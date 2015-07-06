@@ -19,8 +19,8 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.util.regex.Pattern
 
+import org.apache.commons.lang3.StringUtils
 import org.apache.spark.sql.catalyst.analysis.UnresolvedException
-import org.apache.spark.sql.catalyst.expressions.Substring
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -33,7 +33,7 @@ trait StringRegexExpression extends ExpectsInputTypes {
 
   override def nullable: Boolean = left.nullable || right.nullable
   override def dataType: DataType = BooleanType
-  override def expectedChildTypes: Seq[DataType] = Seq(StringType, StringType)
+  override def inputTypes: Seq[DataType] = Seq(StringType, StringType)
 
   // try cache the pattern for Literal
   private lazy val cache: Pattern = right match {
@@ -76,8 +76,6 @@ trait StringRegexExpression extends ExpectsInputTypes {
 case class Like(left: Expression, right: Expression)
   extends BinaryExpression with StringRegexExpression {
 
-  override def symbol: String = "LIKE"
-
   // replace the _ with .{1} exactly match 1 time of any character
   // replace the % with .*, match 0 or more times with any character
   override def escape(v: String): String =
@@ -102,14 +100,16 @@ case class Like(left: Expression, right: Expression)
     }
 
   override def matches(regex: Pattern, str: String): Boolean = regex.matcher(str).matches()
+
+  override def toString: String = s"$left LIKE $right"
 }
 
 case class RLike(left: Expression, right: Expression)
   extends BinaryExpression with StringRegexExpression {
 
-  override def symbol: String = "RLIKE"
   override def escape(v: String): String = v
   override def matches(regex: Pattern, str: String): Boolean = regex.matcher(str).find(0)
+  override def toString: String = s"$left RLIKE $right"
 }
 
 trait CaseConversionExpression extends ExpectsInputTypes {
@@ -117,10 +117,8 @@ trait CaseConversionExpression extends ExpectsInputTypes {
 
   def convert(v: UTF8String): UTF8String
 
-  override def foldable: Boolean = child.foldable
-  override def nullable: Boolean = child.nullable
   override def dataType: DataType = StringType
-  override def expectedChildTypes: Seq[DataType] = Seq(StringType)
+  override def inputTypes: Seq[DataType] = Seq(StringType)
 
   override def eval(input: InternalRow): Any = {
     val evaluated = child.eval(input)
@@ -137,9 +135,7 @@ trait CaseConversionExpression extends ExpectsInputTypes {
  */
 case class Upper(child: Expression) extends UnaryExpression with CaseConversionExpression {
 
-  override def convert(v: UTF8String): UTF8String = v.toUpperCase()
-
-  override def toString: String = s"Upper($child)"
+  override def convert(v: UTF8String): UTF8String = v.toUpperCase
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     defineCodeGen(ctx, ev, c => s"($c).toUpperCase()")
@@ -151,9 +147,7 @@ case class Upper(child: Expression) extends UnaryExpression with CaseConversionE
  */
 case class Lower(child: Expression) extends UnaryExpression with CaseConversionExpression {
 
-  override def convert(v: UTF8String): UTF8String = v.toLowerCase()
-
-  override def toString: String = s"Lower($child)"
+  override def convert(v: UTF8String): UTF8String = v.toLowerCase
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     defineCodeGen(ctx, ev, c => s"($c).toLowerCase()")
@@ -168,7 +162,7 @@ trait StringComparison extends ExpectsInputTypes {
 
   override def nullable: Boolean = left.nullable || right.nullable
 
-  override def expectedChildTypes: Seq[DataType] = Seq(StringType, StringType)
+  override def inputTypes: Seq[DataType] = Seq(StringType, StringType)
 
   override def eval(input: InternalRow): Any = {
     val leftEval = left.eval(input)
@@ -180,8 +174,6 @@ trait StringComparison extends ExpectsInputTypes {
       else compare(leftEval.asInstanceOf[UTF8String], rightEval.asInstanceOf[UTF8String])
     }
   }
-
-  override def symbol: String = nodeName
 
   override def toString: String = s"$nodeName($left, $right)"
 }
@@ -241,7 +233,7 @@ case class Substring(str: Expression, pos: Expression, len: Expression)
     if (str.dataType == BinaryType) str.dataType else StringType
   }
 
-  override def expectedChildTypes: Seq[DataType] = Seq(StringType, IntegerType, IntegerType)
+  override def inputTypes: Seq[DataType] = Seq(StringType, IntegerType, IntegerType)
 
   override def children: Seq[Expression] = str :: pos :: len :: Nil
 
@@ -287,12 +279,6 @@ case class Substring(str: Expression, pos: Expression, len: Expression)
       }
     }
   }
-
-  override def toString: String = len match {
-    // TODO: This is broken because max is not an integer value.
-    case max if max == Integer.MAX_VALUE => s"SUBSTR($str, $pos)"
-    case _ => s"SUBSTR($str, $pos, $len)"
-  }
 }
 
 /**
@@ -300,16 +286,165 @@ case class Substring(str: Expression, pos: Expression, len: Expression)
  */
 case class StringLength(child: Expression) extends UnaryExpression with ExpectsInputTypes {
   override def dataType: DataType = IntegerType
-  override def expectedChildTypes: Seq[DataType] = Seq(StringType)
+  override def inputTypes: Seq[DataType] = Seq(StringType)
 
   override def eval(input: InternalRow): Any = {
     val string = child.eval(input)
     if (string == null) null else string.asInstanceOf[UTF8String].length
   }
 
-  override def toString: String = s"length($child)"
-
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     defineCodeGen(ctx, ev, c => s"($c).length()")
   }
+
+  override def prettyName: String = "length"
 }
+
+/**
+ * A function that return the Levenshtein distance between the two given strings.
+ */
+case class Levenshtein(left: Expression, right: Expression) extends BinaryExpression
+    with ExpectsInputTypes {
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(StringType, StringType)
+
+  override def dataType: DataType = IntegerType
+
+  override def eval(input: InternalRow): Any = {
+    val leftValue = left.eval(input)
+    if (leftValue == null) {
+      null
+    } else {
+      val rightValue = right.eval(input)
+      if(rightValue == null) {
+        null
+      } else {
+        StringUtils.getLevenshteinDistance(leftValue.toString, rightValue.toString)
+      }
+    }
+  }
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    val stringUtils = classOf[StringUtils].getName
+    nullSafeCodeGen(ctx, ev, (res, left, right) =>
+      s"$res = $stringUtils.getLevenshteinDistance($left.toString(), $right.toString());")
+  }
+}
+
+/**
+ * Returns the numeric value of the first character of str.
+ */
+case class Ascii(child: Expression) extends UnaryExpression with ExpectsInputTypes {
+  override def dataType: DataType = IntegerType
+  override def inputTypes: Seq[DataType] = Seq(StringType)
+
+  override def eval(input: InternalRow): Any = {
+    val string = child.eval(input)
+    if (string == null) {
+      null
+    } else {
+      val bytes = string.asInstanceOf[UTF8String].getBytes
+      if (bytes.length > 0) {
+        bytes(0).asInstanceOf[Int]
+      } else {
+        0
+      }
+    }
+  }
+}
+
+/**
+ * Converts the argument from binary to a base 64 string.
+ */
+case class Base64(child: Expression) extends UnaryExpression with ExpectsInputTypes {
+  override def dataType: DataType = StringType
+  override def inputTypes: Seq[DataType] = Seq(BinaryType)
+
+  override def eval(input: InternalRow): Any = {
+    val bytes = child.eval(input)
+    if (bytes == null) {
+      null
+    } else {
+      UTF8String.fromBytes(
+        org.apache.commons.codec.binary.Base64.encodeBase64(
+          bytes.asInstanceOf[Array[Byte]]))
+    }
+  }
+}
+
+/**
+ * Converts the argument from a base 64 string to BINARY.
+ */
+case class UnBase64(child: Expression) extends UnaryExpression with ExpectsInputTypes {
+  override def dataType: DataType = BinaryType
+  override def inputTypes: Seq[DataType] = Seq(StringType)
+
+  override def eval(input: InternalRow): Any = {
+    val string = child.eval(input)
+    if (string == null) {
+      null
+    } else {
+      org.apache.commons.codec.binary.Base64.decodeBase64(string.asInstanceOf[UTF8String].toString)
+    }
+  }
+}
+
+/**
+ * Decodes the first argument into a String using the provided character set
+ * (one of 'US-ASCII', 'ISO-8859-1', 'UTF-8', 'UTF-16BE', 'UTF-16LE', 'UTF-16').
+ * If either argument is null, the result will also be null.
+ */
+case class Decode(bin: Expression, charset: Expression)
+  extends BinaryExpression with ExpectsInputTypes {
+
+  override def left: Expression = bin
+  override def right: Expression = charset
+  override def dataType: DataType = StringType
+  override def inputTypes: Seq[DataType] = Seq(BinaryType, StringType)
+
+  override def eval(input: InternalRow): Any = {
+    val l = bin.eval(input)
+    if (l == null) {
+      null
+    } else {
+      val r = charset.eval(input)
+      if (r == null) {
+        null
+      } else {
+        val fromCharset = r.asInstanceOf[UTF8String].toString
+        UTF8String.fromString(new String(l.asInstanceOf[Array[Byte]], fromCharset))
+      }
+    }
+  }
+}
+
+/**
+ * Encodes the first argument into a BINARY using the provided character set
+ * (one of 'US-ASCII', 'ISO-8859-1', 'UTF-8', 'UTF-16BE', 'UTF-16LE', 'UTF-16').
+ * If either argument is null, the result will also be null.
+*/
+case class Encode(value: Expression, charset: Expression)
+  extends BinaryExpression with ExpectsInputTypes {
+
+  override def left: Expression = value
+  override def right: Expression = charset
+  override def dataType: DataType = BinaryType
+  override def inputTypes: Seq[DataType] = Seq(StringType, StringType)
+
+  override def eval(input: InternalRow): Any = {
+    val l = value.eval(input)
+    if (l == null) {
+      null
+    } else {
+      val r = charset.eval(input)
+      if (r == null) {
+        null
+      } else {
+        val toCharset = r.asInstanceOf[UTF8String].toString
+        l.asInstanceOf[UTF8String].toString.getBytes(toCharset)
+      }
+    }
+  }
+}
+
+

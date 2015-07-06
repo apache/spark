@@ -96,6 +96,7 @@ object FunctionRegistry {
     expression[Rand]("rand"),
     expression[Randn]("randn"),
     expression[CreateStruct]("struct"),
+    expression[CreateNamedStruct]("named_struct"),
     expression[Sqrt]("sqrt"),
 
     // math functions
@@ -103,6 +104,7 @@ object FunctionRegistry {
     expression[Asin]("asin"),
     expression[Atan]("atan"),
     expression[Atan2]("atan2"),
+    expression[Bin]("bin"),
     expression[Cbrt]("cbrt"),
     expression[Ceil]("ceil"),
     expression[Ceil]("ceiling"),
@@ -111,7 +113,10 @@ object FunctionRegistry {
     expression[Exp]("exp"),
     expression[Expm1]("expm1"),
     expression[Floor]("floor"),
+    expression[Factorial]("factorial"),
     expression[Hypot]("hypot"),
+    expression[Hex]("hex"),
+    expression[Logarithm]("log"),
     expression[Log]("ln"),
     expression[Log10]("log10"),
     expression[Log1p]("log1p"),
@@ -120,7 +125,11 @@ object FunctionRegistry {
     expression[Log2]("log2"),
     expression[Pow]("pow"),
     expression[Pow]("power"),
+    expression[UnaryPositive]("positive"),
     expression[Rint]("rint"),
+    expression[ShiftLeft]("shiftleft"),
+    expression[ShiftRight]("shiftright"),
+    expression[ShiftRightUnsigned]("shiftrightunsigned"),
     expression[Signum]("sign"),
     expression[Signum]("signum"),
     expression[Sin]("sin"),
@@ -129,6 +138,13 @@ object FunctionRegistry {
     expression[Tanh]("tanh"),
     expression[ToDegrees]("degrees"),
     expression[ToRadians]("radians"),
+
+    // misc functions
+    expression[Md5]("md5"),
+    expression[Sha2]("sha2"),
+    expression[Sha1]("sha1"),
+    expression[Sha1]("sha"),
+    expression[Crc32]("crc32"),
 
     // aggregate functions
     expression[Average]("avg"),
@@ -140,13 +156,24 @@ object FunctionRegistry {
     expression[Sum]("sum"),
 
     // string functions
+    expression[Ascii]("ascii"),
+    expression[Base64]("base64"),
+    expression[Encode]("encode"),
+    expression[Decode]("decode"),
     expression[Lower]("lcase"),
     expression[Lower]("lower"),
     expression[StringLength]("length"),
+    expression[Levenshtein]("levenshtein"),
     expression[Substring]("substr"),
     expression[Substring]("substring"),
+    expression[UnBase64]("unbase64"),
     expression[Upper]("ucase"),
-    expression[Upper]("upper")
+    expression[UnHex]("unhex"),
+    expression[Upper]("upper"),
+
+    // datetime functions
+    expression[CurrentDate]("current_date"),
+    expression[CurrentTimestamp]("current_timestamp")
   )
 
   val builtin: FunctionRegistry = {

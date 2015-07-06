@@ -17,34 +17,30 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.sql.catalyst.analysis.UnresolvedException
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodeGenContext, GeneratedExpressionCode}
-import org.apache.spark.sql.catalyst.trees
+import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.types.DataType
 
 case class Coalesce(children: Seq[Expression]) extends Expression {
 
   /** Coalesce is nullable if all of its children are nullable, or if it has no children. */
-  override def nullable: Boolean = !children.exists(!_.nullable)
+  override def nullable: Boolean = children.forall(_.nullable)
 
   // Coalesce is foldable if all children are foldable.
-  override def foldable: Boolean = !children.exists(!_.foldable)
+  override def foldable: Boolean = children.forall(_.foldable)
 
-  // Only resolved if all the children are of the same type.
-  override lazy val resolved = childrenResolved && (children.map(_.dataType).distinct.size == 1)
-
-  override def toString: String = s"Coalesce(${children.mkString(",")})"
-
-  override def dataType: DataType = if (resolved) {
-    children.head.dataType
-  } else {
-    val childTypes = children.map(c => s"$c: ${c.dataType}").mkString(", ")
-    throw new UnresolvedException(
-      this, s"Coalesce cannot have children of different types. $childTypes")
+  override def checkInputDataTypes(): TypeCheckResult = {
+    if (children == Nil) {
+      TypeCheckResult.TypeCheckFailure("input to function coalesce cannot be empty")
+    } else {
+      TypeUtils.checkForSameTypeInputExpr(children.map(_.dataType), "function coalesce")
+    }
   }
 
+  override def dataType: DataType = children.head.dataType
+
   override def eval(input: InternalRow): Any = {
-    var i = 0
     var result: Any = null
     val childIterator = children.iterator
     while (childIterator.hasNext && result == null) {
@@ -73,8 +69,7 @@ case class Coalesce(children: Seq[Expression]) extends Expression {
   }
 }
 
-case class IsNull(child: Expression) extends Predicate with trees.UnaryNode[Expression] {
-  override def foldable: Boolean = child.foldable
+case class IsNull(child: Expression) extends UnaryExpression with Predicate {
   override def nullable: Boolean = false
 
   override def eval(input: InternalRow): Any = {
@@ -91,8 +86,7 @@ case class IsNull(child: Expression) extends Predicate with trees.UnaryNode[Expr
   override def toString: String = s"IS NULL $child"
 }
 
-case class IsNotNull(child: Expression) extends Predicate with trees.UnaryNode[Expression] {
-  override def foldable: Boolean = child.foldable
+case class IsNotNull(child: Expression) extends UnaryExpression with Predicate {
   override def nullable: Boolean = false
   override def toString: String = s"IS NOT NULL $child"
 

@@ -194,7 +194,11 @@ class DataFrame(object):
         StructType(List(StructField(age,IntegerType,true),StructField(name,StringType,true)))
         """
         if self._schema is None:
-            self._schema = _parse_datatype_json_string(self._jdf.schema().json())
+            try:
+                self._schema = _parse_datatype_json_string(self._jdf.schema().json())
+            except AttributeError as e:
+                raise Exception(
+                    "Unable to parse datatype from schema. %s" % e)
         return self._schema
 
     @since(1.3)
@@ -243,8 +247,11 @@ class DataFrame(object):
         return self._jdf.isLocal()
 
     @since(1.3)
-    def show(self, n=20):
+    def show(self, n=20, truncate=True):
         """Prints the first ``n`` rows to the console.
+
+        :param n: Number of rows to show.
+        :param truncate: Whether truncate long strings and align cells right.
 
         >>> df
         DataFrame[age: int, name: string]
@@ -256,7 +263,7 @@ class DataFrame(object):
         |  5|  Bob|
         +---+-----+
         """
-        print(self._jdf.showString(n))
+        print(self._jdf.showString(n, truncate))
 
     def __repr__(self):
         return "DataFrame[%s]" % (", ".join("%s: %s" % c for c in self.dtypes))
@@ -477,13 +484,12 @@ class DataFrame(object):
         return [(str(f.name), f.dataType.simpleString()) for f in self.schema.fields]
 
     @property
-    @ignore_unicode_prefix
     @since(1.3)
     def columns(self):
         """Returns all column names as a list.
 
         >>> df.columns
-        [u'age', u'name']
+        ['age', 'name']
         """
         return [f.name for f in self.schema.fields]
 
@@ -796,11 +802,11 @@ class DataFrame(object):
             Each element should be a column name (string) or an expression (:class:`Column`).
 
         >>> df.groupBy().avg().collect()
-        [Row(AVG(age)=3.5)]
+        [Row(avg(age)=3.5)]
         >>> df.groupBy('name').agg({'age': 'mean'}).collect()
-        [Row(name=u'Alice', AVG(age)=2.0), Row(name=u'Bob', AVG(age)=5.0)]
+        [Row(name=u'Alice', avg(age)=2.0), Row(name=u'Bob', avg(age)=5.0)]
         >>> df.groupBy(df.name).avg().collect()
-        [Row(name=u'Alice', AVG(age)=2.0), Row(name=u'Bob', AVG(age)=5.0)]
+        [Row(name=u'Alice', avg(age)=2.0), Row(name=u'Bob', avg(age)=5.0)]
         >>> df.groupBy(['name', df.age]).count().collect()
         [Row(name=u'Bob', age=5, count=1), Row(name=u'Alice', age=2, count=1)]
         """
@@ -858,10 +864,10 @@ class DataFrame(object):
         (shorthand for ``df.groupBy.agg()``).
 
         >>> df.agg({"age": "max"}).collect()
-        [Row(MAX(age)=5)]
+        [Row(max(age)=5)]
         >>> from pyspark.sql import functions as F
         >>> df.agg(F.min(df.age)).collect()
-        [Row(MIN(age)=2)]
+        [Row(min(age)=2)]
         """
         return self.groupBy().agg(*exprs)
 
