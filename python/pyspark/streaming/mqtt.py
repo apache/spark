@@ -15,8 +15,7 @@
 # limitations under the License.
 #
 
-from py4j.java_collections import MapConverter
-from py4j.java_gateway import java_import, Py4JJavaError
+from py4j.java_gateway import Py4JJavaError
 
 from pyspark.storagelevel import StorageLevel
 from pyspark.serializers import UTF8Deserializer
@@ -38,12 +37,13 @@ class MQTTUtils(object):
         :param storageLevel:  RDD storage level.
         :return: A DStream object
         """
-        java_import(ssc._jvm, "org.apache.spark.streaming.mqtt.MQTTUtils")
-
         jlevel = ssc._sc._getJavaStorageLevel(storageLevel)
 
         try:
-            jstream = ssc._jvm.MQTTUtils.createStream(ssc._jssc, brokerUrl, topic, jlevel)
+            helperClass = ssc._jvm.java.lang.Thread.currentThread().getContextClassLoader() \
+                .loadClass("org.apache.spark.streaming.mqtt.MQTTUtilsPythonHelper")
+            helper = helperClass.newInstance()
+            jstream = helper.createStream(ssc._jssc, brokerUrl, topic, jlevel)
         except Py4JJavaError as e:
             if 'ClassNotFoundException' in str(e.java_exception):
                 MQTTUtils._printErrorMsg(ssc.sparkContext)
