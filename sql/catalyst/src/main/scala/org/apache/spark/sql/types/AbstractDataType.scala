@@ -53,10 +53,12 @@ private[sql] abstract class AbstractDataType {
  *
  * This means that we prefer StringType over BinaryType if it is possible to cast to StringType.
  */
-private[sql] class TypeCollection(private val types: Seq[DataType]) extends AbstractDataType {
+private[sql] class TypeCollection(private val types: Seq[AbstractDataType])
+  extends AbstractDataType {
+
   require(types.nonEmpty, s"TypeCollection ($types) cannot be empty")
 
-  private[sql] override def defaultConcreteType: DataType = types.head
+  private[sql] override def defaultConcreteType: DataType = types.head.defaultConcreteType
 
   private[sql] override def isParentOf(childCandidate: DataType): Boolean = false
 
@@ -68,9 +70,9 @@ private[sql] class TypeCollection(private val types: Seq[DataType]) extends Abst
 
 private[sql] object TypeCollection {
 
-  def apply(types: DataType*): TypeCollection = new TypeCollection(types)
+  def apply(types: AbstractDataType*): TypeCollection = new TypeCollection(types)
 
-  def unapply(typ: AbstractDataType): Option[Seq[DataType]] = typ match {
+  def unapply(typ: AbstractDataType): Option[Seq[AbstractDataType]] = typ match {
     case typ: TypeCollection => Some(typ.types)
     case _ => None
   }

@@ -708,8 +708,6 @@ object HiveTypeCoercion {
         case (NullType, target) => Cast(e, target.defaultConcreteType)
 
         // Implicit cast among numeric types
-        // If input is decimal, and we expect a decimal type, just use the input.
-        case (_: DecimalType, DecimalType) => e
         // If input is a numeric type but not decimal, and we expect a decimal type,
         // cast the input to unlimited precision decimal.
         case (_: NumericType, DecimalType) if !inType.isInstanceOf[DecimalType] =>

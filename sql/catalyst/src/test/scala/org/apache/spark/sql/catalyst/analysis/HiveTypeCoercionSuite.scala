@@ -71,6 +71,12 @@ class HiveTypeCoercionSuite extends PlanTest {
 
     shouldCast(IntegerType, TypeCollection(StringType, BinaryType), StringType)
     shouldCast(IntegerType, TypeCollection(BinaryType, StringType), StringType)
+
+    shouldCast(
+      DecimalType.Unlimited, TypeCollection(IntegerType, DecimalType), DecimalType.Unlimited)
+    shouldCast(DecimalType(10, 2), TypeCollection(IntegerType, DecimalType), DecimalType(10, 2))
+    shouldCast(DecimalType(10, 2), TypeCollection(DecimalType, IntegerType), DecimalType(10, 2))
+    shouldCast(IntegerType, TypeCollection(DecimalType(10, 2), StringType), DecimalType(10, 2))
   }
 
   test("ineligible implicit type cast") {
