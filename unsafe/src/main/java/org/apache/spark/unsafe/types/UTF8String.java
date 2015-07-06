@@ -80,9 +80,51 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
    * Returns the number of bytes for a code point with the first byte as `b`
    * @param b The first byte of a code point
    */
-  public int numBytesForFirstByte(final byte b) {
+  public static int numBytesForFirstByte(final byte b) {
     final int offset = (b & 0xFF) - 192;
     return (offset >= 0) ? bytesOfCodePointInUTF8[offset] : 1;
+  }
+
+  /**
+   * Returns the code point that starts at `start`
+   */
+  private int codePointAt(int start, int num) {
+    byte first = getByte(start);
+    switch (num) {
+      case 1:
+        return (int) first;
+      case 2:
+        return ((first & 0x1F) << 6) | (getByte(start + 1) & 0x3F);
+      default:
+        int code = first & (1 << (7 - num) - 1);
+        for (int i = 1; i < num; i ++) {
+          code <<= 6;
+          code += getByte(start + i);
+        }
+        return code;
+    }
+  }
+
+  /**
+   * Update code point using UTF-8 encoding at (base, offset).
+   */
+  private static void updateCodePoint(Object base, long offset, int code, int num) {
+    switch (num) {
+      case 1:
+        UNSAFE.putByte(base, offset, (byte) code);
+        break;
+      case 2:
+        UNSAFE.putByte(base, offset, (byte) ((code >> 6) & 0x1F | 0xC0));
+        UNSAFE.putByte(base, offset + 1, (byte) (code & 0x3F | 0x80));
+        break;
+      default:
+        for (int i = 1; i < num; i ++) {
+          UNSAFE.putByte(base, offset + num - i, (byte) (code & 0x3F | 0x80));
+          code >>>= 6;
+        }
+        int first = (code & ((1 << (7 - num)) - 1)) + ~((1 << (8 - num)) - 1);
+        UNSAFE.putByte(base, offset, (byte) first);
+    }
   }
 
   /**
@@ -180,13 +222,38 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
   }
 
   public UTF8String toUpperCase() {
-    // this is locale aware
-    return UTF8String.fromString(toString().toUpperCase());
+    // It's always have the same number of bytes for upper case
+    byte[] buf = new byte[numBytes];
+    copyMemory(base, offset, buf, BYTE_ARRAY_OFFSET, numBytes);
+
+    for (int i = 0; i < numBytes; ){
+      int n = numBytesForFirstByte(getByte(i));
+      int code = codePointAt(i, n);
+      int upper = Character.toUpperCase(code);
+      if (upper != code) {
+        updateCodePoint(buf, BYTE_ARRAY_OFFSET + i, upper, n);
+      }
+      i += n;
+    }
+
+    return fromBytes(buf);
   }
 
   public UTF8String toLowerCase() {
-    // this is locale aware
-    return UTF8String.fromString(toString().toLowerCase());
+    // It's always have the same number of bytes for upper case
+    byte[] buf = new byte[numBytes];
+    copyMemory(base, offset, buf, BYTE_ARRAY_OFFSET, numBytes);
+
+    for (int i = 0; i < numBytes; ){
+      int n = numBytesForFirstByte(getByte(i));
+      int code = codePointAt(i, n);
+      int lower = Character.toLowerCase(code);
+      if (lower != code) {
+        updateCodePoint(buf, BYTE_ARRAY_OFFSET + i, lower, n);
+      }
+      i += n;
+    }
+    return fromBytes(buf);
   }
 
   @Override
@@ -204,7 +271,7 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
 
   @Override
   public UTF8String clone() {
-    return UTF8String.fromBytes(getBytes());
+    return fromBytes(getBytes());
   }
 
   @Override

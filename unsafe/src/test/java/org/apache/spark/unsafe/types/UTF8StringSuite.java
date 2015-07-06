@@ -69,6 +69,24 @@ public class UTF8StringSuite {
     assertTrue(fromString("你好123").compare(fromString("你好122")) > 0);
   }
 
+  protected void testUpperandLower(String upper, String lower) {
+    UTF8String us = fromString(upper);
+    UTF8String ls = fromString(lower);
+    assertEquals(ls, us.toLowerCase());
+    assertEquals(us, ls.toUpperCase());
+    assertEquals(us, us.toUpperCase());
+    assertEquals(ls, ls.toLowerCase());
+  }
+
+  @Test
+  public void upperAndLower() {
+    testUpperandLower("", "");
+    testUpperandLower("0123456", "0123456");
+    testUpperandLower("ABCXYZ", "abcxyz");
+    testUpperandLower("ЀЁЂѺΏ", "ѐёђѻώ");
+    testUpperandLower("大千世界 数据砖头", "大千世界 数据砖头");
+  }
+
   @Test
   public void contains() {
     assertTrue(fromString("hello").contains(fromString("ello")));
