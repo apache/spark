@@ -31,26 +31,29 @@ import org.apache.spark.sql.types.{StringType, ArrayType, DataType}
  * @param vocabulary An Array over terms. Only the terms in the vocabulary will be counted.
  */
 @Experimental
-class CountVectorizer (override val uid: String, vocabulary: Array[String])
-  extends UnaryTransformer[Seq[String], Vector, CountVectorizer] {
+class CountVectorizerModel (override val uid: String, val vocabulary: Array[String])
+  extends UnaryTransformer[Seq[String], Vector, CountVectorizerModel] {
 
-  def this(vocabulary: Array[String]) = this(Identifiable.randomUID("countVectorizer"), vocabulary)
+  def this(vocabulary: Array[String]) =
+    this(Identifiable.randomUID("countVectorizerModel"), vocabulary)
 
   /**
-   * Corpus-specific stop words filter. Terms with count less than the given threshold are ignored.
+   * Corpus-specific filter to neglect scarce words in a document. For each document, terms with
+   * frequency (count) less than the given threshold are ignored.
    * Default: 1
    * @group param
    */
-  val minTermCounts: IntParam = new IntParam(this, "minTermCounts",
-    "lower bound of effective term counts (>= 1)", ParamValidators.gtEq(1))
+  val minTermFreq: IntParam = new IntParam(this, "minTermFreq",
+    "minimum frequency (count) filter used to neglect scarce words (>= 1). For each document, " +
+      "terms with frequency less than the given threshold are ignored.", ParamValidators.gtEq(1))
 
   /** @group setParam */
-  def setMinTermCounts(value: Int): this.type = set(minTermCounts, value)
+  def setMinTermFreq(value: Int): this.type = set(minTermFreq, value)
 
   /** @group getParam */
-  def getMinTermCounts: Int = $(minTermCounts)
+  def getMinTermFreq: Int = $(minTermFreq)
 
-  setDefault(minTermCounts -> 1)
+  setDefault(minTermFreq -> 1)
 
   override protected def createTransformFunc: Seq[String] => Vector = {
     val dict = vocabulary.zipWithIndex.toMap
@@ -62,18 +65,18 @@ class CountVectorizer (override val uid: String, vocabulary: Array[String])
           case None => // ignore terms not in the vocabulary
         }
       }
-      Vectors.sparse(dict.size, termCounts.filter(_._2 >= $(minTermCounts)).toSeq)
+      Vectors.sparse(dict.size, termCounts.filter(_._2 >= $(minTermFreq)).toSeq)
   }
 
   override protected def validateInputType(inputType: DataType): Unit = {
     require(inputType.sameType(ArrayType(StringType)),
-      s"Input type must be Array type but got $inputType.")
+      s"Input type must be ArrayType(StringType) but got $inputType.")
   }
 
   override protected def outputDataType: DataType = new VectorUDT()
 
-  override def copy(extra: ParamMap): CountVectorizer = {
-    val copied = new CountVectorizer(uid, vocabulary)
+  override def copy(extra: ParamMap): CountVectorizerModel = {
+    val copied = new CountVectorizerModel(uid, vocabulary)
     copyValues(copied, extra)
   }
 }

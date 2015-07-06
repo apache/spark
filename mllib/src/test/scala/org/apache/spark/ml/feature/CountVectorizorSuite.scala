@@ -25,58 +25,48 @@ import org.apache.spark.mllib.util.TestingUtils._
 class CountVectorizerSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   test("params") {
-    ParamsSuite.checkParams(new CountVectorizer(Array("empty")))
+    ParamsSuite.checkParams(new CountVectorizerModel(Array("empty")))
   }
 
-  test("CountVectorizer common cases") {
+  test("CountVectorizerModel common cases") {
     val df = sqlContext.createDataFrame(Seq(
-      (0, "a b c d".split(" ").toSeq),
-      (1, "a b b c d  a".split(" ").toSeq),
-      (2, "a".split(" ").toSeq),
-      (3, "".split(" ").toSeq), // empty string
-      (3, "a notInDict d".split(" ").toSeq)  // with words not in vocabulary
-    )).toDF("id", "words")
-    val cv = new CountVectorizer(Array("a", "b", "c", "d"))
+      (0, "a b c d".split(" ").toSeq,
+        Vectors.sparse(4, Seq((0, 1.0), (1, 1.0), (2, 1.0), (3, 1.0)))),
+      (1, "a b b c d  a".split(" ").toSeq,
+        Vectors.sparse(4, Seq((0, 2.0), (1, 2.0), (2, 1.0), (3, 1.0)))),
+      (2, "a".split(" ").toSeq, Vectors.sparse(4, Seq((0, 1.0)))),
+      (3, "".split(" ").toSeq, Vectors.sparse(4, Seq())), // empty string
+      (4, "a notInDict d".split(" ").toSeq,
+        Vectors.sparse(4, Seq((0, 1.0), (3, 1.0))))  // with words not in vocabulary
+    )).toDF("id", "words", "expected")
+    val cv = new CountVectorizerModel(Array("a", "b", "c", "d"))
       .setInputCol("words")
       .setOutputCol("features")
-    val output = cv.transform(df)
-    val features = output.select("features").collect()
-
-    val expected = Seq(
-      Vectors.sparse(4, Seq((0, 1.0), (1, 1.0), (2, 1.0), (3, 1.0))),
-      Vectors.sparse(4, Seq((0, 2.0), (1, 2.0), (2, 1.0), (3, 1.0))),
-      Vectors.sparse(4, Seq((0, 1.0))),
-      Vectors.sparse(4, Seq()),
-      Vectors.sparse(4, Seq((0, 1.0), (3, 1.0))))
-
-    features.zip(expected).foreach(p =>
-      assert(p._1.getAs[Vector](0) ~== p._2 absTol 1e-14)
-    )
+    val output = cv.transform(df).collect()
+    output.foreach{ p =>
+      val features = p.getAs[Vector]("features")
+      val expected = p.getAs[Vector]("expected")
+      assert(features ~== expected absTol 1e-14)
+    }
   }
 
-  test("CountVectorizer with minTermCounts") {
+  test("CountVectorizerModel with minTermFreq") {
     val df = sqlContext.createDataFrame(Seq(
-      (0, "a a a b b c c c d ".split(" ").toSeq),
-      (1, "c c c c c c".split(" ").toSeq),
-      (2, "a".split(" ").toSeq),
-      (3, "e e e e e".split(" ").toSeq)
-    )).toDF("id", "words")
-    val cv = new CountVectorizer(Array("a", "b", "c", "d"))
+      (0, "a a a b b c c c d ".split(" ").toSeq, Vectors.sparse(4, Seq((0, 3.0), (2, 3.0)))),
+      (1, "c c c c c c".split(" ").toSeq, Vectors.sparse(4, Seq((2, 6.0)))),
+      (2, "a".split(" ").toSeq, Vectors.sparse(4, Seq())),
+      (3, "e e e e e".split(" ").toSeq, Vectors.sparse(4, Seq())))
+    ).toDF("id", "words", "expected")
+    val cv = new CountVectorizerModel(Array("a", "b", "c", "d"))
       .setInputCol("words")
       .setOutputCol("features")
-      .setMinTermCounts(3)
-    val output = cv.transform(df)
-    val features = output.select("features").collect()
-
-    val expected = Seq(
-      Vectors.sparse(4, Seq((0, 3.0), (2, 3.0))),
-      Vectors.sparse(4, Seq((2, 6.0))),
-      Vectors.sparse(4, Seq()),
-      Vectors.sparse(4, Seq()))
-
-    features.zip(expected).foreach(p =>
-      assert(p._1.getAs[Vector](0) ~== p._2 absTol 1e-14)
-    )
+      .setMinTermFreq(3)
+    val output = cv.transform(df).collect()
+    output.foreach{ p =>
+      val features = p.getAs[Vector]("features")
+      val expected = p.getAs[Vector]("expected")
+      assert(features ~== expected absTol 1e-14)
+    }
   }
 }
 
