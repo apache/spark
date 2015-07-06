@@ -22,7 +22,7 @@ import scala.collection.mutable
 import breeze.linalg.{DenseVector => BDV, norm => brzNorm}
 import breeze.optimize.{CachedDiffFunction, DiffFunction, LBFGS => BreezeLBFGS, OWLQN => BreezeOWLQN}
 
-import org.apache.spark.Logging
+import org.apache.spark.{SparkException, Logging}
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.ml.PredictorParams
 import org.apache.spark.ml.param.ParamMap
@@ -162,22 +162,21 @@ class LinearRegression(override val uid: String)
     }
 
     val initialWeights = Vectors.zeros(numFeatures)
-    val states =
-      optimizer.iterations(new CachedDiffFunction(costFun), initialWeights.toBreeze.toDenseVector)
+    val states = optimizer.iterations(new CachedDiffFunction(costFun),
+      initialWeights.toBreeze.toDenseVector).toArray
 
-    var state = states.next()
-    val lossHistory = mutable.ArrayBuilder.make[Double]
-
-    while (states.hasNext) {
-      lossHistory += state.value
-      state = states.next()
+    if (states.length == 0) {
+      val msg = s"${optimizer.getClass.getName} failed."
+      logError(msg)
+      throw new SparkException(msg)
     }
-    lossHistory += state.value
+
+    val lossHistory = states.map(_.adjustedValue)
 
     // The weights are trained in the scaled space; we're converting them back to
     // the original space.
     val weights = {
-      val rawWeights = state.x.toArray.clone()
+      val rawWeights = states.last.x.toArray.clone()
       var i = 0
       val len = rawWeights.length
       while (i < len) {

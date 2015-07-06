@@ -184,21 +184,20 @@ class LogisticRegression(override val uid: String)
     }
 
     val states = optimizer.iterations(new CachedDiffFunction(costFun),
-      initialWeightsWithIntercept.toBreeze.toDenseVector)
+      initialWeightsWithIntercept.toBreeze.toDenseVector).toArray
 
-    var state = states.next()
-    val lossHistory = mutable.ArrayBuilder.make[Double]
-
-    while (states.hasNext) {
-      lossHistory += state.value
-      state = states.next()
+    if (states.length == 0) {
+      val msg = s"${optimizer.getClass.getName} failed."
+      logError(msg)
+      throw new SparkException(msg)
     }
-    lossHistory += state.value
+
+    val lossHistory = states.map(_.adjustedValue)
 
     // The weights are trained in the scaled space; we're converting them back to
     // the original space.
     val weightsWithIntercept = {
-      val rawWeights = state.x.toArray.clone()
+      val rawWeights = states.last.x.toArray.clone()
       var i = 0
       // Note that the intercept in scaled space and original space is the same;
       // as a result, no scaling is needed.
@@ -422,9 +421,7 @@ private class LogisticAggregator(
   def add(label: Double, data: Vector): this.type = {
     require(dim == data.size, s"Dimensions mismatch when adding new sample." +
       s" Expecting $dim but got ${data.size}.")
-
-    val dataSize = data.size
-
+    
     val localWeightsArray = weightsArray
     val localGradientSumArray = gradientSumArray
 
