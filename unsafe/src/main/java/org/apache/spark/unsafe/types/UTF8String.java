@@ -20,6 +20,7 @@ package org.apache.spark.unsafe.types;
 import javax.annotation.Nonnull;
 import java.io.Serializable;
 import java.io.UnsupportedEncodingException;
+import java.util.Locale;
 
 import org.apache.spark.unsafe.array.ByteArrayMethods;
 
@@ -221,39 +222,60 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
     return matchAt(suffix, numBytes - suffix.numBytes);
   }
 
-  public UTF8String toUpperCase() {
-    // It's always have the same number of bytes for upper case
-    byte[] buf = new byte[numBytes];
-    copyMemory(base, offset, buf, BYTE_ARRAY_OFFSET, numBytes);
+  private static String lang = Locale.getDefault().getLanguage();
+  private static boolean localeDependent = lang == "tr" || lang == "az" || lang == "lt";
+  private static int ERROR = 0xFFFFFFFF;  // Character.ERROR
 
+  /**
+   * Returns the upper case of this string
+   */
+  public UTF8String toUpperCase() {
+    byte[] buf = null;
     for (int i = 0; i < numBytes; ){
       int n = numBytesForFirstByte(getByte(i));
       int code = codePointAt(i, n);
       int upper = Character.toUpperCase(code);
       if (upper != code) {
+        if (upper == ERROR || localeDependent) {
+          // fallback to String.toUpperCase() to handle locale
+          return fromString(toString().toUpperCase());
+        }
+        if (buf == null) {
+          // It's always have the same number of bytes for upper case
+          buf = new byte[numBytes];
+          copyMemory(base, offset, buf, BYTE_ARRAY_OFFSET, numBytes);
+        }
         updateCodePoint(buf, BYTE_ARRAY_OFFSET + i, upper, n);
       }
       i += n;
     }
-
-    return fromBytes(buf);
+    return buf != null ? fromBytes(buf) : this;
   }
 
+  /**
+   * Returns the lower case of this string
+   */
   public UTF8String toLowerCase() {
-    // It's always have the same number of bytes for upper case
-    byte[] buf = new byte[numBytes];
-    copyMemory(base, offset, buf, BYTE_ARRAY_OFFSET, numBytes);
-
+    byte[] buf = null;
     for (int i = 0; i < numBytes; ){
       int n = numBytesForFirstByte(getByte(i));
       int code = codePointAt(i, n);
       int lower = Character.toLowerCase(code);
       if (lower != code) {
+        if (lower == ERROR || localeDependent) {
+          // fallback to String.toUpperCase() to handle locale
+          return fromString(toString().toLowerCase());
+        }
+        if (buf == null) {
+          // It's always have the same number of bytes for upper case
+          buf = new byte[numBytes];
+          copyMemory(base, offset, buf, BYTE_ARRAY_OFFSET, numBytes);
+        }
         updateCodePoint(buf, BYTE_ARRAY_OFFSET + i, lower, n);
       }
       i += n;
     }
-    return fromBytes(buf);
+    return buf != null ? fromBytes(buf) : this;
   }
 
   @Override

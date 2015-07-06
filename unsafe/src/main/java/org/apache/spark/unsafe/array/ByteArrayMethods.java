@@ -35,7 +35,7 @@ public class ByteArrayMethods {
   }
 
   /**
-   * Optimized byte array equality check for 8-byte-word-aligned byte arrays.
+   * Optimized byte array equality check for byte arrays.
    * @return true if the arrays are equal, false otherwise
    */
   public static boolean arrayEquals(
