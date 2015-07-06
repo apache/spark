@@ -43,7 +43,7 @@ class CountVectorizerSuite extends SparkFunSuite with MLlibTestSparkContext {
       .setInputCol("words")
       .setOutputCol("features")
     val output = cv.transform(df).collect()
-    output.foreach{ p =>
+    output.foreach { p =>
       val features = p.getAs[Vector]("features")
       val expected = p.getAs[Vector]("expected")
       assert(features ~== expected absTol 1e-14)
@@ -62,7 +62,7 @@ class CountVectorizerSuite extends SparkFunSuite with MLlibTestSparkContext {
       .setOutputCol("features")
       .setMinTermFreq(3)
     val output = cv.transform(df).collect()
-    output.foreach{ p =>
+    output.foreach { p =>
       val features = p.getAs[Vector]("features")
       val expected = p.getAs[Vector]("expected")
       assert(features ~== expected absTol 1e-14)
