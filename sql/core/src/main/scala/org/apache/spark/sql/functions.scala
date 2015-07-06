@@ -1666,18 +1666,19 @@ object functions {
    * @group string_funcs
    * @since 1.5.0
    */
-  def encode(value: Column, charset: Column): Column = Encode(value.expr, charset.expr)
+  def encode(value: Column, charset: String): Column = Encode(value.expr, lit(charset).expr)
 
   /**
    * Computes the first argument into a binary from a string using the provided character set
    * (one of 'US-ASCII', 'ISO-8859-1', 'UTF-8', 'UTF-16BE', 'UTF-16LE', 'UTF-16').
    * If either argument is null, the result will also be null.
+   * NOTE: charset represents the string value of the character set, not the column name.
    *
    * @group string_funcs
    * @since 1.5.0
    */
-  def encode(columnName: String, charsetColumnName: String): Column =
-    encode(Column(columnName), Column(charsetColumnName))
+  def encode(columnName: String, charset: String): Column =
+    encode(Column(columnName), charset)
 
   /**
    * Computes the first argument into a string from a binary using the provided character set
@@ -1687,18 +1688,19 @@ object functions {
    * @group string_funcs
    * @since 1.5.0
    */
-  def decode(value: Column, charset: Column): Column = Decode(value.expr, charset.expr)
+  def decode(value: Column, charset: String): Column = Decode(value.expr, lit(charset).expr)
 
   /**
    * Computes the first argument into a string from a binary using the provided character set
    * (one of 'US-ASCII', 'ISO-8859-1', 'UTF-8', 'UTF-16BE', 'UTF-16LE', 'UTF-16').
    * If either argument is null, the result will also be null.
+   * NOTE: charset represents the string value of the character set, not the column name.
    *
    * @group string_funcs
    * @since 1.5.0
    */
-  def decode(columnName: String, charsetColumnName: String): Column =
-    decode(Column(columnName), Column(charsetColumnName))
+  def decode(columnName: String, charset: String): Column =
+    decode(Column(columnName), charset)
 
 
   //////////////////////////////////////////////////////////////////////////////////////////////
