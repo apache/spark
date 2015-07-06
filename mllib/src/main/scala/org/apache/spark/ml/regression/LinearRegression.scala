@@ -146,11 +146,11 @@ class LinearRegression(override val uid: String)
       val intercept = yMean
 
       val model = new LinearRegressionModel(uid, weights, intercept)
-      val trainingSummary = copyValues(
-        new LinearRegressionTrainingSummary(
-          model.transform(dataset).select(model.getPredictionCol, model.getLabelCol),
-          Array(0D))
-      )
+      val trainingSummary = new LinearRegressionTrainingSummary(
+        model.transform(dataset).select($(predictionCol), $(labelCol)),
+        $(predictionCol),
+        $(labelCol),
+        Array(0D))
       return model.setSummary(trainingSummary)
     }
 
@@ -206,11 +206,11 @@ class LinearRegression(override val uid: String)
 
     // TODO: Converts to sparse format based on the storage, but may base on the scoring speed.
     val model = new LinearRegressionModel(uid, weights.compressed, intercept)
-    val trainingSummary = copyValues(
-      new LinearRegressionTrainingSummary(
-        model.transform(dataset).select(model.getPredictionCol, model.getLabelCol),
-        lossHistory.result())
-    )
+    val trainingSummary = new LinearRegressionTrainingSummary(
+      model.transform(dataset).select($(predictionCol), $(labelCol)),
+      $(predictionCol),
+      $(labelCol),
+      lossHistory.result())
     copyValues(model.setSummary(trainingSummary))
   }
 
@@ -263,7 +263,7 @@ class LinearRegressionModel private[ml] (
     val predictionAndObservations = dataset
       .select(col($(labelCol)), t(col($(featuresCol))).as($(predictionCol)))
 
-    new LinearRegressionSummary(predictionAndObservations)
+    new LinearRegressionSummary(predictionAndObservations, $(predictionCol), $(labelCol))
   }
 
   override protected def predict(features: Vector): Double = {
@@ -286,16 +286,26 @@ class LinearRegressionModel private[ml] (
 @Experimental
 class LinearRegressionTrainingSummary private[ml] (
     predictions: DataFrame,
+    predictionCol: String,
+    labelCol: String,
     val objectiveTrace: DataFrame)
-  extends LinearRegressionSummary(predictions) {
+  extends LinearRegressionSummary(predictions, predictionCol, labelCol) {
 
-  def this(predictions: DataFrame, objectiveTrace: Array[Double]) =
+  def this(
+      predictions: DataFrame,
+      predictionCol: String,
+      labelCol: String,
+      objectiveTrace: Array[Double]) = {
+
     this(
       predictions,
+      predictionCol,
+      labelCol,
       predictions.sqlContext
         .createDataFrame(objectiveTrace.zipWithIndex.map(_.swap).toSeq)
         .toDF("iteration", "objective")
     )
+  }
 
   /** Number of training iterations until termination */
   val totalIterations = objectiveTrace.count()
@@ -309,16 +319,12 @@ class LinearRegressionTrainingSummary private[ml] (
  */
 @Experimental
 class LinearRegressionSummary private[ml] (
-    override val uid: String,
-    val predictions: DataFrame)
-  extends HasLabelCol with HasPredictionCol {
-
-  def this(predictionAndLabel: DataFrame) = this(
-    Identifiable.randomUID("linRegSumm"),
-    predictionAndLabel)
+    val predictions: DataFrame,
+    val predictionCol: String,
+    val labelCol: String) {
 
   private val metrics = new RegressionMetrics(predictions
-    .select($(predictionCol), $(labelCol))
+    .select(predictionCol, labelCol)
     .map { case Row(pred: Double, label: Double) => (pred, label) }
   )
 
@@ -356,10 +362,8 @@ class LinearRegressionSummary private[ml] (
   /** Get residuals (predicted value - label value) */
   def residuals: DataFrame = {
     val t = udf { (pred: Double, label: Double) => pred - label}
-    predictions.select(t(col($(predictionCol)), col($(labelCol))).as("residuals"))
+    predictions.select(t(col(predictionCol), col(labelCol)).as("residuals"))
   }
-
-  override def copy(extra: ParamMap): LinearRegressionSummary = defaultCopy(extra)
 }
 
 /**
