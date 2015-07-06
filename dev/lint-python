@@ -87,9 +87,9 @@ if [ ! -d "$PYLINT_HOME" ]; then
     fi
 fi
 
-for to_be_checked in "$PATHS_TO_CHECK"
-do
-    pylint $to_be_checked
-done
+# for to_be_checked in "$PATHS_TO_CHECK"
+# do
+#     pylint --rcfile="$PYLINT_HOME/pylintrc" $to_be_checked
+# done
 
 exit "$lint_status"
