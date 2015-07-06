@@ -26,13 +26,30 @@ private[spark] case class BlockUIData(
     storageLevel: StorageLevel,
     memSize: Long,
     diskSize: Long,
-    externalBlockStoreSize: Long,
-    locations: Set[String])
+    externalBlockStoreSize: Long)
+
+/**
+ * The aggregated status of stream blocks in an executor
+ */
+private[spark] case class ExecutorStreamBlockStatus (
+  executorId: String,
+  location: String,
+  blocks: Seq[BlockUIData]) {
+
+  def totalMemSize: Long = blocks.map(_.memSize).sum
+
+  def totalDiskSize: Long = blocks.map(_.diskSize).sum
+
+  def totalExternalBlockStoreSize: Long = blocks.map(_.externalBlockStoreSize).sum
+
+  def numStreamBlocks: Int = blocks.size
+
+}
 
 private[spark] class BlockStatusListener extends SparkListener {
 
-  private val blockManagers = new mutable.HashMap[BlockManagerId, mutable.HashSet[BlockId]]
-  private val blocks = new mutable.HashMap[BlockId, BlockUIData]
+  private val blockManagers =
+    new mutable.HashMap[BlockManagerId, mutable.HashMap[BlockId, BlockUIData]]
 
   override def onBlockUpdated(blockUpdated: SparkListenerBlockUpdated): Unit = {
     val blockId = blockUpdated.blockUpdatedInfo.blockId
@@ -50,29 +67,17 @@ private[spark] class BlockStatusListener extends SparkListener {
       // Drop the update info if the block manager is not registered
       blockManagers.get(blockManagerId).foreach { blocksInBlockManager =>
         if (storageLevel.isValid) {
-          blocksInBlockManager.add(blockId)
-          val location = blockManagerId.hostPort
-          val newLocations =
-            blocks.get(blockId).map(_.locations).getOrElse(Set.empty) + location
-          val newStorageLevel = StorageLevel(
-            useDisk = diskSize > 0,
-            useMemory = memSize > 0,
-            useOffHeap = externalBlockStoreSize > 0,
-            deserialized = storageLevel.deserialized,
-            replication = newLocations.size
-          )
-          blocks.put(blockId,
+          blocksInBlockManager.put(blockId,
             BlockUIData(
               blockId,
-              newStorageLevel,
+              storageLevel,
               memSize,
               diskSize,
-              externalBlockStoreSize,
-              newLocations))
+              externalBlockStoreSize)
+          )
         } else {
           // If isValid is not true, it means we should drop the block.
           blocksInBlockManager -= blockId
-          removeBlockFromBlockManager(blockId, blockManagerId)
         }
       }
     }
@@ -80,51 +85,19 @@ private[spark] class BlockStatusListener extends SparkListener {
 
   override def onBlockManagerAdded(blockManagerAdded: SparkListenerBlockManagerAdded): Unit = {
     synchronized {
-      blockManagers.put(blockManagerAdded.blockManagerId, mutable.HashSet())
+      blockManagers.put(blockManagerAdded.blockManagerId, mutable.HashMap())
     }
   }
 
   override def onBlockManagerRemoved(
-      blockManagerRemoved: SparkListenerBlockManagerRemoved): Unit = {
-    val blockManagerId = blockManagerRemoved.blockManagerId
-    synchronized {
-      blockManagers.remove(blockManagerId).foreach { blockIds =>
-        for (blockId <- blockIds) {
-          removeBlockFromBlockManager(blockId, blockManagerId)
-        }
-      }
-    }
+      blockManagerRemoved: SparkListenerBlockManagerRemoved): Unit = synchronized {
+    blockManagers -= blockManagerRemoved.blockManagerId
   }
 
-  private def removeBlockFromBlockManager(
-      blockId: BlockId, blockManagerId: BlockManagerId): Unit = {
-    val location = blockManagerId.hostPort
-    blocks.get(blockId) foreach { blockUIData =>
-      val newLocations = blockUIData.locations - location
-      if (newLocations.isEmpty) {
-        // This block is removed from all block managers, so remove it
-        blocks -= blockId
-      } else {
-        val newStorageLevel = StorageLevel(
-          useDisk = blockUIData.diskSize > 0,
-          useMemory = blockUIData.memSize > 0,
-          useOffHeap = blockUIData.externalBlockStoreSize > 0,
-          deserialized = blockUIData.storageLevel.deserialized,
-          replication = newLocations.size
-        )
-        blocks.put(blockId,
-          BlockUIData(
-            blockId,
-            newStorageLevel,
-            blockUIData.memSize,
-            blockUIData.diskSize,
-            blockUIData.externalBlockStoreSize,
-            newLocations))
-      }
-    }
-  }
-
-  def allBlocks: Seq[BlockUIData] = synchronized {
-    blocks.values.toBuffer
+  def allExecutorStreamBlockStatus: Seq[ExecutorStreamBlockStatus] = synchronized {
+    blockManagers.map { case (blockManagerId, blocks) =>
+      ExecutorStreamBlockStatus(
+        blockManagerId.executorId, blockManagerId.hostPort, blocks.values.toSeq)
+    }.toSeq
   }
 }

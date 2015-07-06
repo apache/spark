@@ -42,10 +42,12 @@ class BlockStatusListenerSuite extends SparkFunSuite {
       StorageLevel.MEMORY_AND_DISK,
       memSize = 100,
       diskSize = 100,
-      externalBlockStoreSize = 0,
-      locations = Set("localhost:10000")
+      externalBlockStoreSize = 0
     )
-    assert(listener.allBlocks === Seq(expectedBlock))
+    val expectedExecutorStreamBlockStatus = Seq(
+      ExecutorStreamBlockStatus("0", "localhost:10000", Seq(expectedBlock))
+    )
+    assert(listener.allExecutorStreamBlockStatus === expectedExecutorStreamBlockStatus)
 
     // Add the second block manager
     val blockManagerId2 = BlockManagerId("1", "localhost", 10001)
@@ -59,16 +61,12 @@ class BlockStatusListenerSuite extends SparkFunSuite {
         memSize = 100,
         diskSize = 100,
         externalBlockStoreSize = 0)))
-    // Adding a new replication of the same block id should increase the replication
-    val expectedBlock2 = BlockUIData(
-      StreamBlockId(0, 100),
-      StorageLevel.MEMORY_AND_DISK_2, // Should increase the replication
-      memSize = 100,
-      diskSize = 100,
-      externalBlockStoreSize = 0,
-      locations = Set("localhost:10000", "localhost:10001") // Should contain two block managers
+    // Each block manager should contain one block
+    val expectedExecutorStreamBlockStatus2 = Set(
+      ExecutorStreamBlockStatus("0", "localhost:10000", Seq(expectedBlock)),
+      ExecutorStreamBlockStatus("1", "localhost:10001", Seq(expectedBlock))
     )
-    assert(listener.allBlocks === Seq(expectedBlock2))
+    assert(listener.allExecutorStreamBlockStatus.toSet === expectedExecutorStreamBlockStatus2)
 
     // Remove a replication of the same block
     listener.onBlockUpdated(SparkListenerBlockUpdated(
@@ -79,16 +77,12 @@ class BlockStatusListenerSuite extends SparkFunSuite {
         memSize = 0,
         diskSize = 0,
         externalBlockStoreSize = 0)))
-    // Removing a replication of the same block should decrease the replication
-    val expectedBlock3 = BlockUIData(
-      StreamBlockId(0, 100),
-      StorageLevel.MEMORY_AND_DISK, // Should decrease the replication
-      memSize = 100,
-      diskSize = 100,
-      externalBlockStoreSize = 0,
-      locations = Set("localhost:10000") // Should contain only the first block manager
+    // Only the first block manager contains a block
+    val expectedExecutorStreamBlockStatus3 = Set(
+      ExecutorStreamBlockStatus("0", "localhost:10000", Seq(expectedBlock)),
+      ExecutorStreamBlockStatus("1", "localhost:10001", Seq.empty)
     )
-    assert(listener.allBlocks === Seq(expectedBlock3))
+    assert(listener.allExecutorStreamBlockStatus.toSet === expectedExecutorStreamBlockStatus3)
 
     // Remove the second block manager at first but add a new block status
     // from this removed block manager
@@ -101,14 +95,16 @@ class BlockStatusListenerSuite extends SparkFunSuite {
         memSize = 100,
         diskSize = 100,
         externalBlockStoreSize = 0)))
-    // The second block manager is removed so the new block status from this block manager
-    // should not change anything
-    assert(listener.allBlocks === Seq(expectedBlock3))
+    // The second block manager is removed so we should not see the new block
+    val expectedExecutorStreamBlockStatus4 = Seq(
+      ExecutorStreamBlockStatus("0", "localhost:10000", Seq(expectedBlock))
+    )
+    assert(listener.allExecutorStreamBlockStatus === expectedExecutorStreamBlockStatus4)
 
     // Remove the last block manager
     listener.onBlockManagerRemoved(SparkListenerBlockManagerRemoved(0, blockManagerId))
-    // No block manager now so we should dop all blocks
-    assert(listener.allBlocks.isEmpty)
+    // No block manager now so we should dop all block managers
+    assert(listener.allExecutorStreamBlockStatus.isEmpty)
   }
 
 }
