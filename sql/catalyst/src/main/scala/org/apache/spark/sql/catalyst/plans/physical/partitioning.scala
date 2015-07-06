@@ -17,10 +17,7 @@
 
 package org.apache.spark.sql.catalyst.plans.physical
 
-import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.expressions.{Expression, SortOrder}
-import org.apache.spark.sql.types.{DataType, IntegerType}
 
 /**
  * Specifies how tuples that share common expressions will be distributed when a query is executed
@@ -40,24 +37,23 @@ sealed trait Distribution
 case object UnspecifiedDistribution extends Distribution
 
 /**
- * Represents a distribution that only has a single partition and all tuples of the dataset
- * are co-located.
- */
-case object AllTuples extends Distribution
-
-/**
  * Represents data where tuples that share the same values for the `clustering`
  * [[Expression Expressions]] will be co-located. Based on the context, this
  * can mean such tuples are either co-located in the same partition or they will be contiguous
  * within a single partition.
+ * There is also another constraint, the `clustering` value contains null will be considered
+ * as a valid value if `nullKeysSensitive` == true.
+ *
+ * For examples:
+ * JOIN KEYS: values contains null will be considered as invalid values, which means
+ *          the tuples could be in different partition.
+ * GROUP BY KEYS: values contains null will be considered as the valid value, which means
+ *          the tuples should be in the same partition.
  */
-case class ClusteredDistribution(clustering: Seq[Expression]) extends Distribution {
-  require(
-    clustering != Nil,
-    "The clustering expressions of a ClusteredDistribution should not be Nil. " +
-      "An AllTuples should be used to represent a distribution that only has " +
-      "a single partition.")
-}
+case class ClusteredDistribution(
+    clustering: Seq[Expression],
+    nullKeysSensitive: Boolean,
+    sortKeys: Seq[SortOrder] = Nil) extends Distribution
 
 /**
  * Represents data where tuples have been ordered according to the `ordering`
@@ -76,144 +72,267 @@ case class OrderedDistribution(ordering: Seq[SortOrder]) extends Distribution {
   def clustering: Set[Expression] = ordering.map(_.child).toSet
 }
 
-sealed trait Partitioning {
-  /** Returns the number of partitions that the data is split across */
-  val numPartitions: Int
-
-  /**
-   * Returns true iff the guarantees made by this [[Partitioning]] are sufficient
-   * to satisfy the partitioning scheme mandated by the `required` [[Distribution]],
-   * i.e. the current dataset does not need to be re-partitioned for the `required`
-   * Distribution (it is possible that tuples within a partition need to be reorganized).
-   */
-  def satisfies(required: Distribution): Boolean
-
-  /**
-   * Returns true iff all distribution guarantees made by this partitioning can also be made
-   * for the `other` specified partitioning.
-   * For example, two [[HashPartitioning HashPartitioning]]s are
-   * only compatible if the `numPartitions` of them is the same.
-   */
-  def compatibleWith(other: Partitioning): Boolean
-
-  /** Returns the expressions that are used to key the partitioning. */
-  def keyExpressions: Seq[Expression]
-}
-
-case class UnknownPartitioning(numPartitions: Int) extends Partitioning {
-  override def satisfies(required: Distribution): Boolean = required match {
-    case UnspecifiedDistribution => true
-    case _ => false
-  }
-
-  override def compatibleWith(other: Partitioning): Boolean = other match {
-    case UnknownPartitioning(_) => true
-    case _ => false
-  }
-
-  override def keyExpressions: Seq[Expression] = Nil
-}
-
-case object SinglePartition extends Partitioning {
-  val numPartitions = 1
-
-  override def satisfies(required: Distribution): Boolean = true
-
-  override def compatibleWith(other: Partitioning): Boolean = other match {
-    case SinglePartition => true
-    case _ => false
-  }
-
-  override def keyExpressions: Seq[Expression] = Nil
-}
-
-case object BroadcastPartitioning extends Partitioning {
-  val numPartitions = 1
-
-  override def satisfies(required: Distribution): Boolean = true
-
-  override def compatibleWith(other: Partitioning): Boolean = other match {
-    case SinglePartition => true
-    case _ => false
-  }
-
-  override def keyExpressions: Seq[Expression] = Nil
-}
-
 /**
- * Represents a partitioning where rows are split up across partitions based on the hash
- * of `expressions`.  All rows where `expressions` evaluate to the same values are guaranteed to be
- * in the same partition.
- */
-case class HashPartitioning(expressions: Seq[Expression], numPartitions: Int)
-  extends Expression
-  with Partitioning {
-
-  override def children: Seq[Expression] = expressions
-  override def nullable: Boolean = false
-  override def dataType: DataType = IntegerType
-
-  private[this] lazy val clusteringSet = expressions.toSet
-
-  override def satisfies(required: Distribution): Boolean = required match {
-    case UnspecifiedDistribution => true
-    case ClusteredDistribution(requiredClustering) =>
-      clusteringSet.subsetOf(requiredClustering.toSet)
-    case _ => false
-  }
-
-  override def compatibleWith(other: Partitioning): Boolean = other match {
-    case BroadcastPartitioning => true
-    case h: HashPartitioning if h == this => true
-    case _ => false
-  }
-
-  override def keyExpressions: Seq[Expression] = expressions
-
-  override def eval(input: InternalRow = null): Any =
-    throw new TreeNodeException(this, s"No function to evaluate expression. type: ${this.nodeName}")
-}
-
-/**
- * Represents a partitioning where rows are split across partitions based on some total ordering of
- * the expressions specified in `ordering`.  When data is partitioned in this manner the following
- * two conditions are guaranteed to hold:
- *  - All row where the expressions in `ordering` evaluate to the same values will be in the same
- *    partition.
- *  - Each partition will have a `min` and `max` row, relative to the given ordering.  All rows
- *    that are in between `min` and `max` in this `ordering` will reside in this partition.
+ * To a child operator, a `Gap` represents what need to be done for satisfying its parent operator
+ * in the data distribution.
  *
- * This class extends expression primarily so that transformations over expression will descend
- * into its child.
+ * NOTE: This trait and its inherits are not used by the physical operators directly,
  */
-case class RangePartitioning(ordering: Seq[SortOrder], numPartitions: Int)
-  extends Expression
-  with Partitioning {
+private[sql] sealed trait Gap
 
-  override def children: Seq[SortOrder] = ordering
-  override def nullable: Boolean = false
-  override def dataType: DataType = IntegerType
+/**
+ * Needn't do anything for the data distribution.
+ */
+private[sql] case object NoGap extends Gap
 
-  private[this] lazy val clusteringSet = ordering.map(_.child).toSet
+/**
+ * Need to sort the data within the current partition.
+ * @param sortKeys the sorting keys
+ */
+private[sql] case class SortKeyWithinPartition(sortKeys: Seq[SortOrder]) extends Gap
 
-  override def satisfies(required: Distribution): Boolean = required match {
-    case UnspecifiedDistribution => true
-    case OrderedDistribution(requiredOrdering) =>
-      val minSize = Seq(requiredOrdering.size, ordering.size).min
-      requiredOrdering.take(minSize) == ordering.take(minSize)
-    case ClusteredDistribution(requiredClustering) =>
-      clusteringSet.subsetOf(requiredClustering.toSet)
-    case _ => false
+/**
+ * Need a global sorting for the distribution according to the specified sorting keys.
+ * @param ordering the sorting keys
+ */
+private[sql] case class GlobalOrdering(ordering: Seq[SortOrder]) extends Gap
+
+/**
+ * Repartition the data according to the new clustering expression, and it's possible that
+ * only a single partition needed, if in that cases, the clustering expression would be ignored.
+ * @param clustering the clustering keys
+ */
+private[sql] case class RepartitionKey(
+                          clustering: Seq[Expression]) extends Gap
+
+/**
+ * Repartition the data according to the the new clustering expression, and we also need to
+ * sort the data within the partition according to the clustering expression.
+ * Notice: The clustering expressions should be the same with the sort keys.
+ * @param clustering the clustering expression
+ * @param sortKeys the sorting keys, should be the same with clustering expression, but with
+ *                 sorting direction.
+ */
+private[sql] case class RepartitionKeyAndSort(
+                          clustering: Seq[Expression],
+                          sortKeys: Seq[SortOrder]) extends Gap
+
+
+/**
+ * Represent the output data distribution for a physical operator.
+ *
+ * @param numPartitions
+ * @param clusterKeys
+ * @param sortKeys
+ * @param globalOrdered
+ * @param additionalNullClusterKeyGenerated
+ */
+sealed case class Partitioning(
+  /** the number of partitions that the data is split across */
+  numPartitions: Option[Int] = None,
+
+  /** the expressions that are used to key the partitioning. */
+  clusterKeys: Seq[Expression] = Nil,
+
+  /** the expression that are used to sort the data. */
+  sortKeys: Seq[SortOrder] = Nil,
+
+  /** work with `sortKeys` if the sorting cross or just within the partition. */
+  globalOrdered: Boolean = false,
+
+  /** to indicate if new null clustering key will be generated in THIS operator. */
+  additionalNullClusterKeyGenerated: Boolean = false) {
+
+  def withNumPartitions(num: Int): Partitioning = {
+    new Partitioning(
+      numPartitions = Some(num),
+      clusterKeys,
+      sortKeys,
+      globalOrdered,
+      additionalNullClusterKeyGenerated)
   }
 
-  override def compatibleWith(other: Partitioning): Boolean = other match {
-    case BroadcastPartitioning => true
-    case r: RangePartitioning if r == this => true
-    case _ => false
+  def withClusterKeys(clusterKeys: Seq[Expression]): Partitioning = {
+    new Partitioning(
+      numPartitions,
+      clusterKeys = clusterKeys,
+      sortKeys,
+      globalOrdered,
+      additionalNullClusterKeyGenerated)
   }
 
-  override def keyExpressions: Seq[Expression] = ordering.map(_.child)
+  def withSortKeys(sortKeys: Seq[SortOrder], globalOrdering: Boolean = false): Partitioning = {
+    if (globalOrdering) {
+      new Partitioning(
+        numPartitions,
+        clusterKeys = sortKeys.map(_.child),
+        sortKeys = sortKeys,
+        globalOrdered = true,
+        additionalNullClusterKeyGenerated)
+    } else {
+      new Partitioning(
+        numPartitions,
+        clusterKeys,
+        sortKeys = sortKeys,
+        globalOrdered = false,
+        additionalNullClusterKeyGenerated)
+    }
+  }
 
-  override def eval(input: InternalRow): Any =
-    throw new TreeNodeException(this, s"No function to evaluate expression. type: ${this.nodeName}")
+  def withGlobalOrdered(globalOrdered: Boolean): Partitioning = {
+    new Partitioning(
+      numPartitions,
+      clusterKeys,
+      sortKeys,
+      globalOrdered = globalOrdered,
+      additionalNullClusterKeyGenerated)
+  }
+
+  def withAdditionalNullClusterKeyGenerated(nullClusterKeyGenerated: Boolean): Partitioning = {
+    new Partitioning(
+      numPartitions,
+      clusterKeys,
+      sortKeys,
+      globalOrdered,
+      additionalNullClusterKeyGenerated = nullClusterKeyGenerated)
+  }
+
+  /**
+   * Compute the gap between the required data distribution and the existed data distribution.
+   *
+   * @param required the required data distribution
+   * @return the gap that need to apply to the existed data.
+   */
+  def gap(required: Distribution): Gap = required match {
+    case UnspecifiedDistribution => NoGap
+    case OrderedDistribution(ordering) if ordering == this.sortKeys && this.globalOrdered => NoGap
+    case OrderedDistribution(ordering) => GlobalOrdering(ordering)
+    case ClusteredDistribution(clustering, nullKeysSensitive, sortKeys) =>
+      if (this.globalOrdered) {
+        // Child is a global ordering partition (clustered by range), definitely requires
+        // the repartitioning for a ClusteredDistribution
+        if (sortKeys.nonEmpty) { // required sorting
+          RepartitionKeyAndSort(clustering, sortKeys)
+        } else {
+          RepartitionKey(clustering)
+        }
+      } else {
+        // Child is not a global ordering partition, probably a Clustered Partitioning or
+        // UnspecifiedPartitioning
+        if (this.clusterKeys == clustering && clustering.nonEmpty) { // same distribution
+          if (nullKeysSensitive) {
+            // No NEW null cluster key generated from the child to be required
+            // e.g. In GROUP BY clause, even the clustering key is the same, however,
+            // if new null clustering key generated in child, we need to put all of the
+            // null clustering into a single partition.
+            if (this.additionalNullClusterKeyGenerated == false) {
+              // No null clustering key generated
+              if (sortKeys.isEmpty || sortKeys == this.sortKeys) {
+                // No sorting required or the sorting keys are the same with current partitioning
+                NoGap
+              } else {
+                // Sorting the data within the partition
+                SortKeyWithinPartition(sortKeys)
+              }
+            } else {
+              // child possible generate the null value for cluster keys,
+              // we need to repartitioning the data
+              if (sortKeys.nonEmpty) { // required sorting
+                RepartitionKeyAndSort(clustering, sortKeys)
+              } else {
+                RepartitionKey(clustering)
+              }
+            }
+          } else {
+            // Don't care if null cluster key generated from the child.
+            // E.g. In EQUAL-JOIN, we don't care about if null key should be in the same partition,
+            // As we always consider the null key would be not equal to each other.
+            if (sortKeys.isEmpty || sortKeys == this.sortKeys) {
+              NoGap
+            } else {
+              SortKeyWithinPartition(sortKeys)
+            }
+          }
+        } else { // not the same distribution
+          if (sortKeys.nonEmpty) { // required sorting
+            RepartitionKeyAndSort(clustering, sortKeys)
+          } else {
+            RepartitionKey(clustering)
+          }
+        }
+      }
+  }
 }
+
+// scalastyle:off
+/******************************************************************/
+/*             Helper utilities for the data partitioning         */
+/******************************************************************/
+// scalastyle:on
+
+object UnknownPartitioning extends Partitioning
+
+object HashPartition {
+  type ReturnType = Option[(Seq[Expression], Int)] // (ClusteringKey, NumberOfPartition)
+
+  def apply(clustering: Seq[Expression]): Partitioning = {
+    UnknownPartitioning.withClusterKeys(clustering)
+  }
+
+  def unapply(part: Partitioning): ReturnType = {
+    if (part.globalOrdered == false &&
+        part.clusterKeys.nonEmpty &&
+        part.sortKeys.isEmpty) {
+      Some(part.clusterKeys, part.numPartitions.get)
+    } else {
+      None
+    }
+  }
+}
+
+object RangePartition {
+  type ReturnType = Option[(Seq[SortOrder], Int)] // (Seq[SortOrder], NumberOfPartition)
+  def apply(ordering: Seq[SortOrder]): Partitioning = {
+    UnknownPartitioning.withSortKeys(ordering).withGlobalOrdered(true)
+  }
+  def unapply(part: Partitioning): ReturnType = {
+    if (part.globalOrdered && part.sortKeys.nonEmpty) {
+      Some(part.sortKeys, part.numPartitions.get)
+    } else {
+      None
+    }
+  }
+}
+
+object HashPartitionWithSort {
+  // (Clustering Keys, Seq[SortOrder], NumberOfPartition)
+  type ReturnType = Option[(Seq[Expression], Seq[SortOrder], Int)]
+
+  def apply(clustering: Seq[Expression], sortKeys: Seq[SortOrder]): Partitioning = {
+    UnknownPartitioning.withClusterKeys(clustering).withSortKeys(sortKeys)
+  }
+
+  def unapply(part: Partitioning): ReturnType = {
+    if (part.globalOrdered == false &&
+        part.clusterKeys.nonEmpty &&
+        part.sortKeys.nonEmpty) {
+      Some(part.clusterKeys, part.sortKeys, part.numPartitions.get)
+    } else {
+      None
+    }
+  }
+}
+
+object SinglePartition {
+  def apply(): Partitioning = {
+    UnknownPartitioning.withClusterKeys(Nil).withNumPartitions(1)
+  }
+
+  def unapply(part: Partitioning): Option[Int] =
+    if (part.numPartitions.get == 1 || part.clusterKeys.isEmpty) {
+      Some(1)
+    } else {
+      None
+    }
+}
+

@@ -40,7 +40,7 @@ case class Expand(
 
   // The GroupExpressions can output data with arbitrary partitioning, so set it
   // as UNKNOWN partitioning
-  override def outputPartitioning: Partitioning = UnknownPartitioning(0)
+  override def outputPartitioning: Partitioning = UnknownPartitioning
 
   protected override def doExecute(): RDD[InternalRow] = attachTree(this, "execute") {
     child.execute().mapPartitions { iter =>

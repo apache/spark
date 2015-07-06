@@ -39,18 +39,16 @@ case class SortMergeJoin(
 
   override def output: Seq[Attribute] = left.output ++ right.output
 
-  override def outputPartitioning: Partitioning = left.outputPartitioning
+  override def outputPartitioning: Partitioning = {
+    left.outputPartitioning.withSortKeys(requiredOrders(leftKeys))
+  }
 
   override def requiredChildDistribution: Seq[Distribution] =
-    ClusteredDistribution(leftKeys) :: ClusteredDistribution(rightKeys) :: Nil
+    ClusteredDistribution(leftKeys, false, requiredOrders(leftKeys)) ::
+    ClusteredDistribution(rightKeys, false, requiredOrders(rightKeys)) :: Nil
 
   // this is to manually construct an ordering that can be used to compare keys from both sides
   private val keyOrdering: RowOrdering = RowOrdering.forSchema(leftKeys.map(_.dataType))
-
-  override def outputOrdering: Seq[SortOrder] = requiredOrders(leftKeys)
-
-  override def requiredChildOrdering: Seq[Seq[SortOrder]] =
-    requiredOrders(leftKeys) :: requiredOrders(rightKeys) :: Nil
 
   @transient protected lazy val leftKeyGenerator = newProjection(leftKeys, left.output)
   @transient protected lazy val rightKeyGenerator = newProjection(rightKeys, right.output)

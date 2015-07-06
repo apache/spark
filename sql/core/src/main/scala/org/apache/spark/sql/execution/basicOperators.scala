@@ -42,8 +42,6 @@ case class Project(projectList: Seq[NamedExpression], child: SparkPlan) extends 
     val reusableProjection = buildProjection()
     iter.map(reusableProjection)
   }
-
-  override def outputOrdering: Seq[SortOrder] = child.outputOrdering
 }
 
 /**
@@ -59,8 +57,6 @@ case class Filter(condition: Expression, child: SparkPlan) extends UnaryNode {
   protected override def doExecute(): RDD[InternalRow] = child.execute().mapPartitions { iter =>
     iter.filter(conditionEvaluator)
   }
-
-  override def outputOrdering: Seq[SortOrder] = child.outputOrdering
 }
 
 /**
@@ -123,7 +119,7 @@ case class Limit(limit: Int, child: SparkPlan)
   private def sortBasedShuffleOn = SparkEnv.get.shuffleManager.isInstanceOf[SortShuffleManager]
 
   override def output: Seq[Attribute] = child.output
-  override def outputPartitioning: Partitioning = SinglePartition
+  override def outputPartitioning: Partitioning = SinglePartition()
 
   override def executeCollect(): Array[Row] = child.executeTake(limit)
 
@@ -162,7 +158,8 @@ case class TakeOrderedAndProject(
 
   override def output: Seq[Attribute] = child.output
 
-  override def outputPartitioning: Partitioning = SinglePartition
+  override def outputPartitioning: Partitioning =
+    SinglePartition().withSortKeys(sortOrder).withGlobalOrdered(true)
 
   private val ord: RowOrdering = new RowOrdering(sortOrder, child.output)
 
@@ -182,8 +179,6 @@ case class TakeOrderedAndProject(
   // TODO: Terminal split should be implemented differently from non-terminal split.
   // TODO: Pick num splits based on |limit|.
   protected override def doExecute(): RDD[InternalRow] = sparkContext.makeRDD(collectData(), 1)
-
-  override def outputOrdering: Seq[SortOrder] = sortOrder
 }
 
 /**
@@ -210,7 +205,11 @@ case class Sort(
 
   override def output: Seq[Attribute] = child.output
 
-  override def outputOrdering: Seq[SortOrder] = sortOrder
+  override def outputPartitioning: Partitioning = if (global) {
+    RangePartition(sortOrder)
+  } else {
+    child.outputPartitioning.withSortKeys(sortOrder)
+  }
 }
 
 /**
@@ -242,7 +241,11 @@ case class ExternalSort(
 
   override def output: Seq[Attribute] = child.output
 
-  override def outputOrdering: Seq[SortOrder] = sortOrder
+  override def outputPartitioning: Partitioning = if (global) {
+    RangePartition(sortOrder)
+  } else {
+    child.outputPartitioning.withSortKeys(sortOrder)
+  }
 }
 
 /**

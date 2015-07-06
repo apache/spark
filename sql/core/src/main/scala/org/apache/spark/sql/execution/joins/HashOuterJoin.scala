@@ -47,13 +47,13 @@ case class HashOuterJoin(
   override def outputPartitioning: Partitioning = joinType match {
     case LeftOuter => left.outputPartitioning
     case RightOuter => right.outputPartitioning
-    case FullOuter => UnknownPartitioning(left.outputPartitioning.numPartitions)
+    case FullOuter => left.outputPartitioning.withAdditionalNullClusterKeyGenerated(true)
     case x =>
       throw new IllegalArgumentException(s"HashOuterJoin should not take $x as the JoinType")
   }
 
   override def requiredChildDistribution: Seq[ClusteredDistribution] =
-    ClusteredDistribution(leftKeys) :: ClusteredDistribution(rightKeys) :: Nil
+    ClusteredDistribution(leftKeys, false) :: ClusteredDistribution(rightKeys, false) :: Nil
 
   override def output: Seq[Attribute] = {
     joinType match {
