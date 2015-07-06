@@ -804,10 +804,10 @@ class DataFrame(object):
         >>> df.groupBy().avg().collect()
         [Row(avg(age)=3.5)]
         >>> df.groupBy('name').agg({'age': 'mean'}).collect()
-        [Row(name=u'Bob', avg(age)=5.0), Row(name=u'Alice', avg(age)=2.0)]
-        >>> df.groupBy(df.name).avg().sort("name").collect()
-        [Row(name=u'Bob', avg(age)=5.0), Row(name=u'Alice', avg(age)=2.0)]
-        >>> df.groupBy(['name', df.age]).count().sort("name").collect()
+        [Row(name=u'Alice', avg(age)=2.0), Row(name=u'Bob', avg(age)=5.0)]
+        >>> df.groupBy(df.name).avg().collect()
+        [Row(name=u'Alice', avg(age)=2.0), Row(name=u'Bob', avg(age)=5.0)]
+        >>> df.groupBy(['name', df.age]).count().collect()
         [Row(name=u'Bob', age=5, count=1), Row(name=u'Alice', age=2, count=1)]
         """
         jgd = self._jdf.groupBy(self._jcols(*cols))
