@@ -854,6 +854,8 @@ it with new information. To use this, you will have to do two steps.
 1. Define the state update function - Specify with a function how to update the state using the
 previous state and the new values from an input stream.
 
+Spark will run the `updateStateByKey` operation for all existing keys, regardless of whether they have new data in a batch or not. If `updateStateByKey` returns None then the key-value pair will be eliminated.
+
 Let's illustrate this with an example. Say you want to maintain a running count of each word
 seen in a text data stream. Here, the running count is the state and it is an integer. We
 define the update function as:
@@ -929,8 +931,6 @@ The update function will be called for each word, with `newValues` having a sequ
 the `(word, 1)` pairs) and the `runningCount` having the previous count. For the complete
 Python code, take a look at the example
 [stateful_network_wordcount.py]({{site.SPARK_GITHUB_URL}}/blob/master/examples/src/main/python/streaming/stateful_network_wordcount.py). 
-
-Spark will run the updateStateByKey for all existing keys, regardless of whether they have new data in a batch or not. If updateStateByKey returns None then the key-value pair will be eliminated.
 
 </div>
 </div>
