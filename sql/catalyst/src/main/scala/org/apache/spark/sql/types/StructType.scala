@@ -309,6 +309,8 @@ object StructType extends AbstractDataType {
     childCandidate.isInstanceOf[StructType]
   }
 
+  private[sql] override def simpleString: String = "struct"
+
   def apply(fields: Seq[StructField]): StructType = StructType(fields.toArray)
 
   def apply(fields: java.util.List[StructField]): StructType = {
