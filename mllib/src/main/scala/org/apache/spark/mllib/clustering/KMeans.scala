@@ -162,12 +162,11 @@ class KMeans private (
 
   /**
    * Set the initial starting point, bypassing the random initialization or k-means||
-   * The condition model.k == this.k must be met, and only one run is allowed;
-   * failure in either case will result in an IllegalArgumentException.
+   * The condition model.k == this.k must be met, failure results
+   * in an IllegalArgumentException.
    */
   def setInitialModel(model: KMeansModel): this.type = {
     require(model.k == k, "mismatched cluster count")
-    logWarning("Ignoring runs; one run is allowed when initialModel is given.")
     initialModel = Some(model)
     this
   }
@@ -209,7 +208,9 @@ class KMeans private (
 
     val initStartTime = System.nanoTime()
 
-    val numRuns = if (initialModel.isEmpty) 1 else runs
+    // Only one run is allowed when initialModel is given
+    val numRuns = if (initialModel.nonEmpty) 1 else runs
+    logWarning("Ignoring runs; one run is allowed when initialModel is given.")
 
     val centers = initialModel match {
       case Some(kMeansCenters) => {
