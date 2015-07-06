@@ -50,28 +50,12 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
         filters,
         (a, f) => toCatalystRDD(l, a, t.buildScan(a.map(_.name).toArray, f))) :: Nil
 
-    case PhysicalOperation(projects, filters,
-        p @ logical.Sample(_, _, _, _, l @ LogicalRelation(t: PrunedFilteredScan))) =>
-      pruneFilterProject(
-        l,
-        projects,
-        filters,
-        (a, f) => toCatalystRDD(l, a, t.buildScan(a.map(_.name).toArray, f)), Some(p)) :: Nil
-
     case PhysicalOperation(projects, filters, l @ LogicalRelation(t: PrunedScan)) =>
       pruneFilterProject(
         l,
         projects,
         filters,
         (a, _) => toCatalystRDD(l, a, t.buildScan(a.map(_.name).toArray))) :: Nil
-
-    case PhysicalOperation(projects, filters,
-        p @ logical.Sample(_, _, _, _, l @ LogicalRelation(t: PrunedScan))) =>
-      pruneFilterProject(
-        l,
-        projects,
-        filters,
-        (a, _) => toCatalystRDD(l, a, t.buildScan(a.map(_.name).toArray)), Some(p)) :: Nil
 
     // Scanning partitioned HadoopFsRelation
     case PhysicalOperation(projects, filters, l @ LogicalRelation(t: HadoopFsRelation))
@@ -274,29 +258,14 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
       relation: LogicalRelation,
       projects: Seq[NamedExpression],
       filterPredicates: Seq[Expression],
-      scanBuilder: (Seq[Attribute], Array[Filter]) => RDD[InternalRow],
-      extraPlan: Option[LogicalPlan] = None) = {
+      scanBuilder: (Seq[Attribute], Array[Filter]) => RDD[InternalRow]) = {
     pruneFilterProjectRaw(
       relation,
       projects,
       filterPredicates,
       (requestedColumns, pushedFilters) => {
         scanBuilder(requestedColumns, selectFilters(pushedFilters).toArray)
-      },
-      extraPlan)
-  }
-
-  private def wrapPhysicalRDD(scan: execution.PhysicalRDD, extraPlan: Option[LogicalPlan]) = {
-    if (!extraPlan.isDefined) {
-      scan
-    } else {
-      extraPlan.get match {
-        case logical.Sample(lb, up, replace, seed, child) =>
-          execution.Sample(lb, up, replace, seed, scan)
-        case _ =>
-          scan
-      }
-    }
+      })
   }
 
   // Based on Catalyst expressions.
@@ -304,8 +273,7 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
       relation: LogicalRelation,
       projects: Seq[NamedExpression],
       filterPredicates: Seq[Expression],
-      scanBuilder: (Seq[Attribute], Seq[Expression]) => RDD[InternalRow],
-      extraPlan: Option[LogicalPlan] = None) = {
+      scanBuilder: (Seq[Attribute], Seq[Expression]) => RDD[InternalRow]) = {
 
     val projectSet = AttributeSet(projects.flatMap(_.references))
     val filterSet = AttributeSet(filterPredicates.flatMap(_.references))
@@ -325,14 +293,14 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
         projects.asInstanceOf[Seq[Attribute]] // Safe due to if above.
           .map(relation.attributeMap)            // Match original case of attributes.
 
-      val scan = wrapPhysicalRDD(execution.PhysicalRDD(projects.map(_.toAttribute),
-        scanBuilder(requestedColumns, pushedFilters)), extraPlan)
+      val scan = execution.PhysicalRDD(projects.map(_.toAttribute),
+        scanBuilder(requestedColumns, pushedFilters))
       filterCondition.map(execution.Filter(_, scan)).getOrElse(scan)
     } else {
       val requestedColumns = (projectSet ++ filterSet).map(relation.attributeMap).toSeq
 
-      val scan = wrapPhysicalRDD(execution.PhysicalRDD(requestedColumns,
-        scanBuilder(requestedColumns, pushedFilters)), extraPlan)
+      val scan = execution.PhysicalRDD(requestedColumns,
+        scanBuilder(requestedColumns, pushedFilters))
       execution.Project(projects, filterCondition.map(execution.Filter(_, scan)).getOrElse(scan))
     }
   }
