@@ -19,10 +19,9 @@ package org.apache.spark.ml.regression
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.linalg.DenseVector
-import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.mllib.util.{LinearDataGenerator, MLlibTestSparkContext}
+import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.sql.{DataFrame, Row}
-import org.scalatest.Assertions
 
 class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
 
