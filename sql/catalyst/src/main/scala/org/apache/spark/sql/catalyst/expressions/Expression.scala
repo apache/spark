@@ -120,17 +120,6 @@ abstract class Expression extends TreeNode[Expression] {
   def childrenResolved: Boolean = children.forall(_.resolved)
 
   /**
-   * Returns a string representation of this expression that does not have developer centric
-   * debugging information like the expression id.
-   */
-  def prettyString: String = {
-    transform {
-      case a: AttributeReference => PrettyAttribute(a.name)
-      case u: UnresolvedAttribute => PrettyAttribute(u.name)
-    }.toString
-  }
-
-  /**
    * Returns true when two expressions will always compute the same result, even if they differ
    * cosmetically (i.e. capitalization of names in attributes may be different).
    */
@@ -154,71 +143,40 @@ abstract class Expression extends TreeNode[Expression] {
    * Note: it's not valid to call this method until `childrenResolved == true`.
    */
   def checkInputDataTypes(): TypeCheckResult = TypeCheckResult.TypeCheckSuccess
-}
-
-abstract class BinaryExpression extends Expression with trees.BinaryNode[Expression] {
-  self: Product =>
-
-  def symbol: String = sys.error(s"BinaryExpressions must override either toString or symbol")
-
-  override def foldable: Boolean = left.foldable && right.foldable
-
-  override def nullable: Boolean = left.nullable || right.nullable
-
-  override def toString: String = s"($left $symbol $right)"
 
   /**
-   * Short hand for generating binary evaluation code.
-   * If either of the sub-expressions is null, the result of this computation
-   * is assumed to be null.
-   *
-   * @param f accepts two variable names and returns Java code to compute the output.
+   * Returns a user-facing string representation of this expression's name.
+   * This should usually match the name of the function in SQL.
    */
-  protected def defineCodeGen(
-      ctx: CodeGenContext,
-      ev: GeneratedExpressionCode,
-      f: (String, String) => String): String = {
-    nullSafeCodeGen(ctx, ev, (result, eval1, eval2) => {
-      s"$result = ${f(eval1, eval2)};"
-    })
-  }
+  def prettyName: String = getClass.getSimpleName.toLowerCase
 
   /**
-   * Short hand for generating binary evaluation code.
-   * If either of the sub-expressions is null, the result of this computation
-   * is assumed to be null.
+   * Returns a user-facing string representation of this expression, i.e. does not have developer
+   * centric debugging information like the expression id.
    */
-  protected def nullSafeCodeGen(
-      ctx: CodeGenContext,
-      ev: GeneratedExpressionCode,
-      f: (String, String, String) => String): String = {
-    val eval1 = left.gen(ctx)
-    val eval2 = right.gen(ctx)
-    val resultCode = f(ev.primitive, eval1.primitive, eval2.primitive)
-    s"""
-      ${eval1.code}
-      boolean ${ev.isNull} = ${eval1.isNull};
-      ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
-      if (!${ev.isNull}) {
-        ${eval2.code}
-        if (!${eval2.isNull}) {
-          $resultCode
-        } else {
-          ${ev.isNull} = true;
-        }
-      }
-    """
+  def prettyString: String = {
+    transform {
+      case a: AttributeReference => PrettyAttribute(a.name)
+      case u: UnresolvedAttribute => PrettyAttribute(u.name)
+    }.toString
   }
+
+  override def toString: String = prettyName + children.mkString("(", ",", ")")
 }
 
-private[sql] object BinaryExpression {
-  def unapply(e: BinaryExpression): Option[(Expression, Expression)] = Some((e.left, e.right))
-}
 
+/**
+ * A leaf expression, i.e. one without any child expressions.
+ */
 abstract class LeafExpression extends Expression with trees.LeafNode[Expression] {
   self: Product =>
 }
 
+
+/**
+ * An expression with one input and one output. The output is by default evaluated to null
+ * if the input is evaluated to null.
+ */
 abstract class UnaryExpression extends Expression with trees.UnaryNode[Expression] {
   self: Product =>
 
@@ -265,39 +223,76 @@ abstract class UnaryExpression extends Expression with trees.UnaryNode[Expressio
   }
 }
 
+
 /**
- * An trait that gets mixin to define the expected input types of an expression.
+ * An expression with two inputs and one output. The output is by default evaluated to null
+ * if any input is evaluated to null.
  */
-trait ExpectsInputTypes { self: Expression =>
+abstract class BinaryExpression extends Expression with trees.BinaryNode[Expression] {
+  self: Product =>
+
+  override def foldable: Boolean = left.foldable && right.foldable
+
+  override def nullable: Boolean = left.nullable || right.nullable
 
   /**
-   * Expected input types from child expressions. The i-th position in the returned seq indicates
-   * the type requirement for the i-th child.
+   * Short hand for generating binary evaluation code.
+   * If either of the sub-expressions is null, the result of this computation
+   * is assumed to be null.
    *
-   * The possible values at each position are:
-   * 1. a specific data type, e.g. LongType, StringType.
-   * 2. a non-leaf data type, e.g. NumericType, IntegralType, FractionalType.
-   * 3. a list of specific data types, e.g. Seq(StringType, BinaryType).
+   * @param f accepts two variable names and returns Java code to compute the output.
    */
-  def inputTypes: Seq[Any]
+  protected def defineCodeGen(
+    ctx: CodeGenContext,
+    ev: GeneratedExpressionCode,
+    f: (String, String) => String): String = {
+    nullSafeCodeGen(ctx, ev, (result, eval1, eval2) => {
+      s"$result = ${f(eval1, eval2)};"
+    })
+  }
 
-  override def checkInputDataTypes(): TypeCheckResult = {
-    // We will do the type checking in `HiveTypeCoercion`, so always returning success here.
-    TypeCheckResult.TypeCheckSuccess
+  /**
+   * Short hand for generating binary evaluation code.
+   * If either of the sub-expressions is null, the result of this computation
+   * is assumed to be null.
+   */
+  protected def nullSafeCodeGen(
+    ctx: CodeGenContext,
+    ev: GeneratedExpressionCode,
+    f: (String, String, String) => String): String = {
+    val eval1 = left.gen(ctx)
+    val eval2 = right.gen(ctx)
+    val resultCode = f(ev.primitive, eval1.primitive, eval2.primitive)
+    s"""
+      ${eval1.code}
+      boolean ${ev.isNull} = ${eval1.isNull};
+      ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
+      if (!${ev.isNull}) {
+        ${eval2.code}
+        if (!${eval2.isNull}) {
+          $resultCode
+        } else {
+          ${ev.isNull} = true;
+        }
+      }
+    """
   }
 }
 
+
 /**
- * Expressions that require a specific `DataType` as input should implement this trait
- * so that the proper type conversions can be performed in the analyzer.
+ * An expression that has two inputs that are expected to the be same type. If the two inputs have
+ * different types, the analyzer will find the tightest common type and do the proper type casting.
  */
-trait AutoCastInputTypes { self: Expression =>
+abstract class BinaryOperator extends BinaryExpression {
+  self: Product =>
 
-  def inputTypes: Seq[DataType]
+  def symbol: String
 
-  override def checkInputDataTypes(): TypeCheckResult = {
-    // We will always do type casting for `AutoCastInputTypes` in `HiveTypeCoercion`,
-    // so type mismatch error won't be reported here, but for underling `Cast`s.
-    TypeCheckResult.TypeCheckSuccess
-  }
+  override def toString: String = s"($left $symbol $right)"
+}
+
+
+private[sql] object BinaryOperator {
+  def unapply(e: BinaryOperator): Option[(Expression, Expression)] = Some((e.left, e.right))
 }
