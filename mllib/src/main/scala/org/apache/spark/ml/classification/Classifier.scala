@@ -32,7 +32,7 @@ import org.apache.spark.sql.types.{DataType, DoubleType, StructType}
  * (private[spark]) Params for classification.
  */
 private[spark] trait ClassifierParams
-  extends PredictorParams with HasRawPredictionCol with HasThresholds {
+  extends PredictorParams with HasRawPredictionCol with HasThresholds with HasThreshold {
 
   override protected def validateAndTransformSchema(
       schema: StructType,
@@ -40,6 +40,29 @@ private[spark] trait ClassifierParams
       featuresDataType: DataType): StructType = {
     val parentSchema = super.validateAndTransformSchema(schema, fitting, featuresDataType)
     SchemaUtils.appendColumn(parentSchema, $(rawPredictionCol), new VectorUDT)
+  }
+
+  /**
+   * Customized version of getThreshold that looks at both threshold & thresholds param.
+   * The priority order is thresholds assigned param, threshold assigned param
+   * thresholds default value, threshold default value.
+   * When converting from threshold to thresholds the threshold for class 0 will be 0.5
+   * and the threshold for class 1 will be the assigned threshold value.
+   **/
+  override protected def getThresholds: Array[Double] = {
+
+  }
+  /**
+   * Customized version of getThreshold that looks at both threshold & thresholds param.
+   * The priority order is threshold assigned param, thresholds assigned param
+   * threshold default value, thresholds default value.
+   * When converting from thresholds to threshold the threshold will be the ratio between
+   * class 1 and class 0.
+   **/
+  override protected def getThreshold: Double = {
+    if (isDefined(threshold)) {
+      getThreshold
+    }
   }
 }
 
