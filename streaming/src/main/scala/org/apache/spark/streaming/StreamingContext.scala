@@ -575,9 +575,7 @@ class StreamingContext private[streaming] (
    * @throws IllegalStateException if the StreamingContext is already stopped.
    */
   def start(): Unit = synchronized {
-  /**
-   * Registering Streaming Metrics at the start of the StreamingContext
-   */
+  //Registering Streaming Metrics at the start of the StreamingContext
     assert(env != null)
     assert(env.metricsSystem != null)
     env.metricsSystem.registerSource(streamingSource)
@@ -692,9 +690,7 @@ class StreamingContext private[streaming] (
     } finally {
       // The state should always be Stopped after calling `stop()`, even if we haven't started yet
       state = STOPPED
-      /**
-       * De-registering Streaming Metrics at the stop of the StreamingContext
-       */
+      // De-registering Streaming Metrics of the StreamingContext
       env.metricsSystem.removeSource(streamingSource)
     }
   }
