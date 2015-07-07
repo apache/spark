@@ -254,7 +254,7 @@ private[sql] class ParquetRelation2(
     // Create the function to set input paths at the driver side.
     val setInputPaths = ParquetRelation2.initializeDriverSideJobFunc(inputFiles) _
 
-    val footers = inputFiles.map(f => metadataCache.footers(f.getPath))
+    val footers = inputFiles.flatMap(f => metadataCache.footers.get(f.getPath))
 
     Utils.withDummyCallSite(sqlContext.sparkContext) {
       // TODO Stop using `FilteringParquetRowInputFormat` and overriding `getPartition`.
