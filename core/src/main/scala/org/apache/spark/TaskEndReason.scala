@@ -168,6 +168,18 @@ case class ExecutorLostFailure(execId: String) extends TaskFailedReason {
 
 /**
  * :: DeveloperApi ::
+ * The task failed because the executor that it was running on was prematurely terminated. The
+ * executor is forcibly exited but the exit should be considered as part of normal cluster
+ * behavior.
+ */
+@DeveloperApi
+case class ExecutorForTaskExited(taskId: Long, execId: String, exitReason: String, exitCode: Int) extends TaskFailedReason {
+  override def toErrorString: String = s"Task with ID $taskId had its executor ${execId} exit normally with exit code "
+    s"$exitCode, due to the following reason: $exitReason."
+}
+
+/**
+ * :: DeveloperApi ::
  * We don't know why the task ended -- for example, because of a ClassNotFound exception when
  * deserializing the task result.
  */

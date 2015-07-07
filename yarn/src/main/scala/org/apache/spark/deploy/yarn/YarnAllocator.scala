@@ -21,6 +21,8 @@ import java.util.Collections
 import java.util.concurrent._
 import java.util.regex.Pattern
 
+import org.apache.spark.scheduler.{ExecutorExitedAbnormally, ExecutorExitedNormally, ExecutorLossReason}
+
 import scala.collection.JavaConversions._
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
 
@@ -62,6 +64,8 @@ private[yarn] class YarnAllocator(
 
   import YarnAllocator._
 
+  private val NORMAL_CONTAINER_EXIT_STATUS = ExecutorExitedNormally(0, "Executor exited normally.")
+
   // RackResolver logs an INFO message whenever it resolves a rack, which is way too often.
   if (Logger.getLogger(classOf[RackResolver]).getLevel == null) {
     Logger.getLogger(classOf[RackResolver]).setLevel(Level.WARN)
@@ -87,6 +91,16 @@ private[yarn] class YarnAllocator(
   // Keep track of which container is running which executor to remove the executors later
   // Visible for testing.
   private[yarn] val executorIdToContainer = new HashMap[String, Container]
+
+  // Maintain container exit statuses, for any executors that exit with non-zero codes.
+  // Used to report to the driver how a given executor was terminated.
+  // For example, the driver will want to ignore preempted containers
+  // and thus should not be considered as a failure counting against
+  // the job's task failure count.
+
+  // Store only non-zero exit codes to save on space for the expected-majority case where executors
+  // terminate normally.
+  private val completedNonZeroContainerExitCodes = new HashMap[ContainerId, ExecutorLossReason]
 
   // Executor memory in MB.
   protected val executorMemory = args.executorMemory
@@ -170,6 +184,11 @@ private[yarn] class YarnAllocator(
     } else {
       logWarning(s"Attempted to kill unknown executor $executorId!")
     }
+  }
+
+  def getExecutorLossReason(executorId: String): ExecutorLossReason = synchronized {
+    allocateResources()
+    completedNonZeroContainerExitCodes.getOrElse(executorIdToContainer(executorId).getId, NORMAL_CONTAINER_EXIT_STATUS)
   }
 
   /**
@@ -399,21 +418,43 @@ private[yarn] class YarnAllocator(
         // Hadoop 2.2.X added a ContainerExitStatus we should switch to use
         // there are some exit status' we shouldn't necessarily count against us, but for
         // now I think its ok as none of the containers are expected to exit
+        var isExecutorNonZeroExitNormal = true
+        var containerExitReason = "Container exited for an unknown reason."
         if (completedContainer.getExitStatus == ContainerExitStatus.PREEMPTED) {
-          logInfo("Container preempted: " + containerId)
+          containerExitReason = s"Container $containerId was preempted."
+          logInfo(containerExitReason)
         } else if (completedContainer.getExitStatus == -103) { // vmem limit exceeded
-          logWarning(memLimitExceededLogMessage(
+          // Should probably still count these towards task failures
+          isExecutorNonZeroExitNormal = false
+          containerExitReason = memLimitExceededLogMessage(
             completedContainer.getDiagnostics,
-            VMEM_EXCEEDED_PATTERN))
+            VMEM_EXCEEDED_PATTERN)
+          logWarning(containerExitReason)
         } else if (completedContainer.getExitStatus == -104) { // pmem limit exceeded
-          logWarning(memLimitExceededLogMessage(
+          // Should probably still count these towards task failures
+          isExecutorNonZeroExitNormal = false
+          containerExitReason = memLimitExceededLogMessage(
             completedContainer.getDiagnostics,
-            PMEM_EXCEEDED_PATTERN))
+            PMEM_EXCEEDED_PATTERN)
+          logWarning(containerExitReason)
         } else if (completedContainer.getExitStatus != 0) {
           logInfo("Container marked as failed: " + containerId +
             ". Exit status: " + completedContainer.getExitStatus +
             ". Diagnostics: " + completedContainer.getDiagnostics)
           numExecutorsFailed += 1
+          isExecutorNonZeroExitNormal = false
+          containerExitReason = s"Container $containerId exited abnormally, and was marked as failed."
+        }
+
+        if (completedContainer.getExitStatus() != 0) {
+          val exitStatus = {
+            if (isExecutorNonZeroExitNormal) {
+              ExecutorExitedNormally(completedContainer.getExitStatus(), containerExitReason)
+            } else {
+              ExecutorExitedAbnormally(completedContainer.getExitStatus(), containerExitReason)
+            }
+          }
+          completedNonZeroContainerExitCodes.put(containerId, exitStatus)
         }
       }
 

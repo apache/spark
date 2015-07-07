@@ -21,6 +21,7 @@ import java.nio.ByteBuffer
 
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.rpc.RpcEndpointRef
+import org.apache.spark.scheduler.{SlaveLost, ExecutorLossReason}
 import org.apache.spark.util.{SerializableBuffer, Utils}
 
 private[spark] sealed trait CoarseGrainedClusterMessage extends Serializable
@@ -70,7 +71,7 @@ private[spark] object CoarseGrainedClusterMessages {
 
   case object StopExecutors extends CoarseGrainedClusterMessage
 
-  case class RemoveExecutor(executorId: String, reason: String) extends CoarseGrainedClusterMessage
+  case class RemoveExecutor(executorId: String, reason: ExecutorLossReason)
 
   case class SetupDriver(driver: RpcEndpointRef) extends CoarseGrainedClusterMessage
 
@@ -87,6 +88,11 @@ private[spark] object CoarseGrainedClusterMessages {
   // Request executors by specifying the new total number of executors desired
   // This includes executors already pending or running
   case class RequestExecutors(requestedTotal: Int) extends CoarseGrainedClusterMessage
+
+  // Check if an executor was force-killed but for a normal reason
+  // This could be the case if e.g. the cluster manager supports killing an executor to move
+  // it elsewhere or to kill an executor in order to free resources
+  case class GetExecutorLossReason(executorId: String)
 
   case class KillExecutors(executorIds: Seq[String]) extends CoarseGrainedClusterMessage
 

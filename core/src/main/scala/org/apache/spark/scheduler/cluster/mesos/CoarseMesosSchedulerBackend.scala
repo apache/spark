@@ -27,7 +27,7 @@ import org.apache.mesos.{Scheduler => MScheduler, _}
 import org.apache.mesos.Protos.{TaskInfo => MesosTaskInfo, _}
 import org.apache.spark.{SparkContext, SparkEnv, SparkException, TaskState}
 import org.apache.spark.rpc.RpcAddress
-import org.apache.spark.scheduler.TaskSchedulerImpl
+import org.apache.spark.scheduler.{SlaveLost, TaskSchedulerImpl}
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
 import org.apache.spark.util.Utils
 
@@ -268,7 +268,7 @@ private[spark] class CoarseMesosSchedulerBackend(
       if (slaveIdsWithExecutors.contains(slaveId.getValue)) {
         // Note that the slave ID corresponds to the executor ID on that slave
         slaveIdsWithExecutors -= slaveId.getValue
-        removeExecutor(slaveId.getValue, "Mesos slave lost")
+        removeExecutor(slaveId.getValue, SlaveLost("Mesos slave lost"))
       }
     }
   }

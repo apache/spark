@@ -707,6 +707,9 @@ private[spark] class TaskSetManager(
             s"${ef.className} (${ef.description}) [duplicate $dupCount]")
         }
 
+      case e: ExecutorForTaskExited =>
+        logWarning(s"Task $tid failed because while it was being computed, its executor exited normally." +
+          s" Not marking the task as failed.")
       case e: TaskFailedReason =>  // TaskResultLost, TaskKilled, and others
         logWarning(failureReason)
 
@@ -718,7 +721,7 @@ private[spark] class TaskSetManager(
       put(info.executorId, clock.getTimeMillis())
     sched.dagScheduler.taskEnded(tasks(index), reason, null, null, info, taskMetrics)
     addPendingTask(index)
-    if (!isZombie && state != TaskState.KILLED && !reason.isInstanceOf[TaskCommitDenied]) {
+    if (!isZombie && state != TaskState.KILLED && shouldTaskFailureEventuallyFailJob(reason)) {
       // If a task failed because its attempt to commit was denied, do not count this failure
       // towards failing the stage. This is intended to prevent spurious stage failures in cases
       // where many speculative tasks are launched and denied to commit.
@@ -733,6 +736,10 @@ private[spark] class TaskSetManager(
       }
     }
     maybeFinishTaskSet()
+  }
+
+  private def shouldTaskFailureEventuallyFailJob(reason: TaskEndReason): Boolean = {
+    !reason.isInstanceOf[TaskCommitDenied] && !reason.isInstanceOf[ExecutorForTaskExited]
   }
 
   def abort(message: String): Unit = sched.synchronized {
@@ -774,7 +781,7 @@ private[spark] class TaskSetManager(
   }
 
   /** Called by TaskScheduler when an executor is lost so we can re-enqueue our tasks */
-  override def executorLost(execId: String, host: String) {
+  override def executorLost(execId: String, host: String, reason: ExecutorLossReason) {
     logInfo("Re-queueing tasks for " + execId + " from TaskSet " + taskSet.id)
 
     // Re-enqueue pending tasks for this host based on the status of the cluster. Note
@@ -805,9 +812,13 @@ private[spark] class TaskSetManager(
         }
       }
     }
-    // Also re-enqueue any tasks that were running on the node
     for ((tid, info) <- taskInfos if info.running && info.executorId == execId) {
-      handleFailedTask(tid, TaskState.FAILED, ExecutorLostFailure(execId))
+      // Also re-enqueue any tasks that were running on the node
+      val executorFailureReason = reason match {
+        case exited: ExecutorExitedNormally => ExecutorForTaskExited(tid, execId, exited.reason, exited.exitCode)
+        case default => ExecutorLostFailure(execId)
+      }
+      handleFailedTask(tid, TaskState.FAILED, executorFailureReason)
     }
     // recalculate valid locality levels and waits when executor is lost
     recomputeLocality()

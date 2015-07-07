@@ -330,7 +330,7 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
 
     // Now mark host2 as dead
     sched.removeExecutor("exec2")
-    manager.executorLost("exec2", "host2")
+    manager.executorLost("exec2", "host2", SlaveLost())
 
     // nothing should be chosen
     assert(manager.resourceOffer("exec1", "host1", ANY) === None)
@@ -500,10 +500,10 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
       Array(PROCESS_LOCAL, NODE_LOCAL, NO_PREF, RACK_LOCAL, ANY)))
     // test if the valid locality is recomputed when the executor is lost
     sched.removeExecutor("execC")
-    manager.executorLost("execC", "host2")
+    manager.executorLost("execC", "host2", SlaveLost())
     assert(manager.myLocalityLevels.sameElements(Array(NODE_LOCAL, NO_PREF, ANY)))
     sched.removeExecutor("execD")
-    manager.executorLost("execD", "host1")
+    manager.executorLost("execD", "host1", SlaveLost())
     assert(manager.myLocalityLevels.sameElements(Array(NO_PREF, ANY)))
   }
 
@@ -717,8 +717,8 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     assert(manager.resourceOffer("execB.2", "host2", ANY) !== None)
     sched.removeExecutor("execA")
     sched.removeExecutor("execB.2")
-    manager.executorLost("execA", "host1")
-    manager.executorLost("execB.2", "host2")
+    manager.executorLost("execA", "host1", SlaveLost())
+    manager.executorLost("execB.2", "host2", SlaveLost())
     clock.advance(LOCALITY_WAIT_MS * 4)
     sched.addExecutor("execC", "host3")
     manager.executorAdded()

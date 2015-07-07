@@ -49,8 +49,15 @@ private[spark] abstract class YarnSchedulerBackend(
   private val yarnSchedulerEndpoint = rpcEnv.setupEndpoint(
     YarnSchedulerBackend.ENDPOINT_NAME, new YarnSchedulerEndpoint(rpcEnv))
 
+<<<<<<< Updated upstream
   private implicit val askTimeout = RpcUtils.askRpcTimeout(sc.conf)
+||||||| merged common ancestors
+  private implicit val askTimeout = RpcUtils.askTimeout(sc.conf)
+=======
   private val executorDisconnectedHandlerPool = ThreadUtils.newDaemonSingleThreadExecutor("executor-disconnected-handler")
+
+  private implicit val askTimeout = RpcUtils.askTimeout(sc.conf)
+>>>>>>> Stashed changes
 
   /**
    * Request executors from the ApplicationMaster by specifying the total number desired.
