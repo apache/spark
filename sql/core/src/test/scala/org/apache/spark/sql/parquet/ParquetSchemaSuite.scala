@@ -185,7 +185,7 @@ class ParquetSchemaInferenceSuite extends ParquetSchemaTest {
       |message root {
       |  optional group _1 (LIST) {
       |    repeated group list {
-      |      required int32 array;
+      |      required int32 element;
       |    }
       |  }
       |}
@@ -210,7 +210,7 @@ class ParquetSchemaInferenceSuite extends ParquetSchemaTest {
       |message root {
       |  optional group _1 (LIST) {
       |    repeated group list {
-      |      optional int32 array;
+      |      optional int32 element;
       |    }
       |  }
       |}
@@ -290,7 +290,7 @@ class ParquetSchemaInferenceSuite extends ParquetSchemaTest {
       |        optional binary _1 (UTF8);
       |        optional group _2 (LIST) {
       |          repeated group list {
-      |            optional group array {
+      |            optional group element {
       |              required int32 _1;
       |              required double _2;
       |            }
@@ -479,7 +479,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       StructField(
         "f1",
         ArrayType(
-          StructType(Seq(StructField("num", IntegerType))), containsNull = true),
+          StructType(Seq(StructField("num", IntegerType))), containsNull = false),
         nullable = true))),
     """message root {
       |  optional group f1 (LIST) {
