@@ -687,24 +687,15 @@ class RDD(object):
         return self.map(lambda x: (f(x), x)).groupByKey(numPartitions)
 
     @ignore_unicode_prefix
-    def pipe(self, command, env={}, mode='permissive'):
+    def pipe(self, command, env={}, checkCode=False):
         """
         Return an RDD created by piping elements to a forked external process.
 
         >>> sc.parallelize(['1', '2', '', '3']).pipe('cat').collect()
         [u'1', u'2', u'', u'3']
+        
+        :param checkCode: whether or not to check the return value of the shell command.
         """
-        if mode == 'permissive':
-            def fail_condition(x):
-                return False
-        elif mode == 'strict':
-            def fail_condition(x):
-                return x != 0
-        elif mode == 'grep':
-            def fail_condition(x):
-                return x != 0 and x != 1
-        else:
-            raise ValueError("mode must be one of 'permissive', 'strict' or 'grep'.")
 
         def func(iterator):
             pipe = Popen(
@@ -719,7 +710,7 @@ class RDD(object):
 
             def check_return_code():
                 pipe.wait()
-                if fail_condition(pipe.returncode):
+                if checkCode and pipe.returncode:
                     raise Exception("Pipe function `%s' exited "
                                     "with error code %d" % (command, pipe.returncode))
                 else:
