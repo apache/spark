@@ -39,6 +39,7 @@ class BlockStatusListenerSuite extends SparkFunSuite {
     // The new block status should be added to the listener
     val expectedBlock = BlockUIData(
       StreamBlockId(0, 100),
+      "localhost:10000",
       StorageLevel.MEMORY_AND_DISK,
       memSize = 100,
       diskSize = 100,
@@ -48,6 +49,7 @@ class BlockStatusListenerSuite extends SparkFunSuite {
       ExecutorStreamBlockStatus("0", "localhost:10000", Seq(expectedBlock))
     )
     assert(listener.allExecutorStreamBlockStatus === expectedExecutorStreamBlockStatus)
+    assert(listener.blockReplication(StreamBlockId(0, 100)) === 1)
 
     // Add the second block manager
     val blockManagerId2 = BlockManagerId("1", "localhost", 10001)
@@ -61,12 +63,21 @@ class BlockStatusListenerSuite extends SparkFunSuite {
         memSize = 100,
         diskSize = 100,
         externalBlockStoreSize = 0)))
+    val expectedBlock2 = BlockUIData(
+      StreamBlockId(0, 100),
+      "localhost:10001",
+      StorageLevel.MEMORY_AND_DISK,
+      memSize = 100,
+      diskSize = 100,
+      externalBlockStoreSize = 0
+    )
     // Each block manager should contain one block
     val expectedExecutorStreamBlockStatus2 = Set(
       ExecutorStreamBlockStatus("0", "localhost:10000", Seq(expectedBlock)),
-      ExecutorStreamBlockStatus("1", "localhost:10001", Seq(expectedBlock))
+      ExecutorStreamBlockStatus("1", "localhost:10001", Seq(expectedBlock2))
     )
     assert(listener.allExecutorStreamBlockStatus.toSet === expectedExecutorStreamBlockStatus2)
+    assert(listener.blockReplication(StreamBlockId(0, 100)) === 2)
 
     // Remove a replication of the same block
     listener.onBlockUpdated(SparkListenerBlockUpdated(
@@ -83,6 +94,7 @@ class BlockStatusListenerSuite extends SparkFunSuite {
       ExecutorStreamBlockStatus("1", "localhost:10001", Seq.empty)
     )
     assert(listener.allExecutorStreamBlockStatus.toSet === expectedExecutorStreamBlockStatus3)
+    assert(listener.blockReplication(StreamBlockId(0, 100)) === 1)
 
     // Remove the second block manager at first but add a new block status
     // from this removed block manager
@@ -100,11 +112,13 @@ class BlockStatusListenerSuite extends SparkFunSuite {
       ExecutorStreamBlockStatus("0", "localhost:10000", Seq(expectedBlock))
     )
     assert(listener.allExecutorStreamBlockStatus === expectedExecutorStreamBlockStatus4)
+    assert(listener.blockReplication(StreamBlockId(0, 100)) === 1)
 
     // Remove the last block manager
     listener.onBlockManagerRemoved(SparkListenerBlockManagerRemoved(0, blockManagerId))
     // No block manager now so we should dop all block managers
     assert(listener.allExecutorStreamBlockStatus.isEmpty)
+    assert(listener.blockReplication(StreamBlockId(0, 100)) === 0)
   }
 
 }

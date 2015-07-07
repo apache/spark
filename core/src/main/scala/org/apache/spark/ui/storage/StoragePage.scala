@@ -30,8 +30,10 @@ private[ui] class StoragePage(parent: StorageTab) extends WebUIPage("") {
   private val listener = parent.listener
 
   def render(request: HttpServletRequest): Seq[Node] = {
-    val statuses = listener.allExecutorStreamBlockStatus.sortBy(_.executorId)
-    val content = rddTable ++ receiverBlockTables(statuses)
+    val content = rddTable ++ synchronized {
+      val executorStatuses = listener.allExecutorStreamBlockStatus.sortBy(_.executorId)
+      receiverBlockTables(executorStatuses)
+    }
     UIUtils.headerSparkPage("Storage", content, parent)
   }
 
@@ -129,13 +131,12 @@ private[ui] class StoragePage(parent: StorageTab) extends WebUIPage("") {
       Nil
     } else {
       <div>
-        <h5>Executor Stream Blocks Details</h5>
+        <h5>Blocks</h5>
         {UIUtils.listingTable(
           streamBlockTableHeader,
           streamBlockTableRow,
           statuses,
-          id = Some("storage-by-block-table"),
-          sortable = false)}
+          id = Some("storage-by-block-table"))}
       </div>
     }
   }
@@ -156,7 +157,7 @@ private[ui] class StoragePage(parent: StorageTab) extends WebUIPage("") {
         {block.blockId.toString}
       </td>
       <td>
-        {block.storageLevel.replication}
+        {listener.blockReplication(block.blockId).toString}
       </td>
       <td>
         {block.location}

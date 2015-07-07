@@ -51,6 +51,13 @@ private[spark] class BlockStatusListener extends SparkListener {
 
   private val blockManagers =
     new mutable.HashMap[BlockManagerId, mutable.HashMap[BlockId, BlockUIData]]
+  /**
+   * The replication in StorageLevel may be out of date. E.g., when the first block is added, the
+   * replication is 1. But when the second block with the same ID is added, the replication should
+   * become 2. To avoid scanning "blockManagers" to modify the replication number, we maintain
+   * "blockLocations" to get the replication quickly.
+   */
+  private val blockLocations = new mutable.HashMap[BlockId, mutable.ArrayBuffer[String]]
 
   override def onBlockUpdated(blockUpdated: SparkListenerBlockUpdated): Unit = {
     val blockId = blockUpdated.blockUpdatedInfo.blockId
@@ -77,9 +84,12 @@ private[spark] class BlockStatusListener extends SparkListener {
               diskSize,
               externalBlockStoreSize)
           )
+          val locations = blockLocations.getOrElseUpdate(blockId, new mutable.ArrayBuffer[String])
+          locations += blockManagerId.hostPort
         } else {
           // If isValid is not true, it means we should drop the block.
           blocksInBlockManager -= blockId
+          removeLocationFromBlockLocations(blockId, blockManagerId.hostPort)
         }
       }
     }
@@ -91,9 +101,25 @@ private[spark] class BlockStatusListener extends SparkListener {
     }
   }
 
+  private def removeLocationFromBlockLocations(blockId: BlockId, location: String): Unit = {
+    synchronized {
+      blockLocations.get(blockId).foreach { locations =>
+        locations -= location
+        if (locations.isEmpty) {
+          blockLocations -= blockId
+        }
+      }
+    }
+  }
+
   override def onBlockManagerRemoved(
       blockManagerRemoved: SparkListenerBlockManagerRemoved): Unit = synchronized {
-    blockManagers -= blockManagerRemoved.blockManagerId
+    val blockManagerId = blockManagerRemoved.blockManagerId
+    blockManagers.get(blockManagerId).foreach { blocksInBlockManager =>
+      blocksInBlockManager.keys.foreach(
+        removeLocationFromBlockLocations(_, blockManagerId.hostPort))
+    }
+    blockManagers -= blockManagerId
   }
 
   def allExecutorStreamBlockStatus: Seq[ExecutorStreamBlockStatus] = synchronized {
@@ -101,5 +127,9 @@ private[spark] class BlockStatusListener extends SparkListener {
       ExecutorStreamBlockStatus(
         blockManagerId.executorId, blockManagerId.hostPort, blocks.values.toSeq)
     }.toSeq
+  }
+
+  def blockReplication(block: BlockId): Int = synchronized {
+    blockLocations.get(block).map(_.size).getOrElse(0)
   }
 }
