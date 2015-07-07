@@ -86,6 +86,12 @@ object DecimalType extends AbstractDataType {
 
   private[sql] override def defaultConcreteType: DataType = Unlimited
 
+  private[sql] override def isParentOf(childCandidate: DataType): Boolean = {
+    childCandidate.isInstanceOf[DecimalType]
+  }
+
+  private[sql] override def simpleString: String = "decimal"
+
   val Unlimited: DecimalType = DecimalType(None)
 
   private[sql] object Fixed {

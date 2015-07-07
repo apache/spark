@@ -28,7 +28,7 @@ import org.apache.spark.{HashPartitioner, Logging, Partitioner, SparkException}
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.api.java.JavaSparkContext.fakeClassTag
-import org.apache.spark.mllib.fpm.FPGrowth.FreqItemset
+import org.apache.spark.mllib.fpm.FPGrowth._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 
@@ -36,7 +36,7 @@ import org.apache.spark.storage.StorageLevel
  * :: Experimental ::
  *
  * Model trained by [[FPGrowth]], which holds frequent itemsets.
- * @param freqItemsets frequent itemsets, which is an RDD of [[FreqItemset]]
+ * @param freqItemsets frequent itemset, which is an RDD of [[FreqItemset]]
  * @tparam Item item type
  */
 @Experimental
@@ -62,14 +62,13 @@ class FPGrowthModel[Item: ClassTag](val freqItemsets: RDD[FreqItemset[Item]]) ex
 @Experimental
 class FPGrowth private (
     private var minSupport: Double,
-    private var numPartitions: Int,
-    private var ordered: Boolean) extends Logging with Serializable {
+    private var numPartitions: Int) extends Logging with Serializable {
 
   /**
    * Constructs a default instance with default parameters {minSupport: `0.3`, numPartitions: same
-   * as the input data, ordered: `false`}.
+   * as the input data}.
    */
-  def this() = this(0.3, -1, false)
+  def this() = this(0.3, -1)
 
   /**
    * Sets the minimal support level (default: `0.3`).
@@ -84,15 +83,6 @@ class FPGrowth private (
    */
   def setNumPartitions(numPartitions: Int): this.type = {
     this.numPartitions = numPartitions
-    this
-  }
-
-  /**
-   * Indicates whether to mine itemsets (unordered) or sequences (ordered) (default: false, mine
-   * itemsets).
-   */
-  def setOrdered(ordered: Boolean): this.type = {
-    this.ordered = ordered
     this
   }
 
@@ -165,7 +155,7 @@ class FPGrowth private (
     .flatMap { case (part, tree) =>
       tree.extract(minCount, x => partitioner.getPartition(x) == part)
     }.map { case (ranks, count) =>
-      new FreqItemset(ranks.map(i => freqItems(i)).reverse.toArray, count, ordered)
+      new FreqItemset(ranks.map(i => freqItems(i)).toArray, count)
     }
   }
 
@@ -181,12 +171,9 @@ class FPGrowth private (
       itemToRank: Map[Item, Int],
       partitioner: Partitioner): mutable.Map[Int, Array[Int]] = {
     val output = mutable.Map.empty[Int, Array[Int]]
-    // Filter the basket by frequent items pattern
+    // Filter the basket by frequent items pattern and sort their ranks.
     val filtered = transaction.flatMap(itemToRank.get)
-    if (!this.ordered) {
-      ju.Arrays.sort(filtered)
-    }
-    // Generate conditional transactions
+    ju.Arrays.sort(filtered)
     val n = filtered.length
     var i = n - 1
     while (i >= 0) {
@@ -211,18 +198,9 @@ object FPGrowth {
    * Frequent itemset.
    * @param items items in this itemset. Java users should call [[FreqItemset#javaItems]] instead.
    * @param freq frequency
-   * @param ordered indicates if items represents an itemset (false) or sequence (true)
    * @tparam Item item type
    */
-  class FreqItemset[Item](val items: Array[Item], val freq: Long, val ordered: Boolean)
-    extends Serializable {
-
-    /**
-     * Auxillary constructor, assumes unordered by default.
-     */
-    def this(items: Array[Item], freq: Long) {
-      this(items, freq, false)
-    }
+  class FreqItemset[Item](val items: Array[Item], val freq: Long) extends Serializable {
 
     /**
      * Returns items in a Java List.

@@ -75,7 +75,9 @@ abstract class DataType extends AbstractDataType {
    */
   private[spark] def asNullable: DataType
 
-  override def defaultConcreteType: DataType = this
+  private[sql] override def defaultConcreteType: DataType = this
+
+  private[sql] override def isParentOf(childCandidate: DataType): Boolean = this == childCandidate
 }
 
 

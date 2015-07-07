@@ -26,18 +26,6 @@ abstract class UnaryArithmetic extends UnaryExpression {
   self: Product =>
 
   override def dataType: DataType = child.dataType
-
-  override def eval(input: InternalRow): Any = {
-    val evalE = child.eval(input)
-    if (evalE == null) {
-      null
-    } else {
-      evalInternal(evalE)
-    }
-  }
-
-  protected def evalInternal(evalE: Any): Any =
-    sys.error(s"UnaryArithmetics must override either eval or evalInternal")
 }
 
 case class UnaryMinus(child: Expression) extends UnaryArithmetic {
@@ -53,7 +41,7 @@ case class UnaryMinus(child: Expression) extends UnaryArithmetic {
     case dt: NumericType => defineCodeGen(ctx, ev, c => s"(${ctx.javaType(dt)})(-($c))")
   }
 
-  protected override def evalInternal(evalE: Any) = numeric.negate(evalE)
+  protected override def nullSafeEval(input: Any): Any = numeric.negate(input)
 }
 
 case class UnaryPositive(child: Expression) extends UnaryArithmetic {
@@ -62,7 +50,7 @@ case class UnaryPositive(child: Expression) extends UnaryArithmetic {
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String =
     defineCodeGen(ctx, ev, c => c)
 
-  protected override def evalInternal(evalE: Any) = evalE
+  protected override def nullSafeEval(input: Any): Any = input
 }
 
 /**
@@ -74,7 +62,7 @@ case class Abs(child: Expression) extends UnaryArithmetic {
 
   private lazy val numeric = TypeUtils.getNumeric(dataType)
 
-  protected override def evalInternal(evalE: Any) = numeric.abs(evalE)
+  protected override def nullSafeEval(input: Any): Any = numeric.abs(input)
 }
 
 abstract class BinaryArithmetic extends BinaryOperator {
@@ -94,20 +82,6 @@ abstract class BinaryArithmetic extends BinaryOperator {
 
   protected def checkTypesInternal(t: DataType): TypeCheckResult
 
-  override def eval(input: InternalRow): Any = {
-    val evalE1 = left.eval(input)
-    if(evalE1 == null) {
-      null
-    } else {
-      val evalE2 = right.eval(input)
-      if (evalE2 == null) {
-        null
-      } else {
-        evalInternal(evalE1, evalE2)
-      }
-    }
-  }
-
   /** Name of the function for this expression on a [[Decimal]] type. */
   def decimalMethod: String =
     sys.error("BinaryArithmetics must override either decimalMethod or genCode")
@@ -122,9 +96,6 @@ abstract class BinaryArithmetic extends BinaryOperator {
     case _ =>
       defineCodeGen(ctx, ev, (eval1, eval2) => s"$eval1 $symbol $eval2")
   }
-
-  protected def evalInternal(evalE1: Any, evalE2: Any): Any =
-    sys.error(s"BinaryArithmetics must override either eval or evalInternal")
 }
 
 private[sql] object BinaryArithmetic {
@@ -143,7 +114,7 @@ case class Add(left: Expression, right: Expression) extends BinaryArithmetic {
 
   private lazy val numeric = TypeUtils.getNumeric(dataType)
 
-  protected override def evalInternal(evalE1: Any, evalE2: Any) = numeric.plus(evalE1, evalE2)
+  protected override def nullSafeEval(input1: Any, input2: Any): Any = numeric.plus(input1, input2)
 }
 
 case class Subtract(left: Expression, right: Expression) extends BinaryArithmetic {
@@ -158,7 +129,7 @@ case class Subtract(left: Expression, right: Expression) extends BinaryArithmeti
 
   private lazy val numeric = TypeUtils.getNumeric(dataType)
 
-  protected override def evalInternal(evalE1: Any, evalE2: Any) = numeric.minus(evalE1, evalE2)
+  protected override def nullSafeEval(input1: Any, input2: Any): Any = numeric.minus(input1, input2)
 }
 
 case class Multiply(left: Expression, right: Expression) extends BinaryArithmetic {
@@ -173,7 +144,7 @@ case class Multiply(left: Expression, right: Expression) extends BinaryArithmeti
 
   private lazy val numeric = TypeUtils.getNumeric(dataType)
 
-  protected override def evalInternal(evalE1: Any, evalE2: Any) = numeric.times(evalE1, evalE2)
+  protected override def nullSafeEval(input1: Any, input2: Any): Any = numeric.times(input1, input2)
 }
 
 case class Divide(left: Expression, right: Expression) extends BinaryArithmetic {
@@ -194,15 +165,15 @@ case class Divide(left: Expression, right: Expression) extends BinaryArithmetic 
   }
 
   override def eval(input: InternalRow): Any = {
-    val evalE2 = right.eval(input)
-    if (evalE2 == null || evalE2 == 0) {
+    val input2 = right.eval(input)
+    if (input2 == null || input2 == 0) {
       null
     } else {
-      val evalE1 = left.eval(input)
-      if (evalE1 == null) {
+      val input1 = left.eval(input)
+      if (input1 == null) {
         null
       } else {
-        div(evalE1, evalE2)
+        div(input1, input2)
       }
     }
   }
@@ -260,15 +231,15 @@ case class Remainder(left: Expression, right: Expression) extends BinaryArithmet
   }
 
   override def eval(input: InternalRow): Any = {
-    val evalE2 = right.eval(input)
-    if (evalE2 == null || evalE2 == 0) {
+    val input2 = right.eval(input)
+    if (input2 == null || input2 == 0) {
       null
     } else {
-      val evalE1 = left.eval(input)
-      if (evalE1 == null) {
+      val input1 = left.eval(input)
+      if (input1 == null) {
         null
       } else {
-        integral.rem(evalE1, evalE2)
+        integral.rem(input1, input2)
       }
     }
   }
@@ -317,17 +288,17 @@ case class MaxOf(left: Expression, right: Expression) extends BinaryArithmetic {
   private lazy val ordering = TypeUtils.getOrdering(dataType)
 
   override def eval(input: InternalRow): Any = {
-    val evalE1 = left.eval(input)
-    val evalE2 = right.eval(input)
-    if (evalE1 == null) {
-      evalE2
-    } else if (evalE2 == null) {
-      evalE1
+    val input1 = left.eval(input)
+    val input2 = right.eval(input)
+    if (input1 == null) {
+      input2
+    } else if (input2 == null) {
+      input1
     } else {
-      if (ordering.compare(evalE1, evalE2) < 0) {
-        evalE2
+      if (ordering.compare(input1, input2) < 0) {
+        input2
       } else {
-        evalE1
+        input1
       }
     }
   }
@@ -371,17 +342,17 @@ case class MinOf(left: Expression, right: Expression) extends BinaryArithmetic {
   private lazy val ordering = TypeUtils.getOrdering(dataType)
 
   override def eval(input: InternalRow): Any = {
-    val evalE1 = left.eval(input)
-    val evalE2 = right.eval(input)
-    if (evalE1 == null) {
-      evalE2
-    } else if (evalE2 == null) {
-      evalE1
+    val input1 = left.eval(input)
+    val input2 = right.eval(input)
+    if (input1 == null) {
+      input2
+    } else if (input2 == null) {
+      input1
     } else {
-      if (ordering.compare(evalE1, evalE2) < 0) {
-        evalE1
+      if (ordering.compare(input1, input2) < 0) {
+        input1
       } else {
-        evalE2
+        input2
       }
     }
   }
