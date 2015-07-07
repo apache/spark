@@ -46,10 +46,10 @@ private[shared] object SharedParamsCodeGen {
         Some("\"probability\"")),
       ParamDesc[Double]("threshold",
         "threshold in binary classification prediction, in range [0, 1]",
-        isValid = "ParamValidators.inRange(0, 1)", finalMethods=false),
+        isValid = "ParamValidators.inRange(0, 1)", finalMethods = false),
       ParamDesc[Array[Double]]("thresholds",
         "thresholds in multi-class classification prediction, must be array with size of classes.",
-        Some("null"), finalMethods=false),
+        Some("null"), finalMethods = false),
       ParamDesc[String]("inputCol", "input column name"),
       ParamDesc[Array[String]]("inputCols", "input column names"),
       ParamDesc[String]("outputCol", "output column name", Some("uid + \"__output\"")),
@@ -78,7 +78,7 @@ private[shared] object SharedParamsCodeGen {
       doc: String,
       defaultValueStr: Option[String] = None,
       isValid: String = "",
-      finalMethods: Boolean=true) {
+      finalMethods: Boolean = true) {
 
     require(name.matches("[a-z][a-zA-Z0-9]*"), s"Param name $name is invalid.")
     require(doc.nonEmpty) // TODO: more rigorous on doc
