@@ -620,7 +620,8 @@ class DAGSchedulerSuite
 
   }
 
-  /** This tests the case where a late FetchFailed comes in after the map stage has finished getting
+  /**
+    * This tests the case where a late FetchFailed comes in after the map stage has finished getting
     * retried and a new reduce stage starts running.
     */
   test("extremely late fetch failures don't cause multiple concurrent attempts for " +
