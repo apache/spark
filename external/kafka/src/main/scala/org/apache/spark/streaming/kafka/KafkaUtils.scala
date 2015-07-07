@@ -23,6 +23,8 @@ import java.util.{Map => JMap}
 import java.util.{Set => JSet}
 import java.util.{List => JList}
 
+import org.apache.spark.streaming.kafka.KafkaCluster.LeaderOffset
+
 import scala.reflect.ClassTag
 import scala.collection.JavaConversions._
 
@@ -423,12 +425,23 @@ object KafkaUtils {
       topicPartitions <- kc.getPartitions(topics).right
       leaderOffsets <- (if (reset == Some("smallest")) {
         kc.getEarliestLeaderOffsets(topicPartitions)
-      } else {
+      } else if (reset == Some("largest")){
         kc.getLatestLeaderOffsets(topicPartitions)
+      } else {
+        val groupId = kafkaParams.get("group.id") match {
+          case Some(g) => g
+          case _ => throw new SparkException("need group.id in kafkaParams")
+        }
+        val offsets =
+          kc.getConsumerOffsets(kafkaParams.getOrElse("group.id", ""), topicPartitions.seq)
+        if(offsets.isLeft) kc.getLatestLeaderOffsets(topicPartitions)
+        else offsets
       }).right
     } yield {
-      val fromOffsets = leaderOffsets.map { case (tp, lo) =>
-          (tp, lo.offset)
+      val fromOffsets = leaderOffsets.map {
+        case (tp, LeaderOffset(_, _, lo)) => (tp, lo)
+        case (tp, lo: Long) => (tp, lo)
+        case _ => throw new SparkException ("get error leader offsets ")
       }
       new DirectKafkaInputDStream[K, V, KD, VD, (K, V)](
         ssc, kafkaParams, fromOffsets, messageHandler)

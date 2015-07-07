@@ -192,6 +192,10 @@ class KafkaRDD[
         .build()
       val resp = consumer.fetch(req)
       handleFetchErr(resp)
+
+      kc.setConsumerOffsets(kc.config.props.getString("group.id"),
+        Map(TopicAndPartition(part.topic, part.partition) ->
+          Math.min(kc.config.fetchMessageMaxBytes - part.fromOffset, part.untilOffset)))
       // kafka may return a batch that starts before the requested offset
       resp.messageSet(part.topic, part.partition)
         .iterator
