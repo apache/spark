@@ -117,20 +117,6 @@ case class Exchange(
     }
   }
 
-  private val keyOrdering = {
-    if (newOrdering.nonEmpty) {
-      val key = newPartitioning.keyExpressions
-      val boundOrdering = newOrdering.map { o =>
-        val ordinal = key.indexOf(o.child)
-        if (ordinal == -1) sys.error(s"Invalid ordering on $o requested for $newPartitioning")
-        o.copy(child = BoundReference(ordinal, o.child.dataType, o.child.nullable))
-      }
-      new RowOrdering(boundOrdering)
-    } else {
-      null // Ordering will not be used
-    }
-  }
-
   @transient private lazy val sparkConf = child.sqlContext.sparkContext.getConf
 
   private def getSerializer(
