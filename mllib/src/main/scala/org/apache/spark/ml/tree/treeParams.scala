@@ -17,6 +17,7 @@
 
 package org.apache.spark.ml.tree
 
+import org.apache.spark.ml.classification.ClassifierParams
 import org.apache.spark.ml.PredictorParams
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared.{HasMaxIter, HasSeed}
@@ -181,7 +182,7 @@ private[ml] trait DecisionTreeParams extends PredictorParams {
 /**
  * Parameters for Decision Tree-based classification algorithms.
  */
-private[ml] trait TreeClassifierParams extends Params {
+private[ml] trait TreeClassifierParams extends ClassifierParams {
 
   /**
    * Criterion used for information gain calculation (case-insensitive).
@@ -195,6 +196,9 @@ private[ml] trait TreeClassifierParams extends Params {
     (value: String) => TreeClassifierParams.supportedImpurities.contains(value.toLowerCase))
 
   setDefault(impurity -> "gini")
+
+  /** @group setParam */
+  def setThresholds(value: Array[Double]): this.type = set(thresholds, value)
 
   /** @group setParam */
   def setImpurity(value: String): this.type = set(impurity, value)
@@ -278,10 +282,6 @@ private[ml] trait TreeEnsembleParams extends DecisionTreeParams with HasSeed {
     ParamValidators.inRange(0, 1, lowerInclusive = false, upperInclusive = true))
 
   setDefault(subsamplingRate -> 1.0)
-
-  /** @group setParam */
-  def setThresholds(value: Array[Double]): this.type = set(thresholds, value)
-
 
   /** @group setParam */
   def setSubsamplingRate(value: Double): this.type = set(subsamplingRate, value)
