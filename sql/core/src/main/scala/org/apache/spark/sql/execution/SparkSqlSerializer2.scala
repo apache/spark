@@ -179,10 +179,13 @@ private[sql] object SparkSqlSerializer2 {
 
   /**
    * Check if rows with the given schema can be serialized with ShuffleSerializer.
+   * Right now, we do not support schemata with complex types, UDTs, or all data types
+   * of fields are NullTypes.
    */
   def support(schema: Array[DataType]): Boolean = {
     if (schema == null) return true
 
+    var allNulTypes = true
     var i = 0
     while (i < schema.length) {
       schema(i) match {
@@ -190,12 +193,15 @@ private[sql] object SparkSqlSerializer2 {
         case array: ArrayType => return false
         case map: MapType => return false
         case struct: StructType => return false
-        case _ =>
+        case NullType => // Do nothing
+        case _ => if (allNulTypes) allNulTypes = false // This is not a NullType.
       }
       i += 1
     }
 
-    return true
+    // If types of fields are all NullTypes, we return false.
+    // Otherwise, we return true.
+    return !allNulTypes
   }
 
   /**
