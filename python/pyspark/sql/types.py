@@ -1132,19 +1132,6 @@ def _create_object(cls, v):
     return cls(v) if v is not None else v
 
 
-def _create_converter(dt):
-    """ Create a getter for item `i` with schema """
-    if not _has_struct_or_date(dt):
-        return lambda x: x
-
-    cls = _create_cls(dt)
-
-    def converter(o):
-        return _create_object(cls, o)
-
-    return converter
-
-
 def _has_struct_or_date(dt):
     """Return whether `dt` is or has StructType/DateType in it"""
     if isinstance(dt, StructType):
@@ -1163,17 +1150,22 @@ def _has_struct_or_date(dt):
 def _create_properties(fields):
     """Create properties according to fields"""
     ps = {}
-    getters = []
+    converters = []
     for i, f in enumerate(fields):
         name = f.name
         if (name.startswith("__") and name.endswith("__")
                 or keyword.iskeyword(name)):
             warnings.warn("field name %s can not be accessed in Python,"
                           "use position to access it instead" % name)
-        converter = _create_converter(f.dataType)
-        getters.append(converter)
         ps[name] = property(itemgetter(i))
-    ps["__converters__"] = getters
+
+        if _has_struct_or_date(f.dataType):
+            cls = _create_cls(f.dataType)
+            converter = lambda x: _create_object(cls, x)
+        else:
+            converter = lambda x: x
+        converters.append(converter)
+    ps["__converters__"] = converters
     return ps
 
 
@@ -1247,7 +1239,7 @@ def _create_cls(dataType):
 
         def asDict(self):
             """ Return as a dict """
-            return dict((n, getattr(self, n)) for n in self.__fields__)
+            return dict((n, self[i]) for i, n in enumerate(self.__fields__))
 
         def __getitem__(self, item):
             o = tuple.__getitem__(self, item)
