@@ -151,7 +151,7 @@ class LinearRegression(override val uid: String)
         $(predictionCol),
         $(labelCol),
         Array(0D))
-      return model.setSummary(trainingSummary)
+      return copyValues(model.setSummary(trainingSummary))
     }
 
     val featuresMean = summarizer.mean.toArray
@@ -177,13 +177,13 @@ class LinearRegression(override val uid: String)
       optimizer.iterations(new CachedDiffFunction(costFun), initialWeights.toBreeze.toDenseVector)
 
     var state = states.next()
-    val lossHistory = mutable.ArrayBuilder.make[Double]
+    val objectiveTrace = mutable.ArrayBuilder.make[Double]
 
     while (states.hasNext) {
-      lossHistory += state.value
+      objectiveTrace += state.value
       state = states.next()
     }
-    lossHistory += state.value
+    objectiveTrace += state.value
 
     // The weights are trained in the scaled space; we're converting them back to
     // the original space.
@@ -210,7 +210,7 @@ class LinearRegression(override val uid: String)
       model.transform(dataset).select($(predictionCol), $(labelCol)),
       $(predictionCol),
       $(labelCol),
-      lossHistory.result())
+      objectiveTrace.result())
     copyValues(model.setSummary(trainingSummary))
   }
 
@@ -230,13 +230,11 @@ class LinearRegressionModel private[ml] (
   extends RegressionModel[Vector, LinearRegressionModel]
   with LinearRegressionParams {
 
-  @transient private var trainingSummary: Option[LinearRegressionTrainingSummary] = None
+  private var trainingSummary: Option[LinearRegressionTrainingSummary] = None
 
   /**
-   * Gets results summary (e.g. residuals, mse, r-squared ) of model on training set. This method
-   * should only be called on the driver as `summary` is transient.
-   *
-   * An exception is thrown if `trainingSummary == None`.
+   * Gets results summary (e.g. residuals, mse, r-squared ) of model on training set. An exception
+   * is thrown if `trainingSummary == None`.
    */
   def summary: LinearRegressionTrainingSummary = trainingSummary match {
     case Some(summ) => summ
@@ -246,7 +244,7 @@ class LinearRegressionModel private[ml] (
         new NullPointerException())
   }
 
-  def setSummary(summary: LinearRegressionTrainingSummary): this.type = {
+  private[regression] def setSummary(summary: LinearRegressionTrainingSummary): this.type = {
     this.trainingSummary = Some(summary)
     this
   }
@@ -281,7 +279,7 @@ class LinearRegressionModel private[ml] (
  * :: Experimental ::
  * Linear regression training results.
  * @param predictions predictions outputted by the model's `transform` method.
- * @param objectiveTrace objective function value at each iteration.
+ * @param objectiveTrace objective function (scaled loss + regularization) at each iteration.
  */
 @Experimental
 class LinearRegressionTrainingSummary private[ml] (
@@ -319,14 +317,17 @@ class LinearRegressionTrainingSummary private[ml] (
  */
 @Experimental
 class LinearRegressionSummary private[ml] (
-    val predictions: DataFrame,
+    @transient val predictions: DataFrame,
     val predictionCol: String,
-    val labelCol: String) {
+    val labelCol: String) extends Serializable {
 
   private val metrics = new RegressionMetrics(predictions
     .select(predictionCol, labelCol)
     .map { case Row(pred: Double, label: Double) => (pred, label) }
   )
+
+  // Force evaluation of lazy RegressionMetrics.summary for proper serialization
+  metrics.explainedVariance
 
   /**
    * Returns the explained variance regression score.
