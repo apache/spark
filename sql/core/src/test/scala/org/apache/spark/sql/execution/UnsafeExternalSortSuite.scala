@@ -38,29 +38,29 @@ class UnsafeExternalSortSuite extends SparkPlanTest with BeforeAndAfterAll {
 
   // Test sorting on different data types
   // TODO: randomized spilling to ensure that merging is tested at least once for every data type.
-  (DataTypeTestUtils.atomicTypes ++ Set(NullType)).foreach { dataType =>
-    for (
-      nullable <- Seq(true, false);
-      sortOrder <- Seq('a.asc :: Nil, 'a.desc :: Nil);
-      randomDataGenerator <- RandomDataGenerator.forType(dataType, nullable)
-    ) {
-      test(s"sorting on $dataType with nullable=$nullable, sortOrder=$sortOrder") {
-        val inputData = Seq.fill(1024)(randomDataGenerator()).filter {
-          case d: Double => !d.isNaN
-          case f: Float => !java.lang.Float.isNaN(f)
-          case x => true
-        }
-        val inputDf = TestSQLContext.createDataFrame(
-          TestSQLContext.sparkContext.parallelize(Random.shuffle(inputData).map(v => Row(v))),
-          StructType(StructField("a", dataType, nullable = true) :: Nil)
-        )
-        assert(UnsafeExternalSort.supportsSchema(inputDf.schema))
-        checkAnswer(
-          inputDf,
-          UnsafeExternalSort(sortOrder, global = false, _: SparkPlan, testSpillFrequency = 100),
-          Sort(sortOrder, global = false, _: SparkPlan)
-        )
+  for (
+    dataType <- DataTypeTestUtils.atomicTypes ++ Set(NullType);
+    nullable <- Seq(true, false);
+    sortOrder <- Seq('a.asc :: Nil, 'a.desc :: Nil);
+    randomDataGenerator <- RandomDataGenerator.forType(dataType, nullable)
+  ) {
+    test(s"sorting on $dataType with nullable=$nullable, sortOrder=$sortOrder") {
+      val inputData = Seq.fill(3)(randomDataGenerator()).filter {
+        case d: Double => !d.isNaN
+        case f: Float => !java.lang.Float.isNaN(f)
+        case x => true
       }
+      val inputDf = TestSQLContext.createDataFrame(
+        TestSQLContext.sparkContext.parallelize(Random.shuffle(inputData).map(v => Row(v))),
+        StructType(StructField("a", dataType, nullable = true) :: Nil)
+      )
+      assert(UnsafeExternalSort.supportsSchema(inputDf.schema))
+      checkAnswer(
+        inputDf,
+        UnsafeExternalSort(sortOrder, global = false, _: SparkPlan, testSpillFrequency = 2),
+        Sort(sortOrder, global = false, _: SparkPlan),
+        sortAnswers = false
+      )
     }
   }
 }
