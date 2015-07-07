@@ -17,13 +17,15 @@
 
 package org.apache.spark
 
+import scala.collection.mutable.ArrayBuffer
+
 import org.mockito.Mockito._
 import org.mockito.Matchers.{any, isA}
 
 import org.apache.spark.rpc.{RpcAddress, RpcEndpointRef, RpcCallContext, RpcEnv}
 import org.apache.spark.scheduler.{CompressedMapStatus, MapStatus}
 import org.apache.spark.shuffle.FetchFailedException
-import org.apache.spark.storage.BlockManagerId
+import org.apache.spark.storage.{BlockManagerId, ShuffleBlockId}
 
 class MapOutputTrackerSuite extends SparkFunSuite {
   private val conf = new SparkConf
@@ -55,9 +57,11 @@ class MapOutputTrackerSuite extends SparkFunSuite {
         Array(1000L, 10000L)))
     tracker.registerMapOutput(10, 1, MapStatus(BlockManagerId("b", "hostB", 1000),
         Array(10000L, 1000L)))
-    val statuses = tracker.getServerStatuses(10, 0)
-    assert(statuses.toSeq === Seq((BlockManagerId("a", "hostA", 1000), size1000),
-                                  (BlockManagerId("b", "hostB", 1000), size10000)))
+    val statuses = tracker.getMapSizesByExecutorId(10, 0)
+    assert(statuses.toSet ===
+      Seq((BlockManagerId("a", "hostA", 1000), ArrayBuffer((ShuffleBlockId(10, 0, 0), size1000))),
+          (BlockManagerId("b", "hostB", 1000), ArrayBuffer((ShuffleBlockId(10, 1, 0), size10000))))
+        .toSet)
     tracker.stop()
     rpcEnv.shutdown()
   }
@@ -75,10 +79,10 @@ class MapOutputTrackerSuite extends SparkFunSuite {
     tracker.registerMapOutput(10, 1, MapStatus(BlockManagerId("b", "hostB", 1000),
       Array(compressedSize10000, compressedSize1000)))
     assert(tracker.containsShuffle(10))
-    assert(tracker.getServerStatuses(10, 0).nonEmpty)
+    assert(tracker.getMapSizesByExecutorId(10, 0).nonEmpty)
     tracker.unregisterShuffle(10)
     assert(!tracker.containsShuffle(10))
-    assert(tracker.getServerStatuses(10, 0).isEmpty)
+    assert(tracker.getMapSizesByExecutorId(10, 0).isEmpty)
 
     tracker.stop()
     rpcEnv.shutdown()
@@ -104,7 +108,7 @@ class MapOutputTrackerSuite extends SparkFunSuite {
     // The remaining reduce task might try to grab the output despite the shuffle failure;
     // this should cause it to fail, and the scheduler will ignore the failure due to the
     // stage already being aborted.
-    intercept[FetchFailedException] { tracker.getServerStatuses(10, 1) }
+    intercept[FetchFailedException] { tracker.getMapSizesByExecutorId(10, 1) }
 
     tracker.stop()
     rpcEnv.shutdown()
@@ -126,23 +130,23 @@ class MapOutputTrackerSuite extends SparkFunSuite {
     masterTracker.registerShuffle(10, 1)
     masterTracker.incrementEpoch()
     slaveTracker.updateEpoch(masterTracker.getEpoch)
-    intercept[FetchFailedException] { slaveTracker.getServerStatuses(10, 0) }
+    intercept[FetchFailedException] { slaveTracker.getMapSizesByExecutorId(10, 0) }
 
     val size1000 = MapStatus.decompressSize(MapStatus.compressSize(1000L))
     masterTracker.registerMapOutput(10, 0, MapStatus(
       BlockManagerId("a", "hostA", 1000), Array(1000L)))
     masterTracker.incrementEpoch()
     slaveTracker.updateEpoch(masterTracker.getEpoch)
-    assert(slaveTracker.getServerStatuses(10, 0).toSeq ===
-      Seq((BlockManagerId("a", "hostA", 1000), size1000)))
+    assert(slaveTracker.getMapSizesByExecutorId(10, 0) ===
+      Seq((BlockManagerId("a", "hostA", 1000), ArrayBuffer((ShuffleBlockId(10, 0, 0), size1000)))))
 
     masterTracker.unregisterMapOutput(10, 0, BlockManagerId("a", "hostA", 1000))
     masterTracker.incrementEpoch()
     slaveTracker.updateEpoch(masterTracker.getEpoch)
-    intercept[FetchFailedException] { slaveTracker.getServerStatuses(10, 0) }
+    intercept[FetchFailedException] { slaveTracker.getMapSizesByExecutorId(10, 0) }
 
     // failure should be cached
-    intercept[FetchFailedException] { slaveTracker.getServerStatuses(10, 0) }
+    intercept[FetchFailedException] { slaveTracker.getMapSizesByExecutorId(10, 0) }
 
     masterTracker.stop()
     slaveTracker.stop()
