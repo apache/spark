@@ -167,7 +167,8 @@ class HiveUDFSuite extends QueryTest {
     val testData = TestHive.sparkContext.parallelize(StringCaseClass("") :: Nil).toDF()
     testData.registerTempTable("inputTable")
 
-    sql(s"CREATE TEMPORARY FUNCTION testUDFToStringIntMap AS '${classOf[UDFToStringIntMap].getName}'")
+    sql(s"CREATE TEMPORARY FUNCTION testUDFToStringIntMap " +
+      s"AS '${classOf[UDFToStringIntMap].getName}'")
     val errMsg = intercept[AnalysisException] {
       sql("SELECT testUDFToStringIntMap(s) FROM inputTable")
     }
@@ -182,7 +183,8 @@ class HiveUDFSuite extends QueryTest {
     val testData = TestHive.sparkContext.parallelize(StringCaseClass("") :: Nil).toDF()
     testData.registerTempTable("inputTable")
 
-    sql(s"CREATE TEMPORARY FUNCTION testUDFToIntIntMap AS '${classOf[UDFToIntIntMap].getName}'")
+    sql(s"CREATE TEMPORARY FUNCTION testUDFToIntIntMap " +
+      s"AS '${classOf[UDFToIntIntMap].getName}'")
     val errMsg = intercept[AnalysisException] {
       sql("SELECT testUDFToIntIntMap(s) FROM inputTable")
     }
