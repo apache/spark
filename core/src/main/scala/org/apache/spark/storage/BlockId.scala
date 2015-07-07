@@ -95,6 +95,11 @@ private[spark] case class TempShuffleBlockId(id: UUID) extends BlockId {
   override def name: String = "temp_shuffle_" + id
 }
 
+/** Id associated with locally checkpointed data. */
+private[spark] case class LocalCheckpointBlockId(rddId: Int, partitionIndex: Int) extends BlockId {
+  override def name: String = "local_checkpoint_" + rddId + "_" + partitionIndex
+}
+
 // Intended only for testing purposes
 private[spark] case class TestBlockId(id: String) extends BlockId {
   override def name: String = "test_" + id
@@ -109,6 +114,7 @@ object BlockId {
   val BROADCAST = "broadcast_([0-9]+)([_A-Za-z0-9]*)".r
   val TASKRESULT = "taskresult_([0-9]+)".r
   val STREAM = "input-([0-9]+)-([0-9]+)".r
+  val LOCAL_CHECKPOINT = "local_checkpoint_([0-9]+)_([0-9]+)".r
   val TEST = "test_(.*)".r
 
   /** Converts a BlockId "name" String back into a BlockId. */
@@ -127,6 +133,8 @@ object BlockId {
       TaskResultBlockId(taskId.toLong)
     case STREAM(streamId, uniqueId) =>
       StreamBlockId(streamId.toInt, uniqueId.toLong)
+    case LOCAL_CHECKPOINT(rddId, partitionIndex) =>
+      LocalCheckpointBlockId(rddId.toInt, partitionIndex.toInt)
     case TEST(value) =>
       TestBlockId(value)
     case _ =>

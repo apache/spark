@@ -1479,8 +1479,9 @@ abstract class RDD[T: ClassTag](
    * The actual persisting occurs after the first job involving this RDD has completed.
    * The checkpoint directory set through `SparkContext#setCheckpointDir` is not read.
    */
-  def localCheckpoint(): Unit = {
-
+  def localCheckpoint(): this.type = RDDCheckpointData.synchronized {
+    checkpointData = Some(new LocalRDDCheckpointData(this))
+    this
   }
 
   /**
