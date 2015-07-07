@@ -376,7 +376,8 @@ class SqlParser extends AbstractSparkSQLParser with DataTypeParser {
           millisecond ~ microsecond =>
           if (!Seq(year, month, week, day, hour, minute, second,
             millisecond, microsecond).exists(_.isDefined)) {
-            throw new AnalysisException("at least one time unit should be given for interval literal")
+            throw new AnalysisException(
+              "at least one time unit should be given for interval literal")
           }
           val months = Seq(year, month).map(_.getOrElse(0)).sum
           val microseconds = Seq(week, day, hour, minute, second, millisecond, microsecond)
