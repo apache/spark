@@ -67,5 +67,67 @@ class Word2VecSuite extends SparkFunSuite with MLlibTestSparkContext {
         assert(vector1 ~== vector2 absTol 1E-5, "Transformed vector is different with expected.")
     }
   }
+
+  test("getVectors") {
+
+    val sqlContext = new SQLContext(sc)
+    import sqlContext.implicits._
+
+    val sentence = "a b " * 100 + "a c " * 10
+    val doc = sc.parallelize(Seq(sentence, sentence)).map(line => line.split(" "))
+
+    val codes = Map(
+      "a" -> Array(-0.2811822295188904, -0.6356269121170044, -0.3020961284637451),
+      "b" -> Array(1.0309048891067505, -1.29472815990448, 0.22276712954044342),
+      "c" -> Array(-0.08456747233867645, 0.5137411952018738, 0.11731560528278351)
+    )
+    val expectedVectors = codes.toSeq.sortBy(_._1).map { case (w, v) => Vectors.dense(v) }
+
+    val docDF = doc.zip(doc).toDF("text", "alsotext")
+
+    val model = new Word2Vec()
+      .setVectorSize(3)
+      .setInputCol("text")
+      .setOutputCol("result")
+      .setSeed(42L)
+      .fit(docDF)
+
+    val realVectors = model.getVectors.sort("word").select("vector").map {
+      case Row(v: Vector) => v
+    }.collect()
+
+    realVectors.zip(expectedVectors).foreach {
+      case (real, expected) =>
+        assert(real ~== expected absTol 1E-5, "Actual vector is different from expected.")
+    }
+  }
+
+  test("findSynonyms") {
+
+    val sqlContext = new SQLContext(sc)
+    import sqlContext.implicits._
+
+    val sentence = "a b " * 100 + "a c " * 10
+    val doc = sc.parallelize(Seq(sentence, sentence)).map(line => line.split(" "))
+    val docDF = doc.zip(doc).toDF("text", "alsotext")
+
+    val model = new Word2Vec()
+      .setVectorSize(3)
+      .setInputCol("text")
+      .setOutputCol("result")
+      .setSeed(42L)
+      .fit(docDF)
+
+    val expectedSimilarity = Array(0.2789285076917586, -0.6336972059851644)
+    val (synonyms, similarity) = model.findSynonyms("a", 2).map {
+      case Row(w: String, sim: Double) => (w, sim)
+    }.collect().unzip
+
+    assert(synonyms.toArray === Array("b", "c"))
+    expectedSimilarity.zip(similarity).map {
+      case (expected, actual) => assert(math.abs((expected - actual) / expected) < 1E-5)
+    }
+
+  }
 }
 
