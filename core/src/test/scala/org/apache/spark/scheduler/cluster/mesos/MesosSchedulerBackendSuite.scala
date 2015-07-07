@@ -149,15 +149,15 @@ class MesosSchedulerBackendSuite extends SparkFunSuite with LocalSparkContext wi
     when(sc.conf).thenReturn(new SparkConf)
     when(sc.listenerBus).thenReturn(listenerBus)
 
-    val minMem = MemoryUtils.calculateTotalMemory(sc).toInt
+    val backend = new MesosSchedulerBackend(taskScheduler, sc, "master")
+
+    val minMem = backend.calculateTotalMemory(sc)
     val minCpu = 4
 
     val mesosOffers = new java.util.ArrayList[Offer]
     mesosOffers.add(createOffer(1, minMem, minCpu))
     mesosOffers.add(createOffer(2, minMem - 1, minCpu))
     mesosOffers.add(createOffer(3, minMem, minCpu))
-
-    val backend = new MesosSchedulerBackend(taskScheduler, sc, "master")
 
     val expectedWorkerOffers = new ArrayBuffer[WorkerOffer](2)
     expectedWorkerOffers.append(new WorkerOffer(
