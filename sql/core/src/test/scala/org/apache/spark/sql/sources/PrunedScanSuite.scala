@@ -136,5 +136,6 @@ class PrunedScanSuite extends DataSourceTest {
       }
     }
   }
+
 }
 
