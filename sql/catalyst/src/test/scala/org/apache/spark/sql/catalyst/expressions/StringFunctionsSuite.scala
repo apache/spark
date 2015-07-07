@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.dsl.expressions._
-import org.apache.spark.sql.types.{IntegerType, StringType}
+import org.apache.spark.sql.types.{BinaryType, IntegerType, StringType}
 
 
 class StringFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
@@ -217,11 +217,70 @@ class StringFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("length for string") {
-    val regEx = 'a.string.at(0)
+    val a = 'a.string.at(0)
     checkEvaluation(StringLength(Literal("abc")), 3, create_row("abdef"))
-    checkEvaluation(StringLength(regEx), 5, create_row("abdef"))
-    checkEvaluation(StringLength(regEx), 0, create_row(""))
-    checkEvaluation(StringLength(regEx), null, create_row(null))
+    checkEvaluation(StringLength(a), 5, create_row("abdef"))
+    checkEvaluation(StringLength(a), 0, create_row(""))
+    checkEvaluation(StringLength(a), null, create_row(null))
     checkEvaluation(StringLength(Literal.create(null, StringType)), null, create_row("abdef"))
+  }
+
+  test("ascii for string") {
+    val a = 'a.string.at(0)
+    checkEvaluation(Ascii(Literal("efg")), 101, create_row("abdef"))
+    checkEvaluation(Ascii(a), 97, create_row("abdef"))
+    checkEvaluation(Ascii(a), 0, create_row(""))
+    checkEvaluation(Ascii(a), null, create_row(null))
+    checkEvaluation(Ascii(Literal.create(null, StringType)), null, create_row("abdef"))
+  }
+
+  test("base64/unbase64 for string") {
+    val a = 'a.string.at(0)
+    val b = 'b.binary.at(0)
+    val bytes = Array[Byte](1, 2, 3, 4)
+
+    checkEvaluation(Base64(Literal(bytes)), "AQIDBA==", create_row("abdef"))
+    checkEvaluation(Base64(UnBase64(Literal("AQIDBA=="))), "AQIDBA==", create_row("abdef"))
+    checkEvaluation(Base64(UnBase64(Literal(""))), "", create_row("abdef"))
+    checkEvaluation(Base64(UnBase64(Literal.create(null, StringType))), null, create_row("abdef"))
+    checkEvaluation(Base64(UnBase64(a)), "AQIDBA==", create_row("AQIDBA=="))
+
+    checkEvaluation(Base64(b), "AQIDBA==", create_row(bytes))
+    checkEvaluation(Base64(b), "", create_row(Array[Byte]()))
+    checkEvaluation(Base64(b), null, create_row(null))
+    checkEvaluation(Base64(Literal.create(null, StringType)), null, create_row("abdef"))
+
+    checkEvaluation(UnBase64(a), null, create_row(null))
+    checkEvaluation(UnBase64(Literal.create(null, StringType)), null, create_row("abdef"))
+  }
+
+  test("encode/decode for string") {
+    val a = 'a.string.at(0)
+    val b = 'b.binary.at(0)
+    // scalastyle:off
+    // non ascii characters are not allowed in the code, so we disable the scalastyle here.
+    checkEvaluation(
+      Decode(Encode(Literal("大千世界"), Literal("UTF-16LE")), Literal("UTF-16LE")), "大千世界")
+    checkEvaluation(
+      Decode(Encode(a, Literal("utf-8")), Literal("utf-8")), "大千世界", create_row("大千世界"))
+    checkEvaluation(
+      Decode(Encode(a, Literal("utf-8")), Literal("utf-8")), "", create_row(""))
+    // scalastyle:on
+    checkEvaluation(Encode(a, Literal("utf-8")), null, create_row(null))
+    checkEvaluation(Encode(Literal.create(null, StringType), Literal("utf-8")), null)
+    checkEvaluation(Encode(a, Literal.create(null, StringType)), null, create_row(""))
+
+    checkEvaluation(Decode(b, Literal("utf-8")), null, create_row(null))
+    checkEvaluation(Decode(Literal.create(null, BinaryType), Literal("utf-8")), null)
+    checkEvaluation(Decode(b, Literal.create(null, StringType)), null, create_row(null))
+  }
+
+  test("Levenshtein distance") {
+    checkEvaluation(Levenshtein(Literal.create(null, StringType), Literal("")), null)
+    checkEvaluation(Levenshtein(Literal(""), Literal.create(null, StringType)), null)
+    checkEvaluation(Levenshtein(Literal(""), Literal("")), 0)
+    checkEvaluation(Levenshtein(Literal("abc"), Literal("abc")), 0)
+    checkEvaluation(Levenshtein(Literal("kitten"), Literal("sitting")), 3)
+    checkEvaluation(Levenshtein(Literal("frog"), Literal("fog")), 1)
   }
 }

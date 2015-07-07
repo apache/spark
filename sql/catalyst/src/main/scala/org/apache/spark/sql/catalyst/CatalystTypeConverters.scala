@@ -242,7 +242,7 @@ object CatalystTypeConverters {
           ar(idx) = converters(idx).toCatalyst(row(idx))
           idx += 1
         }
-        new GenericRowWithSchema(ar, structType)
+        new GenericInternalRow(ar)
 
       case p: Product =>
         val ar = new Array[Any](structType.size)
@@ -252,7 +252,7 @@ object CatalystTypeConverters {
           ar(idx) = converters(idx).toCatalyst(iter.next())
           idx += 1
         }
-        new GenericRowWithSchema(ar, structType)
+        new GenericInternalRow(ar)
     }
 
     override def toScala(row: InternalRow): Row = {
