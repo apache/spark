@@ -33,7 +33,6 @@ import org.apache.spark.streaming.receiver.Receiver
 import org.apache.spark.util.Utils
 import org.apache.spark.{Logging, SparkConf, SparkContext, SparkException, SparkFunSuite}
 
-
 class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with Timeouts with Logging {
 
   val master = "local[2]"
@@ -295,6 +294,22 @@ class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with Timeo
     assert(runningCount > 0)
     assert(runningCount == totalNumRecords)
     Thread.sleep(100)
+  }
+
+  test("de-register codahale metrics on stop()") {
+    val conf = new SparkConf().setMaster(master).setAppName(appName)
+    ssc = new StreamingContext(conf, batchDuration)
+    addInputStream(ssc).register()
+
+    assert(ssc.getState() === StreamingContextState.INITIALIZED)
+    ssc.start()
+    assert(ssc.getState() === StreamingContextState.ACTIVE)
+    val sizeOfSourcesArrayBuffer = ssc.env.metricsSystem.sources.size
+    Thread.sleep(100)
+
+    ssc.stop()
+    assert(ssc.getState() === StreamingContextState.STOPPED)
+    assert(sizeOfSourcesArrayBuffer == sizeOfSourcesArrayBuffer - 1 )
   }
 
   test("awaitTermination") {
