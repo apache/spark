@@ -19,18 +19,24 @@ package org.apache.spark.sql.columnar
 
 import java.sql.{Date, Timestamp}
 
-import org.apache.spark.sql.TestData._
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.{QueryTest, Row, TestData}
+import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.storage.StorageLevel.MEMORY_ONLY
 
+case class TestData(key: Int, value: String)
+case class IntField(i: Int)
+
 class InMemoryColumnarQuerySuite extends QueryTest {
-  // Make sure the tables are loaded.
-  TestData
 
   private lazy val ctx = org.apache.spark.sql.test.TestSQLContext
   import ctx.implicits._
   import ctx.{logicalPlanToSparkQuery, sql}
+
+  val testData = {
+    val df = (1 to 100).map(i => TestData(i, i.toString)).toDF()
+    df.registerTempTable("testData")
+    df
+  }
 
   test("simple columnar query") {
     val plan = ctx.executePlan(testData.logicalPlan).executedPlan
@@ -66,28 +72,40 @@ class InMemoryColumnarQuerySuite extends QueryTest {
     checkAnswer(scan, testData.collect().toSeq)
   }
 
+  case class StringData(s: String)
   test("SPARK-1678 regression: compression must not lose repeated values") {
+    val repeatedData = {
+      val data = List.fill(2)(StringData("test")).toSeq
+      data.toDF().registerTempTable("repeatedData")
+      data
+    }
+
     checkAnswer(
       sql("SELECT * FROM repeatedData"),
-      repeatedData.collect().toSeq.map(Row.fromTuple))
+      repeatedData.map(Row.fromTuple))
 
     ctx.cacheTable("repeatedData")
 
     checkAnswer(
       sql("SELECT * FROM repeatedData"),
-      repeatedData.collect().toSeq.map(Row.fromTuple))
+      repeatedData.map(Row.fromTuple))
   }
 
   test("with null values") {
+    val nullableRepeatedData = {
+      val data = (List.fill(2)(StringData("test")) ++ List.fill(2)(StringData(null))).toSeq
+      data.toDF().registerTempTable("nullableRepeatedData")
+      data
+    }
     checkAnswer(
       sql("SELECT * FROM nullableRepeatedData"),
-      nullableRepeatedData.collect().toSeq.map(Row.fromTuple))
+      nullableRepeatedData.map(Row.fromTuple))
 
     ctx.cacheTable("nullableRepeatedData")
 
     checkAnswer(
       sql("SELECT * FROM nullableRepeatedData"),
-      nullableRepeatedData.collect().toSeq.map(Row.fromTuple))
+      nullableRepeatedData.map(Row.fromTuple))
   }
 
   test("SPARK-2729 regression: timestamp data type") {
@@ -106,6 +124,10 @@ class InMemoryColumnarQuerySuite extends QueryTest {
   }
 
   test("SPARK-3320 regression: batched column buffer building should work with empty partitions") {
+    // An RDD with 4 elements and 8 partitions
+    val withEmptyParts = ctx.sparkContext.parallelize((1 to 4).map(IntField), 8)
+    withEmptyParts.toDF().registerTempTable("withEmptyParts")
+
     checkAnswer(
       sql("SELECT * FROM withEmptyParts"),
       withEmptyParts.collect().toSeq.map(Row.fromTuple))
@@ -117,7 +139,12 @@ class InMemoryColumnarQuerySuite extends QueryTest {
       withEmptyParts.collect().toSeq.map(Row.fromTuple))
   }
 
+  case class ComplexData(m: Map[String, Int], s: TestData, a: Seq[Int], b: Boolean)
   test("SPARK-4182 Caching complex types") {
+    val complexData = Seq(
+      ComplexData(Map("1" -> 1), TestData(1, "1"), Seq(1), true),
+      ComplexData(Map("2" -> 2), TestData(2, "2"), Seq(2), false)).toDF()
+
     complexData.cache().count()
     // Shouldn't throw
     complexData.count()
