@@ -111,9 +111,7 @@ class DirectKafkaStreamSuite
       rdd
     }.foreachRDD { rdd =>
       for (o <- offsetRanges) {
-        // scalastyle:off println
-        println(s"${o.topic} ${o.partition} ${o.fromOffset} ${o.untilOffset}")
-        // scalastyle:on println
+        logInfo(s"${o.topic} ${o.partition} ${o.fromOffset} ${o.untilOffset}")
       }
       val collected = rdd.mapPartitionsWithIndex { (i, iter) =>
       // For each partition, get size of the range in the partition,

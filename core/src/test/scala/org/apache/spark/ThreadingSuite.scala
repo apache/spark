@@ -21,6 +21,7 @@ import java.util.concurrent.{TimeUnit, Semaphore}
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 
+import org.apache.spark.Logging
 import org.apache.spark.scheduler._
 
 /**
@@ -36,7 +37,7 @@ object ThreadingSuiteState {
   }
 }
 
-class ThreadingSuite extends SparkFunSuite with LocalSparkContext {
+class ThreadingSuite extends SparkFunSuite with LocalSparkContext with Logging{
 
   test("accessing SparkContext form a different thread") {
     sc = new SparkContext("local", "test")
@@ -130,10 +131,8 @@ class ThreadingSuite extends SparkFunSuite with LocalSparkContext {
               Thread.sleep(100)
             }
             if (running.get() != 4) {
-              // scalastyle:off println
-              println("Waited 1 second without seeing runningThreads = 4 (it was " +
+              logInfo("Waited 1 second without seeing runningThreads = 4 (it was " +
                 running.get() + "); failing test")
-              // scalastyle:on println
               ThreadingSuiteState.failed.set(true)
             }
             number
