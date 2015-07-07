@@ -71,7 +71,7 @@ object RRunner {
         val builder = new ProcessBuilder(Seq(rCommand, rFileNormalized) ++ otherArgs)
         val env = builder.environment()
         env.put("EXISTING_SPARKR_BACKEND_PORT", sparkRBackendPort.toString)
-        val rPackageDir = RUtils.sparkRPackagePath(driver = true)
+        val rPackageDir = RUtils.sparkRPackagePath(isDriver = true)
         env.put("SPARKR_PACKAGE_DIR", rPackageDir)
         env.put("R_PROFILE_USER",
           Seq(rPackageDir, "SparkR", "profile", "general.R").mkString(File.separator))

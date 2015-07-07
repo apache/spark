@@ -83,6 +83,9 @@ object MimaExcludes {
               "org.apache.spark.streaming.scheduler.InputInfo$"),
             ProblemFilters.exclude[MissingClassProblem](
               "org.apache.spark.streaming.scheduler.InputInfo")
+            // SPARK-6797 Support YARN modes for SparkR
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.api.r.BaseRRDD.this")
           )
 
         case v if v.startsWith("1.4") =>

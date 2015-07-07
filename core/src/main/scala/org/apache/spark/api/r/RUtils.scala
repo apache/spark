@@ -19,7 +19,7 @@ package org.apache.spark.api.r
 
 import java.io.File
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkEnv, SparkException}
 
 private[spark] object RUtils {
   /**
@@ -34,22 +34,32 @@ private[spark] object RUtils {
 
   /**
    * Get the SparkR package path in various deployment modes.
+   * This assumes that Spark properties `spark.master` and `spark.submit.deployMode`
+   * and environment variable `SPARK_HOME` are set.
    */
-  def sparkRPackagePath(driver: Boolean): String = {
-    val yarnMode = sys.env.get("SPARK_YARN_MODE")
-    if (!yarnMode.isEmpty && yarnMode.get == "true" &&
-        !(driver && System.getProperty("spark.master") == "yarn-client")) {
-      // For workers in YARN modes and driver in yarn cluster mode,
-      // the SparkR package distributed as an archive resource should be pointed to
-      // by a symbol link "sparkr" in the current directory.
+  def sparkRPackagePath(isDriver: Boolean): String = {
+    val (master, deployMode) =
+      if (isDriver) {
+        (sys.props("spark.master"), sys.props("spark.submit.deployMode"))
+      } else {
+        val sparkConf = SparkEnv.get.conf
+        (sparkConf.get("spark.master"), sparkConf.get("spark.submit.deployMode"))
+      }
+
+    val isYarnCluster = master.contains("yarn") && deployMode == "cluster"
+    val isYarnClient = master.contains("yarn") && deployMode == "client"
+
+    // In YARN mode, the SparkR package is distributed as an archive symbolically
+    // linked to the "sparkr" file in the current directory. Note that this does not apply
+    // to the driver in client mode because it is run outside of the cluster.
+    if (isYarnCluster || (isYarnClient && !isDriver)) {
       new File("sparkr").getAbsolutePath
     } else {
-      // TBD: add support for MESOS
-      val rPackagePath = localSparkRPackagePath
-      if (rPackagePath.isEmpty) {
+      // Otherwise, assume the package is local
+      // TODO: support this for Mesos
+      localSparkRPackagePath.getOrElse {
         throw new SparkException("SPARK_HOME not set. Can't locate SparkR package.")
       }
-      rPackagePath.get
     }
   }
 }

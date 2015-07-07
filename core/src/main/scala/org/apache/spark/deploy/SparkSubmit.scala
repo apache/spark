@@ -264,6 +264,11 @@ object SparkSubmit {
       }
     }
 
+    // Update args.deployMode if it is null. It will be passed down as a Spark property later.
+    (args.deployMode, deployMode) match {
+      case (null, CLIENT) => args.deployMode = "client"
+      case (null, CLUSTER) => args.deployMode = "cluster"
+    }
     val isYarnCluster = clusterManager == YARN && deployMode == CLUSTER
     val isMesosCluster = clusterManager == MESOS && deployMode == CLUSTER
 
@@ -349,16 +354,16 @@ object SparkSubmit {
       }
     }
 
-    // In yarn mode for an R app, add the SparkR package archive to archives
+    // In YARN mode for an R app, add the SparkR package archive to archives
     // that can be distributed with the job
     if (args.isR && clusterManager == YARN) {
       val rPackagePath = RUtils.localSparkRPackagePath
       if (rPackagePath.isEmpty) {
-        printErrorAndExit("SPARK_HOME does not exist for R application in yarn mode.")
+        printErrorAndExit("SPARK_HOME does not exist for R application in YARN mode.")
       }
       val rPackageFile = new File(rPackagePath.get, SPARKR_PACKAGE_ARCHIVE)
       if (!rPackageFile.exists()) {
-        printErrorAndExit(s"$SPARKR_PACKAGE_ARCHIVE does not exist for R application in yarn mode.")
+        printErrorAndExit(s"$SPARKR_PACKAGE_ARCHIVE does not exist for R application in YARN mode.")
       }
       val localURI = Utils.resolveURI(rPackageFile.getAbsolutePath)
 
@@ -394,6 +399,8 @@ object SparkSubmit {
 
       // All cluster managers
       OptionAssigner(args.master, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES, sysProp = "spark.master"),
+      OptionAssigner(args.deployMode, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES,
+        sysProp = "spark.submit.deployMode"),
       OptionAssigner(args.name, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES, sysProp = "spark.app.name"),
       OptionAssigner(args.jars, ALL_CLUSTER_MGRS, CLIENT, sysProp = "spark.jars"),
       OptionAssigner(args.ivyRepoPath, ALL_CLUSTER_MGRS, CLIENT, sysProp = "spark.jars.ivy"),
