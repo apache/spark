@@ -79,10 +79,42 @@ class DataFrameFunctionsSuite extends QueryTest {
     assert(row.getAs[Row](0) === Row(2, "str"))
   }
 
-  test("struct: must use named column expression") {
-    intercept[IllegalArgumentException] {
-      struct(col("a") * 2)
-    }
+  test("struct with column expression to be automatically named") {
+    val df = Seq((1, "str")).toDF("a", "b")
+    val result = df.select(struct((col("a") * 2), col("b")))
+
+    val expectedType = StructType(Seq(
+      StructField("col1", IntegerType, nullable = false),
+      StructField("b", StringType)
+    ))
+    assert(result.first.schema(0).dataType === expectedType)
+    checkAnswer(result, Row(Row(2, "str")))
+  }
+
+  test("struct with literal columns") {
+    val df = Seq((1, "str1"), (2, "str2")).toDF("a", "b")
+    val result = df.select(struct((col("a") * 2), lit(5.0)))
+
+    val expectedType = StructType(Seq(
+      StructField("col1", IntegerType, nullable = false),
+      StructField("col2", DoubleType, nullable = false)
+    ))
+
+    assert(result.first.schema(0).dataType === expectedType)
+    checkAnswer(result, Seq(Row(Row(2, 5.0)), Row(Row(4, 5.0))))
+  }
+
+  test("struct with all literal columns") {
+    val df = Seq((1, "str1"), (2, "str2")).toDF("a", "b")
+    val result = df.select(struct(lit("v"), lit(5.0)))
+
+    val expectedType = StructType(Seq(
+      StructField("col1", StringType, nullable = false),
+      StructField("col2", DoubleType, nullable = false)
+    ))
+
+    assert(result.first.schema(0).dataType === expectedType)
+    checkAnswer(result, Seq(Row(Row("v", 5.0)), Row(Row("v", 5.0))))
   }
 
   test("constant functions") {
@@ -192,5 +224,53 @@ class DataFrameFunctionsSuite extends QueryTest {
         val l = if (v == null) null else v.length
         Row(l)
       })
+  }
+
+  test("Levenshtein distance") {
+    val df = Seq(("kitten", "sitting"), ("frog", "fog")).toDF("l", "r")
+    checkAnswer(df.select(levenshtein("l", "r")), Seq(Row(3), Row(1)))
+    checkAnswer(df.selectExpr("levenshtein(l, r)"), Seq(Row(3), Row(1)))
+  }
+
+  test("string ascii function") {
+    val df = Seq(("abc", "")).toDF("a", "b")
+    checkAnswer(
+      df.select(ascii($"a"), ascii("b")),
+      Row(97, 0))
+
+    checkAnswer(
+      df.selectExpr("ascii(a)", "ascii(b)"),
+      Row(97, 0))
+  }
+
+  test("string base64/unbase64 function") {
+    val bytes = Array[Byte](1, 2, 3, 4)
+    val df = Seq((bytes, "AQIDBA==")).toDF("a", "b")
+    checkAnswer(
+      df.select(base64("a"), base64($"a"), unbase64("b"), unbase64($"b")),
+      Row("AQIDBA==", "AQIDBA==", bytes, bytes))
+
+    checkAnswer(
+      df.selectExpr("base64(a)", "unbase64(b)"),
+      Row("AQIDBA==", bytes))
+  }
+
+  test("string encode/decode function") {
+    val bytes = Array[Byte](-27, -92, -89, -27, -115, -125, -28, -72, -106, -25, -107, -116)
+    // scalastyle:off  
+    // non ascii characters are not allowed in the code, so we disable the scalastyle here.
+    val df = Seq(("大千世界", "utf-8", bytes)).toDF("a", "b", "c")
+    checkAnswer(
+      df.select(
+        encode($"a", "utf-8"),
+        encode("a", "utf-8"),
+        decode($"c", "utf-8"),
+        decode("c", "utf-8")),
+      Row(bytes, bytes, "大千世界", "大千世界"))
+
+    checkAnswer(
+      df.selectExpr("encode(a, 'utf-8')", "decode(c, 'utf-8')"),
+      Row(bytes, "大千世界"))
+    // scalastyle:on
   }
 }

@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.parquet
 
+import org.apache.hadoop.fs.Path
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.sql.types._
@@ -120,6 +121,25 @@ class ParquetQuerySuiteBase extends QueryTest with ParquetTest {
       df.write.parquet(file.getCanonicalPath)
       val df2 = sqlContext.read.parquet(file.getCanonicalPath)
       checkAnswer(df2, df.collect().toSeq)
+    }
+  }
+
+  test("Enabling/disabling schema merging") {
+    def testSchemaMerging(expectedColumnNumber: Int): Unit = {
+      withTempDir { dir =>
+        val basePath = dir.getCanonicalPath
+        sqlContext.range(0, 10).toDF("a").write.parquet(new Path(basePath, "foo=1").toString)
+        sqlContext.range(0, 10).toDF("b").write.parquet(new Path(basePath, "foo=2").toString)
+        assert(sqlContext.read.parquet(basePath).columns.length === expectedColumnNumber)
+      }
+    }
+
+    withSQLConf(SQLConf.PARQUET_SCHEMA_MERGING_ENABLED.key -> "true") {
+      testSchemaMerging(3)
+    }
+
+    withSQLConf(SQLConf.PARQUET_SCHEMA_MERGING_ENABLED.key -> "false") {
+      testSchemaMerging(2)
     }
   }
 }

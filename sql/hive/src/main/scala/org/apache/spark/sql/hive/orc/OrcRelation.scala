@@ -242,26 +242,34 @@ private[orc] case class OrcTableScan(
       nonPartitionKeyAttrs: Seq[(Attribute, Int)],
       mutableRow: MutableRow): Iterator[InternalRow] = {
     val deserializer = new OrcSerde
-    val soi = OrcFileOperator.getObjectInspector(path, Some(conf))
-    val (fieldRefs, fieldOrdinals) = nonPartitionKeyAttrs.map {
-      case (attr, ordinal) =>
-        soi.getStructFieldRef(attr.name.toLowerCase) -> ordinal
-    }.unzip
-    val unwrappers = fieldRefs.map(unwrapperFor)
-    // Map each tuple to a row object
-    iterator.map { value =>
-      val raw = deserializer.deserialize(value)
-      var i = 0
-      while (i < fieldRefs.length) {
-        val fieldValue = soi.getStructFieldData(raw, fieldRefs(i))
-        if (fieldValue == null) {
-          mutableRow.setNullAt(fieldOrdinals(i))
-        } else {
-          unwrappers(i)(fieldValue, mutableRow, fieldOrdinals(i))
+    val maybeStructOI = OrcFileOperator.getObjectInspector(path, Some(conf))
+
+    // SPARK-8501: ORC writes an empty schema ("struct<>") to an ORC file if the file contains zero
+    // rows, and thus couldn't give a proper ObjectInspector.  In this case we just return an empty
+    // partition since we know that this file is empty.
+    maybeStructOI.map { soi =>
+      val (fieldRefs, fieldOrdinals) = nonPartitionKeyAttrs.map {
+        case (attr, ordinal) =>
+          soi.getStructFieldRef(attr.name.toLowerCase) -> ordinal
+      }.unzip
+      val unwrappers = fieldRefs.map(unwrapperFor)
+      // Map each tuple to a row object
+      iterator.map { value =>
+        val raw = deserializer.deserialize(value)
+        var i = 0
+        while (i < fieldRefs.length) {
+          val fieldValue = soi.getStructFieldData(raw, fieldRefs(i))
+          if (fieldValue == null) {
+            mutableRow.setNullAt(fieldOrdinals(i))
+          } else {
+            unwrappers(i)(fieldValue, mutableRow, fieldOrdinals(i))
+          }
+          i += 1
         }
-        i += 1
+        mutableRow: InternalRow
       }
-      mutableRow: InternalRow
+    }.getOrElse {
+      Iterator.empty
     }
   }
 

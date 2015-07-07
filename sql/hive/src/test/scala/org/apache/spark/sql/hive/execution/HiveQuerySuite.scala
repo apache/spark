@@ -132,7 +132,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
       lower("AA"), "10",
       repeat(lower("AA"), 3), "11",
       lower(repeat("AA", 3)), "12",
-      printf("Bb%d", 12), "13",
+      printf("bb%d", 12), "13",
       repeat(printf("s%d", 14), 2), "14") FROM src LIMIT 1""")
 
   createQueryTest("NaN to Decimal",

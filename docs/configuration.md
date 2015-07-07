@@ -137,10 +137,10 @@ of the most common options to set are:
 </tr>
 <tr>
   <td><code>spark.driver.memory</code></td>
-  <td>512m</td>
+  <td>1g</td>
   <td>
     Amount of memory to use for the driver process, i.e. where SparkContext is initialized.
-    (e.g. <code>512m</code>, <code>2g</code>).
+    (e.g. <code>1g</code>, <code>2g</code>).
     
     <br /><em>Note:</em> In client mode, this config must not be set through the <code>SparkConf</code>
     directly in your application, because the driver JVM has already started at that point.

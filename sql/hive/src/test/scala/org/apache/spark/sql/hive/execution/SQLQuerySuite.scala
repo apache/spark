@@ -990,5 +990,21 @@ class SQLQuerySuite extends QueryTest {
         Timestamp.valueOf("1969-12-31 16:00:00"),
         String.valueOf("1969-12-31 16:00:00"),
         Timestamp.valueOf("1970-01-01 00:00:00")))
+
+  }
+
+  test("SPARK-8588 HiveTypeCoercion.inConversion fires too early") {
+    val df =
+      TestHive.createDataFrame(Seq((1, "2014-01-01"), (2, "2015-01-01"), (3, "2016-01-01")))
+    df.toDF("id", "date").registerTempTable("test_SPARK8588")
+    checkAnswer(
+      TestHive.sql(
+        """
+          |select id, concat(year(date))
+          |from test_SPARK8588 where concat(year(date), ' year') in ('2015 year', '2014 year')
+        """.stripMargin),
+      Row(1, "2014") :: Row(2, "2015") :: Nil
+    )
+    TestHive.dropTempTable("test_SPARK8588")
   }
 }

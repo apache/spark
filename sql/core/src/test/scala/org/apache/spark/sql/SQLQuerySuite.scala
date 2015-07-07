@@ -1451,4 +1451,20 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll with SQLTestUtils {
       checkAnswer(sql("SELECT a.b FROM t ORDER BY b[0].d"), Row(Seq(Row(1))))
     }
   }
+
+  test("SPARK-8782: ORDER BY NULL") {
+    withTempTable("t") {
+      Seq((1, 2), (1, 2)).toDF("a", "b").registerTempTable("t")
+      checkAnswer(sql("SELECT * FROM t ORDER BY NULL"), Seq(Row(1, 2), Row(1, 2)))
+    }
+  }
+
+  test("SPARK-8837: use keyword in column name") {
+    withTempTable("t") {
+      val df = Seq(1 -> "a").toDF("count", "sort")
+      checkAnswer(df.filter("count > 0"), Row(1, "a"))
+      df.registerTempTable("t")
+      checkAnswer(sql("select count, sort from t"), Row(1, "a"))
+    }
+  }
 }

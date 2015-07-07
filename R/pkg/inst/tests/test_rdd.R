@@ -669,13 +669,15 @@ test_that("fullOuterJoin() on pairwise RDDs", {
   rdd1 <- parallelize(sc, list(list(1,2), list(1,3), list(3,3)))
   rdd2 <- parallelize(sc, list(list(1,1), list(2,4)))
   actual <- collect(fullOuterJoin(rdd1, rdd2, 2L))
-  expected <- list(list(1, list(2, 1)), list(1, list(3, 1)), list(2, list(NULL, 4)), list(3, list(3, NULL)))
+  expected <- list(list(1, list(2, 1)), list(1, list(3, 1)),
+                   list(2, list(NULL, 4)), list(3, list(3, NULL)))
   expect_equal(sortKeyValueList(actual), sortKeyValueList(expected))
 
   rdd1 <- parallelize(sc, list(list("a",2), list("a",3), list("c", 1)))
   rdd2 <- parallelize(sc, list(list("a",1), list("b",4)))
   actual <- collect(fullOuterJoin(rdd1, rdd2, 2L))
-  expected <- list(list("b", list(NULL, 4)), list("a", list(2, 1)), list("a", list(3, 1)), list("c", list(1, NULL)))
+  expected <- list(list("b", list(NULL, 4)), list("a", list(2, 1)),
+                   list("a", list(3, 1)), list("c", list(1, NULL)))
   expect_equal(sortKeyValueList(actual),
                sortKeyValueList(expected))
 
@@ -683,13 +685,15 @@ test_that("fullOuterJoin() on pairwise RDDs", {
   rdd2 <- parallelize(sc, list(list(3,3), list(4,4)))
   actual <- collect(fullOuterJoin(rdd1, rdd2, 2L))
   expect_equal(sortKeyValueList(actual),
-               sortKeyValueList(list(list(1, list(1, NULL)), list(2, list(2, NULL)), list(3, list(NULL, 3)), list(4, list(NULL, 4)))))
+               sortKeyValueList(list(list(1, list(1, NULL)), list(2, list(2, NULL)),
+                                     list(3, list(NULL, 3)), list(4, list(NULL, 4)))))
 
   rdd1 <- parallelize(sc, list(list("a",1), list("b",2)))
   rdd2 <- parallelize(sc, list(list("c",3), list("d",4)))
   actual <- collect(fullOuterJoin(rdd1, rdd2, 2L))
   expect_equal(sortKeyValueList(actual),
-               sortKeyValueList(list(list("a", list(1, NULL)), list("b", list(2, NULL)), list("d", list(NULL, 4)), list("c", list(NULL, 3)))))
+               sortKeyValueList(list(list("a", list(1, NULL)), list("b", list(2, NULL)),
+                                     list("d", list(NULL, 4)), list("c", list(NULL, 3)))))
 })
 
 test_that("sortByKey() on pairwise RDDs", {
