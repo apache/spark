@@ -44,7 +44,7 @@ private[sql] case class InsertIntoDataSource(
     overwrite: Boolean)
   extends RunnableCommand {
 
-  override def run(sqlContext: SQLContext): Seq[InternalRow] = {
+  override def run(sqlContext: SQLContext): Seq[Row] = {
     val relation = logicalRelation.relation.asInstanceOf[InsertableRelation]
     val data = DataFrame(sqlContext, query)
     // Apply the schema of the existing table to the new data.
@@ -54,7 +54,7 @@ private[sql] case class InsertIntoDataSource(
     // Invalidate the cache.
     sqlContext.cacheManager.invalidateCache(logicalRelation)
 
-    Seq.empty[InternalRow]
+    Seq.empty[Row]
   }
 }
 
@@ -86,7 +86,7 @@ private[sql] case class InsertIntoHadoopFsRelation(
     mode: SaveMode)
   extends RunnableCommand {
 
-  override def run(sqlContext: SQLContext): Seq[InternalRow] = {
+  override def run(sqlContext: SQLContext): Seq[Row] = {
     require(
       relation.paths.length == 1,
       s"Cannot write to multiple destinations: ${relation.paths.mkString(",")}")
@@ -154,7 +154,7 @@ private[sql] case class InsertIntoHadoopFsRelation(
     writerContainer.driverSideSetup()
 
     try {
-      df.sqlContext.sparkContext.runJob(df.queryExecution.executedPlan.execute(), writeRows _)
+      df.sqlContext.sparkContext.runJob(df.queryExecution.toRdd, writeRows _)
       writerContainer.commitJob()
       relation.refresh()
     } catch { case cause: Throwable =>
@@ -220,7 +220,7 @@ private[sql] case class InsertIntoHadoopFsRelation(
     writerContainer.driverSideSetup()
 
     try {
-      df.sqlContext.sparkContext.runJob(df.queryExecution.executedPlan.execute(), writeRows _)
+      df.sqlContext.sparkContext.runJob(df.queryExecution.toRdd, writeRows _)
       writerContainer.commitJob()
       relation.refresh()
     } catch { case cause: Throwable =>
@@ -270,7 +270,7 @@ private[sql] case class InsertIntoHadoopFsRelation(
       inputSchema: Seq[Attribute]): Projection = {
     log.debug(
       s"Creating Projection: $expressions, inputSchema: $inputSchema, codegen:$codegenEnabled")
-    if (codegenEnabled && expressions.forall(_.isThreadSafe)) {
+    if (codegenEnabled) {
       GenerateProjection.generate(expressions, inputSchema)
     } else {
       new InterpretedProjection(expressions, inputSchema)

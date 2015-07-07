@@ -238,6 +238,7 @@ class HypothesisTestSuite extends SparkFunSuite with MLlibTestSparkContext {
     */
 
     val RKSStat = 0.18874
+    val RKSPVal = 0.4223
     val RData = sc.parallelize(
         Array(1.1626852897838, -0.585924465893051, 1.78546500331661, -1.33259371048501,
         -0.446566766553219, 0.569606122374976, -2.88971761441412, -0.869018343326555, -0.461702683149641,
@@ -247,6 +248,7 @@ class HypothesisTestSuite extends SparkFunSuite with MLlibTestSparkContext {
     )
     val RCompResult = Statistics.ksTest(RData, "stdnorm")
     assert(RCompResult.statistic ~== RKSStat relTol 1e-4)
+    assert(RCompResult.pValue ~== RKSPVal relTol 1e-4)
 
 
   }

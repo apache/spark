@@ -137,13 +137,12 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll with SQLTestUtils {
 
   test("SPARK-7158 collect and take return different results") {
     import java.util.UUID
-    import org.apache.spark.sql.types._
 
     val df = Seq(Tuple1(1), Tuple1(2), Tuple1(3)).toDF("index")
     // we except the id is materialized once
-    def id: () => String = () => { UUID.randomUUID().toString() }
+    val idUDF = udf(() => UUID.randomUUID().toString)
 
-    val dfWithId = df.withColumn("id", callUDF(id, StringType))
+    val dfWithId = df.withColumn("id", idUDF())
     // Make a new DataFrame (actually the same reference to the old one)
     val cached = dfWithId.cache()
     // Trigger the cache
@@ -1450,6 +1449,22 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll with SQLTestUtils {
       sqlContext.read.json(sqlContext.sparkContext.makeRDD(
         """{"a": {"b": [{"c": 1}]}, "b": [{"d": 1}]}""" :: Nil)).registerTempTable("t")
       checkAnswer(sql("SELECT a.b FROM t ORDER BY b[0].d"), Row(Seq(Row(1))))
+    }
+  }
+
+  test("SPARK-8782: ORDER BY NULL") {
+    withTempTable("t") {
+      Seq((1, 2), (1, 2)).toDF("a", "b").registerTempTable("t")
+      checkAnswer(sql("SELECT * FROM t ORDER BY NULL"), Seq(Row(1, 2), Row(1, 2)))
+    }
+  }
+
+  test("SPARK-8837: use keyword in column name") {
+    withTempTable("t") {
+      val df = Seq(1 -> "a").toDF("count", "sort")
+      checkAnswer(df.filter("count > 0"), Row(1, "a"))
+      df.registerTempTable("t")
+      checkAnswer(sql("select count, sort from t"), Row(1, "a"))
     }
   }
 }

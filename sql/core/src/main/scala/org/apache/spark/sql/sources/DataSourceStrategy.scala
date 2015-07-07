@@ -65,7 +65,7 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
       logInfo {
         val total = t.partitionSpec.partitions.length
         val selected = selectedPartitions.length
-        val percentPruned = (1 - total.toDouble / selected.toDouble) * 100
+        val percentPruned = (1 - selected.toDouble / total.toDouble) * 100
         s"Selected $selected partitions out of $total, pruned $percentPruned% partitions."
       }
 
@@ -313,7 +313,7 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
       output: Seq[Attribute],
       rdd: RDD[Row]): RDD[InternalRow] = {
     if (relation.relation.needConversion) {
-      execution.RDDConversions.rowToRowRdd(rdd.asInstanceOf[RDD[Row]], output.map(_.dataType))
+      execution.RDDConversions.rowToRowRdd(rdd, output.map(_.dataType))
     } else {
       rdd.map(_.asInstanceOf[InternalRow])
     }

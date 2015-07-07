@@ -73,6 +73,13 @@ class DataFrameReader(object):
         self._jreader = self._jreader.schema(jschema)
         return self
 
+    @since(1.5)
+    def option(self, key, value):
+        """Adds an input option for the underlying data source.
+        """
+        self._jreader = self._jreader.option(key, value)
+        return self
+
     @since(1.4)
     def options(self, **options):
         """Adds input options for the underlying data source.
@@ -235,6 +242,13 @@ class DataFrameWriter(object):
         self._jwrite = self._jwrite.format(source)
         return self
 
+    @since(1.5)
+    def option(self, key, value):
+        """Adds an output option for the underlying data source.
+        """
+        self._jwrite = self._jwrite.option(key, value)
+        return self
+
     @since(1.4)
     def options(self, **options):
         """Adds output options for the underlying data source.
@@ -256,12 +270,11 @@ class DataFrameWriter(object):
         """
         if len(cols) == 1 and isinstance(cols[0], (list, tuple)):
             cols = cols[0]
-        if len(cols) > 0:
-            self._jwrite = self._jwrite.partitionBy(_to_seq(self._sqlContext._sc, cols))
+        self._jwrite = self._jwrite.partitionBy(_to_seq(self._sqlContext._sc, cols))
         return self
 
     @since(1.4)
-    def save(self, path=None, format=None, mode=None, partitionBy=(), **options):
+    def save(self, path=None, format=None, mode=None, partitionBy=None, **options):
         """Saves the contents of the :class:`DataFrame` to a data source.
 
         The data source is specified by the ``format`` and a set of ``options``.
@@ -281,7 +294,9 @@ class DataFrameWriter(object):
 
         >>> df.write.mode('append').parquet(os.path.join(tempfile.mkdtemp(), 'data'))
         """
-        self.partitionBy(partitionBy).mode(mode).options(**options)
+        self.mode(mode).options(**options)
+        if partitionBy is not None:
+            self.partitionBy(partitionBy)
         if format is not None:
             self.format(format)
         if path is None:
@@ -301,7 +316,7 @@ class DataFrameWriter(object):
         self._jwrite.mode("overwrite" if overwrite else "append").insertInto(tableName)
 
     @since(1.4)
-    def saveAsTable(self, name, format=None, mode=None, partitionBy=(), **options):
+    def saveAsTable(self, name, format=None, mode=None, partitionBy=None, **options):
         """Saves the content of the :class:`DataFrame` as the specified table.
 
         In the case the table already exists, behavior of this function depends on the
@@ -320,7 +335,9 @@ class DataFrameWriter(object):
         :param partitionBy: names of partitioning columns
         :param options: all other string options
         """
-        self.partitionBy(partitionBy).mode(mode).options(**options)
+        self.mode(mode).options(**options)
+        if partitionBy is not None:
+            self.partitionBy(partitionBy)
         if format is not None:
             self.format(format)
         self._jwrite.saveAsTable(name)
@@ -342,7 +359,7 @@ class DataFrameWriter(object):
         self.mode(mode)._jwrite.json(path)
 
     @since(1.4)
-    def parquet(self, path, mode=None, partitionBy=()):
+    def parquet(self, path, mode=None, partitionBy=None):
         """Saves the content of the :class:`DataFrame` in Parquet format at the specified path.
 
         :param path: the path in any Hadoop supported file system
@@ -356,7 +373,9 @@ class DataFrameWriter(object):
 
         >>> df.write.parquet(os.path.join(tempfile.mkdtemp(), 'data'))
         """
-        self.partitionBy(partitionBy).mode(mode)
+        self.mode(mode)
+        if partitionBy is not None:
+            self.partitionBy(partitionBy)
         self._jwrite.parquet(path)
 
     @since(1.4)

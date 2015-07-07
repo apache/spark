@@ -227,6 +227,12 @@ private[spark] object SQLConf {
     defaultValue = Some(true),
     doc = "<TODO>")
 
+  val PARQUET_SCHEMA_MERGING_ENABLED = booleanConf("spark.sql.parquet.mergeSchema",
+    defaultValue = Some(true),
+    doc = "When true, the Parquet data source merges schemas collected from all data files, " +
+          "otherwise the schema is picked from the summary file or a random data file " +
+          "if no summary file is available.")
+
   val PARQUET_BINARY_AS_STRING = booleanConf("spark.sql.parquet.binaryAsString",
     defaultValue = Some(false),
     doc = "Some other Parquet-producing systems, in particular Impala and older versions of " +
@@ -263,6 +269,14 @@ private[spark] object SQLConf {
   val PARQUET_USE_DATA_SOURCE_API = booleanConf("spark.sql.parquet.useDataSourceApi",
     defaultValue = Some(true),
     doc = "<TODO>")
+
+  val PARQUET_FOLLOW_PARQUET_FORMAT_SPEC = booleanConf(
+    key = "spark.sql.parquet.followParquetFormatSpec",
+    defaultValue = Some(false),
+    doc = "Whether to stick to Parquet format specification when converting Parquet schema to " +
+      "Spark SQL schema and vice versa.  Sticks to the specification if set to true; falls back " +
+      "to compatible mode if set to false.",
+    isPublic = false)
 
   val PARQUET_OUTPUT_COMMITTER_CLASS = stringConf(
     key = "spark.sql.parquet.output.committer.class",
@@ -497,6 +511,12 @@ private[sql] class SQLConf extends Serializable with CatalystConf {
    * When set to true, we always treat INT96Values in Parquet files as timestamp.
    */
   private[spark] def isParquetINT96AsTimestamp: Boolean = getConf(PARQUET_INT96_AS_TIMESTAMP)
+
+  /**
+   * When set to true, sticks to Parquet format spec when converting Parquet schema to Spark SQL
+   * schema and vice versa.  Otherwise, falls back to compatible mode.
+   */
+  private[spark] def followParquetFormatSpec: Boolean = getConf(PARQUET_FOLLOW_PARQUET_FORMAT_SPEC)
 
   /**
    * When set to true, partition pruning for in-memory columnar tables is enabled.

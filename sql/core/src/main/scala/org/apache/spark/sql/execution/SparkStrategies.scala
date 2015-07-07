@@ -117,8 +117,18 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           leftKeys, rightKeys, buildSide, planLater(left), planLater(right))
         condition.map(Filter(_, hashJoin)).getOrElse(hashJoin) :: Nil
 
+      case ExtractEquiJoinKeys(
+             LeftOuter, leftKeys, rightKeys, condition, left, CanBroadcast(right)) =>
+        joins.BroadcastHashOuterJoin(
+          leftKeys, rightKeys, LeftOuter, condition, planLater(left), planLater(right)) :: Nil
+
+      case ExtractEquiJoinKeys(
+             RightOuter, leftKeys, rightKeys, condition, CanBroadcast(left), right) =>
+        joins.BroadcastHashOuterJoin(
+          leftKeys, rightKeys, RightOuter, condition, planLater(left), planLater(right)) :: Nil
+
       case ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, condition, left, right) =>
-        joins.HashOuterJoin(
+        joins.ShuffledHashOuterJoin(
           leftKeys, rightKeys, joinType, condition, planLater(left), planLater(right)) :: Nil
 
       case _ => Nil
@@ -210,13 +220,16 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
     }
   }
 
-  protected lazy val singleRowRdd =
-    sparkContext.parallelize(Seq(new GenericRow(Array[Any]()): InternalRow), 1)
+  protected lazy val singleRowRdd = sparkContext.parallelize(Seq(InternalRow()), 1)
 
-  object TakeOrdered extends Strategy {
+  object TakeOrderedAndProject extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case logical.Limit(IntegerLiteral(limit), logical.Sort(order, true, child)) =>
-        execution.TakeOrdered(limit, order, planLater(child)) :: Nil
+        execution.TakeOrderedAndProject(limit, order, None, planLater(child)) :: Nil
+      case logical.Limit(
+             IntegerLiteral(limit),
+             logical.Project(projectList, logical.Sort(order, true, child))) =>
+        execution.TakeOrderedAndProject(limit, order, Some(projectList), planLater(child)) :: Nil
       case _ => Nil
     }
   }
