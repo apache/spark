@@ -478,7 +478,8 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
     StructType(Seq(
       StructField(
         "f1",
-        ArrayType(IntegerType, containsNull = true),
+        ArrayType(
+          StructType(Seq(StructField("num", IntegerType, nullable = false))), containsNull = true),
         nullable = true))),
     """message root {
       |  optional group f1 (LIST) {
@@ -505,7 +506,9 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
   testParquetToCatalyst(
     "Backwards-compatibility: LIST with non-nullable element type - 2",
     StructType(Seq(
-      StructField("f1", ArrayType(IntegerType, containsNull = false), nullable = true))),
+      StructField("f1",
+      ArrayType(StructType(Seq(StructField("num", IntegerType))), containsNull = false),
+      nullable = true))),
     """message root {
       |  optional group f1 (LIST) {
       |    repeated group array {
