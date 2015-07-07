@@ -14,23 +14,21 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.apache.spark.mllib.fpm;
 
 import java.io.Serializable;
-import java.util.ArrayList;
-import java.util.List;
 
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 import com.google.common.collect.Lists;
-import static org.junit.Assert.*;
 
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
+import org.apache.spark.mllib.fpm.FPGrowth.FreqItemset;
 
-public class JavaFPGrowthSuite implements Serializable {
+
+public class JavaAssociationRulesSuite implements Serializable {
   private transient JavaSparkContext sc;
 
   @Before
@@ -45,29 +43,16 @@ public class JavaFPGrowthSuite implements Serializable {
   }
 
   @Test
-  public void runFPGrowth() {
+  public void runAssociationRules() {
 
     @SuppressWarnings("unchecked")
-    JavaRDD<ArrayList<String>> rdd = sc.parallelize(Lists.newArrayList(
-      Lists.newArrayList("r z h k p".split(" ")),
-      Lists.newArrayList("z y x w v u t s".split(" ")),
-      Lists.newArrayList("s x o n r".split(" ")),
-      Lists.newArrayList("x z y m t s q e".split(" ")),
-      Lists.newArrayList("z".split(" ")),
-      Lists.newArrayList("x z y r q t p".split(" "))), 2);
+    JavaRDD<FPGrowth.FreqItemset<String>> freqItemsets = sc.parallelize(Lists.newArrayList(
+      new FreqItemset<String>(new String[] {"a"}, 15L),
+      new FreqItemset<String>(new String[] {"b"}, 35L),
+      new FreqItemset<String>(new String[] {"a", "b"}, 18L)
+    ));
 
-    FPGrowthModel<String> model = new FPGrowth()
-      .setMinSupport(0.5)
-      .setNumPartitions(2)
-      .run(rdd);
-
-    List<FPGrowth.FreqItemset<String>> freqItemsets = model.freqItemsets().toJavaRDD().collect();
-    assertEquals(18, freqItemsets.size());
-
-    for (FPGrowth.FreqItemset<String> itemset: freqItemsets) {
-      // Test return types.
-      List<String> items = itemset.javaItems();
-      long freq = itemset.freq();
-    }
+    JavaRDD<AssociationRules.Rule<String>> results = (new AssociationRules()).run(freqItemsets);
   }
 }
+
