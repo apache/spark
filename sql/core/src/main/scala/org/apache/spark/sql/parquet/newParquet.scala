@@ -164,7 +164,24 @@ private[sql] class ParquetRelation2(
     }
   }
 
-  override def dataSchema: StructType = maybeDataSchema.getOrElse(metadataCache.dataSchema)
+  /** Constraints on schema of dataframe to be stored. */
+  private def checkConstraints(schema: StructType): Unit = {
+    if (schema.fieldNames.length != schema.fieldNames.distinct.length) {
+      val duplicateColumns = schema.fieldNames.groupBy(identity).collect {
+        case (x, ys) if ys.length > 1 => "\"" + x + "\""
+      }.mkString(", ")
+      throw new AnalysisException(s"Duplicate column(s) : $duplicateColumns found, " +
+        s"cannot save to parquet format")
+    }
+  }
+
+  override def dataSchema: StructType = {
+    val schema = maybeDataSchema.getOrElse(metadataCache.dataSchema)
+    // check if schema satisfies the constraints
+    // before moving forward
+    checkConstraints(schema)
+    schema
+  }
 
   override private[sql] def refresh(): Unit = {
     super.refresh()

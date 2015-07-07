@@ -135,6 +135,7 @@ case class AddItemToSet(item: Expression, set: Expression) extends Expression {
  */
 case class CombineSets(left: Expression, right: Expression) extends BinaryExpression {
 
+  override def nullable: Boolean = left.nullable
   override def dataType: DataType = left.dataType
 
   override def eval(input: InternalRow): Any = {
@@ -183,12 +184,8 @@ case class CountSet(child: Expression) extends UnaryExpression {
 
   override def dataType: DataType = LongType
 
-  override def eval(input: InternalRow): Any = {
-    val childEval = child.eval(input).asInstanceOf[OpenHashSet[Any]]
-    if (childEval != null) {
-      childEval.size.toLong
-    }
-  }
+  protected override def nullSafeEval(input: Any): Any =
+    input.asInstanceOf[OpenHashSet[Any]].size.toLong
 
   override def toString: String = s"$child.count()"
 }

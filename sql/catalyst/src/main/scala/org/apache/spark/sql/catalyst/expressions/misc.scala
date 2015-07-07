@@ -37,14 +37,8 @@ case class Md5(child: Expression) extends UnaryExpression with ExpectsInputTypes
 
   override def inputTypes: Seq[DataType] = Seq(BinaryType)
 
-  override def eval(input: InternalRow): Any = {
-    val value = child.eval(input)
-    if (value == null) {
-      null
-    } else {
-      UTF8String.fromString(DigestUtils.md5Hex(value.asInstanceOf[Array[Byte]]))
-    }
-  }
+  protected override def nullSafeEval(input: Any): Any =
+    UTF8String.fromString(DigestUtils.md5Hex(input.asInstanceOf[Array[Byte]]))
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     defineCodeGen(ctx, ev, c =>
@@ -67,76 +61,56 @@ case class Sha2(left: Expression, right: Expression)
 
   override def inputTypes: Seq[DataType] = Seq(BinaryType, IntegerType)
 
-  override def eval(input: InternalRow): Any = {
-    val evalE1 = left.eval(input)
-    if (evalE1 == null) {
-      null
-    } else {
-      val evalE2 = right.eval(input)
-      if (evalE2 == null) {
-        null
-      } else {
-        val bitLength = evalE2.asInstanceOf[Int]
-        val input = evalE1.asInstanceOf[Array[Byte]]
-        bitLength match {
-          case 224 =>
-            // DigestUtils doesn't support SHA-224 now
-            try {
-              val md = MessageDigest.getInstance("SHA-224")
-              md.update(input)
-              UTF8String.fromBytes(md.digest())
-            } catch {
-              // SHA-224 is not supported on the system, return null
-              case noa: NoSuchAlgorithmException => null
-            }
-          case 256 | 0 =>
-            UTF8String.fromString(DigestUtils.sha256Hex(input))
-          case 384 =>
-            UTF8String.fromString(DigestUtils.sha384Hex(input))
-          case 512 =>
-            UTF8String.fromString(DigestUtils.sha512Hex(input))
-          case _ => null
+  protected override def nullSafeEval(input1: Any, input2: Any): Any = {
+    val bitLength = input2.asInstanceOf[Int]
+    val input = input1.asInstanceOf[Array[Byte]]
+    bitLength match {
+      case 224 =>
+        // DigestUtils doesn't support SHA-224 now
+        try {
+          val md = MessageDigest.getInstance("SHA-224")
+          md.update(input)
+          UTF8String.fromBytes(md.digest())
+        } catch {
+          // SHA-224 is not supported on the system, return null
+          case noa: NoSuchAlgorithmException => null
         }
-      }
+      case 256 | 0 =>
+        UTF8String.fromString(DigestUtils.sha256Hex(input))
+      case 384 =>
+        UTF8String.fromString(DigestUtils.sha384Hex(input))
+      case 512 =>
+        UTF8String.fromString(DigestUtils.sha512Hex(input))
+      case _ => null
     }
   }
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    val eval1 = left.gen(ctx)
-    val eval2 = right.gen(ctx)
-    val digestUtils = "org.apache.commons.codec.digest.DigestUtils"
 
-    s"""
-      ${eval1.code}
-      boolean ${ev.isNull} = ${eval1.isNull};
-      ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
-      if (!${ev.isNull}) {
-        ${eval2.code}
-        if (!${eval2.isNull}) {
-          if (${eval2.primitive} == 224) {
-            try {
-              java.security.MessageDigest md = java.security.MessageDigest.getInstance("SHA-224");
-              md.update(${eval1.primitive});
-              ${ev.primitive} = ${ctx.stringType}.fromBytes(md.digest());
-            } catch (java.security.NoSuchAlgorithmException e) {
-              ${ev.isNull} = true;
-            }
-          } else if (${eval2.primitive} == 256 || ${eval2.primitive} == 0) {
-            ${ev.primitive} =
-              ${ctx.stringType}.fromString(${digestUtils}.sha256Hex(${eval1.primitive}));
-          } else if (${eval2.primitive} == 384) {
-            ${ev.primitive} =
-              ${ctx.stringType}.fromString(${digestUtils}.sha384Hex(${eval1.primitive}));
-          } else if (${eval2.primitive} == 512) {
-            ${ev.primitive} =
-              ${ctx.stringType}.fromString(${digestUtils}.sha512Hex(${eval1.primitive}));
-          } else {
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    val digestUtils = "org.apache.commons.codec.digest.DigestUtils"
+    nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
+      s"""
+        if ($eval2 == 224) {
+          try {
+            java.security.MessageDigest md = java.security.MessageDigest.getInstance("SHA-224");
+            md.update($eval1);
+            ${ev.primitive} = ${ctx.stringType}.fromBytes(md.digest());
+          } catch (java.security.NoSuchAlgorithmException e) {
             ${ev.isNull} = true;
           }
+        } else if ($eval2 == 256 || $eval2 == 0) {
+          ${ev.primitive} =
+            ${ctx.stringType}.fromString($digestUtils.sha256Hex($eval1));
+        } else if ($eval2 == 384) {
+          ${ev.primitive} =
+            ${ctx.stringType}.fromString($digestUtils.sha384Hex($eval1));
+        } else if ($eval2 == 512) {
+          ${ev.primitive} =
+            ${ctx.stringType}.fromString($digestUtils.sha512Hex($eval1));
         } else {
           ${ev.isNull} = true;
         }
-      }
-    """
+      """
+    })
   }
 }
 
@@ -150,19 +124,12 @@ case class Sha1(child: Expression) extends UnaryExpression with ExpectsInputType
 
   override def inputTypes: Seq[DataType] = Seq(BinaryType)
 
-  override def eval(input: InternalRow): Any = {
-    val value = child.eval(input)
-    if (value == null) {
-      null
-    } else {
-      UTF8String.fromString(DigestUtils.shaHex(value.asInstanceOf[Array[Byte]]))
-    }
-  }
+  protected override def nullSafeEval(input: Any): Any =
+    UTF8String.fromString(DigestUtils.shaHex(input.asInstanceOf[Array[Byte]]))
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     defineCodeGen(ctx, ev, c =>
-      "org.apache.spark.unsafe.types.UTF8String.fromString" +
-        s"(org.apache.commons.codec.digest.DigestUtils.shaHex($c))"
+      s"${ctx.stringType}.fromString(org.apache.commons.codec.digest.DigestUtils.shaHex($c))"
     )
   }
 }
@@ -177,30 +144,20 @@ case class Crc32(child: Expression) extends UnaryExpression with ExpectsInputTyp
 
   override def inputTypes: Seq[DataType] = Seq(BinaryType)
 
-  override def eval(input: InternalRow): Any = {
-    val value = child.eval(input)
-    if (value == null) {
-      null
-    } else {
-      val checksum = new CRC32
-      checksum.update(value.asInstanceOf[Array[Byte]], 0, value.asInstanceOf[Array[Byte]].length)
-      checksum.getValue
-    }
+  protected override def nullSafeEval(input: Any): Any = {
+    val checksum = new CRC32
+    checksum.update(input.asInstanceOf[Array[Byte]], 0, input.asInstanceOf[Array[Byte]].length)
+    checksum.getValue
   }
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    val value = child.gen(ctx)
     val CRC32 = "java.util.zip.CRC32"
-    s"""
-      ${value.code}
-      boolean ${ev.isNull} = ${value.isNull};
-      long ${ev.primitive} = ${ctx.defaultValue(dataType)};
-      if (!${ev.isNull}) {
-        ${CRC32} checksum = new ${CRC32}();
-        checksum.update(${value.primitive}, 0, ${value.primitive}.length);
+    nullSafeCodeGen(ctx, ev, value => {
+      s"""
+        $CRC32 checksum = new $CRC32();
+        checksum.update($value, 0, $value.length);
         ${ev.primitive} = checksum.getValue();
-      }
-    """
+      """
+    })
   }
-
 }
