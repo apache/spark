@@ -171,7 +171,7 @@ private[spark] class TaskSchedulerImpl(
         ts.taskSet != taskSet && !ts.isZombie
       }
       if (conflictingTaskSet) {
-        throw new SparkIllegalStateException(s"more than one active taskSet for stage $stage:" +
+        throw new IllegalStateException(s"more than one active taskSet for stage $stage:" +
           s" ${stageTaskSets.toSeq.map{_._2.taskSet.id}.mkString(",")}")
       }
       schedulableBuilder.addTaskSetManager(manager, manager.taskSet.properties)

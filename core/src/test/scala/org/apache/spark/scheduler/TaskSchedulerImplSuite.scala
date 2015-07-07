@@ -141,13 +141,13 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with L
     val attempt1 = new TaskSet(Array(new FakeTask(0)), 0, 0, 0, null)
     val attempt2 = new TaskSet(Array(new FakeTask(0)), 0, 1, 0, null)
     taskScheduler.submitTasks(attempt1)
-    intercept[SparkIllegalStateException] { taskScheduler.submitTasks(attempt2) }
+    intercept[IllegalStateException] { taskScheduler.submitTasks(attempt2) }
 
     // OK to submit multiple if previous attempts are all zombie
     taskScheduler.activeTaskSets(attempt1.id).isZombie = true
     taskScheduler.submitTasks(attempt2)
     val attempt3 = new TaskSet(Array(new FakeTask(0)), 0, 2, 0, null)
-    intercept[SparkIllegalStateException] { taskScheduler.submitTasks(attempt3) }
+    intercept[IllegalStateException] { taskScheduler.submitTasks(attempt3) }
     taskScheduler.activeTaskSets(attempt2.id).isZombie = true
     taskScheduler.submitTasks(attempt3)
   }
