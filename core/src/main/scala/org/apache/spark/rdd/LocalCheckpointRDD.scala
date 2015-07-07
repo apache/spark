@@ -40,6 +40,7 @@ private[spark] class LocalCheckpointRDD[T: ClassTag](@transient sc: SparkContext
       SparkEnv.get.blockManager.master
         .getMatchingBlockIds(blockFilter, askSlaves = true)
         .collect { case RDDBlockId(_, i) => new CheckpointRDDPartition(i) }
+        .sortBy(_.index)
         .toArray
     validateInputPartitions(inputPartitions)
     inputPartitions
@@ -49,8 +50,7 @@ private[spark] class LocalCheckpointRDD[T: ClassTag](@transient sc: SparkContext
    * Return the location of the checkpoint block that corresponds to the given partition.
    */
   override def getPreferredLocations(partition: Partition): Seq[String] = {
-    val index = partition.asInstanceOf[CheckpointRDDPartition].index
-    val blockId = RDDBlockId(id, index)
+    val blockId = RDDBlockId(id, partition.index)
     SparkEnv.get.blockManager.master.getLocations(blockId).map(_.host)
   }
 
@@ -59,8 +59,7 @@ private[spark] class LocalCheckpointRDD[T: ClassTag](@transient sc: SparkContext
    * This block should be in the disk store of at least one executor.
    */
   override def compute(partition: Partition, context: TaskContext): Iterator[T] = {
-    val index = partition.asInstanceOf[CheckpointRDDPartition].index
-    val blockId = RDDBlockId(id, index)
+    val blockId = RDDBlockId(id, partition.index)
     SparkEnv.get.blockManager.get(blockId) match {
       case Some(result) =>
         result.data.asInstanceOf[Iterator[T]]
