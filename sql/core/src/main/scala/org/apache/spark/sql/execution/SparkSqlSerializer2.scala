@@ -191,19 +191,19 @@ private[sql] object SparkSqlSerializer2 {
       schema(i) match {
         case NullType => // Do nothing
         case udt: UserDefinedType[_] =>
-          if (allNullTypes) allNullTypes = false
+          allNullTypes = false
           return false
         case array: ArrayType =>
-          if (allNullTypes) allNullTypes = false
+          allNullTypes = false
           return false
         case map: MapType =>
-          if (allNullTypes) allNullTypes = false
+          allNullTypes = false
           return false
         case struct: StructType =>
-          if (allNullTypes) allNullTypes = false
+          allNullTypes = false
           return false
         case _ =>
-          if (allNullTypes) allNullTypes = false
+          allNullTypes = false
       }
       i += 1
     }
