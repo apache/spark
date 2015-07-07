@@ -20,7 +20,6 @@ package org.apache.spark.ml.classification
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.ml.tree.impl.RandomForest
 import org.apache.spark.ml.param.ParamMap
-import org.apache.spark.ml.param.shared.HasThresholds
 import org.apache.spark.ml.tree.{DecisionTreeModel, RandomForestParams, TreeClassifierParams, TreeEnsembleModel}
 import org.apache.spark.ml.util.{Identifiable, MetadataUtils}
 import org.apache.spark.mllib.linalg.{SparseVector, DenseVector, Vector, Vectors}
