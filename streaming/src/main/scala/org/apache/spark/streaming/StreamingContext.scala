@@ -192,11 +192,9 @@ class StreamingContext private[streaming] (
       None
     }
 
-  /** Register streaming source to metrics system */
+  /** Initializing a streaming source to help register metrics system */
   private val streamingSource = new StreamingSource(this)
-  assert(env != null)
-  assert(env.metricsSystem != null)
-  env.metricsSystem.registerSource(streamingSource)
+
 
   private var state: StreamingContextState = INITIALIZED
 
@@ -598,6 +596,9 @@ class StreamingContext private[streaming] (
         }
         shutdownHookRef = Utils.addShutdownHook(
           StreamingContext.SHUTDOWN_HOOK_PRIORITY)(stopOnShutdown)
+        // Registering Streaming Metrics at the start of the StreamingContext
+        assert(env.metricsSystem != null)
+        env.metricsSystem.registerSource(streamingSource)
         uiTab.foreach(_.attach())
         logInfo("StreamingContext started")
       case ACTIVE =>
@@ -674,6 +675,8 @@ class StreamingContext private[streaming] (
           logWarning("StreamingContext has already been stopped")
         case ACTIVE =>
           scheduler.stop(stopGracefully)
+          // De-registering Streaming Metrics of the StreamingContext
+          env.metricsSystem.removeSource(streamingSource)
           uiTab.foreach(_.detach())
           StreamingContext.setActiveContext(null)
           waiter.notifyStop()
@@ -688,6 +691,7 @@ class StreamingContext private[streaming] (
     } finally {
       // The state should always be Stopped after calling `stop()`, even if we haven't started yet
       state = STOPPED
+
     }
   }
 
