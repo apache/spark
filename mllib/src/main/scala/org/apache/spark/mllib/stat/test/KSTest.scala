@@ -89,15 +89,14 @@ private[stat] object KSTest {
    * @param partData `Iterator[Double]` 1 partition of a sorted RDD
    * @param n `Double` the total size of the RDD
    * @param cdf `Double => Double` a function the calculates the theoretical CDF of a value
-   * @return `Iterator[Double] `Unadjusted (ie. off by a constant) differences between
-   *        ECDF (empirical cumulative distribution function) and CDF. We subtract in such a way
-   *        that when adjusted by the appropriate constant, the difference will be equivalent
-   *        to the KS statistic calculation described in
-   *        http://www.itl.nist.gov/div898/handbook/eda/section3/eda35g.htm
-   *        where the difference is not exactly symmetric
+   * @return `Iterator[(Double, Double)] `Unadjusted (ie. off by a constant) potential extrema
+   *        in a partition. The first element corresponds to the (ECDF - 1/N) - CDF, the second
+   *        element corresponds to ECDF - CDF.  We can then search the resulting iterator
+   *        for the minimum of the first and the maximum of the second element, and provide this
+   *        as a partition's candidate extrema
    */
   private def oneSampleDifferences(partData: Iterator[Double], n: Double, cdf: Double => Double)
-    : Iterator[Double] = {
+    : Iterator[(Double, Double)] = {
     // zip data with index (within that partition)
     // calculate local (unadjusted) ECDF and subtract CDF
     partData.zipWithIndex.map { case (v, ix) =>
@@ -105,9 +104,7 @@ private[stat] object KSTest {
       val dp = (ix + 1) / n
       val dl = ix / n
       val cdfVal = cdf(v)
-      // if dp > cdfVal the adjusted dp is still above cdfVal, if dp < cdfVal
-      // we want negative distance so that constant adjusted gives correct distance
-      if (dp > cdfVal) dp - cdfVal else dl - cdfVal
+      (dl - cdfVal, dp - cdfVal)
     }
   }
 
@@ -115,26 +112,27 @@ private[stat] object KSTest {
       partData: Iterator[Double],
       n: Double,
       createDist: () => RealDistribution)
-    : Iterator[Double] = {
+    : Iterator[(Double, Double)] = {
     val dist = createDist()
     oneSampleDifferences(partData, n, x => dist.cumulativeProbability(x))
   }
 
   /**
-   * Search the unadjusted differences between ECDF and CDF in a partition and return the
+   * Search the unadjusted differences in a partition and return the
    * two extrema (furthest below and furthest above CDF), along with a count of elements in that
    * partition
-   * @param partDiffs `Iterator[Double]` the unadjusted differences between ECDF and CDF in a
-   *                 partition
+   * @param partDiffs `Iterator[(Double, Double)]` the unadjusted differences between ECDF and CDF in a
+   *                 partition, which come as a tuple of (ECDF - 1/N - CDF, ECDF - CDF)
    * @return `Iterator[(Double, Double, Double)]` the local extrema and a count of elements
    */
-  private def searchOneSampleCandidates(partDiffs: Iterator[Double])
+  private def searchOneSampleCandidates(partDiffs: Iterator[(Double, Double)])
     : Iterator[(Double, Double, Double)] = {
     val initAcc = (Double.MaxValue, Double.MinValue, 0.0)
-    val partResults = partDiffs.foldLeft(initAcc) { case ((pMin, pMax, pCt), currDiff) =>
-      (Math.min(pMin, currDiff), Math.max(pMax, currDiff), pCt + 1)
+    val partResults = partDiffs.foldLeft(initAcc) { case ((pMin, pMax, pCt), (dl, dp)) =>
+      (math.min(pMin, dl), math.max(pMax, dp), pCt + 1)
     }
-    Array(partResults).iterator
+    val results = if (partResults == initAcc) Array[(Double, Double, Double)]() else Array(partResults)
+    results.iterator
   }
 
   /**
@@ -153,12 +151,8 @@ private[stat] object KSTest {
     // the correct distance between ECDF and CDF
     val results = localData.foldLeft(initAcc) { case ((prevMax, prevCt), (minCand, maxCand, ct)) =>
       val adjConst = prevCt / n
-      val pdist1 = minCand + adjConst
-      val pdist2 = maxCand + adjConst
-      // adjust by 1 / N if pre-constant the value is less than cdf and post-constant
-      // it is greater than or equal to the cdf
-      val dist1 = if (pdist1 >= 0 && minCand < 0) pdist1 + 1 / n else Math.abs(pdist1)
-      val dist2 = if (pdist2 >= 0 && maxCand < 0) pdist2 + 1 / n else Math.abs(pdist2)
+      val dist1 = math.abs(minCand + adjConst)
+      val dist2 = math.abs(maxCand + adjConst)
       val maxVal = Array(prevMax, dist1, dist2).max
       (maxVal, prevCt + ct)
     }

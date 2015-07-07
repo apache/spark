@@ -101,6 +101,7 @@ class KSTestResult private[stat] (override val pValue: Double,
     override val nullHypothesis: String) extends TestResult[Int] {
 
   override val degreesOfFreedom = 0
+
   override def toString: String = {
     "Kolmogorov Smirnov test summary:\n" + super.toString
   }
