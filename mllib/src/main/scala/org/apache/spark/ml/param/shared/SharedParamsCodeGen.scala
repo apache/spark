@@ -53,6 +53,7 @@ private[shared] object SharedParamsCodeGen {
       ParamDesc[Int]("checkpointInterval", "checkpoint interval (>= 1)",
         isValid = "ParamValidators.gtEq(1)"),
       ParamDesc[Boolean]("fitIntercept", "whether to fit an intercept term", Some("true")),
+      ParamDesc[Boolean]("skipInvalid", "whether to skip invalid entries"),
       ParamDesc[Boolean]("standardization", "whether to standardize the training features" +
         " prior to fitting the model sequence. Note that the coefficients of models are" +
         " always returned on the original scale.", Some("true")),

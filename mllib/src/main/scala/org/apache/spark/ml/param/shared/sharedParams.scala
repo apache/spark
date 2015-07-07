@@ -234,6 +234,21 @@ private[ml] trait HasFitIntercept extends Params {
 }
 
 /**
+ * (private[ml]) Trait for shared param skipInvalid.
+ */
+private[ml] trait HasSkipInvalid extends Params {
+
+  /**
+   * Param for whether to skip invalid entries.
+   * @group param
+   */
+  final val skipInvalid: BooleanParam = new BooleanParam(this, "skipInvalid", "whether to skip invalid entries")
+
+  /** @group getParam */
+  final def getSkipInvalid: Boolean = $(skipInvalid)
+}
+
+/**
  * (private[ml]) Trait for shared param standardization (default: true).
  */
 private[ml] trait HasStandardization extends Params {
