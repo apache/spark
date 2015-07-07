@@ -115,42 +115,26 @@ class PrunedScanSuite extends DataSourceTest {
   def testPruning(sqlString: String, expectedColumns: String*): Unit = {
     test(s"Columns output ${expectedColumns.mkString(",")}: $sqlString") {
       val queryExecution = caseInsensitiveContext.sql(sqlString).queryExecution
-      testPruningBase(queryExecution, expectedColumns: _*)
+      val rawPlan = queryExecution.executedPlan.collect {
+        case p: execution.PhysicalRDD => p
+      } match {
+        case Seq(p) => p
+        case _ => fail(s"More than one PhysicalRDD found\n$queryExecution")
+      }
+      val rawColumns = rawPlan.output.map(_.name)
+      val rawOutput = rawPlan.execute().first()
+
+      if (rawColumns != expectedColumns) {
+        fail(
+          s"Wrong column names. Got $rawColumns, Expected $expectedColumns\n" +
+          s"Filters pushed: ${FiltersPushed.list.mkString(",")}\n" +
+            queryExecution)
+      }
+
+      if (rawOutput.size != expectedColumns.size) {
+        fail(s"Wrong output row. Got $rawOutput\n$queryExecution")
+      }
     }
   }
-
-  def testPruning(testTitle: String, df: DataFrame, expectedColumns: String*): Unit = {
-    test(s"Columns output ${expectedColumns.mkString(",")}: $testTitle") {
-      testPruningBase(df.queryExecution, expectedColumns: _*)
-    }
-  }
-
-  def testPruningBase(queryExecution: SQLContext#QueryExecution, expectedColumns: String*): Unit = {
-    val rawPlan = queryExecution.executedPlan.collect {
-      case p: execution.PhysicalRDD => p
-    } match {
-      case Seq(p) => p
-      case _ => fail(s"More than one PhysicalRDD found\n$queryExecution")
-    }
-    val rawColumns = rawPlan.output.map(_.name)
-    val rawOutput = rawPlan.execute().first()
-
-    if (rawColumns != expectedColumns) {
-      fail(
-        s"Wrong column names. Got $rawColumns, Expected $expectedColumns\n" +
-        s"Filters pushed: ${FiltersPushed.list.mkString(",")}\n" +
-          queryExecution)
-    }
-
-    if (rawOutput.size != expectedColumns.size) {
-      fail(s"Wrong output row. Got $rawOutput\n$queryExecution")
-    }
-  }
-
-  val relation = new SimplePrunedScan(1, 10)(caseInsensitiveContext)
-  val df = caseInsensitiveContext.baseRelationToDataFrame(relation)
-  val sampledDF = df.sample(false, 0.6, 11L)
-  val selectedDF = sampledDF.select("a")
-  testPruning("Sample on PrunedScan", selectedDF, "a")
 }
 
