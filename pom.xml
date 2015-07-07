@@ -1601,7 +1601,7 @@
         <groupId>org.apache.parquet</groupId>
         <artifactId>parquet-avro</artifactId>
         <version>${parquet.version}</version>
-        <scope>${parquet.test.deps.scope}</scope>
+        <scope>${parquet.deps.scope}</scope>
       </dependency>
       <dependency>
         <groupId>com.twitter</groupId>

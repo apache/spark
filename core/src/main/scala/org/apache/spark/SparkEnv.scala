@@ -155,6 +155,13 @@ class SparkEnv (
 object SparkEnv extends Logging {
   @volatile private var env: SparkEnv = _
 
+  // Let the user specify short names for shuffle managers
+  val shuffleManagerAliases = Map(
+    "hash" -> "org.apache.spark.shuffle.hash.HashShuffleManager",
+    "sort" -> "org.apache.spark.shuffle.sort.SortShuffleManager",
+    "tungsten-sort" -> "org.apache.spark.shuffle.unsafe.UnsafeShuffleManager",
+    "parquet" -> "org.apache.spark.shuffle.parquet.ParquetShuffleManager")
+
   private[spark] val driverActorSystemName = "sparkDriver"
   private[spark] val executorActorSystemName = "sparkExecutor"
 
@@ -314,13 +321,9 @@ object SparkEnv extends Logging {
       new MapOutputTrackerMasterEndpoint(
         rpcEnv, mapOutputTracker.asInstanceOf[MapOutputTrackerMaster], conf))
 
-    // Let the user specify short names for shuffle managers
-    val shortShuffleMgrNames = Map(
-      "hash" -> "org.apache.spark.shuffle.hash.HashShuffleManager",
-      "sort" -> "org.apache.spark.shuffle.sort.SortShuffleManager",
-      "tungsten-sort" -> "org.apache.spark.shuffle.unsafe.UnsafeShuffleManager")
     val shuffleMgrName = conf.get("spark.shuffle.manager", "sort")
-    val shuffleMgrClass = shortShuffleMgrNames.getOrElse(shuffleMgrName.toLowerCase, shuffleMgrName)
+    val shuffleMgrClass = shuffleManagerAliases
+      .getOrElse(shuffleMgrName.toLowerCase, shuffleMgrName)
     val shuffleManager = instantiateClass[ShuffleManager](shuffleMgrClass)
 
     val shuffleMemoryManager = ShuffleMemoryManager.create(conf, numUsableCores)
