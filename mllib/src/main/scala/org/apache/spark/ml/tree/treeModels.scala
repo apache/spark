@@ -73,7 +73,7 @@ private[ml] trait TreeEnsembleModel {
 
   /** Weights used by the python wrappers. */
   // Note: An array cannot be returned directly due to serialization problems.
-  def javaTreeWeights: Vector = Vectors.dense(treeWeights)
+  private[spark] def javaTreeWeights: Vector = Vectors.dense(treeWeights)
 
   /** Summary of the model */
   override def toString: String = {
