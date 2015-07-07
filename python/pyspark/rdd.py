@@ -693,7 +693,7 @@ class RDD(object):
 
         >>> sc.parallelize(['1', '2', '', '3']).pipe('cat').collect()
         [u'1', u'2', u'', u'3']
-        
+
         :param checkCode: whether or not to check the return value of the shell command.
         """
 
