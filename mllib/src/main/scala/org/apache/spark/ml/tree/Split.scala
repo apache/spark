@@ -163,8 +163,13 @@ final class ContinuousSplit private[ml] (override val featureIndex: Int, val thr
   }
 
   override private[tree] def shouldGoLeft(binnedFeature: Int, splits: Array[Split]): Boolean = {
-    val featureValueUpperBound = splits(binnedFeature).asInstanceOf[ContinuousSplit].threshold
-    featureValueUpperBound <= threshold
+    if (binnedFeature == splits.length) {
+      // > last split, so split right
+      false
+    } else {
+      val featureValueUpperBound = splits(binnedFeature).asInstanceOf[ContinuousSplit].threshold
+      featureValueUpperBound <= threshold
+    }
   }
 
   override def equals(o: Any): Boolean = {

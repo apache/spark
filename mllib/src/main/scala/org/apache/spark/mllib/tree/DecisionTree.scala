@@ -974,7 +974,7 @@ object DecisionTree extends Serializable with Logging {
         1.0
       }
       logDebug("fraction of data used for calculating quantiles = " + fraction)
-      input.sample(withReplacement = false, fraction, new XORShiftRandom().nextInt()).collect()
+      input.sample(withReplacement = false, fraction, new XORShiftRandom(1).nextInt()).collect()
     } else {
       new Array[LabeledPoint](0)
     }

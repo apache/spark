@@ -17,7 +17,7 @@
 
 package org.apache.spark.ml.tree.impl
 
-import org.apache.spark.SparkException
+import org.apache.spark.ml.feature.Bucketizer
 import org.apache.spark.ml.tree.{ContinuousSplit, Split}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.impl.DecisionTreeMetadata
@@ -64,38 +64,42 @@ private[spark] object TreePoint {
       featureArity(featureIndex) = metadata.featureArity.getOrElse(featureIndex, 0)
       featureIndex += 1
     }
-    // thresholds(feature index) = split thresholds for continuous features,
-    //                             empty for categorical features
-    val thresholds: Array[Array[Double]] = featureArity.zipWithIndex.map { case (arity, idx) =>
+    // TODO: RIGHT HERE NOW: We cannot use Bucketizer since it uses different bucketing than
+    //       the original DecisionTree.  (It handles split thresholds differently.)
+    val bucketizers: Array[Bucketizer] = featureArity.zipWithIndex.map { case (arity, idx) =>
       if (arity == 0) {
-        splits(idx).asInstanceOf[Array[ContinuousSplit]].map(_.threshold)
+        val thresholds: Array[Double] = splits(idx).map(_.asInstanceOf[ContinuousSplit].threshold)
+        new Bucketizer().setSplits(Double.NegativeInfinity +: thresholds :+ Double.PositiveInfinity)
       } else {
-        Array.empty[Double]
+        new Bucketizer()
       }
     }
+    println("Bucketizers:")
+    bucketizers.foreach { b =>
+      println(s"\t ${b.getSplits.mkString(", ")}")
+    }
     input.map { x =>
-      TreePoint.labeledPointToTreePoint(x, thresholds, featureArity)
+      TreePoint.labeledPointToTreePoint(x, bucketizers, featureArity)
     }
   }
 
   /**
    * Convert one LabeledPoint into its TreePoint representation.
-   * @param thresholds    Thresholds for features.  thresholds(feature index) =
-   *                        split thresholds for continuous features,
-   *                        empty for categorical features
+   * @param bucketizers  For each feature, Bucketizer with split thresholds for continuous features,
+   *                     default Bucketizer for categorical features.
    * @param featureArity  Array indexed by feature, with value 0 for continuous and numCategories
    *                      for categorical features.
    */
   private def labeledPointToTreePoint(
       labeledPoint: LabeledPoint,
-      thresholds: Array[Array[Double]],
+      bucketizers: Array[Bucketizer],
       featureArity: Array[Int]): TreePoint = {
     val numFeatures = labeledPoint.features.size
     val arr = new Array[Int](numFeatures)
     var featureIndex = 0
     while (featureIndex < numFeatures) {
       arr(featureIndex) =
-        findBin(featureIndex, labeledPoint, featureArity(featureIndex), thresholds(featureIndex))
+        findBin(featureIndex, labeledPoint, featureArity(featureIndex), bucketizers(featureIndex))
       featureIndex += 1
     }
     new TreePoint(labeledPoint.label, arr)
@@ -105,57 +109,26 @@ private[spark] object TreePoint {
    * Find discretized value for one (labeledPoint, feature).
    *
    * @param featureArity  0 for continuous features; number of categories for categorical features.
-   * @param splits     Split thresholds for feature.
    */
   private def findBin(
       featureIndex: Int,
       labeledPoint: LabeledPoint,
       featureArity: Int,
-      splits: Array[Double]): Int = {
+      bucketizer: Bucketizer): Int = {
     val featureValue = labeledPoint.features(featureIndex)
 
     if (featureArity == 0) {
-      // Perform binary search for finding bin for continuous features.
-      val binIndex = binarySearchForBins(splits, featureValue)
-      if (binIndex == -1) {
-        throw new RuntimeException("No bin was found for continuous feature." +
-          " This error can occur when given invalid data values (such as NaN)." +
-          s" Feature index: $featureIndex.  Feature value: $featureValue")
-      }
-      binIndex
+      bucketizer.transform(featureValue).toInt
     } else {
       // Categorical feature bins are indexed by feature values.
       if (featureValue < 0 || featureValue >= featureArity) {
         throw new IllegalArgumentException(
           s"DecisionTree given invalid data:" +
-            s" Feature $featureIndex is categorical with values in" +
-            s" {0,...,${featureArity - 1}," +
+            s" Feature $featureIndex is categorical with values in {0,...,${featureArity - 1}," +
             s" but a data point gives it value $featureValue.\n" +
             "  Bad data point: " + labeledPoint.toString)
       }
       featureValue.toInt
-    }
-  }
-
-  /**
-   * Binary search helper method for continuous feature.
-   */
-  def binarySearchForBins(splits: Array[Double], feature: Double): Int = {
-    if (feature == splits.last) {
-      splits.length - 2
-    } else {
-      val idx = java.util.Arrays.binarySearch(splits, feature)
-      if (idx >= 0) {
-        idx
-      } else {
-        val insertPos = -idx - 1
-        if (insertPos == 0 || insertPos == splits.length) {
-          throw new SparkException(s"Unexpected error in preparing tree data:" +
-            s"Feature value $feature out of Bucketizer bounds [${splits.head}, ${splits.last}].")
-        } else {
-          insertPos - 1
-        }
-      }
     }
   }
 }

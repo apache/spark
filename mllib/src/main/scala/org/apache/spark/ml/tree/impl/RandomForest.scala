@@ -89,6 +89,10 @@ private[ml] object RandomForest extends Logging {
     val baggedInput = BaggedPoint.convertToBaggedRDD(treeInput, strategy.subsamplingRate, numTrees,
       withReplacement, seed).persist(StorageLevel.MEMORY_AND_DISK)
 
+    baggedInput.collect().foreach { p =>
+      println(s"TreePoint(${p.datum.label}, ${p.datum.binnedFeatures.mkString(", ")})")
+    }
+
     // depth of the decision tree
     val maxDepth = strategy.maxDepth
     require(maxDepth <= 30,
@@ -211,13 +215,13 @@ private[ml] object RandomForest extends Logging {
       node: LearningNode,
       binnedFeatures: Array[Int],
       splits: Array[Array[Split]]): Int = {
-    if (node.isLeaf) {
+    if (node.isLeaf || node.split.isEmpty) {
       node.id
     } else {
       val split = node.split.get
       val featureIndex = split.featureIndex
       val splitLeft = split.shouldGoLeft(binnedFeatures(featureIndex), splits(featureIndex))
-      if (node.leftChild == null) {
+      if (node.leftChild.isEmpty) {
         // Not yet split. Return index from next layer of nodes to train
         if (splitLeft) {
           LearningNode.leftChildIndex(node.id)
@@ -226,9 +230,9 @@ private[ml] object RandomForest extends Logging {
         }
       } else {
         if (splitLeft) {
-          predictNodeIndex(node.leftChild.asInstanceOf[LearningNode], binnedFeatures, splits)
+          predictNodeIndex(node.leftChild.get, binnedFeatures, splits)
         } else {
-          predictNodeIndex(node.rightChild.asInstanceOf[LearningNode], binnedFeatures, splits)
+          predictNodeIndex(node.rightChild.get, binnedFeatures, splits)
         }
       }
     }
@@ -600,15 +604,15 @@ private[ml] object RandomForest extends Logging {
 
           // enqueue left child and right child if they are not leaves
           if (!leftChildIsLeaf) {
-            nodeQueue.enqueue((treeIndex, node.leftChild.asInstanceOf[LearningNode]))
+            nodeQueue.enqueue((treeIndex, node.leftChild.get))
           }
           if (!rightChildIsLeaf) {
-            nodeQueue.enqueue((treeIndex, node.rightChild.asInstanceOf[LearningNode]))
+            nodeQueue.enqueue((treeIndex, node.rightChild.get))
           }
 
-          logDebug("leftChildIndex = " + node.leftChild.asInstanceOf[LearningNode].id +
+          logDebug("leftChildIndex = " + node.leftChild.get.id +
             ", impurity = " + stats.leftImpurity)
-          logDebug("rightChildIndex = " + node.rightChild.asInstanceOf[LearningNode].id +
+          logDebug("rightChildIndex = " + node.rightChild.get.id +
             ", impurity = " + stats.rightImpurity)
         }
       }
@@ -886,7 +890,7 @@ private[ml] object RandomForest extends Logging {
         1.0
       }
       logDebug("fraction of data used for calculating quantiles = " + fraction)
-      input.sample(withReplacement = false, fraction, new XORShiftRandom().nextInt()).collect()
+      input.sample(withReplacement = false, fraction, new XORShiftRandom(1).nextInt()).collect()
     } else {
       new Array[LabeledPoint](0)
     }
@@ -898,9 +902,9 @@ private[ml] object RandomForest extends Logging {
     var featureIndex = 0
     while (featureIndex < numFeatures) {
       if (metadata.isContinuous(featureIndex)) {
-        val featureSamples = sampledInput.map(lp => lp.features(featureIndex))
-        val featureSplits = findSplitsForContinuousFeature(featureSamples,
-          metadata, featureIndex)
+        val featureSamples = sampledInput.map(_.features(featureIndex))
+        val featureSplits = findSplitsForContinuousFeature(featureSamples, metadata, featureIndex)
+        println(s"Feature $featureIndex splits: ${featureSplits.mkString(", ")}")
 
         val numSplits = featureSplits.length
         logDebug(s"featureIndex = $featureIndex, numSplits = $numSplits")

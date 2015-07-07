@@ -230,7 +230,7 @@ private[tree] class LearningNode(
     var rightChild: Option[LearningNode],
     var split: Option[Split],
     var isLeaf: Boolean,
-    var stats: Option[InformationGainStats]) {
+    var stats: Option[InformationGainStats]) extends Serializable {
 
   /**
    * Convert this [[LearningNode]] to a regular [[Node]], and recurse on any children.

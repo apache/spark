@@ -70,12 +70,15 @@ final class Bucketizer(override val uid: String)
 
   override def transform(dataset: DataFrame): DataFrame = {
     transformSchema(dataset.schema)
-    val bucketizer = udf { feature: Double =>
-      Bucketizer.binarySearchForBuckets($(splits), feature)
-    }
+    val bucketizer = udf { feature: Double => transform(feature) }
     val newCol = bucketizer(dataset($(inputCol)))
     val newField = prepOutputField(dataset.schema)
     dataset.withColumn($(outputCol), newCol.as($(outputCol), newField.metadata))
+  }
+
+  /** Per-row transform, private to MLlib */
+  private[ml] def transform(feature: Double): Double = {
+    Bucketizer.binarySearchForBuckets($(splits), feature)
   }
 
   private def prepOutputField(schema: StructType): StructField = {
