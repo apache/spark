@@ -168,7 +168,7 @@ object FunctionRegistry {
     expression[Substring]("substring"),
     expression[UnBase64]("unbase64"),
     expression[Upper]("ucase"),
-    expression[UnHex]("unhex"),
+    expression[Unhex]("unhex"),
     expression[Upper]("upper"),
 
     // datetime functions

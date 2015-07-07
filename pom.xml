@@ -161,6 +161,8 @@
     <fasterxml.jackson.version>2.4.4</fasterxml.jackson.version>
     <snappy.version>1.1.1.7</snappy.version>
     <netlib.java.version>1.1.2</netlib.java.version>
+    <!-- For maven shade plugin (see SPARK-8819) -->
+    <create.dependency.reduced.pom>false</create.dependency.reduced.pom>
 
     <test.java.home>${java.home}</test.java.home>
 
@@ -1440,6 +1442,8 @@
         <version>2.3</version>
         <configuration>
           <shadedArtifactAttached>false</shadedArtifactAttached>
+          <!-- Work around MSHADE-148. See SPARK-8819. -->
+          <createDependencyReducedPom>${create.dependency.reduced.pom}</createDependencyReducedPom>
           <artifactSet>
             <includes>
               <!-- At a minimum we must include this to force effective pom generation -->
@@ -1713,7 +1717,6 @@
       <properties>
         <hadoop.version>2.3.0</hadoop.version>
         <jets3t.version>0.9.3</jets3t.version>
-        <commons.math3.version>3.1.1</commons.math3.version>
       </properties>
     </profile>
 
@@ -1722,7 +1725,6 @@
       <properties>
         <hadoop.version>2.4.0</hadoop.version>
         <jets3t.version>0.9.3</jets3t.version>
-        <commons.math3.version>3.1.1</commons.math3.version>
       </properties>
     </profile>
 
@@ -1731,7 +1733,6 @@
       <properties>
         <hadoop.version>2.6.0</hadoop.version>
         <jets3t.version>0.9.3</jets3t.version>
-        <commons.math3.version>3.1.1</commons.math3.version>
         <zookeeper.version>3.4.6</zookeeper.version>
         <curator.version>2.6.0</curator.version>
       </properties>
@@ -1823,6 +1824,26 @@
         <scala.binary.version>2.11</scala.binary.version>
         <jline.version>2.12.1</jline.version>
         <jline.groupid>jline</jline.groupid>
+      </properties>
+    </profile>
+
+    <profile>
+      <!--
+          Use this profile only for making Spark releases. Note that due to SPARK-8819,
+          you must use maven version 3.2.x or before to avoid running into MSHADE-148.
+      -->
+      <id>release</id>
+      <properties>
+        <!--
+            The maven shade plugin has a bug where enabling the `createDependencyReducedPom`
+            property causes maven to go into an infinite loop (MSHADE-148). This is only an
+            issue for the Spark build if the maven version is 3.3.x or newer (SPARK-8819).
+
+            However, since disabling this property has the side effect of not resolving
+            variables in the released pom files (SPARK-8781), we need to enable this during
+            releases.
+        -->
+        <create.dependency.reduced.pom>true</create.dependency.reduced.pom>
       </properties>
     </profile>
 

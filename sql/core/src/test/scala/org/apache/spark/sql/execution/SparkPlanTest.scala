@@ -54,6 +54,37 @@ class SparkPlanTest extends SparkFunSuite {
       input: DataFrame,
       planFunction: SparkPlan => SparkPlan,
       expectedAnswer: Seq[Row]): Unit = {
+    checkAnswer(input :: Nil, (plans: Seq[SparkPlan]) => planFunction(plans.head), expectedAnswer)
+  }
+
+  /**
+   * Runs the plan and makes sure the answer matches the expected result.
+   * @param left the left input data to be used.
+   * @param right the right input data to be used.
+   * @param planFunction a function which accepts the input SparkPlan and uses it to instantiate
+   *                     the physical operator that's being tested.
+   * @param expectedAnswer the expected result in a [[Seq]] of [[Row]]s.
+   */
+  protected def checkAnswer(
+      left: DataFrame,
+      right: DataFrame,
+      planFunction: (SparkPlan, SparkPlan) => SparkPlan,
+      expectedAnswer: Seq[Row]): Unit = {
+    checkAnswer(left :: right :: Nil,
+      (plans: Seq[SparkPlan]) => planFunction(plans(0), plans(1)), expectedAnswer)
+  }
+
+  /**
+   * Runs the plan and makes sure the answer matches the expected result.
+   * @param input the input data to be used.
+   * @param planFunction a function which accepts the input SparkPlan and uses it to instantiate
+   *                     the physical operator that's being tested.
+   * @param expectedAnswer the expected result in a [[Seq]] of [[Row]]s.
+   */
+  protected def checkAnswer(
+      input: Seq[DataFrame],
+      planFunction: Seq[SparkPlan] => SparkPlan,
+      expectedAnswer: Seq[Row]): Unit = {
     SparkPlanTest.checkAnswer(input, planFunction, expectedAnswer) match {
       case Some(errorMessage) => fail(errorMessage)
       case None =>
@@ -72,11 +103,41 @@ class SparkPlanTest extends SparkFunSuite {
       planFunction: SparkPlan => SparkPlan,
       expectedAnswer: Seq[A]): Unit = {
     val expectedRows = expectedAnswer.map(Row.fromTuple)
-    SparkPlanTest.checkAnswer(input, planFunction, expectedRows) match {
-      case Some(errorMessage) => fail(errorMessage)
-      case None =>
-    }
+    checkAnswer(input, planFunction, expectedRows)
   }
+
+  /**
+   * Runs the plan and makes sure the answer matches the expected result.
+   * @param left the left input data to be used.
+   * @param right the right input data to be used.
+   * @param planFunction a function which accepts the input SparkPlan and uses it to instantiate
+   *                     the physical operator that's being tested.
+   * @param expectedAnswer the expected result in a [[Seq]] of [[Product]]s.
+   */
+  protected def checkAnswer[A <: Product : TypeTag](
+      left: DataFrame,
+      right: DataFrame,
+      planFunction: (SparkPlan, SparkPlan) => SparkPlan,
+      expectedAnswer: Seq[A]): Unit = {
+    val expectedRows = expectedAnswer.map(Row.fromTuple)
+    checkAnswer(left, right, planFunction, expectedRows)
+  }
+
+  /**
+   * Runs the plan and makes sure the answer matches the expected result.
+   * @param input the input data to be used.
+   * @param planFunction a function which accepts the input SparkPlan and uses it to instantiate
+   *                     the physical operator that's being tested.
+   * @param expectedAnswer the expected result in a [[Seq]] of [[Product]]s.
+   */
+  protected def checkAnswer[A <: Product : TypeTag](
+      input: Seq[DataFrame],
+      planFunction: Seq[SparkPlan] => SparkPlan,
+      expectedAnswer: Seq[A]): Unit = {
+    val expectedRows = expectedAnswer.map(Row.fromTuple)
+    checkAnswer(input, planFunction, expectedRows)
+  }
+
 }
 
 /**
@@ -92,27 +153,25 @@ object SparkPlanTest {
    * @param expectedAnswer the expected result in a [[Seq]] of [[Row]]s.
    */
   def checkAnswer(
-      input: DataFrame,
-      planFunction: SparkPlan => SparkPlan,
+      input: Seq[DataFrame],
+      planFunction: Seq[SparkPlan] => SparkPlan,
       expectedAnswer: Seq[Row]): Option[String] = {
 
-    val outputPlan = planFunction(input.queryExecution.sparkPlan)
+    val outputPlan = planFunction(input.map(_.queryExecution.sparkPlan))
 
     // A very simple resolver to make writing tests easier. In contrast to the real resolver
     // this is always case sensitive and does not try to handle scoping or complex type resolution.
-    val resolvedPlan = outputPlan transform {
-      case plan: SparkPlan =>
-        val inputMap = plan.children.flatMap(_.output).zipWithIndex.map {
-          case (a, i) =>
-            (a.name, BoundReference(i, a.dataType, a.nullable))
-        }.toMap
-
-        plan.transformExpressions {
-          case UnresolvedAttribute(Seq(u)) =>
-            inputMap.getOrElse(u,
-              sys.error(s"Invalid Test: Cannot resolve $u given input $inputMap"))
-        }
-    }
+    val resolvedPlan = TestSQLContext.prepareForExecution.execute(
+      outputPlan transform {
+        case plan: SparkPlan =>
+          val inputMap = plan.children.flatMap(_.output).map(a => (a.name, a)).toMap
+          plan.transformExpressions {
+            case UnresolvedAttribute(Seq(u)) =>
+              inputMap.getOrElse(u,
+                sys.error(s"Invalid Test: Cannot resolve $u given input $inputMap"))
+          }
+      }
+    )
 
     def prepareAnswer(answer: Seq[Row]): Seq[Row] = {
       // Converts data to types that we can do equality comparison using Scala collections.

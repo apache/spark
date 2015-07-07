@@ -125,7 +125,7 @@ def setup_external_libs(libs):
             )
             with open(tgz_file_path, "wb") as tgz_file:
                 tgz_file.write(download_stream.read())
-            with open(tgz_file_path) as tar:
+            with open(tgz_file_path, "rb") as tar:
                 if hashlib.md5(tar.read()).hexdigest() != lib["md5"]:
                     print("ERROR: Got wrong md5sum for {lib}.".format(lib=lib["name"]), file=stderr)
                     sys.exit(1)
