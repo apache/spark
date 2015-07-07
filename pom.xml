@@ -1835,7 +1835,7 @@
           Use this profile only for making Spark releases. Note that due to SPARK-8819,
           you must use maven version 3.2.x or before to avoid running into MSHADE-148.
       -->
-      <id>release-profile</id>
+      <id>release</id>
       <properties>
         <!--
             The maven shade plugin has a bug where enabling the `createDependencyReducedPom`
