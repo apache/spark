@@ -151,7 +151,7 @@ private[ml] trait HasThreshold extends Params {
   final val threshold: DoubleParam = new DoubleParam(this, "threshold", "threshold in binary classification prediction, in range [0, 1]", ParamValidators.inRange(0, 1))
 
   /** @group getParam */
-  final def getThreshold: Double = $(threshold)
+  def getThreshold: Double = $(threshold)
 }
 
 /**
@@ -168,7 +168,7 @@ private[ml] trait HasThresholds extends Params {
   setDefault(thresholds, null)
 
   /** @group getParam */
-  final def getThresholds: Array[Double] = $(thresholds)
+  def getThresholds: Array[Double] = $(thresholds)
 }
 
 /**
