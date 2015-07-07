@@ -254,7 +254,7 @@ private[sql] class ParquetRelation2(
     // Create the function to set input paths at the driver side.
     val setInputPaths = ParquetRelation2.initializeDriverSideJobFunc(inputFiles) _
 
-    val footers = inputFiles.flatMap(f => metadataCache.footers.get(f.getPath))
+    val footers = inputFiles.map(f => metadataCache.footers(f.getPath))
 
     Utils.withDummyCallSite(sqlContext.sparkContext) {
       // TODO Stop using `FilteringParquetRowInputFormat` and overriding `getPartition`.
@@ -356,13 +356,13 @@ private[sql] class ParquetRelation2(
         val conf = SparkHadoopUtil.get.conf
         val taskSideMetaData = conf.getBoolean(ParquetInputFormat.TASK_SIDE_METADATA, true)
         val rawFooters = if (shouldMergeSchemas) {
-          val leavesToMerge = if (skipMergePartFiles) {
-            metadataStatuses ++ commonMetadataStatuses
+          if (skipMergePartFiles) {
+             ParquetFileReader.readAllFootersInParallelUsingSummaryFiles(
+               conf, seqAsJavaList(leaves), taskSideMetaData)
           } else {
-            leaves
+            ParquetFileReader.readAllFootersInParallel(
+              conf, seqAsJavaList(leaves), taskSideMetaData)
           }
-          ParquetFileReader.readAllFootersInParallel(
-            conf, seqAsJavaList(leavesToMerge), taskSideMetaData)
         } else {
           ParquetFileReader.readAllFootersInParallelUsingSummaryFiles(
             conf, seqAsJavaList(leaves), taskSideMetaData)
