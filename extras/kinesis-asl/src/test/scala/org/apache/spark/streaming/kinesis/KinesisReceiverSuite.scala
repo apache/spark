@@ -20,6 +20,18 @@ import java.nio.ByteBuffer
 
 import scala.collection.JavaConversions.seqAsJavaList
 
+import org.apache.spark.storage.StorageLevel
+import org.apache.spark.streaming.Milliseconds
+import org.apache.spark.streaming.Seconds
+import org.apache.spark.streaming.StreamingContext
+import org.apache.spark.streaming.TestSuiteBase
+import org.apache.spark.util.{ManualClock, Clock}
+
+import org.mockito.Mockito._
+import org.scalatest.BeforeAndAfter
+import org.scalatest.Matchers
+import org.scalatest.mock.MockitoSugar
+
 import com.amazonaws.services.kinesis.clientlibrary.exceptions.InvalidStateException
 import com.amazonaws.services.kinesis.clientlibrary.exceptions.KinesisClientLibDependencyException
 import com.amazonaws.services.kinesis.clientlibrary.exceptions.ShutdownException
@@ -28,24 +40,12 @@ import com.amazonaws.services.kinesis.clientlibrary.interfaces.IRecordProcessorC
 import com.amazonaws.services.kinesis.clientlibrary.lib.worker.InitialPositionInStream
 import com.amazonaws.services.kinesis.clientlibrary.types.ShutdownReason
 import com.amazonaws.services.kinesis.model.Record
-import org.mockito.Mockito._
-// scalastyle:off
-// To avoid introducing a dependency on Spark core tests, simply use scalatest's FunSuite
-// here instead of our own SparkFunSuite. Introducing the dependency has caused problems
-// in the past (SPARK-8781) that are complicated by bugs in the maven shade plugin (MSHADE-148).
-import org.scalatest.{BeforeAndAfter, FunSuite, Matchers}
-import org.scalatest.mock.MockitoSugar
-
-import org.apache.spark.storage.StorageLevel
-import org.apache.spark.streaming.{Milliseconds, Seconds, StreamingContext}
-import org.apache.spark.util.{Clock, ManualClock}
 
 /**
  * Suite of Kinesis streaming receiver tests focusing mostly on the KinesisRecordProcessor
  */
-class KinesisReceiverSuite extends FunSuite with Matchers with BeforeAndAfter
-  with MockitoSugar {
-// scalastyle:on
+class KinesisReceiverSuite extends TestSuiteBase with Matchers with BeforeAndAfter
+    with MockitoSugar {
 
   val app = "TestKinesisReceiver"
   val stream = "mySparkStream"
@@ -65,7 +65,7 @@ class KinesisReceiverSuite extends FunSuite with Matchers with BeforeAndAfter
   var checkpointStateMock: KinesisCheckpointState = _
   var currentClockMock: Clock = _
 
-  before {
+  override def beforeFunction() = {
     receiverMock = mock[KinesisReceiver]
     checkpointerMock = mock[IRecordProcessorCheckpointer]
     checkpointClockMock = mock[ManualClock]
@@ -73,15 +73,16 @@ class KinesisReceiverSuite extends FunSuite with Matchers with BeforeAndAfter
     currentClockMock = mock[Clock]
   }
 
-  after {
+  override def afterFunction(): Unit = {
+    super.afterFunction()
     // Since this suite was originally written using EasyMock, add this to preserve the old
     // mocking semantics (see SPARK-5735 for more details)
     verifyNoMoreInteractions(receiverMock, checkpointerMock, checkpointClockMock,
       checkpointStateMock, currentClockMock)
   }
 
-  test("KinesisUtils API") {
-    val ssc = new StreamingContext("local[2]", getClass.getSimpleName, Seconds(1))
+  test("kinesis utils api") {
+    val ssc = new StreamingContext(master, framework, batchDuration)
     // Tests the API, does not actually test data receiving
     val kinesisStream = KinesisUtils.createStream(ssc, "mySparkStream",
       "https://kinesis.us-west-2.amazonaws.com", Seconds(2),
