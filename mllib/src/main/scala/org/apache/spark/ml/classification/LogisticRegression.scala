@@ -122,7 +122,7 @@ class LogisticRegression(override val uid: String)
           classSummarizer1: MultiClassSummarizer), (summarizer2: MultivariateOnlineSummarizer,
           classSummarizer2: MultiClassSummarizer)) =>
             (summarizer1.merge(summarizer2), classSummarizer1.merge(classSummarizer2))
-        })
+      })
 
     val histogram = labelSummarizer.histogram
     val numInvalid = labelSummarizer.countInvalid
@@ -166,18 +166,18 @@ class LogisticRegression(override val uid: String)
       Vectors.zeros(if ($(fitIntercept)) numFeatures + 1 else numFeatures)
 
     if ($(fitIntercept)) {
-      /**
-       * For binary logistic regression, when we initialize the weights as zeros,
-       * it will converge faster if we initialize the intercept such that
-       * it follows the distribution of the labels.
-       *
-       * {{{
-       * P(0) = 1 / (1 + \exp(b)), and
-       * P(1) = \exp(b) / (1 + \exp(b))
-       * }}}, hence
-       * {{{
-       * b = \log{P(1) / P(0)} = \log{count_1 / count_0}
-       * }}}
+      /*
+         For binary logistic regression, when we initialize the weights as zeros,
+         it will converge faster if we initialize the intercept such that
+         it follows the distribution of the labels.
+
+         {{{
+         P(0) = 1 / (1 + \exp(b)), and
+         P(1) = \exp(b) / (1 + \exp(b))
+         }}}, hence
+         {{{
+         b = \log{P(1) / P(0)} = \log{count_1 / count_0}
+         }}}
        */
       initialWeightsWithIntercept.toArray(numFeatures)
         = math.log(histogram(1).toDouble / histogram(0).toDouble)
@@ -187,10 +187,10 @@ class LogisticRegression(override val uid: String)
       initialWeightsWithIntercept.toBreeze.toDenseVector)
 
     val (weights, intercept, lossHistory) = {
-      /**
-       * Note that in Logistic Regression, the loss is log-likelihood which is invariance
-       * under feature standardization. As a result, the loss returned from optimizer is
-       * the same as the one in the original space.
+      /*
+         Note that in Logistic Regression, the loss is log-likelihood which is invariance
+         under feature standardization. As a result, the loss returned from optimizer is
+         the same as the one in the original space.
        */
       val arrayBuilder = mutable.ArrayBuilder.make[Double]
       var state: optimizer.State = null
@@ -205,11 +205,11 @@ class LogisticRegression(override val uid: String)
         throw new SparkException(msg)
       }
 
-      /**
-       * The weights are trained in the scaled space; we're converting them back to
-       * the original space.
-       * Note that the intercept in scaled space and original space is the same;
-       * as a result, no scaling is needed.
+      /*
+         The weights are trained in the scaled space; we're converting them back to
+         the original space.
+         Note that the intercept in scaled space and original space is the same;
+         as a result, no scaling is needed.
        */
       val rawWeights = state.x.toArray.clone()
       var i = 0
@@ -438,9 +438,7 @@ private class LogisticAggregator(
 
     numClasses match {
       case 2 =>
-        /**
-         * For Binary Logistic Regression.
-         */
+        // For Binary Logistic Regression.
         val margin = - {
           var sum = 0.0
           data.foreachActive { (index, value) =>
