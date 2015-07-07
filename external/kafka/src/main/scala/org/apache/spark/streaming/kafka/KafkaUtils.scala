@@ -674,13 +674,13 @@ private class KafkaUtilsPythonHelper {
   def offsetRangesOfKafkaRDD(rdd: RDD[_]): JList[OffsetRange] = {
     val parentRDDs = rdd.getNarrowAncestors
     val kafkaRDDs = parentRDDs.filter(rdd => rdd.isInstanceOf[KafkaRDD[_, _, _, _, _]])
-    if (kafkaRDDs.isEmpty) {
-      throw new IllegalStateException("Get offsetRanges from a non KafkaRDD is illegal")
-    } else if (kafkaRDDs.length > 1) {
-      throw new IllegalStateException("Get offsetRanges from multiple KafkaRDDs is unexpected")
-    } else {
-      val kafkaRDD = kafkaRDDs.head.asInstanceOf[KafkaRDD[_, _, _, _, _]]
-      kafkaRDD.offsetRanges.toSeq
-    }
+
+    require(
+      kafkaRDDs.length == 1,
+      "Cannot get offset ranges, as there may be multiple Kafka RDDs or no Kafka RDD associated" +
+        "with this RDD, please call this method only on a Kafka RDD.")
+
+    val kafkaRDD = kafkaRDDs.head.asInstanceOf[KafkaRDD[_, _, _, _, _]]
+    kafkaRDD.offsetRanges.toSeq
   }
 }

@@ -288,9 +288,9 @@ class KafkaRDD(RDD):
                 KafkaUtils._printErrorMsg(self.ctx)
             raise e
 
-        offsets = [OffsetRange(o.topic(), o.partition(), o.fromOffset(), o.untilOffset())
-                   for o in joffsetRanges]
-        return offsets
+        ranges = [OffsetRange(o.topic(), o.partition(), o.fromOffset(), o.untilOffset())
+                  for o in joffsetRanges]
+        return ranges
 
 
 class KafkaDStream(DStream):
