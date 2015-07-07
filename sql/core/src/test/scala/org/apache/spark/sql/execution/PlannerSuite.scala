@@ -30,11 +30,13 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 
-
 class PlannerSuite extends SparkFunSuite with SharedSQLContext {
   import testImplicits._
 
   setupTestData()
+
+  case class TestData(key: Int, value: String)
+  val testData = (1 to 100).map(i => TestData(i, i.toString)).toDF()
 
   private def testPartialAggregationPlan(query: LogicalPlan): Unit = {
     val _ctx = ctx
@@ -80,7 +82,17 @@ class PlannerSuite extends SparkFunSuite with SharedSQLContext {
     testPartialAggregationPlan(query)
   }
 
+
+  case class TestData2(a: Int, b: Int)
   test("sizeInBytes estimation of limit operator for broadcast hash join optimization") {
+    val testData2 = {
+      val df = (for { a <- 1 to 3; b <- 1 to 2 } yield (a, b))
+        .map(t => TestData2(t._1, t._2))
+        .toDF()
+      df.registerTempTable("testData2")
+      df
+    }
+
     def checkPlan(fieldTypes: Seq[DataType], newThreshold: Int): Unit = {
       ctx.setConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD, newThreshold)
       val fields = fieldTypes.zipWithIndex.map {
