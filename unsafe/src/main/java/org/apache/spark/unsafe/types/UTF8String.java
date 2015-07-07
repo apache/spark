@@ -219,6 +219,11 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
     return (char) l;
   }
 
+  /**
+   * Levenshtein distance is a metric for measuring the distance of two strings. The distance is
+   * defined by the minimum number of single-character edits (i.e. insertions, deletions or
+   * substitutions) that are required to change one of the strings into the other.
+   */
   public int levenshteinDistance(UTF8String other) {
     // Implementation adopted from org.apache.common.lang3.StringUtils.getLevenshteinDistance
 
@@ -231,8 +236,7 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
       return n;
     }
 
-    UTF8String s;
-    UTF8String t;
+    UTF8String s, t;
 
     if (n <= m) {
       s = this;
@@ -248,15 +252,8 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
     int d[] = new int[n + 1];
     int swap[];
 
-    int i;
-    int i_bytes;
-
-    int j;
-    int j_bytes;
-
+    int i, i_bytes, j, j_bytes, cost;
     char t_j;
-
-    int cost;
 
     for (i = 0; i <= n; i++) {
       p[i] = i;
