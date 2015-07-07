@@ -18,7 +18,6 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.TestData._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoin, ShuffledHashJoin}
@@ -30,10 +29,12 @@ import org.apache.spark.sql.test.TestSQLContext.planner._
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.{SQLContext, Row, SQLConf, execution}
 
-
 class PlannerSuite extends SparkFunSuite with SQLTestUtils {
 
   override def sqlContext: SQLContext = TestSQLContext
+
+  case class TestData(key: Int, value: String)
+  val testData = (1 to 100).map(i => TestData(i, i.toString)).toDF()
 
   private def testPartialAggregationPlan(query: LogicalPlan): Unit = {
     val plannedOption = HashAggregation(query).headOption.orElse(Aggregation(query).headOption)
@@ -75,7 +76,17 @@ class PlannerSuite extends SparkFunSuite with SQLTestUtils {
     testPartialAggregationPlan(query)
   }
 
+
+  case class TestData2(a: Int, b: Int)
   test("sizeInBytes estimation of limit operator for broadcast hash join optimization") {
+    val testData2 = {
+      val df = (for { a <- 1 to 3; b <- 1 to 2 } yield (a, b))
+        .map(t => TestData2(t._1, t._2))
+        .toDF()
+      df.registerTempTable("testData2")
+      df
+    }
+
     def checkPlan(fieldTypes: Seq[DataType], newThreshold: Int): Unit = {
       setConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD, newThreshold)
       val fields = fieldTypes.zipWithIndex.map {
