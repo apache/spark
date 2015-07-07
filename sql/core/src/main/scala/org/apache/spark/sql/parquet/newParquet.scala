@@ -356,8 +356,13 @@ private[sql] class ParquetRelation2(
         val conf = SparkHadoopUtil.get.conf
         val taskSideMetaData = conf.getBoolean(ParquetInputFormat.TASK_SIDE_METADATA, true)
         val rawFooters = if (shouldMergeSchemas) {
+          val leavesToMerge = if (skipMergePartFiles) {
+            metadataStatuses ++ commonMetadataStatuses
+          } else {
+            leaves
+          }
           ParquetFileReader.readAllFootersInParallel(
-            conf, seqAsJavaList(leaves), taskSideMetaData)
+            conf, seqAsJavaList(leavesToMerge), taskSideMetaData)
         } else {
           ParquetFileReader.readAllFootersInParallelUsingSummaryFiles(
             conf, seqAsJavaList(leaves), taskSideMetaData)
