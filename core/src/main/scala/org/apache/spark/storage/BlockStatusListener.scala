@@ -32,7 +32,7 @@ private[spark] case class BlockUIData(
 /**
  * The aggregated status of stream blocks in an executor
  */
-private[spark] case class ExecutorStreamBlockStatus (
+private[spark] case class ExecutorStreamBlockStatus(
     executorId: String,
     location: String,
     blocks: Seq[BlockUIData]) {
