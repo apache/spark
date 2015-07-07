@@ -192,11 +192,9 @@ class StreamingContext private[streaming] (
       None
     }
 
-  /** Register streaming source to metrics system */
+  /** Initializing a streaming source to help register metrics system */
   private val streamingSource = new StreamingSource(this)
-  assert(env != null)
-  assert(env.metricsSystem != null)
-  env.metricsSystem.registerSource(streamingSource)
+
 
   private var state: StreamingContextState = INITIALIZED
 
@@ -577,6 +575,12 @@ class StreamingContext private[streaming] (
    * @throws IllegalStateException if the StreamingContext is already stopped.
    */
   def start(): Unit = synchronized {
+  /**
+   * Registering Streaming Metrics at the start of the StreamingContext
+   */
+    assert(env != null)
+    assert(env.metricsSystem != null)
+    env.metricsSystem.registerSource(streamingSource)
     state match {
       case INITIALIZED =>
         startSite.set(DStream.getCreationSite())
@@ -688,6 +692,10 @@ class StreamingContext private[streaming] (
     } finally {
       // The state should always be Stopped after calling `stop()`, even if we haven't started yet
       state = STOPPED
+      /**
+       * De-registering Streaming Metrics at the stop of the StreamingContext
+       */
+      env.metricsSystem.removeSource(streamingSource)
     }
   }
 
