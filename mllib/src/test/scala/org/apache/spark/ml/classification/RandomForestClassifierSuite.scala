@@ -213,7 +213,7 @@ class RandomForestClassifierSuite extends SparkFunSuite with MLlibTestSparkConte
     val trainingData = TreeTests.setMetadata(sc.parallelize(trainingInput),
       categoricalFeatures, numClasses)
     val rf = new RandomForestClassifier()
-      .setNumTrees(2)
+      .setNumTrees(3)
       .setMaxDepth(2)
       .setSeed(42)
       .fit(trainingData)
