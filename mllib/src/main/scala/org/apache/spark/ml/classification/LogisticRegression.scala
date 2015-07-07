@@ -186,11 +186,11 @@ class LogisticRegression(override val uid: String)
     val states = optimizer.iterations(new CachedDiffFunction(costFun),
       initialWeightsWithIntercept.toBreeze.toDenseVector)
 
-    val (weights, intercept, lossHistory) = {
+    val (weights, intercept, objectiveHistory) = {
       /*
-         Note that in Logistic Regression, the loss is log-likelihood which is invariance
-         under feature standardization. As a result, the loss returned from optimizer is
-         the same as the one in the original space.
+         Note that in Logistic Regression, the objective history (loss + regularization)
+         is log-likelihood which is invariance under feature standardization. As a result,
+         the objective history from optimizer is the same as the one in the original space.
        */
       val arrayBuilder = mutable.ArrayBuilder.make[Double]
       var state: optimizer.State = null
@@ -219,8 +219,7 @@ class LogisticRegression(override val uid: String)
       }
 
       if ($(fitIntercept)) {
-        (Vectors.dense(rawWeights.slice(0, rawWeights.length - 1)).compressed,
-          rawWeights(rawWeights.length - 1), arrayBuilder.result())
+        (Vectors.dense(rawWeights.dropRight(1)).compressed, rawWeights.last, arrayBuilder.result())
       } else {
         (Vectors.dense(rawWeights).compressed, 0.0, arrayBuilder.result())
       }
