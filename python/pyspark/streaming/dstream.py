@@ -602,17 +602,13 @@ class TransformedDStream(DStream):
     Multiple continuous transformations of DStream can be combined into
     one transformation.
     """
-    def __init__(self, prev, func, transformFunc=None):
+    def __init__(self, prev, func):
         self._ssc = prev._ssc
         self._sc = self._ssc._sc
         self._jrdd_deserializer = self._sc.serializer
         self.is_cached = False
         self.is_checkpointed = False
         self._jdstream_val = None
-        if transformFunc is None:
-            self._transformFunc = lambda sc, func, ser: TransformFunction(sc, func, ser)
-        else:
-            self._transformFunc = transformFunc
 
         if (isinstance(prev, TransformedDStream) and
                 not prev.is_cached and not prev.is_checkpointed):
@@ -628,7 +624,7 @@ class TransformedDStream(DStream):
         if self._jdstream_val is not None:
             return self._jdstream_val
 
-        jfunc = self._transformFunc(self._sc, self.func, self.prev._jrdd_deserializer)
+        jfunc = TransformFunction(self._sc, self.func, self.prev._jrdd_deserializer)
         dstream = self._sc._jvm.PythonTransformedDStream(self.prev._jdstream.dstream(), jfunc)
         self._jdstream_val = dstream.asJavaDStream()
         return self._jdstream_val

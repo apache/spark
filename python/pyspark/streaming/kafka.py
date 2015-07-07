@@ -326,8 +326,24 @@ class KafkaDStream(DStream):
             func = lambda t, rdd: oldfunc(rdd)
         assert func.__code__.co_argcount == 2, "func should take one or two arguments"
 
-        def transformFunc(ctx, func, ser):
-            return TransformFunction(ctx, func, ser) \
-                .rdd_wrapper(lambda jrdd, ctx, ser: KafkaRDD(jrdd, ctx, ser))
+        return KafkaTransformedDStream(self, func)
 
-        return TransformedDStream(self, func, transformFunc)
+
+class KafkaTransformedDStream(TransformedDStream):
+    """
+    Kafka specific wrapper of TransformedDStream to transform on Kafka RDD.
+    """
+
+    def __init__(self, prev, func):
+        TransformedDStream.__init__(self, prev, func)
+
+    @property
+    def _jdstream(self):
+        if self._jdstream_val is not None:
+            return self._jdstream_val
+
+        jfunc = TransformFunction(self._sc, self.func, self.prev._jrdd_deserializer) \
+            .rdd_wrapper(lambda jrdd, ctx, ser: KafkaRDD(jrdd, ctx, ser))
+        dstream = self._sc._jvm.PythonTransformedDStream(self.prev._jdstream.dstream(), jfunc)
+        self._jdstream_val = dstream.asJavaDStream()
+        return self._jdstream_val
