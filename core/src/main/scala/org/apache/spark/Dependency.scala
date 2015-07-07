@@ -17,6 +17,8 @@
 
 package org.apache.spark
 
+import scala.reflect.ClassTag
+
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
 import org.apache.spark.serializer.Serializer
@@ -65,7 +67,7 @@ abstract class NarrowDependency[T](_rdd: RDD[T]) extends Dependency[T] {
  * @param mapSideCombine whether to perform partial aggregation (also known as map-side combine)
  */
 @DeveloperApi
-class ShuffleDependency[K, V, C](
+class ShuffleDependency[K: ClassTag, V: ClassTag, C: ClassTag](
     @transient private val _rdd: RDD[_ <: Product2[K, V]],
     val partitioner: Partitioner,
     val serializer: Option[Serializer] = None,
@@ -76,6 +78,15 @@ class ShuffleDependency[K, V, C](
 
   override def rdd: RDD[Product2[K, V]] = _rdd.asInstanceOf[RDD[Product2[K, V]]]
 
+  /**
+   * The key, value and combiner classes are serialized so that shuffle manager
+   * implementation can use the information to build
+   */
+  val keyClassName: String = reflect.classTag[K].runtimeClass.getName
+  val valueClassName: String = reflect.classTag[V].runtimeClass.getName
+  // Note: It's possible that the combiner class tag is null, if the combineByKey
+  // methods in PairRDDFunctions are used instead of combineByKeyWithClassTag.
+  val combinerClassName: Option[String] = Option(reflect.classTag[C]).map(_.runtimeClass.getName)
   val shuffleId: Int = _rdd.context.newShuffleId()
 
   val shuffleHandle: ShuffleHandle = _rdd.context.env.shuffleManager.registerShuffle(
