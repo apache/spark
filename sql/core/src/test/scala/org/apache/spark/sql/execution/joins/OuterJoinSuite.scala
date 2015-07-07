@@ -47,7 +47,8 @@ class OuterJoinSuite extends SparkPlanTest {
         (1, 2.0, null, null),
         (2, 1.0, 2, 3.0),
         (3, 3.0, null, null)
-      ))
+      ),
+      sortAnswers = true)
 
     checkAnswer(left, right, (left: SparkPlan, right: SparkPlan) =>
       ShuffledHashOuterJoin(leftKeys, rightKeys, RightOuter, condition, left, right),
@@ -55,7 +56,8 @@ class OuterJoinSuite extends SparkPlanTest {
         (2, 1.0, 2, 3.0),
         (null, null, 3, 2.0),
         (null, null, 4, 1.0)
-      ))
+      ),
+      sortAnswers = true)
 
     checkAnswer(left, right, (left: SparkPlan, right: SparkPlan) =>
       ShuffledHashOuterJoin(leftKeys, rightKeys, FullOuter, condition, left, right),
@@ -65,7 +67,8 @@ class OuterJoinSuite extends SparkPlanTest {
         (3, 3.0, null, null),
         (null, null, 3, 2.0),
         (null, null, 4, 1.0)
-      ))
+      ),
+      sortAnswers = true)
   }
 
   test("broadcast hash outer join") {
@@ -75,7 +78,8 @@ class OuterJoinSuite extends SparkPlanTest {
         (1, 2.0, null, null),
         (2, 1.0, 2, 3.0),
         (3, 3.0, null, null)
-      ))
+      ),
+      sortAnswers = true)
 
     checkAnswer(left, right, (left: SparkPlan, right: SparkPlan) =>
       BroadcastHashOuterJoin(leftKeys, rightKeys, RightOuter, condition, left, right),
@@ -83,6 +87,7 @@ class OuterJoinSuite extends SparkPlanTest {
         (2, 1.0, 2, 3.0),
         (null, null, 3, 2.0),
         (null, null, 4, 1.0)
-      ))
+      ),
+      sortAnswers = true)
   }
 }

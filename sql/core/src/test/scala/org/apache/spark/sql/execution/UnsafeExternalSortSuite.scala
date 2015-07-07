@@ -40,7 +40,7 @@ class UnsafeExternalSortSuite extends SparkPlanTest with BeforeAndAfterAll {
   // TODO: randomized spilling to ensure that merging is tested at least once for every data type.
   for (
     dataType <- DataTypeTestUtils.atomicTypes ++ Set(NullType);
-    nullable <- Seq(false);
+    nullable <- Seq(true, false);
     sortOrder <- Seq('a.asc :: Nil);
     randomDataGenerator <- RandomDataGenerator.forType(dataType, nullable)
   ) {

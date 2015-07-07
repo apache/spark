@@ -33,12 +33,14 @@ class SortSuite extends SparkPlanTest {
 
     checkAnswer(
       input.toDF("a", "b", "c"),
-      ExternalSort('a.asc :: 'b.asc :: Nil, global = false, _: SparkPlan),
-      input.sorted)
+      ExternalSort('a.asc :: 'b.asc :: Nil, global = true, _: SparkPlan),
+      input.sortBy(t => (t._1, t._2)),
+      sortAnswers = false)
 
     checkAnswer(
       input.toDF("a", "b", "c"),
-      ExternalSort('b.asc :: 'a.asc :: Nil, global = false, _: SparkPlan),
-      input.sortBy(t => (t._2, t._1)))
+      ExternalSort('b.asc :: 'a.asc :: Nil, global = true, _: SparkPlan),
+      input.sortBy(t => (t._2, t._1)),
+      sortAnswers = false)
   }
 }
