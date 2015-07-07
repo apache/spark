@@ -126,17 +126,15 @@ public final class UnsafeExternalSorter {
       spillWriters.size() > 1 ? " times" : " time");
 
     final UnsafeSorterSpillWriter spillWriter =
-      new UnsafeSorterSpillWriter(blockManager, fileBufferSizeBytes, writeMetrics);
+      new UnsafeSorterSpillWriter(blockManager, fileBufferSizeBytes, writeMetrics,
+        sorter.numRecords());
     spillWriters.add(spillWriter);
     final UnsafeSorterIterator sortedRecords = sorter.getSortedIterator();
     while (sortedRecords.hasNext()) {
       sortedRecords.loadNext();
       final Object baseObject = sortedRecords.getBaseObject();
       final long baseOffset = sortedRecords.getBaseOffset();
-      // TODO: this assumption that the first long holds a length is not enforced via our interfaces
-      // We need to either always store this via the write path (e.g. not require the caller to do
-      // it), or provide interfaces / hooks for customizing the physical storage format etc.
-      final int recordLength = (int) PlatformDependent.UNSAFE.getLong(baseObject, baseOffset);
+      final int recordLength = sortedRecords.getRecordLength();
       spillWriter.write(baseObject, baseOffset, recordLength, sortedRecords.getKeyPrefix());
     }
     spillWriter.close();

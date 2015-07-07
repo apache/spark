@@ -89,6 +89,13 @@ public final class UnsafeInMemorySorter {
     this.sortComparator = new SortComparator(recordComparator, prefixComparator, memoryManager);
   }
 
+  /**
+   * @return the number of records that have been inserted into this sorter.
+   */
+  public int numRecords() {
+    return pointerArrayInsertPosition / 2;
+  }
+
   public long getMemoryUsage() {
     return pointerArray.length * 8L;
   }
@@ -106,7 +113,8 @@ public final class UnsafeInMemorySorter {
   }
 
   /**
-   * Inserts a record to be sorted.
+   * Inserts a record to be sorted. Assumes that the record pointer points to a record length
+   * stored as a 4-byte integer, followed by the record's bytes.
    *
    * @param recordPointer pointer to a record in a data page, encoded by {@link TaskMemoryManager}.
    * @param keyPrefix a user-defined key prefix

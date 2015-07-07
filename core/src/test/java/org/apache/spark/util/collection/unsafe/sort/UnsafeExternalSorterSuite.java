@@ -153,22 +153,17 @@ public class UnsafeExternalSorterSuite {
     insertNumber(sorter, 3);
     sorter.spill();
     insertNumber(sorter, 4);
+    sorter.spill();
     insertNumber(sorter, 2);
 
     UnsafeSorterIterator iter = sorter.getSortedIterator();
 
-    iter.loadNext();
-    assertEquals(1, iter.getKeyPrefix());
-    iter.loadNext();
-    assertEquals(2, iter.getKeyPrefix());
-    iter.loadNext();
-    assertEquals(3, iter.getKeyPrefix());
-    iter.loadNext();
-    assertEquals(4, iter.getKeyPrefix());
-    iter.loadNext();
-    assertEquals(5, iter.getKeyPrefix());
-    assertFalse(iter.hasNext());
-    // TODO: check that the values are also read back properly.
+    for (int i = 1; i <= 5; i++) {
+      iter.loadNext();
+      assertEquals(i, iter.getKeyPrefix());
+      assertEquals(4, iter.getRecordLength());
+      // TODO: read rest of value.
+    }
 
     // TODO: test for cleanup:
     // assert(tempDir.isEmpty)

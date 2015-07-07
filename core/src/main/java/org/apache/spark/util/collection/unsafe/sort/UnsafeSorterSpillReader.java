@@ -25,16 +25,21 @@ import org.apache.spark.storage.BlockId;
 import org.apache.spark.storage.BlockManager;
 import org.apache.spark.unsafe.PlatformDependent;
 
+/**
+ * Reads spill files written by {@link UnsafeSorterSpillWriter} (see that class for a description
+ * of the file format).
+ */
 final class UnsafeSorterSpillReader extends UnsafeSorterIterator {
 
-  private final File file;
   private InputStream in;
   private DataInputStream din;
 
-  private final byte[] arr = new byte[1024 * 1024];  // TODO: tune this (maybe grow dynamically)?
-  private int nextRecordLength;
-
+  // Variables that change with every record read:
+  private int recordLength;
   private long keyPrefix;
+  private int numRecordsRemaining;
+
+  private final byte[] arr = new byte[1024 * 1024];  // TODO: tune this (maybe grow dynamically)?
   private final Object baseObject = arr;
   private final long baseOffset = PlatformDependent.BYTE_ARRAY_OFFSET;
 
@@ -42,25 +47,25 @@ final class UnsafeSorterSpillReader extends UnsafeSorterIterator {
       BlockManager blockManager,
       File file,
       BlockId blockId) throws IOException {
-      this.file = file;
-      assert (file.length() > 0);
+    assert (file.length() > 0);
     final BufferedInputStream bs = new BufferedInputStream(new FileInputStream(file));
     this.in = blockManager.wrapForCompression(blockId, bs);
     this.din = new DataInputStream(this.in);
-    nextRecordLength = din.readInt();
+    numRecordsRemaining = din.readInt();
   }
 
   @Override
   public boolean hasNext() {
-    return (in != null);
+    return (numRecordsRemaining > 0);
   }
 
   @Override
   public void loadNext() throws IOException {
+    recordLength = din.readInt();
     keyPrefix = din.readLong();
-    ByteStreams.readFully(in, arr, 0, nextRecordLength);
-    nextRecordLength = din.readInt();
-    if (nextRecordLength == UnsafeSorterSpillWriter.EOF_MARKER) {
+    ByteStreams.readFully(in, arr, 0, recordLength);
+    numRecordsRemaining--;
+    if (numRecordsRemaining == 0) {
       in.close();
       in = null;
       din = null;
@@ -79,7 +84,7 @@ final class UnsafeSorterSpillReader extends UnsafeSorterIterator {
 
   @Override
   public int getRecordLength() {
-    return 0;
+    return recordLength;
   }
 
   @Override

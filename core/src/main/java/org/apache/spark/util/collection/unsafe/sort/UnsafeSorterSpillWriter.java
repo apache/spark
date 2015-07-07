@@ -30,10 +30,14 @@ import org.apache.spark.storage.BlockObjectWriter;
 import org.apache.spark.storage.TempLocalBlockId;
 import org.apache.spark.unsafe.PlatformDependent;
 
+/**
+ * Spills a list of sorted records to disk. Spill files have the following format:
+ *
+ *   [# of records (int)] [[len (int)][prefix (long)][data (bytes)]...]
+ */
 final class UnsafeSorterSpillWriter {
 
   static final int DISK_WRITE_BUFFER_SIZE = 1024 * 1024;
-  static final int EOF_MARKER = -1;
 
   // Small writes to DiskBlockObjectWriter will be fairly inefficient. Since there doesn't seem to
   // be an API to directly transfer bytes from managed memory to the disk writer, we buffer
@@ -42,22 +46,29 @@ final class UnsafeSorterSpillWriter {
 
   private final File file;
   private final BlockId blockId;
+  private final int numRecordsToWrite;
   private BlockObjectWriter writer;
+  private int numRecordsSpilled = 0;
 
   public UnsafeSorterSpillWriter(
       BlockManager blockManager,
       int fileBufferSize,
-      ShuffleWriteMetrics writeMetrics) {
+      ShuffleWriteMetrics writeMetrics,
+      int numRecordsToWrite) throws IOException {
     final Tuple2<TempLocalBlockId, File> spilledFileInfo =
       blockManager.diskBlockManager().createTempLocalBlock();
     this.file = spilledFileInfo._2();
     this.blockId = spilledFileInfo._1();
+    this.numRecordsToWrite = numRecordsToWrite;
     // Unfortunately, we need a serializer instance in order to construct a DiskBlockObjectWriter.
     // Our write path doesn't actually use this serializer (since we end up calling the `write()`
     // OutputStream methods), but DiskBlockObjectWriter still calls some methods on it. To work
     // around this, we pass a dummy no-op serializer.
     writer = blockManager.getDiskWriter(
       blockId, file, DummySerializerInstance.INSTANCE, fileBufferSize, writeMetrics);
+    // Write the number of records
+    writeIntToBuffer(numRecordsToWrite, 0);
+    writer.write(writeBuffer, 0, 4);
   }
 
   // Based on DataOutputStream.writeLong.
@@ -85,6 +96,12 @@ final class UnsafeSorterSpillWriter {
       long baseOffset,
       int recordLength,
       long keyPrefix) throws IOException {
+    if (numRecordsSpilled == numRecordsToWrite) {
+      throw new IllegalStateException(
+        "Number of records written exceeded numRecordsToWrite = " + numRecordsToWrite);
+    } else {
+      numRecordsSpilled++;
+    }
     writeIntToBuffer(recordLength, 0);
     writeLongToBuffer(keyPrefix, 4);
     int dataRemaining = recordLength;
@@ -107,8 +124,6 @@ final class UnsafeSorterSpillWriter {
   }
 
   public void close() throws IOException {
-    writeIntToBuffer(EOF_MARKER, 0);
-    writer.write(writeBuffer, 0, 4);
     writer.commitAndClose();
     writer = null;
     writeBuffer = null;
