@@ -1001,7 +1001,6 @@ class DAGScheduler(
     val stageId = task.stageId
     val taskType = Utils.getFormattedClassName(task)
 
-    // REVIEWERS: does this need special handling for multiple completions of the same task?
     outputCommitCoordinator.taskCompleted(stageId, task.partitionId,
       event.taskInfo.attempt, event.reason)
 
