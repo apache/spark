@@ -49,10 +49,6 @@ package org.apache.spark.sql.catalyst
  */
 package object expressions  {
 
-  type InternalRow = org.apache.spark.sql.catalyst.InternalRow
-
-  val InternalRow = org.apache.spark.sql.catalyst.InternalRow
-
   /**
    * Converts a [[InternalRow]] to another Row given a sequence of expression that define each
    * column of the new row. If the schema of the input row is specified, then the given expression
