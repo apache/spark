@@ -171,7 +171,8 @@ object Statistics {
 
   /**
    * Convenience function to conduct a one-sample, two sided Kolmogorov Smirnov test for probability
-   * distribution equality. Currently supports standard normal distribution only (distName = "stdnorm")
+   * distribution equality. Currently supports standard normal distribution only
+   * (distName = "stdnorm")
    * @param data an `RDD[Double]` containing the sample of data to test
    * @param distName a `String` name for a theoretical distribution
    * @return KSTestResult object containing test statistic, p-value, and null hypothesis.

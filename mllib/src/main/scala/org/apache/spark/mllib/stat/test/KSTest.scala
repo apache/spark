@@ -121,17 +121,17 @@ private[stat] object KSTest {
    * Search the unadjusted differences in a partition and return the
    * two extrema (furthest below and furthest above CDF), along with a count of elements in that
    * partition
-   * @param partDiffs `Iterator[(Double, Double)]` the unadjusted differences between ECDF and CDF in a
-   *                 partition, which come as a tuple of (ECDF - 1/N - CDF, ECDF - CDF)
+   * @param partDiffs `Iterator[(Double, Double)]` the unadjusted differences between ECDF and CDF
+   *                 in a partition, which come as a tuple of (ECDF - 1/N - CDF, ECDF - CDF)
    * @return `Iterator[(Double, Double, Double)]` the local extrema and a count of elements
    */
   private def searchOneSampleCandidates(partDiffs: Iterator[(Double, Double)])
     : Iterator[(Double, Double, Double)] = {
     val initAcc = (Double.MaxValue, Double.MinValue, 0.0)
-    val partResults = partDiffs.foldLeft(initAcc) { case ((pMin, pMax, pCt), (dl, dp)) =>
+    val pResults = partDiffs.foldLeft(initAcc) { case ((pMin, pMax, pCt), (dl, dp)) =>
       (math.min(pMin, dl), math.max(pMax, dp), pCt + 1)
     }
-    val results = if (partResults == initAcc) Array[(Double, Double, Double)]() else Array(partResults)
+    val results = if (pResults == initAcc) Array[(Double, Double, Double)]() else Array(pResults)
     results.iterator
   }
 
