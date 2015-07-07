@@ -33,10 +33,10 @@ final class TestClassificationModel(
   /** @group setParam */
   def setThresholds(value: Array[Double]): this.type = set(thresholds, value)
 
-  override def predictRaw(input: Vector) = {
+  override def predictRaw(input: Vector): Vector = {
     input
   }
-  def friendlyPredict(input: Vector) = {
+  def friendlyPredict(input: Vector): Vector = {
     predict(input)
   }
 }
