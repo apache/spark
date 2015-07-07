@@ -29,7 +29,7 @@ import org.apache.spark.util.SerializableConfiguration
  * This allows drivers to be restarted on failure with previously computed state.
  */
 private[spark] class ReliableRDDCheckpointData[T: ClassTag](@transient rdd: RDD[T])
-  extends RDDCheckpointData[T](rdd) with Logging with Serializable {
+  extends RDDCheckpointData[T](rdd) with Logging {
 
   // The directory to which the associated RDD has been checkpointed to
   // This is assumed to be a non-local path that points to some reliable storage

@@ -26,7 +26,7 @@ private[spark] class CheckpointRDDPartition(val index: Int) extends Partition
 /**
  * This RDD represents a RDD checkpoint file (similar to HadoopRDD).
  */
-private[spark] abstract class CheckpointRDD[T: ClassTag](sc: SparkContext)
+private[spark] abstract class CheckpointRDD[T: ClassTag](@transient sc: SparkContext)
   extends RDD[T](sc, Nil) {
 
   // CheckpointRDD should not be checkpointed again

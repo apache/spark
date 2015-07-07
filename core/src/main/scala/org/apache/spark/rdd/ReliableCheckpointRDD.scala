@@ -32,7 +32,7 @@ import org.apache.spark.util.{SerializableConfiguration, Utils}
  * An RDD that reads from a checkpoint file previously written to reliable storage.
  */
 private[spark] class ReliableCheckpointRDD[T: ClassTag](
-    sc: SparkContext,
+    @transient sc: SparkContext,
     val checkpointPath: String)
   extends CheckpointRDD[T](sc) {
 
@@ -47,21 +47,12 @@ private[spark] class ReliableCheckpointRDD[T: ClassTag](
     val numPartitions =
       // listStatus can throw exception if path does not exist.
       if (fs.exists(cpath)) {
-        val dirContents = fs.listStatus(cpath).map(_.getPath)
-        val partitionFiles = dirContents
+        val inputFiles = fs.listStatus(cpath)
+          .map(_.getPath)
           .filter(_.getName.startsWith("part-"))
-          .map(_.toString)
-          .sorted
-        // Verify validity of checkpoint files
-        val numPart = partitionFiles.length
-        val firstPartitionValid =
-          partitionFiles(0).endsWith(ReliableCheckpointRDD.splitIdToFile(0))
-        val lastPartitionValid =
-          partitionFiles(numPart - 1).endsWith(ReliableCheckpointRDD.splitIdToFile(numPart - 1))
-        if (numPart > 0 && (!firstPartitionValid || !lastPartitionValid)) {
-          throw new SparkException(s"Invalid checkpoint directory: $checkpointPath")
-        }
-        numPart
+          .sortBy(_.toString)
+        validateInputFiles(inputFiles)
+        inputFiles.length
       } else {
         0
       }
@@ -79,6 +70,19 @@ private[spark] class ReliableCheckpointRDD[T: ClassTag](
     val file = new Path(checkpointPath, ReliableCheckpointRDD.splitIdToFile(split.index))
     ReliableCheckpointRDD.readFromFile(file, broadcastedConf, context)
   }
+
+  /**
+   * Fail fast if our input checkpointed files are invalid.
+   */
+  private def validateInputFiles(files: Array[Path]): Unit = {
+    val valid = files.zipWithIndex.forall { case (f, i) =>
+      f.toString.endsWith(ReliableCheckpointRDD.splitIdToFile(i))
+    }
+    if (!valid) {
+      throw new SparkException(s"Invalid checkpoint directory: $checkpointPath")
+    }
+  }
+
 }
 
 private[spark] object ReliableCheckpointRDD extends Logging {
