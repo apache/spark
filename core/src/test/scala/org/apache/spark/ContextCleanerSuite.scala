@@ -29,7 +29,7 @@ import org.scalatest.concurrent.Eventually._
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.SparkContext._
-import org.apache.spark.rdd.{RDDCheckpointData, RDD}
+import org.apache.spark.rdd.{ReliableRDDCheckpointData, RDD}
 import org.apache.spark.storage._
 import org.apache.spark.shuffle.hash.HashShuffleManager
 import org.apache.spark.shuffle.sort.SortShuffleManager
@@ -221,8 +221,8 @@ class ContextCleanerSuite extends ContextCleanerSuiteBase {
     var rddId = rdd.id
 
     // Confirm the checkpoint directory exists
-    assert(RDDCheckpointData.rddCheckpointDataPath(sc, rddId).isDefined)
-    val path = RDDCheckpointData.rddCheckpointDataPath(sc, rddId).get
+    assert(ReliableRDDCheckpointData.rddCheckpointDataPath(sc, rddId).isDefined)
+    val path = ReliableRDDCheckpointData.rddCheckpointDataPath(sc, rddId).get
     val fs = path.getFileSystem(sc.hadoopConfiguration)
     assert(fs.exists(path))
 
@@ -231,7 +231,7 @@ class ContextCleanerSuite extends ContextCleanerSuiteBase {
     rdd = null // Make RDD out of scope, ok if collected earlier
     runGC()
     postGCTester.assertCleanup()
-    assert(fs.exists(RDDCheckpointData.rddCheckpointDataPath(sc, rddId).get))
+    assert(fs.exists(ReliableRDDCheckpointData.rddCheckpointDataPath(sc, rddId).get))
 
     sc.stop()
     val conf = new SparkConf().setMaster("local[2]").setAppName("cleanupCheckpoint").
@@ -245,7 +245,7 @@ class ContextCleanerSuite extends ContextCleanerSuiteBase {
     rddId = rdd.id
 
     // Confirm the checkpoint directory exists
-    assert(fs.exists(RDDCheckpointData.rddCheckpointDataPath(sc, rddId).get))
+    assert(fs.exists(ReliableRDDCheckpointData.rddCheckpointDataPath(sc, rddId).get))
 
     // Reference rdd to defeat any early collection by the JVM
     rdd.count()
@@ -255,7 +255,7 @@ class ContextCleanerSuite extends ContextCleanerSuiteBase {
     rdd = null // Make RDD out of scope
     runGC()
     postGCTester.assertCleanup()
-    assert(!fs.exists(RDDCheckpointData.rddCheckpointDataPath(sc, rddId).get))
+    assert(!fs.exists(ReliableRDDCheckpointData.rddCheckpointDataPath(sc, rddId).get))
   }
 
   test("automatically cleanup RDD + shuffle + broadcast") {

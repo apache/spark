@@ -1446,7 +1446,7 @@ abstract class RDD[T: ClassTag](
 
   /**
    * Mark this RDD for checkpointing. It will be saved to a file inside the checkpoint
-   * directory set with SparkContext.setCheckpointDir() and all references to its parent
+   * directory set with `SparkContext#setCheckpointDir` and all references to its parent
    * RDDs will be removed. This function must be called before any job has been
    * executed on this RDD. It is strongly recommended that this RDD is persisted in
    * memory, otherwise saving it on a file will require recomputation.
@@ -1459,20 +1459,45 @@ abstract class RDD[T: ClassTag](
       // children RDD partitions point to the correct parent partitions. In the future
       // we should revisit this consideration.
       RDDCheckpointData.synchronized {
-        checkpointData = Some(new RDDCheckpointData(this))
+        checkpointData = Some(new ReliableRDDCheckpointData(this))
       }
     }
   }
 
   /**
-   * Return whether this RDD has been checkpointed or not
+   * Mark this RDD for unsafe checkpointing using a local file system.
+   *
+   * This method is for users who wish to truncate the lineage of the RDD while skipping the
+   * expensive step of replicating the materialized data in a distributed file system. This is
+   * useful for RDDs with long lineages that need to be truncated periodically (e.g. GraphX).
+   *
+   * It is unsafe because we sacrifice fault-tolerance for performance. In particular, we
+   * persist the materialized values only to an ephemeral local storage. The effect is that
+   * if an executor fails during the computation, the checkpointed data will no longer be
+   * accessible.
+   *
+   * The actual persisting occurs after the first job involving this RDD has completed.
+   * The checkpoint directory set through `SparkContext#setCheckpointDir` is not read.
+   */
+  def localCheckpoint(): Unit = {
+
+  }
+
+  /**
+   * Return whether this RDD has been checkpointed or not, either reliably or locally.
    */
   def isCheckpointed: Boolean = checkpointData.exists(_.isCheckpointed)
 
   /**
-   * Gets the name of the file to which this RDD was checkpointed
+   * Gets the name of the directory to which this RDD was checkpointed.
+   * This is not defined if the RDD is checkpointed locally.
    */
-  def getCheckpointFile: Option[String] = checkpointData.flatMap(_.getCheckpointFile)
+  def getCheckpointFile: Option[String] = {
+    checkpointData match {
+      case Some(reliable: ReliableRDDCheckpointData[T]) => reliable.getCheckpointDir
+      case _ => None
+    }
+  }
 
   // =======================================================================
   // Other internal methods and fields
@@ -1543,7 +1568,7 @@ abstract class RDD[T: ClassTag](
       if (!doCheckpointCalled) {
         doCheckpointCalled = true
         if (checkpointData.isDefined) {
-          checkpointData.get.doCheckpoint()
+          checkpointData.get.checkpoint()
         } else {
           dependencies.foreach(_.rdd.doCheckpoint())
         }
