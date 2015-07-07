@@ -148,6 +148,7 @@ private[parquet] class CatalystRowConverter(
       case TimestampType =>
         // TODO Implements `TIMESTAMP_MICROS` once parquet-mr has that.
         new PrimitiveConverter {
+          // Converts nanosecond timestamps stored as INT96
           override def addBinary(value: Binary): Unit = {
             assert(
               value.length() == 12,
@@ -176,7 +177,9 @@ private[parquet] class CatalystRowConverter(
         new CatalystMapConverter(parquetType.asGroupType(), t, updater)
 
       case t: StructType =>
-        new CatalystRowConverter(parquetType.asGroupType(), t, updater)
+        new CatalystRowConverter(parquetType.asGroupType(), t, new ParentContainerUpdater {
+          override def set(value: Any): Unit = updater.set(value.asInstanceOf[Row].copy())
+        })
 
       case t: UserDefinedType[_] =>
         val catalystTypeForUDT = t.sqlType
@@ -240,14 +243,17 @@ private[parquet] class CatalystRowConverter(
       updater: ParentContainerUpdater)
     extends PrimitiveConverter {
 
+    // Converts decimals stored as INT32
     override def addInt(value: Int): Unit = {
       addLong(value: Long)
     }
 
+    // Converts decimals stored as INT64
     override def addLong(value: Long): Unit = {
       updater.set(Decimal(value, decimalType.precision, decimalType.scale))
     }
 
+    // Converts decimals stored as either FIXED_LENGTH_BYTE_ARRAY or BINARY
     override def addBinary(value: Binary): Unit = {
       updater.set(toDecimal(value))
     }
@@ -314,7 +320,7 @@ private[parquet] class CatalystRowConverter(
 
     override def end(): Unit = updater.set(currentArray)
 
-    // NOTE: We can't reuse the mutable Map here and must instantiate a new `ArrayBuffer` for the
+    // NOTE: We can't reuse the mutable `ArrayBuffer` here and must instantiate a new buffer for the
     // next value.  `Row.copy()` only copies row cells, it doesn't do deep copy to objects stored
     // in row cells.
     override def start(): Unit = currentArray = ArrayBuffer.empty[Any]
