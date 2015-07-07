@@ -124,5 +124,6 @@ public class UTF8StringSuite {
     assertEquals(fromString("数据砖头").substring(0, 1), fromString("数"));
     assertEquals(fromString("数据砖头").substring(1, 3), fromString("据砖"));
     assertEquals(fromString("数据砖头").substring(3, 5), fromString("头"));
+    assertEquals(fromString("ߵ梷").substring(0, 2), fromString("ߵ梷"));
   }
 }

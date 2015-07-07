@@ -171,18 +171,20 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
 
     int i = 0;
     int c = 0;
-    for (; i < numBytes && c < start; i += numBytesForFirstByte(getByte(i))) {
+    while (i < numBytes && c < start) {
+      i += numBytesForFirstByte(getByte(i));
       c += 1;
     }
 
     int j = i;
-    for (; j < numBytes && c < until; j += numBytesForFirstByte(getByte(i))) {
+    while (i < numBytes && c < until) {
+      i += numBytesForFirstByte(getByte(i));
       c += 1;
     }
 
-    byte[] bytes = new byte[j - i];
-    copyMemory(base, offset + i, bytes, BYTE_ARRAY_OFFSET, j - i);
-    return UTF8String.fromBytes(bytes);
+    byte[] bytes = new byte[i - j];
+    copyMemory(base, offset + j, bytes, BYTE_ARRAY_OFFSET, i - j);
+    return fromBytes(bytes);
   }
 
   public boolean contains(final UTF8String substring) {
