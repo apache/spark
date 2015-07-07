@@ -48,15 +48,29 @@ object SortPrefixUtils {
 
   def getPrefixComputer(sortOrder: SortOrder): InternalRow => Long = {
     sortOrder.dataType match {
-      case StringType => (row: InternalRow) =>
+      case StringType => (row: InternalRow) => {
         PrefixComparators.STRING.computePrefix(sortOrder.child.eval(row).asInstanceOf[UTF8String])
-      case IntegerType => (row: InternalRow) =>
-        PrefixComparators.INTEGER.computePrefix(sortOrder.child.eval(row).asInstanceOf[Int])
-      case LongType => (row: InternalRow) => sortOrder.child.eval(row).asInstanceOf[Long]
-      case FloatType => (row: InternalRow) =>
-        PrefixComparators.FLOAT.computePrefix(sortOrder.child.eval(row).asInstanceOf[Float])
-      case DoubleType => (row: InternalRow) =>
-        PrefixComparators.DOUBLE.computePrefix(sortOrder.child.eval(row).asInstanceOf[Double])
+      }
+      case IntegerType => (row: InternalRow) => {
+        val exprVal = sortOrder.child.eval(row)
+        if (exprVal == null) PrefixComparators.INTEGER.NULL_PREFIX
+        else PrefixComparators.INTEGER.computePrefix(sortOrder.child.eval(row).asInstanceOf[Int])
+      }
+      case LongType => (row: InternalRow) => {
+        val exprVal = sortOrder.child.eval(row)
+        if (exprVal == null) PrefixComparators.LONG.NULL_PREFIX
+        else sortOrder.child.eval(row).asInstanceOf[Long]
+      }
+      case FloatType => (row: InternalRow) => {
+        val exprVal = sortOrder.child.eval(row)
+        if (exprVal == null) PrefixComparators.FLOAT.NULL_PREFIX
+        else PrefixComparators.FLOAT.computePrefix(sortOrder.child.eval(row).asInstanceOf[Float])
+      }
+      case DoubleType => (row: InternalRow) => {
+        val exprVal = sortOrder.child.eval(row)
+        if (exprVal == null) PrefixComparators.DOUBLE.NULL_PREFIX
+        else PrefixComparators.DOUBLE.computePrefix(sortOrder.child.eval(row).asInstanceOf[Double])
+      }
       case _ => (row: InternalRow) => 0L
     }
   }

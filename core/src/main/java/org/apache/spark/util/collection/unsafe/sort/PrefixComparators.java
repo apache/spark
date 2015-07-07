@@ -75,6 +75,8 @@ public class PrefixComparators {
       return (a < b) ? -1 : (a > b) ? 1 : 0;
     }
 
+    public final long NULL_PREFIX = computePrefix(Integer.MIN_VALUE);
+
     public long computePrefix(int value) {
       return value & 0xffffffffL;
     }
@@ -85,6 +87,8 @@ public class PrefixComparators {
     public int compare(long a, long b) {
       return (a < b) ? -1 : (a > b) ? 1 : 0;
     }
+
+    public final long NULL_PREFIX = Long.MIN_VALUE;
   }
 
   public static final class FloatPrefixComparator extends PrefixComparator {
@@ -98,6 +102,8 @@ public class PrefixComparators {
     public long computePrefix(float value) {
       return Float.floatToIntBits(value) & 0xffffffffL;
     }
+
+    public final long NULL_PREFIX = computePrefix(Float.MIN_VALUE);
   }
 
   public static final class DoublePrefixComparator extends PrefixComparator {
@@ -111,5 +117,7 @@ public class PrefixComparators {
     public long computePrefix(double value) {
       return Double.doubleToLongBits(value);
     }
+
+    public final long NULL_PREFIX = computePrefix(Double.MIN_VALUE);
   }
 }
