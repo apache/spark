@@ -178,6 +178,7 @@ final class UnsafeExternalRowSorter {
    * Return true if UnsafeExternalRowSorter can sort rows with the given schema, false otherwise.
    */
   public static boolean supportsSchema(StructType schema) {
+    // TODO: add spilling note.
     for (StructField field : schema.fields()) {
       if (UnsafeColumnWriter.forType(field.dataType()) instanceof ObjectUnsafeColumnWriter) {
         return false;
