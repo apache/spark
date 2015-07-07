@@ -48,18 +48,13 @@ public class JavaAssociationRulesSuite implements Serializable {
   public void runAssociationRules() {
 
     @SuppressWarnings("unchecked")
-    JavaRDD<FPGrowth.FreqItemset<String>> rdd = sc.parallelize(Lists.newArrayList(
+    JavaRDD<FPGrowth.FreqItemset<String>> freqItemsets = sc.parallelize(Lists.newArrayList(
       new FreqItemset<String>(new String[] {"a"}, 15L),
       new FreqItemset<String>(new String[] {"b"}, 35L),
       new FreqItemset<String>(new String[] {"a", "b"}, 18L)
     ));
 
-    // Used for stubbing out FPGrowth: real use cases will get FPGrowthModel from FPGrowth rather
-    // than directly instantiating
-    ClassTag<String> tag = scala.reflect.ClassTag$.MODULE$.apply(String.class);
-    FPGrowthModel<String> model = new FPGrowthModel<String>(rdd, 35L, tag);
-
-    JavaRDD<AssociationRules.Rule<String>> results = (new AssociationRules()).runJava(model);
+    JavaRDD<AssociationRules.Rule<String>> results = (new AssociationRules()).run(freqItemsets);
   }
 }
 

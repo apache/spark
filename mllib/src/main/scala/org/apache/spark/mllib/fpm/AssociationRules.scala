@@ -55,30 +55,30 @@ class AssociationRules private (
 
   /**
    * Computes the association rules with confidence above [[minConfidence]].
-   * @param model frequent itemset model obtained from [[FPGrowth]]
+   * @param freqItemsets frequent itemset model obtained from [[FPGrowth]]
    * @return a [[Set[Rule[Item]]] containing the assocation rules.
    */
-  def run[Item: ClassTag](model: FPGrowthModel[Item]): RDD[Rule[Item]] = {
-    val freqItemsets = model.freqItemsets
-    val numTransactions = model.numTransactions
-
+  def run[Item: ClassTag](freqItemsets: RDD[FreqItemset[Item]]): RDD[Rule[Item]] = {
     freqItemsets.flatMap { itemset =>
       val items = itemset.items
-      items.map { item =>
-        // Key using List[Item] because cannot use Array[Item] for map-side combining
+      items.flatMap { item =>
         items.partition(_ == item) match {
-          case (consequent, antecedent) => (antecedent.toList, (consequent.toList, itemset.freq))
+          // Itemsets and items in itemsets are unique, so every (antecedent, consequent) is unique
+          case (consequent, antecedent) if !antecedent.isEmpty =>
+            Some((antecedent.toSeq, (consequent.toSeq, itemset.freq)))
+          case _ => None
         }
-      } :+ (items.toList, (Nil, itemset.freq))
-    }.aggregateByKey(Map[List[Item], Long]().empty)(
-      { case (acc, (consequent, freq)) => acc + (consequent -> freq) },
-      { (acc1, acc2) => acc1 ++ acc2 }
+      } :+ (items.toSeq, (Nil, itemset.freq))
+    }.aggregateByKey(Map[Seq[Item], Long]().empty)(
+      // Since every (antecedent, consequent) is unique, there are no collisions in the Map
+      seqOp = { case (acc, (consequent, freq)) => acc + (consequent -> freq) },
+      combOp = _ ++ _
     ).flatMap { case (antecedent, consequentToFreq) =>
       consequentToFreq.flatMap { case (consequent, freqUnion) =>
-        val freqAntecedent = if (antecedent == Nil) numTransactions else consequentToFreq(Nil)
-        val confidence = freqUnion.toDouble / freqAntecedent.toDouble
+        val freqAntecedent = consequentToFreq(Nil)
+        val confidence = 1.0 * freqUnion / freqAntecedent
         if (!consequent.isEmpty && confidence >= minConfidence) {
-          Some(Rule[Item](antecedent.toArray, consequent.toArray, confidence))
+          Some(new Rule[Item](antecedent.toArray, consequent.toArray, freqUnion, freqAntecedent))
         } else {
           None
         }
@@ -86,9 +86,9 @@ class AssociationRules private (
     }
   }
 
-  def runJava[Item](model: FPGrowthModel[Item]): JavaRDD[Rule[Item]] = {
-    implicit val tag = fakeClassTag[Item]
-    run(model)
+  def run[Item](freqItemsets: JavaRDD[FreqItemset[Item]]): JavaRDD[Rule[Item]] = {
+    val tag = fakeClassTag[Item]
+    run(freqItemsets.rdd)(tag)
   }
 }
 
@@ -100,15 +100,19 @@ object AssociationRules {
    * An association rule between sets of items.
    * @param antecedent hypotheses of the rule
    * @param consequent conclusion of the rule
-   * @param confidence the confidence of the rule
+   * @param freqUnion the frequency (num. occurrences) of the union of the antecedent and consequent
+   *                  as subsets of transactions in the transaction data
+   * @param freqAntecedent the frequency of the antecedent in the transaction data
    * @tparam Item item type
    */
   @Experimental
-  case class Rule[Item: ClassTag](
+  class Rule[Item] private[mllib] (
       antecedent: Array[Item],
       consequent: Array[Item],
-      confidence: Double)
-    extends Serializable {
+      freqUnion: Double,
+      freqAntecedent: Double) extends Serializable {
+
+    def confidence: Double = 1.0 * freqUnion / freqAntecedent
 
     require(antecedent.toSet.intersect(consequent.toSet).isEmpty, {
       val sharedItems = antecedent.toSet.intersect(consequent.toSet)
