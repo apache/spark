@@ -240,7 +240,7 @@ private[spark] class ContextCleaner(sc: SparkContext) extends Logging {
   def doCleanCheckpoint(rddId: Int): Unit = {
     try {
       logDebug("Cleaning rdd checkpoint data " + rddId)
-      ReliableRDDCheckpointData.clearRDDCheckpointData(sc, rddId)
+      ReliableRDDCheckpointData.cleanCheckpoint(sc, rddId)
       listeners.foreach(_.checkpointCleaned(rddId))
       logInfo("Cleaned rdd checkpoint data " + rddId)
     }

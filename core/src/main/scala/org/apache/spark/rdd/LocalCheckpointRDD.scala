@@ -28,16 +28,12 @@ import org.apache.spark.storage.{LocalCheckpointBlockId, BlockId}
 private[spark] class LocalCheckpointRDD[T: ClassTag](@transient rdd: RDD[T])
   extends CheckpointRDD[T](rdd.context) {
 
-  // This is needed because `rdd` is transient and will not be found on the executors
-  private val rddId = rdd.id
-
   /**
    * Determine the partitions from the local checkpoint blocks on each executor.
    */
   override def getPartitions: Array[Partition] = {
-    val expectedRddId = rddId
     val blockFilter = (blockId: BlockId) => blockId match {
-      case LocalCheckpointBlockId(rddId, _) => rddId == expectedRddId
+      case LocalCheckpointBlockId(x, _) => x == id
       case _ => false
     }
     val inputPartitions: Array[Partition] =
@@ -54,7 +50,7 @@ private[spark] class LocalCheckpointRDD[T: ClassTag](@transient rdd: RDD[T])
    */
   override def getPreferredLocations(partition: Partition): Seq[String] = {
     val index = partition.asInstanceOf[CheckpointRDDPartition].index
-    val blockId = new LocalCheckpointBlockId(rddId, index)
+    val blockId = new LocalCheckpointBlockId(id, index)
     val hosts = SparkEnv.get.blockManager.master.getLocations(blockId).map(_.host)
     if (hosts.size != 1) {
       // We do not replicate the block, so it should be found on exactly one executor
@@ -69,7 +65,7 @@ private[spark] class LocalCheckpointRDD[T: ClassTag](@transient rdd: RDD[T])
    */
   override def compute(partition: Partition, context: TaskContext): Iterator[T] = {
     val index = partition.asInstanceOf[CheckpointRDDPartition].index
-    val blockId = new LocalCheckpointBlockId(rddId, index)
+    val blockId = new LocalCheckpointBlockId(id, index)
     SparkEnv.get.blockManager.get(blockId) match {
       case Some(result) =>
         result.data.asInstanceOf[Iterator[T]]

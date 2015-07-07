@@ -34,7 +34,7 @@ private[spark] class ReliableRDDCheckpointData[T: ClassTag](@transient rdd: RDD[
   // The directory to which the associated RDD has been checkpointed to
   // This is assumed to be a non-local path that points to some reliable storage
   private val cpDir: String =
-    ReliableRDDCheckpointData.rddCheckpointDataPath(rdd.context, rdd.id)
+    ReliableRDDCheckpointData.checkpointPath(rdd.context, rdd.id)
       .map(_.toString)
       .getOrElse { throw new SparkException("Checkpoint dir must be specified.") }
 
@@ -93,13 +93,13 @@ private[spark] class ReliableRDDCheckpointData[T: ClassTag](@transient rdd: RDD[
 private[spark] object ReliableRDDCheckpointData {
 
   /** Return the path of the directory to which this RDD's checkpoint data is written. */
-  def rddCheckpointDataPath(sc: SparkContext, rddId: Int): Option[Path] = {
+  def checkpointPath(sc: SparkContext, rddId: Int): Option[Path] = {
     sc.checkpointDir.map { dir => new Path(dir, s"rdd-$rddId") }
   }
 
   /** Clean up the files associated with the checkpoint data for this RDD. */
-  def clearRDDCheckpointData(sc: SparkContext, rddId: Int): Unit = {
-    rddCheckpointDataPath(sc, rddId).foreach { path =>
+  def cleanCheckpoint(sc: SparkContext, rddId: Int): Unit = {
+    checkpointPath(sc, rddId).foreach { path =>
       val fs = path.getFileSystem(sc.hadoopConfiguration)
       if (fs.exists(path)) {
         fs.delete(path, true)
