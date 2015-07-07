@@ -1717,7 +1717,6 @@
       <properties>
         <hadoop.version>2.3.0</hadoop.version>
         <jets3t.version>0.9.3</jets3t.version>
-        <commons.math3.version>3.1.1</commons.math3.version>
       </properties>
     </profile>
 
@@ -1726,7 +1725,6 @@
       <properties>
         <hadoop.version>2.4.0</hadoop.version>
         <jets3t.version>0.9.3</jets3t.version>
-        <commons.math3.version>3.1.1</commons.math3.version>
       </properties>
     </profile>
 
@@ -1735,7 +1733,6 @@
       <properties>
         <hadoop.version>2.6.0</hadoop.version>
         <jets3t.version>0.9.3</jets3t.version>
-        <commons.math3.version>3.1.1</commons.math3.version>
         <zookeeper.version>3.4.6</zookeeper.version>
         <curator.version>2.6.0</curator.version>
       </properties>
