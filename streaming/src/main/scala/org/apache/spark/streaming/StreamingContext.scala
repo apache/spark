@@ -575,7 +575,7 @@ class StreamingContext private[streaming] (
    * @throws IllegalStateException if the StreamingContext is already stopped.
    */
   def start(): Unit = synchronized {
-  //Registering Streaming Metrics at the start of the StreamingContext
+    // Registering Streaming Metrics at the start of the StreamingContext
     assert(env != null)
     assert(env.metricsSystem != null)
     env.metricsSystem.registerSource(streamingSource)
