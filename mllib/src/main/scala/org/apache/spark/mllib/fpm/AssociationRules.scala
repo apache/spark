@@ -16,18 +16,14 @@
  */
 package org.apache.spark.mllib.fpm
 
-import java.lang.{Iterable => JavaIterable}
-
-import org.apache.spark.api.java.JavaSparkContext.fakeClassTag
-import org.apache.spark.api.java.JavaRDD
-import org.apache.spark.mllib.fpm.FPGrowth.FreqItemset
-
-import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
 
 import org.apache.spark.Logging
 import org.apache.spark.annotation.Experimental
+import org.apache.spark.api.java.JavaRDD
+import org.apache.spark.api.java.JavaSparkContext.fakeClassTag
 import org.apache.spark.mllib.fpm.AssociationRules.Rule
+import org.apache.spark.mllib.fpm.FPGrowth.FreqItemset
 import org.apache.spark.rdd.RDD
 
 /**
@@ -41,12 +37,12 @@ class AssociationRules private (
     private var minConfidence: Double) extends Logging with Serializable {
 
   /**
-   * Constructs a default instance with default parameters {minConfidence = 0.5}.
+   * Constructs a default instance with default parameters {minConfidence = 0.8}.
    */
-  def this() = this(0.5)
+  def this() = this(0.8)
 
   /**
-   * Sets the minimal confidence (default: `0.5`).
+   * Sets the minimal confidence (default: `0.8`).
    */
   def setMinConfidence(minConfidence: Double): this.type = {
     this.minConfidence = minConfidence

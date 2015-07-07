@@ -18,8 +18,6 @@ package org.apache.spark.mllib.fpm;
 
 import java.io.Serializable;
 
-import scala.reflect.ClassTag;
-
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
