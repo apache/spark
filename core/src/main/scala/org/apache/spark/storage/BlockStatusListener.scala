@@ -23,6 +23,7 @@ import org.apache.spark.scheduler._
 
 private[spark] case class BlockUIData(
     blockId: BlockId,
+    location: String,
     storageLevel: StorageLevel,
     memSize: Long,
     diskSize: Long,
@@ -70,6 +71,7 @@ private[spark] class BlockStatusListener extends SparkListener {
           blocksInBlockManager.put(blockId,
             BlockUIData(
               blockId,
+              blockManagerId.hostPort,
               storageLevel,
               memSize,
               diskSize,
