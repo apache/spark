@@ -17,7 +17,6 @@
 
 package org.apache.spark.ml.tree.impl
 
-import org.apache.spark.ml.feature.Bucketizer
 import org.apache.spark.ml.tree.{ContinuousSplit, Split}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.impl.DecisionTreeMetadata
@@ -66,40 +65,35 @@ private[spark] object TreePoint {
     }
     // TODO: RIGHT HERE NOW: We cannot use Bucketizer since it uses different bucketing than
     //       the original DecisionTree.  (It handles split thresholds differently.)
-    val bucketizers: Array[Bucketizer] = featureArity.zipWithIndex.map { case (arity, idx) =>
+    val thresholds: Array[Array[Double]] = featureArity.zipWithIndex.map { case (arity, idx) =>
       if (arity == 0) {
-        val thresholds: Array[Double] = splits(idx).map(_.asInstanceOf[ContinuousSplit].threshold)
-        new Bucketizer().setSplits(Double.NegativeInfinity +: thresholds :+ Double.PositiveInfinity)
+        splits(idx).map(_.asInstanceOf[ContinuousSplit].threshold)
       } else {
-        new Bucketizer()
+        Array.empty[Double]
       }
     }
-    println("Bucketizers:")
-    bucketizers.foreach { b =>
-      println(s"\t ${b.getSplits.mkString(", ")}")
-    }
     input.map { x =>
-      TreePoint.labeledPointToTreePoint(x, bucketizers, featureArity)
+      TreePoint.labeledPointToTreePoint(x, thresholds, featureArity)
     }
   }
 
   /**
    * Convert one LabeledPoint into its TreePoint representation.
-   * @param bucketizers  For each feature, Bucketizer with split thresholds for continuous features,
-   *                     default Bucketizer for categorical features.
+   * @param thresholds  For each feature, split thresholds for continuous features,
+   *                    empty for categorical features.
    * @param featureArity  Array indexed by feature, with value 0 for continuous and numCategories
    *                      for categorical features.
    */
   private def labeledPointToTreePoint(
       labeledPoint: LabeledPoint,
-      bucketizers: Array[Bucketizer],
+      thresholds: Array[Array[Double]],
       featureArity: Array[Int]): TreePoint = {
     val numFeatures = labeledPoint.features.size
     val arr = new Array[Int](numFeatures)
     var featureIndex = 0
     while (featureIndex < numFeatures) {
       arr(featureIndex) =
-        findBin(featureIndex, labeledPoint, featureArity(featureIndex), bucketizers(featureIndex))
+        findBin(featureIndex, labeledPoint, featureArity(featureIndex), thresholds(featureIndex))
       featureIndex += 1
     }
     new TreePoint(labeledPoint.label, arr)
@@ -108,17 +102,25 @@ private[spark] object TreePoint {
   /**
    * Find discretized value for one (labeledPoint, feature).
    *
+   * NOTE: We cannot use Bucketizer since it handles split thresholds differently than the old
+   *       (mllib) tree API.  We want to maintain the same behavior as the old tree API.
+   *
    * @param featureArity  0 for continuous features; number of categories for categorical features.
    */
   private def findBin(
       featureIndex: Int,
       labeledPoint: LabeledPoint,
       featureArity: Int,
-      bucketizer: Bucketizer): Int = {
+      thresholds: Array[Double]): Int = {
     val featureValue = labeledPoint.features(featureIndex)
 
     if (featureArity == 0) {
-      bucketizer.transform(featureValue).toInt
+      val idx = java.util.Arrays.binarySearch(thresholds, featureValue)
+      if (idx >= 0) {
+        idx
+      } else {
+        -idx - 1
+      }
     } else {
       // Categorical feature bins are indexed by feature values.
       if (featureValue < 0 || featureValue >= featureArity) {
