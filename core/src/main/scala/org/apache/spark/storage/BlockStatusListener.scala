@@ -32,9 +32,9 @@ private[spark] case class BlockUIData(
  * The aggregated status of stream blocks in an executor
  */
 private[spark] case class ExecutorStreamBlockStatus (
-  executorId: String,
-  location: String,
-  blocks: Seq[BlockUIData]) {
+    executorId: String,
+    location: String,
+    blocks: Seq[BlockUIData]) {
 
   def totalMemSize: Long = blocks.map(_.memSize).sum
 
