@@ -45,7 +45,7 @@ class UnsafeExternalSortSuite extends SparkPlanTest with BeforeAndAfterAll {
     randomDataGenerator <- RandomDataGenerator.forType(dataType, nullable)
   ) {
     test(s"sorting on $dataType with nullable=$nullable, sortOrder=$sortOrder") {
-      val inputData = Seq.fill(10)(randomDataGenerator()).filter {
+      val inputData = Seq.fill(1000)(randomDataGenerator()).filter {
         case d: Double => !d.isNaN
         case f: Float => !java.lang.Float.isNaN(f)
         case x => true
@@ -57,7 +57,7 @@ class UnsafeExternalSortSuite extends SparkPlanTest with BeforeAndAfterAll {
       assert(UnsafeExternalSort.supportsSchema(inputDf.schema))
       checkAnswer(
         inputDf,
-        UnsafeExternalSort(sortOrder, global = true, _: SparkPlan, testSpillFrequency = 3),
+        UnsafeExternalSort(sortOrder, global = true, _: SparkPlan, testSpillFrequency = 23),
         Sort(sortOrder, global = true, _: SparkPlan),
         sortAnswers = false
       )
