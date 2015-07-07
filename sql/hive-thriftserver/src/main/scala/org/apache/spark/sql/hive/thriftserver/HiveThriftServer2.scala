@@ -179,6 +179,7 @@ object HiveThriftServer2 extends Logging {
     def onSessionClosed(sessionId: String): Unit = {
       sessionList(sessionId).finishTimestamp = System.currentTimeMillis
       onlineSessionNum -= 1
+      trimSessionIfNecessary()
     }
 
     def onStatementStart(
@@ -199,6 +200,7 @@ object HiveThriftServer2 extends Logging {
     def onStatementParsed(id: String, executionPlan: String): Unit = {
       executionList(id).executePlan = executionPlan
       executionList(id).state = ExecutionState.COMPILED
+      trimExecutionIfNecessary()
     }
 
     def onStatementError(id: String, errorMessage: String, errorTrace: String): Unit = {
@@ -206,21 +208,21 @@ object HiveThriftServer2 extends Logging {
       executionList(id).detail = errorMessage
       executionList(id).state = ExecutionState.FAILED
       totalRunning -= 1
+      trimExecutionIfNecessary()
     }
 
     def onStatementFinish(id: String): Unit = {
       executionList(id).finishTimestamp = System.currentTimeMillis
       executionList(id).state = ExecutionState.FINISHED
       totalRunning -= 1
+      trimExecutionIfNecessary()
     }
 
     private def trimExecutionIfNecessary() = synchronized {
       if (executionList.size > retainedStatements) {
         val toRemove = math.max(retainedStatements / 10, 1)
-        executionList.take(toRemove).foreach { s =>
-          if (s._2.finishTimestamp != 0) {
-            executionList.remove(s._1)
-          }
+        executionList.filter(_._2.finishTimestamp != 0).take(toRemove).foreach { s =>
+          executionList.remove(s._1)
         }
       }
     }
@@ -228,10 +230,8 @@ object HiveThriftServer2 extends Logging {
     private def trimSessionIfNecessary() = synchronized {
       if (sessionList.size > retainedSessions) {
         val toRemove = math.max(retainedSessions / 10, 1)
-        sessionList.take(toRemove).foreach { s =>
-          if (s._2.finishTimestamp != 0) {
-            sessionList.remove(s._1)
-          }
+        sessionList.filter(_._2.finishTimestamp != 0).take(toRemove).foreach { s =>
+          sessionList.remove(s._1)
         }
       }
 
