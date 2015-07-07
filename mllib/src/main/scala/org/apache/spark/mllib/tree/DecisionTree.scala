@@ -916,7 +916,7 @@ object DecisionTree extends Serializable with Logging {
             (splitIndex, gainStats)
           }.maxBy(_._2.gain)
         val categoriesForSplit =
-          categoriesSortedByCentroid.map(_._1.toDouble).slice(0, bestFeatureSplitIndex + 1)
+          categoriesSortedByCentroid.map(_._1.toDouble).toSet.slice(0, bestFeatureSplitIndex + 1)
         val bestFeatureSplit =
           new Split(featureIndex, Double.MinValue, Categorical, categoriesForSplit)
         (bestFeatureSplit, bestFeatureGainStats)
@@ -1003,7 +1003,7 @@ object DecisionTree extends Serializable with Logging {
             while (splitIndex < numSplits) {
               val threshold = featureSplits(splitIndex)
               splits(featureIndex)(splitIndex) =
-                new Split(featureIndex, threshold, Continuous, List())
+                new Split(featureIndex, threshold, Continuous, Set())
               splitIndex += 1
             }
             bins(featureIndex)(0) = new Bin(new DummyLowSplit(featureIndex, Continuous),
@@ -1029,7 +1029,7 @@ object DecisionTree extends Serializable with Logging {
               splits(featureIndex) = new Array[Split](numSplits)
               var splitIndex = 0
               while (splitIndex < numSplits) {
-                val categories: List[Double] =
+                val categories: Set[Double] =
                   extractMultiClassCategories(splitIndex + 1, featureArity)
                 splits(featureIndex)(splitIndex) =
                   new Split(featureIndex, Double.MinValue, Categorical, categories)
@@ -1064,14 +1064,14 @@ object DecisionTree extends Serializable with Logging {
    */
   private[tree] def extractMultiClassCategories(
       input: Int,
-      maxFeatureValue: Int): List[Double] = {
-    var categories = List[Double]()
+      maxFeatureValue: Int): Set[Double] = {
+    var categories = Set[Double]()
     var j = 0
     var bitShiftedInput = input
     while (j < maxFeatureValue) {
       if (bitShiftedInput % 2 != 0) {
-        // updating the list of categories.
-        categories = j.toDouble :: categories
+        // updating the set of categories.
+        categories = categories + j.toDouble
       }
       // Right shift by one
       bitShiftedInput = bitShiftedInput >> 1
