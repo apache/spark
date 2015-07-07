@@ -54,9 +54,10 @@ class UnsafeExternalSortSuite extends SparkPlanTest with BeforeAndAfterAll {
           TestSQLContext.sparkContext.parallelize(Random.shuffle(inputData).map(v => Row(v))),
           StructType(StructField("a", dataType, nullable = true) :: Nil)
         )
+        assert(UnsafeExternalSort.supportsSchema(inputDf.schema))
         checkAnswer(
           inputDf,
-          UnsafeExternalSort(sortOrder, global = false, _: SparkPlan),
+          UnsafeExternalSort(sortOrder, global = false, _: SparkPlan, testSpillFrequency = 100),
           Sort(sortOrder, global = false, _: SparkPlan)
         )
       }

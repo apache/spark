@@ -253,12 +253,15 @@ case class ExternalSort(
  *
  * @param global when true performs a global sort of all partitions by shuffling the data first
  *               if necessary.
+ * @param testSpillFrequency Method for configuring periodic spilling in unit tests. If set, will
+ *                           spill every `frequency` records.
  */
 @DeveloperApi
 case class UnsafeExternalSort(
     sortOrder: Seq[SortOrder],
     global: Boolean,
-    child: SparkPlan)
+    child: SparkPlan,
+    testSpillFrequency: Int = 0)
   extends UnaryNode {
 
   private[this] val schema: StructType = child.schema
@@ -278,7 +281,11 @@ case class UnsafeExternalSort(
           override def computePrefix(row: InternalRow): Long = prefixComputer(row)
         }
       }
-      new UnsafeExternalRowSorter(schema, ordering, prefixComparator, prefixComputer).sort(iterator)
+      val sorter = new UnsafeExternalRowSorter(schema, ordering, prefixComparator, prefixComputer)
+      if (testSpillFrequency > 0) {
+        sorter.setTestSpillFrequency(testSpillFrequency)
+      }
+      sorter.sort(iterator)
     }
     child.execute().mapPartitions(doSort, preservesPartitioning = true)
   }

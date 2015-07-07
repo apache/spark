@@ -44,6 +44,14 @@ import org.apache.spark.util.collection.unsafe.sort.UnsafeSorterIterator;
 
 final class UnsafeExternalRowSorter {
 
+  /**
+   * If positive, forces records to be spilled to disk at the given frequency (measured in numbers
+   * of records). This is only intended to be used in tests.
+   */
+  private int testSpillFrequency = 0;
+
+  private long numRowsInserted = 0;
+
   private final StructType schema;
   private final UnsafeRowConverter rowConverter;
   private final PrefixComputer prefixComputer;
@@ -77,6 +85,15 @@ final class UnsafeExternalRowSorter {
     );
   }
 
+  /**
+   * Forces spills to occur every `frequency` records. Only for use in tests.
+   */
+  @VisibleForTesting
+  void setTestSpillFrequency(int frequency) {
+    assert frequency > 0 : "Frequency must be positive";
+    testSpillFrequency = frequency;
+  }
+
   @VisibleForTesting
   void insertRow(InternalRow row) throws IOException {
     final int sizeRequirement = rowConverter.getSizeRequirement(row);
@@ -99,6 +116,10 @@ final class UnsafeExternalRowSorter {
       sizeRequirement,
       prefix
     );
+    numRowsInserted++;
+    if (testSpillFrequency > 0 && (numRowsInserted % testSpillFrequency) == 0) {
+      spill();
+    }
   }
 
   @VisibleForTesting
