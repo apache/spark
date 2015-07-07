@@ -132,6 +132,12 @@ class StreamingContext private[streaming] (
 
   private[streaming] val isCheckpointPresent = (cp_ != null)
 
+    /**
+     * Boolean flag to check the Metrics registration for a StreamingContext
+     */
+
+  private [streaming] var isSourceRegistered = false
+
   private[streaming] val sc: SparkContext = {
     if (sc_ != null) {
       sc_
@@ -197,6 +203,7 @@ class StreamingContext private[streaming] (
   assert(env != null)
   assert(env.metricsSystem != null)
   env.metricsSystem.registerSource(streamingSource)
+  isSourceRegistered= true
 
   private var state: StreamingContextState = INITIALIZED
 
@@ -585,6 +592,9 @@ class StreamingContext private[streaming] (
    * @throws IllegalStateException if the StreamingContext is already stopped.
    */
   def start(): Unit = synchronized {
+    if (isSourceRegistered) {
+      env.metricsSystem.removeSource(streamingSource)
+    }
     state match {
       case INITIALIZED =>
         startSite.set(DStream.getCreationSite())
@@ -696,6 +706,8 @@ class StreamingContext private[streaming] (
     } finally {
       // The state should always be Stopped after calling `stop()`, even if we haven't started yet
       state = STOPPED
+      env.metricsSystem.removeSource(streamingSource)
+      isSourceRegistered = false
     }
   }
 
