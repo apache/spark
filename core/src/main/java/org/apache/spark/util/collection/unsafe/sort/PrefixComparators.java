@@ -19,6 +19,7 @@ package org.apache.spark.util.collection.unsafe.sort;
 
 import com.google.common.base.Charsets;
 import com.google.common.primitives.Longs;
+
 import org.apache.spark.annotation.Private;
 import org.apache.spark.unsafe.types.UTF8String;
 
@@ -27,8 +28,7 @@ public class PrefixComparators {
   private PrefixComparators() {}
 
   public static final StringPrefixComparator STRING = new StringPrefixComparator();
-  public static final IntPrefixComparator INTEGER = new IntPrefixComparator();
-  public static final LongPrefixComparator LONG = new LongPrefixComparator();
+  public static final IntegralPrefixComparator INTEGRAL = new IntegralPrefixComparator();
   public static final FloatPrefixComparator FLOAT = new FloatPrefixComparator();
   public static final DoublePrefixComparator DOUBLE = new DoublePrefixComparator();
 
@@ -67,22 +67,10 @@ public class PrefixComparators {
     }
   }
 
-  public static final class IntPrefixComparator extends PrefixComparator {
-    @Override
-    public int compare(long aPrefix, long bPrefix) {
-      int a = (int) aPrefix;
-      int b = (int) bPrefix;
-      return (a < b) ? -1 : (a > b) ? 1 : 0;
-    }
-
-    public final long NULL_PREFIX = computePrefix(Integer.MIN_VALUE);
-
-    public long computePrefix(int value) {
-      return value & 0xffffffffL;
-    }
-  }
-
-  public static final class LongPrefixComparator extends PrefixComparator {
+  /**
+   * Prefix comparator for all integral types (boolean, byte, short, int, long).
+   */
+  public static final class IntegralPrefixComparator extends PrefixComparator {
     @Override
     public int compare(long a, long b) {
       return (a < b) ? -1 : (a > b) ? 1 : 0;

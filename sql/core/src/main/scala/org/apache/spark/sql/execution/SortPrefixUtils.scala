@@ -38,8 +38,7 @@ object SortPrefixUtils {
   def getPrefixComparator(sortOrder: SortOrder): PrefixComparator = {
     sortOrder.dataType match {
       case StringType => PrefixComparators.STRING
-      case IntegerType => PrefixComparators.INTEGER
-      case LongType => PrefixComparators.LONG
+      case BooleanType | ByteType | ShortType | IntegerType | LongType => PrefixComparators.INTEGRAL
       case FloatType => PrefixComparators.FLOAT
       case DoubleType => PrefixComparators.DOUBLE
       case _ => NoOpPrefixComparator
@@ -51,16 +50,37 @@ object SortPrefixUtils {
       case StringType => (row: InternalRow) => {
         PrefixComparators.STRING.computePrefix(sortOrder.child.eval(row).asInstanceOf[UTF8String])
       }
-      case IntegerType => (row: InternalRow) => {
-        val exprVal = sortOrder.child.eval(row)
-        if (exprVal == null) PrefixComparators.INTEGER.NULL_PREFIX
-        else PrefixComparators.INTEGER.computePrefix(sortOrder.child.eval(row).asInstanceOf[Int])
-      }
-      case LongType => (row: InternalRow) => {
-        val exprVal = sortOrder.child.eval(row)
-        if (exprVal == null) PrefixComparators.LONG.NULL_PREFIX
-        else sortOrder.child.eval(row).asInstanceOf[Long]
-      }
+      case BooleanType =>
+        (row: InternalRow) => {
+          val exprVal = sortOrder.child.eval(row)
+          if (exprVal == null) PrefixComparators.INTEGRAL.NULL_PREFIX
+          else if (sortOrder.child.eval(row).asInstanceOf[Boolean]) 1
+          else 0
+        }
+      case ByteType =>
+        (row: InternalRow) => {
+          val exprVal = sortOrder.child.eval(row)
+          if (exprVal == null) PrefixComparators.INTEGRAL.NULL_PREFIX
+          else sortOrder.child.eval(row).asInstanceOf[Byte]
+        }
+      case ShortType =>
+        (row: InternalRow) => {
+          val exprVal = sortOrder.child.eval(row)
+          if (exprVal == null) PrefixComparators.INTEGRAL.NULL_PREFIX
+          else sortOrder.child.eval(row).asInstanceOf[Short]
+        }
+      case IntegerType =>
+        (row: InternalRow) => {
+          val exprVal = sortOrder.child.eval(row)
+          if (exprVal == null) PrefixComparators.INTEGRAL.NULL_PREFIX
+          else sortOrder.child.eval(row).asInstanceOf[Int]
+        }
+      case LongType =>
+        (row: InternalRow) => {
+          val exprVal = sortOrder.child.eval(row)
+          if (exprVal == null) PrefixComparators.INTEGRAL.NULL_PREFIX
+          else sortOrder.child.eval(row).asInstanceOf[Long]
+        }
       case FloatType => (row: InternalRow) => {
         val exprVal = sortOrder.child.eval(row)
         if (exprVal == null) PrefixComparators.FLOAT.NULL_PREFIX
