@@ -19,27 +19,27 @@ package org.apache.spark.rdd
 
 import scala.reflect.ClassTag
 
-import org.apache.spark.{SparkException, Partition, SparkEnv, TaskContext}
-import org.apache.spark.storage.{LocalCheckpointBlockId, BlockId}
+import org.apache.spark.{Partition, SparkEnv, SparkException, SparkContext, TaskContext}
+import org.apache.spark.storage.{BlockId, RDDBlockId}
 
 /**
  * An RDD that reads from a checkpoint file previously written to the local file system.
  */
-private[spark] class LocalCheckpointRDD[T: ClassTag](@transient rdd: RDD[T])
-  extends CheckpointRDD[T](rdd.context) {
+private[spark] class LocalCheckpointRDD[T: ClassTag](@transient sc: SparkContext)
+  extends CheckpointRDD[T](sc) {
 
   /**
    * Determine the partitions from the local checkpoint blocks on each executor.
    */
   override def getPartitions: Array[Partition] = {
-    val blockFilter = (blockId: BlockId) => blockId match {
-      case LocalCheckpointBlockId(x, _) => x == id
-      case _ => false
+    val ourId = id // define this locally for serialization purposes
+    val blockFilter = (blockId: BlockId) => {
+      blockId.asRDDId.filter(_.rddId == ourId).isDefined
     }
     val inputPartitions: Array[Partition] =
       SparkEnv.get.blockManager.master
         .getMatchingBlockIds(blockFilter, askSlaves = true)
-        .collect { case LocalCheckpointBlockId(_, i) => new CheckpointRDDPartition(i) }
+        .collect { case RDDBlockId(_, i) => new CheckpointRDDPartition(i) }
         .toArray
     validateInputPartitions(inputPartitions)
     inputPartitions
@@ -50,13 +50,8 @@ private[spark] class LocalCheckpointRDD[T: ClassTag](@transient rdd: RDD[T])
    */
   override def getPreferredLocations(partition: Partition): Seq[String] = {
     val index = partition.asInstanceOf[CheckpointRDDPartition].index
-    val blockId = new LocalCheckpointBlockId(id, index)
-    val hosts = SparkEnv.get.blockManager.master.getLocations(blockId).map(_.host)
-    if (hosts.size != 1) {
-      // We do not replicate the block, so it should be found on exactly one executor
-      logWarning("Expected exactly one host for each local checkpoint block. Instead: " + hosts)
-    }
-    hosts
+    val blockId = RDDBlockId(id, index)
+    SparkEnv.get.blockManager.master.getLocations(blockId).map(_.host)
   }
 
   /**
@@ -65,7 +60,7 @@ private[spark] class LocalCheckpointRDD[T: ClassTag](@transient rdd: RDD[T])
    */
   override def compute(partition: Partition, context: TaskContext): Iterator[T] = {
     val index = partition.asInstanceOf[CheckpointRDDPartition].index
-    val blockId = new LocalCheckpointBlockId(id, index)
+    val blockId = RDDBlockId(id, index)
     SparkEnv.get.blockManager.get(blockId) match {
       case Some(result) =>
         result.data.asInstanceOf[Iterator[T]]

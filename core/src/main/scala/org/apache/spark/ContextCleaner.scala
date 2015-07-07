@@ -22,7 +22,7 @@ import java.lang.ref.{ReferenceQueue, WeakReference}
 import scala.collection.mutable.{ArrayBuffer, SynchronizedBuffer}
 
 import org.apache.spark.broadcast.Broadcast
-import org.apache.spark.rdd.{ReliableRDDCheckpointData, RDD}
+import org.apache.spark.rdd.{RDD, ReliableRDDCheckpointData}
 import org.apache.spark.util.Utils
 
 /**
@@ -232,10 +232,8 @@ private[spark] class ContextCleaner(sc: SparkContext) extends Logging {
   }
 
   /**
-   * Perform checkpoint cleanup.
-   *
-   * Note that this only cleans up reliable checkpoint files.
-   * Unsafe checkpoint files are just cached RDD blocks and are cleaned up separately.
+   * Perform checkpoint cleanup on checkpoint files in reliable storage.
+   * Locally checkpointed files are cleaned up separately through RDD clean ups.
    */
   def doCleanCheckpoint(rddId: Int): Unit = {
     try {

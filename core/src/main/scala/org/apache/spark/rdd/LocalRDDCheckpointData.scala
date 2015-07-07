@@ -20,7 +20,7 @@ package org.apache.spark.rdd
 import scala.reflect.ClassTag
 
 import org.apache.spark.{Logging, SparkEnv, TaskContext}
-import org.apache.spark.storage.{LocalCheckpointBlockId, StorageLevel}
+import org.apache.spark.storage.{RDDBlockId, StorageLevel}
 
 /**
  * An implementation of checkpointing that writes the RDD data to a local file system.
@@ -32,21 +32,31 @@ import org.apache.spark.storage.{LocalCheckpointBlockId, StorageLevel}
 private[spark] class LocalRDDCheckpointData[T: ClassTag](@transient rdd: RDD[T])
   extends RDDCheckpointData[T](rdd) with Logging {
 
+  /**
+   * Write the content of each partition on a local disk store.
+   */
   protected override def doCheckpoint(): CheckpointRDD[T] = {
+    val checkpointRdd = new LocalCheckpointRDD[T](rdd.context)
 
-    // Put each partition into the disk store
-    // TODO: if it's already in disk store, just use the existing values
-    val rddId = rdd.id
+    // Note: we persist the partitions using the checkpoint RDD's ID rather than the
+    // parent RDD's ID. This is not fundamental in design, but allows us to simply
+    // reuse the RDD clean up code path to clean the checkpointed files.
+    val checkpointRddId = checkpointRdd.id
     val persistPartition = (taskContext: TaskContext, values: Iterator[T]) => {
-      SparkEnv.get.blockManager.putIterator(
-        LocalCheckpointBlockId(rddId, taskContext.partitionId()),
-        values,
-        StorageLevel.DISK_ONLY)
+      // TODO: if it's already in disk store, just use the existing values
+      val blockId = RDDBlockId(checkpointRddId, taskContext.partitionId())
+      SparkEnv.get.blockManager.putIterator(blockId, values, StorageLevel.DISK_ONLY)
     }
-    rdd.context.runJob(rdd, persistPartition)
 
-    // Return an RDD that reads these blocks back
-    new LocalCheckpointRDD[T](rdd)
+    // Optionally clean our checkpoint files if the reference is out of scope
+    if (rdd.conf.getBoolean("spark.cleaner.referenceTracking.cleanCheckpoints", false)) {
+      rdd.context.cleaner.foreach { cleaner =>
+        cleaner.registerRDDForCleanup(checkpointRdd)
+      }
+    }
+
+    rdd.context.runJob(rdd, persistPartition)
+    checkpointRdd
   }
 
 }
