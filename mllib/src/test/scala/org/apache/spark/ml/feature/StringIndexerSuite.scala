@@ -17,6 +17,7 @@
 
 package org.apache.spark.ml.feature
 
+import org.apache.spark.SparkException
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.attribute.{Attribute, NominalAttribute}
 import org.apache.spark.ml.param.ParamsSuite
@@ -48,6 +49,38 @@ class StringIndexerSuite extends SparkFunSuite with MLlibTestSparkContext {
     val expected = Set((0, 0.0), (1, 2.0), (2, 1.0), (3, 0.0), (4, 0.0), (5, 1.0))
     assert(output === expected)
   }
+
+  test("StringIndexerUnessen") {
+    val data = sc.parallelize(Seq((0, "a"), (1, "b")), 2)
+    val data2 = sc.parallelize(Seq((0, "a"), (1, "b"), (2, "c")), 2)
+    val df = sqlContext.createDataFrame(data).toDF("id", "label")
+    val df2 = sqlContext.createDataFrame(data2).toDF("id", "label")
+    val indexer = new StringIndexer()
+      .setInputCol("label")
+      .setOutputCol("labelIndex")
+      .fit(df)
+    // Verify we throw by default with unseen values
+    intercept[SparkException] {
+      indexer.transform(df2).collect()
+    }
+    val indexerSkipInvalid = new StringIndexer()
+      .setInputCol("label")
+      .setOutputCol("labelIndex")
+      .setSkipInvalid(true)
+      .fit(df)
+    // Verify that we skip the c record
+    val transformed = indexerSkipInvalid.transform(df2)
+    val attr = Attribute.fromStructField(transformed.schema("labelIndex"))
+      .asInstanceOf[NominalAttribute]
+    assert(attr.values.get === Array("b", "a"))
+    val output = transformed.select("id", "labelIndex").map { r =>
+      (r.getInt(0), r.getDouble(1))
+    }.collect().toSet
+    // a -> 1, b -> 0
+    val expected = Set((0, 1.0), (1, 0.0))
+    assert(output === expected)
+  }
+
 
   test("StringIndexer with a numeric input column") {
     val data = sc.parallelize(Seq((0, 100), (1, 200), (2, 300), (3, 100), (4, 100), (5, 300)), 2)
