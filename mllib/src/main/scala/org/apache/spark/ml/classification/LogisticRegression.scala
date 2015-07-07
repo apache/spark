@@ -116,13 +116,13 @@ class LogisticRegression(override val uid: String)
           case ((summarizer: MultivariateOnlineSummarizer, labelSummarizer: MultiClassSummarizer),
           (label: Double, features: Vector)) =>
             (summarizer.add(features), labelSummarizer.add(label))
-      },
+        },
         combOp = (c1, c2) => (c1, c2) match {
           case ((summarizer1: MultivariateOnlineSummarizer,
           classSummarizer1: MultiClassSummarizer), (summarizer2: MultivariateOnlineSummarizer,
           classSummarizer2: MultiClassSummarizer)) =>
             (summarizer1.merge(summarizer2), classSummarizer1.merge(classSummarizer2))
-      })
+        })
 
     val histogram = labelSummarizer.histogram
     val numInvalid = labelSummarizer.countInvalid
@@ -184,40 +184,51 @@ class LogisticRegression(override val uid: String)
     }
 
     val states = optimizer.iterations(new CachedDiffFunction(costFun),
-      initialWeightsWithIntercept.toBreeze.toDenseVector).toArray
+      initialWeightsWithIntercept.toBreeze.toDenseVector)
 
-    if (states.length == 0) {
-      val msg = s"${optimizer.getClass.getName} failed."
-      logError(msg)
-      throw new SparkException(msg)
-    }
+    val (weights, intercept, lossHistory) = {
+      /**
+       * Note that in Logistic Regression, the loss is log-likelihood which is invariance
+       * under feature standardization. As a result, the loss returned from optimizer is
+       * the same as the one in the original space.
+       */
+      val arrayBuilder = mutable.ArrayBuilder.make[Double]
+      var state: optimizer.State = null
+      while (states.hasNext) {
+        state = states.next()
+        arrayBuilder += state.adjustedValue
+      }
 
-    val lossHistory = states.map(_.adjustedValue)
+      if (state == null) {
+        val msg = s"${optimizer.getClass.getName} failed."
+        logError(msg)
+        throw new SparkException(msg)
+      }
 
-    // The weights are trained in the scaled space; we're converting them back to
-    // the original space.
-    val weightsWithIntercept = {
-      val rawWeights = states.last.x.toArray.clone()
+      /**
+       * The weights are trained in the scaled space; we're converting them back to
+       * the original space.
+       * Note that the intercept in scaled space and original space is the same;
+       * as a result, no scaling is needed.
+       */
+      val rawWeights = state.x.toArray.clone()
       var i = 0
-      // Note that the intercept in scaled space and original space is the same;
-      // as a result, no scaling is needed.
       while (i < numFeatures) {
         rawWeights(i) *= { if (featuresStd(i) != 0.0) 1.0 / featuresStd(i) else 0.0 }
         i += 1
       }
-      Vectors.dense(rawWeights)
+
+      if ($(fitIntercept)) {
+        (Vectors.dense(rawWeights.slice(0, rawWeights.length - 1)).compressed,
+          rawWeights(rawWeights.length - 1), arrayBuilder.result())
+      } else {
+        (Vectors.dense(rawWeights).compressed, 0.0, arrayBuilder.result())
+      }
     }
 
     if (handlePersistence) instances.unpersist()
 
-    val (weights, intercept) = if ($(fitIntercept)) {
-      (Vectors.dense(weightsWithIntercept.toArray.slice(0, weightsWithIntercept.size - 1)),
-        weightsWithIntercept(weightsWithIntercept.size - 1))
-    } else {
-      (weightsWithIntercept, 0.0)
-    }
-
-    new LogisticRegressionModel(uid, weights.compressed, intercept)
+    copyValues(new LogisticRegressionModel(uid, weights, intercept))
   }
 
   override def copy(extra: ParamMap): LogisticRegression = defaultCopy(extra)
@@ -421,7 +432,7 @@ private class LogisticAggregator(
   def add(label: Double, data: Vector): this.type = {
     require(dim == data.size, s"Dimensions mismatch when adding new sample." +
       s" Expecting $dim but got ${data.size}.")
-    
+
     val localWeightsArray = weightsArray
     val localGradientSumArray = gradientSumArray
 

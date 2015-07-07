@@ -163,37 +163,54 @@ class LinearRegression(override val uid: String)
 
     val initialWeights = Vectors.zeros(numFeatures)
     val states = optimizer.iterations(new CachedDiffFunction(costFun),
-      initialWeights.toBreeze.toDenseVector).toArray
+      initialWeights.toBreeze.toDenseVector)
 
-    if (states.length == 0) {
-      val msg = s"${optimizer.getClass.getName} failed."
-      logError(msg)
-      throw new SparkException(msg)
-    }
+    val (weights, lossHistory) = {
+      /**
+       * Note that in Linear Regression, the loss returned from optimizer is computed
+       * in the scaled space given by the following formula.
+       * {{{
+       * L = 1/2n||\sum_i w_i(x_i - \bar{x_i}) / \hat{x_i} - (y - \bar{y}) / \hat{y}||^2 + regTerms
+       * }}}
+       */
+      val arrayBuilder = mutable.ArrayBuilder.make[Double]
+      var state: optimizer.State = null
+      while (states.hasNext) {
+        state = states.next()
+        arrayBuilder += state.adjustedValue
+      }
 
-    val lossHistory = states.map(_.adjustedValue)
+      if (state == null) {
+        val msg = s"${optimizer.getClass.getName} failed."
+        logError(msg)
+        throw new SparkException(msg)
+      }
 
-    // The weights are trained in the scaled space; we're converting them back to
-    // the original space.
-    val weights = {
-      val rawWeights = states.last.x.toArray.clone()
+      /**
+       * The weights are trained in the scaled space; we're converting them back to
+       * the original space.
+       */
+      val rawWeights = state.x.toArray.clone()
       var i = 0
       val len = rawWeights.length
       while (i < len) {
         rawWeights(i) *= { if (featuresStd(i) != 0.0) yStd / featuresStd(i) else 0.0 }
         i += 1
       }
-      Vectors.dense(rawWeights)
+
+      (Vectors.dense(rawWeights).compressed, arrayBuilder.result())
     }
 
-    // The intercept in R's GLMNET is computed using closed form after the coefficients are
-    // converged. See the following discussion for detail.
-    // http://stats.stackexchange.com/questions/13617/how-is-the-intercept-computed-in-glmnet
+    /**
+     * The intercept in R's GLMNET is computed using closed form after the coefficients are
+     * converged. See the following discussion for detail.
+     * http://stats.stackexchange.com/questions/13617/how-is-the-intercept-computed-in-glmnet
+     */
     val intercept = if ($(fitIntercept)) yMean - dot(weights, Vectors.dense(featuresMean)) else 0.0
+
     if (handlePersistence) instances.unpersist()
 
-    // TODO: Converts to sparse format based on the storage, but may base on the scoring speed.
-    copyValues(new LinearRegressionModel(uid, weights.compressed, intercept))
+    copyValues(new LinearRegressionModel(uid, weights, intercept))
   }
 
   override def copy(extra: ParamMap): LinearRegression = defaultCopy(extra)
