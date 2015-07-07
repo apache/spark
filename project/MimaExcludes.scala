@@ -81,6 +81,12 @@ object MimaExcludes {
               "org.apache.spark.mllib.linalg.Matrix.numNonzeros"),
             ProblemFilters.exclude[MissingMethodProblem](
               "org.apache.spark.mllib.linalg.Matrix.numActives")
+          ) ++ Seq(
+            // SPARK-8701 Add input metadata in the batch page.
+            ProblemFilters.exclude[MissingClassProblem](
+              "org.apache.spark.streaming.scheduler.InputInfo$"),
+            ProblemFilters.exclude[MissingClassProblem](
+              "org.apache.spark.streaming.scheduler.InputInfo")
           )
         case v if v.startsWith("1.4") =>
           Seq(
