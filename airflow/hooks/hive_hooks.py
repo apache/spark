@@ -1,6 +1,5 @@
 import csv
 import logging
-import json
 import subprocess
 from tempfile import NamedTemporaryFile
 
@@ -17,29 +16,37 @@ from airflow.utils import TemporaryDirectory
 
 
 class HiveCliHook(BaseHook):
-    '''
-    Simple wrapper around the hive CLI
-    '''
+    """
+    Simple wrapper around the hive CLI.
+
+    It also supports the ``beeline``
+    a lighter CLI that runs JDBC and is replacing the heavier
+    traditional CLI. To enable ``beeline``, set the use_beeline param in the
+    extra field of your connection as in ``{ "use_beeline": true }``
+
+    Note that you can also set default hive CLI parameters using the
+    ``hive_cli_params`` to be used in your connection as in
+    ``{"hive_cli_params": "-hiveconf mapred.job.tracker=some.jobtracker:444"}``
+    """
+
     def __init__(
             self,
-            hive_cli_conn_id="hive_cli_default"
-            ):
+            hive_cli_conn_id="hive_cli_default"):
         conn = self.get_connection(hive_cli_conn_id)
-        self.hive_cli_params = ""
-        try:
-            self.hive_cli_params = json.loads(conn.extra)['hive_cli_params']
-        except:
-            pass
+        self.hive_cli_params = conn.extra_dejson.get('hive_cli_params', '')
+        self.use_beeline = conn.extra_dejson.get('use_beeline', False)
+        self.conn = conn
 
     def run_cli(self, hql, schema=None):
-        '''
+        """
         Run an hql statement using the hive cli
 
         >>> hh = HiveCliHook()
         >>> result = hh.run_cli("USE airflow;")
         >>> ("OK" in result)
         True
-        '''
+        """
+        conn = self.conn
         if schema:
             hql = "USE {schema};\n{hql}".format(**locals())
 
@@ -48,10 +55,26 @@ class HiveCliHook(BaseHook):
                 f.write(hql)
                 f.flush()
                 fname = f.name
-                hive_cmd = ['hive', '-f', fname]
+                hive_bin = 'hive'
+                cmd_extra = []
+                if self.use_beeline:
+                    hive_bin = 'beeline'
+                    jdbc_url = (
+                        "jdbc:hive2://"
+                        "{0}:{1}/{2}"
+                        ";auth=noSasl"
+                    ).format(conn.host, conn.port, conn.schema)
+                    cmd_extra += ['-u', jdbc_url]
+                    if conn.login:
+                        cmd_extra += ['-n', conn.login]
+                    if conn.password:
+                        cmd_extra += ['-p', conn.password]
+                    cmd_extra += ['-p', conn.login]
+                hive_cmd = [hive_bin, '-f', fname] + cmd_extra
                 if self.hive_cli_params:
                     hive_params_list = self.hive_cli_params.split()
                     hive_cmd.extend(hive_params_list)
+                logging.info(" ".join(hive_cmd))
                 sp = subprocess.Popen(
                     hive_cmd,
                     stdout=subprocess.PIPE,
@@ -59,7 +82,7 @@ class HiveCliHook(BaseHook):
                     cwd=tmp_dir)
                 all_err = ''
                 self.sp = sp
-                stdout = ""
+                stdout = ''
                 for line in iter(sp.stdout.readline, ''):
                     stdout += line
                     logging.info(line.strip())
