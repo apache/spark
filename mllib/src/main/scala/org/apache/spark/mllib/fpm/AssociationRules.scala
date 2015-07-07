@@ -96,15 +96,12 @@ object AssociationRules {
    * An association rule between sets of items.
    * @param antecedent hypotheses of the rule
    * @param consequent conclusion of the rule
-   * @param freqUnion the frequency (num. occurrences) of the union of the antecedent and consequent
-   *                  as subsets of transactions in the transaction data
-   * @param freqAntecedent the frequency of the antecedent in the transaction data
    * @tparam Item item type
    */
   @Experimental
   class Rule[Item] private[mllib] (
-      antecedent: Array[Item],
-      consequent: Array[Item],
+      val antecedent: Array[Item],
+      val consequent: Array[Item],
       freqUnion: Double,
       freqAntecedent: Double) extends Serializable {
 
