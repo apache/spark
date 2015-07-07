@@ -48,7 +48,7 @@ private[spark] trait ClassifierParams
    * then thresholds default value.
    * When converting from threshold to thresholds the threshold for class 0 will be 0.5
    * and the threshold for class 1 will be the assigned threshold value.
-   **/
+   */
   override def getThresholds: Array[Double] = {
     def thresholdToThresholds(threshold: Double): Array[Double] = {
       Array[Double](0.5, threshold)
@@ -65,11 +65,11 @@ private[spark] trait ClassifierParams
    * then the threshold default value.
    * When converting from thresholds to threshold the threshold will be the ratio between
    * class 1 and class 0.
-   **/
+   */
   override def getThreshold(): Double = {
     def thresholdsToThreshold(thresholds: Array[Double]): Double = {
-      assert(thresholds.size == 2, "Attempting to use threshold array for binary classification, size " +
-        "must be 2 instead of " + thresholds.size)
+      assert(thresholds.size == 2, "Attempting to use threshold array for binary classification, " +
+        "size must be 2 instead of " + thresholds.size)
       thresholds(1)/thresholds(0)
     }
     if (isDefined(threshold) || !isDefined(thresholds)) {
