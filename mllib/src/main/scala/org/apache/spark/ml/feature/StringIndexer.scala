@@ -32,7 +32,8 @@ import org.apache.spark.util.collection.OpenHashMap
 /**
  * Base trait for [[StringIndexer]] and [[StringIndexerModel]].
  */
-private[feature] trait StringIndexerBase extends Params with HasInputCol with HasOutputCol {
+private[feature] trait StringIndexerBase extends Params with HasInputCol with HasOutputCol
+    with HasSkipInvalid {
 
   /** Validates and transforms the input schema. */
   protected def validateAndTransformSchema(schema: StructType): StructType = {
@@ -65,12 +66,15 @@ class StringIndexer(override val uid: String) extends Estimator[StringIndexerMod
   def this() = this(Identifiable.randomUID("strIdx"))
 
   /** @group setParam */
+  def setSkipInvalid(value: Boolean): this.type = set(skipInvalid, value)
+  setDefault(skipInvalid, false)
+
+  /** @group setParam */
   def setInputCol(value: String): this.type = set(inputCol, value)
 
   /** @group setParam */
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
-  // TODO: handle unseen labels
 
   override def fit(dataset: DataFrame): StringIndexerModel = {
     val counts = dataset.select(col($(inputCol)).cast(StringType))
@@ -111,6 +115,10 @@ class StringIndexerModel private[ml] (
   }
 
   /** @group setParam */
+  def setSkipInvalid(value: Boolean): this.type = set(skipInvalid, value)
+  setDefault(skipInvalid, false)
+
+  /** @group setParam */
   def setInputCol(value: String): this.type = set(inputCol, value)
 
   /** @group setParam */
@@ -127,14 +135,27 @@ class StringIndexerModel private[ml] (
       if (labelToIndex.contains(label)) {
         labelToIndex(label)
       } else {
-        // TODO: handle unseen labels
-        throw new SparkException(s"Unseen label: $label.")
+        if (!getSkipInvalid) {
+          throw new SparkException(s"Unseen label: $label.")
+        } else {
+          throw new SparkException(s"Unseen label even when pre-filtering: $label.")
+        }
       }
     }
+
     val outputColName = $(outputCol)
     val metadata = NominalAttribute.defaultAttr
       .withName(outputColName).withValues(labels).toMetadata()
-    dataset.select(col("*"),
+    // If we are skipping invalid records, filter them out.
+    val filteredDataset = if (getSkipInvalid) {
+      val filterer = udf { label: String =>
+        labelToIndex.contains(label)
+      }
+      dataset.where(filterer(dataset($(inputCol))))
+    } else {
+      dataset
+    }
+    filteredDataset.select(col("*"),
       indexer(dataset($(inputCol)).cast(StringType)).as(outputColName, metadata))
   }
 
