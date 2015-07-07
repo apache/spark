@@ -248,6 +248,7 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
     }
     handler.updateResourceRequests()
     handler.processCompletedContainers(statuses.toSeq)
+    handler.updateResourceRequests()
     handler.getNumExecutorsRunning should be (0)
     handler.getNumPendingAllocate should be (2)
     handler.getNumExecutorsFailed should be (2)

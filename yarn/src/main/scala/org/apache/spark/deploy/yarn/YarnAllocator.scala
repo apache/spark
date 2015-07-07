@@ -457,11 +457,11 @@ private[yarn] class YarnAllocator(
   }
 
   private[yarn] def notifyBackend(executorId: String, containerId: ContainerId): Unit = {
+    numUnexpectedContainerRelease += 1
     if (null != backend) {
       backend.removeExecutor(executorId,
         "Yarn deallocated the executor (" + executorId + ") container " + containerId)
     }
-    numUnexpectedContainerRelease += 1
   }
 
   private[yarn] def getNumUnexpectedContainerRelease = numUnexpectedContainerRelease
