@@ -147,7 +147,9 @@ class FileInputDStream[K, V, F <: NewInputFormat[K, V]](
     recentlySelectedFiles ++= newFiles
     val rdds = Some(filesToRDD(newFiles))
     // Copy newFiles to immutable.List to prevent from being modified by the user
-    val metadata = Map("files" -> newFiles.toList, "Description" -> newFiles.mkString("\n"))
+    val metadata = Map(
+      "files" -> newFiles.toList,
+      StreamInputInfo.METADATA_KEY_DESCRIPTION -> newFiles.mkString("\n"))
     val inputInfo = StreamInputInfo(id, 0, metadata)
     ssc.scheduler.inputInfoTracker.reportInfo(validTime, inputInfo)
     rdds

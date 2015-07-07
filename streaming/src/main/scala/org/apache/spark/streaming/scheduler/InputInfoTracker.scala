@@ -33,11 +33,21 @@ import org.apache.spark.streaming.{Time, StreamingContext}
  *                 "Description" which maps to the content that will be shown in the UI.
  */
 @DeveloperApi
-private[streaming] case class StreamInputInfo(
+case class StreamInputInfo(
     inputStreamId: Int, numRecords: Long, metadata: Map[String, Any] = Map.empty) {
   require(numRecords >= 0, "numRecords must not be negative")
 
-  def metadataDescription: Option[String] = metadata.get("Description").map(_.toString)
+  def metadataDescription: Option[String] =
+    metadata.get(StreamInputInfo.METADATA_KEY_DESCRIPTION).map(_.toString)
+}
+
+@DeveloperApi
+object StreamInputInfo {
+
+  /**
+   * The key for description in `StreamInputInfo.metadata`.
+   */
+  val METADATA_KEY_DESCRIPTION: String = "Description"
 }
 
 /**

@@ -51,7 +51,7 @@ class StreamingJobProgressListenerSuite extends TestSuiteBase with Matchers {
 
     val streamIdToInputInfo = Map(
       0 -> StreamInputInfo(0, 300L),
-      1 -> StreamInputInfo(1, 300L, Map("Description" -> "test")))
+      1 -> StreamInputInfo(1, 300L, Map(StreamInputInfo.METADATA_KEY_DESCRIPTION -> "test")))
 
     // onBatchSubmitted
     val batchInfoSubmitted = BatchInfo(Time(1000), streamIdToInputInfo, 1000, None, None)
@@ -98,7 +98,7 @@ class StreamingJobProgressListenerSuite extends TestSuiteBase with Matchers {
     batchUIData.get.totalDelay should be (batchInfoStarted.totalDelay)
     batchUIData.get.streamIdToInputInfo should be (Map(
       0 -> StreamInputInfo(0, 300L),
-      1 -> StreamInputInfo(1, 300L, Map("Description" -> "test"))))
+      1 -> StreamInputInfo(1, 300L, Map(StreamInputInfo.METADATA_KEY_DESCRIPTION -> "test"))))
     batchUIData.get.numRecords should be(600)
     batchUIData.get.outputOpIdSparkJobIdPairs should be
       Seq(OutputOpIdAndSparkJobId(0, 0),

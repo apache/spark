@@ -124,12 +124,17 @@ class DirectKafkaInputDStream[
       val uo = untilOffsets(tp)
       OffsetRange(tp.topic, tp.partition, fo, uo.offset)
     }
-    val description = offsetRanges.map { offsetRange =>
+    val description = offsetRanges.filter { offsetRange =>
+      // Don't display empty ranges.
+      offsetRange.fromOffset != offsetRange.untilOffset
+    }.map { offsetRange =>
       s"topic: ${offsetRange.topic}\tpartition: ${offsetRange.partition}\t" +
-        s"range: [${offsetRange.fromOffset}, ${offsetRange.untilOffset})"
+        s"offsets: ${offsetRange.fromOffset} to ${offsetRange.untilOffset}"
     }.mkString("\n")
     // Copy offsetRanges to immutable.List to prevent from being modified by the user
-    val metadata = Map("offsets" -> offsetRanges.toList, "Description" -> description)
+    val metadata = Map(
+      "offsets" -> offsetRanges.toList,
+      StreamInputInfo.METADATA_KEY_DESCRIPTION -> description)
     val inputInfo = StreamInputInfo(id, rdd.count, metadata)
     ssc.scheduler.inputInfoTracker.reportInfo(validTime, inputInfo)
 
