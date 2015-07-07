@@ -28,7 +28,7 @@ import org.apache.hadoop.hive.serde2.objectinspector.primitive.PrimitiveObjectIn
 import org.apache.hadoop.hive.serde2.objectinspector.{ObjectInspector, ObjectInspectorFactory}
 import org.apache.hadoop.hive.serde2.{AbstractSerDe, SerDeStats}
 import org.apache.hadoop.io.Writable
-import org.apache.spark.sql.{QueryTest, Row}
+import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.hive.test.TestHive
 
 import org.apache.spark.util.Utils
@@ -130,6 +130,36 @@ class HiveUDFSuite extends QueryTest {
       Seq(Row("1"), Row("2")))
     sql("DROP TEMPORARY FUNCTION IF EXISTS testUDFIntegerToString")
 
+    TestHive.reset()
+  }
+
+  test("UDFToListString") {
+    val testData = TestHive.sparkContext.parallelize(StringCaseClass("") :: Nil).toDF()
+    testData.registerTempTable("inputTable")
+
+    sql(s"CREATE TEMPORARY FUNCTION testUDFToListString AS '${classOf[UDFToListString].getName}'")
+    val errMsg = intercept[AnalysisException] {
+      sql("SELECT testUDFToListString(s) FROM inputTable")
+    }
+    assert(errMsg.getMessage === "List type in java is unsupported because " +
+      "JVM type erasure makes spark fail to catch a component type in List<>;")
+
+    sql("DROP TEMPORARY FUNCTION IF EXISTS testUDFToListString")
+    TestHive.reset()
+  }
+
+  test("UDFToListInt") {
+    val testData = TestHive.sparkContext.parallelize(StringCaseClass("") :: Nil).toDF()
+    testData.registerTempTable("inputTable")
+
+    sql(s"CREATE TEMPORARY FUNCTION testUDFToListInt AS '${classOf[UDFToListInt].getName}'")
+    val errMsg = intercept[AnalysisException] {
+      sql("SELECT testUDFToListInt(s) FROM inputTable")
+    }
+    assert(errMsg.getMessage === "List type in java is unsupported because " +
+      "JVM type erasure makes spark fail to catch a component type in List<>;")
+
+    sql("DROP TEMPORARY FUNCTION IF EXISTS testUDFToListInt")
     TestHive.reset()
   }
 
