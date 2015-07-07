@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.util.collection.ExternalSorter
+import org.apache.spark.util.collection.unsafe.sort.PrefixComparator
 import org.apache.spark.util.{CompletionIterator, MutablePair}
 import org.apache.spark.{HashPartitioner, SparkEnv}
 
@@ -274,7 +275,18 @@ case class UnsafeExternalSort(
     def doSort(iterator: Iterator[InternalRow]): Iterator[InternalRow] = {
       val ordering = newOrdering(sortOrder, child.output)
       val boundSortExpression = BindReferences.bindReference(sortOrder.head, child.output)
-      val prefixComparator = SortPrefixUtils.getPrefixComparator(boundSortExpression)
+      // Hack until we generate separate comparator implementations for ascending vs. descending
+      // (or choose to codegen them):
+      val prefixComparator = {
+        val comp = SortPrefixUtils.getPrefixComparator(boundSortExpression)
+        if (sortOrder.head.direction == Descending) {
+          new PrefixComparator {
+            override def compare(p1: Long, p2: Long): Int = -1 * comp.compare(p1, p2)
+          }
+        } else {
+          comp
+        }
+      }
       val prefixComputer = {
         val prefixComputer = SortPrefixUtils.getPrefixComputer(boundSortExpression)
         new UnsafeExternalRowSorter.PrefixComputer {
