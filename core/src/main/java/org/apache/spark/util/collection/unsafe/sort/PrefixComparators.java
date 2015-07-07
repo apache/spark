@@ -103,7 +103,7 @@ public class PrefixComparators {
       return Float.floatToIntBits(value) & 0xffffffffL;
     }
 
-    public final long NULL_PREFIX = computePrefix(Float.MIN_VALUE);
+    public final long NULL_PREFIX = computePrefix(Float.NEGATIVE_INFINITY);
   }
 
   public static final class DoublePrefixComparator extends PrefixComparator {
@@ -118,6 +118,6 @@ public class PrefixComparators {
       return Double.doubleToLongBits(value);
     }
 
-    public final long NULL_PREFIX = computePrefix(Double.MIN_VALUE);
+    public final long NULL_PREFIX = computePrefix(Double.NEGATIVE_INFINITY);
   }
 }
