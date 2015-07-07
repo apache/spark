@@ -141,9 +141,9 @@ object DecisionTreeModel extends Loader[DecisionTreeModel] with Logging {
         feature: Int,
         threshold: Double,
         featureType: Int,
-        categories: Seq[Double]) { // TODO: Change to List once SPARK-3365 is fixed
+        categories: Set[Double]) { // TODO: Change to List once SPARK-3365 is fixed
       def toSplit: Split = {
-        new Split(feature, threshold, FeatureType(featureType), categories.toList)
+        new Split(feature, threshold, FeatureType(featureType), categories.toSet)
       }
     }
 
@@ -153,7 +153,7 @@ object DecisionTreeModel extends Loader[DecisionTreeModel] with Logging {
       }
 
       def apply(r: Row): SplitData = {
-        SplitData(r.getInt(0), r.getDouble(1), r.getInt(2), r.getAs[Seq[Double]](3))
+        SplitData(r.getInt(0), r.getDouble(1), r.getInt(2), r.getAs[Set[Double]](3))
       }
     }
 

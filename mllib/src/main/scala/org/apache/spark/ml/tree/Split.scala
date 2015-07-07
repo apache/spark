@@ -108,7 +108,7 @@ final class CategoricalSplit private[ml] (
     } else {
       setComplement(categories)
     }
-    OldSplit(featureIndex, threshold = 0.0, OldFeatureType.Categorical, oldCats.toList)
+    OldSplit(featureIndex, threshold = 0.0, OldFeatureType.Categorical, oldCats.toSet)
   }
 
   /** Get sorted categories which split to the left */
@@ -154,6 +154,6 @@ final class ContinuousSplit private[ml] (override val featureIndex: Int, val thr
   }
 
   override private[tree] def toOld: OldSplit = {
-    OldSplit(featureIndex, threshold, OldFeatureType.Continuous, List.empty[Double])
+    OldSplit(featureIndex, threshold, OldFeatureType.Continuous, Set.empty[Double])
   }
 }

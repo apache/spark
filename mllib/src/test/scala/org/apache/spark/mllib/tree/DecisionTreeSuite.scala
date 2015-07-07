@@ -992,10 +992,10 @@ object DecisionTreeSuite extends SparkFunSuite {
     featureType match {
       case Continuous =>
         node.split = Some(new Split(feature = 0, threshold = 0.5, Continuous,
-          categories = List.empty[Double]))
+          categories = Set.empty[Double]))
       case Categorical =>
         node.split = Some(new Split(feature = 1, threshold = 0.0, Categorical,
-          categories = List(0.0, 1.0)))
+          categories = Set(0.0, 1.0)))
     }
     // TODO: The information gain stats should be consistent with info in children: SPARK-7131
     node.stats = Some(new InformationGainStats(gain = 0.1, impurity = 0.2,
