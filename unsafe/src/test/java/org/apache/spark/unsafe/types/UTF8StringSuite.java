@@ -39,7 +39,6 @@ public class UTF8StringSuite {
 
     assertEquals(s1.hashCode(), s2.hashCode());
 
-    assertEquals(s1.compare(s2), 0);
     assertEquals(s1.compareTo(s2), 0);
 
     assertEquals(s1.contains(s2), true);
@@ -56,17 +55,17 @@ public class UTF8StringSuite {
   }
 
   @Test
-  public void compare() {
-    assertTrue(fromString("abc").compare(fromString("ABC")) > 0);
-    assertTrue(fromString("abc0").compare(fromString("abc")) > 0);
-    assertTrue(fromString("abcabcabc").compare(fromString("abcabcabc")) == 0);
-    assertTrue(fromString("aBcabcabc").compare(fromString("Abcabcabc")) > 0);
-    assertTrue(fromString("Abcabcabc").compare(fromString("abcabcabC")) < 0);
-    assertTrue(fromString("abcabcabc").compare(fromString("abcabcabC")) > 0);
+  public void compareTo() {
+    assertTrue(fromString("abc").compareTo(fromString("ABC")) > 0);
+    assertTrue(fromString("abc0").compareTo(fromString("abc")) > 0);
+    assertTrue(fromString("abcabcabc").compareTo(fromString("abcabcabc")) == 0);
+    assertTrue(fromString("aBcabcabc").compareTo(fromString("Abcabcabc")) > 0);
+    assertTrue(fromString("Abcabcabc").compareTo(fromString("abcabcabC")) < 0);
+    assertTrue(fromString("abcabcabc").compareTo(fromString("abcabcabC")) > 0);
 
-    assertTrue(fromString("abc").compare(fromString("世界")) < 0);
-    assertTrue(fromString("你好").compare(fromString("世界")) > 0);
-    assertTrue(fromString("你好123").compare(fromString("你好122")) > 0);
+    assertTrue(fromString("abc").compareTo(fromString("世界")) < 0);
+    assertTrue(fromString("你好").compareTo(fromString("世界")) > 0);
+    assertTrue(fromString("你好123").compareTo(fromString("你好122")) > 0);
   }
 
   protected void testUpperandLower(String upper, String lower) {
@@ -89,6 +88,7 @@ public class UTF8StringSuite {
 
   @Test
   public void contains() {
+    assertTrue(fromString("").contains(fromString("")));
     assertTrue(fromString("hello").contains(fromString("ello")));
     assertFalse(fromString("hello").contains(fromString("vello")));
     assertFalse(fromString("hello").contains(fromString("hellooo")));
@@ -99,6 +99,7 @@ public class UTF8StringSuite {
 
   @Test
   public void startsWith() {
+    assertTrue(fromString("").startsWith(fromString("")));
     assertTrue(fromString("hello").startsWith(fromString("hell")));
     assertFalse(fromString("hello").startsWith(fromString("ell")));
     assertFalse(fromString("hello").startsWith(fromString("hellooo")));
@@ -109,6 +110,7 @@ public class UTF8StringSuite {
 
   @Test
   public void endsWith() {
+    assertTrue(fromString("").endsWith(fromString("")));
     assertTrue(fromString("hello").endsWith(fromString("ello")));
     assertFalse(fromString("hello").endsWith(fromString("ellov")));
     assertFalse(fromString("hello").endsWith(fromString("hhhello")));

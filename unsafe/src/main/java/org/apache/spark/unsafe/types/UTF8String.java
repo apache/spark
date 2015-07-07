@@ -49,6 +49,8 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
     6, 6, 6, 6};
 
   /**
+   * Creates an UTF8String from byte array, which should be encoded in UTF-8.
+   *
    * Note: `bytes` will be hold by returned UTF8String.
    */
   public static UTF8String fromBytes(byte[] bytes) {
@@ -59,6 +61,9 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
     }
   }
 
+  /**
+   * Creates an UTF8String from String.
+   */
   public static UTF8String fromString(String str) {
     if (str == null) return null;
     try {
@@ -71,7 +76,7 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
     }
   }
 
-  public UTF8String(Object base, long offset, int size) {
+  protected UTF8String(Object base, long offset, int size) {
     this.base = base;
     this.offset = offset;
     this.numBytes = size;
@@ -81,47 +86,9 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
    * Returns the number of bytes for a code point with the first byte as `b`
    * @param b The first byte of a code point
    */
-  public static int numBytesForFirstByte(final byte b) {
+  private static int numBytesForFirstByte(final byte b) {
     final int offset = (b & 0xFF) - 192;
     return (offset >= 0) ? bytesOfCodePointInUTF8[offset] : 1;
-  }
-
-  /**
-   * Returns the code point that starts at `start`
-   */
-  private int codePointAt(int start, int num) {
-    byte first = getByte(start);
-    if (num == 1) {
-      return (int) first;
-    } else if (num == 2)  {
-      return ((first & 0x1F) << 6) | (getByte(start + 1) & 0x3F);
-    } else {
-      int code = first & ((1 << (7 - num)) - 1);
-      for (int i = 1; i < num; i ++) {
-        code <<= 6;
-        code += getByte(start + i) & 0x3F;
-      }
-      return code;
-    }
-  }
-
-  /**
-   * Update code point using UTF-8 encoding at (base, offset).
-   */
-  private static void updateCodePoint(Object base, long offset, int code, int num) {
-    if (num == 1) {
-      UNSAFE.putByte(base, offset, (byte) code);
-    } else if (num == 2) {
-      UNSAFE.putByte(base, offset, (byte) ((code >> 6) & 0x1F | 0xC0));
-      UNSAFE.putByte(base, offset + 1, (byte) (code & 0x3F | 0x80));
-    } else {
-      for (int i = 1; i < num; i++) {
-        UNSAFE.putByte(base, offset + num - i, (byte) (code & 0x3F | 0x80));
-        code >>>= 6;
-      }
-      int first = (code & ((1 << (7 - num)) - 1)) + ~((1 << (8 - num)) - 1);
-      UNSAFE.putByte(base, offset, (byte) first);
-    }
   }
 
   /**
@@ -166,7 +133,7 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
    */
   public UTF8String substring(final int start, final int until) {
     if (until <= start || start >= numBytes) {
-      return UTF8String.fromBytes(new byte[0]);
+      return fromBytes(new byte[0]);
     }
 
     int i = 0;
@@ -187,6 +154,9 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
     return fromBytes(bytes);
   }
 
+  /**
+   * Returns whether this contains `substring` or not.
+   */
   public boolean contains(final UTF8String substring) {
     if (substring.numBytes == 0) {
       return true;
@@ -201,6 +171,9 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
     return false;
   }
 
+  /**
+   * Returns the byte at position `i`.
+   */
   private byte getByte(int i) {
     return UNSAFE.getByte(base, offset + i);
   }
@@ -218,6 +191,46 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
 
   public boolean endsWith(final UTF8String suffix) {
     return matchAt(suffix, numBytes - suffix.numBytes);
+  }
+
+  private static int mask(int numBits) {
+    return (1 << numBits) - 1;
+  }
+
+  /**
+   * Returns the code point that starts at `start`
+   */
+  private int codePointAt(int start, int num) {
+    byte first = getByte(start);
+    if (num == 1) {
+      return (int) first;
+    } else if (num == 2)  {
+      // fast path
+      return ((first & 0x1F) << 6) | (getByte(start + 1) & 0x3F);
+    } else {
+      int code = first & mask(7 - num);
+      for (int i = 1; i < num; i ++) {
+        code <<= 6;
+        code += getByte(start + i) & 0x3F;
+      }
+      return code;
+    }
+  }
+
+  /**
+   * Update code point using UTF-8 encoding at (base, offset).
+   */
+  private static void updateCodePoint(Object base, long offset, int code, int num) {
+    if (num == 1) {
+      UNSAFE.putByte(base, offset, (byte) code);
+    } else {
+      for (int i = 1; i < num; i++) {
+        UNSAFE.putByte(base, offset + num - i, (byte) (code & 0x3F | 0x80));
+        code >>>= 6;
+      }
+      int first = (code & mask(7 - num)) | ~mask(8 - num);
+      UNSAFE.putByte(base, offset, (byte) first);
+    }
   }
 
   private static String lang = Locale.getDefault().getLanguage();
@@ -284,7 +297,6 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
   @Override
   public String toString() {
     try {
-      // this is slow
       return new String(getBytes(), "utf-8");
     } catch (UnsupportedEncodingException e) {
       // Turn the exception into unchecked so we can find out about it at runtime, but
@@ -301,7 +313,7 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
 
   @Override
   public int compareTo(final UTF8String other) {
-    int len = numBytes < other.numBytes ? numBytes : other.numBytes;
+    int len = Math.min(numBytes, other.numBytes);
     // TODO: compare 8 bytes as unsigned long
     for (int i = 0; i < len; i ++) {
       // In UTF-8, the byte should be unsigned, so we should compare them as unsigned int.
@@ -311,10 +323,6 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
       }
     }
     return numBytes - other.numBytes;
-  }
-
-  public int compare(final UTF8String other) {
-    return compareTo(other);
   }
 
   @Override
