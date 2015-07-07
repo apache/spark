@@ -37,7 +37,6 @@ class UnsafeExternalSortSuite extends SparkPlanTest with BeforeAndAfterAll {
   }
 
   // Test sorting on different data types
-  // TODO: randomized spilling to ensure that merging is tested at least once for every data type.
   for (
     dataType <- DataTypeTestUtils.atomicTypes ++ Set(NullType);
     nullable <- Seq(true, false);
@@ -57,8 +56,8 @@ class UnsafeExternalSortSuite extends SparkPlanTest with BeforeAndAfterAll {
       assert(UnsafeExternalSort.supportsSchema(inputDf.schema))
       checkAnswer(
         inputDf,
-        UnsafeExternalSort(sortOrder, global = false, _: SparkPlan, testSpillFrequency = 3),
-        Sort(sortOrder, global = false, _: SparkPlan),
+        UnsafeExternalSort(sortOrder, global = true, _: SparkPlan, testSpillFrequency = 3),
+        Sort(sortOrder, global = true, _: SparkPlan),
         sortAnswers = false
       )
     }
