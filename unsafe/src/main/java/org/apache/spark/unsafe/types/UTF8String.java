@@ -233,16 +233,16 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
     }
   }
 
-  private static String lang = Locale.getDefault().getLanguage();
-  private static boolean localeDependent = lang == "tr" || lang == "az" || lang == "lt";
+  private static final String lang = Locale.getDefault().getLanguage();
+  private static final boolean localeDependent = lang == "tr" || lang == "az" || lang == "lt";
 
   /**
    * Returns the upper case of this string
    */
   public UTF8String toUpperCase() {
     if (localeDependent) {
-      // fallback to String.toLowerCase() to handle locale
-      return fromString(toString().toLowerCase());
+      // fallback to String.toUpperCase() to handle locale
+      return fromString(toString().toUpperCase());
     }
 
     byte[] buf = null;
@@ -251,10 +251,6 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
       int code = codePointAt(i, n);
       int upper = Character.toUpperCase(code);
       if (upper != code) {
-        if (localeDependent) {
-          // fallback to String.toUpperCase() to handle locale
-          return fromString(toString().toUpperCase());
-        }
         if (buf == null) {
           // It's always have the same number of bytes for upper case
           buf = new byte[numBytes];
