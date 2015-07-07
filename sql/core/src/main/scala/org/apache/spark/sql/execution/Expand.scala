@@ -48,7 +48,7 @@ case class Expand(
       // workers via closure. However we can't assume the Projection
       // is serializable because of the code gen, so we have to
       // create the projections within each of the partition processing.
-      val groups = projections.map(ee => newProjection(ee, child.output)).toArray
+      val groups = projections.map(ee => newMutableProjection(ee, child.output)()).toArray
 
       new Iterator[InternalRow] {
         private[this] var result: InternalRow = _

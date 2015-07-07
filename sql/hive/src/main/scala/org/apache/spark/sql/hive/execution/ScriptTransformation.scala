@@ -18,7 +18,6 @@
 package org.apache.spark.sql.hive.execution
 
 import java.io.{BufferedReader, DataInputStream, DataOutputStream, EOFException, InputStreamReader}
-import java.lang.ProcessBuilder.Redirect
 import java.util.Properties
 
 import scala.collection.JavaConversions._
@@ -148,7 +147,7 @@ case class ScriptTransformation(
 
       val (inputSerde, inputSoi) = ioschema.initInputSerDe(input)
       val dataOutputStream = new DataOutputStream(outputStream)
-      val outputProjection = new InterpretedProjection(input, child.output)
+      val outputProjection = newMutableProjection(input, child.output)()
 
       // TODO make the 2048 configurable?
       val stderrBuffer = new CircularBuffer(2048)
@@ -165,9 +164,7 @@ case class ScriptTransformation(
       new Thread(new Runnable() {
         override def run(): Unit = {
           Utils.tryWithSafeFinally {
-            iter
-              .map(outputProjection)
-              .foreach { row =>
+            iter.map(outputProjection).foreach { row =>
               if (inputSerde == null) {
                 val data = row.mkString("", ioschema.inputRowFormatMap("TOK_TABLEROWFORMATFIELD"),
                   ioschema.inputRowFormatMap("TOK_TABLEROWFORMATLINES")).getBytes("utf-8")

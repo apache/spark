@@ -23,7 +23,7 @@ import scala.collection.mutable
 
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce._
-import org.apache.hadoop.mapreduce.lib.output.{FileOutputCommitter => MapReduceFileOutputCommitter, FileOutputFormat}
+import org.apache.hadoop.mapreduce.lib.output.{FileOutputFormat, FileOutputCommitter => MapReduceFileOutputCommitter}
 
 import org.apache.spark._
 import org.apache.spark.mapred.SparkHadoopMapRedUtil
@@ -31,7 +31,7 @@ import org.apache.spark.mapreduce.SparkHadoopMapReduceUtil
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.codegen.GenerateProjection
+import org.apache.spark.sql.catalyst.expressions.codegen.GenerateMutableProjection
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
 import org.apache.spark.sql.execution.RunnableCommand
 import org.apache.spark.sql.types.StructType
@@ -234,8 +234,8 @@ private[sql] case class InsertIntoHadoopFsRelation(
       try {
         writerContainer.executorSideSetup(taskContext)
 
-        val partitionProj = newProjection(codegenEnabled, partitionOutput, output)
-        val dataProj = newProjection(codegenEnabled, dataOutput, output)
+        val partitionProj = newMutableProjection(codegenEnabled, partitionOutput, output)
+        val dataProj = newMutableProjection(codegenEnabled, dataOutput, output)
 
         val dataConverter: InternalRow => Row = if (needsConversion) {
           CatalystTypeConverters.createToScalaConverter(dataSchema).asInstanceOf[InternalRow => Row]
@@ -264,16 +264,16 @@ private[sql] case class InsertIntoHadoopFsRelation(
   }
 
   // This is copied from SparkPlan, probably should move this to a more general place.
-  private def newProjection(
+  private def newMutableProjection(
       codegenEnabled: Boolean,
       expressions: Seq[Expression],
-      inputSchema: Seq[Attribute]): Projection = {
+      inputSchema: Seq[Attribute]): MutableProjection = {
     log.debug(
       s"Creating Projection: $expressions, inputSchema: $inputSchema, codegen:$codegenEnabled")
     if (codegenEnabled) {
-      GenerateProjection.generate(expressions, inputSchema)
+      GenerateMutableProjection.generate(expressions, inputSchema)()
     } else {
-      new InterpretedProjection(expressions, inputSchema)
+      new InterpretedMutableProjection(expressions, inputSchema)
     }
   }
 }
