@@ -36,7 +36,7 @@ final class TestClassificationModel(
   override def predictRaw(input: Vector): Vector = {
     input
   }
-  def friendlyPredict(input: Vector): Vector = {
+  def friendlyPredict(input: Vector): Double = {
     predict(input)
   }
 }
