@@ -205,13 +205,13 @@ class LinearRegression(override val uid: String)
     if (handlePersistence) instances.unpersist()
 
     // TODO: Converts to sparse format based on the storage, but may base on the scoring speed.
-    val model = new LinearRegressionModel(uid, weights.compressed, intercept)
+    val model = copyValues(new LinearRegressionModel(uid, weights.compressed, intercept))
     val trainingSummary = new LinearRegressionTrainingSummary(
       model.transform(dataset).select($(predictionCol), $(labelCol)),
       $(predictionCol),
       $(labelCol),
       objectiveTrace.result())
-    copyValues(model.setSummary(trainingSummary))
+    model.setSummary(trainingSummary)
   }
 
   override def copy(extra: ParamMap): LinearRegression = defaultCopy(extra)
