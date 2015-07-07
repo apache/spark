@@ -291,7 +291,7 @@ object CheckpointReader extends Logging {
       conf: SparkConf,
       hadoopConf: Configuration,
       ignoreReadError: Boolean = false): Option[Checkpoint] = {
-    loginUserIfConfExsis(conf)
+    loginUserIfConfExists(conf)
     val checkpointPath = new Path(checkpointDir)
 
     // TODO(rxin): Why is this a def?!
@@ -331,7 +331,7 @@ object CheckpointReader extends Logging {
    * If using the keytab to login user in security mode, this checkpoint application has to login
    * before reading files from hdfs.
    */
-  private def loginUserIfConfExsis(conf: SparkConf): Unit = {
+  private def loginUserIfConfExists(conf: SparkConf): Unit = {
     for(principal <- conf.getOption("spark.yarn.principal");
       keytab <- conf.getOption("spark.yarn.keytab")) {
       UserGroupInformation.loginUserFromKeytab(principal, keytab)
