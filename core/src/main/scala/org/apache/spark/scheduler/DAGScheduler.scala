@@ -1126,7 +1126,10 @@ class DAGScheduler(
       case FetchFailed(bmAddress, shuffleId, mapId, reduceId, failureMessage) =>
         val failedStage = stageIdToStage(task.stageId)
         val mapStage = shuffleToMapStage(shuffleId)
-        if (failedStage.attemptId - 1 > task.stageAttemptId) {
+
+        // failedStage.attemptId is already on the next attempt, so we have to use
+        // failedStage.latestInfo.attemptId
+        if (failedStage.latestInfo.attemptId != task.stageAttemptId) {
           logInfo(s"Ignoring fetch failure from $task as it's from $failedStage attempt" +
             s" ${task.stageAttemptId}, which has already failed")
         } else {

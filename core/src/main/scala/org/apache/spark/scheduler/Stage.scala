@@ -77,7 +77,13 @@ private[spark] abstract class Stage(
     id
   }
 
-  def attemptId: Int = nextAttemptId
+  /**
+   * The id for the **next** stage attempt.
+   *
+   * The unusual meaning of this method means its unlikely to hold the value you are interested in
+   * -- you probably want to use [[latestInfo.attemptId]]
+   */
+  private[spark] def attemptId: Int = nextAttemptId
 
   override final def hashCode(): Int = id
   override final def equals(other: Any): Boolean = other match {
