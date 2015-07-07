@@ -34,14 +34,13 @@ import org.apache.spark.unsafe.memory.TaskMemoryManager;
 
 public class UnsafeInMemorySorterSuite {
 
-  private static String getStringFromDataPage(Object baseObject, long baseOffset) {
-    final int strLength = PlatformDependent.UNSAFE.getInt(baseObject, baseOffset);
-    final byte[] strBytes = new byte[strLength];
+  private static String getStringFromDataPage(Object baseObject, long baseOffset, int length) {
+    final byte[] strBytes = new byte[length];
     PlatformDependent.copyMemory(
       baseObject,
-      baseOffset + 4,
+      baseOffset,
       strBytes,
-      PlatformDependent.BYTE_ARRAY_OFFSET, strLength);
+      PlatformDependent.BYTE_ARRAY_OFFSET, length);
     return new String(strBytes);
   }
 
@@ -116,7 +115,7 @@ public class UnsafeInMemorySorterSuite {
       // position now points to the start of a record (which holds its length).
       final int recordLength = PlatformDependent.UNSAFE.getInt(baseObject, position);
       final long address = memoryManager.encodePageNumberAndOffset(dataPage, position);
-      final String str = getStringFromDataPage(baseObject, position);
+      final String str = getStringFromDataPage(baseObject, position + 4, recordLength);
       final int partitionId = hashPartitioner.getPartition(str);
       sorter.insertRecord(address, partitionId);
       position += 4 + recordLength;
@@ -127,9 +126,8 @@ public class UnsafeInMemorySorterSuite {
     Arrays.sort(dataToSort);
     while (iter.hasNext()) {
       iter.loadNext();
-      // TODO: the logic for how we manipulate record length offsets here is confusing; clean
-      // this up and clarify it in comments.
-      final String str = getStringFromDataPage(iter.getBaseObject(), iter.getBaseOffset() - 4);
+      final String str =
+        getStringFromDataPage(iter.getBaseObject(), iter.getBaseOffset(), iter.getRecordLength());
       final long keyPrefix = iter.getKeyPrefix();
       assertThat(str, isIn(Arrays.asList(dataToSort)));
       assertThat(keyPrefix, greaterThanOrEqualTo(prevPrefix));

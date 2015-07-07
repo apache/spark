@@ -156,6 +156,7 @@ public final class UnsafeInMemorySorter {
 
     @Override
     public void loadNext() {
+      // This pointer points to a 4-byte record length, followed by the record's bytes
       final long recordPointer = sortBuffer[position];
       baseObject = memoryManager.getPage(recordPointer);
       baseOffset = memoryManager.getOffsetInPage(recordPointer) + 4;  // Skip over record length

@@ -91,6 +91,14 @@ final class UnsafeSorterSpillWriter {
     writeBuffer[offset + 3] = (byte)(v >>>  0);
   }
 
+  /**
+   * Write a record to a spill file.
+   *
+   * @param baseObject the base object / memory page containing the record
+   * @param baseOffset the base offset which points directly to the record data.
+   * @param recordLength the length of the record.
+   * @param keyPrefix a sort key prefix
+   */
   public void write(
       Object baseObject,
       long baseOffset,
@@ -105,8 +113,8 @@ final class UnsafeSorterSpillWriter {
     writeIntToBuffer(recordLength, 0);
     writeLongToBuffer(keyPrefix, 4);
     int dataRemaining = recordLength;
-    int freeSpaceInWriteBuffer = DISK_WRITE_BUFFER_SIZE - 4 - 8;
-    long recordReadPosition = baseOffset + 4; // skip over record length
+    int freeSpaceInWriteBuffer = DISK_WRITE_BUFFER_SIZE - 4 - 8; // space used by prefix + len
+    long recordReadPosition = baseOffset;
     while (dataRemaining > 0) {
       final int toTransfer = Math.min(freeSpaceInWriteBuffer, dataRemaining);
       PlatformDependent.copyMemory(
