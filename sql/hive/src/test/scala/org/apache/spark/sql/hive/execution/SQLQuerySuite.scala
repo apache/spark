@@ -19,9 +19,11 @@ package org.apache.spark.sql.hive.execution
 
 import java.sql.{Date, Timestamp}
 
+import scala.collection.JavaConversions._
+
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.DefaultParserDialect
-import org.apache.spark.sql.catalyst.analysis.EliminateSubQueries
+import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, EliminateSubQueries}
 import org.apache.spark.sql.catalyst.errors.DialectException
 import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.hive.test.TestHive._
@@ -133,6 +135,42 @@ class SQLQuerySuite extends QueryTest {
           |  on ao.state = orders.state and ao.month = orders.month
         """.stripMargin),
       (1 to 6).map(_ => Row("CA", 20151)))
+  }
+
+  test("show functions") {
+    val allFunctions =
+      (FunctionRegistry.builtin.listFunction().toSet[String] ++
+        org.apache.hadoop.hive.ql.exec.FunctionRegistry.getFunctionNames).toList.sorted
+    checkAnswer(sql("SHOW functions"), allFunctions.map(Row(_)))
+  }
+
+  test("describe functions") {
+    // The Spark SQL built-in functions
+    checkExistence(sql("describe function extended upper"), true,
+      "Function: upper",
+      "Class: org.apache.spark.sql.catalyst.expressions.Upper",
+      "Usage: upper(str) - Returns str with all characters changed to uppercase",
+      "Extended Usage: > SELECT upper('SparkSql') FROM src LIMIT 1;",
+      "'SPARKSQL'")
+
+    checkExistence(sql("describe functioN Upper"), true,
+      "Function: upper",
+      "Class: org.apache.spark.sql.catalyst.expressions.Upper",
+      "Usage: upper(str) - Returns str with all characters changed to uppercase")
+
+    checkExistence(sql("describe functioN Upper"), false,
+      "Extended Usage")
+
+    checkExistence(sql("describe functioN abcadf"), true,
+      "Function: abcadf is not found.")
+
+    // The Hive built-in functions which is not implemented by Spark SQL
+    checkExistence(sql("describe function extended array_contains"), true,
+      "Function: array_contains",
+      "Class: org.apache.hadoop.hive.ql.udf.generic.GenericUDFArrayContains",
+      "Usage: array_contains(array, value) - Returns TRUE if the array contains value.",
+      "Extended Usage: Example:",
+      "SELECT array_contains(array(1, 2, 3), 2) FROM src LIMIT 1;")
   }
 
   test("SPARK-5371: union with null and sum") {

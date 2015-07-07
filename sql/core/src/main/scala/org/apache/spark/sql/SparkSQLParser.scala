@@ -21,7 +21,7 @@ import scala.util.parsing.combinator.RegexParsers
 
 import org.apache.spark.sql.catalyst.AbstractSparkSQLParser
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.plans.logical.{DescribeFunction, LogicalPlan, ShowFunctions}
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.types.StringType
 
@@ -57,6 +57,10 @@ private[sql] class SparkSQLParser(fallback: String => LogicalPlan) extends Abstr
   protected val AS = Keyword("AS")
   protected val CACHE = Keyword("CACHE")
   protected val CLEAR = Keyword("CLEAR")
+  protected val DESCRIBE = Keyword("DESCRIBE")
+  protected val EXTENDED = Keyword("EXTENDED")
+  protected val FUNCTION = Keyword("FUNCTION")
+  protected val FUNCTIONS = Keyword("FUNCTIONS")
   protected val IN = Keyword("IN")
   protected val LAZY = Keyword("LAZY")
   protected val SET = Keyword("SET")
@@ -65,7 +69,8 @@ private[sql] class SparkSQLParser(fallback: String => LogicalPlan) extends Abstr
   protected val TABLES = Keyword("TABLES")
   protected val UNCACHE = Keyword("UNCACHE")
 
-  override protected lazy val start: Parser[LogicalPlan] = cache | uncache | set | show | others
+  override protected lazy val start: Parser[LogicalPlan] =
+    cache | uncache | set | show | desc | others
 
   private lazy val cache: Parser[LogicalPlan] =
     CACHE ~> LAZY.? ~ (TABLE ~> ident) ~ (AS ~> restInput).? ^^ {
@@ -86,8 +91,17 @@ private[sql] class SparkSQLParser(fallback: String => LogicalPlan) extends Abstr
     }
 
   private lazy val show: Parser[LogicalPlan] =
-    SHOW ~> TABLES ~ (IN ~> ident).? ^^ {
-      case _ ~ dbName => ShowTablesCommand(dbName)
+    ( SHOW ~> TABLES ~ (IN ~> ident).? ^^ {
+        case _ ~ dbName => ShowTablesCommand(dbName)
+      }
+    | SHOW ~> FUNCTIONS ^^ {
+        case _ => ShowFunctions
+      }
+    )
+
+  private lazy val desc: Parser[LogicalPlan] =
+    DESCRIBE ~ FUNCTION ~> EXTENDED.? ~ ident ^^ {
+      case isExtended ~ functionName => DescribeFunction(functionName, isExtended.isDefined)
     }
 
   private lazy val others: Parser[LogicalPlan] =
