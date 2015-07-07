@@ -20,15 +20,16 @@ package org.apache.spark.sql.execution
 import java.io._
 import java.math.{BigDecimal, BigInteger}
 import java.nio.ByteBuffer
-import java.sql.Timestamp
 
 import scala.reflect.ClassTag
 
-import org.apache.spark.serializer._
 import org.apache.spark.Logging
+import org.apache.spark.serializer._
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.catalyst.expressions.{SpecificMutableRow, MutableRow, GenericMutableRow}
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.{MutableRow, SpecificMutableRow}
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * The serialization stream for [[SparkSqlSerializer2]]. It assumes that the object passed in
@@ -86,7 +87,6 @@ private[sql] class Serializer2SerializationStream(
 private[sql] class Serializer2DeserializationStream(
     keySchema: Array[DataType],
     valueSchema: Array[DataType],
-    hasKeyOrdering: Boolean,
     in: InputStream)
   extends DeserializationStream with Logging  {
 
@@ -96,14 +96,9 @@ private[sql] class Serializer2DeserializationStream(
     if (schema == null) {
       () => null
     } else {
-      if (hasKeyOrdering) {
-        // We have key ordering specified in a ShuffledRDD, it is not safe to reuse a mutable row.
-        () => new GenericMutableRow(schema.length)
-      } else {
-        // It is safe to reuse the mutable row.
-        val mutableRow = new SpecificMutableRow(schema)
-        () => mutableRow
-      }
+      // It is safe to reuse the mutable row.
+      val mutableRow = new SpecificMutableRow(schema)
+      () => mutableRow
     }
   }
 
@@ -133,8 +128,7 @@ private[sql] class Serializer2DeserializationStream(
 
 private[sql] class SparkSqlSerializer2Instance(
     keySchema: Array[DataType],
-    valueSchema: Array[DataType],
-    hasKeyOrdering: Boolean)
+    valueSchema: Array[DataType])
   extends SerializerInstance {
 
   def serialize[T: ClassTag](t: T): ByteBuffer =
@@ -151,7 +145,7 @@ private[sql] class SparkSqlSerializer2Instance(
   }
 
   def deserializeStream(s: InputStream): DeserializationStream = {
-    new Serializer2DeserializationStream(keySchema, valueSchema, hasKeyOrdering, s)
+    new Serializer2DeserializationStream(keySchema, valueSchema, s)
   }
 }
 
@@ -164,14 +158,13 @@ private[sql] class SparkSqlSerializer2Instance(
  */
 private[sql] class SparkSqlSerializer2(
     keySchema: Array[DataType],
-    valueSchema: Array[DataType],
-    hasKeyOrdering: Boolean)
+    valueSchema: Array[DataType])
   extends Serializer
   with Logging
   with Serializable{
 
   def newInstance(): SerializerInstance =
-    new SparkSqlSerializer2Instance(keySchema, valueSchema, hasKeyOrdering)
+    new SparkSqlSerializer2Instance(keySchema, valueSchema)
 
   override def supportsRelocationOfSerializedObjects: Boolean = {
     // SparkSqlSerializer2 is stateless and writes no stream headers
@@ -244,7 +237,7 @@ private[sql] object SparkSqlSerializer2 {
                 out.writeShort(row.getShort(i))
               }
 
-            case IntegerType =>
+            case IntegerType | DateType =>
               if (row.isNullAt(i)) {
                 out.writeByte(NULL)
               } else {
@@ -252,7 +245,7 @@ private[sql] object SparkSqlSerializer2 {
                 out.writeInt(row.getInt(i))
               }
 
-            case LongType =>
+            case LongType | TimestampType =>
               if (row.isNullAt(i)) {
                 out.writeByte(NULL)
               } else {
@@ -276,41 +269,6 @@ private[sql] object SparkSqlSerializer2 {
                 out.writeDouble(row.getDouble(i))
               }
 
-            case decimal: DecimalType =>
-              if (row.isNullAt(i)) {
-                out.writeByte(NULL)
-              } else {
-                out.writeByte(NOT_NULL)
-                val value = row.apply(i).asInstanceOf[Decimal]
-                val javaBigDecimal = value.toJavaBigDecimal
-                // First, write out the unscaled value.
-                val bytes: Array[Byte] = javaBigDecimal.unscaledValue().toByteArray
-                out.writeInt(bytes.length)
-                out.write(bytes)
-                // Then, write out the scale.
-                out.writeInt(javaBigDecimal.scale())
-              }
-
-            case DateType =>
-              if (row.isNullAt(i)) {
-                out.writeByte(NULL)
-              } else {
-                out.writeByte(NOT_NULL)
-                out.writeInt(row.getAs[Int](i))
-              }
-
-            case TimestampType =>
-              if (row.isNullAt(i)) {
-                out.writeByte(NULL)
-              } else {
-                out.writeByte(NOT_NULL)
-                val timestamp = row.getAs[java.sql.Timestamp](i)
-                val time = timestamp.getTime
-                val nanos = timestamp.getNanos
-                out.writeLong(time - (nanos / 1000000)) // Write the milliseconds value.
-                out.writeInt(nanos)                     // Write the nanoseconds part.
-              }
-
             case StringType =>
               if (row.isNullAt(i)) {
                 out.writeByte(NULL)
@@ -330,6 +288,21 @@ private[sql] object SparkSqlSerializer2 {
                 out.writeInt(bytes.length)
                 out.write(bytes)
               }
+
+            case decimal: DecimalType =>
+              if (row.isNullAt(i)) {
+                out.writeByte(NULL)
+              } else {
+                out.writeByte(NOT_NULL)
+                val value = row.apply(i).asInstanceOf[Decimal]
+                val javaBigDecimal = value.toJavaBigDecimal
+                // First, write out the unscaled value.
+                val bytes: Array[Byte] = javaBigDecimal.unscaledValue().toByteArray
+                out.writeInt(bytes.length)
+                out.write(bytes)
+                // Then, write out the scale.
+                out.writeInt(javaBigDecimal.scale())
+              }
           }
           i += 1
         }
@@ -341,7 +314,7 @@ private[sql] object SparkSqlSerializer2 {
    */
   def createDeserializationFunction(
       schema: Array[DataType],
-      in: DataInputStream): (MutableRow) => Row = {
+      in: DataInputStream): (MutableRow) => InternalRow = {
     if (schema == null) {
       (mutableRow: MutableRow) => null
     } else {
@@ -375,14 +348,14 @@ private[sql] object SparkSqlSerializer2 {
                 mutableRow.setShort(i, in.readShort())
               }
 
-            case IntegerType =>
+            case IntegerType | DateType =>
               if (in.readByte() == NULL) {
                 mutableRow.setNullAt(i)
               } else {
                 mutableRow.setInt(i, in.readInt())
               }
 
-            case LongType =>
+            case LongType | TimestampType =>
               if (in.readByte() == NULL) {
                 mutableRow.setNullAt(i)
               } else {
@@ -403,6 +376,26 @@ private[sql] object SparkSqlSerializer2 {
                 mutableRow.setDouble(i, in.readDouble())
               }
 
+            case StringType =>
+              if (in.readByte() == NULL) {
+                mutableRow.setNullAt(i)
+              } else {
+                val length = in.readInt()
+                val bytes = new Array[Byte](length)
+                in.readFully(bytes)
+                mutableRow.update(i, UTF8String.fromBytes(bytes))
+              }
+
+            case BinaryType =>
+              if (in.readByte() == NULL) {
+                mutableRow.setNullAt(i)
+              } else {
+                val length = in.readInt()
+                val bytes = new Array[Byte](length)
+                in.readFully(bytes)
+                mutableRow.update(i, bytes)
+              }
+
             case decimal: DecimalType =>
               if (in.readByte() == NULL) {
                 mutableRow.setNullAt(i)
@@ -416,44 +409,6 @@ private[sql] object SparkSqlSerializer2 {
                 val scale = in.readInt()
                 // Finally, create the Decimal object and set it in the row.
                 mutableRow.update(i, Decimal(new BigDecimal(unscaledVal, scale)))
-              }
-
-            case DateType =>
-              if (in.readByte() == NULL) {
-                mutableRow.setNullAt(i)
-              } else {
-                mutableRow.update(i, in.readInt())
-              }
-
-            case TimestampType =>
-              if (in.readByte() == NULL) {
-                mutableRow.setNullAt(i)
-              } else {
-                val time = in.readLong() // Read the milliseconds value.
-                val nanos = in.readInt() // Read the nanoseconds part.
-                val timestamp = new Timestamp(time)
-                timestamp.setNanos(nanos)
-                mutableRow.update(i, timestamp)
-              }
-
-            case StringType =>
-              if (in.readByte() == NULL) {
-                mutableRow.setNullAt(i)
-              } else {
-                val length = in.readInt()
-                val bytes = new Array[Byte](length)
-                in.readFully(bytes)
-                mutableRow.update(i, UTF8String(bytes))
-              }
-
-            case BinaryType =>
-              if (in.readByte() == NULL) {
-                mutableRow.setNullAt(i)
-              } else {
-                val length = in.readInt()
-                val bytes = new Array[Byte](length)
-                in.readFully(bytes)
-                mutableRow.update(i, bytes)
               }
           }
           i += 1

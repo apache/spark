@@ -123,13 +123,13 @@ case class HiveTableScan(
 
         // Only partitioned values are needed here, since the predicate has already been bound to
         // partition key attribute references.
-        val row = new GenericRow(castedValues.toArray)
+        val row = InternalRow.fromSeq(castedValues)
         shouldKeep.eval(row).asInstanceOf[Boolean]
       }
     }
   }
 
-  protected override def doExecute(): RDD[Row] = if (!relation.hiveQlTable.isPartitioned) {
+  protected override def doExecute(): RDD[InternalRow] = if (!relation.hiveQlTable.isPartitioned) {
     hadoopReader.makeRDDForTable(relation.hiveQlTable)
   } else {
     hadoopReader.makeRDDForPartitionedTable(prunePartitions(relation.hiveQlPartitions))

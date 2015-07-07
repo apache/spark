@@ -102,6 +102,7 @@
     <module>external/twitter</module>
     <module>external/flume</module>
     <module>external/flume-sink</module>
+    <module>external/flume-assembly</module>
     <module>external/mqtt</module>
     <module>external/zeromq</module>
     <module>examples</module>
@@ -114,9 +115,9 @@
   <properties>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
-    <akka.group>org.spark-project.akka</akka.group>
-    <akka.version>2.3.4-spark</akka.version>
-    <java.version>1.6</java.version>
+    <akka.group>com.typesafe.akka</akka.group>
+    <akka.version>2.3.11</akka.version>
+    <java.version>1.7</java.version>
     <sbt.project.name>spark</sbt.project.name>
     <mesos.version>0.21.1</mesos.version>
     <mesos.classifier>shaded-protobuf</mesos.classifier>
@@ -156,11 +157,12 @@
     <scala.binary.version>2.10</scala.binary.version>
     <jline.version>${scala.version}</jline.version>
     <jline.groupid>org.scala-lang</jline.groupid>
-    <jodd.version>3.6.3</jodd.version>
     <codehaus.jackson.version>1.9.13</codehaus.jackson.version>
     <fasterxml.jackson.version>2.4.4</fasterxml.jackson.version>
     <snappy.version>1.1.1.7</snappy.version>
     <netlib.java.version>1.1.2</netlib.java.version>
+    <!-- For maven shade plugin (see SPARK-8819) -->
+    <create.dependency.reduced.pom>false</create.dependency.reduced.pom>
 
     <test.java.home>${java.home}</test.java.home>
 
@@ -179,7 +181,7 @@
     <parquet.deps.scope>compile</parquet.deps.scope>
 
     <!--
-      Overridable test home. So that you can call individual pom files directory without
+      Overridable test home. So that you can call individual pom files directly without
       things breaking.
     -->
     <spark.test.home>${session.executionRootDirectory}</spark.test.home>
@@ -249,7 +251,7 @@
     <repository>
       <id>mapr-repo</id>
       <name>MapR Repository</name>
-      <url>http://repository.mapr.com/maven</url>
+      <url>http://repository.mapr.com/maven/</url>
       <releases>
         <enabled>true</enabled>
       </releases>
@@ -587,7 +589,7 @@
       <dependency>
         <groupId>io.netty</groupId>
         <artifactId>netty-all</artifactId>
-        <version>4.0.23.Final</version>
+        <version>4.0.28.Final</version>
       </dependency>
       <dependency>
         <groupId>org.apache.derby</groupId>
@@ -682,7 +684,7 @@
       </dependency>
       <dependency>
         <groupId>org.mockito</groupId>
-        <artifactId>mockito-all</artifactId>
+        <artifactId>mockito-core</artifactId>
         <version>1.9.5</version>
         <scope>test</scope>
       </dependency>
@@ -749,6 +751,10 @@
             <artifactId>asm</artifactId>
           </exclusion>
           <exclusion>
+            <groupId>org.codehaus.jackson</groupId>
+            <artifactId>jackson-mapper-asl</artifactId>
+          </exclusion>
+          <exclusion>
             <groupId>org.ow2.asm</groupId>
             <artifactId>asm</artifactId>
           </exclusion>
@@ -759,6 +765,10 @@
           <exclusion>
             <groupId>commons-logging</groupId>
             <artifactId>commons-logging</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.mockito</groupId>
+            <artifactId>mockito-all</artifactId>
           </exclusion>
           <exclusion>
             <groupId>org.mortbay.jetty</groupId>
@@ -1244,7 +1254,7 @@
               <include>**/*Suite.java</include>
             </includes>
             <reportsDirectory>${project.build.directory}/surefire-reports</reportsDirectory>
-            <argLine>-Xmx3g -XX:MaxPermSize=${MaxPermGen} -XX:ReservedCodeCacheSize=512m</argLine>
+            <argLine>-Xmx3g -Xss4096k -XX:MaxPermSize=${MaxPermGen} -XX:ReservedCodeCacheSize=512m</argLine>
             <environmentVariables>
               <!--
                 Setting SPARK_DIST_CLASSPATH is a simple way to make sure any child processes
@@ -1256,6 +1266,7 @@
             <systemProperties>
               <derby.system.durability>test</derby.system.durability>
               <java.awt.headless>true</java.awt.headless>
+              <java.io.tmpdir>${project.build.directory}/tmp</java.io.tmpdir>
               <spark.test.home>${spark.test.home}</spark.test.home>
               <spark.testing>1</spark.testing>
               <spark.ui.enabled>false</spark.ui.enabled>
@@ -1289,6 +1300,7 @@
             <systemProperties>
               <derby.system.durability>test</derby.system.durability>
               <java.awt.headless>true</java.awt.headless>
+              <java.io.tmpdir>${project.build.directory}/tmp</java.io.tmpdir>
               <spark.test.home>${spark.test.home}</spark.test.home>
               <spark.testing>1</spark.testing>
               <spark.ui.enabled>false</spark.ui.enabled>
@@ -1430,8 +1442,8 @@
         <version>2.3</version>
         <configuration>
           <shadedArtifactAttached>false</shadedArtifactAttached>
-          <!-- Work around MSHADE-148 -->
-          <createDependencyReducedPom>false</createDependencyReducedPom>
+          <!-- Work around MSHADE-148. See SPARK-8819. -->
+          <createDependencyReducedPom>${create.dependency.reduced.pom}</createDependencyReducedPom>
           <artifactSet>
             <includes>
               <!-- At a minimum we must include this to force effective pom generation -->
@@ -1548,6 +1560,26 @@
           </execution>
         </executions>
       </plugin>
+
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-antrun-plugin</artifactId>
+        <executions>
+          <execution>
+            <id>create-tmp-dir</id>
+            <phase>generate-test-resources</phase>
+            <goals>
+              <goal>run</goal>
+            </goals>
+            <configuration>
+              <target>
+                <mkdir dir="${project.build.directory}/tmp" />
+              </target>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+
       <!-- Enable surefire and scalatest in all children, in one place: -->
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
@@ -1665,11 +1697,13 @@
     <profile>
       <id>hadoop-1</id>
       <properties>
-        <hadoop.version>1.0.4</hadoop.version>
+        <hadoop.version>1.2.1</hadoop.version>
         <protobuf.version>2.4.1</protobuf.version>
         <hbase.version>0.98.7-hadoop1</hbase.version>
         <avro.mapred.classifier>hadoop1</avro.mapred.classifier>
         <codehaus.jackson.version>1.8.8</codehaus.jackson.version>
+        <akka.group>org.spark-project.akka</akka.group>
+        <akka.version>2.3.4-spark</akka.version>
       </properties>
     </profile>
 
@@ -1793,6 +1827,26 @@
         <scala.binary.version>2.11</scala.binary.version>
         <jline.version>2.12.1</jline.version>
         <jline.groupid>jline</jline.groupid>
+      </properties>
+    </profile>
+
+    <profile>
+      <!--
+          Use this profile only for making Spark releases. Note that due to SPARK-8819,
+          you must use maven version 3.2.x or before to avoid running into MSHADE-148.
+      -->
+      <id>release</id>
+      <properties>
+        <!--
+            The maven shade plugin has a bug where enabling the `createDependencyReducedPom`
+            property causes maven to go into an infinite loop (MSHADE-148). This is only an
+            issue for the Spark build if the maven version is 3.3.x or newer (SPARK-8819).
+
+            However, since disabling this property has the side effect of not resolving
+            variables in the released pom files (SPARK-8781), we need to enable this during
+            releases.
+        -->
+        <create.dependency.reduced.pom>true</create.dependency.reduced.pom>
       </properties>
     </profile>
 

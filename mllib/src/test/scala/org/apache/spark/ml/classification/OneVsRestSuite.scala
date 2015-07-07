@@ -19,15 +19,18 @@ package org.apache.spark.ml.classification
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.attribute.NominalAttribute
+import org.apache.spark.ml.param.{ParamMap, ParamsSuite}
 import org.apache.spark.ml.util.MetadataUtils
 import org.apache.spark.mllib.classification.LogisticRegressionWithLBFGS
 import org.apache.spark.mllib.classification.LogisticRegressionSuite._
 import org.apache.spark.mllib.evaluation.MulticlassMetrics
+import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.types.Metadata
 
 class OneVsRestSuite extends SparkFunSuite with MLlibTestSparkContext {
 
@@ -50,6 +53,13 @@ class OneVsRestSuite extends SparkFunSuite with MLlibTestSparkContext {
     rdd = sc.parallelize(generateMultinomialLogisticInput(
       weights, xMean, xVariance, true, nPoints, 42), 2)
     dataset = sqlContext.createDataFrame(rdd)
+  }
+
+  test("params") {
+    ParamsSuite.checkParams(new OneVsRest)
+    val lrModel = new LogisticRegressionModel("lr", Vectors.dense(0.0), 0.0)
+    val model = new OneVsRestModel("ovr", Metadata.empty, Array(lrModel))
+    ParamsSuite.checkParams(model)
   }
 
   test("one-vs-rest: default params") {
@@ -101,6 +111,26 @@ class OneVsRestSuite extends SparkFunSuite with MLlibTestSparkContext {
       .setClassifier(logReg)
     val output = ovr.fit(dataset).transform(dataset)
     assert(output.schema.fieldNames.toSet === Set("label", "features", "prediction"))
+  }
+
+  test("OneVsRest.copy and OneVsRestModel.copy") {
+    val lr = new LogisticRegression()
+      .setMaxIter(1)
+
+    val ovr = new OneVsRest()
+    withClue("copy with classifier unset should work") {
+      ovr.copy(ParamMap(lr.maxIter -> 10))
+    }
+    ovr.setClassifier(lr)
+    val ovr1 = ovr.copy(ParamMap(lr.maxIter -> 10))
+    require(ovr.getClassifier.getOrDefault(lr.maxIter) === 1, "copy should have no side-effects")
+    require(ovr1.getClassifier.getOrDefault(lr.maxIter) === 10,
+      "copy should handle extra classifier params")
+
+    val ovrModel = ovr1.fit(dataset).copy(ParamMap(lr.threshold -> 0.1))
+    ovrModel.models.foreach { case m: LogisticRegressionModel =>
+      require(m.getThreshold === 0.1, "copy should handle extra model params")
+    }
   }
 }
 

@@ -18,7 +18,7 @@
 package org.apache.spark.sql
 
 import org.apache.spark.sql.functions._
-
+import org.apache.spark.sql.functions.{log => logarithm}
 
 private object MathExpressionsTestData {
   case class DoubleData(a: java.lang.Double, b: java.lang.Double)
@@ -151,24 +151,47 @@ class MathExpressionsSuite extends QueryTest {
     testOneToOneMathFunction(tanh, math.tanh)
   }
 
-  test("toDeg") {
+  test("toDegrees") {
     testOneToOneMathFunction(toDegrees, math.toDegrees)
+    checkAnswer(
+      ctx.sql("SELECT degrees(0), degrees(1), degrees(1.5)"),
+      Seq((1, 2)).toDF().select(toDegrees(lit(0)), toDegrees(lit(1)), toDegrees(lit(1.5)))
+    )
   }
 
-  test("toRad") {
+  test("toRadians") {
     testOneToOneMathFunction(toRadians, math.toRadians)
+    checkAnswer(
+      ctx.sql("SELECT radians(0), radians(1), radians(1.5)"),
+      Seq((1, 2)).toDF().select(toRadians(lit(0)), toRadians(lit(1)), toRadians(lit(1.5)))
+    )
   }
 
   test("cbrt") {
     testOneToOneMathFunction(cbrt, math.cbrt)
   }
 
-  test("ceil") {
+  test("ceil and ceiling") {
     testOneToOneMathFunction(ceil, math.ceil)
+    checkAnswer(
+      ctx.sql("SELECT ceiling(0), ceiling(1), ceiling(1.5)"),
+      Row(0.0, 1.0, 2.0))
   }
 
   test("floor") {
     testOneToOneMathFunction(floor, math.floor)
+  }
+
+  test("factorial") {
+    val df = (0 to 5).map(i => (i, i)).toDF("a", "b")
+    checkAnswer(
+      df.select(factorial('a)),
+      Seq(Row(1), Row(1), Row(2), Row(6), Row(24), Row(120))
+    )
+    checkAnswer(
+      df.selectExpr("factorial(a)"),
+      Seq(Row(1), Row(1), Row(2), Row(6), Row(24), Row(120))
+    )
   }
 
   test("rint") {
@@ -183,12 +206,44 @@ class MathExpressionsSuite extends QueryTest {
     testOneToOneMathFunction(expm1, math.expm1)
   }
 
-  test("signum") {
+  test("signum / sign") {
     testOneToOneMathFunction[Double](signum, math.signum)
+
+    checkAnswer(
+      ctx.sql("SELECT sign(10), signum(-11)"),
+      Row(1, -1))
   }
 
-  test("pow") {
+  test("pow / power") {
     testTwoToOneMathFunction(pow, pow, math.pow)
+
+    checkAnswer(
+      ctx.sql("SELECT pow(1, 2), power(2, 1)"),
+      Seq((1, 2)).toDF().select(pow(lit(1), lit(2)), pow(lit(2), lit(1)))
+    )
+  }
+
+  test("hex") {
+    val data = Seq((28, -28, 100800200404L, "hello")).toDF("a", "b", "c", "d")
+    checkAnswer(data.select(hex('a)), Seq(Row("1C")))
+    checkAnswer(data.select(hex('b)), Seq(Row("FFFFFFFFFFFFFFE4")))
+    checkAnswer(data.select(hex('c)), Seq(Row("177828FED4")))
+    checkAnswer(data.select(hex('d)), Seq(Row("68656C6C6F")))
+    checkAnswer(data.selectExpr("hex(a)"), Seq(Row("1C")))
+    checkAnswer(data.selectExpr("hex(b)"), Seq(Row("FFFFFFFFFFFFFFE4")))
+    checkAnswer(data.selectExpr("hex(c)"), Seq(Row("177828FED4")))
+    checkAnswer(data.selectExpr("hex(d)"), Seq(Row("68656C6C6F")))
+    checkAnswer(data.selectExpr("hex(cast(d as binary))"), Seq(Row("68656C6C6F")))
+  }
+
+  test("unhex") {
+    val data = Seq(("1C", "737472696E67")).toDF("a", "b")
+    checkAnswer(data.select(unhex('a)), Row(Array[Byte](28.toByte)))
+    checkAnswer(data.select(unhex('b)), Row("string".getBytes))
+    checkAnswer(data.selectExpr("unhex(a)"), Row(Array[Byte](28.toByte)))
+    checkAnswer(data.selectExpr("unhex(b)"), Row("string".getBytes))
+    checkAnswer(data.selectExpr("""unhex("##")"""), Row(null))
+    checkAnswer(data.selectExpr("""unhex("G123")"""), Row(null))
   }
 
   test("hypot") {
@@ -199,8 +254,12 @@ class MathExpressionsSuite extends QueryTest {
     testTwoToOneMathFunction(atan2, atan2, math.atan2)
   }
 
-  test("log") {
+  test("log / ln") {
     testOneToOneNonNegativeMathFunction(org.apache.spark.sql.functions.log, math.log)
+    checkAnswer(
+      ctx.sql("SELECT ln(0), ln(1), ln(1.5)"),
+      Seq((1, 2)).toDF().select(logarithm(lit(0)), logarithm(lit(1)), logarithm(lit(1.5)))
+    )
   }
 
   test("log10") {
@@ -211,4 +270,111 @@ class MathExpressionsSuite extends QueryTest {
     testOneToOneNonNegativeMathFunction(log1p, math.log1p)
   }
 
+  test("shift left") {
+    val df = Seq[(Long, Integer, Short, Byte, Integer, Integer)]((21, 21, 21, 21, 21, null))
+      .toDF("a", "b", "c", "d", "e", "f")
+
+    checkAnswer(
+      df.select(
+        shiftLeft('a, 1), shiftLeft('b, 1), shiftLeft('c, 1), shiftLeft('d, 1),
+        shiftLeft('f, 1)),
+        Row(42.toLong, 42, 42.toShort, 42.toByte, null))
+
+    checkAnswer(
+      df.selectExpr(
+        "shiftLeft(a, 1)", "shiftLeft(b, 1)", "shiftLeft(b, 1)", "shiftLeft(d, 1)",
+        "shiftLeft(f, 1)"),
+      Row(42.toLong, 42, 42.toShort, 42.toByte, null))
+  }
+
+  test("shift right") {
+    val df = Seq[(Long, Integer, Short, Byte, Integer, Integer)]((42, 42, 42, 42, 42, null))
+      .toDF("a", "b", "c", "d", "e", "f")
+
+    checkAnswer(
+      df.select(
+        shiftRight('a, 1), shiftRight('b, 1), shiftRight('c, 1), shiftRight('d, 1),
+        shiftRight('f, 1)),
+      Row(21.toLong, 21, 21.toShort, 21.toByte, null))
+
+    checkAnswer(
+      df.selectExpr(
+        "shiftRight(a, 1)", "shiftRight(b, 1)", "shiftRight(c, 1)", "shiftRight(d, 1)",
+        "shiftRight(f, 1)"),
+      Row(21.toLong, 21, 21.toShort, 21.toByte, null))
+  }
+
+  test("shift right unsigned") {
+    val df = Seq[(Long, Integer, Short, Byte, Integer, Integer)]((-42, 42, 42, 42, 42, null))
+      .toDF("a", "b", "c", "d", "e", "f")
+
+    checkAnswer(
+      df.select(
+        shiftRightUnsigned('a, 1), shiftRightUnsigned('b, 1), shiftRightUnsigned('c, 1),
+        shiftRightUnsigned('d, 1), shiftRightUnsigned('f, 1)),
+      Row(9223372036854775787L, 21, 21.toShort, 21.toByte, null))
+
+    checkAnswer(
+      df.selectExpr(
+        "shiftRightUnsigned(a, 1)", "shiftRightUnsigned(b, 1)", "shiftRightUnsigned(c, 1)",
+        "shiftRightUnsigned(d, 1)", "shiftRightUnsigned(f, 1)"),
+      Row(9223372036854775787L, 21, 21.toShort, 21.toByte, null))
+  }
+
+  test("binary log") {
+    val df = Seq[(Integer, Integer)]((123, null)).toDF("a", "b")
+    checkAnswer(
+      df.select(org.apache.spark.sql.functions.log("a"),
+        org.apache.spark.sql.functions.log(2.0, "a"),
+        org.apache.spark.sql.functions.log("b")),
+      Row(math.log(123), math.log(123) / math.log(2), null))
+
+    checkAnswer(
+      df.selectExpr("log(a)", "log(2.0, a)", "log(b)"),
+      Row(math.log(123), math.log(123) / math.log(2), null))
+  }
+
+  test("abs") {
+    val input =
+      Seq[(java.lang.Double, java.lang.Double)]((null, null), (0.0, 0.0), (1.5, 1.5), (-2.5, 2.5))
+    checkAnswer(
+      input.toDF("key", "value").select(abs($"key").alias("a")).sort("a"),
+      input.map(pair => Row(pair._2)))
+
+    checkAnswer(
+      input.toDF("key", "value").selectExpr("abs(key) a").sort("a"),
+      input.map(pair => Row(pair._2)))
+  }
+
+  test("log2") {
+    val df = Seq((1, 2)).toDF("a", "b")
+    checkAnswer(
+      df.select(log2("b") + log2("a")),
+      Row(1))
+
+    checkAnswer(ctx.sql("SELECT LOG2(8), LOG2(null)"), Row(3, null))
+  }
+
+  test("sqrt") {
+    val df = Seq((1, 4)).toDF("a", "b")
+    checkAnswer(
+      df.select(sqrt("a"), sqrt("b")),
+      Row(1.0, 2.0))
+
+    checkAnswer(ctx.sql("SELECT SQRT(4.0), SQRT(null)"), Row(2.0, null))
+    checkAnswer(df.selectExpr("sqrt(a)", "sqrt(b)", "sqrt(null)"), Row(1.0, 2.0, null))
+  }
+
+  test("negative") {
+    checkAnswer(
+      ctx.sql("SELECT negative(1), negative(0), negative(-1)"),
+      Row(-1, 0, 1))
+  }
+
+  test("positive") {
+    val df = Seq((1, -1, "abc")).toDF("a", "b", "c")
+    checkAnswer(df.selectExpr("positive(a)"), Row(1))
+    checkAnswer(df.selectExpr("positive(b)"), Row(-1))
+    checkAnswer(df.selectExpr("positive(c)"), Row("abc"))
+  }
 }
