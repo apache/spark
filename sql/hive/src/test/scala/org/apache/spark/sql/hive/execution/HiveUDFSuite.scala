@@ -138,9 +138,11 @@ class HiveUDFSuite extends QueryTest {
     testData.registerTempTable("inputTable")
 
     sql(s"CREATE TEMPORARY FUNCTION testUDFToListString AS '${classOf[UDFToListString].getName}'")
-    intercept[AnalysisException] {
+    val errMsg = intercept[AnalysisException] {
       sql("SELECT testUDFToListString(s) FROM inputTable")
     }
+    assert(errMsg.getMessage === "List type in java is unsupported because " +
+      "JVM type erasure makes spark fail to catch a component type in List<>;")
 
     sql("DROP TEMPORARY FUNCTION IF EXISTS testUDFToListString")
     TestHive.reset()
@@ -151,9 +153,11 @@ class HiveUDFSuite extends QueryTest {
     testData.registerTempTable("inputTable")
 
     sql(s"CREATE TEMPORARY FUNCTION testUDFToListInt AS '${classOf[UDFToListInt].getName}'")
-    intercept[AnalysisException] {
+    val errMsg = intercept[AnalysisException] {
       sql("SELECT testUDFToListInt(s) FROM inputTable")
     }
+    assert(errMsg.getMessage === "List type in java is unsupported because " +
+      "JVM type erasure makes spark fail to catch a component type in List<>;")
 
     sql("DROP TEMPORARY FUNCTION IF EXISTS testUDFToListInt")
     TestHive.reset()
