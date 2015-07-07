@@ -603,7 +603,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
     """message root {
       |  optional group f1 (LIST) {
       |    repeated group list {
-      |      optional int32 array;
+      |      optional int32 element;
       |    }
       |  }
       |}
@@ -636,7 +636,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
     """message root {
       |  optional group f1 (LIST) {
       |    repeated group list {
-      |      required int32 array;
+      |      required int32 element;
       |    }
       |  }
       |}

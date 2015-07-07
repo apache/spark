@@ -490,7 +490,7 @@ private[parquet] class CatalystSchemaConverter(
           .buildGroup(repetition).as(LIST)
           .addField(
             Types.repeatedGroup()
-              .addField(convertField(StructField("array", elementType, containsNull)))
+              .addField(convertField(StructField("element", elementType, containsNull)))
               .named("list"))
           .named(field.name)
 
