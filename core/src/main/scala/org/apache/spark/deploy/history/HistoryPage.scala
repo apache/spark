@@ -35,7 +35,6 @@ private[history] class HistoryPage(parent: HistoryServer) extends WebUIPage("") 
       Option(request.getParameter("showIncomplete")).getOrElse("false").toBoolean
 
     val allApps = parent.getApplicationList()
-      .filter(_.attempts.head.completed != requestedIncomplete)
     val allAppsSize = allApps.size
 
     val actualFirst = if (requestedFirst < allAppsSize) requestedFirst else 0
@@ -51,9 +50,15 @@ private[history] class HistoryPage(parent: HistoryServer) extends WebUIPage("") 
     val hasMultipleAttempts = appsToShow.exists(_.attempts.size > 1)
     val appTable =
       if (hasMultipleAttempts) {
-        UIUtils.listingTable(appWithAttemptHeader, appWithAttemptRow, appsToShow)
+        UIUtils.listingTable(
+          appWithAttemptHeader,
+          appWithAttemptRow(_, requestedIncomplete),
+          appsToShow)
       } else {
-        UIUtils.listingTable(appHeader, appRow, appsToShow)
+        UIUtils.listingTable(
+          appHeader,
+          appRow(_, requestedIncomplete),
+          appsToShow)
       }
 
     val providerConfig = parent.getProviderConfig()
@@ -157,7 +162,8 @@ private[history] class HistoryPage(parent: HistoryServer) extends WebUIPage("") 
       renderAttemptIdColumn: Boolean,
       info: ApplicationHistoryInfo,
       attempt: ApplicationAttemptInfo,
-      isFirst: Boolean): Seq[Node] = {
+      isFirst: Boolean,
+      requestedIncomplete: Boolean): Seq[Node] = {
     val uiAddress = HistoryServer.getAttemptURI(info.id, attempt.attemptId)
     val startTime = UIUtils.formatDate(attempt.startTime)
     val endTime = if (attempt.endTime > 0) UIUtils.formatDate(attempt.endTime) else "-"
@@ -168,6 +174,10 @@ private[history] class HistoryPage(parent: HistoryServer) extends WebUIPage("") 
         "-"
       }
     val lastUpdated = UIUtils.formatDate(attempt.lastUpdated)
+    var someAttemptCompleted = false
+    info.attempts.foreach{ attempt =>
+      if (attempt.completed) someAttemptCompleted = true
+    }
     <tr>
       {
         if (isFirst) {
@@ -185,7 +195,8 @@ private[history] class HistoryPage(parent: HistoryServer) extends WebUIPage("") 
         }
       }
       {
-        if (renderAttemptIdColumn) {
+        if (renderAttemptIdColumn &&
+            (requestedIncomplete || (!requestedIncomplete && someAttemptCompleted))) {
           if (info.attempts.size > 1 && attempt.attemptId.isDefined) {
             <td><a href={HistoryServer.getAttemptURI(info.id, attempt.attemptId)}>
               {attempt.attemptId.get}</a></td>
@@ -196,22 +207,34 @@ private[history] class HistoryPage(parent: HistoryServer) extends WebUIPage("") 
           Nil
         }
       }
-      <td sorttable_customkey={attempt.startTime.toString}>{startTime}</td>
-      <td sorttable_customkey={attempt.endTime.toString}>{endTime}</td>
-      <td sorttable_customkey={(attempt.endTime - attempt.startTime).toString}>
-        {duration}</td>
-      <td>{attempt.sparkUser}</td>
-      <td sorttable_customkey={attempt.lastUpdated.toString}>{lastUpdated}</td>
+      {
+        if (requestedIncomplete || (!requestedIncomplete && someAttemptCompleted)) {
+          <td sorttable_customkey={attempt.startTime.toString}>{startTime}</td>
+          <td sorttable_customkey={attempt.endTime.toString}>{endTime}</td>
+          <td sorttable_customkey={(attempt.endTime - attempt.startTime).toString}>
+              {duration}</td>
+          <td>{attempt.sparkUser}</td>
+          <td sorttable_customkey={attempt.lastUpdated.toString}>{lastUpdated}</td>
+        } else {
+          Nil
+        }
+      }
     </tr>
   }
 
-  private def appRow(info: ApplicationHistoryInfo): Seq[Node] = {
-    attemptRow(false, info, info.attempts.head, true)
+
+
+  private def appRow(
+      info: ApplicationHistoryInfo,
+      requestedIncomplete: Boolean): Seq[Node] = {
+    attemptRow(false, info, info.attempts.head, true, requestedIncomplete)
   }
 
-  private def appWithAttemptRow(info: ApplicationHistoryInfo): Seq[Node] = {
-    attemptRow(true, info, info.attempts.head, true) ++
-      info.attempts.drop(1).flatMap(attemptRow(true, info, _, false))
+  private def appWithAttemptRow(
+      info: ApplicationHistoryInfo,
+      requestedIncomplete: Boolean): Seq[Node] = {
+    attemptRow(true, info, info.attempts.head, true, requestedIncomplete) ++
+      info.attempts.drop(1).flatMap(attemptRow(true, info, _, false, requestedIncomplete))
   }
 
   private def makePageLink(linkPage: Int, showIncomplete: Boolean): String = {
