@@ -30,14 +30,8 @@ case class UnscaledValue(child: Expression) extends UnaryExpression {
   override def dataType: DataType = LongType
   override def toString: String = s"UnscaledValue($child)"
 
-  override def eval(input: InternalRow): Any = {
-    val childResult = child.eval(input)
-    if (childResult == null) {
-      null
-    } else {
-      childResult.asInstanceOf[Decimal].toUnscaledLong
-    }
-  }
+  protected override def nullSafeEval(input: Any): Any =
+    input.asInstanceOf[Decimal].toUnscaledLong
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     defineCodeGen(ctx, ev, c => s"$c.toUnscaledLong()")
@@ -54,26 +48,15 @@ case class MakeDecimal(child: Expression, precision: Int, scale: Int) extends Un
   override def dataType: DataType = DecimalType(precision, scale)
   override def toString: String = s"MakeDecimal($child,$precision,$scale)"
 
-  override def eval(input: InternalRow): Decimal = {
-    val childResult = child.eval(input)
-    if (childResult == null) {
-      null
-    } else {
-      new Decimal().setOrNull(childResult.asInstanceOf[Long], precision, scale)
-    }
-  }
+  protected override def nullSafeEval(input: Any): Any =
+    Decimal(input.asInstanceOf[Long], precision, scale)
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    val eval = child.gen(ctx)
-    eval.code + s"""
-      boolean ${ev.isNull} = ${eval.isNull};
-      ${ctx.decimalType} ${ev.primitive} = null;
-
-      if (!${ev.isNull}) {
-        ${ev.primitive} = (new ${ctx.decimalType}()).setOrNull(
-          ${eval.primitive}, $precision, $scale);
+    nullSafeCodeGen(ctx, ev, eval => {
+      s"""
+        ${ev.primitive} = (new ${ctx.decimalType}()).setOrNull($eval, $precision, $scale);
         ${ev.isNull} = ${ev.primitive} == null;
-      }
       """
+    })
   }
 }
