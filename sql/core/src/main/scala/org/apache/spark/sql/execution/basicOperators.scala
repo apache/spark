@@ -270,9 +270,10 @@ case class UnsafeExternalSort(
     assert(codegenEnabled, "UnsafeExternalSort requires code generation to be enabled")
     def doSort(iterator: Iterator[InternalRow]): Iterator[InternalRow] = {
       val ordering = newOrdering(sortOrder, child.output)
-      val prefixComparator = SortPrefixUtils.getPrefixComparator(sortOrder.head)
+      val boundSortExpression = BindReferences.bindReference(sortOrder.head, child.output)
+      val prefixComparator = SortPrefixUtils.getPrefixComparator(boundSortExpression)
       val prefixComputer = {
-        val prefixComputer = SortPrefixUtils.getPrefixComputer(sortOrder.head)
+        val prefixComputer = SortPrefixUtils.getPrefixComputer(boundSortExpression)
         new UnsafeExternalRowSorter.PrefixComputer {
           override def computePrefix(row: InternalRow): Long = prefixComputer(row)
         }
