@@ -22,7 +22,6 @@ import scala.collection.mutable
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.ml.{PredictionModel, Predictor}
 import org.apache.spark.ml.param.ParamMap
-import org.apache.spark.ml.param.shared.HasThresholds
 import org.apache.spark.ml.tree.{DecisionTreeModel, RandomForestParams, TreeClassifierParams, TreeEnsembleModel}
 import org.apache.spark.ml.util.{Identifiable, MetadataUtils}
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
@@ -128,7 +127,7 @@ final class RandomForestClassificationModel private[ml] (
     private val _trees: Array[DecisionTreeClassificationModel],
     override val numClasses: Int)
   extends ClassificationModel[Vector, RandomForestClassificationModel]
-  with TreeEnsembleModel with HasThresholds with Serializable {
+  with TreeEnsembleModel with Serializable {
 
   require(numTrees > 0, "RandomForestClassificationModel requires at least 1 tree.")
 
