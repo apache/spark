@@ -55,31 +55,23 @@ class AssociationRules private (
    * @return a [[Set[Rule[Item]]] containing the assocation rules.
    */
   def run[Item: ClassTag](freqItemsets: RDD[FreqItemset[Item]]): RDD[Rule[Item]] = {
-    freqItemsets.flatMap { itemset =>
+    // For candidate rule X => Y, generate (X, (Y, freq(X union Y)))
+    val candidates = freqItemsets.flatMap { itemset =>
       val items = itemset.items
       items.flatMap { item =>
         items.partition(_ == item) match {
-          // Itemsets and items in itemsets are unique, so every (antecedent, consequent) is unique
           case (consequent, antecedent) if !antecedent.isEmpty =>
             Some((antecedent.toSeq, (consequent.toSeq, itemset.freq)))
           case _ => None
         }
-      } :+ (items.toSeq, (Nil, itemset.freq))
-    }.aggregateByKey(Map[Seq[Item], Long]().empty)(
-      // Since every (antecedent, consequent) is unique, there are no collisions in the Map
-      seqOp = { case (acc, (consequent, freq)) => acc + (consequent -> freq) },
-      combOp = _ ++ _
-    ).flatMap { case (antecedent, consequentToFreq) =>
-      consequentToFreq.flatMap { case (consequent, freqUnion) =>
-        val freqAntecedent = consequentToFreq(Nil)
-        val confidence = 1.0 * freqUnion / freqAntecedent
-        if (!consequent.isEmpty && confidence >= minConfidence) {
-          Some(new Rule[Item](antecedent.toArray, consequent.toArray, freqUnion, freqAntecedent))
-        } else {
-          None
-        }
       }
     }
+
+    // Join to get (X, ((Y, freq(X union Y)), freq(X))), generate rules, and filter by confidence
+    candidates.join(freqItemsets.map(x => (x.items.toSeq, x.freq)))
+      .map { case (antecendent, ((consequent, freqUnion), freqAntecedent)) =>
+      new Rule(antecendent.toArray, consequent.toArray, freqUnion, freqAntecedent)
+    }.filter(_.confidence >= minConfidence)
   }
 
   def run[Item](freqItemsets: JavaRDD[FreqItemset[Item]]): JavaRDD[Rule[Item]] = {
@@ -105,7 +97,7 @@ object AssociationRules {
       freqUnion: Double,
       freqAntecedent: Double) extends Serializable {
 
-    def confidence: Double = 1.0 * freqUnion / freqAntecedent
+    def confidence: Double = freqUnion.toDouble / freqAntecedent
 
     require(antecedent.toSet.intersect(consequent.toSet).isEmpty, {
       val sharedItems = antecedent.toSet.intersect(consequent.toSet)
