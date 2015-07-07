@@ -382,7 +382,7 @@ class SqlParser extends AbstractSparkSQLParser with DataTypeParser {
           val months = Seq(year, month).map(_.getOrElse(0)).sum
           val microseconds = Seq(week, day, hour, minute, second, millisecond, microsecond)
             .map(_.getOrElse(0L)).sum
-          Literal.create(Interval(months, microseconds), IntervalType)
+          Literal(Interval(months, microseconds))
       }
 
   private def toNarrowestIntegerType(value: String): Any = {

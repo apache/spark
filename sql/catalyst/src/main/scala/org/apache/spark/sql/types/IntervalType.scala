@@ -22,6 +22,8 @@ import scala.reflect.runtime.universe.typeTag
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.sql.catalyst.ScalaReflectionLock
+import org.apache.spark.sql.catalyst.util.TypeUtils
+
 
 /**
  * :: DeveloperApi ::
@@ -34,11 +36,15 @@ class IntervalType private() extends AtomicType {
   // The companion object and this class is separated so the companion object also subclasses
   // this type. Otherwise, the companion object would be of type "IntervalType$" in byte code.
   // Defined with a private constructor so the companion object is the only possible instantiation.
-  private[sql] type InternalType = Interval
+  private[sql] type InternalType = Array[Byte]
 
   @transient private[sql] lazy val tag = ScalaReflectionLock.synchronized { typeTag[InternalType] }
 
-  private[sql] val ordering = implicitly[Ordering[InternalType]]
+  private[sql] val ordering = new Ordering[InternalType] {
+    def compare(x: Array[Byte], y: Array[Byte]): Int = {
+      TypeUtils.compareBinary(x, y)
+    }
+  }
 
   override def defaultSize: Int = 12
 
