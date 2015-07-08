@@ -153,7 +153,7 @@ case class Window(
     // Group the window expression by their processing frame.
     val groupedWindowExprs = windowExprs.groupBy(_.windowSpec.frameSpecification)
 
-    // Create factories and collect unbound expressions for each frame.
+    // Create processors and collect unbound expressions for each frame.
     val factories = mutable.Buffer.empty[WindowFunctionFrame]
     val unboundExpressions = mutable.Buffer.empty[Expression]
     groupedWindowExprs.foreach {
