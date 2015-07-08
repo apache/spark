@@ -47,7 +47,7 @@ abstract class MutableRow extends InternalRow {
     val arr = new Array[Any](length)
     var i = 0
     while (i < length) {
-      arr(i) = get(i)
+      arr(i) = apply(i)
       i += 1
     }
     new GenericInternalRow(arr)
@@ -83,27 +83,6 @@ class GenericRow(protected[sql] val values: Array[Any]) extends Row with ArrayBa
   protected def this() = this(null)
 
   def this(size: Int) = this(new Array[Any](size))
-
-  // This is used by test or outside
-  override def equals(o: Any): Boolean = o match {
-    case other: Row if other.length == length =>
-      var i = 0
-      while (i < length) {
-        if (isNullAt(i) != other.isNullAt(i)) {
-          return false
-        }
-        val equal = (apply(i), other.apply(i)) match {
-          case (a: Array[Byte], b: Array[Byte]) => java.util.Arrays.equals(a, b)
-          case (a, b) => a == b
-        }
-        if (!equal) {
-          return false
-        }
-        i += 1
-      }
-      true
-    case _ => false
-  }
 
   override def copy(): Row = this
 }

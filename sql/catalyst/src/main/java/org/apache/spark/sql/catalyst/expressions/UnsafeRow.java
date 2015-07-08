@@ -246,16 +246,11 @@ public final class UnsafeRow extends MutableRow {
     PlatformDependent.UNSAFE.putFloat(baseObject, getFieldOffset(ordinal), value);
   }
 
-  @Override
-  public int size() {
-    return numFields;
-  }
-
   /**
    * Returns the object for column `i`, which should not be primitive type.
    */
   @Override
-  public Object get(int i) {
+  public Object apply(int i) {
     assertIndexIsValid(i);
     if (isNullAt(i)) {
       return null;
