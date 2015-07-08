@@ -144,7 +144,8 @@ class GaussianMixture private (
     val d = breezeData.first().length
 
     // Logic for when to distribute the computation of the [[MultivariateGaussian]]s
-    val distributeGaussians = d >= 30 && k >= 10
+    val numPartitions = math.min(k, 1024)
+    val distributeGaussians = (k - k.toDouble / numPartitions) / numPartitions * d > 25
 
     // Determine initial weights and corresponding Gaussians.
     // If the user supplied an initial GMM, we use those values, otherwise
@@ -179,14 +180,13 @@ class GaussianMixture private (
       val sumWeights = sums.weights.sum
 
       if (distributeGaussians) {
-        val (ws, gs) = sc.parallelize(0 until k, math.min(k, 1024)).map { i =>
-          updateWeightsAndGaussians(sums.means(i), sums.sigmas(i), sums.weights(i), sumWeights)
-
+        val tuples =
+          Seq.tabulate(k)(i => (sums.means(i), sums.sigmas(i), sums.weights(i) / sumWeights))
+        val (ws, gs) = sc.parallelize(tuples, numPartitions).map { case (mean, sigma, weight) =>
+          updateWeightsAndGaussians(mean, sigma, weight, sumWeights)
         }.collect.unzip
-        (0 until k).foreach { i =>
-          weights(i) = ws(i)
-          gaussians(i) = gs(i)
-        }
+        Array.copy(ws, 0, weights, 0, ws.length)
+        Array.copy(gs, 0, gaussians, 0, gs.length)
       } else {
         var i = 0
         while (i < k) {

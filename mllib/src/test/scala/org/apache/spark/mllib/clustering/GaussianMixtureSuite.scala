@@ -106,7 +106,7 @@ class GaussianMixtureSuite extends SparkFunSuite with MLlibTestSparkContext {
       Array(0.5, 0.5),
       Array(
         new MultivariateGaussian(Vectors.dense(-1.0), Matrices.dense(1, 1, Array(1.0))),
-        new MultivariateGaussian(Vectors.dense(2.0), Matrices.dense(1, 1, Array(1.0)))
+        new MultivariateGaussian(Vectors.dense(1.0), Matrices.dense(1, 1, Array(1.0)))
       )
     )
     val Ew = Array(1.0 / 3.0, 2.0 / 3.0)
