@@ -31,6 +31,7 @@ import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo, Strategy => O
 import org.apache.spark.mllib.tree.impl.{BaggedPoint, DTStatsAggregator, DecisionTreeMetadata,
   TimeTracker}
 import org.apache.spark.mllib.tree.impurity.ImpurityCalculator
+import org.apache.spark.mllib.tree.model.{InformationGainStats, Predict}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.random.{SamplingUtils, XORShiftRandom}
@@ -38,12 +39,10 @@ import org.apache.spark.util.random.{SamplingUtils, XORShiftRandom}
 
 private[ml] object RandomForest extends Logging {
 
-  // TODO: Do not use LabeledPoint
-
   /**
-   * Method to train a decision tree model over an RDD
+   * Train a random forest.
    * @param input Training data: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]]
-   * @return a random forest model that can be used for prediction
+   * @return an unweighted set of trees
    */
   def run(
       input: RDD[LabeledPoint],

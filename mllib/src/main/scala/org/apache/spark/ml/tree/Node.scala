@@ -18,7 +18,6 @@
 package org.apache.spark.ml.tree
 
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.ml.tree.impl.{InformationGainStats, Predict}
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.tree.model.{InformationGainStats => OldInformationGainStats,
   Node => OldNode, Predict => OldPredict}
@@ -134,7 +133,7 @@ final class LeafNode private[ml] (
  * @param split  Information about the test used to split to the left or right child.
  */
 @DeveloperApi
-class InternalNode private[ml] (
+final class InternalNode private[ml] (
     override val prediction: Double,
     override val impurity: Double,
     val gain: Double,
@@ -212,7 +211,10 @@ private object InternalNode {
 }
 
 /**
- * For now, we extend nodes with ids.  These will be kept internal since we hope to remove node IDs
+ * Version of a node used in learning.  This uses vars so that we can modify nodes as we split the
+ * tree by adding children, etc.
+ *
+ * For now, we use node IDs.  These will be kept internal since we hope to remove node IDs
  * in the future, or at least change the indexing (so that we can support much deeper trees).
  *
  * This node can either be:
@@ -224,13 +226,13 @@ private object InternalNode {
  */
 private[tree] class LearningNode(
     var id: Int,
-    var predictionStats: Predict,
+    var predictionStats: OldPredict,
     var impurity: Double,
     var leftChild: Option[LearningNode],
     var rightChild: Option[LearningNode],
     var split: Option[Split],
     var isLeaf: Boolean,
-    var stats: Option[InformationGainStats]) extends Serializable {
+    var stats: Option[OldInformationGainStats]) extends Serializable {
 
   /**
    * Convert this [[LearningNode]] to a regular [[Node]], and recurse on any children.
@@ -250,14 +252,16 @@ private[tree] class LearningNode(
 
 private[tree] object LearningNode {
 
-  def apply(id: Int, predictionStats: Predict, impurity: Double, isLeaf: Boolean): LearningNode = {
+  def apply(id: Int, predictionStats: OldPredict, impurity: Double, isLeaf: Boolean): LearningNode = {
     new LearningNode(id, predictionStats, impurity, None, None, None, false, None)
   }
 
   def emptyNode(nodeIndex: Int): LearningNode = {
-    new LearningNode(nodeIndex, new Predict(Double.NaN, Double.NaN), Double.NaN,
+    new LearningNode(nodeIndex, new OldPredict(Double.NaN, Double.NaN), Double.NaN,
       None, None, None, false, None)
   }
+
+  // The below indexing methods were copied from spark.mllib.tree.model.Node
 
   /**
    * Return the index of the left child of this node.

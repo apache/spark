@@ -63,8 +63,6 @@ private[spark] object TreePoint {
       featureArity(featureIndex) = metadata.featureArity.getOrElse(featureIndex, 0)
       featureIndex += 1
     }
-    // TODO: RIGHT HERE NOW: We cannot use Bucketizer since it uses different bucketing than
-    //       the original DecisionTree.  (It handles split thresholds differently.)
     val thresholds: Array[Array[Double]] = featureArity.zipWithIndex.map { case (arity, idx) =>
       if (arity == 0) {
         splits(idx).map(_.asInstanceOf[ContinuousSplit].threshold)

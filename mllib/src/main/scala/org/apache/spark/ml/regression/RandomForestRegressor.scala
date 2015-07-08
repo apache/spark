@@ -18,10 +18,10 @@
 package org.apache.spark.ml.regression
 
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.ml.tree.impl.RandomForest
 import org.apache.spark.ml.{PredictionModel, Predictor}
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.tree.{DecisionTreeModel, RandomForestParams, TreeEnsembleModel, TreeRegressorParams}
+import org.apache.spark.ml.tree.impl.RandomForest
 import org.apache.spark.ml.util.{Identifiable, MetadataUtils}
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.regression.LabeledPoint
@@ -82,9 +82,6 @@ final class RandomForestRegressor(override val uid: String)
     val oldDataset: RDD[LabeledPoint] = extractLabeledPoints(dataset)
     val strategy =
       super.getOldStrategy(categoricalFeatures, numClasses = 0, OldAlgo.Regression, getOldImpurity)
-    // val oldModel = OldRandomForest.trainRegressor(
-    //   oldDataset, strategy, getNumTrees, getFeatureSubsetStrategy, getSeed.toInt)
-    // RandomForestRegressionModel.fromOld(oldModel, this, categoricalFeatures)
     val trees = RandomForest.run(oldDataset, strategy, getNumTrees, getFeatureSubsetStrategy,
       getSeed).map(_.asInstanceOf[DecisionTreeRegressionModel])
     copyValues(new RandomForestRegressionModel(trees).setParent(this))
@@ -118,7 +115,7 @@ final class RandomForestRegressionModel private[ml] (
 
   require(numTrees > 0, "RandomForestRegressionModel requires at least 1 tree.")
 
-  def this(trees: Array[DecisionTreeRegressionModel]) = this(Identifiable.randomUID("rfc"), trees)
+  def this(trees: Array[DecisionTreeRegressionModel]) = this(Identifiable.randomUID("rfr"), trees)
 
   override def trees: Array[DecisionTreeModel] = _trees.asInstanceOf[Array[DecisionTreeModel]]
 

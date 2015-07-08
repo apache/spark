@@ -33,9 +33,7 @@ import org.apache.spark.storage.StorageLevel
  * @param split Split information.
  * @param nodeIndex The current node index of a data point that this will update.
  */
-private[tree] case class NodeIndexUpdater(
-    split: Split,
-    nodeIndex: Int) {
+private[tree] case class NodeIndexUpdater(split: Split, nodeIndex: Int) {
 
   /**
    * Determine a child node index based on the feature value and the split.
@@ -106,10 +104,8 @@ private[spark] class NodeIdCache(
               splits = splits(featureIndex))
             dataPoint._2(treeId) = newNodeIndex
           }
-
           treeId += 1
         }
-
         dataPoint._2
       }
     }
@@ -128,9 +124,7 @@ private[spark] class NodeIdCache(
         // the next checkpoint actually exists in the file system.
         if (checkpointQueue.get(1).get.getCheckpointFile.isDefined) {
           val old = checkpointQueue.dequeue()
-
-          // Since the old checkpoint is not deleted by Spark,
-          // we'll manually delete it here.
+          // Since the old checkpoint is not deleted by Spark, we'll manually delete it here.
           val fs = FileSystem.get(old.sparkContext.hadoopConfiguration)
           fs.delete(new Path(old.getCheckpointFile.get), true)
         } else {
