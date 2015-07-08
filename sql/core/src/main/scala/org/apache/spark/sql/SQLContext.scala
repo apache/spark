@@ -139,8 +139,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
 
   // TODO how to handle the temp function per user session?
   @transient
-  protected[sql] lazy val functionRegistry: FunctionRegistry =
-    new OverrideFunctionRegistry(FunctionRegistry.builtin)
+  protected[sql] lazy val functionRegistry: FunctionRegistry = FunctionRegistry.builtin
 
   @transient
   protected[sql] lazy val analyzer: Analyzer =
@@ -274,7 +273,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * Or, to use Java 8 lambda syntax:
    * {{{
    *   sqlContext.udf().register("myUDF",
-   *       (Integer arg1, String arg2) -> arg2 + arg1),
+   *       (Integer arg1, String arg2) -> arg2 + arg1,
    *       DataTypes.StringType);
    * }}}
    *

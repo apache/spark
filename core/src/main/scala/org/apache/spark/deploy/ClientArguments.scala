@@ -117,7 +117,7 @@ private[deploy] class ClientArguments(args: Array[String]) {
 
 private[deploy] object ClientArguments {
   val DEFAULT_CORES = 1
-  val DEFAULT_MEMORY = 512 // MB
+  val DEFAULT_MEMORY = Utils.DEFAULT_DRIVER_MEM_MB // MB
   val DEFAULT_SUPERVISE = false
 
   def isValidJarUrl(s: String): Boolean = {

@@ -23,6 +23,7 @@ import java.util.Arrays
 import org.scalatest.Matchers
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.{ObjectPool, DateTimeUtils}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.PlatformDependent

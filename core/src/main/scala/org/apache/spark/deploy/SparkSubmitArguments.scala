@@ -461,8 +461,9 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
         |Usage: spark-submit --status [submission ID] --master [spark://...]""".stripMargin)
     outStream.println(command)
 
+    val mem_mb = Utils.DEFAULT_DRIVER_MEM_MB
     outStream.println(
-      """
+      s"""
         |Options:
         |  --master MASTER_URL         spark://host:port, mesos://host:port, yarn, or local.
         |  --deploy-mode DEPLOY_MODE   Whether to launch the driver program locally ("client") or
@@ -488,7 +489,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
         |  --properties-file FILE      Path to a file from which to load extra properties. If not
         |                              specified, this will look for conf/spark-defaults.conf.
         |
-        |  --driver-memory MEM         Memory for driver (e.g. 1000M, 2G) (Default: 512M).
+        |  --driver-memory MEM         Memory for driver (e.g. 1000M, 2G) (Default: ${mem_mb}M).
         |  --driver-java-options       Extra Java options to pass to the driver.
         |  --driver-library-path       Extra library path entries to pass to the driver.
         |  --driver-class-path         Extra class path entries to pass to the driver. Note that
