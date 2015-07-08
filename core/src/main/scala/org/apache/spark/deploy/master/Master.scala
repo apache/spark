@@ -569,7 +569,8 @@ private[master] class Master(
       // Pack executors into as few workers as possible (dense scheduling)
       while (toAssign > 0) {
         while (usableWorkers(pos).coresFree - assignedCores(pos) >= coresPerExecutor &&
-               usableWorkers(pos).memoryFree - assignedMemory(pos) >= memoryPerExecutor) {
+               usableWorkers(pos).memoryFree - assignedMemory(pos) >= memoryPerExecutor &&
+               toAssign > 0) {
           toAssign -= coresPerExecutor
           assignedCores(pos) += coresPerExecutor
           assignedMemory(pos) += memoryPerExecutor
