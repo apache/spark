@@ -86,7 +86,7 @@ final class RandomForestRegressor(override val uid: String)
     //   oldDataset, strategy, getNumTrees, getFeatureSubsetStrategy, getSeed.toInt)
     // RandomForestRegressionModel.fromOld(oldModel, this, categoricalFeatures)
     val trees = RandomForest.run(oldDataset, strategy, getNumTrees, getFeatureSubsetStrategy,
-      getSeed).asInstanceOf[Array[DecisionTreeRegressionModel]]
+      getSeed).map(_.asInstanceOf[DecisionTreeRegressionModel])
     copyValues(new RandomForestRegressionModel(trees).setParent(this))
   }
 

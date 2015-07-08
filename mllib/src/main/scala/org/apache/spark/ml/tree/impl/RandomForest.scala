@@ -89,10 +89,6 @@ private[ml] object RandomForest extends Logging {
     val baggedInput = BaggedPoint.convertToBaggedRDD(treeInput, strategy.subsamplingRate, numTrees,
       withReplacement, seed).persist(StorageLevel.MEMORY_AND_DISK)
 
-    baggedInput.collect().foreach { p =>
-      println(s"TreePoint(${p.datum.label}, ${p.datum.binnedFeatures.mkString(", ")})")
-    }
-
     // depth of the decision tree
     val maxDepth = strategy.maxDepth
     require(maxDepth <= 30,
@@ -904,7 +900,6 @@ private[ml] object RandomForest extends Logging {
       if (metadata.isContinuous(featureIndex)) {
         val featureSamples = sampledInput.map(_.features(featureIndex))
         val featureSplits = findSplitsForContinuousFeature(featureSamples, metadata, featureIndex)
-        println(s"Feature $featureIndex splits: ${featureSplits.mkString(", ")}")
 
         val numSplits = featureSplits.length
         logDebug(s"featureIndex = $featureIndex, numSplits = $numSplits")

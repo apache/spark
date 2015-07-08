@@ -97,7 +97,7 @@ final class RandomForestClassifier(override val uid: String)
     //   oldDataset, strategy, getNumTrees, getFeatureSubsetStrategy, getSeed.toInt)
     // RandomForestClassificationModel.fromOld(oldModel, this, categoricalFeatures)
     val trees = RandomForest.run(oldDataset, strategy, getNumTrees, getFeatureSubsetStrategy,
-      getSeed).asInstanceOf[Array[DecisionTreeClassificationModel]]
+      getSeed).map(_.asInstanceOf[DecisionTreeClassificationModel])
     copyValues(new RandomForestClassificationModel(trees).setParent(this))
   }
 
