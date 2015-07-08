@@ -27,6 +27,7 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   @transient var dataset: DataFrame = _
   @transient var datasetWithoutIntercept: DataFrame = _
+
   /*
      In `LinearRegressionSuite`, we will make sure that the model trained by SparkML
      is the same as the one trained by R's glmnet package. The following instruction
@@ -140,7 +141,7 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
     val interceptR = 6.24300
     val weightsR = Array(4.024821, 6.679841)
 
-    assert(model.intercept ~== interceptR relTol 2E-3)
+    assert(model.intercept ~== interceptR relTol 1E-3)
     assert(model.weights(0) ~== weightsR(0) relTol 1E-3)
     assert(model.weights(1) ~== weightsR(1) relTol 1E-3)
 

@@ -230,11 +230,13 @@ class LinearRegressionModel private[ml] (
   extends RegressionModel[Vector, LinearRegressionModel]
   with LinearRegressionParams {
 
-  private var trainingSummary: Option[LinearRegressionTrainingSummary] = None
+  @transient private var trainingSummary: Option[LinearRegressionTrainingSummary] = None
 
   /**
-   * Gets results summary (e.g. residuals, mse, r-squared ) of model on training set. An exception
-   * is thrown if `trainingSummary == None`.
+   * Gets results summary (e.g. residuals, mse, r-squared ) of model on training set. This method
+   * should only be called on the driver as `summary` is transient.
+   *
+   * An exception is thrown if `trainingSummary == None`.
    */
   def summary: LinearRegressionTrainingSummary = trainingSummary match {
     case Some(summ) => summ
@@ -269,9 +271,9 @@ class LinearRegressionModel private[ml] (
   }
 
   override def copy(extra: ParamMap): LinearRegressionModel = {
-    val newModel = new LinearRegressionModel(uid, weights, intercept)
+    val newModel = copyValues(new LinearRegressionModel(uid, weights, intercept))
     if (trainingSummary.isDefined) newModel.setSummary(trainingSummary.get)
-    copyValues(newModel, extra)
+    newModel
   }
 }
 
@@ -317,17 +319,14 @@ class LinearRegressionTrainingSummary private[ml] (
  */
 @Experimental
 class LinearRegressionSummary private[ml] (
-    @transient val predictions: DataFrame,
+    val predictions: DataFrame,
     val predictionCol: String,
-    val labelCol: String) extends Serializable {
+    val labelCol: String) {
 
   private val metrics = new RegressionMetrics(predictions
     .select(predictionCol, labelCol)
     .map { case Row(pred: Double, label: Double) => (pred, label) }
   )
-
-  // Force evaluation of lazy RegressionMetrics.summary for proper serialization
-  metrics.explainedVariance
 
   /**
    * Returns the explained variance regression score.

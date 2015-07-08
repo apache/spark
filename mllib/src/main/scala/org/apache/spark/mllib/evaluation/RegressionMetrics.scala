@@ -31,8 +31,7 @@ import org.apache.spark.sql.DataFrame
  * @param predictionAndObservations an RDD of (prediction, observation) pairs.
  */
 @Experimental
-class RegressionMetrics(@transient predictionAndObservations: RDD[(Double, Double)])
-  extends Logging with Serializable {
+class RegressionMetrics(predictionAndObservations: RDD[(Double, Double)]) extends Logging {
 
   /**
    * An auxiliary constructor taking a DataFrame.
