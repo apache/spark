@@ -171,7 +171,7 @@ override def outputPartitioning: Partitioning = joinType match {
       var existingMatchList = hashTable.get(rowKey)
       if (existingMatchList == null) {
         existingMatchList = new CompactBuffer[InternalRow]()
-        hashTable.put(rowKey, existingMatchList)
+        hashTable.put(rowKey.copy(), existingMatchList)
       }
 
       existingMatchList += currentRow.copy()

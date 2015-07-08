@@ -125,7 +125,7 @@ private[joins] object HashedRelation {
         val existingMatchList = hashTable.get(rowKey)
         val matchList = if (existingMatchList == null) {
           val newMatchList = new CompactBuffer[InternalRow]()
-          hashTable.put(rowKey, newMatchList)
+          hashTable.put(rowKey.copy(), newMatchList)
           newMatchList
         } else {
           keyIsUnique = false
