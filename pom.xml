@@ -273,6 +273,18 @@
         <enabled>false</enabled>
       </snapshots>
     </repository>
+    <!-- For transitive dependencies brougt by parquet-thrift -->
+    <repository>
+      <id>twttr-repo</id>
+      <name>Twttr Repository</name>
+      <url>http://maven.twttr.com</url>
+      <releases>
+        <enabled>true</enabled>
+      </releases>
+      <snapshots>
+        <enabled>false</enabled>
+      </snapshots>
+    </repository>
     <!-- TODO: This can be deleted after Spark 1.4 is posted -->
     <repository>
       <id>spark-1.4-staging</id>
