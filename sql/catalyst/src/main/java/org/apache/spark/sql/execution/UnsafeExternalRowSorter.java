@@ -18,9 +18,7 @@
 package org.apache.spark.sql.execution;
 
 import java.io.IOException;
-import java.util.Arrays;
 
-import org.apache.spark.sql.Row;
 import scala.collection.Iterator;
 import scala.math.Ordering;
 
@@ -100,12 +98,6 @@ final class UnsafeExternalRowSorter {
     final int sizeRequirement = rowConverter.getSizeRequirement(row);
     if (sizeRequirement > rowConversionBuffer.length) {
       rowConversionBuffer = new byte[sizeRequirement];
-    } else {
-      // Zero out the buffer that's used to hold the current row. This is necessary in order
-      // to ensure that rows hash properly, since garbage data from the previous row could
-      // otherwise end up as padding in this row. As a performance optimization, we only zero
-      // out the portion of the buffer that we'll actually write to.
-      Arrays.fill(rowConversionBuffer, 0, sizeRequirement, (byte) 0);
     }
     final int bytesWritten = rowConverter.writeRow(
       row, rowConversionBuffer, PlatformDependent.BYTE_ARRAY_OFFSET, objPool);
