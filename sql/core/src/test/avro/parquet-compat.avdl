@@ -15,9 +15,7 @@
  * limitations under the License.
  */
 
-/**
- * This is a test protocol for testing parquet-avro compatibility.
- */
+// This is a test protocol for testing parquet-avro compatibility.
 @namespace("org.apache.spark.sql.parquet.test.avro")
 protocol CompatibilityTest {
     record Nested {

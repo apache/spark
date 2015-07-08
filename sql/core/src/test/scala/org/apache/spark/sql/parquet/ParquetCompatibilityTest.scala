@@ -16,9 +16,13 @@
  */
 
 package org.apache.spark.sql.parquet
-
 import java.io.File
 
+import scala.collection.JavaConversions._
+
+import org.apache.hadoop.fs.Path
+import org.apache.parquet.hadoop.ParquetFileReader
+import org.apache.parquet.schema.MessageType
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.sql.test.TestSQLContext
@@ -37,6 +41,15 @@ abstract class ParquetCompatibilityTest extends QueryTest with ParquetTest with 
 
   override protected def afterAll(): Unit = {
     Utils.deleteRecursively(parquetStore)
+  }
+
+  def readParquetSchema(path: String): MessageType = {
+    val fsPath = new Path(path)
+    val footers =
+      ParquetFileReader.readAllFootersInParallel(
+        configuration, fsPath.getFileSystem(configuration).listStatus(fsPath).toSeq, true)
+
+    footers.head.getParquetMetadata.getFileMetaData.getSchema
   }
 }
 

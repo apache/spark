@@ -25,23 +25,23 @@ enum Suit {
 }
 
 struct Nested {
-    1: list<i32> nestedIntsColumn;
-    2: string nestedStringColumn;
+    1: required list<i32> nestedIntsColumn;
+    2: required string nestedStringColumn;
 }
 
 /**
  * This is a test struct for testing parquet-thrift compatibility.
  */
 struct ParquetThriftCompat {
-    1: bool boolColumn;
-    2: byte byteColumn;
-    3: i16 shortColumn;
-    4: i32 intColumn;
-    5: i64 longColumn;
-    6: double doubleColumn;
-    7: binary binaryColumn;
-    8: string stringColumn;
-    9: Suit enumColumn
+    1: required bool boolColumn;
+    2: required byte byteColumn;
+    3: required i16 shortColumn;
+    4: required i32 intColumn;
+    5: required i64 longColumn;
+    6: required double doubleColumn;
+    7: required binary binaryColumn;
+    8: required string stringColumn;
+    9: required Suit enumColumn
 
     10: optional bool maybeBoolColumn;
     11: optional byte maybeByteColumn;
@@ -53,8 +53,8 @@ struct ParquetThriftCompat {
     17: optional string maybeStringColumn;
     18: optional Suit maybeEnumColumn;
 
-    19: list<string> stringsColumn;
-    20: set<i32> intSetColumn;
-    21: map<i32, string> intToStringColumn;
-    22: map<i32, list<Nested>> complexColumn;
+    19: required list<string> stringsColumn;
+    20: required set<i32> intSetColumn;
+    21: required map<i32, string> intToStringColumn;
+    22: required map<i32, list<Nested>> complexColumn;
 }

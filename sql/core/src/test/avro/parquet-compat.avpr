@@ -1,7 +1,6 @@
 {
   "protocol" : "CompatibilityTest",
   "namespace" : "org.apache.spark.sql.parquet.test.avro",
-  "doc" : "* This is a test protocol for testing parquet-avro compatibility.",
   "types" : [ {
     "type" : "record",
     "name" : "Nested",
