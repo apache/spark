@@ -105,7 +105,6 @@ class CoarseMesosSchedulerBackendSuite extends SparkFunSuite
     // Calling doKillExecutors should invoke driver.killTask.
     assert(backend.doKillExecutors(Seq("s1/0")))
     verify(driver, times(1)).killTask(taskID0)
-    assert(backend.executorLimit === 0)
 
     val mesosOffers2 = new java.util.ArrayList[Offer]
     mesosOffers2.add(createOffer("o2", "s2", minMem, minCpu))

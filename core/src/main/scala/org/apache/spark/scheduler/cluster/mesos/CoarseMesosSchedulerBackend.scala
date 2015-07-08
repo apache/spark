@@ -361,13 +361,9 @@ private[spark] class CoarseMesosSchedulerBackend(
         logWarning("Unable to find executor Id '" + executorId + "' in Mesos scheduler")
       }
     }
-
-    // We cannot simply decrement from the existing executor limit as we may not able to
-    // launch as much executors as the limit. But we assume if we are notified to kill
-    // executors, that means the scheduler wants to set the limit that is less than
-    // the amount of the executors that has been launched. Therefore, we take the existing
-    // amount of executors launched and deduct the executors killed as the new limit.
-    executorLimitOption = Some(Math.max(0, taskIdToSlaveId.size - pendingRemovedSlaveIds.size))
+    // no need to adjust `executorLimitOption` since the AllocationManager already communicated
+    // the desired limit through a call to `doRequestTotalExecutors`.
+    // See [[o.a.s.scheduler.cluster.CoarseGrainedSchedulerBackend.killExecutors]]
     true
   }
 }
