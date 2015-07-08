@@ -450,7 +450,6 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
       receiverTrackingInfos.put(receiver.streamId, ReceiverTrackingInfo(
         receiver.streamId,
         ReceiverState.INACTIVE,
-        receiver.preferredLocation,
         None,
         None))
     }
@@ -468,7 +467,6 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
       receiverTrackingInfos.put(receiverId, ReceiverTrackingInfo(
         receiverId,
         ReceiverState.SCHEDULED,
-        receiverPreferredLocations(receiverId),
         Some(scheduledLocations),
         None))
     }
@@ -478,7 +476,6 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
       receiverTrackingInfos.put(receiverId, ReceiverTrackingInfo(
         receiverId,
         ReceiverState.ACTIVE,
-        receiverPreferredLocations(receiverId),
         None,
         Some(runningLocation)))
     }

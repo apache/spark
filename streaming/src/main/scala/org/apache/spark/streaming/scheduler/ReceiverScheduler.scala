@@ -20,13 +20,11 @@ package org.apache.spark.streaming.scheduler
 import scala.collection.mutable
 import scala.util.Random
 
-import org.apache.spark.streaming.StreamingContext
 import org.apache.spark.streaming.scheduler.ReceiverState._
 
 private[streaming] case class ReceiverTrackingInfo(
     receiverId: Int,
     state: ReceiverState,
-    preferredLocation: Option[String],
     scheduledLocations: Option[Seq[String]],
     runningLocation: Option[String])
 
