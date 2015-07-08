@@ -64,61 +64,61 @@ private[history] class HistoryPage(parent: HistoryServer) extends WebUIPage("") 
             {providerConfig.map { case (k, v) => <li><strong>{k}:</strong> {v}</li> }}
           </ul>
           {
-          // This displays the indices of pages that are within `plusOrMinus` pages of
-          // the current page. Regardless of where the current page is, this also links
-          // to the first and last page. If the current page +/- `plusOrMinus` is greater
-          // than the 2nd page from the first page or less than the 2nd page from the last
-          // page, `...` will be displayed.
-          if (allAppsSize > 0) {
-            val leftSideIndices =
-              rangeIndices(actualPage - plusOrMinus until actualPage, 1 < _, requestedIncomplete)
-            val rightSideIndices =
-              rangeIndices(actualPage + 1 to actualPage + plusOrMinus, _ < pageCount,
-                requestedIncomplete)
+            // This displays the indices of pages that are within `plusOrMinus` pages of
+            // the current page. Regardless of where the current page is, this also links
+            // to the first and last page. If the current page +/- `plusOrMinus` is greater
+            // than the 2nd page from the first page or less than the 2nd page from the last
+            // page, `...` will be displayed.
+            if (allAppsSize > 0) {
+              val leftSideIndices =
+                rangeIndices(actualPage - plusOrMinus until actualPage, 1 < _, requestedIncomplete)
+              val rightSideIndices =
+                rangeIndices(actualPage + 1 to actualPage + plusOrMinus, _ < pageCount,
+                  requestedIncomplete)
 
-            <h4>
-              Showing {actualFirst + 1}-{last + 1} of {allAppsSize}
-              {if (requestedIncomplete) "(Incomplete applications)"}
-              <span style="float: right">
-                {
-                if (actualPage > 1) {
-                  <a href={makePageLink(actualPage - 1, requestedIncomplete)}>&lt; </a>
-                    <a href={makePageLink(1, requestedIncomplete)}>1</a>
-                }
-                }
-                {if (actualPage - plusOrMinus > secondPageFromLeft) " ... "}
-                {leftSideIndices}
-                {actualPage}
-                {rightSideIndices}
-                {if (actualPage + plusOrMinus < secondPageFromRight) " ... "}
-                {
-                if (actualPage < pageCount) {
-                  <a href={makePageLink(pageCount, requestedIncomplete)}>{pageCount}</a>
-                    <a href={makePageLink(actualPage + 1, requestedIncomplete)}> &gt;</a>
-                }
-                }
-              </span>
-            </h4> ++
+              <h4>
+                Showing {actualFirst + 1}-{last + 1} of {allAppsSize}
+                {if (requestedIncomplete) "(Incomplete applications)"}
+                <span style="float: right">
+                  {
+                    if (actualPage > 1) {
+                      <a href={makePageLink(actualPage - 1, requestedIncomplete)}>&lt; </a>
+                      <a href={makePageLink(1, requestedIncomplete)}>1</a>
+                    }
+                  }
+                  {if (actualPage - plusOrMinus > secondPageFromLeft) " ... "}
+                  {leftSideIndices}
+                  {actualPage}
+                  {rightSideIndices}
+                  {if (actualPage + plusOrMinus < secondPageFromRight) " ... "}
+                  {
+                    if (actualPage < pageCount) {
+                      <a href={makePageLink(pageCount, requestedIncomplete)}>{pageCount}</a>
+                      <a href={makePageLink(actualPage + 1, requestedIncomplete)}> &gt;</a>
+                    }
+                  }
+                </span>
+              </h4> ++
               appTable
-          } else if (requestedIncomplete) {
-            <h4>No incomplete applications found!</h4>
-          } else {
-            <h4>No completed applications found!</h4> ++
+            } else if (requestedIncomplete) {
+              <h4>No incomplete applications found!</h4>
+            } else {
+              <h4>No completed applications found!</h4> ++
               <p>Did you specify the correct logging directory?
                 Please verify your setting of <span style="font-style:italic">
                 spark.history.fs.logDirectory</span> and whether you have the permissions to
                 access it.<br /> It is also possible that your application did not run to
                 completion or did not stop the SparkContext.
               </p>
-          }
+            }
           }
           <a href={makePageLink(actualPage, !requestedIncomplete)}>
             {
-            if (requestedIncomplete) {
-              "Back to completed applications"
-            } else {
-              "Show incomplete applications"
-            }
+              if (requestedIncomplete) {
+                "Back to completed applications"
+              } else {
+                "Show incomplete applications"
+              }
             }
           </a>
         </div>
@@ -146,18 +146,18 @@ private[history] class HistoryPage(parent: HistoryServer) extends WebUIPage("") 
     "Last Updated")
 
   private def rangeIndices(
-                            range: Seq[Int],
-                            condition: Int => Boolean,
-                            showIncomplete: Boolean): Seq[Node] = {
+      range: Seq[Int],
+      condition: Int => Boolean,
+      showIncomplete: Boolean): Seq[Node] = {
     range.filter(condition).map(nextPage =>
       <a href={makePageLink(nextPage, showIncomplete)}> {nextPage} </a>)
   }
 
   private def attemptRow(
-                          renderAttemptIdColumn: Boolean,
-                          info: ApplicationHistoryInfo,
-                          attempt: ApplicationAttemptInfo,
-                          isFirst: Boolean): Seq[Node] = {
+      renderAttemptIdColumn: Boolean,
+      info: ApplicationHistoryInfo,
+      attempt: ApplicationAttemptInfo,
+      isFirst: Boolean): Seq[Node] = {
     val uiAddress = HistoryServer.getAttemptURI(info.id, attempt.attemptId)
     val startTime = UIUtils.formatDate(attempt.startTime)
     val endTime = if (attempt.endTime > 0) UIUtils.formatDate(attempt.endTime) else "-"
@@ -170,31 +170,31 @@ private[history] class HistoryPage(parent: HistoryServer) extends WebUIPage("") 
     val lastUpdated = UIUtils.formatDate(attempt.lastUpdated)
     <tr>
       {
-      if (isFirst) {
-        if (info.attempts.size > 1 || renderAttemptIdColumn) {
-          <td rowspan={info.attempts.size.toString} style="background-color: #ffffff">
-            <a href={uiAddress}>{info.id}</a></td>
+        if (isFirst) {
+          if (info.attempts.size > 1 || renderAttemptIdColumn) {
+            <td rowspan={info.attempts.size.toString} style="background-color: #ffffff">
+              <a href={uiAddress}>{info.id}</a></td>
             <td rowspan={info.attempts.size.toString} style="background-color: #ffffff">
               {info.name}</td>
-        } else {
-          <td><a href={uiAddress}>{info.id}</a></td>
+          } else {
+            <td><a href={uiAddress}>{info.id}</a></td>
             <td>{info.name}</td>
+          }
+        } else {
+          Nil
         }
-      } else {
-        Nil
-      }
       }
       {
-      if (renderAttemptIdColumn) {
-        if (info.attempts.size > 1 && attempt.attemptId.isDefined) {
-          <td><a href={HistoryServer.getAttemptURI(info.id, attempt.attemptId)}>
-            {attempt.attemptId.get}</a></td>
+        if (renderAttemptIdColumn) {
+          if (info.attempts.size > 1 && attempt.attemptId.isDefined) {
+            <td><a href={HistoryServer.getAttemptURI(info.id, attempt.attemptId)}>
+              {attempt.attemptId.get}</a></td>
+          } else {
+            <td>&nbsp;</td>
+          }
         } else {
-          <td>&nbsp;</td>
+          Nil
         }
-      } else {
-        Nil
-      }
       }
       <td sorttable_customkey={attempt.startTime.toString}>{startTime}</td>
       <td sorttable_customkey={attempt.endTime.toString}>{endTime}</td>
