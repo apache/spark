@@ -242,4 +242,23 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
     assert(pmemMsg.contains("2.1 MB of 2 GB physical memory used."))
   }
 
+  test("Getting executor loss reason should depend on how container was terminated") {
+    val container1 = createContainer("host1")
+    val container2 = createContainer("host2")
+    val container3 = createContainer("host3")
+    val container4 = createContainer("host4")
+    val container5 = createContainer("host5")
+
+    val handler = createAllocator(5)
+    handler.handleAllocatedContainers(Array(container1, container2, container3, container4, container5))
+    val preemptedContainerStatus = ContainerStatus.newInstance(container1.getId(), ContainerState.COMPLETE, "Preempted", ContainerExitStatus.PREEMPTED)
+    val vmemLimitExceededContainerStatus = ContainerStatus.newInstance(container2.getId(), ContainerState.COMPLETE, "Vmem limit exceeded", -103)
+    val pmemLimitExceededContainerStatus = ContainerStatus.newInstance(container3.getId(), ContainerState.COMPLETE, "pmem limit exceeded", -104)
+    val unknownErrorContainerSTatus = ContainerStatus.newInstance(container4.getId(), ContainerState.COMPLETE, "Unknown error", 123)
+
+    val killedExecutorId =  handler.executorIdToContainer.filter(_._2.getId().equals(container5)).iterator().next()._1
+    handler.killExecutor(killedExecutorId)
+    assert(handler.getExecutorLossReason(killedExecutorId).isInstanceOf[ExecutorExitedNormally])
+  }
+
 }

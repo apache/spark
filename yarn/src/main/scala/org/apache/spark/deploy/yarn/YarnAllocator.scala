@@ -101,6 +101,7 @@ private[yarn] class YarnAllocator(
   // Store only non-zero exit codes to save on space for the expected-majority case where executors
   // terminate normally.
   private val completedNonZeroContainerExitCodes = new HashMap[ContainerId, ExecutorLossReason]
+  private val killedExecutors = new HashSet[String]
 
   // Executor memory in MB.
   protected val executorMemory = args.executorMemory
@@ -181,6 +182,7 @@ private[yarn] class YarnAllocator(
       val container = executorIdToContainer.remove(executorId).get
       internalReleaseContainer(container)
       numExecutorsRunning -= 1
+      killedExecutors += executorId
     } else {
       logWarning(s"Attempted to kill unknown executor $executorId!")
     }
@@ -188,7 +190,11 @@ private[yarn] class YarnAllocator(
 
   def getExecutorLossReason(executorId: String): ExecutorLossReason = synchronized {
     allocateResources()
-    completedNonZeroContainerExitCodes.getOrElse(executorIdToContainer(executorId).getId, NORMAL_CONTAINER_EXIT_STATUS)
+    if (killedExecutors.contains(executorId)) {
+        NORMAL_CONTAINER_EXIT_STATUS
+    } else {
+      completedNonZeroContainerExitCodes.getOrElse(executorIdToContainer(executorId).getId, NORMAL_CONTAINER_EXIT_STATUS)
+    }
   }
 
   /**
@@ -418,43 +424,42 @@ private[yarn] class YarnAllocator(
         // Hadoop 2.2.X added a ContainerExitStatus we should switch to use
         // there are some exit status' we shouldn't necessarily count against us, but for
         // now I think its ok as none of the containers are expected to exit
-        var isExecutorNonZeroExitNormal = true
+        var isExecutorNonZeroExitNormal = false
         var containerExitReason = "Container exited for an unknown reason."
-        if (completedContainer.getExitStatus == ContainerExitStatus.PREEMPTED) {
+        val exitStatus = completedContainer.getExitStatus
+        if (exitStatus == ContainerExitStatus.PREEMPTED) {
+          isExecutorNonZeroExitNormal = true
           containerExitReason = s"Container $containerId was preempted."
           logInfo(containerExitReason)
-        } else if (completedContainer.getExitStatus == -103) { // vmem limit exceeded
+        } else if (exitStatus == -103) { // vmem limit exceeded
           // Should probably still count these towards task failures
-          isExecutorNonZeroExitNormal = false
           containerExitReason = memLimitExceededLogMessage(
             completedContainer.getDiagnostics,
             VMEM_EXCEEDED_PATTERN)
           logWarning(containerExitReason)
-        } else if (completedContainer.getExitStatus == -104) { // pmem limit exceeded
+        } else if (exitStatus == -104) { // pmem limit exceeded
           // Should probably still count these towards task failures
-          isExecutorNonZeroExitNormal = false
           containerExitReason = memLimitExceededLogMessage(
             completedContainer.getDiagnostics,
             PMEM_EXCEEDED_PATTERN)
           logWarning(containerExitReason)
-        } else if (completedContainer.getExitStatus != 0) {
+        } else if (exitStatus != 0) {
           logInfo("Container marked as failed: " + containerId +
             ". Exit status: " + completedContainer.getExitStatus +
             ". Diagnostics: " + completedContainer.getDiagnostics)
           numExecutorsFailed += 1
-          isExecutorNonZeroExitNormal = false
-          containerExitReason = s"Container $containerId exited abnormally, and was marked as failed."
+          containerExitReason = s"Container $containerId exited abnormally with exit status $exitStatus, and was marked as failed."
         }
 
-        if (completedContainer.getExitStatus() != 0) {
-          val exitStatus = {
+        if (exitStatus != 0) {
+          val exitReason = {
             if (isExecutorNonZeroExitNormal) {
-              ExecutorExitedNormally(completedContainer.getExitStatus(), containerExitReason)
+              ExecutorExitedNormally(completedContainer.getExitStatus, containerExitReason)
             } else {
-              ExecutorExitedAbnormally(completedContainer.getExitStatus(), containerExitReason)
+              ExecutorExitedAbnormally(completedContainer.getExitStatus, containerExitReason)
             }
           }
-          completedNonZeroContainerExitCodes.put(containerId, exitStatus)
+          completedNonZeroContainerExitCodes.put(containerId, exitReason)
         }
       }
 
