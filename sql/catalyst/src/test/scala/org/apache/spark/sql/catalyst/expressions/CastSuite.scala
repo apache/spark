@@ -305,9 +305,9 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(cast(cast(tss, IntegerType), TimestampType),
       DateTimeUtils.fromJavaTimestamp(ts))
     checkEvaluation(cast(cast(tss, LongType), TimestampType), DateTimeUtils.fromJavaTimestamp(ts))
-//    checkEvaluation(
-//      cast(cast(millis.toFloat / 1000, TimestampType), FloatType),
-//      millis.toFloat / 1000)
+    checkEvaluation(
+      cast(cast(millis.toFloat / 1000, TimestampType), FloatType),
+      millis.toFloat / 1000)
     checkEvaluation(
       cast(cast(millis.toDouble / 1000, TimestampType), DoubleType),
       millis.toDouble / 1000)

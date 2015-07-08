@@ -199,7 +199,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
     // TimestampWritable.floatToTimestamp
     case FloatType =>
       buildCast[Float](_, f => try {
-        decimalToTimestamp(Decimal(f))
+        decimalToTimestamp(Decimal(f.toString))
       } catch {
         case _: NumberFormatException => null
       })
