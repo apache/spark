@@ -164,7 +164,7 @@ private[worker] class WorkerArguments(args: Array[String], conf: SparkConf) {
       }
     }
     // Leave out 1 GB for the operating system, but don't return a negative memory size
-    math.max(totalMb - 1024, 512)
+    math.max(totalMb - 1024, Utils.DEFAULT_DRIVER_MEM_MB)
   }
 
   def checkWorkerMemory(): Unit = {

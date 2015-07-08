@@ -327,11 +327,17 @@ which contains the computed clustering assignments.
 import org.apache.spark.mllib.clustering.{PowerIterationClustering, PowerIterationClusteringModel}
 import org.apache.spark.mllib.linalg.Vectors
 
-val similarities: RDD[(Long, Long, Double)] = ...
+// Load and parse the data
+val data = sc.textFile("data/mllib/pic_data.txt")
+val similarities = data.map { line =>
+  val parts = line.split(' ')
+  (parts(0).toLong, parts(1).toLong, parts(2).toDouble)
+}
 
+// Cluster the data into two classes using PowerIterationClustering
 val pic = new PowerIterationClustering()
-  .setK(3)
-  .setMaxIterations(20)
+  .setK(2)
+  .setMaxIterations(10)
 val model = pic.run(similarities)
 
 model.assignments.foreach { a =>
@@ -363,11 +369,22 @@ import scala.Tuple2;
 import scala.Tuple3;
 
 import org.apache.spark.api.java.JavaRDD;
+import org.apache.spark.api.java.function.Function;
 import org.apache.spark.mllib.clustering.PowerIterationClustering;
 import org.apache.spark.mllib.clustering.PowerIterationClusteringModel;
 
-JavaRDD<Tuple3<Long, Long, Double>> similarities = ...
+// Load and parse the data
+JavaRDD<String> data = sc.textFile("data/mllib/pic_data.txt");
+JavaRDD<Tuple3<Long, Long, Double>> similarities = data.map(
+  new Function<String, Tuple3<Long, Long, Double>>() {
+    public Tuple3<Long, Long, Double> call(String line) {
+      String[] parts = line.split(" ");
+      return new Tuple3<>(new Long(parts[0]), new Long(parts[1]), new Double(parts[2]));
+    }
+  }
+);
 
+// Cluster the data into two classes using PowerIterationClustering
 PowerIterationClustering pic = new PowerIterationClustering()
   .setK(2)
   .setMaxIterations(10);
@@ -380,6 +397,35 @@ for (PowerIterationClustering.Assignment a: model.assignments().toJavaRDD().coll
 // Save and load model
 model.save(sc.sc(), "myModelPath");
 PowerIterationClusteringModel sameModel = PowerIterationClusteringModel.load(sc.sc(), "myModelPath");
+{% endhighlight %}
+</div>
+
+<div data-lang="python" markdown="1">
+
+[`PowerIterationClustering`](api/python/pyspark.mllib.html#pyspark.mllib.clustering.PowerIterationClustering)
+implements the PIC algorithm.
+It takes an `RDD` of `(srcId: Long, dstId: Long, similarity: Double)` tuples representing the
+affinity matrix.
+Calling `PowerIterationClustering.run` returns a
+[`PowerIterationClusteringModel`](api/python/pyspark.mllib.html#pyspark.mllib.clustering.PowerIterationClustering),
+which contains the computed clustering assignments.
+
+{% highlight python %}
+from __future__ import print_function
+from pyspark.mllib.clustering import PowerIterationClustering, PowerIterationClusteringModel
+
+# Load and parse the data
+data = sc.textFile("data/mllib/pic_data.txt")
+similarities = data.map(lambda line: tuple([float(x) for x in line.split(' ')]))
+
+# Cluster the data into two classes using PowerIterationClustering
+model = PowerIterationClustering.train(similarities, 2, 10)
+
+model.assignments().foreach(lambda x: print(str(x.id) + " -> " + str(x.cluster)))
+
+# Save and load model
+model.save(sc, "myModelPath")
+sameModel = PowerIterationClusteringModel.load(sc, "myModelPath")
 {% endhighlight %}
 </div>
 
@@ -401,7 +447,7 @@ It supports different inference algorithms via `setOptimizer` function. EMLDAOpt
 on the likelihood function and yields comprehensive results, while OnlineLDAOptimizer uses iterative mini-batch sampling for [online variational inference](https://www.cs.princeton.edu/~blei/papers/HoffmanBleiBach2010b.pdf) and is generally memory friendly. After fitting on the documents, LDA provides:
 
 * Topics: Inferred topics, each of which is a probability distribution over terms (words).
-* Topic distributions for documents: For each document in the training set, LDA gives a probability distribution over topics. (EM only)
+* Topic distributions for documents: For each non empty document in the training set, LDA gives a probability distribution over topics. (EM only). Note that for empty documents, we don't create the topic distributions. (EM only)
 
 LDA takes the following parameters:
 

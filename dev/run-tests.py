@@ -96,8 +96,8 @@ def determine_modules_to_test(changed_modules):
     ['examples', 'graphx']
     >>> x = sorted(x.name for x in determine_modules_to_test([modules.sql]))
     >>> x # doctest: +NORMALIZE_WHITESPACE
-    ['examples', 'hive-thriftserver', 'mllib', 'pyspark-core', 'pyspark-ml', \
-     'pyspark-mllib', 'pyspark-sql', 'pyspark-streaming', 'sparkr', 'sql']
+    ['examples', 'hive-thriftserver', 'mllib', 'pyspark-ml', \
+     'pyspark-mllib', 'pyspark-sql', 'sparkr', 'sql']
     """
     # If we're going to have to run all of the tests, then we can just short-circuit
     # and return 'root'. No module depends on root, so if it appears then it will be
@@ -293,7 +293,8 @@ def build_spark_sbt(hadoop_version):
     build_profiles = get_hadoop_profiles(hadoop_version) + modules.root.build_profile_flags
     sbt_goals = ["package",
                  "assembly/assembly",
-                 "streaming-kafka-assembly/assembly"]
+                 "streaming-kafka-assembly/assembly",
+                 "streaming-flume-assembly/assembly"]
     profiles_and_goals = build_profiles + sbt_goals
 
     print("[info] Building Spark (w/Hive 0.13.1) using SBT with these arguments: ",

@@ -185,6 +185,7 @@ class CodeGenContext {
     // use c1 - c2 may overflow
     case dt: DataType if isPrimitiveType(dt) => s"($c1 > $c2 ? 1 : $c1 < $c2 ? -1 : 0)"
     case BinaryType => s"org.apache.spark.sql.catalyst.util.TypeUtils.compareBinary($c1, $c2)"
+    case NullType => "0"
     case other => s"$c1.compare($c2)"
   }
 
@@ -235,11 +236,15 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
 
   /**
    * Compile the Java source code into a Java class, using Janino.
-   *
-   * It will track the time used to compile
    */
   protected def compile(code: String): GeneratedClass = {
-    val startTime = System.nanoTime()
+    cache.get(code)
+  }
+
+  /**
+   * Compile the Java source code into a Java class, using Janino.
+   */
+  private[this] def doCompile(code: String): GeneratedClass = {
     val evaluator = new ClassBodyEvaluator()
     evaluator.setParentClassLoader(getClass.getClassLoader)
     evaluator.setDefaultImports(Array("org.apache.spark.sql.catalyst.InternalRow"))
@@ -251,9 +256,6 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
         logError(s"failed to compile:\n $code", e)
         throw e
     }
-    val endTime = System.nanoTime()
-    def timeMs: Double = (endTime - startTime).toDouble / 1000000
-    logDebug(s"Code (${code.size} bytes) compiled in $timeMs ms")
     evaluator.getClazz().newInstance().asInstanceOf[GeneratedClass]
   }
 
@@ -266,16 +268,16 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
    * automatically, in order to constrain its memory footprint.  Note that this cache does not use
    * weak keys/values and thus does not respond to memory pressure.
    */
-  protected val cache = CacheBuilder.newBuilder()
+  private val cache = CacheBuilder.newBuilder()
     .maximumSize(100)
     .build(
-      new CacheLoader[InType, OutType]() {
-        override def load(in: InType): OutType = {
+      new CacheLoader[String, GeneratedClass]() {
+        override def load(code: String): GeneratedClass = {
           val startTime = System.nanoTime()
-          val result = create(in)
+          val result = doCompile(code)
           val endTime = System.nanoTime()
           def timeMs: Double = (endTime - startTime).toDouble / 1000000
-          logInfo(s"Code generated expression $in in $timeMs ms")
+          logInfo(s"Code generated in $timeMs ms")
           result
         }
       })
@@ -285,7 +287,7 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
     generate(bind(expressions, inputSchema))
 
   /** Generates the requested evaluator given already bound expression(s). */
-  def generate(expressions: InType): OutType = cache.get(canonicalize(expressions))
+  def generate(expressions: InType): OutType = create(canonicalize(expressions))
 
   /**
    * Create a new codegen context for expression evaluator, used to store those

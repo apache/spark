@@ -142,7 +142,7 @@ private[parquet] class CatalystSchemaConverter(
       DecimalType(precision, scale)
     }
 
-    field.getPrimitiveTypeName match {
+    typeName match {
       case BOOLEAN => BooleanType
 
       case FLOAT => FloatType
@@ -150,7 +150,7 @@ private[parquet] class CatalystSchemaConverter(
       case DOUBLE => DoubleType
 
       case INT32 =>
-        field.getOriginalType match {
+        originalType match {
           case INT_8 => ByteType
           case INT_16 => ShortType
           case INT_32 | null => IntegerType
@@ -161,7 +161,7 @@ private[parquet] class CatalystSchemaConverter(
         }
 
       case INT64 =>
-        field.getOriginalType match {
+        originalType match {
           case INT_64 | null => LongType
           case DECIMAL => makeDecimalType(maxPrecisionForBytes(8))
           case TIMESTAMP_MILLIS => typeNotImplemented()
@@ -176,7 +176,7 @@ private[parquet] class CatalystSchemaConverter(
         TimestampType
 
       case BINARY =>
-        field.getOriginalType match {
+        originalType match {
           case UTF8 | ENUM => StringType
           case null if assumeBinaryIsString => StringType
           case null => BinaryType
@@ -185,7 +185,7 @@ private[parquet] class CatalystSchemaConverter(
         }
 
       case FIXED_LEN_BYTE_ARRAY =>
-        field.getOriginalType match {
+        originalType match {
           case DECIMAL => makeDecimalType(maxPrecisionForBytes(field.getTypeLength))
           case INTERVAL => typeNotImplemented()
           case _ => illegalType()
@@ -261,7 +261,7 @@ private[parquet] class CatalystSchemaConverter(
   // Here we implement Parquet LIST backwards-compatibility rules.
   // See: https://github.com/apache/parquet-format/blob/master/LogicalTypes.md#backward-compatibility-rules
   // scalastyle:on
-  private def isElementType(repeatedType: Type, parentName: String) = {
+  private def isElementType(repeatedType: Type, parentName: String): Boolean = {
     {
       // For legacy 2-level list types with primitive element type, e.g.:
       //

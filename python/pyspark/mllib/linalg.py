@@ -577,34 +577,27 @@ class SparseVector(Vector):
             ...
         AssertionError: dimension mismatch
         """
-        if type(other) == np.ndarray:
-            if other.ndim == 2:
-                results = [self.dot(other[:, i]) for i in xrange(other.shape[1])]
-                return np.array(results)
-            elif other.ndim > 2:
+
+        if isinstance(other, np.ndarray):
+            if other.ndim not in [2, 1]:
                 raise ValueError("Cannot call dot with %d-dimensional array" % other.ndim)
+            assert len(self) == other.shape[0], "dimension mismatch"
+            return np.dot(self.values, other[self.indices])
 
         assert len(self) == _vector_size(other), "dimension mismatch"
 
-        if type(other) in (np.ndarray, array.array, DenseVector):
-            result = 0.0
-            for i in xrange(len(self.indices)):
-                result += self.values[i] * other[self.indices[i]]
-            return result
+        if isinstance(other, DenseVector):
+            return np.dot(other.array[self.indices], self.values)
 
-        elif type(other) is SparseVector:
-            result = 0.0
-            i, j = 0, 0
-            while i < len(self.indices) and j < len(other.indices):
-                if self.indices[i] == other.indices[j]:
-                    result += self.values[i] * other.values[j]
-                    i += 1
-                    j += 1
-                elif self.indices[i] < other.indices[j]:
-                    i += 1
-                else:
-                    j += 1
-            return result
+        elif isinstance(other, SparseVector):
+            # Find out common indices.
+            self_cmind = np.in1d(self.indices, other.indices, assume_unique=True)
+            self_values = self.values[self_cmind]
+            if self_values.size == 0:
+                return 0.0
+            else:
+                other_cmind = np.in1d(other.indices, self.indices, assume_unique=True)
+                return np.dot(self_values, other.values[other_cmind])
 
         else:
             return self.dot(_convert_to_vector(other))
@@ -635,22 +628,23 @@ class SparseVector(Vector):
         AssertionError: dimension mismatch
         """
         assert len(self) == _vector_size(other), "dimension mismatch"
-        if type(other) in (list, array.array, DenseVector, np.array, np.ndarray):
-            if type(other) is np.array and other.ndim != 1:
+
+        if isinstance(other, np.ndarray) or isinstance(other, DenseVector):
+            if isinstance(other, np.ndarray) and other.ndim != 1:
                 raise Exception("Cannot call squared_distance with %d-dimensional array" %
                                 other.ndim)
-            result = 0.0
-            j = 0   # index into our own array
-            for i in xrange(len(other)):
-                if j < len(self.indices) and self.indices[j] == i:
-                    diff = self.values[j] - other[i]
-                    result += diff * diff
-                    j += 1
-                else:
-                    result += other[i] * other[i]
+            if isinstance(other, DenseVector):
+                other = other.array
+            sparse_ind = np.zeros(other.size, dtype=bool)
+            sparse_ind[self.indices] = True
+            dist = other[sparse_ind] - self.values
+            result = np.dot(dist, dist)
+
+            other_ind = other[~sparse_ind]
+            result += np.dot(other_ind, other_ind)
             return result
 
-        elif type(other) is SparseVector:
+        elif isinstance(other, SparseVector):
             result = 0.0
             i, j = 0, 0
             while i < len(self.indices) and j < len(other.indices):

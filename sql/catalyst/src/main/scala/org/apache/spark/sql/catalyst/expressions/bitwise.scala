@@ -45,7 +45,7 @@ case class BitwiseAnd(left: Expression, right: Expression) extends BinaryArithme
       ((evalE1: Long, evalE2: Long) => evalE1 & evalE2).asInstanceOf[(Any, Any) => Any]
   }
 
-  protected override def evalInternal(evalE1: Any, evalE2: Any) = and(evalE1, evalE2)
+  protected override def nullSafeEval(input1: Any, input2: Any): Any = and(input1, input2)
 }
 
 /**
@@ -70,7 +70,7 @@ case class BitwiseOr(left: Expression, right: Expression) extends BinaryArithmet
       ((evalE1: Long, evalE2: Long) => evalE1 | evalE2).asInstanceOf[(Any, Any) => Any]
   }
 
-  protected override def evalInternal(evalE1: Any, evalE2: Any) = or(evalE1, evalE2)
+  protected override def nullSafeEval(input1: Any, input2: Any): Any = or(input1, input2)
 }
 
 /**
@@ -95,7 +95,7 @@ case class BitwiseXor(left: Expression, right: Expression) extends BinaryArithme
       ((evalE1: Long, evalE2: Long) => evalE1 ^ evalE2).asInstanceOf[(Any, Any) => Any]
   }
 
-  protected override def evalInternal(evalE1: Any, evalE2: Any): Any = xor(evalE1, evalE2)
+  protected override def nullSafeEval(input1: Any, input2: Any): Any = xor(input1, input2)
 }
 
 /**
@@ -122,5 +122,5 @@ case class BitwiseNot(child: Expression) extends UnaryArithmetic {
     defineCodeGen(ctx, ev, c => s"(${ctx.javaType(dataType)}) ~($c)")
   }
 
-  protected override def evalInternal(evalE: Any) = not(evalE)
+  protected override def nullSafeEval(input: Any): Any = not(input)
 }

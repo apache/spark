@@ -24,12 +24,15 @@ import org.apache.spark.sql.types.DataType
  * User-defined function.
  * @param dataType  Return type of function.
  */
-case class ScalaUDF(function: AnyRef, dataType: DataType, children: Seq[Expression])
-  extends Expression {
+case class ScalaUDF(
+    function: AnyRef,
+    dataType: DataType,
+    children: Seq[Expression],
+    inputTypes: Seq[DataType] = Nil) extends Expression with ExpectsInputTypes {
 
   override def nullable: Boolean = true
 
-  override def toString: String = s"scalaUDF(${children.mkString(",")})"
+  override def toString: String = s"UDF(${children.mkString(",")})"
 
   // scalastyle:off
 
@@ -956,7 +959,4 @@ case class ScalaUDF(function: AnyRef, dataType: DataType, children: Seq[Expressi
   // scalastyle:on
   private[this] val converter = CatalystTypeConverters.createToCatalystConverter(dataType)
   override def eval(input: InternalRow): Any = converter(f(input))
-
-  // TODO(davies): make ScalaUDF work with codegen
-  override def isThreadSafe: Boolean = false
 }

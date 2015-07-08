@@ -27,9 +27,9 @@ test_that("textFile() on a local file returns an RDD", {
   writeLines(mockFile, fileName)
 
   rdd <- textFile(sc, fileName)
-  expect_true(inherits(rdd, "RDD"))
+  expect_is(rdd, "RDD")
   expect_true(count(rdd) > 0)
-  expect_true(count(rdd) == 2)
+  expect_equal(count(rdd), 2)
 
   unlink(fileName)
 })
@@ -133,7 +133,7 @@ test_that("textFile() on multiple paths", {
   writeLines("Spark is awesome.", fileName2)
 
   rdd <- textFile(sc, c(fileName1, fileName2))
-  expect_true(count(rdd) == 2)
+  expect_equal(count(rdd), 2)
 
   unlink(fileName1)
   unlink(fileName2)
