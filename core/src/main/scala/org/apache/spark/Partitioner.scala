@@ -76,9 +76,7 @@ object Partitioner {
  * produce an unexpected or incorrect result.
  */
 class HashPartitioner(partitions: Int) extends Partitioner {
-  if (partitions < 1) {
-    throw new IllegalArgumentException(s"Number of partitions ($partitions) must be positive.")
-  }
+  require(partitions > 0, s"Number of partitions ($partitions) must be positive.")
 
   def numPartitions: Int = partitions
 

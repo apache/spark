@@ -78,9 +78,7 @@ private[spark] class CoalescedRDD[T: ClassTag](
     balanceSlack: Double = 0.10)
   extends RDD[T](prev.context, Nil) {  // Nil since we implement getDependencies
 
-  if (maxPartitions < 1) {
-    throw new IllegalArgumentException(s"Number of partitions ($maxPartitions) must be positive.")
-  }
+  require(maxPartitions > 0, s"Number of partitions ($maxPartitions) must be positive.")
 
   override def getPartitions: Array[Partition] = {
     val pc = new PartitionCoalescer(maxPartitions, prev, balanceSlack)
