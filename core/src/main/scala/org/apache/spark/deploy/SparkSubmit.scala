@@ -268,6 +268,7 @@ object SparkSubmit {
     (args.deployMode, deployMode) match {
       case (null, CLIENT) => args.deployMode = "client"
       case (null, CLUSTER) => args.deployMode = "cluster"
+      case _ =>
     }
     val isYarnCluster = clusterManager == YARN && deployMode == CLUSTER
     val isMesosCluster = clusterManager == MESOS && deployMode == CLUSTER
