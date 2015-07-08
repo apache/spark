@@ -1031,7 +1031,7 @@ class SparseMatrix(Matrix):
         if len(self.values) <= 16:
             zipindval = zip(self.rowIndices, self.values)
         else:
-            zipindval = zip(self.rowIndices[:5], self.values[:5])
+            zipindval = zip(self.rowIndices[:16], self.values[:16])
         for i, (rowInd, value) in enumerate(zipindval):
             if self.colPtrs[cur_col + 1] <= i:
                 cur_col += 1
@@ -1055,22 +1055,22 @@ class SparseMatrix(Matrix):
         >>> sm1
         SparseMatrix(2, 2, [0, 2, 3], [0, 1, 1], [2.0, 3.0, 4.0], False)
         """
+        rowIndices = list(self.rowIndices)
+        colPtrs = list(self.colPtrs)
 
         if len(self.values) <= 16:
             values = _format_float_list(self.values)
-            rowIndices = self.rowIndices
+
         else:
             values = (
                 _format_float_list(self.values[:8]) +
                 ["..."] +
                 _format_float_list(self.values[-8:])
             )
-            rowIndices = self.rowIndices[:3] + ["..."] + self.rowIndices[-3:]
+            rowIndices = rowIndices[:8] + ["..."] + rowIndices[-8:]
 
-        if len(self.colPtrs) <= 16:
-            colPtrs = self.colPtrs
-        else:
-            colPtrs = self.colPtrs[:8] + ["..."] + self.colPtrs[-8:]
+        if len(self.colPtrs) > 16:
+            colPtrs = colPtrs[:8] + ["..."] + colPtrs[-8:]
 
         values = ", ".join(values)
         rowIndices = ", ".join([str(ind) for ind in rowIndices])

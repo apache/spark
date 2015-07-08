@@ -27,7 +27,7 @@ from time import time, sleep
 from shutil import rmtree
 
 from numpy import (
-    array, array_equal, zeros, inf, random, exp, dot, all, mean, abs)
+    array, array_equal, zeros, inf, random, exp, dot, all, mean, abs, arange, tile, ones)
 from numpy import sum as array_sum
 
 from py4j.protocol import Py4JJavaError
@@ -191,6 +191,42 @@ class VectorTests(MLlibTestCase):
             repr(mat),
             'DenseMatrix(3, 2, [0.0, 1.0, 4.0, 6.0, 8.0, 10.0], False)')
 
+        mat = DenseMatrix(6, 3, zeros(18))
+        self.assertTrue(
+            repr(mat),
+            'DenseMatrix(6, 3, [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, ..., \
+                0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], False)')
+
+    def test_repr_sparse_matrix(self):
+        sm1t = SparseMatrix(
+            3, 4, [0, 2, 3, 5], [0, 1, 2, 0, 2], [3.0, 2.0, 4.0, 9.0, 8.0],
+            isTransposed=True)
+        self.assertTrue(
+            repr(sm1t),
+            'SparseMatrix(3, 4, [0, 2, 3, 5], [0, 1, 2, 0, 2], [3.0, 2.0, 4.0, 9.0, 8.0], True)')
+
+        indices = tile(arange(6), 3)
+        values = ones(18)
+        sm = SparseMatrix(6, 3, [0, 6, 12, 18], indices, values)
+        self.assertTrue(
+            repr(sm), "SparseMatrix(6, 3, [0, 6, 12, 18], \
+                [0, 1, 2, 3, 4, 5, 0, 1, ..., 4, 5, 0, 1, 2, 3, 4, 5], \
+                [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, ..., \
+                1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0], False)")
+
+        self.assertTrue(
+            str(sm),
+            "6 X 3 CSCMatrix\n\
+            (0,0) 1.0\n(1,0) 1.0\n(2,0) 1.0\n(3,0) 1.0\n(4,0) 1.0\n(5,0) 1.0\n\
+            (0,1) 1.0\n(1,1) 1.0\n(2,1) 1.0\n(3,1) 1.0\n(4,1) 1.0\n(5,1) 1.0\n\
+            (0,2) 1.0\n(1,2) 1.0\n(2,2) 1.0\n(3,2) 1.0\n..\n..")
+
+        sm = SparseMatrix(1, 18, zeros(19), [], [])
+        self.assertTrue(
+            repr(sm),
+            'SparseMatrix(1, 18, \
+                [0, 0, 0, 0, 0, 0, 0, 0, ..., 0, 0, 0, 0, 0, 0, 0, 0], [], [], False)')
+
     def test_sparse_matrix(self):
         # Test sparse matrix creation.
         sm1 = SparseMatrix(
@@ -231,9 +267,6 @@ class VectorTests(MLlibTestCase):
         self.assertEquals(sm1t.colPtrs.tolist(), [0, 2, 3, 5])
         self.assertEquals(sm1t.rowIndices.tolist(), [0, 1, 2, 0, 2])
         self.assertEquals(sm1t.values.tolist(), [3.0, 2.0, 4.0, 9.0, 8.0])
-        self.assertTrue(
-            repr(sm1t),
-            'SparseMatrix(3, 4, [0, 2, 3, 5], [0, 1, 2, 0, 2], [3.0, 2.0, 4.0, 9.0, 8.0], True)')
 
         expected = [
             [3, 2, 0, 0],
