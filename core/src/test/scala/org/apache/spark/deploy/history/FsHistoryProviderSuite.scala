@@ -251,13 +251,12 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
     appListAfterRename.size should be (1)
   }
 
-  test("apps with multiple attempts") {
+  test("apps with multiple attempts with order") {
     val provider = new FsHistoryProvider(createTestConf())
 
-    val attempt1 = newLogFile("app1", Some("attempt1"), inProgress = false)
+    val attempt1 = newLogFile("app1", Some("attempt1"), inProgress = true)
     writeFile(attempt1, true, None,
-      SparkListenerApplicationStart("app1", Some("app1"), 1L, "test", Some("attempt1")),
-      SparkListenerApplicationEnd(2L)
+      SparkListenerApplicationStart("app1", Some("app1"), 1L, "test", Some("attempt1"))
       )
 
     updateAndCheck(provider) { list =>
@@ -267,27 +266,26 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
 
     val attempt2 = newLogFile("app1", Some("attempt2"), inProgress = true)
     writeFile(attempt2, true, None,
-      SparkListenerApplicationStart("app1", Some("app1"), 3L, "test", Some("attempt2"))
+      SparkListenerApplicationStart("app1", Some("app1"), 2L, "test", Some("attempt2"))
       )
 
     updateAndCheck(provider) { list =>
       list.size should be (1)
       list.head.attempts.size should be (2)
-      list.head.attempts.head.attemptId should be (Some("attempt2"))
+      list.head.attempts.head.attemptId should be (Some("attempt1"))
     }
 
-    val completedAttempt2 = newLogFile("app1", Some("attempt2"), inProgress = false)
-    attempt2.delete()
-    writeFile(attempt2, true, None,
-      SparkListenerApplicationStart("app1", Some("app1"), 3L, "test", Some("attempt2")),
+    val attempt3 = newLogFile("app1", Some("attempt3"), inProgress = false)
+    writeFile(attempt3, true, None,
+      SparkListenerApplicationStart("app1", Some("app1"), 3L, "test", Some("attempt3")),
       SparkListenerApplicationEnd(4L)
       )
 
     updateAndCheck(provider) { list =>
       list should not be (null)
       list.size should be (1)
-      list.head.attempts.size should be (2)
-      list.head.attempts.head.attemptId should be (Some("attempt2"))
+      list.head.attempts.size should be (3)
+      list.head.attempts.head.attemptId should be (Some("attempt3"))
     }
 
     val app2Attempt1 = newLogFile("app2", Some("attempt1"), inProgress = false)
@@ -299,7 +297,7 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
     updateAndCheck(provider) { list =>
       list.size should be (2)
       list.head.attempts.size should be (1)
-      list.last.attempts.size should be (2)
+      list.last.attempts.size should be (3)
       list.head.attempts.head.attemptId should be (Some("attempt1"))
 
       list.foreach { case app =>
@@ -343,7 +341,7 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
     updateAndCheck(provider) { list =>
       list.size should be (1)
       list.head.attempts.size should be (1)
-      list.head.attempts.head.attemptId should be (Some("attempt2"))
+      list.head.attempts.head.attemptId should be (Some("attempt1"))
     }
     assert(!log1.exists())
 
