@@ -24,11 +24,10 @@ import scala.language.existentials
 import scala.util.Random
 
 import org.scalatest.BeforeAndAfter
-import org.scalatest.concurrent.{PatienceConfiguration, Eventually}
+import org.scalatest.concurrent.PatienceConfiguration
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.time.SpanSugar._
 
-import org.apache.spark.SparkContext._
 import org.apache.spark.rdd.{ReliableRDDCheckpointData, RDD}
 import org.apache.spark.storage._
 import org.apache.spark.shuffle.hash.HashShuffleManager
@@ -52,6 +51,7 @@ abstract class ContextCleanerSuiteBase(val shuffleManager: Class[_] = classOf[Ha
     .setAppName("ContextCleanerSuite")
     .set("spark.cleaner.referenceTracking.blocking", "true")
     .set("spark.cleaner.referenceTracking.blocking.shuffle", "true")
+    .set("spark.cleaner.referenceTracking.cleanCheckpoints", "true")
     .set("spark.shuffle.manager", shuffleManager.getName)
 
   before {
@@ -209,11 +209,11 @@ class ContextCleanerSuite extends ContextCleanerSuiteBase {
     postGCTester.assertCleanup()
   }
 
-  test("automatically cleanup checkpoint") {
+  test("automatically cleanup normal checkpoint") {
     val checkpointDir = java.io.File.createTempFile("temp", "")
     checkpointDir.deleteOnExit()
     checkpointDir.delete()
-    var rdd = newPairRDD
+    var rdd = newPairRDD()
     sc.setCheckpointDir(checkpointDir.toString)
     rdd.checkpoint()
     rdd.cache()
@@ -227,17 +227,20 @@ class ContextCleanerSuite extends ContextCleanerSuiteBase {
     assert(fs.exists(path))
 
     // the checkpoint is not cleaned by default (without the configuration set)
-    var postGCTester = new CleanerTester(sc, Seq(rddId), Nil, Nil, Nil)
+    var postGCTester = new CleanerTester(sc, Seq(rddId), Nil, Nil, Seq(rddId))
     rdd = null // Make RDD out of scope, ok if collected earlier
     runGC()
     postGCTester.assertCleanup()
-    assert(fs.exists(ReliableRDDCheckpointData.checkpointPath(sc, rddId).get))
+    assert(!fs.exists(ReliableRDDCheckpointData.checkpointPath(sc, rddId).get))
 
+    // Verify that checkpoints are NOT cleaned up if the config is not enabled
     sc.stop()
-    val conf = new SparkConf().setMaster("local[2]").setAppName("cleanupCheckpoint").
-      set("spark.cleaner.referenceTracking.cleanCheckpoints", "true")
+    val conf = new SparkConf()
+      .setMaster("local[2]")
+      .setAppName("cleanupCheckpoint")
+      .set("spark.cleaner.referenceTracking.cleanCheckpoints", "false")
     sc = new SparkContext(conf)
-    rdd = newPairRDD
+    rdd = newPairRDD()
     sc.setCheckpointDir(checkpointDir.toString)
     rdd.checkpoint()
     rdd.cache()
@@ -251,11 +254,39 @@ class ContextCleanerSuite extends ContextCleanerSuiteBase {
     rdd.count()
 
     // Test that GC causes checkpoint data cleanup after dereferencing the RDD
-    postGCTester = new CleanerTester(sc, Seq(rddId), Nil, Nil, Seq(rddId))
+    postGCTester = new CleanerTester(sc, Seq(rddId))
     rdd = null // Make RDD out of scope
     runGC()
     postGCTester.assertCleanup()
-    assert(!fs.exists(ReliableRDDCheckpointData.checkpointPath(sc, rddId).get))
+    assert(fs.exists(ReliableRDDCheckpointData.checkpointPath(sc, rddId).get))
+  }
+
+  test("automatically clean up local checkpoint") {
+    var rdd = newPairRDD().localCheckpoint()
+    assert(rdd.checkpointData.isDefined)
+    assert(rdd.checkpointData.get.checkpointRDD.isEmpty)
+
+    // The checkpoint RDD should be set after an action
+    rdd.count()
+    assert(rdd.checkpointData.get.checkpointRDD.isDefined)
+    var checkpointRdd = rdd.checkpointData.flatMap(_.checkpointRDD).get
+
+    // Do this to make CleanerTester happy (should not affect anything)
+    checkpointRdd.persist()
+
+    // Test that GC does not cause checkpoint cleanup due to a strong reference
+    val preGCTester = new CleanerTester(sc, rddIds = Seq(checkpointRdd.id))
+    runGC()
+    intercept[Exception] {
+      preGCTester.assertCleanup()(timeout(1000 millis))
+    }
+
+    // Test that RDD going out of scope does cause the checkpoint files to be cleaned up
+    val postGCTester = new CleanerTester(sc, rddIds = Seq(checkpointRdd.id))
+    rdd = null
+    checkpointRdd = null
+    runGC()
+    postGCTester.assertCleanup()
   }
 
   test("automatically cleanup RDD + shuffle + broadcast") {
@@ -408,7 +439,10 @@ class SortShuffleContextCleanerSuite extends ContextCleanerSuiteBase(classOf[Sor
 }
 
 
-/** Class to test whether RDDs, shuffles, etc. have been successfully cleaned. */
+/**
+ * Class to test whether RDDs, shuffles, etc. have been successfully cleaned.
+ * The checkpoint here refers only to normal (reliable) checkpoints, not local checkpoints.
+ */
 class CleanerTester(
     sc: SparkContext,
     rddIds: Seq[Int] = Seq.empty,
