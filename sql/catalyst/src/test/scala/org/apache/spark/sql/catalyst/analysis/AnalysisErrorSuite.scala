@@ -32,7 +32,7 @@ case class TestFunction(
     children: Seq[Expression],
     inputTypes: Seq[AbstractDataType]) extends Expression with ExpectsInputTypes {
   override def nullable: Boolean = true
-  override def eval(input: InternalRow): Any = throw new NotImplementedError
+  override def eval(input: InternalRow): Any = throw new UnsupportedOperationException
   override def dataType: DataType = StringType
 }
 
