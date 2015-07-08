@@ -24,7 +24,7 @@ import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.duration._
 
 import org.apache.commons.lang3.StringEscapeUtils
-import org.apache.spark.{ SparkContext, SparkFunSuite }
+import org.apache.spark.{SparkContext, SparkFunSuite}
 import org.apache.spark.util.Utils
 
 class ReplSuite extends SparkFunSuite {
