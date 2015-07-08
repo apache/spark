@@ -224,7 +224,7 @@ class LinearRegression(override val uid: String)
       model.transform(dataset).select($(predictionCol), $(labelCol)),
       $(predictionCol),
       $(labelCol),
-      objectiveTrace.result())
+      objectiveHistory)
     model.setSummary(trainingSummary)
   }
 
