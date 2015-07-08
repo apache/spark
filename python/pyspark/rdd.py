@@ -696,7 +696,6 @@ class RDD(object):
 
         :param checkCode: whether or not to check the return value of the shell command.
         """
-
         def func(iterator):
             pipe = Popen(
                 shlex.split(command), env=env, stdin=PIPE, stdout=PIPE)
