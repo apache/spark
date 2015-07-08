@@ -308,8 +308,9 @@ class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with Timeo
     Thread.sleep(100)
 
     ssc.stop()
+    val updatedSourcesSize = ssc.env.metricsSystem.sources.size
     assert(ssc.getState() === StreamingContextState.STOPPED)
-    assert(sizeOfSourcesArrayBuffer == sizeOfSourcesArrayBuffer - 1 )
+    assert(updatedSourcesSize == sizeOfSourcesArrayBuffer - 1 )
   }
 
   test("awaitTermination") {
