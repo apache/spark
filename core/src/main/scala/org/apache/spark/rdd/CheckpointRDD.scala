@@ -19,7 +19,7 @@ package org.apache.spark.rdd
 
 import scala.reflect.ClassTag
 
-import org.apache.spark.{Partition, SparkContext}
+import org.apache.spark.{Partition, SparkContext, TaskContext}
 
 private[spark] class CheckpointRDDPartition(val index: Int) extends Partition
 
@@ -28,6 +28,11 @@ private[spark] class CheckpointRDDPartition(val index: Int) extends Partition
  */
 private[spark] abstract class CheckpointRDD[T: ClassTag](@transient sc: SparkContext)
   extends RDD[T](sc, Nil) {
+
+  // Note: override these here to work around a MiMa bug that complains
+  // about `AbstractMethodProblem`s in the RDD class if these are missing
+  protected override def getPartitions: Array[Partition] = ???
+  override def compute(p: Partition, tc: TaskContext): Iterator[T] = ???
 
   // CheckpointRDD should not be checkpointed again
   override def checkpoint(): Unit = { }

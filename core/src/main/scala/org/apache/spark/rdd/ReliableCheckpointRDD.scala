@@ -42,7 +42,7 @@ private[spark] class ReliableCheckpointRDD[T: ClassTag](
 
   override def getCheckpointFile: Option[String] = Some(checkpointPath)
 
-  override def getPartitions: Array[Partition] = {
+  protected override def getPartitions: Array[Partition] = {
     val cpath = new Path(checkpointPath)
     val numPartitions =
       // listStatus can throw exception if path does not exist.
@@ -59,7 +59,7 @@ private[spark] class ReliableCheckpointRDD[T: ClassTag](
     Array.tabulate(numPartitions)(i => new CheckpointRDDPartition(i))
   }
 
-  override def getPreferredLocations(split: Partition): Seq[String] = {
+  protected override def getPreferredLocations(split: Partition): Seq[String] = {
     val status = fs.getFileStatus(
       new Path(checkpointPath, ReliableCheckpointRDD.splitIdToFile(split.index)))
     val locations = fs.getFileBlockLocations(status, 0, status.getLen)
