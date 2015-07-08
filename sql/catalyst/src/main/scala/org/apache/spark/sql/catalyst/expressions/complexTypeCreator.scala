@@ -120,4 +120,6 @@ case class CreateNamedStruct(children: Seq[Expression]) extends Expression {
   override def eval(input: InternalRow): Any = {
     InternalRow(valExprs.map(_.eval(input)): _*)
   }
+
+  override def prettyName: String = "named_struct"
 }
