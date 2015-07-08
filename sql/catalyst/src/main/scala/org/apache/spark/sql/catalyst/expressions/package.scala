@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst
 
+import org.apache.spark.sql.catalyst.expressions._
+
 /**
  * A set of classes that can be used to represent trees of relational expressions.  A key goal of
  * the expression library is to hide the details of naming and scoping from developers who want to
@@ -48,6 +50,11 @@ package org.apache.spark.sql.catalyst
  * The result of expressions can be evaluated using the `Expression.apply(Row)` method.
  */
 package object expressions  {
+
+  /**
+   * Used as input into expressions whose output does not depend on any input value.
+   */
+  val EmptyRow: InternalRow = null
 
   /**
    * Converts a [[InternalRow]] to another Row given a sequence of expression that define each
