@@ -264,6 +264,7 @@ public final class UnsafeRow extends MutableRow {
       int offset = (int) ((v >> OFFSET_BITS) & Integer.MAX_VALUE);
       int size = (int) (v & Integer.MAX_VALUE);
       final byte[] bytes = new byte[size];
+      // TODO(davies): Avoid the copy once we can manage the life cycle of Row well.
       PlatformDependent.copyMemory(
         baseObject,
         baseOffset + offset,

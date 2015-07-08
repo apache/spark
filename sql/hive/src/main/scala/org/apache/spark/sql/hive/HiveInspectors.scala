@@ -24,6 +24,7 @@ import org.apache.hadoop.hive.serde2.typeinfo.{DecimalTypeInfo, TypeInfoFactory}
 import org.apache.hadoop.hive.serde2.{io => hiveIo}
 import org.apache.hadoop.{io => hadoopIo}
 
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
@@ -224,6 +225,12 @@ private[hive] trait HiveInspectors {
       throw new AnalysisException(
         "List type in java is unsupported because " +
         "JVM type erasure makes spark fail to catch a component type in List<>")
+
+    // java map type unsupported
+    case c: Class[_] if c == classOf[java.util.Map[_, _]] =>
+      throw new AnalysisException(
+        "Map type in java is unsupported because " +
+        "JVM type erasure makes spark fail to catch key and value types in Map<>")
 
     case c => throw new AnalysisException(s"Unsupported java type $c")
   }

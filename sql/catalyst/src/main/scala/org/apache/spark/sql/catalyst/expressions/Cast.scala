@@ -21,6 +21,7 @@ import java.math.{BigDecimal => JavaBigDecimal}
 import java.sql.{Date, Timestamp}
 
 import org.apache.spark.Logging
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodeGenContext, GeneratedExpressionCode}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
@@ -138,7 +139,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
   // UDFToBoolean
   private[this] def castToBoolean(from: DataType): Any => Any = from match {
     case StringType =>
-      buildCast[UTF8String](_, _.length() != 0)
+      buildCast[UTF8String](_, _.numBytes() != 0)
     case TimestampType =>
       buildCast[Long](_, t => t != 0)
     case DateType =>

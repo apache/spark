@@ -15,22 +15,21 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.expressions
+package org.apache.spark.sql.hive.execution;
 
-import org.apache.spark.TaskContext
-import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.LeafExpression
-import org.apache.spark.sql.types.{IntegerType, DataType}
+import org.apache.hadoop.hive.ql.exec.UDF;
 
+import java.util.HashMap;
+import java.util.Map;
 
-/**
- * Expression that returns the current partition id of the Spark task.
- */
-private[sql] case object SparkPartitionID extends LeafExpression {
-
-  override def nullable: Boolean = false
-
-  override def dataType: DataType = IntegerType
-
-  override def eval(input: InternalRow): Int = TaskContext.get().partitionId()
+public class UDFToStringIntMap extends UDF {
+    public Map<String, Integer> evaluate(Object o) {
+        return new HashMap<String, Integer>() {
+            {
+                put("key1", 1);
+                put("key2", 2);
+                put("key3", 3);
+            }
+        };
+    }
 }

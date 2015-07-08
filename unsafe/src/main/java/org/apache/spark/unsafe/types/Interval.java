@@ -15,22 +15,33 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.expressions
+package org.apache.spark.unsafe.types;
 
-import org.apache.spark.TaskContext
-import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.LeafExpression
-import org.apache.spark.sql.types.{IntegerType, DataType}
-
+import java.io.Serializable;
 
 /**
- * Expression that returns the current partition id of the Spark task.
+ * The internal representation of interval type.
  */
-private[sql] case object SparkPartitionID extends LeafExpression {
+public final class Interval implements Serializable {
+  public final int months;
+  public final long microseconds;
 
-  override def nullable: Boolean = false
+  public Interval(int months, long microseconds) {
+    this.months = months;
+    this.microseconds = microseconds;
+  }
 
-  override def dataType: DataType = IntegerType
+  @Override
+  public boolean equals(Object other) {
+    if (this == other) return true;
+    if (other == null || !(other instanceof Interval)) return false;
 
-  override def eval(input: InternalRow): Int = TaskContext.get().partitionId()
+    Interval o = (Interval) other;
+    return this.months == o.months && this.microseconds == o.microseconds;
+  }
+
+  @Override
+  public int hashCode() {
+    return 31 * months + (int) microseconds;
+  }
 }

@@ -15,22 +15,23 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.expressions
+package org.apache.spark.sql.types
 
-import org.apache.spark.TaskContext
-import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.LeafExpression
-import org.apache.spark.sql.types.{IntegerType, DataType}
+import org.apache.spark.annotation.DeveloperApi
 
 
 /**
- * Expression that returns the current partition id of the Spark task.
+ * :: DeveloperApi ::
+ * The data type representing time intervals.
+ *
+ * Please use the singleton [[DataTypes.IntervalType]].
  */
-private[sql] case object SparkPartitionID extends LeafExpression {
+@DeveloperApi
+class IntervalType private() extends DataType {
 
-  override def nullable: Boolean = false
+  override def defaultSize: Int = 4096
 
-  override def dataType: DataType = IntegerType
-
-  override def eval(input: InternalRow): Int = TaskContext.get().partitionId()
+  private[spark] override def asNullable: IntervalType = this
 }
+
+case object IntervalType extends IntervalType
