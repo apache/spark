@@ -63,7 +63,7 @@ object MimaExcludes {
             // NanoTime and CatalystTimestampConverter is only used inside catalyst,
             // not needed anymore
             ProblemFilters.exclude[MissingClassProblem](
-              "org.apache.spark.sql.parquet.timestamp.NanoTime"),
+              "org.apache.spark.sql.parquet.timestamp.NanoTime"),`
               ProblemFilters.exclude[MissingClassProblem](
               "org.apache.spark.sql.parquet.timestamp.NanoTime$"),
             ProblemFilters.exclude[MissingClassProblem](
