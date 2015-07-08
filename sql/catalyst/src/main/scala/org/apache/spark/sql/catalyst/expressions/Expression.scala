@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, UnresolvedAttribute}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodeGenContext, GeneratedExpressionCode}
 import org.apache.spark.sql.catalyst.trees
@@ -184,6 +185,27 @@ abstract class UnaryExpression extends Expression with trees.UnaryNode[Expressio
   override def nullable: Boolean = child.nullable
 
   /**
+   * Default behavior of evaluation according to the default nullability of UnaryExpression.
+   * If subclass of UnaryExpression override nullable, probably should also override this.
+   */
+  override def eval(input: InternalRow): Any = {
+    val value = child.eval(input)
+    if (value == null) {
+      null
+    } else {
+      nullSafeEval(value)
+    }
+  }
+
+  /**
+   * Called by default [[eval]] implementation.  If subclass of UnaryExpression keep the default
+   * nullability, they can override this method to save null-check code.  If we need full control
+   * of evaluation process, we should override [[eval]].
+   */
+  protected def nullSafeEval(input: Any): Any =
+    sys.error(s"UnaryExpressions must override either eval or nullSafeEval")
+
+  /**
    * Called by unary expressions to generate a code block that returns null if its parent returns
    * null, and if not not null, use `f` to generate the expression.
    *
@@ -198,21 +220,24 @@ abstract class UnaryExpression extends Expression with trees.UnaryNode[Expressio
       ctx: CodeGenContext,
       ev: GeneratedExpressionCode,
       f: String => String): String = {
-    nullSafeCodeGen(ctx, ev, (result, eval) => {
-      s"$result = ${f(eval)};"
+    nullSafeCodeGen(ctx, ev, eval => {
+      s"${ev.primitive} = ${f(eval)};"
     })
   }
 
   /**
    * Called by unary expressions to generate a code block that returns null if its parent returns
    * null, and if not not null, use `f` to generate the expression.
+   *
+   * @param f function that accepts the non-null evaluation result name of child and returns Java
+   *          code to compute the output.
    */
   protected def nullSafeCodeGen(
       ctx: CodeGenContext,
       ev: GeneratedExpressionCode,
-      f: (String, String) => String): String = {
+      f: String => String): String = {
     val eval = child.gen(ctx)
-    val resultCode = f(ev.primitive, eval.primitive)
+    val resultCode = f(eval.primitive)
     eval.code + s"""
       boolean ${ev.isNull} = ${eval.isNull};
       ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
@@ -236,6 +261,32 @@ abstract class BinaryExpression extends Expression with trees.BinaryNode[Express
   override def nullable: Boolean = left.nullable || right.nullable
 
   /**
+   * Default behavior of evaluation according to the default nullability of BinaryExpression.
+   * If subclass of BinaryExpression override nullable, probably should also override this.
+   */
+  override def eval(input: InternalRow): Any = {
+    val value1 = left.eval(input)
+    if (value1 == null) {
+      null
+    } else {
+      val value2 = right.eval(input)
+      if (value2 == null) {
+        null
+      } else {
+        nullSafeEval(value1, value2)
+      }
+    }
+  }
+
+  /**
+   * Called by default [[eval]] implementation.  If subclass of BinaryExpression keep the default
+   * nullability, they can override this method to save null-check code.  If we need full control
+   * of evaluation process, we should override [[eval]].
+   */
+  protected def nullSafeEval(input1: Any, input2: Any): Any =
+    sys.error(s"BinaryExpressions must override either eval or nullSafeEval")
+
+  /**
    * Short hand for generating binary evaluation code.
    * If either of the sub-expressions is null, the result of this computation
    * is assumed to be null.
@@ -246,8 +297,8 @@ abstract class BinaryExpression extends Expression with trees.BinaryNode[Express
     ctx: CodeGenContext,
     ev: GeneratedExpressionCode,
     f: (String, String) => String): String = {
-    nullSafeCodeGen(ctx, ev, (result, eval1, eval2) => {
-      s"$result = ${f(eval1, eval2)};"
+    nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
+      s"${ev.primitive} = ${f(eval1, eval2)};"
     })
   }
 
@@ -255,14 +306,17 @@ abstract class BinaryExpression extends Expression with trees.BinaryNode[Express
    * Short hand for generating binary evaluation code.
    * If either of the sub-expressions is null, the result of this computation
    * is assumed to be null.
+   *
+   * @param f function that accepts the 2 non-null evaluation result names of children
+   *          and returns Java code to compute the output.
    */
   protected def nullSafeCodeGen(
     ctx: CodeGenContext,
     ev: GeneratedExpressionCode,
-    f: (String, String, String) => String): String = {
+    f: (String, String) => String): String = {
     val eval1 = left.gen(ctx)
     val eval2 = right.gen(ctx)
-    val resultCode = f(ev.primitive, eval1.primitive, eval2.primitive)
+    val resultCode = f(eval1.primitive, eval2.primitive)
     s"""
       ${eval1.code}
       boolean ${ev.isNull} = ${eval1.isNull};

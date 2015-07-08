@@ -15,17 +15,15 @@
  * limitations under the License.
  */
 
-package org.apache.spark.scheduler.cluster.mesos
+package org.apache.spark.sql.hive.execution;
 
-import org.apache.spark.SparkContext
+import org.apache.hadoop.hive.ql.exec.UDF;
 
-private[spark] object MemoryUtils {
-  // These defaults copied from YARN
-  val OVERHEAD_FRACTION = 0.10
-  val OVERHEAD_MINIMUM = 384
+import java.util.Arrays;
+import java.util.List;
 
-  def calculateTotalMemory(sc: SparkContext): Int = {
-    sc.conf.getInt("spark.mesos.executor.memoryOverhead",
-      math.max(OVERHEAD_FRACTION * sc.executorMemory, OVERHEAD_MINIMUM).toInt) + sc.executorMemory
-  }
+public class UDFToListInt extends UDF {
+    public List<Integer> evaluate(Object o) {
+        return Arrays.asList(1, 2, 3);
+    }
 }

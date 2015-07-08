@@ -1798,7 +1798,7 @@ DataFrame jdbcDF = sqlContext.read().format("jdbc"). options(options).load();
 
 {% highlight python %}
 
-df = sqlContext.read.format('jdbc').options(url = 'jdbc:postgresql:dbserver', dbtable='schema.tablename').load()
+df = sqlContext.read.format('jdbc').options(url='jdbc:postgresql:dbserver', dbtable='schema.tablename').load()
 
 {% endhighlight %}
 
