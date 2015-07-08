@@ -54,7 +54,6 @@ final class UnsafeExternalRowSorter {
   private final StructType schema;
   private final UnsafeRowConverter rowConverter;
   private final PrefixComputer prefixComputer;
-  private final ObjectPool objPool = new ObjectPool(128);
   private final UnsafeExternalSorter sorter;
   private byte[] rowConversionBuffer = new byte[1024 * 8];
 
@@ -77,7 +76,7 @@ final class UnsafeExternalRowSorter {
       sparkEnv.shuffleMemoryManager(),
       sparkEnv.blockManager(),
       taskContext,
-      new RowComparator(ordering, schema.length(), objPool),
+      new RowComparator(ordering, schema.length(), null),
       prefixComparator,
       4096,
       sparkEnv.conf()
@@ -100,7 +99,7 @@ final class UnsafeExternalRowSorter {
       rowConversionBuffer = new byte[sizeRequirement];
     }
     final int bytesWritten = rowConverter.writeRow(
-      row, rowConversionBuffer, PlatformDependent.BYTE_ARRAY_OFFSET, objPool);
+      row, rowConversionBuffer, PlatformDependent.BYTE_ARRAY_OFFSET, sizeRequirement, null);
     assert (bytesWritten == sizeRequirement);
     final long prefix = prefixComputer.computePrefix(row);
     sorter.insertRecord(
@@ -143,31 +142,18 @@ final class UnsafeExternalRowSorter {
           return sortedIterator.hasNext();
         }
 
-        /**
-         * Called prior to returning this iterator's last row. This copies the row's data into an
-         * on-heap byte array so that the pointer to the row data will not be dangling after the
-         * sorter's memory pages are freed.
-         */
-        private void detachRowFromPage(UnsafeRow row, int rowLength) {
-          final byte[] rowDataCopy = new byte[rowLength];
-          PlatformDependent.copyMemory(
-            row.getBaseObject(),
-            row.getBaseOffset(),
-            rowDataCopy,
-            PlatformDependent.BYTE_ARRAY_OFFSET,
-            rowLength
-          );
-          row.pointTo(rowDataCopy, PlatformDependent.BYTE_ARRAY_OFFSET, numFields, row.getPool());
-        }
-
         @Override
         public InternalRow next() {
           try {
             sortedIterator.loadNext();
             row.pointTo(
-              sortedIterator.getBaseObject(), sortedIterator.getBaseOffset(), numFields, objPool);
+              sortedIterator.getBaseObject(),
+              sortedIterator.getBaseOffset(),
+              numFields,
+              sortedIterator.getRecordLength(),
+              null);
             if (!hasNext()) {
-              detachRowFromPage(row, sortedIterator.getRecordLength());
+              row.copy(); // so that we don't have dangling pointers to freed page
               cleanupResources();
             }
             return row;
@@ -198,7 +184,7 @@ final class UnsafeExternalRowSorter {
    * Return true if UnsafeExternalRowSorter can sort rows with the given schema, false otherwise.
    */
   public static boolean supportsSchema(StructType schema) {
-    // TODO: add spilling note.
+    // TODO: add spilling note to explain why we do this for now:
     for (StructField field : schema.fields()) {
       if (UnsafeColumnWriter.forType(field.dataType()) instanceof ObjectUnsafeColumnWriter) {
         return false;
@@ -222,8 +208,8 @@ final class UnsafeExternalRowSorter {
 
     @Override
     public int compare(Object baseObj1, long baseOff1, Object baseObj2, long baseOff2) {
-      row1.pointTo(baseObj1, baseOff1, numFields, objPool);
-      row2.pointTo(baseObj2, baseOff2, numFields, objPool);
+      row1.pointTo(baseObj1, baseOff1, numFields, -1, objPool);
+      row2.pointTo(baseObj2, baseOff2, numFields, -1, objPool);
       return ordering.compare(row1, row2);
     }
   }
