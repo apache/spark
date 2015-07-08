@@ -366,7 +366,6 @@ class HttpOpSensorTest(unittest.TestCase):
             dag=self.dag)
         t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
 
-    # There's no provision on this test for a max interval
     def test_sensor(self):
         sensor = operators.HttpSensor(
             task_id='http_sensor_check',
@@ -376,6 +375,20 @@ class HttpOpSensorTest(unittest.TestCase):
             headers={},
             response_check=lambda response: True if "airbnb/airflow" in response.text else False,
             poke_interval=5,
+            timeout=15,
+            dag=self.dag)
+        sensor.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE)
+
+    def test_sensor_timeout(self):
+        sensor = operators.HttpSensor(
+            task_id='http_sensor_check',
+            conn_id='http_default',
+            endpoint='/search',
+            params={"client": "ubuntu", "q": "airflow"},
+            headers={},
+            response_check=lambda response: True if "abracadabra_not_exists" in response.text else False,
+            poke_interval=5,
+            timeout=15,
             dag=self.dag)
         sensor.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE)
 
