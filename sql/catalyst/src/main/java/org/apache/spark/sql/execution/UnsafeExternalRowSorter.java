@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution;
 import java.io.IOException;
 import java.util.Arrays;
 
+import org.apache.spark.sql.Row;
 import scala.collection.Iterator;
 import scala.math.Ordering;
 
@@ -150,28 +151,34 @@ final class UnsafeExternalRowSorter {
           return sortedIterator.hasNext();
         }
 
+        /**
+         * Called prior to returning this iterator's last row. This copies the row's data into an
+         * on-heap byte array so that the pointer to the row data will not be dangling after the
+         * sorter's memory pages are freed.
+         */
+        private void detachRowFromPage(UnsafeRow row, int rowLength) {
+          final byte[] rowDataCopy = new byte[rowLength];
+          PlatformDependent.copyMemory(
+            row.getBaseObject(),
+            row.getBaseOffset(),
+            rowDataCopy,
+            PlatformDependent.BYTE_ARRAY_OFFSET,
+            rowLength
+          );
+          row.pointTo(rowDataCopy, PlatformDependent.BYTE_ARRAY_OFFSET, numFields, row.getPool());
+        }
+
         @Override
         public InternalRow next() {
           try {
             sortedIterator.loadNext();
-            if (hasNext()) {
-              row.pointTo(
-                sortedIterator.getBaseObject(), sortedIterator.getBaseOffset(), numFields, objPool);
-              return row;
-            } else {
-              final byte[] rowDataCopy = new byte[sortedIterator.getRecordLength()];
-              PlatformDependent.copyMemory(
-                sortedIterator.getBaseObject(),
-                sortedIterator.getBaseOffset(),
-                rowDataCopy,
-                PlatformDependent.BYTE_ARRAY_OFFSET,
-                sortedIterator.getRecordLength()
-              );
-              row.backingArray = rowDataCopy;
-              row.pointTo(rowDataCopy, PlatformDependent.BYTE_ARRAY_OFFSET, numFields, objPool);
+            row.pointTo(
+              sortedIterator.getBaseObject(), sortedIterator.getBaseOffset(), numFields, objPool);
+            if (!hasNext()) {
+              detachRowFromPage(row, sortedIterator.getRecordLength());
               cleanupResources();
-              return row;
             }
+            return row;
           } catch (IOException e) {
             cleanupResources();
             // Scala iterators don't declare any checked exceptions, so we need to use this hack

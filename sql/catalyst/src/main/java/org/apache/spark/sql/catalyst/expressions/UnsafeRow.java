@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.catalyst.expressions;
 
-import javax.annotation.Nullable;
-
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.util.ObjectPool;
 import org.apache.spark.unsafe.PlatformDependent;
@@ -57,17 +55,15 @@ import org.apache.spark.unsafe.types.UTF8String;
  */
 public final class UnsafeRow extends MutableRow {
 
-  /** Hack for if we want to pass around an UnsafeRow which also carries around its backing data */
-  @Nullable public byte[] backingArray;
   private Object baseObject;
   private long baseOffset;
 
   /** A pool to hold non-primitive objects */
   private ObjectPool pool;
 
-  Object getBaseObject() { return baseObject; }
-  long getBaseOffset() { return baseOffset; }
-  ObjectPool getPool() { return pool; }
+  public Object getBaseObject() { return baseObject; }
+  public long getBaseOffset() { return baseOffset; }
+  public ObjectPool getPool() { return pool; }
 
   /** The number of fields in this row, used for calculating the bitset width (and in assertions) */
   private int numFields;
