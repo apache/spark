@@ -31,8 +31,10 @@ private[spark] abstract class CheckpointRDD[T: ClassTag](@transient sc: SparkCon
 
   // Note: override these here to work around a MiMa bug that complains
   // about `AbstractMethodProblem`s in the RDD class if these are missing
+  // scalastyle:off
   protected override def getPartitions: Array[Partition] = ???
   override def compute(p: Partition, tc: TaskContext): Iterator[T] = ???
+  // scalastyle:on
 
   // CheckpointRDD should not be checkpointed again
   override def checkpoint(): Unit = { }
