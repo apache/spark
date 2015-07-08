@@ -31,7 +31,7 @@ private[spark] class LocalCheckpointRDD[T: ClassTag](@transient sc: SparkContext
   /**
    * Determine the partitions from the local checkpoint blocks on each executor.
    */
-  override def getPartitions: Array[Partition] = {
+  protected override def getPartitions: Array[Partition] = {
     val ourId = id // define this locally for serialization purposes
     val blockFilter = (blockId: BlockId) => {
       blockId.asRDDId.filter(_.rddId == ourId).isDefined
@@ -49,7 +49,7 @@ private[spark] class LocalCheckpointRDD[T: ClassTag](@transient sc: SparkContext
   /**
    * Return the location of the checkpoint block that corresponds to the given partition.
    */
-  override def getPreferredLocations(partition: Partition): Seq[String] = {
+  protected override def getPreferredLocations(partition: Partition): Seq[String] = {
     val blockId = RDDBlockId(id, partition.index)
     SparkEnv.get.blockManager.master.getLocations(blockId).map(_.host)
   }
