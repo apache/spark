@@ -266,12 +266,12 @@ class LinearRegressionModel private[ml] (
 
   def hasSummary: Boolean = trainingSummary.isDefined
 
-
   /**
    * Evaluates the model on a testset.
    * @param dataset Test dataset to evaluate model on.
    */
-  def evaluate(dataset: DataFrame): LinearRegressionSummary = {
+  // TODO: decide on a good name before exposing to public API
+  private def evaluate(dataset: DataFrame): LinearRegressionSummary = {
     val t = udf { features: Vector => predict(features) }
     val predictionAndObservations = dataset
       .select(col($(labelCol)), t(col($(featuresCol))).as($(predictionCol)))
@@ -297,7 +297,7 @@ class LinearRegressionModel private[ml] (
  * @param objectiveTrace objective function (scaled loss + regularization) at each iteration.
  */
 @Experimental
-class LinearRegressionTrainingSummary private[ml] (
+class LinearRegressionTrainingSummary private[regression] (
     predictions: DataFrame,
     predictionCol: String,
     labelCol: String,
@@ -331,7 +331,7 @@ class LinearRegressionTrainingSummary private[ml] (
  * @param predictions predictions outputted by the model's `transform` method.
  */
 @Experimental
-class LinearRegressionSummary private[ml] (
+class LinearRegressionSummary private[regression] (
     val predictions: DataFrame,
     val predictionCol: String,
     val labelCol: String) {
