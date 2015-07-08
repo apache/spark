@@ -82,7 +82,7 @@ class HiveTypeCoercionSuite extends PlanTest {
 
     // NumericType should not be changed when function accepts any of them.
     Seq(ByteType, ShortType, IntegerType, LongType, FloatType, DoubleType,
-      DecimalType.Unlimited, DecimalType(10,2)).foreach { tpe =>
+      DecimalType.Unlimited, DecimalType(10, 2)).foreach { tpe =>
       shouldCast(tpe, NumericType, tpe)
     }
   }
