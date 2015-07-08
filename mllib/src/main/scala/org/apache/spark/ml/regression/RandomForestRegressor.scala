@@ -84,7 +84,7 @@ final class RandomForestRegressor(override val uid: String)
       super.getOldStrategy(categoricalFeatures, numClasses = 0, OldAlgo.Regression, getOldImpurity)
     val trees = RandomForest.run(oldDataset, strategy, getNumTrees, getFeatureSubsetStrategy,
       getSeed).map(_.asInstanceOf[DecisionTreeRegressionModel])
-    copyValues(new RandomForestRegressionModel(trees).setParent(this))
+    new RandomForestRegressionModel(trees)
   }
 
   override def copy(extra: ParamMap): RandomForestRegressor = defaultCopy(extra)

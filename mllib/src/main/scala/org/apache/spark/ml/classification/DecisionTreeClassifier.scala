@@ -77,8 +77,7 @@ final class DecisionTreeClassifier(override val uid: String)
     val strategy = getOldStrategy(categoricalFeatures, numClasses)
     val trees = RandomForest.run(oldDataset, strategy, numTrees = 1, featureSubsetStrategy = "all",
       seed = 0L, parentUID = Some(uid))
-    val dt = trees.head.asInstanceOf[DecisionTreeClassificationModel]
-    copyValues(dt.setParent(this))
+    trees.head.asInstanceOf[DecisionTreeClassificationModel]
   }
 
   /** (private[ml]) Create a Strategy instance to use with the old API. */

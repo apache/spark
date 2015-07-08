@@ -98,7 +98,7 @@ final class RandomForestClassifier(override val uid: String)
     // RandomForestClassificationModel.fromOld(oldModel, this, categoricalFeatures)
     val trees = RandomForest.run(oldDataset, strategy, getNumTrees, getFeatureSubsetStrategy,
       getSeed).map(_.asInstanceOf[DecisionTreeClassificationModel])
-    copyValues(new RandomForestClassificationModel(trees).setParent(this))
+    new RandomForestClassificationModel(trees)
   }
 
   override def copy(extra: ParamMap): RandomForestClassifier = defaultCopy(extra)
