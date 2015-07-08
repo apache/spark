@@ -321,8 +321,9 @@ private[spark] class Client(
           val linkname = targetDir.map(_ + "/").getOrElse("") +
             destName.orElse(Option(localURI.getFragment())).getOrElse(localPath.getName())
           val destPath = copyFileToRemote(dst, localPath, replication)
+          val destFs = FileSystem.get(destPath.toUri(), hadoopConf)
           distCacheMgr.addResource(
-            fs, hadoopConf, destPath, localResources, resType, linkname, statCache,
+            destFs, hadoopConf, destPath, localResources, resType, linkname, statCache,
             appMasterOnly = appMasterOnly)
           (false, linkname)
         } else {
