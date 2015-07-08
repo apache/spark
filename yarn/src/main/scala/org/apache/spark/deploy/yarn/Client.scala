@@ -304,57 +304,6 @@ private[spark] class Client(
     }
 
     /**
-     * Distribute a file to the cluster.
-     *
-     * If the file's path is a "local:" URI, it's actually not distributed. Other files are copied
-     * to HDFS (if not already there) and added to the application's distributed cache.
-     *
-     * @param path URI of the file to distribute.
-     * @param resType Type of resource being distributed.
-     * @param destName Name of the file in the distributed cache.
-     * @param targetDir Subdirectory where to place the file.
-     * @param appMasterOnly Whether to distribute only to the AM.
-     * @return A 2-tuple. First item is whether the file is a "local:" URI. Second item is the
-     *         localized path for non-local paths, or the input `path` for local paths.
-     *         The localized path will be null if the URI has already been added to the cache.
-     */
-    def distribute(
-        path: String,
-        resType: LocalResourceType = LocalResourceType.FILE,
-        destName: Option[String] = None,
-        targetDir: Option[String] = None,
-        appMasterOnly: Boolean = false): (Boolean, String) = {
-      val localURI = new URI(path.trim())
-      if (localURI.getScheme != LOCAL_SCHEME) {
-        if (addDistributedUri(localURI)) {
-          val localPath = getQualifiedLocalPath(localURI, hadoopConf)
-          val linkname = targetDir.map(_ + "/").getOrElse("") +
-            destName.orElse(Option(localURI.getFragment())).getOrElse(localPath.getName())
-          val destPath = copyFileToRemote(dst, localPath, replication)
-          distCacheMgr.addResource(
-            fs, hadoopConf, destPath, localResources, resType, linkname, statCache,
-            appMasterOnly = appMasterOnly)
-          (false, linkname)
-        } else {
-          (false, null)
-        }
-      } else {
-        (true, path.trim())
-      }
-    }
-
-    // If we passed in a keytab, make sure we copy the keytab to the staging directory on
-    // HDFS, and setup the relevant environment vars, so the AM can login again.
-    if (loginFromKeytab) {
-      logInfo("To enable the AM to login from keytab, credentials are being copied over to the AM" +
-        " via the YARN Secure Distributed Cache.")
-      val (_, localizedPath) = distribute(args.keytab,
-        destName = Some(sparkConf.get("spark.yarn.keytab")),
-        appMasterOnly = true)
-      require(localizedPath != null, "Keytab file already distributed.")
-    }
-
-    /**
      * Copy the given main resource to the distributed cache if the scheme is not "local".
      * Otherwise, set the corresponding key in our SparkConf to handle it downstream.
      * Each resource is represented by a 3-tuple of:
@@ -389,7 +338,8 @@ private[spark] class Client(
     createConfArchive().foreach { file =>
       require(addDistributedUri(file.toURI()))
       val destPath = copyFileToRemote(dst, new Path(file.toURI()), replication)
-      distCacheMgr.addResource(fs, hadoopConf, destPath, localResources, LocalResourceType.ARCHIVE,
+      val destFs = FileSystem.get(destPath.toUri(), hadoopConf)
+      distCacheMgr.addResource(destFs, hadoopConf, destPath, localResources, LocalResourceType.ARCHIVE,
         LOCALIZED_HADOOP_CONF_DIR, statCache, appMasterOnly = true)
     }
 
@@ -414,8 +364,9 @@ private[spark] class Client(
               val localPath = new Path(localURI)
               val linkname = Option(localURI.getFragment()).getOrElse(localPath.getName())
               val destPath = copyFileToRemote(dst, localPath, replication)
+              val destFs = FileSystem.get(destPath.toUri(), hadoopConf)
               distCacheMgr.addResource(
-                fs, hadoopConf, destPath, localResources, resType, linkname, statCache)
+                destFs, hadoopConf, destPath, localResources, resType, linkname, statCache)
               if (addToClasspath) {
                 cachedSecondaryJarLinks += linkname
               }
