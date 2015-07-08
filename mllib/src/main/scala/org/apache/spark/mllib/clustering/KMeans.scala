@@ -209,12 +209,15 @@ class KMeans private (
     val initStartTime = System.nanoTime()
 
     // Only one run is allowed when initialModel is given
-    val numRuns = if (initialModel.nonEmpty) 1 else runs
-    logWarning("Ignoring runs; one run is allowed when initialModel is given.")
+    val numRuns = if (initialModel.nonEmpty){
+      if (runs >1 ) logWarning("Ignoring runs; one run is allowed when initialModel is given.")
+      1
+    } else runs
+
 
     val centers = initialModel match {
       case Some(kMeansCenters) => {
-        Array(kMeansCenters.clusterCenters.map(s => new VectorWithNorm(s, Vectors.norm(s, 2.0))))
+        Array(kMeansCenters.clusterCenters.map(s => new VectorWithNorm(s)))
       }
       case None => {
         if (initializationMode == KMeans.RANDOM) {
