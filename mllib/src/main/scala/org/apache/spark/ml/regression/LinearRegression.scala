@@ -243,7 +243,7 @@ class LinearRegressionModel private[ml] (
   extends RegressionModel[Vector, LinearRegressionModel]
   with LinearRegressionParams {
 
-  @transient private var trainingSummary: Option[LinearRegressionTrainingSummary] = None
+  private var trainingSummary: Option[LinearRegressionTrainingSummary] = None
 
   /**
    * Gets results summary (e.g. residuals, mse, r-squared ) of model on training set. This method
@@ -271,7 +271,7 @@ class LinearRegressionModel private[ml] (
    * @param dataset Test dataset to evaluate model on.
    */
   // TODO: decide on a good name before exposing to public API
-  private def evaluate(dataset: DataFrame): LinearRegressionSummary = {
+  private[regression] def evaluate(dataset: DataFrame): LinearRegressionSummary = {
     val t = udf { features: Vector => predict(features) }
     val predictionAndObservations = dataset
       .select(col($(labelCol)), t(col($(featuresCol))).as($(predictionCol)))
@@ -294,34 +294,18 @@ class LinearRegressionModel private[ml] (
  * :: Experimental ::
  * Linear regression training results.
  * @param predictions predictions outputted by the model's `transform` method.
- * @param objectiveTrace objective function (scaled loss + regularization) at each iteration.
+ * @param objectiveHistory objective function (scaled loss + regularization) at each iteration.
  */
 @Experimental
 class LinearRegressionTrainingSummary private[regression] (
     predictions: DataFrame,
     predictionCol: String,
     labelCol: String,
-    val objectiveTrace: DataFrame)
+    val objectiveHistory: Array[Double])
   extends LinearRegressionSummary(predictions, predictionCol, labelCol) {
 
-  def this(
-      predictions: DataFrame,
-      predictionCol: String,
-      labelCol: String,
-      objectiveTrace: Array[Double]) = {
-
-    this(
-      predictions,
-      predictionCol,
-      labelCol,
-      predictions.sqlContext
-        .createDataFrame(objectiveTrace.zipWithIndex.map(_.swap).toSeq)
-        .toDF("iteration", "objective")
-    )
-  }
-
   /** Number of training iterations until termination */
-  val totalIterations = objectiveTrace.count()
+  val totalIterations = objectiveHistory.length
 
 }
 
@@ -332,51 +316,52 @@ class LinearRegressionTrainingSummary private[regression] (
  */
 @Experimental
 class LinearRegressionSummary private[regression] (
-    val predictions: DataFrame,
+    @transient val predictions: DataFrame,
     val predictionCol: String,
-    val labelCol: String) {
+    val labelCol: String) extends Serializable {
 
-  private val metrics = new RegressionMetrics(predictions
-    .select(predictionCol, labelCol)
-    .map { case Row(pred: Double, label: Double) => (pred, label) }
-  )
+  @transient private val metrics = new RegressionMetrics(
+    predictions
+      .select(predictionCol, labelCol)
+      .map { case Row(pred: Double, label: Double) => (pred, label) } )
 
   /**
    * Returns the explained variance regression score.
    * explainedVariance = 1 - variance(y - \hat{y}) / variance(y)
    * Reference: [[http://en.wikipedia.org/wiki/Explained_variation]]
    */
-  def explainedVariance: Double = metrics.explainedVariance
+  val explainedVariance: Double = metrics.explainedVariance
 
   /**
    * Returns the mean absolute error, which is a risk function corresponding to the
    * expected value of the absolute error loss or l1-norm loss.
    */
-  def meanAbsoluteError: Double = metrics.meanAbsoluteError
+  val meanAbsoluteError: Double = metrics.meanAbsoluteError
 
   /**
    * Returns the mean squared error, which is a risk function corresponding to the
    * expected value of the squared error loss or quadratic loss.
    */
-  def meanSquaredError: Double = metrics.meanSquaredError
+  val meanSquaredError: Double = metrics.meanSquaredError
 
   /**
    * Returns the root mean squared error, which is defined as the square root of
    * the mean squared error.
    */
-  def rootMeanSquaredError: Double = metrics.rootMeanSquaredError
+  val rootMeanSquaredError: Double = metrics.rootMeanSquaredError
 
   /**
    * Returns R^2^, the coefficient of determination.
    * Reference: [[http://en.wikipedia.org/wiki/Coefficient_of_determination]]
    */
-  def r2: Double = metrics.r2
+  val r2: Double = metrics.r2
 
-  /** Get residuals (predicted value - label value) */
-  def residuals: DataFrame = {
+  /** Residuals (predicted value - label value) */
+  @transient lazy val residuals: DataFrame = {
     val t = udf { (pred: Double, label: Double) => pred - label}
     predictions.select(t(col(predictionCol), col(labelCol)).as("residuals"))
   }
+
 }
 
 /**

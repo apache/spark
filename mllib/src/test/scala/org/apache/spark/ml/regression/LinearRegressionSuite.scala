@@ -339,8 +339,7 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
     // Objective function should be monotonically decreasing for linear regression
     assert(
       model.summary
-        .objectiveTrace.map(_.getAs[Double]("objective"))
-        .collect()
+        .objectiveHistory
         .sliding(2)
         .forall(x => x(0) >= x(1)))
   }
