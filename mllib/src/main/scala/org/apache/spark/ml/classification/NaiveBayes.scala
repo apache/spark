@@ -1,0 +1,188 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package org.apache.spark.ml.classification
+
+import org.apache.spark.SparkException
+import org.apache.spark.ml.{PredictorParams, PredictionModel, Predictor}
+import org.apache.spark.ml.param.{ParamMap, ParamValidators, Param, DoubleParam}
+import org.apache.spark.ml.util.Identifiable
+import org.apache.spark.mllib.classification.{NaiveBayes => OldNaiveBayes}
+import org.apache.spark.mllib.classification.{NaiveBayesModel => OldNaiveBayesModel}
+import org.apache.spark.mllib.linalg.{BLAS, DenseMatrix, DenseVector, Vector}
+import org.apache.spark.mllib.regression.LabeledPoint
+import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.DataFrame
+
+/**
+ * Params for Naive Bayes Classifiers.
+ */
+private[ml] trait NaiveBayesParams extends PredictorParams {
+
+  /**
+   * The smoothing parameter.
+   * @group param
+   */
+  final val lambda: DoubleParam = new DoubleParam(this, "lambda", "The smoothing parameter.",
+    ParamValidators.gtEq(0))
+  setDefault(lambda -> 1.0)
+
+  /** @group getParam */
+  final def getLambda: Double = $(lambda)
+
+  /**
+   * The model type which is a string (case-sensitive).
+   * Supported options: "multinomial" (default) and "bernoulli".
+   * @group param
+   */
+  final val modelType: Param[String] = new Param[String](this, "modelType",
+    "The model type which is a string (case-sensitive). Supported options: " +
+    "\"multinomial\" (default) and \"bernoulli\".")
+  setDefault(modelType -> "multinomial")
+
+  /** @group getParam */
+  final def getModelType: String = $(modelType)
+}
+
+/**
+ * Naive Bayes Classifiers.
+ * It supports both Multinomial NB ([[http://tinyurl.com/lsdw6p]]) which can handle
+ * all kinds of discrete data and Bernoulli NB ([[http://tinyurl.com/p7c96j6]])
+ * which can only handle 0-1 vector.
+ */
+class NaiveBayes(override val uid: String)
+  extends Predictor[Vector, NaiveBayes, NaiveBayesModel]
+  with NaiveBayesParams {
+
+  def this() = this(Identifiable.randomUID("nb"))
+
+  /**
+   * Set the smoothing parameter.
+   * Default is 1.0.
+   * @group setParam
+   */
+  def setLambda(value: Double): this.type = set(lambda, value)
+
+  /**
+   * Set the model type using a string (case-sensitive).
+   * Supported options: "multinomial" and "bernoulli".
+   * Default is "multinomial"
+   * @return
+   */
+  def setModelType(value: String): this.type = set(modelType, value)
+
+  override protected def train(dataset: DataFrame): NaiveBayesModel = {
+    val oldDataset: RDD[LabeledPoint] = extractLabeledPoints(dataset)
+    val oldModel = OldNaiveBayes.train(oldDataset, $(lambda), $(modelType))
+    NaiveBayesModel.fromOld(oldModel, this)
+  }
+
+  override def copy(extra: ParamMap): NaiveBayes = defaultCopy(extra)
+}
+
+/**
+ * Model produced by [[NaiveBayes]]
+ */
+class NaiveBayesModel private[ml] (
+    override val uid: String,
+    val labels: Array[Double],
+    val pi: Array[Double],
+    val theta: Array[Array[Double]],
+    val modelType: String)
+  extends PredictionModel[Vector, NaiveBayesModel] {
+
+  /** String name for multinomial model type. */
+  private[classification] val Multinomial: String = "multinomial"
+
+  /** String name for Bernoulli model type. */
+  private[classification] val Bernoulli: String = "bernoulli"
+
+  /** Set of modelTypes that NaiveBayes supports */
+  private[classification] val supportedModelTypes = Set(Multinomial, Bernoulli)
+
+  private val piVector = new DenseVector(pi)
+  private val thetaMatrix = new DenseMatrix(labels.length, theta(0).length, theta.flatten, true)
+
+  require(supportedModelTypes.contains(modelType),
+    s"NaiveBayes was created with an unknown modelType: ${modelType}.")
+
+  /**
+   * Bernoulli scoring requires log(condprob) if 1, log(1-condprob) if 0.
+   * This precomputes log(1.0 - exp(theta)) and its sum which are used for the linear algebra
+   * application of this condition (in predict function).
+   */
+  private val (thetaMinusNegTheta, negThetaSum) = modelType match {
+    case Multinomial => (None, None)
+    case Bernoulli =>
+      val negTheta = thetaMatrix.map(value => math.log(1.0 - math.exp(value)))
+      val ones = new DenseVector(Array.fill(thetaMatrix.numCols){1.0})
+      val thetaMinusNegTheta = thetaMatrix.map { value =>
+        value - math.log(1.0 - math.exp(value))
+      }
+      (Option(thetaMinusNegTheta), Option(negTheta.multiply(ones)))
+    case _ =>
+      // This should never happen.
+      throw new UnknownError(s"Invalid modelType: ${modelType}.")
+  }
+
+  override protected def predict(features: Vector): Double = {
+    modelType match {
+      case Multinomial =>
+        val prob = thetaMatrix.multiply(features)
+        BLAS.axpy(1.0, piVector, prob)
+        labels(prob.argmax)
+      case Bernoulli =>
+        features.foreachActive{ (index, value) =>
+          if (value != 0.0 && value != 1.0) {
+            throw new SparkException(
+              s"Bernoulli naive Bayes requires 0 or 1 feature values but found ${features}")
+          }
+        }
+        val prob = thetaMinusNegTheta.get.multiply(features)
+        BLAS.axpy(1.0, piVector, prob)
+        BLAS.axpy(1.0, negThetaSum.get, prob)
+        labels(prob.argmax)
+      case _ =>
+        // This should never happen.
+        throw new UnknownError(s"Invalid modelType: ${modelType}.")
+    }
+  }
+
+  override def copy(extra: ParamMap): NaiveBayesModel = {
+    copyValues(new NaiveBayesModel(uid, labels, pi, theta, modelType), extra)
+  }
+
+  override def toString: String = {
+    s"NaiveBayesModel with ${labels.size} classes"
+  }
+
+  private[ml] def toOld: OldNaiveBayesModel = {
+    new OldNaiveBayesModel(labels, pi, theta, modelType)
+  }
+
+}
+
+private[ml] object NaiveBayesModel {
+
+  /** (private[ml]) Convert a model from the old API */
+  def fromOld(
+      oldModel: OldNaiveBayesModel,
+      parent: NaiveBayes): NaiveBayesModel = {
+    val uid = if (parent != null) parent.uid else Identifiable.randomUID("nb")
+    new NaiveBayesModel(uid, oldModel.labels, oldModel.pi, oldModel.theta, oldModel.modelType)
+  }
+}

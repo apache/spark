@@ -40,7 +40,7 @@ import org.apache.spark.sql.{DataFrame, SQLContext}
  *              where D is number of features
  * @param modelType The type of NB model to fit  can be "multinomial" or "bernoulli"
  */
-class NaiveBayesModel private[mllib] (
+class NaiveBayesModel private[spark] (
     val labels: Array[Double],
     val pi: Array[Double],
     val theta: Array[Array[Double]],

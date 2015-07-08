@@ -291,7 +291,7 @@ class DenseMatrix(
 
   override def copy: DenseMatrix = new DenseMatrix(numRows, numCols, values.clone())
 
-  private[mllib] def map(f: Double => Double) = new DenseMatrix(numRows, numCols, values.map(f),
+  private[spark] def map(f: Double => Double) = new DenseMatrix(numRows, numCols, values.map(f),
     isTransposed)
 
   private[mllib] def update(f: Double => Double): DenseMatrix = {
