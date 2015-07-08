@@ -131,6 +131,10 @@ final class RandomForestClassificationModel private[ml] (
 
   require(numTrees > 0, "RandomForestClassificationModel requires at least 1 tree.")
 
+  /**
+   * Construct a random forest classification model, with all trees weighted equally.
+   * @param trees  Component trees
+   */
   def this(trees: Array[DecisionTreeClassificationModel]) =
     this(Identifiable.randomUID("rfc"), trees)
 

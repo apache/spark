@@ -115,6 +115,10 @@ final class RandomForestRegressionModel private[ml] (
 
   require(numTrees > 0, "RandomForestRegressionModel requires at least 1 tree.")
 
+  /**
+   * Construct a random forest regression model, with all trees weighted equally.
+   * @param trees  Component trees
+   */
   def this(trees: Array[DecisionTreeRegressionModel]) = this(Identifiable.randomUID("rfr"), trees)
 
   override def trees: Array[DecisionTreeModel] = _trees.asInstanceOf[Array[DecisionTreeModel]]

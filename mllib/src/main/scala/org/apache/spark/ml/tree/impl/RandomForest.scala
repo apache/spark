@@ -679,7 +679,7 @@ private[ml] object RandomForest extends Logging {
    */
   private def calculatePredictImpurity(
       leftImpurityCalculator: ImpurityCalculator,
-      rightImpurityCalculator: ImpurityCalculator): (Predict, Double) =  {
+      rightImpurityCalculator: ImpurityCalculator): (Predict, Double) = {
     val parentNodeAgg = leftImpurityCalculator.copy
     parentNodeAgg.add(rightImpurityCalculator)
     val predict = calculatePredict(parentNodeAgg)
@@ -730,7 +730,8 @@ private[ml] object RandomForest extends Logging {
           val (bestFeatureSplitIndex, bestFeatureGainStats) =
             Range(0, numSplits).map { case splitIdx =>
               val leftChildStats = binAggregates.getImpurityCalculator(nodeFeatureOffset, splitIdx)
-              val rightChildStats = binAggregates.getImpurityCalculator(nodeFeatureOffset, numSplits)
+              val rightChildStats =
+                binAggregates.getImpurityCalculator(nodeFeatureOffset, numSplits)
               rightChildStats.subtract(leftChildStats)
               predictionAndImpurity = Some(predictionAndImpurity.getOrElse(
                 calculatePredictImpurity(leftChildStats, rightChildStats)))
@@ -746,7 +747,8 @@ private[ml] object RandomForest extends Logging {
           val (bestFeatureSplitIndex, bestFeatureGainStats) =
             Range(0, numSplits).map { splitIndex =>
               val leftChildStats = binAggregates.getImpurityCalculator(leftChildOffset, splitIndex)
-              val rightChildStats = binAggregates.getImpurityCalculator(rightChildOffset, splitIndex)
+              val rightChildStats =
+                binAggregates.getImpurityCalculator(rightChildOffset, splitIndex)
               predictionAndImpurity = Some(predictionAndImpurity.getOrElse(
                 calculatePredictImpurity(leftChildStats, rightChildStats)))
               val gainStats = calculateGainForSplit(leftChildStats,
@@ -769,7 +771,8 @@ private[ml] object RandomForest extends Logging {
             // For categorical variables in multiclass classification,
             // the bins are ordered by the impurity of their corresponding labels.
             Range(0, numCategories).map { case featureValue =>
-              val categoryStats = binAggregates.getImpurityCalculator(nodeFeatureOffset, featureValue)
+              val categoryStats =
+                binAggregates.getImpurityCalculator(nodeFeatureOffset, featureValue)
               val centroid = if (categoryStats.count != 0) {
                 categoryStats.calculate()
               } else {
@@ -781,7 +784,8 @@ private[ml] object RandomForest extends Logging {
             // For categorical variables in regression and binary classification,
             // the bins are ordered by the centroid of their corresponding labels.
             Range(0, numCategories).map { case featureValue =>
-              val categoryStats = binAggregates.getImpurityCalculator(nodeFeatureOffset, featureValue)
+              val categoryStats =
+                binAggregates.getImpurityCalculator(nodeFeatureOffset, featureValue)
               val centroid = if (categoryStats.count != 0) {
                 categoryStats.predict
               } else {

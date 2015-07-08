@@ -252,7 +252,11 @@ private[tree] class LearningNode(
 
 private[tree] object LearningNode {
 
-  def apply(id: Int, predictionStats: OldPredict, impurity: Double, isLeaf: Boolean): LearningNode = {
+  def apply(
+      id: Int,
+      predictionStats: OldPredict,
+      impurity: Double,
+      isLeaf: Boolean): LearningNode = {
     new LearningNode(id, predictionStats, impurity, None, None, None, false, None)
   }
 
