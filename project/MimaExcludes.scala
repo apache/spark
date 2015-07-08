@@ -91,7 +91,9 @@ object MimaExcludes {
             ProblemFilters.exclude[MissingMethodProblem](
               "org.apache.spark.api.r.RRDD.this"),
             ProblemFilters.exclude[MissingMethodProblem](
-              "org.apache.spark.api.r.StringRRDD.this")
+              "org.apache.spark.api.r.StringRRDD.this"),
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.api.r.BaseRRDD.this")
           )
 
         case v if v.startsWith("1.4") =>
