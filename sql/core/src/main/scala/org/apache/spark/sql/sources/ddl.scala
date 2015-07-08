@@ -304,6 +304,9 @@ private[sql] object ResolvedDataSource {
       mode: SaveMode,
       options: Map[String, String],
       data: DataFrame): ResolvedDataSource = {
+    if (data.schema.map(_.dataType).exists(_.isInstanceOf[IntervalType])) {
+      throw new AnalysisException("Cannot save interval data type into external storage.")
+    }
     val clazz: Class[_] = lookupDataSource(provider)
     val relation = clazz.newInstance() match {
       case dataSource: CreatableRelationProvider =>
