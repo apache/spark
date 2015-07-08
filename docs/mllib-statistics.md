@@ -424,8 +424,8 @@ for i, result in enumerate(featureTestResults):
 
 Additionally, MLlib provides a 1-sample, 2-sided implementation of the Kolmogorov-Smirnov test
 for equality of probability distributions. By providing the name of a theoretical distribution
-(currently solely supported for the standard normal distribution), or a function to calculate
-the cumulative distribution according to a given theoretical distribution, the user can
+(currently solely supported for the normal distribution) and its parameters, or a function to 
+calculate the cumulative distribution according to a given theoretical distribution, the user can
 test the null hypothesis that their sample is drawn from that distribution.
 
 <div class="codetabs">
@@ -441,7 +441,7 @@ import org.apache.spark.mllib.stat.Statistics._
 val data: RDD[Double] = ... // an RDD of sample data
 
 // run a KS test for the sample versus a standard normal distribution
-val ksTestResult = Statistics.ksTest(data, "stdnorm")
+val ksTestResult = Statistics.ksTest(data, "norm", 0, 1)
 println(ksTestResult) // summary of the test including the p-value, test statistic,
                       // and null hypothesis
                       // if our p-value indicates significance, we can reject the null hypothesis

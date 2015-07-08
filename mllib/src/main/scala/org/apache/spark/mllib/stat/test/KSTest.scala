@@ -165,12 +165,17 @@ private[stat] object KSTest {
    * a named distribution
    * @param data the sample data that we wish to evaluate
    * @param distName the name of the theoretical distribution
+   * @param params Variable length parameter for distribution's parameters
    * @return KSTestResult summarizing the test results (pval, statistic, and null hypothesis)
    */
-  def testOneSample(data: RDD[Double], distName: String): KSTestResult = {
+  def testOneSample(data: RDD[Double], distName: String, params: Double*): KSTestResult = {
     val distanceCalc =
       distName match {
-        case "stdnorm" => () => new NormalDistribution(0, 1)
+        case "norm" => () => {
+          require(params.length == 2, "Normal distribution requires mean and standard " +
+            "deviation as parameters")
+          new NormalDistribution(params(0), params(1))
+        }
         case  _ => throw new UnsupportedOperationException(s"$distName not yet supported through" +
           s" convenience method. Current options are:[stdnorm].")
       }

@@ -181,7 +181,7 @@ class HypothesisTestSuite extends SparkFunSuite with MLlibTestSparkContext {
     val pThreshold = 0.05
 
     // Comparing a standard normal sample to a standard normal distribution
-    val result1 = Statistics.ksTest(sampledNorm, "stdnorm")
+    val result1 = Statistics.ksTest(sampledNorm, "norm", 0, 1)
     val referenceStat1 = ksTest.kolmogorovSmirnovStatistic(stdNormalDist, sampledNorm.collect())
     val referencePVal1 = 1 - ksTest.cdf(referenceStat1, n)
     // Verify vs apache math commons ks test
@@ -191,7 +191,7 @@ class HypothesisTestSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(result1.pValue > pThreshold)
 
     // Comparing an exponential sample to a standard normal distribution
-    val result2 = Statistics.ksTest(sampledExp, "stdnorm")
+    val result2 = Statistics.ksTest(sampledExp, "norm", 0, 1)
     val referenceStat2 = ksTest.kolmogorovSmirnovStatistic(stdNormalDist, sampledExp.collect())
     val referencePVal2 = 1 - ksTest.cdf(referenceStat2, n)
     // verify vs apache math commons ks test
@@ -217,41 +217,39 @@ class HypothesisTestSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(result3.pValue < pThreshold)
 
     /*
-     Comparing results with R's implementation of Kolmogorov-Smirnov for 1 sample
-     > sessionInfo()
-     R version 3.2.0 (2015-04-16)
-     Platform: x86_64-apple-darwin13.4.0 (64-bit)
-     > set.seed(20)
-     > v <- rnorm(20)
-     > v
-      [1]  1.16268529 -0.58592447  1.78546500 -1.33259371 -0.44656677  0.56960612
-      [7] -2.88971761 -0.86901834 -0.46170268 -0.55554091 -0.02013537 -0.15038222
-     [13] -0.62812676  1.32322085 -1.52135057 -0.43742787  0.97057758  0.02822264
-     [19] -0.08578219  0.38921440
-     > ks.test(v, pnorm, alternative = "two.sided")
+      Comparing results with R's implementation of Kolmogorov-Smirnov for 1 sample
+      > sessionInfo()
+      R version 3.2.0 (2015-04-16)
+      Platform: x86_64-apple-darwin13.4.0 (64-bit)
+      > set.seed(20)
+      > v <- rnorm(20)
+      > v
+       [1]  1.16268529 -0.58592447  1.78546500 -1.33259371 -0.44656677  0.56960612
+       [7] -2.88971761 -0.86901834 -0.46170268 -0.55554091 -0.02013537 -0.15038222
+      [13] -0.62812676  1.32322085 -1.52135057 -0.43742787  0.97057758  0.02822264
+      [19] -0.08578219  0.38921440
+      > ks.test(v, pnorm, alternative = "two.sided")
 
-             One-sample Kolmogorov-Smirnov test
+               One-sample Kolmogorov-Smirnov test
 
-     data:  v
-     D = 0.18874, p-value = 0.4223
-     alternative hypothesis: two-sided
+      data:  v
+      D = 0.18874, p-value = 0.4223
+      alternative hypothesis: two-sided
     */
 
-    val RKSStat = 0.18874
-    val RKSPVal = 0.4223
-    val RData = sc.parallelize(
-        Array(
-          1.1626852897838, -0.585924465893051, 1.78546500331661, -1.33259371048501,
-          -0.446566766553219, 0.569606122374976, -2.88971761441412, -0.869018343326555,
-          -0.461702683149641, -0.555540910137444, -0.0201353678515895, -0.150382224136063,
-          -0.628126755843964, 1.32322085193283, -1.52135057001199, -0.437427868856691,
-          0.970577579543399, 0.0282226444247749, -0.0857821886527593, 0.389214404984942
-        )
+    val rKSStat = 0.18874
+    val rKSPVal = 0.4223
+    val rData = sc.parallelize(
+      Array(
+        1.1626852897838, -0.585924465893051, 1.78546500331661, -1.33259371048501,
+        -0.446566766553219, 0.569606122374976, -2.88971761441412, -0.869018343326555,
+        -0.461702683149641, -0.555540910137444, -0.0201353678515895, -0.150382224136063,
+        -0.628126755843964, 1.32322085193283, -1.52135057001199, -0.437427868856691,
+        0.970577579543399, 0.0282226444247749, -0.0857821886527593, 0.389214404984942
+      )
     )
-    val RCompResult = Statistics.ksTest(RData, "stdnorm")
-    assert(RCompResult.statistic ~== RKSStat relTol 1e-4)
-    assert(RCompResult.pValue ~== RKSPVal relTol 1e-4)
-
-
+    val rCompResult = Statistics.ksTest(rData, "norm", 0, 1)
+    assert(rCompResult.statistic ~== rKSStat relTol 1e-4)
+    assert(rCompResult.pValue ~== rKSPVal relTol 1e-4)
   }
 }
