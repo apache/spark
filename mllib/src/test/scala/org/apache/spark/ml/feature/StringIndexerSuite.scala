@@ -81,7 +81,6 @@ class StringIndexerSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(output === expected)
   }
 
-
   test("StringIndexer with a numeric input column") {
     val data = sc.parallelize(Seq((0, 100), (1, 200), (2, 300), (3, 100), (4, 100), (5, 300)), 2)
     val df = sqlContext.createDataFrame(data).toDF("id", "label")
