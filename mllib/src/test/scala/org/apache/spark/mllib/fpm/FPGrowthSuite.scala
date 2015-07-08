@@ -50,9 +50,9 @@ class FPGrowthSuite extends SparkFunSuite with MLlibTestSparkContext {
               "x z y r q t p"),
          FUN=function(x) strsplit(x," ",fixed=TRUE)),
          "transactions")
-       ars = apriori(transactions,
-                     parameter = list(support = 0.9, target="frequent itemset"))
-       > ars
+       > eclat(transactions, parameter = list(support = 0.9))
+       ...
+       eclat - zero frequent items
        set of 0 itemsets
      */
     assert(model6.freqItemsets.count() === 0)
@@ -150,6 +150,23 @@ class FPGrowthSuite extends SparkFunSuite with MLlibTestSparkContext {
       .setMinSupport(0.9)
       .setNumPartitions(1)
       .run(rdd)
+
+    /* Verify results using the `R` code:
+       transactions = as(sapply(
+         list("1 2 3",
+              "1 2 3 4",
+              "5 4 3 2 1",
+              "6 5 4 3 2 1",
+              "2 4",
+              "1 3",
+              "1 7"),
+         FUN=function(x) strsplit(x," ",fixed=TRUE)),
+         "transactions")
+       > eclat(transactions, parameter = list(support = 0.9))
+       ...
+       eclat - zero frequent items
+       set of 0 itemsets
+     */
     assert(model6.freqItemsets.count() === 0)
 
     val model3 = fpg
@@ -161,6 +178,24 @@ class FPGrowthSuite extends SparkFunSuite with MLlibTestSparkContext {
     val freqItemsets3 = model3.freqItemsets.collect().map { itemset =>
       (itemset.items.toSet, itemset.freq)
     }
+
+    /* Verify results using the `R` code:
+       fp = eclat(transactions, parameter = list(support = 0.5))
+       fpDF = as(sort(fp), "data.frame")
+       fpDF$support = fpDF$support * length(transactions)
+       names(fpDF)[names(fpDF) == "support"] = "freq"
+       > fpDF
+          items freq
+      6     {1}    6
+      3   {1,3}    5
+      7     {2}    5
+      8     {3}    5
+      1   {2,4}    4
+      2 {1,2,3}    4
+      4   {2,3}    4
+      5   {1,2}    4
+      9     {4}    4
+     */
     val expected = Set(
       (Set(1), 6L), (Set(2), 5L), (Set(3), 5L), (Set(4), 4L),
       (Set(1, 2), 4L), (Set(1, 3), 5L), (Set(2, 3), 4L),
@@ -171,12 +206,30 @@ class FPGrowthSuite extends SparkFunSuite with MLlibTestSparkContext {
       .setMinSupport(0.3)
       .setNumPartitions(4)
       .run(rdd)
+
+    /* Verify results using the `R` code:
+       fp = eclat(transactions, parameter = list(support = 0.3))
+       fpDF = as(fp, "data.frame")
+       fpDF$support = fpDF$support * length(transactions)
+       names(fpDF)[names(fpDF) == "support"] = "freq"
+       > nrow(fpDF)
+       [1] 15
+     */
     assert(model2.freqItemsets.count() === 15)
 
     val model1 = fpg
       .setMinSupport(0.1)
       .setNumPartitions(8)
       .run(rdd)
+
+    /* Verify results using the `R` code:
+       fp = eclat(transactions, parameter = list(support = 0.1))
+       fpDF = as(fp, "data.frame")
+       fpDF$support = fpDF$support * length(transactions)
+       names(fpDF)[names(fpDF) == "support"] = "freq"
+       > nrow(fpDF)
+       [1] 65
+     */
     assert(model1.freqItemsets.count() === 65)
   }
 }
