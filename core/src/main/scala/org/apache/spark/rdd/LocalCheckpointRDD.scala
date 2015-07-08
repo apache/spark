@@ -80,6 +80,9 @@ private[spark] class LocalCheckpointRDD[T: ClassTag](@transient sc: SparkContext
             s"  Expected indices: ${expectedIndices.mkString(", ")}\n" +
             s"  Actual indices: ${sortedIndices.mkString(", ")}")
       }
+    } else {
+      // An exception with a clear message here is better than a wrong answer
+      throw new SparkException("No checkpointed partitions found when reloading an RDD.")
     }
   }
 

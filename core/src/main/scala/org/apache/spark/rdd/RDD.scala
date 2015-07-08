@@ -1478,8 +1478,18 @@ abstract class RDD[T: ClassTag](
    *
    * The actual persisting occurs after the first job involving this RDD has completed.
    * The checkpoint directory set through `SparkContext#setCheckpointDir` is not read.
+   *
+   * This is NOT safe to use with dynamic allocation, which removes cached blocks with
+   * executors that it removes. If you must use both features, you are advised to set
+   * `spark.dynamicAllocation.cachedExecutorIdleTimeout` to a high value.
    */
   def localCheckpoint(): this.type = RDDCheckpointData.synchronized {
+    if (conf.getBoolean("spark.dynamicAllocation.enabled", false)) {
+      logWarning("Local checkpointing is NOT safe to use with dynamic allocation, " +
+        "removes cached blocks with executors that it removes. If you must use both " +
+        "features, you are advised to set `spark.dynamicAllocation.cachedExecutorIdleTimout`" +
+        "to a high value.")
+    }
     checkpointData = Some(new LocalRDDCheckpointData(this))
     this
   }
