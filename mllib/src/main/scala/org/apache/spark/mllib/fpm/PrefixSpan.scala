@@ -84,10 +84,10 @@ class PrefixSpan(
     allPatterns
   }
 
-  private def getAbsoluteMinSupport(sequences: RDD[Array[Int]]): Int =  {
+  private def getAbsoluteMinSupport(sequences: RDD[Array[Int]]): Int = {
     val result = if (minSupport <= 0) {
       0
-    }else {
+    } else {
       val count = sequences.count()
       val support = if (minSupport <= 1) minSupport else 1
       (support * count).toInt
