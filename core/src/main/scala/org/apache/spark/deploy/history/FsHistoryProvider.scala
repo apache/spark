@@ -414,7 +414,8 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
   /**
    * Comparison function that defines the sort order for application attempts within the same
    * application. Order is: running attempts before complete attempts, running attempts sorted
-   * by start time, completed attempts sorted by end time.
+   * by start time showing whichever started first,
+   * completed attempts sorted by end time showing whichever ended first.
    *
    * Normally applications should have a single running attempt; but failure to call sc.stop()
    * may cause multiple running attempts to show up.
@@ -425,9 +426,9 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       a1: FsApplicationAttemptInfo,
       a2: FsApplicationAttemptInfo): Boolean = {
     if (a1.completed == a2.completed) {
-      if (a1.completed) a1.endTime >= a2.endTime else a1.startTime >= a2.startTime
+      if (a1.completed) a1.endTime <= a2.endTime else a1.startTime <= a2.startTime
     } else {
-      !a1.completed
+      a1.completed
     }
   }
 
