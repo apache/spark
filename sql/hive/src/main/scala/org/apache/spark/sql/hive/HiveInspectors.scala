@@ -226,6 +226,12 @@ private[hive] trait HiveInspectors {
         "List type in java is unsupported because " +
         "JVM type erasure makes spark fail to catch a component type in List<>")
 
+    // java map type unsupported
+    case c: Class[_] if c == classOf[java.util.Map[_, _]] =>
+      throw new AnalysisException(
+        "Map type in java is unsupported because " +
+        "JVM type erasure makes spark fail to catch key and value types in Map<>")
+
     case c => throw new AnalysisException(s"Unsupported java type $c")
   }
 
