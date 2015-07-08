@@ -30,7 +30,6 @@ import org.apache.commons.lang3.StringUtils
 
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.api.java.JavaRDD
-import org.apache.spark.api.python.SerDeUtil
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis._
@@ -1550,8 +1549,8 @@ class DataFrame private[sql](
    */
   protected[sql] def javaToPython: JavaRDD[Array[Byte]] = {
     val structType = schema  // capture it for closure
-    val jrdd = queryExecution.toRdd.map(EvaluatePython.toJava(_, structType)).toJavaRDD()
-    SerDeUtil.javaToPython(jrdd)
+    val rdd = queryExecution.toRdd.map(EvaluatePython.toJava(_, structType))
+    EvaluatePython.javaToPython(rdd)
   }
 
   ////////////////////////////////////////////////////////////////////////////

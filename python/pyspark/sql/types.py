@@ -20,13 +20,9 @@ import decimal
 import time
 import datetime
 import calendar
-import keyword
-import warnings
 import json
 import re
-import weakref
 from array import array
-from operator import itemgetter
 
 if sys.version >= "3":
     long = int
@@ -70,6 +66,15 @@ class DataType(object):
         return json.dumps(self.jsonValue(),
                           separators=(',', ':'),
                           sort_keys=True)
+
+    def needSerialization(self):
+        return False
+
+    def serialize(self, obj):
+        return obj
+
+    def deserialize(self, datam):
+        return datam
 
 
 # This singleton pattern does not work with pickle, you will get
@@ -143,12 +148,36 @@ class DateType(AtomicType):
 
     __metaclass__ = DataTypeSingleton
 
+    EPOCH_ORDINAL = datetime.datetime(1970, 1, 1).toordinal()
+
+    def needSerialization(self):
+        return True
+
+    def serialize(self, d):
+        return d and d.toordinal() - self.EPOCH_ORDINAL
+
+    def deserialize(self, v):
+        return v and datetime.date.fromordinal(v + self.EPOCH_ORDINAL)
+
 
 class TimestampType(AtomicType):
     """Timestamp (datetime.datetime) data type.
     """
 
     __metaclass__ = DataTypeSingleton
+
+    def needSerialization(self):
+        return True
+
+    def serialize(self, dt):
+        if dt is not None:
+            seconds = (calendar.timegm(dt.utctimetuple()) if dt.tzinfo
+                       else time.mktime(dt.timetuple()))
+            return int(seconds * 1e6 + dt.microsecond)
+
+    def deserialize(self, ts):
+        if ts is not None:
+            return datetime.datetime.fromtimestamp(ts / 1e6)
 
 
 class DecimalType(FractionalType):
@@ -259,6 +288,19 @@ class ArrayType(DataType):
         return ArrayType(_parse_datatype_json_value(json["elementType"]),
                          json["containsNull"])
 
+    def needSerialization(self):
+        return self.elementType.needSerialization()
+
+    def serialize(self, obj):
+        if not self.needSerialization():
+            return obj
+        return obj and [self.elementType.serialize(v) for v in obj]
+
+    def deserialize(self, datam):
+        if not self.needSerialization():
+            return datam
+        return datam and [self.elementType.deserialize(v) for v in datam]
+
 
 class MapType(DataType):
     """Map data type.
@@ -303,6 +345,21 @@ class MapType(DataType):
         return MapType(_parse_datatype_json_value(json["keyType"]),
                        _parse_datatype_json_value(json["valueType"]),
                        json["valueContainsNull"])
+
+    def needSerialization(self):
+        return self.keyType.needSerialization() or self.valueType.needSerialization()
+
+    def serialize(self, obj):
+        if not self.needSerialization():
+            return obj
+        return obj and dict((self.keyType.serialize(k), self.valueType.serialize(v))
+                            for k, v in obj.items())
+
+    def deserialize(self, datam):
+        if not self.needSerialization():
+            return datam
+        return datam and dict((self.keyType.deserialize(k), self.valueType.deserialize(v))
+                              for k, v in datam.items())
 
 
 class StructField(DataType):
@@ -351,6 +408,15 @@ class StructField(DataType):
                            json["nullable"],
                            json["metadata"])
 
+    def needSerialization(self):
+        return self.dataType.needSerialization()
+
+    def serialize(self, obj):
+        return self.dataType.serialize(obj)
+
+    def deserialize(self, datam):
+        return self.dataType.deserialize(datam)
+
 
 class StructType(DataType):
     """Struct type, consisting of a list of :class:`StructField`.
@@ -371,10 +437,13 @@ class StructType(DataType):
         """
         if not fields:
             self.fields = []
+            self.names = []
         else:
             self.fields = fields
+            self.names = [f.name for f in fields]
             assert all(isinstance(f, StructField) for f in fields),\
                 "fields should be a list of StructField"
+        self._needSerializeFields = None
 
     def add(self, field, data_type=None, nullable=True, metadata=None):
         """
@@ -406,6 +475,7 @@ class StructType(DataType):
         """
         if isinstance(field, StructField):
             self.fields.append(field)
+            self.names.append(field.name)
         else:
             if isinstance(field, str) and data_type is None:
                 raise ValueError("Must specify DataType if passing name of struct_field to create.")
@@ -415,6 +485,7 @@ class StructType(DataType):
             else:
                 data_type_f = data_type
             self.fields.append(StructField(field, data_type_f, nullable, metadata))
+            self.names.append(field)
         return self
 
     def simpleString(self):
@@ -431,6 +502,41 @@ class StructType(DataType):
     @classmethod
     def fromJson(cls, json):
         return StructType([StructField.fromJson(f) for f in json["fields"]])
+
+    def needSerialization(self):
+        # We need convert Row()/namedtuple into tuple()
+        return True
+
+    def serialize(self, obj):
+        if obj is None:
+            return
+
+        if self._needSerializeFields is None:
+            self._needSerializeFields = any(f.dataType.needSerialization() for f in self.fields)
+
+        if self._needSerializeFields:
+            if isinstance(obj, dict):
+                return tuple(f.dataType.serialize(obj.get(n)) for n, f in zip(names, self.fields))
+            elif isinstance(obj, (tuple, list)):
+                return tuple(f.dataType.serialize(v) for f, v in zip(self.fields, obj))
+            else:
+                raise ValueError("Unexpected tuple %r with StructType" % obj)
+        else:
+            if isinstance(obj, dict):
+                return tuple(obj.get(n) for n in self.names)
+            elif isinstance(obj, (list, tuple)):
+                return tuple(obj)
+            else:
+                raise ValueError("Unexpected tuple %r with StructType" % obj)
+
+    def deserialize(self, datam):
+        if datam is None:
+            return
+        if isinstance(datam, Row):
+            # it's already deserialized by pickler
+            return datam
+        values = [f.dataType.deserialize(v) for f, v in zip(self.fields, datam)]
+        return _create_row(self.names, values)
 
 
 class UserDefinedType(DataType):
@@ -463,6 +569,9 @@ class UserDefinedType(DataType):
         The class name of the paired Scala UDT.
         """
         raise NotImplementedError("UDT must have a paired Scala UDT.")
+
+    def needSerialization(self):
+        return True
 
     def serialize(self, obj):
         """
@@ -669,117 +778,6 @@ def _infer_schema(row):
 
     fields = [StructField(k, _infer_type(v), True) for k, v in items]
     return StructType(fields)
-
-
-def _need_python_to_sql_conversion(dataType):
-    """
-    Checks whether we need python to sql conversion for the given type.
-    For now, only UDTs need this conversion.
-
-    >>> _need_python_to_sql_conversion(DoubleType())
-    False
-    >>> schema0 = StructType([StructField("indices", ArrayType(IntegerType(), False), False),
-    ...                       StructField("values", ArrayType(DoubleType(), False), False)])
-    >>> _need_python_to_sql_conversion(schema0)
-    True
-    >>> _need_python_to_sql_conversion(ExamplePointUDT())
-    True
-    >>> schema1 = ArrayType(ExamplePointUDT(), False)
-    >>> _need_python_to_sql_conversion(schema1)
-    True
-    >>> schema2 = StructType([StructField("label", DoubleType(), False),
-    ...                       StructField("point", ExamplePointUDT(), False)])
-    >>> _need_python_to_sql_conversion(schema2)
-    True
-    """
-    if isinstance(dataType, StructType):
-        # convert namedtuple or Row into tuple
-        return True
-    elif isinstance(dataType, ArrayType):
-        return _need_python_to_sql_conversion(dataType.elementType)
-    elif isinstance(dataType, MapType):
-        return _need_python_to_sql_conversion(dataType.keyType) or \
-            _need_python_to_sql_conversion(dataType.valueType)
-    elif isinstance(dataType, UserDefinedType):
-        return True
-    elif isinstance(dataType, (DateType, TimestampType)):
-        return True
-    else:
-        return False
-
-
-EPOCH_ORDINAL = datetime.datetime(1970, 1, 1).toordinal()
-
-
-def _python_to_sql_converter(dataType):
-    """
-    Returns a converter that converts a Python object into a SQL datum for the given type.
-
-    >>> conv = _python_to_sql_converter(DoubleType())
-    >>> conv(1.0)
-    1.0
-    >>> conv = _python_to_sql_converter(ArrayType(DoubleType(), False))
-    >>> conv([1.0, 2.0])
-    [1.0, 2.0]
-    >>> conv = _python_to_sql_converter(ExamplePointUDT())
-    >>> conv(ExamplePoint(1.0, 2.0))
-    [1.0, 2.0]
-    >>> schema = StructType([StructField("label", DoubleType(), False),
-    ...                      StructField("point", ExamplePointUDT(), False)])
-    >>> conv = _python_to_sql_converter(schema)
-    >>> conv((1.0, ExamplePoint(1.0, 2.0)))
-    (1.0, [1.0, 2.0])
-    """
-    if not _need_python_to_sql_conversion(dataType):
-        return lambda x: x
-
-    if isinstance(dataType, StructType):
-        names, types = zip(*[(f.name, f.dataType) for f in dataType.fields])
-        if any(_need_python_to_sql_conversion(t) for t in types):
-            converters = [_python_to_sql_converter(t) for t in types]
-
-            def converter(obj):
-                if isinstance(obj, dict):
-                    return tuple(c(obj.get(n)) for n, c in zip(names, converters))
-                elif isinstance(obj, tuple):
-                    if hasattr(obj, "__fields__") or hasattr(obj, "_fields"):
-                        return tuple(c(v) for c, v in zip(converters, obj))
-                    else:
-                        return tuple(c(v) for c, v in zip(converters, obj))
-                elif obj is not None:
-                    raise ValueError("Unexpected tuple %r with type %r" % (obj, dataType))
-        else:
-            def converter(obj):
-                if isinstance(obj, dict):
-                    return tuple(obj.get(n) for n in names)
-                else:
-                    return tuple(obj)
-        return converter
-    elif isinstance(dataType, ArrayType):
-        element_converter = _python_to_sql_converter(dataType.elementType)
-        return lambda a: a and [element_converter(v) for v in a]
-    elif isinstance(dataType, MapType):
-        key_converter = _python_to_sql_converter(dataType.keyType)
-        value_converter = _python_to_sql_converter(dataType.valueType)
-        return lambda m: m and dict([(key_converter(k), value_converter(v)) for k, v in m.items()])
-
-    elif isinstance(dataType, UserDefinedType):
-        return lambda obj: obj and dataType.serialize(obj)
-
-    elif isinstance(dataType, DateType):
-        return lambda d: d and d.toordinal() - EPOCH_ORDINAL
-
-    elif isinstance(dataType, TimestampType):
-
-        def to_posix_timstamp(dt):
-            if dt:
-                seconds = (calendar.timegm(dt.utctimetuple()) if dt.tzinfo
-                           else time.mktime(dt.timetuple()))
-                return int(seconds * 1e6 + dt.microsecond)
-        return to_posix_timstamp
-
-    else:
-        raise ValueError("Unexpected type %r" % dataType)
 
 
 def _has_nulltype(dt):
@@ -1106,159 +1104,10 @@ def _verify_type(obj, dataType):
         for v, f in zip(obj, dataType.fields):
             _verify_type(v, f.dataType)
 
-_cached_cls = weakref.WeakValueDictionary()
 
-
-def _restore_object(dataType, obj):
-    """ Restore object during unpickling. """
-    # use id(dataType) as key to speed up lookup in dict
-    # Because of batched pickling, dataType will be the
-    # same object in most cases.
-    k = id(dataType)
-    cls = _cached_cls.get(k)
-    if cls is None or cls.__datatype is not dataType:
-        # use dataType as key to avoid create multiple class
-        cls = _cached_cls.get(dataType)
-        if cls is None:
-            cls = _create_cls(dataType)
-            _cached_cls[dataType] = cls
-        cls.__datatype = dataType
-        _cached_cls[k] = cls
-    return cls(obj)
-
-
-def _create_object(cls, v):
-    """ Create an customized object with class `cls`. """
-    # datetime.date would be deserialized as datetime.datetime
-    # from java type, so we need to set it back.
-    if cls is datetime.date and isinstance(v, datetime.datetime):
-        return v.date()
-    return cls(v) if v is not None else v
-
-
-def _create_getter(dt, i):
-    """ Create a getter for item `i` with schema """
-    cls = _create_cls(dt)
-
-    def getter(self):
-        return _create_object(cls, self[i])
-
-    return getter
-
-
-def _has_struct_or_date(dt):
-    """Return whether `dt` is or has StructType/DateType in it"""
-    if isinstance(dt, StructType):
-        return True
-    elif isinstance(dt, ArrayType):
-        return _has_struct_or_date(dt.elementType)
-    elif isinstance(dt, MapType):
-        return _has_struct_or_date(dt.keyType) or _has_struct_or_date(dt.valueType)
-    elif isinstance(dt, DateType):
-        return True
-    elif isinstance(dt, UserDefinedType):
-        return True
-    return False
-
-
-def _create_properties(fields):
-    """Create properties according to fields"""
-    ps = {}
-    for i, f in enumerate(fields):
-        name = f.name
-        if (name.startswith("__") and name.endswith("__")
-                or keyword.iskeyword(name)):
-            warnings.warn("field name %s can not be accessed in Python,"
-                          "use position to access it instead" % name)
-        if _has_struct_or_date(f.dataType):
-            # delay creating object until accessing it
-            getter = _create_getter(f.dataType, i)
-        else:
-            getter = itemgetter(i)
-        ps[name] = property(getter)
-    return ps
-
-
-def _create_cls(dataType):
-    """
-    Create an class by dataType
-
-    The created class is similar to namedtuple, but can have nested schema.
-
-    >>> schema = _parse_schema_abstract("a b c")
-    >>> row = (1, 1.0, "str")
-    >>> schema = _infer_schema_type(row, schema)
-    >>> obj = _create_cls(schema)(row)
-    >>> import pickle
-    >>> pickle.loads(pickle.dumps(obj))
-    Row(a=1, b=1.0, c='str')
-
-    >>> row = [[1], {"key": (1, 2.0)}]
-    >>> schema = _parse_schema_abstract("a[] b{c d}")
-    >>> schema = _infer_schema_type(row, schema)
-    >>> obj = _create_cls(schema)(row)
-    >>> pickle.loads(pickle.dumps(obj))
-    Row(a=[1], b={'key': Row(c=1, d=2.0)})
-    >>> pickle.loads(pickle.dumps(obj.a))
-    [1]
-    >>> pickle.loads(pickle.dumps(obj.b))
-    {'key': Row(c=1, d=2.0)}
-    """
-
-    if isinstance(dataType, ArrayType):
-        cls = _create_cls(dataType.elementType)
-
-        def List(l):
-            if l is None:
-                return
-            return [_create_object(cls, v) for v in l]
-
-        return List
-
-    elif isinstance(dataType, MapType):
-        kcls = _create_cls(dataType.keyType)
-        vcls = _create_cls(dataType.valueType)
-
-        def Dict(d):
-            if d is None:
-                return
-            return dict((_create_object(kcls, k), _create_object(vcls, v)) for k, v in d.items())
-
-        return Dict
-
-    elif isinstance(dataType, DateType):
-        return datetime.date
-
-    elif isinstance(dataType, UserDefinedType):
-        return lambda datum: dataType.deserialize(datum)
-
-    elif not isinstance(dataType, StructType):
-        # no wrapper for atomic types
-        return lambda x: x
-
-    class Row(tuple):
-
-        """ Row in DataFrame """
-        __datatype = dataType
-        __fields__ = tuple(f.name for f in dataType.fields)
-        __slots__ = ()
-
-        # create property for fast access
-        locals().update(_create_properties(dataType.fields))
-
-        def asDict(self):
-            """ Return as a dict """
-            return dict((n, getattr(self, n)) for n in self.__fields__)
-
-        def __repr__(self):
-            # call collect __repr__ for nested objects
-            return ("Row(%s)" % ", ".join("%s=%r" % (n, getattr(self, n))
-                                          for n in self.__fields__))
-
-        def __reduce__(self):
-            return (_restore_object, (self.__datatype, tuple(self)))
-
-    return Row
+# This is used to unpickle a Row from JVM
+def _create_row_inbound_converter(dataType):
+    return lambda *a: dataType.deserialize(a)
 
 
 def _create_row(fields, values):
