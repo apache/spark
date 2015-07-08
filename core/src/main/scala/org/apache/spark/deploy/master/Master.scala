@@ -545,8 +545,8 @@ private[master] class Master(
    * worker by default, in which case only one executor may be launched on each worker.
    */
 
-  private[master] def scheduleExecutorsOnWorkers(app: ApplicationInfo, usableWorkers: Array[WorkerInfo],
-    spreadOutApps: Boolean): Array[Int] = {
+  private[master] def scheduleExecutorsOnWorkers(app: ApplicationInfo,
+    usableWorkers: Array[WorkerInfo], spreadOutApps: Boolean): Array[Int] = {
     val coresPerExecutor = app.desc.coresPerExecutor.getOrElse(1)
     val memoryPerExecutor = app.desc.memoryPerExecutorMB
     val numUsable = usableWorkers.length
@@ -580,9 +580,9 @@ private[master] class Master(
     }
     assignedCores
   }
-  
+
   /**
-   * Schedule and launch executors on workers 
+   * Schedule and launch executors on workers
    */
   private def startExecutorsOnWorkers(): Unit = {
     // Right now this is a very simple FIFO scheduler. We keep trying to fit in the first app
@@ -598,7 +598,8 @@ private[master] class Master(
       // Now that we've decided how many cores to allocate on each worker, let's allocate them
       var pos = 0
       for (pos <- 0 until usableWorkers.length if assignedCores(pos) > 0) {
-        allocateWorkerResourceToExecutors(app, assignedCores(pos), coresPerExecutor, usableWorkers(pos))
+        allocateWorkerResourceToExecutors(app, assignedCores(pos), coresPerExecutor,
+        usableWorkers(pos))
       }
     }
   }
