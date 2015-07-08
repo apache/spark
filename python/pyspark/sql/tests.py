@@ -151,6 +151,17 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertEqual(self.sqlCtx.range(-2).count(), 0)
         self.assertEqual(self.sqlCtx.range(3).count(), 3)
 
+    def test_duplicated_column_names(self):
+        df = self.sqlCtx.createDataFrame([(1, 2)], ["c", "c"])
+        row = df.select('*').first()
+        self.assertEqual(1, row[0])
+        self.assertEqual(2, row[1])
+        self.assertEqual("Row(c=1, c=2)", str(row))
+        # Cannot access columns
+        self.assertRaises(AnalysisException, lambda: df.select(df[0]).first())
+        self.assertRaises(AnalysisException, lambda: df.select(df.c).first())
+        self.assertRaises(AnalysisException, lambda: df.select(df["c"]).first())
+
     def test_explode(self):
         from pyspark.sql.functions import explode
         d = [Row(a=1, intlist=[1, 2, 3], mapfield={"a": "b"})]

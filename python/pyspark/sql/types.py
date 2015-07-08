@@ -1132,16 +1132,6 @@ def _create_object(cls, v):
     return cls(v) if v is not None else v
 
 
-def _create_getter(dt, i):
-    """ Create a getter for item `i` with schema """
-    cls = _create_cls(dt)
-
-    def getter(self):
-        return _create_object(cls, self[i])
-
-    return getter
-
-
 def _has_struct_or_date(dt):
     """Return whether `dt` is or has StructType/DateType in it"""
     if isinstance(dt, StructType):
@@ -1160,18 +1150,22 @@ def _has_struct_or_date(dt):
 def _create_properties(fields):
     """Create properties according to fields"""
     ps = {}
+    converters = []
     for i, f in enumerate(fields):
         name = f.name
         if (name.startswith("__") and name.endswith("__")
                 or keyword.iskeyword(name)):
             warnings.warn("field name %s can not be accessed in Python,"
                           "use position to access it instead" % name)
+        ps[name] = property(itemgetter(i))
+
         if _has_struct_or_date(f.dataType):
-            # delay creating object until accessing it
-            getter = _create_getter(f.dataType, i)
+            cls = _create_cls(f.dataType)
+            converter = lambda x: _create_object(cls, x)
         else:
-            getter = itemgetter(i)
-        ps[name] = property(getter)
+            converter = lambda x: x
+        converters.append(converter)
+    ps["__converters__"] = converters
     return ps
 
 
@@ -1236,6 +1230,7 @@ def _create_cls(dataType):
 
         """ Row in DataFrame """
         __datatype = dataType
+        __converters__ = []
         __fields__ = tuple(f.name for f in dataType.fields)
         __slots__ = ()
 
@@ -1244,12 +1239,16 @@ def _create_cls(dataType):
 
         def asDict(self):
             """ Return as a dict """
-            return dict((n, getattr(self, n)) for n in self.__fields__)
+            return dict((n, self[i]) for i, n in enumerate(self.__fields__))
+
+        def __getitem__(self, item):
+            o = tuple.__getitem__(self, item)
+            return self.__converters__[item](o)
 
         def __repr__(self):
             # call collect __repr__ for nested objects
-            return ("Row(%s)" % ", ".join("%s=%r" % (n, getattr(self, n))
-                                          for n in self.__fields__))
+            return ("Row(%s)" % ", ".join("%s=%r" % (n, self[i])
+                                          for i, n in enumerate(self.__fields__)))
 
         def __reduce__(self):
             return (_restore_object, (self.__datatype, tuple(self)))
