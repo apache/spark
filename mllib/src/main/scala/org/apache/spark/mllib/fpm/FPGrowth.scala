@@ -41,6 +41,10 @@ import org.apache.spark.storage.StorageLevel
  */
 @Experimental
 class FPGrowthModel[Item: ClassTag](val freqItemsets: RDD[FreqItemset[Item]]) extends Serializable {
+  /**
+   * Generates association rules for the [[Item]]s in [[freqItemsets]].
+   * @param confidence minimal confidence of the rules produced
+   */
   def generateAssociationRules(confidence: Double): RDD[AssociationRules.Rule[Item]] = {
     val associationRules = new AssociationRules(confidence)
     associationRules.run(freqItemsets)
