@@ -129,6 +129,20 @@ class ReceiverSuite extends TestSuiteBase with Timeouts with Serializable {
     }
   }
 
+  test("restart receiver should consider the scheduled locations") {
+    val receiver = new FakeReceiver
+    val executor = new FakeReceiverSupervisor(receiver) {
+      override def rescheduleReceiver: Seq[String] = Seq("unknown-host")
+    }
+    executor.start()
+    receiver.restart("force the receiver restart")
+    eventually(timeout(30000 millis), interval(10 millis)) {
+      // Since the scheduled location is not the current host, the receiver should exit
+      assert(receiver.onStopCalled)
+      assert(receiver.isStopped)
+    }
+  }
+
   test("block generator") {
     val blockGeneratorListener = new FakeBlockGeneratorListener
     val blockIntervalMs = 200
