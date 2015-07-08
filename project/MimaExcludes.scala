@@ -60,53 +60,14 @@ object MimaExcludes {
               "org.apache.spark.ml.regression.LeastSquaresCostFun.this"),
             // SQL execution is considered private.
             excludePackage("org.apache.spark.sql.execution"),
-            // NanoTime and CatalystTimestampConverter is only used inside catalyst,
-            // not needed anymore
-            ProblemFilters.exclude[MissingClassProblem](
-              "org.apache.spark.sql.parquet.timestamp.NanoTime"),
-              ProblemFilters.exclude[MissingClassProblem](
-              "org.apache.spark.sql.parquet.timestamp.NanoTime$"),
-            ProblemFilters.exclude[MissingClassProblem](
-              "org.apache.spark.sql.parquet.CatalystTimestampConverter"),
-            ProblemFilters.exclude[MissingClassProblem](
-              "org.apache.spark.sql.parquet.CatalystTimestampConverter$"),
-            // SPARK-6777 Implements backwards compatibility rules in CatalystSchemaConverter
-            ProblemFilters.exclude[MissingClassProblem](
-              "org.apache.spark.sql.parquet.ParquetTypeInfo"),
-            ProblemFilters.exclude[MissingClassProblem](
-              "org.apache.spark.sql.parquet.ParquetTypeInfo$")
+            // Parquet support is considered private.
+            excludePackage("org.apache.spark.sql.parquet")
           ) ++ Seq(
             // SPARK-8479 Add numNonzeros and numActives to Matrix.
             ProblemFilters.exclude[MissingMethodProblem](
               "org.apache.spark.mllib.linalg.Matrix.numNonzeros"),
             ProblemFilters.exclude[MissingMethodProblem](
               "org.apache.spark.mllib.linalg.Matrix.numActives")
-          ) ++ Seq(
-            // SPARK-6776 Implement backwards-compatibility rules in Catalyst converters
-            ProblemFilters.exclude[MissingClassProblem](
-              "org.apache.spark.sql.parquet.CatalystGroupConverter"),
-            ProblemFilters.exclude[MissingClassProblem](
-              "org.apache.spark.sql.parquet.CatalystStructConverter"),
-            ProblemFilters.exclude[MissingClassProblem](
-              "org.apache.spark.sql.parquet.CatalystPrimitiveRowConverter"),
-            ProblemFilters.exclude[MissingClassProblem](
-              "org.apache.spark.sql.parquet.CatalystPrimitiveStringConverter"),
-            ProblemFilters.exclude[MissingClassProblem](
-              "org.apache.spark.sql.parquet.CatalystMapConverter"),
-            ProblemFilters.exclude[FinalClassProblem](
-              "org.apache.spark.sql.parquet.CatalystConverter"),
-            ProblemFilters.exclude[MissingClassProblem](
-              "org.apache.spark.sql.parquet.CatalystNativeArrayConverter"),
-            ProblemFilters.exclude[MissingClassProblem](
-              "org.apache.spark.sql.parquet.CatalystNativeArrayConverter$"),
-            ProblemFilters.exclude[MissingClassProblem](
-              "org.apache.spark.sql.parquet.CatalystArrayContainsNullConverter"),
-            ProblemFilters.exclude[MissingClassProblem](
-              "org.apache.spark.sql.parquet.CatalystArrayConverter$"),
-            ProblemFilters.exclude[MissingClassProblem](
-              "org.apache.spark.sql.parquet.CatalystPrimitiveConverter"),
-            ProblemFilters.exclude[MissingClassProblem](
-              "org.apache.spark.sql.parquet.CatalystArrayConverter")
           )
         case v if v.startsWith("1.4") =>
           Seq(
