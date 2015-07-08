@@ -32,6 +32,8 @@ There are 3 main types of operators:
         HiveOperator,
         HivePartitionSensor,
         HiveToMySqlTransfer,
+        SimpleHttpOperator,
+        HttpSensor,
         MySqlOperator,
         MySqlToHiveTransfer,
         PostgresOperator,
@@ -111,7 +113,7 @@ Hooks
 -----
 .. automodule:: airflow.hooks
     :show-inheritance:
-    :members: MySqlHook, PostgresHook, PrestoHook, HiveCliHook, HiveServer2Hook, HiveMetastoreHook, S3Hook, SqliteHook
+    :members: MySqlHook, PostgresHook, PrestoHook, HiveCliHook, HiveServer2Hook, HiveMetastoreHook, HttpHook, S3Hook, SqliteHook
 
 Executors
 ---------

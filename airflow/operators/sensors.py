@@ -355,6 +355,8 @@ class HttpSensor(BaseSensorOperator):
         depends on the option that's being modified.
     """
 
+    template_fields = ('endpoint',)
+
     @apply_defaults
     def __init__(self,
                  endpoint,
