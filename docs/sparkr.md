@@ -116,7 +116,7 @@ sql(hiveContext, "CREATE TABLE IF NOT EXISTS src (key INT, value STRING)")
 sql(hiveContext, "LOAD DATA LOCAL INPATH 'examples/src/main/resources/kv1.txt' INTO TABLE src")
 
 # Queries can be expressed in HiveQL.
-results <- hiveContext.sql("FROM src SELECT key, value")
+results <- sql(hiveContext, "FROM src SELECT key, value")
 
 # results is now a DataFrame
 head(results)
