@@ -215,6 +215,9 @@ private[spark] object SerDe {
         case "long" | "java.lang.Long" =>
           writeType(dos, "double")
           writeDouble(dos, value.asInstanceOf[Long].toDouble)
+        case "float" | "java.lang.Float" =>
+          writeType(dos, "double")
+          writeDouble(dos, value.asInstanceOf[Float].toDouble)
         case "double" | "java.lang.Double" =>
           writeType(dos, "double")
           writeDouble(dos, value.asInstanceOf[Double])
