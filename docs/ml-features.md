@@ -290,12 +290,18 @@ for words_label in wordsDataFrame.select("words", "label").take(3):
 
 ## $n$-gram
 
-An [n-gram](https://en.wikipedia.org/wiki/N-gram) is a sequence of $n$ tokens (typically words) for some integer $n$. The [NGram](api/scala/index.html#org.apache.spark.ml.feature.NGram) class can be used to transform input features into $n$-grams.
+An [n-gram](https://en.wikipedia.org/wiki/N-gram) is a sequence of $n$ tokens (typically words) for some integer $n$. The `NGram` class can be used to transform input features into $n$-grams.
 
-`NGram` takes as input a sequence of strings (e.g. the output of a [Tokenizer](api/scala/index.html#org.apache.spark.ml.feature.Tokenizer)).  The parameter `n` is used to determine the number of terms in each $n$-gram. The output will consist of a sequence of $n$-grams where each $n$-gram is represented by a space-delimited string of $n$ consecutive words.  If the input sequence contains less than `n` strings, no output is produced.
+`NGram` takes as input a sequence of strings (e.g. the output of a [Tokenizer](api/scala/index.html#org.apache.spark.ml.feature.Tokenizer)).  The parameter `n` is used to determine the number of terms in each $n$-gram. The output will consist of a sequence of $n$-grams where each $n$-gram is represented by a space-delimited string of $n$ consecutive words.  If the input sequence contains fewer than `n` strings, no output is produced.
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
+<div class="codetabs">
+
+<div data-lang="scala" markdown="1">
+
+[`NGram`](api/scala/index.html#org.apache.spark.ml.feature.NGram) takes an input column name, an output column name, and an optional length parameter n (n=2 by default).
+
 {% highlight scala %}
 import org.apache.spark.ml.feature.NGram
 
@@ -316,7 +322,7 @@ ngramDataFrame.select("ngrams", "label").take(3).foreach(println)
 import com.google.common.collect.Lists;
 
 import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.ml.feature.Tokenizer;
+import org.apache.spark.ml.feature.NGram;
 import org.apache.spark.mllib.linalg.Vector;
 import org.apache.spark.sql.DataFrame;
 import org.apache.spark.sql.Row;
@@ -341,7 +347,7 @@ DataFrame ngramDataFrame = ngramTransformer.transform(wordDataFrame);
 for (Row r : ngramDataFrame.select("ngrams", "label").take(3)) {
   java.util.List<String> ngrams = r.getList(0);
   for (String ngram : ngrams) System.out.print(ngram + " --- ");
-    System.out.println();
+  System.out.println();
 }
 {% endhighlight %}
 </div>
