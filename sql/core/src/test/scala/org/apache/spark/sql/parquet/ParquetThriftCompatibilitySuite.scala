@@ -33,7 +33,7 @@ import org.apache.spark.sql.{Row, SQLContext}
 class ParquetThriftCompatibilitySuite extends ParquetCompatibilityTest {
   import ParquetCompatibilityTest._
 
-  override def sqlContext: SQLContext = TestSQLContext
+  override val sqlContext: SQLContext = TestSQLContext
 
   override protected def beforeAll(): Unit = {
     super.beforeAll()

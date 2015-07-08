@@ -25,13 +25,10 @@ import org.apache.parquet.hadoop.ParquetFileReader
 import org.apache.parquet.schema.MessageType
 import org.scalatest.BeforeAndAfterAll
 
-import org.apache.spark.sql.test.TestSQLContext
-import org.apache.spark.sql.{QueryTest, SQLContext}
+import org.apache.spark.sql.QueryTest
 import org.apache.spark.util.Utils
 
 abstract class ParquetCompatibilityTest extends QueryTest with ParquetTest with BeforeAndAfterAll {
-  override def sqlContext: SQLContext = TestSQLContext
-
   protected var parquetStore: File = _
 
   override protected def beforeAll(): Unit = {
@@ -45,10 +42,9 @@ abstract class ParquetCompatibilityTest extends QueryTest with ParquetTest with 
 
   def readParquetSchema(path: String): MessageType = {
     val fsPath = new Path(path)
-    val footers =
-      ParquetFileReader.readAllFootersInParallel(
-        configuration, fsPath.getFileSystem(configuration).listStatus(fsPath).toSeq, true)
-
+    val fs = fsPath.getFileSystem(configuration)
+    val parquetFiles = fs.listStatus(fsPath).toSeq.filterNot(_.getPath.getName.startsWith("_"))
+    val footers = ParquetFileReader.readAllFootersInParallel(configuration, parquetFiles, true)
     footers.head.getParquetMetadata.getFileMetaData.getSchema
   }
 }
