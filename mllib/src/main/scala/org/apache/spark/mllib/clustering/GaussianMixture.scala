@@ -43,9 +43,6 @@ import org.apache.spark.util.Utils
  * While this process is generally guaranteed to converge, it is not guaranteed
  * to find a global optimum.
  *
- * Computation of the Gaussian pdfs are distributed across workers when dimensionality of the input
- * data >= 30 and number of centers >= 10.
- *
  * Note: For high-dimensional data (with many features), this algorithm may perform poorly.
  *       This is due to high-dimensional data (a) making it difficult to cluster at all (based
  *       on statistical/theoretical arguments) and (b) numerical issues with Gaussian distributions.
@@ -64,7 +61,7 @@ class GaussianMixture private (
 
   /**
    * Constructs a default instance. The default parameters are {k: 2, convergenceTol: 0.01,
-   * maxIterations: 100, distributeGaussians: false, seed: random}.
+   * maxIterations: 100, seed: random}.
    */
   def this() = this(2, 0.01, 100, Utils.random.nextLong())
 
@@ -143,9 +140,9 @@ class GaussianMixture private (
     // Get length of the input vectors
     val d = breezeData.first().length
 
-    // Logic for when to distribute the computation of the [[MultivariateGaussian]]s
-    val numPartitions = math.min(k, 1024)
-    val distributeGaussians = (k - k.toDouble / numPartitions) / numPartitions * d > 25
+    // Heuristic to distribute the computation of the [[MultivariateGaussian]]s, approximately when
+    // d > 25 except for when k is very small
+    val distributeGaussians = ((k - 1.0) / k) * d > 25
 
     // Determine initial weights and corresponding Gaussians.
     // If the user supplied an initial GMM, we use those values, otherwise
@@ -180,8 +177,9 @@ class GaussianMixture private (
       val sumWeights = sums.weights.sum
 
       if (distributeGaussians) {
+        val numPartitions = math.min(k, 1024)
         val tuples =
-          Seq.tabulate(k)(i => (sums.means(i), sums.sigmas(i), sums.weights(i) / sumWeights))
+          Seq.tabulate(k)(i => (sums.means(i), sums.sigmas(i), sums.weights(i)))
         val (ws, gs) = sc.parallelize(tuples, numPartitions).map { case (mean, sigma, weight) =>
           updateWeightsAndGaussians(mean, sigma, weight, sumWeights)
         }.collect.unzip
@@ -214,7 +212,7 @@ class GaussianMixture private (
       sigma: BreezeMatrix[Double],
       weight: Double,
       sumWeights: Double): (Double, MultivariateGaussian) = {
-    val mu = mean / weight
+    val mu = (mean /= weight)
     BLAS.syr(-weight, Vectors.fromBreeze(mu),
       Matrices.fromBreeze(sigma).asInstanceOf[DenseMatrix])
     val newWeight = weight / sumWeights
