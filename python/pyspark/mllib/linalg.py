@@ -440,7 +440,7 @@ class SparseVector(Vector):
         values (sorted by index).
 
         :param size: Size of the vector.
-        :param args: Non-zero entries, as a dictionary, list of tupes,
+        :param args: Non-zero entries, as a dictionary, list of tuples,
                or two sorted lists containing indices and values.
 
         >>> SparseVector(4, {1: 1.0, 3: 5.5})
@@ -451,6 +451,7 @@ class SparseVector(Vector):
         SparseVector(4, {1: 1.0, 3: 5.5})
         """
         self.size = int(size)
+        """ Size of the vector. """
         assert 1 <= len(args) <= 2, "must pass either 2 or 3 arguments"
         if len(args) == 1:
             pairs = args[0]
@@ -458,7 +459,9 @@ class SparseVector(Vector):
                 pairs = pairs.items()
             pairs = sorted(pairs)
             self.indices = np.array([p[0] for p in pairs], dtype=np.int32)
+            """ The list of index corresponding to non-zero entries. """
             self.values = np.array([p[1] for p in pairs], dtype=np.float64)
+            """ The list of non-zero entries. """
         else:
             if isinstance(args[0], bytes):
                 assert isinstance(args[1], bytes), "values should be string too"
