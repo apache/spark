@@ -186,23 +186,38 @@ private[sql] object SparkSqlSerializer2 {
 
   /**
    * Check if rows with the given schema can be serialized with ShuffleSerializer.
+   * Right now, we do not support a schema having complex types or UDTs, or all data types
+   * of fields are NullTypes.
    */
   def support(schema: Array[DataType]): Boolean = {
     if (schema == null) return true
 
+    var allNullTypes = true
     var i = 0
     while (i < schema.length) {
       schema(i) match {
-        case udt: UserDefinedType[_] => return false
-        case array: ArrayType => return false
-        case map: MapType => return false
-        case struct: StructType => return false
+        case NullType => // Do nothing
+        case udt: UserDefinedType[_] =>
+          allNullTypes = false
+          return false
+        case array: ArrayType =>
+          allNullTypes = false
+          return false
+        case map: MapType =>
+          allNullTypes = false
+          return false
+        case struct: StructType =>
+          allNullTypes = false
+          return false
         case _ =>
+          allNullTypes = false
       }
       i += 1
     }
 
-    return true
+    // If types of fields are all NullTypes, we return false.
+    // Otherwise, we return true.
+    return !allNullTypes
   }
 
   /**

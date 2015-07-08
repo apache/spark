@@ -42,7 +42,6 @@ class SparkSqlSerializer2DataTypeSuite extends SparkFunSuite {
   }
 
   checkSupported(null, isSupported = true)
-  checkSupported(NullType, isSupported = true)
   checkSupported(BooleanType, isSupported = true)
   checkSupported(ByteType, isSupported = true)
   checkSupported(ShortType, isSupported = true)
@@ -57,6 +56,8 @@ class SparkSqlSerializer2DataTypeSuite extends SparkFunSuite {
   checkSupported(DecimalType(10, 5), isSupported = true)
   checkSupported(DecimalType.Unlimited, isSupported = true)
 
+  // If NullType is the only data type in the schema, we do not support it.
+  checkSupported(NullType, isSupported = false)
   // For now, ArrayType, MapType, and StructType are not supported.
   checkSupported(ArrayType(DoubleType, true), isSupported = false)
   checkSupported(ArrayType(StringType, false), isSupported = false)
@@ -168,6 +169,23 @@ abstract class SparkSqlSerializer2Suite extends QueryTest with BeforeAndAfterAll
   test("no map output field") {
     val df = sql(s"SELECT 1 + 1 FROM shuffle")
     checkSerializer(df.queryExecution.executedPlan, classOf[SparkSqlSerializer])
+  }
+
+  test("types of fields are all NullTypes") {
+    // Test range partitioning code path.
+    val nulls = sql(s"SELECT null as a, null as b, null as c")
+    val df = nulls.unionAll(nulls).sort("a")
+    checkSerializer(df.queryExecution.executedPlan, classOf[SparkSqlSerializer])
+    checkAnswer(
+      df,
+      Row(null, null, null) :: Row(null, null, null) :: Nil)
+
+    // Test hash partitioning code path.
+    val oneRow = sql(s"SELECT DISTINCT null, null, null FROM shuffle")
+    checkSerializer(oneRow.queryExecution.executedPlan, classOf[SparkSqlSerializer])
+    checkAnswer(
+      oneRow,
+      Row(null, null, null))
   }
 }
 
