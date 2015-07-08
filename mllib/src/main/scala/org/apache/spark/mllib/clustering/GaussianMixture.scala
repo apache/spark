@@ -43,6 +43,9 @@ import org.apache.spark.util.Utils
  * While this process is generally guaranteed to converge, it is not guaranteed
  * to find a global optimum.
  *
+ * Computation of the Gaussian pdfs are distributed across workers when dimensionality of the input
+ * data >= 30 and number of centers >= 10.
+ *
  * Note: For high-dimensional data (with many features), this algorithm may perform poorly.
  *       This is due to high-dimensional data (a) making it difficult to cluster at all (based
  *       on statistical/theoretical arguments) and (b) numerical issues with Gaussian distributions.
@@ -51,22 +54,19 @@ import org.apache.spark.util.Utils
  * @param convergenceTol The maximum change in log-likelihood at which convergence
  * is considered to have occurred.
  * @param maxIterations The maximum number of iterations to perform
- * @param distributeGaussians Indicates whether to distribute computation of Gaussian mixture
- *                            components on driver or executors.
  */
 @Experimental
 class GaussianMixture private (
     private var k: Int,
     private var convergenceTol: Double,
     private var maxIterations: Int,
-    private var distributeGaussians: Boolean,
     private var seed: Long) extends Serializable {
 
   /**
    * Constructs a default instance. The default parameters are {k: 2, convergenceTol: 0.01,
    * maxIterations: 100, distributeGaussians: false, seed: random}.
    */
-  def this() = this(2, 0.01, 100, false, Utils.random.nextLong())
+  def this() = this(2, 0.01, 100, Utils.random.nextLong())
 
   // number of samples per cluster to use when initializing Gaussians
   private val nSamples = 5
@@ -124,17 +124,6 @@ class GaussianMixture private (
    */
   def getConvergenceTol: Double = convergenceTol
 
-  /**
-   * Sets indicator for computing Gaussians on driver or executors
-   */
-  def setDistributeGaussians(distributeGaussians: Boolean): this.type = {
-    this.distributeGaussians = distributeGaussians
-    this
-  }
-
-  /** Return indicator for distributing computation of Gaussians */
-  def getDistributeGaussians: Boolean = distributeGaussians
-
   /** Set the random seed */
   def setSeed(seed: Long): this.type = {
     this.seed = seed
@@ -153,6 +142,9 @@ class GaussianMixture private (
 
     // Get length of the input vectors
     val d = breezeData.first().length
+
+    // Logic for when to distribute the computation of the [[MultivariateGaussian]]s
+    val distributeGaussians = d >= 30 && k >= 10
 
     // Determine initial weights and corresponding Gaussians.
     // If the user supplied an initial GMM, we use those values, otherwise
@@ -187,13 +179,9 @@ class GaussianMixture private (
       val sumWeights = sums.weights.sum
 
       if (distributeGaussians) {
-        val (ws, gs) = sc.parallelize(0 until k).map { i =>
-          val mu = sums.means(i) / sums.weights(i)
-          BLAS.syr(-sums.weights(i), Vectors.fromBreeze(mu),
-            Matrices.fromBreeze(sums.sigmas(i)).asInstanceOf[DenseMatrix])
-          val weight = sums.weights(i) / sumWeights
-          val gaussian = new MultivariateGaussian(mu, sums.sigmas(i) / sums.weights(i))
-          (weight, gaussian)
+        val (ws, gs) = sc.parallelize(0 until k, math.min(k, 1024)).map { i =>
+          updateWeightsAndGaussians(sums.means(i), sums.sigmas(i), sums.weights(i), sumWeights)
+
         }.collect.unzip
         (0 until k).foreach { i =>
           weights(i) = ws(i)
@@ -202,11 +190,10 @@ class GaussianMixture private (
       } else {
         var i = 0
         while (i < k) {
-          val mu = sums.means(i) / sums.weights(i)
-          BLAS.syr(-sums.weights(i), Vectors.fromBreeze(mu),
-            Matrices.fromBreeze(sums.sigmas(i)).asInstanceOf[DenseMatrix])
-          weights(i) = sums.weights(i) / sumWeights
-          gaussians(i) = new MultivariateGaussian(mu, sums.sigmas(i) / sums.weights(i))
+          val (weight, gaussian) =
+            updateWeightsAndGaussians(sums.means(i), sums.sigmas(i), sums.weights(i), sumWeights)
+          weights(i) = weight
+          gaussians(i) = gaussian
           i = i + 1
         }
       }
@@ -221,6 +208,19 @@ class GaussianMixture private (
 
   /** Java-friendly version of [[run()]] */
   def run(data: JavaRDD[Vector]): GaussianMixtureModel = run(data.rdd)
+
+  private def updateWeightsAndGaussians(
+      mean: BDV[Double],
+      sigma: BreezeMatrix[Double],
+      weight: Double,
+      sumWeights: Double): (Double, MultivariateGaussian) = {
+    val mu = mean / weight
+    BLAS.syr(-weight, Vectors.fromBreeze(mu),
+      Matrices.fromBreeze(sigma).asInstanceOf[DenseMatrix])
+    val newWeight = weight / sumWeights
+    val newGaussian = new MultivariateGaussian(mu, sigma / weight)
+    (newWeight, newGaussian)
+  }
 
   /** Average of dense breeze vectors */
   private def vectorMean(x: IndexedSeq[BV[Double]]): BDV[Double] = {
