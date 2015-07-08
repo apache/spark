@@ -254,7 +254,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     // the answer is sensitive for jdk version
     "udf_java_method",
 
-    // Spark SQL use Long for TimestampType, lose the precision under 100ns
+    // Spark SQL use Long for TimestampType, lose the precision under 1us
     "timestamp_1",
     "timestamp_2"
   )
