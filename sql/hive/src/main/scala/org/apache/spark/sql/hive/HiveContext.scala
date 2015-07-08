@@ -359,7 +359,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
     hiveconf.set(key, value)
   }
 
-  private[sql] override def setConf[T](entry: SQLConfEntry[T], value: T): Unit = {
+  override private[sql] def setConf[T](entry: SQLConfEntry[T], value: T): Unit = {
     setConf(entry.key, entry.stringConverter(value))
   }
 

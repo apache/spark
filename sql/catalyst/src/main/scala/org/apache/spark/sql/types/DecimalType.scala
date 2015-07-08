@@ -84,13 +84,13 @@ case class DecimalType(precisionInfo: Option[PrecisionInfo]) extends FractionalT
 /** Extra factory methods and pattern matchers for Decimals */
 object DecimalType extends AbstractDataType {
 
-  private[sql] override def defaultConcreteType: DataType = Unlimited
+  override private[sql] def defaultConcreteType: DataType = Unlimited
 
-  private[sql] override def isParentOf(childCandidate: DataType): Boolean = {
-    childCandidate.isInstanceOf[DecimalType]
+  override private[sql] def isSameType(other: DataType): Boolean = {
+    other.isInstanceOf[DecimalType]
   }
 
-  private[sql] override def simpleString: String = "decimal"
+  override private[sql] def simpleString: String = "decimal"
 
   val Unlimited: DecimalType = DecimalType(None)
 
