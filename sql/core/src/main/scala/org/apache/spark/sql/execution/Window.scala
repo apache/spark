@@ -86,37 +86,59 @@ case class Window(
 
   /**
    * Create a bound ordering object for a given frame type and offset. A bound ordering object is
-   * used to determine which input row lies within the frame boundaries of an output row.
+   * used to determine which input row lies within the frame boundaries of an output row. There
+   * are two types of boundaries that can be evaluated:
+   * - Row Based: A row based boundary is based on the position of the row within the partition.
+   *   The offset indicates the number of rows above or below the current row, the frame for the
+   *   current row starts or ends. For instance, given a row based sliding frame with a lower bound
+   *   offset of -1 and a upper bound offset of +2. The frame for row with index 5 would range from
+   *   index 4 to index 6.
+   * - Range based: A range based boundary is based on the actual value of the ORDER BY
+   *   expression(s). The offset is used to alter the value of the ORDER BY expression, for
+   *   instance if the current order by expression has a value of 10 and the lower bound offset
+   *   is -3, the resulting lower bound for the current row will be 10 - 3 = 7. This however puts a
+   *   number of constraints on the ORDER BY expressions: there can be only one expression and this
+   *   expression must have a numerical data type. An exception can be made when the offset is 0,
+   *   because no value modification is needed, in this case multiple and non-numeric ORDER BY
+   *   expression are allowed.
    *
-   * @param frameType to evaluate. A row frame will
+   * @param frameType to evaluate. This can either be Row or Range based.
    * @param offset with respect to the row.
    * @return a bound ordering object.
    */
-  private[this] def createBoundOrdering(frameType: FrameType, offset: Int) = frameType match {
-    case RangeFrame =>
-      // Use the entire order expression when the offset is 0.
-      val (exprs, current, bound) = if (offset == 0) {
-        val exprs = windowSpec.orderSpec.map(_.child)
-        val projection = newMutableProjection(exprs, child.output)
-        (windowSpec.orderSpec, projection(), projection())
-      }
-      // Use only the first order expression when the offset is non-null.
-      else {
-        val sortExpr = windowSpec.orderSpec.head
-        val expr = sortExpr.child
-        val boundExpr = Add(expr, Cast(Literal.create(offset, IntegerType), expr.dataType))
-        val current = newMutableProjection(expr :: Nil, child.output)()
-        val bound = newMutableProjection(boundExpr :: Nil, child.output)()
-        (sortExpr :: Nil, current, bound)
-      }
-      // Construct the ordering.
-      val (sortExprs, schema) = exprs.zipWithIndex.map { case (e, i) =>
-        val ref = AttributeReference(s"c_$i", e.dataType, e.nullable)()
-        (SortOrder(ref, e.direction), ref)
-      }.unzip
-      val ordering = newOrdering(sortExprs, schema)
-      RangeBoundOrdering(ordering, current, bound)
-    case RowFrame => RowBoundOrdering(offset)
+  private[this] def createBoundOrdering(frameType: FrameType, offset: Int) = {
+    frameType match {
+      case RangeFrame =>
+        // Use the entire order expression when the offset is 0.
+        val (exprs, current, bound) = if (offset == 0) {
+          val exprs = windowSpec.orderSpec.map(_.child)
+          val projection = newMutableProjection(exprs, child.output)
+          (windowSpec.orderSpec, projection(), projection())
+        }
+        // Use only the first order expression when the offset is non-null.
+        else if (windowSpec.orderSpec.size == 1) {
+          val sortExpr = windowSpec.orderSpec.head
+          val expr = sortExpr.child
+          val boundExpr = Add(expr, Cast(Literal.create(offset, IntegerType), expr.dataType))
+          val current = newMutableProjection(expr :: Nil, child.output)()
+          val bound = newMutableProjection(boundExpr :: Nil, child.output)()
+          (sortExpr :: Nil, current, bound)
+        }
+        // Fail when we try to use range offsets on a window with multiple order
+        // expressions.
+        else {
+          sys.error("Non-Zero range offsets are not supported for windows " +
+            "with multiple order expressions.")
+        }
+        // Construct the ordering.
+        val (sortExprs, schema) = exprs.zipWithIndex.map { case (e, i) =>
+          val ref = AttributeReference(s"c_$i", e.dataType, e.nullable)()
+          (SortOrder(ref, e.direction), ref)
+        }.unzip
+        val ordering = newOrdering(sortExprs, schema)
+        RangeBoundOrdering(ordering, current, bound)
+      case RowFrame => RowBoundOrdering(offset)
+    }
   }
 
   @transient
