@@ -15,10 +15,33 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.types
+package org.apache.spark.unsafe.types;
 
+import java.io.Serializable;
 
 /**
  * The internal representation of interval type.
  */
-case class Interval(months: Int, microseconds: Long) extends Serializable
+public final class Interval implements Serializable {
+  public final int months;
+  public final long microseconds;
+
+  public Interval(int months, long microseconds) {
+    this.months = months;
+    this.microseconds = microseconds;
+  }
+
+  @Override
+  public boolean equals(Object other) {
+    if (this == other) return true;
+    if (other == null || !(other instanceof Interval)) return false;
+
+    Interval o = (Interval) other;
+    return this.months == o.months && this.microseconds == o.microseconds;
+  }
+
+  @Override
+  public int hashCode() {
+    return 31 * months + (int) microseconds;
+  }
+}

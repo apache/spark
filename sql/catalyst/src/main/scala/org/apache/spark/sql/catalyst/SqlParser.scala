@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.Interval
 
 /**
  * A very simple SQL parser.  Based loosely on:
@@ -382,7 +383,7 @@ class SqlParser extends AbstractSparkSQLParser with DataTypeParser {
           val months = Seq(year, month).map(_.getOrElse(0)).sum
           val microseconds = Seq(week, day, hour, minute, second, millisecond, microsecond)
             .map(_.getOrElse(0L)).sum
-          Literal.create(Interval(months, microseconds), IntervalType)
+          Literal.create(new Interval(months, microseconds), IntervalType)
       }
 
   private def toNarrowestIntegerType(value: String): Any = {
