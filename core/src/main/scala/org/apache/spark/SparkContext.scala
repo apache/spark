@@ -17,8 +17,6 @@
 
 package org.apache.spark
 
-import scala.language.implicitConversions
-
 import java.io._
 import java.lang.reflect.Constructor
 import java.net.URI
@@ -30,6 +28,8 @@ import scala.collection.{Map, Set}
 import scala.collection.JavaConversions._
 import scala.collection.generic.Growable
 import scala.collection.mutable.HashMap
+import scala.concurrent.Future
+import scala.language.implicitConversions
 import scala.reflect.{ClassTag, classTag}
 import scala.util.control.NonFatal
 
@@ -1860,13 +1860,14 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   }
 
   /**
-   * Submit a job for execution and return a FutureJob holding the result.
+   * Submit a job for execution and return a FutureJob holding the result. Return a Future for
+   * monitoring the job success or failure event.
    */
   private[spark] def submitAsyncJob[T, U, R](
       rdd: RDD[T],
       processPartition: (TaskContext, Iterator[T]) => U,
       resultHandler: (Int, U) => Unit,
-      resultFunc: => R): SimpleFutureAction[R] =
+      resultFunc: => R): Future[Unit] =
   {
     assertNotStopped()
     val cleanF = clean(processPartition)
@@ -1879,7 +1880,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       allowLocal = false,
       resultHandler,
       localProperties.get)
-    new SimpleFutureAction(waiter, resultFunc)
+    waiter.toFuture
   }
 
   /**

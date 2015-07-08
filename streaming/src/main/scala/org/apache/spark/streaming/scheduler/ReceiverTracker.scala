@@ -333,7 +333,7 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
     }
 
     private val submitJobThread = ExecutionContext.fromExecutorService(
-      ThreadUtils.newDaemonCachedThreadPool("streaming-submit-job"))
+      ThreadUtils.newDaemonSingleThreadExecutor("streaming-submit-job"))
 
     /**
      * Get the receivers from the ReceiverInputDStreams, distributes them to the
@@ -390,8 +390,9 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
             }
 
             val self = this
+            val receiverId = receiver.streamId
             val scheduledLocations = scheduler.scheduleReceiver(
-              receiver.streamId,
+              receiverId,
               receiver.preferredLocation,
               getReceiverTrackingInfoMap(),
               getExecutors(ssc))
@@ -411,7 +412,7 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
                 if (stopping) {
                   receiverExitLatch.countDown()
                 } else {
-                  logInfo(s"Restarting Receiver ${receiver.streamId}")
+                  logInfo(s"Restarting Receiver $receiverId")
                   submitJobThread.execute(self)
                 }
               case Failure(e) =>
@@ -419,10 +420,10 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
                   receiverExitLatch.countDown()
                 } else {
                   logError("Receiver has been stopped. Try to restart it.", e)
-                  logInfo(s"Restarting Receiver ${receiver.streamId}")
+                  logInfo(s"Restarting Receiver $receiverId")
                   submitJobThread.execute(self)
                 }
-            }(submitJobThread)
+            }(ThreadUtils.sameThread)
             logInfo(s"Receiver ${receiver.streamId} started")
           }
         })

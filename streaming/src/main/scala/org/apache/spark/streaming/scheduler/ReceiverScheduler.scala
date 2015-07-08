@@ -20,6 +20,7 @@ package org.apache.spark.streaming.scheduler
 import scala.collection.mutable
 import scala.util.Random
 
+import org.apache.spark.streaming.StreamingContext
 import org.apache.spark.streaming.scheduler.ReceiverState._
 
 private[streaming] case class ReceiverTrackingInfo(
@@ -31,6 +32,10 @@ private[streaming] case class ReceiverTrackingInfo(
 
 private[streaming] trait ReceiverScheduler {
 
+  /**
+   * Return a candidate executor list to run the receiver. If the list is empty, the caller can run
+   * this receiver in arbitrary executor.
+   */
   def scheduleReceiver(
       receiverId: Int,
       preferredLocation: Option[String],

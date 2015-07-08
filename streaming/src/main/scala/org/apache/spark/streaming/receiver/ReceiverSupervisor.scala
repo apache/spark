@@ -163,7 +163,8 @@ private[streaming] abstract class ReceiverSupervisor(
       stopReceiver("Restarting receiver with delay " + delay + "ms: " + message, error)
       logDebug("Sleeping for " + delay)
       Thread.sleep(delay)
-      if (rescheduleReceiver().contains(host)) {
+      val scheduledLocations = rescheduleReceiver()
+      if (scheduledLocations.isEmpty || scheduledLocations.contains(host)) {
         logInfo("Starting receiver again")
         startReceiver()
         logInfo("Receiver started again")
@@ -174,7 +175,7 @@ private[streaming] abstract class ReceiverSupervisor(
   }
 
   /** Reschedule this receiver and return a candidate executor list */
-  def rescheduleReceiver(): Seq[String]
+  def rescheduleReceiver(): Seq[String] = Seq.empty
 
   /** Check if receiver has been marked for stopping */
   def isReceiverStarted(): Boolean = {
