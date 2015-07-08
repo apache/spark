@@ -70,38 +70,15 @@ class DpMeansSuite  extends SparkFunSuite with MLlibTestSparkContext {
     assert(model.clusterCenters.head == center)
   }
 
-  test("model save/load") {
-    val data = sc.parallelize(DpMeansSuite.data)
-    val dpModel = new DpMeans().setLambda(12).run(data)
-    val tempDir = Utils.createTempDir()
-    val path = tempDir.toURI.toString
-    try {
-      dpModel.save(sc, path)
-      val sameModel = DpMeansModel.load(sc, path)
-      DpMeansSuite.checkEqual(dpModel, sameModel)
-    }
+  object DpMeansSuite extends SparkFunSuite{
+
+    val data = Array(
+     Vectors.dense(-5.1971), Vectors.dense(-2.5359), Vectors.dense(-3.8220),
+     Vectors.dense(-5.2211), Vectors.dense(-5.0602), Vectors.dense( -4.7118),
+     Vectors.dense( 6.8989), Vectors.dense( 3.4592), Vectors.dense( 4.6322),
+     Vectors.dense( 5.7048), Vectors.dense( 4.6567), Vectors.dense( 5.5026),
+     Vectors.dense( 4.5605), Vectors.dense( 5.2043), Vectors.dense( 6.2734)
+    )
+
   }
- }
-
- object DpMeansSuite extends SparkFunSuite{
-
-   val data = Array(
-    Vectors.dense(-5.1971), Vectors.dense(-2.5359), Vectors.dense(-3.8220),
-    Vectors.dense(-5.2211), Vectors.dense(-5.0602), Vectors.dense( -4.7118),
-    Vectors.dense( 6.8989), Vectors.dense( 3.4592), Vectors.dense( 4.6322),
-    Vectors.dense( 5.7048), Vectors.dense( 4.6567), Vectors.dense( 5.5026),
-    Vectors.dense( 4.5605), Vectors.dense( 5.2043), Vectors.dense( 6.2734)
-  )
-
-  def checkEqual(a: DpMeansModel, b: DpMeansModel): Unit = {
-    assert(a.k === b.k)
-    a.clusterCenters.zip(b.clusterCenters).foreach {
-      case (ca: SparseVector, cb: SparseVector) =>
-        assert(ca === cb)
-      case (ca: DenseVector, cb: DenseVector) =>
-        assert(ca === cb)
-      case _ =>
-        throw new AssertionError("checkEqual failed since the two clusters were not identical.\n")
-    }
-  }
- }
+}

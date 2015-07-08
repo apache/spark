@@ -59,10 +59,9 @@ class DpMeans private (
     private var maxIterations: Int) extends Serializable with Logging {
 
   /**
-   * Constructs a default instance.The default parameters are {lambda:1 , convergenceTol: 0.01,
+   * Constructs a default instance.The default parameters are {lambda: 1, convergenceTol: 0.01,
    * maxIterations: 20}.
    */
-
   def this() = this(1, 0.01, 20)
 
   /** Set the distance threshold that controls cluster creation. Default: 1 */
@@ -118,7 +117,6 @@ class DpMeans private (
     // Execute clustering until the maximum number of iterations is reached
     // or the cluster centers have converged.
     while (iteration < maxIterations && !converged) {
-
       type WeightedPoint = (Vector, Long)
       def mergeClusters(x: WeightedPoint, y: WeightedPoint): WeightedPoint = {
         axpy(1.0, x._1, y._1)
@@ -127,8 +125,7 @@ class DpMeans private (
 
       // Loop until all data points are covered by some cluster center
       do {
-        localCenters = zippedData
-          .mapPartitions(h => DpMeans.cover(h, globalCenters, lambda))
+        localCenters = zippedData.mapPartitions(h => DpMeans.cover(h, globalCenters, lambda))
           .collect()
         if (localCenters.isEmpty) {
           covered = true
@@ -205,20 +202,20 @@ class DpMeans private (
 /**
  * Core methods of  DP means clustering.
  */
-object DpMeans {
+private object DpMeans {
   /**
    * A data point is said to be "covered" by a cluster `c` if the distance from the point
    * to the cluster center of `c` is less than a given lambda value.
    */
-  def cover(points: Iterator[VectorWithNorm], centers: ArrayBuffer[VectorWithNorm],
-        lambda: Double): Iterator[VectorWithNorm] = {
+  def cover(
+      points: Iterator[VectorWithNorm],
+      centers: ArrayBuffer[VectorWithNorm],
+      lambda: Double): Iterator[VectorWithNorm] = {
     var newCenters = ArrayBuffer.empty[VectorWithNorm]
     if(!points.isEmpty){
       if (centers.length == 0) newCenters += points.next
       points.foreach { z =>
-        val dist = newCenters.union(centers)
-          .map { center => squaredDistance(z, center)
-        }
+        val dist = newCenters.union(centers).map { center => squaredDistance(z, center) }
         if (dist.min > lambda) newCenters += z
       }
     }
@@ -230,7 +227,9 @@ object DpMeans {
    * the corresponding cluster label and the distance from the center to the
    * cluster center.
    */
-    def assignCluster(centers: ArrayBuffer[VectorWithNorm], x: VectorWithNorm): (Int, Double) = {
+    def assignCluster(
+        centers: ArrayBuffer[VectorWithNorm],
+        x: VectorWithNorm): (Int, Double) = {
       val dist = centers.map { c => squaredDistance(x, c) }
       (dist.indexOf(dist.min), dist.min)
     }
@@ -239,9 +238,9 @@ object DpMeans {
    * Returns the squared Euclidean distance between two vectors computed by
    * [[org.apache.spark.mllib.util.MLUtils#fastSquaredDistance]].
    */
-  private[clustering] def squaredDistance(
-                                           v1: VectorWithNorm,
-                                           v2: VectorWithNorm): Double = {
+  def squaredDistance(
+      v1: VectorWithNorm,
+      v2: VectorWithNorm): Double = {
     MLUtils.fastSquaredDistance(v1.vector, v1.norm, v2.vector, v2.norm)
   }
 

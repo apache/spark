@@ -31,19 +31,17 @@ import org.apache.spark.{SparkConf, SparkContext}
  * If you use it as a template to create your own app, please use `spark-submit` to submit your app.
  */
 object DenseDpMeans {
-
   case class Params(
-                     input: String = null,
-                     lambda: Double = 0.0,
-                     convergenceTol: Double = 0.01,
-                     maxIterations: Int = 20) extends AbstractParams[Params]
+        input: String = null,
+        lambda: Double = 0.0,
+        convergenceTol: Double = 0.01,
+        maxIterations: Int = 20) extends AbstractParams[Params]
 
   def main(args: Array[String]) {
     val defaultParams = Params()
 
     val parser = new OptionParser[Params]("DenseDpMeans") {
       head("DenseDpMeans: Dp means example application.")
-
       opt[Double]("lambda")
         .required()
         .text("distance threshold, required")
@@ -60,7 +58,7 @@ object DenseDpMeans {
         .text("path to input data")
         .required()
         .action((x, c) => c.copy(input = x))
-  }
+    }
 
     parser.parse(args, defaultParams).map { params =>
       run(params)
@@ -102,7 +100,6 @@ object DenseDpMeans {
 
     val cost = clusters.computeCost(data)
     println(s"Total Cost = $cost.")
-
     sc.stop()
   }
 }
