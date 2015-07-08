@@ -15,17 +15,33 @@
  * limitations under the License.
  */
 
-package org.apache.spark.scheduler.cluster.mesos
+package org.apache.spark.unsafe.types;
 
-import org.apache.spark.SparkContext
+import java.io.Serializable;
 
-private[spark] object MemoryUtils {
-  // These defaults copied from YARN
-  val OVERHEAD_FRACTION = 0.10
-  val OVERHEAD_MINIMUM = 384
+/**
+ * The internal representation of interval type.
+ */
+public final class Interval implements Serializable {
+  public final int months;
+  public final long microseconds;
 
-  def calculateTotalMemory(sc: SparkContext): Int = {
-    sc.conf.getInt("spark.mesos.executor.memoryOverhead",
-      math.max(OVERHEAD_FRACTION * sc.executorMemory, OVERHEAD_MINIMUM).toInt) + sc.executorMemory
+  public Interval(int months, long microseconds) {
+    this.months = months;
+    this.microseconds = microseconds;
+  }
+
+  @Override
+  public boolean equals(Object other) {
+    if (this == other) return true;
+    if (other == null || !(other instanceof Interval)) return false;
+
+    Interval o = (Interval) other;
+    return this.months == o.months && this.microseconds == o.microseconds;
+  }
+
+  @Override
+  public int hashCode() {
+    return 31 * months + (int) microseconds;
   }
 }

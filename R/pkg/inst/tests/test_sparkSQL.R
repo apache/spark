@@ -391,7 +391,7 @@ test_that("collect() and take() on a DataFrame return the same number of rows an
   expect_equal(ncol(collect(df)), ncol(take(df, 10)))
 })
 
-test_that("multiple pipeline transformations starting with a DataFrame result in an RDD with the correct values", {
+test_that("multiple pipeline transformations result in an RDD with the correct values", {
   df <- jsonFile(sqlContext, jsonPath)
   first <- lapply(df, function(row) {
     row$age <- row$age + 5
@@ -756,7 +756,14 @@ test_that("toJSON() returns an RDD of the correct values", {
 test_that("showDF()", {
   df <- jsonFile(sqlContext, jsonPath)
   s <- capture.output(showDF(df))
-  expect_output(s , "+----+-------+\n| age|   name|\n+----+-------+\n|null|Michael|\n|  30|   Andy|\n|  19| Justin|\n+----+-------+\n")
+  expected <- paste("+----+-------+\n",
+                    "| age|   name|\n",
+                    "+----+-------+\n",
+                    "|null|Michael|\n",
+                    "|  30|   Andy|\n",
+                    "|  19| Justin|\n",
+                    "+----+-------+\n", sep="")
+  expect_output(s , expected)
 })
 
 test_that("isLocal()", {
