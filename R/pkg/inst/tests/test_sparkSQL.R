@@ -108,6 +108,14 @@ test_that("create DataFrame from RDD", {
   expect_equal(count(df), 10)
   expect_equal(columns(df), c("a", "b"))
   expect_equal(dtypes(df), list(c("a", "int"), c("b", "string")))
+
+  localDF <- data.frame(name=c("John", "Smith", "Sarah"), age=c(19, 23, 18), height=c(164.10, 181.4, 173.7))
+  schema <- structType(structField("name", "string"), structField("age", "integer"), structField("height", "float"))
+  df <- createDataFrame(sqlContext, localDF, schema)
+  expect_is(df, "DataFrame")
+  expect_equal(count(df), 3)
+  expect_equal(columns(df), c("name", "age", "height"))
+  expect_equal(dtypes(df), list(c("name", "string"), c("age", "double"), c("height", "double")))
 })
 
 test_that("convert NAs to null type in DataFrames", {
