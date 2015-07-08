@@ -68,7 +68,6 @@ object CatalystTypeConverters {
       case StringType => StringConverter
       case DateType => DateConverter
       case TimestampType => TimestampConverter
-      case IntervalType => IntervalConverter
       case dt: DecimalType => BigDecimalConverter
       case BooleanType => BooleanConverter
       case ByteType => ByteConverter
@@ -302,16 +301,6 @@ object CatalystTypeConverters {
       DateTimeUtils.toJavaTimestamp(row.getLong(column))
   }
 
-  private object IntervalConverter extends CatalystTypeConverter[Interval, Interval, Array[Byte]] {
-    override def toCatalystImpl(scalaValue: Interval): Array[Byte] =
-      scalaValue.toBinary
-    override def toScala(catalystValue: Array[Byte]): Interval =
-      if (catalystValue == null) null
-      else Interval(catalystValue)
-    override def toScalaImpl(row: InternalRow, column: Int): Interval =
-      toScala(row.getAs[Array[Byte]](column))
-  }
-
   private object BigDecimalConverter extends CatalystTypeConverter[Any, JavaBigDecimal, Decimal] {
     override def toCatalystImpl(scalaValue: Any): Decimal = scalaValue match {
       case d: BigDecimal => Decimal(d)
@@ -408,7 +397,6 @@ object CatalystTypeConverters {
     case d: Date => DateConverter.toCatalyst(d)
     case t: Timestamp => TimestampConverter.toCatalyst(t)
     case d: BigDecimal => BigDecimalConverter.toCatalyst(d)
-    case i: Interval => IntervalConverter.toCatalyst(i)
     case d: JavaBigDecimal => BigDecimalConverter.toCatalyst(d)
     case seq: Seq[Any] => seq.map(convertToCatalyst)
     case r: Row => InternalRow(r.toSeq.map(convertToCatalyst): _*)

@@ -17,23 +17,8 @@
 
 package org.apache.spark.sql.types
 
-import java.nio.ByteBuffer
 
 /**
- * The external representation of interval type.
- * Internally, we use 12 bytes to store values,
- * the first 4 bytes(a int) means the number of months,
- * the last 8 bytes(a long) means the number of microseconds.
+ * The internal representation of interval type.
  */
-case class Interval(months: Int, microseconds: Long) {
-  def toBinary: Array[Byte] =
-    ByteBuffer.allocate(12).putInt(months).putLong(microseconds).array()
-}
-
-object Interval {
-  def apply(binary: Array[Byte]): Interval = {
-    assert(binary.length == 12)
-    val b = ByteBuffer.wrap(binary)
-    Interval(b.getInt(0), b.getLong(4))
-  }
-}
+case class Interval(months: Int, microseconds: Long) extends Serializable
