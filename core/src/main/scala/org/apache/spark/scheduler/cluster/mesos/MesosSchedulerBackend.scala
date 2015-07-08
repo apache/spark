@@ -46,8 +46,8 @@ private[spark] class MesosSchedulerBackend(
   with MScheduler
   with MesosSchedulerUtils {
 
-  // Which slave IDs we have executors on
-  val slaveIdsWithExecutors = new HashMap[String, MesosExecutorInfo]
+  // Stores the slave ids that has launched a Mesos executor.
+  val slaveIdToExecutorInfo = new HashMap[String, MesosExecutorInfo]
   val taskIdToSlaveId = new HashMap[Long, String]
 
   // An ExecutorInfo for our tasks
@@ -73,8 +73,14 @@ private[spark] class MesosSchedulerBackend(
     startScheduler(driver)
   }
 
+  /**
+   * Creates a MesosExecutorInfo that is used to launch a Mesos executor.
+   * @param availableResources Available resources that is offered by Mesos
+   * @param execId The executor id to assign to this new executor.
+   * @return A tuple of the new mesos executor info and the remaining available resources.
+   */
   def createExecutorInfo(
-      resources: JList[Resource],
+      availableResources: JList[Resource],
       execId: String): (MesosExecutorInfo, JList[Resource]) = {
     val executorSparkHome = sc.conf.getOption("spark.mesos.executor.home")
       .orElse(sc.getSparkHome()) // Fall back to driver Spark home for backward compatibility
@@ -121,23 +127,23 @@ private[spark] class MesosSchedulerBackend(
     }
     val builder = MesosExecutorInfo.newBuilder()
     val (resourcesAfterCpu, usedCpuResources) =
-      partitionResources(resources, "cpus", scheduler.CPUS_PER_TASK)
-    builder.addAllResources(usedCpuResources)
+      partitionResources(availableResources, "cpus", scheduler.CPUS_PER_TASK)
     val (resourcesAfterMem, usedMemResources) =
-      partitionResources(resourcesAfterCpu, "mem", MemoryUtils.calculateTotalMemory(sc))
+      partitionResources(resourcesAfterCpu, "mem", calculateTotalMemory(sc))
+
+    builder.addAllResources(usedCpuResources)
     builder.addAllResources(usedMemResources)
     val executorInfo = builder
       .setExecutorId(ExecutorID.newBuilder().setValue(execId).build())
       .setCommand(command)
       .setData(ByteString.copyFrom(createExecArg()))
-      .build()
 
     sc.conf.getOption("spark.mesos.executor.docker.image").foreach { image =>
       MesosSchedulerBackendUtil
         .setupContainerBuilderDockerInfo(image, sc.conf, executorInfo.getContainerBuilder())
     }
 
-    (executorInfo, resourcesAfterMem)
+    (executorInfo.build(), resourcesAfterMem)
   }
 
   /**
@@ -182,13 +188,12 @@ private[spark] class MesosSchedulerBackend(
 
   def getTasksSummary(tasks: JArrayList[MesosTaskInfo]): String = {
     val builder = new StringBuilder
-    tasks.foreach {
-      case t =>
-        builder.append("Task id: ").append(t.getTaskId.getValue).append("\n")
-          .append("Slave id: ").append(t.getSlaveId.getValue).append("\n")
-          .append("Task resources: ").append(t.getResourcesList).append("\n")
-          .append("Executor resources: ").append(t.getExecutor.getResourcesList)
-          .append("---------------------------------------------\n")
+    tasks.foreach { t =>
+      builder.append("Task id: ").append(t.getTaskId.getValue).append("\n")
+        .append("Slave id: ").append(t.getSlaveId.getValue).append("\n")
+        .append("Task resources: ").append(t.getResourcesList).append("\n")
+        .append("Executor resources: ").append(t.getExecutor.getResourcesList)
+        .append("---------------------------------------------\n")
     }
     builder.toString()
   }
@@ -217,7 +222,7 @@ private[spark] class MesosSchedulerBackend(
 
         val meetsRequirements =
           (meetsConstraints && meetsMemoryRequirements && meetsCPURequirements) ||
-          (slaveIdsWithExecutors.contains(slaveId) && cpus >= scheduler.CPUS_PER_TASK)
+          (slaveIdToExecutorInfo.contains(slaveId) && cpus >= scheduler.CPUS_PER_TASK)
 
         // add some debug messaging
         val debugstr = if (meetsRequirements) "Accepting" else "Declining"
@@ -231,7 +236,7 @@ private[spark] class MesosSchedulerBackend(
       unUsableOffers.foreach(o => d.declineOffer(o.getId))
 
       val workerOffers = usableOffers.map { o =>
-        val cpus = if (slaveIdsWithExecutors.contains(o.getSlaveId.getValue)) {
+        val cpus = if (slaveIdToExecutorInfo.contains(o.getSlaveId.getValue)) {
           getResource(o.getResourcesList, "cpus").toInt
         } else {
           // If the Mesos executor has not been started on this slave yet, set aside a few
@@ -272,7 +277,6 @@ private[spark] class MesosSchedulerBackend(
             slaveIdToResources(slaveId) = remainingResources
           }
         }
-      }
 
       // Reply to the offers
       val filters = Filters.newBuilder().setRefuseSeconds(1).build() // TODO: lower timeout?
@@ -292,22 +296,21 @@ private[spark] class MesosSchedulerBackend(
       for (o <- usableOffers if !slavesIdsOfAcceptedOffers.contains(o.getSlaveId.getValue)) {
         d.declineOffer(o.getId)
       }
-
     }
   }
 
-  /** Turn a Spark TaskDescription into a Mesos task */
+  /** Turn a Spark TaskDescription into a Mesos task and also resources unused by the task */
   def createMesosTask(
       task: TaskDescription,
       resources: JList[Resource],
       slaveId: String): (MesosTaskInfo, JList[Resource]) = {
     val taskId = TaskID.newBuilder().setValue(task.taskId.toString).build()
-    val (executorInfo, remainingResources) = if (slaveIdsWithExecutors.contains(slaveId)) {
-      (slaveIdsWithExecutors(slaveId), resources)
+    val (executorInfo, remainingResources) = if (slaveIdToExecutorInfo.contains(slaveId)) {
+      (slaveIdToExecutorInfo(slaveId), resources)
     } else {
       createExecutorInfo(resources, slaveId)
     }
-    slaveIdsWithExecutors(slaveId) = executorInfo
+    slaveIdToExecutorInfo(slaveId) = executorInfo
     val (finalResources, cpuResources) =
       partitionResources(remainingResources, "cpus", scheduler.CPUS_PER_TASK)
     val taskInfo = MesosTaskInfo.newBuilder()
@@ -364,7 +367,7 @@ private[spark] class MesosSchedulerBackend(
   private def removeExecutor(slaveId: String, reason: String) = {
     synchronized {
       listenerBus.post(SparkListenerExecutorRemoved(System.currentTimeMillis(), slaveId, reason))
-      slaveIdsWithExecutors -= slaveId
+      slaveIdToExecutorInfo -= slaveId
     }
   }
 

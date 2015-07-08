@@ -42,14 +42,6 @@ import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkFunSui
 class MesosSchedulerBackendSuite extends SparkFunSuite with LocalSparkContext with MockitoSugar {
 
   test("check spark-class location correctly") {
-    def createResource(name: String, value: Double): Resource = {
-      Resource.newBuilder()
-        .setName(name)
-        .setScalar(Scalar.newBuilder().setValue(value).build())
-        .setType(Value.Type.SCALAR)
-        .build()
-    }
-
     val conf = new SparkConf
     conf.set("spark.mesos.executor.home" , "/mesos-home")
 
@@ -69,7 +61,9 @@ class MesosSchedulerBackendSuite extends SparkFunSuite with LocalSparkContext wi
 
     val mesosSchedulerBackend = new MesosSchedulerBackend(taskScheduler, sc, "master")
 
-    val resources = List(createResource("cpus", 4), createResource("mem", 1024))
+    val resources = List(
+      mesosSchedulerBackend.createResource("cpus", 4),
+      mesosSchedulerBackend.createResource("mem", 1024))
     // uri is null.
     val (executorInfo, _) = mesosSchedulerBackend.createExecutorInfo(resources, "test-id")
     assert(executorInfo.getCommand.getValue ===
@@ -103,7 +97,8 @@ class MesosSchedulerBackendSuite extends SparkFunSuite with LocalSparkContext wi
 
     val backend = new MesosSchedulerBackend(taskScheduler, sc, "master")
 
-    val execInfo = backend.createExecutorInfo("mockExecutor")
+    val (execInfo, _) = backend.createExecutorInfo(
+      List(backend.createResource("cpus", 4)), "mockExecutor")
     assert(execInfo.getContainer.getDocker.getImage.equals("spark/mock"))
     val portmaps = execInfo.getContainer.getDocker.getPortMappingsList
     assert(portmaps.get(0).getHostPort.equals(80))
@@ -204,7 +199,7 @@ class MesosSchedulerBackendSuite extends SparkFunSuite with LocalSparkContext wi
     )
     verify(driver, times(1)).declineOffer(mesosOffers.get(1).getId)
     verify(driver, times(1)).declineOffer(mesosOffers.get(2).getId)
-    assert(capture.getValue.size() == 1)
+    assert(capture.getValue.size() === 1)
     val taskInfo = capture.getValue.iterator().next()
     assert(taskInfo.getName.equals("n1"))
     val cpus = taskInfo.getResourcesList.get(0)
@@ -301,10 +296,10 @@ class MesosSchedulerBackendSuite extends SparkFunSuite with LocalSparkContext wi
       any(classOf[Filters])
     )
 
-    assert(capture.getValue.size() == 1)
+    assert(capture.getValue.size() === 1)
     val taskInfo = capture.getValue.iterator().next()
     assert(taskInfo.getName.equals("n1"))
-    assert(taskInfo.getResourcesCount == 1)
+    assert(taskInfo.getResourcesCount === 1)
     val cpusDev = taskInfo.getResourcesList.get(0)
     assert(cpusDev.getName.equals("cpus"))
     assert(cpusDev.getScalar.getValue.equals(1.0))

@@ -453,12 +453,8 @@ private[spark] class MesosClusterScheduler(
         offer.cpu -= driverCpu
         offer.mem -= driverMem
         val taskId = TaskID.newBuilder().setValue(submission.submissionId).build()
-        val cpuResource = Resource.newBuilder()
-          .setName("cpus").setType(Value.Type.SCALAR)
-          .setScalar(Value.Scalar.newBuilder().setValue(driverCpu)).build()
-        val memResource = Resource.newBuilder()
-          .setName("mem").setType(Value.Type.SCALAR)
-          .setScalar(Value.Scalar.newBuilder().setValue(driverMem)).build()
+        val cpuResource = createResource("cpus", driverCpu)
+        val memResource = createResource("mem", driverMem)
         val commandInfo = buildDriverCommand(submission)
         val appName = submission.schedulerProperties("spark.app.name")
         val taskInfo = TaskInfo.newBuilder()

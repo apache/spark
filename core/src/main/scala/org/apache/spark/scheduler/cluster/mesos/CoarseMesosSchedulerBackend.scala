@@ -18,8 +18,8 @@
 package org.apache.spark.scheduler.cluster.mesos
 
 import java.io.File
-import java.util.{List => JList, Collections}
 import java.util.concurrent.locks.ReentrantLock
+import java.util.{Collections, List => JList}
 
 import scala.collection.JavaConversions._
 import scala.collection.mutable.{HashMap, HashSet}
@@ -27,12 +27,11 @@ import scala.collection.mutable.{HashMap, HashSet}
 import com.google.common.collect.HashBiMap
 import org.apache.mesos.Protos.{TaskInfo => MesosTaskInfo, _}
 import org.apache.mesos.{Scheduler => MScheduler, _}
-import org.apache.mesos.Protos.{TaskInfo => MesosTaskInfo, _}
-import org.apache.spark.{SparkContext, SparkEnv, SparkException, TaskState}
 import org.apache.spark.rpc.RpcAddress
 import org.apache.spark.scheduler.TaskSchedulerImpl
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
 import org.apache.spark.util.Utils
+import org.apache.spark.{SparkContext, SparkEnv, SparkException, TaskState}
 
 /**
  * A SchedulerBackend that runs tasks on Mesos, but uses "coarse-grained" tasks, where it holds
@@ -69,7 +68,7 @@ private[spark] class CoarseMesosSchedulerBackend(
 
   /**
    * The total number of executors we aim to have. Undefined when not using dynamic allocation
-   * and before the ExecutorAllocatorManager calls [[doRequesTotalExecutors]].
+   * and before the ExecutorAllocatorManager calls [[doRequestTotalExecutors]].
    */
   private var executorLimitOption: Option[Int] = None
 
@@ -103,8 +102,9 @@ private[spark] class CoarseMesosSchedulerBackend(
 
   override def start() {
     super.start()
-    val fwInfo = FrameworkInfo.newBuilder().setUser(sc.sparkUser).setName(sc.appName).build()
-    startScheduler(master, CoarseMesosSchedulerBackend.this, fwInfo)
+    val driver = createSchedulerDriver(
+      master, CoarseMesosSchedulerBackend.this, sc.sparkUser, sc.appName, sc.conf)
+    startScheduler(driver)
   }
 
   def createCommand(offer: Offer, numCores: Int, taskId: Int): CommandInfo = {
@@ -225,28 +225,28 @@ private[spark] class CoarseMesosSchedulerBackend(
           slaveIdsWithExecutors += slaveId
           coresByTaskId(taskId) = cpusToUse
           // Gather cpu resources from the available resources and use them in the task.
-          val (remainingResources, taskResources) =
-            MesosSchedulerUtils.partitionResources(offer.getResourcesList, "cpus", cpusToUse)
+          val (remainingResources, cpuResourcesToUse) =
+            partitionResources(offer.getResourcesList, "cpus", cpusToUse)
+          val (_, memResourcesToUse) =
+            partitionResources(remainingResources, "mem", calculateTotalMemory(sc))
           val taskBuilder = MesosTaskInfo.newBuilder()
             .setTaskId(TaskID.newBuilder().setValue(taskId.toString).build())
             .setSlaveId(offer.getSlaveId)
             .setCommand(createCommand(offer, cpusToUse + extraCoresPerSlave, taskId))
             .setName("Task " + taskId)
-            .addAllResources(taskResources)
-            .addAllResources(
-              MesosSchedulerUtils.partitionResources(
-                remainingResources, "mem", MemoryUtils.calculateTotalMemory(sc))._2)
+            .addAllResources(cpuResourcesToUse)
+            .addAllResources(memResourcesToUse)
 
           sc.conf.getOption("spark.mesos.executor.docker.image").foreach { image =>
             MesosSchedulerBackendUtil
-              .setupContainerBuilderDockerInfo(image, sc.conf, task.getContainerBuilder())
+              .setupContainerBuilderDockerInfo(image, sc.conf, taskBuilder.getContainerBuilder())
           }
 
           // accept the offer and launch the task
           logDebug(s"Accepting offer: $id with attributes: $offerAttributes mem: $mem cpu: $cpus")
           d.launchTasks(
             Collections.singleton(offer.getId),
-            Collections.singleton(task.build()), filters)
+            Collections.singleton(taskBuilder.build()), filters)
         } else {
           // Decline the offer
           logDebug(s"Declining offer: $id with attributes: $offerAttributes mem: $mem cpu: $cpus")
