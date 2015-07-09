@@ -49,22 +49,20 @@ import org.apache.spark.sql.{SQLContext, Row}
 @Experimental
 class FPGrowthModel[Item: ClassTag](val freqItemsets: RDD[FreqItemset[Item]])
       extends Saveable with Serializable{
+
   override def save(sc: SparkContext, path: String): Unit = {
     FPGrowthModel.SaveLoadV1_0.save(sc, this, path)
   }
 
   override protected def formatVersion: String = "1.0"
-
 }
-object FPGrowthModel {//extends Loader[FPGrowthModel] {
-  //  override def load(sc: SparkContext, path: String): FPGrowthModel[FreqItemset[ClassTag]] = {
-  //    FPGrowthModel.SaveLoadV1_0.load(sc, path)
-  //  }
+
+object FPGrowthModel {
 
   private case class itemCountPair[Item](items: Array[Item], freq: Long)
 
   private object itemCountPair {
-    def apply[Item:ClassTag](r: Row): itemCountPair[Item] = {
+    def apply[Item: ClassTag](r: Row): itemCountPair[Item] = {
         itemCountPair(r.getAs[Seq[Item]](0).toArray, r.getLong(1))
     }
   }
@@ -77,34 +75,18 @@ object FPGrowthModel {//extends Loader[FPGrowthModel] {
     private[fpm]
     val thisClassName = "org.apache.spark.mllib.fpm.FPGrowthModel"
 
-    def save[Item:ClassTag](sc: SparkContext, model: FPGrowthModel[Item], path: String): Unit = {
+    def save[Item: ClassTag](sc: SparkContext, model: FPGrowthModel[Item], path: String): Unit = {
       val sqlContext = new SQLContext(sc)
       import sqlContext.implicits._
       val metadata = compact(render(
-        ("class" -> thisClassName) ~ ("version" -> thisFormatVersion) ~ ("frequentItemsCount" -> model.freqItemsets.count())))
+        ("class" -> thisClassName) ~ ("version" -> thisFormatVersion) ~
+          ("frequentItemsCount" -> model.freqItemsets.count())))
       sc.parallelize(Seq(metadata), 1).saveAsTextFile(Loader.metadataPath(path))
       val dataRDD = model.freqItemsets.map { freqItemSetObj =>
-        val itemArray = Array.tabulate(freqItemSetObj.items.length){freqItemSetObj.items}
-        itemCountPair(itemArray,freqItemSetObj.freq)
-
+        itemCountPair(freqItemSetObj.items, freqItemSetObj.freq)
       }.toDF()
-//       val dataRDD = model.freqItemsets.map(x=> (x.items,x.freq)).toDF()
       dataRDD.write.parquet(Loader.dataPath(path))
     }
-
-    //    def load[Item:ClassTag](sc: SparkContext, path: String): FPGrowthModel[Item] = {
-    //      implicit val formats = DefaultFormats
-    //      val sqlContext = new SQLContext(sc)
-    //      val (className, formatVersion, metadata) = Loader.loadMetadata(sc, path)
-    //      assert(className == thisClassName)
-    //      assert(formatVersion == thisFormatVersion)
-    //      val frequentItemsCount = (metadata \ "frequentItemsCount").extract[Int]
-    //      val itemsRDD = sqlContext.read.parquet(Loader.dataPath(path))
-    //      Loader.checkSchema[freqItemWithCount](itemsRDD.schema)
-    //      val localItems = itemsRDD.map(freqItemWithCount.apply).collect()
-    //      assert(frequentItemsCount == localItems.size)
-    //      new FPGrowthModel(sc.parallelize(localItems))
-    //    }
   }
 }
 
