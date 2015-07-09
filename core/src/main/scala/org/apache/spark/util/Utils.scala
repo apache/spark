@@ -1805,10 +1805,15 @@ private[spark] object Utils extends Logging {
 
   lazy val isInInterpreter: Boolean = {
     try {
-      val interpClass = classForName("org.apache.spark.repl.Main")
+      val interpClass = classForName("spark.repl.Main")
       interpClass.getMethod("interp").invoke(null) != null
     } catch {
-      case _: ClassNotFoundException => false
+       // Returning true seems to be a mistake.
+       // Currently changing it to false causes tests failures in Streaming.
+       // For a more detailed discussion, please, refer to
+       // https://github.com/apache/spark/pull/5835#issuecomment-101042271 and subsequent comments.
+       // Addressing this changed is tracked as https://issues.apache.org/jira/browse/SPARK-7527
+       case _: ClassNotFoundException => true
     }
   }
 
