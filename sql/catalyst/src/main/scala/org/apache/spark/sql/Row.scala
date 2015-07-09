@@ -368,7 +368,7 @@ trait Row extends Serializable {
     other.isInstanceOf[Row] && !other.isInstanceOf[InternalRow]
 
   override def equals(o: Any): Boolean = {
-    if (!canEqual(o)) return false
+    if (o == null || !canEqual(o)) return false
 
     val other = o.asInstanceOf[Row]
     if (length != other.length) {
