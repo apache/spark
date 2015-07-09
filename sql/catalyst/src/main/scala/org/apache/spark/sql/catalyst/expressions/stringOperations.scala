@@ -288,8 +288,8 @@ case class Levenshtein(left: Expression, right: Expression) extends BinaryExpres
     leftValue.asInstanceOf[UTF8String].levenshteinDistance(rightValue.asInstanceOf[UTF8String])
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    nullSafeCodeGen(ctx, ev, (res, left, right) =>
-      s"$res = $left.levenshteinDistance($right);")
+    nullSafeCodeGen(ctx, ev, (left, right) =>
+      s"${ev.primitive} = $left.levenshteinDistance($right);")
   }
 }
 

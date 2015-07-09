@@ -254,18 +254,6 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
     }
   }
 
-  private char charAt(int bytePos) {
-    int num = numBytes(bytes[bytePos]);
-    if (num == 1) return (char) bytes[bytePos];
-    int l = bytes[bytePos] & 0x000F;
-    l = l << 8 + num + 1 >> 8 + num + 1;
-    for (int i = 1; i < num; i++) {
-      l = l << 6;
-      l = l | (0x003F & bytes[bytePos + i]);
-    }
-    return (char) l;
-  }
-
   /**
    * Levenshtein distance is a metric for measuring the distance of two strings. The distance is
    * defined by the minimum number of single-character edits (i.e. insertions, deletions or
@@ -274,8 +262,8 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
   public int levenshteinDistance(UTF8String other) {
     // Implementation adopted from org.apache.common.lang3.StringUtils.getLevenshteinDistance
 
-    int n = length();
-    int m = other.length();
+    int n = numChars();
+    int m = other.numChars();
 
     if (n == 0) {
       return m;
@@ -291,27 +279,31 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
     } else {
       s = other;
       t = this;
-      n = s.length();
-      m = t.length();
+      n = s.numChars();
+      m = t.numChars();
     }
 
     int p[] = new int[n + 1];
     int d[] = new int[n + 1];
     int swap[];
 
-    int i, i_bytes, j, j_bytes, cost;
-    char t_j;
+    int i, i_bytes, j, j_bytes, num_bytes_j, cost;
 
     for (i = 0; i <= n; i++) {
       p[i] = i;
     }
 
-    for (j = 0, j_bytes = 0; j < m; j_bytes += numBytes(t.bytes[j_bytes]), j++) {
-      t_j = t.charAt(j_bytes);
+    for (j = 0, j_bytes = 0; j < m; j_bytes += numBytesForFirstByte(t.getByte(j_bytes)), j++) {
+      num_bytes_j = numBytesForFirstByte(t.getByte(j_bytes));
       d[0] = j + 1;
 
-      for (i = 0, i_bytes = 0; i < n; i_bytes += numBytes(s.bytes[i_bytes]), i++) {
-        cost = s.charAt(i_bytes) == t_j ? 0 : 1;
+      for (i = 0, i_bytes = 0; i < n; i_bytes += numBytesForFirstByte(s.getByte(i_bytes)), i++) {
+        if (num_bytes_j != numBytesForFirstByte(s.getByte(i_bytes))) {
+          cost = 1;
+        } else {
+          cost = (ByteArrayMethods.arrayEquals(t.base, t.offset + j_bytes, s.base,
+              s.offset + i_bytes, num_bytes_j)) ? 0 : 1;
+        }
         d[i + 1] = Math.min(Math.min(d[i] + 1, p[i + 1] + 1), p[i] + cost);
       }
 
