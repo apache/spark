@@ -99,8 +99,6 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
 
   /**
    * Returns the number of code points in it.
-   *
-   * This is only used by Substring() when `start` is negative.
    */
   public int numChars() {
     int len = 0;
@@ -252,6 +250,70 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
     } else {
       return false;
     }
+  }
+
+  /**
+   * Levenshtein distance is a metric for measuring the distance of two strings. The distance is
+   * defined by the minimum number of single-character edits (i.e. insertions, deletions or
+   * substitutions) that are required to change one of the strings into the other.
+   */
+  public int levenshteinDistance(UTF8String other) {
+    // Implementation adopted from org.apache.common.lang3.StringUtils.getLevenshteinDistance
+
+    int n = numChars();
+    int m = other.numChars();
+
+    if (n == 0) {
+      return m;
+    } else if (m == 0) {
+      return n;
+    }
+
+    UTF8String s, t;
+
+    if (n <= m) {
+      s = this;
+      t = other;
+    } else {
+      s = other;
+      t = this;
+      int swap;
+      swap = n;
+      n = m;
+      m = swap;
+    }
+
+    int p[] = new int[n + 1];
+    int d[] = new int[n + 1];
+    int swap[];
+
+    int i, i_bytes, j, j_bytes, num_bytes_j, cost;
+
+    for (i = 0; i <= n; i++) {
+      p[i] = i;
+    }
+
+    for (j = 0, j_bytes = 0; j < m; j_bytes += num_bytes_j, j++) {
+      num_bytes_j = numBytesForFirstByte(t.getByte(j_bytes));
+      d[0] = j + 1;
+
+      for (i = 0, i_bytes = 0; i < n; i_bytes += numBytesForFirstByte(s.getByte(i_bytes)), i++) {
+        if (s.getByte(i_bytes) != t.getByte(j_bytes) ||
+              num_bytes_j != numBytesForFirstByte(s.getByte(i_bytes))) {
+          cost = 1;
+        } else {
+          cost = (ByteArrayMethods.arrayEquals(t.base, t.offset + j_bytes, s.base,
+              s.offset + i_bytes, num_bytes_j)) ? 0 : 1;
+        }
+        d[i + 1] = Math.min(Math.min(d[i] + 1, p[i + 1] + 1), p[i] + cost);
+      }
+
+      swap = p;
+      p = d;
+      d = swap;
+    }
+
+    return p[n];
   }
 
   @Override
