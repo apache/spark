@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql
 
+import java.sql.{Timestamp, Date}
+import java.text.SimpleDateFormat
+
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.functions._
 
@@ -45,4 +48,150 @@ class DatetimeExpressionsSuite extends QueryTest {
       0).getTime - System.currentTimeMillis()) < 5000)
   }
 
+
+
+
+  test("date format") {
+    val sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss")
+    val d = new Date(sdf.parse("2015-04-08 13:10:15").getTime)
+    val ts = new Timestamp(sdf.parse("2013-04-08 13:10:15").getTime)
+
+    val df = Seq((d, sdf.format(d), ts)).toDF("a", "b", "c")
+
+    checkAnswer(
+      df.select(dateFormat("a", "y"), dateFormat("b", "y"), dateFormat("c", "y")),
+      Row("2015", "2015", "2013"))
+
+    checkAnswer(
+      df.selectExpr("dateFormat(a, 'y')", "dateFormat(b, 'y')", "dateFormat(c, 'y')"),
+      Row("2015", "2015", "2013"))
+  }
+
+  test("year") {
+    val sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss")
+    val d = new Date(sdf.parse("2015-04-08 13:10:15").getTime)
+    val ts = new Timestamp(sdf.parse("2013-04-08 13:10:15").getTime)
+
+    val df = Seq((d, sdf.format(d), ts)).toDF("a", "b", "c")
+
+    checkAnswer(
+      df.select(year("a"), year("b"), year("c")),
+      Row(2015, 2015, 2013))
+
+    checkAnswer(
+      df.selectExpr("year(a)", "year(b)", "year(c)"),
+      Row(2015, 2015, 2013))
+  }
+
+  test("quarter") {
+    val sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss")
+    val d = new Date(sdf.parse("2015-04-08 13:10:15").getTime)
+    val ts = new Timestamp(sdf.parse("2013-11-08 13:10:15").getTime)
+
+    val df = Seq((d, sdf.format(d), ts)).toDF("a", "b", "c")
+
+    checkAnswer(
+      df.select(quarter("a"), quarter("b"), quarter("c")),
+      Row(2, 2, 4))
+
+    checkAnswer(
+      df.selectExpr("quarter(a)", "quarter(b)", "quarter(c)"),
+      Row(2, 2, 4))
+  }
+
+  test("month") {
+    val sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss")
+    val d = new Date(sdf.parse("2015-04-08 13:10:15").getTime)
+    val ts = new Timestamp(sdf.parse("2013-04-08 13:10:15").getTime)
+
+    val df = Seq((d, sdf.format(d), ts)).toDF("a", "b", "c")
+
+    checkAnswer(
+      df.select(month("a"), month("b"), month("c")),
+      Row(4, 4, 4))
+
+    checkAnswer(
+      df.selectExpr("month(a)", "month(b)", "month(c)"),
+      Row(4, 4, 4))
+  }
+
+  test("day") {
+    val sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss")
+    val d = new Date(sdf.parse("2015-04-08 13:10:15").getTime)
+    val ts = new Timestamp(sdf.parse("2013-04-08 13:10:15").getTime)
+
+    val df = Seq((d, sdf.format(d), ts)).toDF("a", "b", "c")
+
+    checkAnswer(
+      df.select(day("a"), day("b"), day("c")),
+      Row(8, 8, 8))
+
+    checkAnswer(
+      df.selectExpr("day(a)", "day(b)", "day(c)"),
+      Row(8, 8, 8))
+  }
+
+  test("hour") {
+    val sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss")
+    val d = new Date(sdf.parse("2015-04-08 13:10:15").getTime)
+    val ts = new Timestamp(sdf.parse("2013-04-08 13:10:15").getTime)
+
+    val df = Seq((d, sdf.format(d), ts)).toDF("a", "b", "c")
+
+    checkAnswer(
+      df.select(hour("a"), hour("b"), hour("c")),
+      Row(0, 13, 13))
+
+    checkAnswer(
+      df.selectExpr("hour(a)", "hour(b)", "hour(c)"),
+      Row(0, 13, 13))
+  }
+
+  test("minute") {
+    val sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss")
+    val d = new Date(sdf.parse("2015-04-08 13:10:15").getTime)
+    val ts = new Timestamp(sdf.parse("2013-04-08 13:10:15").getTime)
+
+    val df = Seq((d, sdf.format(d), ts)).toDF("a", "b", "c")
+
+    checkAnswer(
+      df.select(minute("a"), minute("b"), minute("c")),
+      Row(0, 10, 10))
+
+    checkAnswer(
+      df.selectExpr("minute(a)", "minute(b)", "minute(c)"),
+      Row(0, 10, 10))
+  }
+
+  test("second") {
+    val sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss")
+    val d = new Date(sdf.parse("2015-04-08 13:10:15").getTime)
+    val ts = new Timestamp(sdf.parse("2013-04-08 13:10:15").getTime)
+
+    val df = Seq((d, sdf.format(d), ts)).toDF("a", "b", "c")
+
+    checkAnswer(
+      df.select(second("a"), second("b"), second("c")),
+      Row(0, 15, 15))
+
+    checkAnswer(
+      df.selectExpr("second(a)", "second(b)", "second(c)"),
+      Row(0, 15, 15))
+  }
+
+  test("weekOfYear") {
+    val sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss")
+    val d = new Date(sdf.parse("2015-04-08 13:10:15").getTime)
+    val ts = new Timestamp(sdf.parse("2013-04-08 13:10:15").getTime)
+
+    val df = Seq((d, sdf.format(d), ts)).toDF("a", "b", "c")
+
+    checkAnswer(
+      df.select(weekOfYear("a"), weekOfYear("b"), weekOfYear("c")),
+      Row(15, 15, 15))
+
+    checkAnswer(
+      df.selectExpr("weekOfYear(a)", "weekOfYear(b)", "weekOfYear(c)"),
+      Row(15, 15, 15))
+  }
 }
