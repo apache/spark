@@ -22,6 +22,7 @@ import com.google.common.primitives.Ints;
 
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
+import org.apache.spark.api.java.function.Function;
 import org.apache.spark.sql.*;
 import org.apache.spark.sql.test.TestSQLContext;
 import org.apache.spark.sql.test.TestSQLContext$;
@@ -32,10 +33,7 @@ import scala.collection.JavaConversions;
 import scala.collection.Seq;
 
 import java.io.Serializable;
-import java.util.Arrays;
-import java.util.Comparator;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 import static org.apache.spark.sql.functions.*;
 
@@ -45,10 +43,10 @@ public class JavaDataFrameSuite {
 
   @Before
   public void setUp() {
-    // Trigger static initializer of TestData
-    TestData$.MODULE$.testData();
     jsc = new JavaSparkContext(TestSQLContext.sparkContext());
     context = TestSQLContext$.MODULE$;
+    initializeTestData();
+    initializeTestData2();
   }
 
   @After
@@ -233,7 +231,99 @@ public class JavaDataFrameSuite {
     DataFrame df = context.range(0, 100).select(col("id").mod(3).as("key"));
     DataFrame sampled = df.stat().<Integer>sampleBy("key", ImmutableMap.of(0, 0.1, 1, 0.2), 0L);
     Row[] actual = sampled.groupBy("key").count().orderBy("key").collect();
-    Row[] expected = new Row[] {RowFactory.create(0, 5), RowFactory.create(1, 8)};
+    Row[] expected = new Row[]{RowFactory.create(0, 5), RowFactory.create(1, 8)};
     Assert.assertArrayEquals(expected, actual);
+  }
+
+  public static class TestData implements Serializable {
+    private int key;
+    private String value;
+
+    public int getKey() {
+      return key;
+    }
+
+    public void setKey(int key) {
+      this.key = key;
+    }
+
+    public String getValue() {
+      return value;
+    }
+
+    public void setValue(String value) {
+      this.value = value;
+    }
+  }
+
+  private void initializeTestData() {
+    List<TestData> testDataList = new ArrayList<TestData>(2);
+    TestData testData1 = new TestData();
+    testData1.setKey(1);
+    testData1.setValue("1");
+    testDataList.add(testData1);
+    TestData testData2 = new TestData();
+    testData2.setKey(2);
+    testData2.setValue("2");
+    testDataList.add(testData2);
+
+    JavaRDD<TestData> rdd = jsc.parallelize(testDataList);
+
+    DataFrame df = context.createDataFrame(rdd, TestData.class);
+    df.registerTempTable("testData");
+  }
+
+  public static class TestData2 implements Serializable {
+    private int a;
+    private int b;
+
+    public int getA() {
+      return a;
+    }
+
+    public void setA(int a) {
+      this.a = a;
+    }
+
+    public int getB() {
+      return b;
+    }
+
+    public void setB(int b) {
+      this.b = b;
+    }
+  }
+
+  private void initializeTestData2() {
+    List<TestData2> testDataList = new ArrayList<TestData2>(2);
+    TestData2 testData1 = new TestData2();
+    testData1.setA(1);
+    testData1.setB(1);
+    testDataList.add(testData1);
+    TestData2 testData2 = new TestData2();
+    testData2.setA(1);
+    testData2.setB(2);
+    testDataList.add(testData2);
+    TestData2 testData3 = new TestData2();
+    testData3.setA(2);
+    testData3.setB(1);
+    testDataList.add(testData3);
+    TestData2 testData4 = new TestData2();
+    testData4.setA(2);
+    testData4.setB(2);
+    testDataList.add(testData4);
+    TestData2 testData5 = new TestData2();
+    testData5.setA(3);
+    testData5.setB(1);
+    testDataList.add(testData5);
+    TestData2 testData6 = new TestData2();
+    testData6.setA(3);
+    testData6.setB(2);
+    testDataList.add(testData6);
+
+    JavaRDD<TestData2> rdd = jsc.parallelize(testDataList);
+
+    DataFrame df = context.createDataFrame(rdd, TestData2.class);
+    df.registerTempTable("testData2");
   }
 }
