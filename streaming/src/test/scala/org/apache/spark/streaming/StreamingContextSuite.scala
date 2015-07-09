@@ -21,17 +21,22 @@ import java.io.{File, NotSerializableException}
 import java.util.concurrent.atomic.AtomicInteger
 
 import org.apache.commons.io.FileUtils
+import org.apache.spark.metrics.MetricsSystem
+import org.apache.spark.metrics.source.Source
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.concurrent.Timeouts
 import org.scalatest.exceptions.TestFailedDueToTimeoutException
 import org.scalatest.time.SpanSugar._
-import org.scalatest.{Assertions, BeforeAndAfter}
+import org.scalatest.{PrivateMethodTester, Assertions, BeforeAndAfter}
 
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.dstream.DStream
 import org.apache.spark.streaming.receiver.Receiver
 import org.apache.spark.util.Utils
-import org.apache.spark.{Logging, SparkConf, SparkContext, SparkException, SparkFunSuite}
+import org.apache.spark._
+
+import scala.collection._
+
 
 class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with Timeouts with Logging {
 
@@ -296,21 +301,21 @@ class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with Timeo
     Thread.sleep(100)
   }
 
-  test("de-register codahale metrics on stop()") {
+  test("registering and de-registering of streamingSource") {
     val conf = new SparkConf().setMaster(master).setAppName(appName)
     ssc = new StreamingContext(conf, batchDuration)
     addInputStream(ssc).register()
 
-    assert(ssc.getState() === StreamingContextState.INITIALIZED)
     ssc.start()
+    assert(ssc.getState() === StreamingContextState.INITIALIZED)
+    assert(StreamingContextSuite.sources.get(StreamingContextSuite.streamingSource)!= "null")
+
     assert(ssc.getState() === StreamingContextState.ACTIVE)
-    val sizeOfSourcesArrayBuffer = ssc.env.metricsSystem.sources.size
     Thread.sleep(100)
 
     ssc.stop()
-    val updatedSourcesSize = ssc.env.metricsSystem.sources.size
     assert(ssc.getState() === StreamingContextState.STOPPED)
-    assert(updatedSourcesSize == sizeOfSourcesArrayBuffer - 1 )
+    assert(StreamingContextSuite.sources.get(StreamingContextSuite.streamingSource) == "null")
   }
 
   test("awaitTermination") {
@@ -812,3 +817,20 @@ package object testPackage extends Assertions {
     }
   }
 }
+
+/**
+ * Helper methods for testing StreamingContextSuite.
+ * This includes methods to access private methods and fields in ExecutorAllocationManager.
+ */
+object StreamingContextSuite {
+  val metricsSystemsObject = Class.forName("org.apache.spark.metrics.MetricsSystem")
+  val sources = metricsSystemsObject.getDeclaredField("sources")
+  sources.setAccessible(true)
+
+  val streamingContextObject = classOf[StreamingContext]
+  val streamingSource = getClass.getDeclaredField("streamingSource")
+  streamingSource.setAccessible(true)
+}
+
+
+
