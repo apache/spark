@@ -79,10 +79,12 @@ private[ui] class StoragePage(parent: StorageTab) extends WebUIPage("") {
     if (statuses.map(_.numStreamBlocks).sum == 0) {
       Nil
     } else {
+      val blocks = statuses.flatMap(_.blocks).groupBy(_.blockId).toSeq.sortBy(_._1.toString)
+
       <div>
         <h4>Receiver Blocks</h4>
         {executorMetricsTable(statuses)}
-        {streamBlockTable(statuses.flatMap(_.blocks).sortBy(_.blockId.toString))}
+        {streamBlockTable(blocks)}
       </div>
     }
   }
@@ -126,8 +128,8 @@ private[ui] class StoragePage(parent: StorageTab) extends WebUIPage("") {
     </tr>
   }
 
-  private def streamBlockTable(statuses: Seq[BlockUIData]): Seq[Node] = {
-    if (statuses.isEmpty) {
+  private def streamBlockTable(blocks: Seq[(BlockId, Seq[BlockUIData])]): Seq[Node] = {
+    if (blocks.isEmpty) {
       Nil
     } else {
       <div>
@@ -135,8 +137,9 @@ private[ui] class StoragePage(parent: StorageTab) extends WebUIPage("") {
         {UIUtils.listingTable(
           streamBlockTableHeader,
           streamBlockTableRow,
-          statuses,
-          id = Some("storage-by-block-table"))}
+          blocks,
+          id = Some("storage-by-block-table"),
+          sortable = false)}
       </div>
     }
   }
@@ -146,45 +149,53 @@ private[ui] class StoragePage(parent: StorageTab) extends WebUIPage("") {
     "Replication Level",
     "Location",
     "Storage Level",
-    "Size in Memory",
-    "Size in ExternalBlockStore",
-    "Size on Disk")
+    "Size")
 
   /** Render a stream block */
-  private def streamBlockTableRow(block: BlockUIData): Seq[Node] = {
+  private def streamBlockTableRow(block: (BlockId, Seq[BlockUIData])): Seq[Node] = {
+    val replications = block._2
+    assert(replications.size > 0) // This must be true because it's the result of "groupBy"
+    if (replications.size == 1) {
+      streamBlockTableSubrow(block._1, replications.head, replications.size, true)
+    } else {
+      streamBlockTableSubrow(block._1, replications.head, replications.size, true) ++
+        streamBlockTableSubrow(block._1, replications.head, replications.size, false)
+    }
+  }
+
+  private def streamBlockTableSubrow(
+      blockId: BlockId, block: BlockUIData, replication: Int, firstSubrow: Boolean): Seq[Node] = {
+    val (storageLevel, size) = streamBlockStorageLevelDescriptionAndSize(block)
+
     <tr>
-      <td>
-        {block.blockId.toString}
-      </td>
-      <td>
-        {listener.blockReplication(block.blockId).toString}
-      </td>
-      <td>
-        {block.location}
-      </td>
-      <td>
-        {streamBlockStorageLevelDescription(block.storageLevel)}
-      </td>
-      <td sorttable_customkey={block.memSize.toString}>
-        {Utils.bytesToString(block.memSize)}
-      </td>
-      <td sorttable_customkey={block.externalBlockStoreSize.toString}>
-        {Utils.bytesToString(block.externalBlockStoreSize)}
-      </td>
-      <td sorttable_customkey={block.diskSize.toString}>
-        {Utils.bytesToString(block.diskSize)}
-      </td>
+      {
+        if (firstSubrow) {
+          <td rowspan={replication.toString}>
+            {block.blockId.toString}
+          </td>
+          <td rowspan={replication.toString}>
+            {replication.toString}
+          </td>
+        }
+      }
+      <td>{block.location}</td>
+      <td>{storageLevel}</td>
+      <td>{Utils.bytesToString(size)}</td>
     </tr>
   }
 
-  private def streamBlockStorageLevelDescription(storageLevel: StorageLevel): String = {
-    // Unlike storageLevel.description, this method doesn't show the replication number
-    var result = ""
-    result += (if (storageLevel.useDisk) "Disk " else "")
-    result += (if (storageLevel.useMemory) "Memory " else "")
-    result += (if (storageLevel.useOffHeap) "ExternalBlockStore " else "")
-    result += (if (storageLevel.deserialized) "Deserialized " else "Serialized ")
-    result
+  private def streamBlockStorageLevelDescriptionAndSize(block: BlockUIData): (String, Long) = {
+    if (block.storageLevel.useDisk) {
+      ("Disk", block.diskSize)
+    } else if (block.storageLevel.useMemory && block.storageLevel.deserialized) {
+      ("Memory", block.memSize)
+    } else if (block.storageLevel.useMemory && !block.storageLevel.deserialized) {
+      ("Memory Serialized", block.memSize)
+    } else if (block.storageLevel.useOffHeap) {
+      ("External", block.externalBlockStoreSize)
+    } else {
+      throw new IllegalStateException(s"Invalid Storage Level: ${block.storageLevel}")
+    }
   }
 
 }
