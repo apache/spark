@@ -1153,8 +1153,8 @@ def ssh(host, opts, command):
                 # If this was an ssh failure, provide the user with hints.
                 if e.returncode == 255:
                     raise UsageError(
-                        "Failed to SSH to remote host {0}.\n" +
-                        "Please check that you have provided the correct --identity-file and " +
+                        "Failed to SSH to remote host {0}.\n"
+                        "Please check that you have provided the correct --identity-file and "
                         "--key-pair parameters and try again.".format(host))
                 else:
                     raise e

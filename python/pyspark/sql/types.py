@@ -1069,6 +1069,10 @@ def _verify_type(obj, dataType):
     if obj is None:
         return
 
+    # StringType can work with any types
+    if isinstance(dataType, StringType):
+        return
+
     if isinstance(dataType, UserDefinedType):
         if not (hasattr(obj, '__UDT__') and obj.__UDT__ == dataType):
             raise ValueError("%r is not an instance of type %r" % (obj, dataType))

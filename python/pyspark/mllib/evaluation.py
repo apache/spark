@@ -152,6 +152,10 @@ class MulticlassMetrics(JavaModelWrapper):
     >>> predictionAndLabels = sc.parallelize([(0.0, 0.0), (0.0, 1.0), (0.0, 0.0),
     ...     (1.0, 0.0), (1.0, 1.0), (1.0, 1.0), (1.0, 1.0), (2.0, 2.0), (2.0, 0.0)])
     >>> metrics = MulticlassMetrics(predictionAndLabels)
+    >>> metrics.confusionMatrix().toArray()
+    array([[ 2.,  1.,  1.],
+           [ 1.,  3.,  0.],
+           [ 0.,  0.,  1.]])
     >>> metrics.falsePositiveRate(0.0)
     0.2...
     >>> metrics.precision(1.0)
@@ -185,6 +189,13 @@ class MulticlassMetrics(JavaModelWrapper):
         java_class = sc._jvm.org.apache.spark.mllib.evaluation.MulticlassMetrics
         java_model = java_class(df._jdf)
         super(MulticlassMetrics, self).__init__(java_model)
+
+    def confusionMatrix(self):
+        """
+        Returns confusion matrix: predicted classes are in columns,
+        they are ordered by class label ascending, as in "labels".
+        """
+        return self.call("confusionMatrix")
 
     def truePositiveRate(self, label):
         """
