@@ -36,7 +36,7 @@ class HiveToMySqlTransfer(BaseOperator):
             self,
             sql,
             mysql_table,
-            hive_cli_conn_id='hiveserver2_default',
+            hiveserver2_conn_id='hiveserver2_default',
             mysql_conn_id='mysql_default',
             mysql_preoperator=None,
             *args, **kwargs):
@@ -44,11 +44,11 @@ class HiveToMySqlTransfer(BaseOperator):
         self.sql = sql
         self.mysql_table = mysql_table
         self.mysql_conn_id = mysql_conn_id
-        self.hive_cli_conn_id = hive_cli_conn_id
         self.mysql_preoperator = mysql_preoperator
+        self.hiveserver2_conn_id = hiveserver2_conn_id
 
     def execute(self, context):
-        hive = HiveServer2Hook(hiveserver2_conn_id=self.hive_cli_conn_id)
+        hive = HiveServer2Hook(hiveserver2_conn_id=self.hiveserver2_conn_id)
         logging.info("Extracting data from Hive")
         results = hive.get_records(self.sql)
 
