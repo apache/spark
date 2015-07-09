@@ -192,22 +192,17 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
       buildCast[Decimal](_, d => decimalToTimestamp(d))
     // TimestampWritable.doubleToTimestamp
     case DoubleType =>
-      buildCast[Double](_, d => try {
-        decimalToTimestamp(Decimal(d))
-      } catch {
-        case _: NumberFormatException => null
-      })
+      buildCast[Double](_, d => doubleToTimestamp(d))
     // TimestampWritable.floatToTimestamp
     case FloatType =>
-      buildCast[Float](_, f => try {
-        decimalToTimestamp(Decimal(f))
-      } catch {
-        case _: NumberFormatException => null
-      })
+      buildCast[Float](_, f => doubleToTimestamp(f.toDouble))
   }
 
   private[this] def decimalToTimestamp(d: Decimal): Long = {
     (d.toBigDecimal * 1000000L).longValue()
+  }
+  private[this] def doubleToTimestamp(d: Double): Any = {
+    if (d.isNaN || d.isInfinite) null else (d * 1000000L).toLong
   }
 
   // converting milliseconds to us
@@ -396,8 +391,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
     buildCast[InternalRow](_, row => {
       var i = 0
       while (i < row.length) {
-        val v = row(i)
-        newRow.update(i, if (v == null) null else casts(i)(v))
+        newRow.update(i, if (row.isNullAt(i)) null else casts(i)(row(i)))
         i += 1
       }
       newRow.copy()
