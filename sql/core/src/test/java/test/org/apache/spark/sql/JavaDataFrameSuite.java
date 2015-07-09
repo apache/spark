@@ -33,6 +33,7 @@ import org.junit.*;
 import org.apache.spark.SparkContext;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
+import org.apache.spark.api.java.function.Function;
 import org.apache.spark.sql.*;
 import static org.apache.spark.sql.functions.*;
 import org.apache.spark.sql.test.TestSQLContext;
@@ -234,7 +235,28 @@ public class JavaDataFrameSuite {
     DataFrame df = context.range(0, 100, 1, 2).select(col("id").mod(3).as("key"));
     DataFrame sampled = df.stat().<Integer>sampleBy("key", ImmutableMap.of(0, 0.1, 1, 0.2), 0L);
     Row[] actual = sampled.groupBy("key").count().orderBy("key").collect();
-    Row[] expected = new Row[] {RowFactory.create(0, 5), RowFactory.create(1, 8)};
+    Row[] expected = new Row[]{RowFactory.create(0, 5), RowFactory.create(1, 8)};
     Assert.assertArrayEquals(expected, actual);
+  }
+
+  public static class TestData implements Serializable {
+    private int key;
+    private String value;
+
+    public int getKey() {
+      return key;
+    }
+
+    public void setKey(int key) {
+      this.key = key;
+    }
+
+    public String getValue() {
+      return value;
+    }
+
+    public void setValue(String value) {
+      this.value = value;
+    }
   }
 }
