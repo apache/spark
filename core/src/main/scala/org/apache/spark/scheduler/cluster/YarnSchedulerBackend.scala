@@ -17,8 +17,6 @@
 
 package org.apache.spark.scheduler.cluster
 
-import java.util.Properties
-
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.{Future, ExecutionContext}
