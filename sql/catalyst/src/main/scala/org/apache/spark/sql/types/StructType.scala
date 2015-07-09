@@ -309,6 +309,13 @@ object StructType extends AbstractDataType {
     childCandidate.isInstanceOf[StructType]
   }
 
+  private[sql] override def simpleString: String = "struct"
+
+  private[sql] def fromString(raw: String): StructType = DataType.fromString(raw) match {
+    case t: StructType => t
+    case _ => throw new RuntimeException(s"Failed parsing StructType: $raw")
+  }
+
   def apply(fields: Seq[StructField]): StructType = StructType(fields.toArray)
 
   def apply(fields: java.util.List[StructField]): StructType = {

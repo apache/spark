@@ -35,19 +35,6 @@ trait FunctionRegistry {
   def lookupFunction(name: String, children: Seq[Expression]): Expression
 }
 
-class OverrideFunctionRegistry(underlying: FunctionRegistry) extends FunctionRegistry {
-
-  private val functionBuilders = StringKeyHashMap[FunctionBuilder](caseSensitive = false)
-
-  override def registerFunction(name: String, builder: FunctionBuilder): Unit = {
-    functionBuilders.put(name, builder)
-  }
-
-  override def lookupFunction(name: String, children: Seq[Expression]): Expression = {
-    functionBuilders.get(name).map(_(children)).getOrElse(underlying.lookupFunction(name, children))
-  }
-}
-
 class SimpleFunctionRegistry extends FunctionRegistry {
 
   private val functionBuilders = StringKeyHashMap[FunctionBuilder](caseSensitive = false)
@@ -163,11 +150,12 @@ object FunctionRegistry {
     expression[Lower]("lcase"),
     expression[Lower]("lower"),
     expression[StringLength]("length"),
+    expression[Levenshtein]("levenshtein"),
     expression[Substring]("substr"),
     expression[Substring]("substring"),
     expression[UnBase64]("unbase64"),
     expression[Upper]("ucase"),
-    expression[UnHex]("unhex"),
+    expression[Unhex]("unhex"),
     expression[Upper]("upper"),
 
     // datetime functions

@@ -17,10 +17,9 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import java.lang.{Long => JLong}
-import java.util.Arrays
+import java.{lang => jl}
 
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -63,21 +62,16 @@ abstract class UnaryMathExpression(f: Double => Double, name: String)
   override def nullable: Boolean = true
   override def toString: String = s"$name($child)"
 
-  override def eval(input: InternalRow): Any = {
-    val evalE = child.eval(input)
-    if (evalE == null) {
-      null
-    } else {
-      val result = f(evalE.asInstanceOf[Double])
-      if (result.isNaN) null else result
-    }
+  protected override def nullSafeEval(input: Any): Any = {
+    val result = f(input.asInstanceOf[Double])
+    if (result.isNaN) null else result
   }
 
   // name of function in java.lang.Math
   def funcName: String = name.toLowerCase
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    nullSafeCodeGen(ctx, ev, (result, eval) => {
+    nullSafeCodeGen(ctx, ev, eval => {
       s"""
         ${ev.primitive} = java.lang.Math.${funcName}($eval);
         if (Double.valueOf(${ev.primitive}).isNaN()) {
@@ -103,19 +97,9 @@ abstract class BinaryMathExpression(f: (Double, Double) => Double, name: String)
 
   override def dataType: DataType = DoubleType
 
-  override def eval(input: InternalRow): Any = {
-    val evalE1 = left.eval(input)
-    if (evalE1 == null) {
-      null
-    } else {
-      val evalE2 = right.eval(input)
-      if (evalE2 == null) {
-        null
-      } else {
-        val result = f(evalE1.asInstanceOf[Double], evalE2.asInstanceOf[Double])
-        if (result.isNaN) null else result
-      }
-    }
+  protected override def nullSafeEval(input1: Any, input2: Any): Any = {
+    val result = f(input1.asInstanceOf[Double], input2.asInstanceOf[Double])
+    if (result.isNaN) null else result
   }
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
@@ -196,39 +180,29 @@ case class Factorial(child: Expression) extends UnaryExpression with ExpectsInpu
 
   override def dataType: DataType = LongType
 
-  override def foldable: Boolean = child.foldable
-
   // If the value not in the range of [0, 20], it still will be null, so set it to be true here.
   override def nullable: Boolean = true
 
-  override def eval(input: InternalRow): Any = {
-    val evalE = child.eval(input)
-    if (evalE == null) {
+  protected override def nullSafeEval(input: Any): Any = {
+    val value = input.asInstanceOf[jl.Integer]
+    if (value > 20 || value < 0) {
       null
     } else {
-      val input = evalE.asInstanceOf[Integer]
-      if (input > 20 || input < 0) {
-        null
-      } else {
-        Factorial.factorial(input)
-      }
+      Factorial.factorial(value)
     }
   }
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    val eval = child.gen(ctx)
-    eval.code + s"""
-      boolean ${ev.isNull} = ${eval.isNull};
-      ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
-      if (!${ev.isNull}) {
-        if (${eval.primitive} > 20 || ${eval.primitive} < 0) {
+    nullSafeCodeGen(ctx, ev, eval => {
+      s"""
+        if ($eval > 20 || $eval < 0) {
           ${ev.isNull} = true;
         } else {
           ${ev.primitive} =
-            org.apache.spark.sql.catalyst.expressions.Factorial.factorial(${eval.primitive});
+            org.apache.spark.sql.catalyst.expressions.Factorial.factorial($eval);
         }
-      }
-    """
+      """
+    })
   }
 }
 
@@ -237,17 +211,14 @@ case class Log(child: Expression) extends UnaryMathExpression(math.log, "LOG")
 case class Log2(child: Expression)
   extends UnaryMathExpression((x: Double) => math.log(x) / math.log(2), "LOG2") {
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    val eval = child.gen(ctx)
-    eval.code + s"""
-      boolean ${ev.isNull} = ${eval.isNull};
-      ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
-      if (!${ev.isNull}) {
-        ${ev.primitive} = java.lang.Math.log(${eval.primitive}) / java.lang.Math.log(2);
+    nullSafeCodeGen(ctx, ev, eval => {
+      s"""
+        ${ev.primitive} = java.lang.Math.log($eval) / java.lang.Math.log(2);
         if (Double.valueOf(${ev.primitive}).isNaN()) {
           ${ev.isNull} = true;
         }
-      }
-    """
+      """
+    })
   }
 }
 
@@ -285,14 +256,8 @@ case class Bin(child: Expression)
   override def inputTypes: Seq[DataType] = Seq(LongType)
   override def dataType: DataType = StringType
 
-  override def eval(input: InternalRow): Any = {
-    val evalE = child.eval(input)
-    if (evalE == null) {
-      null
-    } else {
-      UTF8String.fromString(JLong.toBinaryString(evalE.asInstanceOf[Long]))
-    }
-  }
+  protected override def nullSafeEval(input: Any): Any =
+    UTF8String.fromString(jl.Long.toBinaryString(input.asInstanceOf[Long]))
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     defineCodeGen(ctx, ev, (c) =>
@@ -300,61 +265,47 @@ case class Bin(child: Expression)
   }
 }
 
+object Hex {
+  val hexDigits = Array[Char](
+    '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F'
+  ).map(_.toByte)
+
+  // lookup table to translate '0' -> 0 ... 'F'/'f' -> 15
+  val unhexDigits = {
+    val array = Array.fill[Byte](128)(-1)
+    (0 to 9).foreach(i => array('0' + i) = i.toByte)
+    (0 to 5).foreach(i => array('A' + i) = (i + 10).toByte)
+    (0 to 5).foreach(i => array('a' + i) = (i + 10).toByte)
+    array
+  }
+}
 
 /**
  * If the argument is an INT or binary, hex returns the number as a STRING in hexadecimal format.
  * Otherwise if the number is a STRING, it converts each character into its hex representation
  * and returns the resulting STRING. Negative numbers would be treated as two's complement.
  */
-case class Hex(child: Expression) extends UnaryExpression with Serializable  {
+case class Hex(child: Expression) extends UnaryExpression with ExpectsInputTypes {
+  // TODO: Create code-gen version.
+
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(TypeCollection(LongType, BinaryType, StringType))
 
   override def dataType: DataType = StringType
 
-  override def checkInputDataTypes(): TypeCheckResult = {
-    if (child.dataType.isInstanceOf[StringType]
-      || child.dataType.isInstanceOf[IntegerType]
-      || child.dataType.isInstanceOf[LongType]
-      || child.dataType.isInstanceOf[BinaryType]
-      || child.dataType == NullType) {
-      TypeCheckResult.TypeCheckSuccess
-    } else {
-      TypeCheckResult.TypeCheckFailure(s"hex doesn't accepts ${child.dataType} type")
-    }
+  protected override def nullSafeEval(num: Any): Any = child.dataType match {
+    case LongType => hex(num.asInstanceOf[Long])
+    case BinaryType => hex(num.asInstanceOf[Array[Byte]])
+    case StringType => hex(num.asInstanceOf[UTF8String].getBytes)
   }
 
-  override def eval(input: InternalRow): Any = {
-    val num = child.eval(input)
-    if (num == null) {
-      null
-    } else {
-      child.dataType match {
-        case LongType => hex(num.asInstanceOf[Long])
-        case IntegerType => hex(num.asInstanceOf[Integer].toLong)
-        case BinaryType => hex(num.asInstanceOf[Array[Byte]])
-        case StringType => hex(num.asInstanceOf[UTF8String])
-      }
-    }
-  }
-
-  /**
-   * Converts every character in s to two hex digits.
-   */
-  private def hex(str: UTF8String): UTF8String = {
-    hex(str.getBytes)
-  }
-
-  private def hex(bytes: Array[Byte]): UTF8String = {
-    doHex(bytes, bytes.length)
-  }
-
-  private def doHex(bytes: Array[Byte], length: Int): UTF8String = {
+  private[this] def hex(bytes: Array[Byte]): UTF8String = {
+    val length = bytes.length
     val value = new Array[Byte](length * 2)
     var i = 0
     while (i < length) {
-      value(i * 2) = Character.toUpperCase(Character.forDigit(
-        (bytes(i) & 0xF0) >>> 4, 16)).toByte
-      value(i * 2 + 1) = Character.toUpperCase(Character.forDigit(
-        bytes(i) & 0x0F, 16)).toByte
+      value(i * 2) = Hex.hexDigits((bytes(i) & 0xF0) >> 4)
+      value(i * 2 + 1) = Hex.hexDigits(bytes(i) & 0x0F)
       i += 1
     }
     UTF8String.fromBytes(value)
@@ -367,11 +318,57 @@ case class Hex(child: Expression) extends UnaryExpression with Serializable  {
     var len = 0
     do {
       len += 1
-      value(value.length - len) =
-        Character.toUpperCase(Character.forDigit((numBuf & 0xF).toInt, 16)).toByte
+      value(value.length - len) = Hex.hexDigits((numBuf & 0xF).toInt)
       numBuf >>>= 4
     } while (numBuf != 0)
-    UTF8String.fromBytes(Arrays.copyOfRange(value, value.length - len, value.length))
+    UTF8String.fromBytes(java.util.Arrays.copyOfRange(value, value.length - len, value.length))
+  }
+}
+
+/**
+ * Performs the inverse operation of HEX.
+ * Resulting characters are returned as a byte array.
+ */
+case class Unhex(child: Expression) extends UnaryExpression with ExpectsInputTypes {
+  // TODO: Create code-gen version.
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(StringType)
+
+  override def nullable: Boolean = true
+  override def dataType: DataType = BinaryType
+
+  protected override def nullSafeEval(num: Any): Any =
+    unhex(num.asInstanceOf[UTF8String].getBytes)
+
+  private[this] def unhex(bytes: Array[Byte]): Array[Byte] = {
+    val out = new Array[Byte]((bytes.length + 1) >> 1)
+    var i = 0
+    if ((bytes.length & 0x01) != 0) {
+      // padding with '0'
+      if (bytes(0) < 0) {
+        return null
+      }
+      val v = Hex.unhexDigits(bytes(0))
+      if (v == -1) {
+        return null
+      }
+      out(0) = v
+      i += 1
+    }
+    // two characters form the hex value.
+    while (i < bytes.length) {
+      if (bytes(i) < 0 || bytes(i + 1) < 0) {
+        return null
+      }
+      val first = Hex.unhexDigits(bytes(i))
+      val second = Hex.unhexDigits(bytes(i + 1))
+      if (first == -1 || second == -1) {
+        return null
+      }
+      out(i / 2) = (((first << 4) | second) & 0xFF).toByte
+      i += 2
+    }
+    out
   }
 }
 
@@ -386,21 +383,10 @@ case class Hex(child: Expression) extends UnaryExpression with Serializable  {
 case class Atan2(left: Expression, right: Expression)
   extends BinaryMathExpression(math.atan2, "ATAN2") {
 
-  override def eval(input: InternalRow): Any = {
-    val evalE1 = left.eval(input)
-    if (evalE1 == null) {
-      null
-    } else {
-      val evalE2 = right.eval(input)
-      if (evalE2 == null) {
-        null
-      } else {
-        // With codegen, the values returned by -0.0 and 0.0 are different. Handled with +0.0
-        val result = math.atan2(evalE1.asInstanceOf[Double] + 0.0,
-          evalE2.asInstanceOf[Double] + 0.0)
-        if (result.isNaN) null else result
-      }
-    }
+  protected override def nullSafeEval(input1: Any, input2: Any): Any = {
+    // With codegen, the values returned by -0.0 and 0.0 are different. Handled with +0.0
+    val result = math.atan2(input1.asInstanceOf[Double] + 0.0, input2.asInstanceOf[Double] + 0.0)
+    if (result.isNaN) null else result
   }
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
@@ -423,208 +409,94 @@ case class Pow(left: Expression, right: Expression)
   }
 }
 
-case class ShiftLeft(left: Expression, right: Expression) extends BinaryExpression {
-
-  override def checkInputDataTypes(): TypeCheckResult = {
-    (left.dataType, right.dataType) match {
-      case (NullType, _) | (_, NullType) => return TypeCheckResult.TypeCheckSuccess
-      case (_, IntegerType) => left.dataType match {
-        case LongType | IntegerType | ShortType | ByteType =>
-          return TypeCheckResult.TypeCheckSuccess
-        case _ => // failed
-      }
-      case _ => // failed
-    }
-    TypeCheckResult.TypeCheckFailure(
-        s"ShiftLeft expects long, integer, short or byte value as first argument and an " +
-          s"integer value as second argument, not (${left.dataType}, ${right.dataType})")
-  }
-
-  override def eval(input: InternalRow): Any = {
-    val valueLeft = left.eval(input)
-    if (valueLeft != null) {
-      val valueRight = right.eval(input)
-      if (valueRight != null) {
-        valueLeft match {
-          case l: Long => l << valueRight.asInstanceOf[Integer]
-          case i: Integer => i << valueRight.asInstanceOf[Integer]
-          case s: Short => s << valueRight.asInstanceOf[Integer]
-          case b: Byte => b << valueRight.asInstanceOf[Integer]
-        }
-      } else {
-        null
-      }
-    } else {
-      null
-    }
-  }
-
-  override def dataType: DataType = {
-    left.dataType match {
-      case LongType => LongType
-      case IntegerType | ShortType | ByteType => IntegerType
-      case _ => NullType
-    }
-  }
-
-  override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    nullSafeCodeGen(ctx, ev, (result, left, right) => s"$result = $left << $right;")
-  }
-}
-
-case class ShiftRight(left: Expression, right: Expression) extends BinaryExpression {
-
-  override def checkInputDataTypes(): TypeCheckResult = {
-    (left.dataType, right.dataType) match {
-      case (NullType, _) | (_, NullType) => return TypeCheckResult.TypeCheckSuccess
-      case (_, IntegerType) => left.dataType match {
-        case LongType | IntegerType | ShortType | ByteType =>
-          return TypeCheckResult.TypeCheckSuccess
-        case _ => // failed
-      }
-      case _ => // failed
-    }
-    TypeCheckResult.TypeCheckFailure(
-          s"ShiftRight expects long, integer, short or byte value as first argument and an " +
-            s"integer value as second argument, not (${left.dataType}, ${right.dataType})")
-  }
-
-  override def eval(input: InternalRow): Any = {
-    val valueLeft = left.eval(input)
-    if (valueLeft != null) {
-      val valueRight = right.eval(input)
-      if (valueRight != null) {
-        valueLeft match {
-          case l: Long => l >> valueRight.asInstanceOf[Integer]
-          case i: Integer => i >> valueRight.asInstanceOf[Integer]
-          case s: Short => s >> valueRight.asInstanceOf[Integer]
-          case b: Byte => b >> valueRight.asInstanceOf[Integer]
-        }
-      } else {
-        null
-      }
-    } else {
-      null
-    }
-  }
-
-  override def dataType: DataType = {
-    left.dataType match {
-      case LongType => LongType
-      case IntegerType | ShortType | ByteType => IntegerType
-      case _ => NullType
-    }
-  }
-
-  override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    nullSafeCodeGen(ctx, ev, (result, left, right) => s"$result = $left >> $right;")
-  }
-}
-
-case class ShiftRightUnsigned(left: Expression, right: Expression) extends BinaryExpression {
-
-  override def checkInputDataTypes(): TypeCheckResult = {
-    (left.dataType, right.dataType) match {
-      case (NullType, _) | (_, NullType) => return TypeCheckResult.TypeCheckSuccess
-      case (_, IntegerType) => left.dataType match {
-        case LongType | IntegerType | ShortType | ByteType =>
-          return TypeCheckResult.TypeCheckSuccess
-        case _ => // failed
-      }
-      case _ => // failed
-    }
-    TypeCheckResult.TypeCheckFailure(
-      s"ShiftRightUnsigned expects long, integer, short or byte value as first argument and an " +
-        s"integer value as second argument, not (${left.dataType}, ${right.dataType})")
-  }
-
-  override def eval(input: InternalRow): Any = {
-    val valueLeft = left.eval(input)
-    if (valueLeft != null) {
-      val valueRight = right.eval(input)
-      if (valueRight != null) {
-        valueLeft match {
-          case l: Long => l >>> valueRight.asInstanceOf[Integer]
-          case i: Integer => i >>> valueRight.asInstanceOf[Integer]
-          case s: Short => s >>> valueRight.asInstanceOf[Integer]
-          case b: Byte => b >>> valueRight.asInstanceOf[Integer]
-        }
-      } else {
-        null
-      }
-    } else {
-      null
-    }
-  }
-
-  override def dataType: DataType = {
-    left.dataType match {
-      case LongType => LongType
-      case IntegerType | ShortType | ByteType => IntegerType
-      case _ => NullType
-    }
-  }
-
-  override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    nullSafeCodeGen(ctx, ev, (result, left, right) => s"$result = $left >>> $right;")
-  }
-}
 
 /**
- * Performs the inverse operation of HEX.
- * Resulting characters are returned as a byte array.
+ * Bitwise unsigned left shift.
+ * @param left the base number to shift.
+ * @param right number of bits to left shift.
  */
-case class UnHex(child: Expression) extends UnaryExpression with Serializable {
+case class ShiftLeft(left: Expression, right: Expression)
+  extends BinaryExpression with ExpectsInputTypes {
 
-  override def dataType: DataType = BinaryType
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(TypeCollection(IntegerType, LongType), IntegerType)
 
-  override def checkInputDataTypes(): TypeCheckResult = {
-    if (child.dataType.isInstanceOf[StringType] || child.dataType == NullType) {
-      TypeCheckResult.TypeCheckSuccess
-    } else {
-      TypeCheckResult.TypeCheckFailure(s"unHex accepts String type, not ${child.dataType}")
+  override def dataType: DataType = left.dataType
+
+  protected override def nullSafeEval(input1: Any, input2: Any): Any = {
+    input1 match {
+      case l: jl.Long => l << input2.asInstanceOf[jl.Integer]
+      case i: jl.Integer => i << input2.asInstanceOf[jl.Integer]
     }
   }
 
-  override def eval(input: InternalRow): Any = {
-    val num = child.eval(input)
-    if (num == null) {
-      null
-    } else {
-      unhex(num.asInstanceOf[UTF8String].getBytes)
-    }
-  }
-
-  private val unhexDigits = {
-    val array = Array.fill[Byte](128)(-1)
-    (0 to 9).foreach(i => array('0' + i) = i.toByte)
-    (0 to 5).foreach(i => array('A' + i) = (i + 10).toByte)
-    (0 to 5).foreach(i => array('a' + i) = (i + 10).toByte)
-    array
-  }
-
-  private def unhex(inputBytes: Array[Byte]): Array[Byte] = {
-    var bytes = inputBytes
-    if ((bytes.length & 0x01) != 0) {
-      bytes = '0'.toByte +: bytes
-    }
-    val out = new Array[Byte](bytes.length >> 1)
-    // two characters form the hex value.
-    var i = 0
-    while (i < bytes.length) {
-        val first = unhexDigits(bytes(i))
-        val second = unhexDigits(bytes(i + 1))
-        if (first == -1 || second == -1) { return null}
-        out(i / 2) = (((first << 4) | second) & 0xFF).toByte
-        i += 2
-    }
-    out
+  override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    defineCodeGen(ctx, ev, (left, right) => s"$left << $right")
   }
 }
+
+
+/**
+ * Bitwise unsigned left shift.
+ * @param left the base number to shift.
+ * @param right number of bits to left shift.
+ */
+case class ShiftRight(left: Expression, right: Expression)
+  extends BinaryExpression with ExpectsInputTypes {
+
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(TypeCollection(IntegerType, LongType), IntegerType)
+
+  override def dataType: DataType = left.dataType
+
+  protected override def nullSafeEval(input1: Any, input2: Any): Any = {
+    input1 match {
+      case l: jl.Long => l >> input2.asInstanceOf[jl.Integer]
+      case i: jl.Integer => i >> input2.asInstanceOf[jl.Integer]
+    }
+  }
+
+  override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    defineCodeGen(ctx, ev, (left, right) => s"$left >> $right")
+  }
+}
+
+
+/**
+ * Bitwise unsigned right shift, for integer and long data type.
+ * @param left the base number.
+ * @param right the number of bits to right shift.
+ */
+case class ShiftRightUnsigned(left: Expression, right: Expression)
+  extends BinaryExpression with ExpectsInputTypes {
+
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(TypeCollection(IntegerType, LongType), IntegerType)
+
+  override def dataType: DataType = left.dataType
+
+  protected override def nullSafeEval(input1: Any, input2: Any): Any = {
+    input1 match {
+      case l: jl.Long => l >>> input2.asInstanceOf[jl.Integer]
+      case i: jl.Integer => i >>> input2.asInstanceOf[jl.Integer]
+    }
+  }
+
+  override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    defineCodeGen(ctx, ev, (left, right) => s"$left >>> $right")
+  }
+}
+
 
 case class Hypot(left: Expression, right: Expression)
   extends BinaryMathExpression(math.hypot, "HYPOT")
 
+
+/**
+ * Computes the logarithm of a number.
+ * @param left the logarithm base, default to e.
+ * @param right the number to compute the logarithm of.
+ */
 case class Logarithm(left: Expression, right: Expression)
   extends BinaryMathExpression((c1, c2) => math.log(c2) / math.log(c1), "LOG") {
 
@@ -642,7 +514,7 @@ case class Logarithm(left: Expression, right: Expression)
       defineCodeGen(ctx, ev, (c1, c2) => s"java.lang.Math.log($c2) / java.lang.Math.log($c1)")
     }
     logCode + s"""
-      if (Double.valueOf(${ev.primitive}).isNaN()) {
+      if (Double.isNaN(${ev.primitive})) {
         ${ev.isNull} = true;
       }
     """

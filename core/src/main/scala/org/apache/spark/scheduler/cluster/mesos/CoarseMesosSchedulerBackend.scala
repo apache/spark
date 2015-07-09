@@ -18,18 +18,18 @@
 package org.apache.spark.scheduler.cluster.mesos
 
 import java.io.File
-import java.util.{Collections, List => JList}
+import java.util.{List => JList}
 
 import scala.collection.JavaConversions._
 import scala.collection.mutable.{HashMap, HashSet}
 
-import org.apache.mesos.Protos.{TaskInfo => MesosTaskInfo, _}
 import org.apache.mesos.{Scheduler => MScheduler, _}
+import org.apache.mesos.Protos.{TaskInfo => MesosTaskInfo, _}
+import org.apache.spark.{SparkContext, SparkEnv, SparkException, TaskState}
 import org.apache.spark.rpc.RpcAddress
 import org.apache.spark.scheduler.TaskSchedulerImpl
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
 import org.apache.spark.util.Utils
-import org.apache.spark.{SparkContext, SparkEnv, SparkException, TaskState}
 
 /**
  * A SchedulerBackend that runs tasks on Mesos, but uses "coarse-grained" tasks, where it holds
@@ -65,6 +65,10 @@ private[spark] class CoarseMesosSchedulerBackend(
 
 
   val extraCoresPerSlave = conf.getInt("spark.mesos.extra.cores", 0)
+
+  // Offer constraints
+  private val slaveOfferConstraints =
+    parseConstraintString(sc.conf.get("spark.mesos.constraints", ""))
 
   var nextMesosTaskId = 0
 
@@ -170,13 +174,16 @@ private[spark] class CoarseMesosSchedulerBackend(
   override def resourceOffers(d: SchedulerDriver, offers: JList[Offer]) {
     synchronized {
       val filters = Filters.newBuilder().setRefuseSeconds(5).build()
-
       for (offer <- offers) {
+        val offerAttributes = toAttributeMap(offer.getAttributesList)
+        val meetsConstraints = matchesAttributeRequirements(slaveOfferConstraints, offerAttributes)
         val slaveId = offer.getSlaveId.toString
         val mem = getResource(offer.getResourcesList, "mem")
         val cpus = getResource(offer.getResourcesList, "cpus").toInt
-        if (totalCoresAcquired < maxCores &&
-            mem >= MemoryUtils.calculateTotalMemory(sc) &&
+        val id = offer.getId.getValue
+        if (meetsConstraints &&
+            totalCoresAcquired < maxCores &&
+            mem >= calculateTotalMemory(sc) &&
             cpus >= 1 &&
             failuresBySlaveId.getOrElse(slaveId, 0) < MAX_SLAVE_FAILURES &&
             !slaveIdsWithExecutors.contains(slaveId)) {
@@ -193,33 +200,25 @@ private[spark] class CoarseMesosSchedulerBackend(
             .setCommand(createCommand(offer, cpusToUse + extraCoresPerSlave))
             .setName("Task " + taskId)
             .addResources(createResource("cpus", cpusToUse))
-            .addResources(createResource("mem",
-              MemoryUtils.calculateTotalMemory(sc)))
+            .addResources(createResource("mem", calculateTotalMemory(sc)))
 
           sc.conf.getOption("spark.mesos.executor.docker.image").foreach { image =>
             MesosSchedulerBackendUtil
-              .setupContainerBuilderDockerInfo(image, sc.conf, task.getContainerBuilder())
+              .setupContainerBuilderDockerInfo(image, sc.conf, task.getContainerBuilder)
           }
 
-          d.launchTasks(
-            Collections.singleton(offer.getId), Collections.singletonList(task.build()), filters)
+          // accept the offer and launch the task
+          logDebug(s"Accepting offer: $id with attributes: $offerAttributes mem: $mem cpu: $cpus")
+          d.launchTasks(List(offer.getId), List(task.build()), filters)
         } else {
-          // Filter it out
-          d.launchTasks(
-            Collections.singleton(offer.getId), Collections.emptyList[MesosTaskInfo](), filters)
+          // Decline the offer
+          logDebug(s"Declining offer: $id with attributes: $offerAttributes mem: $mem cpu: $cpus")
+          d.declineOffer(offer.getId)
         }
       }
     }
   }
 
-  /** Build a Mesos resource protobuf object */
-  private def createResource(resourceName: String, quantity: Double): Protos.Resource = {
-    Resource.newBuilder()
-      .setName(resourceName)
-      .setType(Value.Type.SCALAR)
-      .setScalar(Value.Scalar.newBuilder().setValue(quantity).build())
-      .build()
-  }
 
   override def statusUpdate(d: SchedulerDriver, status: TaskStatus) {
     val taskId = status.getTaskId.getValue.toInt

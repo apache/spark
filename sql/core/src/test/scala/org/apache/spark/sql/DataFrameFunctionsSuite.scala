@@ -229,6 +229,12 @@ class DataFrameFunctionsSuite extends QueryTest {
       })
   }
 
+  test("Levenshtein distance") {
+    val df = Seq(("kitten", "sitting"), ("frog", "fog")).toDF("l", "r")
+    checkAnswer(df.select(levenshtein("l", "r")), Seq(Row(3), Row(1)))
+    checkAnswer(df.selectExpr("levenshtein(l, r)"), Seq(Row(3), Row(1)))
+  }
+
   test("string ascii function") {
     val df = Seq(("abc", "")).toDF("a", "b")
     checkAnswer(
@@ -258,11 +264,15 @@ class DataFrameFunctionsSuite extends QueryTest {
     // non ascii characters are not allowed in the code, so we disable the scalastyle here.
     val df = Seq(("大千世界", "utf-8", bytes)).toDF("a", "b", "c")
     checkAnswer(
-      df.select(encode($"a", $"b"), encode("a", "b"), decode($"c", $"b"), decode("c", "b")),
+      df.select(
+        encode($"a", "utf-8"),
+        encode("a", "utf-8"),
+        decode($"c", "utf-8"),
+        decode("c", "utf-8")),
       Row(bytes, bytes, "大千世界", "大千世界"))
 
     checkAnswer(
-      df.selectExpr("encode(a, b)", "decode(c, b)"),
+      df.selectExpr("encode(a, 'utf-8')", "decode(c, 'utf-8')"),
       Row(bytes, "大千世界"))
     // scalastyle:on
   }

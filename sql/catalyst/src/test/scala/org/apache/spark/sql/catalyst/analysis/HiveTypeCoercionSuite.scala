@@ -26,7 +26,7 @@ import org.apache.spark.sql.types._
 
 class HiveTypeCoercionSuite extends PlanTest {
 
-  test("implicit type cast") {
+  test("eligible implicit type cast") {
     def shouldCast(from: DataType, to: AbstractDataType, expected: DataType): Unit = {
       val got = HiveTypeCoercion.ImplicitTypeCasts.implicitCast(Literal.create(null, from), to)
       assert(got.map(_.dataType) == Option(expected),
@@ -68,6 +68,35 @@ class HiveTypeCoercionSuite extends PlanTest {
     shouldCast(IntegerType, TypeCollection(BinaryType, IntegerType), IntegerType)
     shouldCast(BinaryType, TypeCollection(BinaryType, IntegerType), BinaryType)
     shouldCast(BinaryType, TypeCollection(IntegerType, BinaryType), BinaryType)
+
+    shouldCast(IntegerType, TypeCollection(StringType, BinaryType), StringType)
+    shouldCast(IntegerType, TypeCollection(BinaryType, StringType), StringType)
+
+    shouldCast(
+      DecimalType.Unlimited, TypeCollection(IntegerType, DecimalType), DecimalType.Unlimited)
+    shouldCast(DecimalType(10, 2), TypeCollection(IntegerType, DecimalType), DecimalType(10, 2))
+    shouldCast(DecimalType(10, 2), TypeCollection(DecimalType, IntegerType), DecimalType(10, 2))
+    shouldCast(IntegerType, TypeCollection(DecimalType(10, 2), StringType), DecimalType(10, 2))
+  }
+
+  test("ineligible implicit type cast") {
+    def shouldNotCast(from: DataType, to: AbstractDataType): Unit = {
+      val got = HiveTypeCoercion.ImplicitTypeCasts.implicitCast(Literal.create(null, from), to)
+      assert(got.isEmpty, s"Should not be able to cast $from to $to, but got $got")
+    }
+
+    shouldNotCast(IntegerType, DateType)
+    shouldNotCast(IntegerType, TimestampType)
+    shouldNotCast(LongType, DateType)
+    shouldNotCast(LongType, TimestampType)
+    shouldNotCast(DecimalType.Unlimited, DateType)
+    shouldNotCast(DecimalType.Unlimited, TimestampType)
+
+    shouldNotCast(IntegerType, TypeCollection(DateType, TimestampType))
+
+    shouldNotCast(IntegerType, ArrayType)
+    shouldNotCast(IntegerType, MapType)
+    shouldNotCast(IntegerType, StructType)
   }
 
   test("tightest common bound for types") {
@@ -240,6 +269,27 @@ class HiveTypeCoercionSuite extends PlanTest {
     ruleTest(be,
       EqualTo(Literal.create(Decimal(1), DecimalType(8, 0)), Literal(true)),
       Literal(true)
+    )
+  }
+
+  /**
+   * There are rules that need to not fire before child expressions get resolved.
+   * We use this test to make sure those rules do not fire early.
+   */
+  test("make sure rules do not fire early") {
+    // InConversion
+    val inConversion = HiveTypeCoercion.InConversion
+    ruleTest(inConversion,
+      In(UnresolvedAttribute("a"), Seq(Literal(1))),
+      In(UnresolvedAttribute("a"), Seq(Literal(1)))
+    )
+    ruleTest(inConversion,
+      In(Literal("test"), Seq(UnresolvedAttribute("a"), Literal(1))),
+      In(Literal("test"), Seq(UnresolvedAttribute("a"), Literal(1)))
+    )
+    ruleTest(inConversion,
+      In(Literal("a"), Seq(Literal(1), Literal("b"))),
+      In(Literal("a"), Seq(Cast(Literal(1), StringType), Cast(Literal("b"), StringType)))
     )
   }
 }
