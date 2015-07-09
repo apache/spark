@@ -1082,7 +1082,9 @@ abstract class RDD[T: ClassTag](
       val scale = math.max(math.ceil(math.pow(numPartitions, 1.0 / depth)).toInt, 2)
       // If creating an extra level doesn't help reduce
       // the wall-clock time, we stop tree aggregation.
-      while (numPartitions > scale + numPartitions / scale) {
+
+      // Don't trigger treeAggregation for 5 partitions
+      while (numPartitions > 5 && (numPartitions > scale + numPartitions / scale)) {
         numPartitions /= scale
         val curNumPartitions = numPartitions
         partiallyAggregated = partiallyAggregated.mapPartitionsWithIndex {
