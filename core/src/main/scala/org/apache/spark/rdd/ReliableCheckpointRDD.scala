@@ -183,7 +183,8 @@ private[spark] object ReliableCheckpointRDD extends Logging {
     val conf = SparkHadoopUtil.get.newConfiguration(new SparkConf())
     val fs = path.getFileSystem(conf)
     val broadcastedConf = sc.broadcast(new SerializableConfiguration(conf))
-    sc.runJob(rdd, ReliableCheckpointRDD.writeCheckpointFile[Int](path.toString, broadcastedConf, 1024) _)
+    sc.runJob(
+      rdd, ReliableCheckpointRDD.writeCheckpointFile[Int](path.toString, broadcastedConf, 1024) _)
     val cpRDD = new ReliableCheckpointRDD[Int](sc, path.toString)
     assert(cpRDD.partitions.length == rdd.partitions.length, "Number of partitions is not the same")
     assert(cpRDD.collect().toList == rdd.collect().toList, "Data of partitions not the same")
