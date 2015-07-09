@@ -17,6 +17,8 @@
 # limitations under the License.
 #
 
+set -e
+
 usage() {
   echo "Usage: $(basename $0) <from-version> <to-version>" 1>&2
   exit 1
@@ -41,26 +43,21 @@ check_scala_version() {
 check_scala_version "$FROM_VERSION"
 check_scala_version "$TO_VERSION"
 
-test_sed() {
-  [ ! -z "$($1 --version 2>&1 | head -n 1 | grep 'GNU sed')" ]
+sed_i() {
+  sed -e "$1" "$2" > "$2.tmp" && mv "$2.tmp" "$2"
 }
 
-# Find GNU sed. On OS X with MacPorts you can install gsed with "sudo port install gsed"
-if test_sed sed; then
-  SED=sed
-elif test_sed gsed; then
-  SED=gsed
-else
-  echo "Could not find GNU sed. Tried \"sed\" and \"gsed\"" 1>&2
-  exit 1
-fi
+export -f sed_i
 
 BASEDIR=$(dirname $0)/..
-find $BASEDIR -name 'pom.xml' | grep -v target \
-  | xargs -I {} $SED -i -e 's/\(artifactId.*\)_'$FROM_VERSION'/\1_'$TO_VERSION'/g' {}
+find "$BASEDIR" -name 'pom.xml' -not -path '*target*' -print \
+  -exec bash -c "sed_i 's/\(artifactId.*\)_'$FROM_VERSION'/\1_'$TO_VERSION'/g' {}" \;
 
 # Also update <scala.binary.version> in parent POM
-$SED -i -e '0,/<scala\.binary\.version>'$FROM_VERSION'</s//<scala.binary.version>'$TO_VERSION'</' $BASEDIR/pom.xml
+# Match any scala binary version to ensure idempotency
+sed_i '1,/<scala\.binary\.version>[0-9]*\.[0-9]*</s/<scala\.binary\.version>[0-9]*\.[0-9]*</<scala.binary.version>'$TO_VERSION'</' \
+  "$BASEDIR/pom.xml"
 
 # Update source of scaladocs
-$SED -i -e 's/scala\-'$FROM_VERSION'/scala\-'$TO_VERSION'/' $BASEDIR/docs/_plugins/copy_api_dirs.rb
+echo "$BASEDIR/docs/_plugins/copy_api_dirs.rb"
+sed_i 's/scala\-'$FROM_VERSION'/scala\-'$TO_VERSION'/' "$BASEDIR/docs/_plugins/copy_api_dirs.rb"
