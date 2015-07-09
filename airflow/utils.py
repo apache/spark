@@ -27,6 +27,10 @@ class AirflowException(Exception):
     pass
 
 
+class AirflowSensorTimeout(Exception):
+    pass
+
+
 class State(object):
     """
     Static class with task instance states constants and color method to

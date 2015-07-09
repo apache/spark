@@ -4,6 +4,7 @@ from airflow import configuration
 configuration.test_mode()
 from airflow import jobs, models, DAG, executors, utils, operators
 from airflow.www.app import app
+from airflow import utils
 
 NUM_EXAMPLE_DAGS = 3
 DEV_NULL = '/dev/null'
@@ -361,7 +362,7 @@ class HttpOpSensorTest(unittest.TestCase):
             method='GET',
             endpoint='/search',
             data={"client": "ubuntu", "q": "airflow"},
-            response_check=lambda response: True if "airbnb/airflow" in response.text else False,
+            response_check=lambda response: ("airbnb/airflow" in response.text),
             headers={},
             dag=self.dag)
         t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
@@ -373,11 +374,11 @@ class HttpOpSensorTest(unittest.TestCase):
             endpoint='/search',
             params={"client": "ubuntu", "q": "airflow"},
             headers={},
-            response_check=lambda response: True if "airbnb/airflow" in response.text else False,
+            response_check=lambda response: ("airbnb/airflow" in response.text),
             poke_interval=5,
             timeout=15,
             dag=self.dag)
-        sensor.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE)
+        sensor.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
 
     def test_sensor_timeout(self):
         sensor = operators.HttpSensor(
@@ -386,11 +387,13 @@ class HttpOpSensorTest(unittest.TestCase):
             endpoint='/search',
             params={"client": "ubuntu", "q": "airflow"},
             headers={},
-            response_check=lambda response: True if "abracadabra_not_exists" in response.text else False,
-            poke_interval=5,
-            timeout=15,
+            response_check=lambda response: ("dingdong" in response.text),
+            poke_interval=2,
+            timeout=5,
             dag=self.dag)
-        sensor.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE)
+        with self.assertRaises(utils.AirflowSensorTimeout):
+            sensor.run(
+                start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
 
 if __name__ == '__main__':
     unittest.main()

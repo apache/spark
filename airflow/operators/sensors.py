@@ -8,7 +8,8 @@ from airflow.models import BaseOperator
 from airflow.models import Connection as DB
 from airflow.models import State
 from airflow.models import TaskInstance
-from airflow.utils import apply_defaults, AirflowException
+from airflow.utils import (
+    apply_defaults, AirflowException, AirflowSensorTimeout)
 
 
 class BaseSensorOperator(BaseOperator):
@@ -48,7 +49,7 @@ class BaseSensorOperator(BaseOperator):
         while not self.poke(context):
             sleep(self.poke_interval)
             if (datetime.now() - started_at).seconds > self.timeout:
-                raise AirflowException('Snap. Time is OUT.')
+                raise AirflowSensorTimeout('Snap. Time is OUT.')
         logging.info("Success criteria met. Exiting.")
 
 
@@ -366,7 +367,6 @@ class HttpSensor(BaseSensorOperator):
                  response_check=None,
                  extra_options=None, *args, **kwargs):
         super(HttpSensor, self).__init__(*args, **kwargs)
-
         self.endpoint = endpoint
         self.http_conn_id = http_conn_id
         self.params = params or {}
@@ -374,19 +374,10 @@ class HttpSensor(BaseSensorOperator):
         self.extra_options = extra_options or {}
         self.response_check = response_check
 
-        session = settings.Session()
-        site = session.query(DB).filter(DB.conn_id == http_conn_id).first()
-        if not site:
-            raise AirflowException("http_conn_id not found in the repository")
-
-        self.hook = hooks.HttpHook(method='GET',
-                                   http_conn_id=self.http_conn_id)
-        session.commit()
-        session.close()
+        self.hook = hooks.HttpHook(method='GET', http_conn_id=http_conn_id)
 
     def poke(self, context):
         logging.info('Poking: ' + self.endpoint)
-
         try:
             response = self.hook.run(self.endpoint,
                                      data=self.params,
@@ -398,6 +389,5 @@ class HttpSensor(BaseSensorOperator):
         except AirflowException as ae:
             if ae.message.startswith("404"):
                 return False
-            raise
 
         return True
