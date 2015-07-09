@@ -950,11 +950,13 @@ test_that("fillna() on a DataFrame", {
 })
 
 test_that("crosstab() on a DataFrame", {
-  rdd <- lapply(parallelize(sc, 1:6), function(x) { list(x % 3, x % 2) })
+  rdd <- lapply(parallelize(sc, 0:5), function(x) {
+    list(paste0("a", x %% 3), paste0("b", x %% 2))
+  })
   df <- toDF(rdd, list("a", "b"))
   ct <- crosstab(df, "a", "b")
   ordered <- ct[order("a_b"),]
-  expected <- data.frame("a_b" = c("0", "1", "2"), "0" = c("1", "1", "1"), "1" = c("0", "0", "0"))
+  expected <- data.frame("a_b" = c("a0", "a1", "a2"), "b0" = c(1, 1, 1), "b1" = c(1, 1, 1))
   assert_true(identical(expected, ordered))
 })
 
