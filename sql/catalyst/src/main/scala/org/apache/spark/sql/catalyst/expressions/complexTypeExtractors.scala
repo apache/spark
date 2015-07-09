@@ -25,6 +25,11 @@ import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions.codegen.{GeneratedExpressionCode, CodeGenContext}
 import org.apache.spark.sql.types._
 
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// This file defines all the expressions to extract values out of complex types.
+// For example, getting a field out of an array, map, or struct.
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
 
 object ExtractValue {
   /**
@@ -117,6 +122,8 @@ abstract class ExtractValueWithStruct extends UnaryExpression with ExtractValue 
 
 /**
  * Returns the value of fields in the Struct `child`.
+ *
+ * No need to do type checking since it is handled by [[ExtractValue]].
  */
 case class GetStructField(child: Expression, field: StructField, ordinal: Int)
   extends ExtractValueWithStruct {
@@ -142,6 +149,8 @@ case class GetStructField(child: Expression, field: StructField, ordinal: Int)
 
 /**
  * Returns the array of value of fields in the Array of Struct `child`.
+ *
+ * No need to do type checking since it is handled by [[ExtractValue]].
  */
 case class GetArrayStructFields(
     child: Expression,
@@ -193,7 +202,9 @@ abstract class ExtractValueWithOrdinal extends BinaryExpression with ExtractValu
 }
 
 /**
- * Returns the field at `ordinal` in the Array `child`
+ * Returns the field at `ordinal` in the Array `child`.
+ *
+ * No need to do type checking since it is handled by [[ExtractValue]].
  */
 case class GetArrayItem(child: Expression, ordinal: Expression)
   extends ExtractValueWithOrdinal {
@@ -204,7 +215,7 @@ case class GetArrayItem(child: Expression, ordinal: Expression)
     // TODO: consider using Array[_] for ArrayType child to avoid
     // boxing of primitives
     val baseValue = value.asInstanceOf[Seq[_]]
-    val index = ordinal.asInstanceOf[Number].intValue()
+    val index = ordinal.asInstanceOf[java.lang.Integer]
     if (index >= baseValue.size || index < 0) {
       null
     } else {
@@ -227,10 +238,14 @@ case class GetArrayItem(child: Expression, ordinal: Expression)
 }
 
 /**
- * Returns the value of key `ordinal` in Map `child`
+ * Returns the value of key `ordinal` in Map `child`.
+ *
+ * No need to do type checking since it is handled by [[ExtractValue]].
  */
 case class GetMapValue(child: Expression, ordinal: Expression)
-  extends ExtractValueWithOrdinal {
+  extends ExtractValueWithOrdinal with ExpectsInputTypes {
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(MapType, IntegerType)
 
   override def dataType: DataType = child.dataType.asInstanceOf[MapType].valueType
 
