@@ -94,7 +94,7 @@ do
 done
 
 if [ "${PIPESTATUS[0]}" -ne 0 ]; then
-    lint_status=0
+    lint_status=1
     echo "Pylint checks failed."
     cat "$PYLINT_REPORT_PATH"
 else
