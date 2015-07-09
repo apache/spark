@@ -19,35 +19,36 @@ package org.apache.spark.rdd
 
 import scala.reflect.ClassTag
 
-import org.apache.spark.{Partition, SparkEnv, SparkException, SparkContext, TaskContext}
-import org.apache.spark.storage.{BlockId, RDDBlockId}
+import org.apache.spark.{Partition, SparkContext, SparkEnv, SparkException, TaskContext}
+import org.apache.spark.storage.RDDBlockId
 
 /**
- * An RDD that reads from a checkpoint file previously written to the local file system.
+ * An RDD that reads from checkpoint files previously written to the local file system.
+ *
+ * Since local checkpointing is not intended for recovery across applications, it is possible
+ * to always know a priori the exact partitions to compute. There are no guarantees, however,
+ * that the checkpoint files backing these partitions still exist when we try to read them
+ * later. This is because the lifecycle of local checkpoint files is tied to that of executors,
+ * whose failures are conducive to irrecoverable calamity.
  */
-private[spark] class LocalCheckpointRDD[T: ClassTag](@transient sc: SparkContext)
+private[spark] class LocalCheckpointRDD[T: ClassTag](
+    @transient sc: SparkContext,
+    originalPartitionIndices: Array[Int])
   extends CheckpointRDD[T](sc) {
 
-  /**
-   * Determine the partitions from the local checkpoint blocks on each executor.
-   */
-  protected override def getPartitions: Array[Partition] = {
-    val ourId = id // define this locally for serialization purposes
-    val blockFilter = (blockId: BlockId) => {
-      blockId.asRDDId.filter(_.rddId == ourId).isDefined
-    }
-    val inputPartitions: Array[Partition] =
-      SparkEnv.get.blockManager.master
-        .getMatchingBlockIds(blockFilter, askSlaves = true)
-        .collect { case RDDBlockId(_, i) => new CheckpointRDDPartition(i) }
-        .sortBy(_.index)
-        .toArray
-    validateInputPartitions(inputPartitions)
-    inputPartitions
+  def this(rdd: RDD[T]) {
+    this(rdd.context, rdd.partitions.map(_.index))
   }
 
   /**
-   * Return the location of the checkpoint block that corresponds to the given partition.
+   * Return partitions that describe how to recover the checkpointed data.
+   */
+  protected override def getPartitions: Array[Partition] = {
+    originalPartitionIndices.map { i => new CheckpointRDDPartition(i) }
+  }
+
+  /**
+   * Return the location of the checkpoint block associated with the given partition.
    */
   protected override def getPreferredLocations(partition: Partition): Seq[String] = {
     val blockId = RDDBlockId(id, partition.index)
@@ -55,34 +56,21 @@ private[spark] class LocalCheckpointRDD[T: ClassTag](@transient sc: SparkContext
   }
 
   /**
-   * Fetch the local checkpoint block that corresponds to this partition.
-   * This block should be in the disk store of at least one executor.
+   * Read the content of the checkpoint block associated with this partition.
+   *
+   * Note that the block may not exist if the executor that wrote it is no longer alive.
+   * This is an irrecoverable failure and we should convey this to the user. In normal
+   * cases, however, this block should already be local in this executor's disk store.
    */
   override def compute(partition: Partition, context: TaskContext): Iterator[T] = {
     val blockId = RDDBlockId(id, partition.index)
     SparkEnv.get.blockManager.get(blockId) match {
-      case Some(result) =>
-        result.data.asInstanceOf[Iterator[T]]
-      case None => throw new SparkException(s"Checkpoint block $blockId not found.")
-    }
-  }
-
-  /**
-   * Validate that the indices of the input partitions are continuous.
-   */
-  private def validateInputPartitions(partitions: Array[Partition]): Unit = {
-    val sortedIndices = partitions.map(_.index).sorted
-    if (sortedIndices.nonEmpty) {
-      val expectedIndices = (sortedIndices.head to sortedIndices.last).toArray
-      if (!java.util.Arrays.equals(sortedIndices, expectedIndices)) {
-        throw new SparkException(
-          "Local checkpoint partitions are invalid.\n" +
-            s"  Expected indices: ${expectedIndices.mkString(", ")}\n" +
-            s"  Actual indices: ${sortedIndices.mkString(", ")}")
-      }
-    } else {
-      // An exception with a clear message here is better than a wrong answer
-      throw new SparkException("No checkpointed partitions found when reloading an RDD.")
+      case Some(result) => result.data.asInstanceOf[Iterator[T]]
+      case None => throw new SparkException(
+        s"Checkpoint block $blockId not found! It is likely that the executor that " +
+        "originally checkpointed this block is no longer alive. If this problem persists, " +
+        "you may consider using `rdd.checkpoint()` instead, which is slower than local " +
+        "checkpointing but more fault-tolerant.")
     }
   }
 

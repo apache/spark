@@ -33,29 +33,30 @@ private[spark] class LocalRDDCheckpointData[T: ClassTag](@transient rdd: RDD[T])
   extends RDDCheckpointData[T](rdd) with Logging {
 
   /**
-   * Write the content of each partition on a local disk store.
+   * Write the content of each partition to a local disk store.
    */
   protected override def doCheckpoint(): CheckpointRDD[T] = {
-    val checkpointRdd = new LocalCheckpointRDD[T](rdd.context)
 
     // Note: we persist the partitions using the checkpoint RDD's ID rather than the
     // parent RDD's ID. This is not fundamental in design, but allows us to simply
     // reuse the RDD clean up code path to clean the checkpointed files.
+    val checkpointRdd = new LocalCheckpointRDD[T](rdd)
     val checkpointRddId = checkpointRdd.id
     val persistPartition = (taskContext: TaskContext, values: Iterator[T]) => {
       // TODO: if it's already in disk store, just use the existing values
       val blockId = RDDBlockId(checkpointRddId, taskContext.partitionId())
       SparkEnv.get.blockManager.putIterator(blockId, values, StorageLevel.DISK_ONLY)
     }
+    rdd.context.runJob(rdd, persistPartition)
 
-    // Optionally clean our checkpoint files if the reference is out of scope
+    // Since checkpoint files are just cached blocks that belong to the checkpoint RDD,
+    // we can just register it for clean up like any other RDD.
     if (rdd.conf.getBoolean("spark.cleaner.referenceTracking.cleanCheckpoints", false)) {
       rdd.context.cleaner.foreach { cleaner =>
         cleaner.registerRDDForCleanup(checkpointRdd)
       }
     }
 
-    rdd.context.runJob(rdd, persistPartition)
     checkpointRdd
   }
 

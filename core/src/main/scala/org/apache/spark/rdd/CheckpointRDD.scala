@@ -21,22 +21,27 @@ import scala.reflect.ClassTag
 
 import org.apache.spark.{Partition, SparkContext, TaskContext}
 
+/**
+ * An RDD partition that maps to a checkpoint file.
+ */
 private[spark] class CheckpointRDDPartition(val index: Int) extends Partition
 
 /**
- * This RDD represents a RDD checkpoint file (similar to HadoopRDD).
+ * An RDD that recovers checkpointed data from persisted files.
  */
 private[spark] abstract class CheckpointRDD[T: ClassTag](@transient sc: SparkContext)
   extends RDD[T](sc, Nil) {
 
-  // Note: override these here to work around a MiMa bug that complains
-  // about `AbstractMethodProblem`s in the RDD class if these are missing
+  // CheckpointRDD should not be checkpointed again
+  override def doCheckpoint(): Unit = { }
+  override def checkpoint(): Unit = { }
+  override def localCheckpoint(): this.type = this
+
+  // Note: There is a bug in MiMa that complains about `AbstractMethodProblem`s in the
+  // base [[org.apache.spark.rdd.RDD]] class if we do not override the following methods.
   // scalastyle:off
   protected override def getPartitions: Array[Partition] = ???
   override def compute(p: Partition, tc: TaskContext): Iterator[T] = ???
   // scalastyle:on
 
-  // CheckpointRDD should not be checkpointed again
-  override def checkpoint(): Unit = { }
-  override def doCheckpoint(): Unit = { }
 }

@@ -66,21 +66,20 @@ private[spark] class ReliableRDDCheckpointData[T: ClassTag](@transient rdd: RDD[
     // Save to file, and reload it as an RDD
     val broadcastedConf = rdd.context.broadcast(
       new SerializableConfiguration(rdd.context.hadoopConfiguration))
+    // TODO: This is expensive because it computes the RDD again unnecessarily (SPARK-8582)
+    rdd.context.runJob(rdd, ReliableCheckpointRDD.writeToFile[T](cpDir, broadcastedConf) _)
     val newRDD = new ReliableCheckpointRDD[T](rdd.context, cpDir)
+    if (newRDD.partitions.length != rdd.partitions.length) {
+      throw new SparkException(
+        s"Checkpoint RDD $newRDD(${newRDD.partitions.length}) has different " +
+          s"number of partitions from original RDD $rdd(${rdd.partitions.length})")
+    }
 
     // Optionally clean our checkpoint files if the reference is out of scope
     if (rdd.conf.getBoolean("spark.cleaner.referenceTracking.cleanCheckpoints", false)) {
       rdd.context.cleaner.foreach { cleaner =>
         cleaner.registerRDDCheckpointDataForCleanup(newRDD, rdd.id)
       }
-    }
-
-    // TODO: This is expensive because it computes the RDD again unnecessarily (SPARK-8582)
-    rdd.context.runJob(rdd, ReliableCheckpointRDD.writeToFile[T](cpDir, broadcastedConf) _)
-    if (newRDD.partitions.length != rdd.partitions.length) {
-      throw new SparkException(
-        s"Checkpoint RDD $newRDD(${newRDD.partitions.length}) has different " +
-          s"number of partitions from original RDD $rdd(${rdd.partitions.length})")
     }
 
     logInfo(s"Done checkpointing RDD ${rdd.id} to $cpDir, new parent is RDD ${newRDD.id}")

@@ -29,19 +29,29 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.util.{SerializableConfiguration, Utils}
 
 /**
- * An RDD that reads from a checkpoint file previously written to reliable storage.
+ * An RDD that reads from checkpoint files previously written to reliable storage.
  */
 private[spark] class ReliableCheckpointRDD[T: ClassTag](
     @transient sc: SparkContext,
     val checkpointPath: String)
   extends CheckpointRDD[T](sc) {
 
-  private val broadcastedConf = sc.broadcast(new SerializableConfiguration(sc.hadoopConfiguration))
+  @transient private val hadoopConf = sc.hadoopConfiguration
+  @transient private val fs = new Path(checkpointPath).getFileSystem(hadoopConf)
+  private val broadcastedConf = sc.broadcast(new SerializableConfiguration(hadoopConf))
 
-  @transient private val fs = new Path(checkpointPath).getFileSystem(sc.hadoopConfiguration)
-
+  /**
+   * Return the path of the checkpoint directory this RDD reads data from.
+   */
   override def getCheckpointFile: Option[String] = Some(checkpointPath)
 
+  /**
+   * Return partitions described by the files in the checkpoint directory.
+   *
+   * Since the original RDD may belong to a prior application, there is no way to know a
+   * priori the number of partitions to expect. This method assumes that the original set of
+   * checkpoint files are fully preserved in a reliable storage across application lifespans.
+   */
   protected override def getPartitions: Array[Partition] = {
     val cpath = new Path(checkpointPath)
     val numPartitions =
@@ -51,7 +61,12 @@ private[spark] class ReliableCheckpointRDD[T: ClassTag](
           .map(_.getPath)
           .filter(_.getName.startsWith("part-"))
           .sortBy(_.toString)
-        validateInputFiles(inputFiles)
+        // Fail fast if input files are invalid
+        inputFiles.zipWithIndex.foreach { case (path, i) =>
+          if (!path.toString.endsWith(ReliableCheckpointRDD.splitIdToFile(i))) {
+            throw new SparkException(s"Invalid checkpoint file: $path")
+          }
+        }
         inputFiles.length
       } else {
         0
@@ -59,6 +74,9 @@ private[spark] class ReliableCheckpointRDD[T: ClassTag](
     Array.tabulate(numPartitions)(i => new CheckpointRDDPartition(i))
   }
 
+  /**
+   * Return the locations of the checkpoint file associated with the given partition.
+   */
   protected override def getPreferredLocations(split: Partition): Seq[String] = {
     val status = fs.getFileStatus(
       new Path(checkpointPath, ReliableCheckpointRDD.splitIdToFile(split.index)))
@@ -66,21 +84,12 @@ private[spark] class ReliableCheckpointRDD[T: ClassTag](
     locations.headOption.toList.flatMap(_.getHosts).filter(_ != "localhost")
   }
 
+  /**
+   * Read the content of the checkpoint file associated with the given partition.
+   */
   override def compute(split: Partition, context: TaskContext): Iterator[T] = {
     val file = new Path(checkpointPath, ReliableCheckpointRDD.splitIdToFile(split.index))
     ReliableCheckpointRDD.readFromFile(file, broadcastedConf, context)
-  }
-
-  /**
-   * Fail fast if our input checkpointed files are invalid.
-   */
-  private def validateInputFiles(files: Array[Path]): Unit = {
-    val valid = files.zipWithIndex.forall { case (f, i) =>
-      f.toString.endsWith(ReliableCheckpointRDD.splitIdToFile(i))
-    }
-    if (!valid) {
-      throw new SparkException(s"Invalid checkpoint directory: $checkpointPath")
-    }
   }
 
 }
