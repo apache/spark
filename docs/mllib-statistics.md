@@ -426,7 +426,10 @@ Additionally, MLlib provides a 1-sample, 2-sided implementation of the Kolmogoro
 for equality of probability distributions. By providing the name of a theoretical distribution
 (currently solely supported for the normal distribution) and its parameters, or a function to 
 calculate the cumulative distribution according to a given theoretical distribution, the user can
-test the null hypothesis that their sample is drawn from that distribution.
+test the null hypothesis that their sample is drawn from that distribution. In the case that the
+user tests against the normal distribution (`distName="norm"`), but does not provide distribution
+parameters, the test initializes to the standard normal distribution and logs an appropriate 
+message.
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">

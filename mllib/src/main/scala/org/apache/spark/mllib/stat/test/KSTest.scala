@@ -17,9 +17,12 @@
 
 package org.apache.spark.mllib.stat.test
 
+import scala.annotation.varargs
+
 import org.apache.commons.math3.distribution.{NormalDistribution, RealDistribution}
 import org.apache.commons.math3.stat.inference.KolmogorovSmirnovTest
 
+import org.apache.spark.Logging
 import org.apache.spark.rdd.RDD
 
 /**
@@ -44,12 +47,12 @@ import org.apache.spark.rdd.RDD
  * constant (the cumulative sum of # of elements in the prior partitions divided by the data set
  * size). Finally, we take the maximum absolute value, and this is the statistic.
  */
-private[stat] object KSTest {
+private[stat] object KSTest extends Logging {
 
   // Null hypothesis for the type of KS test to be included in the result.
   object NullHypothesis extends Enumeration {
     type NullHypothesis = Value
-    val oneSampleTwoSided = Value("Sample follows theoretical distribution.")
+    val oneSampleTwoSided = Value("Sample follows theoretical distribution")
   }
 
   /**
@@ -168,13 +171,22 @@ private[stat] object KSTest {
    * @param params Variable length parameter for distribution's parameters
    * @return KSTestResult summarizing the test results (pval, statistic, and null hypothesis)
    */
+  @varargs
   def testOneSample(data: RDD[Double], distName: String, params: Double*): KSTestResult = {
     val distanceCalc =
       distName match {
         case "norm" => () => {
-          require(params.length == 2, "Normal distribution requires mean and standard " +
-            "deviation as parameters")
-          new NormalDistribution(params(0), params(1))
+          if (params.nonEmpty) {
+            // parameters are passed, then can only be 2
+            require(params.length == 2, "Normal distribution requires mean and standard " +
+              "deviation as parameters")
+            new NormalDistribution(params(0), params(1))
+          } else {
+            // if no parameters passed in initializes to standard normal
+            logInfo("No parameters specified for Normal distribution," +
+              "initialized to standard normal (i.e. N(0, 1))")
+            new NormalDistribution(0, 1)
+          }
         }
         case  _ => throw new UnsupportedOperationException(s"$distName not yet supported through" +
           s" convenience method. Current options are:[stdnorm].")
