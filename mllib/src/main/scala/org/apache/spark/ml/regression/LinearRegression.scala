@@ -246,10 +246,8 @@ class LinearRegressionModel private[ml] (
   private var trainingSummary: Option[LinearRegressionTrainingSummary] = None
 
   /**
-   * Gets results summary (e.g. residuals, mse, r-squared ) of model on training set. This method
-   * should only be called on the driver as `summary` is transient.
-   *
-   * An exception is thrown if `trainingSummary == None`.
+   * Gets summary (e.g. residuals, mse, r-squared ) of model on training set. An exception is
+   * thrown if `trainingSummary == None`.
    */
   def summary: LinearRegressionTrainingSummary = trainingSummary match {
     case Some(summ) => summ
@@ -264,6 +262,7 @@ class LinearRegressionModel private[ml] (
     this
   }
 
+  /** Indicates whether a training summary exists for this model instance. */
   def hasSummary: Boolean = trainingSummary.isDefined
 
   /**
