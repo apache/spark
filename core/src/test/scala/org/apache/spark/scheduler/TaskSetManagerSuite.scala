@@ -507,6 +507,29 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     assert(manager.myLocalityLevels.sameElements(Array(NO_PREF, ANY)))
   }
 
+  test("Executors are added but exit normally while running tasks") {
+    sc = new SparkContext("local", "test")
+    val sched = new FakeTaskScheduler(sc)
+    val taskSet = FakeTask.createTaskSet(4,
+      Seq(TaskLocation("host1", "execA")),
+      Seq(TaskLocation("host1", "execB")),
+      Seq(TaskLocation("host2", "execC")),
+      Seq())
+    val manager = new TaskSetManager(sched, taskSet, 1, new ManualClock)
+    sched.addExecutor("execA", "host1")
+    manager.executorAdded()
+    sched.addExecutor("execC", "host2")
+    manager.executorAdded()
+    assert(manager.resourceOffer("exec1", "host1", ANY).isDefined)
+    sched.removeExecutor("execA")
+    manager.executorLost("execA", "host1", ExecutorExitedNormally(143, "Normal termination"))
+    assert(!sched.taskSetsFailed.contains(taskSet.id))
+    assert(manager.resourceOffer("execC", "host2", ANY).isDefined)
+    sched.removeExecutor("execC")
+    manager.executorLost("execC", "host2", ExecutorExitedAbnormally(1, "Abnormal termination"))
+    assert(sched.taskSetsFailed.contains(taskSet.id))
+  }
+
   test("test RACK_LOCAL tasks") {
     // Assign host1 to rack1
     FakeRackUtil.assignHostToRack("host1", "rack1")

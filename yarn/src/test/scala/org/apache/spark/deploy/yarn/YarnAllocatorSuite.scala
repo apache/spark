@@ -18,10 +18,13 @@
 package org.apache.spark.deploy.yarn
 
 import java.util.{Arrays, List => JList}
+import org.mockito.Mockito._
+import scala.collection.JavaConversions._
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.CommonConfigurationKeysPublic
 import org.apache.hadoop.net.DNSToSwitchMapping
+import org.apache.hadoop.yarn.api.protocolrecords.AllocateResponse
 import org.apache.hadoop.yarn.api.records._
 import org.apache.hadoop.yarn.client.api.AMRMClient
 import org.apache.hadoop.yarn.client.api.AMRMClient.ContainerRequest
@@ -30,7 +33,7 @@ import org.apache.spark.{SecurityManager, SparkFunSuite}
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.yarn.YarnSparkHadoopUtil._
 import org.apache.spark.deploy.yarn.YarnAllocator._
-import org.apache.spark.scheduler.SplitInfo
+import org.apache.spark.scheduler.{ExecutorExitedAbnormally, ExecutorExitedNormally, SplitInfo}
 
 import org.scalatest.{BeforeAndAfterEach, Matchers}
 
@@ -69,7 +72,7 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
   var containerNum = 0
 
   override def beforeEach() {
-    rmClient = AMRMClient.createAMRMClient()
+    rmClient = spy(AMRMClient.createAMRMClient())
     rmClient.init(conf)
     rmClient.start()
   }
@@ -243,22 +246,53 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
   }
 
   test("Getting executor loss reason should depend on how container was terminated") {
-    val container1 = createContainer("host1")
-    val container2 = createContainer("host2")
-    val container3 = createContainer("host3")
-    val container4 = createContainer("host4")
-    val container5 = createContainer("host5")
+    val preemptedContainer = createContainer("host1")
+    val vmemExceededContainer = createContainer("host2")
+    val pmemExceededContainer = createContainer("host3")
+    val unknownErrorContainer= createContainer("host4")
+    val killedContainer = createContainer("host5")
+    val normalExitContainer = createContainer("host6")
 
-    val handler = createAllocator(5)
-    handler.handleAllocatedContainers(Array(container1, container2, container3, container4, container5))
-    val preemptedContainerStatus = ContainerStatus.newInstance(container1.getId(), ContainerState.COMPLETE, "Preempted", ContainerExitStatus.PREEMPTED)
-    val vmemLimitExceededContainerStatus = ContainerStatus.newInstance(container2.getId(), ContainerState.COMPLETE, "Vmem limit exceeded", -103)
-    val pmemLimitExceededContainerStatus = ContainerStatus.newInstance(container3.getId(), ContainerState.COMPLETE, "pmem limit exceeded", -104)
-    val unknownErrorContainerSTatus = ContainerStatus.newInstance(container4.getId(), ContainerState.COMPLETE, "Unknown error", 123)
+    val containersToStatusAndExpectedLossReasons = Map(
+      preemptedContainer ->
+          (ContainerStatus.newInstance(preemptedContainer.getId(), ContainerState.COMPLETE, "Preempted", ContainerExitStatus.PREEMPTED),
+          classOf[ExecutorExitedNormally]),
+      vmemExceededContainer ->
+          (ContainerStatus.newInstance(vmemExceededContainer.getId(), ContainerState.COMPLETE, "Vmem limit exceeded", -103),
+          classOf[ExecutorExitedAbnormally]),
+      pmemExceededContainer ->
+          (ContainerStatus.newInstance(pmemExceededContainer.getId(), ContainerState.COMPLETE, "pmem limit exceeded", -104),
+          classOf[ExecutorExitedAbnormally]),
+      unknownErrorContainer ->
+          (ContainerStatus.newInstance(unknownErrorContainer.getId(), ContainerState.COMPLETE, "Unknown error", 123),
+          classOf[ExecutorExitedAbnormally]),
+      normalExitContainer ->
+        (ContainerStatus.newInstance(normalExitContainer.getId(), ContainerState.COMPLETE, "Container exited normally", 0),
+            classOf[ExecutorExitedNormally])
+    )
 
-    val killedExecutorId =  handler.executorIdToContainer.filter(_._2.getId().equals(container5)).iterator().next()._1
+    val handler = createAllocator(6)
+    val mockAllocateResponse = mock(classOf[AllocateResponse])
+    handler.requestTotalExecutors(6)
+    handler.updateResourceRequests()
+    handler.handleAllocatedContainers(containersToStatusAndExpectedLossReasons.keys.toSeq ++ Seq(killedContainer))
+    doReturn(mockAllocateResponse).when(rmClient).allocate(0.1f)
+    when(mockAllocateResponse.getAllocatedContainers).thenReturn(Seq())
+    when(mockAllocateResponse.getCompletedContainersStatuses)
+        .thenReturn(containersToStatusAndExpectedLossReasons.values.map(_._1).toSeq)
+        .thenReturn(Seq())
+
+    val killedExecutorId = getExecutorIdForContainer(handler, killedContainer)
     handler.killExecutor(killedExecutorId)
     assert(handler.getExecutorLossReason(killedExecutorId).isInstanceOf[ExecutorExitedNormally])
+    containersToStatusAndExpectedLossReasons.foreach({ testContainer =>
+      val executorId = getExecutorIdForContainer(handler, testContainer._1)
+      assert(testContainer._2._2.isInstance(handler.getExecutorLossReason(executorId)))
+    })
   }
 
+  private def getExecutorIdForContainer(handler: YarnAllocator, container: Container): String = {
+    handler.executorIdToContainer.filter(_._2.equals(container)).iterator.next()._1
+  }
 }
+
