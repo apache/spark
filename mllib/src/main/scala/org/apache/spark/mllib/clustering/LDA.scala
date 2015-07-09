@@ -115,6 +115,7 @@ class LDA private (
    *       [[https://github.com/Blei-Lab/onlineldavb]].
    */
   def setDocConcentration(docConcentration: Vector): this.type = {
+    docConcentration.toArray.iterator
     this.docConcentration = docConcentration
     this
   }
