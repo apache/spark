@@ -279,8 +279,10 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
     } else {
       s = other;
       t = this;
-      n = s.numChars();
-      m = t.numChars();
+      int swap;
+      swap = n;
+      n = m;
+      m = swap;
     }
 
     int p[] = new int[n + 1];
@@ -293,12 +295,13 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
       p[i] = i;
     }
 
-    for (j = 0, j_bytes = 0; j < m; j_bytes += numBytesForFirstByte(t.getByte(j_bytes)), j++) {
+    for (j = 0, j_bytes = 0; j < m; j_bytes += num_bytes_j, j++) {
       num_bytes_j = numBytesForFirstByte(t.getByte(j_bytes));
       d[0] = j + 1;
 
       for (i = 0, i_bytes = 0; i < n; i_bytes += numBytesForFirstByte(s.getByte(i_bytes)), i++) {
-        if (num_bytes_j != numBytesForFirstByte(s.getByte(i_bytes))) {
+        if (s.getByte(i_bytes) != t.getByte(j_bytes) ||
+              num_bytes_j != numBytesForFirstByte(s.getByte(i_bytes))) {
           cost = 1;
         } else {
           cost = (ByteArrayMethods.arrayEquals(t.base, t.offset + j_bytes, s.base,
