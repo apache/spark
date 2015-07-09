@@ -181,7 +181,7 @@ class HypothesisTestSuite extends SparkFunSuite with MLlibTestSparkContext {
     val pThreshold = 0.05
 
     // Comparing a standard normal sample to a standard normal distribution
-    val result1 = Statistics.ksTest(sampledNorm, "norm", 0, 1)
+    val result1 = Statistics.kolmogorovSmirnovTest(sampledNorm, "norm", 0, 1)
     val referenceStat1 = ksTest.kolmogorovSmirnovStatistic(stdNormalDist, sampledNorm.collect())
     val referencePVal1 = 1 - ksTest.cdf(referenceStat1, n)
     // Verify vs apache math commons ks test
@@ -191,7 +191,7 @@ class HypothesisTestSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(result1.pValue > pThreshold)
 
     // Comparing an exponential sample to a standard normal distribution
-    val result2 = Statistics.ksTest(sampledExp, "norm", 0, 1)
+    val result2 = Statistics.kolmogorovSmirnovTest(sampledExp, "norm", 0, 1)
     val referenceStat2 = ksTest.kolmogorovSmirnovStatistic(stdNormalDist, sampledExp.collect())
     val referencePVal2 = 1 - ksTest.cdf(referenceStat2, n)
     // verify vs apache math commons ks test
@@ -206,7 +206,7 @@ class HypothesisTestSuite extends SparkFunSuite with MLlibTestSparkContext {
 
     // Comparing an exponential sample with mean X to an exponential distribution with mean Y
     // Where X != Y
-    val result3 = Statistics.ksTest(sampledExp, expCDF)
+    val result3 = Statistics.kolmogorovSmirnovTest(sampledExp, expCDF)
     val referenceStat3 = ksTest.kolmogorovSmirnovStatistic(new ExponentialDistribution(0.2),
       sampledExp.collect())
     val referencePVal3 = 1 - ksTest.cdf(referenceStat3, sampledNorm.count().toInt)
@@ -250,7 +250,7 @@ class HypothesisTestSuite extends SparkFunSuite with MLlibTestSparkContext {
         0.970577579543399, 0.0282226444247749, -0.0857821886527593, 0.389214404984942
       )
     )
-    val rCompResult = Statistics.ksTest(rData, "norm", 0, 1)
+    val rCompResult = Statistics.kolmogorovSmirnovTest(rData, "norm", 0, 1)
     assert(rCompResult.statistic ~== rKSStat relTol 1e-4)
     assert(rCompResult.pValue ~== rKSPVal relTol 1e-4)
   }

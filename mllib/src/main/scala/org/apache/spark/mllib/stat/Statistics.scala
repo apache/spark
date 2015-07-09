@@ -174,7 +174,7 @@ object Statistics {
    * @return [[org.apache.spark.mllib.stat.test.KSTestResult]] object containing test statistic,
    *        p-value, and null hypothesis.
    */
-  def ksTest(data: RDD[Double], cdf: Double => Double): KSTestResult = {
+  def kolmogorovSmirnovTest(data: RDD[Double], cdf: Double => Double): KSTestResult = {
     KSTest.testOneSample(data, cdf)
   }
 
@@ -190,7 +190,7 @@ object Statistics {
    *        p-value, and null hypothesis.
    */
   @varargs
-  def ksTest(data: RDD[Double], distName: String, params: Double*): KSTestResult = {
+  def kolmogorovSmirnovTest(data: RDD[Double], distName: String, params: Double*): KSTestResult = {
     KSTest.testOneSample(data, distName, params: _*)
   }
 }
