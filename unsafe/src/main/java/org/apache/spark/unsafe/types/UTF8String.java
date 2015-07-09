@@ -206,6 +206,30 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
     return fromString(toString().toLowerCase());
   }
 
+  /**
+   * Returns the index of the string `match` in this String. This string has to be a comma separated
+   * list. If `match` contains a comma 0 will be returned. If the `match` isn't part of this String,
+   * -1 will be returned, else the index of match (1-based index)
+   */
+  public int findInSet(UTF8String match) {
+    if (match.contains(UTF8String.fromString(","))) {
+      return 0;
+    }
+
+    int lastComma = -1;
+    for (int i = 0, n = 1; i < numBytes; i++) {
+      if (getByte(i) == 44) {
+        if (i - (lastComma + 1) == match.numBytes && ByteArrayMethods.arrayEquals(base,
+            offset + (lastComma + 1), match.base, match.offset, i - (lastComma + 1))) {
+          return n;
+        }
+        lastComma = i;
+        n++;
+      }
+    }
+    return -1;
+  }
+
   @Override
   public String toString() {
     try {

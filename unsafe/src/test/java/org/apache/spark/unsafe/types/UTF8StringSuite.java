@@ -128,4 +128,13 @@ public class UTF8StringSuite {
     assertEquals(fromString("数据砖头").substring(3, 5), fromString("头"));
     assertEquals(fromString("ߵ梷").substring(0, 2), fromString("ߵ梷"));
   }
+
+  @Test
+  public void findInSet() {
+    assertEquals(fromString("abc,b,ab,c,def").findInSet(fromString("ab")), 3);
+    assertEquals(fromString("ab,abc,b,ab,c,def").findInSet(fromString("ab")), 1);
+    assertEquals(fromString(",,,ab,abc,b,ab,c,def").findInSet(fromString("ab")), 4);
+    assertEquals(fromString(",ab,abc,b,ab,c,def").findInSet(fromString("")), 1);
+    assertEquals(fromString("数据砖头,abc,b,ab,c,def").findInSet(fromString("ab")), 4);
+  }
 }

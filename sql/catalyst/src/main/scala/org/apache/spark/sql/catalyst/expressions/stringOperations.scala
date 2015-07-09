@@ -205,54 +205,15 @@ case class FindInSet(left: Expression, right: Expression) extends BinaryExpressi
     }
   }
 
-  override def inputTypes: Seq[Any] = Seq(StringType, StringType)
+  override def inputTypes: Seq[AbstractDataType] = Seq(StringType, StringType)
 
-  override def eval(input: InternalRow): Any = {
-    val valueLeft = left.eval(input)
-    if (valueLeft != null) {
-      val strLeft = valueLeft.asInstanceOf[UTF8String]
-      if (!strLeft.contains(UTF8String.fromString(","))) {
-        val valueRight = right.eval(input)
-        if (valueRight != null) {
-          val splits = valueRight.asInstanceOf[UTF8String].toString.split(",")
-          var i = 0
-          while (i < splits.length) {
-            if (splits(i).equals(strLeft.toString)) {
-              return i + 1 // index is 1 based
-            }
-            i += 1
-          }
-          -1 // not found
-        } else {
-          null
-        }
-      } else {
-        0
-      }
-    } else {
-      null
-    }
-  }
+  override protected def nullSafeEval(word: Any, set: Any): Any =
+    set.asInstanceOf[UTF8String].findInSet(word.asInstanceOf[UTF8String])
 
-  override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    nullSafeCodeGen(ctx, ev, (res, left, right) => {
-      val splits = ctx.freshName("splits")
-      val i = ctx.freshName("i")
-
-      s"""
-          $res = -1;
-          if (!$left.contains(${ctx.stringType}.fromString(","))) {
-            String[] $splits = $right.toString().split(",");
-            for (int $i = 0; $i < $splits.length; $i++) {
-              if ($splits[$i].equals($left.toString())) {
-                $res = $i + 1; // index is 1 based
-                break;
-              }
-            }
-          } else {
-            $res = 0;
-          }"""
-    })
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    nullSafeCodeGen(ctx, ev, (word, set) =>
+      s"${ev.primitive} = $set.findInSet($word);"
+    )
   }
 
   override def dataType: DataType = IntegerType
