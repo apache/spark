@@ -292,15 +292,15 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("cast from timestamp") {
-    val millis = 15 * 1000 + 2
-    val seconds = millis * 1000 + 2
+    val millis = 15 * 1000 + 3
+    val seconds = millis * 1000 + 3
     val ts = new Timestamp(millis)
     val tss = new Timestamp(seconds)
     checkEvaluation(cast(ts, ShortType), 15.toShort)
     checkEvaluation(cast(ts, IntegerType), 15)
     checkEvaluation(cast(ts, LongType), 15.toLong)
-    checkEvaluation(cast(ts, FloatType), 15.002f)
-    checkEvaluation(cast(ts, DoubleType), 15.002)
+    checkEvaluation(cast(ts, FloatType), 15.003f)
+    checkEvaluation(cast(ts, DoubleType), 15.003)
     checkEvaluation(cast(cast(tss, ShortType), TimestampType), DateTimeUtils.fromJavaTimestamp(ts))
     checkEvaluation(cast(cast(tss, IntegerType), TimestampType),
       DateTimeUtils.fromJavaTimestamp(ts))
