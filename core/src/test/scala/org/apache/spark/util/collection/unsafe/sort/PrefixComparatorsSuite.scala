@@ -35,12 +35,14 @@ class PrefixComparatorsSuite extends SparkFunSuite with PropertyChecks {
         (prefixComparisonResult > 0 && s1 > s2))
     }
 
+    // scalastyle:off
     val regressionTests = Table(
       ("s1", "s2"),
       ("abc", "世界"),
       ("你好", "世界"),
       ("你好123", "你好122")
     )
+    // scalastyle:on
 
     forAll (regressionTests) { (s1: String, s2: String) => testPrefixComparison(s1, s2) }
     forAll { (s1: String, s2: String) => testPrefixComparison(s1, s2) }

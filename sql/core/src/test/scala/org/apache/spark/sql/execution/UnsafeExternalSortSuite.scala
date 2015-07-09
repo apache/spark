@@ -66,7 +66,7 @@ class UnsafeExternalSortSuite extends SparkPlanTest with BeforeAndAfterAll {
   // Test sorting on different data types
   for (
     dataType <- DataTypeTestUtils.atomicTypes ++ Set(NullType)
-    if !dataType.isInstanceOf[DecimalType]; // Since we don't have an unsafe representation for decimals
+    if !dataType.isInstanceOf[DecimalType]; // We don't have an unsafe representation for decimals
     nullable <- Seq(true, false);
     sortOrder <- Seq('a.asc :: Nil, 'a.desc :: Nil);
     randomDataGenerator <- RandomDataGenerator.forType(dataType, nullable)
