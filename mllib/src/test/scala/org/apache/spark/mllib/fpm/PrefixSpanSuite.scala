@@ -102,7 +102,7 @@ class PrefixspanSuite extends SparkFunSuite with MLlibTestSparkContext {
     val expectedValue3 = Array(
       (Array(1), 4L),
       (Array(1, 3), 2L),
-      (Array(1,4), 2L),
+      (Array(1, 4), 2L),
       (Array(1, 5), 2L),
       (Array(2, 1), 2L),
       (Array(2), 2L),
