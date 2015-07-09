@@ -1007,9 +1007,9 @@ Apart from these, the following properties are also available, and may be useful
 <tr>
   <td><code>spark.rpc.numRetries</code></td>
   <td>3</td>
+  <td>
     Number of times to retry before an RPC task gives up.
     An RPC task will run at most times of this number.
-  <td>
   </td>
 </tr>
 <tr>
@@ -1029,8 +1029,8 @@ Apart from these, the following properties are also available, and may be useful
 <tr>
   <td><code>spark.rpc.lookupTimeout</code></td>
   <td>120s</td>
-    Duration for an RPC remote endpoint lookup operation to wait before timing out.
   <td>
+    Duration for an RPC remote endpoint lookup operation to wait before timing out.  
   </td>
 </tr>
 </table>

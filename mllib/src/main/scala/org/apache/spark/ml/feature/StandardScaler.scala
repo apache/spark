@@ -106,6 +106,12 @@ class StandardScalerModel private[ml] (
     scaler: feature.StandardScalerModel)
   extends Model[StandardScalerModel] with StandardScalerParams {
 
+  /** Standard deviation of the StandardScalerModel */
+  val std: Vector = scaler.std
+
+  /** Mean of the StandardScalerModel */
+  val mean: Vector = scaler.mean
+
   /** @group setParam */
   def setInputCol(value: String): this.type = set(inputCol, value)
 

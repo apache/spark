@@ -139,8 +139,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
 
   // TODO how to handle the temp function per user session?
   @transient
-  protected[sql] lazy val functionRegistry: FunctionRegistry =
-    new OverrideFunctionRegistry(FunctionRegistry.builtin)
+  protected[sql] lazy val functionRegistry: FunctionRegistry = FunctionRegistry.builtin
 
   @transient
   protected[sql] lazy val analyzer: Analyzer =
@@ -1045,33 +1044,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
       rdd: RDD[Array[Any]],
       schema: StructType): DataFrame = {
 
-    def needsConversion(dataType: DataType): Boolean = dataType match {
-      case ByteType => true
-      case ShortType => true
-      case LongType => true
-      case FloatType => true
-      case DateType => true
-      case TimestampType => true
-      case StringType => true
-      case ArrayType(_, _) => true
-      case MapType(_, _, _) => true
-      case StructType(_) => true
-      case udt: UserDefinedType[_] => needsConversion(udt.sqlType)
-      case other => false
-    }
-
-    val convertedRdd = if (schema.fields.exists(f => needsConversion(f.dataType))) {
-      rdd.map(m => m.zip(schema.fields).map {
-        case (value, field) => EvaluatePython.fromJava(value, field.dataType)
-      })
-    } else {
-      rdd
-    }
-
-    val rowRdd = convertedRdd.mapPartitions { iter =>
-      iter.map { m => new GenericInternalRow(m): InternalRow}
-    }
-
+    val rowRdd = rdd.map(r => EvaluatePython.fromJava(r, schema).asInstanceOf[InternalRow])
     DataFrame(this, LogicalRDD(schema.toAttributes, rowRdd)(self))
   }
 

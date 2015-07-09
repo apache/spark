@@ -20,10 +20,13 @@ package org.apache.spark.sql.catalyst.expressions
 import java.util.regex.Pattern
 
 import org.apache.commons.lang3.StringUtils
+
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.UnresolvedException
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
+
 
 trait StringRegexExpression extends ExpectsInputTypes {
   self: BinaryExpression =>
@@ -247,7 +250,7 @@ case class Substring(str: Expression, pos: Expression, len: Expression)
           val (st, end) = slicePos(start, length, () => ba.length)
           ba.slice(st, end)
         case s: UTF8String =>
-          val (st, end) = slicePos(start, length, () => s.length())
+          val (st, end) = slicePos(start, length, () => s.numChars())
           s.substring(st, end)
       }
     }
@@ -262,10 +265,10 @@ case class StringLength(child: Expression) extends UnaryExpression with ExpectsI
   override def inputTypes: Seq[DataType] = Seq(StringType)
 
   protected override def nullSafeEval(string: Any): Any =
-    string.asInstanceOf[UTF8String].length
+    string.asInstanceOf[UTF8String].numChars
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    defineCodeGen(ctx, ev, c => s"($c).length()")
+    defineCodeGen(ctx, ev, c => s"($c).numChars()")
   }
 
   override def prettyName: String = "length"
