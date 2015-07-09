@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.GenericRow
 import org.apache.spark.sql.types.StructType
 
@@ -363,7 +364,8 @@ trait Row extends Serializable {
     false
   }
 
-  protected def canEqual(other: Any) = other.isInstanceOf[Row]
+  protected def canEqual(other: Any) =
+    other.isInstanceOf[Row] && !other.isInstanceOf[InternalRow]
 
   override def equals(o: Any): Boolean = {
     if (!canEqual(o)) return false
