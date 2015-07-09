@@ -213,8 +213,12 @@ public final class UnsafeRow extends MutableRow {
   @Override
   public void setDouble(int ordinal, double value) {
     assertIndexIsValid(ordinal);
-    setNotNullAt(ordinal);
-    PlatformDependent.UNSAFE.putDouble(baseObject, getFieldOffset(ordinal), value);
+    if (Double.isNaN(value)) {
+      setNullAt(ordinal);
+    } else {
+      setNotNullAt(ordinal);
+      PlatformDependent.UNSAFE.putDouble(baseObject, getFieldOffset(ordinal), value);
+    }
   }
 
   @Override
@@ -241,8 +245,12 @@ public final class UnsafeRow extends MutableRow {
   @Override
   public void setFloat(int ordinal, float value) {
     assertIndexIsValid(ordinal);
-    setNotNullAt(ordinal);
-    PlatformDependent.UNSAFE.putFloat(baseObject, getFieldOffset(ordinal), value);
+    if (Float.isNaN(value)) {
+      setNullAt(ordinal);
+    } else {
+      setNotNullAt(ordinal);
+      PlatformDependent.UNSAFE.putFloat(baseObject, getFieldOffset(ordinal), value);
+    }
   }
 
   @Override

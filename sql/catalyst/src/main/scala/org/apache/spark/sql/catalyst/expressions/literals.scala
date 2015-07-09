@@ -30,8 +30,10 @@ object Literal {
   def apply(v: Any): Literal = v match {
     case i: Int => Literal(i, IntegerType)
     case l: Long => Literal(l, LongType)
-    case d: Double => Literal(d, DoubleType)
-    case f: Float => Literal(f, FloatType)
+    case d: Double =>
+      if (java.lang.Double.isNaN(d)) Literal(null, DoubleType) else Literal(d, DoubleType)
+    case f: Float =>
+      if (java.lang.Float.isNaN(f)) Literal(null, FloatType) else Literal(f, FloatType)
     case b: Byte => Literal(b, ByteType)
     case s: Short => Literal(s, ShortType)
     case s: String => Literal(UTF8String.fromString(s), StringType)

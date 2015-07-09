@@ -181,9 +181,11 @@ object EvaluatePython {
     case (c: Int, LongType) => c.toLong
     case (c: Long, LongType) => c
 
-    case (c: Double, FloatType) => c.toFloat
+    case (c: Double, FloatType) =>
+      if (java.lang.Double.isNaN(c)) null else c.toFloat
 
-    case (c: Double, DoubleType) => c
+    case (c: Double, DoubleType) =>
+      if (java.lang.Double.isNaN(c)) null else c
 
     case (c: java.math.BigDecimal, dt: DecimalType) => Decimal(c)
 
