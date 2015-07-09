@@ -599,6 +599,7 @@ class StreamingContext private[streaming] (
             case NonFatal(e) =>
               logError("Error starting the context, marking it as stopped", e)
               scheduler.stop(false)
+              env.metricsSystem.removeSource(streamingSource)
               state = StreamingContextState.STOPPED
               throw e
           }
@@ -682,6 +683,7 @@ class StreamingContext private[streaming] (
           logWarning("StreamingContext has already been stopped")
         case ACTIVE =>
           scheduler.stop(stopGracefully)
+          env.metricsSystem.removeSource(streamingSource)
           uiTab.foreach(_.detach())
           StreamingContext.setActiveContext(null)
           waiter.notifyStop()
