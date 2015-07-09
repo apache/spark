@@ -27,7 +27,7 @@ import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.graphx._
 import org.apache.spark.graphx.impl.GraphImpl
 import org.apache.spark.mllib.impl.PeriodicGraphCheckpointer
-import org.apache.spark.mllib.linalg.{Matrices, SparseVector, DenseVector, Vector}
+import org.apache.spark.mllib.linalg._
 import org.apache.spark.rdd.RDD
 
 /**
@@ -95,8 +95,11 @@ final class EMLDAOptimizer extends LDAOptimizer {
    * Compute bipartite term/doc graph.
    */
   override private[clustering] def initialize(docs: RDD[(Long, Vector)], lda: LDA): LDAOptimizer = {
+    val docConcentration = breeze.stats.mean(lda.getDocConcentration.toBreeze)
+    require({
+      lda.getDocConcentration.toArray.forall(x => math.abs(x - docConcentration) < 1E-3)
+    }, "EMLDAOptimizer currently only supports symmetric document-topic priors")
 
-    val docConcentration = lda.getDocConcentration
     val topicConcentration = lda.getTopicConcentration
     val k = lda.getK
 
@@ -229,10 +232,10 @@ final class OnlineLDAOptimizer extends LDAOptimizer {
   private var vocabSize: Int = 0
 
   /** alias for docConcentration */
-  private var alpha: Double = 0
+  private var alpha: Vector = Vectors.dense(0)
 
   /** (private[clustering] for debugging)  Get docConcentration */
-  private[clustering] def getAlpha: Double = alpha
+  private[clustering] def getAlpha: Vector = alpha
 
   /** alias for topicConcentration */
   private var eta: Double = 0
@@ -343,7 +346,11 @@ final class OnlineLDAOptimizer extends LDAOptimizer {
     this.k = lda.getK
     this.corpusSize = docs.count()
     this.vocabSize = docs.first()._2.size
-    this.alpha = if (lda.getDocConcentration == -1) 1.0 / k else lda.getDocConcentration
+    this.alpha = if (lda.getDocConcentration.toArray.forall(_ == -1.0)) {
+      Vectors.dense(Array.fill(k)(1.0 / k))
+    } else {
+      lda.getDocConcentration
+    }
     this.eta = if (lda.getTopicConcentration == -1) 1.0 / k else lda.getTopicConcentration
     this.randomGenerator = new Random(lda.getSeed)
 
@@ -372,7 +379,7 @@ final class OnlineLDAOptimizer extends LDAOptimizer {
     val vocabSize = this.vocabSize
     val Elogbeta = dirichletExpectation(lambda)
     val expElogbeta = exp(Elogbeta)
-    val alpha = this.alpha
+    val alpha = this.alpha.toBreeze
     val gammaShape = this.gammaShape
 
     val stats: RDD[BDM[Double]] = batch.mapPartitions { docs =>
@@ -400,7 +407,7 @@ final class OnlineLDAOptimizer extends LDAOptimizer {
         while (meanchange > 1e-3) {
           val lastgamma = gammad
           //        1*K                  1 * ids               ids * k
-          gammad = (expElogthetad :* ((ctsVector / phinorm) * expElogbetad.t)) + alpha
+          gammad = (expElogthetad :* ((ctsVector / phinorm) * expElogbetad.t)) :+ alpha.t
           Elogthetad = digamma(gammad) - digamma(sum(gammad))
           expElogthetad = exp(Elogthetad)
           phinorm = expElogthetad * expElogbetad + 1e-100

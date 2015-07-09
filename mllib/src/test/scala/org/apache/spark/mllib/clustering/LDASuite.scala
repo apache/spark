@@ -132,8 +132,8 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext {
 
   test("setter alias") {
     val lda = new LDA().setAlpha(2.0).setBeta(3.0)
-    assert(lda.getAlpha === 2.0)
-    assert(lda.getDocConcentration === 2.0)
+    assert(lda.getAlpha.toArray.forall(_ === 2.0))
+    assert(lda.getDocConcentration.toArray.forall(_ === 2.0))
     assert(lda.getBeta === 3.0)
     assert(lda.getTopicConcentration === 3.0)
   }
@@ -143,7 +143,7 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext {
     val corpus = sc.parallelize(tinyCorpus, 2)
     val op = new OnlineLDAOptimizer().initialize(corpus, lda)
     op.setKappa(0.9876).setMiniBatchFraction(0.123).setTau0(567)
-    assert(op.getAlpha == 0.5) // default 1.0 / k
+    assert(op.getAlpha.toArray.forall(_ == 0.5)) // default 1.0 / k
     assert(op.getEta == 0.5)   // default 1.0 / k
     assert(op.getKappa == 0.9876)
     assert(op.getMiniBatchFraction == 0.123)
