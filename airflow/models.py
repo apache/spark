@@ -820,6 +820,7 @@ class TaskInstance(Base):
 
                     self.render_templates()
                     context = self.get_template_context()
+                    settings.policy(task_copy)
                     task_copy.pre_execute(context=context)
                     task_copy.execute(context=context)
                     task_copy.post_execute(context=context)
