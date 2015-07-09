@@ -799,7 +799,7 @@ class DAGScheduler(
         case s: ResultStage =>
           val job = s.resultOfJob.get
           partitionsToCompute.map { id =>
-            val p: Int = job.partitions(id)
+            val p = job.partitions(id)
             (id, getPreferredLocs(stage.rdd, p))
           }.toMap
       }

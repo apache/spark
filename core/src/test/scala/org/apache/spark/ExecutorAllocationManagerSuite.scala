@@ -751,6 +751,42 @@ class ExecutorAllocationManagerSuite
     assert(numExecutorsTarget(manager) === 2)
   }
 
+  test("get pending task number and related locality preference") {
+    sc = createSparkContext(2, 5, 3)
+    val manager = sc.executorAllocationManager.get
+
+    val stageInfo1 = createStageInfo(1, 5)
+    stageInfo1.taskLocalityPreferences = Some(Seq(
+      Seq(TaskLocation("host1"), TaskLocation("host2"), TaskLocation("host3")),
+      Seq(TaskLocation("host1"), TaskLocation("host2"), TaskLocation("host4")),
+      Seq(TaskLocation("host2"), TaskLocation("host3"), TaskLocation("host4")),
+      Seq.empty,
+      Seq.empty
+    ))
+    sc.listenerBus.postToAll(SparkListenerStageSubmitted(stageInfo1))
+
+    val hints1 = listener(manager).executorPlacementHints()
+    assert(hints1._1 === 3)
+    assert(hints1._2 === Map("host1" -> 2, "host2" -> 3, "host3" -> 2, "host4" -> 2))
+
+    val stageInfo2 = createStageInfo(2, 3)
+    stageInfo2.taskLocalityPreferences = Some(Seq(
+      Seq(TaskLocation("host2"), TaskLocation("host3"), TaskLocation("host5")),
+      Seq(TaskLocation("host3"), TaskLocation("host4"), TaskLocation("host5")),
+      Seq.empty
+    ))
+    sc.listenerBus.postToAll(SparkListenerStageSubmitted(stageInfo2))
+
+    val hints2 = listener(manager).executorPlacementHints()
+    assert(hints2._1 === 5)
+    assert(hints2._2 === Map("host1" -> 2, "host2" -> 4, "host3" -> 4, "host4" -> 3, "host5" -> 2))
+
+    sc.listenerBus.postToAll(SparkListenerStageCompleted(stageInfo1))
+    val hints3 = listener(manager).executorPlacementHints()
+    assert(hints3._1 === 2)
+    assert(hints3._2 === Map("host2" -> 1, "host3" -> 2, "host4" -> 1, "host5" -> 2))
+  }
+
   private def createSparkContext(
       minExecutors: Int = 1,
       maxExecutors: Int = 5,
@@ -884,5 +920,11 @@ private object ExecutorAllocationManagerSuite extends PrivateMethodTester {
 
   private def onExecutorBusy(manager: ExecutorAllocationManager, id: String): Unit = {
     manager invokePrivate _onExecutorBusy(id)
+  }
+
+  private def listener(manager: ExecutorAllocationManager
+      ): manager.type#ExecutorAllocationListener = {
+    val _listener = PrivateMethod[manager.type#ExecutorAllocationListener]('listener)
+    manager invokePrivate _listener()
   }
 }

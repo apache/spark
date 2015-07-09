@@ -70,7 +70,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   protected var preferredLocalityToCount: Map[String, Int] = Map.empty
 
   // The number of pending tasks which is locality required
-  protected var localityAwarePendingTasks: Int = 0
+  protected var localityAwarePendingTasks = 0
 
   class DriverEndpoint(override val rpcEnv: RpcEnv, sparkProperties: Seq[(String, String)])
     extends ThreadSafeRpcEndpoint with Logging {

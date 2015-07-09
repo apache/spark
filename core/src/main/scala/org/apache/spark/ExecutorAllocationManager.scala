@@ -516,7 +516,7 @@ private[spark] class ExecutorAllocationManager(
    * and consistency of events returned by the listener. For simplicity, it does not account
    * for speculated tasks.
    */
-  private class ExecutorAllocationListener extends SparkListener {
+  private[spark] class ExecutorAllocationListener extends SparkListener {
 
     private val stageIdToNumTasks = new mutable.HashMap[Int, Int]
     private val stageIdToTaskIndices = new mutable.HashMap[Int, mutable.HashSet[Int]]
@@ -524,9 +524,11 @@ private[spark] class ExecutorAllocationManager(
     // Number of tasks currently running on the cluster.  Should be 0 when no stages are active.
     private var numRunningTasks: Int = _
 
-    // stageId to preferred localities map, maintain the preferred node location of each task in
-    // each stage
-    private val stageIdToPreferredLocations = new mutable.HashMap[Int, Seq[Seq[TaskLocation]]]
+    // stageId to tuple (the number of task with locality preferences, a map where each pair is a
+    // node and the number of tasks that would like to be scheduled on that node) map,
+    // maintain the executor placement hints for each stage Id used by resource framework to better
+    // place the executors.
+    private val stageIdToExecutorPlacementHints = new mutable.HashMap[Int, (Int, Map[String, Int])]
 
     override def onStageSubmitted(stageSubmitted: SparkListenerStageSubmitted): Unit = {
       initializing = false
@@ -536,9 +538,20 @@ private[spark] class ExecutorAllocationManager(
         stageIdToNumTasks(stageId) = numTasks
         allocationManager.onSchedulerBacklogged()
 
-        stageSubmitted.stageInfo.taskLocalityPreferences.foreach { m =>
-          stageIdToPreferredLocations.put(stageId, m)
+        var numTasksPending = 0
+        val localityPreferences = new mutable.HashMap[String, Int]()
+        stageSubmitted.stageInfo.taskLocalityPreferences.foreach { localities =>
+          localities.foreach { locality =>
+            if (!locality.isEmpty) {
+              numTasksPending += 1
+              locality.foreach { location =>
+                val count = localityPreferences.getOrElse(location.host, 0) + 1
+                localityPreferences(location.host) = count
+              }
+            }
+          }
         }
+        stageIdToExecutorPlacementHints.put(stageId, (numTasksPending, localityPreferences.toMap))
       }
     }
 
@@ -547,7 +560,7 @@ private[spark] class ExecutorAllocationManager(
       allocationManager.synchronized {
         stageIdToNumTasks -= stageId
         stageIdToTaskIndices -= stageId
-        stageIdToPreferredLocations -= stageId
+        stageIdToExecutorPlacementHints -= stageId
 
         // If this is the last stage with pending tasks, mark the scheduler queue as empty
         // This is needed in case the stage is aborted for any reason
@@ -653,25 +666,20 @@ private[spark] class ExecutorAllocationManager(
     }
 
     /**
-     * Get the number of locality aware pending tasks and related locality preferences as the
-     * hints used for executor allocation.
+     * Get a tuple of (the number of task with locality preferences, a map where each pair is a
+     * node and the number of tasks that would like to be scheduled on that node).
      */
     def executorPlacementHints(): (Int, Map[String, Int]) =
       allocationManager.synchronized {
-      var localityAwarePendingTasks: Int = 0
-      val localityToCount = new mutable.HashMap[String, Int]()
-      stageIdToPreferredLocations.values.foreach { localities =>
-        localities.foreach { locality =>
-          if (!locality.isEmpty) {
-            localityAwarePendingTasks += 1
-            locality.foreach { location =>
-              val count = localityToCount.getOrElse(location.host, 0) + 1
-              localityToCount(location.host) = count
-            }
+        var localityAwarePendingTasks = 0
+        val localityToCount = new mutable.HashMap[String, Int]()
+        stageIdToExecutorPlacementHints.values.foreach { case (numTasksPending, localities) =>
+          localityAwarePendingTasks += numTasksPending
+          localities.foreach { case (hostname, count) =>
+            val updatedCount = localityToCount.getOrElse(hostname, 0) + count
+            localityToCount(hostname) = updatedCount
           }
         }
-      }
-
       (localityAwarePendingTasks, localityToCount.toMap)
     }
   }
