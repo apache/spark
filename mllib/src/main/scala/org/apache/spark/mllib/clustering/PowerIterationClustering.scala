@@ -66,7 +66,7 @@ object PowerIterationClusteringModel extends Loader[PowerIterationClusteringMode
     val thisClassName = "org.apache.spark.mllib.clustering.PowerIterationClusteringModel"
 
     def save(sc: SparkContext, model: PowerIterationClusteringModel, path: String): Unit = {
-      val sqlContext = new SQLContext(sc)
+      val sqlContext = SQLContext.getOrCreate(sc)
       import sqlContext.implicits._
 
       val metadata = compact(render(
@@ -79,7 +79,7 @@ object PowerIterationClusteringModel extends Loader[PowerIterationClusteringMode
 
     def load(sc: SparkContext, path: String): PowerIterationClusteringModel = {
       implicit val formats = DefaultFormats
-      val sqlContext = new SQLContext(sc)
+      val sqlContext = SQLContext.getOrCreate(sc)
 
       val (className, formatVersion, metadata) = Loader.loadMetadata(sc, path)
       assert(className == thisClassName)
