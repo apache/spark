@@ -21,6 +21,7 @@ import java.io.{FileOutputStream, PrintStream, File}
 import java.net.URI
 import java.util.jar.JarFile
 
+import com.google.common.io.Files
 import org.apache.spark.util.{RedirectThread, Utils}
 
 import scala.collection.JavaConversions._
@@ -37,7 +38,7 @@ private[deploy] object RPackageUtils {
   private final val RJarEntries = "R/pkg"
 
   /** Documentation on how the R source file layout should be in the jar. */
-  private final val RJarDoc =
+  private[deploy] final val RJarDoc =
     s"""In order for Spark to build R packages that are parts of Spark Packages, there are a few
       |requirements. The R source code must be shipped in a jar, with additional Java/Scala
       |classes. The jar must be in the following format:
@@ -70,13 +71,10 @@ private[deploy] object RPackageUtils {
 
   /**
    * Runs the standard R package installation code to build the R package from source.
-   * Multiple runs don't cause problems. Exposed for testing.
+   * Multiple runs don't cause problems.
    */
-  private[deploy] def rPackageBuilder(
-      dir: File,
-      printStream: PrintStream,
-      verbose: Boolean): Boolean = {
-    val sparkHome = sys.env.get("SPARK_HOME").orNull
+  private def rPackageBuilder(dir: File, printStream: PrintStream, verbose: Boolean): Boolean = {
+    val sparkHome = sys.env.get("SPARK_HOME").orElse(sys.props.get("spark.test.home")).orNull
     if (sparkHome == null) throw new IllegalArgumentException("SPARK_HOME not set!")
     val pathToSparkR = Seq(sparkHome, "R", "lib").mkString(File.separator)
     val pathToPkg = Seq(dir, "R", "pkg").mkString(File.separator)
@@ -90,7 +88,7 @@ private[deploy] object RPackageUtils {
       val env = builder.environment()
       env.clear()
       val process = builder.start()
-      new RedirectThread(process.getInputStream, printStream, "redirect R output").start()
+      new RedirectThread(process.getInputStream, printStream, "redirect R packaging").start()
       process.waitFor() == 0
     } catch {
       case e: Throwable =>
@@ -119,6 +117,7 @@ private[deploy] object RPackageUtils {
         } else {
           val inStream = jar.getInputStream(entry)
           val outPath = new File(tempDir, entryPath)
+          Files.createParentDirs(outPath)
           val outStream = new FileOutputStream(outPath)
           if (verbose) {
             printStream.println(s"Extracting $entry to $outPath")
@@ -137,8 +136,8 @@ private[deploy] object RPackageUtils {
       jars: String,
       printStream: PrintStream,
       verbose: Boolean): Unit = {
-    jars.split(",").foreach { jarUri =>
-      val file = new File(new URI(jarUri))
+    jars.split(",").foreach { jarPath =>
+      val file = new File(jarPath)
       if (file.exists()) {
         val jar = new JarFile(file)
         if (checkManifestForR(jar)) {

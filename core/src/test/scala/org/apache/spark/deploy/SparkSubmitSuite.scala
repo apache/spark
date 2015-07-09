@@ -349,11 +349,29 @@ class SparkSubmitSuite
         "--class", JarCreationTest.getClass.getName.stripSuffix("$"),
         "--name", "testApp",
         "--master", "local-cluster[2,1,512]",
-        "--packages", Seq(main, dep).mkString(","),
+        "--packages", main.toString,
         "--repositories", repo,
         "--conf", "spark.ui.enabled=false",
         unusedJar.toString,
         "my.great.lib.MyLib", "my.great.dep.MyLib")
+      runSparkSubmit(args)
+    }
+  }
+
+  test("correctly builds R packages included in a jar with --packages") {
+    val main = MavenCoordinate("my.great.lib", "mylib", "0.1")
+    val sparkHome = sys.props.getOrElse("spark.test.home", fail("spark.test.home is not set!"))
+    val rScriptDir =
+      Seq(sparkHome, "R", "pkg", "inst", "tests", "packageInAJarTest.R").mkString(File.separator)
+    assert(new File(rScriptDir).exists)
+    IvyTestUtils.withRepository(main, None, None, withR = true) { repo =>
+      val args = Seq(
+        "--name", "testApp",
+        "--master", "local-cluster[2,1,512]",
+        "--packages", main.toString,
+        "--repositories", repo,
+        "--conf", "spark.ui.enabled=false",
+        rScriptDir)
       runSparkSubmit(args)
     }
   }
