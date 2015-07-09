@@ -29,7 +29,8 @@ class PrefixspanSuite extends SparkFunSuite with MLlibTestSparkContext {
       prefixSpanSeqs = read_baskets("prefixSpanSeqs", info = c("sequenceID","eventID","SIZE"))
       freqItemSeq = cspade(
         prefixSpanSeqs,
-        parameter = list(support = 2 / length(unique(transactionInfo(prefixSpanSeqs)$sequenceID)), maxlen = 2 ))
+        parameter = list(support =
+          2 / length(unique(transactionInfo(prefixSpanSeqs)$sequenceID)), maxlen = 2 ))
       resSeq = as(freqItemSeq, "data.frame")
       resSeq
     */
@@ -64,23 +65,23 @@ class PrefixspanSuite extends SparkFunSuite with MLlibTestSparkContext {
     val result1 = prefixspan.run(rdd)
     val expectedValue1 = Array(
       (Array(1), 4L),
-      (Array(1,3),2L),
-      (Array(1,3,4), 2L),
-      (Array(1,3,4,5), 2L),
-      (Array(1,3,5), 2L),
-      (Array(1,4), 2L),
-      (Array(1,4,5), 2L),
-      (Array(1,5), 2L),
+      (Array(1, 3), 2L),
+      (Array(1, 3, 4), 2L),
+      (Array(1, 3, 4, 5), 2L),
+      (Array(1, 3, 5), 2L),
+      (Array(1, 4), 2L),
+      (Array(1, 4, 5), 2L),
+      (Array(1, 5), 2L),
       (Array(2), 2L),
-      (Array(2,1), 2L),
+      (Array(2, 1), 2L),
       (Array(3), 5L),
-      (Array(3,1), 2L),
-      (Array(3,3), 2L),
-      (Array(3,4), 3L),
-      (Array(3,4,5), 2L),
-      (Array(3,5), 2L),
+      (Array(3, 1), 2L),
+      (Array(3, 3), 2L),
+      (Array(3, 4), 3L),
+      (Array(3, 4, 5), 2L),
+      (Array(3, 5), 2L),
       (Array(4), 4L),
-      (Array(4,5), 2L),
+      (Array(4, 5), 2L),
       (Array(5), 3L)
     )
     assert(compareResult(expectedValue1, result1.collect()))
@@ -90,7 +91,7 @@ class PrefixspanSuite extends SparkFunSuite with MLlibTestSparkContext {
     val expectedValue2 = Array(
       (Array(1), 4L),
       (Array(3), 5L),
-      (Array(3,4), 3L),
+      (Array(3, 4), 3L),
       (Array(4), 4L),
       (Array(5), 3L)
     )
@@ -100,18 +101,18 @@ class PrefixspanSuite extends SparkFunSuite with MLlibTestSparkContext {
     val result3 = prefixspan.run(rdd)
     val expectedValue3 = Array(
       (Array(1), 4L),
-      (Array(1,3), 2L),
+      (Array(1, 3), 2L),
       (Array(1,4), 2L),
-      (Array(1,5), 2L),
-      (Array(2,1), 2L),
+      (Array(1, 5), 2L),
+      (Array(2, 1), 2L),
       (Array(2), 2L),
       (Array(3), 5L),
-      (Array(3,1), 2L),
-      (Array(3,3), 2L),
-      (Array(3,4), 3L),
-      (Array(3,5), 2L),
+      (Array(3, 1), 2L),
+      (Array(3, 3), 2L),
+      (Array(3, 4), 3L),
+      (Array(3, 5), 2L),
       (Array(4), 4L),
-      (Array(4,5), 2L),
+      (Array(4, 5), 2L),
       (Array(5), 3L)
     )
     assert(compareResult(expectedValue3, result3.collect()))
