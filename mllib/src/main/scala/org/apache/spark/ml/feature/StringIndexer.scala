@@ -135,11 +135,7 @@ class StringIndexerModel private[ml] (
       if (labelToIndex.contains(label)) {
         labelToIndex(label)
       } else {
-        if (!getSkipInvalid) {
-          throw new SparkException(s"Unseen label: $label.")
-        } else {
-          throw new SparkException(s"Unseen label even when pre-filtering: $label.")
-        }
+        throw new SparkException(s"Unseen label: $label.")
       }
     }
 
