@@ -19,8 +19,6 @@ package org.apache.spark.ml.tuning
 
 import scala.reflect.ClassTag
 
-import com.github.fommil.netlib.F2jBLAS
-
 import org.apache.spark.Logging
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.ml.evaluation.Evaluator
