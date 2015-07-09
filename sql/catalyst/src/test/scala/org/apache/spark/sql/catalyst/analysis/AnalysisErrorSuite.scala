@@ -58,7 +58,7 @@ class AnalysisErrorSuite extends SparkFunSuite with BeforeAndAfter {
         }
       }
 
-      errorMessages.foreach(m => assert(error.getMessage.toLowerCase contains m.toLowerCase))
+      errorMessages.foreach(m => assert(error.getMessage.toLowerCase.contains(m.toLowerCase)))
     }
   }
 
