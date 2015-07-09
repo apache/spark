@@ -27,6 +27,10 @@ class AirflowException(Exception):
     pass
 
 
+class AirflowSensorTimeout(Exception):
+    pass
+
+
 class State(object):
     """
     Static class with task instance states constants and color method to
@@ -146,6 +150,15 @@ def initdb():
             models.Connection(
                 conn_id='sqlite_default', conn_type='sqlite',
                 host='{}/sqlite_default.db'.format(home)))
+        session.commit()
+
+    conn = session.query(C).filter(C.conn_id == 'http_default').first()
+    if not conn:
+        home = conf.get('core', 'AIRFLOW_HOME')
+        session.add(
+            models.Connection(
+                conn_id='http_default', conn_type='http',
+                host='http://www.google.com'))
         session.commit()
 
     # Known event types

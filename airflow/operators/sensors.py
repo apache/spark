@@ -8,7 +8,8 @@ from airflow.models import BaseOperator
 from airflow.models import Connection as DB
 from airflow.models import State
 from airflow.models import TaskInstance
-from airflow.utils import apply_defaults, AirflowException
+from airflow.utils import (
+    apply_defaults, AirflowException, AirflowSensorTimeout)
 
 
 class BaseSensorOperator(BaseOperator):
@@ -48,7 +49,7 @@ class BaseSensorOperator(BaseOperator):
         while not self.poke(context):
             sleep(self.poke_interval)
             if (datetime.now() - started_at).seconds > self.timeout:
-                raise AirflowException('Snap. Time is OUT.')
+                raise AirflowSensorTimeout('Snap. Time is OUT.')
         logging.info("Success criteria met. Exiting.")
 
 
@@ -331,3 +332,62 @@ class TimeSensor(BaseSensorOperator):
         logging.info(
             'Checking if the time ({0}) has come'.format(self.target_time))
         return datetime.now().time() > self.target_time
+
+
+class HttpSensor(BaseSensorOperator):
+    """
+    Executes a HTTP get statement and returns False on failure:
+        404 not found or response_check function returned False
+
+    :param http_conn_id: The connection to run the sensor against
+    :type http_conn_id: string
+    :param endpoint: The relative part of the full url
+    :type endpoint: string
+    :param params: The parameters to be added to the GET url
+    :type params: a dictionary of string key/value pairs
+    :param headers: The HTTP headers to be added to the GET request
+    :type headers: a dictionary of string key/value pairs
+    :param response_check: A check against the 'requests' response object.
+        Returns True for 'pass' and False otherwise.
+    :type response_check: A lambda or defined function.
+    :param extra_options: Extra options for the 'requests' library, see the
+        'requests' documentation (options to modify timeout, ssl, etc.)
+    :type extra_options: A dictionary of options, where key is string and value
+        depends on the option that's being modified.
+    """
+
+    template_fields = ('endpoint',)
+
+    @apply_defaults
+    def __init__(self,
+                 endpoint,
+                 http_conn_id='http_default',
+                 params=None,
+                 headers=None,
+                 response_check=None,
+                 extra_options=None, *args, **kwargs):
+        super(HttpSensor, self).__init__(*args, **kwargs)
+        self.endpoint = endpoint
+        self.http_conn_id = http_conn_id
+        self.params = params or {}
+        self.headers = headers or {}
+        self.extra_options = extra_options or {}
+        self.response_check = response_check
+
+        self.hook = hooks.HttpHook(method='GET', http_conn_id=http_conn_id)
+
+    def poke(self, context):
+        logging.info('Poking: ' + self.endpoint)
+        try:
+            response = self.hook.run(self.endpoint,
+                                     data=self.params,
+                                     headers=self.headers,
+                                     extra_options=self.extra_options)
+            if self.response_check:
+                # run content check on response
+                return self.response_check(response)
+        except AirflowException as ae:
+            if ae.message.startswith("404"):
+                return False
+
+        return True

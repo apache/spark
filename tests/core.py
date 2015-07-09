@@ -4,6 +4,7 @@ from airflow import configuration
 configuration.test_mode()
 from airflow import jobs, models, DAG, executors, utils, operators
 from airflow.www.app import app
+from airflow import utils
 
 NUM_EXAMPLE_DAGS = 4
 DEV_NULL = '/dev/null'
@@ -335,6 +336,64 @@ if 'PostgresOperator' in dir(operators):
                 end_date=DEFAULT_DATE,
                 force=True)
 
+
+class HttpOpSensorTest(unittest.TestCase):
+
+    def setUp(self):
+        configuration.test_mode()
+        utils.initdb()
+        args = {'owner': 'airflow', 'start_date': datetime(2015, 1, 1)}
+        dag = DAG('http_test', default_args=args)
+        self.dag = dag
+
+    def test_get(self):
+        t = operators.SimpleHttpOperator(
+            task_id='get_op',
+            method='GET',
+            endpoint='/search',
+            data={"client": "ubuntu", "q": "airflow"},
+            headers={},
+            dag=self.dag)
+        t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
+
+    def test_get_response_check(self):
+        t = operators.SimpleHttpOperator(
+            task_id='get_op',
+            method='GET',
+            endpoint='/search',
+            data={"client": "ubuntu", "q": "airflow"},
+            response_check=lambda response: ("airbnb/airflow" in response.text),
+            headers={},
+            dag=self.dag)
+        t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
+
+    def test_sensor(self):
+        sensor = operators.HttpSensor(
+            task_id='http_sensor_check',
+            conn_id='http_default',
+            endpoint='/search',
+            params={"client": "ubuntu", "q": "airflow"},
+            headers={},
+            response_check=lambda response: ("airbnb/airflow" in response.text),
+            poke_interval=5,
+            timeout=15,
+            dag=self.dag)
+        sensor.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
+
+    def test_sensor_timeout(self):
+        sensor = operators.HttpSensor(
+            task_id='http_sensor_check',
+            conn_id='http_default',
+            endpoint='/search',
+            params={"client": "ubuntu", "q": "airflow"},
+            headers={},
+            response_check=lambda response: ("dingdong" in response.text),
+            poke_interval=2,
+            timeout=5,
+            dag=self.dag)
+        with self.assertRaises(utils.AirflowSensorTimeout):
+            sensor.run(
+                start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
 
 if __name__ == '__main__':
     unittest.main()
