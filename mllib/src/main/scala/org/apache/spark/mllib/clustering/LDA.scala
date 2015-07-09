@@ -23,7 +23,7 @@ import org.apache.spark.Logging
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.api.java.JavaPairRDD
 import org.apache.spark.graphx._
-import org.apache.spark.mllib.linalg.Vector
+import org.apache.spark.mllib.linalg.{Vectors, Vector}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.Utils
 
@@ -49,11 +49,23 @@ import org.apache.spark.util.Utils
 class LDA private (
     private var k: Int,
     private var maxIterations: Int,
-    private var docConcentration: Double,
+    private var docConcentration: Vector,
     private var topicConcentration: Double,
     private var seed: Long,
     private var checkpointInterval: Int,
     private var ldaOptimizer: LDAOptimizer) extends Logging {
+
+  def this(
+      k: Int,
+      maxIterations: Int,
+      docConcentration: Double,
+      topicConcentration: Double,
+      seed: Long,
+      checkpointInterval: Int,
+      ldaOptimizer: LDAOptimizer) = {
+    this(k, maxIterations, Vectors.dense(Array.fill(k)(docConcentration)), topicConcentration,
+      seed, checkpointInterval, ldaOptimizer)
+  }
 
   def this() = this(k = 10, maxIterations = 20, docConcentration = -1, topicConcentration = -1,
     seed = Utils.random.nextLong(), checkpointInterval = 10, ldaOptimizer = new EMLDAOptimizer)
@@ -77,37 +89,47 @@ class LDA private (
    * Concentration parameter (commonly named "alpha") for the prior placed on documents'
    * distributions over topics ("theta").
    *
-   * This is the parameter to a symmetric Dirichlet distribution.
+   * This is the parameter to a Dirichlet distribution.
    */
-  def getDocConcentration: Double = this.docConcentration
+  def getDocConcentration: Vector = this.docConcentration
 
   /**
    * Concentration parameter (commonly named "alpha") for the prior placed on documents'
    * distributions over topics ("theta").
    *
-   * This is the parameter to a symmetric Dirichlet distribution, where larger values
-   * mean more smoothing (more regularization).
+   * This is the parameter to a Dirichlet distribution, where larger values mean more smoothing
+   * (more regularization).
    *
-   * If set to -1, then docConcentration is set automatically.
-   *  (default = -1 = automatic)
+   * If set to a vector of -1, then docConcentration is set automatically.
+   *  (default = a vector of -1 = automatic)
    *
    * Optimizer-specific parameter settings:
    *  - EM
+   *     - Currently only supports symmetric distributions, so values in the vector must be the same
    *     - Value should be > 1.0
    *     - default = (50 / k) + 1, where 50/k is common in LDA libraries and +1 follows
    *       Asuncion et al. (2009), who recommend a +1 adjustment for EM.
    *  - Online
-   *     - Value should be >= 0
-   *     - default = (1.0 / k), following the implementation from
+   *     - Values should be >= 0
+   *     - default = uniformly (1.0 / k), following the implementation from
    *       [[https://github.com/Blei-Lab/onlineldavb]].
    */
-  def setDocConcentration(docConcentration: Double): this.type = {
+  def setDocConcentration(docConcentration: Vector): this.type = {
     this.docConcentration = docConcentration
     this
   }
 
+  /** Replicates Double to create a symmetric prior */
+  def setDocConcentration(docConcentration: Double): this.type = {
+    this.docConcentration = Vectors.dense(Array.fill(k)(docConcentration))
+    this
+  }
+
   /** Alias for [[getDocConcentration]] */
-  def getAlpha: Double = getDocConcentration
+  def getAlpha: Vector = getDocConcentration
+
+  /** Alias for [[setDocConcentration()]] */
+  def setAlpha(alpha: Vector): this.type = setDocConcentration(alpha)
 
   /** Alias for [[setDocConcentration()]] */
   def setAlpha(alpha: Double): this.type = setDocConcentration(alpha)
@@ -242,6 +264,8 @@ class LDA private (
    * @return  Inferred LDA model
    */
   def run(documents: RDD[(Long, Vector)]): LDAModel = {
+    require(docConcentration.size == this.k, "Dimension of alpha and k must be equal.")
+
     val state = ldaOptimizer.initialize(documents, this)
     var iter = 0
     val iterationTimes = Array.fill[Double](maxIterations)(0)
