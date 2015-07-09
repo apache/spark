@@ -158,7 +158,7 @@ class HypothesisTestSuite extends SparkFunSuite with MLlibTestSparkContext {
     }
   }
 
-  test("1 sample Kolmogorov-Smirnov test") {
+  test("1 sample Kolmogorov-Smirnov test: apache commons math3 implementation equivalence") {
     // Create theoretical distributions
     val stdNormalDist = new NormalDistribution(0, 1)
     val expDist = new ExponentialDistribution(0.6)
@@ -215,7 +215,9 @@ class HypothesisTestSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(result3.pValue ~== referencePVal3 relTol 1e-4)
     // reject null hypothesis
     assert(result3.pValue < pThreshold)
+  }
 
+  test("1 sample Kolmogorov-Smirnov test: R implementation equivalence") {
     /*
       Comparing results with R's implementation of Kolmogorov-Smirnov for 1 sample
       > sessionInfo()

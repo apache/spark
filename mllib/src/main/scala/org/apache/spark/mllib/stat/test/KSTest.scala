@@ -38,28 +38,29 @@ import org.apache.spark.rdd.RDD
  * calculate an empirical cumulative distribution value for each observation, and a theoretical
  * cumulative distribution value. We know the latter to be correct, while the former will be off by
  * a constant (how large the constant is depends on how many values precede it in other partitions).
- * However, given that this constant simply shifts the ECDF upwards, but doesn't change its shape,
- * and furthermore, that constant is the same within a given partition, we can pick 2 values
- * in each partition that can potentially resolve to the largest global distance. Namely, we
- * pick the minimum distance and the maximum distance. Additionally, we keep track of how many
- * elements are in each partition. Once these three values have been returned for every partition,
- * we can collect and operate locally. Locally, we can now adjust each distance by the appropriate
- * constant (the cumulative sum of # of elements in the prior partitions divided by the data set
- * size). Finally, we take the maximum absolute value, and this is the statistic.
+ * However, given that this constant simply shifts the empirical CDF upwards, but doesn't
+ * change its shape, and furthermore, that constant is the same within a given partition, we can
+ * pick 2 values in each partition that can potentially resolve to the largest global distance.
+ * Namely, we pick the minimum distance and the maximum distance. Additionally, we keep track of how
+ * many elements are in each partition. Once these three values have been returned for every
+ * partition, we can collect and operate locally. Locally, we can now adjust each distance by the
+ * appropriate constant (the cumulative sum of number of elements in the prior partitions divided by
+ * thedata set size). Finally, we take the maximum absolute value, and this is the statistic.
  */
 private[stat] object KSTest extends Logging {
 
   // Null hypothesis for the type of KS test to be included in the result.
   object NullHypothesis extends Enumeration {
     type NullHypothesis = Value
-    val oneSampleTwoSided = Value("Sample follows theoretical distribution")
+    val OneSampleTwoSided = Value("Sample follows theoretical distribution")
   }
 
   /**
    * Runs a KS test for 1 set of sample data, comparing it to a theoretical distribution
    * @param data `RDD[Double]` data on which to run test
    * @param cdf `Double => Double` function to calculate the theoretical CDF
-   * @return KSTestResult summarizing the test results (pval, statistic, and null hypothesis)
+   * @return [[org.apache.spark.mllib.stat.test.KSTestResult]] summarizing the test results
+   *        (p-value, statistic, and null hypothesis)
    */
   def testOneSample(data: RDD[Double], cdf: Double => Double): KSTestResult = {
     val n = data.count().toDouble
@@ -75,7 +76,8 @@ private[stat] object KSTest extends Logging {
    * Runs a KS test for 1 set of sample data, comparing it to a theoretical distribution
    * @param data `RDD[Double]` data on which to run test
    * @param createDist `Unit => RealDistribution` function to create a theoretical distribution
-   * @return KSTestResult summarizing the test results (pval, statistic, and null hypothesis)
+   * @return [[org.apache.spark.mllib.stat.test.KSTestResult]] summarizing the test results
+   *        (p-value, statistic, and null hypothesis)
    */
   def testOneSample(data: RDD[Double], createDist: () => RealDistribution): KSTestResult = {
     val n = data.count().toDouble
@@ -94,15 +96,15 @@ private[stat] object KSTest extends Logging {
    * @param n `Double` the total size of the RDD
    * @param cdf `Double => Double` a function the calculates the theoretical CDF of a value
    * @return `Iterator[(Double, Double)] `Unadjusted (ie. off by a constant) potential extrema
-   *        in a partition. The first element corresponds to the (ECDF - 1/N) - CDF, the second
-   *        element corresponds to ECDF - CDF.  We can then search the resulting iterator
-   *        for the minimum of the first and the maximum of the second element, and provide this
-   *        as a partition's candidate extrema
+   *        in a partition. The first element corresponds to the (empirical CDF - 1/N) - CDF,
+   *        the second element corresponds to empirical CDF - CDF.  We can then search the resulting
+   *        iterator for the minimum of the first and the maximum of the second element, and provide
+   *        this as a partition's candidate extrema
    */
   private def oneSampleDifferences(partData: Iterator[Double], n: Double, cdf: Double => Double)
     : Iterator[(Double, Double)] = {
     // zip data with index (within that partition)
-    // calculate local (unadjusted) ECDF and subtract CDF
+    // calculate local (unadjusted) empirical CDF and subtract CDF
     partData.zipWithIndex.map { case (v, ix) =>
       // dp and dl are later adjusted by constant, when global info is available
       val dp = (ix + 1) / n
@@ -125,8 +127,9 @@ private[stat] object KSTest extends Logging {
    * Search the unadjusted differences in a partition and return the
    * two extrema (furthest below and furthest above CDF), along with a count of elements in that
    * partition
-   * @param partDiffs `Iterator[(Double, Double)]` the unadjusted differences between ECDF and CDF
-   *                 in a partition, which come as a tuple of (ECDF - 1/N - CDF, ECDF - CDF)
+   * @param partDiffs `Iterator[(Double, Double)]` the unadjusted differences between empirical CDF
+   *                 and CDFin a partition, which come as a tuple of
+   *                 (empirical CDF - 1/N - CDF, empirical CDF - CDF)
    * @return `Iterator[(Double, Double, Double)]` the local extrema and a count of elements
    */
   private def searchOneSampleCandidates(partDiffs: Iterator[(Double, Double)])
@@ -140,9 +143,9 @@ private[stat] object KSTest extends Logging {
   }
 
   /**
-   * Find the global maximum distance between ECDF and CDF (i.e. the KS Statistic) after adjusting
-   * local extrema estimates from individual partitions with the amount of elements in preceding
-   * partitions
+   * Find the global maximum distance between empirical CDF and CDF (i.e. the KS statistic) after
+   * adjusting local extrema estimates from individual partitions with the amount of elements in
+   * preceding partitions
    * @param localData `Array[(Double, Double, Double)]` A local array containing the collected
    *                 results of `searchOneSampleCandidates` across all partitions
    * @param n `Double`The size of the RDD
@@ -151,8 +154,8 @@ private[stat] object KSTest extends Logging {
   private def searchOneSampleStatistic(localData: Array[(Double, Double, Double)], n: Double)
     : Double = {
     val initAcc = (Double.MinValue, 0.0)
-    // adjust differences based on the # of elements preceding it, which should provide
-    // the correct distance between ECDF and CDF
+    // adjust differences based on the number of elements preceding it, which should provide
+    // the correct distance between empirical CDF and CDF
     val results = localData.foldLeft(initAcc) { case ((prevMax, prevCt), (minCand, maxCand, ct)) =>
       val adjConst = prevCt / n
       val dist1 = math.abs(minCand + adjConst)
@@ -169,7 +172,8 @@ private[stat] object KSTest extends Logging {
    * @param data the sample data that we wish to evaluate
    * @param distName the name of the theoretical distribution
    * @param params Variable length parameter for distribution's parameters
-   * @return KSTestResult summarizing the test results (pval, statistic, and null hypothesis)
+   * @return [[org.apache.spark.mllib.stat.test.KSTestResult]] summarizing the test results
+   *        (p-value, statistic, and null hypothesis)
    */
   @varargs
   def testOneSample(data: RDD[Double], distName: String, params: Double*): KSTestResult = {
@@ -183,13 +187,13 @@ private[stat] object KSTest extends Logging {
             new NormalDistribution(params(0), params(1))
           } else {
             // if no parameters passed in initializes to standard normal
-            logInfo("No parameters specified for Normal distribution," +
+            logInfo("No parameters specified for normal distribution," +
               "initialized to standard normal (i.e. N(0, 1))")
             new NormalDistribution(0, 1)
           }
         }
         case  _ => throw new UnsupportedOperationException(s"$distName not yet supported through" +
-          s" convenience method. Current options are:[stdnorm].")
+          s" convenience method. Current options are:['norm'].")
       }
 
     testOneSample(data, distanceCalc)
@@ -197,7 +201,7 @@ private[stat] object KSTest extends Logging {
 
   private def evalOneSampleP(ksStat: Double, n: Long): KSTestResult = {
     val pval = 1 - new KolmogorovSmirnovTest().cdf(ksStat, n.toInt)
-    new KSTestResult(pval, ksStat, NullHypothesis.oneSampleTwoSided.toString)
+    new KSTestResult(pval, ksStat, NullHypothesis.OneSampleTwoSided.toString)
   }
 }
 
