@@ -501,7 +501,15 @@ private[hive] case class HiveGenericUDTF(
   protected lazy val inputInspectors = children.map(toInspector)
 
   @transient
-  protected lazy val outputInspector = function.initialize(inputInspectors.toArray)
+  protected lazy val outputInspector = {
+    /**
+     * Field names are not used in HiveGenericUDTF#initialize(),
+     * so they are filled with empty strings.
+     */
+    function.initialize(ObjectInspectorFactory.getStandardStructObjectInspector(
+      (0 until inputInspectors.size).map(_ => ""),
+      inputInspectors))
+  }
 
   @transient
   protected lazy val udtInput = new Array[AnyRef](children.length)
