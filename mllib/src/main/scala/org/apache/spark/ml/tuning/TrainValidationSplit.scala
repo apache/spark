@@ -17,7 +17,10 @@
 
 package org.apache.spark.ml.tuning
 
+import scala.reflect.ClassTag
+
 import com.github.fommil.netlib.F2jBLAS
+
 import org.apache.spark.Logging
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.ml.evaluation.Evaluator
@@ -30,13 +33,11 @@ import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
 import org.apache.spark.util.random.BernoulliCellSampler
 
-import scala.reflect.ClassTag
 
 /**
  * Params for [[TrainValidatorSplit]] and [[TrainValidatorSplitModel]].
  */
 private[ml] trait TrainValidatorSplitParams extends ValidatorParams {
-
   /**
    * Param for ratio between train and validation data. Must be between 0 and 1.
    * Default: 0.75
@@ -51,7 +52,7 @@ private[ml] trait TrainValidatorSplitParams extends ValidatorParams {
   setDefault(trainRatio -> 0.75)
 }
 
-  /**
+/**
  * :: Experimental ::
  * Validation for hyper-parameter tuning.
  * Randomly splits the input dataset into train and validation sets.
@@ -78,7 +79,7 @@ class TrainValidatorSplit(override val uid: String) extends Estimator[TrainValid
   /** @group setParam */
   def setTrainRatio(value: Double): this.type = set(trainRatio, value)
 
-  private def sample[T: ClassTag](
+  private[this] def sample[T: ClassTag](
       rdd: RDD[T],
       lb: Double,
       ub: Double,
