@@ -18,7 +18,7 @@
 package org.apache.spark.scheduler.cluster.mesos
 
 import java.io.File
-import java.util.{List => JList}
+import java.util.{List => JList, Collections}
 import java.util.concurrent.locks.ReentrantLock
 
 import scala.collection.JavaConversions._
@@ -239,7 +239,9 @@ private[spark] class CoarseMesosSchedulerBackend(
 
           // accept the offer and launch the task
           logDebug(s"Accepting offer: $id with attributes: $offerAttributes mem: $mem cpu: $cpus")
-          d.launchTasks(List(offer.getId), List(task.build()), filters)
+          d.launchTasks(
+            Collections.singleton(offer.getId),
+            Collections.singleton(task.build()), filters)
         } else {
           // Decline the offer
           logDebug(s"Declining offer: $id with attributes: $offerAttributes mem: $mem cpu: $cpus")

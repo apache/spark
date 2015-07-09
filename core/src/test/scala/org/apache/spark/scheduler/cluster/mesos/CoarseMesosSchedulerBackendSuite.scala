@@ -86,7 +86,8 @@ class CoarseMesosSchedulerBackendSuite extends SparkFunSuite
     sparkConf.set("spark.driver.host", "driverHost")
     sparkConf.set("spark.driver.port", "1234")
 
-    val minMem = MemoryUtils.calculateTotalMemory(sc).toInt
+    val backend = createSchedulerBackend(taskScheduler, driver)
+    val minMem = backend.calculateTotalMemory(sc).toInt
     val minCpu = 4
 
     val mesosOffers = new java.util.ArrayList[Offer]
@@ -94,15 +95,14 @@ class CoarseMesosSchedulerBackendSuite extends SparkFunSuite
 
     val taskID0 = TaskID.newBuilder().setValue("0").build()
 
-    val backend = createSchedulerBackend(taskScheduler, driver)
-
     backend.resourceOffers(driver, mesosOffers)
     verify(driver, times(1)).launchTasks(
       Matchers.eq(Collections.singleton(mesosOffers.get(0).getId)),
       any[util.Collection[TaskInfo]],
       any[Filters])
 
-    // Calling doKillExecutors should invoke driver.killTask.
+    // simulate the allocation manager down-scaling executors
+    backend.doRequestTotalExecutors(0)
     assert(backend.doKillExecutors(Seq("s1/0")))
     verify(driver, times(1)).killTask(taskID0)
 
@@ -133,7 +133,8 @@ class CoarseMesosSchedulerBackendSuite extends SparkFunSuite
     val taskScheduler = mock[TaskSchedulerImpl]
     when(taskScheduler.sc).thenReturn(sc)
 
-    val minMem = MemoryUtils.calculateTotalMemory(sc).toInt + 1024
+    val backend = createSchedulerBackend(taskScheduler, driver)
+    val minMem = backend.calculateTotalMemory(sc).toInt + 1024
     val minCpu = 4
 
     val mesosOffers = new java.util.ArrayList[Offer]
@@ -141,8 +142,6 @@ class CoarseMesosSchedulerBackendSuite extends SparkFunSuite
     mesosOffers.add(offer1)
 
     val offer2 = createOffer("o2", "s1", minMem, 1);
-
-    val backend = createSchedulerBackend(taskScheduler, driver)
 
     backend.resourceOffers(driver, mesosOffers)
 
