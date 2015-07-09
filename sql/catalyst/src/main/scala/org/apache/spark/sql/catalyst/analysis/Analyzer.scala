@@ -43,7 +43,7 @@ class Analyzer(
     registry: FunctionRegistry,
     conf: CatalystConf,
     maxIterations: Int = 100)
-  extends RuleExecutor[LogicalPlan] with HiveTypeCoercion with CheckAnalysis {
+  extends RuleExecutor[LogicalPlan] with CheckAnalysis {
 
   def resolver: Resolver = {
     if (conf.caseSensitiveAnalysis) {
@@ -76,7 +76,7 @@ class Analyzer(
       ExtractWindowExpressions ::
       GlobalAggregates ::
       UnresolvedHavingClauseAttributes ::
-      typeCoercionRules ++
+      HiveTypeCoercion.typeCoercionRules ++
       extendedResolutionRules : _*)
   )
 
@@ -85,7 +85,7 @@ class Analyzer(
    */
   object CTESubstitution extends Rule[LogicalPlan] {
     // TODO allow subquery to define CTE
-    def apply(plan: LogicalPlan): LogicalPlan = plan match {
+    def apply(plan: LogicalPlan): LogicalPlan = plan transform  {
       case With(child, relations) => substituteCTE(child, relations)
       case other => other
     }

@@ -42,7 +42,7 @@ import org.apache.spark.sql.SQLConf.SQLConfEntry._
 import org.apache.spark.sql.catalyst.ParserDialect
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.execution.{ExecutedCommand, ExtractPythonUdfs, SetCommand}
+import org.apache.spark.sql.execution.{ExecutedCommand, ExtractPythonUDFs, SetCommand}
 import org.apache.spark.sql.hive.client._
 import org.apache.spark.sql.hive.execution.{DescribeHiveTableCommand, HiveNativeCommand}
 import org.apache.spark.sql.sources.DataSourceStrategy
@@ -359,7 +359,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
     hiveconf.set(key, value)
   }
 
-  private[sql] override def setConf[T](entry: SQLConfEntry[T], value: T): Unit = {
+  override private[sql] def setConf[T](entry: SQLConfEntry[T], value: T): Unit = {
     setConf(entry.key, entry.stringConverter(value))
   }
 
@@ -371,7 +371,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
   // Note that HiveUDFs will be overridden by functions registered in this context.
   @transient
   override protected[sql] lazy val functionRegistry: FunctionRegistry =
-    new OverrideFunctionRegistry(new HiveFunctionRegistry(FunctionRegistry.builtin))
+    new HiveFunctionRegistry(FunctionRegistry.builtin)
 
   /* An analyzer that uses the Hive metastore. */
   @transient
@@ -381,7 +381,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
         catalog.ParquetConversions ::
         catalog.CreateTables ::
         catalog.PreInsertionCasts ::
-        ExtractPythonUdfs ::
+        ExtractPythonUDFs ::
         ResolveHiveWindowFunction ::
         sources.PreInsertCastAndRename ::
         Nil

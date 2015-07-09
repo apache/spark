@@ -39,8 +39,6 @@ case class PrecisionInfo(precision: Int, scale: Int) {
  * A Decimal that might have fixed precision and scale, or unlimited values for these.
  *
  * Please use [[DataTypes.createDecimalType()]] to create a specific instance.
- *
- * @group dataType
  */
 @DeveloperApi
 case class DecimalType(precisionInfo: Option[PrecisionInfo]) extends FractionalType {
@@ -84,7 +82,16 @@ case class DecimalType(precisionInfo: Option[PrecisionInfo]) extends FractionalT
 
 
 /** Extra factory methods and pattern matchers for Decimals */
-object DecimalType {
+object DecimalType extends AbstractDataType {
+
+  override private[sql] def defaultConcreteType: DataType = Unlimited
+
+  override private[sql] def isSameType(other: DataType): Boolean = {
+    other.isInstanceOf[DecimalType]
+  }
+
+  override private[sql] def simpleString: String = "decimal"
+
   val Unlimited: DecimalType = DecimalType(None)
 
   private[sql] object Fixed {

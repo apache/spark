@@ -21,6 +21,7 @@ import org.scalactic.TripleEqualsSupport.Spread
 import org.scalatest.Matchers._
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.catalyst.expressions.codegen.{GenerateProjection, GenerateMutableProjection}
 import org.apache.spark.sql.catalyst.optimizer.DefaultOptimizer
@@ -135,6 +136,9 @@ trait ExpressionEvalHelper {
     if (actual != expectedRow) {
       val input = if (inputRow == EmptyRow) "" else s", input: $inputRow"
       fail(s"Incorrect Evaluation: $expression, actual: $actual, expected: $expected$input")
+    }
+    if (actual.copy() != expectedRow) {
+      fail(s"Copy of generated Row is wrong: actual: ${actual.copy()}, expected: $expectedRow")
     }
   }
 

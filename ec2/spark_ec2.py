@@ -125,7 +125,7 @@ def setup_external_libs(libs):
             )
             with open(tgz_file_path, "wb") as tgz_file:
                 tgz_file.write(download_stream.read())
-            with open(tgz_file_path) as tar:
+            with open(tgz_file_path, "rb") as tar:
                 if hashlib.md5(tar.read()).hexdigest() != lib["md5"]:
                     print("ERROR: Got wrong md5sum for {lib}.".format(lib=lib["name"]), file=stderr)
                     sys.exit(1)
@@ -325,14 +325,16 @@ def parse_args():
     home_dir = os.getenv('HOME')
     if home_dir is None or not os.path.isfile(home_dir + '/.boto'):
         if not os.path.isfile('/etc/boto.cfg'):
-            if os.getenv('AWS_ACCESS_KEY_ID') is None:
-                print("ERROR: The environment variable AWS_ACCESS_KEY_ID must be set",
-                      file=stderr)
-                sys.exit(1)
-            if os.getenv('AWS_SECRET_ACCESS_KEY') is None:
-                print("ERROR: The environment variable AWS_SECRET_ACCESS_KEY must be set",
-                      file=stderr)
-                sys.exit(1)
+            # If there is no boto config, check aws credentials
+            if not os.path.isfile(home_dir + '/.aws/credentials'):
+                if os.getenv('AWS_ACCESS_KEY_ID') is None:
+                    print("ERROR: The environment variable AWS_ACCESS_KEY_ID must be set",
+                          file=stderr)
+                    sys.exit(1)
+                if os.getenv('AWS_SECRET_ACCESS_KEY') is None:
+                    print("ERROR: The environment variable AWS_SECRET_ACCESS_KEY must be set",
+                          file=stderr)
+                    sys.exit(1)
     return (opts, action, cluster_name)
 
 
@@ -1153,8 +1155,8 @@ def ssh(host, opts, command):
                 # If this was an ssh failure, provide the user with hints.
                 if e.returncode == 255:
                     raise UsageError(
-                        "Failed to SSH to remote host {0}.\n" +
-                        "Please check that you have provided the correct --identity-file and " +
+                        "Failed to SSH to remote host {0}.\n"
+                        "Please check that you have provided the correct --identity-file and "
                         "--key-pair parameters and try again.".format(host))
                 else:
                     raise e

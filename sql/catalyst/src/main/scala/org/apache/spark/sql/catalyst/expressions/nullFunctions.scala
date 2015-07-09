@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodeGenContext, GeneratedExpressionCode}
 import org.apache.spark.sql.catalyst.util.TypeUtils
@@ -38,8 +39,6 @@ case class Coalesce(children: Seq[Expression]) extends Expression {
     }
   }
 
-  override def toString: String = s"Coalesce(${children.mkString(",")})"
-
   override def dataType: DataType = children.head.dataType
 
   override def eval(input: InternalRow): Any = {
@@ -50,8 +49,6 @@ case class Coalesce(children: Seq[Expression]) extends Expression {
     }
     result
   }
-
-  override def isThreadSafe: Boolean = children.forall(_.isThreadSafe)
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     s"""

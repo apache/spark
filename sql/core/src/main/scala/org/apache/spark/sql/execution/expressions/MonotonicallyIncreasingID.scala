@@ -18,7 +18,8 @@
 package org.apache.spark.sql.execution.expressions
 
 import org.apache.spark.TaskContext
-import org.apache.spark.sql.catalyst.expressions.{InternalRow, LeafExpression}
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.LeafExpression
 import org.apache.spark.sql.types.{LongType, DataType}
 
 /**
@@ -48,6 +49,4 @@ private[sql] case class MonotonicallyIncreasingID() extends LeafExpression {
     count += 1
     (TaskContext.get().partitionId().toLong << 33) + currentCount
   }
-
-  override def isThreadSafe: Boolean = false
 }
