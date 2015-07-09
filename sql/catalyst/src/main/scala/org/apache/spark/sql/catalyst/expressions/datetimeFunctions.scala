@@ -163,7 +163,7 @@ case class Year(child: Expression) extends DateFormatExpression {
 
   override def eval(input: InternalRow): Any = {
     eval(input, (dayInYear, year, longTime) =>
-      if (dayInYear > 1 && dayInYear < 360) {
+      if (dayInYear > 3 && dayInYear < 363) {
         year
       } else {
         val c = Calendar.getInstance()
