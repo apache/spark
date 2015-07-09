@@ -45,7 +45,8 @@ import org.apache.spark.util.Utils
  */
 class YarnSparkHadoopUtil extends SparkHadoopUtil {
 
-  private var tokenRenewer: Option[ExecutorDelegationTokenUpdater] = None
+  private var executorDelegationTokenRenewer: Option[ExecutorDelegationTokenUpdater] = None
+  private var driverDelegationTokenRenewer: Option[DriverDelegationTokenRenewer] = None
 
   override def transferCredentials(source: UserGroupInformation, dest: UserGroupInformation) {
     dest.addCredentials(source.getCredentials())
@@ -128,13 +129,28 @@ class YarnSparkHadoopUtil extends SparkHadoopUtil {
     }
   }
 
+  private[spark] override def startDriverDelegationTokenRenewer(sparkConf: SparkConf): Unit = {
+    // If the credentials file config is present, we must periodically renew tokens. So create
+    // a new DriverDelegationTokenRenewer
+    if (sparkConf.contains("spark.yarn.credentials.file")) {
+      driverDelegationTokenRenewer = Some(new DriverDelegationTokenRenewer(sparkConf, conf))
+      // If a principal and keytab have been set, use that to create new credentials for executors
+      // periodically
+      driverDelegationTokenRenewer.foreach(_.scheduleLoginFromKeytab())
+    }
+  }
+
+  private[spark] override def stopDriverDelegationTokenRenewer(): Unit = {
+    driverDelegationTokenRenewer.foreach(_.stop())
+  }
+
   private[spark] override def startExecutorDelegationTokenRenewer(sparkConf: SparkConf): Unit = {
-    tokenRenewer = Some(new ExecutorDelegationTokenUpdater(sparkConf, conf))
-    tokenRenewer.get.updateCredentialsIfRequired()
+    executorDelegationTokenRenewer = Some(new ExecutorDelegationTokenUpdater(sparkConf, conf))
+    executorDelegationTokenRenewer.get.updateCredentialsIfRequired()
   }
 
   private[spark] override def stopExecutorDelegationTokenRenewer(): Unit = {
-    tokenRenewer.foreach(_.stop())
+    executorDelegationTokenRenewer.foreach(_.stop())
   }
 
   private[spark] def getContainerId: ContainerId = {

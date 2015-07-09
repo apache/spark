@@ -325,6 +325,17 @@ class SparkHadoopUtil extends Logging {
   }
 
   /**
+   * Start a thread to periodically re-login to the KDC and create new delegation tokens for HDFS
+   * access.
+   */
+  private[spark] def startDriverDelegationTokenRenewer(conf: SparkConf): Unit = {}
+
+  /**
+   * Stop the thread that does delegation token updates on the driver.
+   */
+  private[spark] def stopDriverDelegationTokenRenewer(): Unit = {}
+
+  /**
    * Start a thread to periodically update the current user's credentials with new delegation
    * tokens so that writes to HDFS do not fail.
    */

@@ -84,8 +84,6 @@ private[spark] class ApplicationMaster(
   // Fields used in cluster mode.
   private val sparkContextRef = new AtomicReference[SparkContext](null)
 
-  private var delegationTokenRenewerOption: Option[AMDelegationTokenRenewer] = None
-
   final def run(): Int = {
     try {
       val appAttemptId = client.getAttemptId()
@@ -139,15 +137,6 @@ private[spark] class ApplicationMaster(
       // Hadoop UGI. This has to happen before the startUserApplication which does a
       // doAs in order for the credentials to be passed on to the executor containers.
       val securityMgr = new SecurityManager(sparkConf)
-
-      // If the credentials file config is present, we must periodically renew tokens. So create
-      // a new AMDelegationTokenRenewer
-      if (sparkConf.contains("spark.yarn.credentials.file")) {
-        delegationTokenRenewerOption = Some(new AMDelegationTokenRenewer(sparkConf, yarnConf))
-        // If a principal and keytab have been set, use that to create new credentials for executors
-        // periodically
-        delegationTokenRenewerOption.foreach(_.scheduleLoginFromKeytab())
-      }
 
       if (isClusterMode) {
         runDriver(securityMgr)
@@ -213,7 +202,6 @@ private[spark] class ApplicationMaster(
           logDebug("shutting down user thread")
           userClassThread.interrupt()
         }
-        if (!inShutdown) delegationTokenRenewerOption.foreach(_.stop())
       }
     }
   }

@@ -547,6 +547,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       }
     _cleaner.foreach(_.start())
 
+    SparkHadoopUtil.get.startDriverDelegationTokenRenewer(conf)
     setupAndStartListenerBus()
     postEnvironmentUpdate()
     postApplicationStart()
@@ -1666,6 +1667,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       _env.stop()
       SparkEnv.set(null)
     }
+    SparkHadoopUtil.get.stopDriverDelegationTokenRenewer()
     SparkContext.clearActiveContext()
     logInfo("Successfully stopped SparkContext")
   }
