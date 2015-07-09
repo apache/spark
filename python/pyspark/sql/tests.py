@@ -249,7 +249,6 @@ class SQLTests(ReusedPySparkTestCase):
         df = self.sqlCtx.jsonRDD(rdd)
         df.count()
         df.collect()
-        df.schema
 
         # cache and checkpoint
         self.assertFalse(df.is_cached)
