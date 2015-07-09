@@ -26,13 +26,13 @@ object ArrayType extends AbstractDataType {
   /** Construct a [[ArrayType]] object with the given element type. The `containsNull` is true. */
   def apply(elementType: DataType): ArrayType = ArrayType(elementType, containsNull = true)
 
-  private[sql] override def defaultConcreteType: DataType = ArrayType(NullType, containsNull = true)
+  override private[sql] def defaultConcreteType: DataType = ArrayType(NullType, containsNull = true)
 
-  private[sql] override def isParentOf(childCandidate: DataType): Boolean = {
-    childCandidate.isInstanceOf[ArrayType]
+  override private[sql] def isSameType(other: DataType): Boolean = {
+    other.isInstanceOf[ArrayType]
   }
 
-  private[sql] override def simpleString: String = "array"
+  override private[sql] def simpleString: String = "array"
 }
 
 

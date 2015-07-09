@@ -34,9 +34,32 @@ private[sql] abstract class AbstractDataType {
   private[sql] def defaultConcreteType: DataType
 
   /**
-   * Returns true if this data type is a parent of the `childCandidate`.
+   * Returns true if this data type is the same type as `other`.  This is different that equality
+   * as equality will also consider data type parametrization, such as decimal precision.
+   *
+   * {{{
+   *   // this should return true
+   *   DecimalType.isSameType(DecimalType(10, 2))
+   *
+   *   // this should return false
+   *   NumericType.isSameType(DecimalType(10, 2))
+   * }}}
    */
-  private[sql] def isParentOf(childCandidate: DataType): Boolean
+  private[sql] def isSameType(other: DataType): Boolean
+
+  /**
+   * Returns true if `other` is an acceptable input type for a function that expectes this,
+   * possibly abstract, DataType.
+   *
+   * {{{
+   *   // this should return true
+   *   DecimalType.isSameType(DecimalType(10, 2))
+   *
+   *   // this should return true as well
+   *   NumericType.acceptsType(DecimalType(10, 2))
+   * }}}
+   */
+  private[sql] def acceptsType(other: DataType): Boolean = isSameType(other)
 
   /** Readable string representation for the type. */
   private[sql] def simpleString: String
@@ -58,11 +81,14 @@ private[sql] class TypeCollection(private val types: Seq[AbstractDataType])
 
   require(types.nonEmpty, s"TypeCollection ($types) cannot be empty")
 
-  private[sql] override def defaultConcreteType: DataType = types.head.defaultConcreteType
+  override private[sql] def defaultConcreteType: DataType = types.head.defaultConcreteType
 
-  private[sql] override def isParentOf(childCandidate: DataType): Boolean = false
+  override private[sql] def isSameType(other: DataType): Boolean = false
 
-  private[sql] override def simpleString: String = {
+  override private[sql] def acceptsType(other: DataType): Boolean =
+    types.exists(_.isSameType(other))
+
+  override private[sql] def simpleString: String = {
     types.map(_.simpleString).mkString("(", " or ", ")")
   }
 }
@@ -108,7 +134,7 @@ abstract class NumericType extends AtomicType {
 }
 
 
-private[sql] object NumericType {
+private[sql] object NumericType extends AbstractDataType {
   /**
    * Enables matching against NumericType for expressions:
    * {{{
@@ -117,6 +143,14 @@ private[sql] object NumericType {
    * }}}
    */
   def unapply(e: Expression): Boolean = e.dataType.isInstanceOf[NumericType]
+
+  override private[sql] def defaultConcreteType: DataType = DoubleType
+
+  override private[sql] def simpleString: String = "numeric"
+
+  override private[sql] def isSameType(other: DataType): Boolean = false
+
+  override private[sql] def acceptsType(other: DataType): Boolean = other.isInstanceOf[NumericType]
 }
 
 

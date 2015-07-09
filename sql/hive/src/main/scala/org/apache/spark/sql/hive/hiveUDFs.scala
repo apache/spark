@@ -77,7 +77,7 @@ private[hive] class HiveFunctionRegistry(underlying: analysis.FunctionRegistry)
   }
 
   override def registerFunction(name: String, builder: FunctionBuilder): Unit =
-    throw new UnsupportedOperationException
+    underlying.registerFunction(name, builder)
 }
 
 private[hive] case class HiveSimpleUDF(funcWrapper: HiveFunctionWrapper, children: Seq[Expression])

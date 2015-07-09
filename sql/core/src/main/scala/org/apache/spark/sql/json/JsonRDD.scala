@@ -401,9 +401,9 @@ private[sql] object JsonRDD extends Logging {
 
   private def toTimestamp(value: Any): Long = {
     value match {
-      case value: java.lang.Integer => value.asInstanceOf[Int].toLong * 10000L
-      case value: java.lang.Long => value * 10000L
-      case value: java.lang.String => DateTimeUtils.stringToTime(value).getTime * 10000L
+      case value: java.lang.Integer => value.asInstanceOf[Int].toLong * 1000L
+      case value: java.lang.Long => value * 1000L
+      case value: java.lang.String => DateTimeUtils.stringToTime(value).getTime * 1000L
     }
   }
 
