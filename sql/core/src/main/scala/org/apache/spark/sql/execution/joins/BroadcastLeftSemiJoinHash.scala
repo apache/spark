@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.joins
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.{BinaryNode, SparkPlan}
 
@@ -50,7 +51,8 @@ case class BroadcastLeftSemiJoinHash(
       if (!rowKey.anyNull) {
         val keyExists = hashSet.contains(rowKey)
         if (!keyExists) {
-          hashSet.add(rowKey)
+          // rowKey may be not serializable (from codegen)
+          hashSet.add(rowKey.copy())
         }
       }
     }

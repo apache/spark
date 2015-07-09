@@ -19,12 +19,17 @@ package org.apache.spark.ml.feature
 
 import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.ml.attribute.{AttributeGroup, NominalAttribute, NumericAttribute}
+import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vector, Vectors}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.functions.col
 
 class VectorAssemblerSuite extends SparkFunSuite with MLlibTestSparkContext {
+
+  test("params") {
+    ParamsSuite.checkParams(new VectorAssembler)
+  }
 
   test("assemble") {
     import org.apache.spark.ml.feature.VectorAssembler.assemble

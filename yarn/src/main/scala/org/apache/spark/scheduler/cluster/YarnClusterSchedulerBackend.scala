@@ -115,8 +115,9 @@ private[spark] class YarnClusterSchedulerBackend(
           val httpScheme = if (yarnHttpPolicy == "HTTPS_ONLY") "https://" else "http://"
           val baseUrl = s"$httpScheme$httpAddress/node/containerlogs/$containerId/$user"
           logDebug(s"Base URL for logs: $baseUrl")
-          driverLogs = Some(
-            Map("stderr" -> s"$baseUrl/stderr?start=0", "stdout" -> s"$baseUrl/stdout?start=0"))
+          driverLogs = Some(Map(
+            "stderr" -> s"$baseUrl/stderr?start=-4096",
+            "stdout" -> s"$baseUrl/stdout?start=-4096"))
         }
       }
     } catch {

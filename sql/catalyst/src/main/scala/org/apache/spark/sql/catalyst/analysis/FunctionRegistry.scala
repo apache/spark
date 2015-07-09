@@ -35,19 +35,6 @@ trait FunctionRegistry {
   def lookupFunction(name: String, children: Seq[Expression]): Expression
 }
 
-class OverrideFunctionRegistry(underlying: FunctionRegistry) extends FunctionRegistry {
-
-  private val functionBuilders = StringKeyHashMap[FunctionBuilder](caseSensitive = false)
-
-  override def registerFunction(name: String, builder: FunctionBuilder): Unit = {
-    functionBuilders.put(name, builder)
-  }
-
-  override def lookupFunction(name: String, children: Seq[Expression]): Expression = {
-    functionBuilders.get(name).map(_(children)).getOrElse(underlying.lookupFunction(name, children))
-  }
-}
-
 class SimpleFunctionRegistry extends FunctionRegistry {
 
   private val functionBuilders = StringKeyHashMap[FunctionBuilder](caseSensitive = false)
@@ -96,6 +83,7 @@ object FunctionRegistry {
     expression[Rand]("rand"),
     expression[Randn]("randn"),
     expression[CreateStruct]("struct"),
+    expression[CreateNamedStruct]("named_struct"),
     expression[Sqrt]("sqrt"),
 
     // math functions
@@ -103,6 +91,7 @@ object FunctionRegistry {
     expression[Asin]("asin"),
     expression[Atan]("atan"),
     expression[Atan2]("atan2"),
+    expression[Bin]("bin"),
     expression[Cbrt]("cbrt"),
     expression[Ceil]("ceil"),
     expression[Ceil]("ceiling"),
@@ -111,7 +100,10 @@ object FunctionRegistry {
     expression[Exp]("exp"),
     expression[Expm1]("expm1"),
     expression[Floor]("floor"),
+    expression[Factorial]("factorial"),
     expression[Hypot]("hypot"),
+    expression[Hex]("hex"),
+    expression[Logarithm]("log"),
     expression[Log]("ln"),
     expression[Log10]("log10"),
     expression[Log1p]("log1p"),
@@ -120,7 +112,11 @@ object FunctionRegistry {
     expression[Log2]("log2"),
     expression[Pow]("pow"),
     expression[Pow]("power"),
+    expression[UnaryPositive]("positive"),
     expression[Rint]("rint"),
+    expression[ShiftLeft]("shiftleft"),
+    expression[ShiftRight]("shiftright"),
+    expression[ShiftRightUnsigned]("shiftrightunsigned"),
     expression[Signum]("sign"),
     expression[Signum]("signum"),
     expression[Sin]("sin"),
@@ -129,6 +125,13 @@ object FunctionRegistry {
     expression[Tanh]("tanh"),
     expression[ToDegrees]("degrees"),
     expression[ToRadians]("radians"),
+
+    // misc functions
+    expression[Md5]("md5"),
+    expression[Sha2]("sha2"),
+    expression[Sha1]("sha1"),
+    expression[Sha1]("sha"),
+    expression[Crc32]("crc32"),
 
     // aggregate functions
     expression[Average]("avg"),
@@ -140,13 +143,24 @@ object FunctionRegistry {
     expression[Sum]("sum"),
 
     // string functions
+    expression[Ascii]("ascii"),
+    expression[Base64]("base64"),
+    expression[Encode]("encode"),
+    expression[Decode]("decode"),
     expression[Lower]("lcase"),
     expression[Lower]("lower"),
     expression[StringLength]("length"),
+    expression[Levenshtein]("levenshtein"),
     expression[Substring]("substr"),
     expression[Substring]("substring"),
+    expression[UnBase64]("unbase64"),
     expression[Upper]("ucase"),
-    expression[Upper]("upper")
+    expression[Unhex]("unhex"),
+    expression[Upper]("upper"),
+
+    // datetime functions
+    expression[CurrentDate]("current_date"),
+    expression[CurrentTimestamp]("current_timestamp")
   )
 
   val builtin: FunctionRegistry = {
@@ -158,27 +172,23 @@ object FunctionRegistry {
   /** See usage above. */
   private def expression[T <: Expression](name: String)
       (implicit tag: ClassTag[T]): (String, FunctionBuilder) = {
-    // Use the companion class to find apply methods.
-    val objectClass = Class.forName(tag.runtimeClass.getName + "$")
-    val companionObj = objectClass.getDeclaredField("MODULE$").get(null)
 
-    // See if we can find an apply that accepts Seq[Expression]
-    val varargApply = Try(objectClass.getDeclaredMethod("apply", classOf[Seq[_]])).toOption
-
+    // See if we can find a constructor that accepts Seq[Expression]
+    val varargCtor = Try(tag.runtimeClass.getDeclaredConstructor(classOf[Seq[_]])).toOption
     val builder = (expressions: Seq[Expression]) => {
-      if (varargApply.isDefined) {
+      if (varargCtor.isDefined) {
         // If there is an apply method that accepts Seq[Expression], use that one.
-        varargApply.get.invoke(companionObj, expressions).asInstanceOf[Expression]
+        varargCtor.get.newInstance(expressions).asInstanceOf[Expression]
       } else {
-        // Otherwise, find an apply method that matches the number of arguments, and use that.
+        // Otherwise, find an ctor method that matches the number of arguments, and use that.
         val params = Seq.fill(expressions.size)(classOf[Expression])
-        val f = Try(objectClass.getDeclaredMethod("apply", params : _*)) match {
+        val f = Try(tag.runtimeClass.getDeclaredConstructor(params : _*)) match {
           case Success(e) =>
             e
           case Failure(e) =>
             throw new AnalysisException(s"Invalid number of arguments for function $name")
         }
-        f.invoke(companionObj, expressions : _*).asInstanceOf[Expression]
+        f.newInstance(expressions : _*).asInstanceOf[Expression]
       }
     }
     (name, builder)

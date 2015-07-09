@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst
 
-import org.apache.spark.sql.catalyst
+import org.apache.spark.sql.catalyst.expressions._
 
 /**
  * A set of classes that can be used to represent trees of relational expressions.  A key goal of
@@ -51,9 +51,10 @@ import org.apache.spark.sql.catalyst
  */
 package object expressions  {
 
-  type InternalRow = catalyst.InternalRow
-
-  val InternalRow = catalyst.InternalRow
+  /**
+   * Used as input into expressions whose output does not depend on any input value.
+   */
+  val EmptyRow: InternalRow = null
 
   /**
    * Converts a [[InternalRow]] to another Row given a sequence of expression that define each

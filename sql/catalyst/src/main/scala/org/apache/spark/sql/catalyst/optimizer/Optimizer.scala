@@ -39,19 +39,24 @@ object DefaultOptimizer extends Optimizer {
     Batch("Distinct", FixedPoint(100),
       ReplaceDistinctWithAggregate) ::
     Batch("Operator Optimizations", FixedPoint(100),
-      UnionPushdown,
-      CombineFilters,
+      // Operator push down
+      UnionPushDown,
+      SamplePushDown,
+      PushPredicateThroughJoin,
       PushPredicateThroughProject,
       PushPredicateThroughGenerate,
       ColumnPruning,
+      // Operator combine
       ProjectCollapsing,
+      CombineFilters,
       CombineLimits,
+      // Constant folding
       NullPropagation,
       OptimizeIn,
       ConstantFolding,
       LikeSimplification,
       BooleanSimplification,
-      PushPredicateThroughJoin,
+      RemovePositive,
       SimplifyFilters,
       SimplifyCasts,
       SimplifyCaseConversionExpressions) ::
@@ -62,25 +67,42 @@ object DefaultOptimizer extends Optimizer {
 }
 
 /**
-  *  Pushes operations to either side of a Union.
-  */
-object UnionPushdown extends Rule[LogicalPlan] {
+ * Pushes operations down into a Sample.
+ */
+object SamplePushDown extends Rule[LogicalPlan] {
+
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    // Push down filter into sample
+    case Filter(condition, s @ Sample(lb, up, replace, seed, child)) =>
+      Sample(lb, up, replace, seed,
+        Filter(condition, child))
+    // Push down projection into sample
+    case Project(projectList, s @ Sample(lb, up, replace, seed, child)) =>
+      Sample(lb, up, replace, seed,
+        Project(projectList, child))
+  }
+}
+
+/**
+ * Pushes operations to either side of a Union.
+ */
+object UnionPushDown extends Rule[LogicalPlan] {
 
   /**
-    *  Maps Attributes from the left side to the corresponding Attribute on the right side.
-    */
-  def buildRewrites(union: Union): AttributeMap[Attribute] = {
+   * Maps Attributes from the left side to the corresponding Attribute on the right side.
+   */
+  private def buildRewrites(union: Union): AttributeMap[Attribute] = {
     assert(union.left.output.size == union.right.output.size)
 
     AttributeMap(union.left.output.zip(union.right.output))
   }
 
   /**
-    *  Rewrites an expression so that it can be pushed to the right side of a Union operator.
-    *  This method relies on the fact that the output attributes of a union are always equal
-    *  to the left child's output.
-    */
-  def pushToRight[A <: Expression](e: A, rewrites: AttributeMap[Attribute]): A = {
+   * Rewrites an expression so that it can be pushed to the right side of a Union operator.
+   * This method relies on the fact that the output attributes of a union are always equal
+   * to the left child's output.
+   */
+  private def pushToRight[A <: Expression](e: A, rewrites: AttributeMap[Attribute]) = {
     val result = e transform {
       case a: Attribute => rewrites(a)
     }
@@ -107,7 +129,6 @@ object UnionPushdown extends Rule[LogicalPlan] {
   }
 }
 
-
 /**
  * Attempts to eliminate the reading of unneeded columns from the query plan using the following
  * transformations:
@@ -116,10 +137,13 @@ object UnionPushdown extends Rule[LogicalPlan] {
  *   - Aggregate
  *   - Project <- Join
  *   - LeftSemiJoin
- *  - Performing alias substitution.
  */
 object ColumnPruning extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case a @ Aggregate(_, _, e @ Expand(_, groupByExprs, _, child))
+      if (child.outputSet -- AttributeSet(groupByExprs) -- a.references).nonEmpty =>
+      a.copy(child = e.copy(child = prunedChild(child, AttributeSet(groupByExprs) ++ a.references)))
+
     // Eliminate attributes that are not needed to calculate the specified aggregates.
     case a @ Aggregate(_, _, child) if (child.outputSet -- a.references).nonEmpty =>
       a.copy(child = Project(a.references.toSeq, child))
@@ -154,10 +178,11 @@ object ColumnPruning extends Rule[LogicalPlan] {
 
       Join(left, prunedChild(right, allReferences), LeftSemi, condition)
 
+    // Push down project through limit, so that we may have chance to push it further.
     case Project(projectList, Limit(exp, child)) =>
       Limit(exp, Project(projectList, child))
 
-    // push down project if possible when the child is sort
+    // Push down project if possible when the child is sort
     case p @ Project(projectList, s @ Sort(_, _, grandChild))
       if s.references.subsetOf(p.outputSet) =>
       s.copy(child = Project(projectList, grandChild))
@@ -176,8 +201,8 @@ object ColumnPruning extends Rule[LogicalPlan] {
 }
 
 /**
- * Combines two adjacent [[Project]] operators into one, merging the
- * expressions into one single expression.
+ * Combines two adjacent [[Project]] operators into one and perform alias substitution,
+ * merging the expressions into one single expression.
  */
 object ProjectCollapsing extends Rule[LogicalPlan] {
 
@@ -217,10 +242,10 @@ object ProjectCollapsing extends Rule[LogicalPlan] {
 object LikeSimplification extends Rule[LogicalPlan] {
   // if guards below protect from escapes on trailing %.
   // Cases like "something\%" are not optimized, but this does not affect correctness.
-  val startsWith = "([^_%]+)%".r
-  val endsWith = "%([^_%]+)".r
-  val contains = "%([^_%]+)%".r
-  val equalTo = "([^_%]*)".r
+  private val startsWith = "([^_%]+)%".r
+  private val endsWith = "%([^_%]+)".r
+  private val contains = "%([^_%]+)%".r
+  private val equalTo = "([^_%]*)".r
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
     case Like(l, Literal(utf, StringType)) =>
@@ -492,7 +517,7 @@ object PushPredicateThroughProject extends Rule[LogicalPlan] {
         grandChild))
   }
 
-  def replaceAlias(condition: Expression, sourceAliases: Map[Attribute, Expression]): Expression = {
+  private def replaceAlias(condition: Expression, sourceAliases: Map[Attribute, Expression]) = {
     condition transform {
       case a: AttributeReference => sourceAliases.getOrElse(a, a)
     }
@@ -633,6 +658,15 @@ object SimplifyCasts extends Rule[LogicalPlan] {
 }
 
 /**
+ * Removes [[UnaryPositive]] identify function
+ */
+object RemovePositive extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
+    case UnaryPositive(child) => child
+  }
+}
+
+/**
  * Combines two adjacent [[Limit]] operators into one, merging the
  * expressions into one single expression.
  */
@@ -668,7 +702,7 @@ object DecimalAggregates extends Rule[LogicalPlan] {
   import Decimal.MAX_LONG_DIGITS
 
   /** Maximum number of decimal digits representable precisely in a Double */
-  val MAX_DOUBLE_DIGITS = 15
+  private val MAX_DOUBLE_DIGITS = 15
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
     case Sum(e @ DecimalType.Expression(prec, scale)) if prec + 10 <= MAX_LONG_DIGITS =>

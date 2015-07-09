@@ -31,13 +31,15 @@ import org.apache.hadoop.mapred.{FileOutputFormat, JobConf}
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.catalyst.expressions.{Attribute, InternalRow}
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.execution.{UnaryNode, SparkPlan}
 import org.apache.spark.sql.hive.HiveShim.{ShimFileSinkDesc => FileSinkDesc}
 import org.apache.spark.sql.hive._
-import org.apache.spark.{SerializableWritable, SparkException, TaskContext}
+import org.apache.spark.{SparkException, TaskContext}
 
 import scala.collection.JavaConversions._
+import org.apache.spark.util.SerializableJobConf
 
 private[hive]
 case class InsertIntoHiveTable(
@@ -64,7 +66,7 @@ case class InsertIntoHiveTable(
       rdd: RDD[InternalRow],
       valueClass: Class[_],
       fileSinkConf: FileSinkDesc,
-      conf: SerializableWritable[JobConf],
+      conf: SerializableJobConf,
       writerContainer: SparkHiveWriterContainer): Unit = {
     assert(valueClass != null, "Output value class not set")
     conf.value.setOutputValueClass(valueClass)
@@ -172,7 +174,7 @@ case class InsertIntoHiveTable(
     }
 
     val jobConf = new JobConf(sc.hiveconf)
-    val jobConfSer = new SerializableWritable(jobConf)
+    val jobConfSer = new SerializableJobConf(jobConf)
 
     val writerContainer = if (numDynamicPartitions > 0) {
       val dynamicPartColNames = partitionColumnNames.takeRight(numDynamicPartitions)
@@ -197,7 +199,6 @@ case class InsertIntoHiveTable(
       table.hiveQlTable.getPartCols().foreach { entry =>
         orderedPartitionSpec.put(entry.getName, partitionSpec.get(entry.getName).getOrElse(""))
       }
-      val partVals = MetaStoreUtils.getPvals(table.hiveQlTable.getPartCols, partitionSpec)
 
       // inheritTableSpecs is set to true. It should be set to false for a IMPORT query
       // which is currently considered as a Hive native command.

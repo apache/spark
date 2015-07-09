@@ -20,7 +20,8 @@
 # @rdname aggregateRDD
 # @seealso reduce
 # @export
-setGeneric("aggregateRDD", function(x, zeroValue, seqOp, combOp) { standardGeneric("aggregateRDD") })
+setGeneric("aggregateRDD",
+           function(x, zeroValue, seqOp, combOp) { standardGeneric("aggregateRDD") })
 
 # @rdname cache-methods
 # @export
@@ -134,7 +135,7 @@ setGeneric("maximum", function(x) { standardGeneric("maximum") })
 # @export
 setGeneric("minimum", function(x) { standardGeneric("minimum") })
 
-# @rdname sumRDD 
+# @rdname sumRDD
 # @export
 setGeneric("sumRDD", function(x) { standardGeneric("sumRDD") })
 
@@ -223,7 +224,7 @@ setGeneric("zipRDD", function(x, other) { standardGeneric("zipRDD") })
 
 # @rdname zipRDD
 # @export
-setGeneric("zipPartitions", function(..., func) { standardGeneric("zipPartitions") }, 
+setGeneric("zipPartitions", function(..., func) { standardGeneric("zipPartitions") },
            signature = "...")
 
 # @rdname zipWithIndex
@@ -368,7 +369,7 @@ setGeneric("subtract",
 
 # @rdname subtractByKey
 # @export
-setGeneric("subtractByKey", 
+setGeneric("subtractByKey",
            function(x, other, numPartitions = 1) {
              standardGeneric("subtractByKey")
            })
@@ -403,15 +404,15 @@ setGeneric("describe", function(x, col, ...) { standardGeneric("describe") })
 #' @rdname nafunctions
 #' @export
 setGeneric("dropna",
-           function(x, how = c("any", "all"), minNonNulls = NULL, cols = NULL) { 
-             standardGeneric("dropna") 
+           function(x, how = c("any", "all"), minNonNulls = NULL, cols = NULL) {
+             standardGeneric("dropna")
            })
 
 #' @rdname nafunctions
 #' @export
 setGeneric("na.omit",
-           function(x, how = c("any", "all"), minNonNulls = NULL, cols = NULL) { 
-             standardGeneric("na.omit") 
+           function(x, how = c("any", "all"), minNonNulls = NULL, cols = NULL) {
+             standardGeneric("na.omit")
            })
 
 #' @rdname schema
@@ -660,4 +661,3 @@ setGeneric("toRadians", function(x) { standardGeneric("toRadians") })
 #' @rdname column
 #' @export
 setGeneric("upper", function(x) { standardGeneric("upper") })
-

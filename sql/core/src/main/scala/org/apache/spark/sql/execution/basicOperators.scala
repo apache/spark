@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.{RDD, ShuffledRDD}
 import org.apache.spark.shuffle.sort.SortShuffleManager
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.expressions._
@@ -39,8 +40,8 @@ case class Project(projectList: Seq[NamedExpression], child: SparkPlan) extends 
   @transient lazy val buildProjection = newMutableProjection(projectList, child.output)
 
   protected override def doExecute(): RDD[InternalRow] = child.execute().mapPartitions { iter =>
-    val resuableProjection = buildProjection()
-    iter.map(resuableProjection)
+    val reusableProjection = buildProjection()
+    iter.map(reusableProjection)
   }
 
   override def outputOrdering: Seq[SortOrder] = child.outputOrdering
@@ -147,12 +148,18 @@ case class Limit(limit: Int, child: SparkPlan)
 
 /**
  * :: DeveloperApi ::
- * Take the first limit elements as defined by the sortOrder. This is logically equivalent to
- * having a [[Limit]] operator after a [[Sort]] operator. This could have been named TopK, but
- * Spark's top operator does the opposite in ordering so we name it TakeOrdered to avoid confusion.
+ * Take the first limit elements as defined by the sortOrder, and do projection if needed.
+ * This is logically equivalent to having a [[Limit]] operator after a [[Sort]] operator,
+ * or having a [[Project]] operator between them.
+ * This could have been named TopK, but Spark's top operator does the opposite in ordering
+ * so we name it TakeOrdered to avoid confusion.
  */
 @DeveloperApi
-case class TakeOrdered(limit: Int, sortOrder: Seq[SortOrder], child: SparkPlan) extends UnaryNode {
+case class TakeOrderedAndProject(
+    limit: Int,
+    sortOrder: Seq[SortOrder],
+    projectList: Option[Seq[NamedExpression]],
+    child: SparkPlan) extends UnaryNode {
 
   override def output: Seq[Attribute] = child.output
 
@@ -160,8 +167,13 @@ case class TakeOrdered(limit: Int, sortOrder: Seq[SortOrder], child: SparkPlan) 
 
   private val ord: RowOrdering = new RowOrdering(sortOrder, child.output)
 
-  private def collectData(): Array[InternalRow] =
-    child.execute().map(_.copy()).takeOrdered(limit)(ord)
+  // TODO: remove @transient after figure out how to clean closure at InsertIntoHiveTable.
+  @transient private val projection = projectList.map(new InterpretedProjection(_, child.output))
+
+  private def collectData(): Array[InternalRow] = {
+    val data = child.execute().map(_.copy()).takeOrdered(limit)(ord)
+    projection.map(data.map(_)).getOrElse(data)
+  }
 
   override def executeCollect(): Array[Row] = {
     val converter = CatalystTypeConverters.createToScalaConverter(schema)

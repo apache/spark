@@ -10,6 +10,11 @@ export("sparkR.init")
 export("sparkR.stop")
 export("print.jobj")
 
+# Job group lifecycle management methods
+export("setJobGroup",
+       "clearJobGroup",
+       "cancelJobGroup")
+
 exportClasses("DataFrame")
 
 exportMethods("arrange",

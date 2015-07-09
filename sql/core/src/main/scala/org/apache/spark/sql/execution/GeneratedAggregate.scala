@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution
 import org.apache.spark.TaskContext
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.trees._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical._
@@ -238,11 +239,6 @@ case class GeneratedAggregate(
       StructType(fields)
     }
 
-    val schemaSupportsUnsafe: Boolean = {
-      UnsafeFixedWidthAggregationMap.supportsAggregationBufferSchema(aggregationBufferSchema) &&
-        UnsafeFixedWidthAggregationMap.supportsGroupKeySchema(groupKeySchema)
-    }
-
     child.execute().mapPartitions { iter =>
       // Builds a new custom class for holding the results of aggregation for a group.
       val initialValues = computeFunctions.flatMap(_.initialValues)
@@ -283,12 +279,12 @@ case class GeneratedAggregate(
 
         val resultProjection = resultProjectionBuilder()
         Iterator(resultProjection(buffer))
-      } else if (unsafeEnabled && schemaSupportsUnsafe) {
+      } else if (unsafeEnabled) {
         log.info("Using Unsafe-based aggregator")
         val aggregationMap = new UnsafeFixedWidthAggregationMap(
-          newAggregationBuffer(EmptyRow),
-          aggregationBufferSchema,
-          groupKeySchema,
+          newAggregationBuffer,
+          new UnsafeRowConverter(groupKeySchema),
+          new UnsafeRowConverter(aggregationBufferSchema),
           TaskContext.get.taskMemoryManager(),
           1024 * 16, // initial capacity
           false // disable tracking of performance metrics
@@ -323,9 +319,6 @@ case class GeneratedAggregate(
           }
         }
       } else {
-        if (unsafeEnabled) {
-          log.info("Not using Unsafe-based aggregator because it is not supported for this schema")
-        }
         val buffers = new java.util.HashMap[InternalRow, MutableRow]()
 
         var currentRow: InternalRow = null

@@ -17,8 +17,11 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import com.google.common.math.LongMath
+
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.types.DoubleType
+import org.apache.spark.sql.catalyst.dsl.expressions._
+import org.apache.spark.sql.types._
 
 class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
@@ -40,16 +43,18 @@ class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
    * Used for testing unary math expressions.
    *
    * @param c expression
-   * @param f The functions in scala.math
+   * @param f The functions in scala.math or elsewhere used to generate expected results
    * @param domain The set of values to run the function with
    * @param expectNull Whether the given values should return null or not
    * @tparam T Generic type for primitives
+   * @tparam U Generic type for the output of the given function `f`
    */
-  private def testUnary[T](
+  private def testUnary[T, U](
       c: Expression => Expression,
-      f: T => T,
+      f: T => U,
       domain: Iterable[T] = (-20 to 20).map(_ * 0.1),
-      expectNull: Boolean = false): Unit = {
+      expectNull: Boolean = false,
+      evalType: DataType = DoubleType): Unit = {
     if (expectNull) {
       domain.foreach { value =>
         checkEvaluation(c(Literal(value)), null, EmptyRow)
@@ -59,7 +64,7 @@ class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         checkEvaluation(c(Literal(value)), f(value), EmptyRow)
       }
     }
-    checkEvaluation(c(Literal.create(null, DoubleType)), null, create_row(null))
+    checkEvaluation(c(Literal.create(null, evalType)), null, create_row(null))
   }
 
   /**
@@ -154,6 +159,15 @@ class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     testUnary(Floor, math.floor)
   }
 
+  test("factorial") {
+    (0 to 20).foreach { value =>
+      checkEvaluation(Factorial(Literal(value)), LongMath.factorial(value), EmptyRow)
+    }
+    checkEvaluation(Literal.create(null, IntegerType), null, create_row(null))
+    checkEvaluation(Factorial(Literal(20)), 2432902008176640000L, EmptyRow)
+    checkEvaluation(Factorial(Literal(21)), null, EmptyRow)
+  }
+
   test("rint") {
     testUnary(Rint, math.rint)
   }
@@ -167,7 +181,7 @@ class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("signum") {
-    testUnary[Double](Signum, math.signum)
+    testUnary[Double, Double](Signum, math.signum)
   }
 
   test("log") {
@@ -185,15 +199,103 @@ class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     testUnary(Log1p, math.log1p, (-10 to -2).map(_ * 1.0), expectNull = true)
   }
 
+  test("bin") {
+    testUnary(Bin, java.lang.Long.toBinaryString, (-20 to 20).map(_.toLong), evalType = LongType)
+
+    val row = create_row(null, 12L, 123L, 1234L, -123L)
+    val l1 = 'a.long.at(0)
+    val l2 = 'a.long.at(1)
+    val l3 = 'a.long.at(2)
+    val l4 = 'a.long.at(3)
+    val l5 = 'a.long.at(4)
+
+    checkEvaluation(Bin(l1), null, row)
+    checkEvaluation(Bin(l2), java.lang.Long.toBinaryString(12), row)
+    checkEvaluation(Bin(l3), java.lang.Long.toBinaryString(123), row)
+    checkEvaluation(Bin(l4), java.lang.Long.toBinaryString(1234), row)
+    checkEvaluation(Bin(l5), java.lang.Long.toBinaryString(-123), row)
+  }
+
   test("log2") {
     def f: (Double) => Double = (x: Double) => math.log(x) / math.log(2)
     testUnary(Log2, f, (0 to 20).map(_ * 0.1))
     testUnary(Log2, f, (-5 to -1).map(_ * 1.0), expectNull = true)
   }
 
+  test("sqrt") {
+    testUnary(Sqrt, math.sqrt, (0 to 20).map(_ * 0.1))
+    testUnary(Sqrt, math.sqrt, (-5 to -1).map(_ * 1.0), expectNull = true)
+
+    checkEvaluation(Sqrt(Literal.create(null, DoubleType)), null, create_row(null))
+    checkEvaluation(Sqrt(Literal(-1.0)), null, EmptyRow)
+    checkEvaluation(Sqrt(Literal(-1.5)), null, EmptyRow)
+  }
+
   test("pow") {
     testBinary(Pow, math.pow, (-5 to 5).map(v => (v * 1.0, v * 1.0)))
     testBinary(Pow, math.pow, Seq((-1.0, 0.9), (-2.2, 1.7), (-2.2, -1.7)), expectNull = true)
+  }
+
+  test("shift left") {
+    checkEvaluation(ShiftLeft(Literal.create(null, IntegerType), Literal(1)), null)
+    checkEvaluation(ShiftLeft(Literal(21), Literal.create(null, IntegerType)), null)
+    checkEvaluation(
+      ShiftLeft(Literal.create(null, IntegerType), Literal.create(null, IntegerType)), null)
+    checkEvaluation(ShiftLeft(Literal(21), Literal(1)), 42)
+
+    checkEvaluation(ShiftLeft(Literal(21.toLong), Literal(1)), 42.toLong)
+    checkEvaluation(ShiftLeft(Literal(-21.toLong), Literal(1)), -42.toLong)
+  }
+
+  test("shift right") {
+    checkEvaluation(ShiftRight(Literal.create(null, IntegerType), Literal(1)), null)
+    checkEvaluation(ShiftRight(Literal(42), Literal.create(null, IntegerType)), null)
+    checkEvaluation(
+      ShiftRight(Literal.create(null, IntegerType), Literal.create(null, IntegerType)), null)
+    checkEvaluation(ShiftRight(Literal(42), Literal(1)), 21)
+
+    checkEvaluation(ShiftRight(Literal(42.toLong), Literal(1)), 21.toLong)
+    checkEvaluation(ShiftRight(Literal(-42.toLong), Literal(1)), -21.toLong)
+  }
+
+  test("shift right unsigned") {
+    checkEvaluation(ShiftRightUnsigned(Literal.create(null, IntegerType), Literal(1)), null)
+    checkEvaluation(ShiftRightUnsigned(Literal(42), Literal.create(null, IntegerType)), null)
+    checkEvaluation(
+      ShiftRight(Literal.create(null, IntegerType), Literal.create(null, IntegerType)), null)
+    checkEvaluation(ShiftRightUnsigned(Literal(42), Literal(1)), 21)
+
+    checkEvaluation(ShiftRightUnsigned(Literal(42.toLong), Literal(1)), 21.toLong)
+    checkEvaluation(ShiftRightUnsigned(Literal(-42.toLong), Literal(1)), 9223372036854775787L)
+  }
+
+  test("hex") {
+    checkEvaluation(Hex(Literal.create(null, LongType)), null)
+    checkEvaluation(Hex(Literal(28L)), "1C")
+    checkEvaluation(Hex(Literal(-28L)), "FFFFFFFFFFFFFFE4")
+    checkEvaluation(Hex(Literal(100800200404L)), "177828FED4")
+    checkEvaluation(Hex(Literal(-100800200404L)), "FFFFFFE887D7012C")
+    checkEvaluation(Hex(Literal.create(null, BinaryType)), null)
+    checkEvaluation(Hex(Literal("helloHex".getBytes())), "68656C6C6F486578")
+    // scalastyle:off
+    // Turn off scala style for non-ascii chars
+    checkEvaluation(Hex(Literal("三重的".getBytes("UTF8"))), "E4B889E9878DE79A84")
+    // scalastyle:on
+  }
+
+  test("unhex") {
+    checkEvaluation(Unhex(Literal.create(null, StringType)), null)
+    checkEvaluation(Unhex(Literal("737472696E67")), "string".getBytes)
+    checkEvaluation(Unhex(Literal("")), new Array[Byte](0))
+    checkEvaluation(Unhex(Literal("F")), Array[Byte](15))
+    checkEvaluation(Unhex(Literal("ff")), Array[Byte](-1))
+    checkEvaluation(Unhex(Literal("GG")), null)
+    // scalastyle:off
+    // Turn off scala style for non-ascii chars
+    checkEvaluation(Unhex(Literal("E4B889E9878DE79A84")), "三重的".getBytes("UTF-8"))
+    checkEvaluation(Unhex(Literal("三重的")), null)
+
+    // scalastyle:on
   }
 
   test("hypot") {
@@ -204,4 +306,34 @@ class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     testBinary(Atan2, math.atan2)
   }
 
+  test("binary log") {
+    val f = (c1: Double, c2: Double) => math.log(c2) / math.log(c1)
+    val domain = (1 to 20).map(v => (v * 0.1, v * 0.2))
+
+    domain.foreach { case (v1, v2) =>
+      checkEvaluation(Logarithm(Literal(v1), Literal(v2)), f(v1 + 0.0, v2 + 0.0), EmptyRow)
+      checkEvaluation(Logarithm(Literal(v2), Literal(v1)), f(v2 + 0.0, v1 + 0.0), EmptyRow)
+      checkEvaluation(new Logarithm(Literal(v1)), f(math.E, v1 + 0.0), EmptyRow)
+    }
+
+    // null input should yield null output
+    checkEvaluation(
+      Logarithm(Literal.create(null, DoubleType), Literal(1.0)),
+      null,
+      create_row(null))
+    checkEvaluation(
+      Logarithm(Literal(1.0), Literal.create(null, DoubleType)),
+      null,
+      create_row(null))
+
+    // negative input should yield null output
+    checkEvaluation(
+      Logarithm(Literal(-1.0), Literal(1.0)),
+      null,
+      create_row(null))
+    checkEvaluation(
+      Logarithm(Literal(1.0), Literal(-1.0)),
+      null,
+      create_row(null))
+  }
 }

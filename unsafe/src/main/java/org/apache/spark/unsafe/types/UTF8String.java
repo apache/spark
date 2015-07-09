@@ -17,12 +17,13 @@
 
 package org.apache.spark.unsafe.types;
 
+import javax.annotation.Nonnull;
 import java.io.Serializable;
 import java.io.UnsupportedEncodingException;
-import java.util.Arrays;
-import javax.annotation.Nullable;
 
-import org.apache.spark.unsafe.PlatformDependent;
+import org.apache.spark.unsafe.array.ByteArrayMethods;
+
+import static org.apache.spark.unsafe.PlatformDependent.*;
 
 /**
  * A UTF-8 String for internal Spark use.
@@ -34,8 +35,10 @@ import org.apache.spark.unsafe.PlatformDependent;
  */
 public final class UTF8String implements Comparable<UTF8String>, Serializable {
 
-  @Nullable
-  private byte[] bytes;
+  @Nonnull
+  private final Object base;
+  private final long offset;
+  private final int numBytes;
 
   private static int[] bytesOfCodePointInUTF8 = {2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
     2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
@@ -44,43 +47,54 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
     5, 5, 5, 5,
     6, 6, 6, 6};
 
+  /**
+   * Creates an UTF8String from byte array, which should be encoded in UTF-8.
+   *
+   * Note: `bytes` will be hold by returned UTF8String.
+   */
   public static UTF8String fromBytes(byte[] bytes) {
-    return (bytes != null) ? new UTF8String().set(bytes) : null;
-  }
-
-  public static UTF8String fromString(String str) {
-    return (str != null) ? new UTF8String().set(str) : null;
+    if (bytes != null) {
+      return new UTF8String(bytes, BYTE_ARRAY_OFFSET, bytes.length);
+    } else {
+      return null;
+    }
   }
 
   /**
-   * Updates the UTF8String with String.
+   * Creates an UTF8String from String.
    */
-  public UTF8String set(final String str) {
+  public static UTF8String fromString(String str) {
+    if (str == null) return null;
     try {
-      bytes = str.getBytes("utf-8");
+      return fromBytes(str.getBytes("utf-8"));
     } catch (UnsupportedEncodingException e) {
       // Turn the exception into unchecked so we can find out about it at runtime, but
       // don't need to add lots of boilerplate code everywhere.
-      PlatformDependent.throwException(e);
+      throwException(e);
+      return null;
     }
-    return this;
   }
 
-  /**
-   * Updates the UTF8String with byte[], which should be encoded in UTF-8.
-   */
-  public UTF8String set(final byte[] bytes) {
-    this.bytes = bytes;
-    return this;
+  protected UTF8String(Object base, long offset, int size) {
+    this.base = base;
+    this.offset = offset;
+    this.numBytes = size;
   }
 
   /**
    * Returns the number of bytes for a code point with the first byte as `b`
    * @param b The first byte of a code point
    */
-  public int numBytes(final byte b) {
+  private static int numBytesForFirstByte(final byte b) {
     final int offset = (b & 0xFF) - 192;
     return (offset >= 0) ? bytesOfCodePointInUTF8[offset] : 1;
+  }
+
+  /**
+   * Returns the number of bytes
+   */
+  public int numBytes() {
+    return numBytes;
   }
 
   /**
@@ -88,16 +102,27 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
    *
    * This is only used by Substring() when `start` is negative.
    */
-  public int length() {
+  public int numChars() {
     int len = 0;
-    for (int i = 0; i < bytes.length; i+= numBytes(bytes[i])) {
+    for (int i = 0; i < numBytes; i += numBytesForFirstByte(getByte(i))) {
       len += 1;
     }
     return len;
   }
 
+  /**
+   * Returns the underline bytes, will be a copy of it if it's part of another array.
+   */
   public byte[] getBytes() {
-    return bytes;
+    // avoid copy if `base` is `byte[]`
+    if (offset == BYTE_ARRAY_OFFSET && base instanceof byte[]
+      && ((byte[]) base).length == numBytes) {
+      return (byte[]) base;
+    } else {
+      byte[] bytes = new byte[numBytes];
+      copyMemory(base, offset, bytes, BYTE_ARRAY_OFFSET, numBytes);
+      return bytes;
+    }
   }
 
   /**
@@ -106,86 +131,110 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
    * @param until the position after last code point, exclusive.
    */
   public UTF8String substring(final int start, final int until) {
-    if (until <= start || start >= bytes.length) {
-      return UTF8String.fromBytes(new byte[0]);
+    if (until <= start || start >= numBytes) {
+      return fromBytes(new byte[0]);
     }
 
     int i = 0;
     int c = 0;
-    for (; i < bytes.length && c < start; i += numBytes(bytes[i])) {
+    while (i < numBytes && c < start) {
+      i += numBytesForFirstByte(getByte(i));
       c += 1;
     }
 
     int j = i;
-    for (; j < bytes.length && c < until; j += numBytes(bytes[i])) {
+    while (i < numBytes && c < until) {
+      i += numBytesForFirstByte(getByte(i));
       c += 1;
     }
 
-    return UTF8String.fromBytes(Arrays.copyOfRange(bytes, i, j));
+    byte[] bytes = new byte[i - j];
+    copyMemory(base, offset + j, bytes, BYTE_ARRAY_OFFSET, i - j);
+    return fromBytes(bytes);
   }
 
+  /**
+   * Returns whether this contains `substring` or not.
+   */
   public boolean contains(final UTF8String substring) {
-    final byte[] b = substring.getBytes();
-    if (b.length == 0) {
+    if (substring.numBytes == 0) {
       return true;
     }
 
-    for (int i = 0; i <= bytes.length - b.length; i++) {
-      // TODO: Avoid copying.
-      if (bytes[i] == b[0] && Arrays.equals(Arrays.copyOfRange(bytes, i, i + b.length), b)) {
+    byte first = substring.getByte(0);
+    for (int i = 0; i <= numBytes - substring.numBytes; i++) {
+      if (getByte(i) == first && matchAt(substring, i)) {
         return true;
       }
     }
     return false;
   }
 
+  /**
+   * Returns the byte at position `i`.
+   */
+  private byte getByte(int i) {
+    return UNSAFE.getByte(base, offset + i);
+  }
+
+  private boolean matchAt(final UTF8String s, int pos) {
+    if (s.numBytes + pos > numBytes || pos < 0) {
+      return false;
+    }
+    return ByteArrayMethods.arrayEquals(base, offset + pos, s.base, s.offset, s.numBytes);
+  }
+
   public boolean startsWith(final UTF8String prefix) {
-    final byte[] b = prefix.getBytes();
-    // TODO: Avoid copying.
-    return b.length <= bytes.length && Arrays.equals(Arrays.copyOfRange(bytes, 0, b.length), b);
+    return matchAt(prefix, 0);
   }
 
   public boolean endsWith(final UTF8String suffix) {
-    final byte[] b = suffix.getBytes();
-    return b.length <= bytes.length &&
-      Arrays.equals(Arrays.copyOfRange(bytes, bytes.length - b.length, bytes.length), b);
+    return matchAt(suffix, numBytes - suffix.numBytes);
   }
 
+  /**
+   * Returns the upper case of this string
+   */
   public UTF8String toUpperCase() {
-    return UTF8String.fromString(toString().toUpperCase());
+    return fromString(toString().toUpperCase());
   }
 
+  /**
+   * Returns the lower case of this string
+   */
   public UTF8String toLowerCase() {
-    return UTF8String.fromString(toString().toLowerCase());
+    return fromString(toString().toLowerCase());
   }
 
   @Override
   public String toString() {
     try {
-      return new String(bytes, "utf-8");
+      return new String(getBytes(), "utf-8");
     } catch (UnsupportedEncodingException e) {
       // Turn the exception into unchecked so we can find out about it at runtime, but
       // don't need to add lots of boilerplate code everywhere.
-      PlatformDependent.throwException(e);
+      throwException(e);
       return "unknown";  // we will never reach here.
     }
   }
 
   @Override
   public UTF8String clone() {
-    return new UTF8String().set(bytes);
+    return fromBytes(getBytes());
   }
 
   @Override
   public int compareTo(final UTF8String other) {
-    final byte[] b = other.getBytes();
-    for (int i = 0; i < bytes.length && i < b.length; i++) {
-      int res = bytes[i] - b[i];
+    int len = Math.min(numBytes, other.numBytes);
+    // TODO: compare 8 bytes as unsigned long
+    for (int i = 0; i < len; i ++) {
+      // In UTF-8, the byte should be unsigned, so we should compare them as unsigned int.
+      int res = (getByte(i) & 0xFF) - (other.getByte(i) & 0xFF);
       if (res != 0) {
         return res;
       }
     }
-    return bytes.length - b.length;
+    return numBytes - other.numBytes;
   }
 
   public int compare(final UTF8String other) {
@@ -195,11 +244,11 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
   @Override
   public boolean equals(final Object other) {
     if (other instanceof UTF8String) {
-      return Arrays.equals(bytes, ((UTF8String) other).getBytes());
-    } else if (other instanceof String) {
-      // Used only in unit tests.
-      String s = (String) other;
-      return bytes.length >= s.length() && length() == s.length() && toString().equals(s);
+      UTF8String o = (UTF8String) other;
+      if (numBytes != o.numBytes){
+        return false;
+      }
+      return ByteArrayMethods.arrayEquals(base, offset, o.base, o.offset, numBytes);
     } else {
       return false;
     }
@@ -207,6 +256,10 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
 
   @Override
   public int hashCode() {
-    return Arrays.hashCode(bytes);
+    int result = 1;
+    for (int i = 0; i < numBytes; i ++) {
+      result = 31 * result + getByte(i);
+    }
+    return result;
   }
 }

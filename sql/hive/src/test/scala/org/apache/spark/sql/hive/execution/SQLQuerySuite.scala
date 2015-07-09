@@ -17,14 +17,16 @@
 
 package org.apache.spark.sql.hive.execution
 
+import java.sql.{Date, Timestamp}
+
+import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.DefaultParserDialect
 import org.apache.spark.sql.catalyst.analysis.EliminateSubQueries
 import org.apache.spark.sql.catalyst.errors.DialectException
-import org.apache.spark.sql._
 import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.hive.test.TestHive._
 import org.apache.spark.sql.hive.test.TestHive.implicits._
-import org.apache.spark.sql.hive.{HiveQLDialect, MetastoreRelation}
+import org.apache.spark.sql.hive.{HiveContext, HiveQLDialect, MetastoreRelation}
 import org.apache.spark.sql.parquet.ParquetRelation2
 import org.apache.spark.sql.sources.LogicalRelation
 import org.apache.spark.sql.types._
@@ -157,6 +159,24 @@ class SQLQuerySuite extends QueryTest {
     checkAnswer(query, Row(1, 1) :: Nil)
   }
 
+  test("CTAS with WITH clause") {
+    val df = Seq((1, 1)).toDF("c1", "c2")
+    df.registerTempTable("table1")
+
+    sql(
+      """
+        |CREATE TABLE with_table1 AS
+        |WITH T AS (
+        |  SELECT *
+        |  FROM table1
+        |)
+        |SELECT *
+        |FROM T
+      """.stripMargin)
+    val query = sql("SELECT * FROM with_table1")
+    checkAnswer(query, Row(1, 1) :: Nil)
+  }
+
   test("explode nested Field") {
     Seq(NestedArray1(NestedArray2(Seq(1, 2, 3)))).toDF.registerTempTable("nestedArray")
     checkAnswer(
@@ -191,9 +211,9 @@ class SQLQuerySuite extends QueryTest {
       }
     }
 
-    val originalConf = getConf("spark.sql.hive.convertCTAS", "false")
+    val originalConf = convertCTAS
 
-    setConf("spark.sql.hive.convertCTAS", "true")
+    setConf(HiveContext.CONVERT_CTAS, true)
 
     sql("CREATE TABLE ctas1 AS SELECT key k, value FROM src ORDER BY k, value")
     sql("CREATE TABLE IF NOT EXISTS ctas1 AS SELECT key k, value FROM src ORDER BY k, value")
@@ -235,7 +255,7 @@ class SQLQuerySuite extends QueryTest {
     checkRelation("ctas1", false)
     sql("DROP TABLE ctas1")
 
-    setConf("spark.sql.hive.convertCTAS", originalConf)
+    setConf(HiveContext.CONVERT_CTAS, originalConf)
   }
 
   test("SQL Dialect Switching") {
@@ -332,7 +352,7 @@ class SQLQuerySuite extends QueryTest {
 
     val origUseParquetDataSource = conf.parquetUseDataSourceApi
     try {
-      setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, "false")
+      setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, false)
       sql(
         """CREATE TABLE ctas5
           | STORED AS parquet AS
@@ -348,7 +368,7 @@ class SQLQuerySuite extends QueryTest {
         "MANAGED_TABLE"
       )
 
-      val default = getConf("spark.sql.hive.convertMetastoreParquet", "true")
+      val default = convertMetastoreParquet
       // use the Hive SerDe for parquet tables
       sql("set spark.sql.hive.convertMetastoreParquet = false")
       checkAnswer(
@@ -356,7 +376,7 @@ class SQLQuerySuite extends QueryTest {
         sql("SELECT key, value FROM src ORDER BY key, value").collect().toSeq)
       sql(s"set spark.sql.hive.convertMetastoreParquet = $default")
     } finally {
-      setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, origUseParquetDataSource.toString)
+      setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, origUseParquetDataSource)
     }
   }
 
@@ -603,8 +623,8 @@ class SQLQuerySuite extends QueryTest {
     // generates an invalid query plan.
     val rdd = sparkContext.makeRDD((1 to 5).map(i => s"""{"a":[$i, ${i + 1}]}"""))
     read.json(rdd).registerTempTable("data")
-    val originalConf = getConf("spark.sql.hive.convertCTAS", "false")
-    setConf("spark.sql.hive.convertCTAS", "false")
+    val originalConf = convertCTAS
+    setConf(HiveContext.CONVERT_CTAS, false)
 
     sql("CREATE TABLE explodeTest (key bigInt)")
     table("explodeTest").queryExecution.analyzed match {
@@ -621,7 +641,7 @@ class SQLQuerySuite extends QueryTest {
 
     sql("DROP TABLE explodeTest")
     dropTempTable("data")
-    setConf("spark.sql.hive.convertCTAS", originalConf)
+    setConf(HiveContext.CONVERT_CTAS, originalConf)
   }
 
   test("sanity test for SPARK-6618") {
@@ -638,7 +658,7 @@ class SQLQuerySuite extends QueryTest {
   test("SPARK-5203 union with different decimal precision") {
     Seq.empty[(Decimal, Decimal)]
       .toDF("d1", "d2")
-      .select($"d1".cast(DecimalType(10, 15)).as("d"))
+      .select($"d1".cast(DecimalType(10, 5)).as("d"))
       .registerTempTable("dn")
 
     sql("select d from dn union all select d * 2 from dn")
@@ -875,6 +895,10 @@ class SQLQuerySuite extends QueryTest {
     }
   }
 
+  test("Cast STRING to BIGINT") {
+    checkAnswer(sql("SELECT CAST('775983671874188101' as BIGINT)"), Row(775983671874188101L))
+  }
+
   // `Math.exp(1.0)` has different result for different jdk version, so not use createQueryTest
   test("udf_java_method") {
     checkAnswer(sql(
@@ -929,5 +953,76 @@ class SQLQuerySuite extends QueryTest {
       sql("drop table if exists dynparttest2")
       sql("set hive.exec.dynamic.partition.mode=strict")
     }
+  }
+
+  test("Call add jar in a different thread (SPARK-8306)") {
+    @volatile var error: Option[Throwable] = None
+    val thread = new Thread {
+      override def run() {
+        // To make sure this test works, this jar should not be loaded in another place.
+        TestHive.sql(
+          s"ADD JAR ${TestHive.getHiveFile("hive-contrib-0.13.1.jar").getCanonicalPath()}")
+        try {
+          TestHive.sql(
+            """
+              |CREATE TEMPORARY FUNCTION example_max
+              |AS 'org.apache.hadoop.hive.contrib.udaf.example.UDAFExampleMax'
+            """.stripMargin)
+        } catch {
+          case throwable: Throwable =>
+            error = Some(throwable)
+        }
+      }
+    }
+    thread.start()
+    thread.join()
+    error match {
+      case Some(throwable) =>
+        fail("CREATE TEMPORARY FUNCTION should not fail.", throwable)
+      case None => // OK
+    }
+  }
+
+  test("SPARK-6785: HiveQuerySuite - Date comparison test 2") {
+    checkAnswer(
+      sql("SELECT CAST(CAST(0 AS timestamp) AS date) > CAST(0 AS timestamp) FROM src LIMIT 1"),
+      Row(false))
+  }
+
+  test("SPARK-6785: HiveQuerySuite - Date cast") {
+    // new Date(0) == 1970-01-01 00:00:00.0 GMT == 1969-12-31 16:00:00.0 PST
+    checkAnswer(
+      sql(
+        """
+          | SELECT
+          | CAST(CAST(0 AS timestamp) AS date),
+          | CAST(CAST(CAST(0 AS timestamp) AS date) AS string),
+          | CAST(0 AS timestamp),
+          | CAST(CAST(0 AS timestamp) AS string),
+          | CAST(CAST(CAST('1970-01-01 23:00:00' AS timestamp) AS date) AS timestamp)
+          | FROM src LIMIT 1
+        """.stripMargin),
+      Row(
+        Date.valueOf("1969-12-31"),
+        String.valueOf("1969-12-31"),
+        Timestamp.valueOf("1969-12-31 16:00:00"),
+        String.valueOf("1969-12-31 16:00:00"),
+        Timestamp.valueOf("1970-01-01 00:00:00")))
+
+  }
+
+  test("SPARK-8588 HiveTypeCoercion.inConversion fires too early") {
+    val df =
+      TestHive.createDataFrame(Seq((1, "2014-01-01"), (2, "2015-01-01"), (3, "2016-01-01")))
+    df.toDF("id", "date").registerTempTable("test_SPARK8588")
+    checkAnswer(
+      TestHive.sql(
+        """
+          |select id, concat(year(date))
+          |from test_SPARK8588 where concat(year(date), ' year') in ('2015 year', '2014 year')
+        """.stripMargin),
+      Row(1, "2014") :: Row(2, "2015") :: Nil
+    )
+    TestHive.dropTempTable("test_SPARK8588")
   }
 }

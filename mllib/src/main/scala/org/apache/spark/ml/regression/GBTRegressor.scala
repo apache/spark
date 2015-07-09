@@ -131,6 +131,8 @@ final class GBTRegressor(override val uid: String)
     val oldModel = oldGBT.run(oldDataset)
     GBTRegressionModel.fromOld(oldModel, this, categoricalFeatures)
   }
+
+  override def copy(extra: ParamMap): GBTRegressor = defaultCopy(extra)
 }
 
 @Experimental
@@ -170,8 +172,7 @@ final class GBTRegressionModel(
     // TODO: When we add a generic Boosting class, handle transform there?  SPARK-7129
     // Classifies by thresholding sum of weighted tree predictions
     val treePredictions = _trees.map(_.rootNode.predict(features))
-    val prediction = blas.ddot(numTrees, treePredictions, 1, _treeWeights, 1)
-    if (prediction > 0.0) 1.0 else 0.0
+    blas.ddot(numTrees, treePredictions, 1, _treeWeights, 1)
   }
 
   override def copy(extra: ParamMap): GBTRegressionModel = {
