@@ -33,6 +33,7 @@ import org.apache.hadoop.hive.ql.udf.generic.GenericUDFUtils.ConversionHelper
 
 import org.apache.spark.Logging
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
@@ -76,7 +77,7 @@ private[hive] class HiveFunctionRegistry(underlying: analysis.FunctionRegistry)
   }
 
   override def registerFunction(name: String, builder: FunctionBuilder): Unit =
-    throw new UnsupportedOperationException
+    underlying.registerFunction(name, builder)
 }
 
 private[hive] case class HiveSimpleUDF(funcWrapper: HiveFunctionWrapper, children: Seq[Expression])
