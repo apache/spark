@@ -1627,6 +1627,179 @@ object functions {
   def ascii(columnName: String): Column = ascii(Column(columnName))
 
   /**
+   * Trim the spaces from both ends for the specified string value.
+   *
+   * @group string_funcs
+   * @since 1.5.0
+   */
+  def trim(e: Column): Column = StringTrim(e.expr)
+
+  /**
+   * Trim the spaces from both ends for the specified column.
+   *
+   * @group string_funcs
+   * @since 1.5.0
+   */
+  def trim(columnName: String): Column = trim(Column(columnName))
+
+  /**
+   * Trim the spaces from left end for the specified string value.
+   *
+   * @group string_funcs
+   * @since 1.5.0
+   */
+  def ltrim(e: Column): Column = StringTrimLeft(e.expr)
+
+  /**
+   * Trim the spaces from left end for the specified column.
+   *
+   * @group string_funcs
+   * @since 1.5.0
+   */
+  def ltrim(columnName: String): Column = ltrim(Column(columnName))
+
+  /**
+   * Trim the spaces from right end for the specified string value.
+   *
+   * @group string_funcs
+   * @since 1.5.0
+   */
+  def rtrim(e: Column): Column = StringTrimRight(e.expr)
+
+  /**
+   * Trim the spaces from right end for the specified column.
+   *
+   * @group string_funcs
+   * @since 1.5.0
+   */
+  def rtrim(columnName: String): Column = rtrim(Column(columnName))
+
+  /**
+   * Format strings in printf-style.
+   *
+   * @group string_funcs
+   * @since 1.5.0
+   */
+  @scala.annotation.varargs
+  def formatString(format: Column, arguments: Column*): Column = {
+    StringFormat((format +: arguments).map(_.expr): _*)
+  }
+
+  /**
+   * Format strings in printf-style.
+   * NOTE: `format` is the string value of the formatter, not column name.
+   *
+   * @group string_funcs
+   * @since 1.5.0
+   */
+  @scala.annotation.varargs
+  def formatString(format: String, arguNames: String*): Column = {
+    StringFormat(lit(format).expr +: arguNames.map(Column(_).expr): _*)
+  }
+
+  /**
+   * Locate the position of the first occurrence of substr value in the given string.
+   * Returns null if either of the arguments are null.
+   *
+   * NOTE: The position is not zero based, but 1 based index, returns 0 if substr
+   * could not be found in str.
+   *
+   * @group string_funcs
+   * @since 1.5.0
+   */
+  def instr(substr: String, sub: String): Column = instr(Column(substr), Column(sub))
+
+  /**
+   * Locate the position of the first occurrence of substr column in the given string.
+   * Returns null if either of the arguments are null.
+   *
+   * NOTE: The position is not zero based, but 1 based index, returns 0 if substr
+   * could not be found in str.
+   *
+   * @group string_funcs
+   * @since 1.5.0
+   */
+  def instr(substr: Column, sub: Column): Column = StringInstr(substr.expr, sub.expr)
+
+  /**
+   * Locate the position of the first occurrence of substr.
+   *
+   * NOTE: The position is not zero based, but 1 based index, returns 0 if substr
+   * could not be found in str.
+   *
+   * @group string_funcs
+   * @since 1.5.0
+   */
+  def locate(substr: String, str: String): Column = {
+    locate(Column(substr), Column(str))
+  }
+
+  /**
+   * Locate the position of the first occurrence of substr.
+   *
+   * NOTE: The position is not zero based, but 1 based index, returns 0 if substr
+   * could not be found in str.
+   *
+   * @group string_funcs
+   * @since 1.5.0
+   */
+  def locate(substr: Column, str: Column): Column = {
+    new StringLocate(substr.expr, str.expr)
+  }
+
+  /**
+   * Locate the position of the first occurrence of substr in a given string after position pos.
+   *
+   * NOTE: The position is not zero based, but 1 based index, returns 0 if substr
+   * could not be found in str.
+   *
+   * @group string_funcs
+   * @since 1.5.0
+   */
+  def locate(substr: String, str: String, pos: String): Column = {
+    locate(Column(substr), Column(str), Column(pos))
+  }
+
+  /**
+   * Locate the position of the first occurrence of substr in a given string after position pos.
+   *
+   * NOTE: The position is not zero based, but 1 based index, returns 0 if substr
+   * could not be found in str.
+   *
+   * @group string_funcs
+   * @since 1.5.0
+   */
+  def locate(substr: Column, str: Column, pos: Column): Column = {
+    StringLocate(substr.expr, str.expr, pos.expr)
+  }
+
+  /**
+   * Locate the position of the first occurrence of substr in a given string after position pos.
+   *
+   * NOTE: The position is not zero based, but 1 based index, returns 0 if substr
+   * could not be found in str.
+   *
+   * @group string_funcs
+   * @since 1.5.0
+   */
+  def locate(substr: Column, str: Column, pos: Int): Column = {
+    StringLocate(substr.expr, str.expr, lit(pos).expr)
+  }
+
+  /**
+   * Locate the position of the first occurrence of substr in a given string after position pos.
+   *
+   * NOTE: The position is not zero based, but 1 based index, returns 0 if substr
+   * could not be found in str.
+   *
+   * @group string_funcs
+   * @since 1.5.0
+   */
+  def locate(substr: String, str: String, pos: Int): Column = {
+    locate(Column(substr), Column(str), lit(pos))
+  }
+
+  /**
    * Computes the specified value from binary to a base64 string.
    *
    * @group string_funcs
@@ -1657,6 +1830,46 @@ object functions {
    * @since 1.5.0
    */
   def unbase64(columnName: String): Column = unbase64(Column(columnName))
+
+  /**
+   * Left-padded with pad to a length of len.
+   *
+   * @group string_funcs
+   * @since 1.5.0
+   */
+  def lpad(str: String, len: String, pad: String): Column = {
+    lpad(Column(str), Column(len), Column(pad))
+  }
+
+  /**
+   * Left-padded with pad to a length of len.
+   *
+   * @group string_funcs
+   * @since 1.5.0
+   */
+  def lpad(str: Column, len: Column, pad: Column): Column = {
+    StringLPad(str.expr, len.expr, pad.expr)
+  }
+
+  /**
+   * Left-padded with pad to a length of len.
+   *
+   * @group string_funcs
+   * @since 1.5.0
+   */
+  def lpad(str: Column, len: Int, pad: Column): Column = {
+    StringLPad(str.expr, lit(len).expr, pad.expr)
+  }
+
+  /**
+   * Left-padded with pad to a length of len.
+   *
+   * @group string_funcs
+   * @since 1.5.0
+   */
+  def lpad(str: String, len: Int, pad: String): Column = {
+    lpad(Column(str), len, Column(pad))
+  }
 
   /**
    * Computes the first argument into a binary from a string using the provided character set
@@ -1702,6 +1915,146 @@ object functions {
   def decode(columnName: String, charset: String): Column =
     decode(Column(columnName), charset)
 
+  /**
+   * Right-padded with pad to a length of len.
+   *
+   * @group string_funcs
+   * @since 1.5.0
+   */
+  def rpad(str: String, len: String, pad: String): Column = {
+    rpad(Column(str), Column(len), Column(pad))
+  }
+
+  /**
+   * Right-padded with pad to a length of len.
+   *
+   * @group string_funcs
+   * @since 1.5.0
+   */
+  def rpad(str: Column, len: Column, pad: Column): Column = {
+    StringRPad(str.expr, len.expr, pad.expr)
+  }
+
+  /**
+   * Right-padded with pad to a length of len.
+   *
+   * @group string_funcs
+   * @since 1.5.0
+   */
+  def rpad(str: String, len: Int, pad: String): Column = {
+    rpad(Column(str), len, Column(pad))
+  }
+
+  /**
+   * Right-padded with pad to a length of len.
+   *
+   * @group string_funcs
+   * @since 1.5.0
+   */
+  def rpad(str: Column, len: Int, pad: Column): Column = {
+    StringRPad(str.expr, lit(len).expr, pad.expr)
+  }
+
+  /**
+   * Repeat the string value of the specified column n times.
+   *
+   * @group string_funcs
+   * @since 1.5.0
+   */
+  def repeat(strColumn: String, timesColumn: String): Column = {
+    repeat(Column(strColumn), Column(timesColumn))
+  }
+
+  /**
+   * Repeat the string expression value n times.
+   *
+   * @group string_funcs
+   * @since 1.5.0
+   */
+  def repeat(str: Column, times: Column): Column = {
+    StringRepeat(str.expr, times.expr)
+  }
+
+  /**
+   * Repeat the string value of the specified column n times.
+   *
+   * @group string_funcs
+   * @since 1.5.0
+   */
+  def repeat(strColumn: String, times: Int): Column = {
+    repeat(Column(strColumn), times)
+  }
+
+  /**
+   * Repeat the string expression value n times.
+   *
+   * @group string_funcs
+   * @since 1.5.0
+   */
+  def repeat(str: Column, times: Int): Column = {
+    StringRepeat(str.expr, lit(times).expr)
+  }
+
+  /**
+   * Splits str around pattern (pattern is a regular expression).
+   *
+   * @group string_funcs
+   * @since 1.5.0
+   */
+  def split(strColumnName: String, pattern: String): Column = {
+    split(Column(strColumnName), pattern)
+  }
+
+  /**
+   * Splits str around pattern (pattern is a regular expression).
+   * NOTE: pattern is a string represent the regular expression.
+   *
+   * @group string_funcs
+   * @since 1.5.0
+   */
+  def split(str: Column, pattern: String): Column = {
+    StringSplit(str.expr, lit(pattern).expr)
+  }
+
+  /**
+   * Reversed the string for the specified column.
+   *
+   * @group string_funcs
+   * @since 1.5.0
+   */
+  def reverse(str: String): Column = {
+    reverse(Column(str))
+  }
+
+  /**
+   * Reversed the string for the specified value.
+   *
+   * @group string_funcs
+   * @since 1.5.0
+   */
+  def reverse(str: Column): Column = {
+    StringReverse(str.expr)
+  }
+
+  /**
+   * Make a n spaces of string.
+   *
+   * @group string_funcs
+   * @since 1.5.0
+   */
+  def space(n: String): Column = {
+    space(Column(n))
+  }
+
+  /**
+   * Make a n spaces of string.
+   *
+   * @group string_funcs
+   * @since 1.5.0
+   */
+  def space(n: Column): Column = {
+    StringSpace(n.expr)
+  }
 
   //////////////////////////////////////////////////////////////////////////////////////////////
   //////////////////////////////////////////////////////////////////////////////////////////////

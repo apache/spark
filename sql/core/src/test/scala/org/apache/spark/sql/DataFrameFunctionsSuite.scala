@@ -209,21 +209,14 @@ class DataFrameFunctionsSuite extends QueryTest {
   }
 
   test("string length function") {
+    val df = Seq(("abc", "")).toDF("a", "b")
     checkAnswer(
-      nullStrings.select(strlen($"s"), strlen("s")),
-      nullStrings.collect().toSeq.map { r =>
-        val v = r.getString(1)
-        val l = if (v == null) null else v.length
-        Row(l, l)
-      })
+      df.select(strlen($"a"), strlen("b")),
+      Row(3, 0))
 
     checkAnswer(
-      nullStrings.selectExpr("length(s)"),
-      nullStrings.collect().toSeq.map { r =>
-        val v = r.getString(1)
-        val l = if (v == null) null else v.length
-        Row(l)
-      })
+      df.selectExpr("length(a)", "length(b)"),
+      Row(3, 0))
   }
 
   test("Levenshtein distance") {
@@ -272,5 +265,120 @@ class DataFrameFunctionsSuite extends QueryTest {
       df.selectExpr("encode(a, 'utf-8')", "decode(c, 'utf-8')"),
       Row(bytes, "大千世界"))
     // scalastyle:on
+  }
+
+  test("string trim functions") {
+    val df = Seq(("  example  ", "")).toDF("a", "b")
+
+    checkAnswer(
+      df.select(ltrim($"a"), rtrim($"a"), trim($"a")),
+      Row("example  ", "  example", "example"))
+
+    checkAnswer(
+      df.selectExpr("ltrim(a)", "rtrim(a)", "trim(a)"),
+      Row("example  ", "  example", "example"))
+  }
+
+  test("string formatString function") {
+    val df = Seq(("aa%d%s", 123, "cc")).toDF("a", "b", "c")
+
+    checkAnswer(
+      df.select(formatString($"a", $"b", $"c"), formatString("aa%d%s", "b", "c")),
+      Row("aa123cc", "aa123cc"))
+
+    checkAnswer(
+      df.selectExpr("printf(a, b, c)"),
+      Row("aa123cc"))
+  }
+
+  test("string instr function") {
+    val df = Seq(("aaads", "aa", "zz")).toDF("a", "b", "c")
+
+    checkAnswer(
+      df.select(instr($"a", $"b"), instr("a", "b")),
+      Row(1, 1))
+
+    checkAnswer(
+      df.selectExpr("instr(a, b)"),
+      Row(1))
+  }
+
+  test("string locate function") {
+    val df = Seq(("aaads", "aa", "zz", 1)).toDF("a", "b", "c", "d")
+
+    checkAnswer(
+      df.select(
+        locate($"b", $"a"), locate("b", "a"), locate($"b", $"a", 1),
+        locate("b", "a", 1), locate($"b", $"a", $"d"), locate("b", "a", "d")),
+      Row(1, 1, 2, 2, 2, 2))
+
+    checkAnswer(
+      df.selectExpr("locate(b, a)", "locate(b, a, d)"),
+      Row(1, 2))
+  }
+
+  test("string padding functions") {
+    val df = Seq(("hi", 5, "??")).toDF("a", "b", "c")
+
+    checkAnswer(
+          df.select(
+            lpad($"a", $"b", $"c"), rpad("a", "b", "c"),
+            lpad($"a", 1, $"c"), rpad("a", 1, "c")),
+          Row("???hi", "hi???", "h", "h"))
+
+    checkAnswer(
+      df.selectExpr("lpad(a, b, c)", "rpad(a, b, c)", "lpad(a, 1, c)", "rpad(a, 1, c)"),
+      Row("???hi", "hi???", "h", "h"))
+  }
+
+  test("string repeat function") {
+    val df = Seq(("hi", 2)).toDF("a", "b")
+
+    checkAnswer(
+      df.select(
+        repeat($"a", 2), repeat("a", 2), repeat($"a", $"b"), repeat("a", "b")),
+      Row("hihi", "hihi", "hihi", "hihi"))
+
+    checkAnswer(
+      df.selectExpr("repeat(a, 2)", "repeat(a, b)"),
+      Row("hihi", "hihi"))
+  }
+
+  test("string reverse function") {
+    val df = Seq(("hi", "hhhi")).toDF("a", "b")
+
+    checkAnswer(
+      df.select(reverse($"a"), reverse("b")),
+      Row("ih", "ihhh"))
+
+    checkAnswer(
+      df.selectExpr("reverse(b)"),
+      Row("ihhh"))
+  }
+
+  test("string space function") {
+    val df = Seq((2, 3)).toDF("a", "b")
+
+    checkAnswer(
+      df.select(space($"a"), space("b")),
+      Row("  ", "   "))
+
+    checkAnswer(
+      df.selectExpr("space(b)"),
+      Row("   "))
+  }
+
+  test("string split function") {
+    val df = Seq(("aa2bb3cc", "[1-9]+")).toDF("a", "b")
+
+    checkAnswer(
+      df.select(
+        split($"a", "[1-9]+"),
+        split("a", "[1-9]+")),
+      Row(Seq("aa", "bb", "cc"), Seq("aa", "bb", "cc")))
+
+    checkAnswer(
+      df.selectExpr("split(a, '[1-9]+')"),
+      Row(Seq("aa", "bb", "cc")))
   }
 }
