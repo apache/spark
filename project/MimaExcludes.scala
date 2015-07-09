@@ -70,7 +70,12 @@ object MimaExcludes {
               "org.apache.spark.mllib.linalg.Matrix.numNonzeros"),
             ProblemFilters.exclude[MissingMethodProblem](
               "org.apache.spark.mllib.linalg.Matrix.numActives")
+          ) ++ Seq(
+            // SPARK-8914 Remove RDDApi
+            ProblemFilters.exclude[MissingClassProblem](
+            "org.apache.spark.sql.RDDApi")
           )
+
         case v if v.startsWith("1.4") =>
           Seq(
             MimaBuild.excludeSparkPackage("deploy"),
