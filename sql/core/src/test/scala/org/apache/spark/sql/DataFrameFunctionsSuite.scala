@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.TestData._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 
@@ -115,6 +114,15 @@ class DataFrameFunctionsSuite extends QueryTest {
 
     assert(result.first.schema(0).dataType === expectedType)
     checkAnswer(result, Seq(Row(Row("v", 5.0)), Row(Row("v", 5.0))))
+  }
+
+  case class TestData2(a: Int, b: Int)
+  val testData2 = {
+    val df = (for { a <- 1 to 3; b <- 1 to 2 } yield (a, b))
+      .map(t => TestData2(t._1, t._2))
+      .toDF()
+    df.registerTempTable("testData2")
+    df
   }
 
   test("constant functions") {
