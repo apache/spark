@@ -775,7 +775,7 @@ def _python_to_sql_converter(dataType):
             if dt:
                 seconds = (calendar.timegm(dt.utctimetuple()) if dt.tzinfo
                            else time.mktime(dt.timetuple()))
-                return int(seconds * 1e7 + dt.microsecond * 10)
+                return int(seconds * 1e6 + dt.microsecond)
         return to_posix_timstamp
 
     else:
@@ -1067,6 +1067,10 @@ def _verify_type(obj, dataType):
     """
     # all objects are nullable
     if obj is None:
+        return
+
+    # StringType can work with any types
+    if isinstance(dataType, StringType):
         return
 
     if isinstance(dataType, UserDefinedType):

@@ -58,30 +58,27 @@ object MimaExcludes {
               "org.apache.spark.ml.regression.LeastSquaresAggregator.this"),
             ProblemFilters.exclude[MissingMethodProblem](
               "org.apache.spark.ml.regression.LeastSquaresCostFun.this"),
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.ml.classification.LogisticCostFun.this"),
             // SQL execution is considered private.
             excludePackage("org.apache.spark.sql.execution"),
-            // NanoTime and CatalystTimestampConverter is only used inside catalyst,
-            // not needed anymore
-            ProblemFilters.exclude[MissingClassProblem](
-              "org.apache.spark.sql.parquet.timestamp.NanoTime"),
-              ProblemFilters.exclude[MissingClassProblem](
-              "org.apache.spark.sql.parquet.timestamp.NanoTime$"),
-            ProblemFilters.exclude[MissingClassProblem](
-              "org.apache.spark.sql.parquet.CatalystTimestampConverter"),
-            ProblemFilters.exclude[MissingClassProblem](
-              "org.apache.spark.sql.parquet.CatalystTimestampConverter$"),
-            // SPARK-6777 Implements backwards compatibility rules in CatalystSchemaConverter
-            ProblemFilters.exclude[MissingClassProblem](
-              "org.apache.spark.sql.parquet.ParquetTypeInfo"),
-            ProblemFilters.exclude[MissingClassProblem](
-              "org.apache.spark.sql.parquet.ParquetTypeInfo$")
+            // Parquet support is considered private.
+            excludePackage("org.apache.spark.sql.parquet"),
+            // local function inside a method
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.sql.SQLContext.org$apache$spark$sql$SQLContext$$needsConversion$1")
           ) ++ Seq(
             // SPARK-8479 Add numNonzeros and numActives to Matrix.
             ProblemFilters.exclude[MissingMethodProblem](
               "org.apache.spark.mllib.linalg.Matrix.numNonzeros"),
             ProblemFilters.exclude[MissingMethodProblem](
               "org.apache.spark.mllib.linalg.Matrix.numActives")
+          ) ++ Seq(
+            // SPARK-8914 Remove RDDApi
+            ProblemFilters.exclude[MissingClassProblem](
+            "org.apache.spark.sql.RDDApi")
           )
+
         case v if v.startsWith("1.4") =>
           Seq(
             MimaBuild.excludeSparkPackage("deploy"),

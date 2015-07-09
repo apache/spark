@@ -71,6 +71,12 @@ class HiveTypeCoercionSuite extends PlanTest {
 
     shouldCast(IntegerType, TypeCollection(StringType, BinaryType), StringType)
     shouldCast(IntegerType, TypeCollection(BinaryType, StringType), StringType)
+
+    shouldCast(
+      DecimalType.Unlimited, TypeCollection(IntegerType, DecimalType), DecimalType.Unlimited)
+    shouldCast(DecimalType(10, 2), TypeCollection(IntegerType, DecimalType), DecimalType(10, 2))
+    shouldCast(DecimalType(10, 2), TypeCollection(DecimalType, IntegerType), DecimalType(10, 2))
+    shouldCast(IntegerType, TypeCollection(DecimalType(10, 2), StringType), DecimalType(10, 2))
   }
 
   test("ineligible implicit type cast") {
@@ -263,6 +269,27 @@ class HiveTypeCoercionSuite extends PlanTest {
     ruleTest(be,
       EqualTo(Literal.create(Decimal(1), DecimalType(8, 0)), Literal(true)),
       Literal(true)
+    )
+  }
+
+  /**
+   * There are rules that need to not fire before child expressions get resolved.
+   * We use this test to make sure those rules do not fire early.
+   */
+  test("make sure rules do not fire early") {
+    // InConversion
+    val inConversion = HiveTypeCoercion.InConversion
+    ruleTest(inConversion,
+      In(UnresolvedAttribute("a"), Seq(Literal(1))),
+      In(UnresolvedAttribute("a"), Seq(Literal(1)))
+    )
+    ruleTest(inConversion,
+      In(Literal("test"), Seq(UnresolvedAttribute("a"), Literal(1))),
+      In(Literal("test"), Seq(UnresolvedAttribute("a"), Literal(1)))
+    )
+    ruleTest(inConversion,
+      In(Literal("a"), Seq(Literal(1), Literal("b"))),
+      In(Literal("a"), Seq(Cast(Literal(1), StringType), Cast(Literal("b"), StringType)))
     )
   }
 }

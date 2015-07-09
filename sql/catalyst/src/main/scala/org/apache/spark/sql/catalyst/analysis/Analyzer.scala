@@ -85,7 +85,7 @@ class Analyzer(
    */
   object CTESubstitution extends Rule[LogicalPlan] {
     // TODO allow subquery to define CTE
-    def apply(plan: LogicalPlan): LogicalPlan = plan match {
+    def apply(plan: LogicalPlan): LogicalPlan = plan transform  {
       case With(child, relations) => substituteCTE(child, relations)
       case other => other
     }

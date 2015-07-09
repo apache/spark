@@ -358,9 +358,24 @@ private[parquet] class CatalystSchemaConverter(
       case DateType =>
         Types.primitive(INT32, repetition).as(DATE).named(field.name)
 
-      // NOTE: !! This timestamp type is not specified in Parquet format spec !!
-      // However, Impala and older versions of Spark SQL use INT96 to store timestamps with
-      // nanosecond precision (not TIME_MILLIS or TIMESTAMP_MILLIS described in the spec).
+      // NOTE: Spark SQL TimestampType is NOT a well defined type in Parquet format spec.
+      //
+      // As stated in PARQUET-323, Parquet `INT96` was originally introduced to represent nanosecond
+      // timestamp in Impala for some historical reasons, it's not recommended to be used for any
+      // other types and will probably be deprecated in future Parquet format spec.  That's the
+      // reason why Parquet format spec only defines `TIMESTAMP_MILLIS` and `TIMESTAMP_MICROS` which
+      // are both logical types annotating `INT64`.
+      //
+      // Originally, Spark SQL uses the same nanosecond timestamp type as Impala and Hive.  Starting
+      // from Spark 1.5.0, we resort to a timestamp type with 100 ns precision so that we can store
+      // a timestamp into a `Long`.  This design decision is subject to change though, for example,
+      // we may resort to microsecond precision in the future.
+      //
+      // For Parquet, we plan to write all `TimestampType` value as `TIMESTAMP_MICROS`, but it's
+      // currently not implemented yet because parquet-mr 1.7.0 (the version we're currently using)
+      // hasn't implemented `TIMESTAMP_MICROS` yet.
+      //
+      // TODO Implements `TIMESTAMP_MICROS` once parquet-mr has that.
       case TimestampType =>
         Types.primitive(INT96, repetition).named(field.name)
 
