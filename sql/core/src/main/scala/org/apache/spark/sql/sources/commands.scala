@@ -276,7 +276,18 @@ private[sql] case class InsertIntoHadoopFsRelation(
     log.debug(
       s"Creating Projection: $expressions, inputSchema: $inputSchema, codegen:$codegenEnabled")
     if (codegenEnabled) {
-      GenerateProjection.generate(expressions, inputSchema)
+
+      try {
+        GenerateProjection.generate(expressions, inputSchema)
+      } catch {
+        case e: Exception =>
+          if (sys.props.contains("spark.testing")) {
+            throw e
+          } else {
+            log.error("failed to generate projection, fallback to interpreted", e)
+            new InterpretedProjection(expressions, inputSchema)
+          }
+      }
     } else {
       new InterpretedProjection(expressions, inputSchema)
     }
