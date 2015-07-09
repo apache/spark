@@ -325,14 +325,16 @@ def parse_args():
     home_dir = os.getenv('HOME')
     if home_dir is None or not os.path.isfile(home_dir + '/.boto'):
         if not os.path.isfile('/etc/boto.cfg'):
-            if os.getenv('AWS_ACCESS_KEY_ID') is None:
-                print("ERROR: The environment variable AWS_ACCESS_KEY_ID must be set",
-                      file=stderr)
-                sys.exit(1)
-            if os.getenv('AWS_SECRET_ACCESS_KEY') is None:
-                print("ERROR: The environment variable AWS_SECRET_ACCESS_KEY must be set",
-                      file=stderr)
-                sys.exit(1)
+            # If there is no boto config, check aws credentials
+            if not os.path.isfile(home_dir + '/.aws/credentials'):
+                if os.getenv('AWS_ACCESS_KEY_ID') is None:
+                    print("ERROR: The environment variable AWS_ACCESS_KEY_ID must be set",
+                          file=stderr)
+                    sys.exit(1)
+                if os.getenv('AWS_SECRET_ACCESS_KEY') is None:
+                    print("ERROR: The environment variable AWS_SECRET_ACCESS_KEY must be set",
+                          file=stderr)
+                    sys.exit(1)
     return (opts, action, cluster_name)
 
 
