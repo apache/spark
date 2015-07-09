@@ -1185,6 +1185,23 @@ class BaseOperator(object):
         '''
         pass
 
+    def __deepcopy__(self, memo):
+        """
+        Hack sorting double chained task lists by task_id to avoid hitting
+        max_depth on deepcopy operations.
+        """
+        cls = self.__class__
+        result = cls.__new__(cls)
+        memo[id(self)] = result
+
+        self._upstream_list = sorted(self._upstream_list, key=lambda x: x.task_id)
+        self._downstream_list = sorted(self._downstream_list, key=lambda x: x.task_id)
+        for k, v in self.__dict__.items():
+            if k not in ('user_defined_macros', 'params'):
+                setattr(result, k, copy.deepcopy(v, memo))
+
+        return result
+
     def render_template(self, content, context):
         if hasattr(self, 'dag'):
             env = self.dag.get_template_env()
