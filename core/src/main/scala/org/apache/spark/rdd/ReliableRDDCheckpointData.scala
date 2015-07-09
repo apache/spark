@@ -67,7 +67,7 @@ private[spark] class ReliableRDDCheckpointData[T: ClassTag](@transient rdd: RDD[
     val broadcastedConf = rdd.context.broadcast(
       new SerializableConfiguration(rdd.context.hadoopConfiguration))
     // TODO: This is expensive because it computes the RDD again unnecessarily (SPARK-8582)
-    rdd.context.runJob(rdd, ReliableCheckpointRDD.writeToFile[T](cpDir, broadcastedConf) _)
+    rdd.context.runJob(rdd, ReliableCheckpointRDD.writeCheckpointFile[T](cpDir, broadcastedConf) _)
     val newRDD = new ReliableCheckpointRDD[T](rdd.context, cpDir)
     if (newRDD.partitions.length != rdd.partitions.length) {
       throw new SparkException(
