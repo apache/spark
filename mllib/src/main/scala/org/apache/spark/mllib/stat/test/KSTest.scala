@@ -75,18 +75,13 @@ private[stat] object KSTest extends Logging {
   /**
    * Runs a KS test for 1 set of sample data, comparing it to a theoretical distribution
    * @param data `RDD[Double]` data on which to run test
-   * @param createDist `Unit => RealDistribution` function to create a theoretical distribution
+   * @param distObj `RealDistribution` a theoretical distribution
    * @return [[org.apache.spark.mllib.stat.test.KSTestResult]] summarizing the test results
    *        (p-value, statistic, and null hypothesis)
    */
-  def testOneSample(data: RDD[Double], createDist: () => RealDistribution): KSTestResult = {
-    val n = data.count().toDouble
-    val localData = data.sortBy(x => x).mapPartitions { part =>
-      val partDiffs = oneSampleDifferences(part, n, createDist) // local distances
-      searchOneSampleCandidates(partDiffs) // candidates: local extrema
-    }.collect()
-    val ksStat = searchOneSampleStatistic(localData, n) // result: global extreme
-    evalOneSampleP(ksStat, n.toLong)
+  def testOneSample(data: RDD[Double], distObj: RealDistribution): KSTestResult = {
+    val cdf = (x: Double) => distObj.cumulativeProbability(x)
+    testOneSample(data, cdf)
   }
 
   /**
@@ -112,15 +107,6 @@ private[stat] object KSTest extends Logging {
       val cdfVal = cdf(v)
       (dl - cdfVal, dp - cdfVal)
     }
-  }
-
-  private def oneSampleDifferences(
-      partData: Iterator[Double],
-      n: Double,
-      createDist: () => RealDistribution)
-    : Iterator[(Double, Double)] = {
-    val dist = createDist()
-    oneSampleDifferences(partData, n, x => dist.cumulativeProbability(x))
   }
 
   /**
@@ -177,9 +163,9 @@ private[stat] object KSTest extends Logging {
    */
   @varargs
   def testOneSample(data: RDD[Double], distName: String, params: Double*): KSTestResult = {
-    val distanceCalc =
+    val distObj =
       distName match {
-        case "norm" => () => {
+        case "norm" => {
           if (params.nonEmpty) {
             // parameters are passed, then can only be 2
             require(params.length == 2, "Normal distribution requires mean and standard " +
@@ -196,7 +182,7 @@ private[stat] object KSTest extends Logging {
           s" convenience method. Current options are:['norm'].")
       }
 
-    testOneSample(data, distanceCalc)
+    testOneSample(data, distObj)
   }
 
   private def evalOneSampleP(ksStat: Double, n: Long): KSTestResult = {
