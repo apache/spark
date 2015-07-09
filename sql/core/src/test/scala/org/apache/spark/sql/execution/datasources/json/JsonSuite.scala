@@ -918,6 +918,13 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
       StructField("f4", ArrayType(StringType), nullable = true) ::
       StructField("f5", IntegerType, true) :: Nil)
 
+    val unparsedStrings =
+      ctx.sparkContext.parallelize(
+        "1, A1, true, null" ::
+        "2, B2, false, null" ::
+        "3, C3, true, null" ::
+        "4, D4, true, 2147483644" :: Nil)
+
     val rowRDD1 = unparsedStrings.map { r =>
       val values = r.split(",").map(_.trim)
       val v5 = try values(3).toInt catch {
