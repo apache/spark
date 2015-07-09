@@ -17,8 +17,7 @@
 
 package org.apache.spark.scheduler.cluster
 
-import scala.collection.mutable
-import scala.collection.mutable.ArrayBuffer
+import scala.collection.mutable.{ArrayBuffer, HashSet}
 import scala.concurrent.{Future, ExecutionContext}
 
 import org.apache.spark.{Logging, SparkContext}
@@ -99,7 +98,7 @@ private[spark] abstract class YarnSchedulerBackend(
   private class YarnDriverEndpoint(rpcEnv: RpcEnv, sparkProperties: ArrayBuffer[(String, String)])
       extends DriverEndpoint(rpcEnv, sparkProperties) {
 
-    private val pendingDisconnectedExecutors = new mutable.HashSet[String]
+    private val pendingDisconnectedExecutors = new HashSet[String]
     private val handleDisconnectedExecutorThreadPool =
       ThreadUtils.newDaemonCachedThreadPool("yarn-driver-endpoint-handle-disconnected-executor-thread-pool")
 
