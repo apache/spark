@@ -79,8 +79,7 @@ case class BroadcastHashOuterJoin(
     // Note that we use .execute().collect() because we don't want to convert data to Scala types
     val input: Array[InternalRow] = buildPlan.execute().map(_.copy()).collect()
     // buildHashTable uses code-generated rows as keys, which are not serializable
-    val hashed =
-      buildHashTable(input.iterator, new InterpretedProjection(buildKeys, buildPlan.output))
+    val hashed = buildHashTable(input.iterator, newProjection(buildKeys, buildPlan.output))
     sparkContext.broadcast(hashed)
   }(BroadcastHashOuterJoin.broadcastHashOuterJoinExecutionContext)
 

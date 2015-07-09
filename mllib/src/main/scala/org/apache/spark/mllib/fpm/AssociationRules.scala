@@ -33,7 +33,7 @@ import org.apache.spark.rdd.RDD
  * association rules which have a single item as the consequent.
  */
 @Experimental
-class AssociationRules private (
+class AssociationRules private[fpm] (
     private var minConfidence: Double) extends Logging with Serializable {
 
   /**
@@ -45,6 +45,7 @@ class AssociationRules private (
    * Sets the minimal confidence (default: `0.8`).
    */
   def setMinConfidence(minConfidence: Double): this.type = {
+    require(minConfidence >= 0.0 && minConfidence <= 1.0)
     this.minConfidence = minConfidence
     this
   }
@@ -91,7 +92,7 @@ object AssociationRules {
    * @tparam Item item type
    */
   @Experimental
-  class Rule[Item] private[mllib] (
+  class Rule[Item] private[fpm] (
       val antecedent: Array[Item],
       val consequent: Array[Item],
       freqUnion: Double,

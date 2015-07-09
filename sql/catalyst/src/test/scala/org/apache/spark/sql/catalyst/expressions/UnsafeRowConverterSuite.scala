@@ -55,10 +55,21 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers {
     assert(unsafeRow.getLong(1) === 1)
     assert(unsafeRow.getInt(2) === 2)
 
+    // We can copy UnsafeRows as long as they don't reference ObjectPools
+    val unsafeRowCopy = unsafeRow.copy()
+    assert(unsafeRowCopy.getLong(0) === 0)
+    assert(unsafeRowCopy.getLong(1) === 1)
+    assert(unsafeRowCopy.getInt(2) === 2)
+
     unsafeRow.setLong(1, 3)
     assert(unsafeRow.getLong(1) === 3)
     unsafeRow.setInt(2, 4)
     assert(unsafeRow.getInt(2) === 4)
+
+    // Mutating the original row should not have changed the copy
+    assert(unsafeRowCopy.getLong(0) === 0)
+    assert(unsafeRowCopy.getLong(1) === 1)
+    assert(unsafeRowCopy.getInt(2) === 2)
   }
 
   test("basic conversion with primitive, string and binary types") {
@@ -100,6 +111,11 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers {
     unsafeRow.update(2, "Hello World".getBytes)
     assert(unsafeRow.get(2) === "Hello World".getBytes)
     assert(pool.size === 2)
+
+    // We do not support copy() for UnsafeRows that reference ObjectPools
+    intercept[UnsupportedOperationException] {
+      unsafeRow.copy()
+    }
   }
 
   test("basic conversion with primitive, decimal and array") {

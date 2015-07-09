@@ -343,6 +343,12 @@ public final class UnsafeRow extends MutableRow {
     }
   }
 
+  /**
+   * Copies this row, returning a self-contained UnsafeRow that stores its data in an internal
+   * byte array rather than referencing data stored in a data page.
+   * <p>
+   * This method is only supported on UnsafeRows that do not use ObjectPools.
+   */
   @Override
   public InternalRow copy() {
     if (pool != null) {

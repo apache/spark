@@ -28,7 +28,7 @@ import breeze.linalg.{DenseVector => BDV, SparseVector => BSV, Vector => BV}
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.mllib.util.NumericParser
-import org.apache.spark.sql.Row
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.GenericMutableRow
 import org.apache.spark.sql.types._
 
@@ -175,7 +175,7 @@ private[spark] class VectorUDT extends UserDefinedType[Vector] {
       StructField("values", ArrayType(DoubleType, containsNull = false), nullable = true)))
   }
 
-  override def serialize(obj: Any): Row = {
+  override def serialize(obj: Any): InternalRow = {
     obj match {
       case SparseVector(size, indices, values) =>
         val row = new GenericMutableRow(4)
@@ -191,17 +191,12 @@ private[spark] class VectorUDT extends UserDefinedType[Vector] {
         row.setNullAt(2)
         row.update(3, values.toSeq)
         row
-      // TODO: There are bugs in UDT serialization because we don't have a clear separation between
-      // TODO: internal SQL types and language specific types (including UDT). UDT serialize and
-      // TODO: deserialize may get called twice. See SPARK-7186.
-      case row: Row =>
-        row
     }
   }
 
   override def deserialize(datum: Any): Vector = {
     datum match {
-      case row: Row =>
+      case row: InternalRow =>
         require(row.length == 4,
           s"VectorUDT.deserialize given row with length ${row.length} but requires length == 4")
         val tpe = row.getByte(0)
@@ -215,11 +210,6 @@ private[spark] class VectorUDT extends UserDefinedType[Vector] {
             val values = row.getAs[Iterable[Double]](3).toArray
             new DenseVector(values)
         }
-      // TODO: There are bugs in UDT serialization because we don't have a clear separation between
-      // TODO: internal SQL types and language specific types (including UDT). UDT serialize and
-      // TODO: deserialize may get called twice. See SPARK-7186.
-      case v: Vector =>
-        v
     }
   }
 

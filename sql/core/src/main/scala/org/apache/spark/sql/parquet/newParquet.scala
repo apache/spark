@@ -21,6 +21,7 @@ import java.net.URI
 import java.util.{List => JList}
 
 import scala.collection.JavaConversions._
+import scala.collection.mutable
 import scala.util.Try
 
 import com.google.common.base.Objects
@@ -30,8 +31,9 @@ import org.apache.hadoop.mapreduce._
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat
 import org.apache.parquet.filter2.predicate.FilterApi
 import org.apache.parquet.hadoop._
-import org.apache.parquet.hadoop.metadata.CompressionCodecName
+import org.apache.parquet.hadoop.metadata.{FileMetaData, CompressionCodecName}
 import org.apache.parquet.hadoop.util.ContextUtil
+import org.apache.parquet.schema.MessageType
 
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.deploy.SparkHadoopUtil
@@ -257,6 +259,10 @@ private[sql] class ParquetRelation2(
       broadcastedConf: Broadcast[SerializableConfiguration]): RDD[Row] = {
     val useMetadataCache = sqlContext.getConf(SQLConf.PARQUET_CACHE_METADATA)
     val parquetFilterPushDown = sqlContext.conf.parquetFilterPushDown
+    val assumeBinaryIsString = sqlContext.conf.isParquetBinaryAsString
+    val assumeInt96IsTimestamp = sqlContext.conf.isParquetINT96AsTimestamp
+    val followParquetFormatSpec = sqlContext.conf.followParquetFormatSpec
+
     // Create the function to set variable Parquet confs at both driver and executor side.
     val initLocalJobFuncOpt =
       ParquetRelation2.initializeLocalJobFunc(
@@ -264,7 +270,11 @@ private[sql] class ParquetRelation2(
         filters,
         dataSchema,
         useMetadataCache,
-        parquetFilterPushDown) _
+        parquetFilterPushDown,
+        assumeBinaryIsString,
+        assumeInt96IsTimestamp,
+        followParquetFormatSpec) _
+
     // Create the function to set input paths at the driver side.
     val setInputPaths = ParquetRelation2.initializeDriverSideJobFunc(inputFiles) _
 
@@ -469,9 +479,12 @@ private[sql] object ParquetRelation2 extends Logging {
       filters: Array[Filter],
       dataSchema: StructType,
       useMetadataCache: Boolean,
-      parquetFilterPushDown: Boolean)(job: Job): Unit = {
+      parquetFilterPushDown: Boolean,
+      assumeBinaryIsString: Boolean,
+      assumeInt96IsTimestamp: Boolean,
+      followParquetFormatSpec: Boolean)(job: Job): Unit = {
     val conf = job.getConfiguration
-    conf.set(ParquetInputFormat.READ_SUPPORT_CLASS, classOf[RowReadSupport].getName())
+    conf.set(ParquetInputFormat.READ_SUPPORT_CLASS, classOf[RowReadSupport].getName)
 
     // Try to push down filters when filter push-down is enabled.
     if (parquetFilterPushDown) {
@@ -495,6 +508,11 @@ private[sql] object ParquetRelation2 extends Logging {
 
     // Tell FilteringParquetRowInputFormat whether it's okay to cache Parquet and FS metadata
     conf.setBoolean(SQLConf.PARQUET_CACHE_METADATA.key, useMetadataCache)
+
+    // Sets flags for Parquet schema conversion
+    conf.setBoolean(SQLConf.PARQUET_BINARY_AS_STRING.key, assumeBinaryIsString)
+    conf.setBoolean(SQLConf.PARQUET_INT96_AS_TIMESTAMP.key, assumeInt96IsTimestamp)
+    conf.setBoolean(SQLConf.PARQUET_FOLLOW_PARQUET_FORMAT_SPEC.key, followParquetFormatSpec)
   }
 
   /** This closure sets input paths at the driver side. */
@@ -508,44 +526,56 @@ private[sql] object ParquetRelation2 extends Logging {
 
   private[parquet] def readSchema(
       footers: Seq[Footer], sqlContext: SQLContext): Option[StructType] = {
-    footers.map { footer =>
+
+    def parseParquetSchema(schema: MessageType): StructType = {
+      StructType.fromAttributes(
+        // TODO Really no need to use `Attribute` here, we only need to know the data type.
+        ParquetTypesConverter.convertToAttributes(
+          schema,
+          sqlContext.conf.isParquetBinaryAsString,
+          sqlContext.conf.isParquetINT96AsTimestamp))
+    }
+
+    val seen = mutable.HashSet[String]()
+    val finalSchemas: Seq[StructType] = footers.flatMap { footer =>
       val metadata = footer.getParquetMetadata.getFileMetaData
-      val parquetSchema = metadata.getSchema
-      val maybeSparkSchema = metadata
+      val serializedSchema = metadata
         .getKeyValueMetaData
         .toMap
         .get(RowReadSupport.SPARK_METADATA_KEY)
-        .flatMap { serializedSchema =>
-          // Don't throw even if we failed to parse the serialized Spark schema. Just fallback to
-          // whatever is available.
-          Try(DataType.fromJson(serializedSchema))
-            .recover { case _: Throwable =>
-              logInfo(
-                s"Serialized Spark schema in Parquet key-value metadata is not in JSON format, " +
-                  "falling back to the deprecated DataType.fromCaseClassString parser.")
-              DataType.fromCaseClassString(serializedSchema)
-            }
-            .recover { case cause: Throwable =>
-              logWarning(
-                s"""Failed to parse serialized Spark schema in Parquet key-value metadata:
-                   |\t$serializedSchema
-                 """.stripMargin,
-                cause)
-            }
-            .map(_.asInstanceOf[StructType])
-            .toOption
-        }
+      if (serializedSchema == None) {
+        // Falls back to Parquet schema if no Spark SQL schema found.
+        Some(parseParquetSchema(metadata.getSchema))
+      } else if (!seen.contains(serializedSchema.get)) {
+        seen += serializedSchema.get
 
-      maybeSparkSchema.getOrElse {
-        // Falls back to Parquet schema if Spark SQL schema is absent.
-        StructType.fromAttributes(
-          // TODO Really no need to use `Attribute` here, we only need to know the data type.
-          ParquetTypesConverter.convertToAttributes(
-            parquetSchema,
-            sqlContext.conf.isParquetBinaryAsString,
-            sqlContext.conf.isParquetINT96AsTimestamp))
+        // Don't throw even if we failed to parse the serialized Spark schema. Just fallback to
+        // whatever is available.
+        Some(Try(DataType.fromJson(serializedSchema.get))
+          .recover { case _: Throwable =>
+            logInfo(
+              s"Serialized Spark schema in Parquet key-value metadata is not in JSON format, " +
+                "falling back to the deprecated DataType.fromCaseClassString parser.")
+            DataType.fromCaseClassString(serializedSchema.get)
+          }
+          .recover { case cause: Throwable =>
+            logWarning(
+              s"""Failed to parse serialized Spark schema in Parquet key-value metadata:
+                 |\t$serializedSchema
+               """.stripMargin,
+              cause)
+          }
+          .map(_.asInstanceOf[StructType])
+          .getOrElse {
+            // Falls back to Parquet schema if Spark SQL schema can't be parsed.
+            parseParquetSchema(metadata.getSchema)
+          })
+      } else {
+        None
       }
-    }.reduceOption { (left, right) =>
+    }
+
+    finalSchemas.reduceOption { (left, right) =>
       try left.merge(right) catch { case e: Throwable =>
         throw new SparkException(s"Failed to merge incompatible schemas $left and $right", e)
       }
