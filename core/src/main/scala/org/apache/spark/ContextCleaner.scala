@@ -232,8 +232,8 @@ private[spark] class ContextCleaner(sc: SparkContext) extends Logging {
   }
 
   /**
-   * Perform checkpoint cleanup on checkpoint files in reliable storage.
-   * Locally checkpointed files are cleaned up separately through RDD clean ups.
+   * Clean up checkpoint files written to a reliable storage.
+   * Locally checkpointed files are cleaned up separately through RDD cleanups.
    */
   def doCleanCheckpoint(rddId: Int): Unit = {
     try {
