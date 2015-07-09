@@ -68,7 +68,7 @@ you can specify the packages with the `packages` argument.
 
 <div data-lang="r" markdown="1">
 {% highlight r %}
-sc <- sparkR.init(packages="com.databricks:spark-csv_2.11:1.0.3")
+sc <- sparkR.init(sparkPackages="com.databricks:spark-csv_2.11:1.0.3")
 sqlContext <- sparkRSQL.init(sc)
 {% endhighlight %}
 </div>
@@ -116,7 +116,7 @@ sql(hiveContext, "CREATE TABLE IF NOT EXISTS src (key INT, value STRING)")
 sql(hiveContext, "LOAD DATA LOCAL INPATH 'examples/src/main/resources/kv1.txt' INTO TABLE src")
 
 # Queries can be expressed in HiveQL.
-results <- hiveContext.sql("FROM src SELECT key, value")
+results <- sql(hiveContext, "FROM src SELECT key, value")
 
 # results is now a DataFrame
 head(results)

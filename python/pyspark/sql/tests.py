@@ -700,6 +700,19 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertTrue(now - now1 < datetime.timedelta(0.001))
         self.assertTrue(now - utcnow1 < datetime.timedelta(0.001))
 
+    def test_decimal(self):
+        from decimal import Decimal
+        schema = StructType([StructField("decimal", DecimalType(10, 5))])
+        df = self.sqlCtx.createDataFrame([(Decimal("3.14159"),)], schema)
+        row = df.select(df.decimal + 1).first()
+        self.assertEqual(row[0], Decimal("4.14159"))
+        tmpPath = tempfile.mkdtemp()
+        shutil.rmtree(tmpPath)
+        df.write.parquet(tmpPath)
+        df2 = self.sqlCtx.read.parquet(tmpPath)
+        row = df2.first()
+        self.assertEqual(row[0], Decimal("3.14159"))
+
     def test_dropna(self):
         schema = StructType([
             StructField("name", StringType(), True),

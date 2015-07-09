@@ -35,19 +35,6 @@ trait FunctionRegistry {
   def lookupFunction(name: String, children: Seq[Expression]): Expression
 }
 
-class OverrideFunctionRegistry(underlying: FunctionRegistry) extends FunctionRegistry {
-
-  private val functionBuilders = StringKeyHashMap[FunctionBuilder](caseSensitive = false)
-
-  override def registerFunction(name: String, builder: FunctionBuilder): Unit = {
-    functionBuilders.put(name, builder)
-  }
-
-  override def lookupFunction(name: String, children: Seq[Expression]): Expression = {
-    functionBuilders.get(name).map(_(children)).getOrElse(underlying.lookupFunction(name, children))
-  }
-}
-
 class SimpleFunctionRegistry extends FunctionRegistry {
 
   private val functionBuilders = StringKeyHashMap[FunctionBuilder](caseSensitive = false)

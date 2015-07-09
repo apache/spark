@@ -120,9 +120,11 @@ public final class UnsafeFixedWidthAggregationMap {
     this.bufferPool = new ObjectPool(initialCapacity);
 
     InternalRow initRow = initProjection.apply(emptyRow);
-    this.emptyBuffer = new byte[bufferConverter.getSizeRequirement(initRow)];
+    int emptyBufferSize = bufferConverter.getSizeRequirement(initRow);
+    this.emptyBuffer = new byte[emptyBufferSize];
     int writtenLength = bufferConverter.writeRow(
-      initRow, emptyBuffer, PlatformDependent.BYTE_ARRAY_OFFSET, bufferPool);
+      initRow, emptyBuffer, PlatformDependent.BYTE_ARRAY_OFFSET, emptyBufferSize,
+      bufferPool);
     assert (writtenLength == emptyBuffer.length): "Size requirement calculation was wrong!";
     // re-use the empty buffer only when there is no object saved in pool.
     reuseEmptyBuffer = bufferPool.size() == 0;
@@ -142,6 +144,7 @@ public final class UnsafeFixedWidthAggregationMap {
       groupingKey,
       groupingKeyConversionScratchSpace,
       PlatformDependent.BYTE_ARRAY_OFFSET,
+      groupingKeySize,
       keyPool);
     assert (groupingKeySize == actualGroupingKeySize) : "Size requirement calculation was wrong!";
 
@@ -157,7 +160,7 @@ public final class UnsafeFixedWidthAggregationMap {
         // There is some objects referenced by emptyBuffer, so generate a new one
         InternalRow initRow = initProjection.apply(emptyRow);
         bufferConverter.writeRow(initRow, emptyBuffer, PlatformDependent.BYTE_ARRAY_OFFSET,
-          bufferPool);
+          groupingKeySize, bufferPool);
       }
       loc.putNewKey(
         groupingKeyConversionScratchSpace,
@@ -175,6 +178,7 @@ public final class UnsafeFixedWidthAggregationMap {
       address.getBaseObject(),
       address.getBaseOffset(),
       bufferConverter.numFields(),
+      loc.getValueLength(),
       bufferPool
     );
     return currentBuffer;
@@ -214,12 +218,14 @@ public final class UnsafeFixedWidthAggregationMap {
           keyAddress.getBaseObject(),
           keyAddress.getBaseOffset(),
           keyConverter.numFields(),
+          loc.getKeyLength(),
           keyPool
         );
         entry.value.pointTo(
           valueAddress.getBaseObject(),
           valueAddress.getBaseOffset(),
           bufferConverter.numFields(),
+          loc.getValueLength(),
           bufferPool
         );
         return entry;

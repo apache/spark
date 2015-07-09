@@ -163,6 +163,38 @@ class HiveUDFSuite extends QueryTest {
     TestHive.reset()
   }
 
+  test("UDFToStringIntMap") {
+    val testData = TestHive.sparkContext.parallelize(StringCaseClass("") :: Nil).toDF()
+    testData.registerTempTable("inputTable")
+
+    sql(s"CREATE TEMPORARY FUNCTION testUDFToStringIntMap " +
+      s"AS '${classOf[UDFToStringIntMap].getName}'")
+    val errMsg = intercept[AnalysisException] {
+      sql("SELECT testUDFToStringIntMap(s) FROM inputTable")
+    }
+    assert(errMsg.getMessage === "Map type in java is unsupported because " +
+      "JVM type erasure makes spark fail to catch key and value types in Map<>;")
+
+    sql("DROP TEMPORARY FUNCTION IF EXISTS testUDFToStringIntMap")
+    TestHive.reset()
+  }
+
+  test("UDFToIntIntMap") {
+    val testData = TestHive.sparkContext.parallelize(StringCaseClass("") :: Nil).toDF()
+    testData.registerTempTable("inputTable")
+
+    sql(s"CREATE TEMPORARY FUNCTION testUDFToIntIntMap " +
+      s"AS '${classOf[UDFToIntIntMap].getName}'")
+    val errMsg = intercept[AnalysisException] {
+      sql("SELECT testUDFToIntIntMap(s) FROM inputTable")
+    }
+    assert(errMsg.getMessage === "Map type in java is unsupported because " +
+      "JVM type erasure makes spark fail to catch key and value types in Map<>;")
+
+    sql("DROP TEMPORARY FUNCTION IF EXISTS testUDFToIntIntMap")
+    TestHive.reset()
+  }
+
   test("UDFListListInt") {
     val testData = TestHive.sparkContext.parallelize(
       ListListIntCaseClass(Nil) ::
