@@ -89,7 +89,8 @@ class VectorsSuite extends FunSuite {
     val vec3 = Vectors.sparse(5, Array(2, 3, 4), Array(1.0, 0.0, -.7))
     assert(vec3.argmax === 2)
 
-    // check for case that sparse vector is created with only negative values {0.0, 0.0,-1.0, -0.7, 0.0}
+    // check for case that sparse vector is created with
+    // only negative values {0.0, 0.0,-1.0, -0.7, 0.0}
     val vec4 = Vectors.sparse(5, Array(2, 3), Array(-1.0, -.7))
     assert(vec4.argmax === 0)
 
