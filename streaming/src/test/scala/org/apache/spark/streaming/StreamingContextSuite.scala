@@ -21,13 +21,11 @@ import java.io.{File, NotSerializableException}
 import java.util.concurrent.atomic.AtomicInteger
 
 import org.apache.commons.io.FileUtils
-import org.apache.spark.metrics.MetricsSystem
-import org.apache.spark.metrics.source.Source
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.concurrent.Timeouts
 import org.scalatest.exceptions.TestFailedDueToTimeoutException
 import org.scalatest.time.SpanSugar._
-import org.scalatest.{PrivateMethodTester, Assertions, BeforeAndAfter}
+import org.scalatest.{Assertions, BeforeAndAfter}
 
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.dstream.DStream
