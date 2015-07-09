@@ -132,7 +132,7 @@ object EvaluatePython {
     case (row: InternalRow, struct: StructType) =>
       val values = new Array[Any](row.size)
       var i = 0
-      while (i < row.size && i < struct.fields.size) {
+      while (i < row.size) {
         values(i) = toJava(row(i), struct.fields(i).dataType)
         i += 1
       }
@@ -231,7 +231,7 @@ object EvaluatePython {
 
     def pickle(obj: Object, out: OutputStream, pickler: Pickler): Unit = {
       out.write(Opcodes.GLOBAL)
-      out.write((module + "\n" + "_parse_datatype_json_string" + "\n").getBytes)
+      out.write((module + "\n" + "_parse_datatype_json_string" + "\n").getBytes("utf-8"))
       val schema = obj.asInstanceOf[StructType]
       pickler.save(schema.json)
       out.write(Opcodes.TUPLE1)
@@ -255,17 +255,22 @@ object EvaluatePython {
     def pickle(obj: Object, out: OutputStream, pickler: Pickler): Unit = {
       if (obj == this) {
         out.write(Opcodes.GLOBAL)
-        out.write((module + "\n" + "_create_row_inbound_converter" + "\n").getBytes)
+        out.write((module + "\n" + "_create_row_inbound_converter" + "\n").getBytes("utf-8"))
       } else {
-        // it will be memorized by Pickler
+        // it will be memorized by Pickler to save some bytes
         pickler.save(this)
         val row = obj.asInstanceOf[GenericInternalRowWithSchema]
-        // schema should always be same object for memorization
+        // schema should always be same object for memoization
         pickler.save(row.schema)
         out.write(Opcodes.TUPLE1)
         out.write(Opcodes.REDUCE)
 
         out.write(Opcodes.MARK)
+        var i = 0
+        while (i < row.values.size) {
+          pickler.save(row.values(i))
+          i += 1
+        }
         row.values.foreach(pickler.save)
         out.write(Opcodes.TUPLE)
         out.write(Opcodes.REDUCE)
@@ -274,12 +279,14 @@ object EvaluatePython {
   }
 
   private[this] var registered = false
-  // This should be called before trying to serialize any above classes
-  // In cluster mode, this should be put in the closure
+  /**
+   * This should be called before trying to serialize any above classes un cluster mode,
+   * this should be put in the closure
+   */
   def registerPicklers(): Unit = {
-    SerDeUtil.initialize()
     synchronized {
       if (!registered) {
+        SerDeUtil.initialize()
         new StructTypePickler().register()
         new RowPickler().register()
         registered = true

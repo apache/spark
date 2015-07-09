@@ -388,7 +388,7 @@ class SQLContext(object):
             raise TypeError("schema should be StructType or list or None")
 
         # convert python objects to sql data
-        rdd = rdd.map(schema.serialize)
+        rdd = rdd.map(schema.toInternal)
 
         jrdd = self._jvm.SerDeUtil.toJavaArray(rdd._to_java_object_rdd())
         df = self._ssql_ctx.applySchemaToPythonRDD(jrdd.rdd(), schema.json())

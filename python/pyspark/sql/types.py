@@ -67,14 +67,25 @@ class DataType(object):
                           separators=(',', ':'),
                           sort_keys=True)
 
-    def needSerialization(self):
+    def needConversion(self):
+        """
+        Does this type need to conversion between Python object and internal SQL object.
+
+        This is used to avoid the unnecessary conversion for ArrayType/MapType/StructType.
+        """
         return False
 
-    def serialize(self, obj):
+    def toInternal(self, obj):
+        """
+        Converts a Python object into an internal SQL object.
+        """
         return obj
 
-    def deserialize(self, datam):
-        return datam
+    def fromInternal(self, obj):
+        """
+        Converts an internal SQL object into a native Python object.
+        """
+        return obj
 
 
 # This singleton pattern does not work with pickle, you will get
@@ -150,13 +161,13 @@ class DateType(AtomicType):
 
     EPOCH_ORDINAL = datetime.datetime(1970, 1, 1).toordinal()
 
-    def needSerialization(self):
+    def needConversion(self):
         return True
 
-    def serialize(self, d):
+    def toInternal(self, d):
         return d and d.toordinal() - self.EPOCH_ORDINAL
 
-    def deserialize(self, v):
+    def fromInternal(self, v):
         return v and datetime.date.fromordinal(v + self.EPOCH_ORDINAL)
 
 
@@ -166,16 +177,16 @@ class TimestampType(AtomicType):
 
     __metaclass__ = DataTypeSingleton
 
-    def needSerialization(self):
+    def needConversion(self):
         return True
 
-    def serialize(self, dt):
+    def toInternal(self, dt):
         if dt is not None:
             seconds = (calendar.timegm(dt.utctimetuple()) if dt.tzinfo
                        else time.mktime(dt.timetuple()))
             return int(seconds * 1e6 + dt.microsecond)
 
-    def deserialize(self, ts):
+    def fromInternal(self, ts):
         if ts is not None:
             return datetime.datetime.fromtimestamp(ts / 1e6)
 
@@ -288,18 +299,18 @@ class ArrayType(DataType):
         return ArrayType(_parse_datatype_json_value(json["elementType"]),
                          json["containsNull"])
 
-    def needSerialization(self):
-        return self.elementType.needSerialization()
+    def needConversion(self):
+        return self.elementType.needConversion()
 
-    def serialize(self, obj):
-        if not self.needSerialization():
+    def toInternal(self, obj):
+        if not self.needConversion():
             return obj
-        return obj and [self.elementType.serialize(v) for v in obj]
+        return obj and [self.elementType.toInternal(v) for v in obj]
 
-    def deserialize(self, datam):
-        if not self.needSerialization():
-            return datam
-        return datam and [self.elementType.deserialize(v) for v in datam]
+    def fromInternal(self, obj):
+        if not self.needConversion():
+            return obj
+        return obj and [self.elementType.fromInternal(v) for v in obj]
 
 
 class MapType(DataType):
@@ -346,20 +357,20 @@ class MapType(DataType):
                        _parse_datatype_json_value(json["valueType"]),
                        json["valueContainsNull"])
 
-    def needSerialization(self):
-        return self.keyType.needSerialization() or self.valueType.needSerialization()
+    def needConversion(self):
+        return self.keyType.needConversion() or self.valueType.needConversion()
 
-    def serialize(self, obj):
-        if not self.needSerialization():
+    def toInternal(self, obj):
+        if not self.needConversion():
             return obj
-        return obj and dict((self.keyType.serialize(k), self.valueType.serialize(v))
+        return obj and dict((self.keyType.toInternal(k), self.valueType.toInternal(v))
                             for k, v in obj.items())
 
-    def deserialize(self, datam):
-        if not self.needSerialization():
-            return datam
-        return datam and dict((self.keyType.deserialize(k), self.valueType.deserialize(v))
-                              for k, v in datam.items())
+    def fromInternal(self, obj):
+        if not self.needConversion():
+            return obj
+        return obj and dict((self.keyType.fromInternal(k), self.valueType.fromInternal(v))
+                            for k, v in obj.items())
 
 
 class StructField(DataType):
@@ -368,7 +379,7 @@ class StructField(DataType):
     :param name: string, name of the field.
     :param dataType: :class:`DataType` of the field.
     :param nullable: boolean, whether the field can be null (None) or not.
-    :param metadata: a dict from string to simple type that can be serialized to JSON automatically
+    :param metadata: a dict from string to simple type that can be toInternald to JSON automatically
     """
 
     def __init__(self, name, dataType, nullable=True, metadata=None):
@@ -408,14 +419,14 @@ class StructField(DataType):
                            json["nullable"],
                            json["metadata"])
 
-    def needSerialization(self):
-        return self.dataType.needSerialization()
+    def needConversion(self):
+        return self.dataType.needConversion()
 
-    def serialize(self, obj):
-        return self.dataType.serialize(obj)
+    def toInternal(self, obj):
+        return self.dataType.toInternal(obj)
 
-    def deserialize(self, datam):
-        return self.dataType.deserialize(datam)
+    def fromInternal(self, obj):
+        return self.dataType.fromInternal(obj)
 
 
 class StructType(DataType):
@@ -503,22 +514,22 @@ class StructType(DataType):
     def fromJson(cls, json):
         return StructType([StructField.fromJson(f) for f in json["fields"]])
 
-    def needSerialization(self):
+    def needConversion(self):
         # We need convert Row()/namedtuple into tuple()
         return True
 
-    def serialize(self, obj):
+    def toInternal(self, obj):
         if obj is None:
             return
 
         if self._needSerializeFields is None:
-            self._needSerializeFields = any(f.dataType.needSerialization() for f in self.fields)
+            self._needSerializeFields = any(f.needConversion() for f in self.fields)
 
         if self._needSerializeFields:
             if isinstance(obj, dict):
-                return tuple(f.dataType.serialize(obj.get(n)) for n, f in zip(names, self.fields))
+                return tuple(f.toInternal(obj.get(n)) for n, f in zip(names, self.fields))
             elif isinstance(obj, (tuple, list)):
-                return tuple(f.dataType.serialize(v) for f, v in zip(self.fields, obj))
+                return tuple(f.toInternal(v) for f, v in zip(self.fields, obj))
             else:
                 raise ValueError("Unexpected tuple %r with StructType" % obj)
         else:
@@ -529,13 +540,13 @@ class StructType(DataType):
             else:
                 raise ValueError("Unexpected tuple %r with StructType" % obj)
 
-    def deserialize(self, datam):
-        if datam is None:
+    def fromInternal(self, obj):
+        if obj is None:
             return
-        if isinstance(datam, Row):
-            # it's already deserialized by pickler
-            return datam
-        values = [f.dataType.deserialize(v) for f, v in zip(self.fields, datam)]
+        if isinstance(obj, Row):
+            # it's already converted by pickler
+            return obj
+        values = [f.dataType.fromInternal(v) for f, v in zip(self.fields, obj)]
         return _create_row(self.names, values)
 
 
@@ -570,20 +581,35 @@ class UserDefinedType(DataType):
         """
         raise NotImplementedError("UDT must have a paired Scala UDT.")
 
-    def needSerialization(self):
+    def needConversion(self):
         return True
+
+    @classmethod
+    def _cachedSqlType(cls):
+        """
+        Cache the sqlType() into class, because it's heavy used in `toInternal`.
+        """
+        if not hasattr(cls, "_cached_sql_type"):
+            cls._cached_sql_type = cls.sqlType()
+        return cls._cached_sql_type
+
+    def toInternal(self, obj):
+        return self._cachedSqlType().toInternal(self.serialize(obj))
+
+    def fromInternal(self, obj):
+        return self.deserialize(self._cachedSqlType().fromInternal(obj))
 
     def serialize(self, obj):
         """
         Converts the a user-type object into a SQL datum.
         """
-        raise NotImplementedError("UDT must implement serialize().")
+        raise NotImplementedError("UDT must implement toInternal().")
 
     def deserialize(self, datum):
         """
         Converts a SQL datum into a user-type object.
         """
-        raise NotImplementedError("UDT must implement deserialize().")
+        raise NotImplementedError("UDT must implement fromInternal().")
 
     def simpleString(self):
         return 'udt'
@@ -1074,7 +1100,7 @@ def _verify_type(obj, dataType):
     if isinstance(dataType, UserDefinedType):
         if not (hasattr(obj, '__UDT__') and obj.__UDT__ == dataType):
             raise ValueError("%r is not an instance of type %r" % (obj, dataType))
-        _verify_type(dataType.serialize(obj), dataType.sqlType())
+        _verify_type(dataType.toInternal(obj), dataType.sqlType())
         return
 
     _type = type(dataType)
@@ -1084,7 +1110,7 @@ def _verify_type(obj, dataType):
         if not isinstance(obj, (tuple, list)):
             raise TypeError("StructType can not accept object in type %s" % type(obj))
     else:
-        # subclass of them can not be deserialized in JVM
+        # subclass of them can not be fromInternald in JVM
         if type(obj) not in _acceptable_types[_type]:
             raise TypeError("%s can not accept object in type %s" % (dataType, type(obj)))
 
@@ -1107,7 +1133,7 @@ def _verify_type(obj, dataType):
 
 # This is used to unpickle a Row from JVM
 def _create_row_inbound_converter(dataType):
-    return lambda *a: dataType.deserialize(a)
+    return lambda *a: dataType.fromInternal(a)
 
 
 def _create_row(fields, values):
