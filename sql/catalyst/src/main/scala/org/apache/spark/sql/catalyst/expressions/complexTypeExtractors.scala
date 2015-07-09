@@ -215,7 +215,7 @@ case class GetArrayItem(child: Expression, ordinal: Expression)
     // TODO: consider using Array[_] for ArrayType child to avoid
     // boxing of primitives
     val baseValue = value.asInstanceOf[Seq[_]]
-    val index = ordinal.asInstanceOf[java.lang.Integer]
+    val index = ordinal.asInstanceOf[Number].intValue()
     if (index >= baseValue.size || index < 0) {
       null
     } else {
