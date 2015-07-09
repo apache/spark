@@ -40,7 +40,7 @@ trait ExpectsInputTypes { self: Expression =>
     val mismatches = children.zip(inputTypes).zipWithIndex.collect {
       case ((child, expected), idx) if !expected.acceptsType(child.dataType) =>
         s"Argument ${idx + 1} is expected to be of type ${expected.simpleString}, " +
-        s"however, ${child.prettyString} is of type ${child.dataType}."
+        s"however, ${child.prettyString} is of type ${child.dataType.simpleString}."
     }
 
     if (mismatches.isEmpty) {
