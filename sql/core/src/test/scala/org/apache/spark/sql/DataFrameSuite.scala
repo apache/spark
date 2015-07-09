@@ -147,6 +147,19 @@ class DataFrameSuite extends QueryTest with SQLTestUtils {
       Row("a", Seq("a"), 1) :: Nil)
   }
 
+  test("explode takes UnresolvedStar") {
+    val df = Seq(("1", "1,2"), ("2", "4"), ("3", "7,8,9")).toDF("prefix", "csv")
+    checkAnswer(
+      df.explode($"*") { case Row(prefix: String, csv: String) =>
+        csv.split(",").map(v => Tuple1(prefix + ":" + v))
+      },
+      Row("1", "1,2", "1:1") :: Row("1", "1,2", "1:2")
+        :: Row("2", "4", "2:4")
+        :: Row("3", "7,8,9", "3:7") :: Row("3", "7,8,9", "3:8") :: Row("3", "7,8,9", "3:9")
+        :: Nil
+    )
+  }
+
   test("selectExpr") {
     checkAnswer(
       testData.selectExpr("abs(key)", "value"),

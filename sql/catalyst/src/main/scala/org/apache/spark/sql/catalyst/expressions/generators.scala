@@ -64,6 +64,13 @@ trait Generator extends Expression {
    * rows can be made here.
    */
   def terminate(): TraversableOnce[InternalRow] = Nil
+
+  /**
+   * Copys this instance with new children.
+   * Analyzer uses this function to expand a Star if the aggregator
+   * function argument has it.
+   */
+  def copy(children: Seq[Expression]): Generator
 }
 
 /**
@@ -95,6 +102,13 @@ case class UserDefinedGenerator(
   }
 
   override def toString: String = s"UserDefinedGenerator(${children.mkString(",")})"
+
+  def copy(children: Seq[Expression]): Generator = {
+    new UserDefinedGenerator(
+      elementTypes = this.elementTypes,
+      function = this.function,
+      children)
+  }
 }
 
 /**
@@ -129,4 +143,9 @@ case class Explode(child: Expression) extends UnaryExpression with Generator wit
         else inputMap.map { case (k, v) => InternalRow(k, v) }
     }
   }
+
+  override def toString: String = s"explode($child)"
+
+  def copy(children: Seq[Expression]): Generator =
+    new Explode(child)
 }

@@ -307,13 +307,22 @@ class Analyzer(
           }
         )
 
-      // If the aggregate function argument contains Stars, expand it.
+      // If the aggregate function argument contains a Star, expand it.
       case a: Aggregate if containsStar(a.aggregateExpressions) =>
         a.copy(
           aggregateExpressions = a.aggregateExpressions.flatMap {
             case s: Star => s.expand(a.child.output, resolver)
             case o => o :: Nil
           }
+        )
+
+      // If the generator function argument contains a Star, expand it.
+      case e: Generate if containsStar(e.generator.children) =>
+        e.copy(
+          generator = e.generator.copy(children = e.generator.children.flatMap {
+            case s: Star => s.expand(e.child.output, resolver)
+            case o => o :: Nil
+          })
         )
 
       // Special handling for cases when self-join introduce duplicate expression ids.
