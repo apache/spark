@@ -234,6 +234,23 @@ private[ml] trait HasFitIntercept extends Params {
 }
 
 /**
+ * (private[ml]) Trait for shared param standardization (default: true).
+ */
+private[ml] trait HasStandardization extends Params {
+
+  /**
+   * Param for whether to standardize the training features before fitting the model..
+   * @group param
+   */
+  final val standardization: BooleanParam = new BooleanParam(this, "standardization", "whether to standardize the training features before fitting the model.")
+
+  setDefault(standardization, true)
+
+  /** @group getParam */
+  final def getStandardization: Boolean = $(standardization)
+}
+
+/**
  * (private[ml]) Trait for shared param seed (default: this.getClass.getName.hashCode.toLong).
  */
 private[ml] trait HasSeed extends Params {

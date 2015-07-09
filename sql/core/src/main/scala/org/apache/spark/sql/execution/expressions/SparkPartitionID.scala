@@ -18,7 +18,8 @@
 package org.apache.spark.sql.execution.expressions
 
 import org.apache.spark.TaskContext
-import org.apache.spark.sql.catalyst.expressions.{LeafExpression, Row}
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.LeafExpression
 import org.apache.spark.sql.types.{IntegerType, DataType}
 
 
@@ -31,5 +32,5 @@ private[sql] case object SparkPartitionID extends LeafExpression {
 
   override def dataType: DataType = IntegerType
 
-  override def eval(input: Row): Int = TaskContext.get().partitionId()
+  override def eval(input: InternalRow): Int = TaskContext.get().partitionId()
 }

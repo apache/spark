@@ -17,18 +17,17 @@
 
 package org.apache.spark.sql.parquet
 
+import org.apache.hadoop.fs.Path
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.{SQLConf, QueryTest}
-import org.apache.spark.sql.catalyst.expressions.Row
+import org.apache.spark.sql.{QueryTest, Row, SQLConf}
 
 /**
  * A test suite that tests various Parquet queries.
  */
 class ParquetQuerySuiteBase extends QueryTest with ParquetTest {
   lazy val sqlContext = org.apache.spark.sql.test.TestSQLContext
-  import sqlContext.implicits._
   import sqlContext.sql
 
   test("simple select queries") {
@@ -124,17 +123,36 @@ class ParquetQuerySuiteBase extends QueryTest with ParquetTest {
       checkAnswer(df2, df.collect().toSeq)
     }
   }
+
+  test("Enabling/disabling schema merging") {
+    def testSchemaMerging(expectedColumnNumber: Int): Unit = {
+      withTempDir { dir =>
+        val basePath = dir.getCanonicalPath
+        sqlContext.range(0, 10).toDF("a").write.parquet(new Path(basePath, "foo=1").toString)
+        sqlContext.range(0, 10).toDF("b").write.parquet(new Path(basePath, "foo=2").toString)
+        assert(sqlContext.read.parquet(basePath).columns.length === expectedColumnNumber)
+      }
+    }
+
+    withSQLConf(SQLConf.PARQUET_SCHEMA_MERGING_ENABLED.key -> "true") {
+      testSchemaMerging(3)
+    }
+
+    withSQLConf(SQLConf.PARQUET_SCHEMA_MERGING_ENABLED.key -> "false") {
+      testSchemaMerging(2)
+    }
+  }
 }
 
 class ParquetDataSourceOnQuerySuite extends ParquetQuerySuiteBase with BeforeAndAfterAll {
   private lazy val originalConf = sqlContext.conf.parquetUseDataSourceApi
 
   override protected def beforeAll(): Unit = {
-    sqlContext.conf.setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, "true")
+    sqlContext.conf.setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, true)
   }
 
   override protected def afterAll(): Unit = {
-    sqlContext.setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, originalConf.toString)
+    sqlContext.setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, originalConf)
   }
 }
 
@@ -142,10 +160,10 @@ class ParquetDataSourceOffQuerySuite extends ParquetQuerySuiteBase with BeforeAn
   private lazy val originalConf = sqlContext.conf.parquetUseDataSourceApi
 
   override protected def beforeAll(): Unit = {
-    sqlContext.conf.setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, "false")
+    sqlContext.conf.setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, false)
   }
 
   override protected def afterAll(): Unit = {
-    sqlContext.setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, originalConf.toString)
+    sqlContext.setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, originalConf)
   }
 }

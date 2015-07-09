@@ -28,6 +28,7 @@ import org.apache.hadoop.hive.ql.metadata._
 import org.apache.hadoop.hive.ql.plan.TableDesc
 
 import org.apache.spark.Logging
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{Catalog, MultiInstanceRelation, OverrideCatalog}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
@@ -143,7 +144,7 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
       provider: String,
       options: Map[String, String],
       isExternal: Boolean): Unit = {
-    val (dbName, tblName) = processDatabaseAndTableName("default", tableName)
+    val (dbName, tblName) = processDatabaseAndTableName(client.currentDatabase, tableName)
     val tableProperties = new scala.collection.mutable.HashMap[String, String]
     tableProperties.put("spark.sql.sources.provider", provider)
 
@@ -302,7 +303,7 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
       val partitionColumnDataTypes = partitionSchema.map(_.dataType)
       val partitions = metastoreRelation.hiveQlPartitions.map { p =>
         val location = p.getLocation
-        val values = Row.fromSeq(p.getValues.zip(partitionColumnDataTypes).map {
+        val values = InternalRow.fromSeq(p.getValues.zip(partitionColumnDataTypes).map {
           case (rawValue, dataType) => Cast(Literal(rawValue), dataType).eval(null)
         })
         ParquetPartition(values, location)

@@ -19,9 +19,7 @@ package org.apache.spark.deploy.master
 
 import scala.collection.mutable
 
-import akka.actor.ActorRef
-
-import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.util.Utils
 
 private[spark] class WorkerInfo(
@@ -30,7 +28,7 @@ private[spark] class WorkerInfo(
     val port: Int,
     val cores: Int,
     val memory: Int,
-    val actor: ActorRef,
+    val endpoint: RpcEndpointRef,
     val webUiPort: Int,
     val publicAddress: String)
   extends Serializable {
@@ -107,4 +105,6 @@ private[spark] class WorkerInfo(
   def setState(state: WorkerState.Value): Unit = {
     this.state = state
   }
+
+  def isAlive(): Boolean = this.state == WorkerState.ALIVE
 }

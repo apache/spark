@@ -12,9 +12,13 @@ It also supports a rich set of higher-level tools including [Spark SQL](sql-prog
 
 # Downloading
 
-Get Spark from the [downloads page](http://spark.apache.org/downloads.html) of the project website. This documentation is for Spark version {{site.SPARK_VERSION}}. The downloads page 
-contains Spark packages for many popular HDFS versions. If you'd like to build Spark from 
-scratch, visit [Building Spark](building-spark.html).
+Get Spark from the [downloads page](http://spark.apache.org/downloads.html) of the project website. This documentation is for Spark version {{site.SPARK_VERSION}}. Spark uses Hadoop's client libraries for HDFS and YARN. Downloads are pre-packaged for a handful of popular Hadoop versions.
+Users can also download a "Hadoop free" binary and run Spark with any Hadoop version
+[by augmenting Spark's classpath](hadoop-provided.html). 
+
+If you'd like to build Spark from 
+source, visit [Building Spark](building-spark.html).
+
 
 Spark runs on both Windows and UNIX-like systems (e.g. Linux, Mac OS). It's easy to run
 locally on one machine --- all you need is to have `java` installed on your system `PATH`,

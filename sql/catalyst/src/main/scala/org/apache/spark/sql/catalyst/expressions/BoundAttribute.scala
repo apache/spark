@@ -18,10 +18,11 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.Logging
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.errors.attachTree
-import org.apache.spark.sql.catalyst.expressions.codegen.{GeneratedExpressionCode, CodeGenContext}
-import org.apache.spark.sql.types._
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodeGenContext, GeneratedExpressionCode}
 import org.apache.spark.sql.catalyst.trees
+import org.apache.spark.sql.types._
 
 /**
  * A bound reference points to a specific slot in the input tuple, allowing the actual value
@@ -33,7 +34,7 @@ case class BoundReference(ordinal: Int, dataType: DataType, nullable: Boolean)
 
   override def toString: String = s"input[$ordinal]"
 
-  override def eval(input: Row): Any = input(ordinal)
+  override def eval(input: InternalRow): Any = input(ordinal)
 
   override def name: String = s"i[$ordinal]"
 
@@ -47,7 +48,7 @@ case class BoundReference(ordinal: Int, dataType: DataType, nullable: Boolean)
     s"""
         boolean ${ev.isNull} = i.isNullAt($ordinal);
         ${ctx.javaType(dataType)} ${ev.primitive} = ${ev.isNull} ?
-            ${ctx.defaultValue(dataType)} : (${ctx.getColumn(dataType, ordinal)});
+            ${ctx.defaultValue(dataType)} : (${ctx.getColumn("i", dataType, ordinal)});
     """
   }
 }

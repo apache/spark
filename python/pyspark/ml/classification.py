@@ -18,7 +18,8 @@
 from pyspark.ml.util import keyword_only
 from pyspark.ml.wrapper import JavaEstimator, JavaModel
 from pyspark.ml.param.shared import *
-from pyspark.ml.regression import RandomForestParams
+from pyspark.ml.regression import (
+    RandomForestParams, DecisionTreeModel, TreeEnsembleModels)
 from pyspark.mllib.common import inherit_doc
 
 
@@ -202,6 +203,10 @@ class DecisionTreeClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPred
     >>> td = si_model.transform(df)
     >>> dt = DecisionTreeClassifier(maxDepth=2, labelCol="indexed")
     >>> model = dt.fit(td)
+    >>> model.numNodes
+    3
+    >>> model.depth
+    1
     >>> test0 = sqlContext.createDataFrame([(Vectors.dense(-1.0),)], ["features"])
     >>> model.transform(test0).head().prediction
     0.0
@@ -269,7 +274,8 @@ class DecisionTreeClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPred
         return self.getOrDefault(self.impurity)
 
 
-class DecisionTreeClassificationModel(JavaModel):
+@inherit_doc
+class DecisionTreeClassificationModel(DecisionTreeModel):
     """
     Model fitted by DecisionTreeClassifier.
     """
@@ -284,6 +290,7 @@ class RandomForestClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPred
     It supports both binary and multiclass labels, as well as both continuous and categorical
     features.
 
+    >>> from numpy import allclose
     >>> from pyspark.mllib.linalg import Vectors
     >>> from pyspark.ml.feature import StringIndexer
     >>> df = sqlContext.createDataFrame([
@@ -294,6 +301,8 @@ class RandomForestClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPred
     >>> td = si_model.transform(df)
     >>> rf = RandomForestClassifier(numTrees=2, maxDepth=2, labelCol="indexed", seed=42)
     >>> model = rf.fit(td)
+    >>> allclose(model.treeWeights, [1.0, 1.0])
+    True
     >>> test0 = sqlContext.createDataFrame([(Vectors.dense(-1.0),)], ["features"])
     >>> model.transform(test0).head().prediction
     0.0
@@ -423,7 +432,7 @@ class RandomForestClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPred
         return self.getOrDefault(self.featureSubsetStrategy)
 
 
-class RandomForestClassificationModel(JavaModel):
+class RandomForestClassificationModel(TreeEnsembleModels):
     """
     Model fitted by RandomForestClassifier.
     """
@@ -438,6 +447,7 @@ class GBTClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol
     It supports binary labels, as well as both continuous and categorical features.
     Note: Multiclass labels are not currently supported.
 
+    >>> from numpy import allclose
     >>> from pyspark.mllib.linalg import Vectors
     >>> from pyspark.ml.feature import StringIndexer
     >>> df = sqlContext.createDataFrame([
@@ -448,6 +458,8 @@ class GBTClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol
     >>> td = si_model.transform(df)
     >>> gbt = GBTClassifier(maxIter=5, maxDepth=2, labelCol="indexed")
     >>> model = gbt.fit(td)
+    >>> allclose(model.treeWeights, [1.0, 0.1, 0.1, 0.1, 0.1])
+    True
     >>> test0 = sqlContext.createDataFrame([(Vectors.dense(-1.0),)], ["features"])
     >>> model.transform(test0).head().prediction
     0.0
@@ -558,7 +570,7 @@ class GBTClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol
         return self.getOrDefault(self.stepSize)
 
 
-class GBTClassificationModel(JavaModel):
+class GBTClassificationModel(TreeEnsembleModels):
     """
     Model fitted by GBTClassifier.
     """

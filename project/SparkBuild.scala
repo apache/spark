@@ -27,6 +27,8 @@ import sbtunidoc.Plugin.UnidocKeys.unidocGenjavadocVersion
 import com.typesafe.sbt.pom.{loadEffectivePom, PomBuild, SbtPomKeys}
 import net.virtualvoid.sbt.graph.Plugin.graphSettings
 
+import spray.revolver.RevolverPlugin._
+
 object BuildCommons {
 
   private val buildLocation = file(".").getAbsoluteFile.getParentFile
@@ -43,8 +45,8 @@ object BuildCommons {
     sparkKinesisAsl) = Seq("yarn", "yarn-stable", "java8-tests", "ganglia-lgpl",
     "kinesis-asl").map(ProjectRef(buildLocation, _))
 
-  val assemblyProjects@Seq(assembly, examples, networkYarn, streamingKafkaAssembly) =
-    Seq("assembly", "examples", "network-yarn", "streaming-kafka-assembly")
+  val assemblyProjects@Seq(assembly, examples, networkYarn, streamingFlumeAssembly, streamingKafkaAssembly) =
+    Seq("assembly", "examples", "network-yarn", "streaming-flume-assembly", "streaming-kafka-assembly")
       .map(ProjectRef(buildLocation, _))
 
   val tools = ProjectRef(buildLocation, "tools")
@@ -53,9 +55,6 @@ object BuildCommons {
   val sparkHome = buildLocation
 
   val testTempDir = s"$sparkHome/target/tmp"
-  if (!new File(testTempDir).isDirectory()) {
-    require(new File(testTempDir).mkdirs())
-  }
 }
 
 object SparkBuild extends PomBuild {
@@ -149,7 +148,9 @@ object SparkBuild extends PomBuild {
     javacOptions in (Compile, doc) ++= {
       val Array(major, minor, _) = System.getProperty("java.version").split("\\.", 3)
       if (major.toInt >= 1 && minor.toInt >= 8) Seq("-Xdoclint:all", "-Xdoclint:-missing") else Seq.empty
-    }
+    },
+
+    javacOptions in Compile ++= Seq("-encoding", "UTF-8")
   )
 
   def enable(settings: Seq[Setting[_]])(projectRef: ProjectRef) = {
@@ -160,14 +161,13 @@ object SparkBuild extends PomBuild {
   // Note ordering of these settings matter.
   /* Enable shared settings on all projects */
   (allProjects ++ optionallyEnabledProjects ++ assemblyProjects ++ Seq(spark, tools))
-    .foreach(enable(sharedSettings ++ ExludedDependencies.settings))
+    .foreach(enable(sharedSettings ++ ExcludedDependencies.settings ++ Revolver.settings))
 
   /* Enable tests settings for all projects except examples, assembly and tools */
   (allProjects ++ optionallyEnabledProjects).foreach(enable(TestSettings.settings))
 
-  // TODO: remove launcher from this list after 1.4.0
   allProjects.filterNot(x => Seq(spark, hive, hiveThriftServer, catalyst, repl,
-    networkCommon, networkShuffle, networkYarn, launcher, unsafe).contains(x)).foreach {
+    networkCommon, networkShuffle, networkYarn, unsafe).contains(x)).foreach {
       x => enable(MimaBuild.mimaSettings(sparkHome, x))(x)
     }
 
@@ -206,7 +206,7 @@ object SparkBuild extends PomBuild {
     fork := true,
     outputStrategy in run := Some (StdoutOutput),
 
-    javaOptions ++= Seq("-Xmx2G", "-XX:MaxPermSize=1g"),
+    javaOptions ++= Seq("-Xmx2G", "-XX:MaxPermSize=256m"),
 
     sparkShell := {
       (runMain in Compile).toTask(" org.apache.spark.repl.Main -usejavacp").value
@@ -246,7 +246,7 @@ object Flume {
   This excludes library dependencies in sbt, which are specified in maven but are
   not needed by sbt build.
   */
-object ExludedDependencies {
+object ExcludedDependencies {
   lazy val settings = Seq(
     libraryDependencies ~= { libs => libs.filterNot(_.name == "groovy-all") }
   )
@@ -299,7 +299,7 @@ object SQL {
 object Hive {
 
   lazy val settings = Seq(
-    javaOptions += "-XX:MaxPermSize=1g",
+    javaOptions += "-XX:MaxPermSize=256m",
     // Specially disable assertions since some Hive tests fail them
     javaOptions in Test := (javaOptions in Test).value.filterNot(_ == "-ea"),
     // Multiple queries rely on the TestHive singleton. See comments there for more details.
@@ -347,7 +347,7 @@ object Assembly {
         .getOrElse(SbtPomKeys.effectivePom.value.getProperties.get("hadoop.version").asInstanceOf[String])
     },
     jarName in assembly <<= (version, moduleName, hadoopVersion) map { (v, mName, hv) =>
-      if (mName.contains("streaming-kafka-assembly")) {
+      if (mName.contains("streaming-flume-assembly") || mName.contains("streaming-kafka-assembly")) {
         // This must match the same name used in maven (see external/kafka-assembly/pom.xml)
         s"${mName}-${v}.jar"
       } else {
@@ -514,7 +514,7 @@ object TestSettings {
     javaOptions in Test ++= System.getProperties.filter(_._1 startsWith "spark")
       .map { case (k,v) => s"-D$k=$v" }.toSeq,
     javaOptions in Test += "-ea",
-    javaOptions in Test ++= "-Xmx3g -XX:PermSize=128M -XX:MaxNewSize=256m -XX:MaxPermSize=1g"
+    javaOptions in Test ++= "-Xmx3g -Xss4096k -XX:PermSize=128M -XX:MaxNewSize=256m -XX:MaxPermSize=1g"
       .split(" ").toSeq,
     javaOptions += "-Xmx3g",
     // Show full stack trace and duration in test cases.
@@ -524,6 +524,13 @@ object TestSettings {
     libraryDependencies += "com.novocode" % "junit-interface" % "0.9" % "test",
     // Only allow one test at a time, even across projects, since they run in the same JVM
     parallelExecution in Test := false,
+    // Make sure the test temp directory exists.
+    resourceGenerators in Test <+= resourceManaged in Test map { outDir: File =>
+      if (!new File(testTempDir).isDirectory()) {
+        require(new File(testTempDir).mkdirs())
+      }
+      Seq[File]()
+    },
     concurrentRestrictions in Global += Tags.limit(Tags.Test, 1),
     // Remove certain packages from Scaladoc
     scalacOptions in (Compile, doc) := Seq(

@@ -27,6 +27,7 @@ import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorUtils.Object
 import org.apache.hadoop.hive.serde2.typeinfo.TypeInfoUtils
 
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.hive._
@@ -123,13 +124,13 @@ case class HiveTableScan(
 
         // Only partitioned values are needed here, since the predicate has already been bound to
         // partition key attribute references.
-        val row = new GenericRow(castedValues.toArray)
+        val row = InternalRow.fromSeq(castedValues)
         shouldKeep.eval(row).asInstanceOf[Boolean]
       }
     }
   }
 
-  protected override def doExecute(): RDD[Row] = if (!relation.hiveQlTable.isPartitioned) {
+  protected override def doExecute(): RDD[InternalRow] = if (!relation.hiveQlTable.isPartitioned) {
     hadoopReader.makeRDDForTable(relation.hiveQlTable)
   } else {
     hadoopReader.makeRDDForPartitionedTable(prunePartitions(relation.hiveQlPartitions))

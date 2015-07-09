@@ -22,12 +22,11 @@ import scala.reflect.runtime.universe.typeTag
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.sql.catalyst.ScalaReflectionLock
+import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * :: DeveloperApi ::
  * The data type representing `String` values. Please use the singleton [[DataTypes.StringType]].
- *
- * @group dataType
  */
 @DeveloperApi
 class StringType private() extends AtomicType {

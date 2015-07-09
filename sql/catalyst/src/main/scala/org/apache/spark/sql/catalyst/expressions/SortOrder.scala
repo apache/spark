@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.trees
 import org.apache.spark.sql.types.DataType
@@ -36,7 +37,7 @@ case class SortOrder(child: Expression, direction: SortDirection) extends Expres
   override def nullable: Boolean = child.nullable
 
   // SortOrder itself is never evaluated.
-  override def eval(input: Row = null): Any =
+  override def eval(input: InternalRow = null): Any =
     throw new TreeNodeException(this, s"No function to evaluate expression. type: ${this.nodeName}")
 
   override def toString: String = s"$child ${if (direction == Ascending) "ASC" else "DESC"}"

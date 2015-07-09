@@ -197,6 +197,7 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext w
       .setStepSize(10.0)
       .setRegParam(0.0)
       .setNumIterations(20)
+      .setConvergenceTol(0.0005)
 
     val model = lr.run(testRDD)
 

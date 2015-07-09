@@ -75,6 +75,14 @@ class SQLConfSuite extends QueryTest {
   test("deprecated property") {
     ctx.conf.clear()
     ctx.sql(s"set ${SQLConf.Deprecated.MAPRED_REDUCE_TASKS}=10")
-    assert(ctx.getConf(SQLConf.SHUFFLE_PARTITIONS) === "10")
+    assert(ctx.conf.numShufflePartitions === 10)
+  }
+
+  test("invalid conf value") {
+    ctx.conf.clear()
+    val e = intercept[IllegalArgumentException] {
+      ctx.sql(s"set ${SQLConf.CASE_SENSITIVE.key}=10")
+    }
+    assert(e.getMessage === s"${SQLConf.CASE_SENSITIVE.key} should be boolean, but was 10")
   }
 }
