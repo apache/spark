@@ -17,6 +17,7 @@
 
 package org.apache.spark.scheduler.local
 
+import java.io.File
 import java.net.URL
 import java.nio.ByteBuffer
 
@@ -108,7 +109,7 @@ private[spark] class LocalBackend(
    */
   def getUserClasspath(conf: SparkConf): Seq[URL] = {
     val userClassPathStr = conf.getOption("spark.executor.extraClassPath")
-    userClassPathStr.map(_.split(",")).toSeq.flatten.map(new URL(_))
+    userClassPathStr.map(_.split(File.pathSeparator)).toSeq.flatten.map(new URL(_))
   }
 
   override def start() {
