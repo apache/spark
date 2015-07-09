@@ -17,15 +17,22 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.TestData._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{BinaryType, DecimalType}
-
 
 class DataFrameAggregateSuite extends QueryTest {
 
   private lazy val ctx = org.apache.spark.sql.test.TestSQLContext
   import ctx.implicits._
+
+  case class TestData2(a: Int, b: Int)
+  val testData2 = {
+    val df = (for { a <- 1 to 3; b <- 1 to 2 } yield (a, b))
+      .map(t => TestData2(t._1, t._2))
+      .toDF()
+    df.registerTempTable("testData2")
+    df
+  }
 
   test("groupBy") {
     checkAnswer(
@@ -83,6 +90,15 @@ class DataFrameAggregateSuite extends QueryTest {
     )
   }
 
+  case class DecimalData(a: BigDecimal, b: BigDecimal)
+  val decimalData = {
+    val df = (for { a <- 1 to 3; b <- 1 to 2 } yield (a, b))
+      .map(t => DecimalData(t._1, t._2))
+      .toDF()
+    df.registerTempTable("decimalData")
+    df
+  }
+
   test("average") {
     checkAnswer(
       testData2.agg(avg('a)),
@@ -111,6 +127,13 @@ class DataFrameAggregateSuite extends QueryTest {
     checkAnswer(
       decimalData.agg(avg('a cast DecimalType(10, 2)), sumDistinct('a cast DecimalType(10, 2))),
       Row(new java.math.BigDecimal(2.0), new java.math.BigDecimal(6)) :: Nil)
+  }
+
+  case class TestData3(a: Int, b: Option[Int])
+  val testData3 = {
+    val df = Seq(TestData3(1, None), TestData3(2, Some(2))).toDF()
+    df.registerTempTable("testData3")
+    df
   }
 
   test("null average") {
