@@ -575,14 +575,13 @@ class StreamingContext private[streaming] (
    * @throws IllegalStateException if the StreamingContext is already stopped.
    */
   def start(): Unit = synchronized {
-    // Registering Streaming Metrics at the start of the StreamingContext
-    assert(env != null)
-    assert(env.metricsSystem != null)
-    env.metricsSystem.registerSource(streamingSource)
     state match {
       case INITIALIZED =>
         startSite.set(DStream.getCreationSite())
         sparkContext.setCallSite(startSite.get)
+        // Registering Streaming Metrics at the start of the StreamingContext
+        assert(env.metricsSystem != null)
+        env.metricsSystem.registerSource(streamingSource)
         StreamingContext.ACTIVATION_LOCK.synchronized {
           StreamingContext.assertNoOtherContextIsActive()
           try {
