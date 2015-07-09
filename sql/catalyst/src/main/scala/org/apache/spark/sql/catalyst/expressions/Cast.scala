@@ -186,7 +186,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
     case ByteType =>
       buildCast[Byte](_, b => longToTimestamp(b.toLong))
     case DateType =>
-      buildCast[Int](_, d => DateTimeUtils.daysToMillis(d) * 10000)
+      buildCast[Int](_, d => DateTimeUtils.daysToMillis(d) * 1000)
     // TimestampWritable.decimalToTimestamp
     case DecimalType() =>
       buildCast[Decimal](_, d => decimalToTimestamp(d))
@@ -207,16 +207,16 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
   }
 
   private[this] def decimalToTimestamp(d: Decimal): Long = {
-    (d.toBigDecimal * 10000000L).longValue()
+    (d.toBigDecimal * 1000000L).longValue()
   }
 
-  // converting milliseconds to 100ns
-  private[this] def longToTimestamp(t: Long): Long = t * 10000L
-  // converting 100ns to seconds
-  private[this] def timestampToLong(ts: Long): Long = math.floor(ts.toDouble / 10000000L).toLong
-  // converting 100ns to seconds in double
+  // converting milliseconds to us
+  private[this] def longToTimestamp(t: Long): Long = t * 1000L
+  // converting us to seconds
+  private[this] def timestampToLong(ts: Long): Long = math.floor(ts.toDouble / 1000000L).toLong
+  // converting us to seconds in double
   private[this] def timestampToDouble(ts: Long): Double = {
-    ts / 10000000.0
+    ts / 1000000.0
   }
 
   // DateConverter
@@ -229,7 +229,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
     case TimestampType =>
       // throw valid precision more than seconds, according to Hive.
       // Timestamp.nanos is in 0 to 999,999,999, no more than a second.
-      buildCast[Long](_, t => DateTimeUtils.millisToDays(t / 10000L))
+      buildCast[Long](_, t => DateTimeUtils.millisToDays(t / 1000L))
     // Hive throws this exception as a Semantic Exception
     // It is never possible to compare result when hive return with exception,
     // so we can return null
