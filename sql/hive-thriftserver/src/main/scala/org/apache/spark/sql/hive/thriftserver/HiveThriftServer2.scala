@@ -200,7 +200,6 @@ object HiveThriftServer2 extends Logging {
     def onStatementParsed(id: String, executionPlan: String): Unit = {
       executionList(id).executePlan = executionPlan
       executionList(id).state = ExecutionState.COMPILED
-      trimExecutionIfNecessary()
     }
 
     def onStatementError(id: String, errorMessage: String, errorTrace: String): Unit = {
