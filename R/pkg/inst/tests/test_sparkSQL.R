@@ -109,23 +109,16 @@ test_that("create DataFrame from RDD", {
   expect_equal(columns(df), c("a", "b"))
   expect_equal(dtypes(df), list(c("a", "int"), c("b", "string")))
 
-  localDF <- data.frame(name=c("John", "Smith", "Sarah"), age=c(19, 23, 18), height=c(164.10, 181.4, 173.7))
-  schema <- structType(structField("name", "string"), structField("age", "integer"), structField("height", "float"))
-  df <- createDataFrame(sqlContext, localDF, schema)
-  expect_is(df, "DataFrame")
-  expect_equal(count(df), 3)
-  expect_equal(columns(df), c("name", "age", "height"))
-  expect_equal(dtypes(df), list(c("name", "string"), c("age", "double"), c("height", "double")))
-
+  df <- jsonFile(sqlContext, jsonPathNa)
   hiveCtx <- tryCatch({
     newJObject("org.apache.spark.sql.hive.test.TestHiveContext", ssc)
   }, error = function(err) {
     skip("Hive is not build with SparkSQL, skipped")
   })
-  sql(hiveCtx, "CREATE TABLE people (name string, age double, height float) row format delimited fields terminated by ','")
+  sql(hiveCtx, "CREATE TABLE people (name string, age double, height float)")
   insertInto(df, "people")
-  expect_equal(sql(hiveCtx, "SELECT age from people"), c(19, 23, 18))
-  expect_equal(sql(hiveCtx, "SELECT height from people"), c(164.10, 181.4, 173.7))
+  expect_equal(sql(hiveCtx, "SELECT age from people WHERE name = 'Bob'"), c(16))
+  expect_equal(sql(hiveCtx, "SELECT height from people WHERE name ='Bob'"), c(176.5))
 })
 
 test_that("convert NAs to null type in DataFrames", {
