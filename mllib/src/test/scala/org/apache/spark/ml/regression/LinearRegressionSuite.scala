@@ -289,4 +289,63 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
         assert(prediction1 ~== prediction2 relTol 1E-5)
     }
   }
+
+  test("linear regression model training summary") {
+    val trainer = new LinearRegression
+    val model = trainer.fit(dataset)
+
+    // Training results for the model should be available
+    assert(model.hasSummary)
+
+    // Residuals in [[LinearRegressionResults]] should equal those manually computed
+    val expectedResiduals = dataset.select("features", "label")
+      .map { case Row(features: DenseVector, label: Double) =>
+      val prediction =
+        features(0) * model.weights(0) + features(1) * model.weights(1) + model.intercept
+      prediction - label
+    }
+      .zip(model.summary.residuals.map(_.getDouble(0)))
+      .collect()
+      .foreach { case (manualResidual: Double, resultResidual: Double) =>
+      assert(manualResidual ~== resultResidual relTol 1E-5)
+    }
+
+    /*
+       Use the following R code to generate model training results.
+
+       predictions <- predict(fit, newx=features)
+       residuals <- predictions - label
+       > mean(residuals^2) # MSE
+       [1] 0.009720325
+       > mean(abs(residuals)) # MAD
+       [1] 0.07863206
+       > cor(predictions, label)^2# r^2
+               [,1]
+       s0 0.9998749
+     */
+    assert(model.summary.meanSquaredError ~== 0.00972035 relTol 1E-5)
+    assert(model.summary.meanAbsoluteError ~== 0.07863206  relTol 1E-5)
+    assert(model.summary.r2 ~== 0.9998749 relTol 1E-5)
+
+    // Objective function should be monotonically decreasing for linear regression
+    assert(
+      model.summary
+        .objectiveHistory
+        .sliding(2)
+        .forall(x => x(0) >= x(1)))
+  }
+
+  test("linear regression model testset evaluation summary") {
+    val trainer = new LinearRegression
+    val model = trainer.fit(dataset)
+
+    // Evaluating on training dataset should yield results summary equal to training summary
+    val testSummary = model.evaluate(dataset)
+    assert(model.summary.meanSquaredError ~== testSummary.meanSquaredError relTol 1E-5)
+    assert(model.summary.r2 ~== testSummary.r2 relTol 1E-5)
+    model.summary.residuals.select("residuals").collect()
+      .zip(testSummary.residuals.select("residuals").collect())
+      .forall { case (Row(r1: Double), Row(r2: Double)) => r1 ~== r2 relTol 1E-5 }
+  }
+
 }
