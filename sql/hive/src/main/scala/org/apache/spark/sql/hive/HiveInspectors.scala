@@ -226,6 +226,12 @@ private[hive] trait HiveInspectors {
         "List type in java is unsupported because " +
         "JVM type erasure makes spark fail to catch a component type in List<>")
 
+    // java map type unsupported
+    case c: Class[_] if c == classOf[java.util.Map[_, _]] =>
+      throw new AnalysisException(
+        "Map type in java is unsupported because " +
+        "JVM type erasure makes spark fail to catch key and value types in Map<>")
+
     case c => throw new AnalysisException(s"Unsupported java type $c")
   }
 
@@ -261,7 +267,7 @@ private[hive] trait HiveInspectors {
         poi.getWritableConstantValue.getHiveDecimal)
     case poi: WritableConstantTimestampObjectInspector =>
       val t = poi.getWritableConstantValue
-      t.getSeconds * 10000000L + t.getNanos / 100L
+      t.getSeconds * 1000000L + t.getNanos / 1000L
     case poi: WritableConstantIntObjectInspector =>
       poi.getWritableConstantValue.get()
     case poi: WritableConstantDoubleObjectInspector =>
@@ -326,7 +332,7 @@ private[hive] trait HiveInspectors {
       case x: DateObjectInspector => DateTimeUtils.fromJavaDate(x.getPrimitiveJavaObject(data))
       case x: TimestampObjectInspector if x.preferWritable() =>
         val t = x.getPrimitiveWritableObject(data)
-        t.getSeconds * 10000000L + t.getNanos / 100
+        t.getSeconds * 1000000L + t.getNanos / 1000L
       case ti: TimestampObjectInspector =>
         DateTimeUtils.fromJavaTimestamp(ti.getPrimitiveJavaObject(data))
       case _ => pi.getPrimitiveJavaObject(data)

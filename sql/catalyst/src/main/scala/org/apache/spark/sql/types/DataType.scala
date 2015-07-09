@@ -17,11 +17,12 @@
 
 package org.apache.spark.sql.types
 
+import scala.util.Try
 import scala.util.parsing.combinator.RegexParsers
 
-import org.json4s._
 import org.json4s.JsonAST.JValue
 import org.json4s.JsonDSL._
+import org.json4s._
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.annotation.DeveloperApi
@@ -75,13 +76,16 @@ abstract class DataType extends AbstractDataType {
    */
   private[spark] def asNullable: DataType
 
-  private[sql] override def defaultConcreteType: DataType = this
+  override private[sql] def defaultConcreteType: DataType = this
 
-  private[sql] override def isParentOf(childCandidate: DataType): Boolean = this == childCandidate
+  override private[sql] def isSameType(other: DataType): Boolean = this == other
 }
 
 
 object DataType {
+  private[sql] def fromString(raw: String): DataType = {
+    Try(DataType.fromJson(raw)).getOrElse(DataType.fromCaseClassString(raw))
+  }
 
   def fromJson(json: String): DataType = parseDataType(parse(json))
 
