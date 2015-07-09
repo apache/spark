@@ -18,17 +18,14 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.rdd.{RDD, ShuffledRDD}
-import org.apache.spark.shuffle.sort.SortShuffleManager
-import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.CatalystTypeConverters
+import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.plans.physical._
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
+import org.apache.spark.util.CompletionIterator
 import org.apache.spark.util.collection.ExternalSorter
-import org.apache.spark.util.{CompletionIterator, MutablePair}
-import org.apache.spark.{HashPartitioner, SparkEnv}
 
 /**
  * :: DeveloperApi ::
@@ -108,48 +105,24 @@ case class Union(children: Seq[SparkPlan]) extends SparkPlan {
 
 /**
  * :: DeveloperApi ::
- * Take the first limit elements. Note that the implementation is different depending on whether
- * this is a terminal operator or not. If it is terminal and is invoked using executeCollect,
- * this operator uses something similar to Spark's take method on the Spark driver. If it is not
- * terminal or is invoked using execute, we first take the limit on each partition, and then
- * repartition all the data to a single partition to compute the global limit.
+ * Take the first `limit` elements from each partition.
  */
 @DeveloperApi
-case class Limit(limit: Int, child: SparkPlan)
+case class PartitionLocalLimit(limit: Int, child: SparkPlan)
   extends UnaryNode {
-  // TODO: Implement a partition local limit, and use a strategy to generate the proper limit plan:
-  // partition local limit -> exchange into one partition -> partition local limit again
-
-  /** We must copy rows when sort based shuffle is on */
-  private def sortBasedShuffleOn = SparkEnv.get.shuffleManager.isInstanceOf[SortShuffleManager]
-
   override def output: Seq[Attribute] = child.output
-  override def outputPartitioning: Partitioning = SinglePartition
 
   override def executeCollect(): Array[Row] = child.executeTake(limit)
 
-  protected override def doExecute(): RDD[InternalRow] = {
-    val rdd: RDD[_ <: Product2[Boolean, InternalRow]] = if (sortBasedShuffleOn) {
-      child.execute().mapPartitions { iter =>
-        iter.take(limit).map(row => (false, row.copy()))
-      }
-    } else {
-      child.execute().mapPartitions { iter =>
-        val mutablePair = new MutablePair[Boolean, InternalRow]()
-        iter.take(limit).map(row => mutablePair.update(false, row))
-      }
-    }
-    val part = new HashPartitioner(1)
-    val shuffled = new ShuffledRDD[Boolean, InternalRow, InternalRow](rdd, part)
-    shuffled.setSerializer(new SparkSqlSerializer(child.sqlContext.sparkContext.getConf))
-    shuffled.mapPartitions(_.take(limit).map(_._2))
+  protected override def doExecute(): RDD[InternalRow] = child.execute().mapPartitions { iter =>
+    iter.take(limit)
   }
 }
 
 /**
  * :: DeveloperApi ::
  * Take the first limit elements as defined by the sortOrder, and do projection if needed.
- * This is logically equivalent to having a [[Limit]] operator after a [[Sort]] operator,
+ * This is logically equivalent to having a Limit operator after a [[Sort]] operator,
  * or having a [[Project]] operator between them.
  * This could have been named TopK, but Spark's top operator does the opposite in ordering
  * so we name it TakeOrdered to avoid confusion.
