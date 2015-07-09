@@ -35,10 +35,10 @@ class CountVectorizerModel (override val uid: String, val vocabulary: Array[Stri
   extends UnaryTransformer[Seq[String], Vector, CountVectorizerModel] {
 
   def this(vocabulary: Array[String]) =
-    this(Identifiable.randomUID("countVectorizerModel"), vocabulary)
+    this(Identifiable.randomUID("cntVec"), vocabulary)
 
   /**
-   * Corpus-specific filter to neglect scarce words in a document. For each document, terms with
+   * Corpus-specific filter to ignore scarce words in a document. For each document, terms with
    * frequency (count) less than the given threshold are ignored.
    * Default: 1
    * @group param
