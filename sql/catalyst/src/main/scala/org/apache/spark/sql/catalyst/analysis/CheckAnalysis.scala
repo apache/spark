@@ -40,7 +40,7 @@ trait CheckAnalysis {
   def containsMultipleGenerators(exprs: Seq[Expression]): Boolean = {
     exprs.flatMap(_.collect {
       case e: Generator => true
-    }).length >= 1
+    }).nonEmpty
   }
 
   def checkAnalysis(plan: LogicalPlan): Unit = {
@@ -85,12 +85,12 @@ trait CheckAnalysis {
           case Aggregate(groupingExprs, aggregateExprs, child) =>
             def checkValidAggregateExpression(expr: Expression): Unit = expr match {
               case _: AggregateExpression => // OK
-              case e: Attribute if groupingExprs.find(_ semanticEquals e).isEmpty =>
+              case e: Attribute if !groupingExprs.exists(_.semanticEquals(e)) =>
                 failAnalysis(
                   s"expression '${e.prettyString}' is neither present in the group by, " +
                     s"nor is it an aggregate function. " +
                     "Add to group by or wrap in first() if you don't care which value you get.")
-              case e if groupingExprs.find(_ semanticEquals e).isDefined => // OK
+              case e if groupingExprs.exists(_.semanticEquals(e)) => // OK
               case e if e.references.isEmpty => // OK
               case e => e.children.foreach(checkValidAggregateExpression)
             }

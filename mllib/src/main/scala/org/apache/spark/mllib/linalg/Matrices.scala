@@ -24,9 +24,9 @@ import scala.collection.mutable.{ArrayBuilder => MArrayBuilder, HashSet => MHash
 import breeze.linalg.{CSCMatrix => BSM, DenseMatrix => BDM, Matrix => BM}
 
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.sql.Row
-import org.apache.spark.sql.types._
 import org.apache.spark.sql.catalyst.expressions.GenericMutableRow
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.types._
 
 /**
  * Trait for a local matrix.
@@ -114,6 +114,16 @@ sealed trait Matrix extends Serializable {
    *          corresponding value in the matrix with type `Double`.
    */
   private[spark] def foreachActive(f: (Int, Int, Double) => Unit)
+
+  /**
+   * Find the number of non-zero active values.
+   */
+  def numNonzeros: Int
+
+  /**
+   * Find the number of values stored explicitly. These values can be zero as well.
+   */
+  def numActives: Int
 }
 
 @DeveloperApi
@@ -137,7 +147,7 @@ private[spark] class MatrixUDT extends UserDefinedType[Matrix] {
       ))
   }
 
-  override def serialize(obj: Any): Row = {
+  override def serialize(obj: Any): InternalRow = {
     val row = new GenericMutableRow(7)
     obj match {
       case sm: SparseMatrix =>
@@ -163,9 +173,7 @@ private[spark] class MatrixUDT extends UserDefinedType[Matrix] {
 
   override def deserialize(datum: Any): Matrix = {
     datum match {
-      // TODO: something wrong with UDT serialization, should never happen.
-      case m: Matrix => m
-      case row: Row =>
+      case row: InternalRow =>
         require(row.length == 7,
           s"MatrixUDT.deserialize given row with length ${row.length} but requires length == 7")
         val tpe = row.getByte(0)
@@ -193,7 +201,8 @@ private[spark] class MatrixUDT extends UserDefinedType[Matrix] {
     }
   }
 
-  override def hashCode(): Int = 1994
+  // see [SPARK-8647], this achieves the needed constant hash code without constant no.
+  override def hashCode(): Int = classOf[MatrixUDT].getName.hashCode()
 
   override def typeName: String = "matrix"
 
@@ -322,6 +331,10 @@ class DenseMatrix(
       }
     }
   }
+
+  override def numNonzeros: Int = values.count(_ != 0)
+
+  override def numActives: Int = values.length
 
   /**
    * Generate a `SparseMatrix` from the given `DenseMatrix`. The new matrix will have isTransposed
@@ -592,6 +605,11 @@ class SparseMatrix(
   def toDense: DenseMatrix = {
     new DenseMatrix(numRows, numCols, toArray)
   }
+
+  override def numNonzeros: Int = values.count(_ != 0)
+
+  override def numActives: Int = values.length
+
 }
 
 /**

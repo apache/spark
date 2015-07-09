@@ -34,6 +34,7 @@ class FilterPushdownSuite extends PlanTest {
       Batch("Subqueries", Once,
         EliminateSubQueries) ::
       Batch("Filter Pushdown", Once,
+        SamplePushDown,
         CombineFilters,
         PushPredicateThroughProject,
         BooleanSimplification,
@@ -592,5 +593,20 @@ class FilterPushdownSuite extends PlanTest {
        .select('b).analyze
 
     comparePlans(optimized1, analysis.EliminateSubQueries(correctAnswer1))
+  }
+
+  test("push project and filter down into sample") {
+    val x = testRelation.subquery('x)
+    val originalQuery =
+      Sample(0.0, 0.6, false, 11L, x).select('a)
+
+    val originalQueryAnalyzed = EliminateSubQueries(analysis.SimpleAnalyzer.execute(originalQuery))
+
+    val optimized = Optimize.execute(originalQueryAnalyzed)
+
+    val correctAnswer =
+      Sample(0.0, 0.6, false, 11L, x.select('a))
+
+    comparePlans(optimized, correctAnswer.analyze)
   }
 }
