@@ -78,11 +78,10 @@ object ExtractValue {
     }
   }
 
-  def unapply(g: ExtractValue): Option[(Expression, Expression)] = {
-    g match {
-      case o: ExtractValueWithOrdinal => Some((o.child, o.ordinal))
-      case s: ExtractValueWithStruct => Some((s.child, null))
-    }
+  def unapply(g: ExtractValue): Option[(Expression, Expression)] = g match {
+    case o: GetArrayItem => Some((o.child, o.ordinal))
+    case o: GetMapValue => Some((o.child, o.key))
+    case s: ExtractValueWithStruct => Some((s.child, null))
   }
 
   /**
@@ -187,27 +186,21 @@ case class GetArrayStructFields(
   }
 }
 
-abstract class ExtractValueWithOrdinal extends BinaryExpression with ExtractValue {
-  self: Product =>
-
-  def ordinal: Expression
-  def child: Expression
-
-  override def left: Expression = child
-  override def right: Expression = ordinal
-
-  /** `Null` is returned for invalid ordinals. */
-  override def nullable: Boolean = true
-  override def toString: String = s"$child[$ordinal]"
-}
-
 /**
  * Returns the field at `ordinal` in the Array `child`.
  *
  * No need to do type checking since it is handled by [[ExtractValue]].
  */
 case class GetArrayItem(child: Expression, ordinal: Expression)
-  extends ExtractValueWithOrdinal {
+  extends BinaryExpression with ExtractValue {
+
+  override def toString: String = s"$child[$ordinal]"
+
+  override def left: Expression = child
+  override def right: Expression = ordinal
+
+  /** `Null` is returned for invalid ordinals. */
+  override def nullable: Boolean = true
 
   override def dataType: DataType = child.dataType.asInstanceOf[ArrayType].elementType
 
@@ -242,10 +235,16 @@ case class GetArrayItem(child: Expression, ordinal: Expression)
  *
  * No need to do type checking since it is handled by [[ExtractValue]].
  */
-case class GetMapValue(child: Expression, ordinal: Expression)
-  extends ExtractValueWithOrdinal with ExpectsInputTypes {
+case class GetMapValue(child: Expression, key: Expression)
+  extends BinaryExpression with ExtractValue {
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(MapType, IntegerType)
+  override def toString: String = s"$child[$key]"
+
+  override def left: Expression = child
+  override def right: Expression = key
+
+  /** `Null` is returned for invalid ordinals. */
+  override def nullable: Boolean = true
 
   override def dataType: DataType = child.dataType.asInstanceOf[MapType].valueType
 
