@@ -20,7 +20,8 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen._
-import org.apache.spark.sql.types.{BooleanType, DataType}
+import org.apache.spark.sql.catalyst.util.TypeUtils
+import org.apache.spark.sql.types.{NullType, BooleanType, DataType}
 
 
 case class If(predicate: Expression, trueValue: Expression, falseValue: Expression)
@@ -313,62 +314,102 @@ case class CaseKeyWhen(key: Expression, branches: Seq[Expression]) extends CaseW
   }
 }
 
-case class Least(children: Expression*)
-  extends Expression {
+case class Least(children: Expression*) extends Expression {
+  require(children.length > 1, "LEAST requires at least 2 arguments, got " + children.length)
 
   override def nullable: Boolean = children.forall(_.nullable)
+  override def foldable: Boolean = children.forall(_.foldable)
+
+  private lazy val ordering = TypeUtils.getOrdering(dataType)
 
   override def checkInputDataTypes(): TypeCheckResult = {
-    if (children.map(_.dataType).distinct.size > 1) {
+    if (children.map(_.dataType).distinct.count(_ != NullType) > 1) {
       TypeCheckResult.TypeCheckFailure(
-        s"differing types in Least (${children.map(_.dataType)}).")
+        s"The expressions should all have the same type," +
+          s" got LEAST (${children.map(_.dataType)}).")
     } else {
-      TypeCheckResult.TypeCheckSuccess
+      TypeUtils.checkForOrderingExpr(dataType, "function " + prettyName)
     }
   }
 
   override def dataType: DataType = children.head.dataType
 
   override def eval(input: InternalRow): Any = {
-    val cmp = GreaterThan
-    children.foldLeft[Expression](null)((r, c) => {
-      if (c != null) {
-        if (r == null || cmp.apply(r, c).eval(input).asInstanceOf[Boolean]) c else r
+    children.foldLeft[Any](null)((r, c) => {
+      val evalc = c.eval(input)
+      if (evalc != null) {
+        if (r == null || ordering.lt(evalc, r)) evalc else r
       } else {
         r
       }
-    }).eval(input)
+    })
   }
 
-  override def toString: String = s"LEAST(${children.mkString(", ")})"
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    val evalChildren = children.map(_.gen(ctx))
+    def updateEval(i: Int): String =
+      s"""
+        if (${ev.isNull} || (!${evalChildren(i).isNull} && ${
+          ctx.genComp(dataType, evalChildren(i).primitive, ev.primitive)} < 0)) {
+          ${ev.isNull} = ${evalChildren(i).isNull};
+          ${ev.primitive} = ${evalChildren(i).primitive};
+        }
+      """
+    s"""
+      ${evalChildren.map(_.code).mkString("\n")}
+      boolean ${ev.isNull} = true;
+      ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
+      ${(0 to children.length - 1).map(updateEval).mkString("\n")}
+    """
+  }
 }
 
-case class Greatest(children: Expression*)
-  extends Expression {
+case class Greatest(children: Expression*) extends Expression {
+  require(children.length > 1, "GREATEST requires at least 2 arguments, got " + children.length)
 
   override def nullable: Boolean = children.forall(_.nullable)
+  override def foldable: Boolean = children.forall(_.foldable)
+
+  private lazy val ordering = TypeUtils.getOrdering(dataType)
 
   override def checkInputDataTypes(): TypeCheckResult = {
-    if (children.map(_.dataType).distinct.size > 1) {
+    if (children.map(_.dataType).distinct.count(_ != NullType) > 1) {
       TypeCheckResult.TypeCheckFailure(
-        s"differing types in Greatest (${children.map(_.dataType)}).")
+        s"The expressions should all have the same type," +
+          s" got GREATEST (${children.map(_.dataType)}).")
     } else {
-      TypeCheckResult.TypeCheckSuccess
+      TypeUtils.checkForOrderingExpr(dataType, "function " + prettyName)
     }
   }
 
   override def dataType: DataType = children.head.dataType
 
   override def eval(input: InternalRow): Any = {
-    val cmp = LessThan
-    children.foldLeft[Expression](null)((r, c) => {
-      if (c != null) {
-        if (r == null || cmp.apply(r, c).eval(input).asInstanceOf[Boolean]) c else r
+    children.foldLeft[Any](null)((r, c) => {
+      val evalc = c.eval(input)
+      if (evalc != null) {
+        if (r == null || ordering.gt(evalc, r)) evalc else r
       } else {
         r
       }
-    }).eval(input)
+    })
   }
 
-  override def toString: String = s"LEAST(${children.mkString(", ")})"
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    val evalChildren = children.map(_.gen(ctx))
+    def updateEval(i: Int): String =
+      s"""
+        if (${ev.isNull} || (!${evalChildren(i).isNull} && ${
+        ctx.genComp(dataType, evalChildren(i).primitive, ev.primitive)} > 0)) {
+          ${ev.isNull} = ${evalChildren(i).isNull};
+          ${ev.primitive} = ${evalChildren(i).primitive};
+        }
+      """
+    s"""
+      ${evalChildren.map(_.code).mkString("\n")}
+      boolean ${ev.isNull} = true;
+      ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
+      ${(0 to children.length - 1).map(updateEval).mkString("\n")}
+    """
+  }
 }
