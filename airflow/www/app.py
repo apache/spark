@@ -2,6 +2,7 @@ import copy
 from datetime import datetime, timedelta
 import dateutil.parser
 from functools import wraps
+import inspect
 import json
 import logging
 import os
@@ -128,6 +129,8 @@ attr_renderer = {
     'doc_rst': lambda x: pygment_html_render(x, lexers.RstLexer),
     'doc_yaml': lambda x: pygment_html_render(x, lexers.YamlLexer),
     'doc_md': wrapped_markdown,
+    'python_callable': lambda x: pygment_html_render(
+        inspect.getsource(x), lexers.PythonLexer),
 }
 
 
