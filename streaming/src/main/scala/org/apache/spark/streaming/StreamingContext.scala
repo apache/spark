@@ -676,6 +676,8 @@ class StreamingContext private[streaming] (
           logWarning("StreamingContext has already been stopped")
         case ACTIVE =>
           scheduler.stop(stopGracefully)
+          // De-registering Streaming Metrics of the StreamingContext
+          env.metricsSystem.removeSource(streamingSource)
           uiTab.foreach(_.detach())
           StreamingContext.setActiveContext(null)
           waiter.notifyStop()
@@ -690,8 +692,7 @@ class StreamingContext private[streaming] (
     } finally {
       // The state should always be Stopped after calling `stop()`, even if we haven't started yet
       state = STOPPED
-      // De-registering Streaming Metrics of the StreamingContext
-      env.metricsSystem.removeSource(streamingSource)
+
     }
   }
 
