@@ -63,7 +63,10 @@ object MimaExcludes {
             // SQL execution is considered private.
             excludePackage("org.apache.spark.sql.execution"),
             // Parquet support is considered private.
-            excludePackage("org.apache.spark.sql.parquet")
+            excludePackage("org.apache.spark.sql.parquet"),
+            // local function inside a method
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.sql.SQLContext.org$apache$spark$sql$SQLContext$$needsConversion$1")
           ) ++ Seq(
             // SPARK-8479 Add numNonzeros and numActives to Matrix.
             ProblemFilters.exclude[MissingMethodProblem](
