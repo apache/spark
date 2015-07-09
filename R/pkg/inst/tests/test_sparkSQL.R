@@ -957,7 +957,7 @@ test_that("crosstab() on a DataFrame", {
   ct <- crosstab(df, "a", "b")
   ordered <- ct[order("a_b"),]
   expected <- data.frame("a_b" = c("a0", "a1", "a2"), "b0" = c(1, 1, 1), "b1" = c(1, 1, 1))
-  assert_true(identical(expected, ordered))
+  expect_identical(expected, ordered)
 })
 
 unlink(parquetPath)
