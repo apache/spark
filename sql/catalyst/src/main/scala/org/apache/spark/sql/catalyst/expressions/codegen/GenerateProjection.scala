@@ -100,9 +100,9 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
         case (e, i) if ctx.javaType(e.dataType) == jt =>
           Some(jt match {
             case "float" =>
-              s"case $i: {if (Float.isNaN(value)) nullBits[$i] = true else c$i = value; return;}"
+              s"case $i: {if (Float.isNaN(value)) nullBits[$i] = true; else c$i = value; return;}"
             case "double" =>
-              s"case $i: {if (Double.isNaN(value)) nullBits[$i] = true else c$i = value; return;}"
+              s"case $i: {if (Double.isNaN(value)) nullBits[$i] = true; else c$i = value; return;}"
             case _ =>
               s"case $i: {c$i = value; return;}"
           })
