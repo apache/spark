@@ -65,8 +65,6 @@ class TrainValidatorSplit(override val uid: String) extends Estimator[TrainValid
 
   def this() = this(Identifiable.randomUID("cv"))
 
-  private val f2jBLAS = new F2jBLAS
-
   /** @group setParam */
   def setEstimator(value: Estimator[_]): this.type = set(estimator, value)
 
@@ -104,6 +102,7 @@ class TrainValidatorSplit(override val uid: String) extends Estimator[TrainValid
     val validationDataset = sqlCtx.createDataFrame(validation, schema).cache()
 
     // multi-model training
+    logDebug(s"Train split with multiple sets of parameters.")
     val models = est.fit(trainingDataset, epm).asInstanceOf[Seq[Model[_]]]
     trainingDataset.unpersist()
     var i = 0
