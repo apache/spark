@@ -461,7 +461,8 @@ private[parquet] class CatalystSchemaConverter(
           field.name,
           Types
             .buildGroup(REPEATED)
-            .addField(convertField(StructField("element", elementType, nullable)))
+            // "array_element" is the name chosen by parquet-hive (1.7.0 and prior version)
+            .addField(convertField(StructField("array_element", elementType, nullable)))
             .named(CatalystConverter.ARRAY_CONTAINS_NULL_BAG_SCHEMA_NAME))
 
       // Spark 1.4.x and prior versions convert ArrayType with non-nullable elements into a 2-level
@@ -474,7 +475,8 @@ private[parquet] class CatalystSchemaConverter(
         ConversionPatterns.listType(
           repetition,
           field.name,
-          convertField(StructField("element", elementType, nullable), REPEATED))
+          // "array" is the name chosen by parquet-avro (1.7.0 and prior version)
+          convertField(StructField("array", elementType, nullable), REPEATED))
 
       // Spark 1.4.x and prior versions convert MapType into a 3-level group annotated by
       // MAP_KEY_VALUE.  This is covered by `convertGroupField(field: GroupType): DataType`.
