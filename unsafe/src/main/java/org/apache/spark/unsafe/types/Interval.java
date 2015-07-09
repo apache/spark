@@ -23,6 +23,13 @@ import java.io.Serializable;
  * The internal representation of interval type.
  */
 public final class Interval implements Serializable {
+  public static final long MICROS_PER_MILLI = 1000L;
+  public static final long MICROS_PER_SECOND = MICROS_PER_MILLI * 1000;
+  public static final long MICROS_PER_MINUTE = MICROS_PER_SECOND * 60;
+  public static final long MICROS_PER_HOUR = MICROS_PER_MINUTE * 60;
+  public static final long MICROS_PER_DAY = MICROS_PER_HOUR * 24;
+  public static final long MICROS_PER_WEEK = MICROS_PER_DAY * 7;
+
   public final int months;
   public final long microseconds;
 
@@ -43,5 +50,40 @@ public final class Interval implements Serializable {
   @Override
   public int hashCode() {
     return 31 * months + (int) microseconds;
+  }
+
+  @Override
+  public String toString() {
+    StringBuilder sb = new StringBuilder("interval");
+
+    if (months != 0) {
+      appendUnit(sb, months / 12, "year");
+      appendUnit(sb, months % 12, "month");
+    }
+
+    if (microseconds != 0) {
+      long rest = microseconds;
+      appendUnit(sb, rest / MICROS_PER_WEEK, "week");
+      rest %= MICROS_PER_WEEK;
+      appendUnit(sb, rest / MICROS_PER_DAY, "day");
+      rest %= MICROS_PER_DAY;
+      appendUnit(sb, rest / MICROS_PER_HOUR, "hour");
+      rest %= MICROS_PER_HOUR;
+      appendUnit(sb, rest / MICROS_PER_MINUTE, "minute");
+      rest %= MICROS_PER_MINUTE;
+      appendUnit(sb, rest / MICROS_PER_SECOND, "second");
+      rest %= MICROS_PER_SECOND;
+      appendUnit(sb, rest / MICROS_PER_MILLI, "millisecond");
+      rest %= MICROS_PER_MILLI;
+      appendUnit(sb, rest, "microsecond");
+    }
+
+    return sb.toString();
+  }
+
+  private void appendUnit(StringBuilder sb, long value, String unit) {
+    if (value != 0) {
+      sb.append(" " + value + " " + unit + "s");
+    }
   }
 }
