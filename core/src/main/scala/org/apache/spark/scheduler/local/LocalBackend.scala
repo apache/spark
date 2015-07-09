@@ -114,7 +114,8 @@ private[spark] class LocalBackend(
 
   override def start() {
     localEndpoint = SparkEnv.get.rpcEnv.setupEndpoint(
-      "LocalBackendEndpoint", new LocalEndpoint(SparkEnv.get.rpcEnv, userClassPath, scheduler, this, totalCores))
+      "LocalBackendEndpoint",
+      new LocalEndpoint(SparkEnv.get.rpcEnv, userClassPath, scheduler, this, totalCores))
   }
 
   override def stop() {
