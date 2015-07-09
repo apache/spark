@@ -22,48 +22,98 @@ import org.apache.spark.rdd.RDD
 
 class PrefixspanSuite extends SparkFunSuite with MLlibTestSparkContext {
 
-  test("Prefixspan sequences mining using Integer type") {
+  test("PrefixSpan using Integer type") {
+
+    /*
+      library("arulesSequences")
+      prefixSpanSeqs = read_baskets("prefixSpanSeqs", info = c("sequenceID","eventID","SIZE"))
+      freqItemSeq = cspade(
+        prefixSpanSeqs,
+        parameter = list(support = 2 / length(unique(transactionInfo(prefixSpanSeqs)$sequenceID)), maxlen = 2 ))
+      resSeq = as(freqItemSeq, "data.frame")
+      resSeq
+    */
+
     val sequences = Array(
-      Array(3, 1, 3, 4, 5),
-      Array(2, 3, 1),
-      Array(3, 4, 4, 3),
       Array(1, 3, 4, 5),
+      Array(2, 3, 1),
       Array(2, 4, 1),
+      Array(3, 1, 3, 4, 5),
+      Array(3, 4, 4, 3),
       Array(6, 5, 3))
 
     val rdd = sc.parallelize(sequences, 2).cache()
 
-    def formatResultString(data: RDD[(Seq[Int], Int)]): String = {
-      data.map(x => x._1.mkString(",") + ": " + x._2)
-        .collect()
-        .sortWith(_<_)
-        .mkString("; ")
+    def compareResult(
+        expectedValue: Array[(Array[Int], Long)],
+        actualValue: Array[(Array[Int], Long)]): Boolean = {
+      val sortedExpectedValue = expectedValue.sortWith{ (x, y) =>
+        x._1.mkString(",") + ":" + x._2 < y._1.mkString(",") + ":" + y._2
+      }
+      val sortedActualValue = actualValue.sortWith{ (x, y) =>
+        x._1.mkString(",") + ":" + x._2 < y._1.mkString(",") + ":" + y._2
+      }
+      sortedExpectedValue.zip(sortedActualValue)
+        .map(x => x._1._1.mkString(",") == x._2._1.mkString(",") && x._1._2 == x._2._2)
+        .reduce(_&&_)
     }
 
     val prefixspan = new PrefixSpan()
       .setMinSupport(0.34)
       .setMaxPatternLength(50)
     val result1 = prefixspan.run(rdd)
-    val len1 = result1.count().toInt
-    val actualValue1 = formatResultString(result1)
-    val expectedValue1 =
-      "1,3,4,5: 2; 1,3,4: 2; 1,3,5: 2; 1,3: 2; 1,4,5: 2;" +
-      " 1,4: 2; 1,5: 2; 1: 4; 2,1: 2; 2: 2; 3,1: 2; 3,3: 2;" +
-      " 3,4,5: 2; 3,4: 3; 3,5: 2; 3: 5; 4,5: 2; 4: 4; 5: 3"
-    assert(expectedValue1 == actualValue1)
+    val expectedValue1 = Array(
+      (Array(1), 4L),
+      (Array(1,3),2L),
+      (Array(1,3,4), 2L),
+      (Array(1,3,4,5), 2L),
+      (Array(1,3,5), 2L),
+      (Array(1,4), 2L),
+      (Array(1,4,5), 2L),
+      (Array(1,5), 2L),
+      (Array(2), 2L),
+      (Array(2,1), 2L),
+      (Array(3), 5L),
+      (Array(3,1), 2L),
+      (Array(3,3), 2L),
+      (Array(3,4), 3L),
+      (Array(3,4,5), 2L),
+      (Array(3,5), 2L),
+      (Array(4), 4L),
+      (Array(4,5), 2L),
+      (Array(5), 3L)
+    )
+    assert(compareResult(expectedValue1, result1.collect()))
 
     prefixspan.setMinSupport(0.5).setMaxPatternLength(50)
     val result2 = prefixspan.run(rdd)
-    val expectedValue2 = "1: 4; 3,4: 3; 3: 5; 4: 4; 5: 3"
-    val actualValue2 = formatResultString(result2)
-    assert(expectedValue2 == actualValue2)
+    val expectedValue2 = Array(
+      (Array(1), 4L),
+      (Array(3), 5L),
+      (Array(3,4), 3L),
+      (Array(4), 4L),
+      (Array(5), 3L)
+    )
+    assert(compareResult(expectedValue2, result2.collect()))
 
     prefixspan.setMinSupport(0.34).setMaxPatternLength(2)
     val result3 = prefixspan.run(rdd)
-    val actualValue3 = formatResultString(result3)
-    val expectedValue3 =
-      "1,3: 2; 1,4: 2; 1,5: 2; 1: 4; 2,1: 2; 2: 2; 3,1: 2;" +
-      " 3,3: 2; 3,4: 3; 3,5: 2; 3: 5; 4,5: 2; 4: 4; 5: 3"
-    assert(expectedValue3 == actualValue3)
+    val expectedValue3 = Array(
+      (Array(1), 4L),
+      (Array(1,3), 2L),
+      (Array(1,4), 2L),
+      (Array(1,5), 2L),
+      (Array(2,1), 2L),
+      (Array(2), 2L),
+      (Array(3), 5L),
+      (Array(3,1), 2L),
+      (Array(3,3), 2L),
+      (Array(3,4), 3L),
+      (Array(3,5), 2L),
+      (Array(4), 4L),
+      (Array(4,5), 2L),
+      (Array(5), 3L)
+    )
+    assert(compareResult(expectedValue3, result3.collect()))
   }
 }
