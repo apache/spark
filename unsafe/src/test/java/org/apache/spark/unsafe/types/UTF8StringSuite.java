@@ -149,19 +149,19 @@ public class UTF8StringSuite {
   }
 
   @Test
-  public void instr() {
-    assertEquals(0, fromString("").instr(fromString(""), 0));
-    assertEquals(-1, fromString("").instr(fromString("l"), 0));
-    assertEquals(0, fromString("hello").instr(fromString(""), 0));
-    assertEquals(2, fromString("hello").instr(fromString("l"), 0));
-    assertEquals(3, fromString("hello").instr(fromString("l"), 3));
-    assertEquals(-1, fromString("hello").instr(fromString("a"), 0));
-    assertEquals(2, fromString("hello").instr(fromString("ll"), 0));
-    assertEquals(-1, fromString("hello").instr(fromString("ll"), 4));
-    assertEquals(1, fromString("数据砖头").instr(fromString("据砖"), 0));
-    assertEquals(-1, fromString("数据砖头").instr(fromString("数"), 3));
-    assertEquals(0, fromString("数据砖头").instr(fromString("数"), 0));
-    assertEquals(3, fromString("数据砖头").instr(fromString("头"), 0));
+  public void indexOf() {
+    assertEquals(0, fromString("").indexOf(fromString(""), 0));
+    assertEquals(-1, fromString("").indexOf(fromString("l"), 0));
+    assertEquals(0, fromString("hello").indexOf(fromString(""), 0));
+    assertEquals(2, fromString("hello").indexOf(fromString("l"), 0));
+    assertEquals(3, fromString("hello").indexOf(fromString("l"), 3));
+    assertEquals(-1, fromString("hello").indexOf(fromString("a"), 0));
+    assertEquals(2, fromString("hello").indexOf(fromString("ll"), 0));
+    assertEquals(-1, fromString("hello").indexOf(fromString("ll"), 4));
+    assertEquals(1, fromString("数据砖头").indexOf(fromString("据砖"), 0));
+    assertEquals(-1, fromString("数据砖头").indexOf(fromString("数"), 3));
+    assertEquals(0, fromString("数据砖头").indexOf(fromString("数"), 0));
+    assertEquals(3, fromString("数据砖头").indexOf(fromString("头"), 0));
   }
 
   @Test
@@ -170,6 +170,13 @@ public class UTF8StringSuite {
     assertEquals(fromString(""), fromString("").reverse());
     assertEquals(fromString("者行孙"), fromString("孙行者").reverse());
     assertEquals(fromString("者行孙 olleh"), fromString("hello 孙行者").reverse());
+  }
+
+  @Test
+  public void repeat() {
+    assertEquals(fromString("数d数d数d数d数d"), fromString("数d").repeat(5));
+    assertEquals(fromString("数d"), fromString("数d").repeat(1));
+    assertEquals(fromString(""), fromString("数d").repeat(-1));
   }
 
   @Test

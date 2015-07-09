@@ -1687,13 +1687,14 @@ object functions {
 
   /**
    * Format strings in printf-style.
+   * NOTE: `format` is the string value of the formatter, not column name.
    *
    * @group string_funcs
    * @since 1.5.0
    */
   @scala.annotation.varargs
-  def formatString(format: String, arguments: String*): Column = {
-    StringFormat((format +: arguments).map(Column(_).expr): _*)
+  def formatString(format: String, arguNames: String*): Column = {
+    StringFormat(lit(format).expr +: arguNames.map(Column(_).expr): _*)
   }
 
   /**

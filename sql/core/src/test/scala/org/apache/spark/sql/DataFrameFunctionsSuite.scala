@@ -283,7 +283,7 @@ class DataFrameFunctionsSuite extends QueryTest {
     val df = Seq(("aa%d%s", 123, "cc")).toDF("a", "b", "c")
 
     checkAnswer(
-      df.select(formatString($"a", $"b", $"c"), formatString("a", "b", "c")),
+      df.select(formatString($"a", $"b", $"c"), formatString("aa%d%s", "b", "c")),
       Row("aa123cc", "aa123cc"))
 
     checkAnswer(

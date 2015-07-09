@@ -213,54 +213,51 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
    * @param end the end position of the current UTF8String in bytes.
    * @return a new UTF8String in the position of [start, end] of current UTF8String bytes.
    */
-  private UTF8String copyUTF8String(byte[] bytes, int start, int end) {
+  private UTF8String copyUTF8String(int start, int end) {
     int len = end - start + 1;
     byte[] newBytes = new byte[len];
-    System.arraycopy(bytes, start, newBytes, 0, len);
+    copyMemory(base, offset + start, newBytes, BYTE_ARRAY_OFFSET, len);
     return UTF8String.fromBytes(newBytes);
   }
 
   public UTF8String trim() {
-    byte[] bytes = getBytes();
     int s = 0;
-    int e = bytes.length - 1;
+    int e = this.numBytes - 1;
     // skip all of the space (0x20) in the left side
-    while (s < bytes.length && bytes[s] == 0x20) s++;
+    while (s < this.numBytes && getByte(s) == 0x20) s++;
     // skip all of the space (0x20) in the right side
-    while (e >= 0 && bytes[e] == 0x20) e--;
+    while (e >= 0 && getByte(e) == 0x20) e--;
 
     if (s > e) {
       // empty string
       return UTF8String.fromBytes(new byte[0]);
     } else {
-      return copyUTF8String(bytes, s, e);
+      return copyUTF8String(s, e);
     }
   }
 
   public UTF8String trimLeft() {
-    byte[] bytes = getBytes();
     int s = 0;
     // skip all of the space (0x20) in the left side
-    while (s < bytes.length && bytes[s] == 0x20) s++;
-    if (s == bytes.length) {
+    while (s < this.numBytes && getByte(s) == 0x20) s++;
+    if (s == this.numBytes) {
       // empty string
       return UTF8String.fromBytes(new byte[0]);
     } else {
-      return copyUTF8String(bytes, s, bytes.length - 1);
+      return copyUTF8String(s, this.numBytes - 1);
     }
   }
 
   public UTF8String trimRight() {
-    byte[] bytes = getBytes();
-    int e = bytes.length - 1;
+    int e = numBytes - 1;
     // skip all of the space (0x20) in the right side
-    while (e >= 0 && bytes[e] == 0x20) e--;
+    while (e >= 0 && getByte(e) == 0x20) e--;
 
     if (e < 0) {
       // empty string
       return UTF8String.fromBytes(new byte[0]);
     } else {
-      return copyUTF8String(bytes, 0, e);
+      return copyUTF8String(0, e);
     }
   }
 
@@ -280,17 +277,18 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
   }
 
   public UTF8String repeat(int times) {
-    byte[] bytes = getBytes();
-    int totalLength = numBytes * times;
-
-    if (totalLength < 0) {
-      totalLength = 0;
+    if (times <=0) {
+      return fromBytes(new byte[0]);
     }
 
-    byte[] newBytes = new byte[totalLength];
-    while (times > 0) {
-      times -= 1;
-      System.arraycopy(bytes, 0, newBytes, times * numBytes, numBytes);
+    byte[] newBytes = new byte[numBytes * times];
+    System.arraycopy(getBytes(), 0, newBytes, 0, numBytes);
+
+    int copied = 1;
+    while (copied < times) {
+      int toCopy = Math.min(copied, times - copied);
+      System.arraycopy(newBytes, 0, newBytes, copied * numBytes, numBytes * toCopy);
+      copied += toCopy;
     }
 
     return UTF8String.fromBytes(newBytes);
@@ -304,7 +302,7 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
    * @param start the start position of the current string for searching
    * @return the position of the first occurrence of substr, if not found, -1 returned.
    */
-  public int instr(UTF8String v, int start) {
+  public int indexOf(UTF8String v, int start) {
     if (v.numBytes() == 0) {
       return 0;
     }

@@ -196,7 +196,7 @@ case class StringTrim(child: Expression)
 
   def convert(v: UTF8String): UTF8String = v.trim()
 
-  override def toString: String = s"TRIM($child)"
+  override def prettyName: String = "trim"
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     defineCodeGen(ctx, ev, c => s"($c).trim()")
@@ -211,7 +211,7 @@ case class StringTrimLeft(child: Expression)
 
   def convert(v: UTF8String): UTF8String = v.trimLeft()
 
-  override def toString: String = s"LTRIM($child)"
+  override def prettyName: String = "ltrim"
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     defineCodeGen(ctx, ev, c => s"($c).trimLeft()")
@@ -226,7 +226,7 @@ case class StringTrimRight(child: Expression)
 
   def convert(v: UTF8String): UTF8String = v.trimRight()
 
-  override def toString: String = s"RTRIM($child)"
+  override def prettyName: String = "rtrim"
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     defineCodeGen(ctx, ev, c => s"($c).trimRight()")
@@ -249,14 +249,14 @@ case class StringInstr(str: Expression, substr: Expression)
   override def inputTypes: Seq[DataType] = Seq(StringType, StringType)
 
   override def nullSafeEval(string: Any, sub: Any): Any = {
-    string.asInstanceOf[UTF8String].instr(sub.asInstanceOf[UTF8String], 0) + 1
+    string.asInstanceOf[UTF8String].indexOf(sub.asInstanceOf[UTF8String], 0) + 1
   }
 
-  override def toString: String = s"INSTR($str, $substr)"
+  override def prettyName: String = "instr"
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     defineCodeGen(ctx, ev, (l, r) =>
-      s"($l).instr($r, 0) + 1")
+      s"($l).indexOf($r, 0) + 1")
   }
 }
 
@@ -280,7 +280,7 @@ case class StringLocate(substr: Expression, str: Expression, start: Expression)
   override def eval(input: InternalRow): Any = {
     val s = start.eval(input)
     if (s == null) {
-      // if the start position is null, we need to return 0, (keep it conform to Hive)
+      // if the start position is null, we need to return 0, (conform to Hive)
       0
     } else {
       val r = substr.eval(input)
@@ -291,7 +291,7 @@ case class StringLocate(substr: Expression, str: Expression, start: Expression)
         if (l == null) {
           null
         } else {
-          l.asInstanceOf[UTF8String].instr(
+          l.asInstanceOf[UTF8String].indexOf(
             r.asInstanceOf[UTF8String],
             s.asInstanceOf[Int]) + 1
         }
@@ -299,7 +299,7 @@ case class StringLocate(substr: Expression, str: Expression, start: Expression)
     }
   }
 
-  override def toString: String = s"LOCATE($substr, $str[, $start])"
+  override def prettyName: String = "locate"
 }
 
 /**
@@ -337,7 +337,7 @@ case class StringLPad(str: Expression, len: Expression, pad: Expression)
     }
   }
 
-  override def toString: String = s"LPAD($str, $len, $pad)"
+  override def prettyName: String = "lpad"
 }
 
 /**
@@ -375,7 +375,7 @@ case class StringRPad(str: Expression, len: Expression, pad: Expression)
     }
   }
 
-  override def toString: String = s"RPAD($str, $len, $pad)"
+  override def prettyName: String = "rpad"
 }
 
 /**
@@ -406,7 +406,7 @@ case class StringFormat(children: Expression*) extends Expression {
     }
   }
 
-  override def toString: String = s"printf($format, $args)"
+  override def prettyName: String = "printf"
 }
 
 /**
@@ -424,11 +424,10 @@ case class StringRepeat(str: Expression, times: Expression)
     string.asInstanceOf[UTF8String].repeat(n.asInstanceOf[Integer])
   }
 
-  override def toString: String = s"repeat($str, $times)"
+  override def prettyName: String = "repeat"
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    defineCodeGen(ctx, ev, (l, r) =>
-      s"($l).repeat($r)")
+    defineCodeGen(ctx, ev, (l, r) => s"($l).repeat($r)")
   }
 }
 
@@ -438,7 +437,7 @@ case class StringRepeat(str: Expression, times: Expression)
 case class StringReverse(child: Expression) extends UnaryExpression with String2StringExpression {
   override def convert(v: UTF8String): UTF8String = v.reverse()
 
-  override def toString: String = s"reverse($child)"
+  override def prettyName: String = "reverse"
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     defineCodeGen(ctx, ev, c => s"($c).reverse()")
@@ -461,7 +460,7 @@ case class StringSpace(child: Expression) extends UnaryExpression with ExpectsIn
     UTF8String.fromBytes(spaces)
   }
 
-  override def toString: String = s"space($child)"
+  override def prettyName: String = "space"
 }
 
 /**
@@ -481,7 +480,7 @@ case class StringSplit(str: Expression, pattern: Expression)
     splits.toSeq.map(UTF8String.fromString)
   }
 
-  override def toString: String = s"split($str, $pattern)"
+  override def prettyName: String = "split"
 }
 
 /**
