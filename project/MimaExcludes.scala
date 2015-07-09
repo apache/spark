@@ -76,7 +76,7 @@ object MimaExcludes {
           ) ++ Seq(
             // SPARK-8914 Remove RDDApi
             ProblemFilters.exclude[MissingClassProblem](
-              "org.apache.spark.sql.RDDApi")
+            "org.apache.spark.sql.RDDApi")
           ) ++ Seq(
             // SPARK-8701 Add input metadata in the batch page.
             ProblemFilters.exclude[MissingClassProblem](
@@ -84,6 +84,7 @@ object MimaExcludes {
             ProblemFilters.exclude[MissingClassProblem](
               "org.apache.spark.streaming.scheduler.InputInfo")
           )
+
         case v if v.startsWith("1.4") =>
           Seq(
             MimaBuild.excludeSparkPackage("deploy"),
