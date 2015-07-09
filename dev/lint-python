@@ -21,13 +21,13 @@ SCRIPT_DIR="$( cd "$( dirname "$0" )" && pwd )"
 SPARK_ROOT_DIR="$(dirname "$SCRIPT_DIR")"
 PATHS_TO_CHECK="./python/pyspark/ ./ec2/spark_ec2.py ./examples/src/main/python/ ./dev/sparktestsupport"
 PATHS_TO_CHECK="$PATHS_TO_CHECK ./dev/run-tests.py ./python/run-tests.py"
-PYTHON_LINT_REPORT_PATH="$SPARK_ROOT_DIR/dev/python-lint-report.txt"
+PEP8_REPORT_PATH="$SPARK_ROOT_DIR/dev/pep8-report.txt"
 PYLINT_REPORT_PATH="$SPARK_ROOT_DIR/dev/pylint-report.txt"
 
 cd "$SPARK_ROOT_DIR"
 
 # compileall: https://docs.python.org/2/library/compileall.html
-python -B -m compileall -q -l $PATHS_TO_CHECK > "$PYTHON_LINT_REPORT_PATH"
+python -B -m compileall -q -l $PATHS_TO_CHECK > "$PEP8_REPORT_PATH"
 compile_status="${PIPESTATUS[0]}"
 
 # Get pep8 at runtime so that we don't rely on it being installed on the build server.
@@ -62,6 +62,7 @@ if [ ! -d "$PYLINT_HOME" ]; then
 
     if [ "$easy_install_status" -ne 0 ]; then
         echo "Unable to install pylint locally in \"$PYTHONPATH\"."
+        exit "$easy_install_status"
     fi
 fi
 
@@ -69,7 +70,7 @@ fi
 #+ first, but we do so so that the check status can
 #+ be output before the report, like with the
 #+ scalastyle and RAT checks.
-python "$PEP8_SCRIPT_PATH" --ignore=E402,E731,E241,W503,E226 $PATHS_TO_CHECK >> "$PYTHON_LINT_REPORT_PATH"
+python "$PEP8_SCRIPT_PATH" --ignore=E402,E731,E241,W503,E226 $PATHS_TO_CHECK >> "$PEP8_REPORT_PATH"
 pep8_status="${PIPESTATUS[0]}"
 
 if [ "$compile_status" -eq 0 -a "$pep8_status" -eq 0 ]; then
@@ -80,17 +81,17 @@ fi
 
 if [ "$lint_status" -ne 0 ]; then
     echo "PEP8 checks failed."
-    cat "$PYTHON_LINT_REPORT_PATH"
+    cat "$PEP8_REPORT_PATH"
 else
     echo "PEP8 checks passed."
 fi
 
-rm "$PYTHON_LINT_REPORT_PATH"
+rm "$PEP8_REPORT_PATH"
 
 
 for to_be_checked in "$PATHS_TO_CHECK"
 do
-    pylint --rcfile="$PYLINT_HOME/pylintrc" $to_be_checked >> "$PYLINT_REPORT_PATH"
+    pylint --rcfile="$SPARK_ROOT_DIR/pylintrc" $to_be_checked >> "$PYLINT_REPORT_PATH"
 done
 
 if [ "${PIPESTATUS[0]}" -ne 0 ]; then
