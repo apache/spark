@@ -88,23 +88,23 @@ private[recommendation] trait ALSParams extends ALSModelParams with HasMaxIter w
   def getRank: Int = $(rank)
 
   /**
-   * Param for number of user blocks (>= 1).
+   * Param for number of user blocks (>= 1, or -1 to auto-configure).
    * Default: 10
    * @group param
    */
   val numUserBlocks = new IntParam(this, "numUserBlocks", "number of user blocks",
-    ParamValidators.gtEq(1))
+    ParamValidators.or(ParamValidators.gtEq(1), ParamValidators.eq(-1)))
 
   /** @group getParam */
   def getNumUserBlocks: Int = $(numUserBlocks)
 
   /**
-   * Param for number of item blocks (>= 1).
+   * Param for number of item blocks (>= 1, or -1 to auto-configure).
    * Default: 10
    * @group param
    */
   val numItemBlocks = new IntParam(this, "numItemBlocks", "number of item blocks",
-      ParamValidators.gtEq(1))
+    ParamValidators.or(ParamValidators.gtEq(1), ParamValidators.eq(-1)))
 
   /** @group getParam */
   def getNumItemBlocks: Int = $(numItemBlocks)
@@ -321,8 +321,21 @@ class ALS(override val uid: String) extends Estimator[ALSModel] with ALSParams {
       .map { row =>
         Rating(row.getInt(0), row.getInt(1), row.getFloat(2))
       }
+
+    // check if num blocks should be auto-configured
+    val numUserBlocksFinal = if ($(numUserBlocks) == -1) {
+      math.max(dataset.sqlContext.sparkContext.defaultParallelism, ratings.partitions.size / 2)
+    } else {
+      $(numUserBlocks)
+    }
+    val numItemBlocksFinal = if ($(numItemBlocks) == -1) {
+      math.max(dataset.sqlContext.sparkContext.defaultParallelism, ratings.partitions.size / 2)
+    } else {
+      $(numItemBlocks)
+    }
+
     val (userFactors, itemFactors) = ALS.train(ratings, rank = $(rank),
-      numUserBlocks = $(numUserBlocks), numItemBlocks = $(numItemBlocks),
+      numUserBlocks = numUserBlocksFinal, numItemBlocks = numItemBlocksFinal,
       maxIter = $(maxIter), regParam = $(regParam), implicitPrefs = $(implicitPrefs),
       alpha = $(alpha), nonnegative = $(nonnegative),
       checkpointInterval = $(checkpointInterval), seed = $(seed))

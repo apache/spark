@@ -412,6 +412,13 @@ class ALSSuite extends SparkFunSuite with MLlibTestSparkContext with Logging {
      numItemBlocks = 5, numUserBlocks = 5)
   }
 
+  test("auto-configured block settings") {
+    val (training, test) =
+      genExplicitTestData(numUsers = 4, numItems = 4, rank = 1)
+    testALS(training, test, maxIter = 2, rank = 1, regParam = 1e-4, targetRMSE = 0.002,
+      numUserBlocks = -1, numItemBlocks = -1)
+  }
+
   test("implicit feedback") {
     val (training, test) =
       genImplicitTestData(numUsers = 20, numItems = 40, rank = 2, noiseStd = 0.01)
