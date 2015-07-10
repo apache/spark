@@ -19,6 +19,8 @@ package org.apache.spark.scheduler
 
 import java.util.Properties
 
+import org.apache.hadoop.security.UserGroupInformation
+
 import scala.collection.mutable.Map
 import scala.language.existentials
 
@@ -33,7 +35,11 @@ import org.apache.spark.util.CallSite
  * submitted) but there is a single "logic" thread that reads these events and takes decisions.
  * This greatly simplifies synchronization.
  */
-private[scheduler] sealed trait DAGSchedulerEvent
+private[scheduler] sealed abstract class DAGSchedulerEvent {
+    private var ugi: UserGroupInformation = null
+    def forwardUGI(): Unit = { ugi = UserGroupInformation.getCurrentUser }
+    def getForwardedUGI(): UserGroupInformation = ugi
+}
 
 private[scheduler] case class JobSubmitted(
     jobId: Int,

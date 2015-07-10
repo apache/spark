@@ -33,9 +33,9 @@ import org.apache.spark.Logging
  */
 private[spark] abstract class EventLoop[E](name: String) extends Logging {
 
-  private val eventQueue: BlockingQueue[E] = new LinkedBlockingDeque[E]()
+  protected val eventQueue: BlockingQueue[E] = new LinkedBlockingDeque[E]()
 
-  private val stopped = new AtomicBoolean(false)
+  protected val stopped = new AtomicBoolean(false)
 
   private val eventThread = new Thread(name) {
     setDaemon(true)
@@ -61,7 +61,6 @@ private[spark] abstract class EventLoop[E](name: String) extends Logging {
         case NonFatal(e) => logError("Unexpected error in " + name, e)
       }
     }
-
   }
 
   def start(): Unit = {

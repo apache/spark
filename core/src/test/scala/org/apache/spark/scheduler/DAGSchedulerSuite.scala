@@ -17,7 +17,13 @@
 
 package org.apache.spark.scheduler
 
-import scala.collection.mutable.{ArrayBuffer, HashSet, HashMap, Map}
+import java.security.PrivilegedExceptionAction
+import java.util.concurrent.{Semaphore, TimeUnit}
+import org.apache.hadoop.security.UserGroupInformation
+import java.util.Properties
+import java.util.concurrent.TimeUnit
+
+import scala.collection.mutable.{ArrayBuffer, HashSet, HashMap, Map, ListBuffer}
 import scala.language.reflectiveCalls
 import scala.util.control.NonFatal
 
@@ -873,6 +879,55 @@ class DAGSchedulerSuite
     complete(reduceTaskSet, Seq((Success, 42)))
     assert(results === Map(0 -> 42))
     assertDataStructuresEmpty
+  }
+
+
+  test("DAGSchedulerEventProcessLoopSecure forwarding ugi") {
+    var rightUser = "testUser"
+    val dummyEvent = JobSubmitted(0, null, null, null, false, null, null)
+    val sem = new Semaphore(0)
+    val results = new ListBuffer[Boolean]()
+    val dagScheduler = new DAGScheduler(
+      sc,
+      taskScheduler,
+      sc.listenerBus,
+      mapOutputTracker,
+      blockManagerMaster,
+      sc.env) {
+      override def isSecurityEnabled(): Boolean = true
+      override private[scheduler] def handleJobSubmitted(jobId: Int,
+                                                finalRDD: RDD[_],
+                                                func: (TaskContext, Iterator[_]) => _,
+                                                partitions: Array[Int],
+                                                allowLocal: Boolean,
+                                                callSite: CallSite,
+                                                listener: JobListener,
+                                                properties: Properties): Unit = {
+        sem.release()
+        results += UserGroupInformation.getCurrentUser().getUserName === rightUser
+      }
+    }
+    val ugiProxy = UserGroupInformation.createUserForTesting(rightUser, Array("testGroup"))
+    val eventLoopTesterSecure = new DAGSchedulerEventProcessLoopSecure(dagScheduler)
+
+    eventLoopTesterSecure.start()
+    ugiProxy.doAs(new PrivilegedExceptionAction[Unit]() {
+      override def run(): Unit = {
+        eventLoopTesterSecure.post(dummyEvent)
+      }
+    })
+    assert(UserGroupInformation.getCurrentUser().getUserName !== rightUser)
+    assert(sem.tryAcquire(1, 1, TimeUnit.MINUTES))
+    eventLoopTesterSecure.stop()
+
+    rightUser = UserGroupInformation.getCurrentUser().getUserName
+    val eventLoopTester = new DAGSchedulerEventProcessLoop(dagScheduler)
+    eventLoopTester.start()
+    eventLoopTester.post(dummyEvent)
+    assert(sem.tryAcquire(1, 1, TimeUnit.MINUTES))
+    eventLoopTester.stop()
+
+    assert(results(0) && results(1))
   }
 
   /**
