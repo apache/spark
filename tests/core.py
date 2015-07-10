@@ -6,7 +6,7 @@ from airflow import jobs, models, DAG, executors, utils, operators
 from airflow.www.app import app
 from airflow import utils
 
-NUM_EXAMPLE_DAGS = 4
+NUM_EXAMPLE_DAGS = 5
 DEV_NULL = '/dev/null'
 LOCAL_EXECUTOR = executors.LocalExecutor()
 DEFAULT_DATE = datetime(2015, 1, 1)

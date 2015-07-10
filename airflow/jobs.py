@@ -418,9 +418,15 @@ class SchedulerJob(BaseJob):
                         task = dagbag.dags[ti.dag_id].get_task(ti.task_id)
                     except:
                         logging.error("Queued task {} seems gone".format(ti))
+                        session.delete(ti)
                     if task:
                         ti.task = task
-                        executor.queue_task_instance(ti, force=True)
+                        ti.refresh_from_db()
+                        if ti.is_queueable():
+                            executor.queue_task_instance(ti, force=True)
+                        else:
+                            session.delete(ti)
+                    session.commit()
 
     def _execute(self):
         dag_id = self.dag_id
