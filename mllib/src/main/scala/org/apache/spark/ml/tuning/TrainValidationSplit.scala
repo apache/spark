@@ -31,7 +31,6 @@ import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
 import org.apache.spark.util.random.BernoulliCellSampler
 
-
 /**
  * Params for [[TrainValidatorSplit]] and [[TrainValidatorSplitModel]].
  */
