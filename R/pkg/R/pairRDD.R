@@ -560,8 +560,8 @@ setMethod("join",
 # Left outer join two RDDs
 #
 # @description
-# \code{leftouterjoin} This function left-outer-joins two RDDs where every element is of the form list(K, V).
-# The key types of the two RDDs should be the same.
+# \code{leftouterjoin} This function left-outer-joins two RDDs where every element is of
+# the form list(K, V). The key types of the two RDDs should be the same.
 #
 # @param x An RDD to be joined. Should be an RDD where each element is
 #             list(K, V).
@@ -597,8 +597,8 @@ setMethod("leftOuterJoin",
 # Right outer join two RDDs
 #
 # @description
-# \code{rightouterjoin} This function right-outer-joins two RDDs where every element is of the form list(K, V).
-# The key types of the two RDDs should be the same.
+# \code{rightouterjoin} This function right-outer-joins two RDDs where every element is of
+# the form list(K, V). The key types of the two RDDs should be the same.
 #
 # @param x An RDD to be joined. Should be an RDD where each element is
 #             list(K, V).
@@ -634,8 +634,8 @@ setMethod("rightOuterJoin",
 # Full outer join two RDDs
 #
 # @description
-# \code{fullouterjoin} This function full-outer-joins two RDDs where every element is of the form list(K, V).
-# The key types of the two RDDs should be the same.
+# \code{fullouterjoin} This function full-outer-joins two RDDs where every element is of
+# the form list(K, V). The key types of the two RDDs should be the same.
 #
 # @param x An RDD to be joined. Should be an RDD where each element is
 #             list(K, V).

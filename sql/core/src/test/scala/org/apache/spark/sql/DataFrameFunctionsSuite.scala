@@ -79,10 +79,42 @@ class DataFrameFunctionsSuite extends QueryTest {
     assert(row.getAs[Row](0) === Row(2, "str"))
   }
 
-  test("struct: must use named column expression") {
-    intercept[IllegalArgumentException] {
-      struct(col("a") * 2)
-    }
+  test("struct with column expression to be automatically named") {
+    val df = Seq((1, "str")).toDF("a", "b")
+    val result = df.select(struct((col("a") * 2), col("b")))
+
+    val expectedType = StructType(Seq(
+      StructField("col1", IntegerType, nullable = false),
+      StructField("b", StringType)
+    ))
+    assert(result.first.schema(0).dataType === expectedType)
+    checkAnswer(result, Row(Row(2, "str")))
+  }
+
+  test("struct with literal columns") {
+    val df = Seq((1, "str1"), (2, "str2")).toDF("a", "b")
+    val result = df.select(struct((col("a") * 2), lit(5.0)))
+
+    val expectedType = StructType(Seq(
+      StructField("col1", IntegerType, nullable = false),
+      StructField("col2", DoubleType, nullable = false)
+    ))
+
+    assert(result.first.schema(0).dataType === expectedType)
+    checkAnswer(result, Seq(Row(Row(2, 5.0)), Row(Row(4, 5.0))))
+  }
+
+  test("struct with all literal columns") {
+    val df = Seq((1, "str1"), (2, "str2")).toDF("a", "b")
+    val result = df.select(struct(lit("v"), lit(5.0)))
+
+    val expectedType = StructType(Seq(
+      StructField("col1", StringType, nullable = false),
+      StructField("col2", DoubleType, nullable = false)
+    ))
+
+    assert(result.first.schema(0).dataType === expectedType)
+    checkAnswer(result, Seq(Row(Row("v", 5.0)), Row(Row("v", 5.0))))
   }
 
   test("constant functions") {
@@ -177,20 +209,176 @@ class DataFrameFunctionsSuite extends QueryTest {
   }
 
   test("string length function") {
+    val df = Seq(("abc", "")).toDF("a", "b")
     checkAnswer(
-      nullStrings.select(strlen($"s"), strlen("s")),
-      nullStrings.collect().toSeq.map { r =>
-        val v = r.getString(1)
-        val l = if (v == null) null else v.length
-        Row(l, l)
-      })
+      df.select(strlen($"a"), strlen("b")),
+      Row(3, 0))
 
     checkAnswer(
-      nullStrings.selectExpr("length(s)"),
-      nullStrings.collect().toSeq.map { r =>
-        val v = r.getString(1)
-        val l = if (v == null) null else v.length
-        Row(l)
-      })
+      df.selectExpr("length(a)", "length(b)"),
+      Row(3, 0))
+  }
+
+  test("Levenshtein distance") {
+    val df = Seq(("kitten", "sitting"), ("frog", "fog")).toDF("l", "r")
+    checkAnswer(df.select(levenshtein("l", "r")), Seq(Row(3), Row(1)))
+    checkAnswer(df.selectExpr("levenshtein(l, r)"), Seq(Row(3), Row(1)))
+  }
+
+  test("string ascii function") {
+    val df = Seq(("abc", "")).toDF("a", "b")
+    checkAnswer(
+      df.select(ascii($"a"), ascii("b")),
+      Row(97, 0))
+
+    checkAnswer(
+      df.selectExpr("ascii(a)", "ascii(b)"),
+      Row(97, 0))
+  }
+
+  test("string base64/unbase64 function") {
+    val bytes = Array[Byte](1, 2, 3, 4)
+    val df = Seq((bytes, "AQIDBA==")).toDF("a", "b")
+    checkAnswer(
+      df.select(base64("a"), base64($"a"), unbase64("b"), unbase64($"b")),
+      Row("AQIDBA==", "AQIDBA==", bytes, bytes))
+
+    checkAnswer(
+      df.selectExpr("base64(a)", "unbase64(b)"),
+      Row("AQIDBA==", bytes))
+  }
+
+  test("string encode/decode function") {
+    val bytes = Array[Byte](-27, -92, -89, -27, -115, -125, -28, -72, -106, -25, -107, -116)
+    // scalastyle:off  
+    // non ascii characters are not allowed in the code, so we disable the scalastyle here.
+    val df = Seq(("大千世界", "utf-8", bytes)).toDF("a", "b", "c")
+    checkAnswer(
+      df.select(
+        encode($"a", "utf-8"),
+        encode("a", "utf-8"),
+        decode($"c", "utf-8"),
+        decode("c", "utf-8")),
+      Row(bytes, bytes, "大千世界", "大千世界"))
+
+    checkAnswer(
+      df.selectExpr("encode(a, 'utf-8')", "decode(c, 'utf-8')"),
+      Row(bytes, "大千世界"))
+    // scalastyle:on
+  }
+
+  test("string trim functions") {
+    val df = Seq(("  example  ", "")).toDF("a", "b")
+
+    checkAnswer(
+      df.select(ltrim($"a"), rtrim($"a"), trim($"a")),
+      Row("example  ", "  example", "example"))
+
+    checkAnswer(
+      df.selectExpr("ltrim(a)", "rtrim(a)", "trim(a)"),
+      Row("example  ", "  example", "example"))
+  }
+
+  test("string formatString function") {
+    val df = Seq(("aa%d%s", 123, "cc")).toDF("a", "b", "c")
+
+    checkAnswer(
+      df.select(formatString($"a", $"b", $"c"), formatString("aa%d%s", "b", "c")),
+      Row("aa123cc", "aa123cc"))
+
+    checkAnswer(
+      df.selectExpr("printf(a, b, c)"),
+      Row("aa123cc"))
+  }
+
+  test("string instr function") {
+    val df = Seq(("aaads", "aa", "zz")).toDF("a", "b", "c")
+
+    checkAnswer(
+      df.select(instr($"a", $"b"), instr("a", "b")),
+      Row(1, 1))
+
+    checkAnswer(
+      df.selectExpr("instr(a, b)"),
+      Row(1))
+  }
+
+  test("string locate function") {
+    val df = Seq(("aaads", "aa", "zz", 1)).toDF("a", "b", "c", "d")
+
+    checkAnswer(
+      df.select(
+        locate($"b", $"a"), locate("b", "a"), locate($"b", $"a", 1),
+        locate("b", "a", 1), locate($"b", $"a", $"d"), locate("b", "a", "d")),
+      Row(1, 1, 2, 2, 2, 2))
+
+    checkAnswer(
+      df.selectExpr("locate(b, a)", "locate(b, a, d)"),
+      Row(1, 2))
+  }
+
+  test("string padding functions") {
+    val df = Seq(("hi", 5, "??")).toDF("a", "b", "c")
+
+    checkAnswer(
+          df.select(
+            lpad($"a", $"b", $"c"), rpad("a", "b", "c"),
+            lpad($"a", 1, $"c"), rpad("a", 1, "c")),
+          Row("???hi", "hi???", "h", "h"))
+
+    checkAnswer(
+      df.selectExpr("lpad(a, b, c)", "rpad(a, b, c)", "lpad(a, 1, c)", "rpad(a, 1, c)"),
+      Row("???hi", "hi???", "h", "h"))
+  }
+
+  test("string repeat function") {
+    val df = Seq(("hi", 2)).toDF("a", "b")
+
+    checkAnswer(
+      df.select(
+        repeat($"a", 2), repeat("a", 2), repeat($"a", $"b"), repeat("a", "b")),
+      Row("hihi", "hihi", "hihi", "hihi"))
+
+    checkAnswer(
+      df.selectExpr("repeat(a, 2)", "repeat(a, b)"),
+      Row("hihi", "hihi"))
+  }
+
+  test("string reverse function") {
+    val df = Seq(("hi", "hhhi")).toDF("a", "b")
+
+    checkAnswer(
+      df.select(reverse($"a"), reverse("b")),
+      Row("ih", "ihhh"))
+
+    checkAnswer(
+      df.selectExpr("reverse(b)"),
+      Row("ihhh"))
+  }
+
+  test("string space function") {
+    val df = Seq((2, 3)).toDF("a", "b")
+
+    checkAnswer(
+      df.select(space($"a"), space("b")),
+      Row("  ", "   "))
+
+    checkAnswer(
+      df.selectExpr("space(b)"),
+      Row("   "))
+  }
+
+  test("string split function") {
+    val df = Seq(("aa2bb3cc", "[1-9]+")).toDF("a", "b")
+
+    checkAnswer(
+      df.select(
+        split($"a", "[1-9]+"),
+        split("a", "[1-9]+")),
+      Row(Seq("aa", "bb", "cc"), Seq("aa", "bb", "cc")))
+
+    checkAnswer(
+      df.selectExpr("split(a, '[1-9]+')"),
+      Row(Seq("aa", "bb", "cc")))
   }
 }

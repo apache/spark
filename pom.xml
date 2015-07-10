@@ -102,6 +102,7 @@
     <module>external/twitter</module>
     <module>external/flume</module>
     <module>external/flume-sink</module>
+    <module>external/flume-assembly</module>
     <module>external/mqtt</module>
     <module>external/zeromq</module>
     <module>examples</module>
@@ -160,6 +161,8 @@
     <fasterxml.jackson.version>2.4.4</fasterxml.jackson.version>
     <snappy.version>1.1.1.7</snappy.version>
     <netlib.java.version>1.1.2</netlib.java.version>
+    <!-- For maven shade plugin (see SPARK-8819) -->
+    <create.dependency.reduced.pom>false</create.dependency.reduced.pom>
 
     <test.java.home>${java.home}</test.java.home>
 
@@ -176,6 +179,7 @@
     <hbase.deps.scope>compile</hbase.deps.scope>
     <hive.deps.scope>compile</hive.deps.scope>
     <parquet.deps.scope>compile</parquet.deps.scope>
+    <parquet.test.deps.scope>test</parquet.test.deps.scope>
 
     <!--
       Overridable test home. So that you can call individual pom files directly without
@@ -260,6 +264,18 @@
       <id>spring-releases</id>
       <name>Spring Release Repository</name>
       <url>https://repo.spring.io/libs-release</url>
+      <releases>
+        <enabled>true</enabled>
+      </releases>
+      <snapshots>
+        <enabled>false</enabled>
+      </snapshots>
+    </repository>
+    <!-- For transitive dependencies brougt by parquet-thrift -->
+    <repository>
+      <id>twttr-repo</id>
+      <name>Twttr Repository</name>
+      <url>http://maven.twttr.com</url>
       <releases>
         <enabled>true</enabled>
       </releases>
@@ -1099,6 +1115,12 @@
         <scope>${parquet.deps.scope}</scope>
       </dependency>
       <dependency>
+        <groupId>org.apache.parquet</groupId>
+        <artifactId>parquet-avro</artifactId>
+        <version>${parquet.version}</version>
+        <scope>${parquet.test.deps.scope}</scope>
+      </dependency>
+      <dependency>
         <groupId>org.apache.flume</groupId>
         <artifactId>flume-ng-core</artifactId>
         <version>${flume.version}</version>
@@ -1107,6 +1129,10 @@
           <exclusion>
             <groupId>io.netty</groupId>
             <artifactId>netty</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.apache.flume</groupId>
+            <artifactId>flume-ng-auth</artifactId>
           </exclusion>
           <exclusion>
             <groupId>org.apache.thrift</groupId>
@@ -1303,6 +1329,7 @@
               <spark.ui.enabled>false</spark.ui.enabled>
               <spark.ui.showConsoleProgress>false</spark.ui.showConsoleProgress>
               <spark.driver.allowMultipleContexts>true</spark.driver.allowMultipleContexts>
+              <spark.unsafe.exceptionOnMemoryLeak>true</spark.unsafe.exceptionOnMemoryLeak>
             </systemProperties>
           </configuration>
           <executions>
@@ -1439,8 +1466,8 @@
         <version>2.3</version>
         <configuration>
           <shadedArtifactAttached>false</shadedArtifactAttached>
-          <!-- Work around MSHADE-148 -->
-          <createDependencyReducedPom>false</createDependencyReducedPom>
+          <!-- Work around MSHADE-148. See SPARK-8819. -->
+          <createDependencyReducedPom>${create.dependency.reduced.pom}</createDependencyReducedPom>
           <artifactSet>
             <includes>
               <!-- At a minimum we must include this to force effective pom generation -->
@@ -1714,7 +1741,6 @@
       <properties>
         <hadoop.version>2.3.0</hadoop.version>
         <jets3t.version>0.9.3</jets3t.version>
-        <commons.math3.version>3.1.1</commons.math3.version>
       </properties>
     </profile>
 
@@ -1723,7 +1749,6 @@
       <properties>
         <hadoop.version>2.4.0</hadoop.version>
         <jets3t.version>0.9.3</jets3t.version>
-        <commons.math3.version>3.1.1</commons.math3.version>
       </properties>
     </profile>
 
@@ -1732,7 +1757,6 @@
       <properties>
         <hadoop.version>2.6.0</hadoop.version>
         <jets3t.version>0.9.3</jets3t.version>
-        <commons.math3.version>3.1.1</commons.math3.version>
         <zookeeper.version>3.4.6</zookeeper.version>
         <curator.version>2.6.0</curator.version>
       </properties>
@@ -1824,6 +1848,26 @@
         <scala.binary.version>2.11</scala.binary.version>
         <jline.version>2.12.1</jline.version>
         <jline.groupid>jline</jline.groupid>
+      </properties>
+    </profile>
+
+    <profile>
+      <!--
+          Use this profile only for making Spark releases. Note that due to SPARK-8819,
+          you must use maven version 3.2.x or before to avoid running into MSHADE-148.
+      -->
+      <id>release</id>
+      <properties>
+        <!--
+            The maven shade plugin has a bug where enabling the `createDependencyReducedPom`
+            property causes maven to go into an infinite loop (MSHADE-148). This is only an
+            issue for the Spark build if the maven version is 3.3.x or newer (SPARK-8819).
+
+            However, since disabling this property has the side effect of not resolving
+            variables in the released pom files (SPARK-8781), we need to enable this during
+            releases.
+        -->
+        <create.dependency.reduced.pom>true</create.dependency.reduced.pom>
       </properties>
     </profile>
 

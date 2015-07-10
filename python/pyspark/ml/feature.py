@@ -627,6 +627,10 @@ class StandardScaler(JavaEstimator, HasInputCol, HasOutputCol):
     >>> df = sqlContext.createDataFrame([(Vectors.dense([0.0]),), (Vectors.dense([2.0]),)], ["a"])
     >>> standardScaler = StandardScaler(inputCol="a", outputCol="scaled")
     >>> model = standardScaler.fit(df)
+    >>> model.mean
+    DenseVector([1.0])
+    >>> model.std
+    DenseVector([1.4142])
     >>> model.transform(df).collect()[1].scaled
     DenseVector([1.4142])
     """
@@ -691,6 +695,20 @@ class StandardScalerModel(JavaModel):
     """
     Model fitted by StandardScaler.
     """
+
+    @property
+    def std(self):
+        """
+        Standard deviation of the StandardScalerModel.
+        """
+        return self._call_java("std")
+
+    @property
+    def mean(self):
+        """
+        Mean of the StandardScalerModel.
+        """
+        return self._call_java("mean")
 
 
 @inherit_doc

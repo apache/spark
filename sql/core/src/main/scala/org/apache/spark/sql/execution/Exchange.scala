@@ -24,6 +24,7 @@ import org.apache.spark.shuffle.hash.HashShuffleManager
 import org.apache.spark.shuffle.sort.SortShuffleManager
 import org.apache.spark.shuffle.unsafe.UnsafeShuffleManager
 import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.errors.attachTree
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical._
@@ -114,20 +115,6 @@ case class Exchange(
     } else {
       // Catch-all case to safely handle any future ShuffleManager implementations.
       true
-    }
-  }
-
-  private val keyOrdering = {
-    if (newOrdering.nonEmpty) {
-      val key = newPartitioning.keyExpressions
-      val boundOrdering = newOrdering.map { o =>
-        val ordinal = key.indexOf(o.child)
-        if (ordinal == -1) sys.error(s"Invalid ordering on $o requested for $newPartitioning")
-        o.copy(child = BoundReference(ordinal, o.child.dataType, o.child.nullable))
-      }
-      new RowOrdering(boundOrdering)
-    } else {
-      null // Ordering will not be used
     }
   }
 
