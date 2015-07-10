@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.parquet
 
+import org.apache.hadoop.fs.Path
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.sql.types._
@@ -122,6 +123,24 @@ class ParquetQuerySuiteBase extends QueryTest with ParquetTest {
       df.write.parquet(file.getCanonicalPath)
       val df2 = sqlContext.read.parquet(file.getCanonicalPath)
       checkAnswer(df2, df.collect().toSeq)
+    }
+  }
+
+  test("SPARK-8990 DataFrameReader.parquet() should respect user specified options") {
+    withTempPath { dir =>
+      val basePath = dir.getCanonicalPath
+      sqlContext.range(0, 10).toDF("a").write.parquet(new Path(basePath, "foo=1").toString)
+      sqlContext.range(0, 10).toDF("b").write.parquet(new Path(basePath, "foo=a").toString)
+
+      assertResult(2) {
+        // Disables schema merging via data source option
+        sqlContext.read.option("mergeSchema", "false").parquet(basePath).columns.length
+      }
+
+      assertResult(3) {
+        // Enables schema merging via data source option
+        sqlContext.read.option("mergeSchema", "true").parquet(basePath).columns.length
+      }
     }
   }
 }
