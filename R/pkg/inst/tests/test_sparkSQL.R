@@ -119,6 +119,13 @@ test_that("create DataFrame from RDD", {
   insertInto(df, "people")
   expect_equal(sql(hiveCtx, "SELECT age from people WHERE name = 'Bob'"), c(16))
   expect_equal(sql(hiveCtx, "SELECT height from people WHERE name ='Bob'"), c(176.5))
+
+  schema <- structType(structField("name", "string"), structField("age", "integer"),
+                       structField("height", "float"))
+  df2 <- createDataFrame(sqlContext, df.toRDD, schema)
+  expect_equal(columns(df2), c("name", "age", "height"))
+  expect_equal(dtypes(df2), list(c("name", "string"), c("age", "int"), c("height", "float")))
+  expect_equal(collect(where(df2, df2$name == "Bob")), c("Bob", 16, 176.5))
 })
 
 test_that("convert NAs to null type in DataFrames", {
