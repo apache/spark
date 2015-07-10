@@ -170,6 +170,7 @@ streaming_mqtt = Module(
     dependencies=[streaming],
     source_file_regexes=[
         "external/mqtt",
+        "external/mqtt-assembly",
     ],
     sbt_test_goals=[
         "streaming-mqtt/test",
@@ -290,7 +291,7 @@ pyspark_sql = Module(
 
 pyspark_streaming = Module(
     name="pyspark-streaming",
-    dependencies=[pyspark_core, streaming, streaming_kafka, streaming_flume_assembly],
+    dependencies=[pyspark_core, streaming, streaming_kafka, streaming_flume_assembly, streaming_mqtt],
     source_file_regexes=[
         "python/pyspark/streaming"
     ],

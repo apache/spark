@@ -39,6 +39,7 @@ from pyspark.context import SparkConf, SparkContext, RDD
 from pyspark.streaming.context import StreamingContext
 from pyspark.streaming.kafka import Broker, KafkaUtils, OffsetRange, TopicAndPartition
 from pyspark.streaming.flume import FlumeUtils
+from pyspark.streaming.mqtt import MQTTUtils
 
 
 class PySparkStreamingTestCase(unittest.TestCase):
@@ -826,6 +827,52 @@ class FlumePollingStreamTests(PySparkStreamingTestCase):
     def test_flume_polling_multiple_hosts(self):
         self._testMultipleTimes(self._testFlumePollingMultipleHosts)
 
+class MQTTStreamTests(PySparkStreamingTestCase):
+    timeout = 20  # seconds
+    duration = 1
+
+    def setUp(self):
+        super(MQTTStreamTests, self).setUp()
+
+        utilsClz = self.ssc._jvm.java.lang.Thread.currentThread().getContextClassLoader() \
+            .loadClass("org.apache.spark.streaming.mqtt.MQTTTestUtils")
+        self._utils = utilsClz.newInstance()
+        self._MQTTTestUtils.setup()
+
+    def tearDown(self):
+        if self._MQTTTestUtils is not None:
+           self._MQTTTestUtils.teardown()
+           self._MQTTTestUtils = None
+
+        super(MQTTStreamTests, self).tearDown()
+
+    def _randomTopic(self):
+        return "topic-%d" % random.randint(0, 10000)
+
+    def _validateStreamResult(self, sendData, stream):
+        result = []
+
+        def get_output(_, rdd):
+            for data in rdd.collect():
+                result.append(data)
+
+        dstream.foreachRDD(get_output)
+        receiveData = ' '.join(result[0])
+        self.assertEqual(sendData, receiveData)
+
+    def test_mqtt_stream(self):
+        """Test the Python Kafka stream API."""
+        topic = self._randomTopic()
+        sendData = "MQTT demo for spark streaming"
+        ssc = self.ssc
+
+        self._MQTTTestUtils.createTopic(topic)
+        self._MQTTTestUtils.waitForReceiverToStart(ssc)
+        self._MQTTTestUtils.publishData(topic, sendData)
+
+        stream = MQTTUtils.createStream(ssc, "tcp://" + MQTTTestUtils.brokerUri, topic)
+        self._validateStreamResult(sendData, stream)
+
 
 def search_kafka_assembly_jar():
     SPARK_HOME = os.environ["SPARK_HOME"]
@@ -862,10 +909,28 @@ def search_flume_assembly_jar():
     else:
         return jars[0]
 
+def search_mqtt_assembly_jar():
+    SPARK_HOME = os.environ["SPARK_HOME"]
+    mqtt_assembly_dir = os.path.join(SPARK_HOME, "external/mqtt-assembly")
+    jars = glob.glob(
+        os.path.join(mqtt_assembly_dir, "target/scala-*/spark-streaming-mqtt-assembly-*.jar"))
+    if not jars:
+        raise Exception(
+            ("Failed to find Spark Streaming MQTT assembly jar in %s. " % mqtt_assembly_dir) +
+            "You need to build Spark with "
+            "'build/sbt assembly/assembly streaming-mqtt-assembly/assembly' or "
+            "'build/mvn package' before running this test")
+    elif len(jars) > 1:
+        raise Exception(("Found multiple Spark Streaming MQTT assembly JARs in %s; please "
+                         "remove all but one") % mqtt_assembly_dir)
+    else:
+        return jars[0]
+
 if __name__ == "__main__":
     kafka_assembly_jar = search_kafka_assembly_jar()
     flume_assembly_jar = search_flume_assembly_jar()
-    jars = "%s,%s" % (kafka_assembly_jar, flume_assembly_jar)
+    mqtt_assembly_jar = search_mqtt_assembly_jar()
+    jars = "%s,%s,%s" % (kafka_assembly_jar, flume_assembly_jar, mqtt_assembly_jar)
 
     os.environ["PYSPARK_SUBMIT_ARGS"] = "--jars %s pyspark-shell" % jars
     unittest.main()
