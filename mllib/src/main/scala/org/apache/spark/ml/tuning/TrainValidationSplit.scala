@@ -52,15 +52,15 @@ private[ml] trait TrainValidatorSplitParams extends ValidatorParams {
 /**
  * :: Experimental ::
  * Validation for hyper-parameter tuning.
- * Randomly splits the input dataset into train and validation sets.
- * And uses evaluation metric on the validation set to select the best model.
- * Similar to CrossValidator, but only splits the set once.
+ * Randomly splits the input dataset into train and validation sets,
+ * and uses evaluation metric on the validation set to select the best model.
+ * Similar to [[CrossValidator]], but only splits the set once.
  */
 @Experimental
 class TrainValidatorSplit(override val uid: String) extends Estimator[TrainValidatorSplitModel]
   with TrainValidatorSplitParams with Logging {
 
-  def this() = this(Identifiable.randomUID("cv"))
+  def this() = this(Identifiable.randomUID("tvs"))
 
   /** @group setParam */
   def setEstimator(value: Estimator[_]): this.type = set(estimator, value)
