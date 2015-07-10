@@ -32,6 +32,7 @@ case class Aggregate2Sort(
     child: SparkPlan)
   extends UnaryNode {
 
+
   override def requiredChildDistribution: List[Distribution] = {
     if (preShuffle) {
       UnspecifiedDistribution :: Nil
@@ -51,6 +52,7 @@ case class Aggregate2Sort(
 
   protected override def doExecute(): RDD[InternalRow] = attachTree(this, "execute") {
     child.execute().mapPartitions { iter =>
+
       new Iterator[InternalRow] {
         private val aggregateFunctions: Array[AggregateFunction2] = {
           var bufferOffset =
@@ -74,6 +76,10 @@ case class Aggregate2Sort(
             i += 1
           }
 
+          functions.foreach {
+            case ae: AlgebraicAggregate => ae.inputSchema = child.output
+            case _ =>
+          }
           functions
         }
 
