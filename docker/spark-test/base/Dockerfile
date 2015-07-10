@@ -18,10 +18,12 @@
 FROM ubuntu:precise
 
 # Upgrade package index
-RUN apt-get update
-
 # install a few other useful packages plus Open Jdk 7
-RUN apt-get install -y less openjdk-7-jre-headless net-tools vim-tiny sudo openssh-server
+# Remove unneeded /var/lib/apt/lists/* after install to reduce the
+# docker image size (by ~30MB)
+RUN apt-get update && \
+    apt-get install -y less openjdk-7-jre-headless net-tools vim-tiny sudo openssh-server && \
+    rm -rf /var/lib/apt/lists/*
 
 ENV SCALA_VERSION 2.10.4
 ENV CDH_VERSION cdh4
