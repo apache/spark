@@ -1159,7 +1159,7 @@ class Airflow(BaseView):
         for task in dag.tasks:
             data = []
             for ti in task.get_task_instances(session, from_date):
-                if ti.end_date:
+                if ti.duration:
                     data.append([
                         ti.execution_date.isoformat(),
                         float(ti.duration) / (60*60)
