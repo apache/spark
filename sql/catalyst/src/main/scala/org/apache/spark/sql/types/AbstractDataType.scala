@@ -96,6 +96,8 @@ private[sql] class TypeCollection(private val types: Seq[AbstractDataType])
 
 private[sql] object TypeCollection {
 
+  val Ordered = TypeCollection(NumericType, StringType)
+
   def apply(types: AbstractDataType*): TypeCollection = new TypeCollection(types)
 
   def unapply(typ: AbstractDataType): Option[Seq[AbstractDataType]] = typ match {

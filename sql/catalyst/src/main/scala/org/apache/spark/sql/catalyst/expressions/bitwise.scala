@@ -17,9 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen._
-import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.types._
 
 
@@ -28,11 +26,13 @@ import org.apache.spark.sql.types._
  *
  * Code generation inherited from BinaryArithmetic.
  */
-case class BitwiseAnd(left: Expression, right: Expression) extends BinaryArithmetic {
+case class BitwiseAnd(left: Expression, right: Expression)
+  extends BinaryArithmetic with ExpectsInputTypes {
+
   override def symbol: String = "&"
 
-  protected def checkTypesInternal(t: DataType) =
-    TypeUtils.checkForBitwiseExpr(t, "operator " + symbol)
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(TypeCollection(IntegerType, LongType), TypeCollection(IntegerType, LongType))
 
   private lazy val and: (Any, Any) => Any = dataType match {
     case ByteType =>
@@ -53,11 +53,13 @@ case class BitwiseAnd(left: Expression, right: Expression) extends BinaryArithme
  *
  * Code generation inherited from BinaryArithmetic.
  */
-case class BitwiseOr(left: Expression, right: Expression) extends BinaryArithmetic {
+case class BitwiseOr(left: Expression, right: Expression)
+  extends BinaryArithmetic with ExpectsInputTypes {
+
   override def symbol: String = "|"
 
-  protected def checkTypesInternal(t: DataType) =
-    TypeUtils.checkForBitwiseExpr(t, "operator " + symbol)
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(TypeCollection(IntegerType, LongType), TypeCollection(IntegerType, LongType))
 
   private lazy val or: (Any, Any) => Any = dataType match {
     case ByteType =>
@@ -78,11 +80,13 @@ case class BitwiseOr(left: Expression, right: Expression) extends BinaryArithmet
  *
  * Code generation inherited from BinaryArithmetic.
  */
-case class BitwiseXor(left: Expression, right: Expression) extends BinaryArithmetic {
+case class BitwiseXor(left: Expression, right: Expression)
+  extends BinaryArithmetic with ExpectsInputTypes {
+
   override def symbol: String = "^"
 
-  protected def checkTypesInternal(t: DataType) =
-    TypeUtils.checkForBitwiseExpr(t, "operator " + symbol)
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(TypeCollection(IntegerType, LongType), TypeCollection(IntegerType, LongType))
 
   private lazy val xor: (Any, Any) => Any = dataType match {
     case ByteType =>
@@ -101,11 +105,11 @@ case class BitwiseXor(left: Expression, right: Expression) extends BinaryArithme
 /**
  * A function that calculates bitwise not(~) of a number.
  */
-case class BitwiseNot(child: Expression) extends UnaryArithmetic {
+case class BitwiseNot(child: Expression) extends UnaryArithmetic with ExpectsInputTypes {
+
   override def toString: String = s"~$child"
 
-  override def checkInputDataTypes(): TypeCheckResult =
-    TypeUtils.checkForBitwiseExpr(child.dataType, "operator ~")
+  override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection(IntegerType, LongType))
 
   private lazy val not: (Any) => Any = dataType match {
     case ByteType =>

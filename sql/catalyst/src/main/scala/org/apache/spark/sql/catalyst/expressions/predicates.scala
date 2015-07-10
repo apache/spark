@@ -213,18 +213,6 @@ case class Or(left: Expression, right: Expression)
 abstract class BinaryComparison extends BinaryOperator with Predicate {
   self: Product =>
 
-  override def checkInputDataTypes(): TypeCheckResult = {
-    if (left.dataType != right.dataType) {
-      TypeCheckResult.TypeCheckFailure(
-        s"differing types in ${this.getClass.getSimpleName} " +
-        s"(${left.dataType} and ${right.dataType}).")
-    } else {
-      checkTypesInternal(dataType)
-    }
-  }
-
-  protected def checkTypesInternal(t: DataType): TypeCheckResult
-
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     if (ctx.isPrimitiveType(left.dataType)) {
       // faster version
@@ -251,8 +239,6 @@ private[sql] object Equality {
 case class EqualTo(left: Expression, right: Expression) extends BinaryComparison {
   override def symbol: String = "="
 
-  override protected def checkTypesInternal(t: DataType) = TypeCheckResult.TypeCheckSuccess
-
   protected override def nullSafeEval(input1: Any, input2: Any): Any = {
     if (left.dataType != BinaryType) input1 == input2
     else java.util.Arrays.equals(input1.asInstanceOf[Array[Byte]], input2.asInstanceOf[Array[Byte]])
@@ -267,8 +253,6 @@ case class EqualNullSafe(left: Expression, right: Expression) extends BinaryComp
   override def symbol: String = "<=>"
 
   override def nullable: Boolean = false
-
-  override protected def checkTypesInternal(t: DataType) = TypeCheckResult.TypeCheckSuccess
 
   override def eval(input: InternalRow): Any = {
     val input1 = left.eval(input)
@@ -301,7 +285,7 @@ case class EqualNullSafe(left: Expression, right: Expression) extends BinaryComp
 case class LessThan(left: Expression, right: Expression) extends BinaryComparison {
   override def symbol: String = "<"
 
-  override protected def checkTypesInternal(t: DataType) =
+  protected def checkTypesInternal(t: DataType) =
     TypeUtils.checkForOrderingExpr(left.dataType, "operator " + symbol)
 
   private lazy val ordering = TypeUtils.getOrdering(left.dataType)
@@ -312,7 +296,7 @@ case class LessThan(left: Expression, right: Expression) extends BinaryCompariso
 case class LessThanOrEqual(left: Expression, right: Expression) extends BinaryComparison {
   override def symbol: String = "<="
 
-  override protected def checkTypesInternal(t: DataType) =
+  protected def checkTypesInternal(t: DataType) =
     TypeUtils.checkForOrderingExpr(left.dataType, "operator " + symbol)
 
   private lazy val ordering = TypeUtils.getOrdering(left.dataType)
@@ -323,7 +307,7 @@ case class LessThanOrEqual(left: Expression, right: Expression) extends BinaryCo
 case class GreaterThan(left: Expression, right: Expression) extends BinaryComparison {
   override def symbol: String = ">"
 
-  override protected def checkTypesInternal(t: DataType) =
+  protected def checkTypesInternal(t: DataType) =
     TypeUtils.checkForOrderingExpr(left.dataType, "operator " + symbol)
 
   private lazy val ordering = TypeUtils.getOrdering(left.dataType)
@@ -334,7 +318,7 @@ case class GreaterThan(left: Expression, right: Expression) extends BinaryCompar
 case class GreaterThanOrEqual(left: Expression, right: Expression) extends BinaryComparison {
   override def symbol: String = ">="
 
-  override protected def checkTypesInternal(t: DataType) =
+  protected def checkTypesInternal(t: DataType) =
     TypeUtils.checkForOrderingExpr(left.dataType, "operator " + symbol)
 
   private lazy val ordering = TypeUtils.getOrdering(left.dataType)
