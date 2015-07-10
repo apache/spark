@@ -200,16 +200,16 @@ class LocalLDAModel private[clustering] (
 }
 
 @Experimental
-object LocalLDAModel extends Loader[LocalLDAModel]{
+object LocalLDAModel extends Loader[LocalLDAModel] {
 
   private object SaveLoadV1_0 {
 
-    val formatVersionV1_0 = "1.0"
+    val thisFormatVersion = "1.0"
 
-    val classNameV1_0 = "org.apache.spark.mllib.clustering.LocalLDAModel"
+    val thisClassName = "org.apache.spark.mllib.clustering.LocalLDAModel"
 
     // Store the distribution of terms of each topic as a Row in data.
-    case class Data(termDistributions: Vector)
+    case class Data(topics: Vector)
 
     def save(sc: SparkContext, path: String, topicsMatrix: Matrix): Unit = {
 
@@ -218,31 +218,30 @@ object LocalLDAModel extends Loader[LocalLDAModel]{
 
       val k = topicsMatrix.numCols
       val metadata = compact(render
-        (("class" -> classNameV1_0) ~ ("version" -> formatVersionV1_0) ~
+        (("class" -> thisClassName) ~ ("version" -> thisFormatVersion) ~
          ("k" -> k) ~ ("vocabSize" -> topicsMatrix.numRows)))
       sc.parallelize(Seq(metadata), 1).saveAsTextFile(Loader.metadataPath(path))
 
       val topicsDenseMatrix = topicsMatrix.toBreeze.toDenseMatrix
-
-      val termDistributions = Range(0, k).map { topicInd =>
+      val topics = Range(0, k).map { topicInd =>
         Data(Vectors.dense((topicsDenseMatrix(::, topicInd).toArray)))
       }.toSeq
-      sc.parallelize(termDistributions, 1).toDF().write.parquet(Loader.dataPath(path))
+      sc.parallelize(topics, 1).toDF().write.parquet(Loader.dataPath(path))
     }
 
     def load(sc: SparkContext, path: String): LocalLDAModel = {
 
       val dataPath = Loader.dataPath(path)
-      val sqlContext = new SQLContext(sc)
+      val sqlContext = SQLContext.getOrCreate(sc)
       val dataFrame = sqlContext.read.parquet(dataPath)
 
       Loader.checkSchema[Data](dataFrame.schema)
-      val termDistributions = dataFrame.collect()
-      val vocabSize = termDistributions(0)(0).asInstanceOf[Vector].size
-      val k = termDistributions.size
+      val topics = dataFrame.collect()
+      val vocabSize = topics(0)(0).asInstanceOf[Vector].size
+      val k = topics.size
 
       val brzTopics = BDM.zeros[Double](vocabSize, k)
-      termDistributions.zipWithIndex.foreach { case (Row(vec: Vector), ind: Int) =>
+      topics.zipWithIndex.foreach { case (Row(vec: Vector), ind: Int) =>
         brzTopics(::, ind) := vec.toBreeze
       }
       new LocalLDAModel(Matrices.fromBreeze(brzTopics))
@@ -255,23 +254,23 @@ object LocalLDAModel extends Loader[LocalLDAModel]{
     implicit val formats = DefaultFormats
     val expectedK = (metadata \ "k").extract[Int]
     val expectedVocabSize = (metadata \ "vocabSize").extract[Int]
-    val classNameV1_0 = SaveLoadV1_0.classNameV1_0
+    val classNameV1_0 = SaveLoadV1_0.thisClassName
 
-    (loadedClassName, loadedVersion) match {
-      case (classNameV1_0, formatVersionV1_0) => {
-        val topicsMatrix = SaveLoadV1_0.load(sc, path).topicsMatrix
-        require(expectedK == topicsMatrix.numCols,
-          s"LocalLDAModel requires $expectedK topics, got $topicsMatrix.numCols topics")
-        require(expectedVocabSize == topicsMatrix.numRows,
-          s"LocalLDAModel requires $expectedVocabSize terms for each topic, " +
-          s"but got $topicsMatrix.numRows")
-        new LocalLDAModel(topicsMatrix)
-      }
+    val model = (loadedClassName, loadedVersion) match {
+      case (classNameV1_0, "1.0") => SaveLoadV1_0.load(sc, path)
       case _ => throw new Exception(
         s"LocalLDAModel.load did not recognize model with (className, format version):" +
         s"($loadedClassName, $loadedVersion).  Supported:\n" +
         s"  ($classNameV1_0, 1.0)")
     }
+
+    val topicsMatrix = model.topicsMatrix
+    require(expectedK == topicsMatrix.numCols,
+      s"LocalLDAModel requires $expectedK topics, got $topicsMatrix.numCols topics")
+    require(expectedVocabSize == topicsMatrix.numRows,
+      s"LocalLDAModel requires $expectedVocabSize terms for each topic, " +
+      s"but got $topicsMatrix.numRows")
+    model
   }
 }
 
@@ -461,7 +460,7 @@ object DistributedLDAModel extends Loader[DistributedLDAModel]{
 
   object SaveLoadV1_0 {
 
-    val formatVersionV1_0 = "1.0"
+    val thisFormatVersion = "1.0"
 
     val classNameV1_0 = "org.apache.spark.mllib.clustering.DistributedLDAModel"
 
@@ -485,26 +484,26 @@ object DistributedLDAModel extends Loader[DistributedLDAModel]{
         topicConcentration: Double,
         iterationTimes: Array[Double]): Unit = {
 
-      val sqlContext = new SQLContext(sc)
+      val sqlContext = SQLContext.getOrCreate(sc)
       import sqlContext.implicits._
 
       val metadata = compact(render
-        (("class" -> classNameV1_0) ~ ("version" -> formatVersionV1_0) ~
+        (("class" -> classNameV1_0) ~ ("version" -> thisFormatVersion) ~
          ("k" -> k) ~ ("vocabSize" -> vocabSize) ~ ("docConcentration" -> docConcentration) ~
          ("topicConcentration" -> topicConcentration) ~
          ("iterationTimes" -> iterationTimes.toSeq)))
       sc.parallelize(Seq(metadata), 1).saveAsTextFile(Loader.metadataPath(path))
 
-      val newPath = new Path(Loader.dataPath(path), "globalTopicTotals").toString
+      val newPath = new Path(Loader.dataPath(path), "globalTopicTotals").toUri.toString
       sc.parallelize(globalTopicTotals.toArray.toSeq.map(w => Data(w)), 1).toDF()
         .write.parquet(newPath)
 
-      val verticesPath = new Path(Loader.dataPath(path), "topicCounts").toString
+      val verticesPath = new Path(Loader.dataPath(path), "topicCounts").toUri.toString
       graph.vertices.map { case (ind, vertex) =>
         VertexData(ind, Vectors.fromBreeze(vertex))
       }.toDF().write.parquet(verticesPath)
 
-      val edgesPath = new Path(Loader.dataPath(path), "tokenCounts").toString
+      val edgesPath = new Path(Loader.dataPath(path), "tokenCounts").toUri.toString
       graph.edges.map { case Edge(srcId, dstId, prop) =>
         EdgeData(srcId, dstId, prop)
       }.toDF().write.parquet(edgesPath)
@@ -518,9 +517,9 @@ object DistributedLDAModel extends Loader[DistributedLDAModel]{
         topicConcentration: Double,
         iterationTimes: Array[Double]): DistributedLDAModel = {
 
-      val dataPath = new Path(Loader.dataPath(path), "globalTopicTotals").toString
-      val vertexDataPath = new Path(Loader.dataPath(path), "topicCounts").toString
-      val edgeDataPath = new Path(Loader.dataPath(path), "tokenCounts").toString
+      val dataPath = new Path(Loader.dataPath(path), "globalTopicTotals").toUri.toString
+      val vertexDataPath = new Path(Loader.dataPath(path), "topicCounts").toUri.toString
+      val edgeDataPath = new Path(Loader.dataPath(path), "tokenCounts").toUri.toString
       val sqlContext = new SQLContext(sc)
       val dataFrame = sqlContext.read.parquet(dataPath)
       val vertexDataFrame = sqlContext.read.parquet(vertexDataPath)
@@ -557,20 +556,27 @@ object DistributedLDAModel extends Loader[DistributedLDAModel]{
     val iterationTimes = (metadata \ "iterationTimes").extract[Seq[Double]]
     val classNameV1_0 = SaveLoadV1_0.classNameV1_0
 
-    (loadedClassName, loadedVersion) match {
-      case (classNameV1_0, formatVersionV1_0) => {
-        val model = DistributedLDAModel.SaveLoadV1_0.load(
+    val model = (loadedClassName, loadedVersion) match {
+      case (classNameV1_0, "1.0") => {
+        DistributedLDAModel.SaveLoadV1_0.load(
           sc, path, vocabSize, docConcentration, topicConcentration, iterationTimes.toArray)
-        require(expectedK == model.k,
-          s"LocalLDAModel requires $expectedK topics, got $model.k topics")
-        model
       }
-
       case _ => throw new Exception(
         s"DistributedLDAModel.load did not recognize model with (className, format version):" +
         s"($loadedClassName, $loadedVersion).  Supported: ($classNameV1_0, 1.0)")
     }
-  }
 
+    require(model.vocabSize == vocabSize,
+      s"DistributedLDAModel requires $vocabSize vocabSize, got $model.vocabSize vocabSize")
+    require(model.docConcentration == docConcentration,
+      s"DistributedLDAModel requires $docConcentration docConcentration, " +
+      s"got $model.docConcentration docConcentration")
+    require(model.topicConcentration == topicConcentration,
+      s"DistributedLDAModel requires $topicConcentration docConcentration, " +
+      s"got $model.topicConcentration docConcentration")
+    require(expectedK == model.k,
+      s"DistributedLDAModel requires $expectedK topics, got $model.k topics")
+    model
+  }
 
 }

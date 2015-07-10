@@ -20,10 +20,10 @@ package org.apache.spark.mllib.clustering
 import breeze.linalg.{DenseMatrix => BDM}
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.util.Utils
 import org.apache.spark.mllib.linalg.{Vector, DenseMatrix, Matrix, Vectors}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
+import org.apache.spark.util.Utils
 
 class LDASuite extends SparkFunSuite with MLlibTestSparkContext {
 
@@ -247,6 +247,7 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext {
       assert(distributedModel.topicsMatrix === sameDistributedModel.topicsMatrix)
       assert(distributedModel.k === sameDistributedModel.k)
       assert(distributedModel.vocabSize === sameDistributedModel.vocabSize)
+      assert(distributedModel.iterationTimes === sameDistributedModel.iterationTimes)
     } finally {
       Utils.deleteRecursively(tempDir1)
       Utils.deleteRecursively(tempDir2)
