@@ -57,58 +57,36 @@ class StoragePageSuite extends SparkFunSuite {
     rdd3.numCachedPartitions = 10
 
     val xmlNodes = storagePage.rddTable(Seq(rdd1, rdd2, rdd3))
-    // scalastyle:off
-    val expectedXmlNodes =
-      <div>
-        <h4>RDDs</h4>
-        <table class="table table-bordered table-condensed table-striped sortable" id="storage-by-rdd-table">
-          <thead>
-            <th width="" class="">RDD Name</th>
-            <th width="" class="">Storage Level</th>
-            <th width="" class="">Cached Partitions</th>
-            <th width="" class="">Fraction Cached</th>
-            <th width="" class="">Size in Memory</th>
-            <th width="" class="">Size in ExternalBlockStore</th>
-            <th width="" class="">Size on Disk</th>
-          </thead>
-          <tbody>
-            <tr>
-              <td><a href="http://localhost:4040/storage/rdd?id=1">rdd1</a></td>
-              <td>Memory Deserialized 1x Replicated</td>
-              <td>10</td>
-              <td>100%</td>
-              <td sorttable_customkey="100">100.0 B</td>
-              <td sorttable_customkey="0">0.0 B</td>
-              <td sorttable_customkey="0">0.0 B</td>
-            </tr>
-            <tr>
-              <td>
-                <a href="http://localhost:4040/storage/rdd?id=2">rdd2</a>
-              </td>
-              <td>Disk Serialized 1x Replicated</td>
-              <td>5</td>
-              <td>50%</td>
-              <td sorttable_customkey="0">0.0 B</td>
-              <td sorttable_customkey="0">0.0 B</td>
-              <td sorttable_customkey="200">200.0 B</td>
-            </tr>
-            <tr>
-              <td><a href="http://localhost:4040/storage/rdd?id=3">rdd3</a></td>
-              <td>Disk Memory Serialized 1x Replicated</td>
-              <td>10</td>
-              <td>100%</td>
-              <td sorttable_customkey="400">400.0 B</td>
-              <td sorttable_customkey="0">0.0 B</td>
-              <td sorttable_customkey="500">500.0 B</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    // scalastyle:on
 
-    // Use Utility.trim to ignore whitespaces
-    assert(xmlNodes.size == 1)
-    assert(Utility.trim(expectedXmlNodes) === Utility.trim(xmlNodes.head))
+    val headers = Seq(
+      "RDD Name",
+      "Storage Level",
+      "Cached Partitions",
+      "Fraction Cached",
+      "Size in Memory",
+      "Size in ExternalBlockStore",
+      "Size on Disk")
+    assert((xmlNodes \\ "th").map(_.text) === headers)
+
+    assert((xmlNodes \\ "tr").size === 3)
+    assert(((xmlNodes \\ "tr")(0) \\ "td").map(_.text.trim) ===
+      Seq("rdd1", "Memory Deserialized 1x Replicated", "10", "100%", "100.0 B", "0.0 B", "0.0 B"))
+    // Check the url
+    assert(((xmlNodes \\ "tr")(0) \\ "td" \ "a")(0).attribute("href").map(_.text) ===
+      Some("http://localhost:4040/storage/rdd?id=1"))
+
+    assert(((xmlNodes \\ "tr")(1) \\ "td").map(_.text.trim) ===
+      Seq("rdd2", "Disk Serialized 1x Replicated", "5", "50%", "0.0 B", "0.0 B", "200.0 B"))
+    // Check the url
+    assert(((xmlNodes \\ "tr")(1) \\ "td" \ "a")(0).attribute("href").map(_.text) ===
+      Some("http://localhost:4040/storage/rdd?id=2"))
+
+    assert(((xmlNodes \\ "tr")(2) \\ "td").map(_.text.trim) ===
+      Seq("rdd3", "Disk Memory Serialized 1x Replicated", "10", "100%", "400.0 B", "0.0 B",
+        "500.0 B"))
+    // Check the url
+    assert(((xmlNodes \\ "tr")(2) \\ "td" \ "a")(0).attribute("href").map(_.text) ===
+      Some("http://localhost:4040/storage/rdd?id=3"))
   }
 
   test("empty rddTable") {
@@ -189,94 +167,57 @@ class StoragePageSuite extends SparkFunSuite {
         externalBlockStoreSize = 0)
     )
     val executor1 = ExecutorStreamBlockStatus("1", "localhost:10001", blocksForExecutor1)
-
     val xmlNodes = storagePage.receiverBlockTables(Seq(executor0, executor1))
-    // scalastyle:off
-    val expectedXmlNodes =
-      <div>
-        <h4>Receiver Blocks</h4>
-        <div>
-          <h5>Aggregated Block Metrics by Executor</h5>
-          <table class="table table-bordered table-condensed table-striped sortable" id="storage-by-executor-stream-blocks">
-            <thead>
-              <th width="" class="">Executor ID</th>
-              <th width="" class="">Address</th>
-              <th width="" class="">Total Size in Memory</th>
-              <th width="" class="">Total Size in ExternalBlockStore</th>
-              <th width="" class="">Total Size on Disk</th>
-              <th width="" class="">Stream Blocks</th>
-            </thead>
-            <tbody>
-              <tr>
-                <td>0</td>
-                <td>localhost:10000</td>
-                <td sorttable_customkey="100">100.0 B</td>
-                <td sorttable_customkey="0">0.0 B</td>
-                <td sorttable_customkey="100">100.0 B</td>
-                <td>2</td>
-              </tr>
-              <tr>
-                <td>1</td>
-                <td>localhost:10001</td>
-                <td sorttable_customkey="200">200.0 B</td>
-                <td sorttable_customkey="200">200.0 B</td>
-                <td sorttable_customkey="0">0.0 B</td>
-                <td>3</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-        <div>
-          <h5>Blocks</h5>
-          <table class="table table-bordered table-condensed table-striped" id="storage-by-block-table">
-            <thead>
-              <th width="" class="">Block ID</th>
-              <th width="" class="">Replication Level</th>
-              <th width="" class="">Location</th>
-              <th width="" class="">Storage Level</th>
-              <th width="" class="">Size</th>
-            </thead>
-            <tbody>
-              <tr>
-                <td rowspan="2">input-0-0</td>
-                <td rowspan="2">2</td>
-                <td>localhost:10000</td>
-                <td>Memory</td>
-                <td>100.0 B</td>
-              </tr>
-              <tr>
-                <td>localhost:10001</td>
-                <td>Memory</td>
-                <td>100.0 B</td>
-              </tr>
-              <tr>
-                <td rowspan="2">input-1-1</td>
-                <td rowspan="2">2</td>
-                <td>localhost:10000</td>
-                <td>Disk</td>
-                <td>100.0 B</td>
-              </tr>
-              <tr>
-                <td>localhost:10001</td>
-                <td>Memory Serialized</td>
-                <td>100.0 B</td>
-              </tr>
-              <tr>
-                <td rowspan="1">input-2-2</td>
-                <td rowspan="1">1</td>
-                <td>localhost:10001</td>
-                <td>External</td>
-                <td>200.0 B</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-    // scalastyle:on
 
-    // Use Utility.trim to ignore whitespaces
-    assert(xmlNodes.size == 1)
-    assert(Utility.trim(expectedXmlNodes) === Utility.trim(xmlNodes.head))
+    val executorTable = (xmlNodes \\ "table")(0)
+    val executorHeaders = Seq(
+      "Executor ID",
+      "Address",
+      "Total Size in Memory",
+      "Total Size in ExternalBlockStore",
+      "Total Size on Disk",
+      "Stream Blocks")
+    assert((executorTable \\ "th").map(_.text) === executorHeaders)
+
+    assert((executorTable \\ "tr").size === 2)
+    assert(((executorTable \\ "tr")(0) \\ "td").map(_.text.trim) ===
+      Seq("0", "localhost:10000", "100.0 B", "0.0 B", "100.0 B", "2"))
+    assert(((executorTable \\ "tr")(1) \\ "td").map(_.text.trim) ===
+      Seq("1", "localhost:10001", "200.0 B", "200.0 B", "0.0 B", "3"))
+
+    val blockTable = (xmlNodes \\ "table")(1)
+    val blockHeaders = Seq(
+      "Block ID",
+      "Replication Level",
+      "Location",
+      "Storage Level",
+      "Size")
+    assert((blockTable \\ "th").map(_.text) === blockHeaders)
+
+    assert((blockTable \\ "tr").size === 5)
+    assert(((blockTable \\ "tr")(0) \\ "td").map(_.text.trim) ===
+      Seq("input-0-0", "2", "localhost:10000", "Memory", "100.0 B"))
+    // Check "rowspan=2" for the first 2 columns
+    assert(((blockTable \\ "tr")(0) \\ "td")(0).attribute("rowspan").map(_.text) === Some("2"))
+    assert(((blockTable \\ "tr")(0) \\ "td")(1).attribute("rowspan").map(_.text) === Some("2"))
+
+    assert(((blockTable \\ "tr")(1) \\ "td").map(_.text.trim) ===
+      Seq("localhost:10001", "Memory", "100.0 B"))
+
+    assert(((blockTable \\ "tr")(2) \\ "td").map(_.text.trim) ===
+      Seq("input-1-1", "2", "localhost:10000", "Disk", "100.0 B"))
+    // Check "rowspan=2" for the first 2 columns
+    assert(((blockTable \\ "tr")(2) \\ "td")(0).attribute("rowspan").map(_.text) === Some("2"))
+    assert(((blockTable \\ "tr")(2) \\ "td")(1).attribute("rowspan").map(_.text) === Some("2"))
+
+    assert(((blockTable \\ "tr")(3) \\ "td").map(_.text.trim) ===
+      Seq("localhost:10001", "Memory Serialized", "100.0 B"))
+
+    assert(((blockTable \\ "tr")(4) \\ "td").map(_.text.trim) ===
+      Seq("input-2-2", "1", "localhost:10001", "External", "200.0 B"))
+    // Check "rowspan=1" for the first 2 columns
+    assert(((blockTable \\ "tr")(4) \\ "td")(0).attribute("rowspan").map(_.text) === Some("1"))
+    assert(((blockTable \\ "tr")(4) \\ "td")(1).attribute("rowspan").map(_.text) === Some("1"))
   }
 
   test("empty receiverBlockTables") {
