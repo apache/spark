@@ -20,7 +20,7 @@ package org.apache.spark.mllib.clustering
 import breeze.linalg.{DenseMatrix => BDM}
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.mllib.linalg.{Vector, DenseMatrix, Matrix, Vectors}
+import org.apache.spark.mllib.linalg.{DenseMatrix, Matrix, Vector, Vectors}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.util.Utils
@@ -138,16 +138,32 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(lda.getTopicConcentration === 3.0)
   }
 
+  test("initializing with alpha length != k or 1 fails") {
+    intercept[IllegalArgumentException] {
+      val lda = new LDA().setK(2).setAlpha(Vectors.dense(1, 2, 3, 4))
+      val corpus = sc.parallelize(tinyCorpus, 2)
+      lda.run(corpus)
+    }
+  }
+
+  test("initializing with elements in alpha < 0 fails") {
+    intercept[IllegalArgumentException] {
+      val lda = new LDA().setK(2).setAlpha(Vectors.dense(-1, 2, 3, 4))
+      val corpus = sc.parallelize(tinyCorpus, 2)
+      lda.run(corpus)
+    }
+  }
+
   test("OnlineLDAOptimizer initialization") {
     val lda = new LDA().setK(2)
     val corpus = sc.parallelize(tinyCorpus, 2)
     val op = new OnlineLDAOptimizer().initialize(corpus, lda)
     op.setKappa(0.9876).setMiniBatchFraction(0.123).setTau0(567)
-    assert(op.getAlpha.toArray.forall(_ == 0.5)) // default 1.0 / k
-    assert(op.getEta == 0.5)   // default 1.0 / k
-    assert(op.getKappa == 0.9876)
-    assert(op.getMiniBatchFraction == 0.123)
-    assert(op.getTau0 == 567)
+    assert(op.getAlpha.toArray.forall(_ === 0.5)) // default 1.0 / k
+    assert(op.getEta === 0.5)   // default 1.0 / k
+    assert(op.getKappa === 0.9876)
+    assert(op.getMiniBatchFraction === 0.123)
+    assert(op.getTau0 === 567)
   }
 
   test("OnlineLDAOptimizer one iteration") {

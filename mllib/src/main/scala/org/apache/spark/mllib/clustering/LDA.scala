@@ -23,10 +23,9 @@ import org.apache.spark.Logging
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.api.java.JavaPairRDD
 import org.apache.spark.graphx._
-import org.apache.spark.mllib.linalg.{Vectors, Vector}
+import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.Utils
-
 
 /**
  * :: Experimental ::
@@ -55,20 +54,9 @@ class LDA private (
     private var checkpointInterval: Int,
     private var ldaOptimizer: LDAOptimizer) extends Logging {
 
-  def this(
-      k: Int,
-      maxIterations: Int,
-      docConcentration: Double,
-      topicConcentration: Double,
-      seed: Long,
-      checkpointInterval: Int,
-      ldaOptimizer: LDAOptimizer) = {
-    this(k, maxIterations, Vectors.dense(Array.fill(k)(docConcentration)), topicConcentration,
-      seed, checkpointInterval, ldaOptimizer)
-  }
-
-  def this() = this(k = 10, maxIterations = 20, docConcentration = -1, topicConcentration = -1,
-    seed = Utils.random.nextLong(), checkpointInterval = 10, ldaOptimizer = new EMLDAOptimizer)
+  def this() = this(k = 10, maxIterations = 20, docConcentration = Vectors.dense(-1),
+    topicConcentration = -1, seed = Utils.random.nextLong(), checkpointInterval = 10,
+    ldaOptimizer = new EMLDAOptimizer)
 
   /**
    * Number of topics to infer.  I.e., the number of soft cluster centers.
@@ -100,29 +88,31 @@ class LDA private (
    * This is the parameter to a Dirichlet distribution, where larger values mean more smoothing
    * (more regularization).
    *
-   * If set to a vector of -1, then docConcentration is set automatically.
-   *  (default = a vector of -1 = automatic)
+   * If set to a singleton vector Vector(-1), then docConcentration is set automatically. If set to
+   * singleton vector Vector(t) where t != -1, then t is replicated to a vector of length k during
+   * [[LDAOptimizer.initialize()]]. Otherwise, the [[docConcentration]] vector must be length k.
+   * (default = Vector(-1) = automatic)
    *
    * Optimizer-specific parameter settings:
    *  - EM
-   *     - Currently only supports symmetric distributions, so values in the vector must be the same
-   *     - Value should be > 1.0
-   *     - default = (50 / k) + 1, where 50/k is common in LDA libraries and +1 follows
-   *       Asuncion et al. (2009), who recommend a +1 adjustment for EM.
+   *     - Currently only supports symmetric distributions, so all values in the vector should be
+   *       the same.
+   *     - Values should be > 1.0
+   *     - default = uniformly (50 / k) + 1, where 50/k is common in LDA libraries and +1 follows
+   *       from Asuncion et al. (2009), who recommend a +1 adjustment for EM.
    *  - Online
    *     - Values should be >= 0
    *     - default = uniformly (1.0 / k), following the implementation from
    *       [[https://github.com/Blei-Lab/onlineldavb]].
    */
   def setDocConcentration(docConcentration: Vector): this.type = {
-    docConcentration.toArray.iterator
     this.docConcentration = docConcentration
     this
   }
 
   /** Replicates Double to create a symmetric prior */
   def setDocConcentration(docConcentration: Double): this.type = {
-    this.docConcentration = Vectors.dense(Array.fill(k)(docConcentration))
+    this.docConcentration = Vectors.dense(docConcentration)
     this
   }
 
@@ -265,8 +255,6 @@ class LDA private (
    * @return  Inferred LDA model
    */
   def run(documents: RDD[(Long, Vector)]): LDAModel = {
-    require(docConcentration.size == this.k, "Dimension of alpha and k must be equal.")
-
     val state = ldaOptimizer.initialize(documents, this)
     var iter = 0
     val iterationTimes = Array.fill[Double](maxIterations)(0)
