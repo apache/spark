@@ -181,13 +181,11 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite {
 
   test("check types for ROUND") {
     assertErrorWithImplicitCast(Round(Literal(null), 'booleanField),
-      "Only foldable Integral Expression is allowed for ROUND scale arguments")
+      "data type mismatch: argument 2 is expected to be of type int")
     assertErrorWithImplicitCast(Round(Literal(null), 'complexField),
-      "Only foldable Integral Expression is allowed for ROUND scale arguments")
+      "data type mismatch: argument 2 is expected to be of type int")
     assertSuccess(Round(Literal(null), Literal(null)))
     assertError(Round('booleanField, 'intField),
-      "Only numeric type is allowed for ROUND function")
-    assertErrorWithImplicitCast(Round(Literal(null), Literal(1L + Int.MaxValue)),
-      "ROUND scale argument out of allowed range")
+      "data type mismatch: argument 1 is expected to be of type numeric")
   }
 }

@@ -23,7 +23,6 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckSuccess, TypeCheckFailure}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.util.BigDecimalConverter
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -524,144 +523,125 @@ case class Logarithm(left: Expression, right: Expression)
   }
 }
 
-case class Round(child: Expression, scale: Expression) extends Expression with ExpectsInputTypes {
+case class Round(child: Expression, scale: Expression)
+  extends BinaryExpression with ExpectsInputTypes {
 
-  def this(child: Expression) = {
-    this(child, Literal(0))
-  }
+  import BigDecimal.RoundingMode.HALF_UP
+
+  def this(child: Expression) = this(child, Literal(0))
+
+  override def left: Expression = child
+  override def right: Expression = scale
 
   override def children: Seq[Expression] = Seq(child, scale)
 
+  // round of Decimal would eval to null if it fails to `changePrecision`
   override def nullable: Boolean = true
 
   override def foldable: Boolean = child.foldable
 
   override lazy val dataType: DataType = child.dataType match {
-      case DecimalType.Fixed(p, s) => DecimalType(p, _scale)
-      case t => t
-    }
+    case DecimalType.Fixed(p, s) => DecimalType(p, _scale)
+    case t => t
+  }
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(
-    // rely on precedence to implicit cast String into Double
-    TypeCollection(DecimalType, DoubleType, FloatType, LongType, IntegerType, ShortType, ByteType),
-    TypeCollection(LongType, IntegerType, ShortType, ByteType))
+  override def inputTypes: Seq[AbstractDataType] = Seq(NumericType, IntegerType)
 
   override def checkInputDataTypes(): TypeCheckResult = {
-    child.dataType match {
-      case _: NumericType => // satisfy requirement
-      case dt =>
-        return TypeCheckFailure(s"Only numeric type is allowed for ROUND function, got $dt")
-    }
-    scale match {
-      case Literal(value, LongType) =>
-        if (value.asInstanceOf[Long] < Int.MinValue || value.asInstanceOf[Long] > Int.MaxValue) {
-          return TypeCheckFailure("ROUND scale argument out of allowed range")
-        }
-      case _ =>
-        if (scale.dataType.isInstanceOf[IntegralType] && scale.foldable) {
-          // TODO: How to check out of range for foldable LongType Expression
-          // satisfy requirement
+    super.checkInputDataTypes() match {
+      case TypeCheckSuccess =>
+        if (scale.foldable) {
+          TypeCheckSuccess
         } else {
-          return TypeCheckFailure("Only foldable Integral Expression " +
-            s"is allowed for ROUND scale arguments, got ${child.dataType}")
+          TypeCheckFailure("Only foldable Expression is allowed for scale arguments")
         }
+      case f => f
     }
-    TypeCheckSuccess
   }
 
   private lazy val scaleV = scale.eval(EmptyRow)
   private lazy val _scale = if (scaleV != null) scaleV.asInstanceOf[Int] else 0
 
-  override def eval(input: InternalRow): Any = {
-    val evalE = child.eval(input)
-    if (evalE == null || scaleV == null) return null
-    round(evalE)
-  }
-
-  private lazy val round: (Any) => (Any) = typedRound(child.dataType)
-
-  // Using dataType info to find an appropriate round method
-  private def typedRound(dt: DataType)(x: Any): Any = {
-    dt match {
+  protected override def nullSafeEval(input1: Any, input2: Any): Any = {
+    child.dataType match {
       case _: DecimalType =>
-        val decimal = x.asInstanceOf[Decimal]
+        val decimal = input1.asInstanceOf[Decimal]
         if (decimal.changePrecision(decimal.precision, _scale)) decimal else null
       case ByteType =>
-        numericRound(x.asInstanceOf[Byte], _scale)
+        BigDecimal(input1.asInstanceOf[Byte]).setScale(_scale, HALF_UP).toByte
       case ShortType =>
-        numericRound(x.asInstanceOf[Short], _scale)
+        BigDecimal(input1.asInstanceOf[Short]).setScale(_scale, HALF_UP).toShort
       case IntegerType =>
-        numericRound(x.asInstanceOf[Int], _scale)
+        BigDecimal(input1.asInstanceOf[Int]).setScale(_scale, HALF_UP).toInt
       case LongType =>
-        numericRound(x.asInstanceOf[Long], _scale)
+        BigDecimal(input1.asInstanceOf[Long]).setScale(_scale, HALF_UP).toLong
       case FloatType =>
-        numericRound(x.asInstanceOf[Float], _scale)
+        val f = input1.asInstanceOf[Float]
+        if (f.isNaN || f.isInfinite) {
+          f
+        } else {
+          BigDecimal(f).setScale(_scale, HALF_UP).toFloat
+        }
       case DoubleType =>
-        numericRound(x.asInstanceOf[Double], _scale)
+        val d = input1.asInstanceOf[Double]
+        if (d.isNaN || d.isInfinite) {
+          d
+        } else {
+          BigDecimal(d).setScale(_scale, HALF_UP).toDouble
+        }
     }
-  }
-
-  private def numericRound[T](input: T, scale: Int)(implicit bdc: BigDecimalConverter[T]): T = {
-    input match {
-      case f: Float if (f.isNaN || f.isInfinite) => return input
-      case d: Double if (d.isNaN || d.isInfinite) => return input
-      case _ =>
-    }
-    bdc.fromBigDecimal(bdc.toBigDecimal(input).setScale(scale, BigDecimal.RoundingMode.HALF_UP))
   }
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     val ce = child.gen(ctx)
 
-    def round(primitive: String, integral: Boolean): String = {
-      val (p1, p2) = if (integral) ("new", "") else ("", ".valueOf")
-      s"""
-      ${ev.primitive} = $p1 java.math.BigDecimal$p2(${primitive}).
-        setScale(${_scale}, java.math.BigDecimal.ROUND_HALF_UP)"""
-    }
-
-    def fractionalCheck(primitive: String, function: String): String = {
-      s"""
-      if (Double.isNaN(${primitive}) || Double.isInfinite(${primitive})){
-        ${ev.primitive} = ${primitive};
-      } else {
-        ${round(primitive, false)}.${function};
-      }"""
-    }
-
-    def decimalRound(): String = {
-      s"""
-      if (${ce.primitive}.changePrecision(${ce.primitive}.precision(), ${_scale})) {
-        ${ev.primitive} = ${ce.primitive};
-      } else {
-        ${ev.isNull} = true;
-      }
-      """
-    }
-
-    val roundCode = child.dataType match {
-      case NullType => ";"
+    val evaluationCode = child.dataType match {
       case _: DecimalType =>
-        decimalRound()
+        s"""
+        if (${ce.primitive}.changePrecision(${ce.primitive}.precision(), ${_scale})) {
+          ${ev.primitive} = ${ce.primitive};
+        } else {
+          ${ev.isNull} = true;
+        }"""
       case ByteType =>
-        round(ce.primitive, true) + ".byteValue();"
+        s"""
+        ${ev.primitive} = new java.math.BigDecimal(${ce.primitive}).
+          setScale(${_scale}, java.math.BigDecimal.ROUND_HALF_UP).byteValue();"""
       case ShortType =>
-        round(ce.primitive, true) + ".shortValue();"
+        s"""
+        ${ev.primitive} = new java.math.BigDecimal(${ce.primitive}).
+          setScale(${_scale}, java.math.BigDecimal.ROUND_HALF_UP).shortValue();"""
       case IntegerType =>
-        round(ce.primitive, true) + ".intValue();"
+        s"""
+        ${ev.primitive} = new java.math.BigDecimal(${ce.primitive}).
+          setScale(${_scale}, java.math.BigDecimal.ROUND_HALF_UP).intValue();"""
       case LongType =>
-        round(ce.primitive, true) + ".longValue();"
+        s"""
+        ${ev.primitive} = new java.math.BigDecimal(${ce.primitive}).
+          setScale(${_scale}, java.math.BigDecimal.ROUND_HALF_UP).longValue();"""
       case FloatType =>
-        fractionalCheck(ce.primitive, "floatValue()")
+        s"""
+        if (Float.isNaN(${ce.primitive}) || Float.isInfinite(${ce.primitive})){
+          ${ev.primitive} = ${ce.primitive};
+        } else {
+          ${ev.primitive} = java.math.BigDecimal.valueOf(${ce.primitive}).
+            setScale(${_scale}, java.math.BigDecimal.ROUND_HALF_UP).floatValue();
+        }"""
       case DoubleType =>
-        fractionalCheck(ce.primitive, "doubleValue()")
+        s"""
+        if (Double.isNaN(${ce.primitive}) || Double.isInfinite(${ce.primitive})){
+          ${ev.primitive} = ${ce.primitive};
+        } else {
+          ${ev.primitive} = java.math.BigDecimal.valueOf(${ce.primitive}).
+            setScale(${_scale}, java.math.BigDecimal.ROUND_HALF_UP).doubleValue();
+        }"""
     }
 
     ce.code + s"""
       boolean ${ev.isNull} = ${ce.isNull} || ${scaleV == null};
       ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
       if (!${ev.isNull}) {
-        ${roundCode}
+        ${evaluationCode}
       }
       """
   }
