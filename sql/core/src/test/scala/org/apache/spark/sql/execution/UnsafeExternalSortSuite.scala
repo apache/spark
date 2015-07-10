@@ -40,7 +40,7 @@ class UnsafeExternalSortSuite extends SparkPlanTest with BeforeAndAfterAll {
     // TODO: this test is going to fail until we implement a proper iterator interface
     // with a close() method.
     TestSQLContext.sparkContext.conf.set("spark.unsafe.exceptionOnMemoryLeak", "true")
-    checkAnswer(
+    checkThatPlansAgree(
       (1 to 100).map(v => Tuple1(v)).toDF("a"),
       (child: SparkPlan) => Limit(10, UnsafeExternalSort('a.asc :: Nil, true, child)),
       (child: SparkPlan) => Limit(10, Sort('a.asc :: Nil, global = true, child)),
@@ -51,7 +51,7 @@ class UnsafeExternalSortSuite extends SparkPlanTest with BeforeAndAfterAll {
   test("sort followed by limit") {
     TestSQLContext.sparkContext.conf.set("spark.unsafe.exceptionOnMemoryLeak", "false")
     try {
-      checkAnswer(
+      checkThatPlansAgree(
         (1 to 100).map(v => Tuple1(v)).toDF("a"),
         (child: SparkPlan) => Limit(10, UnsafeExternalSort('a.asc :: Nil, true, child)),
         (child: SparkPlan) => Limit(10, Sort('a.asc :: Nil, global = true, child)),
@@ -66,7 +66,7 @@ class UnsafeExternalSortSuite extends SparkPlanTest with BeforeAndAfterAll {
   test("sorting does not crash for large inputs") {
     val sortOrder = 'a.asc :: Nil
     val stringLength = 1024 * 1024 * 2
-    checkAnswer(
+    checkThatPlansAgree(
       Seq(Tuple1("a" * stringLength), Tuple1("b" * stringLength)).toDF("a").repartition(1),
       UnsafeExternalSort(sortOrder, global = true, _: SparkPlan, testSpillFrequency = 1),
       Sort(sortOrder, global = true, _: SparkPlan),
@@ -93,7 +93,7 @@ class UnsafeExternalSortSuite extends SparkPlanTest with BeforeAndAfterAll {
         StructType(StructField("a", dataType, nullable = true) :: Nil)
       )
       assert(UnsafeExternalSort.supportsSchema(inputDf.schema))
-      checkAnswer(
+      checkThatPlansAgree(
         inputDf,
         UnsafeExternalSort(sortOrder, global = true, _: SparkPlan, testSpillFrequency = 23),
         Sort(sortOrder, global = true, _: SparkPlan),

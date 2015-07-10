@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution
 
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.dsl.expressions._
 
 class SortSuite extends SparkPlanTest {
@@ -34,13 +35,13 @@ class SortSuite extends SparkPlanTest {
     checkAnswer(
       input.toDF("a", "b", "c"),
       ExternalSort('a.asc :: 'b.asc :: Nil, global = true, _: SparkPlan),
-      input.sortBy(t => (t._1, t._2)),
+      input.sortBy(t => (t._1, t._2)).map(Row.fromTuple),
       sortAnswers = false)
 
     checkAnswer(
       input.toDF("a", "b", "c"),
       ExternalSort('b.asc :: 'a.asc :: Nil, global = true, _: SparkPlan),
-      input.sortBy(t => (t._2, t._1)),
+      input.sortBy(t => (t._2, t._1)).map(Row.fromTuple),
       sortAnswers = false)
   }
 }
