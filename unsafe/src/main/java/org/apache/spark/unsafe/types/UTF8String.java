@@ -25,6 +25,7 @@ import org.apache.spark.unsafe.array.ByteArrayMethods;
 
 import static org.apache.spark.unsafe.PlatformDependent.*;
 
+
 /**
  * A UTF-8 String for internal Spark use.
  * <p>
@@ -99,8 +100,6 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
 
   /**
    * Returns the number of code points in it.
-   *
-   * This is only used by Substring() when `start` is negative.
    */
   public int numChars() {
     int len = 0;
@@ -206,6 +205,196 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
     return fromString(toString().toLowerCase());
   }
 
+  /**
+   * Copy the bytes from the current UTF8String, and make a new UTF8String.
+   * @param start the start position of the current UTF8String in bytes.
+   * @param end the end position of the current UTF8String in bytes.
+   * @return a new UTF8String in the position of [start, end] of current UTF8String bytes.
+   */
+  private UTF8String copyUTF8String(int start, int end) {
+    int len = end - start + 1;
+    byte[] newBytes = new byte[len];
+    copyMemory(base, offset + start, newBytes, BYTE_ARRAY_OFFSET, len);
+    return UTF8String.fromBytes(newBytes);
+  }
+
+  public UTF8String trim() {
+    int s = 0;
+    int e = this.numBytes - 1;
+    // skip all of the space (0x20) in the left side
+    while (s < this.numBytes && getByte(s) == 0x20) s++;
+    // skip all of the space (0x20) in the right side
+    while (e >= 0 && getByte(e) == 0x20) e--;
+
+    if (s > e) {
+      // empty string
+      return UTF8String.fromBytes(new byte[0]);
+    } else {
+      return copyUTF8String(s, e);
+    }
+  }
+
+  public UTF8String trimLeft() {
+    int s = 0;
+    // skip all of the space (0x20) in the left side
+    while (s < this.numBytes && getByte(s) == 0x20) s++;
+    if (s == this.numBytes) {
+      // empty string
+      return UTF8String.fromBytes(new byte[0]);
+    } else {
+      return copyUTF8String(s, this.numBytes - 1);
+    }
+  }
+
+  public UTF8String trimRight() {
+    int e = numBytes - 1;
+    // skip all of the space (0x20) in the right side
+    while (e >= 0 && getByte(e) == 0x20) e--;
+
+    if (e < 0) {
+      // empty string
+      return UTF8String.fromBytes(new byte[0]);
+    } else {
+      return copyUTF8String(0, e);
+    }
+  }
+
+  public UTF8String reverse() {
+    byte[] bytes = getBytes();
+    byte[] result = new byte[bytes.length];
+
+    int i = 0; // position in byte
+    while (i < numBytes) {
+      int len = numBytesForFirstByte(getByte(i));
+      System.arraycopy(bytes, i, result, result.length - i - len, len);
+
+      i += len;
+    }
+
+    return UTF8String.fromBytes(result);
+  }
+
+  public UTF8String repeat(int times) {
+    if (times <=0) {
+      return fromBytes(new byte[0]);
+    }
+
+    byte[] newBytes = new byte[numBytes * times];
+    System.arraycopy(getBytes(), 0, newBytes, 0, numBytes);
+
+    int copied = 1;
+    while (copied < times) {
+      int toCopy = Math.min(copied, times - copied);
+      System.arraycopy(newBytes, 0, newBytes, copied * numBytes, numBytes * toCopy);
+      copied += toCopy;
+    }
+
+    return UTF8String.fromBytes(newBytes);
+  }
+
+  /**
+   * Returns the position of the first occurrence of substr in
+   * current string from the specified position (0-based index).
+   *
+   * @param v the string to be searched
+   * @param start the start position of the current string for searching
+   * @return the position of the first occurrence of substr, if not found, -1 returned.
+   */
+  public int indexOf(UTF8String v, int start) {
+    if (v.numBytes() == 0) {
+      return 0;
+    }
+
+    // locate to the start position.
+    int i = 0; // position in byte
+    int c = 0; // position in character
+    while (i < numBytes && c < start) {
+      i += numBytesForFirstByte(getByte(i));
+      c += 1;
+    }
+
+    do {
+      if (i + v.numBytes > numBytes) {
+        return -1;
+      }
+      if (ByteArrayMethods.arrayEquals(base, offset + i, v.base, v.offset, v.numBytes)) {
+        return c;
+      }
+      i += numBytesForFirstByte(getByte(i));
+      c += 1;
+    } while(i < numBytes);
+
+    return -1;
+  }
+
+  /**
+   * Returns str, right-padded with pad to a length of len
+   * For example:
+   *   ('hi', 5, '??') => 'hi???'
+   *   ('hi', 1, '??') => 'h'
+   */
+  public UTF8String rpad(int len, UTF8String pad) {
+    int spaces = len - this.numChars(); // number of char need to pad
+    if (spaces <= 0) {
+      // no padding at all, return the substring of the current string
+      return substring(0, len);
+    } else {
+      int padChars = pad.numChars();
+      int count = spaces / padChars; // how many padding string needed
+      // the partial string of the padding
+      UTF8String remain = pad.substring(0, spaces - padChars * count);
+
+      byte[] data = new byte[this.numBytes + pad.numBytes * count + remain.numBytes];
+      System.arraycopy(getBytes(), 0, data, 0, this.numBytes);
+      int offset = this.numBytes;
+      int idx = 0;
+      byte[] padBytes = pad.getBytes();
+      while (idx < count) {
+        System.arraycopy(padBytes, 0, data, offset, pad.numBytes);
+        ++idx;
+        offset += pad.numBytes;
+      }
+      System.arraycopy(remain.getBytes(), 0, data, offset, remain.numBytes);
+
+      return UTF8String.fromBytes(data);
+    }
+  }
+
+  /**
+   * Returns str, left-padded with pad to a length of len.
+   * For example:
+   *   ('hi', 5, '??') => '???hi'
+   *   ('hi', 1, '??') => 'h'
+   */
+  public UTF8String lpad(int len, UTF8String pad) {
+    int spaces = len - this.numChars(); // number of char need to pad
+    if (spaces <= 0) {
+      // no padding at all, return the substring of the current string
+      return substring(0, len);
+    } else {
+      int padChars = pad.numChars();
+      int count = spaces / padChars; // how many padding string needed
+      // the partial string of the padding
+      UTF8String remain = pad.substring(0, spaces - padChars * count);
+
+      byte[] data = new byte[this.numBytes + pad.numBytes * count + remain.numBytes];
+
+      int offset = 0;
+      int idx = 0;
+      byte[] padBytes = pad.getBytes();
+      while (idx < count) {
+        System.arraycopy(padBytes, 0, data, offset, pad.numBytes);
+        ++idx;
+        offset += pad.numBytes;
+      }
+      System.arraycopy(remain.getBytes(), 0, data, offset, remain.numBytes);
+      offset += remain.numBytes;
+      System.arraycopy(getBytes(), 0, data, offset, numBytes());
+
+      return UTF8String.fromBytes(data);
+    }
+  }
+
   @Override
   public String toString() {
     try {
@@ -252,6 +441,70 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
     } else {
       return false;
     }
+  }
+
+  /**
+   * Levenshtein distance is a metric for measuring the distance of two strings. The distance is
+   * defined by the minimum number of single-character edits (i.e. insertions, deletions or
+   * substitutions) that are required to change one of the strings into the other.
+   */
+  public int levenshteinDistance(UTF8String other) {
+    // Implementation adopted from org.apache.common.lang3.StringUtils.getLevenshteinDistance
+
+    int n = numChars();
+    int m = other.numChars();
+
+    if (n == 0) {
+      return m;
+    } else if (m == 0) {
+      return n;
+    }
+
+    UTF8String s, t;
+
+    if (n <= m) {
+      s = this;
+      t = other;
+    } else {
+      s = other;
+      t = this;
+      int swap;
+      swap = n;
+      n = m;
+      m = swap;
+    }
+
+    int p[] = new int[n + 1];
+    int d[] = new int[n + 1];
+    int swap[];
+
+    int i, i_bytes, j, j_bytes, num_bytes_j, cost;
+
+    for (i = 0; i <= n; i++) {
+      p[i] = i;
+    }
+
+    for (j = 0, j_bytes = 0; j < m; j_bytes += num_bytes_j, j++) {
+      num_bytes_j = numBytesForFirstByte(t.getByte(j_bytes));
+      d[0] = j + 1;
+
+      for (i = 0, i_bytes = 0; i < n; i_bytes += numBytesForFirstByte(s.getByte(i_bytes)), i++) {
+        if (s.getByte(i_bytes) != t.getByte(j_bytes) ||
+              num_bytes_j != numBytesForFirstByte(s.getByte(i_bytes))) {
+          cost = 1;
+        } else {
+          cost = (ByteArrayMethods.arrayEquals(t.base, t.offset + j_bytes, s.base,
+              s.offset + i_bytes, num_bytes_j)) ? 0 : 1;
+        }
+        d[i + 1] = Math.min(Math.min(d[i] + 1, p[i + 1] + 1), p[i] + cost);
+      }
+
+      swap = p;
+      p = d;
+      d = swap;
+    }
+
+    return p[n];
   }
 
   @Override

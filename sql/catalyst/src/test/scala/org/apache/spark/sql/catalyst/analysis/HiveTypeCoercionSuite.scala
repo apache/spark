@@ -79,6 +79,7 @@ class HiveTypeCoercionSuite extends PlanTest {
     shouldCast(IntegerType, TypeCollection(DecimalType(10, 2), StringType), DecimalType(10, 2))
 
     shouldCast(StringType, NumericType, DoubleType)
+    shouldCast(StringType, TypeCollection(NumericType, BinaryType), DoubleType)
 
     // NumericType should not be changed when function accepts any of them.
     Seq(ByteType, ShortType, IntegerType, LongType, FloatType, DoubleType,

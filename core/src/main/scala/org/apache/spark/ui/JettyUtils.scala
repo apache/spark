@@ -210,9 +210,15 @@ private[spark] object JettyUtils extends Logging {
       conf: SparkConf,
       serverName: String = ""): ServerInfo = {
 
-    val collection = new ContextHandlerCollection
-    collection.setHandlers(handlers.toArray)
     addFilters(handlers, conf)
+
+    val collection = new ContextHandlerCollection
+    val gzipHandlers = handlers.map { h =>
+      val gzipHandler = new GzipHandler
+      gzipHandler.setHandler(h)
+      gzipHandler
+    }
+    collection.setHandlers(gzipHandlers.toArray)
 
     // Bind to the given port, or throw a java.net.BindException if the port is occupied
     def connect(currentPort: Int): (Server, Int) = {

@@ -153,12 +153,24 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
     buf.toArray.map(converter(_).asInstanceOf[Row])
   }
 
+  private[this] def isTesting: Boolean = sys.props.contains("spark.testing")
+
   protected def newProjection(
       expressions: Seq[Expression], inputSchema: Seq[Attribute]): Projection = {
     log.debug(
       s"Creating Projection: $expressions, inputSchema: $inputSchema, codegen:$codegenEnabled")
     if (codegenEnabled) {
-      GenerateProjection.generate(expressions, inputSchema)
+      try {
+        GenerateProjection.generate(expressions, inputSchema)
+      } catch {
+        case e: Exception =>
+          if (isTesting) {
+            throw e
+          } else {
+            log.error("Failed to generate projection, fallback to interpret", e)
+            new InterpretedProjection(expressions, inputSchema)
+          }
+      }
     } else {
       new InterpretedProjection(expressions, inputSchema)
     }
@@ -170,17 +182,36 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
     log.debug(
       s"Creating MutableProj: $expressions, inputSchema: $inputSchema, codegen:$codegenEnabled")
     if(codegenEnabled) {
-      GenerateMutableProjection.generate(expressions, inputSchema)
+      try {
+        GenerateMutableProjection.generate(expressions, inputSchema)
+      } catch {
+        case e: Exception =>
+          if (isTesting) {
+            throw e
+          } else {
+            log.error("Failed to generate mutable projection, fallback to interpreted", e)
+            () => new InterpretedMutableProjection(expressions, inputSchema)
+          }
+      }
     } else {
       () => new InterpretedMutableProjection(expressions, inputSchema)
     }
   }
 
-
   protected def newPredicate(
       expression: Expression, inputSchema: Seq[Attribute]): (InternalRow) => Boolean = {
     if (codegenEnabled) {
-      GeneratePredicate.generate(expression, inputSchema)
+      try {
+        GeneratePredicate.generate(expression, inputSchema)
+      } catch {
+        case e: Exception =>
+          if (isTesting) {
+            throw e
+          } else {
+            log.error("Failed to generate predicate, fallback to interpreted", e)
+            InterpretedPredicate.create(expression, inputSchema)
+          }
+      }
     } else {
       InterpretedPredicate.create(expression, inputSchema)
     }
@@ -190,7 +221,17 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
       order: Seq[SortOrder],
       inputSchema: Seq[Attribute]): Ordering[InternalRow] = {
     if (codegenEnabled) {
-      GenerateOrdering.generate(order, inputSchema)
+      try {
+        GenerateOrdering.generate(order, inputSchema)
+      } catch {
+        case e: Exception =>
+          if (isTesting) {
+            throw e
+          } else {
+            log.error("Failed to generate ordering, fallback to interpreted", e)
+            new RowOrdering(order, inputSchema)
+          }
+      }
     } else {
       new RowOrdering(order, inputSchema)
     }

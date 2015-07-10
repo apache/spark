@@ -58,7 +58,7 @@ class AnalysisErrorSuite extends SparkFunSuite with BeforeAndAfter {
         }
       }
 
-      errorMessages.foreach(m => assert(error.getMessage.toLowerCase contains m.toLowerCase))
+      errorMessages.foreach(m => assert(error.getMessage.toLowerCase.contains(m.toLowerCase)))
     }
   }
 
@@ -68,21 +68,21 @@ class AnalysisErrorSuite extends SparkFunSuite with BeforeAndAfter {
     "single invalid type, single arg",
     testRelation.select(TestFunction(dateLit :: Nil, IntegerType :: Nil).as('a)),
     "cannot resolve" :: "testfunction" :: "argument 1" :: "expected to be of type int" ::
-    "null is of type date" ::Nil)
+    "'null' is of type date" ::Nil)
 
   errorTest(
     "single invalid type, second arg",
     testRelation.select(
       TestFunction(dateLit :: dateLit :: Nil, DateType :: IntegerType :: Nil).as('a)),
     "cannot resolve" :: "testfunction" :: "argument 2" :: "expected to be of type int" ::
-    "null is of type date" ::Nil)
+    "'null' is of type date" ::Nil)
 
   errorTest(
     "multiple invalid type",
     testRelation.select(
       TestFunction(dateLit :: dateLit :: Nil, IntegerType :: IntegerType :: Nil).as('a)),
     "cannot resolve" :: "testfunction" :: "argument 1" :: "argument 2" ::
-    "expected to be of type int" :: "null is of type date" ::Nil)
+    "expected to be of type int" :: "'null' is of type date" ::Nil)
 
   errorTest(
     "unresolved window function",

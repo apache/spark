@@ -162,6 +162,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
       .orNull
     executorCores = Option(executorCores)
       .orElse(sparkProperties.get("spark.executor.cores"))
+      .orElse(env.get("SPARK_EXECUTOR_CORES"))
       .orNull
     totalExecutorCores = Option(totalExecutorCores)
       .orElse(sparkProperties.get("spark.cores.max"))

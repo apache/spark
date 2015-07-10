@@ -36,12 +36,28 @@ private[sql] abstract class AbstractDataType {
   /**
    * Returns true if this data type is the same type as `other`.  This is different that equality
    * as equality will also consider data type parametrization, such as decimal precision.
+   *
+   * {{{
+   *   // this should return true
+   *   DecimalType.isSameType(DecimalType(10, 2))
+   *
+   *   // this should return false
+   *   NumericType.isSameType(DecimalType(10, 2))
+   * }}}
    */
   private[sql] def isSameType(other: DataType): Boolean
 
   /**
    * Returns true if `other` is an acceptable input type for a function that expectes this,
    * possibly abstract, DataType.
+   *
+   * {{{
+   *   // this should return true
+   *   DecimalType.isSameType(DecimalType(10, 2))
+   *
+   *   // this should return true as well
+   *   NumericType.acceptsType(DecimalType(10, 2))
+   * }}}
    */
   private[sql] def acceptsType(other: DataType): Boolean = isSameType(other)
 

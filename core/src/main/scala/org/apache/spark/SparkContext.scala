@@ -532,7 +532,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     _executorAllocationManager =
       if (dynamicAllocationEnabled) {
         assert(supportDynamicAllocation,
-          "Dynamic allocation of executors is currently only supported in YARN mode")
+          "Dynamic allocation of executors is currently only supported in YARN and Mesos mode")
         Some(new ExecutorAllocationManager(this, listenerBus, _conf))
       } else {
         None
@@ -852,7 +852,6 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       updateConf,
       minPartitions).setName(path)
   }
-
 
   /**
    * :: Experimental ::
@@ -1364,10 +1363,14 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
 
   /**
    * Return whether dynamically adjusting the amount of resources allocated to
-   * this application is supported. This is currently only available for YARN.
+   * this application is supported. This is currently only available for YARN
+   * and Mesos coarse-grained mode.
    */
-  private[spark] def supportDynamicAllocation =
-    master.contains("yarn") || _conf.getBoolean("spark.dynamicAllocation.testing", false)
+  private[spark] def supportDynamicAllocation: Boolean = {
+    (master.contains("yarn")
+      || master.contains("mesos")
+      || _conf.getBoolean("spark.dynamicAllocation.testing", false))
+  }
 
   /**
    * :: DeveloperApi ::
@@ -1385,7 +1388,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    */
   private[spark] override def requestTotalExecutors(numExecutors: Int): Boolean = {
     assert(supportDynamicAllocation,
-      "Requesting executors is currently only supported in YARN mode")
+      "Requesting executors is currently only supported in YARN and Mesos modes")
     schedulerBackend match {
       case b: CoarseGrainedSchedulerBackend =>
         b.requestTotalExecutors(numExecutors)
@@ -1403,7 +1406,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   @DeveloperApi
   override def requestExecutors(numAdditionalExecutors: Int): Boolean = {
     assert(supportDynamicAllocation,
-      "Requesting executors is currently only supported in YARN mode")
+      "Requesting executors is currently only supported in YARN and Mesos modes")
     schedulerBackend match {
       case b: CoarseGrainedSchedulerBackend =>
         b.requestExecutors(numAdditionalExecutors)
@@ -1421,7 +1424,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   @DeveloperApi
   override def killExecutors(executorIds: Seq[String]): Boolean = {
     assert(supportDynamicAllocation,
-      "Killing executors is currently only supported in YARN mode")
+      "Killing executors is currently only supported in YARN and Mesos modes")
     schedulerBackend match {
       case b: CoarseGrainedSchedulerBackend =>
         b.killExecutors(executorIds)
