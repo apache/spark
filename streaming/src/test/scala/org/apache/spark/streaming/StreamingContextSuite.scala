@@ -818,7 +818,7 @@ package object testPackage extends Assertions {
 
 /**
  * Helper methods for testing StreamingContextSuite.
- * This includes methods to access private methods and fields in ExecutorAllocationManager.
+ * This includes methods to access private methods and fields in StreamingContext and MetricsSystem.
  */
 object StreamingContextSuite {
   val metricsSystemsObject = Class.forName("org.apache.spark.metrics.MetricsSystem")

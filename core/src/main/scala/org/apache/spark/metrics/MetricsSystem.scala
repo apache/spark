@@ -73,7 +73,7 @@ private[spark] class MetricsSystem private (
   private[this] val metricsConfig = new MetricsConfig(conf)
 
   private val sinks = new mutable.ArrayBuffer[Sink]
-  val sources = new mutable.ArrayBuffer[Source]
+  private val sources = new mutable.ArrayBuffer[Source]
   private val registry = new MetricRegistry()
 
   private var running: Boolean = false
