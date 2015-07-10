@@ -130,7 +130,7 @@ case class GetStructField(child: Expression, field: StructField, ordinal: Int)
   override def dataType: DataType = field.dataType
   override def nullable: Boolean = child.nullable || field.nullable
 
-  protected override def nullSafeEval(input: Any): Any =
+  override protected def nullSafeEval(input: Any): Any =
     input.asInstanceOf[InternalRow](ordinal)
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
@@ -160,7 +160,7 @@ case class GetArrayStructFields(
   override def dataType: DataType = ArrayType(field.dataType, containsNull)
   override def nullable: Boolean = child.nullable || containsNull || field.nullable
 
-  protected override def nullSafeEval(input: Any): Any = {
+  override protected def nullSafeEval(input: Any): Any = {
     input.asInstanceOf[Seq[InternalRow]].map { row =>
       if (row == null) null else row(ordinal)
     }
@@ -204,7 +204,7 @@ case class GetArrayItem(child: Expression, ordinal: Expression)
 
   override def dataType: DataType = child.dataType.asInstanceOf[ArrayType].elementType
 
-  protected override def nullSafeEval(value: Any, ordinal: Any): Any = {
+  override protected def nullSafeEval(value: Any, ordinal: Any): Any = {
     // TODO: consider using Array[_] for ArrayType child to avoid
     // boxing of primitives
     val baseValue = value.asInstanceOf[Seq[_]]
@@ -248,7 +248,7 @@ case class GetMapValue(child: Expression, key: Expression)
 
   override def dataType: DataType = child.dataType.asInstanceOf[MapType].valueType
 
-  protected override def nullSafeEval(value: Any, ordinal: Any): Any = {
+  override protected def nullSafeEval(value: Any, ordinal: Any): Any = {
     val baseValue = value.asInstanceOf[Map[Any, _]]
     baseValue.get(ordinal).orNull
   }

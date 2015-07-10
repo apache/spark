@@ -344,6 +344,18 @@ abstract class BinaryOperator extends BinaryExpression {
   def symbol: String
 
   override def toString: String = s"($left $symbol $right)"
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    if (left.dataType != right.dataType) {
+      TypeCheckResult.TypeCheckFailure(
+        s"differing types in ${this.getClass.getSimpleName} " +
+          s"(${left.dataType} and ${right.dataType}).")
+    } else {
+      checkTypesInternal(dataType)
+    }
+  }
+
+  protected def checkTypesInternal(t: DataType): TypeCheckResult
 }
 
 

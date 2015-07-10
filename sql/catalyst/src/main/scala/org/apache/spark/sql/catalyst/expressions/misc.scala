@@ -37,7 +37,7 @@ case class Md5(child: Expression) extends UnaryExpression with ExpectsInputTypes
 
   override def inputTypes: Seq[DataType] = Seq(BinaryType)
 
-  protected override def nullSafeEval(input: Any): Any =
+  override protected def nullSafeEval(input: Any): Any =
     UTF8String.fromString(DigestUtils.md5Hex(input.asInstanceOf[Array[Byte]]))
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
@@ -61,7 +61,7 @@ case class Sha2(left: Expression, right: Expression)
 
   override def inputTypes: Seq[DataType] = Seq(BinaryType, IntegerType)
 
-  protected override def nullSafeEval(input1: Any, input2: Any): Any = {
+  override protected def nullSafeEval(input1: Any, input2: Any): Any = {
     val bitLength = input2.asInstanceOf[Int]
     val input = input1.asInstanceOf[Array[Byte]]
     bitLength match {
@@ -124,7 +124,7 @@ case class Sha1(child: Expression) extends UnaryExpression with ExpectsInputType
 
   override def inputTypes: Seq[DataType] = Seq(BinaryType)
 
-  protected override def nullSafeEval(input: Any): Any =
+  override protected def nullSafeEval(input: Any): Any =
     UTF8String.fromString(DigestUtils.shaHex(input.asInstanceOf[Array[Byte]]))
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
@@ -144,7 +144,7 @@ case class Crc32(child: Expression) extends UnaryExpression with ExpectsInputTyp
 
   override def inputTypes: Seq[DataType] = Seq(BinaryType)
 
-  protected override def nullSafeEval(input: Any): Any = {
+  override protected def nullSafeEval(input: Any): Any = {
     val checksum = new CRC32
     checksum.update(input.asInstanceOf[Array[Byte]], 0, input.asInstanceOf[Array[Byte]].length)
     checksum.getValue

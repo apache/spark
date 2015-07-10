@@ -31,7 +31,7 @@ import org.apache.spark.sql.types._
 case class BitwiseAnd(left: Expression, right: Expression) extends BinaryArithmetic {
   override def symbol: String = "&"
 
-  protected def checkTypesInternal(t: DataType) =
+  override protected def checkTypesInternal(t: DataType) =
     TypeUtils.checkForBitwiseExpr(t, "operator " + symbol)
 
   private lazy val and: (Any, Any) => Any = dataType match {
@@ -45,7 +45,7 @@ case class BitwiseAnd(left: Expression, right: Expression) extends BinaryArithme
       ((evalE1: Long, evalE2: Long) => evalE1 & evalE2).asInstanceOf[(Any, Any) => Any]
   }
 
-  protected override def nullSafeEval(input1: Any, input2: Any): Any = and(input1, input2)
+  override protected def nullSafeEval(input1: Any, input2: Any): Any = and(input1, input2)
 }
 
 /**
@@ -56,7 +56,7 @@ case class BitwiseAnd(left: Expression, right: Expression) extends BinaryArithme
 case class BitwiseOr(left: Expression, right: Expression) extends BinaryArithmetic {
   override def symbol: String = "|"
 
-  protected def checkTypesInternal(t: DataType) =
+  override protected def checkTypesInternal(t: DataType) =
     TypeUtils.checkForBitwiseExpr(t, "operator " + symbol)
 
   private lazy val or: (Any, Any) => Any = dataType match {
@@ -70,7 +70,7 @@ case class BitwiseOr(left: Expression, right: Expression) extends BinaryArithmet
       ((evalE1: Long, evalE2: Long) => evalE1 | evalE2).asInstanceOf[(Any, Any) => Any]
   }
 
-  protected override def nullSafeEval(input1: Any, input2: Any): Any = or(input1, input2)
+  override protected def nullSafeEval(input1: Any, input2: Any): Any = or(input1, input2)
 }
 
 /**
@@ -81,7 +81,7 @@ case class BitwiseOr(left: Expression, right: Expression) extends BinaryArithmet
 case class BitwiseXor(left: Expression, right: Expression) extends BinaryArithmetic {
   override def symbol: String = "^"
 
-  protected def checkTypesInternal(t: DataType) =
+  override protected def checkTypesInternal(t: DataType) =
     TypeUtils.checkForBitwiseExpr(t, "operator " + symbol)
 
   private lazy val xor: (Any, Any) => Any = dataType match {
@@ -95,7 +95,7 @@ case class BitwiseXor(left: Expression, right: Expression) extends BinaryArithme
       ((evalE1: Long, evalE2: Long) => evalE1 ^ evalE2).asInstanceOf[(Any, Any) => Any]
   }
 
-  protected override def nullSafeEval(input1: Any, input2: Any): Any = xor(input1, input2)
+  override protected def nullSafeEval(input1: Any, input2: Any): Any = xor(input1, input2)
 }
 
 /**
@@ -122,5 +122,5 @@ case class BitwiseNot(child: Expression) extends UnaryArithmetic {
     defineCodeGen(ctx, ev, c => s"(${ctx.javaType(dataType)}) ~($c)")
   }
 
-  protected override def nullSafeEval(input: Any): Any = not(input)
+  override protected def nullSafeEval(input: Any): Any = not(input)
 }

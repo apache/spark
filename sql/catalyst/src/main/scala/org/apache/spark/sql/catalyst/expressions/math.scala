@@ -62,7 +62,7 @@ abstract class UnaryMathExpression(f: Double => Double, name: String)
   override def nullable: Boolean = true
   override def toString: String = s"$name($child)"
 
-  protected override def nullSafeEval(input: Any): Any = {
+  override protected def nullSafeEval(input: Any): Any = {
     val result = f(input.asInstanceOf[Double])
     if (result.isNaN) null else result
   }
@@ -97,7 +97,7 @@ abstract class BinaryMathExpression(f: (Double, Double) => Double, name: String)
 
   override def dataType: DataType = DoubleType
 
-  protected override def nullSafeEval(input1: Any, input2: Any): Any = {
+  override protected def nullSafeEval(input1: Any, input2: Any): Any = {
     val result = f(input1.asInstanceOf[Double], input2.asInstanceOf[Double])
     if (result.isNaN) null else result
   }
@@ -183,7 +183,7 @@ case class Factorial(child: Expression) extends UnaryExpression with ExpectsInpu
   // If the value not in the range of [0, 20], it still will be null, so set it to be true here.
   override def nullable: Boolean = true
 
-  protected override def nullSafeEval(input: Any): Any = {
+  override protected def nullSafeEval(input: Any): Any = {
     val value = input.asInstanceOf[jl.Integer]
     if (value > 20 || value < 0) {
       null
@@ -256,7 +256,7 @@ case class Bin(child: Expression)
   override def inputTypes: Seq[DataType] = Seq(LongType)
   override def dataType: DataType = StringType
 
-  protected override def nullSafeEval(input: Any): Any =
+  override protected def nullSafeEval(input: Any): Any =
     UTF8String.fromString(jl.Long.toBinaryString(input.asInstanceOf[Long]))
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
@@ -293,7 +293,7 @@ case class Hex(child: Expression) extends UnaryExpression with ExpectsInputTypes
 
   override def dataType: DataType = StringType
 
-  protected override def nullSafeEval(num: Any): Any = child.dataType match {
+  override protected def nullSafeEval(num: Any): Any = child.dataType match {
     case LongType => hex(num.asInstanceOf[Long])
     case BinaryType => hex(num.asInstanceOf[Array[Byte]])
     case StringType => hex(num.asInstanceOf[UTF8String].getBytes)
@@ -337,7 +337,7 @@ case class Unhex(child: Expression) extends UnaryExpression with ExpectsInputTyp
   override def nullable: Boolean = true
   override def dataType: DataType = BinaryType
 
-  protected override def nullSafeEval(num: Any): Any =
+  override protected def nullSafeEval(num: Any): Any =
     unhex(num.asInstanceOf[UTF8String].getBytes)
 
   private[this] def unhex(bytes: Array[Byte]): Array[Byte] = {
@@ -383,7 +383,7 @@ case class Unhex(child: Expression) extends UnaryExpression with ExpectsInputTyp
 case class Atan2(left: Expression, right: Expression)
   extends BinaryMathExpression(math.atan2, "ATAN2") {
 
-  protected override def nullSafeEval(input1: Any, input2: Any): Any = {
+  override protected def nullSafeEval(input1: Any, input2: Any): Any = {
     // With codegen, the values returned by -0.0 and 0.0 are different. Handled with +0.0
     val result = math.atan2(input1.asInstanceOf[Double] + 0.0, input2.asInstanceOf[Double] + 0.0)
     if (result.isNaN) null else result
@@ -423,7 +423,7 @@ case class ShiftLeft(left: Expression, right: Expression)
 
   override def dataType: DataType = left.dataType
 
-  protected override def nullSafeEval(input1: Any, input2: Any): Any = {
+  override protected def nullSafeEval(input1: Any, input2: Any): Any = {
     input1 match {
       case l: jl.Long => l << input2.asInstanceOf[jl.Integer]
       case i: jl.Integer => i << input2.asInstanceOf[jl.Integer]
@@ -449,7 +449,7 @@ case class ShiftRight(left: Expression, right: Expression)
 
   override def dataType: DataType = left.dataType
 
-  protected override def nullSafeEval(input1: Any, input2: Any): Any = {
+  override protected def nullSafeEval(input1: Any, input2: Any): Any = {
     input1 match {
       case l: jl.Long => l >> input2.asInstanceOf[jl.Integer]
       case i: jl.Integer => i >> input2.asInstanceOf[jl.Integer]
@@ -475,7 +475,7 @@ case class ShiftRightUnsigned(left: Expression, right: Expression)
 
   override def dataType: DataType = left.dataType
 
-  protected override def nullSafeEval(input1: Any, input2: Any): Any = {
+  override protected def nullSafeEval(input1: Any, input2: Any): Any = {
     input1 match {
       case l: jl.Long => l >>> input2.asInstanceOf[jl.Integer]
       case i: jl.Integer => i >>> input2.asInstanceOf[jl.Integer]
