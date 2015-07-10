@@ -579,9 +579,6 @@ class StreamingContext private[streaming] (
       case INITIALIZED =>
         startSite.set(DStream.getCreationSite())
         sparkContext.setCallSite(startSite.get)
-        // Registering Streaming Metrics at the start of the StreamingContext
-        assert(env.metricsSystem != null)
-        env.metricsSystem.registerSource(streamingSource)
         StreamingContext.ACTIVATION_LOCK.synchronized {
           StreamingContext.assertNoOtherContextIsActive()
           try {
@@ -599,6 +596,9 @@ class StreamingContext private[streaming] (
         }
         shutdownHookRef = Utils.addShutdownHook(
           StreamingContext.SHUTDOWN_HOOK_PRIORITY)(stopOnShutdown)
+        // Registering Streaming Metrics at the start of the StreamingContext
+        assert(env.metricsSystem != null)
+        env.metricsSystem.registerSource(streamingSource)
         uiTab.foreach(_.attach())
         logInfo("StreamingContext started")
       case ACTIVE =>
