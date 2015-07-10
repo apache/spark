@@ -96,7 +96,7 @@ class SqlLexical extends StdLexical {
     ",", ";", "%", "{", "}", ":", "[", "]", ".", "&", "|", "^", "~", "<=>"
   )
 
-  protected override def processIdent(name: String) = {
+  override protected def processIdent(name: String) = {
     val token = normalizeKeyword(name)
     if (reserved contains token) Keyword(token) else Identifier(name)
   }

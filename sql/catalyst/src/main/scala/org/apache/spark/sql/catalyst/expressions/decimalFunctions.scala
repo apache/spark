@@ -30,7 +30,7 @@ case class UnscaledValue(child: Expression) extends UnaryExpression {
   override def dataType: DataType = LongType
   override def toString: String = s"UnscaledValue($child)"
 
-  protected override def nullSafeEval(input: Any): Any =
+  override protected def nullSafeEval(input: Any): Any =
     input.asInstanceOf[Decimal].toUnscaledLong
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
@@ -48,7 +48,7 @@ case class MakeDecimal(child: Expression, precision: Int, scale: Int) extends Un
   override def dataType: DataType = DecimalType(precision, scale)
   override def toString: String = s"MakeDecimal($child,$precision,$scale)"
 
-  protected override def nullSafeEval(input: Any): Any =
+  override protected def nullSafeEval(input: Any): Any =
     Decimal(input.asInstanceOf[Long], precision, scale)
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {

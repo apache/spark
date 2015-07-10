@@ -53,7 +53,7 @@ trait StringRegexExpression extends ExpectsInputTypes {
 
   protected def pattern(str: String) = if (cache == null) compile(str) else cache
 
-  protected override def nullSafeEval(input1: Any, input2: Any): Any = {
+  override protected def nullSafeEval(input1: Any, input2: Any): Any = {
     val regex = pattern(input2.asInstanceOf[UTF8String].toString())
     if(regex == null) {
       null
@@ -113,7 +113,7 @@ trait String2StringExpression extends ExpectsInputTypes {
   override def dataType: DataType = StringType
   override def inputTypes: Seq[DataType] = Seq(StringType)
 
-  protected override def nullSafeEval(input: Any): Any =
+  override protected def nullSafeEval(input: Any): Any =
     convert(input.asInstanceOf[UTF8String])
 }
 
@@ -149,7 +149,7 @@ trait StringComparison extends ExpectsInputTypes {
 
   override def inputTypes: Seq[DataType] = Seq(StringType, StringType)
 
-  protected override def nullSafeEval(input1: Any, input2: Any): Any =
+  override protected def nullSafeEval(input1: Any, input2: Any): Any =
     compare(input1.asInstanceOf[UTF8String], input2.asInstanceOf[UTF8String])
 
   override def toString: String = s"$nodeName($left, $right)"
@@ -559,7 +559,7 @@ case class StringLength(child: Expression) extends UnaryExpression with ExpectsI
   override def dataType: DataType = IntegerType
   override def inputTypes: Seq[DataType] = Seq(StringType)
 
-  protected override def nullSafeEval(string: Any): Any =
+  override protected def nullSafeEval(string: Any): Any =
     string.asInstanceOf[UTF8String].numChars
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
@@ -579,7 +579,7 @@ case class Levenshtein(left: Expression, right: Expression) extends BinaryExpres
 
   override def dataType: DataType = IntegerType
 
-  protected override def nullSafeEval(leftValue: Any, rightValue: Any): Any =
+  override protected def nullSafeEval(leftValue: Any, rightValue: Any): Any =
     leftValue.asInstanceOf[UTF8String].levenshteinDistance(rightValue.asInstanceOf[UTF8String])
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
@@ -595,7 +595,7 @@ case class Ascii(child: Expression) extends UnaryExpression with ExpectsInputTyp
   override def dataType: DataType = IntegerType
   override def inputTypes: Seq[DataType] = Seq(StringType)
 
-  protected override def nullSafeEval(string: Any): Any = {
+  override protected def nullSafeEval(string: Any): Any = {
     val bytes = string.asInstanceOf[UTF8String].getBytes
     if (bytes.length > 0) {
       bytes(0).asInstanceOf[Int]
@@ -612,7 +612,7 @@ case class Base64(child: Expression) extends UnaryExpression with ExpectsInputTy
   override def dataType: DataType = StringType
   override def inputTypes: Seq[DataType] = Seq(BinaryType)
 
-  protected override def nullSafeEval(bytes: Any): Any = {
+  override protected def nullSafeEval(bytes: Any): Any = {
     UTF8String.fromBytes(
       org.apache.commons.codec.binary.Base64.encodeBase64(
         bytes.asInstanceOf[Array[Byte]]))
@@ -626,7 +626,7 @@ case class UnBase64(child: Expression) extends UnaryExpression with ExpectsInput
   override def dataType: DataType = BinaryType
   override def inputTypes: Seq[DataType] = Seq(StringType)
 
-  protected override def nullSafeEval(string: Any): Any =
+  override protected def nullSafeEval(string: Any): Any =
     org.apache.commons.codec.binary.Base64.decodeBase64(string.asInstanceOf[UTF8String].toString)
 }
 
@@ -643,7 +643,7 @@ case class Decode(bin: Expression, charset: Expression)
   override def dataType: DataType = StringType
   override def inputTypes: Seq[DataType] = Seq(BinaryType, StringType)
 
-  protected override def nullSafeEval(input1: Any, input2: Any): Any = {
+  override protected def nullSafeEval(input1: Any, input2: Any): Any = {
     val fromCharset = input2.asInstanceOf[UTF8String].toString
     UTF8String.fromString(new String(input1.asInstanceOf[Array[Byte]], fromCharset))
   }
@@ -662,7 +662,7 @@ case class Encode(value: Expression, charset: Expression)
   override def dataType: DataType = BinaryType
   override def inputTypes: Seq[DataType] = Seq(StringType, StringType)
 
-  protected override def nullSafeEval(input1: Any, input2: Any): Any = {
+  override protected def nullSafeEval(input1: Any, input2: Any): Any = {
     val toCharset = input2.asInstanceOf[UTF8String].toString
     input1.asInstanceOf[UTF8String].toString.getBytes(toCharset)
   }

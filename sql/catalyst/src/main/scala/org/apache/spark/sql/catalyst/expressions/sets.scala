@@ -185,7 +185,7 @@ case class CountSet(child: Expression) extends UnaryExpression {
 
   override def dataType: DataType = LongType
 
-  protected override def nullSafeEval(input: Any): Any =
+  override protected def nullSafeEval(input: Any): Any =
     input.asInstanceOf[OpenHashSet[Any]].size.toLong
 
   override def toString: String = s"$child.count()"

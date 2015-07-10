@@ -42,7 +42,7 @@ case class UnaryMinus(child: Expression) extends UnaryArithmetic {
     case dt: NumericType => defineCodeGen(ctx, ev, c => s"(${ctx.javaType(dt)})(-($c))")
   }
 
-  protected override def nullSafeEval(input: Any): Any = numeric.negate(input)
+  override protected def nullSafeEval(input: Any): Any = numeric.negate(input)
 }
 
 case class UnaryPositive(child: Expression) extends UnaryArithmetic {
@@ -51,7 +51,7 @@ case class UnaryPositive(child: Expression) extends UnaryArithmetic {
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String =
     defineCodeGen(ctx, ev, c => c)
 
-  protected override def nullSafeEval(input: Any): Any = input
+  override protected def nullSafeEval(input: Any): Any = input
 }
 
 /**
@@ -63,25 +63,13 @@ case class Abs(child: Expression) extends UnaryArithmetic {
 
   private lazy val numeric = TypeUtils.getNumeric(dataType)
 
-  protected override def nullSafeEval(input: Any): Any = numeric.abs(input)
+  override protected def nullSafeEval(input: Any): Any = numeric.abs(input)
 }
 
 abstract class BinaryArithmetic extends BinaryOperator {
   self: Product =>
 
   override def dataType: DataType = left.dataType
-
-  override def checkInputDataTypes(): TypeCheckResult = {
-    if (left.dataType != right.dataType) {
-      TypeCheckResult.TypeCheckFailure(
-        s"differing types in ${this.getClass.getSimpleName} " +
-        s"(${left.dataType} and ${right.dataType}).")
-    } else {
-      checkTypesInternal(dataType)
-    }
-  }
-
-  protected def checkTypesInternal(t: DataType): TypeCheckResult
 
   /** Name of the function for this expression on a [[Decimal]] type. */
   def decimalMethod: String =
@@ -110,12 +98,12 @@ case class Add(left: Expression, right: Expression) extends BinaryArithmetic {
   override lazy val resolved =
     childrenResolved && checkInputDataTypes().isSuccess && !DecimalType.isFixed(dataType)
 
-  protected def checkTypesInternal(t: DataType) =
+  override protected def checkTypesInternal(t: DataType) =
     TypeUtils.checkForNumericExpr(t, "operator " + symbol)
 
   private lazy val numeric = TypeUtils.getNumeric(dataType)
 
-  protected override def nullSafeEval(input1: Any, input2: Any): Any = numeric.plus(input1, input2)
+  override protected def nullSafeEval(input1: Any, input2: Any): Any = numeric.plus(input1, input2)
 }
 
 case class Subtract(left: Expression, right: Expression) extends BinaryArithmetic {
@@ -125,12 +113,12 @@ case class Subtract(left: Expression, right: Expression) extends BinaryArithmeti
   override lazy val resolved =
     childrenResolved && checkInputDataTypes().isSuccess && !DecimalType.isFixed(dataType)
 
-  protected def checkTypesInternal(t: DataType) =
+  override protected def checkTypesInternal(t: DataType) =
     TypeUtils.checkForNumericExpr(t, "operator " + symbol)
 
   private lazy val numeric = TypeUtils.getNumeric(dataType)
 
-  protected override def nullSafeEval(input1: Any, input2: Any): Any = numeric.minus(input1, input2)
+  override protected def nullSafeEval(input1: Any, input2: Any): Any = numeric.minus(input1, input2)
 }
 
 case class Multiply(left: Expression, right: Expression) extends BinaryArithmetic {
@@ -140,12 +128,12 @@ case class Multiply(left: Expression, right: Expression) extends BinaryArithmeti
   override lazy val resolved =
     childrenResolved && checkInputDataTypes().isSuccess && !DecimalType.isFixed(dataType)
 
-  protected def checkTypesInternal(t: DataType) =
+  override protected def checkTypesInternal(t: DataType) =
     TypeUtils.checkForNumericExpr(t, "operator " + symbol)
 
   private lazy val numeric = TypeUtils.getNumeric(dataType)
 
-  protected override def nullSafeEval(input1: Any, input2: Any): Any = numeric.times(input1, input2)
+  override protected def nullSafeEval(input1: Any, input2: Any): Any = numeric.times(input1, input2)
 }
 
 case class Divide(left: Expression, right: Expression) extends BinaryArithmetic {
@@ -157,7 +145,7 @@ case class Divide(left: Expression, right: Expression) extends BinaryArithmetic 
   override lazy val resolved =
     childrenResolved && checkInputDataTypes().isSuccess && !DecimalType.isFixed(dataType)
 
-  protected def checkTypesInternal(t: DataType) =
+  override protected def checkTypesInternal(t: DataType) =
     TypeUtils.checkForNumericExpr(t, "operator " + symbol)
 
   private lazy val div: (Any, Any) => Any = dataType match {
@@ -223,7 +211,7 @@ case class Remainder(left: Expression, right: Expression) extends BinaryArithmet
   override lazy val resolved =
     childrenResolved && checkInputDataTypes().isSuccess && !DecimalType.isFixed(dataType)
 
-  protected def checkTypesInternal(t: DataType) =
+  override protected def checkTypesInternal(t: DataType) =
     TypeUtils.checkForNumericExpr(t, "operator " + symbol)
 
   private lazy val integral = dataType match {
@@ -283,7 +271,7 @@ case class Remainder(left: Expression, right: Expression) extends BinaryArithmet
 case class MaxOf(left: Expression, right: Expression) extends BinaryArithmetic {
   override def nullable: Boolean = left.nullable && right.nullable
 
-  protected def checkTypesInternal(t: DataType) =
+  override protected def checkTypesInternal(t: DataType) =
     TypeUtils.checkForOrderingExpr(t, "function maxOf")
 
   private lazy val ordering = TypeUtils.getOrdering(dataType)
@@ -337,7 +325,7 @@ case class MaxOf(left: Expression, right: Expression) extends BinaryArithmetic {
 case class MinOf(left: Expression, right: Expression) extends BinaryArithmetic {
   override def nullable: Boolean = left.nullable && right.nullable
 
-  protected def checkTypesInternal(t: DataType) =
+  override protected def checkTypesInternal(t: DataType) =
     TypeUtils.checkForOrderingExpr(t, "function minOf")
 
   private lazy val ordering = TypeUtils.getOrdering(dataType)

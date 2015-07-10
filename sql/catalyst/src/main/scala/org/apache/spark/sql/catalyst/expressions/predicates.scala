@@ -75,7 +75,7 @@ case class Not(child: Expression) extends UnaryExpression with Predicate with Ex
 
   override def inputTypes: Seq[DataType] = Seq(BooleanType)
 
-  protected override def nullSafeEval(input: Any): Any = !input.asInstanceOf[Boolean]
+  override protected def nullSafeEval(input: Any): Any = !input.asInstanceOf[Boolean]
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     defineCodeGen(ctx, ev, c => s"!($c)")
@@ -213,18 +213,6 @@ case class Or(left: Expression, right: Expression)
 abstract class BinaryComparison extends BinaryOperator with Predicate {
   self: Product =>
 
-  override def checkInputDataTypes(): TypeCheckResult = {
-    if (left.dataType != right.dataType) {
-      TypeCheckResult.TypeCheckFailure(
-        s"differing types in ${this.getClass.getSimpleName} " +
-        s"(${left.dataType} and ${right.dataType}).")
-    } else {
-      checkTypesInternal(dataType)
-    }
-  }
-
-  protected def checkTypesInternal(t: DataType): TypeCheckResult
-
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     if (ctx.isPrimitiveType(left.dataType)) {
       // faster version
@@ -253,7 +241,7 @@ case class EqualTo(left: Expression, right: Expression) extends BinaryComparison
 
   override protected def checkTypesInternal(t: DataType) = TypeCheckResult.TypeCheckSuccess
 
-  protected override def nullSafeEval(input1: Any, input2: Any): Any = {
+  override protected def nullSafeEval(input1: Any, input2: Any): Any = {
     if (left.dataType != BinaryType) input1 == input2
     else java.util.Arrays.equals(input1.asInstanceOf[Array[Byte]], input2.asInstanceOf[Array[Byte]])
   }
@@ -306,7 +294,7 @@ case class LessThan(left: Expression, right: Expression) extends BinaryCompariso
 
   private lazy val ordering = TypeUtils.getOrdering(left.dataType)
 
-  protected override def nullSafeEval(input1: Any, input2: Any): Any = ordering.lt(input1, input2)
+  override protected def nullSafeEval(input1: Any, input2: Any): Any = ordering.lt(input1, input2)
 }
 
 case class LessThanOrEqual(left: Expression, right: Expression) extends BinaryComparison {
@@ -317,7 +305,7 @@ case class LessThanOrEqual(left: Expression, right: Expression) extends BinaryCo
 
   private lazy val ordering = TypeUtils.getOrdering(left.dataType)
 
-  protected override def nullSafeEval(input1: Any, input2: Any): Any = ordering.lteq(input1, input2)
+  override protected def nullSafeEval(input1: Any, input2: Any): Any = ordering.lteq(input1, input2)
 }
 
 case class GreaterThan(left: Expression, right: Expression) extends BinaryComparison {
@@ -328,7 +316,7 @@ case class GreaterThan(left: Expression, right: Expression) extends BinaryCompar
 
   private lazy val ordering = TypeUtils.getOrdering(left.dataType)
 
-  protected override def nullSafeEval(input1: Any, input2: Any): Any = ordering.gt(input1, input2)
+  override protected def nullSafeEval(input1: Any, input2: Any): Any = ordering.gt(input1, input2)
 }
 
 case class GreaterThanOrEqual(left: Expression, right: Expression) extends BinaryComparison {
@@ -339,5 +327,5 @@ case class GreaterThanOrEqual(left: Expression, right: Expression) extends Binar
 
   private lazy val ordering = TypeUtils.getOrdering(left.dataType)
 
-  protected override def nullSafeEval(input1: Any, input2: Any): Any = ordering.gteq(input1, input2)
+  override protected def nullSafeEval(input1: Any, input2: Any): Any = ordering.gteq(input1, input2)
 }
