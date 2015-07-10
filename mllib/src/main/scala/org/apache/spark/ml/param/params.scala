@@ -134,6 +134,14 @@ object ParamValidators {
     getDouble(value) <= upperBound
   }
 
+  /** Check if value == requiredValue */
+  def eq[T](requiredValue: T): T => Boolean = {
+    case value @ (_: Double | _: Float) =>
+      throw new IllegalArgumentException("ParamValidator.eq not intended for real numbers, " +
+        s"value given is $value")
+    case value: Any => value == requiredValue
+  }
+
   /**
    * Check for value in range lowerBound to upperBound.
    * @param lowerInclusive  If true, check for value >= lowerBound.
@@ -165,6 +173,11 @@ object ParamValidators {
   /** Check for value in an allowed set of values. */
   def inArray[T](allowed: java.util.List[T]): T => Boolean = { (value: T) =>
     allowed.contains(value)
+  }
+
+  /** Use two validators together in a logical OR expression */
+  def or[T](a: T => Boolean, b: T => Boolean): T => Boolean = { (value: T) =>
+    a(value) || b(value)
   }
 }
 

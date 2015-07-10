@@ -181,6 +181,13 @@ class ParamsSuite extends SparkFunSuite {
     val ltEq1Double = ParamValidators.ltEq[Double](1)
     assert(ltEq1Double(1.0) && !ltEq1Double(1.1))
 
+    val eq1Int = ParamValidators.eq[Int](1)
+    assert(eq1Int(1) && !eq1Int(0))
+    val eqDouble = ParamValidators.eq[Double](2/3.0)
+    intercept[IllegalArgumentException] {
+      eqDouble(1 - 1/3.0)
+    }
+
     val inRange02IntInclusive = ParamValidators.inRange[Int](0, 2)
     assert(inRange02IntInclusive(0) && inRange02IntInclusive(1) && inRange02IntInclusive(2) &&
       !inRange02IntInclusive(-1) && !inRange02IntInclusive(3))
@@ -199,6 +206,9 @@ class ParamsSuite extends SparkFunSuite {
 
     val inArray = ParamValidators.inArray[Int](Array(1, 2))
     assert(inArray(1) && inArray(2) && !inArray(0))
+
+    val orInt = ParamValidators.or(ParamValidators.eq[Int](-1), gtEq1Int)
+    assert(orInt(-1) && orInt(1) && !orInt(0))
   }
 }
 
