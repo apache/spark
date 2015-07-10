@@ -83,7 +83,6 @@ private[spark] class Client(
   private val fireAndForget = isClusterMode &&
     !sparkConf.getBoolean("spark.yarn.submit.waitAppCompletion", true)
 
-
   def stop(): Unit = yarnClient.stop()
 
   /**
@@ -334,13 +333,17 @@ private[spark] class Client(
       }
     }
 
-    // If we passed in a keytab, make sure we copy the keytab to the staging directory on
-    // HDFS, and setup the relevant environment vars, so the AM can login again.
-    if (loginFromKeytab) {
+    // Cluster mode: If we passed in a keytab, make sure we copy the keytab to the staging
+    // directory on HDFS, and setup the relevant environment vars, so the AM can login again.
+    // Client mode: The SparkContext takes care of re-logging in, so the AM does not need the
+    // keytab at all
+    if (loginFromKeytab && isClusterMode) {
       logInfo("To enable the AM to login from keytab, credentials are being copied over to the AM" +
         " via the YARN Secure Distributed Cache.")
-      val (_, localizedPath) = distribute(args.keytab,
-        destName = Some(sparkConf.get("spark.yarn.keytab")),
+      val keytab = sparkConf.get("spark.yarn.keytab")
+      val (_, localizedPath) = distribute(keytab,
+        destName = Some(keytab),
+        targetDir = Some(appStagingDir),
         appMasterOnly = true)
       require(localizedPath != null, "Keytab file already distributed.")
     }
@@ -785,7 +788,10 @@ private[spark] class Client(
   }
 
   def setupCredentials(): Unit = {
-    if (args.principal != null) {
+    loginFromKeytab = args.principal != null || sparkConf.contains("spark.yarn.principal")
+    // In client mode, the SparkContext will take care of logging in and renewing the tokens, but
+    // in cluster mode, we must distribute the keytab to the AM so it can generate the tokens.
+    if (loginFromKeytab && isClusterMode) {
       require(args.keytab != null, "Keytab must be specified when principal is specified.")
       logInfo("Attempting to login to the Kerberos" +
         s" using principal: ${args.principal} and keytab: ${args.keytab}")
@@ -793,8 +799,12 @@ private[spark] class Client(
       // Generate a file name that can be used for the keytab file, that does not conflict
       // with any user file.
       val keytabFileName = f.getName + "-" + UUID.randomUUID().toString
-      UserGroupInformation.loginUserFromKeytab(args.principal, args.keytab)
-      loginFromKeytab = true
+      // In client mode, the SparkContext has already logged the user in.
+      if (isClusterMode) {
+        UserGroupInformation.loginUserFromKeytab(args.principal, args.keytab)
+      }
+      // In YARN-CLIENT mode, this is something we don't have to care about - since SparkContext
+      // has already started with the original values - so this is never checked.
       sparkConf.set("spark.yarn.keytab", keytabFileName)
       sparkConf.set("spark.yarn.principal", args.principal)
       logInfo("Successfully logged into the KDC.")
@@ -1162,7 +1172,7 @@ object Client extends Logging {
    *
    * If not a "local:" file and no alternate name, the environment is not modified.
    *
-   * @parma conf      Spark configuration.
+   * @param conf      Spark configuration.
    * @param uri       URI to add to classpath (optional).
    * @param fileName  Alternate name for the file (optional).
    * @param env       Map holding the environment variables.
