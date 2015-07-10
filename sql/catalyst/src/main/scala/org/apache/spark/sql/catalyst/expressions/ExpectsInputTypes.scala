@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
-import org.apache.spark.sql.types.DataType
+import org.apache.spark.sql.types.AbstractDataType
 
 
 /**
@@ -32,28 +32,21 @@ trait ExpectsInputTypes { self: Expression =>
    *
    * The possible values at each position are:
    * 1. a specific data type, e.g. LongType, StringType.
-   * 2. a non-leaf data type, e.g. NumericType, IntegralType, FractionalType.
-   * 3. a list of specific data types, e.g. Seq(StringType, BinaryType).
+   * 2. a non-leaf abstract data type, e.g. NumericType, IntegralType, FractionalType.
    */
-  def inputTypes: Seq[Any]
+  def inputTypes: Seq[AbstractDataType]
 
   override def checkInputDataTypes(): TypeCheckResult = {
-    // We will do the type checking in `HiveTypeCoercion`, so always returning success here.
-    TypeCheckResult.TypeCheckSuccess
-  }
-}
+    val mismatches = children.zip(inputTypes).zipWithIndex.collect {
+      case ((child, expected), idx) if !expected.acceptsType(child.dataType) =>
+        s"argument ${idx + 1} is expected to be of type ${expected.simpleString}, " +
+        s"however, '${child.prettyString}' is of type ${child.dataType.simpleString}."
+    }
 
-/**
- * Expressions that require a specific `DataType` as input should implement this trait
- * so that the proper type conversions can be performed in the analyzer.
- */
-trait AutoCastInputTypes { self: Expression =>
-
-  def inputTypes: Seq[DataType]
-
-  override def checkInputDataTypes(): TypeCheckResult = {
-    // We will always do type casting for `AutoCastInputTypes` in `HiveTypeCoercion`,
-    // so type mismatch error won't be reported here, but for underling `Cast`s.
-    TypeCheckResult.TypeCheckSuccess
+    if (mismatches.isEmpty) {
+      TypeCheckResult.TypeCheckSuccess
+    } else {
+      TypeCheckResult.TypeCheckFailure(mismatches.mkString(" "))
+    }
   }
 }

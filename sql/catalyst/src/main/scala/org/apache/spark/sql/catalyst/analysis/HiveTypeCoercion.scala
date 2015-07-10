@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import javax.annotation.Nullable
+
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, Union}
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -33,7 +35,6 @@ object HiveTypeCoercion {
 
   val typeCoercionRules =
     PropagateTypes ::
-      ConvertNaNs ::
       InConversion ::
       WidenTypes ::
       PromoteStrings ::
@@ -143,38 +144,6 @@ object HiveTypeCoercion {
                 newType
             }
         }
-    }
-  }
-
-  /**
-   * Converts string "NaN"s that are in binary operators with a NaN-able types (Float / Double) to
-   * the appropriate numeric equivalent.
-   */
-  // TODO: remove this rule and make Cast handle Nan.
-  object ConvertNaNs extends Rule[LogicalPlan] {
-    private val StringNaN = Literal("NaN")
-
-    def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-      case q: LogicalPlan => q transformExpressions {
-        // Skip nodes who's children have not been resolved yet.
-        case e if !e.childrenResolved => e
-
-        /* Double Conversions */
-        case b @ BinaryOperator(StringNaN, right @ DoubleType()) =>
-          b.makeCopy(Array(Literal(Double.NaN), right))
-        case b @ BinaryOperator(left @ DoubleType(), StringNaN) =>
-          b.makeCopy(Array(left, Literal(Double.NaN)))
-
-        /* Float Conversions */
-        case b @ BinaryOperator(StringNaN, right @ FloatType()) =>
-          b.makeCopy(Array(Literal(Float.NaN), right))
-        case b @ BinaryOperator(left @ FloatType(), StringNaN) =>
-          b.makeCopy(Array(left, Literal(Float.NaN)))
-
-        /* Use float NaN by default to avoid unnecessary type widening */
-        case b @ BinaryOperator(left @ StringNaN, StringNaN) =>
-          b.makeCopy(Array(left, Literal(Float.NaN)))
-      }
     }
   }
 
@@ -704,19 +673,83 @@ object HiveTypeCoercion {
 
   /**
    * Casts types according to the expected input types for Expressions that have the trait
-   * [[AutoCastInputTypes]].
+   * [[ExpectsInputTypes]].
    */
   object ImplicitTypeCasts extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
 
-      case e: AutoCastInputTypes if e.children.map(_.dataType) != e.inputTypes =>
-        val newC = (e.children, e.children.map(_.dataType), e.inputTypes).zipped.map {
-          case (child, actual, expected) =>
-            if (actual == expected) child else Cast(child, expected)
+      case e: ExpectsInputTypes if (e.inputTypes.nonEmpty) =>
+        val children: Seq[Expression] = e.children.zip(e.inputTypes).map { case (in, expected) =>
+          // If we cannot do the implicit cast, just use the original input.
+          implicitCast(in, expected).getOrElse(in)
         }
-        e.withNewChildren(newC)
+        e.withNewChildren(children)
+    }
+
+    /**
+     * Given an expected data type, try to cast the expression and return the cast expression.
+     *
+     * If the expression already fits the input type, we simply return the expression itself.
+     * If the expression has an incompatible type that cannot be implicitly cast, return None.
+     */
+    def implicitCast(e: Expression, expectedType: AbstractDataType): Option[Expression] = {
+      val inType = e.dataType
+
+      // Note that ret is nullable to avoid typing a lot of Some(...) in this local scope.
+      // We wrap immediately an Option after this.
+      @Nullable val ret: Expression = (inType, expectedType) match {
+
+        // If the expected type is already a parent of the input type, no need to cast.
+        case _ if expectedType.isSameType(inType) => e
+
+        // Cast null type (usually from null literals) into target types
+        case (NullType, target) => Cast(e, target.defaultConcreteType)
+
+        // If the function accepts any numeric type (i.e. the ADT `NumericType`) and the input is
+        // already a number, leave it as is.
+        case (_: NumericType, NumericType) => e
+
+        // If the function accepts any numeric type and the input is a string, we follow the hive
+        // convention and cast that input into a double
+        case (StringType, NumericType) => Cast(e, NumericType.defaultConcreteType)
+
+        // Implicit cast among numeric types
+        // If input is a numeric type but not decimal, and we expect a decimal type,
+        // cast the input to unlimited precision decimal.
+        case (_: NumericType, DecimalType) if !inType.isInstanceOf[DecimalType] =>
+          Cast(e, DecimalType.Unlimited)
+        // For any other numeric types, implicitly cast to each other, e.g. long -> int, int -> long
+        case (_: NumericType, target: NumericType) if e.dataType != target => Cast(e, target)
+        case (_: NumericType, target: NumericType) => e
+
+        // Implicit cast between date time types
+        case (DateType, TimestampType) => Cast(e, TimestampType)
+        case (TimestampType, DateType) => Cast(e, DateType)
+
+        // Implicit cast from/to string
+        case (StringType, DecimalType) => Cast(e, DecimalType.Unlimited)
+        case (StringType, target: NumericType) => Cast(e, target)
+        case (StringType, DateType) => Cast(e, DateType)
+        case (StringType, TimestampType) => Cast(e, TimestampType)
+        case (StringType, BinaryType) => Cast(e, BinaryType)
+        case (any, StringType) if any != StringType => Cast(e, StringType)
+
+        // Type collection.
+        // First see if we can find our input type in the type collection. If we can, then just
+        // use the current expression; otherwise, find the first one we can implicitly cast.
+        case (_, TypeCollection(types)) =>
+          if (types.exists(_.isSameType(inType))) {
+            e
+          } else {
+            types.flatMap(implicitCast(e, _)).headOption.orNull
+          }
+
+        // Else, just return the same input expression
+        case _ => null
+      }
+      Option(ret)
     }
   }
 }

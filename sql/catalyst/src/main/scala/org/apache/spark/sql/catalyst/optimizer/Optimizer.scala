@@ -41,6 +41,7 @@ object DefaultOptimizer extends Optimizer {
     Batch("Operator Optimizations", FixedPoint(100),
       // Operator push down
       UnionPushDown,
+      SamplePushDown,
       PushPredicateThroughJoin,
       PushPredicateThroughProject,
       PushPredicateThroughGenerate,
@@ -63,6 +64,23 @@ object DefaultOptimizer extends Optimizer {
       DecimalAggregates) ::
     Batch("LocalRelation", FixedPoint(100),
       ConvertToLocalRelation) :: Nil
+}
+
+/**
+ * Pushes operations down into a Sample.
+ */
+object SamplePushDown extends Rule[LogicalPlan] {
+
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    // Push down filter into sample
+    case Filter(condition, s @ Sample(lb, up, replace, seed, child)) =>
+      Sample(lb, up, replace, seed,
+        Filter(condition, child))
+    // Push down projection into sample
+    case Project(projectList, s @ Sample(lb, up, replace, seed, child)) =>
+      Sample(lb, up, replace, seed,
+        Project(projectList, child))
+  }
 }
 
 /**

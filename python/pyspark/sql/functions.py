@@ -325,6 +325,20 @@ def explode(col):
 
 @ignore_unicode_prefix
 @since(1.5)
+def levenshtein(left, right):
+    """Computes the Levenshtein distance of the two given strings.
+
+    >>> df0 = sqlContext.createDataFrame([('kitten', 'sitting',)], ['l', 'r'])
+    >>> df0.select(levenshtein('l', 'r').alias('d')).collect()
+    [Row(d=3)]
+    """
+    sc = SparkContext._active_spark_context
+    jc = sc._jvm.functions.levenshtein(_to_java_column(left), _to_java_column(right))
+    return Column(jc)
+
+
+@ignore_unicode_prefix
+@since(1.5)
 def md5(col):
     """Calculates the MD5 digest and returns the value as a 32 character hex string.
 
@@ -383,6 +397,34 @@ def randn(seed=None):
 
 @ignore_unicode_prefix
 @since(1.5)
+def hex(col):
+    """Computes hex value of the given column, which could be StringType,
+    BinaryType, IntegerType or LongType.
+
+    >>> sqlContext.createDataFrame([('ABC', 3)], ['a', 'b']).select(hex('a'), hex('b')).collect()
+    [Row(hex(a)=u'414243', hex(b)=u'3')]
+    """
+    sc = SparkContext._active_spark_context
+    jc = sc._jvm.functions.hex(_to_java_column(col))
+    return Column(jc)
+
+
+@ignore_unicode_prefix
+@since(1.5)
+def unhex(col):
+    """Inverse of hex. Interprets each pair of characters as a hexadecimal number
+    and converts to the byte representation of number.
+
+    >>> sqlContext.createDataFrame([('414243',)], ['a']).select(unhex('a')).collect()
+    [Row(unhex(a)=bytearray(b'ABC'))]
+    """
+    sc = SparkContext._active_spark_context
+    jc = sc._jvm.functions.unhex(_to_java_column(col))
+    return Column(jc)
+
+
+@ignore_unicode_prefix
+@since(1.5)
 def sha1(col):
     """Returns the hex string result of SHA-1.
 
@@ -409,6 +451,43 @@ def sha2(col, numBits):
     """
     sc = SparkContext._active_spark_context
     jc = sc._jvm.functions.sha2(_to_java_column(col), numBits)
+    return Column(jc)
+
+
+@since(1.5)
+def shiftLeft(col, numBits):
+    """Shift the the given value numBits left.
+
+    >>> sqlContext.createDataFrame([(21,)], ['a']).select(shiftLeft('a', 1).alias('r')).collect()
+    [Row(r=42)]
+    """
+    sc = SparkContext._active_spark_context
+    jc = sc._jvm.functions.shiftLeft(_to_java_column(col), numBits)
+    return Column(jc)
+
+
+@since(1.5)
+def shiftRight(col, numBits):
+    """Shift the the given value numBits right.
+
+    >>> sqlContext.createDataFrame([(42,)], ['a']).select(shiftRight('a', 1).alias('r')).collect()
+    [Row(r=21)]
+    """
+    sc = SparkContext._active_spark_context
+    jc = sc._jvm.functions.shiftRight(_to_java_column(col), numBits)
+    return Column(jc)
+
+
+@since(1.5)
+def shiftRightUnsigned(col, numBits):
+    """Unsigned shift the the given value numBits right.
+
+    >>> sqlContext.createDataFrame([(-42,)], ['a']).select(shiftRightUnsigned('a', 1).alias('r'))\
+    .collect()
+    [Row(r=9223372036854775787)]
+    """
+    sc = SparkContext._active_spark_context
+    jc = sc._jvm.functions.shiftRightUnsigned(_to_java_column(col), numBits)
     return Column(jc)
 
 
@@ -443,7 +522,6 @@ def struct(*cols):
     """Creates a new struct column.
 
     :param cols: list of column names (string) or list of :class:`Column` expressions
-        that are named or aliased.
 
     >>> df.select(struct('age', 'name').alias("struct")).collect()
     [Row(struct=Row(age=2, name=u'Alice')), Row(struct=Row(age=5, name=u'Bob'))]
