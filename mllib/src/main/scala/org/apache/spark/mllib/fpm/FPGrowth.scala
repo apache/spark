@@ -39,7 +39,7 @@ import org.apache.spark.storage.StorageLevel
  * @param freqItemsets frequent itemset, which is an RDD of [[FreqItemset]]
  * @tparam Item item type
  *
- * @since 1.5.0
+ * @since 1.3.0
  */
 @Experimental
 class FPGrowthModel[Item: ClassTag](val freqItemsets: RDD[FreqItemset[Item]]) extends Serializable {
@@ -71,7 +71,7 @@ class FPGrowthModel[Item: ClassTag](val freqItemsets: RDD[FreqItemset[Item]]) ex
  * @see [[http://en.wikipedia.org/wiki/Association_rule_learning Association rule learning
  *       (Wikipedia)]]
  *
- * @since 1.5.0
+ * @since 1.3.0
  */
 @Experimental
 class FPGrowth private (
@@ -82,14 +82,14 @@ class FPGrowth private (
    * Constructs a default instance with default parameters {minSupport: `0.3`, numPartitions: same
    * as the input data}.
    *
-   * @since 1.5.0
+   * @since 1.3.0
    */
   def this() = this(0.3, -1)
 
   /**
    * Sets the minimal support level (default: `0.3`).
    *
-   * @since 1.5.0
+   * @since 1.3.0
    */
   def setMinSupport(minSupport: Double): this.type = {
     this.minSupport = minSupport
@@ -99,7 +99,7 @@ class FPGrowth private (
   /**
    * Sets the number of partitions used by parallel FP-growth (default: same as input data).
    *
-   * @since 1.5.0
+   * @since 1.3.0
    */
   def setNumPartitions(numPartitions: Int): this.type = {
     this.numPartitions = numPartitions
@@ -111,7 +111,7 @@ class FPGrowth private (
    * @param data input data set, each element contains a transaction
    * @return an [[FPGrowthModel]]
    *
-   * @since 1.5.0
+   * @since 1.3.0
    */
   def run[Item: ClassTag](data: RDD[Array[Item]]): FPGrowthModel[Item] = {
     if (data.getStorageLevel == StorageLevel.NONE) {
@@ -136,8 +136,6 @@ class FPGrowth private (
    * @param minCount minimum count for frequent itemsets
    * @param partitioner partitioner used to distribute items
    * @return array of frequent pattern ordered by their frequencies
-   *
-   * @since 1.5.0
    */
   private def genFreqItems[Item: ClassTag](
       data: RDD[Array[Item]],
@@ -164,8 +162,6 @@ class FPGrowth private (
    * @param freqItems frequent items
    * @param partitioner partitioner used to distribute transactions
    * @return an RDD of (frequent itemset, count)
-   *
-   * @since 1.5.0
    */
   private def genFreqItemsets[Item: ClassTag](
       data: RDD[Array[Item]],
@@ -191,8 +187,6 @@ class FPGrowth private (
    * @param itemToRank map from item to their rank
    * @param partitioner partitioner used to distribute transactions
    * @return a map of (target partition, conditional transaction)
-   *
-   * @since 1.5.0
    */
   private def genCondTransactions[Item: ClassTag](
       transaction: Array[Item],
@@ -219,7 +213,7 @@ class FPGrowth private (
 /**
  * :: Experimental ::
  *
- * @since 1.5.0
+ * @since 1.3.0
  */
 @Experimental
 object FPGrowth {
@@ -230,14 +224,14 @@ object FPGrowth {
    * @param freq frequency
    * @tparam Item item type
    *
-   * @since 1.5.0
+   * @since 1.3.0
    */
   class FreqItemset[Item](val items: Array[Item], val freq: Long) extends Serializable {
 
     /**
      * Returns items in a Java List.
      *
-     * @since 1.5.0
+     * @since 1.3.0
      */
     def javaItems: java.util.List[Item] = {
       items.toList.asJava

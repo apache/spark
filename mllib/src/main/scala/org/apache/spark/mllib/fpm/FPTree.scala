@@ -23,8 +23,6 @@ import scala.collection.mutable.ListBuffer
 /**
  * FP-Tree data structure used in FP-Growth.
  * @tparam T item type
- *
- * @since 1.5.0
  */
 private[fpm] class FPTree[T] extends Serializable {
 
@@ -34,11 +32,7 @@ private[fpm] class FPTree[T] extends Serializable {
 
   private val summaries: mutable.Map[T, Summary[T]] = mutable.Map.empty
 
-  /**
-   * Adds a transaction with count.
-   *
-   * @since 1.5.0
-   */
+  /** Adds a transaction with count. */
   def add(t: Iterable[T], count: Long = 1L): this.type = {
     require(count > 0)
     var curr = root
@@ -58,11 +52,7 @@ private[fpm] class FPTree[T] extends Serializable {
     this
   }
 
-  /**
-   * Merges another FP-Tree.
-   *
-   * @since 1.5.0
-   */
+  /** Merges another FP-Tree. */
   def merge(other: FPTree[T]): this.type = {
     other.transactions.foreach { case (t, c) =>
       add(t, c)
@@ -70,11 +60,7 @@ private[fpm] class FPTree[T] extends Serializable {
     this
   }
 
-  /**
-   * Gets a subtree with the suffix.
-   *
-   * @since 1.5.0
-   */
+  /** Gets a subtree with the suffix. */
   private def project(suffix: T): FPTree[T] = {
     val tree = new FPTree[T]
     if (summaries.contains(suffix)) {
@@ -92,18 +78,10 @@ private[fpm] class FPTree[T] extends Serializable {
     tree
   }
 
-  /**
-   * Returns all transactions in an iterator.
-   *
-   * @since 1.5.0
-   */
+  /** Returns all transactions in an iterator. */
   def transactions: Iterator[(List[T], Long)] = getTransactions(root)
 
-  /**
-   * Returns all transactions under this node.
-   *
-   * @since 1.5.0
-   */
+  /** Returns all transactions under this node. */
   private def getTransactions(node: Node[T]): Iterator[(List[T], Long)] = {
     var count = node.count
     node.children.iterator.flatMap { case (item, child) =>
@@ -120,11 +98,7 @@ private[fpm] class FPTree[T] extends Serializable {
     }
   }
 
-  /**
-   * Extracts all patterns with valid suffix and minimum count.
-   *
-   * @since 1.5.0
-   */
+  /** Extracts all patterns with valid suffix and minimum count. */
   def extract(
       minCount: Long,
       validateSuffix: T => Boolean = _ => true): Iterator[(List[T], Long)] = {
@@ -143,11 +117,7 @@ private[fpm] class FPTree[T] extends Serializable {
 
 private[fpm] object FPTree {
 
-  /**
-   * Representing a node in an FP-Tree.
-   *
-   * @since 1.5.0
-   */
+  /** Representing a node in an FP-Tree. */
   class Node[T](val parent: Node[T]) extends Serializable {
     var item: T = _
     var count: Long = 0L
@@ -156,11 +126,7 @@ private[fpm] object FPTree {
     def isRoot: Boolean = parent == null
   }
 
-  /**
-   * Summary of a item in an FP-Tree.
-   *
-   * @since 1.5.0
-   */
+  /** Summary of a item in an FP-Tree. */
   private class Summary[T] extends Serializable {
     var count: Long = 0L
     val nodes: ListBuffer[Node[T]] = ListBuffer.empty
