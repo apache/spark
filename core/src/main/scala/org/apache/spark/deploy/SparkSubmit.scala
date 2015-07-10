@@ -82,6 +82,7 @@ object SparkSubmit {
 
   private val CLASS_NOT_FOUND_EXIT_STATUS = 101
 
+  // scalastyle:off println
   // Exposed for testing
   private[spark] var exitFn: Int => Unit = (exitCode: Int) => System.exit(exitCode)
   private[spark] var printStream: PrintStream = System.err
@@ -102,11 +103,14 @@ object SparkSubmit {
     printStream.println("Type --help for more information.")
     exitFn(0)
   }
+  // scalastyle:on println
 
   def main(args: Array[String]): Unit = {
     val appArgs = new SparkSubmitArguments(args)
     if (appArgs.verbose) {
+      // scalastyle:off println
       printStream.println(appArgs)
+      // scalastyle:on println
     }
     appArgs.action match {
       case SparkSubmitAction.SUBMIT => submit(appArgs)
@@ -160,7 +164,9 @@ object SparkSubmit {
             // makes the message printed to the output by the JVM not very helpful. Instead,
             // detect exceptions with empty stack traces here, and treat them differently.
             if (e.getStackTrace().length == 0) {
+              // scalastyle:off println
               printStream.println(s"ERROR: ${e.getClass().getName()}: ${e.getMessage()}")
+              // scalastyle:on println
               exitFn(1)
             } else {
               throw e
@@ -178,7 +184,9 @@ object SparkSubmit {
      // to use the legacy gateway if the master endpoint turns out to be not a REST server.
     if (args.isStandaloneCluster && args.useRest) {
       try {
+        // scalastyle:off println
         printStream.println("Running Spark using the REST application submission protocol.")
+        // scalastyle:on println
         doRunMain()
       } catch {
         // Fail over to use the legacy submission gateway
@@ -558,6 +566,7 @@ object SparkSubmit {
       sysProps: Map[String, String],
       childMainClass: String,
       verbose: Boolean): Unit = {
+    // scalastyle:off println
     if (verbose) {
       printStream.println(s"Main class:\n$childMainClass")
       printStream.println(s"Arguments:\n${childArgs.mkString("\n")}")
@@ -565,6 +574,7 @@ object SparkSubmit {
       printStream.println(s"Classpath elements:\n${childClasspath.mkString("\n")}")
       printStream.println("\n")
     }
+    // scalastyle:on println
 
     val loader =
       if (sysProps.getOrElse("spark.driver.userClassPathFirst", "false").toBoolean) {
@@ -592,8 +602,10 @@ object SparkSubmit {
       case e: ClassNotFoundException =>
         e.printStackTrace(printStream)
         if (childMainClass.contains("thriftserver")) {
+          // scalastyle:off println
           printStream.println(s"Failed to load main class $childMainClass.")
           printStream.println("You need to build Spark with -Phive and -Phive-thriftserver.")
+          // scalastyle:on println
         }
         System.exit(CLASS_NOT_FOUND_EXIT_STATUS)
     }
@@ -766,7 +778,9 @@ private[spark] object SparkSubmitUtils {
         brr.setRoot(repo)
         brr.setName(s"repo-${i + 1}")
         cr.add(brr)
+        // scalastyle:off println
         printStream.println(s"$repo added as a remote repository with the name: ${brr.getName}")
+        // scalastyle:on println
       }
     }
 
@@ -829,7 +843,9 @@ private[spark] object SparkSubmitUtils {
       val ri = ModuleRevisionId.newInstance(mvn.groupId, mvn.artifactId, mvn.version)
       val dd = new DefaultDependencyDescriptor(ri, false, false)
       dd.addDependencyConfiguration(ivyConfName, ivyConfName)
+      // scalastyle:off println
       printStream.println(s"${dd.getDependencyId} added as a dependency")
+      // scalastyle:on println
       md.addDependency(dd)
     }
   }
@@ -896,9 +912,11 @@ private[spark] object SparkSubmitUtils {
             ivySettings.setDefaultCache(new File(alternateIvyCache, "cache"))
             new File(alternateIvyCache, "jars")
           }
+        // scalastyle:off println
         printStream.println(
           s"Ivy Default Cache set to: ${ivySettings.getDefaultCache.getAbsolutePath}")
         printStream.println(s"The jars for the packages stored in: $packagesDirectory")
+        // scalastyle:on println
         // create a pattern matcher
         ivySettings.addMatcher(new GlobPatternMatcher)
         // create the dependency resolvers

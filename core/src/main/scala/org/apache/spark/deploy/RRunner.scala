@@ -85,7 +85,9 @@ object RRunner {
       }
       System.exit(returnCode)
     } else {
+      // scalastyle:off println
       System.err.println("SparkR backend did not initialize in " + backendTimeout + " seconds")
+      // scalastyle:on println
       System.exit(-1)
     }
   }

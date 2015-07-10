@@ -250,7 +250,9 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
     builder.toString()
   }
 
+  // scalastyle:off println
   def printTreeString(): Unit = println(treeString)
+  // scalastyle:on println
 
   private[sql] def buildFormattedString(prefix: String, builder: StringBuilder): Unit = {
     fields.foreach(field => field.buildFormattedString(prefix, builder))

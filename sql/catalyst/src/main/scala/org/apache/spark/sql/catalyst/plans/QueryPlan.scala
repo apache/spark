@@ -154,7 +154,9 @@ abstract class QueryPlan[PlanType <: TreeNode[PlanType]] extends TreeNode[PlanTy
   def schemaString: String = schema.treeString
 
   /** Prints out the schema in the tree format */
+  // scalastyle:off println
   def printSchema(): Unit = println(schemaString)
+  // scalastyle:on println
 
   /**
    * A prefix string used when printing the plan.
