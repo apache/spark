@@ -129,7 +129,9 @@ class SparkIMain(@BeanProperty val factory: ScriptEngineFactory, initialSettings
   }
   private def tquoted(s: String) = "\"\"\"" + s + "\"\"\""
   private val logScope = scala.sys.props contains "scala.repl.scope"
+  // scalastyle:off println
   private def scopelog(msg: String) = if (logScope) Console.err.println(msg)
+  // scalastyle:on println
 
   // argument is a thunk to execute after init is done
   def initialize(postInitSignal: => Unit) {
@@ -1297,8 +1299,10 @@ class SparkISettings(intp: SparkIMain) {
   def deprecation_=(x: Boolean) = {
     val old = intp.settings.deprecation.value
     intp.settings.deprecation.value = x
+    // scalastyle:off println
     if (!old && x) println("Enabled -deprecation output.")
     else if (old && !x) println("Disabled -deprecation output.")
+    // scalastyle:on println
   }
   def deprecation: Boolean = intp.settings.deprecation.value
 

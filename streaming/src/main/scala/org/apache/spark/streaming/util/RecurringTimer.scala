@@ -106,7 +106,7 @@ class RecurringTimer(clock: Clock, period: Long, callback: (Long) => Unit, name:
 }
 
 private[streaming]
-object RecurringTimer {
+object RecurringTimer extends Logging {
 
   def main(args: Array[String]) {
     var lastRecurTime = 0L
@@ -114,7 +114,7 @@ object RecurringTimer {
 
     def onRecur(time: Long) {
       val currentTime = System.currentTimeMillis()
-      println("" + currentTime + ": " + (currentTime - lastRecurTime))
+      logInfo("" + currentTime + ": " + (currentTime - lastRecurTime))
       lastRecurTime = currentTime
     }
     val timer = new  RecurringTimer(new SystemClock(), period, onRecur, "Test")
