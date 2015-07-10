@@ -199,11 +199,17 @@ class MathExpressionsSuite extends QueryTest {
   }
 
   test("round") {
+    val df = Seq(5, 55, 555).map(Tuple1(_)).toDF("a")
     checkAnswer(
-      ctx.sql("SELECT round(-32768), round(1809242.3151111344, 9)"),
-      Seq((1, 2)).toDF().select(
-        round(lit(-32768)),
-        round(lit(1809242.3151111344), 9))
+      df.select(round('a), round('a, -1), round('a, -2)),
+      Seq(Row(5, 10, 0), Row(55, 60, 100), Row(555, 560, 600))
+    )
+
+    val pi = 3.1415
+    checkAnswer(
+      ctx.sql(s"SELECT round($pi, -3), round($pi, -2), round($pi, -1), " +
+        s"round($pi, 0), round($pi, 1), round($pi, 2), round($pi, 3)"),
+      Seq(Row(0.0, 0.0, 0.0, 3.0, 3.1, 3.14, 3.142))
     )
   }
 
