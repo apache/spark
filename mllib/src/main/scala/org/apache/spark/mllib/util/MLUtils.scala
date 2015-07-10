@@ -21,17 +21,16 @@ import scala.reflect.ClassTag
 
 import breeze.linalg.{DenseVector => BDV, SparseVector => BSV}
 
-import org.apache.spark.annotation.Experimental
 import org.apache.spark.SparkContext
-import org.apache.spark.rdd.RDD
-import org.apache.spark.rdd.PartitionwiseSampledRDD
-import org.apache.spark.util.random.BernoulliCellSampler
-import org.apache.spark.mllib.regression.LabeledPoint
-import org.apache.spark.mllib.linalg.{SparseVector, DenseVector, Vector, Vectors}
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.mllib.linalg.BLAS.dot
+import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vector, Vectors}
+import org.apache.spark.mllib.regression.LabeledPoint
+import org.apache.spark.rdd.{PartitionwiseSampledRDD, RDD}
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.streaming.StreamingContext
-import org.apache.spark.streaming.dstream.DStream
+import org.apache.spark.util.Utils
+import org.apache.spark.util.random.BernoulliCellSampler
+
 
 /**
  * Helper methods to load, save and pre-process data used in ML Lib.
@@ -258,12 +257,26 @@ object MLUtils {
   def kFold[T: ClassTag](rdd: RDD[T], numFolds: Int, seed: Int): Array[(RDD[T], RDD[T])] = {
     val numFoldsF = numFolds.toFloat
     (1 to numFolds).map { fold =>
-      val sampler = new BernoulliCellSampler[T]((fold - 1) / numFoldsF, fold / numFoldsF,
-        complement = false)
-      val validation = new PartitionwiseSampledRDD(rdd, sampler, true, seed)
-      val training = new PartitionwiseSampledRDD(rdd, sampler.cloneComplement(), true, seed)
-      (training, validation)
+      sample(rdd, (fold - 1) / numFoldsF, fold / numFoldsF, seed)
     }.toArray
+  }
+
+  /**
+   * :: Experimental ::
+   * Return a pair of RDDs with the first element
+   * containing the training data, a complement of the validation data and the second
+   * element, the validation data, containing a unique 1/kth of the data. Where k=numFolds.
+   */
+  @Experimental
+  def sample[T: ClassTag](
+      rdd: RDD[T],
+      lb: Double,
+      ub: Double,
+      seed: Int = Utils.random.nextInt()): (RDD[T], RDD[T]) = {
+    val sampler = new BernoulliCellSampler[T](lb, ub, complement = false)
+    val validation = new PartitionwiseSampledRDD(rdd, sampler, true, seed)
+    val training = new PartitionwiseSampledRDD(rdd, sampler.cloneComplement(), true, seed)
+    (training, validation)
   }
 
   /**
