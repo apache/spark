@@ -1131,6 +1131,10 @@
             <artifactId>netty</artifactId>
           </exclusion>
           <exclusion>
+            <groupId>org.apache.flume</groupId>
+            <artifactId>flume-ng-auth</artifactId>
+          </exclusion>
+          <exclusion>
             <groupId>org.apache.thrift</groupId>
             <artifactId>libthrift</artifactId>
           </exclusion>
