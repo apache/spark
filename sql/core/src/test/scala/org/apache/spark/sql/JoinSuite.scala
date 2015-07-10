@@ -26,11 +26,16 @@ class JoinSuite extends QueryTest with SharedSQLContext {
 
   setupTestData()
 
-  case class TestData2(a: Int, b: Int)
+  val testData = {
+    val df = (1 to 100).map(i => (i, i.toString)).toDF("key", "value")
+    df.registerTempTable("testData")
+    df
+  }
+
   val testData2 = {
     val df = (for { a <- 1 to 3; b <- 1 to 2 } yield (a, b))
-      .map(t => TestData2(t._1, t._2))
-      .toDF()
+      .map(t => (t._1, t._2))
+      .toDF("a", "b")
     df.registerTempTable("testData2")
     df
   }
@@ -66,12 +71,6 @@ class JoinSuite extends QueryTest with SharedSQLContext {
     }
   }
 
-  case class TestData(key: Int, value: String)
-  val testData = {
-    val df = (1 to 100).map(i => TestData(i, i.toString)).toDF()
-    df.registerTempTable("testData")
-    df
-  }
   test("join operator selection") {
     ctx.cacheManager.clearCache()
 
@@ -185,19 +184,17 @@ class JoinSuite extends QueryTest with SharedSQLContext {
     assert(planned.size === 1)
   }
 
-  case class UpperCaseData(N: Int, L: String)
   val upperCaseData = {
     val df = ((1 to 6) zip ('A' to 'F'))
-      .map(t => UpperCaseData(t._1, t._2.toString))
-      .toDF()
+      .map(t => (t._1, t._2.toString))
+      .toDF("N", "L")
     df.registerTempTable("upperCaseData")
     df
   }
 
-  case class LowerCaseData(n: Int, l: String)
   val lowerCaseData = ((1 to 4) zip ('a' to 'd'))
-    .map(t => LowerCaseData(t._1, t._2.toString))
-    .toDF()
+    .map(t => (t._1, t._2.toString))
+    .toDF("n", "l")
 
   test("inner join where, one match per row") {
     checkAnswer(
@@ -251,9 +248,8 @@ class JoinSuite extends QueryTest with SharedSQLContext {
       testData.rdd.flatMap(row => Seq.fill(16)(Row.merge(row, row))).collect().toSeq)
   }
 
-  case class TestData3(a: Int, b: Option[Int])
   test("cartesian product join") {
-    val testData3 = Seq(TestData3(1, None), TestData3(2, Some(2))).toDF()
+    val testData3 = Seq((1, None), (2, Some(2))).toDF("a", "b")
     checkAnswer(
       testData3.join(testData3),
       Row(1, null, 1, null) ::
