@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.sql.sources.QueryPlanningException
+
 import scala.language.postfixOps
 
 import org.apache.spark.sql.functions._
@@ -760,5 +762,26 @@ class DataFrameSuite extends QueryTest {
     assert(f.getMessage.contains("column1"))
     assert(f.getMessage.contains("column3"))
     assert(!f.getMessage.contains("column2"))
+  }
+
+  test("SPARK-6941: Better Error Message for inserting into RDD-based Table") {
+    val df = Seq(Tuple1(1)).toDF("col")
+    df.registerTempTable("rdd_base")
+
+    df.write.parquet("tmp_parquet")
+    val pdf = ctx.read.parquet("tmp_parquet")
+    pdf.registerTempTable("parquet_base")
+
+    df.write.json("tmp_json")
+    val jdf = ctx.read.json("tmp_json")
+    jdf.registerTempTable("json_base")
+
+    val insertion = Seq(Tuple1(2)).toDF("col")
+    val e = intercept[QueryPlanningException] {
+      insertion.write.insertInto("rdd_base")
+    }
+    assert(e.getMessage.contains("Attempt to insert into a RDD-based table"))
+    insertion.write.insertInto("parquet_base")
+    insertion.write.mode(SaveMode.Overwrite).insertInto("json_base")
   }
 }
