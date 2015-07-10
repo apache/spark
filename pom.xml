@@ -342,11 +342,6 @@
   <dependencyManagement>
     <dependencies>
       <dependency>
-        <groupId>${jline.groupid}</groupId>
-        <artifactId>jline</artifactId>
-        <version>${jline.version}</version>
-      </dependency>
-      <dependency>
         <groupId>com.twitter</groupId>
         <artifactId>chill_${scala.binary.version}</artifactId>
         <version>${chill.version}</version>
@@ -1826,6 +1821,15 @@
         <jline.version>${scala.version}</jline.version>
         <jline.groupid>org.scala-lang</jline.groupid>
       </properties>
+      <dependencyManagement>
+        <dependencies>
+          <dependency>
+            <groupId>${jline.groupid}</groupId>
+            <artifactId>jline</artifactId>
+            <version>${jline.version}</version>
+          </dependency>
+        </dependencies>
+      </dependencyManagement>
     </profile>
 
     <profile>
@@ -1844,10 +1848,8 @@
         <property><name>scala-2.11</name></property>
       </activation>
       <properties>
-        <scala.version>2.11.6</scala.version>
+        <scala.version>2.11.7</scala.version>
         <scala.binary.version>2.11</scala.binary.version>
-        <jline.version>2.12.1</jline.version>
-        <jline.groupid>jline</jline.groupid>
       </properties>
     </profile>
 
