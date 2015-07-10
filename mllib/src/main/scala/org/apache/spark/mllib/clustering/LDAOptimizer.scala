@@ -19,8 +19,8 @@ package org.apache.spark.mllib.clustering
 
 import java.util.Random
 
-import breeze.linalg.{DenseVector => BDV, DenseMatrix => BDM, sum, normalize, kron}
-import breeze.numerics.{digamma, exp, abs}
+import breeze.linalg.{DenseMatrix => BDM, DenseVector => BDV, normalize, sum}
+import breeze.numerics.{abs, digamma, exp}
 import breeze.stats.distributions.{Gamma, RandBasis}
 
 import org.apache.spark.annotation.DeveloperApi
@@ -97,7 +97,7 @@ final class EMLDAOptimizer extends LDAOptimizer {
   override private[clustering] def initialize(docs: RDD[(Long, Vector)], lda: LDA): LDAOptimizer = {
     val docConcentration = breeze.stats.mean(lda.getDocConcentration.toBreeze)
     require({
-      lda.getDocConcentration.toArray.forall(x => math.abs(x - docConcentration) < 1E-3)
+      lda.getDocConcentration.toArray.forall(_ == docConcentration)
     }, "EMLDAOptimizer currently only supports symmetric document-topic priors")
 
     val topicConcentration = lda.getTopicConcentration
@@ -346,9 +346,17 @@ final class OnlineLDAOptimizer extends LDAOptimizer {
     this.k = lda.getK
     this.corpusSize = docs.count()
     this.vocabSize = docs.first()._2.size
-    this.alpha = if (lda.getDocConcentration.toArray.forall(_ == -1.0)) {
-      Vectors.dense(Array.fill(k)(1.0 / k))
+    this.alpha = if (lda.getDocConcentration.size == 1) {
+      if (lda.getDocConcentration(0) == -1) Vectors.dense(Array.fill(k)(1.0 / k))
+      else {
+        require(lda.getDocConcentration(0) >= 0, "all entries in alpha must be >=0")
+        Vectors.dense(Array.fill(k)(lda.getDocConcentration(0)))
+      }
     } else {
+      require(lda.getDocConcentration.size == k, "alpha must have length k")
+      lda.getDocConcentration.foreachActive { case (_, x) =>
+        require(x >= 0, "all entries in alpha must be >= 0")
+      }
       lda.getDocConcentration
     }
     this.eta = if (lda.getTopicConcentration == -1) 1.0 / k else lda.getTopicConcentration
