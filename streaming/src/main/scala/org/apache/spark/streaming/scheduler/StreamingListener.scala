@@ -83,12 +83,12 @@ trait StreamingListener {
 /**
  * :: DeveloperApi ::
  * A simple StreamingListener that logs summary statistics across Spark Streaming batches
- * @param numBatchInfos Number of last batches to consider for generating statistics (default: 10)
+ * @param numBatchInfos Number of last batches to consider for generating statistics (default: 100)
  */
 @DeveloperApi
 class StatsReportListener(numBatchInfos: Int) extends StreamingListener {
 
-  def this() = this(10)
+  def this() = this(100)
 
   // Queue containing latest completed batches
   val batchInfos = new Queue[BatchInfo]()
