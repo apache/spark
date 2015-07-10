@@ -85,9 +85,10 @@ class SparkILoop(in0: Option[BufferedReader], out: JPrintWriter)
   /** Available commands */
   override def commands: List[LoopCommand] = sparkStandardCommands
 
-  /** We override `loadFiles` because we need to initialize Spark *before* the REPL
-   *  sees any files, so that the Spark context is visible in those files. This is a bit of a
-   *  hack, but there isn't another hook available to us at this point.
+  /** 
+   * We override `loadFiles` because we need to initialize Spark *before* the REPL
+   * sees any files, so that the Spark context is visible in those files. This is a bit of a
+   * hack, but there isn't another hook available to us at this point.
    */
   override def loadFiles(settings: Settings): Unit = {
     initializeSpark()
@@ -96,8 +97,10 @@ class SparkILoop(in0: Option[BufferedReader], out: JPrintWriter)
 }
 
 object SparkILoop {
-  /** Creates an interpreter loop with default settings and feeds
-   *  the given code to it as input.
+
+  /** 
+   * Creates an interpreter loop with default settings and feeds
+   * the given code to it as input.
    */
   def run(code: String, sets: Settings = new Settings): String = {
     import java.io.{ BufferedReader, StringReader, OutputStreamWriter }
