@@ -854,6 +854,8 @@ it with new information. To use this, you will have to do two steps.
 1. Define the state update function - Specify with a function how to update the state using the
 previous state and the new values from an input stream.
 
+In every batch, Spark will apply the state  update function for all existing keys, regardless of whether they have new data in a batch or not. If the update function returns `None` then the key-value pair will be eliminated.
+
 Let's illustrate this with an example. Say you want to maintain a running count of each word
 seen in a text data stream. Here, the running count is the state and it is an integer. We
 define the update function as:
