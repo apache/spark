@@ -78,10 +78,12 @@ object ExtractValue {
     }
   }
 
-  def unapply(g: ExtractValue): Option[(Expression, Expression)] = g match {
+  def unapply(g: Expression): Option[(Expression, Expression)] = g match {
     case o: GetArrayItem => Some((o.child, o.ordinal))
     case o: GetMapValue => Some((o.child, o.key))
-    case s: ExtractValueWithStruct => Some((s.child, null))
+    case o: GetStructField => Some((o.child, null))
+    case o: GetArrayStructFields => Some((o.child, null))
+    case _ => None
   }
 
   /**
@@ -104,31 +106,16 @@ object ExtractValue {
 }
 
 /**
- * A common interface of all kinds of extract value expressions.
- * Note: concrete extract value expressions are created only by `ExtractValue.apply`,
- * we don't need to do type check for them.
- */
-trait ExtractValue {
-  self: Expression =>
-}
-
-abstract class ExtractValueWithStruct extends UnaryExpression with ExtractValue {
-  self: Product =>
-
-  def field: StructField
-  override def toString: String = s"$child.${field.name}"
-}
-
-/**
  * Returns the value of fields in the Struct `child`.
  *
  * No need to do type checking since it is handled by [[ExtractValue]].
  */
 case class GetStructField(child: Expression, field: StructField, ordinal: Int)
-  extends ExtractValueWithStruct {
+  extends UnaryExpression {
 
   override def dataType: DataType = field.dataType
   override def nullable: Boolean = child.nullable || field.nullable
+  override def toString: String = s"$child.${field.name}"
 
   protected override def nullSafeEval(input: Any): Any =
     input.asInstanceOf[InternalRow](ordinal)
@@ -155,10 +142,11 @@ case class GetArrayStructFields(
     child: Expression,
     field: StructField,
     ordinal: Int,
-    containsNull: Boolean) extends ExtractValueWithStruct {
+    containsNull: Boolean) extends UnaryExpression {
 
   override def dataType: DataType = ArrayType(field.dataType, containsNull)
   override def nullable: Boolean = child.nullable || containsNull || field.nullable
+  override def toString: String = s"$child.${field.name}"
 
   protected override def nullSafeEval(input: Any): Any = {
     input.asInstanceOf[Seq[InternalRow]].map { row =>
@@ -191,8 +179,7 @@ case class GetArrayStructFields(
  *
  * No need to do type checking since it is handled by [[ExtractValue]].
  */
-case class GetArrayItem(child: Expression, ordinal: Expression)
-  extends BinaryExpression with ExtractValue {
+case class GetArrayItem(child: Expression, ordinal: Expression) extends BinaryExpression {
 
   override def toString: String = s"$child[$ordinal]"
 
@@ -231,12 +218,11 @@ case class GetArrayItem(child: Expression, ordinal: Expression)
 }
 
 /**
- * Returns the value of key `ordinal` in Map `child`.
+ * Returns the value of key `key` in Map `child`.
  *
  * No need to do type checking since it is handled by [[ExtractValue]].
  */
-case class GetMapValue(child: Expression, key: Expression)
-  extends BinaryExpression with ExtractValue {
+case class GetMapValue(child: Expression, key: Expression) extends BinaryExpression {
 
   override def toString: String = s"$child[$key]"
 

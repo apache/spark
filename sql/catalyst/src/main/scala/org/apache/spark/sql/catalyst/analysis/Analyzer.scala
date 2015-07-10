@@ -141,7 +141,8 @@ class Analyzer(
           child match {
             case _: UnresolvedAttribute => u
             case ne: NamedExpression => ne
-            case ev: ExtractValueWithStruct => Alias(ev, ev.field.name)()
+            case g: GetStructField => Alias(g, g.field.name)()
+            case g: GetArrayStructFields => Alias(g, g.field.name)()
             case g: Generator if g.resolved && g.elementTypes.size > 1 => MultiAlias(g, Nil)
             case e if !e.resolved => u
             case other => Alias(other, s"_c$i")()
