@@ -1092,7 +1092,7 @@ object functions {
     greatest((columnName +: columnNames).map(Column.apply): _*)
 
   /**
-    * Computes hex value of the given column
+    * Computes hex value of the given column.
     *
     * @group math_funcs
     * @since 1.5.0
@@ -1100,7 +1100,7 @@ object functions {
   def hex(column: Column): Column = Hex(column.expr)
 
   /**
-   * Computes hex value of the given input
+   * Computes hex value of the given input.
    *
    * @group math_funcs
    * @since 1.5.0
