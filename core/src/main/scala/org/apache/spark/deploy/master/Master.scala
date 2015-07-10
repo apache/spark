@@ -605,7 +605,7 @@ private[master] class Master(
   }
 
   /**
-   * Allocate a worker's resources to one or more executors
+   * Allocate a worker's resources to one or more executors.
    * @param app the info of the application which the executors belong to
    * @param assignedCores number of cores on this worker for this application
    * @param coresPerExecutor number of cores per executor
