@@ -870,8 +870,10 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
       val totalExecutionTime = info.finishTime - info.launchTime
       val executorOverhead = (metrics.executorDeserializeTime +
         metrics.resultSerializationTime)
-      math.max(0, totalExecutionTime - metrics.executorRunTime - executorOverhead -
-        getGettingResultTime(info, currentTime))
+      math.max(
+        0,
+        totalExecutionTime - metrics.executorRunTime - executorOverhead -
+          getGettingResultTime(info, currentTime))
     } else {
       // The task is still running and the metrics like executorRunTime are not available.
       0L
