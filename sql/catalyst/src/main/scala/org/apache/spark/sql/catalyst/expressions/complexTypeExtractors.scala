@@ -78,14 +78,6 @@ object ExtractValue {
     }
   }
 
-  def unapply(g: Expression): Option[(Expression, Expression)] = g match {
-    case o: GetArrayItem => Some((o.child, o.ordinal))
-    case o: GetMapValue => Some((o.child, o.key))
-    case o: GetStructField => Some((o.child, null))
-    case o: GetArrayStructFields => Some((o.child, null))
-    case _ => None
-  }
-
   /**
    * Find the ordinal of StructField, report error if no desired field or over one
    * desired fields are found.
