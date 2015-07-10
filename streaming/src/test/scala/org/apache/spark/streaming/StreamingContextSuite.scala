@@ -824,7 +824,6 @@ object StreamingContextSuite {
   val metricsSystemsObject = Class.forName("org.apache.spark.metrics.MetricsSystem")
   val sources = metricsSystemsObject.getDeclaredField("sources")
   sources.setAccessible(true)
-
   val streamingContextObject = classOf[StreamingContext]
   val streamingSource = getClass.getDeclaredField("streamingSource")
   streamingSource.setAccessible(true)
