@@ -61,12 +61,15 @@ class Aggregate2Suite extends QueryTest with BeforeAndAfterAll {
         |GROUP BY key
       """.stripMargin).queryExecution.executedPlan(3).execute().collect().foreach(println)
 
-    ctx.sql(
-      """
-        |SELECT key, avg2(value)
-        |FROM agg2
-        |GROUP BY key
-      """.stripMargin).show()
+    checkAnswer(
+      ctx.sql(
+        """
+          |SELECT key, avg2(value)
+          |FROM agg2
+          |GROUP BY key
+        """.stripMargin),
+      Row(1, 20.0) :: Row(2, -0.5) :: Row(3, null) :: Nil)
+
   }
 
   override def afterAll(): Unit = {
