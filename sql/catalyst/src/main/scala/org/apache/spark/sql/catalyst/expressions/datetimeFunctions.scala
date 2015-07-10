@@ -112,12 +112,12 @@ case class Second(child: Expression) extends UnaryExpression with ExpectsInputTy
   override def dataType: DataType = IntegerType
 
   override protected def nullSafeEval(time: Any): Any = {
-    time.asInstanceOf[Long] / 1000L / 1000L % 60L
+    (time.asInstanceOf[Long] / 1000L / 1000L % 60L).toInt
   }
 
   override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     nullSafeCodeGen(ctx, ev, (time) => {
-      s"""${ev.primitive} = (${ctx.javaType(IntegerType)}) ($time / 1000L / 1000L % 60L);"""
+      s"""${ev.primitive} = (int) ($time / 1000L / 1000L % 60L);"""
     })
   }
 }
