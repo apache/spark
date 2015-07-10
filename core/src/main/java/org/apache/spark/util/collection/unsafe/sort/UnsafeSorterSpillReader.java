@@ -39,8 +39,8 @@ final class UnsafeSorterSpillReader extends UnsafeSorterIterator {
   private long keyPrefix;
   private int numRecordsRemaining;
 
-  private final byte[] arr = new byte[1024 * 1024];  // TODO: tune this (maybe grow dynamically)?
-  private final Object baseObject = arr;
+  private byte[] arr = new byte[1024 * 1024];
+  private Object baseObject = arr;
   private final long baseOffset = PlatformDependent.BYTE_ARRAY_OFFSET;
 
   public UnsafeSorterSpillReader(
@@ -63,6 +63,10 @@ final class UnsafeSorterSpillReader extends UnsafeSorterIterator {
   public void loadNext() throws IOException {
     recordLength = din.readInt();
     keyPrefix = din.readLong();
+    if (recordLength > arr.length) {
+      arr = new byte[recordLength];
+      baseObject = arr;
+    }
     ByteStreams.readFully(in, arr, 0, recordLength);
     numRecordsRemaining--;
     if (numRecordsRemaining == 0) {

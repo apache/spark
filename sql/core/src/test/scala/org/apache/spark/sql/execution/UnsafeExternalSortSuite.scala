@@ -63,6 +63,17 @@ class UnsafeExternalSortSuite extends SparkPlanTest with BeforeAndAfterAll {
     }
   }
 
+  test("sorting does not crash for large inputs") {
+    val sortOrder = 'a.asc :: Nil
+    val stringLength = 1024 * 1024 * 2
+    checkAnswer(
+      Seq(Tuple1("a" * stringLength), Tuple1("b" * stringLength)).toDF("a").repartition(1),
+      UnsafeExternalSort(sortOrder, global = true, _: SparkPlan, testSpillFrequency = 1),
+      Sort(sortOrder, global = true, _: SparkPlan),
+      sortAnswers = false
+    )
+  }
+
   // Test sorting on different data types
   for (
     dataType <- DataTypeTestUtils.atomicTypes ++ Set(NullType)
