@@ -19,7 +19,7 @@ package org.apache.spark.sql.sources
 
 import java.util.{Date, UUID}
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConversions.asScalaIterator
 
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce._
@@ -546,7 +546,7 @@ private[sql] class DynamicPartitionWriterContainer(
 
   private def clearOutputWriters(): Unit = {
     if (!outputWriters.isEmpty) {
-      outputWriters.values().iterator().foreach(_.close())
+      asScalaIterator(outputWriters.values().iterator()).foreach(_.close())
       outputWriters.clear()
     }
   }
