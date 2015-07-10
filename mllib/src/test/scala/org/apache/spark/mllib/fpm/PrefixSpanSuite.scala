@@ -60,7 +60,7 @@ class PrefixspanSuite extends SparkFunSuite with MLlibTestSparkContext {
     }
 
     val prefixspan = new PrefixSpan()
-      .setMinSupport(0.34)
+      .setMinSupport(0.33)
       .setMaxPatternLength(50)
     val result1 = prefixspan.run(rdd)
     val expectedValue1 = Array(
@@ -97,7 +97,7 @@ class PrefixspanSuite extends SparkFunSuite with MLlibTestSparkContext {
     )
     assert(compareResult(expectedValue2, result2.collect()))
 
-    prefixspan.setMinSupport(0.34).setMaxPatternLength(2)
+    prefixspan.setMinSupport(0.33).setMaxPatternLength(2)
     val result3 = prefixspan.run(rdd)
     val expectedValue3 = Array(
       (Array(1), 4L),
