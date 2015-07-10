@@ -30,7 +30,7 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
   var archives: String = null
   var userJar: String = null
   var userClass: String = null
-  var pyFiles: String = null
+  var pyFiles: Seq[String] = Nil
   var primaryPyFile: String = null
   var primaryRFile: String = null
   var userArgs: ArrayBuffer[String] = new ArrayBuffer[String]()
@@ -46,7 +46,7 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
   var keytab: String = null
   def isClusterMode: Boolean = userClass != null
 
-  private var driverMemory: Int = 512 // MB
+  private var driverMemory: Int = Utils.DEFAULT_DRIVER_MEM_MB // MB
   private var driverCores: Int = 1
   private val driverMemOverheadKey = "spark.yarn.driver.memoryOverhead"
   private val amMemKey = "spark.yarn.am.memory"
@@ -98,6 +98,12 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
 
       numExecutors = initialNumExecutors
     }
+    principal = Option(principal)
+      .orElse(sparkConf.getOption("spark.yarn.principal"))
+      .orNull
+    keytab = Option(keytab)
+      .orElse(sparkConf.getOption("spark.yarn.keytab"))
+      .orNull
   }
 
   /**
@@ -222,7 +228,7 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
           args = tail
 
         case ("--py-files") :: value :: tail =>
-          pyFiles = value
+          pyFiles = value.split(",")
           args = tail
 
         case ("--files") :: value :: tail =>
@@ -256,8 +262,9 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
 
   private def getUsageMessage(unknownParam: List[String] = null): String = {
     val message = if (unknownParam != null) s"Unknown/unsupported param $unknownParam\n" else ""
+    val mem_mb = Utils.DEFAULT_DRIVER_MEM_MB
     message +
-      """
+      s"""
       |Usage: org.apache.spark.deploy.yarn.Client [options]
       |Options:
       |  --jar JAR_PATH           Path to your application's JAR file (required in yarn-cluster
@@ -269,7 +276,7 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
       |                           Multiple invocations are possible, each will be passed in order.
       |  --num-executors NUM      Number of executors to start (Default: 2)
       |  --executor-cores NUM     Number of cores per executor (Default: 1).
-      |  --driver-memory MEM      Memory for driver (e.g. 1000M, 2G) (Default: 512 Mb)
+      |  --driver-memory MEM      Memory for driver (e.g. 1000M, 2G) (Default: $mem_mb Mb)
       |  --driver-cores NUM       Number of cores used by the driver (Default: 1).
       |  --executor-memory MEM    Memory per executor (e.g. 1000M, 2G) (Default: 1G)
       |  --name NAME              The name of your application (Default: Spark)

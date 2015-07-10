@@ -26,10 +26,10 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 /** A SQLContext that can be used for local testing. */
 class LocalSQLContext
   extends SQLContext(
-    new SparkContext(
-      "local[2]",
-      "TestSQLContext",
-      new SparkConf().set("spark.sql.testkey", "true"))) {
+    new SparkContext("local[2]", "TestSQLContext", new SparkConf()
+      .set("spark.sql.testkey", "true")
+      // SPARK-8910
+      .set("spark.ui.enabled", "false"))) {
 
   override protected[sql] def createSession(): SQLSession = {
     new this.SQLSession()
@@ -38,7 +38,7 @@ class LocalSQLContext
   protected[sql] class SQLSession extends super.SQLSession {
     protected[sql] override lazy val conf: SQLConf = new SQLConf {
       /** Fewer partitions to speed up testing. */
-      override def numShufflePartitions: Int = this.getConf(SQLConf.SHUFFLE_PARTITIONS, "5").toInt
+      override def numShufflePartitions: Int = this.getConf(SQLConf.SHUFFLE_PARTITIONS, 5)
     }
   }
 

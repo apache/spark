@@ -45,10 +45,10 @@ private[ml] trait HasRegParam extends Params {
 private[ml] trait HasMaxIter extends Params {
 
   /**
-   * Param for max number of iterations (>= 0).
+   * Param for maximum number of iterations (>= 0).
    * @group param
    */
-  final val maxIter: IntParam = new IntParam(this, "maxIter", "max number of iterations (>= 0)", ParamValidators.gtEq(0))
+  final val maxIter: IntParam = new IntParam(this, "maxIter", "maximum number of iterations (>= 0)", ParamValidators.gtEq(0))
 
   /** @group getParam */
   final def getMaxIter: Int = $(maxIter)
@@ -231,6 +231,23 @@ private[ml] trait HasFitIntercept extends Params {
 
   /** @group getParam */
   final def getFitIntercept: Boolean = $(fitIntercept)
+}
+
+/**
+ * (private[ml]) Trait for shared param standardization (default: true).
+ */
+private[ml] trait HasStandardization extends Params {
+
+  /**
+   * Param for whether to standardize the training features before fitting the model..
+   * @group param
+   */
+  final val standardization: BooleanParam = new BooleanParam(this, "standardization", "whether to standardize the training features before fitting the model.")
+
+  setDefault(standardization, true)
+
+  /** @group getParam */
+  final def getStandardization: Boolean = $(standardization)
 }
 
 /**

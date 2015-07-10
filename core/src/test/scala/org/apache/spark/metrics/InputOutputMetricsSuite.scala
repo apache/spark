@@ -36,14 +36,14 @@ import org.apache.hadoop.mapreduce.lib.input.{CombineFileInputFormat => NewCombi
 import org.apache.hadoop.mapreduce.lib.output.{TextOutputFormat => NewTextOutputFormat}
 import org.apache.hadoop.mapreduce.{TaskAttemptContext, InputSplit => NewInputSplit,
   RecordReader => NewRecordReader}
-import org.scalatest.{BeforeAndAfter, FunSuite}
+import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.SharedSparkContext
+import org.apache.spark.{SharedSparkContext, SparkFunSuite}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskEnd}
 import org.apache.spark.util.Utils
 
-class InputOutputMetricsSuite extends FunSuite with SharedSparkContext
+class InputOutputMetricsSuite extends SparkFunSuite with SharedSparkContext
   with BeforeAndAfter {
 
   @transient var tmpDir: File = _
@@ -193,26 +193,6 @@ class InputOutputMetricsSuite extends FunSuite with SharedSparkContext
     assert(records == numRecords)
   }
 
-  test("shuffle records read metrics") {
-    val recordsRead = runAndReturnShuffleRecordsRead {
-      sc.textFile(tmpFilePath, 4)
-        .map(key => (key, 1))
-        .groupByKey()
-        .collect()
-    }
-    assert(recordsRead == numRecords)
-  }
-
-  test("shuffle records written metrics") {
-    val recordsWritten = runAndReturnShuffleRecordsWritten {
-      sc.textFile(tmpFilePath, 4)
-        .map(key => (key, 1))
-        .groupByKey()
-        .collect()
-    }
-    assert(recordsWritten == numRecords)
-  }
-
   /**
    * Tests the metrics from end to end.
    * 1) reading a hadoop file
@@ -263,7 +243,7 @@ class InputOutputMetricsSuite extends FunSuite with SharedSparkContext
 
     val tmpRdd = sc.textFile(tmpFilePath, numPartitions)
 
-    val firstSize= runAndReturnBytesRead {
+    val firstSize = runAndReturnBytesRead {
       aRdd.count()
     }
     val secondSize = runAndReturnBytesRead {
@@ -299,14 +279,6 @@ class InputOutputMetricsSuite extends FunSuite with SharedSparkContext
 
   private def runAndReturnRecordsWritten(job: => Unit): Long = {
     runAndReturnMetrics(job, _.taskMetrics.outputMetrics.map(_.recordsWritten))
-  }
-
-  private def runAndReturnShuffleRecordsRead(job: => Unit): Long = {
-    runAndReturnMetrics(job, _.taskMetrics.shuffleReadMetrics.map(_.recordsRead))
-  }
-
-  private def runAndReturnShuffleRecordsWritten(job: => Unit): Long = {
-    runAndReturnMetrics(job, _.taskMetrics.shuffleWriteMetrics.map(_.shuffleRecordsWritten))
   }
 
   private def runAndReturnMetrics(job: => Unit,
@@ -433,10 +405,10 @@ class OldCombineTextRecordReaderWrapper(
 /**
  * Hadoop 2 has a version of this, but we can't use it for backwards compatibility
  */
-class NewCombineTextInputFormat extends NewCombineFileInputFormat[LongWritable,Text] {
+class NewCombineTextInputFormat extends NewCombineFileInputFormat[LongWritable, Text] {
   def createRecordReader(split: NewInputSplit, context: TaskAttemptContext)
   : NewRecordReader[LongWritable, Text] = {
-    new NewCombineFileRecordReader[LongWritable,Text](split.asInstanceOf[NewCombineFileSplit],
+    new NewCombineFileRecordReader[LongWritable, Text](split.asInstanceOf[NewCombineFileSplit],
       context, classOf[NewCombineTextRecordReaderWrapper])
   }
 }

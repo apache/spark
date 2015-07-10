@@ -27,10 +27,10 @@ import org.apache.spark.mllib.regression.GeneralizedLinearModel
  * PMML Model Export for GeneralizedLinearModel class with binary ClassificationModel
  */
 private[mllib] class BinaryClassificationPMMLModelExport(
-    model : GeneralizedLinearModel, 
+    model : GeneralizedLinearModel,
     description : String,
     normalizationMethod : RegressionNormalizationMethodType,
-    threshold: Double) 
+    threshold: Double)
   extends PMMLModelExport {
 
   populateBinaryClassificationPMML()
@@ -72,7 +72,7 @@ private[mllib] class BinaryClassificationPMMLModelExport(
            .withUsageType(FieldUsageType.ACTIVE))
          regressionTableYES.withNumericPredictors(new NumericPredictor(fields(i), model.weights(i)))
        }
-       
+
        // add target field
        val targetField = FieldName.create("target")
        dataDictionary
@@ -80,9 +80,9 @@ private[mllib] class BinaryClassificationPMMLModelExport(
        miningSchema
          .withMiningFields(new MiningField(targetField)
          .withUsageType(FieldUsageType.TARGET))
-       
+
        dataDictionary.withNumberOfFields(dataDictionary.getDataFields.size)
-       
+
        pmml.setDataDictionary(dataDictionary)
        pmml.withModels(regressionModel)
      }

@@ -17,10 +17,9 @@
 
 package org.apache.spark.sql.types
 
-import org.apache.spark.SparkException
-import org.scalatest.FunSuite
+import org.apache.spark.{SparkException, SparkFunSuite}
 
-class DataTypeSuite extends FunSuite {
+class DataTypeSuite extends SparkFunSuite {
 
   test("construct an ArrayType") {
     val array = ArrayType(StringType)
@@ -32,6 +31,37 @@ class DataTypeSuite extends FunSuite {
     val map = MapType(StringType, IntegerType)
 
     assert(MapType(StringType, IntegerType, true) === map)
+  }
+
+  test("construct with add") {
+    val struct = (new StructType)
+      .add("a", IntegerType, true)
+      .add("b", LongType, false)
+      .add("c", StringType, true)
+
+    assert(StructField("b", LongType, false) === struct("b"))
+  }
+
+  test("construct with add from StructField") {
+    // Test creation from StructField type
+    val struct = (new StructType)
+      .add(StructField("a", IntegerType, true))
+      .add(StructField("b", LongType, false))
+      .add(StructField("c", StringType, true))
+
+    assert(StructField("b", LongType, false) === struct("b"))
+  }
+
+  test("construct with String DataType") {
+    // Test creation with DataType as String
+    val struct = (new StructType)
+      .add("a", "int", true)
+      .add("b", "long", false)
+      .add("c", "string", true)
+
+    assert(StructField("a", IntegerType, true) === struct("a"))
+    assert(StructField("b", LongType, false) === struct("b"))
+    assert(StructField("c", StringType, true) === struct("c"))
   }
 
   test("extract fields from a StructType") {
@@ -72,7 +102,7 @@ class DataTypeSuite extends FunSuite {
 
   test("fieldsMap returns map of name to StructField") {
     val struct = StructType(
-      StructField("a", LongType) :: 
+      StructField("a", LongType) ::
       StructField("b", FloatType) :: Nil)
 
     val mapped = StructType.fieldsMap(struct.fields)
@@ -91,7 +121,7 @@ class DataTypeSuite extends FunSuite {
 
     val right = StructType(List())
     val merged = left.merge(right)
-    
+
     assert(merged === left)
   }
 
@@ -134,7 +164,7 @@ class DataTypeSuite extends FunSuite {
 
     val right = StructType(
       StructField("b", LongType) :: Nil)
-    
+
     intercept[SparkException] {
       left.merge(right)
     }
@@ -191,7 +221,7 @@ class DataTypeSuite extends FunSuite {
   checkDefaultSize(DecimalType(10, 5), 4096)
   checkDefaultSize(DecimalType.Unlimited, 4096)
   checkDefaultSize(DateType, 4)
-  checkDefaultSize(TimestampType, 12)
+  checkDefaultSize(TimestampType, 8)
   checkDefaultSize(StringType, 4096)
   checkDefaultSize(BinaryType, 4096)
   checkDefaultSize(ArrayType(DoubleType, true), 800)
@@ -250,11 +280,11 @@ class DataTypeSuite extends FunSuite {
     expected = false)
   checkEqualsIgnoreCompatibleNullability(
     from = MapType(StringType, ArrayType(IntegerType, true), valueContainsNull = true),
-    to = MapType(StringType,  ArrayType(IntegerType, false), valueContainsNull = true),
+    to = MapType(StringType, ArrayType(IntegerType, false), valueContainsNull = true),
     expected = false)
   checkEqualsIgnoreCompatibleNullability(
     from = MapType(StringType, ArrayType(IntegerType, false), valueContainsNull = true),
-    to = MapType(StringType,  ArrayType(IntegerType, true), valueContainsNull = true),
+    to = MapType(StringType, ArrayType(IntegerType, true), valueContainsNull = true),
     expected = true)
 
 

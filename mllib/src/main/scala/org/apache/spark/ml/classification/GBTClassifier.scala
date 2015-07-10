@@ -141,6 +141,8 @@ final class GBTClassifier(override val uid: String)
     val oldModel = oldGBT.run(oldDataset)
     GBTClassificationModel.fromOld(oldModel, this, categoricalFeatures)
   }
+
+  override def copy(extra: ParamMap): GBTClassifier = defaultCopy(extra)
 }
 
 @Experimental
@@ -208,7 +210,7 @@ private[ml] object GBTClassificationModel {
     require(oldModel.algo == OldAlgo.Classification, "Cannot convert GradientBoostedTreesModel" +
       s" with algo=${oldModel.algo} (old API) to GBTClassificationModel (new API).")
     val newTrees = oldModel.trees.map { tree =>
-      // parent, fittingParamMap for each tree is null since there are no good ways to set these.
+      // parent for each tree is null since there is no good way to set this.
       DecisionTreeRegressionModel.fromOld(tree, null, categoricalFeatures)
     }
     val uid = if (parent != null) parent.uid else Identifiable.randomUID("gbtc")

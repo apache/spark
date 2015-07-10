@@ -17,14 +17,15 @@
 
 package org.apache.spark.ml.feature
 
-import org.scalatest.FunSuite
-
+import org.apache.spark.SparkFunSuite
+import org.apache.spark.ml.param.ParamsSuite
+import org.apache.spark.mllib.feature.{IDFModel => OldIDFModel}
 import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vector, Vectors}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.sql.Row
 
-class IDFSuite extends FunSuite with MLlibTestSparkContext {
+class IDFSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   def scaleDataWithIDF(dataSet: Array[Vector], model: Vector): Array[Vector] = {
     dataSet.map {
@@ -37,6 +38,12 @@ class IDFSuite extends FunSuite with MLlibTestSparkContext {
         }
         Vectors.sparse(data.size, res)
     }
+  }
+
+  test("params") {
+    ParamsSuite.checkParams(new IDF)
+    val model = new IDFModel("idf", new OldIDFModel(Vectors.dense(1.0)))
+    ParamsSuite.checkParams(model)
   }
 
   test("compute IDF with default parameter") {

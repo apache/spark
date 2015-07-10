@@ -19,8 +19,7 @@ package org.apache.spark.mllib.tree
 
 import scala.collection.mutable
 
-import org.scalatest.FunSuite
-
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.configuration.Algo._
@@ -35,7 +34,7 @@ import org.apache.spark.util.Utils
 /**
  * Test suite for [[RandomForest]].
  */
-class RandomForestSuite extends FunSuite with MLlibTestSparkContext {
+class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
   def binaryClassificationTestWithContinuousFeatures(strategy: Strategy) {
     val arr = EnsembleTestHelper.generateOrderedLabeledPoints(numFeatures = 50, 1000)
     val rdd = sc.parallelize(arr)

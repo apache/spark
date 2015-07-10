@@ -53,7 +53,7 @@ val splits = parsedData.randomSplit(Array(0.6, 0.4), seed = 11L)
 val training = splits(0)
 val test = splits(1)
 
-val model = NaiveBayes.train(training, lambda = 1.0, model = "multinomial")
+val model = NaiveBayes.train(training, lambda = 1.0, modelType = "multinomial")
 
 val predictionAndLabel = test.map(p => (model.predict(p.features), p.label))
 val accuracy = 1.0 * predictionAndLabel.filter(x => x._1 == x._2).count() / test.count()
@@ -119,7 +119,7 @@ used for evaluation and prediction.
 Note that the Python API does not yet support model save/load but will in the future.
 
 {% highlight python %}
-from pyspark.mllib.classification import NaiveBayes
+from pyspark.mllib.classification import NaiveBayes, NaiveBayesModel
 from pyspark.mllib.linalg import Vectors
 from pyspark.mllib.regression import LabeledPoint
 
@@ -140,6 +140,10 @@ model = NaiveBayes.train(training, 1.0)
 # Make prediction and test accuracy.
 predictionAndLabel = test.map(lambda p : (model.predict(p.features), p.label))
 accuracy = 1.0 * predictionAndLabel.filter(lambda (x, v): x == v).count() / test.count()
+
+# Save and load model
+model.save(sc, "myModelPath")
+sameModel = NaiveBayesModel.load(sc, "myModelPath")
 {% endhighlight %}
 
 </div>

@@ -17,415 +17,373 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.sql.catalyst.analysis.UnresolvedException
-import org.apache.spark.sql.catalyst.errors.TreeNodeException
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodeGenContext, GeneratedExpressionCode}
+import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.types._
 
-case class UnaryMinus(child: Expression) extends UnaryExpression {
-
-  override def dataType: DataType = child.dataType
-  override def foldable: Boolean = child.foldable
-  override def nullable: Boolean = child.nullable
-  override def toString: String = s"-$child"
-
-  lazy val numeric = dataType match {
-    case n: NumericType => n.numeric.asInstanceOf[Numeric[Any]]
-    case other => sys.error(s"Type $other does not support numeric operations")
-  }
-
-  override def eval(input: Row): Any = {
-    val evalE = child.eval(input)
-    if (evalE == null) {
-      null
-    } else {
-      numeric.negate(evalE)
-    }
-  }
-}
-
-case class Sqrt(child: Expression) extends UnaryExpression {
-
-  override def dataType: DataType = DoubleType
-  override def foldable: Boolean = child.foldable
-  override def nullable: Boolean = true
-  override def toString: String = s"SQRT($child)"
-
-  lazy val numeric = child.dataType match {
-    case n: NumericType => n.numeric.asInstanceOf[Numeric[Any]]
-    case other => sys.error(s"Type $other does not support non-negative numeric operations")
-  }
-
-  override def eval(input: Row): Any = {
-    val evalE = child.eval(input)
-    if (evalE == null) {
-      null
-    } else {
-      val value = numeric.toDouble(evalE)
-      if (value < 0) null
-      else math.sqrt(value)
-    }
-  }
-}
-
-abstract class BinaryArithmetic extends BinaryExpression {
+abstract class UnaryArithmetic extends UnaryExpression {
   self: Product =>
 
-  override lazy val resolved =
-    left.resolved && right.resolved &&
-    left.dataType == right.dataType &&
-    !DecimalType.isFixed(left.dataType)
-
-  override def dataType: DataType = {
-    if (!resolved) {
-      throw new UnresolvedException(this,
-        s"datatype. Can not resolve due to differing types ${left.dataType}, ${right.dataType}")
-    }
-    left.dataType
-  }
-
-  override def eval(input: Row): Any = {
-    val evalE1 = left.eval(input)
-    if(evalE1 == null) {
-      null
-    } else {
-      val evalE2 = right.eval(input)
-      if (evalE2 == null) {
-        null
-      } else {
-        evalInternal(evalE1, evalE2)
-      }
-    }
-  }
-
-  def evalInternal(evalE1: Any, evalE2: Any): Any =
-    sys.error(s"BinaryExpressions must either override eval or evalInternal")
-}
-
-case class Add(left: Expression, right: Expression) extends BinaryArithmetic {
-  override def symbol: String = "+"
-
-  lazy val numeric = dataType match {
-    case n: NumericType => n.numeric.asInstanceOf[Numeric[Any]]
-    case other => sys.error(s"Type $other does not support numeric operations")
-  }
-
-  override def eval(input: Row): Any = {
-    val evalE1 = left.eval(input)
-    if(evalE1 == null) {
-      null
-    } else {
-      val evalE2 = right.eval(input)
-      if (evalE2 == null) {
-        null
-      } else {
-        numeric.plus(evalE1, evalE2)
-      }
-    }
-  }
-}
-
-case class Subtract(left: Expression, right: Expression) extends BinaryArithmetic {
-  override def symbol: String = "-"
-
-  lazy val numeric = dataType match {
-    case n: NumericType => n.numeric.asInstanceOf[Numeric[Any]]
-    case other => sys.error(s"Type $other does not support numeric operations")
-  }
-
-  override def eval(input: Row): Any = {
-    val evalE1 = left.eval(input)
-    if(evalE1 == null) {
-      null
-    } else {
-      val evalE2 = right.eval(input)
-      if (evalE2 == null) {
-        null
-      } else {
-        numeric.minus(evalE1, evalE2)
-      }
-    }
-  }
-}
-
-case class Multiply(left: Expression, right: Expression) extends BinaryArithmetic {
-  override def symbol: String = "*"
-
-  lazy val numeric = dataType match {
-    case n: NumericType => n.numeric.asInstanceOf[Numeric[Any]]
-    case other => sys.error(s"Type $other does not support numeric operations")
-  }
-
-  override def eval(input: Row): Any = {
-    val evalE1 = left.eval(input)
-    if(evalE1 == null) {
-      null
-    } else {
-      val evalE2 = right.eval(input)
-      if (evalE2 == null) {
-        null
-      } else {
-        numeric.times(evalE1, evalE2)
-      }
-    }
-  }
-}
-
-case class Divide(left: Expression, right: Expression) extends BinaryArithmetic {
-  override def symbol: String = "/"
-
-  override def nullable: Boolean = true
-
-  lazy val div: (Any, Any) => Any = dataType match {
-    case ft: FractionalType => ft.fractional.asInstanceOf[Fractional[Any]].div
-    case it: IntegralType => it.integral.asInstanceOf[Integral[Any]].quot
-    case other => sys.error(s"Type $other does not support numeric operations")
-  }
-  
-  override def eval(input: Row): Any = {
-    val evalE2 = right.eval(input)
-    if (evalE2 == null || evalE2 == 0) {
-      null
-    } else {
-      val evalE1 = left.eval(input)
-      if (evalE1 == null) {
-        null
-      } else {
-        div(evalE1, evalE2)
-      }
-    }
-  }
-}
-
-case class Remainder(left: Expression, right: Expression) extends BinaryArithmetic {
-  override def symbol: String = "%"
-
-  override def nullable: Boolean = true
-
-  lazy val integral = dataType match {
-    case i: IntegralType => i.integral.asInstanceOf[Integral[Any]]
-    case i: FractionalType => i.asIntegral.asInstanceOf[Integral[Any]]
-    case other => sys.error(s"Type $other does not support numeric operations")
-  }
-
-  override def eval(input: Row): Any = {
-    val evalE2 = right.eval(input)
-    if (evalE2 == null || evalE2 == 0) {
-      null
-    } else {
-      val evalE1 = left.eval(input)
-      if (evalE1 == null) {
-        null
-      } else {
-        integral.rem(evalE1, evalE2)
-      }
-    }
-  }
-}
-
-/**
- * A function that calculates bitwise and(&) of two numbers.
- */
-case class BitwiseAnd(left: Expression, right: Expression) extends BinaryArithmetic {
-  override def symbol: String = "&"
-
-  lazy val and: (Any, Any) => Any = dataType match {
-    case ByteType =>
-      ((evalE1: Byte, evalE2: Byte) => (evalE1 & evalE2).toByte).asInstanceOf[(Any, Any) => Any]
-    case ShortType =>
-      ((evalE1: Short, evalE2: Short) => (evalE1 & evalE2).toShort).asInstanceOf[(Any, Any) => Any]
-    case IntegerType =>
-      ((evalE1: Int, evalE2: Int) => evalE1 & evalE2).asInstanceOf[(Any, Any) => Any]
-    case LongType =>
-      ((evalE1: Long, evalE2: Long) => evalE1 & evalE2).asInstanceOf[(Any, Any) => Any]
-    case other => sys.error(s"Unsupported bitwise & operation on $other")
-  }
-
-  override def evalInternal(evalE1: Any, evalE2: Any): Any = and(evalE1, evalE2)
-}
-
-/**
- * A function that calculates bitwise or(|) of two numbers.
- */
-case class BitwiseOr(left: Expression, right: Expression) extends BinaryArithmetic {
-  override def symbol: String = "|"
-
-  lazy val or: (Any, Any) => Any = dataType match {
-    case ByteType =>
-      ((evalE1: Byte, evalE2: Byte) => (evalE1 | evalE2).toByte).asInstanceOf[(Any, Any) => Any]
-    case ShortType =>
-      ((evalE1: Short, evalE2: Short) => (evalE1 | evalE2).toShort).asInstanceOf[(Any, Any) => Any]
-    case IntegerType =>
-      ((evalE1: Int, evalE2: Int) => evalE1 | evalE2).asInstanceOf[(Any, Any) => Any]
-    case LongType =>
-      ((evalE1: Long, evalE2: Long) => evalE1 | evalE2).asInstanceOf[(Any, Any) => Any]
-    case other => sys.error(s"Unsupported bitwise | operation on $other")
-  }
-
-  override def evalInternal(evalE1: Any, evalE2: Any): Any = or(evalE1, evalE2)
-}
-
-/**
- * A function that calculates bitwise xor(^) of two numbers.
- */
-case class BitwiseXor(left: Expression, right: Expression) extends BinaryArithmetic {
-  override def symbol: String = "^"
-
-  lazy val xor: (Any, Any) => Any = dataType match {
-    case ByteType =>
-      ((evalE1: Byte, evalE2: Byte) => (evalE1 ^ evalE2).toByte).asInstanceOf[(Any, Any) => Any]
-    case ShortType =>
-      ((evalE1: Short, evalE2: Short) => (evalE1 ^ evalE2).toShort).asInstanceOf[(Any, Any) => Any]
-    case IntegerType =>
-      ((evalE1: Int, evalE2: Int) => evalE1 ^ evalE2).asInstanceOf[(Any, Any) => Any]
-    case LongType =>
-      ((evalE1: Long, evalE2: Long) => evalE1 ^ evalE2).asInstanceOf[(Any, Any) => Any]
-    case other => sys.error(s"Unsupported bitwise ^ operation on $other")
-  }
-
-  override def evalInternal(evalE1: Any, evalE2: Any): Any = xor(evalE1, evalE2)
-}
-
-/**
- * A function that calculates bitwise not(~) of a number.
- */
-case class BitwiseNot(child: Expression) extends UnaryExpression {
-
   override def dataType: DataType = child.dataType
-  override def foldable: Boolean = child.foldable
-  override def nullable: Boolean = child.nullable
-  override def toString: String = s"~$child"
-
-  lazy val not: (Any) => Any = dataType match {
-    case ByteType =>
-      ((evalE: Byte) => (~evalE).toByte).asInstanceOf[(Any) => Any]
-    case ShortType =>
-      ((evalE: Short) => (~evalE).toShort).asInstanceOf[(Any) => Any]
-    case IntegerType =>
-      ((evalE: Int) => ~evalE).asInstanceOf[(Any) => Any]
-    case LongType =>
-      ((evalE: Long) => ~evalE).asInstanceOf[(Any) => Any]
-    case other => sys.error(s"Unsupported bitwise ~ operation on $other")
-  }
-
-  override def eval(input: Row): Any = {
-    val evalE = child.eval(input)
-    if (evalE == null) {
-      null
-    } else {
-      not(evalE)
-    }
-  }
 }
 
-case class MaxOf(left: Expression, right: Expression) extends Expression {
+case class UnaryMinus(child: Expression) extends UnaryArithmetic {
+  override def toString: String = s"-$child"
 
-  override def foldable: Boolean = left.foldable && right.foldable
+  override def checkInputDataTypes(): TypeCheckResult =
+    TypeUtils.checkForNumericExpr(child.dataType, "operator -")
 
-  override def nullable: Boolean = left.nullable && right.nullable
+  private lazy val numeric = TypeUtils.getNumeric(dataType)
 
-  override def children: Seq[Expression] = left :: right :: Nil
-
-  override lazy val resolved =
-    left.resolved && right.resolved &&
-    left.dataType == right.dataType
-
-  override def dataType: DataType = {
-    if (!resolved) {
-      throw new UnresolvedException(this,
-        s"datatype. Can not resolve due to differing types ${left.dataType}, ${right.dataType}")
-    }
-    left.dataType
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = dataType match {
+    case dt: DecimalType => defineCodeGen(ctx, ev, c => s"$c.unary_$$minus()")
+    case dt: NumericType => defineCodeGen(ctx, ev, c => s"(${ctx.javaType(dt)})(-($c))")
   }
 
-  lazy val ordering = left.dataType match {
-    case i: AtomicType => i.ordering.asInstanceOf[Ordering[Any]]
-    case other => sys.error(s"Type $other does not support ordered operations")
-  }
-
-  override def eval(input: Row): Any = {
-    val evalE1 = left.eval(input)
-    val evalE2 = right.eval(input)
-    if (evalE1 == null) {
-      evalE2
-    } else if (evalE2 == null) {
-      evalE1
-    } else {
-      if (ordering.compare(evalE1, evalE2) < 0) {
-        evalE2
-      } else {
-        evalE1
-      }
-    }
-  }
-
-  override def toString: String = s"MaxOf($left, $right)"
+  protected override def nullSafeEval(input: Any): Any = numeric.negate(input)
 }
 
-case class MinOf(left: Expression, right: Expression) extends Expression {
+case class UnaryPositive(child: Expression) extends UnaryArithmetic {
+  override def prettyName: String = "positive"
 
-  override def foldable: Boolean = left.foldable && right.foldable
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String =
+    defineCodeGen(ctx, ev, c => c)
 
-  override def nullable: Boolean = left.nullable && right.nullable
-
-  override def children: Seq[Expression] = left :: right :: Nil
-
-  override lazy val resolved =
-    left.resolved && right.resolved &&
-    left.dataType == right.dataType
-
-  override def dataType: DataType = {
-    if (!resolved) {
-      throw new UnresolvedException(this,
-        s"datatype. Can not resolve due to differing types ${left.dataType}, ${right.dataType}")
-    }
-    left.dataType
-  }
-
-  lazy val ordering = left.dataType match {
-    case i: AtomicType => i.ordering.asInstanceOf[Ordering[Any]]
-    case other => sys.error(s"Type $other does not support ordered operations")
-  }
-
-  override def eval(input: Row): Any = {
-    val evalE1 = left.eval(input)
-    val evalE2 = right.eval(input)
-    if (evalE1 == null) {
-      evalE2
-    } else if (evalE2 == null) {
-      evalE1
-    } else {
-      if (ordering.compare(evalE1, evalE2) < 0) {
-        evalE1
-      } else {
-        evalE2
-      }
-    }
-  }
-
-  override def toString: String = s"MinOf($left, $right)"
+  protected override def nullSafeEval(input: Any): Any = input
 }
 
 /**
  * A function that get the absolute value of the numeric value.
  */
-case class Abs(child: Expression) extends UnaryExpression  {
+case class Abs(child: Expression) extends UnaryArithmetic {
+  override def checkInputDataTypes(): TypeCheckResult =
+    TypeUtils.checkForNumericExpr(child.dataType, "function abs")
 
-  override def dataType: DataType = child.dataType
-  override def foldable: Boolean = child.foldable
-  override def nullable: Boolean = child.nullable
-  override def toString: String = s"Abs($child)"
+  private lazy val numeric = TypeUtils.getNumeric(dataType)
 
-  lazy val numeric = dataType match {
-    case n: NumericType => n.numeric.asInstanceOf[Numeric[Any]]
-    case other => sys.error(s"Type $other does not support numeric operations")
-  }
+  protected override def nullSafeEval(input: Any): Any = numeric.abs(input)
+}
 
-  override def eval(input: Row): Any = {
-    val evalE = child.eval(input)
-    if (evalE == null) {
-      null
+abstract class BinaryArithmetic extends BinaryOperator {
+  self: Product =>
+
+  override def dataType: DataType = left.dataType
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    if (left.dataType != right.dataType) {
+      TypeCheckResult.TypeCheckFailure(
+        s"differing types in ${this.getClass.getSimpleName} " +
+        s"(${left.dataType} and ${right.dataType}).")
     } else {
-      numeric.abs(evalE)
+      checkTypesInternal(dataType)
     }
   }
+
+  protected def checkTypesInternal(t: DataType): TypeCheckResult
+
+  /** Name of the function for this expression on a [[Decimal]] type. */
+  def decimalMethod: String =
+    sys.error("BinaryArithmetics must override either decimalMethod or genCode")
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = dataType match {
+    case dt: DecimalType =>
+      defineCodeGen(ctx, ev, (eval1, eval2) => s"$eval1.$decimalMethod($eval2)")
+    // byte and short are casted into int when add, minus, times or divide
+    case ByteType | ShortType =>
+      defineCodeGen(ctx, ev,
+        (eval1, eval2) => s"(${ctx.javaType(dataType)})($eval1 $symbol $eval2)")
+    case _ =>
+      defineCodeGen(ctx, ev, (eval1, eval2) => s"$eval1 $symbol $eval2")
+  }
+}
+
+private[sql] object BinaryArithmetic {
+  def unapply(e: BinaryArithmetic): Option[(Expression, Expression)] = Some((e.left, e.right))
+}
+
+case class Add(left: Expression, right: Expression) extends BinaryArithmetic {
+  override def symbol: String = "+"
+  override def decimalMethod: String = "$plus"
+
+  override lazy val resolved =
+    childrenResolved && checkInputDataTypes().isSuccess && !DecimalType.isFixed(dataType)
+
+  protected def checkTypesInternal(t: DataType) =
+    TypeUtils.checkForNumericExpr(t, "operator " + symbol)
+
+  private lazy val numeric = TypeUtils.getNumeric(dataType)
+
+  protected override def nullSafeEval(input1: Any, input2: Any): Any = numeric.plus(input1, input2)
+}
+
+case class Subtract(left: Expression, right: Expression) extends BinaryArithmetic {
+  override def symbol: String = "-"
+  override def decimalMethod: String = "$minus"
+
+  override lazy val resolved =
+    childrenResolved && checkInputDataTypes().isSuccess && !DecimalType.isFixed(dataType)
+
+  protected def checkTypesInternal(t: DataType) =
+    TypeUtils.checkForNumericExpr(t, "operator " + symbol)
+
+  private lazy val numeric = TypeUtils.getNumeric(dataType)
+
+  protected override def nullSafeEval(input1: Any, input2: Any): Any = numeric.minus(input1, input2)
+}
+
+case class Multiply(left: Expression, right: Expression) extends BinaryArithmetic {
+  override def symbol: String = "*"
+  override def decimalMethod: String = "$times"
+
+  override lazy val resolved =
+    childrenResolved && checkInputDataTypes().isSuccess && !DecimalType.isFixed(dataType)
+
+  protected def checkTypesInternal(t: DataType) =
+    TypeUtils.checkForNumericExpr(t, "operator " + symbol)
+
+  private lazy val numeric = TypeUtils.getNumeric(dataType)
+
+  protected override def nullSafeEval(input1: Any, input2: Any): Any = numeric.times(input1, input2)
+}
+
+case class Divide(left: Expression, right: Expression) extends BinaryArithmetic {
+  override def symbol: String = "/"
+  override def decimalMethod: String = "$div"
+
+  override def nullable: Boolean = true
+
+  override lazy val resolved =
+    childrenResolved && checkInputDataTypes().isSuccess && !DecimalType.isFixed(dataType)
+
+  protected def checkTypesInternal(t: DataType) =
+    TypeUtils.checkForNumericExpr(t, "operator " + symbol)
+
+  private lazy val div: (Any, Any) => Any = dataType match {
+    case ft: FractionalType => ft.fractional.asInstanceOf[Fractional[Any]].div
+    case it: IntegralType => it.integral.asInstanceOf[Integral[Any]].quot
+  }
+
+  override def eval(input: InternalRow): Any = {
+    val input2 = right.eval(input)
+    if (input2 == null || input2 == 0) {
+      null
+    } else {
+      val input1 = left.eval(input)
+      if (input1 == null) {
+        null
+      } else {
+        div(input1, input2)
+      }
+    }
+  }
+
+  /**
+   * Special case handling due to division by 0 => null.
+   */
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    val eval1 = left.gen(ctx)
+    val eval2 = right.gen(ctx)
+    val isZero = if (dataType.isInstanceOf[DecimalType]) {
+      s"${eval2.primitive}.isZero()"
+    } else {
+      s"${eval2.primitive} == 0"
+    }
+    val javaType = ctx.javaType(dataType)
+    val divide = if (dataType.isInstanceOf[DecimalType]) {
+      s"${eval1.primitive}.$decimalMethod(${eval2.primitive})"
+    } else {
+      s"($javaType)(${eval1.primitive} $symbol ${eval2.primitive})"
+    }
+    s"""
+      ${eval2.code}
+      boolean ${ev.isNull} = false;
+      $javaType ${ev.primitive} = ${ctx.defaultValue(javaType)};
+      if (${eval2.isNull} || $isZero) {
+        ${ev.isNull} = true;
+      } else {
+        ${eval1.code}
+        if (${eval1.isNull}) {
+          ${ev.isNull} = true;
+        } else {
+          ${ev.primitive} = $divide;
+        }
+      }
+    """
+  }
+}
+
+case class Remainder(left: Expression, right: Expression) extends BinaryArithmetic {
+  override def symbol: String = "%"
+  override def decimalMethod: String = "remainder"
+
+  override def nullable: Boolean = true
+
+  override lazy val resolved =
+    childrenResolved && checkInputDataTypes().isSuccess && !DecimalType.isFixed(dataType)
+
+  protected def checkTypesInternal(t: DataType) =
+    TypeUtils.checkForNumericExpr(t, "operator " + symbol)
+
+  private lazy val integral = dataType match {
+    case i: IntegralType => i.integral.asInstanceOf[Integral[Any]]
+    case i: FractionalType => i.asIntegral.asInstanceOf[Integral[Any]]
+  }
+
+  override def eval(input: InternalRow): Any = {
+    val input2 = right.eval(input)
+    if (input2 == null || input2 == 0) {
+      null
+    } else {
+      val input1 = left.eval(input)
+      if (input1 == null) {
+        null
+      } else {
+        integral.rem(input1, input2)
+      }
+    }
+  }
+
+  /**
+   * Special case handling for x % 0 ==> null.
+   */
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    val eval1 = left.gen(ctx)
+    val eval2 = right.gen(ctx)
+    val isZero = if (dataType.isInstanceOf[DecimalType]) {
+      s"${eval2.primitive}.isZero()"
+    } else {
+      s"${eval2.primitive} == 0"
+    }
+    val javaType = ctx.javaType(dataType)
+    val remainder = if (dataType.isInstanceOf[DecimalType]) {
+      s"${eval1.primitive}.$decimalMethod(${eval2.primitive})"
+    } else {
+      s"($javaType)(${eval1.primitive} $symbol ${eval2.primitive})"
+    }
+    s"""
+      ${eval2.code}
+      boolean ${ev.isNull} = false;
+      $javaType ${ev.primitive} = ${ctx.defaultValue(javaType)};
+      if (${eval2.isNull} || $isZero) {
+        ${ev.isNull} = true;
+      } else {
+        ${eval1.code}
+        if (${eval1.isNull}) {
+          ${ev.isNull} = true;
+        } else {
+          ${ev.primitive} = $remainder;
+        }
+      }
+    """
+  }
+}
+
+case class MaxOf(left: Expression, right: Expression) extends BinaryArithmetic {
+  override def nullable: Boolean = left.nullable && right.nullable
+
+  protected def checkTypesInternal(t: DataType) =
+    TypeUtils.checkForOrderingExpr(t, "function maxOf")
+
+  private lazy val ordering = TypeUtils.getOrdering(dataType)
+
+  override def eval(input: InternalRow): Any = {
+    val input1 = left.eval(input)
+    val input2 = right.eval(input)
+    if (input1 == null) {
+      input2
+    } else if (input2 == null) {
+      input1
+    } else {
+      if (ordering.compare(input1, input2) < 0) {
+        input2
+      } else {
+        input1
+      }
+    }
+  }
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    val eval1 = left.gen(ctx)
+    val eval2 = right.gen(ctx)
+    val compCode = ctx.genComp(dataType, eval1.primitive, eval2.primitive)
+
+    eval1.code + eval2.code + s"""
+      boolean ${ev.isNull} = false;
+      ${ctx.javaType(left.dataType)} ${ev.primitive} =
+        ${ctx.defaultValue(left.dataType)};
+
+      if (${eval1.isNull}) {
+        ${ev.isNull} = ${eval2.isNull};
+        ${ev.primitive} = ${eval2.primitive};
+      } else if (${eval2.isNull}) {
+        ${ev.isNull} = ${eval1.isNull};
+        ${ev.primitive} = ${eval1.primitive};
+      } else {
+        if ($compCode > 0) {
+          ${ev.primitive} = ${eval1.primitive};
+        } else {
+          ${ev.primitive} = ${eval2.primitive};
+        }
+      }
+    """
+  }
+
+  override def symbol: String = "max"
+  override def prettyName: String = symbol
+}
+
+case class MinOf(left: Expression, right: Expression) extends BinaryArithmetic {
+  override def nullable: Boolean = left.nullable && right.nullable
+
+  protected def checkTypesInternal(t: DataType) =
+    TypeUtils.checkForOrderingExpr(t, "function minOf")
+
+  private lazy val ordering = TypeUtils.getOrdering(dataType)
+
+  override def eval(input: InternalRow): Any = {
+    val input1 = left.eval(input)
+    val input2 = right.eval(input)
+    if (input1 == null) {
+      input2
+    } else if (input2 == null) {
+      input1
+    } else {
+      if (ordering.compare(input1, input2) < 0) {
+        input1
+      } else {
+        input2
+      }
+    }
+  }
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    val eval1 = left.gen(ctx)
+    val eval2 = right.gen(ctx)
+    val compCode = ctx.genComp(dataType, eval1.primitive, eval2.primitive)
+
+    eval1.code + eval2.code + s"""
+      boolean ${ev.isNull} = false;
+      ${ctx.javaType(left.dataType)} ${ev.primitive} =
+        ${ctx.defaultValue(left.dataType)};
+
+      if (${eval1.isNull}) {
+        ${ev.isNull} = ${eval2.isNull};
+        ${ev.primitive} = ${eval2.primitive};
+      } else if (${eval2.isNull}) {
+        ${ev.isNull} = ${eval1.isNull};
+        ${ev.primitive} = ${eval1.primitive};
+      } else {
+        if ($compCode < 0) {
+          ${ev.primitive} = ${eval1.primitive};
+        } else {
+          ${ev.primitive} = ${eval2.primitive};
+        }
+      }
+    """
+  }
+
+  override def symbol: String = "min"
+  override def prettyName: String = symbol
 }

@@ -18,11 +18,11 @@
 package org.apache.spark.mllib.stat
 
 import org.apache.commons.math3.distribution.NormalDistribution
-import org.scalatest.FunSuite
 
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 
-class KernelDensitySuite extends FunSuite with MLlibTestSparkContext {
+class KernelDensitySuite extends SparkFunSuite with MLlibTestSparkContext {
   test("kernel density single sample") {
     val rdd = sc.parallelize(Array(5.0))
     val evaluationPoints = Array(5.0, 6.0)

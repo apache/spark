@@ -35,6 +35,7 @@ import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.partial.{ApproximateActionListener, ApproximateEvaluator, PartialResult}
 import org.apache.spark.rdd.RDD
+import org.apache.spark.rpc.RpcTimeout
 import org.apache.spark.storage._
 import org.apache.spark.unsafe.memory.TaskMemoryManager
 import org.apache.spark.util._
@@ -80,6 +81,8 @@ class DAGScheduler(
   }
 
   def this(sc: SparkContext) = this(sc, sc.taskScheduler)
+
+  private[scheduler] val metricsSource: DAGSchedulerSource = new DAGSchedulerSource(this)
 
   private[scheduler] val nextJobId = new AtomicInteger(0)
   private[scheduler] def numTotalJobs: Int = nextJobId.get()
@@ -137,6 +140,22 @@ class DAGScheduler(
   private[scheduler] val eventProcessLoop = new DAGSchedulerEventProcessLoop(this)
   taskScheduler.setDAGScheduler(this)
 
+  // Flag to control if reduce tasks are assigned preferred locations
+  private val shuffleLocalityEnabled =
+    sc.getConf.getBoolean("spark.shuffle.reduceLocality.enabled", true)
+  // Number of map, reduce tasks above which we do not assign preferred locations
+  // based on map output sizes. We limit the size of jobs for which assign preferred locations
+  // as computing the top locations by size becomes expensive.
+  private[this] val SHUFFLE_PREF_MAP_THRESHOLD = 1000
+  // NOTE: This should be less than 2000 as we use HighlyCompressedMapStatus beyond that
+  private[this] val SHUFFLE_PREF_REDUCE_THRESHOLD = 1000
+
+  // Fraction of total map output that must be at a location for it to considered as a preferred
+  // location for a reduce task.
+  // Making this larger will focus on fewer locations where most data can be read locally, but
+  // may lead to more delay in scheduling if those locations are busy.
+  private[scheduler] val REDUCER_PREF_LOCS_FRACTION = 0.2
+
   // Called by TaskScheduler to report task's starting.
   def taskStarted(task: Task[_], taskInfo: TaskInfo) {
     eventProcessLoop.post(BeginEvent(task, taskInfo))
@@ -170,7 +189,7 @@ class DAGScheduler(
       blockManagerId: BlockManagerId): Boolean = {
     listenerBus.post(SparkListenerExecutorMetricsUpdate(execId, taskMetrics))
     blockManagerMaster.driverEndpoint.askWithRetry[Boolean](
-      BlockManagerHeartbeat(blockManagerId), 600 seconds)
+      BlockManagerHeartbeat(blockManagerId), new RpcTimeout(600 seconds, "BlockManagerHeartbeat"))
   }
 
   // Called by TaskScheduler when an executor fails.
@@ -193,9 +212,15 @@ class DAGScheduler(
   def getCacheLocs(rdd: RDD[_]): Seq[Seq[TaskLocation]] = cacheLocs.synchronized {
     // Note: this doesn't use `getOrElse()` because this method is called O(num tasks) times
     if (!cacheLocs.contains(rdd.id)) {
-      val blockIds = rdd.partitions.indices.map(index => RDDBlockId(rdd.id, index)).toArray[BlockId]
-      val locs: Seq[Seq[TaskLocation]] = blockManagerMaster.getLocations(blockIds).map { bms =>
-        bms.map(bm => TaskLocation(bm.host, bm.executorId))
+      // Note: if the storage level is NONE, we don't need to get locations from block manager.
+      val locs: Seq[Seq[TaskLocation]] = if (rdd.getStorageLevel == StorageLevel.NONE) {
+        Seq.fill(rdd.partitions.size)(Nil)
+      } else {
+        val blockIds =
+          rdd.partitions.indices.map(index => RDDBlockId(rdd.id, index)).toArray[BlockId]
+        blockManagerMaster.getLocations(blockIds).map { bms =>
+          bms.map(bm => TaskLocation(bm.host, bm.executorId))
+        }
       }
       cacheLocs(rdd.id) = locs
     }
@@ -382,7 +407,8 @@ class DAGScheduler(
     def visit(rdd: RDD[_]) {
       if (!visited(rdd)) {
         visited += rdd
-        if (getCacheLocs(rdd).contains(Nil)) {
+        val rddHasUncachedPartitions = getCacheLocs(rdd).contains(Nil)
+        if (rddHasUncachedPartitions) {
           for (dep <- rdd.dependencies) {
             dep match {
               case shufDep: ShuffleDependency[_, _, _] =>
@@ -882,22 +908,29 @@ class DAGScheduler(
         return
     }
 
-    val tasks: Seq[Task[_]] = stage match {
-      case stage: ShuffleMapStage =>
-        partitionsToCompute.map { id =>
-          val locs = getPreferredLocs(stage.rdd, id)
-          val part = stage.rdd.partitions(id)
-          new ShuffleMapTask(stage.id, taskBinary, part, locs)
-        }
+    val tasks: Seq[Task[_]] = try {
+      stage match {
+        case stage: ShuffleMapStage =>
+          partitionsToCompute.map { id =>
+            val locs = getPreferredLocs(stage.rdd, id)
+            val part = stage.rdd.partitions(id)
+            new ShuffleMapTask(stage.id, taskBinary, part, locs)
+          }
 
-      case stage: ResultStage =>
-        val job = stage.resultOfJob.get
-        partitionsToCompute.map { id =>
-          val p: Int = job.partitions(id)
-          val part = stage.rdd.partitions(p)
-          val locs = getPreferredLocs(stage.rdd, p)
-          new ResultTask(stage.id, taskBinary, part, locs, id)
-        }
+        case stage: ResultStage =>
+          val job = stage.resultOfJob.get
+          partitionsToCompute.map { id =>
+            val p: Int = job.partitions(id)
+            val part = stage.rdd.partitions(p)
+            val locs = getPreferredLocs(stage.rdd, p)
+            new ResultTask(stage.id, taskBinary, part, locs, id)
+          }
+      }
+    } catch {
+      case NonFatal(e) =>
+        abortStage(stage, s"Task creation failed: $e\n${e.getStackTraceString}")
+        runningStages -= stage
+        return
     }
 
     if (tasks.size > 0) {
@@ -1360,10 +1393,10 @@ class DAGScheduler(
   private def getPreferredLocsInternal(
       rdd: RDD[_],
       partition: Int,
-      visited: HashSet[(RDD[_],Int)]): Seq[TaskLocation] = {
+      visited: HashSet[(RDD[_], Int)]): Seq[TaskLocation] = {
     // If the partition has already been visited, no need to re-visit.
     // This avoids exponential path exploration.  SPARK-695
-    if (!visited.add((rdd,partition))) {
+    if (!visited.add((rdd, partition))) {
       // Nil has already been returned for previously visited partitions.
       return Nil
     }
@@ -1377,17 +1410,32 @@ class DAGScheduler(
     if (rddPrefs.nonEmpty) {
       return rddPrefs.map(TaskLocation(_))
     }
-    // If the RDD has narrow dependencies, pick the first partition of the first narrow dep
-    // that has any placement preferences. Ideally we would choose based on transfer sizes,
-    // but this will do for now.
+
     rdd.dependencies.foreach {
       case n: NarrowDependency[_] =>
+        // If the RDD has narrow dependencies, pick the first partition of the first narrow dep
+        // that has any placement preferences. Ideally we would choose based on transfer sizes,
+        // but this will do for now.
         for (inPart <- n.getParents(partition)) {
           val locs = getPreferredLocsInternal(n.rdd, inPart, visited)
           if (locs != Nil) {
             return locs
           }
         }
+      case s: ShuffleDependency[_, _, _] =>
+        // For shuffle dependencies, pick locations which have at least REDUCER_PREF_LOCS_FRACTION
+        // of data as preferred locations
+        if (shuffleLocalityEnabled &&
+            rdd.partitions.size < SHUFFLE_PREF_REDUCE_THRESHOLD &&
+            s.rdd.partitions.size < SHUFFLE_PREF_MAP_THRESHOLD) {
+          // Get the preferred map output locations for this reducer
+          val topLocsForReducer = mapOutputTracker.getLocationsWithLargestOutputs(s.shuffleId,
+            partition, rdd.partitions.size, REDUCER_PREF_LOCS_FRACTION)
+          if (topLocsForReducer.nonEmpty) {
+            return topLocsForReducer.get.map(loc => TaskLocation(loc.host, loc.executorId))
+          }
+        }
+
       case _ =>
     }
     Nil
@@ -1400,17 +1448,29 @@ class DAGScheduler(
     taskScheduler.stop()
   }
 
-  // Start the event thread at the end of the constructor
+  // Start the event thread and register the metrics source at the end of the constructor
+  env.metricsSystem.registerSource(metricsSource)
   eventProcessLoop.start()
 }
 
 private[scheduler] class DAGSchedulerEventProcessLoop(dagScheduler: DAGScheduler)
   extends EventLoop[DAGSchedulerEvent]("dag-scheduler-event-loop") with Logging {
 
+  private[this] val timer = dagScheduler.metricsSource.messageProcessingTimer
+
   /**
    * The main event loop of the DAG scheduler.
    */
-  override def onReceive(event: DAGSchedulerEvent): Unit = event match {
+  override def onReceive(event: DAGSchedulerEvent): Unit = {
+    val timerContext = timer.time()
+    try {
+      doOnReceive(event)
+    } finally {
+      timerContext.stop()
+    }
+  }
+
+  private def doOnReceive(event: DAGSchedulerEvent): Unit = event match {
     case JobSubmitted(jobId, rdd, func, partitions, allowLocal, callSite, listener, properties) =>
       dagScheduler.handleJobSubmitted(jobId, rdd, func, partitions, allowLocal, callSite,
         listener, properties)

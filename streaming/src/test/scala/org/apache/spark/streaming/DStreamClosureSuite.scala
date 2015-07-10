@@ -19,9 +19,9 @@ package org.apache.spark.streaming
 
 import java.io.NotSerializableException
 
-import org.scalatest.{BeforeAndAfterAll, FunSuite}
+import org.scalatest.BeforeAndAfterAll
 
-import org.apache.spark.{HashPartitioner, SparkContext, SparkException}
+import org.apache.spark.{HashPartitioner, SparkContext, SparkException, SparkFunSuite}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.streaming.dstream.DStream
 import org.apache.spark.util.ReturnStatementInClosureException
@@ -29,7 +29,7 @@ import org.apache.spark.util.ReturnStatementInClosureException
 /**
  * Test that closures passed to DStream operations are actually cleaned.
  */
-class DStreamClosureSuite extends FunSuite with BeforeAndAfterAll {
+class DStreamClosureSuite extends SparkFunSuite with BeforeAndAfterAll {
   private var ssc: StreamingContext = null
 
   override def beforeAll(): Unit = {

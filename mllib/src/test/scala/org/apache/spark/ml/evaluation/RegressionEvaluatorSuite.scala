@@ -17,13 +17,17 @@
 
 package org.apache.spark.ml.evaluation
 
-import org.scalatest.FunSuite
-
+import org.apache.spark.SparkFunSuite
+import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.regression.LinearRegression
 import org.apache.spark.mllib.util.{LinearDataGenerator, MLlibTestSparkContext}
 import org.apache.spark.mllib.util.TestingUtils._
 
-class RegressionEvaluatorSuite extends FunSuite with MLlibTestSparkContext {
+class RegressionEvaluatorSuite extends SparkFunSuite with MLlibTestSparkContext {
+
+  test("params") {
+    ParamsSuite.checkParams(new RegressionEvaluator)
+  }
 
   test("Regression Evaluator: default params") {
     /**
@@ -39,7 +43,7 @@ class RegressionEvaluatorSuite extends FunSuite with MLlibTestSparkContext {
     val dataset = sqlContext.createDataFrame(
       sc.parallelize(LinearDataGenerator.generateLinearInput(
         6.3, Array(4.7, 7.2), Array(0.9, -1.3), Array(0.7, 1.2), 100, 42, 0.1), 2))
-    
+
     /**
      * Using the following R code to load the data, train the model and evaluate metrics.
      *
@@ -59,7 +63,7 @@ class RegressionEvaluatorSuite extends FunSuite with MLlibTestSparkContext {
 
     // default = rmse
     val evaluator = new RegressionEvaluator()
-    assert(evaluator.evaluate(predictions) ~== 0.1019382 absTol 0.001)
+    assert(evaluator.evaluate(predictions) ~== -0.1019382 absTol 0.001)
 
     // r2 score
     evaluator.setMetricName("r2")
@@ -67,6 +71,6 @@ class RegressionEvaluatorSuite extends FunSuite with MLlibTestSparkContext {
 
     // mae
     evaluator.setMetricName("mae")
-    assert(evaluator.evaluate(predictions) ~== 0.08036075 absTol 0.001)
+    assert(evaluator.evaluate(predictions) ~== -0.08036075 absTol 0.001)
   }
 }

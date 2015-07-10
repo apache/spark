@@ -55,6 +55,12 @@ final class OffsetRange private(
     val untilOffset: Long) extends Serializable {
   import OffsetRange.OffsetRangeTuple
 
+  /** Kafka TopicAndPartition object, for convenience */
+  def topicAndPartition(): TopicAndPartition = TopicAndPartition(topic, partition)
+
+  /** Number of messages this OffsetRange refers to */
+  def count(): Long = untilOffset - fromOffset
+
   override def equals(obj: Any): Boolean = obj match {
     case that: OffsetRange =>
       this.topic == that.topic &&
@@ -69,7 +75,7 @@ final class OffsetRange private(
   }
 
   override def toString(): String = {
-    s"OffsetRange(topic: '$topic', partition: $partition, range: [$fromOffset -> $untilOffset]"
+    s"OffsetRange(topic: '$topic', partition: $partition, range: [$fromOffset -> $untilOffset])"
   }
 
   /** this is to avoid ClassNotFoundException during checkpoint restore */
