@@ -48,7 +48,7 @@ import org.apache.spark.util.ThreadUtils
  * appeared, it will read the credentials and update the currently running UGI with it. This
  * process happens again once 80% of the validity of this has expired.
  */
-private[yarn] class AMDelegationTokenRenewer(
+private[yarn] class DriverDelegationTokenRenewer(
     sparkConf: SparkConf,
     hadoopConf: Configuration) extends Logging {
 
