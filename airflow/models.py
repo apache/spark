@@ -826,7 +826,7 @@ class TaskInstance(Base):
                     task_copy.post_execute(context=context)
             except (Exception, StandardError, KeyboardInterrupt) as e:
                 self.record_failure(e, test_mode)
-                raise e
+                raise
 
             # Recording SUCCESS
             session = settings.Session()
