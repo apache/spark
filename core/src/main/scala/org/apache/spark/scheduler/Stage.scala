@@ -77,7 +77,7 @@ private[spark] abstract class Stage(
   private var _latestInfo: StageInfo = StageInfo.fromStage(this, nextAttemptId)
 
   /** Creates a new attempt for this stage by creating a new StageInfo with a new attempt ID. */
-  def makeNewStageAttempt(numPartitionsToCompute: Int) = {
+  def makeNewStageAttempt(numPartitionsToCompute: Int): Unit = {
     _latestInfo = StageInfo.fromStage(this, nextAttemptId, Some(numPartitionsToCompute))
     nextAttemptId += 1
   }
