@@ -380,6 +380,9 @@ private[spark] object SQLConf {
   val USE_SQL_SERIALIZER2 = booleanConf("spark.sql.useSerializer2",
     defaultValue = Some(true), doc = "<TODO>")
 
+  val USE_SQL_AGGREGATE2 = booleanConf("spark.sql.useAggregate2",
+    defaultValue = Some(false), doc = "<TODO>")
+
   val USE_JACKSON_STREAMING_API = booleanConf("spark.sql.json.useJacksonStreamingAPI",
     defaultValue = Some(true), doc = "<TODO>")
 
@@ -478,6 +481,8 @@ private[sql] class SQLConf extends Serializable with CatalystConf {
   private[spark] def unsafeEnabled: Boolean = getConf(UNSAFE_ENABLED)
 
   private[spark] def useSqlSerializer2: Boolean = getConf(USE_SQL_SERIALIZER2)
+
+  private[spark] def useSqlAggregate2: Boolean = getConf(USE_SQL_AGGREGATE2)
 
   /**
    * Selects between the new (true) and old (false) JSON handlers, to be removed in Spark 1.5.0

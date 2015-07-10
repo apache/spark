@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.aggregate2.{_}
 import org.apache.spark.sql.catalyst.planning._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.{BroadcastHint, LogicalPlan}
@@ -139,7 +140,8 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
              if canBeCodeGened(
                   allAggregates(partialComputation) ++
                   allAggregates(rewrittenAggregateExpressions)) &&
-               codegenEnabled =>
+               codegenEnabled &&
+               !sqlContext.conf.useSqlAggregate2 =>
           execution.GeneratedAggregate(
             partial = false,
             namedGroupingAttributes,
@@ -158,7 +160,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
              rewrittenAggregateExpressions,
              groupingExpressions,
              partialComputation,
-             child) =>
+             child) if !sqlContext.conf.useSqlAggregate2 =>
         execution.Aggregate(
           partial = false,
           namedGroupingAttributes,
@@ -183,6 +185,76 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
     def allAggregates(exprs: Seq[Expression]): Seq[AggregateExpression] =
       exprs.flatMap(_.collect { case a: AggregateExpression => a })
   }
+
+  object AggregateOperator2 extends Strategy {
+    def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+      case logical.Aggregate(groupingExpressions, resultExpressions, child)
+        if sqlContext.conf.useSqlAggregate2 =>
+        // 1. Extracts all aggregate expressions.
+        val aggregateExpressions = resultExpressions.flatMap { expr =>
+          expr.collect {
+            case agg: AggregateExpression2 => agg
+          }
+        }.toSet.toSeq
+        val aggregateExpressionMap = aggregateExpressions.zipWithIndex.map {
+          case (agg, index) =>
+            agg.aggregateFunction -> Alias(agg, s"_agg$index")().toAttribute
+        }.toMap
+
+        // 2. Create Pre-shuffle Aggregate Operator
+        val namedGroupingExpressions = groupingExpressions.zipWithIndex.map {
+          case (ne: NamedExpression, index) => ne
+          case (other, index) => Alias(other, s"_groupingExpr$index")()
+        }
+        val namedGroupingAttributes = namedGroupingExpressions.map(_.toAttribute)
+        val preShuffleAggregateExpressions = aggregateExpressions.map {
+          case AggregateExpression2(aggregateFunction, mode, isDistinct) =>
+            AggregateExpression2(aggregateFunction, Partial, isDistinct)
+        }
+        val preShuffleAggregateAttributes = preShuffleAggregateExpressions.zipWithIndex.flatMap {
+          case (AggregateExpression2(aggregateFunction, Partial, isDistinct), index) =>
+            aggregateFunction.bufferValueDataTypes.map {
+              case StructField(name, dataType, nullable, metadata) =>
+                AttributeReference(s"_partialAgg${index}_${name}", dataType, nullable, metadata)()
+            }
+        }
+        val partialAggregate =
+          Aggregate2Sort(
+            true,
+            namedGroupingExpressions,
+            preShuffleAggregateExpressions,
+            preShuffleAggregateAttributes,
+            namedGroupingAttributes ++ preShuffleAggregateAttributes,
+            planLater(child))
+
+        // 3. Create post-shuffle Aggregate Operator.
+        val postShuffleAggregateExpressions = aggregateExpressions.map {
+          case AggregateExpression2(aggregateFunction, mode, isDistinct) =>
+            AggregateExpression2(aggregateFunction, Final, isDistinct)
+        }
+        val postShuffleAggregateAttributes =
+          postShuffleAggregateExpressions.map {
+            expr => aggregateExpressionMap(expr.aggregateFunction)
+          }
+        val rewrittenResultExpressions = resultExpressions.map { expr =>
+          expr.transform {
+            case agg: AggregateExpression2 =>
+              aggregateExpressionMap(agg.aggregateFunction).toAttribute
+          }.asInstanceOf[NamedExpression]
+        }
+        val finalAggregate = Aggregate2Sort(
+          false,
+          namedGroupingAttributes,
+          postShuffleAggregateExpressions,
+          postShuffleAggregateAttributes,
+          rewrittenResultExpressions,
+          partialAggregate)
+
+        finalAggregate :: Nil
+      case _ => Nil
+    }
+  }
+
 
   object BroadcastNestedLoopJoin extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
@@ -313,7 +385,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         execution.Filter(condition, planLater(child)) :: Nil
       case e @ logical.Expand(_, _, _, child) =>
         execution.Expand(e.projections, e.output, planLater(child)) :: Nil
-      case logical.Aggregate(group, agg, child) =>
+      case logical.Aggregate(group, agg, child) if !sqlContext.conf.useSqlAggregate2 =>
         execution.Aggregate(partial = false, group, agg, planLater(child)) :: Nil
       case logical.Window(projectList, windowExpressions, spec, child) =>
         execution.Window(projectList, windowExpressions, spec, planLater(child)) :: Nil

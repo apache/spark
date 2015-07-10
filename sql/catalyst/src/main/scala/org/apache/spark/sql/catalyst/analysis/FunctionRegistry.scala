@@ -148,6 +148,7 @@ object FunctionRegistry {
 
     // aggregate functions
     expression[Average]("avg"),
+    expression[aggregate2.Average]("avg2"),
     expression[Count]("count"),
     expression[First]("first"),
     expression[Last]("last"),
