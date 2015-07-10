@@ -23,6 +23,7 @@ PATHS_TO_CHECK="./python/pyspark/ ./ec2/spark_ec2.py ./examples/src/main/python/
 PATHS_TO_CHECK="$PATHS_TO_CHECK ./dev/run-tests.py ./python/run-tests.py"
 PEP8_REPORT_PATH="$SPARK_ROOT_DIR/dev/pep8-report.txt"
 PYLINT_REPORT_PATH="$SPARK_ROOT_DIR/dev/pylint-report.txt"
+PYLINT_INSTALL_INFO="$SPARK_ROOT_DIR/dev/pylint-info.txt"
 
 cd "$SPARK_ROOT_DIR"
 
@@ -51,19 +52,26 @@ fi
 # Easy install pylint in /dev/pylint. To easy_install into a directory, the PYTHONPATH should
 # be set to the directory.
 # dev/pylint should be appended to the PATH variable as well.
+# Jenkins by default installs the pylint3 version, so for now this just checks the code quality
+# of python3.
 export "PYTHONPATH=$SPARK_ROOT_DIR/dev/pylint"
 export "PYLINT_HOME=$PYTHONPATH"
 export "PATH=$PYTHONPATH:$PATH"
 
 if [ ! -d "$PYLINT_HOME" ]; then
     mkdir "$PYLINT_HOME"
-    easy_install -d "$PYLINT_HOME" pylint
+    # Redirect the annoying pylint installation output.
+    easy_install -d "$PYLINT_HOME" pylint==1.4.4 &>> "$PYLINT_INSTALL_INFO"
     easy_install_status="$?"
 
     if [ "$easy_install_status" -ne 0 ]; then
         echo "Unable to install pylint locally in \"$PYTHONPATH\"."
+        cat "$PYLINT_INSTALL_INFO"
         exit "$easy_install_status"
     fi
+
+    rm "$PYLINT_INSTALL_INFO"
+
 fi
 
 # There is no need to write this output to a file
@@ -87,7 +95,6 @@ else
 fi
 
 rm "$PEP8_REPORT_PATH"
-
 
 for to_be_checked in "$PATHS_TO_CHECK"
 do
