@@ -128,6 +128,9 @@ final class UnsafeSorterSpillWriter {
       dataRemaining -= toTransfer;
       freeSpaceInWriteBuffer = DISK_WRITE_BUFFER_SIZE;
     }
+    if (freeSpaceInWriteBuffer < DISK_WRITE_BUFFER_SIZE) {
+      writer.write(writeBuffer, 0, (DISK_WRITE_BUFFER_SIZE - freeSpaceInWriteBuffer));
+    }
     writer.recordWritten();
   }
 

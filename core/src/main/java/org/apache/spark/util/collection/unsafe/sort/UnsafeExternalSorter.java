@@ -263,11 +263,12 @@ public final class UnsafeExternalSorter {
 
   public UnsafeSorterIterator getSortedIterator() throws IOException {
     final UnsafeSorterIterator inMemoryIterator = sorter.getSortedIterator();
+    int numIteratorsToMerge = spillWriters.size() + (inMemoryIterator.hasNext() ? 1 : 0);
     if (spillWriters.isEmpty()) {
       return inMemoryIterator;
     } else {
       final UnsafeSorterSpillMerger spillMerger =
-        new UnsafeSorterSpillMerger(recordComparator, prefixComparator);
+        new UnsafeSorterSpillMerger(recordComparator, prefixComparator, numIteratorsToMerge);
       for (UnsafeSorterSpillWriter spillWriter : spillWriters) {
         spillMerger.addSpill(spillWriter.getReader(blockManager));
       }

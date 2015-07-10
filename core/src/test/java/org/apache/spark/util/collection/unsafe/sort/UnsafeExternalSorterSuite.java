@@ -169,4 +169,34 @@ public class UnsafeExternalSorterSuite {
     // assert(tempDir.isEmpty)
   }
 
+  @Test
+  public void testSortingEmptyArrays() throws Exception {
+
+    final UnsafeExternalSorter sorter = new UnsafeExternalSorter(
+      memoryManager,
+      shuffleMemoryManager,
+      blockManager,
+      taskContext,
+      recordComparator,
+      prefixComparator,
+      1024,
+      new SparkConf());
+
+    sorter.insertRecord(null, 0, 0, 0);
+    sorter.insertRecord(null, 0, 0, 0);
+    sorter.spill();
+    sorter.insertRecord(null, 0, 0, 0);
+    sorter.spill();
+    sorter.insertRecord(null, 0, 0, 0);
+    sorter.insertRecord(null, 0, 0, 0);
+
+    UnsafeSorterIterator iter = sorter.getSortedIterator();
+
+    for (int i = 1; i <= 5; i++) {
+      iter.loadNext();
+      assertEquals(0, iter.getKeyPrefix());
+      assertEquals(0, iter.getRecordLength());
+    }
+  }
+
 }

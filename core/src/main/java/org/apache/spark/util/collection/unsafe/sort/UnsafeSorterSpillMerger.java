@@ -27,7 +27,8 @@ final class UnsafeSorterSpillMerger {
 
   public UnsafeSorterSpillMerger(
       final RecordComparator recordComparator,
-      final PrefixComparator prefixComparator) {
+      final PrefixComparator prefixComparator,
+      final int numSpills) {
     final Comparator<UnsafeSorterIterator> comparator = new Comparator<UnsafeSorterIterator>() {
 
       @Override
@@ -43,8 +44,7 @@ final class UnsafeSorterSpillMerger {
         }
       }
     };
-    // TODO: the size is often known; incorporate size hints here.
-    priorityQueue = new PriorityQueue<UnsafeSorterIterator>(10, comparator);
+    priorityQueue = new PriorityQueue<UnsafeSorterIterator>(numSpills, comparator);
   }
 
   public void addSpill(UnsafeSorterIterator spillReader) throws IOException {
