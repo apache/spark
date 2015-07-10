@@ -199,10 +199,32 @@ class Analyzer(
         GroupingSets(bitmasks(a), a.groupByExprs, a.child, a.aggregations)
       case x: GroupingSets =>
         val gid = AttributeReference(VirtualColumn.groupingIdName, IntegerType, false)()
+
+        val nonAttributeGroupByExpression = new ArrayBuffer[Alias]()
+        val groupByExprPairs = x.groupByExprs.map(_ match {
+          case e: NamedExpression => (e, e)
+          case other => {
+            val alias = Alias(other, other.toString)()
+            nonAttributeGroupByExpression += alias
+            (other, alias.toAttribute)
+          }
+        })
+
+        val aggregation = x.aggregations.map(expr => expr.transformDown {
+          case e => groupByExprPairs.find(_._1.semanticEquals(e)).map(_._2).getOrElse(e)
+        }.asInstanceOf[NamedExpression])
+
+        val newGroupByExprs = groupByExprPairs.map(_._2)
+        val child = if (nonAttributeGroupByExpression.length > 0) {
+          Project(x.child.output ++ nonAttributeGroupByExpression, x.child)
+        } else {
+          x.child
+        }
+
         Aggregate(
-          x.groupByExprs :+ VirtualColumn.groupingIdAttribute,
-          x.aggregations,
-          Expand(x.bitmasks, x.groupByExprs, gid, x.child))
+          newGroupByExprs :+ VirtualColumn.groupingIdAttribute,
+          aggregation,
+          Expand(x.bitmasks, newGroupByExprs, gid, child))
     }
   }
 

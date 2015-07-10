@@ -85,6 +85,11 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
     }
   }
 
+  createQueryTest("SPARK-8976 Wrong Result for Rollup",
+    """
+      SELECT count(*) AS cnt, key % 5,GROUPING__ID FROM src group by key%5 WITH ROLLUP
+    """.stripMargin)
+
   createQueryTest("insert table with generator with column name",
     """
       |  CREATE TABLE gen_tmp (key Int);
