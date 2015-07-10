@@ -30,19 +30,21 @@ private[ui] class StoragePage(parent: StorageTab) extends WebUIPage("") {
   private val listener = parent.listener
 
   def render(request: HttpServletRequest): Seq[Node] = {
-    val content = rddTable ++ synchronized {
-      val executorStatuses = listener.allExecutorStreamBlockStatus.sortBy(_.executorId)
-      receiverBlockTables(executorStatuses)
-    }
+    val content = rddTable(listener.rddInfoList) ++
+      receiverBlockTables(listener.allExecutorStreamBlockStatus.sortBy(_.executorId))
     UIUtils.headerSparkPage("Storage", content, parent)
   }
 
-  private def rddTable: Seq[Node] = {
-    val rdds = listener.rddInfoList
-    <div>
-      <h4>RDDs</h4>
-      {UIUtils.listingTable(rddHeader, rddRow, rdds, id = Some("storage-by-rdd-table"))}
-    </div>
+  private[storage] def rddTable(rdds: Seq[RDDInfo]): Seq[Node] = {
+    if (rdds.isEmpty) {
+      // Don't show the rdd table if there is no RDD persisted.
+      Nil
+    } else {
+      <div>
+        <h4>RDDs</h4>
+        {UIUtils.listingTable(rddHeader, rddRow, rdds, id = Some("storage-by-rdd-table"))}
+      </div>
+    }
   }
 
   /** Header fields for the RDD table */
@@ -66,7 +68,7 @@ private[ui] class StoragePage(parent: StorageTab) extends WebUIPage("") {
       </td>
       <td>{rdd.storageLevel.description}
       </td>
-      <td>{rdd.numCachedPartitions}</td>
+      <td>{rdd.numCachedPartitions.toString}</td>
       <td>{"%.0f%%".format(rdd.numCachedPartitions * 100.0 / rdd.numPartitions)}</td>
       <td sorttable_customkey={rdd.memSize.toString}>{Utils.bytesToString(rdd.memSize)}</td>
       <td sorttable_customkey={rdd.externalBlockStoreSize.toString}>{Utils.bytesToString(rdd.externalBlockStoreSize)}</td>
@@ -75,8 +77,9 @@ private[ui] class StoragePage(parent: StorageTab) extends WebUIPage("") {
     // scalastyle:on
   }
 
-  private def receiverBlockTables(statuses: Seq[ExecutorStreamBlockStatus]): Seq[Node] = {
+  private[storage] def receiverBlockTables(statuses: Seq[ExecutorStreamBlockStatus]): Seq[Node] = {
     if (statuses.map(_.numStreamBlocks).sum == 0) {
+      // Don't show the tables if there is no stream block
       Nil
     } else {
       val blocks = statuses.flatMap(_.blocks).groupBy(_.blockId).toSeq.sortBy(_._1.toString)
@@ -159,7 +162,7 @@ private[ui] class StoragePage(parent: StorageTab) extends WebUIPage("") {
       streamBlockTableSubrow(block._1, replications.head, replications.size, true)
     } else {
       streamBlockTableSubrow(block._1, replications.head, replications.size, true) ++
-        streamBlockTableSubrow(block._1, replications.head, replications.size, false)
+        replications.tail.map(streamBlockTableSubrow(block._1, _, replications.size, false)).flatten
     }
   }
 
@@ -184,7 +187,8 @@ private[ui] class StoragePage(parent: StorageTab) extends WebUIPage("") {
     </tr>
   }
 
-  private def streamBlockStorageLevelDescriptionAndSize(block: BlockUIData): (String, Long) = {
+  private[storage] def streamBlockStorageLevelDescriptionAndSize(
+      block: BlockUIData): (String, Long) = {
     if (block.storageLevel.useDisk) {
       ("Disk", block.diskSize)
     } else if (block.storageLevel.useMemory && block.storageLevel.deserialized) {
