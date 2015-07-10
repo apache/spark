@@ -19,62 +19,20 @@ package org.apache.spark.deploy.master
 
 import java.util.Date
 
-import scala.concurrent.Await
 import scala.concurrent.duration._
 import scala.io.Source
 import scala.language.postfixOps
 
-import akka.actor.Address
 import org.json4s._
 import org.json4s.jackson.JsonMethods._
 import org.scalatest.Matchers
 import org.scalatest.concurrent.Eventually
 import other.supplier.{CustomPersistenceEngine, CustomRecoveryModeFactory}
 
-import org.apache.spark.{SparkConf, SparkException, SparkFunSuite}
+import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy._
 
 class MasterSuite extends SparkFunSuite with Matchers with Eventually {
-
-  test("toAkkaUrl") {
-    val conf = new SparkConf(loadDefaults = false)
-    val akkaUrl = Master.toAkkaUrl("spark://1.2.3.4:1234", "akka.tcp")
-    assert("akka.tcp://sparkMaster@1.2.3.4:1234/user/Master" === akkaUrl)
-  }
-
-  test("toAkkaUrl with SSL") {
-    val conf = new SparkConf(loadDefaults = false)
-    val akkaUrl = Master.toAkkaUrl("spark://1.2.3.4:1234", "akka.ssl.tcp")
-    assert("akka.ssl.tcp://sparkMaster@1.2.3.4:1234/user/Master" === akkaUrl)
-  }
-
-  test("toAkkaUrl: a typo url") {
-    val conf = new SparkConf(loadDefaults = false)
-    val e = intercept[SparkException] {
-      Master.toAkkaUrl("spark://1.2. 3.4:1234", "akka.tcp")
-    }
-    assert("Invalid master URL: spark://1.2. 3.4:1234" === e.getMessage)
-  }
-
-  test("toAkkaAddress") {
-    val conf = new SparkConf(loadDefaults = false)
-    val address = Master.toAkkaAddress("spark://1.2.3.4:1234", "akka.tcp")
-    assert(Address("akka.tcp", "sparkMaster", "1.2.3.4", 1234) === address)
-  }
-
-  test("toAkkaAddress with SSL") {
-    val conf = new SparkConf(loadDefaults = false)
-    val address = Master.toAkkaAddress("spark://1.2.3.4:1234", "akka.ssl.tcp")
-    assert(Address("akka.ssl.tcp", "sparkMaster", "1.2.3.4", 1234) === address)
-  }
-
-  test("toAkkaAddress: a typo url") {
-    val conf = new SparkConf(loadDefaults = false)
-    val e = intercept[SparkException] {
-      Master.toAkkaAddress("spark://1.2. 3.4:1234", "akka.tcp")
-    }
-    assert("Invalid master URL: spark://1.2. 3.4:1234" === e.getMessage)
-  }
 
   test("can use a custom recovery mode factory") {
     val conf = new SparkConf(loadDefaults = false)
@@ -129,16 +87,16 @@ class MasterSuite extends SparkFunSuite with Matchers with Eventually {
       port = 10000,
       cores = 0,
       memory = 0,
-      actor = null,
+      endpoint = null,
       webUiPort = 0,
       publicAddress = ""
     )
 
-    val (actorSystem, port, uiPort, restPort) =
-      Master.startSystemAndActor("127.0.0.1", 7077, 8080, conf)
+    val (rpcEnv, uiPort, restPort) =
+      Master.startRpcEnvAndEndpoint("127.0.0.1", 7077, 8080, conf)
 
     try {
-      Await.result(actorSystem.actorSelection("/user/Master").resolveOne(10 seconds), 10 seconds)
+      rpcEnv.setupEndpointRef(Master.SYSTEM_NAME, rpcEnv.address, Master.ENDPOINT_NAME)
 
       CustomPersistenceEngine.lastInstance.isDefined shouldBe true
       val persistenceEngine = CustomPersistenceEngine.lastInstance.get
@@ -154,8 +112,8 @@ class MasterSuite extends SparkFunSuite with Matchers with Eventually {
       workers.map(_.id) should contain(workerToPersist.id)
 
     } finally {
-      actorSystem.shutdown()
-      actorSystem.awaitTermination()
+      rpcEnv.shutdown()
+      rpcEnv.awaitTermination()
     }
 
     CustomRecoveryModeFactory.instantiationAttempts should be > instantiationAttempts

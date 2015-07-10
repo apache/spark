@@ -185,6 +185,7 @@ class CodeGenContext {
     // use c1 - c2 may overflow
     case dt: DataType if isPrimitiveType(dt) => s"($c1 > $c2 ? 1 : $c1 < $c2 ? -1 : 0)"
     case BinaryType => s"org.apache.spark.sql.catalyst.util.TypeUtils.compareBinary($c1, $c2)"
+    case NullType => "0"
     case other => s"$c1.compare($c2)"
   }
 

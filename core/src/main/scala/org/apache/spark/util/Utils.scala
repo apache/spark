@@ -80,6 +80,12 @@ private[spark] object Utils extends Logging {
    */
   val TEMP_DIR_SHUTDOWN_PRIORITY = 25
 
+  /**
+   * Define a default value for driver memory here since this value is referenced across the code
+   * base and nearly all files already use Utils.scala
+   */
+  val DEFAULT_DRIVER_MEM_MB = JavaUtils.DEFAULT_DRIVER_MEM_MB.toInt
+
   private val MAX_DIR_CREATION_ATTEMPTS: Int = 10
   @volatile private var localRootDirs: Array[String] = null
 
@@ -727,7 +733,12 @@ private[spark] object Utils extends Logging {
     localRootDirs
   }
 
-  private def getOrCreateLocalRootDirsImpl(conf: SparkConf): Array[String] = {
+  /**
+   * Return the configured local directories where Spark can write files. This
+   * method does not create any directories on its own, it only encapsulates the
+   * logic of locating the local directories according to deployment mode.
+   */
+  def getConfiguredLocalDirs(conf: SparkConf): Array[String] = {
     if (isRunningInYarnContainer(conf)) {
       // If we are in yarn mode, systems can have different disk layouts so we must set it
       // to what Yarn on this system said was available. Note this assumes that Yarn has
@@ -743,25 +754,27 @@ private[spark] object Utils extends Logging {
       Option(conf.getenv("SPARK_LOCAL_DIRS"))
         .getOrElse(conf.get("spark.local.dir", System.getProperty("java.io.tmpdir")))
         .split(",")
-        .flatMap { root =>
-          try {
-            val rootDir = new File(root)
-            if (rootDir.exists || rootDir.mkdirs()) {
-              val dir = createTempDir(root)
-              chmod700(dir)
-              Some(dir.getAbsolutePath)
-            } else {
-              logError(s"Failed to create dir in $root. Ignoring this directory.")
-              None
-            }
-          } catch {
-            case e: IOException =>
-            logError(s"Failed to create local root dir in $root. Ignoring this directory.")
-            None
-          }
-        }
-        .toArray
     }
+  }
+
+  private def getOrCreateLocalRootDirsImpl(conf: SparkConf): Array[String] = {
+    getConfiguredLocalDirs(conf).flatMap { root =>
+      try {
+        val rootDir = new File(root)
+        if (rootDir.exists || rootDir.mkdirs()) {
+          val dir = createTempDir(root)
+          chmod700(dir)
+          Some(dir.getAbsolutePath)
+        } else {
+          logError(s"Failed to create dir in $root. Ignoring this directory.")
+          None
+        }
+      } catch {
+        case e: IOException =>
+          logError(s"Failed to create local root dir in $root. Ignoring this directory.")
+          None
+      }
+    }.toArray
   }
 
   /** Get the Yarn approved local directories. */

@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.expressions.codegen
 
 import org.apache.spark.Logging
 import org.apache.spark.annotation.Private
-import org.apache.spark.sql.Row
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 
 /**
@@ -33,11 +33,9 @@ class BaseOrdering extends Ordering[InternalRow] {
 }
 
 /**
- * Generates bytecode for an [[Ordering]] of [[Row Rows]] for a given set of
- * [[Expression Expressions]].
+ * Generates bytecode for an [[Ordering]] of rows for a given set of expressions.
  */
-object GenerateOrdering
-    extends CodeGenerator[Seq[SortOrder], Ordering[InternalRow]] with Logging {
+object GenerateOrdering extends CodeGenerator[Seq[SortOrder], Ordering[InternalRow]] with Logging {
 
   protected def canonicalize(in: Seq[SortOrder]): Seq[SortOrder] =
     in.map(ExpressionCanonicalizer.execute(_).asInstanceOf[SortOrder])

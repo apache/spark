@@ -359,7 +359,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
     hiveconf.set(key, value)
   }
 
-  private[sql] override def setConf[T](entry: SQLConfEntry[T], value: T): Unit = {
+  override private[sql] def setConf[T](entry: SQLConfEntry[T], value: T): Unit = {
     setConf(entry.key, entry.stringConverter(value))
   }
 
@@ -371,7 +371,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
   // Note that HiveUDFs will be overridden by functions registered in this context.
   @transient
   override protected[sql] lazy val functionRegistry: FunctionRegistry =
-    new OverrideFunctionRegistry(new HiveFunctionRegistry(FunctionRegistry.builtin))
+    new HiveFunctionRegistry(FunctionRegistry.builtin)
 
   /* An analyzer that uses the Hive metastore. */
   @transient
