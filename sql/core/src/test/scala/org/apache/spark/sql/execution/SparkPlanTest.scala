@@ -53,7 +53,7 @@ class SparkPlanTest extends SparkFunSuite {
       input: DataFrame,
       planFunction: SparkPlan => SparkPlan,
       expectedAnswer: Seq[Row],
-      sortAnswers: Boolean): Unit = {
+      sortAnswers: Boolean = true): Unit = {
     checkAnswer(
       input :: Nil,
       (plans: Seq[SparkPlan]) => planFunction(plans.head),
@@ -76,7 +76,7 @@ class SparkPlanTest extends SparkFunSuite {
       right: DataFrame,
       planFunction: (SparkPlan, SparkPlan) => SparkPlan,
       expectedAnswer: Seq[Row],
-      sortAnswers: Boolean): Unit = {
+      sortAnswers: Boolean = true): Unit = {
     checkAnswer(
       left :: right :: Nil,
       (plans: Seq[SparkPlan]) => planFunction(plans(0), plans(1)),
@@ -97,7 +97,7 @@ class SparkPlanTest extends SparkFunSuite {
       input: Seq[DataFrame],
       planFunction: Seq[SparkPlan] => SparkPlan,
       expectedAnswer: Seq[Row],
-      sortAnswers: Boolean): Unit = {
+      sortAnswers: Boolean = true): Unit = {
     SparkPlanTest.checkAnswer(input, planFunction, expectedAnswer, sortAnswers) match {
       case Some(errorMessage) => fail(errorMessage)
       case None =>
@@ -117,7 +117,7 @@ class SparkPlanTest extends SparkFunSuite {
       input: DataFrame,
       planFunction: SparkPlan => SparkPlan,
       expectedAnswer: Seq[A],
-      sortAnswers: Boolean): Unit = {
+      sortAnswers: Boolean = true): Unit = {
     val expectedRows = expectedAnswer.map(Row.fromTuple)
     checkAnswer(input, planFunction, expectedRows, sortAnswers)
   }
@@ -137,7 +137,7 @@ class SparkPlanTest extends SparkFunSuite {
       right: DataFrame,
       planFunction: (SparkPlan, SparkPlan) => SparkPlan,
       expectedAnswer: Seq[A],
-      sortAnswers: Boolean): Unit = {
+      sortAnswers: Boolean = true): Unit = {
     val expectedRows = expectedAnswer.map(Row.fromTuple)
     checkAnswer(left, right, planFunction, expectedRows, sortAnswers)
   }
@@ -155,7 +155,7 @@ class SparkPlanTest extends SparkFunSuite {
       input: Seq[DataFrame],
       planFunction: Seq[SparkPlan] => SparkPlan,
       expectedAnswer: Seq[A],
-      sortAnswers: Boolean): Unit = {
+      sortAnswers: Boolean = true): Unit = {
     val expectedRows = expectedAnswer.map(Row.fromTuple)
     checkAnswer(input, planFunction, expectedRows, sortAnswers)
   }
@@ -176,7 +176,7 @@ class SparkPlanTest extends SparkFunSuite {
       input: DataFrame,
       planFunction: SparkPlan => SparkPlan,
       expectedPlanFunction: SparkPlan => SparkPlan,
-      sortAnswers: Boolean): Unit = {
+      sortAnswers: Boolean = true): Unit = {
     SparkPlanTest.checkAnswer(input, planFunction, expectedPlanFunction, sortAnswers) match {
       case Some(errorMessage) => fail(errorMessage)
       case None =>
