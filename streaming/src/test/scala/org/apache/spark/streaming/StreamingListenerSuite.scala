@@ -142,7 +142,7 @@ class StreamingListenerSuite extends TestSuiteBase with Matchers {
     true
   }
 
-  test("registering listeners via spark.streaming.listeners") {
+  test("registering listeners via spark.streaming.extraListeners") {
     val conf = new SparkConf().setMaster("local").setAppName("test")
       .set("spark.streaming.extraListeners", classOf[BatchInfoCollector].getName + "," +
         classOf[ReceiverInfoCollector].getName)
