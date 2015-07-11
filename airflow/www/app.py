@@ -1540,8 +1540,10 @@ mv = TaskInstanceModelView(
 admin.add_view(mv)
 
 mv = DagModelView(
-    models.DagModel, Session, name="DAGs", category="Admin")
+    models.DagModel, Session, name=None)
 admin.add_view(mv)
+# Hack to not add this view to the menu
+admin._menu = admin._menu[:-1]
 
 
 class ConnectionModelView(wwwutils.SuperUserMixin, ModelView):
