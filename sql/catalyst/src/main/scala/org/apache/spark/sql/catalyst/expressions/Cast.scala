@@ -165,8 +165,8 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
   private[this] def castToTimestamp(from: DataType): Any => Any = from match {
     case StringType =>
       buildCast[UTF8String](_, utfs => {
-        val parsedDateString = DateTimeUtils.stringToMillis(utfs) * 1000
-        if (parsedDateString == null.asInstanceOf[Long]) {
+        val parsedDateString = DateTimeUtils.stringToTimestamp(utfs)
+        if (parsedDateString == null) {
           // Throw away extra if more than 9 decimal places
           val s = utfs.toString
           val periodIdx = s.indexOf(".")
@@ -179,7 +179,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
             case _: java.lang.IllegalArgumentException => null
           }
         } else {
-          parsedDateString
+          DateTimeUtils.fromJavaTimestamp(parsedDateString)
         }
       })
     case BooleanType =>
@@ -229,9 +229,10 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
   // DateConverter
   private[this] def castToDate(from: DataType): Any => Any = from match {
     case StringType =>
-      buildCast[UTF8String](_, s =>
-        DateTimeUtils.millisToDays(DateTimeUtils.stringToMillis(s))
-      )
+      buildCast[UTF8String](_, s => {
+        val parsedDate = DateTimeUtils.stringToDate(s)
+        if (parsedDate == null) null else DateTimeUtils.fromJavaDate (parsedDate)
+      })
     case TimestampType =>
       // throw valid precision more than seconds, according to Hive.
       // Timestamp.nanos is in 0 to 999,999,999, no more than a second.

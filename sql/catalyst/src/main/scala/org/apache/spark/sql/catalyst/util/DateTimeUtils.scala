@@ -184,50 +184,161 @@ object DateTimeUtils {
   }
 
   /**
-   * Parses a given UTF8 date string to the corresponding millisecond value. The format of the date
-   * string has to be either `yyyy-[m]m-[d]d` or `yyyy-[m]m-[d]d [H]H:[m]m:[s]s` or
-   * `[H]H:[m]m:[s]s`. If only a date is given, the time will be set to midnight. If only a time is
-   * given, the date will be set to today.
+   * Parses a given UTF8 date string to the corresponding [[Timestamp]] object. The format of the
+   * date has to be one of the following: `yyyy`, `yyyy-[m]m`, `yyyy-[m]m-[d]d`, `yyyy-[m]m-[d]d `,
+   * `yyyy-[m]m-[d]d [h]h:[m]m:[s]s.[ms][ms][ms][ms]`,
+   * `yyyy-[m]m-[d]d [h]h:[m]m:[s]s.[ms][ms][ms][ms]Z`,
+   * `yyyy-[m]m-[d]d [h]h:[m]m:[s]s.[ms][ms][ms][ms]-[h]h:[m]m`,
+   * `yyyy-[m]m-[d]d [h]h:[m]m:[s]s.[ms][ms][ms][ms]+[h]h:[m]m`,
+   * `yyyy-[m]m-[d]dT[h]h:[m]m:[s]s.[ms][ms][ms][ms]`,
+   * `yyyy-[m]m-[d]dT[h]h:[m]m:[s]s.[ms][ms][ms][ms]Z`,
+   * `yyyy-[m]m-[d]dT[h]h:[m]m:[s]s.[ms][ms][ms][ms]-[h]h:[m]m`,
+   * `yyyy-[m]m-[d]dT[h]h:[m]m:[s]s.[ms][ms][ms][ms]+[h]h:[m]m`,
    */
-  def stringToMillis(s: UTF8String): Long = {
+  def stringToTimestamp(s: UTF8String): Timestamp = {
     if (s == null) {
-      return null.asInstanceOf[Long]
+      return null
     }
-    val segments: Array[Int] = new Array[Int](6)
+    var timeZone: Option[Byte] = None
+    val segments: Array[Int] = Array[Int](1, 1, 1, 0, 0, 0, 0, 0, 0)
     var i = 0
-    var currentSegment = 0
-    var justTime = false
-    for {
-      b <- s.getBytes
-    } yield {
-      if (b == 45 || b == 58 || b == 32) {
-        segments(i) = currentSegment
-        currentSegment = 0
-        if (i == 0 && b == 58) {
-          justTime = true
+    var currentSegmentValue = 0
+    val bytes = s.getBytes
+    var j = 0
+    var digitsMilli = 0
+    while (j < bytes.length) {
+      val b = bytes(j)
+      val parsedValue = b - 48
+      if (parsedValue < 0 || parsedValue > 9) {
+        if (i < 2) {
+          if (b == '-') {
+            segments(i) = currentSegmentValue
+            currentSegmentValue = 0
+            i += 1
+          } else {
+            return null
+          }
+        } else if (i == 2) {
+          if (b == ' ' || b == 'T') {
+            segments(i) = currentSegmentValue
+            currentSegmentValue = 0
+            i += 1
+          } else {
+            return null
+          }
+        } else if (i < 5) {
+          if (b == ':') {
+            segments(i) = currentSegmentValue
+            currentSegmentValue = 0
+            i += 1
+          } else {
+            return null
+          }
+        } else if (i < 7) {
+          if (b == 'Z') {
+            segments(i) = currentSegmentValue
+            currentSegmentValue = 0
+            i += 1
+            timeZone = Some(43)
+          } else if (b == '-' || b == '+') {
+            segments(i) = currentSegmentValue
+            currentSegmentValue = 0
+            i += 1
+            timeZone = Some(b)
+          } else if (b == '.' && i == 5) {
+            segments(i) = currentSegmentValue
+            currentSegmentValue = 0
+            i += 1
+          } else {
+            return null
+          }
+          if (i == 6  && b != '.') {
+            i += 1
+          }
+        } else if (i > 6) {
+          if (b == ':') {
+            segments(i) = currentSegmentValue
+            currentSegmentValue = 0
+            i += 1
+          } else {
+            return null
+          }
         }
+      } else {
+        if (i == 6) {
+          digitsMilli += 1
+        }
+        currentSegmentValue = currentSegmentValue * 10 + parsedValue
+      }
+      j += 1
+    }
+    if (i > 8) {
+      return null
+    }
+    segments(i) = currentSegmentValue
+
+    // 18:3:1.1 is equals to 18:3:1:100
+    if (digitsMilli == 1) {
+      segments(6) = segments(6) * 100
+    } else if (digitsMilli == 2) {
+      segments(6) = segments(6) * 10
+    }
+    if (segments(0) < 0 || segments(0) > 9999 || segments(1) < 1 || segments(1) > 12 ||
+        segments(2) < 1 || segments(2) > 21 || segments(3) < 0 || segments(3) > 13 ||
+        segments(4) < 0 || segments(4) > 59 || segments(5) < 0 || segments(5) > 59 ||
+        segments(6) < 0 || segments(6) > 999 || segments(7) < 0 || segments(7) > 14 ||
+        segments(8) < 0 || segments(8) > 59) {
+      return null
+    }
+    val c = if (timeZone.isEmpty) {
+      Calendar.getInstance()
+    } else {
+      Calendar.getInstance(
+        TimeZone.getTimeZone(f"GMT${timeZone.get.toChar}${segments(7)}%02d:${segments(8)}%02d"))
+    }
+    c.set(segments(0), segments(1) - 1, segments(2), segments(3), segments(4), segments(5))
+    c.set(Calendar.MILLISECOND, segments(6))
+    new Timestamp(c.getTimeInMillis)
+  }
+
+  /**
+   * Parses a given UTF8 date string to the corresponding [[Date]] object. The format of the date
+   * has to be one of the following: `yyyy`, `yyyy-[m]m`, `yyyy-[m]m-[d]d`, `yyyy-[m]m-[d]d `,
+   * `yyyy-[m]m-[d]d *`, `yyyy-[m]m-[d]dT*`
+   */
+  def stringToDate(s: UTF8String): Date = {
+    if (s == null) {
+      return null
+    }
+    val segments: Array[Int] = Array[Int](1, 1, 1)
+    var i = 0
+    var currentSegmentValue = 0
+    val bytes = s.getBytes
+    var j = 0
+    while (j < bytes.length && (i < 3 && !(bytes(j) == ' ' || bytes(j) == 'T'))) {
+      val b = bytes(j)
+      if (i < 2 && b == '-') {
+        segments(i) = currentSegmentValue
+        currentSegmentValue = 0
         i += 1
       } else {
         val parsedValue = b - 48
         if (parsedValue < 0 || parsedValue > 9) {
-          return null.asInstanceOf[Long]
+          return null
+        } else {
+          currentSegmentValue = currentSegmentValue * 10 + parsedValue
         }
-        currentSegment = currentSegment * 10 + parsedValue
       }
+      j += 1
     }
-    segments(i) = currentSegment
-    if (i < 2) {
-      null.asInstanceOf[Long]
-    } else {
-      val c = Calendar.getInstance()
-      if (justTime) {
-        c.set(Calendar.HOUR, segments(0))
-        c.set(Calendar.MINUTE, segments(1))
-        c.set(Calendar.SECOND, segments(2))
-      } else {
-        c.set(segments(0), segments(1) - 1, segments(2), segments(3), segments(4), segments(5))
-      }
-      c.getTimeInMillis
+    segments(i) = currentSegmentValue
+    if (segments(0) < 0 || segments(0) > 9999 || segments(1) < 1 || segments(1) > 12 ||
+        segments(2) < 1 || segments(2) > 21) {
+      return null
     }
+    val c = Calendar.getInstance()
+    c.set(segments(0), segments(1) - 1, segments(2), 0, 0, 0)
+    c.set(Calendar.MILLISECOND, 0)
+    new Date(c.getTimeInMillis)
   }
 }
