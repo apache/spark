@@ -18,6 +18,8 @@
 package org.apache.spark.unsafe.types;
 
 import java.io.Serializable;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * The internal representation of interval type.
@@ -29,6 +31,42 @@ public final class Interval implements Serializable {
   public static final long MICROS_PER_HOUR = MICROS_PER_MINUTE * 60;
   public static final long MICROS_PER_DAY = MICROS_PER_HOUR * 24;
   public static final long MICROS_PER_WEEK = MICROS_PER_DAY * 7;
+
+  private static String unitRegex(String unit) {
+    return "(?:\\s+(-?\\d+)\\s+" + unit + "s?)?";
+  }
+
+  private static Pattern p = Pattern.compile("interval" + unitRegex("year") + unitRegex("month") +
+    unitRegex("week") + unitRegex("day") + unitRegex("hour") + unitRegex("minute") +
+    unitRegex("second") + unitRegex("millisecond") + unitRegex("microsecond"));
+
+  private static long toLong(String s) {
+    if (s == null) {
+      return 0;
+    } else {
+      return Long.valueOf(s);
+    }
+  }
+
+  public static Interval fromString(String s) {
+    if (s == null) {
+      return null;
+    }
+    Matcher m = p.matcher(s);
+    if (!m.matches() || s.equals("interval")) {
+      return null;
+    } else {
+      long months = toLong(m.group(1)) * 12 + toLong(m.group(2));
+      long microseconds = toLong(m.group(3)) * MICROS_PER_WEEK;
+      microseconds += toLong(m.group(4)) * MICROS_PER_DAY;
+      microseconds += toLong(m.group(5)) * MICROS_PER_HOUR;
+      microseconds += toLong(m.group(6)) * MICROS_PER_MINUTE;
+      microseconds += toLong(m.group(7)) * MICROS_PER_SECOND;
+      microseconds += toLong(m.group(8)) * MICROS_PER_MILLI;
+      microseconds += toLong(m.group(9));
+      return new Interval((int) months, microseconds);
+    }
+  }
 
   public final int months;
   public final long microseconds;

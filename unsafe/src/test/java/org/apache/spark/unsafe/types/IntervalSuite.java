@@ -56,4 +56,34 @@ public class IntervalSuite {
     i = new Interval(34, 3 * MICROS_PER_WEEK + 13 * MICROS_PER_HOUR + 123);
     assertEquals(i.toString(), "interval 2 years 10 months 3 weeks 13 hours 123 microseconds");
   }
+
+  @Test
+  public void fromStringTest() {
+    String s;
+    Interval i;
+
+    s = "interval  2 weeks -6 minute";
+    i = new Interval(0, 2 * MICROS_PER_WEEK - 6 * MICROS_PER_MINUTE);
+    assertEquals(Interval.fromString(s), i);
+
+    s = "interval   -5 years 23 month";
+    i = new Interval(-5 * 12 + 23, 0);
+    assertEquals(Interval.fromString(s), i);
+
+    s = "interval   3month 1 hour";
+    i = null;
+    assertEquals(Interval.fromString(s), i);
+
+    s = "interval 3 moth 1 hour";
+    i = null;
+    assertEquals(Interval.fromString(s), i);
+
+    s = "interval";
+    i = null;
+    assertEquals(Interval.fromString(s), i);
+
+    s = null;
+    i = null;
+    assertEquals(Interval.fromString(s), i);
+  }
 }
