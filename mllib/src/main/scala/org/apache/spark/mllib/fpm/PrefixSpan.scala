@@ -82,10 +82,15 @@ class PrefixSpan private (
       logWarning("Input data is not cached.")
     }
     val minCount = getMinCount(sequences)
-    val (lengthOnePatternsAndCounts, prefixAndCandidates) =
-      findLengthOnePatterns(minCount, sequences)
-    val projectedDatabase = makePrefixProjectedDatabases(prefixAndCandidates)
-    val nextPatterns = getPatternsInLocal(minCount, projectedDatabase)
+    val lengthOnePatternsAndCounts =
+      getFreqItemAndCounts(minCount, sequences).collect()
+    val prefixAndProjectedDatabase = getPrefixAndProjectedDatabase(
+      lengthOnePatternsAndCounts.map(_._1), sequences)
+    val groupedProjectedDatabase = prefixAndProjectedDatabase
+      .map(x => (x._1.toSeq, x._2))
+      .groupByKey()
+      .map(x => (x._1.toArray, x._2.toArray))
+    val nextPatterns = getPatternsInLocal(minCount, groupedProjectedDatabase)
     val lengthOnePatternsAndCountsRdd =
       sequences.sparkContext.parallelize(
         lengthOnePatternsAndCounts.map(x => (Array(x._1), x._2)))
@@ -122,7 +127,7 @@ class PrefixSpan private (
    * @param sequences sequences data
    * @return prefixes and projected database
    */
-  private def getPatternAndProjectedDatabase(
+  private def getPrefixAndProjectedDatabase(
       frequentPrefixes: Array[Int],
       sequences: RDD[Array[Int]]): RDD[(Array[Int], Array[Int])] = {
     val filteredSequences = sequences.map { p =>
@@ -134,33 +139,6 @@ class PrefixSpan private (
         (Array(y), sub)
       }.filter(_._2.nonEmpty)
     }
-  }
-
-  /**
-   * Find the patterns that it's length is one
-   * @param minCount the minimum count
-   * @param sequences original sequences data
-   * @return length-one patterns and projection table
-   */
-  private def findLengthOnePatterns(
-      minCount: Long,
-      sequences: RDD[Array[Int]]): (Array[(Int, Long)], RDD[(Array[Int], Array[Int])]) = {
-    val frequentLengthOnePatternAndCounts = getFreqItemAndCounts(minCount, sequences)
-    val prefixAndProjectedDatabase = getPatternAndProjectedDatabase(
-      frequentLengthOnePatternAndCounts.keys.collect(), sequences)
-    (frequentLengthOnePatternAndCounts.collect(), prefixAndProjectedDatabase)
-  }
-
-  /**
-   * Constructs prefix-projected databases from (prefix, suffix) pairs.
-   * @param data patterns and projected sequences data before re-partition
-   * @return patterns and projected sequences data after re-partition
-   */
-  private def makePrefixProjectedDatabases(
-      data: RDD[(Array[Int], Array[Int])]): RDD[(Array[Int], Array[Array[Int]])] = {
-    data.map(x => (x._1.toSeq, x._2))
-      .groupByKey()
-      .map(x => (x._1.toArray, x._2.toArray))
   }
 
   /**

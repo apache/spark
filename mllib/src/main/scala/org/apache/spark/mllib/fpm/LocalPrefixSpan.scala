@@ -30,13 +30,13 @@ import org.apache.spark.annotation.Experimental
 private[fpm] object LocalPrefixSpan extends Logging with Serializable {
 
   /**
-   * Calculate all patterns of a projected database in local.
+   * Calculate all patterns of a projected database.
    * @param minCount minimum count
    * @param maxPatternLength maximum pattern length
    * @param prefix prefix
    * @param projectedDatabase the projected dabase
    * @return a set of sequential pattern pairs,
-   *         the key of pair is pattern (a list of elements),
+   *         the key of pair is sequential pattern (a list of items),
    *         the value of pair is the pattern's count.
    */
   def run(
@@ -44,7 +44,21 @@ private[fpm] object LocalPrefixSpan extends Logging with Serializable {
       maxPatternLength: Int,
       prefix: Array[Int],
       projectedDatabase: Array[Array[Int]]): Array[(Array[Int], Long)] = {
-    getPatternsWithPrefix(minCount, maxPatternLength, prefix, projectedDatabase)
+    val frequentPrefixAndCounts = getFreqItemAndCounts(minCount, projectedDatabase)
+    val frequentPatternAndCounts = frequentPrefixAndCounts
+      .map(x => (prefix ++ Array(x._1), x._2))
+    val prefixProjectedDatabases = getPatternAndProjectedDatabase(
+      prefix, frequentPrefixAndCounts.map(_._1), projectedDatabase)
+
+    val continueProcess = prefixProjectedDatabases.nonEmpty && prefix.length + 1 < maxPatternLength
+    if (continueProcess) {
+      val nextPatterns = prefixProjectedDatabases
+        .map(x => run(minCount, maxPatternLength, x._1, x._2))
+        .reduce(_ ++ _)
+      frequentPatternAndCounts ++ nextPatterns
+    } else {
+      frequentPatternAndCounts
+    }
   }
 
   /**
@@ -95,35 +109,5 @@ private[fpm] object LocalPrefixSpan extends Logging with Serializable {
       val sub = filteredProjectedDatabase.map(y => getSuffix(x, y)).filter(_.nonEmpty)
       (prePrefix ++ Array(x), sub)
     }.filter(x => x._2.nonEmpty)
-  }
-
-  /**
-   * Calculate all patterns of a projected database in local.
-   * @param minCount the minimum count
-   * @param maxPatternLength maximum pattern length
-   * @param prefix prefix
-   * @param projectedDatabase projected database
-   * @return patterns
-   */
-  private def getPatternsWithPrefix(
-      minCount: Long,
-      maxPatternLength: Int,
-      prefix: Array[Int],
-      projectedDatabase: Array[Array[Int]]): Array[(Array[Int], Long)] = {
-    val frequentPrefixAndCounts = getFreqItemAndCounts(minCount, projectedDatabase)
-    val frequentPatternAndCounts = frequentPrefixAndCounts
-      .map(x => (prefix ++ Array(x._1), x._2))
-    val prefixProjectedDatabases = getPatternAndProjectedDatabase(
-      prefix, frequentPrefixAndCounts.map(_._1), projectedDatabase)
-
-    val continueProcess = prefixProjectedDatabases.nonEmpty && prefix.length + 1 < maxPatternLength
-    if (continueProcess) {
-      val nextPatterns = prefixProjectedDatabases
-        .map(x => getPatternsWithPrefix(minCount, maxPatternLength, x._1, x._2))
-        .reduce(_ ++ _)
-      frequentPatternAndCounts ++ nextPatterns
-    } else {
-      frequentPatternAndCounts
-    }
   }
 }
