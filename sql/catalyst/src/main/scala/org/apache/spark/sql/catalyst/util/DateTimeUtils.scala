@@ -21,6 +21,8 @@ import java.sql.{Date, Timestamp}
 import java.text.{DateFormat, SimpleDateFormat}
 import java.util.{Calendar, TimeZone}
 
+import org.apache.spark.unsafe.types.UTF8String
+
 /**
  * Helper functions for converting between internal and external date and time representations.
  * Dates are exposed externally as java.sql.Date and are represented internally as the number of
@@ -179,5 +181,53 @@ object DateTimeUtils {
     val secondsInDay = seconds % SECONDS_PER_DAY
     val nanos = (us % MICROS_PER_SECOND) * 1000L
     (day.toInt, secondsInDay * NANOS_PER_SECOND + nanos)
+  }
+
+  /**
+   * Parses a given UTF8 date string to the corresponding millisecond value. The format of the date
+   * string has to be either `yyyy-[m]m-[d]d` or `yyyy-[m]m-[d]d [H]H:[m]m:[s]s` or
+   * `[H]H:[m]m:[s]s`. If only a date is given, the time will be set to midnight. If only a time is
+   * given, the date will be set to today.
+   */
+  def stringToMillis(s: UTF8String): Long = {
+    if (s == null) {
+      return null.asInstanceOf[Long]
+    }
+    val segments: Array[Int] = new Array[Int](6)
+    var i = 0
+    var currentSegment = 0
+    var justTime = false
+    for {
+      b <- s.getBytes
+    } yield {
+      if (b == 45 || b == 58 || b == 32) {
+        segments(i) = currentSegment
+        currentSegment = 0
+        if (i == 0 && b == 58) {
+          justTime = true
+        }
+        i += 1
+      } else {
+        val parsedValue = b - 48
+        if (parsedValue < 0 || parsedValue > 9) {
+          return null.asInstanceOf[Long]
+        }
+        currentSegment = currentSegment * 10 + parsedValue
+      }
+    }
+    segments(i) = currentSegment
+    if (i < 2) {
+      null.asInstanceOf[Long]
+    } else {
+      val c = Calendar.getInstance()
+      if (justTime) {
+        c.set(Calendar.HOUR, segments(0))
+        c.set(Calendar.MINUTE, segments(1))
+        c.set(Calendar.SECOND, segments(2))
+      } else {
+        c.set(segments(0), segments(1) - 1, segments(2), segments(3), segments(4), segments(5))
+      }
+      c.getTimeInMillis
+    }
   }
 }

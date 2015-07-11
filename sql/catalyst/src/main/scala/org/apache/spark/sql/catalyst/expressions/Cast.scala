@@ -165,15 +165,22 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
   private[this] def castToTimestamp(from: DataType): Any => Any = from match {
     case StringType =>
       buildCast[UTF8String](_, utfs => {
-        // Throw away extra if more than 9 decimal places
-        val s = utfs.toString
-        val periodIdx = s.indexOf(".")
-        var n = s
-        if (periodIdx != -1 && n.length() - periodIdx > 9) {
-          n = n.substring(0, periodIdx + 10)
+        val parsedDateString = DateTimeUtils.stringToMillis(utfs) * 1000
+        if (parsedDateString == null.asInstanceOf[Long]) {
+          // Throw away extra if more than 9 decimal places
+          val s = utfs.toString
+          val periodIdx = s.indexOf(".")
+          var n = s
+          if (periodIdx != -1 && n.length() - periodIdx > 9) {
+            n = n.substring(0, periodIdx + 10)
+          }
+          try DateTimeUtils.fromJavaTimestamp(Timestamp.valueOf(n))
+          catch {
+            case _: java.lang.IllegalArgumentException => null
+          }
+        } else {
+          parsedDateString
         }
-        try DateTimeUtils.fromJavaTimestamp(Timestamp.valueOf(n))
-        catch { case _: java.lang.IllegalArgumentException => null }
       })
     case BooleanType =>
       buildCast[Boolean](_, b => if (b) 1L else 0)
@@ -223,8 +230,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
   private[this] def castToDate(from: DataType): Any => Any = from match {
     case StringType =>
       buildCast[UTF8String](_, s =>
-        try DateTimeUtils.fromJavaDate(Date.valueOf(s.toString))
-        catch { case _: java.lang.IllegalArgumentException => null }
+        DateTimeUtils.millisToDays(DateTimeUtils.stringToMillis(s))
       )
     case TimestampType =>
       // throw valid precision more than seconds, according to Hive.

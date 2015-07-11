@@ -18,11 +18,13 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.sql.{Timestamp, Date}
+import java.util.Calendar
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * Test suite for data type casting expression [[Cast]].
@@ -39,6 +41,42 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
   // expected cannot be null
   private def checkCast(v: Any, expected: Any): Unit = {
     checkEvaluation(cast(v, Literal(expected).dataType), expected)
+  }
+
+  test("cast string to date") {
+    val c = Calendar.getInstance()
+    c.set(2015, 0, 1)
+    checkEvaluation(Cast(Literal("2015-1-1"), DateType),
+      (c.getTimeInMillis / 1000L / 3600L / 24L - 1).toInt)
+    c.set(2015, 1, 1)
+    checkEvaluation(Cast(Literal("2015-02-01"), DateType),
+      (c.getTimeInMillis / 1000L / 3600L / 24L - 1).toInt)
+    c.set(2015, 5, 15)
+    checkEvaluation(Cast(Literal("2015-06-15"), DateType),
+      (c.getTimeInMillis / 1000L / 3600L / 24L - 1).toInt)
+
+    c.set(2015, 0, 1)
+    checkEvaluation(Cast(Literal("2015-1-1 13:10:58"), DateType),
+      (c.getTimeInMillis / 1000L / 3600L / 24L - 1).toInt)
+    c.set(2015, 1, 1)
+    checkEvaluation(Cast(Literal("2015-02-01 13:10:58"), DateType),
+      (c.getTimeInMillis / 1000L / 3600L / 24L - 1).toInt)
+    c.set(2015, 5, 15)
+    checkEvaluation(Cast(Literal("2015-06-15 13:10:58"), DateType),
+      (c.getTimeInMillis / 1000L / 3600L / 24L - 1).toInt)
+
+    c.set(2015, 0, 1, 13, 10, 58)
+    assert(
+      evaluate(Cast(Literal("2015-1-1 13:10:58"), TimestampType)).asInstanceOf[Long] / 1000000L ==
+        c.getTimeInMillis / 1000L)
+    c.set(2015, 1, 1, 12, 9, 15)
+    assert(
+      evaluate(Cast(Literal("2015-2-1 12:9:15"), TimestampType)).asInstanceOf[Long] / 1000000L ==
+        c.getTimeInMillis / 1000L)
+    c.set(2015, 5, 15, 17, 58, 46)
+    assert(
+      evaluate(Cast(Literal("2015-6-15 17:58:46"), TimestampType)).asInstanceOf[Long] / 1000000L ==
+        c.getTimeInMillis / 1000L)
   }
 
   test("cast from int") {
