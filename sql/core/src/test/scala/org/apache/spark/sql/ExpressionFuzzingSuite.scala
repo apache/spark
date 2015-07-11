@@ -33,7 +33,7 @@ import org.apache.spark.sql.types.NullType
 /**
  * This test suite implements fuzz tests for expression code generation. It uses reflection to
  * automatically discover all [[Expression]]s, then instantiates these expressions with random
- * children/inputs. If the resulting expression passes the type checker after type coerceion is
+ * children/inputs. If the resulting expression passes the type checker after type coercion is
  * performed then we attempt to compile the expression and compare its output to output generated
  * by the interpreted expression.
  */
@@ -54,6 +54,11 @@ class ExpressionFuzzingSuite extends SparkFunSuite {
       .map(c => Class.forName(c.name).asInstanceOf[Class[Expression]]).toSeq
   }
 
+  def coerceTypes(expression: Expression): Expression = {
+    val dummyPlan: LogicalPlan = DummyPlan(expression)
+    DummyAnalyzer.execute(dummyPlan).asInstanceOf[DummyPlan].expression
+  }
+
   for (c <- expressionSubclasses) {
     val exprOnlyConstructor = c.getConstructors.filter { c =>
       c.getParameterTypes.toSet == Set(classOf[Expression])
@@ -63,11 +68,7 @@ class ExpressionFuzzingSuite extends SparkFunSuite {
       test(s"${c.getName}") {
         val expr: Expression =
           cons.newInstance(Seq.fill(numChildren)(Literal.create(null, NullType)): _*).asInstanceOf[Expression]
-        val coercedExpr: Expression = {
-          val dummyPlan = DummyPlan(expr)
-          DummyAnalyzer.execute(dummyPlan).asInstanceOf[DummyPlan].expr
-          expr
-        }
+        val coercedExpr: Expression = coerceTypes(expr)
         println(s"Before coercion: ${expr.children.map(_.dataType)}")
         println(s"After coercion: ${coercedExpr.children.map(_.dataType)}")
         assume(coercedExpr.checkInputDataTypes().isSuccess, coercedExpr.checkInputDataTypes().toString)
@@ -82,18 +83,14 @@ class ExpressionFuzzingSuite extends SparkFunSuite {
   }
 }
 
-case object DummyAnalyzer extends RuleExecutor[LogicalPlan] {
+private case object DummyAnalyzer extends RuleExecutor[LogicalPlan] {
   override protected val batches: Seq[Batch] = Seq(
     Batch("analysis", FixedPoint(100), HiveTypeCoercion.typeCoercionRules: _*)
   )
 }
 
-
-case class DummyPlan(expr: Expression) extends LogicalPlan {
+private case class DummyPlan(expression: Expression) extends LogicalPlan {
+  override def expressions: Seq[Expression] = Seq(expression)
   override def output: Seq[Attribute] = Seq.empty
-
-  /** Returns all of the expressions present in this query plan operator. */
-  override def expressions: Seq[Expression] = Seq(expr)
-
   override def children: Seq[LogicalPlan] = Seq.empty
 }
