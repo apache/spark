@@ -31,25 +31,25 @@
         <span class="glyphicon glyphicon-tree-deciduous" aria-hidden="true"></span>
       Tree View
     </a></li>
-    <li><a href="{{ url_for("airflow.duration", dag_id=dag.dag_id, days=30) }}">
+    <li><a href="{{ url_for("airflow.duration", dag_id=dag.dag_id, days=30, root=root) }}">
         <span class="glyphicon glyphicon-stats" aria-hidden="true"></span>
         Task Duration
     </a></li>
     <li>
-      <a href="{{ url_for("airflow.landing_times", dag_id=dag.dag_id, days=30) }}">
+      <a href="{{ url_for("airflow.landing_times", dag_id=dag.dag_id, days=30, root=root) }}">
         <span class="glyphicon glyphicon-plane" aria-hidden="true"></span>
         Landing Times
       </a>
     </li>
     <li>
-      <a href="{{ url_for("airflow.gantt", dag_id=dag.dag_id) }}">
+      <a href="{{ url_for("airflow.gantt", dag_id=dag.dag_id, root=root) }}">
         <span class="glyphicon glyphicon-align-left" aria-hidden="true"></span>
         <i class="icon-align-left"></i>
         Gantt
       </a>
     </li>
     <li>
-      <a href="{{ url_for("airflow.code", dag_id=dag.dag_id) }}">
+      <a href="{{ url_for("airflow.code", dag_id=dag.dag_id, root=root) }}">
         <span class="glyphicon glyphicon-flash" aria-hidden="true"></span>
         Code
       </a>

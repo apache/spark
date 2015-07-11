@@ -1608,6 +1608,7 @@ class DAG(object):
             TI.dag_id == self.dag_id,
             TI.execution_date >= start_date,
             TI.execution_date <= end_date,
+            TI.task_id.in_([t.task_id for t in self.tasks]),
         )
         if state:
             tis = tis.filter(TI.state == state)
