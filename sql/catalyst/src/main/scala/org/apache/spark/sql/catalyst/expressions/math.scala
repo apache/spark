@@ -523,6 +523,20 @@ case class Logarithm(left: Expression, right: Expression)
   }
 }
 
+/**
+ * Round the `child`'s result to `scale` decimal place when `scale` >= 0
+ * or round at integral part when `scale` < 0.
+ * For example, round(31.415, 2) would eval to 31.42 and round(31.415, -1) would eval to 30.
+ *
+ * Child of IntegralType would eval to itself when `scale` >= 0.
+ * Child of FractionalType whose value is NaN or Infinite would always eval to itself.
+ *
+ * Round's dataType would always equal to `child`'s dataType except for [[DecimalType.Fixed]],
+ * which leads to scale update in DecimalType's [[PrecisionInfo]]
+ *
+ * @param child expr to be round, all [[NumericType]] is allowed as Input
+ * @param scale new scale to be round to, this should be a constant int at runtime
+ */
 case class Round(child: Expression, scale: Expression)
   extends BinaryExpression with ExpectsInputTypes {
 
@@ -559,10 +573,27 @@ case class Round(child: Expression, scale: Expression)
     }
   }
 
-  private lazy val scaleV = scale.eval(EmptyRow)
-  private lazy val _scale = if (scaleV != null) scaleV.asInstanceOf[Int] else 0
+  // Avoid repeated evaluation since `scale` is a constant int,
+  // avoid unnecessary `child` evaluation in both codegen and non-codegen eval
+  // by checking if scaleV == null as well.
+  private lazy val scaleV: Any = scale.eval(EmptyRow)
+  private lazy val _scale: Int = scaleV.asInstanceOf[Int]
 
-  protected override def nullSafeEval(input1: Any, input2: Any): Any = {
+  override def eval(input: InternalRow): Any = {
+    if (scaleV == null) { // if scale is null, no need to eval its child at all
+      null
+    } else {
+      val evalE = child.eval(input)
+      if (evalE == null) {
+        null
+      } else {
+        nullSafeEval(evalE)
+      }
+    }
+  }
+
+  // not overriding since _scale is a constant int at runtime
+  def nullSafeEval(input1: Any): Any = {
     child.dataType match {
       case _: DecimalType =>
         val decimal = input1.asInstanceOf[Decimal]
@@ -604,45 +635,89 @@ case class Round(child: Expression, scale: Expression)
           ${ev.isNull} = true;
         }"""
       case ByteType =>
-        s"""
-        ${ev.primitive} = new java.math.BigDecimal(${ce.primitive}).
-          setScale(${_scale}, java.math.BigDecimal.ROUND_HALF_UP).byteValue();"""
+        if (_scale < 0) {
+          s"""
+          ${ev.primitive} = new java.math.BigDecimal(${ce.primitive}).
+            setScale(${_scale}, java.math.BigDecimal.ROUND_HALF_UP).byteValue();"""
+        } else {
+          s"${ev.primitive} = ${ce.primitive};"
+        }
       case ShortType =>
-        s"""
-        ${ev.primitive} = new java.math.BigDecimal(${ce.primitive}).
-          setScale(${_scale}, java.math.BigDecimal.ROUND_HALF_UP).shortValue();"""
+        if (_scale < 0) {
+          s"""
+          ${ev.primitive} = new java.math.BigDecimal(${ce.primitive}).
+            setScale(${_scale}, java.math.BigDecimal.ROUND_HALF_UP).shortValue();"""
+        } else {
+          s"${ev.primitive} = ${ce.primitive};"
+        }
       case IntegerType =>
-        s"""
-        ${ev.primitive} = new java.math.BigDecimal(${ce.primitive}).
-          setScale(${_scale}, java.math.BigDecimal.ROUND_HALF_UP).intValue();"""
+        if (_scale < 0) {
+          s"""
+          ${ev.primitive} = new java.math.BigDecimal(${ce.primitive}).
+            setScale(${_scale}, java.math.BigDecimal.ROUND_HALF_UP).intValue();"""
+        } else {
+          s"${ev.primitive} = ${ce.primitive};"
+        }
       case LongType =>
-        s"""
-        ${ev.primitive} = new java.math.BigDecimal(${ce.primitive}).
-          setScale(${_scale}, java.math.BigDecimal.ROUND_HALF_UP).longValue();"""
-      case FloatType =>
-        s"""
-        if (Float.isNaN(${ce.primitive}) || Float.isInfinite(${ce.primitive})){
-          ${ev.primitive} = ${ce.primitive};
+        if (_scale < 0) {
+          s"""
+          ${ev.primitive} = new java.math.BigDecimal(${ce.primitive}).
+            setScale(${_scale}, java.math.BigDecimal.ROUND_HALF_UP).longValue();"""
         } else {
-          ${ev.primitive} = java.math.BigDecimal.valueOf(${ce.primitive}).
-            setScale(${_scale}, java.math.BigDecimal.ROUND_HALF_UP).floatValue();
-        }"""
-      case DoubleType =>
-        s"""
-        if (Double.isNaN(${ce.primitive}) || Double.isInfinite(${ce.primitive})){
-          ${ev.primitive} = ${ce.primitive};
+          s"${ev.primitive} = ${ce.primitive};"
+        }
+      case FloatType => // if child eval to NaN or Infinity, just return it.
+        if (_scale == 0) {
+          s"""
+            if (Float.isNaN(${ce.primitive}) || Float.isInfinite(${ce.primitive})){
+              ${ev.primitive} = ${ce.primitive};
+            } else {
+              ${ev.primitive} = Math.round(${ce.primitive});
+            }"""
         } else {
-          ${ev.primitive} = java.math.BigDecimal.valueOf(${ce.primitive}).
-            setScale(${_scale}, java.math.BigDecimal.ROUND_HALF_UP).doubleValue();
-        }"""
+          s"""
+            if (Float.isNaN(${ce.primitive}) || Float.isInfinite(${ce.primitive})){
+              ${ev.primitive} = ${ce.primitive};
+            } else {
+              ${ev.primitive} = java.math.BigDecimal.valueOf(${ce.primitive}).
+                setScale(${_scale}, java.math.BigDecimal.ROUND_HALF_UP).floatValue();
+            }"""
+        }
+      case DoubleType => // if child eval to NaN or Infinity, just return it.
+        if (_scale == 0) {
+          s"""
+            if (Double.isNaN(${ce.primitive}) || Double.isInfinite(${ce.primitive})){
+              ${ev.primitive} = ${ce.primitive};
+            } else {
+              ${ev.primitive} = Math.round(${ce.primitive});
+            }"""
+        } else {
+          s"""
+            if (Double.isNaN(${ce.primitive}) || Double.isInfinite(${ce.primitive})){
+              ${ev.primitive} = ${ce.primitive};
+            } else {
+              ${ev.primitive} = java.math.BigDecimal.valueOf(${ce.primitive}).
+                setScale(${_scale}, java.math.BigDecimal.ROUND_HALF_UP).doubleValue();
+            }"""
+        }
     }
 
-    ce.code + s"""
-      boolean ${ev.isNull} = ${ce.isNull} || ${scaleV == null};
-      ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
-      if (!${ev.isNull}) {
-        ${evaluationCode}
-      }
+    if (scaleV == null) { // if scale is null, no need to eval its child at all
+      s"""
+        boolean ${ev.isNull} = true;
+        ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
       """
+    } else {
+      s"""
+        ${ce.code}
+        boolean ${ev.isNull} = ${ce.isNull};
+        ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
+        if (!${ev.isNull}) {
+          $evaluationCode
+        }
+      """
+    }
   }
+
+  override def prettyName: String = "round"
 }
