@@ -19,6 +19,8 @@ package org.apache.spark.sql.hive.client
 
 import java.io.File
 
+import org.apache.spark.sql.catalyst.expressions.{NamedExpression, Literal, AttributeReference, EqualTo}
+import org.apache.spark.sql.types.IntegerType
 import org.apache.spark.{Logging, SparkFunSuite}
 import org.apache.spark.sql.catalyst.util.quietly
 import org.apache.spark.util.Utils
@@ -152,7 +154,9 @@ class VersionsSuite extends SparkFunSuite with Logging {
     }
 
     test(s"$version: getPartitionsByFilter") {
-      client.getPartitionsByFilter(client.getTable("default", "src_part"), "key = 1")
+      client.getPartitionsByFilter(client.getTable("default", "src_part"), Seq(EqualTo(
+        AttributeReference("key", IntegerType, false)(NamedExpression.newExprId),
+        Literal(1))))
     }
 
     test(s"$version: loadPartition") {

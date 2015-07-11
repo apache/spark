@@ -19,7 +19,6 @@ package org.apache.spark.sql.hive
 
 import java.io.{InputStream, OutputStream}
 import java.rmi.server.UID
-import java.util.List
 
 /* Implicit conversions */
 import scala.collection.JavaConversions._
@@ -31,18 +30,15 @@ import com.esotericsoftware.kryo.io.{Input, Output}
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
-import org.apache.hadoop.hive.metastore.api.FieldSchema
 import org.apache.hadoop.hive.ql.exec.{UDF, Utilities}
 import org.apache.hadoop.hive.ql.plan.{FileSinkDesc, TableDesc}
-import org.apache.hadoop.hive.serde.serdeConstants
 import org.apache.hadoop.hive.serde2.ColumnProjectionUtils
 import org.apache.hadoop.hive.serde2.avro.AvroGenericRecordWritable
 import org.apache.hadoop.hive.serde2.objectinspector.primitive.HiveDecimalObjectInspector
 import org.apache.hadoop.io.Writable
 
 import org.apache.spark.Logging
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, BinaryComparison, Expression}
-import org.apache.spark.sql.types.{StringType, IntegralType, Decimal}
+import org.apache.spark.sql.types.Decimal
 import org.apache.spark.util.Utils
 
 private[hive] object HiveShim {
@@ -102,56 +98,6 @@ private[hive] object HiveShim {
     } else {
       Decimal(hdoi.getPrimitiveJavaObject(data).bigDecimalValue(), hdoi.precision(), hdoi.scale())
     }
-  }
-
-  def toMetastoreFilter(
-      predicates: Seq[Expression],
-      partitionKeys: List[FieldSchema],
-      hiveMetastoreVersion: String): Option[String] = {
-
-    // Binary comparison has been supported in getPartitionsByFilter() since Hive 0.13.
-    // So if Hive matastore version is older than 0.13, predicates cannot be pushed down.
-    // See HIVE-4888.
-    val versionPattern = "([\\d]+\\.[\\d]+).*".r
-    hiveMetastoreVersion match {
-      case versionPattern(version) if (version.toDouble < 0.13) => return None
-      case _ => // continue
-    }
-
-    // hive varchar is treated as catalyst string, but hive varchar can't be pushed down.
-    val varcharKeys = partitionKeys
-      .filter(col => col.getType.startsWith(serdeConstants.VARCHAR_TYPE_NAME))
-      .map(col => col.getName).toSet
-
-    // Hive getPartitionsByFilter() takes a string that represents partition
-    // predicates like "str_key=\"value\" and int_key=1 ..."
-    Option(predicates.foldLeft("") {
-      (prevStr, expr) => {
-        expr match {
-          case op @ BinaryComparison(lhs, rhs) => {
-            val curr: Option[String] =
-              lhs match {
-                case AttributeReference(_, _, _, _) => {
-                  rhs.dataType match {
-                    case _: IntegralType =>
-                      Some(lhs.prettyString + op.symbol + rhs.prettyString)
-                    case _: StringType if (!varcharKeys.contains(lhs.prettyString)) =>
-                      Some(lhs.prettyString + op.symbol + "\"" + rhs.prettyString + "\"")
-                    case _ => None
-                  }
-                }
-                case _ => None
-              }
-            curr match {
-              case Some(currStr) if (prevStr.nonEmpty) => s"$prevStr and $currStr"
-              case Some(currStr) if (prevStr.isEmpty) => currStr
-              case None => prevStr
-            }
-          }
-          case _ => prevStr
-        }
-      }
-    }).filter(_.nonEmpty)
   }
 
   /**

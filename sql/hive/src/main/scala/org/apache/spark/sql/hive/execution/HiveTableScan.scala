@@ -54,12 +54,6 @@ case class HiveTableScan(
   // Retrieve the original attributes based on expression ID so that capitalization matches.
   val attributes = requestedAttributes.map(relation.attributeMap)
 
-  val metastoreFilter: Option[String] =
-    HiveShim.toMetastoreFilter(
-      partitionPruningPred,
-      relation.hiveQlTable.getPartitionKeys,
-      context.hiveMetastoreVersion)
-
   // Bind all partition key attribute references in the partition pruning predicate for later
   // evaluation.
   private[this] val boundPruningPred = partitionPruningPred.reduceLeftOption(And).map { pred =>
@@ -139,9 +133,8 @@ case class HiveTableScan(
   protected override def doExecute(): RDD[InternalRow] = if (!relation.hiveQlTable.isPartitioned) {
     hadoopReader.makeRDDForTable(relation.hiveQlTable)
   } else {
-    logDebug(s"Hive metastore filter is $metastoreFilter")
     hadoopReader.makeRDDForPartitionedTable(
-      prunePartitions(relation.getHiveQlPartitions(metastoreFilter)))
+      prunePartitions(relation.getHiveQlPartitions(partitionPruningPred)))
   }
 
   override def output: Seq[Attribute] = attributes

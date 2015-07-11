@@ -17,11 +17,11 @@
 
 package org.apache.spark.sql.hive.client
 
-import java.io.{BufferedReader, File, InputStreamReader, PrintStream}
-import java.net.URI
-import java.util.{ArrayList => JArrayList, Map => JMap, List => JList, Set => JSet}
+import java.io.{File, PrintStream}
+import java.util.{Map => JMap}
 import javax.annotation.concurrent.GuardedBy
 
+import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.util.CircularBuffer
 
 import scala.collection.JavaConversions._
@@ -315,9 +315,9 @@ private[hive] class ClientWrapper(
 
   override def getPartitionsByFilter(
       hTable: HiveTable,
-      filter: String): Seq[HivePartition] = withHiveState {
+      predicates: Seq[Expression]): Seq[HivePartition] = withHiveState {
     val qlTable = toQlTable(hTable)
-    shim.getPartitionsByFilter(client, qlTable, filter).map(toHivePartition)
+    shim.getPartitionsByFilter(client, qlTable, predicates).map(toHivePartition)
   }
 
   override def listTables(dbName: String): Seq[String] = withHiveState {
