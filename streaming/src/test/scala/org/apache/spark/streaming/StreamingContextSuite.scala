@@ -21,19 +21,23 @@ import java.io.{File, NotSerializableException}
 import java.util.concurrent.atomic.AtomicInteger
 
 import org.apache.commons.io.FileUtils
+import org.apache.spark.metrics.MetricsSystem
+import org.apache.spark.metrics.source.Source
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.concurrent.Timeouts
 import org.scalatest.exceptions.TestFailedDueToTimeoutException
 import org.scalatest.time.SpanSugar._
-import org.scalatest.{Assertions, BeforeAndAfter}
+import org.scalatest.{PrivateMethodTester, Assertions, BeforeAndAfter}
 
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.dstream.DStream
 import org.apache.spark.streaming.receiver.Receiver
 import org.apache.spark.util.Utils
+
 import org.apache.spark._
 
 import scala.collection._
+import scala.collection.mutable.ArrayBuffer
 
 
 class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with Timeouts with Logging {
@@ -303,17 +307,20 @@ class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with Timeo
     val conf = new SparkConf().setMaster(master).setAppName(appName)
     ssc = new StreamingContext(conf, batchDuration)
     addInputStream(ssc).register()
-
     ssc.start()
-    assert(ssc.getState() === StreamingContextState.INITIALIZED)
-    assert(StreamingContextSuite.sources.get(StreamingContextSuite.streamingSource)!= "null")
 
+    assert(ssc.getState() === StreamingContextState.INITIALIZED)
+    val sources: ArrayBuffer[Source] = StreamingContextSuite.getSources(ssc.env.metricsSystem)
+    val streamingSource: StreamingSource = StreamingContextSuite.getStreamingSource(ssc)
+    assert(sources.contains(streamingSource))
     assert(ssc.getState() === StreamingContextState.ACTIVE)
     Thread.sleep(100)
 
     ssc.stop()
+    val sourcesAfterStop: ArrayBuffer[Source] = StreamingContextSuite.getSources(ssc.env.metricsSystem)
+    val streamingSourceAfterStop: StreamingSource = StreamingContextSuite.getStreamingSource(ssc)
     assert(ssc.getState() === StreamingContextState.STOPPED)
-    assert(StreamingContextSuite.sources.get(StreamingContextSuite.streamingSource) == "null")
+    assert(sourcesAfterStop.contains(streamingSourceAfterStop))
   }
 
   test("awaitTermination") {
@@ -820,13 +827,15 @@ package object testPackage extends Assertions {
  * Helper methods for testing StreamingContextSuite.
  * This includes methods to access private methods and fields in StreamingContext and MetricsSystem.
  */
-object StreamingContextSuite {
-  val metricsSystemsObject = Class.forName("org.apache.spark.metrics.MetricsSystem")
-  val sources = metricsSystemsObject.getDeclaredField("sources")
-  sources.setAccessible(true)
-  val streamingContextObject = classOf[StreamingContext]
-  val streamingSource = getClass.getDeclaredField("streamingSource")
-  streamingSource.setAccessible(true)
+private object StreamingContextSuite extends PrivateMethodTester {
+  private val _sources = PrivateMethod[ArrayBuffer[Source]]('sources)
+  private def getSources(metricsSystem: MetricsSystem): ArrayBuffer[Source] = {
+    metricsSystem invokePrivate _sources()
+  }
+  private val _streamingSource = PrivateMethod[StreamingSource]('streamingSource)
+  private def getStreamingSource(streamingContext: StreamingContext): StreamingSource = {
+    streamingContext invokePrivate _streamingSource()
+  }
 }
 
 
