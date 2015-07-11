@@ -22,7 +22,7 @@ import java.io.File
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.HiveTypeCoercion
-import org.apache.spark.sql.catalyst.expressions.codegen.GenerateMutableProjection
+import org.apache.spark.sql.catalyst.expressions.codegen.{GenerateProjection, GenerateMutableProjection}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
@@ -58,24 +58,28 @@ class ExpressionFuzzingSuite extends SparkFunSuite {
   expressionClasses.foreach(println)
 
   for (c <- expressionClasses) {
-    val singleExprConstructor = c.getConstructors.filter { c =>
-      c.getParameterTypes.toSeq == Seq(classOf[Expression])
-    }
-    singleExprConstructor.foreach { cons =>
+    val exprOnlyConstructor = c.getConstructors.filter { c =>
+      c.getParameterTypes.toSet == Set(classOf[Expression])
+    }.sortBy(_.getParameterTypes.length * -1).headOption
+    exprOnlyConstructor.foreach { cons =>
+      val numChildren = cons.getParameterTypes.length
       test(s"${c.getName}") {
-        val expr: Expression = cons.newInstance(Literal(null)).asInstanceOf[Expression]
+        val expr: Expression =
+          cons.newInstance(Seq.fill(numChildren)(Literal.create(null, NullType)): _*).asInstanceOf[Expression]
         val coercedExpr: Expression = {
           val dummyPlan = DummyPlan(expr)
           DummyAnalyzer.execute(dummyPlan).asInstanceOf[DummyPlan].expr
+          expr
         }
-        if (expr.checkInputDataTypes().isSuccess) {
-          val row: InternalRow = new GenericInternalRow(Array[Any](null))
-          val gened = GenerateMutableProjection.generate(Seq(coercedExpr), Seq(AttributeReference("f", NullType)()))
-          gened()
-          //        expr.eval(row)
-        } else {
-          println(s"Input types check failed for $c")
-        }
+        println(s"Before coercion: ${expr.children.map(_.dataType)}")
+        println(s"After coercion: ${coercedExpr.children.map(_.dataType)}")
+        assume(coercedExpr.checkInputDataTypes().isSuccess, coercedExpr.checkInputDataTypes().toString)
+        val row: InternalRow = new GenericInternalRow(Array.fill[Any](numChildren)(null))
+        val inputSchema = coercedExpr.children.map(c => AttributeReference("f", c.dataType)())
+        val gened = GenerateProjection.generate(Seq(coercedExpr), inputSchema)
+        // TODO: mutable projections
+        //gened().apply(row)
+        coercedExpr.eval(row)
       }
     }
   }
