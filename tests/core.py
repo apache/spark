@@ -55,9 +55,7 @@ class HivePrestoTest(unittest.TestCase):
         args = {'owner': 'airflow', 'start_date': datetime(2015, 1, 1)}
         dag = DAG('hive_test', default_args=args)
         self.dag = dag
-
-    def test_hive(self):
-        hql = """
+        self.hql = """
         USE airflow;
         DROP TABLE IF EXISTS static_babynames_partitioned;
         CREATE TABLE IF NOT EXISTS static_babynames_partitioned (
@@ -71,7 +69,16 @@ class HivePrestoTest(unittest.TestCase):
             PARTITION(ds='{{ ds }}')
         SELECT state, year, name, gender, num FROM static_babynames;
         """
-        t = operators.HiveOperator(task_id='basic_hql', hql=hql, dag=self.dag)
+
+    def test_hive(self):
+        t = operators.HiveOperator(
+            task_id='basic_hql', hql=self.hql, dag=self.dag)
+        t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
+
+    def test_beeline(self):
+        t = operators.HiveOperator(
+            task_id='beeline_hql', hive_cli_conn_id='beeline_default',
+            hql=self.hql, dag=self.dag)
         t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
 
     def test_presto(self):
