@@ -96,7 +96,7 @@ class ExpressionFuzzingSuite extends SparkFunSuite {
     // Attempt to generate code for this expression by using it to generate a projection.
     val inputSchema = expression.children.map(c => AttributeReference("f", c.dataType)())
     val generatedProjection = GenerateProjection.generate(Seq(expression), inputSchema)
-    val interpretedProjection = InterpretedMutableProjection(Seq(expression))
+    val interpretedProjection = new InterpretedProjection(Seq(expression), inputSchema)
     // Check that the answers agree for an input row consisting entirely of nulls, since the
     // implicit type casts should make this safe
     val inputRow = InternalRow.apply(Seq.fill(numChildren)(null))
