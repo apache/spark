@@ -166,11 +166,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
     case StringType =>
       buildCast[UTF8String](_, utfs => {
         val parsedDateString = DateTimeUtils.stringToTimestamp(utfs)
-        if (parsedDateString == null) {
-          null
-        } else {
-          DateTimeUtils.fromJavaTimestamp(parsedDateString)
-        }
+        if (parsedDateString == null) null else DateTimeUtils.fromJavaTimestamp(parsedDateString)
       })
     case BooleanType =>
       buildCast[Boolean](_, b => if (b) 1L else 0)
@@ -221,7 +217,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
     case StringType =>
       buildCast[UTF8String](_, s => {
         val parsedDate = DateTimeUtils.stringToDate(s)
-        if (parsedDate == null) null else DateTimeUtils.fromJavaDate (parsedDate)
+        if (parsedDate == null) null else DateTimeUtils.fromJavaDate(parsedDate)
       })
     case TimestampType =>
       // throw valid precision more than seconds, according to Hive.
