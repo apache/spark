@@ -72,7 +72,7 @@ abstract class Expression extends TreeNode[Expression] {
     val primitive = ctx.freshName("primitive")
     val ve = GeneratedExpressionCode("", isNull, primitive)
     ve.code = genCode(ctx, ve)
-    ve
+    ve.copy(s"/* $this */\n" + ve.code)
   }
 
   /**

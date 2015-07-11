@@ -34,6 +34,13 @@ private[sql] case object Final extends AggregateMode
 
 private[sql] case object Complete extends AggregateMode
 
+case object NoOp extends Expression {
+  override def nullable: Boolean = true
+  override def eval(input: expressions.InternalRow): Any = ???
+  override def dataType: DataType = NullType
+  override def children: Seq[Expression] = Nil
+}
+
 /**
  * A container of a Aggregate Function, Aggregate Mode, and a field (`isDistinct`) indicating
  * if DISTINCT keyword is specified for this function.

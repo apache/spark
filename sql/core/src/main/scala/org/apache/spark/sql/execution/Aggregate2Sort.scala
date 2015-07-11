@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate2._
 import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, AllTuples, UnspecifiedDistribution, Distribution}
+import org.apache.spark.sql.types.NullType
 
 case class Aggregate2Sort(
     preShuffle: Boolean,
@@ -66,7 +67,7 @@ case class Aggregate2Sort(
           while (i < aggregateExpressions.length) {
             val func = aggregateExpressions(i).aggregateFunction.withBufferOffset(bufferOffset)
             functions(i) = aggregateExpressions(i).mode match {
-              case Partial | Complete => BindReferences.bindReference(func, child.output)
+              case Partial | Complete => func
               case PartialMerge | Final => func
             }
             bufferOffset = aggregateExpressions(i).mode match {
@@ -118,6 +119,43 @@ case class Aggregate2Sort(
           new InterpretedMutableProjection(
             resultExpressions, groupingExpressions.map(_.toAttribute) ++ aggregateAttributes)
 
+        val offsetAttributes = if (preShuffle) Nil else Seq.fill(groupingExpressions.length)(AttributeReference("offset", NullType)())
+        val offsetExpressions = if (preShuffle) Nil else Seq.fill(groupingExpressions.length)(NoOp)
+
+        val initialProjection = {
+          val initExpressions = offsetExpressions ++ aggregateFunctions.flatMap {
+            case ae: AlgebraicAggregate => ae.initialValues
+          }
+          println(initExpressions.mkString(","))
+          newMutableProjection(initExpressions, Nil)().target(buffer)
+        }
+
+        lazy val updateProjection = {
+          val bufferSchema = aggregateFunctions.flatMap {
+            case ae: AlgebraicAggregate => ae.bufferSchema
+          }
+          val updateExpressions = aggregateFunctions.flatMap {
+            case ae: AlgebraicAggregate => ae.updateExpressions
+          }
+
+          println(updateExpressions.mkString(","))
+          newMutableProjection(updateExpressions, bufferSchema ++ child.output)().target(buffer)
+        }
+
+        val mergeProjection = {
+          val bufferSchemata =
+            offsetAttributes ++ aggregateFunctions.flatMap {
+              case ae: AlgebraicAggregate => ae.bufferSchema
+            } ++ offsetAttributes ++ aggregateFunctions.flatMap {
+              case ae: AlgebraicAggregate => ae.rightBufferSchema
+            }
+            val mergeExpressions = offsetExpressions ++ aggregateFunctions.flatMap {
+              case ae: AlgebraicAggregate => ae.mergeExpressions
+            }
+
+          newMutableProjection(mergeExpressions, bufferSchemata)()
+        }
+
         // Initialize this iterator.
         initialize()
 
@@ -136,28 +174,16 @@ case class Aggregate2Sort(
         }
 
         private def initializeBuffer(): Unit = {
-          var i = 0
-          while (i < aggregateFunctions.length) {
-            aggregateFunctions(i).initialize(buffer)
-            i += 1
-          }
+          initialProjection(EmptyRow)
+          println("initilized: " + buffer)
         }
 
         private def processRow(row: InternalRow): Unit = {
           // The new row is still in the current group.
           if (preShuffle) {
-            var i = 0
-            while (i < aggregateFunctions.length) {
-              aggregateFunctions(i).update(buffer, row)
-              i += 1
-            }
+            updateProjection(joinedRow(buffer, row))
           } else {
-            var i = 0
-            println("post shuffle: " + buffer + " " + row)
-            while (i < aggregateFunctions.length) {
-              aggregateFunctions(i).merge(buffer, row)
-              i += 1
-            }
+            mergeProjection.target(buffer)(joinedRow(buffer, row))
           }
         }
 

@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions.codegen
 
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.aggregate2.NoOp
 
 // MutableProjection is not accessible in Java
 abstract class BaseMutableProjection extends MutableProjection
@@ -36,15 +37,18 @@ object GenerateMutableProjection extends CodeGenerator[Seq[Expression], () => Mu
 
   protected def create(expressions: Seq[Expression]): (() => MutableProjection) = {
     val ctx = newCodeGenContext()
-    val projectionCode = expressions.zipWithIndex.map { case (e, i) =>
-      val evaluationCode = e.gen(ctx)
-      evaluationCode.code +
-        s"""
-          if(${evaluationCode.isNull})
-            mutableRow.setNullAt($i);
-          else
-            ${ctx.setColumn("mutableRow", e.dataType, i, evaluationCode.primitive)};
-        """
+    val projectionCode = expressions.zipWithIndex.map {
+      case (NoOp, _) => ""
+      case (e, i) =>
+        val evaluationCode = e.gen(ctx)
+        evaluationCode.code +
+          s"""
+            /** output[$i] = $e */
+            if(${evaluationCode.isNull})
+              mutableRow.setNullAt($i);
+            else
+              ${ctx.setColumn("mutableRow", e.dataType, i, evaluationCode.primitive)};
+          """
     }.mkString("\n")
     val code = s"""
       public Object generate($exprType[] expr) {
@@ -80,7 +84,7 @@ object GenerateMutableProjection extends CodeGenerator[Seq[Expression], () => Mu
       }
     """
 
-    logDebug(s"code for ${expressions.mkString(",")}:\n$code")
+    logWarning(s"code for ${expressions.mkString(",")}:\n$code")
 
     val c = compile(code)
     () => {
