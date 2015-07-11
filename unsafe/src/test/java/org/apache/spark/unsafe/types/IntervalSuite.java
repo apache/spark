@@ -59,31 +59,50 @@ public class IntervalSuite {
 
   @Test
   public void fromStringTest() {
+    testSingleUnit("year", 3, 36, 0);
+    testSingleUnit("month", 3, 3, 0);
+    testSingleUnit("week", 3, 0, 3 * MICROS_PER_WEEK);
+    testSingleUnit("day", 3, 0, 3 * MICROS_PER_DAY);
+    testSingleUnit("hour", 3, 0, 3 * MICROS_PER_HOUR);
+    testSingleUnit("minute", 3, 0, 3 * MICROS_PER_MINUTE);
+    testSingleUnit("second", 3, 0, 3 * MICROS_PER_SECOND);
+    testSingleUnit("millisecond", 3, 0, 3 * MICROS_PER_MILLI);
+    testSingleUnit("microsecond", 3, 0, 3);
+
     String s;
     Interval i;
 
-    s = "interval  2 weeks -6 minute";
-    i = new Interval(0, 2 * MICROS_PER_WEEK - 6 * MICROS_PER_MINUTE);
-    assertEquals(Interval.fromString(s), i);
-
-    s = "interval   -5 years 23 month";
+    s = "interval   -5  years  23   month";
     i = new Interval(-5 * 12 + 23, 0);
     assertEquals(Interval.fromString(s), i);
 
-    s = "interval   3month 1 hour";
+    // Error cases
     i = null;
+
+    s = "interval   3month 1 hour";
     assertEquals(Interval.fromString(s), i);
 
     s = "interval 3 moth 1 hour";
-    i = null;
     assertEquals(Interval.fromString(s), i);
 
     s = "interval";
-    i = null;
+    assertEquals(Interval.fromString(s), i);
+
+    s = "int";
+    assertEquals(Interval.fromString(s), i);
+
+    s = "";
     assertEquals(Interval.fromString(s), i);
 
     s = null;
-    i = null;
     assertEquals(Interval.fromString(s), i);
+  }
+
+  private void testSingleUnit(String unit, int number, int months, long microseconds) {
+    String s1 = "interval " + number + " " + unit;
+    String s2 = "interval " + number + " " + unit + "s";
+    Interval i = new Interval(months, microseconds);
+    assertEquals(Interval.fromString(s1), i);
+    assertEquals(Interval.fromString(s2), i);
   }
 }

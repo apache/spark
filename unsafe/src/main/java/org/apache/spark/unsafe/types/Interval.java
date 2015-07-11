@@ -32,6 +32,16 @@ public final class Interval implements Serializable {
   public static final long MICROS_PER_DAY = MICROS_PER_HOUR * 24;
   public static final long MICROS_PER_WEEK = MICROS_PER_DAY * 7;
 
+  /**
+   * A function to generate regex which matches interval string's unit part like "3 years".
+   *
+   * First, we can leave out some units in interval string, and we only care about the value of
+   * unit, so here we use non-capturing group to wrap the actual regex.
+   * At the beginning of the actual regex, we should match spaces before the unit part.
+   * Next is the number part, starts with an optional "-" to represent negative value. We use
+   * capturing group to wrap this part as we need the value later.
+   * Finally is the unit name, ends with an optional "s".
+   */
   private static String unitRegex(String unit) {
     return "(?:\\s+(-?\\d+)\\s+" + unit + "s?)?";
   }

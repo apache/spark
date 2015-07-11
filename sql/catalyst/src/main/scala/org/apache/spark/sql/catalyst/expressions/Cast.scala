@@ -453,6 +453,10 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
       case (_, StringType) =>
         defineCodeGen(ctx, ev, c => s"${ctx.stringType}.fromString(String.valueOf($c))")
 
+      case (StringType, IntervalType) =>
+        defineCodeGen(ctx, ev, c =>
+          s"org.apache.spark.unsafe.types.Interval.fromString($c.toString)")
+
       // fallback for DecimalType, this must be before other numeric types
       case (_, dt: DecimalType) =>
         super.genCode(ctx, ev)
