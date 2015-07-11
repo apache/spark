@@ -19,45 +19,42 @@ package org.apache.spark.sql
 
 import java.io.File
 
+import org.clapper.classutil.ClassFinder
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.HiveTypeCoercion
-import org.apache.spark.sql.catalyst.expressions.codegen.{GenerateProjection, GenerateMutableProjection}
+import org.apache.spark.sql.catalyst.expressions.codegen.GenerateProjection
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.types.NullType
-import org.clapper.classutil.ClassFinder
 
-case object DummyAnalyzer extends RuleExecutor[LogicalPlan] {
-  override protected val batches: Seq[Batch] = Seq(
-    Batch("analysis", FixedPoint(100), HiveTypeCoercion.typeCoercionRules: _*)
-  )
-}
-
-
-case class DummyPlan(expr: Expression) extends LogicalPlan {
-  override def output: Seq[Attribute] = Seq.empty
-
-  /** Returns all of the expressions present in this query plan operator. */
-  override def expressions: Seq[Expression] = Seq(expr)
-
-  override def children: Seq[LogicalPlan] = Seq.empty
-}
-
-
+/**
+ * This test suite implements fuzz tests for expression code generation. It uses reflection to
+ * automatically discover all [[Expression]]s, then instantiates these expressions with random
+ * children/inputs. If the resulting expression passes the type checker after type coerceion is
+ * performed then we attempt to compile the expression and compare its output to output generated
+ * by the interpreted expression.
+ */
 class ExpressionFuzzingSuite extends SparkFunSuite {
-  lazy val expressionClasses: Seq[Class[_]] = {
-    val finder = ClassFinder(
-      System.getProperty("java.class.path").split(':').map(new File(_)) .filter(_.exists))
-    val classes = finder.getClasses().toIterator
-    ClassFinder.concreteSubclasses(classOf[Expression].getName, classes)
-      .map(c => Class.forName(c.name)).toSeq
+
+  /**
+   * All subclasses of [[Expression]].
+   */
+  lazy val expressionSubclasses: Seq[Class[Expression]] = {
+    val classpathEntries: Seq[File] = System.getProperty("java.class.path")
+      .split(File.pathSeparatorChar)
+      .filter(_.contains("spark"))
+      .map(new File(_))
+      .filter(_.exists()).toSeq
+    val allClasses = ClassFinder(classpathEntries).getClasses()
+    assert(allClasses.nonEmpty, "Could not find Spark classes on classpath.")
+    ClassFinder.concreteSubclasses(classOf[Expression].getName, allClasses)
+      .map(c => Class.forName(c.name).asInstanceOf[Class[Expression]]).toSeq
   }
 
-  expressionClasses.foreach(println)
-
-  for (c <- expressionClasses) {
+  for (c <- expressionSubclasses) {
     val exprOnlyConstructor = c.getConstructors.filter { c =>
       c.getParameterTypes.toSet == Set(classOf[Expression])
     }.sortBy(_.getParameterTypes.length * -1).headOption
@@ -83,4 +80,20 @@ class ExpressionFuzzingSuite extends SparkFunSuite {
       }
     }
   }
+}
+
+case object DummyAnalyzer extends RuleExecutor[LogicalPlan] {
+  override protected val batches: Seq[Batch] = Seq(
+    Batch("analysis", FixedPoint(100), HiveTypeCoercion.typeCoercionRules: _*)
+  )
+}
+
+
+case class DummyPlan(expr: Expression) extends LogicalPlan {
+  override def output: Seq[Attribute] = Seq.empty
+
+  /** Returns all of the expressions present in this query plan operator. */
+  override def expressions: Seq[Expression] = Seq(expr)
+
+  override def children: Seq[LogicalPlan] = Seq.empty
 }
