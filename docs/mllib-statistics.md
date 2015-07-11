@@ -444,14 +444,14 @@ import org.apache.spark.mllib.stat.Statistics._
 val data: RDD[Double] = ... // an RDD of sample data
 
 // run a KS test for the sample versus a standard normal distribution
-val ksTestResult = Statistics.kolmogorovSmirnovTest(data, "norm", 0, 1)
-println(ksTestResult) // summary of the test including the p-value, test statistic,
+val testResult = Statistics.kolmogorovSmirnovTest(data, "norm", 0, 1)
+println(testResult) // summary of the test including the p-value, test statistic,
                       // and null hypothesis
                       // if our p-value indicates significance, we can reject the null hypothesis
 
 // perform a KS test using a cumulative distribution function of our making
 val myCDF: Double => Double = ...
-val ksTestResult = Statistics.kolmogorovSmirnovTest(data, myCDF)
+val testResult2 = Statistics.kolmogorovSmirnovTest(data, myCDF)
 {% endhighlight %}
 </div>
 </div>

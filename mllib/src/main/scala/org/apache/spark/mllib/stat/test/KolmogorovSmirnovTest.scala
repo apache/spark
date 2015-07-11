@@ -26,7 +26,7 @@ import org.apache.spark.Logging
 import org.apache.spark.rdd.RDD
 
 /**
- * Conduct the two-sided Kolmogorov Smirnov test for data sampled from a
+ * Conduct the two-sided Kolmogorov Smirnov (KS) test for data sampled from a
  * continuous distribution. By comparing the largest difference between the empirical cumulative
  * distribution of the sample data and the theoretical distribution we can provide a test for the
  * the null hypothesis that the sample data comes from that theoretical distribution.
@@ -47,7 +47,7 @@ import org.apache.spark.rdd.RDD
  * appropriate constant (the cumulative sum of number of elements in the prior partitions divided by
  * thedata set size). Finally, we take the maximum absolute value, and this is the statistic.
  */
-private[stat] object KSTest extends Logging {
+private[stat] object KolmogorovSmirnovTest extends Logging {
 
   // Null hypothesis for the type of KS test to be included in the result.
   object NullHypothesis extends Enumeration {
@@ -59,10 +59,10 @@ private[stat] object KSTest extends Logging {
    * Runs a KS test for 1 set of sample data, comparing it to a theoretical distribution
    * @param data `RDD[Double]` data on which to run test
    * @param cdf `Double => Double` function to calculate the theoretical CDF
-   * @return [[org.apache.spark.mllib.stat.test.KSTestResult]] summarizing the test results
-   *        (p-value, statistic, and null hypothesis)
+   * @return [[org.apache.spark.mllib.stat.test.KolmogorovSmirnovTestResult]] summarizing the test
+   *        results (p-value, statistic, and null hypothesis)
    */
-  def testOneSample(data: RDD[Double], cdf: Double => Double): KSTestResult = {
+  def testOneSample(data: RDD[Double], cdf: Double => Double): KolmogorovSmirnovTestResult = {
     val n = data.count().toDouble
     val localData = data.sortBy(x => x).mapPartitions { part =>
       val partDiffs = oneSampleDifferences(part, n, cdf) // local distances
@@ -76,10 +76,10 @@ private[stat] object KSTest extends Logging {
    * Runs a KS test for 1 set of sample data, comparing it to a theoretical distribution
    * @param data `RDD[Double]` data on which to run test
    * @param distObj `RealDistribution` a theoretical distribution
-   * @return [[org.apache.spark.mllib.stat.test.KSTestResult]] summarizing the test results
-   *        (p-value, statistic, and null hypothesis)
+   * @return [[org.apache.spark.mllib.stat.test.KolmogorovSmirnovTestResult]] summarizing the test
+   *        results (p-value, statistic, and null hypothesis)
    */
-  def testOneSample(data: RDD[Double], distObj: RealDistribution): KSTestResult = {
+  def testOneSample(data: RDD[Double], distObj: RealDistribution): KolmogorovSmirnovTestResult = {
     val cdf = (x: Double) => distObj.cumulativeProbability(x)
     testOneSample(data, cdf)
   }
@@ -158,11 +158,12 @@ private[stat] object KSTest extends Logging {
    * @param data the sample data that we wish to evaluate
    * @param distName the name of the theoretical distribution
    * @param params Variable length parameter for distribution's parameters
-   * @return [[org.apache.spark.mllib.stat.test.KSTestResult]] summarizing the test results
-   *        (p-value, statistic, and null hypothesis)
+   * @return [[org.apache.spark.mllib.stat.test.KolmogorovSmirnovTestResult]] summarizing the
+   *        test results (p-value, statistic, and null hypothesis)
    */
   @varargs
-  def testOneSample(data: RDD[Double], distName: String, params: Double*): KSTestResult = {
+  def testOneSample(data: RDD[Double], distName: String, params: Double*)
+    : KolmogorovSmirnovTestResult = {
     val distObj =
       distName match {
         case "norm" => {
@@ -185,9 +186,9 @@ private[stat] object KSTest extends Logging {
     testOneSample(data, distObj)
   }
 
-  private def evalOneSampleP(ksStat: Double, n: Long): KSTestResult = {
+  private def evalOneSampleP(ksStat: Double, n: Long): KolmogorovSmirnovTestResult = {
     val pval = 1 - new KolmogorovSmirnovTest().cdf(ksStat, n.toInt)
-    new KSTestResult(pval, ksStat, NullHypothesis.OneSampleTwoSided.toString)
+    new KolmogorovSmirnovTestResult(pval, ksStat, NullHypothesis.OneSampleTwoSided.toString)
   }
 }
 

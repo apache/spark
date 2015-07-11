@@ -25,7 +25,8 @@ import org.apache.spark.mllib.linalg.distributed.RowMatrix
 import org.apache.spark.mllib.linalg.{Matrix, Vector}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.stat.correlation.Correlations
-import org.apache.spark.mllib.stat.test.{ChiSqTest, ChiSqTestResult, KSTest, KSTestResult}
+import org.apache.spark.mllib.stat.test.{ChiSqTest, ChiSqTestResult, KolmogorovSmirnovTest,
+  KolmogorovSmirnovTestResult}
 import org.apache.spark.rdd.RDD
 
 /**
@@ -171,11 +172,12 @@ object Statistics {
    *
    * @param data an `RDD[Double]` containing the sample of data to test
    * @param cdf a `Double => Double` function to calculate the theoretical CDF at a given value
-   * @return [[org.apache.spark.mllib.stat.test.KSTestResult]] object containing test statistic,
-   *        p-value, and null hypothesis.
+   * @return [[org.apache.spark.mllib.stat.test.KolmogorovSmirnovTestResult]] object containing test
+   *        statistic, p-value, and null hypothesis.
    */
-  def kolmogorovSmirnovTest(data: RDD[Double], cdf: Double => Double): KSTestResult = {
-    KSTest.testOneSample(data, cdf)
+  def kolmogorovSmirnovTest(data: RDD[Double], cdf: Double => Double)
+    : KolmogorovSmirnovTestResult = {
+    KolmogorovSmirnovTest.testOneSample(data, cdf)
   }
 
   /**
@@ -186,11 +188,12 @@ object Statistics {
    * @param data an `RDD[Double]` containing the sample of data to test
    * @param distName a `String` name for a theoretical distribution
    * @param params `Double*` specifying the parameters to be used for the theoretical distribution
-   * @return [[org.apache.spark.mllib.stat.test.KSTestResult]] object containing test statistic,
-   *        p-value, and null hypothesis.
+   * @return [[org.apache.spark.mllib.stat.test.KolmogorovSmirnovTestResult]] object containing test
+   *        statistic, p-value, and null hypothesis.
    */
   @varargs
-  def kolmogorovSmirnovTest(data: RDD[Double], distName: String, params: Double*): KSTestResult = {
-    KSTest.testOneSample(data, distName, params: _*)
+  def kolmogorovSmirnovTest(data: RDD[Double], distName: String, params: Double*)
+    : KolmogorovSmirnovTestResult = {
+    KolmogorovSmirnovTest.testOneSample(data, distName, params: _*)
   }
 }

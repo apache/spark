@@ -96,7 +96,7 @@ class ChiSqTestResult private[stat] (override val pValue: Double,
  * Object containing the test results for the Kolmogorov-Smirnov test.
  */
 @Experimental
-class KSTestResult private[stat] (
+class KolmogorovSmirnovTestResult private[stat] (
     override val pValue: Double,
     override val statistic: Double,
     override val nullHypothesis: String) extends TestResult[Int] {
