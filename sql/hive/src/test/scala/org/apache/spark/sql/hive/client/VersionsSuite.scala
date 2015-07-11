@@ -19,10 +19,10 @@ package org.apache.spark.sql.hive.client
 
 import java.io.File
 
-import org.apache.spark.sql.catalyst.expressions.{NamedExpression, Literal, AttributeReference, EqualTo}
-import org.apache.spark.sql.types.IntegerType
 import org.apache.spark.{Logging, SparkFunSuite}
+import org.apache.spark.sql.catalyst.expressions.{NamedExpression, Literal, AttributeReference, EqualTo}
 import org.apache.spark.sql.catalyst.util.quietly
+import org.apache.spark.sql.types.IntegerType
 import org.apache.spark.util.Utils
 
 /**
