@@ -132,7 +132,7 @@ class ReceiverSuite extends TestSuiteBase with Timeouts with Serializable {
   test("restart receiver should consider the scheduled locations") {
     val receiver = new FakeReceiver
     val executor = new FakeReceiverSupervisor(receiver) {
-      override def rescheduleReceiver: Seq[String] = Seq("unknown-host")
+      override def getAllowedLocations: Seq[String] = Seq("unknown-host")
     }
     executor.start()
     receiver.restart("force the receiver restart")

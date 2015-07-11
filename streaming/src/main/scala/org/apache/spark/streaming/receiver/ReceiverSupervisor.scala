@@ -64,7 +64,7 @@ private[streaming] abstract class ReceiverSupervisor(
   /** State of the receiver */
   @volatile private[streaming] var receiverState = Initialized
 
-  val host = Utils.localHostName()
+  protected val host = Utils.localHostName()
 
   /** Push a single data item to backend data store. */
   def pushSingle(data: Any)
@@ -163,7 +163,7 @@ private[streaming] abstract class ReceiverSupervisor(
       stopReceiver("Restarting receiver with delay " + delay + "ms: " + message, error)
       logDebug("Sleeping for " + delay)
       Thread.sleep(delay)
-      val scheduledLocations = rescheduleReceiver()
+      val scheduledLocations = getAllowedLocations()
       if (scheduledLocations.isEmpty || scheduledLocations.contains(host)) {
         logInfo("Starting receiver again")
         startReceiver()
@@ -175,7 +175,7 @@ private[streaming] abstract class ReceiverSupervisor(
   }
 
   /** Reschedule this receiver and return a candidate executor list */
-  def rescheduleReceiver(): Seq[String] = Seq.empty
+  def getAllowedLocations(): Seq[String] = Seq.empty
 
   /** Check if receiver has been marked for stopping */
   def isReceiverStarted(): Boolean = {
