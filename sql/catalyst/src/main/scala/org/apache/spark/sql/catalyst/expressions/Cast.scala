@@ -167,17 +167,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
       buildCast[UTF8String](_, utfs => {
         val parsedDateString = DateTimeUtils.stringToTimestamp(utfs)
         if (parsedDateString == null) {
-          // Throw away extra if more than 9 decimal places
-          val s = utfs.toString
-          val periodIdx = s.indexOf(".")
-          var n = s
-          if (periodIdx != -1 && n.length() - periodIdx > 9) {
-            n = n.substring(0, periodIdx + 10)
-          }
-          try DateTimeUtils.fromJavaTimestamp(Timestamp.valueOf(n))
-          catch {
-            case _: java.lang.IllegalArgumentException => null
-          }
+          null
         } else {
           DateTimeUtils.fromJavaTimestamp(parsedDateString)
         }
