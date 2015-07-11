@@ -111,7 +111,7 @@ private class MQTTTestUtils extends Logging {
   /**
    * Block until at least one receiver has started or timeout occurs.
    */
-  def waitForReceiverToStart(ssc: StreamingContext) = {
+  def waitForReceiverToStart(ssc: StreamingContext) : Unit = {
     val latch = new CountDownLatch(1)
     ssc.addStreamingListener(new StreamingListener {
       override def onReceiverStarted(receiverStarted: StreamingListenerReceiverStarted) {

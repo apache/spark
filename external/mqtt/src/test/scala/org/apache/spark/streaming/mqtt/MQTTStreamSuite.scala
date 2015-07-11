@@ -54,8 +54,10 @@ class MQTTStreamSuite extends SparkFunSuite with Eventually with BeforeAndAfterA
     val sparkConf = new SparkConf().setMaster("local[4]").setAppName(this.getClass.getSimpleName)
     ssc = new StreamingContext(sparkConf, Milliseconds(500))
     val sendMessage = "MQTT demo for spark streaming"
-    val receiveStream =
-      MQTTUtils.createStream(ssc, "tcp://" + MQTTTestUtils.brokerUri, topic, StorageLevel.MEMORY_ONLY)
+
+    val receiveStream = MQTTUtils.createStream(ssc, "tcp://" + MQTTTestUtils.brokerUri, topic,
+      StorageLevel.MEMORY_ONLY)
+
     @volatile var receiveMessage: List[String] = List()
     receiveStream.foreachRDD { rdd =>
       if (rdd.collect.length > 0) {
