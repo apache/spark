@@ -22,7 +22,7 @@ import java.lang.reflect.Constructor
 
 import org.clapper.classutil.ClassFinder
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{Logging, SparkFunSuite}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.HiveTypeCoercion
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateProjection
@@ -38,7 +38,7 @@ import org.apache.spark.sql.types.NullType
  * performed then we attempt to compile the expression and compare its output to output generated
  * by the interpreted expression.
  */
-class ExpressionFuzzingSuite extends SparkFunSuite {
+class ExpressionFuzzingSuite extends SparkFunSuite with Logging {
 
   /**
    * All subclasses of [[Expression]].
@@ -90,6 +90,7 @@ class ExpressionFuzzingSuite extends SparkFunSuite {
       val childExpressions: Seq[Expression] = Seq.fill(numChildren)(Literal.create(null, NullType))
       coerceTypes(constructor.newInstance(childExpressions: _*))
     }
+    logInfo(s"After type coercion, expression is $expression")
     // Make sure that the resulting expression passes type checks.
     val typecheckResult = expression.checkInputDataTypes()
     assume(typecheckResult.isSuccess, s"Type checks failed: $typecheckResult")
