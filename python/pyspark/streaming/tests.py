@@ -827,6 +827,7 @@ class FlumePollingStreamTests(PySparkStreamingTestCase):
     def test_flume_polling_multiple_hosts(self):
         self._testMultipleTimes(self._testFlumePollingMultipleHosts)
 
+
 class MQTTStreamTests(PySparkStreamingTestCase):
     timeout = 20  # seconds
     duration = 1
@@ -841,8 +842,8 @@ class MQTTStreamTests(PySparkStreamingTestCase):
 
     def tearDown(self):
         if self._MQTTTestUtils is not None:
-           self._MQTTTestUtils.teardown()
-           self._MQTTTestUtils = None
+            self._MQTTTestUtils.teardown()
+            self._MQTTTestUtils = None
 
         super(MQTTStreamTests, self).tearDown()
 
@@ -905,9 +906,10 @@ def search_flume_assembly_jar():
             "'build/mvn package' before running this test")
     elif len(jars) > 1:
         raise Exception(("Found multiple Spark Streaming Flume assembly JARs in %s; please "
-                         "remove all but one") % flume_assembly_dir)
+                        "remove all but one") % flume_assembly_dir)
     else:
         return jars[0]
+
 
 def search_mqtt_assembly_jar():
     SPARK_HOME = os.environ["SPARK_HOME"]
@@ -925,6 +927,7 @@ def search_mqtt_assembly_jar():
                          "remove all but one") % mqtt_assembly_dir)
     else:
         return jars[0]
+
 
 if __name__ == "__main__":
     kafka_assembly_jar = search_kafka_assembly_jar()

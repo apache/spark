@@ -291,7 +291,13 @@ pyspark_sql = Module(
 
 pyspark_streaming = Module(
     name="pyspark-streaming",
-    dependencies=[pyspark_core, streaming, streaming_kafka, streaming_flume_assembly, streaming_mqtt],
+    dependencies=[
+        pyspark_core,
+        streaming,
+        streaming_kafka,
+        streaming_flume_assembly,
+        streaming_mqtt
+    ],
     source_file_regexes=[
         "python/pyspark/streaming"
     ],
