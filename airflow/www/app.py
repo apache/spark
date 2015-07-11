@@ -648,6 +648,7 @@ class Airflow(BaseView):
             code, lexers.PythonLexer(), HtmlFormatter(linenos=True))
         return self.render(
             'airflow/dag_code.html', html_code=html_code, dag=dag, title=title,
+            root=request.args.get('root'),
             demo_mode=conf.getboolean('webserver', 'demo_mode'))
 
     @app.errorhandler(404)
@@ -1072,8 +1073,8 @@ class Airflow(BaseView):
         if root:
             dag = dag.sub_dag(
                 task_regex=root,
-                include_downstream=False,
-                include_upstream=True)
+                include_upstream=True,
+                include_downstream=False)
 
         nodes = []
         edges = []
@@ -1155,6 +1156,13 @@ class Airflow(BaseView):
         from_date = (datetime.today()-timedelta(days)).date()
         from_date = datetime.combine(from_date, datetime.min.time())
 
+        root = request.args.get('root')
+        if root:
+            dag = dag.sub_dag(
+                task_regex=root,
+                include_upstream=True,
+                include_downstream=False)
+
         all_data = []
         for task in dag.tasks:
             data = []
@@ -1177,6 +1185,7 @@ class Airflow(BaseView):
             chart_options={'yAxis': {'title': {'text': 'hours'}}},
             height="700px",
             demo_mode=conf.getboolean('webserver', 'demo_mode'),
+            root=root,
         )
 
     @expose('/landing_times')
@@ -1188,6 +1197,13 @@ class Airflow(BaseView):
         dag = dagbag.get_dag(dag_id)
         from_date = (datetime.today()-timedelta(days)).date()
         from_date = datetime.combine(from_date, datetime.min.time())
+
+        root = request.args.get('root')
+        if root:
+            dag = dag.sub_dag(
+                task_regex=root,
+                include_upstream=True,
+                include_downstream=False)
 
         all_data = []
         for task in dag.tasks:
@@ -1212,6 +1228,7 @@ class Airflow(BaseView):
             height="700px",
             chart_options={'yAxis': {'title': {'text': 'hours after 00:00'}}},
             demo_mode=conf.getboolean('webserver', 'demo_mode'),
+            root=root,
         )
 
     @expose('/refresh')
@@ -1248,6 +1265,13 @@ class Airflow(BaseView):
         dag_id = request.args.get('dag_id')
         dag = dagbag.get_dag(dag_id)
         demo_mode = conf.getboolean('webserver', 'demo_mode')
+
+        root = request.args.get('root')
+        if root:
+            dag = dag.sub_dag(
+                task_regex=root,
+                include_upstream=True,
+                include_downstream=False)
 
         dttm = request.args.get('execution_date')
         if dttm:
@@ -1310,6 +1334,7 @@ class Airflow(BaseView):
             hc=json.dumps(hc, indent=4),
             height=height,
             demo_mode=demo_mode,
+            root=root,
         )
 
     @expose('/variables/<form>', methods=["GET", "POST"])
