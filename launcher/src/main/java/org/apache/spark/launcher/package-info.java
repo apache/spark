@@ -17,10 +17,10 @@
 
 /**
  * Library for launching Spark applications.
- * <p/>
+ * <p>
  * This library allows applications to launch Spark programmatically. There's only one entry
  * point to the library - the {@link org.apache.spark.launcher.SparkLauncher} class.
- * <p/>
+ * </p>
  * To launch a Spark application, just instantiate a {@link org.apache.spark.launcher.SparkLauncher}
  * and configure the application to run. For example:
  *
