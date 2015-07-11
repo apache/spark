@@ -18,6 +18,7 @@
 package org.apache.spark.sql
 
 import java.io.File
+import java.lang.reflect.Constructor
 
 import org.clapper.classutil.ClassFinder
 
@@ -59,26 +60,55 @@ class ExpressionFuzzingSuite extends SparkFunSuite {
     DummyAnalyzer.execute(dummyPlan).asInstanceOf[DummyPlan].expression
   }
 
-  for (c <- expressionSubclasses) {
-    val exprOnlyConstructor = c.getConstructors.filter { c =>
-      c.getParameterTypes.toSet == Set(classOf[Expression])
-    }.sortBy(_.getParameterTypes.length * -1).headOption
-    exprOnlyConstructor.foreach { cons =>
-      val numChildren = cons.getParameterTypes.length
-      test(s"${c.getName}") {
-        val expr: Expression =
-          cons.newInstance(Seq.fill(numChildren)(Literal.create(null, NullType)): _*).asInstanceOf[Expression]
-        val coercedExpr: Expression = coerceTypes(expr)
-        println(s"Before coercion: ${expr.children.map(_.dataType)}")
-        println(s"After coercion: ${coercedExpr.children.map(_.dataType)}")
-        assume(coercedExpr.checkInputDataTypes().isSuccess, coercedExpr.checkInputDataTypes().toString)
-        val row: InternalRow = new GenericInternalRow(Array.fill[Any](numChildren)(null))
-        val inputSchema = coercedExpr.children.map(c => AttributeReference("f", c.dataType)())
-        val gened = GenerateProjection.generate(Seq(coercedExpr), inputSchema)
-        // TODO: mutable projections
-        //gened().apply(row)
-        coercedExpr.eval(row)
-      }
+  /**
+   * Given an expression class, find the constructor which accepts only expressions. If there are
+   * multiple such constructors, pick the one with the most parameters.
+   * @return The matching constructor, or None if no appropriate constructor could be found.
+   */
+  def getBestConstructor(expressionClass: Class[Expression]): Option[Constructor[Expression]] = {
+    val allConstructors = expressionClass.getConstructors ++ expressionClass.getDeclaredConstructors
+    allConstructors
+      .map(_.asInstanceOf[Constructor[Expression]])
+      .filter(_.getParameterTypes.toSet == Set(classOf[Expression]))
+      .sortBy(_.getParameterTypes.length * -1)
+      .headOption
+  }
+
+  def testExpression(expressionClass: Class[Expression]): Unit = {
+    // Eventually, we should add support for testing multiple constructors. For now, though, we
+    // only test the "best" one:
+    val constructor: Constructor[Expression] = {
+      val maybeBestConstructor = getBestConstructor(expressionClass)
+      assume(maybeBestConstructor.isDefined, "Could not find an Expression-only constructor")
+      maybeBestConstructor.get
+    }
+    val numChildren: Int = constructor.getParameterTypes.length
+    // Eventually, we should test with multiple types of child expressions. For now, though, we
+    // construct null literals for all child expressions and leave it up to the type coercion rules
+    // to cast them to the appropriate types.
+    val expression: Expression = {
+      val childExpressions: Seq[Expression] = Seq.fill(numChildren)(Literal.create(null, NullType))
+      coerceTypes(constructor.newInstance(childExpressions: _*))
+    }
+    // Make sure that the resulting expression passes type checks.
+    val typecheckResult = expression.checkInputDataTypes()
+    assume(typecheckResult.isSuccess, s"Type checks failed: $typecheckResult")
+    // Attempt to generate code for this expression by using it to generate a projection.
+    val inputSchema = expression.children.map(c => AttributeReference("f", c.dataType)())
+    val generatedProjection = GenerateProjection.generate(Seq(expression), inputSchema)
+    val interpretedProjection = InterpretedMutableProjection(Seq(expression))
+    // Check that the answers agree for an input row consisting entirely of nulls, since the
+    // implicit type casts should make this safe
+    val inputRow = InternalRow.apply(Seq.fill(numChildren)(null))
+    val generatedResult = generatedProjection.apply(inputRow)
+    val interpretedResult = interpretedProjection.apply(inputRow)
+    assert(generatedResult === interpretedResult)
+  }
+
+  // Run the actual tests
+  expressionSubclasses.foreach { expressionClass =>
+    test(s"${expressionClass.getName}") {
+      testExpression(expressionClass)
     }
   }
 }
