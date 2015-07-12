@@ -90,7 +90,6 @@ class NaiveBayesSuite extends SparkFunSuite with MLlibTestSparkContext {
 
     val validationDataset = sqlContext.createDataFrame(generateNaiveBayesInput(
       piArray, thetaArray, nPoints, 17, "multinomial"))
-
     val predictionAndLabels = model.transform(validationDataset).select("prediction", "label")
 
     validatePrediction(predictionAndLabels)
@@ -117,7 +116,6 @@ class NaiveBayesSuite extends SparkFunSuite with MLlibTestSparkContext {
 
     val validationDataset = sqlContext.createDataFrame(generateNaiveBayesInput(
       piArray, thetaArray, nPoints, 20, "bernoulli"))
-
     val predictionAndLabels = model.transform(validationDataset).select("prediction", "label")
 
     validatePrediction(predictionAndLabels)
