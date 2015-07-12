@@ -113,6 +113,16 @@ sealed trait Vector extends Serializable {
     throw new NotImplementedError(s"copy is not implemented for ${this.getClass}.")
   }
 
+  /** Map the values of this vector using a function and generates a new vector. Performs the
+    * function on only the backing array. For example, an operation such as addition or
+    * subtraction will only be performed on the non-zero values in a `SparseVector`. */
+  private[spark] def map(f: Double => Double): Vector
+
+  /** Update all the values of this vector using the function f. Performed in-place on the
+    * backing array. For example, an operation such as addition or subtraction will only be
+    * performed on the non-zero values in a `SparseVector`. */
+  private[spark] def update(f: Double => Double): Vector
+
   /**
    * Applies a function `f` to all the active elements of dense and sparse vector.
    *
@@ -564,6 +574,18 @@ class DenseVector @Since("1.0.0") (
     new DenseVector(values.clone())
   }
 
+  private[spark] override def map(f: Double => Double): Vector = new DenseVector(values.map(f))
+
+  private[spark] override def update(f: Double => Double): Vector = {
+    var i = 0
+    val len = values.length
+    while (i < len) {
+      values(i) = f(values(i))
+      i += 1
+    }
+    this
+  }
+
   private[spark] override def foreachActive(f: (Int, Double) => Unit) = {
     var i = 0
     val localValuesSize = values.length
@@ -691,6 +713,19 @@ class SparseVector @Since("1.0.0") (
   }
 
   private[spark] override def toBreeze: BV[Double] = new BSV[Double](indices, values, size)
+
+  private[spark] override def map(f: Double => Double): Vector =
+    new SparseVector(size, indices.clone(), values.map(f))
+
+  private[spark] override def update(f: Double => Double): Vector = {
+    val len = values.length
+    var i = 0
+    while (i < len) {
+      values(i) = f(values(i))
+      i += 1
+    }
+    this
+  }
 
   private[spark] override def foreachActive(f: (Int, Double) => Unit) = {
     var i = 0

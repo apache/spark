@@ -277,6 +277,20 @@ class VectorsSuite extends SparkFunSuite with Logging {
     }
   }
 
+  test("map, update") {
+    val dv1 = Vectors.dense(0.0, 1.2, 3.1, 0.0)
+    val sv1 = Vectors.sparse(4, Seq((1, 1.2), (2, 3.1), (3, 0.0)))
+
+    val dv2 = dv1.map(_ * 2)
+    val sv2 = sv1.map(_ * 2)
+
+    dv1.update(_ * 2)
+    sv1.update(_ * 2)
+
+    assert(dv1.toArray === dv2.toArray)
+    assert(sv1.toArray === sv2.toArray)
+  }
+
   test("foreachActive") {
     val dv = Vectors.dense(0.0, 1.2, 3.1, 0.0)
     val sv = Vectors.sparse(4, Seq((1, 1.2), (2, 3.1), (3, 0.0)))
