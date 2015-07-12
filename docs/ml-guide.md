@@ -183,7 +183,7 @@ There are now several algorithms in the Pipelines API which are not in the lower
 
 **Algorithms in `spark.ml`**
 
-* [Linear methods with Elastic Net regularization](ml-linear-methods.html)
+* [Linear methods with elastic net regularization](ml-linear-methods.html)
 
 # Code Examples
 
