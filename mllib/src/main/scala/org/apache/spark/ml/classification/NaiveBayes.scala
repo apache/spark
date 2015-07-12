@@ -23,7 +23,7 @@ import org.apache.spark.ml.param.{ParamMap, ParamValidators, Param, DoubleParam}
 import org.apache.spark.ml.util.Identifiable
 import org.apache.spark.mllib.classification.{NaiveBayes => OldNaiveBayes}
 import org.apache.spark.mllib.classification.{NaiveBayesModel => OldNaiveBayesModel}
-import org.apache.spark.mllib.linalg.{BLAS, DenseMatrix, DenseVector, Vector}
+import org.apache.spark.mllib.linalg._
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.DataFrame
@@ -35,24 +35,24 @@ private[ml] trait NaiveBayesParams extends PredictorParams {
 
   /**
    * The smoothing parameter.
+   * (default = 1.0).
    * @group param
    */
   final val lambda: DoubleParam = new DoubleParam(this, "lambda", "The smoothing parameter.",
     ParamValidators.gtEq(0))
-  setDefault(lambda -> 1.0)
 
   /** @group getParam */
   final def getLambda: Double = $(lambda)
 
   /**
    * The model type which is a string (case-sensitive).
-   * Supported options: "multinomial" (default) and "bernoulli".
+   * Supported options: "multinomial" and "bernoulli".
+   * (default = multinomial)
    * @group param
    */
   final val modelType: Param[String] = new Param[String](this, "modelType",
     "The model type which is a string (case-sensitive). Supported options: " +
     "\"multinomial\" (default) and \"bernoulli\".")
-  setDefault(modelType -> "multinomial")
 
   /** @group getParam */
   final def getModelType: String = $(modelType)
@@ -60,9 +60,13 @@ private[ml] trait NaiveBayesParams extends PredictorParams {
 
 /**
  * Naive Bayes Classifiers.
- * It supports both Multinomial NB ([[http://tinyurl.com/lsdw6p]]) which can handle
- * all kinds of discrete data and Bernoulli NB ([[http://tinyurl.com/p7c96j6]])
- * which can only handle 0-1 vector.
+ * It supports both Multinomial NB
+ * ([[http://nlp.stanford.edu/IR-book/html/htmledition/naive-bayes-text-classification-1.html]])
+ * which can handle finitely supported discrete data. For example, by converting documents into
+ * TF-IDF vectors, it can be used for document classification. By making every vector a
+ * binary (0/1) data, it can also be used as Bernoulli NB
+ * ([[http://nlp.stanford.edu/IR-book/html/htmledition/the-bernoulli-model-1.html]]).
+ * The input feature values must be nonnegative.
  */
 class NaiveBayes(override val uid: String)
   extends Predictor[Vector, NaiveBayes, NaiveBayesModel]
@@ -76,14 +80,15 @@ class NaiveBayes(override val uid: String)
    * @group setParam
    */
   def setLambda(value: Double): this.type = set(lambda, value)
+  setDefault(lambda -> 1.0)
 
   /**
    * Set the model type using a string (case-sensitive).
    * Supported options: "multinomial" and "bernoulli".
    * Default is "multinomial"
-   * @return
    */
   def setModelType(value: String): this.type = set(modelType, value)
+  setDefault(modelType -> "multinomial")
 
   override protected def train(dataset: DataFrame): NaiveBayesModel = {
     val oldDataset: RDD[LabeledPoint] = extractLabeledPoints(dataset)
@@ -99,26 +104,16 @@ class NaiveBayes(override val uid: String)
  */
 class NaiveBayesModel private[ml] (
     override val uid: String,
-    val labels: Array[Double],
-    val pi: Array[Double],
-    val theta: Array[Array[Double]],
+    val labels: Vector,
+    val pi: Vector,
+    val theta: Matrix,
     val modelType: String)
   extends PredictionModel[Vector, NaiveBayesModel] {
 
-  /** String name for multinomial model type. */
-  private[classification] val Multinomial: String = "multinomial"
-
-  /** String name for Bernoulli model type. */
-  private[classification] val Bernoulli: String = "bernoulli"
-
-  /** Set of modelTypes that NaiveBayes supports */
-  private[classification] val supportedModelTypes = Set(Multinomial, Bernoulli)
-
-  private val piVector = new DenseVector(pi)
-  private val thetaMatrix = new DenseMatrix(labels.length, theta(0).length, theta.flatten, true)
+  import NaiveBayesModel.{Bernoulli, Multinomial, supportedModelTypes}
 
   require(supportedModelTypes.contains(modelType),
-    s"NaiveBayes was created with an unknown modelType: ${modelType}.")
+    s"NaiveBayes was created with an unknown modelType: $modelType.")
 
   /**
    * Bernoulli scoring requires log(condprob) if 1, log(1-condprob) if 0.
@@ -128,37 +123,37 @@ class NaiveBayesModel private[ml] (
   private val (thetaMinusNegTheta, negThetaSum) = modelType match {
     case Multinomial => (None, None)
     case Bernoulli =>
-      val negTheta = thetaMatrix.map(value => math.log(1.0 - math.exp(value)))
-      val ones = new DenseVector(Array.fill(thetaMatrix.numCols){1.0})
-      val thetaMinusNegTheta = thetaMatrix.map { value =>
+      val negTheta = theta.map(value => math.log(1.0 - math.exp(value)))
+      val ones = new DenseVector(Array.fill(theta.numCols){1.0})
+      val thetaMinusNegTheta = theta.map { value =>
         value - math.log(1.0 - math.exp(value))
       }
       (Option(thetaMinusNegTheta), Option(negTheta.multiply(ones)))
     case _ =>
       // This should never happen.
-      throw new UnknownError(s"Invalid modelType: ${modelType}.")
+      throw new UnknownError(s"Invalid modelType: $modelType.")
   }
 
   override protected def predict(features: Vector): Double = {
     modelType match {
       case Multinomial =>
-        val prob = thetaMatrix.multiply(features)
-        BLAS.axpy(1.0, piVector, prob)
+        val prob = theta.multiply(features)
+        BLAS.axpy(1.0, pi, prob)
         labels(prob.argmax)
       case Bernoulli =>
         features.foreachActive{ (index, value) =>
           if (value != 0.0 && value != 1.0) {
             throw new SparkException(
-              s"Bernoulli naive Bayes requires 0 or 1 feature values but found ${features}")
+              s"Bernoulli naive Bayes requires 0 or 1 feature values but found $features")
           }
         }
         val prob = thetaMinusNegTheta.get.multiply(features)
-        BLAS.axpy(1.0, piVector, prob)
+        BLAS.axpy(1.0, pi, prob)
         BLAS.axpy(1.0, negThetaSum.get, prob)
         labels(prob.argmax)
       case _ =>
         // This should never happen.
-        throw new UnknownError(s"Invalid modelType: ${modelType}.")
+        throw new UnknownError(s"Invalid modelType: $modelType.")
     }
   }
 
@@ -170,19 +165,28 @@ class NaiveBayesModel private[ml] (
     s"NaiveBayesModel with ${labels.size} classes"
   }
 
-  private[ml] def toOld: OldNaiveBayesModel = {
-    new OldNaiveBayesModel(labels, pi, theta, modelType)
-  }
-
 }
 
 private[ml] object NaiveBayesModel {
 
-  /** (private[ml]) Convert a model from the old API */
+  /** String name for multinomial model type. */
+  private[classification] val Multinomial: String = "multinomial"
+
+  /** String name for Bernoulli model type. */
+  private[classification] val Bernoulli: String = "bernoulli"
+
+  /** Set of modelTypes that NaiveBayes supports */
+  private[classification] val supportedModelTypes = Set(Multinomial, Bernoulli)
+
+  /** Convert a model from the old API */
   def fromOld(
       oldModel: OldNaiveBayesModel,
       parent: NaiveBayes): NaiveBayesModel = {
     val uid = if (parent != null) parent.uid else Identifiable.randomUID("nb")
-    new NaiveBayesModel(uid, oldModel.labels, oldModel.pi, oldModel.theta, oldModel.modelType)
+    val labels = Vectors.dense(oldModel.labels)
+    val pi = Vectors.dense(oldModel.pi)
+    val theta = new DenseMatrix(oldModel.labels.length, oldModel.theta(0).length,
+      oldModel.theta.flatten, true)
+    new NaiveBayesModel(uid, labels, pi, theta, oldModel.modelType)
   }
 }
