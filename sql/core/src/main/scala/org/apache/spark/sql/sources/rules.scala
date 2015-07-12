@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.sources
 
+import org.apache.spark.sql.execution.LogicalRDD
 import org.apache.spark.sql.{SaveMode, AnalysisException}
 import org.apache.spark.sql.catalyst.analysis.{EliminateSubQueries, Catalog}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Cast, Alias}
@@ -118,6 +119,10 @@ private[sql] case class PreWriteCheck(catalog: Catalog) extends (LogicalPlan => 
       case logical.InsertIntoTable(l: LogicalRelation, _, _, _, _) =>
         // The relation in l is not an InsertableRelation.
         failAnalysis(s"$l does not allow insertion.")
+
+      case logical.InsertIntoTable(t, _, _, _, _) =>
+        failAnalysis(
+          s"Attempt to insert into a RDD-based table: ${t.simpleString} which is immutable.")
 
       case CreateTableUsingAsSelect(tableName, _, _, _, SaveMode.Overwrite, _, query) =>
         // When the SaveMode is Overwrite, we need to check if the table is an input table of

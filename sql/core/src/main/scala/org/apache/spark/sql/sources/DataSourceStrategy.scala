@@ -112,12 +112,6 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
       val mode = if (overwrite) SaveMode.Overwrite else SaveMode.Append
       execution.ExecutedCommand(InsertIntoHadoopFsRelation(t, query, mode)) :: Nil
 
-    case logical.InsertIntoTable(t, _, _, _, _) =>
-      throw new QueryPlanningException(s"""
-         | Attempt to insert into a RDD-based table: ${t.simpleString}, which is immutable.
-         | Save the RDD to a data source and register the data source as a table before insertion.
-       """.stripMargin)
-
     case _ => Nil
   }
 
@@ -399,5 +393,3 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
     filters.flatMap(translate)
   }
 }
-
-class QueryPlanningException(message: String) extends Exception(message)

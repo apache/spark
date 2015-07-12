@@ -17,14 +17,11 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.sources.QueryPlanningException
-
 import scala.language.postfixOps
 
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.test.{ExamplePointUDT, ExamplePoint}
-
 
 class DataFrameSuite extends QueryTest {
   import org.apache.spark.sql.TestData._
@@ -764,24 +761,35 @@ class DataFrameSuite extends QueryTest {
     assert(!f.getMessage.contains("column2"))
   }
 
-  test("SPARK-6941: Better Error Message for inserting into RDD-based Table") {
+  test("SPARK-6941: Better error message for inserting into RDD-based Table") {
     val df = Seq(Tuple1(1)).toDF("col")
-    df.registerTempTable("rdd_base")
+    val insertion = Seq(Tuple1(2)).toDF("col")
 
-    df.write.parquet("tmp_parquet")
+    // pass case: parquet table (HadoopFsRelation)
+    df.write.mode(SaveMode.Overwrite).parquet("tmp_parquet")
     val pdf = ctx.read.parquet("tmp_parquet")
     pdf.registerTempTable("parquet_base")
+    insertion.write.insertInto("parquet_base")
 
-    df.write.json("tmp_json")
+    // pass case: json table (InsertableRelation)
+    df.write.mode(SaveMode.Overwrite).json("tmp_json")
     val jdf = ctx.read.json("tmp_json")
     jdf.registerTempTable("json_base")
+    insertion.write.mode(SaveMode.Overwrite).insertInto("json_base")
 
-    val insertion = Seq(Tuple1(2)).toDF("col")
-    val e = intercept[QueryPlanningException] {
+    // error cases: insert into a RDD
+    df.registerTempTable("rdd_base")
+    val e1 = intercept[AnalysisException] {
       insertion.write.insertInto("rdd_base")
     }
-    assert(e.getMessage.contains("Attempt to insert into a RDD-based table"))
-    insertion.write.insertInto("parquet_base")
-    insertion.write.mode(SaveMode.Overwrite).insertInto("json_base")
+    assert(e1.getMessage.contains("Attempt to insert into a RDD-based table"))
+
+    // error case: insert into a RDD based on data source
+    val indirectDS = pdf.select("col").filter($"col" > 5)
+    indirectDS.registerTempTable("indirect_ds")
+    val e2 = intercept[AnalysisException] {
+      insertion.write.insertInto("indirect_ds")
+    }
+    assert(e2.getMessage.contains("Attempt to insert into a RDD-based table"))
   }
 }
