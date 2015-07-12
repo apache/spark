@@ -34,9 +34,8 @@ import org.apache.spark.streaming.dstream.DStream
 import org.apache.spark.streaming.receiver.Receiver
 import org.apache.spark.util.Utils
 
-import org.apache.spark._
+import org.apache.spark.{Logging, SparkConf, SparkContext, SparkFunSuite}
 
-import scala.collection._
 import scala.collection.mutable.ArrayBuffer
 
 
