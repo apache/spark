@@ -272,7 +272,7 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
     updateAndCheck(provider) { list =>
       list.size should be (1)
       list.head.attempts.size should be (2)
-      list.head.attempts.head.attemptId should be (Some("attempt1"))
+      list.head.attempts.head.attemptId should be (Some("attempt2"))
     }
 
     val attempt3 = newLogFile("app1", Some("attempt3"), inProgress = false)
@@ -289,7 +289,7 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
     }
 
     val app2Attempt1 = newLogFile("app2", Some("attempt1"), inProgress = false)
-    writeFile(attempt2, true, None,
+    writeFile(attempt1, true, None,
       SparkListenerApplicationStart("app2", Some("app2"), 5L, "test", Some("attempt1")),
       SparkListenerApplicationEnd(6L)
       )
