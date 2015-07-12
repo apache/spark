@@ -161,7 +161,9 @@ private abstract class BaseRRDD[T: ClassTag, U: ClassTag](
               dataOut.write(elem.asInstanceOf[Array[Byte]])
             } else if (deserializer == SerializationFormats.STRING) {
               // write string(for StringRRDD)
+              // scalastyle:off println
               printOut.println(elem)
+              // scalastyle:on println
             }
           }
 
@@ -391,7 +393,7 @@ private[r] object RRDD {
   }
 
   private def createRProcess(rLibDir: String, port: Int, script: String): BufferedStreamThread = {
-    val rCommand = "Rscript"
+    val rCommand = SparkEnv.get.conf.get("spark.sparkr.r.command", "Rscript")
     val rOptions = "--vanilla"
     val rExecScript = rLibDir + "/SparkR/worker/" + script
     val pb = new ProcessBuilder(List(rCommand, rOptions, rExecScript))

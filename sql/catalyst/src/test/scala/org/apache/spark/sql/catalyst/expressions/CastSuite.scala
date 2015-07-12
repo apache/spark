@@ -20,7 +20,8 @@ package org.apache.spark.sql.catalyst.expressions
 import java.sql.{Timestamp, Date}
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.util.DateUtils
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
 
 /**
@@ -156,7 +157,7 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(cast(cast(sd, DateType), StringType), sd)
     checkEvaluation(cast(cast(d, StringType), DateType), 0)
     checkEvaluation(cast(cast(nts, TimestampType), StringType), nts)
-    checkEvaluation(cast(cast(ts, StringType), TimestampType), DateUtils.fromJavaTimestamp(ts))
+    checkEvaluation(cast(cast(ts, StringType), TimestampType), DateTimeUtils.fromJavaTimestamp(ts))
 
     // all convert to string type to check
     checkEvaluation(cast(cast(cast(nts, TimestampType), DateType), StringType), sd)
@@ -292,18 +293,19 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("cast from timestamp") {
-    val millis = 15 * 1000 + 2
-    val seconds = millis * 1000 + 2
+    val millis = 15 * 1000 + 3
+    val seconds = millis * 1000 + 3
     val ts = new Timestamp(millis)
     val tss = new Timestamp(seconds)
     checkEvaluation(cast(ts, ShortType), 15.toShort)
     checkEvaluation(cast(ts, IntegerType), 15)
     checkEvaluation(cast(ts, LongType), 15.toLong)
-    checkEvaluation(cast(ts, FloatType), 15.002f)
-    checkEvaluation(cast(ts, DoubleType), 15.002)
-    checkEvaluation(cast(cast(tss, ShortType), TimestampType), DateUtils.fromJavaTimestamp(ts))
-    checkEvaluation(cast(cast(tss, IntegerType), TimestampType), DateUtils.fromJavaTimestamp(ts))
-    checkEvaluation(cast(cast(tss, LongType), TimestampType), DateUtils.fromJavaTimestamp(ts))
+    checkEvaluation(cast(ts, FloatType), 15.003f)
+    checkEvaluation(cast(ts, DoubleType), 15.003)
+    checkEvaluation(cast(cast(tss, ShortType), TimestampType), DateTimeUtils.fromJavaTimestamp(ts))
+    checkEvaluation(cast(cast(tss, IntegerType), TimestampType),
+      DateTimeUtils.fromJavaTimestamp(ts))
+    checkEvaluation(cast(cast(tss, LongType), TimestampType), DateTimeUtils.fromJavaTimestamp(ts))
     checkEvaluation(
       cast(cast(millis.toFloat / 1000, TimestampType), FloatType),
       millis.toFloat / 1000)
@@ -315,7 +317,7 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
       Decimal(1))
 
     // A test for higher precision than millis
-    checkEvaluation(cast(cast(0.0000001, TimestampType), DoubleType), 0.0000001)
+    checkEvaluation(cast(cast(0.000001, TimestampType), DoubleType), 0.000001)
 
     checkEvaluation(cast(Double.NaN, TimestampType), null)
     checkEvaluation(cast(1.0 / 0.0, TimestampType), null)

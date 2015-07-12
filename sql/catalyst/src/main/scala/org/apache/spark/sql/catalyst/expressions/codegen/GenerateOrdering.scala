@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.expressions.codegen
 
 import org.apache.spark.Logging
 import org.apache.spark.annotation.Private
-import org.apache.spark.sql.Row
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 
 /**
@@ -33,12 +33,9 @@ class BaseOrdering extends Ordering[InternalRow] {
 }
 
 /**
- * Generates bytecode for an [[Ordering]] of [[Row Rows]] for a given set of
- * [[Expression Expressions]].
+ * Generates bytecode for an [[Ordering]] of rows for a given set of expressions.
  */
-object GenerateOrdering
-    extends CodeGenerator[Seq[SortOrder], Ordering[InternalRow]] with Logging {
-  import scala.reflect.runtime.universe._
+object GenerateOrdering extends CodeGenerator[Seq[SortOrder], Ordering[InternalRow]] with Logging {
 
   protected def canonicalize(in: Seq[SortOrder]): Seq[SortOrder] =
     in.map(ExpressionCanonicalizer.execute(_).asInstanceOf[SortOrder])
@@ -47,8 +44,6 @@ object GenerateOrdering
     in.map(BindReferences.bindReference(_, inputSchema))
 
   protected def create(ordering: Seq[SortOrder]): Ordering[InternalRow] = {
-    val a = newTermName("a")
-    val b = newTermName("b")
     val ctx = newCodeGenContext()
 
     val comparisons = ordering.zipWithIndex.map { case (order, i) =>
@@ -56,9 +51,9 @@ object GenerateOrdering
       val evalB = order.child.gen(ctx)
       val asc = order.direction == Ascending
       s"""
-          i = $a;
+          i = a;
           ${evalA.code}
-          i = $b;
+          i = b;
           ${evalB.code}
           if (${evalA.isNull} && ${evalB.isNull}) {
             // Nothing
@@ -80,7 +75,7 @@ object GenerateOrdering
         return new SpecificOrdering(expr);
       }
 
-      class SpecificOrdering extends ${typeOf[BaseOrdering]} {
+      class SpecificOrdering extends ${classOf[BaseOrdering].getName} {
 
         private $exprType[] expressions = null;
 

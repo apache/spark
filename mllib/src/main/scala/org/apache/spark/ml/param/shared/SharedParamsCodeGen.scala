@@ -53,6 +53,8 @@ private[shared] object SharedParamsCodeGen {
       ParamDesc[Int]("checkpointInterval", "checkpoint interval (>= 1)",
         isValid = "ParamValidators.gtEq(1)"),
       ParamDesc[Boolean]("fitIntercept", "whether to fit an intercept term", Some("true")),
+      ParamDesc[Boolean]("standardization", "whether to standardize the training features" +
+        " before fitting the model.", Some("true")),
       ParamDesc[Long]("seed", "random seed", Some("this.getClass.getName.hashCode.toLong")),
       ParamDesc[Double]("elasticNetParam", "the ElasticNet mixing parameter, in range [0, 1]." +
         " For alpha = 0, the penalty is an L2 penalty. For alpha = 1, it is an L1 penalty.",

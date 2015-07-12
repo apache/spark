@@ -140,7 +140,9 @@ private[spark] class EventLoggingListener(
   /** Log the event as JSON. */
   private def logEvent(event: SparkListenerEvent, flushLogger: Boolean = false) {
     val eventJson = JsonProtocol.sparkEventToJson(event)
+    // scalastyle:off println
     writer.foreach(_.println(compact(render(eventJson))))
+    // scalastyle:on println
     if (flushLogger) {
       writer.foreach(_.flush())
       hadoopDataStream.foreach(hadoopFlushMethod.invoke(_))

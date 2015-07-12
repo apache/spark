@@ -33,8 +33,15 @@ class NumericParserSuite extends SparkFunSuite {
     malformatted.foreach { s =>
       intercept[SparkException] {
         NumericParser.parse(s)
-        println(s"Didn't detect malformatted string $s.")
+        throw new RuntimeException(s"Didn't detect malformatted string $s.")
       }
     }
+  }
+
+  test("parser with whitespaces") {
+    val s = "(0.0, [1.0, 2.0])"
+    val parsed = NumericParser.parse(s).asInstanceOf[Seq[_]]
+    assert(parsed(0).asInstanceOf[Double] === 0.0)
+    assert(parsed(1).asInstanceOf[Array[Double]] === Array(1.0, 2.0))
   }
 }

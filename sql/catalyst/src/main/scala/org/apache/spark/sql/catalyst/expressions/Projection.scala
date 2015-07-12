@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import org.apache.spark.sql.catalyst.InternalRow
+
 /**
  * A [[Projection]] that is calculated by calling the `eval` of each of the specified expressions.
  * @param expressions a sequence of expressions that determine the value of each column of the
@@ -36,7 +38,7 @@ class InterpretedProjection(expressions: Seq[Expression]) extends Projection {
       outputArray(i) = exprArray(i).eval(input)
       i += 1
     }
-    new GenericRow(outputArray)
+    new GenericInternalRow(outputArray)
   }
 
   override def toString: String = s"Row => [${exprArray.mkString(",")}]"
@@ -135,12 +137,6 @@ class JoinedRow extends InternalRow {
   override def getFloat(i: Int): Float =
     if (i < row1.length) row1.getFloat(i) else row2.getFloat(i - row1.length)
 
-  override def getString(i: Int): String =
-    if (i < row1.length) row1.getString(i) else row2.getString(i - row1.length)
-
-  override def getAs[T](i: Int): T =
-    if (i < row1.length) row1.getAs[T](i) else row2.getAs[T](i - row1.length)
-
   override def copy(): InternalRow = {
     val totalSize = row1.length + row2.length
     val copiedValues = new Array[Any](totalSize)
@@ -149,7 +145,7 @@ class JoinedRow extends InternalRow {
       copiedValues(i) = apply(i)
       i += 1
     }
-    new GenericRow(copiedValues)
+    new GenericInternalRow(copiedValues)
   }
 
   override def toString: String = {
@@ -235,12 +231,6 @@ class JoinedRow2 extends InternalRow {
   override def getFloat(i: Int): Float =
     if (i < row1.length) row1.getFloat(i) else row2.getFloat(i - row1.length)
 
-  override def getString(i: Int): String =
-    if (i < row1.length) row1.getString(i) else row2.getString(i - row1.length)
-
-  override def getAs[T](i: Int): T =
-    if (i < row1.length) row1.getAs[T](i) else row2.getAs[T](i - row1.length)
-
   override def copy(): InternalRow = {
     val totalSize = row1.length + row2.length
     val copiedValues = new Array[Any](totalSize)
@@ -249,7 +239,7 @@ class JoinedRow2 extends InternalRow {
       copiedValues(i) = apply(i)
       i += 1
     }
-    new GenericRow(copiedValues)
+    new GenericInternalRow(copiedValues)
   }
 
   override def toString: String = {
@@ -329,12 +319,6 @@ class JoinedRow3 extends InternalRow {
   override def getFloat(i: Int): Float =
     if (i < row1.length) row1.getFloat(i) else row2.getFloat(i - row1.length)
 
-  override def getString(i: Int): String =
-    if (i < row1.length) row1.getString(i) else row2.getString(i - row1.length)
-
-  override def getAs[T](i: Int): T =
-    if (i < row1.length) row1.getAs[T](i) else row2.getAs[T](i - row1.length)
-
   override def copy(): InternalRow = {
     val totalSize = row1.length + row2.length
     val copiedValues = new Array[Any](totalSize)
@@ -343,7 +327,7 @@ class JoinedRow3 extends InternalRow {
       copiedValues(i) = apply(i)
       i += 1
     }
-    new GenericRow(copiedValues)
+    new GenericInternalRow(copiedValues)
   }
 
   override def toString: String = {
@@ -423,12 +407,6 @@ class JoinedRow4 extends InternalRow {
   override def getFloat(i: Int): Float =
     if (i < row1.length) row1.getFloat(i) else row2.getFloat(i - row1.length)
 
-  override def getString(i: Int): String =
-    if (i < row1.length) row1.getString(i) else row2.getString(i - row1.length)
-
-  override def getAs[T](i: Int): T =
-    if (i < row1.length) row1.getAs[T](i) else row2.getAs[T](i - row1.length)
-
   override def copy(): InternalRow = {
     val totalSize = row1.length + row2.length
     val copiedValues = new Array[Any](totalSize)
@@ -437,7 +415,7 @@ class JoinedRow4 extends InternalRow {
       copiedValues(i) = apply(i)
       i += 1
     }
-    new GenericRow(copiedValues)
+    new GenericInternalRow(copiedValues)
   }
 
   override def toString: String = {
@@ -517,12 +495,6 @@ class JoinedRow5 extends InternalRow {
   override def getFloat(i: Int): Float =
     if (i < row1.length) row1.getFloat(i) else row2.getFloat(i - row1.length)
 
-  override def getString(i: Int): String =
-    if (i < row1.length) row1.getString(i) else row2.getString(i - row1.length)
-
-  override def getAs[T](i: Int): T =
-    if (i < row1.length) row1.getAs[T](i) else row2.getAs[T](i - row1.length)
-
   override def copy(): InternalRow = {
     val totalSize = row1.length + row2.length
     val copiedValues = new Array[Any](totalSize)
@@ -531,7 +503,7 @@ class JoinedRow5 extends InternalRow {
       copiedValues(i) = apply(i)
       i += 1
     }
-    new GenericRow(copiedValues)
+    new GenericInternalRow(copiedValues)
   }
 
   override def toString: String = {
@@ -611,12 +583,6 @@ class JoinedRow6 extends InternalRow {
   override def getFloat(i: Int): Float =
     if (i < row1.length) row1.getFloat(i) else row2.getFloat(i - row1.length)
 
-  override def getString(i: Int): String =
-    if (i < row1.length) row1.getString(i) else row2.getString(i - row1.length)
-
-  override def getAs[T](i: Int): T =
-    if (i < row1.length) row1.getAs[T](i) else row2.getAs[T](i - row1.length)
-
   override def copy(): InternalRow = {
     val totalSize = row1.length + row2.length
     val copiedValues = new Array[Any](totalSize)
@@ -625,7 +591,7 @@ class JoinedRow6 extends InternalRow {
       copiedValues(i) = apply(i)
       i += 1
     }
-    new GenericRow(copiedValues)
+    new GenericInternalRow(copiedValues)
   }
 
   override def toString: String = {

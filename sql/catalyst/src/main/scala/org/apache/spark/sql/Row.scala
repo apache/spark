@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql
 
-import scala.util.hashing.MurmurHash3
-
 import org.apache.spark.sql.catalyst.expressions.GenericRow
 import org.apache.spark.sql.types.StructType
 
@@ -181,7 +179,7 @@ trait Row extends Serializable {
   def get(i: Int): Any = apply(i)
 
   /** Checks whether the value at position i is null. */
-  def isNullAt(i: Int): Boolean
+  def isNullAt(i: Int): Boolean = apply(i) == null
 
   /**
    * Returns the value at position i as a primitive boolean.
@@ -189,7 +187,7 @@ trait Row extends Serializable {
    * @throws ClassCastException when data type does not match.
    * @throws NullPointerException when value is null.
    */
-  def getBoolean(i: Int): Boolean
+  def getBoolean(i: Int): Boolean = getAs[Boolean](i)
 
   /**
    * Returns the value at position i as a primitive byte.
@@ -197,7 +195,7 @@ trait Row extends Serializable {
    * @throws ClassCastException when data type does not match.
    * @throws NullPointerException when value is null.
    */
-  def getByte(i: Int): Byte
+  def getByte(i: Int): Byte = getAs[Byte](i)
 
   /**
    * Returns the value at position i as a primitive short.
@@ -205,7 +203,7 @@ trait Row extends Serializable {
    * @throws ClassCastException when data type does not match.
    * @throws NullPointerException when value is null.
    */
-  def getShort(i: Int): Short
+  def getShort(i: Int): Short = getAs[Short](i)
 
   /**
    * Returns the value at position i as a primitive int.
@@ -213,7 +211,7 @@ trait Row extends Serializable {
    * @throws ClassCastException when data type does not match.
    * @throws NullPointerException when value is null.
    */
-  def getInt(i: Int): Int
+  def getInt(i: Int): Int = getAs[Int](i)
 
   /**
    * Returns the value at position i as a primitive long.
@@ -221,7 +219,7 @@ trait Row extends Serializable {
    * @throws ClassCastException when data type does not match.
    * @throws NullPointerException when value is null.
    */
-  def getLong(i: Int): Long
+  def getLong(i: Int): Long = getAs[Long](i)
 
   /**
    * Returns the value at position i as a primitive float.
@@ -230,7 +228,7 @@ trait Row extends Serializable {
    * @throws ClassCastException when data type does not match.
    * @throws NullPointerException when value is null.
    */
-  def getFloat(i: Int): Float
+  def getFloat(i: Int): Float = getAs[Float](i)
 
   /**
    * Returns the value at position i as a primitive double.
@@ -238,7 +236,7 @@ trait Row extends Serializable {
    * @throws ClassCastException when data type does not match.
    * @throws NullPointerException when value is null.
    */
-  def getDouble(i: Int): Double
+  def getDouble(i: Int): Double = getAs[Double](i)
 
   /**
    * Returns the value at position i as a String object.
@@ -246,35 +244,35 @@ trait Row extends Serializable {
    * @throws ClassCastException when data type does not match.
    * @throws NullPointerException when value is null.
    */
-  def getString(i: Int): String
+  def getString(i: Int): String = getAs[String](i)
 
   /**
    * Returns the value at position i of decimal type as java.math.BigDecimal.
    *
    * @throws ClassCastException when data type does not match.
    */
-  def getDecimal(i: Int): java.math.BigDecimal = apply(i).asInstanceOf[java.math.BigDecimal]
+  def getDecimal(i: Int): java.math.BigDecimal = getAs[java.math.BigDecimal](i)
 
   /**
    * Returns the value at position i of date type as java.sql.Date.
    *
    * @throws ClassCastException when data type does not match.
    */
-  def getDate(i: Int): java.sql.Date = apply(i).asInstanceOf[java.sql.Date]
+  def getDate(i: Int): java.sql.Date = getAs[java.sql.Date](i)
 
   /**
    * Returns the value at position i of date type as java.sql.Timestamp.
    *
    * @throws ClassCastException when data type does not match.
    */
-  def getTimestamp(i: Int): java.sql.Timestamp = apply(i).asInstanceOf[java.sql.Timestamp]
+  def getTimestamp(i: Int): java.sql.Timestamp = getAs[java.sql.Timestamp](i)
 
   /**
    * Returns the value at position i of array type as a Scala Seq.
    *
    * @throws ClassCastException when data type does not match.
    */
-  def getSeq[T](i: Int): Seq[T] = apply(i).asInstanceOf[Seq[T]]
+  def getSeq[T](i: Int): Seq[T] = getAs[Seq[T]](i)
 
   /**
    * Returns the value at position i of array type as [[java.util.List]].
@@ -290,7 +288,7 @@ trait Row extends Serializable {
    *
    * @throws ClassCastException when data type does not match.
    */
-  def getMap[K, V](i: Int): scala.collection.Map[K, V] = apply(i).asInstanceOf[Map[K, V]]
+  def getMap[K, V](i: Int): scala.collection.Map[K, V] = getAs[Map[K, V]](i)
 
   /**
    * Returns the value at position i of array type as a [[java.util.Map]].
@@ -365,42 +363,21 @@ trait Row extends Serializable {
     false
   }
 
-  override def equals(that: Any): Boolean = that match {
-    case null => false
-    case that: Row =>
-      if (this.length != that.length) {
-        return false
-      }
-      var i = 0
-      val len = this.length
-      while (i < len) {
-        if (apply(i) != that.apply(i)) {
-          return false
-        }
-        i += 1
-      }
-      true
-    case _ => false
-  }
-
-  override def hashCode: Int = {
-    // Using Scala's Seq hash code implementation.
-    var n = 0
-    var h = MurmurHash3.seqSeed
-    val len = length
-    while (n < len) {
-      h = MurmurHash3.mix(h, apply(n).##)
-      n += 1
-    }
-    MurmurHash3.finalizeHash(h, n)
-  }
-
   /* ---------------------- utility methods for Scala ---------------------- */
 
   /**
-   * Return a Scala Seq representing the row. ELements are placed in the same order in the Seq.
+   * Return a Scala Seq representing the row. Elements are placed in the same order in the Seq.
    */
-  def toSeq: Seq[Any]
+  def toSeq: Seq[Any] = {
+    val n = length
+    val values = new Array[Any](n)
+    var i = 0
+    while (i < n) {
+      values.update(i, get(i))
+      i += 1
+    }
+    values.toSeq
+  }
 
   /** Displays all elements of this sequence in a string (without a separator). */
   def mkString: String = toSeq.mkString

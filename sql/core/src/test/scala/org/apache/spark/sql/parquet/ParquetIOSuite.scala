@@ -37,7 +37,7 @@ import org.scalatest.BeforeAndAfterAll
 import org.apache.spark.SparkException
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.ScalaReflection
-import org.apache.spark.sql.catalyst.util.DateUtils
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
 
 // Write support class for nested groups: ParquetWriter initializes GroupWriteSupport
@@ -99,7 +99,6 @@ class ParquetIOSuiteBase extends QueryTest with ParquetTest {
   }
 
   test("fixed-length decimals") {
-
     def makeDecimalRDD(decimal: DecimalType): DataFrame =
       sqlContext.sparkContext
         .parallelize(0 to 1000)
@@ -137,7 +136,7 @@ class ParquetIOSuiteBase extends QueryTest with ParquetTest {
     def makeDateRDD(): DataFrame =
       sqlContext.sparkContext
         .parallelize(0 to 1000)
-        .map(i => Tuple1(DateUtils.toJavaDate(i)))
+        .map(i => Tuple1(DateTimeUtils.toJavaDate(i)))
         .toDF()
         .select($"_1")
 
@@ -155,6 +154,11 @@ class ParquetIOSuiteBase extends QueryTest with ParquetTest {
 
   test("array") {
     val data = (1 to 4).map(i => Tuple1(Seq(i, i + 1)))
+    checkParquetFile(data)
+  }
+
+  test("array and double") {
+    val data = (1 to 4).map(i => (i.toDouble, Seq(i.toDouble, (i + 1).toDouble)))
     checkParquetFile(data)
   }
 

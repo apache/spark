@@ -66,7 +66,6 @@ private[graphx] object BytecodeUtils {
       val finder = new MethodInvocationFinder(c.getName, m)
       getClassReader(c).accept(finder, 0)
       for (classMethod <- finder.methodsInvoked) {
-        // println(classMethod)
         if (classMethod._1 == targetClass && classMethod._2 == targetMethod) {
           return true
         } else if (!seen.contains(classMethod)) {

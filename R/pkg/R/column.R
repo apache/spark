@@ -210,6 +210,22 @@ setMethod("cast",
             }
           })
 
+#' Match a column with given values.
+#'
+#' @rdname column
+#' @return a matched values as a result of comparing with given values.
+#' \dontrun{
+#'   filter(df, "age in (10, 30)")
+#'   where(df, df$age %in% c(10, 30))
+#' }
+setMethod("%in%",
+          signature(x = "Column"),
+          function(x, table) {
+            table <- listToSeq(as.list(table))
+            jc <- callJMethod(x@jc, "in", table)
+            return(column(jc))
+          })
+
 #' Approx Count Distinct
 #'
 #' @rdname column

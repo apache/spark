@@ -35,19 +35,6 @@ trait FunctionRegistry {
   def lookupFunction(name: String, children: Seq[Expression]): Expression
 }
 
-class OverrideFunctionRegistry(underlying: FunctionRegistry) extends FunctionRegistry {
-
-  private val functionBuilders = StringKeyHashMap[FunctionBuilder](caseSensitive = false)
-
-  override def registerFunction(name: String, builder: FunctionBuilder): Unit = {
-    functionBuilders.put(name, builder)
-  }
-
-  override def lookupFunction(name: String, children: Seq[Expression]): Expression = {
-    functionBuilders.get(name).map(_(children)).getOrElse(underlying.lookupFunction(name, children))
-  }
-}
-
 class SimpleFunctionRegistry extends FunctionRegistry {
 
   private val functionBuilders = StringKeyHashMap[FunctionBuilder](caseSensitive = false)
@@ -96,6 +83,7 @@ object FunctionRegistry {
     expression[Rand]("rand"),
     expression[Randn]("randn"),
     expression[CreateStruct]("struct"),
+    expression[CreateNamedStruct]("named_struct"),
     expression[Sqrt]("sqrt"),
 
     // math functions
@@ -112,7 +100,9 @@ object FunctionRegistry {
     expression[Exp]("exp"),
     expression[Expm1]("expm1"),
     expression[Floor]("floor"),
+    expression[Factorial]("factorial"),
     expression[Hypot]("hypot"),
+    expression[Hex]("hex"),
     expression[Logarithm]("log"),
     expression[Log]("ln"),
     expression[Log10]("log10"),
@@ -124,6 +114,9 @@ object FunctionRegistry {
     expression[Pow]("power"),
     expression[UnaryPositive]("positive"),
     expression[Rint]("rint"),
+    expression[ShiftLeft]("shiftleft"),
+    expression[ShiftRight]("shiftright"),
+    expression[ShiftRightUnsigned]("shiftrightunsigned"),
     expression[Signum]("sign"),
     expression[Signum]("signum"),
     expression[Sin]("sin"),
@@ -135,6 +128,10 @@ object FunctionRegistry {
 
     // misc functions
     expression[Md5]("md5"),
+    expression[Sha2]("sha2"),
+    expression[Sha1]("sha1"),
+    expression[Sha1]("sha"),
+    expression[Crc32]("crc32"),
 
     // aggregate functions
     expression[Average]("avg"),
@@ -146,13 +143,36 @@ object FunctionRegistry {
     expression[Sum]("sum"),
 
     // string functions
+    expression[Ascii]("ascii"),
+    expression[Base64]("base64"),
+    expression[Encode]("encode"),
+    expression[Decode]("decode"),
+    expression[StringInstr]("instr"),
     expression[Lower]("lcase"),
     expression[Lower]("lower"),
     expression[StringLength]("length"),
+    expression[Levenshtein]("levenshtein"),
+    expression[StringLocate]("locate"),
+    expression[StringLPad]("lpad"),
+    expression[StringTrimLeft]("ltrim"),
+    expression[StringFormat]("printf"),
+    expression[StringRPad]("rpad"),
+    expression[StringRepeat]("repeat"),
+    expression[StringReverse]("reverse"),
+    expression[StringTrimRight]("rtrim"),
+    expression[StringSpace]("space"),
+    expression[StringSplit]("split"),
     expression[Substring]("substr"),
     expression[Substring]("substring"),
+    expression[StringTrim]("trim"),
+    expression[UnBase64]("unbase64"),
     expression[Upper]("ucase"),
-    expression[Upper]("upper")
+    expression[Unhex]("unhex"),
+    expression[Upper]("upper"),
+
+    // datetime functions
+    expression[CurrentDate]("current_date"),
+    expression[CurrentTimestamp]("current_timestamp")
   )
 
   val builtin: FunctionRegistry = {
