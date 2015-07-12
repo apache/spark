@@ -20,6 +20,8 @@ package org.apache.spark.mllib.fpm
 import org.apache.spark.Logging
 import org.apache.spark.annotation.Experimental
 
+import scala.collection.mutable.ArrayBuffer
+
 /**
  *
  * :: Experimental ::
@@ -42,22 +44,20 @@ private[fpm] object LocalPrefixSpan extends Logging with Serializable {
   def run(
       minCount: Long,
       maxPatternLength: Int,
-      prefix: Array[Int],
-      projectedDatabase: Array[Array[Int]]): Array[(Array[Int], Long)] = {
+      prefix: ArrayBuffer[Int],
+      projectedDatabase: Array[Array[Int]]): Iterator[(Array[Int], Long)] = {
     val frequentPrefixAndCounts = getFreqItemAndCounts(minCount, projectedDatabase)
     val frequentPatternAndCounts = frequentPrefixAndCounts
-      .map(x => (prefix ++ Array(x._1), x._2))
+      .map(x => ((prefix :+ x._1).toArray, x._2))
     val prefixProjectedDatabases = getPatternAndProjectedDatabase(
       prefix, frequentPrefixAndCounts.map(_._1), projectedDatabase)
 
-    val continueProcess = prefixProjectedDatabases.nonEmpty && prefix.length + 1 < maxPatternLength
-    if (continueProcess) {
-      val nextPatterns = prefixProjectedDatabases
-        .map(x => run(minCount, maxPatternLength, x._1, x._2))
-        .reduce(_ ++ _)
-      frequentPatternAndCounts ++ nextPatterns
+    if (prefixProjectedDatabases.nonEmpty && prefix.length + 1 < maxPatternLength) {
+      frequentPatternAndCounts.iterator ++ prefixProjectedDatabases.flatMap {
+        case (nextPrefix, projDB) => run(minCount, maxPatternLength, nextPrefix, projDB)
+      }
     } else {
-      frequentPatternAndCounts
+      frequentPatternAndCounts.iterator
     }
   }
 
@@ -86,28 +86,30 @@ private[fpm] object LocalPrefixSpan extends Logging with Serializable {
       minCount: Long,
       sequences: Array[Array[Int]]): Array[(Int, Long)] = {
     sequences.flatMap(_.distinct)
-      .groupBy(x => x)
-      .mapValues(_.length.toLong)
+      .foldRight(Map[Int, Long]().withDefaultValue(0L)) { case (item, ctr) =>
+        ctr + (item -> (ctr(item) + 1))
+      }
       .filter(_._2 >= minCount)
       .toArray
   }
 
   /**
    * Get the frequent prefixes' projected database.
-   * @param prePrefix the frequent prefixes' prefix
-   * @param frequentPrefixes frequent prefixes
-   * @param sequences sequences data
-   * @return prefixes and projected database
+   * @param prefix the frequent prefixes' prefix
+   * @param frequentPrefixes frequent next prefixes
+   * @param projDB projected database for given prefix
+   * @return extensions of prefix by one item and corresponding projected databases
    */
   private def getPatternAndProjectedDatabase(
-      prePrefix: Array[Int],
+      prefix: ArrayBuffer[Int],
       frequentPrefixes: Array[Int],
-      sequences: Array[Array[Int]]): Array[(Array[Int], Array[Array[Int]])] = {
-    val filteredProjectedDatabase = sequences
-      .map(x => x.filter(frequentPrefixes.contains(_)))
-    frequentPrefixes.map { x =>
-      val sub = filteredProjectedDatabase.map(y => getSuffix(x, y)).filter(_.nonEmpty)
-      (prePrefix ++ Array(x), sub)
+      projDB: Array[Array[Int]]): Array[(ArrayBuffer[Int], Array[Array[Int]])] = {
+    val filteredProjectedDatabase = projDB.map(x => x.filter(frequentPrefixes.contains(_)))
+    frequentPrefixes.map { nextItem =>
+      val nextProjDB = filteredProjectedDatabase
+        .map(candidateSeq => getSuffix(nextItem, candidateSeq))
+        .filter(_.nonEmpty)
+      (prefix :+ nextItem, nextProjDB)
     }.filter(x => x._2.nonEmpty)
   }
 }
