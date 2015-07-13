@@ -24,11 +24,11 @@ import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.Queue
 
 import org.apache.commons.io.FileUtils
+import org.scalatest.{Assertions, BeforeAndAfter, PrivateMethodTester}
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.concurrent.Timeouts
 import org.scalatest.exceptions.TestFailedDueToTimeoutException
 import org.scalatest.time.SpanSugar._
-import org.scalatest.{Assertions, BeforeAndAfter, PrivateMethodTester}
 
 import org.apache.spark.{Logging, SparkConf, SparkContext, SparkFunSuite}
 import org.apache.spark.metrics.MetricsSystem
