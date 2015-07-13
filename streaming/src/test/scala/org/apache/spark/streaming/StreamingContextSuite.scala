@@ -30,13 +30,13 @@ import org.scalatest.exceptions.TestFailedDueToTimeoutException
 import org.scalatest.time.SpanSugar._
 import org.scalatest.{Assertions, BeforeAndAfter, PrivateMethodTester}
 
+import org.apache.spark.{Logging, SparkConf, SparkContext, SparkFunSuite}
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.metrics.source.Source
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.dstream.DStream
 import org.apache.spark.streaming.receiver.Receiver
 import org.apache.spark.util.Utils
-import org.apache.spark.{Logging, SparkConf, SparkContext, SparkFunSuite}
 
 
 class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with Timeouts with Logging {
