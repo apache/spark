@@ -20,22 +20,20 @@ package org.apache.spark.sql.execution
 import java.nio.ByteBuffer
 import java.util.{HashMap => JavaHashMap}
 
-import org.apache.spark.sql.types.Decimal
-
 import scala.reflect.ClassTag
 
 import com.clearspring.analytics.stream.cardinality.HyperLogLog
 import com.esotericsoftware.kryo.io.{Input, Output}
-import com.esotericsoftware.kryo.{Serializer, Kryo}
+import com.esotericsoftware.kryo.{Kryo, Serializer}
 import com.twitter.chill.ResourcePool
 
-import org.apache.spark.{SparkEnv, SparkConf}
-import org.apache.spark.serializer.{SerializerInstance, KryoSerializer}
-import org.apache.spark.sql.catalyst.expressions.GenericRow
-import org.apache.spark.util.collection.OpenHashSet
-import org.apache.spark.util.MutablePair
-
+import org.apache.spark.serializer.{KryoSerializer, SerializerInstance}
+import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.{IntegerHashSet, LongHashSet}
+import org.apache.spark.sql.types.Decimal
+import org.apache.spark.util.MutablePair
+import org.apache.spark.util.collection.OpenHashSet
+import org.apache.spark.{SparkConf, SparkEnv}
 
 private[sql] class SparkSqlSerializer(conf: SparkConf) extends KryoSerializer(conf) {
   override def newKryo(): Kryo = {
@@ -43,6 +41,7 @@ private[sql] class SparkSqlSerializer(conf: SparkConf) extends KryoSerializer(co
     kryo.setRegistrationRequired(false)
     kryo.register(classOf[MutablePair[_, _]])
     kryo.register(classOf[org.apache.spark.sql.catalyst.expressions.GenericRow])
+    kryo.register(classOf[org.apache.spark.sql.catalyst.expressions.GenericInternalRow])
     kryo.register(classOf[org.apache.spark.sql.catalyst.expressions.GenericMutableRow])
     kryo.register(classOf[com.clearspring.analytics.stream.cardinality.HyperLogLog],
                   new HyperLogLogSerializer)
@@ -139,7 +138,7 @@ private[sql] class OpenHashSetSerializer extends Serializer[OpenHashSet[_]] {
     val iterator = hs.iterator
     while(iterator.hasNext) {
       val row = iterator.next()
-      rowSerializer.write(kryo, output, row.asInstanceOf[GenericRow].values)
+      rowSerializer.write(kryo, output, row.asInstanceOf[GenericInternalRow].values)
     }
   }
 
@@ -150,7 +149,7 @@ private[sql] class OpenHashSetSerializer extends Serializer[OpenHashSet[_]] {
     var i = 0
     while (i < numItems) {
       val row =
-        new GenericRow(rowSerializer.read(
+        new GenericInternalRow(rowSerializer.read(
           kryo,
           input,
           classOf[Array[Any]].asInstanceOf[Class[Any]]).asInstanceOf[Array[Any]])

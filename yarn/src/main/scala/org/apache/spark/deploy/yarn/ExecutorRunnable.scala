@@ -146,7 +146,7 @@ class ExecutorRunnable(
       javaOpts ++= Utils.splitCommandString(opts).map(YarnSparkHadoopUtil.escapeForShell)
     }
     sys.props.get("spark.executor.extraLibraryPath").foreach { p =>
-      prefixEnv = Some(Utils.libraryPathEnvPrefix(Seq(p)))
+      prefixEnv = Some(Client.getClusterPath(sparkConf, Utils.libraryPathEnvPrefix(Seq(p))))
     }
 
     javaOpts += "-Djava.io.tmpdir=" +
@@ -195,7 +195,7 @@ class ExecutorRunnable(
     val userClassPath = Client.getUserClasspath(sparkConf).flatMap { uri =>
       val absPath =
         if (new File(uri.getPath()).isAbsolute()) {
-          uri.getPath()
+          Client.getClusterPath(sparkConf, uri.getPath())
         } else {
           Client.buildPath(Environment.PWD.$(), uri.getPath())
         }
