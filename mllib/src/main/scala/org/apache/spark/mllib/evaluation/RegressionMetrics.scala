@@ -54,8 +54,13 @@ class RegressionMetrics(predictionAndObservations: RDD[(Double, Double)]) extend
     summary
   }
   private lazy val SSerr = math.pow(summary.normL2(1), 2)
-  private lazy val SStot = summary.variance(0)
-  private lazy val SSreg = SStot - SSerr
+  private lazy val SStot = summary.variance(0) * (summary.count - 1)
+  private lazy val SSreg = {
+    val yMean = summary.mean(0)
+    predictionAndObservations.map {
+      case (prediction, _) => math.pow(prediction - yMean, 2)
+    }.reduce(_+_)
+  }
 
   /**
    * Returns the variance explained by regression.
@@ -94,6 +99,6 @@ class RegressionMetrics(predictionAndObservations: RDD[(Double, Double)]) extend
    * @see [[http://en.wikipedia.org/wiki/Coefficient_of_determination]]
    */
   def r2: Double = {
-    SSreg / SStot
+    1 - SSerr / SStot
   }
 }
