@@ -705,11 +705,13 @@ class SQLTests(ReusedPySparkTestCase):
     def test_time_with_timezone(self):
         day = datetime.date.today()
         now = datetime.datetime.now()
-        ts = time.mktime(now.timetuple()) + now.microsecond / 1e6
+        ts = time.mktime(now.timetuple())
         # class in __main__ is not serializable
         from pyspark.sql.tests import UTC
         utc = UTC()
-        utcnow = datetime.datetime.fromtimestamp(ts, utc)
+        utcnow = datetime.datetime.utcfromtimestamp(ts)  # without microseconds
+        # add microseconds to utcnow (keeping year,month,day,hour,minute,second)
+        utcnow = datetime.datetime(*(utcnow.timetuple()[:6] + (now.microsecond, utc)))
         df = self.sqlCtx.createDataFrame([(day, now, utcnow)])
         day1, now1, utcnow1 = df.first()
         self.assertEqual(day1, day)

@@ -1761,7 +1761,9 @@ object SparkIMain {
         if (intp.totalSilence) ()
         else super.printMessage(msg)
       }
+      // scalastyle:off println
       else Console.println(msg)
+      // scalastyle:on println
     }
   }
 }

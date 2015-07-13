@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodeGenContext, GeneratedExpressionCode}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.unsafe.types.{Interval, UTF8String}
 
 
 object Cast {
@@ -54,6 +54,9 @@ object Cast {
     case (_: NumericType, TimestampType) => true
 
     case (_, DateType) => true
+
+    case (StringType, IntervalType) => true
+    case (IntervalType, StringType) => true
 
     case (StringType, _: NumericType) => true
     case (BooleanType, _: NumericType) => true
@@ -232,6 +235,13 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
     case _ => _ => null
   }
 
+  // IntervalConverter
+  private[this] def castToInterval(from: DataType): Any => Any = from match {
+    case StringType =>
+      buildCast[UTF8String](_, s => Interval.fromString(s.toString))
+    case _ => _ => null
+  }
+
   // LongConverter
   private[this] def castToLong(from: DataType): Any => Any = from match {
     case StringType =>
@@ -405,6 +415,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
     case DateType => castToDate(from)
     case decimal: DecimalType => castToDecimal(from, decimal)
     case TimestampType => castToTimestamp(from)
+    case IntervalType => castToInterval(from)
     case BooleanType => castToBoolean(from)
     case ByteType => castToByte(from)
     case ShortType => castToShort(from)
@@ -441,6 +452,10 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
 
       case (_, StringType) =>
         defineCodeGen(ctx, ev, c => s"${ctx.stringType}.fromString(String.valueOf($c))")
+
+      case (StringType, IntervalType) =>
+        defineCodeGen(ctx, ev, c =>
+          s"org.apache.spark.unsafe.types.Interval.fromString($c.toString())")
 
       // fallback for DecimalType, this must be before other numeric types
       case (_, dt: DecimalType) =>
