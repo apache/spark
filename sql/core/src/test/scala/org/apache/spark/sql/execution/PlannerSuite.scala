@@ -147,4 +147,10 @@ class PlannerSuite extends SparkFunSuite {
     val planned = planner.TakeOrderedAndProject(query)
     assert(planned.head.isInstanceOf[execution.TakeOrderedAndProject])
   }
+
+  test("efficient select -> project -> limit") {
+    val query = testData.select('value).limit(2).logicalPlan
+    val planned = planner.TakeLimit(query)
+    assert(planned.head.isInstanceOf[execution.TakeLimit])
+  }
 }
