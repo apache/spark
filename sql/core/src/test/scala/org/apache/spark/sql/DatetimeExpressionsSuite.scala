@@ -118,6 +118,18 @@ class DatetimeExpressionsSuite extends QueryTest {
       Row(8, 8, 8))
   }
 
+  test("dayInYear") {
+    val df = Seq((d, sdfDate.format(d), ts)).toDF("a", "b", "c")
+
+    checkAnswer(
+      df.select(dayInYear("a"), dayInYear("b"), dayInYear("c")),
+      Row(128, 128, 128))
+
+    checkAnswer(
+      df.selectExpr("dayInYear(a)", "dayInYear(b)", "dayInYear(c)"),
+      Row(128, 128, 128))
+  }
+
   test("hour") {
     val df = Seq((d, sdf.format(d), ts)).toDF("a", "b", "c")
 

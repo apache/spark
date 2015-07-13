@@ -1602,6 +1602,8 @@ object functions {
   /**
    * Converts a date/timestamp/string to a value of string in the format specified by the date
    * format given by the second argument
+   *
+   * NOTE: Prefer using functions like year. These use an optimized implementation.
    * @group datetime_funcs
    * @since 1.5.0
    */
@@ -1610,6 +1612,8 @@ object functions {
   /**
    * Converts a date/timestamp/string to a value of string in the format specified by the date
    * format given by the second argument
+   *
+   * NOTE: Prefer using functions like year. These use an optimized implementation.
    * @group datetime_funcs
    * @since 1.5.0
    */
@@ -1670,6 +1674,20 @@ object functions {
    * @since 1.5.0
    */
   def day(columnName: String): Column = day(Column(columnName))
+
+  /**
+   * Extracts the day of the year as an integer from a given date/timestamp/string
+   * @group datetime_funcs
+   * @since 1.5.0
+   */
+  def dayInYear(e: Column): Column = DayInYear(e.expr)
+
+  /**
+   * Extracts the day of the year as an integer from a given date/timestamp/string
+   * @group datetime_funcs
+   * @since 1.5.0
+   */
+  def dayInYear(columnName: String): Column = dayInYear(Column(columnName))
 
   /**
    * Extracts the hours as an integer from a given date/timestamp/string

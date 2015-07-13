@@ -642,6 +642,7 @@ def dateFormat(dateCol, formatCol):
     """
     Convert the given date into the format specified by the second argument.
     Return type is always string.
+    NOTE: Prefer using functions like year. These use an optimized implementation.
     >>> df0 = sqlContext.createDataFrame([('2015-04-08',)], ['a'])
 
     >>> df0.select(dateFormat('a', 'MM/dd/yyy').alias('date')).collect()
@@ -696,6 +697,18 @@ def day(col):
     Extract the day of a given date as integer.
     >>> sqlContext.createDataFrame([('2015-04-08',)], ['a']).select(day('a').alias('day')).collect()
     [Row(day=8)]
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.day(col))
+
+
+@since(1.5)
+def dayInYear(col):
+    """
+    Extract the day of the year of a given date as integer.
+    >>> df0 = sqlContext.createDataFrame([('2015-04-08',)], ['a'])
+    >>> df0.select(dayInYear('a').alias('day')).collect()
+    [Row(day=128)]
     """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.day(col))

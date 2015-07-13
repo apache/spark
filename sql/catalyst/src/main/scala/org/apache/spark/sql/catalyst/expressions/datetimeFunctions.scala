@@ -128,30 +128,25 @@ private[sql] object DateFormatExpression {
     (year % 4) == 0 && ((year % 100) != 0 || (year % 400) == 0)
   }
 
-  val yearBoundaries = new Array[Int](2330 - 1599)
 
-  var i = 0
-  yearBoundaries(i) = -135140
-  (1601 to 2330) foreach { year =>
-    i = i + 1
-    if (isLeapYear(year - 1)) {
-      yearBoundaries(i) = yearBoundaries(i - 1) + 366
-    } else {
-      yearBoundaries(i) = yearBoundaries(i - 1) + 365
-    }
-  }
 }
 
 abstract class DateFormatExpression extends UnaryExpression with ExpectsInputTypes {
   self: Product =>
 
-  val daysIn400Year: Int = (365.2425 * 400).toInt
-
+  val daysIn400Years: Int = 146097
   val to2001 = -11323
-  val to1601 = to2001 + daysIn400Year
 
-  private[this] def numYears(i: Int): Int = {
-    (i / 365.2425).toInt
+  // this is year -17999, calculation: 50 * daysIn400Year
+  val toYearZero = to2001 + 7304850
+
+  private[this] def yearBoundary(year: Int): Int = {
+    year * 365 + ((year / 4 ) - (year / 100) + (year / 400))
+  }
+
+  private[this] def numYears(in: Int): Int = {
+    val year = in / 365
+    if (in > yearBoundary(year)) year else year - 1
   }
 
   override def dataType: DataType = IntegerType
@@ -159,40 +154,60 @@ abstract class DateFormatExpression extends UnaryExpression with ExpectsInputTyp
   override def inputTypes: Seq[AbstractDataType] = Seq(DateType)
 
   protected def calculateYearAndDayInYear(daysIn: Int): (Int, Int) = {
-    val daysNormalized = daysIn + to1601
-    val numOfQuarterCenturies = daysNormalized / daysIn400Year
-    val daysIn400 = daysNormalized % daysIn400Year + 1
-    val years = numYears(daysIn400)
-    val leapDays = ((years - 1) / 4) - (((years - 1) / 100) - ((years - 1) / 400))
-    val year: Int = 1601 + 400 * numOfQuarterCenturies + (daysIn400 - leapDays) / 365
-    var dayInYear = (daysIn400 - leapDays) % 365
-    if (dayInYear == 0 && year % 400 == 0) dayInYear = 365
+    val daysNormalized = daysIn + toYearZero
+    val numOfQuarterCenturies = daysNormalized / daysIn400Years
+    val daysInThis400 = daysNormalized % daysIn400Years + 1
+    val years = numYears(daysInThis400)
+    val year: Int = (2001 - 20000) + 400 * numOfQuarterCenturies + years
+    val dayInYear = daysInThis400 - yearBoundary(years)
     (year, dayInYear)
   }
 
   protected def codeGen(ctx: CodeGenContext, ev: GeneratedExpressionCode, input: String,
       f: (String, String) => String): String = {
+    val daysIn400Years = ctx.freshName("daysIn400Years")
+    val to2001 = ctx.freshName("to2001")
+    val toYearZero = ctx.freshName("toYearZero")
+    val daysNormalized = ctx.freshName("daysNormalized")
+    val numOfQuarterCenturies = ctx.freshName("numOfQuarterCenturies")
+    val daysInThis400 = ctx.freshName("daysInThis400")
+    val years = ctx.freshName("years")
     val year = ctx.freshName("year")
     val dayInYear = ctx.freshName("dayInYear")
 
     s"""
-       int daysIn400Year =  (int) (365.2425 * 400);
+       int $daysIn400Years = 146097;
+       int $to2001 = -11323;
+       int $toYearZero = to2001 + 7304850;
 
-       int to2001 = -11323;
-       int to1601 = to2001 + daysIn400Year;
+       int $daysNormalized = $input + $toYearZero;
+       int $numOfQuarterCenturies = $daysNormalized / $daysIn400Years;
+       int $daysInThis400 = $daysNormalized % $daysIn400Years + 1;
+       int $years = $daysInThis400 / 365;
 
-       int daysNormalized = $input + to1601;
-       int numOfQuarterCenturies = daysNormalized / daysIn400Year;
-       int daysIn400 = daysNormalized % daysIn400Year;
-       int years = daysIn400 / 365;
-       int extra = ((years % 4) == 0 && years != 0) ? 1 : 0;
-       int leapDays = ((years - 1) / 4) - (((years - 1) / 100) - ((years - 1) / 400)) + extra;
-       int dayInYear = (daysIn400 - leapDays) % 365;
-       int year = 1601 + (400 * numOfQuarterCenturies) + (daysIn400 - leapDays) / 365;
-       int $year = year;
-       int $dayInYear = dayInYear + 1;
-       ${f(year, dayInYear)}
+       $years = ($daysInThis400 > $years * 365 + (($years / 4 ) - ($years / 100) +
+             ($years / 400))) ? $years : $years - 1;
+
+       int $year = (2001 - 20000) + 400 * $numOfQuarterCenturies + years;
+       int $dayInYear = $daysInThis400 -
+         ($years * 365 + (($years / 4 ) - ($years / 100) + ($years / 400)));
+       ${f(year, dayInYear)};
      """
+  }
+}
+
+case class DayInYear(child: Expression) extends DateFormatExpression {
+
+  override protected def nullSafeEval(input: Any): Any = {
+    calculateYearAndDayInYear(input.asInstanceOf[Int])._2
+  }
+
+  override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    nullSafeCodeGen(ctx, ev, days => {
+      codeGen(ctx, ev, days, (year, dayInYear) => {
+        s"""${ev.primitive} = $dayInYear;"""
+      })
+    })
   }
 }
 
@@ -265,7 +280,7 @@ case class Month(child: Expression) extends DateFormatExpression {
     }
   }
 
-  /*override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+  override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     nullSafeCodeGen(ctx, ev, days => {
       codeGen(ctx, ev, days, (year, dayInYear) => {
         val leap = ctx.freshName("leap")
@@ -299,7 +314,7 @@ case class Month(child: Expression) extends DateFormatExpression {
          """
       })
     })
-  }*/
+  }
 }
 
 case class Day(child: Expression) extends DateFormatExpression with ExpectsInputTypes {

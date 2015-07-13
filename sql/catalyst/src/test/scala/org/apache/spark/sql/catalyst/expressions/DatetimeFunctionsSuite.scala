@@ -47,6 +47,69 @@ class DatetimeFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   val d = new Date(sdf.parse("2015-04-08 13:10:15").getTime)
   val ts = new Timestamp(sdf.parse("2013-11-08 13:10:15").getTime)
 
+  test("Day in Year") {
+    val sdfDay = new SimpleDateFormat("D")
+    (2002 to 2004).foreach { y =>
+      (0 to 11).foreach { m =>
+        (0 to 5).foreach { i =>
+          val c = Calendar.getInstance()
+          c.set(y, m, 28, 0, 0, 0)
+          c.add(Calendar.DATE, i)
+          checkEvaluation(DayInYear(Cast(Literal(new Date(c.getTimeInMillis)), DateType)),
+            sdfDay.format(c.getTime).toInt)
+        }
+      }
+    }
+
+    (1998 to 2002).foreach { y =>
+      (0 to 11).foreach { m =>
+        (0 to 5).foreach { i =>
+          val c = Calendar.getInstance()
+          c.set(y, m, 28, 0, 0, 0)
+          c.add(Calendar.DATE, i)
+          checkEvaluation(DayInYear(Cast(Literal(new Date(c.getTimeInMillis)), DateType)),
+            sdfDay.format(c.getTime).toInt)
+        }
+      }
+    }
+
+    (1969 to 1970).foreach { y =>
+      (0 to 11).foreach { m =>
+        (0 to 5).foreach { i =>
+          val c = Calendar.getInstance()
+          c.set(y, m, 28, 0, 0, 0)
+          c.add(Calendar.DATE, i)
+          checkEvaluation(DayInYear(Cast(Literal(new Date(c.getTimeInMillis)), DateType)),
+            sdfDay.format(c.getTime).toInt)
+        }
+      }
+    }
+
+    (2402 to 2404).foreach { y =>
+      (0 to 11).foreach { m =>
+        (0 to 5).foreach { i =>
+          val c = Calendar.getInstance()
+          c.set(y, m, 28, 0, 0, 0)
+          c.add(Calendar.DATE, i)
+          checkEvaluation(DayInYear(Cast(Literal(new Date(c.getTimeInMillis)), DateType)),
+            sdfDay.format(c.getTime).toInt)
+        }
+      }
+    }
+
+    (2398 to 2402).foreach { y =>
+      (0 to 11).foreach { m =>
+        (0 to 5).foreach { i =>
+          val c = Calendar.getInstance()
+          c.set(y, m, 28, 0, 0, 0)
+          c.add(Calendar.DATE, i)
+          checkEvaluation(DayInYear(Cast(Literal(new Date(c.getTimeInMillis)), DateType)),
+            sdfDay.format(c.getTime).toInt)
+        }
+      }
+    }
+  }
+
   test("Year") {
     checkEvaluation(Year(Literal.create(null, DateType)), null)
     checkEvaluation(Year(Cast(Literal(d), DateType)), 2015)
@@ -64,21 +127,6 @@ class DatetimeFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         }
       }
     }
-  }
-
-  test("millis to date") {
-    var l: Long = 970383600696L
-    var lBase = l + TimeZone.getDefault.getOffset(l)
-    System.out.println(new Date(l))
-    assert(DateTimeUtils.millisToDays(l) == lBase / 3600 / 24 / 1000)
-
-    l = 970383600977L
-    lBase = l + TimeZone.getDefault.getOffset(l)
-    System.out.println(new Date(l))
-    System.out.println(DateTimeUtils.millisToDays(l))
-    println(new SimpleDateFormat("D").format(new Date(l)))
-    println(lBase / 3600 / 24 / 1000)
-    assert(DateTimeUtils.millisToDays(l) == lBase / 3600 / 24 / 1000)
   }
 
   test("Quarter") {
@@ -101,48 +149,10 @@ class DatetimeFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("Month") {
-    /*checkEvaluation(Month(Literal.create(null, DateType)), null)
+    checkEvaluation(Month(Literal.create(null, DateType)), null)
     checkEvaluation(Month(Cast(Literal(d), DateType)), 4)
     checkEvaluation(Month(Cast(Literal(sdfDate.format(d)), DateType)), 4)
-    checkEvaluation(Month(Cast(Literal(ts), DateType)), 11)*/
-
-    val x = Calendar.getInstance()
-
-    x.setTimeInMillis(946713600707L)
-    println(x.getTime)
-    println(Cast(Literal(new Date(x.getTimeInMillis)), DateType).eval(null))
-    checkEvaluation(Month(Cast(Literal(new Date(x.getTimeInMillis)), DateType)),
-      x.get(Calendar.MONTH) + 1)
-
-    x.setTimeInMillis(1072944000077L)
-    println(x.getTime)
-    println(Cast(Literal(new Date(x.getTimeInMillis)), DateType).eval(null))
-    checkEvaluation(Month(Cast(Literal(new Date(x.getTimeInMillis)), DateType)),
-      x.get(Calendar.MONTH) + 1)
-
-    x.setTimeInMillis(981014400345L)
-    println(x.getTime)
-    println(Cast(Literal(new Date(x.getTimeInMillis)), DateType).eval(null))
-    checkEvaluation(Month(Cast(Literal(new Date(x.getTimeInMillis)), DateType)),
-      x.get(Calendar.MONTH) + 1)
-
-    x.setTimeInMillis(978249600433L)
-    println(x.getTime)
-    println(Cast(Literal(new Date(x.getTimeInMillis)), DateType).eval(null))
-    checkEvaluation(Month(Cast(Literal(new Date(x.getTimeInMillis)), DateType)),
-      x.get(Calendar.MONTH) + 1)
-
-    x.setTimeInMillis(970383600000L)
-    println(x.getTime)
-    println(Cast(Literal(new Date(x.getTimeInMillis)), DateType).eval(null))
-    checkEvaluation(Month(Cast(Literal(new Date(x.getTimeInMillis)), DateType)),
-      x.get(Calendar.MONTH) + 1)
-
-    x.setTimeInMillis(954489600409L)
-    println(x.getTime)
-    println(Cast(Literal(new Date(x.getTimeInMillis)), DateType).eval(null))
-    checkEvaluation(Month(Cast(Literal(new Date(x.getTimeInMillis)), DateType)),
-      x.get(Calendar.MONTH) + 1)
+    checkEvaluation(Month(Cast(Literal(ts), DateType)), 11)
 
     (2003 to 2004).foreach { y =>
       (0 to 11).foreach { m =>
@@ -157,13 +167,12 @@ class DatetimeFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
 
     val sdf = new SimpleDateFormat("D")
-    (1998 to 2005).foreach { y =>
+    (1999 to 2000).foreach { y =>
       (0 to 11).foreach { m =>
         (0 to 5 * 24).foreach { i =>
           val c = Calendar.getInstance()
           c.set(y, m, 28, 0, 0, 0)
           c.add(Calendar.HOUR_OF_DAY, i)
-          println(Cast(Literal(new Date(c.getTimeInMillis)), DateType).eval(null) + " " + sdf.format(c.getTime) + " " + c.getTimeInMillis)
           checkEvaluation(Month(Cast(Literal(new Date(c.getTimeInMillis)), DateType)),
             c.get(Calendar.MONTH) + 1)
         }
