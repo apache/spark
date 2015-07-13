@@ -163,15 +163,11 @@ abstract class DateFormatExpression extends UnaryExpression with ExpectsInputTyp
     val numOfQuarterCenturies = daysNormalized / daysIn400Year
     val daysIn400 = daysNormalized % daysIn400Year + 1
     val years = numYears(daysIn400)
-    if (years == 400) {
-      (1601 + 400 * numOfQuarterCenturies + 399, 365)
-    } else {
-      val leapDays = ((years - 1) / 4) - (((years - 1) / 100) - ((years - 1) / 400))
-      val year: Int = 1601 + 400 * numOfQuarterCenturies + (daysIn400 - leapDays) / 365
-      var dayInYear = (daysIn400 - leapDays) % 365
-      if (dayInYear == 0 && year % 400 == 0) dayInYear = 365
-      (year, dayInYear)
-    }
+    val leapDays = ((years - 1) / 4) - (((years - 1) / 100) - ((years - 1) / 400))
+    val year: Int = 1601 + 400 * numOfQuarterCenturies + (daysIn400 - leapDays) / 365
+    var dayInYear = (daysIn400 - leapDays) % 365
+    if (dayInYear == 0 && year % 400 == 0) dayInYear = 365
+    (year, dayInYear)
   }
 
   protected def codeGen(ctx: CodeGenContext, ev: GeneratedExpressionCode, input: String,
