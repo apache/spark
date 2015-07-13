@@ -1427,7 +1427,14 @@ class QueryView(wwwutils.DataProfilingMixin, BaseView):
 admin.add_view(QueryView(name='Ad Hoc Query', category="Data Profiling"))
 
 
-class ModelViewOnly(wwwutils.LoginMixin, ModelView):
+class AirflowModelView(ModelView):
+    list_template = 'airflow/model_list.html'
+    edit_template = 'airflow/model_edit.html'
+    create_template = 'airflow/model_create.html'
+    page_size = 500
+
+
+class ModelViewOnly(wwwutils.LoginMixin, AirflowModelView):
     """
     Modifying the base ModelView class for non edit, browse only operations
     """
@@ -1497,7 +1504,11 @@ def nobr_f(v, c, m, p):
     return Markup("<nobr>{}</nobr>".format(getattr(m, p)))
 
 
+
+
 class JobModelView(ModelViewOnly):
+    verbose_name_plural = "jobs"
+    verbose_name = "job"
     column_default_sort = ('start_date', True)
     column_filters = (
         'job_type', 'dag_id', 'state',
@@ -1505,21 +1516,28 @@ class JobModelView(ModelViewOnly):
     column_formatters = dict(
         start_date=datetime_f,
         end_date=datetime_f,
+        hostname=nobr_f,
+        state=state_f,
         latest_heartbeat=datetime_f)
 mv = JobModelView(jobs.BaseJob, Session, name="Jobs", category="Browse")
 admin.add_view(mv)
 
 
 class LogModelView(ModelViewOnly):
+    verbose_name_plural = "logs"
+    verbose_name = "log"
     column_default_sort = ('dttm', True)
     column_filters = ('dag_id', 'task_id', 'execution_date')
-    column_formatters = dict(dttm=datetime_f, execution_date=datetime_f)
+    column_formatters = dict(
+        dttm=datetime_f, execution_date=datetime_f, dag_id=dag_link)
 mv = LogModelView(
     models.Log, Session, name="Logs", category="Browse")
 admin.add_view(mv)
 
 
 class TaskInstanceModelView(ModelViewOnly):
+    verbose_name_plural = "task instances"
+    verbose_name = "task instance"
     column_filters = (
         'state', 'dag_id', 'task_id', 'execution_date', 'hostname',
         'queue', 'pool')
@@ -1539,7 +1557,7 @@ class TaskInstanceModelView(ModelViewOnly):
         'start_date', 'end_date', 'duration', 'job_id', 'hostname',
         'unixname', 'priority_weight', 'log')
     can_delete = True
-    page_size = 1000
+    page_size = 500
 mv = TaskInstanceModelView(
     models.TaskInstance, Session, name="Task Instances", category="Browse")
 admin.add_view(mv)
@@ -1551,7 +1569,9 @@ admin.add_view(mv)
 admin._menu = admin._menu[:-1]
 
 
-class ConnectionModelView(wwwutils.SuperUserMixin, ModelView):
+class ConnectionModelView(wwwutils.SuperUserMixin, AirflowModelView):
+    verbose_name = "Connection"
+    verbose_name_plural = "Connections"
     column_default_sort = ('conn_id', False)
     column_list = ('conn_id', 'conn_type', 'host', 'port')
     form_overrides = dict(password=VisiblePasswordField)
@@ -1578,7 +1598,9 @@ mv = ConnectionModelView(
 admin.add_view(mv)
 
 
-class UserModelView(wwwutils.SuperUserMixin, ModelView):
+class UserModelView(wwwutils.SuperUserMixin, AirflowModelView):
+    verbose_name = "User"
+    verbose_name_plural = "Users"
     column_default_sort = 'username'
 mv = UserModelView(models.User, Session, name="Users", category="Admin")
 admin.add_view(mv)
@@ -1624,7 +1646,9 @@ def label_link(v, c, m, p):
     return Markup("<a href='{url}'>{m.label}</a>".format(**locals()))
 
 
-class ChartModelView(wwwutils.DataProfilingMixin, ModelView):
+class ChartModelView(wwwutils.DataProfilingMixin, AirflowModelView):
+    verbose_name = "chart"
+    verbose_name_plural = "charts"
     form_columns = (
         'label',
         'owner',
@@ -1737,7 +1761,9 @@ admin.add_link(
         url='https://github.com/airbnb/airflow'))
 
 
-class KnowEventView(wwwutils.DataProfilingMixin, ModelView):
+class KnowEventView(wwwutils.DataProfilingMixin, AirflowModelView):
+    verbose_name = "known event"
+    verbose_name_plural = "known events"
     form_columns = (
         'label',
         'event_type',
@@ -1753,7 +1779,7 @@ mv = KnowEventView(
 admin.add_view(mv)
 
 
-class KnowEventTypeView(wwwutils.DataProfilingMixin, ModelView):
+class KnowEventTypeView(wwwutils.DataProfilingMixin, AirflowModelView):
     pass
 
 '''
@@ -1771,7 +1797,9 @@ admin.add_view(mv)
 '''
 
 
-class VariableView(wwwutils.LoginMixin, ModelView):
+class VariableView(wwwutils.LoginMixin, AirflowModelView):
+    verbose_name = "Variable"
+    verbose_name_plural = "Variables"
     column_list = ('key',)
     column_filters = ('key', 'val')
     column_searchable_list = ('key', 'val')
@@ -1807,7 +1835,7 @@ def fqueued_slots(v, c, m, p):
     return Markup("<a href='{0}'>{1}</a>".format(url, m.queued_slots()))
 
 
-class PoolModelView(wwwutils.SuperUserMixin, ModelView):
+class PoolModelView(wwwutils.SuperUserMixin, AirflowModelView):
     column_list = ('pool', 'slots', 'used_slots', 'queued_slots')
     column_formatters = dict(
         pool=pool_link, used_slots=fused_slots, queued_slots=fqueued_slots)
@@ -1816,7 +1844,9 @@ mv = PoolModelView(models.Pool, Session, name="Pools", category="Admin")
 admin.add_view(mv)
 
 
-class SlaMissModelView(wwwutils.SuperUserMixin, ModelView):
+class SlaMissModelView(wwwutils.SuperUserMixin, AirflowModelView):
+    verbose_name_plural = "SLA misses"
+    verbose_name = "SLA miss"
     column_list = (
         'dag_id', 'task_id', 'execution_date', 'email_sent', 'timestamp')
     column_formatters = dict(
