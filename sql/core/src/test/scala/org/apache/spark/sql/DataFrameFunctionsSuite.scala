@@ -116,14 +116,9 @@ class DataFrameFunctionsSuite extends QueryTest {
     checkAnswer(result, Seq(Row(Row("v", 5.0)), Row(Row("v", 5.0))))
   }
 
-  case class TestData2(a: Int, b: Int)
-  val testData2 = {
-    val df = (for { a <- 1 to 3; b <- 1 to 2 } yield (a, b))
-      .map(t => TestData2(t._1, t._2))
-      .toDF()
-    df.registerTempTable("testData2")
-    df
-  }
+  val testData2 = (for { a <- 1 to 3; b <- 1 to 2 } yield (a, b))
+      .map(t => (t._1, t._2))
+      .toDF("a", "b")
 
   test("constant functions") {
     checkAnswer(
