@@ -25,11 +25,9 @@ import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
-import org.apache.spark.util.CompletionIterator
 import org.apache.spark.util.collection.ExternalSorter
 import org.apache.spark.util.collection.unsafe.sort.PrefixComparator
-import org.apache.spark.util.{CompletionIterator, MutablePair}
-import org.apache.spark.{HashPartitioner, SparkEnv}
+import org.apache.spark.util.CompletionIterator
 
 /**
  * :: DeveloperApi ::
@@ -109,11 +107,24 @@ case class Union(children: Seq[SparkPlan]) extends SparkPlan {
 
 /**
  * :: DeveloperApi ::
- * Take the first `limit` elements from each partition.
+ * Take the first `limit` elements.
+ *
+ * @param global if true, then this operator will take the first `limit` elements of the entire
+ *               input. If false, it will take the first `limit` elements of each partition.
+ * @param limit the number of elements to take.
+*  @param child the input data source.
  */
 @DeveloperApi
-case class PartitionLocalLimit(limit: Int, child: SparkPlan)
+case class Limit(global: Boolean, limit: Int, child: SparkPlan)
   extends UnaryNode {
+  override def requiredChildDistribution: List[Distribution] = {
+    if (global) {
+      AllTuples :: Nil
+    } else {
+      UnspecifiedDistribution :: Nil
+    }
+  }
+
   override def output: Seq[Attribute] = child.output
 
   override def executeCollect(): Array[Row] = child.executeTake(limit)

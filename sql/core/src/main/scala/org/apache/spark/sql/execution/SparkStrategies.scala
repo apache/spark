@@ -346,12 +346,10 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         execution.Sample(lb, ub, withReplacement, seed, planLater(child)) :: Nil
       case logical.LocalRelation(output, data) =>
         LocalTableScan(output, data) :: Nil
-      case logical.Limit(IntegerLiteral(limit), child) => {
-        val perPartitionLimit = execution.PartitionLocalLimit(limit, planLater(child))
-        val globalLimit = execution.PartitionLocalLimit(
-          limit, execution.Exchange(SinglePartition, Nil, perPartitionLimit))
+      case logical.Limit(IntegerLiteral(limit), child) =>
+        val perPartitionLimit = execution.Limit(global = false, limit, planLater(child))
+        val globalLimit = execution.Limit(global = true, limit, perPartitionLimit)
         globalLimit :: Nil
-      }
       case Unions(unionChildren) =>
         execution.Union(unionChildren.map(planLater)) :: Nil
       case logical.Except(left, right) =>
