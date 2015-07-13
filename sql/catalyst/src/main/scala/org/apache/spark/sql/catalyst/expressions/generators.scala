@@ -74,21 +74,13 @@ case class UserDefinedGenerator(
     children: Seq[Expression])
   extends Generator {
 
-  @transient private[this] var inputRow: InterpretedProjection = _
-  @transient private[this] var convertToScala: (InternalRow) => Row = _
-
-  private def initializeConverters(): Unit = {
-    inputRow = new InterpretedProjection(children)
-    convertToScala = {
-      val inputSchema = StructType(children.map(e => StructField(e.simpleString, e.dataType, true)))
-      CatalystTypeConverters.createToScalaConverter(inputSchema)
-    }.asInstanceOf[InternalRow => Row]
-  }
+  @transient private lazy val inputRow: InterpretedProjection = new InterpretedProjection(children)
+  @transient private lazy val convertToScala: (InternalRow) => Row = {
+    val inputSchema = StructType(children.map(e => StructField(e.simpleString, e.dataType, true)))
+    CatalystTypeConverters.createToScalaConverter(inputSchema)
+  }.asInstanceOf[InternalRow => Row]
 
   override def eval(input: InternalRow): TraversableOnce[InternalRow] = {
-    if (inputRow == null) {
-      initializeConverters()
-    }
     // Convert the objects into Scala Type before calling function, we need schema to support UDT
     function(convertToScala(inputRow(input)))
   }
