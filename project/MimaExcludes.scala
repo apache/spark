@@ -83,6 +83,7 @@ object MimaExcludes {
               "org.apache.spark.streaming.scheduler.InputInfo$"),
             ProblemFilters.exclude[MissingClassProblem](
               "org.apache.spark.streaming.scheduler.InputInfo")
+          ) ++ Seq(
             // SPARK-6797 Support YARN modes for SparkR
             ProblemFilters.exclude[MissingMethodProblem](
               "org.apache.spark.api.r.PairwiseRRDD.this"),
