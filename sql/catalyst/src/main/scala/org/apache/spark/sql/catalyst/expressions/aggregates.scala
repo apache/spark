@@ -903,27 +903,25 @@ case class CombinePartialStdFunction(
 
         // update average based on following formula
         // (combineAvg * preCount + partialAvg * partialCount) / (preCount + partialCount)
-        combineAvg.update(
-          avgUpdateFunction(preCount, partialCount, partialAvg), input)
+        combineAvg.update(avgUpdateFunction(preCount, partialCount, partialAvg), input)
 
         // update sum of square differences from mean based on following formula
         // (combineMk + partialMk + (avgDelta * avgDelta) * (preCount * partialCount/combineCount)
-        combineMk.update(
-          Add(combineMk, Add(partialMk, mkDelta)), input)
+        combineMk.update(Add(combineMk, Add(partialMk, mkDelta)), input)
       }
     }
   }
 
   override def eval(input: InternalRow): Any = {
-    val count = Cast(combineCount, LongType).eval(null)
+    val count: Long = Cast(combineCount, LongType).eval(null).asInstanceOf[Long]
 
-    if (count.asInstanceOf[Long] == 0 ) null
-    else if (count.asInstanceOf[Long] < 2) zero.eval(null)
+    if (count == 0) null
+    else if (count < 2) zero.eval(null)
     else {
       // when total count > 2
       // stddev = sqrt (combineMk/(combineCount -1))
-      Sqrt(Divide(combineMk,
-           Subtract(combineCount, Cast(Literal(1), computeType)))).eval(null)
+      val cov = Cast(Divide(combineMk, Cast(Literal(count - 1), computeType)), DoubleType)
+      Cast(Literal(math.sqrt(cov.eval(null).asInstanceOf[Double])), computeType).eval(null)
     }
   }
 }
@@ -960,7 +958,7 @@ case class StddevFunction(
     if (evaluatedExpr != null) {
       val preAvg: MutableLiteral = curAvg.copy()
       val exprValue = Literal.create(evaluatedExpr, expr.dataType)
-      curCount += 1
+      curCount += 1L
       curAvg.update(curAvgAddFunction(exprValue), input)
       curMk.update(curMkAddFunction(exprValue, preAvg), input)
     }
@@ -970,8 +968,9 @@ case class StddevFunction(
     if (curCount == 0) null
     else if (curCount < 2) zero.eval(null)
     else {
-      // when total count > 2, stddev = sqrt(curMk/(curCount -1))
-      Sqrt(Divide(curMk, Cast(Literal(curCount -1), computeType))).eval(null)
+      // when total count > 2, stddev = sqrt(curMk/(curCount - 1))
+      val cov = Cast(Divide(curMk, Cast(Literal(curCount - 1), computeType)), DoubleType)
+      Cast(Literal(math.sqrt(cov.eval(null).asInstanceOf[Double])), computeType).eval(null)
     }
   }
 }

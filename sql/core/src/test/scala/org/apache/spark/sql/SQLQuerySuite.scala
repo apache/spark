@@ -642,7 +642,7 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll with SQLTestUtils {
       Row(math.sqrt(4/5.0))
     )
   }
-   
+
   test("inner join where, one match per row") {
     checkAnswer(
       sql("SELECT * FROM upperCaseData JOIN lowerCaseData WHERE n = N"),
