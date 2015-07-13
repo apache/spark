@@ -145,41 +145,56 @@ private[sql] object DateFormatExpression {
 abstract class DateFormatExpression extends UnaryExpression with ExpectsInputTypes {
   self: Product =>
 
+  val daysIn400Year: Int = (365.2425 * 400).toInt
+
+  val to2001 = -11323
+  val to1601 = to2001 + daysIn400Year
+
+  private[this] def numYears(i: Int): Int = {
+    (i / 365.2425).toInt
+  }
+
   override def dataType: DataType = IntegerType
 
   override def inputTypes: Seq[AbstractDataType] = Seq(DateType)
 
   protected def calculateYearAndDayInYear(daysIn: Int): (Int, Int) = {
-    var index: Int = 370 + (daysIn / 365.24).toInt - 1
-    while (DateFormatExpression.yearBoundaries(index) < daysIn + 1) {
-      index += 1
+    val daysNormalized = daysIn + to1601
+    val numOfQuarterCenturies = daysNormalized / daysIn400Year
+    val daysIn400 = daysNormalized % daysIn400Year + 1
+    val years = numYears(daysIn400)
+    if (years == 400) {
+      (1601 + 400 * numOfQuarterCenturies + 399, 365)
+    } else {
+      val leapDays = ((years - 1) / 4) - (((years - 1) / 100) - ((years - 1) / 400))
+      val year: Int = 1601 + 400 * numOfQuarterCenturies + (daysIn400 - leapDays) / 365
+      var dayInYear = (daysIn400 - leapDays) % 365
+      if (dayInYear == 0 && year % 400 == 0) dayInYear = 365
+      (year, dayInYear)
     }
-    (index - 1  + 1600, daysIn - DateFormatExpression.yearBoundaries(index - 1) + 1)
   }
 
   protected def codeGen(ctx: CodeGenContext, ev: GeneratedExpressionCode, input: String,
       f: (String, String) => String): String = {
-    val yb = ctx.freshName("yb")
-    val i = ctx.freshName("counter")
-    val x = ctx.freshName("counter")
-    val index = ctx.freshName("index")
     val year = ctx.freshName("year")
     val dayInYear = ctx.freshName("dayInYear")
 
     s"""
-       int[] $yb = new int[2330 - 1599];
-       $yb[0] = -135140;
-       int $x = 1;
-       for(int $i = 1601; $i <= 2330; $i++, $x++) {
-         $yb[$x] = (($i - 1) % 4 == 0 && (($i - 1) % 100 != 0 || ($i - 1) % 400 == 0)) ?
-                          $yb[$x - 1] + 366 : $yb[$x - 1] + 365;
-       }
-       int $index = 370 + ((int) ($input / 365.24)) - 1;
-       while ($yb[$index] < $input + 1) {
-         $index++;
-       }
-       int $year = $index - 1 + 1600;
-       int $dayInYear = $input - $yb[$index - 1] + 1;
+       int daysIn400Year =  (int) (365.2425 * 400);
+
+       int to2001 = -11323;
+       int to1601 = to2001 + daysIn400Year;
+
+       int daysNormalized = $input + to1601;
+       int numOfQuarterCenturies = daysNormalized / daysIn400Year;
+       int daysIn400 = daysNormalized % daysIn400Year;
+       int years = daysIn400 / 365;
+       int extra = ((years % 4) == 0 && years != 0) ? 1 : 0;
+       int leapDays = ((years - 1) / 4) - (((years - 1) / 100) - ((years - 1) / 400)) + extra;
+       int dayInYear = (daysIn400 - leapDays) % 365;
+       int year = 1601 + (400 * numOfQuarterCenturies) + (daysIn400 - leapDays) / 365;
+       int $year = year;
+       int $dayInYear = dayInYear + 1;
        ${f(year, dayInYear)}
      """
   }
@@ -254,7 +269,7 @@ case class Month(child: Expression) extends DateFormatExpression {
     }
   }
 
-  override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+  /*override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     nullSafeCodeGen(ctx, ev, days => {
       codeGen(ctx, ev, days, (year, dayInYear) => {
         val leap = ctx.freshName("leap")
@@ -288,7 +303,7 @@ case class Month(child: Expression) extends DateFormatExpression {
          """
       })
     })
-  }
+  }*/
 }
 
 case class Day(child: Expression) extends DateFormatExpression with ExpectsInputTypes {
