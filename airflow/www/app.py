@@ -1502,6 +1502,10 @@ class JobModelView(ModelViewOnly):
     column_filters = (
         'job_type', 'dag_id', 'state',
         'unixname', 'hostname', 'start_date', 'end_date', 'latest_heartbeat')
+    column_formatters = dict(
+        start_date=datetime_f,
+        end_date=datetime_f,
+        latest_heartbeat=datetime_f)
 mv = JobModelView(jobs.BaseJob, Session, name="Jobs", category="Browse")
 admin.add_view(mv)
 
@@ -1509,6 +1513,7 @@ admin.add_view(mv)
 class LogModelView(ModelViewOnly):
     column_default_sort = ('dttm', True)
     column_filters = ('dag_id', 'task_id', 'execution_date')
+    column_formatters = dict(dttm=datetime_f, execution_date=datetime_f)
 mv = LogModelView(
     models.Log, Session, name="Logs", category="Browse")
 admin.add_view(mv)
@@ -1817,6 +1822,7 @@ class SlaMissModelView(wwwutils.SuperUserMixin, ModelView):
     column_formatters = dict(
         task_id=task_instance_link,
         execution_date=datetime_f,
+        timestamp=datetime_f,
         dag_id=dag_link)
     named_filter_urls = True
     column_searchable_list = ('dag_id', 'task_id',)
