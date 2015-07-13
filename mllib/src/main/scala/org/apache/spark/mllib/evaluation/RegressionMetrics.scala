@@ -53,14 +53,16 @@ class RegressionMetrics(predictionAndObservations: RDD[(Double, Double)]) extend
       )
     summary
   }
+  private lazy val SSerr = math.pow(summary.normL2(1), 2)
+  private lazy val SStot = summary.variance(0)
+  private lazy val SSreg = SStot - SSerr
 
   /**
-   * Returns the explained variance regression score.
-   * explainedVariance = 1 - variance(y - \hat{y}) / variance(y)
-   * Reference: [[http://en.wikipedia.org/wiki/Explained_variation]]
+   * Returns the variance explained by regression.
+   * @see [[https://en.wikipedia.org/wiki/Fraction_of_variance_unexplained]]
    */
   def explainedVariance: Double = {
-    1 - summary.variance(1) / summary.variance(0)
+    SSreg / summary.count
   }
 
   /**
@@ -76,8 +78,7 @@ class RegressionMetrics(predictionAndObservations: RDD[(Double, Double)]) extend
    * expected value of the squared error loss or quadratic loss.
    */
   def meanSquaredError: Double = {
-    val rmse = summary.normL2(1) / math.sqrt(summary.count)
-    rmse * rmse
+    SSerr / summary.count
   }
 
   /**
@@ -85,14 +86,14 @@ class RegressionMetrics(predictionAndObservations: RDD[(Double, Double)]) extend
    * the mean squared error.
    */
   def rootMeanSquaredError: Double = {
-    summary.normL2(1) / math.sqrt(summary.count)
+    math.sqrt(this.meanSquaredError)
   }
 
   /**
-   * Returns R^2^, the coefficient of determination.
-   * Reference: [[http://en.wikipedia.org/wiki/Coefficient_of_determination]]
+   * Returns R^2^, the unadjusted coefficient of determination.
+   * @see [[http://en.wikipedia.org/wiki/Coefficient_of_determination]]
    */
   def r2: Double = {
-    1 - math.pow(summary.normL2(1), 2) / (summary.variance(0) * (summary.count - 1))
+    SSreg / SStot
   }
 }
