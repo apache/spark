@@ -71,7 +71,7 @@ function start_instance {
   fi
   WEBUI_PORT=$(( $SPARK_WORKER_WEBUI_PORT + $WORKER_NUM - 1 ))
 
-  HOST_NAME=`hostname`
+  HOST_NAME=`hostname -f`
 
   "$sbin"/spark-daemon.sh start org.apache.spark.deploy.worker.Worker $WORKER_NUM \
      --host $HOST_NAME --webui-port "$WEBUI_PORT" $PORT_FLAG $PORT_NUM $MASTER "$@"
