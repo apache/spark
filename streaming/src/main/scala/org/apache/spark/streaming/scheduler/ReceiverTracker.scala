@@ -27,7 +27,7 @@ import org.apache.spark.{Logging, SparkEnv, SparkException}
 import org.apache.spark.rpc._
 import org.apache.spark.streaming.{StreamingContext, Time}
 import org.apache.spark.streaming.receiver.{CleanupOldBlocks, Receiver, ReceiverSupervisorImpl,
-  StopReceiver}
+  StopReceiver, UpdateRateLimit}
 import org.apache.spark.util.SerializableConfiguration
 
 /**
@@ -178,6 +178,12 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
       s"$message"
     }
     logError(s"Deregistered receiver for stream $streamId: $messageWithError")
+  }
+
+  /** Update a receiver's maximum rate from an estimator's update */
+  def sendRateUpdate(streamUID: Int, newRate: Long): Unit = {
+    for (info <- receiverInfo.get(streamUID); eP <- Option(info.endpoint))
+      eP.send(UpdateRateLimit(newRate))
   }
 
   /** Add new blocks for the given stream */
