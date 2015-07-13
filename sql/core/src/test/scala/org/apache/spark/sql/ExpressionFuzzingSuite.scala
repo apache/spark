@@ -107,7 +107,7 @@ class ExpressionFuzzingSuite extends SparkFunSuite with Logging {
   }
 
   // Run the actual tests
-  expressionSubclasses.foreach { expressionClass =>
+  expressionSubclasses.sortBy(_.getName).foreach { expressionClass =>
     test(s"${expressionClass.getName}") {
       testExpression(expressionClass)
     }
