@@ -36,7 +36,7 @@ private[sql] case object Complete extends AggregateMode
 
 case object NoOp extends Expression {
   override def nullable: Boolean = true
-  override def eval(input: expressions.InternalRow): Any = ???
+  override def eval(input: InternalRow): Any = ???
   override def dataType: DataType = NullType
   override def children: Seq[Expression] = Nil
 }

@@ -1458,4 +1458,38 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll with SQLTestUtils {
       checkAnswer(sql("SELECT * FROM t ORDER BY NULL"), Seq(Row(1, 2), Row(1, 2)))
     }
   }
+
+  test("SPARK-8837: use keyword in column name") {
+    withTempTable("t") {
+      val df = Seq(1 -> "a").toDF("count", "sort")
+      checkAnswer(df.filter("count > 0"), Row(1, "a"))
+      df.registerTempTable("t")
+      checkAnswer(sql("select count, sort from t"), Row(1, "a"))
+    }
+  }
+
+  test("SPARK-8753: add interval type") {
+    import org.apache.spark.unsafe.types.Interval
+
+    val df = sql("select interval 3 years -3 month 7 week 123 microseconds")
+    checkAnswer(df, Row(new Interval(12 * 3 - 3, 7L * 1000 * 1000 * 3600 * 24 * 7 + 123 )))
+    withTempPath(f => {
+      // Currently we don't yet support saving out values of interval data type.
+      val e = intercept[AnalysisException] {
+        df.write.json(f.getCanonicalPath)
+      }
+      e.message.contains("Cannot save interval data type into external storage")
+    })
+
+    def checkIntervalParseError(s: String): Unit = {
+      val e = intercept[AnalysisException] {
+        sql(s)
+      }
+      e.message.contains("at least one time unit should be given for interval literal")
+    }
+
+    checkIntervalParseError("select interval")
+    // Currently we don't yet support nanosecond
+    checkIntervalParseError("select interval 23 nanosecond")
+  }
 }

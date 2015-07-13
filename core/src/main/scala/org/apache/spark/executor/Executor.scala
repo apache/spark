@@ -443,7 +443,7 @@ private[spark] class Executor(
     try {
       val response = heartbeatReceiverRef.askWithRetry[HeartbeatResponse](message)
       if (response.reregisterBlockManager) {
-        logWarning("Told to re-register on heartbeat")
+        logInfo("Told to re-register on heartbeat")
         env.blockManager.reregister()
       }
     } catch {

@@ -277,7 +277,7 @@ public final class BytesToBytesMap {
             final MemoryLocation keyAddress = loc.getKeyAddress();
             final Object storedKeyBaseObject = keyAddress.getBaseObject();
             final long storedKeyBaseOffset = keyAddress.getBaseOffset();
-            final boolean areEqual = ByteArrayMethods.wordAlignedArrayEquals(
+            final boolean areEqual = ByteArrayMethods.arrayEquals(
               keyBaseObject,
               keyBaseOffset,
               storedKeyBaseObject,

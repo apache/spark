@@ -860,11 +860,13 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * @since 1.3.0
    */
   def explain(extended: Boolean): Unit = {
+    // scalastyle:off println
     if (extended) {
       println(expr)
     } else {
       println(expr.prettyString)
     }
+    // scalastyle:on println
   }
 
   /**
