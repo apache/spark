@@ -33,8 +33,7 @@ class PlannerSuite extends SparkFunSuite with SQLTestUtils {
 
   override def sqlContext: SQLContext = TestSQLContext
 
-  case class TestData(key: Int, value: String)
-  val testData = (1 to 100).map(i => TestData(i, i.toString)).toDF()
+  val testData = (1 to 100).map(i => (i, i.toString)).toDF("key", "value")
 
   private def testPartialAggregationPlan(query: LogicalPlan): Unit = {
     val plannedOption = HashAggregation(query).headOption.orElse(Aggregation(query).headOption)
@@ -77,12 +76,11 @@ class PlannerSuite extends SparkFunSuite with SQLTestUtils {
   }
 
 
-  case class TestData2(a: Int, b: Int)
   test("sizeInBytes estimation of limit operator for broadcast hash join optimization") {
     val testData2 = {
       val df = (for { a <- 1 to 3; b <- 1 to 2 } yield (a, b))
-        .map(t => TestData2(t._1, t._2))
-        .toDF()
+        .map(t => (t._1, t._2))
+        .toDF("a", "b")
       df.registerTempTable("testData2")
       df
     }
