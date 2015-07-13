@@ -193,6 +193,7 @@ class Analyzer(
     }
 
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+      case a if !a.childrenResolved => a // be sure all of the children are resolved.
       case a: Cube =>
         GroupingSets(bitmasks(a), a.groupByExprs, a.child, a.aggregations)
       case a: Rollup =>
@@ -200,21 +201,26 @@ class Analyzer(
       case x: GroupingSets =>
         val gid = AttributeReference(VirtualColumn.groupingIdName, IntegerType, false)()
 
+        // the complex expression (non-attribute expressions) in the GROUP BY keys
         val nonAttributeGroupByExpression = new ArrayBuffer[Alias]()
         val groupByExprPairs = x.groupByExprs.map(_ match {
           case e: NamedExpression => (e, e)
           case other => {
             val alias = Alias(other, other.toString)()
             nonAttributeGroupByExpression += alias
-            (other, alias.toAttribute)
+            (other, alias.toAttribute) // (Aliased complex expression, the associated attribute)
           }
         })
 
+        // substitute the complex expression for aggregations.
         val aggregation = x.aggregations.map(expr => expr.transformDown {
           case e => groupByExprPairs.find(_._1.semanticEquals(e)).map(_._2).getOrElse(e)
         }.asInstanceOf[NamedExpression])
 
+        // substitute the group by expressions.
         val newGroupByExprs = groupByExprPairs.map(_._2)
+
+        // add an additional projection if contains the complex expression in the GROUP BY keys
         val child = if (nonAttributeGroupByExpression.length > 0) {
           Project(x.child.output ++ nonAttributeGroupByExpression, x.child)
         } else {
