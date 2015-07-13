@@ -282,5 +282,148 @@ class StringFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Levenshtein(Literal("abc"), Literal("abc")), 0)
     checkEvaluation(Levenshtein(Literal("kitten"), Literal("sitting")), 3)
     checkEvaluation(Levenshtein(Literal("frog"), Literal("fog")), 1)
+    // scalastyle:off
+    // non ascii characters are not allowed in the code, so we disable the scalastyle here.
+    checkEvaluation(Levenshtein(Literal("千世"), Literal("fog")), 3)
+    checkEvaluation(Levenshtein(Literal("世界千世"), Literal("大a界b")), 4)
+    // scalastyle:on
+  }
+
+  test("TRIM/LTRIM/RTRIM") {
+    val s = 'a.string.at(0)
+    checkEvaluation(StringTrim(Literal(" aa  ")), "aa", create_row(" abdef "))
+    checkEvaluation(StringTrim(s), "abdef", create_row(" abdef "))
+
+    checkEvaluation(StringTrimLeft(Literal(" aa  ")), "aa  ", create_row(" abdef "))
+    checkEvaluation(StringTrimLeft(s), "abdef ", create_row(" abdef "))
+
+    checkEvaluation(StringTrimRight(Literal(" aa  ")), " aa", create_row(" abdef "))
+    checkEvaluation(StringTrimRight(s), " abdef", create_row(" abdef "))
+
+    // scalastyle:off
+    // non ascii characters are not allowed in the source code, so we disable the scalastyle.
+    checkEvaluation(StringTrimRight(s), "  花花世界", create_row("  花花世界 "))
+    checkEvaluation(StringTrimLeft(s), "花花世界 ", create_row("  花花世界 "))
+    checkEvaluation(StringTrim(s), "花花世界", create_row("  花花世界 "))
+    // scalastyle:on
+  }
+
+  test("FORMAT") {
+    val f = 'f.string.at(0)
+    val d1 = 'd.int.at(1)
+    val s1 = 's.int.at(2)
+
+    val row1 = create_row("aa%d%s", 12, "cc")
+    val row2 = create_row(null, 12, "cc")
+    checkEvaluation(StringFormat(Literal("aa%d%s"), Literal(123), Literal("a")), "aa123a", row1)
+    checkEvaluation(StringFormat(Literal("aa")), "aa", create_row(null))
+    checkEvaluation(StringFormat(Literal("aa%d%s"), Literal(123), Literal("a")), "aa123a", row1)
+
+    checkEvaluation(StringFormat(f, d1, s1), "aa12cc", row1)
+    checkEvaluation(StringFormat(f, d1, s1), null, row2)
+  }
+
+  test("INSTR") {
+    val s1 = 'a.string.at(0)
+    val s2 = 'b.string.at(1)
+    val s3 = 'c.string.at(2)
+    val row1 = create_row("aaads", "aa", "zz")
+
+    checkEvaluation(StringInstr(Literal("aaads"), Literal("aa")), 1, row1)
+    checkEvaluation(StringInstr(Literal("aaads"), Literal("de")), 0, row1)
+    checkEvaluation(StringInstr(Literal.create(null, StringType), Literal("de")), null, row1)
+    checkEvaluation(StringInstr(Literal("aaads"), Literal.create(null, StringType)), null, row1)
+
+    checkEvaluation(StringInstr(s1, s2), 1, row1)
+    checkEvaluation(StringInstr(s1, s3), 0, row1)
+
+    // scalastyle:off
+    // non ascii characters are not allowed in the source code, so we disable the scalastyle.
+    checkEvaluation(StringInstr(s1, s2), 3, create_row("花花世界", "世界"))
+    checkEvaluation(StringInstr(s1, s2), 1, create_row("花花世界", "花"))
+    checkEvaluation(StringInstr(s1, s2), 0, create_row("花花世界", "小"))
+    // scalastyle:on
+  }
+
+  test("LOCATE") {
+    val s1 = 'a.string.at(0)
+    val s2 = 'b.string.at(1)
+    val s3 = 'c.string.at(2)
+    val s4 = 'd.int.at(3)
+    val row1 = create_row("aaads", "aa", "zz", 1)
+
+    checkEvaluation(new StringLocate(Literal("aa"), Literal("aaads")), 1, row1)
+    checkEvaluation(StringLocate(Literal("aa"), Literal("aaads"), Literal(1)), 2, row1)
+    checkEvaluation(StringLocate(Literal("aa"), Literal("aaads"), Literal(2)), 0, row1)
+    checkEvaluation(new StringLocate(Literal("de"), Literal("aaads")), 0, row1)
+    checkEvaluation(StringLocate(Literal("de"), Literal("aaads"), 1), 0, row1)
+
+    checkEvaluation(new StringLocate(s2, s1), 1, row1)
+    checkEvaluation(StringLocate(s2, s1, s4), 2, row1)
+    checkEvaluation(new StringLocate(s3, s1), 0, row1)
+    checkEvaluation(StringLocate(s3, s1, Literal.create(null, IntegerType)), 0, row1)
+  }
+
+  test("LPAD/RPAD") {
+    val s1 = 'a.string.at(0)
+    val s2 = 'b.int.at(1)
+    val s3 = 'c.string.at(2)
+    val row1 = create_row("hi", 5, "??")
+    val row2 = create_row("hi", 1, "?")
+    val row3 = create_row(null, 1, "?")
+
+    checkEvaluation(StringLPad(Literal("hi"), Literal(5), Literal("??")), "???hi", row1)
+    checkEvaluation(StringLPad(Literal("hi"), Literal(1), Literal("??")), "h", row1)
+    checkEvaluation(StringLPad(s1, s2, s3), "???hi", row1)
+    checkEvaluation(StringLPad(s1, s2, s3), "h", row2)
+    checkEvaluation(StringLPad(s1, s2, s3), null, row3)
+
+    checkEvaluation(StringRPad(Literal("hi"), Literal(5), Literal("??")), "hi???", row1)
+    checkEvaluation(StringRPad(Literal("hi"), Literal(1), Literal("??")), "h", row1)
+    checkEvaluation(StringRPad(s1, s2, s3), "hi???", row1)
+    checkEvaluation(StringRPad(s1, s2, s3), "h", row2)
+    checkEvaluation(StringRPad(s1, s2, s3), null, row3)
+  }
+
+  test("REPEAT") {
+    val s1 = 'a.string.at(0)
+    val s2 = 'b.int.at(1)
+    val row1 = create_row("hi", 2)
+    val row2 = create_row(null, 1)
+
+    checkEvaluation(StringRepeat(Literal("hi"), Literal(2)), "hihi", row1)
+    checkEvaluation(StringRepeat(Literal("hi"), Literal(-1)), "", row1)
+    checkEvaluation(StringRepeat(s1, s2), "hihi", row1)
+    checkEvaluation(StringRepeat(s1, s2), null, row2)
+  }
+
+  test("REVERSE") {
+    val s = 'a.string.at(0)
+    val row1 = create_row("abccc")
+    checkEvaluation(StringReverse(Literal("abccc")), "cccba", row1)
+    checkEvaluation(StringReverse(s), "cccba", row1)
+  }
+
+  test("SPACE") {
+    val s1 = 'b.int.at(0)
+    val row1 = create_row(2)
+    val row2 = create_row(null)
+
+    checkEvaluation(StringSpace(Literal(2)), "  ", row1)
+    checkEvaluation(StringSpace(Literal(-1)), "", row1)
+    checkEvaluation(StringSpace(Literal(0)), "", row1)
+    checkEvaluation(StringSpace(s1), "  ", row1)
+    checkEvaluation(StringSpace(s1), null, row2)
+  }
+
+  test("SPLIT") {
+    val s1 = 'a.string.at(0)
+    val s2 = 'b.string.at(1)
+    val row1 = create_row("aa2bb3cc", "[1-9]+")
+
+    checkEvaluation(
+      StringSplit(Literal("aa2bb3cc"), Literal("[1-9]+")), Seq("aa", "bb", "cc"), row1)
+    checkEvaluation(
+      StringSplit(s1, s2), Seq("aa", "bb", "cc"), row1)
   }
 }

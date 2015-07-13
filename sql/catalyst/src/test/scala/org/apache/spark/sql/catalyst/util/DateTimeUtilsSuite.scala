@@ -24,11 +24,11 @@ import org.apache.spark.SparkFunSuite
 
 class DateTimeUtilsSuite extends SparkFunSuite {
 
-  test("timestamp and 100ns") {
+  test("timestamp and us") {
     val now = new Timestamp(System.currentTimeMillis())
-    now.setNanos(100)
+    now.setNanos(1000)
     val ns = DateTimeUtils.fromJavaTimestamp(now)
-    assert(ns % 10000000L === 1)
+    assert(ns % 1000000L === 1)
     assert(DateTimeUtils.toJavaTimestamp(ns) === now)
 
     List(-111111111111L, -1L, 0, 1L, 111111111111L).foreach { t =>
@@ -38,7 +38,7 @@ class DateTimeUtilsSuite extends SparkFunSuite {
     }
   }
 
-  test("100ns and julian day") {
+  test("us and julian day") {
     val (d, ns) = DateTimeUtils.toJulianDay(0)
     assert(d === DateTimeUtils.JULIAN_DAY_OF_EPOCH)
     assert(ns === DateTimeUtils.SECONDS_PER_DAY / 2 * DateTimeUtils.NANOS_PER_SECOND)

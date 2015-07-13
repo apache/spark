@@ -15,6 +15,17 @@
 # limitations under the License.
 #
 
-.onLoad <- function(libname, pkgname) {
-  sparkR.onLoad(libname, pkgname)
-}
+cd $(dirname $0)/..
+BASEDIR=`pwd`
+cd -
+
+rm -rf $BASEDIR/gen-java
+mkdir -p $BASEDIR/gen-java
+
+thrift\
+    --gen java\
+    -out $BASEDIR/gen-java\
+    $BASEDIR/thrift/parquet-compat.thrift
+
+avro-tools idl $BASEDIR/avro/parquet-compat.avdl > $BASEDIR/avro/parquet-compat.avpr
+avro-tools compile -string protocol $BASEDIR/avro/parquet-compat.avpr $BASEDIR/gen-java

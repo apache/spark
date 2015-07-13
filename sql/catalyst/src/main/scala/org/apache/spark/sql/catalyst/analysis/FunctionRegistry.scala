@@ -35,19 +35,6 @@ trait FunctionRegistry {
   def lookupFunction(name: String, children: Seq[Expression]): Expression
 }
 
-class OverrideFunctionRegistry(underlying: FunctionRegistry) extends FunctionRegistry {
-
-  private val functionBuilders = StringKeyHashMap[FunctionBuilder](caseSensitive = false)
-
-  override def registerFunction(name: String, builder: FunctionBuilder): Unit = {
-    functionBuilders.put(name, builder)
-  }
-
-  override def lookupFunction(name: String, children: Seq[Expression]): Expression = {
-    functionBuilders.get(name).map(_(children)).getOrElse(underlying.lookupFunction(name, children))
-  }
-}
-
 class SimpleFunctionRegistry extends FunctionRegistry {
 
   private val functionBuilders = StringKeyHashMap[FunctionBuilder](caseSensitive = false)
@@ -89,9 +76,11 @@ object FunctionRegistry {
     expression[CreateArray]("array"),
     expression[Coalesce]("coalesce"),
     expression[Explode]("explode"),
+    expression[Greatest]("greatest"),
     expression[If]("if"),
     expression[IsNull]("isnull"),
     expression[IsNotNull]("isnotnull"),
+    expression[Least]("least"),
     expression[Coalesce]("nvl"),
     expression[Rand]("rand"),
     expression[Randn]("randn"),
@@ -160,12 +149,24 @@ object FunctionRegistry {
     expression[Base64]("base64"),
     expression[Encode]("encode"),
     expression[Decode]("decode"),
+    expression[StringInstr]("instr"),
     expression[Lower]("lcase"),
     expression[Lower]("lower"),
     expression[StringLength]("length"),
     expression[Levenshtein]("levenshtein"),
+    expression[StringLocate]("locate"),
+    expression[StringLPad]("lpad"),
+    expression[StringTrimLeft]("ltrim"),
+    expression[StringFormat]("printf"),
+    expression[StringRPad]("rpad"),
+    expression[StringRepeat]("repeat"),
+    expression[StringReverse]("reverse"),
+    expression[StringTrimRight]("rtrim"),
+    expression[StringSpace]("space"),
+    expression[StringSplit]("split"),
     expression[Substring]("substr"),
     expression[Substring]("substring"),
+    expression[StringTrim]("trim"),
     expression[UnBase64]("unbase64"),
     expression[Upper]("ucase"),
     expression[Unhex]("unhex"),

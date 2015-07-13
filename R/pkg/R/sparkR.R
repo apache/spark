@@ -17,10 +17,6 @@
 
 .sparkREnv <- new.env()
 
-sparkR.onLoad <- function(libname, pkgname) {
-  .sparkREnv$libname <- libname
-}
-
 # Utility function that returns TRUE if we have an active connection to the
 # backend and FALSE otherwise
 connExists <- function(env) {
@@ -80,7 +76,6 @@ sparkR.stop <- function() {
 #' @param sparkEnvir Named list of environment variables to set on worker nodes.
 #' @param sparkExecutorEnv Named list of environment variables to be used when launching executors.
 #' @param sparkJars Character string vector of jar files to pass to the worker nodes.
-#' @param sparkRLibDir The path where R is installed on the worker nodes.
 #' @param sparkPackages Character string vector of packages from spark-packages.org
 #' @export
 #' @examples
@@ -101,7 +96,6 @@ sparkR.init <- function(
   sparkEnvir = list(),
   sparkExecutorEnv = list(),
   sparkJars = "",
-  sparkRLibDir = "",
   sparkPackages = "") {
 
   if (exists(".sparkRjsc", envir = .sparkREnv)) {
@@ -168,10 +162,6 @@ sparkR.init <- function(
 
   if (nchar(sparkHome) != 0) {
     sparkHome <- normalizePath(sparkHome)
-  }
-
-  if (nchar(sparkRLibDir) != 0) {
-    .sparkREnv$libname <- sparkRLibDir
   }
 
   sparkEnvirMap <- new.env()

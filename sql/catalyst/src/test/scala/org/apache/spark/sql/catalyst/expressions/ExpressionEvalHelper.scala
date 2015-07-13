@@ -21,6 +21,7 @@ import org.scalactic.TripleEqualsSupport.Spread
 import org.scalatest.Matchers._
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.catalyst.expressions.codegen.{GenerateProjection, GenerateMutableProjection}
 import org.apache.spark.sql.catalyst.optimizer.DefaultOptimizer
