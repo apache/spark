@@ -23,8 +23,7 @@ import org.apache.spark.sql.test.SharedSQLContext
 class DebuggingSuite extends SparkFunSuite with SharedSQLContext {
   import testImplicits._
 
-  case class TestData(key: Int, value: String)
-  val testData = (1 to 100).map(i => TestData(i, i.toString)).toDF()
+  val testData = (1 to 100).map(i => (i, i.toString)).toDF("key", "value")
 
   test("DataFrame.debug()") {
     testData.debug()
