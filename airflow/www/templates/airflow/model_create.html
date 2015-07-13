@@ -1,0 +1,12 @@
+{% extends 'admin/model/edit.html' %}
+
+{% block body %}
+  {% if admin_view.verbose_name %}
+  <h2>
+    {{ admin_view.verbose_name|title }}
+    <small>[create]</small>
+  </h2>
+  <hr/>
+  {% endif %}
+  {{ super() }}
+{% endblock %}
