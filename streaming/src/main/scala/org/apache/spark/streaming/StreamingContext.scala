@@ -544,47 +544,39 @@ class StreamingContext private[streaming] (
    * Registers streamingListeners specified in spark.streaming.extraListeners
    */
   private def setupStreamingListeners(): Unit = {
-    // Use reflection to instantiate listeners specified via `spark.extraListeners`
-    try {
-      val listenerClassNames: Seq[String] =
-        conf.get("spark.streaming.extraListeners", "").split(',').map(_.trim).filter(_ != "")
-      for (className <- listenerClassNames) {
-        // Use reflection to find the right constructor
-        val constructors = {
-          val listenerClass = org.apache.spark.util.Utils.classForName(className)
-          listenerClass.getConstructors.asInstanceOf[Array[Constructor[_ <: StreamingListener]]]
-        }
-        val constructorTakingSparkConf = constructors.find { c =>
-          c.getParameterTypes.sameElements(Array(classOf[SparkConf]))
-        }
-        lazy val zeroArgumentConstructor = constructors.find { c =>
-          c.getParameterTypes.isEmpty
-        }
-        val listener: StreamingListener = {
-          if (constructorTakingSparkConf.isDefined) {
-            constructorTakingSparkConf.get.newInstance(conf)
-          } else if (zeroArgumentConstructor.isDefined) {
-            zeroArgumentConstructor.get.newInstance()
-          } else {
-            throw new SparkException(
-              s"$className did not have a zero-argument constructor or a" +
-                " single-argument constructor that accepts SparkConf. Note: if the class is" +
-                " defined inside of another Scala class, then its constructors may accept an" +
-                " implicit parameter that references the enclosing class; in this case, you must" +
-                " define the listener as a top-level class in order to prevent this extra" +
-                " parameter from breaking Spark's ability to find a valid constructor.")
-          }
-        }
-        addStreamingListener(listener)
-        logInfo(s"Registered StreamingListener $className")
+    // Use reflection to instantiate listeners specified via `spark.streaming.extraListeners`
+    val listenerClassNames: Seq[String] =
+      conf.get("spark.streaming.extraListeners", "").split(',').map(_.trim).filter(_ != "")
+    for (className <- listenerClassNames) {
+      // Use reflection to find the right constructor
+      val constructors = {
+        val listenerClass = org.apache.spark.util.Utils.classForName(className)
+        listenerClass.getConstructors.asInstanceOf[Array[Constructor[_ <: StreamingListener]]]
       }
-    } catch {
-      case e: Exception =>
-        try {
-          stop()
-        } finally {
-          throw new SparkException(s"Exception when registering StreamingListener", e)
+      val constructorTakingSparkConf = constructors.find { c =>
+        c.getParameterTypes.sameElements(Array(classOf[SparkConf]))
+      }
+      lazy val zeroArgumentConstructor = constructors.find { c =>
+        c.getParameterTypes.isEmpty
+      }
+      val listener: StreamingListener = {
+        if (constructorTakingSparkConf.isDefined) {
+          constructorTakingSparkConf.get.newInstance(conf)
+        } else if (zeroArgumentConstructor.isDefined) {
+          zeroArgumentConstructor.get.newInstance()
+        } else {
+          throw new SparkException(
+             s"Exception when registering Streaming Listener:" +
+              " $className did not have a zero-argument constructor or a" +
+              " single-argument constructor that accepts SparkConf. Note: if the class is" +
+              " defined inside of another Scala class, then its constructors may accept an" +
+              " implicit parameter that references the enclosing class; in this case, you must" +
+              " define the listener as a top-level class in order to prevent this extra" +
+              " parameter from breaking Spark's ability to find a valid constructor.")
         }
+      }
+      addStreamingListener(listener)
+      logInfo(s"Registered StreamingListener $className")
     }
   }
 

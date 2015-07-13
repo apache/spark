@@ -148,10 +148,8 @@ class StreamingListenerSuite extends TestSuiteBase with Matchers {
         classOf[ReceiverInfoCollector].getName)
     val scc = new StreamingContext(conf, Seconds(1))
 
-    scc.scheduler.listenerBus.listeners.collect {
-      case x: BatchInfoCollector => x }.size should be (1)
-    scc.scheduler.listenerBus.listeners.collect {
-      case x: ReceiverInfoCollector => x }.size should be (1)
+    scc.scheduler.listenerBus.listeners.exists { _.isInstanceOf[BatchInfoCollector] }
+    scc.scheduler.listenerBus.listeners.exists { _.isInstanceOf[ReceiverInfoCollector] }
   }
 }
 
