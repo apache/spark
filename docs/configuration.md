@@ -665,7 +665,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     Initial size of Kryo's serialization buffer. Note that there will be one buffer
      <i>per core</i> on each worker. This buffer will grow up to
-     <code>spark.kryoserializer.buffer.max.mb</code> if needed.
+     <code>spark.kryoserializer.buffer.max</code> if needed.
   </td>
 </tr>
 <tr>
