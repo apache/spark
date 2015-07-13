@@ -313,7 +313,6 @@ class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with Timeo
     val streamingSource = StreamingContextSuite.getStreamingSource(ssc)
     assert(sources.contains(streamingSource))
     assert(ssc.getState() === StreamingContextState.ACTIVE)
-    Thread.sleep(100)
 
     ssc.stop()
     val sourcesAfterStop = StreamingContextSuite.getSources(ssc.env.metricsSystem)
