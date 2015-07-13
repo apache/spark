@@ -140,7 +140,7 @@ class DAGScheduler(
     ThreadUtils.newDaemonSingleThreadScheduledExecutor("dag-scheduler-message")
 
   private[scheduler] val eventProcessLoop =
-    if (isSecurityEnabled) new DAGSchedulerEventProcessLoop(this)
+    if (!isSecurityEnabled) new DAGSchedulerEventProcessLoop(this)
     else new DAGSchedulerEventProcessLoopSecure(this, UserGroupInformation.getCurrentUser)
 
   taskScheduler.setDAGScheduler(this)
