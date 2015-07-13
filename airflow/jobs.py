@@ -396,6 +396,7 @@ class SchedulerJob(BaseJob):
             .filter(TI.state == State.QUEUED)
             .all()
         )
+        session.expunge_all()
         d = defaultdict(list)
         for ti in queued_tis:
             if (
@@ -421,7 +422,7 @@ class SchedulerJob(BaseJob):
                         session.delete(ti)
                     if task:
                         ti.task = task
-                        if ti.is_queueable():
+                        if ti.are_dependencies_met():
                             executor.queue_task_instance(ti, force=True)
                         else:
                             session.delete(ti)
