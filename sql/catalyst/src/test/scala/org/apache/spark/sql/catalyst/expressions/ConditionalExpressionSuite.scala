@@ -125,7 +125,7 @@ class ConditionalExpressionSuite extends SparkFunSuite with ExpressionEvalHelper
     val literalString = Literal("a")
 
     checkEvaluation(CaseKeyWhen(c1, Seq(c2, c4, c5)), "b", row)
-    checkEvaluation(CaseKeyWhen(c1, Seq(c2, c4, literalNull, c5, c6)), "b", row)
+    checkEvaluation(CaseKeyWhen(c1, Seq(c2, c4, literalNull, c5, c6)), "c", row)
     checkEvaluation(CaseKeyWhen(c2, Seq(literalInt, c4, c5)), "a", row)
     checkEvaluation(CaseKeyWhen(c2, Seq(c1, c4, c5)), "b", row)
     checkEvaluation(CaseKeyWhen(c4, Seq(literalString, c2, c3)), 1, row)
@@ -134,7 +134,7 @@ class ConditionalExpressionSuite extends SparkFunSuite with ExpressionEvalHelper
     checkEvaluation(CaseKeyWhen(literalInt, Seq(c2, c4, c5)), "a", row)
     checkEvaluation(CaseKeyWhen(literalString, Seq(c5, c2, c4, c3)), 2, row)
     checkEvaluation(CaseKeyWhen(c6, Seq(c5, c2, c4, c3)), null, row)
-    checkEvaluation(CaseKeyWhen(literalNull, Seq(c2, c5, c1, c6)), "c", row)
+    checkEvaluation(CaseKeyWhen(literalNull, Seq(c2, c5, c1, c6)), null, row)
   }
 
   test("function least") {
