@@ -91,6 +91,10 @@ class DateTimeUtilsSuite extends SparkFunSuite {
 
   test("string to date") {
     var c = Calendar.getInstance()
+    c.set(2015, 0, 28, 0, 0, 0)
+    c.set(Calendar.MILLISECOND, 0)
+    assert(DateTimeUtils.stringToDate(UTF8String.fromString("2015-01-28")) ==
+      new Date(c.getTimeInMillis))
     c.set(2015, 0, 1, 0, 0, 0)
     c.set(Calendar.MILLISECOND, 0)
     assert(DateTimeUtils.stringToDate(UTF8String.fromString("2015")) ==
@@ -124,6 +128,10 @@ class DateTimeUtilsSuite extends SparkFunSuite {
   test("string to timestamp") {
 
     var c = Calendar.getInstance()
+    c.set(1969, 11, 31, 16, 0, 0)
+    c.set(Calendar.MILLISECOND, 0)
+    assert(DateTimeUtils.stringToTimestamp(UTF8String.fromString("1969-12-31 16:00:00")) ==
+      new Timestamp(c.getTimeInMillis))
     c.set(2015, 0, 1, 0, 0, 0)
     c.set(Calendar.MILLISECOND, 0)
     assert(DateTimeUtils.stringToTimestamp(UTF8String.fromString("2015")) ==
