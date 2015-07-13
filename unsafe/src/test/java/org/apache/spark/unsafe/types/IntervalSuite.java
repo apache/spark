@@ -69,40 +69,37 @@ public class IntervalSuite {
     testSingleUnit("millisecond", 3, 0, 3 * MICROS_PER_MILLI);
     testSingleUnit("microsecond", 3, 0, 3);
 
-    String s;
-    Interval i;
+    String input;
 
-    s = "interval   -5  years  23   month";
-    i = new Interval(-5 * 12 + 23, 0);
-    assertEquals(Interval.fromString(s), i);
+    input = "interval   -5  years  23   month";
+    Interval result = new Interval(-5 * 12 + 23, 0);
+    assertEquals(Interval.fromString(input), result);
 
     // Error cases
-    i = null;
+    input = "interval   3month 1 hour";
+    assertEquals(Interval.fromString(input), null);
 
-    s = "interval   3month 1 hour";
-    assertEquals(Interval.fromString(s), i);
+    input = "interval 3 moth 1 hour";
+    assertEquals(Interval.fromString(input), null);
 
-    s = "interval 3 moth 1 hour";
-    assertEquals(Interval.fromString(s), i);
+    input = "interval";
+    assertEquals(Interval.fromString(input), null);
 
-    s = "interval";
-    assertEquals(Interval.fromString(s), i);
+    input = "int";
+    assertEquals(Interval.fromString(input), null);
 
-    s = "int";
-    assertEquals(Interval.fromString(s), i);
+    input = "";
+    assertEquals(Interval.fromString(input), null);
 
-    s = "";
-    assertEquals(Interval.fromString(s), i);
-
-    s = null;
-    assertEquals(Interval.fromString(s), i);
+    input = null;
+    assertEquals(Interval.fromString(input), null);
   }
 
   private void testSingleUnit(String unit, int number, int months, long microseconds) {
-    String s1 = "interval " + number + " " + unit;
-    String s2 = "interval " + number + " " + unit + "s";
-    Interval i = new Interval(months, microseconds);
-    assertEquals(Interval.fromString(s1), i);
-    assertEquals(Interval.fromString(s2), i);
+    String input1 = "interval " + number + " " + unit;
+    String input2 = "interval " + number + " " + unit + "s";
+    Interval result = new Interval(months, microseconds);
+    assertEquals(Interval.fromString(input1), result);
+    assertEquals(Interval.fromString(input2), result);
   }
 }
