@@ -421,7 +421,6 @@ class SchedulerJob(BaseJob):
                         session.delete(ti)
                     if task:
                         ti.task = task
-                        ti.refresh_from_db()
                         if ti.is_queueable():
                             executor.queue_task_instance(ti, force=True)
                         else:

@@ -784,7 +784,7 @@ class TaskInstance(Base):
                 session.merge(self)
                 session.commit()
                 session.close()
-                logging.info("Pool {} is full, queuing".format(task.pool))
+                logging.info("Queuing into pool {}".format(task.pool))
                 return
             if self.state == State.UP_FOR_RETRY:
                 self.try_number += 1
