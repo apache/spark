@@ -228,10 +228,10 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case ExtractRangeJoinKeys(CanBroadcast(left), right,
-          leftKeys, rightKeys, equality) =>
+          leftKeys, rightKeys, equality) if sqlContext.conf.rangeJoinEnabled =>
         makeRangeJoin(leftKeys, rightKeys, equality, joins.BuildLeft, left, right) :: Nil
       case ExtractRangeJoinKeys(left, CanBroadcast(right),
-          leftKeys, rightKeys, equality) =>
+          leftKeys, rightKeys, equality) if sqlContext.conf.rangeJoinEnabled =>
         makeRangeJoin(leftKeys, rightKeys, equality, joins.BuildRight, left, right) :: Nil
       case _ => Nil
     }

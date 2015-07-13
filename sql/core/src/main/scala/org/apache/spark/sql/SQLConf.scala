@@ -315,6 +315,10 @@ private[spark] object SQLConf {
     defaultValue = Some(false),
     doc = "<TODO>")
 
+  val RANGE_JOIN = booleanConf("spark.sql.planner.rangeJoin",
+    defaultValue = Some(false),
+    doc = "<TODO>")
+
   // This is only used for the thriftserver
   val THRIFTSERVER_POOL = stringConf("spark.sql.thriftserver.scheduler.pool",
     doc = "Set a Fair Scheduler pool for a JDBC client session")
@@ -456,6 +460,9 @@ private[sql] class SQLConf extends Serializable with CatalystConf {
    * to HashJoin.
    */
   private[spark] def sortMergeJoinEnabled: Boolean = getConf(SORTMERGE_JOIN)
+
+  /** When true the planner will use range join operator (instead of BNL) for range queries. */
+  private[spark] def rangeJoinEnabled: Boolean = getConf(RANGE_JOIN)
 
   /**
    * When set to true, Spark SQL will use the Janino at runtime to generate custom bytecode

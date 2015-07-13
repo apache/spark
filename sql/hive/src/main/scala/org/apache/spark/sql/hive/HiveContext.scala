@@ -454,6 +454,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) with Logging {
       LeftSemiJoin,
       HashJoin,
       BasicOperators,
+      BroadcastRangeJoin,
       CartesianProduct,
       BroadcastNestedLoopJoin
     )

@@ -47,10 +47,9 @@ import org.apache.spark.sql.execution.{BinaryNode, SparkPlan}
  * of comparisons made by log(n) (n is the number of records in the build table) over the
  * typical solution (Nested Loop Join).
  *
- * TODO
+ * TODO NaN values
  * TODO NULL values
- * TODO Equality
- * TODO Outer joins?
+ * TODO Outer joins? StreamSide is quite easy/BuildSide requires bookkeeping and
  */
 @DeveloperApi
 case class BroadcastRangeJoin(
@@ -96,7 +95,7 @@ case class BroadcastRangeJoin(
   private[this] val indexBroadcastFuture = future {
     // Deal with equality.
     val Seq(allowLowEqual: Boolean, allowHighEqual: Boolean) = buildSide match {
-      case BuildLeft => equality.head
+      case BuildLeft => equality
       case BuildRight => equality.reverse
     }
 
@@ -105,8 +104,8 @@ case class BroadcastRangeJoin(
 
     // Note that we use .execute().collect() because we don't want to convert data to Scala types
     // TODO find out if the result of a sort and a collect is still sorted.
-    val events = buildPlan.execute().flatMap(RangeIndex.toRangeEvent(
-      buildSideKeyGenerator, ordering)).collect()
+    val eventifier = RangeIndex.toRangeEvent(buildSideKeyGenerator, ordering)
+    val events = buildPlan.execute().collect().flatMap(eventifier)
 
     // Create the index.
     val index = RangeIndex.build(ordering, events, allowLowEqual, allowHighEqual)
@@ -207,8 +206,8 @@ private[joins] object RangeIndex {
     finishKey
 
     // Determine corrections based on equality
-    val lowBoundEqualCorrection = if (allowLowEqual) 0 else 1
-    val highBoundEqualCorrection = if (allowHighEqual) 1 else 0
+    val lowBoundEqualCorrection = if (allowLowEqual) 1 else 0
+    val highBoundEqualCorrection = if (allowHighEqual) 0 else 1
 
     // Create the index.
     new RangeIndex(ordering, keys.toArray, activeRows.toArray, activatedRows.toArray,
@@ -232,11 +231,23 @@ private[joins] object RangeIndex {
 }
 
 /**
+ * A range index is an data structure which can be used to efficiently execute range queries upon. A
+ * range query has a lower and an upper bound, the result of a range query is a iterator of rows
+ * that match the given constraints.
  *
- * @param ordering used retrieve
- * @param keys array
+ * @param ordering used for sorting keys, comparing keys and values, and retrieving the rows in a
+ *                 given interval.
+ * @param keys which are used for finding the active and activated rows. A key is used when
+ *             something changes, an event occurs (if you will), in the composition of the active
+ *             or activated rows.
  * @param active contains the rows that are 'active' between the current key and the next key.
- * @param activated contains the row that have been activated at the current key.
+ *               This is only used for rows that span an interval.
+ * @param activated contains the row that have been activated at the current key. This contains
+ *                  both rows that span an interval or only exist at one point
+ * @param lowBoundEqualCorrection correction to apply to the lower bound index, when the value
+ *                                queried equals the key.
+ * @param highBoundEqualCorrection correction to apply to the upper bound index, when the value
+ *                                 queried equals the key.
  */
 private[joins] class RangeIndex(
     private[this] val ordering: Ordering[Any],
@@ -244,24 +255,29 @@ private[joins] class RangeIndex(
     private[this] val active: Array[Array[InternalRow]],
     private[this] val activated: Array[Array[InternalRow]],
     private[this] val lowBoundEqualCorrection: Int,
-    private[this] val highBoundEqualCorrection: Int) {
+    private[this] val highBoundEqualCorrection: Int) extends Serializable {
 
   /**
-   * Find the index of the closest upper bound to the value given. We can correct the result of a
-   * match by passing an index correction to the function.
+   * Find the index of the closest key lower than or equal to the value given. When a value is
+   * equal to the found key, the result is corrected.
    *
-   * @param value to find the index of the closest upper bound.
+   * This method is tail recursive.
+   *
+   * @param value to find the closest lower or equal key index for.
+   * @param equalCorrection to correct the result with in case of equality.
+   * @param first index (inclusive) to start searching at.
+   * @param last index (inclusive) to stop searching at.
    * @return the index of the closest upper bound.
    */
   @tailrec
   final def closestLowerKey(value: Any, equalCorrection: Int,
-      first: Int = 0, last: Int = keys.length): Int = {
+      first: Int = 0, last: Int = keys.length - 1): Int = {
     if (first < last) {
-      val index = first + (last - first - 1) / 2
+      val index = first + ((last - first) >> 1)
       val key = keys(index)
-      val cmp = if (key == null) 1
-      else ordering.compare(key, value)
-      if (cmp == 0) index + equalCorrection
+      val cmp = if (key == null) -1
+      else ordering.compare(value, key)
+      if (cmp == 0) index - equalCorrection
       else if (cmp < 0) closestLowerKey(value, equalCorrection, first, index)
       else closestLowerKey(value, equalCorrection, index + 1, last)
     } else first
@@ -277,11 +293,11 @@ private[joins] class RangeIndex(
    * @return an iterator containing all the rows that fall within the given range.
    */
   final def intersect(low: Any, high: Any): Iterator[InternalRow] = {
-    // Find first index by searching for closest the upper bound to the low value.
+    // Find first index by searching for the last key lower than the low value.
     val first = if (low == null) 0
     else closestLowerKey(low, lowBoundEqualCorrection)
 
-    // Find last index by searching for closest the upper bound to the high value.
+    // Find last index by searching for the last lower than the high value.
     val last = if (high == null || first == keys.length - 1) keys.length - 1
     else closestLowerKey(high, highBoundEqualCorrection, first)
 
@@ -310,3 +326,4 @@ private[joins] class RangeIndex(
     }
   }
 }
+
