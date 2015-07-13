@@ -24,16 +24,13 @@ import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel.MEMORY_ONLY
 
-case class TestData(key: Int, value: String)
-case class IntField(i: Int)
-
 class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
   import testImplicits._
 
   setupTestData()
 
   val testData = {
-    val df = (1 to 100).map(i => TestData(i, i.toString)).toDF()
+    val df = (1 to 100).map(i => (i, i.toString)).toDF("key", "value")
     df.registerTempTable("testData")
     df
   }
@@ -47,8 +44,8 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
 
   test("default size avoids broadcast") {
     // TODO: Improve this test when we have better statistics
-    ctx.sparkContext.parallelize(1 to 10).map(i => TestData(i, i.toString))
-      .toDF().registerTempTable("sizeTst")
+    ctx.sparkContext.parallelize(1 to 10).map(i => (i, i.toString))
+      .toDF("key", "value").registerTempTable("sizeTst")
     ctx.cacheTable("sizeTst")
     assert(
       ctx.table("sizeTst").queryExecution.analyzed.statistics.sizeInBytes >
@@ -72,11 +69,10 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
     checkAnswer(scan, testData.collect().toSeq)
   }
 
-  case class StringData(s: String)
   test("SPARK-1678 regression: compression must not lose repeated values") {
     val repeatedData = {
-      val data = List.fill(2)(StringData("test")).toSeq
-      data.toDF().registerTempTable("repeatedData")
+      val data = List.fill(2)(Tuple1("test")).toSeq
+      data.toDF("s").registerTempTable("repeatedData")
       data
     }
 
@@ -93,8 +89,8 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
 
   test("with null values") {
     val nullableRepeatedData = {
-      val data = (List.fill(2)(StringData("test")) ++ List.fill(2)(StringData(null))).toSeq
-      data.toDF().registerTempTable("nullableRepeatedData")
+      val data = (List.fill(2)(Tuple1("test")) ++ List.fill(2)(Tuple1(null))).toSeq
+      data.toDF("s").registerTempTable("nullableRepeatedData")
       data
     }
     checkAnswer(
@@ -125,8 +121,8 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
 
   test("SPARK-3320 regression: batched column buffer building should work with empty partitions") {
     // An RDD with 4 elements and 8 partitions
-    val withEmptyParts = ctx.sparkContext.parallelize((1 to 4).map(IntField), 8)
-    withEmptyParts.toDF().registerTempTable("withEmptyParts")
+    val withEmptyParts = ctx.sparkContext.parallelize((1 to 4).map(Tuple1(_)), 8)
+    withEmptyParts.toDF("i").registerTempTable("withEmptyParts")
 
     checkAnswer(
       sql("SELECT * FROM withEmptyParts"),
@@ -139,6 +135,7 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
       withEmptyParts.collect().toSeq.map(Row.fromTuple))
   }
 
+  case class TestData(key: Int, value: String)
   case class ComplexData(m: Map[String, Int], s: TestData, a: Seq[Int], b: Boolean)
   test("SPARK-4182 Caching complex types") {
     val complexData = Seq(
