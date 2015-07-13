@@ -15,13 +15,14 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution
+package org.apache.spark.sql.execution.aggregate2
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate2._
-import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, AllTuples, UnspecifiedDistribution, Distribution}
+import org.apache.spark.sql.catalyst.plans.physical.{AllTuples, ClusteredDistribution, Distribution, UnspecifiedDistribution}
+import org.apache.spark.sql.execution.{SparkPlan, UnaryNode}
 import org.apache.spark.sql.types.NullType
 
 case class Aggregate2Sort(
@@ -71,7 +72,7 @@ case class Aggregate2Sort(
               case PartialMerge | Final => func
             }
             bufferOffset = aggregateExpressions(i).mode match {
-              case Partial | PartialMerge => bufferOffset + func.bufferValueDataTypes.length
+              case Partial | PartialMerge => bufferOffset + func.bufferSchema.length
               case Final | Complete => bufferOffset + 1
             }
             i += 1
@@ -88,7 +89,7 @@ case class Aggregate2Sort(
           var i = 0
           var size = 0
           while (i < aggregateFunctions.length) {
-            size += aggregateFunctions(i).bufferValueDataTypes.length
+            size += aggregateFunctions(i).bufferSchema.length
             i += 1
           }
           if (preShuffle) {
@@ -132,7 +133,7 @@ case class Aggregate2Sort(
 
         lazy val updateProjection = {
           val bufferSchema = aggregateFunctions.flatMap {
-            case ae: AlgebraicAggregate => ae.bufferSchema
+            case ae: AlgebraicAggregate => ae.bufferAttributes
           }
           val updateExpressions = aggregateFunctions.flatMap {
             case ae: AlgebraicAggregate => ae.updateExpressions
@@ -145,7 +146,7 @@ case class Aggregate2Sort(
         val mergeProjection = {
           val bufferSchemata =
             offsetAttributes ++ aggregateFunctions.flatMap {
-              case ae: AlgebraicAggregate => ae.bufferSchema
+              case ae: AlgebraicAggregate => ae.bufferAttributes
             } ++ offsetAttributes ++ aggregateFunctions.flatMap {
               case ae: AlgebraicAggregate => ae.rightBufferSchema
             }

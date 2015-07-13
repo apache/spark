@@ -18,7 +18,6 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.expressions.aggregate2.{AggregateExpression2, AggregateFunction2}
 import org.apache.spark.sql.catalyst.{SimpleCatalystConf, CatalystConf}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -483,11 +482,7 @@ class Analyzer(
         q transformExpressions {
           case u @ UnresolvedFunction(name, children) =>
             withPosition(u) {
-              registry.lookupFunction(name, children) match {
-                case agg2: AggregateFunction2 =>
-                  AggregateExpression2(agg2, aggregate2.Complete, false)
-                case other => other
-              }
+              registry.lookupFunction(name, children)
             }
         }
     }

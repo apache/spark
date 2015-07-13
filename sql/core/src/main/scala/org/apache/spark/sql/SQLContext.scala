@@ -21,6 +21,8 @@ import java.beans.Introspector
 import java.util.Properties
 import java.util.concurrent.atomic.AtomicReference
 
+import org.apache.spark.sql.execution.aggregate2.ConvertAggregateFunction
+
 import scala.collection.JavaConversions._
 import scala.collection.immutable
 import scala.language.implicitConversions
@@ -148,6 +150,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
       override val extendedResolutionRules =
         ExtractPythonUDFs ::
         sources.PreInsertCastAndRename ::
+        ConvertAggregateFunction(self) ::
         Nil
 
       override val extendedCheckRules = Seq(
