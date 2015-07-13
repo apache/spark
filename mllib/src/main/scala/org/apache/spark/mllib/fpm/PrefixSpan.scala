@@ -153,7 +153,7 @@ class PrefixSpan private (
       minCount: Long,
       data: RDD[(Array[Int], Array[Array[Int]])]): RDD[(Array[Int], Long)] = {
     data.flatMap { case (prefix, projDB) =>
-      LocalPrefixSpan.run(minCount, maxPatternLength, prefix.to[ArrayBuffer], projDB)
+      LocalPrefixSpan.run(minCount, maxPatternLength, prefix.toList, projDB)
     }
   }
 }
