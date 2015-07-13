@@ -862,6 +862,9 @@ class RDD(object):
             for obj in iterator:
                 acc = op(obj, acc)
             yield acc
+        # collecting result of mapPartitions here ensures that the copy of
+        # zeroValue provided to each partition is unique from the one provided
+        # to the final reduce call
         vals = self.mapPartitions(func).collect()
         return reduce(op, vals, zeroValue)
 
@@ -886,8 +889,14 @@ class RDD(object):
         >>> sc.parallelize([]).aggregate((0, 0), seqOp, combOp)
         (0, 0)
         """
+        def createZero():
+            return copy.deepcopy(zeroValue)
+
         def func(iterator):
-            acc = zeroValue
+            # calling createZero here ensures that the copy of zeroValue used
+            # to initialize the accumulator in each partition is unique from
+            # the one provided to the fold call on each partition
+            acc = createZero()
             for obj in iterator:
                 acc = seqOp(acc, obj)
             yield acc
