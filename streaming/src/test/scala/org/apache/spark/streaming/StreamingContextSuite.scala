@@ -20,15 +20,15 @@ package org.apache.spark.streaming
 import java.io.{File, NotSerializableException}
 import java.util.concurrent.atomic.AtomicInteger
 
-import scala.collection.mutable.Queue
 import scala.collection.mutable.ArrayBuffer
+import scala.collection.mutable.Queue
 
 import org.apache.commons.io.FileUtils
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.concurrent.Timeouts
 import org.scalatest.exceptions.TestFailedDueToTimeoutException
 import org.scalatest.time.SpanSugar._
-import org.scalatest.{PrivateMethodTester, Assertions, BeforeAndAfter}
+import org.scalatest.{Assertions, BeforeAndAfter, PrivateMethodTester}
 
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.metrics.source.Source
@@ -839,7 +839,6 @@ package object testPackage extends Assertions {
  * Helper methods for testing StreamingContextSuite
  * This includes methods to access private methods and fields in StreamingContext and MetricsSystem
  */
-
 private object StreamingContextSuite extends PrivateMethodTester {
   private val _sources = PrivateMethod[ArrayBuffer[Source]]('sources)
   private def getSources(metricsSystem: MetricsSystem): ArrayBuffer[Source] = {
