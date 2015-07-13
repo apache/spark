@@ -28,7 +28,6 @@ import org.scalatest.concurrent.Eventually._
 import org.scalatest.concurrent.Timeouts
 import org.scalatest.exceptions.TestFailedDueToTimeoutException
 import org.scalatest.time.SpanSugar._
-import org.scalatest.{Assertions, BeforeAndAfter}
 import org.scalatest.{PrivateMethodTester, Assertions, BeforeAndAfter}
 
 import org.apache.spark.metrics.MetricsSystem
