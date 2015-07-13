@@ -30,19 +30,15 @@ import org.apache.spark.sql.test.{ExamplePointUDT, ExamplePoint, SharedSQLContex
 class DataFrameSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
 
-  case class TestData(key: Int, value: String)
   val testData = {
-    val df = (1 to 100).map(i => TestData(i, i.toString)).toDF()
+    val df = (1 to 100).map(i => (i, i.toString)).toDF("key", "value")
     df.registerTempTable("testData")
     df
   }
 
-  case class TestData2(a: Int, b: Int)
   val testData2 = (for { a <- 1 to 3; b <- 1 to 2 } yield (a, b))
-      .map(t => TestData2(t._1, t._2))
-      .toDF()
-
-  case class ComplexData(m: Map[String, Int], s: TestData, a: Seq[Int], b: Boolean)
+      .map(t => (t._1, t._2))
+      .toDF("a", "b")
 
   test("analysis error should be eagerly reported") {
     // Eager analysis.
@@ -94,6 +90,8 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     }
   }
 
+  case class TestData(key: Int, value: String)
+  case class ComplexData(m: Map[String, Int], s: TestData, a: Seq[Int], b: Boolean)
   test("access complex data") {
     val complexData = Seq(
       ComplexData(Map("1" -> 1), TestData(1, "1"), Seq(1), true),
@@ -318,15 +316,13 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       mapData.take(1).map(r => Row.fromSeq(r.productIterator.toSeq)))
   }
 
-  case class UpperCaseData(N: Int, L: String)
   val upperCaseData = ((1 to 6) zip ('A' to 'F'))
-    .map(t => UpperCaseData(t._1, t._2.toString))
-    .toDF()
+    .map(t => (t._1, t._2.toString))
+    .toDF("N", "L")
 
-  case class LowerCaseData(n: Int, l: String)
   val lowerCaseData = ((1 to 4) zip ('a' to 'd'))
-    .map(t => LowerCaseData(t._1, t._2.toString))
-    .toDF()
+    .map(t => (t._1, t._2.toString))
+    .toDF("n", "l")
 
   test("except") {
     checkAnswer(
@@ -439,11 +435,9 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
   }
 
 
-  case class Person(id: Int, name: String, age: Int)
-  case class Salary(personId: Int, salary: Double)
   test("drop column after join with duplicate columns using column reference") {
-    val person = Seq(Person(0, "mike", 30), Person(1, "jim", 20)).toDF()
-    val salary = Seq(Salary(0, 2000.0), Salary(1, 1000.0)).toDF()
+    val person = Seq((0, "mike", 30), (1, "jim", 20)).toDF("id", "name", "age")
+    val salary = Seq((0, 2000.0), (1, 1000.0)).toDF("personId", "salary")
     val newSalary = salary.withColumnRenamed("personId", "id")
     val col = newSalary("id")
     // this join will result in duplicate "id" columns
@@ -650,11 +644,10 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     df.rdd.collect()
   }
 
-  case class DecimalData(a: BigDecimal, b: BigDecimal)
   test("SPARK-6899: type should match when using codegen") {
-    val decimalData = (for { a <- (1 to 3); b <- (1 to 2) } yield (a, b))
-      .map(t => DecimalData(t._1, t._2))
-      .toDF()
+    val decimalData = (for { a <- 1 to 3; b <- 1 to 2 } yield (a, b))
+      .map(t => (t._1, t._2))
+      .toDF("a", "b")
     withSQLConf(SQLConf.CODEGEN_ENABLED.key -> "true") {
       checkAnswer(
         decimalData.agg(avg('a)),
