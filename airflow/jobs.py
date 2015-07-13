@@ -421,7 +421,7 @@ class SchedulerJob(BaseJob):
                         session.delete(ti)
                     if task:
                         ti.task = task
-                        if ti.is_queueable():
+                        if ti.are_dependencies_met():
                             executor.queue_task_instance(ti, force=True)
                         else:
                             session.delete(ti)
