@@ -7,23 +7,37 @@ from airflow.utils import apply_defaults
 
 class HiveToDruidTransfer(BaseOperator):
     """
-    Moves data from Hive to Druid, note that for now the data is loaded
+    Moves data from Hive to Druid, [del]note that for now the data is loaded
     into memory before being pushed to Druid, so this operator should
-    be used for smallish amount of data.
+    be used for smallish amount of data.[/del]
 
     :param sql: SQL query to execute against the Druid database
     :type sql: str
+    :param druid_datasource: the datasource you want to ingest into in druid
+    :type druid_datasource: str
+    :param ts_dim: the timestamp dimension
+    :type ts_dim: str
+    :param metric_spec: the metrics you want to define for your data
+    :type metric_spec: list
+    :param hive_cli_conn_id: the hive connection id
+    :type hive_cli_conn_id: str
+    :param druid_ingest_conn_id: the druid ingest connection id
+    :type druid_ingest_conn_id: str
+    :param metastore_conn_id: the metastore connection id
+    :type metastore_conn_id: str
     """
 
-    template_fields = ('sql', 'druid_table')
-    template_ext = ('.sql',)
-    ui_color = '#a0e08c'
+    #template_fields = ('sql', 'druid_table')
+    #template_ext = ('.sql',)
+    #ui_color = '#a0e08c'
 
     @apply_defaults
     def __init__(
             self,
             sql,
             druid_datasource,
+            ts_dim,
+            metric_spec=None,
             hive_cli_conn_id='hiveserver2_default',
             druid_ingest_conn_id='druid_ingest_default',
             metastore_conn_id='metastore_default',
@@ -31,24 +45,43 @@ class HiveToDruidTransfer(BaseOperator):
         super(HiveToDruidTransfer, self).__init__(*args, **kwargs)
         self.sql = sql
         self.druid_datasource = druid_datasource
+        self.ts_dim = ts_dim
+        self.metric_spec = metric_spec
         self.hive_cli_conn_id = hive_cli_conn_id
         self.druid_ingest_conn_id = druid_ingest_conn_id
         self.metastore_conn_id = metastore_conn_id
+
+
 
     def execute(self, context):
         hive = HiveServer2Hook(hiveserver2_conn_id=self.hive_cli_conn_id)
         logging.info("Extracting data from Hive")
         hive_table = (
             'tmp.druid__' + context['task_instance'].task_instance_key_str)
-        hql = hql.strip().strip(';')
-        sql = """\
-        CREATE EXTERNAL TABLE {hive_table}
+        sql = sql.strip().strip(';')
+        set_output_compressed_false = "\
+                set mapred.output.compress=false; \
+                set hive.exec.compress.output=false;"
+        hql = """\
+        {set_output_compressed_false}
+        CREATE TABLE {hive_table}
         STORED AS TEXTFILE AS
         {sql};
         """.format(**locals())
         m = HiveMetastoreHook(self.metastore_conn_id)
+        t = m.get_table(hive_table)
+
+        dimensions = [col.name for col in t.sd.cols]
+        for metric in metric_spec:
+            dimensions.remove(metric['fieldName'])
+
         hdfs_uri = m.get_table(hive_table).sd.location
+        pos = hdfs_uri.find('/user')
+        static_path = hdfs_uri[pos:]
+
         hive.run(self.sql)
         druid = DruidHook(druid_ingest_conn_id=self.druid_ingest_conn_id)
         logging.info("Inserting rows into Druid")
-        druid.load_from_hdfs(table=self.druid_datasource, hdfs_uri=hdfs_uri)
+        druid.load_from_hdfs(datasource=self.druid_datasource,
+                static_path=static_path, ts_dim=self.ts_dim,
+                dimensions=dimensions, metric_spec=self.metric_spec)
