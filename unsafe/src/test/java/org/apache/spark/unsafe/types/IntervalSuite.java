@@ -56,4 +56,50 @@ public class IntervalSuite {
     i = new Interval(34, 3 * MICROS_PER_WEEK + 13 * MICROS_PER_HOUR + 123);
     assertEquals(i.toString(), "interval 2 years 10 months 3 weeks 13 hours 123 microseconds");
   }
+
+  @Test
+  public void fromStringTest() {
+    testSingleUnit("year", 3, 36, 0);
+    testSingleUnit("month", 3, 3, 0);
+    testSingleUnit("week", 3, 0, 3 * MICROS_PER_WEEK);
+    testSingleUnit("day", 3, 0, 3 * MICROS_PER_DAY);
+    testSingleUnit("hour", 3, 0, 3 * MICROS_PER_HOUR);
+    testSingleUnit("minute", 3, 0, 3 * MICROS_PER_MINUTE);
+    testSingleUnit("second", 3, 0, 3 * MICROS_PER_SECOND);
+    testSingleUnit("millisecond", 3, 0, 3 * MICROS_PER_MILLI);
+    testSingleUnit("microsecond", 3, 0, 3);
+
+    String input;
+
+    input = "interval   -5  years  23   month";
+    Interval result = new Interval(-5 * 12 + 23, 0);
+    assertEquals(Interval.fromString(input), result);
+
+    // Error cases
+    input = "interval   3month 1 hour";
+    assertEquals(Interval.fromString(input), null);
+
+    input = "interval 3 moth 1 hour";
+    assertEquals(Interval.fromString(input), null);
+
+    input = "interval";
+    assertEquals(Interval.fromString(input), null);
+
+    input = "int";
+    assertEquals(Interval.fromString(input), null);
+
+    input = "";
+    assertEquals(Interval.fromString(input), null);
+
+    input = null;
+    assertEquals(Interval.fromString(input), null);
+  }
+
+  private void testSingleUnit(String unit, int number, int months, long microseconds) {
+    String input1 = "interval " + number + " " + unit;
+    String input2 = "interval " + number + " " + unit + "s";
+    Interval result = new Interval(months, microseconds);
+    assertEquals(Interval.fromString(input1), result);
+    assertEquals(Interval.fromString(input2), result);
+  }
 }

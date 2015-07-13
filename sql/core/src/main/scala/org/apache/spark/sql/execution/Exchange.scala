@@ -289,11 +289,8 @@ private[sql] case class EnsureRequirements(sqlContext: SQLContext) extends Rule[
         }
 
         val withSort = if (needSort) {
-          if (sqlContext.conf.externalSortEnabled) {
-            ExternalSort(rowOrdering, global = false, withShuffle)
-          } else {
-            Sort(rowOrdering, global = false, withShuffle)
-          }
+          sqlContext.planner.BasicOperators.getSortOperator(
+            rowOrdering, global = false, withShuffle)
         } else {
           withShuffle
         }
@@ -321,11 +318,7 @@ private[sql] case class EnsureRequirements(sqlContext: SQLContext) extends Rule[
           case (UnspecifiedDistribution, Seq(), child) =>
             child
           case (UnspecifiedDistribution, rowOrdering, child) =>
-            if (sqlContext.conf.externalSortEnabled) {
-              ExternalSort(rowOrdering, global = false, child)
-            } else {
-              Sort(rowOrdering, global = false, child)
-            }
+            sqlContext.planner.BasicOperators.getSortOperator(rowOrdering, global = false, child)
 
           case (dist, ordering, _) =>
             sys.error(s"Don't know how to ensure $dist with ordering $ordering")

@@ -563,4 +563,14 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
       InternalRow(0L)))
   }
 
+  test("case between string and interval") {
+    import org.apache.spark.unsafe.types.Interval
+
+    checkEvaluation(Cast(Literal("interval -3 month 7 hours"), IntervalType),
+      new Interval(-3, 7 * Interval.MICROS_PER_HOUR))
+    checkEvaluation(Cast(Literal.create(
+      new Interval(15, -3 * Interval.MICROS_PER_DAY), IntervalType), StringType),
+      "interval 1 years 3 months -3 days")
+  }
+
 }
