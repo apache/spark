@@ -6,6 +6,14 @@ import pydruid
 import requests
 
 from airflow.hooks.base_hook import BaseHook
+from airflow.utils import AirflowException
+
+LOAD_CHECK_INTERVAL = 5
+
+
+class AirflowDruidLoadException(AirflowException):
+    pass
+
 
 class DruidHook(BaseHook):
     '''
@@ -15,12 +23,10 @@ class DruidHook(BaseHook):
     def __init__(
             self,
             druid_query_conn_id='druid_query_default',
-            druid_ingest_conn_id='druid_ingest_default',
-            ):
+            druid_ingest_conn_id='druid_ingest_default'):
         self.druid_query_conn_id = druid_query_conn_id
         self.druid_ingest_conn_id = druid_ingest_conn_id
 	self.header = {'content-type': 'application/json'}
-
 
     def get_conn(self):
         """
@@ -44,8 +50,18 @@ class DruidHook(BaseHook):
         post_url = self.ingest_post_url
         return "{post_url}/{task_id}/status".format(**locals())
 
-    def construct_ingest_query(self, datasource, static_path,
-                                    ts_dim, dimensions, metric_spec):
+    def construct_ingest_query(
+            self, datasource, static_path, ts_dim, columns, metric_spec,
+            intervals):
+        """
+        Builds an ingest query for an HDFS TSV load.
+
+        :param datasource: target datasource in druid
+        :param columns: list of all columns in the TSV, in the right order
+        """
+        metric_names = [
+            m['fieldName'] for m in metric_spec if m['type'] != 'count']
+        dimensions = [c for c in columns if c not in metric_names]
 	ingest_query_dict = {
             "type": "index_hadoop",
             "spec": {
@@ -53,13 +69,14 @@ class DruidHook(BaseHook):
                     "metricsSpec": metric_spec,
                     "granularitySpec": {
                         "queryGranularity": "NONE",
-                        "intervals": ["1901-01-01/2040-05-25"],
+                        "intervals": intervals,
                         "type": "uniform",
                         "segmentGranularity": "DAY"
                     },
                     "parser": {
                         "type": "string",
                         "parseSpec": {
+                            "columns": columns,
                             "dimensionsSpec": {
                                 "dimensionExclusions": [],
                                 "dimensions": dimensions,  # list of names
@@ -87,39 +104,45 @@ class DruidHook(BaseHook):
             }
         }
 
-	return json.dumps(ingest_query_dict)
+	return json.dumps(ingest_query_dict, indent=4)
 
 
-    def send_ingest_query(self, datasource, static_path, ts_dim,
-                                                dimensions, metric_spec):
-	query = self.construct_ingest_query(datasource, static_path,
-                                            ts_dims, dimensions, metric_spec)
-	r = requests.post(self.ingest_post_url, headers=self.header,
-                                                                data=query)
+    def send_ingest_query(
+            self, datasource, static_path, ts_dim, columns, metric_spec,
+            intervals):
+	query = self.construct_ingest_query(
+            datasource, static_path, ts_dim, columns,
+            metric_spec, intervals)
+	r = requests.post(
+            self.ingest_post_url, headers=self.header, data=query)
+        print self.ingest_post_url
+        print query
+        print(r.text)
         d = json.loads(r.text)
         if "task" not in d:
-            raise AirflowException("[Error]: Ingesting data to druid failed.")
+            raise AirflowDruidLoadException(
+                "[Error]: Ingesting data to druid failed.")
         return d["task"]
 
 
-    def load_from_hdfs(self, datasource, static_path,  ts_dim,
-                                    dimensions, metric_spec=None):
+    def load_from_hdfs(
+            self, datasource, static_path,  ts_dim, columns,
+            intervals, metric_spec=None):
         """
 	load data to druid from hdfs
         :params ts_dim: The column name to use as a timestamp
-        :params dimensions: A list of column names to use as dimension
         :params metric_spec: A list of dictionaries
         """
-        task_id = send_ingest_query(datasource, static_path, ts_dim,
-                                        dimensions, metric_spec)
+        task_id = self.send_ingest_query(
+            datasource, static_path, ts_dim, columns, metric_spec,
+            intervals)
         status_url = self.get_ingest_status_url(task_id)
         while True:
             r = requests.get(status_url)
             d = json.loads(r.text)
             if d['status']['status'] == 'FAILED':
-                raise AirflowException(
-                        "[Error]: Ingesting data to druid failed.")
+                raise AirflowDruidLoadException(
+                    "[Error]: Ingesting data to druid failed.")
             elif d['status']['status'] == 'SUCCESS':
                 break
-            time.sleep(30)
-
+            time.sleep(LOAD_CHECK_INTERVAL)
