@@ -366,7 +366,7 @@ case class Cast(child: Expression, dataType: DataType)
 
   private[this] def castArray(from: ArrayType, to: ArrayType): Any => Any = {
     val elementCast = cast(from.elementType, to.elementType)
-    buildCast[Seq[Any]](_, _.map(v => if (v == null) null else elementCast(v)))
+    buildCast[Seq[Any]](_, seq => seq.map(v => if (v == null) null else elementCast(v)))
   }
 
   private[this] def castMap(from: MapType, to: MapType): Any => Any = {
@@ -422,8 +422,30 @@ case class Cast(child: Expression, dataType: DataType)
 
   private[this] def castGen(from: DataType, to: DataType, ctx: CodeGenContext,
       ev: GeneratedExpressionCode): String = {
+    to match {
+      // case dt if dt == child.dataType => identity[Any]
+      case StringType => castToStringCode(from, ctx, ev)
+      case BinaryType => castToBinaryCode(from, ctx, ev)
+      case DateType => castToDateCode(from, ctx, ev)
+      case decimal: DecimalType => castToDecimalCode(from, decimal, ctx, ev)
+      case TimestampType => castToTimestampCode(from, ctx, ev)
+      case BooleanType => castToBooleanCode(from, ctx, ev)
+      case ByteType => castToByteCode(from, ctx, ev)
+      case ShortType => castToShortCode(from, ctx, ev)
+      case IntegerType => castToIntCode(from, ctx, ev)
+      case FloatType => castToFloatCode(from, ctx, ev)
+      case LongType => castToLongCode(from, ctx, ev)
+      case DoubleType => castToDoubleCode(from, ctx, ev)
 
-    def castToStringCode(from: DataType): String = from match {
+//      case array: ArrayType => castArrayCode(from.asInstanceOf[ArrayType], array, ctx, ev)
+      case other => super.genCode(ctx, ev)
+      // case map: MapType => castMapCode(from.asInstanceOf[MapType], map)
+      // case struct: StructType => castStructCode(from.asInstanceOf[StructType], struct)
+    }
+  }
+
+  private[this] def castToStringCode(from: DataType, ctx: CodeGenContext,
+      ev: GeneratedExpressionCode): String = from match {
       case BinaryType =>
         defineCodeGen(ctx, ev, c => s"UTF8String.fromBytes($c)")
       case DateType =>
@@ -436,16 +458,18 @@ case class Cast(child: Expression, dataType: DataType)
                 org.apache.spark.sql.catalyst.util.DateTimeUtils.timestampToString($c))""")
       case _ =>
         defineCodeGen(ctx, ev, c => s"UTF8String.fromString(String.valueOf($c))")
-    }
+  }
 
-    def castToBinaryCode(from: DataType): String = from match {
-      case StringType =>
-        defineCodeGen(ctx, ev, c => s"$c.getBytes()")
-    }
+  private[this] def castToBinaryCode(from: DataType, ctx: CodeGenContext,
+      ev: GeneratedExpressionCode): String = from match {
+    case StringType =>
+      defineCodeGen(ctx, ev, c => s"$c.getBytes()")
+  }
 
-    def castToDateCode(from: DataType): String = from match {
-      case StringType =>
-        nullSafeCodeGen(ctx, ev, c =>
+  private[this] def castToDateCode(from: DataType, ctx: CodeGenContext,
+      ev: GeneratedExpressionCode): String = from match {
+    case StringType =>
+      nullSafeCodeGen(ctx, ev, c =>
         s"""
           try {
             ${ev.primitive} = org.apache.spark.sql.catalyst.util.DateTimeUtils.fromJavaDate(
@@ -454,43 +478,45 @@ case class Cast(child: Expression, dataType: DataType)
            ${ev.isNull} = true;
           }
          """)
-      case TimestampType =>
-        defineCodeGen(ctx, ev, c =>
-          s"org.apache.spark.sql.catalyst.util.DateTimeUtils.millisToDays($c / 1000L)")
-      case _ => defineCodeGen(ctx, ev, c => s"${ev.isNull} = true")
-    }
+    case TimestampType =>
+      defineCodeGen(ctx, ev, c =>
+        s"org.apache.spark.sql.catalyst.util.DateTimeUtils.millisToDays($c / 1000L)")
+    case _ => defineCodeGen(ctx, ev, c => s"${ev.isNull} = true")
+  }
 
-    def changePrecision(d: String, decimalType: DecimalType): String = {
-      decimalType match {
-        case DecimalType.Unlimited =>
-          s"${ev.primitive} = $d;"
-        case DecimalType.Fixed(precision, scale) =>
+  private[this] def changePrecision(d: String, decimalType: DecimalType, ctx: CodeGenContext,
+      ev: GeneratedExpressionCode): String = {
+    decimalType match {
+      case DecimalType.Unlimited =>
+        s"${ev.primitive} = $d;"
+      case DecimalType.Fixed(precision, scale) =>
+        s"""
+          if ($d.changePrecision($precision, $scale)) {
+            ${ev.primitive} = $d;
+          } else {
+            ${ev.isNull} = true;
+          }
+        """
+    }
+  }
+
+  private[this] def castToDecimalCode(from: DataType, target: DecimalType, ctx: CodeGenContext,
+      ev: GeneratedExpressionCode): String = {
+    val tmpd = ctx.freshName("d")
+    from match {
+      case StringType =>
+        nullSafeCodeGen(ctx, ev, c =>
           s"""
-            if ($d.changePrecision($precision, $scale)) {
-              ${ev.primitive} = $d;
-            } else {
+            try {
+              org.apache.spark.sql.types.Decimal $tmpd =
+               new org.apache.spark.sql.types.Decimal().set(
+                 new scala.math.BigDecimal(
+                   new java.math.BigDecimal($c.toString())));
+              ${changePrecision(tmpd, target, ctx, ev)}
+            } catch (java.lang.NumberFormatException e) {
               ${ev.isNull} = true;
             }
-           """
-      }
-    }
-
-    def castToDecimalCode(from: DataType, target: DecimalType): String = {
-      val tmpd = ctx.freshName("d")
-      from match {
-        case StringType =>
-          nullSafeCodeGen(ctx, ev, c =>
-            s"""
-              try {
-                org.apache.spark.sql.types.Decimal $tmpd =
-                 new org.apache.spark.sql.types.Decimal().set(
-                   new scala.math.BigDecimal(
-                     new java.math.BigDecimal($c.toString())));
-                ${changePrecision(tmpd, target)}
-              } catch (java.lang.NumberFormatException e) {
-                ${ev.isNull} = true;
-              }
-            """)
+          """)
       case BooleanType =>
         nullSafeCodeGen(ctx, ev, c =>
           s"""
@@ -500,7 +526,7 @@ case class Cast(child: Expression, dataType: DataType)
             } else {
               $tmpd = new org.apache.spark.sql.types.Decimal().set(0);
             }
-            ${changePrecision(tmpd, target)}
+            ${changePrecision(tmpd, target, ctx, ev)}
           """)
       case DateType =>
         // date can't cast to decimal in Hive
@@ -512,20 +538,20 @@ case class Cast(child: Expression, dataType: DataType)
             org.apache.spark.sql.types.Decimal $tmpd =
               new org.apache.spark.sql.types.Decimal().set(
                 scala.math.BigDecimal.valueOf(${timestampToDoubleCode(c)}));
-            ${changePrecision(tmpd, target)}
+            ${changePrecision(tmpd, target, ctx, ev)}
           """)
       case DecimalType() =>
         nullSafeCodeGen(ctx, ev, c =>
           s"""
             org.apache.spark.sql.types.Decimal $tmpd = $c.clone();
-            ${changePrecision(tmpd, target)}
+            ${changePrecision(tmpd, target, ctx, ev)}
           """)
       case LongType =>
         nullSafeCodeGen(ctx, ev, c =>
           s"""
             org.apache.spark.sql.types.Decimal $tmpd =
               new org.apache.spark.sql.types.Decimal().set($c);
-            ${changePrecision(tmpd, target)}
+            ${changePrecision(tmpd, target, ctx, ev)}
           """)
       case x: NumericType =>
         // All other numeric types can be represented precisely as Doubles
@@ -535,17 +561,18 @@ case class Cast(child: Expression, dataType: DataType)
               org.apache.spark.sql.types.Decimal $tmpd =
                 new org.apache.spark.sql.types.Decimal().set(
                   scala.math.BigDecimal.valueOf((double) $c));
-              ${changePrecision(tmpd, target)}
+              ${changePrecision(tmpd, target, ctx, ev)}
             } catch (java.lang.NumberFormatException e) {
               ${ev.isNull} = true;
             }
           """)
-        }
-      }
+    }
+  }
 
-    def castToTimestampCode(from: DataType): String = from match {
-      case StringType =>
-        nullSafeCodeGen(ctx, ev, c =>
+  private[this] def castToTimestampCode(from: DataType, ctx: CodeGenContext,
+      ev: GeneratedExpressionCode): String = from match {
+    case StringType =>
+      nullSafeCodeGen(ctx, ev, c =>
         s"""
           try {
             ${ev.primitive} = org.apache.spark.sql.catalyst.util.DateTimeUtils.fromJavaTimestamp(
@@ -554,227 +581,237 @@ case class Cast(child: Expression, dataType: DataType)
             ${ev.isNull} = true;
           }
          """)
-      case BooleanType =>
-        defineCodeGen(ctx, ev, c => s"$c ? 1L : 0")
-      case LongType =>
-        defineCodeGen(ctx, ev, c => longToTimeStampCode(c))
-      case IntegerType =>
-        defineCodeGen(ctx, ev, c => longToTimeStampCode(c))
-      case ShortType =>
-        defineCodeGen(ctx, ev, c => longToTimeStampCode(c))
-      case ByteType =>
-        defineCodeGen(ctx, ev, c => longToTimeStampCode(c))
-      case DateType =>
-        defineCodeGen(ctx, ev, c =>
-          s"org.apache.spark.sql.catalyst.util.DateTimeUtils.daysToMillis($c) * 1000")
-      case DecimalType() =>
-        defineCodeGen(ctx, ev, c => decimalToTimestampCode(c))
-      case DoubleType =>
-        nullSafeCodeGen(ctx, ev, c =>
-          s"""
-            if (Double.isNaN($c) || Double.isInfinite($c)) {
-              ${ev.isNull} = true;
-            } else {
-              ${ev.primitive} = (long)($c * 1000000L);
-            }
-           """)
-      case FloatType =>
-        nullSafeCodeGen(ctx, ev, c =>
-          s"""
-            if (Float.isNaN($c) || Float.isInfinite($c)) {
-              ${ev.isNull} = true;
-            } else {
-              ${ev.primitive} = (long)($c * 1000000L);
-            }
-           """)
-    }
-
-    def decimalToTimestampCode(d: String): String =
-      s"($d.toBigDecimal().bigDecimal().multiply(new java.math.BigDecimal(1000000L))).longValue()"
-    def longToTimeStampCode(l: String): String = s"$l * 1000L"
-    def timestampToIntegerCode(ts: String): String =
-      s"java.lang.Math.floor((double) $ts / 1000000L)"
-    def timestampToDoubleCode(ts: String): String = s"$ts / 1000000.0"
-
-    def castToBooleanCode(from: DataType): String = from match {
-      case StringType =>
-        defineCodeGen(ctx, ev, c => s"$c.numBytes() != 0")
-      case TimestampType =>
-        defineCodeGen(ctx, ev, c => s"$c != 0")
-      case DateType =>
-        // Hive would return null when cast from date to boolean
-        nullSafeCodeGen(ctx, ev, c => s"${ev.isNull} = true;")
-      case LongType =>
-        defineCodeGen(ctx, ev, c => s"$c != 0")
-      case IntegerType =>
-        defineCodeGen(ctx, ev, c => s"$c != 0")
-      case ShortType =>
-        defineCodeGen(ctx, ev, c => s"$c != 0")
-      case ByteType =>
-        defineCodeGen(ctx, ev, c => s"$c != 0")
-      case DecimalType() =>
-        defineCodeGen(ctx, ev, c => s"!$c.isZero()")
-      case DoubleType =>
-        defineCodeGen(ctx, ev, c => s"$c != 0")
-      case FloatType =>
-        defineCodeGen(ctx, ev, c => s"$c != 0")
-    }
-
-    def castToByteCode(from: DataType): String = from match {
-      case StringType =>
-        nullSafeCodeGen(ctx, ev, c =>
-          s"""
-            try {
-              ${ev.primitive} = Byte.valueOf($c.toString());
-            } catch (java.lang.NumberFormatException e) {
-              ${ev.isNull} = true;
-            }
-           """)
-      case BooleanType =>
-        defineCodeGen(ctx, ev, c => s"$c ? 1 : 0")
-      case DateType =>
-        nullSafeCodeGen(ctx, ev, c => s"${ev.isNull} = true;")
-      case TimestampType =>
-        defineCodeGen(ctx, ev, c => s"(byte) ${timestampToIntegerCode(c)}")
-      case DecimalType() =>
-        defineCodeGen(ctx, ev, c => s"$c.toByte()")
-      case x: NumericType =>
-        defineCodeGen(ctx, ev, c => s"(byte) $c")
-    }
-
-    def castToShortCode(from: DataType): String = from match {
-      case StringType =>
-        nullSafeCodeGen(ctx, ev, c =>
-          s"""
-            try {
-              ${ev.primitive} = Short.valueOf($c.toString());
-            } catch (java.lang.NumberFormatException e) {
-              ${ev.isNull} = true;
-            }
-           """)
-      case BooleanType =>
-        defineCodeGen(ctx, ev, c => s"$c ? 1 : 0")
-      case DateType =>
-        nullSafeCodeGen(ctx, ev, c => s"${ev.isNull} = true;")
-      case TimestampType =>
-        defineCodeGen(ctx, ev, c => s"(short) ${timestampToIntegerCode(c)}")
-      case DecimalType() =>
-        defineCodeGen(ctx, ev, c => s"$c.toShort()")
-      case x: NumericType =>
-        defineCodeGen(ctx, ev, c => s"(short) $c")
-    }
-
-    def castToIntCode(from: DataType): String = from match {
-      case StringType =>
-        nullSafeCodeGen(ctx, ev, c =>
-          s"""
-            try {
-              ${ev.primitive} = Integer.valueOf($c.toString());
-            } catch (java.lang.NumberFormatException e) {
-              ${ev.isNull} = true;
-            }
-           """)
-      case BooleanType =>
-        defineCodeGen(ctx, ev, c => s"$c ? 1 : 0")
-      case DateType =>
-        nullSafeCodeGen(ctx, ev, c => s"${ev.isNull} = true;")
-      case TimestampType =>
-        defineCodeGen(ctx, ev, c => s"(int) ${timestampToIntegerCode(c)}")
-      case DecimalType() =>
-        defineCodeGen(ctx, ev, c => s"$c.toInt()")
-      case x: NumericType =>
-        defineCodeGen(ctx, ev, c => s"(int) $c")
-    }
-
-    def castToLongCode(from: DataType): String = from match {
-      case StringType =>
-        nullSafeCodeGen(ctx, ev, c =>
-          s"""
-            try {
-              ${ev.primitive} = Long.valueOf($c.toString());
-            } catch (java.lang.NumberFormatException e) {
-              ${ev.isNull} = true;
-            }
-           """)
-      case BooleanType =>
-        defineCodeGen(ctx, ev, c => s"$c ? 1 : 0")
-      case DateType =>
-        nullSafeCodeGen(ctx, ev, c => s"${ev.isNull} = true;")
-      case TimestampType =>
-        defineCodeGen(ctx, ev, c => s"(long) ${timestampToIntegerCode(c)}")
-      case DecimalType() =>
-        defineCodeGen(ctx, ev, c => s"$c.toLong()")
-      case x: NumericType =>
-        defineCodeGen(ctx, ev, c => s"(long) $c")
-    }
-
-    def castToFloatCode(from: DataType): String = from match {
-      case StringType =>
-        nullSafeCodeGen(ctx, ev, c =>
-          s"""
-            try {
-              ${ev.primitive} = Float.valueOf($c.toString());
-            } catch (java.lang.NumberFormatException e) {
-              ${ev.isNull} = true;
-            }
-           """)
-      case BooleanType =>
-        defineCodeGen(ctx, ev, c => s"$c ? 1 : 0")
-      case DateType =>
-        nullSafeCodeGen(ctx, ev, c => s"${ev.isNull} = true;")
-      case TimestampType =>
-        defineCodeGen(ctx, ev, c => s"(float) (${timestampToDoubleCode(c)})")
-      case DecimalType() =>
-        defineCodeGen(ctx, ev, c => s"$c.toFloat()")
-      case x: NumericType =>
-        defineCodeGen(ctx, ev, c => s"(float) $c")
-    }
-
-    def castToDoubleCode(from: DataType): String = from match {
-      case StringType =>
-        nullSafeCodeGen(ctx, ev, c =>
-          s"""
-            try {
-              ${ev.primitive} = Double.valueOf($c.toString());
-            } catch (java.lang.NumberFormatException e) {
-              ${ev.isNull} = true;
-            }
-           """)
-      case BooleanType =>
-        defineCodeGen(ctx, ev, c => s"$c ? 1 : 0")
-      case DateType =>
-        nullSafeCodeGen(ctx, ev, c => s"${ev.isNull} = true;")
-      case TimestampType =>
-        defineCodeGen(ctx, ev, c => timestampToDoubleCode(c))
-      case DecimalType() =>
-        defineCodeGen(ctx, ev, c => s"$c.toDouble()")
-      case x: NumericType =>
-        defineCodeGen(ctx, ev, c => s"(double) $c")
-    }
-
-    def castArrayCode(from: DataType): String = ???
-    def castMapCode(from: DataType): String = ???
-    def castStructCode(from: DataType): String = ???
-
-    to match {
-      // case dt if dt == child.dataType => identity[Any]
-      case StringType => castToStringCode(from)
-      case BinaryType => castToBinaryCode(from)
-      case DateType => castToDateCode(from)
-      case decimal: DecimalType => castToDecimalCode(from, decimal)
-      case TimestampType => castToTimestampCode(from)
-      case BooleanType => castToBooleanCode(from)
-      case ByteType => castToByteCode(from)
-      case ShortType => castToShortCode(from)
-      case IntegerType => castToIntCode(from)
-      case FloatType => castToFloatCode(from)
-      case LongType => castToLongCode(from)
-      case DoubleType => castToDoubleCode(from)
-
-      case other => super.genCode(ctx, ev)
-      // case array: ArrayType => castArrayCode(from.asInstanceOf[ArrayType], array)
-      // case map: MapType => castMapCode(from.asInstanceOf[MapType], map)
-      // case struct: StructType => castStructCode(from.asInstanceOf[StructType], struct)
-    }
+    case BooleanType =>
+      defineCodeGen(ctx, ev, c => s"$c ? 1L : 0")
+    case LongType =>
+      defineCodeGen(ctx, ev, c => longToTimeStampCode(c))
+    case IntegerType =>
+      defineCodeGen(ctx, ev, c => longToTimeStampCode(c))
+    case ShortType =>
+      defineCodeGen(ctx, ev, c => longToTimeStampCode(c))
+    case ByteType =>
+      defineCodeGen(ctx, ev, c => longToTimeStampCode(c))
+    case DateType =>
+      defineCodeGen(ctx, ev, c =>
+        s"org.apache.spark.sql.catalyst.util.DateTimeUtils.daysToMillis($c) * 1000")
+    case DecimalType() =>
+      defineCodeGen(ctx, ev, c => decimalToTimestampCode(c))
+    case DoubleType =>
+      nullSafeCodeGen(ctx, ev, c =>
+        s"""
+          if (Double.isNaN($c) || Double.isInfinite($c)) {
+            ${ev.isNull} = true;
+          } else {
+            ${ev.primitive} = (long)($c * 1000000L);
+          }
+        """)
+    case FloatType =>
+      nullSafeCodeGen(ctx, ev, c =>
+        s"""
+          if (Float.isNaN($c) || Float.isInfinite($c)) {
+            ${ev.isNull} = true;
+          } else {
+            ${ev.primitive} = (long)($c * 1000000L);
+          }
+        """)
   }
+
+  private[this] def decimalToTimestampCode(d: String): String =
+    s"($d.toBigDecimal().bigDecimal().multiply(new java.math.BigDecimal(1000000L))).longValue()"
+  private[this] def longToTimeStampCode(l: String): String = s"$l * 1000L"
+  private[this] def timestampToIntegerCode(ts: String): String =
+    s"java.lang.Math.floor((double) $ts / 1000000L)"
+  private[this] def timestampToDoubleCode(ts: String): String = s"$ts / 1000000.0"
+
+  private[this] def castToBooleanCode(from: DataType, ctx: CodeGenContext,
+      ev: GeneratedExpressionCode): String = from match {
+    case StringType =>
+      defineCodeGen(ctx, ev, c => s"$c.numBytes() != 0")
+    case TimestampType =>
+      defineCodeGen(ctx, ev, c => s"$c != 0")
+    case DateType =>
+      // Hive would return null when cast from date to boolean
+      nullSafeCodeGen(ctx, ev, c => s"${ev.isNull} = true;")
+    case DecimalType() =>
+      defineCodeGen(ctx, ev, c => s"!$c.isZero()")
+    case n: NumericType =>
+      defineCodeGen(ctx, ev, c => s"$c != 0")
+  }
+
+  private[this] def castToByteCode(from: DataType, ctx: CodeGenContext,
+      ev: GeneratedExpressionCode): String = from match {
+    case StringType =>
+      nullSafeCodeGen(ctx, ev, c =>
+        s"""
+          try {
+            ${ev.primitive} = Byte.valueOf($c.toString());
+          } catch (java.lang.NumberFormatException e) {
+            ${ev.isNull} = true;
+          }
+        """)
+    case BooleanType =>
+      defineCodeGen(ctx, ev, c => s"$c ? 1 : 0")
+    case DateType =>
+      nullSafeCodeGen(ctx, ev, c => s"${ev.isNull} = true;")
+    case TimestampType =>
+      defineCodeGen(ctx, ev, c => s"(byte) ${timestampToIntegerCode(c)}")
+    case DecimalType() =>
+      defineCodeGen(ctx, ev, c => s"$c.toByte()")
+    case x: NumericType =>
+      defineCodeGen(ctx, ev, c => s"(byte) $c")
+  }
+
+  private[this] def castToShortCode(from: DataType, ctx: CodeGenContext,
+      ev: GeneratedExpressionCode): String = from match {
+    case StringType =>
+      nullSafeCodeGen(ctx, ev, c =>
+        s"""
+          try {
+            ${ev.primitive} = Short.valueOf($c.toString());
+          } catch (java.lang.NumberFormatException e) {
+            ${ev.isNull} = true;
+          }
+        """)
+    case BooleanType =>
+      defineCodeGen(ctx, ev, c => s"$c ? 1 : 0")
+    case DateType =>
+      nullSafeCodeGen(ctx, ev, c => s"${ev.isNull} = true;")
+    case TimestampType =>
+      defineCodeGen(ctx, ev, c => s"(short) ${timestampToIntegerCode(c)}")
+    case DecimalType() =>
+      defineCodeGen(ctx, ev, c => s"$c.toShort()")
+    case x: NumericType =>
+      defineCodeGen(ctx, ev, c => s"(short) $c")
+  }
+
+  private[this] def castToIntCode(from: DataType, ctx: CodeGenContext,
+      ev: GeneratedExpressionCode): String = from match {
+    case StringType =>
+      nullSafeCodeGen(ctx, ev, c =>
+        s"""
+          try {
+            ${ev.primitive} = Integer.valueOf($c.toString());
+          } catch (java.lang.NumberFormatException e) {
+            ${ev.isNull} = true;
+          }
+        """)
+    case BooleanType =>
+      defineCodeGen(ctx, ev, c => s"$c ? 1 : 0")
+    case DateType =>
+      nullSafeCodeGen(ctx, ev, c => s"${ev.isNull} = true;")
+    case TimestampType =>
+      defineCodeGen(ctx, ev, c => s"(int) ${timestampToIntegerCode(c)}")
+    case DecimalType() =>
+      defineCodeGen(ctx, ev, c => s"$c.toInt()")
+    case x: NumericType =>
+      defineCodeGen(ctx, ev, c => s"(int) $c")
+  }
+
+  private[this] def castToLongCode(from: DataType, ctx: CodeGenContext,
+      ev: GeneratedExpressionCode): String = from match {
+    case StringType =>
+      nullSafeCodeGen(ctx, ev, c =>
+        s"""
+          try {
+            ${ev.primitive} = Long.valueOf($c.toString());
+          } catch (java.lang.NumberFormatException e) {
+            ${ev.isNull} = true;
+          }
+        """)
+    case BooleanType =>
+      defineCodeGen(ctx, ev, c => s"$c ? 1 : 0")
+    case DateType =>
+      nullSafeCodeGen(ctx, ev, c => s"${ev.isNull} = true;")
+    case TimestampType =>
+      defineCodeGen(ctx, ev, c => s"(long) ${timestampToIntegerCode(c)}")
+    case DecimalType() =>
+      defineCodeGen(ctx, ev, c => s"$c.toLong()")
+    case x: NumericType =>
+      defineCodeGen(ctx, ev, c => s"(long) $c")
+  }
+
+  private[this] def castToFloatCode(from: DataType, ctx: CodeGenContext,
+      ev: GeneratedExpressionCode): String = from match {
+    case StringType =>
+      nullSafeCodeGen(ctx, ev, c =>
+        s"""
+          try {
+            ${ev.primitive} = Float.valueOf($c.toString());
+          } catch (java.lang.NumberFormatException e) {
+            ${ev.isNull} = true;
+          }
+        """)
+    case BooleanType =>
+      defineCodeGen(ctx, ev, c => s"$c ? 1 : 0")
+    case DateType =>
+      nullSafeCodeGen(ctx, ev, c => s"${ev.isNull} = true;")
+    case TimestampType =>
+      defineCodeGen(ctx, ev, c => s"(float) (${timestampToDoubleCode(c)})")
+    case DecimalType() =>
+      defineCodeGen(ctx, ev, c => s"$c.toFloat()")
+    case x: NumericType =>
+      defineCodeGen(ctx, ev, c => s"(float) $c")
+  }
+
+  private[this] def castToDoubleCode(from: DataType, ctx: CodeGenContext,
+      ev: GeneratedExpressionCode): String = from match {
+    case StringType =>
+      nullSafeCodeGen(ctx, ev, c =>
+        s"""
+          try {
+            ${ev.primitive} = Double.valueOf($c.toString());
+          } catch (java.lang.NumberFormatException e) {
+            ${ev.isNull} = true;
+          }
+        """)
+    case BooleanType =>
+      defineCodeGen(ctx, ev, c => s"$c ? 1 : 0")
+    case DateType =>
+      nullSafeCodeGen(ctx, ev, c => s"${ev.isNull} = true;")
+    case TimestampType =>
+      defineCodeGen(ctx, ev, c => timestampToDoubleCode(c))
+    case DecimalType() =>
+      defineCodeGen(ctx, ev, c => s"$c.toDouble()")
+    case x: NumericType =>
+      defineCodeGen(ctx, ev, c => s"(double) $c")
+  }
+
+  private[this] def castArrayCode(from: ArrayType, to: ArrayType, ctx: CodeGenContext,
+      ev: GeneratedExpressionCode): String = {
+
+    val isNull = ctx.freshName("isNull")
+    val primitive = ctx.freshName("primitive")
+    val ve = GeneratedExpressionCode("", isNull, primitive)
+
+    val size = ctx.freshName("n")
+    val j = ctx.freshName("j")
+
+    val elementCastCode = castGen(from.elementType, to.elementType, ctx, ve)
+    val arraySeqClass = "scala.collection.mutable.ArraySeq"
+    nullSafeCodeGen(ctx, ev, c =>
+      s"""
+        final int $size = $c.size();
+        final $arraySeqClass<Object> result = new $arraySeqClass<Object>($size);
+        for (int $j = 0; $j < $size; $j ++) {
+          if ($c.apply($j) == null) {
+            result.update($j, null);
+          } else {
+            // start
+            $elementCastCode
+            // end
+            if (${ve.isNull}) {
+              result.update($j, null);
+            } else {
+              result.update($j, ${ve.primitive});
+            }
+          }
+        }
+        ${ev.primitive} = result;
+       """)
+  }
+  def castMapCode(from: MapType, to: MapType, ctx: CodeGenContext,
+      ev: GeneratedExpressionCode): String = ???
+  def castStructCode(from: StructType, to: StructType, ctx: CodeGenContext,
+      ev: GeneratedExpressionCode): String = ???
+
 }
