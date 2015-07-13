@@ -349,9 +349,9 @@ case class Least(children: Expression*) extends Expression {
     val evalChildren = children.map(_.gen(ctx))
     def updateEval(i: Int): String =
       s"""
-        if (${ev.isNull} || (!${evalChildren(i).isNull} && ${
-          ctx.genComp(dataType, evalChildren(i).primitive, ev.primitive)} < 0)) {
-          ${ev.isNull} = ${evalChildren(i).isNull};
+        if (!${evalChildren(i).isNull} && (${ev.isNull} ||
+          ${ctx.genComp(dataType, evalChildren(i).primitive, ev.primitive)} < 0)) {
+          ${ev.isNull} = false;
           ${ev.primitive} = ${evalChildren(i).primitive};
         }
       """
@@ -359,7 +359,7 @@ case class Least(children: Expression*) extends Expression {
       ${evalChildren.map(_.code).mkString("\n")}
       boolean ${ev.isNull} = true;
       ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
-      ${(0 to children.length - 1).map(updateEval).mkString("\n")}
+      ${(0 until children.length).map(updateEval).mkString("\n")}
     """
   }
 }
@@ -399,9 +399,9 @@ case class Greatest(children: Expression*) extends Expression {
     val evalChildren = children.map(_.gen(ctx))
     def updateEval(i: Int): String =
       s"""
-        if (${ev.isNull} || (!${evalChildren(i).isNull} && ${
-        ctx.genComp(dataType, evalChildren(i).primitive, ev.primitive)} > 0)) {
-          ${ev.isNull} = ${evalChildren(i).isNull};
+        if (!${evalChildren(i).isNull} && (${ev.isNull} ||
+          ${ctx.genComp(dataType, evalChildren(i).primitive, ev.primitive)} > 0)) {
+          ${ev.isNull} = false;
           ${ev.primitive} = ${evalChildren(i).primitive};
         }
       """
@@ -409,7 +409,7 @@ case class Greatest(children: Expression*) extends Expression {
       ${evalChildren.map(_.code).mkString("\n")}
       boolean ${ev.isNull} = true;
       ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
-      ${(0 to children.length - 1).map(updateEval).mkString("\n")}
+      ${(0 until children.length).map(updateEval).mkString("\n")}
     """
   }
 }

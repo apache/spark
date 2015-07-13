@@ -1079,7 +1079,11 @@ object functions {
    * @since 1.5.0
    */
   @scala.annotation.varargs
-  def greatest(exprs: Column*): Column = Greatest(exprs.map(_.expr): _*)
+  def greatest(exprs: Column*): Column = if (exprs.length < 2) {
+    sys.error("GREATEST takes at least 2 parameters")
+  } else {
+    Greatest(exprs.map(_.expr): _*)
+  }
 
   /**
    * Returns the greatest value of the list of column names.
@@ -1088,8 +1092,11 @@ object functions {
    * @since 1.5.0
    */
   @scala.annotation.varargs
-  def greatest(columnName: String, columnNames: String*): Column =
+  def greatest(columnName: String, columnNames: String*): Column = if (columnNames.isEmpty) {
+    sys.error("GREATEST takes at least 2 parameters")
+  } else {
     greatest((columnName +: columnNames).map(Column.apply): _*)
+  }
 
   /**
     * Computes hex value of the given column.
@@ -1197,7 +1204,11 @@ object functions {
    * @since 1.5.0
    */
   @scala.annotation.varargs
-  def least(exprs: Column*): Column = Least(exprs.map(_.expr): _*)
+  def least(exprs: Column*): Column = if (exprs.length < 2) {
+    sys.error("LEAST takes at least 2 parameters")
+  } else {
+    Least(exprs.map(_.expr): _*)
+  }
 
   /**
    * Returns the least value of the list of column names.
@@ -1206,8 +1217,11 @@ object functions {
    * @since 1.5.0
    */
   @scala.annotation.varargs
-  def least(columnName: String, columnNames: String*): Column =
+  def least(columnName: String, columnNames: String*): Column = if (columnNames.isEmpty) {
+    sys.error("LEAST takes at least 2 parameters")
+  } else {
     least((columnName +: columnNames).map(Column.apply): _*)
+  }
 
   /**
    * Computes the natural logarithm of the given value.
