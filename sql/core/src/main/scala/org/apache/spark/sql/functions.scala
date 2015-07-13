@@ -1082,7 +1082,7 @@ object functions {
   def greatest(exprs: Column*): Column = if (exprs.length < 2) {
     sys.error("GREATEST takes at least 2 parameters")
   } else {
-    Greatest(exprs.map(_.expr): _*)
+    Greatest(exprs.map(_.expr))
   }
 
   /**
@@ -1207,7 +1207,7 @@ object functions {
   def least(exprs: Column*): Column = if (exprs.length < 2) {
     sys.error("LEAST takes at least 2 parameters")
   } else {
-    Least(exprs.map(_.expr): _*)
+    Least(exprs.map(_.expr))
   }
 
   /**
