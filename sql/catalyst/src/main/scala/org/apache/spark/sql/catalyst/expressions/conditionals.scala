@@ -314,7 +314,7 @@ case class CaseKeyWhen(key: Expression, branches: Seq[Expression]) extends CaseW
   }
 }
 
-case class Least(children: Expression*) extends Expression {
+case class Least(children: Seq[Expression]) extends Expression {
   require(children.length > 1, "LEAST requires at least 2 arguments, got " + children.length)
 
   override def nullable: Boolean = children.forall(_.nullable)
@@ -364,7 +364,7 @@ case class Least(children: Expression*) extends Expression {
   }
 }
 
-case class Greatest(children: Expression*) extends Expression {
+case class Greatest(children: Seq[Expression]) extends Expression {
   require(children.length > 1, "GREATEST requires at least 2 arguments, got " + children.length)
 
   override def nullable: Boolean = children.forall(_.nullable)
