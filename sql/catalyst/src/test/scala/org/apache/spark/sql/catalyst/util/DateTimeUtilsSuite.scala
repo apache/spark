@@ -128,6 +128,10 @@ class DateTimeUtilsSuite extends SparkFunSuite {
   test("string to timestamp") {
 
     var c = Calendar.getInstance()
+    c.set(2011, 4, 6, 7, 8, 9)
+    c.set(Calendar.MILLISECOND, 100)
+    assert(DateTimeUtils.stringToTimestamp(UTF8String.fromString("2011-05-06 07:08:09.1000")) ==
+      new Timestamp(c.getTimeInMillis))
     c.set(1969, 11, 31, 16, 0, 0)
     c.set(Calendar.MILLISECOND, 0)
     assert(DateTimeUtils.stringToTimestamp(UTF8String.fromString("1969-12-31 16:00:00")) ==

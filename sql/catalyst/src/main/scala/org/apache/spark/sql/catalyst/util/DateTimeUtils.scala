@@ -277,12 +277,18 @@ object DateTimeUtils {
     }
     segments(i) = currentSegmentValue
 
+    // Hive compatibility 2011-05-06 07:08:09.1000 == 2011-05-06 07:08:09.1
+    if (digitsMilli == 4) {
+      segments(6) = segments(6) / 10
+    }
+
     // 18:3:1.1 is equals to 18:3:1:100
     if (digitsMilli == 1) {
       segments(6) = segments(6) * 100
     } else if (digitsMilli == 2) {
       segments(6) = segments(6) * 10
     }
+
     if (segments(0) < 0 || segments(0) > 9999 || segments(1) < 1 || segments(1) > 12 ||
         segments(2) < 1 || segments(2) > 31 || segments(3) < 0 || segments(3) > 23 ||
         segments(4) < 0 || segments(4) > 59 || segments(5) < 0 || segments(5) > 59 ||
