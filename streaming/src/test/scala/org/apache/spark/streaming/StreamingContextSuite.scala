@@ -21,6 +21,7 @@ import java.io.{File, NotSerializableException}
 import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.mutable.Queue
+import scala.collection.mutable.ArrayBuffer
 
 import org.apache.commons.io.FileUtils
 import org.scalatest.concurrent.Eventually._
@@ -28,17 +29,16 @@ import org.scalatest.concurrent.Timeouts
 import org.scalatest.exceptions.TestFailedDueToTimeoutException
 import org.scalatest.time.SpanSugar._
 import org.scalatest.{Assertions, BeforeAndAfter}
+import org.scalatest.{PrivateMethodTester, Assertions, BeforeAndAfter}
 
+import org.apache.spark.metrics.MetricsSystem
+import org.apache.spark.metrics.source.Source
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.dstream.DStream
 import org.apache.spark.streaming.receiver.Receiver
 import org.apache.spark.util.Utils
 import org.apache.spark.{Logging, SparkConf, SparkContext, SparkFunSuite}
-import org.apache.spark.metrics.MetricsSystem
-import org.apache.spark.metrics.source.Source
-import org.scalatest.{PrivateMethodTester, Assertions, BeforeAndAfter}
-import org.apache.spark.{Logging, SparkConf, SparkContext, SparkFunSuite}
-import scala.collection.mutable.ArrayBuffer
+
 
 class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with Timeouts with Logging {
 
