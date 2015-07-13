@@ -49,14 +49,14 @@ class Aggregate2Suite extends QueryTest with BeforeAndAfterAll {
   test("test average2") {
     ctx.sql(
       """
-        |SELECT key, avg2(value)
+        |SELECT key, avg(value)
         |FROM agg2
         |GROUP BY key
       """.stripMargin).explain(true)
 
     ctx.sql(
       """
-        |SELECT key, avg2(value)
+        |SELECT key, avg(value)
         |FROM agg2
         |GROUP BY key
       """.stripMargin).queryExecution.executedPlan(3).execute().collect().foreach(println)
@@ -64,7 +64,7 @@ class Aggregate2Suite extends QueryTest with BeforeAndAfterAll {
     checkAnswer(
       ctx.sql(
         """
-          |SELECT key, avg2(value)
+          |SELECT key, avg(value)
           |FROM agg2
           |GROUP BY key
         """.stripMargin),

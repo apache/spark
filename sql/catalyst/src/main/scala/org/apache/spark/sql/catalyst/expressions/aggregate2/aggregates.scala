@@ -63,6 +63,9 @@ private[sql] case class AggregateExpression2(
 
   override def eval(input: InternalRow = null): Any =
     throw new TreeNodeException(this, s"No function to evaluate expression. type: ${this.nodeName}")
+
+  def bufferSchema: StructType = aggregateFunction.bufferSchema
+  def bufferAttributes: Seq[Attribute] = aggregateFunction.bufferAttributes
 }
 
 abstract class AggregateFunction2
@@ -77,7 +80,11 @@ abstract class AggregateFunction2
     this
   }
 
-  def bufferValueDataTypes: StructType
+  /** The schema of the aggregation buffer. */
+  def bufferSchema: StructType
+
+  /** Attributes of fields in bufferSchema. */
+  def bufferAttributes: Seq[Attribute]
 
   def initialize(buffer: MutableRow): Unit
 
@@ -94,7 +101,6 @@ abstract class AggregateFunction2
 abstract class AlgebraicAggregate extends AggregateFunction2 with Serializable{
   self: Product =>
 
-  val bufferSchema: Seq[Attribute]
   val initialValues: Seq[Expression]
   val updateExpressions: Seq[Expression]
   val mergeExpressions: Seq[Expression]
@@ -105,23 +111,25 @@ abstract class AlgebraicAggregate extends AggregateFunction2 with Serializable{
 
   def offsetExpressions: Seq[Attribute] = Seq.fill(bufferOffset)(AttributeReference("offset", NullType)())
 
-  lazy val rightBufferSchema = bufferSchema.map(_.newInstance())
+  lazy val rightBufferSchema = bufferAttributes.map(_.newInstance())
   implicit class RichAttribute(a: AttributeReference) {
     def left = a
-    def right = rightBufferSchema(bufferSchema.indexOf(a))
+    def right = rightBufferSchema(bufferAttributes.indexOf(a))
   }
 
-  override def bufferValueDataTypes: StructType = StructType.fromAttributes(bufferSchema)
+  /** An AlgebraicAggregate's bufferSchema is derived from bufferAttributes. */
+  override def bufferSchema: StructType = StructType.fromAttributes(bufferAttributes)
+
   override def initialize(buffer: MutableRow): Unit = {
     var i = 0
-    while (i < bufferSchema.size) {
+    while (i < bufferAttributes.size) {
       buffer(i + bufferOffset) = initialValues(i).eval()
       i += 1
     }
   }
 
   lazy val boundUpdateExpressions = {
-    val updateSchema = inputSchema ++ offsetExpressions ++ bufferSchema
+    val updateSchema = inputSchema ++ offsetExpressions ++ bufferAttributes
     val bound = updateExpressions.map(BindReferences.bindReference(_, updateSchema)).toArray
     println(s"update: ${updateExpressions.mkString(",")}")
     println(s"update: ${bound.mkString(",")}")
@@ -131,21 +139,21 @@ abstract class AlgebraicAggregate extends AggregateFunction2 with Serializable{
   val joinedRow = new JoinedRow
   override def update(buffer: MutableRow, input: InternalRow): Unit = {
     var i = 0
-    while (i < bufferSchema.size) {
+    while (i < bufferAttributes.size) {
       buffer(i + bufferOffset) = boundUpdateExpressions(i).eval(joinedRow(input, buffer))
       i += 1
     }
   }
 
   lazy val boundMergeExpressions = {
-    val mergeSchema = offsetExpressions ++ bufferSchema ++ offsetExpressions ++ rightBufferSchema
+    val mergeSchema = offsetExpressions ++ bufferAttributes ++ offsetExpressions ++ rightBufferSchema
     mergeExpressions.map(BindReferences.bindReference(_, mergeSchema)).toArray
   }
   override def merge(buffer1: MutableRow, buffer2: InternalRow): Unit = {
     var i = 0
     println(s"Merging: $buffer1 $buffer2 with ${boundMergeExpressions.mkString(",")}")
     joinedRow(buffer1, buffer2)
-    while (i < bufferSchema.size) {
+    while (i < bufferAttributes.size) {
       println(s"$i + $bufferOffset: ${boundMergeExpressions(i).eval(joinedRow)}")
       buffer1(i + bufferOffset) = boundMergeExpressions(i).eval(joinedRow)
       i += 1
@@ -153,7 +161,7 @@ abstract class AlgebraicAggregate extends AggregateFunction2 with Serializable{
   }
 
   lazy val boundEvaluateExpression =
-    BindReferences.bindReference(evaluateExpression, offsetExpressions ++ bufferSchema)
+    BindReferences.bindReference(evaluateExpression, offsetExpressions ++ bufferAttributes)
   override def eval(buffer: InternalRow): Any = {
     println(s"eval: $buffer")
     val res = boundEvaluateExpression.eval(buffer)
@@ -170,18 +178,18 @@ case class Average(child: Expression) extends AlgebraicAggregate {
     case _ => DoubleType
   }
 
-  val intermediateType = child.dataType match {
+  val sumDataType = child.dataType match {
     case _ @ DecimalType() => DecimalType.Unlimited
     case _ => DoubleType
   }
 
-  val currentSum = AttributeReference("currentSum", DoubleType)()
+  val currentSum = AttributeReference("currentSum", sumDataType)()
   val currentCount = AttributeReference("currentCount", LongType)()
 
-  val bufferSchema = currentSum :: currentCount :: Nil
+  override val bufferAttributes = currentSum :: currentCount :: Nil
 
   val initialValues = Seq(
-    /* currentSum = */ Cast(Literal(0), intermediateType),
+    /* currentSum = */ Cast(Literal(0), sumDataType),
     /* currentCount = */ Literal(0L)
   )
 
@@ -189,7 +197,7 @@ case class Average(child: Expression) extends AlgebraicAggregate {
     /* currentSum = */
       Add(
         currentSum,
-        Coalesce(Cast(child, intermediateType) :: Cast(Literal(0), intermediateType) :: Nil)),
+        Coalesce(Cast(child, sumDataType) :: Cast(Literal(0), sumDataType) :: Nil)),
     /* currentCount = */ If(IsNull(child), currentCount, currentCount + 1L)
   )
 

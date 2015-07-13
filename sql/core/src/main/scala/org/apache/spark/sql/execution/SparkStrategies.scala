@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.{BroadcastHint, LogicalPlan}
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.columnar.{InMemoryColumnarTableScan, InMemoryRelation}
+import org.apache.spark.sql.execution.aggregate2.Aggregate2Sort
 import org.apache.spark.sql.execution.{DescribeCommand => RunnableDescribeCommand}
 import org.apache.spark.sql.parquet._
 import org.apache.spark.sql.sources.{CreateTableUsing, CreateTempTableUsing, DescribeCommand => LogicalDescribeCommand, _}
@@ -186,67 +187,71 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       exprs.flatMap(_.collect { case a: AggregateExpression => a })
   }
 
+  /**
+   * Used to plan the aggregate operator for expressions based on the AggregateFunction2 interface.
+   */
   object AggregateOperator2 extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case logical.Aggregate(groupingExpressions, resultExpressions, child)
         if sqlContext.conf.useSqlAggregate2 =>
-        // 1. Extracts all aggregate expressions.
+        // 1. Extracts all distinct aggregate expressions from the resultExpressions.
         val aggregateExpressions = resultExpressions.flatMap { expr =>
           expr.collect {
             case agg: AggregateExpression2 => agg
           }
         }.toSet.toSeq
-        val aggregateExpressionMap = aggregateExpressions.zipWithIndex.map {
-          case (agg, index) =>
-            agg.aggregateFunction -> Alias(agg, s"_agg$index")().toAttribute
+        // For those distinct aggregate expressions, we create a map from the aggregate function
+        // to the corresponding attribute of the function.
+        val aggregateFunctionMap = aggregateExpressions.map { agg =>
+          val aggregateFunction = agg.aggregateFunction
+          aggregateFunction -> Alias(aggregateFunction, aggregateFunction.toString)().toAttribute
         }.toMap
 
-        // 2. Create Pre-shuffle Aggregate Operator
-        val namedGroupingExpressions = groupingExpressions.zipWithIndex.map {
-          case (ne: NamedExpression, index) => ne
-          case (other, index) => Alias(other, s"_groupingExpr$index")()
+        // 2. Create an Aggregate Operator for partial aggregations.
+        val namedGroupingExpressions = groupingExpressions.map {
+          case ne: NamedExpression => ne
+          // If the expression is not a NamedExpressions, we add an alias.
+          // So, when we generate the result of the operator, the Aggregate Operator
+          // can directly get the Seq of attributes representing the grouping expressions.
+          case other => Alias(other, other.toString)()
         }
         val namedGroupingAttributes = namedGroupingExpressions.map(_.toAttribute)
-        val preShuffleAggregateExpressions = aggregateExpressions.map {
+        val partialAggregateExpressions = aggregateExpressions.map {
           case AggregateExpression2(aggregateFunction, mode, isDistinct) =>
             AggregateExpression2(aggregateFunction, Partial, isDistinct)
         }
-        val preShuffleAggregateAttributes = preShuffleAggregateExpressions.zipWithIndex.flatMap {
-          case (AggregateExpression2(aggregateFunction, Partial, isDistinct), index) =>
-            aggregateFunction.bufferValueDataTypes.map {
-              case StructField(name, dataType, nullable, metadata) =>
-                AttributeReference(s"_partialAgg${index}_${name}", dataType, nullable, metadata)()
-            }
+        val partialAggregateAttributes = partialAggregateExpressions.flatMap { agg =>
+          agg.bufferAttributes
         }
         val partialAggregate =
           Aggregate2Sort(
             true,
             namedGroupingExpressions,
-            preShuffleAggregateExpressions,
-            preShuffleAggregateAttributes,
-            namedGroupingAttributes ++ preShuffleAggregateAttributes,
+            partialAggregateExpressions,
+            partialAggregateAttributes,
+            namedGroupingAttributes ++ partialAggregateAttributes,
             planLater(child))
 
-        // 3. Create post-shuffle Aggregate Operator.
-        val postShuffleAggregateExpressions = aggregateExpressions.map {
+        // 3. Create an Aggregate Operator for final aggregations.
+        val finalAggregateExpressions = aggregateExpressions.map {
           case AggregateExpression2(aggregateFunction, mode, isDistinct) =>
             AggregateExpression2(aggregateFunction, Final, isDistinct)
         }
-        val postShuffleAggregateAttributes =
-          postShuffleAggregateExpressions.map {
-            expr => aggregateExpressionMap(expr.aggregateFunction)
+        val finalAggregateAttributes =
+          finalAggregateExpressions.map {
+            expr => aggregateFunctionMap(expr.aggregateFunction)
           }
         val rewrittenResultExpressions = resultExpressions.map { expr =>
           expr.transform {
             case agg: AggregateExpression2 =>
-              aggregateExpressionMap(agg.aggregateFunction).toAttribute
+              aggregateFunctionMap(agg.aggregateFunction).toAttribute
           }.asInstanceOf[NamedExpression]
         }
         val finalAggregate = Aggregate2Sort(
           false,
           namedGroupingAttributes,
-          postShuffleAggregateExpressions,
-          postShuffleAggregateAttributes,
+          finalAggregateExpressions,
+          finalAggregateAttributes,
           rewrittenResultExpressions,
           partialAggregate)
 
