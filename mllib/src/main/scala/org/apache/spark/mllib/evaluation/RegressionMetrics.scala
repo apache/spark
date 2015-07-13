@@ -59,7 +59,7 @@ class RegressionMetrics(predictionAndObservations: RDD[(Double, Double)]) extend
     val yMean = summary.mean(0)
     predictionAndObservations.map {
       case (prediction, _) => math.pow(prediction - yMean, 2)
-    }.reduce(_+_)
+    }.reduce(_ + _)
   }
 
   /**
