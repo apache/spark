@@ -70,12 +70,12 @@ private[spark] object StageInfo {
    * shuffle dependencies. Therefore, all ancestor RDDs related to this Stage's RDD through a
    * sequence of narrow dependencies should also be associated with this Stage.
    */
-  def fromStage(stage: Stage, numTasks: Option[Int] = None): StageInfo = {
+  def fromStage(stage: Stage, attemptId: Int, numTasks: Option[Int] = None): StageInfo = {
     val ancestorRddInfos = stage.rdd.getNarrowAncestors.map(RDDInfo.fromRdd)
     val rddInfos = Seq(RDDInfo.fromRdd(stage.rdd)) ++ ancestorRddInfos
     new StageInfo(
       stage.id,
-      stage.attemptId,
+      attemptId,
       stage.name,
       numTasks.getOrElse(stage.numTasks),
       rddInfos,
