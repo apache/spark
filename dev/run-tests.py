@@ -26,9 +26,10 @@ import sys
 import subprocess
 from collections import namedtuple
 
-from sparktestsupport import SPARK_HOME, USER_HOME
+from sparktestsupport import SPARK_HOME, USER_HOME, ERROR_CODES
 from sparktestsupport.shellutils import exit_from_command_with_retcode, run_cmd, rm_r, which
 import sparktestsupport.modules as modules
+
 
 # -------------------------------------------------------------------------------------------------
 # Functions for traversing module dependency graph
@@ -113,19 +114,6 @@ def determine_modules_to_test(changed_modules):
 # -------------------------------------------------------------------------------------------------
 # Functions for working with subprocesses and shell tools
 # -------------------------------------------------------------------------------------------------
-
-def get_error_codes(err_code_file):
-    """Function to retrieve all block numbers from the `run-tests-codes.sh`
-    file to maintain backwards compatibility with the `run-tests-jenkins`
-    script"""
-
-    with open(err_code_file, 'r') as f:
-        err_codes = [e.split()[1].strip().split('=')
-                     for e in f if e.startswith("readonly")]
-        return dict(err_codes)
-
-
-ERROR_CODES = get_error_codes(os.path.join(SPARK_HOME, "dev/run-tests-codes.sh"))
 
 
 def determine_java_executable():
