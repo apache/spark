@@ -40,36 +40,32 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll with SQLTestUtils {
   import sqlContext.implicits._
   import sqlContext.sql
 
-  case class TestData(key: Int, value: String)
   val testData = {
-    val df = (1 to 100).map(i => TestData(i, i.toString)).toDF()
+    val df = (1 to 100).map(i => (i, i.toString)).toDF("key", "value")
     df.registerTempTable("testData")
     df
   }
 
-  case class TestData2(a: Int, b: Int)
   val testData2 = {
     val df = (for { a <- 1 to 3; b <- 1 to 2 } yield (a, b))
-      .map(t => TestData2(t._1, t._2))
-      .toDF()
+      .map(t => (t._1, t._2))
+      .toDF("a", "b")
     df.registerTempTable("testData2")
     df
   }
 
-  case class UpperCaseData(N: Int, L: String)
   val upperCaseData = {
     val df = ((1 to 6) zip ('A' to 'F'))
-      .map(t => UpperCaseData(t._1, t._2.toString))
-      .toDF()
+      .map(t => (t._1, t._2.toString))
+      .toDF("N", "L")
     df.registerTempTable("upperCaseData")
     df
   }
 
-  case class LowerCaseData(n: Int, l: String)
   val lowerCaseData = {
     val df = ((1 to 4) zip ('a' to 'd'))
-      .map(t => LowerCaseData(t._1, t._2.toString))
-      .toDF()
+      .map(t => (t._1, t._2.toString))
+      .toDF("n", "l")
     df.registerTempTable("lowerCaseData")
     df
   }
@@ -589,19 +585,19 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll with SQLTestUtils {
       Row("1"))
   }
 
-  case class BinaryData(a: Array[Byte], b: Int)
-  val binaryData = {
-    val df = Seq(
-      BinaryData("12".getBytes, 1),
-      BinaryData("22".getBytes, 5),
-      BinaryData("122".getBytes, 3),
-      BinaryData("121".getBytes, 2),
-      BinaryData("123".getBytes, 4)).toDF()
-    df.registerTempTable("binaryData")
-    df
-  }
-
   def sortTest(): Unit = {
+
+    val binaryData = {
+      val df = Seq(
+        ("12".getBytes, 1),
+        ("22".getBytes, 5),
+        ("122".getBytes, 3),
+        ("121".getBytes, 2),
+        ("123".getBytes, 4)).toDF("a", "b")
+      df.registerTempTable("binaryData")
+      df
+    }
+
     checkAnswer(
       sql("SELECT * FROM testData2 ORDER BY a ASC, b ASC"),
       Seq(Row(1, 1), Row(1, 2), Row(2, 1), Row(2, 2), Row(3, 1), Row(3, 2)))
@@ -741,11 +737,10 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll with SQLTestUtils {
       Row(2.0))
   }
 
-  case class LargeAndSmallInts(a: Int, b: Int)
   test("average overflow") {
     Seq((2147483644, 1), (1, 2), (2147483645, 1), (2, 2), (2147483646, 1), (3, 2))
-      .map(t => LargeAndSmallInts(t._1, t._2))
-      .toDF()
+      .map(t => (t._1, t._2))
+      .toDF("a", "b")
       .registerTempTable("largeAndSmallInts")
     checkAnswer(
       sql("SELECT AVG(a),b FROM largeAndSmallInts group by b"),
@@ -776,9 +771,8 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll with SQLTestUtils {
       Row(3))
   }
 
-  case class TestData3(a: Int, b: Option[Int])
   val testData3 = {
-    val df = Seq(TestData3(1, None), TestData3(2, Some(2))).toDF()
+    val df = Seq((1, None), (2, Some(2))).toDF("a", "b")
     df.registerTempTable("testData3")
     df
   }
@@ -1231,15 +1225,13 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll with SQLTestUtils {
       Row("true", "false"))
   }
 
-  case class Person(id: Int, name: String, age: Int)
-  case class Salary(personId: Int, salary: Double)
   val person = {
-    val df = Seq(Person(0, "mike", 30), Person(1, "jim", 20)).toDF()
+    val df = Seq((0, "mike", 30), (1, "jim", 20)).toDF("id", "name", "age")
     df.registerTempTable("person")
     df
   }
   val salary = {
-    val df = Seq(Salary(0, 2000.0), Salary(1, 1000.0)).toDF()
+    val df = Seq((0, 2000.0), (1, 1000.0)).toDF("personId", "salary")
     df.registerTempTable("salary")
     df
   }
@@ -1518,29 +1510,29 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll with SQLTestUtils {
   }
 
   test("Supporting relational operator '<=>' in Spark SQL") {
-    val nullCheckData1 = TestData(1, "1") :: TestData(2, null) :: Nil
+    val nullCheckData1 = (1, "1") :: (2, null) :: Nil
     val rdd1 = sqlContext.sparkContext.parallelize((0 to 1).map(i => nullCheckData1(i)))
-    rdd1.toDF().registerTempTable("nulldata1")
-    val nullCheckData2 = TestData(1, "1") :: TestData(2, null) :: Nil
+    rdd1.toDF("key", "value").registerTempTable("nulldata1")
+    val nullCheckData2 = (1, "1") :: (2, null) :: Nil
     val rdd2 = sqlContext.sparkContext.parallelize((0 to 1).map(i => nullCheckData2(i)))
-    rdd2.toDF().registerTempTable("nulldata2")
+    rdd2.toDF("key", "value").registerTempTable("nulldata2")
     checkAnswer(sql("SELECT nulldata1.key FROM nulldata1 join " +
       "nulldata2 on nulldata1.value <=> nulldata2.value"),
         (1 to 2).map(i => Row(i)))
   }
 
   test("Multi-column COUNT(DISTINCT ...)") {
-    val data = TestData(1, "val_1") :: TestData(2, "val_2") :: Nil
+    val data = (1, "val_1") :: (2, "val_2") :: Nil
     val rdd = sqlContext.sparkContext.parallelize((0 to 1).map(i => data(i)))
-    rdd.toDF().registerTempTable("distinctData")
+    rdd.toDF("key", "value").registerTempTable("distinctData")
     checkAnswer(sql("SELECT COUNT(DISTINCT key,value) FROM distinctData"), Row(2))
   }
 
+  case class TestData(key: Int, value: String)
   test("SPARK-4699 case sensitivity SQL query") {
     sqlContext.setConf(SQLConf.CASE_SENSITIVE, false)
-    val data = TestData(1, "val_1") :: TestData(2, "val_2") :: Nil
-    val rdd = sqlContext.sparkContext.parallelize((0 to 1).map(i => data(i)))
-    rdd.toDF().registerTempTable("testTable1")
+    val df = Seq(TestData(1, "val_1"), TestData(2, "val_2")).toDF()
+    df.registerTempTable("testTable1")
     checkAnswer(sql("SELECT VALUE FROM TESTTABLE1 where KEY = 1"), Row("val_1"))
     sqlContext.setConf(SQLConf.CASE_SENSITIVE, true)
   }
