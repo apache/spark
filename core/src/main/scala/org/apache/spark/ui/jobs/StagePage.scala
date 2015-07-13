@@ -17,6 +17,7 @@
 
 package org.apache.spark.ui.jobs
 
+import java.net.URLEncoder
 import java.util.Date
 import javax.servlet.http.HttpServletRequest
 
@@ -27,13 +28,14 @@ import org.apache.commons.lang3.StringEscapeUtils
 
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.scheduler.{AccumulableInfo, TaskInfo}
-import org.apache.spark.ui.{ToolTips, WebUIPage, UIUtils}
+import org.apache.spark.ui._
 import org.apache.spark.ui.jobs.UIData._
-import org.apache.spark.ui.scope.RDDOperationGraph
 import org.apache.spark.util.{Utils, Distribution}
 
 /** Page showing statistics and task list for a given stage */
 private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
+  import StagePage._
+
   private val progressListener = parent.progressListener
   private val operationGraphListener = parent.operationGraphListener
 
@@ -73,6 +75,14 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
 
       val parameterAttempt = request.getParameter("attempt")
       require(parameterAttempt != null && parameterAttempt.nonEmpty, "Missing attempt parameter")
+
+      val parameterTaskPage = request.getParameter("task.page")
+      val parameterTaskSortColumn = request.getParameter("task.sort")
+      val parameterTaskSortDesc = request.getParameter("task.desc")
+
+      val taskPage = Option(parameterTaskPage).map(_.toInt).getOrElse(1)
+      val taskSortColumn = Option(parameterTaskSortColumn).getOrElse("Index")
+      val taskSortDesc = Option(parameterTaskSortDesc).map(_.toBoolean).getOrElse(false)
 
       // If this is set, expand the dag visualization by default
       val expandDagVizParam = request.getParameter("expandDagViz")
@@ -231,52 +241,25 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
         accumulableRow,
         accumulables.values.toSeq)
 
-      val taskHeadersAndCssClasses: Seq[(String, String)] =
-        Seq(
-          ("Index", ""), ("ID", ""), ("Attempt", ""), ("Status", ""), ("Locality Level", ""),
-          ("Executor ID / Host", ""), ("Launch Time", ""), ("Duration", ""),
-          ("Scheduler Delay", TaskDetailsClassNames.SCHEDULER_DELAY),
-          ("Task Deserialization Time", TaskDetailsClassNames.TASK_DESERIALIZATION_TIME),
-          ("GC Time", ""),
-          ("Result Serialization Time", TaskDetailsClassNames.RESULT_SERIALIZATION_TIME),
-          ("Getting Result Time", TaskDetailsClassNames.GETTING_RESULT_TIME)) ++
-        {if (hasAccumulators) Seq(("Accumulators", "")) else Nil} ++
-        {if (stageData.hasInput) Seq(("Input Size / Records", "")) else Nil} ++
-        {if (stageData.hasOutput) Seq(("Output Size / Records", "")) else Nil} ++
-        {if (stageData.hasShuffleRead) {
-          Seq(("Shuffle Read Blocked Time", TaskDetailsClassNames.SHUFFLE_READ_BLOCKED_TIME),
-            ("Shuffle Read Size / Records", ""),
-            ("Shuffle Remote Reads", TaskDetailsClassNames.SHUFFLE_READ_REMOTE_SIZE))
-        } else {
-          Nil
-        }} ++
-        {if (stageData.hasShuffleWrite) {
-          Seq(("Write Time", ""), ("Shuffle Write Size / Records", ""))
-        } else {
-          Nil
-        }} ++
-        {if (stageData.hasBytesSpilled) {
-          Seq(("Shuffle Spill (Memory)", ""), ("Shuffle Spill (Disk)", ""))
-        } else {
-          Nil
-        }} ++
-        Seq(("Errors", ""))
-
-      val unzipped = taskHeadersAndCssClasses.unzip
-
       val currentTime = System.currentTimeMillis()
-      val taskTable = UIUtils.listingTable(
-        unzipped._1,
-        taskRow(
-          hasAccumulators,
-          stageData.hasInput,
-          stageData.hasOutput,
-          stageData.hasShuffleRead,
-          stageData.hasShuffleWrite,
-          stageData.hasBytesSpilled,
-          currentTime),
+      val taskTable = new TaskPagedTable(
+        UIUtils.prependBaseUri(parent.basePath) +
+          s"/stages/stage?id=${stageId}&attempt=${stageAttemptId}",
         tasks,
-        headerClasses = unzipped._2)
+        hasAccumulators,
+        stageData.hasInput,
+        stageData.hasOutput,
+        stageData.hasShuffleRead,
+        stageData.hasShuffleWrite,
+        stageData.hasBytesSpilled,
+        currentTime,
+        page = taskPage,
+        pageSize = 100, // Show 100 tasks at most in the table
+        sortColumn = taskSortColumn,
+        desc = taskSortDesc
+      )
+
+      val taskIdsInPage = taskTable.dataSource.pageData.data.map(_.taskId).toSet
       // Excludes tasks which failed and have incomplete metrics
       val validTasks = tasks.filter(t => t.taskInfo.status == "SUCCESS" && t.taskMetrics.isDefined)
 
@@ -499,12 +482,14 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
         dagViz ++
         maybeExpandDagViz ++
         showAdditionalMetrics ++
-        makeTimeline(stageData.taskData.values.toSeq, currentTime) ++
+        makeTimeline(
+          stageData.taskData.values.toSeq.filter(t => taskIdsInPage.contains(t.taskInfo.taskId)),
+          currentTime) ++
         <h4>Summary Metrics for {numCompleted} Completed Tasks</h4> ++
         <div>{summaryTable.getOrElse("No tasks have reported metrics yet.")}</div> ++
         <h4>Aggregated Metrics by Executor</h4> ++ executorTable.toNodeSeq ++
         maybeAccumulableTable ++
-        <h4>Tasks</h4> ++ taskTable
+        <h4>Tasks</h4> ++ taskTable.table
       UIUtils.headerSparkPage(stageHeader, content, parent, showVisualization = true)
     }
   }
@@ -672,162 +657,599 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
     </script>
   }
 
-  def taskRow(
-      hasAccumulators: Boolean,
-      hasInput: Boolean,
-      hasOutput: Boolean,
-      hasShuffleRead: Boolean,
-      hasShuffleWrite: Boolean,
-      hasBytesSpilled: Boolean,
-      currentTime: Long)(taskData: TaskUIData): Seq[Node] = {
-    taskData match { case TaskUIData(info, metrics, errorMessage) =>
-      val duration = if (info.status == "RUNNING") info.timeRunning(currentTime)
-        else metrics.map(_.executorRunTime).getOrElse(1L)
-      val formatDuration = if (info.status == "RUNNING") UIUtils.formatDuration(duration)
-        else metrics.map(m => UIUtils.formatDuration(m.executorRunTime)).getOrElse("")
-      val schedulerDelay = metrics.map(getSchedulerDelay(info, _)).getOrElse(0L)
-      val gcTime = metrics.map(_.jvmGCTime).getOrElse(0L)
-      val taskDeserializationTime = metrics.map(_.executorDeserializeTime).getOrElse(0L)
-      val serializationTime = metrics.map(_.resultSerializationTime).getOrElse(0L)
-      val gettingResultTime = getGettingResultTime(info)
+}
 
-      val maybeAccumulators = info.accumulables
-      val accumulatorsReadable = maybeAccumulators.map{acc => s"${acc.name}: ${acc.update.get}"}
-
-      val maybeInput = metrics.flatMap(_.inputMetrics)
-      val inputSortable = maybeInput.map(_.bytesRead.toString).getOrElse("")
-      val inputReadable = maybeInput
-        .map(m => s"${Utils.bytesToString(m.bytesRead)} (${m.readMethod.toString.toLowerCase()})")
-        .getOrElse("")
-      val inputRecords = maybeInput.map(_.recordsRead.toString).getOrElse("")
-
-      val maybeOutput = metrics.flatMap(_.outputMetrics)
-      val outputSortable = maybeOutput.map(_.bytesWritten.toString).getOrElse("")
-      val outputReadable = maybeOutput
-        .map(m => s"${Utils.bytesToString(m.bytesWritten)}")
-        .getOrElse("")
-      val outputRecords = maybeOutput.map(_.recordsWritten.toString).getOrElse("")
-
-      val maybeShuffleRead = metrics.flatMap(_.shuffleReadMetrics)
-      val shuffleReadBlockedTimeSortable = maybeShuffleRead
-        .map(_.fetchWaitTime.toString).getOrElse("")
-      val shuffleReadBlockedTimeReadable =
-        maybeShuffleRead.map(ms => UIUtils.formatDuration(ms.fetchWaitTime)).getOrElse("")
-
-      val totalShuffleBytes = maybeShuffleRead.map(_.totalBytesRead)
-      val shuffleReadSortable = totalShuffleBytes.map(_.toString).getOrElse("")
-      val shuffleReadReadable = totalShuffleBytes.map(Utils.bytesToString).getOrElse("")
-      val shuffleReadRecords = maybeShuffleRead.map(_.recordsRead.toString).getOrElse("")
-
-      val remoteShuffleBytes = maybeShuffleRead.map(_.remoteBytesRead)
-      val shuffleReadRemoteSortable = remoteShuffleBytes.map(_.toString).getOrElse("")
-      val shuffleReadRemoteReadable = remoteShuffleBytes.map(Utils.bytesToString).getOrElse("")
-
-      val maybeShuffleWrite = metrics.flatMap(_.shuffleWriteMetrics)
-      val shuffleWriteSortable = maybeShuffleWrite.map(_.shuffleBytesWritten.toString).getOrElse("")
-      val shuffleWriteReadable = maybeShuffleWrite
-        .map(m => s"${Utils.bytesToString(m.shuffleBytesWritten)}").getOrElse("")
-      val shuffleWriteRecords = maybeShuffleWrite
-        .map(_.shuffleRecordsWritten.toString).getOrElse("")
-
-      val maybeWriteTime = metrics.flatMap(_.shuffleWriteMetrics).map(_.shuffleWriteTime)
-      val writeTimeSortable = maybeWriteTime.map(_.toString).getOrElse("")
-      val writeTimeReadable = maybeWriteTime.map(t => t / (1000 * 1000)).map { ms =>
-        if (ms == 0) "" else UIUtils.formatDuration(ms)
-      }.getOrElse("")
-
-      val maybeMemoryBytesSpilled = metrics.map(_.memoryBytesSpilled)
-      val memoryBytesSpilledSortable = maybeMemoryBytesSpilled.map(_.toString).getOrElse("")
-      val memoryBytesSpilledReadable =
-        maybeMemoryBytesSpilled.map(Utils.bytesToString).getOrElse("")
-
-      val maybeDiskBytesSpilled = metrics.map(_.diskBytesSpilled)
-      val diskBytesSpilledSortable = maybeDiskBytesSpilled.map(_.toString).getOrElse("")
-      val diskBytesSpilledReadable = maybeDiskBytesSpilled.map(Utils.bytesToString).getOrElse("")
-
-      <tr>
-        <td>{info.index}</td>
-        <td>{info.taskId}</td>
-        <td sorttable_customkey={info.attempt.toString}>{
-          if (info.speculative) s"${info.attempt} (speculative)" else info.attempt.toString
-        }</td>
-        <td>{info.status}</td>
-        <td>{info.taskLocality}</td>
-        <td>{info.executorId} / {info.host}</td>
-        <td>{UIUtils.formatDate(new Date(info.launchTime))}</td>
-        <td sorttable_customkey={duration.toString}>
-          {formatDuration}
-        </td>
-        <td sorttable_customkey={schedulerDelay.toString}
-            class={TaskDetailsClassNames.SCHEDULER_DELAY}>
-          {UIUtils.formatDuration(schedulerDelay.toLong)}
-        </td>
-        <td sorttable_customkey={taskDeserializationTime.toString}
-            class={TaskDetailsClassNames.TASK_DESERIALIZATION_TIME}>
-          {UIUtils.formatDuration(taskDeserializationTime.toLong)}
-        </td>
-        <td sorttable_customkey={gcTime.toString}>
-          {if (gcTime > 0) UIUtils.formatDuration(gcTime) else ""}
-        </td>
-        <td sorttable_customkey={serializationTime.toString}
-            class={TaskDetailsClassNames.RESULT_SERIALIZATION_TIME}>
-          {UIUtils.formatDuration(serializationTime)}
-        </td>
-        <td sorttable_customkey={gettingResultTime.toString}
-            class={TaskDetailsClassNames.GETTING_RESULT_TIME}>
-          {UIUtils.formatDuration(gettingResultTime)}
-        </td>
-        {if (hasAccumulators) {
-          <td>
-            {Unparsed(accumulatorsReadable.mkString("<br/>"))}
-          </td>
-        }}
-        {if (hasInput) {
-          <td sorttable_customkey={inputSortable}>
-            {s"$inputReadable / $inputRecords"}
-          </td>
-        }}
-        {if (hasOutput) {
-          <td sorttable_customkey={outputSortable}>
-            {s"$outputReadable / $outputRecords"}
-          </td>
-        }}
-        {if (hasShuffleRead) {
-           <td sorttable_customkey={shuffleReadBlockedTimeSortable}
-             class={TaskDetailsClassNames.SHUFFLE_READ_BLOCKED_TIME}>
-             {shuffleReadBlockedTimeReadable}
-           </td>
-           <td sorttable_customkey={shuffleReadSortable}>
-             {s"$shuffleReadReadable / $shuffleReadRecords"}
-           </td>
-           <td sorttable_customkey={shuffleReadRemoteSortable}
-               class={TaskDetailsClassNames.SHUFFLE_READ_REMOTE_SIZE}>
-             {shuffleReadRemoteReadable}
-           </td>
-        }}
-        {if (hasShuffleWrite) {
-           <td sorttable_customkey={writeTimeSortable}>
-             {writeTimeReadable}
-           </td>
-           <td sorttable_customkey={shuffleWriteSortable}>
-             {s"$shuffleWriteReadable / $shuffleWriteRecords"}
-           </td>
-        }}
-        {if (hasBytesSpilled) {
-          <td sorttable_customkey={memoryBytesSpilledSortable}>
-            {memoryBytesSpilledReadable}
-          </td>
-          <td sorttable_customkey={diskBytesSpilledSortable}>
-            {diskBytesSpilledReadable}
-          </td>
-        }}
-        {errorMessageCell(errorMessage)}
-      </tr>
+private[ui] object StagePage {
+  private[ui] def getGettingResultTime(info: TaskInfo): Long = {
+    if (info.gettingResultTime > 0) {
+      if (info.finishTime > 0) {
+        info.finishTime - info.gettingResultTime
+      } else {
+        // The task is still fetching the result.
+        System.currentTimeMillis - info.gettingResultTime
+      }
+    } else {
+      0L
     }
   }
 
-  private def errorMessageCell(errorMessage: Option[String]): Seq[Node] = {
-    val error = errorMessage.getOrElse("")
+  private[ui] def getSchedulerDelay(info: TaskInfo, metrics: TaskMetrics): Long = {
+    val totalExecutionTime =
+      if (info.gettingResult) {
+        info.gettingResultTime - info.launchTime
+      } else if (info.finished) {
+        info.finishTime - info.launchTime
+      } else {
+        0
+      }
+    val executorOverhead = (metrics.executorDeserializeTime +
+      metrics.resultSerializationTime)
+    math.max(
+      0,
+      totalExecutionTime - metrics.executorRunTime - executorOverhead - getGettingResultTime(info))
+  }
+}
+
+private[ui] case class TaskTableRowInputData(inputSortable: String, inputReadable: String)
+
+private[ui] case class TaskTableRowOutputData(outputSortable: String, outputReadable: String)
+
+private[ui] case class TaskTableRowShuffleReadData(
+    shuffleReadBlockedTimeSortable: String,
+    shuffleReadBlockedTimeReadable: String,
+    shuffleReadSortable: String,
+    shuffleReadReadable: String,
+    shuffleReadRemoteSortable: String,
+    shuffleReadRemoteReadable: String)
+
+private[ui] case class TaskTableRowShuffleWriteData(
+    writeTimeSortable: String,
+    writeTimeReadable: String,
+    shuffleWriteSortable: String,
+    shuffleWriteReadable: String)
+
+private[ui] case class TaskTableRowBytesSpilledData(
+    memoryBytesSpilledSortable: String,
+    memoryBytesSpilledReadable: String,
+    diskBytesSpilledSortable: String,
+    diskBytesSpilledReadable: String)
+
+private[ui] case class TaskTableRowData(
+    index: Int,
+    taskId: Long,
+    attempt: Int,
+    speculative: Boolean,
+    status: String,
+    taskLocality: String,
+    executorIdAndHost: String,
+    launchTime: Long,
+    duration: Long,
+    formatDuration: String,
+    schedulerDelay: Long,
+    taskDeserializationTime: Long,
+    gcTime: Long,
+    serializationTime: Long,
+    gettingResultTime: Long,
+    accumulators: Option[String], // HTML
+    input: Option[TaskTableRowInputData],
+    output: Option[TaskTableRowOutputData],
+    shuffleRead: Option[TaskTableRowShuffleReadData],
+    shuffleWrite: Option[TaskTableRowShuffleWriteData],
+    bytesSpilled: Option[TaskTableRowBytesSpilledData],
+    error: String)
+
+private[ui] class TaskDataSource(
+    tasks: Seq[TaskUIData],
+    hasAccumulators: Boolean,
+    hasInput: Boolean,
+    hasOutput: Boolean,
+    hasShuffleRead: Boolean,
+    hasShuffleWrite: Boolean,
+    hasBytesSpilled: Boolean,
+    currentTime: Long,
+    page: Int,
+    pageSize: Int,
+    sortColumn: String,
+    desc: Boolean) extends PagedDataSource[TaskTableRowData](page: Int, pageSize: Int) {
+  import StagePage._
+
+  // Convert TaskUIData to TaskTableRowData which contains the final contents to show in the table
+  // so that we can avoid creating duplicate contents during sorting the data
+  override val data = tasks.map(taskRow).sorted(ordering(sortColumn, desc))
+
+  private def taskRow(taskData: TaskUIData): TaskTableRowData = {
+    val TaskUIData(info, metrics, errorMessage) = taskData
+    val duration = if (info.status == "RUNNING") info.timeRunning(currentTime)
+    else metrics.map(_.executorRunTime).getOrElse(1L)
+    val formatDuration = if (info.status == "RUNNING") UIUtils.formatDuration(duration)
+    else metrics.map(m => UIUtils.formatDuration(m.executorRunTime)).getOrElse("")
+    val schedulerDelay = metrics.map(getSchedulerDelay(info, _)).getOrElse(0L)
+    val gcTime = metrics.map(_.jvmGCTime).getOrElse(0L)
+    val taskDeserializationTime = metrics.map(_.executorDeserializeTime).getOrElse(0L)
+    val serializationTime = metrics.map(_.resultSerializationTime).getOrElse(0L)
+    val gettingResultTime = getGettingResultTime(info)
+
+    val maybeAccumulators = info.accumulables
+    val accumulatorsReadable = maybeAccumulators.map{acc =>
+      StringEscapeUtils.escapeHtml4(s"${acc.name}: ${acc.update.get}")}
+
+    val maybeInput = metrics.flatMap(_.inputMetrics)
+    val inputSortable = maybeInput.map(_.bytesRead.toString).getOrElse("")
+    val inputReadable = maybeInput
+      .map(m => s"${Utils.bytesToString(m.bytesRead)} (${m.readMethod.toString.toLowerCase()})")
+      .getOrElse("")
+    val inputRecords = maybeInput.map(_.recordsRead.toString).getOrElse("")
+
+    val maybeOutput = metrics.flatMap(_.outputMetrics)
+    val outputSortable = maybeOutput.map(_.bytesWritten.toString).getOrElse("")
+    val outputReadable = maybeOutput
+      .map(m => s"${Utils.bytesToString(m.bytesWritten)}")
+      .getOrElse("")
+    val outputRecords = maybeOutput.map(_.recordsWritten.toString).getOrElse("")
+
+    val maybeShuffleRead = metrics.flatMap(_.shuffleReadMetrics)
+    val shuffleReadBlockedTimeSortable = maybeShuffleRead
+      .map(_.fetchWaitTime.toString).getOrElse("")
+    val shuffleReadBlockedTimeReadable =
+      maybeShuffleRead.map(ms => UIUtils.formatDuration(ms.fetchWaitTime)).getOrElse("")
+
+    val totalShuffleBytes = maybeShuffleRead.map(_.totalBytesRead)
+    val shuffleReadSortable = totalShuffleBytes.map(_.toString).getOrElse("")
+    val shuffleReadReadable = totalShuffleBytes.map(Utils.bytesToString).getOrElse("")
+    val shuffleReadRecords = maybeShuffleRead.map(_.recordsRead.toString).getOrElse("")
+
+    val remoteShuffleBytes = maybeShuffleRead.map(_.remoteBytesRead)
+    val shuffleReadRemoteSortable = remoteShuffleBytes.map(_.toString).getOrElse("")
+    val shuffleReadRemoteReadable = remoteShuffleBytes.map(Utils.bytesToString).getOrElse("")
+
+    val maybeShuffleWrite = metrics.flatMap(_.shuffleWriteMetrics)
+    val shuffleWriteSortable = maybeShuffleWrite.map(_.shuffleBytesWritten.toString).getOrElse("")
+    val shuffleWriteReadable = maybeShuffleWrite
+      .map(m => s"${Utils.bytesToString(m.shuffleBytesWritten)}").getOrElse("")
+    val shuffleWriteRecords = maybeShuffleWrite
+      .map(_.shuffleRecordsWritten.toString).getOrElse("")
+
+    val maybeWriteTime = metrics.flatMap(_.shuffleWriteMetrics).map(_.shuffleWriteTime)
+    val writeTimeSortable = maybeWriteTime.map(_.toString).getOrElse("")
+    val writeTimeReadable = maybeWriteTime.map(t => t / (1000 * 1000)).map { ms =>
+      if (ms == 0) "" else UIUtils.formatDuration(ms)
+    }.getOrElse("")
+
+    val maybeMemoryBytesSpilled = metrics.map(_.memoryBytesSpilled)
+    val memoryBytesSpilledSortable = maybeMemoryBytesSpilled.map(_.toString).getOrElse("")
+    val memoryBytesSpilledReadable =
+      maybeMemoryBytesSpilled.map(Utils.bytesToString).getOrElse("")
+
+    val maybeDiskBytesSpilled = metrics.map(_.diskBytesSpilled)
+    val diskBytesSpilledSortable = maybeDiskBytesSpilled.map(_.toString).getOrElse("")
+    val diskBytesSpilledReadable = maybeDiskBytesSpilled.map(Utils.bytesToString).getOrElse("")
+
+    val input =
+      if (hasInput) {
+        Some(TaskTableRowInputData(inputSortable, s"$inputReadable / $inputRecords"))
+      } else {
+        None
+      }
+
+    val output =
+      if (hasOutput) {
+        Some(TaskTableRowOutputData(outputSortable, s"$outputReadable / $outputRecords"))
+      } else {
+        None
+      }
+
+    val shuffleRead =
+      if (hasShuffleRead) {
+        Some(TaskTableRowShuffleReadData(
+          shuffleReadBlockedTimeSortable,
+          shuffleReadBlockedTimeReadable,
+          shuffleReadSortable,
+          s"$shuffleReadReadable / $shuffleReadRecords",
+          shuffleReadRemoteSortable,
+          shuffleReadRemoteReadable
+        ))
+      } else {
+        None
+      }
+
+    val shuffleWrite =
+      if (hasShuffleWrite) {
+        Some(TaskTableRowShuffleWriteData(
+          writeTimeSortable,
+          writeTimeReadable,
+          shuffleWriteSortable,
+          s"$shuffleWriteReadable / $shuffleWriteRecords"
+        ))
+      } else {
+        None
+      }
+
+    val bytesSpilled =
+      if (hasBytesSpilled) {
+        Some(TaskTableRowBytesSpilledData(
+          memoryBytesSpilledSortable,
+          memoryBytesSpilledReadable,
+          diskBytesSpilledSortable,
+          diskBytesSpilledReadable
+        ))
+      } else {
+        None
+      }
+
+    TaskTableRowData(
+      info.index,
+      info.taskId,
+      info.attempt,
+      info.speculative,
+      info.status,
+      info.taskLocality.toString,
+      s"${info.executorId} / ${info.host}",
+      info.launchTime,
+      duration,
+      formatDuration,
+      schedulerDelay,
+      taskDeserializationTime,
+      gcTime,
+      serializationTime,
+      gettingResultTime,
+      if (hasAccumulators) Some(accumulatorsReadable.mkString("<br/>")) else None,
+      input,
+      output,
+      shuffleRead,
+      shuffleWrite,
+      bytesSpilled,
+      errorMessage.getOrElse("")
+    )
+  }
+
+  private def ordering(sortColumn: String, desc: Boolean): Ordering[TaskTableRowData] = {
+    val ordering = sortColumn match {
+      case "Index" => new Ordering[TaskTableRowData] {
+        override def compare(x: TaskTableRowData, y: TaskTableRowData): Int =
+          Ordering.Int.compare(x.index, y.index)
+      }
+      case "ID" => new Ordering[TaskTableRowData] {
+        override def compare(x: TaskTableRowData, y: TaskTableRowData): Int =
+          Ordering.Long.compare(x.taskId, y.taskId)
+      }
+      case "Attempt" => new Ordering[TaskTableRowData] {
+        override def compare(x: TaskTableRowData, y: TaskTableRowData): Int =
+          Ordering.Int.compare(x.attempt, y.attempt)
+      }
+      case "Status" => new Ordering[TaskTableRowData] {
+        override def compare(x: TaskTableRowData, y: TaskTableRowData): Int =
+          Ordering.String.compare(x.status, y.status)
+      }
+      case "Locality Level" => new Ordering[TaskTableRowData] {
+        override def compare(x: TaskTableRowData, y: TaskTableRowData): Int =
+          Ordering.String.compare(x.taskLocality, y.taskLocality)
+      }
+      case "Executor ID / Host" => new Ordering[TaskTableRowData] {
+        override def compare(x: TaskTableRowData, y: TaskTableRowData): Int =
+          Ordering.String.compare(x.executorIdAndHost, y.executorIdAndHost)
+      }
+      case "Launch Time" => new Ordering[TaskTableRowData] {
+        override def compare(x: TaskTableRowData, y: TaskTableRowData): Int =
+          Ordering.Long.compare(x.launchTime, y.launchTime)
+      }
+      case "Duration" => new Ordering[TaskTableRowData] {
+        override def compare(x: TaskTableRowData, y: TaskTableRowData): Int =
+          Ordering.Long.compare(x.duration, y.duration)
+      }
+      case "Scheduler Delay" => new Ordering[TaskTableRowData] {
+        override def compare(x: TaskTableRowData, y: TaskTableRowData): Int =
+          Ordering.Long.compare(x.schedulerDelay, y.schedulerDelay)
+      }
+      case "Task Deserialization Time" => new Ordering[TaskTableRowData] {
+        override def compare(x: TaskTableRowData, y: TaskTableRowData): Int =
+          Ordering.Long.compare(x.taskDeserializationTime, y.taskDeserializationTime)
+      }
+      case "GC Time" => new Ordering[TaskTableRowData] {
+        override def compare(x: TaskTableRowData, y: TaskTableRowData): Int =
+          Ordering.Long.compare(x.gcTime, y.gcTime)
+      }
+      case "Result Serialization Time" => new Ordering[TaskTableRowData] {
+        override def compare(x: TaskTableRowData, y: TaskTableRowData): Int =
+          Ordering.Long.compare(x.serializationTime, y.serializationTime)
+      }
+      case "Getting Result Time" => new Ordering[TaskTableRowData] {
+        override def compare(x: TaskTableRowData, y: TaskTableRowData): Int =
+          Ordering.Long.compare(x.gettingResultTime, y.gettingResultTime)
+      }
+      case "Accumulators" =>
+        if (hasAccumulators) {
+          new Ordering[TaskTableRowData] {
+            override def compare(x: TaskTableRowData, y: TaskTableRowData): Int =
+              Ordering.String.compare(x.accumulators.get, y.accumulators.get)
+          }
+        } else {
+          throw new IllegalArgumentException(
+            "Cannot sort by Accumulators because of no accumulators")
+        }
+      case "Input Size / Records" =>
+        if (hasInput) {
+          new Ordering[TaskTableRowData] {
+            override def compare(x: TaskTableRowData, y: TaskTableRowData): Int =
+              Ordering.String.compare(x.input.get.inputSortable, y.input.get.inputSortable)
+          }
+        } else {
+          throw new IllegalArgumentException(
+            "Cannot sort by Input Size / Records because of no inputs")
+        }
+      case "Output Size / Records" =>
+        if (hasOutput) {
+          new Ordering[TaskTableRowData] {
+            override def compare(x: TaskTableRowData, y: TaskTableRowData): Int =
+              Ordering.String.compare(x.output.get.outputSortable, y.output.get.outputSortable)
+          }
+        } else {
+          throw new IllegalArgumentException(
+            "Cannot sort by Input Size / Records because of no outputs")
+        }
+      // ShuffleRead
+      case "Shuffle Read Blocked Time" =>
+        if (hasShuffleRead) {
+          new Ordering[TaskTableRowData] {
+            override def compare(x: TaskTableRowData, y: TaskTableRowData): Int =
+              Ordering.String.compare(x.shuffleRead.get.shuffleReadBlockedTimeSortable,
+                y.shuffleRead.get.shuffleReadBlockedTimeSortable)
+          }
+        } else {
+          throw new IllegalArgumentException(
+            "Cannot sort by Input Size / Records because of no shuffle reads")
+        }
+      case "Shuffle Read Size / Records" =>
+        if (hasShuffleRead) {
+          new Ordering[TaskTableRowData] {
+            override def compare(x: TaskTableRowData, y: TaskTableRowData): Int =
+              Ordering.String.compare(x.shuffleRead.get.shuffleReadSortable,
+                y.shuffleRead.get.shuffleReadSortable)
+          }
+        } else {
+          throw new IllegalArgumentException(
+            "Cannot sort by Shuffle Read Size / Records because of no shuffle reads")
+        }
+      case "Shuffle Remote Reads" =>
+        if (hasShuffleRead) {
+          new Ordering[TaskTableRowData] {
+            override def compare(x: TaskTableRowData, y: TaskTableRowData): Int =
+              Ordering.String.compare(x.shuffleRead.get.shuffleReadRemoteSortable,
+                y.shuffleRead.get.shuffleReadRemoteSortable)
+          }
+        } else {
+          throw new IllegalArgumentException(
+            "Cannot sort by Shuffle Remote Reads because of no shuffle reads")
+        }
+      // ShuffleWrite
+      case "Write Time" =>
+        if (hasShuffleWrite) {
+          new Ordering[TaskTableRowData] {
+            override def compare(x: TaskTableRowData, y: TaskTableRowData): Int =
+              Ordering.String.compare(x.shuffleWrite.get.writeTimeReadable,
+                y.shuffleWrite.get.writeTimeReadable)
+          }
+        } else {
+          throw new IllegalArgumentException(
+            "Cannot sort by Write Time because of no shuffle writes")
+        }
+      case "Shuffle Write Size / Records" =>
+        if (hasShuffleWrite) {
+          new Ordering[TaskTableRowData] {
+            override def compare(x: TaskTableRowData, y: TaskTableRowData): Int =
+              Ordering.String.compare(x.shuffleWrite.get.shuffleWriteSortable,
+                y.shuffleWrite.get.shuffleWriteSortable)
+          }
+        } else {
+          throw new IllegalArgumentException(
+            "Cannot sort by Shuffle Write Size / Records because of no shuffle writes")
+        }
+      // BytesSpilled
+      case "Shuffle Spill (Memory)" =>
+        if (hasBytesSpilled) {
+          new Ordering[TaskTableRowData] {
+            override def compare(x: TaskTableRowData, y: TaskTableRowData): Int =
+              Ordering.String.compare(x.bytesSpilled.get.memoryBytesSpilledSortable,
+                y.bytesSpilled.get.memoryBytesSpilledSortable)
+          }
+        } else {
+          throw new IllegalArgumentException(
+            "Cannot sort by Shuffle Spill (Memory) because of no spills")
+        }
+      case "Shuffle Spill (Disk)" =>
+        if (hasBytesSpilled) {
+          new Ordering[TaskTableRowData] {
+            override def compare(x: TaskTableRowData, y: TaskTableRowData): Int =
+              Ordering.String.compare(x.bytesSpilled.get.diskBytesSpilledSortable,
+                y.bytesSpilled.get.diskBytesSpilledSortable)
+          }
+        } else {
+          throw new IllegalArgumentException(
+            "Cannot sort by Shuffle Spill (Disk) because of no spills")
+        }
+      case "Errors" => new Ordering[TaskTableRowData] {
+        override def compare(x: TaskTableRowData, y: TaskTableRowData): Int =
+          Ordering.String.compare(x.error, y.error)
+      }
+      case unknownColumn => throw new IllegalArgumentException(s"Unknown column: $unknownColumn")
+    }
+    if (desc) {
+      ordering.reverse
+    } else {
+      ordering
+    }
+  }
+
+}
+
+private[ui] class TaskPagedTable(
+    basePath: String,
+    data: Seq[TaskUIData],
+    hasAccumulators: Boolean,
+    hasInput: Boolean,
+    hasOutput: Boolean,
+    hasShuffleRead: Boolean,
+    hasShuffleWrite: Boolean,
+    hasBytesSpilled: Boolean,
+    currentTime: Long,
+    page: Int,
+    pageSize: Int,
+    sortColumn: String,
+    desc: Boolean) extends PagedTable[TaskTableRowData]{
+
+  override def tableId: String = ""
+
+  override  def tableCssClass: String = "table table-bordered table-condensed table-striped"
+
+  override val dataSource: TaskDataSource = new TaskDataSource(
+    data,
+    hasAccumulators,
+    hasInput,
+    hasOutput,
+    hasShuffleRead,
+    hasShuffleWrite,
+    hasBytesSpilled,
+    currentTime,
+    page,
+    pageSize,
+    sortColumn,
+    desc
+  )
+
+  override def pageLink(page: Int): String = {
+    s"${basePath}&task.page=$page&task.sort=${sortColumn}&task.desc=${desc}"
+  }
+
+  override def goButtonJavascriptFunction: (String, String) = {
+    val jsFuncName = "goToTaskPage"
+    val jsFunc = s"""
+      |function goToTaskPage(page) {
+      |  var url = "${basePath}&task.sort=${sortColumn}&task.desc=${desc}" + "&task.page=" + page;
+      |  window.location.href = url;
+      |}
+     """.stripMargin
+    (jsFuncName, jsFunc)
+  }
+
+  def headers: Seq[Node] = {
+    val taskHeadersAndCssClasses: Seq[(String, String)] =
+      Seq(
+        ("Index", ""), ("ID", ""), ("Attempt", ""), ("Status", ""), ("Locality Level", ""),
+        ("Executor ID / Host", ""), ("Launch Time", ""), ("Duration", ""),
+        ("Scheduler Delay", TaskDetailsClassNames.SCHEDULER_DELAY),
+        ("Task Deserialization Time", TaskDetailsClassNames.TASK_DESERIALIZATION_TIME),
+        ("GC Time", ""),
+        ("Result Serialization Time", TaskDetailsClassNames.RESULT_SERIALIZATION_TIME),
+        ("Getting Result Time", TaskDetailsClassNames.GETTING_RESULT_TIME)) ++
+        {if (hasAccumulators) Seq(("Accumulators", "")) else Nil} ++
+        {if (hasInput) Seq(("Input Size / Records", "")) else Nil} ++
+        {if (hasOutput) Seq(("Output Size / Records", "")) else Nil} ++
+        {if (hasShuffleRead) {
+          Seq(("Shuffle Read Blocked Time", TaskDetailsClassNames.SHUFFLE_READ_BLOCKED_TIME),
+            ("Shuffle Read Size / Records", ""),
+            ("Shuffle Remote Reads", TaskDetailsClassNames.SHUFFLE_READ_REMOTE_SIZE))
+        } else {
+          Nil
+        }} ++
+        {if (hasShuffleWrite) {
+          Seq(("Write Time", ""), ("Shuffle Write Size / Records", ""))
+        } else {
+          Nil
+        }} ++
+        {if (hasBytesSpilled) {
+          Seq(("Shuffle Spill (Memory)", ""), ("Shuffle Spill (Disk)", ""))
+        } else {
+          Nil
+        }} ++
+        Seq(("Errors", ""))
+
+    if (!taskHeadersAndCssClasses.map(_._1).contains(sortColumn)) {
+      new IllegalArgumentException(s"Unknown column: $sortColumn")
+    }
+
+    val headerRow: Seq[Node] = {
+      taskHeadersAndCssClasses.map { case (header, cssClass) =>
+        if (header == sortColumn) {
+          val headerLink =
+            s"$basePath&task.sort=${URLEncoder.encode(header, "UTF-8")}&task.desc=${!desc}"
+          val js = Unparsed(s"window.location.href='${headerLink}'")
+          val arrow = if (desc) "&#x25BE;" else "&#x25B4;"
+          <th class={cssClass} onclick={js}>
+            {header}
+            <span>&nbsp;{Unparsed(arrow)}</span>
+          </th>
+        } else {
+          val headerLink =
+            s"$basePath&task.sort=${URLEncoder.encode(header, "UTF-8")}"
+          val js = Unparsed(s"window.location.href='${headerLink}'")
+          <th class={cssClass} onclick={js}>
+            {header}
+          </th>
+        }
+      }
+    }
+    <thead>{headerRow}</thead>
+  }
+
+  def row(task: TaskTableRowData): Seq[Node] = {
+    <tr>
+      <td>{task.index}</td>
+      <td>{task.taskId}</td>
+      <td>{
+        if (task.speculative) s"${task.attempt} (speculative)" else task.attempt.toString
+        }</td>
+      <td>{task.status}</td>
+      <td>{task.taskLocality}</td>
+      <td>{task.executorIdAndHost}</td>
+      <td>{UIUtils.formatDate(new Date(task.launchTime))}</td>
+      <td>{task.formatDuration}</td>
+      <td class={TaskDetailsClassNames.SCHEDULER_DELAY}>
+        {UIUtils.formatDuration(task.schedulerDelay)}
+      </td>
+      <td class={TaskDetailsClassNames.TASK_DESERIALIZATION_TIME}>
+        {UIUtils.formatDuration(task.taskDeserializationTime)}
+      </td>
+      <td>
+        {if (task.gcTime > 0) UIUtils.formatDuration(task.gcTime) else ""}
+      </td>
+      <td class={TaskDetailsClassNames.RESULT_SERIALIZATION_TIME}>
+        {UIUtils.formatDuration(task.serializationTime)}
+      </td>
+      <td class={TaskDetailsClassNames.GETTING_RESULT_TIME}>
+        {UIUtils.formatDuration(task.gettingResultTime)}
+      </td>
+      {if (task.accumulators.nonEmpty) {
+      <td>{Unparsed(task.accumulators.get)}</td>
+    }}
+      {if (task.input.nonEmpty) {
+      <td>{task.input.get.inputReadable}</td>
+    }}
+      {if (task.output.nonEmpty) {
+      <td>{task.output.get.outputReadable}</td>
+    }}
+      {if (task.shuffleRead.nonEmpty) {
+      <td class={TaskDetailsClassNames.SHUFFLE_READ_BLOCKED_TIME}>
+        {task.shuffleRead.get.shuffleReadBlockedTimeReadable}
+      </td>
+        <td>
+          {task.shuffleRead.get.shuffleReadReadable}
+        </td>
+        <td class={TaskDetailsClassNames.SHUFFLE_READ_REMOTE_SIZE}>
+          {task.shuffleRead.get.shuffleReadRemoteReadable}
+        </td>
+    }}
+      {if (task.shuffleWrite.nonEmpty) {
+      <td>{task.shuffleWrite.get.writeTimeReadable}</td>
+        <td>{task.shuffleWrite.get.shuffleWriteReadable}</td>
+    }}
+      {if (task.bytesSpilled.nonEmpty) {
+      <td>{task.bytesSpilled.get.memoryBytesSpilledReadable}</td>
+        <td>{task.bytesSpilled.get.diskBytesSpilledReadable}</td>
+    }}
+      {errorMessageCell(task.error)}
+    </tr>
+  }
+
+  private def errorMessageCell(error: String): Seq[Node] = {
     val isMultiline = error.indexOf('\n') >= 0
     // Display the first line by default
     val errorSummary = StringEscapeUtils.escapeHtml4(
@@ -850,34 +1272,5 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
       ""
     }
     <td>{errorSummary}{details}</td>
-  }
-
-  private def getGettingResultTime(info: TaskInfo): Long = {
-    if (info.gettingResultTime > 0) {
-      if (info.finishTime > 0) {
-        info.finishTime - info.gettingResultTime
-      } else {
-        // The task is still fetching the result.
-        System.currentTimeMillis - info.gettingResultTime
-      }
-    } else {
-      0L
-    }
-  }
-
-  private def getSchedulerDelay(info: TaskInfo, metrics: TaskMetrics): Long = {
-    val totalExecutionTime =
-      if (info.gettingResult) {
-        info.gettingResultTime - info.launchTime
-      } else if (info.finished) {
-        info.finishTime - info.launchTime
-      } else {
-        0
-      }
-    val executorOverhead = (metrics.executorDeserializeTime +
-      metrics.resultSerializationTime)
-    math.max(
-      0,
-      totalExecutionTime - metrics.executorRunTime - executorOverhead - getGettingResultTime(info))
   }
 }
