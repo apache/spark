@@ -237,7 +237,7 @@ case class CaseKeyWhen(key: Expression, branches: Seq[Expression]) extends CaseW
     // If all branches fail and an elseVal is not provided, the whole statement
     // defaults to null, according to Hive's semantics.
     while (i < len - 1) {
-      if (equalNullSafe(evaluatedKey, branchesArr(i).eval(input))) {
+      if (threeValueEquals(evaluatedKey, branchesArr(i).eval(input))) {
         return branchesArr(i + 1).eval(input)
       }
       i += 2
@@ -294,7 +294,7 @@ case class CaseKeyWhen(key: Expression, branches: Seq[Expression]) extends CaseW
     """
   }
 
-  private def equalNullSafe(l: Any, r: Any) = {
+  private def threeValueEquals(l: Any, r: Any) = {
     if (l == null || r == null) {
       false
     } else {
