@@ -25,6 +25,11 @@ import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions.codegen.{GeneratedExpressionCode, CodeGenContext}
 import org.apache.spark.sql.types._
 
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// This file defines all the expressions to extract values out of complex types.
+// For example, getting a field out of an array, map, or struct.
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
 
 object ExtractValue {
   /**
@@ -73,13 +78,6 @@ object ExtractValue {
     }
   }
 
-  def unapply(g: ExtractValue): Option[(Expression, Expression)] = {
-    g match {
-      case o: ExtractValueWithOrdinal => Some((o.child, o.ordinal))
-      case s: ExtractValueWithStruct => Some((s.child, null))
-    }
-  }
-
   /**
    * Find the ordinal of StructField, report error if no desired field or over one
    * desired fields are found.
@@ -100,29 +98,16 @@ object ExtractValue {
 }
 
 /**
- * A common interface of all kinds of extract value expressions.
- * Note: concrete extract value expressions are created only by `ExtractValue.apply`,
- * we don't need to do type check for them.
- */
-trait ExtractValue {
-  self: Expression =>
-}
-
-abstract class ExtractValueWithStruct extends UnaryExpression with ExtractValue {
-  self: Product =>
-
-  def field: StructField
-  override def toString: String = s"$child.${field.name}"
-}
-
-/**
  * Returns the value of fields in the Struct `child`.
+ *
+ * No need to do type checking since it is handled by [[ExtractValue]].
  */
 case class GetStructField(child: Expression, field: StructField, ordinal: Int)
-  extends ExtractValueWithStruct {
+  extends UnaryExpression {
 
   override def dataType: DataType = field.dataType
   override def nullable: Boolean = child.nullable || field.nullable
+  override def toString: String = s"$child.${field.name}"
 
   protected override def nullSafeEval(input: Any): Any =
     input.asInstanceOf[InternalRow](ordinal)
@@ -142,15 +127,18 @@ case class GetStructField(child: Expression, field: StructField, ordinal: Int)
 
 /**
  * Returns the array of value of fields in the Array of Struct `child`.
+ *
+ * No need to do type checking since it is handled by [[ExtractValue]].
  */
 case class GetArrayStructFields(
     child: Expression,
     field: StructField,
     ordinal: Int,
-    containsNull: Boolean) extends ExtractValueWithStruct {
+    containsNull: Boolean) extends UnaryExpression {
 
   override def dataType: DataType = ArrayType(field.dataType, containsNull)
   override def nullable: Boolean = child.nullable || containsNull || field.nullable
+  override def toString: String = s"$child.${field.name}"
 
   protected override def nullSafeEval(input: Any): Any = {
     input.asInstanceOf[Seq[InternalRow]].map { row =>
@@ -178,25 +166,20 @@ case class GetArrayStructFields(
   }
 }
 
-abstract class ExtractValueWithOrdinal extends BinaryExpression with ExtractValue {
-  self: Product =>
+/**
+ * Returns the field at `ordinal` in the Array `child`.
+ *
+ * No need to do type checking since it is handled by [[ExtractValue]].
+ */
+case class GetArrayItem(child: Expression, ordinal: Expression) extends BinaryExpression {
 
-  def ordinal: Expression
-  def child: Expression
+  override def toString: String = s"$child[$ordinal]"
 
   override def left: Expression = child
   override def right: Expression = ordinal
 
   /** `Null` is returned for invalid ordinals. */
   override def nullable: Boolean = true
-  override def toString: String = s"$child[$ordinal]"
-}
-
-/**
- * Returns the field at `ordinal` in the Array `child`
- */
-case class GetArrayItem(child: Expression, ordinal: Expression)
-  extends ExtractValueWithOrdinal {
 
   override def dataType: DataType = child.dataType.asInstanceOf[ArrayType].elementType
 
@@ -227,10 +210,19 @@ case class GetArrayItem(child: Expression, ordinal: Expression)
 }
 
 /**
- * Returns the value of key `ordinal` in Map `child`
+ * Returns the value of key `key` in Map `child`.
+ *
+ * No need to do type checking since it is handled by [[ExtractValue]].
  */
-case class GetMapValue(child: Expression, ordinal: Expression)
-  extends ExtractValueWithOrdinal {
+case class GetMapValue(child: Expression, key: Expression) extends BinaryExpression {
+
+  override def toString: String = s"$child[$key]"
+
+  override def left: Expression = child
+  override def right: Expression = key
+
+  /** `Null` is returned for invalid ordinals. */
+  override def nullable: Boolean = true
 
   override def dataType: DataType = child.dataType.asInstanceOf[MapType].valueType
 

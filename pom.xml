@@ -128,7 +128,7 @@
     <yarn.version>${hadoop.version}</yarn.version>
     <hbase.version>0.98.7-hadoop2</hbase.version>
     <hbase.artifact>hbase</hbase.artifact>
-    <flume.version>1.4.0</flume.version>
+    <flume.version>1.6.0</flume.version>
     <zookeeper.version>3.4.5</zookeeper.version>
     <curator.version>2.4.0</curator.version>
     <hive.group>org.spark-project.hive</hive.group>
@@ -161,7 +161,6 @@
     <fasterxml.jackson.version>2.4.4</fasterxml.jackson.version>
     <snappy.version>1.1.1.7</snappy.version>
     <netlib.java.version>1.1.2</netlib.java.version>
-    <thrift.version>0.9.2</thrift.version>
     <!-- For maven shade plugin (see SPARK-8819) -->
     <create.dependency.reduced.pom>false</create.dependency.reduced.pom>
 
@@ -181,7 +180,6 @@
     <hive.deps.scope>compile</hive.deps.scope>
     <parquet.deps.scope>compile</parquet.deps.scope>
     <parquet.test.deps.scope>test</parquet.test.deps.scope>
-    <thrift.test.deps.scope>test</thrift.test.deps.scope>
 
     <!--
       Overridable test home. So that you can call individual pom files directly without
@@ -343,11 +341,6 @@
   </dependencies>
   <dependencyManagement>
     <dependencies>
-      <dependency>
-        <groupId>${jline.groupid}</groupId>
-        <artifactId>jline</artifactId>
-        <version>${jline.version}</version>
-      </dependency>
       <dependency>
         <groupId>com.twitter</groupId>
         <artifactId>chill_${scala.binary.version}</artifactId>
@@ -1123,18 +1116,6 @@
         <scope>${parquet.test.deps.scope}</scope>
       </dependency>
       <dependency>
-        <groupId>org.apache.parquet</groupId>
-        <artifactId>parquet-thrift</artifactId>
-        <version>${parquet.version}</version>
-        <scope>${parquet.test.deps.scope}</scope>
-      </dependency>
-      <dependency>
-        <groupId>org.apache.thrift</groupId>
-        <artifactId>libthrift</artifactId>
-        <version>${thrift.version}</version>
-        <scope>${thrift.test.deps.scope}</scope>
-      </dependency>
-      <dependency>
         <groupId>org.apache.flume</groupId>
         <artifactId>flume-ng-core</artifactId>
         <version>${flume.version}</version>
@@ -1143,6 +1124,10 @@
           <exclusion>
             <groupId>io.netty</groupId>
             <artifactId>netty</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.apache.flume</groupId>
+            <artifactId>flume-ng-auth</artifactId>
           </exclusion>
           <exclusion>
             <groupId>org.apache.thrift</groupId>
@@ -1339,6 +1324,7 @@
               <spark.ui.enabled>false</spark.ui.enabled>
               <spark.ui.showConsoleProgress>false</spark.ui.showConsoleProgress>
               <spark.driver.allowMultipleContexts>true</spark.driver.allowMultipleContexts>
+              <spark.unsafe.exceptionOnMemoryLeak>true</spark.unsafe.exceptionOnMemoryLeak>
             </systemProperties>
           </configuration>
           <executions>
@@ -1835,6 +1821,15 @@
         <jline.version>${scala.version}</jline.version>
         <jline.groupid>org.scala-lang</jline.groupid>
       </properties>
+      <dependencyManagement>
+        <dependencies>
+          <dependency>
+            <groupId>${jline.groupid}</groupId>
+            <artifactId>jline</artifactId>
+            <version>${jline.version}</version>
+          </dependency>
+        </dependencies>
+      </dependencyManagement>
     </profile>
 
     <profile>
@@ -1853,10 +1848,8 @@
         <property><name>scala-2.11</name></property>
       </activation>
       <properties>
-        <scala.version>2.11.6</scala.version>
+        <scala.version>2.11.7</scala.version>
         <scala.binary.version>2.11</scala.binary.version>
-        <jline.version>2.12.1</jline.version>
-        <jline.groupid>jline</jline.groupid>
       </properties>
     </profile>
 

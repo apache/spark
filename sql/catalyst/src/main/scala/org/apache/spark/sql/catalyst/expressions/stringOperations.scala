@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import java.util.Locale
 import java.util.regex.Pattern
 
 import org.apache.commons.lang3.StringUtils
@@ -104,7 +105,7 @@ case class RLike(left: Expression, right: Expression)
   override def toString: String = s"$left RLIKE $right"
 }
 
-trait CaseConversionExpression extends ExpectsInputTypes {
+trait String2StringExpression extends ExpectsInputTypes {
   self: UnaryExpression =>
 
   def convert(v: UTF8String): UTF8String
@@ -119,7 +120,7 @@ trait CaseConversionExpression extends ExpectsInputTypes {
 /**
  * A function that converts the characters of a string to uppercase.
  */
-case class Upper(child: Expression) extends UnaryExpression with CaseConversionExpression {
+case class Upper(child: Expression) extends UnaryExpression with String2StringExpression {
 
   override def convert(v: UTF8String): UTF8String = v.toUpperCase
 
@@ -131,7 +132,7 @@ case class Upper(child: Expression) extends UnaryExpression with CaseConversionE
 /**
  * A function that converts the characters of a string to lowercase.
  */
-case class Lower(child: Expression) extends UnaryExpression with CaseConversionExpression {
+case class Lower(child: Expression) extends UnaryExpression with String2StringExpression {
 
   override def convert(v: UTF8String): UTF8String = v.toLowerCase
 
@@ -188,6 +189,301 @@ case class EndsWith(left: Expression, right: Expression)
 }
 
 /**
+ * A function that trim the spaces from both ends for the specified string.
+ */
+case class StringTrim(child: Expression)
+  extends UnaryExpression with String2StringExpression {
+
+  def convert(v: UTF8String): UTF8String = v.trim()
+
+  override def prettyName: String = "trim"
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    defineCodeGen(ctx, ev, c => s"($c).trim()")
+  }
+}
+
+/**
+ * A function that trim the spaces from left end for given string.
+ */
+case class StringTrimLeft(child: Expression)
+  extends UnaryExpression with String2StringExpression {
+
+  def convert(v: UTF8String): UTF8String = v.trimLeft()
+
+  override def prettyName: String = "ltrim"
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    defineCodeGen(ctx, ev, c => s"($c).trimLeft()")
+  }
+}
+
+/**
+ * A function that trim the spaces from right end for given string.
+ */
+case class StringTrimRight(child: Expression)
+  extends UnaryExpression with String2StringExpression {
+
+  def convert(v: UTF8String): UTF8String = v.trimRight()
+
+  override def prettyName: String = "rtrim"
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    defineCodeGen(ctx, ev, c => s"($c).trimRight()")
+  }
+}
+
+/**
+ * A function that returns the position of the first occurrence of substr in the given string.
+ * Returns null if either of the arguments are null and
+ * returns 0 if substr could not be found in str.
+ *
+ * NOTE: that this is not zero based, but 1-based index. The first character in str has index 1.
+ */
+case class StringInstr(str: Expression, substr: Expression)
+  extends BinaryExpression with ExpectsInputTypes {
+
+  override def left: Expression = str
+  override def right: Expression = substr
+  override def dataType: DataType = IntegerType
+  override def inputTypes: Seq[DataType] = Seq(StringType, StringType)
+
+  override def nullSafeEval(string: Any, sub: Any): Any = {
+    string.asInstanceOf[UTF8String].indexOf(sub.asInstanceOf[UTF8String], 0) + 1
+  }
+
+  override def prettyName: String = "instr"
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    defineCodeGen(ctx, ev, (l, r) =>
+      s"($l).indexOf($r, 0) + 1")
+  }
+}
+
+/**
+ * A function that returns the position of the first occurrence of substr
+ * in given string after position pos.
+ */
+case class StringLocate(substr: Expression, str: Expression, start: Expression)
+  extends Expression with ExpectsInputTypes {
+
+  def this(substr: Expression, str: Expression) = {
+    this(substr, str, Literal(0))
+  }
+
+  override def children: Seq[Expression] = substr :: str :: start :: Nil
+  override def foldable: Boolean = children.forall(_.foldable)
+  override def nullable: Boolean = substr.nullable || str.nullable
+  override def dataType: DataType = IntegerType
+  override def inputTypes: Seq[DataType] = Seq(StringType, StringType, IntegerType)
+
+  override def eval(input: InternalRow): Any = {
+    val s = start.eval(input)
+    if (s == null) {
+      // if the start position is null, we need to return 0, (conform to Hive)
+      0
+    } else {
+      val r = substr.eval(input)
+      if (r == null) {
+        null
+      } else {
+        val l = str.eval(input)
+        if (l == null) {
+          null
+        } else {
+          l.asInstanceOf[UTF8String].indexOf(
+            r.asInstanceOf[UTF8String],
+            s.asInstanceOf[Int]) + 1
+        }
+      }
+    }
+  }
+
+  override def prettyName: String = "locate"
+}
+
+/**
+ * Returns str, left-padded with pad to a length of len.
+ */
+case class StringLPad(str: Expression, len: Expression, pad: Expression)
+  extends Expression with ExpectsInputTypes {
+
+  override def children: Seq[Expression] = str :: len :: pad :: Nil
+  override def foldable: Boolean = children.forall(_.foldable)
+  override def nullable: Boolean = children.exists(_.nullable)
+  override def dataType: DataType = StringType
+  override def inputTypes: Seq[DataType] = Seq(StringType, IntegerType, StringType)
+
+  override def eval(input: InternalRow): Any = {
+    val s = str.eval(input)
+    if (s == null) {
+      null
+    } else {
+      val l = len.eval(input)
+      if (l == null) {
+        null
+      } else {
+        val p = pad.eval(input)
+        if (p == null) {
+          null
+        } else {
+          val len = l.asInstanceOf[Int]
+          val str = s.asInstanceOf[UTF8String]
+          val pad = p.asInstanceOf[UTF8String]
+
+          str.lpad(len, pad)
+        }
+      }
+    }
+  }
+
+  override def prettyName: String = "lpad"
+}
+
+/**
+ * Returns str, right-padded with pad to a length of len.
+ */
+case class StringRPad(str: Expression, len: Expression, pad: Expression)
+  extends Expression with ExpectsInputTypes {
+
+  override def children: Seq[Expression] = str :: len :: pad :: Nil
+  override def foldable: Boolean = children.forall(_.foldable)
+  override def nullable: Boolean = children.exists(_.nullable)
+  override def dataType: DataType = StringType
+  override def inputTypes: Seq[DataType] = Seq(StringType, IntegerType, StringType)
+
+  override def eval(input: InternalRow): Any = {
+    val s = str.eval(input)
+    if (s == null) {
+      null
+    } else {
+      val l = len.eval(input)
+      if (l == null) {
+        null
+      } else {
+        val p = pad.eval(input)
+        if (p == null) {
+          null
+        } else {
+          val len = l.asInstanceOf[Int]
+          val str = s.asInstanceOf[UTF8String]
+          val pad = p.asInstanceOf[UTF8String]
+
+          str.rpad(len, pad)
+        }
+      }
+    }
+  }
+
+  override def prettyName: String = "rpad"
+}
+
+/**
+ * Returns the input formatted according do printf-style format strings
+ */
+case class StringFormat(children: Expression*) extends Expression {
+
+  require(children.length >=1, "printf() should take at least 1 argument")
+
+  override def foldable: Boolean = children.forall(_.foldable)
+  override def nullable: Boolean = children(0).nullable
+  override def dataType: DataType = StringType
+  private def format: Expression = children(0)
+  private def args: Seq[Expression] = children.tail
+
+  override def eval(input: InternalRow): Any = {
+    val pattern = format.eval(input)
+    if (pattern == null) {
+      null
+    } else {
+      val sb = new StringBuffer()
+      val formatter = new java.util.Formatter(sb, Locale.US)
+
+      val arglist = args.map(_.eval(input).asInstanceOf[AnyRef])
+      formatter.format(pattern.asInstanceOf[UTF8String].toString(), arglist: _*)
+
+      UTF8String.fromString(sb.toString)
+    }
+  }
+
+  override def prettyName: String = "printf"
+}
+
+/**
+ * Returns the string which repeat the given string value n times.
+ */
+case class StringRepeat(str: Expression, times: Expression)
+  extends BinaryExpression with ExpectsInputTypes {
+
+  override def left: Expression = str
+  override def right: Expression = times
+  override def dataType: DataType = StringType
+  override def inputTypes: Seq[DataType] = Seq(StringType, IntegerType)
+
+  override def nullSafeEval(string: Any, n: Any): Any = {
+    string.asInstanceOf[UTF8String].repeat(n.asInstanceOf[Integer])
+  }
+
+  override def prettyName: String = "repeat"
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    defineCodeGen(ctx, ev, (l, r) => s"($l).repeat($r)")
+  }
+}
+
+/**
+ * Returns the reversed given string.
+ */
+case class StringReverse(child: Expression) extends UnaryExpression with String2StringExpression {
+  override def convert(v: UTF8String): UTF8String = v.reverse()
+
+  override def prettyName: String = "reverse"
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    defineCodeGen(ctx, ev, c => s"($c).reverse()")
+  }
+}
+
+/**
+ * Returns a n spaces string.
+ */
+case class StringSpace(child: Expression) extends UnaryExpression with ExpectsInputTypes {
+
+  override def dataType: DataType = StringType
+  override def inputTypes: Seq[DataType] = Seq(IntegerType)
+
+  override def nullSafeEval(s: Any): Any = {
+    val length = s.asInstanceOf[Integer]
+
+    val spaces = new Array[Byte](if (length < 0) 0 else length)
+    java.util.Arrays.fill(spaces, ' '.asInstanceOf[Byte])
+    UTF8String.fromBytes(spaces)
+  }
+
+  override def prettyName: String = "space"
+}
+
+/**
+ * Splits str around pat (pattern is a regular expression).
+ */
+case class StringSplit(str: Expression, pattern: Expression)
+  extends BinaryExpression with ExpectsInputTypes {
+
+  override def left: Expression = str
+  override def right: Expression = pattern
+  override def dataType: DataType = ArrayType(StringType)
+  override def inputTypes: Seq[DataType] = Seq(StringType, StringType)
+
+  override def nullSafeEval(string: Any, regex: Any): Any = {
+    val splits =
+      string.asInstanceOf[UTF8String].toString.split(regex.asInstanceOf[UTF8String].toString, -1)
+    splits.toSeq.map(UTF8String.fromString)
+  }
+
+  override def prettyName: String = "split"
+}
+
+/**
  * A function that takes a substring of its first argument starting at a given position.
  * Defined for String and Binary types.
  */
@@ -199,8 +495,7 @@ case class Substring(str: Expression, pos: Expression, len: Expression)
   }
 
   override def foldable: Boolean = str.foldable && pos.foldable && len.foldable
-
-  override  def nullable: Boolean = str.nullable || pos.nullable || len.nullable
+  override def nullable: Boolean = str.nullable || pos.nullable || len.nullable
 
   override def dataType: DataType = {
     if (!resolved) {
@@ -284,13 +579,12 @@ case class Levenshtein(left: Expression, right: Expression) extends BinaryExpres
 
   override def dataType: DataType = IntegerType
 
-  protected override def nullSafeEval(input1: Any, input2: Any): Any =
-    StringUtils.getLevenshteinDistance(input1.toString, input2.toString)
+  protected override def nullSafeEval(leftValue: Any, rightValue: Any): Any =
+    leftValue.asInstanceOf[UTF8String].levenshteinDistance(rightValue.asInstanceOf[UTF8String])
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    val stringUtils = classOf[StringUtils].getName
-    defineCodeGen(ctx, ev, (left, right) =>
-      s"$stringUtils.getLevenshteinDistance($left.toString(), $right.toString())")
+    nullSafeCodeGen(ctx, ev, (left, right) =>
+      s"${ev.primitive} = $left.levenshteinDistance($right);")
   }
 }
 
@@ -373,5 +667,4 @@ case class Encode(value: Expression, charset: Expression)
     input1.asInstanceOf[UTF8String].toString.getBytes(toCharset)
   }
 }
-
 

@@ -37,7 +37,16 @@ trait ExpectsInputTypes { self: Expression =>
   def inputTypes: Seq[AbstractDataType]
 
   override def checkInputDataTypes(): TypeCheckResult = {
-    // TODO: implement proper type checking.
-    TypeCheckResult.TypeCheckSuccess
+    val mismatches = children.zip(inputTypes).zipWithIndex.collect {
+      case ((child, expected), idx) if !expected.acceptsType(child.dataType) =>
+        s"argument ${idx + 1} is expected to be of type ${expected.simpleString}, " +
+        s"however, '${child.prettyString}' is of type ${child.dataType.simpleString}."
+    }
+
+    if (mismatches.isEmpty) {
+      TypeCheckResult.TypeCheckSuccess
+    } else {
+      TypeCheckResult.TypeCheckFailure(mismatches.mkString(" "))
+    }
   }
 }

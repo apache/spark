@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples.mllib
 
 import scala.language.reflectiveCalls
@@ -368,3 +369,4 @@ object DecisionTreeRunner {
   }
   // scalastyle:on structural.type
 }
+// scalastyle:on println
