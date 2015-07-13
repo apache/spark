@@ -41,6 +41,7 @@ private[classification] object GLMClassificationModel {
      * Helper method for saving GLM classification model metadata and data.
      * @param modelClass  String name for model class, to be saved with metadata
      * @param numClasses  Number of classes label can take, to be saved with metadata
+     * @since 1.3.0
      */
     def save(
         sc: SparkContext,
@@ -71,6 +72,7 @@ private[classification] object GLMClassificationModel {
      * NOTE: Callers of this method should check numClasses, numFeatures on their own.
      *
      * @param modelClass  String name for model class (used for error messages)
+     * @since 1.3.0
      */
     def loadData(sc: SparkContext, path: String, modelClass: String): Data = {
       val datapath = Loader.dataPath(path)
