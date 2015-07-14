@@ -46,9 +46,18 @@ private[spark] object SerDe {
     dis.readByte().toChar
   }
 
-  def readObject(dis: DataInputStream): Object = {
+  def readObject(dis: DataInputStream, typeName: String = ""): Object = {
     val dataType = readObjectType(dis)
-    readTypedObject(dis, dataType)
+    val data = readTypedObject(dis, dataType)
+    doConversion(data, dataType, typeName)
+  }
+
+  def doConversion(data: Object, dataType: Char, typeName: String): Object = {
+    dataType match {
+      case 'd' if typeName == "Float" =>
+        new java.lang.Float(data.asInstanceOf[java.lang.Double])
+      case _ => data
+    }
   }
 
   def readTypedObject(
