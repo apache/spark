@@ -356,7 +356,7 @@ private[spark] class Executor(
       logInfo("Using REPL class URI: " + classUri)
       try {
         val _userClassPathFirst: java.lang.Boolean = userClassPathFirst
-        val klass = Class.forName("org.apache.spark.repl.ExecutorClassLoader")
+        val klass = Utils.classForName("org.apache.spark.repl.ExecutorClassLoader")
           .asInstanceOf[Class[_ <: ClassLoader]]
         val constructor = klass.getConstructor(classOf[SparkConf], classOf[String],
           classOf[ClassLoader], classOf[Boolean])

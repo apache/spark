@@ -39,8 +39,7 @@ private[spark] object RpcEnv {
     val rpcEnvNames = Map("akka" -> "org.apache.spark.rpc.akka.AkkaRpcEnvFactory")
     val rpcEnvName = conf.get("spark.rpc", "akka")
     val rpcEnvFactoryClassName = rpcEnvNames.getOrElse(rpcEnvName.toLowerCase, rpcEnvName)
-    Class.forName(rpcEnvFactoryClassName, true, Utils.getContextOrSparkClassLoader).
-      newInstance().asInstanceOf[RpcEnvFactory]
+    Utils.classForName(rpcEnvFactoryClassName).newInstance().asInstanceOf[RpcEnvFactory]
   }
 
   def create(
