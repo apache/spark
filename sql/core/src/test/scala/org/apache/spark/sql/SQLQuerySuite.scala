@@ -54,21 +54,15 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll with SQLTestUtils {
     df
   }
 
-  val upperCaseData = {
-    val df = ((1 to 6) zip ('A' to 'F'))
-      .map(t => (t._1, t._2.toString))
-      .toDF("N", "L")
-    df.registerTempTable("upperCaseData")
-    df
-  }
+  ((1 to 6) zip ('A' to 'F'))
+    .map(t => (t._1, t._2.toString))
+    .toDF("N", "L")
+    .registerTempTable("upperCaseData")
 
-  val lowerCaseData = {
-    val df = ((1 to 4) zip ('a' to 'd'))
-      .map(t => (t._1, t._2.toString))
-      .toDF("n", "l")
-    df.registerTempTable("lowerCaseData")
-    df
-  }
+  ((1 to 4) zip ('a' to 'd'))
+    .map(t => (t._1, t._2.toString))
+    .toDF("n", "l")
+    .registerTempTable("lowerCaseData")
 
   case class ArrayData(data: Seq[Int], nestedData: Seq[Seq[Int]])
   val arrayData = {
@@ -428,8 +422,7 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll with SQLTestUtils {
     )
   }
 
-  case class TableName(tableName: String)
-  Seq(TableName("test")).toDF().registerTempTable("tableName")
+  Seq(Tuple1("test")).toDF("tableName").registerTempTable("tableName")
   test("SPARK-2041 column name equals tablename") {
     checkAnswer(
       sql("SELECT tableName FROM tableName"),
@@ -562,10 +555,10 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll with SQLTestUtils {
     }
   }
 
-  case class NullInts(a: Integer)
   test("aggregates with nulls") {
-      ((1 to 3).map(i => NullInts(i)) ++ Seq(NullInts(null)))
-        .toDF()
+      ((1 to 3) ++ Seq(null)).asInstanceOf[Seq[Integer]]
+        .map(Tuple1(_))
+        .toDF("a")
         .registerTempTable("nullInts")
     checkAnswer(
       sql("SELECT MIN(a), MAX(a), AVG(a), SUM(a), COUNT(a) FROM nullInts"),
@@ -587,16 +580,14 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll with SQLTestUtils {
 
   def sortTest(): Unit = {
 
-    val binaryData = {
-      val df = Seq(
-        ("12".getBytes, 1),
-        ("22".getBytes, 5),
-        ("122".getBytes, 3),
-        ("121".getBytes, 2),
-        ("123".getBytes, 4)).toDF("a", "b")
-      df.registerTempTable("binaryData")
-      df
-    }
+    Seq(
+      ("12".getBytes, 1),
+      ("22".getBytes, 5),
+      ("122".getBytes, 3),
+      ("121".getBytes, 2),
+      ("123".getBytes, 4))
+      .toDF("a", "b")
+      .registerTempTable("binaryData")
 
     checkAnswer(
       sql("SELECT * FROM testData2 ORDER BY a ASC, b ASC"),
@@ -970,12 +961,8 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll with SQLTestUtils {
         Row(4, "D")))
   }
 
-  case class NullStrings(n: Int, s: String)
-  val nullStrings = {
-    val df = ((1 to 3) zip Seq("abc", "ABC", null)).map(t => NullStrings(t._1, t._2)).toDF()
-    df.registerTempTable("nullStrings")
-    df
-  }
+  ((1 to 3) zip Seq("abc", "ABC", null)).map(t => (t._1, t._2))
+    .toDF("n", "s").registerTempTable("nullStrings")
 
   test("system function upper()") {
     checkAnswer(
@@ -1225,18 +1212,13 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll with SQLTestUtils {
       Row("true", "false"))
   }
 
-  val person = {
-    val df = Seq((0, "mike", 30), (1, "jim", 20)).toDF("id", "name", "age")
-    df.registerTempTable("person")
-    df
-  }
-  val salary = {
-    val df = Seq((0, 2000.0), (1, 1000.0)).toDF("personId", "salary")
-    df.registerTempTable("salary")
-    df
-  }
   test("metadata is propagated correctly") {
-    val person: DataFrame = sql("SELECT * FROM person")
+    val person = Seq((0, "mike", 30), (1, "jim", 20))
+      .toDF("id", "name", "age")
+    Seq((0, 2000.0), (1, 1000.0))
+      .toDF("personId", "salary")
+      .registerTempTable("salary")
+
     val schema = person.schema
     val docKey = "doc"
     val docValue = "first name"
