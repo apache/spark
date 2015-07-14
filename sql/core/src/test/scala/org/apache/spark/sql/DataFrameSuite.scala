@@ -250,20 +250,8 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
 
 
   case class ArrayData(data: Seq[Int], nestedData: Seq[Seq[Int]])
-  val arrayData = {
-    val data = Seq(ArrayData(1 to 3, Seq(1 to 3)), ArrayData(2 to 4, Seq(2 to 4)))
-    data.toDF().registerTempTable("arrayData")
-    data
-  }
+  val arrayData = Seq(ArrayData(1 to 3, Seq(1 to 3)), ArrayData(2 to 4, Seq(2 to 4)))
 
-  case class MapData(data: scala.collection.Map[Int, String])
-  val mapData = {
-    val data = (5 to 1 by - 1)
-      .map(i => (1 to i) zip ('a' to ('a' + i).toChar).map(_.toString + (6 - i)))
-      .map(s => MapData(s.toMap))
-    data.toDF().registerTempTable("mapData")
-    data
-  }
   test("global sorting") {
     checkAnswer(
       testData2.orderBy('a.asc, 'b.asc),
@@ -302,6 +290,8 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       arrayData.toDF().collect().sortBy(_.getAs[Seq[Int]](0)(1)).reverse.toSeq)
   }
 
+  case class MapData(data: scala.collection.Map[Int, String])
+
   test("limit") {
     checkAnswer(
       testData.limit(10),
@@ -310,6 +300,10 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       arrayData.toDF().limit(1),
       arrayData.take(1).map(r => Row.fromSeq(r.productIterator.toSeq)))
+
+    val mapData = (5 to 1 by - 1)
+      .map(i => (1 to i) zip ('a' to ('a' + i).toChar).map(_.toString + (6 - i)))
+      .map(s => MapData(s.toMap))
 
     checkAnswer(
       mapData.toDF().limit(1),
