@@ -60,15 +60,15 @@ private[spark] class RModelFormula(override val uid: String)
     }
     StructType(withFeatures.fields :+ StructField($(labelCol), DoubleType, nullable))
   }
- 
+
   override def transform(dataset: DataFrame): DataFrame = {
     require(parsedFormula.isDefined, "Must call setFormula() first.")
     transformLabel(featureTransformer.transform(dataset))
   }
 
   override def copy(extra: ParamMap): RModelFormula = defaultCopy(extra)
-  
-  override def toString = s"RModelFormula(${get(formula)})"
+
+  override def toString: String = s"RModelFormula(${get(formula)})"
 
   protected def transformLabel(dataset: DataFrame): DataFrame = {
     val responseName = parsedFormula.get.response
