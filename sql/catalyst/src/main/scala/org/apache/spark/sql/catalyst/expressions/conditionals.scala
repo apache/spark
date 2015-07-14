@@ -311,7 +311,11 @@ case class CaseKeyWhen(key: Expression, branches: Seq[Expression]) extends CaseW
   }
 }
 
-case class Least(children: Expression*) extends Expression {
+/**
+ * A function that returns the least value of all parameters, skipping null values.
+ * It takes at least 2 parameters, and returns null iff all parameters are null.
+ */
+case class Least(children: Seq[Expression]) extends Expression {
   require(children.length > 1, "LEAST requires at least 2 arguments, got " + children.length)
 
   override def nullable: Boolean = children.forall(_.nullable)
@@ -356,12 +360,16 @@ case class Least(children: Expression*) extends Expression {
       ${evalChildren.map(_.code).mkString("\n")}
       boolean ${ev.isNull} = true;
       ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
-      ${(0 until children.length).map(updateEval).mkString("\n")}
+      ${children.indices.map(updateEval).mkString("\n")}
     """
   }
 }
 
-case class Greatest(children: Expression*) extends Expression {
+/**
+ * A function that returns the greatest value of all parameters, skipping null values.
+ * It takes at least 2 parameters, and returns null iff all parameters are null.
+ */
+case class Greatest(children: Seq[Expression]) extends Expression {
   require(children.length > 1, "GREATEST requires at least 2 arguments, got " + children.length)
 
   override def nullable: Boolean = children.forall(_.nullable)
@@ -406,7 +414,7 @@ case class Greatest(children: Expression*) extends Expression {
       ${evalChildren.map(_.code).mkString("\n")}
       boolean ${ev.isNull} = true;
       ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
-      ${(0 until children.length).map(updateEval).mkString("\n")}
+      ${children.indices.map(updateEval).mkString("\n")}
     """
   }
 }
