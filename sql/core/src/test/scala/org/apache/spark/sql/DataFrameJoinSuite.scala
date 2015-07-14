@@ -52,10 +52,9 @@ class DataFrameJoinSuite extends QueryTest {
       Row(1, "1", "1") :: Row(2, "2", "2") :: Row(3, "3", "3") :: Nil)
   }
 
-  case class TestData(key: Int, value: String)
   test("join - self join") {
     val testData = {
-      val df = (1 to 100).map(i => TestData(i, i.toString)).toDF()
+      val df = (1 to 100).map(i => (i, i.toString)).toDF("key", "value")
       df.registerTempTable("testData")
       df
     }
