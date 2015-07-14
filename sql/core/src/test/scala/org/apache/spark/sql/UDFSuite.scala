@@ -18,7 +18,6 @@
 package org.apache.spark.sql
 
 import org.apache.spark.sql.test.SharedSQLContext
-import org.apache.spark.sql.test.SQLTestData._
 
 private case class FunctionResult(f1: String, f2: String)
 
@@ -105,7 +104,7 @@ class UDFSuite extends QueryTest with SharedSQLContext {
     ctx.udf.register("oneArgFilter", (n: Int) => { n > 80 })
 
     val df = ctx.sparkContext.parallelize(
-      (1 to 100).map(i => TestData(i, i.toString))).toDF()
+      (1 to 100).map(i => (i, i.toString))).toDF("key", "value")
     df.registerTempTable("integerData")
 
     val result =
