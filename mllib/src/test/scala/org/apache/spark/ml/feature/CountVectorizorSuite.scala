@@ -30,13 +30,13 @@ class CountVectorizerSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   test("CountVectorizerModel common cases") {
     val df = sqlContext.createDataFrame(Seq(
-      (0, "a b c d".split(" ").toSeq,
+      (0, "a b c d".split("\\s+").toSeq,
         Vectors.sparse(4, Seq((0, 1.0), (1, 1.0), (2, 1.0), (3, 1.0)))),
-      (1, "a b b c d  a".split(" ").toSeq,
+      (1, "a b b c d  a".split("\\s+").toSeq,
         Vectors.sparse(4, Seq((0, 2.0), (1, 2.0), (2, 1.0), (3, 1.0)))),
-      (2, "a".split(" ").toSeq, Vectors.sparse(4, Seq((0, 1.0)))),
-      (3, "".split(" ").toSeq, Vectors.sparse(4, Seq())), // empty string
-      (4, "a notInDict d".split(" ").toSeq,
+      (2, "a".split("\\s+").toSeq, Vectors.sparse(4, Seq((0, 1.0)))),
+      (3, "".split("\\s+").toSeq, Vectors.sparse(4, Seq())), // empty string
+      (4, "a notInDict d".split("\\s+").toSeq,
         Vectors.sparse(4, Seq((0, 1.0), (3, 1.0))))  // with words not in vocabulary
     )).toDF("id", "words", "expected")
     val cv = new CountVectorizerModel(Array("a", "b", "c", "d"))
@@ -50,18 +50,50 @@ class CountVectorizerSuite extends SparkFunSuite with MLlibTestSparkContext {
     }
   }
 
-  test("CountVectorizerModel with minTermFreq") {
+  test("CountVectorizer common cases") {
     val df = sqlContext.createDataFrame(Seq(
-      (0, "a a a b b c c c d ".split(" ").toSeq, Vectors.sparse(4, Seq((0, 3.0), (2, 3.0)))),
-      (1, "c c c c c c".split(" ").toSeq, Vectors.sparse(4, Seq((2, 6.0)))),
-      (2, "a".split(" ").toSeq, Vectors.sparse(4, Seq())),
-      (3, "e e e e e".split(" ").toSeq, Vectors.sparse(4, Seq())))
+      (0, "a b c d e".split("\\s+").toSeq,
+        Vectors.sparse(5, Seq((0, 1.0), (1, 1.0), (2, 1.0), (3, 1.0), (4, 1.0)))),
+      (1, "a a a a a a".split("\\s+").toSeq, Vectors.sparse(5, Seq((0, 6.0)))),
+      (2, "c".split("\\s+").toSeq, Vectors.sparse(5, Seq((2, 1.0)))),
+      (3, "b b b b b".split("\\s+").toSeq, Vectors.sparse(5, Seq((1, 5.0)))))
     ).toDF("id", "words", "expected")
-    val cv = new CountVectorizerModel(Array("a", "b", "c", "d"))
+    val cv = new CountVectorizer()
       .setInputCol("words")
       .setOutputCol("features")
-      .setMinTermFreq(3)
+      .fit(df)
+    assert(cv.vocabulary.deep == Array("a", "b", "c", "d", "e").deep)
+
     val output = cv.transform(df).collect()
+    output.foreach { p =>
+      val features = p.getAs[Vector]("features")
+      val expected = p.getAs[Vector]("expected")
+      assert(features ~== expected absTol 1e-14)
+    }
+  }
+
+  test("CountVectorizer vocabSize and minCount") {
+    val df = sqlContext.createDataFrame(Seq(
+      (0, "a a a a a".split("\\s+").toSeq, Vectors.sparse(3, Seq((0, 5.0)))),
+      (1, "b b b b".split("\\s+").toSeq, Vectors.sparse(3, Seq((1, 4.0)))),
+      (2, "c c c".split("\\s+").toSeq, Vectors.sparse(3, Seq((2, 3.0)))),
+      (3, "d d".split("\\s+").toSeq, Vectors.sparse(3, Seq())))
+    ).toDF("id", "words", "expected")
+    val cvModel = new CountVectorizer()
+      .setInputCol("words")
+      .setOutputCol("features")
+      .setVocabSize(3)  // limit vocab size to 3
+      .fit(df)
+    assert(cvModel.vocabulary.deep == Array("a", "b", "c").deep)
+
+    val cvModel2 = new CountVectorizer()
+      .setInputCol("words")
+      .setOutputCol("features")
+      .setMinCount(3)  // ignore terms with count less than 3
+      .fit(df)
+    assert(cvModel2.vocabulary.deep == Array("a", "b", "c").deep)
+
+    val output = cvModel2.transform(df).collect()
     output.foreach { p =>
       val features = p.getAs[Vector]("features")
       val expected = p.getAs[Vector]("expected")

@@ -67,7 +67,7 @@ class CountVectorizer(override val uid: String)
   def this() = this(Identifiable.randomUID("cntVec"))
 
   /**
-   * The minimum number of times a token must appear in the corpus to be included in the vocabulary.
+   * The minimum number of times a token must appear in the corpus to be included in the vocabulary
    * Default: 1
    * @group param
    */
@@ -106,7 +106,7 @@ class CountVectorizer(override val uid: String)
     val vocab: Array[String] = {
       val tmpSortedWC: Array[(String, Long)] = if (fullVocabSize <= vocab_size) {
         // Use all terms
-        wordCounts.collect().sortBy(_._2)
+        wordCounts.collect().sortBy(-_._2)
       } else {
         // Sort terms to select vocab
         wordCounts.sortBy(_._2, ascending = false).take(vocab_size)
@@ -147,7 +147,6 @@ class CountVectorizerModel(override val uid: String, val vocabulary: Array[Strin
 
   override def transform(dataset: DataFrame): DataFrame = {
     val dict = vocabulary.zipWithIndex.toMap
-
     val vectorizer = udf { (document: Seq[String]) =>
       val termCounts = mutable.HashMap.empty[Int, Double]
       document.foreach { term =>
@@ -158,7 +157,6 @@ class CountVectorizerModel(override val uid: String, val vocabulary: Array[Strin
       }
       Vectors.sparse(dict.size, termCounts.toSeq)
     }
-
     dataset.withColumn($(outputCol), vectorizer(col($(inputCol))))
   }
 
