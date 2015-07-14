@@ -106,7 +106,7 @@ class TwitterReceiver(
       }
       if (locations.size > 0) {
         query.locations(locations.flatMap(box =>
-          Seq(Array(box.west, box.south), Array(box.east, box.north))).toArray)
+          Array(Array(box.west, box.south), Array(box.east, box.north))).toArray)
       }
       newTwitterStream.filter(query)
       setTwitterStream(newTwitterStream)
