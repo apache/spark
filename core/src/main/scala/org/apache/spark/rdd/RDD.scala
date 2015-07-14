@@ -188,6 +188,14 @@ abstract class RDD[T: ClassTag](
   /** Get the RDD's current storage level, or StorageLevel.NONE if none is set. */
   def getStorageLevel: StorageLevel = storageLevel
 
+  /**
+   * Override any existing storage level with the one specified.
+   * This is for internal use only and is currently used only for local checkpointing.
+   */
+  private[spark] def setStorageLevel(newLevel: StorageLevel): Unit = {
+    storageLevel = newLevel
+  }
+
   // Our dependencies and partitions will be gotten by calling subclass's methods below, and will
   // be overwritten when we're checkpointed
   private var dependencies_ : Seq[Dependency[_]] = null
@@ -1595,6 +1603,18 @@ abstract class RDD[T: ClassTag](
     clearDependencies()
     partitions_ = null
     deps = null    // Forget the constructor argument for dependencies too
+  }
+
+  /**
+   * Callback invoked immediately before a job is run on this RDD.
+   * This recursively calls itself on this RDD's parents.
+   */
+  private[spark] def beforeRunJob(): Unit = {
+    checkpointData match {
+      case Some(local: LocalRDDCheckpointData[T]) => local.transformStorageLevel()
+      case _ =>
+    }
+    dependencies.foreach(_.rdd.beforeRunJob())
   }
 
   /**

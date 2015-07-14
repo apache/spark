@@ -19,11 +19,11 @@ package org.apache.spark.rdd
 
 import scala.reflect.ClassTag
 
-import org.apache.spark.{Logging, SparkEnv, TaskContext}
+import org.apache.spark.{Logging, SparkEnv, SparkException, TaskContext}
 import org.apache.spark.storage.{RDDBlockId, StorageLevel}
 
 /**
- * An implementation of checkpointing that writes the RDD data to a local file system.
+ * An implementation of checkpointing implemented on top of Spark's caching layer.
  *
  * Local checkpointing trades off fault tolerance for performance by skipping the expensive
  * step of replicating the checkpointed data in a reliable storage. This is useful for use
@@ -33,36 +33,50 @@ private[spark] class LocalRDDCheckpointData[T: ClassTag](@transient rdd: RDD[T])
   extends RDDCheckpointData[T](rdd) with Logging {
 
   /**
-   * Write the content of each partition to a local disk store.
+   * Transform the specified storage level to one that uses disk.
+   *
+   * This guarantees that the RDD can be recomputed multiple times correctly as long as
+   * executors do not fail. Otherwise, if the RDD is cached in memory only, for instance,
+   * the checkpoint data will be lost if the relevant block is evicted from memory.
+   *
+   * This should be called immediately before the first job on the RDD is run.
+   */
+  def transformStorageLevel(): Unit = {
+    rdd.getStorageLevel match {
+      case StorageLevel.NONE =>
+        // If this RDD is not already marked for caching, persist it on disk
+        rdd.persist(StorageLevel.DISK_ONLY)
+      case level if level.useOffHeap =>
+        // If this RDD is to be cached off-heap, fail fast since we cannot provide any
+        // correctness guarantees about subsequent computations after the first one
+        throw new SparkException("Local checkpointing is not compatible with off heap caching.")
+      case level =>
+        // Otherwise, adjust the existing storage level to use disk
+        // This guards against potential data losses caused by memory evictions
+        rdd.setStorageLevel(StorageLevel(
+          useDisk = true, level.useMemory, level.deserialized, level.replication))
+    }
+    assert(rdd.getStorageLevel.isValid, s"Resulting level is invalid: ${rdd.getStorageLevel}")
+  }
+
+  /**
+   * Ensure the RDD is fully cached and return a CheckpointRDD that reads from these blocks.
    */
   protected override def doCheckpoint(): CheckpointRDD[T] = {
-    val checkpointRdd = new LocalCheckpointRDD[T](rdd)
-    val checkpointRddId = checkpointRdd.id
-    val persistPartition = (taskContext: TaskContext, values: Iterator[T]) => {
+    val cm = SparkEnv.get.cacheManager
+    val bmm = SparkEnv.get.blockManager.master
 
-      // This uses the existing caching interface to write the checkpoint files.
-      // Each partition is cached on disk without replication using the checkpoint RDD's ID.
-      //
-      // The reason why the original RDD's ID is not used is because the original RDD may
-      // already be cached with a different storage level. The alternative of modifying the
-      // original storage level is significantly more complicated downstream especially if
-      // replication is involved.
-      // TODO: if a partition is already in disk store, do not write it again
-
-      val blockId = RDDBlockId(checkpointRddId, taskContext.partitionId())
-      SparkEnv.get.blockManager.putIterator(blockId, values, StorageLevel.DISK_ONLY)
-    }
-    rdd.context.runJob(rdd, persistPartition)
-
-    // Since checkpoint files are just cached blocks that belong to the checkpoint RDD,
-    // we can just register it for clean up like any other RDD.
-    if (rdd.conf.getBoolean("spark.cleaner.referenceTracking.cleanCheckpoints", false)) {
-      rdd.context.cleaner.foreach { cleaner =>
-        cleaner.registerRDDForCleanup(checkpointRdd)
+    // Local checkpointing relies on the fact that all partitions of this RDD are cached.
+    // This may not be the case, however, if the job does not fully drain the RDD iterator.
+    // For this reason, we must force cache any partitions that are not already cached.
+    rdd.partitions.foreach { p =>
+      val blockId = RDDBlockId(rdd.id, p.index)
+      if (!bmm.contains(blockId)) {
+        cm.getOrCompute(rdd, p, TaskContext.empty(), rdd.getStorageLevel)
       }
     }
 
-    checkpointRdd
+    new LocalCheckpointRDD[T](rdd)
   }
 
 }

@@ -32,6 +32,42 @@ class LocalCheckpointSuite extends SparkFunSuite with LocalSparkContext {
     sc = spy(new SparkContext("local[2]", "test"))
   }
 
+  test("transform storage level") {
+    val rdd = sc.parallelize(1 to 100).localCheckpoint()
+    assert(rdd.getStorageLevel === StorageLevel.NONE)
+    assert(rdd.checkpointData.isDefined)
+    val data = rdd.checkpointData match {
+      case Some(local: LocalRDDCheckpointData[Int]) => local
+      case _ => fail("Checkpoint data was not of expected type!")
+    }
+
+    // No storage level -> disk only
+    data.transformStorageLevel()
+    assert(rdd.getStorageLevel === StorageLevel.DISK_ONLY)
+
+    // Disk only -> disk only
+    data.transformStorageLevel()
+    assert(rdd.getStorageLevel === StorageLevel.DISK_ONLY)
+
+    // Memory only -> memory and disk
+    rdd.setStorageLevel(StorageLevel.MEMORY_ONLY)
+    data.transformStorageLevel()
+    assert(rdd.getStorageLevel === StorageLevel.MEMORY_AND_DISK)
+
+    // Memory and disk -> memory and disk
+    data.transformStorageLevel()
+    assert(rdd.getStorageLevel === StorageLevel.MEMORY_AND_DISK)
+
+    // Other properties (i.e. whether to serialize, replication factor) should stay
+    rdd.setStorageLevel(StorageLevel.MEMORY_ONLY_SER_2)
+    data.transformStorageLevel()
+    assert(rdd.getStorageLevel === StorageLevel.MEMORY_AND_DISK_SER_2)
+
+    // Off-heap should fail fast
+    rdd.setStorageLevel(StorageLevel.OFF_HEAP)
+    intercept[SparkException] { data.transformStorageLevel() }
+  }
+
   test("basic lineage truncation") {
     val numPartitions = 4
     val parallelRdd = sc.parallelize(1 to 100, numPartitions)
@@ -66,10 +102,10 @@ class LocalCheckpointSuite extends SparkFunSuite with LocalSparkContext {
   }
 
   test("indirect lineage truncation") {
-    val numPartitions = 4
-    val parallelRdd = sc.parallelize(1 to 100, numPartitions)
-    val mappedRdd = parallelRdd.map { i => i + 1 }
-    val filteredRdd = mappedRdd.filter { i => i % 2 == 0 }.localCheckpoint()
+    val filteredRdd = sc.parallelize(1 to 100, 4)
+      .map { i => i + 1 }
+      .filter { i => i % 2 == 0 }
+      .localCheckpoint()
     val coalescedRdd = filteredRdd.repartition(10)
 
     // After an action, only the dependencies of the checkpointed RDD changes
@@ -84,11 +120,35 @@ class LocalCheckpointSuite extends SparkFunSuite with LocalSparkContext {
     assert(coalescedRdd.collect() === result)
   }
 
+  test("checkpoint without draining iterator") {
+    val filteredRdd = sc.parallelize(1 to 100, 4)
+      .map { i => i + 1 }
+      .filter { i => i % 2 == 0 }
+      .sortBy(identity) // needed for determinism
+      .localCheckpoint()
+
+    // This does not drain the iterator, but checkpointing should still work
+    val first = filteredRdd.first()
+    assert(filteredRdd.count() === 50)
+    assert(filteredRdd.count() === 50)
+    assert(filteredRdd.first() === first)
+    assert(filteredRdd.first() === first)
+
+    // Test the same thing by calling actions on the child instead
+    val coalescedRdd = filteredRdd.repartition(10)
+    val first2 = coalescedRdd.first()
+    assert(coalescedRdd.count() === 50)
+    assert(coalescedRdd.count() === 50)
+    assert(coalescedRdd.first() === first2)
+    assert(coalescedRdd.first() === first2)
+  }
+
   test("checkpoint files are in disk store") {
     val numPartitions = 4
-    val parallelRdd = sc.parallelize(1 to 100, numPartitions)
-    val mappedRdd = parallelRdd.map { i => i + 1 }
-    val filteredRdd = mappedRdd.filter { i => i % 2 == 0 }.localCheckpoint()
+    val filteredRdd = sc.parallelize(1 to 100, numPartitions)
+      .map { i => i + 1 }
+      .filter { i => i % 2 == 0 }
+      .localCheckpoint()
     val bmm = sc.env.blockManager.master
 
     // After an action, the blocks should be found somewhere on disk
@@ -98,71 +158,51 @@ class LocalCheckpointSuite extends SparkFunSuite with LocalSparkContext {
     assert(filteredRdd.checkpointData.isDefined)
     assert(filteredRdd.checkpointData.get.checkpointRDD.isDefined)
 
-    // These blocks should be cached using the checkpoint RDD's ID
-    val checkpointRddId = filteredRdd.checkpointData.flatMap(_.checkpointRDD).get.id
     (0 until numPartitions).foreach { i =>
-      val blockId = RDDBlockId(checkpointRddId, i)
+      val blockId = RDDBlockId(filteredRdd.id, i)
       val status = bmm.getBlockStatus(blockId).values.head
       assert(status.storageLevel === StorageLevel.DISK_ONLY)
       assert(status.diskSize > 0)
     }
   }
 
-  test("checkpoint files do not interfere with caching") {
+  test("checkpoint files are in disk store with caching") {
     val numPartitions = 4
-    val parallelRdd = sc.parallelize(1 to 100, numPartitions)
-    val mappedRdd = parallelRdd.map { i => i + 1 }
-    val filteredRdd = mappedRdd.filter { i => i % 2 == 0 }
-      .persist(StorageLevel.MEMORY_ONLY_2) // also cache it in memory
+    val filteredRdd = sc.parallelize(1 to 100, numPartitions)
+      .map { i => i + 1 }
+      .filter { i => i % 2 == 0 }
+      .persist(StorageLevel.MEMORY_ONLY)
       .localCheckpoint()
     val bmm = sc.env.blockManager.master
 
-    // After an action, the blocks should be found somewhere on disk
-    assert(bmm.getStorageStatus.forall(_.memUsed == 0))
-    assert(bmm.getStorageStatus.forall(_.diskUsed == 0))
+    // After an action, the blocks should be found in the
+    // block manager with a new storage level that uses disk
     filteredRdd.collect()
-    assert(bmm.getStorageStatus.forall(_.memUsed > 0))
-    assert(bmm.getStorageStatus.forall(_.diskUsed > 0))
-    assert(filteredRdd.checkpointData.isDefined)
-    assert(filteredRdd.checkpointData.get.checkpointRDD.isDefined)
-
-    /** Return whether blocks of the specified RDD are cached with a particular storage level. */
-    def areBlocksCached(rddId: Int, level: StorageLevel): Boolean = {
-      (0 until numPartitions).forall { i =>
-        val blockId = RDDBlockId(rddId, i)
-        val status = bmm.getBlockStatus(blockId).values
-        status.nonEmpty && status.head.storageLevel == level
-      }
+    (0 until numPartitions).foreach { i =>
+      val blockId = RDDBlockId(filteredRdd.id, i)
+      val status = bmm.getBlockStatus(blockId).values.head
+      assert(status.storageLevel === StorageLevel.MEMORY_AND_DISK)
+      assert(status.memSize > 0)
     }
-
-    // Checkpoint files should remain even if we unpersist the RDD
-    val checkpointRddId = filteredRdd.checkpointData.flatMap(_.checkpointRDD).get.id
-    assert(areBlocksCached(filteredRdd.id, StorageLevel.MEMORY_ONLY_2))
-    assert(areBlocksCached(checkpointRddId, StorageLevel.DISK_ONLY))
-    filteredRdd.unpersist(blocking = true)
-    assert(!areBlocksCached(filteredRdd.id, StorageLevel.MEMORY_ONLY_2))
-    assert(areBlocksCached(checkpointRddId, StorageLevel.DISK_ONLY))
   }
 
   test("missing checkpoint file fails with informative message") {
     val numPartitions = 4
-    val parallelRdd = sc.parallelize(1 to 100, numPartitions)
-    val mappedRdd = parallelRdd.map { i => i + 1 }
-    val filteredRdd = mappedRdd.filter { i => i % 2 == 0 }.localCheckpoint()
+    val filteredRdd = sc.parallelize(1 to 100, numPartitions)
+      .map { i => i + 1 }
+      .filter { i => i % 2 == 0 }
+      .localCheckpoint()
     val bmm = sc.env.blockManager.master
 
     // After an action, the blocks should be found somewhere on disk
     filteredRdd.collect()
-    assert(filteredRdd.checkpointData.isDefined)
-    assert(filteredRdd.checkpointData.get.checkpointRDD.isDefined)
-    val checkpointRddId = filteredRdd.checkpointData.flatMap(_.checkpointRDD).get.id
     (0 until numPartitions).foreach { i =>
-      assert(bmm.contains(RDDBlockId(checkpointRddId, i)))
+      assert(bmm.contains(RDDBlockId(filteredRdd.id, i)))
     }
 
     // Remove one of the blocks to simulate executor failure
     // Collecting the RDD should now fail with an informative exception
-    val blockId = RDDBlockId(checkpointRddId, numPartitions - 1)
+    val blockId = RDDBlockId(filteredRdd.id, numPartitions - 1)
     bmm.removeBlock(blockId)
     try {
       filteredRdd.collect()

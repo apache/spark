@@ -23,7 +23,7 @@ import org.apache.spark.{Partition, SparkContext, SparkEnv, SparkException, Task
 import org.apache.spark.storage.RDDBlockId
 
 /**
- * An RDD that reads from checkpoint files previously written to the local file system.
+ * An RDD that reads from checkpoint files previously written into Spark's caching layer.
  *
  * Since local checkpointing is not intended for recovery across applications, it is possible
  * to always know a priori the exact partitions to compute. There are no guarantees, however,
@@ -33,11 +33,12 @@ import org.apache.spark.storage.RDDBlockId
  */
 private[spark] class LocalCheckpointRDD[T: ClassTag](
     @transient sc: SparkContext,
+    rddId: Int,
     originalPartitionIndices: Array[Int])
   extends CheckpointRDD[T](sc) {
 
   def this(rdd: RDD[T]) {
-    this(rdd.context, rdd.partitions.map(_.index))
+    this(rdd.context, rdd.id, rdd.partitions.map(_.index))
   }
 
   /**
@@ -51,7 +52,7 @@ private[spark] class LocalCheckpointRDD[T: ClassTag](
    * Return the location of the checkpoint block associated with the given partition.
    */
   protected override def getPreferredLocations(partition: Partition): Seq[String] = {
-    val blockId = RDDBlockId(id, partition.index)
+    val blockId = RDDBlockId(rddId, partition.index)
     SparkEnv.get.blockManager.master.getLocations(blockId).map(_.host)
   }
 
@@ -63,7 +64,7 @@ private[spark] class LocalCheckpointRDD[T: ClassTag](
    * cases, however, this block should already be local in this executor's disk store.
    */
   override def compute(partition: Partition, context: TaskContext): Iterator[T] = {
-    val blockId = RDDBlockId(id, partition.index)
+    val blockId = RDDBlockId(rddId, partition.index)
     SparkEnv.get.blockManager.get(blockId) match {
       case Some(result) => result.data.asInstanceOf[Iterator[T]]
       case None => throw new SparkException(
