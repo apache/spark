@@ -220,13 +220,16 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
         // 2. Create an Aggregate Operator for partial aggregations.
         val namedGroupingExpressions = groupingExpressions.map {
-          case ne: NamedExpression => ne
+          case ne: NamedExpression => ne -> ne
           // If the expression is not a NamedExpressions, we add an alias.
           // So, when we generate the result of the operator, the Aggregate Operator
           // can directly get the Seq of attributes representing the grouping expressions.
-          case other => Alias(other, other.toString)()
+          case other =>
+            val withAlias = Alias(other, other.toString)()
+            other -> withAlias
         }
-        val namedGroupingAttributes = namedGroupingExpressions.map(_.toAttribute)
+        val groupExpressionMap = namedGroupingExpressions.toMap
+        val namedGroupingAttributes = namedGroupingExpressions.map(_._2.toAttribute)
         val partialAggregateExpressions = aggregateExpressions.map {
           case AggregateExpression2(aggregateFunction, mode, isDistinct) =>
             AggregateExpression2(aggregateFunction, Partial, isDistinct)
@@ -237,7 +240,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         val partialAggregate =
           Aggregate2Sort(
             true,
-            namedGroupingExpressions,
+            namedGroupingExpressions.map(_._2),
             partialAggregateExpressions,
             partialAggregateAttributes,
             namedGroupingAttributes ++ partialAggregateAttributes,
@@ -256,6 +259,8 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           expr.transform {
             case agg: AggregateExpression2 =>
               aggregateFunctionMap(agg.aggregateFunction).toAttribute
+            case expression if groupExpressionMap.contains(expression) =>
+              groupExpressionMap(expression).toAttribute
           }.asInstanceOf[NamedExpression]
         }
         val finalAggregate = Aggregate2Sort(
