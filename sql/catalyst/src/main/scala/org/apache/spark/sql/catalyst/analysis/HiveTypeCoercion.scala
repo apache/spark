@@ -426,6 +426,12 @@ object HiveTypeCoercion {
             DecimalType(min(p1 - s1, p2 - s2) + max(s1, s2), max(s1, s2))
           )
 
+        case Pmod(e1 @ DecimalType.Expression(p1, s1), e2 @ DecimalType.Expression(p2, s2)) =>
+          Cast(
+            Pmod(Cast(e1, DecimalType.Unlimited), Cast(e2, DecimalType.Unlimited)),
+            DecimalType(min(p1 - s1, p2 - s2) + max(s1, s2), max(s1, s2))
+          )
+
         // When we compare 2 decimal types with different precisions, cast them to the smallest
         // common precision.
         case b @ BinaryComparison(e1 @ DecimalType.Expression(p1, s1),

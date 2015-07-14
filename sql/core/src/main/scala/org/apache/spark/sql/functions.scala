@@ -1372,6 +1372,23 @@ object functions {
   def pow(l: Double, rightName: String): Column = pow(l, Column(rightName))
 
   /**
+   * Returns the positive value of dividend mod divisor.
+   *
+   * @group math_funcs
+   * @since 1.5.0
+   */
+  def pmod(dividend: Column, divisor: Column): Column = Pmod(dividend.expr, divisor.expr)
+
+  /**
+   * Returns the positive value of dividend mod divisor.
+   *
+   * @group math_funcs
+   * @since 1.5.0
+   */
+  def pmod(dividendColName: String, divisorColName: String): Column =
+    pmod(Column(dividendColName), Column(divisorColName))
+
+  /**
    * Returns the double value that is closest in value to the argument and
    * is equal to a mathematical integer.
    *
