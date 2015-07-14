@@ -41,6 +41,10 @@ private[spark] class RModelFormula(override val uid: String)
   val formula: Param[String] = new Param(this, "formula", "R model formula")
   protected var parsedFormula: Option[RFormula] = None
 
+  /**
+   * Sets the formula to use for this transformer. Must be called before use.
+   * @param value a R formula in string form (e.g. "y ~ x + z")
+   */
   def setFormula(value: String): this.type = {
     parsedFormula = Some(RFormulaParser.parse(value))
     set(formula, value)
