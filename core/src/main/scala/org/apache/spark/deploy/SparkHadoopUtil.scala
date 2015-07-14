@@ -39,6 +39,8 @@ import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.util.Utils
 import org.apache.spark.{Logging, SparkConf, SparkException}
 
+import scala.util.control.NonFatal
+
 /**
  * :: DeveloperApi ::
  * Contains util methods to interact with Hadoop from Spark.
@@ -248,19 +250,25 @@ class SparkHadoopUtil extends Logging {
       dir: Path,
       prefix: String,
       exclusionSuffix: String): Array[FileStatus] = {
-    val fileStatuses = remoteFs.listStatus(dir,
-      new PathFilter {
-        override def accept(path: Path): Boolean = {
-          val name = path.getName
-          name.startsWith(prefix) && !name.endsWith(exclusionSuffix)
+    try {
+      val fileStatuses = remoteFs.listStatus(dir,
+        new PathFilter {
+          override def accept(path: Path): Boolean = {
+            val name = path.getName
+            name.startsWith(prefix) && !name.endsWith(exclusionSuffix)
+          }
+        })
+      Arrays.sort(fileStatuses, new Comparator[FileStatus] {
+        override def compare(o1: FileStatus, o2: FileStatus): Int = {
+          Longs.compare(o1.getModificationTime, o2.getModificationTime)
         }
       })
-    Arrays.sort(fileStatuses, new Comparator[FileStatus] {
-      override def compare(o1: FileStatus, o2: FileStatus): Int = {
-        Longs.compare(o1.getModificationTime, o2.getModificationTime)
-      }
-    })
-    fileStatuses
+      fileStatuses
+    } catch {
+      case NonFatal(e) =>
+        logWarning("Error while attempting to list files from application straging dir", e)
+        Array.empty
+    }
   }
 
   /**
