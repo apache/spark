@@ -196,6 +196,8 @@ private[joins] object RangeIndex {
           case 1 =>
             currentActiveRows += row
             currentActivatedRows += row
+          case 0 =>
+            currentActivatedRows += row
           case -1 =>
             currentActiveRows -= row
         }
@@ -220,9 +222,19 @@ private[joins] object RangeIndex {
     (row: InternalRow) => {
       val Row(low, high) = lowHighExtr(row)
       // Valid points and intervals.
-      if (low != null && high != null && cmp.compare(low, high) <= 0) {
+      if (low != null && high != null) {
+        val result = cmp.compare(low, high)
         val copy = row.copy()
-        (low, 1, copy) ::(high, -1, copy) :: Nil
+        // Point
+        if (result == 0) {
+          (low, 0, copy) :: Nil
+        }
+        // Interval
+        else if (result < 0) {
+          (low, 1, copy) ::(high, -1, copy) :: Nil
+        }
+        // Reversed Interval (low > high) - Cannot join on this record.
+        else Nil
       }
       // Nulls
       else Nil
