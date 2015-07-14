@@ -91,8 +91,8 @@ def send_archived_logs():
 
         run_cmd(['tar', 'czf', log-archive] + log_files.strip().split('\n'))
 
-        jenkins_build_dir = os.environ["JENKINS_HOME"] + "/jobs/" + os.environ["JOB_NAME"] +
-        "/builds/" + os.environ["BUILD_NUMBER"]
+        jenkins_build_dir = os.environ["JENKINS_HOME"] + "/jobs/" + os.environ["JOB_NAME"] + \
+            "/builds/" + os.environ["BUILD_NUMBER"]
 
         scp_proc = subprocess.Popen(['scp', log_archive,
                                      'amp-jenkins-master:' + jenkins_build_dir + '/' + log_archive],
@@ -133,10 +133,10 @@ def bind_message_base(build_display_name, build_url, ghprb_pull_id, short_commit
     parameters into a closure without the specific message and returns a function
     able to generate strong messages for a specific description.
     """
-    return lambda mssg, post_mssg="":\
-        '**[Test build ' + build_display_name + ' ' + mssg + '](' + build_url +
-'console)** for PR ' + ghprb_pull_id + ' at commit [\`' + short_commit_hash + '\`](' +
-commit_url + ')' + str(' ' + post_mssg + '.') if post_mssg else '.'
+    return lambda mssg, post_mssg="": \
+        '**[Test build ' + build_display_name + ' ' + mssg + '](' + build_url + \
+        'console)** for PR ' + ghprb_pull_id + ' at commit [\`' + short_commit_hash + '\`](' + \
+        commit_url + ')' + str(' ' + post_mssg + '.') if post_mssg else '.'
 
 
 def success_result_note(mssg):
