@@ -341,7 +341,7 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
     updateAndCheck(provider) { list =>
       list.size should be (1)
       list.head.attempts.size should be (1)
-      list.head.attempts.head.attemptId should be (Some("attempt1"))
+      list.head.attempts.head.attemptId should be (Some("attempt2"))
     }
     assert(!log1.exists())
 
