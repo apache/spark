@@ -52,7 +52,7 @@ class BisectingKMeansSuite extends SparkFunSuite with MLlibTestSparkContext {
     val data = sc.parallelize(localSeed, 2)
     val model = algo.run(data)
     assert(model.getClusters.length == 123)
-    assert(model.node.getHeight ~== 702.86414 absTol 10E-4)
+    assert(model.node.getHeight ~== 705.6925 absTol 10E-4)
 
     // check the relations between a parent cluster and its children
     assert(model.node.getParent === None)

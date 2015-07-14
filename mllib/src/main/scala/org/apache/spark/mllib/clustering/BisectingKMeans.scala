@@ -147,6 +147,7 @@ class BisectingKMeans private (
           head.unpersist()
           rddArray = rddArray.filterNot(_.hashCode() == head.hashCode())
         }
+        clusterStats = clusterStats ++ divided
         step += 1
         log.info(s"${sc.appName} adding ${divided.size} new clusterStats at step:${step}")
       }
@@ -154,7 +155,7 @@ class BisectingKMeans private (
     // unpersist kept RDDs
     rddArray.foreach(_.unpersist())
 
-    val nodes = summarizeAsClusters(data, clusterStats)
+    val nodes = calcCriterions(data, clusterStats)
 
     // build a cluster tree by Map class which is expressed
     log.info(s"Building the cluster tree is started in ${sc.appName}")
@@ -188,12 +189,38 @@ class BisectingKMeans private (
    * Summarizes data by each cluster as ClusterTree classes
    */
   private[clustering]
-  def summarizeAsClusters(
+  def calcCriterions(
       data: RDD[(BigInt, BV[Double])],
       stats: Map[BigInt, ClusterNodeStat]): Map[BigInt, ClusterNode] = {
 
+    // TODO: support other criteria, such as entropy
+    calcAvgConsts(data, stats)
+  }
+
+  private[clustering]
+  def calcAvgConsts(
+      data: RDD[(BigInt, BV[Double])],
+      stats: Map[BigInt, ClusterNodeStat]): Map[BigInt, ClusterNode] = {
+
+    val bcCenters = data.sparkContext.broadcast(stats.map { case (i, stat) => i -> stat.center })
+    val costs = data.mapPartitions { iter =>
+      val counters = mutable.Map.empty[BigInt, (Long, Double)]
+      bcCenters.value.foreach {case (i, center) => counters(i) = (0L, 0.0)}
+      iter.foreach { case (i, point) =>
+        val cost = breezeNorm(bcCenters.value.apply(i) - point, 2.0)
+        counters(i) = (counters(i)._1 + 1, counters(i)._2 + cost)
+      }
+      counters.toIterator
+    }.reduceByKey { case((n1, cost1), (n2, cost2)) =>
+      (n1 + n2, cost1 + cost2)
+    }.collectAsMap()
+
     stats.map { case (i, stat) =>
-      i -> new ClusterNode(Vectors.fromBreeze(stat.center), stat.rows, breezeNorm(stat.variances, 2.0))
+      val avgCost = costs(i)._1 match {
+        case x if x == 0.0 => 0.0
+        case _ => costs(i)._2 / costs(i)._1
+      }
+      i -> new ClusterNode(Vectors.fromBreeze(stat.center), stat.rows, avgCost)
     }
   }
 
