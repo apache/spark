@@ -200,6 +200,9 @@ private[spark] class EventLoggingListener(
   }
 
   // No-op because logging every update would be overkill
+  override def onBlockUpdated(event: SparkListenerBlockUpdated): Unit = {}
+
+  // No-op because logging every update would be overkill
   override def onExecutorMetricsUpdate(event: SparkListenerExecutorMetricsUpdate): Unit = { }
 
   /**
