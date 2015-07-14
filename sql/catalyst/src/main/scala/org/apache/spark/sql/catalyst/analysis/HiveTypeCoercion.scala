@@ -222,13 +222,19 @@ object HiveTypeCoercion {
 
         case b @ BinaryOperator(left, right) if left.dataType != right.dataType =>
           findTightestCommonTypeOfTwo(left.dataType, right.dataType).map { commonType =>
-            // If the expression accepts the tighest common type, cast to that.
-            // Otherwise, don't do anything with the expression.
             if (b.inputType.acceptsType(commonType)) {
+              // If the expression accepts the tighest common type, cast to that.
               val newLeft = if (left.dataType == commonType) left else Cast(left, commonType)
               val newRight = if (right.dataType == commonType) right else Cast(right, commonType)
               b.makeCopy(Array(newLeft, newRight))
+            } else if (commonType == NullType) {
+              // If the common type is null type (from null literals), cast the null type into the
+              // first accepted type.
+              val newLeft = Cast(left, b.inputType.defaultConcreteType)
+              val newRight = Cast(right, b.inputType.defaultConcreteType)
+              b.makeCopy(Array(newLeft, newRight))
             } else {
+              // Otherwise, don't do anything with the expression.
               b
             }
           }.getOrElse(b)  // If there is no applicable conversion, leave expression unchanged.

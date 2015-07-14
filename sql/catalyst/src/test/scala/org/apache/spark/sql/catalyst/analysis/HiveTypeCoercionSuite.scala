@@ -194,6 +194,12 @@ class HiveTypeCoercionSuite extends PlanTest {
       Project(Seq(Alias(transformed, "a")()), testRelation))
   }
 
+  test("null literals handling for binary operators") {
+    ruleTest(HiveTypeCoercion.WidenTypes,
+      Add(Literal.create(null, NullType), Literal.create(null, NullType)),
+      Add(Literal.create(null, DoubleType), Literal.create(null, DoubleType)))
+  }
+
   test("coalesce casts") {
     ruleTest(HiveTypeCoercion.FunctionArgumentConversion,
       Coalesce(Literal(1.0)
