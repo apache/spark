@@ -26,7 +26,7 @@ class UDFSuite extends QueryTest with SQLTestUtils {
   private lazy val ctx = org.apache.spark.sql.test.TestSQLContext
   import ctx.implicits._
 
-  override def sqlContext(): SQLContext = ctx
+  override def sqlContext: SQLContext = ctx
 
   test("built-in fixed arity expressions") {
     val df = ctx.emptyDataFrame
@@ -108,7 +108,7 @@ class UDFSuite extends QueryTest with SQLTestUtils {
     ctx.udf.register("oneArgFilter", (n: Int) => { n > 80 })
 
     val df = ctx.sparkContext.parallelize(
-      (1 to 100).map(i => TestData(i, i.toString))).toDF()
+      (1 to 100).map(i => (i, i.toString))).toDF("key", "value")
     df.registerTempTable("integerData")
 
     val result =
