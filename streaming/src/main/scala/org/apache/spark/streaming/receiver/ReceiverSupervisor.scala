@@ -174,7 +174,7 @@ private[streaming] abstract class ReceiverSupervisor(
     }(futureExecutionContext)
   }
 
-  /** Reschedule this receiver and return a candidate executor list */
+  /** Return a list of candidate executors to run the receiver */
   def getAllowedLocations(): Seq[String] = Seq.empty
 
   /** Check if receiver has been marked for stopping */

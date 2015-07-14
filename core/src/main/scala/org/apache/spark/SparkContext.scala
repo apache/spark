@@ -1859,16 +1859,11 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     new SimpleFutureAction(waiter, resultFunc)
   }
 
-  /**
-   * Submit a job for execution and return a FutureJob holding the result. Return a Future for
-   * monitoring the job success or failure event.
-   */
   private[spark] def submitAsyncJob[T, U, R](
       rdd: RDD[T],
       processPartition: (TaskContext, Iterator[T]) => U,
       resultHandler: (Int, U) => Unit,
-      resultFunc: => R): Future[Unit] =
-  {
+      resultFunc: => R): Future[Unit] = {
     assertNotStopped()
     val cleanF = clean(processPartition)
     val callSite = getCallSite

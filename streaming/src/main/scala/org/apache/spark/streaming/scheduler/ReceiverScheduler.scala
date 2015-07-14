@@ -31,8 +31,8 @@ private[streaming] case class ReceiverTrackingInfo(
 private[streaming] trait ReceiverScheduler {
 
   /**
-   * Return a candidate executor list to run the receiver. If the list is empty, the caller can run
-   * this receiver in arbitrary executor.
+   * Return a list of candidate executors to run the receiver. If the list is empty, the caller can
+   * run this receiver in arbitrary executor.
    */
   def scheduleReceiver(
       receiverId: Int,
@@ -69,7 +69,7 @@ private[streaming] class LoadBalanceReceiverSchedulerImpl extends ReceiverSchedu
           val scheduledLocations = receiverTrackingInfo.scheduledLocations.get
           // The probability that a scheduled receiver will run in an executor is
           // 1.0 / scheduledLocations.size
-          scheduledLocations.map(location => (location, 1.0 / scheduledLocations.size))
+          scheduledLocations.map(location => location -> 1.0 / scheduledLocations.size)
         case ReceiverState.ACTIVE => Seq(receiverTrackingInfo.runningLocation.get -> 1.0)
       }
     }.groupBy(_._1).mapValues(_.map(_._2).sum) // Sum weights for each executor

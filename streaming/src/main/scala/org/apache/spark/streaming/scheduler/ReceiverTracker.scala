@@ -93,13 +93,17 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
 
   @volatile private var stopping = false
 
-  // Track receivers' status for scheduling
+  /**
+   * Track receivers' status for scheduling
+   */
   private val receiverTrackingInfos = new HashMap[Int, ReceiverTrackingInfo]
 
-  // Store all preferred locations for all receivers. We need this information to schedule receivers
+  /**
+   * Store all preferred locations for all receivers. We need this information to schedule receivers
+   */
   private val receiverPreferredLocations = new HashMap[Int, Option[String]]
 
-  // Use a separate lock to avoid dead-lock
+  /** Use a separate lock to avoid dead-lock */
   private val receiverTrackingInfosLock = new AnyRef
 
   /** Start the endpoint and receiver execution thread. */
@@ -405,8 +409,6 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
               }
             val future = ssc.sparkContext.submitAsyncJob[Receiver[_], Unit, Unit](
               receiverRDD, startReceiver, (_, _) => Unit, ())
-            // TODO Refactor JobWaiter to avoid creating a new Thread here. Otherwise, it's not
-            // scalable because we need a thread for each Receiver.
             future.onComplete {
               case Success(_) =>
                 if (stopping) {
