@@ -43,10 +43,10 @@ public final class Interval implements Serializable {
    * Finally is the unit name, ends with an optional "s".
    */
   private static String unitRegex(String unit) {
-    return "(?:\\s+(-?\\d+)\\s+" + unit + "s?)?";
+    return "(?:\\s+(-?\\d+)\\s+" + unit + "s?\\s*)?";
   }
 
-  private static Pattern p = Pattern.compile("interval" + unitRegex("year") + unitRegex("month") +
+  private static Pattern p = Pattern.compile("\\s*interval" + unitRegex("year") + unitRegex("month") +
     unitRegex("week") + unitRegex("day") + unitRegex("hour") + unitRegex("minute") +
     unitRegex("second") + unitRegex("millisecond") + unitRegex("microsecond"));
 
