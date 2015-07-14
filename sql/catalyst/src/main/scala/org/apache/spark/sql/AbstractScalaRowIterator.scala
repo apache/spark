@@ -24,7 +24,7 @@ package org.apache.spark.sql
  * class because that leads to compilation errors under Scala 2.11.
  */
 private[spark] class AbstractScalaRowIterator[T] extends Iterator[T] {
-  override def hasNext: Boolean = ???
+  override def hasNext: Boolean = throw new NotImplementedError
 
-  override def next(): T = ???
+  override def next(): T = throw new NotImplementedError
 }
