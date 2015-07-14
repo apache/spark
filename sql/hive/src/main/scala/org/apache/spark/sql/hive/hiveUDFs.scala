@@ -501,15 +501,13 @@ private[hive] case class HiveGenericUDTF(
   protected lazy val inputInspectors = children.map(toInspector)
 
   @transient
-  protected lazy val outputInspector = {
-    /**
-     * Field names are not used in HiveGenericUDTF#initialize(),
-     * so they are filled with empty strings.
-     */
-    function.initialize(ObjectInspectorFactory.getStandardStructObjectInspector(
-      (0 until inputInspectors.size).map(_ => ""),
-      inputInspectors))
-  }
+  /**
+   * [[org.apache.hadoop.hive.ql.udf.generic.GenericUDTF#initialize(ObjectInspector[])]] is
+   * duplicated in Hive v0.13.1 though, we leave this code below unchanged
+   * because a new initialization interface has meaningless field names as an argument.
+   * We need to revisit SPARK-8955 to fix the issue in future.
+   */
+  protected lazy val outputInspector = function.initialize(inputInspectors.toArray)
 
   @transient
   protected lazy val udtInput = new Array[AnyRef](children.length)
