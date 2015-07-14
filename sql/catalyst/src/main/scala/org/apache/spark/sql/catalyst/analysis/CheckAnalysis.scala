@@ -51,9 +51,9 @@ trait CheckAnalysis {
 
       case operator: LogicalPlan =>
         operator transformExpressionsUp {
-          case a: Attribute if !a.resolved =>
+          case e: Expression if !e.resolved =>
             val from = operator.inputSet.map(_.name).mkString(", ")
-            a.failAnalysis(s"cannot resolve '${a.prettyString}' given input columns $from")
+            e.failAnalysis(s"cannot resolve '${e.prettyString}' given input columns $from")
 
           case e: Expression if e.checkInputDataTypes().isFailure =>
             e.checkInputDataTypes() match {

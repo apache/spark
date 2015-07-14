@@ -611,7 +611,7 @@ class SQLQuerySuite extends QueryTest {
     val errMsg = intercept[AnalysisException] {
       sql("SELECT explode(*) AS val FROM data")
     }
-    assert(errMsg === "cannot resolve '*' given input columns a, b;")
+    assert(errMsg.getMessage === "cannot resolve '*' given input columns a, b; line 1 pos 7")
   }
 
   // TGF with non-TGF in project is allowed in Spark SQL, but not in Hive
