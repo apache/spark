@@ -360,12 +360,12 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
         new SerializableConfiguration(ssc.sparkContext.hadoopConfiguration)
 
       // Function to start the receiver on the worker node
-      val startReceiver = (context: TaskContext, iterator: Iterator[Receiver[_]]) => {
+      val startReceiver = (iterator: Iterator[Receiver[_]]) => {
         if (!iterator.hasNext) {
           throw new SparkException(
             "Could not start receiver as object not found.")
         }
-        if (context.attemptNumber() == 0) {
+        if (TaskContext.get().attemptNumber() == 0) {
           val receiver = iterator.next()
           val supervisor = new ReceiverSupervisorImpl(
             receiver, SparkEnv.get, serializableHadoopConf.value, checkpointDirOption)
@@ -407,7 +407,7 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
               } else {
                 ssc.sc.makeRDD(Seq(receiver -> scheduledLocations))
               }
-            val future = ssc.sparkContext.submitAsyncJob[Receiver[_], Unit, Unit](
+            val future = ssc.sparkContext.submitJob[Receiver[_], Unit, Unit](
               receiverRDD, startReceiver, (_, _) => Unit, ())
             future.onComplete {
               case Success(_) =>

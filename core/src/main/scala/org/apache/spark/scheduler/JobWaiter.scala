@@ -17,8 +17,6 @@
 
 package org.apache.spark.scheduler
 
-import scala.concurrent.{Future, Promise}
-
 /**
  * An object that waits for a DAGScheduler job to complete. As tasks finish, it passes their
  * results to the given handler function.
@@ -29,8 +27,6 @@ private[spark] class JobWaiter[T](
     totalTasks: Int,
     resultHandler: (Int, T) => Unit)
   extends JobListener {
-
-  private val promise = Promise[Unit]
 
   private var finishedTasks = 0
 
@@ -62,7 +58,6 @@ private[spark] class JobWaiter[T](
     if (finishedTasks == totalTasks) {
       _jobFinished = true
       jobResult = JobSucceeded
-      promise.trySuccess()
       this.notifyAll()
     }
   }
@@ -70,7 +65,6 @@ private[spark] class JobWaiter[T](
   override def jobFailed(exception: Exception): Unit = synchronized {
     _jobFinished = true
     jobResult = JobFailed(exception)
-    promise.tryFailure(exception)
     this.notifyAll()
   }
 
@@ -80,10 +74,4 @@ private[spark] class JobWaiter[T](
     }
     return jobResult
   }
-
-  /**
-   * Return a Future to monitoring the job success or failure event. You can use this method to
-   * avoid blocking your thread.
-   */
-  def toFuture: Future[Unit] = promise.future
 }

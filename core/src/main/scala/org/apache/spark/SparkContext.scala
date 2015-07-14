@@ -1859,25 +1859,6 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     new SimpleFutureAction(waiter, resultFunc)
   }
 
-  private[spark] def submitAsyncJob[T, U, R](
-      rdd: RDD[T],
-      processPartition: (TaskContext, Iterator[T]) => U,
-      resultHandler: (Int, U) => Unit,
-      resultFunc: => R): Future[Unit] = {
-    assertNotStopped()
-    val cleanF = clean(processPartition)
-    val callSite = getCallSite
-    val waiter = dagScheduler.submitJob(
-      rdd,
-      (context: TaskContext, iter: Iterator[T]) => cleanF(context, iter),
-      0 until rdd.partitions.size,
-      callSite,
-      allowLocal = false,
-      resultHandler,
-      localProperties.get)
-    waiter.toFuture
-  }
-
   /**
    * Cancel active jobs for the specified group. See [[org.apache.spark.SparkContext.setJobGroup]]
    * for more information.
