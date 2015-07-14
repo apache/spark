@@ -18,6 +18,7 @@
 package org.apache.spark.streaming
 
 import scala.collection.mutable.{ArrayBuffer, SynchronizedBuffer}
+import scala.collection.JavaConversions._
 import scala.concurrent.Future
 import scala.concurrent.ExecutionContext.Implicits.global
 
@@ -29,7 +30,7 @@ import org.apache.spark.streaming.scheduler._
 import org.scalatest.Matchers
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.time.SpanSugar._
-import org.apache.spark.Logging
+import org.apache.spark.{SparkConf, Logging}
 
 class StreamingListenerSuite extends TestSuiteBase with Matchers {
 
@@ -139,6 +140,16 @@ class StreamingListenerSuite extends TestSuiteBase with Matchers {
       }
     }
     true
+  }
+
+  test("registering listeners via spark.streaming.extraListeners") {
+    val conf = new SparkConf().setMaster("local").setAppName("test")
+      .set("spark.streaming.extraListeners", classOf[BatchInfoCollector].getName + "," +
+        classOf[ReceiverInfoCollector].getName)
+    val scc = new StreamingContext(conf, Seconds(1))
+
+    scc.scheduler.listenerBus.listeners.exists { _.isInstanceOf[BatchInfoCollector] }
+    scc.scheduler.listenerBus.listeners.exists { _.isInstanceOf[ReceiverInfoCollector] }
   }
 }
 
