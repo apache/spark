@@ -282,8 +282,7 @@ private[sql] case class EnsureRequirements(sqlContext: SQLContext) extends Rule[
 
         def addSortIfNecessary(child: SparkPlan): SparkPlan = {
           if (rowOrdering.nonEmpty && child.outputOrdering != rowOrdering) {
-            sqlContext.planner.BasicOperators.getSortOperator(
-              rowOrdering, global = false, child)
+            sqlContext.planner.BasicOperators.getSortOperator(rowOrdering, global = false, child)
           } else {
             child
           }
