@@ -128,45 +128,19 @@ abstract class AlgebraicAggregate extends AggregateFunction2 with Serializable{
     }
   }
 
-  lazy val boundUpdateExpressions = {
-    val updateSchema = inputSchema ++ offsetExpressions ++ bufferAttributes
-    val bound = updateExpressions.map(BindReferences.bindReference(_, updateSchema)).toArray
-    println(s"update: ${updateExpressions.mkString(",")}")
-    println(s"update: ${bound.mkString(",")}")
-    bound
-  }
-
-  val joinedRow = new JoinedRow
   override def update(buffer: MutableRow, input: InternalRow): Unit = {
-    var i = 0
-    while (i < bufferAttributes.size) {
-      buffer(i + bufferOffset) = boundUpdateExpressions(i).eval(joinedRow(input, buffer))
-      i += 1
-    }
+    throw new UnsupportedOperationException(
+      "AlgebraicAggregate's update should not be called directly")
   }
 
-  lazy val boundMergeExpressions = {
-    val mergeSchema = offsetExpressions ++ bufferAttributes ++ offsetExpressions ++ rightBufferSchema
-    mergeExpressions.map(BindReferences.bindReference(_, mergeSchema)).toArray
-  }
   override def merge(buffer1: MutableRow, buffer2: InternalRow): Unit = {
-    var i = 0
-    println(s"Merging: $buffer1 $buffer2 with ${boundMergeExpressions.mkString(",")}")
-    joinedRow(buffer1, buffer2)
-    while (i < bufferAttributes.size) {
-      println(s"$i + $bufferOffset: ${boundMergeExpressions(i).eval(joinedRow)}")
-      buffer1(i + bufferOffset) = boundMergeExpressions(i).eval(joinedRow)
-      i += 1
-    }
+    throw new UnsupportedOperationException(
+      "AlgebraicAggregate's merge should not be called directly")
   }
 
-  lazy val boundEvaluateExpression =
-    BindReferences.bindReference(evaluateExpression, offsetExpressions ++ bufferAttributes)
   override def eval(buffer: InternalRow): Any = {
-    println(s"eval: $buffer")
-    val res = boundEvaluateExpression.eval(buffer)
-    println(s"eval: $buffer with $boundEvaluateExpression => $res")
-    res
+    throw new UnsupportedOperationException(
+      "AlgebraicAggregate's eval should not be called directly")
   }
 }
 

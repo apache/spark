@@ -117,9 +117,9 @@ case class Aggregate2Sort(
         private val buffer: MutableRow = new GenericMutableRow(bufferSize)
         private val aggregateResult: MutableRow = new GenericMutableRow(aggregateAttributes.length)
         private val joinedRow = new JoinedRow4
-        private val resultProjection =
-          new InterpretedMutableProjection(
-            resultExpressions, groupingExpressions.map(_.toAttribute) ++ aggregateAttributes)
+        private lazy val resultProjection =
+          newMutableProjection(
+            resultExpressions, groupingExpressions.map(_.toAttribute) ++ aggregateAttributes)()
 
         val offsetAttributes = if (preShuffle) Nil else Seq.fill(groupingExpressions.length)(AttributeReference("offset", NullType)())
         val offsetExpressions = if (preShuffle) Nil else Seq.fill(groupingExpressions.length)(NoOp)
@@ -128,7 +128,7 @@ case class Aggregate2Sort(
           val initExpressions = offsetExpressions ++ aggregateFunctions.flatMap {
             case ae: AlgebraicAggregate => ae.initialValues
           }
-          println(initExpressions.mkString(","))
+          // println(initExpressions.mkString(","))
           newMutableProjection(initExpressions, Nil)().target(buffer)
         }
 
@@ -140,22 +140,36 @@ case class Aggregate2Sort(
             case ae: AlgebraicAggregate => ae.updateExpressions
           }
 
-          println(updateExpressions.mkString(","))
+          // println(updateExpressions.mkString(","))
           newMutableProjection(updateExpressions, bufferSchema ++ child.output)().target(buffer)
         }
 
-        val mergeProjection = {
+        lazy val mergeProjection = {
           val bufferSchemata =
             offsetAttributes ++ aggregateFunctions.flatMap {
               case ae: AlgebraicAggregate => ae.bufferAttributes
             } ++ offsetAttributes ++ aggregateFunctions.flatMap {
               case ae: AlgebraicAggregate => ae.rightBufferSchema
             }
-            val mergeExpressions = offsetExpressions ++ aggregateFunctions.flatMap {
-              case ae: AlgebraicAggregate => ae.mergeExpressions
-            }
+          val mergeExpressions = offsetExpressions ++ aggregateFunctions.flatMap {
+            case ae: AlgebraicAggregate => ae.mergeExpressions
+          }
 
           newMutableProjection(mergeExpressions, bufferSchemata)()
+        }
+
+        lazy val evalProjection = {
+          val bufferSchemata =
+            offsetAttributes ++ aggregateFunctions.flatMap {
+              case ae: AlgebraicAggregate => ae.bufferAttributes
+            } ++ offsetAttributes ++ aggregateFunctions.flatMap {
+              case ae: AlgebraicAggregate => ae.rightBufferSchema
+            }
+          val evalExpressions = aggregateFunctions.map {
+            case ae: AlgebraicAggregate => ae.evaluateExpression
+          }
+
+          newMutableProjection(evalExpressions, bufferSchemata)()
         }
 
         // Initialize this iterator.
@@ -177,7 +191,7 @@ case class Aggregate2Sort(
 
         private def initializeBuffer(): Unit = {
           initialProjection(EmptyRow)
-          println("initilized: " + buffer)
+          // println("initilized: " + buffer)
         }
 
         private def processRow(row: InternalRow): Unit = {
@@ -230,16 +244,20 @@ case class Aggregate2Sort(
                 // If it is preShuffle, we just output the grouping columns and the buffer.
                 joinedRow(currentGroupingKey, buffer).copy()
               } else {
+                /*
                 var i = 0
                 while (i < aggregateFunctions.length) {
                   aggregateResult.update(i, aggregateFunctions(i).eval(buffer))
                   i += 1
                 }
                 resultProjection(joinedRow(currentGroupingKey, aggregateResult)).copy()
+                */
+                resultProjection(joinedRow(currentGroupingKey, evalProjection.target(aggregateResult)(buffer)))
+
               }
             initializeBuffer()
 
-            println(s"outputRow $preShuffle " + outputRow)
+            // println(s"outputRow $preShuffle " + outputRow)
             outputRow
           } else {
             // no more result

@@ -70,6 +70,24 @@ class Aggregate2Suite extends QueryTest with BeforeAndAfterAll {
         """.stripMargin),
       Row(1, 20.0) :: Row(2, -0.5) :: Row(3, null) :: Nil)
 
+    checkAnswer(
+      ctx.sql(
+        """
+          |SELECT avg(value), key
+          |FROM agg2
+          |GROUP BY key
+        """.stripMargin),
+      Row(20.0, 1) :: Row(-0.5, 2) :: Row(null, 3) :: Nil)
+
+    checkAnswer(
+      ctx.sql(
+        """
+          |SELECT avg(value) + 1.5, key + 10
+          |FROM agg2
+          |GROUP BY key + 10
+        """.stripMargin),
+      Row(21.5, 11) :: Row(1.0, 12) :: Row(null, 13) :: Nil)
+
   }
 
   override def afterAll(): Unit = {
