@@ -29,11 +29,7 @@ class InMemoryColumnarQuerySuite extends QueryTest {
   import ctx.implicits._
   import ctx.{logicalPlanToSparkQuery, sql}
 
-  val testData = {
-    val df = (1 to 100).map(i => (i, i.toString)).toDF("key", "value")
-    df.registerTempTable("testData")
-    df
-  }
+  val testData = (1 to 100).map(i => (i, i.toString)).toDF("key", "value")
 
   test("simple columnar query") {
     val plan = ctx.executePlan(testData.logicalPlan).executedPlan
