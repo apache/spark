@@ -31,7 +31,7 @@ class ColumnExpressionSuite extends QueryTest with SQLTestUtils {
 
   override def sqlContext: SQLContext = ctx
 
-  val testData = (1 to 100).map(i => TestData(i, i.toString)).toDF("key", "value")
+  val testData = (1 to 100).map(i => (i, i.toString)).toDF("key", "value")
 
   val testData2 = (for { a <- 1 to 3; b <- 1 to 2 } yield (a, b))
       .map(t => (t._1, t._2))
