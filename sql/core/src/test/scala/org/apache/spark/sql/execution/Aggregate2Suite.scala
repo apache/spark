@@ -25,25 +25,36 @@ import org.scalatest.BeforeAndAfterAll
 class Aggregate2Suite extends QueryTest with BeforeAndAfterAll {
 
   protected lazy val ctx = TestSQLContext
+  import ctx.implicits._
 
   var originalUseAggregate2: Boolean = _
 
   override def beforeAll(): Unit = {
     originalUseAggregate2 = ctx.conf.useSqlAggregate2
     ctx.sql("set spark.sql.useAggregate2=true")
-    val data =
-      Row(1, 10) ::
-      Row(1, 20) ::
-      Row(1, 30) ::
-      Row(2, 0) ::
-      Row(2, -1) ::
-      Row(2, null) ::
-      Row(2, null) ::
-      Row(3, null) ::
-      Row(3, null) :: Nil
-    val schema =
-      StructType(StructField("key", IntegerType) :: StructField("value", IntegerType) :: Nil)
-    ctx.createDataFrame(ctx.sparkContext.parallelize(data, 2), schema).registerTempTable("agg2")
+    val data = Seq[(Int, Integer)](
+      (1, 10),
+      (1, 20),
+      (1, 30),
+      (2, 0),
+      (2, -1),
+      (2, null),
+      (2, null),
+      (3, null),
+      (3, null)).toDF("key", "value")
+
+    data.registerTempTable("agg2")
+  }
+
+  test("test average2 no key in output") {
+    checkAnswer(
+      ctx.sql(
+        """
+          |SELECT avg(value)
+          |FROM agg2
+          |GROUP BY key
+        """.stripMargin),
+      Row(-0.5) :: Row(20.0) :: Row(null) :: Nil)
   }
 
   test("test average2") {
