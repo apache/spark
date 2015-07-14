@@ -113,14 +113,14 @@ class SparkContext(object):
         SparkContext._ensure_initialized(self, gateway=gateway)
         try:
             self._do_init(master, appName, sparkHome, pyFiles, environment,
-                    batchSize, serializer, conf, jsc, profiler_cls, requirementsFile)
+                          batchSize, serializer, conf, jsc, profiler_cls, requirementsFile)
         except:
             # If an error occurs, clean up in order to allow future SparkContext creation:
             self.stop()
             raise
 
     def _do_init(self, master, appName, sparkHome, pyFiles,  environment,
-                batchSize, serializer, conf, jsc, profiler_cls, requirementsFile):
+                 batchSize, serializer, conf, jsc, profiler_cls, requirementsFile):
         self.environment = environment or {}
         self._conf = conf or SparkConf(_jvm=self._jvm)
         self._batchSize = batchSize  # -1 represents an unlimited batch size

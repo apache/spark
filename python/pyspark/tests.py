@@ -1664,9 +1664,9 @@ class ContextTests(unittest.TestCase):
             pip.main(['install', 'quadkey>0.0.4'])
             with SparkContext(requirementsFile=temp.name) as sc:
                 import quadkey
-                qks = sc.parallelize([(0,0),(1,1),(2,2)]) \
+                qks = sc.parallelize([(0, 0), (1, 1), (2, 2)]) \
                         .map(lambda pair: quadkey.from_geo(pair, 1).key)
-                self.assertSequenceEqual(['3','1','1'], qks.collect())
+                self.assertSequenceEqual(['3', '1', '1'], qks.collect())
 
     def test_progress_api(self):
         with SparkContext() as sc:
