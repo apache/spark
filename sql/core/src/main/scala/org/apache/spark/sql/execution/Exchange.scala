@@ -35,20 +35,12 @@ import org.apache.spark.{HashPartitioner, Partitioner, RangePartitioner, SparkEn
 
 /**
  * :: DeveloperApi ::
- * Performs a shuffle that will result in the desired `newPartitioning`.  Optionally sorts each
- * resulting partition based on expressions from the partition key.  It is invalid to construct an
- * exchange operator with a `newOrdering` that cannot be calculated using the partitioning key.
+ * Performs a shuffle that will result in the desired `newPartitioning`.
  */
 @DeveloperApi
-case class Exchange(
-    newPartitioning: Partitioning,
-    newOrdering: Seq[SortOrder],
-    child: SparkPlan)
-  extends UnaryNode {
+case class Exchange(newPartitioning: Partitioning, child: SparkPlan) extends UnaryNode {
 
   override def outputPartitioning: Partitioning = newPartitioning
-
-  override def outputOrdering: Seq[SortOrder] = newOrdering
 
   override def output: Seq[Attribute] = child.output
 
@@ -283,7 +275,7 @@ private[sql] case class EnsureRequirements(sqlContext: SQLContext) extends Rule[
         val needsShuffle = child.outputPartitioning != partitioning
 
         val withShuffle = if (needsShuffle) {
-          Exchange(partitioning, Nil, child)
+          Exchange(partitioning, child)
         } else {
           child
         }
