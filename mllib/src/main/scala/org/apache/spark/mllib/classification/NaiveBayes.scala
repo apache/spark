@@ -93,24 +93,58 @@ class NaiveBayesModel private[mllib] (
   override def predict(testData: Vector): Double = {
     modelType match {
       case Multinomial =>
-        val prob = thetaMatrix.multiply(testData)
-        BLAS.axpy(1.0, piVector, prob)
+        val prob = multinomialCalculation(testData)
         labels(prob.argmax)
       case Bernoulli =>
-        testData.foreachActive { (index, value) =>
-          if (value != 0.0 && value != 1.0) {
-            throw new SparkException(
-              s"Bernoulli naive Bayes requires 0 or 1 feature values but found $testData.")
-          }
-        }
-        val prob = thetaMinusNegTheta.get.multiply(testData)
-        BLAS.axpy(1.0, piVector, prob)
-        BLAS.axpy(1.0, negThetaSum.get, prob)
+        val prob = bernoulliCalculation(testData)
         labels(prob.argmax)
-      case _ =>
-        // This should never happen.
-        throw new UnknownError(s"Invalid modelType: $modelType.")
     }
+  }
+
+  def predictProbabilities(testData: RDD[Vector]): RDD[Vector] = {
+    val bcModel = testData.context.broadcast(this)
+    testData.mapPartitions { iter =>
+      val model = bcModel.value
+      iter.map(model.predictProbabilities)
+    }
+  }
+
+  def predictProbabilities(testData: Vector): Vector = {
+    modelType match {
+      case Multinomial =>
+        val prob = multinomialCalculation(testData)
+        posteriorProbabilities(prob)
+      case Bernoulli =>
+        val prob = bernoulliCalculation(testData)
+        posteriorProbabilities(prob)
+    }
+  }
+
+  private def multinomialCalculation(testData: Vector): DenseVector = {
+    val prob = thetaMatrix.multiply(testData)
+    BLAS.axpy(1.0, piVector, prob)
+    prob
+  }
+
+  private def bernoulliCalculation(testData: Vector): DenseVector = {
+    testData.foreachActive { (index, value) =>
+      if (value != 0.0 && value != 1.0) {
+        throw new SparkException(
+          s"Bernoulli naive Bayes requires 0 or 1 feature values but found $testData.")
+      }
+    }
+    val prob = thetaMinusNegTheta.get.multiply(testData)
+    BLAS.axpy(1.0, piVector, prob)
+    BLAS.axpy(1.0, negThetaSum.get, prob)
+    prob
+  }
+
+  private def posteriorProbabilities(prob: DenseVector): Vector = {
+    val probArray = prob.toArray
+    val maxLog = probArray.max
+    val probabilities = probArray.map(lp => math.exp(lp - maxLog))
+    val probSum = probabilities.sum
+    new DenseVector(labels.zip(probabilities.map(_ / probSum)).sortBy(_._1).map(_._2))
   }
 
   override def save(sc: SparkContext, path: String): Unit = {
