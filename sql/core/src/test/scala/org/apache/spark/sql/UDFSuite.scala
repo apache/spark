@@ -103,9 +103,8 @@ class UDFSuite extends QueryTest with SharedSQLContext {
   test("UDF in a WHERE") {
     ctx.udf.register("oneArgFilter", (n: Int) => { n > 80 })
 
-    val df = ctx.sparkContext.parallelize(
-      (1 to 100).map(i => (i, i.toString))).toDF("key", "value")
-    df.registerTempTable("integerData")
+    (1 to 100).map(i => (i, i.toString)).toDF("key", "value")
+      .registerTempTable("integerData")
 
     val result =
       sql("SELECT * FROM integerData WHERE oneArgFilter(key)")
