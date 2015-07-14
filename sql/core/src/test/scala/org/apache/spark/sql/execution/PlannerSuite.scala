@@ -77,13 +77,10 @@ class PlannerSuite extends SparkFunSuite with SQLTestUtils {
 
 
   test("sizeInBytes estimation of limit operator for broadcast hash join optimization") {
-    val testData2 = {
-      val df = (for { a <- 1 to 3; b <- 1 to 2 } yield (a, b))
-        .map(t => (t._1, t._2))
-        .toDF("a", "b")
-      df.registerTempTable("testData2")
-      df
-    }
+    (for { a <- 1 to 3; b <- 1 to 2 } yield (a, b))
+      .map(t => (t._1, t._2))
+      .toDF("a", "b")
+      .registerTempTable("testData2")
 
     def checkPlan(fieldTypes: Seq[DataType], newThreshold: Int): Unit = {
       setConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD, newThreshold)
