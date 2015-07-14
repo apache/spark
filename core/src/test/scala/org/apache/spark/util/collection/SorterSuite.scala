@@ -20,11 +20,10 @@ package org.apache.spark.util.collection
 import java.lang.{Float => JFloat, Integer => JInteger}
 import java.util.{Arrays, Comparator}
 
-import org.scalatest.FunSuite
-
+import org.apache.spark.{Logging, SparkFunSuite}
 import org.apache.spark.util.random.XORShiftRandom
 
-class SorterSuite extends FunSuite {
+class SorterSuite extends SparkFunSuite with Logging {
 
   test("equivalent to Arrays.sort") {
     val rand = new XORShiftRandom(123)
@@ -75,7 +74,7 @@ class SorterSuite extends FunSuite {
   /** Runs an experiment several times. */
   def runExperiment(name: String, skip: Boolean = false)(f: => Unit, prepare: () => Unit): Unit = {
     if (skip) {
-      println(s"Skipped experiment $name.")
+      logInfo(s"Skipped experiment $name.")
       return
     }
 
@@ -87,11 +86,11 @@ class SorterSuite extends FunSuite {
     while (i < 10) {
       val time = org.apache.spark.util.Utils.timeIt(1)(f, Some(prepare))
       next10 += time
-      println(s"$name: Took $time ms")
+      logInfo(s"$name: Took $time ms")
       i += 1
     }
 
-    println(s"$name: ($firstTry ms first try, ${next10 / 10} ms average)")
+    logInfo(s"$name: ($firstTry ms first try, ${next10 / 10} ms average)")
   }
 
   /**
@@ -104,9 +103,6 @@ class SorterSuite extends FunSuite {
    * has the keys and values alternating. The basic Java sorts work only on the keys, so the
    * real Java solution is to make Tuple2s to store the keys and values and sort an array of
    * those, while the Sorter approach can work directly on the input data format.
-   *
-   * Note that the Java implementation varies tremendously between Java 6 and Java 7, when
-   * the Java sort changed from merge sort to TimSort.
    */
   ignore("Sorter benchmark for key-value pairs") {
     val numElements = 25000000 // 25 mil

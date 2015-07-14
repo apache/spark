@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples.ml
 
 import org.apache.spark.{SparkConf, SparkContext}
@@ -87,7 +88,7 @@ object SimpleParamsExample {
       LabeledPoint(1.0, Vectors.dense(0.0, 2.2, -1.5))))
 
     // Make predictions on test data using the Transformer.transform() method.
-    // LogisticRegression.transform will only use the 'features' column.
+    // LogisticRegressionModel.transform will only use the 'features' column.
     // Note that model2.transform() outputs a 'myProbability' column instead of the usual
     // 'probability' column since we renamed the lr.probabilityCol parameter previously.
     model2.transform(test.toDF())
@@ -100,3 +101,4 @@ object SimpleParamsExample {
     sc.stop()
   }
 }
+// scalastyle:on println

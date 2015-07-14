@@ -24,6 +24,8 @@ import com.google.common.io.{Files, ByteStreams}
 
 import org.apache.commons.io.FileUtils
 
+import org.apache.ivy.core.settings.IvySettings
+
 import org.apache.spark.TestUtils.{createCompiledClass, JavaSourceFromString}
 import org.apache.spark.deploy.SparkSubmitUtils.MavenCoordinate
 
@@ -44,13 +46,30 @@ private[deploy] object IvyTestUtils {
       if (!useIvyLayout) {
         Seq(groupDirs, artifactDirs, artifact.version).mkString(File.separator)
       } else {
-        Seq(groupDirs, artifactDirs, artifact.version, ext + "s").mkString(File.separator)
+        Seq(artifact.groupId, artifactDirs, artifact.version, ext + "s").mkString(File.separator)
       }
     new File(prefix, artifactPath)
   }
 
-  private def artifactName(artifact: MavenCoordinate, ext: String = ".jar"): String = {
-    s"${artifact.artifactId}-${artifact.version}$ext"
+  /** Returns the artifact naming based on standard ivy or maven format. */
+  private def artifactName(
+      artifact: MavenCoordinate,
+      useIvyLayout: Boolean,
+      ext: String = ".jar"): String = {
+    if (!useIvyLayout) {
+      s"${artifact.artifactId}-${artifact.version}$ext"
+    } else {
+      s"${artifact.artifactId}$ext"
+    }
+  }
+
+  /** Returns the directory for the given groupId based on standard ivy or maven format. */
+  private def getBaseGroupDirectory(artifact: MavenCoordinate, useIvyLayout: Boolean): String = {
+    if (!useIvyLayout) {
+      artifact.groupId.replace(".", File.separator)
+    } else {
+      artifact.groupId
+    }
   }
 
   /** Write the contents to a file to the supplied directory. */
@@ -92,6 +111,22 @@ private[deploy] object IvyTestUtils {
     createCompiledClass(className, dir, sourceFile, Seq.empty)
   }
 
+  private def createDescriptor(
+      tempPath: File,
+      artifact: MavenCoordinate,
+      dependencies: Option[Seq[MavenCoordinate]],
+      useIvyLayout: Boolean): File = {
+    if (useIvyLayout) {
+      val ivyXmlPath = pathFromCoordinate(artifact, tempPath, "ivy", true)
+      Files.createParentDirs(new File(ivyXmlPath, "dummy"))
+      createIvyDescriptor(ivyXmlPath, artifact, dependencies)
+    } else {
+      val pomPath = pathFromCoordinate(artifact, tempPath, "pom", useIvyLayout)
+      Files.createParentDirs(new File(pomPath, "dummy"))
+      createPom(pomPath, artifact, dependencies)
+    }
+  }
+
   /** Helper method to write artifact information in the pom. */
   private def pomArtifactWriter(artifact: MavenCoordinate, tabCount: Int = 1): String = {
     var result = "\n" + "  " * tabCount + s"<groupId>${artifact.groupId}</groupId>"
@@ -121,15 +156,55 @@ private[deploy] object IvyTestUtils {
       "\n  <dependencies>\n" + inside + "\n  </dependencies>"
     }.getOrElse("")
     content += "\n</project>"
-    writeFile(dir, artifactName(artifact, ".pom"), content.trim)
+    writeFile(dir, artifactName(artifact, false, ".pom"), content.trim)
+  }
+
+  /** Helper method to write artifact information in the ivy.xml. */
+  private def ivyArtifactWriter(artifact: MavenCoordinate): String = {
+    s"""<dependency org="${artifact.groupId}" name="${artifact.artifactId}"
+       |            rev="${artifact.version}" force="true"
+       |            conf="compile->compile(*),master(*);runtime->runtime(*)"/>""".stripMargin
+  }
+
+  /** Create a pom file for this artifact. */
+  private def createIvyDescriptor(
+      dir: File,
+      artifact: MavenCoordinate,
+      dependencies: Option[Seq[MavenCoordinate]]): File = {
+    var content = s"""
+        |<?xml version="1.0" encoding="UTF-8"?>
+        |<ivy-module version="2.0" xmlns:m="http://ant.apache.org/ivy/maven">
+        |  <info organisation="${artifact.groupId}"
+        |        module="${artifact.artifactId}"
+        |        revision="${artifact.version}"
+        |        status="release" publication="20150405222456" />
+        |  <configurations>
+        |    <conf name="default" visibility="public" description="" extends="runtime,master"/>
+        |    <conf name="compile" visibility="public" description=""/>
+        |    <conf name="master" visibility="public" description=""/>
+        |    <conf name="runtime" visibility="public" description="" extends="compile"/>
+        |    <conf name="pom" visibility="public" description=""/>
+        |  </configurations>
+        |  <publications>
+        |     <artifact name="${artifactName(artifact, true, "")}" type="jar" ext="jar"
+        |               conf="master"/>
+        |  </publications>
+      """.stripMargin.trim
+    content += dependencies.map { deps =>
+      val inside = deps.map(ivyArtifactWriter).mkString("\n")
+      "\n  <dependencies>\n" + inside + "\n  </dependencies>"
+    }.getOrElse("")
+    content += "\n</ivy-module>"
+    writeFile(dir, "ivy.xml", content.trim)
   }
 
   /** Create the jar for the given maven coordinate, using the supplied files. */
   private def packJar(
       dir: File,
       artifact: MavenCoordinate,
-      files: Seq[(String, File)]): File = {
-    val jarFile = new File(dir, artifactName(artifact))
+      files: Seq[(String, File)],
+      useIvyLayout: Boolean): File = {
+    val jarFile = new File(dir, artifactName(artifact, useIvyLayout))
     val jarFileStream = new FileOutputStream(jarFile)
     val jarStream = new JarOutputStream(jarFileStream, new java.util.jar.Manifest())
 
@@ -187,12 +262,10 @@ private[deploy] object IvyTestUtils {
         } else {
           Seq(javaFile)
         }
-      val jarFile = packJar(jarPath, artifact, allFiles)
+      val jarFile = packJar(jarPath, artifact, allFiles, useIvyLayout)
       assert(jarFile.exists(), "Problem creating Jar file")
-      val pomPath = pathFromCoordinate(artifact, tempPath, "pom", useIvyLayout)
-      Files.createParentDirs(new File(pomPath, "dummy"))
-      val pomFile = createPom(pomPath, artifact, dependencies)
-      assert(pomFile.exists(), "Problem creating Pom file")
+      val descriptor = createDescriptor(tempPath, artifact, dependencies, useIvyLayout)
+      assert(descriptor.exists(), "Problem creating Pom file")
     } finally {
       FileUtils.deleteDirectory(root)
     }
@@ -237,7 +310,10 @@ private[deploy] object IvyTestUtils {
       dependencies: Option[String],
       rootDir: Option[File],
       useIvyLayout: Boolean = false,
-      withPython: Boolean = false)(f: String => Unit): Unit = {
+      withPython: Boolean = false,
+      ivySettings: IvySettings = new IvySettings)(f: String => Unit): Unit = {
+    val deps = dependencies.map(SparkSubmitUtils.extractMavenCoordinates)
+    purgeLocalIvyCache(artifact, deps, ivySettings)
     val repo = createLocalRepositoryForTests(artifact, dependencies, rootDir, useIvyLayout,
       withPython)
     try {
@@ -245,16 +321,28 @@ private[deploy] object IvyTestUtils {
     } finally {
       // Clean up
       if (repo.toString.contains(".m2") || repo.toString.contains(".ivy2")) {
-        FileUtils.deleteDirectory(new File(repo,
-          artifact.groupId.replace(".", File.separator) + File.separator + artifact.artifactId))
-        dependencies.map(SparkSubmitUtils.extractMavenCoordinates).foreach { seq =>
-          seq.foreach { dep =>
-            FileUtils.deleteDirectory(new File(repo,
-              dep.artifactId.replace(".", File.separator)))
+        val groupDir = getBaseGroupDirectory(artifact, useIvyLayout)
+        FileUtils.deleteDirectory(new File(repo, groupDir + File.separator + artifact.artifactId))
+        deps.foreach { _.foreach { dep =>
+            FileUtils.deleteDirectory(new File(repo, getBaseGroupDirectory(dep, useIvyLayout)))
           }
         }
       } else {
         FileUtils.deleteDirectory(repo)
+      }
+      purgeLocalIvyCache(artifact, deps, ivySettings)
+    }
+  }
+
+  /** Deletes the test packages from the ivy cache */
+  private def purgeLocalIvyCache(
+      artifact: MavenCoordinate,
+      dependencies: Option[Seq[MavenCoordinate]],
+      ivySettings: IvySettings): Unit = {
+    // delete the artifact from the cache as well if it already exists
+    FileUtils.deleteDirectory(new File(ivySettings.getDefaultCache, artifact.groupId))
+    dependencies.foreach { _.foreach { dep =>
+        FileUtils.deleteDirectory(new File(ivySettings.getDefaultCache, dep.groupId))
       }
     }
   }

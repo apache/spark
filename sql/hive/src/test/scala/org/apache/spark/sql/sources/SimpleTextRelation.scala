@@ -27,6 +27,7 @@ import org.apache.hadoop.mapreduce.lib.output.{FileOutputFormat, TextOutputForma
 import org.apache.hadoop.mapreduce.{Job, RecordWriter, TaskAttemptContext}
 
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.catalyst.expressions.{Cast, Literal}
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.sql.{Row, SQLContext}
@@ -52,9 +53,10 @@ class AppendingTextOutputFormat(outputFile: Path) extends TextOutputFormat[NullW
   numberFormat.setGroupingUsed(false)
 
   override def getDefaultWorkFile(context: TaskAttemptContext, extension: String): Path = {
+    val uniqueWriteJobId = context.getConfiguration.get("spark.sql.sources.writeJobUUID")
     val split = context.getTaskAttemptID.getTaskID.getId
     val name = FileOutputFormat.getOutputName(context)
-    new Path(outputFile, s"$name-${numberFormat.format(split)}-${UUID.randomUUID()}")
+    new Path(outputFile, s"$name-${numberFormat.format(split)}-$uniqueWriteJobId")
   }
 }
 
@@ -108,12 +110,17 @@ class SimpleTextRelation(
 
     sparkContext.textFile(inputStatuses.map(_.getPath).mkString(",")).map { record =>
       Row(record.split(",").zip(fields).map { case (value, dataType) =>
-        Cast(Literal(value), dataType).eval()
+        // `Cast`ed values are always of Catalyst types (i.e. UTF8String instead of String, etc.)
+        val catalystValue = Cast(Literal(value), dataType).eval()
+        // Here we're converting Catalyst values to Scala values to test `needsConversion`
+        CatalystTypeConverters.convertToScala(catalystValue, dataType)
       }: _*)
     }
   }
 
   override def prepareJobForWrite(job: Job): OutputWriterFactory = new OutputWriterFactory {
+    job.setOutputFormatClass(classOf[TextOutputFormat[_, _]])
+
     override def newInstance(
         path: String,
         dataSchema: StructType,
@@ -152,6 +159,7 @@ class CommitFailureTestRelation(
         context: TaskAttemptContext): OutputWriter = {
       new SimpleTextOutputWriter(path, context) {
         override def close(): Unit = {
+          super.close()
           sys.error("Intentional task commitment failure for testing purpose.")
         }
       }

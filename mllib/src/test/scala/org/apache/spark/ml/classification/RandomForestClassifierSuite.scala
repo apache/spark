@@ -17,9 +17,10 @@
 
 package org.apache.spark.ml.classification
 
-import org.scalatest.FunSuite
-
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.impl.TreeTests
+import org.apache.spark.ml.param.ParamsSuite
+import org.apache.spark.ml.tree.LeafNode
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.{EnsembleTestHelper, RandomForest => OldRandomForest}
@@ -28,11 +29,10 @@ import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.DataFrame
 
-
 /**
  * Test suite for [[RandomForestClassifier]].
  */
-class RandomForestClassifierSuite extends FunSuite with MLlibTestSparkContext {
+class RandomForestClassifierSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   import RandomForestClassifierSuite.compareAPIs
 
@@ -61,6 +61,13 @@ class RandomForestClassifierSuite extends FunSuite with MLlibTestSparkContext {
       .setFeatureSubsetStrategy("auto")
       .setSeed(123)
     compareAPIs(orderedLabeledPoints50_1000, newRF, categoricalFeatures, numClasses)
+  }
+
+  test("params") {
+    ParamsSuite.checkParams(new RandomForestClassifier)
+    val model = new RandomForestClassificationModel("rfc",
+      Array(new DecisionTreeClassificationModel("dtc", new LeafNode(0.0, 0.0))))
+    ParamsSuite.checkParams(model)
   }
 
   test("Binary classification with continuous features:" +
@@ -158,7 +165,7 @@ private object RandomForestClassifierSuite {
       data, oldStrategy, rf.getNumTrees, rf.getFeatureSubsetStrategy, rf.getSeed.toInt)
     val newData: DataFrame = TreeTests.setMetadata(data, categoricalFeatures, numClasses)
     val newModel = rf.fit(newData)
-    // Use parent, fittingParamMap from newTree since these are not checked anyways.
+    // Use parent from newTree since this is not checked anyways.
     val oldModelAsNew = RandomForestClassificationModel.fromOld(
       oldModel, newModel.parent.asInstanceOf[RandomForestClassifier], categoricalFeatures)
     TreeTests.checkEqual(oldModelAsNew, newModel)

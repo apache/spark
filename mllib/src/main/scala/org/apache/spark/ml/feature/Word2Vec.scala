@@ -17,7 +17,7 @@
 
 package org.apache.spark.ml.feature
 
-import org.apache.spark.annotation.AlphaComponent
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
@@ -82,11 +82,11 @@ private[feature] trait Word2VecBase extends Params
 }
 
 /**
- * :: AlphaComponent ::
+ * :: Experimental ::
  * Word2Vec trains a model of `Map(String, Vector)`, i.e. transforms a word into a code for further
  * natural language processing or machine learning process.
  */
-@AlphaComponent
+@Experimental
 final class Word2Vec(override val uid: String) extends Estimator[Word2VecModel] with Word2VecBase {
 
   def this() = this(Identifiable.randomUID("w2v"))
@@ -132,13 +132,15 @@ final class Word2Vec(override val uid: String) extends Estimator[Word2VecModel] 
   override def transformSchema(schema: StructType): StructType = {
     validateAndTransformSchema(schema)
   }
+
+  override def copy(extra: ParamMap): Word2Vec = defaultCopy(extra)
 }
 
 /**
- * :: AlphaComponent ::
+ * :: Experimental ::
  * Model fitted by [[Word2Vec]].
  */
-@AlphaComponent
+@Experimental
 class Word2VecModel private[ml] (
     override val uid: String,
     wordVectors: feature.Word2VecModel)
@@ -179,5 +181,10 @@ class Word2VecModel private[ml] (
 
   override def transformSchema(schema: StructType): StructType = {
     validateAndTransformSchema(schema)
+  }
+
+  override def copy(extra: ParamMap): Word2VecModel = {
+    val copied = new Word2VecModel(uid, wordVectors)
+    copyValues(copied, extra)
   }
 }
