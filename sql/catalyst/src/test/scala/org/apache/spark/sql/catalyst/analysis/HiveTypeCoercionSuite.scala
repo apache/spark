@@ -197,7 +197,9 @@ class HiveTypeCoercionSuite extends PlanTest {
   test("null literals handling for binary operators") {
     ruleTest(HiveTypeCoercion.WidenTypes,
       Add(Literal.create(null, NullType), Literal.create(null, NullType)),
-      Add(Literal.create(null, DoubleType), Literal.create(null, DoubleType)))
+      Add(
+        Cast(Literal.create(null, NullType), DoubleType),
+        Cast(Literal.create(null, NullType), DoubleType)))
   }
 
   test("coalesce casts") {
