@@ -22,7 +22,7 @@ import java.util.concurrent.TimeUnit
 
 import org.apache.spark.api.java.JavaFutureAction
 import org.apache.spark.rdd.RDD
-import org.apache.spark.scheduler.{JobFailed, JobSucceeded, JobWaiter}
+import org.apache.spark.scheduler.JobWaiter
 
 import scala.concurrent._
 import scala.concurrent.duration.Duration
@@ -109,6 +109,7 @@ class SimpleFutureAction[T] private[spark](jobWaiter: JobWaiter[_], resultFunc: 
   extends FutureAction[T] {
 
   @volatile private var _cancelled: Boolean = false
+  @volatile private var _value: Try[T] = null
 
   override def cancel() {
     _cancelled = true
@@ -116,57 +117,28 @@ class SimpleFutureAction[T] private[spark](jobWaiter: JobWaiter[_], resultFunc: 
   }
 
   override def ready(atMost: Duration)(implicit permit: CanAwait): SimpleFutureAction.this.type = {
-    if (!atMost.isFinite()) {
-      awaitResult()
-    } else jobWaiter.synchronized {
-      val finishTime = System.currentTimeMillis() + atMost.toMillis
-      while (!isCompleted) {
-        val time = System.currentTimeMillis()
-        if (time >= finishTime) {
-          throw new TimeoutException
-        } else {
-          jobWaiter.wait(finishTime - time)
-        }
-      }
-    }
+    jobWaiter.toFuture.ready(atMost)(permit)
     this
   }
 
   @throws(classOf[Exception])
   override def result(atMost: Duration)(implicit permit: CanAwait): T = {
-    ready(atMost)(permit)
-    awaitResult() match {
-      case scala.util.Success(res) => res
-      case scala.util.Failure(e) => throw e
-    }
+    jobWaiter.toFuture.result(atMost)(permit)
+    resultFunc
   }
 
-  override def onComplete[U](func: (Try[T]) => U)(implicit executor: ExecutionContext) {
-    executor.execute(new Runnable {
-      override def run() {
-        func(awaitResult())
-      }
-    })
+  override def onComplete[U](func: (Try[T]) => U)(implicit executor: ExecutionContext): Unit = {
+    jobWaiter.toFuture.onComplete { (jobWaiterResult: Try[Unit]) =>
+      _value = jobWaiterResult.map(_ => resultFunc)
+      func(_value)
+    }
   }
 
   override def isCompleted: Boolean = jobWaiter.jobFinished
 
   override def isCancelled: Boolean = _cancelled
 
-  override def value: Option[Try[T]] = {
-    if (jobWaiter.jobFinished) {
-      Some(awaitResult())
-    } else {
-      None
-    }
-  }
-
-  private def awaitResult(): Try[T] = {
-    jobWaiter.awaitResult() match {
-      case JobSucceeded => scala.util.Success(resultFunc)
-      case JobFailed(e: Exception) => scala.util.Failure(e)
-    }
-  }
+  override def value: Option[Try[T]] = Option(_value)
 
   def jobIds: Seq[Int] = Seq(jobWaiter.jobId)
 }
