@@ -125,7 +125,7 @@ class PrefixSpan private (
   (RDD[(Array[Int], Long)], RDD[(Array[Int], Array[Int])]) = {
     val prefixAndFreqentItemAndCounts = prefixAndProjectedDatabase.flatMap{ x =>
       x._2.distinct.map(y => ((x._1.toSeq, y), 1L))
-    }.reduceByKey(_+_)
+    }.reduceByKey(_ + _)
       .filter(_._2 >= minCount)
     val patternAndCounts = prefixAndFreqentItemAndCounts
       .map(x => (x._1._1.toArray ++ Array(x._1._2), x._2))
