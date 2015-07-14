@@ -15,6 +15,9 @@ export("setJobGroup",
        "clearJobGroup",
        "cancelJobGroup")
 
+# MLLib api
+export("glm")
+
 exportClasses("DataFrame")
 
 exportMethods("arrange",

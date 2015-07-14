@@ -27,6 +27,7 @@ Collate:
     'backend.R'
     'broadcast.R'
     'client.R'
+    'glm.R'
     'context.R'
     'deserialize.R'
     'serialize.R'
