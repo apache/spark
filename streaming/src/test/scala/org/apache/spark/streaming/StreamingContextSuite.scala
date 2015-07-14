@@ -112,6 +112,15 @@ class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with Timeo
     assert(ssc.conf.getTimeAsSeconds("spark.cleaner.ttl", "-1") === 10)
   }
 
+  test("checkPoint from conf") {
+    val checkpointDirectory = Utils.createTempDir().getAbsolutePath()
+
+    val myConf = SparkContext.updatedConf(new SparkConf(false), master, appName)
+    myConf.set("spark.streaming.checkpointDir", checkpointDirectory)
+    val ssc = new StreamingContext(myConf, batchDuration)
+    assert(ssc.checkpointDir != null)
+  }
+
   test("state matching") {
     import StreamingContextState._
     assert(INITIALIZED === INITIALIZED)
