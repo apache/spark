@@ -42,7 +42,28 @@ private[streaming] trait ReceiverScheduler {
 }
 
 /**
- * A ReceiverScheduler trying to balance executors' load.
+ * A ReceiverScheduler trying to balance executors' load. Here is the approach to schedule executors
+ * for a receiver.
+ * <ol>
+ *   <li>
+ *     If preferredLocation is set, preferredLocation should be one of the candidate executors.
+ *   </li>
+ *   <li>
+ *     Every executor will be assigned to a weight according to the receivers running or scheduling
+ *     on it.
+ *     <ul>
+ *       <li>
+ *         If a receiver is running on an executor, it contributes 1.0 to the executor's weight.
+ *       </li>
+ *       <li>
+ *         If a receiver is scheduled to an executor but has not yet run, it contributes
+ *         `1.0 / #candidate_executors_of_this_receiver` to the executor's weight.</li>
+ *     </ul>
+ *     At last, we will randomly select one of the executors that have the least weight and add it
+ *     to the candidate list.
+ *   </li>
+ * </ol>
+ *
  */
 private[streaming] class LoadBalanceReceiverSchedulerImpl extends ReceiverScheduler {
 
