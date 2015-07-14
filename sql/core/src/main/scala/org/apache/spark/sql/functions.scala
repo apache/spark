@@ -1074,6 +1074,7 @@ object functions {
 
   /**
    * Returns the greatest value of the list of values.
+   * This function takes at least 2 parameters. It will return null iff all parameters are null.
    *
    * @group normal_funcs
    * @since 1.5.0
@@ -1082,11 +1083,12 @@ object functions {
   def greatest(exprs: Column*): Column = if (exprs.length < 2) {
     sys.error("GREATEST takes at least 2 parameters")
   } else {
-    Greatest(exprs.map(_.expr): _*)
+    Greatest(exprs.map(_.expr))
   }
 
   /**
    * Returns the greatest value of the list of column names.
+   * This function takes at least 2 parameters. It will return null iff all parameters are null.
    *
    * @group normal_funcs
    * @since 1.5.0
@@ -1199,6 +1201,7 @@ object functions {
 
   /**
    * Returns the least value of the list of values.
+   * This function takes at least 2 parameters. It will return null iff all parameters are null.
    *
    * @group normal_funcs
    * @since 1.5.0
@@ -1207,11 +1210,12 @@ object functions {
   def least(exprs: Column*): Column = if (exprs.length < 2) {
     sys.error("LEAST takes at least 2 parameters")
   } else {
-    Least(exprs.map(_.expr): _*)
+    Least(exprs.map(_.expr))
   }
 
   /**
    * Returns the least value of the list of column names.
+   * This function takes at least 2 parameters. It will return null iff all parameters are null.
    *
    * @group normal_funcs
    * @since 1.5.0
