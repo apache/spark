@@ -64,6 +64,7 @@ class RegressionMetrics(predictionAndObservations: RDD[(Double, Double)]) extend
 
   /**
    * Returns the variance explained by regression.
+   * explainedVariance = \sum_i (\hat{y_i} - \bar{y})^2 / n
    * @see [[https://en.wikipedia.org/wiki/Fraction_of_variance_unexplained]]
    */
   def explainedVariance: Double = {
