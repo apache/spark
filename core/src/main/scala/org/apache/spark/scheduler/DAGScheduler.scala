@@ -913,7 +913,7 @@ class DAGScheduler(
           partitionsToCompute.map { id =>
             val locs = getPreferredLocs(stage.rdd, id)
             val part = stage.rdd.partitions(id)
-            new ShuffleMapTask(stage.id, stage.attemptId, taskBinary, part, locs)
+            new ShuffleMapTask(stage.id, stage.latestInfo.attemptId, taskBinary, part, locs)
           }
 
         case stage: ResultStage =>
@@ -922,7 +922,7 @@ class DAGScheduler(
             val p: Int = job.partitions(id)
             val part = stage.rdd.partitions(p)
             val locs = getPreferredLocs(stage.rdd, p)
-            new ResultTask(stage.id, stage.attemptId, taskBinary, part, locs, id)
+            new ResultTask(stage.id, stage.latestInfo.attemptId, taskBinary, part, locs, id)
           }
       }
     } catch {
@@ -1128,8 +1128,6 @@ class DAGScheduler(
         val failedStage = stageIdToStage(task.stageId)
         val mapStage = shuffleToMapStage(shuffleId)
 
-        // failedStage.attemptId is already on the next attempt, so we have to use
-        // failedStage.latestInfo.attemptId
         if (failedStage.latestInfo.attemptId != task.stageAttemptId) {
           logInfo(s"Ignoring fetch failure from $task as it's from $failedStage attempt" +
             s" ${task.stageAttemptId}, which has already failed")
