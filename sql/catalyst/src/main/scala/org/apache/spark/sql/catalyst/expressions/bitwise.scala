@@ -17,9 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen._
-import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.types._
 
 
@@ -101,10 +99,11 @@ case class BitwiseXor(left: Expression, right: Expression) extends BinaryArithme
 /**
  * A function that calculates bitwise not(~) of a number.
  */
-case class BitwiseNot(child: Expression) extends UnaryArithmetic {
+case class BitwiseNot(child: Expression) extends UnaryExpression with ExpectsInputTypes {
 
-  override def checkInputDataTypes(): TypeCheckResult =
-    TypeUtils.checkForBitwiseExpr(child.dataType, "operator ~")
+  override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection.Bitwise)
+
+  override def dataType: DataType = child.dataType
 
   override def toString: String = s"~$child"
 

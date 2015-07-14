@@ -76,7 +76,7 @@ trait PredicateHelper {
 }
 
 
-case class Not(child: Expression) extends UnaryExpression with Predicate with ExpectsInputTypes {
+case class Not(child: Expression) extends UnaryExpression with Predicate with ImplicitCastInputTypes {
   override def toString: String = s"NOT $child"
 
   override def inputTypes: Seq[DataType] = Seq(BooleanType)

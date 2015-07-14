@@ -18,23 +18,18 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodeGenContext, GeneratedExpressionCode}
 import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.types._
 
-abstract class UnaryArithmetic extends UnaryExpression {
-  self: Product =>
+
+case class UnaryMinus(child: Expression) extends UnaryExpression with ExpectsInputTypes {
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(NumericType)
 
   override def dataType: DataType = child.dataType
-}
-
-case class UnaryMinus(child: Expression) extends UnaryArithmetic {
 
   override def toString: String = s"-$child"
-
-  override def checkInputDataTypes(): TypeCheckResult =
-    TypeUtils.checkForNumericExpr(child.dataType, "operator -")
 
   private lazy val numeric = TypeUtils.getNumeric(dataType)
 
@@ -46,11 +41,12 @@ case class UnaryMinus(child: Expression) extends UnaryArithmetic {
   protected override def nullSafeEval(input: Any): Any = numeric.negate(input)
 }
 
-case class UnaryPositive(child: Expression) extends UnaryArithmetic {
+case class UnaryPositive(child: Expression) extends UnaryExpression with ExpectsInputTypes {
   override def prettyName: String = "positive"
 
-  override def checkInputDataTypes(): TypeCheckResult =
-    TypeUtils.checkForNumericExpr(child.dataType, "operator -")
+  override def inputTypes: Seq[AbstractDataType] = Seq(NumericType)
+
+  override def dataType: DataType = child.dataType
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String =
     defineCodeGen(ctx, ev, c => c)
@@ -61,9 +57,11 @@ case class UnaryPositive(child: Expression) extends UnaryArithmetic {
 /**
  * A function that get the absolute value of the numeric value.
  */
-case class Abs(child: Expression) extends UnaryArithmetic {
-  override def checkInputDataTypes(): TypeCheckResult =
-    TypeUtils.checkForNumericExpr(child.dataType, "function abs")
+case class Abs(child: Expression) extends UnaryExpression with ExpectsInputTypes {
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(NumericType)
+
+  override def dataType: DataType = child.dataType
 
   private lazy val numeric = TypeUtils.getNumeric(dataType)
 
