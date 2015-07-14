@@ -556,7 +556,7 @@ class DAGScheduler(
       case JobFailed(exception: Exception) =>
         logInfo("Job %d failed: %s, took %f s".format
           (waiter.jobId, callSite.shortForm, (System.nanoTime - start) / 1e9))
-        throw exception
+        throw new SparkException("job failed", exception)
     }
   }
 

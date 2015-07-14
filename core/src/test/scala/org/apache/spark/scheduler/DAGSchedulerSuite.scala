@@ -757,7 +757,7 @@ class DAGSchedulerSuite
   }
 
   test("misbehaved resultHandler should not crash DAGScheduler and SparkContext") {
-    val e1 = intercept[SparkDriverExecutionException] {
+    val e1 = intercept[SparkException] {
       val rdd = sc.parallelize(1 to 10, 2)
       sc.runJob[Int, Int](
         rdd,
@@ -766,9 +766,10 @@ class DAGSchedulerSuite
         allowLocal = true,
         (part: Int, result: Int) => throw new DAGSchedulerSuiteDummyException)
     }
-    assert(e1.getCause.isInstanceOf[DAGSchedulerSuiteDummyException])
+    assert(e1.getCause.isInstanceOf[SparkDriverExecutionException])
+    assert(e1.getCause.getCause.isInstanceOf[DAGSchedulerSuiteDummyException])
 
-    val e2 = intercept[SparkDriverExecutionException] {
+    val e2 = intercept[SparkException] {
       val rdd = sc.parallelize(1 to 10, 2)
       sc.runJob[Int, Int](
         rdd,
@@ -777,7 +778,8 @@ class DAGSchedulerSuite
         allowLocal = false,
         (part: Int, result: Int) => throw new DAGSchedulerSuiteDummyException)
     }
-    assert(e2.getCause.isInstanceOf[DAGSchedulerSuiteDummyException])
+    assert(e2.getCause.isInstanceOf[SparkDriverExecutionException])
+    assert(e2.getCause.getCause.isInstanceOf[DAGSchedulerSuiteDummyException])
 
     // Make sure we can still run local commands as well as cluster commands.
     assert(sc.parallelize(1 to 10, 2).count() === 10)
@@ -785,7 +787,7 @@ class DAGSchedulerSuite
   }
 
   test("getPartitions exceptions should not crash DAGScheduler and SparkContext (SPARK-8606)") {
-    val e1 = intercept[DAGSchedulerSuiteDummyException] {
+    val e1 = intercept[SparkException] {
       val rdd = new MyRDD(sc, 2, Nil) {
         override def getPartitions: Array[Partition] = {
           throw new DAGSchedulerSuiteDummyException
@@ -793,6 +795,7 @@ class DAGSchedulerSuite
       }
       rdd.reduceByKey(_ + _, 1).count()
     }
+    assert(e1.getCause.isInstanceOf[DAGSchedulerSuiteDummyException])
 
     // Make sure we can still run local commands as well as cluster commands.
     assert(sc.parallelize(1 to 10, 2).count() === 10)
@@ -808,7 +811,7 @@ class DAGSchedulerSuite
       }
       rdd.count()
     }
-    assert(e1.getMessage.contains(classOf[DAGSchedulerSuiteDummyException].getName))
+    assert(e1.getCause().getMessage.contains(classOf[DAGSchedulerSuiteDummyException].getName))
 
     // Make sure we can still run local commands as well as cluster commands.
     assert(sc.parallelize(1 to 10, 2).count() === 10)
@@ -873,6 +876,21 @@ class DAGSchedulerSuite
     complete(reduceTaskSet, Seq((Success, 42)))
     assert(results === Map(0 -> 42))
     assertDataStructuresEmpty
+  }
+
+  test("Spark exceptions should include call site in stack trace") {
+    val e = intercept[SparkException] {
+      sc.parallelize(1 to 10, 2).map { _ => throw new RuntimeException("uh-oh!") }.count()
+    }
+
+    // Does not include message, ONLY stack trace.
+    val stackTraceString = e.getStackTraceString
+
+    // should actually include the RDD operation that invoked the method:
+    assert(stackTraceString.contains("org.apache.spark.rdd.RDD.count"))
+
+    // should include the FunSuite setup:
+    assert(stackTraceString.contains("org.scalatest.FunSuite"))
   }
 
   /**
