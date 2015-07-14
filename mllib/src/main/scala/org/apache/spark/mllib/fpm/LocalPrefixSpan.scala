@@ -36,7 +36,7 @@ private[fpm] object LocalPrefixSpan extends Logging with Serializable {
    *         the key of pair is sequential pattern (a list of items in reversed order),
    *         the value of pair is the pattern's count.
    */
-  def run(
+  def run[Item: ClassTag](
       minCount: Long,
       maxPatternLength: Int,
       prefixes: List[Set[Int]],
@@ -89,7 +89,7 @@ private[fpm] object LocalPrefixSpan extends Logging with Serializable {
    * @param database database of sequences
    * @return freq item to count map
    */
-  private def getFreqItemAndCounts(
+  private def getFreqItemAndCounts[Item: ClassTag](
       minCount: Long,
       database: Iterable[List[Set[Int]]]): Map[Set[Int], Long] = {
     // TODO: use PrimitiveKeyOpenHashMap

@@ -18,6 +18,7 @@
 package org.apache.spark.mllib.fpm
 
 import scala.collection.mutable.ArrayBuilder
+import scala.reflect.ClassTag
 
 import org.apache.spark.Logging
 import org.apache.spark.annotation.Experimental
