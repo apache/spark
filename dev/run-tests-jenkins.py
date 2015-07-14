@@ -36,7 +36,7 @@ def print_err(*args):
 
 def post_message(mssg, comments_url):
     http_code_header = "HTTP Response Code: "
-    posted_message = json.dumps({"body" : mssg})
+    posted_message = json.dumps({"body": mssg})
 
     print("Attempting to post to Github...")
 
@@ -84,18 +84,17 @@ def send_archived_logs():
                          '-o', '-path', './sql/hive/target/HiveCompatibilitySuite.failed',
                          '-o', '-path', './sql/hive/target/HiveCompatibilitySuite.hiveFailed',
                          '-o', '-path', './sql/hive/target/HiveCompatibilitySuite.wrong'],
-                        return_output = True)
+                        return_output=True)
 
     if log_files:
         log_archive = "unit-tests-logs.tar.gz"
 
         run_cmd(['tar', 'czf', log-archive, *log_files])
 
-        jenkins_build_dir = os.environ["JENKINS_HOME"] + 
-                            "/jobs/" + os.environ["JOB_NAME"] + 
-                            "/builds/" + os.environ["BUILD_NUMBER"]
+        jenkins_build_dir = os.environ["JENKINS_HOME"] + "/jobs/" + os.environ["JOB_NAME"] +
+        "/builds/" + os.environ["BUILD_NUMBER"]
 
-        scp_proc = subprocess.Popen(['scp', log_archive, 
+        scp_proc = subprocess.Popen(['scp', log_archive,
                                      'amp-jenkins-master:' + jenkins_build_dir + '/' + log_archive],
                                     stdout=subprocess.PIPE,
                                     stderr=subprocess.PIPE)
@@ -136,8 +135,8 @@ def bind_message_base(build_display_name, build_url, ghprb_pull_id, short_commit
     """
     return lambda mssg, post_mssg="":\
         '**[Test build ' + build_display_name + ' ' + mssg + '](' + build_url +
-        'console)** for PR ' + ghprb_pull_id + ' at commit [\`' + short_commit_hash + '\`](' +
-        commit_url + ')' + str(' ' + post_mssg + '.') if post_mssg else '.'
+'console)** for PR ' + ghprb_pull_id + ' at commit [\`' + short_commit_hash + '\`](' +
+commit_url + ')' + str(' ' + post_mssg + '.') if post_mssg else '.'
 
 
 def success_result_note(mssg):
@@ -149,24 +148,24 @@ def failure_result_note(mssg):
 
 
 def run_tests(tests_timeout):
-    test_proc = subprocess.Popen(['timeout', 
-                                  tests_timeout, 
+    test_proc = subprocess.Popen(['timeout',
+                                  tests_timeout,
                                   os.path.join(SPARK_HOME, 'dev', 'run-tests')]).wait()
     test_result = test_proc.returncode
 
     failure_note_by_errcode = {
-        ERROR_CODES["BLOCK_GENERAL"] : failure_result_note('some tests'),
-        ERROR_CODES["BLOCK_RAT"] : failure_result_note('RAT tests'),
-        ERROR_CODES["BLOCK_SCALA_STYLE"] : failure_result_note('Scala style tests'),
-        ERROR_CODES["BLOCK_PYTHON_STYLE"] : failure_result_note('Python style tests'),
-        ERROR_CODES["BLOCK_DOCUMENTATION"] : failure_result_note('to generate documentation'),
-        ERROR_CODES["BLOCK_BUILD"] : failure_result_note('to build'),
-        ERROR_CODES["BLOCK_MIMA"] : failure_result_note('MiMa tests'),
-        ERROR_CODES["BLOCK_SPARK_UNIT_TESTS"] : failure_result_note('Spark unit tests'),
-        ERROR_CODES["BLOCK_PYSPARK_UNIT_TESTS"] : failure_result_note('PySpark unit tests'),
-        ERROR_CODES["BLOCK_SPARKR_UNIT_TESTS"] : failure_result_note('SparkR unit tests'),
-        ERROR_CODES["BLOCK_TIMEOUT"] : failure_result_note('from timeout after a configured wait' +
-                                                           ' of \`' + tests_timeout + '\`')
+        ERROR_CODES["BLOCK_GENERAL"]: failure_result_note('some tests'),
+        ERROR_CODES["BLOCK_RAT"]: failure_result_note('RAT tests'),
+        ERROR_CODES["BLOCK_SCALA_STYLE"]: failure_result_note('Scala style tests'),
+        ERROR_CODES["BLOCK_PYTHON_STYLE"]: failure_result_note('Python style tests'),
+        ERROR_CODES["BLOCK_DOCUMENTATION"]: failure_result_note('to generate documentation'),
+        ERROR_CODES["BLOCK_BUILD"]: failure_result_note('to build'),
+        ERROR_CODES["BLOCK_MIMA"]: failure_result_note('MiMa tests'),
+        ERROR_CODES["BLOCK_SPARK_UNIT_TESTS"]: failure_result_note('Spark unit tests'),
+        ERROR_CODES["BLOCK_PYSPARK_UNIT_TESTS"]: failure_result_note('PySpark unit tests'),
+        ERROR_CODES["BLOCK_SPARKR_UNIT_TESTS"]: failure_result_note('SparkR unit tests'),
+        ERROR_CODES["BLOCK_TIMEOUT"]: failure_result_note('from timeout after a configured wait' +
+                                                          ' of \`' + tests_timeout + '\`')
     }
 
     if test_result == 0:
@@ -182,14 +181,14 @@ def main():
     # Important Environment Variables
     # ---
     # $ghprbActualCommit
-    #+  This is the hash of the most recent commit in the PR.
-    #+  The merge-base of this and master is the commit from which the PR was branched.
+    #   This is the hash of the most recent commit in the PR.
+    #   The merge-base of this and master is the commit from which the PR was branched.
     # $sha1
-    #+  If the patch merges cleanly, this is a reference to the merge commit hash
-    #+    (e.g. "origin/pr/2606/merge").
-    #+  If the patch does not merge cleanly, it is equal to $ghprbActualCommit.
-    #+  The merge-base of this and master in the case of a clean merge is the most recent commit
-    #+    against master.
+    #   If the patch merges cleanly, this is a reference to the merge commit hash
+    #     (e.g. "origin/pr/2606/merge").
+    #   If the patch does not merge cleanly, it is equal to $ghprbActualCommit.
+    #   The merge-base of this and master in the case of a clean merge is the most recent commit
+    #     against master.
     ghprb_pull_id = os.environ["ghprbPullId"]
     ghprb_actual_commit = os.environ["ghprbActualCommit"]
     sha1 = os.environ["sha1"]
@@ -211,15 +210,15 @@ def main():
     tests_timeout = "175m"
 
     # Array to capture all tests to run on the pull request. These tests are held under the
-    #+ dev/tests/ directory.
+    #  dev/tests/ directory.
     #
     # To write a PR test:
-    #+  * the file must reside within the dev/tests directory
-    #+  * be an executable bash script
-    #+  * accept three arguments on the command line, the first being the Github PR long commit
-    #+    hash, the second the Github SHA1 hash, and the final the current PR hash
-    #+  * and, lastly, return string output to be included in the pr message output that will
-    #+    be posted to Github
+    #   * the file must reside within the dev/tests directory
+    #   * be an executable bash script
+    #   * accept three arguments on the command line, the first being the Github PR long commit
+    #     hash, the second the Github SHA1 hash, and the final the current PR hash
+    #   * and, lastly, return string output to be included in the pr message output that will
+    #     be posted to Github
     pr_tests = ["pr_merge_ability",
                 "pr_public_classes"
                 # DISABLED (pwendell) "pr_new_dependencies"
