@@ -46,19 +46,30 @@ object GenerateMutableProjection extends CodeGenerator[Seq[Expression], () => Mu
             ${ctx.setColumn("mutableRow", e.dataType, i, evaluationCode.primitive)};
         """
     }.mkString("\n")
+
+    val mutableStates = ctx.mutableStates.map {
+      case (jt, name, _) => s"private $jt $name;"
+    }.mkString("\n      ")
+
+    val initStates = ctx.mutableStates.zipWithIndex.map {
+      case ((jt, name, _), index) => s"$name = (${ctx.boxedType(jt)}) states[$index];"
+    }.mkString("\n        ")
+
     val code = s"""
-      public Object generate($exprType[] expr) {
-        return new SpecificProjection(expr);
+      public Object generate($exprType[] expr, Object[] states) {
+        return new SpecificProjection(expr, states);
       }
 
       class SpecificProjection extends ${classOf[BaseMutableProjection].getName} {
 
         private $exprType[] expressions = null;
         private $mutableRowType mutableRow = null;
+        $mutableStates
 
-        public SpecificProjection($exprType[] expr) {
+        public SpecificProjection($exprType[] expr, Object[] states) {
           expressions = expr;
           mutableRow = new $genericMutableRowType(${expressions.size});
+          $initStates
         }
 
         public ${classOf[BaseMutableProjection].getName} target($mutableRowType row) {
@@ -84,7 +95,8 @@ object GenerateMutableProjection extends CodeGenerator[Seq[Expression], () => Mu
 
     val c = compile(code)
     () => {
-      c.generate(ctx.references.toArray).asInstanceOf[MutableProjection]
+      c.generate(ctx.references.toArray, ctx.mutableStates.map(_._3).toArray)
+        .asInstanceOf[MutableProjection]
     }
   }
 }

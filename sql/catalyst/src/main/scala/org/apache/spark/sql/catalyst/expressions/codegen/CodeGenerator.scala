@@ -56,6 +56,14 @@ class CodeGenContext {
    */
   val references: mutable.ArrayBuffer[Expression] = new mutable.ArrayBuffer[Expression]()
 
+  /**
+   * Holding expressions' mutable states like `Rand.rng`, and keep them as member variables
+   * in generated classes like `SpecificProjection`.
+   * Each element is a 3-tuple: java type, variable name, variable value.
+   */
+  val mutableStates: mutable.ArrayBuffer[(String, String, Any)] =
+    mutable.ArrayBuffer.empty[(String, String, Any)]
+
   val stringType: String = classOf[UTF8String].getName
   val decimalType: String = classOf[Decimal].getName
 
@@ -205,7 +213,7 @@ class CodeGenContext {
 
 
 abstract class GeneratedClass {
-  def generate(expressions: Array[Expression]): Any
+  def generate(expressions: Array[Expression], states: Array[Any]): Any
 }
 
 /**

@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.expressions
 import org.apache.spark.TaskContext
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.LeafExpression
+import org.apache.spark.sql.catalyst.expressions.codegen.{GeneratedExpressionCode, CodeGenContext}
 import org.apache.spark.sql.types.{LongType, DataType}
 
 /**
@@ -40,6 +41,11 @@ private[sql] case class MonotonicallyIncreasingID() extends LeafExpression {
    */
   @transient private[this] var count: Long = 0L
 
+  @transient protected lazy val partitionMask = TaskContext.get() match {
+    case null => 0L
+    case _ => TaskContext.get().partitionId().toLong << 33
+  }
+
   override def nullable: Boolean = false
 
   override def dataType: DataType = LongType
@@ -47,6 +53,19 @@ private[sql] case class MonotonicallyIncreasingID() extends LeafExpression {
   override def eval(input: InternalRow): Long = {
     val currentCount = count
     count += 1
-    (TaskContext.get().partitionId().toLong << 33) + currentCount
+    partitionMask + currentCount
+  }
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    val countTerm = ctx.freshName("count")
+    val partitionMaskTerm = ctx.freshName("partitionMask")
+    ctx.mutableStates += (("long", countTerm, count))
+    ctx.mutableStates += (("long", partitionMaskTerm, partitionMask))
+
+    ev.isNull = "false"
+    s"""
+      final ${ctx.javaType(dataType)} ${ev.primitive} = $partitionMaskTerm + $countTerm;
+      $countTerm++;
+    """
   }
 }

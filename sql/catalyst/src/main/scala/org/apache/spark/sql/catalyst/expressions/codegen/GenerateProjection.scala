@@ -151,85 +151,96 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
         s"""if (!nullBits[$i]) arr[$i] = c$i;"""
     }.mkString("\n      ")
 
+    val mutableStates = ctx.mutableStates.map {
+      case (jt, name, _) => s"private $jt $name;"
+    }.mkString("\n      ")
+
+    val initStates = ctx.mutableStates.zipWithIndex.map {
+      case ((jt, name, _), index) => s"$name = (${ctx.boxedType(jt)}) states[$index];"
+    }.mkString("\n        ")
+
     val code = s"""
-    public SpecificProjection generate($exprType[] expr) {
-      return new SpecificProjection(expr);
+    public SpecificProjection generate($exprType[] expr, Object[] states) {
+      return new SpecificProjection(expr, states);
     }
 
     class SpecificProjection extends ${classOf[BaseProject].getName} {
       private $exprType[] expressions = null;
+      $mutableStates
 
-      public SpecificProjection($exprType[] expr) {
+      public SpecificProjection($exprType[] expr, Object[] states) {
         expressions = expr;
+        $initStates
       }
 
       @Override
       public Object apply(Object r) {
-        return new SpecificRow(expressions, (InternalRow) r);
-      }
-    }
-
-    final class SpecificRow extends ${classOf[MutableRow].getName} {
-
-      $columns
-
-      public SpecificRow($exprType[] expressions, InternalRow i) {
-        $initColumns
+        return new SpecificRow((InternalRow) r);
       }
 
-      public int length() { return ${expressions.length};}
-      protected boolean[] nullBits = new boolean[${expressions.length}];
-      public void setNullAt(int i) { nullBits[i] = true; }
-      public boolean isNullAt(int i) { return nullBits[i]; }
+      final class SpecificRow extends ${classOf[MutableRow].getName} {
 
-      public Object get(int i) {
-        if (isNullAt(i)) return null;
-        switch (i) {
-        $getCases
+        $columns
+
+        public SpecificRow(InternalRow i) {
+          $initColumns
         }
-        return null;
-      }
-      public void update(int i, Object value) {
-        if (value == null) {
-          setNullAt(i);
-          return;
-        }
-        nullBits[i] = false;
-        switch (i) {
-        $updateCases
-        }
-      }
-      $specificAccessorFunctions
-      $specificMutatorFunctions
 
-      @Override
-      public int hashCode() {
-        int result = 37;
-        $hashUpdates
-        return result;
-      }
+        public int length() { return ${expressions.length};}
+        protected boolean[] nullBits = new boolean[${expressions.length}];
+        public void setNullAt(int i) { nullBits[i] = true; }
+        public boolean isNullAt(int i) { return nullBits[i]; }
 
-      @Override
-      public boolean equals(Object other) {
-        if (other instanceof SpecificRow) {
-          SpecificRow row = (SpecificRow) other;
-          $columnChecks
-          return true;
+        public Object get(int i) {
+          if (isNullAt(i)) return null;
+          switch (i) {
+          $getCases
+          }
+          return null;
         }
-        return super.equals(other);
-      }
+        public void update(int i, Object value) {
+          if (value == null) {
+            setNullAt(i);
+            return;
+          }
+          nullBits[i] = false;
+          switch (i) {
+          $updateCases
+          }
+        }
+        $specificAccessorFunctions
+        $specificMutatorFunctions
 
-      @Override
-      public InternalRow copy() {
-        Object[] arr = new Object[${expressions.length}];
-        ${copyColumns}
-        return new ${classOf[GenericInternalRow].getName}(arr);
+        @Override
+        public int hashCode() {
+          int result = 37;
+          $hashUpdates
+          return result;
+        }
+
+        @Override
+        public boolean equals(Object other) {
+          if (other instanceof SpecificRow) {
+            SpecificRow row = (SpecificRow) other;
+            $columnChecks
+            return true;
+          }
+          return super.equals(other);
+        }
+
+        @Override
+        public InternalRow copy() {
+          Object[] arr = new Object[${expressions.length}];
+          ${copyColumns}
+          return new ${classOf[GenericInternalRow].getName}(arr);
+        }
       }
     }
     """
 
     logDebug(s"MutableRow, initExprs: ${expressions.mkString(",")} code:\n${code}")
 
-    compile(code).generate(ctx.references.toArray).asInstanceOf[Projection]
+    compile(code).generate(ctx.references.toArray, ctx.mutableStates.map(_._3).toArray)
+      .asInstanceOf[Projection]
   }
 }

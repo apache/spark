@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.TaskContext
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodeGenContext, GeneratedExpressionCode}
 import org.apache.spark.sql.types.{DataType, DoubleType}
 import org.apache.spark.util.Utils
 import org.apache.spark.util.random.XORShiftRandom
@@ -61,6 +62,15 @@ case class Rand(seed: Long) extends RDG(seed) {
     case IntegerLiteral(s) => s
     case _ => throw new AnalysisException("Input argument to rand must be an integer literal.")
   })
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    val rngTerm = ctx.freshName("rng")
+    ctx.mutableStates += ((rng.getClass.getCanonicalName, rngTerm, rng))
+    ev.isNull = "false"
+    s"""
+      final ${ctx.javaType(dataType)} ${ev.primitive} = $rngTerm.nextDouble();
+    """
+  }
 }
 
 /** Generate a random column with i.i.d. gaussian random distribution. */
@@ -73,4 +83,13 @@ case class Randn(seed: Long) extends RDG(seed) {
     case IntegerLiteral(s) => s
     case _ => throw new AnalysisException("Input argument to rand must be an integer literal.")
   })
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    val rngTerm = ctx.freshName("rng")
+    ctx.mutableStates += ((rng.getClass.getCanonicalName, rngTerm, rng))
+    ev.isNull = "false"
+    s"""
+      final ${ctx.javaType(dataType)} ${ev.primitive} = $rngTerm.nextGaussian();
+    """
+  }
 }

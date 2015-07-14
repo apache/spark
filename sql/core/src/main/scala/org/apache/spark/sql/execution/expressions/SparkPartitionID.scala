@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.expressions
 import org.apache.spark.TaskContext
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.LeafExpression
+import org.apache.spark.sql.catalyst.expressions.codegen.{GeneratedExpressionCode, CodeGenContext}
 import org.apache.spark.sql.types.{IntegerType, DataType}
 
 
@@ -32,5 +33,18 @@ private[sql] case object SparkPartitionID extends LeafExpression {
 
   override def dataType: DataType = IntegerType
 
-  override def eval(input: InternalRow): Int = TaskContext.get().partitionId()
+  @transient private lazy val partitionId = TaskContext.get() match {
+    case null => 0
+    case _ => TaskContext.get().partitionId()
+  }
+
+  override def eval(input: InternalRow): Int = partitionId
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    val idTerm = ctx.freshName("partitionId")
+    ctx.mutableStates += (("int", idTerm, partitionId))
+    ev.isNull = "false"
+    ev.primitive = idTerm
+    ""
+  }
 }
