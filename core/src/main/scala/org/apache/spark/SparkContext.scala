@@ -17,6 +17,8 @@
 
 package org.apache.spark
 
+import scala.language.implicitConversions
+
 import java.io._
 import java.lang.reflect.Constructor
 import java.net.URI
@@ -28,8 +30,6 @@ import scala.collection.{Map, Set}
 import scala.collection.JavaConversions._
 import scala.collection.generic.Growable
 import scala.collection.mutable.HashMap
-import scala.concurrent.Future
-import scala.language.implicitConversions
 import scala.reflect.{ClassTag, classTag}
 import scala.util.control.NonFatal
 
