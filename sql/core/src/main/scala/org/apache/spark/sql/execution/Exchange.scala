@@ -271,23 +271,25 @@ private[sql] case class EnsureRequirements(sqlContext: SQLContext) extends Rule[
           partitioning: Partitioning,
           rowOrdering: Seq[SortOrder],
           child: SparkPlan): SparkPlan = {
-        val needSort = rowOrdering.nonEmpty && child.outputOrdering != rowOrdering
-        val needsShuffle = child.outputPartitioning != partitioning
 
-        val withShuffle = if (needsShuffle) {
-          Exchange(partitioning, child)
-        } else {
-          child
+        def addShuffleIfNecessary(child: SparkPlan): SparkPlan = {
+          if (child.outputPartitioning != partitioning) {
+            Exchange(partitioning, child)
+          } else {
+            child
+          }
         }
 
-        val withSort = if (needSort) {
-          sqlContext.planner.BasicOperators.getSortOperator(
-            rowOrdering, global = false, withShuffle)
-        } else {
-          withShuffle
+        def addSortIfNecessary(child: SparkPlan): SparkPlan = {
+          if (rowOrdering.nonEmpty && child.outputOrdering != rowOrdering) {
+            sqlContext.planner.BasicOperators.getSortOperator(
+              rowOrdering, global = false, child)
+          } else {
+            child
+          }
         }
 
-        withSort
+        addSortIfNecessary(addShuffleIfNecessary(child))
       }
 
       if (meetsRequirements && compatible && !needsAnySort) {
