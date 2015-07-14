@@ -28,7 +28,12 @@ case class Dummy(optKey: Option[Expression]) extends Expression {
   override def nullable: Boolean = true
   override def dataType: NullType = NullType
   override lazy val resolved = true
-  override def eval(input: Row): Any = null.asInstanceOf[Any]
+  override def eval(input: InternalRow): Any = null.asInstanceOf[Any]
+}
+
+case class ComplexPlan(exprs: Seq[Seq[Expression]])
+  extends org.apache.spark.sql.catalyst.plans.logical.LeafNode {
+  override def output: Seq[Attribute] = Nil
 }
 
 class TreeNodeSuite extends SparkFunSuite {
@@ -68,7 +73,7 @@ class TreeNodeSuite extends SparkFunSuite {
     val expected = Seq("+", "1", "*", "2", "-", "3", "4")
     val expression = Add(Literal(1), Multiply(Literal(2), Subtract(Literal(3), Literal(4))))
     expression transformDown {
-      case b: BinaryExpression => actual.append(b.symbol); b
+      case b: BinaryOperator => actual.append(b.symbol); b
       case l: Literal => actual.append(l.toString); l
     }
 
@@ -80,7 +85,7 @@ class TreeNodeSuite extends SparkFunSuite {
     val expected = Seq("1", "2", "3", "4", "-", "*", "+")
     val expression = Add(Literal(1), Multiply(Literal(2), Subtract(Literal(3), Literal(4))))
     expression transformUp {
-      case b: BinaryExpression => actual.append(b.symbol); b
+      case b: BinaryOperator => actual.append(b.symbol); b
       case l: Literal => actual.append(l.toString); l
     }
 
@@ -120,7 +125,7 @@ class TreeNodeSuite extends SparkFunSuite {
     val expected = Seq("1", "2", "3", "4", "-", "*", "+")
     val expression = Add(Literal(1), Multiply(Literal(2), Subtract(Literal(3), Literal(4))))
     expression foreachUp {
-      case b: BinaryExpression => actual.append(b.symbol);
+      case b: BinaryOperator => actual.append(b.symbol);
       case l: Literal => actual.append(l.toString);
     }
 
@@ -219,5 +224,14 @@ class TreeNodeSuite extends SparkFunSuite {
       val expected = None
       assert(expected === actual)
     }
+  }
+
+  test("transformExpressions on nested expression sequence") {
+    val plan = ComplexPlan(Seq(Seq(Literal(1)), Seq(Literal(2))))
+    val actual = plan.transformExpressions {
+      case Literal(value, _) => Literal(value.toString)
+    }
+    val expected = ComplexPlan(Seq(Seq(Literal("1")), Seq(Literal("2"))))
+    assert(expected === actual)
   }
 }

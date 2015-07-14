@@ -36,7 +36,7 @@ else:
 import numpy as np
 
 from pyspark.sql.types import UserDefinedType, StructField, StructType, ArrayType, DoubleType, \
-    IntegerType, ByteType
+    IntegerType, ByteType, BooleanType
 
 
 __all__ = ['Vector', 'DenseVector', 'SparseVector', 'Vectors',
@@ -161,6 +161,59 @@ class VectorUDT(UserDefinedType):
 
     def simpleString(self):
         return "vector"
+
+
+class MatrixUDT(UserDefinedType):
+    """
+    SQL user-defined type (UDT) for Matrix.
+    """
+
+    @classmethod
+    def sqlType(cls):
+        return StructType([
+            StructField("type", ByteType(), False),
+            StructField("numRows", IntegerType(), False),
+            StructField("numCols", IntegerType(), False),
+            StructField("colPtrs", ArrayType(IntegerType(), False), True),
+            StructField("rowIndices", ArrayType(IntegerType(), False), True),
+            StructField("values", ArrayType(DoubleType(), False), True),
+            StructField("isTransposed", BooleanType(), False)])
+
+    @classmethod
+    def module(cls):
+        return "pyspark.mllib.linalg"
+
+    @classmethod
+    def scalaUDT(cls):
+        return "org.apache.spark.mllib.linalg.MatrixUDT"
+
+    def serialize(self, obj):
+        if isinstance(obj, SparseMatrix):
+            colPtrs = [int(i) for i in obj.colPtrs]
+            rowIndices = [int(i) for i in obj.rowIndices]
+            values = [float(v) for v in obj.values]
+            return (0, obj.numRows, obj.numCols, colPtrs,
+                    rowIndices, values, bool(obj.isTransposed))
+        elif isinstance(obj, DenseMatrix):
+            values = [float(v) for v in obj.values]
+            return (1, obj.numRows, obj.numCols, None, None, values,
+                    bool(obj.isTransposed))
+        else:
+            raise TypeError("cannot serialize type %r" % (type(obj)))
+
+    def deserialize(self, datum):
+        assert len(datum) == 7, \
+            "MatrixUDT.deserialize given row with length %d but requires 7" % len(datum)
+        tpe = datum[0]
+        if tpe == 0:
+            return SparseMatrix(*datum[1:])
+        elif tpe == 1:
+            return DenseMatrix(datum[1], datum[2], datum[5], datum[6])
+        else:
+            raise ValueError("do not recognize type %r" % tpe)
+
+    def simpleString(self):
+        return "matrix"
 
 
 class Vector(object):
@@ -524,22 +577,19 @@ class SparseVector(Vector):
             ...
         AssertionError: dimension mismatch
         """
-        if type(other) == np.ndarray:
-            if other.ndim == 2:
-                results = [self.dot(other[:, i]) for i in xrange(other.shape[1])]
-                return np.array(results)
-            elif other.ndim > 2:
+
+        if isinstance(other, np.ndarray):
+            if other.ndim not in [2, 1]:
                 raise ValueError("Cannot call dot with %d-dimensional array" % other.ndim)
+            assert len(self) == other.shape[0], "dimension mismatch"
+            return np.dot(self.values, other[self.indices])
 
         assert len(self) == _vector_size(other), "dimension mismatch"
 
-        if type(other) in (np.ndarray, array.array, DenseVector):
-            result = 0.0
-            for i in xrange(len(self.indices)):
-                result += self.values[i] * other[self.indices[i]]
-            return result
+        if isinstance(other, DenseVector):
+            return np.dot(other.array[self.indices], self.values)
 
-        elif type(other) is SparseVector:
+        elif isinstance(other, SparseVector):
             result = 0.0
             i, j = 0, 0
             while i < len(self.indices) and j < len(other.indices):
@@ -582,22 +632,23 @@ class SparseVector(Vector):
         AssertionError: dimension mismatch
         """
         assert len(self) == _vector_size(other), "dimension mismatch"
-        if type(other) in (list, array.array, DenseVector, np.array, np.ndarray):
-            if type(other) is np.array and other.ndim != 1:
+
+        if isinstance(other, np.ndarray) or isinstance(other, DenseVector):
+            if isinstance(other, np.ndarray) and other.ndim != 1:
                 raise Exception("Cannot call squared_distance with %d-dimensional array" %
                                 other.ndim)
-            result = 0.0
-            j = 0   # index into our own array
-            for i in xrange(len(other)):
-                if j < len(self.indices) and self.indices[j] == i:
-                    diff = self.values[j] - other[i]
-                    result += diff * diff
-                    j += 1
-                else:
-                    result += other[i] * other[i]
+            if isinstance(other, DenseVector):
+                other = other.array
+            sparse_ind = np.zeros(other.size, dtype=bool)
+            sparse_ind[self.indices] = True
+            dist = other[sparse_ind] - self.values
+            result = np.dot(dist, dist)
+
+            other_ind = other[~sparse_ind]
+            result += np.dot(other_ind, other_ind)
             return result
 
-        elif type(other) is SparseVector:
+        elif isinstance(other, SparseVector):
             result = 0.0
             i, j = 0, 0
             while i < len(self.indices) and j < len(other.indices):
@@ -781,10 +832,12 @@ class Vectors(object):
 
 
 class Matrix(object):
+
+    __UDT__ = MatrixUDT()
+
     """
     Represents a local matrix.
     """
-
     def __init__(self, numRows, numCols, isTransposed=False):
         self.numRows = numRows
         self.numCols = numCols

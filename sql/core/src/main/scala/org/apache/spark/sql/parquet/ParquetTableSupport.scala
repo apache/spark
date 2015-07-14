@@ -17,19 +17,22 @@
 
 package org.apache.spark.sql.parquet
 
+import java.nio.{ByteOrder, ByteBuffer}
 import java.util.{HashMap => JHashMap}
 
 import org.apache.hadoop.conf.Configuration
-import parquet.column.ParquetProperties
-import parquet.hadoop.ParquetOutputFormat
-import parquet.hadoop.api.ReadSupport.ReadContext
-import parquet.hadoop.api.{ReadSupport, WriteSupport}
-import parquet.io.api._
-import parquet.schema.MessageType
+import org.apache.parquet.column.ParquetProperties
+import org.apache.parquet.hadoop.ParquetOutputFormat
+import org.apache.parquet.hadoop.api.ReadSupport.ReadContext
+import org.apache.parquet.hadoop.api.{ReadSupport, WriteSupport}
+import org.apache.parquet.io.api._
+import org.apache.parquet.schema.MessageType
 
 import org.apache.spark.Logging
-import org.apache.spark.sql.catalyst.expressions.{Attribute, Row}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, InternalRow}
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * A `parquet.io.api.RecordMaterializer` for Rows.
@@ -37,12 +40,12 @@ import org.apache.spark.sql.types._
  *@param root The root group converter for the record.
  */
 private[parquet] class RowRecordMaterializer(root: CatalystConverter)
-  extends RecordMaterializer[Row] {
+  extends RecordMaterializer[InternalRow] {
 
   def this(parquetSchema: MessageType, attributes: Seq[Attribute]) =
     this(CatalystConverter.createRootConverter(parquetSchema, attributes))
 
-  override def getCurrentRecord: Row = root.getCurrentRecord
+  override def getCurrentRecord: InternalRow = root.getCurrentRecord
 
   override def getRootConverter: GroupConverter = root.asInstanceOf[GroupConverter]
 }
@@ -50,13 +53,13 @@ private[parquet] class RowRecordMaterializer(root: CatalystConverter)
 /**
  * A `parquet.hadoop.api.ReadSupport` for Row objects.
  */
-private[parquet] class RowReadSupport extends ReadSupport[Row] with Logging {
+private[parquet] class RowReadSupport extends ReadSupport[InternalRow] with Logging {
 
   override def prepareForRead(
       conf: Configuration,
       stringMap: java.util.Map[String, String],
       fileSchema: MessageType,
-      readContext: ReadContext): RecordMaterializer[Row] = {
+      readContext: ReadContext): RecordMaterializer[InternalRow] = {
     log.debug(s"preparing for read with Parquet file schema $fileSchema")
     // Note: this very much imitates AvroParquet
     val parquetSchema = readContext.getRequestedSchema
@@ -83,8 +86,7 @@ private[parquet] class RowReadSupport extends ReadSupport[Row] with Logging {
     // TODO: Why it can be null?
     if (schema == null)  {
       log.debug("falling back to Parquet read schema")
-      schema = ParquetTypesConverter.convertToAttributes(
-        parquetSchema, false, true)
+      schema = ParquetTypesConverter.convertToAttributes(parquetSchema, false, true)
     }
     log.debug(s"list of attributes that will be read: $schema")
     new RowRecordMaterializer(parquetSchema, schema)
@@ -102,8 +104,7 @@ private[parquet] class RowReadSupport extends ReadSupport[Row] with Logging {
       // If the parquet file is thrift derived, there is a good chance that
       // it will have the thrift class in metadata.
       val isThriftDerived = keyValueMetaData.keySet().contains("thrift.class")
-      parquetSchema = ParquetTypesConverter
-        .convertFromAttributes(requestedAttributes, isThriftDerived)
+      parquetSchema = ParquetTypesConverter.convertFromAttributes(requestedAttributes)
       metadata.put(
         RowReadSupport.SPARK_ROW_REQUESTED_SCHEMA,
         ParquetTypesConverter.convertToString(requestedAttributes))
@@ -131,7 +132,7 @@ private[parquet] object RowReadSupport {
 /**
  * A `parquet.hadoop.api.WriteSupport` for Row objects.
  */
-private[parquet] class RowWriteSupport extends WriteSupport[Row] with Logging {
+private[parquet] class RowWriteSupport extends WriteSupport[InternalRow] with Logging {
 
   private[parquet] var writer: RecordConsumer = null
   private[parquet] var attributes: Array[Attribute] = null
@@ -155,7 +156,7 @@ private[parquet] class RowWriteSupport extends WriteSupport[Row] with Logging {
     log.debug(s"preparing for write with schema $attributes")
   }
 
-  override def write(record: Row): Unit = {
+  override def write(record: InternalRow): Unit = {
     val attributesSize = attributes.size
     if (attributesSize > record.size) {
       throw new IndexOutOfBoundsException(
@@ -197,19 +198,18 @@ private[parquet] class RowWriteSupport extends WriteSupport[Row] with Logging {
   private[parquet] def writePrimitive(schema: DataType, value: Any): Unit = {
     if (value != null) {
       schema match {
+        case BooleanType => writer.addBoolean(value.asInstanceOf[Boolean])
+        case ByteType => writer.addInteger(value.asInstanceOf[Byte])
+        case ShortType => writer.addInteger(value.asInstanceOf[Short])
+        case IntegerType | DateType => writer.addInteger(value.asInstanceOf[Int])
+        case LongType => writer.addLong(value.asInstanceOf[Long])
+        case TimestampType => writeTimestamp(value.asInstanceOf[Long])
+        case FloatType => writer.addFloat(value.asInstanceOf[Float])
+        case DoubleType => writer.addDouble(value.asInstanceOf[Double])
         case StringType => writer.addBinary(
           Binary.fromByteArray(value.asInstanceOf[UTF8String].getBytes))
         case BinaryType => writer.addBinary(
           Binary.fromByteArray(value.asInstanceOf[Array[Byte]]))
-        case IntegerType => writer.addInteger(value.asInstanceOf[Int])
-        case ShortType => writer.addInteger(value.asInstanceOf[Short])
-        case LongType => writer.addLong(value.asInstanceOf[Long])
-        case TimestampType => writeTimestamp(value.asInstanceOf[java.sql.Timestamp])
-        case ByteType => writer.addInteger(value.asInstanceOf[Byte])
-        case DoubleType => writer.addDouble(value.asInstanceOf[Double])
-        case FloatType => writer.addFloat(value.asInstanceOf[Float])
-        case BooleanType => writer.addBoolean(value.asInstanceOf[Boolean])
-        case DateType => writer.addInteger(value.asInstanceOf[Int])
         case d: DecimalType =>
           if (d.precisionInfo == None || d.precisionInfo.get.precision > 18) {
             sys.error(s"Unsupported datatype $d, cannot write to consumer")
@@ -296,7 +296,7 @@ private[parquet] class RowWriteSupport extends WriteSupport[Row] with Logging {
   }
 
   // Scratch array used to write decimals as fixed-length binary
-  private val scratchBytes = new Array[Byte](8)
+  private[this] val scratchBytes = new Array[Byte](8)
 
   private[parquet] def writeDecimal(decimal: Decimal, precision: Int): Unit = {
     val numBytes = ParquetTypesConverter.BYTES_FOR_PRECISION(precision)
@@ -311,15 +311,22 @@ private[parquet] class RowWriteSupport extends WriteSupport[Row] with Logging {
     writer.addBinary(Binary.fromByteArray(scratchBytes, 0, numBytes))
   }
 
-  private[parquet] def writeTimestamp(ts: java.sql.Timestamp): Unit = {
-    val binaryNanoTime = CatalystTimestampConverter.convertFromTimestamp(ts)
-    writer.addBinary(binaryNanoTime)
+  // array used to write Timestamp as Int96 (fixed-length binary)
+  private[this] val int96buf = new Array[Byte](12)
+
+  private[parquet] def writeTimestamp(ts: Long): Unit = {
+    val (julianDay, timeOfDayNanos) = DateTimeUtils.toJulianDay(ts)
+    val buf = ByteBuffer.wrap(int96buf)
+    buf.order(ByteOrder.LITTLE_ENDIAN)
+    buf.putLong(timeOfDayNanos)
+    buf.putInt(julianDay)
+    writer.addBinary(Binary.fromByteArray(int96buf))
   }
 }
 
 // Optimized for non-nested rows
 private[parquet] class MutableRowWriteSupport extends RowWriteSupport {
-  override def write(record: Row): Unit = {
+  override def write(record: InternalRow): Unit = {
     val attributesSize = attributes.size
     if (attributesSize > record.size) {
       throw new IndexOutOfBoundsException(
@@ -342,22 +349,21 @@ private[parquet] class MutableRowWriteSupport extends RowWriteSupport {
 
   private def consumeType(
       ctype: DataType,
-      record: Row,
+      record: InternalRow,
       index: Int): Unit = {
     ctype match {
+      case BooleanType => writer.addBoolean(record.getBoolean(index))
+      case ByteType => writer.addInteger(record.getByte(index))
+      case ShortType => writer.addInteger(record.getShort(index))
+      case IntegerType | DateType => writer.addInteger(record.getInt(index))
+      case LongType => writer.addLong(record.getLong(index))
+      case TimestampType => writeTimestamp(record.getLong(index))
+      case FloatType => writer.addFloat(record.getFloat(index))
+      case DoubleType => writer.addDouble(record.getDouble(index))
       case StringType => writer.addBinary(
         Binary.fromByteArray(record(index).asInstanceOf[UTF8String].getBytes))
       case BinaryType => writer.addBinary(
         Binary.fromByteArray(record(index).asInstanceOf[Array[Byte]]))
-      case IntegerType => writer.addInteger(record.getInt(index))
-      case ShortType => writer.addInteger(record.getShort(index))
-      case LongType => writer.addLong(record.getLong(index))
-      case ByteType => writer.addInteger(record.getByte(index))
-      case DoubleType => writer.addDouble(record.getDouble(index))
-      case FloatType => writer.addFloat(record.getFloat(index))
-      case BooleanType => writer.addBoolean(record.getBoolean(index))
-      case DateType => writer.addInteger(record.getInt(index))
-      case TimestampType => writeTimestamp(record(index).asInstanceOf[java.sql.Timestamp])
       case d: DecimalType =>
         if (d.precisionInfo == None || d.precisionInfo.get.precision > 18) {
           sys.error(s"Unsupported datatype $d, cannot write to consumer")

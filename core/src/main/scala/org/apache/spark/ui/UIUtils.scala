@@ -362,7 +362,7 @@ private[spark] object UIUtils extends Logging {
               { g.incomingEdges.map { e => <div class="incoming-edge">{e.fromId},{e.toId}</div> } }
               { g.outgoingEdges.map { e => <div class="outgoing-edge">{e.fromId},{e.toId}</div> } }
               {
-                g.rootCluster.getAllNodes.filter(_.cached).map { n =>
+                g.rootCluster.getCachedNodes.map { n =>
                   <div class="cached-rdd">{n.id}</div>
                 }
               }

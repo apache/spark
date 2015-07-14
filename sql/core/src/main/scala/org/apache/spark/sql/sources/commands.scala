@@ -17,14 +17,13 @@
 
 package org.apache.spark.sql.sources
 
-import java.util.Date
+import java.util.{Date, UUID}
 
 import scala.collection.mutable
 
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce._
 import org.apache.hadoop.mapreduce.lib.output.{FileOutputCommitter => MapReduceFileOutputCommitter, FileOutputFormat}
-import parquet.hadoop.util.ContextUtil
 
 import org.apache.spark._
 import org.apache.spark.mapred.SparkHadoopMapRedUtil
@@ -33,10 +32,11 @@ import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateProjection
-import org.apache.spark.sql.catalyst.plans.logical.{Project, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
 import org.apache.spark.sql.execution.RunnableCommand
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.sql.{DataFrame, SQLConf, SQLContext, SaveMode}
+import org.apache.spark.sql.{DataFrame, Row, SQLConf, SQLContext, SaveMode}
+import org.apache.spark.util.SerializableConfiguration
 
 private[sql] case class InsertIntoDataSource(
     logicalRelation: LogicalRelation,
@@ -48,8 +48,7 @@ private[sql] case class InsertIntoDataSource(
     val relation = logicalRelation.relation.asInstanceOf[InsertableRelation]
     val data = DataFrame(sqlContext, query)
     // Apply the schema of the existing table to the new data.
-    val df = sqlContext.createDataFrame(
-      data.queryExecution.toRdd, logicalRelation.schema, needsConversion = false)
+    val df = sqlContext.internalCreateDataFrame(data.queryExecution.toRdd, logicalRelation.schema)
     relation.insert(df, overwrite)
 
     // Invalidate the cache.
@@ -59,6 +58,28 @@ private[sql] case class InsertIntoDataSource(
   }
 }
 
+/**
+ * A command for writing data to a [[HadoopFsRelation]].  Supports both overwriting and appending.
+ * Writing to dynamic partitions is also supported.  Each [[InsertIntoHadoopFsRelation]] issues a
+ * single write job, and owns a UUID that identifies this job.  Each concrete implementation of
+ * [[HadoopFsRelation]] should use this UUID together with task id to generate unique file path for
+ * each task output file.  This UUID is passed to executor side via a property named
+ * `spark.sql.sources.writeJobUUID`.
+ *
+ * Different writer containers, [[DefaultWriterContainer]] and [[DynamicPartitionWriterContainer]]
+ * are used to write to normal tables and tables with dynamic partitions.
+ *
+ * Basic work flow of this command is:
+ *
+ *   1. Driver side setup, including output committer initialization and data source specific
+ *      preparation work for the write job to be issued.
+ *   2. Issues a write job consists of one or more executor side tasks, each of which writes all
+ *      rows within an RDD partition.
+ *   3. If no exception is thrown in a task, commits that task, otherwise aborts that task;  If any
+ *      exception is thrown during task commitment, also aborts that task.
+ *   4. If all tasks are committed, commit the job, otherwise aborts the job;  If any exception is
+ *      thrown during job commitment, also aborts the job.
+ */
 private[sql] case class InsertIntoHadoopFsRelation(
     @transient relation: HadoopFsRelation,
     @transient query: LogicalPlan,
@@ -75,7 +96,8 @@ private[sql] case class InsertIntoHadoopFsRelation(
     val fs = outputPath.getFileSystem(hadoopConf)
     val qualifiedOutputPath = outputPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
 
-    val doInsertion = (mode, fs.exists(qualifiedOutputPath)) match {
+    val pathExists = fs.exists(qualifiedOutputPath)
+    val doInsertion = (mode, pathExists) match {
       case (SaveMode.ErrorIfExists, true) =>
         sys.error(s"path $qualifiedOutputPath already exists.")
       case (SaveMode.Overwrite, true) =>
@@ -86,11 +108,13 @@ private[sql] case class InsertIntoHadoopFsRelation(
       case (SaveMode.Ignore, exists) =>
         !exists
     }
+    // If we are appending data to an existing dir.
+    val isAppend = (pathExists) && (mode == SaveMode.Append)
 
     if (doInsertion) {
       val job = new Job(hadoopConf)
       job.setOutputKeyClass(classOf[Void])
-      job.setOutputValueClass(classOf[Row])
+      job.setOutputValueClass(classOf[InternalRow])
       FileOutputFormat.setOutputPath(job, qualifiedOutputPath)
 
       // We create a DataFrame by applying the schema of relation to the data to make sure.
@@ -103,23 +127,21 @@ private[sql] case class InsertIntoHadoopFsRelation(
         val project = Project(
           relation.schema.map(field => new UnresolvedAttribute(Seq(field.name))), query)
 
-        sqlContext.createDataFrame(
-          DataFrame(sqlContext, project).queryExecution.toRdd,
-          relation.schema,
-          needsConversion = false)
+        sqlContext.internalCreateDataFrame(
+          DataFrame(sqlContext, project).queryExecution.toRdd, relation.schema)
       }
 
       val partitionColumns = relation.partitionColumns.fieldNames
       if (partitionColumns.isEmpty) {
-        insert(new DefaultWriterContainer(relation, job), df)
+        insert(new DefaultWriterContainer(relation, job, isAppend), df)
       } else {
         val writerContainer = new DynamicPartitionWriterContainer(
-          relation, job, partitionColumns, PartitioningUtils.DEFAULT_PARTITION_NAME)
+          relation, job, partitionColumns, PartitioningUtils.DEFAULT_PARTITION_NAME, isAppend)
         insertWithDynamicPartitions(sqlContext, writerContainer, df, partitionColumns)
       }
     }
 
-    Seq.empty[Row]
+    Seq.empty[InternalRow]
   }
 
   private def insert(writerContainer: BaseWriterContainer, df: DataFrame): Unit = {
@@ -127,9 +149,12 @@ private[sql] case class InsertIntoHadoopFsRelation(
     val needsConversion = relation.needConversion
     val dataSchema = relation.dataSchema
 
+    // This call shouldn't be put into the `try` block below because it only initializes and
+    // prepares the job, any exception thrown from here shouldn't cause abortJob() to be called.
+    writerContainer.driverSideSetup()
+
     try {
-      writerContainer.driverSideSetup()
-      df.sqlContext.sparkContext.runJob(df.queryExecution.executedPlan.execute(), writeRows _)
+      df.sqlContext.sparkContext.runJob(df.queryExecution.toRdd, writeRows _)
       writerContainer.commitJob()
       relation.refresh()
     } catch { case cause: Throwable =>
@@ -138,22 +163,21 @@ private[sql] case class InsertIntoHadoopFsRelation(
       throw new SparkException("Job aborted.", cause)
     }
 
-    def writeRows(taskContext: TaskContext, iterator: Iterator[Row]): Unit = {
-      writerContainer.executorSideSetup(taskContext)
-
+    def writeRows(taskContext: TaskContext, iterator: Iterator[InternalRow]): Unit = {
+      // If anything below fails, we should abort the task.
       try {
-        if (needsConversion) {
-          val converter = CatalystTypeConverters.createToScalaConverter(dataSchema)
-          while (iterator.hasNext) {
-            val row = converter(iterator.next()).asInstanceOf[Row]
-            writerContainer.outputWriterForRow(row).write(row)
-          }
+        writerContainer.executorSideSetup(taskContext)
+
+        val converter = if (needsConversion) {
+          CatalystTypeConverters.createToScalaConverter(dataSchema).asInstanceOf[InternalRow => Row]
         } else {
-          while (iterator.hasNext) {
-            val row = iterator.next()
-            writerContainer.outputWriterForRow(row).write(row)
-          }
+          r: InternalRow => r.asInstanceOf[Row]
         }
+        while (iterator.hasNext) {
+          val row = converter(iterator.next())
+          writerContainer.outputWriterForRow(row).write(row)
+        }
+
         writerContainer.commitTask()
       } catch { case cause: Throwable =>
         logError("Aborting task.", cause)
@@ -191,9 +215,12 @@ private[sql] case class InsertIntoHadoopFsRelation(
     val (partitionOutput, dataOutput) = output.partition(a => partitionColumns.contains(a.name))
     val codegenEnabled = df.sqlContext.conf.codegenEnabled
 
+    // This call shouldn't be put into the `try` block below because it only initializes and
+    // prepares the job, any exception thrown from here shouldn't cause abortJob() to be called.
+    writerContainer.driverSideSetup()
+
     try {
-      writerContainer.driverSideSetup()
-      df.sqlContext.sparkContext.runJob(df.queryExecution.executedPlan.execute(), writeRows _)
+      df.sqlContext.sparkContext.runJob(df.queryExecution.toRdd, writeRows _)
       writerContainer.commitJob()
       relation.refresh()
     } catch { case cause: Throwable =>
@@ -202,33 +229,37 @@ private[sql] case class InsertIntoHadoopFsRelation(
       throw new SparkException("Job aborted.", cause)
     }
 
-    def writeRows(taskContext: TaskContext, iterator: Iterator[Row]): Unit = {
-      writerContainer.executorSideSetup(taskContext)
+    def writeRows(taskContext: TaskContext, iterator: Iterator[InternalRow]): Unit = {
+      // If anything below fails, we should abort the task.
+      try {
+        writerContainer.executorSideSetup(taskContext)
 
-      val partitionProj = newProjection(codegenEnabled, partitionOutput, output)
-      val dataProj = newProjection(codegenEnabled, dataOutput, output)
+        val partitionProj = newProjection(codegenEnabled, partitionOutput, output)
+        val dataProj = newProjection(codegenEnabled, dataOutput, output)
 
-      if (needsConversion) {
-        val converter = CatalystTypeConverters.createToScalaConverter(dataSchema)
-        while (iterator.hasNext) {
-          val row = iterator.next()
-          val partitionPart = partitionProj(row)
-          val dataPart = dataProj(row)
-          val convertedDataPart = converter(dataPart).asInstanceOf[Row]
-          writerContainer.outputWriterForRow(partitionPart).write(convertedDataPart)
+        val dataConverter: InternalRow => Row = if (needsConversion) {
+          CatalystTypeConverters.createToScalaConverter(dataSchema).asInstanceOf[InternalRow => Row]
+        } else {
+          r: InternalRow => r.asInstanceOf[Row]
         }
-      } else {
         val partitionSchema = StructType.fromAttributes(partitionOutput)
-        val converter = CatalystTypeConverters.createToScalaConverter(partitionSchema)
+        val partConverter: InternalRow => Row =
+          CatalystTypeConverters.createToScalaConverter(partitionSchema)
+            .asInstanceOf[InternalRow => Row]
+
         while (iterator.hasNext) {
           val row = iterator.next()
-          val partitionPart = converter(partitionProj(row)).asInstanceOf[Row]
-          val dataPart = dataProj(row)
+          val partitionPart = partConverter(partitionProj(row))
+          val dataPart = dataConverter(dataProj(row))
           writerContainer.outputWriterForRow(partitionPart).write(dataPart)
         }
-      }
 
-      writerContainer.commitTask()
+        writerContainer.commitTask()
+      } catch { case cause: Throwable =>
+        logError("Aborting task.", cause)
+        writerContainer.abortTask()
+        throw new SparkException("Task failed while writing rows.", cause)
+      }
     }
   }
 
@@ -249,12 +280,20 @@ private[sql] case class InsertIntoHadoopFsRelation(
 
 private[sql] abstract class BaseWriterContainer(
     @transient val relation: HadoopFsRelation,
-    @transient job: Job)
+    @transient job: Job,
+    isAppend: Boolean)
   extends SparkHadoopMapReduceUtil
   with Logging
   with Serializable {
 
-  protected val serializableConf = new SerializableWritable(ContextUtil.getConfiguration(job))
+  protected val serializableConf = new SerializableConfiguration(job.getConfiguration)
+
+  // This UUID is used to avoid output file name collision between different appending write jobs.
+  // These jobs may belong to different SparkContext instances. Concrete data source implementations
+  // may use this UUID to generate unique file names (e.g., `part-r-<task-id>-<job-uuid>.parquet`).
+  //  The reason why this ID is used to identify a job rather than a single task output file is
+  // that, speculative tasks must generate the same output file name as the original task.
+  private val uniqueWriteJobId = UUID.randomUUID()
 
   // This is only used on driver side.
   @transient private val jobContext: JobContext = job
@@ -282,8 +321,22 @@ private[sql] abstract class BaseWriterContainer(
   def driverSideSetup(): Unit = {
     setupIDs(0, 0, 0)
     setupConf()
-    taskAttemptContext = newTaskAttemptContext(serializableConf.value, taskAttemptId)
+
+    // This UUID is sent to executor side together with the serialized `Configuration` object within
+    // the `Job` instance.  `OutputWriters` on the executor side should use this UUID to generate
+    // unique task output files.
+    job.getConfiguration.set("spark.sql.sources.writeJobUUID", uniqueWriteJobId.toString)
+
+    // Order of the following two lines is important.  For Hadoop 1, TaskAttemptContext constructor
+    // clones the Configuration object passed in.  If we initialize the TaskAttemptContext first,
+    // configurations made in prepareJobForWrite(job) are not populated into the TaskAttemptContext.
+    //
+    // Also, the `prepareJobForWrite` call must happen before initializing output format and output
+    // committer, since their initialization involve the job configuration, which can be potentially
+    // decorated in `prepareJobForWrite`.
     outputWriterFactory = relation.prepareJobForWrite(job)
+    taskAttemptContext = newTaskAttemptContext(serializableConf.value, taskAttemptId)
+
     outputFormatClass = job.getOutputFormatClass
     outputCommitter = newOutputCommitter(taskAttemptContext)
     outputCommitter.setupJob(jobContext)
@@ -307,30 +360,47 @@ private[sql] abstract class BaseWriterContainer(
   }
 
   private def newOutputCommitter(context: TaskAttemptContext): OutputCommitter = {
-    val committerClass = context.getConfiguration.getClass(
-      SQLConf.OUTPUT_COMMITTER_CLASS, null, classOf[OutputCommitter])
+    val defaultOutputCommitter = outputFormatClass.newInstance().getOutputCommitter(context)
 
-    Option(committerClass).map { clazz =>
-      // Every output format based on org.apache.hadoop.mapreduce.lib.output.OutputFormat
-      // has an associated output committer. To override this output committer,
-      // we will first try to use the output committer set in SQLConf.OUTPUT_COMMITTER_CLASS.
-      // If a data source needs to override the output committer, it needs to set the
-      // output committer in prepareForWrite method.
-      if (classOf[MapReduceFileOutputCommitter].isAssignableFrom(clazz)) {
-        // The specified output committer is a FileOutputCommitter.
-        // So, we will use the FileOutputCommitter-specified constructor.
-        val ctor = clazz.getDeclaredConstructor(classOf[Path], classOf[TaskAttemptContext])
-        ctor.newInstance(new Path(outputPath), context)
-      } else {
-        // The specified output committer is just a OutputCommitter.
-        // So, we will use the no-argument constructor.
-        val ctor = clazz.getDeclaredConstructor()
-        ctor.newInstance()
+    if (isAppend) {
+      // If we are appending data to an existing dir, we will only use the output committer
+      // associated with the file output format since it is not safe to use a custom
+      // committer for appending. For example, in S3, direct parquet output committer may
+      // leave partial data in the destination dir when the the appending job fails.
+      logInfo(
+        s"Using output committer class ${defaultOutputCommitter.getClass.getCanonicalName} " +
+        "for appending.")
+      defaultOutputCommitter
+    } else {
+      val committerClass = context.getConfiguration.getClass(
+        SQLConf.OUTPUT_COMMITTER_CLASS.key, null, classOf[OutputCommitter])
+
+      Option(committerClass).map { clazz =>
+        logInfo(s"Using user defined output committer class ${clazz.getCanonicalName}")
+
+        // Every output format based on org.apache.hadoop.mapreduce.lib.output.OutputFormat
+        // has an associated output committer. To override this output committer,
+        // we will first try to use the output committer set in SQLConf.OUTPUT_COMMITTER_CLASS.
+        // If a data source needs to override the output committer, it needs to set the
+        // output committer in prepareForWrite method.
+        if (classOf[MapReduceFileOutputCommitter].isAssignableFrom(clazz)) {
+          // The specified output committer is a FileOutputCommitter.
+          // So, we will use the FileOutputCommitter-specified constructor.
+          val ctor = clazz.getDeclaredConstructor(classOf[Path], classOf[TaskAttemptContext])
+          ctor.newInstance(new Path(outputPath), context)
+        } else {
+          // The specified output committer is just a OutputCommitter.
+          // So, we will use the no-argument constructor.
+          val ctor = clazz.getDeclaredConstructor()
+          ctor.newInstance()
+        }
+      }.getOrElse {
+        // If output committer class is not set, we will use the one associated with the
+        // file output format.
+        logInfo(
+          s"Using output committer class ${defaultOutputCommitter.getClass.getCanonicalName}")
+        defaultOutputCommitter
       }
-    }.getOrElse {
-      // If output committer class is not set, we will use the one associated with the
-      // file output format.
-      outputFormatClass.newInstance().getOutputCommitter(context)
     }
   }
 
@@ -359,7 +429,9 @@ private[sql] abstract class BaseWriterContainer(
   }
 
   def abortTask(): Unit = {
-    outputCommitter.abortTask(taskAttemptContext)
+    if (outputCommitter != null) {
+      outputCommitter.abortTask(taskAttemptContext)
+    }
     logError(s"Task attempt $taskAttemptId aborted.")
   }
 
@@ -369,15 +441,18 @@ private[sql] abstract class BaseWriterContainer(
   }
 
   def abortJob(): Unit = {
-    outputCommitter.abortJob(jobContext, JobStatus.State.FAILED)
+    if (outputCommitter != null) {
+      outputCommitter.abortJob(jobContext, JobStatus.State.FAILED)
+    }
     logError(s"Job $jobId aborted.")
   }
 }
 
 private[sql] class DefaultWriterContainer(
     @transient relation: HadoopFsRelation,
-    @transient job: Job)
-  extends BaseWriterContainer(relation, job) {
+    @transient job: Job,
+    isAppend: Boolean)
+  extends BaseWriterContainer(relation, job, isAppend) {
 
   @transient private var writer: OutputWriter = _
 
@@ -390,18 +465,22 @@ private[sql] class DefaultWriterContainer(
 
   override def commitTask(): Unit = {
     try {
+      assert(writer != null, "OutputWriter instance should have been initialized")
       writer.close()
       super.commitTask()
-    } catch {
-      case cause: Throwable =>
-        super.abortTask()
-        throw new RuntimeException("Failed to commit task", cause)
+    } catch { case cause: Throwable =>
+      // This exception will be handled in `InsertIntoHadoopFsRelation.insert$writeRows`, and will
+      // cause `abortTask()` to be invoked.
+      throw new RuntimeException("Failed to commit task", cause)
     }
   }
 
   override def abortTask(): Unit = {
     try {
-      writer.close()
+      // It's possible that the task fails before `writer` gets initialized
+      if (writer != null) {
+        writer.close()
+      }
     } finally {
       super.abortTask()
     }
@@ -412,8 +491,9 @@ private[sql] class DynamicPartitionWriterContainer(
     @transient relation: HadoopFsRelation,
     @transient job: Job,
     partitionColumns: Array[String],
-    defaultPartitionName: String)
-  extends BaseWriterContainer(relation, job) {
+    defaultPartitionName: String,
+    isAppend: Boolean)
+  extends BaseWriterContainer(relation, job, isAppend) {
 
   // All output writers are created on executor side.
   @transient protected var outputWriters: mutable.Map[String, OutputWriter] = _
@@ -442,19 +522,25 @@ private[sql] class DynamicPartitionWriterContainer(
     })
   }
 
+  private def clearOutputWriters(): Unit = {
+    if (outputWriters.nonEmpty) {
+      outputWriters.values.foreach(_.close())
+      outputWriters.clear()
+    }
+  }
+
   override def commitTask(): Unit = {
     try {
-      outputWriters.values.foreach(_.close())
+      clearOutputWriters()
       super.commitTask()
     } catch { case cause: Throwable =>
-      super.abortTask()
       throw new RuntimeException("Failed to commit task", cause)
     }
   }
 
   override def abortTask(): Unit = {
     try {
-      outputWriters.values.foreach(_.close())
+      clearOutputWriters()
     } finally {
       super.abortTask()
     }

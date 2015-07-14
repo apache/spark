@@ -18,7 +18,7 @@
 package org.apache.spark.ml.evaluation
 
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.ml.param.{ParamValidators, Param}
+import org.apache.spark.ml.param.{ParamMap, ParamValidators, Param}
 import org.apache.spark.ml.param.shared.{HasLabelCol, HasPredictionCol}
 import org.apache.spark.ml.util.{SchemaUtils, Identifiable}
 import org.apache.spark.mllib.evaluation.MulticlassMetrics
@@ -74,4 +74,5 @@ class MulticlassClassificationEvaluator (override val uid: String)
     metric
   }
 
+  override def copy(extra: ParamMap): MulticlassClassificationEvaluator = defaultCopy(extra)
 }

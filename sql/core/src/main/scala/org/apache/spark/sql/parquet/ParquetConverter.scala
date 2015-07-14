@@ -17,20 +17,20 @@
 
 package org.apache.spark.sql.parquet
 
-import java.sql.Timestamp
-import java.util.{TimeZone, Calendar}
+import java.nio.ByteOrder
 
-import scala.collection.mutable.{Buffer, ArrayBuffer, HashMap}
+import scala.collection.mutable.{ArrayBuffer, Buffer, HashMap}
 
-import jodd.datetime.JDateTime
-import parquet.column.Dictionary
-import parquet.io.api.{PrimitiveConverter, GroupConverter, Binary, Converter}
-import parquet.schema.MessageType
+import org.apache.parquet.Preconditions
+import org.apache.parquet.column.Dictionary
+import org.apache.parquet.io.api.{Binary, Converter, GroupConverter, PrimitiveConverter}
+import org.apache.parquet.schema.MessageType
 
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.parquet.CatalystConverter.FieldType
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.parquet.timestamp.NanoTime
+import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * Collection of converters of Parquet types (group and primitive types) that
@@ -77,7 +77,7 @@ private[sql] object CatalystConverter {
 
   // TODO: consider using Array[T] for arrays to avoid boxing of primitive types
   type ArrayScalaType[T] = Seq[T]
-  type StructScalaType[T] = Row
+  type StructScalaType[T] = InternalRow
   type MapScalaType[K, V] = Map[K, V]
 
   protected[parquet] def createConverter(
@@ -221,7 +221,7 @@ private[parquet] abstract class CatalystConverter extends GroupConverter {
     updateField(fieldIndex, value.getBytes)
 
   protected[parquet] def updateString(fieldIndex: Int, value: Array[Byte]): Unit =
-    updateField(fieldIndex, UTF8String(value))
+    updateField(fieldIndex, UTF8String.fromBytes(value))
 
   protected[parquet] def updateTimestamp(fieldIndex: Int, value: Binary): Unit =
     updateField(fieldIndex, readTimestamp(value))
@@ -238,7 +238,7 @@ private[parquet] abstract class CatalystConverter extends GroupConverter {
    *
    * @return
    */
-  def getCurrentRecord: Row = throw new UnsupportedOperationException
+  def getCurrentRecord: InternalRow = throw new UnsupportedOperationException
 
   /**
    * Read a decimal value from a Parquet Binary into "dest". Only supports decimals that fit in
@@ -266,14 +266,19 @@ private[parquet] abstract class CatalystConverter extends GroupConverter {
   /**
    * Read a Timestamp value from a Parquet Int96Value
    */
-  protected[parquet] def readTimestamp(value: Binary): Timestamp = {
-    CatalystTimestampConverter.convertToTimestamp(value)
+  protected[parquet] def readTimestamp(value: Binary): Long = {
+    Preconditions.checkArgument(value.length() == 12, "Must be 12 bytes")
+    val buf = value.toByteBuffer
+    buf.order(ByteOrder.LITTLE_ENDIAN)
+    val timeOfDayNanos = buf.getLong
+    val julianDay = buf.getInt
+    DateTimeUtils.fromJulianDay(julianDay, timeOfDayNanos)
   }
 }
 
 /**
  * A `parquet.io.api.GroupConverter` that is able to convert a Parquet record
- * to a [[org.apache.spark.sql.catalyst.expressions.Row]] object.
+ * to a [[org.apache.spark.sql.catalyst.expressions.InternalRow]] object.
  *
  * @param schema The corresponding Catalyst schema in the form of a list of attributes.
  */
@@ -282,7 +287,7 @@ private[parquet] class CatalystGroupConverter(
     protected[parquet] val index: Int,
     protected[parquet] val parent: CatalystConverter,
     protected[parquet] var current: ArrayBuffer[Any],
-    protected[parquet] var buffer: ArrayBuffer[Row])
+    protected[parquet] var buffer: ArrayBuffer[InternalRow])
   extends CatalystConverter {
 
   def this(schema: Array[FieldType], index: Int, parent: CatalystConverter) =
@@ -291,7 +296,7 @@ private[parquet] class CatalystGroupConverter(
       index,
       parent,
       current = null,
-      buffer = new ArrayBuffer[Row](
+      buffer = new ArrayBuffer[InternalRow](
         CatalystArrayConverter.INITIAL_ARRAY_SIZE))
 
   /**
@@ -307,13 +312,13 @@ private[parquet] class CatalystGroupConverter(
 
   override val size = schema.size
 
-  override def getCurrentRecord: Row = {
+  override def getCurrentRecord: InternalRow = {
     assert(isRootConverter, "getCurrentRecord should only be called in root group converter!")
     // TODO: use iterators if possible
     // Note: this will ever only be called in the root converter when the record has been
     // fully processed. Therefore it will be difficult to use mutable rows instead, since
     // any non-root converter never would be sure when it would be safe to re-use the buffer.
-    new GenericRow(current.toArray)
+    new GenericInternalRow(current.toArray)
   }
 
   override def getConverter(fieldIndex: Int): Converter = converters(fieldIndex)
@@ -337,15 +342,15 @@ private[parquet] class CatalystGroupConverter(
   override def end(): Unit = {
     if (!isRootConverter) {
       assert(current != null) // there should be no empty groups
-      buffer.append(new GenericRow(current.toArray))
-      parent.updateField(index, new GenericRow(buffer.toArray.asInstanceOf[Array[Any]]))
+      buffer.append(new GenericInternalRow(current.toArray))
+      parent.updateField(index, new GenericInternalRow(buffer.toArray.asInstanceOf[Array[Any]]))
     }
   }
 }
 
 /**
  * A `parquet.io.api.GroupConverter` that is able to convert a Parquet record
- * to a [[org.apache.spark.sql.catalyst.expressions.Row]] object. Note that his
+ * to a [[org.apache.spark.sql.catalyst.expressions.InternalRow]] object. Note that his
  * converter is optimized for rows of primitive types (non-nested records).
  */
 private[parquet] class CatalystPrimitiveRowConverter(
@@ -371,7 +376,7 @@ private[parquet] class CatalystPrimitiveRowConverter(
   override val parent = null
 
   // Should be only called in root group converter!
-  override def getCurrentRecord: Row = current
+  override def getCurrentRecord: InternalRow = current
 
   override def getConverter(fieldIndex: Int): Converter = converters(fieldIndex)
 
@@ -401,7 +406,7 @@ private[parquet] class CatalystPrimitiveRowConverter(
     current.setInt(fieldIndex, value)
 
   override protected[parquet] def updateDate(fieldIndex: Int, value: Int): Unit =
-    current.update(fieldIndex, value)
+    current.setInt(fieldIndex, value)
 
   override protected[parquet] def updateLong(fieldIndex: Int, value: Long): Unit =
     current.setLong(fieldIndex, value)
@@ -422,10 +427,10 @@ private[parquet] class CatalystPrimitiveRowConverter(
     current.update(fieldIndex, value.getBytes)
 
   override protected[parquet] def updateString(fieldIndex: Int, value: Array[Byte]): Unit =
-    current.update(fieldIndex, UTF8String(value))
+    current.update(fieldIndex, UTF8String.fromBytes(value))
 
   override protected[parquet] def updateTimestamp(fieldIndex: Int, value: Binary): Unit =
-    current.update(fieldIndex, readTimestamp(value))
+    current.setLong(fieldIndex, readTimestamp(value))
 
   override protected[parquet] def updateDecimal(
       fieldIndex: Int, value: Binary, ctype: DecimalType): Unit = {
@@ -494,73 +499,6 @@ private[parquet] class CatalystPrimitiveStringConverter(parent: CatalystConverte
 
 private[parquet] object CatalystArrayConverter {
   val INITIAL_ARRAY_SIZE = 20
-}
-
-private[parquet] object CatalystTimestampConverter {
-  // TODO most part of this comes from Hive-0.14
-  // Hive code might have some issues, so we need to keep an eye on it.
-  // Also we use NanoTime and Int96Values from parquet-examples.
-  // We utilize jodd to convert between NanoTime and Timestamp
-  val parquetTsCalendar = new ThreadLocal[Calendar]
-  def getCalendar: Calendar = {
-    // this is a cache for the calendar instance.
-    if (parquetTsCalendar.get == null) {
-      parquetTsCalendar.set(Calendar.getInstance(TimeZone.getTimeZone("GMT")))
-    }
-    parquetTsCalendar.get
-  }
-  val NANOS_PER_SECOND: Long = 1000000000
-  val SECONDS_PER_MINUTE: Long = 60
-  val MINUTES_PER_HOUR: Long = 60
-  val NANOS_PER_MILLI: Long = 1000000
-
-  def convertToTimestamp(value: Binary): Timestamp = {
-    val nt = NanoTime.fromBinary(value)
-    val timeOfDayNanos = nt.getTimeOfDayNanos
-    val julianDay = nt.getJulianDay
-    val jDateTime = new JDateTime(julianDay.toDouble)
-    val calendar = getCalendar
-    calendar.set(Calendar.YEAR, jDateTime.getYear)
-    calendar.set(Calendar.MONTH, jDateTime.getMonth - 1)
-    calendar.set(Calendar.DAY_OF_MONTH, jDateTime.getDay)
-
-    // written in command style
-    var remainder = timeOfDayNanos
-    calendar.set(
-      Calendar.HOUR_OF_DAY,
-      (remainder / (NANOS_PER_SECOND * SECONDS_PER_MINUTE * MINUTES_PER_HOUR)).toInt)
-    remainder = remainder % (NANOS_PER_SECOND * SECONDS_PER_MINUTE * MINUTES_PER_HOUR)
-    calendar.set(
-      Calendar.MINUTE, (remainder / (NANOS_PER_SECOND * SECONDS_PER_MINUTE)).toInt)
-    remainder = remainder % (NANOS_PER_SECOND * SECONDS_PER_MINUTE)
-    calendar.set(Calendar.SECOND, (remainder / NANOS_PER_SECOND).toInt)
-    val nanos = remainder % NANOS_PER_SECOND
-    val ts = new Timestamp(calendar.getTimeInMillis)
-    ts.setNanos(nanos.toInt)
-    ts
-  }
-
-  def convertFromTimestamp(ts: Timestamp): Binary = {
-    val calendar = getCalendar
-    calendar.setTime(ts)
-    val jDateTime = new JDateTime(calendar.get(Calendar.YEAR),
-      calendar.get(Calendar.MONTH) + 1, calendar.get(Calendar.DAY_OF_MONTH))
-    // Hive-0.14 didn't set hour before get day number, while the day number should
-    // has something to do with hour, since julian day number grows at 12h GMT
-    // here we just follow what hive does.
-    val julianDay = jDateTime.getJulianDayNumber
-
-    val hour = calendar.get(Calendar.HOUR_OF_DAY)
-    val minute = calendar.get(Calendar.MINUTE)
-    val second = calendar.get(Calendar.SECOND)
-    val nanos = ts.getNanos
-    // Hive-0.14 would use hours directly, that might be wrong, since the day starts
-    // from 12h in Julian. here we just follow what hive does.
-    val nanosOfDay = nanos + second * NANOS_PER_SECOND +
-      minute * NANOS_PER_SECOND * SECONDS_PER_MINUTE +
-      hour * NANOS_PER_SECOND * SECONDS_PER_MINUTE * MINUTES_PER_HOUR
-    NanoTime(julianDay, nanosOfDay).toBinary
-  }
 }
 
 /**
@@ -718,7 +656,7 @@ private[parquet] class CatalystNativeArrayConverter(
 
   override protected[parquet] def updateString(fieldIndex: Int, value: Array[Byte]): Unit = {
     checkGrowBuffer()
-    buffer(elements) = UTF8String(value).asInstanceOf[NativeType]
+    buffer(elements) = UTF8String.fromBytes(value).asInstanceOf[NativeType]
     elements += 1
   }
 
@@ -850,7 +788,7 @@ private[parquet] class CatalystStructConverter(
     // here we need to make sure to use StructScalaType
     // Note: we need to actually make a copy of the array since we
     // may be in a nested field
-    parent.updateField(index, new GenericRow(current.toArray))
+    parent.updateField(index, new GenericInternalRow(current.toArray))
   }
 }
 

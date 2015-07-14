@@ -160,13 +160,15 @@ class RegressionEvaluator(JavaEvaluator, HasLabelCol, HasPredictionCol):
     ...
     >>> evaluator = RegressionEvaluator(predictionCol="raw")
     >>> evaluator.evaluate(dataset)
-    2.842...
+    -2.842...
     >>> evaluator.evaluate(dataset, {evaluator.metricName: "r2"})
     0.993...
     >>> evaluator.evaluate(dataset, {evaluator.metricName: "mae"})
-    2.649...
+    -2.649...
     """
-    # a placeholder to make it appear in the generated doc
+    # Because we will maximize evaluation value (ref: `CrossValidator`),
+    # when we evaluate a metric that is needed to minimize (e.g., `"rmse"`, `"mse"`, `"mae"`),
+    # we take and output the negative of this metric.
     metricName = Param(Params._dummy(), "metricName",
                        "metric name in evaluation (mse|rmse|r2|mae)")
 
@@ -208,6 +210,66 @@ class RegressionEvaluator(JavaEvaluator, HasLabelCol, HasPredictionCol):
         setParams(self, predictionCol="prediction", labelCol="label", \
                   metricName="rmse")
         Sets params for regression evaluator.
+        """
+        kwargs = self.setParams._input_kwargs
+        return self._set(**kwargs)
+
+
+@inherit_doc
+class MulticlassClassificationEvaluator(JavaEvaluator, HasLabelCol, HasPredictionCol):
+    """
+    Evaluator for Multiclass Classification, which expects two input
+    columns: prediction and label.
+    >>> scoreAndLabels = [(-28.98343821, -27.0), (20.21491975, 21.5),
+    ...   (-25.98418959, -22.0), (30.69731842, 33.0), (74.69283752, 71.0)]
+    >>> dataset = sqlContext.createDataFrame(scoreAndLabels, ["raw", "label"])
+    ...
+    >>> evaluator = MulticlassClassificationEvaluator(predictionCol="raw")
+    >>> evaluator.evaluate(dataset)
+    2.842...
+    """
+    # a placeholder to make it appear in the generated doc
+    metricName = Param(Params._dummy(), "metricName",
+        "metric name in evaluation (f1)")
+
+    @keyword_only
+    def __init__(self, predictionCol="prediction", labelCol="label",
+                 metricName="f1"):
+        """
+        __init__(self, predictionCol="prediction", labelCol="label", \
+                 metricName="f1")
+        """
+        super(MulticlassClassificationEvaluator, self).__init__()
+        self._java_obj = self._new_java_obj(
+            "org.apache.spark.ml.evaluation.MulticlassClassificationEvaluator", self.uid)
+        #: param for metric name in evaluation (f1)
+        self.metricName = Param(self, "metricName",
+                                "metric name in evaluation (f1)")
+        self._setDefault(predictionCol="prediction", labelCol="label",
+                         metricName="f1")
+        kwargs = self.__init__._input_kwargs
+        self._set(**kwargs)
+
+    def setMetricName(self, value):
+        """
+        Sets the value of :py:attr:`metricName`.
+        """
+        self._paramMap[self.metricName] = value
+        return self
+
+    def getMetricName(self):
+        """
+        Gets the value of metricName or its default value.
+        """
+        return self.getOrDefault(self.metricName)
+
+    @keyword_only
+    def setParams(self, predictionCol="prediction", labelCol="label",
+                  metricName="f1"):
+        """
+        setParams(self, predictionCol="prediction", labelCol="label", \
+                  metricName="f1")
+        Sets params for multiclass classification evaluator.
         """
         kwargs = self.setParams._input_kwargs
         return self._set(**kwargs)
