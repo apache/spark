@@ -266,7 +266,7 @@ class SparkHadoopUtil extends Logging {
       fileStatuses
     } catch {
       case NonFatal(e) =>
-        logWarning("Error while attempting to list files from application straging dir", e)
+        logWarning("Error while attempting to list files from application staging dir", e)
         Array.empty
     }
   }
