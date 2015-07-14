@@ -17,7 +17,7 @@
 
 package org.apache.spark.mllib.clustering
 
-import scala.collection.{SortedSet, mutable, Map}
+import scala.collection.{mutable, Map}
 
 import breeze.linalg.{SparseVector => BSV, Vector => BV, norm => breezeNorm, any => breezeAny}
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
@@ -56,7 +56,6 @@ object BisectingKMeans extends Logging {
  * @param numClusters tne number of clusters you want
  * @param clusterMap the pairs of cluster and its index as Map
  * @param maxIterations the number of maximal iterations
- * @param maxRetries the number of maximum retries
  * @param seed a random seed
  */
 class BisectingKMeans private (
