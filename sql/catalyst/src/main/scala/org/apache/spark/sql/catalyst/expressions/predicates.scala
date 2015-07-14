@@ -33,11 +33,16 @@ object InterpretedPredicate {
   }
 }
 
+
+/**
+ * An [[Expression]] that returns a boolean value.
+ */
 trait Predicate extends Expression {
   self: Product =>
 
   override def dataType: DataType = BooleanType
 }
+
 
 trait PredicateHelper {
   protected def splitConjunctivePredicates(condition: Expression): Seq[Expression] = {
@@ -70,6 +75,7 @@ trait PredicateHelper {
     expr.references.subsetOf(plan.outputSet)
 }
 
+
 case class Not(child: Expression) extends UnaryExpression with Predicate with ExpectsInputTypes {
   override def toString: String = s"NOT $child"
 
@@ -81,6 +87,7 @@ case class Not(child: Expression) extends UnaryExpression with Predicate with Ex
     defineCodeGen(ctx, ev, c => s"!($c)")
   }
 }
+
 
 /**
  * Evaluates to `true` if `list` contains `value`.
@@ -97,6 +104,7 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
   }
 }
 
+
 /**
  * Optimized version of In clause, when all filter values of In clause are
  * static.
@@ -112,12 +120,12 @@ case class InSet(child: Expression, hset: Set[Any])
   }
 }
 
-case class And(left: Expression, right: Expression)
-  extends BinaryExpression with Predicate with ExpectsInputTypes {
 
-  override def toString: String = s"($left && $right)"
+case class And(left: Expression, right: Expression) extends BinaryOperator with Predicate {
 
-  override def inputTypes: Seq[DataType] = Seq(BooleanType, BooleanType)
+  override def inputType: AbstractDataType = BooleanType
+
+  override def symbol: String = "&&"
 
   override def eval(input: InternalRow): Any = {
     val input1 = left.eval(input)
@@ -161,12 +169,12 @@ case class And(left: Expression, right: Expression)
   }
 }
 
-case class Or(left: Expression, right: Expression)
-  extends BinaryExpression with Predicate with ExpectsInputTypes {
 
-  override def toString: String = s"($left || $right)"
+case class Or(left: Expression, right: Expression) extends BinaryOperator with Predicate {
 
-  override def inputTypes: Seq[DataType] = Seq(BooleanType, BooleanType)
+  override def inputType: AbstractDataType = BooleanType
+
+  override def symbol: String = "||"
 
   override def eval(input: InternalRow): Any = {
     val input1 = left.eval(input)
@@ -210,6 +218,7 @@ case class Or(left: Expression, right: Expression)
   }
 }
 
+
 abstract class BinaryComparison extends BinaryOperator with Predicate {
   self: Product =>
 
@@ -223,9 +232,11 @@ abstract class BinaryComparison extends BinaryOperator with Predicate {
   }
 }
 
+
 private[sql] object BinaryComparison {
   def unapply(e: BinaryComparison): Option[(Expression, Expression)] = Some((e.left, e.right))
 }
+
 
 /** An extractor that matches both standard 3VL equality and null-safe equality. */
 private[sql] object Equality {
@@ -236,7 +247,11 @@ private[sql] object Equality {
   }
 }
 
+
 case class EqualTo(left: Expression, right: Expression) extends BinaryComparison {
+
+  override def inputType: AbstractDataType = AnyDataType
+
   override def symbol: String = "="
 
   protected override def nullSafeEval(input1: Any, input2: Any): Any = {
@@ -249,7 +264,11 @@ case class EqualTo(left: Expression, right: Expression) extends BinaryComparison
   }
 }
 
+
 case class EqualNullSafe(left: Expression, right: Expression) extends BinaryComparison {
+
+  override def inputType: AbstractDataType = AnyDataType
+
   override def symbol: String = "<=>"
 
   override def nullable: Boolean = false
@@ -282,7 +301,11 @@ case class EqualNullSafe(left: Expression, right: Expression) extends BinaryComp
   }
 }
 
+
 case class LessThan(left: Expression, right: Expression) extends BinaryComparison {
+
+  override def inputType: AbstractDataType = TypeCollection.Ordered
+
   override def symbol: String = "<"
 
   protected def checkTypesInternal(t: DataType) =
@@ -293,7 +316,11 @@ case class LessThan(left: Expression, right: Expression) extends BinaryCompariso
   protected override def nullSafeEval(input1: Any, input2: Any): Any = ordering.lt(input1, input2)
 }
 
+
 case class LessThanOrEqual(left: Expression, right: Expression) extends BinaryComparison {
+
+  override def inputType: AbstractDataType = TypeCollection.Ordered
+
   override def symbol: String = "<="
 
   protected def checkTypesInternal(t: DataType) =
@@ -304,7 +331,11 @@ case class LessThanOrEqual(left: Expression, right: Expression) extends BinaryCo
   protected override def nullSafeEval(input1: Any, input2: Any): Any = ordering.lteq(input1, input2)
 }
 
+
 case class GreaterThan(left: Expression, right: Expression) extends BinaryComparison {
+
+  override def inputType: AbstractDataType = TypeCollection.Ordered
+
   override def symbol: String = ">"
 
   protected def checkTypesInternal(t: DataType) =
@@ -315,7 +346,11 @@ case class GreaterThan(left: Expression, right: Expression) extends BinaryCompar
   protected override def nullSafeEval(input1: Any, input2: Any): Any = ordering.gt(input1, input2)
 }
 
+
 case class GreaterThanOrEqual(left: Expression, right: Expression) extends BinaryComparison {
+
+  override def inputType: AbstractDataType = TypeCollection.Ordered
+
   override def symbol: String = ">="
 
   protected def checkTypesInternal(t: DataType) =

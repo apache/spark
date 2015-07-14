@@ -29,11 +29,12 @@ abstract class UnaryArithmetic extends UnaryExpression {
   override def dataType: DataType = child.dataType
 }
 
-case class UnaryMinus(child: Expression) extends UnaryArithmetic with ExpectsInputTypes {
-
-  override def inputTypes: Seq[AbstractDataType] = Seq(NumericType)
+case class UnaryMinus(child: Expression) extends UnaryArithmetic {
 
   override def toString: String = s"-$child"
+
+  override def checkInputDataTypes(): TypeCheckResult =
+    TypeUtils.checkForNumericExpr(child.dataType, "operator -")
 
   private lazy val numeric = TypeUtils.getNumeric(dataType)
 
@@ -48,6 +49,9 @@ case class UnaryMinus(child: Expression) extends UnaryArithmetic with ExpectsInp
 case class UnaryPositive(child: Expression) extends UnaryArithmetic {
   override def prettyName: String = "positive"
 
+  override def checkInputDataTypes(): TypeCheckResult =
+    TypeUtils.checkForNumericExpr(child.dataType, "operator -")
+
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String =
     defineCodeGen(ctx, ev, c => c)
 
@@ -57,9 +61,9 @@ case class UnaryPositive(child: Expression) extends UnaryArithmetic {
 /**
  * A function that get the absolute value of the numeric value.
  */
-case class Abs(child: Expression) extends UnaryArithmetic with ExpectsInputTypes {
-
-  override def inputTypes: Seq[AbstractDataType] = Seq(NumericType)
+case class Abs(child: Expression) extends UnaryArithmetic {
+  override def checkInputDataTypes(): TypeCheckResult =
+    TypeUtils.checkForNumericExpr(child.dataType, "function abs")
 
   private lazy val numeric = TypeUtils.getNumeric(dataType)
 
@@ -91,13 +95,12 @@ private[sql] object BinaryArithmetic {
   def unapply(e: BinaryArithmetic): Option[(Expression, Expression)] = Some((e.left, e.right))
 }
 
-case class Add(left: Expression, right: Expression)
-  extends BinaryArithmetic with ExpectsInputTypes {
+case class Add(left: Expression, right: Expression) extends BinaryArithmetic {
+
+  override def inputType: AbstractDataType = NumericType
 
   override def symbol: String = "+"
   override def decimalMethod: String = "$plus"
-
-  override def inputTypes: Seq[AbstractDataType] = Seq(NumericType, NumericType)
 
   override lazy val resolved =
     childrenResolved && checkInputDataTypes().isSuccess && !DecimalType.isFixed(dataType)
@@ -107,13 +110,12 @@ case class Add(left: Expression, right: Expression)
   protected override def nullSafeEval(input1: Any, input2: Any): Any = numeric.plus(input1, input2)
 }
 
-case class Subtract(left: Expression, right: Expression)
-  extends BinaryArithmetic with ExpectsInputTypes {
+case class Subtract(left: Expression, right: Expression) extends BinaryArithmetic {
+
+  override def inputType: AbstractDataType = NumericType
 
   override def symbol: String = "-"
   override def decimalMethod: String = "$minus"
-
-  override def inputTypes: Seq[AbstractDataType] = Seq(NumericType, NumericType)
 
   override lazy val resolved =
     childrenResolved && checkInputDataTypes().isSuccess && !DecimalType.isFixed(dataType)
@@ -123,13 +125,12 @@ case class Subtract(left: Expression, right: Expression)
   protected override def nullSafeEval(input1: Any, input2: Any): Any = numeric.minus(input1, input2)
 }
 
-case class Multiply(left: Expression, right: Expression)
-  extends BinaryArithmetic with ExpectsInputTypes {
+case class Multiply(left: Expression, right: Expression) extends BinaryArithmetic {
+
+  override def inputType: AbstractDataType = NumericType
 
   override def symbol: String = "*"
   override def decimalMethod: String = "$times"
-
-  override def inputTypes: Seq[AbstractDataType] = Seq(NumericType, NumericType)
 
   override lazy val resolved =
     childrenResolved && checkInputDataTypes().isSuccess && !DecimalType.isFixed(dataType)
@@ -139,14 +140,13 @@ case class Multiply(left: Expression, right: Expression)
   protected override def nullSafeEval(input1: Any, input2: Any): Any = numeric.times(input1, input2)
 }
 
-case class Divide(left: Expression, right: Expression)
-  extends BinaryArithmetic with ExpectsInputTypes {
+case class Divide(left: Expression, right: Expression) extends BinaryArithmetic {
+
+  override def inputType: AbstractDataType = NumericType
 
   override def symbol: String = "/"
   override def decimalMethod: String = "$div"
   override def nullable: Boolean = true
-
-  override def inputTypes: Seq[AbstractDataType] = Seq(NumericType, NumericType)
 
   override lazy val resolved =
     childrenResolved && checkInputDataTypes().isSuccess && !DecimalType.isFixed(dataType)
@@ -205,14 +205,13 @@ case class Divide(left: Expression, right: Expression)
   }
 }
 
-case class Remainder(left: Expression, right: Expression)
-  extends BinaryArithmetic with ExpectsInputTypes {
+case class Remainder(left: Expression, right: Expression) extends BinaryArithmetic {
+
+  override def inputType: AbstractDataType = NumericType
 
   override def symbol: String = "%"
   override def decimalMethod: String = "remainder"
   override def nullable: Boolean = true
-
-  override def inputTypes: Seq[AbstractDataType] = Seq(NumericType, NumericType)
 
   override lazy val resolved =
     childrenResolved && checkInputDataTypes().isSuccess && !DecimalType.isFixed(dataType)
@@ -272,6 +271,10 @@ case class Remainder(left: Expression, right: Expression)
 }
 
 case class MaxOf(left: Expression, right: Expression) extends BinaryArithmetic {
+  // TODO: Remove MaxOf and MinOf, and replace its usage with Greatest and Least.
+
+  override def inputType: AbstractDataType = TypeCollection.Ordered
+
   override def nullable: Boolean = left.nullable && right.nullable
 
   protected def checkTypesInternal(t: DataType) =
@@ -326,6 +329,10 @@ case class MaxOf(left: Expression, right: Expression) extends BinaryArithmetic {
 }
 
 case class MinOf(left: Expression, right: Expression) extends BinaryArithmetic {
+  // TODO: Remove MaxOf and MinOf, and replace its usage with Greatest and Least.
+
+  override def inputType: AbstractDataType = TypeCollection.Ordered
+
   override def nullable: Boolean = left.nullable && right.nullable
 
   protected def checkTypesInternal(t: DataType) =

@@ -356,20 +356,32 @@ abstract class BinaryExpression extends Expression with trees.BinaryNode[Express
 abstract class BinaryOperator extends BinaryExpression {
   self: Product =>
 
+  /**
+   * Expected input type from both left/right child expressions, similar to the
+   * [[ExpectsInputTypes]] trait.
+   */
+  def inputType: AbstractDataType
+
   def symbol: String
 
+  override def toString: String = s"($left $symbol $right)"
+
   override def checkInputDataTypes(): TypeCheckResult = {
-    // First call the checker for ExpectsInputTypes, and then check whether left and right have
-    // the same type.
-    super.checkInputDataTypes() match {
-      case TypeCheckResult.TypeCheckSuccess =>
-        if (left.dataType != right.dataType) {
-          TypeCheckResult.TypeCheckFailure(s"differing types in '$prettyString' " +
-            s"(${left.dataType.simpleString} and ${right.dataType.simpleString}).")
-        } else {
-          TypeCheckResult.TypeCheckSuccess
-        }
-      case TypeCheckResult.TypeCheckFailure(msg) => TypeCheckResult.TypeCheckFailure(msg)
+    val mismatches = children.zipWithIndex.collect {
+      case (child, idx) if !inputType.acceptsType(child.dataType) =>
+        s"argument ${idx + 1} is expected to be of type ${inputType.simpleString}, " +
+          s"however, '${child.prettyString}' is of type ${child.dataType.simpleString}."
+    }
+
+    if (mismatches.isEmpty) {
+      if (left.dataType != right.dataType) {
+        TypeCheckResult.TypeCheckFailure(s"differing types in '$prettyString' " +
+          s"(${left.dataType.simpleString} and ${right.dataType.simpleString}).")
+      } else {
+        TypeCheckResult.TypeCheckSuccess
+      }
+    } else {
+      TypeCheckResult.TypeCheckFailure(mismatches.mkString(" "))
     }
   }
 }

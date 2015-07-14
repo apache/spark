@@ -96,7 +96,23 @@ private[sql] class TypeCollection(private val types: Seq[AbstractDataType])
 
 private[sql] object TypeCollection {
 
-  val Ordered = TypeCollection(NumericType, StringType)
+  /**
+   * Types that can be ordered/compared. In the long run we should probably make this a trait
+   * that can be mixed into each data type, and perhaps create an [[AbstractDataType]].
+   */
+  val Ordered = TypeCollection(
+    BooleanType,
+    ByteType, ShortType, IntegerType, LongType,
+    FloatType, DoubleType, DecimalType,
+    TimestampType, DateType,
+    StringType)
+
+  /**
+   * Types that can be used in bitwise operations.
+   */
+  val Bitwise = TypeCollection(
+    BooleanType,
+    ByteType, ShortType, IntegerType, LongType)
 
   def apply(types: AbstractDataType*): TypeCollection = new TypeCollection(types)
 
@@ -104,6 +120,23 @@ private[sql] object TypeCollection {
     case typ: TypeCollection => Some(typ.types)
     case _ => None
   }
+}
+
+
+/**
+ * An [[AbstractDataType]] that matches any concrete data types.
+ */
+protected[sql] object AnyDataType extends AbstractDataType {
+
+  // Note that since AnyDataType matches any concrete types, defaultConcreteType should never
+  // be invoked.
+  override private[sql] def defaultConcreteType: DataType = throw new UnsupportedOperationException
+
+  override private[sql] def simpleString: String = "any"
+
+  override private[sql] def isSameType(other: DataType): Boolean = false
+
+  override private[sql] def acceptsType(other: DataType): Boolean = true
 }
 
 

@@ -221,10 +221,16 @@ object HiveTypeCoercion {
         case e if !e.childrenResolved => e
 
         case b @ BinaryOperator(left, right) if left.dataType != right.dataType =>
-          findTightestCommonTypeOfTwo(left.dataType, right.dataType).map { widestType =>
-            val newLeft = if (left.dataType == widestType) left else Cast(left, widestType)
-            val newRight = if (right.dataType == widestType) right else Cast(right, widestType)
-            b.makeCopy(Array(newLeft, newRight))
+          findTightestCommonTypeOfTwo(left.dataType, right.dataType).map { commonType =>
+            // If the expression accepts the tighest common type, cast to that.
+            // Otherwise, don't do anything with the expression.
+            if (b.inputType.acceptsType(commonType)) {
+              val newLeft = if (left.dataType == commonType) left else Cast(left, commonType)
+              val newRight = if (right.dataType == commonType) right else Cast(right, commonType)
+              b.makeCopy(Array(newLeft, newRight))
+            } else {
+              b
+            }
           }.getOrElse(b)  // If there is no applicable conversion, leave expression unchanged.
       }
     }
@@ -680,7 +686,7 @@ object HiveTypeCoercion {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
 
-      case e: ExpectsInputTypes if (e.inputTypes.nonEmpty) =>
+      case e: ExpectsInputTypes if e.inputTypes.nonEmpty =>
         val children: Seq[Expression] = e.children.zip(e.inputTypes).map { case (in, expected) =>
           // If we cannot do the implicit cast, just use the original input.
           implicitCast(in, expected).getOrElse(in)
