@@ -231,8 +231,8 @@ class DateTimeUtilsSuite extends SparkFunSuite {
     c = Calendar.getInstance(TimeZone.getTimeZone("GMT+07:30"))
     c.set(2015, 2, 18, 12, 3, 17)
     c.set(Calendar.MILLISECOND, 123)
-    assert(DateTimeUtils.stringToTimestamp(UTF8String.fromString("2015-03-18T12:03:17.123+07:30")) ==
-      c.getTimeInMillis * 1000)
+    assert(DateTimeUtils.stringToTimestamp(UTF8String.fromString("2015-03-18T12:03:17.123+07:30"))
+      == c.getTimeInMillis * 1000)
 
     c = Calendar.getInstance(TimeZone.getTimeZone("GMT+07:30"))
     c.set(2015, 2, 18, 12, 3, 17)
