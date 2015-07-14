@@ -159,6 +159,7 @@ class NaiveBayesSuite extends SparkFunSuite with MLlibTestSparkContext {
     // Test posteriors
     validationData.map(_.features).foreach { features =>
       val predicted = model.predictProbabilities(features).toArray
+      assert(predicted.sum ~== 1.0 relTol 1.0e-10)
       val expected = expectedMultinomialProbabilities(model, features)
       expected.zip(predicted).foreach { case (e, p) => assert(e ~== p relTol 1.0e-10) }
     }
@@ -209,6 +210,7 @@ class NaiveBayesSuite extends SparkFunSuite with MLlibTestSparkContext {
     // Test posteriors
     validationData.map(_.features).foreach { features =>
       val predicted = model.predictProbabilities(features).toArray
+      assert(predicted.sum ~== 1.0 relTol 1.0e-10)
       val expected = expectedBernoulliProbabilities(model, features)
       expected.zip(predicted).foreach { case (e, p) => assert(e ~== p relTol 1.0e-10) }
     }
