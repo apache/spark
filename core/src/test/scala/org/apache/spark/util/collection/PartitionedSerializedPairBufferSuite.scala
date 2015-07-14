@@ -145,4 +145,4 @@ class PartitionedSerializedPairBufferSuite extends SparkFunSuite {
   }
 }
 
-case class SomeStruct(val str: String, val num: Int)
+case class SomeStruct(str: String, num: Int)
