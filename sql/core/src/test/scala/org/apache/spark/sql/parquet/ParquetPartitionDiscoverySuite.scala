@@ -447,7 +447,12 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest {
         (1 to 10).map(i => (i, i.toString)).toDF("intField", "stringField"),
         makePartitionDir(base, defaultPartitionName, "pi" -> 2))
 
-      sqlContext.read.format("parquet").load(base.getCanonicalPath).registerTempTable("t")
+      sqlContext
+        .read
+        .option("mergeSchema", "true")
+        .format("parquet")
+        .load(base.getCanonicalPath)
+        .registerTempTable("t")
 
       withTempTable("t") {
         checkAnswer(
