@@ -312,7 +312,7 @@ case class CaseKeyWhen(key: Expression, branches: Seq[Expression]) extends CaseW
 }
 
 /**
- * A function that returns the least value of all parameters.
+ * A function that returns the least value of all parameters, skipping null values.
  * It takes at least 2 parameters, and returns null iff all parameters are null.
  */
 case class Least(children: Seq[Expression]) extends Expression {
@@ -366,7 +366,7 @@ case class Least(children: Seq[Expression]) extends Expression {
 }
 
 /**
- * A function that returns the greatest value of all parameters.
+ * A function that returns the greatest value of all parameters, skipping null values.
  * It takes at least 2 parameters, and returns null iff all parameters are null.
  */
 case class Greatest(children: Seq[Expression]) extends Expression {

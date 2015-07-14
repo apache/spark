@@ -1073,7 +1073,7 @@ object functions {
   def floor(columnName: String): Column = floor(Column(columnName))
 
   /**
-   * Returns the greatest value of the list of values.
+   * Returns the greatest value of the list of values, skipping null values.
    * This function takes at least 2 parameters. It will return null iff all parameters are null.
    *
    * @group normal_funcs
@@ -1087,7 +1087,7 @@ object functions {
   }
 
   /**
-   * Returns the greatest value of the list of column names.
+   * Returns the greatest value of the list of column names, skipping null values.
    * This function takes at least 2 parameters. It will return null iff all parameters are null.
    *
    * @group normal_funcs
@@ -1200,7 +1200,7 @@ object functions {
   def hypot(l: Double, rightName: String): Column = hypot(l, Column(rightName))
 
   /**
-   * Returns the least value of the list of values.
+   * Returns the least value of the list of values, skipping null values.
    * This function takes at least 2 parameters. It will return null iff all parameters are null.
    *
    * @group normal_funcs
@@ -1214,7 +1214,7 @@ object functions {
   }
 
   /**
-   * Returns the least value of the list of column names.
+   * Returns the least value of the list of column names, skipping null values.
    * This function takes at least 2 parameters. It will return null iff all parameters are null.
    *
    * @group normal_funcs
