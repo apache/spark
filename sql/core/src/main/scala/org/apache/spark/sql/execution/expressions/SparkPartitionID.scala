@@ -33,18 +33,14 @@ private[sql] case object SparkPartitionID extends LeafExpression {
 
   override def dataType: DataType = IntegerType
 
-  @transient private lazy val partitionId = TaskContext.get() match {
-    case null => 0
-    case _ => TaskContext.get().partitionId()
-  }
+  @transient private lazy val partitionId = TaskContext.getPartitionId
 
   override def eval(input: InternalRow): Int = partitionId
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     val idTerm = ctx.freshName("partitionId")
-    ctx.mutableStates += (("int", idTerm, partitionId))
+    ctx.addMutableState(ctx.JAVA_INT, idTerm, "org.apache.spark.TaskContext.getPartitionId()")
     ev.isNull = "false"
-    ev.primitive = idTerm
-    ""
+    s"final ${ctx.javaType(dataType)} ${ev.primitive} = $idTerm;"
   }
 }

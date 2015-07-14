@@ -56,13 +56,15 @@ class CodeGenContext {
    */
   val references: mutable.ArrayBuffer[Expression] = new mutable.ArrayBuffer[Expression]()
 
+  val mutableStates: mutable.ArrayBuffer[String] = mutable.ArrayBuffer.empty[String]
+
   /**
-   * Holding expressions' mutable states like `Rand.rng`, and keep them as member variables
-   * in generated classes like `SpecificProjection`.
-   * Each element is a 3-tuple: java type, variable name, variable value.
+   * Register expressions' mutable states like `MonotonicallyIncreasingID.count`, they will be
+   * kept as member variables in generated classes like `SpecificProjection`.
    */
-  val mutableStates: mutable.ArrayBuffer[(String, String, Any)] =
-    mutable.ArrayBuffer.empty[(String, String, Any)]
+  def addMutableState(javaType: String, variableName: String, initialValue: String): Unit = {
+    mutableStates += s"private $javaType $variableName = $initialValue;"
+  }
 
   val stringType: String = classOf[UTF8String].getName
   val decimalType: String = classOf[Decimal].getName
@@ -211,9 +213,12 @@ class CodeGenContext {
   def isPrimitiveType(dt: DataType): Boolean = isPrimitiveType(javaType(dt))
 }
 
-
+/**
+ * A wrapper for generated class, defines a `generate` method so that we can pass extra objects
+ * into generated class.
+ */
 abstract class GeneratedClass {
-  def generate(expressions: Array[Expression], states: Array[Any]): Any
+  def generate(expressions: Array[Expression]): Any
 }
 
 /**

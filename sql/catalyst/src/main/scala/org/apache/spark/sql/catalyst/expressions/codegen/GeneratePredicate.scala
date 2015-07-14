@@ -40,26 +40,16 @@ object GeneratePredicate extends CodeGenerator[Expression, (InternalRow) => Bool
   protected def create(predicate: Expression): ((InternalRow) => Boolean) = {
     val ctx = newCodeGenContext()
     val eval = predicate.gen(ctx)
-
-    val mutableStates = ctx.mutableStates.map {
-      case (jt, name, _) => s"private $jt $name;"
-    }.mkString("\n      ")
-
-    val initStates = ctx.mutableStates.zipWithIndex.map {
-      case ((jt, name, _), index) => s"$name = (${ctx.boxedType(jt)}) states[$index];"
-    }.mkString("\n        ")
-
     val code = s"""
-      public SpecificPredicate generate($exprType[] expr, Object[] states) {
-        return new SpecificPredicate(expr, states);
+      public SpecificPredicate generate($exprType[] expr) {
+        return new SpecificPredicate(expr);
       }
 
       class SpecificPredicate extends ${classOf[Predicate].getName} {
         private final $exprType[] expressions;
-        $mutableStates
-        public SpecificPredicate($exprType[] expr, Object[] states) {
+        ${ctx.mutableStates.mkString("\n      ")}
+        public SpecificPredicate($exprType[] expr) {
           expressions = expr;
-          $initStates
         }
 
         @Override
@@ -71,8 +61,7 @@ object GeneratePredicate extends CodeGenerator[Expression, (InternalRow) => Bool
 
     logDebug(s"Generated predicate '$predicate':\n$code")
 
-    val p = compile(code).generate(ctx.references.toArray, ctx.mutableStates.map(_._3).toArray)
-      .asInstanceOf[Predicate]
+    val p = compile(code).generate(ctx.references.toArray).asInstanceOf[Predicate]
     (r: InternalRow) => p.eval(r)
   }
 }

@@ -151,26 +151,17 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
         s"""if (!nullBits[$i]) arr[$i] = c$i;"""
     }.mkString("\n      ")
 
-    val mutableStates = ctx.mutableStates.map {
-      case (jt, name, _) => s"private $jt $name;"
-    }.mkString("\n      ")
-
-    val initStates = ctx.mutableStates.zipWithIndex.map {
-      case ((jt, name, _), index) => s"$name = (${ctx.boxedType(jt)}) states[$index];"
-    }.mkString("\n        ")
-
     val code = s"""
-    public SpecificProjection generate($exprType[] expr, Object[] states) {
-      return new SpecificProjection(expr, states);
+    public SpecificProjection generate($exprType[] expr) {
+      return new SpecificProjection(expr);
     }
 
     class SpecificProjection extends ${classOf[BaseProject].getName} {
       private $exprType[] expressions = null;
-      $mutableStates
+      ${ctx.mutableStates.mkString("\n      ")}
 
-      public SpecificProjection($exprType[] expr, Object[] states) {
+      public SpecificProjection($exprType[] expr) {
         expressions = expr;
-        $initStates
       }
 
       @Override
@@ -240,7 +231,6 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
 
     logDebug(s"MutableRow, initExprs: ${expressions.mkString(",")} code:\n${code}")
 
-    compile(code).generate(ctx.references.toArray, ctx.mutableStates.map(_._3).toArray)
-      .asInstanceOf[Projection]
+    compile(code).generate(ctx.references.toArray).asInstanceOf[Projection]
   }
 }

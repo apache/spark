@@ -39,11 +39,7 @@ abstract class RDG(seed: Long) extends LeafExpression with Serializable {
    * Record ID within each partition. By being transient, the Random Number Generator is
    * reset every time we serialize and deserialize it.
    */
-  @transient protected lazy val partitionId = TaskContext.get() match {
-    case null => 0
-    case _ => TaskContext.get().partitionId()
-  }
-  @transient protected lazy val rng = new XORShiftRandom(seed + partitionId)
+  @transient protected lazy val rng = new XORShiftRandom(seed + TaskContext.getPartitionId)
 
   override def deterministic: Boolean = false
 
@@ -65,7 +61,9 @@ case class Rand(seed: Long) extends RDG(seed) {
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     val rngTerm = ctx.freshName("rng")
-    ctx.mutableStates += ((rng.getClass.getCanonicalName, rngTerm, rng))
+    val className = classOf[XORShiftRandom].getCanonicalName
+    ctx.addMutableState(className, rngTerm,
+      s"new $className($seed + org.apache.spark.TaskContext.getPartitionId())")
     ev.isNull = "false"
     s"""
       final ${ctx.javaType(dataType)} ${ev.primitive} = $rngTerm.nextDouble();
@@ -86,7 +84,9 @@ case class Randn(seed: Long) extends RDG(seed) {
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     val rngTerm = ctx.freshName("rng")
-    ctx.mutableStates += ((rng.getClass.getCanonicalName, rngTerm, rng))
+    val className = classOf[XORShiftRandom].getCanonicalName
+    ctx.addMutableState(className, rngTerm,
+      s"new $className($seed + org.apache.spark.TaskContext.getPartitionId())")
     ev.isNull = "false"
     s"""
       final ${ctx.javaType(dataType)} ${ev.primitive} = $rngTerm.nextGaussian();
