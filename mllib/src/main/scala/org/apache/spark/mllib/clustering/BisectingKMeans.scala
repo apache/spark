@@ -543,7 +543,7 @@ class ClusterNode private (
       case _ => Array(this) ++ this.children.flatMap(child => child.toArray.toIterator)
     }
     array.sortWith { case (a, b) =>
-      a.getDepth < b.getDepth && a.criterion < b.criterion
+      a.getDepth < b.getDepth && a.criterion < b.criterion && a.rows < b.rows
     }
   }
 
