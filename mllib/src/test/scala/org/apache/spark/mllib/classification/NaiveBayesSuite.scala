@@ -172,7 +172,7 @@ class NaiveBayesSuite extends SparkFunSuite with MLlibTestSparkContext {
    */
   private def expectedMultinomialProbabilities(model: NaiveBayesModel, testData: Vector) = {
     val piVector = new BDV(model.pi)
-    // model.labels is row-major; treat it as col-major representation of transpose, and transpose:
+    // model.theta is row-major; treat it as col-major representation of transpose, and transpose:
     val thetaMatrix = new BDM(model.theta(0).length, model.theta.length, model.theta.flatten).t
     val logClassProbs: BV[Double] = piVector + (thetaMatrix * testData.toBreeze)
     val classProbs = logClassProbs.toArray.map(math.exp)
