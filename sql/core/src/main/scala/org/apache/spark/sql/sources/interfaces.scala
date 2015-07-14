@@ -413,7 +413,6 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
     }
 
     def refresh(): Unit = {
-      assert(paths.nonEmpty, "Input paths can't be empty")
       val files = listLeafFilesAndDirs(paths)
 
       leafFiles.clear()
