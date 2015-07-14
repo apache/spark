@@ -15,16 +15,16 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution
+package org.apache.spark.sql.hive.execution
 
-import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
-import org.apache.spark.sql.{Row, QueryTest}
+import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.test.TestSQLContext
+import org.apache.spark.sql.{QueryTest, Row}
 import org.scalatest.BeforeAndAfterAll
 
 class Aggregate2Suite extends QueryTest with BeforeAndAfterAll {
 
-  protected lazy val ctx = TestSQLContext
+  protected lazy val ctx = TestHive
   import ctx.implicits._
 
   var originalUseAggregate2: Boolean = _
@@ -43,7 +43,7 @@ class Aggregate2Suite extends QueryTest with BeforeAndAfterAll {
       (3, null),
       (3, null)).toDF("key", "value")
 
-    data.registerTempTable("agg2")
+    data.write.saveAsTable("agg2")
   }
 
   test("test average2 no key in output") {
