@@ -375,6 +375,5 @@ class MathExpressionsSuite extends QueryTest {
     val df = Seq((1, -1, "abc")).toDF("a", "b", "c")
     checkAnswer(df.selectExpr("positive(a)"), Row(1))
     checkAnswer(df.selectExpr("positive(b)"), Row(-1))
-    checkAnswer(df.selectExpr("positive(c)"), Row("abc"))
   }
 }

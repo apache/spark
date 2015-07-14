@@ -275,9 +275,6 @@ case class MaxOf(left: Expression, right: Expression) extends BinaryArithmetic {
 
   override def nullable: Boolean = left.nullable && right.nullable
 
-  protected def checkTypesInternal(t: DataType) =
-    TypeUtils.checkForOrderingExpr(t, "function maxOf")
-
   private lazy val ordering = TypeUtils.getOrdering(dataType)
 
   override def eval(input: InternalRow): Any = {
@@ -332,9 +329,6 @@ case class MinOf(left: Expression, right: Expression) extends BinaryArithmetic {
   override def inputType: AbstractDataType = TypeCollection.Ordered
 
   override def nullable: Boolean = left.nullable && right.nullable
-
-  protected def checkTypesInternal(t: DataType) =
-    TypeUtils.checkForOrderingExpr(t, "function minOf")
 
   private lazy val ordering = TypeUtils.getOrdering(dataType)
 

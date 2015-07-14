@@ -310,9 +310,6 @@ case class LessThan(left: Expression, right: Expression) extends BinaryCompariso
 
   override def symbol: String = "<"
 
-  protected def checkTypesInternal(t: DataType) =
-    TypeUtils.checkForOrderingExpr(left.dataType, "operator " + symbol)
-
   private lazy val ordering = TypeUtils.getOrdering(left.dataType)
 
   protected override def nullSafeEval(input1: Any, input2: Any): Any = ordering.lt(input1, input2)
@@ -324,9 +321,6 @@ case class LessThanOrEqual(left: Expression, right: Expression) extends BinaryCo
   override def inputType: AbstractDataType = TypeCollection.Ordered
 
   override def symbol: String = "<="
-
-  protected def checkTypesInternal(t: DataType) =
-    TypeUtils.checkForOrderingExpr(left.dataType, "operator " + symbol)
 
   private lazy val ordering = TypeUtils.getOrdering(left.dataType)
 
@@ -340,9 +334,6 @@ case class GreaterThan(left: Expression, right: Expression) extends BinaryCompar
 
   override def symbol: String = ">"
 
-  protected def checkTypesInternal(t: DataType) =
-    TypeUtils.checkForOrderingExpr(left.dataType, "operator " + symbol)
-
   private lazy val ordering = TypeUtils.getOrdering(left.dataType)
 
   protected override def nullSafeEval(input1: Any, input2: Any): Any = ordering.gt(input1, input2)
@@ -354,9 +345,6 @@ case class GreaterThanOrEqual(left: Expression, right: Expression) extends Binar
   override def inputType: AbstractDataType = TypeCollection.Ordered
 
   override def symbol: String = ">="
-
-  protected def checkTypesInternal(t: DataType) =
-    TypeUtils.checkForOrderingExpr(left.dataType, "operator " + symbol)
 
   private lazy val ordering = TypeUtils.getOrdering(left.dataType)
 

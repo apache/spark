@@ -105,7 +105,7 @@ private[sql] object TypeCollection {
     ByteType, ShortType, IntegerType, LongType,
     FloatType, DoubleType, DecimalType,
     TimestampType, DateType,
-    StringType)
+    StringType, BinaryType)
 
   /**
    * Types that can be used in bitwise operations.
