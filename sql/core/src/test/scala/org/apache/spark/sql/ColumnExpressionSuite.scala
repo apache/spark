@@ -574,8 +574,10 @@ class ColumnExpressionSuite extends QueryTest with SQLTestUtils {
     // Because Rand function is not deterministic, the column rand is not deterministic.
     // So, in the optimizer, we will not collapse Project [rand + 1 AS rand1, rand - 1 AS rand2]
     // and Project [key, Rand 5 AS rand]. The final plan still has two Projects.
+    val localTestData = ctx.sparkContext.parallelize((1 to 100).map(i => (i, i.toString)))
+      .toDF("key", "value")
     val dfWithTwoProjects =
-      testData
+      localTestData
         .select($"key", (rand(5L) + 1).as("rand"))
         .select(($"rand" + 1).as("rand1"), ($"rand" - 1).as("rand2"))
     checkNumProjects(dfWithTwoProjects, 2)
