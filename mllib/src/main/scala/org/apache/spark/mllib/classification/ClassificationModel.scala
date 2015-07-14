@@ -64,7 +64,6 @@ private[mllib] object ClassificationModel {
   /**
    * Helper method for loading GLM classification model metadata.
    * @return (numFeatures, numClasses)
-   * @since 1.3.0
    */
   def getNumFeaturesClasses(metadata: JValue): (Int, Int) = {
     implicit val formats = DefaultFormats

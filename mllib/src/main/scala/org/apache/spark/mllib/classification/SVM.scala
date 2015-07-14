@@ -73,9 +73,6 @@ class SVMModel (
     this
   }
 
-  /**
-   * @since 0.8.0
-   */
   override protected def predictPoint(
       dataMatrix: Vector,
       weightMatrix: Vector,
@@ -95,9 +92,6 @@ class SVMModel (
       numFeatures = weights.size, numClasses = 2, weights, intercept, threshold)
   }
 
-  /**
-   * @since 1.3.0
-   */
   override protected def formatVersion: String = "1.0"
 
   /**
@@ -166,9 +160,6 @@ class SVMWithSGD private (
    */
   def this() = this(1.0, 100, 0.01, 1.0)
 
-  /**
-   * @since 0.8.0
-   */
   override protected def createModel(weights: Vector, intercept: Double) = {
     new SVMModel(weights, intercept)
   }

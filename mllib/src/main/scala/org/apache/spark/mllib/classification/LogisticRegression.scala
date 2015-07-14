@@ -114,9 +114,6 @@ class LogisticRegressionModel (
     this
   }
 
-  /**
-   * @since 0.8.0
-  */
   override protected def predictPoint(
       dataMatrix: Vector,
       weightMatrix: Vector,
@@ -169,9 +166,6 @@ class LogisticRegressionModel (
       numFeatures, numClasses, weights, intercept, threshold)
   }
 
-  /**
-   * @since 1.3.0
-   */
   override protected def formatVersion: String = "1.0"
 
   /**
@@ -241,9 +235,6 @@ class LogisticRegressionWithSGD private[mllib] (
    */
   def this() = this(1.0, 100, 0.01, 1.0)
 
-  /**
-   * @since 0.8.0
-   */
   override protected[mllib] def createModel(weights: Vector, intercept: Double) = {
     new LogisticRegressionModel(weights, intercept)
   }
@@ -357,9 +348,6 @@ class LogisticRegressionWithLBFGS
 
   override protected val validators = List(multiLabelValidator)
 
-  /**
-   * @since 1.3.0
-   */
   private def multiLabelValidator: RDD[LabeledPoint] => Boolean = { data =>
     if (numOfLinearPredictor > 1) {
       DataValidators.multiLabelValidator(numOfLinearPredictor + 1)(data)
@@ -385,9 +373,6 @@ class LogisticRegressionWithLBFGS
     this
   }
 
-  /**
-   * @since 1.0.0
-   */
   override protected def createModel(weights: Vector, intercept: Double) = {
     if (numOfLinearPredictor == 1) {
       new LogisticRegressionModel(weights, intercept)

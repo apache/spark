@@ -82,9 +82,6 @@ class NaiveBayesModel private[mllib] (
       throw new UnknownError(s"Invalid modelType: $modelType.")
   }
 
-  /**
-   * @since 1.1.0
-   */
   override def predict(testData: RDD[Vector]): RDD[Double] = {
     val bcModel = testData.context.broadcast(this)
     testData.mapPartitions { iter =>
@@ -93,9 +90,6 @@ class NaiveBayesModel private[mllib] (
     }
   }
 
-  /**
-   * @since 1.1.0
-   */
   override def predict(testData: Vector): Double = {
     modelType match {
       case Multinomial =>
@@ -119,9 +113,6 @@ class NaiveBayesModel private[mllib] (
     }
   }
 
-  /**
-   * @since 1.3.0
-   */
   override def save(sc: SparkContext, path: String): Unit = {
     val data = NaiveBayesModel.SaveLoadV2_0.Data(labels, pi, theta, modelType)
     NaiveBayesModel.SaveLoadV2_0.save(sc, path, data)
@@ -148,9 +139,6 @@ object NaiveBayesModel extends Loader[NaiveBayesModel] {
         theta: Array[Array[Double]],
         modelType: String)
 
-    /**
-     * @since 1.3.0
-     */
     def save(sc: SparkContext, path: String, data: Data): Unit = {
       val sqlContext = new SQLContext(sc)
       import sqlContext.implicits._
@@ -166,9 +154,6 @@ object NaiveBayesModel extends Loader[NaiveBayesModel] {
       dataRDD.write.parquet(dataPath(path))
     }
 
-    /**
-     * @since 1.3.0
-     */
     def load(sc: SparkContext, path: String): NaiveBayesModel = {
       val sqlContext = new SQLContext(sc)
       // Load Parquet data.
@@ -200,9 +185,6 @@ object NaiveBayesModel extends Loader[NaiveBayesModel] {
         pi: Array[Double],
         theta: Array[Array[Double]])
 
-    /**
-     * @since 1.3.0
-     */
     def save(sc: SparkContext, path: String, data: Data): Unit = {
       val sqlContext = new SQLContext(sc)
       import sqlContext.implicits._
@@ -218,9 +200,6 @@ object NaiveBayesModel extends Loader[NaiveBayesModel] {
       dataRDD.write.parquet(dataPath(path))
     }
 
-    /**
-     * @since 1.3.0
-     */
     def load(sc: SparkContext, path: String): NaiveBayesModel = {
       val sqlContext = new SQLContext(sc)
       // Load Parquet data.
@@ -237,9 +216,6 @@ object NaiveBayesModel extends Loader[NaiveBayesModel] {
     }
   }
 
-  /**
-  * @since 1.3.0
-  */
   override def load(sc: SparkContext, path: String): NaiveBayesModel = {
     val (loadedClassName, version, metadata) = loadMetadata(sc, path)
     val classNameV1_0 = SaveLoadV1_0.thisClassName
@@ -291,23 +267,18 @@ class NaiveBayes private (
 
   def this() = this(1.0, NaiveBayes.Multinomial)
 
-  /** Set the smoothing parameter. Default: 1.0.
-  * @since 0.9.0
-  */
+  /** Set the smoothing parameter. Default: 1.0. */
   def setLambda(lambda: Double): NaiveBayes = {
     this.lambda = lambda
     this
   }
 
-  /** Get the smoothing parameter.
-  * @since 1.4.0
-  */
+  /** Get the smoothing parameter. */
   def getLambda: Double = lambda
 
   /**
    * Set the model type using a string (case-sensitive).
    * Supported options: "multinomial" (default) and "bernoulli".
-   * @since 1.4.0
    */
   def setModelType(modelType: String): NaiveBayes = {
     require(NaiveBayes.supportedModelTypes.contains(modelType),
@@ -316,16 +287,13 @@ class NaiveBayes private (
     this
   }
 
-  /** Get the model type.
-  * @since 1.4.0
-  */
+  /** Get the model type. */
   def getModelType: String = this.modelType
 
   /**
    * Run the algorithm with the configured parameters on an input RDD of LabeledPoint entries.
    *
    * @param data RDD of [[org.apache.spark.mllib.regression.LabeledPoint]].
-   * @since 0.9.0
    */
   def run(data: RDD[LabeledPoint]): NaiveBayesModel = {
     val requireNonnegativeValues: Vector => Unit = (v: Vector) => {
