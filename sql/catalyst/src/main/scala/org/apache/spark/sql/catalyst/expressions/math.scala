@@ -555,7 +555,9 @@ case class Round(child: Expression, scale: Expression)
   override def foldable: Boolean = child.foldable
 
   override lazy val dataType: DataType = child.dataType match {
-    case DecimalType.Fixed(p, s) => DecimalType(p, _scale)
+    // if the new scale is bigger which means we are scaling up,
+    // keep the original scale as `Decimal` does
+    case DecimalType.Fixed(p, s) => DecimalType(p, if (_scale > s) s else _scale)
     case t => t
   }
 
