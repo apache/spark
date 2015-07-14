@@ -174,20 +174,18 @@ abstract class PredictionModel[FeaturesType, M <: PredictionModel[FeaturesType, 
    * @return transformed dataset with [[predictionCol]] of type [[Double]]
    */
   override def transform(dataset: DataFrame): DataFrame = {
-    transformImpl(dataset, predict)
-  }
-
-  protected def transformImpl(
-      dataset: DataFrame,
-      predictFunc: (FeaturesType) => Double): DataFrame = {
     transformSchema(dataset.schema, logging = true)
     if ($(predictionCol).nonEmpty) {
-      dataset.withColumn($(predictionCol), callUDF(predictFunc, DoubleType, col($(featuresCol))))
+      transformImpl(dataset)
     } else {
       this.logWarning(s"$uid: Predictor.transform() was called as NOOP" +
         " since no output columns were set.")
       dataset
     }
+  }
+
+  protected def transformImpl(dataset: DataFrame): DataFrame = {
+    dataset.withColumn($(predictionCol), callUDF(predict _, DoubleType, col($(featuresCol))))
   }
 
   /**

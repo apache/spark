@@ -34,6 +34,8 @@ import org.apache.spark.mllib.tree.loss.{LogLoss => OldLogLoss, Loss => OldLoss}
 import org.apache.spark.mllib.tree.model.{GradientBoostedTreesModel => OldGBTModel}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.functions._
+import org.apache.spark.sql.types.DoubleType
 
 /**
  * :: AlphaComponent ::
@@ -176,23 +178,17 @@ final class GBTClassificationModel(
 
   override def treeWeights: Array[Double] = _treeWeights
 
-  override def transform(dataset: DataFrame): DataFrame = {
+  override protected def transformImpl(dataset: DataFrame): DataFrame = {
     val bcastModel = dataset.sqlContext.sparkContext.broadcast(this)
-    val predictFunc = (features: Vector) => predictImpl(features, () => bcastModel.value)
-    transformImpl(dataset, predictFunc)
+    dataset.withColumn($(predictionCol), callUDF(bcastModel.value.predict _, DoubleType,
+      col($(featuresCol))))
   }
 
   override protected def predict(features: Vector): Double = {
-    // TODO: When we add a generic Bagging class, handle transform there: SPARK-7128
-    // Predict without using a broadcasted model
-    predictImpl(features, () => this)
-  }
-
-  protected def predictImpl(features: Vector, modelAccesor: () => TreeEnsembleModel): Double = {
+    // TODO: When we add a generic Boosting class, handle transform there?  SPARK-7129
     // Classifies by thresholding sum of weighted tree predictions
-    val treePredictions = modelAccesor().trees.map(_.rootNode.predict(features))
-    val prediction = blas.ddot(modelAccesor().numTrees, treePredictions, 1,
-      modelAccesor().treeWeights, 1)
+    val treePredictions = _trees.map(_.rootNode.predict(features))
+    val prediction = blas.ddot(numTrees, treePredictions, 1, _treeWeights, 1)
     if (prediction > 0.0) 1.0 else 0.0
   }
 

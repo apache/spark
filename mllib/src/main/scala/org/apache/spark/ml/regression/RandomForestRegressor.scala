@@ -29,6 +29,8 @@ import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo}
 import org.apache.spark.mllib.tree.model.{RandomForestModel => OldRandomForestModel}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.functions._
+import org.apache.spark.sql.types.DoubleType
 
 /**
  * :: AlphaComponent ::
@@ -121,22 +123,17 @@ final class RandomForestRegressionModel private[ml] (
 
   override def treeWeights: Array[Double] = _treeWeights
 
-  override def transform(dataset: DataFrame): DataFrame = {
+  override protected def transformImpl(dataset: DataFrame): DataFrame = {
     val bcastModel = dataset.sqlContext.sparkContext.broadcast(this)
-    val predictFunc = (features: Vector) => predictImpl(features, () => bcastModel.value)
-    transformImpl(dataset, predictFunc)
+    dataset.withColumn($(predictionCol), callUDF(bcastModel.value.predict _, DoubleType,
+      col($(featuresCol))))
   }
 
   override protected def predict(features: Vector): Double = {
-    // TODO: When we add a generic Bagging class, handle transform there: SPARK-7128
-    // Predict without using a broadcasted model
-    predictImpl(features, () => this)
-  }
-
-  protected def predictImpl(features: Vector, modelAccesor: () => TreeEnsembleModel): Double = {
+    // TODO: When we add a generic Bagging class, handle transform there.  SPARK-7128
     // Predict average of tree predictions.
     // Ignore the weights since all are 1.0 for now.
-    modelAccesor().trees.map(_.rootNode.predict(features)).sum / modelAccesor().numTrees
+    _trees.map(_.rootNode.predict(features)).sum / numTrees
   }
 
   override def copy(extra: ParamMap): RandomForestRegressionModel = {
