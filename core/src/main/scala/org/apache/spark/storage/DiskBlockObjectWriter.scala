@@ -40,7 +40,7 @@ private[spark] class DiskBlockObjectWriter(
     bufferSize: Int,
     compressStream: OutputStream => OutputStream,
     syncWrites: Boolean,
-    // These write metrics concurrently shared with other active BlockObjectWriter's who
+    // These write metrics concurrently shared with other active DiskBlockObjectWriters who
     // are themselves performing writes. All updates must be relative.
     writeMetrics: ShuffleWriteMetrics)
   extends OutputStream

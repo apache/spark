@@ -91,7 +91,7 @@ private[spark] object WritablePartitionedPairCollection {
 }
 
 /**
- * Iterator that writes elements to a BlockObjectWriter instead of returning them. Each element
+ * Iterator that writes elements to a DiskBlockObjectWriter instead of returning them. Each element
  * has an associated partition.
  */
 private[spark] trait WritablePartitionedIterator {
