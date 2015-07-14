@@ -22,6 +22,7 @@ import org.apache.spark.annotation.Experimental
 /**
  * :: Experimental ::
  * Enum for selecting the quantile calculation strategy
+ * @since 1.0.0
  */
 @Experimental
 object QuantileStrategy extends Enumeration {

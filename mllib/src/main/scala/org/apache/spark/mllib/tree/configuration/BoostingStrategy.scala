@@ -37,6 +37,7 @@ import org.apache.spark.mllib.tree.loss.{LogLoss, SquaredError, Loss}
  * @param validationTol Useful when runWithValidation is used. If the error rate on the
  *                      validation input between two iterations is less than the validationTol
  *                      then stop. Ignored when [[run]] is used.
+ * @since 1.2.0
  */
 @Experimental
 case class BoostingStrategy(
@@ -69,6 +70,9 @@ case class BoostingStrategy(
   }
 }
 
+/**
+ * @since 1.2.0
+ */
 @Experimental
 object BoostingStrategy {
 
@@ -76,6 +80,7 @@ object BoostingStrategy {
    * Returns default configuration for the boosting algorithm
    * @param algo Learning goal.  Supported: "Classification" or "Regression"
    * @return Configuration for boosting algorithm
+   * @since 1.2.0
    */
   def defaultParams(algo: String): BoostingStrategy = {
     defaultParams(Algo.fromString(algo))
@@ -87,6 +92,7 @@ object BoostingStrategy {
    *             [[org.apache.spark.mllib.tree.configuration.Algo.Classification]],
    *             [[org.apache.spark.mllib.tree.configuration.Algo.Regression]]
    * @return Configuration for boosting algorithm
+   * @since 1.3.0
    */
   def defaultParams(algo: Algo): BoostingStrategy = {
     val treeStrategy = Strategy.defaultStategy(algo)

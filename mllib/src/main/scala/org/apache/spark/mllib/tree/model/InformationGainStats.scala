@@ -28,6 +28,7 @@ import org.apache.spark.annotation.DeveloperApi
  * @param rightImpurity right node impurity
  * @param leftPredict left node predict
  * @param rightPredict right node predict
+ * @since 1.0.0
  */
 @DeveloperApi
 class InformationGainStats(
@@ -38,11 +39,17 @@ class InformationGainStats(
     val leftPredict: Predict,
     val rightPredict: Predict) extends Serializable {
 
+  /**
+   * @since 1.0.0
+   */
   override def toString: String = {
     s"gain = $gain, impurity = $impurity, left impurity = $leftImpurity, " +
       s"right impurity = $rightImpurity"
   }
 
+  /**
+   * @since 1.2.0
+   */
   override def equals(o: Any): Boolean = o match {
     case other: InformationGainStats =>
       gain == other.gain &&
@@ -55,6 +62,9 @@ class InformationGainStats(
     case _ => false
   }
 
+  /**
+   * @since 1.4.0
+   */
   override def hashCode: Int = {
     com.google.common.base.Objects.hashCode(
       gain: java.lang.Double,

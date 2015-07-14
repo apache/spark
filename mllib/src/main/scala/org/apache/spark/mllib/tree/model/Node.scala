@@ -38,6 +38,7 @@ import org.apache.spark.mllib.linalg.Vector
  * @param leftNode  left child
  * @param rightNode right child
  * @param stats information gain stats
+ * @since 1.0.0
  */
 @DeveloperApi
 class Node (
@@ -50,6 +51,9 @@ class Node (
     var rightNode: Option[Node],
     var stats: Option[InformationGainStats]) extends Serializable with Logging {
 
+  /**
+   * @since 1.0.0
+   */
   override def toString: String = {
     s"id = $id, isLeaf = $isLeaf, predict = $predict, impurity = $impurity, " +
       s"split = $split, stats = $stats"
@@ -58,6 +62,7 @@ class Node (
   /**
    * build the left node and right nodes if not leaf
    * @param nodes array of nodes
+   * @since 1.0.0
    */
   @deprecated("build should no longer be used since trees are constructed on-the-fly in training",
     "1.2.0")
@@ -79,6 +84,7 @@ class Node (
    * predict value if node is not leaf
    * @param features feature value
    * @return predicted value
+   * @since 1.0.0
    */
   def predict(features: Vector) : Double = {
     if (isLeaf) {

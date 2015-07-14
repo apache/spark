@@ -23,14 +23,21 @@ import org.apache.spark.annotation.DeveloperApi
  * Predicted value for a node
  * @param predict predicted value
  * @param prob probability of the label (classification only)
+ * @since 1.2.0
  */
 @DeveloperApi
 class Predict(
     val predict: Double,
     val prob: Double = 0.0) extends Serializable {
 
+  /**
+   * @since 1.2.0
+   */
   override def toString: String = s"$predict (prob = $prob)"
 
+  /**
+   * @since 1.3.0
+   */
   override def equals(other: Any): Boolean = {
     other match {
       case p: Predict => predict == p.predict && prob == p.prob
@@ -38,6 +45,9 @@ class Predict(
     }
   }
 
+  /**
+   * @since 1.4.0
+   */
   override def hashCode: Int = {
     com.google.common.base.Objects.hashCode(predict: java.lang.Double, prob: java.lang.Double)
   }
