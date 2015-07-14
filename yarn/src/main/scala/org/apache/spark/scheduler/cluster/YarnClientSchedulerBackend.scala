@@ -60,6 +60,9 @@ private[spark] class YarnClientSchedulerBackend(
     // to the executors
     super.start()
 
+    // SPARK-8851: In yarn-client mode, the AM still does the credentials refresh. The driver
+    // reads the credentials from HDFS, just like the executors and updates its own credentials
+    // cache.
     if (conf.contains("spark.yarn.credentials.file")) {
       YarnSparkHadoopUtil.get.startExecutorDelegationTokenRenewer(conf)
     }
