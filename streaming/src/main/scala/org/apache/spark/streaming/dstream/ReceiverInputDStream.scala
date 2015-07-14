@@ -24,7 +24,8 @@ import org.apache.spark.storage.BlockId
 import org.apache.spark.streaming._
 import org.apache.spark.streaming.rdd.WriteAheadLogBackedBlockRDD
 import org.apache.spark.streaming.receiver.Receiver
-import org.apache.spark.streaming.scheduler.StreamInputInfo
+import org.apache.spark.streaming.scheduler.{RateController, StreamInputInfo}
+import org.apache.spark.streaming.scheduler.rate.NoopRateEstimator
 import org.apache.spark.streaming.util.WriteAheadLogUtils
 
 /**
@@ -39,6 +40,14 @@ import org.apache.spark.streaming.util.WriteAheadLogUtils
  */
 abstract class ReceiverInputDStream[T: ClassTag](@transient ssc_ : StreamingContext)
   extends InputDStream[T](ssc_) {
+
+  /**
+   * Asynchronously maintains & sends new rate limits to the receiver through the receiver tracker.
+   */
+  override val rateController: RateController = new RateController(id, rateEstimator) {
+      override def publish(rate: Long): Unit =
+        ssc.scheduler.receiverTracker.sendRateUpdate(id, rate)
+    }
 
   /**
    * Gets the receiver object that will be sent to the worker nodes
