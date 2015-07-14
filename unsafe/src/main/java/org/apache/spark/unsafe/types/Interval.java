@@ -86,6 +86,18 @@ public final class Interval implements Serializable {
     this.microseconds = microseconds;
   }
 
+  public Interval add(Interval that) {
+    int months = this.months + that.months;
+    long microseconds = this.microseconds + that.microseconds;
+    return new Interval(months, microseconds);
+  }
+
+  public Interval subtract(Interval that) {
+    int months = this.months - that.months;
+    long microseconds = this.microseconds - that.microseconds;
+    return new Interval(months, microseconds);
+  }
+
   @Override
   public boolean equals(Object other) {
     if (this == other) return true;

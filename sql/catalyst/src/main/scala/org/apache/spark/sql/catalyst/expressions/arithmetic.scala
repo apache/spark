@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodeGenContext, GeneratedExpressionCode}
 import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.Interval
 
 abstract class UnaryArithmetic extends UnaryExpression {
   self: Product =>
@@ -87,6 +88,10 @@ abstract class BinaryArithmetic extends BinaryOperator {
   def decimalMethod: String =
     sys.error("BinaryArithmetics must override either decimalMethod or genCode")
 
+  /** Name of the function for this expression on a [[Interval]] type. */
+  def intervalMethod: String =
+    sys.error("BinaryArithmetics must override either intervalMethod or genCode")
+
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = dataType match {
     case dt: DecimalType =>
       defineCodeGen(ctx, ev, (eval1, eval2) => s"$eval1.$decimalMethod($eval2)")
@@ -94,6 +99,8 @@ abstract class BinaryArithmetic extends BinaryOperator {
     case ByteType | ShortType =>
       defineCodeGen(ctx, ev,
         (eval1, eval2) => s"(${ctx.javaType(dataType)})($eval1 $symbol $eval2)")
+    case IntervalType =>
+      defineCodeGen(ctx, ev, (eval1, eval2) => s"$eval1.$intervalMethod($eval2)")
     case _ =>
       defineCodeGen(ctx, ev, (eval1, eval2) => s"$eval1 $symbol $eval2")
   }
@@ -106,31 +113,45 @@ private[sql] object BinaryArithmetic {
 case class Add(left: Expression, right: Expression) extends BinaryArithmetic {
   override def symbol: String = "+"
   override def decimalMethod: String = "$plus"
+  override def intervalMethod: String = "add"
 
   override lazy val resolved =
     childrenResolved && checkInputDataTypes().isSuccess && !DecimalType.isFixed(dataType)
 
   protected def checkTypesInternal(t: DataType) =
-    TypeUtils.checkForNumericExpr(t, "operator " + symbol)
+    TypeUtils.checkForNumericAndIntervalExpr(t, "operator " + symbol)
 
   private lazy val numeric = TypeUtils.getNumeric(dataType)
 
-  protected override def nullSafeEval(input1: Any, input2: Any): Any = numeric.plus(input1, input2)
+  protected override def nullSafeEval(input1: Any, input2: Any): Any = {
+    if (dataType.isInstanceOf[IntervalType]) {
+      input1.asInstanceOf[Interval].add(input2.asInstanceOf[Interval])
+    } else {
+      numeric.plus(input1, input2)
+    }
+  }
 }
 
 case class Subtract(left: Expression, right: Expression) extends BinaryArithmetic {
   override def symbol: String = "-"
   override def decimalMethod: String = "$minus"
+  override def intervalMethod: String = "subtract"
 
   override lazy val resolved =
     childrenResolved && checkInputDataTypes().isSuccess && !DecimalType.isFixed(dataType)
 
   protected def checkTypesInternal(t: DataType) =
-    TypeUtils.checkForNumericExpr(t, "operator " + symbol)
+    TypeUtils.checkForNumericAndIntervalExpr(t, "operator " + symbol)
 
   private lazy val numeric = TypeUtils.getNumeric(dataType)
 
-  protected override def nullSafeEval(input1: Any, input2: Any): Any = numeric.minus(input1, input2)
+  protected override def nullSafeEval(input1: Any, input2: Any): Any = {
+    if (dataType.isInstanceOf[IntervalType]) {
+      input1.asInstanceOf[Interval].subtract(input2.asInstanceOf[Interval])
+    } else {
+      numeric.minus(input1, input2)
+    }
+  }
 }
 
 case class Multiply(left: Expression, right: Expression) extends BinaryArithmetic {

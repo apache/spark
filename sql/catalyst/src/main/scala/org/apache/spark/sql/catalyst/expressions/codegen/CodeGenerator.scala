@@ -26,7 +26,7 @@ import org.codehaus.janino.ClassBodyEvaluator
 import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.unsafe.types._
 
 
 // These classes are here to avoid issues with serialization and integration with quasiquotes.
@@ -57,6 +57,7 @@ class CodeGenContext {
   val references: mutable.ArrayBuffer[Expression] = new mutable.ArrayBuffer[Expression]()
 
   val stringType: String = classOf[UTF8String].getName
+  val intervalType: String = classOf[Interval].getName
   val decimalType: String = classOf[Decimal].getName
 
   final val JAVA_BOOLEAN = "boolean"
@@ -127,6 +128,7 @@ class CodeGenContext {
     case dt: DecimalType => decimalType
     case BinaryType => "byte[]"
     case StringType => stringType
+    case IntervalType =>  intervalType
     case _: StructType => "InternalRow"
     case _: ArrayType => s"scala.collection.Seq"
     case _: MapType => s"scala.collection.Map"
