@@ -31,6 +31,11 @@ import org.apache.hadoop.hive.ql.Driver
 import org.apache.hadoop.hive.ql.metadata.{Hive, Partition, Table}
 import org.apache.hadoop.hive.ql.processors.{CommandProcessor, CommandProcessorFactory}
 import org.apache.hadoop.hive.ql.session.SessionState
+import org.apache.hadoop.hive.serde.serdeConstants
+
+import org.apache.spark.Logging
+import org.apache.spark.sql.catalyst.expressions.{Expression, AttributeReference, BinaryComparison}
+import org.apache.spark.sql.types.{StringType, IntegralType}
 
 /**
  * A shim that defines the interface between ClientWrapper and the underlying Hive library used to
@@ -60,6 +65,8 @@ private[client] sealed abstract class Shim {
   def setDataLocation(table: Table, loc: String): Unit
 
   def getAllPartitions(hive: Hive, table: Table): Seq[Partition]
+
+  def getPartitionsByFilter(hive: Hive, table: Table, predicates: Seq[Expression]): Seq[Partition]
 
   def getCommandProcessor(token: String, conf: HiveConf): CommandProcessor
 
@@ -109,7 +116,7 @@ private[client] sealed abstract class Shim {
 
 }
 
-private[client] class Shim_v0_12 extends Shim {
+private[client] class Shim_v0_12 extends Shim with Logging {
 
   private lazy val startMethod =
     findStaticMethod(
@@ -196,6 +203,17 @@ private[client] class Shim_v0_12 extends Shim {
   override def getAllPartitions(hive: Hive, table: Table): Seq[Partition] =
     getAllPartitionsMethod.invoke(hive, table).asInstanceOf[JSet[Partition]].toSeq
 
+  override def getPartitionsByFilter(
+      hive: Hive,
+      table: Table,
+      predicates: Seq[Expression]): Seq[Partition] = {
+    // getPartitionsByFilter() doesn't support binary comparison ops in Hive 0.12.
+    // See HIVE-4888.
+    logDebug("Hive 0.12 doesn't support predicate pushdown to metastore. " +
+      "Please use Hive 0.13 or higher.")
+    getAllPartitions(hive, table)
+  }
+
   override def getCommandProcessor(token: String, conf: HiveConf): CommandProcessor =
     getCommandProcessorMethod.invoke(null, token, conf).asInstanceOf[CommandProcessor]
 
@@ -267,6 +285,12 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
       classOf[Hive],
       "getAllPartitionsOf",
       classOf[Table])
+  private lazy val getPartitionsByFilterMethod =
+    findMethod(
+      classOf[Hive],
+      "getPartitionsByFilter",
+      classOf[Table],
+      classOf[String])
   private lazy val getCommandProcessorMethod =
     findStaticMethod(
       classOf[CommandProcessorFactory],
@@ -287,6 +311,48 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
 
   override def getAllPartitions(hive: Hive, table: Table): Seq[Partition] =
     getAllPartitionsMethod.invoke(hive, table).asInstanceOf[JSet[Partition]].toSeq
+
+  override def getPartitionsByFilter(
+      hive: Hive,
+      table: Table,
+      predicates: Seq[Expression]): Seq[Partition] = {
+    // hive varchar is treated as catalyst string, but hive varchar can't be pushed down.
+    val varcharKeys = table.getPartitionKeys
+      .filter(col => col.getType.startsWith(serdeConstants.VARCHAR_TYPE_NAME))
+      .map(col => col.getName).toSet
+
+    // Hive getPartitionsByFilter() takes a string that represents partition
+    // predicates like "str_key=\"value\" and int_key=1 ..."
+    val filter = predicates.flatMap { expr =>
+      expr match {
+        case op @ BinaryComparison(lhs, rhs) => {
+          lhs match {
+            case AttributeReference(_, _, _, _) => {
+              rhs.dataType match {
+                case _: IntegralType =>
+                  Some(lhs.prettyString + op.symbol + rhs.prettyString)
+                case _: StringType if (!varcharKeys.contains(lhs.prettyString)) =>
+                  Some(lhs.prettyString + op.symbol + "\"" + rhs.prettyString + "\"")
+                case _ => None
+              }
+            }
+            case _ => None
+          }
+        }
+        case _ => None
+      }
+    }.mkString(" and ")
+
+    val partitions =
+      if (filter.isEmpty) {
+        getAllPartitionsMethod.invoke(hive, table).asInstanceOf[JSet[Partition]]
+      } else {
+        logDebug(s"Hive metastore filter is '$filter'.")
+        getPartitionsByFilterMethod.invoke(hive, table, filter).asInstanceOf[JArrayList[Partition]]
+      }
+
+    partitions.toSeq
+  }
 
   override def getCommandProcessor(token: String, conf: HiveConf): CommandProcessor =
     getCommandProcessorMethod.invoke(null, Array(token), conf).asInstanceOf[CommandProcessor]

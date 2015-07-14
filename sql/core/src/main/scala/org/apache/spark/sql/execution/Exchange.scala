@@ -24,6 +24,7 @@ import org.apache.spark.shuffle.hash.HashShuffleManager
 import org.apache.spark.shuffle.sort.SortShuffleManager
 import org.apache.spark.shuffle.unsafe.UnsafeShuffleManager
 import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.errors.attachTree
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical._
@@ -114,20 +115,6 @@ case class Exchange(
     } else {
       // Catch-all case to safely handle any future ShuffleManager implementations.
       true
-    }
-  }
-
-  private val keyOrdering = {
-    if (newOrdering.nonEmpty) {
-      val key = newPartitioning.keyExpressions
-      val boundOrdering = newOrdering.map { o =>
-        val ordinal = key.indexOf(o.child)
-        if (ordinal == -1) sys.error(s"Invalid ordering on $o requested for $newPartitioning")
-        o.copy(child = BoundReference(ordinal, o.child.dataType, o.child.nullable))
-      }
-      new RowOrdering(boundOrdering)
-    } else {
-      null // Ordering will not be used
     }
   }
 
@@ -302,11 +289,8 @@ private[sql] case class EnsureRequirements(sqlContext: SQLContext) extends Rule[
         }
 
         val withSort = if (needSort) {
-          if (sqlContext.conf.externalSortEnabled) {
-            ExternalSort(rowOrdering, global = false, withShuffle)
-          } else {
-            Sort(rowOrdering, global = false, withShuffle)
-          }
+          sqlContext.planner.BasicOperators.getSortOperator(
+            rowOrdering, global = false, withShuffle)
         } else {
           withShuffle
         }
@@ -334,11 +318,7 @@ private[sql] case class EnsureRequirements(sqlContext: SQLContext) extends Rule[
           case (UnspecifiedDistribution, Seq(), child) =>
             child
           case (UnspecifiedDistribution, rowOrdering, child) =>
-            if (sqlContext.conf.externalSortEnabled) {
-              ExternalSort(rowOrdering, global = false, child)
-            } else {
-              Sort(rowOrdering, global = false, child)
-            }
+            sqlContext.planner.BasicOperators.getSortOperator(rowOrdering, global = false, child)
 
           case (dist, ordering, _) =>
             sys.error(s"Don't know how to ensure $dist with ordering $ordering")

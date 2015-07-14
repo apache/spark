@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples.ml
 
 import org.apache.spark.{SparkConf, SparkContext}
@@ -100,3 +101,4 @@ object SimpleParamsExample {
     sc.stop()
   }
 }
+// scalastyle:on println

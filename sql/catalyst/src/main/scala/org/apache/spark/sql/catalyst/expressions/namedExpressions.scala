@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodeGenContext, GeneratedExpressionCode}
@@ -116,8 +117,6 @@ case class Alias(child: Expression, name: String)(
     childrenResolved && checkInputDataTypes().isSuccess && !child.isInstanceOf[Generator]
 
   override def eval(input: InternalRow): Any = child.eval(input)
-
-  override def isThreadSafe: Boolean = child.isThreadSafe
 
   override def gen(ctx: CodeGenContext): GeneratedExpressionCode = child.gen(ctx)
 
