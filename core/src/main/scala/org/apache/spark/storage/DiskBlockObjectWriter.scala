@@ -26,12 +26,12 @@ import org.apache.spark.executor.ShuffleWriteMetrics
 import org.apache.spark.util.Utils
 
 /**
- * An interface for writing JVM objects directly to a file on disk. This interface allows
- * appending data to an existing block, and can guarantee atomicity in the case of faults
- * as it allows the caller to revert partial writes.
+ * A class for writing JVM objects directly to a file on disk. This class allows data to be appended
+ * to an existing block and can guarantee atomicity in the case of faults as it allows the caller to
+ * revert partial writes.
  *
- * This interface does not support concurrent writes. Also, once the writer has
- * been opened, it cannot be reopened again.
+ * This class does not support concurrent writes. Also, once the writer has been opened it cannot be
+ * reopened again.
  */
 private[spark] class DiskBlockObjectWriter(
     val blockId: BlockId,
