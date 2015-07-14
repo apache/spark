@@ -69,7 +69,7 @@ class ExternalAppendOnlyMap[K, V, C](
   extends Iterable[(K, C)]
   with Serializable
   with Logging
-  with Spillable[SizeTracker] {
+  with CollectionSpillable[SizeTracker] {
 
   private var currentMap = new SizeTrackingAppendOnlyMap[K, C]
   private val spilledMaps = new ArrayBuffer[DiskMapIterator]
@@ -99,6 +99,8 @@ class ExternalAppendOnlyMap[K, V, C](
 
   private val keyComparator = new HashComparator[K]
   private val ser = serializer.newInstance()
+
+  private var memoryOrDiskIter: Option[MemoryOrDiskIterator] = None
 
   /**
    * Insert the given key and value into the map.
@@ -151,6 +153,14 @@ class ExternalAppendOnlyMap[K, V, C](
    * Sort the existing contents of the in-memory map and spill them to a temporary file on disk.
    */
   override protected[this] def spill(collection: SizeTracker): Unit = {
+    val it = currentMap.destructiveSortedIterator(keyComparator)
+    spilledMaps.append(spillMemoryToDisk(it))
+  }
+
+  /**
+   * spill contents of the in-memory map to a temporary file on disk.
+   */
+  private[this] def spillMemoryToDisk(inMemory: Iterator[(K, C)]): DiskMapIterator = {
     val (blockId, file) = diskBlockManager.createTempLocalBlock()
     curWriteMetrics = new ShuffleWriteMetrics()
     var writer = blockManager.getDiskWriter(blockId, file, ser, fileBufferSize, curWriteMetrics)
@@ -171,9 +181,8 @@ class ExternalAppendOnlyMap[K, V, C](
 
     var success = false
     try {
-      val it = currentMap.destructiveSortedIterator(keyComparator)
-      while (it.hasNext) {
-        val kv = it.next()
+      while (inMemory.hasNext) {
+        val kv = inMemory.next()
         writer.write(kv._1, kv._2)
         objectsWritten += 1
 
@@ -203,8 +212,7 @@ class ExternalAppendOnlyMap[K, V, C](
         }
       }
     }
-
-    spilledMaps.append(new DiskMapIterator(file, blockId, batchSizes))
+    new DiskMapIterator(file, blockId, batchSizes)
   }
 
   def diskBytesSpilled: Long = _diskBytesSpilled
@@ -214,10 +222,50 @@ class ExternalAppendOnlyMap[K, V, C](
    * If no spill has occurred, simply return the in-memory map's iterator.
    */
   override def iterator: Iterator[(K, C)] = {
+    shuffleMemoryManager.addSpillableToReservedList(this)
     if (spilledMaps.isEmpty) {
-      currentMap.iterator
+      memoryOrDiskIter = Some(MemoryOrDiskIterator(currentMap.iterator))
+      memoryOrDiskIter.get
     } else {
       new ExternalIterator()
+    }
+  }
+
+  /**
+   * spill contents of memory map to disk and release its memory
+   */
+  override def forceSpill(): Long = {
+    var freeMemory = 0L
+    if (memoryOrDiskIter.isDefined) {
+      freeMemory = logForceSpill(currentMap.estimateSize())
+      memoryOrDiskIter.get.spill()
+    }
+    freeMemory
+  }
+
+  /*
+   * An iterator that read elements from in-memory iterator or disk iterator when in-memory
+   * iterator have spilled to disk.
+   */
+  case class MemoryOrDiskIterator(memIter: Iterator[(K, C)]) extends Iterator[(K, C)] {
+
+    var currentIter = memIter
+
+    override def hasNext: Boolean = currentIter.hasNext
+
+    override def next(): (K, C) = currentIter.next()
+
+    private[spark] def spill() = {
+      if (hasNext) {
+        currentIter = spillMemoryToDisk(currentIter)
+      } else {
+        // in-memory iterator is already drained, release it by giving an empty iterator
+        currentIter = new Iterator[(K, C)]{
+          override def hasNext: Boolean = false
+          override def next(): (K, C) = null
+        }
+        logInfo("nothing in memory iterator, do nothing")
+      }
     }
   }
 
@@ -232,7 +280,9 @@ class ExternalAppendOnlyMap[K, V, C](
 
     // Input streams are derived both from the in-memory map and spilled maps on disk
     // The in-memory map is sorted in place, while the spilled maps are already in sorted order
-    private val sortedMap = currentMap.destructiveSortedIterator(keyComparator)
+    memoryOrDiskIter = Some(MemoryOrDiskIterator(
+      currentMap.destructiveSortedIterator(keyComparator)))
+    private val sortedMap = memoryOrDiskIter.get
     private val inputStreams = (Seq(sortedMap) ++ spilledMaps).map(it => it.buffered)
 
     inputStreams.foreach { it =>

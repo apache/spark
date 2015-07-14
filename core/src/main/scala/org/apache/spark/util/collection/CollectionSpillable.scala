@@ -17,14 +17,13 @@
 
 package org.apache.spark.util.collection
 
-import org.apache.spark.Logging
-import org.apache.spark.SparkEnv
+import org.apache.spark.{Logging, SparkEnv, Spillable}
 
 /**
  * Spills contents of an in-memory collection to disk when the memory threshold
  * has been exceeded.
  */
-private[spark] trait Spillable[C] extends Logging {
+private[spark] trait CollectionSpillable[C] extends Logging with Spillable{
   /**
    * Spills the current in-memory collection to disk, and releases the memory.
    *
@@ -40,16 +39,10 @@ private[spark] trait Spillable[C] extends Logging {
   protected def addElementsRead(): Unit = { _elementsRead += 1 }
 
   // Memory manager that can be used to acquire/release memory
-  private[this] val shuffleMemoryManager = SparkEnv.get.shuffleMemoryManager
-
-  // Initial threshold for the size of a collection before we start tracking its memory usage
-  // Exposed for testing
-  private[this] val initialMemoryThreshold: Long =
-    SparkEnv.get.conf.getLong("spark.shuffle.spill.initialMemoryThreshold", 5 * 1024 * 1024)
+  protected val shuffleMemoryManager = SparkEnv.get.shuffleMemoryManager
 
   // Threshold for this collection's size in bytes before we start tracking its memory usage
-  // To avoid a large number of small spills, initialize this to a value orders of magnitude > 0
-  private[this] var myMemoryThreshold = initialMemoryThreshold
+  private[this] var myMemoryThreshold = 0L
 
   // Number of elements read from input since last spill
   private[this] var _elementsRead = 0L
@@ -102,8 +95,8 @@ private[spark] trait Spillable[C] extends Logging {
    */
   private def releaseMemoryForThisThread(): Unit = {
     // The amount we requested does not include the initial memory tracking threshold
-    shuffleMemoryManager.release(myMemoryThreshold - initialMemoryThreshold)
-    myMemoryThreshold = initialMemoryThreshold
+    shuffleMemoryManager.release(myMemoryThreshold)
+    myMemoryThreshold = 0L
   }
 
   /**
@@ -116,5 +109,19 @@ private[spark] trait Spillable[C] extends Logging {
     logInfo("Thread %d spilling in-memory map of %s to disk (%d time%s so far)"
       .format(threadId, org.apache.spark.util.Utils.bytesToString(size),
         _spillCount, if (_spillCount > 1) "s" else ""))
+  }
+
+  /**
+   * log ForceSpill and return collection's size
+   */
+  protected def logForceSpill(currentMemory: Long): Long = {
+    _spillCount += 1
+    logSpillage(currentMemory)
+
+    _elementsRead = 0
+    _memoryBytesSpilled += currentMemory
+    val freeMemory = myMemoryThreshold
+    myMemoryThreshold = 0L
+    freeMemory
   }
 }
