@@ -565,17 +565,6 @@ class StreamingKMeans(object):
         return dstream.mapValues(lambda x: self._model.predict(x))
 
 
-def _test():
-    import doctest
-    import pyspark.mllib.clustering
-    globs = pyspark.mllib.clustering.__dict__.copy()
-    globs['sc'] = SparkContext('local[4]', 'PythonTest', batchSize=2)
-    (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
-    globs['sc'].stop()
-    if failure_count:
-        exit(-1)
-
-
 class LDAModel(JavaModelWrapper):
 
     """ A clustering model derived from the LDA method.
@@ -636,6 +625,17 @@ class LDA():
                               docConcentration, topicConcentration, seed,
                               checkpointInterval, optimizer)
         return LDAModel(model)
+
+
+def _test():
+    import doctest
+    import pyspark.mllib.clustering
+    globs = pyspark.mllib.clustering.__dict__.copy()
+    globs['sc'] = SparkContext('local[4]', 'PythonTest', batchSize=2)
+    (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
+    globs['sc'].stop()
+    if failure_count:
+        exit(-1)
 
 
 if __name__ == "__main__":
