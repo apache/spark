@@ -26,7 +26,7 @@ import java.util.Map;
 
 import static org.apache.spark.launcher.CommandBuilderUtils.*;
 
-/** 
+/**
  * Launcher for Spark applications.
  * <p>
  * Use this class to start Spark applications programmatically. The class uses a builder pattern
@@ -281,10 +281,11 @@ public class SparkLauncher {
    * This method returns a handle that provides information about the running application and can
    * be used to do basic interaction with it.
    *
+   * @since 1.5.0
    * @param listeners Listeners to add to the handle before the app is launched.
    * @return A handle for the launched application.
    */
-  public SparkAppHandle start(SparkAppHandle.Listener... listeners) throws IOException {
+  public SparkAppHandle startApplication(SparkAppHandle.Listener... listeners) throws IOException {
     ChildProcAppHandle handle = LauncherServer.newAppHandle();
     for (SparkAppHandle.Listener l : listeners) {
       handle.addListener(l);

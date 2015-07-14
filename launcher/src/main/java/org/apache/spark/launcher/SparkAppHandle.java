@@ -21,30 +21,54 @@ package org.apache.spark.launcher;
  * A handle to a running Spark application.
  * <p/>
  * Provides runtime information about the underlying Spark application, and actions to control it.
+ *
+ * @since 1.5.0
  */
 public interface SparkAppHandle {
 
+  /**
+   * Represents the application's state. A state can be "final", in which case it will not change
+   * after it's reached, and means the application is not running anymore.
+   *
+   * @since 1.5.0
+   */
   public enum State {
     /** The application has not reported back yet. */
-    UNKNOWN,
+    UNKNOWN(false),
     /** The application has connected to the handle. */
-    CONNECTED,
+    CONNECTED(false),
     /** The application has been submitted to the cluster. */
-    SUBMITTED,
+    SUBMITTED(false),
     /** The application is running. */
-    RUNNING,
+    RUNNING(false),
     /** The application finished with a successful status. */
-    FINISHED,
+    FINISHED(true),
     /** The application finished with a failed status. */
-    FAILED,
+    FAILED(true),
     /** The application was killed. */
-    KILLED,
+    KILLED(true);
+
+    private final boolean isFinal;
+
+    State(boolean isFinal) {
+      this.isFinal = isFinal;
+    }
+
+    /**
+     * Whether this state is a final state, meaning the application is not running anymore
+     * once it's reached.
+     */
+    public boolean isFinal() {
+      return isFinal;
+    }
   }
 
   /**
    * Adds a listener to be notified of changes to the handle's information. Listeners will be called
    * from the thread processing updates from the application, so they should avoid blocking or
    * long-running operations.
+   *
+   * @param l Listener to add.
    */
   void addListener(Listener l);
 
@@ -64,7 +88,7 @@ public interface SparkAppHandle {
   /**
    * Tries to kill the underlying application. Implies {@link #disconnect()}. This will not send
    * a {@link #stop()} message to the application, so it's recommended that users first try to
-   * stop the application cleanly and only restore to this method if that fails.
+   * stop the application cleanly and only resort to this method if that fails.
    */
   void kill();
 
@@ -77,6 +101,8 @@ public interface SparkAppHandle {
   /**
    * Listener for updates to a handle's state. The callbacks do not receive information about
    * what exactly has changed, just that an update has occurred.
+   *
+   * @since 1.5.0
    */
   public interface Listener {
 

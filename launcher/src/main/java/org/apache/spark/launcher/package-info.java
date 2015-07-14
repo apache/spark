@@ -17,7 +17,7 @@
 
 /**
  * Library for launching Spark applications.
- * 
+ *
  * <p>
  * This library allows applications to launch Spark programmatically. There's only one entry
  * point to the library - the {@link org.apache.spark.launcher.SparkLauncher} class.
@@ -27,7 +27,7 @@
  * To launch a Spark application, just instantiate a {@link org.apache.spark.launcher.SparkLauncher}
  * and configure the application to run. For example:
  * </p>
- * 
+ *
  * <pre>
  * {@code
  *   import org.apache.spark.launcher.SparkLauncher;
@@ -41,6 +41,34 @@
  *         .setConf(SparkLauncher.DRIVER_MEMORY, "2g")
  *         .launch();
  *       spark.waitFor();
+ *     }
+ *   }
+ * }
+ * </pre>
+ *
+ * <p>
+ * Since Spark 1.5.0, the {@link org.apache.spark.launcher.SparkLauncher#startApplication(
+ * org.apache.spark.launcher.SparkAppHandle.Listener...)} method is preferred, since it provides
+ * information about the running application while also allowing finer-grained control of its state:
+ * </p>
+ *
+ * <pre>
+ * {@code
+ *   import org.apache.spark.launcher.SparkAppHandle;
+ *   import org.apache.spark.launcher.SparkLauncher;
+ *
+ *   public class MyLauncher {
+ *     public static void main(String[] args) throws Exception {
+ *       SparkAppHandle handle = new SparkLauncher()
+ *         .setAppResource("/my/app.jar")
+ *         .setMainClass("my.spark.app.Main")
+ *         .setMaster("local")
+ *         .setConf(SparkLauncher.DRIVER_MEMORY, "2g")
+ *         .startApplication();
+ *       handle.stop();
+ *       while (!handle.getState().isFinal()) {
+ *         Thread.sleep(1000L);
+ *       }
  *     }
  *   }
  * }

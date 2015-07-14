@@ -51,7 +51,7 @@ class LauncherBackendSuite extends SparkFunSuite with Matchers {
       .setMaster(master)
       .setAppResource("spark-internal")
       .setMainClass(TestApp.getClass.getName().stripSuffix("$"))
-      .start()
+      .startApplication()
 
     try {
       eventually(timeout(10 seconds), interval(100 millis)) {

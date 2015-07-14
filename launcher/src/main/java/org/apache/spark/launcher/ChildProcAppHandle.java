@@ -126,8 +126,10 @@ class ChildProcAppHandle implements SparkAppHandle {
   }
 
   void setState(State s) {
-    this.state = s;
-    fireEvent(false);
+    if (!state.isFinal()) {
+      state = s;
+      fireEvent(false);
+    }
   }
 
   void setAppId(String appId) {

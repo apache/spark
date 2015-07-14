@@ -195,7 +195,7 @@ class YarnClusterSuite extends SparkFunSuite with BeforeAndAfterAll with Matcher
       .setMaster("yarn-cluster")
       .setAppResource("spark-internal")
       .setMainClass(mainClassName(YarnLauncherTestApp.getClass))
-      .start()
+      .startApplication()
 
     try {
       eventually(timeout(30 seconds), interval(100 millis)) {
