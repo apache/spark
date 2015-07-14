@@ -602,7 +602,7 @@ class LDAModel(JavaModelWrapper):
         return self.call("vocabSize")
 
 
-class LDA():
+class LDA(object):
 
     @classmethod
     def train(cls, rdd, k=10, maxIterations=20, docConcentration=-1.0,
