@@ -22,7 +22,7 @@ import org.apache.spark.sql.{SaveMode, AnalysisException}
 import org.apache.spark.sql.catalyst.analysis.{EliminateSubQueries, Catalog}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Cast, Alias}
 import org.apache.spark.sql.catalyst.plans.logical
-import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoTable, LogicalPlan, Project}
+import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.types.DataType
 
@@ -121,8 +121,11 @@ private[sql] case class PreWriteCheck(catalog: Catalog) extends (LogicalPlan => 
         failAnalysis(s"$l does not allow insertion.")
 
       case logical.InsertIntoTable(t, _, _, _, _) =>
-        failAnalysis(
-          s"Attempt to insert into a RDD-based table: ${t.simpleString} which is immutable.")
+        if (!t.isInstanceOf[LeafNode] || t == OneRowRelation || t.isInstanceOf[LocalRelation]) {
+          failAnalysis(s"Inserting into an RDD-based table is not allowed.")
+        } else {
+          // OK
+        }
 
       case CreateTableUsingAsSelect(tableName, _, _, _, SaveMode.Overwrite, _, query) =>
         // When the SaveMode is Overwrite, we need to check if the table is an input table of
