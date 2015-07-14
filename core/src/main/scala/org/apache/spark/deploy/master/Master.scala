@@ -727,40 +727,44 @@ private[master] class Master(
 
   def removeApplication(app: ApplicationInfo, state: ApplicationState.Value) {
     if (apps.contains(app)) {
-      logInfo("Removing app " + app.id)
-      apps -= app
-      idToApp -= app.id
-      endpointToApp -= app.driver
-      addressToApp -= app.driver.address
-      if (completedApps.size >= RETAINED_APPLICATIONS) {
-        val toRemove = math.max(RETAINED_APPLICATIONS / 10, 1)
-        completedApps.take(toRemove).foreach( a => {
-          appIdToUI.remove(a.id).foreach { ui => webUi.detachSparkUI(ui) }
-          applicationMetricsSystem.removeSource(a.appSource)
-        })
-        completedApps.trimStart(toRemove)
-      }
-      completedApps += app // Remember it in our history
-      waitingApps -= app
+      synchronized{
+        if (apps.contains(app)) {
+          logInfo("Removing app " + app.id)
+          apps -= app
+          idToApp -= app.id
+          endpointToApp -= app.driver
+          addressToApp -= app.driver.address
+          if (completedApps.size >= RETAINED_APPLICATIONS) {
+            val toRemove = math.max(RETAINED_APPLICATIONS / 10, 1)
+            completedApps.take(toRemove).foreach(a => {
+              appIdToUI.remove(a.id).foreach { ui => webUi.detachSparkUI(ui) }
+              applicationMetricsSystem.removeSource(a.appSource)
+            })
+            completedApps.trimStart(toRemove)
+          }
+          completedApps += app // Remember it in our history
+          waitingApps -= app
 
-      // If application events are logged, use them to rebuild the UI
-      rebuildSparkUI(app)
+          // If application events are logged, use them to rebuild the UI
+          rebuildSparkUI(app)
 
-      for (exec <- app.executors.values) {
-        exec.worker.removeExecutor(exec)
-        exec.worker.endpoint.send(KillExecutor(masterUrl, exec.application.id, exec.id))
-        exec.state = ExecutorState.KILLED
-      }
-      app.markFinished(state)
-      if (state != ApplicationState.FINISHED) {
-        app.driver.send(ApplicationRemoved(state.toString))
-      }
-      persistenceEngine.removeApplication(app)
-      schedule()
+          for (exec <- app.executors.values) {
+            exec.worker.removeExecutor(exec)
+            exec.worker.endpoint.send(KillExecutor(masterUrl, exec.application.id, exec.id))
+            exec.state = ExecutorState.KILLED
+          }
+          app.markFinished(state)
+          if (state != ApplicationState.FINISHED) {
+            app.driver.send(ApplicationRemoved(state.toString))
+          }
+          persistenceEngine.removeApplication(app)
+          schedule()
 
-      // Tell all workers that the application has finished, so they can clean up any app state.
-      workers.foreach { w =>
-        w.endpoint.send(ApplicationFinished(app.id))
+          // Tell all workers that the application has finished, so they can clean up any app state.
+          workers.foreach { w =>
+            w.endpoint.send(ApplicationFinished(app.id))
+          }
+        }
       }
     }
   }
