@@ -86,10 +86,7 @@ private[spark] class Client(
   private val fireAndForget = isClusterMode &&
     !sparkConf.getBoolean("spark.yarn.submit.waitAppCompletion", true)
 
-  def stop(): Unit = {
-    SparkHadoopUtil.get.stopExecutorDelegationTokenRenewer()
-    yarnClient.stop()
-  }
+  def stop(): Unit = yarnClient.stop()
 
   /**
    * Submit an application running our ApplicationMaster to the ResourceManager.
@@ -125,9 +122,6 @@ private[spark] class Client(
       // Finally, submit and monitor the application
       logInfo(s"Submitting application ${appId.getId} to ResourceManager")
       yarnClient.submitApplication(appContext)
-      if (loginFromKeytab && !isClusterMode) {
-        SparkHadoopUtil.get.startExecutorDelegationTokenRenewer(sparkConf)
-      }
       appId
     } catch {
       case e: Throwable =>
