@@ -56,4 +56,13 @@ public class UniqueObjectPool extends ObjectPool {
   public void replace(int idx, Object obj) {
     throw new UnsupportedOperationException();
   }
+
+  /**
+   * Remove all the objects in the pool.
+   */
+  @Override
+  public void clear() {
+    objIndex.clear();
+    super.clear();
+  }
 }

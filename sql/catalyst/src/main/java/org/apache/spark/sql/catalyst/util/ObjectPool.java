@@ -75,4 +75,14 @@ public class ObjectPool {
     assert (idx < numObj);
     objects[idx] = obj;
   }
+
+  /**
+   * Remove all the objects in the pool.
+   */
+  public void clear() {
+    for (int i = 0; i < numObj; i++) {
+      objects[i] = null;
+    }
+    numObj = 0;
+  }
 }
