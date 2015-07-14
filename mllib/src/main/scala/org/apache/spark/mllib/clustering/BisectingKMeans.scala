@@ -352,7 +352,7 @@ class BisectingKMeans private (
     // Since the combination sampleByKey and groupByKey is more expensive,
     // this as follows would be better.
     val bcIndeces = data.sparkContext.broadcast(stats.keySet)
-    val samples =  data.mapPartitions { iter =>
+    val samples = data.mapPartitions { iter =>
       val map = mutable.Map.empty[BigInt, mutable.ArrayBuffer[BV[Double]]]
 
       bcIndeces.value.foreach {i => map(i) = mutable.ArrayBuffer.empty[BV[Double]]}
@@ -562,7 +562,9 @@ class ClusterNode private (
   /**
    * Gets the leaves nodes in the cluster tree
    */
-  def getLeavesNodes: Array[ClusterNode] = this.toArray.filter(_.isLeaf).sortBy(_.center.toArray.sum)
+  def getLeavesNodes: Array[ClusterNode] = {
+    this.toArray.filter(_.isLeaf).sortBy(_.center.toArray.sum)
+  }
 
   def isLeaf: Boolean = this.children.isEmpty
 

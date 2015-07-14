@@ -144,11 +144,12 @@ class BisectingKMeansSuite extends SparkFunSuite with MLlibTestSparkContext {
   test("should assign each data to new clusters") {
     val algo = new BisectingKMeans
     val seed = Seq(
-      (BigInt(2), Vectors.dense(0.0, 0.0)), (BigInt(2), Vectors.dense(1.0, 1.0)), (BigInt(2), Vectors.dense(2.0, 2.0)),
-      (BigInt(2), Vectors.dense(3.0, 3.0)), (BigInt(2), Vectors.dense(4.0, 4.0)), (BigInt(2), Vectors.dense(5.0, 5.0)),
-      (BigInt(3), Vectors.dense(6.0, 6.0)), (BigInt(3), Vectors.dense(7.0, 7.0)), (BigInt(3), Vectors.dense(8.0, 8.0)),
-      (BigInt(3), Vectors.dense(9.0, 9.0)), (BigInt(3), Vectors.dense(10.0, 10.0)),
-      (BigInt(3), Vectors.dense(11.0, 11.0))
+      (BigInt(2), Vectors.dense(0.0, 0.0)), (BigInt(2), Vectors.dense(1.0, 1.0)),
+      (BigInt(2), Vectors.dense(2.0, 2.0)), (BigInt(2), Vectors.dense(3.0, 3.0)),
+      (BigInt(2), Vectors.dense(4.0, 4.0)), (BigInt(2), Vectors.dense(5.0, 5.0)),
+      (BigInt(3), Vectors.dense(6.0, 6.0)), (BigInt(3), Vectors.dense(7.0, 7.0)),
+      (BigInt(3), Vectors.dense(8.0, 8.0)), (BigInt(3), Vectors.dense(9.0, 9.0)),
+      (BigInt(3), Vectors.dense(10.0, 10.0)), (BigInt(3), Vectors.dense(11.0, 11.0))
     ).map { case (idx, vector) => (idx, vector.toBreeze)}
     val newClusters = Map(
       BigInt(4) -> new ClusterNodeStat(3L, BV[Double](1.0, 1.0) :* 3.0, BV[Double](1.0, 1.0)),
