@@ -56,6 +56,7 @@ final class UnsafeExternalRowSorter {
   private final PrefixComputer prefixComputer;
   private final UnsafeExternalSorter sorter;
   private byte[] rowConversionBuffer = new byte[1024 * 8];
+  private final UnsafeRow unsafeRow = new UnsafeRow(null);
 
   public static abstract class PrefixComputer {
     abstract long computePrefix(InternalRow row);
@@ -98,8 +99,9 @@ final class UnsafeExternalRowSorter {
     if (sizeRequirement > rowConversionBuffer.length) {
       rowConversionBuffer = new byte[sizeRequirement];
     }
-    final int bytesWritten = rowConverter.writeRow(
-      row, rowConversionBuffer, PlatformDependent.BYTE_ARRAY_OFFSET, sizeRequirement, null);
+    unsafeRow.pointTo(rowConversionBuffer, PlatformDependent.BYTE_ARRAY_OFFSET, row.size(),
+      sizeRequirement);
+    final int bytesWritten = rowConverter.writeRow(row, unsafeRow);
     assert (bytesWritten == sizeRequirement);
     final long prefix = prefixComputer.computePrefix(row);
     sorter.insertRecord(
@@ -135,7 +137,7 @@ final class UnsafeExternalRowSorter {
       return new AbstractScalaRowIterator() {
 
         private final int numFields = schema.length();
-        private final UnsafeRow row = new UnsafeRow();
+        private final UnsafeRow row = new UnsafeRow(null);
 
         @Override
         public boolean hasNext() {
@@ -150,8 +152,7 @@ final class UnsafeExternalRowSorter {
               sortedIterator.getBaseObject(),
               sortedIterator.getBaseOffset(),
               numFields,
-              sortedIterator.getRecordLength(),
-              null);
+              sortedIterator.getRecordLength());
             if (!hasNext()) {
               row.copy(); // so that we don't have dangling pointers to freed page
               cleanupResources();
@@ -197,19 +198,21 @@ final class UnsafeExternalRowSorter {
     private final Ordering<InternalRow> ordering;
     private final int numFields;
     private final ObjectPool objPool;
-    private final UnsafeRow row1 = new UnsafeRow();
-    private final UnsafeRow row2 = new UnsafeRow();
+    private final UnsafeRow row1;
+    private final UnsafeRow row2;
 
     public RowComparator(Ordering<InternalRow> ordering, int numFields, ObjectPool objPool) {
       this.numFields = numFields;
       this.ordering = ordering;
       this.objPool = objPool;
+      this.row1 = new UnsafeRow(objPool);
+      this.row2 = new UnsafeRow(objPool);
     }
 
     @Override
     public int compare(Object baseObj1, long baseOff1, Object baseObj2, long baseOff2) {
-      row1.pointTo(baseObj1, baseOff1, numFields, -1, objPool);
-      row2.pointTo(baseObj2, baseOff2, numFields, -1, objPool);
+      row1.pointTo(baseObj1, baseOff1, numFields, -1);
+      row2.pointTo(baseObj2, baseOff2, numFields, -1);
       return ordering.compare(row1, row2);
     }
   }

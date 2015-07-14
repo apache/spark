@@ -18,7 +18,6 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.util.ObjectPool
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.PlatformDependent
 import org.apache.spark.unsafe.array.ByteArrayMethods
@@ -36,9 +35,6 @@ class UnsafeRowConverter(fieldTypes: Array[DataType]) {
   }
 
   def numFields: Int = fieldTypes.length
-
-  /** Re-used pointer to the unsafe row being written */
-  private[this] val unsafeRow = new UnsafeRow()
 
   /** Functions for encoding each column */
   private[this] val writers: Array[UnsafeColumnWriter] = {
@@ -68,18 +64,10 @@ class UnsafeRowConverter(fieldTypes: Array[DataType]) {
    * Convert the given row into UnsafeRow format.
    *
    * @param row the row to convert
-   * @param baseObject the base object of the destination address
-   * @param baseOffset the base offset of the destination address
-   * @param rowLengthInBytes the length calculated by `getSizeRequirement(row)`
+   * @param unsafeRow the target UnsafeRow to write
    * @return the number of bytes written. This should be equal to `getSizeRequirement(row)`.
    */
-  def writeRow(
-      row: InternalRow,
-      baseObject: Object,
-      baseOffset: Long,
-      rowLengthInBytes: Int,
-      pool: ObjectPool): Int = {
-    unsafeRow.pointTo(baseObject, baseOffset, writers.length, rowLengthInBytes, pool)
+  def writeRow(row: InternalRow, unsafeRow: UnsafeRow): Int = {
 
     if (writers.length > 0) {
       // zero-out the bitset

@@ -90,8 +90,12 @@ public final class UnsafeRow extends MutableRow {
   /**
    * Construct a new UnsafeRow. The resulting row won't be usable until `pointTo()` has been called,
    * since the value returned by this constructor is equivalent to a null pointer.
+   *
+   * @param pool the object pool to hold arbitrary objects
    */
-  public UnsafeRow() { }
+  public UnsafeRow(ObjectPool pool) {
+    this.pool = pool;
+  }
 
   /**
    * Update this UnsafeRow to point to different backing data.
@@ -100,17 +104,15 @@ public final class UnsafeRow extends MutableRow {
    * @param baseOffset the offset within the base object
    * @param numFields the number of fields in this row
    * @param sizeInBytes the size of this row's backing data, in bytes
-   * @param pool the object pool to hold arbitrary objects
    */
   public void pointTo(
-      Object baseObject, long baseOffset, int numFields, int sizeInBytes, ObjectPool pool) {
+      Object baseObject, long baseOffset, int numFields, int sizeInBytes) {
     assert numFields >= 0 : "numFields should >= 0";
     this.bitSetWidthInBytes = calculateBitSetWidthInBytes(numFields);
     this.baseObject = baseObject;
     this.baseOffset = baseOffset;
     this.numFields = numFields;
     this.sizeInBytes = sizeInBytes;
-    this.pool = pool;
   }
 
   private void assertIndexIsValid(int index) {
@@ -355,7 +357,7 @@ public final class UnsafeRow extends MutableRow {
       throw new UnsupportedOperationException(
         "Copy is not supported for UnsafeRows that use object pools");
     } else {
-      UnsafeRow rowCopy = new UnsafeRow();
+      UnsafeRow rowCopy = new UnsafeRow(null);
       final byte[] rowDataCopy = new byte[sizeInBytes];
       PlatformDependent.copyMemory(
         baseObject,
@@ -365,7 +367,7 @@ public final class UnsafeRow extends MutableRow {
         sizeInBytes
       );
       rowCopy.pointTo(
-        rowDataCopy, PlatformDependent.BYTE_ARRAY_OFFSET, numFields, sizeInBytes, null);
+        rowDataCopy, PlatformDependent.BYTE_ARRAY_OFFSET, numFields, sizeInBytes);
       return rowCopy;
     }
   }

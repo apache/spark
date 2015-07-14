@@ -85,7 +85,7 @@ case class ToUnsafeProjection(fields: Seq[DataType]) extends Projection {
   private[this] val converter = new UnsafeRowConverter(fields.toArray)
   private[this] val pool = new ObjectPool(10)
   private[this] var buffer = new Array[Byte](1024)
-  private[this] val unsafeRow = new UnsafeRow()
+  private[this] val unsafeRow = new UnsafeRow(pool)
 
   override def apply(input: InternalRow): InternalRow = {
     val numBytes = converter.getSizeRequirement(input)
@@ -93,8 +93,8 @@ case class ToUnsafeProjection(fields: Seq[DataType]) extends Projection {
       buffer = new Array[Byte](numBytes)
     }
     pool.clear()
-    converter.writeRow(input, buffer, PlatformDependent.BYTE_ARRAY_OFFSET, numBytes, pool)
-    unsafeRow.pointTo(buffer, PlatformDependent.BYTE_ARRAY_OFFSET, input.size, numBytes, pool)
+    unsafeRow.pointTo(buffer, PlatformDependent.BYTE_ARRAY_OFFSET, input.size, numBytes)
+    converter.writeRow(input, unsafeRow)
     unsafeRow
   }
 }
