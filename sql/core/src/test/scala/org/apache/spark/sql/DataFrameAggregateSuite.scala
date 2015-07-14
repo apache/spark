@@ -25,13 +25,9 @@ class DataFrameAggregateSuite extends QueryTest {
   private lazy val ctx = org.apache.spark.sql.test.TestSQLContext
   import ctx.implicits._
 
-  val testData2 = {
-    val df = (for { a <- 1 to 3; b <- 1 to 2 } yield (a, b))
+  val testData2 = (for { a <- 1 to 3; b <- 1 to 2 } yield (a, b))
       .map(t => (t._1, t._2))
       .toDF("a", "b")
-    df.registerTempTable("testData2")
-    df
-  }
 
   test("groupBy") {
     checkAnswer(
@@ -91,13 +87,9 @@ class DataFrameAggregateSuite extends QueryTest {
 
   test("average") {
 
-    val decimalData = {
-      val df = (for { a <- 1 to 3; b <- 1 to 2 } yield (a, b))
+    val decimalData = (for { a <- 1 to 3; b <- 1 to 2 } yield (a, b))
         .map(t => (t._1, t._2))
         .toDF("a", "b")
-      df.registerTempTable("decimalData")
-      df
-    }
 
     checkAnswer(
       testData2.agg(avg('a)),
@@ -128,11 +120,7 @@ class DataFrameAggregateSuite extends QueryTest {
       Row(new java.math.BigDecimal(2.0), new java.math.BigDecimal(6)) :: Nil)
   }
 
-  val testData3 = {
-    val df = Seq((1, None), (2, Some(2))).toDF("a", "b")
-    df.registerTempTable("testData3")
-    df
-  }
+  val testData3 = Seq((1, None), (2, Some(2))).toDF("a", "b")
 
   test("null average") {
     checkAnswer(
