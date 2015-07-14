@@ -63,7 +63,7 @@ class GenericAvroSerializerSuite extends SparkFunSuite with SharedSparkContext {
     output.flush()
     val normalLength = output.total - beginningNormalPosition
 
-    conf.registerAvroSchema(Array(schema))
+    conf.registerAvroSchemas(schema)
     val genericSerFinger = new GenericAvroSerializer(conf.getAvroSchema)
     val beginningFingerprintPosition = output.total()
     genericSerFinger.serializeDatum(record, output)

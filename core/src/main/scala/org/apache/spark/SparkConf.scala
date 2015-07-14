@@ -166,17 +166,16 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
    * Use Kryo serialization and register the given set of Avro schemas so that the generic
    * record serializer can decrease network IO
    */
-  def registerAvroSchema(schemas: Array[Schema]): SparkConf =
-    schemas.foldLeft(this) { (conf, schema) =>
-      conf.set(avroSchemaKey(SchemaNormalization.parsingFingerprint64(schema)), schema.toString)
-    }
+  def registerAvroSchemas(schemas: Schema*): SparkConf = schemas.foldLeft(this) { (conf, schema) =>
+    conf.set(avroSchemaKey(schema), schema.toString)
+  }
 
   /** Gets all the avro schemas in the configuration used in the generic Avro record serializer */
-  def getAvroSchema: Map[Long, String] = {
+  def getAvroSchema: Map[Long, String] =
     getAll.filter { case (k, v) => k.startsWith(avroSchemaNamespace) }
           .map { case (k, v) => (k.substring(avroSchemaNamespace.length).toLong, v) }
           .toMap
-  }
+
 
   /** Remove a parameter from the configuration */
   def remove(key: String): SparkConf = {

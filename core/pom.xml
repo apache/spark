@@ -35,11 +35,6 @@
   <url>http://spark.apache.org/</url>
   <dependencies>
     <dependency>
-      <groupId>net.sf.py4j</groupId>
-      <artifactId>py4j</artifactId>
-      <version>0.8.2.1</version>
-    </dependency>
-    <dependency>
       <groupId>org.apache.avro</groupId>
       <artifactId>avro-mapred</artifactId>
       <classifier>${avro.mapred.classifier}</classifier>
@@ -402,6 +397,11 @@
           <artifactId>serpent</artifactId>
         </exclusion>
       </exclusions>
+    </dependency>
+    <dependency>
+      <groupId>net.sf.py4j</groupId>
+      <artifactId>py4j</artifactId>
+      <version>0.8.2.1</version>
     </dependency>
   </dependencies>
   <build>

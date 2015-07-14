@@ -25,13 +25,17 @@ import scala.collection.mutable
 
 import com.esotericsoftware.kryo.{Kryo, Serializer => KSerializer}
 import com.esotericsoftware.kryo.io.{Input => KryoInput, Output => KryoOutput}
+import org.apache.avro.{Schema, SchemaNormalization}
 import org.apache.avro.generic.{GenericData, GenericRecord}
 import org.apache.avro.io._
-import org.apache.avro.{Schema, SchemaNormalization}
 
-object GenericAvroSerializer {
-  val avroSchemaNamespace = "avro.schema."
-  def avroSchemaKey(fingerprint: Long): String = avroSchemaNamespace + fingerprint
+/**
+ *
+ */
+private[spark] object GenericAvroSerializer {
+  final val avroSchemaNamespace = "avro.schema."
+  def avroSchemaKey(schema: Schema): String =
+    avroSchemaNamespace + SchemaNormalization.parsingFingerprint64(schema)
 }
 
 /**
@@ -41,7 +45,8 @@ object GenericAvroSerializer {
  * Actions like parsing or compressing schemas are computationally expensive so the serializer
  * caches all previously seen values as to reduce the amount of work needed to do.
  */
-class GenericAvroSerializer(schemas: Map[Long, String]) extends KSerializer[GenericRecord] {
+private[serializer] class GenericAvroSerializer(schemas: Map[Long, String])
+  extends KSerializer[GenericRecord] {
 
   /** Used to reduce the amount of effort to compress the schema */
   private val compressCache = new mutable.HashMap[Schema, Array[Byte]]()
@@ -51,11 +56,9 @@ class GenericAvroSerializer(schemas: Map[Long, String]) extends KSerializer[Gene
   private val writerCache = new mutable.HashMap[Schema, DatumWriter[_]]()
   private val readerCache = new mutable.HashMap[Schema, DatumReader[_]]()
 
-  /** Fingerprinting is very expensive to this alleviates most of the work */
+  /** Fingerprinting is very expensive so this alleviates most of the work */
   private val fingerprintCache = new mutable.HashMap[Schema, Long]()
   private val schemaCache = new mutable.HashMap[Long, Schema]()
-
-  private def getSchema(fingerprint: Long): Option[String] = schemas.get(fingerprint)
 
   /**
    * Used to compress Schemas when they are being sent over the wire.
@@ -107,7 +110,7 @@ class GenericAvroSerializer(schemas: Map[Long, String]) extends KSerializer[Gene
     val fingerprint = fingerprintCache.getOrElseUpdate(schema, {
       SchemaNormalization.parsingFingerprint64(schema)
     })
-    getSchema(fingerprint) match {
+    schemas.get(fingerprint) match {
       case Some(_) => {
         output.writeBoolean(true)
         output.writeLong(fingerprint)
@@ -122,8 +125,8 @@ class GenericAvroSerializer(schemas: Map[Long, String]) extends KSerializer[Gene
     }
 
     writerCache.getOrElseUpdate(schema, GenericData.get.createDatumWriter(schema))
-               .asInstanceOf[DatumWriter[R]]
-               .write(datum, encoder)
+      .asInstanceOf[DatumWriter[R]]
+      .write(datum, encoder)
     encoder.flush()
   }
 
@@ -136,7 +139,7 @@ class GenericAvroSerializer(schemas: Map[Long, String]) extends KSerializer[Gene
       if (input.readBoolean()) {
         val fingerprint = input.readLong()
         schemaCache.getOrElseUpdate(fingerprint, {
-          getSchema(fingerprint) match {
+          schemas.get(fingerprint) match {
             case Some(s) => new Schema.Parser().parse(s)
             case None => throw new RuntimeException(s"Unknown fingerprint: $fingerprint")
           }
@@ -148,8 +151,8 @@ class GenericAvroSerializer(schemas: Map[Long, String]) extends KSerializer[Gene
     }
     val decoder = DecoderFactory.get.directBinaryDecoder(input, null)
     readerCache.getOrElseUpdate(schema, GenericData.get.createDatumReader(schema))
-               .asInstanceOf[DatumReader[GenericRecord]]
-               .read(null.asInstanceOf[GenericRecord], decoder)
+      .asInstanceOf[DatumReader[GenericRecord]]
+      .read(null, decoder)
   }
 
   override def write(kryo: Kryo, output: KryoOutput, datum: GenericRecord): Unit =

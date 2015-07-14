@@ -74,7 +74,6 @@ class KryoSerializer(conf: SparkConf)
   private val classesToRegister = conf.get("spark.kryo.classesToRegister", "")
     .split(',')
     .filter(!_.isEmpty)
-  conf.getExecutorEnv
 
   private val avroSchemas = conf.getAvroSchema
 
