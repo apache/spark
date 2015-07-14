@@ -54,8 +54,8 @@ class RFormulaModelSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(result.schema.toString == resultSchema.toString)
     assert(resultSchema.toString == expected.schema.toString)
     assert(
-      result.collect.map(_.toString).mkString(",") ==
-      expected.collect.map(_.toString).mkString(","))
+      result.collect().map(_.toString).sorted.mkString(",") ==
+      expected.collect().map(_.toString).sorted.mkString(","))
   }
 
   test("transform string label") {
@@ -72,7 +72,7 @@ class RFormulaModelSuite extends SparkFunSuite with MLlibTestSparkContext {
       ).toDF("id", "name", "features", "label")
     assert(result.schema.toString == resultSchema.toString)
     assert(
-      result.collect.map(_.toString).mkString(",") ==
-      expected.collect.map(_.toString).mkString(","))
+      result.collect().map(_.toString).sorted.mkString(",") ==
+      expected.collect().map(_.toString).sorted.mkString(","))
   }
 }

@@ -30,26 +30,43 @@ import org.apache.spark.sql.types._
 
 /**
  * :: Experimental ::
- * Implements the transforms required for fitting a dataset against a R model formula.
+ * Implements the transforms required for fitting a dataset against an R model formula. Currently
+ * we support a limited subset of the R operators, including '~' and '+'. Also see the R formula
+ * docs here: http://www.inside-r.org/r-doc/stats/formula
  */
 @Experimental
-private[spark] class RModelFormula(override val uid: String)
+class RModelFormula(override val uid: String)
   extends Transformer with HasFeaturesCol with HasLabelCol {
 
   def this() = this(Identifiable.randomUID("rModelFormula"))
 
+  /**
+   * R formula parameter. The formula is provided in string form.
+   * @group setParam
+   */
   val formula: Param[String] = new Param(this, "formula", "R model formula")
-  protected var parsedFormula: Option[RFormula] = None
+
+  private var parsedFormula: Option[RFormula] = None
 
   /**
    * Sets the formula to use for this transformer. Must be called before use.
-   * @param value a R formula in string form (e.g. "y ~ x + z")
+   * @group setParam
+   * @param value an R formula in string form (e.g. "y ~ x + z")
    */
   def setFormula(value: String): this.type = {
     parsedFormula = Some(RFormulaParser.parse(value))
     set(formula, value)
     this
   }
+
+  /** @group getParam */
+  def getFormula: String = $(formula)
+
+  /** @group getParam */
+  def setFeaturesCol(col: String): this.type = set(featuresCol, col)
+
+  /** @group getParam */
+  def setLabelCol(col: String): this.type = set(labelCol, col)
 
   override def transformSchema(schema: StructType): StructType = {
     require(parsedFormula.isDefined, "Must call setFormula() first.")
@@ -70,7 +87,7 @@ private[spark] class RModelFormula(override val uid: String)
 
   override def toString: String = s"RModelFormula(${get(formula)})"
 
-  protected def transformLabel(dataset: DataFrame): DataFrame = {
+  private def transformLabel(dataset: DataFrame): DataFrame = {
     val responseName = parsedFormula.get.response
     dataset.schema(responseName).dataType match {
       case _: NumericType | BooleanType =>
@@ -78,7 +95,7 @@ private[spark] class RModelFormula(override val uid: String)
           col("*"),
           dataset(responseName).cast(DoubleType).as($(labelCol)))
       case StringType =>
-        new StringIndexer(uid)
+        new StringIndexer()
           .setInputCol(responseName)
           .setOutputCol($(labelCol))
           .fit(dataset)
@@ -88,7 +105,7 @@ private[spark] class RModelFormula(override val uid: String)
     }
   }
 
-  protected def featureTransformer: Transformer = {
+  private def featureTransformer: Transformer = {
     // TODO(ekl) add support for non-numeric features and feature interactions
     new VectorAssembler(uid)
       .setInputCols(parsedFormula.get.terms.toArray)
@@ -97,13 +114,11 @@ private[spark] class RModelFormula(override val uid: String)
 }
 
 /**
- * :: Experimental ::
  * Represents a parsed R formula.
  */
 private[ml] case class RFormula(response: String, terms: Seq[String])
 
 /**
- * :: Experimental ::
  * Limited implementation of R formula parsing. Currently supports: '~', '+'.
  */
 private[ml] object RFormulaParser extends RegexParsers {
