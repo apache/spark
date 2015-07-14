@@ -353,4 +353,3 @@ class TestUDTF extends GenericUDTF {
 
   override def close(): Unit = {}
 }
-
