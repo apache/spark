@@ -21,6 +21,7 @@ import org.apache.spark.{Logging, TaskContext}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.rdd.{MapPartitionsRDD, RDD, UnionRDD}
 import org.apache.spark.sql._
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
@@ -65,7 +66,7 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
       logInfo {
         val total = t.partitionSpec.partitions.length
         val selected = selectedPartitions.length
-        val percentPruned = (1 - total.toDouble / selected.toDouble) * 100
+        val percentPruned = (1 - selected.toDouble / total.toDouble) * 100
         s"Selected $selected partitions out of $total, pruned $percentPruned% partitions."
       }
 

@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples.streaming
 
 import java.io.{InputStreamReader, BufferedReader, InputStream}
@@ -100,3 +101,4 @@ class CustomReceiver(host: String, port: Int)
    }
   }
 }
+// scalastyle:on println

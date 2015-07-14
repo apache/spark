@@ -192,11 +192,8 @@ class StreamingContext private[streaming] (
       None
     }
 
-  /** Register streaming source to metrics system */
+  /* Initializing a streamingSource to register metrics */
   private val streamingSource = new StreamingSource(this)
-  assert(env != null)
-  assert(env.metricsSystem != null)
-  env.metricsSystem.registerSource(streamingSource)
 
   private var state: StreamingContextState = INITIALIZED
 
@@ -477,6 +474,10 @@ class StreamingContext private[streaming] (
   /**
    * Create an input stream from a queue of RDDs. In each batch,
    * it will process either one or all of the RDDs returned by the queue.
+   *
+   * NOTE: Arbitrary RDDs can be added to `queueStream`, there is no way to recover data of
+   * those RDDs, so `queueStream` doesn't support checkpointing.
+   *
    * @param queue      Queue of RDDs
    * @param oneAtATime Whether only one RDD should be consumed from the queue in every interval
    * @tparam T         Type of objects in the RDD
@@ -491,6 +492,10 @@ class StreamingContext private[streaming] (
   /**
    * Create an input stream from a queue of RDDs. In each batch,
    * it will process either one or all of the RDDs returned by the queue.
+   *
+   * NOTE: Arbitrary RDDs can be added to `queueStream`, there is no way to recover data of
+   * those RDDs, so `queueStream` doesn't support checkpointing.
+   *
    * @param queue      Queue of RDDs
    * @param oneAtATime Whether only one RDD should be consumed from the queue in every interval
    * @param defaultRDD Default RDD is returned by the DStream when the queue is empty.
@@ -598,6 +603,9 @@ class StreamingContext private[streaming] (
         }
         shutdownHookRef = Utils.addShutdownHook(
           StreamingContext.SHUTDOWN_HOOK_PRIORITY)(stopOnShutdown)
+        // Registering Streaming Metrics at the start of the StreamingContext
+        assert(env.metricsSystem != null)
+        env.metricsSystem.registerSource(streamingSource)
         uiTab.foreach(_.attach())
         logInfo("StreamingContext started")
       case ACTIVE =>
@@ -674,6 +682,8 @@ class StreamingContext private[streaming] (
           logWarning("StreamingContext has already been stopped")
         case ACTIVE =>
           scheduler.stop(stopGracefully)
+          // Removing the streamingSource to de-register the metrics on stop()
+          env.metricsSystem.removeSource(streamingSource)
           uiTab.foreach(_.detach())
           StreamingContext.setActiveContext(null)
           waiter.notifyStop()

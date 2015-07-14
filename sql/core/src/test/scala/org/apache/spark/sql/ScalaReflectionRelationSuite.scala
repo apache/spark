@@ -78,7 +78,7 @@ class ScalaReflectionRelationSuite extends SparkFunSuite {
 
   test("query case class RDD") {
     val data = ReflectData("a", 1, 1L, 1.toFloat, 1.toDouble, 1.toShort, 1.toByte, true,
-      new java.math.BigDecimal(1), new Date(12345), new Timestamp(12345), Seq(1, 2, 3))
+      new java.math.BigDecimal(1), Date.valueOf("1970-01-01"), new Timestamp(12345), Seq(1, 2, 3))
     Seq(data).toDF().registerTempTable("reflectData")
 
     assert(ctx.sql("SELECT * FROM reflectData").collect().head ===

@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples.streaming.clickstream
 
 import org.apache.spark.SparkContext._
@@ -107,3 +108,4 @@ object PageViewStream {
     ssc.start()
   }
 }
+// scalastyle:on println

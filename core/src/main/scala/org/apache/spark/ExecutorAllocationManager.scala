@@ -102,7 +102,7 @@ private[spark] class ExecutorAllocationManager(
     "spark.dynamicAllocation.executorIdleTimeout", "60s")
 
   private val cachedExecutorIdleTimeoutS = conf.getTimeAsSeconds(
-    "spark.dynamicAllocation.cachedExecutorIdleTimeout", s"${2 * executorIdleTimeoutS}s")
+    "spark.dynamicAllocation.cachedExecutorIdleTimeout", s"${Integer.MAX_VALUE}s")
 
   // During testing, the methods to actually kill and add executors are mocked out
   private val testing = conf.getBoolean("spark.dynamicAllocation.testing", false)

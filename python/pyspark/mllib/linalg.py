@@ -31,6 +31,7 @@ if sys.version >= '3':
     xrange = range
     import copyreg as copy_reg
 else:
+    from itertools import izip as zip
     import copy_reg
 
 import numpy as np
@@ -114,6 +115,10 @@ def _format_float(f, digits=4):
     if '.' in s:
         s = s[:s.index('.') + 1 + digits]
     return s
+
+
+def _format_float_list(l):
+    return [_format_float(x) for x in l]
 
 
 class VectorUDT(UserDefinedType):
@@ -440,8 +445,10 @@ class SparseVector(Vector):
         values (sorted by index).
 
         :param size: Size of the vector.
-        :param args: Non-zero entries, as a dictionary, list of tupes,
-               or two sorted lists containing indices and values.
+        :param args: Active entries, as a dictionary {index: value, ...},
+          a list of tuples [(index, value), ...], or a list of strictly i
+          ncreasing indices and a list of corresponding values [index, ...],
+          [value, ...]. Inactive entries are treated as zeros.
 
         >>> SparseVector(4, {1: 1.0, 3: 5.5})
         SparseVector(4, {1: 1.0, 3: 5.5})
@@ -451,6 +458,7 @@ class SparseVector(Vector):
         SparseVector(4, {1: 1.0, 3: 5.5})
         """
         self.size = int(size)
+        """ Size of the vector. """
         assert 1 <= len(args) <= 2, "must pass either 2 or 3 arguments"
         if len(args) == 1:
             pairs = args[0]
@@ -458,7 +466,9 @@ class SparseVector(Vector):
                 pairs = pairs.items()
             pairs = sorted(pairs)
             self.indices = np.array([p[0] for p in pairs], dtype=np.int32)
+            """ A list of indices corresponding to active entries. """
             self.values = np.array([p[1] for p in pairs], dtype=np.float64)
+            """ A list of values corresponding to active entries. """
         else:
             if isinstance(args[0], bytes):
                 assert isinstance(args[1], bytes), "values should be string too"
@@ -577,34 +587,27 @@ class SparseVector(Vector):
             ...
         AssertionError: dimension mismatch
         """
-        if type(other) == np.ndarray:
-            if other.ndim == 2:
-                results = [self.dot(other[:, i]) for i in xrange(other.shape[1])]
-                return np.array(results)
-            elif other.ndim > 2:
+
+        if isinstance(other, np.ndarray):
+            if other.ndim not in [2, 1]:
                 raise ValueError("Cannot call dot with %d-dimensional array" % other.ndim)
+            assert len(self) == other.shape[0], "dimension mismatch"
+            return np.dot(self.values, other[self.indices])
 
         assert len(self) == _vector_size(other), "dimension mismatch"
 
-        if type(other) in (np.ndarray, array.array, DenseVector):
-            result = 0.0
-            for i in xrange(len(self.indices)):
-                result += self.values[i] * other[self.indices[i]]
-            return result
+        if isinstance(other, DenseVector):
+            return np.dot(other.array[self.indices], self.values)
 
-        elif type(other) is SparseVector:
-            result = 0.0
-            i, j = 0, 0
-            while i < len(self.indices) and j < len(other.indices):
-                if self.indices[i] == other.indices[j]:
-                    result += self.values[i] * other.values[j]
-                    i += 1
-                    j += 1
-                elif self.indices[i] < other.indices[j]:
-                    i += 1
-                else:
-                    j += 1
-            return result
+        elif isinstance(other, SparseVector):
+            # Find out common indices.
+            self_cmind = np.in1d(self.indices, other.indices, assume_unique=True)
+            self_values = self.values[self_cmind]
+            if self_values.size == 0:
+                return 0.0
+            else:
+                other_cmind = np.in1d(other.indices, self.indices, assume_unique=True)
+                return np.dot(self_values, other.values[other_cmind])
 
         else:
             return self.dot(_convert_to_vector(other))
@@ -635,22 +638,23 @@ class SparseVector(Vector):
         AssertionError: dimension mismatch
         """
         assert len(self) == _vector_size(other), "dimension mismatch"
-        if type(other) in (list, array.array, DenseVector, np.array, np.ndarray):
-            if type(other) is np.array and other.ndim != 1:
+
+        if isinstance(other, np.ndarray) or isinstance(other, DenseVector):
+            if isinstance(other, np.ndarray) and other.ndim != 1:
                 raise Exception("Cannot call squared_distance with %d-dimensional array" %
                                 other.ndim)
-            result = 0.0
-            j = 0   # index into our own array
-            for i in xrange(len(other)):
-                if j < len(self.indices) and self.indices[j] == i:
-                    diff = self.values[j] - other[i]
-                    result += diff * diff
-                    j += 1
-                else:
-                    result += other[i] * other[i]
+            if isinstance(other, DenseVector):
+                other = other.array
+            sparse_ind = np.zeros(other.size, dtype=bool)
+            sparse_ind[self.indices] = True
+            dist = other[sparse_ind] - self.values
+            result = np.dot(dist, dist)
+
+            other_ind = other[~sparse_ind]
+            result += np.dot(other_ind, other_ind)
             return result
 
-        elif type(other) is SparseVector:
+        elif isinstance(other, SparseVector):
             result = 0.0
             i, j = 0, 0
             while i < len(self.indices) and j < len(other.indices):
@@ -876,6 +880,50 @@ class DenseMatrix(Matrix):
             self.numRows, self.numCols, self.values.tostring(),
             int(self.isTransposed))
 
+    def __str__(self):
+        """
+        Pretty printing of a DenseMatrix
+
+        >>> dm = DenseMatrix(2, 2, range(4))
+        >>> print(dm)
+        DenseMatrix([[ 0.,  2.],
+                     [ 1.,  3.]])
+        >>> dm = DenseMatrix(2, 2, range(4), isTransposed=True)
+        >>> print(dm)
+        DenseMatrix([[ 0.,  1.],
+                     [ 2.,  3.]])
+        """
+        # Inspired by __repr__ in scipy matrices.
+        array_lines = repr(self.toArray()).splitlines()
+
+        # We need to adjust six spaces which is the difference in number
+        # of letters between "DenseMatrix" and "array"
+        x = '\n'.join([(" " * 6 + line) for line in array_lines[1:]])
+        return array_lines[0].replace("array", "DenseMatrix") + "\n" + x
+
+    def __repr__(self):
+        """
+        Representation of a DenseMatrix
+
+        >>> dm = DenseMatrix(2, 2, range(4))
+        >>> dm
+        DenseMatrix(2, 2, [0.0, 1.0, 2.0, 3.0], False)
+        """
+        # If the number of values are less than seventeen then return as it is.
+        # Else return first eight values and last eight values.
+        if len(self.values) < 17:
+            entries = _format_float_list(self.values)
+        else:
+            entries = (
+                _format_float_list(self.values[:8]) +
+                ["..."] +
+                _format_float_list(self.values[-8:])
+            )
+
+        entries = ", ".join(entries)
+        return "DenseMatrix({0}, {1}, [{2}], {3})".format(
+            self.numRows, self.numCols, entries, self.isTransposed)
+
     def toArray(self):
         """
         Return an numpy.ndarray
@@ -951,6 +999,84 @@ class SparseMatrix(Matrix):
         if self.rowIndices.size != self.values.size:
             raise ValueError("Expected rowIndices of length %d, got %d."
                              % (self.rowIndices.size, self.values.size))
+
+    def __str__(self):
+        """
+        Pretty printing of a SparseMatrix
+
+        >>> sm1 = SparseMatrix(2, 2, [0, 2, 3], [0, 1, 1], [2, 3, 4])
+        >>> print(sm1)
+        2 X 2 CSCMatrix
+        (0,0) 2.0
+        (1,0) 3.0
+        (1,1) 4.0
+        >>> sm1 = SparseMatrix(2, 2, [0, 2, 3], [0, 1, 1], [2, 3, 4], True)
+        >>> print(sm1)
+        2 X 2 CSRMatrix
+        (0,0) 2.0
+        (0,1) 3.0
+        (1,1) 4.0
+        """
+        spstr = "{0} X {1} ".format(self.numRows, self.numCols)
+        if self.isTransposed:
+            spstr += "CSRMatrix\n"
+        else:
+            spstr += "CSCMatrix\n"
+
+        cur_col = 0
+        smlist = []
+
+        # Display first 16 values.
+        if len(self.values) <= 16:
+            zipindval = zip(self.rowIndices, self.values)
+        else:
+            zipindval = zip(self.rowIndices[:16], self.values[:16])
+        for i, (rowInd, value) in enumerate(zipindval):
+            if self.colPtrs[cur_col + 1] <= i:
+                cur_col += 1
+            if self.isTransposed:
+                smlist.append('({0},{1}) {2}'.format(
+                    cur_col, rowInd, _format_float(value)))
+            else:
+                smlist.append('({0},{1}) {2}'.format(
+                    rowInd, cur_col, _format_float(value)))
+        spstr += "\n".join(smlist)
+
+        if len(self.values) > 16:
+            spstr += "\n.." * 2
+        return spstr
+
+    def __repr__(self):
+        """
+        Representation of a SparseMatrix
+
+        >>> sm1 = SparseMatrix(2, 2, [0, 2, 3], [0, 1, 1], [2, 3, 4])
+        >>> sm1
+        SparseMatrix(2, 2, [0, 2, 3], [0, 1, 1], [2.0, 3.0, 4.0], False)
+        """
+        rowIndices = list(self.rowIndices)
+        colPtrs = list(self.colPtrs)
+
+        if len(self.values) <= 16:
+            values = _format_float_list(self.values)
+
+        else:
+            values = (
+                _format_float_list(self.values[:8]) +
+                ["..."] +
+                _format_float_list(self.values[-8:])
+            )
+            rowIndices = rowIndices[:8] + ["..."] + rowIndices[-8:]
+
+        if len(self.colPtrs) > 16:
+            colPtrs = colPtrs[:8] + ["..."] + colPtrs[-8:]
+
+        values = ", ".join(values)
+        rowIndices = ", ".join([str(ind) for ind in rowIndices])
+        colPtrs = ", ".join([str(ptr) for ptr in colPtrs])
+        return "SparseMatrix({0}, {1}, [{2}], [{3}], [{4}], {5})".format(
+            self.numRows, self.numCols, colPtrs, rowIndices,
+            values, self.isTransposed)
 
     def __reduce__(self):
         return SparseMatrix, (

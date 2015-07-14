@@ -90,8 +90,10 @@ class HiveSparkSubmitSuite
       "SPARK_TESTING" -> "1",
       "SPARK_HOME" -> sparkHome
     ).run(ProcessLogger(
+      // scalastyle:off println
       (line: String) => { println(s"out> $line") },
       (line: String) => { println(s"err> $line") }
+      // scalastyle:on println
     ))
 
     try {

@@ -121,6 +121,7 @@ trait Logging {
     if (usingLog4j12) {
       val log4j12Initialized = LogManager.getRootLogger.getAllAppenders.hasMoreElements
       if (!log4j12Initialized) {
+        // scalastyle:off println
         if (Utils.isInInterpreter) {
           val replDefaultLogProps = "org/apache/spark/log4j-defaults-repl.properties"
           Option(Utils.getSparkClassLoader.getResource(replDefaultLogProps)) match {
@@ -141,6 +142,7 @@ trait Logging {
               System.err.println(s"Spark was unable to load $defaultLogProps")
           }
         }
+        // scalastyle:on println
       }
     }
     Logging.initialized = true

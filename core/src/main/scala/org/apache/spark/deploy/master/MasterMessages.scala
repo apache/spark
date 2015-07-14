@@ -28,7 +28,7 @@ private[master] object MasterMessages {
 
   case object RevokedLeadership
 
-  // Actor System to Master
+  // Master to itself
 
   case object CheckForWorkerTimeOut
 
