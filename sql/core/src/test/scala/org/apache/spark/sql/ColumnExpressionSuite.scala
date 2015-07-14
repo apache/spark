@@ -268,7 +268,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSQLContext {
   case class TestData(key: Int, value: String)
   case class ComplexData(m: Map[String, Int], s: TestData, a: Seq[Int], b: Boolean)
   test("unary !") {
-    val complexData =Seq(
+    val complexData = Seq(
       ComplexData(Map("1" -> 1), TestData(1, "1"), Seq(1), true),
       ComplexData(Map("2" -> 2), TestData(2, "2"), Seq(2), false)
     ).toDF()
