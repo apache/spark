@@ -22,7 +22,7 @@ import java.util.concurrent.TimeUnit
 
 import org.apache.spark.api.java.JavaFutureAction
 import org.apache.spark.rdd.RDD
-import org.apache.spark.scheduler.JobWaiter
+import org.apache.spark.scheduler.{JobFailed, JobSucceeded, JobWaiter}
 
 import scala.concurrent._
 import scala.concurrent.duration.Duration
@@ -112,8 +112,7 @@ class SimpleFutureAction[T] private[spark](jobWaiter: JobWaiter[_], resultFunc: 
   // JobWaiter's result handler function. It should only be evaluated once the job has succeeded.
 
   @volatile private var _cancelled: Boolean = false
-  // Null until the job has completed, then holds a Try representing success or failure.
-  @volatile private var _value: Try[T] = null
+  private[this] val jobWaiterFuture: Future[Unit] = jobWaiter.toFuture
 
   override def cancel() {
     _cancelled = true
@@ -121,32 +120,34 @@ class SimpleFutureAction[T] private[spark](jobWaiter: JobWaiter[_], resultFunc: 
   }
 
   override def ready(atMost: Duration)(implicit permit: CanAwait): SimpleFutureAction.this.type = {
-    // This call to the JobWaiter's future will throw an exception if the job failed.
-    jobWaiter.toFuture.ready(atMost)(permit)
+    jobWaiterFuture.ready(atMost)(permit) // Throws exception if the job failed.
     this
   }
 
   @throws(classOf[Exception])
   override def result(atMost: Duration)(implicit permit: CanAwait): T = {
-    // This call to the JobWaiter's future will throw an exception if the job failed.
-    jobWaiter.toFuture.result(atMost)(permit)
-    // At this point, we know that the job succeeded so it's safe to evaluate this function:
-    resultFunc
+    jobWaiterFuture.result(atMost)(permit) // Throws exception if the job failed.
+    resultFunc // This function is safe to evaluate because the job must have succeeded.
   }
 
   override def onComplete[U](func: (Try[T]) => U)(implicit executor: ExecutionContext): Unit = {
-    jobWaiter.toFuture.onComplete { (jobWaiterResult: Try[Unit]) =>
-      // If the job succeeded, then evaluate the result function; otherwise, preserve the exception.
-      _value = jobWaiterResult.map(_ => resultFunc)
-      func(_value)
-    }
+    jobWaiterFuture.map { _ => resultFunc }.onComplete(func)
   }
 
   override def isCompleted: Boolean = jobWaiter.jobFinished
 
   override def isCancelled: Boolean = _cancelled
 
-  override def value: Option[Try[T]] = Option(_value)
+  override def value: Option[Try[T]] = {
+    if (!isCompleted) {
+      None
+    } else {
+      jobWaiter.awaitResult() match {
+        case JobSucceeded => Some(scala.util.Success(resultFunc))
+        case JobFailed(e) => Some(scala.util.Failure(e))
+      }
+    }
+  }
 
   def jobIds: Seq[Int] = Seq(jobWaiter.jobId)
 }
