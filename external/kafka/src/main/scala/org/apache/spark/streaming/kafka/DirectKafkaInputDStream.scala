@@ -78,7 +78,8 @@ class DirectKafkaInputDStream[
    */
   override protected[streaming] val rateController: Option[RateController] = {
     if (RateController.isBackPressureEnabled(ssc.conf)) {
-      Some(new DirectKafkaRateController(id, RateEstimator.create(ssc.conf, ssc_.graph.batchDuration)))
+      Some(new DirectKafkaRateController(id,
+        RateEstimator.create(ssc.conf, ssc_.graph.batchDuration)))
     } else {
       None
     }
