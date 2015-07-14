@@ -22,7 +22,7 @@ import java.util.concurrent.ConcurrentHashMap
 import scala.collection.JavaConverters._
 import scala.collection.mutable.LinkedHashSet
 
-import org.apache.avro.{Schema, SchemaNormalization}
+import org.apache.avro.Schema
 
 import org.apache.spark.serializer.GenericAvroSerializer.{avroSchemaNamespace, avroSchemaKey}
 import org.apache.spark.serializer.KryoSerializer

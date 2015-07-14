@@ -17,9 +17,12 @@
 
 package org.apache.spark.serializer
 
-import java.io.ByteArrayOutputStream
+import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
 import java.nio.ByteBuffer
-import java.util.zip.{Inflater, Deflater}
+
+import org.apache.commons.io.IOUtils
+import org.apache.spark.io.CompressionCodec
+import org.xerial.snappy.{SnappyInputStream, SnappyOutputStream}
 
 import scala.collection.mutable
 
@@ -66,18 +69,11 @@ private[serializer] class GenericAvroSerializer(schemas: Map[Long, String])
    * same schema is compressed many times over
    */
   def compress(schema: Schema): Array[Byte] = compressCache.getOrElseUpdate(schema, {
-    val deflater = new Deflater(Deflater.BEST_COMPRESSION)
-    val schemaBytes = schema.toString.getBytes("UTF-8")
-    deflater.setInput(schemaBytes)
-    deflater.finish()
-    val buffer = Array.ofDim[Byte](schemaBytes.length)
-    val outputStream = new ByteArrayOutputStream(schemaBytes.length)
-    while(!deflater.finished()) {
-      val count = deflater.deflate(buffer)
-      outputStream.write(buffer, 0, count)
-    }
-    outputStream.close()
-    outputStream.toByteArray
+    val bos = new ByteArrayOutputStream()
+    val out = new SnappyOutputStream(bos)
+    out.write(schema.toString.getBytes("UTF-8"))
+    out.close()
+    bos.toByteArray
   })
 
 
@@ -86,18 +82,9 @@ private[serializer] class GenericAvroSerializer(schemas: Map[Long, String])
    * seen values so to limit the number of times that decompression has to be done.
    */
   def decompress(schemaBytes: ByteBuffer): Schema = decompressCache.getOrElseUpdate(schemaBytes, {
-    val inflater = new Inflater()
-    val bytes = schemaBytes.array()
-    inflater.setInput(bytes)
-    val outputStream = new ByteArrayOutputStream(bytes.length)
-    val tmpBuffer = Array.ofDim[Byte](1024)
-    while (!inflater.finished()) {
-      val count = inflater.inflate(tmpBuffer)
-      outputStream.write(tmpBuffer, 0, count)
-    }
-    inflater.end()
-    outputStream.close()
-    new Schema.Parser().parse(new String(outputStream.toByteArray, "UTF-8"))
+    val bis = new ByteArrayInputStream(schemaBytes.array())
+    val bytes = IOUtils.toByteArray(new SnappyInputStream(bis))
+    new Schema.Parser().parse(new String(bytes, "UTF-8"))
   })
 
   /**

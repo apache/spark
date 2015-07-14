@@ -34,6 +34,7 @@ import org.roaringbitmap.{ArrayContainer, BitmapContainer, RoaringArray, Roaring
 import org.apache.spark._
 import org.apache.spark.api.python.PythonBroadcast
 import org.apache.spark.broadcast.HttpBroadcast
+import org.apache.spark.io.CompressionCodec
 import org.apache.spark.network.nio.{GetBlock, GotBlock, PutBlock}
 import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.scheduler.{CompressedMapStatus, HighlyCompressedMapStatus}
