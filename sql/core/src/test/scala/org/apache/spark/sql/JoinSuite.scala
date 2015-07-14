@@ -272,12 +272,8 @@ class JoinSuite extends QueryTest with BeforeAndAfterEach {
         Row(2, 2, 2, 2) :: Nil)
   }
 
-  case class NullInts(a: Integer)
-  val allNulls = {
-    val df = (1 to 4).map(_ => NullInts(null)).toDF()
-    df.registerTempTable("allNulls")
-    df
-  }
+  (1 to 4).map(_ => null).asInstanceOf[Seq[Integer]].map(Tuple1(_))
+    .toDF("a").registerTempTable("allNulls")
 
   test("left outer join") {
     checkAnswer(
