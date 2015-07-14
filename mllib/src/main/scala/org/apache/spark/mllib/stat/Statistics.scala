@@ -196,4 +196,18 @@ object Statistics {
     : KolmogorovSmirnovTestResult = {
     KolmogorovSmirnovTest.testOneSample(data, distName, params: _*)
   }
+
+  /**
+   * Perform a two-sample, two-sided Kolmogorov-Smirnov test for probability distribution equality
+   * The null hypothesis corresponds to both samples coming from the same distribution
+   * @param data1 `RDD[Double]` first sample of data
+   * @param data2 `RDD[Double]` second sample of data
+   * @return [[org.apache.spark.mllib.stat.test.KolmogorovSmirnovTestResult]] object containing test
+   *        statistic, p-value, and null hypothesis
+   */
+  def kolmogorovSmirnovTest2(data1: RDD[Double], data2: RDD[Double])
+    : KolmogorovSmirnovTestResult = {
+    KolmogorovSmirnovTest.testTwoSamples(data1, data2)
+  }
+
 }
