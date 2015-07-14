@@ -215,7 +215,7 @@ class KMeans private (
     } else {
       runs
     }
-    
+
     val centers = initialModel match {
       case Some(kMeansCenters) => {
         Array(kMeansCenters.clusterCenters.map(s => new VectorWithNorm(s)))
