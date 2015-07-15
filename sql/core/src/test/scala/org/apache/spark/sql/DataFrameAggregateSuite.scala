@@ -182,10 +182,6 @@ class DataFrameAggregateSuite extends QueryTest {
     checkAnswer(
       testData2.agg(stddev('a)),
       Row(testData2ADev))
-
-    checkAnswer(
-      decimalData.agg(stddev('a)),
-      Row(new java.math.BigDecimal(testData2ADev)))
   }
 
   test("zero stddev") {
@@ -194,8 +190,7 @@ class DataFrameAggregateSuite extends QueryTest {
 
     checkAnswer(
     emptyTableData.agg(stddev('a)),
-    Row(null)
-    )
+    Row(null))
   }
 
   test("zero sum") {
