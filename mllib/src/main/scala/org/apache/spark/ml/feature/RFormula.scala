@@ -32,13 +32,13 @@ import org.apache.spark.sql.types._
  * :: Experimental ::
  * Implements the transforms required for fitting a dataset against an R model formula. Currently
  * we support a limited subset of the R operators, including '~' and '+'. Also see the R formula
- * docs here: http://www.inside-r.org/r-doc/stats/formula
+ * docs here: http://stat.ethz.ch/R-manual/R-patched/library/stats/html/formula.html
  */
 @Experimental
-class RModelFormula(override val uid: String)
+class RFormula(override val uid: String)
   extends Transformer with HasFeaturesCol with HasLabelCol {
 
-  def this() = this(Identifiable.randomUID("rModelFormula"))
+  def this() = this(Identifiable.randomUID("rFormula"))
 
   /**
    * R formula parameter. The formula is provided in string form.
@@ -46,7 +46,7 @@ class RModelFormula(override val uid: String)
    */
   val formula: Param[String] = new Param(this, "formula", "R model formula")
 
-  private var parsedFormula: Option[RFormula] = None
+  private var parsedFormula: Option[ParsedRFormula] = None
 
   /**
    * Sets the formula to use for this transformer. Must be called before use.
@@ -63,60 +63,74 @@ class RModelFormula(override val uid: String)
   def getFormula: String = $(formula)
 
   /** @group getParam */
-  def setFeaturesCol(col: String): this.type = set(featuresCol, col)
+  def setFeaturesCol(value: String): this.type = set(featuresCol, value)
 
   /** @group getParam */
-  def setLabelCol(col: String): this.type = set(labelCol, col)
+  def setLabelCol(value: String): this.type = set(labelCol, value)
 
   override def transformSchema(schema: StructType): StructType = {
-    require(parsedFormula.isDefined, "Must call setFormula() first.")
-    val withFeatures = featureTransformer.transformSchema(schema)
-    val nullable = schema(parsedFormula.get.response).dataType match {
-      case _: NumericType | BooleanType => false
-      case _ => true
+    checkCanTransform(schema)
+    val withFeatures = transformFeatures.transformSchema(schema)
+    if (hasLabelCol(schema)) {
+      withFeatures
+    } else {
+      val nullable = schema(parsedFormula.get.label).dataType match {
+        case _: NumericType | BooleanType => false
+        case _ => true
+      }
+      StructType(withFeatures.fields :+ StructField($(labelCol), DoubleType, nullable))
     }
-    StructType(withFeatures.fields :+ StructField($(labelCol), DoubleType, nullable))
   }
 
   override def transform(dataset: DataFrame): DataFrame = {
-    require(parsedFormula.isDefined, "Must call setFormula() first.")
-    transformLabel(featureTransformer.transform(dataset))
+    checkCanTransform(dataset.schema)
+    transformLabel(transformFeatures.transform(dataset))
   }
 
-  override def copy(extra: ParamMap): RModelFormula = defaultCopy(extra)
+  override def copy(extra: ParamMap): RFormula = defaultCopy(extra)
 
-  override def toString: String = s"RModelFormula(${get(formula)})"
+  override def toString: String = s"RFormula(${get(formula)})"
 
   private def transformLabel(dataset: DataFrame): DataFrame = {
-    val responseName = parsedFormula.get.response
-    dataset.schema(responseName).dataType match {
-      case _: NumericType | BooleanType =>
-        dataset.select(
-          col("*"),
-          dataset(responseName).cast(DoubleType).as($(labelCol)))
-      case StringType =>
-        new StringIndexer()
-          .setInputCol(responseName)
-          .setOutputCol($(labelCol))
-          .fit(dataset)
-          .transform(dataset)
-      case other =>
-        throw new IllegalArgumentException("Unsupported type for response: " + other)
+    if (hasLabelCol(dataset.schema)) {
+      dataset
+    } else {
+      val labelName = parsedFormula.get.label
+      dataset.schema(labelName).dataType match {
+        case _: NumericType | BooleanType =>
+          dataset.withColumn($(labelCol), dataset(labelName).cast(DoubleType))
+        // TODO(ekl) add support for string-type labels
+        case other =>
+          throw new IllegalArgumentException("Unsupported type for label: " + other)
+      }
     }
   }
 
-  private def featureTransformer: Transformer = {
+  private def transformFeatures: Transformer = {
     // TODO(ekl) add support for non-numeric features and feature interactions
     new VectorAssembler(uid)
       .setInputCols(parsedFormula.get.terms.toArray)
       .setOutputCol($(featuresCol))
+  }
+
+  private def checkCanTransform(schema: StructType) {
+    require(parsedFormula.isDefined, "Must call setFormula() first.")
+    val columnNames = schema.map(_.name)
+    require(!columnNames.contains($(featuresCol)), "Features column already exists.")
+    require(
+      !columnNames.contains($(labelCol)) || schema($(labelCol)).dataType == DoubleType,
+      "Label column already exists and is not of type DoubleType.")
+  }
+
+  private def hasLabelCol(schema: StructType): Boolean = {
+    schema.map(_.name).contains($(labelCol))
   }
 }
 
 /**
  * Represents a parsed R formula.
  */
-private[ml] case class RFormula(response: String, terms: Seq[String])
+private[ml] case class ParsedRFormula(label: String, terms: Seq[String])
 
 /**
  * Limited implementation of R formula parsing. Currently supports: '~', '+'.
@@ -126,9 +140,10 @@ private[ml] object RFormulaParser extends RegexParsers {
 
   def expr: Parser[List[String]] = term ~ rep("+" ~> term) ^^ { case a ~ list => a :: list }
 
-  def formula: Parser[RFormula] = (term ~ "~" ~ expr) ^^ { case r ~ "~" ~ t => RFormula(r, t) }
+  def formula: Parser[ParsedRFormula] =
+    (term ~ "~" ~ expr) ^^ { case r ~ "~" ~ t => ParsedRFormula(r, t) }
 
-  def parse(value: String): RFormula = parseAll(formula, value) match {
+  def parse(value: String): ParsedRFormula = parseAll(formula, value) match {
     case Success(result, _) => result
     case failure: NoSuccess => throw new IllegalArgumentException(
       "Could not parse formula: " + value)
