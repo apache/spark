@@ -901,6 +901,8 @@ class RDD(object):
                 acc = seqOp(acc, obj)
             yield acc
 
+        # fold() properly protects zeroValue from mutation, so it is
+        # unnecessary to make another copy in the fold() call
         return self.mapPartitions(func).fold(zeroValue, combOp)
 
     def treeAggregate(self, zeroValue, seqOp, combOp, depth=2):
