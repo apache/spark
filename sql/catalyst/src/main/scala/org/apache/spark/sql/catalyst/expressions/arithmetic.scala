@@ -26,7 +26,7 @@ import org.apache.spark.unsafe.types.Interval
 
 case class UnaryMinus(child: Expression) extends UnaryExpression with ExpectsInputTypes {
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(NumericType)
+  override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection.NumericAndInterval)
 
   override def dataType: DataType = child.dataType
 
@@ -37,15 +37,22 @@ case class UnaryMinus(child: Expression) extends UnaryExpression with ExpectsInp
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = dataType match {
     case dt: DecimalType => defineCodeGen(ctx, ev, c => s"$c.unary_$$minus()")
     case dt: NumericType => defineCodeGen(ctx, ev, c => s"(${ctx.javaType(dt)})(-($c))")
+    case dt: IntervalType => defineCodeGen(ctx, ev, c => s"$c.negate()")
   }
 
-  protected override def nullSafeEval(input: Any): Any = numeric.negate(input)
+  protected override def nullSafeEval(input: Any): Any = {
+    if (dataType.isInstanceOf[IntervalType]) {
+      input.asInstanceOf[Interval].negate()
+    } else {
+      numeric.negate(input)
+    }
+  }
 }
 
 case class UnaryPositive(child: Expression) extends UnaryExpression with ExpectsInputTypes {
   override def prettyName: String = "positive"
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(NumericType)
+  override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection.NumericAndInterval)
 
   override def dataType: DataType = child.dataType
 
@@ -85,8 +92,6 @@ abstract class BinaryArithmetic extends BinaryOperator {
     case ByteType | ShortType =>
       defineCodeGen(ctx, ev,
         (eval1, eval2) => s"(${ctx.javaType(dataType)})($eval1 $symbol $eval2)")
-    case IntervalType =>
-      defineCodeGen(ctx, ev, (eval1, eval2) => s"""$eval1.doOp($eval2, "$symbol")""")
     case _ =>
       defineCodeGen(ctx, ev, (eval1, eval2) => s"$eval1 $symbol $eval2")
   }
@@ -98,8 +103,7 @@ private[sql] object BinaryArithmetic {
 
 case class Add(left: Expression, right: Expression) extends BinaryArithmetic {
 
-  override def inputType: AbstractDataType = NumericType
-  override def inputTypes: Seq[AbstractDataType] = Seq(NumericType, IntervalType)
+  override def inputType: AbstractDataType = TypeCollection.NumericAndInterval
 
   override def symbol: String = "+"
   override def decimalMethod: String = "$plus"
@@ -116,12 +120,23 @@ case class Add(left: Expression, right: Expression) extends BinaryArithmetic {
       numeric.plus(input1, input2)
     }
   }
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = dataType match {
+    case dt: DecimalType =>
+      defineCodeGen(ctx, ev, (eval1, eval2) => s"$eval1.$decimalMethod($eval2)")
+    case ByteType | ShortType =>
+      defineCodeGen(ctx, ev,
+        (eval1, eval2) => s"(${ctx.javaType(dataType)})($eval1 $symbol $eval2)")
+    case IntervalType =>
+      defineCodeGen(ctx, ev, (eval1, eval2) => s"$eval1.add($eval2)")
+    case _ =>
+      defineCodeGen(ctx, ev, (eval1, eval2) => s"$eval1 $symbol $eval2")
+  }
 }
 
 case class Subtract(left: Expression, right: Expression) extends BinaryArithmetic {
 
-  override def inputType: AbstractDataType = NumericType
-  override def inputTypes: Seq[AbstractDataType] = Seq(NumericType, IntervalType)
+  override def inputType: AbstractDataType = TypeCollection.NumericAndInterval
 
   override def symbol: String = "-"
   override def decimalMethod: String = "$minus"
@@ -137,6 +152,18 @@ case class Subtract(left: Expression, right: Expression) extends BinaryArithmeti
     } else {
       numeric.minus(input1, input2)
     }
+  }
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = dataType match {
+    case dt: DecimalType =>
+      defineCodeGen(ctx, ev, (eval1, eval2) => s"$eval1.$decimalMethod($eval2)")
+    case ByteType | ShortType =>
+      defineCodeGen(ctx, ev,
+        (eval1, eval2) => s"(${ctx.javaType(dataType)})($eval1 $symbol $eval2)")
+    case IntervalType =>
+      defineCodeGen(ctx, ev, (eval1, eval2) => s"$eval1.subtract($eval2)")
+    case _ =>
+      defineCodeGen(ctx, ev, (eval1, eval2) => s"$eval1 $symbol $eval2")
   }
 }
 

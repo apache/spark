@@ -53,7 +53,8 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite {
   }
 
   test("check types for unary arithmetic") {
-    assertError(UnaryMinus('stringField), "argument 1 is expected to be of type numeric")
+    assertError(UnaryMinus('stringField), "argument 1 is expected to be of type (tinyint or " +
+      "smallint or int or bigint or float or double or decimal or interval")
     assertError(Abs('stringField), "argument 1 is expected to be of type numeric")
     assertError(BitwiseNot('stringField), "argument 1 is expected to be of type (boolean " +
       "or tinyint or smallint or int or bigint)")

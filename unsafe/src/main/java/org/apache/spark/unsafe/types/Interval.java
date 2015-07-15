@@ -86,19 +86,6 @@ public final class Interval implements Serializable {
     this.microseconds = microseconds;
   }
 
-  public Interval doOp(Interval that, String op) {
-    Interval opRet = null;
-    switch (op) {
-      case "+":
-        opRet = add(that);
-        break;
-      case "-":
-        opRet = subtract(that);
-        break;
-    }
-    return opRet;
-  }
-
   public Interval add(Interval that) {
     int months = this.months + that.months;
     long microseconds = this.microseconds + that.microseconds;
@@ -109,6 +96,10 @@ public final class Interval implements Serializable {
     int months = this.months - that.months;
     long microseconds = this.microseconds - that.microseconds;
     return new Interval(months, microseconds);
+  }
+
+  public Interval negate() {
+    return new Interval(-this.months, -this.microseconds);
   }
 
   @Override

@@ -1504,5 +1504,9 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll with SQLTestUtils {
 
     checkAnswer(df.select(df("i") - new Interval(2, 123)),
       Row(new Interval(12 * 3 - 3 - 2, 7L * 1000 * 1000 * 3600 * 24 * 7 + 123 - 123)))
+
+    // unary minus
+    checkAnswer(df.select(-df("i")),
+      Row(new Interval(-(12 * 3 - 3), -(7L * 1000 * 1000 * 3600 * 24 * 7 + 123))))
   }
 }
