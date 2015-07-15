@@ -249,7 +249,7 @@ private class RandomForest (
       try {
         nodeIdCache.get.deleteAllCheckpoints()
       } catch {
-        case e:IOException =>
+        case e: IOException =>
           logWarning(s"delete all checkpoints failed. Error reason: ${e.getMessage}")
       }
     }
@@ -474,7 +474,7 @@ object RandomForest extends Serializable with Logging {
       val (treeIndex, node) = nodeQueue.head
       // Choose subset of features for node (if subsampling).
       val featureSubset: Option[Array[Int]] = if (metadata.subsamplingFeatures) {
-        Some(SamplingUtils.reservoirSampleAndCount(Range(0, 
+        Some(SamplingUtils.reservoirSampleAndCount(Range(0,
           metadata.numFeatures).iterator, metadata.numFeaturesPerNode, rng.nextLong)._1)
       } else {
         None

@@ -44,7 +44,7 @@ import org.slf4j.LoggerFactory;
  * maximum size of a long[] array, allowing us to address 8192 * 2^32 * 8 bytes, which is
  * approximately 35 terabytes of memory.
  */
-public final class TaskMemoryManager {
+public class TaskMemoryManager {
 
   private final Logger logger = LoggerFactory.getLogger(TaskMemoryManager.class);
 

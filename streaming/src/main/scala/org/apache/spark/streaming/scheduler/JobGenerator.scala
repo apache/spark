@@ -244,8 +244,7 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
     } match {
       case Success(jobs) =>
         val streamIdToInputInfos = jobScheduler.inputInfoTracker.getInfo(time)
-        val streamIdToNumRecords = streamIdToInputInfos.mapValues(_.numRecords)
-        jobScheduler.submitJobSet(JobSet(time, jobs, streamIdToNumRecords))
+        jobScheduler.submitJobSet(JobSet(time, jobs, streamIdToInputInfos))
       case Failure(e) =>
         jobScheduler.reportError("Error generating jobs for time " + time, e)
     }

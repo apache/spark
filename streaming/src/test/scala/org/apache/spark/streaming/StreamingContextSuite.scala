@@ -17,24 +17,29 @@
 
 package org.apache.spark.streaming
 
-import java.io.File
+import java.io.{File, NotSerializableException}
 import java.util.concurrent.atomic.AtomicInteger
 
+import scala.collection.mutable.ArrayBuffer
+import scala.collection.mutable.Queue
+
 import org.apache.commons.io.FileUtils
-import org.scalatest.{Assertions, BeforeAndAfter, FunSuite}
-import org.scalatest.concurrent.Timeouts
+import org.scalatest.{Assertions, BeforeAndAfter, PrivateMethodTester}
 import org.scalatest.concurrent.Eventually._
+import org.scalatest.concurrent.Timeouts
 import org.scalatest.exceptions.TestFailedDueToTimeoutException
 import org.scalatest.time.SpanSugar._
 
-import org.apache.spark.{Logging, SparkConf, SparkContext, SparkException}
+import org.apache.spark.{Logging, SparkConf, SparkContext, SparkFunSuite}
+import org.apache.spark.metrics.MetricsSystem
+import org.apache.spark.metrics.source.Source
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.dstream.DStream
 import org.apache.spark.streaming.receiver.Receiver
 import org.apache.spark.util.Utils
 
 
-class StreamingContextSuite extends FunSuite with BeforeAndAfter with Timeouts with Logging {
+class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with Timeouts with Logging {
 
   val master = "local[2]"
   val appName = this.getClass.getSimpleName
@@ -132,6 +137,41 @@ class StreamingContextSuite extends FunSuite with BeforeAndAfter with Timeouts w
     }
   }
 
+  test("start with non-seriazable DStream checkpoints") {
+    val checkpointDir = Utils.createTempDir()
+    ssc = new StreamingContext(conf, batchDuration)
+    ssc.checkpoint(checkpointDir.getAbsolutePath)
+    addInputStream(ssc).foreachRDD { rdd =>
+      // Refer to this.appName from inside closure so that this closure refers to
+      // the instance of StreamingContextSuite, and is therefore not serializable
+      rdd.count() + appName
+    }
+
+    // Test whether start() fails early when checkpointing is enabled
+    val exception = intercept[NotSerializableException] {
+      ssc.start()
+    }
+    assert(exception.getMessage().contains("DStreams with their functions are not serializable"))
+    assert(ssc.getState() !== StreamingContextState.ACTIVE)
+    assert(StreamingContext.getActive().isEmpty)
+  }
+
+  test("start failure should stop internal components") {
+    ssc = new StreamingContext(conf, batchDuration)
+    val inputStream = addInputStream(ssc)
+    val updateFunc = (values: Seq[Int], state: Option[Int]) => {
+      Some(values.sum + state.getOrElse(0))
+    }
+    inputStream.map(x => (x, 1)).updateStateByKey[Int](updateFunc)
+    // Require that the start fails because checkpoint directory was not set
+    intercept[Exception] {
+      ssc.start()
+    }
+    assert(ssc.getState() === StreamingContextState.STOPPED)
+    assert(ssc.scheduler.isStarted === false)
+  }
+
+
   test("start multiple times") {
     ssc = new StreamingContext(master, appName, batchDuration)
     addInputStream(ssc).register()
@@ -163,7 +203,7 @@ class StreamingContextSuite extends FunSuite with BeforeAndAfter with Timeouts w
     ssc = new StreamingContext(master, appName, batchDuration)
     addInputStream(ssc).register()
     ssc.stop()
-    intercept[SparkException] {
+    intercept[IllegalStateException] {
       ssc.start() // start after stop should throw exception
     }
     assert(ssc.getState() === StreamingContextState.STOPPED)
@@ -260,6 +300,25 @@ class StreamingContextSuite extends FunSuite with BeforeAndAfter with Timeouts w
     assert(runningCount > 0)
     assert(runningCount == totalNumRecords)
     Thread.sleep(100)
+  }
+
+  test ("registering and de-registering of streamingSource") {
+    val conf = new SparkConf().setMaster(master).setAppName(appName)
+    ssc = new StreamingContext(conf, batchDuration)
+    assert(ssc.getState() === StreamingContextState.INITIALIZED)
+    addInputStream(ssc).register()
+    ssc.start()
+
+    val sources = StreamingContextSuite.getSources(ssc.env.metricsSystem)
+    val streamingSource = StreamingContextSuite.getStreamingSource(ssc)
+    assert(sources.contains(streamingSource))
+    assert(ssc.getState() === StreamingContextState.ACTIVE)
+
+    ssc.stop()
+    val sourcesAfterStop = StreamingContextSuite.getSources(ssc.env.metricsSystem)
+    val streamingSourceAfterStop = StreamingContextSuite.getStreamingSource(ssc)
+    assert(ssc.getState() === StreamingContextState.STOPPED)
+    assert(!sourcesAfterStop.contains(streamingSourceAfterStop))
   }
 
   test("awaitTermination") {
@@ -581,7 +640,7 @@ class StreamingContextSuite extends FunSuite with BeforeAndAfter with Timeouts w
     val anotherInput = addInputStream(anotherSsc)
     anotherInput.foreachRDD { rdd => rdd.count }
 
-    val exception = intercept[SparkException] {
+    val exception = intercept[IllegalStateException] {
       anotherSsc.start()
     }
     assert(exception.getMessage.contains("StreamingContext"), "Did not get the right exception")
@@ -604,7 +663,7 @@ class StreamingContextSuite extends FunSuite with BeforeAndAfter with Timeouts w
 
     def testForException(clue: String, expectedErrorMsg: String)(body: => Unit): Unit = {
       withClue(clue) {
-        val ex = intercept[SparkException] {
+        val ex = intercept[IllegalStateException] {
           body
         }
         assert(ex.getMessage.toLowerCase().contains(expectedErrorMsg))
@@ -628,6 +687,19 @@ class StreamingContextSuite extends FunSuite with BeforeAndAfter with Timeouts w
       input.map { x => x * 2 } }
     testForException("no error on adding output operation after stop", "stop") {
       transformed.foreachRDD { rdd => rdd.collect() } }
+  }
+
+  test("queueStream doesn't support checkpointing") {
+    val checkpointDir = Utils.createTempDir()
+    ssc = new StreamingContext(master, appName, batchDuration)
+    val rdd = ssc.sparkContext.parallelize(1 to 10)
+    ssc.queueStream[Int](Queue(rdd)).print()
+    ssc.checkpoint(checkpointDir.getAbsolutePath)
+    val e = intercept[NotSerializableException] {
+      ssc.start()
+    }
+    // StreamingContext.validate changes the message, so use "contains" here
+    assert(e.getMessage.contains("queueStream doesn't support checkpointing"))
   }
 
   def addInputStream(s: StreamingContext): DStream[Int] = {
@@ -713,7 +785,9 @@ class SlowTestReceiver(totalRecords: Int, recordsPerSecond: Int)
 
   def onStop() {
     // Simulate slow receiver by waiting for all records to be produced
-    while(!SlowTestReceiver.receivedAllRecords) Thread.sleep(100)
+    while (!SlowTestReceiver.receivedAllRecords) {
+      Thread.sleep(100)
+    }
     // no clean to be done, the receiving thread should stop on it own
   }
 }
@@ -757,5 +831,20 @@ package object testPackage extends Assertions {
     } finally {
       ssc.stop()
     }
+  }
+}
+
+/**
+ * Helper methods for testing StreamingContextSuite
+ * This includes methods to access private methods and fields in StreamingContext and MetricsSystem
+ */
+private object StreamingContextSuite extends PrivateMethodTester {
+  private val _sources = PrivateMethod[ArrayBuffer[Source]]('sources)
+  private def getSources(metricsSystem: MetricsSystem): ArrayBuffer[Source] = {
+    metricsSystem.invokePrivate(_sources())
+  }
+  private val _streamingSource = PrivateMethod[StreamingSource]('streamingSource)
+  private def getStreamingSource(streamingContext: StreamingContext): StreamingSource = {
+    streamingContext.invokePrivate(_streamingSource())
   }
 }

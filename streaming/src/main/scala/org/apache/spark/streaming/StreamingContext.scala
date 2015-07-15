@@ -17,12 +17,13 @@
 
 package org.apache.spark.streaming
 
-import java.io.InputStream
+import java.io.{InputStream, NotSerializableException}
 import java.util.concurrent.atomic.{AtomicInteger, AtomicReference}
 
 import scala.collection.Map
 import scala.collection.mutable.Queue
 import scala.reflect.ClassTag
+import scala.util.control.NonFatal
 
 import akka.actor.{Props, SupervisorStrategy}
 import org.apache.hadoop.conf.Configuration
@@ -35,13 +36,14 @@ import org.apache.spark._
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.input.FixedLengthBinaryInputFormat
 import org.apache.spark.rdd.{RDD, RDDOperationScope}
+import org.apache.spark.serializer.SerializationDebugger
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.StreamingContextState._
 import org.apache.spark.streaming.dstream._
 import org.apache.spark.streaming.receiver.{ActorReceiver, ActorSupervisorStrategy, Receiver}
 import org.apache.spark.streaming.scheduler.{JobScheduler, StreamingListener}
 import org.apache.spark.streaming.ui.{StreamingJobProgressListener, StreamingTab}
-import org.apache.spark.util.CallSite
+import org.apache.spark.util.{CallSite, Utils}
 
 /**
  * Main entry point for Spark Streaming functionality. It provides methods used to create
@@ -155,7 +157,7 @@ class StreamingContext private[streaming] (
       cp_.graph.restoreCheckpointData()
       cp_.graph
     } else {
-      assert(batchDur_ != null, "Batch duration for streaming context cannot be null")
+      require(batchDur_ != null, "Batch duration for StreamingContext cannot be null")
       val newGraph = new DStreamGraph()
       newGraph.setBatchDuration(batchDur_)
       newGraph
@@ -190,15 +192,14 @@ class StreamingContext private[streaming] (
       None
     }
 
-  /** Register streaming source to metrics system */
+  /* Initializing a streamingSource to register metrics */
   private val streamingSource = new StreamingSource(this)
-  assert(env != null)
-  assert(env.metricsSystem != null)
-  env.metricsSystem.registerSource(streamingSource)
 
   private var state: StreamingContextState = INITIALIZED
 
   private val startSite = new AtomicReference[CallSite](null)
+
+  private var shutdownHookRef: AnyRef = _
 
   /**
    * Return the associated Spark context
@@ -235,6 +236,10 @@ class StreamingContext private[streaming] (
     }
   }
 
+  private[streaming] def isCheckpointingEnabled: Boolean = {
+    checkpointDir != null
+  }
+
   private[streaming] def initialCheckpoint: Checkpoint = {
     if (isCheckpointPresent) cp_ else null
   }
@@ -263,6 +268,8 @@ class StreamingContext private[streaming] (
    * Create an input stream with any arbitrary user implemented receiver.
    * Find more details at: http://spark.apache.org/docs/latest/streaming-custom-receivers.html
    * @param receiver Custom implementation of Receiver
+   *
+   * @deprecated As of 1.0.0", replaced by `receiverStream`.
    */
   @deprecated("Use receiverStream", "1.0.0")
   def networkStream[T: ClassTag](receiver: Receiver[T]): ReceiverInputDStream[T] = {
@@ -454,10 +461,11 @@ class StreamingContext private[streaming] (
     val conf = sc_.hadoopConfiguration
     conf.setInt(FixedLengthBinaryInputFormat.RECORD_LENGTH_PROPERTY, recordLength)
     val br = fileStream[LongWritable, BytesWritable, FixedLengthBinaryInputFormat](
-      directory, FileInputDStream.defaultFilter : Path => Boolean, newFilesOnly=true, conf)
+      directory, FileInputDStream.defaultFilter: Path => Boolean, newFilesOnly = true, conf)
     val data = br.map { case (k, v) =>
       val bytes = v.getBytes
-      assert(bytes.length == recordLength, "Byte array does not have correct length")
+      require(bytes.length == recordLength, "Byte array does not have correct length. " +
+        s"${bytes.length} did not equal recordLength: $recordLength")
       bytes
     }
     data
@@ -466,6 +474,10 @@ class StreamingContext private[streaming] (
   /**
    * Create an input stream from a queue of RDDs. In each batch,
    * it will process either one or all of the RDDs returned by the queue.
+   *
+   * NOTE: Arbitrary RDDs can be added to `queueStream`, there is no way to recover data of
+   * those RDDs, so `queueStream` doesn't support checkpointing.
+   *
    * @param queue      Queue of RDDs
    * @param oneAtATime Whether only one RDD should be consumed from the queue in every interval
    * @tparam T         Type of objects in the RDD
@@ -480,6 +492,10 @@ class StreamingContext private[streaming] (
   /**
    * Create an input stream from a queue of RDDs. In each batch,
    * it will process either one or all of the RDDs returned by the queue.
+   *
+   * NOTE: Arbitrary RDDs can be added to `queueStream`, there is no way to recover data of
+   * those RDDs, so `queueStream` doesn't support checkpointing.
+   *
    * @param queue      Queue of RDDs
    * @param oneAtATime Whether only one RDD should be consumed from the queue in every interval
    * @param defaultRDD Default RDD is returned by the DStream when the queue is empty.
@@ -523,11 +539,26 @@ class StreamingContext private[streaming] (
     assert(graph != null, "Graph is null")
     graph.validate()
 
-    assert(
-      checkpointDir == null || checkpointDuration != null,
+    require(
+      !isCheckpointingEnabled || checkpointDuration != null,
       "Checkpoint directory has been set, but the graph checkpointing interval has " +
         "not been set. Please use StreamingContext.checkpoint() to set the interval."
     )
+
+    // Verify whether the DStream checkpoint is serializable
+    if (isCheckpointingEnabled) {
+      val checkpoint = new Checkpoint(this, Time.apply(0))
+      try {
+        Checkpoint.serialize(checkpoint, conf)
+      } catch {
+        case e: NotSerializableException =>
+          throw new NotSerializableException(
+            "DStream checkpointing has been enabled but the DStreams with their functions " +
+              "are not serializable\n" +
+              SerializationDebugger.improveException(checkpoint, e).getMessage()
+          )
+      }
+    }
   }
 
   /**
@@ -548,26 +579,39 @@ class StreamingContext private[streaming] (
   /**
    * Start the execution of the streams.
    *
-   * @throws SparkException if the StreamingContext is already stopped.
+   * @throws IllegalStateException if the StreamingContext is already stopped.
    */
   def start(): Unit = synchronized {
     state match {
       case INITIALIZED =>
-        validate()
         startSite.set(DStream.getCreationSite())
         sparkContext.setCallSite(startSite.get)
         StreamingContext.ACTIVATION_LOCK.synchronized {
           StreamingContext.assertNoOtherContextIsActive()
-          scheduler.start()
-          uiTab.foreach(_.attach())
-          state = StreamingContextState.ACTIVE
+          try {
+            validate()
+            scheduler.start()
+            state = StreamingContextState.ACTIVE
+          } catch {
+            case NonFatal(e) =>
+              logError("Error starting the context, marking it as stopped", e)
+              scheduler.stop(false)
+              state = StreamingContextState.STOPPED
+              throw e
+          }
           StreamingContext.setActiveContext(this)
         }
+        shutdownHookRef = Utils.addShutdownHook(
+          StreamingContext.SHUTDOWN_HOOK_PRIORITY)(stopOnShutdown)
+        // Registering Streaming Metrics at the start of the StreamingContext
+        assert(env.metricsSystem != null)
+        env.metricsSystem.registerSource(streamingSource)
+        uiTab.foreach(_.attach())
         logInfo("StreamingContext started")
       case ACTIVE =>
         logWarning("StreamingContext has already been started")
       case STOPPED =>
-        throw new SparkException("StreamingContext has already been stopped")
+        throw new IllegalStateException("StreamingContext has already been stopped")
     }
   }
 
@@ -583,6 +627,8 @@ class StreamingContext private[streaming] (
    * Wait for the execution to stop. Any exceptions that occurs during the execution
    * will be thrown in this thread.
    * @param timeout time to wait in milliseconds
+   *
+   * @deprecated As of 1.3.0, replaced by `awaitTerminationOrTimeout(Long)`.
    */
   @deprecated("Use awaitTerminationOrTimeout(Long) instead", "1.3.0")
   def awaitTermination(timeout: Long) {
@@ -636,9 +682,14 @@ class StreamingContext private[streaming] (
           logWarning("StreamingContext has already been stopped")
         case ACTIVE =>
           scheduler.stop(stopGracefully)
+          // Removing the streamingSource to de-register the metrics on stop()
+          env.metricsSystem.removeSource(streamingSource)
           uiTab.foreach(_.detach())
           StreamingContext.setActiveContext(null)
           waiter.notifyStop()
+          if (shutdownHookRef != null) {
+            Utils.removeShutdownHook(shutdownHookRef)
+          }
           logInfo("StreamingContext stopped successfully")
       }
       // Even if we have already stopped, we still need to attempt to stop the SparkContext because
@@ -648,6 +699,13 @@ class StreamingContext private[streaming] (
       // The state should always be Stopped after calling `stop()`, even if we haven't started yet
       state = STOPPED
     }
+  }
+
+  private def stopOnShutdown(): Unit = {
+    val stopGracefully = conf.getBoolean("spark.streaming.stopGracefullyOnShutdown", false)
+    logInfo(s"Invoking stop(stopGracefully=$stopGracefully) from shutdown hook")
+    // Do not stop SparkContext, let its own shutdown hook stop it
+    stop(stopSparkContext = false, stopGracefully = stopGracefully)
   }
 }
 
@@ -664,12 +722,14 @@ object StreamingContext extends Logging {
    */
   private val ACTIVATION_LOCK = new Object()
 
+  private val SHUTDOWN_HOOK_PRIORITY = Utils.SPARK_CONTEXT_SHUTDOWN_PRIORITY + 1
+
   private val activeContext = new AtomicReference[StreamingContext](null)
 
   private def assertNoOtherContextIsActive(): Unit = {
     ACTIVATION_LOCK.synchronized {
       if (activeContext.get() != null) {
-        throw new SparkException(
+        throw new IllegalStateException(
           "Only one StreamingContext may be started in this JVM. " +
             "Currently running StreamingContext was started at" +
             activeContext.get.startSite.get.longForm)
@@ -695,6 +755,10 @@ object StreamingContext extends Logging {
     }
   }
 
+  /**
+   * @deprecated As of 1.3.0, replaced by implicit functions in the DStream companion object.
+   *             This is kept here only for backward compatibility.
+   */
   @deprecated("Replaced by implicit functions in the DStream companion object. This is " +
     "kept here only for backward compatibility.", "1.3.0")
   def toPairDStreamFunctions[K, V](stream: DStream[(K, V)])

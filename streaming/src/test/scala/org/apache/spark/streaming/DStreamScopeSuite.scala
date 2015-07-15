@@ -17,17 +17,17 @@
 
 package org.apache.spark.streaming
 
-import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll, FunSuite}
+import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll}
 
-import org.apache.spark.SparkContext
-import org.apache.spark.rdd.{RDD, RDDOperationScope}
-import org.apache.spark.streaming.dstream.{DStream, InputDStream}
+import org.apache.spark.{SparkContext, SparkFunSuite}
+import org.apache.spark.rdd.RDDOperationScope
+import org.apache.spark.streaming.dstream.DStream
 import org.apache.spark.streaming.ui.UIUtils
 
 /**
  * Tests whether scope information is passed from DStream operations to RDDs correctly.
  */
-class DStreamScopeSuite extends FunSuite with BeforeAndAfter with BeforeAndAfterAll {
+class DStreamScopeSuite extends SparkFunSuite with BeforeAndAfter with BeforeAndAfterAll {
   private var ssc: StreamingContext = null
   private val batchDuration: Duration = Seconds(1)
 
@@ -169,22 +169,4 @@ class DStreamScopeSuite extends FunSuite with BeforeAndAfter with BeforeAndAfter
     options.zipWithIndex.foreach { case (o, i) => assert(o.isDefined, s"Option $i was empty!") }
   }
 
-}
-
-/**
- * A dummy stream that does absolutely nothing.
- */
-private class DummyDStream(ssc: StreamingContext) extends DStream[Int](ssc) {
-  override def dependencies: List[DStream[Int]] = List.empty
-  override def slideDuration: Duration = Seconds(1)
-  override def compute(time: Time): Option[RDD[Int]] = Some(ssc.sc.emptyRDD[Int])
-}
-
-/**
- * A dummy input stream that does absolutely nothing.
- */
-private class DummyInputDStream(ssc: StreamingContext) extends InputDStream[Int](ssc) {
-  override def start(): Unit = { }
-  override def stop(): Unit = { }
-  override def compute(time: Time): Option[RDD[Int]] = Some(ssc.sc.emptyRDD[Int])
 }

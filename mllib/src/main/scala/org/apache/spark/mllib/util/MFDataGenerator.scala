@@ -55,8 +55,10 @@ import org.apache.spark.rdd.RDD
 object MFDataGenerator {
   def main(args: Array[String]) {
     if (args.length < 2) {
+      // scalastyle:off println
       println("Usage: MFDataGenerator " +
         "<master> <outputDir> [m] [n] [rank] [trainSampFact] [noise] [sigma] [test] [testSampFact]")
+      // scalastyle:on println
       System.exit(1)
     }
 
@@ -82,8 +84,7 @@ object MFDataGenerator {
     BLAS.gemm(z, A, B, 1.0, fullData)
 
     val df = rank * (m + n - rank)
-    val sampSize = scala.math.min(scala.math.round(trainSampFact * df),
-      scala.math.round(.99 * m * n)).toInt
+    val sampSize = math.min(math.round(trainSampFact * df), math.round(.99 * m * n)).toInt
     val rand = new Random()
     val mn = m * n
     val shuffled = rand.shuffle((0 until mn).toList)
@@ -102,8 +103,8 @@ object MFDataGenerator {
 
     // optionally generate testing data
     if (test) {
-      val testSampSize = scala.math
-        .min(scala.math.round(sampSize * testSampFact),scala.math.round(mn - sampSize)).toInt
+      val testSampSize = math.min(
+        math.round(sampSize * testSampFact), math.round(mn - sampSize)).toInt
       val testOmega = shuffled.slice(sampSize, sampSize + testSampSize)
       val testOrdered = testOmega.sortWith(_ < _).toArray
       val testData: RDD[(Int, Int, Double)] = sc.parallelize(testOrdered)

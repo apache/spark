@@ -17,14 +17,15 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.scalatest.{BeforeAndAfter, FunSuite}
+import org.scalatest.BeforeAndAfter
 
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.{Union, Project, LocalRelation}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.catalyst.SimpleCatalystConf
 
-class DecimalPrecisionSuite extends FunSuite with BeforeAndAfter {
+class DecimalPrecisionSuite extends SparkFunSuite with BeforeAndAfter {
   val conf = new SimpleCatalystConf(true)
   val catalog = new SimpleCatalog(conf)
   val analyzer = new Analyzer(catalog, EmptyFunctionRegistry, conf)
@@ -91,8 +92,10 @@ class DecimalPrecisionSuite extends FunSuite with BeforeAndAfter {
   }
 
   test("Comparison operations") {
-    checkComparison(LessThan(i, d1), DecimalType.Unlimited)
-    checkComparison(LessThanOrEqual(d1, d2), DecimalType.Unlimited)
+    checkComparison(EqualTo(i, d1), DecimalType(10, 1))
+    checkComparison(EqualNullSafe(d2, d1), DecimalType(5, 2))
+    checkComparison(LessThan(i, d1), DecimalType(10, 1))
+    checkComparison(LessThanOrEqual(d1, d2), DecimalType(5, 2))
     checkComparison(GreaterThan(d2, u), DecimalType.Unlimited)
     checkComparison(GreaterThanOrEqual(d1, f), DoubleType)
     checkComparison(GreaterThan(d2, d2), DecimalType(5, 2))

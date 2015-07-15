@@ -18,9 +18,11 @@
 package org.apache.spark.storage
 
 import java.nio.ByteBuffer
+
+import scala.util.control.NonFatal
+
 import org.apache.spark.Logging
 import org.apache.spark.util.Utils
-import scala.util.control.NonFatal
 
 
 /**
@@ -40,7 +42,7 @@ private[spark] class ExternalBlockStore(blockManager: BlockManager, executorId: 
       externalBlockManager.map(_.getSize(blockId)).getOrElse(0)
     } catch {
       case NonFatal(t) =>
-        logError(s"error in getSize from $blockId", t)
+        logError(s"Error in getSize($blockId)", t)
         0L
     }
   }
@@ -54,7 +56,7 @@ private[spark] class ExternalBlockStore(blockManager: BlockManager, executorId: 
       values: Array[Any],
       level: StorageLevel,
       returnValues: Boolean): PutResult = {
-    putIterator(blockId, values.toIterator, level, returnValues)
+    putIntoExternalBlockStore(blockId, values.toIterator, returnValues)
   }
 
   override def putIterator(
@@ -62,42 +64,70 @@ private[spark] class ExternalBlockStore(blockManager: BlockManager, executorId: 
       values: Iterator[Any],
       level: StorageLevel,
       returnValues: Boolean): PutResult = {
-    logDebug(s"Attempting to write values for block $blockId")
-    val bytes = blockManager.dataSerialize(blockId, values)
-    putIntoExternalBlockStore(blockId, bytes, returnValues)
+    putIntoExternalBlockStore(blockId, values, returnValues)
+  }
+
+  private def putIntoExternalBlockStore(
+      blockId: BlockId,
+      values: Iterator[_],
+      returnValues: Boolean): PutResult = {
+    logTrace(s"Attempting to put block $blockId into ExternalBlockStore")
+    // we should never hit here if externalBlockManager is None. Handle it anyway for safety.
+    try {
+      val startTime = System.currentTimeMillis
+      if (externalBlockManager.isDefined) {
+        externalBlockManager.get.putValues(blockId, values)
+        val size = getSize(blockId)
+        val data = if (returnValues) {
+          Left(getValues(blockId).get)
+        } else {
+          null
+        }
+        val finishTime = System.currentTimeMillis
+        logDebug("Block %s stored as %s file in ExternalBlockStore in %d ms".format(
+          blockId, Utils.bytesToString(size), finishTime - startTime))
+        PutResult(size, data)
+      } else {
+        logError(s"Error in putValues($blockId): no ExternalBlockManager has been configured")
+        PutResult(-1, null, Seq((blockId, BlockStatus.empty)))
+      }
+    } catch {
+      case NonFatal(t) =>
+        logError(s"Error in putValues($blockId)", t)
+        PutResult(-1, null, Seq((blockId, BlockStatus.empty)))
+    }
   }
 
   private def putIntoExternalBlockStore(
       blockId: BlockId,
       bytes: ByteBuffer,
       returnValues: Boolean): PutResult = {
-    // So that we do not modify the input offsets !
-    // duplicate does not copy buffer, so inexpensive
-    val byteBuffer = bytes.duplicate()
-    byteBuffer.rewind()
-    logDebug(s"Attempting to put block $blockId into ExtBlk store")
+    logTrace(s"Attempting to put block $blockId into ExternalBlockStore")
     // we should never hit here if externalBlockManager is None. Handle it anyway for safety.
     try {
       val startTime = System.currentTimeMillis
       if (externalBlockManager.isDefined) {
-        externalBlockManager.get.putBytes(blockId, bytes)
+        val byteBuffer = bytes.duplicate()
+        byteBuffer.rewind()
+        externalBlockManager.get.putBytes(blockId, byteBuffer)
+        val size = bytes.limit()
+        val data = if (returnValues) {
+          Right(bytes)
+        } else {
+          null
+        }
         val finishTime = System.currentTimeMillis
         logDebug("Block %s stored as %s file in ExternalBlockStore in %d ms".format(
-          blockId, Utils.bytesToString(byteBuffer.limit), finishTime - startTime))
-
-        if (returnValues) {
-          PutResult(bytes.limit(), Right(bytes.duplicate()))
-        } else {
-          PutResult(bytes.limit(), null)
-        }
+          blockId, Utils.bytesToString(size), finishTime - startTime))
+        PutResult(size, data)
       } else {
-        logError(s"error in putBytes $blockId")
-        PutResult(bytes.limit(), null, Seq((blockId, BlockStatus.empty)))
+        logError(s"Error in putBytes($blockId): no ExternalBlockManager has been configured")
+        PutResult(-1, null, Seq((blockId, BlockStatus.empty)))
       }
     } catch {
       case NonFatal(t) =>
-        logError(s"error in putBytes $blockId", t)
-        PutResult(bytes.limit(), null, Seq((blockId, BlockStatus.empty)))
+        logError(s"Error in putBytes($blockId)", t)
+        PutResult(-1, null, Seq((blockId, BlockStatus.empty)))
     }
   }
 
@@ -107,13 +137,19 @@ private[spark] class ExternalBlockStore(blockManager: BlockManager, executorId: 
       externalBlockManager.map(_.removeBlock(blockId)).getOrElse(true)
     } catch {
       case NonFatal(t) =>
-        logError(s"error in removing $blockId", t)
+        logError(s"Error in removeBlock($blockId)", t)
         true
     }
   }
 
   override def getValues(blockId: BlockId): Option[Iterator[Any]] = {
-    getBytes(blockId).map(buffer => blockManager.dataDeserialize(blockId, buffer))
+    try {
+      externalBlockManager.flatMap(_.getValues(blockId))
+    } catch {
+      case NonFatal(t) =>
+        logError(s"Error in getValues($blockId)", t)
+        None
+    }
   }
 
   override def getBytes(blockId: BlockId): Option[ByteBuffer] = {
@@ -121,7 +157,7 @@ private[spark] class ExternalBlockStore(blockManager: BlockManager, executorId: 
       externalBlockManager.flatMap(_.getBytes(blockId))
     } catch {
       case NonFatal(t) =>
-        logError(s"error in getBytes from $blockId", t)
+        logError(s"Error in getBytes($blockId)", t)
         None
     }
   }
@@ -130,13 +166,13 @@ private[spark] class ExternalBlockStore(blockManager: BlockManager, executorId: 
     try {
       val ret = externalBlockManager.map(_.blockExists(blockId)).getOrElse(false)
       if (!ret) {
-        logInfo(s"remove block $blockId")
+        logInfo(s"Remove block $blockId")
         blockManager.removeBlock(blockId, true)
       }
       ret
     } catch {
       case NonFatal(t) =>
-        logError(s"error in getBytes from $blockId", t)
+        logError(s"Error in getBytes($blockId)", t)
         false
     }
   }

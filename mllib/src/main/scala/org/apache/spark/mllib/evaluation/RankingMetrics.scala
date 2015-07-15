@@ -31,6 +31,8 @@ import org.apache.spark.rdd.RDD
  * ::Experimental::
  * Evaluator for ranking algorithms.
  *
+ * Java users should use [[RankingMetrics$.of]] to create a [[RankingMetrics]] instance.
+ *
  * @param predictionAndLabels an RDD of (predicted ranking, ground truth set) pairs.
  */
 @Experimental

@@ -17,9 +17,9 @@
 
 package org.apache.spark.storage
 
-import org.scalatest.FunSuite
+import org.apache.spark.SparkFunSuite
 
-class BlockIdSuite extends FunSuite {
+class BlockIdSuite extends SparkFunSuite {
   def assertSame(id1: BlockId, id2: BlockId) {
     assert(id1.name === id2.name)
     assert(id1.hashCode === id2.hashCode)
