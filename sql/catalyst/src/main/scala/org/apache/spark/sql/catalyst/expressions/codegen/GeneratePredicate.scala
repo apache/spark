@@ -40,8 +40,8 @@ object GeneratePredicate extends CodeGenerator[Expression, (InternalRow) => Bool
   protected def create(predicate: Expression): ((InternalRow) => Boolean) = {
     val ctx = newCodeGenContext()
     val eval = predicate.gen(ctx)
-    val mutableStates = ctx.mutableStates.map { case (jt, name, init) =>
-      s"private $jt $name = $init;"
+    val mutableStates = ctx.mutableStates.map { case (javaType, variableName, initialValue) =>
+      s"private $javaType $variableName = $initialValue;"
     }.mkString("\n      ")
     val code = s"""
       public SpecificPredicate generate($exprType[] expr) {

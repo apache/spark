@@ -69,8 +69,8 @@ object GenerateOrdering extends CodeGenerator[Seq[SortOrder], Ordering[InternalR
           }
       """
     }.mkString("\n")
-    val mutableStates = ctx.mutableStates.map { case (jt, name, init) =>
-      s"private $jt $name = $init;"
+    val mutableStates = ctx.mutableStates.map { case (javaType, variableName, initialValue) =>
+      s"private $javaType $variableName = $initialValue;"
     }.mkString("\n      ")
     val code = s"""
       public SpecificOrdering generate($exprType[] expr) {

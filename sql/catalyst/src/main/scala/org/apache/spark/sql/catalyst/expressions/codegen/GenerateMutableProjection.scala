@@ -46,8 +46,8 @@ object GenerateMutableProjection extends CodeGenerator[Seq[Expression], () => Mu
             ${ctx.setColumn("mutableRow", e.dataType, i, evaluationCode.primitive)};
         """
     }.mkString("\n")
-    val mutableStates = ctx.mutableStates.map { case (jt, name, init) =>
-      s"private $jt $name = $init;"
+    val mutableStates = ctx.mutableStates.map { case (javaType, variableName, initialValue) =>
+      s"private $javaType $variableName = $initialValue;"
     }.mkString("\n      ")
     val code = s"""
       public Object generate($exprType[] expr) {

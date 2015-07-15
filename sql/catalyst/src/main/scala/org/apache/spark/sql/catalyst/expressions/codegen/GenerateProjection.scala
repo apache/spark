@@ -151,8 +151,8 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
         s"""if (!nullBits[$i]) arr[$i] = c$i;"""
     }.mkString("\n      ")
 
-    val mutableStates = ctx.mutableStates.map { case (jt, name, init) =>
-      s"private $jt $name = $init;"
+    val mutableStates = ctx.mutableStates.map { case (javaType, variableName, initialValue) =>
+      s"private $javaType $variableName = $initialValue;"
     }.mkString("\n      ")
 
     val code = s"""
