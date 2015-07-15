@@ -34,6 +34,8 @@ private[sql] class MyDenseVector(val data: Array[Double]) extends Serializable {
   override def equals(other: Any): Boolean = other match {
     case v: MyDenseVector =>
       java.util.Arrays.equals(this.data, v.data)
+    case a: Array[Double] =>
+      java.util.Arrays.equals(this.data, a)
     case _ => false
   }
 }
@@ -155,7 +157,9 @@ class UserDefinedTypeSuite extends QueryTest {
     val jsonRDD = ctx.read.schema(schema).json(stringRDD)
     checkAnswer(
       jsonRDD,
-      Row(1, Array(1.1, 2.2, 3.3, 4.4)) :: Row(2, Array(2.25, 4.5, 8.75)) :: Nil
+      Row(1, new MyDenseVector(Array(1.1, 2.2, 3.3, 4.4))) ::
+        Row(2, new MyDenseVector(Array(2.25, 4.5, 8.75))) ::
+        Nil
     )
   }
 }

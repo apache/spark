@@ -105,7 +105,7 @@ class MasterSuite extends SparkFunSuite with Matchers with Eventually {
       persistenceEngine.addDriver(driverToPersist)
       persistenceEngine.addWorker(workerToPersist)
 
-      val (apps, drivers, workers) = persistenceEngine.readPersistedData()
+      val (apps, drivers, workers) = persistenceEngine.readPersistedData(rpcEnv)
 
       apps.map(_.id) should contain(appToPersist.id)
       drivers.map(_.id) should contain(driverToPersist.id)

@@ -37,7 +37,7 @@ import org.apache.spark.rdd.RDD
  *                      I.e., the feature takes values in {0, ..., arity - 1}.
  * @param numBins  Number of bins for each feature.
  */
-private[tree] class DecisionTreeMetadata(
+private[spark] class DecisionTreeMetadata(
     val numFeatures: Int,
     val numExamples: Long,
     val numClasses: Int,
@@ -94,7 +94,7 @@ private[tree] class DecisionTreeMetadata(
 
 }
 
-private[tree] object DecisionTreeMetadata extends Logging {
+private[spark] object DecisionTreeMetadata extends Logging {
 
   /**
    * Construct a [[DecisionTreeMetadata]] instance for this dataset and parameters.
