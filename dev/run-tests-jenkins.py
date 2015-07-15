@@ -45,7 +45,7 @@ def post_message_to_github(msg, ghprb_pull_id):
     posted_message = json.dumps({"body": msg})
     request = urllib2.Request(url,
                               headers={
-                                  "Authorization": "x-oauth-basic: %s" % (github_oauth_key),
+                                  "Authorization": "token %s" % github_oauth_key,
                                   "Content-Type": "application/json"
                               },
                               data=posted_message)
@@ -55,12 +55,12 @@ def post_message_to_github(msg, ghprb_pull_id):
         if response.getcode() == 201:
             print(" > Post successful.")
     except urllib2.HTTPError as http_e:
-        print_err("Failed to post message to GitHub.")
+        print_err("Failed to post message to Github.")
         print_err(" > http_code: %s" % http_e.code)
         print_err(" > api_response: %s" % http_e.read())
         print_err(" > data: %s" % posted_message)
     except urllib2.URLError as url_e:
-        print_err("Failed to post message to GitHub.")
+        print_err("Failed to post message to Github.")
         print_err(" > urllib2_status: %s" % url_e.reason[1])
         print_err(" > data: %s" % posted_message)
 
