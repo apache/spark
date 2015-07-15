@@ -20,6 +20,7 @@ package org.apache.spark
 import java.util.concurrent.TimeUnit
 
 import scala.collection.mutable
+import scala.util.control.ControlThrowable
 
 import com.codahale.metrics.{Gauge, MetricRegistry}
 
@@ -204,7 +205,16 @@ private[spark] class ExecutorAllocationManager(
     listenerBus.addListener(listener)
 
     val scheduleTask = new Runnable() {
-      override def run(): Unit = Utils.logUncaughtExceptions(schedule())
+      override def run(): Unit = {
+        try {
+          schedule()
+        } catch {
+          case ct: ControlThrowable =>
+            throw ct
+          case t: Throwable =>
+            logWarning(s"Uncaught exception in thread ${Thread.currentThread().getName}", t)
+        }
+      }
     }
     executor.scheduleAtFixedRate(scheduleTask, 0, intervalMillis, TimeUnit.MILLISECONDS)
   }
