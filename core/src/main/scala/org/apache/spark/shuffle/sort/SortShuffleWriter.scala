@@ -21,7 +21,7 @@ import org.apache.spark._
 import org.apache.spark.executor.ShuffleWriteMetrics
 import org.apache.spark.scheduler.MapStatus
 import org.apache.spark.serializer.Serializer
-import org.apache.spark.shuffle.{IndexShuffleBlockResolver, ShuffleWriter, BaseShuffleHandle}
+import org.apache.spark.shuffle.{ShuffleAggregationManager, IndexShuffleBlockResolver, ShuffleWriter, BaseShuffleHandle}
 import org.apache.spark.storage.ShuffleBlockId
 import org.apache.spark.util.collection.ExternalSorter
 
@@ -50,7 +50,14 @@ private[spark] class SortShuffleWriter[K, V, C](
 
   /** Write a bunch of records to this task's output */
   override def write(records: Iterator[Product2[K, V]]): Unit = {
-    sorter = if (dep.mapSideCombine) {
+    // Decide if it's optimal to do the pre-aggregation.
+    val aggManager = new ShuffleAggregationManager[K, V](records)
+    val enableAggregation = aggManager.enableAggregation()
+    val enableMapSideCombine = (dep.mapSideCombine & enableAggregation)
+
+    System.out.println("SortShuffleWriter - Enable Pre-Aggregation: " + enableMapSideCombine)
+
+    sorter = if (enableMapSideCombine) {
       require(dep.aggregator.isDefined, "Map-side combine without Aggregator specified!")
       new ExternalSorter[K, V, C](
         dep.aggregator, Some(dep.partitioner), dep.keyOrdering, dep.serializer)
@@ -70,7 +77,8 @@ private[spark] class SortShuffleWriter[K, V, C](
       new ExternalSorter[K, V, V](
         aggregator = None, Some(dep.partitioner), ordering = None, dep.serializer)
     }
-    sorter.insertAll(records)
+
+    sorter.insertAll(aggManager.getRestoredIterator())
 
     // Don't bother including the time to open the merged output file in the shuffle write time,
     // because it just opens a single file, so is typically too fast to measure accurately
