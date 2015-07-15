@@ -923,15 +923,14 @@ class KafkaStreamTests(PySparkStreamingTestCase):
         offsetRanges = [OffsetRange(topic, 0, long(0), long(sum(sendData.values())))]
         kafkaParams = {"metadata.broker.list": self._kafkaTestUtils.brokerAddress()}
 
-        def getOffsetAndMessage(m):
-            return m and (m.offset, m.message)
+        def getKeyAndDoubleMessage(m):
+            return m and (m.key, m.message * 2)
 
         self._kafkaTestUtils.createTopic(topic)
         self._kafkaTestUtils.sendMessages(topic, sendData)
         rdd = KafkaUtils.createRDD(self.sc, kafkaParams, offsetRanges,
-                                   messageHandler=getOffsetAndMessage)
-        self.assertEqual(rdd.collect(),
-                         [(0, "a"), (1, "b"), (2, "c"), (3, "c")])
+                                   messageHandler=getKeyAndDoubleMessage)
+        self._validateRddResult({"aa": 1, "bb": 1, "cc": 2}, rdd)
 
     @unittest.skipIf(sys.version >= "3", "long type not support")
     def test_kafka_direct_stream_message_handler(self):
@@ -944,24 +943,12 @@ class KafkaStreamTests(PySparkStreamingTestCase):
         self._kafkaTestUtils.createTopic(topic)
         self._kafkaTestUtils.sendMessages(topic, sendData)
 
-        def getOffsetAndMessage(m):
-            return m and (m.offset, m.message)
+        def getKeyAndDoubleMessage(m):
+            return m and (m.key, m.message * 2)
 
         stream = KafkaUtils.createDirectStream(self.ssc, [topic], kafkaParams,
-                                               messageHandler=getOffsetAndMessage)
-
-        offsetAndMessages = []
-
-        def collectData(_, rdd):
-            for o in rdd.collect():
-                offsetAndMessages.append(o)
-
-        stream.foreachRDD(collectData)
-        self.ssc.start()
-        self.wait_for(offsetAndMessages, 6)
-
-        self.assertEqual(offsetAndMessages,
-                         [(0, "a"), (1, "b"), (2, "b"), (3, "c"), (4, "c"), (5, "c")])
+                                               messageHandler=getKeyAndDoubleMessage)
+        self._validateStreamResult({"aa": 1, "bb": 2, "cc": 3}, stream)
 
 
 class FlumeStreamTests(PySparkStreamingTestCase):
