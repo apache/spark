@@ -19,12 +19,14 @@ from py4j.protocol import Py4JJavaError
 
 from pyspark.rdd import RDD
 from pyspark.storagelevel import StorageLevel
-from pyspark.serializers import PairDeserializer, NoOpSerializer
+from pyspark.serializers import AutoBatchedSerializer, PickleSerializer, PairDeserializer, \
+    NoOpSerializer
 from pyspark.streaming import DStream
 from pyspark.streaming.dstream import TransformedDStream
 from pyspark.streaming.util import TransformFunction
 
-__all__ = ['Broker', 'KafkaUtils', 'OffsetRange', 'TopicAndPartition', 'utf8_decoder']
+__all__ = ['Broker', 'default_message_handler', 'KafkaMessageAndMetadata', 'KafkaUtils',
+           'OffsetRange', 'TopicAndPartition', 'utf8_decoder']
 
 
 def utf8_decoder(s):
@@ -32,6 +34,16 @@ def utf8_decoder(s):
     if s is None:
         return None
     return s.decode('utf-8')
+
+
+def default_message_handler(s):
+    """
+    Function for translating each message and metadata into the desired type
+
+    :param s: A KafkaMessageAndMetadata object includes message and metadata
+    :return: Object of any desired type
+    """
+    return s and (s.key, s.message)
 
 
 class KafkaUtils(object):
@@ -82,7 +94,8 @@ class KafkaUtils(object):
 
     @staticmethod
     def createDirectStream(ssc, topics, kafkaParams, fromOffsets=None,
-                           keyDecoder=utf8_decoder, valueDecoder=utf8_decoder):
+                           keyDecoder=utf8_decoder, valueDecoder=utf8_decoder,
+                           messageHandler=default_message_handler):
         """
         .. note:: Experimental
 
@@ -129,14 +142,19 @@ class KafkaUtils(object):
                 KafkaUtils._printErrorMsg(ssc.sparkContext)
             raise e
 
-        ser = PairDeserializer(NoOpSerializer(), NoOpSerializer())
-        stream = DStream(jstream, ssc, ser) \
-            .map(lambda k_v: (keyDecoder(k_v[0]), valueDecoder(k_v[1])))
+        def func(m):
+            m.set_key_decoder(keyDecoder)
+            m.set_value_decoder(valueDecoder)
+            return messageHandler(m)
+
+        ser = AutoBatchedSerializer(PickleSerializer())
+        stream = DStream(jstream, ssc, ser).map(func)
         return KafkaDStream(stream._jdstream, ssc, stream._jrdd_deserializer)
 
     @staticmethod
     def createRDD(sc, kafkaParams, offsetRanges, leaders=None,
-                  keyDecoder=utf8_decoder, valueDecoder=utf8_decoder):
+                  keyDecoder=utf8_decoder, valueDecoder=utf8_decoder,
+                  messageHandler=default_message_handler):
         """
         .. note:: Experimental
 
@@ -171,9 +189,13 @@ class KafkaUtils(object):
                 KafkaUtils._printErrorMsg(sc)
             raise e
 
-        ser = PairDeserializer(NoOpSerializer(), NoOpSerializer())
-        rdd = RDD(jrdd, sc, ser).map(lambda k_v: (keyDecoder(k_v[0]), valueDecoder(k_v[1])))
-        return KafkaRDD(rdd._jrdd, rdd.ctx, rdd._jrdd_deserializer)
+        def func(m):
+            m.set_key_decoder(keyDecoder)
+            m.set_value_decoder(valueDecoder)
+            return messageHandler(m)
+
+        rdd = RDD(jrdd, sc).map(func)
+        return KafkaRDD(rdd._jrdd, sc, rdd._jrdd_deserializer)
 
     @staticmethod
     def _printErrorMsg(sc):
@@ -365,3 +387,43 @@ class KafkaTransformedDStream(TransformedDStream):
         dstream = self._sc._jvm.PythonTransformedDStream(self.prev._jdstream.dstream(), jfunc)
         self._jdstream_val = dstream.asJavaDStream()
         return self._jdstream_val
+
+
+class KafkaMessageAndMetadata(object):
+    """
+    Kafka message and metadata information. Including topic, partition, offset and message
+    """
+
+    def __init__(self, topic, partition, offset, key, message):
+        self.topic = topic
+        self.partition = partition
+        self.offset = offset
+        self._rawkey = key
+        self._rawMessage = message
+        self._keyDecoder = utf8_decoder
+        self._valueDecoder = utf8_decoder
+
+    def __str__(self):
+        return "KafkaMessageAndMetadata(topic: %s, partition: %d, offset: %d, key and message...)" \
+               % (self.topic, self.partition, self.offset)
+
+    def __repr__(self):
+        return self.__str__()
+
+    def __reduce__(self):
+        return (KafkaMessageAndMetadata,
+                (self.topic, self.partition, self.offset, self._rawkey, self._rawMessage))
+
+    def set_key_decoder(self, decoder):
+        self._keyDecoder = decoder
+
+    def set_value_decoder(self, decoder):
+        self._valueDecoder = decoder
+
+    @property
+    def key(self):
+        return self._keyDecoder(self._rawkey)
+
+    @property
+    def message(self):
+        return self._valueDecoder(self._rawMessage)

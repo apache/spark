@@ -915,6 +915,54 @@ class KafkaStreamTests(PySparkStreamingTestCase):
         self.assertNotEqual(topic_and_partition_a, topic_and_partition_c)
         self.assertNotEqual(topic_and_partition_a, topic_and_partition_d)
 
+    @unittest.skipIf(sys.version >= "3", "long type not support")
+    def test_kafka_rdd_message_handler(self):
+        """Test Python direct Kafka RDD MessageHandler."""
+        topic = self._randomTopic()
+        sendData = {"a": 1, "b": 1, "c": 2}
+        offsetRanges = [OffsetRange(topic, 0, long(0), long(sum(sendData.values())))]
+        kafkaParams = {"metadata.broker.list": self._kafkaTestUtils.brokerAddress()}
+
+        def getOffsetAndMessage(m):
+            return m and (m.offset, m.message)
+
+        self._kafkaTestUtils.createTopic(topic)
+        self._kafkaTestUtils.sendMessages(topic, sendData)
+        rdd = KafkaUtils.createRDD(self.sc, kafkaParams, offsetRanges,
+                                   messageHandler=getOffsetAndMessage)
+        self.assertEqual(rdd.collect(),
+                         [(0, "a"), (1, "b"), (2, "c"), (3, "c")])
+
+    @unittest.skipIf(sys.version >= "3", "long type not support")
+    def test_kafka_direct_stream_message_handler(self):
+        """Test the Python direct Kafka stream MessageHandler."""
+        topic = self._randomTopic()
+        sendData = {"a": 1, "b": 2, "c": 3}
+        kafkaParams = {"metadata.broker.list": self._kafkaTestUtils.brokerAddress(),
+                       "auto.offset.reset": "smallest"}
+
+        self._kafkaTestUtils.createTopic(topic)
+        self._kafkaTestUtils.sendMessages(topic, sendData)
+
+        def getOffsetAndMessage(m):
+            return m and (m.offset, m.message)
+
+        stream = KafkaUtils.createDirectStream(self.ssc, [topic], kafkaParams,
+                                               messageHandler=getOffsetAndMessage)
+
+        offsetAndMessages = []
+
+        def collectData(_, rdd):
+            for o in rdd.collect():
+                offsetAndMessages.append(o)
+
+        stream.foreachRDD(collectData)
+        self.ssc.start()
+        self.wait_for(offsetAndMessages, 6)
+
+        self.assertEqual(offsetAndMessages,
+                         [(0, "a"), (1, "b"), (2, "b"), (3, "c"), (4, "c"), (5, "c")])
+
 
 class FlumeStreamTests(PySparkStreamingTestCase):
     timeout = 20  # seconds
