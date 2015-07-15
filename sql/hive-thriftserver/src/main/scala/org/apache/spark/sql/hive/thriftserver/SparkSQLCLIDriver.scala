@@ -22,7 +22,8 @@ import scala.collection.JavaConversions._
 import java.io._
 import java.util.{ArrayList => JArrayList}
 
-import jline.{ConsoleReader, History}
+import jline.console.ConsoleReader
+import jline.console.history.FileHistory
 
 import org.apache.commons.lang3.StringUtils
 import org.apache.commons.logging.LogFactory
@@ -171,14 +172,14 @@ private[hive] object SparkSQLCLIDriver extends Logging {
     val reader = new ConsoleReader()
     reader.setBellEnabled(false)
     // reader.setDebug(new PrintWriter(new FileWriter("writer.debug", true)))
-    CliDriver.getCommandCompletor.foreach((e) => reader.addCompletor(e))
+    CliDriver.getCommandCompleter.foreach((e) => reader.addCompleter(e))
 
     val historyDirectory = System.getProperty("user.home")
 
     try {
       if (new File(historyDirectory).exists()) {
         val historyFile = historyDirectory + File.separator + ".hivehistory"
-        reader.setHistory(new History(new File(historyFile)))
+        reader.setHistory(new FileHistory(new File(historyFile)))
       } else {
         logWarning("WARNING: Directory for Hive history file: " + historyDirectory +
                            " does not exist.   History will not be available during this session.")

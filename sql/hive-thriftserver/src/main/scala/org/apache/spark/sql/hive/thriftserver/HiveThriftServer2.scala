@@ -243,7 +243,7 @@ private[hive] class HiveThriftServer2(hiveContext: HiveContext)
   with ReflectedCompositeService {
 
   override def init(hiveConf: HiveConf) {
-    val sparkSqlCliService = new SparkSQLCLIService(hiveContext)
+    val sparkSqlCliService = new SparkSQLCLIService(this, hiveContext)
     setSuperField(this, "cliService", sparkSqlCliService)
     addService(sparkSqlCliService)
 

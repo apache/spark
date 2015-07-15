@@ -141,7 +141,7 @@
     <!-- Version used in Maven Hive dependency -->
     <hive.version>1.2.1</hive.version>
     <!-- Version used for internal directory structure -->
-    <hive.version.short>0.13.1</hive.version.short>
+    <hive.version.short>1.2.1</hive.version.short>
     <derby.version>10.10.1.1</derby.version>
     <parquet.version>1.7.0</parquet.version>
     <jblas.version>1.2.4</jblas.version>
@@ -166,6 +166,7 @@
     <fasterxml.jackson.version>2.4.4</fasterxml.jackson.version>
     <snappy.version>1.1.1.7</snappy.version>
     <netlib.java.version>1.1.2</netlib.java.version>
+    <calcite.version>1.2.0-incubating</calcite.version>
     <!-- For maven shade plugin (see SPARK-8819) -->
     <create.dependency.reduced.pom>false</create.dependency.reduced.pom>
 
@@ -1052,6 +1053,7 @@
             <groupId>com.esotericsoftware.kryo</groupId>
             <artifactId>kryo</artifactId>
           </exclusion>
+          <!--
           <exclusion>
             <groupId>org.apache.avro</groupId>
             <artifactId>avro-mapred</artifactId>
@@ -1064,6 +1066,7 @@
             <groupId>org.apache.calcite</groupId>
             <artifactId>calcite-avatica</artifactId>
           </exclusion>
+            -->
           <!-- excluded to keep out transitive dependencies -->
           <exclusion>
             <groupId>org.apache.zookeeper</groupId>

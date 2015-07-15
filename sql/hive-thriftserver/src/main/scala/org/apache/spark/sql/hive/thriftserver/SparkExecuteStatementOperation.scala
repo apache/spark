@@ -146,7 +146,7 @@ private[hive] class SparkExecuteStatementOperation(
     } else {
       val parentSessionState = SessionState.get()
       val hiveConf = getConfigForOperation()
-      val sparkServiceUGI = ShimLoader.getHadoopShims.getUGIForConf(hiveConf)
+      val sparkServiceUGI = UserGroupInformation.getCurrentUser
       val sessionHive = getCurrentHive()
       val currentSqlSession = hiveContext.currentSession
 
@@ -174,7 +174,7 @@ private[hive] class SparkExecuteStatementOperation(
           }
 
           try {
-            ShimLoader.getHadoopShims().doAs(sparkServiceUGI, doAsAction)
+            sparkServiceUGI.doAs(doAsAction)
           } catch {
             case e: Exception =>
               setOperationException(new HiveSQLException(e))
@@ -201,7 +201,8 @@ private[hive] class SparkExecuteStatementOperation(
     }
   }
 
-  private def runInternal(): Unit = {
+
+  override def runInternal(): Unit = {
     statementId = UUID.randomUUID().toString
     logInfo(s"Running query '$statement' with $statementId")
     setState(OperationState.RUNNING)
