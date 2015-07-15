@@ -58,7 +58,6 @@ class CodeGenContext {
   val references: mutable.ArrayBuffer[Expression] = new mutable.ArrayBuffer[Expression]()
 
   val stringType: String = classOf[UTF8String].getName
-  val decimalType: String = classOf[Decimal].getName
 
   final val JAVA_BOOLEAN = "boolean"
   final val JAVA_BYTE = "byte"
@@ -125,9 +124,9 @@ class CodeGenContext {
     case LongType | TimestampType => JAVA_LONG
     case FloatType => JAVA_FLOAT
     case DoubleType => JAVA_DOUBLE
-    case dt: DecimalType => decimalType
+    case dt: DecimalType => "Decimal"
     case BinaryType => "byte[]"
-    case StringType => stringType
+    case StringType => "UTF8String"
     case _: StructType => "InternalRow"
     case _: ArrayType => s"scala.collection.Seq"
     case _: MapType => s"scala.collection.Map"

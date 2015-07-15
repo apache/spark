@@ -261,7 +261,7 @@ case class Bin(child: Expression)
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     defineCodeGen(ctx, ev, (c) =>
-      s"${ctx.stringType}.fromString(java.lang.Long.toBinaryString($c))")
+      s"UTF8String.fromString(java.lang.Long.toBinaryString($c))")
   }
 }
 

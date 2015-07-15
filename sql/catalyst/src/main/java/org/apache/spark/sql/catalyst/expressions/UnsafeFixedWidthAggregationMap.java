@@ -120,14 +120,14 @@ public final class UnsafeFixedWidthAggregationMap {
     this.keyPool = new UniqueObjectPool(100);
     this.currentKey = new UnsafeRow(keyPool);
     this.bufferPool = new ObjectPool(initialCapacity);
-    this.currentBuffer = new UnsafeRow(this.bufferPool);
+    this.currentBuffer = new UnsafeRow(bufferPool);
 
     InternalRow initRow = initProjection.apply(emptyRow);
     int emptyBufferSize = bufferConverter.getSizeRequirement(initRow);
     this.emptyBuffer = new byte[emptyBufferSize];
-    this.currentBuffer.pointTo(this.emptyBuffer, PlatformDependent.BYTE_ARRAY_OFFSET,
+    this.currentBuffer.pointTo(emptyBuffer, PlatformDependent.BYTE_ARRAY_OFFSET,
       initRow.size(), emptyBufferSize);
-    int writtenLength = bufferConverter.writeRow(initRow, this.currentBuffer);
+    int writtenLength = bufferConverter.writeRow(initRow, currentBuffer);
     assert (writtenLength == emptyBuffer.length): "Size requirement calculation was wrong!";
     // re-use the empty buffer only when there is no object saved in pool.
     reuseEmptyBuffer = bufferPool.size() == 0;
@@ -159,8 +159,8 @@ public final class UnsafeFixedWidthAggregationMap {
       if (!reuseEmptyBuffer) {
         // There is some objects referenced by emptyBuffer, so generate a new one
         InternalRow initRow = initProjection.apply(emptyRow);
-        currentBuffer.pointTo(emptyBuffer, PlatformDependent.BYTE_ARRAY_OFFSET,
-          initRow.size(), emptyBuffer.length);
+        currentBuffer.pointTo(emptyBuffer, PlatformDependent.BYTE_ARRAY_OFFSET, initRow.size(),
+          emptyBuffer.length);
         bufferConverter.writeRow(initRow, currentBuffer);
       }
       loc.putNewKey(
