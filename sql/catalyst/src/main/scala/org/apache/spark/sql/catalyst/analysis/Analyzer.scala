@@ -209,9 +209,9 @@ class Analyzer(
         // find all of the non-attribute expressions in the GROUP BY keys
         val nonAttributeGroupByExpressions = new ArrayBuffer[Alias]()
 
-        // The pair of (the non-attributes expression, associated attribute (alias))
+        // The pair of (the original GROUP BY key, associated attribute)
         val groupByExprPairs = x.groupByExprs.map(_ match {
-          case e: NamedExpression => (e, e)
+          case e: NamedExpression => (e, e.toAttribute)
           case other => {
             val alias = Alias(other, other.toString)()
             nonAttributeGroupByExpressions += alias // add the non-attributes expression alias
