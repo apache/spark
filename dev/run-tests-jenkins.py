@@ -49,14 +49,14 @@ def post_message_to_github(msg, ghprb_pull_id):
                               data=posted_message)
     try:
         response = urllib2.urlopen(request)
-    except urllib2.URLError as url_e:
-        print_err("Failed to post message to GitHub.")
-        print_err(" > urllib2_status: %s" % url_e.reason[1])
-        print_err(" > data: %s" % posted_message)
     except urllib2.HTTPError as http_e:
         print_err("Failed to post message to GitHub.")
         print_err(" > http_code: %s" % http_e.code)
         print_err(" > api_response: %s" % http_e.read())
+        print_err(" > data: %s" % posted_message)
+    except urllib2.URLError as url_e:
+        print_err("Failed to post message to GitHub.")
+        print_err(" > urllib2_status: %s" % url_e.reason[1])
         print_err(" > data: %s" % posted_message)
 
     if response.getcode() == 201:
@@ -69,7 +69,7 @@ def send_archived_logs():
     # find any files rescursively with the name 'unit-tests.log'
     log_files = [os.path.join(path, f)
                  for path, _, filenames in os.walk(SPARK_HOME)
-                 for f in filesnames if f == 'unit-tests.log']
+                 for f in filenames if f == 'unit-tests.log']
     # ensure we have a default list if no 'unit-tests.log' files were found
     log_files = log_files if log_files else list()
 
@@ -91,7 +91,7 @@ def send_archived_logs():
                                      'amp-jenkins-master:' + jenkins_build_dir + '/' + log_archive],
                                     stdout=subprocess.PIPE,
                                     stderr=subprocess.PIPE)
-        scp_stdout, scp_stderr = scp_proc.communicate()
+        scp_stdout, _ = scp_proc.communicate()
         scp_returncode = scp_proc.returncode
 
         if not scp_returncode == 0:
@@ -104,6 +104,24 @@ def send_archived_logs():
         print_err(" > No log files found.")
 
         rm_r(log_archive)
+
+
+def pr_message(build_display_name,
+               build_url,
+               ghprb_pull_id,
+               short_commit_hash,
+               commit_url,
+               msg,
+               post_msg=''):
+    # align the arguments properly for string formatting
+    str_args = (build_display_name,
+                msg,
+                build_url,
+                ghprb_pull_id,
+                short_commit_hash,
+                commit_url,
+                str(' ' + post_msg + '.') if post_msg else '.')
+    return '**[Test build %s %s](%sconsole)** for PR %s at commit [\`%s\`](%s)%s' % str_args
 
 
 def run_pr_checks(pr_tests, ghprb_actual_commit, sha1):
@@ -125,24 +143,6 @@ def run_pr_checks(pr_tests, ghprb_actual_commit, sha1):
     return pr_results
 
 
-def pr_message(build_display_name,
-               build_url,
-               ghprb_pull_id,
-               short_commit_hash,
-               commit_url,
-               msg,
-               post_msg=''):
-    # align the arguments properly for string formatting
-    str_args = (build_display_name,
-                msg,
-                build_url,
-                ghprb_pull_id,
-                short_commit_hash,
-                commit_url,
-                str(' ' + post_msg + '.') if post_msg else '.')
-    return '**[Test build %s %s](%sconsole)** for PR %s at commit [\`%s\`](%s)%s' % str_args
-
-
 def run_tests(tests_timeout):
     """
     Runs the `dev/run-tests` script and responds with the correct error message
@@ -155,28 +155,25 @@ def run_tests(tests_timeout):
                                   os.path.join(SPARK_HOME, 'dev', 'run-tests')]).wait()
     test_result_code = test_proc.returncode
 
-    def failure_result_note(msg):
-        ' * This patch **fails ' + msg + '**.'
-
     failure_note_by_errcode = {
-        ERROR_CODES["BLOCK_GENERAL"]: failure_result_note('some tests'),
-        ERROR_CODES["BLOCK_RAT"]: failure_result_note('RAT tests'),
-        ERROR_CODES["BLOCK_SCALA_STYLE"]: failure_result_note('Scala style tests'),
-        ERROR_CODES["BLOCK_PYTHON_STYLE"]: failure_result_note('Python style tests'),
-        ERROR_CODES["BLOCK_DOCUMENTATION"]: failure_result_note('to generate documentation'),
-        ERROR_CODES["BLOCK_BUILD"]: failure_result_note('to build'),
-        ERROR_CODES["BLOCK_MIMA"]: failure_result_note('MiMa tests'),
-        ERROR_CODES["BLOCK_SPARK_UNIT_TESTS"]: failure_result_note('Spark unit tests'),
-        ERROR_CODES["BLOCK_PYSPARK_UNIT_TESTS"]: failure_result_note('PySpark unit tests'),
-        ERROR_CODES["BLOCK_SPARKR_UNIT_TESTS"]: failure_result_note('SparkR unit tests'),
-        ERROR_CODES["BLOCK_TIMEOUT"]: failure_result_note('from timeout after a configured wait' +
-                                                          ' of \`' + tests_timeout + '\`')
+        ERROR_CODES["BLOCK_GENERAL"]: 'some tests',
+        ERROR_CODES["BLOCK_RAT"]: 'RAT tests',
+        ERROR_CODES["BLOCK_SCALA_STYLE"]: 'Scala style tests',
+        ERROR_CODES["BLOCK_PYTHON_STYLE"]: 'Python style tests',
+        ERROR_CODES["BLOCK_DOCUMENTATION"]: 'to generate documentation',
+        ERROR_CODES["BLOCK_BUILD"]: 'to build',
+        ERROR_CODES["BLOCK_MIMA"]: 'MiMa tests',
+        ERROR_CODES["BLOCK_SPARK_UNIT_TESTS"]: 'Spark unit tests',
+        ERROR_CODES["BLOCK_PYSPARK_UNIT_TESTS"]: 'PySpark unit tests',
+        ERROR_CODES["BLOCK_SPARKR_UNIT_TESTS"]: 'SparkR unit tests',
+        ERROR_CODES["BLOCK_TIMEOUT"]: 'from timeout after a configured wait of \`%s\`' % (
+            tests_timeout)
     }
 
-    if test_result == 0:
+    if test_result_code == 0:
         test_result_note = ' * This patch passes all tests.'
     else:
-        test_result_note = failure_note_by_errcode[test_result]
+        test_result_note = ' * This patch **fails %s**.' % failure_note_by_errcode[test_result_code]
         send_archived_logs()
 
     return [test_result_code, test_result_note]
@@ -238,14 +235,14 @@ def main():
     # post start message
     post_message_to_github(github_message('has started'), ghprb_pull_id)
 
-    pr_test_results = run_pr_tests(pr_tests, ghprb_actual_commit, sha1)
+    pr_check_results = run_pr_checks(pr_tests, ghprb_actual_commit, sha1)
 
     test_result_code, test_result_note = run_tests(tests_timeout)
 
     # post end message
     result_message = github_message('has finished')
     result_message += '\n' + test_result_note
-    result_message += " ".join(pr_results)
+    result_message += " ".join(pr_check_results)
 
     post_message_to_github(result_message, ghprb_pull_id)
 
