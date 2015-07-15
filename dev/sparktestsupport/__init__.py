@@ -20,15 +20,15 @@ import os
 SPARK_HOME = os.path.abspath(os.path.join(os.path.dirname(os.path.realpath(__file__)), "../../"))
 USER_HOME = os.environ.get("HOME")
 ERROR_CODES = {
-    "BLOCK_GENERAL" : 10,
-    "BLOCK_RAT" : 11,
-    "BLOCK_SCALA_STYLE" : 12,
-    "BLOCK_PYTHON_STYLE" : 13,
-    "BLOCK_DOCUMENTATION" : 14,
-    "BLOCK_BUILD" : 15,
-    "BLOCK_MIMA" : 16,
-    "BLOCK_SPARK_UNIT_TESTS" : 17,
-    "BLOCK_PYSPARK_UNIT_TESTS" : 18,
-    "BLOCK_SPARKR_UNIT_TESTS" : 19,
-    "BLOCK_TIMEOUT" : 124 
+    "BLOCK_GENERAL": 10,
+    "BLOCK_RAT": 11,
+    "BLOCK_SCALA_STYLE": 12,
+    "BLOCK_PYTHON_STYLE": 13,
+    "BLOCK_DOCUMENTATION": 14,
+    "BLOCK_BUILD": 15,
+    "BLOCK_MIMA": 16,
+    "BLOCK_SPARK_UNIT_TESTS": 17,
+    "BLOCK_PYSPARK_UNIT_TESTS": 18,
+    "BLOCK_SPARKR_UNIT_TESTS": 19,
+    "BLOCK_TIMEOUT": 124 
 }

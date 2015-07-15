@@ -39,12 +39,13 @@ def print_err(msg):
 def post_message_to_github(msg, ghprb_pull_id):
     print("Attempting to post to Github...")
 
+    url = "https://api.github.com/repos/apache/spark/issues/" + ghprb_pull_id + "/comments"
+    github_oauth_key = os.environ["GITHUB_OAUTH_KEY"]
+
     posted_message = json.dumps({"body": msg})
-    request = urllib2.Request("https://api.github.com/repos/apache/spark/issues/" +
-                              ghprb_pull_id + "/comments",
+    request = urllib2.Request(url,
                               headers={
-                                  "Authorization": "x-oauth-basic: %s" % (
-                                      os.environ['GITHUB_OAUTH_KEY']),
+                                  "Authorization": "x-oauth-basic: %s" % (github_oauth_key),
                                   "Content-Type": "application/json"
                               },
                               data=posted_message)
