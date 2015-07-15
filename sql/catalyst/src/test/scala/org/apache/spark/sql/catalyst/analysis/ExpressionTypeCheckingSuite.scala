@@ -60,9 +60,9 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite {
   }
 
   test("check types for unary arithmetic") {
-    assertError(UnaryMinus('stringField), "operator - accepts numeric type")
-    assertError(Abs('stringField), "function abs accepts numeric type")
-    assertError(BitwiseNot('stringField), "operator ~ accepts integral type")
+    assertError(UnaryMinus('stringField), "expected to be of type numeric")
+    assertError(Abs('stringField), "expected to be of type numeric")
+    assertError(BitwiseNot('stringField), "type (boolean or tinyint or smallint or int or bigint)")
   }
 
   ignore("check types for binary arithmetic") {
