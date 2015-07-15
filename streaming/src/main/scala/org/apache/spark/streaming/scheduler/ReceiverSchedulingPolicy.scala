@@ -59,8 +59,8 @@ private[streaming] trait ReceiverSchedulingPolicy {
  *         If a receiver is scheduled to an executor but has not yet run, it contributes
  *         `1.0 / #candidate_executors_of_this_receiver` to the executor's weight.</li>
  *     </ul>
- *     At last, we will randomly select one of the executors that have the least weight and add it
- *     to the candidate list.
+ *     At last, if there are more than 3 idle executors (weight = 0), returns all idle executors.
+ *     Otherwise, we only return 3 best options according to the weights.
  *   </li>
  * </ol>
  *
@@ -96,12 +96,14 @@ private[streaming] class LoadBalanceReceiverSchedulingPolicyImpl extends Receive
     }.groupBy(_._1).mapValues(_.map(_._2).sum) // Sum weights for each executor
 
     val idleExecutors = (executors.toSet -- executorWeights.keys).toSeq
-    if (idleExecutors.nonEmpty) {
-      // If there are idle executors, randomly select one
-      locations += idleExecutors(Random.nextInt(idleExecutors.size))
+    if (idleExecutors.size >= 3) {
+      // If there are more than 3 idle executors, return all of them
+      locations ++= idleExecutors
     } else {
-      // Use the executor that runs the least receivers
-      locations += executorWeights.minBy(_._2)._1
+      // If there are less than 3 idle executors, return 3 best options
+      locations ++= idleExecutors
+      val sortedExecutors = executorWeights.toSeq.sortBy(_._2).map(_._1)
+      locations ++= (idleExecutors ++ sortedExecutors).take(3)
     }
     locations.toSeq
   }
