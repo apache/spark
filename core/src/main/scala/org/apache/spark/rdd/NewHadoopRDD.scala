@@ -141,6 +141,9 @@ class NewHadoopRDD[K, V](
       override def hasNext: Boolean = {
         if (!finished && !havePair) {
           finished = !reader.nextKeyValue
+          if (finished) {
+            reader.close()
+          }
           havePair = !finished
         }
         !finished
@@ -159,7 +162,9 @@ class NewHadoopRDD[K, V](
 
       private def close() {
         try {
-          reader.close()
+          if (!finished) {
+            reader.close()
+          }
           if (bytesReadCallback.isDefined) {
             inputMetrics.updateBytesRead()
           } else if (split.serializableHadoopSplit.value.isInstanceOf[FileSplit] ||
