@@ -21,6 +21,7 @@ import java.io.InputStream
 import java.util.concurrent.LinkedBlockingQueue
 
 import scala.collection.mutable.{ArrayBuffer, HashSet, Queue}
+import scala.util.control.NonFatal
 
 import org.apache.spark.{Logging, SparkException, TaskContext}
 import org.apache.spark.network.buffer.ManagedBuffer
@@ -308,8 +309,8 @@ final class ShuffleBlockFetcherIterator(
         try {
           (result.blockId, new BufferReleasingInputStream(buf.createInputStream(), this))
         } catch {
-          case e: Exception =>
-            throwFetchFailedException(blockId, address, e)
+          case NonFatal(t) =>
+            throwFetchFailedException(blockId, address, t)
         }
     }
   }
@@ -389,7 +390,10 @@ object ShuffleBlockFetcherIterator {
    * @param buf [[ManagedBuffer]] for the content.
    */
   private[storage] case class SuccessFetchResult(
-      blockId: BlockId, address: BlockManagerId, size: Long, buf: ManagedBuffer)
+      blockId: BlockId,
+      address: BlockManagerId,
+      size: Long,
+      buf: ManagedBuffer)
     extends FetchResult {
     require(buf != null)
     require(size >= 0)
@@ -402,5 +406,8 @@ object ShuffleBlockFetcherIterator {
    * @param e the failure exception
    */
   private[storage] case class FailureFetchResult(
-      blockId: BlockId, address: BlockManagerId, e: Throwable) extends FetchResult
+      blockId: BlockId,
+      address: BlockManagerId,
+      e: Throwable)
+    extends FetchResult
 }
