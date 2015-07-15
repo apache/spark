@@ -1372,6 +1372,23 @@ object functions {
   def pow(l: Double, rightName: String): Column = pow(l, Column(rightName))
 
   /**
+   * Returns the positive value of dividend mod divisor.
+   *
+   * @group math_funcs
+   * @since 1.5.0
+   */
+  def pmod(dividend: Column, divisor: Column): Column = Pmod(dividend.expr, divisor.expr)
+
+  /**
+   * Returns the positive value of dividend mod divisor.
+   *
+   * @group math_funcs
+   * @since 1.5.0
+   */
+  def pmod(dividendColName: String, divisorColName: String): Column =
+    pmod(Column(dividendColName), Column(divisorColName))
+
+  /**
    * Returns the double value that is closest in value to the argument and
    * is equal to a mathematical integer.
    *
@@ -1388,6 +1405,38 @@ object functions {
    * @since 1.4.0
    */
   def rint(columnName: String): Column = rint(Column(columnName))
+
+  /**
+   * Returns the value of the column `e` rounded to 0 decimal places.
+   *
+   * @group math_funcs
+   * @since 1.5.0
+   */
+  def round(e: Column): Column = round(e.expr, 0)
+
+  /**
+   * Returns the value of the given column rounded to 0 decimal places.
+   *
+   * @group math_funcs
+   * @since 1.5.0
+   */
+  def round(columnName: String): Column = round(Column(columnName), 0)
+
+  /**
+   * Returns the value of `e` rounded to `scale` decimal places.
+   *
+   * @group math_funcs
+   * @since 1.5.0
+   */
+  def round(e: Column, scale: Int): Column = Round(e.expr, Literal(scale))
+
+  /**
+   * Returns the value of the given column rounded to `scale` decimal places.
+   *
+   * @group math_funcs
+   * @since 1.5.0
+   */
+  def round(columnName: String, scale: Int): Column = round(Column(columnName), scale)
 
   /**
    * Shift the the given value numBits left. If the given value is a long value, this function

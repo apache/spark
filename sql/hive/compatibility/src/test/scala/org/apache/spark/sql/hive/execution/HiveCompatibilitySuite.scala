@@ -221,9 +221,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "udf_when",
     "udf_case",
 
-    // Needs constant object inspectors
-    "udf_round",
-
     // the table src(key INT, value STRING) is not the same as HIVE unittest. In Hive
     // is src(key STRING, value STRING), and in the reflect.q, it failed in
     // Integer.valueOf, which expect the first argument passed as STRING type not INT.
@@ -918,8 +915,8 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "udf_regexp_replace",
     "udf_repeat",
     "udf_rlike",
-    "udf_round",
-    //  "udf_round_3",  TODO: FIX THIS failed due to cast exception
+    // "udf_round",  turn this on after we figure out null vs nan vs infinity
+    "udf_round_3",
     "udf_rpad",
     "udf_rtrim",
     "udf_second",

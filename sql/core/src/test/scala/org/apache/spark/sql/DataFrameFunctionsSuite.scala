@@ -403,4 +403,41 @@ class DataFrameFunctionsSuite extends QueryTest {
       Seq(Row(2), Row(2), Row(2), Row(2), Row(3), Row(3))
     )
   }
+
+  test("pmod") {
+    val intData = Seq((7, 3), (-7, 3)).toDF("a", "b")
+    checkAnswer(
+      intData.select(pmod('a, 'b)),
+      Seq(Row(1), Row(2))
+    )
+    checkAnswer(
+      intData.select(pmod('a, lit(3))),
+      Seq(Row(1), Row(2))
+    )
+    checkAnswer(
+      intData.select(pmod(lit(-7), 'b)),
+      Seq(Row(2), Row(2))
+    )
+    checkAnswer(
+      intData.selectExpr("pmod(a, b)"),
+      Seq(Row(1), Row(2))
+    )
+    checkAnswer(
+      intData.selectExpr("pmod(a, 3)"),
+      Seq(Row(1), Row(2))
+    )
+    checkAnswer(
+      intData.selectExpr("pmod(-7, b)"),
+      Seq(Row(2), Row(2))
+    )
+    val doubleData = Seq((7.2, 4.1)).toDF("a", "b")
+    checkAnswer(
+      doubleData.select(pmod('a, 'b)),
+      Seq(Row(3.1000000000000005))  // same as hive
+    )
+    checkAnswer(
+      doubleData.select(pmod(lit(2), lit(Int.MaxValue))),
+      Seq(Row(2))
+    )
+  }
 }

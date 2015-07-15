@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import scala.language.existentials
 import scala.reflect.ClassTag
 import scala.util.{Failure, Success, Try}
 
@@ -114,8 +115,10 @@ object FunctionRegistry {
     expression[Log2]("log2"),
     expression[Pow]("pow"),
     expression[Pow]("power"),
+    expression[Pmod]("pmod"),
     expression[UnaryPositive]("positive"),
     expression[Rint]("rint"),
+    expression[Round]("round"),
     expression[ShiftLeft]("shiftleft"),
     expression[ShiftRight]("shiftright"),
     expression[ShiftRightUnsigned]("shiftrightunsigned"),
