@@ -185,7 +185,7 @@ class BisectingKMeans private (
   }
 
   /**
-   * Summarizes data by each cluster as ClusterTree classes
+   * Calculates criterions for building cluster tree
    */
   private[clustering]
   def calcCriterions(
@@ -193,11 +193,14 @@ class BisectingKMeans private (
       stats: Map[BigInt, ClusterNodeStat]): Map[BigInt, ClusterNode] = {
 
     // TODO: support other criteria, such as entropy
-    calcAvgConsts(data, stats)
+    calcAvgCosts(data, stats)
   }
 
+  /**
+   * Calculates the average costs of each cluster
+   */
   private[clustering]
-  def calcAvgConsts(
+  def calcAvgCosts(
       data: RDD[(BigInt, BV[Double])],
       stats: Map[BigInt, ClusterNodeStat]): Map[BigInt, ClusterNode] = {
 
