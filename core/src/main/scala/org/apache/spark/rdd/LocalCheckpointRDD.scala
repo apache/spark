@@ -23,18 +23,21 @@ import org.apache.spark.{Partition, SparkContext, SparkEnv, SparkException, Task
 import org.apache.spark.storage.RDDBlockId
 
 /**
- * An RDD that reads from checkpoint files previously written into Spark's caching layer.
+ * A dummy CheckpointRDD that exists to provide informative error messages during failures.
  *
- * Since local checkpointing is not intended for recovery across applications, it is possible
- * to always know a priori the exact partitions to compute. There are no guarantees, however,
- * that the checkpoint files backing these partitions still exist when we try to read them
- * later. This is because the lifecycle of local checkpoint files is tied to that of executors,
- * whose failures are conducive to irrecoverable calamity.
+ * This is simply a placeholder because the original checkpointed RDD is expected to be
+ * fully cached. Only if an executor fails or if the user explicitly unpersists the original
+ * RDD will Spark ever attempt to compute this CheckpointRDD. When this happens, however,
+ * we must provide an informative error message.
+ *
+ * @param sc the active SparkContext
+ * @param rddId the ID of the checkpointed RDD
+ * @param partitionIndices the partitionIndices of the checkpointed RDD
  */
 private[spark] class LocalCheckpointRDD[T: ClassTag](
     @transient sc: SparkContext,
     rddId: Int,
-    originalPartitionIndices: Array[Int])
+    partitionIndices: Array[Int])
   extends CheckpointRDD[T](sc) {
 
   def this(rdd: RDD[T]) {
@@ -45,34 +48,19 @@ private[spark] class LocalCheckpointRDD[T: ClassTag](
    * Return partitions that describe how to recover the checkpointed data.
    */
   protected override def getPartitions: Array[Partition] = {
-    originalPartitionIndices.map { i => new CheckpointRDDPartition(i) }
+    partitionIndices.map { i => new CheckpointRDDPartition(i) }
   }
 
   /**
-   * Return the location of the checkpoint block associated with the given partition.
-   */
-  protected override def getPreferredLocations(partition: Partition): Seq[String] = {
-    val blockId = RDDBlockId(rddId, partition.index)
-    SparkEnv.get.blockManager.master.getLocations(blockId).map(_.host)
-  }
-
-  /**
-   * Read the content of the checkpoint block associated with this partition.
-   *
-   * Note that the block may not exist if the executor that wrote it is no longer alive.
-   * This is an irrecoverable failure and we should convey this to the user. In normal
-   * cases, however, this block should already be local in this executor's disk store.
+   * Throw an exception indicating that the relevant block is not found.
    */
   override def compute(partition: Partition, context: TaskContext): Iterator[T] = {
     val blockId = RDDBlockId(rddId, partition.index)
-    SparkEnv.get.blockManager.get(blockId) match {
-      case Some(result) => result.data.asInstanceOf[Iterator[T]]
-      case None => throw new SparkException(
-        s"Checkpoint block $blockId not found! Either the executor that originally " +
-        "checkpointed this block is no longer alive, or the original RDD is unpersisted. " +
-        "If this problem persists, you may consider using `rdd.checkpoint()` instead, " +
-        "which is slower than local checkpointing but more fault-tolerant.")
-    }
+    throw new SparkException(
+      s"Checkpoint block $blockId not found! Either the executor that originally " +
+      "checkpointed this block is no longer alive, or the original RDD is unpersisted. " +
+      "If this problem persists, you may consider using `rdd.checkpoint()` instead, " +
+      "which is slower than local checkpointing but more fault-tolerant.")
   }
 
 }
