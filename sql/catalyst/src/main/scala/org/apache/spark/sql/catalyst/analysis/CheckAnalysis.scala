@@ -51,11 +51,11 @@ trait CheckAnalysis {
 
       case operator: LogicalPlan =>
         operator transformExpressionsUp {
-          case e: Expression if !e.resolved =>
+          case a: Attribute if !a.resolved =>
             val from = operator.inputSet.map(_.name).mkString(", ")
-            e.failAnalysis(s"cannot resolve '${e.prettyString}' given input columns $from")
+            a.failAnalysis(s"cannot resolve '${a.prettyString}' given input columns $from")
 
-          case e: Expression if e.checkInputDataTypes().isFailure =>
+          case e: Expression if e.childrenResolved && e.checkInputDataTypes().isFailure =>
             e.checkInputDataTypes() match {
               case TypeCheckResult.TypeCheckFailure(message) =>
                 e.failAnalysis(
@@ -75,6 +75,9 @@ trait CheckAnalysis {
             // The window spec is not valid.
             val reason = windowSpec.validate.get
             failAnalysis(s"Window specification $windowSpec is not valid because $reason")
+
+          case e: Expression if !e.childrenResolved =>
+            e.failAnalysis(s"cannot resolve '${e.prettyString}'")
         }
 
         operator match {
