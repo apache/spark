@@ -24,6 +24,9 @@ import io.netty.buffer.ByteBuf;
 
 import org.apache.spark.network.protocol.Encoders;
 
+// Needed by ScalaDoc. See SPARK-7726
+import static org.apache.spark.network.shuffle.protocol.BlockTransferMessage.Type;
+
 
 /** Request to upload a block with a certain StorageLevel. Returns nothing (empty byte array). */
 public class UploadBlock extends BlockTransferMessage {

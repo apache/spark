@@ -31,3 +31,39 @@ abstract class ParserDialect {
   // this is the main function that will be implemented by sql parser.
   def parse(sqlText: String): LogicalPlan
 }
+
+/**
+ * Currently we support the default dialect named "sql", associated with the class
+ * [[DefaultParserDialect]]
+ *
+ * And we can also provide custom SQL Dialect, for example in Spark SQL CLI:
+ * {{{
+ *-- switch to "hiveql" dialect
+ *   spark-sql>SET spark.sql.dialect=hiveql;
+ *   spark-sql>SELECT * FROM src LIMIT 1;
+ *
+ *-- switch to "sql" dialect
+ *   spark-sql>SET spark.sql.dialect=sql;
+ *   spark-sql>SELECT * FROM src LIMIT 1;
+ *
+ *-- register the new SQL dialect
+ *   spark-sql> SET spark.sql.dialect=com.xxx.xxx.SQL99Dialect;
+ *   spark-sql> SELECT * FROM src LIMIT 1;
+ *
+ *-- register the non-exist SQL dialect
+ *   spark-sql> SET spark.sql.dialect=NotExistedClass;
+ *   spark-sql> SELECT * FROM src LIMIT 1;
+ *
+ *-- Exception will be thrown and switch to dialect
+ *-- "sql" (for SQLContext) or
+ *-- "hiveql" (for HiveContext)
+ * }}}
+ */
+private[spark] class DefaultParserDialect extends ParserDialect {
+  @transient
+  protected val sqlParser = new SqlParser
+
+  override def parse(sqlText: String): LogicalPlan = {
+    sqlParser.parse(sqlText)
+  }
+}

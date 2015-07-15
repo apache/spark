@@ -58,13 +58,12 @@ package object jdbc {
      * are used.
      */
     def savePartition(
-        url: String,
+        getConnection: () => Connection,
         table: String,
         iterator: Iterator[Row],
         rddSchema: StructType,
-        nullTypes: Array[Int],
-        properties: Properties): Iterator[Byte] = {
-      val conn = DriverManager.getConnection(url, properties)
+        nullTypes: Array[Int]): Iterator[Byte] = {
+      val conn = getConnection()
       var committed = false
       try {
         conn.setAutoCommit(false) // Everything in the same db transaction.
@@ -129,25 +128,26 @@ package object jdbc {
      */
     def schemaString(df: DataFrame, url: String): String = {
       val sb = new StringBuilder()
-      val quirks = DriverQuirks.get(url)
+      val dialect = JdbcDialects.get(url)
       df.schema.fields foreach { field => {
         val name = field.name
-        var typ: String = quirks.getJDBCType(field.dataType)._1
-        if (typ == null) typ = field.dataType match {
-          case IntegerType => "INTEGER"
-          case LongType => "BIGINT"
-          case DoubleType => "DOUBLE PRECISION"
-          case FloatType => "REAL"
-          case ShortType => "INTEGER"
-          case ByteType => "BYTE"
-          case BooleanType => "BIT(1)"
-          case StringType => "TEXT"
-          case BinaryType => "BLOB"
-          case TimestampType => "TIMESTAMP"
-          case DateType => "DATE"
-          case DecimalType.Unlimited => "DECIMAL(40,20)"
-          case _ => throw new IllegalArgumentException(s"Don't know how to save $field to JDBC")
-        }
+        val typ: String =
+          dialect.getJDBCType(field.dataType).map(_.databaseTypeDefinition).getOrElse(
+          field.dataType match {
+            case IntegerType => "INTEGER"
+            case LongType => "BIGINT"
+            case DoubleType => "DOUBLE PRECISION"
+            case FloatType => "REAL"
+            case ShortType => "INTEGER"
+            case ByteType => "BYTE"
+            case BooleanType => "BIT(1)"
+            case StringType => "TEXT"
+            case BinaryType => "BLOB"
+            case TimestampType => "TIMESTAMP"
+            case DateType => "DATE"
+            case DecimalType.Unlimited => "DECIMAL(40,20)"
+            case _ => throw new IllegalArgumentException(s"Don't know how to save $field to JDBC")
+          })
         val nullable = if (field.nullable) "" else "NOT NULL"
         sb.append(s", $name $typ $nullable")
       }}
@@ -162,10 +162,9 @@ package object jdbc {
         url: String,
         table: String,
         properties: Properties = new Properties()) {
-      val quirks = DriverQuirks.get(url)
-      var nullTypes: Array[Int] = df.schema.fields.map(field => {
-        var nullType: Option[Int] = quirks.getJDBCType(field.dataType)._2
-        if (nullType.isEmpty) {
+      val dialect = JdbcDialects.get(url)
+      val nullTypes: Array[Int] = df.schema.fields.map { field =>
+        dialect.getJDBCType(field.dataType).map(_.jdbcNullType).getOrElse(
           field.dataType match {
             case IntegerType => java.sql.Types.INTEGER
             case LongType => java.sql.Types.BIGINT
@@ -181,13 +180,14 @@ package object jdbc {
             case DecimalType.Unlimited => java.sql.Types.DECIMAL
             case _ => throw new IllegalArgumentException(
               s"Can't translate null value for field $field")
-          }
-        } else nullType.get
-      }).toArray
+          })
+      }
 
       val rddSchema = df.schema
+      val driver: String = DriverRegistry.getDriverClassName(url)
+      val getConnection: () => Connection = JDBCRDD.getConnector(driver, url, properties)
       df.foreachPartition { iterator =>
-        JDBCWriteDetails.savePartition(url, table, iterator, rddSchema, nullTypes, properties)
+        JDBCWriteDetails.savePartition(getConnection, table, iterator, rddSchema, nullTypes)
       }
     }
 
@@ -241,10 +241,10 @@ package object jdbc {
         }
       }
     }
-    
+
     def getDriverClassName(url: String): String = DriverManager.getDriver(url) match {
       case wrapper: DriverWrapper => wrapper.wrapped.getClass.getCanonicalName
-      case driver => driver.getClass.getCanonicalName  
+      case driver => driver.getClass.getCanonicalName
     }
   }
 

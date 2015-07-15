@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples.streaming
 
 import java.io.File
@@ -108,3 +109,4 @@ object RecoverableNetworkWordCount {
     ssc.awaitTermination()
   }
 }
+// scalastyle:on println

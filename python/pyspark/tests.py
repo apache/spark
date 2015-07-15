@@ -179,9 +179,12 @@ class SorterTests(unittest.TestCase):
                          list(sorter.sorted(l, key=lambda x: -x, reverse=True)))
 
     def test_external_sort(self):
+        class CustomizedSorter(ExternalSorter):
+            def _next_limit(self):
+                return self.memory_limit
         l = list(range(1024))
         random.shuffle(l)
-        sorter = ExternalSorter(1)
+        sorter = CustomizedSorter(1)
         self.assertEqual(sorted(l), list(sorter.sorted(l)))
         self.assertGreater(shuffle.DiskBytesSpilled, 0)
         last = shuffle.DiskBytesSpilled
@@ -444,6 +447,11 @@ class AddFileTests(PySparkTestCase):
 
 class RDDTests(ReusedPySparkTestCase):
 
+    def test_range(self):
+        self.assertEqual(self.sc.range(1, 1).count(), 0)
+        self.assertEqual(self.sc.range(1, 0, -1).count(), 1)
+        self.assertEqual(self.sc.range(0, 1 << 40, 1 << 39).count(), 2)
+
     def test_id(self):
         rdd = self.sc.parallelize(range(10))
         id = rdd.id()
@@ -452,6 +460,14 @@ class RDDTests(ReusedPySparkTestCase):
         id2 = rdd2.id()
         self.assertEqual(id + 1, id2)
         self.assertEqual(id2, rdd2.id())
+
+    def test_empty_rdd(self):
+        rdd = self.sc.emptyRDD()
+        self.assertTrue(rdd.isEmpty())
+
+    def test_sum(self):
+        self.assertEqual(0, self.sc.emptyRDD().sum())
+        self.assertEqual(6, self.sc.parallelize([1, 2, 3]).sum())
 
     def test_save_as_textfile_with_unicode(self):
         # Regression test for SPARK-970
@@ -868,6 +884,18 @@ class RDDTests(ReusedPySparkTestCase):
             sizes = sort.glom().map(len).collect()
             for size in sizes:
                 self.assertGreater(size, 0)
+
+    def test_pipe_functions(self):
+        data = ['1', '2', '3']
+        rdd = self.sc.parallelize(data)
+        with QuietTest(self.sc):
+            self.assertEqual([], rdd.pipe('cc').collect())
+            self.assertRaises(Py4JJavaError, rdd.pipe('cc', checkCode=True).collect)
+        result = rdd.pipe('cat').collect()
+        result.sort()
+        [self.assertEqual(x, y) for x, y in zip(data, result)]
+        self.assertRaises(Py4JJavaError, rdd.pipe('grep 4', checkCode=True).collect)
+        self.assertEqual([], rdd.pipe('grep 4').collect())
 
 
 class ProfilerTests(PySparkTestCase):
@@ -1405,7 +1433,8 @@ class DaemonTests(unittest.TestCase):
 
         # start daemon
         daemon_path = os.path.join(os.path.dirname(__file__), "daemon.py")
-        daemon = Popen([sys.executable, daemon_path], stdin=PIPE, stdout=PIPE)
+        python_exec = sys.executable or os.environ.get("PYSPARK_PYTHON")
+        daemon = Popen([python_exec, daemon_path], stdin=PIPE, stdout=PIPE)
 
         # read the port number
         port = read_int(daemon.stdout)
@@ -1543,13 +1572,13 @@ class WorkerTests(ReusedPySparkTestCase):
     def test_with_different_versions_of_python(self):
         rdd = self.sc.parallelize(range(10))
         rdd.count()
-        version = sys.version_info
-        sys.version_info = (2, 0, 0)
+        version = self.sc.pythonVer
+        self.sc.pythonVer = "2.0"
         try:
             with QuietTest(self.sc):
                 self.assertRaises(Py4JJavaError, lambda: rdd.count())
         finally:
-            sys.version_info = version
+            self.sc.pythonVer = version
 
 
 class SparkSubmitTests(unittest.TestCase):
@@ -1803,6 +1832,10 @@ class ContextTests(unittest.TestCase):
             self.assertEqual([], tracker.getActiveStageIds())
 
             sc.stop()
+
+    def test_startTime(self):
+        with SparkContext() as sc:
+            self.assertGreater(sc.startTime, 0)
 
 
 @unittest.skipIf(not _have_scipy, "SciPy not installed")

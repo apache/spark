@@ -27,10 +27,15 @@ import java.util.Map;
  */
 class CommandBuilderUtils {
 
-  static final String DEFAULT_MEM = "512m";
+  static final String DEFAULT_MEM = "1g";
   static final String DEFAULT_PROPERTIES_FILE = "spark-defaults.conf";
   static final String ENV_SPARK_HOME = "SPARK_HOME";
   static final String ENV_SPARK_ASSEMBLY = "_SPARK_ASSEMBLY";
+
+  /** The set of known JVM vendors. */
+  static enum JavaVendor {
+    Oracle, IBM, OpenJDK, Unknown
+  };
 
   /** Returns whether the given string is null or empty. */
   static boolean isEmpty(String s) {
@@ -106,6 +111,21 @@ class CommandBuilderUtils {
   static boolean isWindows() {
     String os = System.getProperty("os.name");
     return os.startsWith("Windows");
+  }
+
+  /** Returns an enum value indicating whose JVM is being used. */
+  static JavaVendor getJavaVendor() {
+    String vendorString = System.getProperty("java.vendor");
+    if (vendorString.contains("Oracle")) {
+      return JavaVendor.Oracle;
+    }
+    if (vendorString.contains("IBM")) {
+      return JavaVendor.IBM;
+    }
+    if (vendorString.contains("OpenJDK")) {
+      return JavaVendor.OpenJDK;
+    }
+    return JavaVendor.Unknown;
   }
 
   /**

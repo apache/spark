@@ -24,6 +24,65 @@ div#application-timeline, div#job-timeline {
   margin-top: 5px;
 }
 
+#task-assignment-timeline div.legend-area {
+  width: 574px;
+}
+
+#task-assignment-timeline .legend-area > svg {
+  width: 100%;
+  height: 55px;
+}
+
+#task-assignment-timeline div.item.range {
+  padding: 0px;
+  height: 26px;
+  border-width: 0;
+}
+
+.task-assignment-timeline-content {
+  width: 100%;
+}
+
+.task-assignment-timeline-duration-bar {
+  width: 100%;
+  height: 26px;
+}
+
+rect.scheduler-delay-proportion {
+  fill: #80B1D3;
+  stroke: #6B94B0;
+}
+
+rect.deserialization-time-proportion {
+  fill: #FB8072;
+  stroke: #D26B5F;
+}
+
+rect.shuffle-read-time-proportion {
+  fill: #FDB462;
+  stroke: #D39651;
+}
+
+rect.executor-runtime-proportion {
+  fill: #B3DE69;
+  stroke: #95B957;
+}
+
+rect.shuffle-write-time-proportion {
+  fill: #FFED6F;
+  stroke: #D5C65C;
+}
+
+rect.serialization-time-proportion {
+  fill: #BC80BD;
+  stroke: #9D6B9E;
+}
+
+rect.getting-result-time-proportion {
+  fill: #8DD3C7;
+  stroke: #75B0A6;
+}
+
 .vis.timeline {
   line-height: 14px;
 }
@@ -178,6 +237,10 @@ tr.corresponding-item-hover > td, tr.corresponding-item-hover > th {
   display: none;
 }
 
+#task-assignment-timeline.collapsed {
+  display: none;
+}
+
 .control-panel {
   margin-bottom: 5px;
 }
@@ -186,7 +249,8 @@ tr.corresponding-item-hover > td, tr.corresponding-item-hover > th {
   margin: 0;
 }
 
-span.expand-application-timeline, span.expand-job-timeline {
+span.expand-application-timeline, span.expand-job-timeline,
+span.expand-task-assignment-timeline {
   cursor: pointer;
 }
 

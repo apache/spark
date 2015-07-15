@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples.mllib
 
 import scopt.OptionParser
@@ -80,3 +81,4 @@ object FPGrowthExample {
     sc.stop()
   }
 }
+// scalastyle:on println

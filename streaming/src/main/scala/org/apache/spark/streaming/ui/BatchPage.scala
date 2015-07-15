@@ -19,7 +19,7 @@ package org.apache.spark.streaming.ui
 
 import javax.servlet.http.HttpServletRequest
 
-import scala.xml.{NodeSeq, Node, Text}
+import scala.xml.{NodeSeq, Node, Text, Unparsed}
 
 import org.apache.commons.lang3.StringEscapeUtils
 
@@ -288,7 +288,8 @@ private[ui] class BatchPage(parent: StreamingTab) extends WebUIPage("batch") {
     val batchTime = Option(request.getParameter("id")).map(id => Time(id.toLong)).getOrElse {
       throw new IllegalArgumentException(s"Missing id parameter")
     }
-    val formattedBatchTime = SparkUIUtils.formatDate(batchTime.milliseconds)
+    val formattedBatchTime =
+      UIUtils.formatBatchTime(batchTime.milliseconds, streamingListener.batchDuration)
 
     val batchUIData = streamingListener.getBatchUIData(batchTime).getOrElse {
       throw new IllegalArgumentException(s"Batch $formattedBatchTime does not exist")
@@ -300,6 +301,9 @@ private[ui] class BatchPage(parent: StreamingTab) extends WebUIPage("batch") {
       batchUIData.processingDelay.map(SparkUIUtils.formatDuration).getOrElse("-")
     val formattedTotalDelay = batchUIData.totalDelay.map(SparkUIUtils.formatDuration).getOrElse("-")
 
+    val inputMetadatas = batchUIData.streamIdToInputInfo.values.flatMap { inputInfo =>
+      inputInfo.metadataDescription.map(desc => inputInfo.inputStreamId -> desc)
+    }.toSeq
     val summary: NodeSeq =
       <div>
         <ul class="unstyled">
@@ -323,6 +327,13 @@ private[ui] class BatchPage(parent: StreamingTab) extends WebUIPage("batch") {
             <strong>Total delay: </strong>
             {formattedTotalDelay}
           </li>
+          {
+            if (inputMetadatas.nonEmpty) {
+              <li>
+                <strong>Input Metadata:</strong>{generateInputMetadataTable(inputMetadatas)}
+              </li>
+            }
+          }
         </ul>
       </div>
 
@@ -336,5 +347,34 @@ private[ui] class BatchPage(parent: StreamingTab) extends WebUIPage("batch") {
     val content = summary ++ jobTable
 
     SparkUIUtils.headerSparkPage(s"Details of batch at $formattedBatchTime", content, parent)
+  }
+
+  def generateInputMetadataTable(inputMetadatas: Seq[(Int, String)]): Seq[Node] = {
+    <table class={SparkUIUtils.TABLE_CLASS_STRIPED}>
+      <thead>
+        <tr>
+          <th>Input</th>
+          <th>Metadata</th>
+        </tr>
+      </thead>
+      <tbody>
+        {inputMetadatas.flatMap(generateInputMetadataRow)}
+      </tbody>
+    </table>
+  }
+
+  def generateInputMetadataRow(inputMetadata: (Int, String)): Seq[Node] = {
+    val streamId = inputMetadata._1
+
+    <tr>
+      <td>{streamingListener.streamName(streamId).getOrElse(s"Stream-$streamId")}</td>
+      <td>{metadataDescriptionToHTML(inputMetadata._2)}</td>
+    </tr>
+  }
+
+  private def metadataDescriptionToHTML(metadataDescription: String): Seq[Node] = {
+    // tab to 4 spaces and "\n" to "<br/>"
+    Unparsed(StringEscapeUtils.escapeHtml4(metadataDescription).
+      replaceAllLiterally("\t", "&nbsp;&nbsp;&nbsp;&nbsp;").replaceAllLiterally("\n", "<br/>"))
   }
 }

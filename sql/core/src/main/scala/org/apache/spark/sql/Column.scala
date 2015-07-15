@@ -23,7 +23,7 @@ import org.apache.spark.annotation.Experimental
 import org.apache.spark.Logging
 import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, UnresolvedStar, UnresolvedExtractValue}
+import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.types._
 
 
@@ -346,8 +346,9 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * }}}
    *
    * @group expr_ops
+   * @since 1.4.0
    */
-  def when(condition: Column, value: Any):Column = this.expr match {
+  def when(condition: Column, value: Any): Column = this.expr match {
     case CaseWhen(branches: Seq[Expression]) =>
       CaseWhen(branches ++ Seq(lit(condition).expr, lit(value).expr))
     case _ =>
@@ -374,8 +375,9 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * }}}
    *
    * @group expr_ops
+   * @since 1.4.0
    */
-  def otherwise(value: Any):Column = this.expr match {
+  def otherwise(value: Any): Column = this.expr match {
     case CaseWhen(branches: Seq[Expression]) =>
       if (branches.size % 2 == 0) {
         CaseWhen(branches :+ lit(value).expr)
@@ -618,7 +620,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * @since 1.3.0
    */
   @scala.annotation.varargs
-  def in(list: Column*): Column = In(expr, list.map(_.expr))
+  def in(list: Any*): Column = In(expr, list.map(lit(_).expr))
 
   /**
    * SQL like expression.
@@ -714,6 +716,18 @@ class Column(protected[sql] val expr: Expression) extends Logging {
   def endsWith(literal: String): Column = this.endsWith(lit(literal))
 
   /**
+   * Gives the column an alias. Same as `as`.
+   * {{{
+   *   // Renames colA to colB in select output.
+   *   df.select($"colA".alias("colB"))
+   * }}}
+   *
+   * @group expr_ops
+   * @since 1.4.0
+   */
+  def alias(alias: String): Column = as(alias)
+
+  /**
    * Gives the column an alias.
    * {{{
    *   // Renames colA to colB in select output.
@@ -724,6 +738,30 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * @since 1.3.0
    */
   def as(alias: String): Column = Alias(expr, alias)()
+
+  /**
+   * (Scala-specific) Assigns the given aliases to the results of a table generating function.
+   * {{{
+   *   // Renames colA to colB in select output.
+   *   df.select(explode($"myMap").as("key" :: "value" :: Nil))
+   * }}}
+   *
+   * @group expr_ops
+   * @since 1.4.0
+   */
+  def as(aliases: Seq[String]): Column = MultiAlias(expr, aliases)
+
+  /**
+   * Assigns the given aliases to the results of a table generating function.
+   * {{{
+   *   // Renames colA to colB in select output.
+   *   df.select(explode($"myMap").as("key" :: "value" :: Nil))
+   * }}}
+   *
+   * @group expr_ops
+   * @since 1.4.0
+   */
+  def as(aliases: Array[String]): Column = MultiAlias(expr, aliases)
 
   /**
    * Gives the column an alias.
@@ -822,11 +860,13 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * @since 1.3.0
    */
   def explain(extended: Boolean): Unit = {
+    // scalastyle:off println
     if (extended) {
       println(expr)
     } else {
       println(expr.prettyString)
     }
+    // scalastyle:on println
   }
 
   /**
@@ -861,6 +901,22 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * @since 1.4.0
    */
   def bitwiseXOR(other: Any): Column = BitwiseXor(expr, lit(other).expr)
+
+  /**
+   * Define a windowing column.
+   *
+   * {{{
+   *   val w = Window.partitionBy("name").orderBy("id")
+   *   df.select(
+   *     sum("price").over(w.rangeBetween(Long.MinValue, 2)),
+   *     avg("price").over(w.rowsBetween(0, 4))
+   *   )
+   * }}}
+   *
+   * @group expr_ops
+   * @since 1.4.0
+   */
+  def over(window: expressions.WindowSpec): Column = window.withAggregate(this)
 
 }
 

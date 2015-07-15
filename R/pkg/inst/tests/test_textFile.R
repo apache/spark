@@ -27,9 +27,9 @@ test_that("textFile() on a local file returns an RDD", {
   writeLines(mockFile, fileName)
 
   rdd <- textFile(sc, fileName)
-  expect_true(inherits(rdd, "RDD"))
+  expect_is(rdd, "RDD")
   expect_true(count(rdd) > 0)
-  expect_true(count(rdd) == 2)
+  expect_equal(count(rdd), 2)
 
   unlink(fileName)
 })
@@ -58,7 +58,7 @@ test_that("textFile() word count works as expected", {
   expected <- list(list("pretty.", 1), list("is", 2), list("awesome.", 1),
                    list("Spark", 2))
   expect_equal(sortKeyValueList(output), sortKeyValueList(expected))
-  
+
   unlink(fileName)
 })
 
@@ -115,13 +115,13 @@ test_that("textFile() and saveAsTextFile() word count works as expected", {
 
   saveAsTextFile(counts, fileName2)
   rdd <- textFile(sc, fileName2)
-   
+
   output <- collect(rdd)
   expected <- list(list("awesome.", 1), list("Spark", 2),
                    list("pretty.", 1), list("is", 2))
   expectedStr <- lapply(expected, function(x) { toString(x) })
   expect_equal(sortKeyValueList(output), sortKeyValueList(expectedStr))
-  
+
   unlink(fileName1)
   unlink(fileName2)
 })
@@ -133,7 +133,7 @@ test_that("textFile() on multiple paths", {
   writeLines("Spark is awesome.", fileName2)
 
   rdd <- textFile(sc, c(fileName1, fileName2))
-  expect_true(count(rdd) == 2)
+  expect_equal(count(rdd), 2)
 
   unlink(fileName1)
   unlink(fileName2)
@@ -159,4 +159,3 @@ test_that("Pipelined operations on RDDs created using textFile", {
 
   unlink(fileName)
 })
-

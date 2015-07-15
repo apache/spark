@@ -26,6 +26,7 @@ import io.netty.channel.{ChannelHandlerContext, SimpleChannelInboundHandler}
 
 import org.apache.spark.Logging
 import org.apache.spark.api.r.SerDe._
+import org.apache.spark.util.Utils
 
 /**
  * Handler for RBackend
@@ -77,7 +78,7 @@ private[r] class RBackendHandler(server: RBackend)
     val reply = bos.toByteArray
     ctx.write(reply)
   }
-  
+
   override def channelReadComplete(ctx: ChannelHandlerContext): Unit = {
     ctx.flush()
   }
@@ -98,7 +99,7 @@ private[r] class RBackendHandler(server: RBackend)
     var obj: Object = null
     try {
       val cls = if (isStatic) {
-        Class.forName(objId)
+        Utils.classForName(objId)
       } else {
         JVMObjectTracker.get(objId) match {
           case None => throw new IllegalArgumentException("Object not found " + objId)
@@ -124,7 +125,7 @@ private[r] class RBackendHandler(server: RBackend)
           }
           throw new Exception(s"No matched method found for $cls.$methodName")
         }
-        val ret = methods.head.invoke(obj, args:_*)
+        val ret = methods.head.invoke(obj, args : _*)
 
         // Write status bit
         writeInt(dos, 0)
@@ -135,7 +136,7 @@ private[r] class RBackendHandler(server: RBackend)
           matchMethod(numArgs, args, x.getParameterTypes)
         }.head
 
-        val obj = ctor.newInstance(args:_*)
+        val obj = ctor.newInstance(args : _*)
 
         writeInt(dos, 0)
         writeObject(dos, obj.asInstanceOf[AnyRef])

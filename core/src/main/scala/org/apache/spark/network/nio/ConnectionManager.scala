@@ -635,12 +635,11 @@ private[nio] class ConnectionManager(
         val message = securityMsgResp.toBufferMessage
         if (message == null) throw new IOException("Error creating security message")
         sendSecurityMessage(waitingConn.getRemoteConnectionManagerId(), message)
-      } catch  {
-        case e: Exception => {
+      } catch {
+        case e: Exception =>
           logError("Error handling sasl client authentication", e)
           waitingConn.close()
           throw new IOException("Error evaluating sasl response: ", e)
-        }
       }
     }
   }
@@ -1017,7 +1016,9 @@ private[spark] object ConnectionManager {
     val conf = new SparkConf
     val manager = new ConnectionManager(9999, conf, new SecurityManager(conf))
     manager.onReceiveMessage((msg: Message, id: ConnectionManagerId) => {
+      // scalastyle:off println
       println("Received [" + msg + "] from [" + id + "]")
+      // scalastyle:on println
       None
     })
 
@@ -1034,6 +1035,7 @@ private[spark] object ConnectionManager {
     System.gc()
   }
 
+  // scalastyle:off println
   def testSequentialSending(manager: ConnectionManager) {
     println("--------------------------")
     println("Sequential Sending")
@@ -1151,4 +1153,5 @@ private[spark] object ConnectionManager {
       println()
     }
   }
+  // scalastyle:on println
 }

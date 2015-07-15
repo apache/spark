@@ -30,16 +30,15 @@ import org.apache.mesos.SchedulerDriver
 import org.mockito.Matchers._
 import org.mockito.Mockito._
 import org.mockito.{ArgumentCaptor, Matchers}
-import org.scalatest.FunSuite
 import org.scalatest.mock.MockitoSugar
 
 import org.apache.spark.executor.MesosExecutorBackend
 import org.apache.spark.scheduler.cluster.ExecutorInfo
 import org.apache.spark.scheduler.{LiveListenerBus, SparkListenerExecutorAdded,
   TaskDescription, TaskSchedulerImpl, WorkerOffer}
-import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext}
+import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkFunSuite}
 
-class MesosSchedulerBackendSuite extends FunSuite with LocalSparkContext with MockitoSugar {
+class MesosSchedulerBackendSuite extends SparkFunSuite with LocalSparkContext with MockitoSugar {
 
   test("check spark-class location correctly") {
     val conf = new SparkConf
@@ -80,11 +79,11 @@ class MesosSchedulerBackendSuite extends FunSuite with LocalSparkContext with Mo
       .set("spark.mesos.executor.docker.image", "spark/mock")
       .set("spark.mesos.executor.docker.volumes", "/a,/b:/b,/c:/c:rw,/d:ro,/e:/e:ro")
       .set("spark.mesos.executor.docker.portmaps", "80:8080,53:53:tcp")
-     
+
     val listenerBus = mock[LiveListenerBus]
     listenerBus.post(
       SparkListenerExecutorAdded(anyLong, "s1", new ExecutorInfo("host1", 2, Map.empty)))
-                         
+
     val sc = mock[SparkContext]
     when(sc.executorMemory).thenReturn(100)
     when(sc.getSparkHome()).thenReturn(Option("/spark-home"))
@@ -150,15 +149,15 @@ class MesosSchedulerBackendSuite extends FunSuite with LocalSparkContext with Mo
     when(sc.conf).thenReturn(new SparkConf)
     when(sc.listenerBus).thenReturn(listenerBus)
 
-    val minMem = MemoryUtils.calculateTotalMemory(sc).toInt
+    val backend = new MesosSchedulerBackend(taskScheduler, sc, "master")
+
+    val minMem = backend.calculateTotalMemory(sc)
     val minCpu = 4
 
     val mesosOffers = new java.util.ArrayList[Offer]
     mesosOffers.add(createOffer(1, minMem, minCpu))
     mesosOffers.add(createOffer(2, minMem - 1, minCpu))
     mesosOffers.add(createOffer(3, minMem, minCpu))
-
-    val backend = new MesosSchedulerBackend(taskScheduler, sc, "master")
 
     val expectedWorkerOffers = new ArrayBuffer[WorkerOffer](2)
     expectedWorkerOffers.append(new WorkerOffer(
