@@ -102,10 +102,10 @@ def send_archived_logs():
             print_err(" > scp_output: %s" % scp_stdout)
         else:
             print(" > Send successful.")
-    else:
-        print_err(" > No log files found.")
 
         rm_r(log_archive)
+    else:
+        print_err(" > No log files found.")
 
 
 def pr_message(build_display_name,
@@ -137,7 +137,8 @@ def run_pr_checks(pr_tests, ghprb_actual_commit, sha1):
     pr_results = list()
 
     for pr_test in pr_tests:
-        pr_results.append(run_cmd(['bash', os.path.join(SPARK_HOME, 'dev', 'tests', pr_test + '.sh'),
+        test_name = pr_test + '.sh'
+        pr_results.append(run_cmd(['bash', os.path.join(SPARK_HOME, 'dev', 'tests', test_name),
                                    ghprb_actual_commit, sha1],
                                   return_output=True).strip())
         # Ensure, after each test, that we're back on the current PR
@@ -157,7 +158,7 @@ def run_tests(tests_timeout):
                                          os.path.join(SPARK_HOME, 'dev', 'run-tests')]).wait()
 
     failure_note_by_errcode = {
-        1: 'executing the `dev/run-tests` script', # error to denote run-tests script failures
+        1: 'executing the `dev/run-tests` script',  # error to denote run-tests script failures
         ERROR_CODES["BLOCK_GENERAL"]: 'some tests',
         ERROR_CODES["BLOCK_RAT"]: 'RAT tests',
         ERROR_CODES["BLOCK_SCALA_STYLE"]: 'Scala style tests',

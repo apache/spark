@@ -40,6 +40,7 @@ else:
                 cmd = popenargs[0]
             raise subprocess.CalledProcessError(retcode, cmd, output=output)
         return output
+
     # backported from subprocess module in Python 2.7
     def subprocess_check_call(*popenargs, **kwargs):
         retcode = call(*popenargs, **kwargs)
