@@ -580,7 +580,18 @@ abstract class RDD[T: ClassTag](
    * elements (a, b) where a is in `this` and b is in `other`.
    */
   def cartesian[U: ClassTag](other: RDD[U]): RDD[(T, U)] = withScope {
-    new CartesianRDD(sc, this, other)
+    val numPartitions = {
+      val numExecutors = System.getProperty("spark.executor.instances")
+
+      if (numExecutors != null) {
+        numExecutors.toInt
+      } else {
+        sc.defaultMinPartitions
+      }
+    }
+    val coalesced = coalesce(numPartitions, shuffle = true)
+    val coalescedOther = other.coalesce(numPartitions, shuffle = true)
+    new CartesianRDD(sc, coalesced, coalescedOther)
   }
 
   /**
