@@ -219,10 +219,11 @@ def main():
     #     hash, the second the Github SHA1 hash, and the final the current PR hash
     #   * and, lastly, return string output to be included in the pr message output that will
     #     be posted to Github
-    pr_tests = ["pr_merge_ability",
-                "pr_public_classes"
-                # DISABLED (pwendell) "pr_new_dependencies"
-                ]
+    pr_tests = [
+        "pr_merge_ability",
+        "pr_public_classes"
+        # DISABLED (pwendell) "pr_new_dependencies"
+    ]
 
     # `bind_message_base` returns a function to generate messages for Github posting
     github_message = functools.partial(pr_message,
