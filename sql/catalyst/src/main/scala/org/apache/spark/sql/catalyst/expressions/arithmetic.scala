@@ -380,13 +380,14 @@ case class MinOf(left: Expression, right: Expression) extends BinaryArithmetic {
 
 case class Pmod(left: Expression, right: Expression) extends BinaryArithmetic {
 
+  override def toString: String = s"pmod($left, $right)"
+
   override def symbol: String = "pmod"
 
   protected def checkTypesInternal(t: DataType) =
     TypeUtils.checkForNumericExpr(t, "pmod")
 
-  override lazy val resolved =
-    childrenResolved && checkInputDataTypes().isSuccess && !DecimalType.isFixed(dataType)
+  override def inputType: AbstractDataType = NumericType
 
   protected override def nullSafeEval(left: Any, right: Any) =
     dataType match {
