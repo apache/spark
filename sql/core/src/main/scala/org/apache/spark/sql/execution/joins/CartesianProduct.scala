@@ -34,8 +34,8 @@ case class CartesianProduct(left: SparkPlan, right: SparkPlan) extends BinaryNod
     val leftResults = left.execute().map(_.copy())
     val rightResults = right.execute().map(_.copy())
 
-    val cartesianRdd = if(leftResults.partitions.size > rightResults.partitions.size) {
-      rightResults.cartesian(leftResults).mapPartitions{ iter =>
+    val cartesianRdd = if (leftResults.partitions.size > rightResults.partitions.size) {
+      rightResults.cartesian(leftResults).mapPartitions { iter =>
         iter.map(tuple => (tuple._2, tuple._1))
       }
     } else {
