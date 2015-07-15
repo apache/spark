@@ -43,7 +43,7 @@ import org.apache.spark.mllib.recommendation._
 import org.apache.spark.mllib.regression._
 import org.apache.spark.mllib.stat.correlation.CorrelationNames
 import org.apache.spark.mllib.stat.distribution.MultivariateGaussian
-import org.apache.spark.mllib.stat.test.ChiSqTestResult
+import org.apache.spark.mllib.stat.test.{ChiSqTestResult, KolmogorovSmirnovTestResult}
 import org.apache.spark.mllib.stat.{
   KernelDensity, MultivariateStatisticalSummary, Statistics}
 import org.apache.spark.mllib.tree.configuration.{Algo, BoostingStrategy, Strategy}
@@ -1093,6 +1093,27 @@ private[python] class PythonMLLibAPI extends Serializable {
     LinearDataGenerator.generateLinearRDD(
       sc, nexamples, nfeatures, eps, nparts, intercept)
   }
+
+  /**
+   * Wrapper around Statistics.kolmogorovSmirnovTestWrapper with default params.
+   */
+  def kolmogorovSmirnovTestWrapper(
+      data: JavaRDD[Double],
+      distName: String): KolmogorovSmirnovTestResult = {
+    Statistics.kolmogorovSmirnovTest(data, distName)
+  }
+
+  /**
+   * Wrapper around Statistics.kolmogorovSmirnovTestWrapper.
+   */
+  def kolmogorovSmirnovTestWrapper(
+      data: JavaRDD[Double],
+      distName: String,
+      params: JList[Double]): KolmogorovSmirnovTestResult = {
+    val seqParams = params.asScala.toSeq
+    Statistics.kolmogorovSmirnovTest(data, distName, seqParams: _*)
+  }
+
 }
 
 /**
