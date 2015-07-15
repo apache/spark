@@ -36,6 +36,7 @@ import org.apache.log4j.{Level, Logger}
 
 import org.apache.spark.{Logging, SecurityManager, SparkConf}
 import org.apache.spark.deploy.yarn.YarnSparkHadoopUtil._
+import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
 
 /**
  * YarnAllocator is charged with requesting containers from the YARN ResourceManager and deciding
@@ -87,6 +88,10 @@ private[yarn] class YarnAllocator(
   // Keep track of which container is running which executor to remove the executors later
   // Visible for testing.
   private[yarn] val executorIdToContainer = new HashMap[String, Container]
+
+  private var numUnexpectedContainerRelease = 0L
+  private var backend: CoarseGrainedSchedulerBackend = _
+  private val containerIdToExecutorId = new HashMap[ContainerId, String]
 
   // Executor memory in MB.
   protected val executorMemory = args.executorMemory
@@ -165,6 +170,7 @@ private[yarn] class YarnAllocator(
   def killExecutor(executorId: String): Unit = synchronized {
     if (executorIdToContainer.contains(executorId)) {
       val container = executorIdToContainer.remove(executorId).get
+      containerIdToExecutorId.remove(container.getId)
       internalReleaseContainer(container)
       numExecutorsRunning -= 1
     } else {
@@ -353,6 +359,7 @@ private[yarn] class YarnAllocator(
 
       logInfo("Launching container %s for on host %s".format(containerId, executorHostname))
       executorIdToContainer(executorId) = container
+      containerIdToExecutorId(container.getId) = executorId
 
       val containerSet = allocatedHostToContainersMap.getOrElseUpdate(executorHostname,
         new HashSet[ContainerId])
@@ -384,6 +391,7 @@ private[yarn] class YarnAllocator(
     for (completedContainer <- completedContainers) {
       val containerId = completedContainer.getContainerId
 
+      var needNotify = false
       if (releasedContainers.contains(containerId)) {
         // Already marked the container for release, so remove it from
         // `releasedContainers`.
@@ -415,6 +423,7 @@ private[yarn] class YarnAllocator(
             ". Diagnostics: " + completedContainer.getDiagnostics)
           numExecutorsFailed += 1
         }
+        needNotify = true
       }
 
       if (allocatedContainerToHostMap.containsKey(containerId)) {
@@ -430,6 +439,15 @@ private[yarn] class YarnAllocator(
 
         allocatedContainerToHostMap.remove(containerId)
       }
+
+      val executorIdOpt = containerIdToExecutorId.remove(containerId)
+      if (executorIdOpt.isDefined) executorIdToContainer.remove(executorIdOpt.get)
+
+      if (needNotify && executorIdOpt.isDefined) {
+        // The executor could have gone away (like no route to host, node failure, etc)
+        // Notify backend about the failure of the executor
+        notifyBackend(executorIdOpt.get, containerId)
+      }
     }
   }
 
@@ -438,6 +456,19 @@ private[yarn] class YarnAllocator(
     amClient.releaseAssignedContainer(container.getId())
   }
 
+  private[yarn] def notifyBackend(executorId: String, containerId: ContainerId): Unit = {
+    numUnexpectedContainerRelease += 1
+    if (null != backend) {
+      backend.removeExecutor(executorId,
+        "Yarn deallocated the executor (" + executorId + ") container " + containerId)
+    }
+  }
+
+  private[yarn] def getNumUnexpectedContainerRelease = numUnexpectedContainerRelease
+
+  private[yarn] def setScheduler(backend: CoarseGrainedSchedulerBackend): Unit = synchronized {
+    this.backend = backend
+  }
 }
 
 private object YarnAllocator {

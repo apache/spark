@@ -77,6 +77,8 @@ private[spark] class ApplicationMaster(
   @volatile private var allocator: YarnAllocator = _
   private val allocatorLock = new Object()
 
+  @volatile private var backend: CoarseGrainedSchedulerBackend = _
+
   // Fields used in client mode.
   private var rpcEnv: RpcEnv = null
   private var amEndpoint: RpcEndpointRef = _
@@ -218,11 +220,13 @@ private[spark] class ApplicationMaster(
     }
   }
 
-  private def sparkContextInitialized(sc: SparkContext) = {
+  private def sparkContextInitialized(sc: SparkContext, backend: CoarseGrainedSchedulerBackend) = {
     sparkContextRef.synchronized {
       sparkContextRef.compareAndSet(null, sc)
       sparkContextRef.notifyAll()
     }
+    this.backend = backend
+    if (null != allocator) allocator.setScheduler(backend)
   }
 
   private def sparkContextStopped(sc: SparkContext) = {
@@ -252,6 +256,7 @@ private[spark] class ApplicationMaster(
       uiAddress,
       historyAddress,
       securityMgr)
+    if (null != backend) allocator.setScheduler(backend)
 
     allocator.allocateResources()
     reporterThread = launchReporterThread()
@@ -612,8 +617,9 @@ object ApplicationMaster extends Logging {
     }
   }
 
-  private[spark] def sparkContextInitialized(sc: SparkContext): Unit = {
-    master.sparkContextInitialized(sc)
+  private[spark] def sparkContextInitialized(sc: SparkContext,
+      backend: CoarseGrainedSchedulerBackend): Unit = {
+    master.sparkContextInitialized(sc, backend)
   }
 
   private[spark] def sparkContextStopped(sc: SparkContext): Boolean = {
