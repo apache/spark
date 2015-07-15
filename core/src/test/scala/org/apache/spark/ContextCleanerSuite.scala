@@ -262,29 +262,24 @@ class ContextCleanerSuite extends ContextCleanerSuiteBase {
   }
 
   test("automatically clean up local checkpoint") {
+    // Note that this test is similar to the RDD cleanup
+    // test because the same underlying mechanism is used!
     var rdd = newPairRDD().localCheckpoint()
     assert(rdd.checkpointData.isDefined)
     assert(rdd.checkpointData.get.checkpointRDD.isEmpty)
-
-    // The checkpoint RDD should be set after an action
     rdd.count()
     assert(rdd.checkpointData.get.checkpointRDD.isDefined)
-    var checkpointRdd = rdd.checkpointData.flatMap(_.checkpointRDD).get
-
-    // Do this to make CleanerTester happy (should not affect anything)
-    checkpointRdd.persist()
 
     // Test that GC does not cause checkpoint cleanup due to a strong reference
-    val preGCTester = new CleanerTester(sc, rddIds = Seq(checkpointRdd.id))
+    val preGCTester = new CleanerTester(sc, rddIds = Seq(rdd.id))
     runGC()
     intercept[Exception] {
       preGCTester.assertCleanup()(timeout(1000 millis))
     }
 
-    // Test that RDD going out of scope does cause the checkpoint files to be cleaned up
-    val postGCTester = new CleanerTester(sc, rddIds = Seq(checkpointRdd.id))
+    // Test that RDD going out of scope does cause the checkpoint blocks to be cleaned up
+    val postGCTester = new CleanerTester(sc, rddIds = Seq(rdd.id))
     rdd = null
-    checkpointRdd = null
     runGC()
     postGCTester.assertCleanup()
   }

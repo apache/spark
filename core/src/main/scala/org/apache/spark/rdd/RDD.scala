@@ -149,21 +149,40 @@ abstract class RDD[T: ClassTag](
   }
 
   /**
-   * Set this RDD's storage level to persist its values across operations after the first time
-   * it is computed. This can only be used to assign a new storage level if the RDD does not
-   * have a storage level set yet..
+   * Mark this RDD for persisting with the specified level.
+   *
+   * @param newLevel the target storage level
+   * @param allowOverride whether to override any existing level with the new one
    */
-  def persist(newLevel: StorageLevel): this.type = {
+  private def persist(newLevel: StorageLevel, allowOverride: Boolean): this.type = {
     // TODO: Handle changes of StorageLevel
-    if (storageLevel != StorageLevel.NONE && newLevel != storageLevel) {
+    if (storageLevel != StorageLevel.NONE && storageLevel != newLevel && !allowOverride) {
       throw new UnsupportedOperationException(
         "Cannot change storage level of an RDD after it was already assigned a level")
     }
-    sc.persistRDD(this)
-    // Register the RDD with the ContextCleaner for automatic GC-based cleanup
-    sc.cleaner.foreach(_.registerRDDForCleanup(this))
+    // If this is the first time this RDD is marked for persisting, register it
+    // with the SparkContext for cleanups and accounting. Do this only once.
+    if (storageLevel == StorageLevel.NONE) {
+      sc.cleaner.foreach(_.registerRDDForCleanup(this))
+      sc.persistRDD(this)
+    }
     storageLevel = newLevel
     this
+  }
+
+  /**
+   * Set this RDD's storage level to persist its values across operations after the first time
+   * it is computed. This can only be used to assign a new storage level if the RDD does not
+   * have a storage level set yet.
+   */
+  def persist(newLevel: StorageLevel): this.type = {
+    if (isLocallyCheckpointed) {
+      // This could happen if the user calls localCheckpoint() before persist(), in which case
+      // we should respect the storage level set by the user explicitly and override the old one
+      persist(LocalRDDCheckpointData.transformStorageLevel(newLevel), allowOverride = true)
+    } else {
+      persist(newLevel, allowOverride = false)
+    }
   }
 
   /** Persist this RDD with the default storage level (`MEMORY_ONLY`). */
@@ -187,14 +206,6 @@ abstract class RDD[T: ClassTag](
 
   /** Get the RDD's current storage level, or StorageLevel.NONE if none is set. */
   def getStorageLevel: StorageLevel = storageLevel
-
-  /**
-   * Override any existing storage level with the one specified.
-   * This is for internal use only and is currently used only for local checkpointing.
-   */
-  private[spark] def setStorageLevel(newLevel: StorageLevel): Unit = {
-    storageLevel = newLevel
-  }
 
   // Our dependencies and partitions will be gotten by calling subclass's methods below, and will
   // be overwritten when we're checkpointed
@@ -1499,13 +1510,27 @@ abstract class RDD[T: ClassTag](
         "to a high value.")
     }
     checkpointData = Some(new LocalRDDCheckpointData(this))
+    // In case this RDD is already marked for caching, we need to override the
+    // existing storage level with one that is suitable for local checkpointing.
+    persist(LocalRDDCheckpointData.transformStorageLevel(storageLevel), allowOverride = true)
     this
   }
 
   /**
-   * Return whether this RDD has been checkpointed or not, either reliably or locally.
+   * Return whether this RDD is marked for checkpointing, either reliably or locally.
    */
   def isCheckpointed: Boolean = checkpointData.exists(_.isCheckpointed)
+
+  /**
+   * Return whether this RDD is marked for local checkpointing.
+   * Exposed for testing.
+   */
+  private[rdd] def isLocallyCheckpointed: Boolean = {
+    checkpointData match {
+      case Some(_: LocalRDDCheckpointData[T]) => true
+      case _ => false
+    }
+  }
 
   /**
    * Gets the name of the directory to which this RDD was checkpointed.
@@ -1603,18 +1628,6 @@ abstract class RDD[T: ClassTag](
     clearDependencies()
     partitions_ = null
     deps = null    // Forget the constructor argument for dependencies too
-  }
-
-  /**
-   * Callback invoked immediately before a job is run on this RDD.
-   * This recursively calls itself on this RDD's parents.
-   */
-  private[spark] def beforeRunJob(): Unit = {
-    checkpointData match {
-      case Some(local: LocalRDDCheckpointData[T]) => local.transformStorageLevel()
-      case _ =>
-    }
-    dependencies.foreach(_.rdd.beforeRunJob())
   }
 
   /**

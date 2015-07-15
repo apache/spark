@@ -68,10 +68,10 @@ private[spark] class LocalCheckpointRDD[T: ClassTag](
     SparkEnv.get.blockManager.get(blockId) match {
       case Some(result) => result.data.asInstanceOf[Iterator[T]]
       case None => throw new SparkException(
-        s"Checkpoint block $blockId not found! It is likely that the executor that " +
-        "originally checkpointed this block is no longer alive. If this problem persists, " +
-        "you may consider using `rdd.checkpoint()` instead, which is slower than local " +
-        "checkpointing but more fault-tolerant.")
+        s"Checkpoint block $blockId not found! Either the executor that originally " +
+        "checkpointed this block is no longer alive, or the original RDD is unpersisted. " +
+        "If this problem persists, you may consider using `rdd.checkpoint()` instead, " +
+        "which is slower than local checkpointing but more fault-tolerant.")
     }
   }
 

@@ -33,33 +33,6 @@ private[spark] class LocalRDDCheckpointData[T: ClassTag](@transient rdd: RDD[T])
   extends RDDCheckpointData[T](rdd) with Logging {
 
   /**
-   * Transform the specified storage level to one that uses disk.
-   *
-   * This guarantees that the RDD can be recomputed multiple times correctly as long as
-   * executors do not fail. Otherwise, if the RDD is cached in memory only, for instance,
-   * the checkpoint data will be lost if the relevant block is evicted from memory.
-   *
-   * This should be called immediately before the first job on the RDD is run.
-   */
-  def transformStorageLevel(): Unit = {
-    rdd.getStorageLevel match {
-      case StorageLevel.NONE =>
-        // If this RDD is not already marked for caching, persist it on disk
-        rdd.persist(StorageLevel.DISK_ONLY)
-      case level if level.useOffHeap =>
-        // If this RDD is to be cached off-heap, fail fast since we cannot provide any
-        // correctness guarantees about subsequent computations after the first one
-        throw new SparkException("Local checkpointing is not compatible with off heap caching.")
-      case level =>
-        // Otherwise, adjust the existing storage level to use disk
-        // This guards against potential data losses caused by memory evictions
-        rdd.setStorageLevel(StorageLevel(
-          useDisk = true, level.useMemory, level.deserialized, level.replication))
-    }
-    assert(rdd.getStorageLevel.isValid, s"Resulting level is invalid: ${rdd.getStorageLevel}")
-  }
-
-  /**
    * Ensure the RDD is fully cached and return a CheckpointRDD that reads from these blocks.
    */
   protected override def doCheckpoint(): CheckpointRDD[T] = {
@@ -79,4 +52,26 @@ private[spark] class LocalRDDCheckpointData[T: ClassTag](@transient rdd: RDD[T])
     new LocalCheckpointRDD[T](rdd)
   }
 
+}
+
+private[spark] object LocalRDDCheckpointData {
+
+  /**
+   * Transform the specified storage level to one that uses disk.
+   *
+   * This guarantees that the RDD can be recomputed multiple times correctly as long as
+   * executors do not fail. Otherwise, if the RDD is cached in memory only, for instance,
+   * the checkpoint data will be lost if the relevant block is evicted from memory.
+   *
+   * This method is idempotent.
+   */
+  def transformStorageLevel(level: StorageLevel): StorageLevel = {
+    // If this RDD is to be cached off-heap, fail fast since we cannot provide any
+    // correctness guarantees about subsequent computations after the first one
+    if (level.useOffHeap) {
+      throw new SparkException("Local checkpointing is not compatible with off heap caching.")
+    }
+
+    StorageLevel(useDisk = true, level.useMemory, level.deserialized, level.replication)
+  }
 }
