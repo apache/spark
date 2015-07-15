@@ -56,7 +56,7 @@ class NaiveBayesSuite extends SparkFunSuite with MLlibTestSparkContext {
     ParamsSuite.checkParams(new NaiveBayes)
     val model = new NaiveBayesModel("nb", labels = Vectors.dense(Array(0.0, 1.0)),
       pi = Vectors.dense(Array(0.2, 0.8)), theta = new DenseMatrix(2, 3,
-        Array(0.1, 0.2, 0.3, 0.4, 0.6, 0.4)), "multinomial")
+        Array(0.1, 0.2, 0.3, 0.4, 0.6, 0.4)))
     ParamsSuite.checkParams(model)
   }
 

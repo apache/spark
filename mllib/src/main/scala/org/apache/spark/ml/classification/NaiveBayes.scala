@@ -50,9 +50,9 @@ private[ml] trait NaiveBayesParams extends PredictorParams {
    * (default = multinomial)
    * @group param
    */
-  final val modelType: Param[String] = new Param[String](this, "modelType",
-    "The model type which is a string (case-sensitive). Supported options: " +
-    "\"multinomial\" (default) and \"bernoulli\".")
+  final val modelType: Param[String] = new Param[String](this, "modelType", "The model type " +
+    "which is a string (case-sensitive). Supported options: multinomial (default) and bernoulli.",
+    ParamValidators.inArray[String](OldNaiveBayes.supportedModelTypes.toArray))
 
   /** @group getParam */
   final def getModelType: String = $(modelType)
@@ -88,7 +88,7 @@ class NaiveBayes(override val uid: String)
    * Default is "multinomial"
    */
   def setModelType(value: String): this.type = set(modelType, value)
-  setDefault(modelType -> "multinomial")
+  setDefault(modelType -> OldNaiveBayes.Multinomial)
 
   override protected def train(dataset: DataFrame): NaiveBayesModel = {
     val oldDataset: RDD[LabeledPoint] = extractLabeledPoints(dataset)
@@ -106,21 +106,17 @@ class NaiveBayesModel private[ml] (
     override val uid: String,
     val labels: Vector,
     val pi: Vector,
-    val theta: Matrix,
-    val modelType: String)
-  extends PredictionModel[Vector, NaiveBayesModel] {
+    val theta: Matrix)
+  extends PredictionModel[Vector, NaiveBayesModel] with NaiveBayesParams {
 
-  import NaiveBayesModel.{Bernoulli, Multinomial, supportedModelTypes}
-
-  require(supportedModelTypes.contains(modelType),
-    s"NaiveBayes was created with an unknown modelType: $modelType.")
+  import OldNaiveBayes.{Bernoulli, Multinomial}
 
   /**
    * Bernoulli scoring requires log(condprob) if 1, log(1-condprob) if 0.
    * This precomputes log(1.0 - exp(theta)) and its sum which are used for the linear algebra
    * application of this condition (in predict function).
    */
-  private val (thetaMinusNegTheta, negThetaSum) = modelType match {
+  private lazy val (thetaMinusNegTheta, negThetaSum) = $(modelType) match {
     case Multinomial => (None, None)
     case Bernoulli =>
       val negTheta = theta.map(value => math.log(1.0 - math.exp(value)))
@@ -131,11 +127,11 @@ class NaiveBayesModel private[ml] (
       (Option(thetaMinusNegTheta), Option(negTheta.multiply(ones)))
     case _ =>
       // This should never happen.
-      throw new UnknownError(s"Invalid modelType: $modelType.")
+      throw new UnknownError(s"Invalid modelType: ${$(modelType)}.")
   }
 
   override protected def predict(features: Vector): Double = {
-    modelType match {
+    $(modelType) match {
       case Multinomial =>
         val prob = theta.multiply(features)
         BLAS.axpy(1.0, pi, prob)
@@ -153,12 +149,12 @@ class NaiveBayesModel private[ml] (
         labels(prob.argmax)
       case _ =>
         // This should never happen.
-        throw new UnknownError(s"Invalid modelType: $modelType.")
+        throw new UnknownError(s"Invalid modelType: ${$(modelType)}.")
     }
   }
 
   override def copy(extra: ParamMap): NaiveBayesModel = {
-    copyValues(new NaiveBayesModel(uid, labels, pi, theta, modelType), extra)
+    copyValues(new NaiveBayesModel(uid, labels, pi, theta), extra)
   }
 
   override def toString: String = {
@@ -169,15 +165,6 @@ class NaiveBayesModel private[ml] (
 
 private[ml] object NaiveBayesModel {
 
-  /** String name for multinomial model type. */
-  private[classification] val Multinomial: String = "multinomial"
-
-  /** String name for Bernoulli model type. */
-  private[classification] val Bernoulli: String = "bernoulli"
-
-  /** Set of modelTypes that NaiveBayes supports */
-  private[classification] val supportedModelTypes = Set(Multinomial, Bernoulli)
-
   /** Convert a model from the old API */
   def fromOld(
       oldModel: OldNaiveBayesModel,
@@ -187,6 +174,6 @@ private[ml] object NaiveBayesModel {
     val pi = Vectors.dense(oldModel.pi)
     val theta = new DenseMatrix(oldModel.labels.length, oldModel.theta(0).length,
       oldModel.theta.flatten, true)
-    new NaiveBayesModel(uid, labels, pi, theta, oldModel.modelType)
+    new NaiveBayesModel(uid, labels, pi, theta)
   }
 }
