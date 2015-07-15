@@ -30,8 +30,7 @@ case object Descending extends SortDirection
  * An expression that can be used to sort a tuple.  This class extends expression primarily so that
  * transformations over expression will descend into its child.
  */
-case class SortOrder(child: Expression, direction: SortDirection) extends Expression
-    with trees.UnaryNode[Expression] {
+case class SortOrder(child: Expression, direction: SortDirection) extends UnaryExpression {
 
   override def dataType: DataType = child.dataType
   override def nullable: Boolean = child.nullable

@@ -238,12 +238,19 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   }
 }
 
-private[sql] trait LeafNode extends SparkPlan with trees.LeafNode[SparkPlan] {
+private[sql] trait LeafNode extends SparkPlan {
   self: Product =>
+
+  override def children: Seq[SparkPlan] = Nil
 }
 
-private[sql] trait UnaryNode extends SparkPlan with trees.UnaryNode[SparkPlan] {
+private[sql] trait UnaryNode extends SparkPlan {
   self: Product =>
+
+  def child: SparkPlan
+
+  override def children: Seq[SparkPlan] = child :: Nil
+
   override def outputPartitioning: Partitioning = child.outputPartitioning
 }
 
