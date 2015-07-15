@@ -166,7 +166,7 @@ def determine_java_version(java_exe):
 
 
 def set_title_and_block(title, err_block):
-    os.environ["CURRENT_BLOCK"] = ERROR_CODES[err_block]
+    os.environ["CURRENT_BLOCK"] = str(ERROR_CODES[err_block])
     line_str = '=' * 72
 
     print('')
@@ -401,7 +401,7 @@ def main():
     rm_r(os.path.join(USER_HOME, ".ivy2", "local", "org.apache.spark"))
     rm_r(os.path.join(USER_HOME, ".ivy2", "cache", "org.apache.spark"))
 
-    os.environ["CURRENT_BLOCK"] = ERROR_CODES["BLOCK_GENERAL"]
+    os.environ["CURRENT_BLOCK"] = str(ERROR_CODES["BLOCK_GENERAL"])
 
     java_exe = determine_java_executable()
 
