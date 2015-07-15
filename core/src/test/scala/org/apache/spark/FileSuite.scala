@@ -179,6 +179,7 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
   }
 
   test("object files of classes from a JAR") {
+    // scalastyle:off classforname
     val original = Thread.currentThread().getContextClassLoader
     val className = "FileSuiteObjectFileTest"
     val jar = TestUtils.createJarWithClasses(Seq(className))
@@ -201,6 +202,7 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
     finally {
       Thread.currentThread().setContextClassLoader(original)
     }
+    // scalastyle:on classforname
   }
 
   test("write SequenceFile using new Hadoop API") {
