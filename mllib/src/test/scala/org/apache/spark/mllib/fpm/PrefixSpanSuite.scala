@@ -47,8 +47,8 @@ class PrefixSpanSuite extends SparkFunSuite with MLlibTestSparkContext {
     def compareResult(
         expectedValue: Array[(Array[Int], Long)],
         actualValue: Array[(Array[Int], Long)]): Boolean = {
-      expectedValue.map(x => (x._1.toList, x._2)).toSet ==
-        actualValue.map(x => (x._1.toList, x._2)).toSet
+      expectedValue.map(x => (x._1.toSeq, x._2)).toSet ==
+        actualValue.map(x => (x._1.toSeq, x._2)).toSet
     }
 
     val prefixspan = new PrefixSpan()
