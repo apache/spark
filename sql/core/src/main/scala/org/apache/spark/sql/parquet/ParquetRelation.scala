@@ -33,6 +33,7 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap}
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, Statistics}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.{DataFrame, SQLContext}
+import org.apache.spark.util.Utils
 
 /**
  * Relation that consists of data stored in a Parquet columnar format.
@@ -108,7 +109,7 @@ private[sql] object ParquetRelation {
     //
     // Therefore we need to force the class to be loaded.
     // This should really be resolved by Parquet.
-    Class.forName(classOf[ParquetLog].getName)
+    Utils.classForName(classOf[ParquetLog].getName)
 
     // Note: Logger.getLogger("parquet") has a default logger
     // that appends to Console which needs to be cleared.
@@ -119,12 +120,12 @@ private[sql] object ParquetRelation {
     // Disables a WARN log message in ParquetOutputCommitter.  We first ensure that
     // ParquetOutputCommitter is loaded and the static LOG field gets initialized.
     // See https://issues.apache.org/jira/browse/SPARK-5968 for details
-    Class.forName(classOf[ParquetOutputCommitter].getName)
+    Utils.classForName(classOf[ParquetOutputCommitter].getName)
     JLogger.getLogger(classOf[ParquetOutputCommitter].getName).setLevel(Level.OFF)
 
     // Similar as above, disables a unnecessary WARN log message in ParquetRecordReader.
     // See https://issues.apache.org/jira/browse/PARQUET-220 for details
-    Class.forName(classOf[ParquetRecordReader[_]].getName)
+    Utils.classForName(classOf[ParquetRecordReader[_]].getName)
     JLogger.getLogger(classOf[ParquetRecordReader[_]].getName).setLevel(Level.OFF)
   }
 
