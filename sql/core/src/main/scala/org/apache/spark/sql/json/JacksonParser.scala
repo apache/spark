@@ -24,6 +24,7 @@ import scala.collection.Map
 import com.fasterxml.jackson.core._
 
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.json.JacksonUtils.nextUntil
@@ -66,10 +67,10 @@ private[sql] object JacksonParser {
         DateTimeUtils.millisToDays(DateTimeUtils.stringToTime(parser.getText).getTime)
 
       case (VALUE_STRING, TimestampType) =>
-        DateTimeUtils.stringToTime(parser.getText).getTime * 10000L
+        DateTimeUtils.stringToTime(parser.getText).getTime * 1000L
 
       case (VALUE_NUMBER_INT, TimestampType) =>
-        parser.getLongValue * 10000L
+        parser.getLongValue * 1000L
 
       case (_, StringType) =>
         val writer = new ByteArrayOutputStream()

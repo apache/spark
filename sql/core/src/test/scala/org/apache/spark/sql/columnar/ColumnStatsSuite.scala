@@ -18,7 +18,7 @@
 package org.apache.spark.sql.columnar
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.expressions.InternalRow
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.types._
 
 class ColumnStatsSuite extends SparkFunSuite {

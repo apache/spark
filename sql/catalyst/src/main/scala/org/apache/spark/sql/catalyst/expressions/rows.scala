@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.Row
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.types.{DataType, StructType, AtomicType}
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -51,26 +52,6 @@ abstract class MutableRow extends InternalRow {
     }
     new GenericInternalRow(arr)
   }
-}
-
-/**
- * A row with no data.  Calling any methods will result in an error.  Can be used as a placeholder.
- */
-object EmptyRow extends InternalRow {
-  override def apply(i: Int): Any = throw new UnsupportedOperationException
-  override def toSeq: Seq[Any] = Seq.empty
-  override def length: Int = 0
-  override def isNullAt(i: Int): Boolean = throw new UnsupportedOperationException
-  override def getInt(i: Int): Int = throw new UnsupportedOperationException
-  override def getLong(i: Int): Long = throw new UnsupportedOperationException
-  override def getDouble(i: Int): Double = throw new UnsupportedOperationException
-  override def getFloat(i: Int): Float = throw new UnsupportedOperationException
-  override def getBoolean(i: Int): Boolean = throw new UnsupportedOperationException
-  override def getShort(i: Int): Short = throw new UnsupportedOperationException
-  override def getByte(i: Int): Byte = throw new UnsupportedOperationException
-  override def getString(i: Int): String = throw new UnsupportedOperationException
-  override def getAs[T](i: Int): T = throw new UnsupportedOperationException
-  override def copy(): InternalRow = this
 }
 
 /**
@@ -149,6 +130,18 @@ class GenericInternalRow(protected[sql] val values: Array[Any])
   def this(size: Int) = this(new Array[Any](size))
 
   override def copy(): InternalRow = this
+}
+
+/**
+ * This is used for serialization of Python DataFrame
+ */
+class GenericInternalRowWithSchema(values: Array[Any], override val schema: StructType)
+  extends GenericInternalRow(values) {
+
+  /** No-arg constructor for serialization. */
+  protected def this() = this(null, null)
+
+  override def fieldIndex(name: String): Int = schema.fieldIndex(name)
 }
 
 class GenericMutableRow(val values: Array[Any]) extends MutableRow with ArrayBackedRow {

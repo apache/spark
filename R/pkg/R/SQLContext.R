@@ -86,7 +86,9 @@ infer_type <- function(x) {
 createDataFrame <- function(sqlContext, data, schema = NULL, samplingRatio = 1.0) {
   if (is.data.frame(data)) {
       # get the names of columns, they will be put into RDD
-      schema <- names(data)
+      if (is.null(schema)) {
+        schema <- names(data)
+      }
       n <- nrow(data)
       m <- ncol(data)
       # get rid of factor type

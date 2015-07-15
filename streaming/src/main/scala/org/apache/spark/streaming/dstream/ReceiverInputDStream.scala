@@ -24,7 +24,7 @@ import org.apache.spark.storage.BlockId
 import org.apache.spark.streaming._
 import org.apache.spark.streaming.rdd.WriteAheadLogBackedBlockRDD
 import org.apache.spark.streaming.receiver.Receiver
-import org.apache.spark.streaming.scheduler.InputInfo
+import org.apache.spark.streaming.scheduler.StreamInputInfo
 import org.apache.spark.streaming.util.WriteAheadLogUtils
 
 /**
@@ -70,7 +70,7 @@ abstract class ReceiverInputDStream[T: ClassTag](@transient ssc_ : StreamingCont
         val blockIds = blockInfos.map { _.blockId.asInstanceOf[BlockId] }.toArray
 
         // Register the input blocks information into InputInfoTracker
-        val inputInfo = InputInfo(id, blockInfos.flatMap(_.numRecords).sum)
+        val inputInfo = StreamInputInfo(id, blockInfos.flatMap(_.numRecords).sum)
         ssc.scheduler.inputInfoTracker.reportInfo(validTime, inputInfo)
 
         if (blockInfos.nonEmpty) {

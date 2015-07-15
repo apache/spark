@@ -702,14 +702,20 @@ object HiveTypeCoercion {
       @Nullable val ret: Expression = (inType, expectedType) match {
 
         // If the expected type is already a parent of the input type, no need to cast.
-        case _ if expectedType.isParentOf(inType) => e
+        case _ if expectedType.isSameType(inType) => e
 
         // Cast null type (usually from null literals) into target types
         case (NullType, target) => Cast(e, target.defaultConcreteType)
 
+        // If the function accepts any numeric type (i.e. the ADT `NumericType`) and the input is
+        // already a number, leave it as is.
+        case (_: NumericType, NumericType) => e
+
+        // If the function accepts any numeric type and the input is a string, we follow the hive
+        // convention and cast that input into a double
+        case (StringType, NumericType) => Cast(e, NumericType.defaultConcreteType)
+
         // Implicit cast among numeric types
-        // If input is decimal, and we expect a decimal type, just use the input.
-        case (_: DecimalType, DecimalType) => e
         // If input is a numeric type but not decimal, and we expect a decimal type,
         // cast the input to unlimited precision decimal.
         case (_: NumericType, DecimalType) if !inType.isInstanceOf[DecimalType] =>
@@ -734,7 +740,7 @@ object HiveTypeCoercion {
         // First see if we can find our input type in the type collection. If we can, then just
         // use the current expression; otherwise, find the first one we can implicitly cast.
         case (_, TypeCollection(types)) =>
-          if (types.exists(_.isParentOf(inType))) {
+          if (types.exists(_.isSameType(inType))) {
             e
           } else {
             types.flatMap(implicitCast(e, _)).headOption.orNull

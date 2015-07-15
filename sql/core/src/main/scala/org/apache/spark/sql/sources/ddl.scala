@@ -26,7 +26,8 @@ import org.apache.spark.Logging
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.sql.catalyst.AbstractSparkSQLParser
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, InternalRow}
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.RunnableCommand
 import org.apache.spark.sql.types._
@@ -303,6 +304,9 @@ private[sql] object ResolvedDataSource {
       mode: SaveMode,
       options: Map[String, String],
       data: DataFrame): ResolvedDataSource = {
+    if (data.schema.map(_.dataType).exists(_.isInstanceOf[IntervalType])) {
+      throw new AnalysisException("Cannot save interval data type into external storage.")
+    }
     val clazz: Class[_] = lookupDataSource(provider)
     val relation = clazz.newInstance() match {
       case dataSource: CreatableRelationProvider =>

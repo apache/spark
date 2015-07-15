@@ -24,10 +24,11 @@ import org.apache.hadoop.hive.serde2.typeinfo.{DecimalTypeInfo, TypeInfoFactory}
 import org.apache.hadoop.hive.serde2.{io => hiveIo}
 import org.apache.hadoop.{io => hadoopIo}
 
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
-import org.apache.spark.sql.types
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.{AnalysisException, types}
 import org.apache.spark.unsafe.types.UTF8String
 
 /* Implicit conversions */
@@ -218,6 +219,20 @@ private[hive] trait HiveInspectors {
 
     // Hive seems to return this for struct types?
     case c: Class[_] if c == classOf[java.lang.Object] => NullType
+
+    // java list type unsupported
+    case c: Class[_] if c == classOf[java.util.List[_]] =>
+      throw new AnalysisException(
+        "List type in java is unsupported because " +
+        "JVM type erasure makes spark fail to catch a component type in List<>")
+
+    // java map type unsupported
+    case c: Class[_] if c == classOf[java.util.Map[_, _]] =>
+      throw new AnalysisException(
+        "Map type in java is unsupported because " +
+        "JVM type erasure makes spark fail to catch key and value types in Map<>")
+
+    case c => throw new AnalysisException(s"Unsupported java type $c")
   }
 
   /**
@@ -252,7 +267,7 @@ private[hive] trait HiveInspectors {
         poi.getWritableConstantValue.getHiveDecimal)
     case poi: WritableConstantTimestampObjectInspector =>
       val t = poi.getWritableConstantValue
-      t.getSeconds * 10000000L + t.getNanos / 100L
+      t.getSeconds * 1000000L + t.getNanos / 1000L
     case poi: WritableConstantIntObjectInspector =>
       poi.getWritableConstantValue.get()
     case poi: WritableConstantDoubleObjectInspector =>
@@ -317,7 +332,7 @@ private[hive] trait HiveInspectors {
       case x: DateObjectInspector => DateTimeUtils.fromJavaDate(x.getPrimitiveJavaObject(data))
       case x: TimestampObjectInspector if x.preferWritable() =>
         val t = x.getPrimitiveWritableObject(data)
-        t.getSeconds * 10000000L + t.getNanos / 100
+        t.getSeconds * 1000000L + t.getNanos / 1000L
       case ti: TimestampObjectInspector =>
         DateTimeUtils.fromJavaTimestamp(ti.getPrimitiveJavaObject(data))
       case _ => pi.getPrimitiveJavaObject(data)
