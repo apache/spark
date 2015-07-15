@@ -558,7 +558,7 @@ class RDDTests(ReusedPySparkTestCase):
         counts3 = data1.treeAggregate(defaultdict(int), seqOp, comboOp, 2)
         counts4 = data2.treeAggregate(defaultdict(int), seqOp, comboOp, 2)
 
-        ground_truth = {i : 1 for i in range(10)}
+        ground_truth = {i: 1 for i in range(10)}
         self.assertEqual(counts1, ground_truth)
         self.assertEqual(counts2, ground_truth)
         self.assertEqual(counts3, ground_truth)
@@ -602,10 +602,10 @@ class RDDTests(ReusedPySparkTestCase):
         # compatibility
         from collections import defaultdict
 
-        counts1 = defaultdict(int, {i : 1 for i in range(10)})
-        counts2 = defaultdict(int, {i : 1 for i in range(3, 8)})
-        counts3 = defaultdict(int, {i : 1 for i in range(4, 7)})
-        counts4 = defaultdict(int, {i : 1 for i in range(5, 6)})
+        counts1 = defaultdict(int, {i: 1 for i in range(10)})
+        counts2 = defaultdict(int, {i: 1 for i in range(3, 8)})
+        counts3 = defaultdict(int, {i: 1 for i in range(4, 7)})
+        counts4 = defaultdict(int, {i: 1 for i in range(5, 6)})
         all_counts = [counts1, counts2, counts3, counts4]
         # Show that single or multiple partitions work
         data1 = self.sc.parallelize(all_counts, 1)
