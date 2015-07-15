@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.types
 
-import java.math.{MathContext, RoundingMode}
-
 import org.apache.spark.annotation.DeveloperApi
 
 /**
@@ -139,9 +137,9 @@ final class Decimal extends Ordered[Decimal] with Serializable {
 
   def toBigDecimal: BigDecimal = {
     if (decimalVal.ne(null)) {
-      decimalVal(MathContext.UNLIMITED)
+      decimalVal
     } else {
-      BigDecimal(longVal, _scale)(MathContext.UNLIMITED)
+      BigDecimal(longVal, _scale)
     }
   }
 
