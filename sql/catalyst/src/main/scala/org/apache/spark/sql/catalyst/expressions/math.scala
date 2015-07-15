@@ -547,8 +547,6 @@ case class Round(child: Expression, scale: Expression)
   override def left: Expression = child
   override def right: Expression = scale
 
-  override def children: Seq[Expression] = Seq(child, scale)
-
   // round of Decimal would eval to null if it fails to `changePrecision`
   override def nullable: Boolean = true
 
