@@ -43,7 +43,8 @@ def post_message_to_github(msg, ghprb_pull_id):
     request = urllib2.Request("https://api.github.com/repos/apache/spark/issues/" +
                               ghprb_pull_id + "/comments",
                               headers={
-                                  "Authorization": "x-oauth-basic:" + os.environ['GITHUB_OATH_KEY'],
+                                  "Authorization": "x-oauth-basic: %s" % (
+                                      os.environ['GITHUB_OAUTH_KEY']),
                                   "Content-Type": "application/json"
                               },
                               data=posted_message)
