@@ -38,7 +38,7 @@ class RFormulaSuite extends SparkFunSuite with MLlibTestSparkContext {
         (0, 1.0, 3.0, Vectors.dense(Array(1.0, 3.0)), 0.0),
         (2, 2.0, 5.0, Vectors.dense(Array(2.0, 5.0)), 2.0))
       ).toDF("id", "v1", "v2", "features", "label")
-    // TODO(ekl) make schema comparisons check metadata, to avoid .toString
+    // TODO(ekl) make schema comparisons ignore metadata, to avoid .toString
     assert(result.schema.toString == resultSchema.toString)
     assert(resultSchema == expected.schema)
     assert(result.collect().toSeq == expected.collect().toSeq)
