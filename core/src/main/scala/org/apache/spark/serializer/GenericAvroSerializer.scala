@@ -67,7 +67,6 @@ private[serializer] class GenericAvroSerializer(schemas: Map[Long, String])
     bos.toByteArray
   })
 
-
   /**
    * Decompresses the schema into the actual in-memory object. Keeps an internal cache of already
    * seen values so to limit the number of times that decompression has to be done.
