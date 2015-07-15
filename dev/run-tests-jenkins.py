@@ -51,6 +51,9 @@ def post_message_to_github(msg, ghprb_pull_id):
                               data=posted_message)
     try:
         response = urllib2.urlopen(request)
+
+        if response.getcode() == 201:
+            print(" > Post successful.")
     except urllib2.HTTPError as http_e:
         print_err("Failed to post message to GitHub.")
         print_err(" > http_code: %s" % http_e.code)
@@ -60,9 +63,6 @@ def post_message_to_github(msg, ghprb_pull_id):
         print_err("Failed to post message to GitHub.")
         print_err(" > urllib2_status: %s" % url_e.reason[1])
         print_err(" > data: %s" % posted_message)
-
-    if response.getcode() == 201:
-        print(" > Post successful.")
 
 
 def send_archived_logs():
