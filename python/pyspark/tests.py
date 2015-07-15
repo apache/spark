@@ -33,7 +33,6 @@ import zipfile
 import random
 import threading
 import hashlib
-import collections
 
 from py4j.protocol import Py4JJavaError
 
@@ -535,8 +534,11 @@ class RDDTests(ReusedPySparkTestCase):
         self.assertEqual(len(subset), 10)
 
     def test_aggregate_mutable_zero_value(self):
-        # Test for SPARK-9021; uses aggregate to build Counter representing an
-        # RDD of ints
+        # Test for SPARK-9021; uses aggregate and treeAggregate to build dict
+        # representing a counter of ints
+        # NOTE: dict is used instead of collections.Counter for Python 2.6
+        # compatibility
+        from collections import defaultdict
 
         # Show that single or multiple partitions work
         data1 = self.sc.range(10, numSlices=1)
@@ -547,14 +549,20 @@ class RDDTests(ReusedPySparkTestCase):
             return x
 
         def comboOp(x, y):
-            x.update(y)
+            for key, val in y.items():
+                x[key] += val
             return x
 
-        counts1 = data1.aggregate(collections.Counter(), seqOp, comboOp)
-        counts2 = data2.aggregate(collections.Counter(), seqOp, comboOp)
+        counts1 = data1.aggregate(defaultdict(int), seqOp, comboOp)
+        counts2 = data2.aggregate(defaultdict(int), seqOp, comboOp)
+        counts3 = data1.treeAggregate(defaultdict(int), seqOp, comboOp, 2)
+        counts4 = data2.treeAggregate(defaultdict(int), seqOp, comboOp, 2)
 
-        self.assertEqual(counts1, collections.Counter(range(10)))
-        self.assertEqual(counts2, collections.Counter(range(10)))
+        ground_truth = {i : 1 for i in range(10)}
+        self.assertEqual(counts1, ground_truth)
+        self.assertEqual(counts2, ground_truth)
+        self.assertEqual(counts3, ground_truth)
+        self.assertEqual(counts4, ground_truth)
 
     def test_aggregate_by_key_mutable_zero_value(self):
         # Test for SPARK-9021; uses aggregateByKey to make a pair RDD that
@@ -588,27 +596,33 @@ class RDDTests(ReusedPySparkTestCase):
         self.assertEqual(values2, ground_truth)
 
     def test_fold_mutable_zero_value(self):
-        # Test for SPARK-9021; uses fold to merge an RDD of Counters into a
-        # single Counter
-        counts1 = collections.Counter(range(10))
-        counts2 = collections.Counter(range(3, 8))
-        counts3 = collections.Counter(range(4, 7))
-        counts4 = collections.Counter(range(5, 6))
+        # Test for SPARK-9021; uses fold to merge an RDD of dict counters into
+        # a single dict
+        # NOTE: dict is used instead of collections.Counter for Python 2.6
+        # compatibility
+        from collections import defaultdict
+
+        counts1 = defaultdict(int, {i : 1 for i in range(10)})
+        counts2 = defaultdict(int, {i : 1 for i in range(3, 8)})
+        counts3 = defaultdict(int, {i : 1 for i in range(4, 7)})
+        counts4 = defaultdict(int, {i : 1 for i in range(5, 6)})
         all_counts = [counts1, counts2, counts3, counts4]
         # Show that single or multiple partitions work
         data1 = self.sc.parallelize(all_counts, 1)
         data2 = self.sc.parallelize(all_counts, 2)
 
         def comboOp(x, y):
-            x.update(y)
+            for key, val in y.items():
+                x[key] += val
             return x
 
-        fold1 = data1.fold(collections.Counter(), comboOp)
-        fold2 = data2.fold(collections.Counter(), comboOp)
+        fold1 = data1.fold(defaultdict(int), comboOp)
+        fold2 = data2.fold(defaultdict(int), comboOp)
 
-        ground_truth = collections.Counter()
+        ground_truth = defaultdict(int)
         for counts in all_counts:
-            ground_truth.update(counts)
+            for key, val in counts.items():
+                ground_truth[key] += val
         self.assertEqual(fold1, ground_truth)
         self.assertEqual(fold2, ground_truth)
 
@@ -635,28 +649,6 @@ class RDDTests(ReusedPySparkTestCase):
         ground_truth = [(i, list(range(i))*2) for i in range(10)]
         self.assertEqual(values1, ground_truth)
         self.assertEqual(values2, ground_truth)
-
-    def test_tree_aggregate_mutable_zero_value(self):
-        # Test for SPARK-9021; uses aggregate to build Counter representing an
-        # RDD of ints
-
-        # Show that single or multiple partitions work
-        data1 = self.sc.range(10, numSlices=1)
-        data2 = self.sc.range(10, numSlices=2)
-
-        def seqOp(x, y):
-            x[y] += 1
-            return x
-
-        def comboOp(x, y):
-            x.update(y)
-            return x
-
-        counts1 = data1.treeAggregate(collections.Counter(), seqOp, comboOp, 2)
-        counts2 = data2.treeAggregate(collections.Counter(), seqOp, comboOp, 2)
-
-        self.assertEqual(counts1, collections.Counter(range(10)))
-        self.assertEqual(counts2, collections.Counter(range(10)))
 
     def test_aggregate_by_key(self):
         data = self.sc.parallelize([(1, 1), (1, 1), (3, 2), (5, 1), (5, 3)], 2)
