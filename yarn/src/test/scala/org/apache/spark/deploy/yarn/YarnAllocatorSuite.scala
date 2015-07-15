@@ -26,13 +26,15 @@ import org.apache.hadoop.yarn.api.records._
 import org.apache.hadoop.yarn.client.api.AMRMClient
 import org.apache.hadoop.yarn.client.api.AMRMClient.ContainerRequest
 
+import org.scalatest.{BeforeAndAfterEach, Matchers}
+import org.mockito.Mockito._
+
 import org.apache.spark.{SecurityManager, SparkFunSuite}
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.yarn.YarnSparkHadoopUtil._
 import org.apache.spark.deploy.yarn.YarnAllocator._
+import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.scheduler.SplitInfo
-
-import org.scalatest.{BeforeAndAfterEach, Matchers}
 
 class MockResolver extends DNSToSwitchMapping {
 
@@ -91,6 +93,7 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
       "--class", "SomeClass")
     new YarnAllocator(
       "not used",
+      mock(classOf[RpcEndpointRef]),
       conf,
       sparkConf,
       rmClient,
