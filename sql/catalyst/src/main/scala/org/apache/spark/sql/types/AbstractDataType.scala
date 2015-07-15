@@ -34,32 +34,18 @@ private[sql] abstract class AbstractDataType {
   private[sql] def defaultConcreteType: DataType
 
   /**
-   * Returns true if this data type is the same type as `other`.  This is different that equality
-   * as equality will also consider data type parametrization, such as decimal precision.
+   * Returns true if `other` is an acceptable input type for a function that expects this,
+   * possibly abstract DataType.
    *
    * {{{
    *   // this should return true
-   *   DecimalType.isSameType(DecimalType(10, 2))
-   *
-   *   // this should return false
-   *   NumericType.isSameType(DecimalType(10, 2))
-   * }}}
-   */
-  private[sql] def isSameType(other: DataType): Boolean
-
-  /**
-   * Returns true if `other` is an acceptable input type for a function that expectes this,
-   * possibly abstract, DataType.
-   *
-   * {{{
-   *   // this should return true
-   *   DecimalType.isSameType(DecimalType(10, 2))
+   *   DecimalType.acceptsType(DecimalType(10, 2))
    *
    *   // this should return true as well
    *   NumericType.acceptsType(DecimalType(10, 2))
    * }}}
    */
-  private[sql] def acceptsType(other: DataType): Boolean = isSameType(other)
+  private[sql] def acceptsType(other: DataType): Boolean
 
   /** Readable string representation for the type. */
   private[sql] def simpleString: String
@@ -83,10 +69,8 @@ private[sql] class TypeCollection(private val types: Seq[AbstractDataType])
 
   override private[sql] def defaultConcreteType: DataType = types.head.defaultConcreteType
 
-  override private[sql] def isSameType(other: DataType): Boolean = false
-
   override private[sql] def acceptsType(other: DataType): Boolean =
-    types.exists(_.isSameType(other))
+    types.exists(_.acceptsType(other))
 
   override private[sql] def simpleString: String = {
     types.map(_.simpleString).mkString("(", " or ", ")")
@@ -107,13 +91,6 @@ private[sql] object TypeCollection {
     TimestampType, DateType,
     StringType, BinaryType)
 
-  /**
-   * Types that can be used in bitwise operations.
-   */
-  val Bitwise = TypeCollection(
-    BooleanType,
-    ByteType, ShortType, IntegerType, LongType)
-
   def apply(types: AbstractDataType*): TypeCollection = new TypeCollection(types)
 
   def unapply(typ: AbstractDataType): Option[Seq[AbstractDataType]] = typ match {
@@ -133,8 +110,6 @@ protected[sql] object AnyDataType extends AbstractDataType {
   override private[sql] def defaultConcreteType: DataType = throw new UnsupportedOperationException
 
   override private[sql] def simpleString: String = "any"
-
-  override private[sql] def isSameType(other: DataType): Boolean = false
 
   override private[sql] def acceptsType(other: DataType): Boolean = true
 }
@@ -183,13 +158,11 @@ private[sql] object NumericType extends AbstractDataType {
 
   override private[sql] def simpleString: String = "numeric"
 
-  override private[sql] def isSameType(other: DataType): Boolean = false
-
   override private[sql] def acceptsType(other: DataType): Boolean = other.isInstanceOf[NumericType]
 }
 
 
-private[sql] object IntegralType {
+private[sql] object IntegralType extends AbstractDataType {
   /**
    * Enables matching against IntegralType for expressions:
    * {{{
@@ -198,6 +171,12 @@ private[sql] object IntegralType {
    * }}}
    */
   def unapply(e: Expression): Boolean = e.dataType.isInstanceOf[IntegralType]
+
+  override private[sql] def defaultConcreteType: DataType = IntegerType
+
+  override private[sql] def simpleString: String = "integral"
+
+  override private[sql] def acceptsType(other: DataType): Boolean = other.isInstanceOf[IntegralType]
 }
 
 

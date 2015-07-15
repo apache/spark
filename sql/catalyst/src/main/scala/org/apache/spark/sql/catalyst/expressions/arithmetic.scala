@@ -320,7 +320,6 @@ case class MaxOf(left: Expression, right: Expression) extends BinaryArithmetic {
   }
 
   override def symbol: String = "max"
-  override def prettyName: String = symbol
 }
 
 case class MinOf(left: Expression, right: Expression) extends BinaryArithmetic {
@@ -375,5 +374,4 @@ case class MinOf(left: Expression, right: Expression) extends BinaryArithmetic {
   }
 
   override def symbol: String = "min"
-  override def prettyName: String = symbol
 }

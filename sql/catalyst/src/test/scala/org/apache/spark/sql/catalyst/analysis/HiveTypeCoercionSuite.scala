@@ -345,14 +345,14 @@ object HiveTypeCoercionSuite {
   }
 
   case class AnyTypeBinaryOperator(left: Expression, right: Expression)
-    extends BinaryOperator with ExpectsInputTypes {
+    extends BinaryOperator {
     override def dataType: DataType = NullType
     override def inputType: AbstractDataType = AnyDataType
     override def symbol: String = "anytype"
   }
 
   case class NumericTypeBinaryOperator(left: Expression, right: Expression)
-    extends BinaryOperator with ExpectsInputTypes {
+    extends BinaryOperator {
     override def dataType: DataType = NullType
     override def inputType: AbstractDataType = NumericType
     override def symbol: String = "numerictype"
