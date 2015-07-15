@@ -19,9 +19,11 @@ package org.apache.spark.rdd
 
 import scala.reflect.ClassTag
 
+import org.apache.hadoop.fs.FileSystem
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark._
+import org.apache.spark.util.{CheckpointingIterator, SerializableConfiguration}
 import org.apache.spark.util.SerializableConfiguration
 
 /**
@@ -43,6 +45,26 @@ private[spark] class RDDCheckpointData[T: ClassTag](@transient rdd: RDD[T])
   extends Logging with Serializable {
 
   import CheckpointState._
+
+  // Because SparkContext is transient in RDD, so we can't get the id and checkpointDir later.
+  // So keep a copy of the id and checkpointDir.
+  // The id of RDD
+  val rddId: Int = rdd.id
+
+  // The path the checkpoint data will write to.
+  val checkpointDir = rdd.context.checkpointDir
+  @transient var checkpointPath: Path = null
+  @transient var fs: FileSystem = null
+  if (checkpointDir.isDefined) {
+    checkpointPath = new Path(checkpointDir.get, "rdd-" + rddId)
+    fs = checkpointPath.getFileSystem(rdd.context.hadoopConfiguration)
+    if (!fs.mkdirs(checkpointPath)) {
+      throw new SparkException("Failed to create checkpoint path " + checkpointPath)
+    }
+  }
+
+  val broadcastedConf = rdd.context.broadcast(
+    new SerializableConfiguration(rdd.context.hadoopConfiguration))
 
   // The checkpoint state of the associated RDD.
   private var cpState = Initialized
@@ -66,6 +88,27 @@ private[spark] class RDDCheckpointData[T: ClassTag](@transient rdd: RDD[T])
     cpFile
   }
 
+  // Get the iterator used to write checkpoint data to HDFS
+  def getCheckpointIterator(
+      rddIterator: Iterator[T],
+      context: TaskContext,
+      partitionId: Int): Iterator[T] = {
+    RDDCheckpointData.synchronized {
+      if (cpState == Initialized) {
+        // Create the output path for the checkpoint
+        val path = new Path(checkpointDir.get, "rdd-" + rddId)
+        CheckpointingIterator[T](
+          rddIterator,
+          path.toString,
+          broadcastedConf,
+          partitionId,
+          context)
+      } else {
+        rddIterator
+      }
+    }
+  }
+
   /**
    * Materialize this RDD and write its content to a reliable DFS.
    * This is called immediately after the first action invoked on this RDD has completed.
@@ -82,25 +125,13 @@ private[spark] class RDDCheckpointData[T: ClassTag](@transient rdd: RDD[T])
       }
     }
 
-    // Create the output path for the checkpoint
-    val path = RDDCheckpointData.rddCheckpointDataPath(rdd.context, rdd.id).get
-    val fs = path.getFileSystem(rdd.context.hadoopConfiguration)
-    if (!fs.mkdirs(path)) {
-      throw new SparkException(s"Failed to create checkpoint path $path")
-    }
-
-    // Save to file, and reload it as an RDD
-    val broadcastedConf = rdd.context.broadcast(
-      new SerializableConfiguration(rdd.context.hadoopConfiguration))
+    val path = checkpointPath
     val newRDD = new CheckpointRDD[T](rdd.context, path.toString)
     if (rdd.conf.getBoolean("spark.cleaner.referenceTracking.cleanCheckpoints", false)) {
       rdd.context.cleaner.foreach { cleaner =>
-        cleaner.registerRDDCheckpointDataForCleanup(newRDD, rdd.id)
+        cleaner.registerRDDCheckpointDataForCleanup(newRDD, rddId)
       }
     }
-
-    // TODO: This is expensive because it computes the RDD again unnecessarily (SPARK-8582)
-    rdd.context.runJob(rdd, CheckpointRDD.writeToFile[T](path.toString, broadcastedConf) _)
     if (newRDD.partitions.length != rdd.partitions.length) {
       throw new SparkException(
         "Checkpoint RDD " + newRDD + "(" + newRDD.partitions.length + ") has different " +
@@ -114,7 +145,7 @@ private[spark] class RDDCheckpointData[T: ClassTag](@transient rdd: RDD[T])
       rdd.markCheckpointed(newRDD)   // Update the RDD's dependencies and partitions
       cpState = Checkpointed
     }
-    logInfo(s"Done checkpointing RDD ${rdd.id} to $path, new parent is RDD ${newRDD.id}")
+    logInfo(s"Done checkpointing RDD ${rddId} to $path, new parent is RDD ${newRDD.id}")
   }
 
   def getPartitions: Array[Partition] = RDDCheckpointData.synchronized {

@@ -359,7 +359,7 @@ class CheckpointSuite extends SparkFunSuite with LocalSparkContext with Logging 
    * have large size.
    */
   def generateFatPairRDD(): RDD[(Int, Int)] = {
-    new FatPairRDD(sc.makeRDD(1 to 100, 4), partitioner).mapValues(x => x)
+    new FatPairRDD(sc.makeRDD(1 to 100, 2), partitioner).mapValues(x => x)
   }
 
   /**
