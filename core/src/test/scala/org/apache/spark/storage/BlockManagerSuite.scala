@@ -1091,6 +1091,47 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     droppedBlocks.clear()
   }
 
+  test("block failed to unroll should not be replicated for MEMORY_ONLY_2") {
+    store = makeBlockManager(12000, "exec1")
+    store2 = makeBlockManager(120000, "exec2")
+    val bigList = List.fill(70)(new Array[Byte](100))
+
+    // Unroll huge block with not enough space. Even after ensuring free space of 12000 * 0.4 =
+    // 4800 bytes, there is not enough room to unroll this block in store.
+    // In store2 even though there is enough room to unroll
+    // replication should not happen to store2.
+    store.putIterator("block1", bigList.iterator, StorageLevel.MEMORY_ONLY_2)
+    val memoryStore = store.memoryStore
+    val memoryStore2 = store2.memoryStore
+    // check to see if block is replicated
+    val memSize = if (memoryStore.contains("block1")) memoryStore.getSize("block1") else 0L
+    val memSize2 = if (memoryStore2.contains("block1")) memoryStore2.getSize("block1") else 0L
+    assert(memSize == 0)
+    assert(memSize2 == 0)
+  }
+
+  test("block failed to unroll will be replicated for MEMORY_AND_DISK_2") {
+    store = makeBlockManager(12000, "exec1")
+    store2 = makeBlockManager(120000, "exec2")
+    val diskStore = store.diskStore
+    val bigList = List.fill(70)(new Array[Byte](100))
+
+    // Unroll huge block with not enough space. Even after ensuring free space of 12000 * 0.4 =
+    // 4800 bytes, there is not enough room to unroll this block in store.
+    // But this block able to store to Disk as storage level is MEMORY_AND_DISK_2
+    // In this case replication to store2 should be successful
+    store.putIterator("block1", bigList.iterator, StorageLevel.MEMORY_AND_DISK_2)
+    val memoryStore = store.memoryStore
+    val memoryStore2 = store2.memoryStore
+    // check to see if block is replicated
+    val memSize = if (memoryStore.contains("block1")) memoryStore.getSize("block1") else 0L
+    val diskSize = if (diskStore.contains("block1")) diskStore.getSize("block1") else 0L
+    val memSize2 = if (memoryStore2.contains("block1")) memoryStore2.getSize("block1") else 0L
+    assert(memSize == 0)
+    assert(diskSize > 0)
+    assert(memSize2 > 0)
+  }
+
   test("safely unroll blocks through putIterator") {
     store = makeBlockManager(12000)
     val memOnly = StorageLevel.MEMORY_ONLY

@@ -833,8 +833,10 @@ private[spark] class BlockManager(
     logDebug("Put block %s locally took %s".format(blockId, Utils.getUsedTimeMs(startTimeMs)))
 
     // Either we're storing bytes and we asynchronously started replication, or we're storing
-    // values and need to serialize and replicate them now:
-    if (putLevel.replication > 1) {
+    // values and need to serialize and replicate them now.
+    // Should not replicate the block if its StorageLevel is StorageLevel.NONE or
+    // putting it to local is failed.
+    if (!putBlockInfo.isFailed && putLevel.replication > 1) {
       data match {
         case ByteBufferValues(bytes) =>
           if (replicationFuture != null) {
