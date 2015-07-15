@@ -58,9 +58,6 @@ private[streaming] case class ReportError(streamId: Int, message: String, error:
 private[streaming] case class DeregisterReceiver(streamId: Int, msg: String, error: String)
   extends ReceiverTrackerMessage
 
-/** It's used to ask ReceiverTracker to return a candidate executor list to run the receiver */
-private[streaming] case class ScheduleReceiver(streamId: Int) extends ReceiverTrackerMessage
-
 /**
  * This class manages the execution of the receivers of ReceiverInputDStreams. Instance of
  * this class must be created after all input streams have been added and StreamingContext.start()
@@ -122,12 +119,12 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
   private def isTrackerStarted(): Boolean = trackerStateLock.synchronized {
     trackerState == Started
   }
- 
+
   /** Check if tracker has been marked for stopping */
   private def isTrackerStopping(): Boolean = trackerStateLock.synchronized {
     trackerState == Stopping
   }
- 
+
   /** Check if tracker has been marked for stopped */
   private def isTrackerStopped(): Boolean = trackerStateLock.synchronized {
     trackerState == Stopped
@@ -219,6 +216,9 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
     trackerStateLock.synchronized {
       if (isTrackerStopping || isTrackerStopped) {
         false
+      } else if (!ssc.sparkContext.isLocal && // We don't need to schedule it in the local mode
+        !scheduleReceiver(streamId).contains(host)) {
+        false
       } else {
         // When updating "receiverInfo", we should make sure "trackerState" won't be changed at the
         // same time. Therefore the following line should be in "trackerStateLock.synchronized".
@@ -305,8 +305,6 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
       case DeregisterReceiver(streamId, message, error) =>
         deregisterReceiver(streamId, message, error)
         context.reply(true)
-      case ScheduleReceiver(streamId) =>
-        context.reply(scheduleReceiver(streamId))
     }
   }
 

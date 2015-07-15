@@ -175,19 +175,11 @@ private[streaming] abstract class ReceiverSupervisor(
       stopReceiver("Restarting receiver with delay " + delay + "ms: " + message, error)
       logDebug("Sleeping for " + delay)
       Thread.sleep(delay)
-      val scheduledLocations = getAllowedLocations()
-      if (scheduledLocations.isEmpty || scheduledLocations.contains(host)) {
-        logInfo("Starting receiver again")
-        startReceiver()
-        logInfo("Receiver started again")
-      } else {
-        stop("Receiver is scheduled to another executor", None)
-      }
+      logInfo("Starting receiver again")
+      startReceiver()
+      logInfo("Receiver started again")
     }(futureExecutionContext)
   }
-
-  /** Return a list of candidate executors to run the receiver */
-  def getAllowedLocations(): Seq[String] = Seq.empty
 
   /** Check if receiver has been marked for starting */
   def isReceiverStarted(): Boolean = {

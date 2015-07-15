@@ -183,7 +183,4 @@ private[streaming] class ReceiverSupervisorImpl(
     receivedBlockHandler.cleanupOldBlocks(cleanupThreshTime.milliseconds)
   }
 
-  override def getAllowedLocations(): Seq[String] = {
-    trackerEndpoint.askWithRetry[Seq[String]](ScheduleReceiver(streamId))
-  }
 }
