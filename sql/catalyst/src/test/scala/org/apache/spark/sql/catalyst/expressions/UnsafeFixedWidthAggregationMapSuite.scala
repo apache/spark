@@ -57,8 +57,8 @@ class UnsafeFixedWidthAggregationMapSuite
   test("empty map") {
     val map = new UnsafeFixedWidthAggregationMap(
       emptyProjection,
-      new UnsafeRowConverter(groupKeySchema),
-      new UnsafeRowConverter(aggBufferSchema),
+      UnsafeRowConverter(groupKeySchema),
+      UnsafeRowConverter(aggBufferSchema),
       memoryManager,
       1024, // initial capacity
       false // disable perf metrics
@@ -70,8 +70,8 @@ class UnsafeFixedWidthAggregationMapSuite
   test("updating values for a single key") {
     val map = new UnsafeFixedWidthAggregationMap(
       emptyProjection,
-      new UnsafeRowConverter(groupKeySchema),
-      new UnsafeRowConverter(aggBufferSchema),
+      UnsafeRowConverter(groupKeySchema),
+      UnsafeRowConverter(aggBufferSchema),
       memoryManager,
       1024, // initial capacity
       false // disable perf metrics
@@ -96,8 +96,8 @@ class UnsafeFixedWidthAggregationMapSuite
   test("inserting large random keys") {
     val map = new UnsafeFixedWidthAggregationMap(
       emptyProjection,
-      new UnsafeRowConverter(groupKeySchema),
-      new UnsafeRowConverter(aggBufferSchema),
+      UnsafeRowConverter(groupKeySchema),
+      UnsafeRowConverter(aggBufferSchema),
       memoryManager,
       128, // initial capacity
       false // disable perf metrics
@@ -123,8 +123,8 @@ class UnsafeFixedWidthAggregationMapSuite
       Seq(AttributeReference("price", DecimalType.Unlimited)()))
     val map = new UnsafeFixedWidthAggregationMap(
       emptyProjection,
-      new UnsafeRowConverter(groupKeySchema),
-      new UnsafeRowConverter(aggBufferSchema),
+      UnsafeRowConverter(groupKeySchema),
+      UnsafeRowConverter(aggBufferSchema),
       memoryManager,
       1, // initial capacity
       false // disable perf metrics

@@ -82,7 +82,7 @@ case class InterpretedMutableProjection(expressions: Seq[Expression]) extends Mu
  */
 case class ToUnsafeProjection(fields: Seq[DataType]) extends Projection {
 
-  private[this] val converter = new UnsafeRowConverter(fields.toArray)
+  private[this] val converter = UnsafeRowConverter(fields.toArray)
   private[this] val pool = new ObjectPool(10)
   private[this] var buffer = new Array[Byte](1024)
   private[this] val unsafeRow = new UnsafeRow(pool)

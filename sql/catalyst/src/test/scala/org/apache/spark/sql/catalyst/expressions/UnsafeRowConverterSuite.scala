@@ -34,7 +34,7 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers {
 
   test("basic conversion with only primitive types") {
     val fieldTypes: Array[DataType] = Array(LongType, LongType, IntegerType)
-    val converter = new UnsafeRowConverter(fieldTypes)
+    val converter = UnsafeRowConverter(fieldTypes)
 
     val row = new SpecificMutableRow(fieldTypes)
     row.setLong(0, 0)
@@ -72,7 +72,7 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers {
 
   test("basic conversion with primitive, string and binary types") {
     val fieldTypes: Array[DataType] = Array(LongType, StringType, BinaryType)
-    val converter = new UnsafeRowConverter(fieldTypes)
+    val converter = UnsafeRowConverter(fieldTypes)
 
     val row = new SpecificMutableRow(fieldTypes)
     row.setLong(0, 0)
@@ -116,7 +116,7 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers {
 
   test("basic conversion with primitive, decimal and array") {
     val fieldTypes: Array[DataType] = Array(LongType, DecimalType(10, 0), ArrayType(StringType))
-    val converter = new UnsafeRowConverter(fieldTypes)
+    val converter = UnsafeRowConverter(fieldTypes)
 
     val row = new SpecificMutableRow(fieldTypes)
     row.setLong(0, 0)
@@ -146,7 +146,7 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers {
 
   test("basic conversion with primitive, string, date and timestamp types") {
     val fieldTypes: Array[DataType] = Array(LongType, StringType, DateType, TimestampType)
-    val converter = new UnsafeRowConverter(fieldTypes)
+    val converter = UnsafeRowConverter(fieldTypes)
 
     val row = new SpecificMutableRow(fieldTypes)
     row.setLong(0, 0)
@@ -193,7 +193,7 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers {
       DecimalType.Unlimited,
       ArrayType(IntegerType)
     )
-    val converter = new UnsafeRowConverter(fieldTypes)
+    val converter = UnsafeRowConverter(fieldTypes)
 
     val rowWithAllNullColumns: InternalRow = {
       val r = new SpecificMutableRow(fieldTypes)

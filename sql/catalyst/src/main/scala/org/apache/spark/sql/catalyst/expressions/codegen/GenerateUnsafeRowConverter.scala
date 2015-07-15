@@ -23,18 +23,18 @@ import org.apache.spark.sql.types.{BinaryType, DataType, StringType}
 /**
  * Generates byte code that convert a InternalRow to an [[UnsafeRow]].
  */
-object GenerateToUnsafeProjection extends CodeGenerator[Seq[DataType], Projection] {
+object GenerateUnsafeRowConverter extends CodeGenerator[Array[DataType], UnsafeRowConverter] {
 
-  protected def canonicalize(in: Seq[DataType]): Seq[DataType] = in
+  protected def canonicalize(in: Array[DataType]): Array[DataType] = in
 
-  protected def bind(in: Seq[DataType], inputSchema: Seq[Attribute]): Seq[DataType] = in
+  protected def bind(in: Array[DataType], inputSchema: Seq[Attribute]): Array[DataType] = in
 
-  protected def create(fields: Seq[DataType]): Projection = {
+  protected def create(fields: Array[DataType]): UnsafeRowConverter = {
     val ctx = newCodeGenContext()
-    val sizes = fields.zipWithIndex.map { case (dt, i) =>
+    val additionalSize = fields.zipWithIndex.map { case (dt, i) =>
       dt match {
-        case StringType => s" + stringWriter.getSize(row, $i)"
-        case BinaryType => s" + binaryWriter.getSize(row, $i)"
+        case StringType => s" + (row.isNullAt($i) ? 0 : stringWriter.getSize(row, $i))"
+        case BinaryType => s" + (row.isNullAt($i) ? 0 : binaryWriter.getSize(row, $i))"
         case _ => ""
       }
     }.mkString("")
@@ -63,34 +63,29 @@ object GenerateToUnsafeProjection extends CodeGenerator[Seq[DataType], Projectio
         return new SpecificProjection();
       }
 
-      class SpecificProjection extends ${classOf[BaseProjection].getName} {
-
-        private final org.apache.spark.sql.catalyst.util.ObjectPool pool =
-         new org.apache.spark.sql.catalyst.util.ObjectPool(1);
-        private final UnsafeRow target = new UnsafeRow(pool);
-        private byte[] buffer = new byte[64];
+      class SpecificProjection extends ${classOf[UnsafeRowConverter].getName} {
 
         private final org.apache.spark.sql.catalyst.expressions.StringUnsafeColumnWriter
-         stringWriter = new org.apache.spark.sql.catalyst.expressions.StringUnsafeColumnWriter();
+          stringWriter = new org.apache.spark.sql.catalyst.expressions.StringUnsafeColumnWriter();
         private final org.apache.spark.sql.catalyst.expressions.BinaryUnsafeColumnWriter
-         binaryWriter = new org.apache.spark.sql.catalyst.expressions.BinaryUnsafeColumnWriter();
+          binaryWriter = new org.apache.spark.sql.catalyst.expressions.BinaryUnsafeColumnWriter();
         private final org.apache.spark.sql.catalyst.expressions.ObjectUnsafeColumnWriter
-         objectWriter = new org.apache.spark.sql.catalyst.expressions.ObjectUnsafeColumnWriter();
+          objectWriter = new org.apache.spark.sql.catalyst.expressions.ObjectUnsafeColumnWriter();
 
         public SpecificProjection() {}
 
-        public Object apply(Object _i) {
-          InternalRow row = (InternalRow) _i;
-          int numBytes = $fixedSize $sizes;
-          if (numBytes > buffer.length) {
-            buffer = new byte[numBytes];
-          }
-          target.pointTo(buffer, org.apache.spark.unsafe.PlatformDependent.BYTE_ARRAY_OFFSET,
-            ${fields.size}, numBytes);
+        public int numFields() {
+          return ${fields.size};
+        }
+
+        public int getSizeRequirement(InternalRow row) {
+          return $fixedSize $additionalSize;
+        }
+
+        public int writeRow(InternalRow row, UnsafeRow target) {
           int cursor = $fixedSize;
-          pool.clear();
           $writers
-          return target;
+          return cursor;
         }
       }
     """
@@ -98,6 +93,6 @@ object GenerateToUnsafeProjection extends CodeGenerator[Seq[DataType], Projectio
     logDebug(s"code for ${fields.mkString(",")}:\n$code")
 
     val c = compile(code)
-    c.generate(null).asInstanceOf[Projection]
+    c.generate(null).asInstanceOf[UnsafeRowConverter]
   }
 }

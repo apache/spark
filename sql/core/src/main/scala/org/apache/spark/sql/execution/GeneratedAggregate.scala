@@ -283,8 +283,8 @@ case class GeneratedAggregate(
         log.info("Using Unsafe-based aggregator")
         val aggregationMap = new UnsafeFixedWidthAggregationMap(
           newAggregationBuffer,
-          new UnsafeRowConverter(groupKeySchema),
-          new UnsafeRowConverter(aggregationBufferSchema),
+          UnsafeRowConverter(groupKeySchema),
+          UnsafeRowConverter(aggregationBufferSchema),
           TaskContext.get.taskMemoryManager(),
           1024 * 16, // initial capacity
           false // disable tracking of performance metrics
