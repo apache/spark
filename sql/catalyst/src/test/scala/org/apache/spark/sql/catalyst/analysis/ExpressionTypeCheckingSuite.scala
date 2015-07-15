@@ -52,6 +52,13 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite {
       s"differing types in '${expr.prettyString}' (int and boolean)")
   }
 
+  def assertErrorWithImplicitCast(expr: Expression, errorMessage: String): Unit = {
+    val e = intercept[AnalysisException] {
+      assertSuccess(expr)
+    }
+    assert(e.getMessage.contains(errorMessage))
+  }
+
   test("check types for unary arithmetic") {
     assertError(UnaryMinus('stringField), "operator - accepts numeric type")
     assertError(Abs('stringField), "function abs accepts numeric type")
@@ -170,5 +177,15 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite {
     assertError(
       CreateNamedStruct(Seq('a.string.at(0), "a", "b", 2.0)),
         "Odd position only allow foldable and not-null StringType expressions")
+  }
+
+  test("check types for ROUND") {
+    assertErrorWithImplicitCast(Round(Literal(null), 'booleanField),
+      "data type mismatch: argument 2 is expected to be of type int")
+    assertErrorWithImplicitCast(Round(Literal(null), 'complexField),
+      "data type mismatch: argument 2 is expected to be of type int")
+    assertSuccess(Round(Literal(null), Literal(null)))
+    assertError(Round('booleanField, 'intField),
+      "data type mismatch: argument 1 is expected to be of type numeric")
   }
 }
