@@ -24,8 +24,20 @@ import org.apache.spark.sql.catalyst.trees
 import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.types._
 
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// This file defines the basic expression abstract classes in Catalyst, including:
+// Expression: the base expression abstract class
+// LeafExpression
+// UnaryExpression
+// BinaryExpression
+// BinaryOperator
+//
+// For details, see their classdocs.
+////////////////////////////////////////////////////////////////////////////////////////////////////
 
 /**
+ * An expression in Catalyst.
+ *
  * If an expression wants to be exposed in the function registry (so users can call it with
  * "name(arguments...)", the concrete implementation must be a case class whose constructor
  * arguments are all Expressions types.
@@ -335,15 +347,41 @@ abstract class BinaryExpression extends Expression with trees.BinaryNode[Express
 
 
 /**
- * An expression that has two inputs that are expected to the be same type. If the two inputs have
- * different types, the analyzer will find the tightest common type and do the proper type casting.
+ * A [[BinaryExpression]] that is an operator, with two properties:
+ *
+ * 1. The string representation is "x symbol y", rather than "funcName(x, y)".
+ * 2. Two inputs are expected to the be same type. If the two inputs have different types,
+ *    the analyzer will find the tightest common type and do the proper type casting.
  */
-abstract class BinaryOperator extends BinaryExpression {
+abstract class BinaryOperator extends BinaryExpression with ExpectsInputTypes {
   self: Product =>
+
+  /**
+   * Expected input type from both left/right child expressions, similar to the
+   * [[ImplicitCastInputTypes]] trait.
+   */
+  def inputType: AbstractDataType
 
   def symbol: String
 
   override def toString: String = s"($left $symbol $right)"
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(inputType, inputType)
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    // First call the checker for ExpectsInputTypes, and then check whether left and right have
+    // the same type.
+    super.checkInputDataTypes() match {
+      case TypeCheckResult.TypeCheckSuccess =>
+        if (left.dataType != right.dataType) {
+          TypeCheckResult.TypeCheckFailure(s"differing types in '$prettyString' " +
+            s"(${left.dataType.simpleString} and ${right.dataType.simpleString}).")
+        } else {
+          TypeCheckResult.TypeCheckSuccess
+        }
+      case TypeCheckResult.TypeCheckFailure(msg) => TypeCheckResult.TypeCheckFailure(msg)
+    }
+  }
 }
 
 

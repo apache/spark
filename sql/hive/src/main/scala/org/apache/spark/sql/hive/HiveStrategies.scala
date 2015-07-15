@@ -125,7 +125,7 @@ private[hive] trait HiveStrategies {
                 InterpretedPredicate.create(castedPredicate)
               }
 
-            val partitions = relation.getHiveQlPartitions(pruningPredicates).filter { part =>
+            val partitions = relation.hiveQlPartitions.filter { part =>
               val partitionValues = part.getValues
               var i = 0
               while (i < partitionValues.size()) {
@@ -213,7 +213,7 @@ private[hive] trait HiveStrategies {
           projectList,
           otherPredicates,
           identity[Seq[Expression]],
-          HiveTableScan(_, relation, pruningPredicates)(hiveContext)) :: Nil
+          HiveTableScan(_, relation, pruningPredicates.reduceLeftOption(And))(hiveContext)) :: Nil
       case _ =>
         Nil
     }
