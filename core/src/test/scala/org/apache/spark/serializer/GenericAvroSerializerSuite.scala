@@ -17,13 +17,13 @@
 
 package org.apache.spark.serializer
 
-import java.io.{ByteArrayInputStream, ByteArrayOutputStream, OutputStream}
+import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
 import java.nio.ByteBuffer
 
 import com.esotericsoftware.kryo.io.{Output, Input}
-import org.apache.avro.generic.GenericData.Record
 import org.apache.avro.{SchemaBuilder, Schema}
-import org.apache.spark.io.CompressionCodec
+import org.apache.avro.generic.GenericData.Record
+
 import org.apache.spark.{SparkFunSuite, SharedSparkContext}
 
 class GenericAvroSerializerSuite extends SparkFunSuite with SharedSparkContext {

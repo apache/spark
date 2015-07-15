@@ -20,26 +20,17 @@ package org.apache.spark.serializer
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
 import java.nio.ByteBuffer
 
-import org.apache.commons.io.IOUtils
-import org.apache.spark.io.CompressionCodec
-import org.xerial.snappy.{SnappyInputStream, SnappyOutputStream}
-
 import scala.collection.mutable
 
+import org.apache.commons.io.IOUtils
 import com.esotericsoftware.kryo.{Kryo, Serializer => KSerializer}
 import com.esotericsoftware.kryo.io.{Input => KryoInput, Output => KryoOutput}
+import org.xerial.snappy.{SnappyInputStream, SnappyOutputStream}
+
 import org.apache.avro.{Schema, SchemaNormalization}
 import org.apache.avro.generic.{GenericData, GenericRecord}
 import org.apache.avro.io._
 
-/**
- *
- */
-private[spark] object GenericAvroSerializer {
-  final val avroSchemaNamespace = "avro.schema."
-  def avroSchemaKey(schema: Schema): String =
-    avroSchemaNamespace + SchemaNormalization.parsingFingerprint64(schema)
-}
 
 /**
  * Custom serializer used for generic Avro records. If the user registers the schemas
@@ -98,17 +89,14 @@ private[serializer] class GenericAvroSerializer(schemas: Map[Long, String])
       SchemaNormalization.parsingFingerprint64(schema)
     })
     schemas.get(fingerprint) match {
-      case Some(_) => {
+      case Some(_) =>
         output.writeBoolean(true)
         output.writeLong(fingerprint)
-      }
-      case None => {
+      case None =>
         output.writeBoolean(false)
         val compressedSchema = compress(schema)
         output.writeInt(compressedSchema.length)
         output.writeBytes(compressedSchema)
-
-      }
     }
 
     writerCache.getOrElseUpdate(schema, GenericData.get.createDatumWriter(schema))
@@ -148,4 +136,3 @@ private[serializer] class GenericAvroSerializer(schemas: Map[Long, String])
   override def read(kryo: Kryo, input: KryoInput, datumClass: Class[GenericRecord]): GenericRecord =
     deserializeDatum(input)
 }
-
