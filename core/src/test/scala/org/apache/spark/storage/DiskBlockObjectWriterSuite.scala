@@ -26,7 +26,7 @@ import org.apache.spark.executor.ShuffleWriteMetrics
 import org.apache.spark.serializer.JavaSerializer
 import org.apache.spark.util.Utils
 
-class BlockObjectWriterSuite extends SparkFunSuite with BeforeAndAfterEach {
+class DiskBlockObjectWriterSuite extends SparkFunSuite with BeforeAndAfterEach {
 
   var tempDir: File = _
 

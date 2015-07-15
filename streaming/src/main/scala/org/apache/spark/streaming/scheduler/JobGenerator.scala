@@ -22,7 +22,7 @@ import scala.util.{Failure, Success, Try}
 import org.apache.spark.{SparkEnv, Logging}
 import org.apache.spark.streaming.{Checkpoint, CheckpointWriter, Time}
 import org.apache.spark.streaming.util.RecurringTimer
-import org.apache.spark.util.{Clock, EventLoop, ManualClock}
+import org.apache.spark.util.{Utils, Clock, EventLoop, ManualClock}
 
 /** Event classes for JobGenerator */
 private[scheduler] sealed trait JobGeneratorEvent
@@ -47,11 +47,11 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
     val clockClass = ssc.sc.conf.get(
       "spark.streaming.clock", "org.apache.spark.util.SystemClock")
     try {
-      Class.forName(clockClass).newInstance().asInstanceOf[Clock]
+      Utils.classForName(clockClass).newInstance().asInstanceOf[Clock]
     } catch {
       case e: ClassNotFoundException if clockClass.startsWith("org.apache.spark.streaming") =>
         val newClockClass = clockClass.replace("org.apache.spark.streaming", "org.apache.spark")
-        Class.forName(newClockClass).newInstance().asInstanceOf[Clock]
+        Utils.classForName(newClockClass).newInstance().asInstanceOf[Clock]
     }
   }
 

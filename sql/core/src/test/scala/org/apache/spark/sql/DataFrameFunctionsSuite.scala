@@ -381,4 +381,26 @@ class DataFrameFunctionsSuite extends QueryTest {
       df.selectExpr("split(a, '[1-9]+')"),
       Row(Seq("aa", "bb", "cc")))
   }
+
+  test("conditional function: least") {
+    checkAnswer(
+      testData2.select(least(lit(-1), lit(0), col("a"), col("b"))).limit(1),
+      Row(-1)
+    )
+    checkAnswer(
+      ctx.sql("SELECT least(a, 2) as l from testData2 order by l"),
+      Seq(Row(1), Row(1), Row(2), Row(2), Row(2), Row(2))
+    )
+  }
+
+  test("conditional function: greatest") {
+    checkAnswer(
+      testData2.select(greatest(lit(2), lit(3), col("a"), col("b"))).limit(1),
+      Row(3)
+    )
+    checkAnswer(
+      ctx.sql("SELECT greatest(a, 2) as g from testData2 order by g"),
+      Seq(Row(2), Row(2), Row(2), Row(2), Row(3), Row(3))
+    )
+  }
 }

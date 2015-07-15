@@ -17,15 +17,20 @@
 
 package org.apache.spark.util.collection
 
-import java.io.{ByteArrayInputStream, ByteArrayOutputStream, InputStream}
+import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
 
 import com.google.common.io.ByteStreams
 
+import org.mockito.Matchers.any
+import org.mockito.Mockito._
+import org.mockito.Mockito.RETURNS_SMART_NULLS
+import org.mockito.invocation.InvocationOnMock
+import org.mockito.stubbing.Answer
 import org.scalatest.Matchers._
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.serializer.KryoSerializer
-import org.apache.spark.storage.{FileSegment, BlockObjectWriter}
+import org.apache.spark.storage.DiskBlockObjectWriter
 
 class PartitionedSerializedPairBufferSuite extends SparkFunSuite {
   test("OrderedInputStream single record") {
@@ -79,13 +84,13 @@ class PartitionedSerializedPairBufferSuite extends SparkFunSuite {
     val struct = SomeStruct("something", 5)
     buffer.insert(4, 10, struct)
     val it = buffer.destructiveSortedWritablePartitionedIterator(None)
-    val writer = new SimpleBlockObjectWriter
+    val (writer, baos) = createMockWriter()
     assert(it.hasNext)
     it.nextPartition should be (4)
     it.writeNext(writer)
     assert(!it.hasNext)
 
-    val stream = serializerInstance.deserializeStream(writer.getInputStream)
+    val stream = serializerInstance.deserializeStream(new ByteArrayInputStream(baos.toByteArray))
     stream.readObject[AnyRef]() should be (10)
     stream.readObject[AnyRef]() should be (struct)
   }
@@ -101,7 +106,7 @@ class PartitionedSerializedPairBufferSuite extends SparkFunSuite {
     buffer.insert(5, 3, struct3)
 
     val it = buffer.destructiveSortedWritablePartitionedIterator(None)
-    val writer = new SimpleBlockObjectWriter
+    val (writer, baos) = createMockWriter()
     assert(it.hasNext)
     it.nextPartition should be (4)
     it.writeNext(writer)
@@ -113,7 +118,7 @@ class PartitionedSerializedPairBufferSuite extends SparkFunSuite {
     it.writeNext(writer)
     assert(!it.hasNext)
 
-    val stream = serializerInstance.deserializeStream(writer.getInputStream)
+    val stream = serializerInstance.deserializeStream(new ByteArrayInputStream(baos.toByteArray))
     val iter = stream.asIterator
     iter.next() should be (2)
     iter.next() should be (struct2)
@@ -123,26 +128,21 @@ class PartitionedSerializedPairBufferSuite extends SparkFunSuite {
     iter.next() should be (struct1)
     assert(!iter.hasNext)
   }
-}
 
-case class SomeStruct(val str: String, val num: Int)
-
-class SimpleBlockObjectWriter extends BlockObjectWriter(null) {
-  val baos = new ByteArrayOutputStream()
-
-  override def write(bytes: Array[Byte], offs: Int, len: Int): Unit = {
-    baos.write(bytes, offs, len)
+  def createMockWriter(): (DiskBlockObjectWriter, ByteArrayOutputStream) = {
+    val writer = mock(classOf[DiskBlockObjectWriter], RETURNS_SMART_NULLS)
+    val baos = new ByteArrayOutputStream()
+    when(writer.write(any(), any(), any())).thenAnswer(new Answer[Unit] {
+      override def answer(invocationOnMock: InvocationOnMock): Unit = {
+        val args = invocationOnMock.getArguments
+        val bytes = args(0).asInstanceOf[Array[Byte]]
+        val offset = args(1).asInstanceOf[Int]
+        val length = args(2).asInstanceOf[Int]
+        baos.write(bytes, offset, length)
+      }
+    })
+    (writer, baos)
   }
-
-  def getInputStream(): InputStream = new ByteArrayInputStream(baos.toByteArray)
-
-  override def open(): BlockObjectWriter = this
-  override def close(): Unit = { }
-  override def isOpen: Boolean = true
-  override def commitAndClose(): Unit = { }
-  override def revertPartialWritesAndClose(): Unit = { }
-  override def fileSegment(): FileSegment = null
-  override def write(key: Any, value: Any): Unit = { }
-  override def recordWritten(): Unit = { }
-  override def write(b: Int): Unit = { }
 }
+
+case class SomeStruct(str: String, num: Int)
