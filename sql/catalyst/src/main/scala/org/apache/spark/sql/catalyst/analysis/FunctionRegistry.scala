@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import org.apache.spark.sql.catalyst.expressions.aggregate2.MyDoubleSum
+
 import scala.reflect.ClassTag
 import scala.util.{Failure, Success, Try}
 
@@ -143,6 +145,7 @@ object FunctionRegistry {
     expression[Max]("max"),
     expression[Min]("min"),
     expression[Sum]("sum"),
+    expression[MyDoubleSum]("mydoublesum"),
 
     // string functions
     expression[Ascii]("ascii"),

@@ -95,10 +95,56 @@ abstract class AggregateFunction2
   override def eval(buffer: InternalRow = null): Any
 }
 
+case class MyDoubleSum(child: Expression) extends AggregateFunction2 {
+  override val bufferSchema: StructType =
+    StructType(StructField("currentSum", DoubleType, true) :: Nil)
+
+  override val bufferAttributes: Seq[Attribute] = bufferSchema.toAttributes
+
+  override def initialize(buffer: MutableRow): Unit = {
+    buffer.update(bufferOffset, null)
+  }
+
+  override def update(buffer: MutableRow, input: InternalRow): Unit = {
+    val inputValue = child.eval(input)
+    if (inputValue != null) {
+      if (buffer.isNullAt(bufferOffset) == null) {
+        buffer.setDouble(bufferOffset, inputValue.asInstanceOf[Double])
+      } else {
+        val currentSum = buffer.getDouble(bufferOffset)
+        buffer.setDouble(bufferOffset, currentSum + inputValue.asInstanceOf[Double])
+      }
+    }
+  }
+
+  override def merge(buffer1: MutableRow, buffer2: InternalRow): Unit = {
+    if (!buffer2.isNullAt(bufferOffset)) {
+      if (buffer1.isNullAt(bufferOffset)) {
+        buffer1.setDouble(bufferOffset, buffer2.getDouble(bufferOffset))
+      } else {
+        val currentSum = buffer1.getDouble(bufferOffset)
+        buffer1.setDouble(bufferOffset, currentSum + buffer2.getDouble(bufferOffset))
+      }
+    }
+  }
+
+  override def eval(buffer: InternalRow = null): Any = {
+    if (buffer.isNullAt(bufferOffset)) {
+      null
+    } else {
+      buffer.getDouble(bufferOffset)
+    }
+  }
+
+  override def nullable: Boolean = true
+  override def dataType: DataType = DoubleType
+  override def children: Seq[Expression] = child :: Nil
+}
+
 /**
  * A helper class for aggregate functions that can be implemented in terms of catalyst expressions.
  */
-abstract class AlgebraicAggregate extends AggregateFunction2 with Serializable{
+abstract class AlgebraicAggregate extends AggregateFunction2 with Serializable {
   self: Product =>
 
   val initialValues: Seq[Expression]
@@ -108,6 +154,11 @@ abstract class AlgebraicAggregate extends AggregateFunction2 with Serializable{
 
   /** Must be filled in by the executors */
   var inputSchema: Seq[Attribute] = _
+
+  override def withBufferOffset(newBufferOffset: Int): AlgebraicAggregate = {
+    bufferOffset = newBufferOffset
+    this
+  }
 
   def offsetExpressions: Seq[Attribute] = Seq.fill(bufferOffset)(AttributeReference("offset", NullType)())
 
@@ -182,7 +233,7 @@ case class Average(child: Expression) extends AlgebraicAggregate {
 
   val evaluateExpression = Cast(currentSum, resultType) / Cast(currentCount, resultType)
 
-  override def nullable: Boolean = false
+  override def nullable: Boolean = true
   override def dataType: DataType = resultType
   override def children: Seq[Expression] = child :: Nil
 }
