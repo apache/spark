@@ -32,22 +32,6 @@ object TypeUtils {
     }
   }
 
-  def checkForNumericAndIntervalExpr(t: DataType, caller: String): TypeCheckResult = {
-    if (t.isInstanceOf[NumericType] || t.isInstanceOf[IntervalType] || t == NullType) {
-      TypeCheckResult.TypeCheckSuccess
-    } else {
-      TypeCheckResult.TypeCheckFailure(s"$caller accepts numeric or interval types, not $t")
-    }
-  }
-
-  def checkForBitwiseExpr(t: DataType, caller: String): TypeCheckResult = {
-    if (t.isInstanceOf[IntegralType] || t == NullType) {
-      TypeCheckResult.TypeCheckSuccess
-    } else {
-      TypeCheckResult.TypeCheckFailure(s"$caller accepts integral types, not $t")
-    }
-  }
-
   def checkForOrderingExpr(t: DataType, caller: String): TypeCheckResult = {
     if (t.isInstanceOf[AtomicType] || t == NullType) {
       TypeCheckResult.TypeCheckSuccess
