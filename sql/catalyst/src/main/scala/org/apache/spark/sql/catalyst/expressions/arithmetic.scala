@@ -88,10 +88,6 @@ abstract class BinaryArithmetic extends BinaryOperator {
   def decimalMethod: String =
     sys.error("BinaryArithmetics must override either decimalMethod or genCode")
 
-  /** Name of the function for this expression on a [[Interval]] type. */
-  def intervalMethod: String =
-    sys.error("BinaryArithmetics must override either intervalMethod or genCode")
-
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = dataType match {
     case dt: DecimalType =>
       defineCodeGen(ctx, ev, (eval1, eval2) => s"$eval1.$decimalMethod($eval2)")
@@ -100,7 +96,7 @@ abstract class BinaryArithmetic extends BinaryOperator {
       defineCodeGen(ctx, ev,
         (eval1, eval2) => s"(${ctx.javaType(dataType)})($eval1 $symbol $eval2)")
     case IntervalType =>
-      defineCodeGen(ctx, ev, (eval1, eval2) => s"$eval1.$intervalMethod($eval2)")
+      defineCodeGen(ctx, ev, (eval1, eval2) => s"""$eval1.doOp($eval2, "$symbol")""")
     case _ =>
       defineCodeGen(ctx, ev, (eval1, eval2) => s"$eval1 $symbol $eval2")
   }
@@ -113,7 +109,6 @@ private[sql] object BinaryArithmetic {
 case class Add(left: Expression, right: Expression) extends BinaryArithmetic {
   override def symbol: String = "+"
   override def decimalMethod: String = "$plus"
-  override def intervalMethod: String = "add"
 
   override lazy val resolved =
     childrenResolved && checkInputDataTypes().isSuccess && !DecimalType.isFixed(dataType)
@@ -135,7 +130,6 @@ case class Add(left: Expression, right: Expression) extends BinaryArithmetic {
 case class Subtract(left: Expression, right: Expression) extends BinaryArithmetic {
   override def symbol: String = "-"
   override def decimalMethod: String = "$minus"
-  override def intervalMethod: String = "subtract"
 
   override lazy val resolved =
     childrenResolved && checkInputDataTypes().isSuccess && !DecimalType.isFixed(dataType)

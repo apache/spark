@@ -78,8 +78,8 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite {
     assertErrorForDifferingTypes(MaxOf('intField, 'booleanField))
     assertErrorForDifferingTypes(MinOf('intField, 'booleanField))
 
-    assertError(Add('booleanField, 'booleanField), "operator + accepts numeric type")
-    assertError(Subtract('booleanField, 'booleanField), "operator - accepts numeric type")
+    assertError(Add('booleanField, 'booleanField), "operator + accepts numeric or interval types")
+    assertError(Subtract('booleanField, 'booleanField), "operator - accepts numeric or interval types")
     assertError(Multiply('booleanField, 'booleanField), "operator * accepts numeric type")
     assertError(Divide('booleanField, 'booleanField), "operator / accepts numeric type")
     assertError(Remainder('booleanField, 'booleanField), "operator % accepts numeric type")
