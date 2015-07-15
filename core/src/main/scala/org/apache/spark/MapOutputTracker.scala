@@ -440,6 +440,9 @@ private[spark] object MapOutputTracker extends Logging {
    * If any of the statuses is null (indicating a missing location due to a failed mapper),
    * throws a FetchFailedException.
    *
+   * @param shuffleId Identifier for the shuffle
+   * @param reduceId Identifier for the reduce task
+   * @param statuses List of map statuses, indexed by map ID.
    * @return A sequence of 2-item tuples, where the first item in the tuple is a BlockManagerId,
    *         and the second item is a sequence of (shuffle block id, shuffle block size) tuples
    *         describing the shuffle blocks that are stored at that block manager.
@@ -450,14 +453,14 @@ private[spark] object MapOutputTracker extends Logging {
       statuses: Array[MapStatus]): Seq[(BlockManagerId, Seq[(BlockId, Long)])] = {
     assert (statuses != null)
     val splitsByAddress = new HashMap[BlockManagerId, ArrayBuffer[(BlockId, Long)]]
-    for ((status, index) <- statuses.zipWithIndex) {
+    for ((status, mapId) <- statuses.zipWithIndex) {
       if (status == null) {
         val errorMessage = s"Missing an output location for shuffle $shuffleId"
         logError(errorMessage)
         throw new MetadataFetchFailedException(shuffleId, reduceId, errorMessage)
       } else {
         splitsByAddress.getOrElseUpdate(status.location, ArrayBuffer()) +=
-          ((ShuffleBlockId(shuffleId, index, reduceId), status.getSizeForBlock(reduceId)))
+          ((ShuffleBlockId(shuffleId, mapId, reduceId), status.getSizeForBlock(reduceId)))
       }
     }
 
