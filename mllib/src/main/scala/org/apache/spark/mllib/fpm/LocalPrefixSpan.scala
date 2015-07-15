@@ -17,16 +17,13 @@
 
 package org.apache.spark.mllib.fpm
 
+import scala.collection.mutable
+
 import org.apache.spark.Logging
-import org.apache.spark.annotation.Experimental
 
 /**
- *
- * :: Experimental ::
- *
  * Calculate all patterns of a projected database in local.
  */
-@Experimental
 private[fpm] object LocalPrefixSpan extends Logging with Serializable {
 
   /**
@@ -43,18 +40,18 @@ private[fpm] object LocalPrefixSpan extends Logging with Serializable {
       minCount: Long,
       maxPatternLength: Int,
       prefix: List[Int],
-      database: Iterable[Array[Int]]): Iterator[(Array[Int], Long)] = {
+      database: Array[Array[Int]]): Iterator[(List[Int], Long)] = {
 
     if (database.isEmpty) return Iterator.empty
 
     val frequentItemAndCounts = getFreqItemAndCounts(minCount, database)
     val frequentItems = frequentItemAndCounts.map(_._1).toSet
     val frequentPatternAndCounts = frequentItemAndCounts
-      .map { case (item, count) => ((item :: prefix).reverse.toArray, count) }
+      .map { case (item, count) => ((item :: prefix), count) }
 
-    val filteredProjectedDatabase = database.map(x => x.filter(frequentItems.contains(_)))
 
     if (prefix.length + 1 < maxPatternLength) {
+      val filteredProjectedDatabase = database.map(x => x.filter(frequentItems.contains(_)))
       frequentPatternAndCounts.iterator ++ frequentItems.flatMap { item =>
         val nextProjected = project(filteredProjectedDatabase, item)
         run(minCount, maxPatternLength, item :: prefix, nextProjected)
@@ -79,7 +76,7 @@ private[fpm] object LocalPrefixSpan extends Logging with Serializable {
     }
   }
 
-  def project(database: Iterable[Array[Int]], prefix: Int): Iterable[Array[Int]] = {
+  def project(database: Array[Array[Int]], prefix: Int): Array[Array[Int]] = {
     database
       .map(candidateSeq => getSuffix(prefix, candidateSeq))
       .filter(_.nonEmpty)
@@ -93,10 +90,11 @@ private[fpm] object LocalPrefixSpan extends Logging with Serializable {
    */
   private def getFreqItemAndCounts(
       minCount: Long,
-      database: Iterable[Array[Int]]): Iterable[(Int, Long)] = {
+      database: Array[Array[Int]]): Iterable[(Int, Long)] = {
     database.flatMap(_.distinct)
-      .foldRight(Map[Int, Long]().withDefaultValue(0L)) { case (item, ctr) =>
-        ctr + (item -> (ctr(item) + 1))
+      .foldRight(mutable.Map[Int, Long]().withDefaultValue(0L)) { case (item, ctr) =>
+        ctr(item) += 1
+        ctr
       }
       .filter(_._2 >= minCount)
   }

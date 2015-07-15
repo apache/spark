@@ -22,8 +22,6 @@ import org.apache.spark.annotation.Experimental
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 
-import scala.collection.mutable.ArrayBuffer
-
 /**
  *
  * :: Experimental ::
@@ -154,6 +152,7 @@ class PrefixSpan private (
       data: RDD[(Array[Int], Array[Array[Int]])]): RDD[(Array[Int], Long)] = {
     data.flatMap { case (prefix, projDB) =>
       LocalPrefixSpan.run(minCount, maxPatternLength, prefix.toList, projDB)
+        .map { case (pattern: List[Int], count: Long) => (pattern.toArray.reverse, count) }
     }
   }
 }
