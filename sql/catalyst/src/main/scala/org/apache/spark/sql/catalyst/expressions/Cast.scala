@@ -417,6 +417,17 @@ case class Cast(child: Expression, dataType: DataType)
 
   protected override def nullSafeEval(input: Any): Any = cast(input)
 
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    val eval = child.gen(ctx)
+    val nullSafeCast = nullSafeCastFunction(child.dataType, dataType, ctx)
+    if (nullSafeCast != null) {
+      eval.code +
+        castCode(ctx, eval.primitive, eval.isNull, ev.primitive, ev.isNull, dataType, nullSafeCast)
+    } else {
+      super.genCode(ctx, ev)
+    }
+  }
+
   private[this] type CastFunction = (String, String, String) => String
 
   private[this] def nullSafeCastFunction(from: DataType, to: DataType, ctx: CodeGenContext):
@@ -450,17 +461,6 @@ case class Cast(child: Expression, dataType: DataType)
         ${cast(childPrim, resultPrim, resultNull)}
       }
     """
-  }
-
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    val eval = child.gen(ctx)
-    val nullSafeCast = nullSafeCastFunction(child.dataType, dataType, ctx)
-    if (nullSafeCast != null) {
-      eval.code +
-        castCode(ctx, eval.primitive, eval.isNull, ev.primitive, ev.isNull, dataType, nullSafeCast)
-    } else {
-      super.genCode(ctx, ev)
-    }
   }
 
   private[this] def castToStringCode(from: DataType, ctx: CodeGenContext): CastFunction = {
@@ -827,7 +827,6 @@ case class Cast(child: Expression, dataType: DataType)
     val toValuePrim = ctx.freshName("tvp")
     val toValueNull = ctx.freshName("tvn")
     val result = ctx.freshName("result")
-
 
     (c, evPrim, evNull) =>
       s"""
