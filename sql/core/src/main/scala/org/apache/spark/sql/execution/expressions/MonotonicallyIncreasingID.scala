@@ -41,7 +41,9 @@ private[sql] case class MonotonicallyIncreasingID() extends LeafExpression {
    */
   @transient private[this] var count: Long = 0L
 
-  @transient private lazy val partitionMask = TaskContext.getPartitionId.toLong << 33
+  @transient private lazy val partitionMask = TaskContext.getPartitionId().toLong << 33
+
+  override def deterministic: Boolean = false
 
   override def nullable: Boolean = false
 

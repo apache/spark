@@ -61,9 +61,15 @@ abstract class Expression extends TreeNode[Expression] {
   def foldable: Boolean = false
 
   /**
-   * Returns true when the current expression always return the same result for fixed input values.
+   * Returns true when the current expression always return the same result for fixed inputs from
+   * children.
+   *
+   * Note that this means that an expression should be considered as non-deterministic if:
+   * - if it relies on some mutable internal state, or
+   * - if it relies on some implicit input that is not part of the children expression list.
+   *
+   * An example would be `SparkPartitionID` that relies on the partition id returned by TaskContext.
    */
-  // TODO: Need to define explicit input values vs implicit input values.
   def deterministic: Boolean = true
 
   def nullable: Boolean
