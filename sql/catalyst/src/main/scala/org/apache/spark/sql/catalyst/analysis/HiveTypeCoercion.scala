@@ -36,6 +36,7 @@ object HiveTypeCoercion {
   val typeCoercionRules =
     PropagateTypes ::
       InConversion ::
+      RemoveNullTypes ::
       WidenTypes ::
       PromoteStrings ::
       DecimalPrecision ::
@@ -148,6 +149,47 @@ object HiveTypeCoercion {
   }
 
   /**
+   * Removes [[NullType]] (from null literals in SQL) from expressions by adding an explicit cast
+   * into the type the expression supports. This rule is here to avoid handling [[NullType]] in
+   * every expression implementations.
+   *
+   * This works by looking up the expected input types for expressions, and cast [[NullType]]
+   * into some other specific data type that the expression expects. For example, consider [[Add]],
+   * an expression that supports any numeric types.
+   *
+   * When applying this rule on `Add(NullType, NullType)`, the expression will be converted to
+   * `Add(DoubleType, DoubleType)`.
+   */
+  object RemoveNullTypes extends Rule[LogicalPlan] {
+    def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+      case q: LogicalPlan => q transformExpressions {
+        // Skip nodes who's children have not been resolved yet.
+        case e if !e.childrenResolved => e
+
+        // For binary operators whose input types are NullType, cast them to some specific type.
+        case b@BinaryOperator(left, right)
+          if left.dataType == NullType && right.dataType == NullType &&
+            !b.inputType.acceptsType(NullType) =>
+          // If both inputs are null type (from null literals), cast the null type into some
+          // specific type the expression expects, so expressions don't need to handle NullType
+          val newLeft = Cast(left, b.inputType.defaultConcreteType)
+          val newRight = Cast(right, b.inputType.defaultConcreteType)
+          b.makeCopy(Array(newLeft, newRight))
+
+        case e: ExpectsInputTypes if e.inputTypes.nonEmpty =>
+          val children: Seq[Expression] = e.children.zip(e.inputTypes).map { case (in, expected) =>
+            if (in.dataType == NullType && !expected.acceptsType(NullType)) {
+              Cast(in, expected.defaultConcreteType)
+            } else {
+              in
+            }
+          }
+          e.withNewChildren(children)
+      }
+    }
+  }
+
+  /**
    * Widens numeric types and converts strings to numbers when appropriate.
    *
    * Loosely based on rules from "Hadoop: The Definitive Guide" 2nd edition, by Tom White
@@ -219,14 +261,6 @@ object HiveTypeCoercion {
       case q: LogicalPlan => q transformExpressions {
         // Skip nodes who's children have not been resolved yet.
         case e if !e.childrenResolved => e
-
-        case b @ BinaryOperator(left, right)
-          if left.dataType == NullType &&  right.dataType == NullType =>
-          // If both inputs are null type (from null literals), cast the null type into some
-          // specific type the expression expects, so expressions don't need to handle NullType
-          val newLeft = Cast(left, b.inputType.defaultConcreteType)
-          val newRight = Cast(right, b.inputType.defaultConcreteType)
-          b.makeCopy(Array(newLeft, newRight))
 
         case b @ BinaryOperator(left, right) if left.dataType != right.dataType =>
           findTightestCommonTypeOfTwo(left.dataType, right.dataType).map { commonType =>
