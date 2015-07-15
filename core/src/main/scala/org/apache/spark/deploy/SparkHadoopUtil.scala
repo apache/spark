@@ -25,6 +25,7 @@ import java.util.{Arrays, Comparator}
 import scala.collection.JavaConversions._
 import scala.concurrent.duration._
 import scala.language.postfixOps
+import scala.util.control.NonFatal
 
 import com.google.common.primitives.Longs
 import org.apache.hadoop.conf.Configuration
@@ -38,8 +39,6 @@ import org.apache.hadoop.security.{Credentials, UserGroupInformation}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.util.Utils
 import org.apache.spark.{Logging, SparkConf, SparkException}
-
-import scala.util.control.NonFatal
 
 /**
  * :: DeveloperApi ::
