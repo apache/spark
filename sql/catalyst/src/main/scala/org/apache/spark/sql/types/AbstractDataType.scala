@@ -120,7 +120,8 @@ private[sql] object TypeCollection {
    */
   val NumericAndInterval = TypeCollection(
     ByteType, ShortType, IntegerType, LongType,
-    FloatType, DoubleType, DecimalType, IntervalType)
+    FloatType, DoubleType, DecimalType,
+    IntervalType)
 
   def apply(types: AbstractDataType*): TypeCollection = new TypeCollection(types)
 
