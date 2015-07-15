@@ -48,12 +48,12 @@ class KinesisStreamSuite extends FunSuite
     testUtils.deleteDynamoDBTable(kinesisAppName)
   }
 
-  if (shouldRunTests) {
+  if (KinesisStreamSuite.shouldRunTests) {
 
     test("basic operation") {
       val conf = new SparkConf()
         .setMaster("local[4]")
-        .setAppName(kinesisAppName)  // Setting Spark app name to Kinesis app name
+        .setAppName(kinesisAppName) // Setting Spark app name to Kinesis app name
       ssc = new StreamingContext(conf, Milliseconds(1000))
       //val stream = KinesisUtils.createStream(ssc, testUtils.streamName, testUtils.endpointUrl,
       //  Seconds(10), InitialPositionInStream.LATEST, StorageLevel.MEMORY_ONLY)
@@ -79,8 +79,10 @@ class KinesisStreamSuite extends FunSuite
       }
     }
   }
+}
 
-  def shouldRunTests: Boolean = {
+object KinesisStreamSuite {
+  def shouldRunTests(): Boolean = {
     val isSystemVariableSet = true // sys.env.get("RUN_KINESIS_STREAM_TESTS").nonEmpty
     def isCredentialsAvailable: Boolean = Try {
       new DefaultAWSCredentialsProviderChain().getCredentials

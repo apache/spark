@@ -71,7 +71,7 @@ class KinesisTestUtils(val endpointUrl: String, _regionName: String = "") extend
 
   /**
    * Push data to Kinesis stream and return a map of
-   *  shardId -> seq of (data, seq number) pushed to corresponding shard
+   * shardId -> seq of (data, seq number) pushed to corresponding shard
    */
   def pushData(testData: Seq[Int]): Map[String, Seq[(Int, String)]] = {
     require(streamCreated, "Stream not yet created, call createStream() to create one")
@@ -119,7 +119,6 @@ class KinesisTestUtils(val endpointUrl: String, _regionName: String = "") extend
   }
 
   def deleteDynamoDBTable(tableName: String): Unit = {
-
     try {
       val table = dynamoDB.getTable(tableName)
       table.delete()
@@ -146,7 +145,7 @@ class KinesisTestUtils(val endpointUrl: String, _regionName: String = "") extend
       Thread.sleep(TimeUnit.SECONDS.toMillis(describeStreamPollTimeSeconds))
       describeStream(streamNameToWaitFor).foreach { description =>
         val streamStatus = description.getStreamStatus()
-        println(s"\t- current state: $streamStatus\n")
+        logDebug(s"\t- current state: $streamStatus\n")
         if ("ACTIVE".equals(streamStatus)) {
           return
         }
