@@ -36,7 +36,14 @@ object TaskContext {
    * Returns the partition id of currently active TaskContext. It will return 0
    * if there is no active TaskContext for cases like local execution.
    */
-  def getPartitionId(): Int = Option(taskContext.get).map(_.partitionId).getOrElse(0)
+  def getPartitionId(): Int = {
+    val tc = taskContext.get()
+    if (tc == null) {
+      0
+    } else {
+      tc.partitionId()
+    }
+  }
 
   private[this] val taskContext: ThreadLocal[TaskContext] = new ThreadLocal[TaskContext]
 

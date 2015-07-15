@@ -151,6 +151,10 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
         s"""if (!nullBits[$i]) arr[$i] = c$i;"""
     }.mkString("\n      ")
 
+    val mutableStates = ctx.mutableStates.map { case (jt, name, init) =>
+      s"private $jt $name = $init;"
+    }.mkString("\n      ")
+
     val code = s"""
     public SpecificProjection generate($exprType[] expr) {
       return new SpecificProjection(expr);
@@ -158,7 +162,7 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
 
     class SpecificProjection extends ${classOf[BaseProject].getName} {
       private $exprType[] expressions = null;
-      ${ctx.mutableStates.mkString("\n      ")}
+      $mutableStates
 
       public SpecificProjection($exprType[] expr) {
         expressions = expr;

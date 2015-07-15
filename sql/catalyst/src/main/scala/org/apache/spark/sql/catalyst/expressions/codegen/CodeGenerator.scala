@@ -56,14 +56,16 @@ class CodeGenContext {
    */
   val references: mutable.ArrayBuffer[Expression] = new mutable.ArrayBuffer[Expression]()
 
-  val mutableStates: mutable.ArrayBuffer[String] = mutable.ArrayBuffer.empty[String]
-
   /**
-   * Register expressions' mutable states like `MonotonicallyIncreasingID.count`, they will be
-   * kept as member variables in generated classes like `SpecificProjection`.
+   * Holding expressions' mutable states like `MonotonicallyIncreasingID.count` as a
+   * 3-tuple: java type, variable name, code to init it.
+   * They will be kept as member variables in generated classes like `SpecificProjection`.
    */
+  val mutableStates: mutable.ArrayBuffer[(String, String, String)] =
+    mutable.ArrayBuffer.empty[(String, String, String)]
+
   def addMutableState(javaType: String, variableName: String, initialValue: String): Unit = {
-    mutableStates += s"private $javaType $variableName = $initialValue;"
+    mutableStates += ((javaType, variableName, initialValue))
   }
 
   val stringType: String = classOf[UTF8String].getName
