@@ -137,7 +137,7 @@ def run_pr_checks(pr_tests, ghprb_actual_commit, sha1):
     pr_results = list()
 
     for pr_test in pr_tests:
-        pr_results.append(run_cmd(['bash', os.path.join(SPARK_HOME, 'dev', 'tests', pr_test),
+        pr_results.append(run_cmd(['bash', os.path.join(SPARK_HOME, 'dev', 'tests', pr_test + '.sh'),
                                    ghprb_actual_commit, sha1],
                                   return_output=True).strip())
         # Ensure, after each test, that we're back on the current PR
