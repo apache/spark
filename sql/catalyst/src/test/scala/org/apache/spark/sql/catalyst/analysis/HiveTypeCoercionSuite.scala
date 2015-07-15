@@ -194,26 +194,26 @@ class HiveTypeCoercionSuite extends PlanTest {
       Project(Seq(Alias(transformed, "a")()), testRelation))
   }
 
-  test("RemoveNullTypes for expressions that define ExpectsInputTypes") {
+  test("cast NullType for expresions that implement ExpectsInputTypes") {
     import HiveTypeCoercionSuite._
 
-    ruleTest(HiveTypeCoercion.RemoveNullTypes,
+    ruleTest(HiveTypeCoercion.ImplicitTypeCasts,
       AnyTypeUnaryExpression(Literal.create(null, NullType)),
       AnyTypeUnaryExpression(Literal.create(null, NullType)))
 
-    ruleTest(HiveTypeCoercion.RemoveNullTypes,
+    ruleTest(HiveTypeCoercion.ImplicitTypeCasts,
       NumericTypeUnaryExpression(Literal.create(null, NullType)),
       NumericTypeUnaryExpression(Cast(Literal.create(null, NullType), DoubleType)))
   }
 
-  test("RemoveNullTypes for binary operators") {
+  test("cast NullType for binary operators") {
     import HiveTypeCoercionSuite._
 
-    ruleTest(HiveTypeCoercion.RemoveNullTypes,
+    ruleTest(HiveTypeCoercion.ImplicitTypeCasts,
       AnyTypeBinaryOperator(Literal.create(null, NullType), Literal.create(null, NullType)),
       AnyTypeBinaryOperator(Literal.create(null, NullType), Literal.create(null, NullType)))
 
-    ruleTest(HiveTypeCoercion.RemoveNullTypes,
+    ruleTest(HiveTypeCoercion.ImplicitTypeCasts,
       NumericTypeBinaryOperator(Literal.create(null, NullType), Literal.create(null, NullType)),
       NumericTypeBinaryOperator(
         Cast(Literal.create(null, NullType), DoubleType),
