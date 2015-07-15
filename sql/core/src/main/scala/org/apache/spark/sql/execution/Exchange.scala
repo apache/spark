@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.types.DataType
-import org.apache.spark.util.MutablePair
+import org.apache.spark.util.{Utils, MutablePair}
 import org.apache.spark.{HashPartitioner, Partitioner, RangePartitioner, SparkEnv}
 
 /**
@@ -175,8 +175,21 @@ case class Exchange(newPartitioning: Partitioning, child: SparkPlan) extends Una
             val mutablePair = new MutablePair[InternalRow, Null]()
             iter.map(row => mutablePair.update(row.copy(), null))
           }
-          // TODO: RangePartitioner should take an Ordering.
-          implicit val ordering = newOrdering(sortingExpressions, child.output)
+          // This wrapper works around the fact that generated orderings are not Serializable.
+          // Normally we do not run into this problem because the code generation is performed on
+          // the executors, but Spark's RangePartitioner requires a Serializable Ordering to be
+          // created on the driver. This wrapper is an easy workaround to let us use generated
+          // orderings here without having to rewrite or modify RangePartitioner.
+          implicit val ordering = new Ordering[InternalRow] {
+            @transient var _ordering = buildOrdering()
+            override def compare(x: InternalRow, y: InternalRow): Int = _ordering.compare(x, y)
+            def buildOrdering(): Ordering[InternalRow] =
+              newOrdering(sortingExpressions, child.output)
+            private def readObject(in: java.io.ObjectInputStream): Unit = Utils.tryOrIOException {
+              in.defaultReadObject()
+              _ordering = buildOrdering()
+            }
+          }
           new RangePartitioner(numPartitions, rddForSampling, ascending = true)
         }
 
