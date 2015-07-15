@@ -219,7 +219,7 @@ private[spark] class ExecutorAllocationManager(
           case ct: ControlThrowable =>
             throw ct
           case t: Throwable =>
-            logError(s"Uncaught exception in thread ${Thread.currentThread().getName}", t)
+            logWarning(s"Uncaught exception in thread ${Thread.currentThread().getName}", t)
         }
       }
     }
