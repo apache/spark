@@ -50,7 +50,7 @@ private[spark] abstract class Stopwatch extends Serializable {
    */
   def stop(): Long = {
     assume(running, "stop() called but the stopwatch is not running.")
-    val duration = now  - startTime
+    val duration = now - startTime
     add(duration)
     running = false
     duration
@@ -100,7 +100,7 @@ private[spark] class DistributedStopwatch(
     sc: SparkContext,
     override val name: String) extends Stopwatch {
 
-  val elapsedTime: Accumulator[Long] = sc.accumulator(0L, s"DistributedStopwatch($name)")
+  private val elapsedTime: Accumulator[Long] = sc.accumulator(0L, s"DistributedStopwatch($name)")
 
   override def elapsed(): Long = elapsedTime.value
 
@@ -144,9 +144,8 @@ private[spark] class MultiStopwatch(@transient private val sc: SparkContext) ext
   def apply(name: String): Stopwatch = stopwatches(name)
 
   override def toString: String = {
-    "MultiStopwatch" +
-      stopwatches.values.toArray.sortBy(_.name)
-        .map(c => s"  ${c.name} -> ${c.elapsed()}ms")
-        .mkString("(\n", ",\n", "\n)")
+    stopwatches.values.toArray.sortBy(_.name)
+      .map(c => s"  ${c.name}: ${c.elapsed()}ms")
+      .mkString("{\n", ",\n", "\n}")
   }
 }

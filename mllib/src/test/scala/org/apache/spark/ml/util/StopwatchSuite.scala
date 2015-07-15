@@ -34,13 +34,13 @@ class StopwatchSuite extends SparkFunSuite with MLlibTestSparkContext {
     val duration = sw.stop()
     assert(duration >= 50 && duration < 100) // using a loose upper bound
     val elapsed = sw.elapsed()
-    assert(elapsed >= 50 && elapsed < 100)
+    assert(elapsed === duration)
     sw.start()
     Thread.sleep(50)
     val duration2 = sw.stop()
     assert(duration2 >= 50 && duration2 < 100)
     val elapsed2 = sw.elapsed()
-    assert(elapsed2 >= 100 && elapsed2 < 200)
+    assert(elapsed2 == duration + duration2)
     sw.start()
     assert(sw.isRunning)
     intercept[AssertionError] {
@@ -80,7 +80,7 @@ class StopwatchSuite extends SparkFunSuite with MLlibTestSparkContext {
     intercept[NoSuchElementException] {
       sw("some")
     }
-    assert(sw.toString === "MultiStopwatch(\n  local -> 0ms,\n  spark -> 0ms\n)")
+    assert(sw.toString === "{\n  local: 0ms,\n  spark: 0ms\n}")
     sw("local").start()
     sw("spark").start()
     Thread.sleep(50)
@@ -92,7 +92,7 @@ class StopwatchSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(localElapsed >= 50 && localElapsed < 100)
     assert(sparkElapsed >= 100 && sparkElapsed < 200)
     assert(sw.toString ===
-      s"MultiStopwatch(\n  local -> ${localElapsed}ms,\n  spark -> ${sparkElapsed}ms\n)")
+      s"{\n  local: ${localElapsed}ms,\n  spark: ${sparkElapsed}ms\n}")
     val rdd = sc.parallelize(0 until 4, 4)
     rdd.foreach { i =>
       sw("local").start()
