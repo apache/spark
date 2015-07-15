@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.hive.thriftserver
 
+import java.util
 import java.util.concurrent.Executors
 
 import org.apache.commons.logging.Log
@@ -25,14 +26,15 @@ import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hive.service.cli.SessionHandle
 import org.apache.hive.service.cli.session.SessionManager
 import org.apache.hive.service.cli.thrift.TProtocolVersion
+import org.apache.hive.service.server.HiveServer2
 
 import org.apache.spark.sql.hive.HiveContext
 import org.apache.spark.sql.hive.thriftserver.ReflectionUtils._
 import org.apache.spark.sql.hive.thriftserver.server.SparkSQLOperationManager
 
 
-private[hive] class SparkSQLSessionManager(hiveContext: HiveContext)
-  extends SessionManager
+private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2, hiveContext: HiveContext)
+  extends SessionManager(hiveServer)
   with ReflectedCompositeService {
 
   private lazy val sparkSqlOperationManager = new SparkSQLOperationManager(hiveContext)
@@ -55,12 +57,14 @@ private[hive] class SparkSQLSessionManager(hiveContext: HiveContext)
       protocol: TProtocolVersion,
       username: String,
       passwd: String,
+      ipAddress: String,
       sessionConf: java.util.Map[String, String],
       withImpersonation: Boolean,
       delegationToken: String): SessionHandle = {
     hiveContext.openSession()
-    val sessionHandle = super.openSession(
-      protocol, username, passwd, sessionConf, withImpersonation, delegationToken)
+    val sessionHandle = super
+        .openSession(protocol, username, passwd, ipAddress, sessionConf, withImpersonation,
+          delegationToken)
     val session = super.getSession(sessionHandle)
     HiveThriftServer2.listener.onSessionCreated(
       session.getIpAddress, sessionHandle.getSessionId.toString, session.getUsername)

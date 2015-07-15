@@ -515,16 +515,18 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) with Logging {
 
 private[hive] object HiveContext {
   /** The version of hive used internally by Spark SQL. */
-  val hiveExecutionVersion: String = "0.13.1"
+  val hiveExecutionVersion: String = "1.2.0"
 
   val HIVE_METASTORE_VERSION: String = "spark.sql.hive.metastore.version"
   val HIVE_METASTORE_JARS = stringConf("spark.sql.hive.metastore.jars",
     defaultValue = Some("builtin"),
-    doc = "Location of the jars that should be used to instantiate the HiveMetastoreClient. This" +
-      " property can be one of three options: " +
-      "1. \"builtin\" Use Hive 0.13.1, which is bundled with the Spark assembly jar when " +
-      "<code>-Phive</code> is enabled. When this option is chosen, " +
-      "spark.sql.hive.metastore.version must be either <code>0.13.1</code> or not defined. " +
+    doc = s"Location of the jars that should be used to instantiate the HiveMetastoreClient. This" +
+      s" property can be one of three options: " +
+      "1. \"builtin\"" +
+       s" Use Hive ${hiveExecutionVersion}, which is bundled with the Spark assembly jar when " +
+      s"<code>-Phive</code> is enabled. When this option is chosen, " +
+      s"spark.sql.hive.metastore.version must be either <code>${hiveExecutionVersion}</code>" +
+        s" or not defined. " +
       "2. \"maven\" Use Hive jars of specified version downloaded from Maven repositories." +
       "3. A classpath in the standard format for both Hive and Hadoop.")
 
