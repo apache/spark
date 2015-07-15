@@ -21,75 +21,68 @@ from __future__ import print_function
 import os
 import sys
 import json
+import urllib2
+import functools
 import subprocess
 
 from sparktestsupport import SPARK_HOME, ERROR_CODES
-from sparktestsupport.shellutils import exit_from_command_with_retcode, run_cmd, rm_r
+from sparktestsupport.shellutils import run_cmd, rm_r
 
 
-def print_err(*args):
+def print_err(msg):
     """
     Given a set of arguments, will print them to the STDERR stream
     """
-    print(*args, file=sys.stderr)
+    print(msg, file=sys.stderr)
 
 
-def post_message(mssg, comments_url):
-    http_code_header = "HTTP Response Code: "
-    posted_message = json.dumps({"body": mssg})
-
+def post_message_to_github(msg, ghprb_pull_id):
     print("Attempting to post to Github...")
 
-    # we don't want to call `run_cmd` here as, in the event of an error, we DO NOT
-    # want to print the GITHUB_OAUTH_KEY into the public Jenkins logs
-    curl_proc = subprocess.Popen(['curl',
-                                  '--silent',
-                                  '--user', 'x-oauth-basic:' + os.environ['GITHUB_OATH_KEY'],
-                                  '--request', 'POST',
-                                  '--data', posted_message,
-                                  '--write-out', http_code_header + '%{http_code}',
-                                  '--header', 'Content-Type: application/json',
-                                  comments_url],
-                                 stdout=subprocess.PIPE,
-                                 stderr=subprocess.PIPE)
-    curl_stdout, curl_stderr = curl_proc.communicate()
-    curl_returncode = curl_proc.returncode
-    # find all lines relevant to the Github API response
-    api_response = "\n".join([l for l in curl_stdout.split('\n')
-                              if l and not l.startswith(http_code_header)])
-    # find the line where `http_code_header` exists, split on ':' to get the
-    # HTTP response code, and cast to an int
-    http_code = int(curl_stdout[curl_stdout.find(http_code_header):].split(':')[1])
-
-    if not curl_returncode == 0:
+    posted_message = json.dumps({"body": msg})
+    request = urllib2.Request("https://api.github.com/repos/apache/spark/issues/" +
+                              ghprb_pull_id + "/comments",
+                              headers={
+                                  "Authorization": "x-oauth-basic:" + os.environ['GITHUB_OATH_KEY'],
+                                  "Content-Type": "application/json"
+                              },
+                              data=posted_message)
+    try:
+        response = urllib2.urlopen(request)
+    except urllib2.URLError as url_e:
         print_err("Failed to post message to GitHub.")
-        print_err(" > curl_status:", curl_returncode)
-        print_err(" > curl_output:", curl_stdout)
-        print_err(" > data:", posted_message)
+        print_err(" > urllib2_status: %s" % url_e.reason[1])
+        print_err(" > data: %s" % posted_message)
+    except urllib2.HTTPError as http_e:
+        print_err("Failed to post message to GitHub.")
+        print_err(" > http_code: %s" % http_e.code)
+        print_err(" > api_response: %s" % http_e.read())
+        print_err(" > data: %s" % posted_message)
 
-    if http_code and not http_code == 201:
-        print_err(" > http_code:", http_code)
-        print_err(" > api_response:", api_response)
-        print_err(" > data:", posted_message)
-
-    if curl_returncode == 0 and http_code == 201:
+    if response.getcode() == 201:
         print(" > Post successful.")
 
 
 def send_archived_logs():
     print("Archiving unit tests logs...")
 
-    log_files = run_cmd(['find', '.',
-                         '-name', 'unit-tests.log',
-                         '-o', '-path', './sql/hive/target/HiveCompatibilitySuite.failed',
-                         '-o', '-path', './sql/hive/target/HiveCompatibilitySuite.hiveFailed',
-                         '-o', '-path', './sql/hive/target/HiveCompatibilitySuite.wrong'],
-                        return_output=True)
+    # find any files rescursively with the name 'unit-tests.log'
+    log_files = [os.path.join(path, f)
+                 for path, _, filenames in os.walk(SPARK_HOME)
+                 for f in filesnames if f == 'unit-tests.log']
+    # ensure we have a default list if no 'unit-tests.log' files were found
+    log_files = log_files if log_files else list()
+
+    # check if any of the three explicit paths exist on the system
+    log_files += [f for f in ['./sql/hive/target/HiveCompatibilitySuite.failed',
+                              './sql/hive/target/HiveCompatibilitySuite.hiveFailed',
+                              './sql/hive/target/HiveCompatibilitySuite.wrong']
+                  if os.path.isfile(f)]
 
     if log_files:
         log_archive = "unit-tests-logs.tar.gz"
 
-        run_cmd(['tar', 'czf', log-archive] + log_files.strip().split('\n'))
+        run_cmd(['tar', 'czf', log_archive] + log_files.strip().split('\n'))
 
         jenkins_build_dir = os.environ["JENKINS_HOME"] + "/jobs/" + os.environ["JOB_NAME"] + \
             "/builds/" + os.environ["BUILD_NUMBER"]
@@ -103,8 +96,8 @@ def send_archived_logs():
 
         if not scp_returncode == 0:
             print_err("Failed to send archived unit tests logs to Jenkins master.")
-            print_err(" > scp_status:",  scp_returncode)
-            print_err(" > scp_output:", scp_stdout)
+            print_err(" > scp_status: %s" % scp_returncode)
+            print_err(" > scp_output: %s" % scp_stdout)
         else:
             print(" > Send successful.")
     else:
@@ -113,7 +106,12 @@ def send_archived_logs():
         rm_r(log_archive)
 
 
-def run_pr_tests(pr_tests, ghprb_actual_commit, sha1):
+def run_pr_checks(pr_tests, ghprb_actual_commit, sha1):
+    """
+    Executes a set of pull request checks to ease development and report issues with various
+    components such as style, linting, dependencies, compatibilities, etc.
+    @return a list of messages to post back to Github
+    """
     # Ensure we save off the current HEAD to revert to
     current_pr_head = run_cmd(['git', 'rev-parse', 'HEAD'], return_output=True).strip()
     pr_results = list()
@@ -127,31 +125,38 @@ def run_pr_tests(pr_tests, ghprb_actual_commit, sha1):
     return pr_results
 
 
-def bind_message_base(build_display_name, build_url, ghprb_pull_id, short_commit_hash, commit_url):
-    """
-    Given base parameters to generate a strong Github message response, binds those
-    parameters into a closure without the specific message and returns a function
-    able to generate strong messages for a specific description.
-    """
-    return lambda mssg, post_mssg="": \
-        '**[Test build ' + build_display_name + ' ' + mssg + '](' + build_url + \
-        'console)** for PR ' + ghprb_pull_id + ' at commit [\`' + short_commit_hash + '\`](' + \
-        commit_url + ')' + str(' ' + post_mssg + '.') if post_mssg else '.'
-
-
-def success_result_note(mssg):
-    return ' * This patch ' + mssg + '.'
-
-
-def failure_result_note(mssg):
-    return ' * This patch **fails ' + mssg + '**.'
+def pr_message(build_display_name,
+               build_url,
+               ghprb_pull_id,
+               short_commit_hash,
+               commit_url,
+               msg,
+               post_msg=''):
+    # align the arguments properly for string formatting
+    str_args = (build_display_name,
+                msg,
+                build_url,
+                ghprb_pull_id,
+                short_commit_hash,
+                commit_url,
+                str(' ' + post_msg + '.') if post_msg else '.')
+    return '**[Test build %s %s](%sconsole)** for PR %s at commit [\`%s\`](%s)%s' % str_args
 
 
 def run_tests(tests_timeout):
+    """
+    Runs the `dev/run-tests` script and responds with the correct error message
+    under the various failure scenarios.
+    @return a tuple containing the test result code and the result note to post to Github
+    """
+
     test_proc = subprocess.Popen(['timeout',
                                   tests_timeout,
                                   os.path.join(SPARK_HOME, 'dev', 'run-tests')]).wait()
-    test_result = test_proc.returncode
+    test_result_code = test_proc.returncode
+
+    def failure_result_note(msg):
+        ' * This patch **fails ' + msg + '**.'
 
     failure_note_by_errcode = {
         ERROR_CODES["BLOCK_GENERAL"]: failure_result_note('some tests'),
@@ -169,12 +174,12 @@ def run_tests(tests_timeout):
     }
 
     if test_result == 0:
-        test_result_note = success_result_note('passes all tests')
+        test_result_note = ' * This patch passes all tests.'
     else:
-        test_result_note = failure_note_by_errcode(test_result)
+        test_result_note = failure_note_by_errcode[test_result]
         send_archived_logs()
 
-    return test_result_note
+    return [test_result_code, test_result_note]
 
 
 def main():
@@ -198,8 +203,6 @@ def main():
     build_display_name = os.environ["BUILD_DISPLAY_NAME"]
     build_url = os.environ["BUILD_URL"]
 
-    comments_url = "https://api.github.com/repos/apache/spark/issues/" + ghprb_pull_id + "/comments"
-    pull_request_url = "https://github.com/apache/spark/pull/" + ghprb_pull_id
     commit_url = "https://github.com/apache/spark/commit/" + ghprb_actual_commit
 
     # GitHub doesn't auto-link short hashes when submitted via the API, unfortunately. :(
@@ -209,8 +212,8 @@ def main():
     # must be less than the timeout configured on Jenkins (currently 180m)
     tests_timeout = "175m"
 
-    # Array to capture all tests to run on the pull request. These tests are held under the
-    #  dev/tests/ directory.
+    # Array to capture all test names to run on the pull request. These tests are represented
+    # by their file equivalents in the dev/tests/ directory.
     #
     # To write a PR test:
     #   * the file must reside within the dev/tests directory
@@ -225,28 +228,28 @@ def main():
                 ]
 
     # `bind_message_base` returns a function to generate messages for Github posting
-    github_message = bind_message_base(build_display_name,
+    github_message = functools.partial(pr_message,
+                                       build_display_name,
                                        build_url,
                                        ghprb_pull_id,
                                        short_commit_hash,
                                        commit_url)
 
     # post start message
-    post_message(github_message('has started'))
+    post_message_to_github(github_message('has started'), ghprb_pull_id)
 
     pr_test_results = run_pr_tests(pr_tests, ghprb_actual_commit, sha1)
 
-    test_results = run_tests(tests_timeout)
+    test_result_code, test_result_note = run_tests(tests_timeout)
 
     # post end message
     result_message = github_message('has finished')
-    result_message += '\n' + test_results
-    for pr_result in pr_test_results:
-        result_message += pr_result
+    result_message += '\n' + test_result_note
+    result_message += " ".join(pr_results)
 
-    post_message(result_message)
+    post_message_to_github(result_message, ghprb_pull_id)
 
-    sys.exit(test_result)
+    sys.exit(test_result_code)
 
 
 if __name__ == "__main__":
