@@ -200,19 +200,26 @@ class Analyzer(
         GroupingSets(bitmasks(a), a.groupByExprs, a.child, a.aggregations)
       case x: GroupingSets =>
         val gid = AttributeReference(VirtualColumn.groupingIdName, IntegerType, false)()
+        // We will insert another Projection if the GROUP BY keys contains the
+        // non-attribute expressions. And the top operators can references those
+        // expressions by its alias.
+        // e.g. SELECT key%5 as c1 FROM src GROUP BY key%5 ==>
+        //      SELECT a as c1 FROM (SELECT key%5 AS a FROM src) GROUP BY a
 
-        // the complex expression (non-attribute expressions) in the GROUP BY keys
-        val nonAttributeGroupByExpression = new ArrayBuffer[Alias]()
+        // find all of the non-attribute expressions in the GROUP BY keys
+        val nonAttributeGroupByExpressions = new ArrayBuffer[Alias]()
+
+        // The pair of (the non-attributes expression, associated attribute (alias))
         val groupByExprPairs = x.groupByExprs.map(_ match {
           case e: NamedExpression => (e, e)
           case other => {
             val alias = Alias(other, other.toString)()
-            nonAttributeGroupByExpression += alias
-            (other, alias.toAttribute) // (Aliased complex expression, the associated attribute)
+            nonAttributeGroupByExpressions += alias // add the non-attributes expression alias
+            (other, alias.toAttribute)
           }
         })
 
-        // substitute the complex expression for aggregations.
+        // substitute the non-attribute expressions for aggregations.
         val aggregation = x.aggregations.map(expr => expr.transformDown {
           case e => groupByExprPairs.find(_._1.semanticEquals(e)).map(_._2).getOrElse(e)
         }.asInstanceOf[NamedExpression])
@@ -220,9 +227,10 @@ class Analyzer(
         // substitute the group by expressions.
         val newGroupByExprs = groupByExprPairs.map(_._2)
 
-        // add an additional projection if contains the complex expression in the GROUP BY keys
-        val child = if (nonAttributeGroupByExpression.length > 0) {
-          Project(x.child.output ++ nonAttributeGroupByExpression, x.child)
+        val child = if (nonAttributeGroupByExpressions.length > 0) {
+          // insert additional projection if contains the
+          // non-attribute expressions in the GROUP BY keys
+          Project(x.child.output ++ nonAttributeGroupByExpressions, x.child)
         } else {
           x.child
         }
