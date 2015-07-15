@@ -301,11 +301,11 @@ object DateTimeUtils {
       digitsMilli += 1
     }
 
-    if (segments(0) < 0 || segments(0) > 9999 || segments(1) < 1 || segments(1) > 12 ||
-        segments(2) < 1 || segments(2) > 31 || segments(3) < 0 || segments(3) > 23 ||
-        segments(4) < 0 || segments(4) > 59 || segments(5) < 0 || segments(5) > 59 ||
-        segments(6) < 0 || segments(6) > 999999 || segments(7) < 0 || segments(7) > 23 ||
-        segments(8) < 0 || segments(8) > 59) {
+    if ((!justTime && (segments(0) < 999 || segments(0) > 9999 || segments(1) < 1 ||
+        segments(1) > 12 || segments(2) < 1 || segments(2) > 31)) || segments(3) < 0 ||
+        segments(3) > 23 || segments(4) < 0 || segments(4) > 59 || segments(5) < 0 ||
+        segments(5) > 59 || segments(6) < 0 || segments(6) > 999999 || segments(7) < 0 ||
+        segments(7) > 23 || segments(8) < 0 || segments(8) > 59) {
       return null.asInstanceOf[Long]
     }
     val c = if (timeZone.isEmpty) {

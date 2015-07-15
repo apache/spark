@@ -268,6 +268,8 @@ class DateTimeUtilsSuite extends SparkFunSuite {
     assert(DateTimeUtils.stringToTimestamp(UTF8String.fromString("2011-05-06 07:08:09.1000")) ==
       c.getTimeInMillis * 1000)
 
+    assert(DateTimeUtils.stringToTimestamp(UTF8String.fromString("238")) ==
+      null.asInstanceOf[Long])
     assert(DateTimeUtils.stringToTimestamp(UTF8String.fromString("2015-03-18 123142")) ==
       null.asInstanceOf[Long])
     assert(DateTimeUtils.stringToTimestamp(UTF8String.fromString("2015-03-18T123123")) ==
