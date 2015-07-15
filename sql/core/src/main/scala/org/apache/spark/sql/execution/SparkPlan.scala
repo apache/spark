@@ -229,11 +229,11 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
             throw e
           } else {
             log.error("Failed to generate ordering, fallback to interpreted", e)
-            new RowOrdering(order, inputSchema)
+            new InterpretedOrdering(order, inputSchema)
           }
       }
     } else {
-      new RowOrdering(order, inputSchema)
+      new InterpretedOrdering(order, inputSchema)
     }
   }
 }

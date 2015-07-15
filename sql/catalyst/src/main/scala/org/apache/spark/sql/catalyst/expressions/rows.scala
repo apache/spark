@@ -153,7 +153,7 @@ class GenericMutableRow(val values: Array[Any]) extends MutableRow with ArrayBac
   override def copy(): InternalRow = new GenericInternalRow(values.clone())
 }
 
-class RowOrdering(ordering: Seq[SortOrder]) extends Ordering[InternalRow] {
+class InterpretedOrdering private (ordering: Seq[SortOrder]) extends Ordering[InternalRow] {
   def this(ordering: Seq[SortOrder], inputSchema: Seq[Attribute]) =
     this(ordering.map(BindReferences.bindReference(_, inputSchema)))
 
@@ -184,11 +184,4 @@ class RowOrdering(ordering: Seq[SortOrder]) extends Ordering[InternalRow] {
     }
     return 0
   }
-}
-
-object RowOrdering {
-  def forSchema(dataTypes: Seq[DataType]): RowOrdering =
-    new RowOrdering(dataTypes.zipWithIndex.map {
-      case(dt, index) => new SortOrder(BoundReference(index, dt, nullable = true), Ascending)
-    })
 }

@@ -167,7 +167,7 @@ case class TakeOrderedAndProject(
 
   override def outputPartitioning: Partitioning = SinglePartition
 
-  private val ord: RowOrdering = new RowOrdering(sortOrder, child.output)
+  private val ord: Ordering[InternalRow] = newOrdering(sortOrder, child.output)
 
   // TODO: remove @transient after figure out how to clean closure at InsertIntoHiveTable.
   @transient private val projection = projectList.map(new InterpretedProjection(_, child.output))

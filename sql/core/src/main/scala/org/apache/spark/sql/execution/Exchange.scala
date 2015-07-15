@@ -158,16 +158,16 @@ case class Exchange(
         val rdd = if (needToCopyObjectsBeforeShuffle(part, serializer)) {
           child.execute().mapPartitions { iter =>
             val hashExpressions = newMutableProjection(expressions, child.output)()
-            iter.map(r => (hashExpressions(r).copy(), r.copy()))
+            iter.map(r => (hashExpressions(r).hashCode, r.copy()))
           }
         } else {
           child.execute().mapPartitions { iter =>
             val hashExpressions = newMutableProjection(expressions, child.output)()
-            val mutablePair = new MutablePair[InternalRow, InternalRow]()
-            iter.map(r => mutablePair.update(hashExpressions(r), r))
+            val mutablePair = new MutablePair[Int, InternalRow]()
+            iter.map(r => mutablePair.update(hashExpressions(r).hashCode, r))
           }
         }
-        val shuffled = new ShuffledRDD[InternalRow, InternalRow, InternalRow](rdd, part)
+        val shuffled = new ShuffledRDD[Int, InternalRow, InternalRow](rdd, part)
         shuffled.setSerializer(serializer)
         shuffled.map(_._2)
 
@@ -184,7 +184,7 @@ case class Exchange(
             iter.map(row => mutablePair.update(row.copy(), null))
           }
           // TODO: RangePartitioner should take an Ordering.
-          implicit val ordering = new RowOrdering(sortingExpressions, child.output)
+          implicit val ordering = newOrdering(sortingExpressions, child.output)
           new RangePartitioner(numPartitions, rddForSampling, ascending = true)
         }
 
