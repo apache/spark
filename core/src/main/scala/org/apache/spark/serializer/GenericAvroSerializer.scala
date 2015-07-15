@@ -20,6 +20,8 @@ package org.apache.spark.serializer
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
 import java.nio.ByteBuffer
 
+import org.apache.spark.io.CompressionCodec
+
 import scala.collection.mutable
 
 import org.apache.commons.io.IOUtils
@@ -39,7 +41,7 @@ import org.apache.avro.io._
  * Actions like parsing or compressing schemas are computationally expensive so the serializer
  * caches all previously seen values as to reduce the amount of work needed to do.
  */
-private[serializer] class GenericAvroSerializer(schemas: Map[Long, String])
+private[serializer] class GenericAvroSerializer(schemas: Map[Long, String], codec: CompressionCodec)
   extends KSerializer[GenericRecord] {
 
   /** Used to reduce the amount of effort to compress the schema */
@@ -61,7 +63,7 @@ private[serializer] class GenericAvroSerializer(schemas: Map[Long, String])
    */
   def compress(schema: Schema): Array[Byte] = compressCache.getOrElseUpdate(schema, {
     val bos = new ByteArrayOutputStream()
-    val out = new SnappyOutputStream(bos)
+    val out = codec.compressedOutputStream(bos)
     out.write(schema.toString.getBytes("UTF-8"))
     out.close()
     bos.toByteArray
@@ -73,7 +75,7 @@ private[serializer] class GenericAvroSerializer(schemas: Map[Long, String])
    */
   def decompress(schemaBytes: ByteBuffer): Schema = decompressCache.getOrElseUpdate(schemaBytes, {
     val bis = new ByteArrayInputStream(schemaBytes.array())
-    val bytes = IOUtils.toByteArray(new SnappyInputStream(bis))
+    val bytes = IOUtils.toByteArray(codec.compressedInputStream(bis))
     new Schema.Parser().parse(new String(bytes, "UTF-8"))
   })
 

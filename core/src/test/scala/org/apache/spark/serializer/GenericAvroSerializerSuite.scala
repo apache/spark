@@ -23,6 +23,7 @@ import java.nio.ByteBuffer
 import com.esotericsoftware.kryo.io.{Output, Input}
 import org.apache.avro.{SchemaBuilder, Schema}
 import org.apache.avro.generic.GenericData.Record
+import org.apache.spark.io.CompressionCodec
 
 import org.apache.spark.{SparkFunSuite, SharedSparkContext}
 
@@ -37,12 +38,14 @@ class GenericAvroSerializerSuite extends SparkFunSuite with SharedSparkContext {
   record.put("data", "test data")
 
   test("schema compression and decompression") {
-    val genericSer = new GenericAvroSerializer(conf.getAvroSchema)
+    val genericSer = new GenericAvroSerializer(conf.getAvroSchema,
+      CompressionCodec.createCodec(conf))
     assert(schema === genericSer.decompress(ByteBuffer.wrap(genericSer.compress(schema))))
   }
 
   test("record serialization and deserialization") {
-    val genericSer = new GenericAvroSerializer(conf.getAvroSchema)
+    val genericSer = new GenericAvroSerializer(conf.getAvroSchema,
+      CompressionCodec.createCodec(conf))
 
     val outputStream = new ByteArrayOutputStream()
     val output = new Output(outputStream)
@@ -55,7 +58,8 @@ class GenericAvroSerializerSuite extends SparkFunSuite with SharedSparkContext {
   }
 
   test("uses schema fingerprint to decrease message size") {
-    val genericSerFull = new GenericAvroSerializer(conf.getAvroSchema)
+    val genericSerFull = new GenericAvroSerializer(conf.getAvroSchema,
+      CompressionCodec.createCodec(conf))
 
     val output = new Output(new ByteArrayOutputStream())
 
@@ -65,7 +69,8 @@ class GenericAvroSerializerSuite extends SparkFunSuite with SharedSparkContext {
     val normalLength = output.total - beginningNormalPosition
 
     conf.registerAvroSchemas(schema)
-    val genericSerFinger = new GenericAvroSerializer(conf.getAvroSchema)
+    val genericSerFinger = new GenericAvroSerializer(conf.getAvroSchema,
+      CompressionCodec.createCodec(conf))
     val beginningFingerprintPosition = output.total()
     genericSerFinger.serializeDatum(record, output)
     val fingerprintLength = output.total - beginningFingerprintPosition
@@ -74,7 +79,8 @@ class GenericAvroSerializerSuite extends SparkFunSuite with SharedSparkContext {
   }
 
   test("caches previously seen schemas") {
-    val genericSer = new GenericAvroSerializer(conf.getAvroSchema)
+    val genericSer = new GenericAvroSerializer(conf.getAvroSchema,
+      CompressionCodec.createCodec(conf))
     val compressedSchema = genericSer.compress(schema)
     val decompressedScheam = genericSer.decompress(ByteBuffer.wrap(compressedSchema))
 

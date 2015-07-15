@@ -21,6 +21,8 @@ import java.io.{EOFException, IOException, InputStream, OutputStream}
 import java.nio.ByteBuffer
 import javax.annotation.Nullable
 
+import org.apache.spark.io.CompressionCodec
+
 import scala.reflect.ClassTag
 
 import org.apache.avro.generic.{GenericData, GenericRecord}
@@ -76,6 +78,7 @@ class KryoSerializer(conf: SparkConf)
     .filter(!_.isEmpty)
 
   private val avroSchemas = conf.getAvroSchema
+  private val codec = CompressionCodec.createCodec(conf)
 
   def newKryoOutput(): KryoOutput = new KryoOutput(bufferSize, math.max(bufferSize, maxBufferSize))
 
@@ -103,8 +106,8 @@ class KryoSerializer(conf: SparkConf)
     kryo.register(classOf[HttpBroadcast[_]], new KryoJavaSerializer())
     kryo.register(classOf[PythonBroadcast], new KryoJavaSerializer())
 
-    kryo.register(classOf[GenericRecord], new GenericAvroSerializer(avroSchemas))
-    kryo.register(classOf[GenericData.Record], new GenericAvroSerializer(avroSchemas))
+    kryo.register(classOf[GenericRecord], new GenericAvroSerializer(avroSchemas, codec))
+    kryo.register(classOf[GenericData.Record], new GenericAvroSerializer(avroSchemas, codec))
 
     try {
       // Use the default classloader when calling the user registrator.
