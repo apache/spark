@@ -77,12 +77,20 @@ private[r] object SQLUtils {
     df.map(r => rowToRBytes(r))
   }
 
+  private[this] def doConversion(data: Object, dataType: DataType): Object = {
+    data match {
+      case d: java.lang.Double if dataType == FloatType =>
+        new java.lang.Float(d)
+      case _ => data
+    }
+  }
+
   private[this] def bytesToRow(bytes: Array[Byte], schema: StructType): Row = {
     val bis = new ByteArrayInputStream(bytes)
     val dis = new DataInputStream(bis)
     val num = SerDe.readInt(dis)
     Row.fromSeq((0 until num).map { i =>
-      SerDe.readObject(dis, schema.fields(i).dataType.typeName)
+      doConversion(SerDe.readObject(dis), schema.fields(i).dataType)
     }.toSeq)
   }
 
