@@ -53,7 +53,7 @@ object GenerateMutableProjection extends CodeGenerator[Seq[Expression], () => Mu
       (projectionCodeSegments(0), "")
     } else {
       val pCode = (0 until projectionCodeSegments.length).map { i =>
-        s"projectSeg$i(_i)"
+        s"projectSeg$i(_i);"
       }.mkString("\n")
 
       val pFuncs = (0 until projectionCodeSegments.length).map { i =>
