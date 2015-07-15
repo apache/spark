@@ -17,10 +17,9 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import java.text.DecimalFormat
 import java.util.Locale
 import java.util.regex.Pattern
-
-import org.apache.commons.lang3.StringUtils
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.UnresolvedException
@@ -553,17 +552,23 @@ case class Substring(str: Expression, pos: Expression, len: Expression)
 }
 
 /**
- * A function that return the length of the given string expression.
+ * A function that return the length of the given string or binary expression.
  */
-case class StringLength(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
+case class Length(child: Expression) extends UnaryExpression with ExpectsInputTypes {
   override def dataType: DataType = IntegerType
-  override def inputTypes: Seq[DataType] = Seq(StringType)
+  override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection(StringType, BinaryType))
 
-  protected override def nullSafeEval(string: Any): Any =
-    string.asInstanceOf[UTF8String].numChars
+  protected override def nullSafeEval(value: Any): Any = child.dataType match {
+    case StringType => value.asInstanceOf[UTF8String].numChars
+    case BinaryType => value.asInstanceOf[Array[Byte]].length
+  }
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    defineCodeGen(ctx, ev, c => s"($c).numChars()")
+    child.dataType match {
+      case StringType => defineCodeGen(ctx, ev, c => s"($c).numChars()")
+      case BinaryType => defineCodeGen(ctx, ev, c => s"($c).length")
+      case NullType => defineCodeGen(ctx, ev, c => s"-1")
+    }
   }
 
   override def prettyName: String = "length"
@@ -665,6 +670,77 @@ case class Encode(value: Expression, charset: Expression)
   protected override def nullSafeEval(input1: Any, input2: Any): Any = {
     val toCharset = input2.asInstanceOf[UTF8String].toString
     input1.asInstanceOf[UTF8String].toString.getBytes(toCharset)
+  }
+}
+
+/**
+ * Formats the number X to a format like '#,###,###.##', rounded to D decimal places,
+ * and returns the result as a string. If D is 0, the result has no decimal point or
+ * fractional part.
+ */
+case class FormatNumber(x: Expression, d: Expression)
+  extends BinaryExpression with ExpectsInputTypes {
+
+  override def left: Expression = x
+  override def right: Expression = d
+  override def dataType: DataType = StringType
+  override def inputTypes: Seq[AbstractDataType] = Seq(NumericType, IntegerType)
+  override def foldable: Boolean = x.foldable && d.foldable
+  override def nullable: Boolean = x.nullable || d.nullable
+
+  @transient
+  private var lastDValue: Int = -100
+
+  @transient
+  private val pattern: StringBuffer = new StringBuffer()
+
+  @transient
+  private val numberFormat: DecimalFormat = new DecimalFormat("")
+
+  override def eval(input: InternalRow): Any = {
+    val xObject = x.eval(input)
+    if (xObject == null) {
+      return null
+    }
+
+    val dObject = d.eval(input)
+
+    if (dObject == null || dObject.asInstanceOf[Int] < 0) {
+      throw new IllegalArgumentException(
+        s"Argument 2 of function FORMAT_NUMBER must be >= 0, but $dObject was found")
+    }
+    val dValue = dObject.asInstanceOf[Int]
+
+    if (dValue != lastDValue) {
+      // construct a new DecimalFormat only if a new dValue
+      pattern.delete(0, pattern.length())
+      pattern.append("#,###,###,###,###,###,##0")
+
+      // decimal place
+      if (dValue > 0) {
+        pattern.append(".")
+
+        var i = 0
+        while (i < dValue) {
+          i += 1
+          pattern.append("0")
+        }
+      }
+      val dFormat = new DecimalFormat(pattern.toString())
+      lastDValue = dValue;
+      numberFormat.applyPattern(dFormat.toPattern())
+    }
+
+    x.dataType match {
+      case ByteType => UTF8String.fromString(numberFormat.format(xObject.asInstanceOf[Byte]))
+      case ShortType => UTF8String.fromString(numberFormat.format(xObject.asInstanceOf[Short]))
+      case FloatType => UTF8String.fromString(numberFormat.format(xObject.asInstanceOf[Float]))
+      case IntegerType => UTF8String.fromString(numberFormat.format(xObject.asInstanceOf[Int]))
+      case LongType => UTF8String.fromString(numberFormat.format(xObject.asInstanceOf[Long]))
+      case DoubleType => UTF8String.fromString(numberFormat.format(xObject.asInstanceOf[Double]))
+      case _: DecimalType =>
+        UTF8String.fromString(numberFormat.format(xObject.asInstanceOf[Decimal].toJavaBigDecimal))
+    }
   }
 }
 

@@ -1685,20 +1685,42 @@ object functions {
   //////////////////////////////////////////////////////////////////////////////////////////////
 
   /**
-   * Computes the length of a given string value.
+   * Computes the length of a given string / binary value
    *
    * @group string_funcs
    * @since 1.5.0
    */
-  def strlen(e: Column): Column = StringLength(e.expr)
+  def length(e: Column): Column = Length(e.expr)
 
   /**
-   * Computes the length of a given string column.
+   * Computes the length of a given string / binary  column
    *
    * @group string_funcs
    * @since 1.5.0
    */
-  def strlen(columnName: String): Column = strlen(Column(columnName))
+  def length(columnName: String): Column = length(Column(columnName))
+
+  /**
+   * Formats the number X to a format like '#,###,###.##', rounded to D decimal places,
+   * and returns the result as a string. If D is 0, the result has no decimal point or
+   * fractional part.
+   *
+   * @group string_funcs
+   * @since 1.5.0
+   */
+  def formatNumber(x: Column, d: Column): Column = FormatNumber(x.expr, d.expr)
+
+  /**
+   * Formats the number X to a format like '#,###,###.##', rounded to D decimal places,
+   * and returns the result as a string. If D is 0, the result has no decimal point or
+   * fractional part.
+   *
+   * @group string_funcs
+   * @since 1.5.0
+   */
+  def formatNumber(columnXName: String, columnDName: String): Column = {
+    formatNumber(Column(columnXName), Column(columnDName))
+  }
 
   /**
    * Computes the Levenshtein distance of the two given strings.
