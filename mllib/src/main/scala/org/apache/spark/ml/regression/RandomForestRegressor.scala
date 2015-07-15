@@ -126,8 +126,10 @@ final class RandomForestRegressionModel private[ml] (
 
   override protected def transformImpl(dataset: DataFrame): DataFrame = {
     val bcastModel = dataset.sqlContext.sparkContext.broadcast(this)
-    dataset.withColumn($(predictionCol), callUDF(bcastModel.value.predict _, DoubleType,
-      col($(featuresCol))))
+    val predictUDF = udf { (features: Any) =>
+      bcastModel.value.predict(features.asInstanceOf[Vector])
+    }
+    dataset.withColumn($(predictionCol), predictUDF(col($(featuresCol))))
   }
 
   override protected def predict(features: Vector): Double = {
