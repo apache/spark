@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.dsl.plans._
 
 case class TestFunction(
     children: Seq[Expression],
-    inputTypes: Seq[AbstractDataType]) extends Expression with ExpectsInputTypes {
+    inputTypes: Seq[AbstractDataType]) extends Expression with ImplicitCastInputTypes {
   override def nullable: Boolean = true
   override def eval(input: InternalRow): Any = throw new UnsupportedOperationException
   override def dataType: DataType = StringType
