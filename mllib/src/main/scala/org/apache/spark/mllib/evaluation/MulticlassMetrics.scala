@@ -37,6 +37,7 @@ class MulticlassMetrics(predictionAndLabels: RDD[(Double, Double)]) {
   /**
    * An auxiliary constructor taking a DataFrame.
    * @param predictionAndLabels a DataFrame with two double columns: prediction and label
+   * @since 1.4.0
    */
   private[mllib] def this(predictionAndLabels: DataFrame) =
     this(predictionAndLabels.map(r => (r.getDouble(0), r.getDouble(1))))

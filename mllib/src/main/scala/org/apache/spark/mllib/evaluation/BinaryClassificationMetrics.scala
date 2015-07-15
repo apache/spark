@@ -51,12 +51,14 @@ class BinaryClassificationMetrics(
 
   /**
    * Defaults `numBins` to 0.
+   * @since 1.3.0
    */
   def this(scoreAndLabels: RDD[(Double, Double)]) = this(scoreAndLabels, 0)
 
   /**
    * An auxiliary constructor taking a DataFrame.
    * @param scoreAndLabels a DataFrame with two double columns: score and label
+   * @since 1.4.0
    */
   private[mllib] def this(scoreAndLabels: DataFrame) =
     this(scoreAndLabels.map(r => (r.getDouble(0), r.getDouble(1))))

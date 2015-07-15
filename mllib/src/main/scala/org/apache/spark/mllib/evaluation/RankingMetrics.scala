@@ -162,6 +162,7 @@ object RankingMetrics {
   /**
    * Creates a [[RankingMetrics]] instance (for Java users).
    * @param predictionAndLabels a JavaRDD of (predicted ranking, ground truth set) pairs
+   * @since 1.4.0
    */
   def of[E, T <: jl.Iterable[E]](predictionAndLabels: JavaRDD[(T, T)]): RankingMetrics[E] = {
     implicit val tag = JavaSparkContext.fakeClassTag[E]

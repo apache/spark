@@ -31,6 +31,7 @@ class MultilabelMetrics(predictionAndLabels: RDD[(Array[Double], Array[Double])]
   /**
    * An auxiliary constructor taking a DataFrame.
    * @param predictionAndLabels a DataFrame with two double array columns: prediction and label
+   * @since 1.4.0
    */
   private[mllib] def this(predictionAndLabels: DataFrame) =
     this(predictionAndLabels.map(r => (r.getSeq[Double](0).toArray, r.getSeq[Double](1).toArray)))
