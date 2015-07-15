@@ -483,6 +483,7 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
         maybeExpandDagViz ++
         showAdditionalMetrics ++
         makeTimeline(
+          // Only show the tasks in the table
           stageData.taskData.values.toSeq.filter(t => taskIdsInPage.contains(t.taskInfo.taskId)),
           currentTime) ++
         <h4>Summary Metrics for {numCompleted} Completed Tasks</h4> ++
@@ -714,6 +715,10 @@ private[ui] case class TaskTableRowBytesSpilledData(
     diskBytesSpilledSortable: String,
     diskBytesSpilledReadable: String)
 
+/**
+ * Contains all data that needs for sorting and generating HTML. Using this one rather than
+ * TaskUIData to avoid creating duplicate contents during sorting the data.
+ */
 private[ui] case class TaskTableRowData(
     index: Int,
     taskId: Long,
@@ -903,6 +908,9 @@ private[ui] class TaskDataSource(
     )
   }
 
+  /**
+   * Return Ordering according to sortColumn and desc
+   */
   private def ordering(sortColumn: String, desc: Boolean): Ordering[TaskTableRowData] = {
     val ordering = sortColumn match {
       case "Index" => new Ordering[TaskTableRowData] {
@@ -1122,9 +1130,11 @@ private[ui] class TaskPagedTable(
 
   override def goButtonJavascriptFunction: (String, String) = {
     val jsFuncName = "goToTaskPage"
+    val encodedSortColumn = URLEncoder.encode(sortColumn, "UTF-8")
     val jsFunc = s"""
       |function goToTaskPage(page) {
-      |  var url = "${basePath}&task.sort=${sortColumn}&task.desc=${desc}" + "&task.page=" + page;
+      |  var url = "${basePath}&task.sort=${encodedSortColumn}&task.desc=${desc}" +
+      |    "&task.page=" + page;
       |  window.location.href = url;
       |}
      """.stripMargin
@@ -1173,7 +1183,7 @@ private[ui] class TaskPagedTable(
           val headerLink =
             s"$basePath&task.sort=${URLEncoder.encode(header, "UTF-8")}&task.desc=${!desc}"
           val js = Unparsed(s"window.location.href='${headerLink}'")
-          val arrow = if (desc) "&#x25BE;" else "&#x25B4;"
+          val arrow = if (desc) "&#x25BE;" else "&#x25B4;" // UP or DOWN
           <th class={cssClass} onclick={js}>
             {header}
             <span>&nbsp;{Unparsed(arrow)}</span>
@@ -1195,9 +1205,7 @@ private[ui] class TaskPagedTable(
     <tr>
       <td>{task.index}</td>
       <td>{task.taskId}</td>
-      <td>{
-        if (task.speculative) s"${task.attempt} (speculative)" else task.attempt.toString
-        }</td>
+      <td>{if (task.speculative) s"${task.attempt} (speculative)" else task.attempt.toString}</td>
       <td>{task.status}</td>
       <td>{task.taskLocality}</td>
       <td>{task.executorIdAndHost}</td>
@@ -1219,33 +1227,31 @@ private[ui] class TaskPagedTable(
         {UIUtils.formatDuration(task.gettingResultTime)}
       </td>
       {if (task.accumulators.nonEmpty) {
-      <td>{Unparsed(task.accumulators.get)}</td>
-    }}
+        <td>{Unparsed(task.accumulators.get)}</td>
+      }}
       {if (task.input.nonEmpty) {
-      <td>{task.input.get.inputReadable}</td>
-    }}
+        <td>{task.input.get.inputReadable}</td>
+      }}
       {if (task.output.nonEmpty) {
-      <td>{task.output.get.outputReadable}</td>
-    }}
+        <td>{task.output.get.outputReadable}</td>
+      }}
       {if (task.shuffleRead.nonEmpty) {
-      <td class={TaskDetailsClassNames.SHUFFLE_READ_BLOCKED_TIME}>
-        {task.shuffleRead.get.shuffleReadBlockedTimeReadable}
-      </td>
-        <td>
-          {task.shuffleRead.get.shuffleReadReadable}
+        <td class={TaskDetailsClassNames.SHUFFLE_READ_BLOCKED_TIME}>
+          {task.shuffleRead.get.shuffleReadBlockedTimeReadable}
         </td>
+        <td>{task.shuffleRead.get.shuffleReadReadable}</td>
         <td class={TaskDetailsClassNames.SHUFFLE_READ_REMOTE_SIZE}>
           {task.shuffleRead.get.shuffleReadRemoteReadable}
         </td>
-    }}
+      }}
       {if (task.shuffleWrite.nonEmpty) {
-      <td>{task.shuffleWrite.get.writeTimeReadable}</td>
+        <td>{task.shuffleWrite.get.writeTimeReadable}</td>
         <td>{task.shuffleWrite.get.shuffleWriteReadable}</td>
-    }}
+      }}
       {if (task.bytesSpilled.nonEmpty) {
-      <td>{task.bytesSpilled.get.memoryBytesSpilledReadable}</td>
+        <td>{task.bytesSpilled.get.memoryBytesSpilledReadable}</td>
         <td>{task.bytesSpilled.get.diskBytesSpilledReadable}</td>
-    }}
+      }}
       {errorMessageCell(task.error)}
     </tr>
   }

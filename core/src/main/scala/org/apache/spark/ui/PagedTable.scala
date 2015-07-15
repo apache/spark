@@ -19,10 +19,19 @@ package org.apache.spark.ui
 
 import scala.xml.{Node, Unparsed}
 
+/**
+ * A data source that provides data for a page.
+ *
+ * @param page the page number
+ * @param pageSize the number of rows in a page
+ */
 private[ui] abstract class PagedDataSource[T](page: Int, pageSize: Int) {
 
   protected val data: Seq[T]
 
+  /**
+   * Slice the data for this page
+   */
   def pageData: PageData[T] = {
     val dataSize = data.size
     val totalPages = (dataSize + pageSize - 1) / pageSize
@@ -35,8 +44,15 @@ private[ui] abstract class PagedDataSource[T](page: Int, pageSize: Int) {
 
 }
 
+/**
+ * The data returned by `PagedDataSource.pageData`, including the page number, the number of total
+ * pages and the data in this page.
+ */
 private[ui] case class PageData[T](page: Int, totalPage: Int, data: Seq[T])
 
+/**
+ * A paged table that will generate a HTML table for a specified page and also the page navigation.
+ */
 private[ui] trait PagedTable[T] {
 
   def tableId: String
@@ -62,10 +78,46 @@ private[ui] trait PagedTable[T] {
     </div>
   }
 
+  /**
+   * Return a page navigation.
+   * <ul>
+   *   <li>If the totalPages is 1, the page navigation will be empty</li>
+   *   <li>
+   *     If the totalPages is more than 1, it will create a page navigation including a group of
+   *     page numbers and a form to submit the page number.
+   *   </li>
+   * </ul>
+   *
+   * Here are some examples of the page navigation:
+   * {{{
+   * << < 11 12 13* 14 15 16 17 18 19 20 > >>
+   *
+   * This is the first group, so "<<" is hidden.
+   * < 1 2* 3 4 5 6 7 8 9 10 > >>
+   *
+   * This is the first group and the first page, so "<<" and "<" are hidden.
+   * 1 2* 3 4 5 6 7 8 9 10 > >>
+   *
+   * Assume totalPages is 19. This is the last group, so ">>" is hidden.
+   * << < 11 12 13* 14 15 16 17 18 19 >
+   *
+   * Assume totalPages is 19. This is the last group and the last page, so ">>" and ">" are hidden.
+   * << < 11 12 13 14 15 16 17 18 19*
+   *
+   * * means the current page number
+   * << means jumping to the first page of the previous group.
+   * < means jumping to the previous page.
+   * >> means jumping to the first page of the next group.
+   * > means jumping to the next page.
+   * }}}
+   */
   private[ui] def pageNavigation(page: Int, totalPages: Int): Seq[Node] = {
     if (totalPages == 1) {
       Nil
     } else {
+      // A group includes all page numbers will be shown in the page navigation.
+      // The size of group is 10 means there are 10 page numbers will be shown.
+      // The first group is 1 to 10, the second is 2 to 20, and so on
       val groupSize = 10
       val firstGroup = 0
       val lastGroup = (totalPages - 1) / groupSize
@@ -74,12 +126,15 @@ private[ui] trait PagedTable[T] {
       val endPage = totalPages.min(startPage + groupSize - 1)
       val pageTags = (startPage to endPage).map { p =>
         if (p == page) {
+          // The current page should be disabled so that it cannot be clicked.
           <li class="disabled"><a href="#">{p}</a></li>
         } else {
           <li class="active"><a href={pageLink(p)}>{p}</a></li>
         }
       }
       val (goButtonJsFuncName, goButtonJsFunc) = goButtonJavascriptFunction
+      // When clicking the "Go" button, it will call this javascript method and then call
+      // "goButtonJsFuncName"
       val formJs =
         s"""$$(function(){
           |  $$( "#form-task-page" ).submit(function(event) {
@@ -152,7 +207,15 @@ private[ui] trait PagedTable[T] {
     }
   }
 
+  /**
+   * Return a link to jump to a page.
+   */
   def pageLink(page: Int): String
 
+  /**
+   * Only the implementation knows how to create the url with a page number, so we leave this one
+   * to the implementation. The implementation should create a JavaScript method that accepts a page
+   * number and jumps to the page. The return value is this method name and its JavaScript codes.
+   */
   def goButtonJavascriptFunction: (String, String)
 }
