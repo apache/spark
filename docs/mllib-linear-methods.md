@@ -10,7 +10,7 @@ displayTitle: <a href="mllib-guide.html">MLlib</a> - Linear Methods
 
 `\[
 \newcommand{\R}{\mathbb{R}}
-\newcommand{\E}{\mathbb{E}} 
+\newcommand{\E}{\mathbb{E}}
 \newcommand{\x}{\mathbf{x}}
 \newcommand{\y}{\mathbf{y}}
 \newcommand{\wv}{\mathbf{w}}
@@ -18,10 +18,10 @@ displayTitle: <a href="mllib-guide.html">MLlib</a> - Linear Methods
 \newcommand{\bv}{\mathbf{b}}
 \newcommand{\N}{\mathbb{N}}
 \newcommand{\id}{\mathbf{I}}
-\newcommand{\ind}{\mathbf{1}} 
-\newcommand{\0}{\mathbf{0}} 
-\newcommand{\unit}{\mathbf{e}} 
-\newcommand{\one}{\mathbf{1}} 
+\newcommand{\ind}{\mathbf{1}}
+\newcommand{\0}{\mathbf{0}}
+\newcommand{\unit}{\mathbf{e}}
+\newcommand{\one}{\mathbf{1}}
 \newcommand{\zero}{\mathbf{0}}
 \]`
 
@@ -29,7 +29,7 @@ displayTitle: <a href="mllib-guide.html">MLlib</a> - Linear Methods
 
 Many standard *machine learning* methods can be formulated as a convex optimization problem, i.e.
 the task of finding a minimizer of a convex function `$f$` that depends on a variable vector
-`$\wv$` (called `weights` in the code), which has `$d$` entries. 
+`$\wv$` (called `weights` in the code), which has `$d$` entries.
 Formally, we can write this as the optimization problem `$\min_{\wv \in\R^d} \; f(\wv)$`, where
 the objective function is of the form
 `\begin{equation}
@@ -39,7 +39,7 @@ the objective function is of the form
     \ .
 \end{equation}`
 Here the vectors `$\x_i\in\R^d$` are the training data examples, for `$1\le i\le n$`, and
-`$y_i\in\R$` are their corresponding labels, which we want to predict. 
+`$y_i\in\R$` are their corresponding labels, which we want to predict.
 We call the method *linear* if $L(\wv; \x, y)$ can be expressed as a function of $\wv^T x$ and $y$.
 Several of MLlib's classification and regression algorithms fall into this category,
 and are discussed here.
@@ -99,6 +99,9 @@ regularizers in MLlib:
     <tr>
       <td>L1</td><td>$\|\wv\|_1$</td><td>$\mathrm{sign}(\wv)$</td>
     </tr>
+    <tr>
+      <td>elastic net</td><td>$\alpha \|\wv\|_1 + (1-\alpha)\frac{1}{2}\|\wv\|_2^2$</td><td>$\alpha \mathrm{sign}(\wv) + (1-\alpha) \wv$</td>
+    </tr>
   </tbody>
 </table>
 
@@ -107,7 +110,7 @@ of `$\wv$`.
 
 L2-regularized problems are generally easier to solve than L1-regularized due to smoothness.
 However, L1 regularization can help promote sparsity in weights leading to smaller and more interpretable models, the latter of which can be useful for feature selection.
-It is not recommended to train models without any regularization,
+[Elastic net](http://en.wikipedia.org/wiki/Elastic_net_regularization) is a combination of L1 and L2 regularization. It is not recommended to train models without any regularization,
 especially when the number of training examples is small.
 
 ### Optimization
@@ -527,7 +530,7 @@ print("Training Error = " + str(trainErr))
 ### Linear least squares, Lasso, and ridge regression
 
 
-Linear least squares is the most common formulation for regression problems. 
+Linear least squares is the most common formulation for regression problems.
 It is a linear method as described above in equation `$\eqref{eq:regPrimal}$`, with the loss
 function in the formulation given by the squared loss:
 `\[
@@ -535,8 +538,8 @@ L(\wv;\x,y) :=  \frac{1}{2} (\wv^T \x - y)^2.
 \]`
 
 Various related regression methods are derived by using different types of regularization:
-[*ordinary least squares*](http://en.wikipedia.org/wiki/Ordinary_least_squares) or 
-[*linear least squares*](http://en.wikipedia.org/wiki/Linear_least_squares_(mathematics)) uses 
+[*ordinary least squares*](http://en.wikipedia.org/wiki/Ordinary_least_squares) or
+[*linear least squares*](http://en.wikipedia.org/wiki/Linear_least_squares_(mathematics)) uses
  no regularization; [*ridge regression*](http://en.wikipedia.org/wiki/Ridge_regression) uses L2
 regularization; and [*Lasso*](http://en.wikipedia.org/wiki/Lasso_(statistics)) uses L1
 regularization.  For all of these models, the average loss or training error, $\frac{1}{n} \sum_{i=1}^n (\wv^T x_i - y_i)^2$, is
@@ -548,7 +551,7 @@ known as the [mean squared error](http://en.wikipedia.org/wiki/Mean_squared_erro
 
 <div data-lang="scala" markdown="1">
 The following example demonstrate how to load training data, parse it as an RDD of LabeledPoint.
-The example then uses LinearRegressionWithSGD to build a simple linear model to predict label 
+The example then uses LinearRegressionWithSGD to build a simple linear model to predict label
 values. We compute the mean squared error at the end to evaluate
 [goodness of fit](http://en.wikipedia.org/wiki/Goodness_of_fit).
 
@@ -610,7 +613,7 @@ public class LinearRegression {
   public static void main(String[] args) {
     SparkConf conf = new SparkConf().setAppName("Linear Regression Example");
     JavaSparkContext sc = new JavaSparkContext(conf);
-    
+
     // Load and parse the data
     String path = "data/mllib/ridge-data/lpsa.data";
     JavaRDD<String> data = sc.textFile(path);
@@ -630,7 +633,7 @@ public class LinearRegression {
 
     // Building the model
     int numIterations = 100;
-    final LinearRegressionModel model = 
+    final LinearRegressionModel model =
       LinearRegressionWithSGD.train(JavaRDD.toRDD(parsedData), numIterations);
 
     // Evaluate model on training examples and compute training error
@@ -661,7 +664,7 @@ public class LinearRegression {
 
 <div data-lang="python" markdown="1">
 The following example demonstrate how to load training data, parse it as an RDD of LabeledPoint.
-The example then uses LinearRegressionWithSGD to build a simple linear model to predict label 
+The example then uses LinearRegressionWithSGD to build a simple linear model to predict label
 values. We compute the mean squared error at the end to evaluate
 [goodness of fit](http://en.wikipedia.org/wiki/Goodness_of_fit).
 
@@ -698,8 +701,8 @@ a dependency.
 
 ###Streaming linear regression
 
-When data arrive in a streaming fashion, it is useful to fit regression models online, 
-updating the parameters of the model as new data arrives. MLlib currently supports 
+When data arrive in a streaming fashion, it is useful to fit regression models online,
+updating the parameters of the model as new data arrives. MLlib currently supports
 streaming linear regression using ordinary least squares. The fitting is similar
 to that performed offline, except fitting occurs on each batch of data, so that
 the model continually updates to reflect the data from the stream.
@@ -714,7 +717,7 @@ online to the first stream, and make predictions on the second stream.
 
 <div data-lang="scala" markdown="1">
 
-First, we import the necessary classes for parsing our input data and creating the model. 
+First, we import the necessary classes for parsing our input data and creating the model.
 
 {% highlight scala %}
 
@@ -726,7 +729,7 @@ import org.apache.spark.mllib.regression.StreamingLinearRegressionWithSGD
 
 Then we make input streams for training and testing data. We assume a StreamingContext `ssc`
 has already been created, see [Spark Streaming Programming Guide](streaming-programming-guide.html#initializing)
-for more info. For this example, we use labeled points in training and testing streams, 
+for more info. For this example, we use labeled points in training and testing streams,
 but in practice you will likely want to use unlabeled vectors for test data.
 
 {% highlight scala %}
@@ -746,7 +749,7 @@ val model = new StreamingLinearRegressionWithSGD()
 
 {% endhighlight %}
 
-Now we register the streams for training and testing and start the job. 
+Now we register the streams for training and testing and start the job.
 Printing predictions alongside true labels lets us easily see the result.
 
 {% highlight scala %}
@@ -756,14 +759,14 @@ model.predictOnValues(testData.map(lp => (lp.label, lp.features))).print()
 
 ssc.start()
 ssc.awaitTermination()
- 
+
 {% endhighlight %}
 
 We can now save text files with data to the training or testing folders.
-Each line should be a data point formatted as `(y,[x1,x2,x3])` where `y` is the label 
-and `x1,x2,x3` are the features. Anytime a text file is placed in `/training/data/dir` 
-the model will update. Anytime a text file is placed in `/testing/data/dir` you will see predictions. 
-As you feed more data to the training directory, the predictions 
+Each line should be a data point formatted as `(y,[x1,x2,x3])` where `y` is the label
+and `x1,x2,x3` are the features. Anytime a text file is placed in `/training/data/dir`
+the model will update. Anytime a text file is placed in `/testing/data/dir` you will see predictions.
+As you feed more data to the training directory, the predictions
 will get better!
 
 </div>
