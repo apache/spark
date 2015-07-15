@@ -47,6 +47,12 @@ PUSH_REMOTE_NAME = os.environ.get("PUSH_REMOTE_NAME", "apache")
 JIRA_USERNAME = os.environ.get("JIRA_USERNAME", "")
 # ASF JIRA password
 JIRA_PASSWORD = os.environ.get("JIRA_PASSWORD", "")
+# OAuth key used for issuing requests against the GitHub API. If this is not defined, then requests
+# will be unauthenticated. You should only need to configure this if you find yourself regularly
+# exceeding your IP's unauthenticated request rate limit. You can create an OAuth key at
+# https://github.com/settings/tokens. This script only requires the "public_repo" scope.
+GITHUB_OAUTH_KEY = os.environ.get("GITHUB_OAUTH_KEY")
+
 
 GITHUB_BASE = "https://github.com/apache/spark/pull"
 GITHUB_API_BASE = "https://api.github.com/repos/apache/spark"
@@ -58,9 +64,17 @@ BRANCH_PREFIX = "PR_TOOL"
 
 def get_json(url):
     try:
-        return json.load(urllib2.urlopen(url))
+        request = urllib2.Request(url)
+        if GITHUB_OAUTH_KEY:
+            request.add_header('Authorization', 'token %s' % GITHUB_OAUTH_KEY)
+        return json.load(urllib2.urlopen(request))
     except urllib2.HTTPError as e:
-        print "Unable to fetch URL, exiting: %s" % url
+        if "X-RateLimit-Remaining" in e.headers and e.headers["X-RateLimit-Remaining"] == '0':
+            print "Exceeded the GitHub API rate limit; see the instructions in " + \
+                  "dev/merge_spark_pr.py to configure an OAuth token for making authenticated " + \
+                  "GitHub requests."
+        else:
+            print "Unable to fetch URL, exiting: %s" % url
         sys.exit(-1)
 
 

@@ -28,6 +28,7 @@ import scala.reflect.ClassTag
 
 import net.razorvine.pickle._
 
+import org.apache.spark.SparkContext
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
 import org.apache.spark.api.python.SerDeUtil
 import org.apache.spark.mllib.classification._
@@ -74,6 +75,15 @@ private[python] class PythonMLLibAPI extends Serializable {
       path: String,
       minPartitions: Int): JavaRDD[LabeledPoint] =
     MLUtils.loadLabeledPoints(jsc.sc, path, minPartitions)
+
+  /**
+   * Loads and serializes vectors saved with `RDD#saveAsTextFile`.
+   * @param jsc Java SparkContext
+   * @param path file or directory path in any Hadoop-supported file system URI
+   * @return serialized vectors in a RDD
+   */
+  def loadVectors(jsc: JavaSparkContext, path: String): RDD[Vector] =
+    MLUtils.loadVectors(jsc.sc, path)
 
   private def trainRegressionModel(
       learner: GeneralizedLinearAlgorithm[_ <: GeneralizedLinearModel],
@@ -632,6 +642,8 @@ private[python] class PythonMLLibAPI extends Serializable {
     def getVectors: JMap[String, JList[Float]] = {
       model.getVectors.map({case (k, v) => (k, v.toList.asJava)}).asJava
     }
+
+    def save(sc: SparkContext, path: String): Unit = model.save(sc, path)
   }
 
   /**

@@ -18,7 +18,8 @@
 package org.apache.spark.sql.execution.expressions
 
 import org.apache.spark.TaskContext
-import org.apache.spark.sql.catalyst.expressions.{InternalRow, LeafExpression}
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.LeafExpression
 import org.apache.spark.sql.types.{LongType, DataType}
 
 /**

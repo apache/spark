@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.ObjectPool
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.PlatformDependent
@@ -69,10 +70,16 @@ class UnsafeRowConverter(fieldTypes: Array[DataType]) {
    * @param row the row to convert
    * @param baseObject the base object of the destination address
    * @param baseOffset the base offset of the destination address
+   * @param rowLengthInBytes the length calculated by `getSizeRequirement(row)`
    * @return the number of bytes written. This should be equal to `getSizeRequirement(row)`.
    */
-  def writeRow(row: InternalRow, baseObject: Object, baseOffset: Long, pool: ObjectPool): Int = {
-    unsafeRow.pointTo(baseObject, baseOffset, writers.length, pool)
+  def writeRow(
+      row: InternalRow,
+      baseObject: Object,
+      baseOffset: Long,
+      rowLengthInBytes: Int,
+      pool: ObjectPool): Int = {
+    unsafeRow.pointTo(baseObject, baseOffset, writers.length, rowLengthInBytes, pool)
 
     if (writers.length > 0) {
       // zero-out the bitset

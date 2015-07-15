@@ -41,6 +41,7 @@ object DefaultOptimizer extends Optimizer {
     Batch("Operator Optimizations", FixedPoint(100),
       // Operator push down
       UnionPushDown,
+      SamplePushDown,
       PushPredicateThroughJoin,
       PushPredicateThroughProject,
       PushPredicateThroughGenerate,
@@ -63,6 +64,23 @@ object DefaultOptimizer extends Optimizer {
       DecimalAggregates) ::
     Batch("LocalRelation", FixedPoint(100),
       ConvertToLocalRelation) :: Nil
+}
+
+/**
+ * Pushes operations down into a Sample.
+ */
+object SamplePushDown extends Rule[LogicalPlan] {
+
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    // Push down filter into sample
+    case Filter(condition, s @ Sample(lb, up, replace, seed, child)) =>
+      Sample(lb, up, replace, seed,
+        Filter(condition, child))
+    // Push down projection into sample
+    case Project(projectList, s @ Sample(lb, up, replace, seed, child)) =>
+      Sample(lb, up, replace, seed,
+        Project(projectList, child))
+  }
 }
 
 /**
@@ -257,8 +275,12 @@ object NullPropagation extends Rule[LogicalPlan] {
       case e @ Count(Literal(null, _)) => Cast(Literal(0L), e.dataType)
       case e @ IsNull(c) if !c.nullable => Literal.create(false, BooleanType)
       case e @ IsNotNull(c) if !c.nullable => Literal.create(true, BooleanType)
-      case e @ ExtractValue(Literal(null, _), _) => Literal.create(null, e.dataType)
-      case e @ ExtractValue(_, Literal(null, _)) => Literal.create(null, e.dataType)
+      case e @ GetArrayItem(Literal(null, _), _) => Literal.create(null, e.dataType)
+      case e @ GetArrayItem(_, Literal(null, _)) => Literal.create(null, e.dataType)
+      case e @ GetMapValue(Literal(null, _), _) => Literal.create(null, e.dataType)
+      case e @ GetMapValue(_, Literal(null, _)) => Literal.create(null, e.dataType)
+      case e @ GetStructField(Literal(null, _), _, _) => Literal.create(null, e.dataType)
+      case e @ GetArrayStructFields(Literal(null, _), _, _, _) => Literal.create(null, e.dataType)
       case e @ EqualNullSafe(Literal(null, _), r) => IsNull(r)
       case e @ EqualNullSafe(l, Literal(null, _)) => IsNull(l)
       case e @ Count(expr) if !expr.nullable => Count(Literal(1))

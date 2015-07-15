@@ -178,7 +178,7 @@ class SparkHadoopUtil extends Logging {
 
   private def getFileSystemThreadStatisticsMethod(methodName: String): Method = {
     val statisticsDataClass =
-      Class.forName("org.apache.hadoop.fs.FileSystem$Statistics$StatisticsData")
+      Utils.classForName("org.apache.hadoop.fs.FileSystem$Statistics$StatisticsData")
     statisticsDataClass.getDeclaredMethod(methodName)
   }
 
@@ -334,6 +334,19 @@ class SparkHadoopUtil extends Logging {
    * Stop the thread that does the delegation token updates.
    */
   private[spark] def stopExecutorDelegationTokenRenewer() {}
+
+  /**
+   * Return a fresh Hadoop configuration, bypassing the HDFS cache mechanism.
+   * This is to prevent the DFSClient from using an old cached token to connect to the NameNode.
+   */
+  private[spark] def getConfBypassingFSCache(
+      hadoopConf: Configuration,
+      scheme: String): Configuration = {
+    val newConf = new Configuration(hadoopConf)
+    val confKey = s"fs.${scheme}.impl.disable.cache"
+    newConf.setBoolean(confKey, true)
+    newConf
+  }
 }
 
 object SparkHadoopUtil {
@@ -343,7 +356,7 @@ object SparkHadoopUtil {
         System.getProperty("SPARK_YARN_MODE", System.getenv("SPARK_YARN_MODE")))
     if (yarnMode) {
       try {
-        Class.forName("org.apache.spark.deploy.yarn.YarnSparkHadoopUtil")
+        Utils.classForName("org.apache.spark.deploy.yarn.YarnSparkHadoopUtil")
           .newInstance()
           .asInstanceOf[SparkHadoopUtil]
       } catch {

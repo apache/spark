@@ -87,8 +87,6 @@ import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Attribute}
  * val row = Row(Row(1, 2, true))
  * // row: Row = [[1,2,true]]
  * }}}
- *
- * @group dataType
  */
 @DeveloperApi
 case class StructType(fields: Array[StructField]) extends DataType with Seq[StructField] {
@@ -252,7 +250,9 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
     builder.toString()
   }
 
+  // scalastyle:off println
   def printTreeString(): Unit = println(treeString)
+  // scalastyle:on println
 
   private[sql] def buildFormattedString(prefix: String, builder: StringBuilder): Unit = {
     fields.foreach(field => field.buildFormattedString(prefix, builder))
@@ -303,7 +303,20 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
 }
 
 
-object StructType {
+object StructType extends AbstractDataType {
+
+  override private[sql] def defaultConcreteType: DataType = new StructType
+
+  override private[sql] def isSameType(other: DataType): Boolean = {
+    other.isInstanceOf[StructType]
+  }
+
+  override private[sql] def simpleString: String = "struct"
+
+  private[sql] def fromString(raw: String): StructType = DataType.fromString(raw) match {
+    case t: StructType => t
+    case _ => throw new RuntimeException(s"Failed parsing StructType: $raw")
+  }
 
   def apply(fields: Seq[StructField]): StructType = StructType(fields.toArray)
 

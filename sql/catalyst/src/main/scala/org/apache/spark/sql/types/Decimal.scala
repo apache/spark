@@ -145,6 +145,14 @@ final class Decimal extends Ordered[Decimal] with Serializable {
     }
   }
 
+  def toLimitedBigDecimal: BigDecimal = {
+    if (decimalVal.ne(null)) {
+      decimalVal
+    } else {
+      BigDecimal(longVal, _scale)
+    }
+  }
+
   def toJavaBigDecimal: java.math.BigDecimal = toBigDecimal.underlying()
 
   def toUnscaledLong: Long = {
@@ -269,9 +277,9 @@ final class Decimal extends Ordered[Decimal] with Serializable {
     if (that.isZero) {
       null
     } else {
-      // To avoid non-terminating decimal expansion problem, we turn to Java BigDecimal's divide
-      // with specified ROUNDING_MODE.
-      Decimal(toJavaBigDecimal.divide(that.toJavaBigDecimal, ROUNDING_MODE.id))
+      // To avoid non-terminating decimal expansion problem, we get scala's BigDecimal with limited
+      // precision and scala.
+      Decimal(toLimitedBigDecimal / that.toLimitedBigDecimal)
     }
   }
 
