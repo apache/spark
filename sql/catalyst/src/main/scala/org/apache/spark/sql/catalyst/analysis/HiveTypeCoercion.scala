@@ -167,7 +167,7 @@ object HiveTypeCoercion {
         case e if !e.childrenResolved => e
 
         // For binary operators whose input types are NullType, cast them to some specific type.
-        case b@BinaryOperator(left, right)
+        case b @ BinaryOperator(left, right)
           if left.dataType == NullType && right.dataType == NullType &&
             !b.inputType.acceptsType(NullType) =>
           // If both inputs are null type (from null literals), cast the null type into some
