@@ -95,8 +95,8 @@ case class BroadcastRangeJoin(
   private[this] val indexBroadcastFuture = future {
     // Deal with equality.
     val Seq(allowLowEqual: Boolean, allowHighEqual: Boolean) = buildSide match {
-      case BuildLeft => equality
-      case BuildRight => equality.reverse
+      case BuildLeft => equality.reverse
+      case BuildRight => equality
     }
 
     // Get the ordering for the datatype.
@@ -105,7 +105,7 @@ case class BroadcastRangeJoin(
     // Note that we use .execute().collect() because we don't want to convert data to Scala types
     // TODO find out if the result of a sort and a collect is still sorted.
     val eventifier = RangeIndex.toRangeEvent(buildSideKeyGenerator, ordering)
-    val events = buildPlan.execute().collect().flatMap(eventifier)
+    val events = buildPlan.execute().map(_.copy()).collect().flatMap(eventifier)
 
     // Create the index.
     val index = RangeIndex.build(ordering, events, allowLowEqual, allowHighEqual)
@@ -120,25 +120,34 @@ case class BroadcastRangeJoin(
 
     // Iterate over the streaming relation.
     streamedPlan.execute().mapPartitions { stream =>
-      val index = indexBC.value
-      val streamSideKeys = streamSideKeyGenerator()
-      val join = new JoinedRow2 // TODO create our own join row...
-      stream.flatMap { sRow =>
-        // Get the bounds.
-        val lowHigh = streamSideKeys(sRow)
-        val low = lowHigh(0)
-        val high = lowHigh(1)
+      new Iterator[InternalRow] {
+        private[this] val index = indexBC.value
+        private[this] val streamSideKeys = streamSideKeyGenerator()
+        private[this] val join = new JoinedRow2 // TODO create our own join row...
+        private[this] var row: InternalRow = EmptyRow
+        private[this] var iterator: Iterator[InternalRow] = Iterator.empty
 
-        // Only allow non-null keys.
-        if (low != null && high != null) {
-          index.intersect(low, high).map { bRow =>
-            buildSide match {
-              case BuildRight => join(sRow, bRow)
-              case BuildLeft => join(bRow, sRow)
+        override final def hasNext: Boolean = {
+          var result = iterator.hasNext
+          while (!result && stream.hasNext) {
+            row = stream.next()
+            val lowHigh = streamSideKeys(row)
+            val low = lowHigh(0)
+            val high = lowHigh(1)
+            if (low != null && high != null) {
+              iterator = index.intersect(low, high)
             }
+            result = iterator.hasNext
+          }
+          result
+        }
+
+        override final def next(): InternalRow = {
+          buildSide match {
+            case BuildRight => join(row, iterator.next())
+            case BuildLeft => join(iterator.next(), row)
           }
         }
-        else Iterator.empty
       }
     }
   }
@@ -224,14 +233,13 @@ private[joins] object RangeIndex {
       // Valid points and intervals.
       if (low != null && high != null) {
         val result = cmp.compare(low, high)
-        val copy = row.copy()
         // Point
         if (result == 0) {
-          (low, 0, copy) :: Nil
+          (low, 0, row) :: Nil
         }
         // Interval
         else if (result < 0) {
-          (low, 1, copy) ::(high, -1, copy) :: Nil
+          (low, 1, row) ::(high, -1, row) :: Nil
         }
         // Reversed Interval (low > high) - Cannot join on this record.
         else Nil
@@ -285,13 +293,21 @@ private[joins] class RangeIndex(
   final def closestLowerKey(value: Any, equalCorrection: Int,
       first: Int = 0, last: Int = keys.length - 1): Int = {
     if (first < last) {
-      val index = first + ((last - first) >> 1)
-      val key = keys(index)
-      val cmp = if (key == null) -1
+      // Determine the mid point.
+      val mid = first + ((last - first + 1) >>> 1)
+
+      // Compare the value with the key at the mid point.
+      // Note that a value is always larger than NULL.
+      val key = keys(mid)
+      val cmp = if (key == null) 1
       else ordering.compare(value, key)
-      if (cmp == 0) index - equalCorrection
-      else if (cmp < 0) closestLowerKey(value, equalCorrection, first, index)
-      else closestLowerKey(value, equalCorrection, index + 1, last)
+
+      // Value == Key. Keys are unique so we can stop.
+      if (cmp == 0) mid - equalCorrection
+      // Value > Key.
+      else if (cmp > 0) closestLowerKey(value, equalCorrection, mid, last)
+      // Value < Key.
+      else closestLowerKey(value, equalCorrection, first, mid - 1)
     } else first
   }
 
