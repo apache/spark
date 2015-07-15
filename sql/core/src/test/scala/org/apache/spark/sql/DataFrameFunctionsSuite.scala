@@ -465,8 +465,8 @@ class DataFrameFunctionsSuite extends QueryTest {
 
     checkAnswer(
       df.select(
-        formatNumber($"f", $"e"),
-        formatNumber("f", "e")),
+        format_number($"f", 4),
+        format_number("f", 4)),
       Row("5.0000", "5.0000"))
 
     checkAnswer(

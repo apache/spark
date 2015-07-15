@@ -441,8 +441,6 @@ class StringFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     checkEvaluation(Length(Literal.create(null, StringType)), null, create_row(string))
     checkEvaluation(Length(Literal.create(null, BinaryType)), null, create_row(bytes))
-
-    checkEvaluation(Length(Literal.create(null, NullType)), null, create_row(null))
   }
 
   test("number format") {
@@ -453,6 +451,7 @@ class StringFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(FormatNumber(Literal(12831273.23481d), Literal(3)), "12,831,273.235")
     checkEvaluation(FormatNumber(Literal(12831273.83421d), Literal(0)), "12,831,274")
     checkEvaluation(FormatNumber(Literal(123123324123L), Literal(3)), "123,123,324,123.000")
+    checkEvaluation(FormatNumber(Literal(123123324123L), Literal(-1)), null)
     checkEvaluation(
       FormatNumber(
         Literal(Decimal(123123324123L) * Decimal(123123.21234d)), Literal(4)),

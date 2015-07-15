@@ -1685,7 +1685,7 @@ object functions {
   //////////////////////////////////////////////////////////////////////////////////////////////
 
   /**
-   * Computes the length of a given string / binary value
+   * Computes the length of a given string / binary value.
    *
    * @group string_funcs
    * @since 1.5.0
@@ -1693,7 +1693,7 @@ object functions {
   def length(e: Column): Column = Length(e.expr)
 
   /**
-   * Computes the length of a given string / binary  column
+   * Computes the length of a given string / binary column.
    *
    * @group string_funcs
    * @since 1.5.0
@@ -1701,25 +1701,27 @@ object functions {
   def length(columnName: String): Column = length(Column(columnName))
 
   /**
-   * Formats the number X to a format like '#,###,###.##', rounded to D decimal places,
-   * and returns the result as a string. If D is 0, the result has no decimal point or
-   * fractional part.
+   * Formats the number X to a format like '#,###,###.##', rounded to d decimal places,
+   * and returns the result as a string.
+   * If d is 0, the result has no decimal point or fractional part.
+   * If d < 0, the result will be null.
    *
    * @group string_funcs
    * @since 1.5.0
    */
-  def formatNumber(x: Column, d: Column): Column = FormatNumber(x.expr, d.expr)
+  def format_number(x: Column, d: Int): Column = FormatNumber(x.expr, lit(d).expr)
 
   /**
-   * Formats the number X to a format like '#,###,###.##', rounded to D decimal places,
-   * and returns the result as a string. If D is 0, the result has no decimal point or
-   * fractional part.
+   * Formats the number X to a format like '#,###,###.##', rounded to d decimal places,
+   * and returns the result as a string.
+   * If d is 0, the result has no decimal point or fractional part.
+   * If d < 0, the result will be null.
    *
    * @group string_funcs
    * @since 1.5.0
    */
-  def formatNumber(columnXName: String, columnDName: String): Column = {
-    formatNumber(Column(columnXName), Column(columnDName))
+  def format_number(columnXName: String, d: Int): Column = {
+    format_number(Column(columnXName), d)
   }
 
   /**

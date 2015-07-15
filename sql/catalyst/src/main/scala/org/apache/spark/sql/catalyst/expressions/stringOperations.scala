@@ -567,7 +567,6 @@ case class Length(child: Expression) extends UnaryExpression with ExpectsInputTy
     child.dataType match {
       case StringType => defineCodeGen(ctx, ev, c => s"($c).numChars()")
       case BinaryType => defineCodeGen(ctx, ev, c => s"($c).length")
-      case NullType => defineCodeGen(ctx, ev, c => s"-1")
     }
   }
 
@@ -685,8 +684,6 @@ case class FormatNumber(x: Expression, d: Expression)
   override def right: Expression = d
   override def dataType: DataType = StringType
   override def inputTypes: Seq[AbstractDataType] = Seq(NumericType, IntegerType)
-  override def foldable: Boolean = x.foldable && d.foldable
-  override def nullable: Boolean = x.nullable || d.nullable
 
   @transient
   private var lastDValue: Int = -100
@@ -706,8 +703,7 @@ case class FormatNumber(x: Expression, d: Expression)
     val dObject = d.eval(input)
 
     if (dObject == null || dObject.asInstanceOf[Int] < 0) {
-      throw new IllegalArgumentException(
-        s"Argument 2 of function FORMAT_NUMBER must be >= 0, but $dObject was found")
+      return null
     }
     val dValue = dObject.asInstanceOf[Int]
 
@@ -742,5 +738,7 @@ case class FormatNumber(x: Expression, d: Expression)
         UTF8String.fromString(numberFormat.format(xObject.asInstanceOf[Decimal].toJavaBigDecimal))
     }
   }
+
+  override def prettyName: String = "format_number"
 }
 
