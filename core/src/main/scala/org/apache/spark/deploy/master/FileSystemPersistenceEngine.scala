@@ -59,7 +59,7 @@ private[master] class FileSystemPersistenceEngine(
     val fileOut = new FileOutputStream(file)
     var out: SerializationStream = null
     Utils.tryWithSafeFinally {
-      out = serializer.newInstance.serializeStream(fileOut)
+      out = serializer.newInstance().serializeStream(fileOut)
       out.writeObject(value)
     } {
       fileOut.close()
@@ -73,7 +73,7 @@ private[master] class FileSystemPersistenceEngine(
     val fileIn = new FileInputStream(file)
     var in: DeserializationStream = null
     try {
-      in = serializer.newInstance.deserializeStream(fileIn)
+      in = serializer.newInstance().deserializeStream(fileIn)
       in.readObject[T]()
     } finally {
       fileIn.close()

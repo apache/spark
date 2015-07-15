@@ -238,7 +238,7 @@ private[spark] class AkkaRpcEnv private[akka] (
 
   override def toString: String = s"${getClass.getSimpleName}($actorSystem)"
 
-  def deserialize[T](deserializationAction: () => T): T = {
+  override def deserialize[T](deserializationAction: () => T): T = {
     JavaSerializer.currentSystem.withValue(actorSystem.asInstanceOf[ExtendedActorSystem]) {
       deserializationAction()
     }

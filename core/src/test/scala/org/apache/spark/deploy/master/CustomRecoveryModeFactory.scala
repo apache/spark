@@ -65,7 +65,7 @@ class CustomPersistenceEngine(serializer: Serializer) extends PersistenceEngine 
    */
   override def persist(name: String, obj: Object): Unit = {
     CustomPersistenceEngine.persistAttempts += 1
-    val serialized = serializer.newInstance.serialize(obj)
+    val serialized = serializer.newInstance().serialize(obj)
     val bytes = new Array[Byte](serialized.remaining())
     serialized.get(bytes)
     data += name -> bytes
@@ -86,7 +86,7 @@ class CustomPersistenceEngine(serializer: Serializer) extends PersistenceEngine 
   override def read[T: ClassTag](prefix: String): Seq[T] = {
     CustomPersistenceEngine.readAttempts += 1
     val results = for ((name, bytes) <- data; if name.startsWith(prefix))
-      yield serializer.newInstance.deserialize[T](ByteBuffer.wrap(bytes))
+      yield serializer.newInstance().deserialize[T](ByteBuffer.wrap(bytes))
     results.toSeq
   }
 }
