@@ -52,13 +52,6 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite {
       s"differing types in '${expr.prettyString}'")
   }
 
-  def assertErrorWithImplicitCast(expr: Expression, errorMessage: String): Unit = {
-    val e = intercept[AnalysisException] {
-      assertSuccess(expr)
-    }
-    assert(e.getMessage.contains(errorMessage))
-  }
-
   test("check types for unary arithmetic") {
     assertError(UnaryMinus('stringField), "expected to be of type numeric")
     assertError(Abs('stringField), "expected to be of type numeric")

@@ -353,7 +353,7 @@ abstract class BinaryExpression extends Expression with trees.BinaryNode[Express
  * 2. Two inputs are expected to the be same type. If the two inputs have different types,
  *    the analyzer will find the tightest common type and do the proper type casting.
  */
-abstract class BinaryOperator extends BinaryExpression {
+abstract class BinaryOperator extends BinaryExpression with ExpectsInputTypes {
   self: Product =>
 
   /**
@@ -365,6 +365,8 @@ abstract class BinaryOperator extends BinaryExpression {
   def symbol: String
 
   override def toString: String = s"($left $symbol $right)"
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(inputType, inputType)
 
   override def checkInputDataTypes(): TypeCheckResult = {
     // First check whether left and right have the same type, then check if the type is acceptable.

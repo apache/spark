@@ -672,7 +672,7 @@ object HiveTypeCoercion {
             // If the expression accepts the tightest common type, cast to that.
             val newLeft = if (left.dataType == commonType) left else Cast(left, commonType)
             val newRight = if (right.dataType == commonType) right else Cast(right, commonType)
-            b.makeCopy(Array(newLeft, newRight))
+            b.withNewChildren(Seq(newLeft, newRight))
           } else {
             // Otherwise, don't do anything with the expression.
             b
@@ -691,7 +691,7 @@ object HiveTypeCoercion {
         // general implicit casting.
         val children: Seq[Expression] = e.children.zip(e.inputTypes).map { case (in, expected) =>
           if (in.dataType == NullType && !expected.acceptsType(NullType)) {
-            Cast(in, expected.defaultConcreteType)
+            Literal.create(null, expected.defaultConcreteType)
           } else {
             in
           }
