@@ -29,11 +29,13 @@ import org.apache.spark.sql.types.{IntegerType, DataType}
  */
 private[sql] case object SparkPartitionID extends LeafExpression {
 
+  override def deterministic: Boolean = false
+
   override def nullable: Boolean = false
 
   override def dataType: DataType = IntegerType
 
-  @transient private lazy val partitionId = TaskContext.getPartitionId
+  @transient private lazy val partitionId = TaskContext.getPartitionId()
 
   override def eval(input: InternalRow): Int = partitionId
 
