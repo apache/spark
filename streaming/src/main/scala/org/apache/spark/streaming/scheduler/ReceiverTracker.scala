@@ -89,7 +89,8 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
   // This not being null means the tracker has been started and not stopped
   private var endpoint: RpcEndpointRef = null
 
-  private val scheduler: ReceiverScheduler = new LoadBalanceReceiverSchedulerImpl()
+  private val schedulingPolicy: ReceiverSchedulingPolicy =
+    new LoadBalanceReceiverSchedulingPolicyImpl()
 
   @volatile private var stopping = false
 
@@ -395,7 +396,7 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
 
             val self = this
             val receiverId = receiver.streamId
-            val scheduledLocations = scheduler.scheduleReceiver(
+            val scheduledLocations = schedulingPolicy.scheduleReceiver(
               receiverId,
               receiver.preferredLocation,
               getReceiverTrackingInfoMap(),
@@ -486,7 +487,7 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
     val preferredLocation = receiverTrackingInfosLock.synchronized {
       receiverPreferredLocations(receiverId)
     }
-    val scheduledLocations = scheduler.scheduleReceiver(
+    val scheduledLocations = schedulingPolicy.scheduleReceiver(
       receiverId, preferredLocation, getReceiverTrackingInfoMap(), getExecutors(ssc))
     updateReceiverScheduledLocations(receiverId, scheduledLocations)
     scheduledLocations

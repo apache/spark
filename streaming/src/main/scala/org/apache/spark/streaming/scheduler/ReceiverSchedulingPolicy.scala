@@ -28,7 +28,7 @@ private[streaming] case class ReceiverTrackingInfo(
     scheduledLocations: Option[Seq[String]],
     runningLocation: Option[String])
 
-private[streaming] trait ReceiverScheduler {
+private[streaming] trait ReceiverSchedulingPolicy {
 
   /**
    * Return a list of candidate executors to run the receiver. If the list is empty, the caller can
@@ -65,7 +65,7 @@ private[streaming] trait ReceiverScheduler {
  * </ol>
  *
  */
-private[streaming] class LoadBalanceReceiverSchedulerImpl extends ReceiverScheduler {
+private[streaming] class LoadBalanceReceiverSchedulingPolicyImpl extends ReceiverSchedulingPolicy {
 
   def scheduleReceiver(
       receiverId: Int,

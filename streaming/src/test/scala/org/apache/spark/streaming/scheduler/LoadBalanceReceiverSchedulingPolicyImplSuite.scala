@@ -19,20 +19,20 @@ package org.apache.spark.streaming.scheduler
 
 import org.apache.spark.SparkFunSuite
 
-class LoadBalanceReceiverSchedulerImplSuite extends SparkFunSuite {
+class LoadBalanceReceiverSchedulingPolicyImplSuite extends SparkFunSuite {
 
-  val receiverScheduler = new LoadBalanceReceiverSchedulerImpl
+  val receiverSchedulingPolicy = new LoadBalanceReceiverSchedulingPolicyImpl
 
   test("empty executors") {
     val scheduledLocations =
-      receiverScheduler.scheduleReceiver(0, None, Map.empty, executors = Seq.empty)
+      receiverSchedulingPolicy.scheduleReceiver(0, None, Map.empty, executors = Seq.empty)
     assert(scheduledLocations === Seq.empty)
   }
 
   test("receiver preferredLocation") {
     val receiverTrackingInfoMap = Map(
       0 -> ReceiverTrackingInfo(0, ReceiverState.INACTIVE, None, None))
-    val scheduledLocations = receiverScheduler.scheduleReceiver(
+    val scheduledLocations = receiverSchedulingPolicy.scheduleReceiver(
       0, Some("host1"), receiverTrackingInfoMap, executors = Seq("host2"))
     assert(scheduledLocations.toSet === Set("host1", "host2"))
   }
@@ -43,7 +43,7 @@ class LoadBalanceReceiverSchedulerImplSuite extends SparkFunSuite {
     val receiverTrackingInfoMap = Map(
       0 -> ReceiverTrackingInfo(0, ReceiverState.ACTIVE, None, Some("host1")),
       1 -> ReceiverTrackingInfo(1, ReceiverState.SCHEDULED, Some(Seq("host2")), None))
-    val scheduledLocations = receiverScheduler.scheduleReceiver(
+    val scheduledLocations = receiverSchedulingPolicy.scheduleReceiver(
       2, None, receiverTrackingInfoMap, executors)
     assert(scheduledLocations.toSet === Set("host3"))
   }
@@ -55,7 +55,7 @@ class LoadBalanceReceiverSchedulerImplSuite extends SparkFunSuite {
       0 -> ReceiverTrackingInfo(0, ReceiverState.ACTIVE, None, Some("host1")),
       1 -> ReceiverTrackingInfo(1, ReceiverState.SCHEDULED, Some(Seq("host2", "host3")), None),
       2 -> ReceiverTrackingInfo(1, ReceiverState.SCHEDULED, Some(Seq("host1", "host3")), None))
-    val scheduledLocations = receiverScheduler.scheduleReceiver(
+    val scheduledLocations = receiverSchedulingPolicy.scheduleReceiver(
       3, None, receiverTrackingInfoMap, executors)
     assert(scheduledLocations.toSet === Set("host2"))
   }
@@ -72,7 +72,7 @@ class LoadBalanceReceiverSchedulerImplSuite extends SparkFunSuite {
       1 -> ReceiverTrackingInfo(1, ReceiverState.SCHEDULED, Some(Seq("host2")), None),
       2 -> ReceiverTrackingInfo(1, ReceiverState.SCHEDULED, Some(Seq("host3")), None),
       3 -> ReceiverTrackingInfo(1, ReceiverState.SCHEDULED, Some(Seq("host2", "host3")), None))
-    val scheduledLocations = receiverScheduler.scheduleReceiver(
+    val scheduledLocations = receiverSchedulingPolicy.scheduleReceiver(
       1, None, receiverTrackingInfoMap, executors)
     assert(scheduledLocations.toSet === Set("host2"))
   }
