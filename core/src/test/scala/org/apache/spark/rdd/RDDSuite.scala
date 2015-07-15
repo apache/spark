@@ -229,14 +229,25 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext {
     }
     assert(thrown.getMessage.contains("empty"))
 
+    def testEmptyRDD(emptyKv: RDD[Tuple2[Int, Int]], rdd : RDD[Tuple2[Int, Int]])
+    {
+      assert(rdd.join(emptyKv).collect().size === 0)
+      assert(rdd.rightOuterJoin(emptyKv).collect().size === 0)
+      assert(rdd.leftOuterJoin(emptyKv).collect().size === 2)
+      assert(rdd.fullOuterJoin(emptyKv).collect().size === 2)
+      assert(rdd.cogroup(emptyKv).collect().size === 2)
+      assert(rdd.union(emptyKv).collect().size === 2)
+
+    }
+
     val emptyKv = new EmptyRDD[(Int, Int)](sc)
     val rdd = sc.parallelize(1 to 2, 2).map(x => (x, x))
-    assert(rdd.join(emptyKv).collect().size === 0)
-    assert(rdd.rightOuterJoin(emptyKv).collect().size === 0)
-    assert(rdd.leftOuterJoin(emptyKv).collect().size === 2)
-    assert(rdd.fullOuterJoin(emptyKv).collect().size === 2)
-    assert(rdd.cogroup(emptyKv).collect().size === 2)
-    assert(rdd.union(emptyKv).collect().size === 2)
+    testEmptyRDD(emptyKv, rdd)
+
+    // Regression test for SPARK-8048. Zero partitioned RDD should behave similar to emptyRDD.
+    val zeroPartitionRDD = sc.parallelize(List[Tuple2[Int, Int]]()).
+          partitionBy(new HashPartitioner(0))
+    testEmptyRDD(zeroPartitionRDD, rdd)
   }
 
   test("repartitioned RDDs") {

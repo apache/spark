@@ -56,9 +56,10 @@ object Partitioner {
    */
   def defaultPartitioner(rdd: RDD[_], others: RDD[_]*): Partitioner = {
     val bySize = (Seq(rdd) ++ others).sortBy(_.partitions.size).reverse
-    for (r <- bySize if r.partitioner.isDefined) {
-      return r.partitioner.get
-    }
+    for {
+      r <- bySize
+      partitioner <- r.partitioner if r.partitions.nonEmpty
+    } return partitioner
     if (rdd.context.conf.contains("spark.default.parallelism")) {
       new HashPartitioner(rdd.context.defaultParallelism)
     } else {
