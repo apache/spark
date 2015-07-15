@@ -659,8 +659,7 @@ object HiveTypeCoercion {
   }
 
   /**
-   * Casts types according to the expected input types for Expressions that have the trait
-   * [[ImplicitCastInputTypes]].
+   * Casts types according to the expected input types for [[Expression]]s.
    */
   object ImplicitTypeCasts extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
