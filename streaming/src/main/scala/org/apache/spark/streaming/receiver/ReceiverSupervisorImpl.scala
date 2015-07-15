@@ -162,7 +162,7 @@ private[streaming] class ReceiverSupervisorImpl(
     env.rpcEnv.stop(endpoint)
   }
 
-  override protected def onReceiverStart() {
+  override protected def onReceiverStart(): Boolean = {
     val msg = RegisterReceiver(
       streamId, receiver.getClass.getSimpleName, host, endpoint)
     trackerEndpoint.askWithRetry[Boolean](msg)
