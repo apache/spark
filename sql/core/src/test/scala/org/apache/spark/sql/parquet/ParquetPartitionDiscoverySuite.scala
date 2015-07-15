@@ -588,4 +588,15 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest {
           Seq("a", "a, b"),
           Seq("file:/tmp/foo/a=1", "file:/tmp/foo/a=1/b=foo")))
   }
+
+  test("Parallel partition discovery") {
+    withTempPath { dir =>
+      withSQLConf(SQLConf.PARALLEL_PARTITION_DISCOVERY_THRESHOLD.key -> "1") {
+        val path = dir.getCanonicalPath
+        val df = sqlContext.range(5).select('id as 'a, 'id as 'b, 'id as 'c).coalesce(1)
+        df.write.partitionBy("b", "c").parquet(path)
+        checkAnswer(sqlContext.read.parquet(path), df)
+      }
+    }
+  }
 }

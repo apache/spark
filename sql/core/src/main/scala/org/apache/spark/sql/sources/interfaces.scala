@@ -386,9 +386,9 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
 
     var leafDirToChildrenFiles = mutable.Map.empty[Path, Array[FileStatus]]
 
-    private def listLeafFilesAndDirs(paths: Array[String]): Set[FileStatus] = {
+    private def listLeafFiles(paths: Array[String]): Set[FileStatus] = {
       if (paths.length >= sqlContext.conf.parallelPartitionDiscoveryThreshold) {
-        HadoopFsRelation.listLeafFilesAndDirsInParallel(paths, hadoopConf, sqlContext.sparkContext)
+        HadoopFsRelation.listLeafFilesInParallel(paths, hadoopConf, sqlContext.sparkContext)
       } else {
         val statuses = paths.flatMap { path =>
           val hdfsPath = new Path(path)
@@ -407,13 +407,13 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
         if (dirs.isEmpty) {
           files.toSet
         } else {
-          files.toSet ++ listLeafFilesAndDirs(dirs.map(_.getPath.toString))
+          files.toSet ++ listLeafFiles(dirs.map(_.getPath.toString))
         }
       }
     }
 
     def refresh(): Unit = {
-      val files = listLeafFilesAndDirs(paths)
+      val files = listLeafFiles(paths)
 
       leafFiles.clear()
       leafDirToChildrenFiles.clear()
@@ -681,15 +681,14 @@ private[sql] object HadoopFsRelation extends Logging {
   // _common_metadata files). "_temporary" directories are explicitly ignored since failed
   // tasks/jobs may leave partial/corrupted data files there.  Files and directories whose name
   // start with "." are also ignored.
-  def listLeafFilesAndDirs(fs: FileSystem, status: FileStatus): Array[FileStatus] = {
+  def listLeafFiles(fs: FileSystem, status: FileStatus): Array[FileStatus] = {
     logInfo(s"Listing ${status.getPath}")
     val name = status.getPath.getName.toLowerCase
     if (name == "_temporary" || name.startsWith(".")) {
       Array.empty
     } else {
       val (dirs, files) = fs.listStatus(status.getPath).partition(_.isDir)
-      val leafDirs = if (dirs.isEmpty) Array(status) else Array.empty[FileStatus]
-      files ++ leafDirs ++ dirs.flatMap(dir => listLeafFilesAndDirs(fs, dir))
+      files ++ dirs.flatMap(dir => listLeafFiles(fs, dir))
     }
   }
 
@@ -706,7 +705,7 @@ private[sql] object HadoopFsRelation extends Logging {
       modificationTime: Long,
       accessTime: Long)
 
-  def listLeafFilesAndDirsInParallel(
+  def listLeafFilesInParallel(
       paths: Array[String],
       hadoopConf: Configuration,
       sparkContext: SparkContext): Set[FileStatus] = {
@@ -717,7 +716,7 @@ private[sql] object HadoopFsRelation extends Logging {
       val hdfsPath = new Path(path)
       val fs = hdfsPath.getFileSystem(serializableConfiguration.value)
       val qualified = hdfsPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
-      Try(listLeafFilesAndDirs(fs, fs.getFileStatus(qualified))).getOrElse(Array.empty)
+      Try(listLeafFiles(fs, fs.getFileStatus(qualified))).getOrElse(Array.empty)
     }.map { status =>
       FakeFileStatus(
         status.getPath.toString,
