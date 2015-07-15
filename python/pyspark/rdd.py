@@ -889,21 +889,16 @@ class RDD(object):
         >>> sc.parallelize([]).aggregate((0, 0), seqOp, combOp)
         (0, 0)
         """
-        def createZero():
-            return copy.deepcopy(zeroValue)
-
         def func(iterator):
-            # calling createZero here ensures that the copy of zeroValue used
-            # to initialize the accumulator in each partition is unique from
-            # the one provided to the fold call on each partition
-            acc = createZero()
+            acc = zeroValue
             for obj in iterator:
                 acc = seqOp(acc, obj)
             yield acc
-
-        # fold() properly protects zeroValue from mutation, so it is
-        # unnecessary to make another copy in the fold() call
-        return self.mapPartitions(func).fold(zeroValue, combOp)
+        # collecting result of mapPartitions here ensures that the copy of
+        # zeroValue provided to each partition is unique from the one provided
+        # to the final reduce call
+        vals = self.mapPartitions(func).collect()
+        return reduce(combOp, vals, zeroValue)
 
     def treeAggregate(self, zeroValue, seqOp, combOp, depth=2):
         """
