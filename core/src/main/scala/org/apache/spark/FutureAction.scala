@@ -22,7 +22,7 @@ import java.util.concurrent.TimeUnit
 
 import org.apache.spark.api.java.JavaFutureAction
 import org.apache.spark.rdd.RDD
-import org.apache.spark.scheduler.{JobFailed, JobSucceeded, JobWaiter}
+import org.apache.spark.scheduler.JobWaiter
 
 import scala.concurrent._
 import scala.concurrent.duration.Duration
@@ -112,7 +112,6 @@ class SimpleFutureAction[T] private[spark](jobWaiter: JobWaiter[_], resultFunc: 
   // JobWaiter's result handler function. It should only be evaluated once the job has succeeded.
 
   @volatile private var _cancelled: Boolean = false
-  private[this] val jobWaiterFuture: Future[Unit] = jobWaiter.toFuture
   private[this] lazy val resultFuncOutput: T = {
     assert(isCompleted, "resultFunc should only be evaluated after the job has completed")
     resultFunc
@@ -124,32 +123,27 @@ class SimpleFutureAction[T] private[spark](jobWaiter: JobWaiter[_], resultFunc: 
   }
 
   override def ready(atMost: Duration)(implicit permit: CanAwait): SimpleFutureAction.this.type = {
-    jobWaiterFuture.ready(atMost)(permit) // Throws exception if the job failed.
+    jobWaiter.ready(atMost)(permit)
     this
   }
 
   @throws(classOf[Exception])
   override def result(atMost: Duration)(implicit permit: CanAwait): T = {
-    jobWaiterFuture.result(atMost)(permit) // Throws exception if the job failed.
+    jobWaiter.result(atMost)(permit) // Throws exception if the job failed.
     resultFuncOutput // This function is safe to evaluate because the job must have succeeded.
   }
 
   override def onComplete[U](func: (Try[T]) => U)(implicit executor: ExecutionContext): Unit = {
-    jobWaiterFuture.map { _ => resultFuncOutput }.onComplete(func)
+    jobWaiter.map { _ => resultFuncOutput }.onComplete(func)
   }
 
-  override def isCompleted: Boolean = jobWaiter.jobFinished
+  override def isCompleted: Boolean = jobWaiter.isCompleted
 
   override def isCancelled: Boolean = _cancelled
 
   override def value: Option[Try[T]] = {
-    if (!isCompleted) {
-      None
-    } else {
-      jobWaiter.awaitResult() match {
-        case JobSucceeded => Some(scala.util.Success(resultFuncOutput))
-        case JobFailed(e) => Some(scala.util.Failure(e))
-      }
+    jobWaiter.value.map { valueTry =>
+      valueTry.map(_ => resultFuncOutput)
     }
   }
 
