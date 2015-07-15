@@ -20,6 +20,7 @@ package org.apache.spark.serializer
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
 import java.nio.ByteBuffer
 
+import org.apache.spark.SparkConf
 import org.apache.spark.io.CompressionCodec
 
 import scala.collection.mutable
@@ -41,7 +42,7 @@ import org.apache.avro.io._
  * Actions like parsing or compressing schemas are computationally expensive so the serializer
  * caches all previously seen values as to reduce the amount of work needed to do.
  */
-private[serializer] class GenericAvroSerializer(schemas: Map[Long, String], codec: CompressionCodec)
+private[serializer] class GenericAvroSerializer(schemas: Map[Long, String])
   extends KSerializer[GenericRecord] {
 
   /** Used to reduce the amount of effort to compress the schema */
@@ -55,6 +56,8 @@ private[serializer] class GenericAvroSerializer(schemas: Map[Long, String], code
   /** Fingerprinting is very expensive so this alleviates most of the work */
   private val fingerprintCache = new mutable.HashMap[Schema, Long]()
   private val schemaCache = new mutable.HashMap[Long, Schema]()
+
+  private val codec = CompressionCodec.createCodec(new SparkConf())
 
   /**
    * Used to compress Schemas when they are being sent over the wire.
