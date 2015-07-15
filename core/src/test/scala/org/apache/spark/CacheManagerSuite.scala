@@ -17,6 +17,8 @@
 
 package org.apache.spark
 
+import scala.collection.mutable.ArrayBuffer
+
 import org.mockito.Mockito._
 import org.scalatest.BeforeAndAfter
 import org.scalatest.mock.MockitoSugar
@@ -24,6 +26,8 @@ import org.scalatest.mock.MockitoSugar
 import org.apache.spark.executor.DataReadMethod
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage._
+import org.apache.spark.util.TimeStampedHashMap
+
 
 // TODO: Test the CacheManager's thread-safety aspects
 class CacheManagerSuite extends SparkFunSuite with LocalSparkContext with BeforeAndAfter
@@ -80,6 +84,36 @@ class CacheManagerSuite extends SparkFunSuite with LocalSparkContext with Before
     val context = new TaskContextImpl(0, 0, 0, 0, null)
     val value = cacheManager.getOrCompute(rdd, split, context, StorageLevel.MEMORY_ONLY)
     assert(value.toList === List(5, 6, 7))
+  }
+
+  test("cache remotely block") {
+    val memoryStore = mock[MemoryStore]
+    val blockInfo = new TimeStampedHashMap[BlockId, Boolean]
+    val values = Array(5, 6, 7).iterator
+    val result = new BlockResult(values, DataReadMethod.Memory, 12)
+    // mock remotely received block
+    when(blockManager.get(RDDBlockId(0, 0))).thenReturn(Some(result))
+    when(blockManager.containsBlockId(RDDBlockId(0, 0)))
+      .thenReturn(false)
+    when(blockManager.memoryStore).thenReturn(memoryStore)
+    when(memoryStore.unrollSafely(RDDBlockId(0, 0), values,
+      new ArrayBuffer[(BlockId, BlockStatus)])).thenThrow(new RuntimeException("putInBlockManager"))
+
+    assert(!blockInfo.contains(RDDBlockId(0, 0)))
+
+    val context = new TaskContextImpl(0, 0, 0, 0, null)
+    try {
+      val computeValue =
+        cacheManager.getOrCompute(rdd, split, context, StorageLevel.MEMORY_ONLY, cacheRemote = true)
+    } catch {
+      case e: RuntimeException =>
+        if (e.getMessage().contains("putInBlockManager")) {
+          blockInfo.putIfAbsent(RDDBlockId(0, 0), true)
+        }
+    }
+
+    // remotely block is cached now
+    assert(blockInfo.contains(RDDBlockId(0, 0)))
   }
 
   test("get uncached local rdd") {

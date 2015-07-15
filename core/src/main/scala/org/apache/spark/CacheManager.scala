@@ -37,7 +37,8 @@ private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
       rdd: RDD[T],
       partition: Partition,
       context: TaskContext,
-      storageLevel: StorageLevel): Iterator[T] = {
+      storageLevel: StorageLevel,
+      cacheRemote: Boolean = false): Iterator[T] = {
 
     val key = RDDBlockId(rdd.id, partition.index)
     logDebug(s"Looking for partition $key")
@@ -48,8 +49,14 @@ private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
           .getInputMetricsForReadMethod(blockResult.readMethod)
         existingMetrics.incBytesRead(blockResult.bytes)
 
-        val iter = blockResult.data.asInstanceOf[Iterator[T]]
-        new InterruptibleIterator[T](context, iter) {
+        var iter = blockResult.data.asInstanceOf[Iterator[T]]
+          // If the block is retrieved remotely, try to cache it locally
+        if (cacheRemote && !blockManager.containsBlockId(key)) {
+            val updatedBlocks = new ArrayBuffer[(BlockId, BlockStatus)]
+            iter = putInBlockManager(key, iter, storageLevel, updatedBlocks)
+        }
+
+        new InterruptibleIterator(context, iter) {
           override def next(): T = {
             existingMetrics.incRecordsRead(1)
             delegate.next()
@@ -72,7 +79,6 @@ private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
           if (context.isRunningLocally) {
             return computedValues
           }
-
           // Otherwise, cache the values and keep track of any updates in block statuses
           val updatedBlocks = new ArrayBuffer[(BlockId, BlockStatus)]
           val cachedValues = putInBlockManager(key, computedValues, storageLevel, updatedBlocks)
@@ -114,7 +120,7 @@ private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
           }
         }
         logInfo(s"Finished waiting for $id")
-        val values = blockManager.get(id)
+        val values = blockManager.getLocal(id)
         if (!values.isDefined) {
           /* The block is not guaranteed to exist even after the other thread has finished.
            * For instance, the block could be evicted after it was put, but before our get.
