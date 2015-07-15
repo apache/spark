@@ -158,7 +158,7 @@ case class Exchange(
         val rdd = if (needToCopyObjectsBeforeShuffle(part, serializer)) {
           child.execute().mapPartitions { iter =>
             val hashExpressions = newMutableProjection(expressions, child.output)()
-            iter.map(r => (hashExpressions(r).copy, r.copy()))
+            iter.map(r => (hashExpressions(r).copy(), r.copy()))
           }
         } else {
           child.execute().mapPartitions { iter =>
