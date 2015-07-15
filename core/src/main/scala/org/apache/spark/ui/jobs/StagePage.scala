@@ -684,7 +684,9 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
       val gettingResultTime = getGettingResultTime(info)
 
       val maybeAccumulators = info.accumulables
-      val accumulatorsReadable = maybeAccumulators.map{acc => s"${acc.name}: ${acc.update.get}"}
+      val accumulatorsReadable = maybeAccumulators.map { acc =>
+        StringEscapeUtils.escapeHtml4(s"${acc.name}: ${acc.update.get}")
+      }
 
       val maybeInput = metrics.flatMap(_.inputMetrics)
       val inputSortable = maybeInput.map(_.bytesRead.toString).getOrElse("")
