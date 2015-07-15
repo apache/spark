@@ -35,52 +35,19 @@ case class LeftSemiJoinHash(
     rightKeys: Seq[Expression],
     left: SparkPlan,
     right: SparkPlan,
-    condition: Option[Expression]) extends BinaryNode with HashJoin {
-
-  override val buildSide: BuildSide = BuildRight
+    condition: Option[Expression]) extends BinaryNode with HashSemiJoin {
 
   override def requiredChildDistribution: Seq[ClusteredDistribution] =
     ClusteredDistribution(leftKeys) :: ClusteredDistribution(rightKeys) :: Nil
 
-  override def output: Seq[Attribute] = left.output
-
-  @transient private lazy val boundCondition =
-    newPredicate(condition.getOrElse(Literal(true)), left.output ++ right.output)
-
   protected override def doExecute(): RDD[InternalRow] = {
-    buildPlan.execute().zipPartitions(streamedPlan.execute()) { (buildIter, streamIter) =>
-      val joinKeys = streamSideKeyGenerator()
-      val joinedRow = new JoinedRow
-
-      condition match {
-        case None =>
-          val hashSet = new java.util.HashSet[InternalRow]()
-          var currentRow: InternalRow = null
-
-          // Create a Hash set of buildKeys
-          while (buildIter.hasNext) {
-            currentRow = buildIter.next()
-            val rowKey = buildSideKeyGenerator(currentRow)
-            if (!rowKey.anyNull) {
-              val keyExists = hashSet.contains(rowKey)
-              if (!keyExists) {
-                hashSet.add(rowKey)
-              }
-            }
-          }
-
-          val joinKeys = streamSideKeyGenerator()
-          streamIter.filter(current => {
-            !joinKeys(current).anyNull && hashSet.contains(joinKeys.currentValue)
-          })
-        case _ =>
-          val hashRelation = HashedRelation(buildIter, buildSideKeyGenerator)
-          streamIter.filter(current => {
-            val rowBuffer = hashRelation.get(joinKeys.currentValue)
-            !joinKeys(current).anyNull && rowBuffer != null && rowBuffer.exists {
-              (build: InternalRow) => boundCondition(joinedRow(current, build))
-            }
-          })
+    right.execute().zipPartitions(left.execute()) { (buildIter, streamIter) =>
+      if (condition.isEmpty) {
+        val hashSet = buildKeyHashSet(buildIter, copy = false)
+        hashSemiJoin(streamIter, hashSet)
+      } else {
+        val hashRelation = HashedRelation(buildIter, rightKeyGenerator)
+        hashSemiJoin(streamIter, hashRelation)
       }
     }
   }
