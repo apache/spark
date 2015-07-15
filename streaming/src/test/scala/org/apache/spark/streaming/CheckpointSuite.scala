@@ -198,8 +198,6 @@ class CheckpointSuite extends TestSuiteBase {
     conf.foreach(kv => System.setProperty(kv._1, kv._2))
     ssc = new StreamingContext(master, framework, batchDuration)
     val originalConf = ssc.conf
-    assert(ssc.sc.isDriverHostSetByUser === true)
-    assert(ssc.sc.isDriverPortSetByUser === true)
     assert(originalConf.get("spark.driver.host") === "localhost")
     assert(originalConf.get("spark.driver.port") === "9999")
 
@@ -218,8 +216,6 @@ class CheckpointSuite extends TestSuiteBase {
     // Check if all the parameters have been restored
     ssc = new StreamingContext(null, newCp, null)
     val restoredConf = ssc.conf
-    assert(ssc.sc.isDriverHostSetByUser === true)
-    assert(ssc.sc.isDriverPortSetByUser === true)
     assert(restoredConf.get("spark.driver.host") === "localhost")
     assert(restoredConf.get("spark.driver.port") === "9999")
   }
