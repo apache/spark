@@ -251,7 +251,8 @@ private[spark] class TaskSchedulerImpl(
           for (task <- taskSet.resourceOffer(execId, host, maxLocality)) {
             tasks(i) += task
             val tid = task.taskId
-            taskIdToStageIdAndAttempt(tid) = (taskSet.taskSet.stageId, taskSet.taskSet.stageAttemptId)
+            taskIdToStageIdAndAttempt(tid) =
+              (taskSet.taskSet.stageId, taskSet.taskSet.stageAttemptId)
             taskIdToExecutorId(tid) = execId
             executorsByHost(host) += execId
             availableCpus(i) -= CPUS_PER_TASK
@@ -547,7 +548,9 @@ private[spark] class TaskSchedulerImpl(
     }
   }
 
-  private[scheduler] def taskSetManagerForAttempt(stageId: Int, stageAttemptId: Int): Option[TaskSetManager] = {
+  private[scheduler] def taskSetManagerForAttempt(
+      stageId: Int,
+      stageAttemptId: Int): Option[TaskSetManager] = {
     for {
       attempts <- taskSetsByStage.get(stageId)
       manager <- attempts.get(stageAttemptId)

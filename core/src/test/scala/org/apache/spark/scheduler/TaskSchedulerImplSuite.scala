@@ -219,7 +219,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with L
     val taskDescriptions2 = taskScheduler.resourceOffers(workerOffers).flatten
     assert(0 === taskDescriptions2.length)
 
-    //submit attempt 2
+    // submit attempt 2
     val attempt2 = FakeTask.createTaskSet(10, 1)
     taskScheduler.submitTasks(attempt2)
 
