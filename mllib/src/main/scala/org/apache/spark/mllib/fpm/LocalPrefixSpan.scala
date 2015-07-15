@@ -17,6 +17,8 @@
 
 package org.apache.spark.mllib.fpm
 
+import scala.reflect.ClassTag
+
 import org.apache.spark.Logging
 import org.apache.spark.annotation.Experimental
 
@@ -39,11 +41,11 @@ private[fpm] object LocalPrefixSpan extends Logging with Serializable {
    *         the key of pair is sequential pattern (a list of items),
    *         the value of pair is the pattern's count.
    */
-  def run(
+  def run[Item: ClassTag](
       minCount: Long,
       maxPatternLength: Int,
-      prefix: Array[Int],
-      projectedDatabase: Array[Array[Int]]): Array[(Array[Int], Long)] = {
+      prefix: Array[Item],
+      projectedDatabase: Array[Array[Item]]): Array[(Array[Item], Long)] = {
     val frequentPrefixAndCounts = getFreqItemAndCounts(minCount, projectedDatabase)
     val frequentPatternAndCounts = frequentPrefixAndCounts
       .map(x => (prefix ++ Array(x._1), x._2))
@@ -67,7 +69,7 @@ private[fpm] object LocalPrefixSpan extends Logging with Serializable {
    * @param sequence sequence
    * @return suffix sequence
    */
-  def getSuffix(prefix: Int, sequence: Array[Int]): Array[Int] = {
+  def getSuffix[Item: ClassTag](prefix: Item, sequence: Array[Item]): Array[Item] = {
     val index = sequence.indexOf(prefix)
     if (index == -1) {
       Array()
@@ -82,9 +84,9 @@ private[fpm] object LocalPrefixSpan extends Logging with Serializable {
    * @param sequences sequences data
    * @return array of item and count pair
    */
-  private def getFreqItemAndCounts(
+  private def getFreqItemAndCounts[Item: ClassTag](
       minCount: Long,
-      sequences: Array[Array[Int]]): Array[(Int, Long)] = {
+      sequences: Array[Array[Item]]): Array[(Item, Long)] = {
     sequences.flatMap(_.distinct)
       .groupBy(x => x)
       .mapValues(_.length.toLong)
@@ -99,10 +101,10 @@ private[fpm] object LocalPrefixSpan extends Logging with Serializable {
    * @param sequences sequences data
    * @return prefixes and projected database
    */
-  private def getPatternAndProjectedDatabase(
-      prePrefix: Array[Int],
-      frequentPrefixes: Array[Int],
-      sequences: Array[Array[Int]]): Array[(Array[Int], Array[Array[Int]])] = {
+  private def getPatternAndProjectedDatabase[Item: ClassTag](
+      prePrefix: Array[Item],
+      frequentPrefixes: Array[Item],
+      sequences: Array[Array[Item]]): Array[(Array[Item], Array[Array[Item]])] = {
     val filteredProjectedDatabase = sequences
       .map(x => x.filter(frequentPrefixes.contains(_)))
     frequentPrefixes.map { x =>

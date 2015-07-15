@@ -17,6 +17,8 @@
 
 package org.apache.spark.mllib.fpm
 
+import scala.reflect.ClassTag
+
 import org.apache.spark.Logging
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.rdd.RDD
@@ -77,7 +79,7 @@ class PrefixSpan private (
    *         the key of pair is pattern (a list of elements),
    *         the value of pair is the pattern's count.
    */
-  def run(sequences: RDD[Array[Int]]): RDD[(Array[Int], Long)] = {
+  def run[Item: ClassTag](sequences: RDD[Array[Item]]): RDD[(Array[Item], Long)] = {
     if (sequences.getStorageLevel == StorageLevel.NONE) {
       logWarning("Input data is not cached.")
     }
@@ -103,7 +105,7 @@ class PrefixSpan private (
    * @param sequences input data set, contains a set of sequences,
    * @return minimum count,
    */
-  private def getMinCount(sequences: RDD[Array[Int]]): Long = {
+  private def getMinCount[Item: ClassTag](sequences: RDD[Array[Item]]): Long = {
     if (minSupport == 0) 0L else math.ceil(sequences.count() * minSupport).toLong
   }
 
@@ -113,9 +115,9 @@ class PrefixSpan private (
    * @param sequences original sequences data
    * @return array of item and count pair
    */
-  private def getFreqItemAndCounts(
+  private def getFreqItemAndCounts[Item: ClassTag](
       minCount: Long,
-      sequences: RDD[Array[Int]]): RDD[(Int, Long)] = {
+      sequences: RDD[Array[Item]]): RDD[(Item, Long)] = {
     sequences.flatMap(_.distinct.map((_, 1L)))
       .reduceByKey(_ + _)
       .filter(_._2 >= minCount)
@@ -127,9 +129,9 @@ class PrefixSpan private (
    * @param sequences sequences data
    * @return prefixes and projected database
    */
-  private def getPrefixAndProjectedDatabase(
-      frequentPrefixes: Array[Int],
-      sequences: RDD[Array[Int]]): RDD[(Array[Int], Array[Int])] = {
+  private def getPrefixAndProjectedDatabase[Item: ClassTag](
+      frequentPrefixes: Array[Item],
+      sequences: RDD[Array[Item]]): RDD[(Array[Item], Array[Item])] = {
     val filteredSequences = sequences.map { p =>
       p.filter (frequentPrefixes.contains(_) )
     }
@@ -147,9 +149,9 @@ class PrefixSpan private (
    * @param data patterns and projected sequences data data
    * @return patterns
    */
-  private def getPatternsInLocal(
+  private def getPatternsInLocal[Item: ClassTag](
       minCount: Long,
-      data: RDD[(Array[Int], Array[Array[Int]])]): RDD[(Array[Int], Long)] = {
+      data: RDD[(Array[Item], Array[Array[Item]])]): RDD[(Array[Item], Long)] = {
     data.flatMap { x =>
       LocalPrefixSpan.run(minCount, maxPatternLength, x._1, x._2)
     }
