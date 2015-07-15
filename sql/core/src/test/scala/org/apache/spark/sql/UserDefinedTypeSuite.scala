@@ -36,9 +36,6 @@ private[sql] class MyDenseVector(val data: Array[Double]) extends Serializable {
       java.util.Arrays.equals(this.data, v.data)
     case _ => false
   }
-
-  override def toString: String =
-    '[' + data.mkString(",") + ']'
 }
 
 @BeanInfo
@@ -156,8 +153,9 @@ class UserDefinedTypeSuite extends QueryTest {
 
     val stringRDD = ctx.sparkContext.parallelize(data)
     val jsonRDD = ctx.read.schema(schema).json(stringRDD)
-    assertResult("[1,[1.1,2.2,3.3,4.4]],[2,[2.25,4.5,8.75]]") {
-      jsonRDD.collect().mkString(",")
-    }
+    checkAnswer(
+      jsonRDD,
+      Row(1, Array(1.1, 2.2, 3.3, 4.4)) :: Row(2, Array(2.25, 4.5, 8.75)) :: Nil
+    )
   }
 }
