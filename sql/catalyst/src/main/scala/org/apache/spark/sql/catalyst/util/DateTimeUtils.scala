@@ -184,8 +184,10 @@ object DateTimeUtils {
   }
 
   /**
-   * Parses a given UTF8 date string to the corresponding [[Timestamp]] object. The format of the
-   * date has to be one of the following:
+   * Parses a given UTF8 date string to the corresponding a corresponding [[Long]] value.
+   * The return type is [[Option]] in order to distinguish between 0L and null. The following
+   * formats are allowed:
+   *
    * `yyyy`
    * `yyyy-[m]m`
    * `yyyy-[m]m-[d]d`
@@ -207,9 +209,9 @@ object DateTimeUtils {
    * `T[h]h:[m]m:[s]s.[ms][ms][ms][us][us][us]-[h]h:[m]m`
    * `T[h]h:[m]m:[s]s.[ms][ms][ms][us][us][us]+[h]h:[m]m`
    */
-  def stringToTimestamp(s: UTF8String): Long = {
+  def stringToTimestamp(s: UTF8String): Option[Long] = {
     if (s == null) {
-      return null.asInstanceOf[Long]
+      return None
     }
     var timeZone: Option[Byte] = None
     val segments: Array[Int] = Array[Int](1, 1, 1, 0, 0, 0, 0, 0, 0)
@@ -237,7 +239,7 @@ object DateTimeUtils {
             currentSegmentValue = 0
             i = 4
           } else {
-            return null.asInstanceOf[Long]
+            return None
           }
         } else if (i == 2) {
           if (b == ' ' || b == 'T') {
@@ -245,7 +247,7 @@ object DateTimeUtils {
             currentSegmentValue = 0
             i += 1
           } else {
-            return null.asInstanceOf[Long]
+            return None
           }
         } else if (i == 3 || i == 4) {
           if (b == ':') {
@@ -253,7 +255,7 @@ object DateTimeUtils {
             currentSegmentValue = 0
             i += 1
           } else {
-            return null.asInstanceOf[Long]
+            return None
           }
         } else if (i == 5 || i == 6) {
           if (b == 'Z') {
@@ -271,7 +273,7 @@ object DateTimeUtils {
             currentSegmentValue = 0
             i += 1
           } else {
-            return null.asInstanceOf[Long]
+            return None
           }
           if (i == 6  && b != '.') {
             i += 1
@@ -282,7 +284,7 @@ object DateTimeUtils {
             currentSegmentValue = 0
             i += 1
           } else {
-            return null.asInstanceOf[Long]
+            return None
           }
         }
       } else {
@@ -301,19 +303,25 @@ object DateTimeUtils {
       digitsMilli += 1
     }
 
-    if ((!justTime && (segments(0) < 999 || segments(0) > 9999 || segments(1) < 1 ||
-        segments(1) > 12 || segments(2) < 1 || segments(2) > 31)) || segments(3) < 0 ||
+    if (!justTime && (segments(0) < 1000 || segments(0) > 9999 || segments(1) < 1 ||
+        segments(1) > 12 || segments(2) < 1 || segments(2) > 31)) {
+      return None
+    }
+
+    if (segments(3) < 0 ||
         segments(3) > 23 || segments(4) < 0 || segments(4) > 59 || segments(5) < 0 ||
         segments(5) > 59 || segments(6) < 0 || segments(6) > 999999 || segments(7) < 0 ||
         segments(7) > 23 || segments(8) < 0 || segments(8) > 59) {
-      return null.asInstanceOf[Long]
+      return None
     }
+
     val c = if (timeZone.isEmpty) {
       Calendar.getInstance()
     } else {
       Calendar.getInstance(
         TimeZone.getTimeZone(f"GMT${timeZone.get.toChar}${segments(7)}%02d:${segments(8)}%02d"))
     }
+
     if (justTime) {
       c.set(Calendar.HOUR, segments(3))
       c.set(Calendar.MINUTE, segments(4))
@@ -321,13 +329,16 @@ object DateTimeUtils {
     } else {
       c.set(segments(0), segments(1) - 1, segments(2), segments(3), segments(4), segments(5))
     }
+
     c.set(Calendar.MILLISECOND, segments(6) / 1000)
-    c.getTimeInMillis * 1000 + segments(6) % 1000
+    Some(c.getTimeInMillis * 1000 + segments(6) % 1000)
   }
 
   /**
-   * Parses a given UTF8 date string to the corresponding number of days since 1.1.1970.
-   * The format of the date has to be one of the following:
+   * Parses a given UTF8 date string to the corresponding a corresponding [[Int]] value.
+   * The return type is [[Option]] in order to distinguish between 0 and null. The following
+   * formats are allowed:
+   *
    * `yyyy`,
    * `yyyy-[m]m`
    * `yyyy-[m]m-[d]d`
@@ -335,9 +346,9 @@ object DateTimeUtils {
    * `yyyy-[m]m-[d]d *`
    * `yyyy-[m]m-[d]dT*`
    */
-  def stringToDate(s: UTF8String): Int = {
+  def stringToDate(s: UTF8String): Option[Int] = {
     if (s == null) {
-      return null.asInstanceOf[Int]
+      return None
     }
     val segments: Array[Int] = Array[Int](1, 1, 1)
     var i = 0
@@ -353,7 +364,7 @@ object DateTimeUtils {
       } else {
         val parsedValue = b - '0'.toByte
         if (parsedValue < 0 || parsedValue > 9) {
-          return null.asInstanceOf[Int]
+          return None
         } else {
           currentSegmentValue = currentSegmentValue * 10 + parsedValue
         }
@@ -361,13 +372,13 @@ object DateTimeUtils {
       j += 1
     }
     segments(i) = currentSegmentValue
-    if (segments(0) < 0 || segments(0) > 9999 || segments(1) < 1 || segments(1) > 12 ||
+    if (segments(0) < 1000 || segments(0) > 9999 || segments(1) < 1 || segments(1) > 12 ||
         segments(2) < 1 || segments(2) > 31) {
-      return null.asInstanceOf[Int]
+      return None
     }
     val c = Calendar.getInstance()
     c.set(segments(0), segments(1) - 1, segments(2), 0, 0, 0)
     c.set(Calendar.MILLISECOND, 0)
-    (c.getTimeInMillis / 1000 / 3600 / 24).toInt
+    Some((c.getTimeInMillis / 1000 / 3600 / 24).toInt)
   }
 }

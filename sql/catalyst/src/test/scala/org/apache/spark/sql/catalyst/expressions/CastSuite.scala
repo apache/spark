@@ -69,6 +69,9 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("cast string to timestamp") {
+    checkEvaluation(Cast(Literal("123"), TimestampType),
+      null)
+
     var c = Calendar.getInstance()
     c.set(2015, 0, 1, 0, 0, 0)
     c.set(Calendar.MILLISECOND, 0)
@@ -168,9 +171,7 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Cast(Literal("2015.03.18"), TimestampType), null)
     checkEvaluation(Cast(Literal("20150318"), TimestampType), null)
     checkEvaluation(Cast(Literal("2015-031-8"), TimestampType), null)
-    checkEvaluation(Cast(Literal("2015-03-18T12:03:17-20:0"), TimestampType), null)
     checkEvaluation(Cast(Literal("2015-03-18T12:03:17-0:70"), TimestampType), null)
-    checkEvaluation(Cast(Literal("2015-03-18T12:03:17-1:0:0"), TimestampType), null)
   }
 
   test("cast from int") {
@@ -307,7 +308,7 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(
       cast(cast(cast(cast(cast(cast("5", TimestampType), ByteType),
         DecimalType.Unlimited), LongType), StringType), ShortType),
-      0.toShort)
+      null)
     checkEvaluation(cast(cast(cast(cast(cast(cast("5", DecimalType.Unlimited),
       ByteType), TimestampType), LongType), StringType), ShortType),
       0.toShort)
