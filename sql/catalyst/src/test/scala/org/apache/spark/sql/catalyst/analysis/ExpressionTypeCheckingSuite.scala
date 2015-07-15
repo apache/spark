@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
-import org.apache.spark.sql.types.StringType
+import org.apache.spark.sql.types.{TypeCollection, StringType}
 
 class ExpressionTypeCheckingSuite extends SparkFunSuite {
 
@@ -95,8 +95,10 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite {
     assertError(BitwiseOr('booleanField, 'booleanField), "accepts integral type")
     assertError(BitwiseXor('booleanField, 'booleanField), "accepts integral type")
 
-    assertError(MaxOf('complexField, 'complexField), "accepts (boolean or tinyint or")
-    assertError(MinOf('complexField, 'complexField), "accepts (boolean or tinyint or")
+    assertError(MaxOf('complexField, 'complexField),
+      s"accepts ${TypeCollection.Ordered.simpleString} type")
+    assertError(MinOf('complexField, 'complexField),
+      s"accepts ${TypeCollection.Ordered.simpleString} type")
   }
 
   test("check types for predicates") {
@@ -119,17 +121,16 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite {
     assertErrorForDifferingTypes(GreaterThan('intField, 'booleanField))
     assertErrorForDifferingTypes(GreaterThanOrEqual('intField, 'booleanField))
 
-    assertError(
-      LessThan('complexField, 'complexField), "accepts (boolean or tinyint or")
-    assertError(
-      LessThanOrEqual('complexField, 'complexField), "accepts (boolean or tinyint or")
-    assertError(
-      GreaterThan('complexField, 'complexField), "accepts (boolean or tinyint or")
-    assertError(
-      GreaterThanOrEqual('complexField, 'complexField), "accepts (boolean or tinyint or")
+    assertError(LessThan('complexField, 'complexField),
+      s"accepts ${TypeCollection.Ordered.simpleString} type")
+    assertError(LessThanOrEqual('complexField, 'complexField),
+      s"accepts ${TypeCollection.Ordered.simpleString} type")
+    assertError(GreaterThan('complexField, 'complexField),
+      s"accepts ${TypeCollection.Ordered.simpleString} type")
+    assertError(GreaterThanOrEqual('complexField, 'complexField),
+      s"accepts ${TypeCollection.Ordered.simpleString} type")
 
-    assertError(
-      If('intField, 'stringField, 'stringField),
+    assertError(If('intField, 'stringField, 'stringField),
       "type of predicate expression in If should be boolean")
     assertErrorForDifferingTypes(If('booleanField, 'intField, 'booleanField))
 
