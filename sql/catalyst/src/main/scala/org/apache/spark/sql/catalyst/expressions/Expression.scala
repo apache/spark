@@ -187,8 +187,10 @@ abstract class Expression extends TreeNode[Expression] {
 /**
  * A leaf expression, i.e. one without any child expressions.
  */
-abstract class LeafExpression extends Expression with trees.LeafNode[Expression] {
+abstract class LeafExpression extends Expression {
   self: Product =>
+
+  def children: Seq[Expression] = Nil
 }
 
 
@@ -196,8 +198,12 @@ abstract class LeafExpression extends Expression with trees.LeafNode[Expression]
  * An expression with one input and one output. The output is by default evaluated to null
  * if the input is evaluated to null.
  */
-abstract class UnaryExpression extends Expression with trees.UnaryNode[Expression] {
+abstract class UnaryExpression extends Expression {
   self: Product =>
+
+  def child: Expression
+
+  override def children: Seq[Expression] = child :: Nil
 
   override def foldable: Boolean = child.foldable
   override def nullable: Boolean = child.nullable
@@ -271,8 +277,13 @@ abstract class UnaryExpression extends Expression with trees.UnaryNode[Expressio
  * An expression with two inputs and one output. The output is by default evaluated to null
  * if any input is evaluated to null.
  */
-abstract class BinaryExpression extends Expression with trees.BinaryNode[Expression] {
+abstract class BinaryExpression extends Expression {
   self: Product =>
+
+  def left: Expression
+  def right: Expression
+
+  override def children: Seq[Expression] = Seq(left, right)
 
   override def foldable: Boolean = left.foldable && right.foldable
 
