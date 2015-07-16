@@ -20,7 +20,6 @@ package org.apache.spark.sql.catalyst.expressions
 import com.clearspring.analytics.stream.cardinality.HyperLogLog
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.trees
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.util.TypeUtils
@@ -29,6 +28,11 @@ import org.apache.spark.util.collection.OpenHashSet
 
 trait AggregateExpression extends Expression {
   self: Product =>
+
+  /**
+   * Aggregate expressions should not be foldable.
+   */
+  override def foldable: Boolean = false
 
   /**
    * Creates a new instance that can be used to compute this aggregate expression for a group
