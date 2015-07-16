@@ -1074,6 +1074,7 @@ class PCA(JavaEstimator, HasInputCol, HasOutputCol):
         Sets the value of :py:attr:`k`.
         """
         self._paramMap[self.k] = value
+        return self
 
     def getK(self):
         """
