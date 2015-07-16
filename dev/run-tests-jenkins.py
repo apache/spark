@@ -153,11 +153,9 @@ def run_tests(tests_timeout):
     @return a tuple containing the test result code and the result note to post to Github
     """
 
-    # TODO: turn tests back on
-    # test_result_code = subprocess.Popen(['timeout',
-    #                                      tests_timeout,
-    #                                      os.path.join(SPARK_HOME, 'dev', 'run-tests')]).wait()
-    test_result_code = 0
+    test_result_code = subprocess.Popen(['timeout',
+                                         tests_timeout,
+                                         os.path.join(SPARK_HOME, 'dev', 'run-tests')]).wait()
 
     failure_note_by_errcode = {
         1: 'executing the `dev/run-tests` script',  # error to denote run-tests script failures
@@ -244,8 +242,6 @@ def main():
     pr_check_results = run_pr_checks(pr_tests, ghprb_actual_commit, sha1)
 
     test_result_code, test_result_note = run_tests(tests_timeout)
-
-    print("PR results:", pr_check_results)
 
     # post end message
     result_message = github_message('has finished')
