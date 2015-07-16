@@ -638,6 +638,18 @@ test_that("column functions", {
   c7 <- floor(c) + log(c) + log10(c) + log1p(c) + rint(c)
   c8 <- sign(c) + sin(c) + sinh(c) + tan(c) + tanh(c)
   c9 <- toDegrees(c) + toRadians(c)
+
+  df <- jsonFile(sqlContext, jsonPath)
+  df2 <- select(df, between(df$age, c(20, 30)), between(df$age, c(10, 20)))
+  expect_equal(collect(df2)[[2, 1]], TRUE)
+  expect_equal(collect(df2)[[2, 2]], FALSE)
+  expect_equal(collect(df2)[[3, 1]], FALSE)
+  expect_equal(collect(df2)[[3, 2]], TRUE)
+
+  df3 <- select(df, between(df$name, c("Apache", "Spark")))
+  expect_equal(collect(df3)[[1, 1]], TRUE)
+  expect_equal(collect(df3)[[2, 1]], FALSE)
+  expect_equal(collect(df3)[[3, 1]], TRUE)
 })
 
 test_that("column binary mathfunctions", {
