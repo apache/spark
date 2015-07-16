@@ -208,24 +208,6 @@ class DataFrameFunctionsSuite extends QueryTest {
       Row(2743272264L, 2180413220L))
   }
 
-  test("string length function") {
-    checkAnswer(
-      nullStrings.select(strlen($"s"), strlen("s")),
-      nullStrings.collect().toSeq.map { r =>
-        val v = r.getString(1)
-        val l = if (v == null) null else v.length
-        Row(l, l)
-      })
-
-    checkAnswer(
-      nullStrings.selectExpr("length(s)"),
-      nullStrings.collect().toSeq.map { r =>
-        val v = r.getString(1)
-        val l = if (v == null) null else v.length
-        Row(l)
-      })
-  }
-
   test("Levenshtein distance") {
     val df = Seq(("kitten", "sitting"), ("frog", "fog")).toDF("l", "r")
     checkAnswer(df.select(levenshtein("l", "r")), Seq(Row(3), Row(1)))
@@ -272,5 +254,259 @@ class DataFrameFunctionsSuite extends QueryTest {
       df.selectExpr("encode(a, 'utf-8')", "decode(c, 'utf-8')"),
       Row(bytes, "大千世界"))
     // scalastyle:on
+  }
+
+  test("string trim functions") {
+    val df = Seq(("  example  ", "")).toDF("a", "b")
+
+    checkAnswer(
+      df.select(ltrim($"a"), rtrim($"a"), trim($"a")),
+      Row("example  ", "  example", "example"))
+
+    checkAnswer(
+      df.selectExpr("ltrim(a)", "rtrim(a)", "trim(a)"),
+      Row("example  ", "  example", "example"))
+  }
+
+  test("string formatString function") {
+    val df = Seq(("aa%d%s", 123, "cc")).toDF("a", "b", "c")
+
+    checkAnswer(
+      df.select(formatString($"a", $"b", $"c"), formatString("aa%d%s", "b", "c")),
+      Row("aa123cc", "aa123cc"))
+
+    checkAnswer(
+      df.selectExpr("printf(a, b, c)"),
+      Row("aa123cc"))
+  }
+
+  test("string instr function") {
+    val df = Seq(("aaads", "aa", "zz")).toDF("a", "b", "c")
+
+    checkAnswer(
+      df.select(instr($"a", $"b"), instr("a", "b")),
+      Row(1, 1))
+
+    checkAnswer(
+      df.selectExpr("instr(a, b)"),
+      Row(1))
+  }
+
+  test("string locate function") {
+    val df = Seq(("aaads", "aa", "zz", 1)).toDF("a", "b", "c", "d")
+
+    checkAnswer(
+      df.select(
+        locate($"b", $"a"), locate("b", "a"), locate($"b", $"a", 1),
+        locate("b", "a", 1), locate($"b", $"a", $"d"), locate("b", "a", "d")),
+      Row(1, 1, 2, 2, 2, 2))
+
+    checkAnswer(
+      df.selectExpr("locate(b, a)", "locate(b, a, d)"),
+      Row(1, 2))
+  }
+
+  test("string padding functions") {
+    val df = Seq(("hi", 5, "??")).toDF("a", "b", "c")
+
+    checkAnswer(
+          df.select(
+            lpad($"a", $"b", $"c"), rpad("a", "b", "c"),
+            lpad($"a", 1, $"c"), rpad("a", 1, "c")),
+          Row("???hi", "hi???", "h", "h"))
+
+    checkAnswer(
+      df.selectExpr("lpad(a, b, c)", "rpad(a, b, c)", "lpad(a, 1, c)", "rpad(a, 1, c)"),
+      Row("???hi", "hi???", "h", "h"))
+  }
+
+  test("string repeat function") {
+    val df = Seq(("hi", 2)).toDF("a", "b")
+
+    checkAnswer(
+      df.select(
+        repeat($"a", 2), repeat("a", 2), repeat($"a", $"b"), repeat("a", "b")),
+      Row("hihi", "hihi", "hihi", "hihi"))
+
+    checkAnswer(
+      df.selectExpr("repeat(a, 2)", "repeat(a, b)"),
+      Row("hihi", "hihi"))
+  }
+
+  test("string reverse function") {
+    val df = Seq(("hi", "hhhi")).toDF("a", "b")
+
+    checkAnswer(
+      df.select(reverse($"a"), reverse("b")),
+      Row("ih", "ihhh"))
+
+    checkAnswer(
+      df.selectExpr("reverse(b)"),
+      Row("ihhh"))
+  }
+
+  test("string space function") {
+    val df = Seq((2, 3)).toDF("a", "b")
+
+    checkAnswer(
+      df.select(space($"a"), space("b")),
+      Row("  ", "   "))
+
+    checkAnswer(
+      df.selectExpr("space(b)"),
+      Row("   "))
+  }
+
+  test("string split function") {
+    val df = Seq(("aa2bb3cc", "[1-9]+")).toDF("a", "b")
+
+    checkAnswer(
+      df.select(
+        split($"a", "[1-9]+"),
+        split("a", "[1-9]+")),
+      Row(Seq("aa", "bb", "cc"), Seq("aa", "bb", "cc")))
+
+    checkAnswer(
+      df.selectExpr("split(a, '[1-9]+')"),
+      Row(Seq("aa", "bb", "cc")))
+  }
+
+  test("conditional function: least") {
+    checkAnswer(
+      testData2.select(least(lit(-1), lit(0), col("a"), col("b"))).limit(1),
+      Row(-1)
+    )
+    checkAnswer(
+      ctx.sql("SELECT least(a, 2) as l from testData2 order by l"),
+      Seq(Row(1), Row(1), Row(2), Row(2), Row(2), Row(2))
+    )
+  }
+
+  test("conditional function: greatest") {
+    checkAnswer(
+      testData2.select(greatest(lit(2), lit(3), col("a"), col("b"))).limit(1),
+      Row(3)
+    )
+    checkAnswer(
+      ctx.sql("SELECT greatest(a, 2) as g from testData2 order by g"),
+      Seq(Row(2), Row(2), Row(2), Row(2), Row(3), Row(3))
+    )
+  }
+
+  test("pmod") {
+    val intData = Seq((7, 3), (-7, 3)).toDF("a", "b")
+    checkAnswer(
+      intData.select(pmod('a, 'b)),
+      Seq(Row(1), Row(2))
+    )
+    checkAnswer(
+      intData.select(pmod('a, lit(3))),
+      Seq(Row(1), Row(2))
+    )
+    checkAnswer(
+      intData.select(pmod(lit(-7), 'b)),
+      Seq(Row(2), Row(2))
+    )
+    checkAnswer(
+      intData.selectExpr("pmod(a, b)"),
+      Seq(Row(1), Row(2))
+    )
+    checkAnswer(
+      intData.selectExpr("pmod(a, 3)"),
+      Seq(Row(1), Row(2))
+    )
+    checkAnswer(
+      intData.selectExpr("pmod(-7, b)"),
+      Seq(Row(2), Row(2))
+    )
+    val doubleData = Seq((7.2, 4.1)).toDF("a", "b")
+    checkAnswer(
+      doubleData.select(pmod('a, 'b)),
+      Seq(Row(3.1000000000000005)) // same as hive
+    )
+    checkAnswer(
+      doubleData.select(pmod(lit(2), lit(Int.MaxValue))),
+      Seq(Row(2))
+    )
+  }
+
+  test("string / binary length function") {
+    val df = Seq(("123", Array[Byte](1, 2, 3, 4), 123)).toDF("a", "b", "c")
+    checkAnswer(
+      df.select(length($"a"), length("a"), length($"b"), length("b")),
+      Row(3, 3, 4, 4))
+
+    checkAnswer(
+      df.selectExpr("length(a)", "length(b)"),
+      Row(3, 4))
+
+    intercept[AnalysisException] {
+      checkAnswer(
+        df.selectExpr("length(c)"), // int type of the argument is unacceptable
+        Row("5.0000"))
+    }
+  }
+
+  test("number format function") {
+    val tuple =
+      ("aa", 1.asInstanceOf[Byte], 2.asInstanceOf[Short],
+        3.13223f, 4, 5L, 6.48173d, Decimal(7.128381))
+    val df =
+      Seq(tuple)
+        .toDF(
+          "a", // string "aa"
+          "b", // byte    1
+          "c", // short   2
+          "d", // float   3.13223f
+          "e", // integer 4
+          "f", // long    5L
+          "g", // double  6.48173d
+          "h") // decimal 7.128381
+
+    checkAnswer(
+      df.select(
+        format_number($"f", 4),
+        format_number("f", 4)),
+      Row("5.0000", "5.0000"))
+
+    checkAnswer(
+      df.selectExpr("format_number(b, e)"), // convert the 1st argument to integer
+      Row("1.0000"))
+
+    checkAnswer(
+      df.selectExpr("format_number(c, e)"), // convert the 1st argument to integer
+      Row("2.0000"))
+
+    checkAnswer(
+      df.selectExpr("format_number(d, e)"), // convert the 1st argument to double
+      Row("3.1322"))
+
+    checkAnswer(
+      df.selectExpr("format_number(e, e)"), // not convert anything
+      Row("4.0000"))
+
+    checkAnswer(
+      df.selectExpr("format_number(f, e)"), // not convert anything
+      Row("5.0000"))
+
+    checkAnswer(
+      df.selectExpr("format_number(g, e)"), // not convert anything
+      Row("6.4817"))
+
+    checkAnswer(
+      df.selectExpr("format_number(h, e)"), // not convert anything
+      Row("7.1284"))
+
+    intercept[AnalysisException] {
+      checkAnswer(
+        df.selectExpr("format_number(a, e)"), // string type of the 1st argument is unacceptable
+        Row("5.0000"))
+    }
+
+    intercept[AnalysisException] {
+      checkAnswer(
+        df.selectExpr("format_number(e, g)"), // decimal type of the 2nd argument is unacceptable
+        Row("5.0000"))
+    }
   }
 }

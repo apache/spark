@@ -22,8 +22,6 @@ import java.net.URI
 import java.util.{ArrayList => JArrayList, Map => JMap, List => JList, Set => JSet}
 import javax.annotation.concurrent.GuardedBy
 
-import org.apache.spark.util.CircularBuffer
-
 import scala.collection.JavaConversions._
 import scala.language.reflectiveCalls
 
@@ -40,7 +38,9 @@ import org.apache.hadoop.hive.ql.processors._
 import org.apache.hadoop.hive.ql.Driver
 
 import org.apache.spark.Logging
+import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.execution.QueryExecutionException
+import org.apache.spark.util.{CircularBuffer, Utils}
 
 
 /**
@@ -252,10 +252,10 @@ private[hive] class ClientWrapper(
   }
 
   private def toInputFormat(name: String) =
-    Class.forName(name).asInstanceOf[Class[_ <: org.apache.hadoop.mapred.InputFormat[_, _]]]
+    Utils.classForName(name).asInstanceOf[Class[_ <: org.apache.hadoop.mapred.InputFormat[_, _]]]
 
   private def toOutputFormat(name: String) =
-    Class.forName(name)
+    Utils.classForName(name)
       .asInstanceOf[Class[_ <: org.apache.hadoop.hive.ql.io.HiveOutputFormat[_, _]]]
 
   private def toQlTable(table: HiveTable): metadata.Table = {
@@ -360,7 +360,9 @@ private[hive] class ClientWrapper(
 
         case _ =>
           if (state.out != null) {
+            // scalastyle:off println
             state.out.println(tokens(0) + " " + cmd_1)
+            // scalastyle:on println
           }
           Seq(proc.run(cmd_1).getResponseCode.toString)
       }

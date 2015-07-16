@@ -121,11 +121,117 @@ public class UTF8StringSuite {
 
   @Test
   public void substring() {
-    assertEquals(fromString("hello").substring(0, 0), fromString(""));
-    assertEquals(fromString("hello").substring(1, 3), fromString("el"));
-    assertEquals(fromString("数据砖头").substring(0, 1), fromString("数"));
-    assertEquals(fromString("数据砖头").substring(1, 3), fromString("据砖"));
-    assertEquals(fromString("数据砖头").substring(3, 5), fromString("头"));
-    assertEquals(fromString("ߵ梷").substring(0, 2), fromString("ߵ梷"));
+    assertEquals(fromString(""), fromString("hello").substring(0, 0));
+    assertEquals(fromString("el"), fromString("hello").substring(1, 3));
+    assertEquals(fromString("数"), fromString("数据砖头").substring(0, 1));
+    assertEquals(fromString("据砖"), fromString("数据砖头").substring(1, 3));
+    assertEquals(fromString("头"), fromString("数据砖头").substring(3, 5));
+    assertEquals(fromString("ߵ梷"), fromString("ߵ梷").substring(0, 2));
+  }
+
+  @Test
+  public void trims() {
+    assertEquals(fromString("hello"), fromString("  hello ").trim());
+    assertEquals(fromString("hello "), fromString("  hello ").trimLeft());
+    assertEquals(fromString("  hello"), fromString("  hello ").trimRight());
+
+    assertEquals(fromString(""), fromString("  ").trim());
+    assertEquals(fromString(""), fromString("  ").trimLeft());
+    assertEquals(fromString(""), fromString("  ").trimRight());
+
+    assertEquals(fromString("数据砖头"), fromString("  数据砖头 ").trim());
+    assertEquals(fromString("数据砖头 "), fromString("  数据砖头 ").trimLeft());
+    assertEquals(fromString("  数据砖头"), fromString("  数据砖头 ").trimRight());
+
+    assertEquals(fromString("数据砖头"), fromString("数据砖头").trim());
+    assertEquals(fromString("数据砖头"), fromString("数据砖头").trimLeft());
+    assertEquals(fromString("数据砖头"), fromString("数据砖头").trimRight());
+  }
+
+  @Test
+  public void indexOf() {
+    assertEquals(0, fromString("").indexOf(fromString(""), 0));
+    assertEquals(-1, fromString("").indexOf(fromString("l"), 0));
+    assertEquals(0, fromString("hello").indexOf(fromString(""), 0));
+    assertEquals(2, fromString("hello").indexOf(fromString("l"), 0));
+    assertEquals(3, fromString("hello").indexOf(fromString("l"), 3));
+    assertEquals(-1, fromString("hello").indexOf(fromString("a"), 0));
+    assertEquals(2, fromString("hello").indexOf(fromString("ll"), 0));
+    assertEquals(-1, fromString("hello").indexOf(fromString("ll"), 4));
+    assertEquals(1, fromString("数据砖头").indexOf(fromString("据砖"), 0));
+    assertEquals(-1, fromString("数据砖头").indexOf(fromString("数"), 3));
+    assertEquals(0, fromString("数据砖头").indexOf(fromString("数"), 0));
+    assertEquals(3, fromString("数据砖头").indexOf(fromString("头"), 0));
+  }
+
+  @Test
+  public void reverse() {
+    assertEquals(fromString("olleh"), fromString("hello").reverse());
+    assertEquals(fromString(""), fromString("").reverse());
+    assertEquals(fromString("者行孙"), fromString("孙行者").reverse());
+    assertEquals(fromString("者行孙 olleh"), fromString("hello 孙行者").reverse());
+  }
+
+  @Test
+  public void repeat() {
+    assertEquals(fromString("数d数d数d数d数d"), fromString("数d").repeat(5));
+    assertEquals(fromString("数d"), fromString("数d").repeat(1));
+    assertEquals(fromString(""), fromString("数d").repeat(-1));
+  }
+
+  @Test
+  public void pad() {
+    assertEquals(fromString("hel"), fromString("hello").lpad(3, fromString("????")));
+    assertEquals(fromString("hello"), fromString("hello").lpad(5, fromString("????")));
+    assertEquals(fromString("?hello"), fromString("hello").lpad(6, fromString("????")));
+    assertEquals(fromString("???????hello"), fromString("hello").lpad(12, fromString("????")));
+    assertEquals(fromString("?????hello"), fromString("hello").lpad(10, fromString("?????")));
+    assertEquals(fromString("???????"), fromString("").lpad(7, fromString("?????")));
+
+    assertEquals(fromString("hel"), fromString("hello").rpad(3, fromString("????")));
+    assertEquals(fromString("hello"), fromString("hello").rpad(5, fromString("????")));
+    assertEquals(fromString("hello?"), fromString("hello").rpad(6, fromString("????")));
+    assertEquals(fromString("hello???????"), fromString("hello").rpad(12, fromString("????")));
+    assertEquals(fromString("hello?????"), fromString("hello").rpad(10, fromString("?????")));
+    assertEquals(fromString("???????"), fromString("").rpad(7, fromString("?????")));
+
+
+    assertEquals(fromString("数据砖"), fromString("数据砖头").lpad(3, fromString("????")));
+    assertEquals(fromString("?数据砖头"), fromString("数据砖头").lpad(5, fromString("????")));
+    assertEquals(fromString("??数据砖头"), fromString("数据砖头").lpad(6, fromString("????")));
+    assertEquals(fromString("孙行数据砖头"), fromString("数据砖头").lpad(6, fromString("孙行者")));
+    assertEquals(fromString("孙行者数据砖头"), fromString("数据砖头").lpad(7, fromString("孙行者")));
+    assertEquals(fromString("孙行者孙行者孙行数据砖头"), fromString("数据砖头").lpad(12, fromString("孙行者")));
+
+    assertEquals(fromString("数据砖"), fromString("数据砖头").rpad(3, fromString("????")));
+    assertEquals(fromString("数据砖头?"), fromString("数据砖头").rpad(5, fromString("????")));
+    assertEquals(fromString("数据砖头??"), fromString("数据砖头").rpad(6, fromString("????")));
+    assertEquals(fromString("数据砖头孙行"), fromString("数据砖头").rpad(6, fromString("孙行者")));
+    assertEquals(fromString("数据砖头孙行者"), fromString("数据砖头").rpad(7, fromString("孙行者")));
+    assertEquals(fromString("数据砖头孙行者孙行者孙行"), fromString("数据砖头").rpad(12, fromString("孙行者")));
+  }
+  
+  @Test
+  public void levenshteinDistance() {
+    assertEquals(
+        UTF8String.fromString("").levenshteinDistance(UTF8String.fromString("")), 0);
+    assertEquals(
+        UTF8String.fromString("").levenshteinDistance(UTF8String.fromString("a")), 1);
+    assertEquals(
+        UTF8String.fromString("aaapppp").levenshteinDistance(UTF8String.fromString("")), 7);
+    assertEquals(
+        UTF8String.fromString("frog").levenshteinDistance(UTF8String.fromString("fog")), 1);
+    assertEquals(
+        UTF8String.fromString("fly").levenshteinDistance(UTF8String.fromString("ant")),3);
+    assertEquals(
+        UTF8String.fromString("elephant").levenshteinDistance(UTF8String.fromString("hippo")), 7);
+    assertEquals(
+        UTF8String.fromString("hippo").levenshteinDistance(UTF8String.fromString("elephant")), 7);
+    assertEquals(
+        UTF8String.fromString("hippo").levenshteinDistance(UTF8String.fromString("zzzzzzzz")), 8);
+    assertEquals(
+        UTF8String.fromString("hello").levenshteinDistance(UTF8String.fromString("hallo")),1);
+    assertEquals(
+        UTF8String.fromString("世界千世").levenshteinDistance(UTF8String.fromString("千a世b")),4);
   }
 }

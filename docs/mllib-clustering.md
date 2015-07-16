@@ -33,6 +33,7 @@ guaranteed to find a globally optimal solution, and when run multiple times on
 a given dataset, the algorithm returns the best clustering result).
 * *initializationSteps* determines the number of steps in the k-means\|\| algorithm.
 * *epsilon* determines the distance threshold within which we consider k-means to have converged.
+* *initialModel* is an optional set of cluster centers used for initialization. If this parameter is supplied, only one run is performed.
 
 **Examples**
 

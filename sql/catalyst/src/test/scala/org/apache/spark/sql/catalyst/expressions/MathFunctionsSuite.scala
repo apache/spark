@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import scala.math.BigDecimal.RoundingMode
+
 import com.google.common.math.LongMath
 
 import org.apache.spark.SparkFunSuite
@@ -335,5 +337,47 @@ class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       Logarithm(Literal(1.0), Literal(-1.0)),
       null,
       create_row(null))
+  }
+
+  test("round") {
+    val domain = -6 to 6
+    val doublePi: Double = math.Pi
+    val shortPi: Short = 31415
+    val intPi: Int = 314159265
+    val longPi: Long = 31415926535897932L
+    val bdPi: BigDecimal = BigDecimal(31415927L, 7)
+
+    val doubleResults: Seq[Double] = Seq(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 3.0, 3.1, 3.14, 3.142,
+      3.1416, 3.14159, 3.141593)
+
+    val shortResults: Seq[Short] = Seq[Short](0, 0, 30000, 31000, 31400, 31420) ++
+      Seq.fill[Short](7)(31415)
+
+    val intResults: Seq[Int] = Seq(314000000, 314200000, 314160000, 314159000, 314159300,
+      314159270) ++ Seq.fill(7)(314159265)
+
+    val longResults: Seq[Long] = Seq(31415926536000000L, 31415926535900000L,
+      31415926535900000L, 31415926535898000L, 31415926535897900L, 31415926535897930L) ++
+      Seq.fill(7)(31415926535897932L)
+
+    val bdResults: Seq[BigDecimal] = Seq(BigDecimal(3.0), BigDecimal(3.1), BigDecimal(3.14),
+      BigDecimal(3.142), BigDecimal(3.1416), BigDecimal(3.14159),
+      BigDecimal(3.141593), BigDecimal(3.1415927))
+
+    domain.zipWithIndex.foreach { case (scale, i) =>
+      checkEvaluation(Round(doublePi, scale), doubleResults(i), EmptyRow)
+      checkEvaluation(Round(shortPi, scale), shortResults(i), EmptyRow)
+      checkEvaluation(Round(intPi, scale), intResults(i), EmptyRow)
+      checkEvaluation(Round(longPi, scale), longResults(i), EmptyRow)
+    }
+
+    // round_scale > current_scale would result in precision increase
+    // and not allowed by o.a.s.s.types.Decimal.changePrecision, therefore null
+    (0 to 7).foreach { i =>
+      checkEvaluation(Round(bdPi, i), bdResults(i), EmptyRow)
+    }
+    (8 to 10).foreach { scale =>
+      checkEvaluation(Round(bdPi, scale), null, EmptyRow)
+    }
   }
 }

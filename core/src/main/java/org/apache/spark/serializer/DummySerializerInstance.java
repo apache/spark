@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.shuffle.unsafe;
+package org.apache.spark.serializer;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -24,9 +24,7 @@ import java.nio.ByteBuffer;
 
 import scala.reflect.ClassTag;
 
-import org.apache.spark.serializer.DeserializationStream;
-import org.apache.spark.serializer.SerializationStream;
-import org.apache.spark.serializer.SerializerInstance;
+import org.apache.spark.annotation.Private;
 import org.apache.spark.unsafe.PlatformDependent;
 
 /**
@@ -35,7 +33,8 @@ import org.apache.spark.unsafe.PlatformDependent;
  * `write() OutputStream methods), but DiskBlockObjectWriter still calls some methods on it. To work
  * around this, we pass a dummy no-op serializer.
  */
-final class DummySerializerInstance extends SerializerInstance {
+@Private
+public final class DummySerializerInstance extends SerializerInstance {
 
   public static final DummySerializerInstance INSTANCE = new DummySerializerInstance();
 

@@ -51,6 +51,6 @@ case class CurrentTimestamp() extends LeafExpression {
   override def dataType: DataType = TimestampType
 
   override def eval(input: InternalRow): Any = {
-    System.currentTimeMillis() * 10000L
+    System.currentTimeMillis() * 1000L
   }
 }

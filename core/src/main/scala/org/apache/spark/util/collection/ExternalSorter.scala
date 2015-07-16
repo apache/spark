@@ -29,7 +29,7 @@ import org.apache.spark._
 import org.apache.spark.executor.ShuffleWriteMetrics
 import org.apache.spark.serializer._
 import org.apache.spark.shuffle.sort.SortShuffleFileWriter
-import org.apache.spark.storage.{BlockId, BlockObjectWriter}
+import org.apache.spark.storage.{BlockId, DiskBlockObjectWriter}
 
 /**
  * Sorts and potentially merges a number of key-value pairs of type (K, V) to produce key-combiner
@@ -208,7 +208,7 @@ private[spark] abstract class ExternalSorter[K, V, C](
     // These variables are reset after each flush
     var objectsWritten: Long = 0
     var spillMetrics: ShuffleWriteMetrics = null
-    var writer: BlockObjectWriter = null
+    var writer: DiskBlockObjectWriter = null
     def openWriter(): Unit = {
       assert (writer == null && spillMetrics == null)
       spillMetrics = new ShuffleWriteMetrics

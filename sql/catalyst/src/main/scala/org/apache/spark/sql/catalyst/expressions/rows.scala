@@ -132,6 +132,18 @@ class GenericInternalRow(protected[sql] val values: Array[Any])
   override def copy(): InternalRow = this
 }
 
+/**
+ * This is used for serialization of Python DataFrame
+ */
+class GenericInternalRowWithSchema(values: Array[Any], override val schema: StructType)
+  extends GenericInternalRow(values) {
+
+  /** No-arg constructor for serialization. */
+  protected def this() = this(null, null)
+
+  override def fieldIndex(name: String): Int = schema.fieldIndex(name)
+}
+
 class GenericMutableRow(val values: Array[Any]) extends MutableRow with ArrayBackedRow {
   /** No-arg constructor for serialization. */
   protected def this() = this(null)
