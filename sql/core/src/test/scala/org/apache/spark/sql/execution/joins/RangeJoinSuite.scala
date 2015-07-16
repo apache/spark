@@ -43,7 +43,13 @@ class RangeJoinSuite extends SparkPlanTest {
   test("interval-point range join") {
     // low1 <= point && point < high1
     checkAnswer2(intervals1, points, (left: SparkPlan, right: SparkPlan) =>
-      BroadcastRangeJoin(intervalKeys1, pointKeys, true :: false :: Nil, BuildRight, left, right),
+      BroadcastRangeJoin(
+        intervalKeys1,
+        pointKeys,
+        true :: false :: Nil,
+        BuildRight,
+        left,
+        right),
       Seq(
         (0, 2, 1),
         (1, 5, 1),
@@ -52,7 +58,13 @@ class RangeJoinSuite extends SparkPlanTest {
 
     // low1 <= point && point < high1
     checkAnswer2(intervals1, points, (left: SparkPlan, right: SparkPlan) =>
-      BroadcastRangeJoin(intervalKeys1, pointKeys, false :: false :: Nil, BuildRight, left, right),
+      BroadcastRangeJoin(
+        intervalKeys1,
+        pointKeys,
+        false :: false :: Nil,
+        BuildRight,
+        left,
+        right),
       Seq(
         (0, 2, 1),
         (1, 5, 3)
@@ -60,7 +72,13 @@ class RangeJoinSuite extends SparkPlanTest {
 
     // low <= point && point <= high1
     checkAnswer2(points, intervals1, (left: SparkPlan, right: SparkPlan) =>
-      BroadcastRangeJoin(pointKeys, intervalKeys1, true :: true :: Nil, BuildRight, left, right),
+      BroadcastRangeJoin(
+        pointKeys,
+        intervalKeys1,
+        true :: true :: Nil,
+        BuildRight,
+        left,
+        right),
       Seq(
         (1, 0, 1),
         (1, 0, 2),
@@ -70,7 +88,13 @@ class RangeJoinSuite extends SparkPlanTest {
 
     // low1 < point && point < high1
     checkAnswer2(intervals1, points, (left: SparkPlan, right: SparkPlan) =>
-      BroadcastRangeJoin(intervalKeys1, pointKeys, false :: false :: Nil, BuildLeft, left, right),
+      BroadcastRangeJoin(
+        intervalKeys1,
+        pointKeys,
+        false :: false :: Nil,
+        BuildLeft,
+        left,
+        right),
       Seq(
         (0, 2, 1),
         (1, 5, 3)
@@ -80,7 +104,13 @@ class RangeJoinSuite extends SparkPlanTest {
   test("interval-interval range join") {
     // low1 <= high2 && low2 < high1
     checkAnswer2(intervals1, intervals2, (left: SparkPlan, right: SparkPlan) =>
-      BroadcastRangeJoin(intervalKeys1, intervalKeys2, true :: false :: Nil, BuildRight, left, right),
+      BroadcastRangeJoin(
+        intervalKeys1,
+        intervalKeys2,
+        true :: false :: Nil,
+        BuildRight,
+        left,
+        right),
       Seq(
         (-1, 0, -2, -1),
         (0, 2, 1, 3),
@@ -89,7 +119,13 @@ class RangeJoinSuite extends SparkPlanTest {
 
     // low1 < high2 && low2 <= high1
     checkAnswer2(intervals1, intervals2, (left: SparkPlan, right: SparkPlan) =>
-      BroadcastRangeJoin(intervalKeys1, intervalKeys2, false :: true :: Nil, BuildLeft, left, right),
+      BroadcastRangeJoin(
+        intervalKeys1,
+        intervalKeys2,
+        false :: true :: Nil,
+        BuildLeft,
+        left,
+        right),
       Seq(
         (0, 1, 1, 3),
         (0, 2, 1, 3),
@@ -99,7 +135,13 @@ class RangeJoinSuite extends SparkPlanTest {
 
     // low1 < high2 && low2 < high1
     checkAnswer2(intervals1, intervals2, (left: SparkPlan, right: SparkPlan) =>
-      BroadcastRangeJoin(intervalKeys1, intervalKeys2, false :: false :: Nil, BuildRight, left, right),
+      BroadcastRangeJoin(
+        intervalKeys1,
+        intervalKeys2,
+        false :: false :: Nil,
+        BuildRight,
+        left,
+        right),
       Seq(
         (0, 2, 1, 3),
         (1, 5, 1, 3)
@@ -107,7 +149,13 @@ class RangeJoinSuite extends SparkPlanTest {
 
     // low1 <= high2 && low2 <= high1
     checkAnswer2(intervals1, intervals2, (left: SparkPlan, right: SparkPlan) =>
-      BroadcastRangeJoin(intervalKeys1, intervalKeys2, true :: true :: Nil, BuildLeft, left, right),
+      BroadcastRangeJoin(
+        intervalKeys1,
+        intervalKeys2,
+        true :: true :: Nil,
+        BuildLeft,
+        left,
+        right),
       Seq(
         (-1, 0, -2, -1),
         (0, 1, 1, 3),
