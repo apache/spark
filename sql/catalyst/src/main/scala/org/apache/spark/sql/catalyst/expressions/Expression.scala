@@ -61,9 +61,15 @@ abstract class Expression extends TreeNode[Expression] {
   def foldable: Boolean = false
 
   /**
-   * Returns true when the current expression always return the same result for fixed input values.
+   * Returns true when the current expression always return the same result for fixed inputs from
+   * children.
+   *
+   * Note that this means that an expression should be considered as non-deterministic if:
+   * - if it relies on some mutable internal state, or
+   * - if it relies on some implicit input that is not part of the children expression list.
+   *
+   * An example would be `SparkPartitionID` that relies on the partition id returned by TaskContext.
    */
-  // TODO: Need to define explicit input values vs implicit input values.
   def deterministic: Boolean = true
 
   def nullable: Boolean
@@ -181,8 +187,10 @@ abstract class Expression extends TreeNode[Expression] {
 /**
  * A leaf expression, i.e. one without any child expressions.
  */
-abstract class LeafExpression extends Expression with trees.LeafNode[Expression] {
+abstract class LeafExpression extends Expression {
   self: Product =>
+
+  def children: Seq[Expression] = Nil
 }
 
 
@@ -190,8 +198,12 @@ abstract class LeafExpression extends Expression with trees.LeafNode[Expression]
  * An expression with one input and one output. The output is by default evaluated to null
  * if the input is evaluated to null.
  */
-abstract class UnaryExpression extends Expression with trees.UnaryNode[Expression] {
+abstract class UnaryExpression extends Expression {
   self: Product =>
+
+  def child: Expression
+
+  override def children: Seq[Expression] = child :: Nil
 
   override def foldable: Boolean = child.foldable
   override def nullable: Boolean = child.nullable
@@ -265,8 +277,13 @@ abstract class UnaryExpression extends Expression with trees.UnaryNode[Expressio
  * An expression with two inputs and one output. The output is by default evaluated to null
  * if any input is evaluated to null.
  */
-abstract class BinaryExpression extends Expression with trees.BinaryNode[Expression] {
+abstract class BinaryExpression extends Expression {
   self: Product =>
+
+  def left: Expression
+  def right: Expression
+
+  override def children: Seq[Expression] = Seq(left, right)
 
   override def foldable: Boolean = left.foldable && right.foldable
 
@@ -369,17 +386,15 @@ abstract class BinaryOperator extends BinaryExpression with ExpectsInputTypes {
   override def inputTypes: Seq[AbstractDataType] = Seq(inputType, inputType)
 
   override def checkInputDataTypes(): TypeCheckResult = {
-    // First call the checker for ExpectsInputTypes, and then check whether left and right have
-    // the same type.
-    super.checkInputDataTypes() match {
-      case TypeCheckResult.TypeCheckSuccess =>
-        if (left.dataType != right.dataType) {
-          TypeCheckResult.TypeCheckFailure(s"differing types in '$prettyString' " +
-            s"(${left.dataType.simpleString} and ${right.dataType.simpleString}).")
-        } else {
-          TypeCheckResult.TypeCheckSuccess
-        }
-      case TypeCheckResult.TypeCheckFailure(msg) => TypeCheckResult.TypeCheckFailure(msg)
+    // First check whether left and right have the same type, then check if the type is acceptable.
+    if (left.dataType != right.dataType) {
+      TypeCheckResult.TypeCheckFailure(s"differing types in '$prettyString' " +
+        s"(${left.dataType.simpleString} and ${right.dataType.simpleString}).")
+    } else if (!inputType.acceptsType(left.dataType)) {
+      TypeCheckResult.TypeCheckFailure(s"'$prettyString' accepts ${inputType.simpleString} type," +
+        s" not ${left.dataType.simpleString}")
+    } else {
+      TypeCheckResult.TypeCheckSuccess
     }
   }
 }
