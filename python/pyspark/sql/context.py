@@ -34,6 +34,7 @@ from pyspark.sql.types import Row, StringType, StructType, _verify_type, \
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.readwriter import DataFrameReader
 from pyspark.sql.utils import install_exception_handler
+from pyspark.sql.functions import UserDefinedFunction
 
 try:
     import pandas
@@ -191,19 +192,8 @@ class SQLContext(object):
         >>> sqlContext.sql("SELECT stringLengthInt('test')").collect()
         [Row(_c0=4)]
         """
-        func = lambda _, it: map(lambda x: f(*x), it)
-        ser = AutoBatchedSerializer(PickleSerializer())
-        command = (func, None, ser, ser)
-        pickled_cmd, bvars, env, includes = _prepare_for_python_RDD(self._sc, command, self)
-        self._ssql_ctx.udf().registerPython(name,
-                                            bytearray(pickled_cmd),
-                                            env,
-                                            includes,
-                                            self._sc.pythonExec,
-                                            self._sc.pythonVer,
-                                            bvars,
-                                            self._sc._javaAccumulator,
-                                            returnType.json())
+        udf = UserDefinedFunction(f, returnType, name)
+        self._ssql_ctx.udf().registerPython(name, udf._judf)
 
     def _inferSchemaFromList(self, data):
         """
