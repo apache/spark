@@ -47,7 +47,7 @@ class AccumulatorSuite extends SparkFunSuite with Matchers with LocalSparkContex
 
     val d = sc.parallelize(1 to 20)
     d.foreach{x => acc += x}
-    acc.value should be (210)
+    acc.value should be (42)
 
     val longAcc = sc.accumulator(0L)
     val maxInt = Integer.MAX_VALUE.toLong
