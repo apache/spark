@@ -515,18 +515,28 @@ object SimplifyFilters extends Rule[LogicalPlan] {
 object PushPredicateThroughProject extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case filter @ Filter(condition, project @ Project(fields, grandChild)) =>
-      val sourceAliases = fields.collect { case a @ Alias(c, _) =>
-        (a.toAttribute: Attribute) -> c
-      }.toMap
-      project.copy(child = filter.copy(
-        replaceAlias(condition, sourceAliases),
-        grandChild))
-  }
+      // Create a map of Aliases to their values from the child projection.
+      // e.g., 'SELECT a + b AS c, d ...' produces Map(c -> Alias(a + b, c)).
+      val aliasMap = AttributeMap(fields.collect {
+        case a: Alias => (a.toAttribute, a)
+      })
 
-  private def replaceAlias(condition: Expression, sourceAliases: Map[Attribute, Expression]) = {
-    condition transform {
-      case a: AttributeReference => sourceAliases.getOrElse(a, a)
-    }
+      // We only push down filter if their overlapped expressions are all
+      // deterministic.
+      val hasNondeterministic = condition.collect {
+        case a: Attribute if aliasMap.contains(a) => aliasMap(a).child
+      }.exists(_.find(!_.deterministic).isDefined)
+
+      if (hasNondeterministic) {
+        filter
+      } else {
+        // Substitute any attributes that are produced by the child projection, so that we safely
+        // eliminate it.
+        val substitutedCondition = condition.transform {
+          case a: Attribute => aliasMap.getOrElse(a, a)
+        }
+        project.copy(child = filter.copy(substitutedCondition, grandChild))
+      }
   }
 }
 
