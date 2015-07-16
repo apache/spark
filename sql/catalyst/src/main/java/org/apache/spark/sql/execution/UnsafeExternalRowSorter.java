@@ -19,10 +19,10 @@ package org.apache.spark.sql.execution;
 
 import java.io.IOException;
 
+import com.google.common.annotations.VisibleForTesting;
+import scala.Function1;
 import scala.collection.Iterator;
 import scala.math.Ordering;
-
-import com.google.common.annotations.VisibleForTesting;
 
 import org.apache.spark.SparkEnv;
 import org.apache.spark.TaskContext;
@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.expressions.ObjectUnsafeColumnWriter;
 import org.apache.spark.sql.catalyst.expressions.UnsafeColumnWriter;
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow;
-import org.apache.spark.sql.catalyst.expressions.UnsafeRowConverter;
+import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection;
 import org.apache.spark.sql.catalyst.util.ObjectPool;
 import org.apache.spark.sql.types.StructField;
 import org.apache.spark.sql.types.StructType;
@@ -52,10 +52,9 @@ final class UnsafeExternalRowSorter {
   private long numRowsInserted = 0;
 
   private final StructType schema;
-  private final UnsafeRowConverter rowConverter;
+  private final Function1<InternalRow, InternalRow> unsafeProjection;
   private final PrefixComputer prefixComputer;
   private final UnsafeExternalSorter sorter;
-  private byte[] rowConversionBuffer = new byte[1024 * 8];
 
   public static abstract class PrefixComputer {
     abstract long computePrefix(InternalRow row);
@@ -67,7 +66,7 @@ final class UnsafeExternalRowSorter {
       PrefixComparator prefixComparator,
       PrefixComputer prefixComputer) throws IOException {
     this.schema = schema;
-    this.rowConverter = new UnsafeRowConverter(schema);
+    this.unsafeProjection = GenerateUnsafeProjection.generate(schema);
     this.prefixComputer = prefixComputer;
     final SparkEnv sparkEnv = SparkEnv.get();
     final TaskContext taskContext = TaskContext.get();
@@ -94,18 +93,12 @@ final class UnsafeExternalRowSorter {
 
   @VisibleForTesting
   void insertRow(InternalRow row) throws IOException {
-    final int sizeRequirement = rowConverter.getSizeRequirement(row);
-    if (sizeRequirement > rowConversionBuffer.length) {
-      rowConversionBuffer = new byte[sizeRequirement];
-    }
-    final int bytesWritten = rowConverter.writeRow(
-      row, rowConversionBuffer, PlatformDependent.BYTE_ARRAY_OFFSET, sizeRequirement, null);
-    assert (bytesWritten == sizeRequirement);
+    UnsafeRow unsafeRow = (UnsafeRow) unsafeProjection.apply(row);
     final long prefix = prefixComputer.computePrefix(row);
     sorter.insertRecord(
-      rowConversionBuffer,
-      PlatformDependent.BYTE_ARRAY_OFFSET,
-      sizeRequirement,
+      unsafeRow.getBaseObject(),
+      unsafeRow.getBaseOffset(),
+      unsafeRow.getSizeInBytes(),
       prefix
     );
     numRowsInserted++;

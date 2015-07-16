@@ -236,8 +236,12 @@ private abstract class BytesUnsafeColumnWriter extends UnsafeColumnWriter {
   protected[this] def isString: Boolean
 
   override def write(source: InternalRow, target: UnsafeRow, column: Int, cursor: Int): Int = {
-    val offset = target.getBaseOffset + cursor
     val bytes = getBytes(source, column)
+    write(target, bytes, column, cursor)
+  }
+
+  def write(target: UnsafeRow, bytes: Array[Byte], column: Int, cursor: Int):Int = {
+    val offset = target.getBaseOffset + cursor
     val numBytes = bytes.length
     if ((numBytes & 0x07) > 0) {
       // zero-out the padding bytes
@@ -261,6 +265,13 @@ private class StringUnsafeColumnWriter private() extends BytesUnsafeColumnWriter
   def getBytes(source: InternalRow, column: Int): Array[Byte] = {
     source.getAs[UTF8String](column).getBytes
   }
+  // TODO(davies): refactor this
+  // specialized for codegen
+  def getSize(value: UTF8String): Int =
+    ByteArrayMethods.roundNumberOfBytesToNearestWord(value.numBytes())
+  def write(target: UnsafeRow, value: UTF8String, column: Int, cursor: Int): Int = {
+    write(target, value.getBytes, column, cursor)
+  }
 }
 
 private class BinaryUnsafeColumnWriter private() extends BytesUnsafeColumnWriter {
@@ -268,6 +279,9 @@ private class BinaryUnsafeColumnWriter private() extends BytesUnsafeColumnWriter
   def getBytes(source: InternalRow, column: Int): Array[Byte] = {
     source.getAs[Array[Byte]](column)
   }
+  // specialized for codegen
+  def getSize(value: Array[Byte]): Int =
+    ByteArrayMethods.roundNumberOfBytesToNearestWord(value.length)
 }
 
 private class ObjectUnsafeColumnWriter private() extends UnsafeColumnWriter {

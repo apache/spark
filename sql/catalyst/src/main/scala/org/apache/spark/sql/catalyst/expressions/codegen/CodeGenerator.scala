@@ -24,6 +24,7 @@ import com.google.common.cache.{CacheBuilder, CacheLoader}
 import org.codehaus.janino.ClassBodyEvaluator
 
 import org.apache.spark.Logging
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -55,9 +56,6 @@ class CodeGenContext {
    * Holding all the expressions those do not support codegen, will be evaluated directly.
    */
   val references: mutable.ArrayBuffer[Expression] = new mutable.ArrayBuffer[Expression]()
-
-  val stringType: String = classOf[UTF8String].getName
-  val decimalType: String = classOf[Decimal].getName
 
   final val JAVA_BOOLEAN = "boolean"
   final val JAVA_BYTE = "byte"
@@ -124,9 +122,9 @@ class CodeGenContext {
     case LongType | TimestampType => JAVA_LONG
     case FloatType => JAVA_FLOAT
     case DoubleType => JAVA_DOUBLE
-    case dt: DecimalType => decimalType
+    case dt: DecimalType => "Decimal"
     case BinaryType => "byte[]"
-    case StringType => stringType
+    case StringType => "UTF8String"
     case _: StructType => "InternalRow"
     case _: ArrayType => s"scala.collection.Seq"
     case _: MapType => s"scala.collection.Map"
@@ -247,7 +245,12 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
   private[this] def doCompile(code: String): GeneratedClass = {
     val evaluator = new ClassBodyEvaluator()
     evaluator.setParentClassLoader(getClass.getClassLoader)
-    evaluator.setDefaultImports(Array("org.apache.spark.sql.catalyst.InternalRow"))
+    evaluator.setDefaultImports(Array(
+      classOf[InternalRow].getName,
+      classOf[UnsafeRow].getName,
+      classOf[UTF8String].getName,
+      classOf[Decimal].getName
+    ))
     evaluator.setExtendedClass(classOf[GeneratedClass])
     try {
       evaluator.cook(code)

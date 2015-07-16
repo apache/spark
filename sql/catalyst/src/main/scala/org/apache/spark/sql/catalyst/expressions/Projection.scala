@@ -18,6 +18,8 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.codegen.GenerateMutableProjection
+import org.apache.spark.sql.types.DataType
 
 /**
  * A [[Projection]] that is calculated by calling the `eval` of each of the specified expressions.
@@ -70,6 +72,23 @@ case class InterpretedMutableProjection(expressions: Seq[Expression]) extends Mu
       i += 1
     }
     mutableRow
+  }
+}
+
+/**
+ * A projection that could turn UnsafeRow into GenericInternalRow
+ */
+case class FromUnsafeProjection(fields: Seq[DataType]) extends Projection {
+
+  private[this] val expressions = fields.zipWithIndex.map { case (dt, idx) =>
+    new BoundReference(idx, dt, true)
+  }
+
+  @transient private[this] lazy val generatedProj =
+    GenerateMutableProjection.generate(expressions)()
+
+  override def apply(input: InternalRow): InternalRow = {
+    generatedProj(input)
   }
 }
 
