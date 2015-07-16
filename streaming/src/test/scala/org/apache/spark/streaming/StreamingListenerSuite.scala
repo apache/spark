@@ -200,7 +200,7 @@ class ReceiverInfoCollector extends StreamingListener {
     startedReceiverStreamIds += receiverStarted.receiverInfo.streamId
   }
 
-  override def onReceiverStopped(receiverStopped: StreamingListenerReceiverStopListped) {
+  override def onReceiverStopped(receiverStopped: StreamingListenerReceiverStopped) {
     stoppedReceiverStreamIds += receiverStopped.receiverInfo.streamId
   }
 
