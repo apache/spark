@@ -42,7 +42,7 @@ import org.apache.spark.sql.types.StructField;
 import org.apache.spark.sql.types.StructType;
 import org.apache.spark.storage.BlockId;
 import org.apache.spark.storage.BlockManager;
-import org.apache.spark.storage.BlockObjectWriter;
+import org.apache.spark.storage.DiskBlockObjectWriter;
 import org.apache.spark.storage.TempLocalBlockId;
 import org.apache.spark.unsafe.PlatformDependent;
 import org.apache.spark.unsafe.memory.MemoryBlock;
@@ -740,7 +740,7 @@ public final class UnsafeExternalAggregation {
     private final File file;
     private final BlockId blockId;
     private final int numRecordsToWrite;
-    private BlockObjectWriter writer;
+    private DiskBlockObjectWriter writer;
     private int numRecordsSpilled = 0;
 
     public UnsafeSorterKVSpillWriter(
