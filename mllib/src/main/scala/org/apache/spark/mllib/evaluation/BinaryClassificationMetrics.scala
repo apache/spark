@@ -58,7 +58,6 @@ class BinaryClassificationMetrics(
   /**
    * An auxiliary constructor taking a DataFrame.
    * @param scoreAndLabels a DataFrame with two double columns: score and label
-   * @since 1.4.0
    */
   private[mllib] def this(scoreAndLabels: DataFrame) =
     this(scoreAndLabels.map(r => (r.getDouble(0), r.getDouble(1))))
