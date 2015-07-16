@@ -73,23 +73,23 @@ private[clustering] trait KMeansParams
    * Param for the initialization algorithm. This can be either "random" to choose random points as
    * initial cluster centers, or "k-means||" to use a parallel variant of k-means++
    * (Bahmani et al., Scalable K-Means++, VLDB 2012). Default: k-means||.
-   * @group param
+   * @group expertParam
    */
   final val initMode = new Param[String](this, "initMode", "initialization algorithm",
     (value: String) => MLlibKMeans.validateInitializationMode(value))
 
-  /** @group getParam */
+  /** @group getExpertParam */
   def getInitMode: String = $(initMode)
 
   /**
    * Param for the number of steps for the k-means|| initialization mode. This is an advanced
    * setting -- the default of 5 is almost always enough. Default: 5.
-   * @group param
+   * @group expertParam
    */
   final val initSteps = new IntParam(this, "initSteps", "number of steps for k-means||",
     (value: Int) => value > 0)
 
-  /** @group getParam */
+  /** @group getExpertParam */
   def getInitSteps: Int = $(initSteps)
 
   /**
@@ -163,10 +163,10 @@ class KMeans(override val uid: String) extends Estimator[KMeansModel] with KMean
   /** @group setParam */
   def setK(value: Int): this.type = set(k, value)
 
-  /** @group setParam */
+  /** @group setExpertParam */
   def setInitMode(value: String): this.type = set(initMode, value)
 
-  /** @group setParam */
+  /** @group setExpertParam */
   def setInitSteps(value: Int): this.type = set(initSteps, value)
 
   /** @group setParam */
