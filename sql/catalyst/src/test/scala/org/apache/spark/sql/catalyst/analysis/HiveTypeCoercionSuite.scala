@@ -203,7 +203,7 @@ class HiveTypeCoercionSuite extends PlanTest {
 
     ruleTest(HiveTypeCoercion.ImplicitTypeCasts,
       NumericTypeUnaryExpression(Literal.create(null, NullType)),
-      NumericTypeUnaryExpression(Cast(Literal.create(null, NullType), DoubleType)))
+      NumericTypeUnaryExpression(Literal.create(null, DoubleType)))
   }
 
   test("cast NullType for binary operators") {
@@ -215,9 +215,7 @@ class HiveTypeCoercionSuite extends PlanTest {
 
     ruleTest(HiveTypeCoercion.ImplicitTypeCasts,
       NumericTypeBinaryOperator(Literal.create(null, NullType), Literal.create(null, NullType)),
-      NumericTypeBinaryOperator(
-        Cast(Literal.create(null, NullType), DoubleType),
-        Cast(Literal.create(null, NullType), DoubleType)))
+      NumericTypeBinaryOperator(Literal.create(null, DoubleType), Literal.create(null, DoubleType)))
   }
 
   test("coalesce casts") {
@@ -345,14 +343,14 @@ object HiveTypeCoercionSuite {
   }
 
   case class AnyTypeBinaryOperator(left: Expression, right: Expression)
-    extends BinaryOperator with ExpectsInputTypes {
+    extends BinaryOperator {
     override def dataType: DataType = NullType
     override def inputType: AbstractDataType = AnyDataType
     override def symbol: String = "anytype"
   }
 
   case class NumericTypeBinaryOperator(left: Expression, right: Expression)
-    extends BinaryOperator with ExpectsInputTypes {
+    extends BinaryOperator {
     override def dataType: DataType = NullType
     override def inputType: AbstractDataType = NumericType
     override def symbol: String = "numerictype"
