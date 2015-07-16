@@ -145,12 +145,15 @@ class StreamingListenerSuite extends TestSuiteBase with Matchers {
   test("registering listeners via spark.streaming.extraListeners") {
     // Test for success with zero-argument constructor and sparkConf constructor
     val conf = new SparkConf().setMaster("local").setAppName("test")
-      .set("spark.streaming.extraListeners", classOf[StreamingListenerThatAcceptsSparkConf].getName + "," +
+      .set("spark.streaming.extraListeners",
+        classOf[StreamingListenerThatAcceptsSparkConf].getName + "," +
         classOf[ReceiverInfoCollector].getName)
     val scc = new StreamingContext(conf, Seconds(1))
 
-    scc.scheduler.listenerBus.listeners.exists { _.isInstanceOf[StreamingListenerThatAcceptsSparkConf] }
-    scc.scheduler.listenerBus.listeners.exists { _.isInstanceOf[ReceiverInfoCollector] }
+    scc.scheduler.listenerBus.listeners.exists {
+      _.isInstanceOf[StreamingListenerThatAcceptsSparkConf] }
+    scc.scheduler.listenerBus.listeners.exists {
+      _.isInstanceOf[ReceiverInfoCollector] }
 
     // Test for failure with too many arguments in constructor
     val failingConf = new SparkConf().setMaster("local").setAppName("failingTest")
@@ -159,8 +162,9 @@ class StreamingListenerSuite extends TestSuiteBase with Matchers {
       val failingScc = new StreamingContext(failingConf, Seconds(1))
     }
     val expectedErrorMessage =
-       s"Exception when registering Streaming Listener:" +
-        " StreamingListenerTooManyArguments did not have a zero-argument constructor or a" +
+        "Exception when registering Streaming Listener:" +
+        " org.apache.spark.streaming.StreamingListenerTooManyArguments" +
+        " did not have a zero-argument constructor or a" +
         " single-argument constructor that accepts SparkConf. Note: if the class is" +
         " defined inside of another Scala class, then its constructors may accept an" +
         " implicit parameter that references the enclosing class; in this case, you must" +

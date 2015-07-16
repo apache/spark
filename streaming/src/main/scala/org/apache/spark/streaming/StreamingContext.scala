@@ -566,8 +566,8 @@ class StreamingContext private[streaming] (
           zeroArgumentConstructor.get.newInstance()
         } else {
           throw new SparkException(
-             s"Exception when registering Streaming Listener:" +
-              " $className did not have a zero-argument constructor or a" +
+              "Exception when registering Streaming Listener:" +
+             s" $className did not have a zero-argument constructor or a" +
               " single-argument constructor that accepts SparkConf. Note: if the class is" +
               " defined inside of another Scala class, then its constructors may accept an" +
               " implicit parameter that references the enclosing class; in this case, you must" +
