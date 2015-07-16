@@ -254,7 +254,14 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     // Spark SQL use Long for TimestampType, lose the precision under 1us
     "timestamp_1",
     "timestamp_2",
-    "timestamp_udf"
+    "timestamp_udf",
+
+    // Spark SQL use NULL for NaN
+    "udf7",
+    "udf_acos",
+    "udf_asin",
+    "udf_xpath_double",
+    "udf_xpath_float"
   )
 
   /**
@@ -816,19 +823,16 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "udf2",
     "udf5",
     "udf6",
-    // "udf7",  turn this on after we figure out null vs nan vs infinity
     "udf8",
     "udf9",
     "udf_10_trims",
     "udf_E",
     "udf_PI",
     "udf_abs",
-    // "udf_acos",  turn this on after we figure out null vs nan vs infinity
     "udf_add",
     "udf_array",
     "udf_array_contains",
     "udf_ascii",
-    // "udf_asin",  turn this on after we figure out null vs nan vs infinity
     "udf_atan",
     "udf_avg",
     "udf_bigint",
@@ -955,8 +959,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "udf_when",
     "udf_xpath",
     "udf_xpath_boolean",
-    "udf_xpath_double",
-    "udf_xpath_float",
     "udf_xpath_int",
     "udf_xpath_long",
     "udf_xpath_short",

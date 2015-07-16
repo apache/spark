@@ -98,7 +98,14 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
     val specificMutatorFunctions = ctx.primitiveTypes.map { jt =>
       val cases = expressions.zipWithIndex.flatMap {
         case (e, i) if ctx.javaType(e.dataType) == jt =>
-          Some(s"case $i: { c$i = value; return; }")
+          Some(jt match {
+            case "float" =>
+              s"case $i: {if (Float.isNaN(value)) nullBits[$i] = true; else c$i = value; return;}"
+            case "double" =>
+              s"case $i: {if (Double.isNaN(value)) nullBits[$i] = true; else c$i = value; return;}"
+            case _ =>
+              s"case $i: {c$i = value; return;}"
+          })
         case _ => None
       }.mkString("\n        ")
       if (cases.length > 0) {

@@ -333,11 +333,12 @@ private[sql] object JsonRDD extends Logging {
     }
   }
 
-  private def toDouble(value: Any): Double = {
+  private def toDouble(value: Any): java.lang.Double = {
     value match {
       case value: java.lang.Integer => value.asInstanceOf[Int].toDouble
       case value: java.lang.Long => value.asInstanceOf[Long].toDouble
-      case value: java.lang.Double => value.asInstanceOf[Double]
+      case value: java.lang.Double =>
+        if (java.lang.Double.isNaN(value)) null else value.asInstanceOf[Double]
     }
   }
 

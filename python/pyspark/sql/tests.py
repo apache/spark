@@ -731,6 +731,10 @@ class SQLTests(ReusedPySparkTestCase):
         row = df2.first()
         self.assertEqual(row[0], Decimal("3.14159"))
 
+    def test_nan(self):
+        df = self.sqlCtx.createDataFrame([(float('nan'),)], ['a'])
+        self.assertEqual(None, df.first()[0])
+
     def test_dropna(self):
         schema = StructType([
             StructField("name", StringType(), True),

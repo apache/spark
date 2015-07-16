@@ -64,7 +64,8 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Literal(Double.MaxValue), Double.MaxValue)
     checkEvaluation(Literal(Float.MinValue), Float.MinValue)
     checkEvaluation(Literal(Float.MaxValue), Float.MaxValue)
-
+    checkEvaluation(Literal(Double.NaN), null)
+    checkEvaluation(Literal(Float.NaN), null)
   }
 
   test("string literals") {

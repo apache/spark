@@ -314,7 +314,7 @@ object CatalystTypeConverters {
 
   private abstract class PrimitiveConverter[T] extends CatalystTypeConverter[T, Any, Any] {
     final override def toScala(catalystValue: Any): Any = catalystValue
-    final override def toCatalystImpl(scalaValue: T): Any = scalaValue
+    override def toCatalystImpl(scalaValue: T): Any = scalaValue
   }
 
   private object BooleanConverter extends PrimitiveConverter[Boolean] {
@@ -339,10 +339,14 @@ object CatalystTypeConverters {
 
   private object FloatConverter extends PrimitiveConverter[Float] {
     override def toScalaImpl(row: InternalRow, column: Int): Float = row.getFloat(column)
+    override def toCatalystImpl(scalaValue: Float): Any =
+      if (java.lang.Float.isNaN(scalaValue)) null else scalaValue
   }
 
   private object DoubleConverter extends PrimitiveConverter[Double] {
     override def toScalaImpl(row: InternalRow, column: Int): Double = row.getDouble(column)
+    override def toCatalystImpl(scalaValue: Double): Any =
+      if (java.lang.Double.isNaN(scalaValue)) null else scalaValue
   }
 
   /**

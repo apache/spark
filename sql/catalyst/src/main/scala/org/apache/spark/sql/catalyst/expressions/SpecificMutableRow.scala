@@ -259,8 +259,12 @@ final class SpecificMutableRow(val values: Array[MutableValue]) extends MutableR
 
   override def setFloat(ordinal: Int, value: Float): Unit = {
     val currentValue = values(ordinal).asInstanceOf[MutableFloat]
-    currentValue.isNull = false
-    currentValue.value = value
+    if (java.lang.Float.isNaN(value)) {
+      currentValue.isNull = true
+    } else {
+      currentValue.isNull = false
+      currentValue.value = value
+    }
   }
 
   override def getFloat(i: Int): Float = {
@@ -279,8 +283,12 @@ final class SpecificMutableRow(val values: Array[MutableValue]) extends MutableR
 
   override def setDouble(ordinal: Int, value: Double): Unit = {
     val currentValue = values(ordinal).asInstanceOf[MutableDouble]
-    currentValue.isNull = false
-    currentValue.value = value
+    if (java.lang.Double.isNaN(value)) {
+      currentValue.isNull = true
+    } else {
+      currentValue.isNull = false
+      currentValue.value = value
+    }
   }
 
   override def getDouble(i: Int): Double = {

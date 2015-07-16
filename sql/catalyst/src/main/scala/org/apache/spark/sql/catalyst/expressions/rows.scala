@@ -32,17 +32,20 @@ abstract class MutableRow extends InternalRow {
   def update(i: Int, value: Any)
 
   // default implementation (slow)
+  def setBoolean(i: Int, value: Boolean): Unit = { update(i, value) }
+  def setByte(i: Int, value: Byte): Unit = { update(i, value) }
+  def setShort(i: Int, value: Short): Unit = { update(i, value) }
   def setInt(i: Int, value: Int): Unit = { update(i, value) }
   def setLong(i: Int, value: Long): Unit = { update(i, value) }
-  def setDouble(i: Int, value: Double): Unit = { update(i, value) }
-  def setBoolean(i: Int, value: Boolean): Unit = { update(i, value) }
-  def setShort(i: Int, value: Short): Unit = { update(i, value) }
-  def setByte(i: Int, value: Byte): Unit = { update(i, value) }
-  def setFloat(i: Int, value: Float): Unit = { update(i, value) }
+  def setFloat(i: Int, value: Float): Unit = {
+    if (java.lang.Float.isNaN(value)) setNullAt(i) else update(i, value)
+  }
+  def setDouble(i: Int, value: Double): Unit = {
+    if (java.lang.Double.isNaN(value)) setNullAt(i) else update(i, value)
+  }
   def setString(i: Int, value: String): Unit = {
     update(i, UTF8String.fromString(value))
   }
-
   override def copy(): InternalRow = {
     val arr = new Array[Any](length)
     var i = 0

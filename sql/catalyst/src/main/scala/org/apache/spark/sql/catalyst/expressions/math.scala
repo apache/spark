@@ -98,6 +98,7 @@ abstract class BinaryMathExpression(f: (Double, Double) => Double, name: String)
   override def toString: String = s"$name($left, $right)"
 
   override def dataType: DataType = DoubleType
+  override def nullable: Boolean = true
 
   protected override def nullSafeEval(input1: Any, input2: Any): Any = {
     val result = f(input1.asInstanceOf[Double], input2.asInstanceOf[Double])
