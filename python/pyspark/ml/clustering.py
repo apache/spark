@@ -64,6 +64,18 @@ class KMeans(JavaEstimator, HasFeaturesCol, HasMaxIter, HasSeed):
     TypeError: Method setParams forces keyword arguments.
     """
 
+    # a placeholder to make it appear in the generated doc
+    k = Param(Params._dummy(), "k", "number of clusters to create")
+    epsilon = Param(Params._dummy(), "epsilon",
+                    "distance threshold within which " +
+                    "we've consider centers to have converged")
+    runs = Param(Params._dummy(), "runs", "number of runs of the algorithm to execute in parallel")
+    initMode = Param(Params._dummy(), "initMode",
+                     "the initialization algorithm. This can be either \"random\" to " +
+                     "choose random points as initial cluster centers, or \"k-means||\" " +
+                     "to use a parallel variant of k-means++")
+    initSteps = Param(Params._dummy(), "initSteps", "steps for k-means initialization mode")
+
     @keyword_only
     def __init__(self, k=2, maxIter=20, runs=1, epsilon=1e-4, initMode="k-means||", initStep=5):
         super(KMeans, self).__init__()
