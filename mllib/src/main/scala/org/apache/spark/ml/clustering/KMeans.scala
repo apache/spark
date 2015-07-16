@@ -135,7 +135,9 @@ class KMeansModel private[ml] (
 
 /**
  * :: Experimental ::
- * KMeans API for spark.ml Pipeline.
+ * K-means clustering with support for multiple parallel runs and a k-means++ like initialization
+ * mode (the k-means|| algorithm by Bahmani et al). When multiple concurrent runs are requested,
+ * they are executed together with joint passes over the data for efficiency.
  */
 @Experimental
 class KMeans(override val uid: String) extends Estimator[KMeansModel] with KMeansParams {
