@@ -25,7 +25,8 @@ class AggregateExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("Average") {
     val inputValues = Array(Int.MaxValue, null, 1000, Int.MinValue, 2)
-    val avg = Average(child = BoundReference(0, IntegerType, true)).withBufferOffset(2)
+    val avg = Average(child = BoundReference(0, IntegerType, true))
+    avg.bufferOffset = 2
     val inputRow = new GenericMutableRow(1)
     val buffer = new GenericMutableRow(4)
     avg.initialize(buffer)

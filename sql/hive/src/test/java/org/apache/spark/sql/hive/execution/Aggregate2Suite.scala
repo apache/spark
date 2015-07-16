@@ -154,6 +154,34 @@ class Aggregate2Suite extends QueryTest with BeforeAndAfterAll {
       Row(null) :: Nil)
 
   }
+
+  test("non-AlgebraicAggregate and AlgebraicAggregate aggreguate function") {
+    checkAnswer(
+      ctx.sql(
+        """
+          |SELECT mydoublesum(cast(value as double)), key, avg(value)
+          |FROM agg2
+          |GROUP BY key
+        """.stripMargin),
+      Row(60.0, 1, 20.0) :: Row(-1.0, 2, -0.5) :: Row(null, 3, null) :: Nil)
+
+    checkAnswer(
+      ctx.sql(
+        """
+          |SELECT
+          |  mydoublesum(cast(value as double) + 1.5 * key),
+          |  avg(value - key),
+          |  key,
+          |  mydoublesum(cast(value as double) - 1.5 * key),
+          |  avg(value)
+          |FROM agg2
+          |GROUP BY key
+        """.stripMargin),
+      Row(64.5, 19.0, 1, 55.5, 20.0) ::
+        Row(5.0, -2.5, 2, -7.0, -0.5) ::
+        Row(null, null, 3, null, null) :: Nil)
+  }
+
   override def afterAll(): Unit = {
     ctx.sql(s"set spark.sql.useAggregate2=$originalUseAggregate2")
   }

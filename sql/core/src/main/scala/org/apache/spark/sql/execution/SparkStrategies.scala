@@ -205,12 +205,6 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case logical.Aggregate(groupingExpressions, resultExpressions, child)
         if sqlContext.conf.useSqlAggregate2 =>
-        // 0. Make sure we can convert.
-        resultExpressions.foreach {
-          case agg1: AggregateExpression =>
-            sys.error(s"$agg1 is not supported. Please set spark.sql.useAggregate2 to false.")
-          case _ => // ok
-        }
         // 1. Extracts all distinct aggregate expressions from the resultExpressions.
         val aggregateExpressions = resultExpressions.flatMap { expr =>
           expr.collect {

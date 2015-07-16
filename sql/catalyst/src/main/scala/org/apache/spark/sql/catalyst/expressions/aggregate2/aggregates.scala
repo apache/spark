@@ -56,7 +56,7 @@ private[sql] case class AggregateExpression2(
   override def children: Seq[Expression] = aggregateFunction :: Nil
 
   override def dataType: DataType = aggregateFunction.dataType
-  override def foldable: Boolean = aggregateFunction.foldable
+  override def foldable: Boolean = false
   override def nullable: Boolean = aggregateFunction.nullable
 
   override def toString: String = s"(${aggregateFunction}2,mode=$mode,isDistinct=$isDistinct)"
@@ -75,16 +75,15 @@ abstract class AggregateFunction2
 
   var bufferOffset: Int = 0
 
-  def withBufferOffset(newBufferOffset: Int): AggregateFunction2 = {
-    bufferOffset = newBufferOffset
-    this
-  }
+  override def foldable: Boolean = false
 
   /** The schema of the aggregation buffer. */
   def bufferSchema: StructType
 
   /** Attributes of fields in bufferSchema. */
   def bufferAttributes: Seq[Attribute]
+
+  def rightBufferSchema: Seq[Attribute]
 
   def initialize(buffer: MutableRow): Unit
 
@@ -100,7 +99,7 @@ case class MyDoubleSum(child: Expression) extends AggregateFunction2 {
     StructType(StructField("currentSum", DoubleType, true) :: Nil)
 
   override val bufferAttributes: Seq[Attribute] = bufferSchema.toAttributes
-
+  override lazy val rightBufferSchema = bufferAttributes.map(_.newInstance())
   override def initialize(buffer: MutableRow): Unit = {
     buffer.update(bufferOffset, null)
   }
@@ -152,17 +151,7 @@ abstract class AlgebraicAggregate extends AggregateFunction2 with Serializable {
   val mergeExpressions: Seq[Expression]
   val evaluateExpression: Expression
 
-  /** Must be filled in by the executors */
-  var inputSchema: Seq[Attribute] = _
-
-  override def withBufferOffset(newBufferOffset: Int): AlgebraicAggregate = {
-    bufferOffset = newBufferOffset
-    this
-  }
-
-  def offsetExpressions: Seq[Attribute] = Seq.fill(bufferOffset)(AttributeReference("offset", NullType)())
-
-  lazy val rightBufferSchema = bufferAttributes.map(_.newInstance())
+  override lazy val rightBufferSchema = bufferAttributes.map(_.newInstance())
   implicit class RichAttribute(a: AttributeReference) {
     def left = a
     def right = rightBufferSchema(bufferAttributes.indexOf(a))
