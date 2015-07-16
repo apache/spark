@@ -29,7 +29,7 @@ case class ScalaUDF(
     function: AnyRef,
     dataType: DataType,
     children: Seq[Expression],
-    inputTypes: Seq[DataType] = Nil) extends Expression with ExpectsInputTypes {
+    inputTypes: Seq[DataType] = Nil) extends Expression with ImplicitCastInputTypes {
 
   override def nullable: Boolean = true
 

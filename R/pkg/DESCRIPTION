@@ -33,4 +33,3 @@ Collate:
     'serialize.R'
     'sparkR.R'
     'utils.R'
-    'zzz.R'

@@ -187,6 +187,23 @@ setMethod("substr", signature(x = "Column"),
             column(jc)
           })
 
+#' between
+#'
+#' Test if the column is between the lower bound and upper bound, inclusive.
+#'
+#' @rdname column
+#'
+#' @param bounds lower and upper bounds
+setMethod("between", signature(x = "Column"),
+          function(x, bounds) {
+            if (is.vector(bounds) && length(bounds) == 2) {
+              jc <- callJMethod(x@jc, "between", bounds[1], bounds[2])
+              column(jc)
+            } else {
+              stop("bounds should be a vector of lower and upper bounds")
+            }
+          })
+
 #' Casts the column to a different data type.
 #'
 #' @rdname column

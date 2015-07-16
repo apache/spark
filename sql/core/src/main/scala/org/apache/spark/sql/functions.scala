@@ -599,7 +599,7 @@ object functions {
   /**
    * Creates a new row for each element in the given array or map column.
    */
-   def explode(e: Column): Column = Explode(e.expr)
+  def explode(e: Column): Column = Explode(e.expr)
 
   /**
    * Converts a string exprsesion to lower case.
@@ -1073,15 +1073,43 @@ object functions {
   def floor(columnName: String): Column = floor(Column(columnName))
 
   /**
-   * Computes hex value of the given column
+   * Returns the greatest value of the list of values, skipping null values.
+   * This function takes at least 2 parameters. It will return null iff all parameters are null.
    *
-   * @group math_funcs
+   * @group normal_funcs
    * @since 1.5.0
    */
+  @scala.annotation.varargs
+  def greatest(exprs: Column*): Column = if (exprs.length < 2) {
+    sys.error("GREATEST takes at least 2 parameters")
+  } else {
+    Greatest(exprs.map(_.expr))
+  }
+
+  /**
+   * Returns the greatest value of the list of column names, skipping null values.
+   * This function takes at least 2 parameters. It will return null iff all parameters are null.
+   *
+   * @group normal_funcs
+   * @since 1.5.0
+   */
+  @scala.annotation.varargs
+  def greatest(columnName: String, columnNames: String*): Column = if (columnNames.isEmpty) {
+    sys.error("GREATEST takes at least 2 parameters")
+  } else {
+    greatest((columnName +: columnNames).map(Column.apply): _*)
+  }
+
+  /**
+    * Computes hex value of the given column.
+    *
+    * @group math_funcs
+    * @since 1.5.0
+    */
   def hex(column: Column): Column = Hex(column.expr)
 
   /**
-   * Computes hex value of the given input
+   * Computes hex value of the given input.
    *
    * @group math_funcs
    * @since 1.5.0
@@ -1170,6 +1198,34 @@ object functions {
    * @since 1.4.0
    */
   def hypot(l: Double, rightName: String): Column = hypot(l, Column(rightName))
+
+  /**
+   * Returns the least value of the list of values, skipping null values.
+   * This function takes at least 2 parameters. It will return null iff all parameters are null.
+   *
+   * @group normal_funcs
+   * @since 1.5.0
+   */
+  @scala.annotation.varargs
+  def least(exprs: Column*): Column = if (exprs.length < 2) {
+    sys.error("LEAST takes at least 2 parameters")
+  } else {
+    Least(exprs.map(_.expr))
+  }
+
+  /**
+   * Returns the least value of the list of column names, skipping null values.
+   * This function takes at least 2 parameters. It will return null iff all parameters are null.
+   *
+   * @group normal_funcs
+   * @since 1.5.0
+   */
+  @scala.annotation.varargs
+  def least(columnName: String, columnNames: String*): Column = if (columnNames.isEmpty) {
+    sys.error("LEAST takes at least 2 parameters")
+  } else {
+    least((columnName +: columnNames).map(Column.apply): _*)
+  }
 
   /**
    * Computes the natural logarithm of the given value.
@@ -1316,6 +1372,23 @@ object functions {
   def pow(l: Double, rightName: String): Column = pow(l, Column(rightName))
 
   /**
+   * Returns the positive value of dividend mod divisor.
+   *
+   * @group math_funcs
+   * @since 1.5.0
+   */
+  def pmod(dividend: Column, divisor: Column): Column = Pmod(dividend.expr, divisor.expr)
+
+  /**
+   * Returns the positive value of dividend mod divisor.
+   *
+   * @group math_funcs
+   * @since 1.5.0
+   */
+  def pmod(dividendColName: String, divisorColName: String): Column =
+    pmod(Column(dividendColName), Column(divisorColName))
+
+  /**
    * Returns the double value that is closest in value to the argument and
    * is equal to a mathematical integer.
    *
@@ -1332,6 +1405,38 @@ object functions {
    * @since 1.4.0
    */
   def rint(columnName: String): Column = rint(Column(columnName))
+
+  /**
+   * Returns the value of the column `e` rounded to 0 decimal places.
+   *
+   * @group math_funcs
+   * @since 1.5.0
+   */
+  def round(e: Column): Column = round(e.expr, 0)
+
+  /**
+   * Returns the value of the given column rounded to 0 decimal places.
+   *
+   * @group math_funcs
+   * @since 1.5.0
+   */
+  def round(columnName: String): Column = round(Column(columnName), 0)
+
+  /**
+   * Returns the value of `e` rounded to `scale` decimal places.
+   *
+   * @group math_funcs
+   * @since 1.5.0
+   */
+  def round(e: Column, scale: Int): Column = Round(e.expr, Literal(scale))
+
+  /**
+   * Returns the value of the given column rounded to `scale` decimal places.
+   *
+   * @group math_funcs
+   * @since 1.5.0
+   */
+  def round(columnName: String, scale: Int): Column = round(Column(columnName), scale)
 
   /**
    * Shift the the given value numBits left. If the given value is a long value, this function
@@ -1580,20 +1685,44 @@ object functions {
   //////////////////////////////////////////////////////////////////////////////////////////////
 
   /**
-   * Computes the length of a given string value.
+   * Computes the length of a given string / binary value.
    *
    * @group string_funcs
    * @since 1.5.0
    */
-  def strlen(e: Column): Column = StringLength(e.expr)
+  def length(e: Column): Column = Length(e.expr)
 
   /**
-   * Computes the length of a given string column.
+   * Computes the length of a given string / binary column.
    *
    * @group string_funcs
    * @since 1.5.0
    */
-  def strlen(columnName: String): Column = strlen(Column(columnName))
+  def length(columnName: String): Column = length(Column(columnName))
+
+  /**
+   * Formats the number X to a format like '#,###,###.##', rounded to d decimal places,
+   * and returns the result as a string.
+   * If d is 0, the result has no decimal point or fractional part.
+   * If d < 0, the result will be null.
+   *
+   * @group string_funcs
+   * @since 1.5.0
+   */
+  def format_number(x: Column, d: Int): Column = FormatNumber(x.expr, lit(d).expr)
+
+  /**
+   * Formats the number X to a format like '#,###,###.##', rounded to d decimal places,
+   * and returns the result as a string.
+   * If d is 0, the result has no decimal point or fractional part.
+   * If d < 0, the result will be null.
+   *
+   * @group string_funcs
+   * @since 1.5.0
+   */
+  def format_number(columnXName: String, d: Int): Column = {
+    format_number(Column(columnXName), d)
+  }
 
   /**
    * Computes the Levenshtein distance of the two given strings.
