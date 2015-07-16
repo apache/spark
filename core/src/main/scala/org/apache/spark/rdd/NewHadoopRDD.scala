@@ -142,7 +142,9 @@ class NewHadoopRDD[K, V](
         if (!finished && !havePair) {
           finished = !reader.nextKeyValue
           if (finished) {
+            // Close reader and release it
             reader.close()
+            reader = null
           }
           havePair = !finished
         }
@@ -164,6 +166,7 @@ class NewHadoopRDD[K, V](
         try {
           if (!finished) {
             reader.close()
+            reader = null
           }
           if (bytesReadCallback.isDefined) {
             inputMetrics.updateBytesRead()
