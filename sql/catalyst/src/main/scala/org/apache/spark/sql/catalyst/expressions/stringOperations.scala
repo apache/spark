@@ -685,9 +685,13 @@ case class FormatNumber(x: Expression, d: Expression)
   override def dataType: DataType = StringType
   override def inputTypes: Seq[AbstractDataType] = Seq(NumericType, IntegerType)
 
+  // Associated with the pattern, for the last d value, and we will update the
+  // pattern (DecimalFormat) once the new coming d value differ with the last one.
   @transient
   private var lastDValue: Int = -100
 
+  // A cached DecimalFormat, for performance concern, we will change it
+  // only if the d value changed.
   @transient
   private val pattern: StringBuffer = new StringBuffer()
 
