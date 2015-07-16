@@ -42,6 +42,9 @@ case class ExprId(id: Long)
  */
 trait NamedExpression extends Expression { self: Product =>
 
+  /** We should never fold named expressions in order to not remove the alias. */
+  override def foldable: Boolean = false
+
   def name: String
   def exprId: ExprId
 
