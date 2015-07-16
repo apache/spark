@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.util;
 
+import java.util.Arrays;
+
 /**
  * A object pool stores a collection of objects in array, then they can be referenced by the
  * pool plus an index.
@@ -74,5 +76,13 @@ public class ObjectPool {
   public void replace(int idx, Object obj) {
     assert (idx < numObj);
     objects[idx] = obj;
+  }
+
+  /**
+   * Remove all the objects in the pool.
+   */
+  public void clear() {
+    Arrays.fill(objects, 0, numObj, null);
+    numObj = 0;
   }
 }

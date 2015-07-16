@@ -21,9 +21,10 @@ import org.apache.spark.TaskContext
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.trees._
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.codegen.BaseMutableProjection
 import org.apache.spark.sql.catalyst.plans.physical._
+import org.apache.spark.sql.catalyst.trees._
 import org.apache.spark.sql.types._
 
 case class AggregateEvaluation(
@@ -282,9 +283,9 @@ case class GeneratedAggregate(
       } else if (unsafeEnabled) {
         log.info("Using Unsafe-based aggregator")
         val aggregationMap = new UnsafeFixedWidthAggregationMap(
-          newAggregationBuffer,
-          new UnsafeRowConverter(groupKeySchema),
-          new UnsafeRowConverter(aggregationBufferSchema),
+          initialValues.map(BindReferences.bindReference(_, child.output)),
+          groupingExpressions.map(BindReferences.bindReference(_, child.output)),
+          updateProjection.asInstanceOf[BaseMutableProjection],
           TaskContext.get.taskMemoryManager(),
           1024 * 16, // initial capacity
           false // disable tracking of performance metrics
@@ -292,9 +293,7 @@ case class GeneratedAggregate(
 
         while (iter.hasNext) {
           val currentRow: InternalRow = iter.next()
-          val groupKey: InternalRow = groupProjection(currentRow)
-          val aggregationBuffer = aggregationMap.getAggregationBuffer(groupKey)
-          updateProjection.target(aggregationBuffer)(joinedRow(aggregationBuffer, currentRow))
+          aggregationMap.update(currentRow)
         }
 
         new Iterator[InternalRow] {

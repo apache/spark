@@ -19,22 +19,19 @@ package org.apache.spark.sql.execution;
 
 import java.io.IOException;
 
+import com.google.common.annotations.VisibleForTesting;
 import scala.collection.Iterator;
 import scala.math.Ordering;
-
-import com.google.common.annotations.VisibleForTesting;
 
 import org.apache.spark.SparkEnv;
 import org.apache.spark.TaskContext;
 import org.apache.spark.sql.AbstractScalaRowIterator;
 import org.apache.spark.sql.catalyst.InternalRow;
-import org.apache.spark.sql.catalyst.expressions.ObjectUnsafeColumnWriter;
-import org.apache.spark.sql.catalyst.expressions.UnsafeColumnWriter;
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow;
-import org.apache.spark.sql.catalyst.expressions.UnsafeRowConverter;
+import org.apache.spark.sql.catalyst.expressions.codegen.UnsafeProjection;
+import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection;
 import org.apache.spark.sql.catalyst.util.ObjectPool;
-import org.apache.spark.sql.types.StructField;
-import org.apache.spark.sql.types.StructType;
+import org.apache.spark.sql.types.*;
 import org.apache.spark.unsafe.PlatformDependent;
 import org.apache.spark.util.collection.unsafe.sort.PrefixComparator;
 import org.apache.spark.util.collection.unsafe.sort.RecordComparator;
@@ -52,10 +49,11 @@ final class UnsafeExternalRowSorter {
   private long numRowsInserted = 0;
 
   private final StructType schema;
-  private final UnsafeRowConverter rowConverter;
+  private final UnsafeProjection projection;
   private final PrefixComputer prefixComputer;
   private final UnsafeExternalSorter sorter;
   private byte[] rowConversionBuffer = new byte[1024 * 8];
+  private final UnsafeRow unsafeRow = new UnsafeRow(null);
 
   public static abstract class PrefixComputer {
     abstract long computePrefix(InternalRow row);
@@ -67,7 +65,7 @@ final class UnsafeExternalRowSorter {
       PrefixComparator prefixComparator,
       PrefixComputer prefixComputer) throws IOException {
     this.schema = schema;
-    this.rowConverter = new UnsafeRowConverter(schema);
+    this.projection = GenerateUnsafeProjection.generate(schema);
     this.prefixComputer = prefixComputer;
     final SparkEnv sparkEnv = SparkEnv.get();
     final TaskContext taskContext = TaskContext.get();
@@ -94,18 +92,12 @@ final class UnsafeExternalRowSorter {
 
   @VisibleForTesting
   void insertRow(InternalRow row) throws IOException {
-    final int sizeRequirement = rowConverter.getSizeRequirement(row);
-    if (sizeRequirement > rowConversionBuffer.length) {
-      rowConversionBuffer = new byte[sizeRequirement];
-    }
-    final int bytesWritten = rowConverter.writeRow(
-      row, rowConversionBuffer, PlatformDependent.BYTE_ARRAY_OFFSET, sizeRequirement, null);
-    assert (bytesWritten == sizeRequirement);
+    UnsafeRow unsafeRow = projection.apply(row);
     final long prefix = prefixComputer.computePrefix(row);
     sorter.insertRecord(
       rowConversionBuffer,
       PlatformDependent.BYTE_ARRAY_OFFSET,
-      sizeRequirement,
+      unsafeRow.getSizeInBytes(),
       prefix
     );
     numRowsInserted++;
@@ -135,7 +127,7 @@ final class UnsafeExternalRowSorter {
       return new AbstractScalaRowIterator() {
 
         private final int numFields = schema.length();
-        private final UnsafeRow row = new UnsafeRow();
+        private final UnsafeRow row = new UnsafeRow(null);
 
         @Override
         public boolean hasNext() {
@@ -150,8 +142,7 @@ final class UnsafeExternalRowSorter {
               sortedIterator.getBaseObject(),
               sortedIterator.getBaseOffset(),
               numFields,
-              sortedIterator.getRecordLength(),
-              null);
+              sortedIterator.getRecordLength());
             if (!hasNext()) {
               row.copy(); // so that we don't have dangling pointers to freed page
               cleanupResources();
@@ -186,7 +177,9 @@ final class UnsafeExternalRowSorter {
   public static boolean supportsSchema(StructType schema) {
     // TODO: add spilling note to explain why we do this for now:
     for (StructField field : schema.fields()) {
-      if (UnsafeColumnWriter.forType(field.dataType()) instanceof ObjectUnsafeColumnWriter) {
+      DataType dt = field.dataType();
+      if (dt instanceof StructType || dt instanceof ArrayType || dt instanceof MapType
+        || dt instanceof DecimalType) {
         return false;
       }
     }
@@ -197,19 +190,21 @@ final class UnsafeExternalRowSorter {
     private final Ordering<InternalRow> ordering;
     private final int numFields;
     private final ObjectPool objPool;
-    private final UnsafeRow row1 = new UnsafeRow();
-    private final UnsafeRow row2 = new UnsafeRow();
+    private final UnsafeRow row1;
+    private final UnsafeRow row2;
 
     public RowComparator(Ordering<InternalRow> ordering, int numFields, ObjectPool objPool) {
       this.numFields = numFields;
       this.ordering = ordering;
       this.objPool = objPool;
+      this.row1 = new UnsafeRow(objPool);
+      this.row2 = new UnsafeRow(objPool);
     }
 
     @Override
     public int compare(Object baseObj1, long baseOff1, Object baseObj2, long baseOff2) {
-      row1.pointTo(baseObj1, baseOff1, numFields, -1, objPool);
-      row2.pointTo(baseObj2, baseOff2, numFields, -1, objPool);
+      row1.pointTo(baseObj1, baseOff1, numFields, -1);
+      row2.pointTo(baseObj2, baseOff2, numFields, -1);
       return ordering.compare(row1, row2);
     }
   }
