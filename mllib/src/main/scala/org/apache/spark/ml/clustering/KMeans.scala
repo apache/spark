@@ -148,8 +148,7 @@ class KMeans(override val uid: String) extends Estimator[KMeansModel] with KMean
     runs -> 1,
     initMode -> MLlibKMeans.K_MEANS_PARALLEL,
     initSteps -> 5,
-    epsilon -> 1e-4,
-    seed -> Utils.random.nextLong())
+    epsilon -> 1e-4)
 
   override def copy(extra: ParamMap): Estimator[KMeansModel] = defaultCopy(extra)
 
