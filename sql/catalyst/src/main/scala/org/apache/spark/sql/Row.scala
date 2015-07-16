@@ -152,7 +152,7 @@ trait Row extends Serializable {
    *   StructType -> org.apache.spark.sql.Row
    * }}}
    */
-  def apply(i: Int): Any
+  def apply(i: Int): Any = get(i)
 
   /**
    * Returns the value at position i. If the value is null, null is returned. The following
@@ -177,10 +177,10 @@ trait Row extends Serializable {
    *   StructType -> org.apache.spark.sql.Row
    * }}}
    */
-  def get(i: Int): Any = apply(i)
+  def get(i: Int): Any
 
   /** Checks whether the value at position i is null. */
-  def isNullAt(i: Int): Boolean = apply(i) == null
+  def isNullAt(i: Int): Boolean = get(i) == null
 
   /**
    * Returns the value at position i as a primitive boolean.
@@ -312,7 +312,7 @@ trait Row extends Serializable {
    *
    * @throws ClassCastException when data type does not match.
    */
-  def getAs[T](i: Int): T = apply(i).asInstanceOf[T]
+  def getAs[T](i: Int): T = get(i).asInstanceOf[T]
 
   /**
    * Returns the value of a given fieldName.
@@ -381,8 +381,8 @@ trait Row extends Serializable {
         return false
       }
       if (!isNullAt(i)) {
-        val o1 = apply(i)
-        val o2 = other.apply(i)
+        val o1 = get(i)
+        val o2 = other.get(i)
         if (o1.isInstanceOf[Array[Byte]]) {
           // handle equality of Array[Byte]
           val b1 = o1.asInstanceOf[Array[Byte]]
@@ -408,7 +408,7 @@ trait Row extends Serializable {
         if (isNullAt(i)) {
           0
         } else {
-          apply(i) match {
+          get(i) match {
             case b: Boolean => if (b) 0 else 1
             case b: Byte => b.toInt
             case s: Short => s.toInt
@@ -438,7 +438,7 @@ trait Row extends Serializable {
     val values = new Array[Any](n)
     var i = 0
     while (i < n) {
-      values.update(i, apply(i))
+      values.update(i, get(i))
       i += 1
     }
     values.toSeq

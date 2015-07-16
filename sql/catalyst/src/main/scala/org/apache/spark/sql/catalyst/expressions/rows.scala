@@ -47,7 +47,7 @@ abstract class MutableRow extends InternalRow {
     val arr = new Array[Any](length)
     var i = 0
     while (i < length) {
-      arr(i) = apply(i)
+      arr(i) = get(i)
       i += 1
     }
     new GenericInternalRow(arr)
@@ -66,7 +66,7 @@ trait ArrayBackedRow {
 
   def length: Int = values.length
 
-  override def apply(i: Int): Any = values(i)
+  override def get(i: Int): Any = values(i)
 
   def setNullAt(i: Int): Unit = { values(i) = null}
 

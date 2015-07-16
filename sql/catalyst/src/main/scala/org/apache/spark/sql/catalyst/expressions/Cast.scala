@@ -56,7 +56,6 @@ object Cast {
     case (_, DateType) => true
 
     case (StringType, IntervalType) => true
-    case (IntervalType, StringType) => true
 
     case (StringType, _: NumericType) => true
     case (BooleanType, _: NumericType) => true

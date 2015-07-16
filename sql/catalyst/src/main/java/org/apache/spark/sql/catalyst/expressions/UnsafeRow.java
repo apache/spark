@@ -250,7 +250,7 @@ public final class UnsafeRow extends MutableRow {
    * Returns the object for column `i`, which should not be primitive type.
    */
   @Override
-  public Object apply(int i) {
+  public Object get(int i) {
     assertIndexIsValid(i);
     if (isNullAt(i)) {
       return null;
