@@ -18,6 +18,7 @@
 package org.apache.spark.sql.parquet
 
 import java.net.URI
+import java.util.logging.{Level, Logger => JLogger}
 import java.util.{List => JList}
 
 import scala.collection.JavaConversions._
@@ -30,10 +31,11 @@ import org.apache.hadoop.io.Writable
 import org.apache.hadoop.mapreduce._
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat
 import org.apache.parquet.filter2.predicate.FilterApi
-import org.apache.parquet.hadoop._
 import org.apache.parquet.hadoop.metadata.CompressionCodecName
 import org.apache.parquet.hadoop.util.ContextUtil
+import org.apache.parquet.hadoop.{ParquetOutputCommitter, ParquetRecordReader, _}
 import org.apache.parquet.schema.MessageType
+import org.apache.parquet.{Log => ParquetLog}
 
 import org.apache.spark.{Logging, Partition => SparkPartition, SparkException}
 import org.apache.spark.broadcast.Broadcast
@@ -240,7 +242,7 @@ private[sql] class ParquetRelation2(
     // Sets compression scheme
     conf.set(
       ParquetOutputFormat.COMPRESSION,
-      ParquetRelation
+      ParquetRelation2
         .shortParquetCompressionCodecNames
         .getOrElse(
           sqlContext.conf.parquetCompressionCodec.toUpperCase,
@@ -464,7 +466,7 @@ private[sql] object ParquetRelation2 extends Logging {
       assumeInt96IsTimestamp: Boolean,
       followParquetFormatSpec: Boolean)(job: Job): Unit = {
     val conf = job.getConfiguration
-    conf.set(ParquetInputFormat.READ_SUPPORT_CLASS, classOf[RowReadSupport].getName)
+    conf.set(ParquetInputFormat.READ_SUPPORT_CLASS, classOf[CatalystReadSupport].getName)
 
     // Try to push down filters when filter push-down is enabled.
     if (parquetFilterPushDown) {
@@ -477,14 +479,14 @@ private[sql] object ParquetRelation2 extends Logging {
         .foreach(ParquetInputFormat.setFilterPredicate(conf, _))
     }
 
-    conf.set(RowReadSupport.SPARK_ROW_REQUESTED_SCHEMA, {
+    conf.set(CatalystReadSupport.SPARK_ROW_REQUESTED_SCHEMA, {
       val requestedSchema = StructType(requiredColumns.map(dataSchema(_)))
-      ParquetTypesConverter.convertToString(requestedSchema.toAttributes)
+      CatalystSchemaConverter.checkFieldNames(requestedSchema).json
     })
 
     conf.set(
       RowWriteSupport.SPARK_ROW_SCHEMA,
-      ParquetTypesConverter.convertToString(dataSchema.toAttributes))
+      CatalystSchemaConverter.checkFieldNames(dataSchema).json)
 
     // Tell FilteringParquetRowInputFormat whether it's okay to cache Parquet and FS metadata
     conf.setBoolean(SQLConf.PARQUET_CACHE_METADATA.key, useMetadataCache)
@@ -509,12 +511,12 @@ private[sql] object ParquetRelation2 extends Logging {
       footers: Seq[Footer], sqlContext: SQLContext): Option[StructType] = {
 
     def parseParquetSchema(schema: MessageType): StructType = {
-      StructType.fromAttributes(
-        // TODO Really no need to use `Attribute` here, we only need to know the data type.
-        ParquetTypesConverter.convertToAttributes(
-          schema,
-          sqlContext.conf.isParquetBinaryAsString,
-          sqlContext.conf.isParquetINT96AsTimestamp))
+      val converter = new CatalystSchemaConverter(
+        sqlContext.conf.isParquetBinaryAsString,
+        sqlContext.conf.isParquetBinaryAsString,
+        sqlContext.conf.followParquetFormatSpec)
+
+      converter.convert(schema)
     }
 
     val seen = mutable.HashSet[String]()
@@ -523,7 +525,7 @@ private[sql] object ParquetRelation2 extends Logging {
       val serializedSchema = metadata
         .getKeyValueMetaData
         .toMap
-        .get(RowReadSupport.SPARK_METADATA_KEY)
+        .get(CatalystReadSupport.SPARK_METADATA_KEY)
       if (serializedSchema.isEmpty) {
         // Falls back to Parquet schema if no Spark SQL schema found.
         Some(parseParquetSchema(metadata.getSchema))
@@ -707,7 +709,7 @@ private[sql] object ParquetRelation2 extends Logging {
     fileMetaData
       .getKeyValueMetaData
       .toMap
-      .get(RowReadSupport.SPARK_METADATA_KEY)
+      .get(CatalystReadSupport.SPARK_METADATA_KEY)
       .flatMap(deserializeSchemaString)
       .getOrElse(converter.convert(fileMetaData.getSchema))
   }
@@ -729,4 +731,46 @@ private[sql] object ParquetRelation2 extends Logging {
         Failure(cause)
     }.toOption
   }
+
+  def enableLogForwarding() {
+    // Note: the org.apache.parquet.Log class has a static initializer that
+    // sets the java.util.logging Logger for "org.apache.parquet". This
+    // checks first to see if there's any handlers already set
+    // and if not it creates them. If this method executes prior
+    // to that class being loaded then:
+    //  1) there's no handlers installed so there's none to
+    // remove. But when it IS finally loaded the desired affect
+    // of removing them is circumvented.
+    //  2) The parquet.Log static initializer calls setUseParentHandlers(false)
+    // undoing the attempt to override the logging here.
+    //
+    // Therefore we need to force the class to be loaded.
+    // This should really be resolved by Parquet.
+    Utils.classForName(classOf[ParquetLog].getName)
+
+    // Note: Logger.getLogger("parquet") has a default logger
+    // that appends to Console which needs to be cleared.
+    val parquetLogger = JLogger.getLogger(classOf[ParquetLog].getPackage.getName)
+    parquetLogger.getHandlers.foreach(parquetLogger.removeHandler)
+    parquetLogger.setUseParentHandlers(true)
+
+    // Disables a WARN log message in ParquetOutputCommitter.  We first ensure that
+    // ParquetOutputCommitter is loaded and the static LOG field gets initialized.
+    // See https://issues.apache.org/jira/browse/SPARK-5968 for details
+    Utils.classForName(classOf[ParquetOutputCommitter].getName)
+    JLogger.getLogger(classOf[ParquetOutputCommitter].getName).setLevel(Level.OFF)
+
+    // Similar as above, disables a unnecessary WARN log message in ParquetRecordReader.
+    // See https://issues.apache.org/jira/browse/PARQUET-220 for details
+    Utils.classForName(classOf[ParquetRecordReader[_]].getName)
+    JLogger.getLogger(classOf[ParquetRecordReader[_]].getName).setLevel(Level.OFF)
+  }
+
+  // The parquet compression short names
+  val shortParquetCompressionCodecNames = Map(
+    "NONE"         -> CompressionCodecName.UNCOMPRESSED,
+    "UNCOMPRESSED" -> CompressionCodecName.UNCOMPRESSED,
+    "SNAPPY"       -> CompressionCodecName.SNAPPY,
+    "GZIP"         -> CompressionCodecName.GZIP,
+    "LZO"          -> CompressionCodecName.LZO)
 }

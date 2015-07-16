@@ -564,10 +564,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with BeforeA
   }
 
   test("scan a parquet table created through a CTAS statement") {
-    withSQLConf(
-      HiveContext.CONVERT_METASTORE_PARQUET.key -> "true",
-      SQLConf.PARQUET_USE_DATA_SOURCE_API.key -> "true") {
-
+    withSQLConf(HiveContext.CONVERT_METASTORE_PARQUET.key -> "true") {
       withTempTable("jt") {
         (1 to 10).map(i => i -> s"str$i").toDF("a", "b").registerTempTable("jt")
 

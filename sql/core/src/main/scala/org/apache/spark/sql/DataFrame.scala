@@ -1615,11 +1615,7 @@ class DataFrame private[sql](
    */
   @deprecated("Use write.parquet(path)", "1.4.0")
   def saveAsParquetFile(path: String): Unit = {
-    if (sqlContext.conf.parquetUseDataSourceApi) {
-      write.format("parquet").mode(SaveMode.ErrorIfExists).save(path)
-    } else {
-      sqlContext.executePlan(WriteToFile(path, logicalPlan)).toRdd
-    }
+    write.format("parquet").mode(SaveMode.ErrorIfExists).save(path)
   }
 
   /**
