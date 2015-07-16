@@ -25,7 +25,7 @@ import org.apache.spark.util.collection.OpenHashSet
 /**
  * When planning take() or collect() operations, this special node that is inserted at the top of
  * the logical plan before invoking the query planner.
- * 
+ *
  * Rules can pattern-match on this node in order to apply transformations that only take effect
  * at the top of the logical query plan.
  */
