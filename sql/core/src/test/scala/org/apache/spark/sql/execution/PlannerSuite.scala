@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.TestData._
 import org.apache.spark.sql.catalyst.plans._
+import org.apache.spark.sql.catalyst.plans.logical.ReturnAnswer
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoin, ShuffledHashJoin}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.TestSQLContext._
@@ -149,7 +150,7 @@ class PlannerSuite extends SparkFunSuite {
   }
 
   test("efficient physical planning of terminal limit operators") {
-    val query = testData.select('value).limit(2).logicalPlan
+    val query = ReturnAnswer(testData.select('value).limit(2).logicalPlan)
     val planned = BasicOperators(query)
     assert(planned.head.isInstanceOf[CollectLimit])
   }
