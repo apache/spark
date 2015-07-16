@@ -280,6 +280,17 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    */
   def parquet(path: String): Unit = format("parquet").save(path)
 
+  /**
+   * Saves the content of the [[DataFrame]] in ORC format at the specified path.
+   * This is equivalent to:
+   * {{{
+   *   format("orc").save(path)
+   * }}}
+   *
+   * @since 1.5.0
+   */
+  def orc(path: String): Unit = format("orc").save(path)
+
   ///////////////////////////////////////////////////////////////////////////////////////
   // Builder pattern config options
   ///////////////////////////////////////////////////////////////////////////////////////
