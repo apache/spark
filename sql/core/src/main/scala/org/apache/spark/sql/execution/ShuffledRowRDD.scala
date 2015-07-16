@@ -17,12 +17,12 @@
 
 package org.apache.spark.sql.execution
 
+import scala.reflect.ClassTag
+
 import org.apache.spark._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.sql.types.DataType
-
-import scala.reflect.ClassTag
 
 private class ShuffledRowRDDPartition(val idx: Int) extends Partition {
   override val index: Int = idx
