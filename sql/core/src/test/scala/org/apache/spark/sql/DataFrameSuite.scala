@@ -17,18 +17,22 @@
 
 package org.apache.spark.sql
 
+import java.io.File
+
 import scala.language.postfixOps
 
 import org.apache.spark.sql.catalyst.plans.logical.OneRowRelation
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.test.{ExamplePointUDT, ExamplePoint}
+import org.apache.spark.sql.test.{SQLTestUtils, ExamplePointUDT, ExamplePoint}
 
-class DataFrameSuite extends QueryTest {
+class DataFrameSuite extends QueryTest with SQLTestUtils {
   import org.apache.spark.sql.TestData._
 
   lazy val ctx = org.apache.spark.sql.test.TestSQLContext
   import ctx.implicits._
+
+  def sqlContext: SQLContext = ctx
 
   test("analysis error should be eagerly reported") {
     val oldSetting = ctx.conf.dataFrameEagerAnalysis
@@ -763,41 +767,47 @@ class DataFrameSuite extends QueryTest {
   }
 
   test("SPARK-6941: Better error message for inserting into RDD-based Table") {
-    val df = Seq(Tuple1(1)).toDF()
-    val insertion = Seq(Tuple1(2)).toDF("col")
+    withTempDir { dir =>
 
-    // pass case: parquet table (HadoopFsRelation)
-    df.write.mode(SaveMode.Overwrite).parquet("tmp_parquet")
-    val pdf = ctx.read.parquet("tmp_parquet")
-    pdf.registerTempTable("parquet_base")
-    insertion.write.insertInto("parquet_base")
+      val tempParquetFile = new File(dir, "tmp_parquet")
+      val tempJsonFile = new File(dir, "tmp_json")
 
-    // pass case: json table (InsertableRelation)
-    df.write.mode(SaveMode.Overwrite).json("tmp_json")
-    val jdf = ctx.read.json("tmp_json")
-    jdf.registerTempTable("json_base")
-    insertion.write.mode(SaveMode.Overwrite).insertInto("json_base")
+      val df = Seq(Tuple1(1)).toDF()
+      val insertion = Seq(Tuple1(2)).toDF("col")
 
-    // error cases: insert into a RDD
-    df.registerTempTable("rdd_base")
-    val e1 = intercept[AnalysisException] {
-      insertion.write.insertInto("rdd_base")
+      // pass case: parquet table (HadoopFsRelation)
+      df.write.mode(SaveMode.Overwrite).parquet(tempParquetFile.getCanonicalPath)
+      val pdf = ctx.read.parquet(tempParquetFile.getCanonicalPath)
+      pdf.registerTempTable("parquet_base")
+      insertion.write.insertInto("parquet_base")
+
+      // pass case: json table (InsertableRelation)
+      df.write.mode(SaveMode.Overwrite).json(tempJsonFile.getCanonicalPath)
+      val jdf = ctx.read.json(tempJsonFile.getCanonicalPath)
+      jdf.registerTempTable("json_base")
+      insertion.write.mode(SaveMode.Overwrite).insertInto("json_base")
+
+      // error cases: insert into an RDD
+      df.registerTempTable("rdd_base")
+      val e1 = intercept[AnalysisException] {
+        insertion.write.insertInto("rdd_base")
+      }
+      assert(e1.getMessage.contains("Inserting into an RDD-based table is not allowed."))
+
+      // error case: insert into a logical plan that is not a LeafNode
+      val indirectDS = pdf.select("_1").filter($"_1" > 5)
+      indirectDS.registerTempTable("indirect_ds")
+      val e2 = intercept[AnalysisException] {
+        insertion.write.insertInto("indirect_ds")
+      }
+      assert(e2.getMessage.contains("Inserting into an RDD-based table is not allowed."))
+
+      // error case: insert into an OneRowRelation
+      new DataFrame(ctx, OneRowRelation).registerTempTable("one_row")
+      val e3 = intercept[AnalysisException] {
+        insertion.write.insertInto("one_row")
+      }
+      assert(e3.getMessage.contains("Inserting into an RDD-based table is not allowed."))
     }
-    assert(e1.getMessage.contains("Inserting into an RDD-based table is not allowed."))
-
-    // error case: insert into a RDD based on data source
-    val indirectDS = pdf.select("_1").filter($"_1" > 5)
-    indirectDS.registerTempTable("indirect_ds")
-    val e2 = intercept[AnalysisException] {
-      insertion.write.insertInto("indirect_ds")
-    }
-    assert(e2.getMessage.contains("Inserting into an RDD-based table is not allowed."))
-
-    // error case: insert into a OneRowRelation
-    new DataFrame(ctx, OneRowRelation).registerTempTable("one_row")
-    val e3 = intercept[AnalysisException] {
-      insertion.write.insertInto("one_row")
-    }
-    assert(e3.getMessage.contains("Inserting into an RDD-based table is not allowed."))
   }
 }
