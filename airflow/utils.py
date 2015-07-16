@@ -430,7 +430,7 @@ def TemporaryDirectory(suffix='', prefix=None, dir=None):
                     raise e
 
 
-class TimeoutError(Exception):
+class AirflowTaskTimeout(Exception):
     pass
 
 
@@ -444,7 +444,7 @@ class timeout:
 
     def handle_timeout(self, signum, frame):
         logging.error("Process timed out")
-        raise TimeoutError(self.error_message)
+        raise AirflowTaskTimeout(self.error_message)
 
     def __enter__(self):
         signal.signal(signal.SIGALRM, self.handle_timeout)
