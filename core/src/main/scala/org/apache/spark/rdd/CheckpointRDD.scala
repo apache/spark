@@ -22,12 +22,12 @@ import scala.reflect.ClassTag
 import org.apache.spark.{Partition, SparkContext, TaskContext}
 
 /**
- * An RDD partition that maps to a checkpoint file.
+ * An RDD partition used to recover checkpointed data.
  */
 private[spark] class CheckpointRDDPartition(val index: Int) extends Partition
 
 /**
- * An RDD that recovers checkpointed data from persisted files.
+ * An RDD that recovers checkpointed data from storage.
  */
 private[spark] abstract class CheckpointRDD[T: ClassTag](@transient sc: SparkContext)
   extends RDD[T](sc, Nil) {

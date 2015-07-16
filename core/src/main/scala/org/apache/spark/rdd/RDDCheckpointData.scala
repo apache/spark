@@ -73,11 +73,11 @@ private[spark] abstract class RDDCheckpointData[T: ClassTag](@transient rdd: RDD
 
     val newRDD = doCheckpoint()
 
-    // Update our state and mark the RDD as checkpointed
+    // Update our state and truncate the RDD lineage
     RDDCheckpointData.synchronized {
       cpRDD = Some(newRDD)
       cpState = Checkpointed
-      rdd.markCheckpointed(newRDD)
+      rdd.markCheckpointed()
     }
   }
 

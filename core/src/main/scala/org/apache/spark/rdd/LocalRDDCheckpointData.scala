@@ -26,26 +26,30 @@ import org.apache.spark.storage.{RDDBlockId, StorageLevel}
  * An implementation of checkpointing implemented on top of Spark's caching layer.
  *
  * Local checkpointing trades off fault tolerance for performance by skipping the expensive
- * step of replicating the checkpointed data in a reliable storage. This is useful for use
- * cases where RDDs build up long lineages that need to be truncated often (e.g. GraphX).
+ * step of replicating the checkpointed data in a reliable storage. Instead, checkpoint data
+ * is written to the local, ephemeral block storage that lives in each executor. This is useful
+ * for use cases where RDDs build up long lineages that need to be truncated often (e.g. GraphX).
  */
 private[spark] class LocalRDDCheckpointData[T: ClassTag](@transient rdd: RDD[T])
   extends RDDCheckpointData[T](rdd) with Logging {
 
   /**
-   * Ensure the RDD is fully cached and return a CheckpointRDD that reads from these blocks.
+   * Ensure the RDD is fully cached so the partitions can be recovered later.
    */
   protected override def doCheckpoint(): CheckpointRDD[T] = {
     val cm = SparkEnv.get.cacheManager
     val bmm = SparkEnv.get.blockManager.master
+    val level = rdd.getStorageLevel
 
-    // Local checkpointing relies on the fact that all partitions of this RDD are cached.
-    // This may not be the case, however, if the job does not fully drain the RDD iterator.
-    // For this reason, we must force cache any partitions that are not already cached.
+    // Assume storage level uses disk; otherwise memory eviction may cause data loss
+    assume(level.useDisk, s"Storage level $level is not appropriate for local checkpointing")
+
+    // Not all RDD actions compute all partitions of the RDD (e.g. take)
+    // We must compute and cache any missing partitions for correctness reasons
     rdd.partitions.foreach { p =>
       val blockId = RDDBlockId(rdd.id, p.index)
       if (!bmm.contains(blockId)) {
-        cm.getOrCompute(rdd, p, TaskContext.empty(), rdd.getStorageLevel)
+        cm.getOrCompute(rdd, p, TaskContext.empty(), level)
       }
     }
 
@@ -69,7 +73,7 @@ private[spark] object LocalRDDCheckpointData {
     // If this RDD is to be cached off-heap, fail fast since we cannot provide any
     // correctness guarantees about subsequent computations after the first one
     if (level.useOffHeap) {
-      throw new SparkException("Local checkpointing is not compatible with off heap caching.")
+      throw new SparkException("Local checkpointing is not compatible with off-heap caching.")
     }
 
     StorageLevel(useDisk = true, level.useMemory, level.deserialized, level.replication)

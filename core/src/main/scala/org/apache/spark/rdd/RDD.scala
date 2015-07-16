@@ -149,14 +149,14 @@ abstract class RDD[T: ClassTag](
   }
 
   /**
-   * Mark this RDD for persisting with the specified level.
+   * Mark this RDD for persisting using the specified level.
    *
    * @param newLevel the target storage level
    * @param allowOverride whether to override any existing level with the new one
    */
   private def persist(newLevel: StorageLevel, allowOverride: Boolean): this.type = {
     // TODO: Handle changes of StorageLevel
-    if (storageLevel != StorageLevel.NONE && storageLevel != newLevel && !allowOverride) {
+    if (storageLevel != StorageLevel.NONE && newLevel != storageLevel && !allowOverride) {
       throw new UnsupportedOperationException(
         "Cannot change storage level of an RDD after it was already assigned a level")
     }
@@ -173,12 +173,13 @@ abstract class RDD[T: ClassTag](
   /**
    * Set this RDD's storage level to persist its values across operations after the first time
    * it is computed. This can only be used to assign a new storage level if the RDD does not
-   * have a storage level set yet.
+   * have a storage level set yet. Local checkpointing is an exception.
    */
   def persist(newLevel: StorageLevel): this.type = {
     if (isLocallyCheckpointed) {
-      // This could happen if the user calls localCheckpoint() before persist(), in which case
-      // we should respect the storage level set by the user explicitly and override the old one
+      // This means the user previously called localCheckpoint(), which should have already
+      // marked this RDD for persisting. Here we should override the old storage level with
+      // one that is explicitly requested by the user (after adapting it to use disk).
       persist(LocalRDDCheckpointData.transformStorageLevel(newLevel), allowOverride = true)
     } else {
       persist(newLevel, allowOverride = false)
@@ -1484,35 +1485,43 @@ abstract class RDD[T: ClassTag](
   }
 
   /**
-   * Mark this RDD for unsafe checkpointing using a local file system.
+   * Mark this RDD for local checkpointing using Spark's existing caching layer.
    *
-   * This method is for users who wish to truncate the lineage of the RDD while skipping the
-   * expensive step of replicating the materialized data in a distributed file system. This is
+   * This method is for users who wish to truncate RDD lineages while skipping the expensive
+   * step of replicating the materialized data in a reliable distributed file system. This is
    * useful for RDDs with long lineages that need to be truncated periodically (e.g. GraphX).
    *
-   * It is unsafe because we sacrifice fault-tolerance for performance. In particular, we
-   * persist the materialized values only to an ephemeral local storage. The effect is that
-   * if an executor fails during the computation, the checkpointed data will no longer be
-   * accessible.
+   * Local checkpointing sacrifices fault-tolerance for performance. In particular,
+   * checkpointed data is written to ephemeral local storage (memory or disk) instead of
+   * to a reliable distributed storage. The effect is that if an executor fails during the
+   * computation, the checkpointed data may no longer be accessible, causing an irrecoverable
+   * job failure.
    *
-   * The actual persisting occurs after the first job involving this RDD has completed.
-   * The checkpoint directory set through `SparkContext#setCheckpointDir` is not read.
-   *
-   * This is NOT safe to use with dynamic allocation, which removes cached blocks with
-   * executors that it removes. If you must use both features, you are advised to set
+   * This is NOT safe to use with dynamic allocation, which removes executors along
+   * with their cached blocks. If you must use both features, you are advised to set
    * `spark.dynamicAllocation.cachedExecutorIdleTimeout` to a high value.
+   *
+   * The checkpoint directory set through `SparkContext#setCheckpointDir` is not read.
    */
   def localCheckpoint(): this.type = RDDCheckpointData.synchronized {
-    if (conf.getBoolean("spark.dynamicAllocation.enabled", false)) {
+    if (conf.getBoolean("spark.dynamicAllocation.enabled", false) &&
+        conf.contains("spark.dynamicAllocation.cachedExecutorIdleTimeout")) {
       logWarning("Local checkpointing is NOT safe to use with dynamic allocation, " +
-        "removes cached blocks with executors that it removes. If you must use both " +
-        "features, you are advised to set `spark.dynamicAllocation.cachedExecutorIdleTimout`" +
+        "which removes executors along with their cached blocks. If you must use both " +
+        "features, you are advised to set `spark.dynamicAllocation.cachedExecutorIdleTimeout` " +
         "to a high value.")
     }
-    checkpointData = Some(new LocalRDDCheckpointData(this))
-    // In case this RDD is already marked for caching, we need to override the
-    // existing storage level with one that is suitable for local checkpointing.
+
+    // Note: At this point we do not actually know whether the user will call persist() on
+    // this RDD later, so we must explicitly call it here ourselves to ensure the cached
+    // blocks are registered for cleanup later in the SparkContext.
+    //
+    // If, however, the user has already called persist() on this RDD, then we must adapt
+    // the storage level he/she specified to one that is appropriate for local checkpointing
+    // (i.e. uses disk) to guarantee correctness.
+
     persist(LocalRDDCheckpointData.transformStorageLevel(storageLevel), allowOverride = true)
+    checkpointData = Some(new LocalRDDCheckpointData(this))
     this
   }
 
@@ -1624,7 +1633,7 @@ abstract class RDD[T: ClassTag](
    * Changes the dependencies of this RDD from its original parents to a new RDD (`newRDD`)
    * created from the checkpoint file, and forget its old dependencies and partitions.
    */
-  private[spark] def markCheckpointed(checkpointRDD: RDD[_]) {
+  private[spark] def markCheckpointed(): Unit = {
     clearDependencies()
     partitions_ = null
     deps = null    // Forget the constructor argument for dependencies too
