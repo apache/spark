@@ -19,12 +19,14 @@ package org.apache.spark.sql.catalyst.expressions;
 
 import java.util.Iterator;
 
-import scala.Function1;
+import scala.collection.Seq;
 
 import org.apache.spark.sql.catalyst.InternalRow;
+import org.apache.spark.sql.catalyst.expressions.codegen.BaseMutableProjection;
+import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection;
+import org.apache.spark.sql.catalyst.expressions.codegen.UnsafeProjection;
 import org.apache.spark.sql.catalyst.util.ObjectPool;
 import org.apache.spark.sql.catalyst.util.UniqueObjectPool;
-import org.apache.spark.unsafe.PlatformDependent;
 import org.apache.spark.unsafe.map.BytesToBytesMap;
 import org.apache.spark.unsafe.memory.MemoryLocation;
 import org.apache.spark.unsafe.memory.TaskMemoryManager;
@@ -40,28 +42,28 @@ public final class UnsafeFixedWidthAggregationMap {
    * An empty aggregation buffer, encoded in UnsafeRow format. When inserting a new key into the
    * map, we copy this buffer and use it as the value.
    */
-  private final byte[] emptyBuffer;
+  private UnsafeRow emptyBuffer;
 
   /**
-   * An empty row used by `initProjection`
+   * An empty row used by `initProjectionection`
    */
   private static final InternalRow emptyRow = new GenericInternalRow();
 
   /**
-   * Whether can the empty aggregation buffer be reuse without calling `initProjection` or not.
+   * Whether can the empty aggregation buffer be reuse without calling `initProjectionection` or not.
    */
   private final boolean reuseEmptyBuffer;
 
   /**
    * The projection used to initialize the emptyBuffer
    */
-  private final Function1<InternalRow, InternalRow> initProjection;
+  private final UnsafeProjection initProjection;
+  private final BaseMutableProjection updateProjection;
 
   /**
-   * Encodes grouping keys or buffers as UnsafeRows.
+   * The projection used to generate the key
    */
-  private final UnsafeRowConverter keyConverter;
-  private final UnsafeRowConverter bufferConverter;
+  private final UnsafeProjection keyProjection;
 
   /**
    * A hashmap which maps from opaque bytearray keys to bytearray values.
@@ -81,54 +83,48 @@ public final class UnsafeFixedWidthAggregationMap {
   /**
    * Re-used pointer to the current aggregation key and buffer
    */
-  private final UnsafeRow currentKey;
   private final UnsafeRow currentBuffer;
 
-  /**
-   * Scratch space that is used when encoding grouping keys into UnsafeRow format.
-   *
-   * By default, this is a 8 kb array, but it will grow as necessary in case larger keys are
-   * encountered.
-   */
-  private byte[] groupingKeyConversionScratchSpace = new byte[1024 * 8];
+  private final int numFieldsInKey;
+  private final int numFieldsInBuffer;
+  private JoinedRow3 joinedRow = new JoinedRow3();
 
   private final boolean enablePerfMetrics;
 
   /**
    * Create a new UnsafeFixedWidthAggregationMap.
    *
-   * @param initProjection the default value for new keys (a "zero" of the agg. function)
-   * @param keyConverter the converter of the grouping key, used for row conversion.
-   * @param bufferConverter the converter of the aggregation buffer, used for row conversion.
+   * @param initValuesExprs the expressions to generate default value for new keys
+   *                        (a "zero" of the agg. function)
+   * @param keyExprs the expressions to generate the grouping key.
+   * @param updateProjection the projection to update the aggregate buffer.
    * @param memoryManager the memory manager used to allocate our Unsafe memory structures.
    * @param initialCapacity the initial capacity of the map (a sizing hint to avoid re-hashing).
    * @param enablePerfMetrics if true, performance metrics will be recorded (has minor perf impact)
    */
   public UnsafeFixedWidthAggregationMap(
-      Function1<InternalRow, InternalRow> initProjection,
-      UnsafeRowConverter keyConverter,
-      UnsafeRowConverter bufferConverter,
+      Seq<Expression> initValuesExprs,
+      Seq<Expression> keyExprs,
+      BaseMutableProjection updateProjection,
       TaskMemoryManager memoryManager,
       int initialCapacity,
       boolean enablePerfMetrics) {
-    this.initProjection = initProjection;
-    this.keyConverter = keyConverter;
-    this.bufferConverter = bufferConverter;
+    this.numFieldsInBuffer = initValuesExprs.size();
+    this.initProjection = GenerateUnsafeProjection.generate(initValuesExprs);
+    this.numFieldsInKey = keyExprs.size();
+    this.keyProjection = GenerateUnsafeProjection.generate(keyExprs);
+    this.updateProjection = updateProjection;
     this.enablePerfMetrics = enablePerfMetrics;
 
     this.map = new BytesToBytesMap(memoryManager, initialCapacity, enablePerfMetrics);
     this.keyPool = new UniqueObjectPool(100);
-    this.currentKey = new UnsafeRow(keyPool);
+    this.keyProjection.setPool(keyPool);
+
     this.bufferPool = new ObjectPool(initialCapacity);
     this.currentBuffer = new UnsafeRow(bufferPool);
 
-    InternalRow initRow = initProjection.apply(emptyRow);
-    int emptyBufferSize = bufferConverter.getSizeRequirement(initRow);
-    this.emptyBuffer = new byte[emptyBufferSize];
-    this.currentBuffer.pointTo(emptyBuffer, PlatformDependent.BYTE_ARRAY_OFFSET,
-      initRow.size(), emptyBufferSize);
-    int writtenLength = bufferConverter.writeRow(initRow, currentBuffer);
-    assert (writtenLength == emptyBuffer.length): "Size requirement calculation was wrong!";
+    this.initProjection.setPool(bufferPool);
+    this.emptyBuffer = initProjection.apply(emptyRow);
     // re-use the empty buffer only when there is no object saved in pool.
     reuseEmptyBuffer = bufferPool.size() == 0;
   }
@@ -137,39 +133,26 @@ public final class UnsafeFixedWidthAggregationMap {
    * Return the aggregation buffer for the current group. For efficiency, all calls to this method
    * return the same object.
    */
-  public UnsafeRow getAggregationBuffer(InternalRow groupingKey) {
-    final int groupingKeySize = keyConverter.getSizeRequirement(groupingKey);
-    // Make sure that the buffer is large enough to hold the key. If it's not, grow it:
-    if (groupingKeySize > groupingKeyConversionScratchSpace.length) {
-      groupingKeyConversionScratchSpace = new byte[groupingKeySize];
-    }
-    currentKey.pointTo(groupingKeyConversionScratchSpace,
-      PlatformDependent.BYTE_ARRAY_OFFSET, groupingKey.size(), groupingKeySize);
-    final int actualGroupingKeySize = keyConverter.writeRow(groupingKey, currentKey);
-    assert (groupingKeySize == actualGroupingKeySize) : "Size requirement calculation was wrong!";
-
+  public UnsafeRow getAggregationBuffer(UnsafeRow groupingKey) {
     // Probe our map using the serialized key
     final BytesToBytesMap.Location loc = map.lookup(
-      groupingKeyConversionScratchSpace,
-      PlatformDependent.BYTE_ARRAY_OFFSET,
-      groupingKeySize);
+      groupingKey.getBaseObject(),
+      groupingKey.getBaseOffset(),
+      groupingKey.getSizeInBytes());
     if (!loc.isDefined()) {
       // This is the first time that we've seen this grouping key, so we'll insert a copy of the
       // empty aggregation buffer into the map:
       if (!reuseEmptyBuffer) {
         // There is some objects referenced by emptyBuffer, so generate a new one
-        InternalRow initRow = initProjection.apply(emptyRow);
-        currentBuffer.pointTo(emptyBuffer, PlatformDependent.BYTE_ARRAY_OFFSET, initRow.size(),
-          emptyBuffer.length);
-        bufferConverter.writeRow(initRow, currentBuffer);
+        emptyBuffer = initProjection.apply(emptyRow);
       }
       loc.putNewKey(
-        groupingKeyConversionScratchSpace,
-        PlatformDependent.BYTE_ARRAY_OFFSET,
-        groupingKeySize,
-        emptyBuffer,
-        PlatformDependent.BYTE_ARRAY_OFFSET,
-        emptyBuffer.length
+        groupingKey.getBaseObject(),
+        groupingKey.getBaseOffset(),
+        groupingKey.getSizeInBytes(),
+        emptyBuffer.getBaseObject(),
+        emptyBuffer.getBaseOffset(),
+        emptyBuffer.getSizeInBytes()
       );
     }
 
@@ -178,10 +161,17 @@ public final class UnsafeFixedWidthAggregationMap {
     currentBuffer.pointTo(
       address.getBaseObject(),
       address.getBaseOffset(),
-      bufferConverter.numFields(),
+      numFieldsInBuffer,
       loc.getValueLength()
     );
     return currentBuffer;
+  }
+
+  public UnsafeRow update(InternalRow row) {
+    UnsafeRow groupKey = keyProjection.apply(row);
+    UnsafeRow aggregationBuffer = getAggregationBuffer(groupKey);
+    updateProjection.target(aggregationBuffer);
+    return (UnsafeRow) updateProjection.apply(joinedRow.apply(aggregationBuffer, row));
   }
 
   /**
@@ -217,13 +207,13 @@ public final class UnsafeFixedWidthAggregationMap {
         entry.key.pointTo(
           keyAddress.getBaseObject(),
           keyAddress.getBaseOffset(),
-          keyConverter.numFields(),
+          numFieldsInKey,
           loc.getKeyLength()
         );
         entry.value.pointTo(
           valueAddress.getBaseObject(),
           valueAddress.getBaseOffset(),
-          bufferConverter.numFields(),
+          numFieldsInBuffer,
           loc.getValueLength()
         );
         return entry;
@@ -240,6 +230,8 @@ public final class UnsafeFixedWidthAggregationMap {
    * Free the unsafe memory associated with this map.
    */
   public void free() {
+    bufferPool.clear();
+    keyPool.clear();
     map.free();
   }
 

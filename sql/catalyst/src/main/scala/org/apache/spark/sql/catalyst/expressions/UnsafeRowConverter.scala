@@ -17,83 +17,43 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeRowConverter
-import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.PlatformDependent
 import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
- * Converts Rows into UnsafeRow format.
- */
-abstract class UnsafeRowConverter {
-
-  def numFields: Int
-
-  /**
-   * Compute the amount of space, in bytes, required to encode the given row.
-   */
-  def getSizeRequirement(row: InternalRow): Int
-
-  /**
-   * Convert the given row into UnsafeRow format.
-   *
-   * @param row the row to convert
-   * @param unsafeRow the target UnsafeRow to write
-   * @return the number of bytes written. This should be equal to `getSizeRequirement(row)`.
-   */
-  def writeRow(row: InternalRow, unsafeRow: UnsafeRow): Int
-}
-
-object UnsafeRowConverter {
-  def apply(schema: StructType): UnsafeRowConverter = {
-    apply(schema.fields.map(_.dataType))
-  }
-  def apply(fields: Array[DataType]): UnsafeRowConverter = {
-    GenerateUnsafeRowConverter.generate(fields)
-  }
-}
-
-/**
  * Function for writing a column into an UnsafeRow.
  */
-private abstract class UnsafeColumnWriter {
+private abstract class UnsafeColumnWriter[T] {
   /**
    * Write a value into an UnsafeRow.
    *
-   * @param source the row being converted
    * @param target a pointer to the converted unsafe row
-   * @param column the column to write
+   * @param value the value to write
    * @param cursor the offset from the start of the unsafe row to the end of the row;
    *                     used for calculating where variable-length data should be written
    * @return the number of variable-length bytes written
    */
-  def write(source: InternalRow, target: UnsafeRow, column: Int, cursor: Int): Int
+  def write(target: UnsafeRow, value: T, column: Int, cursor: Int): Int
 
-  /**
-   * Return the number of bytes that are needed to write this variable-length value.
-   */
-  def getSize(source: InternalRow, column: Int): Int
+  def getSize(value: T): Int = 0
 }
 
 
-// ------------------------------------------------------------------------------------------------
+private abstract class BytesUnsafeColumnWriter[T] extends UnsafeColumnWriter[T] {
 
-private abstract class BytesUnsafeColumnWriter extends UnsafeColumnWriter {
+  def getBytes(value: T): Array[Byte]
 
-  def getBytes(source: InternalRow, column: Int): Array[Byte]
-
-  def getSize(source: InternalRow, column: Int): Int = {
-    val numBytes = getBytes(source, column).length
+  override def getSize(value: T): Int = {
+    val numBytes = getBytes(value).length
     ByteArrayMethods.roundNumberOfBytesToNearestWord(numBytes)
   }
 
   protected[this] def isString: Boolean
 
-  override def write(source: InternalRow, target: UnsafeRow, column: Int, cursor: Int): Int = {
+  override def write(target: UnsafeRow, value: T, column: Int, cursor: Int): Int = {
     val offset = target.getBaseOffset + cursor
-    val bytes = getBytes(source, column)
+    val bytes = getBytes(value)
     val numBytes = bytes.length
     if ((numBytes & 0x07) > 0) {
       // zero-out the padding bytes
@@ -112,25 +72,23 @@ private abstract class BytesUnsafeColumnWriter extends UnsafeColumnWriter {
   }
 }
 
-private class StringUnsafeColumnWriter() extends BytesUnsafeColumnWriter {
+private class StringUnsafeColumnWriter() extends BytesUnsafeColumnWriter[UTF8String] {
   protected[this] def isString: Boolean = true
-  def getBytes(source: InternalRow, column: Int): Array[Byte] = {
-    source.getAs[UTF8String](column).getBytes
+  def getBytes(value: UTF8String): Array[Byte] = {
+    value.getBytes
   }
 }
 
-private class BinaryUnsafeColumnWriter() extends BytesUnsafeColumnWriter {
+private class BinaryUnsafeColumnWriter() extends BytesUnsafeColumnWriter[Array[Byte]] {
   protected[this] def isString: Boolean = false
-  def getBytes(source: InternalRow, column: Int): Array[Byte] = {
-    source.getAs[Array[Byte]](column)
+  def getBytes(value: Array[Byte]): Array[Byte] = {
+    value
   }
 }
 
-private class ObjectUnsafeColumnWriter() extends UnsafeColumnWriter {
-  def getSize(sourceRow: InternalRow, column: Int): Int = 0
-  override def write(source: InternalRow, target: UnsafeRow, column: Int, cursor: Int): Int = {
-    val obj = source.get(column)
-    val idx = target.getPool.put(obj)
+private class ObjectUnsafeColumnWriter() extends UnsafeColumnWriter[Any] {
+  override def write(target: UnsafeRow, value: Any, column: Int, cursor: Int): Int = {
+    val idx = target.getPool.put(value)
     target.setLong(column, - idx)
     0
   }

@@ -348,28 +348,23 @@ public final class UnsafeRow extends MutableRow {
   /**
    * Copies this row, returning a self-contained UnsafeRow that stores its data in an internal
    * byte array rather than referencing data stored in a data page.
-   * <p>
-   * This method is only supported on UnsafeRows that do not use ObjectPools.
+   *
+   * Note: it doesn't do deepcopy, so it will share the same object in the object pool.
    */
   @Override
   public InternalRow copy() {
-    if (pool != null) {
-      throw new UnsupportedOperationException(
-        "Copy is not supported for UnsafeRows that use object pools");
-    } else {
-      UnsafeRow rowCopy = new UnsafeRow(null);
-      final byte[] rowDataCopy = new byte[sizeInBytes];
-      PlatformDependent.copyMemory(
-        baseObject,
-        baseOffset,
-        rowDataCopy,
-        PlatformDependent.BYTE_ARRAY_OFFSET,
-        sizeInBytes
-      );
-      rowCopy.pointTo(
-        rowDataCopy, PlatformDependent.BYTE_ARRAY_OFFSET, numFields, sizeInBytes);
-      return rowCopy;
-    }
+    UnsafeRow rowCopy = new UnsafeRow(pool);
+    final byte[] rowDataCopy = new byte[sizeInBytes];
+    PlatformDependent.copyMemory(
+      baseObject,
+      baseOffset,
+      rowDataCopy,
+      PlatformDependent.BYTE_ARRAY_OFFSET,
+      sizeInBytes
+    );
+    rowCopy.pointTo(
+      rowDataCopy, PlatformDependent.BYTE_ARRAY_OFFSET, numFields, sizeInBytes);
+    return rowCopy;
   }
 
   @Override

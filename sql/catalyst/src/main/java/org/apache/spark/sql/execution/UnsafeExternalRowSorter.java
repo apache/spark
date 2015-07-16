@@ -28,7 +28,8 @@ import org.apache.spark.TaskContext;
 import org.apache.spark.sql.AbstractScalaRowIterator;
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow;
-import org.apache.spark.sql.catalyst.expressions.UnsafeRowConverter;
+import org.apache.spark.sql.catalyst.expressions.codegen.UnsafeProjection;
+import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection;
 import org.apache.spark.sql.catalyst.util.ObjectPool;
 import org.apache.spark.sql.types.*;
 import org.apache.spark.unsafe.PlatformDependent;
@@ -48,7 +49,7 @@ final class UnsafeExternalRowSorter {
   private long numRowsInserted = 0;
 
   private final StructType schema;
-  private final UnsafeRowConverter rowConverter;
+  private final UnsafeProjection projection;
   private final PrefixComputer prefixComputer;
   private final UnsafeExternalSorter sorter;
   private byte[] rowConversionBuffer = new byte[1024 * 8];
@@ -64,7 +65,7 @@ final class UnsafeExternalRowSorter {
       PrefixComparator prefixComparator,
       PrefixComputer prefixComputer) throws IOException {
     this.schema = schema;
-    this.rowConverter = UnsafeRowConverter.apply(schema);
+    this.projection = GenerateUnsafeProjection.generate(schema);
     this.prefixComputer = prefixComputer;
     final SparkEnv sparkEnv = SparkEnv.get();
     final TaskContext taskContext = TaskContext.get();
@@ -91,19 +92,12 @@ final class UnsafeExternalRowSorter {
 
   @VisibleForTesting
   void insertRow(InternalRow row) throws IOException {
-    final int sizeRequirement = rowConverter.getSizeRequirement(row);
-    if (sizeRequirement > rowConversionBuffer.length) {
-      rowConversionBuffer = new byte[sizeRequirement];
-    }
-    unsafeRow.pointTo(rowConversionBuffer, PlatformDependent.BYTE_ARRAY_OFFSET, row.size(),
-      sizeRequirement);
-    final int bytesWritten = rowConverter.writeRow(row, unsafeRow);
-    assert (bytesWritten == sizeRequirement);
+    UnsafeRow unsafeRow = projection.apply(row);
     final long prefix = prefixComputer.computePrefix(row);
     sorter.insertRecord(
       rowConversionBuffer,
       PlatformDependent.BYTE_ARRAY_OFFSET,
-      sizeRequirement,
+      unsafeRow.getSizeInBytes(),
       prefix
     );
     numRowsInserted++;

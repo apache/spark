@@ -19,9 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateMutableProjection
-import org.apache.spark.sql.catalyst.util.ObjectPool
 import org.apache.spark.sql.types.DataType
-import org.apache.spark.unsafe.PlatformDependent
 
 /**
  * A [[Projection]] that is calculated by calling the `eval` of each of the specified expressions.
@@ -74,28 +72,6 @@ case class InterpretedMutableProjection(expressions: Seq[Expression]) extends Mu
       i += 1
     }
     mutableRow
-  }
-}
-
-/**
- * A projection that could turn any InternalRow into UnsafeRow
- */
-case class ToUnsafeProjection(fields: Seq[DataType]) extends Projection {
-
-  private[this] val converter = UnsafeRowConverter(fields.toArray)
-  private[this] val pool = new ObjectPool(10)
-  private[this] var buffer = new Array[Byte](1024)
-  private[this] val unsafeRow = new UnsafeRow(pool)
-
-  override def apply(input: InternalRow): InternalRow = {
-    val numBytes = converter.getSizeRequirement(input)
-    if (numBytes > buffer.length) {
-      buffer = new Array[Byte](numBytes)
-    }
-    pool.clear()
-    unsafeRow.pointTo(buffer, PlatformDependent.BYTE_ARRAY_OFFSET, input.size, numBytes)
-    converter.writeRow(input, unsafeRow)
-    unsafeRow
   }
 }
 
