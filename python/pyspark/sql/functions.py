@@ -723,7 +723,7 @@ def dayInYear(col):
     Extract the day of the year of a given date as integer.
     >>> df0 = sqlContext.createDataFrame([('2015-04-08',)], ['a'])
     >>> df0.select(dayInYear('a').alias('day')).collect()
-    [Row(day=128)]
+    [Row(day=98)]
     """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.day(col))

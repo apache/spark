@@ -61,7 +61,7 @@ case class CurrentTimestamp() extends LeafExpression {
   }
 }
 
-case class Hour(child: Expression) extends UnaryExpression with ExpectsInputTypes {
+case class Hour(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType)
 
@@ -82,7 +82,7 @@ case class Hour(child: Expression) extends UnaryExpression with ExpectsInputType
   }
 }
 
-case class Minute(child: Expression) extends UnaryExpression with ExpectsInputTypes {
+case class Minute(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType)
 
@@ -103,7 +103,7 @@ case class Minute(child: Expression) extends UnaryExpression with ExpectsInputTy
   }
 }
 
-case class Second(child: Expression) extends UnaryExpression with ExpectsInputTypes {
+case class Second(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType)
 
@@ -120,7 +120,7 @@ case class Second(child: Expression) extends UnaryExpression with ExpectsInputTy
   }
 }
 
-abstract class DateFormatExpression extends UnaryExpression with ExpectsInputTypes {
+abstract class DateFormatExpression extends UnaryExpression with ImplicitCastInputTypes {
   self: Product =>
 
   val daysIn400Years: Int = 146097
@@ -310,7 +310,7 @@ case class Month(child: Expression) extends DateFormatExpression {
   }
 }
 
-case class Day(child: Expression) extends DateFormatExpression with ExpectsInputTypes {
+case class Day(child: Expression) extends DateFormatExpression with ImplicitCastInputTypes {
 
   override def dataType: DataType = IntegerType
 
@@ -373,7 +373,7 @@ case class Day(child: Expression) extends DateFormatExpression with ExpectsInput
 
 }
 
-case class WeekOfYear(child: Expression) extends UnaryExpression with ExpectsInputTypes {
+case class WeekOfYear(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
 
   override def dataType: DataType = IntegerType
 
@@ -398,7 +398,7 @@ case class WeekOfYear(child: Expression) extends UnaryExpression with ExpectsInp
 }
 
 case class DateFormatClass(left: Expression, right: Expression) extends BinaryExpression
-  with ExpectsInputTypes {
+  with ImplicitCastInputTypes {
 
   override def dataType: DataType = StringType
 

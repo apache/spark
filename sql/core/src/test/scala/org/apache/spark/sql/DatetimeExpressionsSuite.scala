@@ -123,11 +123,11 @@ class DatetimeExpressionsSuite extends QueryTest {
 
     checkAnswer(
       df.select(dayInYear("a"), dayInYear("b"), dayInYear("c")),
-      Row(128, 128, 128))
+      Row(98, 98, 98))
 
     checkAnswer(
       df.selectExpr("dayInYear(a)", "dayInYear(b)", "dayInYear(c)"),
-      Row(128, 128, 128))
+      Row(98, 98, 98))
   }
 
   test("hour") {
