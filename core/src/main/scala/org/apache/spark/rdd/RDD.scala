@@ -1520,7 +1520,11 @@ abstract class RDD[T: ClassTag](
     // the storage level he/she specified to one that is appropriate for local checkpointing
     // (i.e. uses disk) to guarantee correctness.
 
-    persist(LocalRDDCheckpointData.transformStorageLevel(storageLevel), allowOverride = true)
+    if (storageLevel == StorageLevel.NONE) {
+      persist(LocalRDDCheckpointData.DEFAULT_STORAGE_LEVEL)
+    } else {
+      persist(LocalRDDCheckpointData.transformStorageLevel(storageLevel), allowOverride = true)
+    }
     checkpointData = Some(new LocalRDDCheckpointData(this))
     this
   }
