@@ -84,7 +84,7 @@ def send_archived_logs():
     if log_files:
         log_archive = "unit-tests-logs.tar.gz"
 
-        run_cmd(['tar', 'czf', log_archive] + log_files.strip().split('\n'))
+        run_cmd(['tar', 'czf', log_archive] + log_files)
 
         jenkins_build_dir = os.environ["JENKINS_HOME"] + "/jobs/" + os.environ["JOB_NAME"] + \
             "/builds/" + os.environ["BUILD_NUMBER"]
