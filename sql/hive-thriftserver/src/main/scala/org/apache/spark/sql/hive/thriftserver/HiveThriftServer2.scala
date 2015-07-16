@@ -24,7 +24,7 @@ import org.apache.commons.logging.LogFactory
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hive.service.cli.thrift.{ThriftBinaryCLIService, ThriftHttpCLIService}
-import org.apache.hive.service.server.{HiveServer2, ServerOptionsProcessor}
+import org.apache.hive.service.server.{HiveServerServerOptionsProcessor, HiveServer2}
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.scheduler.{SparkListener, SparkListenerApplicationEnd, SparkListenerJobStart}
@@ -65,7 +65,7 @@ object HiveThriftServer2 extends Logging {
   }
 
   def main(args: Array[String]) {
-    val optionsProcessor = new ServerOptionsProcessor("HiveThriftServer2")
+    val optionsProcessor = new HiveServerServerOptionsProcessor("HiveThriftServer2")
     if (!optionsProcessor.process(args)) {
       System.exit(-1)
     }
