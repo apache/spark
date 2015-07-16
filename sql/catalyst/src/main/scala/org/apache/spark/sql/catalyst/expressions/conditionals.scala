@@ -35,8 +35,8 @@ case class If(predicate: Expression, trueValue: Expression, falseValue: Expressi
       TypeCheckResult.TypeCheckFailure(
         s"type of predicate expression in If should be boolean, not ${predicate.dataType}")
     } else if (trueValue.dataType != falseValue.dataType) {
-      TypeCheckResult.TypeCheckFailure(
-        s"differing types in If (${trueValue.dataType} and ${falseValue.dataType}).")
+      TypeCheckResult.TypeCheckFailure(s"differing types in '$prettyString' " +
+        s"(${trueValue.dataType.simpleString} and ${falseValue.dataType.simpleString}).")
     } else {
       TypeCheckResult.TypeCheckSuccess
     }

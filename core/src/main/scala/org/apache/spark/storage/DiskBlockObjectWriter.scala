@@ -26,66 +26,25 @@ import org.apache.spark.executor.ShuffleWriteMetrics
 import org.apache.spark.util.Utils
 
 /**
- * An interface for writing JVM objects to some underlying storage. This interface allows
- * appending data to an existing block, and can guarantee atomicity in the case of faults
- * as it allows the caller to revert partial writes.
+ * A class for writing JVM objects directly to a file on disk. This class allows data to be appended
+ * to an existing block and can guarantee atomicity in the case of faults as it allows the caller to
+ * revert partial writes.
  *
- * This interface does not support concurrent writes. Also, once the writer has
- * been opened, it cannot be reopened again.
- */
-private[spark] abstract class BlockObjectWriter(val blockId: BlockId) extends OutputStream {
-
-  def open(): BlockObjectWriter
-
-  def close()
-
-  def isOpen: Boolean
-
-  /**
-   * Flush the partial writes and commit them as a single atomic block.
-   */
-  def commitAndClose(): Unit
-
-  /**
-   * Reverts writes that haven't been flushed yet. Callers should invoke this function
-   * when there are runtime exceptions. This method will not throw, though it may be
-   * unsuccessful in truncating written data.
-   */
-  def revertPartialWritesAndClose()
-
-  /**
-   * Writes a key-value pair.
-   */
-  def write(key: Any, value: Any)
-
-  /**
-   * Notify the writer that a record worth of bytes has been written with OutputStream#write.
-   */
-  def recordWritten()
-
-  /**
-   * Returns the file segment of committed data that this Writer has written.
-   * This is only valid after commitAndClose() has been called.
-   */
-  def fileSegment(): FileSegment
-}
-
-/**
- * BlockObjectWriter which writes directly to a file on disk. Appends to the given file.
+ * This class does not support concurrent writes. Also, once the writer has been opened it cannot be
+ * reopened again.
  */
 private[spark] class DiskBlockObjectWriter(
-    blockId: BlockId,
+    val blockId: BlockId,
     file: File,
     serializerInstance: SerializerInstance,
     bufferSize: Int,
     compressStream: OutputStream => OutputStream,
     syncWrites: Boolean,
-    // These write metrics concurrently shared with other active BlockObjectWriter's who
+    // These write metrics concurrently shared with other active DiskBlockObjectWriters who
     // are themselves performing writes. All updates must be relative.
     writeMetrics: ShuffleWriteMetrics)
-  extends BlockObjectWriter(blockId)
-  with Logging
-{
+  extends OutputStream
+  with Logging {
 
   /** The file channel, used for repositioning / truncating the file. */
   private var channel: FileChannel = null
@@ -122,7 +81,7 @@ private[spark] class DiskBlockObjectWriter(
    */
   private var numRecordsWritten = 0
 
-  override def open(): BlockObjectWriter = {
+  def open(): DiskBlockObjectWriter = {
     if (hasBeenClosed) {
       throw new IllegalStateException("Writer already closed. Cannot be reopened.")
     }
@@ -159,9 +118,12 @@ private[spark] class DiskBlockObjectWriter(
     }
   }
 
-  override def isOpen: Boolean = objOut != null
+  def isOpen: Boolean = objOut != null
 
-  override def commitAndClose(): Unit = {
+  /**
+   * Flush the partial writes and commit them as a single atomic block.
+   */
+  def commitAndClose(): Unit = {
     if (initialized) {
       // NOTE: Because Kryo doesn't flush the underlying stream we explicitly flush both the
       //       serializer stream and the lower level stream.
@@ -177,9 +139,15 @@ private[spark] class DiskBlockObjectWriter(
     commitAndCloseHasBeenCalled = true
   }
 
-  // Discard current writes. We do this by flushing the outstanding writes and then
-  // truncating the file to its initial position.
-  override def revertPartialWritesAndClose() {
+
+  /**
+   * Reverts writes that haven't been flushed yet. Callers should invoke this function
+   * when there are runtime exceptions. This method will not throw, though it may be
+   * unsuccessful in truncating written data.
+   */
+  def revertPartialWritesAndClose() {
+    // Discard current writes. We do this by flushing the outstanding writes and then
+    // truncating the file to its initial position.
     try {
       if (initialized) {
         writeMetrics.decShuffleBytesWritten(reportedPosition - initialPosition)
@@ -201,7 +169,10 @@ private[spark] class DiskBlockObjectWriter(
     }
   }
 
-  override def write(key: Any, value: Any) {
+  /**
+   * Writes a key-value pair.
+   */
+  def write(key: Any, value: Any) {
     if (!initialized) {
       open()
     }
@@ -221,7 +192,10 @@ private[spark] class DiskBlockObjectWriter(
     bs.write(kvBytes, offs, len)
   }
 
-  override def recordWritten(): Unit = {
+  /**
+   * Notify the writer that a record worth of bytes has been written with OutputStream#write.
+   */
+  def recordWritten(): Unit = {
     numRecordsWritten += 1
     writeMetrics.incShuffleRecordsWritten(1)
 
@@ -230,7 +204,11 @@ private[spark] class DiskBlockObjectWriter(
     }
   }
 
-  override def fileSegment(): FileSegment = {
+  /**
+   * Returns the file segment of committed data that this Writer has written.
+   * This is only valid after commitAndClose() has been called.
+   */
+  def fileSegment(): FileSegment = {
     if (!commitAndCloseHasBeenCalled) {
       throw new IllegalStateException(
         "fileSegment() is only valid after commitAndClose() has been called")

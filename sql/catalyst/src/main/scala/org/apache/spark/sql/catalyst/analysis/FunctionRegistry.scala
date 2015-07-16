@@ -17,14 +17,14 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.catalyst.expressions.aggregate2.MyDoubleSum
-
+import scala.language.existentials
 import scala.reflect.ClassTag
 import scala.util.{Failure, Success, Try}
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.aggregate2.MyDoubleSum
 import org.apache.spark.sql.catalyst.util.StringKeyHashMap
 
 
@@ -116,8 +116,10 @@ object FunctionRegistry {
     expression[Log2]("log2"),
     expression[Pow]("pow"),
     expression[Pow]("power"),
+    expression[Pmod]("pmod"),
     expression[UnaryPositive]("positive"),
     expression[Rint]("rint"),
+    expression[Round]("round"),
     expression[ShiftLeft]("shiftleft"),
     expression[ShiftRight]("shiftright"),
     expression[ShiftRightUnsigned]("shiftrightunsigned"),
@@ -152,11 +154,12 @@ object FunctionRegistry {
     expression[Base64]("base64"),
     expression[Encode]("encode"),
     expression[Decode]("decode"),
-    expression[StringInstr]("instr"),
+    expression[FormatNumber]("format_number"),
     expression[Lower]("lcase"),
     expression[Lower]("lower"),
-    expression[StringLength]("length"),
+    expression[Length]("length"),
     expression[Levenshtein]("levenshtein"),
+    expression[StringInstr]("instr"),
     expression[StringLocate]("locate"),
     expression[StringLPad]("lpad"),
     expression[StringTrimLeft]("ltrim"),

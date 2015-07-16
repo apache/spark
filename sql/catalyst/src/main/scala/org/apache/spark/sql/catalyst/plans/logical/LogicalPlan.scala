@@ -291,6 +291,11 @@ abstract class UnaryNode extends LogicalPlan with trees.UnaryNode[LogicalPlan] {
 /**
  * A logical plan node with a left and right child.
  */
-abstract class BinaryNode extends LogicalPlan with trees.BinaryNode[LogicalPlan] {
+abstract class BinaryNode extends LogicalPlan {
   self: Product =>
+
+  def left: LogicalPlan
+  def right: LogicalPlan
+
+  override def children: Seq[LogicalPlan] = Seq(left, right)
 }

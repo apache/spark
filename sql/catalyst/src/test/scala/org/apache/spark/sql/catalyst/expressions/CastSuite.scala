@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.sql.{Timestamp, Date}
+import java.util.{TimeZone, Calendar}
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
@@ -39,6 +40,137 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
   // expected cannot be null
   private def checkCast(v: Any, expected: Any): Unit = {
     checkEvaluation(cast(v, Literal(expected).dataType), expected)
+  }
+
+  test("cast string to date") {
+    var c = Calendar.getInstance()
+    c.set(2015, 0, 1, 0, 0, 0)
+    c.set(Calendar.MILLISECOND, 0)
+    checkEvaluation(Cast(Literal("2015"), DateType), new Date(c.getTimeInMillis))
+    c = Calendar.getInstance()
+    c.set(2015, 2, 1, 0, 0, 0)
+    c.set(Calendar.MILLISECOND, 0)
+    checkEvaluation(Cast(Literal("2015-03"), DateType), new Date(c.getTimeInMillis))
+    c = Calendar.getInstance()
+    c.set(2015, 2, 18, 0, 0, 0)
+    c.set(Calendar.MILLISECOND, 0)
+    checkEvaluation(Cast(Literal("2015-03-18"), DateType), new Date(c.getTimeInMillis))
+    checkEvaluation(Cast(Literal("2015-03-18 "), DateType), new Date(c.getTimeInMillis))
+    checkEvaluation(Cast(Literal("2015-03-18 123142"), DateType), new Date(c.getTimeInMillis))
+    checkEvaluation(Cast(Literal("2015-03-18T123123"), DateType), new Date(c.getTimeInMillis))
+    checkEvaluation(Cast(Literal("2015-03-18T"), DateType), new Date(c.getTimeInMillis))
+
+    checkEvaluation(Cast(Literal("2015-03-18X"), DateType), null)
+    checkEvaluation(Cast(Literal("2015/03/18"), DateType), null)
+    checkEvaluation(Cast(Literal("2015.03.18"), DateType), null)
+    checkEvaluation(Cast(Literal("20150318"), DateType), null)
+    checkEvaluation(Cast(Literal("2015-031-8"), DateType), null)
+  }
+
+  test("cast string to timestamp") {
+    checkEvaluation(Cast(Literal("123"), TimestampType),
+      null)
+
+    var c = Calendar.getInstance()
+    c.set(2015, 0, 1, 0, 0, 0)
+    c.set(Calendar.MILLISECOND, 0)
+    checkEvaluation(Cast(Literal("2015"), TimestampType),
+      new Timestamp(c.getTimeInMillis))
+    c = Calendar.getInstance()
+    c.set(2015, 2, 1, 0, 0, 0)
+    c.set(Calendar.MILLISECOND, 0)
+    checkEvaluation(Cast(Literal("2015-03"), TimestampType),
+      new Timestamp(c.getTimeInMillis))
+    c = Calendar.getInstance()
+    c.set(2015, 2, 18, 0, 0, 0)
+    c.set(Calendar.MILLISECOND, 0)
+    checkEvaluation(Cast(Literal("2015-03-18"), TimestampType),
+      new Timestamp(c.getTimeInMillis))
+    checkEvaluation(Cast(Literal("2015-03-18 "), TimestampType),
+      new Timestamp(c.getTimeInMillis))
+    checkEvaluation(Cast(Literal("2015-03-18T"), TimestampType),
+      new Timestamp(c.getTimeInMillis))
+
+    c = Calendar.getInstance()
+    c.set(2015, 2, 18, 12, 3, 17)
+    c.set(Calendar.MILLISECOND, 0)
+    checkEvaluation(Cast(Literal("2015-03-18 12:03:17"), TimestampType),
+      new Timestamp(c.getTimeInMillis))
+    checkEvaluation(Cast(Literal("2015-03-18T12:03:17"), TimestampType),
+      new Timestamp(c.getTimeInMillis))
+
+    c = Calendar.getInstance(TimeZone.getTimeZone("UTC"))
+    c.set(2015, 2, 18, 12, 3, 17)
+    c.set(Calendar.MILLISECOND, 0)
+    checkEvaluation(Cast(Literal("2015-03-18T12:03:17Z"), TimestampType),
+      new Timestamp(c.getTimeInMillis))
+    checkEvaluation(Cast(Literal("2015-03-18 12:03:17Z"), TimestampType),
+      new Timestamp(c.getTimeInMillis))
+
+    c = Calendar.getInstance(TimeZone.getTimeZone("GMT-01:00"))
+    c.set(2015, 2, 18, 12, 3, 17)
+    c.set(Calendar.MILLISECOND, 0)
+    checkEvaluation(Cast(Literal("2015-03-18T12:03:17-1:0"), TimestampType),
+      new Timestamp(c.getTimeInMillis))
+    checkEvaluation(Cast(Literal("2015-03-18T12:03:17-01:00"), TimestampType),
+      new Timestamp(c.getTimeInMillis))
+
+    c = Calendar.getInstance(TimeZone.getTimeZone("GMT+07:30"))
+    c.set(2015, 2, 18, 12, 3, 17)
+    c.set(Calendar.MILLISECOND, 0)
+    checkEvaluation(Cast(Literal("2015-03-18T12:03:17+07:30"), TimestampType),
+      new Timestamp(c.getTimeInMillis))
+
+    c = Calendar.getInstance(TimeZone.getTimeZone("GMT+07:03"))
+    c.set(2015, 2, 18, 12, 3, 17)
+    c.set(Calendar.MILLISECOND, 0)
+    checkEvaluation(Cast(Literal("2015-03-18T12:03:17+7:3"), TimestampType),
+      new Timestamp(c.getTimeInMillis))
+
+    c = Calendar.getInstance()
+    c.set(2015, 2, 18, 12, 3, 17)
+    c.set(Calendar.MILLISECOND, 123)
+    checkEvaluation(Cast(Literal("2015-03-18 12:03:17.123"), TimestampType),
+      new Timestamp(c.getTimeInMillis))
+    checkEvaluation(Cast(Literal("2015-03-18T12:03:17.123"), TimestampType),
+      new Timestamp(c.getTimeInMillis))
+
+    c = Calendar.getInstance(TimeZone.getTimeZone("UTC"))
+    c.set(2015, 2, 18, 12, 3, 17)
+    c.set(Calendar.MILLISECOND, 456)
+    checkEvaluation(Cast(Literal("2015-03-18T12:03:17.456Z"), TimestampType),
+      new Timestamp(c.getTimeInMillis))
+    checkEvaluation(Cast(Literal("2015-03-18 12:03:17.456Z"), TimestampType),
+      new Timestamp(c.getTimeInMillis))
+
+    c = Calendar.getInstance(TimeZone.getTimeZone("GMT-01:00"))
+    c.set(2015, 2, 18, 12, 3, 17)
+    c.set(Calendar.MILLISECOND, 123)
+    checkEvaluation(Cast(Literal("2015-03-18T12:03:17.123-1:0"), TimestampType),
+      new Timestamp(c.getTimeInMillis))
+    checkEvaluation(Cast(Literal("2015-03-18T12:03:17.123-01:00"), TimestampType),
+      new Timestamp(c.getTimeInMillis))
+
+    c = Calendar.getInstance(TimeZone.getTimeZone("GMT+07:30"))
+    c.set(2015, 2, 18, 12, 3, 17)
+    c.set(Calendar.MILLISECOND, 123)
+    checkEvaluation(Cast(Literal("2015-03-18T12:03:17.123+07:30"), TimestampType),
+      new Timestamp(c.getTimeInMillis))
+
+    c = Calendar.getInstance(TimeZone.getTimeZone("GMT+07:03"))
+    c.set(2015, 2, 18, 12, 3, 17)
+    c.set(Calendar.MILLISECOND, 123)
+    checkEvaluation(Cast(Literal("2015-03-18T12:03:17.123+7:3"), TimestampType),
+      new Timestamp(c.getTimeInMillis))
+
+    checkEvaluation(Cast(Literal("2015-03-18 123142"), TimestampType), null)
+    checkEvaluation(Cast(Literal("2015-03-18T123123"), TimestampType), null)
+    checkEvaluation(Cast(Literal("2015-03-18X"), TimestampType), null)
+    checkEvaluation(Cast(Literal("2015/03/18"), TimestampType), null)
+    checkEvaluation(Cast(Literal("2015.03.18"), TimestampType), null)
+    checkEvaluation(Cast(Literal("20150318"), TimestampType), null)
+    checkEvaluation(Cast(Literal("2015-031-8"), TimestampType), null)
+    checkEvaluation(Cast(Literal("2015-03-18T12:03:17-0:70"), TimestampType), null)
   }
 
   test("cast from int") {
@@ -148,6 +280,18 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
     val sts = sd + " 00:00:02"
     val nts = sts + ".1"
     val ts = Timestamp.valueOf(nts)
+
+    val defaultTimeZone = TimeZone.getDefault
+    TimeZone.setDefault(TimeZone.getTimeZone("America/Los_Angeles"))
+    var c = Calendar.getInstance()
+    c.set(2015, 2, 8, 2, 30, 0)
+    checkEvaluation(cast(cast(new Timestamp(c.getTimeInMillis), StringType), TimestampType),
+      c.getTimeInMillis * 1000)
+    c = Calendar.getInstance()
+    c.set(2015, 10, 1, 2, 30, 0)
+    checkEvaluation(cast(cast(new Timestamp(c.getTimeInMillis), StringType), TimestampType),
+      c.getTimeInMillis * 1000)
+    TimeZone.setDefault(defaultTimeZone)
 
     checkEvaluation(cast("abdef", StringType), "abdef")
     checkEvaluation(cast("abdef", DecimalType.Unlimited), null)
