@@ -41,7 +41,7 @@ case class CartesianProduct(
 
   protected override def doExecute(): RDD[InternalRow] = {
     val broadcastedRelation = sparkContext.broadcast(broadcast.execute().map(_.copy()))
-    broadcastedRelation.value.cartesian(streamed.execute().map(_.copy())).mapPartitions{ iter =>
+    broadcastedRelation.value.cartesian(streamed.execute().map(_.copy())).mapPartitions { iter =>
       val joinedRow = new JoinedRow
       buildSide match {
         case BuildRight => iter.map(r => joinedRow(r._1, r._2))

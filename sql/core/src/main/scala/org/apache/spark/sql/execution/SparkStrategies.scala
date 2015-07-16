@@ -216,7 +216,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         val buildSide =
           if (left.statistics.sizeInBytes <= right.statistics.sizeInBytes) {
             joins.BuildRight
-          }  else {
+          } else {
             joins.BuildLeft
           }
         execution.joins.CartesianProduct(planLater(left), planLater(right), buildSide) :: Nil
@@ -224,7 +224,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         val buildSide =
           if (left.statistics.sizeInBytes <= right.statistics.sizeInBytes) {
             joins.BuildRight
-          }  else {
+          } else {
             joins.BuildLeft
           }
         execution.Filter(condition,
