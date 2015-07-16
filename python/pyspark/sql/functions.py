@@ -516,6 +516,7 @@ def length(col):
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.length(_to_java_column(col)))
 
+
 @ignore_unicode_prefix
 @since(1.5)
 def format_number(col, d):
