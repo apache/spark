@@ -240,7 +240,7 @@ private abstract class BytesUnsafeColumnWriter extends UnsafeColumnWriter {
     write(target, bytes, column, cursor)
   }
 
-  def write(target: UnsafeRow, bytes: Array[Byte], column: Int, cursor: Int):Int = {
+  def write(target: UnsafeRow, bytes: Array[Byte], column: Int, cursor: Int): Int = {
     val offset = target.getBaseOffset + cursor
     val numBytes = bytes.length
     if ((numBytes & 0x07) > 0) {

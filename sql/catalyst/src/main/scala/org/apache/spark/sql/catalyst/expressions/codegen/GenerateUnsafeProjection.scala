@@ -38,6 +38,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
     val ctx = newCodeGenContext()
     val codes = expressions.map(_.gen(ctx))
     val all_exprs = codes.map(_.code).mkString("\n")
+    val fixedSize = 8 * codes.length + UnsafeRow.calculateBitSetWidthInBytes(codes.length)
 
     val additionalSize = expressions.zipWithIndex.map { case (e, i) =>
       e.dataType match {
@@ -57,6 +58,8 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
           s"cursor += stringWriter.write(target, ${codes(i).primitive}, $i, cursor)"
         case BinaryType =>
           s"cursor += binaryWriter.write(target, ${codes(i).primitive}, $i, cursor)"
+        case _ =>
+          throw new Exception(s"Not supported DataType: $dt")
       }
       s"""if (${codes(i).isNull}) {
             target.setNullAt($i);
@@ -64,7 +67,6 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
             $update;
           }"""
     }.mkString("\n          ")
-    val fixedSize = (8 * expressions.length) + UnsafeRow.calculateBitSetWidthInBytes(expressions.length)
 
     val code = s"""
     public Object generate($exprType[] expr) {
