@@ -19,6 +19,23 @@ There are 3 main types of operators:
   are derived from ``BaseSensorOperator`` and run a poke
   method at a specified ``poke_interval`` until it returns ``True``.
 
+BaseOperator
+''''''''''''
+All operators are derived from ``BaseOperator`` and acquire much
+functionality through inheritance. Since this is the core of the engine,
+it's worth taking the time to understand the parameters of ``BaseOperator``
+to understand the primitive features that can be leveraged in your
+DAGs.
+
+.. automodule:: airflow.operators
+    :show-inheritance:
+    :members:
+        BaseOperator,
+
+
+Operator API
+''''''''''''
+
 .. automodule:: airflow.operators
     :show-inheritance:
     :members:
