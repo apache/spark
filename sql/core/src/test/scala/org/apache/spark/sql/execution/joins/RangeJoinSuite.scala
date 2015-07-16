@@ -32,7 +32,7 @@ class RangeJoinSuite extends SparkPlanTest {
   val intervals2 = Seq(
     (-2, -1),
     (-4, -2),
-    (1 ,3),
+    (1, 3),
     (5, 7)
   ).toDF("low2", "high2")
   val intervalKeys2 = Seq("low2", "high2").map(UnresolvedAttribute.apply)
