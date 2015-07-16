@@ -46,6 +46,8 @@ trait Generator extends Expression { self: Product =>
   // however, we don't keep the output field names in the Generator.
   override def dataType: DataType = throw new UnsupportedOperationException
 
+  override def foldable: Boolean = false
+
   override def nullable: Boolean = false
 
   /**
