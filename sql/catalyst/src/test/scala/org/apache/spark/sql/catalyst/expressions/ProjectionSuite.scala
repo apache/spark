@@ -19,7 +19,6 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -30,8 +29,8 @@ class ProjectionSuite extends SparkFunSuite {
     val row = InternalRow(1, 2L, 3.1, null, UTF8String.fromString("hello"), Array[Byte](12, 12))
     val fields = Seq(IntegerType, LongType, DoubleType, FloatType, StringType, BinaryType)
 
-    val toUnsafe = GenerateUnsafeProjection.generate(fields.toArray)
-    val unsafeRow = toUnsafe(row).asInstanceOf[UnsafeRow]
+    val toUnsafe = UnsafeProjection.create(fields.toArray)
+    val unsafeRow = toUnsafe(row)
     assert(unsafeRow.getInt(0) === 1)
     assert(unsafeRow.getLong(1) === 2L)
     assert(unsafeRow.getDouble(2) === 3.1)

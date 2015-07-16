@@ -18,18 +18,15 @@
 package org.apache.spark.sql.catalyst.expressions.codegen
 
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.types.{BinaryType, DataType, StringType, StructType}
+import org.apache.spark.sql.types.{BinaryType, StringType}
 
 
 /**
- * Generates byte code that convert a InternalRow to an [[UnsafeRow]].
+ * Generates a [[Projection]] that returns an [[UnsafeRow]].
+ *
+ * Note: The returned UnsafeRow will be pointed to a scratch buffer inside the projection.
  */
-object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], Projection] {
-
-  def generate(schema: StructType): Projection = generate(schema.fields.map(_.dataType))
-
-  def generate(fields: Seq[DataType]): Projection =
-    generate(fields.zipWithIndex.map(x => new BoundReference(x._2, x._1, true)))
+object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafeProjection] {
 
   protected def canonicalize(in: Seq[Expression]): Seq[Expression] =
     in.map(ExpressionCanonicalizer.execute)
@@ -37,7 +34,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], Projectio
   protected def bind(in: Seq[Expression], inputSchema: Seq[Attribute]): Seq[Expression] =
     in.map(BindReferences.bindReference(_, inputSchema))
 
-  protected def create(expressions: Seq[Expression]): Projection = {
+  protected def create(expressions: Seq[Expression]): UnsafeProjection = {
     val ctx = newCodeGenContext()
     val codes = expressions.map(_.gen(ctx))
     val all_exprs = codes.map(_.code).mkString("\n")
@@ -74,7 +71,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], Projectio
       return new SpecificProjection();
     }
 
-    class SpecificProjection extends ${classOf[BaseProjection].getName} {
+    class SpecificProjection extends ${classOf[UnsafeProjection].getName} {
 
       private final org.apache.spark.sql.catalyst.expressions.StringUnsafeColumnWriter
         stringWriter = new org.apache.spark.sql.catalyst.expressions.StringUnsafeColumnWriter();
@@ -88,8 +85,11 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], Projectio
 
       public SpecificProjection() {}
 
-      public Object apply(Object _i) {
-        InternalRow i = (InternalRow) _i;
+      public Object apply(Object row) {
+        return apply((InternalRow) i);
+      }
+
+      public UnsafeRow apply(InternalRow i) {
         ${all_exprs}
 
         int numBytes = $fixedSize $additionalSize;
@@ -108,6 +108,6 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], Projectio
     logDebug(s"code for ${expressions.mkString(",")}:\n$code")
 
     val c = compile(code)
-    c.generate(null).asInstanceOf[Projection]
+    c.generate(null).asInstanceOf[UnsafeProjection]
   }
 }

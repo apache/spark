@@ -18,8 +18,8 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.codegen.GenerateMutableProjection
-import org.apache.spark.sql.types.DataType
+import org.apache.spark.sql.catalyst.expressions.codegen.{GenerateUnsafeProjection, GenerateMutableProjection}
+import org.apache.spark.sql.types.{StructType, DataType}
 
 /**
  * A [[Projection]] that is calculated by calling the `eval` of each of the specified expressions.
@@ -72,6 +72,22 @@ case class InterpretedMutableProjection(expressions: Seq[Expression]) extends Mu
       i += 1
     }
     mutableRow
+  }
+}
+
+/**
+ * A projection that returns UnsafeRow.
+ */
+abstract class UnsafeProjection extends Projection {
+  override def apply(row: InternalRow): UnsafeRow
+}
+
+object UnsafeProjection {
+  def create(schema: StructType): UnsafeProjection = create(schema.fields.map(_.dataType))
+
+  def create(fields: Seq[DataType]): UnsafeProjection = {
+    val exprs = fields.zipWithIndex.map(x => new BoundReference(x._2, x._1, true))
+    GenerateUnsafeProjection.generate(exprs)
   }
 }
 
