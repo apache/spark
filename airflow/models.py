@@ -825,8 +825,9 @@ class TaskInstance(Base):
 
                     # If a timout is specified for the task, make it fail
                     # if it goes beyond
-                    if task_copy.timeout:
-                        with utils.timeout(int(task_copy.timeout.total_seconds())):
+                    if task_copy.execution_timeout:
+                        with utils.timeout(int(
+                                task_copy.execution_timeout.total_seconds())):
                             task_copy.execute(context=context)
                     else:
                         task_copy.execute(context=context)
@@ -1059,9 +1060,9 @@ class BaseOperator(object):
         get bundled in a single email, sent soon after that time. SLA
         notification are sent once and only once for each task instance.
     :type sla: datetime.timedelta
-    :param timeout: max time allowed for the execution of this task instance,
-        if it goes beyond it will raise and fail.
-    :type timeout: datetime.timedelta
+    :param execution_timeout: max time allowed for the execution of
+        this task instance, if it goes beyond it will raise and fail.
+    :type execution_timeout: datetime.timedelta
     """
 
     # For derived classes to define which fields will get jinjaified
@@ -1095,7 +1096,7 @@ class BaseOperator(object):
             queue=conf.get('celery', 'default_queue'),
             pool=None,
             sla=None,
-            timeout=None,
+            execution_timeout=None,
             *args,
             **kwargs):
 
@@ -1115,7 +1116,7 @@ class BaseOperator(object):
         self.queue = queue
         self.pool = pool
         self.sla = sla
-        self.timeout = timeout
+        self.execution_timeout = execution_timeout
         if isinstance(retry_delay, timedelta):
             self.retry_delay = retry_delay
         else:

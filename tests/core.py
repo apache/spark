@@ -170,7 +170,7 @@ class CoreTest(unittest.TestCase):
     def test_timeout(self):
         t = operators.PythonOperator(
             task_id='test_timeout',
-            timeout=timedelta(seconds=2),
+            execution_timeout=timedelta(seconds=2),
             python_callable=lambda: sleep(10),
             dag=self.dag)
         self.assertRaises(
