@@ -23,7 +23,7 @@ import javax.security.auth.login.LoginException
 
 import org.apache.commons.logging.Log
 import org.apache.hadoop.hive.conf.HiveConf
-import org.apache.hadoop.hive.shims.ShimLoader
+import org.apache.hadoop.hive.shims.Utils
 import org.apache.hadoop.security.UserGroupInformation
 import org.apache.hive.service.Service.STATE
 import org.apache.hive.service.auth.HiveAuthFactory
@@ -51,7 +51,7 @@ private[hive] class SparkSQLCLIService(hiveServer: HiveServer2, hiveContext: Hiv
     if (UserGroupInformation.isSecurityEnabled) {
       try {
         HiveAuthFactory.loginFromKeytab(hiveConf)
-        sparkServiceUGI = UserGroupInformation.getCurrentUser()
+        sparkServiceUGI = Utils.getUGI()
         setSuperField(this, "serviceUGI", sparkServiceUGI)
       } catch {
         case e @ (_: IOException | _: LoginException) =>

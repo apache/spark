@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.hive.thriftserver
 
-import java.util
 import java.util.concurrent.Executors
 
 import org.apache.commons.logging.Log
