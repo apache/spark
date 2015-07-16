@@ -4,6 +4,7 @@ import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.SparkFunSuite
 
+
 abstract class KinesisFunSuite extends SparkFunSuite with BeforeAndAfterAll {
   import KinesisTestUtils._
 

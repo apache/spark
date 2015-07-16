@@ -39,41 +39,56 @@ import org.apache.spark.util.Utils
 class KinesisStreamSuite extends KinesisFunSuite
   with Eventually with BeforeAndAfter with BeforeAndAfterAll {
 
-  private val endpointUrl = "https://kinesis.us-west-2.amazonaws.com"
+  private lazy val awsCredentials = KinesisTestUtils.getAWSCredentials()
   private val kinesisAppName = s"KinesisStreamSuite-${math.abs(Random.nextLong())}"
-  private val testUtils = new KinesisTestUtils(endpointUrl)
+  private val kinesisTestUtils = new KinesisTestUtils()
 
   private var ssc: StreamingContext = _
+  private var sc: SparkContext = _
 
   override def beforeAll(): Unit = {
-    super.beforeAll()
-    testUtils.createStream()
+    kinesisTestUtils.createStream()
+    val conf = new SparkConf()
+      .setMaster("local[4]")
+      .setAppName("KinesisStreamSuite") // Setting Spark app name to Kinesis app name
+    sc = new SparkContext(conf)
   }
 
   override def afterAll(): Unit = {
-    testUtils.deleteStream()
+    sc.stop()
+    kinesisTestUtils.deleteStream()
+    kinesisTestUtils.deleteDynamoDBTable(kinesisAppName)
   }
 
   before {
-    testUtils.deleteDynamoDBTable(kinesisAppName)
+    // Delete the table so that each unit test can start from scratch without prior state
+    kinesisTestUtils.deleteDynamoDBTable(kinesisAppName)
   }
 
   after {
     if (ssc != null) {
-      ssc.stop()
+      ssc.stop(stopSparkContext = false)
       ssc = null
     }
-    testUtils.deleteDynamoDBTable(kinesisAppName)
   }
 
+  test("API") {
+    // The API is tested separately because other tests may not run all the time
+    ssc = new StreamingContext(sc, Milliseconds(1000))
+    val stream1 = KinesisUtils.createStream(ssc, kinesisAppName, kinesisTestUtils.streamName,
+      kinesisTestUtils.endpointUrl, kinesisTestUtils.regionName, InitialPositionInStream.LATEST,
+      Seconds(10), StorageLevel.MEMORY_ONLY)
+    val stream2 = KinesisUtils.createStream(ssc, kinesisAppName, kinesisTestUtils.streamName,
+      kinesisTestUtils.endpointUrl, kinesisTestUtils.regionName, InitialPositionInStream.LATEST,
+      Seconds(10), StorageLevel.MEMORY_ONLY, "", "")
+  }
+
+
   testOrIgnore("basic operation") {
-    val conf = new SparkConf()
-      .setMaster("local[4]")
-      .setAppName("KinesisStreamSuite") // Setting Spark app name to Kinesis app name
-    ssc = new StreamingContext(conf, Milliseconds(1000))
+    ssc = new StreamingContext(sc, Milliseconds(1000))
     val credentials = KinesisTestUtils.getAWSCredentials()
-    val stream = KinesisUtils.createStream(ssc, kinesisAppName, testUtils.streamName,
-      testUtils.endpointUrl, testUtils.regionName, InitialPositionInStream.LATEST,
+    val stream = KinesisUtils.createStream(ssc, kinesisAppName, kinesisTestUtils.streamName,
+      kinesisTestUtils.endpointUrl, kinesisTestUtils.regionName, InitialPositionInStream.LATEST,
       Seconds(10), StorageLevel.MEMORY_ONLY,
       credentials.getAWSAccessKeyId, credentials.getAWSSecretKey)
 
@@ -86,7 +101,7 @@ class KinesisStreamSuite extends KinesisFunSuite
 
     val testData = 1 to 10
     eventually(timeout(120 seconds), interval(10 second)) {
-      testUtils.pushData(testData)
+      kinesisTestUtils.pushData(testData)
       assert(collected === testData.toSet, "\nData received does not match data sent")
     }
     ssc.stop()

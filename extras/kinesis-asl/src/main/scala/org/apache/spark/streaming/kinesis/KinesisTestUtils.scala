@@ -33,7 +33,12 @@ import com.amazonaws.services.kinesis.model._
 
 import org.apache.spark.Logging
 
-class KinesisTestUtils(val endpointUrl: String, _regionName: String = "") extends Logging {
+/**
+ * Shared utility methods
+ */
+private class KinesisTestUtils(
+    val endpointUrl: String = "https://kinesis.us-west-2.amazonaws.com",
+    _regionName: String = "") extends Logging {
 
   val regionName = if (_regionName.length == 0) {
     RegionUtils.getRegionByEndpoint(endpointUrl).getName()
@@ -169,8 +174,7 @@ class KinesisTestUtils(val endpointUrl: String, _regionName: String = "") extend
   }
 }
 
-object KinesisTestUtils {
-
+private[kinesis] object KinesisTestUtils {
 
   val envVarName = "RUN_KINESIS_TESTS"
 
