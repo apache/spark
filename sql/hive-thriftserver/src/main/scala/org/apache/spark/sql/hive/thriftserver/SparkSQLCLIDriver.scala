@@ -20,7 +20,7 @@ package org.apache.spark.sql.hive.thriftserver
 import scala.collection.JavaConversions._
 
 import java.io._
-import java.util.{ArrayList => JArrayList}
+import java.util.{ArrayList => JArrayList, Locale}
 
 import jline.console.ConsoleReader
 import jline.console.history.FileHistory
@@ -112,7 +112,10 @@ private[hive] object SparkSQLCLIDriver extends Logging {
     // Clean up after we exit
     Utils.addShutdownHook { () => SparkSQLEnv.stop() }
 
+    val remoteMode = isRemoteMode(sessionState)
     // "-h" option has been passed, so connect to Hive thrift server.
+/* TODO
+
     if (sessionState.getHost != null) {
       sessionState.connect()
       if (sessionState.isRemoteMode) {
@@ -121,7 +124,8 @@ private[hive] object SparkSQLCLIDriver extends Logging {
       }
     }
 
-    if (!sessionState.isRemoteMode) {
+*/
+    if (!remoteMode) {
       // Hadoop-20 and above - we need to augment classpath using hiveconf
       // components.
       // See also: code in ExecDriver.java
@@ -191,10 +195,14 @@ private[hive] object SparkSQLCLIDriver extends Logging {
         logWarning(e.getMessage)
     }
 
+    // TODO: missing
+/*
     val clientTransportTSocketField = classOf[CliSessionState].getDeclaredField("transport")
     clientTransportTSocketField.setAccessible(true)
 
     transport = clientTransportTSocketField.get(sessionState).asInstanceOf[TSocket]
+*/
+    transport = null
 
     var ret = 0
     var prefix = ""
@@ -231,6 +239,13 @@ private[hive] object SparkSQLCLIDriver extends Logging {
 
     System.exit(ret)
   }
+
+
+  def isRemoteMode(state: CliSessionState): Boolean = {
+    //    sessionState.isRemoteMode
+    false
+  }
+
 }
 
 private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
@@ -240,25 +255,32 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
 
   private val console = new SessionState.LogHelper(LOG)
 
+  private val isRemoteMode = {
+    SparkSQLCLIDriver.isRemoteMode(sessionState)
+  }
+
   private val conf: Configuration =
     if (sessionState != null) sessionState.getConf else new Configuration()
 
   // Force initializing SparkSQLEnv. This is put here but not object SparkSQLCliDriver
   // because the Hive unit tests do not go through the main() code path.
-  if (!sessionState.isRemoteMode) {
+  if (!isRemoteMode) {
     SparkSQLEnv.init()
   }
 
   override def processCmd(cmd: String): Int = {
     val cmd_trimmed: String = cmd.trim()
+    val cmd_lower = cmd_trimmed.toLowerCase(Locale.ENGLISH)
+
     val tokens: Array[String] = cmd_trimmed.split("\\s+")
     val cmd_1: String = cmd_trimmed.substring(tokens(0).length()).trim()
-    if (cmd_trimmed.toLowerCase.equals("quit") ||
-      cmd_trimmed.toLowerCase.equals("exit") ||
-      tokens(0).equalsIgnoreCase("source") ||
+
+    if (cmd_lower.equals("quit") ||
+      cmd_lower.equals("exit") ||
+      tokens(0).toLowerCase(Locale.ENGLISH).equals("source") ||
       cmd_trimmed.startsWith("!") ||
       tokens(0).toLowerCase.equals("list") ||
-      sessionState.isRemoteMode) {
+      isRemoteMode) {
       val start = System.currentTimeMillis()
       super.processCmd(cmd)
       val end = System.currentTimeMillis()

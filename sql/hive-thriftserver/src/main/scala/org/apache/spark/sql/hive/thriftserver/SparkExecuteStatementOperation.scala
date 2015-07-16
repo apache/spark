@@ -32,7 +32,7 @@ import org.apache.hive.service.cli._
 import org.apache.hadoop.hive.ql.metadata.Hive
 import org.apache.hadoop.hive.ql.metadata.HiveException
 import org.apache.hadoop.hive.ql.session.SessionState
-import org.apache.hadoop.hive.shims.ShimLoader
+import org.apache.hadoop.hive.shims.{Utils, ShimLoader}
 import org.apache.hadoop.security.UserGroupInformation
 import org.apache.hive.service.cli.operation.ExecuteStatementOperation
 import org.apache.hive.service.cli.session.HiveSession
@@ -146,7 +146,7 @@ private[hive] class SparkExecuteStatementOperation(
     } else {
       val parentSessionState = SessionState.get()
       val hiveConf = getConfigForOperation()
-      val sparkServiceUGI = UserGroupInformation.getCurrentUser
+      val sparkServiceUGI = Utils.getUGI()
       val sessionHive = getCurrentHive()
       val currentSqlSession = hiveContext.currentSession
 
@@ -200,7 +200,6 @@ private[hive] class SparkExecuteStatementOperation(
       }
     }
   }
-
 
   override def runInternal(): Unit = {
     statementId = UUID.randomUUID().toString

@@ -17,12 +17,16 @@
 
 package org.apache.spark.sql.hive.thriftserver
 
+import java.util.Locale
+import java.util.concurrent.atomic.AtomicBoolean
+
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.commons.logging.LogFactory
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
+import org.apache.hive.service.Service.STATE
 import org.apache.hive.service.cli.thrift.{ThriftBinaryCLIService, ThriftHttpCLIService}
 import org.apache.hive.service.server.{HiveServerServerOptionsProcessor, HiveServer2}
 
@@ -241,6 +245,9 @@ object HiveThriftServer2 extends Logging {
 private[hive] class HiveThriftServer2(hiveContext: HiveContext)
   extends HiveServer2
   with ReflectedCompositeService {
+  // state is tracked internally so that the server only attempts to shut down if it successfully
+  // started, and then once only.
+  private val started = new AtomicBoolean(false)
 
   override def init(hiveConf: HiveConf) {
     val sparkSqlCliService = new SparkSQLCLIService(this, hiveContext)
@@ -259,8 +266,19 @@ private[hive] class HiveThriftServer2(hiveContext: HiveContext)
   }
 
   private def isHTTPTransportMode(hiveConf: HiveConf): Boolean = {
-    val transportMode: String = hiveConf.getVar(ConfVars.HIVE_SERVER2_TRANSPORT_MODE)
-    transportMode.equalsIgnoreCase("http")
+    val transportMode = hiveConf.getVar(ConfVars.HIVE_SERVER2_TRANSPORT_MODE)
+    transportMode.toLowerCase(Locale.ENGLISH).equals("http")
   }
 
+
+  override def start(): Unit = {
+    super.start()
+    started.set(true)
+  }
+
+  override def stop(): Unit = {
+    if (started.getAndSet(false)) {
+       super.stop()
+    }
+  }
 }
