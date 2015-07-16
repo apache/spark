@@ -452,19 +452,3 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] {
     s"$nodeName(${args.mkString(",")})"
   }
 }
-
-
-/**
- * A [[TreeNode]] with no children.
- */
-trait LeafNode[BaseType <: TreeNode[BaseType]] {
-  def children: Seq[BaseType] = Nil
-}
-
-/**
- * A [[TreeNode]] with a single [[child]].
- */
-trait UnaryNode[BaseType <: TreeNode[BaseType]] {
-  def child: BaseType
-  def children: Seq[BaseType] = child :: Nil
-}
