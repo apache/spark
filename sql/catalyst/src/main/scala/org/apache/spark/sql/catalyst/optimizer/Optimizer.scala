@@ -518,13 +518,13 @@ object PushPredicateThroughProject extends Rule[LogicalPlan] {
       // Create a map of Aliases to their values from the child projection.
       // e.g., 'SELECT a + b AS c, d ...' produces Map(c -> Alias(a + b, c)).
       val aliasMap = AttributeMap(fields.collect {
-        case a: Alias => (a.toAttribute, a)
+        case a: Alias => (a.toAttribute, a.child)
       })
 
       // We only push down filter if their overlapped expressions are all
       // deterministic.
       val hasNondeterministic = condition.collect {
-        case a: Attribute if aliasMap.contains(a) => aliasMap(a).child
+        case a: Attribute if aliasMap.contains(a) => aliasMap(a)
       }.exists(_.find(!_.deterministic).isDefined)
 
       if (hasNondeterministic) {
