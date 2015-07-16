@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst
 import scala.language.implicitConversions
 import scala.util.parsing.combinator.lexical.StdLexical
 import scala.util.parsing.combinator.syntactical.StandardTokenParsers
-import scala.util.parsing.combinator.{PackratParsers, RegexParsers}
+import scala.util.parsing.combinator.PackratParsers
 import scala.util.parsing.input.CharArrayReader.EofCh
 
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -30,12 +30,14 @@ private[sql] abstract class AbstractSparkSQLParser
 
   def parse(input: String): LogicalPlan = {
     // Initialize the Keywords.
-    lexical.initialize(reservedWords)
+    initLexical
     phrase(start)(new lexical.Scanner(input)) match {
       case Success(plan, _) => plan
       case failureOrError => sys.error(failureOrError.toString)
     }
   }
+  /* One time initialization of lexical.This avoid reinitialization of  lexical in parse method */
+  protected lazy val initLexical: Unit = lexical.initialize(reservedWords)
 
   protected case class Keyword(str: String) {
     def normalize: String = lexical.normalizeKeyword(str)

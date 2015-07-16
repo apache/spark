@@ -112,10 +112,17 @@ install_scala() {
 # the environment
 ZINC_PORT=${ZINC_PORT:-"3030"}
 
+# Check for the `--force` flag dictating that `mvn` should be downloaded
+# regardless of whether the system already has a `mvn` install
+if [ "$1" == "--force" ]; then
+  FORCE_MVN=1
+  shift
+fi
+
 # Install Maven if necessary
 MVN_BIN="$(command -v mvn)"
 
-if [ ! "$MVN_BIN" ]; then
+if [ ! "$MVN_BIN" -o -n "$FORCE_MVN" ]; then
   install_mvn
 fi
 
@@ -138,6 +145,8 @@ fi
 
 # Set any `mvn` options if not already present
 export MAVEN_OPTS=${MAVEN_OPTS:-"$_COMPILE_JVM_OPTS"}
+
+echo "Using \`mvn\` from path: $MVN_BIN"
 
 # Last, call the `mvn` command as usual
 ${MVN_BIN} "$@"

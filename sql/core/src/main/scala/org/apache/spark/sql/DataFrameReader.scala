@@ -263,7 +263,7 @@ class DataFrameReader private[sql](sqlContext: SQLContext) {
       val globbedPaths = paths.map(new Path(_)).flatMap(SparkHadoopUtil.get.globPath).toArray
       sqlContext.baseRelationToDataFrame(
         new ParquetRelation2(
-          globbedPaths.map(_.toString), None, None, Map.empty[String, String])(sqlContext))
+          globbedPaths.map(_.toString), None, None, extraOptions.toMap)(sqlContext))
     }
   }
 

@@ -22,9 +22,17 @@ import org.json4s.JsonDSL._
 import org.apache.spark.annotation.DeveloperApi
 
 
-object ArrayType {
+object ArrayType extends AbstractDataType {
   /** Construct a [[ArrayType]] object with the given element type. The `containsNull` is true. */
   def apply(elementType: DataType): ArrayType = ArrayType(elementType, containsNull = true)
+
+  override private[sql] def defaultConcreteType: DataType = ArrayType(NullType, containsNull = true)
+
+  override private[sql] def acceptsType(other: DataType): Boolean = {
+    other.isInstanceOf[ArrayType]
+  }
+
+  override private[sql] def simpleString: String = "array"
 }
 
 
@@ -41,8 +49,6 @@ object ArrayType {
  *
  * @param elementType The data type of values.
  * @param containsNull Indicates if values have `null` values
- *
- * @group dataType
  */
 @DeveloperApi
 case class ArrayType(elementType: DataType, containsNull: Boolean) extends DataType {

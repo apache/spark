@@ -453,15 +453,6 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] {
   }
 }
 
-/**
- * A [[TreeNode]] that has two children, [[left]] and [[right]].
- */
-trait BinaryNode[BaseType <: TreeNode[BaseType]] {
-  def left: BaseType
-  def right: BaseType
-
-  def children: Seq[BaseType] = Seq(left, right)
-}
 
 /**
  * A [[TreeNode]] with no children.

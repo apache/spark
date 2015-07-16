@@ -49,4 +49,12 @@ class MiscFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Sha2(Literal("ABC".getBytes), Literal.create(null, IntegerType)), null)
     checkEvaluation(Sha2(Literal.create(null, BinaryType), Literal.create(null, IntegerType)), null)
   }
+
+  test("crc32") {
+    checkEvaluation(Crc32(Literal("ABC".getBytes)), 2743272264L)
+    checkEvaluation(Crc32(Literal.create(Array[Byte](1, 2, 3, 4, 5, 6), BinaryType)),
+      2180413220L)
+    checkEvaluation(Crc32(Literal.create(null, BinaryType)), null)
+  }
+
 }

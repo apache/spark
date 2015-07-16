@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package main.scala
 
 import scala.util.Try
@@ -37,3 +38,4 @@ object SimpleApp {
     }
   }
 }
+// scalastyle:on println

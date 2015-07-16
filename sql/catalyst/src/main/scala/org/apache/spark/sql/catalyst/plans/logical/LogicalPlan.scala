@@ -161,7 +161,7 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
           if (tmp.nonEmpty) throw e
           inBacktick = true
         } else if (char == '.') {
-          if (tmp.isEmpty) throw e
+          if (name(i - 1) == '.' || i == name.length - 1) throw e
           nameParts += tmp.mkString
           tmp.clear()
         } else {
@@ -170,7 +170,7 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
       }
       i += 1
     }
-    if (tmp.isEmpty || inBacktick) throw e
+    if (inBacktick) throw e
     nameParts += tmp.mkString
     nameParts.toSeq
   }
@@ -291,6 +291,11 @@ abstract class UnaryNode extends LogicalPlan with trees.UnaryNode[LogicalPlan] {
 /**
  * A logical plan node with a left and right child.
  */
-abstract class BinaryNode extends LogicalPlan with trees.BinaryNode[LogicalPlan] {
+abstract class BinaryNode extends LogicalPlan {
   self: Product =>
+
+  def left: LogicalPlan
+  def right: LogicalPlan
+
+  override def children: Seq[LogicalPlan] = Seq(left, right)
 }
