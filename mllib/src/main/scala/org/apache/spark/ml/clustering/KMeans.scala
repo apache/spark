@@ -76,7 +76,7 @@ private[clustering] trait KMeansParams
    * @group expertParam
    */
   final val initMode = new Param[String](this, "initMode", "initialization algorithm",
-    (value: String) => MLlibKMeans.validateInitializationMode(value))
+    (value: String) => MLlibKMeans.validateInitMode(value))
 
   /** @group getExpertParam */
   def getInitMode: String = $(initMode)
