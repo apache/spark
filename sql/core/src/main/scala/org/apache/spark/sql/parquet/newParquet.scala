@@ -308,7 +308,7 @@ private[sql] class ParquetRelation2(
 
         // Overridden so we can inject our own cached files statuses.
         override def getPartitions: Array[SparkPartition] = {
-          val inputFormat = new ParquetInputFormat[Row] {
+          val inputFormat = new ParquetInputFormat[InternalRow] {
             override def listStatus(jobContext: JobContext): JList[FileStatus] = {
               if (cacheMetadata) cachedStatuses else super.listStatus(jobContext)
             }
