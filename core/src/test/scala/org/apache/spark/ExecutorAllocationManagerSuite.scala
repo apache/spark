@@ -755,26 +755,26 @@ class ExecutorAllocationManagerSuite
     sc = createSparkContext(2, 5, 3)
     val manager = sc.executorAllocationManager.get
 
-    val stageInfo1 = createStageInfo(1, 5)
-    stageInfo1.taskLocalityPreferences = Some(Seq(
+    val localityPreferences1 = Seq(
       Seq(TaskLocation("host1"), TaskLocation("host2"), TaskLocation("host3")),
       Seq(TaskLocation("host1"), TaskLocation("host2"), TaskLocation("host4")),
       Seq(TaskLocation("host2"), TaskLocation("host3"), TaskLocation("host4")),
       Seq.empty,
       Seq.empty
-    ))
+    )
+    val stageInfo1 = createStageInfo(1, 5, localityPreferences1)
     sc.listenerBus.postToAll(SparkListenerStageSubmitted(stageInfo1))
 
     val hints1 = listener(manager).executorPlacementHints()
     assert(hints1._1 === 3)
     assert(hints1._2 === Map("host1" -> 2, "host2" -> 3, "host3" -> 2, "host4" -> 2))
 
-    val stageInfo2 = createStageInfo(2, 3)
-    stageInfo2.taskLocalityPreferences = Some(Seq(
+    val localityPreferences2 = Seq(
       Seq(TaskLocation("host2"), TaskLocation("host3"), TaskLocation("host5")),
       Seq(TaskLocation("host3"), TaskLocation("host4"), TaskLocation("host5")),
       Seq.empty
-    ))
+    )
+    val stageInfo2 = createStageInfo(2, 3, localityPreferences2)
     sc.listenerBus.postToAll(SparkListenerStageSubmitted(stageInfo2))
 
     val hints2 = listener(manager).executorPlacementHints()
@@ -820,8 +820,13 @@ private object ExecutorAllocationManagerSuite extends PrivateMethodTester {
   private val sustainedSchedulerBacklogTimeout = 2L
   private val executorIdleTimeout = 3L
 
-  private def createStageInfo(stageId: Int, numTasks: Int): StageInfo = {
-    new StageInfo(stageId, 0, "name", numTasks, Seq.empty, Seq.empty, "no details")
+  private def createStageInfo(
+      stageId: Int,
+      numTasks: Int,
+      taskLocalityPreferences: Seq[Seq[TaskLocation]] = Seq.empty
+    ): StageInfo = {
+    new StageInfo(
+      stageId, 0, "name", numTasks, Seq.empty, Seq.empty, "no details", taskLocalityPreferences)
   }
 
   private def createTaskInfo(taskId: Int, taskIndex: Int, executorId: String): TaskInfo = {

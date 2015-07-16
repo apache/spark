@@ -127,8 +127,8 @@ private[yarn] class YarnAllocator(
     }
   }
 
-  // A map to store preferred locality and its required count
-  private var preferredLocalityToCounts: Map[String, Int] = Map.empty
+  // A map to store preferred hostname and possible task numbers running on it.
+  private var hostToLocalTaskCounts: Map[String, Int] = Map.empty
 
   // Locality required pending task number
   private var numLocalityAwarePendingTasks: Int = 0
@@ -159,16 +159,16 @@ private[yarn] class YarnAllocator(
    * @param requestedTotal total number of containers requested
    * @param localityAwarePendingTasks number of locality aware pending tasks to be used as
    *                                  container placement hint.
-   * @param preferredLocalities a map of preferred hostname to possible task counts to be used as
-   *                            container placement hint.
+   * @param hostToLocalTaskCount a map of preferred hostname to possible task counts to be used as
+   *                             container placement hint.
    * @return Whether the new requested total is different than the old value.
    */
   def requestTotalExecutorsWithPreferredLocalities(
       requestedTotal: Int,
       localityAwarePendingTasks: Int,
-      preferredLocalities: Map[String, Int]): Boolean = synchronized {
+      hostToLocalTaskCount: Map[String, Int]): Boolean = synchronized {
     this.numLocalityAwarePendingTasks = localityAwarePendingTasks
-    this.preferredLocalityToCounts = preferredLocalities
+    this.hostToLocalTaskCounts = hostToLocalTaskCount
 
     if (requestedTotal != targetNumExecutors) {
       logInfo(s"Driver requested a total number of $requestedTotal executor(s).")
@@ -246,7 +246,7 @@ private[yarn] class YarnAllocator(
         s"cores and ${resource.getMemory} MB memory including $memoryOverhead MB overhead")
 
       val containerLocalityPreferences = containerPlacementStrategy.localityOfRequestedContainers(
-        missing, numLocalityAwarePendingTasks, preferredLocalityToCounts)
+        missing, numLocalityAwarePendingTasks, hostToLocalTaskCounts)
 
       for (locality <- containerLocalityPreferences) {
         val request = createContainerRequest(resource, locality.nodes, locality.racks)

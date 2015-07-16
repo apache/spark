@@ -66,8 +66,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   // Executors we have requested the cluster manager to kill that have not died yet
   private val executorsPendingToRemove = new HashSet[String]
 
-  // A map to store preferred locality with its required count
-  protected var preferredLocalityToCount: Map[String, Int] = Map.empty
+  // A map to store hostname with its possible task number running on it
+  protected var hostToLocalTaskCount: Map[String, Int] = Map.empty
 
   // The number of pending tasks which is locality required
   protected var localityAwarePendingTasks = 0
@@ -361,7 +361,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   final override def requestTotalExecutors(
       numExecutors: Int,
       localityAwarePendingTasks: Int,
-      preferredLocalityToCount: Map[String, Int]
+      hostToLocalTaskCount: Map[String, Int]
     ): Boolean = synchronized {
     if (numExecutors < 0) {
       throw new IllegalArgumentException(
@@ -370,7 +370,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     }
 
     this.localityAwarePendingTasks = localityAwarePendingTasks
-    this.preferredLocalityToCount = preferredLocalityToCount
+    this.hostToLocalTaskCount = hostToLocalTaskCount
 
     numPendingExecutors =
       math.max(numExecutors - numExistingExecutors + executorsPendingToRemove.size, 0)

@@ -540,14 +540,12 @@ private[spark] class ExecutorAllocationManager(
 
         var numTasksPending = 0
         val localityPreferences = new mutable.HashMap[String, Int]()
-        stageSubmitted.stageInfo.taskLocalityPreferences.foreach { localities =>
-          localities.foreach { locality =>
-            if (!locality.isEmpty) {
-              numTasksPending += 1
-              locality.foreach { location =>
-                val count = localityPreferences.getOrElse(location.host, 0) + 1
-                localityPreferences(location.host) = count
-              }
+        stageSubmitted.stageInfo.taskLocalityPreferences.foreach { locality =>
+          if (!locality.isEmpty) {
+            numTasksPending += 1
+            locality.foreach { location =>
+              val count = localityPreferences.getOrElse(location.host, 0) + 1
+              localityPreferences(location.host) = count
             }
           }
         }
