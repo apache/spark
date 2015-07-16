@@ -69,10 +69,11 @@ structType.structField <- function(x, ...) {
 #' @param ... further arguments passed to or from other methods
 print.structType <- function(x, ...) {
   cat("StructType\n",
-      sapply(x$fields(), function(field) { paste("|-", "name = \"", field$name(),
-                                           "\", type = \"", field$dataType.toString(),
-                                           "\", nullable = ", field$nullable(), "\n",
-                                           sep = "") })
+      sapply(x$fields(), function(field) {
+             paste("|-", "name = \"", field$name(),
+                   "\", type = \"", field$dataType.toString(),
+                   "\", nullable = ", field$nullable(), "\n",
+                   sep = "") })
       , sep = "")
 }
 
