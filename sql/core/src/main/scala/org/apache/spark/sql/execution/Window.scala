@@ -49,16 +49,32 @@ import scala.collection.mutable
  *     1 PRECEDING AND CURRENT ROW and 1 FOLLOWING AND 2 FOLLOWING.
  *
  * Different frame boundaries can be used in Growing, Shrinking and Moving frames. A frame
- * boundary can be either Row or Range based.
+ * boundary can be either Row or Range based:
+ * - Row Based: A row based boundary is based on the position of the row within the partition.
+ *   An offset indicates the number of rows above or below the current row, the frame for the
+ *   current row starts or ends. For instance, given a row based sliding frame with a lower bound
+ *   offset of -1 and a upper bound offset of +2. The frame for row with index 5 would range from
+ *   index 4 to index 6.
+ * - Range based: A range based boundary is based on the actual value of the ORDER BY
+ *   expression(s). An offset is used to alter the value of the ORDER BY expression, for
+ *   instance if the current order by expression has a value of 10 and the lower bound offset
+ *   is -3, the resulting lower bound for the current row will be 10 - 3 = 7. This however puts a
+ *   number of constraints on the ORDER BY expressions: there can be only one expression and this
+ *   expression must have a numerical data type. An exception can be made when the offset is 0,
+ *   because no value modification is needed, in this case multiple and non-numeric ORDER BY
+ *   expression are allowed.
  *
  * This is quite an expensive operator because every row for a single group must be in the same
- * partition and partitions must be sorted according to the grouping and sort order. This can be
- * infeasible in some extreme cases. The operator does not repartition or sort itself, but requires
- * the planner to this.
+ * partition and partitions must be sorted according to the grouping and sort order. The operator
+ * requires the planner to take care of the partitioning and sorting.
  *
- * The current implementation is semi-blocking. The aggregates and final projection are calculated
- * one group at a time, this is possible due to the aforementioned partitioning and ordering
- * constraints.
+ * The operator is semi-blocking. The window functions and aggregates are calculated one group at
+ * a time, the result will only be made available after the processing for the entire group has
+ * finished. The operator is able to process different frame configurations at the same time. This
+ * is done by delegating the actual frame processing (i.e. calculation of the window functions) to
+ * specialized classes, see [[WindowFunctionFrame]], which take care of their own frame type:
+ * Entire Partition, Sliding, Growing & Shrinking. Boundary evaluation is also delegated to a pair
+ * of specialized classes: [[RowBoundOrdering]] & [[RangeBoundOrdering]].
  */
 @DeveloperApi
 case class Window(
@@ -86,53 +102,43 @@ case class Window(
 
   /**
    * Create a bound ordering object for a given frame type and offset. A bound ordering object is
-   * used to determine which input row lies within the frame boundaries of an output row. There
-   * are two types of boundaries that can be evaluated:
-   * - Row Based: A row based boundary is based on the position of the row within the partition.
-   *   The offset indicates the number of rows above or below the current row, the frame for the
-   *   current row starts or ends. For instance, given a row based sliding frame with a lower bound
-   *   offset of -1 and a upper bound offset of +2. The frame for row with index 5 would range from
-   *   index 4 to index 6.
-   * - Range based: A range based boundary is based on the actual value of the ORDER BY
-   *   expression(s). The offset is used to alter the value of the ORDER BY expression, for
-   *   instance if the current order by expression has a value of 10 and the lower bound offset
-   *   is -3, the resulting lower bound for the current row will be 10 - 3 = 7. This however puts a
-   *   number of constraints on the ORDER BY expressions: there can be only one expression and this
-   *   expression must have a numerical data type. An exception can be made when the offset is 0,
-   *   because no value modification is needed, in this case multiple and non-numeric ORDER BY
-   *   expression are allowed.
+   * used to determine which input row lies within the frame boundaries of an output row.
+   *
+   * This method uses Code Generation. It can only be used on the executor side.
    *
    * @param frameType to evaluate. This can either be Row or Range based.
    * @param offset with respect to the row.
    * @return a bound ordering object.
    */
-  private[this] def createBoundOrdering(frameType: FrameType, offset: Int) = {
+  private[this] def createBoundOrdering(frameType: FrameType, offset: Int): BoundOrdering = {
     frameType match {
       case RangeFrame =>
-        // Use the entire order expression when the offset is 0.
         val (exprs, current, bound) = if (offset == 0) {
+          // Use the entire order expression when the offset is 0.
           val exprs = windowSpec.orderSpec.map(_.child)
           val projection = newMutableProjection(exprs, child.output)
           (windowSpec.orderSpec, projection(), projection())
         }
-        // Use only the first order expression when the offset is non-null.
         else if (windowSpec.orderSpec.size == 1) {
+          // Use only the first order expression when the offset is non-null.
           val sortExpr = windowSpec.orderSpec.head
           val expr = sortExpr.child
-          val boundExpr = Add(expr, Cast(Literal.create(offset, IntegerType), expr.dataType))
+          // Create the projection which returns the current 'value'.
           val current = newMutableProjection(expr :: Nil, child.output)()
+          // Create the projection which returns the current 'value' modified by adding the offset.
+          val boundExpr = Add(expr, Cast(Literal.create(offset, IntegerType), expr.dataType))
           val bound = newMutableProjection(boundExpr :: Nil, child.output)()
           (sortExpr :: Nil, current, bound)
         }
-        // Fail when we try to use range offsets on a window with multiple order
-        // expressions.
         else {
           sys.error("Non-Zero range offsets are not supported for windows " +
             "with multiple order expressions.")
         }
-        // Construct the ordering.
-        val (sortExprs, schema) = exprs.zipWithIndex.map { case (e, i) =>
-          val ref = AttributeReference(s"c_$i", e.dataType, e.nullable)()
+        // Construct the ordering. This is used to compare the result of current value projection
+        // to the result of bound value projection. This is done manually because we want to use
+        // Code Generation (if it is enabled).
+        val (sortExprs, schema) = exprs.map { case e =>
+          val ref = AttributeReference("ordExpr", e.dataType, e.nullable)()
           (SortOrder(ref, e.direction), ref)
         }.unzip
         val ordering = newOrdering(sortExprs, schema)
@@ -141,24 +147,92 @@ case class Window(
     }
   }
 
-  @transient
-  private[this] lazy val (factories, projection, numColumns) = {
-    // Collect all window expressions
+  /**
+   * Create a frame processor.
+   *
+   * This method uses Code Generation. It can only be used on the executor side.
+   *
+   * @param frame boundaries.
+   * @param functions to process in the frame.
+   * @param ordinal at which the processor starts writing to the output.
+   * @return a frame processor.
+   */
+  private[this] def createFrameProcessor(
+      frame: WindowFrame,
+      functions: Array[WindowFunction],
+      ordinal: Int): WindowFunctionFrame = frame match {
+    // Growing Frame.
+    case SpecifiedWindowFrame(frameType, UnboundedPreceding, FrameBoundaryExtractor(high)) =>
+      val uBoundOrdering = createBoundOrdering(frameType, high)
+      new UnboundedPrecedingWindowFunctionFrame(ordinal, functions, uBoundOrdering)
+
+    // Shrinking Frame.
+    case SpecifiedWindowFrame(frameType, FrameBoundaryExtractor(low), UnboundedFollowing) =>
+      val lBoundOrdering = createBoundOrdering(frameType, low)
+      new UnboundedFollowingWindowFunctionFrame(ordinal, functions, lBoundOrdering)
+
+    // Moving Frame: reverse processed range frame - bounds need to flipped.
+    case SpecifiedWindowFrame(RangeFrame,
+        FrameBoundaryExtractor(low), FrameBoundaryExtractor(high))
+        if (low != 0 || high != 0) && windowSpec.orderSpec.head.direction == Descending =>
+      val lBoundOrdering = createBoundOrdering(RangeFrame, high)
+      val uBoundOrdering = createBoundOrdering(RangeFrame, low)
+      new SlidingWindowFunctionFrame(ordinal, functions, lBoundOrdering, uBoundOrdering)
+
+    // Moving Frame.
+    case SpecifiedWindowFrame(frameType,
+        FrameBoundaryExtractor(low), FrameBoundaryExtractor(high)) =>
+      val lBoundOrdering = createBoundOrdering(frameType, low)
+      val uBoundOrdering = createBoundOrdering(frameType, high)
+      new SlidingWindowFunctionFrame(ordinal, functions, lBoundOrdering, uBoundOrdering)
+
+    // Entire Partition Frame.
+    case SpecifiedWindowFrame(_, UnboundedPreceding, UnboundedFollowing) =>
+      new UnboundedWindowFunctionFrame(ordinal, functions)
+
+    // Error
+    case fr =>
+      sys.error(s"Unsupported Frame $fr for functions: $functions")
+  }
+
+  /**
+   * Create the resulting projection.
+   *
+   * This method uses Code Generation. It can only be used on the executor side.
+   *
+   * @param expressions unbound ordered function expressions.
+   * @return the final resulting projection.
+   */
+  private[this] def createResultProjection(
+      expressions: Seq[Expression]): MutableProjection = {
+    val unboundToAttr = expressions.map {
+      e => (e, AttributeReference("windowResult", e.dataType, e.nullable)())
+    }
+    val unboundToAttrMap = unboundToAttr.toMap
+    val patchedWindowExpression = windowExpression.map(_.transform(unboundToAttrMap))
+    newMutableProjection(
+      projectList ++ patchedWindowExpression,
+      child.output ++ unboundToAttr.map(_._2))()
+  }
+
+  protected override def doExecute(): RDD[InternalRow] = {
+    // Prepare processing.
+    // Group the window expression by their processing frame.
     val windowExprs = windowExpression.flatMap {
       _.collect {
         case e: WindowExpression => e
       }
     }
 
-    // Group the window expression by their processing frame.
-    val groupedWindowExprs = windowExprs.groupBy(_.windowSpec.frameSpecification)
-
-    // Create processors and collect unbound expressions for each frame.
-    val factories = mutable.Buffer.empty[WindowFunctionFrame]
+    // Create Frame processor factories and order the unbound window expressions by the frame they
+    // are processed in; this is the order in which their results will be written to window
+    // function result buffer.
+    val framedWindowExprs = windowExprs.groupBy(_.windowSpec.frameSpecification)
+    val factories = Array.ofDim[() => WindowFunctionFrame](framedWindowExprs.size)
     val unboundExpressions = mutable.Buffer.empty[Expression]
-    groupedWindowExprs.foreach {
-      case (frame, unboundFrameExpressions) =>
-        // Register the ordinal.
+    framedWindowExprs.zipWithIndex.foreach {
+      case ((frame, unboundFrameExpressions), index) =>
+        // Track the ordinal.
         val ordinal = unboundExpressions.size
 
         // Track the unbound expressions
@@ -169,51 +243,16 @@ case class Window(
           BindReferences.bindReference(e.windowFunction, child.output)
         }.toArray
 
-        // Create the frame processor.
-        val factory = frame match {
-          // Growing Frame.
-          case SpecifiedWindowFrame(frameType, UnboundedPreceding, FrameBoundaryExtractor(high)) =>
-            val uBoundOrdering = createBoundOrdering(frameType, high)
-            new UnboundedPrecedingWindowFunctionFrame(ordinal, functions, uBoundOrdering)
-          // Shrinking Frame.
-          case SpecifiedWindowFrame(frameType, FrameBoundaryExtractor(low), UnboundedFollowing) =>
-            val lBoundOrdering = createBoundOrdering(frameType, low)
-            new UnboundedFollowingWindowFunctionFrame(ordinal, functions, lBoundOrdering)
-          // Moving Frame.
-          case SpecifiedWindowFrame(frameType,
-              FrameBoundaryExtractor(low), FrameBoundaryExtractor(high)) =>
-            val lBoundOrdering = createBoundOrdering(frameType, low)
-            val uBoundOrdering = createBoundOrdering(frameType, high)
-            new SlidingWindowFunctionFrame(ordinal, functions, lBoundOrdering, uBoundOrdering)
-          // Entire Partition Frame.
-          case SpecifiedWindowFrame(_, UnboundedPreceding, UnboundedFollowing) =>
-            new UnboundedWindowFunctionFrame(ordinal, functions)
-          // Error
-          case fr =>
-            sys.error(s"Unsupported Frame $fr for expressions: $unboundFrameExpressions")
-        }
-        factories += factory
+        // Create the frame processor factory.
+        factories(index) = () => createFrameProcessor(frame, functions, ordinal)
     }
 
-    // Create the schema projection.
-    val unboundToAttr = unboundExpressions.map {
-      e => (e, AttributeReference(s"aggResult:$e", e.dataType, e.nullable)())
-    }
-    val unboundToAttrMap = unboundToAttr.toMap
-    val patchedWindowExpression = windowExpression.map(_.transform(unboundToAttrMap))
-    val projection = newMutableProjection(
-      projectList ++ patchedWindowExpression,
-      child.output ++ unboundToAttr.map(_._2))
-
-    // Done
-    (factories.toArray, projection, unboundExpressions.size)
-  }
-
-  protected override def doExecute(): RDD[InternalRow] = {
+    // Start processing.
     child.execute().mapPartitions { stream =>
       new Iterator[InternalRow] {
+
         // Get all relevant projections.
-        val result = projection()
+        val result = createResultProjection(unboundExpressions)
         val grouping = newProjection(windowSpec.partitionSpec, child.output)
 
         // Manage the stream and the grouping.
@@ -234,7 +273,7 @@ case class Window(
 
         // Manage the current partition.
         var rows: CompactBuffer[InternalRow] = _
-        val frames: Array[WindowFunctionFrame] = factories.map(_.copy)
+        val frames: Array[WindowFunctionFrame] = factories.map(_())
         val numFrames = frames.length
         private[this] def fetchNextPartition() {
           // Collect all the rows in the current partition.
@@ -260,11 +299,11 @@ case class Window(
         // Iteration
         var rowIndex = 0
         var rowsSize = 0
-        def hasNext: Boolean = rowIndex < rowsSize || nextRowAvailable
+        override final def hasNext: Boolean = rowIndex < rowsSize || nextRowAvailable
 
         val join = new JoinedRow6
-        val windowFunctionResult = new GenericMutableRow(numColumns)
-        def next(): InternalRow = {
+        val windowFunctionResult = new GenericMutableRow(unboundExpressions.size)
+        override final def next(): InternalRow = {
           // Load the next partition if we need to.
           if (rowIndex >= rowsSize && nextRowAvailable) {
             fetchNextPartition()
@@ -343,6 +382,9 @@ private[execution] abstract class WindowFunctionFrame(
     ordinal: Int,
     functions: Array[WindowFunction]) {
 
+  // Make sure functions are initialized.
+  functions.foreach(_.init())
+
   /** Number of columns the window function frame is managing */
   val numColumns = functions.length
 
@@ -358,17 +400,7 @@ private[execution] abstract class WindowFunctionFrame(
    *
    * @return an array containing copies of the current window functions.
    */
-  protected final def copyFunctions: Array[WindowFunction] = {
-    val copies = new Array[WindowFunction](numColumns)
-    var i = 0
-    while (i < numColumns) {
-      val copy = functions(i).newInstance()
-      copy.init()
-      copies(i) = copy
-      i += 1
-    }
-    copies
-  }
+  protected final def copyFunctions: Array[WindowFunction] = functions.map(_.newInstance())
 
   /**
    * Prepare the frame for calculating the results for a partition.
