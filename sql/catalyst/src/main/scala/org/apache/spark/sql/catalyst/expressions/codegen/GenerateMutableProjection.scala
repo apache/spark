@@ -67,6 +67,10 @@ object GenerateMutableProjection extends CodeGenerator[Seq[Expression], () => Mu
       (pCode, pFuncs)
     }
 
+    val mutableStates = ctx.mutableStates.map { case (javaType, variableName, initialValue) =>
+      s"private $javaType $variableName = $initialValue;"
+    }.mkString("\n      ")
+
     val code = s"""
       public Object generate($exprType[] expr) {
         return new SpecificProjection(expr);
@@ -76,6 +80,7 @@ object GenerateMutableProjection extends CodeGenerator[Seq[Expression], () => Mu
 
         private $exprType[] expressions = null;
         private $mutableRowType mutableRow = null;
+        $mutableStates
 
         public SpecificProjection($exprType[] expr) {
           expressions = expr;

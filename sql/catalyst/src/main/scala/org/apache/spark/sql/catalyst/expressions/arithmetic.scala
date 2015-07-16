@@ -377,3 +377,97 @@ case class MinOf(left: Expression, right: Expression) extends BinaryArithmetic {
   override def symbol: String = "min"
   override def prettyName: String = symbol
 }
+
+case class Pmod(left: Expression, right: Expression) extends BinaryArithmetic {
+
+  override def toString: String = s"pmod($left, $right)"
+
+  override def symbol: String = "pmod"
+
+  protected def checkTypesInternal(t: DataType) =
+    TypeUtils.checkForNumericExpr(t, "pmod")
+
+  override def inputType: AbstractDataType = NumericType
+
+  protected override def nullSafeEval(left: Any, right: Any) =
+    dataType match {
+      case IntegerType => pmod(left.asInstanceOf[Int], right.asInstanceOf[Int])
+      case LongType => pmod(left.asInstanceOf[Long], right.asInstanceOf[Long])
+      case ShortType => pmod(left.asInstanceOf[Short], right.asInstanceOf[Short])
+      case ByteType => pmod(left.asInstanceOf[Byte], right.asInstanceOf[Byte])
+      case FloatType => pmod(left.asInstanceOf[Float], right.asInstanceOf[Float])
+      case DoubleType => pmod(left.asInstanceOf[Double], right.asInstanceOf[Double])
+      case _: DecimalType => pmod(left.asInstanceOf[Decimal], right.asInstanceOf[Decimal])
+    }
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
+      dataType match {
+        case dt: DecimalType =>
+          val decimalAdd = "$plus"
+          s"""
+            ${ctx.javaType(dataType)} r = $eval1.remainder($eval2);
+            if (r.compare(new org.apache.spark.sql.types.Decimal().set(0)) < 0) {
+              ${ev.primitive} = (r.$decimalAdd($eval2)).remainder($eval2);
+            } else {
+              ${ev.primitive} = r;
+            }
+          """
+        // byte and short are casted into int when add, minus, times or divide
+        case ByteType | ShortType =>
+          s"""
+            ${ctx.javaType(dataType)} r = (${ctx.javaType(dataType)})($eval1 % $eval2);
+            if (r < 0) {
+              ${ev.primitive} = (${ctx.javaType(dataType)})((r + $eval2) % $eval2);
+            } else {
+              ${ev.primitive} = r;
+            }
+          """
+        case _ =>
+          s"""
+            ${ctx.javaType(dataType)} r = $eval1 % $eval2;
+            if (r < 0) {
+              ${ev.primitive} = (r + $eval2) % $eval2;
+            } else {
+              ${ev.primitive} = r;
+            }
+          """
+      }
+    })
+  }
+
+  private def pmod(a: Int, n: Int): Int = {
+    val r = a % n
+    if (r < 0) {(r + n) % n} else r
+  }
+
+  private def pmod(a: Long, n: Long): Long = {
+    val r = a % n
+    if (r < 0) {(r + n) % n} else r
+  }
+
+  private def pmod(a: Byte, n: Byte): Byte = {
+    val r = a % n
+    if (r < 0) {((r + n) % n).toByte} else r.toByte
+  }
+
+  private def pmod(a: Double, n: Double): Double = {
+    val r = a % n
+    if (r < 0) {(r + n) % n} else r
+  }
+
+  private def pmod(a: Short, n: Short): Short = {
+    val r = a % n
+    if (r < 0) {((r + n) % n).toShort} else r.toShort
+  }
+
+  private def pmod(a: Float, n: Float): Float = {
+    val r = a % n
+    if (r < 0) {(r + n) % n} else r
+  }
+
+  private def pmod(a: Decimal, n: Decimal): Decimal = {
+    val r = a % n
+    if (r.compare(Decimal(0)) < 0) {(r + n) % n} else r
+  }
+}
