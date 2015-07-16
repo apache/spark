@@ -245,6 +245,8 @@ def main():
 
     test_result_code, test_result_note = run_tests(tests_timeout)
 
+    print("PR results:", pr_check_results)
+
     # post end message
     result_message = github_message('has finished')
     result_message += '\n' + test_result_note + '\n'
