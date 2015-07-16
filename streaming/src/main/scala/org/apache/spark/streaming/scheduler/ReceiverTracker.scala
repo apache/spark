@@ -20,7 +20,6 @@ package org.apache.spark.streaming.scheduler
 import scala.collection.mutable.{ArrayBuffer, HashMap, SynchronizedMap}
 import scala.language.existentials
 import scala.math.max
-import org.apache.spark.rdd._
 
 import org.apache.spark.streaming.util.WriteAheadLogUtils
 import org.apache.spark.{Logging, SparkEnv, SparkException}
@@ -46,6 +45,8 @@ private[streaming] case class AddBlock(receivedBlockInfo: ReceivedBlockInfo)
 private[streaming] case class ReportError(streamId: Int, message: String, error: String)
 private[streaming] case class DeregisterReceiver(streamId: Int, msg: String, error: String)
   extends ReceiverTrackerMessage
+
+private[streaming] case object StopAllReceivers extends ReceiverTrackerMessage
 
 /**
  * This class manages the execution of the receivers of ReceiverInputDStreams. Instance of
@@ -79,29 +80,20 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
   import TrackerState._
 
   /** State of the tracker. Protected by "trackerStateLock" */
-  private var trackerState = Initialized
-
-  /** "trackerStateLock" is used to protect reading/writing "trackerState" */
-  private val trackerStateLock = new AnyRef
+  @volatile private var trackerState = Initialized
 
   // endpoint is created when generator starts.
   // This not being null means the tracker has been started and not stopped
   private var endpoint: RpcEndpointRef = null
 
   /** Check if tracker has been marked for starting */
-  private def isTrackerStarted(): Boolean = trackerStateLock.synchronized {
-    trackerState == Started
-  }
+  private def isTrackerStarted(): Boolean = trackerState == Started
 
   /** Check if tracker has been marked for stopping */
-  private def isTrackerStopping(): Boolean = trackerStateLock.synchronized {
-    trackerState == Stopping
-  }
+  private def isTrackerStopping(): Boolean = trackerState == Stopping
 
   /** Check if tracker has been marked for stopped */
-  private def isTrackerStopped(): Boolean = trackerStateLock.synchronized {
-    trackerState == Stopped
-  }
+  private def isTrackerStopped(): Boolean = trackerState == Stopped
 
   /** Start the endpoint and receiver execution thread. */
   def start(): Unit = synchronized {
@@ -114,9 +106,7 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
         "ReceiverTracker", new ReceiverTrackerEndpoint(ssc.env.rpcEnv))
       if (!skipReceiverLaunch) receiverExecutor.start()
       logInfo("ReceiverTracker started")
-      trackerStateLock.synchronized {
-        trackerState = Started
-      }
+      trackerState = Started
     }
   }
 
@@ -124,9 +114,7 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
   def stop(graceful: Boolean): Unit = synchronized {
     if (isTrackerStarted) {
       // First, stop the receivers
-      trackerStateLock.synchronized {
-        trackerState = Stopping
-      }
+      trackerState = Stopping
       if (!skipReceiverLaunch) receiverExecutor.stop(graceful)
 
       // Finally, stop the endpoint
@@ -134,9 +122,7 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
       endpoint = null
       receivedBlockTracker.stop()
       logInfo("ReceiverTracker stopped")
-      trackerStateLock.synchronized {
-        trackerState = Stopped
-      }
+      trackerState = Stopped
     }
   }
 
@@ -187,18 +173,17 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
       throw new SparkException("Register received for unexpected id " + streamId)
     }
 
-    trackerStateLock.synchronized {
-      if (isTrackerStopping || isTrackerStopped) {
-        false
-      } else {
-        // When updating "receiverInfo", we should make sure "trackerState" won't be changed at the
-        // same time. Therefore the following line should be in "trackerStateLock.synchronized".
-        receiverInfo(streamId) = ReceiverInfo(
-          streamId, s"${typ}-${streamId}", receiverEndpoint, true, host)
-        listenerBus.post(StreamingListenerReceiverStarted(receiverInfo(streamId)))
-        logInfo("Registered receiver for stream " + streamId + " from " + senderAddress)
-        true
-      }
+    if (isTrackerStopping || isTrackerStopped) {
+      false
+    } else {
+      // "stopReceivers" won't happen at the same time because both "registerReceiver" and are
+      // called in the event loop. So here we can assume "stopReceivers" has not yet been called. If
+      // "stopReceivers" is called later, it should be able to see this receiver.
+      receiverInfo(streamId) = ReceiverInfo(
+        streamId, s"${typ}-${streamId}", receiverEndpoint, true, host)
+      listenerBus.post(StreamingListenerReceiverStarted(receiverInfo(streamId)))
+      logInfo("Registered receiver for stream " + streamId + " from " + senderAddress)
+      true
     }
   }
 
@@ -275,6 +260,18 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
       case DeregisterReceiver(streamId, message, error) =>
         deregisterReceiver(streamId, message, error)
         context.reply(true)
+      case StopAllReceivers =>
+        assert(isTrackerStopping || isTrackerStopped)
+        stopReceivers()
+        context.reply(true)
+    }
+
+    /** Stops the receivers. */
+    private def stopReceivers() {
+      // Signal the receivers to stop
+      receiverInfo.values.flatMap { info => Option(info.endpoint)}
+        .foreach { _.send(StopReceiver) }
+      logInfo("Sent stop signal to all " + receiverInfo.size + " receivers")
     }
   }
 
@@ -299,7 +296,7 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
 
     def stop(graceful: Boolean) {
       // Send the stop signal to all the receivers
-      stopReceivers()
+      endpoint.askWithRetry[Boolean](StopAllReceivers)
 
       // Wait for the Spark job that runs the receivers to be over
       // That is, for the receivers to quit gracefully.
@@ -414,12 +411,5 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
       }
     }
 
-    /** Stops the receivers. */
-    private def stopReceivers() {
-      // Signal the receivers to stop
-      receiverInfo.values.flatMap { info => Option(info.endpoint)}
-                         .foreach { _.send(StopReceiver) }
-      logInfo("Sent stop signal to all " + receiverInfo.size + " receivers")
-    }
   }
 }

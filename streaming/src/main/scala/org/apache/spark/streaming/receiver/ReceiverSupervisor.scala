@@ -98,7 +98,7 @@ private[streaming] abstract class ReceiverSupervisor(
   /** Called when supervisor is stopped */
   protected def onStop(message: String, error: Option[Throwable]) { }
 
-  /** Called when receiver is started. Return if the driver accepts us */
+  /** Called when receiver is started. Return true if the driver accepts us */
   protected def onReceiverStart(): Boolean = true
 
   /** Called when receiver is stopped */
