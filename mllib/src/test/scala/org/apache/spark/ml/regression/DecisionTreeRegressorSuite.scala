@@ -19,6 +19,7 @@ package org.apache.spark.ml.regression
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.impl.TreeTests
+import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.{DecisionTree => OldDecisionTree,
   DecisionTreeSuite => OldDecisionTreeSuite}
@@ -59,6 +60,17 @@ class DecisionTreeRegressorSuite extends SparkFunSuite with MLlibTestSparkContex
       .setMaxBins(100)
     val categoricalFeatures = Map(0 -> 2, 1-> 2)
     compareAPIs(categoricalDataPointsRDD, dt, categoricalFeatures)
+  }
+
+  test("copied model must have the same parent") {
+    val categoricalFeatures = Map(0 -> 2, 1-> 2)
+    val df = TreeTests.setMetadata(categoricalDataPointsRDD, categoricalFeatures, numClasses = 0)
+    val model = new DecisionTreeRegressor()
+      .setImpurity("variance")
+      .setMaxDepth(2)
+      .setMaxBins(100).fit(df)
+    val copied = model.copy(ParamMap.empty)
+    assert(model.parent == copied.parent)
   }
 
   /////////////////////////////////////////////////////////////////////////////

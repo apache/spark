@@ -18,6 +18,7 @@
 package org.apache.spark.ml.feature
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.{Row, SQLContext}
@@ -51,6 +52,10 @@ class MinMaxScalerSuite extends SparkFunSuite with MLlibTestSparkContext {
       .foreach { case Row(vector1: Vector, vector2: Vector) =>
         assert(vector1.equals(vector2), "Transformed vector is different with expected.")
     }
+
+    // copied model must have the same parent.
+    val copied = model.copy(ParamMap.empty)
+    assert(model.parent == copied.parent)
   }
 
   test("MinMaxScaler arguments max must be larger than min") {

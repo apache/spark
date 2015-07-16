@@ -20,6 +20,8 @@ package org.apache.spark.ml.recommendation
 import java.io.File
 import java.util.Random
 
+import org.apache.spark.ml.param.ParamMap
+
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.language.existentials
@@ -374,6 +376,10 @@ class ALSSuite extends SparkFunSuite with MLlibTestSparkContext with Logging {
       }
     logInfo(s"Test RMSE is $rmse.")
     assert(rmse < targetRMSE)
+
+    // copied model must have the same parent.
+    val copied = model.copy(ParamMap.empty)
+    assert(model.parent == copied.parent)
   }
 
   test("exact rank-1 matrix") {

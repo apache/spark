@@ -111,6 +111,23 @@ class CrossValidatorSuite extends SparkFunSuite with MLlibTestSparkContext {
       cv.validateParams()
     }
   }
+
+  test("copied model must have the same parent") {
+    val lr = new LogisticRegression
+    val lrParamMaps = new ParamGridBuilder()
+      .addGrid(lr.regParam, Array(0.001, 1000.0))
+      .addGrid(lr.maxIter, Array(0, 10))
+      .build()
+    val eval = new BinaryClassificationEvaluator
+    val cv = new CrossValidator()
+      .setEstimator(lr)
+      .setEstimatorParamMaps(lrParamMaps)
+      .setEvaluator(eval)
+      .setNumFolds(3)
+    val model = cv.fit(dataset)
+    val copied = model.copy(ParamMap.empty)
+    assert(model.parent == copied.parent)
+  }
 }
 
 object CrossValidatorSuite {

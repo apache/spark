@@ -92,6 +92,7 @@ class PipelineSuite extends SparkFunSuite {
     val copied = model.copy(ParamMap(hashingTF.numFeatures -> 10))
     require(copied.stages(0).asInstanceOf[HashingTF].getNumFeatures === 10,
       "copy should handle extra stage params")
+    assert(copied.parent == model.parent)
   }
 
   test("pipeline model constructors") {

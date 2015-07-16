@@ -149,6 +149,6 @@ class StringIndexerModel private[ml] (
 
   override def copy(extra: ParamMap): StringIndexerModel = {
     val copied = new StringIndexerModel(uid, labels)
-    copyValues(copied, extra)
+    copyValues(copied, extra).setParent(parent)
   }
 }

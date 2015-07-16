@@ -19,7 +19,7 @@ package org.apache.spark.ml.classification
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.impl.TreeTests
-import org.apache.spark.ml.param.ParamsSuite
+import org.apache.spark.ml.param.{ParamMap, ParamsSuite}
 import org.apache.spark.ml.regression.DecisionTreeRegressionModel
 import org.apache.spark.ml.tree.LeafNode
 import org.apache.spark.mllib.regression.LabeledPoint
@@ -74,6 +74,14 @@ class GBTClassifierSuite extends SparkFunSuite with MLlibTestSparkContext {
           .setStepSize(learningRate)
         compareAPIs(data, None, gbt, categoricalFeatures)
     }
+  }
+
+  test("copied model must have the same parent") {
+    val model = new GBTClassificationModel("gbtc",
+      Array(new DecisionTreeRegressionModel("dtr", new LeafNode(0.0, 0.0))),
+      Array(1.0))
+    val copied = model.copy(ParamMap.empty)
+    assert(model.parent == copied.parent)
   }
 
   // TODO: Reinstate test once runWithValidation is implemented   SPARK-7132

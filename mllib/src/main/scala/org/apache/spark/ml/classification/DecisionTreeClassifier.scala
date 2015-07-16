@@ -118,6 +118,7 @@ final class DecisionTreeClassificationModel private[ml] (
 
   override def copy(extra: ParamMap): DecisionTreeClassificationModel = {
     copyValues(new DecisionTreeClassificationModel(uid, rootNode), extra)
+      .setParent(parent)
   }
 
   override def toString: String = {

@@ -405,6 +405,6 @@ class VectorIndexerModel private[ml] (
 
   override def copy(extra: ParamMap): VectorIndexerModel = {
     val copied = new VectorIndexerModel(uid, numFeatures, categoryMaps)
-    copyValues(copied, extra)
+    copyValues(copied, extra).setParent(parent)
   }
 }

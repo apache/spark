@@ -136,6 +136,6 @@ class StandardScalerModel private[ml] (
 
   override def copy(extra: ParamMap): StandardScalerModel = {
     val copied = new StandardScalerModel(uid, scaler)
-    copyValues(copied, extra)
+    copyValues(copied, extra).setParent(parent)
   }
 }

@@ -18,7 +18,7 @@
 package org.apache.spark.ml.feature
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.ml.param.ParamsSuite
+import org.apache.spark.ml.param.{ParamMap, ParamsSuite}
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
@@ -31,6 +31,12 @@ class Word2VecSuite extends SparkFunSuite with MLlibTestSparkContext {
     ParamsSuite.checkParams(new Word2Vec)
     val model = new Word2VecModel("w2v", new OldWord2VecModel(Map("a" -> Array(0.0f))))
     ParamsSuite.checkParams(model)
+  }
+
+  test("copied model must have the same parent") {
+    val model = new Word2VecModel("w2v", new OldWord2VecModel(Map("a" -> Array(0.0f))))
+    val copied = model.copy(ParamMap.empty)
+    assert(model.parent == copied.parent)
   }
 
   test("Word2Vec") {

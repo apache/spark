@@ -180,6 +180,7 @@ private class MyLogisticRegressionModel(
    */
   override def copy(extra: ParamMap): MyLogisticRegressionModel = {
     copyValues(new MyLogisticRegressionModel(uid, weights), extra)
+      .setParent(parent)
   }
 }
 // scalastyle:on println

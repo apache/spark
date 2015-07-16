@@ -132,6 +132,16 @@ class OneVsRestSuite extends SparkFunSuite with MLlibTestSparkContext {
       require(m.getThreshold === 0.1, "copy should handle extra model params")
     }
   }
+
+  test("copied model must have the same parent") {
+    ParamsSuite.checkParams(new OneVsRest)
+    val lrModel = new LogisticRegressionModel("lr", Vectors.dense(0.0), 0.0)
+    val lrCopied = lrModel.copy(ParamMap.empty)
+    assert(lrModel.parent == lrCopied.parent)
+    val model = new OneVsRestModel("ovr", Metadata.empty, Array(lrModel))
+    val copied = model.copy(ParamMap.empty)
+    assert(model.parent == copied.parent)
+  }
 }
 
 private class MockLogisticRegression(uid: String) extends LogisticRegression(uid) {
