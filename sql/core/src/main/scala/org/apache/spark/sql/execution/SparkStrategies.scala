@@ -213,10 +213,22 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   object CartesianProduct extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case logical.Join(left, right, _, None) =>
-        execution.joins.CartesianProduct(planLater(left), planLater(right)) :: Nil
+        val buildSide =
+          if (left.statistics.sizeInBytes <= right.statistics.sizeInBytes) {
+            joins.BuildRight
+          }  else {
+            joins.BuildLeft
+          }
+        execution.joins.CartesianProduct(planLater(left), planLater(right), buildSide) :: Nil
       case logical.Join(left, right, Inner, Some(condition)) =>
+        val buildSide =
+          if (left.statistics.sizeInBytes <= right.statistics.sizeInBytes) {
+            joins.BuildRight
+          }  else {
+            joins.BuildLeft
+          }
         execution.Filter(condition,
-          execution.joins.CartesianProduct(planLater(left), planLater(right))) :: Nil
+          execution.joins.CartesianProduct(planLater(left), planLater(right), buildSide)) :: Nil
       case _ => Nil
     }
   }

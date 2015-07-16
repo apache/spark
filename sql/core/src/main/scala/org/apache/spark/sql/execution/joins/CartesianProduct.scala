@@ -27,24 +27,26 @@ import org.apache.spark.sql.execution.{BinaryNode, SparkPlan}
  * :: DeveloperApi ::
  */
 @DeveloperApi
-case class CartesianProduct(left: SparkPlan, right: SparkPlan) extends BinaryNode {
+case class CartesianProduct(
+     left: SparkPlan,
+     right: SparkPlan,
+     buildSide: BuildSide) extends BinaryNode {
+
+  private val (streamed, broadcast) = buildSide match {
+    case BuildRight => (left, right)
+    case BuildLeft => (right, left)
+  }
+
   override def output: Seq[Attribute] = left.output ++ right.output
 
   protected override def doExecute(): RDD[InternalRow] = {
-    val leftResults = left.execute().map(_.copy())
-    val rightResults = right.execute().map(_.copy())
-
-    val cartesianRdd = if (leftResults.partitions.size > rightResults.partitions.size) {
-      rightResults.cartesian(leftResults).mapPartitions { iter =>
-        iter.map(tuple => (tuple._2, tuple._1))
-      }
-    } else {
-      leftResults.cartesian(rightResults)
-    }
-
-    cartesianRdd.mapPartitions { iter =>
+    val broadcastedRelation = sparkContext.broadcast(broadcast.execute().map(_.copy()))
+    broadcastedRelation.value.cartesian(streamed.execute().map(_.copy())).mapPartitions{ iter =>
       val joinedRow = new JoinedRow
-      iter.map(r => joinedRow(r._1, r._2))
+      buildSide match {
+        case BuildRight => iter.map(r => joinedRow(r._1, r._2))
+        case BuildLeft => iter.map(r => joinedRow(r._2, r._1))
+      }
     }
   }
 }
