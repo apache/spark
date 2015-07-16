@@ -790,7 +790,6 @@ class DAGScheduler(
     // serializable. If tasks are not serializable, a SparkListenerStageCompleted event
     // will be posted, which should always come after a corresponding SparkListenerStageSubmitted
     // event.
-    stage.makeNewStageAttempt(partitionsToCompute.size)
     val taskIdToLocations = try {
       val localities = stage match {
         case s: ShuffleMapStage =>
@@ -802,12 +801,11 @@ class DAGScheduler(
             (id, getPreferredLocs(stage.rdd, p))
           }.toMap
       }
-      stage.latestInfo =
-        StageInfo.fromStage(stage, Some(partitionsToCompute.size), localities.values.toSeq)
+      stage.makeNewStageAttempt(partitionsToCompute.size, localities.values.toSeq)
       localities
     } catch {
       case NonFatal(e) =>
-        stage.latestInfo = StageInfo.fromStage(stage, Some(partitionsToCompute.size))
+        stage.makeNewStageAttempt(partitionsToCompute.size)
         abortStage(stage, s"Task creation failed: $e\n${e.getStackTraceString}")
         runningStages -= stage
         return
