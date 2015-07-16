@@ -152,4 +152,10 @@ abstract class TaskContext extends Serializable {
    * Returns the manager for this task's managed memory.
    */
   private[spark] def taskMemoryManager(): TaskMemoryManager
+
+  private[spark] def registerAccumulator(a: Accumulable[_, _]): Unit
+
+  private[spark] def collectInternalAccumulators(): Map[Long, Any]
+
+  private[spark] def collectAccumulators(): Map[Long, Any]
 }

@@ -45,6 +45,8 @@ import org.apache.spark.util.Utils
  */
 private[spark] abstract class Task[T](val stageId: Int, var partitionId: Int) extends Serializable {
 
+  type AccumulatorUpdates = Map[Long, Any]
+
   /**
    * Called by [[Executor]] to run this task.
    *
@@ -52,7 +54,7 @@ private[spark] abstract class Task[T](val stageId: Int, var partitionId: Int) ex
    * @param attemptNumber how many times this task has been attempted (0 for the first attempt)
    * @return the result of the task
    */
-  final def run(taskAttemptId: Long, attemptNumber: Int): T = {
+  final def run(taskAttemptId: Long, attemptNumber: Int): (T, AccumulatorUpdates) = {
     context = new TaskContextImpl(
       stageId = stageId,
       partitionId = partitionId,
@@ -62,12 +64,13 @@ private[spark] abstract class Task[T](val stageId: Int, var partitionId: Int) ex
       runningLocally = false)
     TaskContext.setTaskContext(context)
     context.taskMetrics.setHostname(Utils.localHostName())
+    context.taskMetrics.setAccumulatorsUpdater(context.collectInternalAccumulators)
     taskThread = Thread.currentThread()
     if (_killed) {
       kill(interruptThread = false)
     }
     try {
-      runTask(context)
+      (runTask(context), context.collectAccumulators())
     } finally {
       context.markTaskCompleted()
       TaskContext.unset()
