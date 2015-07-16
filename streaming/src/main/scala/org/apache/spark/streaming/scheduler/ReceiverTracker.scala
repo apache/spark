@@ -92,12 +92,12 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
   private def isTrackerStarted(): Boolean = trackerStateLock.synchronized {
     trackerState == Started
   }
- 
+
   /** Check if tracker has been marked for stopping */
   private def isTrackerStopping(): Boolean = trackerStateLock.synchronized {
     trackerState == Stopping
   }
- 
+
   /** Check if tracker has been marked for stopped */
   private def isTrackerStopped(): Boolean = trackerStateLock.synchronized {
     trackerState == Stopped
