@@ -166,18 +166,33 @@ class FailureSuite extends SparkFunSuite with LocalSparkContext {
     assert(thrownDueToMemoryLeak.getMessage.contains("memory leak"))
   }
 
-  test("failure cause is sent back to driver") {
-    sc = new SparkContext("local", "test")
-    val e = new UserException("oops", new IllegalArgumentException("x"))
-    val data = sc.makeRDD(1 to 3).map(x => { throw e; (x, x) }).groupByKey(3)
+  // Run a 3-task map job in which task 1 always fails with a exception message that
+  // depends on the failure number, and check that we get the last failure.
+  test("last failure cause is sent back to driver") {
+    sc = new SparkContext("local[1,2]", "test")
+    val data = sc.makeRDD(1 to 3, 3).map { x =>
+      FailureSuiteState.synchronized {
+        FailureSuiteState.tasksRun += 1
+        if (x == 1) {
+          FailureSuiteState.tasksFailed += 1
+          throw new UserException("oops",
+            new IllegalArgumentException("failed=" + FailureSuiteState.tasksFailed))
+        }
+      }
+      x * x
+    }
     val thrown = intercept[SparkException] {
       data.collect()
+    }
+    FailureSuiteState.synchronized {
+      assert(FailureSuiteState.tasksRun === 4)
     }
     assert(thrown.getClass === classOf[SparkException])
     assert(thrown.getCause.getClass === classOf[UserException])
     assert(thrown.getCause.getMessage === "oops")
     assert(thrown.getCause.getCause.getClass === classOf[IllegalArgumentException])
-    assert(thrown.getCause.getCause.getMessage === "x")
+    assert(thrown.getCause.getCause.getMessage === "failed=2")
+    FailureSuiteState.clear()
   }
 
   test("failure cause stacktrace is sent back to driver if exception is not serializable") {
@@ -190,6 +205,7 @@ class FailureSuite extends SparkFunSuite with LocalSparkContext {
     assert(thrown.getClass === classOf[SparkException])
     assert(thrown.getCause === null)
     assert(thrown.getMessage.contains("NonSerializableUserException"))
+    FailureSuiteState.clear()
   }
 
   // TODO: Need to add tests with shuffle fetch failures.

@@ -681,7 +681,7 @@ class DAGScheduler(
       taskSet: TaskSet,
       reason: String,
       exception: Option[Throwable]): Unit = {
-    stageIdToStage.get(taskSet.stageId).foreach {abortStage(_, reason, exception) }
+    stageIdToStage.get(taskSet.stageId).foreach { abortStage(_, reason, exception) }
     submitWaitingStages()
   }
 
@@ -765,7 +765,7 @@ class DAGScheduler(
         }
       }
     } else {
-      abortStage(stage, "No active job for stage " + stage.id)
+      abortStage(stage, "No active job for stage " + stage.id, None)
     }
   }
 
@@ -848,13 +848,13 @@ class DAGScheduler(
     } catch {
       // In the case of a failure during serialization, abort the stage.
       case e: NotSerializableException =>
-        abortStage(stage, "Task not serializable: " + e.toString)
+        abortStage(stage, "Task not serializable: " + e.toString, Some(e))
         runningStages -= stage
 
         // Abort execution
         return
       case NonFatal(e) =>
-        abortStage(stage, s"Task serialization failed: $e\n${e.getStackTraceString}")
+        abortStage(stage, s"Task serialization failed: $e\n${e.getStackTraceString}", Some(e))
         runningStages -= stage
         return
     }
@@ -1101,7 +1101,7 @@ class DAGScheduler(
           }
 
           if (disallowStageRetryForTest) {
-            abortStage(failedStage, "Fetch failure will not retry stage due to testing config")
+            abortStage(failedStage, "Fetch failure will not retry stage due to testing config", None)
           } else if (failedStages.isEmpty) {
             // Don't schedule an event to resubmit failed stages if failed isn't empty, because
             // in that case the event will already have been scheduled.
@@ -1241,7 +1241,7 @@ class DAGScheduler(
   private[scheduler] def abortStage(
       failedStage: Stage,
       reason: String,
-      exception: Option[Throwable] = None): Unit = {
+      exception: Option[Throwable]): Unit = {
     if (!stageIdToStage.contains(failedStage.id)) {
       // Skip all the actions if the stage has been removed.
       return
