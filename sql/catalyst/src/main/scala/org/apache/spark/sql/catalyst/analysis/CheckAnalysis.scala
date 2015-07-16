@@ -121,17 +121,6 @@ trait CheckAnalysis {
 
           case _ => // Analysis successful!
         }
-
-      // Special handling for cases when self-join introduce duplicate expression ids.
-      case j @ Join(left, right, _, _) if left.outputSet.intersect(right.outputSet).nonEmpty =>
-        val conflictingAttributes = left.outputSet.intersect(right.outputSet)
-        failAnalysis(
-          s"""
-             |Failure when resolving conflicting references in Join:
-             |$plan
-             |Conflicting attributes: ${conflictingAttributes.mkString(",")}
-             |""".stripMargin)
-
     }
     extendedCheckRules.foreach(_(plan))
   }
