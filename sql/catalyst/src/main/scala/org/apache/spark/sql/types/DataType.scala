@@ -144,10 +144,14 @@ object DataType {
 
     case JSortedObject(
     ("class", JString(udtClass)),
-    ("pyClass", _),
-    ("sqlType", _),
+    ("pyClass", JString(pyClass)),
+    ("sqlType", v: JValue),
     ("type", JString("udt"))) =>
-      Utils.classForName(udtClass).newInstance().asInstanceOf[UserDefinedType[_]]
+      if (udtClass.length > 0) {
+        Utils.classForName(udtClass).newInstance().asInstanceOf[UserDefinedType[_]]
+      } else {
+        new PythonUserDefinedType(parseDataType(v), pyClass)
+      }
   }
 
   private def parseStructField(json: JValue): StructField = json match {

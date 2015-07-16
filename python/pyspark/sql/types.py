@@ -580,7 +580,7 @@ class UserDefinedType(DataType):
         """
         The class name of the paired Scala UDT.
         """
-        raise NotImplementedError("UDT must have a paired Scala UDT.")
+        return ''
 
     def needConversion(self):
         return True
@@ -641,6 +641,50 @@ class UserDefinedType(DataType):
         return type(self) == type(other)
 
 
+class PointUDT(UserDefinedType):
+    """
+    User-defined type (UDT) for Point.
+    """
+
+    @classmethod
+    def sqlType(self):
+        return ArrayType(DoubleType(), False)
+
+    @classmethod
+    def module(cls):
+        return '__main__'
+
+    def serialize(self, obj):
+        return [obj.x, obj.y]
+
+    def deserialize(self, datum):
+        return Point(datum[0], datum[1])
+
+    def __eq__(self, other):
+        return True
+
+
+class Point:
+    """
+    An example class to demonstrate UDT in Python.
+    """
+
+    __UDT__ = PointUDT()
+
+    def __init__(self, x, y):
+        self.x = x
+        self.y = y
+
+    def __repr__(self):
+        return "ExamplePoint(%s,%s)" % (self.x, self.y)
+
+    def __str__(self):
+        return "(%s,%s)" % (self.x, self.y)
+
+    def __eq__(self, other):
+        return isinstance(other, Point) and other.x == self.x and other.y == self.y
+
+
 _atomic_types = [StringType, BinaryType, BooleanType, DecimalType, FloatType, DoubleType,
                  ByteType, ShortType, IntegerType, LongType, DateType, TimestampType]
 _all_atomic_types = dict((t.typeName(), t) for t in _atomic_types)
@@ -656,7 +700,7 @@ def _parse_datatype_json_string(json_string):
     ...     assert datatype == pickled
     ...     scala_datatype = sqlContext._ssql_ctx.parseDataType(datatype.json())
     ...     python_datatype = _parse_datatype_json_string(scala_datatype.json())
-    ...     assert datatype == python_datatype
+    ...     assert datatype == python_datatype, str(datatype) + str(python_datatype)
     >>> for cls in _all_atomic_types.values():
     ...     check_datatype(cls())
 
@@ -694,9 +738,9 @@ def _parse_datatype_json_string(json_string):
     ...                           complex_arraytype, False)
     >>> check_datatype(complex_maptype)
 
-    >>> check_datatype(ExamplePointUDT())
+    >>> check_datatype(PointUDT())
     >>> structtype_with_udt = StructType([StructField("label", DoubleType(), False),
-    ...                                   StructField("point", ExamplePointUDT(), False)])
+    ...                                   StructField("point", PointUDT(), False)])
     >>> check_datatype(structtype_with_udt)
     """
     return _parse_datatype_json_value(json.loads(json_string))
@@ -750,9 +794,9 @@ if sys.version < "3":
 def _infer_type(obj):
     """Infer the DataType from obj
 
-    >>> p = ExamplePoint(1.0, 2.0)
+    >>> p = Point(1.0, 2.0)
     >>> _infer_type(p)
-    ExamplePointUDT
+    PointUDT
     """
     if obj is None:
         return NullType()
@@ -1084,8 +1128,8 @@ def _verify_type(obj, dataType):
     Traceback (most recent call last):
         ...
     ValueError:...
-    >>> _verify_type(ExamplePoint(1.0, 2.0), ExamplePointUDT())
-    >>> _verify_type([1.0, 2.0], ExamplePointUDT()) # doctest: +IGNORE_EXCEPTION_DETAIL
+    >>> _verify_type(Point(1.0, 2.0), PointUDT())
+    >>> _verify_type([1.0, 2.0], PointUDT()) # doctest: +IGNORE_EXCEPTION_DETAIL
     Traceback (most recent call last):
         ...
     ValueError:...
@@ -1253,18 +1297,12 @@ register_input_converter(DateConverter())
 def _test():
     import doctest
     from pyspark.context import SparkContext
-    # let doctest run in pyspark.sql.types, so DataTypes can be picklable
-    import pyspark.sql.types
-    from pyspark.sql import Row, SQLContext
-    from pyspark.sql.tests import ExamplePoint, ExamplePointUDT
-    globs = pyspark.sql.types.__dict__.copy()
+    from pyspark.sql import SQLContext
+    globs = globals()
     sc = SparkContext('local[4]', 'PythonTest')
     globs['sc'] = sc
     globs['sqlContext'] = SQLContext(sc)
-    globs['ExamplePoint'] = ExamplePoint
-    globs['ExamplePointUDT'] = ExamplePointUDT
-    (failure_count, test_count) = doctest.testmod(
-        pyspark.sql.types, globs=globs, optionflags=doctest.ELLIPSIS)
+    (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
     globs['sc'].stop()
     if failure_count:
         exit(-1)

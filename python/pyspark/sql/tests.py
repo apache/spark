@@ -75,7 +75,7 @@ class ExamplePointUDT(UserDefinedType):
 
     @classmethod
     def module(cls):
-        return 'pyspark.tests'
+        return '__main__'
 
     @classmethod
     def scalaUDT(cls):
@@ -392,9 +392,8 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertEqual(1.0, row.asDict()['d']['key'].c)
 
     def test_infer_schema_with_udt(self):
-        from pyspark.sql.tests import ExamplePoint, ExamplePointUDT
         row = Row(label=1.0, point=ExamplePoint(1.0, 2.0))
-        df = self.sc.parallelize([row]).toDF()
+        df = self.sqlCtx.createDataFrame([row])
         schema = df.schema
         field = [f for f in schema.fields if f.name == "point"][0]
         self.assertEqual(type(field.dataType), ExamplePointUDT)
@@ -403,27 +402,23 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertEqual(point, ExamplePoint(1.0, 2.0))
 
     def test_apply_schema_with_udt(self):
-        from pyspark.sql.tests import ExamplePoint, ExamplePointUDT
         row = (1.0, ExamplePoint(1.0, 2.0))
-        rdd = self.sc.parallelize([row])
         schema = StructType([StructField("label", DoubleType(), False),
                              StructField("point", ExamplePointUDT(), False)])
-        df = rdd.toDF(schema)
+        df = self.sqlCtx.createDataFrame([row], schema)
         point = df.head().point
         self.assertEquals(point, ExamplePoint(1.0, 2.0))
 
     def test_udf_with_udt(self):
-        from pyspark.sql.tests import ExamplePoint
         row = Row(label=1.0, point=ExamplePoint(1.0, 2.0))
-        df = self.sc.parallelize([row]).toDF()
+        df = self.sqlCtx.createDataFrame([row])
         self.assertEqual(1.0, df.map(lambda r: r.point.x).first())
         udf = UserDefinedFunction(lambda p: p.y, DoubleType())
         self.assertEqual(2.0, df.select(udf(df.point)).first()[0])
 
     def test_parquet_with_udt(self):
-        from pyspark.sql.tests import ExamplePoint
         row = Row(label=1.0, point=ExamplePoint(1.0, 2.0))
-        df0 = self.sc.parallelize([row]).toDF()
+        df0 = self.sqlCtx.createDataFrame([row])
         output_dir = os.path.join(self.tempdir.name, "labeled_point")
         df0.saveAsParquetFile(output_dir)
         df1 = self.sqlCtx.parquetFile(output_dir)
