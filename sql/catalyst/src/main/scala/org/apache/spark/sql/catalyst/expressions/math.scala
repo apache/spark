@@ -66,22 +66,14 @@ abstract class UnaryMathExpression(f: Double => Double, name: String)
   override def toString: String = s"$name($child)"
 
   protected override def nullSafeEval(input: Any): Any = {
-    val result = f(input.asInstanceOf[Double])
-    if (result.isNaN) null else result
+    f(input.asInstanceOf[Double])
   }
 
   // name of function in java.lang.Math
   def funcName: String = name.toLowerCase
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    nullSafeCodeGen(ctx, ev, eval => {
-      s"""
-        ${ev.primitive} = java.lang.Math.${funcName}($eval);
-        if (Double.valueOf(${ev.primitive}).isNaN()) {
-          ${ev.isNull} = true;
-        }
-      """
-    })
+    defineCodeGen(ctx, ev, c => s"java.lang.Math.${funcName}($c)")
   }
 }
 
@@ -101,8 +93,7 @@ abstract class BinaryMathExpression(f: (Double, Double) => Double, name: String)
   override def dataType: DataType = DoubleType
 
   protected override def nullSafeEval(input1: Any, input2: Any): Any = {
-    val result = f(input1.asInstanceOf[Double], input2.asInstanceOf[Double])
-    if (result.isNaN) null else result
+    f(input1.asInstanceOf[Double], input2.asInstanceOf[Double])
   }
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
@@ -404,14 +395,7 @@ case class Log(child: Expression) extends UnaryMathExpression(math.log, "LOG")
 case class Log2(child: Expression)
   extends UnaryMathExpression((x: Double) => math.log(x) / math.log(2), "LOG2") {
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    nullSafeCodeGen(ctx, ev, eval => {
-      s"""
-        ${ev.primitive} = java.lang.Math.log($eval) / java.lang.Math.log(2);
-        if (Double.valueOf(${ev.primitive}).isNaN()) {
-          ${ev.isNull} = true;
-        }
-      """
-    })
+    defineCodeGen(ctx, ev, c => s"java.lang.Math.log($c) / java.lang.Math.log(2)")
   }
 }
 
@@ -578,27 +562,18 @@ case class Atan2(left: Expression, right: Expression)
 
   protected override def nullSafeEval(input1: Any, input2: Any): Any = {
     // With codegen, the values returned by -0.0 and 0.0 are different. Handled with +0.0
-    val result = math.atan2(input1.asInstanceOf[Double] + 0.0, input2.asInstanceOf[Double] + 0.0)
-    if (result.isNaN) null else result
+    math.atan2(input1.asInstanceOf[Double] + 0.0, input2.asInstanceOf[Double] + 0.0)
   }
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    defineCodeGen(ctx, ev, (c1, c2) => s"java.lang.Math.atan2($c1 + 0.0, $c2 + 0.0)") + s"""
-      if (Double.valueOf(${ev.primitive}).isNaN()) {
-        ${ev.isNull} = true;
-      }
-      """
+    defineCodeGen(ctx, ev, (c1, c2) => s"java.lang.Math.atan2($c1 + 0.0, $c2 + 0.0)")
   }
 }
 
 case class Pow(left: Expression, right: Expression)
   extends BinaryMathExpression(math.pow, "POWER") {
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    defineCodeGen(ctx, ev, (c1, c2) => s"java.lang.Math.pow($c1, $c2)") + s"""
-      if (Double.valueOf(${ev.primitive}).isNaN()) {
-        ${ev.isNull} = true;
-      }
-      """
+    defineCodeGen(ctx, ev, (c1, c2) => s"java.lang.Math.pow($c1, $c2)")
   }
 }
 
@@ -701,16 +676,11 @@ case class Logarithm(left: Expression, right: Expression)
   }
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    val logCode = if (left.isInstanceOf[EulerNumber]) {
+    if (left.isInstanceOf[EulerNumber]) {
       defineCodeGen(ctx, ev, (c1, c2) => s"java.lang.Math.log($c2)")
     } else {
       defineCodeGen(ctx, ev, (c1, c2) => s"java.lang.Math.log($c2) / java.lang.Math.log($c1)")
     }
-    logCode + s"""
-      if (Double.isNaN(${ev.primitive})) {
-        ${ev.isNull} = true;
-      }
-    """
   }
 }
 

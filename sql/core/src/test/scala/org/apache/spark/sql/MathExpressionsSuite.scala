@@ -70,11 +70,6 @@ class MathExpressionsSuite extends QueryTest {
         nnDoubleData.select(c('b)),
         (1 to 9).map(n => Row(f(n * -0.1))) :+ Row(Double.NegativeInfinity)
       )
-    } else {
-      checkAnswer(
-        nnDoubleData.select(c('b)),
-        (1 to 10).map(n => Row(null))
-      )
     }
 
     checkAnswer(
