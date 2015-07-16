@@ -61,15 +61,7 @@ case class CurrentTimestamp() extends LeafExpression {
   }
 }
 
-/**
- * Abstract class for create time format expressions.
- */
-abstract class TimeFormatExpression extends UnaryExpression with ExpectsInputTypes {
-  self: Product =>
-
-  protected val factorToMilli: Int
-
-  protected val cntPerInterval: Int
+case class Hour(child: Expression) extends UnaryExpression with ExpectsInputTypes {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType)
 
@@ -77,32 +69,38 @@ abstract class TimeFormatExpression extends UnaryExpression with ExpectsInputTyp
 
   override protected def nullSafeEval(timestamp: Any): Any = {
     val time = timestamp.asInstanceOf[Long] / 1000
-    val longTime: Long = time + TimeZone.getDefault.getOffset(time)
-    ((longTime / factorToMilli) % cntPerInterval).toInt
+    val longTime: Long = time.asInstanceOf[Long] + TimeZone.getDefault.getOffset(time)
+    ((longTime / (1000 * 3600)) % 24).toInt
   }
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     val tz = classOf[TimeZone].getName
     defineCodeGen(ctx, ev, (c) =>
-      s"""(${ctx.javaType(dataType)})
-            ((($c / 1000) + $tz.getDefault().getOffset($c / 1000))
-                / $factorToMilli % $cntPerInterval)"""
+      s"""(int) ((($c / 1000) + $tz.getDefault().getOffset($c / 1000))
+                     / (1000 * 3600) % 24)""".stripMargin
     )
   }
 }
 
-case class Hour(child: Expression) extends TimeFormatExpression {
+case class Minute(child: Expression) extends UnaryExpression with ExpectsInputTypes {
 
-  override protected val factorToMilli: Int = 1000 * 3600
+  override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType)
 
-  override protected val cntPerInterval: Int = 24
-}
+  override def dataType: DataType = IntegerType
 
-case class Minute(child: Expression) extends TimeFormatExpression {
+  override protected def nullSafeEval(timestamp: Any): Any = {
+    val time = timestamp.asInstanceOf[Long] / 1000
+    val longTime: Long = time.asInstanceOf[Long] + TimeZone.getDefault.getOffset(time)
+    ((longTime / (1000 * 60)) % 60).toInt
+  }
 
-  override protected val factorToMilli: Int = 1000 * 60
-
-  override protected val cntPerInterval: Int = 60
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    val tz = classOf[TimeZone].getName
+    defineCodeGen(ctx, ev, (c) =>
+      s"""(int) ((($c / 1000) + $tz.getDefault().getOffset($c / 1000))
+                     / (1000 * 60) % 60)""".stripMargin
+    )
+  }
 }
 
 case class Second(child: Expression) extends UnaryExpression with ExpectsInputTypes {
@@ -122,15 +120,6 @@ case class Second(child: Expression) extends UnaryExpression with ExpectsInputTy
   }
 }
 
-private[sql] object DateFormatExpression {
-
-  def isLeapYear(year: Int): Boolean = {
-    (year % 4) == 0 && ((year % 100) != 0 || (year % 400) == 0)
-  }
-
-
-}
-
 abstract class DateFormatExpression extends UnaryExpression with ExpectsInputTypes {
   self: Product =>
 
@@ -139,6 +128,10 @@ abstract class DateFormatExpression extends UnaryExpression with ExpectsInputTyp
 
   // this is year -17999, calculation: 50 * daysIn400Year
   val toYearZero = to2001 + 7304850
+
+  protected def isLeapYear(year: Int): Boolean = {
+    (year % 4) == 0 && ((year % 100) != 0 || (year % 400) == 0)
+  }
 
   private[this] def yearBoundary(year: Int): Int = {
     year * 365 + ((year / 4 ) - (year / 100) + (year / 400))
@@ -178,7 +171,7 @@ abstract class DateFormatExpression extends UnaryExpression with ExpectsInputTyp
     s"""
        int $daysIn400Years = 146097;
        int $to2001 = -11323;
-       int $toYearZero = to2001 + 7304850;
+       int $toYearZero = $to2001 + 7304850;
 
        int $daysNormalized = $input + $toYearZero;
        int $numOfQuarterCenturies = $daysNormalized / $daysIn400Years;
@@ -188,7 +181,7 @@ abstract class DateFormatExpression extends UnaryExpression with ExpectsInputTyp
        $years = ($daysInThis400 > $years * 365 + (($years / 4 ) - ($years / 100) +
              ($years / 400))) ? $years : $years - 1;
 
-       int $year = (2001 - 20000) + 400 * $numOfQuarterCenturies + years;
+       int $year = (2001 - 20000) + 400 * $numOfQuarterCenturies + $years;
        int $dayInYear = $daysInThis400 -
          ($years * 365 + (($years / 4 ) - ($years / 100) + ($years / 400)));
        ${f(year, dayInYear)};
@@ -231,7 +224,7 @@ case class Quarter(child: Expression) extends DateFormatExpression {
 
   override protected def nullSafeEval(input: Any): Any = {
     val (year, dayInYear) = calculateYearAndDayInYear(input.asInstanceOf[Int])
-      val leap = if (DateFormatExpression.isLeapYear(year)) 1 else 0
+      val leap = if (isLeapYear(year)) 1 else 0
       dayInYear match {
         case i: Int if i <= 90 + leap => 1
         case i: Int if i <= 181 + leap => 2
@@ -263,7 +256,7 @@ case class Month(child: Expression) extends DateFormatExpression {
 
   override protected def nullSafeEval(input: Any): Any = {
     val (year, dayInYear) = calculateYearAndDayInYear(input.asInstanceOf[Int])
-    val leap = if (DateFormatExpression.isLeapYear(year)) 1 else 0
+    val leap = if (isLeapYear(year)) 1 else 0
     dayInYear match {
       case i: Int if i <= 31 => 1
       case i: Int if i <= 59 + leap => 2
@@ -325,7 +318,7 @@ case class Day(child: Expression) extends DateFormatExpression with ExpectsInput
 
   override protected def nullSafeEval(input: Any): Any = {
     val (year, dayInYear) = calculateYearAndDayInYear(input.asInstanceOf[Int])
-    val leap = if (DateFormatExpression.isLeapYear(year)) 1 else 0
+    val leap = if (isLeapYear(year)) 1 else 0
     dayInYear match {
       case i: Int if i <= 31 => i
       case i: Int if i <= 59 + leap => i - 31
