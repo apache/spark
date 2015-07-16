@@ -91,31 +91,42 @@ abstract class InternalRow extends Row {
 
   // Custom hashCode function that matches the efficient code generated version.
   override def hashCode: Int = {
-    var result: Int = 37
-    var i = 0
-    while (i < length) {
-      val update: Int =
-        if (isNullAt(i)) {
-          0
-        } else {
-          apply(i) match {
-            case b: Boolean => if (b) 0 else 1
-            case b: Byte => b.toInt
-            case s: Short => s.toInt
-            case i: Int => i
-            case l: Long => (l ^ (l >>> 32)).toInt
-            case f: Float => java.lang.Float.floatToIntBits(f)
-            case d: Double =>
-              val b = java.lang.Double.doubleToLongBits(d)
-              (b ^ (b >>> 32)).toInt
-            case a: Array[Byte] => java.util.Arrays.hashCode(a)
-            case other => other.hashCode()
-          }
+    def hashCode(v: Any): Int = v match {
+      case null => 0
+      case b: Boolean => if (b) 0 else 1
+      case b: Byte => b.toInt
+      case s: Short => s.toInt
+      case i: Int => i
+      case l: Long => (l ^ (l >>> 32)).toInt
+      case f: Float => java.lang.Float.floatToIntBits(f)
+      case d: Double =>
+        val b = java.lang.Double.doubleToLongBits(d)
+        (b ^ (b >>> 32)).toInt
+      case a: Array[Byte] => java.util.Arrays.hashCode(a)
+      case arr: Array[_] =>
+        var code = 0
+        arr.foreach(code += hashCode(_))
+        code
+      case seq: Seq[_] =>
+        var code = 0
+        seq.foreach(code += hashCode(_))
+        code
+      case m: Map[_, _] =>
+        var code = 0
+        m.iterator.foreach { entry => code += (hashCode(entry._1) + hashCode(entry._2)) }
+        code
+      case r: Row =>
+        var res: Int = 0
+        var i = 0
+        while (i < r.length) {
+          res += 31 * res + hashCode(r.get(i))
+          i += 1
         }
-      result = 37 * result + update
-      i += 1
+        res
+      case other => other.hashCode()
     }
-    result
+
+    hashCode(this)
   }
 }
 
