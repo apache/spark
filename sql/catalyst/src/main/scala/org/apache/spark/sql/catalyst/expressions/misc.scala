@@ -22,9 +22,9 @@ import java.security.NoSuchAlgorithmException
 import java.util.zip.CRC32
 
 import org.apache.commons.codec.digest.DigestUtils
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.Row
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
@@ -44,6 +44,45 @@ case class Md5(child: Expression) extends UnaryExpression with ImplicitCastInput
     defineCodeGen(ctx, ev, c =>
       s"${ctx.stringType}.fromString(org.apache.commons.codec.digest.DigestUtils.md5Hex($c))")
   }
+}
+
+/**
+ * A function that returns a hash value of the argument
+ */
+case class Hash(children: Expression*) extends Expression {
+
+  override def foldable: Boolean = children.forall(_.foldable)
+  override def nullable: Boolean = children(0).nullable
+  override def dataType: DataType = IntegerType
+
+  override def eval(input: InternalRow): Any = {
+    val arglist = children.map(_.eval(input).asInstanceOf[AnyRef])
+    hashCode(arglist)
+  }
+
+  def hashCode(v: Any): Int = v match {
+    case null => 0
+    case arr: Array[_] => {
+      arr.foldLeft(0) { (acc, n) => acc + hashCode(n) }
+    }
+    case seq: Seq[_] => {
+      seq.foldLeft(0) { (acc, n) => acc + hashCode(n) }
+    }
+    case m: Map[_, _] => {
+      var res: Int = 0
+      m.foreach { case (k, v) => res += (hashCode(k) + hashCode(v)) }
+      res
+    }
+    case r: Row => {
+      var res: Int = 0
+      for (i <- 0 until r.length) {
+        res += 31 * res + hashCode(r.get(i))
+      }
+      res
+    }
+    case others => others.hashCode()
+  }
+
 }
 
 /**
@@ -112,6 +151,7 @@ case class Sha2(left: Expression, right: Expression)
       """
     })
   }
+
 }
 
 /**

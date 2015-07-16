@@ -168,6 +168,17 @@ class DataFrameFunctionsSuite extends QueryTest {
       Row("902fbdd2b1df0c4f70b4a5d23525e932", "6ac1e56bc78f031059be7be854522c4c"))
   }
 
+  test("misc hash function") {
+    val df = Seq(("ABC", 3.7f)).toDF("a", "b")
+    checkAnswer(
+      df.select(hash($"a"), hash("b")),
+      Row(94369, 1080872141))
+
+    checkAnswer(
+      df.selectExpr("hash(a)", "hash(b)"),
+      Row(94369, 1080872141))
+  }
+
   test("misc sha1 function") {
     val df = Seq(("ABC", "ABC".getBytes)).toDF("a", "b")
     checkAnswer(
