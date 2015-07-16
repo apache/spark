@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.{errors, trees}
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.expressions._
@@ -49,8 +50,7 @@ case class UnresolvedRelation(
 /**
  * Holds the name of an attribute that has yet to be resolved.
  */
-case class UnresolvedAttribute(nameParts: Seq[String])
-  extends Attribute with trees.LeafNode[Expression] {
+case class UnresolvedAttribute(nameParts: Seq[String]) extends Attribute {
 
   def name: String =
     nameParts.map(n => if (n.contains(".")) s"`$n`" else n).mkString(".")
@@ -95,7 +95,7 @@ case class UnresolvedFunction(name: String, children: Seq[Expression]) extends E
  * Represents all of the input attributes to a given relational operator, for example in
  * "SELECT * FROM ...". A [[Star]] gets automatically expanded during analysis.
  */
-trait Star extends NamedExpression with trees.LeafNode[Expression] {
+abstract class Star extends LeafExpression with NamedExpression {
   self: Product =>
 
   override def name: String = throw new UnresolvedException(this, "name")
@@ -150,7 +150,7 @@ case class UnresolvedStar(table: Option[String]) extends Star {
  * @param names the names to be associated with each output of computing [[child]].
  */
 case class MultiAlias(child: Expression, names: Seq[String])
-  extends NamedExpression with trees.UnaryNode[Expression] {
+  extends UnaryExpression with NamedExpression {
 
   override def name: String = throw new UnresolvedException(this, "name")
 
@@ -209,8 +209,7 @@ case class UnresolvedExtractValue(child: Expression, extraction: Expression)
 /**
  * Holds the expression that has yet to be aliased.
  */
-case class UnresolvedAlias(child: Expression) extends NamedExpression
-  with trees.UnaryNode[Expression] {
+case class UnresolvedAlias(child: Expression) extends UnaryExpression with NamedExpression {
 
   override def toAttribute: Attribute = throw new UnresolvedException(this, "toAttribute")
   override def qualifiers: Seq[String] = throw new UnresolvedException(this, "qualifiers")

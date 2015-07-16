@@ -17,15 +17,17 @@
 
 package org.apache.spark.sql.types
 
+import scala.util.Try
 import scala.util.parsing.combinator.RegexParsers
 
-import org.json4s._
 import org.json4s.JsonAST.JValue
 import org.json4s.JsonDSL._
+import org.json4s._
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.util.Utils
 
 
 /**
@@ -75,13 +77,16 @@ abstract class DataType extends AbstractDataType {
    */
   private[spark] def asNullable: DataType
 
-  private[sql] override def defaultConcreteType: DataType = this
+  override private[sql] def defaultConcreteType: DataType = this
 
-  private[sql] override def isParentOf(childCandidate: DataType): Boolean = this == childCandidate
+  override private[sql] def acceptsType(other: DataType): Boolean = this == other
 }
 
 
 object DataType {
+  private[sql] def fromString(raw: String): DataType = {
+    Try(DataType.fromJson(raw)).getOrElse(DataType.fromCaseClassString(raw))
+  }
 
   def fromJson(json: String): DataType = parseDataType(parse(json))
 
@@ -142,7 +147,7 @@ object DataType {
     ("pyClass", _),
     ("sqlType", _),
     ("type", JString("udt"))) =>
-      Class.forName(udtClass).newInstance().asInstanceOf[UserDefinedType[_]]
+      Utils.classForName(udtClass).newInstance().asInstanceOf[UserDefinedType[_]]
   }
 
   private def parseStructField(json: JValue): StructField = json match {

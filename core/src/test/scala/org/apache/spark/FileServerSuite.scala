@@ -51,7 +51,9 @@ class FileServerSuite extends SparkFunSuite with LocalSparkContext {
 
     val textFile = new File(testTempDir, "FileServerSuite.txt")
     val pw = new PrintWriter(textFile)
+    // scalastyle:off println
     pw.println("100")
+    // scalastyle:on println
     pw.close()
 
     val jarFile = new File(testTempDir, "test.jar")
