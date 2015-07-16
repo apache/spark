@@ -393,7 +393,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
 
     // If we do not wish to replace the executors we kill, sync the target number of executors
     // with the cluster manager to avoid allocating new ones. When computing the new target,
-    // take into account executors that are pending to be added and removed.
+    // take into account executors that are pending to be added or removed.
     if (!replace) {
       doRequestTotalExecutors(numExistingExecutors + numPendingExecutors
         - executorsPendingToRemove.size - knownExecutors.size)
