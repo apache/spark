@@ -308,10 +308,9 @@ object DateTimeUtils {
       return None
     }
 
-    if (segments(3) < 0 ||
-        segments(3) > 23 || segments(4) < 0 || segments(4) > 59 || segments(5) < 0 ||
-        segments(5) > 59 || segments(6) < 0 || segments(6) > 999999 || segments(7) < 0 ||
-        segments(7) > 23 || segments(8) < 0 || segments(8) > 59) {
+    if (segments(3) < 0 || segments(3) > 23 || segments(4) < 0 || segments(4) > 59 ||
+        segments(5) < 0 || segments(5) > 59 || segments(6) < 0 || segments(6) > 999999 ||
+        segments(7) < 0 || segments(7) > 23 || segments(8) < 0 || segments(8) > 59) {
       return None
     }
 
