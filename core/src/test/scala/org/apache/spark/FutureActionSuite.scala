@@ -17,12 +17,11 @@
 
 package org.apache.spark
 
-import scala.concurrent.{ExecutionContext, Await}
+import scala.concurrent.Await
 import scala.concurrent.duration.Duration
 
 import org.scalatest.{BeforeAndAfter, Matchers}
 
-import org.apache.spark.util.ThreadUtils
 
 class FutureActionSuite
   extends SparkFunSuite
@@ -48,22 +47,6 @@ class FutureActionSuite
     val res = Await.result(job, Duration.Inf)
     res should be (1 to 10)
     job.jobIds.size should be (2)
-  }
-
-  test("simple async action callbacks should not tie up execution context threads (SPARK-9026)") {
-    val rdd = sc.parallelize(1 to 10, 2).map(_ => Thread.sleep(1000 * 1000))
-    val pool = ThreadUtils.newDaemonCachedThreadPool("SimpleFutureActionTest")
-    val executionContext = ExecutionContext.fromExecutorService(pool)
-    val job = rdd.countAsync()
-    try {
-      for (_ <- 1 to 10) {
-        job.onComplete(_ => ())(executionContext)
-        assert(pool.getLargestPoolSize < 10)
-      }
-    } finally {
-      job.cancel()
-      executionContext.shutdownNow()
-    }
   }
 
 }
