@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.sources
 
-import org.apache.spark.sql.execution.LogicalRDD
 import org.apache.spark.sql.{SaveMode, AnalysisException}
 import org.apache.spark.sql.catalyst.analysis.{EliminateSubQueries, Catalog}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Cast, Alias}
