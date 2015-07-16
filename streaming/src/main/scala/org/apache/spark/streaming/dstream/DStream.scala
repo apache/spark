@@ -20,6 +20,8 @@ package org.apache.spark.streaming.dstream
 
 import java.io.{IOException, ObjectInputStream, ObjectOutputStream}
 
+import org.apache.hadoop.io.compress.CompressionCodec
+
 import scala.collection.mutable.HashMap
 import scala.language.implicitConversions
 import scala.reflect.ClassTag
@@ -906,12 +908,20 @@ abstract class DStream[T: ClassTag] (
   /**
    * Save each RDD in this DStream as at text file, using string representation
    * of elements. The file name at each batch interval is generated based on
-   * `prefix` and `suffix`: "prefix-TIME_IN_MS.suffix".
+   * `prefix` and `suffix`: "prefix-TIME_IN_MS.suffix". If the `CompressionCodec`
+   * is defined, it will use specific `CompressionCodec` to compress the text.
    */
-  def saveAsTextFiles(prefix: String, suffix: String = ""): Unit = ssc.withScope {
+  def saveAsTextFiles(
+    prefix: String,
+    suffix: String = "",
+    codec: Option[Class[_ <: CompressionCodec]] = None): Unit = ssc.withScope {
     val saveFunc = (rdd: RDD[T], time: Time) => {
       val file = rddToFileName(prefix, suffix, time)
-      rdd.saveAsTextFile(file)
+      if (codec.isDefined) {
+        rdd.saveAsTextFile(file, codec.get)
+      } else {
+        rdd.saveAsTextFile(file)
+      }
     }
     this.foreachRDD(saveFunc)
   }
