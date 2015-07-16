@@ -20,20 +20,17 @@ package org.apache.spark.serializer
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
 import java.nio.ByteBuffer
 
-import org.apache.spark.SparkConf
-import org.apache.spark.io.CompressionCodec
-
 import scala.collection.mutable
 
-import org.apache.commons.io.IOUtils
 import com.esotericsoftware.kryo.{Kryo, Serializer => KSerializer}
 import com.esotericsoftware.kryo.io.{Input => KryoInput, Output => KryoOutput}
-import org.xerial.snappy.{SnappyInputStream, SnappyOutputStream}
-
 import org.apache.avro.{Schema, SchemaNormalization}
 import org.apache.avro.generic.{GenericData, GenericRecord}
 import org.apache.avro.io._
+import org.apache.commons.io.IOUtils
 
+import org.apache.spark.SparkEnv
+import org.apache.spark.io.CompressionCodec
 
 /**
  * Custom serializer used for generic Avro records. If the user registers the schemas
@@ -57,7 +54,8 @@ private[serializer] class GenericAvroSerializer(schemas: Map[Long, String])
   private val fingerprintCache = new mutable.HashMap[Schema, Long]()
   private val schemaCache = new mutable.HashMap[Long, Schema]()
 
-  private val codec = CompressionCodec.createCodec(new SparkConf())
+  /** This needs to be lazy since SparkEnv is not initialized yet sometimes when this is called */
+  private lazy val codec = CompressionCodec.createCodec(SparkEnv.get.conf)
 
   /**
    * Used to compress Schemas when they are being sent over the wire.
