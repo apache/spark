@@ -977,9 +977,9 @@ class SQLContext(@transient val sparkContext: SparkContext)
     lazy val optimizedPlan: LogicalPlan = optimizer.execute(withCachedData)
 
     // TODO: Don't just pick the first one...
-    lazy val sparkPlan: SparkPlan = {
+    final lazy val sparkPlan: SparkPlan = {
       SparkPlan.currentContext.set(self)
-      planner.plan(optimizedPlan).next()
+      planner.plan(ReturnAnswer(optimizedPlan)).next()
     }
     // executedPlan should not be used to initialize any SparkPlan. It should be
     // only used for execution.
