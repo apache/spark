@@ -386,17 +386,15 @@ abstract class BinaryOperator extends BinaryExpression with ExpectsInputTypes {
   override def inputTypes: Seq[AbstractDataType] = Seq(inputType, inputType)
 
   override def checkInputDataTypes(): TypeCheckResult = {
-    // First call the checker for ExpectsInputTypes, and then check whether left and right have
-    // the same type.
-    super.checkInputDataTypes() match {
-      case TypeCheckResult.TypeCheckSuccess =>
-        if (left.dataType != right.dataType) {
-          TypeCheckResult.TypeCheckFailure(s"differing types in '$prettyString' " +
-            s"(${left.dataType.simpleString} and ${right.dataType.simpleString}).")
-        } else {
-          TypeCheckResult.TypeCheckSuccess
-        }
-      case TypeCheckResult.TypeCheckFailure(msg) => TypeCheckResult.TypeCheckFailure(msg)
+    // First check whether left and right have the same type, then check if the type is acceptable.
+    if (left.dataType != right.dataType) {
+      TypeCheckResult.TypeCheckFailure(s"differing types in '$prettyString' " +
+        s"(${left.dataType.simpleString} and ${right.dataType.simpleString}).")
+    } else if (!inputType.acceptsType(left.dataType)) {
+      TypeCheckResult.TypeCheckFailure(s"'$prettyString' accepts ${inputType.simpleString} type," +
+        s" not ${left.dataType.simpleString}")
+    } else {
+      TypeCheckResult.TypeCheckSuccess
     }
   }
 }
