@@ -103,7 +103,9 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(model.clusterCenters.length === k)
 
     val transformed = model.transform(dataset)
-    assert(transformed.columns === Array("features", predictionColName))
+    transformed.columns.foreach { column =>
+      Array("features", predictionColName).contains(column)
+    }
     val clusters = transformed.select(predictionColName)
       .map(row => row.apply(0)).distinct().collect().toSet
     assert(clusters.size === k)

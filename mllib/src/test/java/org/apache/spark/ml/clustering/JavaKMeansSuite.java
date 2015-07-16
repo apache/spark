@@ -18,12 +18,15 @@
 package org.apache.spark.ml.clustering;
 
 import java.io.Serializable;
+import java.util.Arrays;
+import java.util.List;
 
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.mllib.linalg.Vector;
@@ -60,6 +63,9 @@ public class JavaKMeansSuite implements Serializable {
     assertEquals(k, centers.length);
 
     DataFrame transformed = model.transform(dataset);
-    assertArrayEquals(new String[]{"features", "prediction"}, transformed.columns());
+    List<String> expectedColumns = Arrays.asList("features", "prediction");
+    for (String clm: transformed.columns()) {
+      assertTrue(expectedColumns.contains(clm));
+    }
   }
 }
