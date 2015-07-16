@@ -32,7 +32,7 @@ class UnsafeExternalAggregationSuite extends QueryTest  with BeforeAndAfterAll {
     sqlContext.setConf(SQLConf.CODEGEN_ENABLED, true)
     val unsafeOriginalValue = sqlContext.conf.unsafeEnabled
     sqlContext.setConf(SQLConf.UNSAFE_ENABLED, true)
-    SparkEnv.get.conf.set("spark.test.aggregate.spillFrequency","5")
+    SparkEnv.get.conf.set("spark.test.aggregate.spillFrequency", "5")
     // Prepare a table that we can group some rows.
     sqlContext.table("testData")
       .unionAll(sqlContext.table("testData"))
@@ -131,7 +131,7 @@ class UnsafeExternalAggregationSuite extends QueryTest  with BeforeAndAfterAll {
       sqlContext.dropTempTable("testData3x")
       sqlContext.setConf(SQLConf.CODEGEN_ENABLED, originalValue)
       sqlContext.setConf(SQLConf.UNSAFE_ENABLED, unsafeOriginalValue)
-      SparkEnv.get.conf.set("spark.test.aggregate.spillFrequency","0")
+      SparkEnv.get.conf.set("spark.test.aggregate.spillFrequency", "0")
     }
   }
 }
