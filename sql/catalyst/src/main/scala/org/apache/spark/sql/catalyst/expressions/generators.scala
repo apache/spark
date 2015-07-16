@@ -127,6 +127,4 @@ case class Explode(child: Expression) extends UnaryExpression with Generator {
         else inputMap.map { case (k, v) => InternalRow(k, v) }
     }
   }
-
-  override def toString: String = s"explode($child)"
 }
