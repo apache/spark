@@ -37,7 +37,6 @@ class DAGSchedulerFailureRecoverySuite extends SparkFunSuite with Logging {
     // could be enough to cause havoc.
 
     (0 until 100).foreach { idx =>
-      println(new Date() + "\ttrial " + idx)
       logInfo(new Date() + "\ttrial " + idx)
 
       val conf = new SparkConf().set("spark.executor.memory", "100m")
@@ -54,7 +53,7 @@ class DAGSchedulerFailureRecoverySuite extends SparkFunSuite with Logging {
             val stage = stageCompleted.stageInfo.stageId
             stageFailureCount(stage) = stageFailureCount.getOrElse(stage, 0) + 1
             val reason = stageCompleted.stageInfo.failureReason.get
-            println("stage " + stage + " failed: " + stageFailureCount(stage))
+            logInfo("stage " + stage + " failed: " + stageFailureCount(stage))
           }
         }
       })
