@@ -148,6 +148,16 @@ class GaussianMixtureSuite extends SparkFunSuite with MLlibTestSparkContext {
     }
   }
 
+  test("model prediction, parallel and local") {
+    val data = sc.parallelize(GaussianTestData.data)
+    val gmm = new GaussianMixture().setK(2).setSeed(0).run(data)
+
+    val batchPredictions = gmm.predict(data)
+    batchPredictions.zip(data).collect().foreach { case (batchPred, datum) =>
+      assert(batchPred === gmm.predict(datum))
+    }
+  }
+
   object GaussianTestData {
 
     val data = Array(
