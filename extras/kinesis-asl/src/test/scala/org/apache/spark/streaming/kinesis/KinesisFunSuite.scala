@@ -17,15 +17,13 @@
 
 package org.apache.spark.streaming.kinesis
 
-import org.scalatest.{FunSuite, BeforeAndAfterAll}
-
 import org.apache.spark.SparkFunSuite
 
 /**
  * Helper class that runs Kinesis real data transfer tests or
  * ignores them based on env variable is set or not.
  */
-trait KinesisSuiteHelper { self: FunSuite =>
+trait KinesisSuiteHelper { self: SparkFunSuite =>
   import KinesisTestUtils._
 
   def testOrIgnore(testName: String)(testBody: => Unit) {
