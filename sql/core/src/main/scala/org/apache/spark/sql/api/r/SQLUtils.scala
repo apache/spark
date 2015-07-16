@@ -47,6 +47,7 @@ private[r] object SQLUtils {
     dataType match {
       case "byte" => org.apache.spark.sql.types.ByteType
       case "integer" => org.apache.spark.sql.types.IntegerType
+      case "float" => org.apache.spark.sql.types.FloatType
       case "double" => org.apache.spark.sql.types.DoubleType
       case "numeric" => org.apache.spark.sql.types.DoubleType
       case "character" => org.apache.spark.sql.types.StringType
@@ -68,7 +69,7 @@ private[r] object SQLUtils {
 
   def createDF(rdd: RDD[Array[Byte]], schema: StructType, sqlContext: SQLContext): DataFrame = {
     val num = schema.fields.size
-    val rowRDD = rdd.map(bytesToRow)
+    val rowRDD = rdd.map(bytesToRow(_, schema))
     sqlContext.createDataFrame(rowRDD, schema)
   }
 
@@ -76,12 +77,20 @@ private[r] object SQLUtils {
     df.map(r => rowToRBytes(r))
   }
 
-  private[this] def bytesToRow(bytes: Array[Byte]): Row = {
+  private[this] def doConversion(data: Object, dataType: DataType): Object = {
+    data match {
+      case d: java.lang.Double if dataType == FloatType =>
+        new java.lang.Float(d)
+      case _ => data
+    }
+  }
+
+  private[this] def bytesToRow(bytes: Array[Byte], schema: StructType): Row = {
     val bis = new ByteArrayInputStream(bytes)
     val dis = new DataInputStream(bis)
     val num = SerDe.readInt(dis)
     Row.fromSeq((0 until num).map { i =>
-      SerDe.readObject(dis)
+      doConversion(SerDe.readObject(dis), schema.fields(i).dataType)
     }.toSeq)
   }
 
@@ -106,7 +115,7 @@ private[r] object SQLUtils {
 
     dfCols.map { col =>
       colToRBytes(col)
-    } 
+    }
   }
 
   def convertRowsToColumns(localDF: Array[Row], numCols: Int): Array[Array[Any]] = {
@@ -121,7 +130,7 @@ private[r] object SQLUtils {
     val numRows = col.length
     val bos = new ByteArrayOutputStream()
     val dos = new DataOutputStream(bos)
-    
+
     SerDe.writeInt(dos, numRows)
 
     col.map { item =>
@@ -138,5 +147,20 @@ private[r] object SQLUtils {
       case "error" => SaveMode.ErrorIfExists
       case "ignore" => SaveMode.Ignore
     }
+  }
+
+  def loadDF(
+      sqlContext: SQLContext,
+      source: String,
+      options: java.util.Map[String, String]): DataFrame = {
+    sqlContext.read.format(source).options(options).load()
+  }
+
+  def loadDF(
+      sqlContext: SQLContext,
+      source: String,
+      schema: StructType,
+      options: java.util.Map[String, String]): DataFrame = {
+    sqlContext.read.format(source).schema(schema).options(options).load()
   }
 }

@@ -18,7 +18,7 @@
 package org.apache.spark
 
 import org.mockito.Mockito._
-import org.scalatest.{BeforeAndAfter, FunSuite}
+import org.scalatest.BeforeAndAfter
 import org.scalatest.mock.MockitoSugar
 
 import org.apache.spark.executor.DataReadMethod
@@ -26,7 +26,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.storage._
 
 // TODO: Test the CacheManager's thread-safety aspects
-class CacheManagerSuite extends FunSuite with LocalSparkContext with BeforeAndAfter
+class CacheManagerSuite extends SparkFunSuite with LocalSparkContext with BeforeAndAfter
   with MockitoSugar {
 
   var blockManager: BlockManager = _

@@ -83,8 +83,10 @@ private[spark] class BlockManager(
   private var externalBlockStoreInitialized = false
   private[spark] val memoryStore = new MemoryStore(this, maxMemory)
   private[spark] val diskStore = new DiskStore(this, diskBlockManager)
-  private[spark] lazy val externalBlockStore: ExternalBlockStore =
+  private[spark] lazy val externalBlockStore: ExternalBlockStore = {
+    externalBlockStoreInitialized = true
     new ExternalBlockStore(this, executorId)
+  }
 
   private[spark]
   val externalShuffleServiceEnabled = conf.getBoolean("spark.shuffle.service.enabled", false)
@@ -646,7 +648,7 @@ private[spark] class BlockManager(
       file: File,
       serializerInstance: SerializerInstance,
       bufferSize: Int,
-      writeMetrics: ShuffleWriteMetrics): BlockObjectWriter = {
+      writeMetrics: ShuffleWriteMetrics): DiskBlockObjectWriter = {
     val compressStream: OutputStream => OutputStream = wrapForCompression(blockId, _)
     val syncWrites = conf.getBoolean("spark.shuffle.sync", false)
     new DiskBlockObjectWriter(blockId, file, serializerInstance, bufferSize, compressStream,

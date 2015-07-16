@@ -7,6 +7,22 @@ description: MLlib migration guides from before Spark SPARK_VERSION_SHORT
 
 The migration guide for the current Spark version is kept on the [MLlib Programming Guide main page](mllib-guide.html#migration-guide).
 
+## From 1.2 to 1.3
+
+In the `spark.mllib` package, there were several breaking changes.  The first change (in `ALS`) is the only one in a component not marked as Alpha or Experimental.
+
+* *(Breaking change)* In [`ALS`](api/scala/index.html#org.apache.spark.mllib.recommendation.ALS), the extraneous method `solveLeastSquares` has been removed.  The `DeveloperApi` method `analyzeBlocks` was also removed.
+* *(Breaking change)* [`StandardScalerModel`](api/scala/index.html#org.apache.spark.mllib.feature.StandardScalerModel) remains an Alpha component. In it, the `variance` method has been replaced with the `std` method.  To compute the column variance values returned by the original `variance` method, simply square the standard deviation values returned by `std`.
+* *(Breaking change)* [`StreamingLinearRegressionWithSGD`](api/scala/index.html#org.apache.spark.mllib.regression.StreamingLinearRegressionWithSGD) remains an Experimental component.  In it, there were two changes:
+    * The constructor taking arguments was removed in favor of a builder pattern using the default constructor plus parameter setter methods.
+    * Variable `model` is no longer public.
+* *(Breaking change)* [`DecisionTree`](api/scala/index.html#org.apache.spark.mllib.tree.DecisionTree) remains an Experimental component.  In it and its associated classes, there were several changes:
+    * In `DecisionTree`, the deprecated class method `train` has been removed.  (The object/static `train` methods remain.)
+    * In `Strategy`, the `checkpointDir` parameter has been removed.  Checkpointing is still supported, but the checkpoint directory must be set before calling tree and tree ensemble training.
+* `PythonMLlibAPI` (the interface between Scala/Java and Python for MLlib) was a public API but is now private, declared `private[python]`.  This was never meant for external use.
+* In linear regression (including Lasso and ridge regression), the squared loss is now divided by 2.
+  So in order to produce the same result as in 1.2, the regularization parameter needs to be divided by 2 and the step size needs to be multiplied by 2.
+
 ## From 1.1 to 1.2
 
 The only API changes in MLlib v1.2 are in

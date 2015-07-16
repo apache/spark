@@ -17,11 +17,11 @@
 
 package org.apache.spark.mllib.linalg
 
-import org.scalatest.FunSuite
-
 import breeze.linalg.{DenseMatrix => BDM, CSCMatrix => BSM}
 
-class BreezeMatrixConversionSuite extends FunSuite {
+import org.apache.spark.SparkFunSuite
+
+class BreezeMatrixConversionSuite extends SparkFunSuite {
   test("dense matrix to breeze") {
     val mat = Matrices.dense(3, 2, Array(0.0, 1.0, 2.0, 3.0, 4.0, 5.0))
     val breeze = mat.toBreeze.asInstanceOf[BDM[Double]]

@@ -22,7 +22,6 @@ import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 
 import org.apache.spark.scheduler._
-import org.scalatest.FunSuite
 
 /**
  * Holds state shared across task threads in some ThreadingSuite tests.
@@ -37,7 +36,7 @@ object ThreadingSuiteState {
   }
 }
 
-class ThreadingSuite extends FunSuite with LocalSparkContext {
+class ThreadingSuite extends SparkFunSuite with LocalSparkContext with Logging {
 
   test("accessing SparkContext form a different thread") {
     sc = new SparkContext("local", "test")
@@ -131,8 +130,6 @@ class ThreadingSuite extends FunSuite with LocalSparkContext {
               Thread.sleep(100)
             }
             if (running.get() != 4) {
-              println("Waited 1 second without seeing runningThreads = 4 (it was " +
-                running.get() + "); failing test")
               ThreadingSuiteState.failed.set(true)
             }
             number
@@ -144,6 +141,8 @@ class ThreadingSuite extends FunSuite with LocalSparkContext {
     }
     sem.acquire(2)
     if (ThreadingSuiteState.failed.get()) {
+      logError("Waited 1 second without seeing runningThreads = 4 (it was " +
+                ThreadingSuiteState.runningThreads.get() + "); failing test")
       fail("One or more threads didn't see runningThreads = 4")
     }
   }

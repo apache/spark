@@ -44,9 +44,15 @@ PR_REMOTE_NAME = os.environ.get("PR_REMOTE_NAME", "apache-github")
 # Remote name which points to Apache git
 PUSH_REMOTE_NAME = os.environ.get("PUSH_REMOTE_NAME", "apache")
 # ASF JIRA username
-JIRA_USERNAME = os.environ.get("JIRA_USERNAME", "pwendell")
+JIRA_USERNAME = os.environ.get("JIRA_USERNAME", "")
 # ASF JIRA password
-JIRA_PASSWORD = os.environ.get("JIRA_PASSWORD", "35500")
+JIRA_PASSWORD = os.environ.get("JIRA_PASSWORD", "")
+# OAuth key used for issuing requests against the GitHub API. If this is not defined, then requests
+# will be unauthenticated. You should only need to configure this if you find yourself regularly
+# exceeding your IP's unauthenticated request rate limit. You can create an OAuth key at
+# https://github.com/settings/tokens. This script only requires the "public_repo" scope.
+GITHUB_OAUTH_KEY = os.environ.get("GITHUB_OAUTH_KEY")
+
 
 GITHUB_BASE = "https://github.com/apache/spark/pull"
 GITHUB_API_BASE = "https://api.github.com/repos/apache/spark"
@@ -58,9 +64,17 @@ BRANCH_PREFIX = "PR_TOOL"
 
 def get_json(url):
     try:
-        return json.load(urllib2.urlopen(url))
+        request = urllib2.Request(url)
+        if GITHUB_OAUTH_KEY:
+            request.add_header('Authorization', 'token %s' % GITHUB_OAUTH_KEY)
+        return json.load(urllib2.urlopen(request))
     except urllib2.HTTPError as e:
-        print "Unable to fetch URL, exiting: %s" % url
+        if "X-RateLimit-Remaining" in e.headers and e.headers["X-RateLimit-Remaining"] == '0':
+            print "Exceeded the GitHub API rate limit; see the instructions in " + \
+                  "dev/merge_spark_pr.py to configure an OAuth token for making authenticated " + \
+                  "GitHub requests."
+        else:
+            print "Unable to fetch URL, exiting: %s" % url
         sys.exit(-1)
 
 
@@ -426,11 +440,13 @@ def main():
             print "JIRA_USERNAME and JIRA_PASSWORD not set"
             print "Exiting without trying to close the associated JIRA."
     else:
-        print "Could not find jira-python library. Run 'sudo pip install jira-python' to install."
+        print "Could not find jira-python library. Run 'sudo pip install jira' to install."
         print "Exiting without trying to close the associated JIRA."
 
 if __name__ == "__main__":
     import doctest
-    doctest.testmod()
+    (failure_count, test_count) = doctest.testmod()
+    if failure_count:
+        exit(-1)
     
     main()
