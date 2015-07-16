@@ -108,6 +108,32 @@ test_that("create DataFrame from RDD", {
   expect_equal(count(df), 10)
   expect_equal(columns(df), c("a", "b"))
   expect_equal(dtypes(df), list(c("a", "int"), c("b", "string")))
+
+  df <- jsonFile(sqlContext, jsonPathNa)
+  hiveCtx <- tryCatch({
+    newJObject("org.apache.spark.sql.hive.test.TestHiveContext", ssc)
+  }, error = function(err) {
+    skip("Hive is not build with SparkSQL, skipped")
+  })
+  sql(hiveCtx, "CREATE TABLE people (name string, age double, height float)")
+  insertInto(df, "people")
+  expect_equal(sql(hiveCtx, "SELECT age from people WHERE name = 'Bob'"), c(16))
+  expect_equal(sql(hiveCtx, "SELECT height from people WHERE name ='Bob'"), c(176.5))
+
+  schema <- structType(structField("name", "string"), structField("age", "integer"),
+                       structField("height", "float"))
+  df2 <- createDataFrame(sqlContext, df.toRDD, schema)
+  expect_equal(columns(df2), c("name", "age", "height"))
+  expect_equal(dtypes(df2), list(c("name", "string"), c("age", "int"), c("height", "float")))
+  expect_equal(collect(where(df2, df2$name == "Bob")), c("Bob", 16, 176.5))
+
+  localDF <- data.frame(name=c("John", "Smith", "Sarah"), age=c(19, 23, 18), height=c(164.10, 181.4, 173.7))
+  df <- createDataFrame(sqlContext, localDF, schema)
+  expect_is(df, "DataFrame")
+  expect_equal(count(df), 3)
+  expect_equal(columns(df), c("name", "age", "height"))
+  expect_equal(dtypes(df), list(c("name", "string"), c("age", "int"), c("height", "float")))
+  expect_equal(collect(where(df, df$name == "John")), c("John", 19, 164.10))
 })
 
 test_that("convert NAs to null type in DataFrames", {
@@ -612,6 +638,18 @@ test_that("column functions", {
   c7 <- floor(c) + log(c) + log10(c) + log1p(c) + rint(c)
   c8 <- sign(c) + sin(c) + sinh(c) + tan(c) + tanh(c)
   c9 <- toDegrees(c) + toRadians(c)
+
+  df <- jsonFile(sqlContext, jsonPath)
+  df2 <- select(df, between(df$age, c(20, 30)), between(df$age, c(10, 20)))
+  expect_equal(collect(df2)[[2, 1]], TRUE)
+  expect_equal(collect(df2)[[2, 2]], FALSE)
+  expect_equal(collect(df2)[[3, 1]], FALSE)
+  expect_equal(collect(df2)[[3, 2]], TRUE)
+
+  df3 <- select(df, between(df$name, c("Apache", "Spark")))
+  expect_equal(collect(df3)[[1, 1]], TRUE)
+  expect_equal(collect(df3)[[2, 1]], FALSE)
+  expect_equal(collect(df3)[[3, 1]], TRUE)
 })
 
 test_that("column binary mathfunctions", {

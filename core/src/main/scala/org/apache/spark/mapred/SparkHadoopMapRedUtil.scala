@@ -26,6 +26,7 @@ import org.apache.hadoop.mapreduce.{OutputCommitter => MapReduceOutputCommitter}
 
 import org.apache.spark.executor.CommitDeniedException
 import org.apache.spark.{Logging, SparkEnv, TaskContext}
+import org.apache.spark.util.{Utils => SparkUtils}
 
 private[spark]
 trait SparkHadoopMapRedUtil {
@@ -64,10 +65,10 @@ trait SparkHadoopMapRedUtil {
 
   private def firstAvailableClass(first: String, second: String): Class[_] = {
     try {
-      Class.forName(first)
+      SparkUtils.classForName(first)
     } catch {
       case e: ClassNotFoundException =>
-        Class.forName(second)
+        SparkUtils.classForName(second)
     }
   }
 }

@@ -247,6 +247,11 @@ private[sql] trait UnaryNode extends SparkPlan with trees.UnaryNode[SparkPlan] {
   override def outputPartitioning: Partitioning = child.outputPartitioning
 }
 
-private[sql] trait BinaryNode extends SparkPlan with trees.BinaryNode[SparkPlan] {
+private[sql] trait BinaryNode extends SparkPlan {
   self: Product =>
+
+  def left: SparkPlan
+  def right: SparkPlan
+
+  override def children: Seq[SparkPlan] = Seq(left, right)
 }

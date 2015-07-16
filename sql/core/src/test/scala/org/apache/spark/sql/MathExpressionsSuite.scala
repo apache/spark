@@ -198,6 +198,21 @@ class MathExpressionsSuite extends QueryTest {
     testOneToOneMathFunction(rint, math.rint)
   }
 
+  test("round") {
+    val df = Seq(5, 55, 555).map(Tuple1(_)).toDF("a")
+    checkAnswer(
+      df.select(round('a), round('a, -1), round('a, -2)),
+      Seq(Row(5, 10, 0), Row(55, 60, 100), Row(555, 560, 600))
+    )
+
+    val pi = 3.1415
+    checkAnswer(
+      ctx.sql(s"SELECT round($pi, -3), round($pi, -2), round($pi, -1), " +
+        s"round($pi, 0), round($pi, 1), round($pi, 2), round($pi, 3)"),
+      Seq(Row(0.0, 0.0, 0.0, 3.0, 3.1, 3.14, 3.142))
+    )
+  }
+
   test("exp") {
     testOneToOneMathFunction(exp, math.exp)
   }
@@ -375,6 +390,5 @@ class MathExpressionsSuite extends QueryTest {
     val df = Seq((1, -1, "abc")).toDF("a", "b", "c")
     checkAnswer(df.selectExpr("positive(a)"), Row(1))
     checkAnswer(df.selectExpr("positive(b)"), Row(-1))
-    checkAnswer(df.selectExpr("positive(c)"), Row("abc"))
   }
 }
