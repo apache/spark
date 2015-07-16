@@ -39,9 +39,10 @@ import org.apache.spark.util.Utils
 class KinesisStreamSuite extends KinesisFunSuite
   with Eventually with BeforeAndAfter with BeforeAndAfterAll {
 
-  private lazy val awsCredentials = KinesisTestUtils.getAWSCredentials()
-  private val kinesisAppName = s"KinesisStreamSuite-${math.abs(Random.nextLong())}"
   private val kinesisTestUtils = new KinesisTestUtils()
+
+  // This is the name that KCL uses to save metadata to DynamoDB
+  private val kinesisAppName = s"KinesisStreamSuite-${math.abs(Random.nextLong())}"
 
   private var ssc: StreamingContext = _
   private var sc: SparkContext = _
@@ -56,6 +57,7 @@ class KinesisStreamSuite extends KinesisFunSuite
 
   override def afterAll(): Unit = {
     sc.stop()
+    // Delete the stream as well as the table
     kinesisTestUtils.deleteStream()
     kinesisTestUtils.deleteDynamoDBTable(kinesisAppName)
   }
@@ -86,11 +88,11 @@ class KinesisStreamSuite extends KinesisFunSuite
 
   testOrIgnore("basic operation") {
     ssc = new StreamingContext(sc, Milliseconds(1000))
-    val credentials = KinesisTestUtils.getAWSCredentials()
+    val aWSCredentials = KinesisTestUtils.getAWSCredentials()
     val stream = KinesisUtils.createStream(ssc, kinesisAppName, kinesisTestUtils.streamName,
       kinesisTestUtils.endpointUrl, kinesisTestUtils.regionName, InitialPositionInStream.LATEST,
       Seconds(10), StorageLevel.MEMORY_ONLY,
-      credentials.getAWSAccessKeyId, credentials.getAWSSecretKey)
+      aWSCredentials.getAWSAccessKeyId, aWSCredentials.getAWSSecretKey)
 
     val collected = new mutable.HashSet[Int] with mutable.SynchronizedSet[Int]
     stream.map { bytes => new String(bytes).toInt }.foreachRDD { rdd =>
