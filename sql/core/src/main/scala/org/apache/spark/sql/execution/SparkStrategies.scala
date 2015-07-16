@@ -235,11 +235,10 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
             AggregateExpression2(aggregateFunction, Partial, isDistinct)
         }
         val partialAggregateAttributes = partialAggregateExpressions.flatMap { agg =>
-          agg.bufferAttributes
+          agg.aggregateFunction.bufferAttributes
         }
         val partialAggregate =
           Aggregate2Sort(
-            true,
             namedGroupingExpressions.map(_._2),
             partialAggregateExpressions,
             partialAggregateAttributes,
@@ -264,7 +263,6 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           }.asInstanceOf[NamedExpression]
         }
         val finalAggregate = Aggregate2Sort(
-          false,
           namedGroupingAttributes,
           finalAggregateExpressions,
           finalAggregateAttributes,

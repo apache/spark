@@ -24,26 +24,53 @@ import org.apache.spark.sql.catalyst.{expressions, InternalRow}
 import org.apache.spark.sql.catalyst.trees.{LeafNode, UnaryNode}
 import org.apache.spark.sql.types._
 
+/** The mode of an [[AggregateFunction]]. */
 private[sql] sealed trait AggregateMode
 
+/**
+ * An [[AggregateFunction]] with [[Partial]] mode is used for partial aggregation.
+ * This function updates the given aggregation buffer with the original input of this
+ * function. When it has processed all input rows, the aggregation buffer is returned.
+ */
 private[sql] case object Partial extends AggregateMode
 
+/**
+ * An [[AggregateFunction]] with [[PartialMerge]] mode is used to merge aggregation buffers
+ * containing intermediate results for this function.
+ * This function updates the given aggregation buffer by merging multiple aggregation buffers.
+ * When it has processed all input rows, the aggregation buffer is returned.
+ */
 private[sql] case object PartialMerge extends AggregateMode
 
+/**
+ * An [[AggregateFunction]] with [[PartialMerge]] mode is used to merge aggregation buffers
+ * containing intermediate results for this function and the generate final result.
+ * This function updates the given aggregation buffer by merging multiple aggregation buffers.
+ * When it has processed all input rows, the final result of this function is returned.
+ */
 private[sql] case object Final extends AggregateMode
 
+/**
+ * An [[AggregateFunction2]] with [[Partial]] mode is used to evaluate this function directly
+ * from original input rows without any partial aggregation.
+ * This function updates the given aggregation buffer with the original input of this
+ * function. When it has processed all input rows, the final result of this function is returned.
+ */
 private[sql] case object Complete extends AggregateMode
 
-case object NoOp extends Expression {
+private[sql] case object NoOp extends Expression {
   override def nullable: Boolean = true
-  override def eval(input: InternalRow): Any = ???
+  override def eval(input: InternalRow): Any = {
+    throw new TreeNodeException(
+      this, s"No function to evaluate expression. type: ${this.nodeName}")
+  }
   override def dataType: DataType = NullType
   override def children: Seq[Expression] = Nil
 }
 
 /**
- * A container of a Aggregate Function, Aggregate Mode, and a field (`isDistinct`) indicating
- * if DISTINCT keyword is specified for this function.
+ * A container for an [[AggregateFunction2]] with its [[AggregateMode]] and a field
+ * (`isDistinct`) indicating if DISTINCT keyword is specified for this function.
  * @param aggregateFunction
  * @param mode
  * @param isDistinct
@@ -54,18 +81,16 @@ private[sql] case class AggregateExpression2(
     isDistinct: Boolean) extends Expression {
 
   override def children: Seq[Expression] = aggregateFunction :: Nil
-
   override def dataType: DataType = aggregateFunction.dataType
   override def foldable: Boolean = false
   override def nullable: Boolean = aggregateFunction.nullable
 
   override def toString: String = s"(${aggregateFunction}2,mode=$mode,isDistinct=$isDistinct)"
 
-  override def eval(input: InternalRow = null): Any =
-    throw new TreeNodeException(this, s"No function to evaluate expression. type: ${this.nodeName}")
-
-  def bufferSchema: StructType = aggregateFunction.bufferSchema
-  def bufferAttributes: Seq[Attribute] = aggregateFunction.bufferAttributes
+  override def eval(input: InternalRow = null): Any = {
+    throw new TreeNodeException(
+      this, s"No function to evaluate expression. type: ${this.nodeName}")
+  }
 }
 
 abstract class AggregateFunction2
@@ -73,9 +98,13 @@ abstract class AggregateFunction2
 
   self: Product =>
 
-  var bufferOffset: Int = 0
-
+  /** An aggregate function is not foldable. */
   override def foldable: Boolean = false
+
+  /**
+   * The offset of this function's buffer in the underlying buffer shared with other functions.
+   */
+  var bufferOffset: Int = 0
 
   /** The schema of the aggregation buffer. */
   def bufferSchema: StructType
@@ -83,23 +112,45 @@ abstract class AggregateFunction2
   /** Attributes of fields in bufferSchema. */
   def bufferAttributes: Seq[Attribute]
 
-  def rightBufferSchema: Seq[Attribute]
+  /** Clones bufferAttributes. */
+  def cloneBufferAttributes: Seq[Attribute]
 
+  /**
+   * Initializes its aggregation buffer located in `buffer`.
+   * It will use bufferOffset to find the starting point of
+   * its buffer in the given `buffer` shared with other functions.
+   */
   def initialize(buffer: MutableRow): Unit
 
+  /**
+   * Updates its aggregation buffer located in `buffer` based on the given `input`.
+   * It will use bufferOffset to find the starting point of its buffer in the given `buffer`
+   * shared with other functions.
+   */
   def update(buffer: MutableRow, input: InternalRow): Unit
 
+  /**
+   * Updates its aggregation buffer located in `buffer1` by combining intermediate results
+   * in the current buffer and intermediate results from another buffer `buffer2`.
+   * It will use bufferOffset to find the starting point of its buffer in the given `buffer1`
+   * and `buffer2`.
+   */
   def merge(buffer1: MutableRow, buffer2: InternalRow): Unit
-
-  override def eval(buffer: InternalRow = null): Any
 }
 
+/**
+ * An example [[AggregateFunction2]] that is not an [[AlgebraicAggregate]].
+ * This function calculate the sum of double values.
+ * @param child
+ */
 case class MyDoubleSum(child: Expression) extends AggregateFunction2 {
   override val bufferSchema: StructType =
     StructType(StructField("currentSum", DoubleType, true) :: Nil)
 
   override val bufferAttributes: Seq[Attribute] = bufferSchema.toAttributes
-  override lazy val rightBufferSchema = bufferAttributes.map(_.newInstance())
+
+  override lazy val cloneBufferAttributes = bufferAttributes.map(_.newInstance())
+
   override def initialize(buffer: MutableRow): Unit = {
     buffer.update(bufferOffset, null)
   }
@@ -107,7 +158,7 @@ case class MyDoubleSum(child: Expression) extends AggregateFunction2 {
   override def update(buffer: MutableRow, input: InternalRow): Unit = {
     val inputValue = child.eval(input)
     if (inputValue != null) {
-      if (buffer.isNullAt(bufferOffset) == null) {
+      if (buffer.isNullAt(bufferOffset)) {
         buffer.setDouble(bufferOffset, inputValue.asInstanceOf[Double])
       } else {
         val currentSum = buffer.getDouble(bufferOffset)
@@ -151,10 +202,11 @@ abstract class AlgebraicAggregate extends AggregateFunction2 with Serializable {
   val mergeExpressions: Seq[Expression]
   val evaluateExpression: Expression
 
-  override lazy val rightBufferSchema = bufferAttributes.map(_.newInstance())
+  override lazy val cloneBufferAttributes = bufferAttributes.map(_.newInstance())
+
   implicit class RichAttribute(a: AttributeReference) {
     def left = a
-    def right = rightBufferSchema(bufferAttributes.indexOf(a))
+    def right = cloneBufferAttributes(bufferAttributes.indexOf(a))
   }
 
   /** An AlgebraicAggregate's bufferSchema is derived from bufferAttributes. */

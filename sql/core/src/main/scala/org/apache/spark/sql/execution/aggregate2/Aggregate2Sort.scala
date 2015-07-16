@@ -29,7 +29,6 @@ import org.apache.spark.sql.types.NullType
 import scala.collection.mutable.ArrayBuffer
 
 case class Aggregate2Sort(
-    preShuffle: Boolean,
     groupingExpressions: Seq[NamedExpression],
     aggregateExpressions: Seq[AggregateExpression2],
     aggregateAttributes: Seq[Attribute],
@@ -37,9 +36,20 @@ case class Aggregate2Sort(
     child: SparkPlan)
   extends UnaryNode {
 
+  /** Indicates if this operator is for partial aggregations. */
+  val partialAggregation: Boolean = {
+    aggregateExpressions.map(_.mode).distinct.toList match {
+      case Partial :: Nil => true
+      case Final :: Nil => false
+      case other =>
+        sys.error(
+          s"Could not evaluate ${aggregateExpressions} because we do not support evaluate " +
+          s"modes $other in this operator.")
+    }
+  }
 
   override def requiredChildDistribution: List[Distribution] = {
-    if (preShuffle) {
+    if (partialAggregation) {
       UnspecifiedDistribution :: Nil
     } else {
       if (groupingExpressions == Nil) {
@@ -59,64 +69,69 @@ case class Aggregate2Sort(
     child.execute().mapPartitions { iter =>
 
       new Iterator[InternalRow] {
-        private val aggregateExprsWithBufferOffset = {
+        // aggregateFunctions contains all of aggregate functions used by this operator.
+        // When populating aggregateFunctions, we also set bufferOffsets for those
+        // functions and bind references for non-algebraic aggregate functions when
+        // the mode is Partial or Complete.
+        private val aggregateFunctions: Array[AggregateFunction2] = {
           var bufferOffset =
-            if (preShuffle) {
+            if (partialAggregation) {
               0
             } else {
               groupingExpressions.length
             }
-          val bufferOffsets = new ArrayBuffer[Int]()
+          val functions = new Array[AggregateFunction2](aggregateExpressions.length)
           var i = 0
           while (i < aggregateExpressions.length) {
             val func = aggregateExpressions(i).aggregateFunction
-            bufferOffsets += bufferOffset
-            bufferOffset += func.bufferSchema.length
+            val funcWithBoundReferences = aggregateExpressions(i).mode match {
+              case Partial | Complete if !func.isInstanceOf[AlgebraicAggregate] =>
+                // We need to create BoundReferences if the function is not an
+                // AlgebraicAggregate (it does not support code-gen) and the mode of
+                // this function is Partial or Complete because we will call eval of this
+                // function's children in the update method of this aggregate function.
+                // Those eval calls require BoundReferences to work.
+                BindReferences.bindReference(func, child.output)
+              case _ => func
+            }
+            // Set bufferOffset for this function. It is important that setting bufferOffset
+            // happens after all potential bindReference operations because bindReference
+            // will create a new instance of the function.
+            funcWithBoundReferences.bufferOffset = bufferOffset
+            bufferOffset += funcWithBoundReferences.bufferSchema.length
+            functions(i) = funcWithBoundReferences
             i += 1
           }
-          aggregateExpressions.zip(bufferOffsets)
-        }
-        // println("aggregateExprsWithBufferOffset " + aggregateExprsWithBufferOffset)
-
-        private val aggregateFunctions: Array[AggregateFunction2] = {
-          aggregateExprsWithBufferOffset.map {
-            case (aggExpr, bufferOffset) =>
-              val func = aggExpr.aggregateFunction
-              func.bufferOffset = bufferOffset
-              func
-          }.toArray
+          functions
         }
 
+        // All non-algebraic aggregate functions.
         private val nonAlgebraicAggregateFunctions: Array[AggregateFunction2] = {
-          aggregateExprsWithBufferOffset.collect {
-            case (AggregateExpression2(agg: AggregateFunction2, mode, isDistinct), offset)
-              if !agg.isInstanceOf[AlgebraicAggregate] =>
-              mode match {
-                case Partial | Complete =>
-                  // Only need to bind reference when the function is not an AlgebraicAggregate
-                  // and the mode is Partial or Complete.
-                  val func = BindReferences.bindReference(agg, child.output)
-                  // Need to set it again since BindReference will create a new instance.
-                  func.bufferOffset = offset
-                  func
-                case _ => agg
-              }
+          aggregateFunctions.collect {
+            case func: AggregateFunction2 if !func.isInstanceOf[AlgebraicAggregate] => func
           }.toArray
         }
 
-        private val nonAlgebraicAggregateFunctionOrdinals: Array[Int] = {
-          val ordinals = new ArrayBuffer[Int]()
+        // Positions of those non-algebraic aggregate functions in aggregateFunctions.
+        // For example, we have func1, func2, func3, func4 in aggregateFunctions, and
+        // func2 and func3 are non-algebraic aggregate functions.
+        // nonAlgebraicAggregateFunctionPositions will be [1, 2].
+        private val nonAlgebraicAggregateFunctionPositions: Array[Int] = {
+          val positions = new ArrayBuffer[Int]()
           var i = 0
-          while (i < aggregateExpressions.length) {
-            aggregateExpressions(i).aggregateFunction match {
+          while (i < aggregateFunctions.length) {
+            aggregateFunctions(i) match {
               case agg: AlgebraicAggregate =>
-              case _ => ordinals += i
+              case _ => positions += i
             }
             i += 1
           }
-          ordinals.toArray
+          positions.toArray
         }
 
+        // The number of elements of the underlying buffer of this operator.
+        // All aggregate functions are sharing this underlying buffer and they find their
+        // buffer values through bufferOffset.
         private val bufferSize: Int = {
           var size = 0
           var i = 0
@@ -124,7 +139,7 @@ case class Aggregate2Sort(
             size += aggregateFunctions(i).bufferSchema.length
             i += 1
           }
-          if (preShuffle) {
+          if (partialAggregation) {
             size
           } else {
             groupingExpressions.length + size
@@ -136,35 +151,57 @@ case class Aggregate2Sort(
           newMutableProjection(groupingExpressions, child.output)()
         // A ordering used to compare if a new row belongs to the current group
         // or a new group.
-        private val groupOrdering: Ordering[InternalRow] =
-          RowOrdering.forSchema(groupingExpressions.map(_.dataType))
+        private val groupOrdering: Ordering[InternalRow] = {
+          val groupingAttributes = groupingExpressions.map(_.toAttribute)
+          newOrdering(
+            groupingAttributes.map(expr => SortOrder(expr, Ascending)),
+            groupingAttributes)
+        }
         // The partition key of the current partition.
         private var currentGroupingKey: InternalRow = _
         // The partition key of next partition.
         private var nextGroupingKey: InternalRow = _
         // The first row of next partition.
         private var firstRowInNextGroup: InternalRow = _
+        // Indicates if we has new group of rows to process.
         private var hasNewGroup: Boolean = true
+        // The underlying buffer shared by all aggregate functions.
         private val buffer: MutableRow = new GenericMutableRow(bufferSize)
+        // The result of aggregate functions. It is only used when aggregate functions' modes
+        // are Final.
         private val aggregateResult: MutableRow = new GenericMutableRow(aggregateAttributes.length)
         private val joinedRow = new JoinedRow4
+        // The projection used to generate the output rows of this operator.
+        // This is only used when we are generating final results of aggregate functions.
         private lazy val resultProjection =
           newMutableProjection(
             resultExpressions, groupingExpressions.map(_.toAttribute) ++ aggregateAttributes)()
 
-        val offsetAttributes = if (preShuffle) Nil else Seq.fill(groupingExpressions.length)(AttributeReference("offset", NullType)())
-        val offsetExpressions = if (preShuffle) Nil else Seq.fill(groupingExpressions.length)(NoOp)
+        // When we merge buffers (for mode PartialMerge or Final), the input rows start with
+        // values for grouping expressions. So, when we construct our buffer for this
+        // aggregate function, the size of the buffer matches the number of values in the
+        // input rows. To simplify the code for code-gen, we need create some dummy
+        // attributes and expressions for these grouping expressions.
+        val offsetAttributes = {
+          if (partialAggregation) {
+            Nil
+          } else {
+            Seq.fill(groupingExpressions.length)(AttributeReference("offset", NullType)())
+          }
+        }
+        val offsetExpressions =
+          if (partialAggregation) Nil else Seq.fill(groupingExpressions.length)(NoOp)
 
+        // This projection is used to initialize buffer values for all AlgebraicAggregates.
         val algebraicInitialProjection = {
           val initExpressions = offsetExpressions ++ aggregateFunctions.flatMap {
             case ae: AlgebraicAggregate => ae.initialValues
             case agg: AggregateFunction2 => NoOp :: Nil
           }
-          // println(initExpressions.mkString(","))
-
           newMutableProjection(initExpressions, Nil)().target(buffer)
         }
 
+        // This projection is used to update buffer values for all AlgebraicAggregates.
         lazy val algebraicUpdateProjection = {
           val bufferSchema = aggregateFunctions.flatMap {
             case ae: AlgebraicAggregate => ae.bufferAttributes
@@ -174,19 +211,18 @@ case class Aggregate2Sort(
             case ae: AlgebraicAggregate => ae.updateExpressions
             case agg: AggregateFunction2 => NoOp :: Nil
           }
-
-          // println(updateExpressions.mkString(","))
           newMutableProjection(updateExpressions, bufferSchema ++ child.output)().target(buffer)
         }
 
+        // This projection is used to merge buffer values for all AlgebraicAggregates.
         lazy val algebraicMergeProjection = {
           val bufferSchemata =
             offsetAttributes ++ aggregateFunctions.flatMap {
               case ae: AlgebraicAggregate => ae.bufferAttributes
               case agg: AggregateFunction2 => agg.bufferAttributes
             } ++ offsetAttributes ++ aggregateFunctions.flatMap {
-              case ae: AlgebraicAggregate => ae.rightBufferSchema
-              case agg: AggregateFunction2 => agg.rightBufferSchema
+              case ae: AlgebraicAggregate => ae.cloneBufferAttributes
+              case agg: AggregateFunction2 => agg.cloneBufferAttributes
             }
           val mergeExpressions = offsetExpressions ++ aggregateFunctions.flatMap {
             case ae: AlgebraicAggregate => ae.mergeExpressions
@@ -196,14 +232,15 @@ case class Aggregate2Sort(
           newMutableProjection(mergeExpressions, bufferSchemata)()
         }
 
+        // This projection is used to evaluate all AlgebraicAggregates.
         lazy val algebraicEvalProjection = {
           val bufferSchemata =
             offsetAttributes ++ aggregateFunctions.flatMap {
               case ae: AlgebraicAggregate => ae.bufferAttributes
               case agg: AggregateFunction2 => agg.bufferAttributes
             } ++ offsetAttributes ++ aggregateFunctions.flatMap {
-              case ae: AlgebraicAggregate => ae.rightBufferSchema
-              case agg: AggregateFunction2 => agg.rightBufferSchema
+              case ae: AlgebraicAggregate => ae.cloneBufferAttributes
+              case agg: AggregateFunction2 => agg.cloneBufferAttributes
             }
           val evalExpressions = aggregateFunctions.map {
             case ae: AlgebraicAggregate => ae.evaluateExpression
@@ -230,6 +267,7 @@ case class Aggregate2Sort(
           }
         }
 
+        /** Initializes buffer values for all aggregate functions. */
         private def initializeBuffer(): Unit = {
           algebraicInitialProjection(EmptyRow)
           var i = 0
@@ -237,12 +275,12 @@ case class Aggregate2Sort(
             nonAlgebraicAggregateFunctions(i).initialize(buffer)
             i += 1
           }
-          // println("initilized: " + buffer)
         }
 
+        /** Processes the current input row. */
         private def processRow(row: InternalRow): Unit = {
           // The new row is still in the current group.
-          if (preShuffle) {
+          if (partialAggregation) {
             algebraicUpdateProjection(joinedRow(buffer, row))
             var i = 0
             while (i < nonAlgebraicAggregateFunctions.length) {
@@ -256,18 +294,19 @@ case class Aggregate2Sort(
               nonAlgebraicAggregateFunctions(i).merge(buffer, row)
               i += 1
             }
-            // println("buffer merge " + buffer + " " + row)
           }
         }
 
-        private def iterateNextGroup(): Unit = {
+        /** Processes rows in the current group. It will stop when it find a new group. */
+        private def processCurrentGroup(): Unit = {
           currentGroupingKey = nextGroupingKey
           // Now, we will start to find all rows belonging to this group.
-          // Create a variable to track if we see the next group.
+          // We create a variable to track if we see the next group.
           var findNextPartition = false
+          // firstRowInNextGroup is the first row of this group. We first process it.
+          processRow(firstRowInNextGroup)
           // The search will stop when we see the next group or there is no
           // input row left in the iter.
-          processRow(firstRowInNextGroup)
           while (iter.hasNext && !findNextPartition) {
             val currentRow = iter.next()
             // Get the grouping key based on the grouping expressions.
@@ -278,16 +317,35 @@ case class Aggregate2Sort(
             if (comparing == 0) {
               processRow(currentRow)
             } else {
-              // We see a new group.
+              // We find a new group.
               findNextPartition = true
               nextGroupingKey = groupingKey.copy()
               firstRowInNextGroup = currentRow.copy()
             }
           }
-          // We have not seen a new group. It means that there is no new row in the
+          // We have not seen a new group. It means that there is no new row in the input
           // iter. The current group is the last group of the iter.
           if (!findNextPartition) {
             hasNewGroup = false
+          }
+        }
+
+        private def generateOutput: () => InternalRow = {
+          if (partialAggregation) {
+            // If it is partialAggregation, we just output the grouping columns and the buffer.
+            () => joinedRow(currentGroupingKey, buffer).copy()
+          } else {
+            () => {
+              algebraicEvalProjection.target(aggregateResult)(buffer)
+              var i = 0
+              while (i < nonAlgebraicAggregateFunctions.length) {
+                aggregateResult.update(
+                  nonAlgebraicAggregateFunctionPositions(i),
+                  nonAlgebraicAggregateFunctions(i).eval(buffer))
+                i += 1
+              }
+              resultProjection(joinedRow(currentGroupingKey, aggregateResult))
+            }
           }
         }
 
@@ -295,26 +353,13 @@ case class Aggregate2Sort(
 
         override final def next(): InternalRow = {
           if (hasNext) {
-            iterateNextGroup()
-            val outputRow =
-              if (preShuffle) {
-                // If it is preShuffle, we just output the grouping columns and the buffer.
-                // println("buffer " + buffer)
-                joinedRow(currentGroupingKey, buffer).copy()
-              } else {
-                algebraicEvalProjection.target(aggregateResult)(buffer)
-                var i = 0
-                while (i < nonAlgebraicAggregateFunctions.length) {
-                  aggregateResult.update(
-                    nonAlgebraicAggregateFunctionOrdinals(i),
-                    nonAlgebraicAggregateFunctions(i).eval(buffer))
-                  i += 1
-                }
-                resultProjection(joinedRow(currentGroupingKey, aggregateResult))
-              }
+            // Process the current group.
+            processCurrentGroup()
+            // Generate output row for the current group.
+            val outputRow = generateOutput()
+            // Initilize buffer values for the next group.
             initializeBuffer()
 
-            // println(s"outputRow $preShuffle " + outputRow)
             outputRow
           } else {
             // no more result
