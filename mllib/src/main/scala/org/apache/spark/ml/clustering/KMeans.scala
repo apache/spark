@@ -79,7 +79,7 @@ private[clustering] trait KMeansParams
     (value: String) => MLlibKMeans.validateInitializationMode(value))
 
   /** @group getParam */
-  def getInitializationMode: String = $(initMode)
+  def getInitMode: String = $(initMode)
 
   /**
    * Param for the number of steps for the k-means|| initialization mode. This is an advanced
@@ -164,7 +164,7 @@ class KMeans(override val uid: String) extends Estimator[KMeansModel] with KMean
   def setK(value: Int): this.type = set(k, value)
 
   /** @group setParam */
-  def setInitializationMode(value: String): this.type = set(initMode, value)
+  def setInitMode(value: String): this.type = set(initMode, value)
 
   /** @group setParam */
   def setInitializationSteps(value: Int): this.type = set(initSteps, value)

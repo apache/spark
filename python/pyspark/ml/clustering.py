@@ -147,21 +147,21 @@ class KMeans(JavaEstimator, HasFeaturesCol, HasMaxIter, HasSeed):
         """
         return self.getOrDefault(self.runs)
 
-    def setInitializationMode(self, value):
+    def setInitMode(self, value):
         """
         Sets the value of :py:attr:`initMode`.
 
         >>> algo = KMeans()
-        >>> algo.getInitializationMode()
+        >>> algo.getInitMode()
         'k-means||'
-        >>> algo = algo.setInitializationMode("random")
-        >>> algo.getInitializationMode()
+        >>> algo = algo.setInitMode("random")
+        >>> algo.getInitMode()
         'random'
         """
         self._paramMap[self.initMode] = value
         return self
 
-    def getInitializationMode(self):
+    def getInitMode(self):
         """
         Gets the value of `initMode`
         """
