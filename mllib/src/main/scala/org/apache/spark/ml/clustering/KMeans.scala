@@ -59,7 +59,7 @@ private[clustering] trait KMeansParams
 
   /**
    * Param the distance threshold within which we've consider centers to have converged.
-   * If all centers move less than this Euclidean distance, we stop iterating one run.
+   * If all centers move less than this Euclidean distance, we stop iterating one run. Default: 1e-4
    * @group param
    */
   final val epsilon = new DoubleParam(this, "epsilon", "distance threshold")
