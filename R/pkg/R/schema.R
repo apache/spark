@@ -123,6 +123,7 @@ structField.character <- function(x, type, nullable = TRUE) {
   }
   options <- c("byte",
                "integer",
+               "float",
                "double",
                "numeric",
                "character",

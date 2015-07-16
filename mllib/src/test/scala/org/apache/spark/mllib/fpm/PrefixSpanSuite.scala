@@ -18,9 +18,8 @@ package org.apache.spark.mllib.fpm
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.util.MLlibTestSparkContext
-import org.apache.spark.rdd.RDD
 
-class PrefixspanSuite extends SparkFunSuite with MLlibTestSparkContext {
+class PrefixSpanSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   test("PrefixSpan using Integer type") {
 
@@ -48,15 +47,8 @@ class PrefixspanSuite extends SparkFunSuite with MLlibTestSparkContext {
     def compareResult(
         expectedValue: Array[(Array[Int], Long)],
         actualValue: Array[(Array[Int], Long)]): Boolean = {
-      val sortedExpectedValue = expectedValue.sortWith{ (x, y) =>
-        x._1.mkString(",") + ":" + x._2 < y._1.mkString(",") + ":" + y._2
-      }
-      val sortedActualValue = actualValue.sortWith{ (x, y) =>
-        x._1.mkString(",") + ":" + x._2 < y._1.mkString(",") + ":" + y._2
-      }
-      sortedExpectedValue.zip(sortedActualValue)
-        .map(x => x._1._1.mkString(",") == x._2._1.mkString(",") && x._1._2 == x._2._2)
-        .reduce(_&&_)
+      expectedValue.map(x => (x._1.toSeq, x._2)).toSet ==
+        actualValue.map(x => (x._1.toSeq, x._2)).toSet
     }
 
     val prefixspan = new PrefixSpan()
