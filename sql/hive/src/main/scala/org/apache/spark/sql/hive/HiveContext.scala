@@ -21,7 +21,7 @@ import java.io.File
 import java.net.{URL, URLClassLoader}
 import java.sql.Timestamp
 
-import org.apache.spark.sql.execution.aggregate2.ConvertAggregateFunction
+import org.apache.spark.sql.execution.aggregate2.{CheckAggregateFunction, ConvertAggregateFunction}
 
 import scala.collection.JavaConversions._
 import scala.collection.mutable.HashMap
@@ -391,7 +391,8 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) with Logging {
         Nil
 
       override val extendedCheckRules = Seq(
-        sources.PreWriteCheck(catalog)
+        sources.PreWriteCheck(catalog),
+        CheckAggregateFunction(self)
       )
     }
 

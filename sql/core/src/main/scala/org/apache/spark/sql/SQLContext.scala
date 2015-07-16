@@ -21,7 +21,7 @@ import java.beans.Introspector
 import java.util.Properties
 import java.util.concurrent.atomic.AtomicReference
 
-import org.apache.spark.sql.execution.aggregate2.ConvertAggregateFunction
+import org.apache.spark.sql.execution.aggregate2.{CheckAggregateFunction, ConvertAggregateFunction}
 
 import scala.collection.JavaConversions._
 import scala.collection.immutable
@@ -153,7 +153,8 @@ class SQLContext(@transient val sparkContext: SparkContext)
         Nil
 
       override val extendedCheckRules = Seq(
-        sources.PreWriteCheck(catalog)
+        sources.PreWriteCheck(catalog),
+        CheckAggregateFunction(self)
       )
     }
 
