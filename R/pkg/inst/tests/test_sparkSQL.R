@@ -619,6 +619,11 @@ test_that("column functions", {
   expect_equal(collect(df2)[[2, 2]], FALSE)
   expect_equal(collect(df2)[[3, 1]], FALSE)
   expect_equal(collect(df2)[[3, 2]], TRUE)
+
+  df3 <- select(df, between(df$name, c("Apache", "Spark")))
+  expect_equal(collect(df3)[[1, 1]], TRUE)
+  expect_equal(collect(df3)[[2, 1]], FALSE)
+  expect_equal(collect(df3)[[3, 1]], TRUE)
 })
 
 test_that("column binary mathfunctions", {
