@@ -27,10 +27,10 @@ import org.apache.spark.streaming.dstream.DStream
 import org.apache.spark.streaming.receiver.Receiver
 import org.apache.spark.streaming.scheduler._
 
-import org.scalatest.Matchers
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.time.SpanSugar._
-import org.apache.spark.{SparkConf, Logging}
+import org.scalatest.{Matchers, Assertions}
+import org.apache.spark.{SparkException, SparkConf, Logging}
 
 class StreamingListenerSuite extends TestSuiteBase with Matchers {
 
@@ -143,13 +143,30 @@ class StreamingListenerSuite extends TestSuiteBase with Matchers {
   }
 
   test("registering listeners via spark.streaming.extraListeners") {
+    // Test for success with zero-argument constructor and sparkConf constructor
     val conf = new SparkConf().setMaster("local").setAppName("test")
-      .set("spark.streaming.extraListeners", classOf[BatchInfoCollector].getName + "," +
+      .set("spark.streaming.extraListeners", classOf[StreamingListenerThatAcceptsSparkConf].getName + "," +
         classOf[ReceiverInfoCollector].getName)
     val scc = new StreamingContext(conf, Seconds(1))
 
-    scc.scheduler.listenerBus.listeners.exists { _.isInstanceOf[BatchInfoCollector] }
+    scc.scheduler.listenerBus.listeners.exists { _.isInstanceOf[StreamingListenerThatAcceptsSparkConf] }
     scc.scheduler.listenerBus.listeners.exists { _.isInstanceOf[ReceiverInfoCollector] }
+
+    // Test for failure with too many arguments in constructor
+    val failingConf = new SparkConf().setMaster("local").setAppName("failingTest")
+      .set("spark.streaming.extraListeners", classOf[StreamingListenerTooManyArguments].getName)
+    val thrown = intercept[SparkException] {
+      val failingScc = new StreamingContext(failingConf, Seconds(1))
+    }
+    val expectedErrorMessage =
+       s"Exception when registering Streaming Listener:" +
+        " StreamingListenerTooManyArguments did not have a zero-argument constructor or a" +
+        " single-argument constructor that accepts SparkConf. Note: if the class is" +
+        " defined inside of another Scala class, then its constructors may accept an" +
+        " implicit parameter that references the enclosing class; in this case, you must" +
+        " define the listener as a top-level class in order to prevent this extra" +
+        " parameter from breaking Spark's ability to find a valid constructor."
+    assert(thrown.getMessage === expectedErrorMessage)
   }
 }
 
@@ -183,7 +200,7 @@ class ReceiverInfoCollector extends StreamingListener {
     startedReceiverStreamIds += receiverStarted.receiverInfo.streamId
   }
 
-  override def onReceiverStopped(receiverStopped: StreamingListenerReceiverStopped) {
+  override def onReceiverStopped(receiverStopped: StreamingListenerReceiverStopListped) {
     stoppedReceiverStreamIds += receiverStopped.receiverInfo.streamId
   }
 
@@ -206,4 +223,12 @@ class StreamingListenerSuiteReceiver extends Receiver[Any](StorageLevel.MEMORY_O
     }
   }
   def onStop() { }
+}
+
+class StreamingListenerThatAcceptsSparkConf(conf: SparkConf) extends StreamingListener {
+  // Empty dummy class used for testing
+}
+
+class StreamingListenerTooManyArguments(conf: SparkConf, failInt: Int) extends StreamingListener {
+  // Empty dummy class used for testing
 }

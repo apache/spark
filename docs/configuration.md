@@ -1498,8 +1498,8 @@ Apart from these, the following properties are also available, and may be useful
   <td>(none)</td>
   <td>
     A comma-separated list of classes that implement <code>StreamingListener</code>; when initializing
-    SparkContext, instances of these classes will be created and registered with Spark's streaming listener
-    bus.  If a class has a single-argument constructor that accepts a SparkConf, that constructor
+    StreamingContext, instances of these classes will be created and registered with StreamingContext's listener
+    bus. If a class has a single-argument constructor that accepts a SparkConf, that constructor
     will be called; otherwise, a zero-argument constructor will be called. If no valid constructor
     can be found, the StreamingContext creation will fail with an exception.
   </td>
