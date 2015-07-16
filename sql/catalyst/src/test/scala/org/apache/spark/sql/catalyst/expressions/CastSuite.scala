@@ -24,7 +24,6 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * Test suite for data type casting expression [[Cast]].
@@ -281,6 +280,18 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
     val sts = sd + " 00:00:02"
     val nts = sts + ".1"
     val ts = Timestamp.valueOf(nts)
+
+    val defaultTimeZone = TimeZone.getDefault
+    TimeZone.setDefault(TimeZone.getTimeZone("America/Los_Angeles"))
+    var c = Calendar.getInstance()
+    c.set(2015, 2, 8, 2, 30, 0)
+    checkEvaluation(cast(cast(new Timestamp(c.getTimeInMillis), StringType), TimestampType),
+      c.getTimeInMillis * 1000)
+    c = Calendar.getInstance()
+    c.set(2015, 10, 1, 2, 30, 0)
+    checkEvaluation(cast(cast(new Timestamp(c.getTimeInMillis), StringType), TimestampType),
+      c.getTimeInMillis * 1000)
+    TimeZone.setDefault(defaultTimeZone)
 
     checkEvaluation(cast("abdef", StringType), "abdef")
     checkEvaluation(cast("abdef", DecimalType.Unlimited), null)

@@ -94,29 +94,29 @@ class DateTimeUtilsSuite extends SparkFunSuite {
     var c = Calendar.getInstance()
     c.set(2015, 0, 28, 0, 0, 0)
     c.set(Calendar.MILLISECOND, 0)
-    assert(DateTimeUtils.stringToDate(UTF8String.fromString("2015-01-28")).get ==
+    assert(DateTimeUtils.stringToDate(UTF8String.fromString("2015-01-28")).get ===
       c.getTimeInMillis / millisPerDay)
     c.set(2015, 0, 1, 0, 0, 0)
     c.set(Calendar.MILLISECOND, 0)
-    assert(DateTimeUtils.stringToDate(UTF8String.fromString("2015")).get ==
+    assert(DateTimeUtils.stringToDate(UTF8String.fromString("2015")).get ===
       c.getTimeInMillis / millisPerDay)
     c = Calendar.getInstance()
     c.set(2015, 2, 1, 0, 0, 0)
     c.set(Calendar.MILLISECOND, 0)
-    assert(DateTimeUtils.stringToDate(UTF8String.fromString("2015-03")).get ==
+    assert(DateTimeUtils.stringToDate(UTF8String.fromString("2015-03")).get ===
       c.getTimeInMillis / millisPerDay)
     c = Calendar.getInstance()
     c.set(2015, 2, 18, 0, 0, 0)
     c.set(Calendar.MILLISECOND, 0)
-    assert(DateTimeUtils.stringToDate(UTF8String.fromString("2015-03-18")).get ==
+    assert(DateTimeUtils.stringToDate(UTF8String.fromString("2015-03-18")).get ===
       c.getTimeInMillis / millisPerDay)
-    assert(DateTimeUtils.stringToDate(UTF8String.fromString("2015-03-18 ")).get ==
+    assert(DateTimeUtils.stringToDate(UTF8String.fromString("2015-03-18 ")).get ===
       c.getTimeInMillis / millisPerDay)
-    assert(DateTimeUtils.stringToDate(UTF8String.fromString("2015-03-18 123142")).get ==
+    assert(DateTimeUtils.stringToDate(UTF8String.fromString("2015-03-18 123142")).get ===
       c.getTimeInMillis / millisPerDay)
-    assert(DateTimeUtils.stringToDate(UTF8String.fromString("2015-03-18T123123")).get ==
+    assert(DateTimeUtils.stringToDate(UTF8String.fromString("2015-03-18T123123")).get ===
       c.getTimeInMillis / millisPerDay)
-    assert(DateTimeUtils.stringToDate(UTF8String.fromString("2015-03-18T")).get ==
+    assert(DateTimeUtils.stringToDate(UTF8String.fromString("2015-03-18T")).get ===
       c.getTimeInMillis / millisPerDay)
 
     assert(DateTimeUtils.stringToDate(UTF8String.fromString("2015-03-18X")).isEmpty)
@@ -130,117 +130,117 @@ class DateTimeUtilsSuite extends SparkFunSuite {
     var c = Calendar.getInstance()
     c.set(1969, 11, 31, 16, 0, 0)
     c.set(Calendar.MILLISECOND, 0)
-    assert(DateTimeUtils.stringToTimestamp(UTF8String.fromString("1969-12-31 16:00:00")).get ==
+    assert(DateTimeUtils.stringToTimestamp(UTF8String.fromString("1969-12-31 16:00:00")).get ===
       c.getTimeInMillis * 1000)
     c.set(2015, 0, 1, 0, 0, 0)
     c.set(Calendar.MILLISECOND, 0)
-    assert(DateTimeUtils.stringToTimestamp(UTF8String.fromString("2015")).get ==
+    assert(DateTimeUtils.stringToTimestamp(UTF8String.fromString("2015")).get ===
       c.getTimeInMillis * 1000)
     c = Calendar.getInstance()
     c.set(2015, 2, 1, 0, 0, 0)
     c.set(Calendar.MILLISECOND, 0)
-    assert(DateTimeUtils.stringToTimestamp(UTF8String.fromString("2015-03")).get ==
+    assert(DateTimeUtils.stringToTimestamp(UTF8String.fromString("2015-03")).get ===
       c.getTimeInMillis * 1000)
     c = Calendar.getInstance()
     c.set(2015, 2, 18, 0, 0, 0)
     c.set(Calendar.MILLISECOND, 0)
-    assert(DateTimeUtils.stringToTimestamp(UTF8String.fromString("2015-03-18")).get ==
+    assert(DateTimeUtils.stringToTimestamp(UTF8String.fromString("2015-03-18")).get ===
       c.getTimeInMillis * 1000)
-    assert(DateTimeUtils.stringToTimestamp(UTF8String.fromString("2015-03-18 ")).get ==
+    assert(DateTimeUtils.stringToTimestamp(UTF8String.fromString("2015-03-18 ")).get ===
       c.getTimeInMillis * 1000)
-    assert(DateTimeUtils.stringToTimestamp(UTF8String.fromString("2015-03-18T")).get ==
+    assert(DateTimeUtils.stringToTimestamp(UTF8String.fromString("2015-03-18T")).get ===
       c.getTimeInMillis * 1000)
 
     c = Calendar.getInstance()
     c.set(2015, 2, 18, 12, 3, 17)
     c.set(Calendar.MILLISECOND, 0)
-    assert(DateTimeUtils.stringToTimestamp(UTF8String.fromString("2015-03-18 12:03:17")).get ==
+    assert(DateTimeUtils.stringToTimestamp(UTF8String.fromString("2015-03-18 12:03:17")).get ===
       c.getTimeInMillis * 1000)
-    assert(DateTimeUtils.stringToTimestamp(UTF8String.fromString("2015-03-18T12:03:17")).get ==
+    assert(DateTimeUtils.stringToTimestamp(UTF8String.fromString("2015-03-18T12:03:17")).get ===
       c.getTimeInMillis * 1000)
 
     c = Calendar.getInstance(TimeZone.getTimeZone("GMT-13:53"))
     c.set(2015, 2, 18, 12, 3, 17)
     c.set(Calendar.MILLISECOND, 0)
     assert(DateTimeUtils.stringToTimestamp(
-      UTF8String.fromString("2015-03-18T12:03:17-13:53")).get == c.getTimeInMillis * 1000)
+      UTF8String.fromString("2015-03-18T12:03:17-13:53")).get === c.getTimeInMillis * 1000)
 
     c = Calendar.getInstance(TimeZone.getTimeZone("UTC"))
     c.set(2015, 2, 18, 12, 3, 17)
     c.set(Calendar.MILLISECOND, 0)
-    assert(DateTimeUtils.stringToTimestamp(UTF8String.fromString("2015-03-18T12:03:17Z")).get ==
+    assert(DateTimeUtils.stringToTimestamp(UTF8String.fromString("2015-03-18T12:03:17Z")).get ===
       c.getTimeInMillis * 1000)
-    assert(DateTimeUtils.stringToTimestamp(UTF8String.fromString("2015-03-18 12:03:17Z")).get ==
+    assert(DateTimeUtils.stringToTimestamp(UTF8String.fromString("2015-03-18 12:03:17Z")).get ===
       c.getTimeInMillis * 1000)
 
     c = Calendar.getInstance(TimeZone.getTimeZone("GMT-01:00"))
     c.set(2015, 2, 18, 12, 3, 17)
     c.set(Calendar.MILLISECOND, 0)
-    assert(DateTimeUtils.stringToTimestamp(UTF8String.fromString("2015-03-18T12:03:17-1:0")).get ==
+    assert(DateTimeUtils.stringToTimestamp(UTF8String.fromString("2015-03-18T12:03:17-1:0")).get ===
       c.getTimeInMillis * 1000)
     assert(DateTimeUtils.stringToTimestamp(
-      UTF8String.fromString("2015-03-18T12:03:17-01:00")).get == c.getTimeInMillis * 1000)
+      UTF8String.fromString("2015-03-18T12:03:17-01:00")).get === c.getTimeInMillis * 1000)
 
     c = Calendar.getInstance(TimeZone.getTimeZone("GMT+07:30"))
     c.set(2015, 2, 18, 12, 3, 17)
     c.set(Calendar.MILLISECOND, 0)
     assert(DateTimeUtils.stringToTimestamp(
-      UTF8String.fromString("2015-03-18T12:03:17+07:30")).get == c.getTimeInMillis * 1000)
+      UTF8String.fromString("2015-03-18T12:03:17+07:30")).get === c.getTimeInMillis * 1000)
 
     c = Calendar.getInstance(TimeZone.getTimeZone("GMT+07:03"))
     c.set(2015, 2, 18, 12, 3, 17)
     c.set(Calendar.MILLISECOND, 0)
     assert(DateTimeUtils.stringToTimestamp(
-      UTF8String.fromString("2015-03-18T12:03:17+07:03")).get == c.getTimeInMillis * 1000)
+      UTF8String.fromString("2015-03-18T12:03:17+07:03")).get === c.getTimeInMillis * 1000)
 
     c = Calendar.getInstance()
     c.set(2015, 2, 18, 12, 3, 17)
     c.set(Calendar.MILLISECOND, 123)
     assert(DateTimeUtils.stringToTimestamp(
-      UTF8String.fromString("2015-03-18 12:03:17.123")).get == c.getTimeInMillis * 1000)
+      UTF8String.fromString("2015-03-18 12:03:17.123")).get === c.getTimeInMillis * 1000)
     assert(DateTimeUtils.stringToTimestamp(
-      UTF8String.fromString("2015-03-18T12:03:17.123")).get == c.getTimeInMillis * 1000)
+      UTF8String.fromString("2015-03-18T12:03:17.123")).get === c.getTimeInMillis * 1000)
 
     c = Calendar.getInstance(TimeZone.getTimeZone("UTC"))
     c.set(2015, 2, 18, 12, 3, 17)
     c.set(Calendar.MILLISECOND, 456)
     assert(DateTimeUtils.stringToTimestamp(
-      UTF8String.fromString("2015-03-18T12:03:17.456Z")).get  == c.getTimeInMillis * 1000)
+      UTF8String.fromString("2015-03-18T12:03:17.456Z")).get  === c.getTimeInMillis * 1000)
     assert(DateTimeUtils.stringToTimestamp(
-      UTF8String.fromString("2015-03-18 12:03:17.456Z")).get  == c.getTimeInMillis * 1000)
+      UTF8String.fromString("2015-03-18 12:03:17.456Z")).get  === c.getTimeInMillis * 1000)
 
     c = Calendar.getInstance(TimeZone.getTimeZone("GMT-01:00"))
     c.set(2015, 2, 18, 12, 3, 17)
     c.set(Calendar.MILLISECOND, 123)
     assert(DateTimeUtils.stringToTimestamp(
-      UTF8String.fromString("2015-03-18T12:03:17.123-1:0")).get  == c.getTimeInMillis * 1000)
+      UTF8String.fromString("2015-03-18T12:03:17.123-1:0")).get  === c.getTimeInMillis * 1000)
     assert(DateTimeUtils.stringToTimestamp(
-      UTF8String.fromString("2015-03-18T12:03:17.123-01:00")).get ==  c.getTimeInMillis * 1000)
+      UTF8String.fromString("2015-03-18T12:03:17.123-01:00")).get ===  c.getTimeInMillis * 1000)
 
     c = Calendar.getInstance(TimeZone.getTimeZone("GMT+07:30"))
     c.set(2015, 2, 18, 12, 3, 17)
     c.set(Calendar.MILLISECOND, 123)
     assert(DateTimeUtils.stringToTimestamp(
-      UTF8String.fromString("2015-03-18T12:03:17.123+07:30")).get ==  c.getTimeInMillis * 1000)
+      UTF8String.fromString("2015-03-18T12:03:17.123+07:30")).get ===  c.getTimeInMillis * 1000)
 
     c = Calendar.getInstance(TimeZone.getTimeZone("GMT+07:30"))
     c.set(2015, 2, 18, 12, 3, 17)
     c.set(Calendar.MILLISECOND, 123)
     assert(DateTimeUtils.stringToTimestamp(
-      UTF8String.fromString("2015-03-18T12:03:17.123+07:30")).get == c.getTimeInMillis * 1000)
+      UTF8String.fromString("2015-03-18T12:03:17.123+07:30")).get === c.getTimeInMillis * 1000)
 
     c = Calendar.getInstance(TimeZone.getTimeZone("GMT+07:30"))
     c.set(2015, 2, 18, 12, 3, 17)
     c.set(Calendar.MILLISECOND, 123)
     assert(DateTimeUtils.stringToTimestamp(
-      UTF8String.fromString("2015-03-18T12:03:17.123121+7:30")).get ==
+      UTF8String.fromString("2015-03-18T12:03:17.123121+7:30")).get ===
         c.getTimeInMillis * 1000 + 121)
 
     c = Calendar.getInstance(TimeZone.getTimeZone("GMT+07:30"))
     c.set(2015, 2, 18, 12, 3, 17)
     c.set(Calendar.MILLISECOND, 123)
     assert(DateTimeUtils.stringToTimestamp(
-      UTF8String.fromString("2015-03-18T12:03:17.12312+7:30")).get ==
+      UTF8String.fromString("2015-03-18T12:03:17.12312+7:30")).get ===
         c.getTimeInMillis * 1000 + 120)
 
     c = Calendar.getInstance(TimeZone.getTimeZone("GMT+07:30"))
@@ -249,7 +249,7 @@ class DateTimeUtilsSuite extends SparkFunSuite {
     c.set(Calendar.SECOND, 15)
     c.set(Calendar.MILLISECOND, 123)
     assert(DateTimeUtils.stringToTimestamp(
-      UTF8String.fromString("T18:12:15.12312+7:30")).get ==
+      UTF8String.fromString("T18:12:15.12312+7:30")).get ===
       c.getTimeInMillis * 1000 + 120)
 
     c = Calendar.getInstance(TimeZone.getTimeZone("GMT+07:30"))
@@ -258,14 +258,36 @@ class DateTimeUtilsSuite extends SparkFunSuite {
     c.set(Calendar.SECOND, 15)
     c.set(Calendar.MILLISECOND, 123)
     assert(DateTimeUtils.stringToTimestamp(
-      UTF8String.fromString("18:12:15.12312+7:30")).get ==
+      UTF8String.fromString("18:12:15.12312+7:30")).get ===
       c.getTimeInMillis * 1000 + 120)
 
     c = Calendar.getInstance()
     c.set(2011, 4, 6, 7, 8, 9)
     c.set(Calendar.MILLISECOND, 100)
     assert(DateTimeUtils.stringToTimestamp(
-      UTF8String.fromString("2011-05-06 07:08:09.1000")).get == c.getTimeInMillis * 1000)
+      UTF8String.fromString("2011-05-06 07:08:09.1000")).get === c.getTimeInMillis * 1000)
+
+    val defaultTimeZone = TimeZone.getDefault
+    TimeZone.setDefault(TimeZone.getTimeZone("America/Los_Angeles"))
+
+    c = Calendar.getInstance()
+    c.set(2015, 2, 8, 2, 0, 0)
+    c.set(Calendar.MILLISECOND, 0)
+    assert(DateTimeUtils.stringToTimestamp(
+      UTF8String.fromString("2015-3-8 2:0:0")).get === c.getTimeInMillis * 1000)
+    c.add(Calendar.MINUTE, 30)
+    assert(DateTimeUtils.stringToTimestamp(
+      UTF8String.fromString("2015-3-8 3:30:0")).get === c.getTimeInMillis * 1000)
+    assert(DateTimeUtils.stringToTimestamp(
+      UTF8String.fromString("2015-3-8 2:30:0")).get === c.getTimeInMillis * 1000)
+
+    c = Calendar.getInstance()
+    c.set(2015, 10, 1, 1, 59, 0)
+    c.set(Calendar.MILLISECOND, 0)
+    c.add(Calendar.MINUTE, 31)
+    assert(DateTimeUtils.stringToTimestamp(
+      UTF8String.fromString("2015-11-1 2:30:0")).get === c.getTimeInMillis * 1000)
+    TimeZone.setDefault(defaultTimeZone)
 
     assert(DateTimeUtils.stringToTimestamp(UTF8String.fromString("238")).isEmpty)
     assert(DateTimeUtils.stringToTimestamp(UTF8String.fromString("2015-03-18 123142")).isEmpty)

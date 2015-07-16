@@ -329,8 +329,7 @@ object DateTimeUtils {
       c.set(segments(0), segments(1) - 1, segments(2), segments(3), segments(4), segments(5))
     }
 
-    c.set(Calendar.MILLISECOND, segments(6) / 1000)
-    Some(c.getTimeInMillis * 1000 + segments(6) % 1000)
+    Some(c.getTimeInMillis / 1000 * 1000000 + segments(6))
   }
 
   /**
@@ -377,7 +376,6 @@ object DateTimeUtils {
     }
     val c = Calendar.getInstance()
     c.set(segments(0), segments(1) - 1, segments(2), 0, 0, 0)
-    c.set(Calendar.MILLISECOND, 0)
     Some((c.getTimeInMillis / 1000 / 3600 / 24).toInt)
   }
 }
