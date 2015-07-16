@@ -371,47 +371,36 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
 
   /**
    * Request that the cluster manager kill the specified executors.
-   * Return whether the kill request is acknowledged.
+   * @return whether the kill request is acknowledged.
    */
   final override def killExecutors(executorIds: Seq[String]): Boolean = synchronized {
-    logInfo(s"Requesting to kill executor(s) ${executorIds.mkString(", ")}")
-    val filteredExecutorIds = new ArrayBuffer[String]
-    executorIds.foreach { id =>
-      if (executorDataMap.contains(id)) {
-        filteredExecutorIds += id
-      } else {
-        logWarning(s"Executor to kill $id does not exist!")
-      }
-    }
-    // Killing executors means effectively that we want less executors than before, so also update
-    // the target number of executors to avoid having the backend allocate new ones.
-    val newTotal = (numExistingExecutors + numPendingExecutors - executorsPendingToRemove.size
-      - filteredExecutorIds.size)
-    doRequestTotalExecutors(newTotal)
-
-    executorsPendingToRemove ++= filteredExecutorIds
-    doKillExecutors(filteredExecutorIds)
+    killExecutors(executorIds, replace = false)
   }
 
   /**
-   * Request that the cluster manager kill the specified executor without adjusting the
-   * application resource requirements.
+   * Request that the cluster manager kill the specified executors.
    *
-   * The effect is that a new executor will be launched in place of the one killed by
-   * this request. This assumes the cluster manager will automatically and eventually
-   * fulfill all missing application resource requests.
-   *
-   * Return whether the request is received.
+   * @param executorIds identifiers of executors to kill
+   * @param replace whether to replace the killed executors with new ones
+   * @return whether the kill request is acknowledged.
    */
-  def killAndReplaceExecutor(executorId: String): Boolean = synchronized {
-    logInfo(s"Requesting to replace executor $executorId")
-    if (executorDataMap.contains(executorId)) {
-      executorsPendingToRemove += executorId
-      doKillExecutors(Seq(executorId))
-    } else {
-      logWarning(s"Executor to replace $executorId does not exist!")
-      false
+  final def killExecutors(executorIds: Seq[String], replace: Boolean): Boolean = synchronized {
+    logInfo(s"Requesting to kill executor(s) ${executorIds.mkString(", ")}")
+    val (knownExecutors, unknownExecutors) = executorIds.partition(executorDataMap.contains)
+    unknownExecutors.foreach { id =>
+      logWarning(s"Executor to kill $id does not exist!")
     }
+
+    // If we do not wish to replace the executors we kill, sync the target number of executors
+    // with the cluster manager to avoid allocating new ones. When computing the new target,
+    // take into account executors that are pending to be added and removed.
+    if (!replace) {
+      doRequestTotalExecutors(numExistingExecutors + numPendingExecutors
+        - executorsPendingToRemove.size - knownExecutors.size)
+    }
+
+    executorsPendingToRemove ++= knownExecutors
+    doKillExecutors(knownExecutors)
   }
 
   /**
