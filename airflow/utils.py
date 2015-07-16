@@ -49,10 +49,10 @@ class State(object):
         QUEUED: 'gray',
         RUNNING: 'lime',
         SUCCESS: 'green',
-        SHUTDOWN: 'orange',
+        SHUTDOWN: 'blue',
         FAILED: 'red',
-        UP_FOR_RETRY: 'yellow',
-        UPSTREAM_FAILED: 'blue',
+        UP_FOR_RETRY: 'gold',
+        UPSTREAM_FAILED: 'orange',
         SKIPPED: 'pink',
     }
 

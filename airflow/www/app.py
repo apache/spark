@@ -598,7 +598,14 @@ class Airflow(BaseView):
     @expose('/dag_stats')
     @login_required
     def dag_stats(self):
-        states = [State.SUCCESS, State.RUNNING, State.FAILED]
+        states = [
+            State.SUCCESS,
+            State.RUNNING,
+            State.FAILED,
+            State.UPSTREAM_FAILED,
+            State.UP_FOR_RETRY,
+            State.QUEUED,
+        ]
         task_ids = []
         for dag in dagbag.dags.values():
             task_ids += dag.task_ids
