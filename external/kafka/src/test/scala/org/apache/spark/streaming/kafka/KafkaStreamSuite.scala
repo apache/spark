@@ -26,9 +26,9 @@ import kafka.serializer.StringDecoder
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.concurrent.Eventually
 
-import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.{Milliseconds, StreamingContext}
+import org.apache.spark.{SparkConf, SparkFunSuite}
 
 class KafkaStreamSuite extends SparkFunSuite with Eventually with BeforeAndAfterAll {
   private var ssc: StreamingContext = _
