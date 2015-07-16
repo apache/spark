@@ -338,7 +338,7 @@ class NaiveBayes private (
         BLAS.axpy(1.0, c2._2, c1._2)
         (c1._1 + c2._1, c1._2)
       }
-    ).collect()
+    ).collect().sortBy(_._1)
 
     val numLabels = aggregated.length
     var numDocuments = 0L

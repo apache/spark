@@ -92,6 +92,24 @@ class NaiveBayes(override val uid: String)
 
   override protected def train(dataset: DataFrame): NaiveBayesModel = {
     val oldDataset: RDD[LabeledPoint] = extractLabeledPoints(dataset)
+    val instance = oldDataset.map{
+      case LabeledPoint(label: Double, features: Vector) => label }
+      .treeAggregate(new MultiClassSummarizer)(
+        seqOp = (c, v) => (c, v) match {
+          case (classSummarizer: MultiClassSummarizer, label: Double) => classSummarizer.add(label)
+        },
+        combOp = (c1, c2) => (c1, c2) match {
+          case (classSummarizer1: MultiClassSummarizer, classSummarizer2: MultiClassSummarizer) =>
+            classSummarizer1.merge(classSummarizer2)
+        })
+    val numInvalid = instance.countInvalid
+    val numClasses = instance.numClasses
+    if (numInvalid != 0) {
+      val msg = s"Classification labels should be in {0 to ${numClasses - 1} " +
+        s"Found $numInvalid invalid labels."
+      logError(msg)
+      throw new SparkException(msg)
+    }
     val oldModel = OldNaiveBayes.train(oldDataset, $(lambda), $(modelType))
     NaiveBayesModel.fromOld(oldModel, this)
   }
@@ -104,7 +122,6 @@ class NaiveBayes(override val uid: String)
  */
 class NaiveBayesModel private[ml] (
     override val uid: String,
-    val labels: Vector,
     val pi: Vector,
     val theta: Matrix)
   extends PredictionModel[Vector, NaiveBayesModel] with NaiveBayesParams {
@@ -135,7 +152,7 @@ class NaiveBayesModel private[ml] (
       case Multinomial =>
         val prob = theta.multiply(features)
         BLAS.axpy(1.0, pi, prob)
-        labels(prob.argmax)
+        prob.argmax
       case Bernoulli =>
         features.foreachActive{ (index, value) =>
           if (value != 0.0 && value != 1.0) {
@@ -146,7 +163,7 @@ class NaiveBayesModel private[ml] (
         val prob = thetaMinusNegTheta.get.multiply(features)
         BLAS.axpy(1.0, pi, prob)
         BLAS.axpy(1.0, negThetaSum.get, prob)
-        labels(prob.argmax)
+        prob.argmax
       case _ =>
         // This should never happen.
         throw new UnknownError(s"Invalid modelType: ${$(modelType)}.")
@@ -154,11 +171,11 @@ class NaiveBayesModel private[ml] (
   }
 
   override def copy(extra: ParamMap): NaiveBayesModel = {
-    copyValues(new NaiveBayesModel(uid, labels, pi, theta), extra)
+    copyValues(new NaiveBayesModel(uid, pi, theta).setParent(this.parent), extra)
   }
 
   override def toString: String = {
-    s"NaiveBayesModel with ${labels.size} classes"
+    s"NaiveBayesModel with ${pi.size} classes"
   }
 
 }
@@ -174,6 +191,6 @@ private[ml] object NaiveBayesModel {
     val pi = Vectors.dense(oldModel.pi)
     val theta = new DenseMatrix(oldModel.labels.length, oldModel.theta(0).length,
       oldModel.theta.flatten, true)
-    new NaiveBayesModel(uid, labels, pi, theta)
+    new NaiveBayesModel(uid, pi, theta)
   }
 }

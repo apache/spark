@@ -41,22 +41,15 @@ class NaiveBayesSuite extends SparkFunSuite with MLlibTestSparkContext {
       piData: Vector,
       thetaData: Matrix,
       model: NaiveBayesModel): Unit = {
-    val modelIndex = (0 until piData.toArray.length).zip(model.labels.toArray.map(_.toInt))
-    for (i <- modelIndex) {
-      assert(math.exp(model.pi(i._1)) ~== math.exp(piData(i._2)) absTol 0.05, "pi mismatch")
-    }
-    for (i <- modelIndex;
-      j <- 0 until thetaData.numCols) {
-      assert(math.exp(model.theta(i._1, j)) ~== math.exp(thetaData(i._2, j)) absTol 0.05,
-        "theta mismatch")
-    }
+    assert(Vectors.dense(model.pi.toArray.map(math.exp)) ~==
+      Vectors.dense(piData.toArray.map(math.exp)) absTol 0.05, "pi mismatch")
+    assert(model.theta.map(math.exp) ~== thetaData.map(math.exp) absTol 0.05, "theta mismatch")
   }
 
   test("params") {
     ParamsSuite.checkParams(new NaiveBayes)
-    val model = new NaiveBayesModel("nb", labels = Vectors.dense(Array(0.0, 1.0)),
-      pi = Vectors.dense(Array(0.2, 0.8)), theta = new DenseMatrix(2, 3,
-        Array(0.1, 0.2, 0.3, 0.4, 0.6, 0.4)))
+    val model = new NaiveBayesModel("nb", pi = Vectors.dense(Array(0.2, 0.8)),
+      theta = new DenseMatrix(2, 3, Array(0.1, 0.2, 0.3, 0.4, 0.6, 0.4)))
     ParamsSuite.checkParams(model)
   }
 
