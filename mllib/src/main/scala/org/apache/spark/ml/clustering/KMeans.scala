@@ -150,7 +150,7 @@ class KMeans(override val uid: String) extends Estimator[KMeansModel] with KMean
     initSteps -> 5,
     epsilon -> 1e-4)
 
-  override def copy(extra: ParamMap): Estimator[KMeansModel] = defaultCopy(extra)
+  override def copy(extra: ParamMap): KMeans = defaultCopy(extra)
 
   def this() = this(Identifiable.randomUID("kmeans"))
 
