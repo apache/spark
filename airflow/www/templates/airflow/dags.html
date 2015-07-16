@@ -46,7 +46,7 @@
                     {% endif %}
                 </td>
                     <td>{{ dag.owner if dag else orm_dags[dag_id].owners }}</td>
-                <td style="padding:0px; width:100px; height:10px;">
+                <td style="padding:0px; width:180px; height:10px;">
                     <svg height="10" width="10" id='{{ dag.dag_id }}' style="display: block;"></svg>
                 </td>
                 <td class="text-center" style="width:160px;">
@@ -104,7 +104,7 @@
             states = json[dag_id];
             g = d3.select('svg#' + dag_id)
               .attr('height', diameter + (stroke_width_hover * 2))
-              .attr('width', '90px')
+              .attr('width', '180px')
               .selectAll("g")
               .data(states)
               .enter()
@@ -121,7 +121,7 @@
               .attr('vertical-align', 'middle')
               .attr('font-size', 8)
               .attr('y', 3)
-              .text(function(d){ return d.count; });
+              .text(function(d){ return d.count > 0 ? d.count : ''; });
 
             g.append('circle')
               .attr('stroke-width', function(d) {
@@ -135,7 +135,7 @@
                   if (d.count > 0)    
                     return d.color;
                   else {
-                    return 'grey';
+                    return 'gainsboro';
                   }
               })
               .attr('fill-opacity', 0)

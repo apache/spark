@@ -44,7 +44,7 @@ span.success{
     background-color: green;
 }
 span.up_for_retry{
-    background-color: yellow;
+    background-color: gold;
 }
 span.started{
     background-color: lime;
@@ -56,10 +56,10 @@ span.queued{
     background-color: gray;
 }
 span.upstream_failed{
-    background-color: #FFB400;
+    background-color: orange;
 }
 span.skipped{
-    background-color:pink;
+    background-color: pink;
 }
 .tooltip-inner {
     text-align:left !important;

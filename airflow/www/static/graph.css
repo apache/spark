@@ -10,7 +10,7 @@ g.node.success rect {
     stroke: green;
 }
 g.node.up_for_retry rect {
-    stroke: yellow;
+    stroke: gold;
 }
 g.node.running rect{
     stroke: lime;
@@ -19,10 +19,10 @@ g.node.failed rect {
     stroke: red;
 }
 g.node.shutdown rect{
-    stroke: orange;
+    stroke: blue;
 }
 g.node.upstream_failed rect{
-    stroke: #FFB400;
+    stroke: orange;
 }
 g.node.skipped rect{
     stroke: pink;
