@@ -516,7 +516,7 @@ object PushPredicateThroughProject extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case filter @ Filter(condition, project @ Project(fields, grandChild)) =>
       // Create a map of Aliases to their values from the child projection.
-      // e.g., 'SELECT a + b AS c, d ...' produces Map(c -> Alias(a + b, c)).
+      // e.g., 'SELECT a + b AS c, d ...' produces Map(c -> a + b).
       val aliasMap = AttributeMap(fields.collect {
         case a: Alias => (a.toAttribute, a.child)
       })

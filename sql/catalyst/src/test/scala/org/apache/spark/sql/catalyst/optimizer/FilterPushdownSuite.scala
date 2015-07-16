@@ -148,8 +148,8 @@ class FilterPushdownSuite extends PlanTest {
 
   test("nondeterministic: can't push down filter through project") {
     val originalQuery = testRelation
-      .select(Rand(10).as('rand))
-      .where('rand > 5)
+      .select(Rand(10).as('rand), 'a)
+      .where('rand > 5 && 'a > 5)
       .analyze
 
     val optimized = Optimize.execute(originalQuery)
