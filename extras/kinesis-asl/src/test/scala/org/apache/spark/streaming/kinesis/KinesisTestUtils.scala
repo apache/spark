@@ -22,9 +22,9 @@ import java.util.concurrent.TimeUnit
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
-import scala.util.Random
+import scala.util.{Failure, Random, Success, Try}
 
-import com.amazonaws.auth.DefaultAWSCredentialsProviderChain
+import com.amazonaws.auth.{AWSCredentials, DefaultAWSCredentialsProviderChain}
 import com.amazonaws.regions.RegionUtils
 import com.amazonaws.services.dynamodbv2.AmazonDynamoDBClient
 import com.amazonaws.services.dynamodbv2.document.DynamoDB
@@ -49,11 +49,8 @@ class KinesisTestUtils(val endpointUrl: String, _regionName: String = "") extend
   private var streamCreated = false
   private var _streamName: String = _
 
-
-  private val credentialsProvider = new DefaultAWSCredentialsProviderChain()
-
   private lazy val kinesisClient = {
-    val client = new AmazonKinesisClient(credentialsProvider)
+    val client = new AmazonKinesisClient(KinesisTestUtils.getAWSCredentials())
     client.setEndpoint(endpointUrl)
     client
   }
@@ -70,7 +67,7 @@ class KinesisTestUtils(val endpointUrl: String, _regionName: String = "") extend
   }
 
   def createStream(): Unit = {
-    println("Creating stream")
+    logInfo("Creating stream")
     require(!streamCreated, "Stream already created")
     _streamName = findNonExistentStreamName()
 
@@ -83,7 +80,7 @@ class KinesisTestUtils(val endpointUrl: String, _regionName: String = "") extend
     // The stream is now being created. Wait for it to become active.
     waitForStreamToBeActive(_streamName)
     streamCreated = true
-    println("Created stream")
+    logInfo("Created stream")
   }
 
   /**
@@ -108,7 +105,7 @@ class KinesisTestUtils(val endpointUrl: String, _regionName: String = "") extend
       sentSeqNumbers += ((num, seqNumber))
 
     }
-    println(s"Pushed $testData:\n\t ${shardIdToSeqNumbers.mkString("\n\t")}")
+    logInfo(s"Pushed $testData:\n\t ${shardIdToSeqNumbers.mkString("\n\t")}")
     shardIdToSeqNumbers.toMap
   }
 
@@ -169,5 +166,27 @@ class KinesisTestUtils(val endpointUrl: String, _regionName: String = "") extend
       }
     }
     require(false, s"Stream $streamName never became active")
+  }
+}
+
+object KinesisTestUtils {
+
+
+  val envVarName = "RUN_KINESIS_TESTS"
+
+  val shouldRunTests = sys.env.get(envVarName).nonEmpty
+
+  def isAWSCredentialsPresent: Boolean = {
+    Try { new DefaultAWSCredentialsProviderChain().getCredentials() }.isSuccess
+  }
+
+  def getAWSCredentials(): AWSCredentials = {
+    assert(shouldRunTests,
+      "Kinesis test not enabled, should not attempt to get AWS credentials")
+    Try { new DefaultAWSCredentialsProviderChain().getCredentials() } match {
+      case Success(cred) => cred
+      case Failure(e) =>
+        throw new Exception("Kinesis tests enabled, but could get not AWS credentials")
+    }
   }
 }
