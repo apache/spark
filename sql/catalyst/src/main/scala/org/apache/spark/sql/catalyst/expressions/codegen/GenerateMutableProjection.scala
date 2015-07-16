@@ -58,8 +58,7 @@ object GenerateMutableProjection extends CodeGenerator[Seq[Expression], () => Mu
 
       val pFuncs = (0 until projectionCodeSegments.length).map { i =>
         s"""
-          public void projectSeg$i(Object _i) {
-            InternalRow i = (InternalRow) _i;
+          private final void projectSeg$i(InternalRow i) {
             ${projectionCodeSegments(i)}
           }
         """
