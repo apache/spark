@@ -149,14 +149,6 @@ case class Aggregate2Sort(
         // This is used to project expressions for the grouping expressions.
         protected val groupGenerator =
           newMutableProjection(groupingExpressions, child.output)()
-        // A ordering used to compare if a new row belongs to the current group
-        // or a new group.
-        private val groupOrdering: Ordering[InternalRow] = {
-          val groupingAttributes = groupingExpressions.map(_.toAttribute)
-          newOrdering(
-            groupingAttributes.map(expr => SortOrder(expr, Ascending)),
-            groupingAttributes)
-        }
         // The partition key of the current partition.
         private var currentGroupingKey: InternalRow = _
         // The partition key of next partition.
@@ -182,18 +174,18 @@ case class Aggregate2Sort(
         // aggregate function, the size of the buffer matches the number of values in the
         // input rows. To simplify the code for code-gen, we need create some dummy
         // attributes and expressions for these grouping expressions.
-        val offsetAttributes = {
+        private val offsetAttributes = {
           if (partialAggregation) {
             Nil
           } else {
             Seq.fill(groupingExpressions.length)(AttributeReference("offset", NullType)())
           }
         }
-        val offsetExpressions =
+        private val offsetExpressions =
           if (partialAggregation) Nil else Seq.fill(groupingExpressions.length)(NoOp)
 
         // This projection is used to initialize buffer values for all AlgebraicAggregates.
-        val algebraicInitialProjection = {
+        private val algebraicInitialProjection = {
           val initExpressions = offsetExpressions ++ aggregateFunctions.flatMap {
             case ae: AlgebraicAggregate => ae.initialValues
             case agg: AggregateFunction2 => NoOp :: Nil
@@ -202,7 +194,7 @@ case class Aggregate2Sort(
         }
 
         // This projection is used to update buffer values for all AlgebraicAggregates.
-        lazy val algebraicUpdateProjection = {
+        private lazy val algebraicUpdateProjection = {
           val bufferSchema = aggregateFunctions.flatMap {
             case ae: AlgebraicAggregate => ae.bufferAttributes
             case agg: AggregateFunction2 => agg.bufferAttributes
@@ -215,7 +207,7 @@ case class Aggregate2Sort(
         }
 
         // This projection is used to merge buffer values for all AlgebraicAggregates.
-        lazy val algebraicMergeProjection = {
+        private lazy val algebraicMergeProjection = {
           val bufferSchemata =
             offsetAttributes ++ aggregateFunctions.flatMap {
               case ae: AlgebraicAggregate => ae.bufferAttributes
@@ -233,7 +225,7 @@ case class Aggregate2Sort(
         }
 
         // This projection is used to evaluate all AlgebraicAggregates.
-        lazy val algebraicEvalProjection = {
+        private lazy val algebraicEvalProjection = {
           val bufferSchemata =
             offsetAttributes ++ aggregateFunctions.flatMap {
               case ae: AlgebraicAggregate => ae.bufferAttributes
@@ -313,8 +305,9 @@ case class Aggregate2Sort(
             // For the below compare method, we do not need to make a copy of groupingKey.
             val groupingKey = groupGenerator(currentRow)
             // Check if the current row belongs the current input row.
-            val comparing = groupOrdering.compare(currentGroupingKey, groupingKey)
-            if (comparing == 0) {
+            currentGroupingKey.equals(groupingKey)
+
+            if (currentGroupingKey == groupingKey) {
               processRow(currentRow)
             } else {
               // We find a new group.

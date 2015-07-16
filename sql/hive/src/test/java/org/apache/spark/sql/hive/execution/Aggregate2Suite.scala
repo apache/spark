@@ -32,15 +32,19 @@ class Aggregate2Suite extends QueryTest with BeforeAndAfterAll {
   override def beforeAll(): Unit = {
     originalUseAggregate2 = ctx.conf.useSqlAggregate2
     ctx.sql("set spark.sql.useAggregate2=true")
-    val data = Seq[(Int, Integer)](
+    val data = Seq[(Integer, Integer)](
       (1, 10),
+      (null, -60),
       (1, 20),
       (1, 30),
       (2, 0),
+      (null, -10),
       (2, -1),
       (2, null),
       (2, null),
+      (null, 100),
       (3, null),
+      (null, null),
       (3, null)).toDF("key", "value")
 
     data.write.saveAsTable("agg2")
@@ -54,7 +58,7 @@ class Aggregate2Suite extends QueryTest with BeforeAndAfterAll {
           |FROM agg2
           |GROUP BY key
         """.stripMargin),
-      Row(-0.5) :: Row(20.0) :: Row(null) :: Nil)
+      Row(-0.5) :: Row(20.0) :: Row(null) :: Row(10.0) :: Nil)
   }
 
   test("test average2") {
@@ -79,7 +83,7 @@ class Aggregate2Suite extends QueryTest with BeforeAndAfterAll {
           |FROM agg2
           |GROUP BY key
         """.stripMargin),
-      Row(1, 20.0) :: Row(2, -0.5) :: Row(3, null) :: Nil)
+      Row(1, 20.0) :: Row(2, -0.5) :: Row(3, null) :: Row(null, 10.0) :: Nil)
 
     checkAnswer(
       ctx.sql(
@@ -88,7 +92,7 @@ class Aggregate2Suite extends QueryTest with BeforeAndAfterAll {
           |FROM agg2
           |GROUP BY key
         """.stripMargin),
-      Row(20.0, 1) :: Row(-0.5, 2) :: Row(null, 3) :: Nil)
+      Row(20.0, 1) :: Row(-0.5, 2) :: Row(null, 3) :: Row(10.0, null) :: Nil)
 
     checkAnswer(
       ctx.sql(
@@ -97,14 +101,14 @@ class Aggregate2Suite extends QueryTest with BeforeAndAfterAll {
           |FROM agg2
           |GROUP BY key + 10
         """.stripMargin),
-      Row(21.5, 11) :: Row(1.0, 12) :: Row(null, 13) :: Nil)
+      Row(21.5, 11) :: Row(1.0, 12) :: Row(null, 13) :: Row(11.5, null) :: Nil)
 
     checkAnswer(
       ctx.sql(
         """
           |SELECT avg(value) FROM agg2
         """.stripMargin),
-      Row(11.8) :: Nil)
+      Row(11.125) :: Nil)
 
     checkAnswer(
       ctx.sql(
@@ -137,14 +141,14 @@ class Aggregate2Suite extends QueryTest with BeforeAndAfterAll {
           |FROM agg2
           |GROUP BY key
         """.stripMargin),
-      Row(60.0, 1) :: Row(-1.0, 2) :: Row(null, 3) :: Nil)
+      Row(60.0, 1) :: Row(-1.0, 2) :: Row(null, 3) :: Row(30.0, null) :: Nil)
 
     checkAnswer(
       ctx.sql(
         """
           |SELECT mydoublesum(cast(value as double)) FROM agg2
         """.stripMargin),
-      Row(59.0) :: Nil)
+      Row(89.0) :: Nil)
 
     checkAnswer(
       ctx.sql(
@@ -163,7 +167,10 @@ class Aggregate2Suite extends QueryTest with BeforeAndAfterAll {
           |FROM agg2
           |GROUP BY key
         """.stripMargin),
-      Row(60.0, 1, 20.0) :: Row(-1.0, 2, -0.5) :: Row(null, 3, null) :: Nil)
+      Row(60.0, 1, 20.0) ::
+        Row(-1.0, 2, -0.5) ::
+        Row(null, 3, null) ::
+        Row(30.0, null, 10.0) :: Nil)
 
     checkAnswer(
       ctx.sql(
@@ -179,7 +186,8 @@ class Aggregate2Suite extends QueryTest with BeforeAndAfterAll {
         """.stripMargin),
       Row(64.5, 19.0, 1, 55.5, 20.0) ::
         Row(5.0, -2.5, 2, -7.0, -0.5) ::
-        Row(null, null, 3, null, null) :: Nil)
+        Row(null, null, 3, null, null) ::
+        Row(null, null, null, null, 10.0) :: Nil)
   }
 
   override def afterAll(): Unit = {
