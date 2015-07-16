@@ -75,6 +75,12 @@ public class IntervalSuite {
     Interval result = new Interval(-5 * 12 + 23, 0);
     assertEquals(Interval.fromString(input), result);
 
+    input = "interval   -5  years  23   month   ";
+    assertEquals(Interval.fromString(input), result);
+
+    input = "  interval   -5  years  23   month   ";
+    assertEquals(Interval.fromString(input), result);
+
     // Error cases
     input = "interval   3month 1 hour";
     assertEquals(Interval.fromString(input), null);
