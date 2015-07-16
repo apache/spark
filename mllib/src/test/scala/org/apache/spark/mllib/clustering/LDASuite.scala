@@ -222,12 +222,12 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext {
 
     // Test for DistributedLDAModel.
     val k = 3
-    val topicSmoothing = 1.2
-    val termSmoothing = 1.2
+    val docConcentration = 1.2
+    val topicConcentration = 1.5
     val lda = new LDA()
     lda.setK(k)
-      .setDocConcentration(topicSmoothing)
-      .setTopicConcentration(termSmoothing)
+      .setDocConcentration(docConcentration)
+      .setTopicConcentration(topicConcentration)
       .setMaxIterations(5)
       .setSeed(12345)
     val corpus = sc.parallelize(tinyCorpus, 2)
