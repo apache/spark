@@ -1,4 +1,5 @@
-from datetime import datetime, time
+from datetime import datetime, time, timedelta
+from time import sleep
 import unittest
 from airflow import configuration
 configuration.test_mode()
@@ -164,7 +165,18 @@ class CoreTest(unittest.TestCase):
             task_id='time_sensor_check',
             target_time=time(0),
             dag=self.dag)
-        t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE)
+        t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
+
+    def test_timeout(self):
+        t = operators.PythonOperator(
+            task_id='test_timeout',
+            execution_timeout=timedelta(seconds=2),
+            python_callable=lambda: sleep(10),
+            dag=self.dag)
+        self.assertRaises(
+            utils.AirflowTaskTimeout,
+            t.run,
+            start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
 
     def test_import_examples(self):
         self.assertEqual(len(self.dagbag.dags), NUM_EXAMPLE_DAGS)

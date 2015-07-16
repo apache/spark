@@ -272,17 +272,15 @@ class S3PrefixSensor(BaseSensorOperator):
     delimiter. Current code accepts sane delimiters, i.e. characters that
     are NOT special characters in the Python regex engine.
 
-
-    :param prefix: The key being waited on. Supports full s3:// style url or
-        or relative path from root level.
+    :param bucket_name: Name of the S3 bucket
+    :type bucket_name: str
+    :param prefix: The prefix being waited on. Relative path from bucket root level.
     :type prefix: str
     :param delimiter: The delimiter intended to show hierarchy.
         Defaults to '/'.
     :type delimiter: str
-    :param bucket_name: Name of the S3 bucket
-    :type bucket_name: str
     """
-    template_fields = ('bucket_key', 'bucket_name')
+    template_fields = ('prefix', 'bucket_name')
 
     @apply_defaults
     def __init__(

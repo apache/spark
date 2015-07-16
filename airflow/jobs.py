@@ -253,7 +253,13 @@ class SchedulerJob(BaseJob):
                     dttm += dag.schedule_interval
         session.commit()
 
-        slas = session.query(SlaMiss).filter(SlaMiss.email_sent == False).all()
+        slas = (
+            session
+            .query(SlaMiss)
+            .filter(SlaMiss.email_sent == False)
+            .filter(SlaMiss.dag_id == dag.dag_id)
+            .all()
+        )
         task_list = "\n".join([
             sla.task_id + ' on ' + sla.execution_date.isoformat()
             for sla in slas])
@@ -396,6 +402,7 @@ class SchedulerJob(BaseJob):
             .filter(TI.state == State.QUEUED)
             .all()
         )
+        session.expunge_all()
         d = defaultdict(list)
         for ti in queued_tis:
             if (

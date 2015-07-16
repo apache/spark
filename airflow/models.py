@@ -822,7 +822,15 @@ class TaskInstance(Base):
                     context = self.get_template_context()
                     settings.policy(task_copy)
                     task_copy.pre_execute(context=context)
-                    task_copy.execute(context=context)
+
+                    # If a timout is specified for the task, make it fail
+                    # if it goes beyond
+                    if task_copy.execution_timeout:
+                        with utils.timeout(int(
+                                task_copy.execution_timeout.total_seconds())):
+                            task_copy.execute(context=context)
+                    else:
+                        task_copy.execute(context=context)
                     task_copy.post_execute(context=context)
             except (Exception, StandardError, KeyboardInterrupt) as e:
                 self.record_failure(e, test_mode)
@@ -1052,6 +1060,9 @@ class BaseOperator(object):
         get bundled in a single email, sent soon after that time. SLA
         notification are sent once and only once for each task instance.
     :type sla: datetime.timedelta
+    :param execution_timeout: max time allowed for the execution of
+        this task instance, if it goes beyond it will raise and fail.
+    :type execution_timeout: datetime.timedelta
     """
 
     # For derived classes to define which fields will get jinjaified
@@ -1085,6 +1096,7 @@ class BaseOperator(object):
             queue=conf.get('celery', 'default_queue'),
             pool=None,
             sla=None,
+            execution_timeout=None,
             *args,
             **kwargs):
 
@@ -1104,10 +1116,11 @@ class BaseOperator(object):
         self.queue = queue
         self.pool = pool
         self.sla = sla
+        self.execution_timeout = execution_timeout
         if isinstance(retry_delay, timedelta):
             self.retry_delay = retry_delay
         else:
-            logging.info("retry_delay isn't timedelta object, assuming secs")
+            logging.debug("retry_delay isn't timedelta object, assuming secs")
             self.retry_delay = timedelta(seconds=retry_delay)
         self.params = params or {}  # Available in templates!
         self.adhoc = adhoc
