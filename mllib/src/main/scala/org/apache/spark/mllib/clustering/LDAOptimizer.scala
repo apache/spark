@@ -19,7 +19,7 @@ package org.apache.spark.mllib.clustering
 
 import java.util.Random
 
-import breeze.linalg.{DenseVector => BDV, DenseMatrix => BDM, sum, normalize, kron}
+import breeze.linalg.{DenseVector => BDV, DenseMatrix => BDM, Transpose, sum, normalize, kron}
 import breeze.numerics.{digamma, exp, abs}
 import breeze.stats.distributions.{Gamma, RandBasis}
 
@@ -370,7 +370,7 @@ final class OnlineLDAOptimizer extends LDAOptimizer {
     iteration += 1
     val k = this.k
     val vocabSize = this.vocabSize
-    val Elogbeta = dirichletExpectation(lambda)
+    val Elogbeta = dirichletExpectation(lambda).t
     val expElogbeta = exp(Elogbeta)
     val alpha = this.alpha
     val gammaShape = this.gammaShape
@@ -379,47 +379,44 @@ final class OnlineLDAOptimizer extends LDAOptimizer {
       val stat = BDM.zeros[Double](k, vocabSize)
       docs.foreach { doc =>
         val termCounts = doc._2
-        val (ids: List[Int], cts: Array[Double]) = termCounts match {
-          case v: DenseVector => ((0 until v.size).toList, v.values)
-          case v: SparseVector => (v.indices.toList, v.values)
+        val (ids: Range, cts: Array[Double]) = termCounts match {
+          case v: DenseVector => ((0 until v.size), v.values)
+          case v: SparseVector => ((0 until v.size), v.toDense.values)
           case v => throw new IllegalArgumentException("Online LDA does not support vector type "
             + v.getClass)
         }
 
         // Initialize the variational distribution q(theta|gamma) for the mini-batch
-        var gammad = new Gamma(gammaShape, 1.0 / gammaShape).samplesVector(k).t // 1 * K
-        var Elogthetad = digamma(gammad) - digamma(sum(gammad))     // 1 * K
-        var expElogthetad = exp(Elogthetad)                         // 1 * K
-        val expElogbetad = expElogbeta(::, ids).toDenseMatrix       // K * ids
+        var gammad: BDV[Double] =
+          new Gamma(gammaShape, 1.0 / gammaShape).samplesVector(k)                   // K
+        var expElogthetad: BDV[Double] = exp(digamma(gammad) - digamma(sum(gammad))) // K
+        val expElogbetad: BDM[Double] = expElogbeta(ids, ::)                         // ids * K
 
-        var phinorm = expElogthetad * expElogbetad + 1e-100         // 1 * ids
+        var phinorm: BDV[Double] = expElogbetad * expElogthetad :+ 1e-100            // ids
         var meanchange = 1D
-        val ctsVector = new BDV[Double](cts).t                      // 1 * ids
+        val ctsVector = new BDV[Double](cts)                                         // ids
 
         // Iterate between gamma and phi until convergence
         while (meanchange > 1e-3) {
-          val lastgamma = gammad
-          //        1*K                  1 * ids               ids * k
-          gammad = (expElogthetad :* ((ctsVector / phinorm) * expElogbetad.t)) + alpha
-          Elogthetad = digamma(gammad) - digamma(sum(gammad))
-          expElogthetad = exp(Elogthetad)
-          phinorm = expElogthetad * expElogbetad + 1e-100
+          val lastgamma = gammad.copy
+          //        K                  K * ids               ids
+          gammad := (expElogthetad :* (expElogbetad.t * (ctsVector / phinorm))) :+ alpha
+          expElogthetad := exp(digamma(gammad) - digamma(sum(gammad)))
+          phinorm := expElogbetad * expElogthetad :+ 1e-100
           meanchange = sum(abs(gammad - lastgamma)) / k
         }
 
-        val m1 = expElogthetad.t
-        val m2 = (ctsVector / phinorm).t.toDenseVector
-        var i = 0
-        while (i < ids.size) {
-          stat(::, ids(i)) := stat(::, ids(i)) + m1 * m2(i)
-          i += 1
+        val m1: BDV[Double] = expElogthetad
+        val m2: BDV[Double] = ctsVector :/ phinorm
+        (0 until ids.size).foreach { i =>
+          stat(::, ids(i)) :+= m1 * m2(i)
         }
       }
       Iterator(stat)
     }
 
     val statsSum: BDM[Double] = stats.reduce(_ += _)
-    val batchResult = statsSum :* expElogbeta
+    val batchResult = statsSum :* expElogbeta.t
 
     // Note that this is an optimization to avoid batch.count
     update(batchResult, iteration, (miniBatchFraction * corpusSize).ceil.toInt)
