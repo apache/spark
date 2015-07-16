@@ -36,7 +36,7 @@ import org.apache.spark.streaming._
 import org.apache.spark.streaming.dstream.DStream
 import org.apache.spark.util.Utils
 
-class KinesisStreamSuite extends KinesisFunSuite
+class KinesisStreamSuite extends SparkFunSuite with KinesisSuiteHelper
   with Eventually with BeforeAndAfter with BeforeAndAfterAll {
 
   private val kinesisTestUtils = new KinesisTestUtils()

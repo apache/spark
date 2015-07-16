@@ -17,7 +17,7 @@
 
 package org.apache.spark.streaming.kinesis
 
-import org.scalatest.BeforeAndAfterAll
+import org.scalatest.{FunSuite, BeforeAndAfterAll}
 
 import org.apache.spark.SparkFunSuite
 
@@ -25,7 +25,7 @@ import org.apache.spark.SparkFunSuite
  * Helper class that runs Kinesis real data transfer tests or
  * ignores them based on env variable is set or not.
  */
-abstract class KinesisFunSuite extends SparkFunSuite with BeforeAndAfterAll {
+trait KinesisSuiteHelper { self: FunSuite =>
   import KinesisTestUtils._
 
   def testOrIgnore(testName: String)(testBody: => Unit) {
