@@ -208,17 +208,6 @@ class DataFrameFunctionsSuite extends QueryTest {
       Row(2743272264L, 2180413220L))
   }
 
-  test("string length function") {
-    val df = Seq(("abc", "")).toDF("a", "b")
-    checkAnswer(
-      df.select(strlen($"a"), strlen("b")),
-      Row(3, 0))
-
-    checkAnswer(
-      df.selectExpr("length(a)", "length(b)"),
-      Row(3, 0))
-  }
-
   test("Levenshtein distance") {
     val df = Seq(("kitten", "sitting"), ("frog", "fog")).toDF("l", "r")
     checkAnswer(df.select(levenshtein("l", "r")), Seq(Row(3), Row(1)))
@@ -433,11 +422,91 @@ class DataFrameFunctionsSuite extends QueryTest {
     val doubleData = Seq((7.2, 4.1)).toDF("a", "b")
     checkAnswer(
       doubleData.select(pmod('a, 'b)),
-      Seq(Row(3.1000000000000005))  // same as hive
+      Seq(Row(3.1000000000000005)) // same as hive
     )
     checkAnswer(
       doubleData.select(pmod(lit(2), lit(Int.MaxValue))),
       Seq(Row(2))
     )
+  }
+
+  test("string / binary length function") {
+    val df = Seq(("123", Array[Byte](1, 2, 3, 4), 123)).toDF("a", "b", "c")
+    checkAnswer(
+      df.select(length($"a"), length("a"), length($"b"), length("b")),
+      Row(3, 3, 4, 4))
+
+    checkAnswer(
+      df.selectExpr("length(a)", "length(b)"),
+      Row(3, 4))
+
+    intercept[AnalysisException] {
+      checkAnswer(
+        df.selectExpr("length(c)"), // int type of the argument is unacceptable
+        Row("5.0000"))
+    }
+  }
+
+  test("number format function") {
+    val tuple =
+      ("aa", 1.asInstanceOf[Byte], 2.asInstanceOf[Short],
+        3.13223f, 4, 5L, 6.48173d, Decimal(7.128381))
+    val df =
+      Seq(tuple)
+        .toDF(
+          "a", // string "aa"
+          "b", // byte    1
+          "c", // short   2
+          "d", // float   3.13223f
+          "e", // integer 4
+          "f", // long    5L
+          "g", // double  6.48173d
+          "h") // decimal 7.128381
+
+    checkAnswer(
+      df.select(
+        format_number($"f", 4),
+        format_number("f", 4)),
+      Row("5.0000", "5.0000"))
+
+    checkAnswer(
+      df.selectExpr("format_number(b, e)"), // convert the 1st argument to integer
+      Row("1.0000"))
+
+    checkAnswer(
+      df.selectExpr("format_number(c, e)"), // convert the 1st argument to integer
+      Row("2.0000"))
+
+    checkAnswer(
+      df.selectExpr("format_number(d, e)"), // convert the 1st argument to double
+      Row("3.1322"))
+
+    checkAnswer(
+      df.selectExpr("format_number(e, e)"), // not convert anything
+      Row("4.0000"))
+
+    checkAnswer(
+      df.selectExpr("format_number(f, e)"), // not convert anything
+      Row("5.0000"))
+
+    checkAnswer(
+      df.selectExpr("format_number(g, e)"), // not convert anything
+      Row("6.4817"))
+
+    checkAnswer(
+      df.selectExpr("format_number(h, e)"), // not convert anything
+      Row("7.1284"))
+
+    intercept[AnalysisException] {
+      checkAnswer(
+        df.selectExpr("format_number(a, e)"), // string type of the 1st argument is unacceptable
+        Row("5.0000"))
+    }
+
+    intercept[AnalysisException] {
+      checkAnswer(
+        df.selectExpr("format_number(e, g)"), // decimal type of the 2nd argument is unacceptable
+        Row("5.0000"))
+    }
   }
 }
