@@ -20,21 +20,15 @@ package org.apache.spark.streaming.kinesis
 import scala.collection.mutable
 import scala.concurrent.duration._
 import scala.language.postfixOps
-import scala.util.{Try, Random}
+import scala.util.Random
 
-import com.amazonaws.auth.DefaultAWSCredentialsProviderChain
 import com.amazonaws.services.kinesis.clientlibrary.lib.worker.InitialPositionInStream
-import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.FileSystem
 import org.scalatest.concurrent.Eventually
-import org.scalatest.{BeforeAndAfterAll, BeforeAndAfter, FunSuite}
+import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll}
 
-import org.apache.spark.{SparkFunSuite, SparkContext, SparkConf}
-import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming._
-import org.apache.spark.streaming.dstream.DStream
-import org.apache.spark.util.Utils
+import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
 
 class KinesisStreamSuite extends SparkFunSuite with KinesisSuiteHelper
   with Eventually with BeforeAndAfter with BeforeAndAfterAll {
