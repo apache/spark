@@ -50,6 +50,8 @@ import org.apache.spark.sql.execution.{BinaryNode, SparkPlan}
  * TODO NaN values
  * TODO NULL values
  * TODO Outer joins? StreamSide is quite easy/BuildSide requires bookkeeping and
+ * TODO This join will maintain sort order. The build side rows will also be added in a lower
+ *      bound sorted fashion.
  */
 @DeveloperApi
 case class BroadcastRangeJoin(
@@ -164,7 +166,9 @@ private[joins] object RangeIndex {
   /** Build a range index from an array of unsorted events. */
   def build(ordering: Ordering[Any], events: Array[RangeEvent],
       allowLowEqual: Boolean, allowHighEqual: Boolean): RangeIndex = {
-    buildFromSorted(ordering, events.sortBy(_._1)(ordering), allowLowEqual, allowHighEqual)
+    val eventOrdering = Ordering.Tuple2(ordering, Ordering.Int)
+    val sortedEvents = events.sortBy(e => (e._1, e._2))(eventOrdering)
+    buildFromSorted(ordering, sortedEvents, allowLowEqual, allowHighEqual)
   }
 
   /** Build a range index from an array of sorted events. */
@@ -172,57 +176,62 @@ private[joins] object RangeIndex {
       allowLowEqual: Boolean, allowHighEqual: Boolean): RangeIndex = {
     // Persisted index components. A dummy null value is added to the array. This makes searching
     // easier and it allows us to deal gracefully with unbound keys.
+    val empty = Array.empty[InternalRow]
     val keys = mutable.Buffer[Any](null)
-    val activatedRows = mutable.Buffer(Array.empty[InternalRow])
-    val activeRows = mutable.Buffer(Array.empty[InternalRow])
+    val offsets = mutable.Buffer[Int](0)
+    val activatedRows = mutable.Buffer.empty[InternalRow]
+    val activeNewOffsets = mutable.Buffer.empty[Int]
+    val activeRows = mutable.Buffer.empty[Array[InternalRow]]
 
     // Current State of the iteration.
     var currentKey: Any = null
-    var currentRowCount = 0
-    val currentActivatedRows = mutable.Buffer.empty[InternalRow]
+    var currentActiveNewOffset: Int = -1
     val currentActiveRows = mutable.Buffer.empty[InternalRow]
 
-    // Store the current key state in the final results.
-    def finishKey = {
-      if (currentRowCount > 0) {
-        keys += currentKey
-        activatedRows += currentActivatedRows.toArray
-        activeRows += currentActiveRows.toArray
-      }
+    // Store the currently active rows.
+    def writeActiveRows = {
+      activeNewOffsets += currentActiveNewOffset
+      if (currentActiveRows.isEmpty) activeRows += empty
+      else activeRows += currentActiveRows.toArray
     }
     events.foreach {
       case (key, flow, row) =>
         // Check if we have finished processing a key
         if (currentKey != key) {
-          finishKey
+          writeActiveRows
           currentKey = key
-          currentActivatedRows.clear()
-          currentRowCount = 0
+          currentActiveNewOffset = -1
+          keys += key
+          offsets += activatedRows.size
+        }
+
+        // Store the offset at which we are starting to add rows to the 'active' buffer.
+        if (flow >= 0 && currentActiveNewOffset == -1) {
+          currentActiveNewOffset = currentActiveRows.size
         }
 
         // Keep track of rows.
         flow match {
           case 1 =>
+            activatedRows += row
             currentActiveRows += row
-            currentActivatedRows += row
           case 0 =>
-            currentActivatedRows += row
+            activatedRows += row
           case -1 =>
             currentActiveRows -= row
         }
-        currentRowCount += 1
     }
 
-    // Store the final events.
-    finishKey
+    // Store the final array of activate rows.
+    writeActiveRows
 
     // Determine corrections based on equality
     val lowBoundEqualCorrection = if (allowLowEqual) 1 else 0
     val highBoundEqualCorrection = if (allowHighEqual) 0 else 1
 
     // Create the index.
-    new RangeIndex(ordering, keys.toArray, activeRows.toArray, activatedRows.toArray,
-      lowBoundEqualCorrection, highBoundEqualCorrection)
+    new RangeIndex(ordering, keys.toArray, offsets.toArray, activeNewOffsets.toArray,
+      activeRows.toArray, activatedRows.toArray, lowBoundEqualCorrection, highBoundEqualCorrection)
   }
 
   /** Create a function that turns a row into its respective range events. */
@@ -262,6 +271,7 @@ private[joins] object RangeIndex {
  *             or activated rows.
  * @param active contains the rows that are 'active' between the current key and the next key.
  *               This is only used for rows that span an interval.
+ * @param activeNewOffsets array contains the index at which the rows in the active array are new.
  * @param activated contains the row that have been activated at the current key. This contains
  *                  both rows that span an interval or only exist at one point
  * @param lowBoundEqualCorrection correction to apply to the lower bound index, when the value
@@ -272,10 +282,14 @@ private[joins] object RangeIndex {
 private[joins] class RangeIndex(
     private[this] val ordering: Ordering[Any],
     private[this] val keys: Array[Any],
+    private[this] val offsets: Array[Int],
+    private[this] val activeNewOffsets: Array[Int],
     private[this] val active: Array[Array[InternalRow]],
-    private[this] val activated: Array[Array[InternalRow]],
+    private[this] val activated: Array[InternalRow],
     private[this] val lowBoundEqualCorrection: Int,
     private[this] val highBoundEqualCorrection: Int) extends Serializable {
+
+  private[this] val maxKeyIndex = keys.length - 1
 
   /**
    * Find the index of the closest key lower than or equal to the value given. When a value is
@@ -291,24 +305,24 @@ private[joins] class RangeIndex(
    */
   @tailrec
   final def closestLowerKey(value: Any, equalCorrection: Int,
-      first: Int = 0, last: Int = keys.length - 1): Int = {
-    if (first < last) {
-      // Determine the mid point.
-      val mid = first + ((last - first + 1) >>> 1)
+      first: Int = 0, last: Int = maxKeyIndex): Int = {
+    // Determine the mid point.
+    val mid = first + ((last - first + 1) >>> 1)
 
-      // Compare the value with the key at the mid point.
-      // Note that a value is always larger than NULL.
-      val key = keys(mid)
-      val cmp = if (key == null) 1
-      else ordering.compare(value, key)
+    // Compare the value with the key at the mid point.
+    // Note that a value is always larger than NULL.
+    val key = keys(mid)
+    val cmp = if (key == null) 1
+    else ordering.compare(value, key)
 
-      // Value == Key. Keys are unique so we can stop.
-      if (cmp == 0) mid - equalCorrection
-      // Value > Key.
-      else if (cmp > 0) closestLowerKey(value, equalCorrection, mid, last)
-      // Value < Key.
-      else closestLowerKey(value, equalCorrection, first, mid - 1)
-    } else first
+    // Value == Key. Keys are unique so we can stop.
+    if (cmp == 0) mid - equalCorrection
+    // No more elements left to search.
+    else if (first == last) mid
+    // Value > Key: Search the top half of the key array.
+    else if (cmp > 0) closestLowerKey(value, equalCorrection, mid, last)
+    // Value < Key: Search the lower half of the array.
+    else closestLowerKey(value, equalCorrection, first, mid - 1)
   }
 
   /**
@@ -326,32 +340,72 @@ private[joins] class RangeIndex(
     else closestLowerKey(low, lowBoundEqualCorrection)
 
     // Find last index by searching for the last lower than the high value.
-    val last = if (high == null || first == keys.length - 1) keys.length - 1
+    val last = if (high == null || first == maxKeyIndex) maxKeyIndex
     else closestLowerKey(high, highBoundEqualCorrection, first)
 
-    // Return the iterator.
     new Iterator[InternalRow] {
-      var index = first
+      var activatedAvailable = first < last
       var rowIndex = 0
-      var rows = active(index)
+      var rows = active(first)
+      var rowLength = if (first <= last) rows.length
+      else activeNewOffsets(first)
 
-      def hasNext: Boolean = {
-        var result = rows != null && rowIndex < rows.length
-        while (!result && index < last) {
-          index += 1
-          rowIndex = 0
-          rows = activated(index)
-          result = rows != null && rowIndex < rows.length
+      override final def hasNext: Boolean = {
+        var result = rowIndex < rowLength
+        if (!result && activatedAvailable) {
+          activatedAvailable = false
+          rows = activated
+          rowIndex = offsets(first + 1)
+          rowLength = if (last == maxKeyIndex) activated.length
+          else offsets(last + 1)
+          result = rowIndex < rowLength
         }
         result
       }
 
-      def next() = {
+      override final def next(): InternalRow = {
         val row = rows(rowIndex)
         rowIndex += 1
         row
       }
     }
   }
+
+  /**
+   * Create a textual representation of the index for debugging purposes.
+   *
+   * @param maxKeys maximum number of keys shows in the string.
+   * @return a textual representation of the index for debugging purposes.
+   */
+  def toDebugString(maxKeys: Int = Int.MaxValue): String = {
+    val builder = new StringBuilder
+    builder.append("Index[lowBoundEqualCorrection = ")
+    builder.append(lowBoundEqualCorrection)
+    builder.append(", highBoundEqualCorrection = ")
+    builder.append(highBoundEqualCorrection)
+    builder.append("]")
+    val keysShown = math.min(keys.length, maxKeys)
+    val keysLeft = keys.length - keysShown
+    for (i <- 0 until keysShown) {
+      builder.append("\n  +[")
+      builder.append(keys(i))
+      builder.append("]@")
+      builder.append(offsets(i))
+      builder.append("\n  | Active: ")
+      builder.append(active(i).mkString(","))
+      builder.append("\n  | Activated: ")
+      val nextOffset = if (i == maxKeyIndex) activated.length
+      else offsets(i + 1)
+      builder.append(activated.slice(offsets(i), nextOffset).mkString(","))
+    }
+    if (keysLeft > 0) {
+      builder.append("\n  (")
+      builder.append(keysLeft)
+      builder.append(" keys left)")
+    }
+    builder.toString
+  }
+
+  override def toString: String = toDebugString(10)
 }
 

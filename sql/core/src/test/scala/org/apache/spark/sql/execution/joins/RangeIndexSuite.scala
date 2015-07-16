@@ -95,7 +95,7 @@ class RangeIndexSuite extends SparkFunSuite {
 
     // Points
     assertResult(Nil)(index1.intersect(2, 2).toSeq)
-    assertResult(r3 :: r5 :: Nil)(index1.intersect(3, 3).toSeq)
+    assertResult(r5 :: Nil)(index1.intersect(4, 4).toSeq)
 
     // Low Bound Included - High Bound Included:
     val index2 = RangeIndex.build(ordering, rs, allowLowEqual = true, allowHighEqual = true)
