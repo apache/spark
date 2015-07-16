@@ -3,6 +3,24 @@ layout: global
 title: Spark ML Programming Guide
 ---
 
+`\[
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\E}{\mathbb{E}}
+\newcommand{\x}{\mathbf{x}}
+\newcommand{\y}{\mathbf{y}}
+\newcommand{\wv}{\mathbf{w}}
+\newcommand{\av}{\mathbf{\alpha}}
+\newcommand{\bv}{\mathbf{b}}
+\newcommand{\N}{\mathbb{N}}
+\newcommand{\id}{\mathbf{I}}
+\newcommand{\ind}{\mathbf{1}}
+\newcommand{\0}{\mathbf{0}}
+\newcommand{\unit}{\mathbf{e}}
+\newcommand{\one}{\mathbf{1}}
+\newcommand{\zero}{\mathbf{0}}
+\]`
+
+
 Spark 1.2 introduced a new package called `spark.ml`, which aims to provide a uniform set of
 high-level APIs that help users create and tune practical machine learning pipelines.
 
@@ -153,6 +171,19 @@ There are two main ways to pass parameters to an algorithm:
 Parameters belong to specific instances of `Estimator`s and `Transformer`s.
 For example, if we have two `LogisticRegression` instances `lr1` and `lr2`, then we can build a `ParamMap` with both `maxIter` parameters specified: `ParamMap(lr1.maxIter -> 10, lr2.maxIter -> 20)`.
 This is useful if there are two algorithms with the `maxIter` parameter in a `Pipeline`.
+
+# Algorithm Guides
+
+There are now several algorithms in the Pipelines API which are not in the lower-level MLlib API, so we link to documentation for them here.  These algorithms are mostly feature transformers, which fit naturally into the `Transformer` abstraction in Pipelines, and ensembles, which fit naturally into the `Estimator` abstraction in the Pipelines.
+
+**Pipelines API Algorithm Guides**
+
+* [Feature Extraction, Transformation, and Selection](ml-features.html)
+* [Ensembles](ml-ensembles.html)
+
+**Algorithms in `spark.ml`**
+
+* [Linear methods with elastic net regularization](ml-linear-methods.html)
 
 # Code Examples
 

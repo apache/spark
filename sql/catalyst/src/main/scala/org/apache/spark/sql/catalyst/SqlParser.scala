@@ -353,22 +353,34 @@ class SqlParser extends AbstractSparkSQLParser with DataTypeParser {
     integral <~ intervalUnit("microsecond") ^^ { case num => num.toLong }
 
   protected lazy val millisecond: Parser[Long] =
-    integral <~ intervalUnit("millisecond") ^^ { case num => num.toLong * 1000 }
+    integral <~ intervalUnit("millisecond") ^^ {
+      case num => num.toLong * Interval.MICROS_PER_MILLI
+    }
 
   protected lazy val second: Parser[Long] =
-    integral <~ intervalUnit("second") ^^ { case num => num.toLong * 1000 * 1000 }
+    integral <~ intervalUnit("second") ^^ {
+      case num => num.toLong * Interval.MICROS_PER_SECOND
+    }
 
   protected lazy val minute: Parser[Long] =
-    integral <~ intervalUnit("minute") ^^ { case num => num.toLong * 1000 * 1000 * 60 }
+    integral <~ intervalUnit("minute") ^^ {
+      case num => num.toLong * Interval.MICROS_PER_MINUTE
+    }
 
   protected lazy val hour: Parser[Long] =
-    integral <~ intervalUnit("hour") ^^ { case num => num.toLong * 1000 * 1000 * 3600 }
+    integral <~ intervalUnit("hour") ^^ {
+      case num => num.toLong * Interval.MICROS_PER_HOUR
+    }
 
   protected lazy val day: Parser[Long] =
-    integral <~ intervalUnit("day") ^^ { case num => num.toLong * 1000 * 1000 * 3600 * 24 }
+    integral <~ intervalUnit("day") ^^ {
+      case num => num.toLong * Interval.MICROS_PER_DAY
+    }
 
   protected lazy val week: Parser[Long] =
-    integral <~ intervalUnit("week") ^^ { case num => num.toLong * 1000 * 1000 * 3600 * 24 * 7 }
+    integral <~ intervalUnit("week") ^^ {
+      case num => num.toLong * Interval.MICROS_PER_WEEK
+    }
 
   protected lazy val intervalLiteral: Parser[Literal] =
     INTERVAL ~> year.? ~ month.? ~ week.? ~ day.? ~ hour.? ~ minute.? ~ second.? ~

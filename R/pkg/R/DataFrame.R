@@ -1328,7 +1328,7 @@ setMethod("write.df",
             jmode <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "saveMode", mode)
             options <- varargsToEnv(...)
             if (!is.null(path)) {
-                options[['path']] = path
+                options[['path']] <- path
             }
             callJMethod(df@sdf, "save", source, jmode, options)
           })

@@ -19,10 +19,15 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.types.AbstractDataType
-
+import org.apache.spark.sql.catalyst.analysis.HiveTypeCoercion.ImplicitTypeCasts
 
 /**
  * An trait that gets mixin to define the expected input types of an expression.
+ *
+ * This trait is typically used by operator expressions (e.g. [[Add]], [[Subtract]]) to define
+ * expected input types without any implicit casting.
+ *
+ * Most function expressions (e.g. [[Substring]] should extends [[ImplicitCastInputTypes]]) instead.
  */
 trait ExpectsInputTypes { self: Expression =>
 
@@ -39,8 +44,8 @@ trait ExpectsInputTypes { self: Expression =>
   override def checkInputDataTypes(): TypeCheckResult = {
     val mismatches = children.zip(inputTypes).zipWithIndex.collect {
       case ((child, expected), idx) if !expected.acceptsType(child.dataType) =>
-        s"Argument ${idx + 1} is expected to be of type ${expected.simpleString}, " +
-        s"however, ${child.prettyString} is of type ${child.dataType.simpleString}."
+        s"argument ${idx + 1} is expected to be of type ${expected.simpleString}, " +
+          s"however, '${child.prettyString}' is of type ${child.dataType.simpleString}."
     }
 
     if (mismatches.isEmpty) {
@@ -49,4 +54,12 @@ trait ExpectsInputTypes { self: Expression =>
       TypeCheckResult.TypeCheckFailure(mismatches.mkString(" "))
     }
   }
+}
+
+
+/**
+ * A mixin for the analyzer to perform implicit type casting using [[ImplicitTypeCasts]].
+ */
+trait ImplicitCastInputTypes extends ExpectsInputTypes { self: Expression =>
+  // No other methods
 }

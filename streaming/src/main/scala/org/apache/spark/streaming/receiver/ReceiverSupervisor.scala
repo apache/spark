@@ -182,12 +182,12 @@ private[streaming] abstract class ReceiverSupervisor(
 
   /** Wait the thread until the supervisor is stopped */
   def awaitTermination() {
+    logInfo("Waiting for receiver to be stopped")
     stopLatch.await()
-    logInfo("Waiting for executor stop is over")
     if (stoppingError != null) {
-      logError("Stopped executor with error: " + stoppingError)
+      logError("Stopped receiver with error: " + stoppingError)
     } else {
-      logWarning("Stopped executor without error")
+      logInfo("Stopped receiver without error")
     }
     if (stoppingError != null) {
       throw stoppingError

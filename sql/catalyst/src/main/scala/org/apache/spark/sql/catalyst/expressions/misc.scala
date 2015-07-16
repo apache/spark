@@ -31,7 +31,7 @@ import org.apache.spark.unsafe.types.UTF8String
  * A function that calculates an MD5 128-bit checksum and returns it as a hex string
  * For input of type [[BinaryType]]
  */
-case class Md5(child: Expression) extends UnaryExpression with ExpectsInputTypes {
+case class Md5(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
 
   override def dataType: DataType = StringType
 
@@ -55,7 +55,7 @@ case class Md5(child: Expression) extends UnaryExpression with ExpectsInputTypes
  * the hash length is not one of the permitted values, the return value is NULL.
  */
 case class Sha2(left: Expression, right: Expression)
-  extends BinaryExpression with Serializable with ExpectsInputTypes {
+  extends BinaryExpression with Serializable with ImplicitCastInputTypes {
 
   override def dataType: DataType = StringType
 
@@ -118,7 +118,7 @@ case class Sha2(left: Expression, right: Expression)
  * A function that calculates a sha1 hash value and returns it as a hex string
  * For input of type [[BinaryType]] or [[StringType]]
  */
-case class Sha1(child: Expression) extends UnaryExpression with ExpectsInputTypes {
+case class Sha1(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
 
   override def dataType: DataType = StringType
 
@@ -138,7 +138,7 @@ case class Sha1(child: Expression) extends UnaryExpression with ExpectsInputType
  * A function that computes a cyclic redundancy check value and returns it as a bigint
  * For input of type [[BinaryType]]
  */
-case class Crc32(child: Expression) extends UnaryExpression with ExpectsInputTypes {
+case class Crc32(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
 
   override def dataType: DataType = LongType
 

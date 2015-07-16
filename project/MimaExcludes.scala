@@ -77,6 +77,24 @@ object MimaExcludes {
             // SPARK-8914 Remove RDDApi
             ProblemFilters.exclude[MissingClassProblem](
             "org.apache.spark.sql.RDDApi")
+          ) ++ Seq(
+            // SPARK-8701 Add input metadata in the batch page.
+            ProblemFilters.exclude[MissingClassProblem](
+              "org.apache.spark.streaming.scheduler.InputInfo$"),
+            ProblemFilters.exclude[MissingClassProblem](
+              "org.apache.spark.streaming.scheduler.InputInfo")
+          ) ++ Seq(
+            // SPARK-6797 Support YARN modes for SparkR
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.api.r.PairwiseRRDD.this"),
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.api.r.RRDD.createRWorker"),
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.api.r.RRDD.this"),
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.api.r.StringRRDD.this"),
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.api.r.BaseRRDD.this")
           )
 
         case v if v.startsWith("1.4") =>

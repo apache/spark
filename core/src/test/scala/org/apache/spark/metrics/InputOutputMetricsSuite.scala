@@ -60,7 +60,9 @@ class InputOutputMetricsSuite extends SparkFunSuite with SharedSparkContext
     tmpFile = new File(testTempDir, getClass.getSimpleName + ".txt")
     val pw = new PrintWriter(new FileWriter(tmpFile))
     for (x <- 1 to numRecords) {
+      // scalastyle:off println
       pw.println(RandomUtils.nextInt(0, numBuckets))
+      // scalastyle:on println
     }
     pw.close()
 
