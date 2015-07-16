@@ -34,7 +34,7 @@ import com.amazonaws.services.kinesis.model._
 import org.apache.spark.Logging
 
 /**
- * Shared utility methods
+ * Shared utility methods for performing Kinesis tests that actually transfer data
  */
 private class KinesisTestUtils(
     val endpointUrl: String = "https://kinesis.us-west-2.amazonaws.com",

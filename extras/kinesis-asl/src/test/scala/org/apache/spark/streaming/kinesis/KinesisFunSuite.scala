@@ -4,7 +4,10 @@ import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.SparkFunSuite
 
-
+/**
+ * Helper class that runs Kinesis real data transfer tests or
+ * ignores them based on env variable is set or not.
+ */
 abstract class KinesisFunSuite extends SparkFunSuite with BeforeAndAfterAll {
   import KinesisTestUtils._
 
