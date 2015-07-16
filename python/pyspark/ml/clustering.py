@@ -167,18 +167,18 @@ class KMeans(JavaEstimator, HasFeaturesCol, HasMaxIter, HasSeed):
         """
         return self.getOrDefault(self.initMode)
 
-    def setInitializationSteps(self, value):
+    def setInitSteps(self, value):
         """
         Sets the value of :py:attr:`initSteps`.
 
-        >>> algo = KMeans().setInitializationSteps(10)
-        >>> algo.getInitializationSteps()
+        >>> algo = KMeans().setInitSteps(10)
+        >>> algo.getInitSteps()
         10
         """
         self._paramMap[self.initSteps] = value
         return self
 
-    def getInitializationSteps(self):
+    def getInitSteps(self):
         """
         Gets the value of `initSteps`
         """

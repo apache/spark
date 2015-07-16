@@ -90,7 +90,7 @@ private[clustering] trait KMeansParams
     (value: Int) => value > 0)
 
   /** @group getParam */
-  def getInitializationSteps: Int = $(initSteps)
+  def getInitSteps: Int = $(initSteps)
 
   /**
    * Validates and transforms the input schema.
@@ -167,7 +167,7 @@ class KMeans(override val uid: String) extends Estimator[KMeansModel] with KMean
   def setInitMode(value: String): this.type = set(initMode, value)
 
   /** @group setParam */
-  def setInitializationSteps(value: Int): this.type = set(initSteps, value)
+  def setInitSteps(value: Int): this.type = set(initSteps, value)
 
   /** @group setParam */
   def setMaxIter(value: Int): this.type = set(maxIter, value)

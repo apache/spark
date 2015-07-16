@@ -54,7 +54,7 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(kmeans.getMaxIter === 20)
     assert(kmeans.getRuns === 1)
     assert(kmeans.getInitMode === MLlibKMeans.K_MEANS_PARALLEL)
-    assert(kmeans.getInitializationSteps === 5)
+    assert(kmeans.getInitSteps === 5)
     assert(kmeans.getEpsilon === 1e-4)
   }
 
@@ -66,7 +66,7 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext {
       .setMaxIter(33)
       .setRuns(7)
       .setInitMode(MLlibKMeans.RANDOM)
-      .setInitializationSteps(3)
+      .setInitSteps(3)
       .setSeed(123)
       .setEpsilon(1e-3)
 
@@ -76,7 +76,7 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(kmeans.getMaxIter === 33)
     assert(kmeans.getRuns === 7)
     assert(kmeans.getInitMode === MLlibKMeans.RANDOM)
-    assert(kmeans.getInitializationSteps === 3)
+    assert(kmeans.getInitSteps === 3)
     assert(kmeans.getSeed === 123)
     assert(kmeans.getEpsilon === 1e-3)
   }
@@ -89,7 +89,7 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext {
       new KMeans().setInitMode("no_such_a_mode")
     }
     intercept[IllegalArgumentException] {
-      new KMeans().setInitializationSteps(0)
+      new KMeans().setInitSteps(0)
     }
     intercept[IllegalArgumentException] {
       new KMeans().setRuns(0)
