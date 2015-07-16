@@ -40,7 +40,7 @@ class StopwatchSuite extends SparkFunSuite with MLlibTestSparkContext {
     val duration2 = sw.stop()
     assert(duration2 >= 50 && duration2 < 100)
     val elapsed2 = sw.elapsed()
-    assert(elapsed2 == duration + duration2)
+    assert(elapsed2 === duration + duration2)
     sw.start()
     assert(sw.isRunning)
     intercept[AssertionError] {
