@@ -107,6 +107,21 @@ case class Union(children: Seq[SparkPlan]) extends SparkPlan {
 
 /**
  * :: DeveloperApi ::
+ * Take the first `limit` elements and return the to the driver.
+ */
+@DeveloperApi
+case class CollectLimit(limit: Int, child: SparkPlan) extends UnaryNode {
+  override def output: Seq[Attribute] = child.output
+  override def executeCollect(): Array[Row] = child.executeTake(limit)
+  // TODO(josh): Throw error on executeTake()?
+  protected override def doExecute(): RDD[InternalRow] = {
+    throw new UnsupportedOperationException(
+      "Should not invoke doExecute() on CollectLimit; use Limit instead.")
+  }
+}
+
+/**
+ * :: DeveloperApi ::
  * Take the first `limit` elements.
  *
  * @param global if true, then this operator will take the first `limit` elements of the entire
@@ -115,8 +130,7 @@ case class Union(children: Seq[SparkPlan]) extends SparkPlan {
 *  @param child the input data source.
  */
 @DeveloperApi
-case class Limit(global: Boolean, limit: Int, child: SparkPlan)
-  extends UnaryNode {
+case class Limit(global: Boolean, limit: Int, child: SparkPlan) extends UnaryNode {
   override def requiredChildDistribution: List[Distribution] = {
     if (global) {
       AllTuples :: Nil
@@ -124,10 +138,17 @@ case class Limit(global: Boolean, limit: Int, child: SparkPlan)
       UnspecifiedDistribution :: Nil
     }
   }
-
   override def output: Seq[Attribute] = child.output
 
-  override def executeCollect(): Array[Row] = child.executeTake(limit)
+  override def executeTake(n: Int): Array[Row] = {
+    throw new UnsupportedOperationException(
+      "Should not invoke executeTake() on Limit; use CollectLimit instead.")
+  }
+
+  override def executeCollect(): Array[Row] = {
+    throw new UnsupportedOperationException(
+      "Should not invoke executeCollect() on Limit; use CollectLimit instead.")
+  }
 
   protected override def doExecute(): RDD[InternalRow] = child.execute().mapPartitions { iter =>
     iter.take(limit)

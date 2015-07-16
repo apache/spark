@@ -346,6 +346,8 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         execution.Sample(lb, ub, withReplacement, seed, planLater(child)) :: Nil
       case logical.LocalRelation(output, data) =>
         LocalTableScan(output, data) :: Nil
+      case logical.ReturnAnswer(logical.Limit(IntegerLiteral(limit), child)) =>
+        execution.CollectLimit(limit, planLater(child)) :: Nil
       case logical.Limit(IntegerLiteral(limit), child) =>
         val perPartitionLimit = execution.Limit(global = false, limit, planLater(child))
         val globalLimit = execution.Limit(global = true, limit, perPartitionLimit)
@@ -368,6 +370,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         BatchPythonEvaluation(udf, e.output, planLater(child)) :: Nil
       case LogicalRDD(output, rdd) => PhysicalRDD(output, rdd) :: Nil
       case BroadcastHint(child) => apply(child)
+      case logical.ReturnAnswer(child) => apply(child)
       case _ => Nil
     }
   }
