@@ -789,15 +789,16 @@ private[spark] class Client(
   def setupCredentials(): Unit = {
     loginFromKeytab = args.principal != null || sparkConf.contains("spark.yarn.principal")
     if (loginFromKeytab) {
-      principal = {
-        if (args.principal != null) {
-          keytab = args.keytab
-          args.principal
+      principal =
+        if (args.principal != null) args.principal else sparkConf.get("spark.yarn.principal")
+      keytab = {
+        if (args.keytab != null) {
+          args.keytab
         } else {
-          keytab = sparkConf.getOption("spark.yarn.keytab").orNull
-          sparkConf.get("spark.yarn.principal")
+          sparkConf.getOption("spark.yarn.keytab").orNull
         }
       }
+
       require(keytab != null, "Keytab must be specified when principal is specified.")
       logInfo("Attempting to login to the Kerberos" +
         s" using principal: $principal and keytab: $keytab")
