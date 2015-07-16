@@ -78,13 +78,13 @@ private[spark] class JobWaiter[T](
     resultHandler(index, result.asInstanceOf[T])
     finishedTasks += 1
     if (finishedTasks == totalTasks) {
-      promise.trySuccess()
+      promise.success()
       this.notifyAll()
     }
   }
 
   override def jobFailed(exception: Exception): Unit = synchronized {
-    promise.tryFailure(exception)
+    promise.failure(exception)
     this.notifyAll()
   }
 }
