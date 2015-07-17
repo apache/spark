@@ -761,4 +761,12 @@ class DataFrameSuite extends QueryTest {
     assert(f.getMessage.contains("column3"))
     assert(!f.getMessage.contains("column2"))
   }
+
+  test("zip") {
+    val other = testData.select('key + 10)
+    checkAnswer(
+      testData.zip(other).limit(3),
+      Row(1, "1", 11) :: Row(2, "2", 12) :: Row(3, "3", 13) :: Nil
+    )
+  }
 }

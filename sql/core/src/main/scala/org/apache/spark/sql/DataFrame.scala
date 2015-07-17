@@ -1365,6 +1365,20 @@ class DataFrame private[sql](
   def foreachPartition(f: Iterator[Row] => Unit): Unit = rdd.foreachPartition(f)
 
   /**
+   * Zips this [[DataFrame]] with another one, returning a new [[DataFrame]], like RDD.zip().
+   * Assumes that the two DataFrames have the *same number of rows*, the two underlying RDDs
+   * have the *same number of partitions* and the *same number of elements in each partition*
+   * (e.g. one [[DataFrame]] was made through a select on the other).
+   * @group rdd
+   * @since 1.5.0
+   */
+  def zip(other: DataFrame): DataFrame = {
+    val newSchema: StructType = StructType(Array.concat(schema.fields, other.schema.fields))
+    sqlContext.createDataFrame(
+      rdd.zip(other.rdd).map { case (r1, r2) => Row.merge(r1, r2) }, newSchema)
+  }
+
+  /**
    * Returns the first `n` rows in the [[DataFrame]].
    * @group action
    * @since 1.3.0
