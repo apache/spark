@@ -424,20 +424,20 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
 
       case (BinaryType, StringType) =>
         defineCodeGen (ctx, ev, c =>
-          s"${ctx.stringType}.fromBytes($c)")
+          s"UTF8String.fromBytes($c)")
 
       case (DateType, StringType) =>
         defineCodeGen(ctx, ev, c =>
-          s"""${ctx.stringType}.fromString(
+          s"""UTF8String.fromString(
                 org.apache.spark.sql.catalyst.util.DateTimeUtils.dateToString($c))""")
 
       case (TimestampType, StringType) =>
         defineCodeGen(ctx, ev, c =>
-          s"""${ctx.stringType}.fromString(
+          s"""UTF8String.fromString(
                 org.apache.spark.sql.catalyst.util.DateTimeUtils.timestampToString($c))""")
 
       case (_, StringType) =>
-        defineCodeGen(ctx, ev, c => s"${ctx.stringType}.fromString(String.valueOf($c))")
+        defineCodeGen(ctx, ev, c => s"UTF8String.fromString(String.valueOf($c))")
 
       case (StringType, IntervalType) =>
         defineCodeGen(ctx, ev, c =>
