@@ -125,8 +125,11 @@ case class Window(
           val expr = sortExpr.child
           // Create the projection which returns the current 'value'.
           val current = newMutableProjection(expr :: Nil, child.output)()
+          // Flip the sign of the offset when processing the order is descending
+          val boundOffset = if (sortExpr.direction == Descending) -offset
+          else offset
           // Create the projection which returns the current 'value' modified by adding the offset.
-          val boundExpr = Add(expr, Cast(Literal.create(offset, IntegerType), expr.dataType))
+          val boundExpr = Add(expr, Cast(Literal.create(boundOffset, IntegerType), expr.dataType))
           val bound = newMutableProjection(boundExpr :: Nil, child.output)()
           (sortExpr :: Nil, current, bound)
         }
@@ -170,14 +173,6 @@ case class Window(
     case SpecifiedWindowFrame(frameType, FrameBoundaryExtractor(low), UnboundedFollowing) =>
       val lBoundOrdering = createBoundOrdering(frameType, low)
       new UnboundedFollowingWindowFunctionFrame(ordinal, functions, lBoundOrdering)
-
-    // Moving Frame: reverse processed range frame - bounds need to flipped.
-    case SpecifiedWindowFrame(RangeFrame,
-        FrameBoundaryExtractor(low), FrameBoundaryExtractor(high))
-        if (low != 0 || high != 0) && windowSpec.orderSpec.head.direction == Descending =>
-      val lBoundOrdering = createBoundOrdering(RangeFrame, high)
-      val uBoundOrdering = createBoundOrdering(RangeFrame, low)
-      new SlidingWindowFunctionFrame(ordinal, functions, lBoundOrdering, uBoundOrdering)
 
     // Moving Frame.
     case SpecifiedWindowFrame(frameType,
