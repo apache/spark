@@ -15,10 +15,11 @@
  * limitations under the License.
  */
 
-package org.apache.spark.mllib.tree.impl
+package org.apache.spark.ml.tree.impl
 
+import org.apache.spark.ml.tree.{ContinuousSplit, Split}
 import org.apache.spark.mllib.regression.LabeledPoint
-import org.apache.spark.mllib.tree.model.Bin
+import org.apache.spark.mllib.tree.impl.DecisionTreeMetadata
 import org.apache.spark.rdd.RDD
 
 
@@ -47,13 +48,13 @@ private[spark] object TreePoint {
    * Convert an input dataset into its TreePoint representation,
    * binning feature values in preparation for DecisionTree training.
    * @param input     Input dataset.
-   * @param bins      Bins for features, of size (numFeatures, numBins).
+   * @param splits    Splits for features, of size (numFeatures, numSplits).
    * @param metadata  Learning and dataset metadata
    * @return  TreePoint dataset representation
    */
   def convertToTreeRDD(
       input: RDD[LabeledPoint],
-      bins: Array[Array[Bin]],
+      splits: Array[Array[Split]],
       metadata: DecisionTreeMetadata): RDD[TreePoint] = {
     // Construct arrays for featureArity for efficiency in the inner loop.
     val featureArity: Array[Int] = new Array[Int](metadata.numFeatures)
@@ -62,85 +63,68 @@ private[spark] object TreePoint {
       featureArity(featureIndex) = metadata.featureArity.getOrElse(featureIndex, 0)
       featureIndex += 1
     }
+    val thresholds: Array[Array[Double]] = featureArity.zipWithIndex.map { case (arity, idx) =>
+      if (arity == 0) {
+        splits(idx).map(_.asInstanceOf[ContinuousSplit].threshold)
+      } else {
+        Array.empty[Double]
+      }
+    }
     input.map { x =>
-      TreePoint.labeledPointToTreePoint(x, bins, featureArity)
+      TreePoint.labeledPointToTreePoint(x, thresholds, featureArity)
     }
   }
 
   /**
    * Convert one LabeledPoint into its TreePoint representation.
-   * @param bins      Bins for features, of size (numFeatures, numBins).
+   * @param thresholds  For each feature, split thresholds for continuous features,
+   *                    empty for categorical features.
    * @param featureArity  Array indexed by feature, with value 0 for continuous and numCategories
    *                      for categorical features.
    */
   private def labeledPointToTreePoint(
       labeledPoint: LabeledPoint,
-      bins: Array[Array[Bin]],
+      thresholds: Array[Array[Double]],
       featureArity: Array[Int]): TreePoint = {
     val numFeatures = labeledPoint.features.size
     val arr = new Array[Int](numFeatures)
     var featureIndex = 0
     while (featureIndex < numFeatures) {
-      arr(featureIndex) = findBin(featureIndex, labeledPoint, featureArity(featureIndex),
-        bins)
+      arr(featureIndex) =
+        findBin(featureIndex, labeledPoint, featureArity(featureIndex), thresholds(featureIndex))
       featureIndex += 1
     }
     new TreePoint(labeledPoint.label, arr)
   }
 
   /**
-   * Find bin for one (labeledPoint, feature).
+   * Find discretized value for one (labeledPoint, feature).
+   *
+   * NOTE: We cannot use Bucketizer since it handles split thresholds differently than the old
+   *       (mllib) tree API.  We want to maintain the same behavior as the old tree API.
    *
    * @param featureArity  0 for continuous features; number of categories for categorical features.
-   * @param bins   Bins for features, of size (numFeatures, numBins).
    */
   private def findBin(
       featureIndex: Int,
       labeledPoint: LabeledPoint,
       featureArity: Int,
-      bins: Array[Array[Bin]]): Int = {
-
-    /**
-     * Binary search helper method for continuous feature.
-     */
-    def binarySearchForBins(): Int = {
-      val binForFeatures = bins(featureIndex)
-      val feature = labeledPoint.features(featureIndex)
-      var left = 0
-      var right = binForFeatures.length - 1
-      while (left <= right) {
-        val mid = left + (right - left) / 2
-        val bin = binForFeatures(mid)
-        val lowThreshold = bin.lowSplit.threshold
-        val highThreshold = bin.highSplit.threshold
-        if ((lowThreshold < feature) && (highThreshold >= feature)) {
-          return mid
-        } else if (lowThreshold >= feature) {
-          right = mid - 1
-        } else {
-          left = mid + 1
-        }
-      }
-      -1
-    }
+      thresholds: Array[Double]): Int = {
+    val featureValue = labeledPoint.features(featureIndex)
 
     if (featureArity == 0) {
-      // Perform binary search for finding bin for continuous features.
-      val binIndex = binarySearchForBins()
-      if (binIndex == -1) {
-        throw new RuntimeException("No bin was found for continuous feature." +
-          " This error can occur when given invalid data values (such as NaN)." +
-          s" Feature index: $featureIndex.  Feature value: ${labeledPoint.features(featureIndex)}")
+      val idx = java.util.Arrays.binarySearch(thresholds, featureValue)
+      if (idx >= 0) {
+        idx
+      } else {
+        -idx - 1
       }
-      binIndex
     } else {
       // Categorical feature bins are indexed by feature values.
-      val featureValue = labeledPoint.features(featureIndex)
       if (featureValue < 0 || featureValue >= featureArity) {
         throw new IllegalArgumentException(
           s"DecisionTree given invalid data:" +
-            s" Feature $featureIndex is categorical with values in" +
-            s" {0,...,${featureArity - 1}," +
+            s" Feature $featureIndex is categorical with values in {0,...,${featureArity - 1}," +
             s" but a data point gives it value $featureValue.\n" +
             "  Bad data point: " + labeledPoint.toString)
       }
