@@ -510,7 +510,6 @@ class DAGScheduler(
       func: (TaskContext, Iterator[T]) => U,
       partitions: Seq[Int],
       callSite: CallSite,
-      allowLocal: Boolean,
       resultHandler: (Int, U) => Unit,
       properties: Properties): JobWaiter[U] = {
     // Check to make sure we are not launching a task on a partition that does not exist.
@@ -530,7 +529,7 @@ class DAGScheduler(
     val func2 = func.asInstanceOf[(TaskContext, Iterator[_]) => _]
     val waiter = new JobWaiter(this, jobId, partitions.size, resultHandler)
     eventProcessLoop.post(JobSubmitted(
-      jobId, rdd, func2, partitions.toArray, allowLocal, callSite, waiter,
+      jobId, rdd, func2, partitions.toArray, callSite, waiter,
       SerializationUtils.clone(properties)))
     waiter
   }
@@ -540,11 +539,10 @@ class DAGScheduler(
       func: (TaskContext, Iterator[T]) => U,
       partitions: Seq[Int],
       callSite: CallSite,
-      allowLocal: Boolean,
       resultHandler: (Int, U) => Unit,
       properties: Properties): Unit = {
     val start = System.nanoTime
-    val waiter = submitJob(rdd, func, partitions, callSite, allowLocal, resultHandler, properties)
+    val waiter = submitJob(rdd, func, partitions, callSite, resultHandler, properties)
     waiter.awaitResult() match {
       case JobSucceeded =>
         logInfo("Job %d finished: %s, took %f s".format
@@ -571,8 +569,7 @@ class DAGScheduler(
     val partitions = (0 until rdd.partitions.size).toArray
     val jobId = nextJobId.getAndIncrement()
     eventProcessLoop.post(JobSubmitted(
-      jobId, rdd, func2, partitions, allowLocal = false, callSite, listener,
-      SerializationUtils.clone(properties)))
+      jobId, rdd, func2, partitions, callSite, listener, SerializationUtils.clone(properties)))
     listener.awaitResult()    // Will throw an exception if the job fails
   }
 
@@ -711,7 +708,6 @@ class DAGScheduler(
       finalRDD: RDD[_],
       func: (TaskContext, Iterator[_]) => _,
       partitions: Array[Int],
-      allowLocal: Boolean,
       callSite: CallSite,
       listener: JobListener,
       properties: Properties) {
@@ -1394,9 +1390,8 @@ private[scheduler] class DAGSchedulerEventProcessLoop(dagScheduler: DAGScheduler
   }
 
   private def doOnReceive(event: DAGSchedulerEvent): Unit = event match {
-    case JobSubmitted(jobId, rdd, func, partitions, allowLocal, callSite, listener, properties) =>
-      dagScheduler.handleJobSubmitted(jobId, rdd, func, partitions, allowLocal, callSite,
-        listener, properties)
+    case JobSubmitted(jobId, rdd, func, partitions, callSite, listener, properties) =>
+      dagScheduler.handleJobSubmitted(jobId, rdd, func, partitions, callSite, listener, properties)
 
     case StageCancelled(stageId) =>
       dagScheduler.handleStageCancellation(stageId)

@@ -227,10 +227,9 @@ class DAGSchedulerSuite
       rdd: RDD[_],
       partitions: Array[Int],
       func: (TaskContext, Iterator[_]) => _ = jobComputeFunc,
-      allowLocal: Boolean = false,
       listener: JobListener = jobListener): Int = {
     val jobId = scheduler.nextJobId.getAndIncrement()
-    runEvent(JobSubmitted(jobId, rdd, func, partitions, allowLocal, CallSite("", ""), listener))
+    runEvent(JobSubmitted(jobId, rdd, func, partitions, CallSite("", ""), listener))
     jobId
   }
 
@@ -716,7 +715,6 @@ class DAGSchedulerSuite
         rdd,
         (context: TaskContext, iter: Iterator[Int]) => iter.size,
         Seq(0, 1),
-        allowLocal = false,
         (part: Int, result: Int) => throw new DAGSchedulerSuiteDummyException)
     }
     assert(e.getCause.isInstanceOf[DAGSchedulerSuiteDummyException])
