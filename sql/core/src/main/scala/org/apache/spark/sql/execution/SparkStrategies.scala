@@ -213,22 +213,51 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   object CartesianProduct extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case logical.Join(left, right, _, None) =>
-        val buildSide =
-          if (left.statistics.sizeInBytes <= right.statistics.sizeInBytes) {
-            joins.BuildRight
+        // For BroadcastCartesianProduct we will broadcast the small size plan,
+        // for CartesianProduct we will use the small size plan as cartesian left rdd.
+        if (right.statistics.sizeInBytes <= left.statistics.sizeInBytes) {
+          if (sqlContext.conf.autoBroadcastJoinThreshold > 0 &&
+            right.statistics.sizeInBytes <= sqlContext.conf.autoBroadcastJoinThreshold) {
+            execution.joins.BroadcastCartesianProduct(planLater(left), planLater(right),
+              joins.BuildRight) :: Nil
           } else {
-            joins.BuildLeft
+            execution.joins.CartesianProduct(planLater(left), planLater(right),
+              joins.BuildLeft) :: Nil
           }
-        execution.joins.CartesianProduct(planLater(left), planLater(right), buildSide) :: Nil
+        } else {
+          if (sqlContext.conf.autoBroadcastJoinThreshold > 0 &&
+            left.statistics.sizeInBytes <= sqlContext.conf.autoBroadcastJoinThreshold) {
+            execution.joins.BroadcastCartesianProduct(planLater(left), planLater(right),
+              joins.BuildLeft) :: Nil
+          } else {
+            execution.joins.CartesianProduct(planLater(left), planLater(right),
+              joins.BuildRight) :: Nil
+          }
+        }
       case logical.Join(left, right, Inner, Some(condition)) =>
-        val buildSide =
-          if (left.statistics.sizeInBytes <= right.statistics.sizeInBytes) {
-            joins.BuildRight
+        if (right.statistics.sizeInBytes <= left.statistics.sizeInBytes) {
+          if (sqlContext.conf.autoBroadcastJoinThreshold > 0 &&
+            right.statistics.sizeInBytes <= sqlContext.conf.autoBroadcastJoinThreshold) {
+            execution.Filter(condition,
+              execution.joins.BroadcastCartesianProduct(planLater(left), planLater(right),
+                joins.BuildRight)) :: Nil
           } else {
-            joins.BuildLeft
+            execution.Filter(condition,
+              execution.joins.CartesianProduct(planLater(left), planLater(right),
+                joins.BuildLeft)) :: Nil
           }
-        execution.Filter(condition,
-          execution.joins.CartesianProduct(planLater(left), planLater(right), buildSide)) :: Nil
+        } else {
+          if (sqlContext.conf.autoBroadcastJoinThreshold > 0 &&
+            left.statistics.sizeInBytes <= sqlContext.conf.autoBroadcastJoinThreshold) {
+            execution.Filter(condition,
+              execution.joins.BroadcastCartesianProduct(planLater(left), planLater(right),
+                joins.BuildLeft)) :: Nil
+          } else {
+            execution.Filter(condition,
+              execution.joins.CartesianProduct(planLater(left), planLater(right),
+                joins.BuildRight)) :: Nil
+          }
+        }
       case _ => Nil
     }
   }
