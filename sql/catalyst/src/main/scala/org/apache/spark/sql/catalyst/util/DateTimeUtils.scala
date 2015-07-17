@@ -19,7 +19,6 @@ package org.apache.spark.sql.catalyst.util
 
 import java.sql.{Date, Timestamp}
 import java.text.{DateFormat, SimpleDateFormat}
-import java.util
 import java.util.{TimeZone, Calendar}
 
 import org.apache.spark.unsafe.types.UTF8String
@@ -552,9 +551,7 @@ object DateTimeUtils {
   def getDayOfMonth(date: Int): Int = {
     var (year, dayInYear) = getYearAndDayInYear(date)
     val leap = if (isLeapYear(year) && dayInYear > 59) 1 else 0
-    if (dayInYear >= 60) {
-      dayInYear = dayInYear - 1
-    }
+
     if (dayInYear <= 181 + leap) {
       if (dayInYear <= 90 + leap) {
         if (dayInYear <= 31) {
