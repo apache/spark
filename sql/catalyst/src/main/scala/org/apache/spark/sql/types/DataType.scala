@@ -144,13 +144,13 @@ object DataType {
 
     case JSortedObject(
     ("class", JString(udtClass)),
-    ("pyClass", JString(pyClass)),
+    ("pyClass", pyClass: JValue),  // pyClass could be null, cannot match with JString()
     ("sqlType", v: JValue),
     ("type", JString("udt"))) =>
       if (udtClass.length > 0) {
         Utils.classForName(udtClass).newInstance().asInstanceOf[UserDefinedType[_]]
       } else {
-        new PythonUserDefinedType(parseDataType(v), pyClass)
+        new PythonUserDefinedType(parseDataType(v), pyClass.asInstanceOf[JString].values)
       }
   }
 
