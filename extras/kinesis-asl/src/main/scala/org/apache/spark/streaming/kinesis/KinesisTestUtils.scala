@@ -45,6 +45,7 @@ private class KinesisTestUtils(
   } else {
     RegionUtils.getRegion(_regionName).getName()
   }
+
   val streamShardCount = 2
 
   private val createStreamTimeoutSeconds = 300
