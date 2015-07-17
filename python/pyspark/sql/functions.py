@@ -666,8 +666,6 @@ class UserDefinedFunction(object):
 
     def _create_judf(self, name):
         f, returnType = self.func, self.returnType  # put them in closure `func`
-        from pyspark.serializers import CloudPickleSerializer
-        CloudPickleSerializer().dumps(returnType)
         func = lambda _, it: map(lambda x: returnType.toInternal(f(*x)), it)
         ser = AutoBatchedSerializer(PickleSerializer())
         command = (func, None, ser, ser)
