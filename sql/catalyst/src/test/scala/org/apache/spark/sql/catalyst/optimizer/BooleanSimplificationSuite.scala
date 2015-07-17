@@ -40,7 +40,7 @@ class BooleanSimplificationSuite extends PlanTest with PredicateHelper {
 
   val testRelation = LocalRelation('a.int, 'b.int, 'c.int, 'd.string)
 
-  def checkCondition(input: Expression, expected: Expression): Unit = {
+  private def checkCondition(input: Expression, expected: Expression): Unit = {
     val plan = testRelation.where(input).analyze
     val actual = Optimize.execute(plan)
     val correctAnswer = testRelation.where(expected).analyze
@@ -88,21 +88,20 @@ class BooleanSimplificationSuite extends PlanTest with PredicateHelper {
       ('a === 'b || 'b > 3 && 'a > 3 && 'a < 5))
   }
 
-  test("(a && b) || (a && c) => a && (b || c) when case insensitive") {
-    def analyze(plan: LogicalPlan) = AnalysisSuite.caseInsensitiveAnalyzer.execute(plan)
+  private def caseInsensitiveAnalyse(plan: LogicalPlan) =
+    AnalysisSuite.caseInsensitiveAnalyzer.execute(plan)
 
-    val plan = analyze(testRelation.where(('a > 2 && 'b > 3) || ('A > 2 && 'b < 5)))
+  test("(a && b) || (a && c) => a && (b || c) when case insensitive") {
+    val plan = caseInsensitiveAnalyse(testRelation.where(('a > 2 && 'b > 3) || ('A > 2 && 'b < 5)))
     val actual = Optimize.execute(plan)
-    val expected = analyze(testRelation.where('a > 2 && ('b > 3 || 'b < 5)))
+    val expected = caseInsensitiveAnalyse(testRelation.where('a > 2 && ('b > 3 || 'b < 5)))
     comparePlans(actual, expected)
   }
 
   test("(a || b) && (a || c) => a || (b && c) when case insensitive") {
-    def analyze(plan: LogicalPlan) = AnalysisSuite.caseInsensitiveAnalyzer.execute(plan)
-
-    val plan = analyze(testRelation.where(('a > 2 || 'b > 3) && ('A > 2 || 'b < 5)))
+    val plan = caseInsensitiveAnalyse(testRelation.where(('a > 2 || 'b > 3) && ('A > 2 || 'b < 5)))
     val actual = Optimize.execute(plan)
-    val expected = analyze(testRelation.where('a > 2 || ('b > 3 && 'b < 5)))
+    val expected = caseInsensitiveAnalyse(testRelation.where('a > 2 || ('b > 3 && 'b < 5)))
     comparePlans(actual, expected)
   }
 }
