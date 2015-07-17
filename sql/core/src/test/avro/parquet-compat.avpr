@@ -2,6 +2,10 @@
   "protocol" : "CompatibilityTest",
   "namespace" : "org.apache.spark.sql.parquet.test.avro",
   "types" : [ {
+    "type" : "enum",
+    "name" : "Suit",
+    "symbols" : [ "SPADES", "HEARTS", "DIAMONDS", "CLUBS" ]
+  }, {
     "type" : "record",
     "name" : "Nested",
     "fields" : [ {
@@ -39,6 +43,9 @@
       "name" : "string_column",
       "type" : "string"
     }, {
+      "name" : "enum_column",
+      "type" : "Suit"
+    }, {
       "name" : "maybe_bool_column",
       "type" : [ "null", "boolean" ]
     }, {
@@ -59,6 +66,9 @@
     }, {
       "name" : "maybe_string_column",
       "type" : [ "null", "string" ]
+    }, {
+      "name" : "maybe_enum_column",
+      "type" : [ "null", "Suit" ]
     }, {
       "name" : "strings_column",
       "type" : {

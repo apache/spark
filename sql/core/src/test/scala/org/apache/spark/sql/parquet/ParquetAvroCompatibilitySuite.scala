@@ -25,7 +25,7 @@ import scala.collection.JavaConversions._
 import org.apache.hadoop.fs.Path
 import org.apache.parquet.avro.AvroParquetWriter
 
-import org.apache.spark.sql.parquet.test.avro.{Nested, ParquetAvroCompat}
+import org.apache.spark.sql.parquet.test.avro.{Suit, Nested, ParquetAvroCompat}
 import org.apache.spark.sql.test.TestSQLContext
 import org.apache.spark.sql.{Row, SQLContext}
 
@@ -63,6 +63,8 @@ class ParquetAvroCompatibilitySuite extends ParquetCompatibilityTest {
         i.toDouble + 0.2d,
         s"val_$i".getBytes,
         s"val_$i",
+        // Avro enum values are converted to plain UTF-8 strings
+        Suit.values()(i % Suit.values().length).name(),
 
         nullable(i % 2 == 0: java.lang.Boolean),
         nullable(i: Integer),
@@ -71,6 +73,7 @@ class ParquetAvroCompatibilitySuite extends ParquetCompatibilityTest {
         nullable(i.toDouble + 0.2d: java.lang.Double),
         nullable(s"val_$i".getBytes),
         nullable(s"val_$i"),
+        nullable(Suit.values()(i % Suit.values().length).name()),
 
         Seq.tabulate(3)(n => s"arr_${i + n}"),
         Seq.tabulate(3)(n => n.toString -> (i + n: Integer)).toMap,
@@ -106,6 +109,7 @@ class ParquetAvroCompatibilitySuite extends ParquetCompatibilityTest {
       .setDoubleColumn(i.toDouble + 0.2d)
       .setBinaryColumn(ByteBuffer.wrap(s"val_$i".getBytes))
       .setStringColumn(s"val_$i")
+      .setEnumColumn(Suit.values()(i % Suit.values().length))
 
       .setMaybeBoolColumn(nullable(i % 2 == 0: java.lang.Boolean))
       .setMaybeIntColumn(nullable(i: Integer))
@@ -114,6 +118,7 @@ class ParquetAvroCompatibilitySuite extends ParquetCompatibilityTest {
       .setMaybeDoubleColumn(nullable(i.toDouble + 0.2d: java.lang.Double))
       .setMaybeBinaryColumn(nullable(ByteBuffer.wrap(s"val_$i".getBytes)))
       .setMaybeStringColumn(nullable(s"val_$i"))
+      .setMaybeEnumColumn(nullable(Suit.values()(i % Suit.values().length)))
 
       .setStringsColumn(Seq.tabulate(3)(n => s"arr_${i + n}"))
       .setStringToIntColumn(
