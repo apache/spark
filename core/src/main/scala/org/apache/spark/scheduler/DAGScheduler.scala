@@ -1130,7 +1130,8 @@ class DAGScheduler(
 
         if (failedStage.latestInfo.attemptId != task.stageAttemptId) {
           logInfo(s"Ignoring fetch failure from $task as it's from $failedStage attempt" +
-            s" ${task.stageAttemptId}, which has already failed")
+            s" ${task.stageAttemptId} and there is a more recent attempt for that stage " +
+            s"(attempt ID ${failedStage.latestInfo.attemptId}) running")
         } else {
 
           // It is likely that we receive multiple FetchFailed for a single stage (because we have
