@@ -96,7 +96,7 @@ abstract class UnaryLogExpression(f: Double => Double, name: String)
         } else {
           ${ev.primitive} = java.lang.Math.${funcName}($c);
         }
-       """
+      """
     )
   }
 }
@@ -426,7 +426,7 @@ case class Log2(child: Expression)
         } else {
           ${ev.primitive} = java.lang.Math.log($c) / java.lang.Math.log(2);
         }
-       """
+      """
     )
   }
 }
@@ -732,7 +732,7 @@ case class Logarithm(left: Expression, right: Expression)
           if ($c1 <= 0.0 || $c2 <= 0.0) {
             ${ev.isNull} = true;
           } else {
-           ${ev.primitive} = java.lang.Math.log($c2) / java.lang.Math.log($c1);
+            ${ev.primitive} = java.lang.Math.log($c2) / java.lang.Math.log($c1);
           }
         """)
     }

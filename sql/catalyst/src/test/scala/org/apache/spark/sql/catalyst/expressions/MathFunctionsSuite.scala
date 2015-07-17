@@ -63,7 +63,7 @@ class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       expectNaN: Boolean = false,
       evalType: DataType = DoubleType): Unit = {
     if (expectNull) {
-      domain.foreach { case value =>
+      domain.foreach { value =>
         checkEvaluation(c(Literal(value)), null, EmptyRow)
       }
     } else if (expectNaN) {
