@@ -620,7 +620,15 @@ object functions {
   def explode(e: Column): Column = Explode(e.expr)
 
   /**
-   * Converts a string exprsesion to lower case.
+   * Return true if the column is NaN or null
+   *
+   * @group normal_funcs
+   * @since 1.5.0
+   */
+  def isNaN(e: Column): Column = IsNaN(e.expr)
+
+  /**
+   * Converts a string expression to lower case.
    *
    * @group normal_funcs
    * @since 1.3.0
