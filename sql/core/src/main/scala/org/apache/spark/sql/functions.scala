@@ -1073,7 +1073,8 @@ object functions {
   def floor(columnName: String): Column = floor(Column(columnName))
 
   /**
-   * Returns the greatest value of the list of values.
+   * Returns the greatest value of the list of values, skipping null values.
+   * This function takes at least 2 parameters. It will return null iff all parameters are null.
    *
    * @group normal_funcs
    * @since 1.5.0
@@ -1082,11 +1083,12 @@ object functions {
   def greatest(exprs: Column*): Column = if (exprs.length < 2) {
     sys.error("GREATEST takes at least 2 parameters")
   } else {
-    Greatest(exprs.map(_.expr): _*)
+    Greatest(exprs.map(_.expr))
   }
 
   /**
-   * Returns the greatest value of the list of column names.
+   * Returns the greatest value of the list of column names, skipping null values.
+   * This function takes at least 2 parameters. It will return null iff all parameters are null.
    *
    * @group normal_funcs
    * @since 1.5.0
@@ -1198,7 +1200,8 @@ object functions {
   def hypot(l: Double, rightName: String): Column = hypot(l, Column(rightName))
 
   /**
-   * Returns the least value of the list of values.
+   * Returns the least value of the list of values, skipping null values.
+   * This function takes at least 2 parameters. It will return null iff all parameters are null.
    *
    * @group normal_funcs
    * @since 1.5.0
@@ -1207,11 +1210,12 @@ object functions {
   def least(exprs: Column*): Column = if (exprs.length < 2) {
     sys.error("LEAST takes at least 2 parameters")
   } else {
-    Least(exprs.map(_.expr): _*)
+    Least(exprs.map(_.expr))
   }
 
   /**
-   * Returns the least value of the list of column names.
+   * Returns the least value of the list of column names, skipping null values.
+   * This function takes at least 2 parameters. It will return null iff all parameters are null.
    *
    * @group normal_funcs
    * @since 1.5.0
@@ -1368,6 +1372,23 @@ object functions {
   def pow(l: Double, rightName: String): Column = pow(l, Column(rightName))
 
   /**
+   * Returns the positive value of dividend mod divisor.
+   *
+   * @group math_funcs
+   * @since 1.5.0
+   */
+  def pmod(dividend: Column, divisor: Column): Column = Pmod(dividend.expr, divisor.expr)
+
+  /**
+   * Returns the positive value of dividend mod divisor.
+   *
+   * @group math_funcs
+   * @since 1.5.0
+   */
+  def pmod(dividendColName: String, divisorColName: String): Column =
+    pmod(Column(dividendColName), Column(divisorColName))
+
+  /**
    * Returns the double value that is closest in value to the argument and
    * is equal to a mathematical integer.
    *
@@ -1384,6 +1405,38 @@ object functions {
    * @since 1.4.0
    */
   def rint(columnName: String): Column = rint(Column(columnName))
+
+  /**
+   * Returns the value of the column `e` rounded to 0 decimal places.
+   *
+   * @group math_funcs
+   * @since 1.5.0
+   */
+  def round(e: Column): Column = round(e.expr, 0)
+
+  /**
+   * Returns the value of the given column rounded to 0 decimal places.
+   *
+   * @group math_funcs
+   * @since 1.5.0
+   */
+  def round(columnName: String): Column = round(Column(columnName), 0)
+
+  /**
+   * Returns the value of `e` rounded to `scale` decimal places.
+   *
+   * @group math_funcs
+   * @since 1.5.0
+   */
+  def round(e: Column, scale: Int): Column = Round(e.expr, Literal(scale))
+
+  /**
+   * Returns the value of the given column rounded to `scale` decimal places.
+   *
+   * @group math_funcs
+   * @since 1.5.0
+   */
+  def round(columnName: String, scale: Int): Column = round(Column(columnName), scale)
 
   /**
    * Shift the the given value numBits left. If the given value is a long value, this function
@@ -1632,20 +1685,44 @@ object functions {
   //////////////////////////////////////////////////////////////////////////////////////////////
 
   /**
-   * Computes the length of a given string value.
+   * Computes the length of a given string / binary value.
    *
    * @group string_funcs
    * @since 1.5.0
    */
-  def strlen(e: Column): Column = StringLength(e.expr)
+  def length(e: Column): Column = Length(e.expr)
 
   /**
-   * Computes the length of a given string column.
+   * Computes the length of a given string / binary column.
    *
    * @group string_funcs
    * @since 1.5.0
    */
-  def strlen(columnName: String): Column = strlen(Column(columnName))
+  def length(columnName: String): Column = length(Column(columnName))
+
+  /**
+   * Formats the number X to a format like '#,###,###.##', rounded to d decimal places,
+   * and returns the result as a string.
+   * If d is 0, the result has no decimal point or fractional part.
+   * If d < 0, the result will be null.
+   *
+   * @group string_funcs
+   * @since 1.5.0
+   */
+  def format_number(x: Column, d: Int): Column = FormatNumber(x.expr, lit(d).expr)
+
+  /**
+   * Formats the number X to a format like '#,###,###.##', rounded to d decimal places,
+   * and returns the result as a string.
+   * If d is 0, the result has no decimal point or fractional part.
+   * If d < 0, the result will be null.
+   *
+   * @group string_funcs
+   * @since 1.5.0
+   */
+  def format_number(columnXName: String, d: Int): Column = {
+    format_number(Column(columnXName), d)
+  }
 
   /**
    * Computes the Levenshtein distance of the two given strings.

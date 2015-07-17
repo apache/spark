@@ -62,6 +62,7 @@ public final class Interval implements Serializable {
     if (s == null) {
       return null;
     }
+    s = s.trim();
     Matcher m = p.matcher(s);
     if (!m.matches() || s.equals("interval")) {
       return null;
