@@ -2403,8 +2403,18 @@ object functions {
   // Collection functions
   //////////////////////////////////////////////////////////////////////////////////////////////
 
+  /**
+   * Returns length of array or map
+   * @group collection_funcs
+   * @since 1.5.0
+   */
   def size(columnName: String): Column = size(Column(columnName))
 
+  /**
+   * Returns length of array or map
+   * @group collection_funcs
+   * @since 1.5.0
+   */
   def size(column: Column): Column = Size(column.expr)
 
   //////////////////////////////////////////////////////////////////////////////////////////////
