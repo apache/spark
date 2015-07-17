@@ -108,8 +108,8 @@ private class KinesisTestUtils(
       val sentSeqNumbers = shardIdToSeqNumbers.getOrElseUpdate(shardId,
         new ArrayBuffer[(Int, String)]())
       sentSeqNumbers += ((num, seqNumber))
-
     }
+
     logInfo(s"Pushed $testData:\n\t ${shardIdToSeqNumbers.mkString("\n\t")}")
     shardIdToSeqNumbers.toMap
   }

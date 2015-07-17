@@ -68,20 +68,28 @@ class KinesisStreamSuite extends SparkFunSuite with KinesisSuiteHelper
     }
   }
 
-  test("API") {
-    // The API is tested separately because other tests may not run all the time
-    ssc = new StreamingContext(sc, Milliseconds(1000))
-    val stream1 = KinesisUtils.createStream(ssc, kinesisAppName, kinesisTestUtils.streamName,
-      kinesisTestUtils.endpointUrl, kinesisTestUtils.regionName, InitialPositionInStream.LATEST,
-      Seconds(10), StorageLevel.MEMORY_ONLY)
-    val stream2 = KinesisUtils.createStream(ssc, kinesisAppName, kinesisTestUtils.streamName,
-      kinesisTestUtils.endpointUrl, kinesisTestUtils.regionName, InitialPositionInStream.LATEST,
-      Seconds(10), StorageLevel.MEMORY_ONLY, "", "")
+  test("KinesisUtils API") {
+    ssc = new StreamingContext(sc, Seconds(1))
+    // Tests the API, does not actually test data receiving
+    val kinesisStream1 = KinesisUtils.createStream(ssc, "mySparkStream",
+      "https://kinesis.us-west-2.amazonaws.com", Seconds(2),
+      InitialPositionInStream.LATEST, StorageLevel.MEMORY_AND_DISK_2)
+    val kinesisStream2 = KinesisUtils.createStream(ssc, "myAppNam", "mySparkStream",
+      "https://kinesis.us-west-2.amazonaws.com", "us-west-2",
+      InitialPositionInStream.LATEST, Seconds(2), StorageLevel.MEMORY_AND_DISK_2)
+    val kinesisStream3 = KinesisUtils.createStream(ssc, "myAppNam", "mySparkStream",
+      "https://kinesis.us-west-2.amazonaws.com", "us-west-2",
+      InitialPositionInStream.LATEST, Seconds(2), StorageLevel.MEMORY_AND_DISK_2,
+      "awsAccessKey", "awsSecretKey")
   }
 
 
+  /**
+   * Test the stream by sending data to a Kinesis stream and receiving from it.
+   * This by default ignore as the user may not have access to the
+   */
   testOrIgnore("basic operation") {
-    ssc = new StreamingContext(sc, Milliseconds(1000))
+    ssc = new StreamingContext(sc, Seconds(1))
     val aWSCredentials = KinesisTestUtils.getAWSCredentials()
     val stream = KinesisUtils.createStream(ssc, kinesisAppName, kinesisTestUtils.streamName,
       kinesisTestUtils.endpointUrl, kinesisTestUtils.regionName, InitialPositionInStream.LATEST,
