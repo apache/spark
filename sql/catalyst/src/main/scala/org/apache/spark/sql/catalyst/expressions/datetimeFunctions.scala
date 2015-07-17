@@ -385,6 +385,8 @@ case class WeekOfYear(child: Expression) extends UnaryExpression with ImplicitCa
       val c = ctx.freshName("cal")
       s"""
         $cal $c = $cal.getInstance();
+        $c.setFirstDayOfWeek($cal.MONDAY);
+        $c.setMinimalDaysInFirstWeek(4);
         $c.setTimeInMillis($time * 1000L * 3600L * 24L);
         ${ev.primitive} = $c.get($cal.WEEK_OF_YEAR);
       """
@@ -392,6 +394,11 @@ case class WeekOfYear(child: Expression) extends UnaryExpression with ImplicitCa
 
   override protected def nullSafeEval(input: Any): Any = {
     val c = Calendar.getInstance()
+
+    // This is set in order to be Hive and ISO-8601 compliant
+    c.setFirstDayOfWeek(Calendar.MONDAY)
+    c.setMinimalDaysInFirstWeek(4)
+
     c.setTimeInMillis(input.asInstanceOf[Int] * 1000L * 3600L * 24L)
     c.get(Calendar.WEEK_OF_YEAR)
   }

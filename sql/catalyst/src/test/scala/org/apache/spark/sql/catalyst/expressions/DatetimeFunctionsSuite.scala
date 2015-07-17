@@ -261,6 +261,7 @@ class DatetimeFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     test("WeekOfYear - " + tz.getID) {
       checkEvaluation(WeekOfYear(Literal.create(null, DateType)), null)
+      checkEvaluation(WeekOfYear(Cast(Literal("2011-05-06"), DateType)), 18)
       checkEvaluation(WeekOfYear(Cast(Literal(d), DateType)), 15)
       checkEvaluation(WeekOfYear(Cast(Literal(sdfDate.format(d)), DateType)), 15)
       checkEvaluation(WeekOfYear(Cast(Literal(ts), DateType)), 45)
