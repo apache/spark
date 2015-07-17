@@ -77,6 +77,8 @@ private[streaming] class ReceiverSupervisorImpl(
         case CleanupOldBlocks(threshTime) =>
           logDebug("Received delete old batch signal")
           cleanupOldBlocks(threshTime)
+        case UpdateRateLimit(eps) =>
+          blockGenerator.updateRate(eps.toInt)
       }
     })
 
