@@ -455,7 +455,7 @@ class StructType(DataType):
             self.names = [f.name for f in fields]
             assert all(isinstance(f, StructField) for f in fields),\
                 "fields should be a list of StructField"
-        self._needSerializeFields = None
+        self._needSerializeAnyField = any(f.needConversion() for f in self.fields)
 
     def add(self, field, data_type=None, nullable=True, metadata=None):
         """
@@ -498,6 +498,7 @@ class StructType(DataType):
                 data_type_f = data_type
             self.fields.append(StructField(field, data_type_f, nullable, metadata))
             self.names.append(field)
+        self._needSerializeAnyField = any(f.needConversion() for f in self.fields)
         return self
 
     def simpleString(self):
@@ -523,12 +524,9 @@ class StructType(DataType):
         if obj is None:
             return
 
-        if self._needSerializeFields is None:
-            self._needSerializeFields = any(f.needConversion() for f in self.fields)
-
-        if self._needSerializeFields:
+        if self._needSerializeAnyField:
             if isinstance(obj, dict):
-                return tuple(f.toInternal(obj.get(n)) for n, f in zip(names, self.fields))
+                return tuple(f.toInternal(obj.get(n)) for n, f in zip(self.names, self.fields))
             elif isinstance(obj, (tuple, list)):
                 return tuple(f.toInternal(v) for f, v in zip(self.fields, obj))
             else:
@@ -547,7 +545,10 @@ class StructType(DataType):
         if isinstance(obj, Row):
             # it's already converted by pickler
             return obj
-        values = [f.dataType.fromInternal(v) for f, v in zip(self.fields, obj)]
+        if self._needSerializeAnyField:
+            values = [f.fromInternal(v) for f, v in zip(self.fields, obj)]
+        else:
+            values = obj
         return _create_row(self.names, values)
 
 

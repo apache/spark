@@ -295,6 +295,7 @@ class SQLContext(object):
             if isinstance(schema, (list, tuple)):
                 for i, name in enumerate(schema):
                     struct.fields[i].name = name
+                    struct.names[i] = name
             schema = struct
 
         elif isinstance(schema, StructType):
@@ -325,6 +326,7 @@ class SQLContext(object):
             if isinstance(schema, (list, tuple)):
                 for i, name in enumerate(schema):
                     struct.fields[i].name = name
+                    struct.names[i] = name
             schema = struct
 
         elif isinstance(schema, StructType):
