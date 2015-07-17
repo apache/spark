@@ -331,7 +331,6 @@ object MLUtils {
    * @param norm2 the norm of the second vector, non-negative
    * @param precision desired relative precision for the squared distance
    * @return squared distance between v1 and v2 within the specified precision
-   * @since 1.0.0
    */
   private[mllib] def fastSquaredDistance(
       v1: Vector,
@@ -381,7 +380,6 @@ object MLUtils {
    *
    * @param x a floating-point value as input.
    * @return the result of `math.log(1 + math.exp(x))`.
-   * @since 1.3.0
    */
   private[spark] def log1pExp(x: Double): Double = {
     if (x > 0) {
