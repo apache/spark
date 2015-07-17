@@ -193,6 +193,10 @@ _window_functions = {
         This is equivalent to the PERCENT_RANK function in SQL.""",
 }
 
+_collection_functions = {
+    'size': ""
+}
+
 for _name, _doc in _functions.items():
     globals()[_name] = since(1.3)(_create_function(_name, _doc))
 for _name, _doc in _functions_1_4.items():
@@ -201,6 +205,8 @@ for _name, _doc in _binary_mathfunctions.items():
     globals()[_name] = since(1.4)(_create_binary_mathfunction(_name, _doc))
 for _name, _doc in _window_functions.items():
     globals()[_name] = since(1.4)(_create_window_function(_name, _doc))
+for _name, _doc in _collection_functions.items():
+    globals()[_name] = since(1.5)(_create_function(_name, _doc))
 del _name, _doc
 __all__ += _functions.keys()
 __all__ += _functions_1_4.keys()
@@ -793,6 +799,15 @@ def weekofyear(col):
     """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.weekofyear(col))
+
+@since(1.5)
+def size(col):
+    """
+    Collection function: returns the length of the array or map stored in the column.
+    :param col: name of column or expression
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.size(_to_java_column(col)))
 
 
 class UserDefinedFunction(object):
