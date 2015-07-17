@@ -17,7 +17,7 @@
 
 # mllib.R: Provides methods for MLLib integration
 
-#' Fits a generalized linear model similar to R's glm().
+#' Fits a generalized linear model, similarly to R's glm().
 #' @param formula A symbolic description of the model to be fitted
 #' @param data DataFrame for training
 #' @param family Error distribution. "gaussian" -> linear regression, "binomial" -> logistic reg.
@@ -38,7 +38,7 @@ glm <- function(formula, data, family = c("gaussian", "binomial"), lambda = 0, a
   return(model)
 }
 
-#' Fits a generalized linear model similar to R's glm().
+#' Fits a generalized linear model, similarly to R's glm().
 #' @param model A fitted MLLib model
 #' @param newData DataFrame for testing
 #' @return DataFrame containing predicted values
