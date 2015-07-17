@@ -322,16 +322,16 @@ case class Day(child: Expression) extends DateFormatExpression with ImplicitCast
     dayInYear match {
       case i: Int if i <= 31 => i
       case i: Int if i <= 59 + leap => i - 31
-      case i: Int if i <= 90 + leap => i - 59 + leap
-      case i: Int if i <= 120 + leap => i - 90 + leap
-      case i: Int if i <= 151 + leap => i - 120 + leap
-      case i: Int if i <= 181 + leap => i - 151 + leap
-      case i: Int if i <= 212 + leap => i - 181 + leap
-      case i: Int if i <= 243 + leap => i - 212 + leap
-      case i: Int if i <= 273 + leap => i - 243 + leap
-      case i: Int if i <= 304 + leap => i - 273 + leap
-      case i: Int if i <= 334 + leap => i - 304 + leap
-      case i: Int => i - 334 + leap
+      case i: Int if i <= 90 + leap => i - 59 - leap
+      case i: Int if i <= 120 + leap => i - 90 - leap
+      case i: Int if i <= 151 + leap => i - 120 - leap
+      case i: Int if i <= 181 + leap => i - 151 - leap
+      case i: Int if i <= 212 + leap => i - 181 - leap
+      case i: Int if i <= 243 + leap => i - 212 - leap
+      case i: Int if i <= 273 + leap => i - 243 - leap
+      case i: Int if i <= 304 + leap => i - 273 - leap
+      case i: Int if i <= 334 + leap => i - 304 - leap
+      case i: Int => i - 334 - leap
     }
   }
 
@@ -346,25 +346,25 @@ case class Day(child: Expression) extends DateFormatExpression with ImplicitCast
             } else if ($dayInYear <= 59 + $leap) {
               ${ev.primitive} = $dayInYear - 31;
             } else if ($dayInYear <= 90 + $leap) {
-              ${ev.primitive} = $dayInYear - 59 + $leap;
+              ${ev.primitive} = $dayInYear - 59 - $leap;
             } else if ($dayInYear <= 120 + $leap) {
-              ${ev.primitive} = $dayInYear - 90 + $leap;
+              ${ev.primitive} = $dayInYear - 90 - $leap;
             } else if ($dayInYear <= 151 + $leap) {
-              ${ev.primitive} = $dayInYear - 120 + $leap;
+              ${ev.primitive} = $dayInYear - 120 - $leap;
             } else if ($dayInYear <= 181 + $leap) {
-              ${ev.primitive} = $dayInYear - 151 + $leap;
+              ${ev.primitive} = $dayInYear - 151 - $leap;
             } else if ($dayInYear <= 212 + $leap) {
-              ${ev.primitive} = $dayInYear - 181 + $leap;
+              ${ev.primitive} = $dayInYear - 181 - $leap;
             } else if ($dayInYear <= 243 + $leap) {
-              ${ev.primitive} = $dayInYear - 212 + $leap;
+              ${ev.primitive} = $dayInYear - 212 - $leap;
             } else if ($dayInYear <= 273 + $leap) {
-              ${ev.primitive} = $dayInYear - 243 + $leap;
+              ${ev.primitive} = $dayInYear - 243 - $leap;
             } else if ($dayInYear <= 304 + $leap) {
-              ${ev.primitive} = $dayInYear - 273 + $leap;
+              ${ev.primitive} = $dayInYear - 273 - $leap;
             } else if ($dayInYear <= 334 + $leap) {
-              ${ev.primitive} = $dayInYear - 304 + $leap;
+              ${ev.primitive} = $dayInYear - 304 - $leap;
             } else {
-              ${ev.primitive} = $dayInYear - 334 + $leap;
+              ${ev.primitive} = $dayInYear - 334 - $leap;
             }
          """
       })

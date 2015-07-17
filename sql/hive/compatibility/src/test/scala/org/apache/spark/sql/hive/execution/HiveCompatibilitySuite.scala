@@ -43,9 +43,9 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
   override def beforeAll() {
     TestHive.cacheTables = true
     // Timezone is fixed to America/Los_Angeles for those timezone sensitive tests (timestamp_*)
-    TimeZone.setDefault(TimeZone.getTimeZone("America/Los_Angeles"))
+    // TimeZone.setDefault(TimeZone.getTimeZone("America/Los_Angeles"))
     // Add Locale setting
-    Locale.setDefault(Locale.US)
+    // Locale.setDefault(Locale.US)
     // Set a relatively small column batch size for testing purposes
     TestHive.setConf(SQLConf.COLUMN_BATCH_SIZE, 5)
     // Enable in-memory partition pruning for testing purposes
@@ -892,7 +892,8 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "udf_lpad",
     "udf_ltrim",
     "udf_map",
-    "udf_minute",
+    // "udf_minute", we can cast dates likes '2015-03-18' to a timestamp and extract the minutes.
+    // Hive returns null for minute('2015-03-18')
     "udf_modulo",
     "udf_month",
     "udf_named_struct",
@@ -919,7 +920,8 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "udf_round_3",
     "udf_rpad",
     "udf_rtrim",
-    "udf_second",
+    // "udf_second", we can cast dates likes '2015-03-18' to a timestamp and extract the seconds.
+    // Hive returns null for second('2015-03-18')
     "udf_sign",
     "udf_sin",
     "udf_smallint",

@@ -166,7 +166,6 @@ class DatetimeFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       }
     }
 
-    val sdf = new SimpleDateFormat("D")
     (1999 to 2000).foreach { y =>
       (0 to 11).foreach { m =>
         (0 to 5 * 24).foreach { i =>
@@ -185,6 +184,16 @@ class DatetimeFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Day(Cast(Literal(d), DateType)), 8)
     checkEvaluation(Day(Cast(Literal(sdfDate.format(d)), DateType)), 8)
     checkEvaluation(Day(Cast(Literal(ts), DateType)), 8)
+
+    (1999 to 2000).foreach { y =>
+      val c = Calendar.getInstance()
+      c.set(y, 0, 1, 0, 0, 0)
+      (0 to 365).foreach { d =>
+        c.add(Calendar.DATE, 1)
+        checkEvaluation(Day(Cast(Literal(new Date(c.getTimeInMillis)), DateType)),
+          c.get(Calendar.DAY_OF_MONTH))
+      }
+    }
   }
 
   test("Seconds") {

@@ -116,6 +116,11 @@ class DatetimeExpressionsSuite extends QueryTest {
     checkAnswer(
       df.selectExpr("day(a)", "day(b)", "day(c)"),
       Row(8, 8, 8))
+
+    checkAnswer(
+      df.selectExpr("day(CAST(\"2008-11-01 15:32:20\" AS DATE))"),
+      Row(1)
+    )
   }
 
   test("dayInYear") {
