@@ -37,8 +37,13 @@ object NamedExpression {
  */
 case class ExprId(id: Long)
 
-abstract class NamedExpression extends Expression {
-  self: Product =>
+/**
+ * An [[Expression]] that is named.
+ */
+trait NamedExpression extends Expression { self: Product =>
+
+  /** We should never fold named expressions in order to not remove the alias. */
+  override def foldable: Boolean = false
 
   def name: String
   def exprId: ExprId
@@ -78,8 +83,7 @@ abstract class NamedExpression extends Expression {
     }
 }
 
-abstract class Attribute extends NamedExpression {
-  self: Product =>
+abstract class Attribute extends LeafExpression with NamedExpression { self: Product =>
 
   override def references: AttributeSet = AttributeSet(this)
 
@@ -110,7 +114,7 @@ case class Alias(child: Expression, name: String)(
     val exprId: ExprId = NamedExpression.newExprId,
     val qualifiers: Seq[String] = Nil,
     val explicitMetadata: Option[Metadata] = None)
-  extends NamedExpression with trees.UnaryNode[Expression] {
+  extends UnaryExpression with NamedExpression {
 
   // Alias(Generator, xx) need to be transformed into Generate(generator, ...)
   override lazy val resolved =
@@ -172,7 +176,8 @@ case class AttributeReference(
     nullable: Boolean = true,
     override val metadata: Metadata = Metadata.empty)(
     val exprId: ExprId = NamedExpression.newExprId,
-    val qualifiers: Seq[String] = Nil) extends Attribute with trees.LeafNode[Expression] {
+    val qualifiers: Seq[String] = Nil)
+  extends Attribute {
 
   /**
    * Returns true iff the expression id is the same for both attributes.
@@ -242,7 +247,7 @@ case class AttributeReference(
  * A place holder used when printing expressions without debugging information such as the
  * expression id or the unresolved indicator.
  */
-case class PrettyAttribute(name: String) extends Attribute with trees.LeafNode[Expression] {
+case class PrettyAttribute(name: String) extends Attribute {
 
   override def toString: String = name
 
