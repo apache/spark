@@ -81,6 +81,17 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   def requiredChildOrdering: Seq[Seq[SortOrder]] = Seq.fill(children.size)(Nil)
 
   /**
+   * The format of this operator's output rows as a function of its input rows' format. This assumes
+   * that all this operator's children have the same row output format; this property is guaranteed
+   * to hold since the physical planner includes a rule to automatically convert all of an
+   * operators' inputs to the same row format.
+   */
+  def outputRowFormat(inputFormat: RowFormat): RowFormat = SafeRowFormat
+
+  /** The set of row formats that this operator can process. */
+  def supportedInputRowFormats: Set[RowFormat] = Set(SafeRowFormat)
+
+  /**
    * Returns the result of this query as an RDD[InternalRow] by delegating to doExecute
    * after adding query plan information to created RDDs for visualization.
    * Concrete implementations of SparkPlan should override doExecute instead.
