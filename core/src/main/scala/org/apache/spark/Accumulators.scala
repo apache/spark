@@ -40,6 +40,9 @@ import org.apache.spark.util.Utils
  * @param initialValue initial value of accumulator
  * @param param helper object defining how to add elements of type `R` and `T`
  * @param name human-readable name for use in Spark's web UI
+ * @param internal if this [[Accumulable]] is internal. Internal [[Accumulable]]s will be reported
+ *                 to the driver via heartbeats. For internal [[Accumulable]]s, `R` must be
+ *                 thread safe so that they can be reported correctly.
  * @tparam R the full accumulated data (result type)
  * @tparam T partial data that can be added in
  */
@@ -70,8 +73,9 @@ class Accumulable[R, T] private[spark] (
   Accumulators.register(this)
 
   /**
-   * Internal accumulators will be reported via heartbeats. For internal accumulators, `R` must be
-   * thread safe so that they can be reported correctly.
+   * If this [[Accumulable]] is internal. Internal [[Accumulable]]s will be reported to the driver
+   * via heartbeats. For internal [[Accumulable]]s, `R` must be thread safe so that they can be
+   * reported correctly.
    */
   private[spark] def isInternal: Boolean = internal
 

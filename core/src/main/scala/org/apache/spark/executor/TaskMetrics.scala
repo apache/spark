@@ -231,6 +231,9 @@ class TaskMetrics extends Serializable {
     _accumulatorUpdates = _accumulatorsUpdater()
   }
 
+  /**
+   * Return the latest updates of accumulators in this task.
+   */
   def accumulatorUpdates(): Map[Long, Any] = _accumulatorUpdates
 
   private[spark] def setAccumulatorsUpdater(accumulatorsUpdater: () => Map[Long, Any]): Unit = {

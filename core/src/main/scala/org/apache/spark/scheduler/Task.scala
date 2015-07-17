@@ -45,6 +45,10 @@ import org.apache.spark.util.Utils
  */
 private[spark] abstract class Task[T](val stageId: Int, var partitionId: Int) extends Serializable {
 
+  /**
+   * The key of the Map is the accumulator id and the value of the Map is the latest accumulator
+   * local value.
+   */
   type AccumulatorUpdates = Map[Long, Any]
 
   /**
@@ -52,7 +56,7 @@ private[spark] abstract class Task[T](val stageId: Int, var partitionId: Int) ex
    *
    * @param taskAttemptId an identifier for this task attempt that is unique within a SparkContext.
    * @param attemptNumber how many times this task has been attempted (0 for the first attempt)
-   * @return the result of the task
+   * @return the result of the task along with updates of Accumulators.
    */
   final def run(taskAttemptId: Long, attemptNumber: Int): (T, AccumulatorUpdates) = {
     context = new TaskContextImpl(
