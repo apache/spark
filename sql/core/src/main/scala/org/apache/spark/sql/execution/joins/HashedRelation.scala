@@ -184,15 +184,12 @@ private[joins] final class UnsafeHashedRelation(
   override def writeExternal(out: ObjectOutput): Unit = {
     writeBytes(out, SparkSqlSerializer.serialize(keyTypes))
     val bytes = SparkSqlSerializer.serialize(hashTable)
-    println(s"before write ${hashTable}")
-    println(s"write bytes ${bytes.toString}")
     writeBytes(out, bytes)
   }
 
   override def readExternal(in: ObjectInput): Unit = {
     keyTypes = SparkSqlSerializer.deserialize(readBytes(in))
     hashTable = SparkSqlSerializer.deserialize(readBytes(in))
-    println(s"loaded ${hashTable}")
   }
 }
 
