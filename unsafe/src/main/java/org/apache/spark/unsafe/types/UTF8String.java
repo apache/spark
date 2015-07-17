@@ -330,8 +330,8 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
   /**
    * Returns str, right-padded with pad to a length of len
    * For example:
-   *   ('hi', 5, '??') => 'hi???'
-   *   ('hi', 1, '??') => 'h'
+   *   ('hi', 5, '??') =&gt; 'hi???'
+   *   ('hi', 1, '??') =&gt; 'h'
    */
   public UTF8String rpad(int len, UTF8String pad) {
     int spaces = len - this.numChars(); // number of char need to pad
@@ -363,8 +363,8 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
   /**
    * Returns str, left-padded with pad to a length of len.
    * For example:
-   *   ('hi', 5, '??') => '???hi'
-   *   ('hi', 1, '??') => 'h'
+   *   ('hi', 5, '??') =&gt; '???hi'
+   *   ('hi', 1, '??') =&gt; 'h'
    */
   public UTF8String lpad(int len, UTF8String pad) {
     int spaces = len - this.numChars(); // number of char need to pad

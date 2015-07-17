@@ -206,31 +206,33 @@ object ColumnPruning extends Rule[LogicalPlan] {
  */
 object ProjectCollapsing extends Rule[LogicalPlan] {
 
-  /** Returns true if any expression in projectList is non-deterministic. */
-  private def hasNondeterministic(projectList: Seq[NamedExpression]): Boolean = {
-    projectList.exists(expr => expr.find(!_.deterministic).isDefined)
-  }
-
   def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
-    // We only collapse these two Projects if the child Project's expressions are all
-    // deterministic.
-    case Project(projectList1, Project(projectList2, child))
-         if !hasNondeterministic(projectList2) =>
+    case p @ Project(projectList1, Project(projectList2, child)) =>
       // Create a map of Aliases to their values from the child projection.
       // e.g., 'SELECT ... FROM (SELECT a + b AS c, d ...)' produces Map(c -> Alias(a + b, c)).
       val aliasMap = AttributeMap(projectList2.collect {
-        case a @ Alias(e, _) => (a.toAttribute, a)
+        case a: Alias => (a.toAttribute, a)
       })
 
-      // Substitute any attributes that are produced by the child projection, so that we safely
-      // eliminate it.
-      // e.g., 'SELECT c + 1 FROM (SELECT a + b AS C ...' produces 'SELECT a + b + 1 ...'
-      // TODO: Fix TransformBase to avoid the cast below.
-      val substitutedProjection = projectList1.map(_.transform {
-        case a: Attribute if aliasMap.contains(a) => aliasMap(a)
-      }).asInstanceOf[Seq[NamedExpression]]
+      // We only collapse these two Projects if their overlapped expressions are all
+      // deterministic.
+      val hasNondeterministic = projectList1.flatMap(_.collect {
+        case a: Attribute if aliasMap.contains(a) => aliasMap(a).child
+      }).exists(_.find(!_.deterministic).isDefined)
 
-      Project(substitutedProjection, child)
+      if (hasNondeterministic) {
+        p
+      } else {
+        // Substitute any attributes that are produced by the child projection, so that we safely
+        // eliminate it.
+        // e.g., 'SELECT c + 1 FROM (SELECT a + b AS C ...' produces 'SELECT a + b + 1 ...'
+        // TODO: Fix TransformBase to avoid the cast below.
+        val substitutedProjection = projectList1.map(_.transform {
+          case a: Attribute => aliasMap.getOrElse(a, a)
+        }).asInstanceOf[Seq[NamedExpression]]
+
+        Project(substitutedProjection, child)
+      }
   }
 }
 
@@ -342,7 +344,7 @@ object ConstantFolding extends Rule[LogicalPlan] {
       case l: Literal => l
 
       // Fold expressions that are foldable.
-      case e if e.foldable => Literal.create(e.eval(null), e.dataType)
+      case e if e.foldable => Literal.create(e.eval(EmptyRow), e.dataType)
 
       // Fold "literal in (item1, item2, ..., literal, ...)" into true directly.
       case In(Literal(v, _), list) if list.exists {
@@ -361,7 +363,7 @@ object OptimizeIn extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case q: LogicalPlan => q transformExpressionsDown {
       case In(v, list) if !list.exists(!_.isInstanceOf[Literal]) =>
-        val hSet = list.map(e => e.eval(null))
+        val hSet = list.map(e => e.eval(EmptyRow))
         InSet(v, HashSet() ++ hSet)
     }
   }

@@ -893,7 +893,8 @@ class RDDTests(ReusedPySparkTestCase):
             self.assertRaises(Py4JJavaError, rdd.pipe('cc', checkCode=True).collect)
         result = rdd.pipe('cat').collect()
         result.sort()
-        [self.assertEqual(x, y) for x, y in zip(data, result)]
+        for x, y in zip(data, result):
+            self.assertEqual(x, y)
         self.assertRaises(Py4JJavaError, rdd.pipe('grep 4', checkCode=True).collect)
         self.assertEqual([], rdd.pipe('grep 4').collect())
 
