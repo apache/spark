@@ -644,7 +644,7 @@ private[hive] case class MetastoreRelation
     new Table(tTable)
   }
 
-  @transient val hiveQlPartitions: Seq[Partition] = table.getAllPartitions.map { p =>
+  @transient lazy val hiveQlPartitions: Seq[Partition] = table.getAllPartitions.map { p =>
     val tPartition = new org.apache.hadoop.hive.metastore.api.Partition
     tPartition.setDbName(databaseName)
     tPartition.setTableName(tableName)
