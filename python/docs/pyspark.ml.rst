@@ -34,7 +34,7 @@ pyspark.ml.classification module
     :inherited-members:
 
 pyspark.ml.clustering module
---------------------------------
+----------------------------
 
 .. automodule:: pyspark.ml.clustering
     :members:
