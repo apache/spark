@@ -24,6 +24,7 @@ import org.apache.spark.ml.{Pipeline, PipelineModel}
 import org.apache.spark.sql.DataFrame
 
 private[r] object MLUtils {
+  // See glm() in mllib.R for usage.
   def fitRModelFormula(
       value: String,
       df: DataFrame,
