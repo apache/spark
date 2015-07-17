@@ -79,6 +79,9 @@ var StagePageVizConstants = {
  * This is the narrow interface called from the Scala UI code.
  */
 function toggleDagViz(forJob) {
+  var status = window.localStorage.getItem("expand-dag-viz-arrow-" + forJob) == "true";
+  status = !status;
+
   var arrowSelector = ".expand-dag-viz-arrow";
   $(arrowSelector).toggleClass('arrow-closed');
   $(arrowSelector).toggleClass('arrow-open');
@@ -93,7 +96,23 @@ function toggleDagViz(forJob) {
     // Save the graph for later so we don't have to render it again
     graphContainer().style("display", "none");
   }
+
+  window.localStorage.setItem("expand-dag-viz-arrow-" + forJob, "" + status);
 }
+
+$(function (){
+  if (window.localStorage.getItem("expand-dag-viz-arrow-false") == "true") {
+    // Set it to false so that the click function can revert it
+    window.localStorage.setItem("expand-dag-viz-arrow-false", "false");
+    toggleDagViz(false);
+  }
+
+  if (window.localStorage.getItem("expand-dag-viz-arrow-true") == "true") {
+    // Set it to false so that the click function can revert it
+    window.localStorage.setItem("expand-dag-viz-arrow-true", "false");
+    toggleDagViz(true);
+  }
+});
 
 /*
  * Render the RDD DAG visualization.
