@@ -95,6 +95,18 @@ class DateExpressionsSuite extends QueryTest {
       Row(8, 8, 8))
   }
 
+  test("day of month") {
+    val df = Seq((d, sdfDate.format(d), ts)).toDF("a", "b", "c")
+
+    checkAnswer(
+      df.select(day_of_month("a"), day_of_month("b"), day_of_month("c")),
+      Row(8, 8, 8))
+
+    checkAnswer(
+      df.selectExpr("day_of_month(a)", "day_of_month(b)", "day_of_month(c)"),
+      Row(8, 8, 8))
+  }
+
   test("day in year") {
     val df = Seq((d, sdfDate.format(d), ts)).toDF("a", "b", "c")
 

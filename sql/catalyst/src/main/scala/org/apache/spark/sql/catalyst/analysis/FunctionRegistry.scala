@@ -184,6 +184,7 @@ object FunctionRegistry {
     expression[Quarter]("quarter"),
     expression[Month]("month"),
     expression[Day]("day"),
+    expression[Day]("day_of_month"),
     expression[DayInYear]("day_in_year"),
     expression[Hour]("hour"),
     expression[Minute]("minute"),

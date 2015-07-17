@@ -670,7 +670,7 @@ def date_format(dateCol, format):
     [Row(date=u'04/08/2015')]
     """
     sc = SparkContext._active_spark_context
-    return Column(sc._jvm.functions.dateFormat(dateCol, format))
+    return Column(sc._jvm.functions.date_format(dateCol, format))
 
 
 @since(1.5)
@@ -715,12 +715,24 @@ def month(col):
 @since(1.5)
 def day(col):
     """
-    Extract the day of a given date as integer.
+    Extract the day of the month of a given date as integer.
     >>> sqlContext.createDataFrame([('2015-04-08',)], ['a']).select(day('a').alias('day')).collect()
     [Row(day=8)]
     """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.day(col))
+
+
+@since(1.5)
+def day_of_month(col):
+    """
+    Extract the day of the month of a given date as integer.
+    >>> df0 = sqlContext.createDataFrame([('2015-04-08',)], ['a'])
+    >>> df0.select(day_of_month('a').alias('day')).collect()
+    [Row(day=8)]
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.day_of_month(col))
 
 
 @since(1.5)
@@ -732,7 +744,7 @@ def day_in_year(col):
     [Row(day=98)]
     """
     sc = SparkContext._active_spark_context
-    return Column(sc._jvm.functions.day(col))
+    return Column(sc._jvm.functions.day_in_year(col))
 
 
 @since(1.5)
@@ -784,7 +796,7 @@ def week_of_year(col):
     [Row(week=15)]
     """
     sc = SparkContext._active_spark_context
-    return Column(sc._jvm.functions.weekOfYear(col))
+    return Column(sc._jvm.functions.week_of_year(col))
 
 
 class UserDefinedFunction(object):

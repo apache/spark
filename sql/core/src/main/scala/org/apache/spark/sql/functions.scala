@@ -1779,18 +1779,32 @@ object functions {
   def month(columnName: String): Column = month(Column(columnName))
 
   /**
-   * Extracts the day as an integer from a given date/timestamp/string.
+   * Extracts the day of the month as an integer from a given date/timestamp/string.
    * @group datetime_funcs
    * @since 1.5.0
    */
   def day(e: Column): Column = Day(e.expr)
 
   /**
-   * Extracts the day as an integer from a given date/timestamp/string.
+   * Extracts the day of the month as an integer from a given date/timestamp/string.
    * @group datetime_funcs
    * @since 1.5.0
    */
   def day(columnName: String): Column = day(Column(columnName))
+
+  /**
+   * Extracts the day of the month as an integer from a given date/timestamp/string.
+   * @group datetime_funcs
+   * @since 1.5.0
+   */
+  def day_of_month(e: Column): Column = Day(e.expr)
+
+  /**
+   * Extracts the day of the month as an integer from a given date/timestamp/string.
+   * @group datetime_funcs
+   * @since 1.5.0
+   */
+  def day_of_month(columnName: String): Column = day_of_month(Column(columnName))
 
   /**
    * Extracts the day of the year as an integer from a given date/timestamp/string.
