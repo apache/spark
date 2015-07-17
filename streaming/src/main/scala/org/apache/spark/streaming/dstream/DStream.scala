@@ -20,12 +20,12 @@ package org.apache.spark.streaming.dstream
 
 import java.io.{IOException, ObjectInputStream, ObjectOutputStream}
 
-import org.apache.hadoop.io.compress.CompressionCodec
-
 import scala.collection.mutable.HashMap
 import scala.language.implicitConversions
 import scala.reflect.ClassTag
 import scala.util.matching.Regex
+
+import org.apache.hadoop.io.compress.CompressionCodec
 
 import org.apache.spark.{Logging, SparkContext, SparkException}
 import org.apache.spark.rdd.{BlockRDD, PairRDDFunctions, RDD, RDDOperationScope}
