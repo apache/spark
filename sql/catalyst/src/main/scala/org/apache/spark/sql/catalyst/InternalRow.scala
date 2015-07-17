@@ -54,7 +54,12 @@ abstract class InternalRow extends Row {
   // A default implementation to change the return type
   override def copy(): InternalRow = this
 
-  protected override def canEqual(other: Any) = other.isInstanceOf[InternalRow]
+  /**
+   * Returns true if we can check equality for these 2 rows.
+   * Equality check between external row and internal row is not allowed.
+   * Here we do this check to prevent call `equals` on internal row with external row.
+   */
+  protected override def canEqual(other: Row) = other.isInstanceOf[InternalRow]
 
   // Custom hashCode function that matches the efficient code generated version.
   override def hashCode: Int = {
