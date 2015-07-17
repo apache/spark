@@ -83,10 +83,11 @@ private[ml] object RandomForest extends Logging {
     // Cache input RDD for speedup during multiple passes.
     val treeInput = TreePoint.convertToTreeRDD(retaggedInput, splits, metadata)
 
-    val withReplacement = if (numTrees > 1) true else false
+    val withReplacement = numTrees > 1
 
-    val baggedInput = BaggedPoint.convertToBaggedRDD(treeInput, strategy.subsamplingRate, numTrees,
-      withReplacement, seed).persist(StorageLevel.MEMORY_AND_DISK)
+    val baggedInput = BaggedPoint
+      .convertToBaggedRDD(treeInput, strategy.subsamplingRate, numTrees, withReplacement, seed)
+      .persist(StorageLevel.MEMORY_AND_DISK)
 
     // depth of the decision tree
     val maxDepth = strategy.maxDepth
@@ -541,16 +542,16 @@ private[ml] object RandomForest extends Logging {
       }
     }
 
-    val nodeToBestSplits = partitionAggregates.reduceByKey((a, b) => a.merge(b))
-      .map { case (nodeIndex, aggStats) =>
-      val featuresForNode = nodeToFeaturesBc.value.flatMap { nodeToFeatures =>
-        Some(nodeToFeatures(nodeIndex))
-      }
+    val nodeToBestSplits = partitionAggregates.reduceByKey((a, b) => a.merge(b)).map {
+      case (nodeIndex, aggStats) =>
+        val featuresForNode = nodeToFeaturesBc.value.flatMap { nodeToFeatures =>
+          Some(nodeToFeatures(nodeIndex))
+        }
 
-      // find best split for each node
-      val (split: Split, stats: InformationGainStats, predict: Predict) =
-        binsToBestSplit(aggStats, splits, featuresForNode, nodes(nodeIndex))
-      (nodeIndex, (split, stats, predict))
+        // find best split for each node
+        val (split: Split, stats: InformationGainStats, predict: Predict) =
+          binsToBestSplit(aggStats, splits, featuresForNode, nodes(nodeIndex))
+        (nodeIndex, (split, stats, predict))
     }.collectAsMap()
 
     timer.stop("chooseSplits")

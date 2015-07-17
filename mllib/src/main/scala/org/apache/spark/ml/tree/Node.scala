@@ -221,8 +221,16 @@ private object InternalNode {
  *  - a leaf node, with leftChild, rightChild, split set to null, or
  *  - an internal node, with all values set
  *
- * @param id  We currently use the same indexing as the spark.mllib implementation,
- *            but this will change later.
+ * @param id  We currently use the same indexing as the old implementation in
+ *            [[org.apache.spark.mllib.tree.model.Node]], but this will change later.
+ * @param predictionStats  Predicted label + class probability (for classification).
+ *                         We will later modify this to store aggregate statistics for labels
+ *                         to provide all class probabilities (for classification) and maybe a
+ *                         distribution (for regression).
+ * @param isLeaf  Indicates whether this node will definitely be a leaf in the learned tree,
+ *                so that we do not need to consider splitting it further.
+ * @param stats  Old structure for storing stats about information gain, prediction, etc.
+ *               This is legacy and will be modified in the future.
  */
 private[tree] class LearningNode(
     var id: Int,
@@ -252,6 +260,7 @@ private[tree] class LearningNode(
 
 private[tree] object LearningNode {
 
+  /** Create a node with some of its fields set. */
   def apply(
       id: Int,
       predictionStats: OldPredict,
@@ -260,6 +269,7 @@ private[tree] object LearningNode {
     new LearningNode(id, predictionStats, impurity, None, None, None, false, None)
   }
 
+  /** Create an empty node with the given node index.  Values must be set later on. */
   def emptyNode(nodeIndex: Int): LearningNode = {
     new LearningNode(nodeIndex, new OldPredict(Double.NaN, Double.NaN), Double.NaN,
       None, None, None, false, None)

@@ -82,8 +82,9 @@ final class RandomForestRegressor(override val uid: String)
     val oldDataset: RDD[LabeledPoint] = extractLabeledPoints(dataset)
     val strategy =
       super.getOldStrategy(categoricalFeatures, numClasses = 0, OldAlgo.Regression, getOldImpurity)
-    val trees = RandomForest.run(oldDataset, strategy, getNumTrees, getFeatureSubsetStrategy,
-      getSeed).map(_.asInstanceOf[DecisionTreeRegressionModel])
+    val trees =
+      RandomForest.run(oldDataset, strategy, getNumTrees, getFeatureSubsetStrategy, getSeed)
+        .map(_.asInstanceOf[DecisionTreeRegressionModel])
     new RandomForestRegressionModel(trees)
   }
 
