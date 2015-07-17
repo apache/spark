@@ -267,4 +267,15 @@ class DataFrameFunctionsSuite extends QueryTest {
     )
   }
 
+  test("array / map size function") {
+    val df = Seq((Array[Int](1, 2), "x"), (Array[Int](), "y"), (Array[Int](1, 2, 3), "z")).toDF("a", "b")
+    checkAnswer(
+      df.select(size("a")),
+      Seq(Row(2), Row(0), Row(3))
+    )
+    checkAnswer(
+      df.selectExpr("size(a)"),
+      Seq(Row(2), Row(0), Row(3))
+    )
+  }
 }
