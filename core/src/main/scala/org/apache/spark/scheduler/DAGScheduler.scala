@@ -18,6 +18,7 @@
 package org.apache.spark.scheduler
 
 import java.io.NotSerializableException
+import java.security.PrivilegedExceptionAction
 import java.util.Properties
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
@@ -40,6 +41,7 @@ import org.apache.spark.storage._
 import org.apache.spark.unsafe.memory.TaskMemoryManager
 import org.apache.spark.util._
 import org.apache.spark.storage.BlockManagerMessages.BlockManagerHeartbeat
+import org.apache.hadoop.security.UserGroupInformation
 
 /**
  * The high-level scheduling layer that implements stage-oriented scheduling. It computes a DAG of
@@ -137,7 +139,10 @@ class DAGScheduler(
   private val messageScheduler =
     ThreadUtils.newDaemonSingleThreadScheduledExecutor("dag-scheduler-message")
 
-  private[scheduler] val eventProcessLoop = new DAGSchedulerEventProcessLoop(this)
+  private[scheduler] val eventProcessLoop =
+    if (!isSecurityEnabled) new DAGSchedulerEventProcessLoop(this)
+    else new DAGSchedulerEventProcessLoopSecure(this, UserGroupInformation.getCurrentUser)
+
   taskScheduler.setDAGScheduler(this)
 
   // Flag to control if reduce tasks are assigned preferred locations
@@ -155,6 +160,9 @@ class DAGScheduler(
   // Making this larger will focus on fewer locations where most data can be read locally, but
   // may lead to more delay in scheduling if those locations are busy.
   private[scheduler] val REDUCER_PREF_LOCS_FRACTION = 0.2
+
+  // If security enabled for scheduler
+  def isSecurityEnabled(): Boolean = UserGroupInformation.isSecurityEnabled
 
   // Called by TaskScheduler to report task's starting.
   def taskStarted(task: Task[_], taskInfo: TaskInfo) {
@@ -1522,6 +1530,23 @@ private[scheduler] class DAGSchedulerEventProcessLoop(dagScheduler: DAGScheduler
   override def onStop(): Unit = {
     // Cancel any active jobs in postStop hook
     dagScheduler.cleanUpAfterSchedulerStop()
+  }
+}
+
+
+private[spark] class DAGSchedulerEventProcessLoopSecure(dagScheduler: DAGScheduler,
+                                                        ugi: UserGroupInformation)
+  extends DAGSchedulerEventProcessLoop(dagScheduler) {
+  /**
+   * Loop event processor that forwarding proxy user for impersonation
+   */
+  override def process(): Unit = {
+    val handleEvent = () => super.process()
+    ugi.doAs(new PrivilegedExceptionAction[Unit]() {
+      override def run(): Unit = {
+        handleEvent()
+      }
+    })
   }
 }
 

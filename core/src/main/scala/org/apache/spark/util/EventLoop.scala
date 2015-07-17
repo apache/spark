@@ -37,29 +37,33 @@ private[spark] abstract class EventLoop[E](name: String) extends Logging {
 
   private val stopped = new AtomicBoolean(false)
 
+  def process(): Unit = {
+    try {
+      while (!stopped.get) {
+        val event = eventQueue.take()
+        try {
+          onReceive(event)
+        } catch {
+          case NonFatal(e) => {
+            try {
+              onError(e)
+            } catch {
+              case NonFatal(e) => logError("Unexpected error in " + name, e)
+            }
+          }
+        }
+      }
+    } catch {
+      case ie: InterruptedException => // exit even if eventQueue is not empty
+      case NonFatal(e) => logError("Unexpected error in " + name, e)
+    }
+  }
+
   private val eventThread = new Thread(name) {
     setDaemon(true)
 
     override def run(): Unit = {
-      try {
-        while (!stopped.get) {
-          val event = eventQueue.take()
-          try {
-            onReceive(event)
-          } catch {
-            case NonFatal(e) => {
-              try {
-                onError(e)
-              } catch {
-                case NonFatal(e) => logError("Unexpected error in " + name, e)
-              }
-            }
-          }
-        }
-      } catch {
-        case ie: InterruptedException => // exit even if eventQueue is not empty
-        case NonFatal(e) => logError("Unexpected error in " + name, e)
-      }
+      process()
     }
 
   }
