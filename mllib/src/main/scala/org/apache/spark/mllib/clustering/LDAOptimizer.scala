@@ -400,7 +400,7 @@ final class OnlineLDAOptimizer extends LDAOptimizer {
         while (meanchange > 1e-3) {
           val lastgamma = gammad.copy
           //        K                  K * ids               ids
-          gammad := (expElogthetad :* (expElogbetad.t * (ctsVector / phinorm))) :+ alpha
+          gammad := (expElogthetad :* (expElogbetad.t * (ctsVector :/ phinorm))) :+ alpha
           expElogthetad := exp(digamma(gammad) - digamma(sum(gammad)))
           phinorm := expElogbetad * expElogthetad :+ 1e-100
           meanchange = sum(abs(gammad - lastgamma)) / k
