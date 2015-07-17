@@ -816,6 +816,16 @@ def size(col):
     return Column(sc._jvm.functions.size(_to_java_column(col)))
 
 
+@since(1.5)
+def size(col):
+    """
+    Collection function: returns the length of the array or map stored in the column.
+    :param col: name of column or expression
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.size(_to_java_column(col)))
+
+
 class UserDefinedFunction(object):
     """
     User defined function in Python

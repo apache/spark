@@ -18,14 +18,14 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
-import org.apache.spark.sql.types.{MapType, ArrayType, DataType}
+import org.apache.spark.sql.types.{IntegerType, MapType, ArrayType, DataType}
 
+/**
+ * Given an array or map, returns its size.
+ */
 case class Size(child: Expression) extends UnaryExpression {
-  /**
-   * Returns the [[DataType]] of the result of evaluating this expression.  It is
-   * invalid to query the dataType of an unresolved expression (i.e., when `resolved` == false).
-   */
-  override def dataType: DataType = throw new UnsupportedOperationException
+
+  override def dataType: DataType = IntegerType
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (child.dataType.isInstanceOf[ArrayType] || child.dataType.isInstanceOf[MapType]) {
