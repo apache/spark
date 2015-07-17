@@ -104,7 +104,12 @@ class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(
       Conv(Literal("1234"), Literal(10), Literal(37)), null)
     checkEvaluation(
+      Conv(Literal(""), Literal(10), Literal(16)), null)
+    checkEvaluation(
       Conv(Literal("9223372036854775807"), Literal(36), Literal(16)), "FFFFFFFFFFFFFFFF")
+    // If there is an invalid digit in the number, the longest valid prefix should be converted.
+    checkEvaluation(
+      Conv(Literal("11abc"), Literal(10), Literal(16)), "B")
   }
 
   test("e") {

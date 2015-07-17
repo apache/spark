@@ -140,6 +140,12 @@ case class Cos(child: Expression) extends UnaryMathExpression(math.cos, "COS")
 
 case class Cosh(child: Expression) extends UnaryMathExpression(math.cosh, "COSH")
 
+/**
+ * Convert a num from one base to another
+ * @param numExpr the number to be converted
+ * @param fromBaseExpr from which base
+ * @param toBaseExpr to which base
+ */
 case class Conv(numExpr: Expression, fromBaseExpr: Expression, toBaseExpr: Expression)
   extends Expression with ImplicitCastInputTypes{
 
@@ -272,7 +278,7 @@ case class Conv(numExpr: Expression, fromBaseExpr: Expression, toBaseExpr: Expre
    * NB: This logic is borrowed from org.apache.hadoop.hive.ql.ud.UDFConv
    */
   private def conv(n: Array[Byte] , fromBase: Int, toBase: Int ): UTF8String = {
-    if (n == null || fromBase == null || toBase == null) {
+    if (n == null || fromBase == null || toBase == null || n.isEmpty) {
       return null
     }
 
