@@ -57,8 +57,10 @@ case class BroadcastCartesianProduct(
   }(BroadcastCartesianProduct.broadcastCartesianProductExecutionContext)
 
   protected override def doExecute(): RDD[InternalRow] = {
-    val broadcastedRdd = Await.result(broadcastFuture, timeout)
-    streamed.execute().map(_.copy()).cartesian(broadcastedRdd.value).mapPartitions { iter =>
+    val leftResults = streamed.execute().map(_.copy())
+    val rightResults = Await.result(broadcastFuture, timeout).value
+
+    leftResults.cartesian(rightResults).mapPartitions { iter =>
       val joinedRow = new JoinedRow
       buildSide match {
         case BuildRight => iter.map(r => joinedRow(r._1, r._2))

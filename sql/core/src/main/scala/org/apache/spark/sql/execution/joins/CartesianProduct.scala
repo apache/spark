@@ -39,7 +39,10 @@ case class CartesianProduct(
   }
 
   protected override def doExecute(): RDD[InternalRow] = {
-    small.execute().map(_.copy()).cartesian(big.execute().map(_.copy())).mapPartitions { iter =>
+    val leftResults = small.execute().map(_.copy())
+    val rightResults = big.execute().map(_.copy())
+
+    leftResults.cartesian(rightResults).mapPartitions { iter =>
       val joinedRow = new JoinedRow
       buildSide match {
         case BuildRight => iter.map(r => joinedRow(r._1, r._2))
