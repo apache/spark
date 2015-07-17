@@ -97,10 +97,6 @@ trait CheckAnalysis {
 
             aggregateExprs.foreach(checkValidAggregateExpression)
 
-          case _ => // Fallbacks to the following checks
-        }
-
-        operator match {
           case o if o.children.nonEmpty && o.missingInput.nonEmpty =>
             val missingAttributes = o.missingInput.mkString(",")
             val input = o.inputSet.mkString(",")
@@ -118,6 +114,15 @@ trait CheckAnalysis {
               s"""Only a single table generating function is allowed in a SELECT clause, found:
                  | ${exprs.map(_.prettyString).mkString(",")}""".stripMargin)
 
+          // Special handling for cases when self-join introduce duplicate expression ids.
+          case j @ Join(left, right, _, _) if left.outputSet.intersect(right.outputSet).nonEmpty =>
+            val conflictingAttributes = left.outputSet.intersect(right.outputSet)
+            failAnalysis(
+              s"""
+                 |Failure when resolving conflicting references in Join:
+                 |$plan
+                  |Conflicting attributes: ${conflictingAttributes.mkString(",")}
+                  |""".stripMargin)
 
           case _ => // Analysis successful!
         }
