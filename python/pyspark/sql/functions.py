@@ -653,7 +653,7 @@ def ntile(n):
 
 
 @since(1.5)
-def dateFormat(dateCol, format):
+def date_format(dateCol, format):
     """
     Converts a date/timestamp/string to a value of string in the format specified by the date
     format given by the second argument.
@@ -666,7 +666,7 @@ def dateFormat(dateCol, format):
 
     >>> df0 = sqlContext.createDataFrame([('2015-04-08',)], ['a'])
 
-    >>> df0.select(dateFormat('a', 'MM/dd/yyy').alias('date')).collect()
+    >>> df0.select(date_format('a', 'MM/dd/yyy').alias('date')).collect()
     [Row(date=u'04/08/2015')]
     """
     sc = SparkContext._active_spark_context
@@ -724,11 +724,11 @@ def day(col):
 
 
 @since(1.5)
-def dayInYear(col):
+def day_in_year(col):
     """
     Extract the day of the year of a given date as integer.
     >>> df0 = sqlContext.createDataFrame([('2015-04-08',)], ['a'])
-    >>> df0.select(dayInYear('a').alias('day')).collect()
+    >>> df0.select(day_in_year('a').alias('day')).collect()
     [Row(day=98)]
     """
     sc = SparkContext._active_spark_context
@@ -775,12 +775,12 @@ def second(col):
 
 
 @since(1.5)
-def weekOfYear(col):
+def week_of_year(col):
     """
     Extract the week number of a given date as integer.
     >>> df0 = sqlContext.createDataFrame([('2015-04-08',)], ['a'])
 
-    >>> df0.select(weekOfYear('a').alias('week')).collect()
+    >>> df0.select(week_of_year('a').alias('week')).collect()
     [Row(week=15)]
     """
     sc = SparkContext._active_spark_context
