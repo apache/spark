@@ -280,7 +280,7 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
         context.reply(true)
     }
 
-    /** Stops the receivers. */
+    /** Send stop signal to the receivers. */
     private def stopReceivers() {
       // Signal the receivers to stop
       receiverInfo.values.flatMap { info => Option(info.endpoint)}
