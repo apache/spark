@@ -173,7 +173,7 @@ class FailureSuite extends SparkFunSuite with LocalSparkContext {
     val data = sc.makeRDD(1 to 3, 3).map { x =>
       FailureSuiteState.synchronized {
         FailureSuiteState.tasksRun += 1
-        if (x == 1) {
+        if (x == 3) {
           FailureSuiteState.tasksFailed += 1
           throw new UserException("oops",
             new IllegalArgumentException("failed=" + FailureSuiteState.tasksFailed))
