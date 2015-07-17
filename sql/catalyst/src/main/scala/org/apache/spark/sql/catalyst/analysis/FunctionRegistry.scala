@@ -179,16 +179,16 @@ object FunctionRegistry {
     // datetime functions
     expression[CurrentDate]("current_date"),
     expression[CurrentTimestamp]("current_timestamp"),
-    expression[DateFormatClass]("dateformat"),
+    expression[DateFormatClass]("date_format"),
     expression[Year]("year"),
     expression[Quarter]("quarter"),
     expression[Month]("month"),
     expression[Day]("day"),
-    expression[DayInYear]("dayinyear"),
+    expression[DayInYear]("day_in_year"),
     expression[Hour]("hour"),
     expression[Minute]("minute"),
     expression[Second]("second"),
-    expression[WeekOfYear]("weekofyear")
+    expression[WeekOfYear]("week_of_year")
   )
 
   val builtin: FunctionRegistry = {

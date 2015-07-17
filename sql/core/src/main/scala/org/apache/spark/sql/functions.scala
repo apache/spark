@@ -1706,149 +1706,161 @@ object functions {
 
   /**
    * Converts a date/timestamp/string to a value of string in the format specified by the date
-   * format given by the second argument
+   * format given by the second argument.
    *
-   * NOTE: Prefer using functions like year. These use an optimized implementation.
+   * A pattern could be for instance `dd.MM.yyyy` and could return a string like '18.03.1993'. All
+   * pattern letters of [[java.text.SimpleDateFormat]] can be used.
+   *
+   * NOTE: Use when ever possible specialized functions like [[year]]. These benefit from a
+   * specialized implementation.
+   *
    * @group datetime_funcs
    * @since 1.5.0
    */
-  def dateFormat(l: Column, r: String): Column = DateFormatClass(l.expr, Literal(r))
+  def date_format(dateExpr: Column, format: String): Column =
+    DateFormatClass(dateExpr.expr, Literal(format))
 
   /**
    * Converts a date/timestamp/string to a value of string in the format specified by the date
-   * format given by the second argument
+   * format given by the second argument.
    *
-   * NOTE: Prefer using functions like year. These use an optimized implementation.
+   * A pattern could be for instance `dd.MM.yyyy` and could return a string like '18.03.1993'. All
+   * pattern letters of [[java.text.SimpleDateFormat]] can be used.
+   *
+   * NOTE: Use when ever possible specialized functions like [[year]]. These benefit from a
+   * specialized implementation.
+   *
    * @group datetime_funcs
    * @since 1.5.0
    */
-  def dateFormat(l: String, r: String): Column = dateFormat(Column(l), r)
+  def date_format(dateColumnName: String, format: String): Column =
+    date_format(Column(dateColumnName), format)
 
   /**
-   * Extracts the year as an integer from a given date/timestamp/string
+   * Extracts the year as an integer from a given date/timestamp/string.
    * @group datetime_funcs
    * @since 1.5.0
    */
   def year(e: Column): Column = Year(e.expr)
 
   /**
-   * Extracts the year as an integer from a given date/timestamp/string
+   * Extracts the year as an integer from a given date/timestamp/string.
    * @group datetime_funcs
    * @since 1.5.0
    */
   def year(columnName: String): Column = year(Column(columnName))
 
   /**
-   * Extracts the quarter as an integer from a given date/timestamp/string
+   * Extracts the quarter as an integer from a given date/timestamp/string.
    * @group datetime_funcs
    * @since 1.5.0
    */
   def quarter(e: Column): Column = Quarter(e.expr)
 
   /**
-   * Extracts the quarter as an integer from a given date/timestamp/string
+   * Extracts the quarter as an integer from a given date/timestamp/string.
    * @group datetime_funcs
    * @since 1.5.0
    */
   def quarter(columnName: String): Column = quarter(Column(columnName))
 
   /**
-   * Extracts the month as an integer from a given date/timestamp/string
+   * Extracts the month as an integer from a given date/timestamp/string.
    * @group datetime_funcs
    * @since 1.5.0
    */
   def month(e: Column): Column = Month(e.expr)
 
   /**
-   * Extracts the month as an integer from a given date/timestamp/string
+   * Extracts the month as an integer from a given date/timestamp/string.
    * @group datetime_funcs
    * @since 1.5.0
    */
   def month(columnName: String): Column = month(Column(columnName))
 
   /**
-   * Extracts the day as an integer from a given date/timestamp/string
+   * Extracts the day as an integer from a given date/timestamp/string.
    * @group datetime_funcs
    * @since 1.5.0
    */
   def day(e: Column): Column = Day(e.expr)
 
   /**
-   * Extracts the day as an integer from a given date/timestamp/string
+   * Extracts the day as an integer from a given date/timestamp/string.
    * @group datetime_funcs
    * @since 1.5.0
    */
   def day(columnName: String): Column = day(Column(columnName))
 
   /**
-   * Extracts the day of the year as an integer from a given date/timestamp/string
+   * Extracts the day of the year as an integer from a given date/timestamp/string.
    * @group datetime_funcs
    * @since 1.5.0
    */
-  def dayInYear(e: Column): Column = DayInYear(e.expr)
+  def day_in_year(e: Column): Column = DayInYear(e.expr)
 
   /**
-   * Extracts the day of the year as an integer from a given date/timestamp/string
+   * Extracts the day of the year as an integer from a given date/timestamp/string.
    * @group datetime_funcs
    * @since 1.5.0
    */
-  def dayInYear(columnName: String): Column = dayInYear(Column(columnName))
+  def day_in_year(columnName: String): Column = day_in_year(Column(columnName))
 
   /**
-   * Extracts the hours as an integer from a given date/timestamp/string
+   * Extracts the hours as an integer from a given date/timestamp/string.
    * @group datetime_funcs
    * @since 1.5.0
    */
   def hour(e: Column): Column = Hour(e.expr)
 
   /**
-   * Extracts the hours as an integer from a given date/timestamp/string
+   * Extracts the hours as an integer from a given date/timestamp/string.
    * @group datetime_funcs
    * @since 1.5.0
    */
   def hour(columnName: String): Column = hour(Column(columnName))
 
   /**
-   * Extracts the minutes as an integer from a given date/timestamp/string
+   * Extracts the minutes as an integer from a given date/timestamp/string.
    * @group datetime_funcs
    * @since 1.5.0
    */
   def minute(e: Column): Column = Minute(e.expr)
 
   /**
-   * Extracts the minutes as an integer from a given date/timestamp/string
+   * Extracts the minutes as an integer from a given date/timestamp/string.
    * @group datetime_funcs
    * @since 1.5.0
    */
   def minute(columnName: String): Column = minute(Column(columnName))
 
   /**
-   * Extracts the seconds as an integer from a given date/timestamp/string
+   * Extracts the seconds as an integer from a given date/timestamp/string.
    * @group datetime_funcs
    * @since 1.5.0
    */
   def second(e: Column): Column = Second(e.expr)
 
   /**
-   * Extracts the seconds as an integer from a given date/timestamp/string
+   * Extracts the seconds as an integer from a given date/timestamp/string.
    * @group datetime_funcs
    * @since 1.5.0
    */
   def second(columnName: String): Column = second(Column(columnName))
 
   /**
-   * Extracts the week number as an integer from a given date/timestamp/string
+   * Extracts the week number as an integer from a given date/timestamp/string.
    * @group datetime_funcs
    * @since 1.5.0
    */
-  def weekOfYear(e: Column): Column = WeekOfYear(e.expr)
+  def week_of_year(e: Column): Column = WeekOfYear(e.expr)
 
   /**
-   * Extracts the week number as an integer from a given date/timestamp/string
+   * Extracts the week number as an integer from a given date/timestamp/string.
    * @group datetime_funcs
    * @since 1.5.0
    */
-  def weekOfYear(columnName: String): Column = weekOfYear(Column(columnName))
+  def week_of_year(columnName: String): Column = week_of_year(Column(columnName))
 
   /**
    * Formats the number X to a format like '#,###,###.##', rounded to d decimal places,
