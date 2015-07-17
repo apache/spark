@@ -4,7 +4,6 @@ abstracting the underlying modules
 '''
 from airflow.utils import import_module_attrs as _import_module_attrs
 from airflow.hooks.base_hook import BaseHook as _BaseHook
-from airflow.hooks.base_hook import BaseHook as _BaseSqlHook
 
 _hooks = {
     'hive_hooks': [
@@ -20,6 +19,7 @@ _hooks = {
     'sqlite_hook': ['SqliteHook'],
     'S3_hook': ['S3Hook'],
     'http_hook': ['HttpHook'],
+    'dbapi_hook': ['DbApiHook'],
 }
 
 _import_module_attrs(globals(), _hooks)
