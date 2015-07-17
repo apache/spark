@@ -96,7 +96,7 @@ private[ui] trait PagedTable[T] {
    * < 1 2* 3 4 5 6 7 8 9 10 > >>
    *
    * This is the first group and the first page, so "<<" and "<" are hidden.
-   * 1 2* 3 4 5 6 7 8 9 10 > >>
+   * 1* 2 3 4 5 6 7 8 9 10 > >>
    *
    * Assume totalPages is 19. This is the last group, so ">>" is hidden.
    * << < 11 12 13* 14 15 16 17 18 19 >

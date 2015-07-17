@@ -691,28 +691,28 @@ private[ui] object StagePage {
   }
 }
 
-private[ui] case class TaskTableRowInputData(inputSortable: String, inputReadable: String)
+private[ui] case class TaskTableRowInputData(inputSortable: Long, inputReadable: String)
 
-private[ui] case class TaskTableRowOutputData(outputSortable: String, outputReadable: String)
+private[ui] case class TaskTableRowOutputData(outputSortable: Long, outputReadable: String)
 
 private[ui] case class TaskTableRowShuffleReadData(
-    shuffleReadBlockedTimeSortable: String,
+    shuffleReadBlockedTimeSortable: Long,
     shuffleReadBlockedTimeReadable: String,
-    shuffleReadSortable: String,
+    shuffleReadSortable: Long,
     shuffleReadReadable: String,
-    shuffleReadRemoteSortable: String,
+    shuffleReadRemoteSortable: Long,
     shuffleReadRemoteReadable: String)
 
 private[ui] case class TaskTableRowShuffleWriteData(
-    writeTimeSortable: String,
+    writeTimeSortable: Long,
     writeTimeReadable: String,
-    shuffleWriteSortable: String,
+    shuffleWriteSortable: Long,
     shuffleWriteReadable: String)
 
 private[ui] case class TaskTableRowBytesSpilledData(
-    memoryBytesSpilledSortable: String,
+    memoryBytesSpilledSortable: Long,
     memoryBytesSpilledReadable: String,
-    diskBytesSpilledSortable: String,
+    diskBytesSpilledSortable: Long,
     diskBytesSpilledReadable: String)
 
 /**
@@ -765,9 +765,9 @@ private[ui] class TaskDataSource(
   private def taskRow(taskData: TaskUIData): TaskTableRowData = {
     val TaskUIData(info, metrics, errorMessage) = taskData
     val duration = if (info.status == "RUNNING") info.timeRunning(currentTime)
-    else metrics.map(_.executorRunTime).getOrElse(1L)
+      else metrics.map(_.executorRunTime).getOrElse(1L)
     val formatDuration = if (info.status == "RUNNING") UIUtils.formatDuration(duration)
-    else metrics.map(m => UIUtils.formatDuration(m.executorRunTime)).getOrElse("")
+      else metrics.map(m => UIUtils.formatDuration(m.executorRunTime)).getOrElse("")
     val schedulerDelay = metrics.map(getSchedulerDelay(info, _, currentTime)).getOrElse(0L)
     val gcTime = metrics.map(_.jvmGCTime).getOrElse(0L)
     val taskDeserializationTime = metrics.map(_.executorDeserializeTime).getOrElse(0L)
@@ -780,54 +780,53 @@ private[ui] class TaskDataSource(
     }
 
     val maybeInput = metrics.flatMap(_.inputMetrics)
-    val inputSortable = maybeInput.map(_.bytesRead.toString).getOrElse("")
+    val inputSortable = maybeInput.map(_.bytesRead).getOrElse(0L)
     val inputReadable = maybeInput
       .map(m => s"${Utils.bytesToString(m.bytesRead)} (${m.readMethod.toString.toLowerCase()})")
       .getOrElse("")
     val inputRecords = maybeInput.map(_.recordsRead.toString).getOrElse("")
 
     val maybeOutput = metrics.flatMap(_.outputMetrics)
-    val outputSortable = maybeOutput.map(_.bytesWritten.toString).getOrElse("")
+    val outputSortable = maybeOutput.map(_.bytesWritten).getOrElse(0L)
     val outputReadable = maybeOutput
       .map(m => s"${Utils.bytesToString(m.bytesWritten)}")
       .getOrElse("")
     val outputRecords = maybeOutput.map(_.recordsWritten.toString).getOrElse("")
 
     val maybeShuffleRead = metrics.flatMap(_.shuffleReadMetrics)
-    val shuffleReadBlockedTimeSortable = maybeShuffleRead
-      .map(_.fetchWaitTime.toString).getOrElse("")
+    val shuffleReadBlockedTimeSortable = maybeShuffleRead.map(_.fetchWaitTime).getOrElse(0L)
     val shuffleReadBlockedTimeReadable =
       maybeShuffleRead.map(ms => UIUtils.formatDuration(ms.fetchWaitTime)).getOrElse("")
 
     val totalShuffleBytes = maybeShuffleRead.map(_.totalBytesRead)
-    val shuffleReadSortable = totalShuffleBytes.map(_.toString).getOrElse("")
+    val shuffleReadSortable = totalShuffleBytes.getOrElse(0L)
     val shuffleReadReadable = totalShuffleBytes.map(Utils.bytesToString).getOrElse("")
     val shuffleReadRecords = maybeShuffleRead.map(_.recordsRead.toString).getOrElse("")
 
     val remoteShuffleBytes = maybeShuffleRead.map(_.remoteBytesRead)
-    val shuffleReadRemoteSortable = remoteShuffleBytes.map(_.toString).getOrElse("")
+    val shuffleReadRemoteSortable = remoteShuffleBytes.getOrElse(0L)
     val shuffleReadRemoteReadable = remoteShuffleBytes.map(Utils.bytesToString).getOrElse("")
 
     val maybeShuffleWrite = metrics.flatMap(_.shuffleWriteMetrics)
-    val shuffleWriteSortable = maybeShuffleWrite.map(_.shuffleBytesWritten.toString).getOrElse("")
+    val shuffleWriteSortable = maybeShuffleWrite.map(_.shuffleBytesWritten).getOrElse(0L)
     val shuffleWriteReadable = maybeShuffleWrite
       .map(m => s"${Utils.bytesToString(m.shuffleBytesWritten)}").getOrElse("")
     val shuffleWriteRecords = maybeShuffleWrite
       .map(_.shuffleRecordsWritten.toString).getOrElse("")
 
     val maybeWriteTime = metrics.flatMap(_.shuffleWriteMetrics).map(_.shuffleWriteTime)
-    val writeTimeSortable = maybeWriteTime.map(_.toString).getOrElse("")
+    val writeTimeSortable = maybeWriteTime.getOrElse(0L)
     val writeTimeReadable = maybeWriteTime.map(t => t / (1000 * 1000)).map { ms =>
       if (ms == 0) "" else UIUtils.formatDuration(ms)
     }.getOrElse("")
 
     val maybeMemoryBytesSpilled = metrics.map(_.memoryBytesSpilled)
-    val memoryBytesSpilledSortable = maybeMemoryBytesSpilled.map(_.toString).getOrElse("")
+    val memoryBytesSpilledSortable = maybeMemoryBytesSpilled.getOrElse(0L)
     val memoryBytesSpilledReadable =
       maybeMemoryBytesSpilled.map(Utils.bytesToString).getOrElse("")
 
     val maybeDiskBytesSpilled = metrics.map(_.diskBytesSpilled)
-    val diskBytesSpilledSortable = maybeDiskBytesSpilled.map(_.toString).getOrElse("")
+    val diskBytesSpilledSortable = maybeDiskBytesSpilled.getOrElse(0L)
     val diskBytesSpilledReadable = maybeDiskBytesSpilled.map(Utils.bytesToString).getOrElse("")
 
     val input =
@@ -979,7 +978,7 @@ private[ui] class TaskDataSource(
         if (hasInput) {
           new Ordering[TaskTableRowData] {
             override def compare(x: TaskTableRowData, y: TaskTableRowData): Int =
-              Ordering.String.compare(x.input.get.inputSortable, y.input.get.inputSortable)
+              Ordering.Long.compare(x.input.get.inputSortable, y.input.get.inputSortable)
           }
         } else {
           throw new IllegalArgumentException(
@@ -989,29 +988,29 @@ private[ui] class TaskDataSource(
         if (hasOutput) {
           new Ordering[TaskTableRowData] {
             override def compare(x: TaskTableRowData, y: TaskTableRowData): Int =
-              Ordering.String.compare(x.output.get.outputSortable, y.output.get.outputSortable)
+              Ordering.Long.compare(x.output.get.outputSortable, y.output.get.outputSortable)
           }
         } else {
           throw new IllegalArgumentException(
-            "Cannot sort by Input Size / Records because of no outputs")
+            "Cannot sort by Output Size / Records because of no outputs")
         }
       // ShuffleRead
       case "Shuffle Read Blocked Time" =>
         if (hasShuffleRead) {
           new Ordering[TaskTableRowData] {
             override def compare(x: TaskTableRowData, y: TaskTableRowData): Int =
-              Ordering.String.compare(x.shuffleRead.get.shuffleReadBlockedTimeSortable,
+              Ordering.Long.compare(x.shuffleRead.get.shuffleReadBlockedTimeSortable,
                 y.shuffleRead.get.shuffleReadBlockedTimeSortable)
           }
         } else {
           throw new IllegalArgumentException(
-            "Cannot sort by Input Size / Records because of no shuffle reads")
+            "Cannot sort by Shuffle Read Blocked Time because of no shuffle reads")
         }
       case "Shuffle Read Size / Records" =>
         if (hasShuffleRead) {
           new Ordering[TaskTableRowData] {
             override def compare(x: TaskTableRowData, y: TaskTableRowData): Int =
-              Ordering.String.compare(x.shuffleRead.get.shuffleReadSortable,
+              Ordering.Long.compare(x.shuffleRead.get.shuffleReadSortable,
                 y.shuffleRead.get.shuffleReadSortable)
           }
         } else {
@@ -1022,7 +1021,7 @@ private[ui] class TaskDataSource(
         if (hasShuffleRead) {
           new Ordering[TaskTableRowData] {
             override def compare(x: TaskTableRowData, y: TaskTableRowData): Int =
-              Ordering.String.compare(x.shuffleRead.get.shuffleReadRemoteSortable,
+              Ordering.Long.compare(x.shuffleRead.get.shuffleReadRemoteSortable,
                 y.shuffleRead.get.shuffleReadRemoteSortable)
           }
         } else {
@@ -1034,8 +1033,8 @@ private[ui] class TaskDataSource(
         if (hasShuffleWrite) {
           new Ordering[TaskTableRowData] {
             override def compare(x: TaskTableRowData, y: TaskTableRowData): Int =
-              Ordering.String.compare(x.shuffleWrite.get.writeTimeReadable,
-                y.shuffleWrite.get.writeTimeReadable)
+              Ordering.Long.compare(x.shuffleWrite.get.writeTimeSortable,
+                y.shuffleWrite.get.writeTimeSortable)
           }
         } else {
           throw new IllegalArgumentException(
@@ -1045,7 +1044,7 @@ private[ui] class TaskDataSource(
         if (hasShuffleWrite) {
           new Ordering[TaskTableRowData] {
             override def compare(x: TaskTableRowData, y: TaskTableRowData): Int =
-              Ordering.String.compare(x.shuffleWrite.get.shuffleWriteSortable,
+              Ordering.Long.compare(x.shuffleWrite.get.shuffleWriteSortable,
                 y.shuffleWrite.get.shuffleWriteSortable)
           }
         } else {
@@ -1057,7 +1056,7 @@ private[ui] class TaskDataSource(
         if (hasBytesSpilled) {
           new Ordering[TaskTableRowData] {
             override def compare(x: TaskTableRowData, y: TaskTableRowData): Int =
-              Ordering.String.compare(x.bytesSpilled.get.memoryBytesSpilledSortable,
+              Ordering.Long.compare(x.bytesSpilled.get.memoryBytesSpilledSortable,
                 y.bytesSpilled.get.memoryBytesSpilledSortable)
           }
         } else {
@@ -1068,7 +1067,7 @@ private[ui] class TaskDataSource(
         if (hasBytesSpilled) {
           new Ordering[TaskTableRowData] {
             override def compare(x: TaskTableRowData, y: TaskTableRowData): Int =
-              Ordering.String.compare(x.bytesSpilled.get.diskBytesSpilledSortable,
+              Ordering.Long.compare(x.bytesSpilled.get.diskBytesSpilledSortable,
                 y.bytesSpilled.get.diskBytesSpilledSortable)
           }
         } else {
@@ -1107,7 +1106,7 @@ private[ui] class TaskPagedTable(
 
   override def tableId: String = ""
 
-  override  def tableCssClass: String = "table table-bordered table-condensed table-striped"
+  override def tableCssClass: String = "table table-bordered table-condensed table-striped"
 
   override val dataSource: TaskDataSource = new TaskDataSource(
     data,
@@ -1125,7 +1124,8 @@ private[ui] class TaskPagedTable(
   )
 
   override def pageLink(page: Int): String = {
-    s"${basePath}&task.page=$page&task.sort=${sortColumn}&task.desc=${desc}"
+    val encodedSortColumn = URLEncoder.encode(sortColumn, "UTF-8")
+    s"${basePath}&task.page=$page&task.sort=${encodedSortColumn}&task.desc=${desc}"
   }
 
   override def goButtonJavascriptFunction: (String, String) = {
