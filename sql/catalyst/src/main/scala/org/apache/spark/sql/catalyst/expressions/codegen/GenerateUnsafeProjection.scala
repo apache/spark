@@ -18,11 +18,15 @@
 package org.apache.spark.sql.catalyst.expressions.codegen
 
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.types.{BinaryType, StringType}
+import org.apache.spark.sql.types.{NullType, BinaryType, StringType}
 
 
 /**
  * Generates a [[Projection]] that returns an [[UnsafeRow]].
+ *
+ * It generates the code for all the expressions, compute the total length for all the columns
+ * (can be accessed via variables), and then copy the data into a scratch buffer space in the
+ * form of UnsafeRow (the scratch buffer will grow as needed).
  *
  * Note: The returned UnsafeRow will be pointed to a scratch buffer inside the projection.
  */
@@ -36,17 +40,17 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
 
   protected def create(expressions: Seq[Expression]): UnsafeProjection = {
     val ctx = newCodeGenContext()
-    val codes = expressions.map(_.gen(ctx))
-    val all_exprs = codes.map(_.code).mkString("\n")
-    val fixedSize = 8 * codes.length + UnsafeRow.calculateBitSetWidthInBytes(codes.length)
+    val exprs = expressions.map(_.gen(ctx))
+    val allExprs = exprs.map(_.code).mkString("\n")
+    val fixedSize = 8 * exprs.length + UnsafeRow.calculateBitSetWidthInBytes(exprs.length)
     val stringWriter = "org.apache.spark.sql.catalyst.expressions.StringUnsafeColumnWriter"
     val binaryWriter = "org.apache.spark.sql.catalyst.expressions.BinaryUnsafeColumnWriter"
     val additionalSize = expressions.zipWithIndex.map { case (e, i) =>
       e.dataType match {
         case StringType =>
-          s" + (${codes(i).isNull} ? 0 : $stringWriter.getSize(${codes(i).primitive}))"
+          s" + (${exprs(i).isNull} ? 0 : $stringWriter.getSize(${exprs(i).primitive}))"
         case BinaryType =>
-          s" + (${codes(i).isNull} ? 0 : $binaryWriter.getSize(${codes(i).primitive}))"
+          s" + (${exprs(i).isNull} ? 0 : $binaryWriter.getSize(${exprs(i).primitive}))"
         case _ => ""
       }
     }.mkString("")
@@ -54,23 +58,31 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
     val writers = expressions.zipWithIndex.map { case (e, i) =>
       val update = e.dataType match {
         case dt if ctx.isPrimitiveType(dt) =>
-          s"${ctx.setColumn("target", dt, i, codes(i).primitive)}"
+          s"${ctx.setColumn("target", dt, i, exprs(i).primitive)}"
         case StringType =>
-          s"cursor += $stringWriter.write(target, ${codes(i).primitive}, $i, cursor)"
+          s"cursor += $stringWriter.write(target, ${exprs(i).primitive}, $i, cursor)"
         case BinaryType =>
-          s"cursor += $binaryWriter.write(target, ${codes(i).primitive}, $i, cursor)"
+          s"cursor += $binaryWriter.write(target, ${exprs(i).primitive}, $i, cursor)"
+        case NullType => ""
         case _ =>
-          throw new Exception(s"Not supported DataType: ${e.dataType}")
+          throw new UnsupportedOperationException(s"Not supported DataType: ${e.dataType}")
       }
-      s"""if (${codes(i).isNull}) {
+      s"""if (${exprs(i).isNull}) {
             target.setNullAt($i);
           } else {
             $update;
           }"""
     }.mkString("\n          ")
 
+    val mutableStates = ctx.mutableStates.map { case (javaType, variableName, initialValue) =>
+      s"private $javaType $variableName = $initialValue;"
+    }.mkString("\n      ")
+
     val code = s"""
+    private $exprType[] expressions;
+
     public Object generate($exprType[] expr) {
+      this.expressions = expr;
       return new SpecificProjection();
     }
 
@@ -78,6 +90,8 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
 
       private UnsafeRow target = new UnsafeRow();
       private byte[] buffer = new byte[64];
+
+      $mutableStates
 
       public SpecificProjection() {}
 
@@ -87,8 +101,9 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
       }
 
       public UnsafeRow apply(InternalRow i) {
-        ${all_exprs}
+        ${allExprs}
 
+        // additionalSize had '+' in the beginning
         int numBytes = $fixedSize $additionalSize;
         if (numBytes > buffer.length) {
           buffer = new byte[numBytes];
@@ -105,6 +120,6 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
     logDebug(s"code for ${expressions.mkString(",")}:\n$code")
 
     val c = compile(code)
-    c.generate(null).asInstanceOf[UnsafeProjection]
+    c.generate(ctx.references.toArray).asInstanceOf[UnsafeProjection]
   }
 }
