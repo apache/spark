@@ -611,9 +611,9 @@ class DAGSchedulerSuite
 
     // Another ResubmitFailedStages event should not result in another attempt for the map
     // stage being run concurrently.
-    // NOTE: the actual ResubmitFailedStages may get called at any time during this, shouldn't
-    // effect anything -- our calling it just makes *SURE* it gets called between the desired event
-    // and our check.
+    // NOTE: the actual ResubmitFailedStages may get called at any time during this, but it
+    // shouldn't effect anything -- our calling it just makes *SURE* it gets called between the
+    // desired event and our check.
     runEvent(ResubmitFailedStages)
     sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
     assert(countSubmittedMapStageAttempts() === 2)
@@ -680,7 +680,8 @@ class DAGSchedulerSuite
       createFakeTaskInfo(),
       null))
 
-    // Trigger resubmission of the failed map stage and finish the re-started map task.
+    // Running ResubmitFailedStages shouldn't result in any more attempts for the map stage, because
+    // the FetchFailed should have been ignored
     runEvent(ResubmitFailedStages)
 
     // The FetchFailed from the original reduce stage should be ignored.

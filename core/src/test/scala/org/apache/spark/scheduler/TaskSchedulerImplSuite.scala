@@ -231,7 +231,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with L
     val taskDescriptions3 = taskScheduler.resourceOffers(workerOffers).flatten
     assert(10 === taskDescriptions3.length)
 
-    taskDescriptions3.foreach{ task =>
+    taskDescriptions3.foreach { task =>
       val mgr = taskScheduler.taskIdToTaskSetManager.get(task.taskId).get
       assert(mgr.taskSet.stageAttemptId === 1)
     }
