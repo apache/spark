@@ -35,10 +35,13 @@ rect.queued {
     fill: gray;
 }
 rect.shutdown {
-    fill: orange;
+    fill: blue;
 }
 rect.upstream_failed {
-    fill: #FFB400;
+    fill: orange;
+}
+rect.up_for_retry {
+    fill: gold;
 }
 rect.skipped {
     fill: pink;
