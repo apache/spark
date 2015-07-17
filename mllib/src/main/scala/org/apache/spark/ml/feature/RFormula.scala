@@ -80,7 +80,9 @@ class RFormula(override val uid: String)
       }
       StructType(withFeatures.fields :+ StructField($(labelCol), DoubleType, nullable))
     } else {
-      withFeatures  // XXX silently drop label field to handle prediction case
+      // Ignore the label field. This is a hack so that this transformer can also work on test
+      // datasets in a Pipeline.
+      withFeatures
     }
   }
 
@@ -106,7 +108,9 @@ class RFormula(override val uid: String)
           throw new IllegalArgumentException("Unsupported type for label: " + other)
       }
     } else {
-      dataset  // XXX silently drop label field to handle prediction case
+      // Ignore the label field. This is a hack so that this transformer can also work on test
+      // datasets in a Pipeline.
+      dataset
     }
   }
 

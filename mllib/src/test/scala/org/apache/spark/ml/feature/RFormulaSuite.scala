@@ -74,6 +74,15 @@ class RFormulaSuite extends SparkFunSuite with MLlibTestSparkContext {
     }
   }
 
+  test("allow missing label column for test datasets") {
+    val formula = new RFormula().setFormula("y ~ x").setLabelCol("label")
+    val original = sqlContext.createDataFrame(Seq((0, 1.0), (2, 2.0))).toDF("x", "_not_y")
+    val resultSchema = formula.transformSchema(original.schema)
+    assert(resultSchema.length == 3)
+    assert(!resultSchema.exists(_.name == "label"))
+    assert(resultSchema.toString == formula.transform(original).schema.toString)
+  }
+
 // TODO(ekl) enable after we implement string label support
 //  test("transform string label") {
 //    val formula = new RFormula().setFormula("name ~ id")
