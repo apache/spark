@@ -42,7 +42,7 @@ class RFormula(override val uid: String)
 
   /**
    * R formula parameter. The formula is provided in string form.
-   * @group setParam
+   * @group param
    */
   val formula: Param[String] = new Param(this, "formula", "R model formula")
 
