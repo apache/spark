@@ -115,6 +115,13 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     // This test is totally fine except that it includes wrong queries and expects errors, but error
     // message format in Hive and Spark SQL differ. Should workaround this later.
     "udf_to_unix_timestamp",
+    // we can cast dates likes '2015-03-18' to a timestamp and extract the seconds.
+    // Hive returns null for second('2015-03-18')
+    "udf_second",
+    // we can cast dates likes '2015-03-18' to a timestamp and extract the minutes.
+    // Hive returns null for minute('2015-03-18')
+    "udf_minute",
+
 
     // Cant run without local map/reduce.
     "index_auto_update",
@@ -892,8 +899,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "udf_lpad",
     "udf_ltrim",
     "udf_map",
-    // "udf_minute", we can cast dates likes '2015-03-18' to a timestamp and extract the minutes.
-    // Hive returns null for minute('2015-03-18')
     "udf_modulo",
     "udf_month",
     "udf_named_struct",
@@ -920,8 +925,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "udf_round_3",
     "udf_rpad",
     "udf_rtrim",
-    // "udf_second", we can cast dates likes '2015-03-18' to a timestamp and extract the seconds.
-    // Hive returns null for second('2015-03-18')
     "udf_sign",
     "udf_sin",
     "udf_smallint",

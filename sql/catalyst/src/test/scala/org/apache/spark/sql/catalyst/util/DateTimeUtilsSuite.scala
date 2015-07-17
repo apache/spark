@@ -304,4 +304,88 @@ class DateTimeUtilsSuite extends SparkFunSuite {
     assert(DateTimeUtils.stringToTimestamp(
       UTF8String.fromString("2015-03-18T12:03.17-1:0:0")).isEmpty)
   }
+
+  test("hours") {
+    val c = Calendar.getInstance()
+    c.set(2015, 2, 18, 13, 2, 11)
+    assert(DateTimeUtils.getHours(c.getTimeInMillis * 1000) === 13)
+    c.set(2015, 12, 8, 2, 7, 9)
+    assert(DateTimeUtils.getHours(c.getTimeInMillis * 1000) === 2)
+  }
+
+  test("minutes") {
+    val c = Calendar.getInstance()
+    c.set(2015, 2, 18, 13, 2, 11)
+    assert(DateTimeUtils.getMinutes(c.getTimeInMillis * 1000) === 2)
+    c.set(2015, 2, 8, 2, 7, 9)
+    assert(DateTimeUtils.getMinutes(c.getTimeInMillis * 1000) === 7)
+  }
+
+  test("seconds") {
+    val c = Calendar.getInstance()
+    c.set(2015, 2, 18, 13, 2, 11)
+    assert(DateTimeUtils.getSeconds(c.getTimeInMillis * 1000) === 11)
+    c.set(2015, 2, 8, 2, 7, 9)
+    assert(DateTimeUtils.getSeconds(c.getTimeInMillis * 1000) === 9)
+  }
+
+  test("get day in year") {
+    val c = Calendar.getInstance()
+    c.set(2015, 2, 18)
+    assert(DateTimeUtils.getDayInYear((c.getTimeInMillis / DateTimeUtils.MILLIS_PER_DAY).toInt) ===
+      77)
+    c.set(2012, 2, 18)
+    assert(DateTimeUtils.getDayInYear((c.getTimeInMillis / DateTimeUtils.MILLIS_PER_DAY).toInt) ===
+      78)
+  }
+
+  test("get year") {
+    val c = Calendar.getInstance()
+    c.set(2015, 2, 18)
+    assert(DateTimeUtils.getYear((c.getTimeInMillis / DateTimeUtils.MILLIS_PER_DAY).toInt) ===
+      2015)
+    c.set(2012, 2, 18)
+    assert(DateTimeUtils.getYear((c.getTimeInMillis / DateTimeUtils.MILLIS_PER_DAY).toInt) ===
+      2012)
+  }
+
+  test("get quarter") {
+    val c = Calendar.getInstance()
+    c.set(2015, 2, 18)
+    assert(DateTimeUtils.getQuarter((c.getTimeInMillis / DateTimeUtils.MILLIS_PER_DAY).toInt) ===
+      1)
+    c.set(2012, 11, 18)
+    assert(DateTimeUtils.getQuarter((c.getTimeInMillis / DateTimeUtils.MILLIS_PER_DAY).toInt) ===
+      4)
+  }
+
+  test("get month") {
+    val c = Calendar.getInstance()
+    c.set(2015, 2, 18)
+    assert(DateTimeUtils.getMonth((c.getTimeInMillis / DateTimeUtils.MILLIS_PER_DAY).toInt) ===
+      3)
+    c.set(2012, 11, 18)
+    assert(DateTimeUtils.getMonth((c.getTimeInMillis / DateTimeUtils.MILLIS_PER_DAY).toInt) ===
+      12)
+  }
+
+  test("get day of month") {
+    val c = Calendar.getInstance()
+    c.set(2015, 2, 18)
+    assert(DateTimeUtils.getDayOfMonth((c.getTimeInMillis / DateTimeUtils.MILLIS_PER_DAY).toInt) ===
+      18)
+    c.set(2012, 11, 24)
+    assert(DateTimeUtils.getDayOfMonth((c.getTimeInMillis / DateTimeUtils.MILLIS_PER_DAY).toInt) ===
+      24)
+  }
+
+  test("get week of year") {
+    val c = Calendar.getInstance()
+    c.set(2015, 2, 18)
+    assert(DateTimeUtils.getWeekOfYear((c.getTimeInMillis / DateTimeUtils.MILLIS_PER_DAY).toInt) ===
+      12)
+    c.set(2012, 11, 24)
+    assert(DateTimeUtils.getWeekOfYear((c.getTimeInMillis / DateTimeUtils.MILLIS_PER_DAY).toInt) ===
+      51)
+  }
 }

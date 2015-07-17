@@ -659,7 +659,7 @@ def date_format(dateCol, format):
     format given by the second argument.
 
     A pattern could be for instance `dd.MM.yyyy` and could return a string like '18.03.1993'. All
-    pattern letters of the Java class `java.text.SimpleDateFormat can be used.
+    pattern letters of the Java class `java.text.SimpleDateFormat` can be used.
 
     NOTE: Use when ever possible specialized functions like `year`. These benefit from a
     specialized implementation.

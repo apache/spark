@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.util
 
 import java.sql.{Date, Timestamp}
 import java.text.{DateFormat, SimpleDateFormat}
+import java.util
 import java.util.{TimeZone, Calendar}
 
 import org.apache.spark.unsafe.types.UTF8String
@@ -418,8 +419,7 @@ object DateTimeUtils {
    * microseconds.
    */
   def getSeconds(timestamp: Long): Int = {
-    val localTs = (timestamp / 1000) + defaultTimeZone.getOffset(timestamp / 1000)
-    ((localTs / 1000) % 60).toInt
+    ((timestamp / 1000 / 1000) % 60).toInt
   }
 
   private[this] def isLeapYear(year: Int): Boolean = {
@@ -438,11 +438,12 @@ object DateTimeUtils {
    * Calculates the number of years for the given number of days. This depends
    * on a 400 year period.
    * @param days days since the beginning of the 400 year period
-   * @return number of year
+   * @return (number of year, days in year)
    */
-  private[this] def numYears(days: Int): Int = {
+  private[this] def numYears(days: Int): (Int, Int) = {
     val year = days / 365
-    if (days > yearBoundary(year)) year else year - 1
+    val boundary = yearBoundary(year)
+    if (days > boundary) (year, days - boundary) else (year - 1, days - yearBoundary(year - 1))
   }
 
   /**
@@ -457,9 +458,8 @@ object DateTimeUtils {
     val daysNormalized = daysSince1970 + toYearZero
     val numOfQuarterCenturies = daysNormalized / daysIn400Years
     val daysInThis400 = daysNormalized % daysIn400Years + 1
-    val years = numYears(daysInThis400)
+    val (years, dayInYear) = numYears(daysInThis400)
     val year: Int = (2001 - 20000) + 400 * numOfQuarterCenturies + years
-    val dayInYear = daysInThis400 - yearBoundary(years)
     (year, dayInYear)
   }
 
@@ -484,13 +484,15 @@ object DateTimeUtils {
    * since 1.1.1970.
    */
   def getQuarter(date: Int): Int = {
-    val (year, dayInYear) = getYearAndDayInYear(date)
-    val leap = if (isLeapYear(year)) 1 else 0
-    if (dayInYear <= 90 + leap) {
+    var (year, dayInYear) = getYearAndDayInYear(date)
+    if (isLeapYear(year)) {
+      dayInYear = dayInYear - 1
+    }
+    if (dayInYear <= 90) {
       1
-    } else if (dayInYear <= 181 + leap) {
+    } else if (dayInYear <= 181) {
       2
-    } else if (dayInYear <= 273 + leap) {
+    } else if (dayInYear <= 273) {
       3
     } else {
       4
@@ -504,30 +506,42 @@ object DateTimeUtils {
   def getMonth(date: Int): Int = {
     val (year, dayInYear) = getYearAndDayInYear(date)
     val leap = if (isLeapYear(year)) 1 else 0
-    if (dayInYear <= 31) {
-      1
-    } else if (dayInYear <= 59 + leap) {
-      2
-    } else if (dayInYear <= 90 + leap) {
-      3
-    } else if (dayInYear <= 120 + leap) {
-      4
-    } else if (dayInYear <= 151 + leap) {
-      5
-    } else if (dayInYear <= 181 + leap) {
-      6
-    } else if (dayInYear <= 212 + leap) {
-      7
-    } else if (dayInYear <= 243 + leap) {
-      8
-    } else if (dayInYear <= 273 + leap) {
-      9
-    } else if (dayInYear <= 304 + leap) {
-      10
-    } else if (dayInYear <= 334 + leap) {
-      11
+    if (dayInYear <= 181 + leap) {
+      if (dayInYear <= 90 + leap) {
+        if (dayInYear <= 31) {
+          1
+        } else if (dayInYear <= 59 + leap) {
+          2
+        } else {
+          3
+        }
+      } else {
+        if (dayInYear <= 120 + leap) {
+          4
+        } else if (dayInYear <= 151 + leap) {
+          5
+        } else {
+          6
+        }
+      }
     } else {
-      12
+      if (dayInYear <= 273 + leap) {
+        if (dayInYear <= 212 + leap) {
+          7
+        } else if (dayInYear <= 243 + leap) {
+          8
+        } else {
+          9
+        }
+      } else {
+        if (dayInYear <= 304 + leap) {
+          10
+        } else if (dayInYear <= 334 + leap) {
+          11
+        } else {
+          12
+        }
+      }
     }
   }
 
@@ -536,38 +550,53 @@ object DateTimeUtils {
    * since 1.1.1970.
    */
   def getDayOfMonth(date: Int): Int = {
-    val (year, dayInYear) = getYearAndDayInYear(date)
-    val leap = if (isLeapYear(year)) 1 else 0
-    if (dayInYear <= 31) {
-      dayInYear
-    } else if (dayInYear <= 59 + leap) {
-      dayInYear - 31
-    } else if (dayInYear <= 90 + leap) {
-      dayInYear - 59 - leap
-    } else if (dayInYear <= 120 + leap) {
-      dayInYear - 90 - leap
-    } else if (dayInYear <= 151 + leap) {
-      dayInYear - 120 - leap
-    } else if (dayInYear <= 181 + leap) {
-      dayInYear - 151 - leap
-    } else if (dayInYear <= 212 + leap) {
-      dayInYear - 181 - leap
-    } else if (dayInYear <= 243 + leap) {
-      dayInYear - 212 - leap
-    } else if (dayInYear <= 273 + leap) {
-      dayInYear - 243 - leap
-    } else if (dayInYear <= 304 + leap) {
-      dayInYear - 273 - leap
-    } else if (dayInYear <= 334 + leap) {
-      dayInYear - 304 - leap
+    var (year, dayInYear) = getYearAndDayInYear(date)
+    val leap = if (isLeapYear(year) && dayInYear > 59) 1 else 0
+    if (dayInYear >= 60) {
+      dayInYear = dayInYear - 1
+    }
+    if (dayInYear <= 181 + leap) {
+      if (dayInYear <= 90 + leap) {
+        if (dayInYear <= 31) {
+          dayInYear
+        } else if (dayInYear <= 59 + leap) {
+          dayInYear - 31
+        } else {
+          dayInYear - 59 - leap
+        }
+      } else {
+        if (dayInYear <= 120 + leap) {
+          dayInYear - 90 - leap
+        } else if (dayInYear <= 151 + leap) {
+          dayInYear - 120 - leap
+        } else {
+          dayInYear - 151 - leap
+        }
+      }
     } else {
-      dayInYear - 334 - leap
+      if (dayInYear <= 273 + leap) {
+        if (dayInYear <= 212 + leap) {
+          dayInYear - 181 - leap
+        } else if (dayInYear <= 243 + leap) {
+          dayInYear - 212 - leap
+        } else {
+          dayInYear - 243 - leap
+        }
+      } else {
+        if (dayInYear <= 304 + leap) {
+          dayInYear - 273 - leap
+        } else if (dayInYear <= 334 + leap) {
+          dayInYear - 304 - leap
+        } else {
+          dayInYear - 334 - leap
+        }
+      }
     }
   }
 
   /**
    * Returns the week number for the given date. The date is expressed in days since
-   * 1.1.1970. The first week of the has to hav eat least 4 days. The first day of a
+   * 1.1.1970. The first week of the has to have at least 4 days. The first day of a
    * week is Monday.
    */
   def getWeekOfYear(date: Int): Int = {

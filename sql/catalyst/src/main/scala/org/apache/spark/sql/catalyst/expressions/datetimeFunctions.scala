@@ -72,7 +72,7 @@ case class Hour(child: Expression) extends UnaryExpression with ImplicitCastInpu
   }
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    val dtu = "org.apache.spark.sql.catalyst.util.DateTimeUtils"
+    val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
     defineCodeGen(ctx, ev, (c) =>
       s"""$dtu.getHours($c)"""
     )
@@ -90,7 +90,7 @@ case class Minute(child: Expression) extends UnaryExpression with ImplicitCastIn
   }
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    val dtu = "org.apache.spark.sql.catalyst.util.DateTimeUtils"
+    val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
     defineCodeGen(ctx, ev, (c) =>
       s"""$dtu.getMinutes($c)"""
     )
@@ -108,7 +108,7 @@ case class Second(child: Expression) extends UnaryExpression with ImplicitCastIn
   }
 
   override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    val dtu = "org.apache.spark.sql.catalyst.util.DateTimeUtils"
+    val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
     defineCodeGen(ctx, ev, (c) =>
       s"""$dtu.getSeconds($c)"""
     )
@@ -128,7 +128,7 @@ case class DayInYear(child: Expression) extends UnaryExpression with ImplicitCas
   }
 
   override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    val dtu = "org.apache.spark.sql.catalyst.util.DateTimeUtils"
+    val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
     defineCodeGen(ctx, ev, (c) =>
       s"""$dtu.getDayInYear($c)"""
     )
@@ -147,7 +147,7 @@ case class Year(child: Expression) extends UnaryExpression with ImplicitCastInpu
   }
 
   override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    val dtu = "org.apache.spark.sql.catalyst.util.DateTimeUtils"
+    val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
     defineCodeGen(ctx, ev, (c) =>
       s"""$dtu.getYear($c)"""
     )
@@ -165,7 +165,7 @@ case class Quarter(child: Expression) extends UnaryExpression with ImplicitCastI
   }
 
   override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    val dtu = "org.apache.spark.sql.catalyst.util.DateTimeUtils"
+    val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
     defineCodeGen(ctx, ev, (c) =>
       s"""$dtu.getQuarter($c)"""
     )
@@ -183,7 +183,7 @@ case class Month(child: Expression) extends UnaryExpression with ImplicitCastInp
   }
 
   override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    val dtu = "org.apache.spark.sql.catalyst.util.DateTimeUtils"
+    val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
     defineCodeGen(ctx, ev, (c) =>
       s"""$dtu.getMonth($c)"""
     )
@@ -201,7 +201,7 @@ case class Day(child: Expression) extends UnaryExpression with ImplicitCastInput
   }
 
   override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    val dtu = "org.apache.spark.sql.catalyst.util.DateTimeUtils"
+    val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
     defineCodeGen(ctx, ev, (c) =>
       s"""$dtu.getDayOfMonth($c)"""
     )
@@ -217,15 +217,25 @@ case class WeekOfYear(child: Expression) extends UnaryExpression with ImplicitCa
   override def prettyName: String = "week_of_year"
 
   override protected def nullSafeEval(date: Any): Any = {
-    DateTimeUtils.getWeekOfYear(date.asInstanceOf[Int])
+    val c = Calendar.getInstance()
+    c.setFirstDayOfWeek(Calendar.MONDAY)
+    c.setMinimalDaysInFirstWeek(4)
+    c.setTimeInMillis(date.asInstanceOf[Int] * 1000L * 3600L * 24L)
+    c.get(Calendar.WEEK_OF_YEAR)
   }
 
-  override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    val dtu = "org.apache.spark.sql.catalyst.util.DateTimeUtils"
-    defineCodeGen(ctx, ev, (c) =>
-      s"""$dtu.getWeekOfYear($c)"""
-    )
-  }
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String =
+    nullSafeCodeGen(ctx, ev, (time) => {
+      val cal = classOf[Calendar].getName
+      val c = ctx.freshName("cal")
+      s"""
+        $cal $c = $cal.getInstance();
+        $c.setFirstDayOfWeek($cal.MONDAY);
+        $c.setMinimalDaysInFirstWeek(4);
+        $c.setTimeInMillis($time * 1000L * 3600L * 24L);
+        ${ev.primitive} = $c.get($cal.WEEK_OF_YEAR);
+      """
+    })
 }
 
 case class DateFormatClass(left: Expression, right: Expression) extends BinaryExpression
@@ -237,16 +247,16 @@ case class DateFormatClass(left: Expression, right: Expression) extends BinaryEx
 
   override def prettyName: String = "date_format"
 
-  override protected def nullSafeEval(date: Any, format: Any): Any = {
+  override protected def nullSafeEval(timestamp: Any, format: Any): Any = {
     val sdf = new SimpleDateFormat(format.toString)
-    UTF8String.fromString(sdf.format(new Date(date.asInstanceOf[Long] / 1000)))
+    UTF8String.fromString(sdf.format(new Date(timestamp.asInstanceOf[Long] / 1000)))
   }
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     val sdf = classOf[SimpleDateFormat].getName
-    defineCodeGen(ctx, ev, (date, format) => {
+    defineCodeGen(ctx, ev, (timestamp, format) => {
       s"""${ctx.stringType}.fromString((new $sdf($format.toString()))
-          .format(new java.sql.Date($date / 1000)))"""
+          .format(new java.sql.Date($timestamp / 1000)))"""
     })
   }
 }

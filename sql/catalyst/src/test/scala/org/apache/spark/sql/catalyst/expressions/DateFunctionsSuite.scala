@@ -166,6 +166,7 @@ class DateFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("Day") {
+    checkEvaluation(Day(Cast(Literal("2000-02-29"), DateType)), 29)
     checkEvaluation(Day(Literal.create(null, DateType)), null)
     checkEvaluation(Day(Cast(Literal(d), DateType)), 8)
     checkEvaluation(Day(Cast(Literal(sdfDate.format(d)), DateType)), 8)
