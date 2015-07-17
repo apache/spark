@@ -20,8 +20,7 @@ package org.apache.spark.sql.catalyst.expressions.aggregate2
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.{expressions, InternalRow}
-import org.apache.spark.sql.catalyst.trees.{LeafNode, UnaryNode}
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.types._
 
 /** The mode of an [[AggregateFunction]]. */
