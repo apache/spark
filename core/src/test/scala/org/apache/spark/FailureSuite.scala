@@ -19,7 +19,7 @@ package org.apache.spark
 
 import org.apache.spark.util.NonSerializable
 
-import java.io.NotSerializableException
+import java.io.{IOException, NotSerializableException, ObjectInputStream}
 
 // Common state shared by FailureSuite-launched tasks. We use a global object
 // for this because any local variables used in the task closures will rightfully
@@ -208,6 +208,19 @@ class FailureSuite extends SparkFunSuite with LocalSparkContext {
     FailureSuiteState.clear()
   }
 
+  test("failure cause stacktrace is sent back to driver if exception is not deserializable") {
+    sc = new SparkContext("local", "test")
+    val data = sc.makeRDD(1 to 3).map(x => { throw new NonDeserializableUserException; (x,
+      x) }).groupByKey(3)
+    val thrown = intercept[SparkException] {
+      data.collect()
+    }
+    assert(thrown.getClass === classOf[SparkException])
+    assert(thrown.getCause === null)
+    assert(thrown.getMessage.contains("NonDeserializableUserException"))
+    FailureSuiteState.clear()
+  }
+
   // TODO: Need to add tests with shuffle fetch failures.
 }
 
@@ -216,4 +229,10 @@ class UserException(message: String, cause: Throwable)
 
 class NonSerializableUserException extends RuntimeException {
   val nonSerializableInstanceVariable = new NonSerializable
+}
+
+class NonDeserializableUserException extends RuntimeException {
+  private def readObject(in: ObjectInputStream): Unit = {
+    throw new IOException("Intentional exception during deserialization.");
+  }
 }

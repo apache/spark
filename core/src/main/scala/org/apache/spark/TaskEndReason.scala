@@ -17,6 +17,8 @@
 
 package org.apache.spark
 
+import java.io.{IOException, ObjectInputStream, ObjectOutputStream}
+
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.storage.BlockManagerId
@@ -102,7 +104,7 @@ case class ExceptionFailure(
     stackTrace: Array[StackTraceElement],
     fullStackTrace: String,
     metrics: Option[TaskMetrics],
-    exception: Option[Throwable])
+    exceptionWrapper: Option[ThrowableSerializationWrapper])
   extends TaskFailedReason {
 
   /**
@@ -112,12 +114,14 @@ case class ExceptionFailure(
    */
   private[spark] def this(e: Throwable, metrics: Option[TaskMetrics], preserveCause: Boolean) {
     this(e.getClass.getName, e.getMessage, e.getStackTrace, Utils.exceptionString(e), metrics,
-      if (preserveCause) Some(e) else None)
+      if (preserveCause) Some(new ThrowableSerializationWrapper(e)) else None)
   }
 
   private[spark] def this(e: Throwable, metrics: Option[TaskMetrics]) {
     this(e, metrics, true)
   }
+
+  def exception = exceptionWrapper.map(_.exception)
 
   override def toErrorString: String =
     if (fullStackTrace == null) {
@@ -139,6 +143,19 @@ case class ExceptionFailure(
     val desc = if (description == null) "" else description
     val st = if (stackTrace == null) "" else stackTrace.map("        " + _).mkString("\n")
     s"$className: $desc\n$st"
+  }
+}
+
+class ThrowableSerializationWrapper(var exception: Throwable) extends Serializable {
+  private def writeObject(out: ObjectOutputStream): Unit = {
+    out.writeObject(exception)
+  }
+  private def readObject(in: ObjectInputStream): Unit = {
+    try {
+      exception = in.readObject().asInstanceOf[Throwable]
+    } catch {
+      case _ : ClassNotFoundException | _ : IOException => // exception is null
+    }
   }
 }
 
