@@ -188,7 +188,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with L
     taskScheduler.submitTasks(attempt2)
     val taskDescriptions3 = taskScheduler.resourceOffers(workerOffers).flatten
     assert(1 === taskDescriptions3.length)
-    val mgr = taskScheduler.taskSetManagerForTask(taskDescriptions3(0).taskId).get
+    val mgr = taskScheduler.taskIdToTaskSetManager.get(taskDescriptions3(0).taskId).get
     assert(mgr.taskSet.stageAttemptId === 1)
   }
 
@@ -232,7 +232,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with L
     assert(10 === taskDescriptions3.length)
 
     taskDescriptions3.foreach{ task =>
-      val mgr = taskScheduler.taskSetManagerForTask(task.taskId).get
+      val mgr = taskScheduler.taskIdToTaskSetManager.get(task.taskId).get
       assert(mgr.taskSet.stageAttemptId === 1)
     }
   }

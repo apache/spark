@@ -75,9 +75,9 @@ private[spark] class TaskSchedulerImpl(
 
   // TaskSetManagers are not thread safe, so any access to one should be synchronized
   // on this class.
-  val taskSetsByStageIdAndAttempt = new HashMap[Int, HashMap[Int, TaskSetManager]]
+  private val taskSetsByStageIdAndAttempt = new HashMap[Int, HashMap[Int, TaskSetManager]]
 
-  val taskIdToStageIdAndAttempt = new HashMap[Long, (Int, Int)]
+  private[scheduler] val taskIdToTaskSetManager = new HashMap[Long, TaskSetManager]
   val taskIdToExecutorId = new HashMap[Long, String]
 
   @volatile private var hasReceivedTask = false
@@ -252,8 +252,7 @@ private[spark] class TaskSchedulerImpl(
           for (task <- taskSet.resourceOffer(execId, host, maxLocality)) {
             tasks(i) += task
             val tid = task.taskId
-            taskIdToStageIdAndAttempt(tid) =
-              (taskSet.taskSet.stageId, taskSet.taskSet.stageAttemptId)
+            taskIdToTaskSetManager(tid) = taskSet
             taskIdToExecutorId(tid) = execId
             executorsByHost(host) += execId
             availableCpus(i) -= CPUS_PER_TASK
@@ -337,10 +336,10 @@ private[spark] class TaskSchedulerImpl(
             failedExecutor = Some(execId)
           }
         }
-        taskSetManagerForTask(tid) match {
+        taskIdToTaskSetManager.get(tid) match {
           case Some(taskSet) =>
             if (TaskState.isFinished(state)) {
-              taskIdToStageIdAndAttempt.remove(tid)
+              taskIdToTaskSetManager.remove(tid)
               taskIdToExecutorId.remove(tid)
             }
             if (state == TaskState.FINISHED) {
@@ -379,12 +378,8 @@ private[spark] class TaskSchedulerImpl(
 
     val metricsWithStageIds: Array[(Long, Int, Int, TaskMetrics)] = synchronized {
       taskMetrics.flatMap { case (id, metrics) =>
-        for {
-          (stageId, stageAttemptId) <- taskIdToStageIdAndAttempt.get(id)
-          attempts <- taskSetsByStageIdAndAttempt.get(stageId)
-          taskSetMgr <- attempts.get(stageAttemptId)
-        } yield {
-            (id, taskSetMgr.stageId, taskSetMgr.taskSet.stageAttemptId, metrics)
+        taskIdToTaskSetManager.get(id).map { taskSetMgr =>
+          (id, taskSetMgr.stageId, taskSetMgr.taskSet.stageAttemptId, metrics)
         }
       }
     }
@@ -542,12 +537,6 @@ private[spark] class TaskSchedulerImpl(
   override def applicationId(): String = backend.applicationId()
 
   override def applicationAttemptId(): Option[String] = backend.applicationAttemptId()
-
-  private[scheduler] def taskSetManagerForTask(taskId: Long): Option[TaskSetManager] = {
-    taskIdToStageIdAndAttempt.get(taskId).flatMap{ case (stageId, stageAttemptId) =>
-      taskSetManagerForAttempt(stageId, stageAttemptId)
-    }
-  }
 
   private[scheduler] def taskSetManagerForAttempt(
       stageId: Int,
