@@ -182,6 +182,7 @@ class MathExpressionsSuite extends QueryTest {
     val df = Seq(("3", 10, 2)).toDF("num", "fromBase", "toBase")
     checkAnswer(df.select(conv('num, 'fromBase, 'toBase)), Row("11"))
     checkAnswer(df.select(conv(lit(100), lit(2), lit(16))), Row("4"))
+    checkAnswer(df.select(conv(lit(3122234455L), lit(10), lit(16))), Row("BA198457"))
     checkAnswer(df.selectExpr("conv(num, fromBase, toBase)"), Row("11"))
     checkAnswer(df.selectExpr("""conv("100", 2, 10)"""), Row("4"))
     checkAnswer(df.selectExpr("""conv("-10", 16, -10)"""), Row("-16"))

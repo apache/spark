@@ -97,18 +97,8 @@ class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("conv") {
-    checkEvaluation(Conv(Literal.create("3", StringType), Literal(10), Literal(2)),
-      "11", create_row(null))
-    checkEvaluation(Conv(Literal(3), Literal(10), Literal(2)),
-      "11", create_row(null))
-    checkEvaluation(Conv(Literal(100), Literal(2), Literal(10)),
-      "4", create_row(null))
-    checkEvaluation(Conv(Literal(-10), Literal(16), Literal(-10)),
-      "-16", create_row(null))
-    checkEvaluation(Conv(Literal.create(17.toShort, ShortType), Literal(10), Literal(16)),
-      "11", create_row(null))
-    checkEvaluation(Conv(Literal(3122234455L), Literal(10), Literal(16)),
-      "BA198457", create_row(null))
+    checkEvaluation(Conv(Literal("3"), Literal(10), Literal(2)), "11", create_row(null))
+    checkEvaluation(Conv(Literal("-10"), Literal(16), Literal(-10)), "-16", create_row(null))
   }
 
   test("e") {

@@ -141,7 +141,7 @@ case class Cos(child: Expression) extends UnaryMathExpression(math.cos, "COS")
 case class Cosh(child: Expression) extends UnaryMathExpression(math.cosh, "COSH")
 
 case class Conv(numExpr: Expression, fromBaseExpr: Expression, toBaseExpr: Expression)
-  extends Expression{
+  extends Expression with ImplicitCastInputTypes{
 
   override def foldable: Boolean = numExpr.foldable && fromBaseExpr.foldable && toBaseExpr.foldable
 
@@ -149,24 +149,7 @@ case class Conv(numExpr: Expression, fromBaseExpr: Expression, toBaseExpr: Expre
 
   override def children: Seq[Expression] = Seq(numExpr, fromBaseExpr, toBaseExpr)
 
-  override def checkInputDataTypes(): TypeCheckResult = {
-    if (
-      !(numExpr.dataType.isInstanceOf[ShortType]
-        || numExpr.dataType.isInstanceOf[IntegerType]
-        || numExpr.dataType.isInstanceOf[LongType]
-        || numExpr.dataType.isInstanceOf[StringType]
-        || numExpr.dataType == NullType)
-      || !(fromBaseExpr.dataType.isInstanceOf[IntegerType]
-        || fromBaseExpr != NullType)
-      || !(toBaseExpr.dataType.isInstanceOf[IntegerType]
-        || toBaseExpr != NullType)
-    ) {
-      TypeCheckResult.TypeCheckFailure(s"""Doesn't support conv(${numExpr.dataType},
-        ${fromBaseExpr.dataType}, ${toBaseExpr.dataType}""")
-    } else {
-      TypeCheckResult.TypeCheckSuccess
-    }
-  }
+  override def inputTypes: Seq[AbstractDataType] = Seq(StringType, IntegerType, IntegerType)
 
   /** Returns the result of evaluating this expression on a given input Row */
   override def eval(input: InternalRow): Any = {
@@ -176,7 +159,8 @@ case class Conv(numExpr: Expression, fromBaseExpr: Expression, toBaseExpr: Expre
     if (num == null || fromBase == null || toBase == null) {
       null
     } else {
-      conv(num.toString.getBytes(), fromBase.asInstanceOf[Integer], toBase.asInstanceOf[Integer])
+      conv(num.asInstanceOf[UTF8String].getBytes,
+        fromBase.asInstanceOf[Int], toBase.asInstanceOf[Int])
     }
   }
 
