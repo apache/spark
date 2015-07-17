@@ -152,4 +152,22 @@ abstract class TaskContext extends Serializable {
    * Returns the manager for this task's managed memory.
    */
   private[spark] def taskMemoryManager(): TaskMemoryManager
+
+  /**
+   * Register an accumulator that belongs to this task. Accumulators must call this method when
+   * deserializing in executors.
+   */
+  private[spark] def registerAccumulator(a: Accumulable[_, _]): Unit
+
+  /**
+   * Return the local values of internal accumulators that belong to this task. The key of the Map
+   * is the accumulator id and the value of the Map is the latest accumulator local value.
+   */
+  private[spark] def collectInternalAccumulators(): Map[Long, Any]
+
+  /**
+   * Return the local values of accumulators that belong to this task. The key of the Map is the
+   * accumulator id and the value of the Map is the latest accumulator local value.
+   */
+  private[spark] def collectAccumulators(): Map[Long, Any]
 }
