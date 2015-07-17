@@ -1314,7 +1314,7 @@ setMethod("except",
 #' write.df(df, "myfile", "parquet", "overwrite")
 #' }
 setMethod("write.df",
-          signature(df = "DataFrame", path = 'character'),
+          signature(df = "DataFrame", path = "character"),
           function(df, path, source = NULL, mode = "append", ...){
             if (is.null(source)) {
               sqlContext <- get(".sparkRSQLsc", envir = .sparkREnv)
@@ -1328,7 +1328,7 @@ setMethod("write.df",
             jmode <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "saveMode", mode)
             options <- varargsToEnv(...)
             if (!is.null(path)) {
-                options[['path']] <- path
+                options[["path"]] <- path
             }
             callJMethod(df@sdf, "save", source, jmode, options)
           })
@@ -1337,7 +1337,7 @@ setMethod("write.df",
 #' @aliases saveDF
 #' @export
 setMethod("saveDF",
-          signature(df = "DataFrame", path = 'character'),
+          signature(df = "DataFrame", path = "character"),
           function(df, path, source = NULL, mode = "append", ...){
             write.df(df, path, source, mode, ...)
           })
@@ -1375,8 +1375,8 @@ setMethod("saveDF",
 #' saveAsTable(df, "myfile")
 #' }
 setMethod("saveAsTable",
-          signature(df = "DataFrame", tableName = 'character', source = 'character',
-                    mode = 'character'),
+          signature(df = "DataFrame", tableName = "character", source = "character",
+                    mode = "character"),
           function(df, tableName, source = NULL, mode="append", ...){
             if (is.null(source)) {
               sqlContext <- get(".sparkRSQLsc", envir = .sparkREnv)

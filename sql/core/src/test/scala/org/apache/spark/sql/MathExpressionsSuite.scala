@@ -178,6 +178,19 @@ class MathExpressionsSuite extends QueryTest {
       Row(0.0, 1.0, 2.0))
   }
 
+  test("conv") {
+    val df = Seq(("333", 10, 2)).toDF("num", "fromBase", "toBase")
+    checkAnswer(df.select(conv('num, 10, 16)), Row("14D"))
+    checkAnswer(df.select(conv("num", 10, 16)), Row("14D"))
+    checkAnswer(df.select(conv(lit(100), 2, 16)), Row("4"))
+    checkAnswer(df.select(conv(lit(3122234455L), 10, 16)), Row("BA198457"))
+    checkAnswer(df.selectExpr("conv(num, fromBase, toBase)"), Row("101001101"))
+    checkAnswer(df.selectExpr("""conv("100", 2, 10)"""), Row("4"))
+    checkAnswer(df.selectExpr("""conv("-10", 16, -10)"""), Row("-16"))
+    checkAnswer(
+      df.selectExpr("""conv("9223372036854775807", 36, -16)"""), Row("-1")) // for overflow
+  }
+
   test("floor") {
     testOneToOneMathFunction(floor, math.floor)
   }
