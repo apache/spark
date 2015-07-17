@@ -19,15 +19,15 @@ package org.apache.spark.mllib.clustering
 
 import java.util.Random
 
-import breeze.linalg.{DenseVector => BDV, DenseMatrix => BDM, Transpose, sum, normalize, kron}
-import breeze.numerics.{digamma, exp, abs}
+import breeze.linalg.{DenseMatrix => BDM, DenseVector => BDV, normalize, sum}
+import breeze.numerics.{abs, digamma, exp}
 import breeze.stats.distributions.{Gamma, RandBasis}
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.graphx._
 import org.apache.spark.graphx.impl.GraphImpl
 import org.apache.spark.mllib.impl.PeriodicGraphCheckpointer
-import org.apache.spark.mllib.linalg.{Matrices, SparseVector, DenseVector, Vector}
+import org.apache.spark.mllib.linalg.{DenseVector, Matrices, SparseVector, Vector}
 import org.apache.spark.rdd.RDD
 
 /**
@@ -379,9 +379,9 @@ final class OnlineLDAOptimizer extends LDAOptimizer {
       val stat = BDM.zeros[Double](k, vocabSize)
       docs.foreach { doc =>
         val termCounts = doc._2
-        val (ids: Range, cts: Array[Double]) = termCounts match {
-          case v: DenseVector => ((0 until v.size), v.values)
-          case v: SparseVector => ((0 until v.size), v.toDense.values)
+        val (ids: List[Int], cts: Array[Double]) = termCounts match {
+          case v: DenseVector => ((0 until v.size).toList, v.values)
+          case v: SparseVector => (v.indices.toList, v.values)
           case v => throw new IllegalArgumentException("Online LDA does not support vector type "
             + v.getClass)
         }
@@ -389,8 +389,8 @@ final class OnlineLDAOptimizer extends LDAOptimizer {
         // Initialize the variational distribution q(theta|gamma) for the mini-batch
         var gammad: BDV[Double] =
           new Gamma(gammaShape, 1.0 / gammaShape).samplesVector(k)                   // K
-        var expElogthetad: BDV[Double] = exp(digamma(gammad) - digamma(sum(gammad))) // K
-        val expElogbetad: BDM[Double] = expElogbeta(ids, ::)                         // ids * K
+        val expElogthetad: BDV[Double] = exp(digamma(gammad) - digamma(sum(gammad))) // K
+        val expElogbetad: BDM[Double] = expElogbeta(ids, ::).toDenseMatrix           // ids * K
 
         var phinorm: BDV[Double] = expElogbetad * expElogthetad :+ 1e-100            // ids
         var meanchange = 1D
@@ -406,11 +406,7 @@ final class OnlineLDAOptimizer extends LDAOptimizer {
           meanchange = sum(abs(gammad - lastgamma)) / k
         }
 
-        val m1: BDV[Double] = expElogthetad
-        val m2: BDV[Double] = ctsVector :/ phinorm
-        (0 until ids.size).foreach { i =>
-          stat(::, ids(i)) :+= m1 * m2(i)
-        }
+        stat(::, ids) :=  expElogthetad.asDenseMatrix.t * (ctsVector :/ phinorm).asDenseMatrix
       }
       Iterator(stat)
     }
