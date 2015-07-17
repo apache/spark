@@ -20,8 +20,8 @@ package test.org.apache.spark.sql.hive.aggregate2;
 import java.util.ArrayList;
 import java.util.List;
 
-import org.apache.spark.sql.catalyst.expressions.aggregate2.MutableAggregationBuffer;
-import org.apache.spark.sql.execution.expressions.aggregate2.UserDefinedAggregateFunction;
+import org.apache.spark.sql.expressions.aggregate2.MutableAggregationBuffer;
+import org.apache.spark.sql.expressions.aggregate2.UserDefinedAggregateFunction;
 import org.apache.spark.sql.types.StructField;
 import org.apache.spark.sql.types.StructType;
 import org.apache.spark.sql.types.DataType;
@@ -48,7 +48,7 @@ public class MyJavaUDAF extends UserDefinedAggregateFunction {
     _returnDataType = DataTypes.DoubleType;
   }
 
-  @Override public StructType inputDataType() {
+  @Override public StructType inputSchema() {
     return _inputDataType;
   }
 
