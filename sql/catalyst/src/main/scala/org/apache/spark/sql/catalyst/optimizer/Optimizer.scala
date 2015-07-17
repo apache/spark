@@ -546,11 +546,9 @@ object PushPredicateThroughProject extends Rule[LogicalPlan] with PredicateHelpe
   private def hasNondeterministic(
       condition: Expression,
       sourceAliases: AttributeMap[Expression]) = {
-    condition.find {
-      case a: Attribute =>
-        sourceAliases.get(a).map(_.find(!_.deterministic).isDefined).getOrElse(false)
-      case _ => false
-    }.isDefined
+    condition.collect {
+      case a: Attribute if sourceAliases.contains(a) => sourceAliases(a)
+    }.exists(!_.deterministic)
   }
 
   // Substitute any attributes that are produced by the child projection, so that we safely
