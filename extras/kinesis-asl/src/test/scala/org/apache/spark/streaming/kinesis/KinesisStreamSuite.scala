@@ -89,7 +89,11 @@ class KinesisStreamSuite extends SparkFunSuite with KinesisSuiteHelper
 
   /**
    * Test the stream by sending data to a Kinesis stream and receiving from it.
-   * This by default ignore as the user may not have access to the
+   * This test is not run by default as it requires AWS credentials that the test
+   * environment may not have. Even if there is AWS credentials available, the user
+   * may not want to run these tests to avoid the Kinesis costs. To enable this test,
+   * you must have AWS credentials available through the default AWS provider chain,
+   * and you have to set the system environment variable RUN_KINESIS_TESTS=1 .
    */
   testOrIgnore("basic operation") {
     ssc = new StreamingContext(sc, Seconds(1))

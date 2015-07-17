@@ -26,6 +26,7 @@ import org.apache.spark.SparkFunSuite
 trait KinesisSuiteHelper { self: SparkFunSuite =>
   import KinesisTestUtils._
 
+  /** Run the test if environment variable is set or ignore the test */
   def testOrIgnore(testName: String)(testBody: => Unit) {
     if (shouldRunTests) {
       test(testName)(testBody)

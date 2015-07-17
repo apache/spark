@@ -179,7 +179,7 @@ private[kinesis] object KinesisTestUtils {
 
   val envVarName = "RUN_KINESIS_TESTS"
 
-  val shouldRunTests = sys.env.get(envVarName).nonEmpty
+  val shouldRunTests = sys.env.get(envVarName) == Some("1")
 
   def isAWSCredentialsPresent: Boolean = {
     Try { new DefaultAWSCredentialsProviderChain().getCredentials() }.isSuccess
