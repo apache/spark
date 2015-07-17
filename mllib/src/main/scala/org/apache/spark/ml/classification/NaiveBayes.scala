@@ -92,24 +92,6 @@ class NaiveBayes(override val uid: String)
 
   override protected def train(dataset: DataFrame): NaiveBayesModel = {
     val oldDataset: RDD[LabeledPoint] = extractLabeledPoints(dataset)
-    val instance = oldDataset.map{
-      case LabeledPoint(label: Double, features: Vector) => label }
-      .treeAggregate(new MultiClassSummarizer)(
-        seqOp = (c, v) => (c, v) match {
-          case (classSummarizer: MultiClassSummarizer, label: Double) => classSummarizer.add(label)
-        },
-        combOp = (c1, c2) => (c1, c2) match {
-          case (classSummarizer1: MultiClassSummarizer, classSummarizer2: MultiClassSummarizer) =>
-            classSummarizer1.merge(classSummarizer2)
-        })
-    val numInvalid = instance.countInvalid
-    val numClasses = instance.numClasses
-    if (numInvalid != 0) {
-      val msg = s"Classification labels should be in {0 to ${numClasses - 1} " +
-        s"Found $numInvalid invalid labels."
-      logError(msg)
-      throw new SparkException(msg)
-    }
     val oldModel = OldNaiveBayes.train(oldDataset, $(lambda), $(modelType))
     NaiveBayesModel.fromOld(oldModel, this)
   }
