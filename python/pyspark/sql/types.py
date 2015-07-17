@@ -188,7 +188,8 @@ class TimestampType(AtomicType):
 
     def fromInternal(self, ts):
         if ts is not None:
-            return datetime.datetime.fromtimestamp(ts / 1e6)
+            # using int to avoid precision loss in float
+            return datetime.datetime.fromtimestamp(ts // 1000000).replace(microsecond=ts % 1000000)
 
 
 class DecimalType(FractionalType):

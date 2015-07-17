@@ -110,7 +110,7 @@ class JoinedRow extends InternalRow {
 
   override def length: Int = row1.length + row2.length
 
-  override def apply(i: Int): Any =
+  override def get(i: Int): Any =
     if (i < row1.length) row1(i) else row2(i - row1.length)
 
   override def isNullAt(i: Int): Boolean =
@@ -204,7 +204,7 @@ class JoinedRow2 extends InternalRow {
 
   override def length: Int = row1.length + row2.length
 
-  override def apply(i: Int): Any =
+  override def get(i: Int): Any =
     if (i < row1.length) row1(i) else row2(i - row1.length)
 
   override def isNullAt(i: Int): Boolean =
@@ -292,7 +292,7 @@ class JoinedRow3 extends InternalRow {
 
   override def length: Int = row1.length + row2.length
 
-  override def apply(i: Int): Any =
+  override def get(i: Int): Any =
     if (i < row1.length) row1(i) else row2(i - row1.length)
 
   override def isNullAt(i: Int): Boolean =
@@ -380,7 +380,7 @@ class JoinedRow4 extends InternalRow {
 
   override def length: Int = row1.length + row2.length
 
-  override def apply(i: Int): Any =
+  override def get(i: Int): Any =
     if (i < row1.length) row1(i) else row2(i - row1.length)
 
   override def isNullAt(i: Int): Boolean =
@@ -468,7 +468,7 @@ class JoinedRow5 extends InternalRow {
 
   override def length: Int = row1.length + row2.length
 
-  override def apply(i: Int): Any =
+  override def get(i: Int): Any =
     if (i < row1.length) row1(i) else row2(i - row1.length)
 
   override def isNullAt(i: Int): Boolean =
@@ -556,7 +556,7 @@ class JoinedRow6 extends InternalRow {
 
   override def length: Int = row1.length + row2.length
 
-  override def apply(i: Int): Any =
+  override def get(i: Int): Any =
     if (i < row1.length) row1(i) else row2(i - row1.length)
 
   override def isNullAt(i: Int): Boolean =

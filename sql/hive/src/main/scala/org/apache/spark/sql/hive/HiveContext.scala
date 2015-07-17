@@ -34,6 +34,7 @@ import org.apache.hadoop.hive.ql.parse.VariableSubstitution
 import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hadoop.hive.serde2.io.{DateWritable, TimestampWritable}
 
+import org.apache.spark.Logging
 import org.apache.spark.SparkContext
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql._
@@ -65,12 +66,12 @@ private[hive] class HiveQLDialect extends ParserDialect {
  *
  * @since 1.0.0
  */
-class HiveContext(sc: SparkContext) extends SQLContext(sc) {
+class HiveContext(sc: SparkContext) extends SQLContext(sc) with Logging {
   self =>
 
   import HiveContext._
 
-  println("create HiveContext")
+  logDebug("create HiveContext")
 
   /**
    * When true, enables an experimental feature where metastore tables that use the parquet SerDe

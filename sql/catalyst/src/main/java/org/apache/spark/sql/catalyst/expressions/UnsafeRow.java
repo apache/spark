@@ -61,9 +61,10 @@ public final class UnsafeRow extends MutableRow {
   /** A pool to hold non-primitive objects */
   private ObjectPool pool;
 
-  Object getBaseObject() { return baseObject; }
-  long getBaseOffset() { return baseOffset; }
-  ObjectPool getPool() { return pool; }
+  public Object getBaseObject() { return baseObject; }
+  public long getBaseOffset() { return baseOffset; }
+  public int getSizeInBytes() { return sizeInBytes; }
+  public ObjectPool getPool() { return pool; }
 
   /** The number of fields in this row, used for calculating the bitset width (and in assertions) */
   private int numFields;
@@ -243,11 +244,6 @@ public final class UnsafeRow extends MutableRow {
     assertIndexIsValid(ordinal);
     setNotNullAt(ordinal);
     PlatformDependent.UNSAFE.putFloat(baseObject, getFieldOffset(ordinal), value);
-  }
-
-  @Override
-  public int size() {
-    return numFields;
   }
 
   /**

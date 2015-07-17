@@ -275,8 +275,12 @@ object NullPropagation extends Rule[LogicalPlan] {
       case e @ Count(Literal(null, _)) => Cast(Literal(0L), e.dataType)
       case e @ IsNull(c) if !c.nullable => Literal.create(false, BooleanType)
       case e @ IsNotNull(c) if !c.nullable => Literal.create(true, BooleanType)
-      case e @ ExtractValue(Literal(null, _), _) => Literal.create(null, e.dataType)
-      case e @ ExtractValue(_, Literal(null, _)) => Literal.create(null, e.dataType)
+      case e @ GetArrayItem(Literal(null, _), _) => Literal.create(null, e.dataType)
+      case e @ GetArrayItem(_, Literal(null, _)) => Literal.create(null, e.dataType)
+      case e @ GetMapValue(Literal(null, _), _) => Literal.create(null, e.dataType)
+      case e @ GetMapValue(_, Literal(null, _)) => Literal.create(null, e.dataType)
+      case e @ GetStructField(Literal(null, _), _, _) => Literal.create(null, e.dataType)
+      case e @ GetArrayStructFields(Literal(null, _), _, _, _) => Literal.create(null, e.dataType)
       case e @ EqualNullSafe(Literal(null, _), r) => IsNull(r)
       case e @ EqualNullSafe(l, Literal(null, _)) => IsNull(l)
       case e @ Count(expr) if !expr.nullable => Count(Literal(1))
@@ -338,7 +342,7 @@ object ConstantFolding extends Rule[LogicalPlan] {
       case l: Literal => l
 
       // Fold expressions that are foldable.
-      case e if e.foldable => Literal.create(e.eval(null), e.dataType)
+      case e if e.foldable => Literal.create(e.eval(EmptyRow), e.dataType)
 
       // Fold "literal in (item1, item2, ..., literal, ...)" into true directly.
       case In(Literal(v, _), list) if list.exists {
@@ -357,7 +361,7 @@ object OptimizeIn extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case q: LogicalPlan => q transformExpressionsDown {
       case In(v, list) if !list.exists(!_.isInstanceOf[Literal]) =>
-        val hSet = list.map(e => e.eval(null))
+        val hSet = list.map(e => e.eval(EmptyRow))
         InSet(v, HashSet() ++ hSet)
     }
   }

@@ -616,7 +616,7 @@ private[spark] class Client(
     val appId = newAppResponse.getApplicationId
     val appStagingDir = getAppStagingDir(appId)
     val pySparkArchives =
-      if (sys.props.getOrElse("spark.yarn.isPython", "false").toBoolean) {
+      if (sparkConf.getBoolean("spark.yarn.isPython", false)) {
         findPySparkArchives()
       } else {
         Nil
@@ -732,9 +732,9 @@ private[spark] class Client(
       }
     val amClass =
       if (isClusterMode) {
-        Class.forName("org.apache.spark.deploy.yarn.ApplicationMaster").getName
+        Utils.classForName("org.apache.spark.deploy.yarn.ApplicationMaster").getName
       } else {
-        Class.forName("org.apache.spark.deploy.yarn.ExecutorLauncher").getName
+        Utils.classForName("org.apache.spark.deploy.yarn.ExecutorLauncher").getName
       }
     if (args.primaryRFile != null && args.primaryRFile.endsWith(".R")) {
       args.userArgs = ArrayBuffer(args.primaryRFile) ++ args.userArgs
@@ -938,7 +938,7 @@ private[spark] class Client(
 object Client extends Logging {
   def main(argStrings: Array[String]) {
     if (!sys.props.contains("SPARK_SUBMIT")) {
-      println("WARNING: This client is deprecated and will be removed in a " +
+      logWarning("WARNING: This client is deprecated and will be removed in a " +
         "future version of Spark. Use ./bin/spark-submit with \"--master yarn\"")
     }
 

@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples.mllib
 
 import org.apache.spark.mllib.linalg.Vectors
@@ -71,3 +72,4 @@ object StreamingLogisticRegression {
   }
 
 }
+// scalastyle:on println

@@ -21,6 +21,8 @@ import java.sql.{Date, Timestamp}
 import java.text.{DateFormat, SimpleDateFormat}
 import java.util.{Calendar, TimeZone}
 
+import org.apache.spark.unsafe.types.UTF8String
+
 /**
  * Helper functions for converting between internal and external date and time representations.
  * Dates are exposed externally as java.sql.Date and are represented internally as the number of
@@ -179,5 +181,201 @@ object DateTimeUtils {
     val secondsInDay = seconds % SECONDS_PER_DAY
     val nanos = (us % MICROS_PER_SECOND) * 1000L
     (day.toInt, secondsInDay * NANOS_PER_SECOND + nanos)
+  }
+
+  /**
+   * Parses a given UTF8 date string to the corresponding a corresponding [[Long]] value.
+   * The return type is [[Option]] in order to distinguish between 0L and null. The following
+   * formats are allowed:
+   *
+   * `yyyy`
+   * `yyyy-[m]m`
+   * `yyyy-[m]m-[d]d`
+   * `yyyy-[m]m-[d]d `
+   * `yyyy-[m]m-[d]d [h]h:[m]m:[s]s.[ms][ms][ms][us][us][us]`
+   * `yyyy-[m]m-[d]d [h]h:[m]m:[s]s.[ms][ms][ms][us][us][us]Z`
+   * `yyyy-[m]m-[d]d [h]h:[m]m:[s]s.[ms][ms][ms][us][us][us]-[h]h:[m]m`
+   * `yyyy-[m]m-[d]d [h]h:[m]m:[s]s.[ms][ms][ms][us][us][us]+[h]h:[m]m`
+   * `yyyy-[m]m-[d]dT[h]h:[m]m:[s]s.[ms][ms][ms][us][us][us]`
+   * `yyyy-[m]m-[d]dT[h]h:[m]m:[s]s.[ms][ms][ms][us][us][us]Z`
+   * `yyyy-[m]m-[d]dT[h]h:[m]m:[s]s.[ms][ms][ms][us][us][us]-[h]h:[m]m`
+   * `yyyy-[m]m-[d]dT[h]h:[m]m:[s]s.[ms][ms][ms][us][us][us]+[h]h:[m]m`
+   * `[h]h:[m]m:[s]s.[ms][ms][ms][us][us][us]`
+   * `[h]h:[m]m:[s]s.[ms][ms][ms][us][us][us]Z`
+   * `[h]h:[m]m:[s]s.[ms][ms][ms][us][us][us]-[h]h:[m]m`
+   * `[h]h:[m]m:[s]s.[ms][ms][ms][us][us][us]+[h]h:[m]m`
+   * `T[h]h:[m]m:[s]s.[ms][ms][ms][us][us][us]`
+   * `T[h]h:[m]m:[s]s.[ms][ms][ms][us][us][us]Z`
+   * `T[h]h:[m]m:[s]s.[ms][ms][ms][us][us][us]-[h]h:[m]m`
+   * `T[h]h:[m]m:[s]s.[ms][ms][ms][us][us][us]+[h]h:[m]m`
+   */
+  def stringToTimestamp(s: UTF8String): Option[Long] = {
+    if (s == null) {
+      return None
+    }
+    var timeZone: Option[Byte] = None
+    val segments: Array[Int] = Array[Int](1, 1, 1, 0, 0, 0, 0, 0, 0)
+    var i = 0
+    var currentSegmentValue = 0
+    val bytes = s.getBytes
+    var j = 0
+    var digitsMilli = 0
+    var justTime = false
+    while (j < bytes.length) {
+      val b = bytes(j)
+      val parsedValue = b - '0'.toByte
+      if (parsedValue < 0 || parsedValue > 9) {
+        if (j == 0 && b == 'T') {
+          justTime = true
+          i += 3
+        } else if (i < 2) {
+          if (b == '-') {
+            segments(i) = currentSegmentValue
+            currentSegmentValue = 0
+            i += 1
+          } else if (i == 0 && b == ':') {
+            justTime = true
+            segments(3) = currentSegmentValue
+            currentSegmentValue = 0
+            i = 4
+          } else {
+            return None
+          }
+        } else if (i == 2) {
+          if (b == ' ' || b == 'T') {
+            segments(i) = currentSegmentValue
+            currentSegmentValue = 0
+            i += 1
+          } else {
+            return None
+          }
+        } else if (i == 3 || i == 4) {
+          if (b == ':') {
+            segments(i) = currentSegmentValue
+            currentSegmentValue = 0
+            i += 1
+          } else {
+            return None
+          }
+        } else if (i == 5 || i == 6) {
+          if (b == 'Z') {
+            segments(i) = currentSegmentValue
+            currentSegmentValue = 0
+            i += 1
+            timeZone = Some(43)
+          } else if (b == '-' || b == '+') {
+            segments(i) = currentSegmentValue
+            currentSegmentValue = 0
+            i += 1
+            timeZone = Some(b)
+          } else if (b == '.' && i == 5) {
+            segments(i) = currentSegmentValue
+            currentSegmentValue = 0
+            i += 1
+          } else {
+            return None
+          }
+          if (i == 6  && b != '.') {
+            i += 1
+          }
+        } else {
+          if (b == ':' || b == ' ') {
+            segments(i) = currentSegmentValue
+            currentSegmentValue = 0
+            i += 1
+          } else {
+            return None
+          }
+        }
+      } else {
+        if (i == 6) {
+          digitsMilli += 1
+        }
+        currentSegmentValue = currentSegmentValue * 10 + parsedValue
+      }
+      j += 1
+    }
+
+    segments(i) = currentSegmentValue
+
+    while (digitsMilli < 6) {
+      segments(6) *= 10
+      digitsMilli += 1
+    }
+
+    if (!justTime && (segments(0) < 1000 || segments(0) > 9999 || segments(1) < 1 ||
+        segments(1) > 12 || segments(2) < 1 || segments(2) > 31)) {
+      return None
+    }
+
+    if (segments(3) < 0 || segments(3) > 23 || segments(4) < 0 || segments(4) > 59 ||
+        segments(5) < 0 || segments(5) > 59 || segments(6) < 0 || segments(6) > 999999 ||
+        segments(7) < 0 || segments(7) > 23 || segments(8) < 0 || segments(8) > 59) {
+      return None
+    }
+
+    val c = if (timeZone.isEmpty) {
+      Calendar.getInstance()
+    } else {
+      Calendar.getInstance(
+        TimeZone.getTimeZone(f"GMT${timeZone.get.toChar}${segments(7)}%02d:${segments(8)}%02d"))
+    }
+
+    if (justTime) {
+      c.set(Calendar.HOUR, segments(3))
+      c.set(Calendar.MINUTE, segments(4))
+      c.set(Calendar.SECOND, segments(5))
+    } else {
+      c.set(segments(0), segments(1) - 1, segments(2), segments(3), segments(4), segments(5))
+    }
+
+    Some(c.getTimeInMillis / 1000 * 1000000 + segments(6))
+  }
+
+  /**
+   * Parses a given UTF8 date string to the corresponding a corresponding [[Int]] value.
+   * The return type is [[Option]] in order to distinguish between 0 and null. The following
+   * formats are allowed:
+   *
+   * `yyyy`,
+   * `yyyy-[m]m`
+   * `yyyy-[m]m-[d]d`
+   * `yyyy-[m]m-[d]d `
+   * `yyyy-[m]m-[d]d *`
+   * `yyyy-[m]m-[d]dT*`
+   */
+  def stringToDate(s: UTF8String): Option[Int] = {
+    if (s == null) {
+      return None
+    }
+    val segments: Array[Int] = Array[Int](1, 1, 1)
+    var i = 0
+    var currentSegmentValue = 0
+    val bytes = s.getBytes
+    var j = 0
+    while (j < bytes.length && (i < 3 && !(bytes(j) == ' ' || bytes(j) == 'T'))) {
+      val b = bytes(j)
+      if (i < 2 && b == '-') {
+        segments(i) = currentSegmentValue
+        currentSegmentValue = 0
+        i += 1
+      } else {
+        val parsedValue = b - '0'.toByte
+        if (parsedValue < 0 || parsedValue > 9) {
+          return None
+        } else {
+          currentSegmentValue = currentSegmentValue * 10 + parsedValue
+        }
+      }
+      j += 1
+    }
+    segments(i) = currentSegmentValue
+    if (segments(0) < 1000 || segments(0) > 9999 || segments(1) < 1 || segments(1) > 12 ||
+        segments(2) < 1 || segments(2) > 31) {
+      return None
+    }
+    val c = Calendar.getInstance()
+    c.set(segments(0), segments(1) - 1, segments(2), 0, 0, 0)
+    Some((c.getTimeInMillis / 1000 / 3600 / 24).toInt)
   }
 }

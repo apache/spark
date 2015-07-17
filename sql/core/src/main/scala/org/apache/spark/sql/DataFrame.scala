@@ -308,7 +308,9 @@ class DataFrame private[sql](
    * @group basic
    * @since 1.3.0
    */
+  // scalastyle:off println
   def printSchema(): Unit = println(schema.treeString)
+  // scalastyle:on println
 
   /**
    * Prints the plans (logical and physical) to the console for debugging purposes.
@@ -319,7 +321,9 @@ class DataFrame private[sql](
     ExplainCommand(
       queryExecution.logical,
       extended = extended).queryExecution.executedPlan.executeCollect().map {
+      // scalastyle:off println
       r => println(r.getString(0))
+      // scalastyle:on println
     }
   }
 
@@ -392,7 +396,9 @@ class DataFrame private[sql](
    * @group action
    * @since 1.5.0
    */
+  // scalastyle:off println
   def show(numRows: Int, truncate: Boolean): Unit = println(showString(numRows, truncate))
+  // scalastyle:on println
 
   /**
    * Returns a [[DataFrameNaFunctions]] for working with missing data.
