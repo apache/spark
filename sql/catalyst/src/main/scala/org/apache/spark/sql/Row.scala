@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.GenericRow
 import org.apache.spark.sql.types.StructType
 
@@ -151,7 +152,7 @@ trait Row extends Serializable {
    *   StructType -> org.apache.spark.sql.Row
    * }}}
    */
-  def apply(i: Int): Any
+  def apply(i: Int): Any = get(i)
 
   /**
    * Returns the value at position i. If the value is null, null is returned. The following
@@ -176,10 +177,10 @@ trait Row extends Serializable {
    *   StructType -> org.apache.spark.sql.Row
    * }}}
    */
-  def get(i: Int): Any = apply(i)
+  def get(i: Int): Any
 
   /** Checks whether the value at position i is null. */
-  def isNullAt(i: Int): Boolean = apply(i) == null
+  def isNullAt(i: Int): Boolean = get(i) == null
 
   /**
    * Returns the value at position i as a primitive boolean.
@@ -311,7 +312,7 @@ trait Row extends Serializable {
    *
    * @throws ClassCastException when data type does not match.
    */
-  def getAs[T](i: Int): T = apply(i).asInstanceOf[T]
+  def getAs[T](i: Int): T = get(i).asInstanceOf[T]
 
   /**
    * Returns the value of a given fieldName.
@@ -361,6 +362,41 @@ trait Row extends Serializable {
       i += 1
     }
     false
+  }
+
+  protected def canEqual(other: Any) =
+    other.isInstanceOf[Row] && !other.isInstanceOf[InternalRow]
+
+  override def equals(o: Any): Boolean = {
+    if (o == null || !canEqual(o)) return false
+
+    val other = o.asInstanceOf[Row]
+    if (length != other.length) {
+      return false
+    }
+
+    var i = 0
+    while (i < length) {
+      if (isNullAt(i) != other.isNullAt(i)) {
+        return false
+      }
+      if (!isNullAt(i)) {
+        val o1 = get(i)
+        val o2 = other.get(i)
+        if (o1.isInstanceOf[Array[Byte]]) {
+          // handle equality of Array[Byte]
+          val b1 = o1.asInstanceOf[Array[Byte]]
+          if (!o2.isInstanceOf[Array[Byte]] ||
+            !java.util.Arrays.equals(b1, o2.asInstanceOf[Array[Byte]])) {
+            return false
+          }
+        } else if (o1 != o2) {
+          return false
+        }
+      }
+      i += 1
+    }
+    return true
   }
 
   /* ---------------------- utility methods for Scala ---------------------- */
