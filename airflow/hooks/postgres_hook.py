@@ -4,8 +4,10 @@ from airflow import settings
 from airflow.utils import AirflowException
 from airflow.models import Connection
 
+from airflow.hooks.base_hook import BaseSqlHook
 
-class PostgresHook(object):
+
+class PostgresHook(BaseSqlHook):
     '''
     Interact with Postgres.
     '''
@@ -44,28 +46,6 @@ class PostgresHook(object):
             dbname=self.db,
             port=self.port)
         return conn
-
-    def get_records(self, sql):
-        '''
-        Executes the sql and returns a set of records.
-        '''
-        conn = self.get_conn()
-        cur = conn.cursor()
-        cur.execute(sql)
-        rows = cur.fetchall()
-        cur.close()
-        conn.close()
-        return rows
-
-    def get_pandas_df(self, sql):
-        '''
-        Executes the sql and returns a pandas dataframe
-        '''
-        import pandas.io.sql as psql
-        conn = self.get_conn()
-        df = psql.read_sql(sql, con=conn)
-        conn.close()
-        return df
 
     def run(self, sql, autocommit=False):
         conn = self.get_conn()

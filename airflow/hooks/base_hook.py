@@ -48,3 +48,46 @@ class BaseHook(object):
 
     def run(self, sql):
         raise NotImplemented()
+
+
+class BaseSqlHook(BaseHook):
+    """
+    """
+    def __init__(self, source):
+        pass
+
+    # add get first
+
+    def get_pandas_df(self, sql):
+        '''
+        Executes the sql and returns a pandas dataframe
+        '''
+        import pandas.io.sql as psql
+        conn = self.get_conn()
+        df = psql.read_sql(sql, con=conn)
+        conn.close()
+        return df
+
+    def get_records(self, sql):
+        '''
+        Executes the sql and returns a set of records.
+        '''
+        conn = self.get_conn()
+        cur = conn.cursor()
+        cur.execute(sql)
+        rows = cur.fetchall()
+        cur.close()
+        conn.close()
+        return rows
+
+    def get_first(self, sql):
+        '''
+        Executes the sql and returns a set of records.
+        '''
+        conn = self.get_conn()
+        cur = conn.cursor()
+        cur.execute(sql)
+        rows = cur.fetchone()
+        cur.close()
+        conn.close()
+        return rows

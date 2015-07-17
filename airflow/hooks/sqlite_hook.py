@@ -2,10 +2,10 @@ import logging
 
 import sqlite3
 
-from airflow.hooks.base_hook import BaseHook
+from airflow.hooks.base_hook import BaseSqlHook
 
 
-class SqliteHook(BaseHook):
+class SqliteHook(BaseSqlHook):
 
     """
     Interact with SQLite.
@@ -76,36 +76,3 @@ class SqliteHook(BaseHook):
         conn.close()
         logging.info(
             "Done loading. Loaded a total of {i} rows".format(**locals()))
-
-    def get_records(self, sql):
-        """
-        Executes the sql and returns a set of records.
-
-        >>> h = SqliteHook()
-        >>> sql = "SELECT * FROM test_table WHERE i=1 LIMIT 1;"
-        >>> h.get_records(sql)
-        [(1,)]
-        """
-        conn = self.get_conn()
-        cur = conn.cursor()
-        cur.execute(sql)
-        rows = cur.fetchall()
-        cur.close()
-        conn.close()
-        return rows
-
-    def get_pandas_df(self, sql):
-        """
-        Executes the sql and returns a pandas dataframe
-
-        >>> h = SqliteHook()
-        >>> sql = "SELECT * FROM test_table WHERE i=1 LIMIT 1;"
-        >>> h.get_pandas_df(sql)
-           i
-        0  1
-        """
-        import pandas.io.sql as psql
-        conn = self.get_conn()
-        df = psql.read_sql(sql, con=conn)
-        conn.close()
-        return df
