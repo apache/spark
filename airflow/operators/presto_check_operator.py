@@ -46,7 +46,7 @@ class PrestoCheckOperator(CheckOperator):
         self.presto_conn_id = presto_conn_id
         self.sql = sql
 
-    def get_first_hook(self):
+    def get_db_hook(self):
         return PrestoHook(presto_conn_id=self.presto_conn_id)
 
 
@@ -68,7 +68,7 @@ class PrestoValueCheckOperator(ValueCheckOperator):
         super(PrestoValueCheckOperator, self).__init__(sql, pass_value, tolerance, *args, **kwargs)
         self.presto_conn_id = presto_conn_id
 
-    def get_first_hook(self):
+    def get_db_hook(self):
         return PrestoHook(presto_conn_id=self.presto_conn_id)
 
 
@@ -97,5 +97,5 @@ class PrestoIntervalCheckOperator(IntervalCheckOperator):
         super(PrestoIntervalCheckOperator, self).__init__(table, metrics_thresholds, date_filter_column, days_back, *args, **kwargs)
         self.presto_conn_id = presto_conn_id
 
-    def get_first_hook(self):
+    def get_db_hook(self):
         return PrestoHook(presto_conn_id=self.presto_conn_id)

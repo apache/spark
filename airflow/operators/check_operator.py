@@ -33,8 +33,8 @@ class CheckOperator(BaseOperator):
     publishing dubious data, or on the side and receive email alerts
     without stopping the progress of the DAG.
 
-    Note that this is an abstract class and get_first_hook
-    needs to be defined. Whereas a get_first_hook is hook that gets a
+    Note that this is an abstract class and get_db_hook
+    needs to be defined. Whereas a get_db_hook is hook that gets a
     single record from an external source.
 
     :param sql: the sql to be executed
@@ -55,7 +55,7 @@ class CheckOperator(BaseOperator):
 
     def execute(self, context=None):
         logging.info('Executing SQL check: ' + self.sql)
-        records = self.get_first_hook().get_first(hql=self.sql)
+        records = self.get_db_hook().get_first(hql=self.sql)
         logging.info("Record: " + str(records))
         if not records:
             raise AirflowException("The query returned None")
@@ -64,7 +64,7 @@ class CheckOperator(BaseOperator):
             raise AirflowException(exceptstr.format(q=self.sql, r=records))
         logging.info("Success.")
 
-    def get_first_hook(self):
+    def get_db_hook(self):
         raise NotImplemented()
 
 
@@ -87,8 +87,8 @@ class ValueCheckOperator(BaseOperator):
     """
     Performs a simple value check using sql code.
 
-    Note that this is an abstract class and get_first_hook
-    needs to be defined. Whereas a get_first_hook is hook that gets a
+    Note that this is an abstract class and get_db_hook
+    needs to be defined. Whereas a get_db_hook is hook that gets a
     single record from an external source.
 
     :param sql: the sql to be executed
@@ -116,7 +116,7 @@ class ValueCheckOperator(BaseOperator):
 
     def execute(self, context=None):
         logging.info('Executing SQL check: ' + self.sql)
-        records = self.get_first_hook().get_first(hql=self.sql)
+        records = self.get_db_hook().get_first(hql=self.sql)
         if not records:
             raise AirflowException("The query returned None")
         test_results = []
@@ -139,7 +139,7 @@ class ValueCheckOperator(BaseOperator):
         if not all(tests):
             raise AirflowException(except_temp.format(**locals()))
 
-    def get_first_hook(self):
+    def get_db_hook(self):
         raise NotImplemented()
 
 
@@ -148,8 +148,8 @@ class IntervalCheckOperator(BaseOperator):
     Checks that the values of metrics given as SQL expressions are within
     a certain tolerance of the ones from days_back before.
 
-    Note that this is an abstract class and get_first_hook
-    needs to be defined. Whereas a get_first_hook is hook that gets a
+    Note that this is an abstract class and get_db_hook
+    needs to be defined. Whereas a get_db_hook is hook that gets a
     single record from an external source.
 
     :param table: the table name
@@ -186,7 +186,7 @@ class IntervalCheckOperator(BaseOperator):
         self.sql2 = sqlt + "'{{ macros.ds_add(ds, "+str(self.days_back)+") }}'"
 
     def execute(self, context=None):
-        hook = self.get_first_hook()
+        hook = self.get_db_hook()
         logging.info('Executing SQL check: ' + self.sql2)
         row2 = hook.get_first(hql=self.sql2)
         logging.info('Executing SQL check: ' + self.sql1)
@@ -223,5 +223,5 @@ class IntervalCheckOperator(BaseOperator):
             raise AirflowException(estr.format(", ".join(failed_tests)))
         logging.info("All tests have passed")
 
-    def get_first_hook(self):
+    def get_db_hook(self):
         raise NotImplemented()
