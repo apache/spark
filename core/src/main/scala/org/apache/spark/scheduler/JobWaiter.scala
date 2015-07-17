@@ -83,6 +83,12 @@ private[spark] class JobWaiter[T](
   }
 
   override def jobFailed(exception: Exception): Unit = synchronized {
-    promise.failure(exception)
+    // There are certain situations where jobFailed can be called multiple times for the same
+    // job. We guard against this by making this method idempotent.
+    if (!isCompleted) {
+      promise.failure(exception)
+    } else {
+      assert(promiseFuture.value.get.isFailure)
+    }
   }
 }
