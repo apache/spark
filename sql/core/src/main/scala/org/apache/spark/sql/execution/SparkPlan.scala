@@ -39,8 +39,7 @@ object SparkPlan {
  * :: DeveloperApi ::
  */
 @DeveloperApi
-abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializable {
-  self: Product =>
+abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Product with Serializable {
 
   /**
    * A handle to the SQL Context that was used to create this plan.   Since many operators need
@@ -239,14 +238,10 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
 }
 
 private[sql] trait LeafNode extends SparkPlan {
-  self: Product =>
-
   override def children: Seq[SparkPlan] = Nil
 }
 
 private[sql] trait UnaryNode extends SparkPlan {
-  self: Product =>
-
   def child: SparkPlan
 
   override def children: Seq[SparkPlan] = child :: Nil
@@ -255,8 +250,6 @@ private[sql] trait UnaryNode extends SparkPlan {
 }
 
 private[sql] trait BinaryNode extends SparkPlan {
-  self: Product =>
-
   def left: SparkPlan
   def right: SparkPlan
 

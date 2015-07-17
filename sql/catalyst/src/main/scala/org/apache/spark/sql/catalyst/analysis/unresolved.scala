@@ -96,7 +96,6 @@ case class UnresolvedFunction(name: String, children: Seq[Expression]) extends E
  * "SELECT * FROM ...". A [[Star]] gets automatically expanded during analysis.
  */
 abstract class Star extends LeafExpression with NamedExpression {
-  self: Product =>
 
   override def name: String = throw new UnresolvedException(this, "name")
   override def exprId: ExprId = throw new UnresolvedException(this, "exprId")
