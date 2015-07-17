@@ -97,6 +97,10 @@ trait CheckAnalysis {
 
             aggregateExprs.foreach(checkValidAggregateExpression)
 
+          case _ => // Fallbacks to the following checks
+        }
+
+        operator match {
           case o if o.children.nonEmpty && o.missingInput.nonEmpty =>
             val missingAttributes = o.missingInput.mkString(",")
             val input = o.inputSet.mkString(",")
@@ -104,10 +108,6 @@ trait CheckAnalysis {
             failAnalysis(
               s"resolved attribute(s) $missingAttributes missing from $input " +
                 s"in operator ${operator.simpleString}")
-
-          case o if !o.resolved =>
-            failAnalysis(
-              s"unresolved operator ${operator.simpleString}")
 
           case p @ Project(exprs, _) if containsMultipleGenerators(exprs) =>
             failAnalysis(
@@ -123,6 +123,10 @@ trait CheckAnalysis {
                  |$plan
                   |Conflicting attributes: ${conflictingAttributes.mkString(",")}
                   |""".stripMargin)
+
+          case o if !o.resolved =>
+            failAnalysis(
+              s"unresolved operator ${operator.simpleString}")
 
           case _ => // Analysis successful!
         }
