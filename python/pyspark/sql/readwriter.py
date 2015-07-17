@@ -157,9 +157,13 @@ class DataFrameReader(object):
 
     @since(1.5)
     def orc(self, path):
-        """Loads an ORC file, returning the result as a :class:`DataFrame`.
+        """
+        Loads an ORC file, returning the result as a :class:`DataFrame`.
 
-        >>> df = sqlContext.read.orc('python/test_support/sql/orc_partitioned')
+        ::Note: Currently ORC support is only available together with
+        :class:`HiveContext`.
+
+        >>> df = hiveContext.read.orc('python/test_support/sql/orc_partitioned')
         >>> df.dtypes
         [('a', 'bigint'), ('b', 'int'), ('c', 'int')]
         """
@@ -391,6 +395,9 @@ class DataFrameWriter(object):
     def orc(self, path, mode=None, partitionBy=None):
         """Saves the content of the :class:`DataFrame` in ORC format at the specified path.
 
+        ::Note: Currently ORC support is only available together with
+        :class:`HiveContext`.
+
         :param path: the path in any Hadoop supported file system
         :param mode: specifies the behavior of the save operation when data already exists.
 
@@ -400,7 +407,8 @@ class DataFrameWriter(object):
             * ``error`` (default case): Throw an exception if data already exists.
         :param partitionBy: names of partitioning columns
 
-        >>> df.write.orc(os.path.join(tempfile.mkdtemp(), 'data'))
+        >>> orc_df = hiveContext.read.orc('python/test_support/sql/orc_partitioned')
+        >>> orc_df.write.orc(os.path.join(tempfile.mkdtemp(), 'data'))
         """
         self.mode(mode)
         if partitionBy is not None:
@@ -437,7 +445,7 @@ def _test():
     import os
     import tempfile
     from pyspark.context import SparkContext
-    from pyspark.sql import Row, SQLContext
+    from pyspark.sql import Row, SQLContext, HiveContext
     import pyspark.sql.readwriter
 
     os.chdir(os.environ["SPARK_HOME"])
@@ -449,6 +457,7 @@ def _test():
     globs['os'] = os
     globs['sc'] = sc
     globs['sqlContext'] = SQLContext(sc)
+    globs['hiveContext'] = HiveContext(sc)
     globs['df'] = globs['sqlContext'].read.parquet('python/test_support/sql/parquet_partitioned')
 
     (failure_count, test_count) = doctest.testmod(

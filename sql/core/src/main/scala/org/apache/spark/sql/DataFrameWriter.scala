@@ -288,6 +288,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    * }}}
    *
    * @since 1.5.0
+   * @note Currently, this method can only be used together with `HiveContext`.
    */
   def orc(path: String): Unit = format("orc").save(path)
 
