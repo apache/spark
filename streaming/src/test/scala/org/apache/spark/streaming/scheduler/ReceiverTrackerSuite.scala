@@ -22,6 +22,9 @@ import org.apache.spark.SparkConf
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.receiver._
 import org.apache.spark.util.Utils
+import org.apache.spark.streaming.dstream.InputDStream
+import scala.reflect.ClassTag
+import org.apache.spark.streaming.dstream.ReceiverInputDStream
 
 /** Testsuite for receiver scheduling */
 class ReceiverTrackerSuite extends TestSuiteBase {
@@ -72,7 +75,35 @@ class ReceiverTrackerSuite extends TestSuiteBase {
     assert(locations(0).length === 1)
     assert(locations(3).length === 1)
   }
+
+  test("Receiver tracker - propagates rate limit") {
+    val newRateLimit = 100
+    val ids = new TestReceiverInputDStream(ssc)
+    val tracker = new ReceiverTracker(ssc)
+    tracker.start()
+    waitUntil(TestDummyReceiver.started, 5000)
+    tracker.sendRateUpdate(ids.id, newRateLimit)
+    // this is an async message, we need to wait a bit for it to be processed
+    waitUntil(ids.getRateLimit.get == newRateLimit, 1000)
+    assert(ids.getRateLimit.get === newRateLimit)
+  }
 }
+
+/** An input DStream with a hard-coded receiver that gives access to internals for testing. */
+private class TestReceiverInputDStream(@transient ssc_ : StreamingContext)
+  extends ReceiverInputDStream[Int](ssc_) {
+
+  override def getReceiver(): DummyReceiver = TestDummyReceiver
+
+  def getRateLimit: Option[Int] =
+    TestDummyReceiver.executor.getCurrentRateLimit
+}
+
+/**
+ * We need the receiver to be an object, otherwise serialization will create another one
+ * and we won't be able to read its rate limit.
+ */
+private object TestDummyReceiver extends DummyReceiver
 
 /**
  * Dummy receiver implementation
@@ -80,7 +111,10 @@ class ReceiverTrackerSuite extends TestSuiteBase {
 private class DummyReceiver(host: Option[String] = None)
   extends Receiver[Int](StorageLevel.MEMORY_ONLY) {
 
+  var started = false
+
   def onStart() {
+    started = true
   }
 
   def onStop() {

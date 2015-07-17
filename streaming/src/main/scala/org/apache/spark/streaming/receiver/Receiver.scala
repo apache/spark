@@ -271,7 +271,7 @@ abstract class Receiver[T](val storageLevel: StorageLevel) extends Serializable 
   }
 
   /** Get the attached executor. */
-  private def executor = {
+  private[streaming] def executor = {
     assert(executor_ != null, "Executor has not been attached to this receiver")
     executor_
   }

@@ -100,6 +100,9 @@ private[streaming] class ReceiverSupervisorImpl(
     }
   }, streamId, env.conf)
 
+  override private[streaming] def getCurrentRateLimit: Option[Int] =
+    Some(blockGenerator.currentRateLimit.get)
+
   /** Push a single record of received data into block generator. */
   def pushSingle(data: Any) {
     blockGenerator.addData(data)
