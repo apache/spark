@@ -271,7 +271,7 @@ object ALS {
    * @param lambda     regularization factor (recommended: 0.01)
    * @param blocks     level of parallelism to split computation into
    * @param seed       random seed
-   * @since 0.8.0
+   * @since 0.9.1
    */
   def train(
       ratings: RDD[Rating],
