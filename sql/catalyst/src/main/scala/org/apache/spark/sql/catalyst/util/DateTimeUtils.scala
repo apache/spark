@@ -320,16 +320,17 @@ object DateTimeUtils {
       Calendar.getInstance(
         TimeZone.getTimeZone(f"GMT${timeZone.get.toChar}${segments(7)}%02d:${segments(8)}%02d"))
     }
+    c.set(Calendar.MILLISECOND, 0)
 
     if (justTime) {
-      c.set(Calendar.HOUR, segments(3))
+      c.set(Calendar.HOUR_OF_DAY, segments(3))
       c.set(Calendar.MINUTE, segments(4))
       c.set(Calendar.SECOND, segments(5))
     } else {
       c.set(segments(0), segments(1) - 1, segments(2), segments(3), segments(4), segments(5))
     }
 
-    Some(c.getTimeInMillis / 1000 * 1000000 + segments(6))
+    Some(c.getTimeInMillis * 1000 + segments(6))
   }
 
   /**

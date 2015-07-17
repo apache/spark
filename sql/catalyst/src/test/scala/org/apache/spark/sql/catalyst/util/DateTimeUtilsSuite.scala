@@ -243,8 +243,17 @@ class DateTimeUtilsSuite extends SparkFunSuite {
       UTF8String.fromString("2015-03-18T12:03:17.12312+7:30")).get ===
         c.getTimeInMillis * 1000 + 120)
 
+    c = Calendar.getInstance()
+    c.set(Calendar.HOUR_OF_DAY, 18)
+    c.set(Calendar.MINUTE, 12)
+    c.set(Calendar.SECOND, 15)
+    c.set(Calendar.MILLISECOND, 0)
+    assert(DateTimeUtils.stringToTimestamp(
+      UTF8String.fromString("18:12:15")).get ===
+      c.getTimeInMillis * 1000)
+
     c = Calendar.getInstance(TimeZone.getTimeZone("GMT+07:30"))
-    c.set(Calendar.HOUR, 18)
+    c.set(Calendar.HOUR_OF_DAY, 18)
     c.set(Calendar.MINUTE, 12)
     c.set(Calendar.SECOND, 15)
     c.set(Calendar.MILLISECOND, 123)
@@ -253,7 +262,7 @@ class DateTimeUtilsSuite extends SparkFunSuite {
       c.getTimeInMillis * 1000 + 120)
 
     c = Calendar.getInstance(TimeZone.getTimeZone("GMT+07:30"))
-    c.set(Calendar.HOUR, 18)
+    c.set(Calendar.HOUR_OF_DAY, 18)
     c.set(Calendar.MINUTE, 12)
     c.set(Calendar.SECOND, 15)
     c.set(Calendar.MILLISECOND, 123)
