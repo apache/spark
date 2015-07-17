@@ -37,7 +37,7 @@ private[clustering] trait KMeansParams
     extends Params with HasMaxIter with HasFeaturesCol with HasSeed with HasPredictionCol {
 
   /**
-   * Set the number of clusters to create (k). Default: 2.
+   * Set the number of clusters to create (k). Must be > 1. Default: 2.
    * @group param
    */
   final val k = new IntParam(this, "k", "number of clusters to create", (x: Int) => x > 1)
@@ -48,7 +48,7 @@ private[clustering] trait KMeansParams
   /**
    * Param the number of runs of the algorithm to execute in parallel. We initialize the algorithm
    * this many times with random starting conditions (configured by the initialization mode), then
-   * return the best clustering found over any run. Default: 1.
+   * return the best clustering found over any run. Must be >= 1. Default: 1.
    * @group param
    */
   final val runs = new IntParam(this, "runs",
@@ -59,7 +59,8 @@ private[clustering] trait KMeansParams
 
   /**
    * Param the distance threshold within which we've consider centers to have converged.
-   * If all centers move less than this Euclidean distance, we stop iterating one run. Default: 1e-4
+   * If all centers move less than this Euclidean distance, we stop iterating one run.
+   * Must be >= 0.0. Default: 1e-4
    * @group param
    */
   final val epsilon = new DoubleParam(this, "epsilon",
@@ -83,7 +84,7 @@ private[clustering] trait KMeansParams
 
   /**
    * Param for the number of steps for the k-means|| initialization mode. This is an advanced
-   * setting -- the default of 5 is almost always enough. Default: 5.
+   * setting -- the default of 5 is almost always enough. Must be > 0. Default: 5.
    * @group expertParam
    */
   final val initSteps = new IntParam(this, "initSteps", "number of steps for k-means||",
