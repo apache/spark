@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.TestData._
 import org.apache.spark.sql.catalyst.plans._
-import org.apache.spark.sql.execution.joins.{BroadcastHashJoin, ShuffledHashJoin}
+import org.apache.spark.sql.execution.joins.{BroadcastRangeJoin, BroadcastHashJoin, ShuffledHashJoin}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.TestSQLContext._
 import org.apache.spark.sql.test.TestSQLContext.implicits._
@@ -146,5 +146,20 @@ class PlannerSuite extends SparkFunSuite {
     val query = testData.sort('key).select('value).limit(2).logicalPlan
     val planned = planner.TakeOrderedAndProject(query)
     assert(planned.head.isInstanceOf[execution.TakeOrderedAndProject])
+  }
+
+  test("range query join condition and broadcastable table will use RangeJoin optimization") {
+    val origRangeJoinSetting = conf.rangeJoinEnabled
+    setConf(SQLConf.RANGE_JOIN, true)
+
+    val interval = Seq((1, 20), (30, 70)).toDF("low", "high")
+    val planned = testData.
+      join(broadcast(interval), $"low" <= $"key" && $"key" < $"high", "inner").
+      queryExecution.
+      executedPlan
+    val broadcastRangeJoins = planned.collect{ case j: BroadcastRangeJoin => j }
+    assert(broadcastRangeJoins.size == 1, "Should use broadcast range join")
+
+    setConf(SQLConf.RANGE_JOIN, origRangeJoinSetting)
   }
 }
