@@ -22,6 +22,7 @@ import com.google.common.cache.{CacheBuilder, CacheLoader, LoadingCache}
 
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.common.StatsSetupConst
+
 import org.apache.hadoop.hive.metastore.Warehouse
 import org.apache.hadoop.hive.metastore.api.FieldSchema
 import org.apache.hadoop.hive.ql.metadata._
@@ -30,6 +31,8 @@ import org.apache.hadoop.hive.ql.plan.TableDesc
 import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{Catalog, MultiInstanceRelation, OverrideCatalog}
+import org.apache.spark.sql.catalyst.CatalystTypeConverters
+import org.apache.spark.sql.catalyst.expressions.codegen.GeneratePredicate
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical
@@ -670,6 +673,7 @@ private[hive] case class MetastoreRelation
     new Partition(hiveQlTable, tPartition)
   }
 
+  @transient var newStatistics: Option[BigInt] = None
   @transient override lazy val statistics: Statistics = Statistics(
     sizeInBytes = {
       val totalSize = hiveQlTable.getParameters.get(StatsSetupConst.TOTAL_SIZE)
@@ -680,15 +684,89 @@ private[hive] case class MetastoreRelation
       // alternative would be going through Hadoop's FileSystem API, which can be expensive if a lot
       // of RPCs are involved.  Besides `totalSize`, there are also `numFiles`, `numRows`,
       // `rawDataSize` keys (see StatsSetupConst in Hive) that we can look at in the future.
-      BigInt(
+      newStatistics.getOrElse(BigInt(
         // When table is external,`totalSize` is always zero, which will influence join strategy
         // so when `totalSize` is zero, use `rawDataSize` instead
         // if the size is still less than zero, we use default size
         Option(totalSize).map(_.toLong).filter(_ > 0)
           .getOrElse(Option(rawDataSize).map(_.toLong).filter(_ > 0)
-          .getOrElse(sqlContext.conf.defaultSizeInBytes)))
+          .getOrElse(sqlContext.conf.defaultSizeInBytes))))
     }
   )
+
+  def updateStats(predicates: Seq[Expression]): Unit = {
+    // Filter out all predicates that only deal with partition keys
+    val partitionsKeys = AttributeSet(partitionKeys)
+    val (pruningPredicates, otherPredicates) = predicates.partition {
+      _.references.subsetOf(partitionsKeys)
+    }
+
+    if (hiveQlTable.isPartitioned) {
+      val rawPredicate = pruningPredicates.reduceOption(And).getOrElse(Literal(true))
+      // Translate the predicate so that it automatically casts the input values to the
+      // correct data types during evaluation.
+      val castedPredicate = rawPredicate transform {
+        case a: AttributeReference =>
+          val idx = partitionKeys.indexWhere(a.exprId == _.exprId)
+          val key = partitionKeys(idx)
+          Cast(BoundReference(idx, StringType, nullable = true), key.dataType)
+      }
+
+      val inputData = new GenericMutableRow(partitionKeys.size)
+      val pruningCondition =
+        if (sqlContext.conf.codegenEnabled) {
+          GeneratePredicate.generate(castedPredicate)
+        } else {
+          InterpretedPredicate.create(castedPredicate)
+        }
+
+      /* These are referred partitions for this query */
+      val refParts = hiveQlPartitions.filter { part =>
+        val partitionValues = part.getValues
+        var i = 0
+        while (i < partitionValues.size()) {
+          inputData(i) = CatalystTypeConverters.convertToCatalyst(partitionValues(i))
+          i += 1
+        }
+        pruningCondition(inputData)
+      }
+
+      def sumParts(): Long = {
+        var size: Long = 0
+        refParts.foreach { refPart =>
+          // get size of the partition
+          val partParams = Option(refPart.getParameters)
+          // If any of the parameters of referred partitions is not defined, skip BroadCastJoin
+          if (partParams.isEmpty) {
+            return sqlContext.conf.defaultSizeInBytes
+          }
+          val partSize =
+            Option(partParams.get.get(StatsSetupConst.TOTAL_SIZE))
+              .map(_.toLong)
+              .getOrElse(0L)
+
+          // It is unlikely that partition size is 0 and still files are present in the
+          // partition location. This is because both alter table add partition and
+          // insert overwrite partition commands modify the total size of the partition
+          // in the metastore. For other cases its better to call analyze command for
+          // updating the metastore partition total size param, instead of calculating
+          // the size here and then storing the parameter from here.
+          size += partSize
+
+          if (size > sqlContext.conf.autoBroadcastJoinThreshold) {
+            return sqlContext.conf.defaultSizeInBytes
+          }
+        }
+
+        size
+      }
+
+      if (refParts.size > 0) {
+        val size = sumParts()
+        newStatistics = Option(BigInt(size))
+      }
+    }
+  }
 
   /** Only compare database and tablename, not alias. */
   override def sameResult(plan: LogicalPlan): Boolean = {
