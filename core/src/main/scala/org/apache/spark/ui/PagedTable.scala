@@ -129,7 +129,7 @@ private[ui] trait PagedTable[T] {
           // The current page should be disabled so that it cannot be clicked.
           <li class="disabled"><a href="#">{p}</a></li>
         } else {
-          <li class="active"><a href={pageLink(p)}>{p}</a></li>
+          <li><a href={pageLink(p)}>{p}</a></li>
         }
       }
       val (goButtonJsFuncName, goButtonJsFunc) = goButtonJavascriptFunction
@@ -148,55 +148,56 @@ private[ui] trait PagedTable[T] {
         """.stripMargin
 
       <div>
-          <div>
-            <form id="form-task-page" class="form-horizontal  pull-right">
-              <div class="control-group">
-                <label class="control-label">{totalPages} Pages. Jump to</label>
-                <div class="controls">
-                  <input type="text" id="form-task-page-no" value={page.toString} class="span1" />
-                  <button type="submit" class="btn">Go</button>
-                </div>
+        <div>
+          <form id="form-task-page" class="form-horizontal pull-right" style="margin-bottom: 0px;">
+            <div class="control-group">
+              <label class="control-label">{totalPages} Pages. Jump to</label>
+              <div class="controls" style="margin-left: 165px;">
+                <input type="text" id="form-task-page-no" value={page.toString} class="span1" />
+                <button type="submit" class="btn">Go</button>
               </div>
-            </form>
-          </div>
-          <div class="pagination">
-            <ul>
-              {if (currentGroup > firstGroup) {
-              <li>
-                <a href={pageLink(startPage - groupSize)} aria-label="Previous Group">
-                  <span aria-hidden="true">
-                    &lt;&lt;
-                  </span>
-                </a>
-              </li>
-              }}
-              {if (page > 1) {
-              <li>
-              <a href={pageLink(page - 1)} aria-label="Previous">
+            </div>
+          </form>
+        </div>
+        <div class="pagination" style="margin-bottom: 0px;">
+          <span style="float: left; padding-top: 4px; padding-right: 4px;">Page: </span>
+          <ul>
+            {if (currentGroup > firstGroup) {
+            <li>
+              <a href={pageLink(startPage - groupSize)} aria-label="Previous Group">
                 <span aria-hidden="true">
-                  &lt;
+                  &lt;&lt;
                 </span>
               </a>
-              </li>
-              }}
-              {pageTags}
-              {if (page < totalPages) {
-              <li>
-                <a href={pageLink(page + 1)} aria-label="Next">
-                  <span aria-hidden="true">&gt;</span>
-                </a>
-              </li>
-              }}
-              {if (currentGroup < lastGroup) {
-              <li>
-                <a href={pageLink(startPage + groupSize)} aria-label="Next Group">
-                  <span aria-hidden="true">
-                    &gt;&gt;
-                  </span>
-                </a>
-              </li>
+            </li>
             }}
-            </ul>
+            {if (page > 1) {
+            <li>
+            <a href={pageLink(page - 1)} aria-label="Previous">
+              <span aria-hidden="true">
+                &lt;
+              </span>
+            </a>
+            </li>
+            }}
+            {pageTags}
+            {if (page < totalPages) {
+            <li>
+              <a href={pageLink(page + 1)} aria-label="Next">
+                <span aria-hidden="true">&gt;</span>
+              </a>
+            </li>
+            }}
+            {if (currentGroup < lastGroup) {
+            <li>
+              <a href={pageLink(startPage + groupSize)} aria-label="Next Group">
+                <span aria-hidden="true">
+                  &gt;&gt;
+                </span>
+              </a>
+            </li>
+          }}
+          </ul>
         </div>
         <script>
           {Unparsed(goButtonJsFunc)}

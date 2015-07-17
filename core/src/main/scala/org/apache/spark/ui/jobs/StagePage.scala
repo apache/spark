@@ -1184,7 +1184,7 @@ private[ui] class TaskPagedTable(
             s"$basePath&task.sort=${URLEncoder.encode(header, "UTF-8")}&task.desc=${!desc}"
           val js = Unparsed(s"window.location.href='${headerLink}'")
           val arrow = if (desc) "&#x25BE;" else "&#x25B4;" // UP or DOWN
-          <th class={cssClass} onclick={js}>
+          <th class={cssClass} onclick={js} style="cursor: pointer;">
             {header}
             <span>&nbsp;{Unparsed(arrow)}</span>
           </th>
@@ -1192,7 +1192,7 @@ private[ui] class TaskPagedTable(
           val headerLink =
             s"$basePath&task.sort=${URLEncoder.encode(header, "UTF-8")}"
           val js = Unparsed(s"window.location.href='${headerLink}'")
-          <th class={cssClass} onclick={js}>
+          <th class={cssClass} onclick={js} style="cursor: pointer;">
             {header}
           </th>
         }
