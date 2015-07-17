@@ -87,7 +87,7 @@ setMethod("count",
 setMethod("agg",
           signature(x = "GroupedData"),
           function(x, ...) {
-            cols = list(...)
+            cols <- list(...)
             stopifnot(length(cols) > 0)
             if (is.character(cols[[1]])) {
               cols <- varargsToEnv(...)
@@ -97,7 +97,7 @@ setMethod("agg",
               if (!is.null(ns)) {
                 for (n in ns) {
                   if (n != "") {
-                    cols[[n]] = alias(cols[[n]], n)
+                    cols[[n]] <- alias(cols[[n]], n)
                   }
                 }
               }

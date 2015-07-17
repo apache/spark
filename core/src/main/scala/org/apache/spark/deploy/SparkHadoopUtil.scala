@@ -178,7 +178,7 @@ class SparkHadoopUtil extends Logging {
 
   private def getFileSystemThreadStatisticsMethod(methodName: String): Method = {
     val statisticsDataClass =
-      Class.forName("org.apache.hadoop.fs.FileSystem$Statistics$StatisticsData")
+      Utils.classForName("org.apache.hadoop.fs.FileSystem$Statistics$StatisticsData")
     statisticsDataClass.getDeclaredMethod(methodName)
   }
 
@@ -356,7 +356,7 @@ object SparkHadoopUtil {
         System.getProperty("SPARK_YARN_MODE", System.getenv("SPARK_YARN_MODE")))
     if (yarnMode) {
       try {
-        Class.forName("org.apache.spark.deploy.yarn.YarnSparkHadoopUtil")
+        Utils.classForName("org.apache.spark.deploy.yarn.YarnSparkHadoopUtil")
           .newInstance()
           .asInstanceOf[SparkHadoopUtil]
       } catch {
