@@ -71,7 +71,7 @@ class LocalCheckpointSuite extends SparkFunSuite with LocalSparkContext {
     assert(filteredRdd.checkpointData.isDefined)
     assert(!filteredRdd.checkpointData.get.isCheckpointed)
     assert(!filteredRdd.checkpointData.get.checkpointRDD.isDefined)
-    assert(filteredRdd.getStorageLevel === StorageLevel.DISK_ONLY)
+    assert(filteredRdd.getStorageLevel === LocalRDDCheckpointData.DEFAULT_STORAGE_LEVEL)
 
     // After an action, the lineage is truncated
     val result = filteredRdd.collect()
@@ -101,7 +101,9 @@ class LocalCheckpointSuite extends SparkFunSuite with LocalSparkContext {
   }
 
   test("indirect lineage truncation") {
-    testIndirectLineageTruncation(newRdd.localCheckpoint(), StorageLevel.DISK_ONLY)
+    testIndirectLineageTruncation(
+      newRdd.localCheckpoint(),
+      LocalRDDCheckpointData.DEFAULT_STORAGE_LEVEL)
   }
 
   test("indirect lineage truncation - caching before checkpointing") {
@@ -117,7 +119,10 @@ class LocalCheckpointSuite extends SparkFunSuite with LocalSparkContext {
   }
 
   test("checkpoint without draining iterator") {
-    testWithoutDrainingIterator(newSortedRdd.localCheckpoint(), StorageLevel.DISK_ONLY, 50)
+    testWithoutDrainingIterator(
+      newSortedRdd.localCheckpoint(),
+      LocalRDDCheckpointData.DEFAULT_STORAGE_LEVEL,
+      50)
   }
 
   test("checkpoint without draining iterator - caching before checkpointing") {
@@ -135,7 +140,9 @@ class LocalCheckpointSuite extends SparkFunSuite with LocalSparkContext {
   }
 
   test("checkpoint blocks exist") {
-    testCheckpointBlocksExist(newRdd.localCheckpoint(), StorageLevel.DISK_ONLY)
+    testCheckpointBlocksExist(
+      newRdd.localCheckpoint(),
+      LocalRDDCheckpointData.DEFAULT_STORAGE_LEVEL)
   }
 
   test("checkpoint blocks exist - caching before checkpointing") {
