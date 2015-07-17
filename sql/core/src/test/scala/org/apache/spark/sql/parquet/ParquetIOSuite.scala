@@ -113,14 +113,6 @@ class ParquetIOSuite extends QueryTest with ParquetTest {
         checkAnswer(sqlContext.read.parquet(dir.getCanonicalPath), data.collect().toSeq)
       }
     }
-
-    // Unlimited-length decimals are not yet supported
-    intercept[Throwable] {
-      withTempPath { dir =>
-        makeDecimalRDD(DecimalType.Unlimited).write.parquet(dir.getCanonicalPath)
-        sqlContext.read.parquet(dir.getCanonicalPath).collect()
-      }
-    }
   }
 
   test("date type") {

@@ -399,10 +399,6 @@ private[parquet] class CatalystSchemaConverter(
           .length(CatalystSchemaConverter.minBytesForPrecision(precision))
           .named(field.name)
 
-      case dec @ DecimalType.Unlimited if !followParquetFormatSpec =>
-        throw new AnalysisException(
-          s"Data type $dec is not supported. Decimal precision must be specified.")
-
       // =====================================
       // Decimals (follow Parquet format spec)
       // =====================================
@@ -436,10 +432,6 @@ private[parquet] class CatalystSchemaConverter(
           .scale(scale)
           .length(CatalystSchemaConverter.minBytesForPrecision(precision))
           .named(field.name)
-
-      case dec @ DecimalType.Unlimited if followParquetFormatSpec =>
-        throw new AnalysisException(
-          s"Data type $dec is not supported. Decimal precision must be specified.")
 
       // ===================================================
       // ArrayType and MapType (for Spark versions <= 1.4.x)
