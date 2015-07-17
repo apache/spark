@@ -20,12 +20,12 @@ package org.apache.spark.sql.parquet
 import java.nio.ByteBuffer
 import java.util.{List => JList, Map => JMap}
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters.{mapAsJavaMapConverter, seqAsJavaListConverter}
 
 import org.apache.hadoop.fs.Path
 import org.apache.parquet.avro.AvroParquetWriter
 
-import org.apache.spark.sql.parquet.test.avro.{Suit, Nested, ParquetAvroCompat}
+import org.apache.spark.sql.parquet.test.avro.{Nested, ParquetAvroCompat, Suit}
 import org.apache.spark.sql.test.TestSQLContext
 import org.apache.spark.sql.{Row, SQLContext}
 
@@ -89,15 +89,15 @@ class ParquetAvroCompatibilitySuite extends ParquetCompatibilityTest {
     def nullable[T <: AnyRef] = makeNullable[T](i) _
 
     def makeComplexColumn(i: Int): JMap[String, JList[Nested]] = {
-      mapAsJavaMap(Seq.tabulate(3) { n =>
-        (i + n).toString -> seqAsJavaList(Seq.tabulate(3) { m =>
+      Seq.tabulate(3) { n =>
+        (i + n).toString -> Seq.tabulate(3) { m =>
           Nested
             .newBuilder()
-            .setNestedIntsColumn(seqAsJavaList(Seq.tabulate(3)(j => i + j + m)))
+            .setNestedIntsColumn(Seq.tabulate(3)(j => i + j + m: Integer).asJava)
             .setNestedStringColumn(s"val_${i + m}")
             .build()
-        })
-      }.toMap)
+        }.asJava
+      }.toMap.asJava
     }
 
     ParquetAvroCompat
@@ -120,9 +120,9 @@ class ParquetAvroCompatibilitySuite extends ParquetCompatibilityTest {
       .setMaybeStringColumn(nullable(s"val_$i"))
       .setMaybeEnumColumn(nullable(Suit.values()(i % Suit.values().length)))
 
-      .setStringsColumn(Seq.tabulate(3)(n => s"arr_${i + n}"))
+      .setStringsColumn(Seq.tabulate(3)(n => s"arr_${i + n}").asJava)
       .setStringToIntColumn(
-        mapAsJavaMap(Seq.tabulate(3)(n => n.toString -> (i + n: Integer)).toMap))
+        Seq.tabulate(3)(n => n.toString -> (i + n: Integer)).toMap.asJava)
       .setComplexColumn(makeComplexColumn(i))
 
       .build()
