@@ -20,8 +20,9 @@ package org.apache.spark.sql.catalyst.expressions.aggregate2
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.Row
 
 /** The mode of an [[AggregateFunction]]. */
 private[sql] sealed trait AggregateMode
@@ -276,4 +277,79 @@ case class Average(child: Expression) extends AlgebraicAggregate {
   override def nullable: Boolean = true
   override def dataType: DataType = resultType
   override def children: Seq[Expression] = child :: Nil
+}
+
+abstract class AggregationBuffer(
+    toCatalystConverters: Array[Any => Any],
+    toScalaConverters: Array[Any => Any],
+    bufferOffset: Int)
+  extends Row {
+
+  override def length: Int = toCatalystConverters.length
+
+  protected val offsets: Array[Int] = {
+    val newOffsets = new Array[Int](length)
+    var i = 0
+    while (i < newOffsets.length) {
+      newOffsets(i) = bufferOffset + i
+      i += 1
+    }
+    newOffsets
+  }
+}
+
+class MutableAggregationBuffer(
+    toCatalystConverters: Array[Any => Any],
+    toScalaConverters: Array[Any => Any],
+    bufferOffset: Int,
+    var underlyingBuffer: MutableRow)
+  extends AggregationBuffer(toCatalystConverters, toScalaConverters, bufferOffset) {
+
+  override def apply(i: Int): Any = {
+    if (i >= length || i < 0) {
+      throw new IllegalArgumentException(
+        s"Could not access ${i}th value in this buffer because it only has $length values.")
+    }
+    toScalaConverters(i)(underlyingBuffer(offsets(i)))
+  }
+
+  def update(i: Int, value: Any): Unit = {
+    if (i >= length || i < 0) {
+      throw new IllegalArgumentException(
+        s"Could not update ${i}th value in this buffer because it only has $length values.")
+    }
+    underlyingBuffer.update(offsets(i), toCatalystConverters(i)(value))
+  }
+
+  override def copy(): MutableAggregationBuffer = {
+    new MutableAggregationBuffer(
+      toCatalystConverters,
+      toScalaConverters,
+      bufferOffset,
+      underlyingBuffer)
+  }
+}
+
+class InputAggregationBuffer(
+    toCatalystConverters: Array[Any => Any],
+    toScalaConverters: Array[Any => Any],
+    bufferOffset: Int,
+    var underlyingInputBuffer: Row)
+  extends AggregationBuffer(toCatalystConverters, toScalaConverters, bufferOffset) {
+
+  override def apply(i: Int): Any = {
+    if (i >= length || i < 0) {
+      throw new IllegalArgumentException(
+        s"Could not access ${i}th value in this buffer because it only has $length values.")
+    }
+    toScalaConverters(i)(underlyingInputBuffer(offsets(i)))
+  }
+
+  override def copy(): InputAggregationBuffer = {
+    new InputAggregationBuffer(
+      toCatalystConverters,
+      toScalaConverters,
+      bufferOffset,
+      underlyingInputBuffer)
+  }
 }

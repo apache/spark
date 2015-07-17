@@ -18,9 +18,9 @@
 package org.apache.spark.sql.hive.execution
 
 import org.apache.spark.sql.hive.test.TestHive
-import org.apache.spark.sql.test.TestSQLContext
 import org.apache.spark.sql.{QueryTest, Row}
 import org.scalatest.BeforeAndAfterAll
+import test.org.apache.spark.sql.hive.aggregate2.MyJavaUDAF
 
 class Aggregate2Suite extends QueryTest with BeforeAndAfterAll {
 
@@ -188,6 +188,55 @@ class Aggregate2Suite extends QueryTest with BeforeAndAfterAll {
         Row(5.0, -2.5, 2, -7.0, -0.5) ::
         Row(null, null, 3, null, null) ::
         Row(null, null, null, null, 10.0) :: Nil)
+  }
+
+  test("udaf") {
+    val myJavaUDAF = new MyJavaUDAF
+    ctx.udaf.register("myjavaudaf", myJavaUDAF)
+
+    ctx.sql(
+      """
+        |SELECT
+        |  key,
+        |  mydoublesum(cast(value as double) + 1.5 * key),
+        |  avg(value - key),
+        |  myjavaudaf(value),
+        |  mydoublesum(cast(value as double) - 1.5 * key),
+        |  avg(value)
+        |FROM agg2
+        |GROUP BY key
+      """.stripMargin).explain(true)
+
+    ctx.sql(
+      """
+        |SELECT
+        |  key,
+        |  mydoublesum(cast(value as double) + 1.5 * key),
+        |  avg(value - key),
+        |  myjavaudaf(value),
+        |  mydoublesum(cast(value as double) - 1.5 * key),
+        |  avg(value)
+        |FROM agg2
+        |GROUP BY key
+      """.stripMargin).collect().foreach(println)
+
+    checkAnswer(
+      ctx.sql(
+        """
+          |SELECT
+          |  key,
+          |  mydoublesum(cast(value as double) + 1.5 * key),
+          |  avg(value - key),
+          |  myjavaudaf(value),
+          |  mydoublesum(cast(value as double) - 1.5 * key),
+          |  avg(value)
+          |FROM agg2
+          |GROUP BY key
+        """.stripMargin),
+      Row(1, 64.5, 19.0, 6000.0, 55.5, 20.0) ::
+        Row(2, 5.0, -2.5, -0.0, -7.0, -0.5) ::
+        Row(3, null, null, null, null, null) ::
+        Row(null, null, null, 60000.0, null, 10.0) :: Nil)
   }
 
   override def afterAll(): Unit = {
