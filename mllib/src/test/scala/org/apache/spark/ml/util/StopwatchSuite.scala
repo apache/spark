@@ -33,24 +33,10 @@ class StopwatchSuite extends SparkFunSuite with MLlibTestSparkContext {
     intercept[AssertionError] {
       sw.stop()
     }
-    val ubStart = now
-    sw.start()
-    val lbStart = now
-    runTask()
-    val lb = now - lbStart
-    val duration = sw.stop()
-    val ub = now - ubStart
-    assert(duration >= lb && duration <= ub)
+    val duration = checkStopwatch(sw)
     val elapsed = sw.elapsed()
     assert(elapsed === duration)
-    val ubStart2 = now
-    sw.start()
-    val lbStart2 = now
-    runTask()
-    val lb2 = now - lbStart2
-    val duration2 = sw.stop()
-    val ub2 = now - ubStart2
-    assert(duration2 >= lb2 && duration2 <= ub2)
+    val duration2 = checkStopwatch(sw)
     val elapsed2 = sw.elapsed()
     assert(elapsed2 === duration + duration2)
     assert(sw.toString === s"sw: ${elapsed2}ms")
@@ -74,22 +60,13 @@ class StopwatchSuite extends SparkFunSuite with MLlibTestSparkContext {
   test("DistributedStopwatch on executors") {
     val sw = new DistributedStopwatch(sc, "sw")
     val rdd = sc.parallelize(0 until 4, 4)
-    val ubAcc = sc.accumulator(0L)
-    val lbAcc = sc.accumulator(0L)
+    val acc = sc.accumulator(0L)
     rdd.foreach { i =>
-      val ubStart = now
-      sw.start()
-      val lbStart = now
-      runTask()
-      val lb = now - lbStart
-      sw.stop()
-      val ub = now - ubStart
-      lbAcc += lb
-      ubAcc += ub
+      acc += checkStopwatch(sw)
     }
     assert(!sw.isRunning)
     val elapsed = sw.elapsed()
-    assert(elapsed >= lbAcc.value && elapsed <= ubAcc.value)
+    assert(elapsed === acc.value)
   }
 
   test("MultiStopwatch") {
@@ -102,57 +79,47 @@ class StopwatchSuite extends SparkFunSuite with MLlibTestSparkContext {
       sw("some")
     }
     assert(sw.toString === "{\n  local: 0ms,\n  spark: 0ms\n}")
-    val localUbStart = now
-    sw("local").start()
-    val localLbStart = now
-    val sparkUbStart = now
-    sw("spark").start()
-    val sparkLbStart = now
-    runTask()
-    val localLb = now - localLbStart
-    sw("local").stop()
-    val localUb = now - localUbStart
-    runTask()
-    val sparkLb = now - sparkLbStart
-    sw("spark").stop()
-    val sparkUb = now - sparkUbStart
+    val localDuration = checkStopwatch(sw("local"))
+    val sparkDuration = checkStopwatch(sw("spark"))
     val localElapsed = sw("local").elapsed()
     val sparkElapsed = sw("spark").elapsed()
-    assert(localElapsed >= localLb && localElapsed <= localUb)
-    assert(sparkElapsed >= sparkLb && sparkElapsed <= sparkUb)
+    assert(localElapsed === localDuration)
+    assert(sparkElapsed === sparkDuration)
     assert(sw.toString ===
       s"{\n  local: ${localElapsed}ms,\n  spark: ${sparkElapsed}ms\n}")
     val rdd = sc.parallelize(0 until 4, 4)
-    val lbAcc = sc.accumulator(0L)
-    val ubAcc = sc.accumulator(0L)
+    val acc = sc.accumulator(0L)
     rdd.foreach { i =>
       sw("local").start()
-      val ubStart = now
-      sw("spark").start()
-      val lbStart = now
-      runTask()
-      val lb = now - lbStart
-      sw("spark").stop()
-      val ub = now - ubStart
+      val duration = checkStopwatch(sw("spark"))
       sw("local").stop()
-      lbAcc += lb
-      ubAcc += ub
+      acc += duration
     }
     val localElapsed2 = sw("local").elapsed()
     assert(localElapsed2 === localElapsed)
     val sparkElapsed2 = sw("spark").elapsed()
-    assert(sparkElapsed2 >= sparkElapsed + lbAcc.value
-      && sparkElapsed2 <= sparkElapsed + ubAcc.value)
+    assert(sparkElapsed2 === sparkElapsed + acc.value)
   }
 }
 
-private object StopwatchSuite {
+private object StopwatchSuite extends SparkFunSuite {
 
-  /** Runs a task that takes a random time. */
-  def runTask(): Unit = {
+  /**
+   * Checks the input stopwatch on a task that takes a random time (<10ms) to finish. Validates and
+   * returns the duration reported by the stopwatch.
+   */
+  def checkStopwatch(sw: Stopwatch): Long = {
+    val ubStart = now
+    sw.start()
+    val lbStart = now
     Thread.sleep(new Random().nextInt(10))
+    val lb = now - lbStart
+    val duration = sw.stop()
+    val ub = now - ubStart
+    assert(duration >= lb && duration <= ub)
+    duration
   }
 
   /** The current time in milliseconds. */
-  def now: Long = System.currentTimeMillis()
+  private def now: Long = System.currentTimeMillis()
 }
