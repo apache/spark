@@ -57,9 +57,9 @@ test_that("infer types", {
   expect_equal(infer_type(as.Date("2015-03-11")), "date")
   expect_equal(infer_type(as.POSIXlt("2015-03-11 12:13:04.043")), "timestamp")
   expect_equal(infer_type(c(1L, 2L)),
-               list(type = 'array', elementType = "integer", containsNull = TRUE))
+               list(type = "array", elementType = "integer", containsNull = TRUE))
   expect_equal(infer_type(list(1L, 2L)),
-               list(type = 'array', elementType = "integer", containsNull = TRUE))
+               list(type = "array", elementType = "integer", containsNull = TRUE))
   testStruct <- infer_type(list(a = 1L, b = "2"))
   expect_equal(class(testStruct), "structType")
   checkStructField(testStruct$fields()[[1]], "a", "IntegerType", TRUE)
