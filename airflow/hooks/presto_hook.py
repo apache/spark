@@ -21,7 +21,8 @@ class PrestoHook(DbApiHook):
     [[340698]]
     """
 
-    conn_name_attr = 'presto_default'
+    conn_name_attr = 'presto_conn_id'
+    default_conn_name = 'presto_default'
 
     def get_conn(self):
         """Returns a connection object"""
