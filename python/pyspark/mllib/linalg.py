@@ -778,6 +778,8 @@ class Vectors(object):
         >>> Vectors.dense([1, 2, 3])
         DenseVector([1.0, 2.0, 3.0])
         """
+        if isinstance(elements, (int, float)):
+            elements = [elements]
         return DenseVector(elements)
 
     @staticmethod
