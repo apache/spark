@@ -289,6 +289,7 @@ class DataFrameFunctionsSuite extends QueryTest {
       (Map[Int, Int](), "y"),
       (Map[Int, Int](1 -> 1, 2 -> 2, 3 -> 3), "z")
     ).toDF("a", "b")
+
     checkAnswer(
       df.select(size("a")),
       Seq(Row(2), Row(0), Row(3))
