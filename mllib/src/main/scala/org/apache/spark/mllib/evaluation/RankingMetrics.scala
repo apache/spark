@@ -55,6 +55,7 @@ class RankingMetrics[T: ClassTag](predictionAndLabels: RDD[(Array[T], Array[T])]
    *
    * @param k the position to compute the truncated precision, must be positive
    * @return the average precision at the first k ranking positions
+   * @since 1.2.0
    */
   def precisionAt(k: Int): Double = {
     require(k > 0, "ranking position k should be positive")
@@ -124,6 +125,7 @@ class RankingMetrics[T: ClassTag](predictionAndLabels: RDD[(Array[T], Array[T])]
    *
    * @param k the position to compute the truncated ndcg, must be positive
    * @return the average ndcg at the first k ranking positions
+   * @since 1.2.0
    */
   def ndcgAt(k: Int): Double = {
     require(k > 0, "ranking position k should be positive")

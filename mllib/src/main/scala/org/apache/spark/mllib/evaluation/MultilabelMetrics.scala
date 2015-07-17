@@ -103,6 +103,7 @@ class MultilabelMetrics(predictionAndLabels: RDD[(Array[Double], Array[Double])]
   /**
    * Returns precision for a given label (category)
    * @param label the label.
+   * @since 1.2.0
    */
   def precision(label: Double): Double = {
     val tp = tpPerClass(label)
@@ -113,6 +114,7 @@ class MultilabelMetrics(predictionAndLabels: RDD[(Array[Double], Array[Double])]
   /**
    * Returns recall for a given label (category)
    * @param label the label.
+   * @since 1.2.0
    */
   def recall(label: Double): Double = {
     val tp = tpPerClass(label)
@@ -123,6 +125,7 @@ class MultilabelMetrics(predictionAndLabels: RDD[(Array[Double], Array[Double])]
   /**
    * Returns f1-measure for a given label (category)
    * @param label the label.
+   * @since 1.2.0
    */
   def f1Measure(label: Double): Double = {
     val p = precision(label)
