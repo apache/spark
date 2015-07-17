@@ -17,19 +17,19 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.annotation.DeveloperApi
+import scala.collection.mutable.ArrayBuffer
+
 import org.apache.spark.Logging
+import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.{RDD, RDDOperationScope}
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.{CatalystTypeConverters, trees}
+import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.physical._
-
-import scala.collection.mutable.ArrayBuffer
 
 object SparkPlan {
   protected[sql] val currentContext = new ThreadLocal[SQLContext]()
@@ -238,12 +238,19 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   }
 }
 
-private[sql] trait LeafNode extends SparkPlan with trees.LeafNode[SparkPlan] {
+private[sql] trait LeafNode extends SparkPlan {
   self: Product =>
+
+  override def children: Seq[SparkPlan] = Nil
 }
 
-private[sql] trait UnaryNode extends SparkPlan with trees.UnaryNode[SparkPlan] {
+private[sql] trait UnaryNode extends SparkPlan {
   self: Product =>
+
+  def child: SparkPlan
+
+  override def children: Seq[SparkPlan] = child :: Nil
+
   override def outputPartitioning: Partitioning = child.outputPartitioning
 }
 
