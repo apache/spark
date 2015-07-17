@@ -56,11 +56,10 @@ case class Project(projectList: Seq[NamedExpression], child: SparkPlan) extends 
 case class Filter(condition: Expression, child: SparkPlan) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
 
-  @transient lazy val conditionEvaluator: (InternalRow) => Boolean =
-    newPredicate(condition, child.output)
+  override def outputsUnsafeRows: Boolean = child.outputsUnsafeRows
 
   protected override def doExecute(): RDD[InternalRow] = child.execute().mapPartitions { iter =>
-    iter.filter(conditionEvaluator)
+    iter.filter(newPredicate(condition, child.output))
   }
 
   override def outputOrdering: Seq[SortOrder] = child.outputOrdering
@@ -265,6 +264,8 @@ case class UnsafeExternalSort(
     child: SparkPlan,
     testSpillFrequency: Int = 0)
   extends UnaryNode {
+
+  override def outputsUnsafeRows: Boolean = true
 
   private[this] val schema: StructType = child.schema
 

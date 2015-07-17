@@ -17,11 +17,10 @@
 
 package org.apache.spark.sql.execution
 
-import scala.reflect.ClassTag
-
 import org.apache.spark._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.serializer.Serializer
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.types.DataType
 
 private class ShuffledRowRDDPartition(val idx: Int) extends Partition {
@@ -39,7 +38,7 @@ private class PartitionIdPassthrough(override val numPartitions: Int) extends Pa
  * be implemented in Spark core, but that is blocked by some more general refactorings to shuffle
  * interfaces / internals.
  */
-class ShuffledRowRDD[InternalRow: ClassTag](
+class ShuffledRowRDD(
     rowSchema: Array[DataType],
     @transient var prev: RDD[Product2[Int, InternalRow]],
     serializer: Serializer,

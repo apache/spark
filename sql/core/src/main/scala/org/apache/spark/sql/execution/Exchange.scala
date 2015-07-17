@@ -112,19 +112,24 @@ case class Exchange(newPartitioning: Partitioning, child: SparkPlan) extends Una
 
   @transient private lazy val sparkConf = child.sqlContext.sparkContext.getConf
 
-  private def getSerializer(rowSchema: Array[DataType]): Serializer = {
+  private val rowDataTypes = child.output.map(_.dataType).toArray
+
+  private val serializer: Serializer = {
     // It is true when there is no field that needs to be write out.
     // For now, we will not use SparkSqlSerializer2 when noField is true.
-    val noField = rowSchema == null || rowSchema.length == 0
+    val noField = rowDataTypes == null || rowDataTypes.length == 0
 
     val useSqlSerializer2 =
         child.sqlContext.conf.useSqlSerializer2 &&   // SparkSqlSerializer2 is enabled.
-        SparkSqlSerializer2.support(rowSchema) &&  // The schema of row is supported.
+        SparkSqlSerializer2.support(rowDataTypes) &&  // The schema of row is supported.
         !noField
 
-    if (useSqlSerializer2) {
+    if (child.outputsUnsafeRows) {
+      logInfo("Using UnsafeRowSerializer.")
+      new UnsafeRowSerializer(child.output.size)
+    } else if (useSqlSerializer2) {
       logInfo("Using SparkSqlSerializer2.")
-      new SparkSqlSerializer2(rowSchema)
+      new SparkSqlSerializer2(rowDataTypes)
     } else {
       logInfo("Using SparkSqlSerializer.")
       new SparkSqlSerializer(sparkConf)
@@ -132,8 +137,6 @@ case class Exchange(newPartitioning: Partitioning, child: SparkPlan) extends Una
   }
 
   protected override def doExecute(): RDD[InternalRow] = attachTree(this , "execute") {
-    val rowSchema = child.output.map(_.dataType).toArray
-    val serializer = getSerializer(rowSchema)
     val rdd = child.execute()
     val part: Partitioner = newPartitioning match {
       case HashPartitioning(expressions, numPartitions) => new HashPartitioner(numPartitions)
@@ -167,7 +170,7 @@ case class Exchange(newPartitioning: Partitioning, child: SparkPlan) extends Una
         mutablePair.update(part.getPartition(getPartitionKey(r)), if (needsCopy) r.copy() else r)
       }
     }
-    new ShuffledRowRDD[InternalRow](rowSchema, rddWithPartitionIds, serializer, part.numPartitions)
+    new ShuffledRowRDD(rowDataTypes, rddWithPartitionIds, serializer, part.numPartitions)
   }
 }
 
