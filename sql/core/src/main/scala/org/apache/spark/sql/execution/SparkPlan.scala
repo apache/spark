@@ -80,16 +80,17 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   /** Specifies sort order for each partition requirements on the input data for this operator. */
   def requiredChildOrdering: Seq[Seq[SortOrder]] = Seq.fill(children.size)(Nil)
 
-  /**
-   * The format of this operator's output rows as a function of its input rows' format. This assumes
-   * that all this operator's children have the same row output format; this property is guaranteed
-   * to hold since the physical planner includes a rule to automatically convert all of an
-   * operators' inputs to the same row format.
-   */
-  def outputRowFormat(inputFormat: RowFormat): RowFormat = SafeRowFormat
+  /** Specifies whether this operator outputs UnsafeRows */
+  def outputsUnsafeRows: Boolean = false
 
-  /** The set of row formats that this operator can process. */
-  def supportedInputRowFormats: Set[RowFormat] = Set(SafeRowFormat)
+  /** Specifies whether this operator is capable of processing UnsafeRows */
+  def canProcessUnsafeRows: Boolean = false
+
+  /**
+   * Specifies whether this operator is capable of processing Java-object-based Rows (i.e. rows
+   * that are not UnsafeRows).
+   */
+  def canProcessSafeRows: Boolean = true
 
   /**
    * Returns the result of this query as an RDD[InternalRow] by delegating to doExecute

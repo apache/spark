@@ -20,43 +20,23 @@ package org.apache.spark.sql.execution
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Attribute, UnsafeRow, UnsafeRowConverter}
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.unsafe.PlatformDependent
-
-
-sealed trait RowFormat
-case object UnsafeRowFormat extends RowFormat
-case object SafeRowFormat extends RowFormat
-
 
 /**
  * :: DeveloperApi ::
  * Converts Java-object-based rows into [[UnsafeRow]]s.
  */
 @DeveloperApi
-case class ToUnsafeRow(child: SparkPlan) extends UnaryNode {
+case class ConvertToUnsafe(child: SparkPlan) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
-  override protected def doExecute(): RDD[UnsafeRow] = {
-    // TODO: this will change after SPARK-9022 / #7437
+  override def outputsUnsafeRows: Boolean = true
+  override def canProcessUnsafeRows: Boolean = false
+  override def canProcessSafeRows: Boolean = true
+  override protected def doExecute(): RDD[InternalRow] = {
     child.execute().mapPartitions { iter =>
-      val toUnsafeConverter = new UnsafeRowConverter(child.output.map(_.dataType).toArray)
-      val unsafeRow = new UnsafeRow()
-      var buffer = new Array[Byte](64)
-      val numFields = child.output.size
-      def convert(row: InternalRow): UnsafeRow = {
-        val sizeRequirement = toUnsafeConverter.getSizeRequirement(row)
-        if (sizeRequirement > buffer.length) {
-          buffer = new Array[Byte](sizeRequirement)
-        }
-        // TODO: how do we want to handle object pools here?
-        toUnsafeConverter.writeRow(
-          row, buffer, PlatformDependent.BYTE_ARRAY_OFFSET, sizeRequirement, null)
-        unsafeRow.pointTo(
-          buffer, PlatformDependent.BYTE_ARRAY_OFFSET, numFields, sizeRequirement, null)
-        unsafeRow
-      }
-      iter.map(convert)
+      val convertToUnsafe = UnsafeProjection.create(child.schema)
+      iter.map(convertToUnsafe)
     }
   }
 }
@@ -66,24 +46,62 @@ case class ToUnsafeRow(child: SparkPlan) extends UnaryNode {
  * Converts [[UnsafeRow]]s back into Java-object-based rows.
  */
 @DeveloperApi
-case class FromUnsafeRow(child: SparkPlan) extends UnaryNode {
+case class ConvertFromUnsafe(child: SparkPlan) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
+  override def outputsUnsafeRows: Boolean = false
+  override def canProcessUnsafeRows: Boolean = true
+  override def canProcessSafeRows: Boolean = false
   override protected def doExecute(): RDD[InternalRow] = {
-    // TODO: this will change after SPARK-9022 / #7437
     child.execute().mapPartitions { iter =>
-      val proj = newMutableProjection(null, child.output)()
-      iter.map(proj)
+      val convertToSafe = FromUnsafeProjection(child.output.map(_.dataType))
+      iter.map(convertToSafe)
     }
   }
 }
 
 private[sql] object EnsureRowFormats extends Rule[SparkPlan] {
 
-  private def meetsRequirements(operator: åSparkPlan): Boolean = {
-    operator.children.flatMap(_.)
-  }
+  private def onlyHandlesSafeRows(operator: SparkPlan): Boolean =
+    operator.canProcessSafeRows && !operator.canProcessUnsafeRows
 
-  override def apply(operator: SparkPlan): SparkPlan = {
+  private def onlyHandlesUnsafeRows(operator: SparkPlan): Boolean =
+    operator.canProcessUnsafeRows && !operator.canProcessSafeRows
 
+  private def handlesBothSafeAndUnsafeRows(operator: SparkPlan): Boolean =
+    operator.canProcessSafeRows && operator.canProcessUnsafeRows
+
+  override def apply(operator: SparkPlan): SparkPlan = operator.transformUp {
+    case operator: SparkPlan if onlyHandlesSafeRows(operator) =>
+      if (operator.children.exists(_.outputsUnsafeRows)) {
+        operator.withNewChildren {
+          operator.children.map {
+            c => if (c.outputsUnsafeRows) ConvertFromUnsafe(c) else c
+          }
+        }
+      } else {
+        operator
+      }
+    case operator: SparkPlan if onlyHandlesUnsafeRows(operator) =>
+      if (operator.children.exists(!_.outputsUnsafeRows)) {
+        operator.withNewChildren {
+          operator.children.map {
+            c => if (!c.outputsUnsafeRows) ConvertToUnsafe(c) else c
+          }
+        }
+      } else {
+        operator
+      }
+    case operator: SparkPlan if handlesBothSafeAndUnsafeRows(operator) =>
+      if (operator.children.map(_.outputsUnsafeRows).toSet.size != 1) {
+        // If this operator's children produce both unsafe and safe rows, then convert everything
+        // to safe rows
+        operator.withNewChildren {
+          operator.children.map {
+            c => if (c.outputsUnsafeRows) ConvertFromUnsafe(c) else c
+          }
+        }
+      } else {
+        operator
+      }
   }
 }
