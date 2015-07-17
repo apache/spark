@@ -47,21 +47,21 @@ class WindowSuite extends QueryTest {
       (9, "Pro", "Tablet", 4500),
       (10, "Pro2", "Tablet", 6500)).
       toDF("id", "product", "category", "revenue")
+    val window = Window.
+      partitionBy($"category").
+      orderBy($"revenue".desc).
+      rangeBetween(-2000L, 1000L)
     checkAnswer(
       df.select(
         $"id",
-        avg($"revenue").over(Window.
-          partitionBy($"category").
-          orderBy($"revenue".desc).
-          rangeBetween(-2000L, 1000L)).
-          cast("int")),
-    Row(1, 5833) :: Row(2, 2000) :: Row(3, 5500) ::
-      Row(4, 5833) :: Row(5, 5833) :: Row(6, 2000) ::
-      Row(7, 3000) :: Row(8, 3000) :: Row(9, 4166) ::
-      Row(10, 5500) :: Nil)
+        avg($"revenue").over(window).cast("int")),
+      Row(1, 5833) :: Row(2, 2000) :: Row(3, 5500) ::
+      Row(4, 5833) :: Row(5, 5833) :: Row(6, 2833) ::
+      Row(7, 3000) :: Row(8, 3000) :: Row(9, 5500) ::
+      Row(10, 6000) :: Nil)
   }
 
-  // This is here to illustrate the fact that reverse order also reverses bounds.
+  // This is here to illustrate the fact that reverse order also reverses offsets.
   test("reverse unbounded range frame") {
     val df = Seq(1, 2, 4, 3, 2, 1).
       map(Tuple1.apply).
@@ -72,8 +72,8 @@ class WindowSuite extends QueryTest {
         $"value",
          sum($"value").over(window.rangeBetween(Long.MinValue, 1)),
          sum($"value").over(window.rangeBetween(1, Long.MaxValue))),
-      Row(1, 11, 6) :: Row(2, 7, 9) :: Row(4, null, 13) ::
-        Row(3, 4, 13) :: Row(2, 7, 9) :: Row(1, 11, 6) :: Nil)
+      Row(1, 13, null) :: Row(2, 13, 2) :: Row(4, 7, 9) ::
+        Row(3, 11, 6) :: Row(2, 13, 2) :: Row(1, 13, null) :: Nil)
 
   }
 }
