@@ -503,39 +503,44 @@ object DateTimeUtils {
    * since 1.1.1970. January is month 1.
    */
   def getMonth(date: Int): Int = {
-    val (year, dayInYear) = getYearAndDayInYear(date)
-    val leap = if (isLeapYear(year)) 1 else 0
-    if (dayInYear <= 181 + leap) {
-      if (dayInYear <= 90 + leap) {
+    var (year, dayInYear) = getYearAndDayInYear(date)
+    var isLeap = isLeapYear(year)
+    if (isLeap && dayInYear > 60) {
+      dayInYear = dayInYear - 1
+      isLeap = false
+    }
+
+    if (dayInYear <= 181) {
+      if (dayInYear <= 90) {
         if (dayInYear <= 31) {
           1
-        } else if (dayInYear <= 59 + leap) {
+        } else if (dayInYear <= 59 || (isLeap && dayInYear <= 60)) {
           2
         } else {
           3
         }
       } else {
-        if (dayInYear <= 120 + leap) {
+        if (dayInYear <= 120) {
           4
-        } else if (dayInYear <= 151 + leap) {
+        } else if (dayInYear <= 151) {
           5
         } else {
           6
         }
       }
     } else {
-      if (dayInYear <= 273 + leap) {
-        if (dayInYear <= 212 + leap) {
+      if (dayInYear <= 273) {
+        if (dayInYear <= 212) {
           7
-        } else if (dayInYear <= 243 + leap) {
+        } else if (dayInYear <= 243) {
           8
         } else {
           9
         }
       } else {
-        if (dayInYear <= 304 + leap) {
+        if (dayInYear <= 304) {
           10
-        } else if (dayInYear <= 334 + leap) {
+        } else if (dayInYear <= 334) {
           11
         } else {
           12
@@ -550,54 +555,48 @@ object DateTimeUtils {
    */
   def getDayOfMonth(date: Int): Int = {
     var (year, dayInYear) = getYearAndDayInYear(date)
-    val leap = if (isLeapYear(year) && dayInYear > 59) 1 else 0
+    var isLeap = isLeapYear(year)
+    if (isLeap && dayInYear > 60) {
+      dayInYear = dayInYear - 1
+      isLeap = false
+    }
 
-    if (dayInYear <= 181 + leap) {
-      if (dayInYear <= 90 + leap) {
+    if (dayInYear <= 181) {
+      if (dayInYear <= 90) {
         if (dayInYear <= 31) {
           dayInYear
-        } else if (dayInYear <= 59 + leap) {
+        } else if (dayInYear <= 59 || (isLeap && dayInYear <= 60)) {
           dayInYear - 31
         } else {
-          dayInYear - 59 - leap
+          dayInYear - 59
         }
       } else {
-        if (dayInYear <= 120 + leap) {
-          dayInYear - 90 - leap
-        } else if (dayInYear <= 151 + leap) {
-          dayInYear - 120 - leap
+        if (dayInYear <= 120) {
+          dayInYear - 90
+        } else if (dayInYear <= 151) {
+          dayInYear - 120
         } else {
-          dayInYear - 151 - leap
+          dayInYear - 151
         }
       }
     } else {
-      if (dayInYear <= 273 + leap) {
-        if (dayInYear <= 212 + leap) {
-          dayInYear - 181 - leap
-        } else if (dayInYear <= 243 + leap) {
-          dayInYear - 212 - leap
+      if (dayInYear <= 273) {
+        if (dayInYear <= 212) {
+          dayInYear - 181
+        } else if (dayInYear <= 243) {
+          dayInYear - 212
         } else {
-          dayInYear - 243 - leap
+          dayInYear - 243
         }
       } else {
-        if (dayInYear <= 304 + leap) {
-          dayInYear - 273 - leap
-        } else if (dayInYear <= 334 + leap) {
-          dayInYear - 304 - leap
+        if (dayInYear <= 304) {
+          dayInYear - 273
+        } else if (dayInYear <= 334) {
+          dayInYear - 304
         } else {
-          dayInYear - 334 - leap
+          dayInYear - 334
         }
       }
     }
-  }
-
-  /**
-   * Returns the week number for the given date. The date is expressed in days since
-   * 1.1.1970. The first week of the has to have at least 4 days. The first day of a
-   * week is Monday.
-   */
-  def getWeekOfYear(date: Int): Int = {
-    calendar.setTimeInMillis(date * MILLIS_PER_DAY)
-    calendar.get(Calendar.WEEK_OF_YEAR)
   }
 }

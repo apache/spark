@@ -706,7 +706,7 @@ def month(col):
     >>> df0 = sqlContext.createDataFrame([('2015-04-08',)], ['a'])
 
     >>> df0.select(month('a').alias('month')).collect()
-   [Row(month=4)]
+    [Row(month=4)]
    """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.month(col))

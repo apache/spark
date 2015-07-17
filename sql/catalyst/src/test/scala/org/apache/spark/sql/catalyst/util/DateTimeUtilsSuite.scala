@@ -378,14 +378,4 @@ class DateTimeUtilsSuite extends SparkFunSuite {
     assert(DateTimeUtils.getDayOfMonth((c.getTimeInMillis / DateTimeUtils.MILLIS_PER_DAY).toInt) ===
       24)
   }
-
-  test("get week of year") {
-    val c = Calendar.getInstance()
-    c.set(2015, 2, 18)
-    assert(DateTimeUtils.getWeekOfYear((c.getTimeInMillis / DateTimeUtils.MILLIS_PER_DAY).toInt) ===
-      12)
-    c.set(2012, 11, 24)
-    assert(DateTimeUtils.getWeekOfYear((c.getTimeInMillis / DateTimeUtils.MILLIS_PER_DAY).toInt) ===
-      51)
-  }
 }
