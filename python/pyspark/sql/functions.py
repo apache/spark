@@ -653,18 +653,24 @@ def ntile(n):
 
 
 @since(1.5)
-def dateFormat(dateCol, formatCol):
+def dateFormat(dateCol, format):
     """
-    Convert the given date into the format specified by the second argument.
-    Return type is always string.
-    NOTE: Prefer using functions like year. These use an optimized implementation.
+    Converts a date/timestamp/string to a value of string in the format specified by the date
+    format given by the second argument.
+
+    A pattern could be for instance `dd.MM.yyyy` and could return a string like '18.03.1993'. All
+    pattern letters of the Java class `java.text.SimpleDateFormat can be used.
+
+    NOTE: Use when ever possible specialized functions like `year`. These benefit from a
+    specialized implementation.
+
     >>> df0 = sqlContext.createDataFrame([('2015-04-08',)], ['a'])
 
     >>> df0.select(dateFormat('a', 'MM/dd/yyy').alias('date')).collect()
     [Row(date=u'04/08/2015')]
     """
     sc = SparkContext._active_spark_context
-    return Column(sc._jvm.functions.dateFormat(dateCol, formatCol))
+    return Column(sc._jvm.functions.dateFormat(dateCol, format))
 
 
 @since(1.5)
