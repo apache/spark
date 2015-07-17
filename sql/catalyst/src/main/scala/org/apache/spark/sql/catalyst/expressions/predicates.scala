@@ -38,8 +38,6 @@ object InterpretedPredicate {
  * An [[Expression]] that returns a boolean value.
  */
 trait Predicate extends Expression {
-  self: Product =>
-
   override def dataType: DataType = BooleanType
 }
 
@@ -222,7 +220,6 @@ case class Or(left: Expression, right: Expression) extends BinaryOperator with P
 
 
 abstract class BinaryComparison extends BinaryOperator with Predicate {
-  self: Product =>
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     if (ctx.isPrimitiveType(left.dataType)) {

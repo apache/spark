@@ -298,7 +298,7 @@ case class Expand(
 }
 
 trait GroupingAnalytics extends UnaryNode {
-  self: Product =>
+
   def groupByExprs: Seq[Expression]
   def aggregations: Seq[NamedExpression]
 

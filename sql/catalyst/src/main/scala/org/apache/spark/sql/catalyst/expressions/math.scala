@@ -34,7 +34,6 @@ import org.apache.spark.unsafe.types.UTF8String
  */
 abstract class LeafMathExpression(c: Double, name: String)
   extends LeafExpression with Serializable {
-  self: Product =>
 
   override def dataType: DataType = DoubleType
   override def foldable: Boolean = true
@@ -58,7 +57,7 @@ abstract class LeafMathExpression(c: Double, name: String)
  * @param name The short name of the function
  */
 abstract class UnaryMathExpression(f: Double => Double, name: String)
-  extends UnaryExpression with Serializable with ImplicitCastInputTypes { self: Product =>
+  extends UnaryExpression with Serializable with ImplicitCastInputTypes {
 
   override def inputTypes: Seq[DataType] = Seq(DoubleType)
   override def dataType: DataType = DoubleType
@@ -92,7 +91,7 @@ abstract class UnaryMathExpression(f: Double => Double, name: String)
  * @param name The short name of the function
  */
 abstract class BinaryMathExpression(f: (Double, Double) => Double, name: String)
-  extends BinaryExpression with Serializable with ImplicitCastInputTypes { self: Product =>
+  extends BinaryExpression with Serializable with ImplicitCastInputTypes {
 
   override def inputTypes: Seq[DataType] = Seq(DoubleType, DoubleType)
 

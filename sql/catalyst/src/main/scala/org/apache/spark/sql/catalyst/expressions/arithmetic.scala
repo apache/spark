@@ -77,7 +77,6 @@ case class Abs(child: Expression) extends UnaryExpression with ExpectsInputTypes
 }
 
 abstract class BinaryArithmetic extends BinaryOperator {
-  self: Product =>
 
   override def dataType: DataType = left.dataType
 
