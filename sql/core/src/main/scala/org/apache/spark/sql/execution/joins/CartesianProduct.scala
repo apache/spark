@@ -28,9 +28,9 @@ import org.apache.spark.sql.execution.{BinaryNode, SparkPlan}
  */
 @DeveloperApi
 case class CartesianProduct(
-     left: SparkPlan,
-     right: SparkPlan,
-     buildSide: BuildSide) extends BinaryNode {
+    left: SparkPlan,
+    right: SparkPlan,
+    buildSide: BuildSide) extends BinaryNode {
   override def output: Seq[Attribute] = left.output ++ right.output
 
   private val (small, big) = buildSide match {
