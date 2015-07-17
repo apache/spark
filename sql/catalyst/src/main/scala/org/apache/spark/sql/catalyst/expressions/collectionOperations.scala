@@ -17,30 +17,28 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
-import org.apache.spark.sql.types.{IntegerType, MapType, ArrayType, DataType}
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodeGenContext, GeneratedExpressionCode}
+import org.apache.spark.sql.types._
 
 /**
  * Given an array or map, returns its size.
  */
-case class Size(child: Expression) extends UnaryExpression {
-
+case class Size(child: Expression) extends UnaryExpression with ExpectsInputTypes {
   override def dataType: DataType = IntegerType
+  override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection(ArrayType, MapType))
 
-  override def checkInputDataTypes(): TypeCheckResult = {
-    if (child.dataType.isInstanceOf[ArrayType] || child.dataType.isInstanceOf[MapType]) {
-      TypeCheckResult.TypeCheckSuccess
-    } else {
-      TypeCheckResult.TypeCheckFailure(
-        s"input to function size should be an array or map type, not ${child.dataType}"
-      )
-    }
+  override def nullSafeEval(value: Any): Int = child.dataType match {
+    case ArrayType(_, _) => value.asInstanceOf[Seq[Any]].size
+    case MapType(_, _, _) => value.asInstanceOf[Map[Any, Any]].size
   }
 
-  override def eval(input: InternalRow): Int = {
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     child.dataType match {
-      case ArrayType(_, _) => child.eval(input).asInstanceOf[Seq[Any]].size
-      case MapType(_, _, _) => child.eval(input).asInstanceOf[Map[Any, Any]].size
+      case ArrayType(_, _) => defineCodeGen(ctx, ev, c => s"($c).size")
+      case MapType(_, _, _) => defineCodeGen(ctx, ev, c => s"($c).size")
     }
   }
+
+  override def prettyName: String = "size"
+
 }
