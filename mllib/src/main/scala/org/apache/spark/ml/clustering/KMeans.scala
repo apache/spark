@@ -78,7 +78,7 @@ private[clustering] trait KMeansParams
   final val initMode = new Param[String](this, "initMode", "initialization algorithm",
     (value: String) => MLlibKMeans.validateInitMode(value))
 
-  /** @group getExpertParam */
+  /** @group expertGetParam */
   def getInitMode: String = $(initMode)
 
   /**
@@ -89,7 +89,7 @@ private[clustering] trait KMeansParams
   final val initSteps = new IntParam(this, "initSteps", "number of steps for k-means||",
     (value: Int) => value > 0)
 
-  /** @group getExpertParam */
+  /** @group expertGetParam */
   def getInitSteps: Int = $(initSteps)
 
   /**
@@ -163,10 +163,10 @@ class KMeans(override val uid: String) extends Estimator[KMeansModel] with KMean
   /** @group setParam */
   def setK(value: Int): this.type = set(k, value)
 
-  /** @group setExpertParam */
+  /** @group expertSetParam */
   def setInitMode(value: String): this.type = set(initMode, value)
 
-  /** @group setExpertParam */
+  /** @group expertSetParam */
   def setInitSteps(value: Int): this.type = set(initSteps, value)
 
   /** @group setParam */
