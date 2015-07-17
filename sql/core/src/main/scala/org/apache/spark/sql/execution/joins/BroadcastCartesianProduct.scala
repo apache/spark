@@ -32,9 +32,9 @@ import org.apache.spark.util.ThreadUtils
  */
 @DeveloperApi
 case class BroadcastCartesianProduct(
-      left: SparkPlan,
-      right: SparkPlan,
-      buildSide: BuildSide) extends BinaryNode {
+     left: SparkPlan,
+     right: SparkPlan,
+     buildSide: BuildSide) extends BinaryNode {
   override def output: Seq[Attribute] = left.output ++ right.output
 
   private val (streamed, broadcast) = buildSide match {
