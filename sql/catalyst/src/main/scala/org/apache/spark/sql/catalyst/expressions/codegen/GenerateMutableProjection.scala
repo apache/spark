@@ -36,7 +36,7 @@ object GenerateMutableProjection extends CodeGenerator[Seq[Expression], () => Mu
 
   protected def create(expressions: Seq[Expression]): (() => MutableProjection) = {
     val ctx = newCodeGenContext()
-    val projectionCode = expressions.zipWithIndex.map { case (e, i) =>
+    val projectionCodes = expressions.zipWithIndex.map { case (e, i) =>
       val evaluationCode = e.gen(ctx)
       evaluationCode.code +
         s"""
@@ -45,10 +45,31 @@ object GenerateMutableProjection extends CodeGenerator[Seq[Expression], () => Mu
           else
             ${ctx.setColumn("mutableRow", e.dataType, i, evaluationCode.primitive)};
         """
-    }.mkString("\n")
+    }
+
+    val projectionCodeSegments = projectionCodes.grouped(50).toSeq.map(_.mkString("\n"))
+
+    val (projectionCode, projectionFuncs) = if (projectionCodeSegments.length == 1) {
+      (projectionCodeSegments(0), "")
+    } else {
+      val pCode = (0 until projectionCodeSegments.length).map { i =>
+        s"projectSeg$i(i);"
+      }.mkString("\n")
+
+      val pFuncs = (0 until projectionCodeSegments.length).map { i =>
+        s"""
+          private final void projectSeg$i(InternalRow i) {
+            ${projectionCodeSegments(i)}
+          }
+        """
+      }.mkString("\n")
+      (pCode, pFuncs)
+    }
+
     val mutableStates = ctx.mutableStates.map { case (javaType, variableName, initialValue) =>
       s"private $javaType $variableName = $initialValue;"
     }.mkString("\n      ")
+
     val code = s"""
       public Object generate($exprType[] expr) {
         return new SpecificProjection(expr);
@@ -74,6 +95,8 @@ object GenerateMutableProjection extends CodeGenerator[Seq[Expression], () => Mu
         public InternalRow currentValue() {
           return (InternalRow) mutableRow;
         }
+
+        $projectionFuncs
 
         public Object apply(Object _i) {
           InternalRow i = (InternalRow) _i;
