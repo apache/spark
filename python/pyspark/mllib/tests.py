@@ -883,6 +883,10 @@ class KolmogorovSmirnovTest(MLlibTestCase):
         self.assertAlmostEqual(model.statistic, 0.189, 3)
         self.assertAlmostEqual(model.pValue, 0.422, 3)
 
+        model = Statistics.kolmogorovSmirnovTest(data, "norm", 0, 1)
+        self.assertAlmostEqual(model.statistic, 0.189, 3)
+        self.assertAlmostEqual(model.pValue, 0.422, 3)
+
 
 class SerDeTest(MLlibTestCase):
     def test_to_java_object_rdd(self):  # SPARK-6660

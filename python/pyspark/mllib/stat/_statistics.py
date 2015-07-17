@@ -248,25 +248,34 @@ class Statistics(object):
         """
         .. note:: Experimental
 
-        Performs the Kolmogorov Smirnov (KS) test for data sampled from a continuous
-        distribution. It tests the null hypothesis that the data is generated from a
-        particular distribution.
+        Performs the Kolmogorov Smirnov (KS) test for data sampled from
+        a continuous distribution. It tests the null hypothesis that
+        the data is generated from a particular distribution.
 
-        The given data is sorted, the Empirical Cumulative Distribution Function (ECDF)
-        is calculated which is the number of points having a CDF value lesser than a given point
-        divided by the total number of points. Since the data is sorted, this is a step function
+        The given data is sorted and the Empirical Cumulative
+        Distribution Function (ECDF) is calculated
+        which for a given point is the number of points having a CDF
+        value lesser than it divided by the total number of points.
+
+        Since the data is sorted, this is a step function
         that rises by (1 / length of data) for every ordered point.
 
-        The KS statistic gives us the maximum distance between the ECDF and the CDF. Intuitively
-        if this value is large, the probabilty that the null hypothesis is true becomes small.
-        For specific details of the implementation, please have a look at the Scala documentation.
+        The KS statistic gives us the maximum distance between the
+        ECDF and the CDF. Intuitively if this statistic is large, the
+        probabilty that the null hypothesis is true becomes small.
+        For specific details of the implementation, please have a look
+        at the Scala documentation.
 
         :param data: RDD, samples from the data
-        :param distName: string, currently only "norm" is suuported. (Normal distribution)
-        :param params: additional values which need to be provided for a certain distribution.
+        :param distName: string, currently only "norm" is supported.
+                         (Normal distribution) to calculate the
+                         theoretical distribution of the data.
+        :param params: additional values which need to be provided for
+                       a certain distribution.
                        If not provided, the default values are used.
-        :return: KolmogorovSmirnovTestResult object containing the test statistic, degrees
-                 of freedom, p-value, the method used, and the null hypothesis.
+        :return: KolmogorovSmirnovTestResult object containing the test
+                 statistic, degrees of freedom, p-value,
+                 the method used, and the null hypothesis.
 
         >>> kstest = Statistics.kolmogorovSmirnovTest
         >>> data = sc.parallelize([-1.0, 0.0, 1.0])
@@ -277,18 +286,15 @@ class Statistics(object):
         0.175
         >>> ksmodel.nullHypothesis
         u'Sample follows theoretical distribution'
-
         """
         if not isinstance(data, RDD):
             raise TypeError("data should be an RDD, got %s." % type(data))
-        if not isinstance(distName, str):
-            raise TypeError("distName should be a string, got %s." % type(distname))
+        if not isinstance(distName, basestring):
+            raise TypeError("distName should be a string, got %s." % type(distName))
 
-        if len(params) == 0:
-            jmodel = callMLlibFunc("kolmogorovSmirnovTestWrapper", data, distName)
-        else:
-            jmodel = callMLlibFunc("kolmogorovSmirnovTestWrapper", data, distName, list(params))
-        return KolmogorovSmirnovTestResult(jmodel)
+        params = [float(param) for param in params]
+        return KolmogorovSmirnovTestResult(
+            callMLlibFunc("kolmogorovSmirnovTest", data, distName, params))
 
 
 def _test():

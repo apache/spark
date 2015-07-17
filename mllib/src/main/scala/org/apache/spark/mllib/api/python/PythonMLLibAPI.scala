@@ -1095,23 +1095,14 @@ private[python] class PythonMLLibAPI extends Serializable {
   }
 
   /**
-   * Wrapper around Statistics.kolmogorovSmirnovTestWrapper with default params.
+   * Java stub for Statistics.kolmogorovSmirnovTest()
    */
-  def kolmogorovSmirnovTestWrapper(
-      data: JavaRDD[Double],
-      distName: String): KolmogorovSmirnovTestResult = {
-    Statistics.kolmogorovSmirnovTest(data, distName)
-  }
-
-  /**
-   * Wrapper around Statistics.kolmogorovSmirnovTestWrapper.
-   */
-  def kolmogorovSmirnovTestWrapper(
+  def kolmogorovSmirnovTest(
       data: JavaRDD[Double],
       distName: String,
       params: JList[Double]): KolmogorovSmirnovTestResult = {
-    val seqParams = params.asScala.toSeq
-    Statistics.kolmogorovSmirnovTest(data, distName, seqParams: _*)
+    val paramsSeq = params.asScala.toSeq
+    Statistics.kolmogorovSmirnovTest(data, distName, paramsSeq: _*)
   }
 
 }

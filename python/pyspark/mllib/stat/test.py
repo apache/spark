@@ -61,9 +61,10 @@ class TestResult(JavaModelWrapper):
         return self._java_model.toString()
 
 
+@inherit_doc
 class ChiSqTestResult(TestResult):
     """
-    Object containing the test results for the chi-squared hypothesis test.
+    Contains test results for the chi-squared hypothesis test.
     """
 
     @property
@@ -74,7 +75,8 @@ class ChiSqTestResult(TestResult):
         return self._java_model.method()
 
 
+@inherit_doc
 class KolmogorovSmirnovTestResult(TestResult):
     """
-    Object containing the test results for the ks tests.
+    Contains test results for the Kolmogorov-Smirnov test.
     """
