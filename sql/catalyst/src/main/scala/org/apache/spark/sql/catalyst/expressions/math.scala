@@ -77,6 +77,30 @@ abstract class UnaryMathExpression(f: Double => Double, name: String)
   }
 }
 
+abstract class UnaryLogExpression(f: Double => Double, name: String)
+    extends UnaryMathExpression(f, name) { self: Product =>
+
+  // values less than or equal to yAsymptote eval to null in Hive, instead of NaN or -Infinity
+  protected val yAsymptote: Double = 0.0
+
+  protected override def nullSafeEval(input: Any): Any = {
+    val d = input.asInstanceOf[Double]
+    if (d <= yAsymptote) null else f(d)
+  }
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    nullSafeCodeGen(ctx, ev, c =>
+      s"""
+        if ($c <= $yAsymptote) {
+          ${ev.isNull} = true;
+        } else {
+          ${ev.primitive} = java.lang.Math.${funcName}($c);
+        }
+       """
+    )
+  }
+}
+
 /**
  * A binary expression specifically for math functions that take two `Double`s as input and returns
  * a `Double`.
@@ -390,18 +414,28 @@ case class Factorial(child: Expression) extends UnaryExpression with ImplicitCas
   }
 }
 
-case class Log(child: Expression) extends UnaryMathExpression(math.log, "LOG")
+case class Log(child: Expression) extends UnaryLogExpression(math.log, "LOG")
 
 case class Log2(child: Expression)
-  extends UnaryMathExpression((x: Double) => math.log(x) / math.log(2), "LOG2") {
+  extends UnaryLogExpression((x: Double) => math.log(x) / math.log(2), "LOG2") {
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    defineCodeGen(ctx, ev, c => s"java.lang.Math.log($c) / java.lang.Math.log(2)")
+    nullSafeCodeGen(ctx, ev, c =>
+      s"""
+        if ($c <= $yAsymptote) {
+          ${ev.isNull} = true;
+        } else {
+          ${ev.primitive} = java.lang.Math.log($c) / java.lang.Math.log(2);
+        }
+       """
+    )
   }
 }
 
-case class Log10(child: Expression) extends UnaryMathExpression(math.log10, "LOG10")
+case class Log10(child: Expression) extends UnaryLogExpression(math.log10, "LOG10")
 
-case class Log1p(child: Expression) extends UnaryMathExpression(math.log1p, "LOG1P")
+case class Log1p(child: Expression) extends UnaryLogExpression(math.log1p, "LOG1P") {
+  protected override val yAsymptote: Double = -1.0
+}
 
 case class Rint(child: Expression) extends UnaryMathExpression(math.rint, "ROUND") {
   override def funcName: String = "rint"
@@ -675,11 +709,32 @@ case class Logarithm(left: Expression, right: Expression)
     this(EulerNumber(), child)
   }
 
+  protected override def nullSafeEval(input1: Any, input2: Any): Any = {
+    val dLeft = input1.asInstanceOf[Double]
+    val dRight = input2.asInstanceOf[Double]
+    // Unlike Hive, we support Log base in (0.0, 1.0]
+    if (dLeft <= 0.0 || dRight <= 0.0) null else math.log(dRight) / math.log(dLeft)
+  }
+
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     if (left.isInstanceOf[EulerNumber]) {
-      defineCodeGen(ctx, ev, (c1, c2) => s"java.lang.Math.log($c2)")
+      nullSafeCodeGen(ctx, ev, (c1, c2) =>
+        s"""
+          if ($c2 <= 0.0) {
+            ${ev.isNull} = true;
+          } else {
+            ${ev.primitive} = java.lang.Math.log($c2);
+          }
+        """)
     } else {
-      defineCodeGen(ctx, ev, (c1, c2) => s"java.lang.Math.log($c2) / java.lang.Math.log($c1)")
+      nullSafeCodeGen(ctx, ev, (c1, c2) =>
+        s"""
+          if ($c1 <= 0.0 || $c2 <= 0.0) {
+            ${ev.isNull} = true;
+          } else {
+           ${ev.primitive} = java.lang.Math.log($c2) / java.lang.Math.log($c1);
+          }
+        """)
     }
   }
 }

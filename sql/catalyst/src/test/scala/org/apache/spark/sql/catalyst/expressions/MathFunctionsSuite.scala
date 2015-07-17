@@ -50,6 +50,7 @@ class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
    * @param c expression
    * @param f The functions in scala.math or elsewhere used to generate expected results
    * @param domain The set of values to run the function with
+   * @param expectNull Whether the given values should return null or not
    * @param expectNaN Whether the given values should eval to NaN or not
    * @tparam T Generic type for primitives
    * @tparam U Generic type for the output of the given function `f`
@@ -58,9 +59,14 @@ class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       c: Expression => Expression,
       f: T => U,
       domain: Iterable[T] = (-20 to 20).map(_ * 0.1),
+      expectNull: Boolean = false,
       expectNaN: Boolean = false,
       evalType: DataType = DoubleType): Unit = {
-    if (expectNaN) {
+    if (expectNull) {
+      domain.foreach { case value =>
+        checkEvaluation(c(Literal(value)), null, EmptyRow)
+      }
+    } else if (expectNaN) {
       domain.foreach { value =>
         checkNaN(c(Literal(value)), EmptyRow)
       }
@@ -78,14 +84,19 @@ class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
    * @param c The DataFrame function
    * @param f The functions in scala.math
    * @param domain The set of values to run the function with
+   * @param expectNull Whether the given values should return null or not
    * @param expectNaN Whether the given values should eval to NaN or not
    */
   private def testBinary(
       c: (Expression, Expression) => Expression,
       f: (Double, Double) => Double,
       domain: Iterable[(Double, Double)] = (-20 to 20).map(v => (v * 0.1, v * -0.1)),
-      expectNaN: Boolean = false): Unit = {
-    if (expectNaN) {
+      expectNull: Boolean = false, expectNaN: Boolean = false): Unit = {
+    if (expectNull) {
+      domain.foreach { case (v1, v2) =>
+        checkEvaluation(c(Literal(v1), Literal(v2)), null, create_row(null))
+      }
+    } else if (expectNaN) {
       domain.foreach { case (v1, v2) =>
         checkNaN(c(Literal(v1), Literal(v2)), EmptyRow)
       }
@@ -265,18 +276,18 @@ class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("log") {
-    testUnary(Log, math.log, (0 to 20).map(_ * 0.1))
-    testUnary(Log, math.log, (-5 to -1).map(_ * 0.1), expectNaN = true)
+    testUnary(Log, math.log, (1 to 20).map(_ * 0.1))
+    testUnary(Log, math.log, (-5 to 0).map(_ * 0.1), expectNull = true)
   }
 
   test("log10") {
-    testUnary(Log10, math.log10, (0 to 20).map(_ * 0.1))
-    testUnary(Log10, math.log10, (-5 to -1).map(_ * 0.1), expectNaN = true)
+    testUnary(Log10, math.log10, (1 to 20).map(_ * 0.1))
+    testUnary(Log10, math.log10, (-5 to 0).map(_ * 0.1), expectNull = true)
   }
 
   test("log1p") {
-    testUnary(Log1p, math.log1p, (-1 to 20).map(_ * 0.1))
-    testUnary(Log1p, math.log1p, (-10 to -2).map(_ * 1.0), expectNaN = true)
+    testUnary(Log1p, math.log1p, (0 to 20).map(_ * 0.1))
+    testUnary(Log1p, math.log1p, (-10 to -1).map(_ * 1.0), expectNull = true)
   }
 
   test("bin") {
@@ -298,8 +309,8 @@ class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("log2") {
     def f: (Double) => Double = (x: Double) => math.log(x) / math.log(2)
-    testUnary(Log2, f, (0 to 20).map(_ * 0.1))
-    testUnary(Log2, f, (-5 to -1).map(_ * 1.0), expectNaN = true)
+    testUnary(Log2, f, (1 to 20).map(_ * 0.1))
+    testUnary(Log2, f, (-5 to 0).map(_ * 1.0), expectNull = true)
   }
 
   test("sqrt") {
@@ -406,12 +417,14 @@ class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       null,
       create_row(null))
 
-    // negative input should yield NaN output
-    checkNaN(
+    // negative input should yield null output
+    checkEvaluation(
       Logarithm(Literal(-1.0), Literal(1.0)),
+      null,
       create_row(null))
-    checkNaN(
+    checkEvaluation(
       Logarithm(Literal(1.0), Literal(-1.0)),
+      null,
       create_row(null))
   }
 
