@@ -766,7 +766,7 @@ def minute(col):
     Extract the minutes of a given date as integer.
     >>> df0 = sqlContext.createDataFrame([('2015-04-08 13:08:15',)], ['a'])
 
-    >>> dfo.select(minute('a').alias('minute')).collect()
+    >>> df0.select(minute('a').alias('minute')).collect()
     [Row(minute=8)]
     """
     sc = SparkContext._active_spark_context
