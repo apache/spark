@@ -286,6 +286,8 @@ class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with Timeo
   }
 
   test("stop gracefully even if a receiver misses StopReceiver") {
+    // This is not a deterministic unit. But if this unit test is flaky, then there is definitely
+    // something wrong. See SPARK-5681
     val conf = new SparkConf().setMaster(master).setAppName(appName)
     sc = new SparkContext(conf)
     ssc = new StreamingContext(sc, Milliseconds(100))

@@ -99,7 +99,7 @@ private[streaming] abstract class ReceiverSupervisor(
   protected def onStop(message: String, error: Option[Throwable]) { }
 
   /** Called when receiver is started. Return true if the driver accepts us */
-  protected def onReceiverStart(): Boolean = true
+  protected def onReceiverStart(): Boolean
 
   /** Called when receiver is stopped */
   protected def onReceiverStop(message: String, error: Option[Throwable]) { }
@@ -129,7 +129,7 @@ private[streaming] abstract class ReceiverSupervisor(
         logInfo("Called receiver onStart")
       } else {
         // The driver refused us
-        stop("Registered unsuccessfully because the driver refused" + streamId, None)
+        stop("Registered unsuccessfully because Driver refused to start receiver " + streamId, None)
       }
     } catch {
       case NonFatal(t) =>

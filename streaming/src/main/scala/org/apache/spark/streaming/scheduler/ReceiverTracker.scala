@@ -74,7 +74,7 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
 
   /** Enumeration to identify current state of the ReceiverTracker */
   object TrackerState extends Enumeration {
-    type CheckpointState = Value
+    type TrackerState = Value
     val Initialized, Started, Stopping, Stopped = Value
   }
   import TrackerState._
@@ -85,15 +85,6 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
   // endpoint is created when generator starts.
   // This not being null means the tracker has been started and not stopped
   private var endpoint: RpcEndpointRef = null
-
-  /** Check if tracker has been marked for starting */
-  private def isTrackerStarted(): Boolean = trackerState == Started
-
-  /** Check if tracker has been marked for stopping */
-  private def isTrackerStopping(): Boolean = trackerState == Stopping
-
-  /** Check if tracker has been marked for stopped */
-  private def isTrackerStopped(): Boolean = trackerState == Stopped
 
   /** Start the endpoint and receiver execution thread. */
   def start(): Unit = synchronized {
@@ -412,4 +403,14 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
     }
 
   }
+
+  /** Check if tracker has been marked for starting */
+  private def isTrackerStarted(): Boolean = trackerState == Started
+
+  /** Check if tracker has been marked for stopping */
+  private def isTrackerStopping(): Boolean = trackerState == Stopping
+
+  /** Check if tracker has been marked for stopped */
+  private def isTrackerStopped(): Boolean = trackerState == Stopped
+
 }
