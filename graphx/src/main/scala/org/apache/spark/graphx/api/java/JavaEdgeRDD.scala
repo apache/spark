@@ -17,21 +17,18 @@
 
 package org.apache.spark.graphx.api.java
 
-import java.lang.{Integer => JInt, Long => JLong, Boolean => JBoolean}
-
-import scala.collection.JavaConversions._
-import scala.language.implicitConversions
-import scala.reflect.ClassTag
+import java.lang.{Boolean => JBoolean, Integer => JInt, Long => JLong}
 
 import org.apache.spark.api.java.JavaPairRDD._
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.api.java.JavaSparkContext.fakeClassTag
-import org.apache.spark.api.java.JavaUtils
-import org.apache.spark.api.java.function.{Function => JFunction, Function2 => JFunction2,
-  Function3 => JFunction3, Function4 => JFunction4, _}
+import org.apache.spark.api.java.function.{Function => JFunction, Function2 => JFunction2, Function3 => JFunction3, Function4 => JFunction4}
 import org.apache.spark.graphx._
 
-class JavaEdgeRDD[ED, VD](override val rdd: EdgeRDD[ED, VD])(
+import scala.language.implicitConversions
+import scala.reflect.ClassTag
+
+class JavaEdgeRDD[ED, VD](override val rdd: EdgeRDD[ED])(
     implicit val edTag: ClassTag[ED], val vdTag: ClassTag[VD])
   extends JavaRDD[Edge[ED]](rdd) {
 
@@ -55,10 +52,10 @@ class JavaEdgeRDD[ED, VD](override val rdd: EdgeRDD[ED, VD])(
   def reverse(): JavaEdgeRDD[ED, VD] = rdd.reverse
 
   /** Removes all edges but those matching `epred` and where both vertices match `vpred`. */
-  def filter(
-      epred: JFunction[EdgeTriplet[VD, ED], JBoolean],
-      vpred: JFunction2[JLong, VD, JBoolean]): JavaEdgeRDD[ED, VD] =
-    rdd.filter(et => epred.call(et), (id, attr) => vpred.call(id, attr))
+//  def filter(
+//      epred: JFunction[EdgeTriplet[VD, ED], JBoolean],
+//      vpred: JFunction2[JLong, VD, JBoolean]): JavaEdgeRDD[ED, VD] =
+//    rdd.filter(et => epred.call(et), (id, attr) => vpred.call(id, attr))
 
   /**
    * Inner joins this EdgeRDD with another EdgeRDD, assuming both are partitioned using the same
@@ -83,12 +80,12 @@ object JavaEdgeRDD {
   def fromEdges[ED, VD](edges: JavaRDD[Edge[ED]]): JavaEdgeRDD[ED, VD] = {
     implicit val edTag: ClassTag[ED] = fakeClassTag
     implicit val vdTag: ClassTag[VD] = fakeClassTag
-    fromEdgeRDD(EdgeRDD.fromEdges(edges))
+    fromEdgeRDD(EdgeRDD.fromEdges[ED, VD](edges))
   }
 
-  implicit def fromEdgeRDD[ED: ClassTag, VD: ClassTag](rdd: EdgeRDD[ED, VD]): JavaEdgeRDD[ED, VD] =
+  implicit def fromEdgeRDD[ED: ClassTag, VD: ClassTag](rdd: EdgeRDD[ED]): JavaEdgeRDD[ED, VD] =
     new JavaEdgeRDD[ED, VD](rdd)
 
-  implicit def toEdgeRDD[ED, VD](rdd: JavaEdgeRDD[ED, VD]): EdgeRDD[ED, VD] =
+  implicit def toEdgeRDD[ED, VD](rdd: JavaEdgeRDD[ED, VD]): EdgeRDD[ED] =
     rdd.rdd
 }

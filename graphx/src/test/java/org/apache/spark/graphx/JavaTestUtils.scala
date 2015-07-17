@@ -16,11 +16,9 @@
  */
 package org.apache.spark.graphx
 
-import org.apache.spark.api.java.JavaSparkContext
 import java.util.{List => JList}
 
-
-import org.apache.spark.graphx.api.java.JavaVertexRDD
+import org.apache.spark.api.java.JavaSparkContext
 
 import scala.reflect.ClassTag
 
@@ -35,7 +33,7 @@ object JavaTestUtils {
       implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[VD]]
 
     val vertices = ssc.parallelize(data)
-    new JavaVertexRDD(vertices)
+//    new JavaVertexRDD(vertices)
   }
 
 }
