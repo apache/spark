@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import scala.math.BigDecimal.RoundingMode
-
 import com.google.common.math.LongMath
 
 import org.apache.spark.SparkFunSuite
@@ -97,8 +95,16 @@ class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("conv") {
-    checkEvaluation(Conv(Literal("3"), Literal(10), Literal(2)), "11", create_row(null))
-    checkEvaluation(Conv(Literal("-10"), Literal(16), Literal(-10)), "-16", create_row(null))
+    checkEvaluation(Conv(Literal("3"), Literal(10), Literal(2)), "11")
+    checkEvaluation(Conv(Literal("-15"), Literal(10), Literal(-16)), "-F")
+    checkEvaluation(Conv(Literal("-15"), Literal(10), Literal(16)), "FFFFFFFFFFFFFFF1")
+    checkEvaluation(Conv(Literal("big"), Literal(36), Literal(16)), "3A48")
+    checkEvaluation(Conv(Literal(null), Literal(36), Literal(16)), null)
+    checkEvaluation(Conv(Literal("3"), Literal(null), Literal(16)), null)
+    checkEvaluation(
+      Conv(Literal("1234"), Literal(10), Literal(37)), null)
+    checkEvaluation(
+      Conv(Literal("9223372036854775807"), Literal(36), Literal(16)), "FFFFFFFFFFFFFFFF")
   }
 
   test("e") {

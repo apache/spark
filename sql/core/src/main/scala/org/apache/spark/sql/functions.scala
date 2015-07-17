@@ -74,8 +74,8 @@ object functions {
    * @group math_funcs
    * @since 1.5.0
    */
-  def conv(num: Column, fromBase: Column, toBase: Column): Column =
-    Conv(num.expr, fromBase.expr, toBase.expr )
+  def conv(num: Column, fromBase: Int, toBase: Int): Column =
+    Conv(num.expr, lit(fromBase).expr, lit(toBase).expr)
 
   /**
    * Convert a number from one base to another for the specified expressions
@@ -83,8 +83,8 @@ object functions {
    * @group math_funcs
    * @since 1.5.0
    */
-  def conv(num: String, fromBase: String, toBase: String): Column =
-    conv(Column(num), Column(fromBase), Column(toBase))
+  def conv(numColName: String, fromBase: Int, toBase: Int): Column =
+    conv(Column(numColName), fromBase, toBase)
 
   /**
    * Creates a [[Column]] of literal value.
