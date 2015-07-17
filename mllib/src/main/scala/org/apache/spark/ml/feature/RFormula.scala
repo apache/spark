@@ -73,12 +73,14 @@ class RFormula(override val uid: String)
     val withFeatures = transformFeatures.transformSchema(schema)
     if (hasLabelCol(schema)) {
       withFeatures
-    } else {
+    } else if (schema.exists(_.name == parsedFormula.get.label)) {
       val nullable = schema(parsedFormula.get.label).dataType match {
         case _: NumericType | BooleanType => false
         case _ => true
       }
       StructType(withFeatures.fields :+ StructField($(labelCol), DoubleType, nullable))
+    } else {
+      withFeatures  // XXX silently drop label field to handle prediction case
     }
   }
 
@@ -92,10 +94,10 @@ class RFormula(override val uid: String)
   override def toString: String = s"RFormula(${get(formula)})"
 
   private def transformLabel(dataset: DataFrame): DataFrame = {
+    val labelName = parsedFormula.get.label
     if (hasLabelCol(dataset.schema)) {
       dataset
-    } else {
-      val labelName = parsedFormula.get.label
+    } else if (dataset.schema.exists(_.name == labelName)) {
       dataset.schema(labelName).dataType match {
         case _: NumericType | BooleanType =>
           dataset.withColumn($(labelCol), dataset(labelName).cast(DoubleType))
@@ -103,6 +105,8 @@ class RFormula(override val uid: String)
         case other =>
           throw new IllegalArgumentException("Unsupported type for label: " + other)
       }
+    } else {
+      dataset  // XXX silently drop label field to handle prediction case
     }
   }
 

@@ -17,10 +17,26 @@
 
 package org.apache.spark.mllib.api.r
 
-import org.apache.spark.ml.feature.RModelFormula
+import org.apache.spark.ml.feature.RFormula
+import org.apache.spark.ml.classification.LogisticRegression
+import org.apache.spark.ml.regression.LinearRegression
+import org.apache.spark.ml.{Pipeline, PipelineModel}
+import org.apache.spark.sql.DataFrame
 
 private[r] object MLUtils {
-  def createRModelFormula(value: String): RModelFormula = {
-    new RModelFormula().setFormula(value)
+  def fitRModelFormula(
+      value: String,
+      family: String,
+      df: DataFrame,
+      lambda: Double,
+      alpha: Double): PipelineModel = {
+    val formula = new RFormula().setFormula(value)
+    val estimator = family match {
+      case "gaussian" => new LinearRegression().setRegParam(lambda).setElasticNetParam(alpha)
+      case "binomial" => new LogisticRegression().setRegParam(lambda).setElasticNetParam(alpha)
+    }
+    val pipeline = new Pipeline().setStages(Array(formula, estimator))
+    val model = pipeline.fit(df)
+    return(model)
   }
 }

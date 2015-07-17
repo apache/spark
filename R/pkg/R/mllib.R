@@ -15,10 +15,14 @@
 # limitations under the License.
 #
 
-# Methods for mllib integration
-glm <- function(formula, family = c("gaussian", "binomial"), data, lambda = 0, alpha = 0) {
-  transformer <- callJStatic("org.apache.spark.mllib.api.r.MLUtils",
-                             "createRModelFormula", deparse(formula))
-  print("WIP")
-  # TODO(ekl) transform the data and then create the model
+# mllib.R: Provides methods for MLLib integration
+
+glm <- function(formula, data, family = c("gaussian", "binomial"), lambda = 0, alpha = 0) {
+  model <- callJStatic("org.apache.spark.mllib.api.r.MLUtils",
+                       "fitRModelFormula", deparse(formula), family, data@sdf, lambda, alpha)
+  return(model)
+}
+
+predict <- function(model, newdata) {
+  return(dataFrame(callJMethod(model, "transform", newdata@sdf)))
 }
