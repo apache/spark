@@ -17,13 +17,12 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import scala.math.BigDecimal.RoundingMode
-
 import com.google.common.math.LongMath
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.types._
+
 
 class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
@@ -93,6 +92,24 @@ class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
     checkEvaluation(c(Literal.create(null, DoubleType), Literal(1.0)), null, create_row(null))
     checkEvaluation(c(Literal(1.0), Literal.create(null, DoubleType)), null, create_row(null))
+  }
+
+  test("conv") {
+    checkEvaluation(Conv(Literal("3"), Literal(10), Literal(2)), "11")
+    checkEvaluation(Conv(Literal("-15"), Literal(10), Literal(-16)), "-F")
+    checkEvaluation(Conv(Literal("-15"), Literal(10), Literal(16)), "FFFFFFFFFFFFFFF1")
+    checkEvaluation(Conv(Literal("big"), Literal(36), Literal(16)), "3A48")
+    checkEvaluation(Conv(Literal(null), Literal(36), Literal(16)), null)
+    checkEvaluation(Conv(Literal("3"), Literal(null), Literal(16)), null)
+    checkEvaluation(
+      Conv(Literal("1234"), Literal(10), Literal(37)), null)
+    checkEvaluation(
+      Conv(Literal(""), Literal(10), Literal(16)), null)
+    checkEvaluation(
+      Conv(Literal("9223372036854775807"), Literal(36), Literal(16)), "FFFFFFFFFFFFFFFF")
+    // If there is an invalid digit in the number, the longest valid prefix should be converted.
+    checkEvaluation(
+      Conv(Literal("11abc"), Literal(10), Literal(16)), "B")
   }
 
   test("e") {
