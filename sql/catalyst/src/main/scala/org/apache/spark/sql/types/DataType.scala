@@ -79,7 +79,7 @@ abstract class DataType extends AbstractDataType {
 
   override private[sql] def defaultConcreteType: DataType = this
 
-  override private[sql] def isSameType(other: DataType): Boolean = this == other
+  override private[sql] def acceptsType(other: DataType): Boolean = this == other
 }
 
 

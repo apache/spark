@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import scala.language.existentials
 import scala.reflect.ClassTag
 import scala.util.{Failure, Success, Try}
 
@@ -98,6 +99,7 @@ object FunctionRegistry {
     expression[Ceil]("ceil"),
     expression[Ceil]("ceiling"),
     expression[Cos]("cos"),
+    expression[Conv]("conv"),
     expression[EulerNumber]("e"),
     expression[Exp]("exp"),
     expression[Expm1]("expm1"),
@@ -114,8 +116,10 @@ object FunctionRegistry {
     expression[Log2]("log2"),
     expression[Pow]("pow"),
     expression[Pow]("power"),
+    expression[Pmod]("pmod"),
     expression[UnaryPositive]("positive"),
     expression[Rint]("rint"),
+    expression[Round]("round"),
     expression[ShiftLeft]("shiftleft"),
     expression[ShiftRight]("shiftright"),
     expression[ShiftRightUnsigned]("shiftrightunsigned"),
@@ -149,11 +153,12 @@ object FunctionRegistry {
     expression[Base64]("base64"),
     expression[Encode]("encode"),
     expression[Decode]("decode"),
-    expression[StringInstr]("instr"),
+    expression[FormatNumber]("format_number"),
     expression[Lower]("lcase"),
     expression[Lower]("lower"),
-    expression[StringLength]("length"),
+    expression[Length]("length"),
     expression[Levenshtein]("levenshtein"),
+    expression[StringInstr]("instr"),
     expression[StringLocate]("locate"),
     expression[StringLPad]("lpad"),
     expression[StringTrimLeft]("ltrim"),

@@ -57,7 +57,7 @@ public class JavaDecisionTreeRegressorSuite implements Serializable {
     JavaRDD<LabeledPoint> data = sc.parallelize(
       LogisticRegressionSuite.generateLogisticInputAsList(A, B, nPoints, 42), 2).cache();
     Map<Integer, Integer> categoricalFeatures = new HashMap<Integer, Integer>();
-    DataFrame dataFrame = TreeTests.setMetadata(data, categoricalFeatures, 2);
+    DataFrame dataFrame = TreeTests.setMetadata(data, categoricalFeatures, 0);
 
     // This tests setters. Training with various options is tested in Scala.
     DecisionTreeRegressor dt = new DecisionTreeRegressor()

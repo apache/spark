@@ -37,11 +37,11 @@ import org.apache.spark.rdd.RDD
  * @param binnedFeatures  Binned feature values.
  *                        Same length as LabeledPoint.features, but values are bin indices.
  */
-private[tree] class TreePoint(val label: Double, val binnedFeatures: Array[Int])
+private[spark] class TreePoint(val label: Double, val binnedFeatures: Array[Int])
   extends Serializable {
 }
 
-private[tree] object TreePoint {
+private[spark] object TreePoint {
 
   /**
    * Convert an input dataset into its TreePoint representation,

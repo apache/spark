@@ -40,12 +40,13 @@ import org.apache.spark.sql.types._
  * requested.  The attributes produced by this function will be automatically copied anytime rules
  * result in changes to the Generator or its children.
  */
-abstract class Generator extends Expression {
-  self: Product =>
+trait Generator extends Expression { self: Product =>
 
   // TODO ideally we should return the type of ArrayType(StructType),
   // however, we don't keep the output field names in the Generator.
   override def dataType: DataType = throw new UnsupportedOperationException
+
+  override def foldable: Boolean = false
 
   override def nullable: Boolean = false
 
@@ -99,8 +100,9 @@ case class UserDefinedGenerator(
 /**
  * Given an input array produces a sequence of rows for each value in the array.
  */
-case class Explode(child: Expression)
-  extends Generator with trees.UnaryNode[Expression] {
+case class Explode(child: Expression) extends UnaryExpression with Generator {
+
+  override def children: Seq[Expression] = child :: Nil
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (child.dataType.isInstanceOf[ArrayType] || child.dataType.isInstanceOf[MapType]) {
@@ -127,6 +129,4 @@ case class Explode(child: Expression)
         else inputMap.map { case (k, v) => InternalRow(k, v) }
     }
   }
-
-  override def toString: String = s"explode($child)"
 }

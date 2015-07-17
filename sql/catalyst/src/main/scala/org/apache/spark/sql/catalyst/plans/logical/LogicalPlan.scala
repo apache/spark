@@ -23,7 +23,6 @@ import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.trees.TreeNode
-import org.apache.spark.sql.catalyst.trees
 
 
 abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
@@ -277,20 +276,31 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
 /**
  * A logical plan node with no children.
  */
-abstract class LeafNode extends LogicalPlan with trees.LeafNode[LogicalPlan] {
+abstract class LeafNode extends LogicalPlan {
   self: Product =>
+
+  override def children: Seq[LogicalPlan] = Nil
 }
 
 /**
  * A logical plan node with single child.
  */
-abstract class UnaryNode extends LogicalPlan with trees.UnaryNode[LogicalPlan] {
+abstract class UnaryNode extends LogicalPlan {
   self: Product =>
+
+  def child: LogicalPlan
+
+  override def children: Seq[LogicalPlan] = child :: Nil
 }
 
 /**
  * A logical plan node with a left and right child.
  */
-abstract class BinaryNode extends LogicalPlan with trees.BinaryNode[LogicalPlan] {
+abstract class BinaryNode extends LogicalPlan {
   self: Product =>
+
+  def left: LogicalPlan
+  def right: LogicalPlan
+
+  override def children: Seq[LogicalPlan] = Seq(left, right)
 }

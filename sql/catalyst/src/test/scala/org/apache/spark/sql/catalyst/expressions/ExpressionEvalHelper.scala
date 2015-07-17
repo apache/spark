@@ -23,7 +23,7 @@ import org.scalatest.Matchers._
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
-import org.apache.spark.sql.catalyst.expressions.codegen.{GenerateProjection, GenerateMutableProjection}
+import org.apache.spark.sql.catalyst.expressions.codegen.{GenerateUnsafeProjection, GenerateProjection, GenerateMutableProjection}
 import org.apache.spark.sql.catalyst.optimizer.DefaultOptimizer
 import org.apache.spark.sql.catalyst.plans.logical.{OneRowRelation, Project}
 
@@ -43,6 +43,9 @@ trait ExpressionEvalHelper {
     checkEvaluationWithoutCodegen(expression, catalystValue, inputRow)
     checkEvaluationWithGeneratedMutableProjection(expression, catalystValue, inputRow)
     checkEvaluationWithGeneratedProjection(expression, catalystValue, inputRow)
+    if (UnsafeColumnWriter.canEmbed(expression.dataType)) {
+      checkEvalutionWithUnsafeProjection(expression, catalystValue, inputRow)
+    }
     checkEvaluationWithOptimization(expression, catalystValue, inputRow)
   }
 
@@ -139,6 +142,35 @@ trait ExpressionEvalHelper {
     }
     if (actual.copy() != expectedRow) {
       fail(s"Copy of generated Row is wrong: actual: ${actual.copy()}, expected: $expectedRow")
+    }
+  }
+
+  protected def checkEvalutionWithUnsafeProjection(
+      expression: Expression,
+      expected: Any,
+      inputRow: InternalRow = EmptyRow): Unit = {
+    val ctx = GenerateUnsafeProjection.newCodeGenContext()
+    lazy val evaluated = expression.gen(ctx)
+
+    val plan = try {
+      GenerateUnsafeProjection.generate(Alias(expression, s"Optimized($expression)")() :: Nil)
+    } catch {
+      case e: Throwable =>
+        fail(
+          s"""
+            |Code generation of $expression failed:
+            |${evaluated.code}
+            |$e
+          """.stripMargin)
+    }
+
+    val unsafeRow = plan(inputRow)
+    // UnsafeRow cannot be compared with GenericInternalRow directly
+    val actual = FromUnsafeProjection(expression.dataType :: Nil)(unsafeRow)
+    val expectedRow = InternalRow(expected)
+    if (actual != expectedRow) {
+      val input = if (inputRow == EmptyRow) "" else s", input: $inputRow"
+      fail(s"Incorrect Evaluation: $expression, actual: $actual, expected: $expected$input")
     }
   }
 

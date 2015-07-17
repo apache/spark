@@ -508,8 +508,14 @@ object SparkSubmit {
     }
 
     // Let YARN know it's a pyspark app, so it distributes needed libraries.
-    if (clusterManager == YARN && args.isPython) {
-      sysProps.put("spark.yarn.isPython", "true")
+    if (clusterManager == YARN) {
+      if (args.isPython) {
+        sysProps.put("spark.yarn.isPython", "true")
+      }
+      if (args.principal != null) {
+        require(args.keytab != null, "Keytab must be specified when the keytab is specified")
+        UserGroupInformation.loginUserFromKeytab(args.principal, args.keytab)
+      }
     }
 
     // In yarn-cluster mode, use yarn.Client as a wrapper around the user class

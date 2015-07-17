@@ -18,9 +18,12 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.{lang => jl}
+import java.util.Arrays
 
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckSuccess, TypeCheckFailure}
 import org.apache.spark.sql.catalyst.expressions.codegen._
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -55,7 +58,7 @@ abstract class LeafMathExpression(c: Double, name: String)
  * @param name The short name of the function
  */
 abstract class UnaryMathExpression(f: Double => Double, name: String)
-  extends UnaryExpression with Serializable with ExpectsInputTypes { self: Product =>
+  extends UnaryExpression with Serializable with ImplicitCastInputTypes { self: Product =>
 
   override def inputTypes: Seq[DataType] = Seq(DoubleType)
   override def dataType: DataType = DoubleType
@@ -89,7 +92,7 @@ abstract class UnaryMathExpression(f: Double => Double, name: String)
  * @param name The short name of the function
  */
 abstract class BinaryMathExpression(f: (Double, Double) => Double, name: String)
-  extends BinaryExpression with Serializable with ExpectsInputTypes { self: Product =>
+  extends BinaryExpression with Serializable with ImplicitCastInputTypes { self: Product =>
 
   override def inputTypes: Seq[DataType] = Seq(DoubleType, DoubleType)
 
@@ -137,6 +140,196 @@ case class Cos(child: Expression) extends UnaryMathExpression(math.cos, "COS")
 
 case class Cosh(child: Expression) extends UnaryMathExpression(math.cosh, "COSH")
 
+/**
+ * Convert a num from one base to another
+ * @param numExpr the number to be converted
+ * @param fromBaseExpr from which base
+ * @param toBaseExpr to which base
+ */
+case class Conv(numExpr: Expression, fromBaseExpr: Expression, toBaseExpr: Expression)
+  extends Expression with ImplicitCastInputTypes{
+
+  override def foldable: Boolean = numExpr.foldable && fromBaseExpr.foldable && toBaseExpr.foldable
+
+  override def nullable: Boolean = numExpr.nullable || fromBaseExpr.nullable || toBaseExpr.nullable
+
+  override def children: Seq[Expression] = Seq(numExpr, fromBaseExpr, toBaseExpr)
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(StringType, IntegerType, IntegerType)
+
+  /** Returns the result of evaluating this expression on a given input Row */
+  override def eval(input: InternalRow): Any = {
+    val num = numExpr.eval(input)
+    val fromBase = fromBaseExpr.eval(input)
+    val toBase = toBaseExpr.eval(input)
+    if (num == null || fromBase == null || toBase == null) {
+      null
+    } else {
+      conv(num.asInstanceOf[UTF8String].getBytes,
+        fromBase.asInstanceOf[Int], toBase.asInstanceOf[Int])
+    }
+  }
+
+  /**
+   * Returns the [[DataType]] of the result of evaluating this expression.  It is
+   * invalid to query the dataType of an unresolved expression (i.e., when `resolved` == false).
+   */
+  override def dataType: DataType = StringType
+
+  private val value = new Array[Byte](64)
+
+  /**
+   * Divide x by m as if x is an unsigned 64-bit integer. Examples:
+   * unsignedLongDiv(-1, 2) == Long.MAX_VALUE unsignedLongDiv(6, 3) == 2
+   * unsignedLongDiv(0, 5) == 0
+   *
+   * @param x is treated as unsigned
+   * @param m is treated as signed
+   */
+  private def unsignedLongDiv(x: Long, m: Int): Long = {
+    if (x >= 0) {
+      x / m
+    } else {
+      // Let uval be the value of the unsigned long with the same bits as x
+      // Two's complement => x = uval - 2*MAX - 2
+      // => uval = x + 2*MAX + 2
+      // Now, use the fact: (a+b)/c = a/c + b/c + (a%c+b%c)/c
+      (x / m + 2 * (Long.MaxValue / m) + 2 / m + (x % m + 2 * (Long.MaxValue % m) + 2 % m) / m)
+    }
+  }
+
+  /**
+   * Decode v into value[].
+   *
+   * @param v is treated as an unsigned 64-bit integer
+   * @param radix must be between MIN_RADIX and MAX_RADIX
+   */
+  private def decode(v: Long, radix: Int): Unit = {
+    var tmpV = v
+    Arrays.fill(value, 0.asInstanceOf[Byte])
+    var i = value.length - 1
+    while (tmpV != 0) {
+      val q = unsignedLongDiv(tmpV, radix)
+      value(i) = (tmpV - q * radix).asInstanceOf[Byte]
+      tmpV = q
+      i -= 1
+    }
+  }
+
+  /**
+   * Convert value[] into a long. On overflow, return -1 (as mySQL does). If a
+   * negative digit is found, ignore the suffix starting there.
+   *
+   * @param radix  must be between MIN_RADIX and MAX_RADIX
+   * @param fromPos is the first element that should be conisdered
+   * @return the result should be treated as an unsigned 64-bit integer.
+   */
+  private def encode(radix: Int, fromPos: Int): Long = {
+    var v: Long = 0L
+    val bound = unsignedLongDiv(-1 - radix, radix) // Possible overflow once
+    // val
+    // exceeds this value
+    var i = fromPos
+    while (i < value.length && value(i) >= 0) {
+      if (v >= bound) {
+        // Check for overflow
+        if (unsignedLongDiv(-1 - value(i), radix) < v) {
+          return -1
+        }
+      }
+      v = v * radix + value(i)
+      i += 1
+    }
+    return v
+  }
+
+  /**
+   * Convert the bytes in value[] to the corresponding chars.
+   *
+   * @param radix must be between MIN_RADIX and MAX_RADIX
+   * @param fromPos is the first nonzero element
+   */
+  private def byte2char(radix: Int, fromPos: Int): Unit = {
+    var i = fromPos
+    while (i < value.length) {
+      value(i) = Character.toUpperCase(Character.forDigit(value(i), radix)).asInstanceOf[Byte]
+      i += 1
+    }
+  }
+
+  /**
+   * Convert the chars in value[] to the corresponding integers. Convert invalid
+   * characters to -1.
+   *
+   * @param radix must be between MIN_RADIX and MAX_RADIX
+   * @param fromPos is the first nonzero element
+   */
+  private def char2byte(radix: Int, fromPos: Int): Unit = {
+    var i = fromPos
+    while ( i < value.length) {
+      value(i) = Character.digit(value(i), radix).asInstanceOf[Byte]
+      i += 1
+    }
+  }
+
+  /**
+   * Convert numbers between different number bases. If toBase>0 the result is
+   * unsigned, otherwise it is signed.
+   * NB: This logic is borrowed from org.apache.hadoop.hive.ql.ud.UDFConv
+   */
+  private def conv(n: Array[Byte] , fromBase: Int, toBase: Int ): UTF8String = {
+    if (n == null || fromBase == null || toBase == null || n.isEmpty) {
+      return null
+    }
+
+    if (fromBase < Character.MIN_RADIX || fromBase > Character.MAX_RADIX
+      || Math.abs(toBase) < Character.MIN_RADIX
+      || Math.abs(toBase) > Character.MAX_RADIX) {
+      return null
+    }
+
+    var (negative, first) = if (n(0) == '-') (true, 1) else (false, 0)
+
+    // Copy the digits in the right side of the array
+    var i = 1
+    while (i <= n.length - first) {
+      value(value.length - i) = n(n.length - i)
+      i += 1
+    }
+    char2byte(fromBase, value.length - n.length + first)
+
+    // Do the conversion by going through a 64 bit integer
+    var v = encode(fromBase, value.length - n.length + first)
+    if (negative && toBase > 0) {
+      if (v < 0) {
+        v = -1
+      } else {
+        v = -v
+      }
+    }
+    if (toBase < 0 && v < 0) {
+      v = -v
+      negative = true
+    }
+    decode(v, Math.abs(toBase))
+
+    // Find the first non-zero digit or the last digits if all are zero.
+    val firstNonZeroPos = {
+      val firstNonZero = value.indexWhere( _ != 0)
+      if (firstNonZero != -1) firstNonZero else value.length - 1
+    }
+
+    byte2char(Math.abs(toBase), firstNonZeroPos)
+
+    var resultStartPos = firstNonZeroPos
+    if (negative && toBase < 0) {
+      resultStartPos = firstNonZeroPos - 1
+      value(resultStartPos) = '-'
+    }
+    UTF8String.fromBytes( Arrays.copyOfRange(value, resultStartPos, value.length))
+  }
+}
+
 case class Exp(child: Expression) extends UnaryMathExpression(math.exp, "EXP")
 
 case class Expm1(child: Expression) extends UnaryMathExpression(math.expm1, "EXPM1")
@@ -174,7 +367,7 @@ object Factorial {
   )
 }
 
-case class Factorial(child: Expression) extends UnaryExpression with ExpectsInputTypes {
+case class Factorial(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
 
   override def inputTypes: Seq[DataType] = Seq(IntegerType)
 
@@ -251,7 +444,7 @@ case class ToRadians(child: Expression) extends UnaryMathExpression(math.toRadia
 }
 
 case class Bin(child: Expression)
-  extends UnaryExpression with Serializable with ExpectsInputTypes {
+  extends UnaryExpression with Serializable with ImplicitCastInputTypes {
 
   override def inputTypes: Seq[DataType] = Seq(LongType)
   override def dataType: DataType = StringType
@@ -261,7 +454,7 @@ case class Bin(child: Expression)
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     defineCodeGen(ctx, ev, (c) =>
-      s"${ctx.stringType}.fromString(java.lang.Long.toBinaryString($c))")
+      s"UTF8String.fromString(java.lang.Long.toBinaryString($c))")
   }
 }
 
@@ -285,7 +478,7 @@ object Hex {
  * Otherwise if the number is a STRING, it converts each character into its hex representation
  * and returns the resulting STRING. Negative numbers would be treated as two's complement.
  */
-case class Hex(child: Expression) extends UnaryExpression with ExpectsInputTypes {
+case class Hex(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
   // TODO: Create code-gen version.
 
   override def inputTypes: Seq[AbstractDataType] =
@@ -329,7 +522,7 @@ case class Hex(child: Expression) extends UnaryExpression with ExpectsInputTypes
  * Performs the inverse operation of HEX.
  * Resulting characters are returned as a byte array.
  */
-case class Unhex(child: Expression) extends UnaryExpression with ExpectsInputTypes {
+case class Unhex(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
   // TODO: Create code-gen version.
 
   override def inputTypes: Seq[AbstractDataType] = Seq(StringType)
@@ -416,7 +609,7 @@ case class Pow(left: Expression, right: Expression)
  * @param right number of bits to left shift.
  */
 case class ShiftLeft(left: Expression, right: Expression)
-  extends BinaryExpression with ExpectsInputTypes {
+  extends BinaryExpression with ImplicitCastInputTypes {
 
   override def inputTypes: Seq[AbstractDataType] =
     Seq(TypeCollection(IntegerType, LongType), IntegerType)
@@ -442,7 +635,7 @@ case class ShiftLeft(left: Expression, right: Expression)
  * @param right number of bits to left shift.
  */
 case class ShiftRight(left: Expression, right: Expression)
-  extends BinaryExpression with ExpectsInputTypes {
+  extends BinaryExpression with ImplicitCastInputTypes {
 
   override def inputTypes: Seq[AbstractDataType] =
     Seq(TypeCollection(IntegerType, LongType), IntegerType)
@@ -468,7 +661,7 @@ case class ShiftRight(left: Expression, right: Expression)
  * @param right the number of bits to right shift.
  */
 case class ShiftRightUnsigned(left: Expression, right: Expression)
-  extends BinaryExpression with ExpectsInputTypes {
+  extends BinaryExpression with ImplicitCastInputTypes {
 
   override def inputTypes: Seq[AbstractDataType] =
     Seq(TypeCollection(IntegerType, LongType), IntegerType)
@@ -519,4 +712,203 @@ case class Logarithm(left: Expression, right: Expression)
       }
     """
   }
+}
+
+/**
+ * Round the `child`'s result to `scale` decimal place when `scale` >= 0
+ * or round at integral part when `scale` < 0.
+ * For example, round(31.415, 2) would eval to 31.42 and round(31.415, -1) would eval to 30.
+ *
+ * Child of IntegralType would eval to itself when `scale` >= 0.
+ * Child of FractionalType whose value is NaN or Infinite would always eval to itself.
+ *
+ * Round's dataType would always equal to `child`'s dataType except for [[DecimalType.Fixed]],
+ * which leads to scale update in DecimalType's [[PrecisionInfo]]
+ *
+ * @param child expr to be round, all [[NumericType]] is allowed as Input
+ * @param scale new scale to be round to, this should be a constant int at runtime
+ */
+case class Round(child: Expression, scale: Expression)
+  extends BinaryExpression with ExpectsInputTypes {
+
+  import BigDecimal.RoundingMode.HALF_UP
+
+  def this(child: Expression) = this(child, Literal(0))
+
+  override def left: Expression = child
+  override def right: Expression = scale
+
+  // round of Decimal would eval to null if it fails to `changePrecision`
+  override def nullable: Boolean = true
+
+  override def foldable: Boolean = child.foldable
+
+  override lazy val dataType: DataType = child.dataType match {
+    // if the new scale is bigger which means we are scaling up,
+    // keep the original scale as `Decimal` does
+    case DecimalType.Fixed(p, s) => DecimalType(p, if (_scale > s) s else _scale)
+    case t => t
+  }
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(NumericType, IntegerType)
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    super.checkInputDataTypes() match {
+      case TypeCheckSuccess =>
+        if (scale.foldable) {
+          TypeCheckSuccess
+        } else {
+          TypeCheckFailure("Only foldable Expression is allowed for scale arguments")
+        }
+      case f => f
+    }
+  }
+
+  // Avoid repeated evaluation since `scale` is a constant int,
+  // avoid unnecessary `child` evaluation in both codegen and non-codegen eval
+  // by checking if scaleV == null as well.
+  private lazy val scaleV: Any = scale.eval(EmptyRow)
+  private lazy val _scale: Int = scaleV.asInstanceOf[Int]
+
+  override def eval(input: InternalRow): Any = {
+    if (scaleV == null) { // if scale is null, no need to eval its child at all
+      null
+    } else {
+      val evalE = child.eval(input)
+      if (evalE == null) {
+        null
+      } else {
+        nullSafeEval(evalE)
+      }
+    }
+  }
+
+  // not overriding since _scale is a constant int at runtime
+  def nullSafeEval(input1: Any): Any = {
+    child.dataType match {
+      case _: DecimalType =>
+        val decimal = input1.asInstanceOf[Decimal]
+        if (decimal.changePrecision(decimal.precision, _scale)) decimal else null
+      case ByteType =>
+        BigDecimal(input1.asInstanceOf[Byte]).setScale(_scale, HALF_UP).toByte
+      case ShortType =>
+        BigDecimal(input1.asInstanceOf[Short]).setScale(_scale, HALF_UP).toShort
+      case IntegerType =>
+        BigDecimal(input1.asInstanceOf[Int]).setScale(_scale, HALF_UP).toInt
+      case LongType =>
+        BigDecimal(input1.asInstanceOf[Long]).setScale(_scale, HALF_UP).toLong
+      case FloatType =>
+        val f = input1.asInstanceOf[Float]
+        if (f.isNaN || f.isInfinite) {
+          f
+        } else {
+          BigDecimal(f).setScale(_scale, HALF_UP).toFloat
+        }
+      case DoubleType =>
+        val d = input1.asInstanceOf[Double]
+        if (d.isNaN || d.isInfinite) {
+          d
+        } else {
+          BigDecimal(d).setScale(_scale, HALF_UP).toDouble
+        }
+    }
+  }
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    val ce = child.gen(ctx)
+
+    val evaluationCode = child.dataType match {
+      case _: DecimalType =>
+        s"""
+        if (${ce.primitive}.changePrecision(${ce.primitive}.precision(), ${_scale})) {
+          ${ev.primitive} = ${ce.primitive};
+        } else {
+          ${ev.isNull} = true;
+        }"""
+      case ByteType =>
+        if (_scale < 0) {
+          s"""
+          ${ev.primitive} = new java.math.BigDecimal(${ce.primitive}).
+            setScale(${_scale}, java.math.BigDecimal.ROUND_HALF_UP).byteValue();"""
+        } else {
+          s"${ev.primitive} = ${ce.primitive};"
+        }
+      case ShortType =>
+        if (_scale < 0) {
+          s"""
+          ${ev.primitive} = new java.math.BigDecimal(${ce.primitive}).
+            setScale(${_scale}, java.math.BigDecimal.ROUND_HALF_UP).shortValue();"""
+        } else {
+          s"${ev.primitive} = ${ce.primitive};"
+        }
+      case IntegerType =>
+        if (_scale < 0) {
+          s"""
+          ${ev.primitive} = new java.math.BigDecimal(${ce.primitive}).
+            setScale(${_scale}, java.math.BigDecimal.ROUND_HALF_UP).intValue();"""
+        } else {
+          s"${ev.primitive} = ${ce.primitive};"
+        }
+      case LongType =>
+        if (_scale < 0) {
+          s"""
+          ${ev.primitive} = new java.math.BigDecimal(${ce.primitive}).
+            setScale(${_scale}, java.math.BigDecimal.ROUND_HALF_UP).longValue();"""
+        } else {
+          s"${ev.primitive} = ${ce.primitive};"
+        }
+      case FloatType => // if child eval to NaN or Infinity, just return it.
+        if (_scale == 0) {
+          s"""
+            if (Float.isNaN(${ce.primitive}) || Float.isInfinite(${ce.primitive})){
+              ${ev.primitive} = ${ce.primitive};
+            } else {
+              ${ev.primitive} = Math.round(${ce.primitive});
+            }"""
+        } else {
+          s"""
+            if (Float.isNaN(${ce.primitive}) || Float.isInfinite(${ce.primitive})){
+              ${ev.primitive} = ${ce.primitive};
+            } else {
+              ${ev.primitive} = java.math.BigDecimal.valueOf(${ce.primitive}).
+                setScale(${_scale}, java.math.BigDecimal.ROUND_HALF_UP).floatValue();
+            }"""
+        }
+      case DoubleType => // if child eval to NaN or Infinity, just return it.
+        if (_scale == 0) {
+          s"""
+            if (Double.isNaN(${ce.primitive}) || Double.isInfinite(${ce.primitive})){
+              ${ev.primitive} = ${ce.primitive};
+            } else {
+              ${ev.primitive} = Math.round(${ce.primitive});
+            }"""
+        } else {
+          s"""
+            if (Double.isNaN(${ce.primitive}) || Double.isInfinite(${ce.primitive})){
+              ${ev.primitive} = ${ce.primitive};
+            } else {
+              ${ev.primitive} = java.math.BigDecimal.valueOf(${ce.primitive}).
+                setScale(${_scale}, java.math.BigDecimal.ROUND_HALF_UP).doubleValue();
+            }"""
+        }
+    }
+
+    if (scaleV == null) { // if scale is null, no need to eval its child at all
+      s"""
+        boolean ${ev.isNull} = true;
+        ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
+      """
+    } else {
+      s"""
+        ${ce.code}
+        boolean ${ev.isNull} = ${ce.isNull};
+        ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
+        if (!${ev.isNull}) {
+          $evaluationCode
+        }
+      """
+    }
+  }
+
+  override def prettyName: String = "round"
 }
