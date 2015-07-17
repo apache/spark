@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.joins
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.catalyst.expressions.{BindReferences, UnsafeColumnWriter, Expression}
 import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, Partitioning}
 import org.apache.spark.sql.execution.{BinaryNode, SparkPlan}
 
@@ -44,8 +44,16 @@ case class ShuffledHashJoin(
     ClusteredDistribution(leftKeys) :: ClusteredDistribution(rightKeys) :: Nil
 
   protected override def doExecute(): RDD[InternalRow] = {
+    val codegenEnabled = left.codegenEnabled
     buildPlan.execute().zipPartitions(streamedPlan.execute()) { (buildIter, streamIter) =>
-      val hashed = HashedRelation(buildIter, buildSideKeyGenerator)
+      val hashed = if (codegenEnabled &&
+        buildKeys.map(_.dataType).forall(UnsafeColumnWriter.canEmbed(_))) {
+        UnsafeHashedRelation(buildIter,
+          buildKeys.map(BindReferences.bindReference(_, buildPlan.output)),
+          buildPlan.schema)
+      } else {
+        HashedRelation(buildIter, buildSideKeyGenerator)
+      }
       hashJoin(streamIter, hashed)
     }
   }

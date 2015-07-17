@@ -23,7 +23,7 @@ import scala.concurrent.duration._
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.catalyst.expressions.{BindReferences, UnsafeColumnWriter, Expression}
 import org.apache.spark.sql.catalyst.plans.physical.{Distribution, Partitioning, UnspecifiedDistribution}
 import org.apache.spark.sql.execution.{BinaryNode, SparkPlan}
 import org.apache.spark.util.ThreadUtils
@@ -62,7 +62,14 @@ case class BroadcastHashJoin(
   private val broadcastFuture = future {
     // Note that we use .execute().collect() because we don't want to convert data to Scala types
     val input: Array[InternalRow] = buildPlan.execute().map(_.copy()).collect()
-    val hashed = HashedRelation(input.iterator, buildSideKeyGenerator, input.length)
+    val hashed = if (left.codegenEnabled &&
+      buildKeys.map(_.dataType).forall(UnsafeColumnWriter.canEmbed(_))) {
+      UnsafeHashedRelation(input.iterator,
+        buildKeys.map(BindReferences.bindReference(_, buildPlan.output)),
+        buildPlan.schema)
+    } else {
+      HashedRelation(input.iterator, buildSideKeyGenerator, input.length)
+    }
     sparkContext.broadcast(hashed)
   }(BroadcastHashJoin.broadcastHashJoinExecutionContext)
 
