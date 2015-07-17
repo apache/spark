@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution;
 
 import java.io.IOException;
 
-import scala.Function1;
 import scala.collection.Iterator;
 import scala.math.Ordering;
 
@@ -29,13 +28,11 @@ import org.apache.spark.SparkEnv;
 import org.apache.spark.TaskContext;
 import org.apache.spark.sql.AbstractScalaRowIterator;
 import org.apache.spark.sql.catalyst.InternalRow;
-import org.apache.spark.sql.catalyst.expressions.ObjectUnsafeColumnWriter;
 import org.apache.spark.sql.catalyst.expressions.UnsafeColumnWriter;
 import org.apache.spark.sql.catalyst.expressions.UnsafeProjection;
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow;
 import org.apache.spark.sql.catalyst.util.ObjectPool;
-import org.apache.spark.sql.types.StructField;
-import org.apache.spark.sql.types.StructType;
+import org.apache.spark.sql.types.*;
 import org.apache.spark.unsafe.PlatformDependent;
 import org.apache.spark.util.collection.unsafe.sort.PrefixComparator;
 import org.apache.spark.util.collection.unsafe.sort.RecordComparator;
@@ -53,7 +50,7 @@ final class UnsafeExternalRowSorter {
   private long numRowsInserted = 0;
 
   private final StructType schema;
-  private final Function1<InternalRow, InternalRow> unsafeProjection;
+  private final UnsafeProjection unsafeProjection;
   private final PrefixComputer prefixComputer;
   private final UnsafeExternalSorter sorter;
 
@@ -94,7 +91,7 @@ final class UnsafeExternalRowSorter {
 
   @VisibleForTesting
   void insertRow(InternalRow row) throws IOException {
-    UnsafeRow unsafeRow = (UnsafeRow) unsafeProjection.apply(row);
+    UnsafeRow unsafeRow = unsafeProjection.apply(row);
     final long prefix = prefixComputer.computePrefix(row);
     sorter.insertRecord(
       unsafeRow.getBaseObject(),
@@ -180,7 +177,7 @@ final class UnsafeExternalRowSorter {
   public static boolean supportsSchema(StructType schema) {
     // TODO: add spilling note to explain why we do this for now:
     for (StructField field : schema.fields()) {
-      if (UnsafeColumnWriter.forType(field.dataType()) instanceof ObjectUnsafeColumnWriter) {
+      if (!UnsafeColumnWriter.canEmbed(field.dataType())) {
         return false;
       }
     }

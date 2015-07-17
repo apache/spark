@@ -39,13 +39,14 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
     val codes = expressions.map(_.gen(ctx))
     val all_exprs = codes.map(_.code).mkString("\n")
     val fixedSize = 8 * codes.length + UnsafeRow.calculateBitSetWidthInBytes(codes.length)
-
+    val stringWriter = "org.apache.spark.sql.catalyst.expressions.StringUnsafeColumnWriter"
+    val binaryWriter = "org.apache.spark.sql.catalyst.expressions.BinaryUnsafeColumnWriter"
     val additionalSize = expressions.zipWithIndex.map { case (e, i) =>
       e.dataType match {
         case StringType =>
-          s" + (${codes(i).isNull} ? 0 : stringWriter.getSize(${codes(i).primitive}))"
+          s" + (${codes(i).isNull} ? 0 : $stringWriter.getSize(${codes(i).primitive}))"
         case BinaryType =>
-          s" + (${codes(i).isNull} ? 0 : binaryWriter.getSize(${codes(i).primitive}))"
+          s" + (${codes(i).isNull} ? 0 : $binaryWriter.getSize(${codes(i).primitive}))"
         case _ => ""
       }
     }.mkString("")
@@ -55,11 +56,11 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
         case dt if ctx.isPrimitiveType(dt) =>
           s"${ctx.setColumn("target", dt, i, codes(i).primitive)}"
         case StringType =>
-          s"cursor += stringWriter.write(target, ${codes(i).primitive}, $i, cursor)"
+          s"cursor += $stringWriter.write(target, ${codes(i).primitive}, $i, cursor)"
         case BinaryType =>
-          s"cursor += binaryWriter.write(target, ${codes(i).primitive}, $i, cursor)"
+          s"cursor += $binaryWriter.write(target, ${codes(i).primitive}, $i, cursor)"
         case _ =>
-          throw new Exception(s"Not supported DataType: $dt")
+          throw new Exception(s"Not supported DataType: ${e.dataType}")
       }
       s"""if (${codes(i).isNull}) {
             target.setNullAt($i);
@@ -75,20 +76,14 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
 
     class SpecificProjection extends ${classOf[UnsafeProjection].getName} {
 
-      private final org.apache.spark.sql.catalyst.expressions.StringUnsafeColumnWriter
-        stringWriter = new org.apache.spark.sql.catalyst.expressions.StringUnsafeColumnWriter();
-      private final org.apache.spark.sql.catalyst.expressions.BinaryUnsafeColumnWriter
-        binaryWriter = new org.apache.spark.sql.catalyst.expressions.BinaryUnsafeColumnWriter();
-      private final org.apache.spark.sql.catalyst.expressions.ObjectUnsafeColumnWriter
-        objectWriter = new org.apache.spark.sql.catalyst.expressions.ObjectUnsafeColumnWriter();
-
       private UnsafeRow target = new UnsafeRow();
       private byte[] buffer = new byte[64];
 
       public SpecificProjection() {}
 
+      // Scala.Function1 need this
       public Object apply(Object row) {
-        return apply((InternalRow) i);
+        return apply((InternalRow) row);
       }
 
       public UnsafeRow apply(InternalRow i) {
