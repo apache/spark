@@ -66,7 +66,7 @@ public class JavaKMeansSuite implements Serializable {
     List<String> columns = Arrays.asList(transformed.columns());
     List<String> expectedColumns = Arrays.asList("features", "prediction");
     for (String column: expectedColumns) {
-      columns.contains(column);
+      assertTrue(columns.contains(column));
     }
   }
 }
