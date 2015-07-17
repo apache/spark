@@ -364,8 +364,13 @@ trait Row extends Serializable {
     false
   }
 
-  protected def canEqual(other: Any) =
+  protected def canEqual(other: Any) = {
+    // Note that InternalRow overrides canEqual. These two canEqual's together makes sure that
+    // comparing the external Row and InternalRow will always yield false.
+    // In the future, InternalRow should not extend Row. In that case, we can remove these
+    // canEqual methods.
     other.isInstanceOf[Row] && !other.isInstanceOf[InternalRow]
+  }
 
   override def equals(o: Any): Boolean = {
     if (o == null || !canEqual(o)) return false
