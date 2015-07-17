@@ -123,11 +123,11 @@ case class Join(
     }
   }
 
-  private def selfJoinResolved: Boolean = left.outputSet.intersect(right.outputSet).isEmpty
+  def selfJoinResolved: Boolean = left.outputSet.intersect(right.outputSet).isEmpty
 
-  // Joins are only resolved if they don't introduce ambiguious expression ids.
+  // Joins are only resolved if they don't introduce ambiguous expression ids.
   override lazy val resolved: Boolean = {
-    childrenResolved && !expressions.exists(!_.resolved) && selfJoinResolved
+    childrenResolved && expressions.forall(_.resolved) && selfJoinResolved
   }
 }
 
