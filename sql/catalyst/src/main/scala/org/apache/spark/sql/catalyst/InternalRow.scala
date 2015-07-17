@@ -59,7 +59,7 @@ abstract class InternalRow extends Row {
    * Equality check between external row and internal row is not allowed.
    * Here we do this check to prevent call `equals` on internal row with external row.
    */
-  protected override def canEqual(other: Any) = other.isInstanceOf[InternalRow]
+  protected override def canEqual(other: Row) = other.isInstanceOf[InternalRow]
 
   // Custom hashCode function that matches the efficient code generated version.
   override def hashCode: Int = {

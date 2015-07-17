@@ -369,7 +369,7 @@ trait Row extends Serializable {
    * Equality check between external row and internal row is not allowed.
    * Here we do this check to prevent call `equals` on external row with internal row.
    */
-  protected def canEqual(other: Any) = {
+  protected def canEqual(other: Row) = {
     // Note that `Row` is not only the interface of external row but also the parent
     // of `InternalRow`, so we have to ensure `other` is not a internal row here to prevent
     // call `equals` on external row with internal row.
@@ -377,18 +377,20 @@ trait Row extends Serializable {
     // equality check between external Row and InternalRow will always fail.
     // In the future, InternalRow should not extend Row. In that case, we can remove these
     // canEqual methods.
-    other.isInstanceOf[Row] && !other.isInstanceOf[InternalRow]
+    !other.isInstanceOf[InternalRow]
   }
 
   override def equals(o: Any): Boolean = {
-    if (!canEqual(o)) {
+    if (!o.isInstanceOf[Row]) return false
+    val other = o.asInstanceOf[Row]
+
+    if (!canEqual(other)) {
       throw new UnsupportedOperationException(
         "cannot check equality between external and internal rows")
     }
 
-    if (o == null) return false
+    if (other eq null) return false
 
-    val other = o.asInstanceOf[Row]
     if (length != other.length) {
       return false
     }
