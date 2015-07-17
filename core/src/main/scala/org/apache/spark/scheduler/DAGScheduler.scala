@@ -1142,8 +1142,8 @@ class DAGScheduler(
               s"due to a fetch failure from $mapStage (${mapStage.name})")
             markStageAsFinished(failedStage, Some(failureMessage))
           } else {
-            logInfo(s"Ignoring fetch failure from $task as it's from $failedStage, " +
-              s"which is no longer running")
+            logDebug(s"Received fetch failure from $task, but its from $failedStage which is no " +
+              s"longer running")
           }
 
           if (disallowStageRetryForTest) {
