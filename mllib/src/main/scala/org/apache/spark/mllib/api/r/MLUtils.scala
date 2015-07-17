@@ -26,8 +26,8 @@ import org.apache.spark.sql.DataFrame
 private[r] object MLUtils {
   def fitRModelFormula(
       value: String,
-      family: String,
       df: DataFrame,
+      family: String,
       lambda: Double,
       alpha: Double): PipelineModel = {
     val formula = new RFormula().setFormula(value)
