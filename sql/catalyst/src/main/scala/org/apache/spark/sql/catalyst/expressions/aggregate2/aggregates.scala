@@ -110,7 +110,7 @@ abstract class AggregateFunction2
   def bufferSchema: StructType
 
   /** Attributes of fields in bufferSchema. */
-  def bufferAttributes: Seq[Attribute]
+  def bufferAttributes: Seq[AttributeReference]
 
   /** Clones bufferAttributes. */
   def cloneBufferAttributes: Seq[Attribute]
@@ -147,7 +147,7 @@ case class MyDoubleSum(child: Expression) extends AggregateFunction2 {
   override val bufferSchema: StructType =
     StructType(StructField("currentSum", DoubleType, true) :: Nil)
 
-  override val bufferAttributes: Seq[Attribute] = bufferSchema.toAttributes
+  override val bufferAttributes: Seq[AttributeReference] = bufferSchema.toAttributes
 
   override lazy val cloneBufferAttributes = bufferAttributes.map(_.newInstance())
 
@@ -205,8 +205,8 @@ abstract class AlgebraicAggregate extends AggregateFunction2 with Serializable {
   override lazy val cloneBufferAttributes = bufferAttributes.map(_.newInstance())
 
   implicit class RichAttribute(a: AttributeReference) {
-    def left = a
-    def right = cloneBufferAttributes(bufferAttributes.indexOf(a))
+    def left: AttributeReference = a
+    def right: AttributeReference = cloneBufferAttributes(bufferAttributes.indexOf(a))
   }
 
   /** An AlgebraicAggregate's bufferSchema is derived from bufferAttributes. */
