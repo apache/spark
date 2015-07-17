@@ -27,7 +27,7 @@ import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.unsafe.types._
 
 
 // These classes are here to avoid issues with serialization and integration with quasiquotes.
@@ -69,6 +69,7 @@ class CodeGenContext {
     mutableStates += ((javaType, variableName, initialValue))
   }
 
+  final val intervalType: String = classOf[Interval].getName
   final val JAVA_BOOLEAN = "boolean"
   final val JAVA_BYTE = "byte"
   final val JAVA_SHORT = "short"
@@ -137,6 +138,7 @@ class CodeGenContext {
     case dt: DecimalType => "Decimal"
     case BinaryType => "byte[]"
     case StringType => "UTF8String"
+    case IntervalType => intervalType
     case _: StructType => "InternalRow"
     case _: ArrayType => s"scala.collection.Seq"
     case _: MapType => s"scala.collection.Map"
