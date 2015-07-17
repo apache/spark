@@ -47,10 +47,14 @@ protocol CompatibilityTest {
         union { null, double } maybe_double_column;
         union { null, bytes } maybe_binary_column;
         union { null, string } maybe_string_column;
-        union { null, Suit }
+        union { null, Suit } maybe_enum_column;
 
         array<string> strings_column;
         map<int> string_to_int_column;
         map<array<Nested>> complex_column;
+
+        union { null, array<string> } maybe_strings_column;
+        union { null, map<int> } maybe_string_to_int_column;
+        union { null, map<array<Nested>> } maybe_complex_column;
     }
 }

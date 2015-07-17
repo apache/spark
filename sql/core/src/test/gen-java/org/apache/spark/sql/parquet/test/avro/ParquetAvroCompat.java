@@ -7,7 +7,7 @@ package org.apache.spark.sql.parquet.test.avro;
 @SuppressWarnings("all")
 @org.apache.avro.specific.AvroGenerated
 public class ParquetAvroCompat extends org.apache.avro.specific.SpecificRecordBase implements org.apache.avro.specific.SpecificRecord {
-  public static final org.apache.avro.Schema SCHEMA$ = new org.apache.avro.Schema.Parser().parse("{\"type\":\"record\",\"name\":\"ParquetAvroCompat\",\"namespace\":\"org.apache.spark.sql.parquet.test.avro\",\"fields\":[{\"name\":\"bool_column\",\"type\":\"boolean\"},{\"name\":\"int_column\",\"type\":\"int\"},{\"name\":\"long_column\",\"type\":\"long\"},{\"name\":\"float_column\",\"type\":\"float\"},{\"name\":\"double_column\",\"type\":\"double\"},{\"name\":\"binary_column\",\"type\":\"bytes\"},{\"name\":\"string_column\",\"type\":{\"type\":\"string\",\"avro.java.string\":\"String\"}},{\"name\":\"enum_column\",\"type\":{\"type\":\"enum\",\"name\":\"Suit\",\"symbols\":[\"SPADES\",\"HEARTS\",\"DIAMONDS\",\"CLUBS\"]}},{\"name\":\"maybe_bool_column\",\"type\":[\"null\",\"boolean\"]},{\"name\":\"maybe_int_column\",\"type\":[\"null\",\"int\"]},{\"name\":\"maybe_long_column\",\"type\":[\"null\",\"long\"]},{\"name\":\"maybe_float_column\",\"type\":[\"null\",\"float\"]},{\"name\":\"maybe_double_column\",\"type\":[\"null\",\"double\"]},{\"name\":\"maybe_binary_column\",\"type\":[\"null\",\"bytes\"]},{\"name\":\"maybe_string_column\",\"type\":[\"null\",{\"type\":\"string\",\"avro.java.string\":\"String\"}]},{\"name\":\"maybe_enum_column\",\"type\":[\"null\",\"Suit\"]},{\"name\":\"strings_column\",\"type\":{\"type\":\"array\",\"items\":{\"type\":\"string\",\"avro.java.string\":\"String\"}}},{\"name\":\"string_to_int_column\",\"type\":{\"type\":\"map\",\"values\":\"int\",\"avro.java.string\":\"String\"}},{\"name\":\"complex_column\",\"type\":{\"type\":\"map\",\"values\":{\"type\":\"array\",\"items\":{\"type\":\"record\",\"name\":\"Nested\",\"fields\":[{\"name\":\"nested_ints_column\",\"type\":{\"type\":\"array\",\"items\":\"int\"}},{\"name\":\"nested_string_column\",\"type\":{\"type\":\"string\",\"avro.java.string\":\"String\"}}]}},\"avro.java.string\":\"String\"}}]}");
+  public static final org.apache.avro.Schema SCHEMA$ = new org.apache.avro.Schema.Parser().parse("{\"type\":\"record\",\"name\":\"ParquetAvroCompat\",\"namespace\":\"org.apache.spark.sql.parquet.test.avro\",\"fields\":[{\"name\":\"bool_column\",\"type\":\"boolean\"},{\"name\":\"int_column\",\"type\":\"int\"},{\"name\":\"long_column\",\"type\":\"long\"},{\"name\":\"float_column\",\"type\":\"float\"},{\"name\":\"double_column\",\"type\":\"double\"},{\"name\":\"binary_column\",\"type\":\"bytes\"},{\"name\":\"string_column\",\"type\":{\"type\":\"string\",\"avro.java.string\":\"String\"}},{\"name\":\"enum_column\",\"type\":{\"type\":\"enum\",\"name\":\"Suit\",\"symbols\":[\"SPADES\",\"HEARTS\",\"DIAMONDS\",\"CLUBS\"]}},{\"name\":\"maybe_bool_column\",\"type\":[\"null\",\"boolean\"]},{\"name\":\"maybe_int_column\",\"type\":[\"null\",\"int\"]},{\"name\":\"maybe_long_column\",\"type\":[\"null\",\"long\"]},{\"name\":\"maybe_float_column\",\"type\":[\"null\",\"float\"]},{\"name\":\"maybe_double_column\",\"type\":[\"null\",\"double\"]},{\"name\":\"maybe_binary_column\",\"type\":[\"null\",\"bytes\"]},{\"name\":\"maybe_string_column\",\"type\":[\"null\",{\"type\":\"string\",\"avro.java.string\":\"String\"}]},{\"name\":\"maybe_enum_column\",\"type\":[\"null\",\"Suit\"]},{\"name\":\"strings_column\",\"type\":{\"type\":\"array\",\"items\":{\"type\":\"string\",\"avro.java.string\":\"String\"}}},{\"name\":\"string_to_int_column\",\"type\":{\"type\":\"map\",\"values\":\"int\",\"avro.java.string\":\"String\"}},{\"name\":\"complex_column\",\"type\":{\"type\":\"map\",\"values\":{\"type\":\"array\",\"items\":{\"type\":\"record\",\"name\":\"Nested\",\"fields\":[{\"name\":\"nested_ints_column\",\"type\":{\"type\":\"array\",\"items\":\"int\"}},{\"name\":\"nested_string_column\",\"type\":{\"type\":\"string\",\"avro.java.string\":\"String\"}}]}},\"avro.java.string\":\"String\"}},{\"name\":\"maybe_strings_column\",\"type\":[\"null\",{\"type\":\"array\",\"items\":{\"type\":\"string\",\"avro.java.string\":\"String\"}}]},{\"name\":\"maybe_string_to_int_column\",\"type\":[\"null\",{\"type\":\"map\",\"values\":\"int\",\"avro.java.string\":\"String\"}]},{\"name\":\"maybe_complex_column\",\"type\":[\"null\",{\"type\":\"map\",\"values\":{\"type\":\"array\",\"items\":\"Nested\"},\"avro.java.string\":\"String\"}]}]}");
   public static org.apache.avro.Schema getClassSchema() { return SCHEMA$; }
   @Deprecated public boolean bool_column;
   @Deprecated public int int_column;
@@ -28,6 +28,9 @@ public class ParquetAvroCompat extends org.apache.avro.specific.SpecificRecordBa
   @Deprecated public java.util.List<java.lang.String> strings_column;
   @Deprecated public java.util.Map<java.lang.String,java.lang.Integer> string_to_int_column;
   @Deprecated public java.util.Map<java.lang.String,java.util.List<org.apache.spark.sql.parquet.test.avro.Nested>> complex_column;
+  @Deprecated public java.util.List<java.lang.String> maybe_strings_column;
+  @Deprecated public java.util.Map<java.lang.String,java.lang.Integer> maybe_string_to_int_column;
+  @Deprecated public java.util.Map<java.lang.String,java.util.List<org.apache.spark.sql.parquet.test.avro.Nested>> maybe_complex_column;
 
   /**
    * Default constructor.  Note that this does not initialize fields
@@ -39,7 +42,7 @@ public class ParquetAvroCompat extends org.apache.avro.specific.SpecificRecordBa
   /**
    * All-args constructor.
    */
-  public ParquetAvroCompat(java.lang.Boolean bool_column, java.lang.Integer int_column, java.lang.Long long_column, java.lang.Float float_column, java.lang.Double double_column, java.nio.ByteBuffer binary_column, java.lang.String string_column, org.apache.spark.sql.parquet.test.avro.Suit enum_column, java.lang.Boolean maybe_bool_column, java.lang.Integer maybe_int_column, java.lang.Long maybe_long_column, java.lang.Float maybe_float_column, java.lang.Double maybe_double_column, java.nio.ByteBuffer maybe_binary_column, java.lang.String maybe_string_column, org.apache.spark.sql.parquet.test.avro.Suit maybe_enum_column, java.util.List<java.lang.String> strings_column, java.util.Map<java.lang.String,java.lang.Integer> string_to_int_column, java.util.Map<java.lang.String,java.util.List<org.apache.spark.sql.parquet.test.avro.Nested>> complex_column) {
+  public ParquetAvroCompat(java.lang.Boolean bool_column, java.lang.Integer int_column, java.lang.Long long_column, java.lang.Float float_column, java.lang.Double double_column, java.nio.ByteBuffer binary_column, java.lang.String string_column, org.apache.spark.sql.parquet.test.avro.Suit enum_column, java.lang.Boolean maybe_bool_column, java.lang.Integer maybe_int_column, java.lang.Long maybe_long_column, java.lang.Float maybe_float_column, java.lang.Double maybe_double_column, java.nio.ByteBuffer maybe_binary_column, java.lang.String maybe_string_column, org.apache.spark.sql.parquet.test.avro.Suit maybe_enum_column, java.util.List<java.lang.String> strings_column, java.util.Map<java.lang.String,java.lang.Integer> string_to_int_column, java.util.Map<java.lang.String,java.util.List<org.apache.spark.sql.parquet.test.avro.Nested>> complex_column, java.util.List<java.lang.String> maybe_strings_column, java.util.Map<java.lang.String,java.lang.Integer> maybe_string_to_int_column, java.util.Map<java.lang.String,java.util.List<org.apache.spark.sql.parquet.test.avro.Nested>> maybe_complex_column) {
     this.bool_column = bool_column;
     this.int_column = int_column;
     this.long_column = long_column;
@@ -59,6 +62,9 @@ public class ParquetAvroCompat extends org.apache.avro.specific.SpecificRecordBa
     this.strings_column = strings_column;
     this.string_to_int_column = string_to_int_column;
     this.complex_column = complex_column;
+    this.maybe_strings_column = maybe_strings_column;
+    this.maybe_string_to_int_column = maybe_string_to_int_column;
+    this.maybe_complex_column = maybe_complex_column;
   }
 
   public org.apache.avro.Schema getSchema() { return SCHEMA$; }
@@ -84,6 +90,9 @@ public class ParquetAvroCompat extends org.apache.avro.specific.SpecificRecordBa
     case 16: return strings_column;
     case 17: return string_to_int_column;
     case 18: return complex_column;
+    case 19: return maybe_strings_column;
+    case 20: return maybe_string_to_int_column;
+    case 21: return maybe_complex_column;
     default: throw new org.apache.avro.AvroRuntimeException("Bad index");
     }
   }
@@ -110,6 +119,9 @@ public class ParquetAvroCompat extends org.apache.avro.specific.SpecificRecordBa
     case 16: strings_column = (java.util.List<java.lang.String>)value$; break;
     case 17: string_to_int_column = (java.util.Map<java.lang.String,java.lang.Integer>)value$; break;
     case 18: complex_column = (java.util.Map<java.lang.String,java.util.List<org.apache.spark.sql.parquet.test.avro.Nested>>)value$; break;
+    case 19: maybe_strings_column = (java.util.List<java.lang.String>)value$; break;
+    case 20: maybe_string_to_int_column = (java.util.Map<java.lang.String,java.lang.Integer>)value$; break;
+    case 21: maybe_complex_column = (java.util.Map<java.lang.String,java.util.List<org.apache.spark.sql.parquet.test.avro.Nested>>)value$; break;
     default: throw new org.apache.avro.AvroRuntimeException("Bad index");
     }
   }
@@ -399,6 +411,51 @@ public class ParquetAvroCompat extends org.apache.avro.specific.SpecificRecordBa
     this.complex_column = value;
   }
 
+  /**
+   * Gets the value of the 'maybe_strings_column' field.
+   */
+  public java.util.List<java.lang.String> getMaybeStringsColumn() {
+    return maybe_strings_column;
+  }
+
+  /**
+   * Sets the value of the 'maybe_strings_column' field.
+   * @param value the value to set.
+   */
+  public void setMaybeStringsColumn(java.util.List<java.lang.String> value) {
+    this.maybe_strings_column = value;
+  }
+
+  /**
+   * Gets the value of the 'maybe_string_to_int_column' field.
+   */
+  public java.util.Map<java.lang.String,java.lang.Integer> getMaybeStringToIntColumn() {
+    return maybe_string_to_int_column;
+  }
+
+  /**
+   * Sets the value of the 'maybe_string_to_int_column' field.
+   * @param value the value to set.
+   */
+  public void setMaybeStringToIntColumn(java.util.Map<java.lang.String,java.lang.Integer> value) {
+    this.maybe_string_to_int_column = value;
+  }
+
+  /**
+   * Gets the value of the 'maybe_complex_column' field.
+   */
+  public java.util.Map<java.lang.String,java.util.List<org.apache.spark.sql.parquet.test.avro.Nested>> getMaybeComplexColumn() {
+    return maybe_complex_column;
+  }
+
+  /**
+   * Sets the value of the 'maybe_complex_column' field.
+   * @param value the value to set.
+   */
+  public void setMaybeComplexColumn(java.util.Map<java.lang.String,java.util.List<org.apache.spark.sql.parquet.test.avro.Nested>> value) {
+    this.maybe_complex_column = value;
+  }
+
   /** Creates a new ParquetAvroCompat RecordBuilder */
   public static org.apache.spark.sql.parquet.test.avro.ParquetAvroCompat.Builder newBuilder() {
     return new org.apache.spark.sql.parquet.test.avro.ParquetAvroCompat.Builder();
@@ -439,6 +496,9 @@ public class ParquetAvroCompat extends org.apache.avro.specific.SpecificRecordBa
     private java.util.List<java.lang.String> strings_column;
     private java.util.Map<java.lang.String,java.lang.Integer> string_to_int_column;
     private java.util.Map<java.lang.String,java.util.List<org.apache.spark.sql.parquet.test.avro.Nested>> complex_column;
+    private java.util.List<java.lang.String> maybe_strings_column;
+    private java.util.Map<java.lang.String,java.lang.Integer> maybe_string_to_int_column;
+    private java.util.Map<java.lang.String,java.util.List<org.apache.spark.sql.parquet.test.avro.Nested>> maybe_complex_column;
 
     /** Creates a new Builder */
     private Builder() {
@@ -524,6 +584,18 @@ public class ParquetAvroCompat extends org.apache.avro.specific.SpecificRecordBa
         this.complex_column = data().deepCopy(fields()[18].schema(), other.complex_column);
         fieldSetFlags()[18] = true;
       }
+      if (isValidValue(fields()[19], other.maybe_strings_column)) {
+        this.maybe_strings_column = data().deepCopy(fields()[19].schema(), other.maybe_strings_column);
+        fieldSetFlags()[19] = true;
+      }
+      if (isValidValue(fields()[20], other.maybe_string_to_int_column)) {
+        this.maybe_string_to_int_column = data().deepCopy(fields()[20].schema(), other.maybe_string_to_int_column);
+        fieldSetFlags()[20] = true;
+      }
+      if (isValidValue(fields()[21], other.maybe_complex_column)) {
+        this.maybe_complex_column = data().deepCopy(fields()[21].schema(), other.maybe_complex_column);
+        fieldSetFlags()[21] = true;
+      }
     }
     
     /** Creates a Builder by copying an existing ParquetAvroCompat instance */
@@ -604,6 +676,18 @@ public class ParquetAvroCompat extends org.apache.avro.specific.SpecificRecordBa
       if (isValidValue(fields()[18], other.complex_column)) {
         this.complex_column = data().deepCopy(fields()[18].schema(), other.complex_column);
         fieldSetFlags()[18] = true;
+      }
+      if (isValidValue(fields()[19], other.maybe_strings_column)) {
+        this.maybe_strings_column = data().deepCopy(fields()[19].schema(), other.maybe_strings_column);
+        fieldSetFlags()[19] = true;
+      }
+      if (isValidValue(fields()[20], other.maybe_string_to_int_column)) {
+        this.maybe_string_to_int_column = data().deepCopy(fields()[20].schema(), other.maybe_string_to_int_column);
+        fieldSetFlags()[20] = true;
+      }
+      if (isValidValue(fields()[21], other.maybe_complex_column)) {
+        this.maybe_complex_column = data().deepCopy(fields()[21].schema(), other.maybe_complex_column);
+        fieldSetFlags()[21] = true;
       }
     }
 
@@ -1077,6 +1161,81 @@ public class ParquetAvroCompat extends org.apache.avro.specific.SpecificRecordBa
       return this;
     }
 
+    /** Gets the value of the 'maybe_strings_column' field */
+    public java.util.List<java.lang.String> getMaybeStringsColumn() {
+      return maybe_strings_column;
+    }
+    
+    /** Sets the value of the 'maybe_strings_column' field */
+    public org.apache.spark.sql.parquet.test.avro.ParquetAvroCompat.Builder setMaybeStringsColumn(java.util.List<java.lang.String> value) {
+      validate(fields()[19], value);
+      this.maybe_strings_column = value;
+      fieldSetFlags()[19] = true;
+      return this; 
+    }
+    
+    /** Checks whether the 'maybe_strings_column' field has been set */
+    public boolean hasMaybeStringsColumn() {
+      return fieldSetFlags()[19];
+    }
+    
+    /** Clears the value of the 'maybe_strings_column' field */
+    public org.apache.spark.sql.parquet.test.avro.ParquetAvroCompat.Builder clearMaybeStringsColumn() {
+      maybe_strings_column = null;
+      fieldSetFlags()[19] = false;
+      return this;
+    }
+
+    /** Gets the value of the 'maybe_string_to_int_column' field */
+    public java.util.Map<java.lang.String,java.lang.Integer> getMaybeStringToIntColumn() {
+      return maybe_string_to_int_column;
+    }
+    
+    /** Sets the value of the 'maybe_string_to_int_column' field */
+    public org.apache.spark.sql.parquet.test.avro.ParquetAvroCompat.Builder setMaybeStringToIntColumn(java.util.Map<java.lang.String,java.lang.Integer> value) {
+      validate(fields()[20], value);
+      this.maybe_string_to_int_column = value;
+      fieldSetFlags()[20] = true;
+      return this; 
+    }
+    
+    /** Checks whether the 'maybe_string_to_int_column' field has been set */
+    public boolean hasMaybeStringToIntColumn() {
+      return fieldSetFlags()[20];
+    }
+    
+    /** Clears the value of the 'maybe_string_to_int_column' field */
+    public org.apache.spark.sql.parquet.test.avro.ParquetAvroCompat.Builder clearMaybeStringToIntColumn() {
+      maybe_string_to_int_column = null;
+      fieldSetFlags()[20] = false;
+      return this;
+    }
+
+    /** Gets the value of the 'maybe_complex_column' field */
+    public java.util.Map<java.lang.String,java.util.List<org.apache.spark.sql.parquet.test.avro.Nested>> getMaybeComplexColumn() {
+      return maybe_complex_column;
+    }
+    
+    /** Sets the value of the 'maybe_complex_column' field */
+    public org.apache.spark.sql.parquet.test.avro.ParquetAvroCompat.Builder setMaybeComplexColumn(java.util.Map<java.lang.String,java.util.List<org.apache.spark.sql.parquet.test.avro.Nested>> value) {
+      validate(fields()[21], value);
+      this.maybe_complex_column = value;
+      fieldSetFlags()[21] = true;
+      return this; 
+    }
+    
+    /** Checks whether the 'maybe_complex_column' field has been set */
+    public boolean hasMaybeComplexColumn() {
+      return fieldSetFlags()[21];
+    }
+    
+    /** Clears the value of the 'maybe_complex_column' field */
+    public org.apache.spark.sql.parquet.test.avro.ParquetAvroCompat.Builder clearMaybeComplexColumn() {
+      maybe_complex_column = null;
+      fieldSetFlags()[21] = false;
+      return this;
+    }
+
     @Override
     public ParquetAvroCompat build() {
       try {
@@ -1100,6 +1259,9 @@ public class ParquetAvroCompat extends org.apache.avro.specific.SpecificRecordBa
         record.strings_column = fieldSetFlags()[16] ? this.strings_column : (java.util.List<java.lang.String>) defaultValue(fields()[16]);
         record.string_to_int_column = fieldSetFlags()[17] ? this.string_to_int_column : (java.util.Map<java.lang.String,java.lang.Integer>) defaultValue(fields()[17]);
         record.complex_column = fieldSetFlags()[18] ? this.complex_column : (java.util.Map<java.lang.String,java.util.List<org.apache.spark.sql.parquet.test.avro.Nested>>) defaultValue(fields()[18]);
+        record.maybe_strings_column = fieldSetFlags()[19] ? this.maybe_strings_column : (java.util.List<java.lang.String>) defaultValue(fields()[19]);
+        record.maybe_string_to_int_column = fieldSetFlags()[20] ? this.maybe_string_to_int_column : (java.util.Map<java.lang.String,java.lang.Integer>) defaultValue(fields()[20]);
+        record.maybe_complex_column = fieldSetFlags()[21] ? this.maybe_complex_column : (java.util.Map<java.lang.String,java.util.List<org.apache.spark.sql.parquet.test.avro.Nested>>) defaultValue(fields()[21]);
         return record;
       } catch (Exception e) {
         throw new org.apache.avro.AvroRuntimeException(e);

@@ -81,7 +81,15 @@ class ParquetAvroCompatibilitySuite extends ParquetCompatibilityTest {
           (i + n).toString -> Seq.tabulate(3) { m =>
             Row(Seq.tabulate(3)(j => i + j + m), s"val_${i + m}")
           }
-        }.toMap)
+        }.toMap,
+
+        nullable(Seq.tabulate(3)(n => s"arr_${i + n}")),
+        nullable(Seq.tabulate(3)(n => n.toString -> (i + n: Integer)).toMap),
+        nullable(Seq.tabulate(3) { n =>
+          (i + n).toString -> Seq.tabulate(3) { m =>
+            Row(Seq.tabulate(3)(j => i + j + m), s"val_${i + m}")
+          }
+        }.toMap))
     })
   }
 
@@ -121,9 +129,13 @@ class ParquetAvroCompatibilitySuite extends ParquetCompatibilityTest {
       .setMaybeEnumColumn(nullable(Suit.values()(i % Suit.values().length)))
 
       .setStringsColumn(Seq.tabulate(3)(n => s"arr_${i + n}").asJava)
-      .setStringToIntColumn(
-        Seq.tabulate(3)(n => n.toString -> (i + n: Integer)).toMap.asJava)
+      .setStringToIntColumn(Seq.tabulate(3)(n => n.toString -> (i + n: Integer)).toMap.asJava)
       .setComplexColumn(makeComplexColumn(i))
+
+      .setMaybeStringsColumn(nullable(Seq.tabulate(3)(n => s"arr_${i + n}").asJava))
+      .setMaybeStringToIntColumn(
+        nullable(Seq.tabulate(3)(n => n.toString -> (i + n: Integer)).toMap.asJava))
+      .setMaybeComplexColumn(nullable(makeComplexColumn(i)))
 
       .build()
   }

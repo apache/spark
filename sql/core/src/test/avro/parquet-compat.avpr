@@ -90,6 +90,27 @@
           "items" : "Nested"
         }
       }
+    }, {
+      "name" : "maybe_strings_column",
+      "type" : [ "null", {
+        "type" : "array",
+        "items" : "string"
+      } ]
+    }, {
+      "name" : "maybe_string_to_int_column",
+      "type" : [ "null", {
+        "type" : "map",
+        "values" : "int"
+      } ]
+    }, {
+      "name" : "maybe_complex_column",
+      "type" : [ "null", {
+        "type" : "map",
+        "values" : {
+          "type" : "array",
+          "items" : "Nested"
+        }
+      } ]
     } ]
   } ],
   "messages" : { }
