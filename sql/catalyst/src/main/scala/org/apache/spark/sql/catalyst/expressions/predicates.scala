@@ -131,7 +131,6 @@ case class IsNaN(child: Expression) extends UnaryExpression
   override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection(DoubleType, FloatType))
 
   override def nullable: Boolean = false
-  override def toString: String = s"($child).isNaN"
 
   override def eval(input: InternalRow): Any = {
     val value = child.eval(input)
@@ -156,7 +155,7 @@ case class IsNaN(child: Expression) extends UnaryExpression
           if (${eval.isNull}) {
             ${ev.primitive} = true;
           } else {
-            ${ev.primitive} = Float.valueOf(${eval.primitive}).isNaN();
+            ${ev.primitive} = Float.isNaN(${eval.primitive});
           }
         """
       case DoubleType =>
@@ -167,7 +166,7 @@ case class IsNaN(child: Expression) extends UnaryExpression
           if (${eval.isNull}) {
             ${ev.primitive} = true;
           } else {
-            ${ev.primitive} = Double.valueOf(${eval.primitive}).isNaN();
+            ${ev.primitive} = Double.isNaN(${eval.primitive});
           }
         """
     }
