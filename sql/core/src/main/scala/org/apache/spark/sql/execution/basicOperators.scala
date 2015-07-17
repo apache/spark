@@ -306,6 +306,8 @@ case class UnsafeExternalSort(
   override def output: Seq[Attribute] = child.output
 
   override def outputOrdering: Seq[SortOrder] = sortOrder
+
+  override def outputsUnsafeRows: Boolean = true
 }
 
 @DeveloperApi
