@@ -76,6 +76,7 @@ class ParquetAvroCompatibilitySuite extends ParquetCompatibilityTest {
         nullable(Suit.values()(i % Suit.values().length).name()),
 
         Seq.tabulate(3)(n => s"arr_${i + n}"),
+        Seq.tabulate(3)(n => Row(Seq.tabulate(3)(j => i + j + n), s"val_${i + n}")),
         Seq.tabulate(3)(n => n.toString -> (i + n: Integer)).toMap,
         Seq.tabulate(3) { n =>
           (i + n).toString -> Seq.tabulate(3) { m =>
@@ -84,6 +85,7 @@ class ParquetAvroCompatibilitySuite extends ParquetCompatibilityTest {
         }.toMap,
 
         nullable(Seq.tabulate(3)(n => s"arr_${i + n}")),
+        nullable(Seq.tabulate(3)(n => Row(Seq.tabulate(3)(j => i + j + n), s"val_${i + n}"))),
         nullable(Seq.tabulate(3)(n => n.toString -> (i + n: Integer)).toMap),
         nullable(Seq.tabulate(3) { n =>
           (i + n).toString -> Seq.tabulate(3) { m =>
@@ -129,10 +131,24 @@ class ParquetAvroCompatibilitySuite extends ParquetCompatibilityTest {
       .setMaybeEnumColumn(nullable(Suit.values()(i % Suit.values().length)))
 
       .setStringsColumn(Seq.tabulate(3)(n => s"arr_${i + n}").asJava)
+      .setStructsColumn(Seq.tabulate(3) { n =>
+        Nested
+          .newBuilder()
+          .setNestedIntsColumn(Seq.tabulate(3)(j => i + j + n: Integer).asJava)
+          .setNestedStringColumn(s"val_${i + n}")
+          .build()
+      }.asJava)
       .setStringToIntColumn(Seq.tabulate(3)(n => n.toString -> (i + n: Integer)).toMap.asJava)
       .setComplexColumn(makeComplexColumn(i))
 
       .setMaybeStringsColumn(nullable(Seq.tabulate(3)(n => s"arr_${i + n}").asJava))
+      .setMaybeStructsColumn(nullable(Seq.tabulate(3) { n =>
+        Nested
+          .newBuilder()
+          .setNestedIntsColumn(Seq.tabulate(3)(j => i + j + n: Integer).asJava)
+          .setNestedStringColumn(s"val_${i + n}")
+          .build()
+      }.asJava))
       .setMaybeStringToIntColumn(
         nullable(Seq.tabulate(3)(n => n.toString -> (i + n: Integer)).toMap.asJava))
       .setMaybeComplexColumn(nullable(makeComplexColumn(i)))

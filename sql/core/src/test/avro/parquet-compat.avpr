@@ -76,6 +76,12 @@
         "items" : "string"
       }
     }, {
+      "name" : "structs_column",
+      "type" : {
+        "type" : "array",
+        "items" : "Nested"
+      }
+    }, {
       "name" : "string_to_int_column",
       "type" : {
         "type" : "map",
@@ -95,6 +101,12 @@
       "type" : [ "null", {
         "type" : "array",
         "items" : "string"
+      } ]
+    }, {
+      "name" : "maybe_structs_column",
+      "type" : [ "null", {
+        "type" : "array",
+        "items" : "Nested"
       } ]
     }, {
       "name" : "maybe_string_to_int_column",
