@@ -254,8 +254,9 @@ case class DateFormatClass(left: Expression, right: Expression) extends BinaryEx
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     val sdf = classOf[SimpleDateFormat].getName
+    val utf8 = classOf[UTF8String].getName
     defineCodeGen(ctx, ev, (timestamp, format) => {
-      s"""${ctx.stringType}.fromString((new $sdf($format.toString()))
+      s"""$utf8.fromString((new $sdf($format.toString()))
           .format(new java.sql.Date($timestamp / 1000)))"""
     })
   }
