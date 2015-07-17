@@ -44,6 +44,8 @@ case class Exchange(newPartitioning: Partitioning, child: SparkPlan) extends Una
 
   override def output: Seq[Attribute] = child.output
 
+  override def outputsUnsafeRows: Boolean = child.outputsUnsafeRows
+
   /**
    * Determines whether records must be defensively copied before being sent to the shuffle.
    * Several of Spark's shuffle components will buffer deserialized Java objects in memory. The
