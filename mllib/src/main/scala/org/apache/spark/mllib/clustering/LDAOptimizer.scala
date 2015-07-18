@@ -404,38 +404,9 @@ final class OnlineLDAOptimizer extends LDAOptimizer {
       .map { case (_, termCounts) => termCounts.toBreeze }
       .reduce(_+_)
     val subsampleRatio = 1.0 * totalDocs / batch.count()
-    //    val perwordbound = self.bound(chunk, subsample_ratio=subsample_ratio) / (subsample_ratio * corpus_words)
-    var score = 0.0D
-    val alpha = this.getAlpha
-    val eta = this.getEta
-    val _lambda = this.getLambda
-    val Elogbeta = dirichletExpectation(_lambda)
-    val expElogbeta = exp(Elogbeta)
-
-    batch.foreach { case (id: Long, termCounts: Vector) =>
-      val (gammad: BDV[Double], _) = topicInference(termCounts, Elogbeta, alpha, gammaShape, k)
-      val Elogthetad: BDV[Double] = digamma(gammad) - digamma(sum(gammad))
-
-      // E[log p(doc | theta, beta)]
-      termCounts.foreachActive { case (id, count) =>
-        score += logSumExp(Elogthetad + Elogbeta(::, id))
-      }
-      // E[log p(theta | alpha) - log q(theta | gamma)]; assumes alpha is a vector
-      score += sum((gammad - alpha) :* Elogthetad)
-      score += sum(lgamma(gammad) - lgamma(alpha))
-      score += lgamma(alpha) - lgamma(sum(gammad))
-    }
-    // compensate likelihood for when `corpus` above is only a sample of the whole corpus
-    score *= subsampleRatio
-
-    // E[log p(beta | eta) - log q (beta | lambda)]; assumes eta is a scalar
-    score += sum((eta - _lambda) * Elogbeta)
-    score += sum(lgamma(_lambda) - lgamma(eta))
-
-    val sumEta = eta * vocabSize
-
-    score += sum(lgamma(sumEta) - lgamma(sum(_lambda(breeze.linalg.*, ::))))
-    score
+    val variationalBound =
+      bound(batch, subsampleRatio, alpha, eta, lambda, gammaShape, k, vocabSize)
+    variationalBound / (subsampleRatio * vocabSize)
   }
 
   override private[clustering] def getLDAModel(iterationTimes: Array[Double]): LDAModel = {
@@ -502,6 +473,50 @@ object OnlineLDAOptimizer {
 
     val sstatsd = expElogthetad.asDenseMatrix.t * (ctsVector / phinorm).asDenseMatrix
     (gammad, sstatsd)
+  }
+
+  /**
+   *  Estimate the variational bound of documents from `batch`:
+   *  E_q[log p(bath)] - E_q[log q(batch)]
+   */
+  // TODO: precompute gamma during training to use for logPerplexity's call to bound
+  private def bound(
+      batch: RDD[(Long, Vector)],
+      subsampleRatio: Double,
+      alpha: Double,
+      eta: Double,
+      lambda: BDM[Double],
+      gammaShape: Double,
+      k: Int,
+      vocabSize: Long): Double = {
+    var score = 0.0D
+    val Elogbeta = dirichletExpectation(lambda)
+    val expElogbeta = exp(Elogbeta)
+
+    batch.foreach { case (id: Long, termCounts: Vector) =>
+      val (gammad: BDV[Double], _) = topicInference(termCounts, Elogbeta, alpha, gammaShape, k)
+      val Elogthetad: BDV[Double] = digamma(gammad) - digamma(sum(gammad))
+
+      // E[log p(doc | theta, beta)]
+      termCounts.foreachActive { case (id, count) =>
+        score += logSumExp(Elogthetad + Elogbeta(::, id))
+      }
+      // E[log p(theta | alpha) - log q(theta | gamma)]; assumes alpha is a vector
+      score += sum((gammad - alpha) :* Elogthetad)
+      score += sum(lgamma(gammad) - lgamma(alpha))
+      score += lgamma(alpha) - lgamma(sum(gammad))
+    }
+    // compensate likelihood for when `corpus` above is only a sample of the whole corpus
+    score *= subsampleRatio
+
+    // E[log p(beta | eta) - log q (beta | lambda)]; assumes eta is a scalar
+    score += sum((eta - lambda) * Elogbeta)
+    score += sum(lgamma(lambda) - lgamma(eta))
+
+    val sumEta = eta * vocabSize
+
+    score += sum(lgamma(sumEta) - lgamma(sum(lambda(breeze.linalg.*, ::))))
+    score
   }
 
   /**
