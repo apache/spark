@@ -26,8 +26,6 @@ import org.apache.spark.sql.types.{StringType, TimestampType, DateType}
 
 class DateFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
-  val oldDefault = TimeZone.getDefault
-
   val sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss")
   val sdfDate = new SimpleDateFormat("yyyy-MM-dd")
   val d = new Date(sdf.parse("2015-04-08 13:10:15").getTime)
@@ -204,57 +202,48 @@ class DateFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(WeekOfYear(Cast(Literal(ts), DateType)), 45)
     checkEvaluation(WeekOfYear(Cast(Literal("2011-05-06"), DateType)), 18)
   }
+  
+  test("DateFormat") {
+    checkEvaluation(DateFormatClass(Literal.create(null, TimestampType), Literal("y")), null)
+    checkEvaluation(DateFormatClass(Cast(Literal(d), TimestampType),
+      Literal.create(null, StringType)), null)
+    checkEvaluation(DateFormatClass(Cast(Literal(d), TimestampType),
+      Literal("y")), "2015")
+    checkEvaluation(DateFormatClass(Literal(ts), Literal("y")), "2013")
+  }
 
-  testWithTimezone(TimeZone.getTimeZone("GMT-14:00"))
-  testWithTimezone(TimeZone.getTimeZone("GMT+04:30"))
-  testWithTimezone(TimeZone.getTimeZone("GMT+12:00"))
+  test("Hour") {
+    checkEvaluation(Hour(Literal.create(null, DateType)), null)
+    checkEvaluation(Hour(Cast(Literal(d), TimestampType)), 0)
+    checkEvaluation(Hour(Cast(Literal(sdf.format(d)), TimestampType)), 13)
+    checkEvaluation(Hour(Literal(ts)), 13)
 
-  def testWithTimezone(tz: TimeZone) {
-    TimeZone.setDefault(tz)
-    test("DateFormat - " + tz.getID) {
-      checkEvaluation(DateFormatClass(Literal.create(null, TimestampType), Literal("y")), null)
-      checkEvaluation(DateFormatClass(Cast(Literal(d), TimestampType),
-        Literal.create(null, StringType)), null)
-      checkEvaluation(DateFormatClass(Cast(Literal(d), TimestampType),
-        Literal("y")), "2015")
-      checkEvaluation(DateFormatClass(Literal(ts), Literal("y")), "2013")
-    }
-
-    test("Hour - " + tz.getID) {
-      checkEvaluation(Hour(Literal.create(null, DateType)), null)
-      checkEvaluation(Hour(Cast(Literal(d), TimestampType)), 0)
-      checkEvaluation(Hour(Cast(Literal(sdf.format(d)), TimestampType)), 13)
-      checkEvaluation(Hour(Literal(ts)), 13)
-
-      val c = Calendar.getInstance()
-      (0 to 24).foreach { h =>
-        (0 to 60 by 15).foreach { m =>
-          (0 to 60 by 15).foreach { s =>
-            c.set(2015, 18, 3, h, m, s)
-            checkEvaluation(Hour(Cast(Literal(new Timestamp(c.getTimeInMillis)), TimestampType)),
-              c.get(Calendar.HOUR_OF_DAY))
-          }
-        }
-      }
-    }
-
-    test("Minute - " + tz.getID) {
-      checkEvaluation(Minute(Literal.create(null, DateType)), null)
-      checkEvaluation(Minute(Cast(Literal(d), TimestampType)), 0)
-      checkEvaluation(Minute(Cast(Literal(sdf.format(d)), TimestampType)), 10)
-      checkEvaluation(Minute(Literal(ts)), 10)
-
-      val c = Calendar.getInstance()
-      (0 to 60 by 5).foreach { m =>
+    val c = Calendar.getInstance()
+    (0 to 24).foreach { h =>
+      (0 to 60 by 15).foreach { m =>
         (0 to 60 by 15).foreach { s =>
-          c.set(2015, 18, 3, 3, m, s)
-          checkEvaluation(Minute(Cast(Literal(new Timestamp(c.getTimeInMillis)), TimestampType)),
-            c.get(Calendar.MINUTE))
+          c.set(2015, 18, 3, h, m, s)
+          checkEvaluation(Hour(Cast(Literal(new Timestamp(c.getTimeInMillis)), TimestampType)),
+            c.get(Calendar.HOUR_OF_DAY))
         }
       }
     }
+  }
 
-    TimeZone.setDefault(oldDefault)
+  test("Minute") {
+    checkEvaluation(Minute(Literal.create(null, DateType)), null)
+    checkEvaluation(Minute(Cast(Literal(d), TimestampType)), 0)
+    checkEvaluation(Minute(Cast(Literal(sdf.format(d)), TimestampType)), 10)
+    checkEvaluation(Minute(Literal(ts)), 10)
+
+    val c = Calendar.getInstance()
+    (0 to 60 by 5).foreach { m =>
+      (0 to 60 by 15).foreach { s =>
+        c.set(2015, 18, 3, 3, m, s)
+        checkEvaluation(Minute(Cast(Literal(new Timestamp(c.getTimeInMillis)), TimestampType)),
+          c.get(Calendar.MINUTE))
+      }
+    }
   }
 
 }
