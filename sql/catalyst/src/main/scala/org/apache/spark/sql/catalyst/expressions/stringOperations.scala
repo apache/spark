@@ -27,6 +27,43 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// This file defines expressions for string operations.
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+
+/**
+ * An expression that concatenates multiple input strings into a single string.
+ * Input expressions that are evaluated to nulls are skipped.
+ *
+ * For example, `concat("a", null, "b")` is evaluated to `"ab"`.
+ *
+ * Note that this is different from Hive since Hive outputs null if any input is null.
+ * We never output null.
+ */
+case class Concat(children: Seq[Expression]) extends Expression with ImplicitCastInputTypes {
+
+  override def inputTypes: Seq[AbstractDataType] = Seq.fill(children.size)(StringType)
+  override def dataType: DataType = StringType
+
+  override def nullable: Boolean = false
+  override def foldable: Boolean = children.forall(_.foldable)
+
+  override def eval(input: InternalRow): Any = {
+    val inputs = children.map(_.eval(input).asInstanceOf[UTF8String])
+    UTF8String.concat(inputs : _*)
+  }
+
+  override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    val evals = children.map(_.gen(ctx))
+    val inputs = evals.map { eval => s"${eval.isNull} ? null : ${eval.primitive}" }.mkString(", ")
+    evals.map(_.code).mkString("\n") + s"""
+      boolean ${ev.isNull} = false;
+      UTF8String ${ev.primitive} = UTF8String.concat($inputs);
+    """
+  }
+}
+
 
 trait StringRegexExpression extends ImplicitCastInputTypes {
   self: BinaryExpression =>

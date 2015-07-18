@@ -152,6 +152,7 @@ object FunctionRegistry {
     // string functions
     expression[Ascii]("ascii"),
     expression[Base64]("base64"),
+    expression[Concat]("concat"),
     expression[Encode]("encode"),
     expression[Decode]("decode"),
     expression[FormatNumber]("format_number"),

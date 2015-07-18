@@ -1711,6 +1711,28 @@ object functions {
   //////////////////////////////////////////////////////////////////////////////////////////////
 
   /**
+   * Concatenates input strings together into a single string.
+   *
+   * @group string_funcs
+   * @since 1.5.0
+   */
+  @scala.annotation.varargs
+  def concat(exprs: Column*): Column = Concat(exprs.map(_.expr))
+
+  /**
+   * Concatenates input strings together into a single string.
+   *
+   * This is the variant of concat that takes in the column names.
+   *
+   * @group string_funcs
+   * @since 1.5.0
+   */
+  @scala.annotation.varargs
+  def concat(columnName: String, columnNames: String*): Column = {
+    concat((columnName +: columnNames).map(Column.apply): _*)
+  }
+
+  /**
    * Computes the length of a given string / binary value.
    *
    * @group string_funcs
