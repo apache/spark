@@ -19,9 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
-import org.apache.spark.sql.catalyst.errors.TreeNodeException
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodeGenContext, GeneratedExpressionCode}
-import org.apache.spark.sql.catalyst.trees
+import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.types._
 
 object NamedExpression {
@@ -114,7 +112,7 @@ case class Alias(child: Expression, name: String)(
     val exprId: ExprId = NamedExpression.newExprId,
     val qualifiers: Seq[String] = Nil,
     val explicitMetadata: Option[Metadata] = None)
-  extends UnaryExpression with NamedExpression {
+  extends UnaryExpression with NamedExpression with CodegenFallback {
 
   // Alias(Generator, xx) need to be transformed into Generate(generator, ...)
   override lazy val resolved =
@@ -177,7 +175,7 @@ case class AttributeReference(
     override val metadata: Metadata = Metadata.empty)(
     val exprId: ExprId = NamedExpression.newExprId,
     val qualifiers: Seq[String] = Nil)
-  extends Attribute {
+  extends Attribute with Unevaluable {
 
   /**
    * Returns true iff the expression id is the same for both attributes.
@@ -236,10 +234,6 @@ case class AttributeReference(
     }
   }
 
-  // Unresolved attributes are transient at compile time and don't get evaluated during execution.
-  override def eval(input: InternalRow = null): Any =
-    throw new TreeNodeException(this, s"No function to evaluate expression. type: ${this.nodeName}")
-
   override def toString: String = s"$name#${exprId.id}$typeSuffix"
 }
 
@@ -247,7 +241,7 @@ case class AttributeReference(
  * A place holder used when printing expressions without debugging information such as the
  * expression id or the unresolved indicator.
  */
-case class PrettyAttribute(name: String) extends Attribute {
+case class PrettyAttribute(name: String) extends Attribute with Unevaluable {
 
   override def toString: String = name
 
@@ -259,7 +253,6 @@ case class PrettyAttribute(name: String) extends Attribute {
   override def withName(newName: String): Attribute = throw new UnsupportedOperationException
   override def qualifiers: Seq[String] = throw new UnsupportedOperationException
   override def exprId: ExprId = throw new UnsupportedOperationException
-  override def eval(input: InternalRow): Any = throw new UnsupportedOperationException
   override def nullable: Boolean = throw new UnsupportedOperationException
   override def dataType: DataType = NullType
 }
