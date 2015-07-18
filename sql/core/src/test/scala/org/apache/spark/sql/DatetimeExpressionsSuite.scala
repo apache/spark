@@ -17,9 +17,6 @@
 
 package org.apache.spark.sql
 
-import java.sql.{Timestamp, Date}
-import java.text.SimpleDateFormat
-
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.functions._
 
@@ -47,4 +44,5 @@ class DatetimeExpressionsSuite extends QueryTest {
     assert(math.abs(ctx.sql("""SELECT CURRENT_TIMESTAMP()""").collect().head.getTimestamp(
       0).getTime - System.currentTimeMillis()) < 5000)
   }
+
 }

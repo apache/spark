@@ -48,14 +48,6 @@ object DateTimeUtils {
   final val toYearZero = to2001 + 7304850
 
   @transient lazy val defaultTimeZone = TimeZone.getDefault
-  @transient lazy val calendar = {
-    val c = Calendar.getInstance()
-    // This is set in order to be Hive and ISO-8601 compliant
-    c.setFirstDayOfWeek(Calendar.MONDAY)
-    c.setMinimalDaysInFirstWeek(4)
-    c
-  }
-
 
   // Java TimeZone has no mention of thread safety. Use thread local instance to be safe.
   private val threadLocalLocalTimeZone = new ThreadLocal[TimeZone] {

@@ -17,16 +17,10 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import java.sql.{Date, Timestamp}
-import java.text.SimpleDateFormat
-import java.util.{TimeZone, Calendar}
-
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
-import org.apache.spark.sql.types.{StringType, DateType, TimestampType}
 
 class DatetimeFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
-
   test("datetime function current_date") {
     val d0 = DateTimeUtils.millisToDays(System.currentTimeMillis())
     val cd = CurrentDate().eval(EmptyRow).asInstanceOf[Int]
