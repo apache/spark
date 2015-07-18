@@ -833,7 +833,7 @@ class TaskInstance(Base):
                         task_copy.execute(context=context)
                     task_copy.post_execute(context=context)
             except (Exception, StandardError, KeyboardInterrupt) as e:
-                self.record_failure(e, test_mode)
+                self.handle_failure(e, test_mode, context)
                 raise
 
             # Recording SUCCESS
@@ -845,9 +845,17 @@ class TaskInstance(Base):
                 session.add(Log(State.SUCCESS, self))
                 session.merge(self)
 
+            # Success callback
+            try:
+                if task.on_success_callback:
+                    task.on_success_callback(context)
+            except Exception as e3:
+                logging.error("Failed when executing success callback")
+                logging.exception(e3)
+
         session.commit()
 
-    def record_failure(self, error, test_mode=False):
+    def handle_failure(self, error, test_mode, context):
         logging.exception(error)
         task = self.task
         session = settings.Session()
@@ -869,7 +877,17 @@ class TaskInstance(Base):
         except Exception as e2:
             logging.error(
                 'Failed to send email to: ' + str(task.email))
-            logging.error(str(e2))
+            logging.exception(e2)
+
+        # Handling callbacks pessimistically
+        try:
+            if self.state == State.UP_FOR_RETRY and task.on_retry_callback:
+                task.on_retry_callback(context)
+            if self.state == State.FAILED and task.on_failure_callback:
+                task.on_failure_callback(context)
+        except Exception as e3:
+            logging.error("Failed at executing callback")
+            logging.exception(e3)
 
         if not test_mode:
             session.merge(self)
@@ -1064,6 +1082,17 @@ class BaseOperator(object):
     :param execution_timeout: max time allowed for the execution of
         this task instance, if it goes beyond it will raise and fail.
     :type execution_timeout: datetime.timedelta
+    :param on_failure_callback: a function to be called when a task instance
+        of this task fails. a context dictionary is passed as a single
+        parameter to this function. Context contains references to related
+        objects to the task instance and is documented under the macros
+        section of the API.
+    :type on_failure_callback: callable
+    :param on_retry_callback: much like the ``on_failure_callback`` excepts
+        that it is executed when retries occur.
+    :param on_success_callback: much like the ``on_failure_callback`` excepts
+        that it is executed when the task succeeds.
+    :type on_success_callback: callable
     """
 
     # For derived classes to define which fields will get jinjaified
@@ -1098,6 +1127,9 @@ class BaseOperator(object):
             pool=None,
             sla=None,
             execution_timeout=None,
+            on_failure_callback=None,
+            on_success_callback=None,
+            on_retry_callback=None,
             *args,
             **kwargs):
 
@@ -1118,6 +1150,9 @@ class BaseOperator(object):
         self.pool = pool
         self.sla = sla
         self.execution_timeout = execution_timeout
+        self.on_failure_callback = on_failure_callback
+        self.on_success_callback = on_success_callback
+        self.on_retry_callback = on_retry_callback
         if isinstance(retry_delay, timedelta):
             self.retry_delay = retry_delay
         else:
