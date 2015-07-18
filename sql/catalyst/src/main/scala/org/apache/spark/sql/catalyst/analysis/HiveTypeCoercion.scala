@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.analysis
 import javax.annotation.Nullable
 
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, Union}
+import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.types._
 
@@ -168,52 +168,65 @@ object HiveTypeCoercion {
    * - LongType to DoubleType
    */
   object WidenTypes extends Rule[LogicalPlan] {
-    def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-      // TODO: unions with fixed-precision decimals
-      case u @ Union(left, right) if u.childrenResolved && !u.resolved =>
-        val castedInput = left.output.zip(right.output).map {
-          // When a string is found on one side, make the other side a string too.
-          case (lhs, rhs) if lhs.dataType == StringType && rhs.dataType != StringType =>
-            (lhs, Alias(Cast(rhs, StringType), rhs.name)())
-          case (lhs, rhs) if lhs.dataType != StringType && rhs.dataType == StringType =>
-            (Alias(Cast(lhs, StringType), lhs.name)(), rhs)
 
-          case (lhs, rhs) if lhs.dataType != rhs.dataType =>
-            logDebug(s"Resolving mismatched union input ${lhs.dataType}, ${rhs.dataType}")
-            findTightestCommonTypeOfTwo(lhs.dataType, rhs.dataType).map { widestType =>
-              val newLeft =
-                if (lhs.dataType == widestType) lhs else Alias(Cast(lhs, widestType), lhs.name)()
-              val newRight =
-                if (rhs.dataType == widestType) rhs else Alias(Cast(rhs, widestType), rhs.name)()
+    private[this] def widenOutputTypes(planName: String, left: LogicalPlan, right: LogicalPlan):
+        (LogicalPlan, LogicalPlan) = {
 
-              (newLeft, newRight)
-            }.getOrElse {
-              // If there is no applicable conversion, leave expression unchanged.
-              (lhs, rhs)
-            }
+      // TODO: with fixed-precision decimals
+      val castedInput = left.output.zip(right.output).map {
+        // When a string is found on one side, make the other side a string too.
+        case (lhs, rhs) if lhs.dataType == StringType && rhs.dataType != StringType =>
+          (lhs, Alias(Cast(rhs, StringType), rhs.name)())
+        case (lhs, rhs) if lhs.dataType != StringType && rhs.dataType == StringType =>
+          (Alias(Cast(lhs, StringType), lhs.name)(), rhs)
 
-          case other => other
+        case (lhs, rhs) if lhs.dataType != rhs.dataType =>
+          logDebug(s"Resolving mismatched $planName input ${lhs.dataType}, ${rhs.dataType}")
+          findTightestCommonTypeOfTwo(lhs.dataType, rhs.dataType).map { widestType =>
+            val newLeft =
+              if (lhs.dataType == widestType) lhs else Alias(Cast(lhs, widestType), lhs.name)()
+            val newRight =
+              if (rhs.dataType == widestType) rhs else Alias(Cast(rhs, widestType), rhs.name)()
+
+            (newLeft, newRight)
+          }.getOrElse {
+            // If there is no applicable conversion, leave expression unchanged.
+            (lhs, rhs)
+          }
+
+        case other => other
+      }
+
+      val (castedLeft, castedRight) = castedInput.unzip
+
+      val newLeft =
+        if (castedLeft.map(_.dataType) != left.output.map(_.dataType)) {
+          logDebug(s"Widening numeric types in $planName $castedLeft ${left.output}")
+          Project(castedLeft, left)
+        } else {
+          left
         }
 
-        val (castedLeft, castedRight) = castedInput.unzip
+      val newRight =
+        if (castedRight.map(_.dataType) != right.output.map(_.dataType)) {
+          logDebug(s"Widening numeric types in $planName $castedRight ${right.output}")
+          Project(castedRight, right)
+        } else {
+          right
+        }
+      (newLeft, newRight)
+    }
 
-        val newLeft =
-          if (castedLeft.map(_.dataType) != left.output.map(_.dataType)) {
-            logDebug(s"Widening numeric types in union $castedLeft ${left.output}")
-            Project(castedLeft, left)
-          } else {
-            left
-          }
-
-        val newRight =
-          if (castedRight.map(_.dataType) != right.output.map(_.dataType)) {
-            logDebug(s"Widening numeric types in union $castedRight ${right.output}")
-            Project(castedRight, right)
-          } else {
-            right
-          }
-
+    def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+      case u @ Union(left, right) if u.childrenResolved && !u.resolved =>
+        val (newLeft, newRight) = widenOutputTypes(u.nodeName, left, right)
         Union(newLeft, newRight)
+      case e @ Except(left, right) if e.childrenResolved && !e.resolved =>
+        val (newLeft, newRight) = widenOutputTypes(e.nodeName, left, right)
+        Except(newLeft, newRight)
+      case i @ Intersect(left, right) if i.childrenResolved && !i.resolved =>
+        val (newLeft, newRight) = widenOutputTypes(i.nodeName, left, right)
+        Intersect(newLeft, newRight)
     }
   }
 
