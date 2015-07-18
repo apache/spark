@@ -94,10 +94,10 @@ private[sql] object EnsureRowFormats extends Rule[SparkPlan] {
     case operator: SparkPlan if handlesBothSafeAndUnsafeRows(operator) =>
       if (operator.children.map(_.outputsUnsafeRows).toSet.size != 1) {
         // If this operator's children produce both unsafe and safe rows, then convert everything
-        // to safe rows
+        // to unsafe rows
         operator.withNewChildren {
           operator.children.map {
-            c => if (c.outputsUnsafeRows) ConvertToSafe(c) else c
+            c => if (!c.outputsUnsafeRows) ConvertToUnsafe(c) else c
           }
         }
       } else {

@@ -65,6 +65,12 @@ class RowFormatConvertersSuite extends SparkPlanTest {
     val plan = Union(Seq(outputsSafe, outputsUnsafe))
     assert(plan.canProcessSafeRows && plan.canProcessUnsafeRows)
     val preparedPlan = TestSQLContext.prepareForExecution.execute(plan)
+    assert(preparedPlan.outputsUnsafeRows)
+  }
+
+  test("union can process safe rows") {
+    val plan = Union(Seq(outputsSafe, outputsSafe))
+    val preparedPlan = TestSQLContext.prepareForExecution.execute(plan)
     assert(!preparedPlan.outputsUnsafeRows)
   }
 
