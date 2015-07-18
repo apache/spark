@@ -54,8 +54,6 @@ private[sql] case class ParquetRelation(
     partitioningAttributes: Seq[Attribute] = Nil)
   extends LeafNode with MultiInstanceRelation {
 
-  self: Product =>
-
   /** Schema derived from ParquetFile */
   def parquetSchema: MessageType =
     ParquetTypesConverter

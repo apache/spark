@@ -201,6 +201,27 @@ class ColumnExpressionSuite extends QueryTest {
       Row(false, true))
   }
 
+  test("isNaN") {
+    val testData = ctx.createDataFrame(ctx.sparkContext.parallelize(
+      Row(Double.NaN, Float.NaN) ::
+      Row(math.log(-1), math.log(-3).toFloat) ::
+      Row(null, null) ::
+      Row(Double.MaxValue, Float.MinValue):: Nil),
+      StructType(Seq(StructField("a", DoubleType), StructField("b", FloatType))))
+
+    checkAnswer(
+      testData.select($"a".isNaN, $"b".isNaN),
+      Row(true, true) :: Row(true, true) :: Row(true, true) :: Row(false, false) :: Nil)
+
+    checkAnswer(
+      testData.select(isNaN($"a"), isNaN($"b")),
+      Row(true, true) :: Row(true, true) :: Row(true, true) :: Row(false, false) :: Nil)
+
+    checkAnswer(
+      ctx.sql("select isnan(15), isnan('invalid')"),
+      Row(false, true))
+  }
+
   test("===") {
     checkAnswer(
       testData2.filter($"a" === 1),

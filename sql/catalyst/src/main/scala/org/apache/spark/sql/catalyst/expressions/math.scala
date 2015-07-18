@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.{lang => jl}
+import java.util.Arrays
 
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckSuccess, TypeCheckFailure}
@@ -33,7 +34,6 @@ import org.apache.spark.unsafe.types.UTF8String
  */
 abstract class LeafMathExpression(c: Double, name: String)
   extends LeafExpression with Serializable {
-  self: Product =>
 
   override def dataType: DataType = DoubleType
   override def foldable: Boolean = true
@@ -57,7 +57,7 @@ abstract class LeafMathExpression(c: Double, name: String)
  * @param name The short name of the function
  */
 abstract class UnaryMathExpression(f: Double => Double, name: String)
-  extends UnaryExpression with Serializable with ImplicitCastInputTypes { self: Product =>
+  extends UnaryExpression with Serializable with ImplicitCastInputTypes {
 
   override def inputTypes: Seq[DataType] = Seq(DoubleType)
   override def dataType: DataType = DoubleType
@@ -65,22 +65,38 @@ abstract class UnaryMathExpression(f: Double => Double, name: String)
   override def toString: String = s"$name($child)"
 
   protected override def nullSafeEval(input: Any): Any = {
-    val result = f(input.asInstanceOf[Double])
-    if (result.isNaN) null else result
+    f(input.asInstanceOf[Double])
   }
 
   // name of function in java.lang.Math
   def funcName: String = name.toLowerCase
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    nullSafeCodeGen(ctx, ev, eval => {
+    defineCodeGen(ctx, ev, c => s"java.lang.Math.${funcName}($c)")
+  }
+}
+
+abstract class UnaryLogExpression(f: Double => Double, name: String)
+    extends UnaryMathExpression(f, name) { self: Product =>
+
+  // values less than or equal to yAsymptote eval to null in Hive, instead of NaN or -Infinity
+  protected val yAsymptote: Double = 0.0
+
+  protected override def nullSafeEval(input: Any): Any = {
+    val d = input.asInstanceOf[Double]
+    if (d <= yAsymptote) null else f(d)
+  }
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    nullSafeCodeGen(ctx, ev, c =>
       s"""
-        ${ev.primitive} = java.lang.Math.${funcName}($eval);
-        if (Double.valueOf(${ev.primitive}).isNaN()) {
+        if ($c <= $yAsymptote) {
           ${ev.isNull} = true;
+        } else {
+          ${ev.primitive} = java.lang.Math.${funcName}($c);
         }
       """
-    })
+    )
   }
 }
 
@@ -91,7 +107,7 @@ abstract class UnaryMathExpression(f: Double => Double, name: String)
  * @param name The short name of the function
  */
 abstract class BinaryMathExpression(f: (Double, Double) => Double, name: String)
-  extends BinaryExpression with Serializable with ImplicitCastInputTypes { self: Product =>
+  extends BinaryExpression with Serializable with ImplicitCastInputTypes {
 
   override def inputTypes: Seq[DataType] = Seq(DoubleType, DoubleType)
 
@@ -100,8 +116,7 @@ abstract class BinaryMathExpression(f: (Double, Double) => Double, name: String)
   override def dataType: DataType = DoubleType
 
   protected override def nullSafeEval(input1: Any, input2: Any): Any = {
-    val result = f(input1.asInstanceOf[Double], input2.asInstanceOf[Double])
-    if (result.isNaN) null else result
+    f(input1.asInstanceOf[Double], input2.asInstanceOf[Double])
   }
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
@@ -138,6 +153,196 @@ case class Ceil(child: Expression) extends UnaryMathExpression(math.ceil, "CEIL"
 case class Cos(child: Expression) extends UnaryMathExpression(math.cos, "COS")
 
 case class Cosh(child: Expression) extends UnaryMathExpression(math.cosh, "COSH")
+
+/**
+ * Convert a num from one base to another
+ * @param numExpr the number to be converted
+ * @param fromBaseExpr from which base
+ * @param toBaseExpr to which base
+ */
+case class Conv(numExpr: Expression, fromBaseExpr: Expression, toBaseExpr: Expression)
+  extends Expression with ImplicitCastInputTypes{
+
+  override def foldable: Boolean = numExpr.foldable && fromBaseExpr.foldable && toBaseExpr.foldable
+
+  override def nullable: Boolean = numExpr.nullable || fromBaseExpr.nullable || toBaseExpr.nullable
+
+  override def children: Seq[Expression] = Seq(numExpr, fromBaseExpr, toBaseExpr)
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(StringType, IntegerType, IntegerType)
+
+  /** Returns the result of evaluating this expression on a given input Row */
+  override def eval(input: InternalRow): Any = {
+    val num = numExpr.eval(input)
+    val fromBase = fromBaseExpr.eval(input)
+    val toBase = toBaseExpr.eval(input)
+    if (num == null || fromBase == null || toBase == null) {
+      null
+    } else {
+      conv(num.asInstanceOf[UTF8String].getBytes,
+        fromBase.asInstanceOf[Int], toBase.asInstanceOf[Int])
+    }
+  }
+
+  /**
+   * Returns the [[DataType]] of the result of evaluating this expression.  It is
+   * invalid to query the dataType of an unresolved expression (i.e., when `resolved` == false).
+   */
+  override def dataType: DataType = StringType
+
+  private val value = new Array[Byte](64)
+
+  /**
+   * Divide x by m as if x is an unsigned 64-bit integer. Examples:
+   * unsignedLongDiv(-1, 2) == Long.MAX_VALUE unsignedLongDiv(6, 3) == 2
+   * unsignedLongDiv(0, 5) == 0
+   *
+   * @param x is treated as unsigned
+   * @param m is treated as signed
+   */
+  private def unsignedLongDiv(x: Long, m: Int): Long = {
+    if (x >= 0) {
+      x / m
+    } else {
+      // Let uval be the value of the unsigned long with the same bits as x
+      // Two's complement => x = uval - 2*MAX - 2
+      // => uval = x + 2*MAX + 2
+      // Now, use the fact: (a+b)/c = a/c + b/c + (a%c+b%c)/c
+      (x / m + 2 * (Long.MaxValue / m) + 2 / m + (x % m + 2 * (Long.MaxValue % m) + 2 % m) / m)
+    }
+  }
+
+  /**
+   * Decode v into value[].
+   *
+   * @param v is treated as an unsigned 64-bit integer
+   * @param radix must be between MIN_RADIX and MAX_RADIX
+   */
+  private def decode(v: Long, radix: Int): Unit = {
+    var tmpV = v
+    Arrays.fill(value, 0.asInstanceOf[Byte])
+    var i = value.length - 1
+    while (tmpV != 0) {
+      val q = unsignedLongDiv(tmpV, radix)
+      value(i) = (tmpV - q * radix).asInstanceOf[Byte]
+      tmpV = q
+      i -= 1
+    }
+  }
+
+  /**
+   * Convert value[] into a long. On overflow, return -1 (as mySQL does). If a
+   * negative digit is found, ignore the suffix starting there.
+   *
+   * @param radix  must be between MIN_RADIX and MAX_RADIX
+   * @param fromPos is the first element that should be conisdered
+   * @return the result should be treated as an unsigned 64-bit integer.
+   */
+  private def encode(radix: Int, fromPos: Int): Long = {
+    var v: Long = 0L
+    val bound = unsignedLongDiv(-1 - radix, radix) // Possible overflow once
+    // val
+    // exceeds this value
+    var i = fromPos
+    while (i < value.length && value(i) >= 0) {
+      if (v >= bound) {
+        // Check for overflow
+        if (unsignedLongDiv(-1 - value(i), radix) < v) {
+          return -1
+        }
+      }
+      v = v * radix + value(i)
+      i += 1
+    }
+    return v
+  }
+
+  /**
+   * Convert the bytes in value[] to the corresponding chars.
+   *
+   * @param radix must be between MIN_RADIX and MAX_RADIX
+   * @param fromPos is the first nonzero element
+   */
+  private def byte2char(radix: Int, fromPos: Int): Unit = {
+    var i = fromPos
+    while (i < value.length) {
+      value(i) = Character.toUpperCase(Character.forDigit(value(i), radix)).asInstanceOf[Byte]
+      i += 1
+    }
+  }
+
+  /**
+   * Convert the chars in value[] to the corresponding integers. Convert invalid
+   * characters to -1.
+   *
+   * @param radix must be between MIN_RADIX and MAX_RADIX
+   * @param fromPos is the first nonzero element
+   */
+  private def char2byte(radix: Int, fromPos: Int): Unit = {
+    var i = fromPos
+    while ( i < value.length) {
+      value(i) = Character.digit(value(i), radix).asInstanceOf[Byte]
+      i += 1
+    }
+  }
+
+  /**
+   * Convert numbers between different number bases. If toBase>0 the result is
+   * unsigned, otherwise it is signed.
+   * NB: This logic is borrowed from org.apache.hadoop.hive.ql.ud.UDFConv
+   */
+  private def conv(n: Array[Byte] , fromBase: Int, toBase: Int ): UTF8String = {
+    if (n == null || fromBase == null || toBase == null || n.isEmpty) {
+      return null
+    }
+
+    if (fromBase < Character.MIN_RADIX || fromBase > Character.MAX_RADIX
+      || Math.abs(toBase) < Character.MIN_RADIX
+      || Math.abs(toBase) > Character.MAX_RADIX) {
+      return null
+    }
+
+    var (negative, first) = if (n(0) == '-') (true, 1) else (false, 0)
+
+    // Copy the digits in the right side of the array
+    var i = 1
+    while (i <= n.length - first) {
+      value(value.length - i) = n(n.length - i)
+      i += 1
+    }
+    char2byte(fromBase, value.length - n.length + first)
+
+    // Do the conversion by going through a 64 bit integer
+    var v = encode(fromBase, value.length - n.length + first)
+    if (negative && toBase > 0) {
+      if (v < 0) {
+        v = -1
+      } else {
+        v = -v
+      }
+    }
+    if (toBase < 0 && v < 0) {
+      v = -v
+      negative = true
+    }
+    decode(v, Math.abs(toBase))
+
+    // Find the first non-zero digit or the last digits if all are zero.
+    val firstNonZeroPos = {
+      val firstNonZero = value.indexWhere( _ != 0)
+      if (firstNonZero != -1) firstNonZero else value.length - 1
+    }
+
+    byte2char(Math.abs(toBase), firstNonZeroPos)
+
+    var resultStartPos = firstNonZeroPos
+    if (negative && toBase < 0) {
+      resultStartPos = firstNonZeroPos - 1
+      value(resultStartPos) = '-'
+    }
+    UTF8String.fromBytes( Arrays.copyOfRange(value, resultStartPos, value.length))
+  }
+}
 
 case class Exp(child: Expression) extends UnaryMathExpression(math.exp, "EXP")
 
@@ -208,25 +413,28 @@ case class Factorial(child: Expression) extends UnaryExpression with ImplicitCas
   }
 }
 
-case class Log(child: Expression) extends UnaryMathExpression(math.log, "LOG")
+case class Log(child: Expression) extends UnaryLogExpression(math.log, "LOG")
 
 case class Log2(child: Expression)
-  extends UnaryMathExpression((x: Double) => math.log(x) / math.log(2), "LOG2") {
+  extends UnaryLogExpression((x: Double) => math.log(x) / math.log(2), "LOG2") {
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    nullSafeCodeGen(ctx, ev, eval => {
+    nullSafeCodeGen(ctx, ev, c =>
       s"""
-        ${ev.primitive} = java.lang.Math.log($eval) / java.lang.Math.log(2);
-        if (Double.valueOf(${ev.primitive}).isNaN()) {
+        if ($c <= $yAsymptote) {
           ${ev.isNull} = true;
+        } else {
+          ${ev.primitive} = java.lang.Math.log($c) / java.lang.Math.log(2);
         }
       """
-    })
+    )
   }
 }
 
-case class Log10(child: Expression) extends UnaryMathExpression(math.log10, "LOG10")
+case class Log10(child: Expression) extends UnaryLogExpression(math.log10, "LOG10")
 
-case class Log1p(child: Expression) extends UnaryMathExpression(math.log1p, "LOG1P")
+case class Log1p(child: Expression) extends UnaryLogExpression(math.log1p, "LOG1P") {
+  protected override val yAsymptote: Double = -1.0
+}
 
 case class Rint(child: Expression) extends UnaryMathExpression(math.rint, "ROUND") {
   override def funcName: String = "rint"
@@ -263,7 +471,7 @@ case class Bin(child: Expression)
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     defineCodeGen(ctx, ev, (c) =>
-      s"${ctx.stringType}.fromString(java.lang.Long.toBinaryString($c))")
+      s"UTF8String.fromString(java.lang.Long.toBinaryString($c))")
   }
 }
 
@@ -387,27 +595,18 @@ case class Atan2(left: Expression, right: Expression)
 
   protected override def nullSafeEval(input1: Any, input2: Any): Any = {
     // With codegen, the values returned by -0.0 and 0.0 are different. Handled with +0.0
-    val result = math.atan2(input1.asInstanceOf[Double] + 0.0, input2.asInstanceOf[Double] + 0.0)
-    if (result.isNaN) null else result
+    math.atan2(input1.asInstanceOf[Double] + 0.0, input2.asInstanceOf[Double] + 0.0)
   }
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    defineCodeGen(ctx, ev, (c1, c2) => s"java.lang.Math.atan2($c1 + 0.0, $c2 + 0.0)") + s"""
-      if (Double.valueOf(${ev.primitive}).isNaN()) {
-        ${ev.isNull} = true;
-      }
-      """
+    defineCodeGen(ctx, ev, (c1, c2) => s"java.lang.Math.atan2($c1 + 0.0, $c2 + 0.0)")
   }
 }
 
 case class Pow(left: Expression, right: Expression)
   extends BinaryMathExpression(math.pow, "POWER") {
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    defineCodeGen(ctx, ev, (c1, c2) => s"java.lang.Math.pow($c1, $c2)") + s"""
-      if (Double.valueOf(${ev.primitive}).isNaN()) {
-        ${ev.isNull} = true;
-      }
-      """
+    defineCodeGen(ctx, ev, (c1, c2) => s"java.lang.Math.pow($c1, $c2)")
   }
 }
 
@@ -509,17 +708,33 @@ case class Logarithm(left: Expression, right: Expression)
     this(EulerNumber(), child)
   }
 
+  protected override def nullSafeEval(input1: Any, input2: Any): Any = {
+    val dLeft = input1.asInstanceOf[Double]
+    val dRight = input2.asInstanceOf[Double]
+    // Unlike Hive, we support Log base in (0.0, 1.0]
+    if (dLeft <= 0.0 || dRight <= 0.0) null else math.log(dRight) / math.log(dLeft)
+  }
+
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    val logCode = if (left.isInstanceOf[EulerNumber]) {
-      defineCodeGen(ctx, ev, (c1, c2) => s"java.lang.Math.log($c2)")
+    if (left.isInstanceOf[EulerNumber]) {
+      nullSafeCodeGen(ctx, ev, (c1, c2) =>
+        s"""
+          if ($c2 <= 0.0) {
+            ${ev.isNull} = true;
+          } else {
+            ${ev.primitive} = java.lang.Math.log($c2);
+          }
+        """)
     } else {
-      defineCodeGen(ctx, ev, (c1, c2) => s"java.lang.Math.log($c2) / java.lang.Math.log($c1)")
+      nullSafeCodeGen(ctx, ev, (c1, c2) =>
+        s"""
+          if ($c1 <= 0.0 || $c2 <= 0.0) {
+            ${ev.isNull} = true;
+          } else {
+            ${ev.primitive} = java.lang.Math.log($c2) / java.lang.Math.log($c1);
+          }
+        """)
     }
-    logCode + s"""
-      if (Double.isNaN(${ev.primitive})) {
-        ${ev.isNull} = true;
-      }
-    """
   }
 }
 

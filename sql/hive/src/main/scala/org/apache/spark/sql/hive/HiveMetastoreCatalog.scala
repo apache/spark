@@ -596,8 +596,6 @@ private[hive] case class MetastoreRelation
     (@transient sqlContext: SQLContext)
   extends LeafNode with MultiInstanceRelation {
 
-  self: Product =>
-
   override def equals(other: Any): Boolean = other match {
     case relation: MetastoreRelation =>
       databaseName == relation.databaseName &&

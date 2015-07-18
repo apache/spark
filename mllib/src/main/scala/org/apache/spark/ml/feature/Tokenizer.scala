@@ -42,7 +42,7 @@ class Tokenizer(override val uid: String) extends UnaryTransformer[String, Seq[S
     require(inputType == StringType, s"Input type must be string type but got $inputType.")
   }
 
-  override protected def outputDataType: DataType = new ArrayType(StringType, false)
+  override protected def outputDataType: DataType = new ArrayType(StringType, true)
 
   override def copy(extra: ParamMap): Tokenizer = defaultCopy(extra)
 }
@@ -113,7 +113,7 @@ class RegexTokenizer(override val uid: String)
     require(inputType == StringType, s"Input type must be string type but got $inputType.")
   }
 
-  override protected def outputDataType: DataType = new ArrayType(StringType, false)
+  override protected def outputDataType: DataType = new ArrayType(StringType, true)
 
   override def copy(extra: ParamMap): RegexTokenizer = defaultCopy(extra)
 }

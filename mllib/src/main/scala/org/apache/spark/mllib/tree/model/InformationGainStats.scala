@@ -67,7 +67,7 @@ class InformationGainStats(
 }
 
 
-private[tree] object InformationGainStats {
+private[spark] object InformationGainStats {
   /**
    * An [[org.apache.spark.mllib.tree.model.InformationGainStats]] object to
    * denote that current split doesn't satisfies minimum info gain or

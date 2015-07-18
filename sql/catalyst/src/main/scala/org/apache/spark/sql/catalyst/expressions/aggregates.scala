@@ -27,7 +27,6 @@ import org.apache.spark.sql.types._
 import org.apache.spark.util.collection.OpenHashSet
 
 trait AggregateExpression extends Expression {
-  self: Product =>
 
   /**
    * Aggregate expressions should not be foldable.
@@ -65,7 +64,6 @@ case class SplitEvaluation(
  * These partial evaluations can then be combined to compute the actual answer.
  */
 trait PartialAggregate extends AggregateExpression {
-  self: Product =>
 
   /**
    * Returns a [[SplitEvaluation]] that computes this aggregation using partial aggregation.
@@ -79,7 +77,6 @@ trait PartialAggregate extends AggregateExpression {
  */
 abstract class AggregateFunction
   extends LeafExpression with AggregateExpression with Serializable {
-  self: Product =>
 
   /** Base should return the generic aggregate expression that this function is computing */
   val base: AggregateExpression

@@ -67,6 +67,8 @@ private[spark] abstract class Stopwatch extends Serializable {
    */
   def elapsed(): Long
 
+  override def toString: String = s"$name: ${elapsed()}ms"
+
   /**
    * Gets the current time in milliseconds.
    */
@@ -145,7 +147,7 @@ private[spark] class MultiStopwatch(@transient private val sc: SparkContext) ext
 
   override def toString: String = {
     stopwatches.values.toArray.sortBy(_.name)
-      .map(c => s"  ${c.name}: ${c.elapsed()}ms")
+      .map(c => s"  $c")
       .mkString("{\n", ",\n", "\n}")
   }
 }
