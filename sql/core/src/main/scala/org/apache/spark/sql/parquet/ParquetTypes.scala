@@ -42,28 +42,40 @@ private[parquet] object ParquetTypesConverter extends Logging {
     case _ => false
   }
 
-  /**
-   * Compute the FIXED_LEN_BYTE_ARRAY length needed to represent a given DECIMAL precision.
-   */
-  private[parquet] val BYTES_FOR_PRECISION = Array.tabulate[Int](38) { precision =>
-    var length = 1
+  private[this] def bytesForPrecisionCompute(precision : Int) : Int = {
+    var length = (precision / math.log10(2) - 1).toInt / 8
     while (math.pow(2.0, 8 * length - 1) < math.pow(10.0, precision)) {
       length += 1
     }
     length
   }
 
+  private[this] val bytesForPrecisionStatic = (0 to 39).map(bytesForPrecisionCompute).toArray
+
+  /**
+   * bytesForPrecision computes the number of bytes required to store a value of a certain decimal
+   * precision.
+   */
+  private[parquet] def bytesForPrecision(precision : Int) : Int =
+    if (precision < bytesForPrecisionStatic.length) {
+      bytesForPrecisionStatic(precision)
+    } else {
+      bytesForPrecisionCompute(precision)
+    }
+
   def convertToAttributes(
       parquetSchema: MessageType,
       isBinaryAsString: Boolean,
-      isInt96AsTimestamp: Boolean): Seq[Attribute] = {
+      isInt96AsTimestamp: Boolean,
+      followParquetFormatSpec : Boolean = false): Seq[Attribute] = {
     val converter = new CatalystSchemaConverter(
-      isBinaryAsString, isInt96AsTimestamp, followParquetFormatSpec = false)
+      isBinaryAsString, isInt96AsTimestamp, followParquetFormatSpec)
     converter.convert(parquetSchema).toAttributes
   }
 
-  def convertFromAttributes(attributes: Seq[Attribute]): MessageType = {
-    val converter = new CatalystSchemaConverter()
+  def convertFromAttributes(attributes: Seq[Attribute],
+    conf : Configuration): MessageType = {
+    val converter = new CatalystSchemaConverter(conf)
     converter.convert(StructType.fromAttributes(attributes))
   }
 
@@ -107,7 +119,7 @@ private[parquet] object ParquetTypesConverter extends Logging {
       ParquetTypesConverter.convertToString(attributes))
     // TODO: add extra data, e.g., table name, date, etc.?
 
-    val parquetSchema: MessageType = ParquetTypesConverter.convertFromAttributes(attributes)
+    val parquetSchema: MessageType = ParquetTypesConverter.convertFromAttributes(attributes, conf)
     val metaData: FileMetaData = new FileMetaData(
       parquetSchema,
       extraMetadata,

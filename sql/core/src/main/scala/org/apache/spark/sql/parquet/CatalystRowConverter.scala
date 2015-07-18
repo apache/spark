@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.parquet
 
+import java.math.BigDecimal
+import java.math.BigInteger
 import java.nio.ByteOrder
 
 import scala.collection.JavaConversions._
@@ -263,17 +265,21 @@ private[parquet] class CatalystRowConverter(
       val scale = decimalType.scale
       val bytes = value.getBytes
 
-      var unscaled = 0L
-      var i = 0
+      if (value.length <= 8) {
+        var unscaled = 0L
+        var i = 0
 
-      while (i < bytes.length) {
-        unscaled = (unscaled << 8) | (bytes(i) & 0xff)
-        i += 1
+        while (i < bytes.length) {
+          unscaled = (unscaled << 8) | (bytes(i) & 0xff)
+          i += 1
+        }
+
+        val bits = 8 * bytes.length
+        unscaled = (unscaled << (64 - bits)) >> (64 - bits)
+        Decimal(unscaled, precision, scale)
+      } else {
+        Decimal(new BigDecimal(new BigInteger(bytes), scale), precision, scale)
       }
-
-      val bits = 8 * bytes.length
-      unscaled = (unscaled << (64 - bits)) >> (64 - bits)
-      Decimal(unscaled, precision, scale)
     }
   }
 

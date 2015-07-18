@@ -35,6 +35,8 @@ import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -184,6 +186,9 @@ private[parquet] object RowReadSupport {
  */
 private[parquet] class RowWriteSupport extends WriteSupport[InternalRow] with Logging {
 
+  var followParquetFormatSpec: Boolean =
+    SQLConf.PARQUET_FOLLOW_PARQUET_FORMAT_SPEC.defaultValue.get
+
   private[parquet] var writer: RecordConsumer = null
   private[parquet] var attributes: Array[Attribute] = null
 
@@ -198,7 +203,8 @@ private[parquet] class RowWriteSupport extends WriteSupport[InternalRow] with Lo
 
     log.debug(s"write support initialized for requested schema $attributes")
     ParquetRelation.enableLogForwarding()
-    new WriteSupport.WriteContext(ParquetTypesConverter.convertFromAttributes(attributes), metadata)
+    new WriteSupport.WriteContext(
+      ParquetTypesConverter.convertFromAttributes(attributes, configuration), metadata)
   }
 
   override def prepareForWrite(recordConsumer: RecordConsumer): Unit = {
@@ -261,8 +267,9 @@ private[parquet] class RowWriteSupport extends WriteSupport[InternalRow] with Lo
         case BinaryType => writer.addBinary(
           Binary.fromByteArray(value.asInstanceOf[Array[Byte]]))
         case d: DecimalType =>
-          if (d.precisionInfo == None || d.precisionInfo.get.precision > 18) {
-            sys.error(s"Unsupported datatype $d, cannot write to consumer")
+          if (d.precisionInfo == None) {
+            throw new AnalysisException(
+              s"Unsupported datatype $d, decimal precision and scale must be specified")
           }
           writeDecimal(value.asInstanceOf[Decimal], d.precisionInfo.get.precision)
         case _ => sys.error(s"Do not know how to writer $schema to consumer")
@@ -346,19 +353,54 @@ private[parquet] class RowWriteSupport extends WriteSupport[InternalRow] with Lo
   }
 
   // Scratch array used to write decimals as fixed-length binary
-  private[this] val scratchBytes = new Array[Byte](8)
+  private[this] val scratchBytes = new Array[Byte](16)
 
   private[parquet] def writeDecimal(decimal: Decimal, precision: Int): Unit = {
-    val numBytes = ParquetTypesConverter.BYTES_FOR_PRECISION(precision)
-    val unscaledLong = decimal.toUnscaledLong
-    var i = 0
-    var shift = 8 * (numBytes - 1)
-    while (i < numBytes) {
-      scratchBytes(i) = (unscaledLong >> shift).toByte
-      i += 1
-      shift -= 8
+    if (precision <= 18) {
+      if (followParquetFormatSpec) {
+        if (ParquetTypesConverter.bytesForPrecision(precision) <= 4) {
+          writer.addInteger(decimal.toUnscaledLong.toInt)
+        } else {
+          writer.addLong(decimal.toUnscaledLong)
+        }
+      } else {
+        val numBytes = ParquetTypesConverter.bytesForPrecision(precision)
+        val unscaledLong = decimal.toUnscaledLong
+        var i = 0
+        var shift = 8 * (numBytes - 1)
+        while (i < numBytes) {
+          scratchBytes(i) = (unscaledLong >> shift).toByte
+          i += 1
+          shift -= 8
+        }
+        writer.addBinary(Binary.fromByteArray(scratchBytes, 0, numBytes))
+      }
+    } else {
+      val numBytes = ParquetTypesConverter.bytesForPrecision(precision)
+      val bytes = decimal.toBigDecimal.underlying.unscaledValue.toByteArray()
+      val bin =
+        if (bytes.length == numBytes) {
+          Binary.fromByteArray(bytes)
+        } else {
+          if (numBytes <= scratchBytes.length) {
+            if (bytes(0) >= 0) {
+              java.util.Arrays.fill(scratchBytes, 0, numBytes - bytes.length, 0.toByte)
+            } else {
+              java.util.Arrays.fill(scratchBytes, 0, numBytes - bytes.length, -1.toByte)
+            }
+            System.arraycopy(bytes, 0, scratchBytes, numBytes - bytes.length, bytes.length)
+            Binary.fromByteArray(scratchBytes, 0, numBytes)
+          } else {
+            val buf = new Array[Byte](numBytes)
+            if (bytes(0) < 0) {
+              java.util.Arrays.fill(buf, 0, numBytes - bytes.length, -1.toByte)
+            }
+            System.arraycopy(bytes, 0, buf, numBytes - bytes.length, bytes.length)
+            Binary.fromByteArray(buf)
+          }
+        }
+      writer.addBinary(bin)
     }
-    writer.addBinary(Binary.fromByteArray(scratchBytes, 0, numBytes))
   }
 
   // array used to write Timestamp as Int96 (fixed-length binary)
@@ -415,7 +457,7 @@ private[parquet] class MutableRowWriteSupport extends RowWriteSupport {
       case BinaryType => writer.addBinary(
         Binary.fromByteArray(record(index).asInstanceOf[Array[Byte]]))
       case d: DecimalType =>
-        if (d.precisionInfo == None || d.precisionInfo.get.precision > 18) {
+        if (d.precisionInfo == None) {
           sys.error(s"Unsupported datatype $d, cannot write to consumer")
         }
         writeDecimal(record(index).asInstanceOf[Decimal], d.precisionInfo.get.precision)
