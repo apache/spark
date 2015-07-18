@@ -202,7 +202,7 @@ class DateFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(WeekOfYear(Cast(Literal(ts), DateType)), 45)
     checkEvaluation(WeekOfYear(Cast(Literal("2011-05-06"), DateType)), 18)
   }
-  
+
   test("DateFormat") {
     checkEvaluation(DateFormatClass(Literal.create(null, TimestampType), Literal("y")), null)
     checkEvaluation(DateFormatClass(Cast(Literal(d), TimestampType),
