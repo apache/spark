@@ -18,12 +18,33 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.expressions.IsNull
 import org.apache.spark.sql.test.TestSQLContext
 
 class RowFormatConvertersSuite extends SparkFunSuite {
+
+  private def getConverters(plan: SparkPlan): Seq[SparkPlan] = plan.collect {
+    case c: ConvertToUnsafe => c
+    case c: ConvertFromUnsafe => c
+  }
+
   test("planner should insert unsafe->safe conversions when required") {
     val plan = Limit(10, UnsafeExternalSort(Nil, false, PhysicalRDD(Seq.empty, null)))
     val preparedPlan = TestSQLContext.prepareForExecution.execute(plan)
     assert(preparedPlan.children.head.isInstanceOf[ConvertFromUnsafe])
+  }
+
+  test("filter can process unsafe rows") {
+    val plan = Filter(IsNull(null), UnsafeExternalSort(Nil, false, PhysicalRDD(Seq.empty, null)))
+    assert(plan.child.outputsUnsafeRows)
+    val preparedPlan = TestSQLContext.prepareForExecution.execute(plan)
+    assert(getConverters(preparedPlan).isEmpty)
+  }
+
+  test("filter can process safe rows") {
+    val plan = Filter(IsNull(null), ExternalSort(Nil, false, PhysicalRDD(Seq.empty, null)))
+    assert(!plan.child.outputsUnsafeRows)
+    val preparedPlan = TestSQLContext.prepareForExecution.execute(plan)
+    assert(getConverters(preparedPlan).isEmpty)
   }
 }
