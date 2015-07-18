@@ -104,11 +104,11 @@ case class CreateNamedStruct(children: Seq[Expression]) extends Expression with 
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (children.size % 2 != 0) {
-      TypeCheckResult.TypeCheckFailure("CreateNamedStruct expects an even number of arguments.")
+      TypeCheckResult.TypeCheckFailure(s"$prettyName expects an even number of arguments.")
     } else {
       val invalidNames =
         nameExprs.filterNot(e => e.foldable && e.dataType == StringType && !nullable)
-      if (invalidNames.size != 0) {
+      if (invalidNames.nonEmpty) {
         TypeCheckResult.TypeCheckFailure(
           s"Odd position only allow foldable and not-null StringType expressions, got :" +
             s" ${invalidNames.mkString(",")}")

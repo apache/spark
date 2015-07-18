@@ -112,7 +112,7 @@ case class Alias(child: Expression, name: String)(
     val exprId: ExprId = NamedExpression.newExprId,
     val qualifiers: Seq[String] = Nil,
     val explicitMetadata: Option[Metadata] = None)
-  extends UnaryExpression with NamedExpression with CodegenFallback {
+  extends UnaryExpression with NamedExpression {
 
   // Alias(Generator, xx) need to be transformed into Generate(generator, ...)
   override lazy val resolved =
@@ -120,7 +120,9 @@ case class Alias(child: Expression, name: String)(
 
   override def eval(input: InternalRow): Any = child.eval(input)
 
+  /** Just a simple passthrough for code generation. */
   override def gen(ctx: CodeGenContext): GeneratedExpressionCode = child.gen(ctx)
+  override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = ""
 
   override def dataType: DataType = child.dataType
   override def nullable: Boolean = child.nullable
