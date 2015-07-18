@@ -17,11 +17,12 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.Row
+import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.catalyst.expressions.IsNull
 import org.apache.spark.sql.test.TestSQLContext
 
-class RowFormatConvertersSuite extends SparkFunSuite {
+class RowFormatConvertersSuite extends SparkPlanTest {
 
   private def getConverters(plan: SparkPlan): Seq[SparkPlan] = plan.collect {
     case c: ConvertToUnsafe => c
@@ -71,5 +72,14 @@ class RowFormatConvertersSuite extends SparkFunSuite {
     val plan = Union(Seq(outputsUnsafe, outputsUnsafe))
     val preparedPlan = TestSQLContext.prepareForExecution.execute(plan)
     assert(preparedPlan.outputsUnsafeRows)
+  }
+
+  test("round trip with ConvertToUnsafe and ConvertToSafe") {
+    val input = Seq(("hello", 1), ("world", 2))
+    checkAnswer(
+      TestSQLContext.createDataFrame(input),
+      plan => ConvertToSafe(ConvertToUnsafe(plan)),
+      input.map(Row.fromTuple)
+    )
   }
 }
