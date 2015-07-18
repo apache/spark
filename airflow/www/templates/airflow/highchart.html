@@ -1,5 +1,4 @@
 {% extends "airflow/master.html" %}
-
 {% block head_css %}
 {{ super() }}
 <link rel="stylesheet" type="text/css"
@@ -33,15 +32,31 @@
     /* symbol for "collapsed" panels */
     content: "\e080";    /* adjust as needed, taken from bootstrap.css */
 }
+{% if embed %}
+/* override padding formatting for flush margins */
+.container {
+    padding: 0px;
+}
+body {
+    padding: 0px;
+    background-color: #fff;
+}
+{% endif %}
 </style>
 {% endblock %}
 {% block title %}
 {{ title }}
 {% endblock %}
-
 {% block body %}
 {{ super() }}
-<div id="container">
+{% if embed %}
+{% block navbar %}
+{% endblock %}
+  <div id="chart_body">
+      <img src="{{ url_for('static', filename='loading.gif') }}" width="50px">
+  </div>
+{% else %}
+  <div id="container">
     <h2>
         <span id="label">{{ label }}</span>
         <a href="/admin/chart/edit/?id={{ chart.id }}" >
@@ -103,9 +118,9 @@
         </div>
       </div>
     {% endif %}
-</div>
+  </div>
+{% endif %}
 {% endblock %}
-
 {% block tail %}
     {{ super() }}
     <script src="{{ url_for('static', filename='jquery.dataTables.min.js') }}"></script>
@@ -166,4 +181,3 @@
     </script>
 
 {% endblock %}
-
