@@ -375,9 +375,9 @@ object DateTimeUtils {
         segments(2) < 1 || segments(2) > 31) {
       return None
     }
-    val c = Calendar.getInstance()
+    val c = Calendar.getInstance(TimeZone.getTimeZone("GMT"))
     c.set(segments(0), segments(1) - 1, segments(2), 0, 0, 0)
     c.set(Calendar.MILLISECOND, 0)
-    Some(millisToDays(c.getTimeInMillis))
+    Some((c.getTimeInMillis / MILLIS_PER_DAY).toInt)
   }
 }
