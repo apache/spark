@@ -18,7 +18,6 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.catalyst.expressions.codegen.{GeneratedExpressionCode, CodeGenContext}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
@@ -120,56 +119,6 @@ case class InSet(child: Expression, hset: Set[Any])
   }
 }
 
-/**
- * Evaluates to `true` if it's NaN or null
- */
-case class IsNaN(child: Expression) extends UnaryExpression
-    with Predicate with ImplicitCastInputTypes {
-
-  override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection(DoubleType, FloatType))
-
-  override def nullable: Boolean = false
-
-  override def eval(input: InternalRow): Any = {
-    val value = child.eval(input)
-    if (value == null) {
-      true
-    } else {
-      child.dataType match {
-        case DoubleType => value.asInstanceOf[Double].isNaN
-        case FloatType => value.asInstanceOf[Float].isNaN
-      }
-    }
-  }
-
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    val eval = child.gen(ctx)
-    child.dataType match {
-      case FloatType =>
-        s"""
-          ${eval.code}
-          boolean ${ev.isNull} = false;
-          ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
-          if (${eval.isNull}) {
-            ${ev.primitive} = true;
-          } else {
-            ${ev.primitive} = Float.isNaN(${eval.primitive});
-          }
-        """
-      case DoubleType =>
-        s"""
-          ${eval.code}
-          boolean ${ev.isNull} = false;
-          ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
-          if (${eval.isNull}) {
-            ${ev.primitive} = true;
-          } else {
-            ${ev.primitive} = Double.isNaN(${eval.primitive});
-          }
-        """
-    }
-  }
-}
 
 case class And(left: Expression, right: Expression) extends BinaryOperator with Predicate {
 

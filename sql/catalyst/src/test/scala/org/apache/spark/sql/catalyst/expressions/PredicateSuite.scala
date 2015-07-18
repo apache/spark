@@ -114,16 +114,10 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(
       And(In(Literal(1), Seq(Literal(1), Literal(2))), In(Literal(2), Seq(Literal(1), Literal(2)))),
       true)
-  }
 
-  test("IsNaN") {
-    checkEvaluation(IsNaN(Literal(Double.NaN)), true)
-    checkEvaluation(IsNaN(Literal(Float.NaN)), true)
-    checkEvaluation(IsNaN(Literal(math.log(-3))), true)
-    checkEvaluation(IsNaN(Literal.create(null, DoubleType)), true)
-    checkEvaluation(IsNaN(Literal(Double.PositiveInfinity)), false)
-    checkEvaluation(IsNaN(Literal(Float.MaxValue)), false)
-    checkEvaluation(IsNaN(Literal(5.5f)), false)
+    checkEvaluation(In(Literal("^Ba*n"), Seq(Literal("^Ba*n"))), true)
+    checkEvaluation(In(Literal("^Ba*n"), Seq(Literal("aa"), Literal("^Ba*n"))), true)
+    checkEvaluation(In(Literal("^Ba*n"), Seq(Literal("aa"), Literal("^n"))), false)
   }
 
   test("INSET") {

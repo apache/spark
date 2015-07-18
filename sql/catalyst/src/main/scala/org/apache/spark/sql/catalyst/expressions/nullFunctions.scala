@@ -21,8 +21,19 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodeGenContext, GeneratedExpressionCode}
 import org.apache.spark.sql.catalyst.util.TypeUtils
-import org.apache.spark.sql.types.DataType
+import org.apache.spark.sql.types._
 
+
+/**
+ * An expression that is evaluated to the first non-null input.
+ *
+ * {{{
+ *   coalesce(1, 2) => 1
+ *   coalesce(null, 1, 2) => 1
+ *   coalesce(null, null, 2) => 2
+ *   coalesce(null, null, null) => null
+ * }}}
+ */
 case class Coalesce(children: Seq[Expression]) extends Expression {
 
   /** Coalesce is nullable if all of its children are nullable, or if it has no children. */
@@ -70,6 +81,62 @@ case class Coalesce(children: Seq[Expression]) extends Expression {
   }
 }
 
+
+/**
+ * Evaluates to `true` if it's NaN or null
+ */
+case class IsNaN(child: Expression) extends UnaryExpression
+  with Predicate with ImplicitCastInputTypes {
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection(DoubleType, FloatType))
+
+  override def nullable: Boolean = false
+
+  override def eval(input: InternalRow): Any = {
+    val value = child.eval(input)
+    if (value == null) {
+      true
+    } else {
+      child.dataType match {
+        case DoubleType => value.asInstanceOf[Double].isNaN
+        case FloatType => value.asInstanceOf[Float].isNaN
+      }
+    }
+  }
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    val eval = child.gen(ctx)
+    child.dataType match {
+      case FloatType =>
+        s"""
+          ${eval.code}
+          boolean ${ev.isNull} = false;
+          ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
+          if (${eval.isNull}) {
+            ${ev.primitive} = true;
+          } else {
+            ${ev.primitive} = Float.isNaN(${eval.primitive});
+          }
+        """
+      case DoubleType =>
+        s"""
+          ${eval.code}
+          boolean ${ev.isNull} = false;
+          ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
+          if (${eval.isNull}) {
+            ${ev.primitive} = true;
+          } else {
+            ${ev.primitive} = Double.isNaN(${eval.primitive});
+          }
+        """
+    }
+  }
+}
+
+
+/**
+ * An expression that is evaluated to true if the input is null.
+ */
 case class IsNull(child: Expression) extends UnaryExpression with Predicate {
   override def nullable: Boolean = false
 
@@ -83,13 +150,14 @@ case class IsNull(child: Expression) extends UnaryExpression with Predicate {
     ev.primitive = eval.isNull
     eval.code
   }
-
-  override def toString: String = s"IS NULL $child"
 }
 
+
+/**
+ * An expression that is evaluated to true if the input is not null.
+ */
 case class IsNotNull(child: Expression) extends UnaryExpression with Predicate {
   override def nullable: Boolean = false
-  override def toString: String = s"IS NOT NULL $child"
 
   override def eval(input: InternalRow): Any = {
     child.eval(input) != null
@@ -103,12 +171,13 @@ case class IsNotNull(child: Expression) extends UnaryExpression with Predicate {
   }
 }
 
+
 /**
- * A predicate that is evaluated to be true if there are at least `n` non-null values.
+ * A predicate that is evaluated to be true if there are at least `n` non-null and non-NaN values.
  */
 case class AtLeastNNonNulls(n: Int, children: Seq[Expression]) extends Predicate {
   override def nullable: Boolean = false
-  override def foldable: Boolean = false
+  override def foldable: Boolean = children.forall(_.foldable)
   override def toString: String = s"AtLeastNNulls(n, ${children.mkString(",")})"
 
   private[this] val childrenArray = children.toArray
