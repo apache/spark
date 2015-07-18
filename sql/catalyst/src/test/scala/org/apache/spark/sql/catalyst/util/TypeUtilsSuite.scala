@@ -29,8 +29,10 @@ class TypeUtilsSuite extends SparkFunSuite {
     assert(compareDoubles(0, 1) === 1)
     assert(compareDoubles(Double.MinValue, Double.MaxValue) === 1)
     assert(compareDoubles(Double.NaN, Double.NaN) === 0)
-    assert(compareDoubles(Double.NaN, Double.PositiveInfinity) === -1)
-    assert(compareDoubles(Double.NaN, Double.NegativeInfinity) === -1)
+    assert(compareDoubles(Double.NaN, Double.PositiveInfinity) === 1)
+    assert(compareDoubles(Double.NaN, Double.NegativeInfinity) === 1)
+    assert(compareDoubles(Double.PositiveInfinity, Double.NaN) === -1)
+    assert(compareDoubles(Double.NegativeInfinity, Double.NaN) === -1)
   }
 
   test("compareFloats") {
@@ -39,7 +41,9 @@ class TypeUtilsSuite extends SparkFunSuite {
     assert(compareFloats(0, 1) === 1)
     assert(compareFloats(Float.MinValue, Float.MaxValue) === 1)
     assert(compareFloats(Float.NaN, Float.NaN) === 0)
-    assert(compareFloats(Float.NaN, Float.PositiveInfinity) === -1)
-    assert(compareFloats(Float.NaN, Float.NegativeInfinity) === -1)
+    assert(compareFloats(Float.NaN, Float.PositiveInfinity) === 1)
+    assert(compareFloats(Float.NaN, Float.NegativeInfinity) === 1)
+    assert(compareFloats(Float.PositiveInfinity, Float.NaN) === -1)
+    assert(compareFloats(Float.NegativeInfinity, Float.NaN) === -1)
   }
 }

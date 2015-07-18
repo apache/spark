@@ -67,8 +67,8 @@ object TypeUtils {
     val xIsNan: Boolean = java.lang.Double.isNaN(x)
     val yIsNan: Boolean = java.lang.Double.isNaN(y)
     if ((xIsNan && yIsNan) || (x == y)) 0
-    else if (xIsNan) -1
-    else if (yIsNan) 1
+    else if (xIsNan) 1
+    else if (yIsNan) -1
     else if (x > y) -1
     else 1
   }
@@ -77,8 +77,8 @@ object TypeUtils {
     val xIsNan: Boolean = java.lang.Float.isNaN(x)
     val yIsNan: Boolean = java.lang.Float.isNaN(y)
     if ((xIsNan && yIsNan) || (x == y)) 0
-    else if (xIsNan) -1
-    else if (yIsNan) 1
+    else if (xIsNan) 1
+    else if (yIsNan) -1
     else if (x > y) -1
     else 1
   }
