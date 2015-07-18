@@ -28,8 +28,21 @@ import org.apache.spark.serializer.{SerializationStream, DeserializationStream, 
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.unsafe.PlatformDependent
 
-
-class UnsafeRowSerializer(numFields: Int) extends Serializer {
+/**
+ * Serializer for serializing [[UnsafeRow]]s during shuffle. Since UnsafeRows are already stored as
+ * bytes, this serializer simply copies those bytes to the underlying output stream. When
+ * deserializing a stream of rows, instances of this serializer mutate and return a single UnsafeRow
+ * instance that is backed by an on-heap byte array.
+ *
+ * Note that this serializer implements only the [[Serializer]] methods that are used during
+ * shuffle, so certain [[SerializerInstance]] methods will throw UnsupportedOperationException.
+ *
+ * This serializer does not support UnsafeRows that use
+ * [[org.apache.spark.sql.catalyst.util.ObjectPool]].
+ *
+ * @param numFields the number of fields in the row being serialized.
+ */
+private[sql] class UnsafeRowSerializer(numFields: Int) extends Serializer {
   override def newInstance(): SerializerInstance = new UnsafeRowSerializerInstance(numFields)
   override private[spark] def supportsRelocationOfSerializedObjects: Boolean = true
 }
@@ -46,7 +59,6 @@ private class UnsafeRowSerializerInstance(numFields: Int) extends SerializerInst
       val row = value.asInstanceOf[UnsafeRow]
       assert(row.getPool == null, "UnsafeRowSerializer does not support ObjectPool")
       dOut.writeInt(row.getSizeInBytes)
-      println("Size in bytes is " + row.getSizeInBytes)
       var dataRemaining: Int = row.getSizeInBytes
       val baseObject = row.getBaseObject
       var rowReadPosition: Long = row.getBaseOffset
