@@ -160,11 +160,11 @@ class DateExpressionsSuite extends QueryTest {
 
     checkAnswer(
       df.select(week_of_year("a"), week_of_year("b"), week_of_year("c")),
-      Row(15, 15, 14))
+      Row(15, 15, 15))
 
     checkAnswer(
       df.selectExpr("week_of_year(a)", "week_of_year(b)", "week_of_year(c)"),
-      Row(15, 15, 14))
+      Row(15, 15, 15))
   }
 
 }
