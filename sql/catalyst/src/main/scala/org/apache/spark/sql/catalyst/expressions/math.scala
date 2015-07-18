@@ -65,22 +65,38 @@ abstract class UnaryMathExpression(f: Double => Double, name: String)
   override def toString: String = s"$name($child)"
 
   protected override def nullSafeEval(input: Any): Any = {
-    val result = f(input.asInstanceOf[Double])
-    if (result.isNaN) null else result
+    f(input.asInstanceOf[Double])
   }
 
   // name of function in java.lang.Math
   def funcName: String = name.toLowerCase
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    nullSafeCodeGen(ctx, ev, eval => {
+    defineCodeGen(ctx, ev, c => s"java.lang.Math.${funcName}($c)")
+  }
+}
+
+abstract class UnaryLogExpression(f: Double => Double, name: String)
+    extends UnaryMathExpression(f, name) { self: Product =>
+
+  // values less than or equal to yAsymptote eval to null in Hive, instead of NaN or -Infinity
+  protected val yAsymptote: Double = 0.0
+
+  protected override def nullSafeEval(input: Any): Any = {
+    val d = input.asInstanceOf[Double]
+    if (d <= yAsymptote) null else f(d)
+  }
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    nullSafeCodeGen(ctx, ev, c =>
       s"""
-        ${ev.primitive} = java.lang.Math.${funcName}($eval);
-        if (Double.valueOf(${ev.primitive}).isNaN()) {
+        if ($c <= $yAsymptote) {
           ${ev.isNull} = true;
+        } else {
+          ${ev.primitive} = java.lang.Math.${funcName}($c);
         }
       """
-    })
+    )
   }
 }
 
@@ -100,8 +116,7 @@ abstract class BinaryMathExpression(f: (Double, Double) => Double, name: String)
   override def dataType: DataType = DoubleType
 
   protected override def nullSafeEval(input1: Any, input2: Any): Any = {
-    val result = f(input1.asInstanceOf[Double], input2.asInstanceOf[Double])
-    if (result.isNaN) null else result
+    f(input1.asInstanceOf[Double], input2.asInstanceOf[Double])
   }
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
@@ -398,25 +413,28 @@ case class Factorial(child: Expression) extends UnaryExpression with ImplicitCas
   }
 }
 
-case class Log(child: Expression) extends UnaryMathExpression(math.log, "LOG")
+case class Log(child: Expression) extends UnaryLogExpression(math.log, "LOG")
 
 case class Log2(child: Expression)
-  extends UnaryMathExpression((x: Double) => math.log(x) / math.log(2), "LOG2") {
+  extends UnaryLogExpression((x: Double) => math.log(x) / math.log(2), "LOG2") {
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    nullSafeCodeGen(ctx, ev, eval => {
+    nullSafeCodeGen(ctx, ev, c =>
       s"""
-        ${ev.primitive} = java.lang.Math.log($eval) / java.lang.Math.log(2);
-        if (Double.valueOf(${ev.primitive}).isNaN()) {
+        if ($c <= $yAsymptote) {
           ${ev.isNull} = true;
+        } else {
+          ${ev.primitive} = java.lang.Math.log($c) / java.lang.Math.log(2);
         }
       """
-    })
+    )
   }
 }
 
-case class Log10(child: Expression) extends UnaryMathExpression(math.log10, "LOG10")
+case class Log10(child: Expression) extends UnaryLogExpression(math.log10, "LOG10")
 
-case class Log1p(child: Expression) extends UnaryMathExpression(math.log1p, "LOG1P")
+case class Log1p(child: Expression) extends UnaryLogExpression(math.log1p, "LOG1P") {
+  protected override val yAsymptote: Double = -1.0
+}
 
 case class Rint(child: Expression) extends UnaryMathExpression(math.rint, "ROUND") {
   override def funcName: String = "rint"
@@ -577,27 +595,18 @@ case class Atan2(left: Expression, right: Expression)
 
   protected override def nullSafeEval(input1: Any, input2: Any): Any = {
     // With codegen, the values returned by -0.0 and 0.0 are different. Handled with +0.0
-    val result = math.atan2(input1.asInstanceOf[Double] + 0.0, input2.asInstanceOf[Double] + 0.0)
-    if (result.isNaN) null else result
+    math.atan2(input1.asInstanceOf[Double] + 0.0, input2.asInstanceOf[Double] + 0.0)
   }
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    defineCodeGen(ctx, ev, (c1, c2) => s"java.lang.Math.atan2($c1 + 0.0, $c2 + 0.0)") + s"""
-      if (Double.valueOf(${ev.primitive}).isNaN()) {
-        ${ev.isNull} = true;
-      }
-      """
+    defineCodeGen(ctx, ev, (c1, c2) => s"java.lang.Math.atan2($c1 + 0.0, $c2 + 0.0)")
   }
 }
 
 case class Pow(left: Expression, right: Expression)
   extends BinaryMathExpression(math.pow, "POWER") {
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    defineCodeGen(ctx, ev, (c1, c2) => s"java.lang.Math.pow($c1, $c2)") + s"""
-      if (Double.valueOf(${ev.primitive}).isNaN()) {
-        ${ev.isNull} = true;
-      }
-      """
+    defineCodeGen(ctx, ev, (c1, c2) => s"java.lang.Math.pow($c1, $c2)")
   }
 }
 
@@ -699,17 +708,33 @@ case class Logarithm(left: Expression, right: Expression)
     this(EulerNumber(), child)
   }
 
+  protected override def nullSafeEval(input1: Any, input2: Any): Any = {
+    val dLeft = input1.asInstanceOf[Double]
+    val dRight = input2.asInstanceOf[Double]
+    // Unlike Hive, we support Log base in (0.0, 1.0]
+    if (dLeft <= 0.0 || dRight <= 0.0) null else math.log(dRight) / math.log(dLeft)
+  }
+
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    val logCode = if (left.isInstanceOf[EulerNumber]) {
-      defineCodeGen(ctx, ev, (c1, c2) => s"java.lang.Math.log($c2)")
+    if (left.isInstanceOf[EulerNumber]) {
+      nullSafeCodeGen(ctx, ev, (c1, c2) =>
+        s"""
+          if ($c2 <= 0.0) {
+            ${ev.isNull} = true;
+          } else {
+            ${ev.primitive} = java.lang.Math.log($c2);
+          }
+        """)
     } else {
-      defineCodeGen(ctx, ev, (c1, c2) => s"java.lang.Math.log($c2) / java.lang.Math.log($c1)")
+      nullSafeCodeGen(ctx, ev, (c1, c2) =>
+        s"""
+          if ($c1 <= 0.0 || $c2 <= 0.0) {
+            ${ev.isNull} = true;
+          } else {
+            ${ev.primitive} = java.lang.Math.log($c2) / java.lang.Math.log($c1);
+          }
+        """)
     }
-    logCode + s"""
-      if (Double.isNaN(${ev.primitive})) {
-        ${ev.isNull} = true;
-      }
-    """
   }
 }
 
