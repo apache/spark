@@ -366,7 +366,7 @@ case class Cast(child: Expression, dataType: DataType)
 
   private[this] def castArray(from: ArrayType, to: ArrayType): Any => Any = {
     val elementCast = cast(from.elementType, to.elementType)
-    buildCast[Seq[Any]](_, seq => seq.map(v => if (v == null) null else elementCast(v)))
+    buildCast[Seq[Any]](_, _.map(v => if (v == null) null else elementCast(v)))
   }
 
   private[this] def castMap(from: MapType, to: MapType): Any => Any = {
@@ -418,9 +418,9 @@ case class Cast(child: Expression, dataType: DataType)
   protected override def nullSafeEval(input: Any): Any = cast(input)
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    val eval = child.gen(ctx)
     val nullSafeCast = nullSafeCastFunction(child.dataType, dataType, ctx)
     if (nullSafeCast != null) {
+      val eval = child.gen(ctx)
       eval.code +
         castCode(ctx, eval.primitive, eval.isNull, ev.primitive, ev.isNull, dataType, nullSafeCast)
     } else {
@@ -428,16 +428,21 @@ case class Cast(child: Expression, dataType: DataType)
     }
   }
 
+  // three function arguments are: child.primitive, result.primitive and result.isNull
+  // it returns the code snippets to be put in null safe evaluation region
   private[this] type CastFunction = (String, String, String) => String
 
-  private[this] def nullSafeCastFunction(from: DataType, to: DataType, ctx: CodeGenContext):
-      CastFunction = to match {
+  private[this] def nullSafeCastFunction(
+      from: DataType,
+      to: DataType,
+      ctx: CodeGenContext): CastFunction = to match {
 
     case StringType => castToStringCode(from, ctx)
     case BinaryType => castToBinaryCode(from)
     case DateType => castToDateCode(from)
     case decimal: DecimalType => castToDecimalCode(from, decimal)
     case TimestampType => castToTimestampCode(from)
+    case IntervalType => castToIntervalCode(from)
     case BooleanType => castToBooleanCode(from)
     case ByteType => castToByteCode(from)
     case ShortType => castToShortCode(from)
@@ -487,8 +492,7 @@ case class Cast(child: Expression, dataType: DataType)
     case StringType =>
       (c, evPrim, evNull) => s"""
         try {
-          $evPrim = org.apache.spark.sql.catalyst.util.DateTimeUtils.fromJavaDate(
-            java.sql.Date.valueOf($c.toString()));
+          $evPrim = org.apache.spark.sql.catalyst.util.DateTimeUtils.stringToDateTE($c);
         } catch (java.lang.IllegalArgumentException e) {
           $evNull = true;
         }
@@ -588,8 +592,7 @@ case class Cast(child: Expression, dataType: DataType)
       (c, evPrim, evNull) =>
         s"""
           try {
-            $evPrim = org.apache.spark.sql.catalyst.util.DateTimeUtils.fromJavaTimestamp(
-              java.sql.Timestamp.valueOf($c.toString()));
+            $evPrim = org.apache.spark.sql.catalyst.util.DateTimeUtils.stringToTimestampTE($c);
           } catch (java.lang.IllegalArgumentException e) {
             $evNull = true;
           }
@@ -621,6 +624,12 @@ case class Cast(child: Expression, dataType: DataType)
             $evPrim = (long)($c * 1000000L);
           }
         """
+  }
+
+  private[this] def castToIntervalCode(from: DataType): CastFunction = from match {
+    case StringType =>
+      (c, evPrim, evNull) =>
+        s"$evPrim = org.apache.spark.unsafe.types.Interval.fromString($c.toString());"
   }
 
   private[this] def decimalToTimestampCode(d: String): String =
@@ -814,7 +823,7 @@ case class Cast(child: Expression, dataType: DataType)
   }
 
   private[this] def castMapCode(from: MapType, to: MapType, ctx: CodeGenContext): CastFunction = {
-    val keyCast= nullSafeCastFunction(from.keyType, to.keyType, ctx)
+    val keyCast = nullSafeCastFunction(from.keyType, to.keyType, ctx)
     val valueCast = nullSafeCastFunction(from.valueType, to.valueType, ctx)
 
     val hashMapClass = "scala.collection.mutable.HashMap"
