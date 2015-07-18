@@ -23,10 +23,16 @@ import scala.collection.mutable
 import scala.reflect.ClassTag
 
 import com.esotericsoftware.kryo.Kryo
+import com.esotericsoftware.kryo.io.{Input, Output}
+import com.esotericsoftware.kryo.serializers.{JavaSerializer => KryoJavaSerializer}
 
-import org.apache.spark.{SharedSparkContext, SparkConf, SparkFunSuite}
+import org.apache.hadoop.mapred.{FileSplit, InputSplit}
+import org.apache.hadoop.fs.Path
+
+import org.apache.spark.{Partition, SerializableWritable, SharedSparkContext, SparkConf, SparkFunSuite}
 import org.apache.spark.scheduler.HighlyCompressedMapStatus
 import org.apache.spark.serializer.KryoTest._
+import org.apache.spark.scheduler.{ResultTask, ShuffleMapTask}
 import org.apache.spark.storage.BlockManagerId
 
 class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
@@ -328,6 +334,52 @@ class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
     assert(!ser2.getAutoReset)
   }
 
+  test("output reuse with JavaSerializer") {
+    val kryo = new Kryo()
+    kryo.register(classOf[JavaSerializable], new KryoJavaSerializer())
+    var output = new Output(100, 100)
+
+    val objectToWrite = new JavaSerializable(42)
+
+    kryo.writeClassAndObject(output, objectToWrite)
+    val firstWriteBytes = output.toBytes
+    val d1 = kryo.readClassAndObject(new Input(firstWriteBytes)).asInstanceOf[JavaSerializable]
+    assert(objectToWrite.index == d1.index)
+
+    output.clear()
+    kryo.reset()
+
+    kryo.writeClassAndObject(output, objectToWrite)
+    val secondWriteBytes = output.toBytes
+    assert(firstWriteBytes.length == secondWriteBytes.length)
+    val d2 = kryo.readClassAndObject(new Input(secondWriteBytes)).asInstanceOf[JavaSerializable]
+    assert(d1.index == d2.index)
+  }
+
+  test("Task kryo serialization") {
+    val kryo = new KryoSerializer(conf).newInstance()
+    val fsplit = new FileSplit(new Path("/foo"), 0L, 100L, Array("host1"))
+    val part = new TestPartition(fsplit)
+    val bcast = sc.broadcast(new Array[Byte](4))
+
+    // Regression test for Spark-7708 where reusing the same KryoSerializerInstance
+    // for JavaSerializable objects caused a StreamCorruptedException during
+    // deserialization
+    for (i <- 0 until 2) {
+      val task = new ResultTask[Int, Int](1, bcast, part, null, 1)
+      val s = kryo.serialize(task)
+      val task1 = kryo.deserialize[ResultTask[Int, Int]](s)
+      assert(task.partitionId == task1.partitionId)
+    }
+
+    for (i <- 0 until 2) {
+      val task = new ShuffleMapTask(1, bcast, part, null)
+      val s = kryo.serialize(task)
+      val task1 = kryo.deserialize[ShuffleMapTask](s)
+      assert(task.partitionId == task1.partitionId)
+    }
+  }
+
   private def testSerializerInstanceReuse(autoReset: Boolean, referenceTracking: Boolean): Unit = {
     val conf = new SparkConf(loadDefaults = false)
       .set("spark.kryo.referenceTracking", referenceTracking.toString)
@@ -397,6 +449,13 @@ class KryoSerializerAutoResetDisabledSuite extends SparkFunSuite with SharedSpar
 }
 
 class ClassLoaderTestingObject
+
+class JavaSerializable(val index: Int) extends Serializable
+
+class TestPartition(@transient fs: FileSplit) extends Partition {
+  override def index: Int = 42
+  val split = new SerializableWritable[InputSplit](fs)
+}
 
 
 object KryoTest {

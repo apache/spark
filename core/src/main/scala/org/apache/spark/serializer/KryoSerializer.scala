@@ -34,7 +34,7 @@ import org.apache.spark.api.python.PythonBroadcast
 import org.apache.spark.broadcast.HttpBroadcast
 import org.apache.spark.network.nio.{GetBlock, GotBlock, PutBlock}
 import org.apache.spark.network.util.ByteUnit
-import org.apache.spark.scheduler.{CompressedMapStatus, HighlyCompressedMapStatus}
+import org.apache.spark.scheduler.{CompressedMapStatus, HighlyCompressedMapStatus, TaskDescription}
 import org.apache.spark.storage._
 import org.apache.spark.util.{BoundedPriorityQueue, SerializableConfiguration, SerializableJobConf}
 import org.apache.spark.util.collection.CompactBuffer
@@ -100,6 +100,8 @@ class KryoSerializer(conf: SparkConf)
     kryo.register(classOf[SerializableJobConf], new KryoJavaSerializer())
     kryo.register(classOf[HttpBroadcast[_]], new KryoJavaSerializer())
     kryo.register(classOf[PythonBroadcast], new KryoJavaSerializer())
+    kryo.register(classOf[Accumulator[_]], new KryoJavaSerializer())
+    kryo.register(classOf[Accumulable[_, _]], new KryoJavaSerializer())
 
     try {
       // scalastyle:off classforname
@@ -265,7 +267,7 @@ private[spark] class KryoSerializerInstance(ks: KryoSerializer) extends Serializ
   override def deserialize[T: ClassTag](bytes: ByteBuffer): T = {
     val kryo = borrowKryo()
     try {
-      input.setBuffer(bytes.array)
+      input.setBuffer(bytes.array, bytes.arrayOffset, bytes.limit + bytes.arrayOffset)
       kryo.readClassAndObject(input).asInstanceOf[T]
     } finally {
       releaseKryo(kryo)
@@ -277,7 +279,7 @@ private[spark] class KryoSerializerInstance(ks: KryoSerializer) extends Serializ
     val oldClassLoader = kryo.getClassLoader
     try {
       kryo.setClassLoader(loader)
-      input.setBuffer(bytes.array)
+      input.setBuffer(bytes.array, bytes.arrayOffset, bytes.limit + bytes.arrayOffset)
       kryo.readClassAndObject(input).asInstanceOf[T]
     } finally {
       kryo.setClassLoader(oldClassLoader)
@@ -339,7 +341,8 @@ private[serializer] object KryoSerializer {
     classOf[Array[Short]],
     classOf[Array[Long]],
     classOf[BoundedPriorityQueue[_]],
-    classOf[SparkConf]
+    classOf[SparkConf],
+    classOf[TaskDescription]
   )
 }
 
