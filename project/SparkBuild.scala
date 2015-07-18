@@ -69,6 +69,7 @@ object SparkBuild extends PomBuild {
     import scala.collection.mutable
     var isAlphaYarn = false
     var profiles: mutable.Seq[String] = mutable.Seq("sbt")
+    // scalastyle:off println
     if (Properties.envOrNone("SPARK_GANGLIA_LGPL").isDefined) {
       println("NOTE: SPARK_GANGLIA_LGPL is deprecated, please use -Pspark-ganglia-lgpl flag.")
       profiles ++= Seq("spark-ganglia-lgpl")
@@ -88,6 +89,7 @@ object SparkBuild extends PomBuild {
       println("NOTE: SPARK_YARN is deprecated, please use -Pyarn flag.")
       profiles ++= Seq("yarn")
     }
+    // scalastyle:on println
     profiles
   }
 
@@ -96,8 +98,10 @@ object SparkBuild extends PomBuild {
     case None => backwardCompatibility
     case Some(v) =>
       if (backwardCompatibility.nonEmpty)
+        // scalastyle:off println
         println("Note: We ignore environment variables, when use of profile is detected in " +
           "conjunction with environment variable.")
+        // scalastyle:on println
       v.split("(\\s+|,)").filterNot(_.isEmpty).map(_.trim.replaceAll("-P", "")).toSeq
     }
 
@@ -206,7 +210,7 @@ object SparkBuild extends PomBuild {
     fork := true,
     outputStrategy in run := Some (StdoutOutput),
 
-    javaOptions ++= Seq("-Xmx2G", "-XX:MaxPermSize=1g"),
+    javaOptions ++= Seq("-Xmx2G", "-XX:MaxPermSize=256m"),
 
     sparkShell := {
       (runMain in Compile).toTask(" org.apache.spark.repl.Main -usejavacp").value
@@ -299,7 +303,7 @@ object SQL {
 object Hive {
 
   lazy val settings = Seq(
-    javaOptions += "-XX:MaxPermSize=1g",
+    javaOptions += "-XX:MaxPermSize=256m",
     // Specially disable assertions since some Hive tests fail them
     javaOptions in Test := (javaOptions in Test).value.filterNot(_ == "-ea"),
     // Multiple queries rely on the TestHive singleton. See comments there for more details.
@@ -477,8 +481,8 @@ object Unidoc {
         "mllib.tree.impurity", "mllib.tree.model", "mllib.util",
         "mllib.evaluation", "mllib.feature", "mllib.random", "mllib.stat.correlation",
         "mllib.stat.test", "mllib.tree.impl", "mllib.tree.loss",
-        "ml", "ml.attribute", "ml.classification", "ml.evaluation", "ml.feature", "ml.param",
-        "ml.recommendation", "ml.regression", "ml.tuning"
+        "ml", "ml.attribute", "ml.classification", "ml.clustering", "ml.evaluation", "ml.feature",
+        "ml.param", "ml.recommendation", "ml.regression", "ml.tuning"
       ),
       "-group", "Spark SQL", packageList("sql.api.java", "sql.api.java.types", "sql.hive.api.java"),
       "-noqualifier", "java.lang"

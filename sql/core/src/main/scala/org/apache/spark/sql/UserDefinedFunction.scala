@@ -41,10 +41,13 @@ import org.apache.spark.sql.types.DataType
  * @since 1.3.0
  */
 @Experimental
-case class UserDefinedFunction protected[sql] (f: AnyRef, dataType: DataType) {
+case class UserDefinedFunction protected[sql] (
+    f: AnyRef,
+    dataType: DataType,
+    inputTypes: Seq[DataType] = Nil) {
 
   def apply(exprs: Column*): Column = {
-    Column(ScalaUDF(f, dataType, exprs.map(_.expr)))
+    Column(ScalaUDF(f, dataType, exprs.map(_.expr), inputTypes))
   }
 }
 

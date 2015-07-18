@@ -28,8 +28,6 @@ import org.apache.spark.sql.catalyst.util.TypeUtils
 /**
  * :: DeveloperApi ::
  * The data type representing `Float` values. Please use the singleton [[DataTypes.FloatType]].
- *
- * @group dataType
  */
 @DeveloperApi
 class FloatType private() extends FractionalType {

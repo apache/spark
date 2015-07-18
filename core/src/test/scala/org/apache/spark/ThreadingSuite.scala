@@ -36,7 +36,7 @@ object ThreadingSuiteState {
   }
 }
 
-class ThreadingSuite extends SparkFunSuite with LocalSparkContext {
+class ThreadingSuite extends SparkFunSuite with LocalSparkContext with Logging {
 
   test("accessing SparkContext form a different thread") {
     sc = new SparkContext("local", "test")
@@ -130,8 +130,6 @@ class ThreadingSuite extends SparkFunSuite with LocalSparkContext {
               Thread.sleep(100)
             }
             if (running.get() != 4) {
-              println("Waited 1 second without seeing runningThreads = 4 (it was " +
-                running.get() + "); failing test")
               ThreadingSuiteState.failed.set(true)
             }
             number
@@ -143,6 +141,8 @@ class ThreadingSuite extends SparkFunSuite with LocalSparkContext {
     }
     sem.acquire(2)
     if (ThreadingSuiteState.failed.get()) {
+      logError("Waited 1 second without seeing runningThreads = 4 (it was " +
+                ThreadingSuiteState.runningThreads.get() + "); failing test")
       fail("One or more threads didn't see runningThreads = 4")
     }
   }

@@ -17,18 +17,19 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.annotation.DeveloperApi
+import scala.collection.mutable.ArrayBuffer
+
 import org.apache.spark.Logging
+import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.{RDD, RDDOperationScope}
 import org.apache.spark.sql.SQLContext
-import org.apache.spark.sql.catalyst.{CatalystTypeConverters, trees}
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.physical._
-
-import scala.collection.mutable.ArrayBuffer
 
 object SparkPlan {
   protected[sql] val currentContext = new ThreadLocal[SQLContext]()
@@ -38,8 +39,7 @@ object SparkPlan {
  * :: DeveloperApi ::
  */
 @DeveloperApi
-abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializable {
-  self: Product =>
+abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Product with Serializable {
 
   /**
    * A handle to the SQL Context that was used to create this plan.   Since many operators need
@@ -152,12 +152,24 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
     buf.toArray.map(converter(_).asInstanceOf[Row])
   }
 
+  private[this] def isTesting: Boolean = sys.props.contains("spark.testing")
+
   protected def newProjection(
       expressions: Seq[Expression], inputSchema: Seq[Attribute]): Projection = {
     log.debug(
       s"Creating Projection: $expressions, inputSchema: $inputSchema, codegen:$codegenEnabled")
     if (codegenEnabled) {
-      GenerateProjection.generate(expressions, inputSchema)
+      try {
+        GenerateProjection.generate(expressions, inputSchema)
+      } catch {
+        case e: Exception =>
+          if (isTesting) {
+            throw e
+          } else {
+            log.error("Failed to generate projection, fallback to interpret", e)
+            new InterpretedProjection(expressions, inputSchema)
+          }
+      }
     } else {
       new InterpretedProjection(expressions, inputSchema)
     }
@@ -169,17 +181,36 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
     log.debug(
       s"Creating MutableProj: $expressions, inputSchema: $inputSchema, codegen:$codegenEnabled")
     if(codegenEnabled) {
-      GenerateMutableProjection.generate(expressions, inputSchema)
+      try {
+        GenerateMutableProjection.generate(expressions, inputSchema)
+      } catch {
+        case e: Exception =>
+          if (isTesting) {
+            throw e
+          } else {
+            log.error("Failed to generate mutable projection, fallback to interpreted", e)
+            () => new InterpretedMutableProjection(expressions, inputSchema)
+          }
+      }
     } else {
       () => new InterpretedMutableProjection(expressions, inputSchema)
     }
   }
 
-
   protected def newPredicate(
       expression: Expression, inputSchema: Seq[Attribute]): (InternalRow) => Boolean = {
     if (codegenEnabled) {
-      GeneratePredicate.generate(expression, inputSchema)
+      try {
+        GeneratePredicate.generate(expression, inputSchema)
+      } catch {
+        case e: Exception =>
+          if (isTesting) {
+            throw e
+          } else {
+            log.error("Failed to generate predicate, fallback to interpreted", e)
+            InterpretedPredicate.create(expression, inputSchema)
+          }
+      }
     } else {
       InterpretedPredicate.create(expression, inputSchema)
     }
@@ -189,22 +220,38 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
       order: Seq[SortOrder],
       inputSchema: Seq[Attribute]): Ordering[InternalRow] = {
     if (codegenEnabled) {
-      GenerateOrdering.generate(order, inputSchema)
+      try {
+        GenerateOrdering.generate(order, inputSchema)
+      } catch {
+        case e: Exception =>
+          if (isTesting) {
+            throw e
+          } else {
+            log.error("Failed to generate ordering, fallback to interpreted", e)
+            new RowOrdering(order, inputSchema)
+          }
+      }
     } else {
       new RowOrdering(order, inputSchema)
     }
   }
 }
 
-private[sql] trait LeafNode extends SparkPlan with trees.LeafNode[SparkPlan] {
-  self: Product =>
+private[sql] trait LeafNode extends SparkPlan {
+  override def children: Seq[SparkPlan] = Nil
 }
 
-private[sql] trait UnaryNode extends SparkPlan with trees.UnaryNode[SparkPlan] {
-  self: Product =>
+private[sql] trait UnaryNode extends SparkPlan {
+  def child: SparkPlan
+
+  override def children: Seq[SparkPlan] = child :: Nil
+
   override def outputPartitioning: Partitioning = child.outputPartitioning
 }
 
-private[sql] trait BinaryNode extends SparkPlan with trees.BinaryNode[SparkPlan] {
-  self: Product =>
+private[sql] trait BinaryNode extends SparkPlan {
+  def left: SparkPlan
+  def right: SparkPlan
+
+  override def children: Seq[SparkPlan] = Seq(left, right)
 }

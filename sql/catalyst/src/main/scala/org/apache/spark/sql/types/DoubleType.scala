@@ -28,8 +28,6 @@ import org.apache.spark.sql.catalyst.util.TypeUtils
 /**
  * :: DeveloperApi ::
  * The data type representing `Double` values. Please use the singleton [[DataTypes.DoubleType]].
- *
- * @group dataType
  */
 @DeveloperApi
 class DoubleType private() extends FractionalType {

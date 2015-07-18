@@ -341,9 +341,7 @@ trait Params extends Identifiable with Serializable {
    * those are checked during schema validation.
    */
   def validateParams(): Unit = {
-    params.filter(isDefined).foreach { param =>
-      param.asInstanceOf[Param[Any]].validate($(param))
-    }
+    // Do nothing by default.  Override to handle Param interactions.
   }
 
   /**
