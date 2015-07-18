@@ -43,7 +43,7 @@ import org.apache.spark.sql.types._
  *
  * See [[Substring]] for an example.
  */
-abstract class Expression extends TreeNode[Expression] with Product {
+abstract class Expression extends TreeNode[Expression] {
 
   /**
    * Returns true when an expression is a candidate for static evaluation before the query is

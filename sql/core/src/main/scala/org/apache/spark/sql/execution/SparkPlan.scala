@@ -39,7 +39,7 @@ object SparkPlan {
  * :: DeveloperApi ::
  */
 @DeveloperApi
-abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Product with Serializable {
+abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializable {
 
   /**
    * A handle to the SQL Context that was used to create this plan.   Since many operators need

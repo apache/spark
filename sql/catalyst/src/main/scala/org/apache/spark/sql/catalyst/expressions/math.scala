@@ -77,7 +77,7 @@ abstract class UnaryMathExpression(f: Double => Double, name: String)
 }
 
 abstract class UnaryLogExpression(f: Double => Double, name: String)
-    extends UnaryMathExpression(f, name) { self: Product =>
+    extends UnaryMathExpression(f, name) {
 
   // values less than or equal to yAsymptote eval to null in Hive, instead of NaN or -Infinity
   protected val yAsymptote: Double = 0.0
