@@ -402,6 +402,10 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
    * For example, concat("a", null, "c") would yield "ac".
    */
   public static UTF8String concat(UTF8String... inputs) {
+    if (inputs == null) {
+      return fromBytes(new byte[0]);
+    }
+
     // Compute the total length of the result.
     int totalLength = 0;
     for (int i = 0; i < inputs.length; i++) {
