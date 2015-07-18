@@ -848,7 +848,7 @@ class TaskInstance(Base):
             # Success callback
             try:
                 if task.on_success_callback:
-                    task.on_retry_callback(context)
+                    task.on_success_callback(context)
             except Exception as e3:
                 logging.error("Failed when executing success callback")
                 logging.exception(e3)
