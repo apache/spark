@@ -23,6 +23,7 @@ import com.google.common.primitives.UnsignedBytes;
 
 import org.apache.spark.annotation.Private;
 import org.apache.spark.unsafe.types.UTF8String;
+import org.apache.spark.util.Utils;
 
 @Private
 public class PrefixComparators {
@@ -82,7 +83,7 @@ public class PrefixComparators {
     public int compare(long aPrefix, long bPrefix) {
       float a = Float.intBitsToFloat((int) aPrefix);
       float b = Float.intBitsToFloat((int) bPrefix);
-      return (a < b) ? -1 : (a > b) ? 1 : 0;
+      return Utils.nanSafeCompareFloats(a, b);
     }
 
     public long computePrefix(float value) {
@@ -97,7 +98,7 @@ public class PrefixComparators {
     public int compare(long aPrefix, long bPrefix) {
       double a = Double.longBitsToDouble(aPrefix);
       double b = Double.longBitsToDouble(bPrefix);
-      return (a < b) ? -1 : (a > b) ? 1 : 0;
+      return Utils.nanSafeCompareDoubles(a, b);
     }
 
     public long computePrefix(double value) {

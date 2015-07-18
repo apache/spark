@@ -23,7 +23,7 @@ import scala.reflect.runtime.universe.typeTag
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.sql.catalyst.ScalaReflectionLock
-import org.apache.spark.sql.catalyst.util.TypeUtils
+import org.apache.spark.util.Utils
 
 /**
  * :: DeveloperApi ::
@@ -39,7 +39,7 @@ class DoubleType private() extends FractionalType {
   private[sql] val numeric = implicitly[Numeric[Double]]
   private[sql] val fractional = implicitly[Fractional[Double]]
   private[sql] val ordering = new Ordering[Double] {
-    override def compare(x: Double, y: Double): Int = TypeUtils.compareDoubles(x, y)
+    override def compare(x: Double, y: Double): Int = Utils.nanSafeCompareDoubles(x, y)
   }
   private[sql] val asIntegral = DoubleAsIfIntegral
 
