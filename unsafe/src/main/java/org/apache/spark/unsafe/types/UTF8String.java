@@ -23,6 +23,7 @@ import java.io.UnsupportedEncodingException;
 
 import org.apache.spark.unsafe.PlatformDependent;
 import org.apache.spark.unsafe.array.ByteArrayMethods;
+import scala.compat.Platform;
 
 import static org.apache.spark.unsafe.PlatformDependent.*;
 
