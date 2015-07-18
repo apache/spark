@@ -743,16 +743,25 @@ class DataFrameSuite extends QueryTest with SQLTestUtils {
     df.col("t.``")
   }
 
-  test("SPARK-8797: sort by float column containing NaN") {
+  test("SPARK-8797: sort by float column containing NaN should not crash") {
     val inputData = Seq.fill(10)(Tuple1(Float.NaN)) ++ (1 to 1000).map(x => Tuple1(x.toFloat))
     val df = Random.shuffle(inputData).toDF("a")
     df.orderBy("a").collect()
   }
 
-  test("SPARK-8797: sort by double column containing NaN") {
+  test("SPARK-8797: sort by double column containing NaN should not crash") {
     val inputData = Seq.fill(10)(Tuple1(Double.NaN)) ++ (1 to 1000).map(x => Tuple1(x.toDouble))
     val df = Random.shuffle(inputData).toDF("a")
     df.orderBy("a").collect()
+  }
+
+  test("SPARK-9146: NaN is greater than all other non-NaN numeric values") {
+    val maxDouble = Seq(Double.NaN, Double.PositiveInfinity, Double.MaxValue)
+      .map(Tuple1.apply).toDF("a").selectExpr("max(a)").first()
+    assert(java.lang.Double.isNaN(maxDouble.getDouble(0)))
+    val maxFloat = Seq(Float.NaN, Float.PositiveInfinity, Float.MaxValue)
+      .map(Tuple1.apply).toDF("a").selectExpr("max(a)").first()
+    assert(java.lang.Float.isNaN(maxFloat.getFloat(0)))
   }
 
   test("SPARK-8072: Better Exception for Duplicate Columns") {
