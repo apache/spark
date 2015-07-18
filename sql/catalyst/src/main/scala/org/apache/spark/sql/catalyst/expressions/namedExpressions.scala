@@ -40,7 +40,7 @@ case class ExprId(id: Long)
 /**
  * An [[Expression]] that is named.
  */
-trait NamedExpression extends Expression { self: Product =>
+trait NamedExpression extends Expression {
 
   /** We should never fold named expressions in order to not remove the alias. */
   override def foldable: Boolean = false
@@ -83,7 +83,7 @@ trait NamedExpression extends Expression { self: Product =>
     }
 }
 
-abstract class Attribute extends LeafExpression with NamedExpression { self: Product =>
+abstract class Attribute extends LeafExpression with NamedExpression {
 
   override def references: AttributeSet = AttributeSet(this)
 

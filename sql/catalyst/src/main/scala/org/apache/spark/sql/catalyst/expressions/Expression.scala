@@ -44,7 +44,6 @@ import org.apache.spark.sql.types._
  * See [[Substring]] for an example.
  */
 abstract class Expression extends TreeNode[Expression] {
-  self: Product =>
 
   /**
    * Returns true when an expression is a candidate for static evaluation before the query is
@@ -187,7 +186,6 @@ abstract class Expression extends TreeNode[Expression] {
  * A leaf expression, i.e. one without any child expressions.
  */
 abstract class LeafExpression extends Expression {
-  self: Product =>
 
   def children: Seq[Expression] = Nil
 }
@@ -198,7 +196,6 @@ abstract class LeafExpression extends Expression {
  * if the input is evaluated to null.
  */
 abstract class UnaryExpression extends Expression {
-  self: Product =>
 
   def child: Expression
 
@@ -277,7 +274,6 @@ abstract class UnaryExpression extends Expression {
  * if any input is evaluated to null.
  */
 abstract class BinaryExpression extends Expression {
-  self: Product =>
 
   def left: Expression
   def right: Expression
@@ -370,7 +366,6 @@ abstract class BinaryExpression extends Expression {
  *    the analyzer will find the tightest common type and do the proper type casting.
  */
 abstract class BinaryOperator extends BinaryExpression with ExpectsInputTypes {
-  self: Product =>
 
   /**
    * Expected input type from both left/right child expressions, similar to the

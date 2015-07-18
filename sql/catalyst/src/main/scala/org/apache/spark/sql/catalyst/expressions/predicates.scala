@@ -18,7 +18,6 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.catalyst.expressions.codegen.{GeneratedExpressionCode, CodeGenContext}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
@@ -38,8 +37,6 @@ object InterpretedPredicate {
  * An [[Expression]] that returns a boolean value.
  */
 trait Predicate extends Expression {
-  self: Product =>
-
   override def dataType: DataType = BooleanType
 }
 
@@ -222,7 +219,6 @@ case class Or(left: Expression, right: Expression) extends BinaryOperator with P
 
 
 abstract class BinaryComparison extends BinaryOperator with Predicate {
-  self: Product =>
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     if (ctx.isPrimitiveType(left.dataType)) {

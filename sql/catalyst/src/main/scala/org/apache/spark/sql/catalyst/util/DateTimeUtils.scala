@@ -65,8 +65,8 @@ object DateTimeUtils {
   def millisToDays(millisUtc: Long): Int = {
     // SPARK-6785: use Math.floor so negative number of days (dates before 1970)
     // will correctly work as input for function toJavaDate(Int)
-    val millisLocal = millisUtc.toDouble + threadLocalLocalTimeZone.get().getOffset(millisUtc)
-    Math.floor(millisLocal / MILLIS_PER_DAY).toInt
+    val millisLocal = millisUtc + threadLocalLocalTimeZone.get().getOffset(millisUtc)
+    Math.floor(millisLocal.toDouble / MILLIS_PER_DAY).toInt
   }
 
   // reverse of millisToDays
@@ -320,16 +320,17 @@ object DateTimeUtils {
       Calendar.getInstance(
         TimeZone.getTimeZone(f"GMT${timeZone.get.toChar}${segments(7)}%02d:${segments(8)}%02d"))
     }
+    c.set(Calendar.MILLISECOND, 0)
 
     if (justTime) {
-      c.set(Calendar.HOUR, segments(3))
+      c.set(Calendar.HOUR_OF_DAY, segments(3))
       c.set(Calendar.MINUTE, segments(4))
       c.set(Calendar.SECOND, segments(5))
     } else {
       c.set(segments(0), segments(1) - 1, segments(2), segments(3), segments(4), segments(5))
     }
 
-    Some(c.getTimeInMillis / 1000 * 1000000 + segments(6))
+    Some(c.getTimeInMillis * 1000 + segments(6))
   }
 
   /**
@@ -374,8 +375,9 @@ object DateTimeUtils {
         segments(2) < 1 || segments(2) > 31) {
       return None
     }
-    val c = Calendar.getInstance()
+    val c = Calendar.getInstance(TimeZone.getTimeZone("GMT"))
     c.set(segments(0), segments(1) - 1, segments(2), 0, 0, 0)
-    Some((c.getTimeInMillis / 1000 / 3600 / 24).toInt)
+    c.set(Calendar.MILLISECOND, 0)
+    Some((c.getTimeInMillis / MILLIS_PER_DAY).toInt)
   }
 }

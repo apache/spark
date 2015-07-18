@@ -33,7 +33,6 @@ import org.apache.spark.util.random.XORShiftRandom
  * Since this expression is stateful, it cannot be a case object.
  */
 abstract class RDG(seed: Long) extends LeafExpression with Serializable {
-  self: Product =>
 
   /**
    * Record ID within each partition. By being transient, the Random Number Generator is

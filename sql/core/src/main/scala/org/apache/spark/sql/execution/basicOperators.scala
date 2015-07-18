@@ -56,13 +56,17 @@ case class Project(projectList: Seq[NamedExpression], child: SparkPlan) extends 
 case class Filter(condition: Expression, child: SparkPlan) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
 
-  override def outputsUnsafeRows: Boolean = child.outputsUnsafeRows
-
   protected override def doExecute(): RDD[InternalRow] = child.execute().mapPartitions { iter =>
     iter.filter(newPredicate(condition, child.output))
   }
 
   override def outputOrdering: Seq[SortOrder] = child.outputOrdering
+
+  override def outputsUnsafeRows: Boolean = child.outputsUnsafeRows
+
+  override def canProcessUnsafeRows: Boolean = true
+
+  override def canProcessSafeRows: Boolean = true
 }
 
 /**
@@ -103,6 +107,9 @@ case class Sample(
 case class Union(children: Seq[SparkPlan]) extends SparkPlan {
   // TODO: attributes output by union should be distinct for nullability purposes
   override def output: Seq[Attribute] = children.head.output
+  override def outputsUnsafeRows: Boolean = children.forall(_.outputsUnsafeRows)
+  override def canProcessUnsafeRows: Boolean = true
+  override def canProcessSafeRows: Boolean = true
   protected override def doExecute(): RDD[InternalRow] =
     sparkContext.union(children.map(_.execute()))
 }
@@ -265,8 +272,6 @@ case class UnsafeExternalSort(
     testSpillFrequency: Int = 0)
   extends UnaryNode {
 
-  override def outputsUnsafeRows: Boolean = true
-
   private[this] val schema: StructType = child.schema
 
   override def requiredChildDistribution: Seq[Distribution] =
@@ -307,6 +312,8 @@ case class UnsafeExternalSort(
   override def output: Seq[Attribute] = child.output
 
   override def outputOrdering: Seq[SortOrder] = sortOrder
+
+  override def outputsUnsafeRows: Boolean = true
 }
 
 @DeveloperApi

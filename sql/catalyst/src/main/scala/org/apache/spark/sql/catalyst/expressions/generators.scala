@@ -40,7 +40,7 @@ import org.apache.spark.sql.types._
  * requested.  The attributes produced by this function will be automatically copied anytime rules
  * result in changes to the Generator or its children.
  */
-trait Generator extends Expression { self: Product =>
+trait Generator extends Expression {
 
   // TODO ideally we should return the type of ArrayType(StructType),
   // however, we don't keep the output field names in the Generator.

@@ -65,8 +65,7 @@ override def outputPartitioning: Partitioning = joinType match {
   @transient private[this] lazy val leftNullRow = new GenericInternalRow(left.output.length)
   @transient private[this] lazy val rightNullRow = new GenericInternalRow(right.output.length)
   @transient private[this] lazy val boundCondition =
-    condition.map(
-      newPredicate(_, left.output ++ right.output)).getOrElse((row: InternalRow) => true)
+    newPredicate(condition.getOrElse(Literal(true)), left.output ++ right.output)
 
   // TODO we need to rewrite all of the iterators with our own implementation instead of the Scala
   // iterator for performance purpose.

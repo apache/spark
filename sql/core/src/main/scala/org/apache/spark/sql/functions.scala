@@ -69,6 +69,24 @@ object functions {
   def column(colName: String): Column = Column(colName)
 
   /**
+   * Convert a number from one base to another for the specified expressions
+   *
+   * @group math_funcs
+   * @since 1.5.0
+   */
+  def conv(num: Column, fromBase: Int, toBase: Int): Column =
+    Conv(num.expr, lit(fromBase).expr, lit(toBase).expr)
+
+  /**
+   * Convert a number from one base to another for the specified expressions
+   *
+   * @group math_funcs
+   * @since 1.5.0
+   */
+  def conv(numColName: String, fromBase: Int, toBase: Int): Column =
+    conv(Column(numColName), fromBase, toBase)
+
+  /**
    * Creates a [[Column]] of literal value.
    *
    * The passed in object is returned directly if it is already a [[Column]].
@@ -602,7 +620,15 @@ object functions {
   def explode(e: Column): Column = Explode(e.expr)
 
   /**
-   * Converts a string exprsesion to lower case.
+   * Return true if the column is NaN or null
+   *
+   * @group normal_funcs
+   * @since 1.5.0
+   */
+  def isNaN(e: Column): Column = IsNaN(e.expr)
+
+  /**
+   * Converts a string expression to lower case.
    *
    * @group normal_funcs
    * @since 1.3.0
@@ -1683,6 +1709,28 @@ object functions {
   //////////////////////////////////////////////////////////////////////////////////////////////
   // String functions
   //////////////////////////////////////////////////////////////////////////////////////////////
+
+  /**
+   * Concatenates input strings together into a single string.
+   *
+   * @group string_funcs
+   * @since 1.5.0
+   */
+  @scala.annotation.varargs
+  def concat(exprs: Column*): Column = Concat(exprs.map(_.expr))
+
+  /**
+   * Concatenates input strings together into a single string.
+   *
+   * This is the variant of concat that takes in the column names.
+   *
+   * @group string_funcs
+   * @since 1.5.0
+   */
+  @scala.annotation.varargs
+  def concat(columnName: String, columnNames: String*): Column = {
+    concat((columnName +: columnNames).map(Column.apply): _*)
+  }
 
   /**
    * Computes the length of a given string / binary value.
