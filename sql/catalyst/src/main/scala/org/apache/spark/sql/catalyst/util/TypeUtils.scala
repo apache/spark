@@ -69,8 +69,8 @@ object TypeUtils {
     if ((xIsNan && yIsNan) || (x == y)) 0
     else if (xIsNan) 1
     else if (yIsNan) -1
-    else if (x > y) -1
-    else 1
+    else if (x > y) 1
+    else -1
   }
 
   def compareFloats(x: Float, y: Float): Int = {
@@ -79,7 +79,7 @@ object TypeUtils {
     if ((xIsNan && yIsNan) || (x == y)) 0
     else if (xIsNan) 1
     else if (yIsNan) -1
-    else if (x > y) -1
-    else 1
+    else if (x > y) 1
+    else -1
   }
 }

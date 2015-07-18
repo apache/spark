@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.util
 
+import java.lang.{Double => JDouble, Float => JFloat}
+
 import org.apache.spark.SparkFunSuite
 
 class TypeUtilsSuite extends SparkFunSuite {
@@ -24,10 +26,13 @@ class TypeUtilsSuite extends SparkFunSuite {
   import TypeUtils._
 
   test("compareDoubles") {
-    assert(compareDoubles(0, 0) === 0)
-    assert(compareDoubles(1, 0) === -1)
-    assert(compareDoubles(0, 1) === 1)
-    assert(compareDoubles(Double.MinValue, Double.MaxValue) === 1)
+    def shouldMatchDefaultOrder(a: Double, b: Double): Unit = {
+      assert(compareDoubles(a, b) === JDouble.compare(a, b))
+      assert(compareDoubles(b, a) === JDouble.compare(b, a))
+    }
+    shouldMatchDefaultOrder(0d, 0d)
+    shouldMatchDefaultOrder(0d, 1d)
+    shouldMatchDefaultOrder(Double.MinValue, Double.MaxValue)
     assert(compareDoubles(Double.NaN, Double.NaN) === 0)
     assert(compareDoubles(Double.NaN, Double.PositiveInfinity) === 1)
     assert(compareDoubles(Double.NaN, Double.NegativeInfinity) === 1)
@@ -36,10 +41,13 @@ class TypeUtilsSuite extends SparkFunSuite {
   }
 
   test("compareFloats") {
-    assert(compareFloats(0, 0) === 0)
-    assert(compareFloats(1, 0) === -1)
-    assert(compareFloats(0, 1) === 1)
-    assert(compareFloats(Float.MinValue, Float.MaxValue) === 1)
+    def shouldMatchDefaultOrder(a: Float, b: Float): Unit = {
+      assert(compareFloats(a, b) === JFloat.compare(a, b))
+      assert(compareFloats(b, a) === JFloat.compare(b, a))
+    }
+    shouldMatchDefaultOrder(0f, 0f)
+    shouldMatchDefaultOrder(1f, 1f)
+    shouldMatchDefaultOrder(Float.MinValue, Float.MaxValue)
     assert(compareFloats(Float.NaN, Float.NaN) === 0)
     assert(compareFloats(Float.NaN, Float.PositiveInfinity) === 1)
     assert(compareFloats(Float.NaN, Float.NegativeInfinity) === 1)
