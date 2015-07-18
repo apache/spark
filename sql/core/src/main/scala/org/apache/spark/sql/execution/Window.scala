@@ -402,7 +402,7 @@ private[execution] abstract class WindowFunctionFrame(
    *
    * @param rows to calculate the frame results for.
    */
-  def prepare(rows: Seq[InternalRow]): Unit
+  def prepare(rows: CompactBuffer[InternalRow]): Unit
 
   /**
    * Write the result for the current row to the given target row.
@@ -431,7 +431,7 @@ private[execution] abstract class WindowFunctionFrame(
     prepared
   }
 
-  /** Evaluate a prepared buffer. */
+  /** Evaluate a prepared buffer (iterator). */
   protected final def evaluatePrepared(iterator: java.util.Iterator[Array[AnyRef]]): Unit = {
     reset()
     while (iterator.hasNext) {
@@ -443,6 +443,23 @@ private[execution] abstract class WindowFunctionFrame(
       }
     }
     evaluate()
+  }
+
+  /** Evaluate a prepared buffer (array). */
+  protected final def evaluatePrepared(prepared: Array[Array[AnyRef]],
+      fromIndex: Int, toIndex: Int): Unit = {
+    var i = 0
+    while (i < numColumns) {
+      val function = functions(i)
+      function.reset()
+      var j = fromIndex
+      while (j < toIndex) {
+        function.update(prepared(j)(i))
+        j += 1
+      }
+      function.evaluate()
+      i += 1
+    }
   }
 
   /** Update an array of window functions. */
@@ -491,7 +508,7 @@ private[execution] final class SlidingWindowFunctionFrame(
     ubound: BoundOrdering) extends WindowFunctionFrame(ordinal, functions) {
 
   /** Rows of the partition currently being processed. */
-  private[this] var input: Seq[InternalRow] = null
+  private[this] var input: CompactBuffer[InternalRow] = null
 
   /** Index of the first input row with a value greater than the upper bound of the current
     * output row. */
@@ -508,7 +525,7 @@ private[execution] final class SlidingWindowFunctionFrame(
   private[this] var outputIndex = 0
 
   /** Prepare the frame for calculating a new partition. Reset all variables. */
-  override def prepare(rows: Seq[InternalRow]): Unit = {
+  override def prepare(rows: CompactBuffer[InternalRow]): Unit = {
     input = rows
     inputHighIndex = 0
     inputLowIndex = 0
@@ -518,7 +535,7 @@ private[execution] final class SlidingWindowFunctionFrame(
 
   /** Write the frame columns for the current row to the given target row. */
   override def write(target: GenericMutableRow): Unit = {
-    var bufferUpdated = false
+    var bufferUpdated = outputIndex == 0
 
     // Add all rows to the buffer for which the input row value is equal to or less than
     // the output row upper bound.
@@ -538,14 +555,11 @@ private[execution] final class SlidingWindowFunctionFrame(
       bufferUpdated = true
     }
 
-    // Only recalculate when the buffer changes.
+    // Only recalculate and update when the buffer changes.
     if (bufferUpdated) {
       evaluatePrepared(buffer.iterator())
+      fill(target, outputIndex)
     }
-
-    // Write to the target.
-    // TODO technically this is only needed when something changes...
-    fill(target, outputIndex)
 
     // Move to the next row.
     outputIndex += 1
@@ -575,7 +589,7 @@ private[execution] final class UnboundedWindowFunctionFrame(
   private[this] var outputIndex = 0
 
   /** Prepare the frame for calculating a new partition. Process all rows eagerly. */
-  override def prepare(rows: Seq[InternalRow]): Unit = {
+  override def prepare(rows: CompactBuffer[InternalRow]): Unit = {
     reset()
     outputIndex = 0
     val iterator = rows.iterator
@@ -616,7 +630,7 @@ private[execution] final class UnboundedPrecedingWindowFunctionFrame(
     ubound: BoundOrdering) extends WindowFunctionFrame(ordinal, functions) {
 
   /** Rows of the partition currently being processed. */
-  private[this] var input: Seq[InternalRow] = null
+  private[this] var input: CompactBuffer[InternalRow] = null
 
   /** Index of the first input row with a value greater than the upper bound of the current
     * output row. */
@@ -626,7 +640,7 @@ private[execution] final class UnboundedPrecedingWindowFunctionFrame(
   private[this] var outputIndex = 0
 
   /** Prepare the frame for calculating a new partition. */
-  override def prepare(rows: Seq[InternalRow]): Unit = {
+  override def prepare(rows: CompactBuffer[InternalRow]): Unit = {
     reset()
     input = rows
     inputIndex = 0
@@ -635,7 +649,7 @@ private[execution] final class UnboundedPrecedingWindowFunctionFrame(
 
   /** Write the frame columns for the current row to the given target row. */
   override def write(target: GenericMutableRow): Unit = {
-    var bufferUpdated = false
+    var bufferUpdated = outputIndex == 0
 
     // Add all rows to the aggregates for which the input row value is equal to or less than
     // the output row upper bound.
@@ -645,13 +659,11 @@ private[execution] final class UnboundedPrecedingWindowFunctionFrame(
       bufferUpdated = true
     }
 
-    // Evaluate if we need to.
+    // Only recalculate and update when the buffer changes.
     if (bufferUpdated) {
       evaluate()
+      fill(target, outputIndex)
     }
-
-    // Write to the target.
-    fill(target, outputIndex)
 
     // Move to the next row.
     outputIndex += 1
@@ -684,10 +696,10 @@ private[execution] final class UnboundedFollowingWindowFunctionFrame(
     lbound: BoundOrdering) extends WindowFunctionFrame(ordinal, functions) {
 
   /** Buffer used for storing prepared input for the window functions. */
-  private[this] val buffer = new util.ArrayDeque[Array[AnyRef]]
+  private[this] var buffer: Array[Array[AnyRef]] = _
 
   /** Rows of the partition currently being processed. */
-  private[this] var input: Seq[InternalRow] = null
+  private[this] var input: CompactBuffer[InternalRow] = null
 
   /** Index of the first input row with a value equal to or greater than the lower bound of the
     * current output row. */
@@ -697,37 +709,36 @@ private[execution] final class UnboundedFollowingWindowFunctionFrame(
   private[this] var outputIndex = 0
 
   /** Prepare the frame for calculating a new partition. */
-  override def prepare(rows: Seq[InternalRow]): Unit = {
+  override def prepare(rows: CompactBuffer[InternalRow]): Unit = {
     input = rows
     inputIndex = 0
     outputIndex = 0
-    buffer.clear()
-    val iterator = rows.iterator
-    while (iterator.hasNext) {
-      buffer.offer(prepare(iterator.next()))
+    val size = input.size
+    buffer = Array.ofDim(size)
+    var i = 0
+    while (i < size) {
+      buffer(i) = prepare(input(i))
+      i += 1
     }
-    evaluatePrepared(buffer.iterator())
+    evaluatePrepared(buffer, 0, buffer.length)
   }
 
   /** Write the frame columns for the current row to the given target row. */
   override def write(target: GenericMutableRow): Unit = {
-    var bufferUpdated = false
+    var bufferUpdated = outputIndex == 0
 
     // Drop all rows from the buffer for which the input row value is smaller than
     // the output row lower bound.
     while (inputIndex < input.size && lbound.compare(input, inputIndex, outputIndex) < 0) {
-      buffer.pop()
       inputIndex += 1
       bufferUpdated = true
     }
 
-    // Only recalculate when the buffer changes.
+    // Only recalculate and update when the buffer changes.
     if (bufferUpdated) {
-      evaluatePrepared(buffer.iterator())
+      evaluatePrepared(buffer, inputIndex, buffer.length)
+      fill(target, outputIndex)
     }
-
-    // Write to the target.
-    fill(target, outputIndex)
 
     // Move to the next row.
     outputIndex += 1
