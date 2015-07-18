@@ -45,6 +45,9 @@ abstract class UserDefinedType[UserType] extends DataType with Serializable {
   /** Paired Python UDT class, if exists. */
   def pyUDT: String = null
 
+  /** Serialized Python UDT class, if exists. */
+  def serializedPyClass: String = null
+
   /**
    * Convert the user type to a SQL datum
    *
@@ -60,6 +63,7 @@ abstract class UserDefinedType[UserType] extends DataType with Serializable {
     ("type" -> "udt") ~
       ("class" -> this.getClass.getName) ~
       ("pyClass" -> pyUDT) ~
+      ("serializedClass" -> serializedPyClass) ~
       ("sqlType" -> sqlType.jsonValue)
   }
 
@@ -89,11 +93,10 @@ abstract class UserDefinedType[UserType] extends DataType with Serializable {
  *
  * Note: This can only be accessed via Python UDF, or accessed as serialized object.
  */
-private[sql] class PythonUserDefinedType(val sqlType: DataType, pyClass: String)
-    extends UserDefinedType[Any] {
-
-  /* The Python UDT class */
-  override def pyUDT: String = pyClass
+private[sql] class PythonUserDefinedType(
+    val sqlType: DataType,
+    override val pyUDT: String,
+    override val serializedPyClass: String) extends UserDefinedType[Any] {
 
   /* The serialization is handled by UDT class in Python */
   override def serialize(obj: Any): Any = obj

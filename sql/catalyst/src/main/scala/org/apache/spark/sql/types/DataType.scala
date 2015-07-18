@@ -142,16 +142,21 @@ object DataType {
     ("type", JString("struct"))) =>
       StructType(fields.map(parseStructField))
 
+    // Scala/Java UDT
     case JSortedObject(
     ("class", JString(udtClass)),
-    ("pyClass", pyClass: JValue),  // pyClass could be null, cannot match with JString()
+    ("pyClass", _),
+    ("sqlType", _),
+    ("type", JString("udt"))) =>
+      Utils.classForName(udtClass).newInstance().asInstanceOf[UserDefinedType[_]]
+
+    // Python UDT
+    case JSortedObject(
+    ("pyClass", JString(pyClass)),
+    ("serializedClass", JString(serialized)),
     ("sqlType", v: JValue),
     ("type", JString("udt"))) =>
-      if (udtClass.length > 0) {
-        Utils.classForName(udtClass).newInstance().asInstanceOf[UserDefinedType[_]]
-      } else {
-        new PythonUserDefinedType(parseDataType(v), pyClass.asInstanceOf[JString].values)
-      }
+        new PythonUserDefinedType(parseDataType(v), pyClass, serialized)
   }
 
   private def parseStructField(json: JValue): StructField = json match {

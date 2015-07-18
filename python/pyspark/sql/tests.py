@@ -77,15 +77,19 @@ class ExamplePointUDT(UserDefinedType):
     def module(cls):
         return '__main__'
 
-    @classmethod
-    def scalaUDT(cls):
-        return 'org.apache.spark.sql.test.ExamplePointUDT'
-
     def serialize(self, obj):
         return [obj.x, obj.y]
 
     def deserialize(self, datum):
         return ExamplePoint(datum[0], datum[1])
+
+    @staticmethod
+    def foo():
+        pass
+
+    @property
+    def props(self):
+        return {}
 
 
 class ExamplePoint:
@@ -390,6 +394,25 @@ class SQLTests(ReusedPySparkTestCase):
         row = self.sqlCtx.sql("select l, d from test").head()
         self.assertEqual(1, row.asDict()["l"][0].a)
         self.assertEqual(1.0, row.asDict()['d']['key'].c)
+
+    def test_udt(self):
+        from pyspark.sql.types import _parse_datatype_json_string, _infer_type, _verify_type
+
+        def check_datatype(datatype):
+            pickled = pickle.loads(pickle.dumps(datatype))
+            assert datatype == pickled
+            scala_datatype = self.sqlCtx._ssql_ctx.parseDataType(datatype.json())
+            python_datatype = _parse_datatype_json_string(scala_datatype.json())
+            assert datatype == python_datatype
+
+        check_datatype(ExamplePointUDT())
+        structtype_with_udt = StructType([StructField("label", DoubleType(), False),
+                                          StructField("point", ExamplePointUDT(), False)])
+        check_datatype(structtype_with_udt)
+        p = ExamplePoint(1.0, 2.0)
+        self.assertEqual(_infer_type(p), ExamplePointUDT())
+        _verify_type(ExamplePoint(1.0, 2.0), ExamplePointUDT())
+        self.assertRaises(ValueError, lambda: _verify_type([1.0, 2.0], ExamplePointUDT()))
 
     def test_infer_schema_with_udt(self):
         row = Row(label=1.0, point=ExamplePoint(1.0, 2.0))

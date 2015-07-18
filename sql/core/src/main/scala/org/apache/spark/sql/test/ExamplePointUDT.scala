@@ -37,8 +37,6 @@ private[sql] class ExamplePointUDT extends UserDefinedType[ExamplePoint] {
 
   override def sqlType: DataType = ArrayType(DoubleType, false)
 
-  override def pyUDT: String = "__main__.ExamplePointUDT"
-
   override def serialize(obj: Any): Seq[Double] = {
     obj match {
       case p: ExamplePoint =>

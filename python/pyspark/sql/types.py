@@ -22,6 +22,7 @@ import datetime
 import calendar
 import json
 import re
+import base64
 from array import array
 
 if sys.version >= "3":
@@ -30,6 +31,8 @@ if sys.version >= "3":
 
 from py4j.protocol import register_input_converter
 from py4j.java_gateway import JavaClass
+
+from pyspark.serializers import CloudPickleSerializer
 
 __all__ = [
     "DataType", "NullType", "StringType", "BinaryType", "BooleanType", "DateType",
@@ -620,12 +623,23 @@ class UserDefinedType(DataType):
         return json.dumps(self.jsonValue(), separators=(',', ':'), sort_keys=True)
 
     def jsonValue(self):
-        schema = {
-            "type": "udt",
-            "class": self.scalaUDT(),
-            "pyClass": "%s.%s" % (self.module(), type(self).__name__),
-            "sqlType": self.sqlType().jsonValue()
-        }
+        if self.scalaUDT():
+            assert self.module() != '__main__', 'UDT in __main__ cannot work with ScalaUDT'
+            schema = {
+                "type": "udt",
+                "class": self.scalaUDT(),
+                "pyClass": "%s.%s" % (self.module(), type(self).__name__),
+                "sqlType": self.sqlType().jsonValue()
+            }
+        else:
+            ser = CloudPickleSerializer()
+            b = ser.dumps(type(self))
+            schema = {
+                "type": "udt",
+                "pyClass": "%s.%s" % (self.module(), type(self).__name__),
+                "serializedClass": base64.b64encode(b).decode('utf8'),
+                "sqlType": self.sqlType().jsonValue()
+            }
         return schema
 
     @classmethod
@@ -635,55 +649,15 @@ class UserDefinedType(DataType):
         pyModule = pyUDT[:split]
         pyClass = pyUDT[split+1:]
         m = __import__(pyModule, globals(), locals(), [pyClass])
-        UDT = getattr(m, pyClass)
+        if pyModule == '__main__' and not hasattr(m, pyClass):
+            s = base64.b64decode(json['serializedClass'].encode('utf-8'))
+            UDT = CloudPickleSerializer().loads(s)
+        else:
+            UDT = getattr(m, pyClass)
         return UDT()
 
     def __eq__(self, other):
         return type(self) == type(other)
-
-
-class PointUDT(UserDefinedType):
-    """
-    User-defined type (UDT) for Point.
-    """
-
-    @classmethod
-    def sqlType(self):
-        return ArrayType(DoubleType(), False)
-
-    @classmethod
-    def module(cls):
-        return '__main__'
-
-    def serialize(self, obj):
-        return [obj.x, obj.y]
-
-    def deserialize(self, datum):
-        return Point(datum[0], datum[1])
-
-    def __eq__(self, other):
-        return True
-
-
-class Point:
-    """
-    An example class to demonstrate UDT in Python.
-    """
-
-    __UDT__ = PointUDT()
-
-    def __init__(self, x, y):
-        self.x = x
-        self.y = y
-
-    def __repr__(self):
-        return "ExamplePoint(%s,%s)" % (self.x, self.y)
-
-    def __str__(self):
-        return "(%s,%s)" % (self.x, self.y)
-
-    def __eq__(self, other):
-        return isinstance(other, Point) and other.x == self.x and other.y == self.y
 
 
 _atomic_types = [StringType, BinaryType, BooleanType, DecimalType, FloatType, DoubleType,
@@ -738,11 +712,6 @@ def _parse_datatype_json_string(json_string):
     >>> complex_maptype = MapType(complex_structtype,
     ...                           complex_arraytype, False)
     >>> check_datatype(complex_maptype)
-
-    >>> check_datatype(PointUDT())
-    >>> structtype_with_udt = StructType([StructField("label", DoubleType(), False),
-    ...                                   StructField("point", PointUDT(), False)])
-    >>> check_datatype(structtype_with_udt)
     """
     return _parse_datatype_json_value(json.loads(json_string))
 
@@ -794,10 +763,6 @@ if sys.version < "3":
 
 def _infer_type(obj):
     """Infer the DataType from obj
-
-    >>> p = Point(1.0, 2.0)
-    >>> _infer_type(p)
-    PointUDT
     """
     if obj is None:
         return NullType()
@@ -1126,11 +1091,6 @@ def _verify_type(obj, dataType):
     >>> _verify_type((), StructType([]))
     >>> _verify_type([], StructType([]))
     >>> _verify_type([1], StructType([])) # doctest: +IGNORE_EXCEPTION_DETAIL
-    Traceback (most recent call last):
-        ...
-    ValueError:...
-    >>> _verify_type(Point(1.0, 2.0), PointUDT())
-    >>> _verify_type([1.0, 2.0], PointUDT()) # doctest: +IGNORE_EXCEPTION_DETAIL
     Traceback (most recent call last):
         ...
     ValueError:...
