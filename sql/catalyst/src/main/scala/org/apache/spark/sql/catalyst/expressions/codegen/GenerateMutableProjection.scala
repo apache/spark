@@ -19,6 +19,8 @@ package org.apache.spark.sql.catalyst.expressions.codegen
 
 import org.apache.spark.sql.catalyst.expressions._
 
+import scala.collection.mutable.ArrayBuffer
+
 // MutableProjection is not accessible in Java
 abstract class BaseMutableProjection extends MutableProjection
 
@@ -46,19 +48,18 @@ object GenerateMutableProjection extends CodeGenerator[Seq[Expression], () => Mu
             ${ctx.setColumn("mutableRow", e.dataType, i, evaluationCode.primitive)};
         """
     }
-    val projectionBlocks = projectionCode.foldLeft(List.empty[String]) {
-      (acc, code) =>
-        acc match {
-          case Nil => List(code)
-          case head::tail =>
-            // code size limit is 64kb and each char takes less or equal to 2 bytes
-            if (head.length < 32 * 1000) {
-              s"$head\n$code"::tail
-            } else {
-              code::acc
-            }
-        }
+    // collect projections into blocks as function has 64kb codesize limit in JVM
+    val projectionBlocks = new ArrayBuffer[String]()
+    val blockBuilder = new StringBuilder()
+    for (projection <- projectionCode) {
+      if (blockBuilder.length > 16 * 1000) {
+        projectionBlocks.append(blockBuilder.toString())
+        blockBuilder.clear()
       }
+      blockBuilder.append(projection)
+    }
+    projectionBlocks.append(blockBuilder.toString())
+
     val (projectionFuns, projectionCalls) = {
       // inline execution if codesize limit was not broken
       if (projectionBlocks.length == 1) {
@@ -72,13 +73,15 @@ object GenerateMutableProjection extends CodeGenerator[Seq[Expression], () => Mu
                |}
              """.stripMargin
           }.mkString,
-          ((projectionBlocks.length - 1) to 0 by -1).map(i => s"apply$i(i);").mkString("\n")
+          projectionBlocks.indices.map(i => s"apply$i(i);").mkString("\n")
         )
       }
     }
+
     val mutableStates = ctx.mutableStates.map { case (javaType, variableName, initialValue) =>
       s"private $javaType $variableName = $initialValue;"
     }.mkString("\n      ")
+
     val code = s"""
       public Object generate($exprType[] expr) {
         return new SpecificProjection(expr);
