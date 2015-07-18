@@ -551,24 +551,25 @@ private[master] class Master(
    * allocated at a time, 12 cores from each worker would be assigned to each executor.
    * Since 12 < 16, no executors would launch [SPARK-8881].
    */
-  private[master] def coresToAssign(
+  private[master] def scheduleExecutorsOnWorkers(
       app: ApplicationInfo,
       usableWorkers: Array[WorkerInfo],
       spreadOutApps: Boolean): Array[Int] = {
-    // Default value for number of cores per executor is 1
+    // If the number of cores per executor is not specified, then we can just schedule
+    // 1 core at a time since we expect a single executor to be launched on each worker
     val coresPerExecutor = app.desc.coresPerExecutor.getOrElse(1)
     val memoryPerExecutor = app.desc.memoryPerExecutorMB
     val numUsable = usableWorkers.length
     val assignedCores = new Array[Int](numUsable) // Number of cores to give to each worker
     val assignedMemory = new Array[Int](numUsable) // Amount of memory to give to each worker
-    var toAssign = math.min(app.coresLeft, usableWorkers.map(_.coresFree).sum)
+    var coresToAssign = math.min(app.coresLeft, usableWorkers.map(_.coresFree).sum)
     var pos = 0
     if (spreadOutApps) {
       // Try to spread out executors among workers (sparse scheduling)
-      while (toAssign > 0) {
+      while (coresToAssign > 0) {
         if (usableWorkers(pos).coresFree - assignedCores(pos) >= coresPerExecutor &&
             usableWorkers(pos).memoryFree - assignedMemory(pos) >= memoryPerExecutor) {
-          toAssign -= coresPerExecutor
+          coresToAssign -= coresPerExecutor
           assignedCores(pos) += coresPerExecutor
           assignedMemory(pos) += memoryPerExecutor
         }
@@ -576,11 +577,11 @@ private[master] class Master(
       }
     } else {
       // Pack executors into as few workers as possible (dense scheduling)
-      while (toAssign > 0) {
+      while (coresToAssign > 0) {
         while (usableWorkers(pos).coresFree - assignedCores(pos) >= coresPerExecutor &&
                usableWorkers(pos).memoryFree - assignedMemory(pos) >= memoryPerExecutor &&
-               toAssign > 0) {
-          toAssign -= coresPerExecutor
+               coresToAssign > 0) {
+          coresToAssign -= coresPerExecutor
           assignedCores(pos) += coresPerExecutor
           assignedMemory(pos) += memoryPerExecutor
         }
@@ -597,13 +598,12 @@ private[master] class Master(
     // Right now this is a very simple FIFO scheduler. We keep trying to fit in the first app
     // in the queue, then the second app, etc.
     for (app <- waitingApps if app.coresLeft > 0) {
-      // Default value for number of cores per executor is 1
-      val coresPerExecutor = app.desc.coresPerExecutor.getOrElse(1)
+      val coresPerExecutor: Option[Int] = app.desc.coresPerExecutor
       val usableWorkers = workers.toArray.filter(_.state == WorkerState.ALIVE)
         .filter(worker => worker.memoryFree >= app.desc.memoryPerExecutorMB &&
-          worker.coresFree >= coresPerExecutor)
+          worker.coresFree >= coresPerExecutor.getOrElse(1))
         .sortBy(_.coresFree).reverse
-      val assignedCores = coresToAssign(app, usableWorkers, spreadOutApps)
+      val assignedCores = scheduleExecutorsOnWorkers(app, usableWorkers, spreadOutApps)
 
       // Now that we've decided how many cores to allocate on each worker, let's allocate them
       var pos = 0
@@ -624,12 +624,15 @@ private[master] class Master(
   private def allocateWorkerResourceToExecutors(
       app: ApplicationInfo,
       assignedCores: Int,
-      coresPerExecutor: Int,
+      coresPerExecutor: Option[Int],
       worker: WorkerInfo): Unit = {
-    // If cores per executor is specified, then this division should have a remainder of zero
-    val numExecutors = assignedCores / coresPerExecutor
+    // If the number of cores per executor is specified, we divide the cores assigned
+    // to this worker evenly among the executors with no remainder.
+    // Otherwise, we launch a single executor that grabs all the assignedCores on this worker.
+    val numExecutors = coresPerExecutor.map { assignedCores / _ }.getOrElse(1)
+    val coresToAssign = coresPerExecutor.getOrElse(assignedCores)
     for (i <- 1 to numExecutors) {
-      val exec = app.addExecutor(worker, coresPerExecutor)
+      val exec = app.addExecutor(worker, coresToAssign)
       launchExecutor(worker, exec)
       app.state = ApplicationState.RUNNING
     }
