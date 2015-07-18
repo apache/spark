@@ -25,7 +25,7 @@ class RowFormatConvertersSuite extends SparkFunSuite {
 
   private def getConverters(plan: SparkPlan): Seq[SparkPlan] = plan.collect {
     case c: ConvertToUnsafe => c
-    case c: ConvertFromUnsafe => c
+    case c: ConvertToSafe => c
   }
 
   private val outputsSafe = ExternalSort(Nil, false, PhysicalRDD(Seq.empty, null))
@@ -36,7 +36,7 @@ class RowFormatConvertersSuite extends SparkFunSuite {
   test("planner should insert unsafe->safe conversions when required") {
     val plan = Limit(10, outputsUnsafe)
     val preparedPlan = TestSQLContext.prepareForExecution.execute(plan)
-    assert(preparedPlan.children.head.isInstanceOf[ConvertFromUnsafe])
+    assert(preparedPlan.children.head.isInstanceOf[ConvertToSafe])
   }
 
   test("filter can process unsafe rows") {

@@ -46,7 +46,7 @@ case class ConvertToUnsafe(child: SparkPlan) extends UnaryNode {
  * Converts [[UnsafeRow]]s back into Java-object-based rows.
  */
 @DeveloperApi
-case class ConvertFromUnsafe(child: SparkPlan) extends UnaryNode {
+case class ConvertToSafe(child: SparkPlan) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
   override def outputsUnsafeRows: Boolean = false
   override def canProcessUnsafeRows: Boolean = true
@@ -75,7 +75,7 @@ private[sql] object EnsureRowFormats extends Rule[SparkPlan] {
       if (operator.children.exists(_.outputsUnsafeRows)) {
         operator.withNewChildren {
           operator.children.map {
-            c => if (c.outputsUnsafeRows) ConvertFromUnsafe(c) else c
+            c => if (c.outputsUnsafeRows) ConvertToSafe(c) else c
           }
         }
       } else {
@@ -97,7 +97,7 @@ private[sql] object EnsureRowFormats extends Rule[SparkPlan] {
         // to safe rows
         operator.withNewChildren {
           operator.children.map {
-            c => if (c.outputsUnsafeRows) ConvertFromUnsafe(c) else c
+            c => if (c.outputsUnsafeRows) ConvertToSafe(c) else c
           }
         }
       } else {
