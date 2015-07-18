@@ -86,7 +86,7 @@ case class Coalesce(children: Seq[Expression]) extends Expression {
  * Evaluates to `true` if it's NaN or null
  */
 case class IsNaN(child: Expression) extends UnaryExpression
-with Predicate with ImplicitCastInputTypes {
+  with Predicate with ImplicitCastInputTypes {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection(DoubleType, FloatType))
 

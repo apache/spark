@@ -68,12 +68,6 @@ class ConditionalExpressionSuite extends SparkFunSuite with ExpressionEvalHelper
     testIf(_.toString, StringType)
   }
 
-  test("in") {
-    checkEvaluation(In(Literal("^Ba*n"), Seq(Literal("^Ba*n"))), true)
-    checkEvaluation(In(Literal("^Ba*n"), Seq(Literal("aa"), Literal("^Ba*n"))), true)
-    checkEvaluation(In(Literal("^Ba*n"), Seq(Literal("aa"), Literal("^n"))), false)
-  }
-
   test("case when") {
     val row = create_row(null, false, true, "a", "b", "c")
     val c1 = 'a.boolean.at(0)
