@@ -28,23 +28,35 @@ class RowFormatConvertersSuite extends SparkFunSuite {
     case c: ConvertFromUnsafe => c
   }
 
+  private val outputsSafe = ExternalSort(Nil, false, PhysicalRDD(Seq.empty, null))
+  assert(!outputsSafe.outputsUnsafeRows)
+  private val outputsUnsafe = UnsafeExternalSort(Nil, false, PhysicalRDD(Seq.empty, null))
+  assert(outputsUnsafe.outputsUnsafeRows)
+
   test("planner should insert unsafe->safe conversions when required") {
-    val plan = Limit(10, UnsafeExternalSort(Nil, false, PhysicalRDD(Seq.empty, null)))
+    val plan = Limit(10, outputsUnsafe)
     val preparedPlan = TestSQLContext.prepareForExecution.execute(plan)
     assert(preparedPlan.children.head.isInstanceOf[ConvertFromUnsafe])
   }
 
   test("filter can process unsafe rows") {
-    val plan = Filter(IsNull(null), UnsafeExternalSort(Nil, false, PhysicalRDD(Seq.empty, null)))
-    assert(plan.child.outputsUnsafeRows)
+    val plan = Filter(IsNull(null), outputsUnsafe)
     val preparedPlan = TestSQLContext.prepareForExecution.execute(plan)
     assert(getConverters(preparedPlan).isEmpty)
+    assert(preparedPlan.outputsUnsafeRows)
   }
 
   test("filter can process safe rows") {
-    val plan = Filter(IsNull(null), ExternalSort(Nil, false, PhysicalRDD(Seq.empty, null)))
-    assert(!plan.child.outputsUnsafeRows)
+    val plan = Filter(IsNull(null), outputsSafe)
     val preparedPlan = TestSQLContext.prepareForExecution.execute(plan)
     assert(getConverters(preparedPlan).isEmpty)
+    assert(!preparedPlan.outputsUnsafeRows)
+  }
+
+  test("execute() fails an assertion if inputs rows are of different formats") {
+    val e = intercept[AssertionError] {
+      Union(Seq(outputsSafe, outputsUnsafe)).execute()
+    }
+    assert(e.getMessage.contains("format"))
   }
 }

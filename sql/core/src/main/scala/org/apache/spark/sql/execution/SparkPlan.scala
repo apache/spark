@@ -98,6 +98,8 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
    * Concrete implementations of SparkPlan should override doExecute instead.
    */
   final def execute(): RDD[InternalRow] = {
+    assert(children.map(_.outputsUnsafeRows).distinct.length <= 1,
+      "Child operators should output rows in the same format")
     RDDOperationScope.withScope(sparkContext, nodeName, false, true) {
       doExecute()
     }
