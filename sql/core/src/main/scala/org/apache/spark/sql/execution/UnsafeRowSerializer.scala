@@ -42,7 +42,7 @@ import org.apache.spark.unsafe.PlatformDependent
  *
  * @param numFields the number of fields in the row being serialized.
  */
-private[sql] class UnsafeRowSerializer(numFields: Int) extends Serializer {
+private[sql] class UnsafeRowSerializer(numFields: Int) extends Serializer with Serializable {
   override def newInstance(): SerializerInstance = new UnsafeRowSerializerInstance(numFields)
   override private[spark] def supportsRelocationOfSerializedObjects: Boolean = true
 }
