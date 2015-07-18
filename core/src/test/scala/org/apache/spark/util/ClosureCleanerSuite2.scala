@@ -120,8 +120,6 @@ class ClosureCleanerSuite2 extends SparkFunSuite with BeforeAndAfterAll with Pri
   // Accessors for private methods
   private val _isClosure = PrivateMethod[Boolean]('isClosure)
   private val _getInnerClosureClasses = PrivateMethod[List[Class[_]]]('getInnerClosureClasses)
-  private val _getOuterClasses = PrivateMethod[List[Class[_]]]('getOuterClasses)
-  private val _getOuterObjects = PrivateMethod[List[AnyRef]]('getOuterObjects)
   private val _getOuterClassesAndObjects =
     PrivateMethod[(List[Class[_]], List[AnyRef])]('getOuterClassesAndObjects)
 
@@ -131,14 +129,6 @@ class ClosureCleanerSuite2 extends SparkFunSuite with BeforeAndAfterAll with Pri
 
   private def getInnerClosureClasses(closure: AnyRef): List[Class[_]] = {
     ClosureCleaner invokePrivate _getInnerClosureClasses(closure)
-  }
-
-  private def getOuterClasses(closure: AnyRef): List[Class[_]] = {
-    ClosureCleaner invokePrivate _getOuterClasses(closure)
-  }
-
-  private def getOuterObjects(closure: AnyRef): List[AnyRef] = {
-    ClosureCleaner invokePrivate _getOuterObjects(closure)
   }
 
   private def getOuterClassesAndObjects(closure: AnyRef): (List[Class[_]], List[AnyRef]) = {
@@ -177,19 +167,20 @@ class ClosureCleanerSuite2 extends SparkFunSuite with BeforeAndAfterAll with Pri
     val closure2 = () => localValue
     val closure3 = () => someSerializableValue
     val closure4 = () => someSerializableMethod()
-    val outerClasses1 = getOuterClasses(closure1)
-    val outerClasses2 = getOuterClasses(closure2)
-    val outerClasses3 = getOuterClasses(closure3)
-    val outerClasses4 = getOuterClasses(closure4)
-    val outerObjects1 = getOuterObjects(closure1)
-    val outerObjects2 = getOuterObjects(closure2)
-    val outerObjects3 = getOuterObjects(closure3)
-    val outerObjects4 = getOuterObjects(closure4)
 
     val outerClassesAndObject1 = getOuterClassesAndObjects(closure1)
     val outerClassesAndObject2 = getOuterClassesAndObjects(closure2)
     val outerClassesAndObject3 = getOuterClassesAndObjects(closure3)
     val outerClassesAndObject4 = getOuterClassesAndObjects(closure4)
+
+    val outerClasses1 = outerClassesAndObject1._1
+    val outerClasses2 = outerClassesAndObject2._1
+    val outerClasses3 = outerClassesAndObject3._1
+    val outerClasses4 = outerClassesAndObject4._1
+    val outerObjects1 = outerClassesAndObject1._2
+    val outerObjects2 = outerClassesAndObject2._2
+    val outerObjects3 = outerClassesAndObject3._2
+    val outerObjects4 = outerClassesAndObject4._2
 
     // The classes and objects should have the same size
     assert(outerClasses1.size === outerObjects1.size)
@@ -197,42 +188,22 @@ class ClosureCleanerSuite2 extends SparkFunSuite with BeforeAndAfterAll with Pri
     assert(outerClasses3.size === outerObjects3.size)
     assert(outerClasses4.size === outerObjects4.size)
 
-    assert(outerClassesAndObject1._1.size === outerClasses1.size)
-    assert(outerClassesAndObject2._1.size === outerClasses2.size)
-    assert(outerClassesAndObject3._1.size === outerClasses3.size)
-    assert(outerClassesAndObject4._1.size === outerClasses4.size)
-    assert(outerClassesAndObject1._2.size === outerObjects1.size)
-    assert(outerClassesAndObject2._2.size === outerObjects2.size)
-    assert(outerClassesAndObject3._2.size === outerObjects3.size)
-    assert(outerClassesAndObject4._2.size === outerObjects4.size)
-
     // These do not have $outer pointers because they reference only local variables
     assert(outerClasses1.isEmpty)
     assert(outerClasses2.isEmpty)
-    assert(outerClassesAndObject1._1.isEmpty)
-    assert(outerClassesAndObject2._1.isEmpty)
 
     // These closures do have $outer pointers because they ultimately reference `this`
     // The first $outer pointer refers to the closure defines this test (see FunSuite#test)
     // The second $outer pointer refers to ClosureCleanerSuite2
     assert(outerClasses3.size === 2)
     assert(outerClasses4.size === 2)
-    assert(outerClassesAndObject3._1.size === 2)
-    assert(outerClassesAndObject4._1.size === 2)
     assert(isClosure(outerClasses3(0)))
     assert(isClosure(outerClasses4(0)))
-    assert(isClosure(outerClassesAndObject3._1(0)))
-    assert(isClosure(outerClassesAndObject4._1(0)))
     assert(outerClasses3(0) === outerClasses4(0)) // part of the same "FunSuite#test" scope
-    assert(outerClassesAndObject3._1(0) === outerClassesAndObject4._1(0))
     assert(outerClasses3(1) === this.getClass)
     assert(outerClasses4(1) === this.getClass)
-    assert(outerClassesAndObject3._1(1) === this.getClass)
-    assert(outerClassesAndObject4._1(1) === this.getClass)
     assert(outerObjects3(1) === this)
     assert(outerObjects4(1) === this)
-    assert(outerClassesAndObject3._2(1) === this)
-    assert(outerClassesAndObject4._2(1) === this)
   }
 
   test("get outer classes and objects with nesting") {
@@ -242,10 +213,12 @@ class ClosureCleanerSuite2 extends SparkFunSuite with BeforeAndAfterAll with Pri
       val x = 1
       val closure1 = () => 1
       val closure2 = () => x
-      val outerClasses1 = getOuterClasses(closure1)
-      val outerClasses2 = getOuterClasses(closure2)
-      val outerObjects1 = getOuterObjects(closure1)
-      val outerObjects2 = getOuterObjects(closure2)
+      val outerClassesAndObject1 = getOuterClassesAndObjects(closure1)
+      val outerClassesAndObject2 = getOuterClassesAndObjects(closure2)
+      val outerClasses1 = outerClassesAndObject1._1
+      val outerClasses2 = outerClassesAndObject2._1
+      val outerObjects1 = outerClassesAndObject1._2
+      val outerObjects2 = outerClassesAndObject2._2
       assert(outerClasses1.size === outerObjects1.size)
       assert(outerClasses2.size === outerObjects2.size)
       // These inner closures only reference local variables, and so do not have $outer pointers
@@ -258,12 +231,15 @@ class ClosureCleanerSuite2 extends SparkFunSuite with BeforeAndAfterAll with Pri
       val closure1 = () => 1
       val closure2 = () => y
       val closure3 = () => localValue
-      val outerClasses1 = getOuterClasses(closure1)
-      val outerClasses2 = getOuterClasses(closure2)
-      val outerClasses3 = getOuterClasses(closure3)
-      val outerObjects1 = getOuterObjects(closure1)
-      val outerObjects2 = getOuterObjects(closure2)
-      val outerObjects3 = getOuterObjects(closure3)
+      val outerClassesAndObject1 = getOuterClassesAndObjects(closure1)
+      val outerClassesAndObject2 = getOuterClassesAndObjects(closure2)
+      val outerClassesAndObject3 = getOuterClassesAndObjects(closure3)
+      val outerClasses1 = outerClassesAndObject1._1
+      val outerClasses2 = outerClassesAndObject2._1
+      val outerClasses3 = outerClassesAndObject3._1
+      val outerObjects1 = outerClassesAndObject1._2
+      val outerObjects2 = outerClassesAndObject2._2
+      val outerObjects3 = outerClassesAndObject3._2
       assert(outerClasses1.size === outerObjects1.size)
       assert(outerClasses2.size === outerObjects2.size)
       assert(outerClasses3.size === outerObjects3.size)
@@ -296,9 +272,9 @@ class ClosureCleanerSuite2 extends SparkFunSuite with BeforeAndAfterAll with Pri
     val closure1 = () => 1
     val closure2 = () => localValue
     val closure3 = () => someSerializableValue
-    val outerClasses1 = getOuterClasses(closure1)
-    val outerClasses2 = getOuterClasses(closure2)
-    val outerClasses3 = getOuterClasses(closure3)
+    val outerClasses1 = getOuterClassesAndObjects(closure1)._1
+    val outerClasses2 = getOuterClassesAndObjects(closure2)._1
+    val outerClasses3 = getOuterClassesAndObjects(closure3)._1
 
     val fields1 = findAccessedFields(closure1, outerClasses1, findTransitively = false)
     val fields2 = findAccessedFields(closure2, outerClasses2, findTransitively = false)
@@ -338,10 +314,10 @@ class ClosureCleanerSuite2 extends SparkFunSuite with BeforeAndAfterAll with Pri
       val closure2 = () => a
       val closure3 = () => localValue
       val closure4 = () => someSerializableValue
-      val outerClasses1 = getOuterClasses(closure1)
-      val outerClasses2 = getOuterClasses(closure2)
-      val outerClasses3 = getOuterClasses(closure3)
-      val outerClasses4 = getOuterClasses(closure4)
+      val outerClasses1 = getOuterClassesAndObjects(closure1)._1
+      val outerClasses2 = getOuterClassesAndObjects(closure2)._1
+      val outerClasses3 = getOuterClassesAndObjects(closure3)._1
+      val outerClasses4 = getOuterClassesAndObjects(closure4)._1
 
       // First, find only fields accessed directly, not transitively, by these closures
       val fields1 = findAccessedFields(closure1, outerClasses1, findTransitively = false)
