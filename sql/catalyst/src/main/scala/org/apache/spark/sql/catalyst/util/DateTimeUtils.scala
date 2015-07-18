@@ -505,15 +505,17 @@ object DateTimeUtils {
    */
   def getMonth(date: Int): Int = {
     var (year, dayInYear) = getYearAndDayInYear(date)
-    var isLeap = isLeapYear(year)
-    if (isLeap && dayInYear > 60) {
-      dayInYear = dayInYear - 1
-      isLeap = false
+    if (isLeapYear(year)) {
+      if (dayInYear == 60) {
+        return 2
+      } else if (dayInYear > 60) {
+        dayInYear = dayInYear - 1
+      }
     }
 
     if (dayInYear <= 31) {
       1
-    } else if (dayInYear <= 59 || (isLeap && dayInYear <= 60)) {
+    } else if (dayInYear <= 59) {
       2
     } else if (dayInYear <= 90) {
       3
@@ -544,15 +546,17 @@ object DateTimeUtils {
    */
   def getDayOfMonth(date: Int): Int = {
     var (year, dayInYear) = getYearAndDayInYear(date)
-    var isLeap = isLeapYear(year)
-    if (isLeap && dayInYear > 60) {
-      dayInYear = dayInYear - 1
-      isLeap = false
+    if (isLeapYear(year)) {
+      if (dayInYear == 60) {
+        return 29
+      } else if (dayInYear > 60) {
+        dayInYear = dayInYear - 1
+      }
     }
 
     if (dayInYear <= 31) {
       dayInYear
-    } else if (dayInYear <= 59 || (isLeap && dayInYear <= 60)) {
+    } else if (dayInYear <= 59) {
       dayInYear - 31
     } else if (dayInYear <= 90) {
       dayInYear - 59
