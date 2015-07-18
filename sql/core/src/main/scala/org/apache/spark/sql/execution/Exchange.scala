@@ -117,9 +117,8 @@ case class Exchange(newPartitioning: Partitioning, child: SparkPlan) extends Una
 
   @transient private lazy val sparkConf = child.sqlContext.sparkContext.getConf
 
-  private val rowDataTypes = child.output.map(_.dataType).toArray
-
   private val serializer: Serializer = {
+    val rowDataTypes = child.output.map(_.dataType).toArray
     // It is true when there is no field that needs to be write out.
     // For now, we will not use SparkSqlSerializer2 when noField is true.
     val noField = rowDataTypes == null || rowDataTypes.length == 0
@@ -181,7 +180,7 @@ case class Exchange(newPartitioning: Partitioning, child: SparkPlan) extends Una
         }
       }
     }
-    new ShuffledRowRDD(rowDataTypes, rddWithPartitionIds, serializer, part.numPartitions)
+    new ShuffledRowRDD(rddWithPartitionIds, serializer, part.numPartitions)
   }
 }
 

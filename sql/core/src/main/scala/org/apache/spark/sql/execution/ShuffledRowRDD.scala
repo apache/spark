@@ -28,6 +28,10 @@ private class ShuffledRowRDDPartition(val idx: Int) extends Partition {
   override def hashCode(): Int = idx
 }
 
+/**
+ * A dummy partitioner for use with records whose partition ids have been pre-computed (i.e. for
+ * use on RDDs of (Int, Row) pairs where the Int is a partition id in the expected range).
+ */
 private class PartitionIdPassthrough(override val numPartitions: Int) extends Partitioner {
   override def getPartition(key: Any): Int = key.asInstanceOf[Int]
 }
@@ -37,9 +41,13 @@ private class PartitionIdPassthrough(override val numPartitions: Int) extends Pa
  * shuffling rows instead of Java key-value pairs. Note that something like this should eventually
  * be implemented in Spark core, but that is blocked by some more general refactorings to shuffle
  * interfaces / internals.
+ *
+ * @param prev the RDD being shuffled. Elements of this RDD are (partitionId, Row) pairs.
+ *             Partition ids should be in the range [0, numPartitions - 1].
+ * @param serializer the serializer used during the shuffle.
+ * @param numPartitions the number of post-shuffle partitions.
  */
 class ShuffledRowRDD(
-    rowSchema: Array[DataType],
     @transient var prev: RDD[Product2[Int, InternalRow]],
     serializer: Serializer,
     numPartitions: Int)
