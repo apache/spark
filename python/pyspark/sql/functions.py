@@ -665,9 +665,8 @@ def date_format(dateCol, format):
     NOTE: Use when ever possible specialized functions like `year`. These benefit from a
     specialized implementation.
 
-    >>> df0 = sqlContext.createDataFrame([('2015-04-08',)], ['a'])
-
-    >>> df0.select(date_format('a', 'MM/dd/yyy').alias('date')).collect()
+    >>> df = sqlContext.createDataFrame([('2015-04-08',)], ['a'])
+    >>> df.select(date_format('a', 'MM/dd/yyy').alias('date')).collect()
     [Row(date=u'04/08/2015')]
     """
     sc = SparkContext._active_spark_context
@@ -679,9 +678,8 @@ def year(col):
     """
     Extract the year of a given date as integer.
 
-    >>> df0 = sqlContext.createDataFrame([('2015-04-08',)], ['a'])
-
-    >>> df0.select(year('a').alias('year')).collect()
+    >>> df = sqlContext.createDataFrame([('2015-04-08',)], ['a'])
+    >>> df.select(year('a').alias('year')).collect()
     [Row(year=2015)]
     """
     sc = SparkContext._active_spark_context
@@ -693,9 +691,8 @@ def quarter(col):
     """
     Extract the quarter of a given date as integer.
 
-    >>> df0 = sqlContext.createDataFrame([('2015-04-08',)], ['a'])
-
-    >>> df0.select(quarter('a').alias('quarter')).collect()
+    >>> df = sqlContext.createDataFrame([('2015-04-08',)], ['a'])
+    >>> df.select(quarter('a').alias('quarter')).collect()
     [Row(quarter=2)]
     """
     sc = SparkContext._active_spark_context
@@ -707,9 +704,8 @@ def month(col):
     """
     Extract the month of a given date as integer.
 
-    >>> df0 = sqlContext.createDataFrame([('2015-04-08',)], ['a'])
-
-    >>> df0.select(month('a').alias('month')).collect()
+    >>> df = sqlContext.createDataFrame([('2015-04-08',)], ['a'])
+    >>> df.select(month('a').alias('month')).collect()
     [Row(month=4)]
    """
     sc = SparkContext._active_spark_context
@@ -733,9 +729,8 @@ def day_of_month(col):
     """
     Extract the day of the month of a given date as integer.
 
-    >>> df0 = sqlContext.createDataFrame([('2015-04-08',)], ['a'])
-
-    >>> df0.select(day_of_month('a').alias('day')).collect()
+    >>> df = sqlContext.createDataFrame([('2015-04-08',)], ['a'])
+    >>> df.select(day_of_month('a').alias('day')).collect()
     [Row(day=8)]
     """
     sc = SparkContext._active_spark_context
@@ -746,9 +741,9 @@ def day_of_month(col):
 def day_in_year(col):
     """
     Extract the day of the year of a given date as integer.
-    >>> df0 = sqlContext.createDataFrame([('2015-04-08',)], ['a'])
 
-    >>> df0.select(day_in_year('a').alias('day')).collect()
+    >>> df = sqlContext.createDataFrame([('2015-04-08',)], ['a'])
+    >>> df.select(day_in_year('a').alias('day')).collect()
     [Row(day=98)]
     """
     sc = SparkContext._active_spark_context
@@ -760,9 +755,8 @@ def hour(col):
     """
     Extract the hours of a given date as integer.
 
-    >>> df0 = sqlContext.createDataFrame([('2015-04-08 13:08:15',)], ['a'])
-
-    >>> df0.select(hour('a').alias('hour')).collect()
+    >>> df = sqlContext.createDataFrame([('2015-04-08 13:08:15',)], ['a'])
+    >>> df.select(hour('a').alias('hour')).collect()
     [Row(hour=13)]
     """
     sc = SparkContext._active_spark_context
@@ -773,9 +767,9 @@ def hour(col):
 def minute(col):
     """
     Extract the minutes of a given date as integer.
-    >>> df0 = sqlContext.createDataFrame([('2015-04-08 13:08:15',)], ['a'])
 
-    >>> df0.select(minute('a').alias('minute')).collect()
+    >>> df = sqlContext.createDataFrame([('2015-04-08 13:08:15',)], ['a'])
+    >>> df.select(minute('a').alias('minute')).collect()
     [Row(minute=8)]
     """
     sc = SparkContext._active_spark_context
@@ -787,9 +781,8 @@ def second(col):
     """
     Extract the seconds of a given date as integer.
 
-    >>> df0 = sqlContext.createDataFrame([('2015-04-08 13:08:15',)], ['a'])
-
-    >>> df0.select(second('a').alias('second')).collect()
+    >>> df = sqlContext.createDataFrame([('2015-04-08 13:08:15',)], ['a'])
+    >>> df.select(second('a').alias('second')).collect()
     [Row(second=15)]
     """
     sc = SparkContext._active_spark_context
@@ -801,9 +794,8 @@ def week_of_year(col):
     """
     Extract the week number of a given date as integer.
 
-    >>> df0 = sqlContext.createDataFrame([('2015-04-08',)], ['a'])
-
-    >>> df0.select(week_of_year('a').alias('week')).collect()
+    >>> df = sqlContext.createDataFrame([('2015-04-08',)], ['a'])
+    >>> df.select(week_of_year('a').alias('week')).collect()
     [Row(week=15)]
     """
     sc = SparkContext._active_spark_context

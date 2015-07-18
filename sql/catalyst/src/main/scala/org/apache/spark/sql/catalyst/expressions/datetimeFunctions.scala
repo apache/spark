@@ -217,7 +217,7 @@ case class WeekOfYear(child: Expression) extends UnaryExpression with ImplicitCa
   override def prettyName: String = "week_of_year"
 
   override protected def nullSafeEval(date: Any): Any = {
-    val c = Calendar.getInstance()
+    val c = Calendar.getInstance(TimeZone.getTimeZone("UTC"))
     c.setFirstDayOfWeek(Calendar.MONDAY)
     c.setMinimalDaysInFirstWeek(4)
     c.setTimeInMillis(date.asInstanceOf[Int] * 1000L * 3600L * 24L)
@@ -229,7 +229,7 @@ case class WeekOfYear(child: Expression) extends UnaryExpression with ImplicitCa
       val cal = classOf[Calendar].getName
       val c = ctx.freshName("cal")
       s"""
-        $cal $c = $cal.getInstance();
+        $cal $c = $cal.getInstance(java.util.TimeZone.getTimeZone("UTC"));
         $c.setFirstDayOfWeek($cal.MONDAY);
         $c.setMinimalDaysInFirstWeek(4);
         $c.setTimeInMillis($time * 1000L * 3600L * 24L);
