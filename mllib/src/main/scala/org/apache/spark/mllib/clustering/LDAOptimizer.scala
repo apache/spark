@@ -396,9 +396,8 @@ final class OnlineLDAOptimizer extends LDAOptimizer {
     this
   }
 
-  private[clustering] def logPerplexity(
+  def logPerplexity(
       batch: RDD[(Long, Vector)],
-      gammad: BDV[Double],
       totalDocs: Long): Double = {
     val corpusWords = batch
       .map { case (_, termCounts) => termCounts.toBreeze }
@@ -407,6 +406,16 @@ final class OnlineLDAOptimizer extends LDAOptimizer {
     val variationalBound =
       bound(batch, subsampleRatio, alpha, eta, lambda, gammaShape, k, vocabSize)
     variationalBound / (subsampleRatio * vocabSize)
+  }
+
+  def predict(doc: (Long, Vector)): BDV[Double] = {
+    val (gamma, _) = topicInference(
+      doc._2,
+      exp(dirichletExpectation(this.getLambda)).t,
+      this.getAlpha,
+      this.gammaShape,
+      this.k)
+    gamma
   }
 
   override private[clustering] def getLDAModel(iterationTimes: Array[Double]): LDAModel = {
@@ -494,7 +503,7 @@ object OnlineLDAOptimizer {
     val expElogbeta = exp(Elogbeta)
 
     batch.foreach { case (id: Long, termCounts: Vector) =>
-      val (gammad: BDV[Double], _) = topicInference(termCounts, Elogbeta, alpha, gammaShape, k)
+      val (gammad: BDV[Double], _) = topicInference(termCounts, expElogbeta, alpha, gammaShape, k)
       val Elogthetad: BDV[Double] = digamma(gammad) - digamma(sum(gammad))
 
       // E[log p(doc | theta, beta)]
