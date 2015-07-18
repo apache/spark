@@ -43,7 +43,7 @@ case class Concat(children: Seq[Expression]) extends Expression with ImplicitCas
   override def inputTypes: Seq[AbstractDataType] = Seq.fill(children.size)(StringType)
   override def dataType: DataType = StringType
 
-  override def nullable: Boolean = children.exists(_.nullable)
+  override def nullable: Boolean = false
   override def foldable: Boolean = children.forall(_.foldable)
 
   override def eval(input: InternalRow): Any = {
