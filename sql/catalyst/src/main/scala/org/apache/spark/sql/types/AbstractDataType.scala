@@ -91,6 +91,12 @@ private[sql] object TypeCollection {
     TimestampType, DateType,
     StringType, BinaryType)
 
+  /**
+   * Types that include numeric types and interval type. They are only used in unary_minus,
+   * unary_positive, add and subtract operations.
+   */
+  val NumericAndInterval = TypeCollection(NumericType, IntervalType)
+
   def apply(types: AbstractDataType*): TypeCollection = new TypeCollection(types)
 
   def unapply(typ: AbstractDataType): Option[Seq[AbstractDataType]] = typ match {

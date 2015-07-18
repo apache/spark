@@ -254,8 +254,6 @@ object SpecifiedWindowFrame {
  * to retrieve value corresponding with these n rows.
  */
 trait WindowFunction extends Expression {
-  self: Product =>
-
   def init(): Unit
 
   def reset(): Unit
