@@ -15,19 +15,18 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst.expressions
-
-import org.scalatest.Matchers._
+package org.apache.spark.sql.execution.expression
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.dsl.expressions._
-import org.apache.spark.sql.types.DoubleType
+import org.apache.spark.sql.catalyst.expressions. ExpressionEvalHelper
+import org.apache.spark.sql.execution.expressions.{SparkPartitionID, MonotonicallyIncreasingID}
 
+class NondeterministicSuite extends SparkFunSuite with ExpressionEvalHelper {
+  test("MonotonicallyIncreasingID") {
+    checkEvaluation(MonotonicallyIncreasingID(), 0)
+  }
 
-class RandomSuite extends SparkFunSuite with ExpressionEvalHelper {
-
-  test("random") {
-    checkDoubleEvaluation(Rand(30), 0.7363714192755834 +- 0.001)
-    checkDoubleEvaluation(Randn(30), 0.5181478766595276 +- 0.001)
+  test("SparkPartitionID") {
+    checkEvaluation(SparkPartitionID, 0)
   }
 }

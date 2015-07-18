@@ -38,7 +38,7 @@ object TaskContext {
    */
   def getPartitionId(): Int = {
     val tc = taskContext.get()
-    if (tc == null) {
+    if (tc eq null) {
       0
     } else {
       tc.partitionId()
