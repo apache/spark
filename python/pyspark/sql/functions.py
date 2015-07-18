@@ -652,6 +652,7 @@ def ntile(n):
     return Column(sc._jvm.functions.ntile(int(n)))
 
 
+@ignore_unicode_prefix
 @since(1.5)
 def date_format(dateCol, format):
     """
@@ -677,6 +678,7 @@ def date_format(dateCol, format):
 def year(col):
     """
     Extract the year of a given date as integer.
+
     >>> df0 = sqlContext.createDataFrame([('2015-04-08',)], ['a'])
 
     >>> df0.select(year('a').alias('year')).collect()
@@ -690,6 +692,7 @@ def year(col):
 def quarter(col):
     """
     Extract the quarter of a given date as integer.
+
     >>> df0 = sqlContext.createDataFrame([('2015-04-08',)], ['a'])
 
     >>> df0.select(quarter('a').alias('quarter')).collect()
@@ -703,6 +706,7 @@ def quarter(col):
 def month(col):
     """
     Extract the month of a given date as integer.
+
     >>> df0 = sqlContext.createDataFrame([('2015-04-08',)], ['a'])
 
     >>> df0.select(month('a').alias('month')).collect()
@@ -716,6 +720,7 @@ def month(col):
 def day(col):
     """
     Extract the day of the month of a given date as integer.
+
     >>> sqlContext.createDataFrame([('2015-04-08',)], ['a']).select(day('a').alias('day')).collect()
     [Row(day=8)]
     """
@@ -727,7 +732,9 @@ def day(col):
 def day_of_month(col):
     """
     Extract the day of the month of a given date as integer.
+
     >>> df0 = sqlContext.createDataFrame([('2015-04-08',)], ['a'])
+
     >>> df0.select(day_of_month('a').alias('day')).collect()
     [Row(day=8)]
     """
@@ -740,6 +747,7 @@ def day_in_year(col):
     """
     Extract the day of the year of a given date as integer.
     >>> df0 = sqlContext.createDataFrame([('2015-04-08',)], ['a'])
+
     >>> df0.select(day_in_year('a').alias('day')).collect()
     [Row(day=98)]
     """
@@ -751,6 +759,7 @@ def day_in_year(col):
 def hour(col):
     """
     Extract the hours of a given date as integer.
+
     >>> df0 = sqlContext.createDataFrame([('2015-04-08 13:08:15',)], ['a'])
 
     >>> df0.select(hour('a').alias('hour')).collect()
@@ -777,6 +786,7 @@ def minute(col):
 def second(col):
     """
     Extract the seconds of a given date as integer.
+
     >>> df0 = sqlContext.createDataFrame([('2015-04-08 13:08:15',)], ['a'])
 
     >>> df0.select(second('a').alias('second')).collect()
@@ -790,6 +800,7 @@ def second(col):
 def week_of_year(col):
     """
     Extract the week number of a given date as integer.
+
     >>> df0 = sqlContext.createDataFrame([('2015-04-08',)], ['a'])
 
     >>> df0.select(week_of_year('a').alias('week')).collect()

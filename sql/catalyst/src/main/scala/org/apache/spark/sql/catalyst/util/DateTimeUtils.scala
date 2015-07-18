@@ -510,42 +510,30 @@ object DateTimeUtils {
       isLeap = false
     }
 
-    if (dayInYear <= 181) {
-      if (dayInYear <= 90) {
-        if (dayInYear <= 31) {
-          1
-        } else if (dayInYear <= 59 || (isLeap && dayInYear <= 60)) {
-          2
-        } else {
-          3
-        }
-      } else {
-        if (dayInYear <= 120) {
-          4
-        } else if (dayInYear <= 151) {
-          5
-        } else {
-          6
-        }
-      }
+    if (dayInYear <= 31) {
+      1
+    } else if (dayInYear <= 59 || (isLeap && dayInYear <= 60)) {
+      2
+    } else if (dayInYear <= 90) {
+      3
+    } else if (dayInYear <= 120) {
+      4
+    } else if (dayInYear <= 151) {
+      5
+    } else if (dayInYear <= 181) {
+      6
+    } else if (dayInYear <= 212) {
+      7
+    } else if (dayInYear <= 243) {
+      8
+    } else if (dayInYear <= 273) {
+      9
+    } else if (dayInYear <= 304) {
+      10
+    } else if (dayInYear <= 334) {
+      11
     } else {
-      if (dayInYear <= 273) {
-        if (dayInYear <= 212) {
-          7
-        } else if (dayInYear <= 243) {
-          8
-        } else {
-          9
-        }
-      } else {
-        if (dayInYear <= 304) {
-          10
-        } else if (dayInYear <= 334) {
-          11
-        } else {
-          12
-        }
-      }
+      12
     }
   }
 
@@ -561,42 +549,30 @@ object DateTimeUtils {
       isLeap = false
     }
 
-    if (dayInYear <= 181) {
-      if (dayInYear <= 90) {
-        if (dayInYear <= 31) {
-          dayInYear
-        } else if (dayInYear <= 59 || (isLeap && dayInYear <= 60)) {
-          dayInYear - 31
-        } else {
-          dayInYear - 59
-        }
-      } else {
-        if (dayInYear <= 120) {
-          dayInYear - 90
-        } else if (dayInYear <= 151) {
-          dayInYear - 120
-        } else {
-          dayInYear - 151
-        }
-      }
+    if (dayInYear <= 31) {
+      dayInYear
+    } else if (dayInYear <= 59 || (isLeap && dayInYear <= 60)) {
+      dayInYear - 31
+    } else if (dayInYear <= 90) {
+      dayInYear - 59
+    } else if (dayInYear <= 120) {
+      dayInYear - 90
+    } else if (dayInYear <= 151) {
+      dayInYear - 120
+    } else if (dayInYear <= 181) {
+      dayInYear - 151
+    } else if (dayInYear <= 212) {
+      dayInYear - 181
+    } else if (dayInYear <= 243) {
+      dayInYear - 212
+    } else if (dayInYear <= 273) {
+      dayInYear - 243
+    } else if (dayInYear <= 304) {
+      dayInYear - 273
+    } else if (dayInYear <= 334) {
+      dayInYear - 304
     } else {
-      if (dayInYear <= 273) {
-        if (dayInYear <= 212) {
-          dayInYear - 181
-        } else if (dayInYear <= 243) {
-          dayInYear - 212
-        } else {
-          dayInYear - 243
-        }
-      } else {
-        if (dayInYear <= 304) {
-          dayInYear - 273
-        } else if (dayInYear <= 334) {
-          dayInYear - 304
-        } else {
-          dayInYear - 334
-        }
-      }
+      dayInYear - 334
     }
   }
 }
