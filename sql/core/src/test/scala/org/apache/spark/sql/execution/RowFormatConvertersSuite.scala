@@ -59,4 +59,17 @@ class RowFormatConvertersSuite extends SparkFunSuite {
     }
     assert(e.getMessage.contains("format"))
   }
+
+  test("union requires all of its input rows' formats to agree") {
+    val plan = Union(Seq(outputsSafe, outputsUnsafe))
+    assert(plan.canProcessSafeRows && plan.canProcessUnsafeRows)
+    val preparedPlan = TestSQLContext.prepareForExecution.execute(plan)
+    assert(!preparedPlan.outputsUnsafeRows)
+  }
+
+  test("union can process unsafe rows") {
+    val plan = Union(Seq(outputsUnsafe, outputsUnsafe))
+    val preparedPlan = TestSQLContext.prepareForExecution.execute(plan)
+    assert(preparedPlan.outputsUnsafeRows)
+  }
 }
