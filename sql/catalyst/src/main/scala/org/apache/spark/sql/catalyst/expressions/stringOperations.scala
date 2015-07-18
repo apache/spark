@@ -37,6 +37,9 @@ import org.apache.spark.unsafe.types.UTF8String
  * Input expressions that are evaluated to nulls are skipped.
  *
  * For example, `concat("a", null, "b")` is evaluated to `"ab"`.
+ *
+ * Note that this is different from Hive since Hive outputs null if any input is null.
+ * We never output null.
  */
 case class Concat(children: Seq[Expression]) extends Expression with ImplicitCastInputTypes {
 
