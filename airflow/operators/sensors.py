@@ -145,7 +145,7 @@ class HivePartitionSensor(BaseSensorOperator):
         AND type='value'` and > < sings as in "ds>=2015-01-01"
     :type partition: string
     """
-    template_fields = ('table', 'partition',)
+    template_fields = ('schema', 'table', 'partition',)
 
     @apply_defaults
     def __init__(
@@ -157,8 +157,6 @@ class HivePartitionSensor(BaseSensorOperator):
             *args, **kwargs):
         super(HivePartitionSensor, self).__init__(
             poke_interval=poke_interval, *args, **kwargs)
-        if '.' in table:
-            schema, table = table.split('.')
         if not partition:
             partition = "ds='{{ ds }}'"
         self.metastore_conn_id = metastore_conn_id
@@ -167,6 +165,8 @@ class HivePartitionSensor(BaseSensorOperator):
         self.schema = schema
 
     def poke(self, context):
+        if '.' in self.table:
+            self.schema, self.table = self.table.split('.')
         logging.info(
             'Poking for table {self.schema}.{self.table}, '
             'partition {self.partition}'.format(**locals()))
