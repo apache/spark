@@ -39,11 +39,15 @@ import org.apache.spark.{HashPartitioner, SparkEnv}
 case class Project(projectList: Seq[NamedExpression], child: SparkPlan) extends UnaryNode {
   override def output: Seq[Attribute] = projectList.map(_.toAttribute)
 
-  @transient lazy val buildProjection = newMutableProjection(projectList, child.output)
+  private def buildProjection = newMutableProjection(projectList, child.output)
 
-  protected override def doExecute(): RDD[InternalRow] = child.execute().mapPartitions { iter =>
-    val reusableProjection = buildProjection()
-    iter.map(reusableProjection)
+  protected override def doExecute(): RDD[InternalRow] = {
+    // Use local variable to avoid referencing to $out inside closure
+    val localBuildProjection = buildProjection
+    child.execute().mapPartitions { iter =>
+      val reusableProjection = localBuildProjection()
+      iter.map(reusableProjection)
+    }
   }
 
   override def outputOrdering: Seq[SortOrder] = child.outputOrdering
@@ -56,11 +60,15 @@ case class Project(projectList: Seq[NamedExpression], child: SparkPlan) extends 
 case class Filter(condition: Expression, child: SparkPlan) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
 
-  @transient lazy val conditionEvaluator: (InternalRow) => Boolean =
+  private def conditionEvaluator: (InternalRow) => Boolean =
     newPredicate(condition, child.output)
 
-  protected override def doExecute(): RDD[InternalRow] = child.execute().mapPartitions { iter =>
-    iter.filter(conditionEvaluator)
+  protected override def doExecute(): RDD[InternalRow] = {
+    // Use local variable to avoid referencing to $out inside closure
+    val localConditionEvaluator = conditionEvaluator
+    child.execute().mapPartitions { iter =>
+      iter.filter(localConditionEvaluator)
+    }
   }
 
   override def outputOrdering: Seq[SortOrder] = child.outputOrdering
@@ -169,8 +177,7 @@ case class TakeOrderedAndProject(
 
   private val ord: RowOrdering = new RowOrdering(sortOrder, child.output)
 
-  // TODO: remove @transient after figure out how to clean closure at InsertIntoHiveTable.
-  @transient private val projection = projectList.map(new InterpretedProjection(_, child.output))
+  private val projection = projectList.map(new InterpretedProjection(_, child.output))
 
   private def collectData(): Array[InternalRow] = {
     val data = child.execute().map(_.copy()).takeOrdered(limit)(ord)
@@ -205,8 +212,8 @@ case class Sort(
     if (global) OrderedDistribution(sortOrder) :: Nil else UnspecifiedDistribution :: Nil
 
   protected override def doExecute(): RDD[InternalRow] = attachTree(this, "sort") {
+    val ordering = newOrdering(sortOrder, child.output)
     child.execute().mapPartitions( { iterator =>
-      val ordering = newOrdering(sortOrder, child.output)
       iterator.map(_.copy()).toArray.sorted(ordering).iterator
     }, preservesPartitioning = true)
   }
@@ -233,8 +240,8 @@ case class ExternalSort(
     if (global) OrderedDistribution(sortOrder) :: Nil else UnspecifiedDistribution :: Nil
 
   protected override def doExecute(): RDD[InternalRow] = attachTree(this, "sort") {
+    val ordering = newOrdering(sortOrder, child.output)
     child.execute().mapPartitions( { iterator =>
-      val ordering = newOrdering(sortOrder, child.output)
       val sorter = new ExternalSorter[InternalRow, Null, InternalRow](ordering = Some(ordering))
       sorter.insertAll(iterator.map(r => (r.copy, null)))
       val baseIterator = sorter.iterator.map(_._1)

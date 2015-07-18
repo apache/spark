@@ -21,7 +21,6 @@ import java.util
 
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
-import org.apache.hadoop.hive.metastore.MetaStoreUtils
 import org.apache.hadoop.hive.ql.plan.TableDesc
 import org.apache.hadoop.hive.ql.{Context, ErrorMsg}
 import org.apache.hadoop.hive.serde2.Serializer
@@ -44,8 +43,8 @@ import org.apache.spark.util.SerializableJobConf
 private[hive]
 case class InsertIntoHiveTable(
     table: MetastoreRelation,
-    partition: Map[String, Option[String]],
-    child: SparkPlan,
+    @transient partition: Map[String, Option[String]],
+    @transient child: SparkPlan,
     overwrite: Boolean,
     ifNotExists: Boolean) extends UnaryNode with HiveInspectors {
 

@@ -100,8 +100,8 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Product 
    * Runs this query returning the result as an array.
    */
   def executeCollect(): Array[Row] = {
+    val converter = CatalystTypeConverters.createToScalaConverter(schema)
     execute().mapPartitions { iter =>
-      val converter = CatalystTypeConverters.createToScalaConverter(schema)
       iter.map(converter(_).asInstanceOf[Row])
     }.collect()
   }
