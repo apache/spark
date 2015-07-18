@@ -1416,10 +1416,12 @@ class BaseOperator(object):
             l.append(item)
 
     def _set_relatives(self, task_or_task_list, upstream=False):
-        if isinstance(task_or_task_list, BaseOperator):
-            task_or_task_list = [task_or_task_list]
-        for task in task_or_task_list:
-            if not isinstance(task_or_task_list, list):
+        try:
+            task_list = list(task_or_task_list)
+        except TypeError:
+            task_list = [task_or_task_list]
+        for task in task_list:
+            if not isinstance(task, BaseOperator):
                 raise AirflowException('Expecting a task')
             if upstream:
                 self.append_only_new(task._downstream_list, self)
