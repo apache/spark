@@ -73,6 +73,13 @@ case class Abs(child: Expression) extends UnaryExpression with ExpectsInputTypes
 
   private lazy val numeric = TypeUtils.getNumeric(dataType)
 
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = dataType match {
+    case dt: DecimalType =>
+      defineCodeGen(ctx, ev, c => s"$c.abs()")
+    case dt: NumericType =>
+      defineCodeGen(ctx, ev, c => s"(${ctx.javaType(dt)})(java.lang.Math.abs($c))")
+  }
+
   protected override def nullSafeEval(input: Any): Any = numeric.abs(input)
 }
 
