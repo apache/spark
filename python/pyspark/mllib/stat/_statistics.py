@@ -248,7 +248,7 @@ class Statistics(object):
         """
         .. note:: Experimental
 
-        Performs the Kolmogorov Smirnov (KS) test for data sampled from
+        Performs the Kolmogorov-Smirnov (KS) test for data sampled from
         a continuous distribution. It tests the null hypothesis that
         the data is generated from a particular distribution.
 
@@ -286,6 +286,13 @@ class Statistics(object):
         0.175
         >>> ksmodel.nullHypothesis
         u'Sample follows theoretical distribution'
+
+        >>> data = sc.parallelize([2.0, 3.0, 4.0])
+        >>> ksmodel = kstest(data, "norm", 3.0, 1.0)
+        >>> print(round(ksmodel.pValue, 3))
+        1.0
+        >>> print(round(ksmodel.statistic, 3))
+        0.175
         """
         if not isinstance(data, RDD):
             raise TypeError("data should be an RDD, got %s." % type(data))
