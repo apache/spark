@@ -272,7 +272,9 @@ case class Or(left: Expression, right: Expression) extends BinaryOperator with P
 abstract class BinaryComparison extends BinaryOperator with Predicate {
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    if (ctx.isPrimitiveType(left.dataType)) {
+    if (ctx.isPrimitiveType(left.dataType)
+        && left.dataType != FloatType
+        && left.dataType != DoubleType) {
       // faster version
       defineCodeGen(ctx, ev, (c1, c2) => s"$c1 $symbol $c2")
     } else {
@@ -304,10 +306,19 @@ case class EqualTo(left: Expression, right: Expression) extends BinaryComparison
   override def symbol: String = "="
 
   protected override def nullSafeEval(input1: Any, input2: Any): Any = {
-    // Note that we do not have to do anything special here to handle NaN values: boxed Double and
-    // Float NaNs will be equal (see Float.equals()' Javadoc for more details).
-    if (left.dataType != BinaryType) input1 == input2
-    else java.util.Arrays.equals(input1.asInstanceOf[Array[Byte]], input2.asInstanceOf[Array[Byte]])
+    if (left.dataType == FloatType) {
+      val f1 = input1.asInstanceOf[Float]
+      val f2 = input2.asInstanceOf[Float]
+      (java.lang.Float.isNaN(f1) && java.lang.Float.isNaN(f2)) || f1 == f2
+    } else if (left.dataType == DoubleType) {
+      val d1 = input1.asInstanceOf[Double]
+      val d2 = input2.asInstanceOf[Double]
+      (java.lang.Double.isNaN(d1) && java.lang.Double.isNaN(d2)) || d1 == d2
+    } else if (left.dataType != BinaryType) {
+      input1 == input2
+    } else {
+      java.util.Arrays.equals(input1.asInstanceOf[Array[Byte]], input2.asInstanceOf[Array[Byte]])
+    }
   }
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
@@ -332,9 +343,15 @@ case class EqualNullSafe(left: Expression, right: Expression) extends BinaryComp
     } else if (input1 == null || input2 == null) {
       false
     } else {
-      // Note that we do not have to do anything special here to handle NaN values: boxed Double and
-      // Float NaNs will be equal (see Float.equals()' Javadoc for more details).
-      if (left.dataType != BinaryType) {
+      if (left.dataType == FloatType) {
+        val f1 = input1.asInstanceOf[Float]
+        val f2 = input2.asInstanceOf[Float]
+        (java.lang.Float.isNaN(f1) && java.lang.Float.isNaN(f2)) || f1 == f2
+      } else if (left.dataType == DoubleType) {
+        val d1 = input1.asInstanceOf[Double]
+        val d2 = input2.asInstanceOf[Double]
+        (java.lang.Double.isNaN(d1) && java.lang.Double.isNaN(d2)) || d1 == d2
+      } else if (left.dataType != BinaryType) {
         input1 == input2
       } else {
         java.util.Arrays.equals(input1.asInstanceOf[Array[Byte]], input2.asInstanceOf[Array[Byte]])

@@ -146,7 +146,8 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
   private val largeValues =
     Seq(2, Decimal(2), Array(2.toByte), "b", Float.NaN, Double.NaN).map(Literal(_))
 
-  private val equalValues1 = smallValues ++ Seq(Float.NaN, Double.NaN).map(Literal(_))
+  private val equalValues1 =
+    Seq(1, Decimal(1), Array(1.toByte), "a", Float.NaN, Double.NaN).map(Literal(_))
   private val equalValues2 =
     Seq(1, Decimal(1), Array(1.toByte), "a", Float.NaN, Double.NaN).map(Literal(_))
 
