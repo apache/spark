@@ -73,7 +73,6 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     testConcatWs("a哈哈b哈哈c", "哈哈", Seq("a", null, "b"), null, "c", Seq.empty[String])
     testConcatWs("a哈哈b哈哈c", "哈哈", Seq("a", null, "b"), null, "c", Seq[String](null))
     // scalastyle:on
-
   }
 
   test("StringComparison") {
