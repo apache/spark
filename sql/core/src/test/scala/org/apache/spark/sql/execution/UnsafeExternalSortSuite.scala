@@ -93,8 +93,7 @@ class UnsafeExternalSortSuite extends SparkPlanTest with BeforeAndAfterAll {
         inputDf,
         UnsafeExternalSort(sortOrder, global = true, _: SparkPlan, testSpillFrequency = 23),
         Sort(sortOrder, global = true, _: SparkPlan),
-        sortAnswers = false,
-        compareStrings = true
+        sortAnswers = false
       )
     }
   }

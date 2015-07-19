@@ -115,17 +115,13 @@ class SparkPlanTest extends SparkFunSuite {
    *                             treated as the source-of-truth for the test.
    * @param sortAnswers if true, the answers will be sorted by their toString representations prior
    *                    to being compared.
-   * @param compareStrings if true, the answers will be converted to strings before being compared
    */
   protected def checkThatPlansAgree(
       input: DataFrame,
       planFunction: SparkPlan => SparkPlan,
       expectedPlanFunction: SparkPlan => SparkPlan,
-      sortAnswers: Boolean = true,
-      compareStrings: Boolean = false): Unit = {
-    val result = SparkPlanTest.checkAnswer(
-      input, planFunction, expectedPlanFunction, sortAnswers, compareStrings)
-    result match {
+      sortAnswers: Boolean = true): Unit = {
+    SparkPlanTest.checkAnswer(input, planFunction, expectedPlanFunction, sortAnswers) match {
       case Some(errorMessage) => fail(errorMessage)
       case None =>
     }
@@ -146,14 +142,12 @@ object SparkPlanTest {
    *                             instantiate a reference implementation of the physical operator
    *                             that's being tested. The result of executing this plan will be
    *                             treated as the source-of-truth for the test.
-   * @param compareStrings if true, the answers will be converted to strings before being compared
    */
   def checkAnswer(
       input: DataFrame,
       planFunction: SparkPlan => SparkPlan,
       expectedPlanFunction: SparkPlan => SparkPlan,
-      sortAnswers: Boolean,
-      compareStrings: Boolean): Option[String] = {
+      sortAnswers: Boolean): Option[String] = {
 
     val outputPlan = planFunction(input.queryExecution.sparkPlan)
     val expectedOutputPlan = expectedPlanFunction(input.queryExecution.sparkPlan)
@@ -188,7 +182,7 @@ object SparkPlanTest {
         return Some(errorMessage)
     }
 
-    compareAnswers(actualAnswer, expectedAnswer, sortAnswers, compareStrings).map { errorMessage =>
+    compareAnswers(actualAnswer, expectedAnswer, sortAnswers).map { errorMessage =>
       s"""
          | Results do not match.
          | Actual result Spark plan:
@@ -232,7 +226,7 @@ object SparkPlanTest {
         return Some(errorMessage)
     }
 
-    compareAnswers(sparkAnswer, expectedAnswer, sortAnswers, false).map { errorMessage =>
+    compareAnswers(sparkAnswer, expectedAnswer, sortAnswers).map { errorMessage =>
       s"""
          | Results do not match for Spark plan:
          | $outputPlan
@@ -244,8 +238,7 @@ object SparkPlanTest {
   private def compareAnswers(
       sparkAnswer: Seq[Row],
       expectedAnswer: Seq[Row],
-      sort: Boolean,
-      compareStrings: Boolean): Option[String] = {
+      sort: Boolean): Option[String] = {
     def prepareAnswer(answer: Seq[Row]): Seq[Row] = {
       // Converts data to types that we can do equality comparison using Scala collections.
       // For BigDecimal type, the Scala type has a better definition of equality test (similar to
@@ -260,15 +253,10 @@ object SparkPlanTest {
           case o => o
         })
       }
-      val maybeSorted = if (sort) {
+      if (sort) {
         converted.sortBy(_.toString())
       } else {
         converted
-      }
-      if (compareStrings) {
-        maybeSorted.map(r => Row.fromSeq(r.toSeq.map(String.valueOf)))  // valueOf handles nulls
-      } else {
-        maybeSorted
       }
     }
     if (prepareAnswer(expectedAnswer) != prepareAnswer(sparkAnswer)) {
