@@ -65,7 +65,15 @@ case class Concat(children: Seq[Expression]) extends Expression with ImplicitCas
 }
 
 
-case class ConcatWs(children: Seq[Expression]) extends Expression with ImplicitCastInputTypes with CodegenFallback {
+/**
+ * An expression that concatenates multiple input strings into a single string, using a given
+ * separator (the first child).
+ *
+ * Returns null if the separator is null. Otherwise, concat_ws skips all null values.
+ */
+case class ConcatWs(children: Seq[Expression])
+  extends Expression with ImplicitCastInputTypes with CodegenFallback {
+
   require(children.nonEmpty, s"$prettyName requires at least one argument.")
 
   override def prettyName: String = "concat_ws"
