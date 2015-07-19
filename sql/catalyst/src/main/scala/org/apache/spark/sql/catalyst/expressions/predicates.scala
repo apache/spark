@@ -304,6 +304,8 @@ case class EqualTo(left: Expression, right: Expression) extends BinaryComparison
   override def symbol: String = "="
 
   protected override def nullSafeEval(input1: Any, input2: Any): Any = {
+    // Note that we do not have to do anything special here to handle NaN values: boxed Double and
+    // Float NaNs will be equal (see Float.equals()' Javadoc for more details).
     if (left.dataType != BinaryType) input1 == input2
     else java.util.Arrays.equals(input1.asInstanceOf[Array[Byte]], input2.asInstanceOf[Array[Byte]])
   }
@@ -330,6 +332,8 @@ case class EqualNullSafe(left: Expression, right: Expression) extends BinaryComp
     } else if (input1 == null || input2 == null) {
       false
     } else {
+      // Note that we do not have to do anything special here to handle NaN values: boxed Double and
+      // Float NaNs will be equal (see Float.equals()' Javadoc for more details).
       if (left.dataType != BinaryType) {
         input1 == input2
       } else {

@@ -126,6 +126,19 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(IsNaN(Literal(5.5f)), false)
   }
 
+  test("NaN equality and comparison") {
+    def testNaN(nan: Expression): Unit = {
+      checkEvaluation(nan === nan, true)
+      checkEvaluation(nan <=> nan, true)
+//      checkEvaluation(nan <= nan, true)
+//      checkEvaluation(nan >= nan, true)
+//      checkEvaluation(nan < nan, false)
+//      checkEvaluation(nan > nan, false)
+    }
+    testNaN(Literal(Float.NaN))
+    testNaN(Literal(Double.NaN))
+  }
+
   test("INSET") {
     val hS = HashSet[Any]() + 1 + 2
     val nS = HashSet[Any]() + 1 + 2 + null
