@@ -233,17 +233,7 @@ case class EndsWith(left: Expression, right: Expression)
  * string (left) contains a comma.
  */
 case class FindInSet(left: Expression, right: Expression) extends BinaryExpression
-    with ExpectsInputTypes {
-
-  override def checkInputDataTypes(): TypeCheckResult = {
-    (left.dataType, right.dataType) match {
-      case (_, NullType) | (NullType, _) | (StringType, StringType) =>
-        TypeCheckResult.TypeCheckSuccess
-      case _ =>
-        TypeCheckResult.TypeCheckFailure(s"FindInSet expects two strings as argument, not " +
-          s"(${left.dataType}, ${right.dataType})")
-    }
-  }
+    with ImplicitCastInputTypes {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(StringType, StringType)
 
