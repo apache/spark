@@ -316,7 +316,7 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers {
     assert(setToNullAfterCreation.get(11) === rowWithNoNullColumns.get(11))
   }
 
-  test("NaN normalization") {
+  test("NaN canonicalization") {
     val fieldTypes: Array[DataType] = Array(FloatType, DoubleType)
 
     val row1 = new SpecificMutableRow(fieldTypes)
