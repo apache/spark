@@ -21,6 +21,7 @@ import org.apache.spark.TaskContext
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.codegen.GenerateOrdering
 import org.apache.spark.sql.catalyst.trees._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical._
@@ -30,6 +31,8 @@ case class AggregateEvaluation(
     schema: Seq[Attribute],
     initialValues: Seq[Expression],
     update: Seq[Expression],
+    mergeSchema: Seq[Attribute],
+    merge: Seq[Expression],
     result: Expression)
 
 /**
@@ -85,9 +88,16 @@ case class GeneratedAggregate(
         val currentCount = AttributeReference("currentCount", LongType, nullable = false)()
         val initialValue = Literal(0L)
         val updateFunction = If(IsNotNull(toCount), Add(currentCount, Literal(1L)), currentCount)
+        val mergeCount = AttributeReference("mergeCount", LongType, nullable = false)()
+        val mergeFunction = Coalesce(
+          Add(
+            Coalesce(currentCount :: initialValue :: Nil),
+            Coalesce(mergeCount :: initialValue :: Nil)
+          ) :: currentCount :: initialValue :: Nil)
         val result = currentCount
 
-        AggregateEvaluation(currentCount :: Nil, initialValue :: Nil, updateFunction :: Nil, result)
+        AggregateEvaluation(currentCount :: Nil, initialValue :: Nil, updateFunction :: Nil,
+          mergeCount :: Nil, mergeFunction :: Nil, result)
 
       case s @ Sum(expr) =>
         val calcType =
@@ -109,6 +119,14 @@ case class GeneratedAggregate(
             Coalesce(currentSum :: zero :: Nil),
             Cast(expr, calcType)
           ) :: currentSum :: zero :: Nil)
+
+        val mergeSum = AttributeReference("mergeSum", calcType, nullable = false)()
+        val mergeFunction = Coalesce(
+          Add(
+            Coalesce(currentSum :: zero :: Nil),
+            Coalesce(mergeSum :: zero :: Nil)
+          ) :: currentSum :: zero :: Nil)
+
         val result =
           expr.dataType match {
             case DecimalType.Fixed(_, _) =>
@@ -116,7 +134,8 @@ case class GeneratedAggregate(
             case _ => currentSum
           }
 
-        AggregateEvaluation(currentSum :: Nil, initialValue :: Nil, updateFunction :: Nil, result)
+        AggregateEvaluation(currentSum :: Nil, initialValue :: Nil, updateFunction :: Nil,
+          mergeSum :: Nil, mergeFunction :: Nil, result)
 
       case cs @ CombineSum(expr) =>
         val calcType =
@@ -148,6 +167,15 @@ case class GeneratedAggregate(
               Cast(expr, calcType)) :: currentSum :: zero :: Nil),
           currentSum)
 
+        val mergeSum = AttributeReference("mergeSum", calcType, nullable = false)()
+        val mergeFunction = If(
+          IsNotNull(mergeSum),
+          Coalesce(
+            Add(
+              Coalesce(currentSum :: zero :: Nil),
+              Cast(mergeSum, calcType)) :: currentSum :: zero :: Nil),
+          currentSum)
+
         val result =
           expr.dataType match {
             case DecimalType.Fixed(_, _) =>
@@ -155,28 +183,37 @@ case class GeneratedAggregate(
             case _ => currentSum
           }
 
-        AggregateEvaluation(currentSum :: Nil, initialValue :: Nil, updateFunction :: Nil, result)
+        AggregateEvaluation(currentSum :: Nil, initialValue :: Nil, updateFunction :: Nil,
+          mergeSum :: Nil, mergeFunction :: Nil, result)
 
       case m @ Max(expr) =>
         val currentMax = AttributeReference("currentMax", expr.dataType, nullable = true)()
         val initialValue = Literal.create(null, expr.dataType)
         val updateMax = MaxOf(currentMax, expr)
+        val mergeMax = AttributeReference("mergeMax", expr.dataType, nullable = false)()
+        val mergeFunction = MaxOf(currentMax, mergeMax)
 
         AggregateEvaluation(
           currentMax :: Nil,
           initialValue :: Nil,
           updateMax :: Nil,
+          mergeMax :: Nil,
+          mergeFunction :: Nil,
           currentMax)
 
       case m @ Min(expr) =>
         val currentMin = AttributeReference("currentMin", expr.dataType, nullable = true)()
         val initialValue = Literal.create(null, expr.dataType)
         val updateMin = MinOf(currentMin, expr)
+        val mergeMin = AttributeReference("mergeMin", expr.dataType, nullable = false)()
+        val mergeFunction = MinOf(currentMin, mergeMin)
 
         AggregateEvaluation(
           currentMin :: Nil,
           initialValue :: Nil,
           updateMin :: Nil,
+          mergeMin :: Nil,
+          mergeFunction :: Nil,
           currentMin)
 
       case CollectHashSet(Seq(expr)) =>
@@ -184,11 +221,16 @@ case class GeneratedAggregate(
           AttributeReference("hashSet", new OpenHashSetUDT(expr.dataType), nullable = false)()
         val initialValue = NewSet(expr.dataType)
         val addToSet = AddItemToSet(expr, set)
+        val mergeSet =
+          AttributeReference("mergeHashSet", new OpenHashSetUDT(expr.dataType), nullable = false)()
+        val mergeFunction = AddItemToSet(mergeSet, set)
 
         AggregateEvaluation(
           set :: Nil,
           initialValue :: Nil,
           addToSet :: Nil,
+          mergeSet :: Nil,
+          mergeFunction :: Nil,
           set)
 
       case CombineSetsAndCount(inputSet) =>
@@ -197,11 +239,17 @@ case class GeneratedAggregate(
           AttributeReference("hashSet", new OpenHashSetUDT(elementType), nullable = false)()
         val initialValue = NewSet(elementType)
         val collectSets = CombineSets(set, inputSet)
+        val mergeSet =
+          AttributeReference("mergeHashSet", new OpenHashSetUDT(elementType), nullable = false)()
+        val mergeFunction = CombineSets(set, mergeSet)
+
 
         AggregateEvaluation(
           set :: Nil,
           initialValue :: Nil,
           collectSets :: Nil,
+          mergeSet :: Nil,
+          mergeFunction :: Nil,
           CountSet(set))
 
       case o => sys.error(s"$o can't be codegened.")
@@ -281,40 +329,92 @@ case class GeneratedAggregate(
         Iterator(resultProjection(buffer))
       } else if (unsafeEnabled) {
         log.info("Using Unsafe-based aggregator")
-        val aggregationMap = new UnsafeFixedWidthAggregationMap(
-          newAggregationBuffer,
-          new UnsafeRowConverter(groupKeySchema),
-          new UnsafeRowConverter(aggregationBufferSchema),
-          TaskContext.get.taskMemoryManager(),
-          1024 * 16, // initial capacity
-          false // disable tracking of performance metrics
-        )
+        if (UnsafeExternalAggregation.supportSchema(groupKeySchema,
+          aggregationBufferSchema)) {
+          val groupingKeyOrdering: Ordering[InternalRow] = GenerateOrdering.generate(
+            groupingExpressions.map(_.dataType).zipWithIndex.map { case(dt, index) =>
+              new SortOrder(BoundReference(index, dt, nullable = true), Ascending)
+            })
+          val mergeExpressions = computeFunctions.flatMap(_.merge)
+          val mergeSchema = computeFunctions.flatMap(_.schema) ++
+            computeFunctions.flatMap(_.mergeSchema)
+          val mergeProjection = newMutableProjection(mergeExpressions, mergeSchema)()
+          log.info(s"Merge Expressions: ${mergeExpressions.mkString(",")}")
+          log.info(s"mergeSchema: ${mergeSchema.mkString(",")}")
+          val aggregationMap = new UnsafeExternalAggregation(
+            newAggregationBuffer,
+            updateProjection,
+            mergeProjection,
+            new UnsafeRowConverter(groupKeySchema),
+            new UnsafeRowConverter(aggregationBufferSchema),
+            groupingKeyOrdering,
+            1024 * 16, // initial capacity
+            false
+          )
 
-        while (iter.hasNext) {
-          val currentRow: InternalRow = iter.next()
-          val groupKey: InternalRow = groupProjection(currentRow)
-          val aggregationBuffer = aggregationMap.getAggregationBuffer(groupKey)
-          updateProjection.target(aggregationBuffer)(joinedRow(aggregationBuffer, currentRow))
-        }
+          while (iter.hasNext) {
+            val currentRow: InternalRow = iter.next()
+            val groupKey: InternalRow = groupProjection(currentRow)
+            aggregationMap.insertRow(groupKey, currentRow)
+          }
 
-        new Iterator[InternalRow] {
-          private[this] val mapIterator = aggregationMap.iterator()
-          private[this] val resultProjection = resultProjectionBuilder()
+          new Iterator[InternalRow] {
+            private[this] val mapIterator = aggregationMap.iterator()
+            private[this] val resultProjection = resultProjectionBuilder()
 
-          def hasNext: Boolean = mapIterator.hasNext
+            def hasNext: Boolean = mapIterator.hasNext
 
-          def next(): InternalRow = {
-            val entry = mapIterator.next()
-            val result = resultProjection(joinedRow(entry.key, entry.value))
-            if (hasNext) {
-              result
-            } else {
-              // This is the last element in the iterator, so let's free the buffer. Before we do,
-              // though, we need to make a defensive copy of the result so that we don't return an
-              // object that might contain dangling pointers to the freed memory
-              val resultCopy = result.copy()
-              aggregationMap.free()
-              resultCopy
+            def next(): InternalRow = {
+              val entry = mapIterator.next()
+              val result = resultProjection(joinedRow(entry.key, entry.value))
+              if (hasNext) {
+                result
+              } else {
+                // This is the last element in the iterator, so let's free the buffer. Before we do,
+                // though, we need to make a defensive copy of the result so that we don't return an
+                // object that might contain dangling pointers to the freed memory
+                val resultCopy = result.copy()
+                aggregationMap.freeMemory()
+                resultCopy
+              }
+            }
+          }
+        } else {
+          val aggregationMap = new UnsafeFixedWidthAggregationMap(
+            newAggregationBuffer,
+            new UnsafeRowConverter(groupKeySchema),
+            new UnsafeRowConverter(aggregationBufferSchema),
+            TaskContext.get.taskMemoryManager(),
+            1024 * 16, // initial capacity
+            false // disable tracking of performance metrics
+          )
+
+          while (iter.hasNext) {
+            val currentRow: InternalRow = iter.next()
+            val groupKey: InternalRow = groupProjection(currentRow)
+            val aggregationBuffer = aggregationMap.getAggregationBuffer(groupKey)
+            updateProjection.target(aggregationBuffer)(joinedRow(aggregationBuffer, currentRow))
+          }
+
+          new Iterator[InternalRow] {
+            private[this] val mapIterator = aggregationMap.iterator()
+            private[this] val resultProjection = resultProjectionBuilder()
+
+            def hasNext: Boolean = mapIterator.hasNext
+
+            def next(): InternalRow = {
+              val entry = mapIterator.next()
+              val result = resultProjection(joinedRow(entry.key, entry.value))
+              if (hasNext) {
+                result
+              } else {
+                // This is the last element in the iterator, so let's free the buffer. Before we do,
+                // though, we need to make a defensive copy of the result so that we don't return an
+                // object that might contain dangling pointers to the freed memory
+                val resultCopy = result.copy()
+                aggregationMap.free()
+                resultCopy
+              }
             }
           }
         }
