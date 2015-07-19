@@ -19,8 +19,8 @@ package org.apache.spark.mllib.clustering
 
 import java.util.Random
 
-import breeze.linalg.{DenseMatrix => BDM, DenseVector => BDV, max, normalize, sum}
-import breeze.numerics.{log, abs, digamma, exp, lgamma}
+import breeze.linalg.{DenseMatrix => BDM, DenseVector => BDV, all, max, normalize, sum}
+import breeze.numerics._
 import breeze.stats.distributions.{Gamma, RandBasis}
 
 import org.apache.spark.annotation.DeveloperApi
@@ -432,6 +432,32 @@ final class OnlineLDAOptimizer extends LDAOptimizer {
     // Update lambda based on documents.
     lambda := lambda * (1 - weight) +
       (stat * (corpusSize.toDouble / batchSize.toDouble) + eta) * weight
+  }
+
+
+  /**
+   *    Update (in place) parameters for the Dirichlet prior on the per-document
+   *    topic weights `alpha` given the last `gammat`.
+   *    Uses Newton's method,
+   *    @see Huang: Maximum Likelihood Estimation of Dirichlet Distribution Parameters
+   *         (http://www.stanford.edu/~jhuang11/research/dirichlet/dirichlet.pdf)
+   */
+  // TODO: Handle non-scalar alpha after SPARK-8536
+  private def updateAlpha(gammat: BDV[Double], rho: Double): Unit = {
+    val N = gammat.length.toDouble
+    val alpha = BDV[Double](this.alpha)
+    val logphat = sum(dirichletExpectation(gammat)) / N
+    val gradf = N * (digamma(sum(alpha)) - digamma(alpha) + logphat)
+
+    val c = N * trigamma(sum(alpha))
+    val q = -N * trigamma(alpha)
+
+    val b = sum(gradf / q) / (1D / c + sum(1D / q))
+
+    val dalpha = -(gradf - b) / q
+
+    if (all((rho * dalpha + alpha) :> 0D))
+      this.alpha += rho * sum(dalpha)
   }
 
   /**
