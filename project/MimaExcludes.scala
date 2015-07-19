@@ -64,6 +64,9 @@ object MimaExcludes {
             excludePackage("org.apache.spark.sql.execution"),
             // Parquet support is considered private.
             excludePackage("org.apache.spark.sql.parquet"),
+            // The old JSON RDD is removed in favor of streaming Jackson
+            ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.json.JsonRDD$"),
+            ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.json.JsonRDD"),
             // local function inside a method
             ProblemFilters.exclude[MissingMethodProblem](
               "org.apache.spark.sql.SQLContext.org$apache$spark$sql$SQLContext$$needsConversion$1")

@@ -143,7 +143,6 @@ class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       case e: Exception => fail(s"Exception evaluating $expression", e)
     }
     if (!actual.asInstanceOf[Double].isNaN) {
-      val input = if (inputRow == EmptyRow) "" else s", input: $inputRow"
       fail(s"Incorrect evaluation (codegen off): $expression, " +
         s"actual: $actual, " +
         s"expected: NaN")
@@ -155,23 +154,12 @@ class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     expression: Expression,
     inputRow: InternalRow = EmptyRow): Unit = {
 
-    val plan = try {
-      GenerateMutableProjection.generate(Alias(expression, s"Optimized($expression)")() :: Nil)()
-    } catch {
-      case e: Throwable =>
-        val ctx = GenerateProjection.newCodeGenContext()
-        val evaluated = expression.gen(ctx)
-        fail(
-          s"""
-             |Code generation of $expression failed:
-             |${evaluated.code}
-             |$e
-          """.stripMargin)
-    }
+    val plan = generateProject(
+      GenerateMutableProjection.generate(Alias(expression, s"Optimized($expression)")() :: Nil)(),
+      expression)
 
     val actual = plan(inputRow).apply(0)
     if (!actual.asInstanceOf[Double].isNaN) {
-      val input = if (inputRow == EmptyRow) "" else s", input: $inputRow"
       fail(s"Incorrect Evaluation: $expression, actual: $actual, expected: NaN")
     }
   }

@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodeGenContext, GeneratedExpressionCode}
+import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.Interval
@@ -65,13 +65,21 @@ case class UnaryPositive(child: Expression) extends UnaryExpression with Expects
 /**
  * A function that get the absolute value of the numeric value.
  */
-case class Abs(child: Expression) extends UnaryExpression with ExpectsInputTypes {
+case class Abs(child: Expression)
+  extends UnaryExpression with ExpectsInputTypes with CodegenFallback {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(NumericType)
 
   override def dataType: DataType = child.dataType
 
   private lazy val numeric = TypeUtils.getNumeric(dataType)
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = dataType match {
+    case dt: DecimalType =>
+      defineCodeGen(ctx, ev, c => s"$c.abs()")
+    case dt: NumericType =>
+      defineCodeGen(ctx, ev, c => s"(${ctx.javaType(dt)})(java.lang.Math.abs($c))")
+  }
 
   protected override def nullSafeEval(input: Any): Any = numeric.abs(input)
 }

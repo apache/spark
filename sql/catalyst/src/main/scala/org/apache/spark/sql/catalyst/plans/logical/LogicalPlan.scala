@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.trees.TreeNode
 
 
-abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging with Product{
+abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
 
   /**
    * Computes [[Statistics]] for this plan. The default implementation assumes the output
