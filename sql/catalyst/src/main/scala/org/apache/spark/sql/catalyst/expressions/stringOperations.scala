@@ -103,7 +103,7 @@ trait StringRegexExpression extends ImplicitCastInputTypes {
  * Simple RegEx pattern matching function
  */
 case class Like(left: Expression, right: Expression)
-  extends BinaryExpression with StringRegexExpression {
+  extends BinaryExpression with StringRegexExpression with CodegenFallback {
 
   // replace the _ with .{1} exactly match 1 time of any character
   // replace the % with .*, match 0 or more times with any character
@@ -133,13 +133,15 @@ case class Like(left: Expression, right: Expression)
   override def toString: String = s"$left LIKE $right"
 }
 
+
 case class RLike(left: Expression, right: Expression)
-  extends BinaryExpression with StringRegexExpression {
+  extends BinaryExpression with StringRegexExpression with CodegenFallback {
 
   override def escape(v: String): String = v
   override def matches(regex: Pattern, str: String): Boolean = regex.matcher(str).find(0)
   override def toString: String = s"$left RLIKE $right"
 }
+
 
 trait String2StringExpression extends ImplicitCastInputTypes {
   self: UnaryExpression =>
@@ -156,7 +158,8 @@ trait String2StringExpression extends ImplicitCastInputTypes {
 /**
  * A function that converts the characters of a string to uppercase.
  */
-case class Upper(child: Expression) extends UnaryExpression with String2StringExpression {
+case class Upper(child: Expression)
+  extends UnaryExpression with String2StringExpression {
 
   override def convert(v: UTF8String): UTF8String = v.toUpperCase
 
@@ -301,7 +304,7 @@ case class StringInstr(str: Expression, substr: Expression)
  * in given string after position pos.
  */
 case class StringLocate(substr: Expression, str: Expression, start: Expression)
-  extends Expression with ImplicitCastInputTypes {
+  extends Expression with ImplicitCastInputTypes with CodegenFallback {
 
   def this(substr: Expression, str: Expression) = {
     this(substr, str, Literal(0))
@@ -342,7 +345,7 @@ case class StringLocate(substr: Expression, str: Expression, start: Expression)
  * Returns str, left-padded with pad to a length of len.
  */
 case class StringLPad(str: Expression, len: Expression, pad: Expression)
-  extends Expression with ImplicitCastInputTypes {
+  extends Expression with ImplicitCastInputTypes with CodegenFallback {
 
   override def children: Seq[Expression] = str :: len :: pad :: Nil
   override def foldable: Boolean = children.forall(_.foldable)
@@ -380,7 +383,7 @@ case class StringLPad(str: Expression, len: Expression, pad: Expression)
  * Returns str, right-padded with pad to a length of len.
  */
 case class StringRPad(str: Expression, len: Expression, pad: Expression)
-  extends Expression with ImplicitCastInputTypes {
+  extends Expression with ImplicitCastInputTypes with CodegenFallback {
 
   override def children: Seq[Expression] = str :: len :: pad :: Nil
   override def foldable: Boolean = children.forall(_.foldable)
@@ -417,9 +420,9 @@ case class StringRPad(str: Expression, len: Expression, pad: Expression)
 /**
  * Returns the input formatted according do printf-style format strings
  */
-case class StringFormat(children: Expression*) extends Expression {
+case class StringFormat(children: Expression*) extends Expression with CodegenFallback {
 
-  require(children.length >=1, "printf() should take at least 1 argument")
+  require(children.nonEmpty, "printf() should take at least 1 argument")
 
   override def foldable: Boolean = children.forall(_.foldable)
   override def nullable: Boolean = children(0).nullable
@@ -436,7 +439,7 @@ case class StringFormat(children: Expression*) extends Expression {
       val formatter = new java.util.Formatter(sb, Locale.US)
 
       val arglist = args.map(_.eval(input).asInstanceOf[AnyRef])
-      formatter.format(pattern.asInstanceOf[UTF8String].toString(), arglist: _*)
+      formatter.format(pattern.asInstanceOf[UTF8String].toString, arglist: _*)
 
       UTF8String.fromString(sb.toString)
     }
@@ -483,7 +486,8 @@ case class StringReverse(child: Expression) extends UnaryExpression with String2
 /**
  * Returns a n spaces string.
  */
-case class StringSpace(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
+case class StringSpace(child: Expression)
+  extends UnaryExpression with ImplicitCastInputTypes with CodegenFallback {
 
   override def dataType: DataType = StringType
   override def inputTypes: Seq[DataType] = Seq(IntegerType)
@@ -503,7 +507,7 @@ case class StringSpace(child: Expression) extends UnaryExpression with ImplicitC
  * Splits str around pat (pattern is a regular expression).
  */
 case class StringSplit(str: Expression, pattern: Expression)
-  extends BinaryExpression with ImplicitCastInputTypes {
+  extends BinaryExpression with ImplicitCastInputTypes with CodegenFallback {
 
   override def left: Expression = str
   override def right: Expression = pattern
@@ -524,7 +528,7 @@ case class StringSplit(str: Expression, pattern: Expression)
  * Defined for String and Binary types.
  */
 case class Substring(str: Expression, pos: Expression, len: Expression)
-  extends Expression with ImplicitCastInputTypes {
+  extends Expression with ImplicitCastInputTypes with CodegenFallback {
 
   def this(str: Expression, pos: Expression) = {
     this(str, pos, Literal(Integer.MAX_VALUE))
@@ -606,8 +610,6 @@ case class Length(child: Expression) extends UnaryExpression with ExpectsInputTy
       case BinaryType => defineCodeGen(ctx, ev, c => s"($c).length")
     }
   }
-
-  override def prettyName: String = "length"
 }
 
 /**
@@ -632,7 +634,9 @@ case class Levenshtein(left: Expression, right: Expression) extends BinaryExpres
 /**
  * Returns the numeric value of the first character of str.
  */
-case class Ascii(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
+case class Ascii(child: Expression)
+  extends UnaryExpression with ImplicitCastInputTypes with CodegenFallback {
+
   override def dataType: DataType = IntegerType
   override def inputTypes: Seq[DataType] = Seq(StringType)
 
@@ -649,7 +653,9 @@ case class Ascii(child: Expression) extends UnaryExpression with ImplicitCastInp
 /**
  * Converts the argument from binary to a base 64 string.
  */
-case class Base64(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
+case class Base64(child: Expression)
+  extends UnaryExpression with ImplicitCastInputTypes with CodegenFallback {
+
   override def dataType: DataType = StringType
   override def inputTypes: Seq[DataType] = Seq(BinaryType)
 
@@ -663,7 +669,9 @@ case class Base64(child: Expression) extends UnaryExpression with ImplicitCastIn
 /**
  * Converts the argument from a base 64 string to BINARY.
  */
-case class UnBase64(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
+case class UnBase64(child: Expression)
+  extends UnaryExpression with ImplicitCastInputTypes with CodegenFallback {
+
   override def dataType: DataType = BinaryType
   override def inputTypes: Seq[DataType] = Seq(StringType)
 
@@ -677,7 +685,7 @@ case class UnBase64(child: Expression) extends UnaryExpression with ImplicitCast
  * If either argument is null, the result will also be null.
  */
 case class Decode(bin: Expression, charset: Expression)
-  extends BinaryExpression with ImplicitCastInputTypes {
+  extends BinaryExpression with ImplicitCastInputTypes with CodegenFallback {
 
   override def left: Expression = bin
   override def right: Expression = charset
@@ -696,7 +704,7 @@ case class Decode(bin: Expression, charset: Expression)
  * If either argument is null, the result will also be null.
 */
 case class Encode(value: Expression, charset: Expression)
-  extends BinaryExpression with ImplicitCastInputTypes {
+  extends BinaryExpression with ImplicitCastInputTypes with CodegenFallback {
 
   override def left: Expression = value
   override def right: Expression = charset
@@ -715,7 +723,7 @@ case class Encode(value: Expression, charset: Expression)
  * fractional part.
  */
 case class FormatNumber(x: Expression, d: Expression)
-  extends BinaryExpression with ExpectsInputTypes {
+  extends BinaryExpression with ExpectsInputTypes with CodegenFallback {
 
   override def left: Expression = x
   override def right: Expression = d

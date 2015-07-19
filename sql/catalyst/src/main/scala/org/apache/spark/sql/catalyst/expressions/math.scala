@@ -18,7 +18,6 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.{lang => jl}
-import java.util.Arrays
 
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckSuccess, TypeCheckFailure}
@@ -29,11 +28,14 @@ import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * A leaf expression specifically for math constants. Math constants expect no input.
+ *
+ * There is no code generation because they should get constant folded by the optimizer.
+ *
  * @param c The math constant.
  * @param name The short name of the function
  */
 abstract class LeafMathExpression(c: Double, name: String)
-  extends LeafExpression with Serializable {
+  extends LeafExpression with CodegenFallback {
 
   override def dataType: DataType = DoubleType
   override def foldable: Boolean = true
@@ -41,13 +43,6 @@ abstract class LeafMathExpression(c: Double, name: String)
   override def toString: String = s"$name()"
 
   override def eval(input: InternalRow): Any = c
-
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    s"""
-      boolean ${ev.isNull} = false;
-      ${ctx.javaType(dataType)} ${ev.primitive} = java.lang.Math.$name;
-    """
-  }
 }
 
 /**
@@ -130,8 +125,16 @@ abstract class BinaryMathExpression(f: (Double, Double) => Double, name: String)
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+/**
+ * Euler's number. Note that there is no code generation because this is only
+ * evaluated by the optimizer during constant folding.
+ */
 case class EulerNumber() extends LeafMathExpression(math.E, "E")
 
+/**
+ * Pi. Note that there is no code generation because this is only
+ * evaluated by the optimizer during constant folding.
+ */
 case class Pi() extends LeafMathExpression(math.Pi, "PI")
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -161,7 +164,7 @@ case class Cosh(child: Expression) extends UnaryMathExpression(math.cosh, "COSH"
  * @param toBaseExpr to which base
  */
 case class Conv(numExpr: Expression, fromBaseExpr: Expression, toBaseExpr: Expression)
-  extends Expression with ImplicitCastInputTypes{
+  extends Expression with ImplicitCastInputTypes with CodegenFallback {
 
   override def foldable: Boolean = numExpr.foldable && fromBaseExpr.foldable && toBaseExpr.foldable
 
@@ -171,6 +174,8 @@ case class Conv(numExpr: Expression, fromBaseExpr: Expression, toBaseExpr: Expre
 
   override def inputTypes: Seq[AbstractDataType] = Seq(StringType, IntegerType, IntegerType)
 
+  override def dataType: DataType = StringType
+
   /** Returns the result of evaluating this expression on a given input Row */
   override def eval(input: InternalRow): Any = {
     val num = numExpr.eval(input)
@@ -179,16 +184,12 @@ case class Conv(numExpr: Expression, fromBaseExpr: Expression, toBaseExpr: Expre
     if (num == null || fromBase == null || toBase == null) {
       null
     } else {
-      conv(num.asInstanceOf[UTF8String].getBytes,
-        fromBase.asInstanceOf[Int], toBase.asInstanceOf[Int])
+      conv(
+        num.asInstanceOf[UTF8String].getBytes,
+        fromBase.asInstanceOf[Int],
+        toBase.asInstanceOf[Int])
     }
   }
-
-  /**
-   * Returns the [[DataType]] of the result of evaluating this expression.  It is
-   * invalid to query the dataType of an unresolved expression (i.e., when `resolved` == false).
-   */
-  override def dataType: DataType = StringType
 
   private val value = new Array[Byte](64)
 
@@ -208,7 +209,7 @@ case class Conv(numExpr: Expression, fromBaseExpr: Expression, toBaseExpr: Expre
       // Two's complement => x = uval - 2*MAX - 2
       // => uval = x + 2*MAX + 2
       // Now, use the fact: (a+b)/c = a/c + b/c + (a%c+b%c)/c
-      (x / m + 2 * (Long.MaxValue / m) + 2 / m + (x % m + 2 * (Long.MaxValue % m) + 2 % m) / m)
+      x / m + 2 * (Long.MaxValue / m) + 2 / m + (x % m + 2 * (Long.MaxValue % m) + 2 % m) / m
     }
   }
 
@@ -220,7 +221,7 @@ case class Conv(numExpr: Expression, fromBaseExpr: Expression, toBaseExpr: Expre
    */
   private def decode(v: Long, radix: Int): Unit = {
     var tmpV = v
-    Arrays.fill(value, 0.asInstanceOf[Byte])
+    java.util.Arrays.fill(value, 0.asInstanceOf[Byte])
     var i = value.length - 1
     while (tmpV != 0) {
       val q = unsignedLongDiv(tmpV, radix)
@@ -254,7 +255,7 @@ case class Conv(numExpr: Expression, fromBaseExpr: Expression, toBaseExpr: Expre
       v = v * radix + value(i)
       i += 1
     }
-    return v
+    v
   }
 
   /**
@@ -292,13 +293,13 @@ case class Conv(numExpr: Expression, fromBaseExpr: Expression, toBaseExpr: Expre
    * NB: This logic is borrowed from org.apache.hadoop.hive.ql.ud.UDFConv
    */
   private def conv(n: Array[Byte] , fromBase: Int, toBase: Int ): UTF8String = {
-    if (n == null || fromBase == null || toBase == null || n.isEmpty) {
-      return null
-    }
-
     if (fromBase < Character.MIN_RADIX || fromBase > Character.MAX_RADIX
       || Math.abs(toBase) < Character.MIN_RADIX
       || Math.abs(toBase) > Character.MAX_RADIX) {
+      return null
+    }
+
+    if (n.length == 0) {
       return null
     }
 
@@ -340,7 +341,7 @@ case class Conv(numExpr: Expression, fromBaseExpr: Expression, toBaseExpr: Expre
       resultStartPos = firstNonZeroPos - 1
       value(resultStartPos) = '-'
     }
-    UTF8String.fromBytes( Arrays.copyOfRange(value, resultStartPos, value.length))
+    UTF8String.fromBytes(java.util.Arrays.copyOfRange(value, resultStartPos, value.length))
   }
 }
 
@@ -495,8 +496,8 @@ object Hex {
  * Otherwise if the number is a STRING, it converts each character into its hex representation
  * and returns the resulting STRING. Negative numbers would be treated as two's complement.
  */
-case class Hex(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
-  // TODO: Create code-gen version.
+case class Hex(child: Expression)
+  extends UnaryExpression with ImplicitCastInputTypes with CodegenFallback {
 
   override def inputTypes: Seq[AbstractDataType] =
     Seq(TypeCollection(LongType, BinaryType, StringType))
@@ -539,8 +540,8 @@ case class Hex(child: Expression) extends UnaryExpression with ImplicitCastInput
  * Performs the inverse operation of HEX.
  * Resulting characters are returned as a byte array.
  */
-case class Unhex(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
-  // TODO: Create code-gen version.
+case class Unhex(child: Expression)
+  extends UnaryExpression with ImplicitCastInputTypes with CodegenFallback {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(StringType)
 
