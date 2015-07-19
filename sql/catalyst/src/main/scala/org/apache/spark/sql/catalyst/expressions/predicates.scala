@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.types._
+import org.apache.spark.util.Utils
 
 
 object InterpretedPredicate {
@@ -257,13 +258,9 @@ case class EqualTo(left: Expression, right: Expression) extends BinaryComparison
 
   protected override def nullSafeEval(input1: Any, input2: Any): Any = {
     if (left.dataType == FloatType) {
-      val f1 = input1.asInstanceOf[Float]
-      val f2 = input2.asInstanceOf[Float]
-      (java.lang.Float.isNaN(f1) && java.lang.Float.isNaN(f2)) || f1 == f2
+      Utils.nanSafeCompareFloats(input1.asInstanceOf[Float], input2.asInstanceOf[Float]) == 0
     } else if (left.dataType == DoubleType) {
-      val d1 = input1.asInstanceOf[Double]
-      val d2 = input2.asInstanceOf[Double]
-      (java.lang.Double.isNaN(d1) && java.lang.Double.isNaN(d2)) || d1 == d2
+      Utils.nanSafeCompareDoubles(input1.asInstanceOf[Double], input2.asInstanceOf[Double]) == 0
     } else if (left.dataType != BinaryType) {
       input1 == input2
     } else {
@@ -294,13 +291,9 @@ case class EqualNullSafe(left: Expression, right: Expression) extends BinaryComp
       false
     } else {
       if (left.dataType == FloatType) {
-        val f1 = input1.asInstanceOf[Float]
-        val f2 = input2.asInstanceOf[Float]
-        (java.lang.Float.isNaN(f1) && java.lang.Float.isNaN(f2)) || f1 == f2
+        Utils.nanSafeCompareFloats(input1.asInstanceOf[Float], input2.asInstanceOf[Float]) == 0
       } else if (left.dataType == DoubleType) {
-        val d1 = input1.asInstanceOf[Double]
-        val d2 = input2.asInstanceOf[Double]
-        (java.lang.Double.isNaN(d1) && java.lang.Double.isNaN(d2)) || d1 == d2
+        Utils.nanSafeCompareDoubles(input1.asInstanceOf[Double], input2.asInstanceOf[Double]) == 0
       } else if (left.dataType != BinaryType) {
         input1 == input2
       } else {

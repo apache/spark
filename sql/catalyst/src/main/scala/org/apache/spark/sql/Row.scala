@@ -406,17 +406,15 @@ trait Row extends Serializable {
         o1 match {
           case b1: Array[Byte] =>
             if (!o2.isInstanceOf[Array[Byte]] ||
-              !java.util.Arrays.equals(b1, o2.asInstanceOf[Array[Byte]])) {
+                !java.util.Arrays.equals(b1, o2.asInstanceOf[Array[Byte]])) {
               return false
             }
-          case f1: Float =>
-            if (!o2.isInstanceOf[Float] ||
-              (java.lang.Float.isNaN(f1) && !java.lang.Float.isNaN(o2.asInstanceOf[Float]))) {
-                return false
+          case f1: Float if java.lang.Float.isNaN(f1) =>
+            if (!o2.isInstanceOf[Float] || ! java.lang.Float.isNaN(o2.asInstanceOf[Float])) {
+              return false
             }
-          case d1: Double =>
-            if (!o2.isInstanceOf[Double] ||
-              (java.lang.Double.isNaN(d1) && !java.lang.Double.isNaN(o2.asInstanceOf[Double]))) {
+          case d1: Double if java.lang.Double.isNaN(d1) =>
+            if (!o2.isInstanceOf[Double] || ! java.lang.Double.isNaN(o2.asInstanceOf[Double])) {
               return false
             }
           case _ => if (o1 != o2) {
