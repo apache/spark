@@ -57,13 +57,8 @@ __all__ += ['lag', 'lead', 'ntile']
 
 __all__ += [
     'date_format',
-    'year',
-    'quarter',
-    'month',
-    'dayofmonth',
-    'dayofyear',
-    'hour',
-    'weekofyear']
+    'year', 'quarter', 'month', 'hour', 'minute', 'second',
+    'dayofmonth', 'dayofyear', 'weekofyear']
 
 
 def _create_function(name, doc=""):
