@@ -2316,20 +2316,6 @@ object functions {
    * @group datetime_funcs
    * @since 1.5.0
    */
-  def day(e: Column): Column = DayOfMonth(e.expr)
-
-  /**
-   * Extracts the day of the month as an integer from a given date/timestamp/string.
-   * @group datetime_funcs
-   * @since 1.5.0
-   */
-  def day(columnName: String): Column = day(Column(columnName))
-
-  /**
-   * Extracts the day of the month as an integer from a given date/timestamp/string.
-   * @group datetime_funcs
-   * @since 1.5.0
-   */
   def dayofmonth(e: Column): Column = DayOfMonth(e.expr)
 
   /**

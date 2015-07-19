@@ -112,18 +112,6 @@ class DateFunctionsSuite extends QueryTest {
       Row(4, 4, 4))
   }
 
-  test("day") {
-    val df = Seq((d, sdfDate.format(d), ts)).toDF("a", "b", "c")
-
-    checkAnswer(
-      df.select(day("a"), day("b"), day("c")),
-      Row(8, 8, 8))
-
-    checkAnswer(
-      df.selectExpr("day(a)", "day(b)", "day(c)"),
-      Row(8, 8, 8))
-  }
-
   test("dayofmonth") {
     val df = Seq((d, sdfDate.format(d), ts)).toDF("a", "b", "c")
 
@@ -132,7 +120,7 @@ class DateFunctionsSuite extends QueryTest {
       Row(8, 8, 8))
 
     checkAnswer(
-      df.selectExpr("dayofmonth(a)", "dayofmonth(b)", "dayofmonth(c)"),
+      df.selectExpr("day(a)", "day(b)", "dayofmonth(c)"),
       Row(8, 8, 8))
   }
 

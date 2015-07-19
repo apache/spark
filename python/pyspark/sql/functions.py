@@ -723,18 +723,6 @@ def month(col):
 
 
 @since(1.5)
-def day(col):
-    """
-    Extract the day of the month of a given date as integer.
-
-    >>> sqlContext.createDataFrame([('2015-04-08',)], ['a']).select(day('a').alias('day')).collect()
-    [Row(day=8)]
-    """
-    sc = SparkContext._active_spark_context
-    return Column(sc._jvm.functions.day(col))
-
-
-@since(1.5)
 def dayofmonth(col):
     """
     Extract the day of the month of a given date as integer.
