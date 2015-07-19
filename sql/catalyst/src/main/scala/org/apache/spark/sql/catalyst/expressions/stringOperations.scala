@@ -110,11 +110,8 @@ case class ConcatWs(children: Seq[Expression])
       }.mkString(", ")
 
       evals.map(_.code).mkString("\n") + s"""
-        boolean ${ev.isNull} = false;
         UTF8String ${ev.primitive} = UTF8String.concatWs($inputs);
-        if (${ev.primitive} == null) {
-          ${ev.isNull} = true;
-        }
+        boolean ${ev.isNull} = ${ev.primitive} == null;
       """
     } else {
       // Contains a mix of strings and array<string>s. Fall back to interpreted mode for now.
