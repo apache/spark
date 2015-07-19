@@ -50,7 +50,7 @@ class DateFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         (0 to 5).foreach { i =>
           val c = Calendar.getInstance()
           c.set(y, m, 28, 0, 0, 0)
-          c.add(Calendar.DATE, 1)
+          c.add(Calendar.DATE, i)
           checkEvaluation(DayInYear(Cast(Literal(new Date(c.getTimeInMillis)), DateType)),
             sdfDay.format(c.getTime).toInt)
         }
@@ -62,7 +62,7 @@ class DateFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         (0 to 5).foreach { i =>
           val c = Calendar.getInstance()
           c.set(y, m, 28, 0, 0, 0)
-          c.add(Calendar.DATE, 1)
+          c.add(Calendar.DATE, i)
           checkEvaluation(DayInYear(Cast(Literal(new Date(c.getTimeInMillis)), DateType)),
             sdfDay.format(c.getTime).toInt)
         }
@@ -74,7 +74,7 @@ class DateFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         (0 to 5).foreach { i =>
           val c = Calendar.getInstance()
           c.set(y, m, 28, 0, 0, 0)
-          c.add(Calendar.DATE, 1)
+          c.add(Calendar.DATE, i)
           checkEvaluation(DayInYear(Cast(Literal(new Date(c.getTimeInMillis)), DateType)),
             sdfDay.format(c.getTime).toInt)
         }
@@ -86,7 +86,7 @@ class DateFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         (0 to 5).foreach { i =>
           val c = Calendar.getInstance()
           c.set(y, m, 28, 0, 0, 0)
-          c.add(Calendar.DATE, 1)
+          c.add(Calendar.DATE, i)
           checkEvaluation(DayInYear(Cast(Literal(new Date(c.getTimeInMillis)), DateType)),
             sdfDay.format(c.getTime).toInt)
         }
@@ -143,7 +143,7 @@ class DateFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         (0 to 5 * 24).foreach { i =>
           val c = Calendar.getInstance()
           c.set(y, m, 28, 0, 0, 0)
-          c.add(Calendar.HOUR_OF_DAY, 1)
+          c.add(Calendar.HOUR_OF_DAY, i)
           checkEvaluation(Month(Cast(Literal(new Date(c.getTimeInMillis)), DateType)),
             c.get(Calendar.MONTH) + 1)
         }
@@ -155,7 +155,7 @@ class DateFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         (0 to 5 * 24).foreach { i =>
           val c = Calendar.getInstance()
           c.set(y, m, 28, 0, 0, 0)
-          c.add(Calendar.HOUR_OF_DAY, 1)
+          c.add(Calendar.HOUR_OF_DAY, i)
           checkEvaluation(Month(Cast(Literal(new Date(c.getTimeInMillis)), DateType)),
             c.get(Calendar.MONTH) + 1)
         }
