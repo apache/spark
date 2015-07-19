@@ -275,12 +275,12 @@ private[sql] case class InsertIntoHadoopFsRelation(
         // (SPARK-8890) to avoid running out of memory due to creating too many outputWriters. Thus,
         // we extract this functionality into its own function that can be called with updated
         // underlying data.
-        def writeRowsSafe(iterator: Iterator[InternalRow]): Unit ={
+        def writeRowsSafe(iterator: Iterator[InternalRow]): Unit = {
           while (iterator.hasNext) {
             val internalRow = iterator.next()
 
-            if (writerContainer.canGetOutputWriter(internalRow) &&
-                !writtenRows.contains(internalRow)) {
+            if (!writtenRows.contains(internalRow) &&
+                writerContainer.canGetOutputWriter(internalRow)) {
               val partitionPart = partitionProj(internalRow)
               val dataPart = dataConverter(dataProj(internalRow))
 
