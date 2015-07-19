@@ -19,6 +19,9 @@ package org.apache.spark.sql
 
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql.execution.stat._
+import org.apache.spark.sql.types._
+
+import scala.collection.mutable.ArrayBuffer
 
 /**
  * :: Experimental ::
@@ -166,4 +169,134 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
   def freqItems(cols: Seq[String]): DataFrame = {
     FrequentItems.singlePassFreqItems(df, cols, 0.01)
   }
+
+  /**
+   * Finding frequent items for columns, possibly with false positives. Using the
+   * frequent element count algorithm described in
+   * [[http://dx.doi.org/10.1145/762471.762473, proposed by Karp, Schenker, and Papadimitriou]].
+   * The `support` should be greater than 1e-4.
+   *
+   * This function is meant for exploratory data analysis, as we make no guarantee about the
+   * backward compatibility of the schema of the resulting [[DataFrame]].
+   *
+   * @param cols the names of the columns to search frequent items in.
+   * @param support The minimum frequency for an item to be considered `frequent`. Should be greater
+   *                than 1e-4.
+   * @return A Local DataFrame with the frequent items for each column.
+   *
+   * @since 1.5.0
+   */
+  def freqItemsFrame(cols: Array[String], support: Double): DataFrame = {
+    val fi = freqItems(cols, support).first
+    val fiSchema = fi.schema
+    val schemaNames = fiSchema.map(_.name)
+    val schemaTypes = fiSchema.map(_.dataType.asInstanceOf[ArrayType].elementType)
+    val newSchema = StructType(schemaNames.zip(schemaTypes)
+      .map(x => StructField(x._1, x._2)).toArray)
+    val colSize = fi.toSeq.map(_.asInstanceOf[ArrayBuffer[Any]].size)
+    val rowSize = fi.size
+    var i = 0
+    var j = 0
+    var rowHolder = Seq[Row]()
+    for (i <- 0 to colSize.max-1) {
+      var fillMap = colSize.map(_ > i)
+      var rowFiller = Seq[Any]()
+      for (j <- 0 to rowSize-1) {
+        if (fillMap(j)) {
+          rowFiller = rowFiller :+ fi(j).asInstanceOf[ArrayBuffer[Any]](i)
+        }
+        else {
+          rowFiller = rowFiller :+ null
+        }
+      }
+      rowHolder = rowHolder :+ Row.fromSeq(rowFiller)
+    }
+    val rowRDD = df.sqlContext.sparkContext.parallelize(rowHolder)
+    val fiDF = df.sqlContext.createDataFrame(rowRDD, newSchema)
+    fiDF
+  }
+
+  /**
+   * Finding frequent items for columns, possibly with false positives. Using the
+   * frequent element count algorithm described in
+   * [[http://dx.doi.org/10.1145/762471.762473, proposed by Karp, Schenker, and Papadimitriou]].
+   * The `support` should be greater than 1e-4.
+   *
+   * This function is meant for exploratory data analysis, as we make no guarantee about the
+   * backward compatibility of the schema of the resulting [[DataFrame]].
+   *
+   * @param cols the names of the columns to search frequent items in.
+   * @param support The minimum frequency for an item to be considered `frequent`. Should be greater
+   *                than 1e-4.
+   * @return A Local DataFrame with the frequent items for each column.
+   *
+   * @since 1.5.0
+   */
+  def freqItemsFrame(cols: Array[String]): DataFrame = {
+    freqItemsFrame(cols, 0.01)
+  }
+
+  /**
+   * (Scala-specific) Finding frequent items for columns, possibly with false positives. Using the
+   * frequent element count algorithm described in
+   * [[http://dx.doi.org/10.1145/762471.762473, proposed by Karp, Schenker, and Papadimitriou]].
+   * Uses a `default` support of 1%.
+   *
+   * This function is meant for exploratory data analysis, as we make no guarantee about the
+   * backward compatibility of the schema of the resulting [[DataFrame]].
+   *
+   * @param cols the names of the columns to search frequent items in.
+   * @param support The minimum frequency for an item to be considered `frequent`. Should be greater
+   *                than 1e-4.
+   * @return A Local DataFrame with the frequent items for each column.
+   *
+   * @since 1.5.0
+   */
+   def freqItemsFrame(cols: Seq[String], support: Double) : DataFrame = {
+     val fi = freqItems(cols, support).first
+     val fiSchema = fi.schema
+     val schemaNames = fiSchema.map(_.name)
+     val schemaTypes = fiSchema.map(_.dataType.asInstanceOf[ArrayType].elementType)
+     val newSchema = StructType(schemaNames.zip(schemaTypes)
+       .map(x => StructField(x._1, x._2)).toArray)
+     val colSize = fi.toSeq.map(_.asInstanceOf[ArrayBuffer[Any]].size)
+     val rowSize = fi.size
+     var i = 0
+     var j = 0
+     var rowHolder = Seq[Row]()
+     for (i <- 0 to colSize.max-1) {
+       var fillMap = colSize.map(_ > i)
+       var rowFiller = Seq[Any]()
+       for (j <- 0 to rowSize-1) {
+         if (fillMap(j)) {
+           rowFiller = rowFiller :+ fi(j).asInstanceOf[ArrayBuffer[Any]](i)
+         }
+         else {
+           rowFiller = rowFiller :+ null
+         }
+       }
+       rowHolder = rowHolder :+ Row.fromSeq(rowFiller)
+     }
+     val rowRDD = df.sqlContext.sparkContext.parallelize(rowHolder)
+     val fiDF = df.sqlContext.createDataFrame(rowRDD, newSchema)
+     fiDF
+   }
+
+   /**
+    * (Scala-specific) Finding frequent items for columns, possibly with false positives. Using the
+    * frequent element count algorithm described in
+    * [[http://dx.doi.org/10.1145/762471.762473, proposed by Karp, Schenker, and Papadimitriou]].
+    * Uses a `default` support of 1%.
+    *
+    * This function is meant for exploratory data analysis, as we make no guarantee about the
+    * backward compatibility of the schema of the resulting [[DataFrame]].
+    *
+    * @param cols the names of the columns to search frequent items in.
+    * @return A Local DataFrame with the frequent items for each column.
+    *
+    * @since 1.5.0
+    */
+    def freqItemsFrame(cols: Seq[String]) : DataFrame = {
+      freqItemsFrame(cols, 0.01)
+    }
 }

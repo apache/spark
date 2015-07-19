@@ -130,4 +130,17 @@ class DataFrameStatSuite extends SparkFunSuite  {
     val items2 = singleColResults.collect().head
     items2.getSeq[Double](0) should contain (-1.0)
   }
+
+  test("Frequent Items Frame") {
+    val rows = Seq.tabulate(1000) { i =>
+      if (i % 3 == 0) (1, toLetter(1), -1.0) else (i, toLetter(i), i * -1.0)
+    }
+    val df = rows.toDF("numbers", "letters", "negDoubles")
+
+    val results = df.stat.freqItemsFrame(Array("numbers", "letters"), 0.1)
+    results.select("numbers_freqItems").map(_.get(0)).collect should contain (1)
+    results.select("letters_freqItems").map(_.get(0)).collect should contain (toLetter(1))
+    val singleColResults = df.stat.freqItemsFrame(Seq("negDoubles"), 0.1)
+    singleColResults.select("negDoubles_freqItems").map(_.get(0)).collect should contain(-1.0)
+  }
 }
