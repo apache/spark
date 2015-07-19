@@ -75,7 +75,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
           val c = Calendar.getInstance()
           c.set(y, m, 28, 0, 0, 0)
           c.add(Calendar.DATE, i)
-          checkEvaluation(DayInYear(Cast(Literal(new Date(c.getTimeInMillis)), DateType)),
+          checkEvaluation(DayOfYear(Cast(Literal(new Date(c.getTimeInMillis)), DateType)),
             sdfDay.format(c.getTime).toInt)
         }
       }
@@ -87,7 +87,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
           val c = Calendar.getInstance()
           c.set(y, m, 28, 0, 0, 0)
           c.add(Calendar.DATE, i)
-          checkEvaluation(DayInYear(Cast(Literal(new Date(c.getTimeInMillis)), DateType)),
+          checkEvaluation(DayOfYear(Cast(Literal(new Date(c.getTimeInMillis)), DateType)),
             sdfDay.format(c.getTime).toInt)
         }
       }
