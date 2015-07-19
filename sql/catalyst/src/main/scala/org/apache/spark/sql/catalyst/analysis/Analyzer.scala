@@ -841,7 +841,8 @@ class Analyzer(
           failAnalysis(s"$expr has multiple Window Specifications ($distinctWindowSpec)." +
             s"Please file a bug report with this error message, stack trace, and the query.")
         } else {
-          distinctWindowSpec.head
+          val unbounded = SpecifiedWindowFrame(RowFrame, UnboundedPreceding, UnboundedFollowing)
+          distinctWindowSpec.head.copy(frameSpecification = unbounded)
         }
       }.toSeq
 
