@@ -42,11 +42,11 @@ object SquaredError extends Loss {
    * @return Loss gradient
    */
   override def gradient(prediction: Double, label: Double): Double = {
-    2.0 * (prediction - label)
+    - 2.0 * (label - prediction)
   }
 
   override private[mllib] def computeError(prediction: Double, label: Double): Double = {
-    val err = prediction - label
+    val err = label - prediction
     err * err
   }
 }

@@ -30,6 +30,7 @@ if sys.version >= '3':
     basestring = str
     xrange = range
     import copyreg as copy_reg
+    long = int
 else:
     from itertools import izip as zip
     import copy_reg
@@ -445,8 +446,10 @@ class SparseVector(Vector):
         values (sorted by index).
 
         :param size: Size of the vector.
-        :param args: Non-zero entries, as a dictionary, list of tupes,
-               or two sorted lists containing indices and values.
+        :param args: Active entries, as a dictionary {index: value, ...},
+          a list of tuples [(index, value), ...], or a list of strictly i
+          ncreasing indices and a list of corresponding values [index, ...],
+          [value, ...]. Inactive entries are treated as zeros.
 
         >>> SparseVector(4, {1: 1.0, 3: 5.5})
         SparseVector(4, {1: 1.0, 3: 5.5})
@@ -456,6 +459,7 @@ class SparseVector(Vector):
         SparseVector(4, {1: 1.0, 3: 5.5})
         """
         self.size = int(size)
+        """ Size of the vector. """
         assert 1 <= len(args) <= 2, "must pass either 2 or 3 arguments"
         if len(args) == 1:
             pairs = args[0]
@@ -463,7 +467,9 @@ class SparseVector(Vector):
                 pairs = pairs.items()
             pairs = sorted(pairs)
             self.indices = np.array([p[0] for p in pairs], dtype=np.int32)
+            """ A list of indices corresponding to active entries. """
             self.values = np.array([p[1] for p in pairs], dtype=np.float64)
+            """ A list of values corresponding to active entries. """
         else:
             if isinstance(args[0], bytes):
                 assert isinstance(args[1], bytes), "values should be string too"
@@ -765,14 +771,18 @@ class Vectors(object):
         return SparseVector(size, *args)
 
     @staticmethod
-    def dense(elements):
+    def dense(*elements):
         """
-        Create a dense vector of 64-bit floats from a Python list. Always
-        returns a NumPy array.
+        Create a dense vector of 64-bit floats from a Python list or numbers.
 
         >>> Vectors.dense([1, 2, 3])
         DenseVector([1.0, 2.0, 3.0])
+        >>> Vectors.dense(1.0, 2.0)
+        DenseVector([1.0, 2.0])
         """
+        if len(elements) == 1 and not isinstance(elements[0], (float, int, long)):
+            # it's list, numpy.array or other iterable object.
+            elements = elements[0]
         return DenseVector(elements)
 
     @staticmethod

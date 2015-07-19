@@ -20,28 +20,25 @@ package org.apache.spark.sql.catalyst.expressions
 import com.clearspring.analytics.stream.cardinality.HyperLogLog
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.trees
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.util.collection.OpenHashSet
 
-abstract class AggregateExpression extends Expression {
-  self: Product =>
+
+trait AggregateExpression extends Expression with Unevaluable {
+
+  /**
+   * Aggregate expressions should not be foldable.
+   */
+  override def foldable: Boolean = false
 
   /**
    * Creates a new instance that can be used to compute this aggregate expression for a group
    * of input rows/
    */
   def newInstance(): AggregateFunction
-
-  /**
-   * [[AggregateExpression.eval]] should never be invoked because [[AggregateExpression]]'s are
-   * replaced with a physical aggregate operator at runtime.
-   */
-  override def eval(input: InternalRow = null): Any =
-    throw new TreeNodeException(this, s"No function to evaluate expression. type: ${this.nodeName}")
 }
 
 /**
@@ -60,8 +57,7 @@ case class SplitEvaluation(
  * An [[AggregateExpression]] that can be partially computed without seeing all relevant tuples.
  * These partial evaluations can then be combined to compute the actual answer.
  */
-abstract class PartialAggregate extends AggregateExpression {
-  self: Product =>
+trait PartialAggregate extends AggregateExpression {
 
   /**
    * Returns a [[SplitEvaluation]] that computes this aggregation using partial aggregation.
@@ -74,8 +70,7 @@ abstract class PartialAggregate extends AggregateExpression {
  * [[AggregateExpression]] with an algorithm that will be used to compute one specific result.
  */
 abstract class AggregateFunction
-  extends AggregateExpression with Serializable with trees.LeafNode[Expression] {
-  self: Product =>
+  extends LeafExpression with AggregateExpression with Serializable {
 
   /** Base should return the generic aggregate expression that this function is computing */
   val base: AggregateExpression
@@ -91,7 +86,7 @@ abstract class AggregateFunction
   }
 }
 
-case class Min(child: Expression) extends PartialAggregate with trees.UnaryNode[Expression] {
+case class Min(child: Expression) extends UnaryExpression with PartialAggregate {
 
   override def nullable: Boolean = true
   override def dataType: DataType = child.dataType
@@ -124,7 +119,7 @@ case class MinFunction(expr: Expression, base: AggregateExpression) extends Aggr
   override def eval(input: InternalRow): Any = currentMin.value
 }
 
-case class Max(child: Expression) extends PartialAggregate with trees.UnaryNode[Expression] {
+case class Max(child: Expression) extends UnaryExpression with PartialAggregate {
 
   override def nullable: Boolean = true
   override def dataType: DataType = child.dataType
@@ -157,7 +152,7 @@ case class MaxFunction(expr: Expression, base: AggregateExpression) extends Aggr
   override def eval(input: InternalRow): Any = currentMax.value
 }
 
-case class Count(child: Expression) extends PartialAggregate with trees.UnaryNode[Expression] {
+case class Count(child: Expression) extends UnaryExpression with PartialAggregate {
 
   override def nullable: Boolean = false
   override def dataType: LongType.type = LongType
@@ -310,7 +305,7 @@ private[sql] case object HyperLogLogUDT extends UserDefinedType[HyperLogLog] {
 }
 
 case class ApproxCountDistinctPartition(child: Expression, relativeSD: Double)
-  extends AggregateExpression with trees.UnaryNode[Expression] {
+  extends UnaryExpression with AggregateExpression {
 
   override def nullable: Boolean = false
   override def dataType: DataType = HyperLogLogUDT
@@ -340,7 +335,7 @@ case class ApproxCountDistinctPartitionFunction(
 }
 
 case class ApproxCountDistinctMerge(child: Expression, relativeSD: Double)
-  extends AggregateExpression with trees.UnaryNode[Expression] {
+  extends UnaryExpression with AggregateExpression {
 
   override def nullable: Boolean = false
   override def dataType: LongType.type = LongType
@@ -368,7 +363,7 @@ case class ApproxCountDistinctMergeFunction(
 }
 
 case class ApproxCountDistinct(child: Expression, relativeSD: Double = 0.05)
-  extends PartialAggregate with trees.UnaryNode[Expression] {
+  extends UnaryExpression with PartialAggregate {
 
   override def nullable: Boolean = false
   override def dataType: LongType.type = LongType
@@ -386,7 +381,7 @@ case class ApproxCountDistinct(child: Expression, relativeSD: Double = 0.05)
   override def newInstance(): CountDistinctFunction = new CountDistinctFunction(child :: Nil, this)
 }
 
-case class Average(child: Expression) extends PartialAggregate with trees.UnaryNode[Expression] {
+case class Average(child: Expression) extends UnaryExpression with PartialAggregate {
 
   override def prettyName: String = "avg"
 
@@ -479,7 +474,7 @@ case class AverageFunction(expr: Expression, base: AggregateExpression)
   }
 }
 
-case class Sum(child: Expression) extends PartialAggregate with trees.UnaryNode[Expression] {
+case class Sum(child: Expression) extends UnaryExpression with PartialAggregate {
 
   override def nullable: Boolean = true
 
@@ -606,8 +601,7 @@ case class CombineSumFunction(expr: Expression, base: AggregateExpression)
   }
 }
 
-case class SumDistinct(child: Expression)
-  extends PartialAggregate with trees.UnaryNode[Expression] {
+case class SumDistinct(child: Expression) extends UnaryExpression with PartialAggregate {
 
   def this() = this(null)
   override def nullable: Boolean = true
@@ -701,7 +695,7 @@ case class CombineSetsAndSumFunction(
   }
 }
 
-case class First(child: Expression) extends PartialAggregate with trees.UnaryNode[Expression] {
+case class First(child: Expression) extends UnaryExpression with PartialAggregate {
   override def nullable: Boolean = true
   override def dataType: DataType = child.dataType
   override def toString: String = s"FIRST($child)"
@@ -729,7 +723,7 @@ case class FirstFunction(expr: Expression, base: AggregateExpression) extends Ag
   override def eval(input: InternalRow): Any = result
 }
 
-case class Last(child: Expression) extends PartialAggregate with trees.UnaryNode[Expression] {
+case class Last(child: Expression) extends UnaryExpression with PartialAggregate {
   override def references: AttributeSet = child.references
   override def nullable: Boolean = true
   override def dataType: DataType = child.dataType

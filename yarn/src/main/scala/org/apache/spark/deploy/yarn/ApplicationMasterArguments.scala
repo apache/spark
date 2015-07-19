@@ -85,7 +85,9 @@ class ApplicationMasterArguments(val args: Array[String]) {
     }
 
     if (primaryPyFile != null && primaryRFile != null) {
+      // scalastyle:off println
       System.err.println("Cannot have primary-py-file and primary-r-file at the same time")
+      // scalastyle:on println
       System.exit(-1)
     }
 
@@ -93,6 +95,7 @@ class ApplicationMasterArguments(val args: Array[String]) {
   }
 
   def printUsageAndExit(exitCode: Int, unknownParam: Any = null) {
+    // scalastyle:off println
     if (unknownParam != null) {
       System.err.println("Unknown/unsupported param " + unknownParam)
     }
@@ -111,6 +114,7 @@ class ApplicationMasterArguments(val args: Array[String]) {
       |  --executor-cores NUM   Number of cores for the executors (Default: 1)
       |  --executor-memory MEM  Memory per executor (e.g. 1000M, 2G) (Default: 1G)
       """.stripMargin)
+    // scalastyle:on println
     System.exit(exitCode)
   }
 }

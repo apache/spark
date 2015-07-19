@@ -219,7 +219,7 @@ final class SpecificMutableRow(val values: Array[MutableValue]) extends MutableR
     values(i).isNull = true
   }
 
-  override def apply(i: Int): Any = values(i).boxed
+  override def get(i: Int): Any = values(i).boxed
 
   override def isNullAt(i: Int): Boolean = values(i).isNull
 

@@ -61,7 +61,9 @@ public class JavaDataFrameSuite {
   @After
   public void tearDown() throws IOException {
     // Clean up tables.
-    hc.sql("DROP TABLE IF EXISTS window_table");
+    if (hc != null) {
+      hc.sql("DROP TABLE IF EXISTS window_table");
+    }
   }
 
   @Test

@@ -39,6 +39,8 @@ __all__ = [
     'coalesce',
     'countDistinct',
     'explode',
+    'format_number',
+    'length',
     'log2',
     'md5',
     'monotonicallyIncreasingId',
@@ -47,7 +49,6 @@ __all__ = [
     'sha1',
     'sha2',
     'sparkPartitionId',
-    'strlen',
     'struct',
     'udf',
     'when']
@@ -506,14 +507,28 @@ def sparkPartitionId():
 
 @ignore_unicode_prefix
 @since(1.5)
-def strlen(col):
-    """Calculates the length of a string expression.
+def length(col):
+    """Calculates the length of a string or binary expression.
 
-    >>> sqlContext.createDataFrame([('ABC',)], ['a']).select(strlen('a').alias('length')).collect()
+    >>> sqlContext.createDataFrame([('ABC',)], ['a']).select(length('a').alias('length')).collect()
     [Row(length=3)]
     """
     sc = SparkContext._active_spark_context
-    return Column(sc._jvm.functions.strlen(_to_java_column(col)))
+    return Column(sc._jvm.functions.length(_to_java_column(col)))
+
+
+@ignore_unicode_prefix
+@since(1.5)
+def format_number(col, d):
+    """Formats the number X to a format like '#,###,###.##', rounded to d decimal places,
+       and returns the result as a string.
+    :param col: the column name of the numeric value to be formatted
+    :param d: the N decimal places
+    >>> sqlContext.createDataFrame([(5,)], ['a']).select(format_number('a', 4).alias('v')).collect()
+    [Row(v=u'5.0000')]
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.format_number(_to_java_column(col), d))
 
 
 @ignore_unicode_prefix
@@ -635,6 +650,156 @@ def ntile(n):
     """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.ntile(int(n)))
+
+
+@ignore_unicode_prefix
+@since(1.5)
+def date_format(dateCol, format):
+    """
+    Converts a date/timestamp/string to a value of string in the format specified by the date
+    format given by the second argument.
+
+    A pattern could be for instance `dd.MM.yyyy` and could return a string like '18.03.1993'. All
+    pattern letters of the Java class `java.text.SimpleDateFormat` can be used.
+
+    NOTE: Use when ever possible specialized functions like `year`. These benefit from a
+    specialized implementation.
+
+    >>> df = sqlContext.createDataFrame([('2015-04-08',)], ['a'])
+    >>> df.select(date_format('a', 'MM/dd/yyy').alias('date')).collect()
+    [Row(date=u'04/08/2015')]
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.date_format(dateCol, format))
+
+
+@since(1.5)
+def year(col):
+    """
+    Extract the year of a given date as integer.
+
+    >>> df = sqlContext.createDataFrame([('2015-04-08',)], ['a'])
+    >>> df.select(year('a').alias('year')).collect()
+    [Row(year=2015)]
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.year(col))
+
+
+@since(1.5)
+def quarter(col):
+    """
+    Extract the quarter of a given date as integer.
+
+    >>> df = sqlContext.createDataFrame([('2015-04-08',)], ['a'])
+    >>> df.select(quarter('a').alias('quarter')).collect()
+    [Row(quarter=2)]
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.quarter(col))
+
+
+@since(1.5)
+def month(col):
+    """
+    Extract the month of a given date as integer.
+
+    >>> df = sqlContext.createDataFrame([('2015-04-08',)], ['a'])
+    >>> df.select(month('a').alias('month')).collect()
+    [Row(month=4)]
+   """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.month(col))
+
+
+@since(1.5)
+def day(col):
+    """
+    Extract the day of the month of a given date as integer.
+
+    >>> sqlContext.createDataFrame([('2015-04-08',)], ['a']).select(day('a').alias('day')).collect()
+    [Row(day=8)]
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.day(col))
+
+
+@since(1.5)
+def day_of_month(col):
+    """
+    Extract the day of the month of a given date as integer.
+
+    >>> df = sqlContext.createDataFrame([('2015-04-08',)], ['a'])
+    >>> df.select(day_of_month('a').alias('day')).collect()
+    [Row(day=8)]
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.day_of_month(col))
+
+
+@since(1.5)
+def day_in_year(col):
+    """
+    Extract the day of the year of a given date as integer.
+
+    >>> df = sqlContext.createDataFrame([('2015-04-08',)], ['a'])
+    >>> df.select(day_in_year('a').alias('day')).collect()
+    [Row(day=98)]
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.day_in_year(col))
+
+
+@since(1.5)
+def hour(col):
+    """
+    Extract the hours of a given date as integer.
+
+    >>> df = sqlContext.createDataFrame([('2015-04-08 13:08:15',)], ['a'])
+    >>> df.select(hour('a').alias('hour')).collect()
+    [Row(hour=13)]
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.hour(col))
+
+
+@since(1.5)
+def minute(col):
+    """
+    Extract the minutes of a given date as integer.
+
+    >>> df = sqlContext.createDataFrame([('2015-04-08 13:08:15',)], ['a'])
+    >>> df.select(minute('a').alias('minute')).collect()
+    [Row(minute=8)]
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.minute(col))
+
+
+@since(1.5)
+def second(col):
+    """
+    Extract the seconds of a given date as integer.
+
+    >>> df = sqlContext.createDataFrame([('2015-04-08 13:08:15',)], ['a'])
+    >>> df.select(second('a').alias('second')).collect()
+    [Row(second=15)]
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.second(col))
+
+
+@since(1.5)
+def week_of_year(col):
+    """
+    Extract the week number of a given date as integer.
+
+    >>> df = sqlContext.createDataFrame([('2015-04-08',)], ['a'])
+    >>> df.select(week_of_year('a').alias('week')).collect()
+    [Row(week=15)]
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.week_of_year(col))
 
 
 class UserDefinedFunction(object):

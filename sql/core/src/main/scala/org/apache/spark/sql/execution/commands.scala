@@ -35,8 +35,6 @@ import org.apache.spark.sql.{DataFrame, Row, SQLConf, SQLContext}
  * wrapped in `ExecutedCommand` during execution.
  */
 private[sql] trait RunnableCommand extends LogicalPlan with logical.Command {
-  self: Product =>
-
   override def output: Seq[Attribute] = Seq.empty
   override def children: Seq[LogicalPlan] = Seq.empty
   def run(sqlContext: SQLContext): Seq[Row]

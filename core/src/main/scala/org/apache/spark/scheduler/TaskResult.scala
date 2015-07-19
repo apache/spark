@@ -20,7 +20,8 @@ package org.apache.spark.scheduler
 import java.io._
 import java.nio.ByteBuffer
 
-import scala.collection.mutable.Map
+import scala.collection.Map
+import scala.collection.mutable
 
 import org.apache.spark.SparkEnv
 import org.apache.spark.executor.TaskMetrics
@@ -69,10 +70,11 @@ class DirectTaskResult[T](var valueBytes: ByteBuffer, var accumUpdates: Map[Long
     if (numUpdates == 0) {
       accumUpdates = null
     } else {
-      accumUpdates = Map()
+      val _accumUpdates = mutable.Map[Long, Any]()
       for (i <- 0 until numUpdates) {
-        accumUpdates(in.readLong()) = in.readObject()
+        _accumUpdates(in.readLong()) = in.readObject()
       }
+      accumUpdates = _accumUpdates
     }
     metrics = in.readObject().asInstanceOf[TaskMetrics]
     valueObjectDeserialized = false

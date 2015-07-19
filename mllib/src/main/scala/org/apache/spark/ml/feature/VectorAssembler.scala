@@ -116,7 +116,7 @@ class VectorAssembler(override val uid: String)
     if (schema.fieldNames.contains(outputColName)) {
       throw new IllegalArgumentException(s"Output column $outputColName already exists.")
     }
-    StructType(schema.fields :+ new StructField(outputColName, new VectorUDT, false))
+    StructType(schema.fields :+ new StructField(outputColName, new VectorUDT, true))
   }
 
   override def copy(extra: ParamMap): VectorAssembler = defaultCopy(extra)
