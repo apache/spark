@@ -90,34 +90,35 @@ class DateTimeUtilsSuite extends SparkFunSuite {
   }
 
   test("string to date") {
-    val millisPerDay = 1000L * 3600L * 24L
+    import DateTimeUtils.millisToDays
+
     var c = Calendar.getInstance()
     c.set(2015, 0, 28, 0, 0, 0)
     c.set(Calendar.MILLISECOND, 0)
     assert(DateTimeUtils.stringToDate(UTF8String.fromString("2015-01-28")).get ===
-      c.getTimeInMillis / millisPerDay)
+      millisToDays(c.getTimeInMillis))
     c.set(2015, 0, 1, 0, 0, 0)
     c.set(Calendar.MILLISECOND, 0)
     assert(DateTimeUtils.stringToDate(UTF8String.fromString("2015")).get ===
-      c.getTimeInMillis / millisPerDay)
+      millisToDays(c.getTimeInMillis))
     c = Calendar.getInstance()
     c.set(2015, 2, 1, 0, 0, 0)
     c.set(Calendar.MILLISECOND, 0)
     assert(DateTimeUtils.stringToDate(UTF8String.fromString("2015-03")).get ===
-      c.getTimeInMillis / millisPerDay)
+      millisToDays(c.getTimeInMillis))
     c = Calendar.getInstance()
     c.set(2015, 2, 18, 0, 0, 0)
     c.set(Calendar.MILLISECOND, 0)
     assert(DateTimeUtils.stringToDate(UTF8String.fromString("2015-03-18")).get ===
-      c.getTimeInMillis / millisPerDay)
+      millisToDays(c.getTimeInMillis))
     assert(DateTimeUtils.stringToDate(UTF8String.fromString("2015-03-18 ")).get ===
-      c.getTimeInMillis / millisPerDay)
+      millisToDays(c.getTimeInMillis))
     assert(DateTimeUtils.stringToDate(UTF8String.fromString("2015-03-18 123142")).get ===
-      c.getTimeInMillis / millisPerDay)
+      millisToDays(c.getTimeInMillis))
     assert(DateTimeUtils.stringToDate(UTF8String.fromString("2015-03-18T123123")).get ===
-      c.getTimeInMillis / millisPerDay)
+      millisToDays(c.getTimeInMillis))
     assert(DateTimeUtils.stringToDate(UTF8String.fromString("2015-03-18T")).get ===
-      c.getTimeInMillis / millisPerDay)
+      millisToDays(c.getTimeInMillis))
 
     assert(DateTimeUtils.stringToDate(UTF8String.fromString("2015-03-18X")).isEmpty)
     assert(DateTimeUtils.stringToDate(UTF8String.fromString("2015/03/18")).isEmpty)

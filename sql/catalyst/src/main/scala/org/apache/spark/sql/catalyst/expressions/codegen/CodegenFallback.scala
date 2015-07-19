@@ -15,26 +15,26 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst.expressions
+package org.apache.spark.sql.catalyst.expressions.codegen
 
-import org.apache.spark.sql.types.DataType
-
-abstract sealed class SortDirection
-case object Ascending extends SortDirection
-case object Descending extends SortDirection
+import org.apache.spark.sql.catalyst.expressions.Expression
 
 /**
- * An expression that can be used to sort a tuple.  This class extends expression primarily so that
- * transformations over expression will descend into its child.
+ * A trait that can be used to provide a fallback mode for expression code generation.
  */
-case class SortOrder(child: Expression, direction: SortDirection)
-  extends UnaryExpression with Unevaluable {
+trait CodegenFallback { self: Expression =>
 
-  /** Sort order is not foldable because we don't have an eval for it. */
-  override def foldable: Boolean = false
-
-  override def dataType: DataType = child.dataType
-  override def nullable: Boolean = child.nullable
-
-  override def toString: String = s"$child ${if (direction == Ascending) "ASC" else "DESC"}"
+  protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    ctx.references += this
+    val objectTerm = ctx.freshName("obj")
+    s"""
+      /* expression: ${this} */
+      Object $objectTerm = expressions[${ctx.references.size - 1}].eval(i);
+      boolean ${ev.isNull} = $objectTerm == null;
+      ${ctx.javaType(this.dataType)} ${ev.primitive} = ${ctx.defaultValue(this.dataType)};
+      if (!${ev.isNull}) {
+        ${ev.primitive} = (${ctx.boxedType(this.dataType)}) $objectTerm;
+      }
+    """
+  }
 }

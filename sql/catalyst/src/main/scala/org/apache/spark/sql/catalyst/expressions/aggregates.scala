@@ -26,7 +26,8 @@ import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.util.collection.OpenHashSet
 
-trait AggregateExpression extends Expression {
+
+trait AggregateExpression extends Expression with Unevaluable {
 
   /**
    * Aggregate expressions should not be foldable.
@@ -38,13 +39,6 @@ trait AggregateExpression extends Expression {
    * of input rows/
    */
   def newInstance(): AggregateFunction
-
-  /**
-   * [[AggregateExpression.eval]] should never be invoked because [[AggregateExpression]]'s are
-   * replaced with a physical aggregate operator at runtime.
-   */
-  override def eval(input: InternalRow = null): Any =
-    throw new TreeNodeException(this, s"No function to evaluate expression. type: ${this.nodeName}")
 }
 
 /**
