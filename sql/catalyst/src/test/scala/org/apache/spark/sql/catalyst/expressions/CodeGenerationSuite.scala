@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
 /**
  * Additional tests for code generation.
  */
-class CodeGenerationSuite extends SparkFunSuite {
+class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("multithreaded eval") {
     import scala.concurrent._
@@ -43,7 +43,15 @@ class CodeGenerationSuite extends SparkFunSuite {
     futures.foreach(Await.result(_, 10.seconds))
   }
 
-  test("SPARK-8443: code size limit") {
-    GenerateMutableProjection.generate(List.fill(5000)(EqualTo(Literal(1), Literal(1))))
+  test("SPARK-8443: split wide projections into blocks due to JVM code size limit") {
+    val length = 5000
+    val expressions = List.fill(length)(EqualTo(Literal(1), Literal(1)))
+    val plan = GenerateMutableProjection.generate(expressions)()
+    val actual = plan(new GenericMutableRow(length)).toSeq
+    val expected = Seq.fill(length)(true)
+
+    if (!checkResult(actual, expected)) {
+      fail(s"Incorrect Evaluation: expressions: $expressions, actual: $actual, expected: $expected")
+    }
   }
 }
