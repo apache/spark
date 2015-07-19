@@ -116,13 +116,11 @@ case class Second(child: Expression) extends UnaryExpression with ImplicitCastIn
   }
 }
 
-case class DayInYear(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
+case class DayOfYear(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(DateType)
 
   override def dataType: DataType = IntegerType
-
-  override def prettyName: String = "day_in_year"
 
   override protected def nullSafeEval(date: Any): Any = {
     DateTimeUtils.getDayInYear(date.asInstanceOf[Int])
@@ -149,7 +147,7 @@ case class Year(child: Expression) extends UnaryExpression with ImplicitCastInpu
 
   override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
-    defineCodeGen(ctx, ev, (c) =>
+    defineCodeGen(ctx, ev, c =>
       s"""$dtu.getYear($c)"""
     )
   }
@@ -191,7 +189,7 @@ case class Month(child: Expression) extends UnaryExpression with ImplicitCastInp
   }
 }
 
-case class Day(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
+case class DayOfMonth(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(DateType)
 
@@ -215,8 +213,6 @@ case class WeekOfYear(child: Expression) extends UnaryExpression with ImplicitCa
 
   override def dataType: DataType = IntegerType
 
-  override def prettyName: String = "week_of_year"
-
   override protected def nullSafeEval(date: Any): Any = {
     val c = Calendar.getInstance(TimeZone.getTimeZone("UTC"))
     c.setFirstDayOfWeek(Calendar.MONDAY)
@@ -225,7 +221,7 @@ case class WeekOfYear(child: Expression) extends UnaryExpression with ImplicitCa
     c.get(Calendar.WEEK_OF_YEAR)
   }
 
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String =
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     nullSafeCodeGen(ctx, ev, (time) => {
       val cal = classOf[Calendar].getName
       val c = ctx.freshName("cal")
@@ -237,6 +233,7 @@ case class WeekOfYear(child: Expression) extends UnaryExpression with ImplicitCa
         ${ev.primitive} = $c.get($cal.WEEK_OF_YEAR);
       """
     })
+  }
 }
 
 case class DateFormatClass(left: Expression, right: Expression) extends BinaryExpression

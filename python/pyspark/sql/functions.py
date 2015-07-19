@@ -55,6 +55,11 @@ __all__ = [
 
 __all__ += ['lag', 'lead', 'ntile']
 
+__all__ += [
+    'date_format',
+    'year', 'quarter', 'month', 'hour', 'minute', 'second',
+    'dayofmonth', 'dayofyear', 'weekofyear']
+
 
 def _create_function(name, doc=""):
     """ Create a function for aggregator by name"""
@@ -713,41 +718,29 @@ def month(col):
 
 
 @since(1.5)
-def day(col):
-    """
-    Extract the day of the month of a given date as integer.
-
-    >>> sqlContext.createDataFrame([('2015-04-08',)], ['a']).select(day('a').alias('day')).collect()
-    [Row(day=8)]
-    """
-    sc = SparkContext._active_spark_context
-    return Column(sc._jvm.functions.day(col))
-
-
-@since(1.5)
-def day_of_month(col):
+def dayofmonth(col):
     """
     Extract the day of the month of a given date as integer.
 
     >>> df = sqlContext.createDataFrame([('2015-04-08',)], ['a'])
-    >>> df.select(day_of_month('a').alias('day')).collect()
+    >>> df.select(dayofmonth('a').alias('day')).collect()
     [Row(day=8)]
     """
     sc = SparkContext._active_spark_context
-    return Column(sc._jvm.functions.day_of_month(col))
+    return Column(sc._jvm.functions.dayofmonth(col))
 
 
 @since(1.5)
-def day_in_year(col):
+def dayofyear(col):
     """
     Extract the day of the year of a given date as integer.
 
     >>> df = sqlContext.createDataFrame([('2015-04-08',)], ['a'])
-    >>> df.select(day_in_year('a').alias('day')).collect()
+    >>> df.select(dayofyear('a').alias('day')).collect()
     [Row(day=98)]
     """
     sc = SparkContext._active_spark_context
-    return Column(sc._jvm.functions.day_in_year(col))
+    return Column(sc._jvm.functions.dayofyear(col))
 
 
 @since(1.5)
@@ -790,16 +783,16 @@ def second(col):
 
 
 @since(1.5)
-def week_of_year(col):
+def weekofyear(col):
     """
     Extract the week number of a given date as integer.
 
     >>> df = sqlContext.createDataFrame([('2015-04-08',)], ['a'])
-    >>> df.select(week_of_year('a').alias('week')).collect()
+    >>> df.select(weekofyear('a').alias('week')).collect()
     [Row(week=15)]
     """
     sc = SparkContext._active_spark_context
-    return Column(sc._jvm.functions.week_of_year(col))
+    return Column(sc._jvm.functions.weekofyear(col))
 
 
 class UserDefinedFunction(object):

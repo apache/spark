@@ -183,15 +183,15 @@ object FunctionRegistry {
     expression[CurrentDate]("current_date"),
     expression[CurrentTimestamp]("current_timestamp"),
     expression[DateFormatClass]("date_format"),
-    expression[Day]("day"),
-    expression[DayInYear]("day_in_year"),
-    expression[Day]("day_of_month"),
+    expression[DayOfMonth]("day"),
+    expression[DayOfYear]("dayofyear"),
+    expression[DayOfMonth]("dayofmonth"),
     expression[Hour]("hour"),
     expression[Month]("month"),
     expression[Minute]("minute"),
     expression[Quarter]("quarter"),
     expression[Second]("second"),
-    expression[WeekOfYear]("week_of_year"),
+    expression[WeekOfYear]("weekofyear"),
     expression[Year]("year")
 
   )
