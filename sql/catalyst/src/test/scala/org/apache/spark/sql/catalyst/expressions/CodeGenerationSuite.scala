@@ -29,7 +29,7 @@ import org.apache.spark.sql.types.{DataTypeTestUtils, NullType, StructField, Str
 /**
  * Additional tests for code generation.
  */
-class CodeGenerationSuite extends SparkFunSuite {
+class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("multithreaded eval") {
     import scala.concurrent._
@@ -56,10 +56,10 @@ class CodeGenerationSuite extends SparkFunSuite {
       val rowOrdering = RowOrdering.forSchema(Seq(dataType, dataType))
       val genOrdering = GenerateOrdering.generate(
         BoundReference(0, dataType, nullable = true).asc ::
-        BoundReference(1, dataType, nullable = true).asc :: Nil)
+          BoundReference(1, dataType, nullable = true).asc :: Nil)
       val rowType = StructType(
         StructField("a", dataType, nullable = true) ::
-        StructField("b", dataType, nullable = true) :: Nil)
+          StructField("b", dataType, nullable = true) :: Nil)
       val maybeDataGenerator = RandomDataGenerator.forType(rowType, nullable = false)
       assume(maybeDataGenerator.isDefined)
       val randGenerator = maybeDataGenerator.get
@@ -79,6 +79,18 @@ class CodeGenerationSuite extends SparkFunSuite {
             "Generated and non-generated orderings should agree")
         }
       }
+    }
+  }
+
+  test("SPARK-8443: split wide projections into blocks due to JVM code size limit") {
+    val length = 5000
+    val expressions = List.fill(length)(EqualTo(Literal(1), Literal(1)))
+    val plan = GenerateMutableProjection.generate(expressions)()
+    val actual = plan(new GenericMutableRow(length)).toSeq
+    val expected = Seq.fill(length)(true)
+
+    if (!checkResult(actual, expected)) {
+      fail(s"Incorrect Evaluation: expressions: $expressions, actual: $actual, expected: $expected")
     }
   }
 }
