@@ -44,6 +44,15 @@ abstract class LDAModel private[clustering] {
   /** Vocabulary size (number of terms or terms in the vocabulary) */
   def vocabSize: Int
 
+  /** Dirichlet parameters for document-topic distribution. */
+  protected def alpha: Double
+
+  /** Dirichlet parameters for topic-word distribution. */
+  protected def eta: Double
+
+  /** Shape parameter for random initialization of gamma. */
+  protected def gammaShape: Double
+
   /**
    * Inferred topics, where each topic is represented by a distribution over terms.
    * This is a matrix of size vocabSize x k, where each column is a topic.
@@ -160,9 +169,9 @@ abstract class LDAModel private[clustering] {
 @Experimental
 class LocalLDAModel private[clustering] (
     private val topics: Matrix,
-    private val alpha: Double,
-    private val eta: Double,
-    private val gammaShape: Double) extends LDAModel with Serializable {
+    protected val alpha: Double,
+    protected val eta: Double,
+    protected val gammaShape: Double) extends LDAModel with Serializable {
 
   override def k: Int = topics.numCols
 
@@ -297,23 +306,19 @@ class DistributedLDAModel private (
     private val globalTopicTotals: LDA.TopicCounts,
     val k: Int,
     val vocabSize: Int,
-    private val docConcentration: Double,
-    private val topicConcentration: Double,
-    private[spark] val iterationTimes: Array[Double],
-    private val alpha: Double,
-    private val eta: Double,
-    private val gammaShape: Double) extends LDAModel {
+    protected val alpha: Double,
+    protected val eta: Double,
+    protected val gammaShape: Double,
+    private[spark] val iterationTimes: Array[Double]) extends LDAModel {
 
   import LDA._
 
   private[clustering] def this(
       state: EMLDAOptimizer,
       iterationTimes: Array[Double],
-      alpha: Double,
-      eta: Double,
       gammaShape: Double) = {
     this(state.graph, state.globalTopicTotals, state.k, state.vocabSize, state.docConcentration,
-      state.topicConcentration, iterationTimes, alpha, eta, gammaShape)
+      state.topicConcentration, gammaShape, iterationTimes)
   }
 
   /**
@@ -393,8 +398,8 @@ class DistributedLDAModel private (
    *    hyperparameters.
    */
   lazy val logLikelihood: Double = {
-    val eta = topicConcentration
-    val alpha = docConcentration
+    val alpha = this.alpha // To avoid closure capture of this
+    val eta = this.eta
     assert(eta > 1.0)
     assert(alpha > 1.0)
     val N_k = globalTopicTotals
@@ -418,10 +423,10 @@ class DistributedLDAModel private (
    *  log P(topics, topic distributions for docs | alpha, eta)
    */
   lazy val logPrior: Double = {
-    val eta = topicConcentration
-    val alpha = docConcentration
     // Term vertices: Compute phi_{wk}.  Use to compute prior log probability.
     // Doc vertex: Compute theta_{kj}.  Use to compute prior log probability.
+    val alpha = this.alpha // To avoid closure capture of this
+    val eta = this.eta
     val N_k = globalTopicTotals
     val smoothed_N_k: TopicCounts = N_k + (vocabSize * (eta - 1.0))
     val seqOp: (Double, (VertexId, TopicCounts)) => Double = {

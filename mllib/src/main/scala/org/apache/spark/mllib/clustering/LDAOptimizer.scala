@@ -207,7 +207,7 @@ final class EMLDAOptimizer extends LDAOptimizer {
     this.graphCheckpointer.deleteAllCheckpoints()
     // This assumes gammaShape = 100 in OnlineLDAOptimizer to ensure equivalence in LDAModel.toLocal
     // conversion
-    new DistributedLDAModel(this, iterationTimes, docConcentration, topicConcentration, 100)
+    new DistributedLDAModel(this, iterationTimes, 100)
   }
 }
 
