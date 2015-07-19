@@ -30,8 +30,10 @@ class DataFrameNaFunctionsSuite extends QueryTest {
       ("Bob", 16, 176.5),
       ("Alice", null, 164.3),
       ("David", 60, null),
+      ("Nina", 25, Double.NaN),
       ("Amy", null, null),
-      (null, null, null)).toDF("name", "age", "height")
+      (null, null, null)
+      ).toDF("name", "age", "height")
   }
 
   test("drop") {
@@ -39,12 +41,12 @@ class DataFrameNaFunctionsSuite extends QueryTest {
     val rows = input.collect()
 
     checkAnswer(
-      input.na.drop("name" :: Nil),
-      rows(0) :: rows(1) :: rows(2) :: rows(3) :: Nil)
+      input.na.drop("name" :: Nil).select("name"),
+      Row("Bob") :: Row("Alice") :: Row("David") :: Row("Nina") :: Row("Amy") :: Nil)
 
     checkAnswer(
-      input.na.drop("age" :: Nil),
-      rows(0) :: rows(2) :: Nil)
+      input.na.drop("age" :: Nil).select("name"),
+      Row("Bob") :: Row("David") :: Row("Nina") :: Nil)
 
     checkAnswer(
       input.na.drop("age" :: "height" :: Nil),
@@ -67,8 +69,8 @@ class DataFrameNaFunctionsSuite extends QueryTest {
     val rows = input.collect()
 
     checkAnswer(
-      input.na.drop("all"),
-      rows(0) :: rows(1) :: rows(2) :: rows(3) :: Nil)
+      input.na.drop("all").select("name"),
+      Row("Bob") :: Row("Alice") :: Row("David") :: Row("Nina") :: Row("Amy") :: Nil)
 
     checkAnswer(
       input.na.drop("any"),
@@ -79,8 +81,8 @@ class DataFrameNaFunctionsSuite extends QueryTest {
       rows(0) :: Nil)
 
     checkAnswer(
-      input.na.drop("all", Seq("age", "height")),
-      rows(0) :: rows(1) :: rows(2) :: Nil)
+      input.na.drop("all", Seq("age", "height")).select("name"),
+      Row("Bob") :: Row("Alice") :: Row("David") :: Row("Nina") :: Nil)
   }
 
   test("drop with threshold") {

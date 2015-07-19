@@ -211,15 +211,15 @@ class ColumnExpressionSuite extends QueryTest {
 
     checkAnswer(
       testData.select($"a".isNaN, $"b".isNaN),
-      Row(true, true) :: Row(true, true) :: Row(true, true) :: Row(false, false) :: Nil)
+      Row(true, true) :: Row(true, true) :: Row(false, false) :: Row(false, false) :: Nil)
 
     checkAnswer(
       testData.select(isNaN($"a"), isNaN($"b")),
-      Row(true, true) :: Row(true, true) :: Row(true, true) :: Row(false, false) :: Nil)
+      Row(true, true) :: Row(true, true) :: Row(false, false) :: Row(false, false) :: Nil)
 
     checkAnswer(
       ctx.sql("select isnan(15), isnan('invalid')"),
-      Row(false, true))
+      Row(false, false))
   }
 
   test("===") {

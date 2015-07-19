@@ -620,7 +620,7 @@ object functions {
   def explode(e: Column): Column = Explode(e.expr)
 
   /**
-   * Return true if the column is NaN or null
+   * Return true if the column is NaN
    *
    * @group normal_funcs
    * @since 1.5.0

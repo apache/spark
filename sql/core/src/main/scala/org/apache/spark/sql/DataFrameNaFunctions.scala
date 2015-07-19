@@ -37,24 +37,24 @@ import org.apache.spark.sql.types._
 final class DataFrameNaFunctions private[sql](df: DataFrame) {
 
   /**
-   * Returns a new [[DataFrame]] that drops rows containing any null values.
+   * Returns a new [[DataFrame]] that drops rows containing any null or NaN values.
    *
    * @since 1.3.1
    */
   def drop(): DataFrame = drop("any", df.columns)
 
   /**
-   * Returns a new [[DataFrame]] that drops rows containing null values.
+   * Returns a new [[DataFrame]] that drops rows containing null or NaN values.
    *
-   * If `how` is "any", then drop rows containing any null values.
-   * If `how` is "all", then drop rows only if every column is null for that row.
+   * If `how` is "any", then drop rows containing any null or NaN values.
+   * If `how` is "all", then drop rows only if every column is null or NaN for that row.
    *
    * @since 1.3.1
    */
   def drop(how: String): DataFrame = drop(how, df.columns)
 
   /**
-   * Returns a new [[DataFrame]] that drops rows containing any null values
+   * Returns a new [[DataFrame]] that drops rows containing any null or NaN values
    * in the specified columns.
    *
    * @since 1.3.1
@@ -62,7 +62,7 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
   def drop(cols: Array[String]): DataFrame = drop(cols.toSeq)
 
   /**
-   * (Scala-specific) Returns a new [[DataFrame ]] that drops rows containing any null values
+   * (Scala-specific) Returns a new [[DataFrame]] that drops rows containing any null or NaN values
    * in the specified columns.
    *
    * @since 1.3.1
@@ -70,22 +70,22 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
   def drop(cols: Seq[String]): DataFrame = drop(cols.size, cols)
 
   /**
-   * Returns a new [[DataFrame]] that drops rows containing null values
+   * Returns a new [[DataFrame]] that drops rows containing null or NaN values
    * in the specified columns.
    *
-   * If `how` is "any", then drop rows containing any null values in the specified columns.
-   * If `how` is "all", then drop rows only if every specified column is null for that row.
+   * If `how` is "any", then drop rows containing any null or NaN values in the specified columns.
+   * If `how` is "all", then drop rows only if every specified column is null or NaN for that row.
    *
    * @since 1.3.1
    */
   def drop(how: String, cols: Array[String]): DataFrame = drop(how, cols.toSeq)
 
   /**
-   * (Scala-specific) Returns a new [[DataFrame]] that drops rows containing null values
+   * (Scala-specific) Returns a new [[DataFrame]] that drops rows containing null or NaN values
    * in the specified columns.
    *
-   * If `how` is "any", then drop rows containing any null values in the specified columns.
-   * If `how` is "all", then drop rows only if every specified column is null for that row.
+   * If `how` is "any", then drop rows containing any null or NaN values in the specified columns.
+   * If `how` is "all", then drop rows only if every specified column is null or NaN for that row.
    *
    * @since 1.3.1
    */
@@ -98,15 +98,16 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
   }
 
   /**
-   * Returns a new [[DataFrame]] that drops rows containing less than `minNonNulls` non-null values.
+   * Returns a new [[DataFrame]] that drops rows containing
+   * less than `minNonNulls` non-null and non-NaN values.
    *
    * @since 1.3.1
    */
   def drop(minNonNulls: Int): DataFrame = drop(minNonNulls, df.columns)
 
   /**
-   * Returns a new [[DataFrame]] that drops rows containing less than `minNonNulls` non-null
-   * values in the specified columns.
+   * Returns a new [[DataFrame]] that drops rows containing
+   * less than `minNonNulls` non-null and non-NaN values in the specified columns.
    *
    * @since 1.3.1
    */
@@ -114,12 +115,13 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
 
   /**
    * (Scala-specific) Returns a new [[DataFrame]] that drops rows containing less than
-   * `minNonNulls` non-null values in the specified columns.
+   * `minNonNulls` non-null and non-NaN values in the specified columns.
    *
    * @since 1.3.1
    */
   def drop(minNonNulls: Int, cols: Seq[String]): DataFrame = {
-    // Filtering condition -- only keep the row if it has at least `minNonNulls` non-null values.
+    // Filtering condition:
+    // only keep the row if it has at least `minNonNulls` non-null and non-NaN values.
     val predicate = AtLeastNNonNulls(minNonNulls, cols.map(name => df.resolve(name)))
     df.filter(Column(predicate))
   }

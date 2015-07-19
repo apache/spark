@@ -83,7 +83,7 @@ case class Coalesce(children: Seq[Expression]) extends Expression {
 
 
 /**
- * Evaluates to `true` if it's NaN or null
+ * Evaluates to `true` if it's NaN
  */
 case class IsNaN(child: Expression) extends UnaryExpression
   with Predicate with ImplicitCastInputTypes {
@@ -95,7 +95,7 @@ case class IsNaN(child: Expression) extends UnaryExpression
   override def eval(input: InternalRow): Any = {
     val value = child.eval(input)
     if (value == null) {
-      true
+      false
     } else {
       child.dataType match {
         case DoubleType => value.asInstanceOf[Double].isNaN
@@ -113,7 +113,7 @@ case class IsNaN(child: Expression) extends UnaryExpression
           boolean ${ev.isNull} = false;
           ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
           if (${eval.isNull}) {
-            ${ev.primitive} = true;
+            ${ev.primitive} = false;
           } else {
             ${ev.primitive} = Float.isNaN(${eval.primitive});
           }
@@ -124,7 +124,7 @@ case class IsNaN(child: Expression) extends UnaryExpression
           boolean ${ev.isNull} = false;
           ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
           if (${eval.isNull}) {
-            ${ev.primitive} = true;
+            ${ev.primitive} = false;
           } else {
             ${ev.primitive} = Double.isNaN(${eval.primitive});
           }
@@ -186,8 +186,13 @@ case class AtLeastNNonNulls(n: Int, children: Seq[Expression]) extends Predicate
     var numNonNulls = 0
     var i = 0
     while (i < childrenArray.length && numNonNulls < n) {
-      if (childrenArray(i).eval(input) != null) {
-        numNonNulls += 1
+      val evalC = childrenArray(i).eval(input)
+      if (evalC != null) {
+        childrenArray(i).dataType match {
+          case DoubleType if !evalC.asInstanceOf[Double].isNaN => numNonNulls += 1
+          case FloatType if !evalC.asInstanceOf[Float].isNaN => numNonNulls += 1
+          case _ => numNonNulls += 1
+        }
       }
       i += 1
     }
@@ -198,14 +203,39 @@ case class AtLeastNNonNulls(n: Int, children: Seq[Expression]) extends Predicate
     val nonnull = ctx.freshName("nonnull")
     val code = children.map { e =>
       val eval = e.gen(ctx)
-      s"""
-        if ($nonnull < $n) {
-          ${eval.code}
-          if (!${eval.isNull}) {
-            $nonnull += 1;
-          }
-        }
-      """
+      e.dataType match {
+        case DoubleType =>
+          s"""
+            if ($nonnull < $n) {
+              ${eval.code}
+              if (!${eval.isNull}) {
+                if (!Double.isNaN(${eval.primitive})) {
+                  $nonnull += 1;
+                }
+              }
+            }
+          """
+        case FloatType =>
+          s"""
+            if ($nonnull < $n) {
+              ${eval.code}
+              if (!${eval.isNull}) {
+                if (!Float.isNaN(${eval.primitive})) {
+                  $nonnull += 1;
+                }
+              }
+            }
+          """
+        case _ =>
+          s"""
+            if ($nonnull < $n) {
+              ${eval.code}
+              if (!${eval.isNull}) {
+                $nonnull += 1;
+              }
+            }
+          """
+      }
     }.mkString("\n")
     s"""
       int $nonnull = 0;

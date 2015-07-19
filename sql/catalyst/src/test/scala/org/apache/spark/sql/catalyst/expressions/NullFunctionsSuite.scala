@@ -49,7 +49,7 @@ class NullFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(IsNaN(Literal(Double.NaN)), true)
     checkEvaluation(IsNaN(Literal(Float.NaN)), true)
     checkEvaluation(IsNaN(Literal(math.log(-3))), true)
-    checkEvaluation(IsNaN(Literal.create(null, DoubleType)), true)
+    checkEvaluation(IsNaN(Literal.create(null, DoubleType)), false)
     checkEvaluation(IsNaN(Literal(Double.PositiveInfinity)), false)
     checkEvaluation(IsNaN(Literal(Float.MaxValue)), false)
     checkEvaluation(IsNaN(Literal(5.5f)), false)
