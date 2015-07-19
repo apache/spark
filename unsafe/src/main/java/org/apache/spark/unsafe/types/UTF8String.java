@@ -49,7 +49,7 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
     5, 5, 5, 5,
     6, 6, 6, 6};
 
-  public static UTF8String EMPTY_STRING = new UTF8String(new byte[0], BYTE_ARRAY_OFFSET, 0);
+  public static UTF8String EMPTY_UTF8 = UTF8String.fromString("");
 
   /**
    * Creates an UTF8String from byte array, which should be encoded in UTF-8.
