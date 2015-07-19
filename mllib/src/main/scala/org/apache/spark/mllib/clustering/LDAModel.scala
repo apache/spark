@@ -215,7 +215,7 @@ class LocalLDAModel private[clustering] (
       totalDocs: Long): Double = {
     val corpusWords = batch
       .flatMap { case (_, termCounts) => termCounts.toArray }
-      .reduce(_+_)
+      .reduce(_ + _)
     val subsampleRatio = totalDocs.toDouble / batch.count()
     val batchVariationalBound = bound(
       batch,

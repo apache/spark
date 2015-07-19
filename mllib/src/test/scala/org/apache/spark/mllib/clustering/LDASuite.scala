@@ -225,8 +225,8 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext {
     val eta = 0.01
     val gammaShape = 100
     val topics = new DenseMatrix(numRows = vocabSize, numCols = k, values = Array(
-      1.86738052,  1.94056535,  1.89981687,  0.08332659,  0.07405918, 0.07940597,
-      0.15081551,  0.08637973,  0.12428538,  1.9474897 ,  1.94615165, 1.95204124))
+      1.86738052, 1.94056535, 1.89981687, 0.0833265, 0.07405918, 0.07940597,
+      0.15081551, 0.08637973, 0.12428538, 1.9474897, 1.94615165, 1.95204124))
 
     def toydata: Array[(Long, Vector)] = Array(
       Vectors.sparse(6, Array(0, 1), Array(1, 1)),

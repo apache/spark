@@ -451,8 +451,9 @@ final class OnlineLDAOptimizer extends LDAOptimizer {
 
     val dalpha = -(gradf - b) / q
 
-    if (all((rho * dalpha + alpha) :> 0D))
+    if (all((rho * dalpha + alpha) :> 0D)) {
       this.alpha += rho * sum(dalpha)
+    }
   }
 
   /**
