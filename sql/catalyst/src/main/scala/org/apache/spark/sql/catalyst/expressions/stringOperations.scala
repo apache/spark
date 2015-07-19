@@ -66,8 +66,8 @@ case class Concat(children: Seq[Expression]) extends Expression with ImplicitCas
 
 
 /**
- * An expression that concatenates multiple input strings into a single string, using a given
- * separator (the first child).
+ * An expression that concatenates multiple input strings or array of strings into a single string,
+ * using a given separator (the first child).
  *
  * Returns null if the separator is null. Otherwise, concat_ws skips all null values.
  */
@@ -78,11 +78,10 @@ case class ConcatWs(children: Seq[Expression])
 
   override def prettyName: String = "concat_ws"
 
+  /** The 1st child (separator) is str, and rest are either str or array of str. */
   override def inputTypes: Seq[AbstractDataType] = {
-    Seq.fill(children.size)(TypeCollection(
-      ArrayType(StringType, true),
-      ArrayType(StringType, false),
-      StringType))
+    val arrayOrStr = TypeCollection(ArrayType(StringType), StringType)
+    StringType +: Seq.fill(children.size - 1)(arrayOrStr)
   }
 
   override def dataType: DataType = StringType
@@ -99,6 +98,28 @@ case class ConcatWs(children: Seq[Expression])
       }
     }
     UTF8String.concatWs(flatInputs.head, flatInputs.tail : _*)
+  }
+
+  override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    if (children.forall(_.dataType == StringType)) {
+      // All children are strings. In that case we can construct a fixed size array.
+      val evals = children.map(_.gen(ctx))
+
+      val inputs = evals.map { eval =>
+        s"${eval.isNull} ? (UTF8String)null : ${eval.primitive}"
+      }.mkString(", ")
+
+      evals.map(_.code).mkString("\n") + s"""
+        boolean ${ev.isNull} = false;
+        UTF8String ${ev.primitive} = UTF8String.concatWs($inputs);
+        if (${ev.primitive} == null) {
+          ${ev.isNull} = true;
+        }
+      """
+    } else {
+      // Contains a mix of strings and array<string>s. Fall back to interpreted mode for now.
+      super.genCode(ctx, ev)
+    }
   }
 }
 
