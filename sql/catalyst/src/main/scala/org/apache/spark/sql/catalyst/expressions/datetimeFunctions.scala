@@ -213,10 +213,14 @@ case class WeekOfYear(child: Expression) extends UnaryExpression with ImplicitCa
 
   override def dataType: DataType = IntegerType
 
-  override protected def nullSafeEval(date: Any): Any = {
+  private[this] final val c = {
     val c = Calendar.getInstance(TimeZone.getTimeZone("UTC"))
     c.setFirstDayOfWeek(Calendar.MONDAY)
     c.setMinimalDaysInFirstWeek(4)
+    c
+  }
+
+  override protected def nullSafeEval(date: Any): Any = {
     c.setTimeInMillis(date.asInstanceOf[Int] * 1000L * 3600L * 24L)
     c.get(Calendar.WEEK_OF_YEAR)
   }
@@ -225,8 +229,8 @@ case class WeekOfYear(child: Expression) extends UnaryExpression with ImplicitCa
     nullSafeCodeGen(ctx, ev, (time) => {
       val cal = classOf[Calendar].getName
       val c = ctx.freshName("cal")
+      ctx.addMutableState(cal, c, s"""$cal.getInstance(java.util.TimeZone.getTimeZone("UTC"));""")
       s"""
-        $cal $c = $cal.getInstance(java.util.TimeZone.getTimeZone("UTC"));
         $c.setFirstDayOfWeek($cal.MONDAY);
         $c.setMinimalDaysInFirstWeek(4);
         $c.setTimeInMillis($time * 1000L * 3600L * 24L);
