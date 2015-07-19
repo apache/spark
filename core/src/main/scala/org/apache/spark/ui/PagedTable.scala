@@ -25,7 +25,11 @@ import scala.xml.{Node, Unparsed}
  * @param page the page number
  * @param pageSize the number of rows in a page
  */
-private[ui] abstract class PagedDataSource[T](page: Int, pageSize: Int) {
+private[ui] abstract class PagedDataSource[T](page: Int, val pageSize: Int) {
+
+  if (pageSize <= 0) {
+    throw new IllegalArgumentException("Page size must be positive")
+  }
 
   protected val data: Seq[T]
 
@@ -68,9 +72,10 @@ private[ui] trait PagedTable[T] {
   def row(t: T): Seq[Node]
 
   def table: Seq[Node] = {
-    val PageData(page, totalPages, data) = dataSource.pageData
+    val _dataSource = dataSource
+    val PageData(page, totalPages, data) = _dataSource.pageData
     <div>
-      {pageNavigation(page, totalPages)}
+      {pageNavigation(page, _dataSource.pageSize, totalPages)}
       <table class={tableCssClass} id={tableId}>
         {headers}
         <tbody>
@@ -113,7 +118,7 @@ private[ui] trait PagedTable[T] {
    * > means jumping to the next page.
    * }}}
    */
-  private[ui] def pageNavigation(page: Int, totalPages: Int): Seq[Node] = {
+  private[ui] def pageNavigation(page: Int, pageSize: Int, totalPages: Int): Seq[Node] = {
     if (totalPages == 1) {
       Nil
     } else {
@@ -141,8 +146,10 @@ private[ui] trait PagedTable[T] {
         s"""$$(function(){
           |  $$( "#form-task-page" ).submit(function(event) {
           |    var page = $$("#form-task-page-no").val()
+          |    var pageSize = $$("#form-task-page-size").val()
+          |    pageSize = pageSize ? pageSize: 100;
           |    if (page != "") {
-          |      ${goButtonJsFuncName}(page);
+          |      ${goButtonJsFuncName}(page, pageSize);
           |    }
           |    event.preventDefault();
           |  });
@@ -151,14 +158,13 @@ private[ui] trait PagedTable[T] {
 
       <div>
         <div>
-          <form id="form-task-page" class="form-horizontal pull-right" style="margin-bottom: 0px;">
-            <div class="control-group">
-              <label class="control-label">{totalPages} Pages. Jump to</label>
-              <div class="controls" style="margin-left: 165px;">
-                <input type="text" id="form-task-page-no" value={page.toString} class="span1" />
-                <button type="submit" class="btn">Go</button>
-              </div>
-            </div>
+          <form id="form-task-page" class="form-inline pull-right" style="margin-bottom: 0px;">
+            <label>{totalPages} Pages. Jump to</label>
+            <input type="text" id="form-task-page-no" value={page.toString} class="span1" />
+            <label>. Show </label>
+            <input type="text" id="form-task-page-size" value={pageSize.toString} class="span1" />
+            <label>tasks in a page.</label>
+            <button type="submit" class="btn">Go</button>
           </form>
         </div>
         <div class="pagination" style="margin-bottom: 0px;">
@@ -216,9 +222,10 @@ private[ui] trait PagedTable[T] {
   def pageLink(page: Int): String
 
   /**
-   * Only the implementation knows how to create the url with a page number, so we leave this one
-   * to the implementation. The implementation should create a JavaScript method that accepts a page
-   * number and jumps to the page. The return value is this method name and its JavaScript codes.
+   * Only the implementation knows how to create the url with a page number and the page size, so we
+   * leave this one to the implementation. The implementation should create a JavaScript method that
+   * accepts a page number along with the page size and jumps to the page. The return value is this
+   * method name and its JavaScript codes.
    */
   def goButtonJavascriptFunction: (String, String)
 }

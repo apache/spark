@@ -79,10 +79,12 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
       val parameterTaskPage = request.getParameter("task.page")
       val parameterTaskSortColumn = request.getParameter("task.sort")
       val parameterTaskSortDesc = request.getParameter("task.desc")
+      val parameterTaskPageSize = request.getParameter("task.pageSize")
 
       val taskPage = Option(parameterTaskPage).map(_.toInt).getOrElse(1)
       val taskSortColumn = Option(parameterTaskSortColumn).getOrElse("Index")
       val taskSortDesc = Option(parameterTaskSortDesc).map(_.toBoolean).getOrElse(false)
+      val taskPageSize = Option(parameterTaskPageSize).map(_.toInt).getOrElse(100)
 
       // If this is set, expand the dag visualization by default
       val expandDagVizParam = request.getParameter("expandDagViz")
@@ -255,7 +257,7 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
           stageData.hasBytesSpilled,
           currentTime,
           page = taskPage,
-          pageSize = 100, // Show 100 tasks at most in the table
+          pageSize = taskPageSize,
           sortColumn = taskSortColumn,
           desc = taskSortDesc
         )
@@ -1147,16 +1149,17 @@ private[ui] class TaskPagedTable(
 
   override def pageLink(page: Int): String = {
     val encodedSortColumn = URLEncoder.encode(sortColumn, "UTF-8")
-    s"${basePath}&task.page=$page&task.sort=${encodedSortColumn}&task.desc=${desc}"
+    s"${basePath}&task.page=$page&task.sort=${encodedSortColumn}&task.desc=${desc}" +
+      s"&task.pageSize=${pageSize}"
   }
 
   override def goButtonJavascriptFunction: (String, String) = {
     val jsFuncName = "goToTaskPage"
     val encodedSortColumn = URLEncoder.encode(sortColumn, "UTF-8")
     val jsFunc = s"""
-      |function goToTaskPage(page) {
+      |function goToTaskPage(page, pageSize) {
       |  var url = "${basePath}&task.sort=${encodedSortColumn}&task.desc=${desc}" +
-      |    "&task.page=" + page;
+      |    "&task.page=" + page + "&task.pageSize=" + pageSize;
       |  window.location.href = url;
       |}
      """.stripMargin
@@ -1203,7 +1206,8 @@ private[ui] class TaskPagedTable(
       taskHeadersAndCssClasses.map { case (header, cssClass) =>
         if (header == sortColumn) {
           val headerLink =
-            s"$basePath&task.sort=${URLEncoder.encode(header, "UTF-8")}&task.desc=${!desc}"
+            s"$basePath&task.sort=${URLEncoder.encode(header, "UTF-8")}&task.desc=${!desc}" +
+              s"&task.pageSize=${pageSize}"
           val js = Unparsed(s"window.location.href='${headerLink}'")
           val arrow = if (desc) "&#x25BE;" else "&#x25B4;" // UP or DOWN
           <th class={cssClass} onclick={js} style="cursor: pointer;">
@@ -1212,7 +1216,7 @@ private[ui] class TaskPagedTable(
           </th>
         } else {
           val headerLink =
-            s"$basePath&task.sort=${URLEncoder.encode(header, "UTF-8")}"
+            s"$basePath&task.sort=${URLEncoder.encode(header, "UTF-8")}&task.pageSize=${pageSize}"
           val js = Unparsed(s"window.location.href='${headerLink}'")
           <th class={cssClass} onclick={js} style="cursor: pointer;">
             {header}

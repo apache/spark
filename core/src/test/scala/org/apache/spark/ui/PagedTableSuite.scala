@@ -77,23 +77,25 @@ class PagedTableSuite extends SparkFunSuite {
       override def goButtonJavascriptFunction: (String, String) = ("", "")
     }
 
-    assert(pagedTable.pageNavigation(1, 1) === Nil)
-    assert((pagedTable.pageNavigation(1, 2).head \\ "li").map(_.text.trim) === Seq("1", "2", ">"))
-    assert((pagedTable.pageNavigation(2, 2).head \\ "li").map(_.text.trim) === Seq("<", "1", "2"))
+    assert(pagedTable.pageNavigation(1, 10, 1) === Nil)
+    assert(
+      (pagedTable.pageNavigation(1, 10, 2).head \\ "li").map(_.text.trim) === Seq("1", "2", ">"))
+    assert(
+      (pagedTable.pageNavigation(2, 10, 2).head \\ "li").map(_.text.trim) === Seq("<", "1", "2"))
 
-    assert((pagedTable.pageNavigation(1, 100).head \\ "li").map(_.text.trim) ===
+    assert((pagedTable.pageNavigation(1, 10, 100).head \\ "li").map(_.text.trim) ===
       (1 to 10).map(_.toString) ++ Seq(">", ">>"))
-    assert((pagedTable.pageNavigation(2, 100).head \\ "li").map(_.text.trim) ===
+    assert((pagedTable.pageNavigation(2, 10, 100).head \\ "li").map(_.text.trim) ===
       Seq("<") ++ (1 to 10).map(_.toString) ++ Seq(">", ">>"))
 
-    assert((pagedTable.pageNavigation(100, 100).head \\ "li").map(_.text.trim) ===
+    assert((pagedTable.pageNavigation(100, 10, 100).head \\ "li").map(_.text.trim) ===
       Seq("<<", "<") ++ (91 to 100).map(_.toString))
-    assert((pagedTable.pageNavigation(99, 100).head \\ "li").map(_.text.trim) ===
+    assert((pagedTable.pageNavigation(99, 10, 100).head \\ "li").map(_.text.trim) ===
       Seq("<<", "<") ++ (91 to 100).map(_.toString) ++ Seq(">"))
 
-    assert((pagedTable.pageNavigation(11, 100).head \\ "li").map(_.text.trim) ===
+    assert((pagedTable.pageNavigation(11, 10, 100).head \\ "li").map(_.text.trim) ===
       Seq("<<", "<") ++ (11 to 20).map(_.toString) ++ Seq(">", ">>"))
-    assert((pagedTable.pageNavigation(93, 97).head \\ "li").map(_.text.trim) ===
+    assert((pagedTable.pageNavigation(93, 10, 97).head \\ "li").map(_.text.trim) ===
       Seq("<<", "<") ++ (91 to 97).map(_.toString) ++ Seq(">"))
   }
 }
