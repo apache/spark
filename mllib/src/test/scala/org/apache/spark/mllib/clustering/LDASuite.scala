@@ -17,7 +17,7 @@
 
 package org.apache.spark.mllib.clustering
 
-import breeze.linalg.{DenseMatrix => BDM}
+import breeze.linalg.{DenseMatrix => BDM, max, argmax}
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.linalg.{Vector, DenseMatrix, Matrix, Vectors}
@@ -204,7 +204,8 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext {
       .setOptimizer(op)
       .setSeed(12345)
 
-    val ldaModel = lda.run(docs)
+    // NOTE: this assumes OnlineLDAOptimizer returns a LocalLDAModel
+    val ldaModel: LocalLDAModel = lda.run(docs).asInstanceOf[LocalLDAModel]
     val topicIndices = ldaModel.describeTopics(maxTermsPerTopic = 10)
     val topics = topicIndices.map { case (terms, termWeights) =>
       terms.zip(termWeights)
@@ -217,6 +218,68 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext {
     }
   }
 
+  test("LocalLDAModel logPerplexity and predict") {
+    val k = 2
+    val vocabSize = 6
+    val alpha = 0.01
+    val eta = 0.01
+    val gammaShape = 100
+    val topics = new DenseMatrix(numRows = vocabSize, numCols = k, values = Array(
+      1.86738052,  1.94056535,  1.89981687,  0.08332659,  0.07405918, 0.07940597,
+      0.15081551,  0.08637973,  0.12428538,  1.9474897 ,  1.94615165, 1.95204124))
+
+    def toydata: Array[(Long, Vector)] = Array(
+      Vectors.sparse(6, Array(0, 1), Array(1, 1)),
+      Vectors.sparse(6, Array(1, 2), Array(1, 1)),
+      Vectors.sparse(6, Array(0, 2), Array(1, 1)),
+      Vectors.sparse(6, Array(3, 4), Array(1, 1)),
+      Vectors.sparse(6, Array(3, 5), Array(1, 1)),
+      Vectors.sparse(6, Array(4, 5), Array(1, 1))
+    ).zipWithIndex.map { case (wordCounts, docId) => (docId.toLong, wordCounts) }
+    val docs = sc.parallelize(toydata)
+
+
+    val ldaModel: LocalLDAModel = new LocalLDAModel(topics, alpha, eta, gammaShape)
+
+    /* Verify results using gensim:
+       import numpy as np
+       from gensim import models
+       corpus = [
+          [(0, 1.0), (1, 1.0)],
+          [(1, 1.0), (2, 1.0)],
+          [(0, 1.0), (2, 1.0)],
+          [(3, 1.0), (4, 1.0)],
+          [(3, 1.0), (5, 1.0)],
+          [(4, 1.0), (5, 1.0)]]
+       np.random.seed(2345)
+       lda = models.ldamodel.LdaModel(
+          corpus=corpus, alpha=0.01, eta=0.01, num_topics=2, update_every=0, passes=100,
+          decay=0.51, offset=1024)
+       print(lda.log_perplexity(corpus))
+       > -3.69051285096
+       print(list(lda.get_document_topics(corpus)))
+       > [[(0, 0.99504950495049516)], [(0, 0.99504950495049516)],
+       > [(0, 0.99504950495049516)], [(1, 0.99504950495049516)],
+       > [(1, 0.99504950495049516)], [(1, 0.99504950495049516)]]
+     */
+
+    // check logPerplexity
+    assert(ldaModel.logPerplexity(docs, docs.count()) ~== -3.690D relTol 1E-3D)
+
+    // check predicting topic distribution for a document
+    val expectedPredictions = List(
+      (0, 0.99504), (0, 0.99504),
+      (0, 0.99504), (1, 0.99504),
+      (1, 0.99504), (1, 0.99504))
+    expectedPredictions.zip(docs.map { doc =>
+      val (_, topics) = ldaModel.topicDistribution(doc)
+      val topicsBz = topics.toBreeze.toDenseVector
+      (argmax(topicsBz), max(topicsBz))
+    }.collect()).forall {
+      case (expected, actual) =>
+        expected._1 === actual._1 && (expected._2 ~== actual._2 relTol 1E-3D)
+    }
+  }
 }
 
 private[clustering] object LDASuite {

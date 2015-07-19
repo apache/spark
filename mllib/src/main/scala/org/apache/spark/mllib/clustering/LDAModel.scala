@@ -211,10 +211,10 @@ class LocalLDAModel private[clustering] (
    * documents as evaluation corpus.
    */
   def logPerplexity(
-    batch: RDD[(Long, Vector)],
-    totalDocs: Long): Double = {
+      batch: RDD[(Long, Vector)],
+      totalDocs: Long): Double = {
     val corpusWords = batch
-      .map { case (_, termCounts) => termCounts.toBreeze }
+      .flatMap { case (_, termCounts) => termCounts.toArray }
       .reduce(_+_)
     val subsampleRatio = totalDocs.toDouble / batch.count()
     val batchVariationalBound = bound(
@@ -226,7 +226,7 @@ class LocalLDAModel private[clustering] (
       gammaShape,
       k,
       vocabSize)
-    val perWordBound = batchVariationalBound / (subsampleRatio * vocabSize)
+    val perWordBound = batchVariationalBound / (subsampleRatio * corpusWords)
 
     perWordBound
   }
@@ -238,42 +238,47 @@ class LocalLDAModel private[clustering] (
    */
   // TODO: precompute gamma during training to use for logPerplexity's call to bound
   private def bound(
-    batch: RDD[(Long, Vector)],
-    subsampleRatio: Double,
-    alpha: Double,
-    eta: Double,
-    lambda: BDM[Double],
-    gammaShape: Double,
-    k: Int,
-    vocabSize: Long): Double = {
-    var score = 0.0D
-    val Elogbeta = LDAUtils.dirichletExpectation(lambda)
-    val expElogbeta = exp(Elogbeta)
+      batch: RDD[(Long, Vector)],
+      subsampleRatio: Double,
+      alpha: Double,
+      eta: Double,
+      lambda: BDM[Double],
+      gammaShape: Double,
+      k: Int,
+      vocabSize: Long): Double = {
+    // Double transpose because dirichletExpectation normalizes by row and we need to normalize
+    // by topic (columns of lambda)
+    val Elogbeta = LDAUtils.dirichletExpectation(lambda.t).t
 
-    batch.foreach { case (id: Long, termCounts: Vector) =>
-      val (gammad: BDV[Double], _) =
-        OnlineLDAOptimizer.variationalTopicInference(termCounts, expElogbeta, alpha, gammaShape, k)
-      val Elogthetad: BDV[Double] = digamma(gammad) - digamma(sum(gammad))
+    var score = batch.map { case (id: Long, termCounts: Vector) =>
+      var docScore = 0.0D
+      val (gammad: BDV[Double], _) = OnlineLDAOptimizer.variationalTopicInference(
+        termCounts, exp(Elogbeta), alpha, gammaShape, k)
+      val Elogthetad: BDV[Double] = LDAUtils.dirichletExpectation(gammad)
 
       // E[log p(doc | theta, beta)]
       termCounts.foreachActive { case (id, count) =>
-        score += LDAUtils.logSumExp(Elogthetad + Elogbeta(::, id))
+        docScore += LDAUtils.logSumExp(Elogthetad + Elogbeta(id, ::).t)
       }
       // E[log p(theta | alpha) - log q(theta | gamma)]; assumes alpha is a vector
-      score += sum((gammad - alpha) :* Elogthetad)
-      score += sum(lgamma(gammad) - lgamma(alpha))
-      score += lgamma(alpha) - lgamma(sum(gammad))
-    }
+      docScore += sum((alpha - gammad) :* Elogthetad)
+      docScore += sum(lgamma(gammad) - lgamma(alpha))
+      // TODO: change k * alpha to sum(alpha) when alpha is vector
+      docScore += lgamma(k * alpha) - lgamma(sum(gammad))
+
+      docScore
+    }.sum()
+
     // compensate likelihood for when `corpus` above is only a sample of the whole corpus
     score *= subsampleRatio
 
     // E[log p(beta | eta) - log q (beta | lambda)]; assumes eta is a scalar
-    score += sum((eta - lambda) * Elogbeta)
+    score += sum((eta - lambda) :* Elogbeta)
     score += sum(lgamma(lambda) - lgamma(eta))
 
     val sumEta = eta * vocabSize
+    score += sum(lgamma(sumEta) - lgamma(sum(lambda(::, breeze.linalg.*))))
 
-    score += sum(lgamma(sumEta) - lgamma(sum(lambda(breeze.linalg.*, ::))))
     score
   }
 
@@ -281,13 +286,17 @@ class LocalLDAModel private[clustering] (
    * Predicts the topic mixture distribution gamma for a document.
    */
   def topicDistribution(doc: (Long, Vector)): (Long, Vector) = {
+    // Double transpose because dirichletExpectation normalizes by row and we need to normalize
+    // by topic (columns of lambda)
+    val Elogbeta = LDAUtils.dirichletExpectation(topicsMatrix.toBreeze.toDenseMatrix.t).t
+
     val (gamma, _) = OnlineLDAOptimizer.variationalTopicInference(
       doc._2,
-      exp(LDAUtils.dirichletExpectation(this.topicsMatrix.toBreeze.toDenseMatrix)).t,
+      exp(Elogbeta),
       this.alpha,
       this.gammaShape,
       this.k)
-    (doc._1, Vectors.dense(gamma.toArray))
+    (doc._1, Vectors.dense((gamma / sum(gamma)).toArray))
   }
 
 }
