@@ -21,7 +21,7 @@ import scala.collection.immutable.HashSet
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.dsl.expressions._
-import org.apache.spark.sql.types.{Decimal, IntegerType, BooleanType}
+import org.apache.spark.sql.types.{Decimal, DoubleType, IntegerType, BooleanType}
 
 
 class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
@@ -114,6 +114,10 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(
       And(In(Literal(1), Seq(Literal(1), Literal(2))), In(Literal(2), Seq(Literal(1), Literal(2)))),
       true)
+
+    checkEvaluation(In(Literal("^Ba*n"), Seq(Literal("^Ba*n"))), true)
+    checkEvaluation(In(Literal("^Ba*n"), Seq(Literal("aa"), Literal("^Ba*n"))), true)
+    checkEvaluation(In(Literal("^Ba*n"), Seq(Literal("aa"), Literal("^n"))), false)
   }
 
   test("INSET") {

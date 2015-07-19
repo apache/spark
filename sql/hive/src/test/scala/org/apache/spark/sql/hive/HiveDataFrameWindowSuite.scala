@@ -183,13 +183,13 @@ class HiveDataFrameWindowSuite extends QueryTest {
   }
 
   test("aggregation and range betweens with unbounded") {
-    val df = Seq((1, "1"), (2, "2"), (2, "2"), (2, "2"), (1, "1"), (2, "2")).toDF("key", "value")
+    val df = Seq((5, "1"), (5, "2"), (4, "2"), (6, "2"), (3, "1"), (2, "2")).toDF("key", "value")
     df.registerTempTable("window_table")
     checkAnswer(
       df.select(
         $"key",
         last("value").over(
-          Window.partitionBy($"value").orderBy($"key").rangeBetween(1, Long.MaxValue))
+          Window.partitionBy($"value").orderBy($"key").rangeBetween(-2, -1))
           .equalTo("2")
           .as("last_v"),
         avg("key").over(Window.partitionBy("value").orderBy("key").rangeBetween(Long.MinValue, 1))
@@ -203,7 +203,7 @@ class HiveDataFrameWindowSuite extends QueryTest {
         """SELECT
           | key,
           | last_value(value) OVER
-          |   (PARTITION BY value ORDER BY key RANGE 1 preceding) == "2",
+          |   (PARTITION BY value ORDER BY key RANGE BETWEEN 2 preceding and 1 preceding) == "2",
           | avg(key) OVER
           |   (PARTITION BY value ORDER BY key RANGE BETWEEN unbounded preceding and 1 following),
           | avg(key) OVER

@@ -24,9 +24,10 @@ import com.google.common.cache.{CacheBuilder, CacheLoader}
 import org.codehaus.janino.ClassBodyEvaluator
 
 import org.apache.spark.Logging
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.unsafe.types._
 
 
 // These classes are here to avoid issues with serialization and integration with quasiquotes.
@@ -56,9 +57,19 @@ class CodeGenContext {
    */
   val references: mutable.ArrayBuffer[Expression] = new mutable.ArrayBuffer[Expression]()
 
-  val stringType: String = classOf[UTF8String].getName
-  val decimalType: String = classOf[Decimal].getName
+  /**
+   * Holding expressions' mutable states like `MonotonicallyIncreasingID.count` as a
+   * 3-tuple: java type, variable name, code to init it.
+   * They will be kept as member variables in generated classes like `SpecificProjection`.
+   */
+  val mutableStates: mutable.ArrayBuffer[(String, String, String)] =
+    mutable.ArrayBuffer.empty[(String, String, String)]
 
+  def addMutableState(javaType: String, variableName: String, initialValue: String): Unit = {
+    mutableStates += ((javaType, variableName, initialValue))
+  }
+
+  final val intervalType: String = classOf[Interval].getName
   final val JAVA_BOOLEAN = "boolean"
   final val JAVA_BYTE = "byte"
   final val JAVA_SHORT = "short"
@@ -124,9 +135,10 @@ class CodeGenContext {
     case LongType | TimestampType => JAVA_LONG
     case FloatType => JAVA_FLOAT
     case DoubleType => JAVA_DOUBLE
-    case dt: DecimalType => decimalType
+    case dt: DecimalType => "Decimal"
     case BinaryType => "byte[]"
-    case StringType => stringType
+    case StringType => "UTF8String"
+    case IntervalType => intervalType
     case _: StructType => "InternalRow"
     case _: ArrayType => s"scala.collection.Seq"
     case _: MapType => s"scala.collection.Map"
@@ -203,7 +215,10 @@ class CodeGenContext {
   def isPrimitiveType(dt: DataType): Boolean = isPrimitiveType(javaType(dt))
 }
 
-
+/**
+ * A wrapper for generated class, defines a `generate` method so that we can pass extra objects
+ * into generated class.
+ */
 abstract class GeneratedClass {
   def generate(expressions: Array[Expression]): Any
 }
@@ -247,7 +262,12 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
   private[this] def doCompile(code: String): GeneratedClass = {
     val evaluator = new ClassBodyEvaluator()
     evaluator.setParentClassLoader(getClass.getClassLoader)
-    evaluator.setDefaultImports(Array("org.apache.spark.sql.catalyst.InternalRow"))
+    evaluator.setDefaultImports(Array(
+      classOf[InternalRow].getName,
+      classOf[UnsafeRow].getName,
+      classOf[UTF8String].getName,
+      classOf[Decimal].getName
+    ))
     evaluator.setExtendedClass(classOf[GeneratedClass])
     try {
       evaluator.cook(code)

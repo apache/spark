@@ -54,8 +54,8 @@ object CurrentOrigin {
   }
 }
 
-abstract class TreeNode[BaseType <: TreeNode[BaseType]] {
-  self: BaseType with Product =>
+abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
+  self: BaseType =>
 
   val origin: Origin = CurrentOrigin.get
 
@@ -451,29 +451,4 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] {
     }
     s"$nodeName(${args.mkString(",")})"
   }
-}
-
-/**
- * A [[TreeNode]] that has two children, [[left]] and [[right]].
- */
-trait BinaryNode[BaseType <: TreeNode[BaseType]] {
-  def left: BaseType
-  def right: BaseType
-
-  def children: Seq[BaseType] = Seq(left, right)
-}
-
-/**
- * A [[TreeNode]] with no children.
- */
-trait LeafNode[BaseType <: TreeNode[BaseType]] {
-  def children: Seq[BaseType] = Nil
-}
-
-/**
- * A [[TreeNode]] with a single [[child]].
- */
-trait UnaryNode[BaseType <: TreeNode[BaseType]] {
-  def child: BaseType
-  def children: Seq[BaseType] = child :: Nil
 }

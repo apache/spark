@@ -17,11 +17,15 @@
 
 package org.apache.spark.executor
 
+import java.io.{IOException, ObjectInputStream}
+import java.util.concurrent.ConcurrentHashMap
+
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.executor.DataReadMethod.DataReadMethod
 import org.apache.spark.storage.{BlockId, BlockStatus}
+import org.apache.spark.util.Utils
 
 /**
  * :: DeveloperApi ::
@@ -210,10 +214,42 @@ class TaskMetrics extends Serializable {
   private[spark] def updateInputMetrics(): Unit = synchronized {
     inputMetrics.foreach(_.updateBytesRead())
   }
+
+  @throws(classOf[IOException])
+  private def readObject(in: ObjectInputStream): Unit = Utils.tryOrIOException {
+    in.defaultReadObject()
+    // Get the hostname from cached data, since hostname is the order of number of nodes in
+    // cluster, so using cached hostname will decrease the object number and alleviate the GC
+    // overhead.
+    _hostname = TaskMetrics.getCachedHostName(_hostname)
+  }
+
+  private var _accumulatorUpdates: Map[Long, Any] = Map.empty
+  @transient private var _accumulatorsUpdater: () => Map[Long, Any] = null
+
+  private[spark] def updateAccumulators(): Unit = synchronized {
+    _accumulatorUpdates = _accumulatorsUpdater()
+  }
+
+  /**
+   * Return the latest updates of accumulators in this task.
+   */
+  def accumulatorUpdates(): Map[Long, Any] = _accumulatorUpdates
+
+  private[spark] def setAccumulatorsUpdater(accumulatorsUpdater: () => Map[Long, Any]): Unit = {
+    _accumulatorsUpdater = accumulatorsUpdater
+  }
 }
 
 private[spark] object TaskMetrics {
+  private val hostNameCache = new ConcurrentHashMap[String, String]()
+
   def empty: TaskMetrics = new TaskMetrics
+
+  def getCachedHostName(host: String): String = {
+    val canonicalHost = hostNameCache.putIfAbsent(host, host)
+    if (canonicalHost != null) canonicalHost else host
+  }
 }
 
 /**

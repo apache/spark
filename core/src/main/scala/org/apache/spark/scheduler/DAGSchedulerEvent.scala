@@ -19,7 +19,7 @@ package org.apache.spark.scheduler
 
 import java.util.Properties
 
-import scala.collection.mutable.Map
+import scala.collection.Map
 import scala.language.existentials
 
 import org.apache.spark._

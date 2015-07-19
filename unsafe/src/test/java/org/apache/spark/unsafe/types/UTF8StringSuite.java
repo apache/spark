@@ -87,6 +87,20 @@ public class UTF8StringSuite {
   }
 
   @Test
+  public void concatTest() {
+    assertEquals(concat(), fromString(""));
+    assertEquals(concat(null), fromString(""));
+    assertEquals(concat(fromString("")), fromString(""));
+    assertEquals(concat(fromString("ab")), fromString("ab"));
+    assertEquals(concat(fromString("a"), fromString("b")), fromString("ab"));
+    assertEquals(concat(fromString("a"), fromString("b"), fromString("c")), fromString("abc"));
+    assertEquals(concat(fromString("a"), null, fromString("c")), fromString("ac"));
+    assertEquals(concat(fromString("a"), null, null), fromString("a"));
+    assertEquals(concat(null, null, null), fromString(""));
+    assertEquals(concat(fromString("数据"), fromString("砖头")), fromString("数据砖头"));
+  }
+
+  @Test
   public void contains() {
     assertTrue(fromString("").contains(fromString("")));
     assertTrue(fromString("hello").contains(fromString("ello")));
