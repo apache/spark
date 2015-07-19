@@ -19,11 +19,10 @@ package org.apache.spark.sql.sources
 
 import java.util.{Date, UUID}
 
-import org.apache.commons.lang.NotImplementedException
-
 import scala.collection.JavaConversions.asScalaIterator
-import scala.collection.mutable
 import scala.collection.mutable.HashSet
+
+import org.apache.commons.lang.NotImplementedException
 
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce._
@@ -41,7 +40,6 @@ import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.execution.RunnableCommand
 import org.apache.spark.sql.types.StringType
 import org.apache.spark.util.SerializableConfiguration
-
 
 private[sql] case class InsertIntoDataSource(
     logicalRelation: LogicalRelation,
@@ -243,7 +241,7 @@ private[sql] case class InsertIntoHadoopFsRelation(
     def writeRows(taskContext: TaskContext, iterator: Iterator[InternalRow]): Unit = {
       // Track which rows have been output to disk so that if a data sort is necessary mid-write,
       // we don't end up outputting the same data twice
-      val writtenRows: mutable.HashSet[InternalRow] = new HashSet[InternalRow]
+      val writtenRows: HashSet[InternalRow] = new HashSet[InternalRow]
 
       // Flag to track whether data has been sorted in which case it's safe to close previously
       // used outputWriters
