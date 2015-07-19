@@ -31,9 +31,9 @@ import org.apache.spark.sql.types._
 
 case class TestFunction(
     children: Seq[Expression],
-    inputTypes: Seq[AbstractDataType]) extends Expression with ImplicitCastInputTypes {
+    inputTypes: Seq[AbstractDataType])
+  extends Expression with ImplicitCastInputTypes with Unevaluable {
   override def nullable: Boolean = true
-  override def eval(input: InternalRow): Any = throw new UnsupportedOperationException
   override def dataType: DataType = StringType
 }
 

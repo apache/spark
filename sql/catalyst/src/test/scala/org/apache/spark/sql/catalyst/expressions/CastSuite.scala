@@ -281,8 +281,6 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
     val nts = sts + ".1"
     val ts = Timestamp.valueOf(nts)
 
-    val defaultTimeZone = TimeZone.getDefault
-    TimeZone.setDefault(TimeZone.getTimeZone("America/Los_Angeles"))
     var c = Calendar.getInstance()
     c.set(2015, 2, 8, 2, 30, 0)
     checkEvaluation(cast(cast(new Timestamp(c.getTimeInMillis), StringType), TimestampType),
@@ -291,7 +289,6 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
     c.set(2015, 10, 1, 2, 30, 0)
     checkEvaluation(cast(cast(new Timestamp(c.getTimeInMillis), StringType), TimestampType),
       c.getTimeInMillis * 1000)
-    TimeZone.setDefault(defaultTimeZone)
 
     checkEvaluation(cast("abdef", StringType), "abdef")
     checkEvaluation(cast("abdef", DecimalType.Unlimited), null)

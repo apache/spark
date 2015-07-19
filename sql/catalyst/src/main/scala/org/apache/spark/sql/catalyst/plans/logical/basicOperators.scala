@@ -141,6 +141,10 @@ case class BroadcastHint(child: LogicalPlan) extends UnaryNode {
 
 case class Except(left: LogicalPlan, right: LogicalPlan) extends BinaryNode {
   override def output: Seq[Attribute] = left.output
+
+  override lazy val resolved: Boolean =
+    childrenResolved &&
+      left.output.zip(right.output).forall { case (l, r) => l.dataType == r.dataType }
 }
 
 case class InsertIntoTable(
@@ -437,4 +441,8 @@ case object OneRowRelation extends LeafNode {
 
 case class Intersect(left: LogicalPlan, right: LogicalPlan) extends BinaryNode {
   override def output: Seq[Attribute] = left.output
+
+  override lazy val resolved: Boolean =
+    childrenResolved &&
+      left.output.zip(right.output).forall { case (l, r) => l.dataType == r.dataType }
 }

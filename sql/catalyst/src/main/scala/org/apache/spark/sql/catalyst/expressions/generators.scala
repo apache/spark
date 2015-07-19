@@ -20,9 +20,9 @@ package org.apache.spark.sql.catalyst.expressions
 import scala.collection.Map
 
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
-import org.apache.spark.sql.catalyst.{CatalystTypeConverters, trees}
+import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.types._
 
 /**
@@ -73,7 +73,7 @@ case class UserDefinedGenerator(
     elementTypes: Seq[(DataType, Boolean)],
     function: Row => TraversableOnce[InternalRow],
     children: Seq[Expression])
-  extends Generator {
+  extends Generator with CodegenFallback {
 
   @transient private[this] var inputRow: InterpretedProjection = _
   @transient private[this] var convertToScala: (InternalRow) => Row = _
@@ -100,7 +100,7 @@ case class UserDefinedGenerator(
 /**
  * Given an input array produces a sequence of rows for each value in the array.
  */
-case class Explode(child: Expression) extends UnaryExpression with Generator {
+case class Explode(child: Expression) extends UnaryExpression with Generator with CodegenFallback {
 
   override def children: Seq[Expression] = child :: Nil
 

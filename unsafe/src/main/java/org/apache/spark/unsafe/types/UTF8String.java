@@ -21,6 +21,7 @@ import javax.annotation.Nonnull;
 import java.io.Serializable;
 import java.io.UnsupportedEncodingException;
 
+import org.apache.spark.unsafe.PlatformDependent;
 import org.apache.spark.unsafe.array.ByteArrayMethods;
 
 import static org.apache.spark.unsafe.PlatformDependent.*;
@@ -322,7 +323,7 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
       }
       i += numBytesForFirstByte(getByte(i));
       c += 1;
-    } while(i < numBytes);
+    } while (i < numBytes);
 
     return -1;
   }
@@ -395,6 +396,39 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
     }
   }
 
+  /**
+   * Concatenates input strings together into a single string. A null input is skipped.
+   * For example, concat("a", null, "c") would yield "ac".
+   */
+  public static UTF8String concat(UTF8String... inputs) {
+    if (inputs == null) {
+      return fromBytes(new byte[0]);
+    }
+
+    // Compute the total length of the result.
+    int totalLength = 0;
+    for (int i = 0; i < inputs.length; i++) {
+      if (inputs[i] != null) {
+        totalLength += inputs[i].numBytes;
+      }
+    }
+
+    // Allocate a new byte array, and copy the inputs one by one into it.
+    final byte[] result = new byte[totalLength];
+    int offset = 0;
+    for (int i = 0; i < inputs.length; i++) {
+      if (inputs[i] != null) {
+        int len = inputs[i].numBytes;
+        PlatformDependent.copyMemory(
+          inputs[i].base, inputs[i].offset,
+          result, PlatformDependent.BYTE_ARRAY_OFFSET + offset,
+          len);
+        offset += len;
+      }
+    }
+    return fromBytes(result);
+  }
+
   @Override
   public String toString() {
     try {
@@ -413,7 +447,7 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
   }
 
   @Override
-  public int compareTo(final UTF8String other) {
+  public int compareTo(@Nonnull final UTF8String other) {
     int len = Math.min(numBytes, other.numBytes);
     // TODO: compare 8 bytes as unsigned long
     for (int i = 0; i < len; i ++) {
@@ -434,7 +468,7 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
   public boolean equals(final Object other) {
     if (other instanceof UTF8String) {
       UTF8String o = (UTF8String) other;
-      if (numBytes != o.numBytes){
+      if (numBytes != o.numBytes) {
         return false;
       }
       return ByteArrayMethods.arrayEquals(base, offset, o.base, o.offset, numBytes);
