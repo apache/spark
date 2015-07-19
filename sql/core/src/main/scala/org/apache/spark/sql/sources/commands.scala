@@ -245,6 +245,10 @@ private[sql] case class InsertIntoHadoopFsRelation(
       // we don't end up outputting the same data twice
       val writtenRows: mutable.HashSet[InternalRow] = new HashSet[InternalRow]
 
+      // Flag to track whether data has been sorted in which case it's safe to close previously
+      // used outputWriters
+      var sorted: Boolean = false
+
       // If anything below fails, we should abort the task.
       try {
         writerContainer.executorSideSetup(taskContext)
@@ -263,6 +267,7 @@ private[sql] case class InsertIntoHadoopFsRelation(
         // Sort the data by partition so that it's possible to use a single outputWriter at a
         // time to process the incoming data
         def sortRows(iterator: Iterator[InternalRow]): Iterator[InternalRow] = {
+          // TODO Sort the data by partition key
           throw new NotImplementedException()
         }
 
@@ -270,8 +275,6 @@ private[sql] case class InsertIntoHadoopFsRelation(
         // (SPARK-8890) to avoid running out of memory due to creating too many outputWriters. Thus,
         // we extract this functionality into its own function that can be called with updated
         // underlying data.
-        // TODO Add tracking of whether data has been sorted in outputWriterForRow, so that
-        // previously used outputWriters may be closed when complete.
         def writeRowsSafe(iterator: Iterator[InternalRow]): Unit ={
           while (iterator.hasNext) {
             val internalRow = iterator.next()
@@ -281,11 +284,11 @@ private[sql] case class InsertIntoHadoopFsRelation(
               val partitionPart = partitionProj(internalRow)
               val dataPart = dataConverter(dataProj(internalRow))
 
-              writerContainer.outputWriterForRow(partitionPart).write(dataPart)
+              writerContainer.outputWriterForRow(partitionPart, sorted).write(dataPart)
               writtenRows += internalRow
             } else {
-              // TODO Sort the data by partition key
               val sortedRows: Iterator[InternalRow] = sortRows(iterator)
+              sorted = true
               writeRowsSafe(sortedRows)
             }
           }
@@ -547,7 +550,7 @@ private[sql] class DynamicPartitionWriterContainer(
   // All output writers are created on executor side.
   @transient protected var outputWriters: java.util.HashMap[String, OutputWriter] = _
 
-  protected var maxOutputWriters = 50;
+  protected var maxOutputWriters = 50
 
   override protected def initWriters(): Unit = {
     outputWriters = new java.util.HashMap[String, OutputWriter]
@@ -602,8 +605,12 @@ private[sql] class DynamicPartitionWriterContainer(
     }
   }
 
-  // The `row` argument is supposed to only contain partition column values which have been casted
-  // to strings.
+  /**
+   * Create the outputWriter to output a given row to disk.
+   *
+   * @param row The `row` argument is supposed to only contain partition column values
+   *            which have been casted to strings.
+   */
   override def outputWriterForRow(row: InternalRow): OutputWriter = {
     val partitionPath: String = computePartitionPath(row)
 
@@ -618,6 +625,22 @@ private[sql] class DynamicPartitionWriterContainer(
     } else {
       writer
     }
+  }
+
+  /**
+   * Create the outputWriter to output a given row to disk. If dealing with sorted data, we
+   * can close previously used writers since they will no longer be necessary.
+   *
+   * @param row The `row` argument is supposed to only contain partition column values
+   *            which have been casted to strings.
+   * @param shouldCloseWriters If true, close all existing writers before creating new writers
+   */
+  def outputWriterForRow(row: InternalRow, shouldCloseWriters: Boolean): OutputWriter = {
+    if (shouldCloseWriters) {
+      clearOutputWriters()
+    }
+
+    outputWriterForRow(row)
   }
 
   private def clearOutputWriters(): Unit = {
