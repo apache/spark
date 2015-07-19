@@ -896,10 +896,10 @@ class SQLTests(ReusedPySparkTestCase):
 
     def test_capture_illegalargument_exception(self):
         self.assertRaisesRegexp(IllegalArgumentException, "Setting negative mapred.reduce.tasks",
-                          lambda: self.sqlCtx.sql("SET mapred.reduce.tasks=-1"))
+                                lambda: self.sqlCtx.sql("SET mapred.reduce.tasks=-1"))
         df = self.sqlCtx.createDataFrame([(1, 2)], ["a", "b"])
         self.assertRaisesRegexp(IllegalArgumentException, "1024 is not in the permitted values",
-                          lambda: df.select(sha2(df.a, 1024)).collect())
+                                lambda: df.select(sha2(df.a, 1024)).collect())
 
 
 class HiveContextSQLTests(ReusedPySparkTestCase):
