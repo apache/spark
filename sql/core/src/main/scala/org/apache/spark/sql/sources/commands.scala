@@ -19,7 +19,11 @@ package org.apache.spark.sql.sources
 
 import java.util.{Date, UUID}
 
+import org.apache.commons.lang.NotImplementedException
+
 import scala.collection.JavaConversions.asScalaIterator
+import scala.collection.mutable
+import scala.collection.mutable.HashSet
 
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce._
@@ -38,7 +42,6 @@ import org.apache.spark.sql.execution.RunnableCommand
 import org.apache.spark.sql.types.StringType
 import org.apache.spark.util.SerializableConfiguration
 
-import scala.collection.mutable
 
 private[sql] case class InsertIntoDataSource(
     logicalRelation: LogicalRelation,
@@ -197,7 +200,7 @@ private[sql] case class InsertIntoHadoopFsRelation(
    */
   private def insertWithDynamicPartitions(
       sqlContext: SQLContext,
-      writerContainer: BaseWriterContainer,
+      writerContainer: DynamicPartitionWriterContainer,
       df: DataFrame,
       partitionColumns: Array[String]): Unit = {
     // Uses a local val for serialization
@@ -238,6 +241,10 @@ private[sql] case class InsertIntoHadoopFsRelation(
     }
 
     def writeRows(taskContext: TaskContext, iterator: Iterator[InternalRow]): Unit = {
+      // Track which rows have been output to disk so that if a data sort is necessary mid-write,
+      // we don't end up outputting the same data twice
+      val writtenRows: mutable.HashSet[InternalRow] = new HashSet[InternalRow]
+
       // If anything below fails, we should abort the task.
       try {
         writerContainer.executorSideSetup(taskContext)
@@ -253,13 +260,38 @@ private[sql] case class InsertIntoHadoopFsRelation(
           r: InternalRow => r.asInstanceOf[Row]
         }
 
-        while (iterator.hasNext) {
-          val internalRow = iterator.next()
-          val partitionPart = partitionProj(internalRow)
-          val dataPart = dataConverter(dataProj(internalRow))
-          writerContainer.outputWriterForRow(partitionPart).write(dataPart)
+        // Sort the data by partition so that it's possible to use a single outputWriter at a
+        // time to process the incoming data
+        def sortRows(iterator: Iterator[InternalRow]): Iterator[InternalRow] = {
+          throw new NotImplementedException()
         }
 
+        // When outputting rows, we may need to interrupt the file write to sort the underlying data
+        // (SPARK-8890) to avoid running out of memory due to creating too many outputWriters. Thus,
+        // we extract this functionality into its own function that can be called with updated
+        // underlying data.
+        // TODO Add tracking of whether data has been sorted in outputWriterForRow, so that
+        // previously used outputWriters may be closed when complete.
+        def writeRowsSafe(iterator: Iterator[InternalRow]): Unit ={
+          while (iterator.hasNext) {
+            val internalRow = iterator.next()
+
+            if (writerContainer.canGetOutputWriter(internalRow) &&
+                !writtenRows.contains(internalRow)) {
+              val partitionPart = partitionProj(internalRow)
+              val dataPart = dataConverter(dataProj(internalRow))
+
+              writerContainer.outputWriterForRow(partitionPart).write(dataPart)
+              writtenRows += internalRow
+            } else {
+              // TODO Sort the data by partition key
+              val sortedRows: Iterator[InternalRow] = sortRows(iterator)
+              writeRowsSafe(sortedRows)
+            }
+          }
+        }
+
+        writeRowsSafe(iterator)
         writerContainer.commitTask()
       } catch { case cause: Throwable =>
         logError("Aborting task.", cause)
@@ -527,7 +559,7 @@ private[sql] class DynamicPartitionWriterContainer(
    */
   def computePartitionPath(row: InternalRow): String = {
     val partitionPath = {
-      val partitionPathBuilder = new mutable.StringBuilder
+      val partitionPathBuilder = new StringBuilder
       var i = 0
 
       while (i < partitionColumns.length) {
@@ -551,10 +583,10 @@ private[sql] class DynamicPartitionWriterContainer(
   }
 
   /**
-   * Returns true if it's possible to create a new outputWriter for a given row or to use an 
+   * Returns true if it's possible to create a new outputWriter for a given row or to use an
    * existing writer without triggering a sort operation on the incoming data to avoid memory
    * problems.
-   * 
+   *
    * During {{ InsertIntoHadoopFsRelation }} new outputWriters are created for every partition.
    * Creating too many outputWriters can cause us to run out of memory (SPARK-8890). Therefore, only
    * create up to a certain number of outputWriters. If the number of allowed writers is exceeded,
