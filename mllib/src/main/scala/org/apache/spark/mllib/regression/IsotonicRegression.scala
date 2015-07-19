@@ -46,6 +46,8 @@ import org.apache.spark.sql.SQLContext
  * @param predictions Array of predictions associated to the boundaries at the same index.
  *                    Results of isotonic regression and therefore monotone.
  * @param isotonic indicates whether this is isotonic or antitonic.
+ *
+ * @since 1.3.0
  */
 @Experimental
 class IsotonicRegressionModel (
@@ -59,7 +61,10 @@ class IsotonicRegressionModel (
   assertOrdered(boundaries)
   assertOrdered(predictions)(predictionOrd)
 
-  /** A Java-friendly constructor that takes two Iterable parameters and one Boolean parameter. */
+  /** A Java-friendly constructor that takes two Iterable parameters and one Boolean parameter.
+   *
+   * @since 1.4.0
+   */
   def this(boundaries: java.lang.Iterable[Double],
       predictions: java.lang.Iterable[Double],
       isotonic: java.lang.Boolean) = {
@@ -83,6 +88,8 @@ class IsotonicRegressionModel (
    *
    * @param testData Features to be labeled.
    * @return Predicted labels.
+   *
+   * @since 1.3.0
    */
   def predict(testData: RDD[Double]): RDD[Double] = {
     testData.map(predict)
@@ -94,6 +101,8 @@ class IsotonicRegressionModel (
    *
    * @param testData Features to be labeled.
    * @return Predicted labels.
+   *
+   * @since 1.3.0
    */
   def predict(testData: JavaDoubleRDD): JavaDoubleRDD = {
     JavaDoubleRDD.fromRDD(predict(testData.rdd.retag.asInstanceOf[RDD[Double]]))
@@ -114,6 +123,8 @@ class IsotonicRegressionModel (
    *         3) If testData falls between two values in boundary array then prediction is treated
    *           as piecewise linear function and interpolated value is returned. In case there are
    *           multiple values with the same boundary then the same rules as in 2) are used.
+   *
+   * @since 1.3.0
    */
   def predict(testData: Double): Double = {
 
@@ -147,14 +158,21 @@ class IsotonicRegressionModel (
 
   /** A convenient method for boundaries called by the Python API. */
   private[mllib] def predictionVector: Vector = Vectors.dense(predictions)
-
+  /*
+   * @since 1.4.0
+   */
   override def save(sc: SparkContext, path: String): Unit = {
     IsotonicRegressionModel.SaveLoadV1_0.save(sc, path, boundaries, predictions, isotonic)
   }
 
+  /*
+   * @since 1.4.0
+   */
   override protected def formatVersion: String = "1.0"
 }
-
+/*
+ * @since 1.4.0
+ */
 object IsotonicRegressionModel extends Loader[IsotonicRegressionModel] {
 
   import org.apache.spark.mllib.util.Loader._
@@ -200,6 +218,9 @@ object IsotonicRegressionModel extends Loader[IsotonicRegressionModel] {
     }
   }
 
+  /*
+   * @since 1.4.0
+   */
   override def load(sc: SparkContext, path: String): IsotonicRegressionModel = {
     implicit val formats = DefaultFormats
     val (loadedClassName, version, metadata) = loadMetadata(sc, path)
@@ -237,6 +258,8 @@ object IsotonicRegressionModel extends Loader[IsotonicRegressionModel] {
  *   Available from [[http://softlib.rice.edu/pub/CRPC-TRs/reports/CRPC-TR96640.pdf]]
  *
  * @see [[http://en.wikipedia.org/wiki/Isotonic_regression Isotonic regression (Wikipedia)]]
+ *
+ * @since 1.3.0
  */
 @Experimental
 class IsotonicRegression private (private var isotonic: Boolean) extends Serializable {
@@ -245,6 +268,8 @@ class IsotonicRegression private (private var isotonic: Boolean) extends Seriali
    * Constructs IsotonicRegression instance with default parameter isotonic = true.
    *
    * @return New instance of IsotonicRegression.
+   *
+   * @since 1.3.0
    */
   def this() = this(true)
 
@@ -253,6 +278,8 @@ class IsotonicRegression private (private var isotonic: Boolean) extends Seriali
    *
    * @param isotonic Isotonic (increasing) or antitonic (decreasing) sequence.
    * @return This instance of IsotonicRegression.
+   *
+   * @since 1.3.0
    */
   def setIsotonic(isotonic: Boolean): this.type = {
     this.isotonic = isotonic
@@ -268,6 +295,8 @@ class IsotonicRegression private (private var isotonic: Boolean) extends Seriali
    *              If multiple labels share the same feature value then they are ordered before
    *              the algorithm is executed.
    * @return Isotonic regression model.
+   *
+   * @since 1.3.0
    */
   def run(input: RDD[(Double, Double, Double)]): IsotonicRegressionModel = {
     val preprocessedInput = if (isotonic) {
@@ -293,6 +322,8 @@ class IsotonicRegression private (private var isotonic: Boolean) extends Seriali
    *              If multiple labels share the same feature value then they are ordered before
    *              the algorithm is executed.
    * @return Isotonic regression model.
+   *
+   * @since 1.3.0
    */
   def run(input: JavaRDD[(JDouble, JDouble, JDouble)]): IsotonicRegressionModel = {
     run(input.rdd.retag.asInstanceOf[RDD[(Double, Double, Double)]])

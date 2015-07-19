@@ -40,6 +40,7 @@ import org.apache.spark.mllib.linalg.Vector
  *    .setInitialWeights(Vectors.dense(...))
  *    .trainOn(DStream)
  *
+ * @since 1.1.0
  */
 @Experimental
 class StreamingLinearRegressionWithSGD private[mllib] (
@@ -54,6 +55,8 @@ class StreamingLinearRegressionWithSGD private[mllib] (
    * {stepSize: 0.1, numIterations: 50, miniBatchFraction: 1.0}.
    * Initial weights must be set before using trainOn or predictOn
    * (see `StreamingLinearAlgorithm`)
+   *
+   * @since 1.1.0
    */
   def this() = this(0.1, 50, 1.0)
 
@@ -61,31 +64,46 @@ class StreamingLinearRegressionWithSGD private[mllib] (
 
   protected var model: Option[LinearRegressionModel] = None
 
-  /** Set the step size for gradient descent. Default: 0.1. */
+  /** Set the step size for gradient descent. Default: 0.1.
+  *
+  * @since 1.1.0
+  */
   def setStepSize(stepSize: Double): this.type = {
     this.algorithm.optimizer.setStepSize(stepSize)
     this
   }
 
-  /** Set the number of iterations of gradient descent to run per update. Default: 50. */
+  /** Set the number of iterations of gradient descent to run per update. Default: 50.
+  *
+  * @since 1.1.0
+  */
   def setNumIterations(numIterations: Int): this.type = {
     this.algorithm.optimizer.setNumIterations(numIterations)
     this
   }
 
-  /** Set the fraction of each batch to use for updates. Default: 1.0. */
+  /** Set the fraction of each batch to use for updates. Default: 1.0.
+  *
+  * @since 1.1.0
+  */
   def setMiniBatchFraction(miniBatchFraction: Double): this.type = {
     this.algorithm.optimizer.setMiniBatchFraction(miniBatchFraction)
     this
   }
 
-  /** Set the initial weights. */
+  /** Set the initial weights.
+  *
+  * @since 1.1.0
+  */
   def setInitialWeights(initialWeights: Vector): this.type = {
     this.model = Some(algorithm.createModel(initialWeights, 0.0))
     this
   }
 
-  /** Set the convergence tolerance. */
+  /** Set the convergence tolerance.
+  *
+  * @since 1.5.0
+  */
   def setConvergenceTol(tolerance: Double): this.type = {
     this.algorithm.optimizer.setConvergenceTol(tolerance)
     this

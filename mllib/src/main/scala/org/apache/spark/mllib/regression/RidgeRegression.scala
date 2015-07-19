@@ -31,6 +31,8 @@ import org.apache.spark.rdd.RDD
  *
  * @param weights Weights computed for every feature.
  * @param intercept Intercept computed for this model.
+ *
+ * @since 0.8.0
  */
 class RidgeRegressionModel (
     override val weights: Vector,
@@ -38,6 +40,9 @@ class RidgeRegressionModel (
   extends GeneralizedLinearModel(weights, intercept)
   with RegressionModel with Serializable with Saveable with PMMLExportable {
 
+  /*
+   * @since 0.8.0
+   */
   override protected def predictPoint(
       dataMatrix: Vector,
       weightMatrix: Vector,
@@ -45,15 +50,27 @@ class RidgeRegressionModel (
     weightMatrix.toBreeze.dot(dataMatrix.toBreeze) + intercept
   }
 
+  /*
+   * @since 1.3.0
+   */
   override def save(sc: SparkContext, path: String): Unit = {
     GLMRegressionModel.SaveLoadV1_0.save(sc, path, this.getClass.getName, weights, intercept)
   }
 
+  /*
+   * @since 1.3.0
+   */
   override protected def formatVersion: String = "1.0"
 }
 
+/*
+ * @since 1.3.0
+ */
 object RidgeRegressionModel extends Loader[RidgeRegressionModel] {
 
+  /*
+   * @since 1.3.0
+   */
   override def load(sc: SparkContext, path: String): RidgeRegressionModel = {
     val (loadedClassName, version, metadata) = Loader.loadMetadata(sc, path)
     // Hard-code class name string in case it changes in the future
@@ -78,6 +95,8 @@ object RidgeRegressionModel extends Loader[RidgeRegressionModel] {
  * Here the data matrix has n rows, and the input RDD holds the set of rows of A, each with
  * its corresponding right hand side label y.
  * See also the documentation for the precise formulation.
+ *
+ * @since 0.8.0
  */
 class RidgeRegressionWithSGD private (
     private var stepSize: Double,
@@ -98,9 +117,14 @@ class RidgeRegressionWithSGD private (
   /**
    * Construct a RidgeRegression object with default parameters: {stepSize: 1.0, numIterations: 100,
    * regParam: 0.01, miniBatchFraction: 1.0}.
+   *
+   * @since 0.8.0
    */
   def this() = this(1.0, 100, 0.01, 1.0)
 
+  /*
+  * @since 0.8.0
+  */
   override protected def createModel(weights: Vector, intercept: Double) = {
     new RidgeRegressionModel(weights, intercept)
   }
@@ -108,6 +132,8 @@ class RidgeRegressionWithSGD private (
 
 /**
  * Top-level methods for calling RidgeRegression.
+ *
+ * @since 0.8.0
  */
 object RidgeRegressionWithSGD {
 
@@ -124,6 +150,8 @@ object RidgeRegressionWithSGD {
    * @param miniBatchFraction Fraction of data to be used per iteration.
    * @param initialWeights Initial set of weights to be used. Array should be equal in size to
    *        the number of features in the data.
+   *
+   * @since 0.8.0
    */
   def train(
       input: RDD[LabeledPoint],
@@ -146,6 +174,8 @@ object RidgeRegressionWithSGD {
    * @param stepSize Step size to be used for each iteration of gradient descent.
    * @param regParam Regularization parameter.
    * @param miniBatchFraction Fraction of data to be used per iteration.
+   *
+   * @since 0.8.0
    */
   def train(
       input: RDD[LabeledPoint],
@@ -166,6 +196,8 @@ object RidgeRegressionWithSGD {
    * @param regParam Regularization parameter.
    * @param numIterations Number of iterations of gradient descent to run.
    * @return a RidgeRegressionModel which has the weights and offset from training.
+   *
+   * @since 0.8.0
    */
   def train(
       input: RDD[LabeledPoint],
@@ -183,6 +215,8 @@ object RidgeRegressionWithSGD {
    * @param input RDD of (label, array of features) pairs.
    * @param numIterations Number of iterations of gradient descent to run.
    * @return a RidgeRegressionModel which has the weights and offset from training.
+   *
+   * @since 0.8.0
    */
   def train(
       input: RDD[LabeledPoint],
