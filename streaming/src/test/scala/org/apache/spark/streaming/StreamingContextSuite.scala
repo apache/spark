@@ -115,6 +115,15 @@ class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with Timeo
     assert(ssc.conf.getTimeAsSeconds("spark.cleaner.ttl", "-1") === 10)
   }
 
+  test("checkPoint from conf") {
+    val checkpointDirectory = Utils.createTempDir().getAbsolutePath()
+
+    val myConf = SparkContext.updatedConf(new SparkConf(false), master, appName)
+    myConf.set("spark.streaming.checkpoint.directory", checkpointDirectory)
+    val ssc = new StreamingContext(myConf, batchDuration)
+    assert(ssc.checkpointDir != null)
+  }
+
   test("state matching") {
     import StreamingContextState._
     assert(INITIALIZED === INITIALIZED)
@@ -273,6 +282,21 @@ class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with Timeo
           "processed records = " + runningCount
       )
       Thread.sleep(100)
+    }
+  }
+
+  test("stop gracefully even if a receiver misses StopReceiver") {
+    // This is not a deterministic unit. But if this unit test is flaky, then there is definitely
+    // something wrong. See SPARK-5681
+    val conf = new SparkConf().setMaster(master).setAppName(appName)
+    sc = new SparkContext(conf)
+    ssc = new StreamingContext(sc, Milliseconds(100))
+    val input = ssc.receiverStream(new TestReceiver)
+    input.foreachRDD(_ => {})
+    ssc.start()
+    // Call `ssc.stop` at once so that it's possible that the receiver will miss "StopReceiver"
+    failAfter(30000 millis) {
+      ssc.stop(stopSparkContext = true, stopGracefully = true)
     }
   }
 

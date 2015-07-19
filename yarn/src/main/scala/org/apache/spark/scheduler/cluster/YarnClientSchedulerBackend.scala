@@ -20,10 +20,9 @@ package org.apache.spark.scheduler.cluster
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.hadoop.yarn.api.records.{ApplicationId, YarnApplicationState}
-import org.apache.hadoop.yarn.exceptions.ApplicationNotFoundException
 
 import org.apache.spark.{SparkException, Logging, SparkContext}
-import org.apache.spark.deploy.yarn.{Client, ClientArguments}
+import org.apache.spark.deploy.yarn.{Client, ClientArguments, YarnSparkHadoopUtil}
 import org.apache.spark.scheduler.TaskSchedulerImpl
 
 private[spark] class YarnClientSchedulerBackend(
@@ -62,6 +61,13 @@ private[spark] class YarnClientSchedulerBackend(
     super.start()
 
     waitForApplication()
+
+    // SPARK-8851: In yarn-client mode, the AM still does the credentials refresh. The driver
+    // reads the credentials from HDFS, just like the executors and updates its own credentials
+    // cache.
+    if (conf.contains("spark.yarn.credentials.file")) {
+      YarnSparkHadoopUtil.get.startExecutorDelegationTokenRenewer(conf)
+    }
     monitorThread = asyncMonitorApplication()
     monitorThread.start()
   }
@@ -158,6 +164,7 @@ private[spark] class YarnClientSchedulerBackend(
     }
     super.stop()
     client.stop()
+    YarnSparkHadoopUtil.get.stopExecutorDelegationTokenRenewer()
     logInfo("Stopped")
   }
 

@@ -48,6 +48,8 @@ class Checkpoint(@transient ssc: StreamingContext, val checkpointTime: Time)
     // Reload properties for the checkpoint application since user wants to set a reload property
     // or spark had changed its value and user wants to set it back.
     val propertiesToReload = List(
+      "spark.driver.host",
+      "spark.driver.port",
       "spark.master",
       "spark.yarn.keytab",
       "spark.yarn.principal")
