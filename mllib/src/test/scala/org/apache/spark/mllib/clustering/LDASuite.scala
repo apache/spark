@@ -280,6 +280,48 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext {
         expected._1 === actual._1 && (expected._2 ~== actual._2 relTol 1E-3D)
     }
   }
+
+  // TODO: Blocked by SPARK-8536, requires asymmetric alpha
+  test("OnlineLDAOptimizer alpha hyperparameter optimization") {
+    def toydata: Array[(Long, Vector)] = Array(
+      Vectors.sparse(6, Array(0, 1), Array(1, 1)),
+      Vectors.sparse(6, Array(1, 2), Array(1, 1)),
+      Vectors.sparse(6, Array(0, 2), Array(1, 1)),
+      Vectors.sparse(6, Array(3, 4), Array(1, 1)),
+      Vectors.sparse(6, Array(3, 5), Array(1, 1)),
+      Vectors.sparse(6, Array(4, 5), Array(1, 1))
+    ).zipWithIndex.map { case (wordCounts, docId) => (docId.toLong, wordCounts) }
+
+    val docs = sc.parallelize(toydata)
+    val op = new OnlineLDAOptimizer().setMiniBatchFraction(1).setTau0(1024).setKappa(0.51)
+      .setGammaShape(1e10).setOptimzeAlpha(true)
+    val lda = new LDA().setK(2)
+      .setDocConcentration(0.01)
+      .setTopicConcentration(0.01)
+      .setMaxIterations(100)
+      .setOptimizer(op)
+      .setSeed(12345)
+
+    val ldaModel: LocalLDAModel = lda.run(docs).asInstanceOf[LocalLDAModel]
+
+    /* Verify the results with gensim:
+      import numpy as np
+      from gensim import models
+      corpus = [
+         [(0, 1.0), (1, 1.0)],
+         [(1, 1.0), (2, 1.0)],
+         [(0, 1.0), (2, 1.0)],
+         [(3, 1.0), (4, 1.0)],
+         [(3, 1.0), (5, 1.0)],
+         [(4, 1.0), (5, 1.0)]]
+      np.random.seed(2345)
+      lda = models.ldamodel.LdaModel(
+         corpus=corpus, alpha='auto', eta=0.01, num_topics=2, update_every=0, passes=100,
+         decay=0.51, offset=1024)
+      print(lda.alpha)
+      > [ 0.42582646  0.43511073 ]
+     */
+  }
 }
 
 private[clustering] object LDASuite {

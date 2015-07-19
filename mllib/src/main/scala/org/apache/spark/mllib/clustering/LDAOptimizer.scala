@@ -247,6 +247,7 @@ final class OnlineLDAOptimizer extends LDAOptimizer {
   private var tau0: Double = 1024
   private var kappa: Double = 0.51
   private var miniBatchFraction: Double = 0.05
+  private var optimizeAlpha: Boolean = false
 
   // internal data structure
   private var docs: RDD[(Long, Vector)] = null
@@ -313,6 +314,22 @@ final class OnlineLDAOptimizer extends LDAOptimizer {
     require(miniBatchFraction > 0.0 && miniBatchFraction <= 1.0,
       s"Online LDA miniBatchFraction must be in range (0,1], but was set to $miniBatchFraction")
     this.miniBatchFraction = miniBatchFraction
+    this
+  }
+
+  /**
+   * Optimize alpha, indicates whether alpha (Dirichlet parameter for prior document-topic
+   * distributions) will be optimized during training.
+   */
+  def getOptimzeAlpha: Boolean = this.optimizeAlpha
+
+  /**
+   * Sets whether to optimize alpha parameter during training.
+   *
+   * Default: false
+   */
+  def setOptimzeAlpha(optimizeAlpha: Boolean): this.type = {
+    this.optimizeAlpha = optimizeAlpha
     this
   }
 
@@ -420,7 +437,7 @@ final class OnlineLDAOptimizer extends LDAOptimizer {
    *    @see Huang: Maximum Likelihood Estimation of Dirichlet Distribution Parameters
    *         (http://www.stanford.edu/~jhuang11/research/dirichlet/dirichlet.pdf)
    */
-  // TODO: Handle non-scalar alpha after SPARK-8536
+  // TODO: Blocked by SPARK-8536, requires asymmetric alpha
   private def updateAlpha(gammat: BDV[Double], rho: Double): Unit = {
     val N = gammat.length.toDouble
     val alpha = BDV[Double](this.alpha)
