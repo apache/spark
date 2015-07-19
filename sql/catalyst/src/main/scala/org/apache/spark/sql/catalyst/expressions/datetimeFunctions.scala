@@ -17,10 +17,16 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import java.sql.Date
+import java.text.SimpleDateFormat
+import java.util.{Calendar, TimeZone}
+
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodeGenContext, GeneratedExpressionCode}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * Returns the current date at the start of query evaluation.
@@ -53,5 +59,205 @@ case class CurrentTimestamp() extends LeafExpression with CodegenFallback {
 
   override def eval(input: InternalRow): Any = {
     System.currentTimeMillis() * 1000L
+  }
+}
+
+case class Hour(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType)
+
+  override def dataType: DataType = IntegerType
+
+  override protected def nullSafeEval(timestamp: Any): Any = {
+    DateTimeUtils.getHours(timestamp.asInstanceOf[Long])
+  }
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
+    defineCodeGen(ctx, ev, (c) =>
+      s"""$dtu.getHours($c)"""
+    )
+  }
+}
+
+case class Minute(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType)
+
+  override def dataType: DataType = IntegerType
+
+  override protected def nullSafeEval(timestamp: Any): Any = {
+    DateTimeUtils.getMinutes(timestamp.asInstanceOf[Long])
+  }
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
+    defineCodeGen(ctx, ev, (c) =>
+      s"""$dtu.getMinutes($c)"""
+    )
+  }
+}
+
+case class Second(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType)
+
+  override def dataType: DataType = IntegerType
+
+  override protected def nullSafeEval(timestamp: Any): Any = {
+    DateTimeUtils.getSeconds(timestamp.asInstanceOf[Long])
+  }
+
+  override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
+    defineCodeGen(ctx, ev, (c) =>
+      s"""$dtu.getSeconds($c)"""
+    )
+  }
+}
+
+case class DayInYear(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(DateType)
+
+  override def dataType: DataType = IntegerType
+
+  override def prettyName: String = "day_in_year"
+
+  override protected def nullSafeEval(date: Any): Any = {
+    DateTimeUtils.getDayInYear(date.asInstanceOf[Int])
+  }
+
+  override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
+    defineCodeGen(ctx, ev, (c) =>
+      s"""$dtu.getDayInYear($c)"""
+    )
+  }
+}
+
+
+case class Year(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(DateType)
+
+  override def dataType: DataType = IntegerType
+
+  override protected def nullSafeEval(date: Any): Any = {
+    DateTimeUtils.getYear(date.asInstanceOf[Int])
+  }
+
+  override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
+    defineCodeGen(ctx, ev, (c) =>
+      s"""$dtu.getYear($c)"""
+    )
+  }
+}
+
+case class Quarter(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(DateType)
+
+  override def dataType: DataType = IntegerType
+
+  override protected def nullSafeEval(date: Any): Any = {
+    DateTimeUtils.getQuarter(date.asInstanceOf[Int])
+  }
+
+  override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
+    defineCodeGen(ctx, ev, (c) =>
+      s"""$dtu.getQuarter($c)"""
+    )
+  }
+}
+
+case class Month(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(DateType)
+
+  override def dataType: DataType = IntegerType
+
+  override protected def nullSafeEval(date: Any): Any = {
+    DateTimeUtils.getMonth(date.asInstanceOf[Int])
+  }
+
+  override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
+    defineCodeGen(ctx, ev, (c) =>
+      s"""$dtu.getMonth($c)"""
+    )
+  }
+}
+
+case class Day(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(DateType)
+
+  override def dataType: DataType = IntegerType
+
+  override protected def nullSafeEval(date: Any): Any = {
+    DateTimeUtils.getDayOfMonth(date.asInstanceOf[Int])
+  }
+
+  override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
+    defineCodeGen(ctx, ev, (c) =>
+      s"""$dtu.getDayOfMonth($c)"""
+    )
+  }
+}
+
+case class WeekOfYear(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(DateType)
+
+  override def dataType: DataType = IntegerType
+
+  override def prettyName: String = "week_of_year"
+
+  override protected def nullSafeEval(date: Any): Any = {
+    val c = Calendar.getInstance(TimeZone.getTimeZone("UTC"))
+    c.setFirstDayOfWeek(Calendar.MONDAY)
+    c.setMinimalDaysInFirstWeek(4)
+    c.setTimeInMillis(date.asInstanceOf[Int] * 1000L * 3600L * 24L)
+    c.get(Calendar.WEEK_OF_YEAR)
+  }
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String =
+    nullSafeCodeGen(ctx, ev, (time) => {
+      val cal = classOf[Calendar].getName
+      val c = ctx.freshName("cal")
+      s"""
+        $cal $c = $cal.getInstance(java.util.TimeZone.getTimeZone("UTC"));
+        $c.setFirstDayOfWeek($cal.MONDAY);
+        $c.setMinimalDaysInFirstWeek(4);
+        $c.setTimeInMillis($time * 1000L * 3600L * 24L);
+        ${ev.primitive} = $c.get($cal.WEEK_OF_YEAR);
+      """
+    })
+}
+
+case class DateFormatClass(left: Expression, right: Expression) extends BinaryExpression
+  with ImplicitCastInputTypes {
+
+  override def dataType: DataType = StringType
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType, StringType)
+
+  override def prettyName: String = "date_format"
+
+  override protected def nullSafeEval(timestamp: Any, format: Any): Any = {
+    val sdf = new SimpleDateFormat(format.toString)
+    UTF8String.fromString(sdf.format(new Date(timestamp.asInstanceOf[Long] / 1000)))
+  }
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    val sdf = classOf[SimpleDateFormat].getName
+    defineCodeGen(ctx, ev, (timestamp, format) => {
+      s"""UTF8String.fromString((new $sdf($format.toString()))
+          .format(new java.sql.Date($timestamp / 1000)))"""
+    })
   }
 }
