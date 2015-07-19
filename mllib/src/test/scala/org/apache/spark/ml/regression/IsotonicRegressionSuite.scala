@@ -46,7 +46,7 @@ class IsotonicRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
     sqlContext.createDataFrame(parallelData, predictionSchema)
   }
 
-  test("isotonic regression") {
+  test("isotonic regression predictions") {
     val dataset = generateIsotonicInput(Seq(1, 2, 3, 1, 6, 17, 16, 17, 18))
     val trainer = new IsotonicRegression().setIsotonicParam(true)
 
@@ -66,7 +66,7 @@ class IsotonicRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(model.parentModel.isotonic)
   }
 
-  test("antitonic regression") {
+  test("antitonic regression predictions") {
     val dataset = generateIsotonicInput(Seq(7, 5, 3, 5, 1))
     val trainer = new IsotonicRegression().setIsotonicParam(false)
 
@@ -83,7 +83,7 @@ class IsotonicRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(predictions === Array(7, 7, 6, 5.5, 5, 4, 1))
   }
 
-  test("params") {
+  test("params validation") {
     val dataset = generateIsotonicInput(Seq(1, 2, 3))
     val ir = new IsotonicRegression
     ParamsSuite.checkParams(ir)
@@ -91,7 +91,7 @@ class IsotonicRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
     ParamsSuite.checkParams(model)
   }
 
-  test("isotonic regression: default params") {
+  test("default params") {
     val dataset = generateIsotonicInput(Seq(1, 2, 3))
     val ir = new IsotonicRegression()
     assert(ir.getLabelCol === "label")
@@ -111,5 +111,40 @@ class IsotonicRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(model.getPredictionCol === "prediction")
     assert(model.getIsotonicParam === true)
     assert(model.hasParent)
+  }
+
+  test("set parameters") {
+    val isotonicRegression = new IsotonicRegression()
+      .setIsotonicParam(false)
+      .setWeightParam("w")
+      .setFeaturesCol("f")
+      .setLabelCol("l")
+      .setPredictionCol("p")
+
+    assert(isotonicRegression.getIsotonicParam === false)
+    assert(isotonicRegression.getWeightCol === "w")
+    assert(isotonicRegression.getFeaturesCol === "f")
+    assert(isotonicRegression.getLabelCol === "l")
+    assert(isotonicRegression.getPredictionCol === "p")
+  }
+
+  test("missing column") {
+    val dataset = generateIsotonicInput(Seq(1, 2, 3))
+
+    intercept[IllegalArgumentException] {
+      new IsotonicRegression().setWeightParam("w").fit(dataset)
+    }
+
+    intercept[IllegalArgumentException] {
+      new IsotonicRegression().setFeaturesCol("f").fit(dataset)
+    }
+
+    intercept[IllegalArgumentException] {
+      new IsotonicRegression().setLabelCol("l").fit(dataset)
+    }
+
+    intercept[IllegalArgumentException] {
+      new IsotonicRegression().fit(dataset).setFeaturesCol("f").transform(dataset)
+    }
   }
 }

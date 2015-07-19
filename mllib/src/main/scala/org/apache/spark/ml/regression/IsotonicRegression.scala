@@ -20,7 +20,7 @@ package org.apache.spark.ml.regression
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.ml.PredictorParams
 import org.apache.spark.ml.param.{Param, ParamMap, BooleanParam}
-import org.apache.spark.ml.util.Identifiable
+import org.apache.spark.ml.util.{SchemaUtils, Identifiable}
 import org.apache.spark.mllib.regression.{IsotonicRegression => MLlibIsotonicRegression}
 import org.apache.spark.mllib.regression.{IsotonicRegressionModel => MLlibIsotonicRegressionModel}
 import org.apache.spark.rdd.RDD
@@ -100,6 +100,7 @@ class IsotonicRegression(override val uid: String)
   }
 
   override protected def train(dataset: DataFrame): IsotonicRegressionModel = {
+    SchemaUtils.checkColumnType(dataset.schema, $(weightCol), DoubleType)
     // Extract columns from data.  If dataset is persisted, do not persist oldDataset.
     val instances = extractWeightedLabeledPoints(dataset)
     val handlePersistence = dataset.rdd.getStorageLevel == StorageLevel.NONE
@@ -138,4 +139,3 @@ class IsotonicRegressionModel private[ml] (
     copyValues(new IsotonicRegressionModel(uid, parentModel), extra)
   }
 }
-
