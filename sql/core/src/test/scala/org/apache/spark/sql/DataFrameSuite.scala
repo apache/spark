@@ -755,7 +755,7 @@ class DataFrameSuite extends QueryTest with SQLTestUtils {
     df.orderBy("a").collect()
   }
 
-  test("SPARK-9146: NaN is greater than all other non-NaN numeric values") {
+  test("NaN is greater than all other non-NaN numeric values") {
     val maxDouble = Seq(Double.NaN, Double.PositiveInfinity, Double.MaxValue)
       .map(Tuple1.apply).toDF("a").selectExpr("max(a)").first()
     assert(java.lang.Double.isNaN(maxDouble.getDouble(0)))

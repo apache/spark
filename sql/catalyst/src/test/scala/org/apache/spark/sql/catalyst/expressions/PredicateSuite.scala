@@ -130,10 +130,10 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
     def testNaN(nan: Expression): Unit = {
       checkEvaluation(nan === nan, true)
       checkEvaluation(nan <=> nan, true)
-//      checkEvaluation(nan <= nan, true)
-//      checkEvaluation(nan >= nan, true)
-//      checkEvaluation(nan < nan, false)
-//      checkEvaluation(nan > nan, false)
+      checkEvaluation(nan <= nan, true)
+      checkEvaluation(nan >= nan, true)
+      checkEvaluation(nan < nan, false)
+      checkEvaluation(nan > nan, false)
     }
     testNaN(Literal(Float.NaN))
     testNaN(Literal(Double.NaN))
