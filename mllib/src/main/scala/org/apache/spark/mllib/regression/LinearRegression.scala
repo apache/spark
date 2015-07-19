@@ -30,6 +30,7 @@ import org.apache.spark.rdd.RDD
  *
  * @param weights Weights computed for every feature.
  * @param intercept Intercept computed for this model.
+ *
  * @since 0.8.0
  */
 class LinearRegressionModel (

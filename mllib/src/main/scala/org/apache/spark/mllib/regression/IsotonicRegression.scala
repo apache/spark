@@ -61,7 +61,8 @@ class IsotonicRegressionModel (
   assertOrdered(boundaries)
   assertOrdered(predictions)(predictionOrd)
 
-  /** A Java-friendly constructor that takes two Iterable parameters and one Boolean parameter.
+  /**
+   * A Java-friendly constructor that takes two Iterable parameters and one Boolean parameter.
    *
    * @since 1.4.0
    */
@@ -158,6 +159,7 @@ class IsotonicRegressionModel (
 
   /** A convenient method for boundaries called by the Python API. */
   private[mllib] def predictionVector: Vector = Vectors.dense(predictions)
+
   /*
    * @since 1.4.0
    */

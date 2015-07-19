@@ -47,6 +47,8 @@ abstract class GeneralizedLinearModel(val weights: Vector, val intercept: Double
    * @param dataMatrix Row vector containing the features for this data point
    * @param weightMatrix Column vector containing the weights of the model
    * @param intercept Intercept of the model.
+   *
+   * @since 0.8.0
    */
   protected def predictPoint(dataMatrix: Vector, weightMatrix: Vector, intercept: Double): Double
 
@@ -105,7 +107,8 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
 
   protected val validators: Seq[RDD[LabeledPoint] => Boolean] = List()
 
-  /** The optimizer to solve the problem.
+  /**
+   * The optimizer to solve the problem.
    *
    * @since 1.0.0
    */
@@ -161,7 +164,11 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
     this
   }
 
-  /* Create a model given the weights and intercept */
+  /**
+   * Create a model given the weights and intercept
+   *
+   * @since 0.8.0
+   */
   protected def createModel(weights: Vector, intercept: Double): M
 
   /**

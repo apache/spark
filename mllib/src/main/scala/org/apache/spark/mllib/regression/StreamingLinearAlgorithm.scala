@@ -67,10 +67,11 @@ abstract class StreamingLinearAlgorithm[
   /** The algorithm to use for updating. */
   protected val algorithm: A
 
-  /** Return the latest model.
-  *
-  * @since 1.1.0
-  */
+  /**
+   * Return the latest model.
+   *
+   * @since 1.1.0
+   */
   def latestModel(): M = {
     model.get
   }
@@ -102,10 +103,11 @@ abstract class StreamingLinearAlgorithm[
     }
   }
 
-  /** Java-friendly version of `trainOn`.
-  *
-  * @since 1.1.0
-  */
+  /**
+   * Java-friendly version of `trainOn`.
+   *
+   * @since 1.1.0
+   */
   def trainOn(data: JavaDStream[LabeledPoint]): Unit = trainOn(data.dstream)
 
   /**
@@ -123,10 +125,11 @@ abstract class StreamingLinearAlgorithm[
     data.map{x => model.get.predict(x)}
   }
 
-  /** Java-friendly version of `predictOn`.
-  *
-  * @since 1.1.0
-  */
+  /**
+   * Java-friendly version of `predictOn`.
+   *
+   * @since 1.1.0
+   */
   def predictOn(data: JavaDStream[Vector]): JavaDStream[java.lang.Double] = {
     JavaDStream.fromDStream(predictOn(data.dstream).asInstanceOf[DStream[java.lang.Double]])
   }
@@ -147,10 +150,11 @@ abstract class StreamingLinearAlgorithm[
   }
 
 
-  /** Java-friendly version of `predictOnValues`.
-  *
-  * @since 1.1.0
-  */
+  /**
+   * Java-friendly version of `predictOnValues`.
+   *
+   * @since 1.1.0
+   */
   def predictOnValues[K](data: JavaPairDStream[K, Vector]): JavaPairDStream[K, java.lang.Double] = {
     implicit val tag = fakeClassTag[K]
     JavaPairDStream.fromPairDStream(
