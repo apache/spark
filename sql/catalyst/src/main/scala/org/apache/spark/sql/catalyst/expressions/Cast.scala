@@ -435,26 +435,31 @@ case class Cast(child: Expression, dataType: DataType)
   private[this] def nullSafeCastFunction(
       from: DataType,
       to: DataType,
-      ctx: CodeGenContext): CastFunction = to match {
+      ctx: CodeGenContext): CastFunction = {
+    if (from == NullType) {
+      (c, evPrim, evNull) => s"$evNull = true;"
+    } else {
+      to match {
+        case StringType => castToStringCode(from, ctx)
+        case BinaryType => castToBinaryCode(from)
+        case DateType => castToDateCode(from)
+        case decimal: DecimalType => castToDecimalCode(from, decimal)
+        case TimestampType => castToTimestampCode(from)
+        case IntervalType => castToIntervalCode(from)
+        case BooleanType => castToBooleanCode(from)
+        case ByteType => castToByteCode(from)
+        case ShortType => castToShortCode(from)
+        case IntegerType => castToIntCode(from)
+        case FloatType => castToFloatCode(from)
+        case LongType => castToLongCode(from)
+        case DoubleType => castToDoubleCode(from)
 
-    case StringType => castToStringCode(from, ctx)
-    case BinaryType => castToBinaryCode(from)
-    case DateType => castToDateCode(from)
-    case decimal: DecimalType => castToDecimalCode(from, decimal)
-    case TimestampType => castToTimestampCode(from)
-    case IntervalType => castToIntervalCode(from)
-    case BooleanType => castToBooleanCode(from)
-    case ByteType => castToByteCode(from)
-    case ShortType => castToShortCode(from)
-    case IntegerType => castToIntCode(from)
-    case FloatType => castToFloatCode(from)
-    case LongType => castToLongCode(from)
-    case DoubleType => castToDoubleCode(from)
-
-    case array: ArrayType => castArrayCode(from.asInstanceOf[ArrayType], array, ctx)
-    case map: MapType => castMapCode(from.asInstanceOf[MapType], map, ctx)
-    case struct: StructType => castStructCode(from.asInstanceOf[StructType], struct, ctx)
-    case other => null
+        case array: ArrayType => castArrayCode(from.asInstanceOf[ArrayType], array, ctx)
+        case map: MapType => castMapCode(from.asInstanceOf[MapType], map, ctx)
+        case struct: StructType => castStructCode(from.asInstanceOf[StructType], struct, ctx)
+        case other => null
+      }
+    }
   }
 
   private[this] def castCode(ctx: CodeGenContext, childPrim: String, childNull: String,
@@ -785,6 +790,15 @@ case class Cast(child: Expression, dataType: DataType)
       (c, evPrim, evNull) => s"$evPrim = (double) $c;"
   }
 
+  private[this] def unboxPrimitive(ctx: CodeGenContext, dt: DataType, obj: String): String = {
+    dt match {
+      case _: IntegralType | FloatType | DoubleType =>
+        s"((${ctx.boxedType(dt)}) $obj).${ctx.javaType(dt)}Value()";
+      case _ =>
+        s"(${ctx.javaType(dt)}) $obj"
+    }
+  }
+
   private[this] def castArrayCode(
       from: ArrayType, to: ArrayType, ctx: CodeGenContext): CastFunction = {
     val elementCast = nullSafeCastFunction(from.elementType, to.elementType, ctx)
@@ -807,8 +821,8 @@ case class Cast(child: Expression, dataType: DataType)
             $result.update($j, null);
           } else {
             boolean $fromElementNull = false;
-            ${ctx.boxedType(from.elementType)} $fromElementPrim =
-              (${ctx.boxedType(from.elementType)}) $c.apply($j);
+            ${ctx.javaType(from.elementType)} $fromElementPrim =
+              ${unboxPrimitive(ctx, from.elementType, s"$c.apply($j)")};
             ${castCode(ctx, fromElementPrim,
               fromElementNull, toElementPrim, toElementNull, to.elementType, elementCast)}
             if ($toElementNull) {
@@ -844,8 +858,8 @@ case class Cast(child: Expression, dataType: DataType)
         while (iter.hasNext()) {
           scala.Tuple2 kv = (scala.Tuple2) iter.next();
           boolean $fromKeyNull = false;
-          ${ctx.boxedType(from.keyType)} $fromKeyPrim =
-            (${ctx.boxedType(from.keyType)}) kv._1();
+          ${ctx.javaType(from.keyType)} $fromKeyPrim =
+            ${unboxPrimitive(ctx, from.keyType, "kv._1()")};
           ${castCode(ctx, fromKeyPrim,
             fromKeyNull, toKeyPrim, toKeyNull, to.keyType, keyCast)}
 
@@ -853,8 +867,8 @@ case class Cast(child: Expression, dataType: DataType)
           if ($fromValueNull) {
             $result.put($toKeyPrim, null);
           } else {
-            ${ctx.boxedType(from.valueType)} $fromValuePrim =
-              (${ctx.boxedType(from.valueType)}) kv._2();
+            ${ctx.javaType(from.valueType)} $fromValuePrim =
+              ${unboxPrimitive(ctx, from.valueType, "kv._2()")};
             ${castCode(ctx, fromValuePrim,
               fromValueNull, toValuePrim, toValueNull, to.valueType, valueCast)}
             if ($toValueNull) {
@@ -883,13 +897,14 @@ case class Cast(child: Expression, dataType: DataType)
       val fromFieldNull = ctx.freshName("ffn")
       val toFieldPrim = ctx.freshName("tfp")
       val toFieldNull = ctx.freshName("tfn")
-      val fromType = ctx.boxedType(from.fields(i).dataType)
+      val fromType = ctx.javaType(from.fields(i).dataType)
       s"""
         boolean $fromFieldNull = $tmpRow.isNullAt($i);
         if ($fromFieldNull) {
           $result.update($i, null);
         } else {
-          $fromType $fromFieldPrim = ($fromType) $tmpRow.apply($i);
+          $fromType $fromFieldPrim =
+            ${unboxPrimitive(ctx, from.fields(i).dataType, s"$tmpRow.apply($i)")};
           ${castCode(ctx, fromFieldPrim,
             fromFieldNull, toFieldPrim, toFieldNull, to.fields(i).dataType, cast)}
           if ($toFieldNull) {
