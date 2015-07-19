@@ -35,8 +35,10 @@ private[ui] abstract class PagedDataSource[T](page: Int, pageSize: Int) {
   def pageData: PageData[T] = {
     val dataSize = data.size
     val totalPages = (dataSize + pageSize - 1) / pageSize
-    require(page > 0, "page must be positive")
-    require(page <= totalPages, s"page must not exceed $totalPages")
+    if (page <= 0 || page > totalPages) {
+      throw new IllegalArgumentException(
+        s"Page $page is out of range. Please select a page number between 1 and $totalPages.")
+    }
     val from = (page - 1) * pageSize
     val to = dataSize.min(page * pageSize)
     PageData(page, totalPages, data.slice(from, to))

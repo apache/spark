@@ -45,7 +45,7 @@ class PagedDataSourceSuite extends SparkFunSuite {
     val e1 = intercept[IllegalArgumentException] {
       dataSource4.pageData
     }
-    assert(e1.getMessage === "requirement failed: page must not exceed 3")
+    assert(e1.getMessage === "Page 4 is out of range. Please select a page number between 1 and 3.")
 
     val dataSource5 = new PagedDataSource[Int](page = 0, pageSize = 2) {
       override protected val data: Seq[Int] = (1 to 5)
@@ -53,7 +53,8 @@ class PagedDataSourceSuite extends SparkFunSuite {
     val e2 = intercept[IllegalArgumentException] {
       dataSource5.pageData
     }
-    assert(e2.getMessage === "requirement failed: page must be positive")
+    assert(e2.getMessage === "Page 0 is out of range. Please select a page number between 1 and 3.")
+
   }
 }
 

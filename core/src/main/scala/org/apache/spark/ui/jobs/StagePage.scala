@@ -242,22 +242,28 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
         accumulables.values.toSeq)
 
       val currentTime = System.currentTimeMillis()
-      val taskTable = new TaskPagedTable(
-        UIUtils.prependBaseUri(parent.basePath) +
-          s"/stages/stage?id=${stageId}&attempt=${stageAttemptId}",
-        tasks,
-        hasAccumulators,
-        stageData.hasInput,
-        stageData.hasOutput,
-        stageData.hasShuffleRead,
-        stageData.hasShuffleWrite,
-        stageData.hasBytesSpilled,
-        currentTime,
-        page = taskPage,
-        pageSize = 100, // Show 100 tasks at most in the table
-        sortColumn = taskSortColumn,
-        desc = taskSortDesc
-      )
+      val (taskTable, taskTableHTML) = try {
+        val _taskTable = new TaskPagedTable(
+          UIUtils.prependBaseUri(parent.basePath) +
+            s"/stages/stage?id=${stageId}&attempt=${stageAttemptId}",
+          tasks,
+          hasAccumulators,
+          stageData.hasInput,
+          stageData.hasOutput,
+          stageData.hasShuffleRead,
+          stageData.hasShuffleWrite,
+          stageData.hasBytesSpilled,
+          currentTime,
+          page = taskPage,
+          pageSize = 100, // Show 100 tasks at most in the table
+          sortColumn = taskSortColumn,
+          desc = taskSortDesc
+        )
+        (_taskTable, _taskTable.table)
+      } catch {
+        case e: IllegalArgumentException =>
+          (null, <div>{e.getMessage}</div>)
+      }
 
       val jsForScrollingDownToTaskTable =
         <script>
@@ -274,7 +280,8 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
           }
         </script>
 
-      val taskIdsInPage = taskTable.dataSource.pageData.data.map(_.taskId).toSet
+      val taskIdsInPage = if (taskTable == null) Set.empty[Long]
+        else taskTable.dataSource.pageData.data.map(_.taskId).toSet
       // Excludes tasks which failed and have incomplete metrics
       val validTasks = tasks.filter(t => t.taskInfo.status == "SUCCESS" && t.taskMetrics.isDefined)
 
@@ -505,7 +512,7 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
         <div>{summaryTable.getOrElse("No tasks have reported metrics yet.")}</div> ++
         <h4>Aggregated Metrics by Executor</h4> ++ executorTable.toNodeSeq ++
         maybeAccumulableTable ++
-        <h4 id="tasks-section">Tasks</h4> ++ taskTable.table ++ jsForScrollingDownToTaskTable
+        <h4 id="tasks-section">Tasks</h4> ++ taskTableHTML ++ jsForScrollingDownToTaskTable
       UIUtils.headerSparkPage(stageHeader, content, parent, showVisualization = true)
     }
   }
