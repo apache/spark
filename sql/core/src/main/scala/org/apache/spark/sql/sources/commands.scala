@@ -38,6 +38,8 @@ import org.apache.spark.sql.execution.RunnableCommand
 import org.apache.spark.sql.types.StringType
 import org.apache.spark.util.SerializableConfiguration
 
+import scala.collection.mutable
+
 private[sql] case class InsertIntoDataSource(
     logicalRelation: LogicalRelation,
     query: LogicalPlan,
@@ -513,15 +515,19 @@ private[sql] class DynamicPartitionWriterContainer(
   // All output writers are created on executor side.
   @transient protected var outputWriters: java.util.HashMap[String, OutputWriter] = _
 
+  protected var maxOutputWriters = 50;
+
   override protected def initWriters(): Unit = {
     outputWriters = new java.util.HashMap[String, OutputWriter]
   }
 
-  // The `row` argument is supposed to only contain partition column values which have been casted
-  // to strings.
-  override def outputWriterForRow(row: InternalRow): OutputWriter = {
+  /**
+   * Extract the functionality to create a partitionPath, a grouping of columns in a row, which
+   * serves as a key variable when allocating new outputWriters.
+   */
+  def computePartitionPath(row: InternalRow): String = {
     val partitionPath = {
-      val partitionPathBuilder = new StringBuilder
+      val partitionPathBuilder = new mutable.StringBuilder
       var i = 0
 
       while (i < partitionColumns.length) {
@@ -541,6 +547,33 @@ private[sql] class DynamicPartitionWriterContainer(
 
       partitionPathBuilder.toString()
     }
+    partitionPath
+  }
+
+  /**
+   * Returns true if it's possible to create a new outputWriter for a given row or to use an 
+   * existing writer without triggering a sort operation on the incoming data to avoid memory
+   * problems.
+   * 
+   * During {{ InsertIntoHadoopFsRelation }} new outputWriters are created for every partition.
+   * Creating too many outputWriters can cause us to run out of memory (SPARK-8890). Therefore, only
+   * create up to a certain number of outputWriters. If the number of allowed writers is exceeded,
+   * the existing outputWriters will be closed and a sort operation will be triggered on the
+   * incoming data, ensuring that it's sorted by key such that a single outputWriter may be used
+   * at a time. E.g. process all key1, close the writer, process key2, etc.
+   */
+  def canGetOutputWriter(row: InternalRow): Boolean = {
+    (outputWriters.size() < (maxOutputWriters - 1)) || {
+      // Only compute this when we're near the max allowed number of outputWriters
+      val partitionPath = computePartitionPath(row)
+      outputWriters.containsKey(partitionPath)
+    }
+  }
+
+  // The `row` argument is supposed to only contain partition column values which have been casted
+  // to strings.
+  override def outputWriterForRow(row: InternalRow): OutputWriter = {
+    val partitionPath: String = computePartitionPath(row)
 
     val writer = outputWriters.get(partitionPath)
     if (writer.eq(null)) {
