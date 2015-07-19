@@ -17,7 +17,8 @@
 
 package org.apache.spark.mllib.clustering
 
-import breeze.linalg.{DenseMatrix => BDM, normalize, sum => brzSum}
+import breeze.linalg.{DenseVector => BDV, DenseMatrix => BDM, sum, normalize}
+import breeze.numerics.{lgamma, digamma, exp}
 
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.java.JavaPairRDD
@@ -158,7 +159,10 @@ abstract class LDAModel private[clustering] {
  */
 @Experimental
 class LocalLDAModel private[clustering] (
-    private val topics: Matrix) extends LDAModel with Serializable {
+    private val topics: Matrix,
+    private val alpha: Double,
+    private val eta: Double,
+    private val gammaShape: Double) extends LDAModel with Serializable {
 
   override def k: Int = topics.numCols
 
@@ -176,11 +180,106 @@ class LocalLDAModel private[clustering] (
     }.toArray
   }
 
+  /**
+   * Backwards compatibility constructor, assumes sensible values for other arguments. This will
+   * NOT be what you want (prefer setting explicitly in other constructor)
+   * @deprecated Provide alpha, eta, and gammaShape in constructor.
+   */
+  @deprecated("Provide alpha, eta, and gammaShape in constructor", "1.5.0")
+  def this(topics: Matrix) {
+    this(topics, 1D, 1D, 100D)
+  }
+
   // TODO
   // override def logLikelihood(documents: RDD[(Long, Vector)]): Double = ???
 
   // TODO:
   // override def topicDistributions(documents: RDD[(Long, Vector)]): RDD[(Long, Vector)] = ???
+
+
+  /**
+   * Calculate and return per-word likelihood bound, using the `batch` of
+   * documents as evaluation corpus.
+   */
+  def logPerplexity(
+    batch: RDD[(Long, Vector)],
+    totalDocs: Long): Double = {
+    val corpusWords = batch
+      .map { case (_, termCounts) => termCounts.toBreeze }
+      .reduce(_+_)
+    val subsampleRatio = totalDocs.toDouble / batch.count()
+    val batchVariationalBound = bound(
+      batch,
+      subsampleRatio,
+      alpha,
+      eta,
+      topicsMatrix.toBreeze.toDenseMatrix,
+      gammaShape,
+      k,
+      vocabSize)
+    val perWordBound = batchVariationalBound / (subsampleRatio * vocabSize)
+
+    perWordBound
+  }
+
+
+  /**
+   *  Estimate the variational bound of documents from `batch`:
+   *  E_q[log p(bath)] - E_q[log q(batch)]
+   */
+  // TODO: precompute gamma during training to use for logPerplexity's call to bound
+  private def bound(
+    batch: RDD[(Long, Vector)],
+    subsampleRatio: Double,
+    alpha: Double,
+    eta: Double,
+    lambda: BDM[Double],
+    gammaShape: Double,
+    k: Int,
+    vocabSize: Long): Double = {
+    var score = 0.0D
+    val Elogbeta = OnlineLDAOptimizer.dirichletExpectation(lambda)
+    val expElogbeta = exp(Elogbeta)
+
+    batch.foreach { case (id: Long, termCounts: Vector) =>
+      val (gammad: BDV[Double], _) =
+        OnlineLDAOptimizer.topicInference(termCounts, expElogbeta, alpha, gammaShape, k)
+      val Elogthetad: BDV[Double] = digamma(gammad) - digamma(sum(gammad))
+
+      // E[log p(doc | theta, beta)]
+      termCounts.foreachActive { case (id, count) =>
+        score += OnlineLDAOptimizer.logSumExp(Elogthetad + Elogbeta(::, id))
+      }
+      // E[log p(theta | alpha) - log q(theta | gamma)]; assumes alpha is a vector
+      score += sum((gammad - alpha) :* Elogthetad)
+      score += sum(lgamma(gammad) - lgamma(alpha))
+      score += lgamma(alpha) - lgamma(sum(gammad))
+    }
+    // compensate likelihood for when `corpus` above is only a sample of the whole corpus
+    score *= subsampleRatio
+
+    // E[log p(beta | eta) - log q (beta | lambda)]; assumes eta is a scalar
+    score += sum((eta - lambda) * Elogbeta)
+    score += sum(lgamma(lambda) - lgamma(eta))
+
+    val sumEta = eta * vocabSize
+
+    score += sum(lgamma(sumEta) - lgamma(sum(lambda(breeze.linalg.*, ::))))
+    score
+  }
+
+  /**
+   * Predicts the topic mixture distribution gamma for a document.
+   */
+  def topicDistribution(doc: (Long, Vector)): (Long, Vector) = {
+    val (gamma, _) = OnlineLDAOptimizer.topicInference(
+      doc._2,
+      exp(OnlineLDAOptimizer.dirichletExpectation(this.topicsMatrix.toBreeze.toDenseMatrix)).t,
+      this.alpha,
+      this.gammaShape,
+      this.k)
+    (doc._1, Vectors.dense(gamma.toArray))
+  }
 
 }
 
@@ -200,13 +299,21 @@ class DistributedLDAModel private (
     val vocabSize: Int,
     private val docConcentration: Double,
     private val topicConcentration: Double,
-    private[spark] val iterationTimes: Array[Double]) extends LDAModel {
+    private[spark] val iterationTimes: Array[Double],
+    private val alpha: Double,
+    private val eta: Double,
+    private val gammaShape: Double) extends LDAModel {
 
   import LDA._
 
-  private[clustering] def this(state: EMLDAOptimizer, iterationTimes: Array[Double]) = {
+  private[clustering] def this(
+      state: EMLDAOptimizer,
+      iterationTimes: Array[Double],
+      alpha: Double,
+      eta: Double,
+      gammaShape: Double) = {
     this(state.graph, state.globalTopicTotals, state.k, state.vocabSize, state.docConcentration,
-      state.topicConcentration, iterationTimes)
+      state.topicConcentration, iterationTimes, alpha, eta, gammaShape)
   }
 
   /**
@@ -214,7 +321,7 @@ class DistributedLDAModel private (
    * The local model stores the inferred topics but not the topic distributions for training
    * documents.
    */
-  def toLocal: LocalLDAModel = new LocalLDAModel(topicsMatrix)
+  def toLocal: LocalLDAModel = new LocalLDAModel(topicsMatrix, alpha, eta, gammaShape)
 
   /**
    * Inferred topics, where each topic is represented by a distribution over terms.
@@ -323,12 +430,12 @@ class DistributedLDAModel private (
           val N_wk = vertex._2
           val smoothed_N_wk: TopicCounts = N_wk + (eta - 1.0)
           val phi_wk: TopicCounts = smoothed_N_wk :/ smoothed_N_k
-          (eta - 1.0) * brzSum(phi_wk.map(math.log))
+          (eta - 1.0) * sum(phi_wk.map(math.log))
         } else {
           val N_kj = vertex._2
           val smoothed_N_kj: TopicCounts = N_kj + (alpha - 1.0)
           val theta_kj: TopicCounts = normalize(smoothed_N_kj, 1.0)
-          (alpha - 1.0) * brzSum(theta_kj.map(math.log))
+          (alpha - 1.0) * sum(theta_kj.map(math.log))
         }
     }
     graph.vertices.aggregate(0.0)(seqOp, _ + _)

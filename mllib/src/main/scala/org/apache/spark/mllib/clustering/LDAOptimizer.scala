@@ -27,7 +27,7 @@ import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.graphx._
 import org.apache.spark.graphx.impl.GraphImpl
 import org.apache.spark.mllib.impl.PeriodicGraphCheckpointer
-import org.apache.spark.mllib.linalg.{DenseVector, Matrices, SparseVector, Vector}
+import org.apache.spark.mllib.linalg._
 import org.apache.spark.rdd.RDD
 
 /**
@@ -205,7 +205,9 @@ final class EMLDAOptimizer extends LDAOptimizer {
   override private[clustering] def getLDAModel(iterationTimes: Array[Double]): LDAModel = {
     require(graph != null, "graph is null, EMLDAOptimizer not initialized.")
     this.graphCheckpointer.deleteAllCheckpoints()
-    new DistributedLDAModel(this, iterationTimes)
+    // This assumes gammaShape = 100 in OnlineLDAOptimizer to ensure equivalence in LDAModel.toLocal
+    // conversion
+    new DistributedLDAModel(this, iterationTimes, docConcentration, topicConcentration, 100)
   }
 }
 
@@ -396,30 +398,8 @@ final class OnlineLDAOptimizer extends LDAOptimizer {
     this
   }
 
-  def logPerplexity(
-      batch: RDD[(Long, Vector)],
-      totalDocs: Long): Double = {
-    val corpusWords = batch
-      .map { case (_, termCounts) => termCounts.toBreeze }
-      .reduce(_+_)
-    val subsampleRatio = 1.0 * totalDocs / batch.count()
-    val variationalBound =
-      bound(batch, subsampleRatio, alpha, eta, lambda, gammaShape, k, vocabSize)
-    variationalBound / (subsampleRatio * vocabSize)
-  }
-
-  def predict(doc: (Long, Vector)): BDV[Double] = {
-    val (gamma, _) = topicInference(
-      doc._2,
-      exp(dirichletExpectation(this.getLambda)).t,
-      this.getAlpha,
-      this.gammaShape,
-      this.k)
-    gamma
-  }
-
   override private[clustering] def getLDAModel(iterationTimes: Array[Double]): LDAModel = {
-    new LocalLDAModel(Matrices.fromBreeze(lambda).transpose)
+    new LocalLDAModel(Matrices.fromBreeze(lambda).transpose, alpha, eta, gammaShape)
   }
 
   /**
@@ -447,7 +427,7 @@ final class OnlineLDAOptimizer extends LDAOptimizer {
     val N = gammat.length.toDouble
     val alpha = BDV[Double](this.alpha)
     val logphat = sum(dirichletExpectation(gammat)) / N
-    val gradf = N * (digamma(sum(alpha)) - digamma(alpha) + logphat)
+    val gradf = N * (-dirichletExpectation(alpha) + logphat)
 
     val c = N * trigamma(sum(alpha))
     val q = -N * trigamma(alpha)
@@ -476,7 +456,7 @@ final class OnlineLDAOptimizer extends LDAOptimizer {
  * Serializable companion object containing helper methods for OnlineLDA
  */
 object OnlineLDAOptimizer {
-  private def topicInference(
+  private[clustering] def topicInference(
       termCounts: Vector,
       expElogbeta: BDM[Double],
       alpha: Double,
@@ -489,7 +469,7 @@ object OnlineLDAOptimizer {
     // Initialize the variational distribution q(theta|gamma) for the mini-batch
     val gammad: BDV[Double] =
       new Gamma(gammaShape, 1.0 / gammaShape).samplesVector(k)                   // K
-    val expElogthetad: BDV[Double] = exp(digamma(gammad) - digamma(sum(gammad))) // K
+    val expElogthetad: BDV[Double] = exp(dirichletExpectation(gammad))           // K
     val expElogbetad = expElogbeta(ids, ::).toDenseMatrix                        // ids * K
 
     val phinorm: BDV[Double] = expElogbetad * expElogthetad + 1e-100             // ids
@@ -501,7 +481,7 @@ object OnlineLDAOptimizer {
       val lastgamma = gammad.copy
       //        K                  K * ids               ids
       gammad := (expElogthetad :* (expElogbetad.t * (ctsVector / phinorm))) + alpha
-      expElogthetad := exp(digamma(gammad) - digamma(sum(gammad)))
+      expElogthetad := exp(dirichletExpectation(gammad))
       phinorm := expElogbetad * expElogthetad + 1e-100
       meanchange = sum(abs(gammad - lastgamma)) / k
     }
@@ -511,54 +491,10 @@ object OnlineLDAOptimizer {
   }
 
   /**
-   *  Estimate the variational bound of documents from `batch`:
-   *  E_q[log p(bath)] - E_q[log q(batch)]
-   */
-  // TODO: precompute gamma during training to use for logPerplexity's call to bound
-  private def bound(
-      batch: RDD[(Long, Vector)],
-      subsampleRatio: Double,
-      alpha: Double,
-      eta: Double,
-      lambda: BDM[Double],
-      gammaShape: Double,
-      k: Int,
-      vocabSize: Long): Double = {
-    var score = 0.0D
-    val Elogbeta = dirichletExpectation(lambda)
-    val expElogbeta = exp(Elogbeta)
-
-    batch.foreach { case (id: Long, termCounts: Vector) =>
-      val (gammad: BDV[Double], _) = topicInference(termCounts, expElogbeta, alpha, gammaShape, k)
-      val Elogthetad: BDV[Double] = digamma(gammad) - digamma(sum(gammad))
-
-      // E[log p(doc | theta, beta)]
-      termCounts.foreachActive { case (id, count) =>
-        score += logSumExp(Elogthetad + Elogbeta(::, id))
-      }
-      // E[log p(theta | alpha) - log q(theta | gamma)]; assumes alpha is a vector
-      score += sum((gammad - alpha) :* Elogthetad)
-      score += sum(lgamma(gammad) - lgamma(alpha))
-      score += lgamma(alpha) - lgamma(sum(gammad))
-    }
-    // compensate likelihood for when `corpus` above is only a sample of the whole corpus
-    score *= subsampleRatio
-
-    // E[log p(beta | eta) - log q (beta | lambda)]; assumes eta is a scalar
-    score += sum((eta - lambda) * Elogbeta)
-    score += sum(lgamma(lambda) - lgamma(eta))
-
-    val sumEta = eta * vocabSize
-
-    score += sum(lgamma(sumEta) - lgamma(sum(lambda(breeze.linalg.*, ::))))
-    score
-  }
-
-  /**
    * Log Sum Exp with overflow protection using the identity:
    * For any a: \log \sum_{n=1}^N \exp\{x_n\} = a + \log \sum_{n=1}^N \exp\{x_n - a\}
    */
-  private def logSumExp(x: BDV[Double]): Double = {
+  private[clustering] def logSumExp(x: BDV[Double]): Double = {
     val a = max(x)
     a + log(sum(exp(x :- a)))
   }
@@ -567,14 +503,14 @@ object OnlineLDAOptimizer {
    * For theta ~ Dir(alpha), computes E[log(theta)] given alpha. Currently the implementation
    * uses digamma which is accurate but expensive.
    */
-  private def dirichletExpectation(alpha: BDV[Double]): BDV[Double] = {
+  private[clustering] def dirichletExpectation(alpha: BDV[Double]): BDV[Double] = {
     digamma(alpha) - digamma(sum(alpha))
   }
 
   /**
    * Computes [[dirichletExpectation()]] row-wise.
    */
-  private def dirichletExpectation(alpha: BDM[Double]): BDM[Double] = {
+  private[clustering] def dirichletExpectation(alpha: BDM[Double]): BDM[Double] = {
     val rowSum = sum(alpha(breeze.linalg.*, ::))
     val digAlpha = digamma(alpha)
     val digRowSum = digamma(rowSum)
