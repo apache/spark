@@ -247,17 +247,17 @@ class LocalLDAModel private[clustering] (
     k: Int,
     vocabSize: Long): Double = {
     var score = 0.0D
-    val Elogbeta = OnlineLDAOptimizer.dirichletExpectation(lambda)
+    val Elogbeta = LDAUtils.dirichletExpectation(lambda)
     val expElogbeta = exp(Elogbeta)
 
     batch.foreach { case (id: Long, termCounts: Vector) =>
       val (gammad: BDV[Double], _) =
-        OnlineLDAOptimizer.topicInference(termCounts, expElogbeta, alpha, gammaShape, k)
+        OnlineLDAOptimizer.variationalTopicInference(termCounts, expElogbeta, alpha, gammaShape, k)
       val Elogthetad: BDV[Double] = digamma(gammad) - digamma(sum(gammad))
 
       // E[log p(doc | theta, beta)]
       termCounts.foreachActive { case (id, count) =>
-        score += OnlineLDAOptimizer.logSumExp(Elogthetad + Elogbeta(::, id))
+        score += LDAUtils.logSumExp(Elogthetad + Elogbeta(::, id))
       }
       // E[log p(theta | alpha) - log q(theta | gamma)]; assumes alpha is a vector
       score += sum((gammad - alpha) :* Elogthetad)
@@ -281,9 +281,9 @@ class LocalLDAModel private[clustering] (
    * Predicts the topic mixture distribution gamma for a document.
    */
   def topicDistribution(doc: (Long, Vector)): (Long, Vector) = {
-    val (gamma, _) = OnlineLDAOptimizer.topicInference(
+    val (gamma, _) = OnlineLDAOptimizer.variationalTopicInference(
       doc._2,
-      exp(OnlineLDAOptimizer.dirichletExpectation(this.topicsMatrix.toBreeze.toDenseMatrix)).t,
+      exp(LDAUtils.dirichletExpectation(this.topicsMatrix.toBreeze.toDenseMatrix)).t,
       this.alpha,
       this.gammaShape,
       this.k)

@@ -19,10 +19,9 @@ package org.apache.spark.mllib.clustering
 
 import java.util.Random
 
-import breeze.linalg.{DenseMatrix => BDM, DenseVector => BDV, all, max, normalize, sum}
+import breeze.linalg.{DenseMatrix => BDM, DenseVector => BDV, all, normalize, sum}
 import breeze.numerics._
 import breeze.stats.distributions.{Gamma, RandBasis}
-
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.graphx._
 import org.apache.spark.graphx.impl.GraphImpl
@@ -224,8 +223,6 @@ final class EMLDAOptimizer extends LDAOptimizer {
  */
 @DeveloperApi
 final class OnlineLDAOptimizer extends LDAOptimizer {
-  import OnlineLDAOptimizer._
-
   // LDA common parameters
   private var k: Int = 0
   private var corpusSize: Long = 0
@@ -373,7 +370,7 @@ final class OnlineLDAOptimizer extends LDAOptimizer {
     iteration += 1
     val k = this.k
     val vocabSize = this.vocabSize
-    val expElogbeta = exp(dirichletExpectation(lambda)).t
+    val expElogbeta = exp(LDAUtils.dirichletExpectation(lambda)).t
     val alpha = this.alpha
     val gammaShape = this.gammaShape
 
@@ -384,7 +381,8 @@ final class OnlineLDAOptimizer extends LDAOptimizer {
           case v: DenseVector => (0 until v.size).toList
           case v: SparseVector => v.indices.toList
         }
-        val (_, sstats) = topicInference(termCounts, expElogbeta, alpha, gammaShape, k)
+        val (_, sstats) = OnlineLDAOptimizer.variationalTopicInference(
+          termCounts, expElogbeta, alpha, gammaShape, k)
         stat(::, ids) := sstats
       }
       Iterator(stat)
@@ -426,8 +424,8 @@ final class OnlineLDAOptimizer extends LDAOptimizer {
   private def updateAlpha(gammat: BDV[Double], rho: Double): Unit = {
     val N = gammat.length.toDouble
     val alpha = BDV[Double](this.alpha)
-    val logphat = sum(dirichletExpectation(gammat)) / N
-    val gradf = N * (-dirichletExpectation(alpha) + logphat)
+    val logphat = sum(LDAUtils.dirichletExpectation(gammat)) / N
+    val gradf = N * (-LDAUtils.dirichletExpectation(alpha) + logphat)
 
     val c = N * trigamma(sum(alpha))
     val q = -N * trigamma(alpha)
@@ -456,12 +454,12 @@ final class OnlineLDAOptimizer extends LDAOptimizer {
  * Serializable companion object containing helper methods for OnlineLDA
  */
 object OnlineLDAOptimizer {
-  private[clustering] def topicInference(
-      termCounts: Vector,
-      expElogbeta: BDM[Double],
-      alpha: Double,
-      gammaShape: Double,
-      k: Int): (BDV[Double], BDM[Double]) = {
+  private[clustering] def variationalTopicInference(
+    termCounts: Vector,
+    expElogbeta: BDM[Double],
+    alpha: Double,
+    gammaShape: Double,
+    k: Int): (BDV[Double], BDM[Double]) = {
     val (ids: List[Int], cts: Array[Double]) = termCounts match {
       case v: DenseVector => ((0 until v.size).toList, v.values)
       case v: SparseVector => (v.indices.toList, v.values)
@@ -469,7 +467,7 @@ object OnlineLDAOptimizer {
     // Initialize the variational distribution q(theta|gamma) for the mini-batch
     val gammad: BDV[Double] =
       new Gamma(gammaShape, 1.0 / gammaShape).samplesVector(k)                   // K
-    val expElogthetad: BDV[Double] = exp(dirichletExpectation(gammad))           // K
+    val expElogthetad: BDV[Double] = exp(LDAUtils.dirichletExpectation(gammad))  // K
     val expElogbetad = expElogbeta(ids, ::).toDenseMatrix                        // ids * K
 
     val phinorm: BDV[Double] = expElogbetad * expElogthetad + 1e-100             // ids
@@ -481,40 +479,12 @@ object OnlineLDAOptimizer {
       val lastgamma = gammad.copy
       //        K                  K * ids               ids
       gammad := (expElogthetad :* (expElogbetad.t * (ctsVector / phinorm))) + alpha
-      expElogthetad := exp(dirichletExpectation(gammad))
+      expElogthetad := exp(LDAUtils.dirichletExpectation(gammad))
       phinorm := expElogbetad * expElogthetad + 1e-100
       meanchange = sum(abs(gammad - lastgamma)) / k
     }
 
     val sstatsd = expElogthetad.asDenseMatrix.t * (ctsVector / phinorm).asDenseMatrix
     (gammad, sstatsd)
-  }
-
-  /**
-   * Log Sum Exp with overflow protection using the identity:
-   * For any a: \log \sum_{n=1}^N \exp\{x_n\} = a + \log \sum_{n=1}^N \exp\{x_n - a\}
-   */
-  private[clustering] def logSumExp(x: BDV[Double]): Double = {
-    val a = max(x)
-    a + log(sum(exp(x :- a)))
-  }
-
-  /**
-   * For theta ~ Dir(alpha), computes E[log(theta)] given alpha. Currently the implementation
-   * uses digamma which is accurate but expensive.
-   */
-  private[clustering] def dirichletExpectation(alpha: BDV[Double]): BDV[Double] = {
-    digamma(alpha) - digamma(sum(alpha))
-  }
-
-  /**
-   * Computes [[dirichletExpectation()]] row-wise.
-   */
-  private[clustering] def dirichletExpectation(alpha: BDM[Double]): BDM[Double] = {
-    val rowSum = sum(alpha(breeze.linalg.*, ::))
-    val digAlpha = digamma(alpha)
-    val digRowSum = digamma(rowSum)
-    val result = digAlpha(::, breeze.linalg.*) - digRowSum
-    result
   }
 }
