@@ -65,7 +65,7 @@ object Main extends Logging {
     val jars = getAddedJars
     val conf = new SparkConf()
       .setMaster(getMaster)
-      .setAppName("Spark shell")
+      .setAppName(sys.props.getOrElse("spark.app.name", "Spark shell"))
       .setJars(jars)
       .set("spark.repl.class.uri", classServer.uri)
     logInfo("Spark class server started at " + classServer.uri)

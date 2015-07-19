@@ -1008,7 +1008,7 @@ class SparkILoop(
     val jars = SparkILoop.getAddedJars
     val conf = new SparkConf()
       .setMaster(getMaster())
-      .setAppName("Spark shell")
+      .setAppName(sys.props.getOrElse("spark.app.name", "Spark shell"))
       .setJars(jars)
       .set("spark.repl.class.uri", intp.classServerUri)
     if (execUri != null) {
