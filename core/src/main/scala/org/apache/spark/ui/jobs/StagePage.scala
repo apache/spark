@@ -259,6 +259,21 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
         desc = taskSortDesc
       )
 
+      val jsForScrollingDownToTaskTable =
+        <script>
+          {Unparsed {
+            """
+              |$(function() {
+              |  if (/.*&task.sort=.*$/.test(location.search)) {
+              |    var topOffset = $("#tasks-section").offset().top;
+              |    $("html,body").animate({scrollTop: topOffset}, 200);
+              |  }
+              |});
+            """.stripMargin
+           }
+          }
+        </script>
+
       val taskIdsInPage = taskTable.dataSource.pageData.data.map(_.taskId).toSet
       // Excludes tasks which failed and have incomplete metrics
       val validTasks = tasks.filter(t => t.taskInfo.status == "SUCCESS" && t.taskMetrics.isDefined)
@@ -490,7 +505,7 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
         <div>{summaryTable.getOrElse("No tasks have reported metrics yet.")}</div> ++
         <h4>Aggregated Metrics by Executor</h4> ++ executorTable.toNodeSeq ++
         maybeAccumulableTable ++
-        <h4>Tasks</h4> ++ taskTable.table
+        <h4 id="tasks-section">Tasks</h4> ++ taskTable.table ++ jsForScrollingDownToTaskTable
       UIUtils.headerSparkPage(stageHeader, content, parent, showVisualization = true)
     }
   }
