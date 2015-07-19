@@ -34,19 +34,14 @@ import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * An expression that concatenates multiple input strings into a single string.
- * Input expressions that are evaluated to nulls are skipped.
- *
- * For example, `concat("a", null, "b")` is evaluated to `"ab"`.
- *
- * Note that this is different from Hive since Hive outputs null if any input is null.
- * We never output null.
+ * If any input is null, concat returns null.
  */
 case class Concat(children: Seq[Expression]) extends Expression with ImplicitCastInputTypes {
 
   override def inputTypes: Seq[AbstractDataType] = Seq.fill(children.size)(StringType)
   override def dataType: DataType = StringType
 
-  override def nullable: Boolean = false
+  override def nullable: Boolean = children.exists(_.nullable)
   override def foldable: Boolean = children.forall(_.foldable)
 
   override def eval(input: InternalRow): Any = {
@@ -56,11 +51,46 @@ case class Concat(children: Seq[Expression]) extends Expression with ImplicitCas
 
   override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     val evals = children.map(_.gen(ctx))
-    val inputs = evals.map { eval => s"${eval.isNull} ? null : ${eval.primitive}" }.mkString(", ")
+    val inputs = evals.map { eval =>
+      s"${eval.isNull} ? (UTF8String)null : ${eval.primitive}"
+    }.mkString(", ")
     evals.map(_.code).mkString("\n") + s"""
       boolean ${ev.isNull} = false;
       UTF8String ${ev.primitive} = UTF8String.concat($inputs);
+      if (${ev.primitive} == null) {
+        ${ev.isNull} = true;
+      }
     """
+  }
+}
+
+
+case class ConcatWs(children: Seq[Expression]) extends Expression with ImplicitCastInputTypes with CodegenFallback {
+  require(children.nonEmpty, s"$prettyName requires at least one argument.")
+
+  override def prettyName: String = "concat_ws"
+
+  override def inputTypes: Seq[AbstractDataType] = {
+    Seq.fill(children.size)(TypeCollection(
+      ArrayType(StringType, true),
+      ArrayType(StringType, false),
+      StringType))
+  }
+
+  override def dataType: DataType = StringType
+
+  override def nullable: Boolean = children.head.nullable
+  override def foldable: Boolean = children.forall(_.foldable)
+
+  override def eval(input: InternalRow): Any = {
+    val flatInputs = children.flatMap { child =>
+      child.eval(input) match {
+        case s: UTF8String => Iterator(s)
+        case arr: Seq[_] => arr.asInstanceOf[Seq[UTF8String]]
+        case null => Iterator(null.asInstanceOf[UTF8String])
+      }
+    }
+    UTF8String.concatWs(flatInputs.head, flatInputs.tail : _*)
   }
 }
 

@@ -88,16 +88,50 @@ public class UTF8StringSuite {
 
   @Test
   public void concatTest() {
-    assertEquals(concat(), fromString(""));
-    assertEquals(concat(null), fromString(""));
-    assertEquals(concat(fromString("")), fromString(""));
-    assertEquals(concat(fromString("ab")), fromString("ab"));
-    assertEquals(concat(fromString("a"), fromString("b")), fromString("ab"));
-    assertEquals(concat(fromString("a"), fromString("b"), fromString("c")), fromString("abc"));
-    assertEquals(concat(fromString("a"), null, fromString("c")), fromString("ac"));
-    assertEquals(concat(fromString("a"), null, null), fromString("a"));
-    assertEquals(concat(null, null, null), fromString(""));
-    assertEquals(concat(fromString("数据"), fromString("砖头")), fromString("数据砖头"));
+    assertEquals(fromString(""), concat());
+    assertEquals(null, concat((UTF8String) null));
+    assertEquals(fromString(""), concat(fromString("")));
+    assertEquals(fromString("ab"), concat(fromString("ab")));
+    assertEquals(fromString("ab"), concat(fromString("a"), fromString("b")));
+    assertEquals(fromString("abc"), concat(fromString("a"), fromString("b"), fromString("c")));
+    assertEquals(null, concat(fromString("a"), null, fromString("c")));
+    assertEquals(null, concat(fromString("a"), null, null));
+    assertEquals(null, concat(null, null, null));
+    assertEquals(fromString("数据砖头"), concat(fromString("数据"), fromString("砖头")));
+  }
+
+  @Test
+  public void concatWsTest() {
+    // Returns null if the separator is null
+    assertEquals(null, concatWs(null, (UTF8String)null));
+    assertEquals(null, concatWs(null, fromString("a")));
+
+    // If separator is null, concatWs should skip all null inputs and never return null.
+    UTF8String sep = fromString("哈哈");
+    assertEquals(
+      fromString(""),
+      concatWs(sep, fromString("")));
+    assertEquals(
+      fromString("ab"),
+      concatWs(sep, fromString("ab")));
+    assertEquals(
+      fromString("a哈哈b"),
+      concatWs(sep, fromString("a"), fromString("b")));
+    assertEquals(
+      fromString("a哈哈b哈哈c"),
+      concatWs(sep, fromString("a"), fromString("b"), fromString("c")));
+    assertEquals(
+      fromString("a哈哈c"),
+      concatWs(sep, fromString("a"), null, fromString("c")));
+    assertEquals(
+      fromString("a"),
+      concatWs(sep, fromString("a"), null, null));
+    assertEquals(
+      fromString(""),
+      concatWs(sep, null, null, null));
+    assertEquals(
+      fromString("数据哈哈砖头"),
+      concatWs(sep, fromString("数据"), fromString("砖头")));
   }
 
   @Test
@@ -215,14 +249,18 @@ public class UTF8StringSuite {
     assertEquals(fromString("??数据砖头"), fromString("数据砖头").lpad(6, fromString("????")));
     assertEquals(fromString("孙行数据砖头"), fromString("数据砖头").lpad(6, fromString("孙行者")));
     assertEquals(fromString("孙行者数据砖头"), fromString("数据砖头").lpad(7, fromString("孙行者")));
-    assertEquals(fromString("孙行者孙行者孙行数据砖头"), fromString("数据砖头").lpad(12, fromString("孙行者")));
+    assertEquals(
+      fromString("孙行者孙行者孙行数据砖头"),
+      fromString("数据砖头").lpad(12, fromString("孙行者")));
 
     assertEquals(fromString("数据砖"), fromString("数据砖头").rpad(3, fromString("????")));
     assertEquals(fromString("数据砖头?"), fromString("数据砖头").rpad(5, fromString("????")));
     assertEquals(fromString("数据砖头??"), fromString("数据砖头").rpad(6, fromString("????")));
     assertEquals(fromString("数据砖头孙行"), fromString("数据砖头").rpad(6, fromString("孙行者")));
     assertEquals(fromString("数据砖头孙行者"), fromString("数据砖头").rpad(7, fromString("孙行者")));
-    assertEquals(fromString("数据砖头孙行者孙行者孙行"), fromString("数据砖头").rpad(12, fromString("孙行者")));
+    assertEquals(
+      fromString("数据砖头孙行者孙行者孙行"),
+      fromString("数据砖头").rpad(12, fromString("孙行者")));
   }
   
   @Test
