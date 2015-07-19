@@ -26,7 +26,7 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("concat") {
     def testConcat(inputs: String*): Unit = {
-      val expected = inputs.filter(_ != null).mkString
+      val expected = if (inputs.contains(null)) null else inputs.mkString
       checkEvaluation(Concat(inputs.map(Literal.create(_, StringType))), expected, EmptyRow)
     }
 
@@ -43,6 +43,35 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     // scalastyle:off
     // non ascii characters are not allowed in the code, so we disable the scalastyle here.
     testConcat("数据", null, "砖头")
+    // scalastyle:on
+  }
+
+  test("concat_ws") {
+    def testConcatWs(expected: String, sep: String, inputs: Any*): Unit = {
+      val inputExprs = inputs.map {
+        case s: Seq[_] => Literal.create(s, ArrayType(StringType))
+        case null => Literal.create(null, StringType)
+        case s: String => Literal.create(s, StringType)
+      }
+      val sepExpr = Literal.create(sep, StringType)
+      checkEvaluation(ConcatWs(sepExpr +: inputExprs), expected, EmptyRow)
+    }
+
+    // scalastyle:off
+    // non ascii characters are not allowed in the code, so we disable the scalastyle here.
+    testConcatWs(null, null)
+    testConcatWs(null, null, "a", "b")
+    testConcatWs("", "")
+    testConcatWs("ab", "哈哈", "ab")
+    testConcatWs("a哈哈b", "哈哈", "a", "b")
+    testConcatWs("a哈哈b", "哈哈", "a", null, "b")
+    testConcatWs("a哈哈b哈哈c", "哈哈", null, "a", null, "b", "c")
+
+    testConcatWs("ab", "哈哈", Seq("ab"))
+    testConcatWs("a哈哈b", "哈哈", Seq("a", "b"))
+    testConcatWs("a哈哈b哈哈c哈哈d", "哈哈", Seq("a", null, "b"), null, "c", Seq(null, "d"))
+    testConcatWs("a哈哈b哈哈c", "哈哈", Seq("a", null, "b"), null, "c", Seq.empty[String])
+    testConcatWs("a哈哈b哈哈c", "哈哈", Seq("a", null, "b"), null, "c", Seq[String](null))
     // scalastyle:on
   }
 

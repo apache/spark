@@ -153,6 +153,7 @@ object FunctionRegistry {
     expression[Ascii]("ascii"),
     expression[Base64]("base64"),
     expression[Concat]("concat"),
+    expression[ConcatWs]("concat_ws"),
     expression[Encode]("encode"),
     expression[Decode]("decode"),
     expression[FormatNumber]("format_number"),
@@ -211,7 +212,10 @@ object FunctionRegistry {
     val builder = (expressions: Seq[Expression]) => {
       if (varargCtor.isDefined) {
         // If there is an apply method that accepts Seq[Expression], use that one.
-        varargCtor.get.newInstance(expressions).asInstanceOf[Expression]
+        Try(varargCtor.get.newInstance(expressions).asInstanceOf[Expression]) match {
+          case Success(e) => e
+          case Failure(e) => throw new AnalysisException(e.getMessage)
+        }
       } else {
         // Otherwise, find an ctor method that matches the number of arguments, and use that.
         val params = Seq.fill(expressions.size)(classOf[Expression])
@@ -221,7 +225,10 @@ object FunctionRegistry {
           case Failure(e) =>
             throw new AnalysisException(s"Invalid number of arguments for function $name")
         }
-        f.newInstance(expressions : _*).asInstanceOf[Expression]
+        Try(f.newInstance(expressions : _*).asInstanceOf[Expression]) match {
+          case Success(e) => e
+          case Failure(e) => throw new AnalysisException(e.getMessage)
+        }
       }
     }
     (name, builder)

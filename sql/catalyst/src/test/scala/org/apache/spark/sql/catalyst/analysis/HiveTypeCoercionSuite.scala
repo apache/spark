@@ -37,7 +37,6 @@ class HiveTypeCoercionSuite extends PlanTest {
     shouldCast(NullType, IntegerType, IntegerType)
     shouldCast(NullType, DecimalType, DecimalType.Unlimited)
 
-    // TODO: write the entire implicit cast table out for test cases.
     shouldCast(ByteType, IntegerType, IntegerType)
     shouldCast(IntegerType, IntegerType, IntegerType)
     shouldCast(IntegerType, LongType, LongType)
@@ -86,6 +85,16 @@ class HiveTypeCoercionSuite extends PlanTest {
       DecimalType.Unlimited, DecimalType(10, 2)).foreach { tpe =>
       shouldCast(tpe, NumericType, tpe)
     }
+
+    shouldCast(
+      ArrayType(StringType, false),
+      TypeCollection(ArrayType(StringType), StringType),
+      ArrayType(StringType, false))
+
+    shouldCast(
+      ArrayType(StringType, true),
+      TypeCollection(ArrayType(StringType), StringType),
+      ArrayType(StringType, true))
   }
 
   test("ineligible implicit type cast") {

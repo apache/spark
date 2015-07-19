@@ -397,19 +397,16 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
   }
 
   /**
-   * Concatenates input strings together into a single string. A null input is skipped.
-   * For example, concat("a", null, "c") would yield "ac".
+   * Concatenates input strings together into a single string. Returns null if any input is null.
    */
   public static UTF8String concat(UTF8String... inputs) {
-    if (inputs == null) {
-      return fromBytes(new byte[0]);
-    }
-
     // Compute the total length of the result.
     int totalLength = 0;
     for (int i = 0; i < inputs.length; i++) {
       if (inputs[i] != null) {
         totalLength += inputs[i].numBytes;
+      } else {
+        return null;
       }
     }
 
@@ -417,6 +414,45 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
     final byte[] result = new byte[totalLength];
     int offset = 0;
     for (int i = 0; i < inputs.length; i++) {
+      int len = inputs[i].numBytes;
+      PlatformDependent.copyMemory(
+        inputs[i].base, inputs[i].offset,
+        result, PlatformDependent.BYTE_ARRAY_OFFSET + offset,
+        len);
+      offset += len;
+    }
+    return fromBytes(result);
+  }
+
+  /**
+   * Concatenates input strings together into a single string using the separator.
+   * A null input is skipped. For example, concat(",", "a", null, "c") would yield "a,c".
+   */
+  public static UTF8String concatWs(UTF8String separator, UTF8String... inputs) {
+    if (separator == null) {
+      return null;
+    }
+
+    int numInputBytes = 0;  // total number of bytes from the inputs
+    int numInputs = 0;      // number of non-null inputs
+    for (int i = 0; i < inputs.length; i++) {
+      if (inputs[i] != null) {
+        numInputBytes += inputs[i].numBytes;
+        numInputs++;
+      }
+    }
+
+    if (numInputs == 0) {
+      // Return an empty string if there is no input, or all the inputs are null.
+      return fromBytes(new byte[0]);
+    }
+
+    // Allocate a new byte array, and copy the inputs one by one into it.
+    // The size of the new array is the size of all inputs, plus the separators.
+    final byte[] result = new byte[numInputBytes + (numInputs - 1) * separator.numBytes];
+    int offset = 0;
+
+    for (int i = 0, j = 0; i < inputs.length; i++) {
       if (inputs[i] != null) {
         int len = inputs[i].numBytes;
         PlatformDependent.copyMemory(
@@ -424,6 +460,16 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
           result, PlatformDependent.BYTE_ARRAY_OFFSET + offset,
           len);
         offset += len;
+
+        j++;
+        // Add separator if this is not the last input.
+        if (j < numInputs) {
+          PlatformDependent.copyMemory(
+            separator.base, separator.offset,
+            result, PlatformDependent.BYTE_ARRAY_OFFSET + offset,
+            separator.numBytes);
+          offset += separator.numBytes;
+        }
       }
     }
     return fromBytes(result);
