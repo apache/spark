@@ -1,9 +1,28 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package org.apache.spark.ml.regression
 
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.ml.PredictorParams
 import org.apache.spark.ml.param.{Param, ParamMap, BooleanParam}
 import org.apache.spark.ml.util.Identifiable
+import org.apache.spark.mllib.regression.{IsotonicRegression => MLlibIsotonicRegression}
+import org.apache.spark.mllib.regression.{IsotonicRegressionModel => MLlibIsotonicRegressionModel}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.types.{DoubleType, DataType}
 import org.apache.spark.sql.{Row, DataFrame}
@@ -18,7 +37,8 @@ private[regression] trait IsotonicRegressionParams extends PredictorParams {
    * Param for weight column name.
    * @group param
    */
-  final val weightCol: Param[String] = new Param[String](this, "weightCol", "weight column name")
+  final val weightCol: Param[String] =
+    new Param[String](this, "weightCol", "weight column name")
 
   /** @group getParam */
   final def getWeightCol: String = $(weightCol)
@@ -27,12 +47,22 @@ private[regression] trait IsotonicRegressionParams extends PredictorParams {
    * Param for isotonic parameter.
    * @group param
    */
-  final val isotonicParam: BooleanParam = new BooleanParam(this, "isotonicParam", "isotonic parameter")
+  final val isotonicParam: BooleanParam =
+    new BooleanParam(this, "isotonicParam", "isotonic parameter")
 
   /** @group getParam */
   final def getIsotonicParam: Boolean = $(isotonicParam)
 }
 
+/**
+ * :: Experimental ::
+ * Isotonic regression.
+ *
+ * Currently implemented using parallelized pool adjacent violators algorithm.
+ * Only univariate (single feature) algorithm supported.
+ *
+ * Uses [[org.apache.spark.mllib.regression.IsotonicRegression]].
+ */
 @Experimental
 class IsotonicRegression(override val uid: String)
   extends Regressor[Double, IsotonicRegression, IsotonicRegressionModel]
@@ -49,20 +79,24 @@ class IsotonicRegression(override val uid: String)
   setDefault(isotonicParam -> true)
 
   /**
-   * Set the isotonic parameter.
-   * Default is true.
+   * Set weight column param.
+   * Default is weight.
    * @group setParam
    */
   def setWeightParam(value: String): this.type = set(weightCol, value)
   setDefault(weightCol -> "weight")
 
-  override def featuresDataType: DataType = DoubleType
+  override private[ml] def featuresDataType: DataType = DoubleType
 
   override def copy(extra: ParamMap): IsotonicRegression = defaultCopy(extra)
 
-  private def extractWeightedLabeledPoints(dataset: DataFrame): RDD[(Double, Double, Double)] = {
+  private[this] def extractWeightedLabeledPoints(
+      dataset: DataFrame): RDD[(Double, Double, Double)] = {
+
     dataset.select($(labelCol), $(featuresCol), $(weightCol))
-      .map { case Row(label: Double, features: Double, weights: Double) => (label, features, weights) }
+      .map {
+        case Row(label: Double, features: Double, weights: Double) => (label, features, weights)
+      }
   }
 
   override protected def train(dataset: DataFrame): IsotonicRegressionModel = {
@@ -71,27 +105,37 @@ class IsotonicRegression(override val uid: String)
     val handlePersistence = dataset.rdd.getStorageLevel == StorageLevel.NONE
     if (handlePersistence) instances.persist(StorageLevel.MEMORY_AND_DISK)
 
-    val isotonicRegression = new org.apache.spark.mllib.regression.IsotonicRegression().setIsotonic($(isotonicParam))
-    val model = isotonicRegression.run(instances)
+    val isotonicRegression = new MLlibIsotonicRegression().setIsotonic($(isotonicParam))
+    val parentModel = isotonicRegression.run(instances)
 
-    new IsotonicRegressionModel(uid, model)
+    new IsotonicRegressionModel(uid, parentModel)
   }
 }
 
+/**
+ * :: Experimental ::
+ * Model fitted by IsotonicRegression.
+ * Predicts using a piecewise linear function.
+ *
+ * For detailed rules see [[org.apache.spark.mllib.regression.IsotonicRegressionModel.predict()]].
+ *
+ * @param parentModel A [[org.apache.spark.mllib.regression.IsotonicRegressionModel]]
+ *                    model trained by [[org.apache.spark.mllib.regression.IsotonicRegression]].
+ */
 class IsotonicRegressionModel private[ml] (
     override val uid: String,
-    val model: org.apache.spark.mllib.regression.IsotonicRegressionModel)
+    private[ml] val parentModel: MLlibIsotonicRegressionModel)
   extends RegressionModel[Double, IsotonicRegressionModel]
   with IsotonicRegressionParams {
 
   override def featuresDataType: DataType = DoubleType
 
   override protected def predict(features: Double): Double = {
-    model.predict(features)
+    parentModel.predict(features)
   }
 
   override def copy(extra: ParamMap): IsotonicRegressionModel = {
-    copyValues(new IsotonicRegressionModel(uid, model), extra)
+    copyValues(new IsotonicRegressionModel(uid, parentModel), extra)
   }
 }
 

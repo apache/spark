@@ -1,13 +1,27 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package org.apache.spark.ml.regression
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.ml.classification.{LogisticRegressionModel, LogisticRegression}
 import org.apache.spark.ml.param.ParamsSuite
-import org.apache.spark.mllib.classification.LogisticRegressionSuite._
-import org.apache.spark.mllib.linalg.Vectors
-import org.apache.spark.mllib.util.{LinearDataGenerator, MLlibTestSparkContext}
-import org.apache.spark.sql.{Row, DataFrame}
+import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.types.{DoubleType, StructField, StructType}
+import org.apache.spark.sql.{DataFrame, Row}
 
 class IsotonicRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
   private val schema = StructType(
@@ -16,28 +30,25 @@ class IsotonicRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
       StructField("features", DoubleType),
       StructField("weight", DoubleType)))
 
-  @transient var dataset: DataFrame = _
+  private val predictionSchema = StructType(Array(StructField("features", DoubleType)))
 
-  override def beforeAll(): Unit = {
-    super.beforeAll()
-    val data = sc.parallelize(
-      Seq(
-        Row(1d, 0d, 1d),
-        Row(2d, 1d, 1d),
-        Row(3d, 2d, 1d),
-        Row(1d, 3d, 1d),
-        Row(6d, 4d, 1d),
-        Row(17d, 5d, 1d),
-        Row(16d, 6d, 1d),
-        Row(17d, 7d, 1d),
-        Row(18d, 8d, 1d)))
+  private def generateIsotonicInput(labels: Seq[Double]): DataFrame = {
+    val data = Seq.tabulate(labels.size)(i => Row(labels(i), i.toDouble, 1d))
+    val parallelData = sc.parallelize(data)
 
-    dataset = sqlContext.createDataFrame(data, schema)
+    sqlContext.createDataFrame(parallelData, schema)
+  }
+
+  private def generatePredictionInput(features: Seq[Double]): DataFrame = {
+    val data = Seq.tabulate(features.size)(i => Row(features(i)))
+
+    val parallelData = sc.parallelize(data)
+    sqlContext.createDataFrame(parallelData, predictionSchema)
   }
 
   test("isotonic regression") {
-    val trainer = new IsotonicRegression()
-      .setIsotonicParam(true)
+    val dataset = generateIsotonicInput(Seq(1, 2, 3, 1, 6, 17, 16, 17, 18))
+    val trainer = new IsotonicRegression().setIsotonicParam(true)
 
     val model = trainer.fit(dataset)
 
@@ -50,12 +61,30 @@ class IsotonicRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
 
     assert(predictions === Array(1, 2, 2, 2, 6, 16.5, 16.5, 17, 18))
 
-    assert(model.model.boundaries === Array(0, 1, 3, 4, 5, 6, 7, 8))
-    assert(model.model.predictions === Array(1, 2, 2, 6, 16.5, 16.5, 17.0, 18.0))
-    assert(model.model.isotonic)
+    assert(model.parentModel.boundaries === Array(0, 1, 3, 4, 5, 6, 7, 8))
+    assert(model.parentModel.predictions === Array(1, 2, 2, 6, 16.5, 16.5, 17.0, 18.0))
+    assert(model.parentModel.isotonic)
+  }
+
+  test("antitonic regression") {
+    val dataset = generateIsotonicInput(Seq(7, 5, 3, 5, 1))
+    val trainer = new IsotonicRegression().setIsotonicParam(false)
+
+    val model = trainer.fit(dataset)
+    val features = generatePredictionInput(Seq(-2.0, -1.0, 0.5, 0.75, 1.0, 2.0, 9.0))
+
+    val predictions = model
+      .transform(features)
+      .select("prediction").map {
+      case Row(pred) => pred
+    }
+    .collect()
+
+    assert(predictions === Array(7, 7, 6, 5.5, 5, 4, 1))
   }
 
   test("params") {
+    val dataset = generateIsotonicInput(Seq(1, 2, 3))
     val ir = new IsotonicRegression
     ParamsSuite.checkParams(ir)
     val model = ir.fit(dataset)
@@ -63,6 +92,7 @@ class IsotonicRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
   }
 
   test("isotonic regression: default params") {
+    val dataset = generateIsotonicInput(Seq(1, 2, 3))
     val ir = new IsotonicRegression()
     assert(ir.getLabelCol === "label")
     assert(ir.getFeaturesCol === "features")
