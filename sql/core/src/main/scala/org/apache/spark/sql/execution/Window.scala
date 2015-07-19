@@ -119,10 +119,8 @@ case class Window(
         // Although input rows are grouped based on windowSpec.partitionSpec, we need to
         // know when we have a new partition.
         // This is to manually construct an ordering that can be used to compare rows.
-        // TODO: We may want to have a newOrdering that takes BoundReferences.
-        // So, we can take advantave of code gen.
         private val partitionOrdering: Ordering[InternalRow] =
-          RowOrdering.forSchema(windowSpec.partitionSpec.map(_.dataType))
+          newOrdering(windowSpec.partitionSpec.map(SortOrder(_, Ascending)), child.output)
 
         // This is used to project expressions for the partition specification.
         protected val partitionGenerator =

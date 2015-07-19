@@ -29,7 +29,7 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.util.collection.ExternalSorter
 import org.apache.spark.util.collection.unsafe.sort.PrefixComparator
-import org.apache.spark.util.{CompletionIterator, MutablePair}
+import org.apache.spark.util.{CompletionIterator, MutablePair, Utils}
 import org.apache.spark.{HashPartitioner, SparkEnv}
 
 /**
@@ -176,7 +176,24 @@ case class TakeOrderedAndProject(
 
   override def outputPartitioning: Partitioning = SinglePartition
 
-  private val ord: RowOrdering = new RowOrdering(sortOrder, child.output)
+  private val ord: Ordering[InternalRow] = {
+    // This wrapper works around the fact that generated orderings are not Serializable.
+    // Normally we do not run into this problem because the code generation is performed on
+    // the executors, but Spark's takeOrdered requires a Serializable Ordering to be
+    // created on the driver. This wrapper is an easy workaround to let us use generated
+    // orderings here without having to rewrite or modify takeOrdered.
+    val schema = child.output
+    val sortOrderCopy = sortOrder
+    new Ordering[InternalRow] {
+      @transient var _ordering = buildOrdering()
+      override def compare(x: InternalRow, y: InternalRow): Int = _ordering.compare(x, y)
+      def buildOrdering(): Ordering[InternalRow] = newOrdering(sortOrderCopy, schema)
+      private def readObject(in: java.io.ObjectInputStream): Unit = Utils.tryOrIOException {
+        in.defaultReadObject()
+        _ordering = buildOrdering()
+      }
+    }
+  }
 
   // TODO: remove @transient after figure out how to clean closure at InsertIntoHiveTable.
   @transient private val projection = projectList.map(new InterpretedProjection(_, child.output))
