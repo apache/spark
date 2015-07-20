@@ -381,6 +381,21 @@ public final class UnsafeRow extends MutableRow {
     return false;
   }
 
+  /**
+   * Returns the underline bytes for this UnsafeRow.
+   */
+  public byte[] getBytes() {
+    if (baseObject instanceof byte[] && baseOffset == PlatformDependent.BYTE_ARRAY_OFFSET
+        && (((byte[]) baseObject).length == sizeInBytes)) {
+      return (byte[]) baseObject;
+    } else {
+      byte[] bytes = new byte[sizeInBytes];
+      PlatformDependent.copyMemory(baseObject, baseOffset, bytes,
+        PlatformDependent.BYTE_ARRAY_OFFSET, sizeInBytes);
+      return bytes;
+    }
+  }
+
   // This is for debugging
   @Override
   public String toString(){
@@ -395,6 +410,6 @@ public final class UnsafeRow extends MutableRow {
 
   @Override
   public boolean anyNull() {
-    return BitSetMethods.anySet(baseObject, baseOffset, bitSetWidthInBytes);
+    return BitSetMethods.anySet(baseObject, baseOffset, bitSetWidthInBytes / 8);
   }
 }

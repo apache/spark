@@ -93,6 +93,10 @@ object UnsafeProjection {
   def create(exprs: Seq[Expression]): UnsafeProjection = {
     GenerateUnsafeProjection.generate(exprs)
   }
+
+  def create(exprs: Seq[Expression], inputSchema: Seq[Attribute]): UnsafeProjection = {
+    create(exprs.map(BindReferences.bindReference(_, inputSchema)))
+  }
 }
 
 /**

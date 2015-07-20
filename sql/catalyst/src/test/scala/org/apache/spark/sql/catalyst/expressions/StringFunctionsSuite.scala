@@ -302,7 +302,7 @@ class StringFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("FORMAT") {
     val f = 'f.string.at(0)
     val d1 = 'd.int.at(1)
-    val s1 = 's.int.at(2)
+    val s1 = 's.string.at(2)
 
     val row1 = create_row("aa%d%s", 12, "cc")
     val row2 = create_row(null, 12, "cc")

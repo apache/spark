@@ -103,4 +103,14 @@ trait HashJoin {
       }
     }
   }
+
+  protected[this] def buildHashRelation(buildIter: Iterator[InternalRow]): HashedRelation = {
+    if (self.codegenEnabled && buildKeys.map(_.dataType).forall(UnsafeColumnWriter.canEmbed(_))) {
+      UnsafeHashedRelation(buildIter,
+        buildKeys.map(BindReferences.bindReference(_, buildPlan.output)),
+        buildPlan.schema)
+    } else {
+      HashedRelation(buildIter, buildSideKeyGenerator)
+    }
+  }
 }

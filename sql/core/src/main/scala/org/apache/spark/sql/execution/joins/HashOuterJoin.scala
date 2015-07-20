@@ -38,7 +38,7 @@ trait HashOuterJoin {
   val left: SparkPlan
   val right: SparkPlan
 
-override def outputPartitioning: Partitioning = joinType match {
+  override def outputPartitioning: Partitioning = joinType match {
     case LeftOuter => left.outputPartitioning
     case RightOuter => right.outputPartitioning
     case FullOuter => UnknownPartitioning(left.outputPartitioning.numPartitions)
@@ -56,6 +56,31 @@ override def outputPartitioning: Partitioning = joinType match {
         left.output.map(_.withNullability(true)) ++ right.output.map(_.withNullability(true))
       case x =>
         throw new IllegalArgumentException(s"HashOuterJoin should not take $x as the JoinType")
+    }
+  }
+
+  protected[this] lazy val (buildPlan, streamedPlan) = joinType match {
+    case RightOuter => (left, right)
+    case LeftOuter => (right, left)
+    case x =>
+      throw new IllegalArgumentException(
+        s"BroadcastHashOuterJoin should not take $x as the JoinType")
+  }
+
+  protected[this] lazy val (buildKeys, streamedKeys) = joinType match {
+    case RightOuter => (leftKeys, rightKeys)
+    case LeftOuter => (rightKeys, leftKeys)
+    case x =>
+      throw new IllegalArgumentException(
+        s"BroadcastHashOuterJoin should not take $x as the JoinType")
+  }
+
+  protected[this] def streamedKeyGenerator(): Projection = {
+    if (self.codegenEnabled &&
+        streamedKeys.map(_.dataType).forall(UnsafeColumnWriter.canEmbed(_))) {
+      UnsafeProjection.create(streamedKeys, streamedPlan.output)
+    } else {
+      newProjection(streamedKeys, streamedPlan.output)
     }
   }
 
@@ -77,8 +102,12 @@ override def outputPartitioning: Partitioning = joinType match {
       rightIter: Iterable[InternalRow]): Iterator[InternalRow] = {
     val ret: Iterable[InternalRow] = {
       if (!key.anyNull) {
-        val temp = rightIter.collect {
-          case r if boundCondition(joinedRow.withRight(r)) => joinedRow.copy()
+        val temp = if (rightIter != null) {
+          rightIter.collect {
+            case r if boundCondition(joinedRow.withRight(r)) => joinedRow.copy()
+          }
+        } else {
+          List()
         }
         if (temp.isEmpty) {
           joinedRow.withRight(rightNullRow).copy :: Nil
@@ -98,9 +127,13 @@ override def outputPartitioning: Partitioning = joinType match {
       joinedRow: JoinedRow): Iterator[InternalRow] = {
     val ret: Iterable[InternalRow] = {
       if (!key.anyNull) {
-        val temp = leftIter.collect {
-          case l if boundCondition(joinedRow.withLeft(l)) =>
-            joinedRow.copy()
+        val temp = if (leftIter != null) {
+          leftIter.collect {
+            case l if boundCondition(joinedRow.withLeft(l)) =>
+              joinedRow.copy()
+          }
+        } else {
+          List()
         }
         if (temp.isEmpty) {
           joinedRow.withLeft(leftNullRow).copy :: Nil
@@ -178,5 +211,15 @@ override def outputPartitioning: Partitioning = joinType match {
     }
 
     hashTable
+  }
+
+  protected[this] def buildHashRelation(buildIter: Iterator[InternalRow]): HashedRelation = {
+    if (self.codegenEnabled && buildKeys.map(_.dataType).forall(UnsafeColumnWriter.canEmbed(_))) {
+      UnsafeHashedRelation(buildIter,
+        buildKeys.map(BindReferences.bindReference(_, buildPlan.output)),
+        buildPlan.schema)
+    } else {
+      HashedRelation(buildIter, newProjection(buildKeys, buildPlan.output))
+    }
   }
 }
