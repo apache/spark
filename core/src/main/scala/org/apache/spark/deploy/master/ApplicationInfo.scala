@@ -22,7 +22,6 @@ import java.util.Date
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.deploy.ApplicationDescription
 import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.util.Utils
@@ -43,6 +42,18 @@ private[spark] class ApplicationInfo(
   @transient var endTime: Long = _
   @transient var appSource: ApplicationSource = _
 
+  // A cap on the number of executors this application can have at any given time.
+  // By default, this is infinite. Only after the first allocation request is issued
+  // by the application will this be set to a finite value.
+  @transient var executorLimit: Int = _
+
+  // A set of workers on which this application cannot launch executors.
+  // This is used to handle kill requests when `spark.executor.cores` is NOT set. In this mode,
+  // at most one executor from this application can be run on each worker. When an executor is
+  // killed, its worker is added to the blacklist to avoid having the master immediately schedule
+  // a new executor on the worker.
+  @transient var blacklistedWorkers: mutable.HashSet[String] = _
+
   @transient private var nextExecutorId: Int = _
 
   init()
@@ -60,6 +71,8 @@ private[spark] class ApplicationInfo(
     appSource = new ApplicationSource(this)
     nextExecutorId = 0
     removedExecutors = new ArrayBuffer[ExecutorDesc]
+    executorLimit = Integer.MAX_VALUE
+    blacklistedWorkers = new mutable.HashSet[String]
   }
 
   private def newExecutorId(useID: Option[Int] = None): Int = {

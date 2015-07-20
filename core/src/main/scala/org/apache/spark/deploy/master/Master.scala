@@ -468,6 +468,25 @@ private[master] class Master(
     case BoundPortsRequest => {
       context.reply(BoundPortsResponse(address.port, webUi.boundPort, restServerBoundPort))
     }
+
+    case RequestExecutors(appId, requestedTotal) =>
+      context.reply(handleRequestExecutors(appId, requestedTotal))
+
+    case KillExecutors(appId, executorIdsString) =>
+      // All executors IDs should be integers since we launched these executors.
+      // However, the kill interface on the driver side accepts strings, so we need to handle
+      // non-integer executor IDs just to be safe since the user can pass in whatever s/he wants.
+      val executorIds = executorIdsString.flatMap { executorId =>
+        try {
+          Some(executorId.toInt)
+        } catch {
+          case e: NumberFormatException =>
+            logError(s"Application $appId requested to kill an " +
+              s"executor with a non-integer ID: $executorId. Ignoring.")
+            None
+        }
+      }
+      context.reply(handleKillExecutors(appId, executorIds))
   }
 
   override def onDisconnected(address: RpcAddress): Unit = {
@@ -559,12 +578,22 @@ private[master] class Master(
       // Try to spread out each app among all the workers, until it has all its cores
       for (app <- waitingApps if app.coresLeft > 0) {
         val usableWorkers = workers.toArray.filter(_.state == WorkerState.ALIVE)
-          .filter(worker => worker.memoryFree >= app.desc.memoryPerExecutorMB &&
-            worker.coresFree >= app.desc.coresPerExecutor.getOrElse(1))
+          .filter { worker =>
+            worker.memoryFree >= app.desc.memoryPerExecutorMB &&
+            worker.coresFree >= app.desc.coresPerExecutor.getOrElse(1) &&
+            !app.blacklistedWorkers.contains(worker.id)
+          }
           .sortBy(_.coresFree).reverse
         val numUsable = usableWorkers.length
         val assigned = new Array[Int](numUsable) // Number of cores to give on each node
         var toAssign = math.min(app.coresLeft, usableWorkers.map(_.coresFree).sum)
+        // If all executors in this application have the same number of cores,
+        // use the executor limit to bound the number of cores to assign.
+        app.desc.coresPerExecutor.foreach { coresPerExecutor =>
+          val maxNewExecutors = app.executorLimit - app.executors.size
+          val maxNewCores = math.min(maxNewExecutors.toLong * coresPerExecutor, Integer.MAX_VALUE)
+          toAssign = math.min(toAssign, maxNewCores.toInt)
+        }
         var pos = 0
         while (toAssign > 0) {
           if (usableWorkers(pos).coresFree - assigned(pos) > 0) {
@@ -743,9 +772,7 @@ private[master] class Master(
       rebuildSparkUI(app)
 
       for (exec <- app.executors.values) {
-        exec.worker.removeExecutor(exec)
-        exec.worker.endpoint.send(KillExecutor(masterUrl, exec.application.id, exec.id))
-        exec.state = ExecutorState.KILLED
+        killExecutor(exec)
       }
       app.markFinished(state)
       if (state != ApplicationState.FINISHED) {
@@ -759,6 +786,86 @@ private[master] class Master(
         w.endpoint.send(ApplicationFinished(app.id))
       }
     }
+  }
+
+  /**
+   * Handle a request from an application to set the executors limit for this application.
+   * @return whether the application has previously registered with this Master.
+   */
+  private def handleRequestExecutors(appId: String, requestedTotal: Int): Boolean = {
+    idToApp.get(appId) match {
+      case Some(appInfo) =>
+        logInfo(s"Application $appId requested to set total executors to $requestedTotal.")
+        appInfo.executorLimit = requestedTotal
+
+        // We may have previously added workers to the blacklist. Now that the application
+        // explicitly requests more executors, we can fulfill the request by removing workers
+        // from the blacklist, if any.
+        if (appInfo.desc.coresPerExecutor.isEmpty) {
+          val numMissingExecutors = appInfo.executorLimit - appInfo.executors.size
+          if (numMissingExecutors > 0) {
+            appInfo.blacklistedWorkers.take(numMissingExecutors).foreach { workerId =>
+              appInfo.blacklistedWorkers.remove(workerId)
+            }
+          }
+        }
+        schedule()
+        true
+      case None =>
+        logWarning(s"Unknown application $appId requested $requestedTotal total executors.")
+        false
+    }
+  }
+
+  /**
+   * Handle a request from an application to kill the specified list of executors.
+   * @return whether the application has previously registered with this Master.
+   */
+  private def handleKillExecutors(appId: String, executorIds: Seq[Int]): Boolean = {
+    idToApp.get(appId) match {
+      case Some(appInfo) =>
+        val (known, unknown) = executorIds.partition(appInfo.executors.contains)
+        if (known.nonEmpty) {
+          logInfo(s"Application $appId attempted to kill executors: " + known.mkString(", "))
+          val executors = known.map { executorId => appInfo.executors(executorId) }
+          executors.foreach { desc => killExecutor(desc) }
+
+          // If cores per executor is not set, then each worker runs at most one executor.
+          // In this case, after killing an executor we need to blacklist its worker since
+          // we don't want the worker to immediately launch a new executor.
+          if (appInfo.desc.coresPerExecutor.isEmpty) {
+            // There may be executors waiting to be scheduled once space frees up.
+            // If so, keep around a few non-blacklisted workers to launch these executors.
+            // Note that this assumes the executor limit has already been adjusted downwards
+            // through a separate request message.
+            val numExecutorsAfterKill = appInfo.executors.size - known.size
+            val numWaitingExecutors = math.max(0, appInfo.executorLimit - numExecutorsAfterKill)
+            val workersToBlacklist = executors.drop(numWaitingExecutors).map(_.worker.id)
+            workersToBlacklist.foreach { workerId => appInfo.blacklistedWorkers += workerId }
+          }
+        }
+
+        // Warn against executor IDs we don't know about
+        if (unknown.nonEmpty) {
+          logWarning(s"Application $appId attempted to kill non-existent executors: "
+            + unknown.mkString(", "))
+        }
+
+        schedule()
+        true
+      case None =>
+        logWarning(s"Unregistered application $appId requested us to kill executors!")
+        false
+    }
+  }
+
+  /**
+   * Ask the Worker on which the specified executor is launched to kill the executor.
+   */
+  private def killExecutor(exec: ExecutorDesc): Unit = {
+    exec.worker.removeExecutor(exec)
+    exec.worker.endpoint.send(KillExecutor(masterUrl, exec.application.id, exec.id))
+    exec.state = ExecutorState.KILLED
   }
 
   /**
