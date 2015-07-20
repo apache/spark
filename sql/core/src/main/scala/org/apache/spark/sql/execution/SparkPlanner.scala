@@ -21,6 +21,7 @@ import org.apache.spark.SparkContext
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.execution.TakeOrderedAndProject
 import org.apache.spark.sql.sources.DataSourceStrategy
 
 @Experimental
@@ -37,7 +38,7 @@ class SparkPlanner(val sqlContext: SQLContext) extends org.apache.spark.sql.exec
     sqlContext.experimental.extraStrategies ++ (
       DataSourceStrategy ::
         DDLStrategy ::
-        TakeOrdered ::
+        TakeOrderedAndProject ::
         HashAggregation ::
         LeftSemiJoin ::
         HashJoin ::
@@ -61,10 +62,10 @@ class SparkPlanner(val sqlContext: SQLContext) extends org.apache.spark.sql.exec
    * provided `scanBuilder` function so that it can avoid unnecessary column materialization.
    */
   def pruneFilterProject(
-    projectList: Seq[NamedExpression],
-    filterPredicates: Seq[Expression],
-    prunePushedDownFilters: Seq[Expression] => Seq[Expression],
-    scanBuilder: Seq[Attribute] => SparkPlan): SparkPlan = {
+                          projectList: Seq[NamedExpression],
+                          filterPredicates: Seq[Expression],
+                          prunePushedDownFilters: Seq[Expression] => Seq[Expression],
+                          scanBuilder: Seq[Attribute] => SparkPlan): SparkPlan = {
 
     val projectSet = AttributeSet(projectList.flatMap(_.references))
     val filterSet = AttributeSet(filterPredicates.flatMap(_.references))

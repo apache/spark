@@ -24,7 +24,7 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.{Logging, SparkConf}
 import org.apache.spark.storage.StreamBlockId
 import org.apache.spark.streaming.util.RecurringTimer
-import org.apache.spark.util.{SystemClock, Utils}
+import org.apache.spark.util.SystemClock
 
 /** Listener object for BlockGenerator events */
 private[streaming] trait BlockGeneratorListener {
@@ -80,6 +80,8 @@ private[streaming] class BlockGenerator(
 
   private val clock = new SystemClock()
   private val blockIntervalMs = conf.getTimeAsMs("spark.streaming.blockInterval", "200ms")
+  require(blockIntervalMs > 0, s"'spark.streaming.blockInterval' should be a positive value")
+
   private val blockIntervalTimer =
     new RecurringTimer(clock, blockIntervalMs, updateCurrentBuffer, "BlockGenerator")
   private val blockQueueSize = conf.getInt("spark.streaming.blockQueueSize", 10)
@@ -164,7 +166,7 @@ private[streaming] class BlockGenerator(
   private def keepPushingBlocks() {
     logInfo("Started block pushing thread")
     try {
-      while(!stopped) {
+      while (!stopped) {
         Option(blocksForPushing.poll(100, TimeUnit.MILLISECONDS)) match {
           case Some(block) => pushBlock(block)
           case None =>
@@ -191,7 +193,7 @@ private[streaming] class BlockGenerator(
     logError(message, t)
     listener.onError(message, t)
   }
-  
+
   private def pushBlock(block: Block) {
     listener.onPushBlock(block.id, block.buffer)
     logInfo("Pushed block " + block.id)

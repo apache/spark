@@ -20,7 +20,7 @@
 
 #' structType
 #'
-#' Create a structType object that contains the metadata for a DataFrame. Intended for 
+#' Create a structType object that contains the metadata for a DataFrame. Intended for
 #' use with createDataFrame and toDF.
 #'
 #' @param x a structField object (created with the field() function)
@@ -123,6 +123,7 @@ structField.character <- function(x, type, nullable = TRUE) {
   }
   options <- c("byte",
                "integer",
+               "float",
                "double",
                "numeric",
                "character",

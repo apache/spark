@@ -100,7 +100,7 @@ private[spark] class TachyonBlockManager() extends ExternalBlockManager with Log
     try {
       os.write(bytes.array())
     } catch {
-      case NonFatal(e) => 
+      case NonFatal(e) =>
         logWarning(s"Failed to put bytes of block $blockId into Tachyon", e)
         os.cancel()
     } finally {
@@ -114,7 +114,7 @@ private[spark] class TachyonBlockManager() extends ExternalBlockManager with Log
     try {
       blockManager.dataSerializeStream(blockId, os, values)
     } catch {
-      case NonFatal(e) => 
+      case NonFatal(e) =>
         logWarning(s"Failed to put values of block $blockId into Tachyon", e)
         os.cancel()
     } finally {

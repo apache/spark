@@ -212,6 +212,8 @@ public class JavaAPISuite implements Serializable {
 
     JavaPairRDD<Integer, Integer> repartitioned =
         rdd.repartitionAndSortWithinPartitions(partitioner);
+    Assert.assertTrue(repartitioned.partitioner().isPresent());
+    Assert.assertEquals(repartitioned.partitioner().get(), partitioner);
     List<List<Tuple2<Integer, Integer>>> partitions = repartitioned.glom().collect();
     Assert.assertEquals(partitions.get(0), Arrays.asList(new Tuple2<Integer, Integer>(0, 5),
         new Tuple2<Integer, Integer>(0, 8), new Tuple2<Integer, Integer>(2, 6)));

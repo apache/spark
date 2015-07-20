@@ -19,15 +19,15 @@ package org.apache.spark.ml
 
 import scala.annotation.varargs
 
-import org.apache.spark.annotation.AlphaComponent
-import org.apache.spark.ml.param.{ParamMap, ParamPair, Params}
+import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.ml.param.{ParamMap, ParamPair}
 import org.apache.spark.sql.DataFrame
 
 /**
- * :: AlphaComponent ::
+ * :: DeveloperApi ::
  * Abstract class for estimators that fit models to data.
  */
-@AlphaComponent
+@DeveloperApi
 abstract class Estimator[M <: Model[M]] extends PipelineStage {
 
   /**
@@ -78,7 +78,5 @@ abstract class Estimator[M <: Model[M]] extends PipelineStage {
     paramMaps.map(fit(dataset, _))
   }
 
-  override def copy(extra: ParamMap): Estimator[M] = {
-    super.copy(extra).asInstanceOf[Estimator[M]]
-  }
+  override def copy(extra: ParamMap): Estimator[M]
 }

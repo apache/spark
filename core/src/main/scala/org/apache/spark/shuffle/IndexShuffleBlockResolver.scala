@@ -114,7 +114,7 @@ private[spark] class IndexShuffleBlockResolver(conf: SparkConf) extends ShuffleB
 }
 
 private[spark] object IndexShuffleBlockResolver {
-  // No-op reduce ID used in interactions with disk store and BlockObjectWriter.
+  // No-op reduce ID used in interactions with disk store and DiskBlockObjectWriter.
   // The disk store currently expects puts to relate to a (map, reduce) pair, but in the sort
   // shuffle outputs for several reduces are glommed into a single file.
   // TODO: Avoid this entirely by having the DiskBlockObjectWriter not require a BlockId.

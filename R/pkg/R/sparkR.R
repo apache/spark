@@ -17,10 +17,6 @@
 
 .sparkREnv <- new.env()
 
-sparkR.onLoad <- function(libname, pkgname) {
-  .sparkREnv$libname <- libname
-}
-
 # Utility function that returns TRUE if we have an active connection to the
 # backend and FALSE otherwise
 connExists <- function(env) {
@@ -43,7 +39,7 @@ sparkR.stop <- function() {
       callJMethod(sc, "stop")
       rm(".sparkRjsc", envir = env)
     }
-  
+
     if (exists(".backendLaunched", envir = env)) {
       callJStatic("SparkRHandler", "stopBackend")
     }
@@ -80,7 +76,7 @@ sparkR.stop <- function() {
 #' @param sparkEnvir Named list of environment variables to set on worker nodes.
 #' @param sparkExecutorEnv Named list of environment variables to be used when launching executors.
 #' @param sparkJars Character string vector of jar files to pass to the worker nodes.
-#' @param sparkRLibDir The path where R is installed on the worker nodes.
+#' @param sparkPackages Character string vector of packages from spark-packages.org
 #' @export
 #' @examples
 #'\dontrun{
@@ -100,14 +96,15 @@ sparkR.init <- function(
   sparkEnvir = list(),
   sparkExecutorEnv = list(),
   sparkJars = "",
-  sparkRLibDir = "") {
+  sparkPackages = "") {
 
   if (exists(".sparkRjsc", envir = .sparkREnv)) {
-    cat("Re-using existing Spark Context. Please stop SparkR with sparkR.stop() or restart R to create a new Spark Context\n")
+    cat(paste("Re-using existing Spark Context.",
+              "Please stop SparkR with sparkR.stop() or restart R to create a new Spark Context\n"))
     return(get(".sparkRjsc", envir = .sparkREnv))
   }
 
-  sparkMem <- Sys.getenv("SPARK_MEM", "512m")
+  sparkMem <- Sys.getenv("SPARK_MEM", "1024m")
   jars <- suppressWarnings(normalizePath(as.character(sparkJars)))
 
   # Classpath separator is ";" on Windows
@@ -129,7 +126,8 @@ sparkR.init <- function(
         args = path,
         sparkHome = sparkHome,
         jars = jars,
-        sparkSubmitOpts = Sys.getenv("SPARKR_SUBMIT_ARGS", "sparkr-shell"))
+        sparkSubmitOpts = Sys.getenv("SPARKR_SUBMIT_ARGS", "sparkr-shell"),
+        packages = sparkPackages)
     # wait atmost 100 seconds for JVM to launch
     wait <- 0.1
     for (i in 1:25) {
@@ -142,7 +140,7 @@ sparkR.init <- function(
     if (!file.exists(path)) {
       stop("JVM is not ready after 10 seconds")
     }
-    f <- file(path, open='rb')
+    f <- file(path, open="rb")
     backendPort <- readInt(f)
     monitorPort <- readInt(f)
     close(f)
@@ -166,25 +164,23 @@ sparkR.init <- function(
     sparkHome <- normalizePath(sparkHome)
   }
 
-  if (nchar(sparkRLibDir) != 0) {
-    .sparkREnv$libname <- sparkRLibDir
-  }
-
   sparkEnvirMap <- new.env()
   for (varname in names(sparkEnvir)) {
     sparkEnvirMap[[varname]] <- sparkEnvir[[varname]]
   }
-  
+
   sparkExecutorEnvMap <- new.env()
   if (!any(names(sparkExecutorEnv) == "LD_LIBRARY_PATH")) {
-    sparkExecutorEnvMap[["LD_LIBRARY_PATH"]] <- paste0("$LD_LIBRARY_PATH:",Sys.getenv("LD_LIBRARY_PATH"))
+    sparkExecutorEnvMap[["LD_LIBRARY_PATH"]] <-
+      paste0("$LD_LIBRARY_PATH:",Sys.getenv("LD_LIBRARY_PATH"))
   }
   for (varname in names(sparkExecutorEnv)) {
     sparkExecutorEnvMap[[varname]] <- sparkExecutorEnv[[varname]]
   }
 
   nonEmptyJars <- Filter(function(x) { x != "" }, jars)
-  localJarPaths <- sapply(nonEmptyJars, function(j) { utils::URLencode(paste("file:", uriSep, j, sep = "")) })
+  localJarPaths <- sapply(nonEmptyJars,
+                          function(j) { utils::URLencode(paste("file:", uriSep, j, sep = "")) })
 
   # Set the start time to identify jobjs
   # Seconds resolution is good enough for this purpose, so use ints
@@ -214,7 +210,7 @@ sparkR.init <- function(
 
 #' Initialize a new SQLContext.
 #'
-#' This function creates a SparkContext from an existing JavaSparkContext and 
+#' This function creates a SparkContext from an existing JavaSparkContext and
 #' then uses it to initialize a new SQLContext
 #'
 #' @param jsc The existing JavaSparkContext created with SparkR.init()
@@ -222,19 +218,26 @@ sparkR.init <- function(
 #' @examples
 #'\dontrun{
 #' sc <- sparkR.init()
-#' sqlCtx <- sparkRSQL.init(sc)
+#' sqlContext <- sparkRSQL.init(sc)
 #'}
 
-sparkRSQL.init <- function(jsc) {
+sparkRSQL.init <- function(jsc = NULL) {
   if (exists(".sparkRSQLsc", envir = .sparkREnv)) {
     return(get(".sparkRSQLsc", envir = .sparkREnv))
   }
 
-  sqlCtx <- callJStatic("org.apache.spark.sql.api.r.SQLUtils",
-                        "createSQLContext",
-                        jsc)
-  assign(".sparkRSQLsc", sqlCtx, envir = .sparkREnv)
-  sqlCtx
+  # If jsc is NULL, create a Spark Context
+  sc <- if (is.null(jsc)) {
+    sparkR.init()
+  } else {
+    jsc
+  }
+
+  sqlContext <- callJStatic("org.apache.spark.sql.api.r.SQLUtils",
+                            "createSQLContext",
+                            sc)
+  assign(".sparkRSQLsc", sqlContext, envir = .sparkREnv)
+  sqlContext
 }
 
 #' Initialize a new HiveContext.
@@ -246,15 +249,22 @@ sparkRSQL.init <- function(jsc) {
 #' @examples
 #'\dontrun{
 #' sc <- sparkR.init()
-#' sqlCtx <- sparkRHive.init(sc)
+#' sqlContext <- sparkRHive.init(sc)
 #'}
 
-sparkRHive.init <- function(jsc) {
+sparkRHive.init <- function(jsc = NULL) {
   if (exists(".sparkRHivesc", envir = .sparkREnv)) {
     return(get(".sparkRHivesc", envir = .sparkREnv))
   }
 
-  ssc <- callJMethod(jsc, "sc")
+  # If jsc is NULL, create a Spark Context
+  sc <- if (is.null(jsc)) {
+    sparkR.init()
+  } else {
+    jsc
+  }
+
+  ssc <- callJMethod(sc, "sc")
   hiveCtx <- tryCatch({
     newJObject("org.apache.spark.sql.hive.HiveContext", ssc)
   }, error = function(err) {
@@ -263,4 +273,48 @@ sparkRHive.init <- function(jsc) {
 
   assign(".sparkRHivesc", hiveCtx, envir = .sparkREnv)
   hiveCtx
+}
+
+#' Assigns a group ID to all the jobs started by this thread until the group ID is set to a
+#' different value or cleared.
+#'
+#' @param sc existing spark context
+#' @param groupid the ID to be assigned to job groups
+#' @param description description for the the job group ID
+#' @param interruptOnCancel flag to indicate if the job is interrupted on job cancellation
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' setJobGroup(sc, "myJobGroup", "My job group description", TRUE)
+#'}
+
+setJobGroup <- function(sc, groupId, description, interruptOnCancel) {
+  callJMethod(sc, "setJobGroup", groupId, description, interruptOnCancel)
+}
+
+#' Clear current job group ID and its description
+#'
+#' @param sc existing spark context
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' clearJobGroup(sc)
+#'}
+
+clearJobGroup <- function(sc) {
+  callJMethod(sc, "clearJobGroup")
+}
+
+#' Cancel active jobs for the specified group
+#'
+#' @param sc existing spark context
+#' @param groupId the ID of job group to be cancelled
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' cancelJobGroup(sc, "myJobGroup")
+#'}
+
+cancelJobGroup <- function(sc, groupId) {
+  callJMethod(sc, "cancelJobGroup", groupId)
 }

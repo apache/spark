@@ -38,7 +38,7 @@ import org.apache.spark.graphx._
  */
 object TriangleCount {
 
-  def run[VD: ClassTag, ED: ClassTag](graph: Graph[VD,ED]): Graph[Int, ED] = {
+  def run[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]): Graph[Int, ED] = {
     // Remove redundant edges
     val g = graph.groupEdges((a, b) => a).cache()
 
@@ -49,7 +49,7 @@ object TriangleCount {
         var i = 0
         while (i < nbrs.size) {
           // prevent self cycle
-          if(nbrs(i) != vid) {
+          if (nbrs(i) != vid) {
             set.add(nbrs(i))
           }
           i += 1

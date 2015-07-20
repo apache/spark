@@ -17,9 +17,11 @@
 
 package org.apache.spark.ml.classification
 
-import org.scalatest.FunSuite
-
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.impl.TreeTests
+import org.apache.spark.ml.param.ParamsSuite
+import org.apache.spark.ml.regression.DecisionTreeRegressionModel
+import org.apache.spark.ml.tree.LeafNode
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.{EnsembleTestHelper, GradientBoostedTrees => OldGBT}
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo}
@@ -31,7 +33,7 @@ import org.apache.spark.sql.DataFrame
 /**
  * Test suite for [[GBTClassifier]].
  */
-class GBTClassifierSuite extends FunSuite with MLlibTestSparkContext {
+class GBTClassifierSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   import GBTClassifierSuite.compareAPIs
 
@@ -50,6 +52,14 @@ class GBTClassifierSuite extends FunSuite with MLlibTestSparkContext {
       sc.parallelize(EnsembleTestHelper.generateOrderedLabeledPoints(numFeatures = 20, 120), 2)
     validationData =
       sc.parallelize(EnsembleTestHelper.generateOrderedLabeledPoints(numFeatures = 20, 80), 2)
+  }
+
+  test("params") {
+    ParamsSuite.checkParams(new GBTClassifier)
+    val model = new GBTClassificationModel("gbtc",
+      Array(new DecisionTreeRegressionModel("dtr", new LeafNode(0.0, 0.0))),
+      Array(1.0))
+    ParamsSuite.checkParams(model)
   }
 
   test("Binary classification with continuous features: Log Loss") {
@@ -128,7 +138,7 @@ private object GBTClassifierSuite {
     val oldModel = oldGBT.run(data)
     val newData: DataFrame = TreeTests.setMetadata(data, categoricalFeatures, numClasses = 2)
     val newModel = gbt.fit(newData)
-    // Use parent, fittingParamMap from newTree since these are not checked anyways.
+    // Use parent from newTree since this is not checked anyways.
     val oldModelAsNew = GBTClassificationModel.fromOld(
       oldModel, newModel.parent.asInstanceOf[GBTClassifier], categoricalFeatures)
     TreeTests.checkEqual(oldModelAsNew, newModel)

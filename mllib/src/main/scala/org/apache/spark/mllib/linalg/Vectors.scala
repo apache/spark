@@ -28,7 +28,7 @@ import breeze.linalg.{DenseVector => BDV, SparseVector => BSV, Vector => BV}
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.mllib.util.NumericParser
-import org.apache.spark.sql.Row
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.GenericMutableRow
 import org.apache.spark.sql.types._
 
@@ -175,29 +175,28 @@ private[spark] class VectorUDT extends UserDefinedType[Vector] {
       StructField("values", ArrayType(DoubleType, containsNull = false), nullable = true)))
   }
 
-  override def serialize(obj: Any): Row = {
-    val row = new GenericMutableRow(4)
+  override def serialize(obj: Any): InternalRow = {
     obj match {
       case SparseVector(size, indices, values) =>
+        val row = new GenericMutableRow(4)
         row.setByte(0, 0)
         row.setInt(1, size)
         row.update(2, indices.toSeq)
         row.update(3, values.toSeq)
+        row
       case DenseVector(values) =>
+        val row = new GenericMutableRow(4)
         row.setByte(0, 1)
         row.setNullAt(1)
         row.setNullAt(2)
         row.update(3, values.toSeq)
+        row
     }
-    row
   }
 
   override def deserialize(datum: Any): Vector = {
     datum match {
-      // TODO: something wrong with UDT serialization
-      case v: Vector =>
-        v
-      case row: Row =>
+      case row: InternalRow =>
         require(row.length == 4,
           s"VectorUDT.deserialize given row with length ${row.length} but requires length == 4")
         val tpe = row.getByte(0)
@@ -225,7 +224,8 @@ private[spark] class VectorUDT extends UserDefinedType[Vector] {
     }
   }
 
-  override def hashCode: Int = 7919
+  // see [SPARK-8647], this achieves the needed constant hash code without constant no.
+  override def hashCode(): Int = classOf[VectorUDT].getName.hashCode()
 
   override def typeName: String = "vector"
 

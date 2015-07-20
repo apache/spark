@@ -55,7 +55,7 @@ private[ui] class ThriftServerSessionPage(parent: ThriftServerTab)
         Total run {sessionStat._2.totalExecution} SQL
       </h4> ++
       generateSQLStatsTable(sessionStat._2.sessionId)
-    UIUtils.headerSparkPage("ThriftServer", content, parent, Some(5000))
+    UIUtils.headerSparkPage("JDBC/ODBC Session", content, parent, Some(5000))
   }
 
   /** Generate basic stats of the streaming program */
@@ -87,7 +87,7 @@ private[ui] class ThriftServerSessionPage(parent: ThriftServerTab)
             [{id}]
           </a>
         }
-        val detail = if(info.state == ExecutionState.FAILED) info.detail else info.executePlan
+        val detail = if (info.state == ExecutionState.FAILED) info.detail else info.executePlan
         <tr>
           <td>{info.userName}</td>
           <td>

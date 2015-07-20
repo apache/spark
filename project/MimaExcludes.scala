@@ -34,10 +34,78 @@ import com.typesafe.tools.mima.core.ProblemFilters._
 object MimaExcludes {
     def excludes(version: String) =
       version match {
+        case v if v.startsWith("1.5") =>
+          Seq(
+            MimaBuild.excludeSparkPackage("deploy"),
+            // These are needed if checking against the sbt build, since they are part of
+            // the maven-generated artifacts in 1.3.
+            excludePackage("org.spark-project.jetty"),
+            MimaBuild.excludeSparkPackage("unused"),
+            // JavaRDDLike is not meant to be extended by user programs
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.api.java.JavaRDDLike.partitioner"),
+            // Modification of private static method
+            ProblemFilters.exclude[IncompatibleMethTypeProblem](
+              "org.apache.spark.streaming.kafka.KafkaUtils.org$apache$spark$streaming$kafka$KafkaUtils$$leadersForRanges"),
+            // Mima false positive (was a private[spark] class)
+            ProblemFilters.exclude[MissingClassProblem](
+              "org.apache.spark.util.collection.PairIterator"),
+            // Removing a testing method from a private class
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.streaming.kafka.KafkaTestUtils.waitUntilLeaderOffset"),
+            // While private MiMa is still not happy about the changes,
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.ml.regression.LeastSquaresAggregator.this"),
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.ml.regression.LeastSquaresCostFun.this"),
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.ml.classification.LogisticCostFun.this"),
+            // SQL execution is considered private.
+            excludePackage("org.apache.spark.sql.execution"),
+            // Parquet support is considered private.
+            excludePackage("org.apache.spark.sql.parquet"),
+            // The old JSON RDD is removed in favor of streaming Jackson
+            ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.json.JsonRDD$"),
+            ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.json.JsonRDD"),
+            // local function inside a method
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.sql.SQLContext.org$apache$spark$sql$SQLContext$$needsConversion$1")
+          ) ++ Seq(
+            // SPARK-8479 Add numNonzeros and numActives to Matrix.
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.mllib.linalg.Matrix.numNonzeros"),
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.mllib.linalg.Matrix.numActives")
+          ) ++ Seq(
+            // SPARK-8914 Remove RDDApi
+            ProblemFilters.exclude[MissingClassProblem](
+            "org.apache.spark.sql.RDDApi")
+          ) ++ Seq(
+            // SPARK-8701 Add input metadata in the batch page.
+            ProblemFilters.exclude[MissingClassProblem](
+              "org.apache.spark.streaming.scheduler.InputInfo$"),
+            ProblemFilters.exclude[MissingClassProblem](
+              "org.apache.spark.streaming.scheduler.InputInfo")
+          ) ++ Seq(
+            // SPARK-6797 Support YARN modes for SparkR
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.api.r.PairwiseRRDD.this"),
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.api.r.RRDD.createRWorker"),
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.api.r.RRDD.this"),
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.api.r.StringRRDD.this"),
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.api.r.BaseRRDD.this")
+          )
+
         case v if v.startsWith("1.4") =>
           Seq(
             MimaBuild.excludeSparkPackage("deploy"),
             MimaBuild.excludeSparkPackage("ml"),
+            // SPARK-7910 Adding a method to get the partioner to JavaRDD,
+            ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.api.java.JavaRDDLike.partitioner"),
             // SPARK-5922 Adding a generalized diff(other: RDD[(VertexId, VD)]) to VertexRDD
             ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.graphx.VertexRDD.diff"),
             // These are needed if checking against the sbt build, since they are part of
@@ -133,7 +201,10 @@ object MimaExcludes {
               "org.apache.spark.sql.parquet.TestGroupWriteSupport"),
             ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.CachedData"),
             ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.CachedData$"),
-            ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.CacheManager")
+            ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.CacheManager"),
+            // TODO: Remove the following rule once ParquetTest has been moved to src/test.
+            ProblemFilters.exclude[MissingClassProblem](
+              "org.apache.spark.sql.parquet.ParquetTest")
           ) ++ Seq(
             // SPARK-7530 Added StreamingContext.getState()
             ProblemFilters.exclude[MissingMethodProblem](
