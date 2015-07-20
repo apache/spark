@@ -18,7 +18,7 @@ mysql = ['mysql-python>=1.2.5']
 postgres = ['psycopg2>=2.6']
 optional = ['librabbitmq>=1.6.1']
 samba = ['pysmbclient>=0.1.3']
-pydruid = ['pydruid>=0.2.1']
+druid = ['pydruid>=0.2.1']
 s3 = ['boto>=2.36.0']
 
 all_dbs = postgres + mysql + hive
