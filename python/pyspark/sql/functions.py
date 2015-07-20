@@ -797,21 +797,6 @@ def weekofyear(col):
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.weekofyear(col))
 
-@since(1.5)
-def size(col):
-    """
-    Collection function: returns the length of the array or map stored in the column.
-    :param col: name of column or expression
-
-    >>> from pyspark.sql import Row
-    >>> from pyspark.sql.functions import size
-    >>> df = sqlContext.createDataFrame([Row(data=[1, 2, 3]), Row(data=[1]), Row(data=[])])
-    >>> df.select(size(df.data)).collect()
-    [Row(size(data)=3), Row(size(data)=1), Row(size(data)=0)]
-    """
-    sc = SparkContext._active_spark_context
-    return Column(sc._jvm.functions.size(_to_java_column(col)))
-
 
 @since(1.5)
 def size(col):
