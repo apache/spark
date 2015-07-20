@@ -401,7 +401,7 @@ case class StringLocate(substr: Expression, str: Expression, start: Expression)
  * Returns str, left-padded with pad to a length of len.
  */
 case class StringLPad(str: Expression, len: Expression, pad: Expression)
-  extends Expression with ImplicitCastInputTypes with CodegenFallback {
+  extends Expression with ImplicitCastInputTypes {
 
   override def children: Seq[Expression] = str :: len :: pad :: Nil
   override def foldable: Boolean = children.forall(_.foldable)
@@ -464,7 +464,7 @@ case class StringLPad(str: Expression, len: Expression, pad: Expression)
  * Returns str, right-padded with pad to a length of len.
  */
 case class StringRPad(str: Expression, len: Expression, pad: Expression)
-  extends Expression with ImplicitCastInputTypes with CodegenFallback {
+  extends Expression with ImplicitCastInputTypes {
 
   override def children: Seq[Expression] = str :: len :: pad :: Nil
   override def foldable: Boolean = children.forall(_.foldable)
