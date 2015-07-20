@@ -53,19 +53,23 @@ case class BroadcastCartesianProduct(
 
   @transient
   private val broadcastFuture = future {
-    sparkContext.broadcast(broadcast.execute().map(_.copy()))
+    val input = broadcast.execute().map(_.copy()).collect()
+    sparkContext.broadcast(input)
   }(BroadcastCartesianProduct.broadcastCartesianProductExecutionContext)
 
   protected override def doExecute(): RDD[InternalRow] = {
     val leftResults = streamed.execute().map(_.copy())
-    val rightResults = Await.result(broadcastFuture, timeout).value
+    val rightResults = Await.result(broadcastFuture, timeout)
 
-    leftResults.cartesian(rightResults).mapPartitions { iter =>
-      val joinedRow = new JoinedRow
-      buildSide match {
-        case BuildRight => iter.map(r => joinedRow(r._1, r._2))
-        case BuildLeft => iter.map(r => joinedRow(r._2, r._1))
-      }
+    leftResults.mapPartitions { streamedIter =>
+      for (x <- streamedIter; y <- rightResults.value)
+        yield {
+          val joinedRow = new JoinedRow
+          buildSide match {
+            case BuildRight => joinedRow(x, y)
+            case BuildLeft => joinedRow(y, x)
+          }
+        }
     }
   }
 }
