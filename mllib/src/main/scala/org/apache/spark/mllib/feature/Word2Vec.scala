@@ -546,7 +546,7 @@ class Word2VecModel private[spark] (
    * @param vector An array to be normalized
    * @return a new normalized array
    */
-  def euclideanNormalize(vector: Array[Float]):Array[Float] = {
+  def euclideanNormalize(vector: Array[Float]): Array[Float] = {
     val norm = blas.snrm2(vector.size, vector, 1)
 
     if (norm == 0) {
