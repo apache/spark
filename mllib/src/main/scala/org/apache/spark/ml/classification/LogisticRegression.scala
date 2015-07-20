@@ -30,10 +30,12 @@ import org.apache.spark.ml.util.Identifiable
 import org.apache.spark.mllib.linalg._
 import org.apache.spark.mllib.linalg.BLAS._
 import org.apache.spark.mllib.regression.LabeledPoint
+import org.apache.spark.mllib.evaluation.BinaryClassificationMetrics
 import org.apache.spark.mllib.stat.MultivariateOnlineSummarizer
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.sql.functions.{col, udf}
 import org.apache.spark.storage.StorageLevel
 
 /**
@@ -252,7 +254,13 @@ class LogisticRegression(override val uid: String)
 
     if (handlePersistence) instances.unpersist()
 
-    copyValues(new LogisticRegressionModel(uid, weights, intercept))
+    val model = copyValues(new LogisticRegressionModel(uid, weights, intercept))
+    val logRegSummary = new LogisticRegressionTrainingSummary(
+      model.transform(dataset),
+      $(probabilityCol),
+      $(labelCol),
+      objectiveHistory)
+    model.setSummary(logRegSummary)
   }
 
   override def copy(extra: ParamMap): LogisticRegression = defaultCopy(extra)
@@ -285,6 +293,40 @@ class LogisticRegressionModel private[ml] (
   }
 
   override val numClasses: Int = 2
+
+  private var trainingSummary: Option[LogisticRegressionTrainingSummary] = None
+
+  /**
+   * Gets summary (e.g. residuals, mse, r-squared ) of model on training set. An exception is
+   * thrown if `trainingSummary == None`.
+   */
+  def summary: LogisticRegressionTrainingSummary = trainingSummary match {
+    case Some(summ) => summ
+    case None =>
+      throw new SparkException(
+        "No training summary available for this LinearRegressionModel",
+        new NullPointerException())
+  }
+
+  private[classification] def setSummary(summary: LogisticRegressionTrainingSummary): this.type = {
+    this.trainingSummary = Some(summary)
+    this
+  }
+
+  /** Indicates whether a training summary exists for this model instance. */
+  def hasSummary: Boolean = trainingSummary.isDefined
+
+  /**
+   * Evaluates the model on a testset.
+   * @param dataset Test dataset to evaluate model on.
+   */
+  // TODO: decide on a good name before exposing to public API
+  def evaluate(dataset: DataFrame): LogisticRegressionSummary = {
+    val t = udf { features: Vector => raw2probabilityInPlace(predictRaw(features)) }
+    val labelsAndScores = dataset.
+      select(col($(labelCol)), t(col($(featuresCol))).as($(probabilityCol)))
+    new LogisticRegressionSummary(labelsAndScores, $(probabilityCol), $(labelCol))
+  }
 
   /**
    * Predict label for the given feature vector.
@@ -405,6 +447,60 @@ private[classification] class MultiClassSummarizer extends Serializable {
     }
     result
   }
+}
+
+@Experimental
+class LogisticRegressionTrainingSummary private[classification] (
+    predictions: DataFrame,
+    probabilityCol: String,
+    labelCol: String,
+    val objectiveHistory: Array[Double])
+  extends LogisticRegressionSummary(predictions, probabilityCol, labelCol) {
+
+  /** Number of training iterations until termination */
+  val totalIterations = objectiveHistory.length
+
+}
+
+@Experimental
+class LogisticRegressionSummary private[classification] (
+  @transient val predictions: DataFrame,
+  val probabilityCol: String,
+  val labelCol: String) extends Serializable {
+
+  @transient val metrics = new BinaryClassificationMetrics(
+    predictions.select(probabilityCol, labelCol).map {
+      case Row(score: Vector, label: Double) => (score(1), label)
+    }
+  )
+
+  /**
+   * Returns the receiver operating characteristic (ROC) curve,
+   * which is an RDD of (false positive rate, true positive rate)
+   * with (0.0, 0.0) prepended and (1.0, 1.0) appended to it.
+   */
+  val roc: RDD[(Double, Double)] = metrics.roc()
+
+  /**
+   * Computes the area under the receiver operating characteristic (ROC) curve.
+   */
+  val areaUnderROC: Double = metrics.areaUnderROC()
+
+  /**
+   * Returns the precision-recall curve, which is an RDD of (recall, precision),
+   * NOT (precision, recall), with (0.0, 1.0) prepended to it.
+   */
+  val pr: RDD[(Double, Double)] = metrics.pr()
+
+  /** Returns the (threshold, F-Measure) curve with beta = 1.0. */
+  val fMeasureByThreshold: RDD[(Double, Double)] = metrics.fMeasureByThreshold()
+
+  /** Returns the (threshold, precision) curve. */
+  val precisionByThreshold: RDD[(Double, Double)] = metrics.precisionByThreshold()
+
+  /** Returns the (threshold, recall) curve. */
+  val recallByThreshold: RDD[(Double, Double)] = metrics.recallByThreshold()
+
 }
 
 /**

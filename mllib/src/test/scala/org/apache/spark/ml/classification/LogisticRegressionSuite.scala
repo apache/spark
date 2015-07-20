@@ -701,4 +701,19 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(model1.intercept ~== interceptR relTol 1E-5)
     assert(model1.weights ~= weightsR absTol 1E-6)
   }
+
+  test("evaluate on test set") {
+
+    // Evaluate on test set should be same as that of the transformed training data.
+    val lr = new LogisticRegression()
+      .setMaxIter(10)
+      .setRegParam(1.0)
+      .setThreshold(0.6)
+    val model = lr.fit(dataset)
+    val summary = model.summary
+
+    val sameSummary = model.evaluate(dataset)
+    assert(summary.areaUnderROC === sameSummary.areaUnderROC)
+
+  }
 }
