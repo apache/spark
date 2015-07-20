@@ -63,8 +63,15 @@ class ALS(JavaEstimator, HasCheckpointInterval, HasMaxIter, HasPredictionCol, Ha
     indicated user preferences rather than explicit ratings given to
     items.
 
+    >>> df = sqlContext.createDataFrame(
+    ...     [(0, 0, 4.0), (0, 1, 2.0), (1, 1, 3.0), (1, 2, 4.0), (2, 1, 1.0), (2, 2, 5.0)],
+    ...     ["user", "item", "rating"])
     >>> als = ALS(rank=10, maxIter=5)
     >>> model = als.fit(df)
+    >>> model.rank
+    10
+    >>> model.userFactors.orderBy("id").collect()
+    [Row(id=0, features=[...]), Row(id=1, ...), Row(id=2, ...)]
     >>> test = sqlContext.createDataFrame([(0, 2), (1, 0), (2, 0)], ["user", "item"])
     >>> predictions = sorted(model.transform(test).collect(), key=lambda r: r[0])
     >>> predictions[0]
@@ -89,11 +96,11 @@ class ALS(JavaEstimator, HasCheckpointInterval, HasMaxIter, HasPredictionCol, Ha
 
     @keyword_only
     def __init__(self, rank=10, maxIter=10, regParam=0.1, numUserBlocks=10, numItemBlocks=10,
-                 implicitPrefs=False, alpha=1.0, userCol="user", itemCol="item", seed=0,
+                 implicitPrefs=False, alpha=1.0, userCol="user", itemCol="item", seed=None,
                  ratingCol="rating", nonnegative=False, checkpointInterval=10):
         """
         __init__(self, rank=10, maxIter=10, regParam=0.1, numUserBlocks=10, numItemBlocks=10, \
-                 implicitPrefs=false, alpha=1.0, userCol="user", itemCol="item", seed=0, \
+                 implicitPrefs=false, alpha=1.0, userCol="user", itemCol="item", seed=None, \
                  ratingCol="rating", nonnegative=false, checkpointInterval=10)
         """
         super(ALS, self).__init__()
@@ -109,18 +116,18 @@ class ALS(JavaEstimator, HasCheckpointInterval, HasMaxIter, HasPredictionCol, Ha
         self.nonnegative = Param(self, "nonnegative",
                                  "whether to use nonnegative constraint for least squares")
         self._setDefault(rank=10, maxIter=10, regParam=0.1, numUserBlocks=10, numItemBlocks=10,
-                         implicitPrefs=False, alpha=1.0, userCol="user", itemCol="item", seed=0,
+                         implicitPrefs=False, alpha=1.0, userCol="user", itemCol="item", seed=None,
                          ratingCol="rating", nonnegative=False, checkpointInterval=10)
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
 
     @keyword_only
     def setParams(self, rank=10, maxIter=10, regParam=0.1, numUserBlocks=10, numItemBlocks=10,
-                  implicitPrefs=False, alpha=1.0, userCol="user", itemCol="item", seed=0,
+                  implicitPrefs=False, alpha=1.0, userCol="user", itemCol="item", seed=None,
                   ratingCol="rating", nonnegative=False, checkpointInterval=10):
         """
         setParams(self, rank=10, maxIter=10, regParam=0.1, numUserBlocks=10, numItemBlocks=10, \
-                 implicitPrefs=False, alpha=1.0, userCol="user", itemCol="item", seed=0, \
+                 implicitPrefs=False, alpha=1.0, userCol="user", itemCol="item", seed=None, \
                  ratingCol="rating", nonnegative=False, checkpointInterval=10)
         Sets params for ALS.
         """
@@ -260,6 +267,27 @@ class ALSModel(JavaModel):
     Model fitted by ALS.
     """
 
+    @property
+    def rank(self):
+        """rank of the matrix factorization model"""
+        return self._call_java("rank")
+
+    @property
+    def userFactors(self):
+        """
+        a DataFrame that stores user factors in two columns: `id` and
+        `features`
+        """
+        return self._call_java("userFactors")
+
+    @property
+    def itemFactors(self):
+        """
+        a DataFrame that stores item factors in two columns: `id` and
+        `features`
+        """
+        return self._call_java("itemFactors")
+
 
 if __name__ == "__main__":
     import doctest
@@ -272,8 +300,6 @@ if __name__ == "__main__":
     sqlContext = SQLContext(sc)
     globs['sc'] = sc
     globs['sqlContext'] = sqlContext
-    globs['df'] = sqlContext.createDataFrame([(0, 0, 4.0), (0, 1, 2.0), (1, 1, 3.0), (1, 2, 4.0),
-                                              (2, 1, 1.0), (2, 2, 5.0)], ["user", "item", "rating"])
     (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
     sc.stop()
     if failure_count:

@@ -29,6 +29,7 @@ import org.apache.mesos.Protos.Environment.Variable
 import org.apache.mesos.Protos.TaskStatus.Reason
 import org.apache.mesos.Protos.{TaskState => MesosTaskState, _}
 import org.apache.mesos.{Scheduler, SchedulerDriver}
+
 import org.apache.spark.deploy.mesos.MesosDriverDescription
 import org.apache.spark.deploy.rest.{CreateSubmissionResponse, KillSubmissionResponse, SubmissionStatusResponse}
 import org.apache.spark.metrics.MetricsSystem
@@ -294,20 +295,24 @@ private[spark] class MesosClusterScheduler(
   def start(): Unit = {
     // TODO: Implement leader election to make sure only one framework running in the cluster.
     val fwId = schedulerState.fetch[String]("frameworkId")
-    val builder = FrameworkInfo.newBuilder()
-      .setUser(Utils.getCurrentUserName())
-      .setName(appName)
-      .setWebuiUrl(frameworkUrl)
-      .setCheckpoint(true)
-      .setFailoverTimeout(Integer.MAX_VALUE) // Setting to max so tasks keep running on crash
     fwId.foreach { id =>
-      builder.setId(FrameworkID.newBuilder().setValue(id).build())
       frameworkId = id
     }
     recoverState()
     metricsSystem.registerSource(new MesosClusterSchedulerSource(this))
     metricsSystem.start()
-    startScheduler(master, MesosClusterScheduler.this, builder.build())
+    val driver = createSchedulerDriver(
+      master,
+      MesosClusterScheduler.this,
+      Utils.getCurrentUserName(),
+      appName,
+      conf,
+      Some(frameworkUrl),
+      Some(true),
+      Some(Integer.MAX_VALUE),
+      fwId)
+
+    startScheduler(driver)
     ready = true
   }
 
@@ -448,12 +453,8 @@ private[spark] class MesosClusterScheduler(
         offer.cpu -= driverCpu
         offer.mem -= driverMem
         val taskId = TaskID.newBuilder().setValue(submission.submissionId).build()
-        val cpuResource = Resource.newBuilder()
-          .setName("cpus").setType(Value.Type.SCALAR)
-          .setScalar(Value.Scalar.newBuilder().setValue(driverCpu)).build()
-        val memResource = Resource.newBuilder()
-          .setName("mem").setType(Value.Type.SCALAR)
-          .setScalar(Value.Scalar.newBuilder().setValue(driverMem)).build()
+        val cpuResource = createResource("cpus", driverCpu)
+        val memResource = createResource("mem", driverMem)
         val commandInfo = buildDriverCommand(submission)
         val appName = submission.schedulerProperties("spark.app.name")
         val taskInfo = TaskInfo.newBuilder()

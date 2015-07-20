@@ -32,12 +32,12 @@ import org.apache.spark.util.collection.OpenHashMap
  * An ApproximateEvaluator for counts by key. Returns a map of key to confidence interval.
  */
 private[spark] class GroupedCountEvaluator[T : ClassTag](totalOutputs: Int, confidence: Double)
-  extends ApproximateEvaluator[OpenHashMap[T,Long], Map[T, BoundedDouble]] {
+  extends ApproximateEvaluator[OpenHashMap[T, Long], Map[T, BoundedDouble]] {
 
   var outputsMerged = 0
-  var sums = new OpenHashMap[T,Long]()   // Sum of counts for each key
+  var sums = new OpenHashMap[T, Long]()   // Sum of counts for each key
 
-  override def merge(outputId: Int, taskResult: OpenHashMap[T,Long]) {
+  override def merge(outputId: Int, taskResult: OpenHashMap[T, Long]) {
     outputsMerged += 1
     taskResult.foreach { case (key, value) =>
       sums.changeValue(key, value, _ + value)

@@ -35,7 +35,7 @@ import org.apache.spark.util.collection.{PrimitiveKeyOpenHashMap, PrimitiveVecto
 
 /** A group of writers for a ShuffleMapTask, one writer per reducer. */
 private[spark] trait ShuffleWriterGroup {
-  val writers: Array[BlockObjectWriter]
+  val writers: Array[DiskBlockObjectWriter]
 
   /** @param success Indicates all writes were successful. If false, no blocks will be recorded. */
   def releaseWriters(success: Boolean)
@@ -113,15 +113,15 @@ private[spark] class FileShuffleBlockResolver(conf: SparkConf)
 
       val openStartTime = System.nanoTime
       val serializerInstance = serializer.newInstance()
-      val writers: Array[BlockObjectWriter] = if (consolidateShuffleFiles) {
+      val writers: Array[DiskBlockObjectWriter] = if (consolidateShuffleFiles) {
         fileGroup = getUnusedFileGroup()
-        Array.tabulate[BlockObjectWriter](numBuckets) { bucketId =>
+        Array.tabulate[DiskBlockObjectWriter](numBuckets) { bucketId =>
           val blockId = ShuffleBlockId(shuffleId, mapId, bucketId)
           blockManager.getDiskWriter(blockId, fileGroup(bucketId), serializerInstance, bufferSize,
             writeMetrics)
         }
       } else {
-        Array.tabulate[BlockObjectWriter](numBuckets) { bucketId =>
+        Array.tabulate[DiskBlockObjectWriter](numBuckets) { bucketId =>
           val blockId = ShuffleBlockId(shuffleId, mapId, bucketId)
           val blockFile = blockManager.diskBlockManager.getFile(blockId)
           // Because of previous failures, the shuffle file may already exist on this machine.

@@ -19,28 +19,29 @@ package org.apache.spark.ml.classification
 
 import scala.collection.mutable
 
-import org.apache.spark.annotation.AlphaComponent
+import org.apache.spark.annotation.Experimental
+import org.apache.spark.ml.tree.impl.RandomForest
 import org.apache.spark.ml.{PredictionModel, Predictor}
 import org.apache.spark.ml.param.ParamMap
-import org.apache.spark.ml.tree.{RandomForestParams, TreeClassifierParams, DecisionTreeModel, TreeEnsembleModel}
+import org.apache.spark.ml.tree.{DecisionTreeModel, RandomForestParams, TreeClassifierParams, TreeEnsembleModel}
 import org.apache.spark.ml.util.{Identifiable, MetadataUtils}
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.regression.LabeledPoint
-import org.apache.spark.mllib.tree.{RandomForest => OldRandomForest}
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo}
 import org.apache.spark.mllib.tree.model.{RandomForestModel => OldRandomForestModel}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.functions._
+import org.apache.spark.sql.types.DoubleType
 
 /**
- * :: AlphaComponent ::
- *
+ * :: Experimental ::
  * [[http://en.wikipedia.org/wiki/Random_forest  Random Forest]] learning algorithm for
  * classification.
  * It supports both binary and multiclass labels, as well as both continuous and categorical
  * features.
  */
-@AlphaComponent
+@Experimental
 final class RandomForestClassifier(override val uid: String)
   extends Predictor[Vector, RandomForestClassifier, RandomForestClassificationModel]
   with RandomForestParams with TreeClassifierParams {
@@ -94,12 +95,16 @@ final class RandomForestClassifier(override val uid: String)
     val oldDataset: RDD[LabeledPoint] = extractLabeledPoints(dataset)
     val strategy =
       super.getOldStrategy(categoricalFeatures, numClasses, OldAlgo.Classification, getOldImpurity)
-    val oldModel = OldRandomForest.trainClassifier(
-      oldDataset, strategy, getNumTrees, getFeatureSubsetStrategy, getSeed.toInt)
-    RandomForestClassificationModel.fromOld(oldModel, this, categoricalFeatures)
+    val trees =
+      RandomForest.run(oldDataset, strategy, getNumTrees, getFeatureSubsetStrategy, getSeed)
+        .map(_.asInstanceOf[DecisionTreeClassificationModel])
+    new RandomForestClassificationModel(trees)
   }
+
+  override def copy(extra: ParamMap): RandomForestClassifier = defaultCopy(extra)
 }
 
+@Experimental
 object RandomForestClassifier {
   /** Accessor for supported impurity settings: entropy, gini */
   final val supportedImpurities: Array[String] = TreeClassifierParams.supportedImpurities
@@ -110,15 +115,14 @@ object RandomForestClassifier {
 }
 
 /**
- * :: AlphaComponent ::
- *
+ * :: Experimental ::
  * [[http://en.wikipedia.org/wiki/Random_forest  Random Forest]] model for classification.
  * It supports both binary and multiclass labels, as well as both continuous and categorical
  * features.
  * @param _trees  Decision trees in the ensemble.
  *               Warning: These have null parents.
  */
-@AlphaComponent
+@Experimental
 final class RandomForestClassificationModel private[ml] (
     override val uid: String,
     private val _trees: Array[DecisionTreeClassificationModel])
@@ -127,6 +131,13 @@ final class RandomForestClassificationModel private[ml] (
 
   require(numTrees > 0, "RandomForestClassificationModel requires at least 1 tree.")
 
+  /**
+   * Construct a random forest classification model, with all trees weighted equally.
+   * @param trees  Component trees
+   */
+  def this(trees: Array[DecisionTreeClassificationModel]) =
+    this(Identifiable.randomUID("rfc"), trees)
+
   override def trees: Array[DecisionTreeModel] = _trees.asInstanceOf[Array[DecisionTreeModel]]
 
   // Note: We may add support for weights (based on tree performance) later on.
@@ -134,8 +145,15 @@ final class RandomForestClassificationModel private[ml] (
 
   override def treeWeights: Array[Double] = _treeWeights
 
+  override protected def transformImpl(dataset: DataFrame): DataFrame = {
+    val bcastModel = dataset.sqlContext.sparkContext.broadcast(this)
+    val predictUDF = udf { (features: Any) =>
+      bcastModel.value.predict(features.asInstanceOf[Vector])
+    }
+    dataset.withColumn($(predictionCol), predictUDF(col($(featuresCol))))
+  }
+
   override protected def predict(features: Vector): Double = {
-    // TODO: Override transform() to broadcast model.  SPARK-7127
     // TODO: When we add a generic Bagging class, handle transform there: SPARK-7128
     // Classifies using majority votes.
     // Ignore the weights since all are 1.0 for now.
@@ -171,7 +189,7 @@ private[ml] object RandomForestClassificationModel {
     require(oldModel.algo == OldAlgo.Classification, "Cannot convert RandomForestModel" +
       s" with algo=${oldModel.algo} (old API) to RandomForestClassificationModel (new API).")
     val newTrees = oldModel.trees.map { tree =>
-      // parent, fittingParamMap for each tree is null since there are no good ways to set these.
+      // parent for each tree is null since there is no good way to set this.
       DecisionTreeClassificationModel.fromOld(tree, null, categoricalFeatures)
     }
     val uid = if (parent != null) parent.uid else Identifiable.randomUID("rfc")

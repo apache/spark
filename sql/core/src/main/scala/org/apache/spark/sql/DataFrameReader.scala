@@ -27,7 +27,7 @@ import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.jdbc.{JDBCPartition, JDBCPartitioningInfo, JDBCRelation}
-import org.apache.spark.sql.json.{JsonRDD, JSONRelation}
+import org.apache.spark.sql.json.JSONRelation
 import org.apache.spark.sql.parquet.ParquetRelation2
 import org.apache.spark.sql.sources.{LogicalRelation, ResolvedDataSource}
 import org.apache.spark.sql.types.StructType
@@ -95,20 +95,6 @@ class DataFrameReader private[sql](sqlContext: SQLContext) {
   }
 
   /**
-   * Specifies the input partitioning. If specified, the underlying data source does not need to
-   * discover the data partitioning scheme, and thus can speed up very large inputs.
-   *
-   * This is only applicable for Parquet at the moment.
-   *
-   * @since 1.4.0
-   */
-  @scala.annotation.varargs
-  def partitionBy(colNames: String*): DataFrameReader = {
-    this.partitioningColumns = Option(colNames)
-    this
-  }
-
-  /**
    * Loads input in as a [[DataFrame]], for data sources that require a path (e.g. data backed by
    * a local or distributed file system).
    *
@@ -128,7 +114,7 @@ class DataFrameReader private[sql](sqlContext: SQLContext) {
     val resolved = ResolvedDataSource(
       sqlContext,
       userSpecifiedSchema = userSpecifiedSchema,
-      partitionColumns = partitioningColumns.map(_.toArray).getOrElse(Array.empty[String]),
+      partitionColumns = Array.empty[String],
       provider = source,
       options = extraOptions.toMap)
     DataFrame(sqlContext, LogicalRelation(resolved.relation))
@@ -250,17 +236,8 @@ class DataFrameReader private[sql](sqlContext: SQLContext) {
    */
   def json(jsonRDD: RDD[String]): DataFrame = {
     val samplingRatio = extraOptions.getOrElse("samplingRatio", "1.0").toDouble
-    if (sqlContext.conf.useJacksonStreamingAPI) {
-      sqlContext.baseRelationToDataFrame(
-        new JSONRelation(() => jsonRDD, None, samplingRatio, userSpecifiedSchema)(sqlContext))
-    } else {
-      val columnNameOfCorruptJsonRecord = sqlContext.conf.columnNameOfCorruptRecord
-      val appliedSchema = userSpecifiedSchema.getOrElse(
-        JsonRDD.nullTypeToStringType(
-          JsonRDD.inferSchema(jsonRDD, 1.0, columnNameOfCorruptJsonRecord)))
-      val rowRDD = JsonRDD.jsonStringToRow(jsonRDD, appliedSchema, columnNameOfCorruptJsonRecord)
-      sqlContext.createDataFrame(rowRDD, appliedSchema, needsConversion = false)
-    }
+    sqlContext.baseRelationToDataFrame(
+      new JSONRelation(() => jsonRDD, None, samplingRatio, userSpecifiedSchema)(sqlContext))
   }
 
   /**
@@ -277,7 +254,7 @@ class DataFrameReader private[sql](sqlContext: SQLContext) {
       val globbedPaths = paths.map(new Path(_)).flatMap(SparkHadoopUtil.get.globPath).toArray
       sqlContext.baseRelationToDataFrame(
         new ParquetRelation2(
-          globbedPaths.map(_.toString), None, None, Map.empty[String, String])(sqlContext))
+          globbedPaths.map(_.toString), None, None, extraOptions.toMap)(sqlContext))
     }
   }
 
@@ -299,7 +276,5 @@ class DataFrameReader private[sql](sqlContext: SQLContext) {
   private var userSpecifiedSchema: Option[StructType] = None
 
   private var extraOptions = new scala.collection.mutable.HashMap[String, String]
-
-  private var partitioningColumns: Option[Seq[String]] = None
 
 }

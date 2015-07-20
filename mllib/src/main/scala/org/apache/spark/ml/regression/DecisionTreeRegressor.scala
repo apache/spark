@@ -17,27 +17,26 @@
 
 package org.apache.spark.ml.regression
 
-import org.apache.spark.annotation.AlphaComponent
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.ml.{PredictionModel, Predictor}
 import org.apache.spark.ml.param.ParamMap
-import org.apache.spark.ml.tree.{TreeRegressorParams, DecisionTreeParams, DecisionTreeModel, Node}
+import org.apache.spark.ml.tree.{DecisionTreeModel, DecisionTreeParams, Node, TreeRegressorParams}
+import org.apache.spark.ml.tree.impl.RandomForest
 import org.apache.spark.ml.util.{Identifiable, MetadataUtils}
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.regression.LabeledPoint
-import org.apache.spark.mllib.tree.{DecisionTree => OldDecisionTree}
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo, Strategy => OldStrategy}
 import org.apache.spark.mllib.tree.model.{DecisionTreeModel => OldDecisionTreeModel}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.DataFrame
 
 /**
- * :: AlphaComponent ::
- *
+ * :: Experimental ::
  * [[http://en.wikipedia.org/wiki/Decision_tree_learning Decision tree]] learning algorithm
  * for regression.
  * It supports both continuous and categorical features.
  */
-@AlphaComponent
+@Experimental
 final class DecisionTreeRegressor(override val uid: String)
   extends Predictor[Vector, DecisionTreeRegressor, DecisionTreeRegressionModel]
   with DecisionTreeParams with TreeRegressorParams {
@@ -68,8 +67,9 @@ final class DecisionTreeRegressor(override val uid: String)
       MetadataUtils.getCategoricalFeatures(dataset.schema($(featuresCol)))
     val oldDataset: RDD[LabeledPoint] = extractLabeledPoints(dataset)
     val strategy = getOldStrategy(categoricalFeatures)
-    val oldModel = OldDecisionTree.train(oldDataset, strategy)
-    DecisionTreeRegressionModel.fromOld(oldModel, this, categoricalFeatures)
+    val trees = RandomForest.run(oldDataset, strategy, numTrees = 1, featureSubsetStrategy = "all",
+      seed = 0L, parentUID = Some(uid))
+    trees.head.asInstanceOf[DecisionTreeRegressionModel]
   }
 
   /** (private[ml]) Create a Strategy instance to use with the old API. */
@@ -77,21 +77,23 @@ final class DecisionTreeRegressor(override val uid: String)
     super.getOldStrategy(categoricalFeatures, numClasses = 0, OldAlgo.Regression, getOldImpurity,
       subsamplingRate = 1.0)
   }
+
+  override def copy(extra: ParamMap): DecisionTreeRegressor = defaultCopy(extra)
 }
 
+@Experimental
 object DecisionTreeRegressor {
   /** Accessor for supported impurities: variance */
   final val supportedImpurities: Array[String] = TreeRegressorParams.supportedImpurities
 }
 
 /**
- * :: AlphaComponent ::
- *
+ * :: Experimental ::
  * [[http://en.wikipedia.org/wiki/Decision_tree_learning Decision tree]] model for regression.
  * It supports both continuous and categorical features.
  * @param rootNode  Root of the decision tree
  */
-@AlphaComponent
+@Experimental
 final class DecisionTreeRegressionModel private[ml] (
     override val uid: String,
     override val rootNode: Node)
@@ -100,6 +102,12 @@ final class DecisionTreeRegressionModel private[ml] (
 
   require(rootNode != null,
     "DecisionTreeClassificationModel given null rootNode, but it requires a non-null rootNode.")
+
+  /**
+   * Construct a decision tree regression model.
+   * @param rootNode  Root node of tree, with other nodes attached.
+   */
+  def this(rootNode: Node) = this(Identifiable.randomUID("dtr"), rootNode)
 
   override protected def predict(features: Vector): Double = {
     rootNode.predict(features)

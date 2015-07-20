@@ -387,7 +387,7 @@ private[tree] object TreeEnsembleModel extends Logging {
         val driverMemory = sc.getConf.getOption("spark.driver.memory")
           .orElse(Option(System.getenv("SPARK_DRIVER_MEMORY")))
           .map(Utils.memoryStringToMb)
-          .getOrElse(512)
+          .getOrElse(Utils.DEFAULT_DRIVER_MEM_MB)
         if (driverMemory <= memThreshold) {
           logWarning(s"$className.save() was called, but it may fail because of too little" +
             s" driver memory (${driverMemory}m)." +
@@ -437,7 +437,7 @@ private[tree] object TreeEnsembleModel extends Logging {
         treeAlgo: String): Array[DecisionTreeModel] = {
       val datapath = Loader.dataPath(path)
       val sqlContext = new SQLContext(sc)
-      val nodes = sqlContext.parquetFile(datapath).map(NodeData.apply)
+      val nodes = sqlContext.read.parquet(datapath).map(NodeData.apply)
       val trees = constructTrees(nodes)
       trees.map(new DecisionTreeModel(_, Algo.fromString(treeAlgo)))
     }

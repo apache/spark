@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples
 
 import org.apache.commons.math3.linear._
@@ -117,7 +118,7 @@ object SparkALS {
     var us = Array.fill(U)(randomVector(F))
 
     // Iteratively update movies then users
-    val Rc  = sc.broadcast(R)
+    val Rc = sc.broadcast(R)
     var msb = sc.broadcast(ms)
     var usb = sc.broadcast(us)
     for (iter <- 1 to ITERATIONS) {
@@ -144,3 +145,4 @@ object SparkALS {
     new Array2DRowRealMatrix(Array.fill(rows, cols)(math.random))
 
 }
+// scalastyle:on println

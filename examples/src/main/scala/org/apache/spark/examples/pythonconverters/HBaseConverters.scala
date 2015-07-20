@@ -18,20 +18,34 @@
 package org.apache.spark.examples.pythonconverters
 
 import scala.collection.JavaConversions._
+import scala.util.parsing.json.JSONObject
 
 import org.apache.spark.api.python.Converter
 import org.apache.hadoop.hbase.client.{Put, Result}
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable
 import org.apache.hadoop.hbase.util.Bytes
+import org.apache.hadoop.hbase.KeyValue.Type
+import org.apache.hadoop.hbase.CellUtil
 
 /**
- * Implementation of [[org.apache.spark.api.python.Converter]] that converts an
- * HBase Result to a String
+ * Implementation of [[org.apache.spark.api.python.Converter]] that converts all
+ * the records in an HBase Result to a String
  */
 class HBaseResultToStringConverter extends Converter[Any, String] {
   override def convert(obj: Any): String = {
+    import collection.JavaConverters._
     val result = obj.asInstanceOf[Result]
-    Bytes.toStringBinary(result.value())
+    val output = result.listCells.asScala.map(cell =>
+        Map(
+          "row" -> Bytes.toStringBinary(CellUtil.cloneRow(cell)),
+          "columnFamily" -> Bytes.toStringBinary(CellUtil.cloneFamily(cell)),
+          "qualifier" -> Bytes.toStringBinary(CellUtil.cloneQualifier(cell)),
+          "timestamp" -> cell.getTimestamp.toString,
+          "type" -> Type.codeToType(cell.getTypeByte).toString,
+          "value" -> Bytes.toStringBinary(CellUtil.cloneValue(cell))
+        )
+    )
+    output.map(JSONObject(_).toString()).mkString("\n")
   }
 }
 

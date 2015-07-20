@@ -198,7 +198,7 @@ object DecisionTreeModel extends Loader[DecisionTreeModel] with Logging {
         val driverMemory = sc.getConf.getOption("spark.driver.memory")
           .orElse(Option(System.getenv("SPARK_DRIVER_MEMORY")))
           .map(Utils.memoryStringToMb)
-          .getOrElse(512)
+          .getOrElse(Utils.DEFAULT_DRIVER_MEM_MB)
         if (driverMemory <= memThreshold) {
           logWarning(s"$thisClassName.save() was called, but it may fail because of too little" +
             s" driver memory (${driverMemory}m)." +
@@ -230,7 +230,7 @@ object DecisionTreeModel extends Loader[DecisionTreeModel] with Logging {
       val datapath = Loader.dataPath(path)
       val sqlContext = new SQLContext(sc)
       // Load Parquet data.
-      val dataRDD = sqlContext.parquetFile(datapath)
+      val dataRDD = sqlContext.read.parquet(datapath)
       // Check schema explicitly since erasure makes it hard to use match-case for checking.
       Loader.checkSchema[NodeData](dataRDD.schema)
       val nodes = dataRDD.map(NodeData.apply)

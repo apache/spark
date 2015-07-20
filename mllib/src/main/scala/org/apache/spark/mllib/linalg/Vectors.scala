@@ -28,7 +28,7 @@ import breeze.linalg.{DenseVector => BDV, SparseVector => BSV, Vector => BV}
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.mllib.util.NumericParser
-import org.apache.spark.sql.Row
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.GenericMutableRow
 import org.apache.spark.sql.types._
 
@@ -150,6 +150,12 @@ sealed trait Vector extends Serializable {
       toDense
     }
   }
+
+  /**
+   * Find the index of a maximal element.  Returns the first maximal element in case of a tie.
+   * Returns -1 if vector has length 0.
+   */
+  def argmax: Int
 }
 
 /**
@@ -175,29 +181,28 @@ private[spark] class VectorUDT extends UserDefinedType[Vector] {
       StructField("values", ArrayType(DoubleType, containsNull = false), nullable = true)))
   }
 
-  override def serialize(obj: Any): Row = {
-    val row = new GenericMutableRow(4)
+  override def serialize(obj: Any): InternalRow = {
     obj match {
       case SparseVector(size, indices, values) =>
+        val row = new GenericMutableRow(4)
         row.setByte(0, 0)
         row.setInt(1, size)
         row.update(2, indices.toSeq)
         row.update(3, values.toSeq)
+        row
       case DenseVector(values) =>
+        val row = new GenericMutableRow(4)
         row.setByte(0, 1)
         row.setNullAt(1)
         row.setNullAt(2)
         row.update(3, values.toSeq)
+        row
     }
-    row
   }
 
   override def deserialize(datum: Any): Vector = {
     datum match {
-      // TODO: something wrong with UDT serialization
-      case v: Vector =>
-        v
-      case row: Row =>
+      case row: InternalRow =>
         require(row.length == 4,
           s"VectorUDT.deserialize given row with length ${row.length} but requires length == 4")
         val tpe = row.getByte(0)
@@ -225,7 +230,8 @@ private[spark] class VectorUDT extends UserDefinedType[Vector] {
     }
   }
 
-  override def hashCode: Int = 7919
+  // see [SPARK-8647], this achieves the needed constant hash code without constant no.
+  override def hashCode(): Int = classOf[VectorUDT].getName.hashCode()
 
   override def typeName: String = "vector"
 
@@ -588,11 +594,7 @@ class DenseVector(val values: Array[Double]) extends Vector {
     new SparseVector(size, ii, vv)
   }
 
-  /**
-   * Find the index of a maximal element.  Returns the first maximal element in case of a tie.
-   * Returns -1 if vector has length 0.
-   */
-  private[spark] def argmax: Int = {
+  override def argmax: Int = {
     if (size == 0) {
       -1
     } else {
@@ -715,6 +717,51 @@ class SparseVector(
         }
       }
       new SparseVector(size, ii, vv)
+    }
+  }
+
+  override def argmax: Int = {
+    if (size == 0) {
+      -1
+    } else {
+      // Find the max active entry.
+      var maxIdx = indices(0)
+      var maxValue = values(0)
+      var maxJ = 0
+      var j = 1
+      val na = numActives
+      while (j < na) {
+        val v = values(j)
+        if (v > maxValue) {
+          maxValue = v
+          maxIdx = indices(j)
+          maxJ = j
+        }
+        j += 1
+      }
+
+      // If the max active entry is nonpositive and there exists inactive ones, find the first zero.
+      if (maxValue <= 0.0 && na < size) {
+        if (maxValue == 0.0) {
+          // If there exists an inactive entry before maxIdx, find it and return its index.
+          if (maxJ < maxIdx) {
+            var k = 0
+            while (k < maxJ && indices(k) == k) {
+              k += 1
+            }
+            maxIdx = k
+          }
+        } else {
+          // If the max active value is negative, find and return the first inactive index.
+          var k = 0
+          while (k < na && indices(k) == k) {
+            k += 1
+          }
+          maxIdx = k
+        }
+      }
+
+      maxIdx
     }
   }
 }

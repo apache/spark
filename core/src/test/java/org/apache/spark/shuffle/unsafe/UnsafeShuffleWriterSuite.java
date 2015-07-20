@@ -26,6 +26,7 @@ import scala.collection.Iterator;
 import scala.reflect.ClassTag;
 import scala.runtime.AbstractFunction1;
 
+import com.google.common.collect.Iterators;
 import com.google.common.collect.HashMultiset;
 import com.google.common.io.ByteStreams;
 import org.junit.After;
@@ -252,10 +253,27 @@ public class UnsafeShuffleWriterSuite {
     createWriter(false).stop(false);
   }
 
+  class PandaException extends RuntimeException {
+  }
+
+  @Test(expected=PandaException.class)
+  public void writeFailurePropagates() throws Exception {
+    class BadRecords extends scala.collection.AbstractIterator<Product2<Object, Object>> {
+      @Override public boolean hasNext() {
+        throw new PandaException();
+      }
+      @Override public Product2<Object, Object> next() {
+        return null;
+      }
+    }
+    final UnsafeShuffleWriter<Object, Object> writer = createWriter(true);
+    writer.write(new BadRecords());
+  }
+
   @Test
   public void writeEmptyIterator() throws Exception {
     final UnsafeShuffleWriter<Object, Object> writer = createWriter(true);
-    writer.write(Collections.<Product2<Object, Object>>emptyIterator());
+    writer.write(Iterators.<Product2<Object, Object>>emptyIterator());
     final Option<MapStatus> mapStatus = writer.stop(true);
     assertTrue(mapStatus.isDefined());
     assertTrue(mergedOutputFile.exists());
