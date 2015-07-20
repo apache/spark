@@ -58,9 +58,9 @@ private[sql] case class MonotonicallyIncreasingID() extends LeafExpression {
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     val countTerm = ctx.freshName("count")
     val partitionMaskTerm = ctx.freshName("partitionMask")
-    ctx.addMutableState(ctx.JAVA_LONG, countTerm, "0L")
+    ctx.addMutableState(ctx.JAVA_LONG, countTerm, s"$countTerm = 0L;")
     ctx.addMutableState(ctx.JAVA_LONG, partitionMaskTerm,
-      "((long) org.apache.spark.TaskContext.getPartitionId()) << 33")
+      s"$partitionMaskTerm = ((long) org.apache.spark.TaskContext.getPartitionId()) << 33;")
 
     ev.isNull = "false"
     s"""

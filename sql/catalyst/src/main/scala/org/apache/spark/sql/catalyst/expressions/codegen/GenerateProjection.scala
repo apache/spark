@@ -23,7 +23,7 @@ import org.apache.spark.sql.types._
 /**
  * Java can not access Projection (in package object)
  */
-abstract class BaseProject extends Projection {}
+abstract class BaseProjection extends Projection {}
 
 /**
  * Generates bytecode that produces a new [[InternalRow]] object based on a fixed set of input
@@ -151,21 +151,18 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
         s"""if (!nullBits[$i]) arr[$i] = c$i;"""
     }.mkString("\n      ")
 
-    val mutableStates = ctx.mutableStates.map { case (javaType, variableName, initialValue) =>
-      s"private $javaType $variableName = $initialValue;"
-    }.mkString("\n      ")
-
     val code = s"""
     public SpecificProjection generate($exprType[] expr) {
       return new SpecificProjection(expr);
     }
 
-    class SpecificProjection extends ${classOf[BaseProject].getName} {
-      private $exprType[] expressions = null;
-      $mutableStates
+    class SpecificProjection extends ${classOf[BaseProjection].getName} {
+      private $exprType[] expressions;
+      ${declareMutableStates(ctx)}
 
       public SpecificProjection($exprType[] expr) {
         expressions = expr;
+        ${initMutableStates(ctx)}
       }
 
       @Override

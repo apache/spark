@@ -132,8 +132,8 @@ abstract class SparkSqlSerializer2Suite extends QueryTest with BeforeAndAfterAll
       expectedSerializerClass: Class[T]): Unit = {
     executedPlan.foreach {
       case exchange: Exchange =>
-        val shuffledRDD = exchange.execute().firstParent.asInstanceOf[ShuffledRDD[_, _, _]]
-        val dependency = shuffledRDD.getDependencies.head.asInstanceOf[ShuffleDependency[_, _, _]]
+        val shuffledRDD = exchange.execute()
+        val dependency = shuffledRDD.dependencies.head.asInstanceOf[ShuffleDependency[_, _, _]]
         val serializerNotSetMessage =
           s"Expected $expectedSerializerClass as the serializer of Exchange. " +
           s"However, the serializer was not set."

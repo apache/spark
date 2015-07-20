@@ -30,7 +30,7 @@ import org.apache.spark.sql.types._
  * the layout of intermediate tuples, BindReferences should be run after all such transformations.
  */
 case class BoundReference(ordinal: Int, dataType: DataType, nullable: Boolean)
-  extends NamedExpression with trees.LeafNode[Expression] {
+  extends LeafExpression with NamedExpression {
 
   override def toString: String = s"input[$ordinal]"
 

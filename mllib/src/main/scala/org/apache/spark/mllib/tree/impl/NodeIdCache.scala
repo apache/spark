@@ -75,7 +75,7 @@ private[tree] case class NodeIndexUpdater(
  *                           (how often should the cache be checkpointed.).
  */
 @DeveloperApi
-private[tree] class NodeIdCache(
+private[spark] class NodeIdCache(
   var nodeIdsForInstances: RDD[Array[Int]],
   val checkpointInterval: Int) {
 
@@ -170,7 +170,7 @@ private[tree] class NodeIdCache(
 }
 
 @DeveloperApi
-private[tree] object NodeIdCache {
+private[spark] object NodeIdCache {
   /**
    * Initialize the node Id cache with initial node Id values.
    * @param data The RDD of training rows.

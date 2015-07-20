@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
-import org.apache.spark.sql.catalyst.analysis.EliminateSubQueries
+import org.apache.spark.sql.catalyst.analysis.{AnalysisSuite, EliminateSubQueries}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.PlanTest
@@ -40,29 +40,11 @@ class BooleanSimplificationSuite extends PlanTest with PredicateHelper {
 
   val testRelation = LocalRelation('a.int, 'b.int, 'c.int, 'd.string)
 
-  // The `foldLeft` is required to handle cases like comparing `a && (b && c)` and `(a && b) && c`
-  def compareConditions(e1: Expression, e2: Expression): Boolean = (e1, e2) match {
-    case (lhs: And, rhs: And) =>
-      val lhsSet = splitConjunctivePredicates(lhs).toSet
-      val rhsSet = splitConjunctivePredicates(rhs).toSet
-      lhsSet.foldLeft(rhsSet) { (set, e) =>
-        set.find(compareConditions(_, e)).map(set - _).getOrElse(set)
-      }.isEmpty
-
-    case (lhs: Or, rhs: Or) =>
-      val lhsSet = splitDisjunctivePredicates(lhs).toSet
-      val rhsSet = splitDisjunctivePredicates(rhs).toSet
-      lhsSet.foldLeft(rhsSet) { (set, e) =>
-        set.find(compareConditions(_, e)).map(set - _).getOrElse(set)
-      }.isEmpty
-
-    case (l, r) => l == r
-  }
-
-  def checkCondition(input: Expression, expected: Expression): Unit = {
+  private def checkCondition(input: Expression, expected: Expression): Unit = {
     val plan = testRelation.where(input).analyze
-    val actual = Optimize.execute(plan).expressions.head
-    compareConditions(actual, expected)
+    val actual = Optimize.execute(plan)
+    val correctAnswer = testRelation.where(expected).analyze
+    comparePlans(actual, correctAnswer)
   }
 
   test("a && a => a") {
@@ -86,10 +68,8 @@ class BooleanSimplificationSuite extends PlanTest with PredicateHelper {
       ('a === 'b && 'c < 1 && 'a === 5) ||
       ('a === 'b && 'b < 5 && 'a > 1)
 
-    val expected =
-      (((('b > 3) && ('c > 2)) ||
-        (('c < 1) && ('a === 5))) ||
-        (('b < 5) && ('a > 1))) && ('a === 'b)
+    val expected = 'a === 'b && (
+      ('b > 3 && 'c > 2) || ('c < 1 && 'a === 5) || ('b < 5 && 'a > 1))
 
     checkCondition(input, expected)
   }
@@ -101,10 +81,27 @@ class BooleanSimplificationSuite extends PlanTest with PredicateHelper {
 
     checkCondition('a < 2 && ('a < 2 || 'a > 3 || 'b > 5) , 'a < 2)
 
-    checkCondition(('a < 2 || 'b > 3) && ('a < 2 || 'c > 5), ('b > 3 && 'c > 5) || 'a < 2)
+    checkCondition(('a < 2 || 'b > 3) && ('a < 2 || 'c > 5), 'a < 2 || ('b > 3 && 'c > 5))
 
     checkCondition(
       ('a === 'b || 'b > 3) && ('a === 'b || 'a > 3) && ('a === 'b || 'a < 5),
-      ('b > 3 && 'a > 3 && 'a < 5) || 'a === 'b)
+      ('a === 'b || 'b > 3 && 'a > 3 && 'a < 5))
+  }
+
+  private def caseInsensitiveAnalyse(plan: LogicalPlan) =
+    AnalysisSuite.caseInsensitiveAnalyzer.execute(plan)
+
+  test("(a && b) || (a && c) => a && (b || c) when case insensitive") {
+    val plan = caseInsensitiveAnalyse(testRelation.where(('a > 2 && 'b > 3) || ('A > 2 && 'b < 5)))
+    val actual = Optimize.execute(plan)
+    val expected = caseInsensitiveAnalyse(testRelation.where('a > 2 && ('b > 3 || 'b < 5)))
+    comparePlans(actual, expected)
+  }
+
+  test("(a || b) && (a || c) => a || (b && c) when case insensitive") {
+    val plan = caseInsensitiveAnalyse(testRelation.where(('a > 2 || 'b > 3) && ('A > 2 || 'b < 5)))
+    val actual = Optimize.execute(plan)
+    val expected = caseInsensitiveAnalyse(testRelation.where('a > 2 || ('b > 3 && 'b < 5)))
+    comparePlans(actual, expected)
   }
 }

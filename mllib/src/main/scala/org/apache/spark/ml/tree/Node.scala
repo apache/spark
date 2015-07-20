@@ -209,3 +209,132 @@ private object InternalNode {
     }
   }
 }
+
+/**
+ * Version of a node used in learning.  This uses vars so that we can modify nodes as we split the
+ * tree by adding children, etc.
+ *
+ * For now, we use node IDs.  These will be kept internal since we hope to remove node IDs
+ * in the future, or at least change the indexing (so that we can support much deeper trees).
+ *
+ * This node can either be:
+ *  - a leaf node, with leftChild, rightChild, split set to null, or
+ *  - an internal node, with all values set
+ *
+ * @param id  We currently use the same indexing as the old implementation in
+ *            [[org.apache.spark.mllib.tree.model.Node]], but this will change later.
+ * @param predictionStats  Predicted label + class probability (for classification).
+ *                         We will later modify this to store aggregate statistics for labels
+ *                         to provide all class probabilities (for classification) and maybe a
+ *                         distribution (for regression).
+ * @param isLeaf  Indicates whether this node will definitely be a leaf in the learned tree,
+ *                so that we do not need to consider splitting it further.
+ * @param stats  Old structure for storing stats about information gain, prediction, etc.
+ *               This is legacy and will be modified in the future.
+ */
+private[tree] class LearningNode(
+    var id: Int,
+    var predictionStats: OldPredict,
+    var impurity: Double,
+    var leftChild: Option[LearningNode],
+    var rightChild: Option[LearningNode],
+    var split: Option[Split],
+    var isLeaf: Boolean,
+    var stats: Option[OldInformationGainStats]) extends Serializable {
+
+  /**
+   * Convert this [[LearningNode]] to a regular [[Node]], and recurse on any children.
+   */
+  def toNode: Node = {
+    if (leftChild.nonEmpty) {
+      assert(rightChild.nonEmpty && split.nonEmpty && stats.nonEmpty,
+        "Unknown error during Decision Tree learning.  Could not convert LearningNode to Node.")
+      new InternalNode(predictionStats.predict, impurity, stats.get.gain,
+        leftChild.get.toNode, rightChild.get.toNode, split.get)
+    } else {
+      new LeafNode(predictionStats.predict, impurity)
+    }
+  }
+
+}
+
+private[tree] object LearningNode {
+
+  /** Create a node with some of its fields set. */
+  def apply(
+      id: Int,
+      predictionStats: OldPredict,
+      impurity: Double,
+      isLeaf: Boolean): LearningNode = {
+    new LearningNode(id, predictionStats, impurity, None, None, None, false, None)
+  }
+
+  /** Create an empty node with the given node index.  Values must be set later on. */
+  def emptyNode(nodeIndex: Int): LearningNode = {
+    new LearningNode(nodeIndex, new OldPredict(Double.NaN, Double.NaN), Double.NaN,
+      None, None, None, false, None)
+  }
+
+  // The below indexing methods were copied from spark.mllib.tree.model.Node
+
+  /**
+   * Return the index of the left child of this node.
+   */
+  def leftChildIndex(nodeIndex: Int): Int = nodeIndex << 1
+
+  /**
+   * Return the index of the right child of this node.
+   */
+  def rightChildIndex(nodeIndex: Int): Int = (nodeIndex << 1) + 1
+
+  /**
+   * Get the parent index of the given node, or 0 if it is the root.
+   */
+  def parentIndex(nodeIndex: Int): Int = nodeIndex >> 1
+
+  /**
+   * Return the level of a tree which the given node is in.
+   */
+  def indexToLevel(nodeIndex: Int): Int = if (nodeIndex == 0) {
+    throw new IllegalArgumentException(s"0 is not a valid node index.")
+  } else {
+    java.lang.Integer.numberOfTrailingZeros(java.lang.Integer.highestOneBit(nodeIndex))
+  }
+
+  /**
+   * Returns true if this is a left child.
+   * Note: Returns false for the root.
+   */
+  def isLeftChild(nodeIndex: Int): Boolean = nodeIndex > 1 && nodeIndex % 2 == 0
+
+  /**
+   * Return the maximum number of nodes which can be in the given level of the tree.
+   * @param level  Level of tree (0 = root).
+   */
+  def maxNodesInLevel(level: Int): Int = 1 << level
+
+  /**
+   * Return the index of the first node in the given level.
+   * @param level  Level of tree (0 = root).
+   */
+  def startIndexInLevel(level: Int): Int = 1 << level
+
+  /**
+   * Traces down from a root node to get the node with the given node index.
+   * This assumes the node exists.
+   */
+  def getNode(nodeIndex: Int, rootNode: LearningNode): LearningNode = {
+    var tmpNode: LearningNode = rootNode
+    var levelsToGo = indexToLevel(nodeIndex)
+    while (levelsToGo > 0) {
+      if ((nodeIndex & (1 << levelsToGo - 1)) == 0) {
+        tmpNode = tmpNode.leftChild.asInstanceOf[LearningNode]
+      } else {
+        tmpNode = tmpNode.rightChild.asInstanceOf[LearningNode]
+      }
+      levelsToGo -= 1
+    }
+    tmpNode
+  }
+
+}

@@ -51,15 +51,11 @@ private[spark] case class PythonUDF(
     broadcastVars: JList[Broadcast[PythonBroadcast]],
     accumulator: Accumulator[JList[Array[Byte]]],
     dataType: DataType,
-    children: Seq[Expression]) extends Expression with SparkLogging {
+    children: Seq[Expression]) extends Expression with Unevaluable with SparkLogging {
 
   override def toString: String = s"PythonUDF#$name(${children.mkString(",")})"
 
   override def nullable: Boolean = true
-
-  override def eval(input: InternalRow): Any = {
-    throw new UnsupportedOperationException("PythonUDFs can not be directly evaluated.")
-  }
 }
 
 /**

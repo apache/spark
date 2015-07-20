@@ -36,8 +36,8 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
-import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.hive.HiveShim._
@@ -81,7 +81,7 @@ private[hive] class HiveFunctionRegistry(underlying: analysis.FunctionRegistry)
 }
 
 private[hive] case class HiveSimpleUDF(funcWrapper: HiveFunctionWrapper, children: Seq[Expression])
-  extends Expression with HiveInspectors with Logging {
+  extends Expression with HiveInspectors with CodegenFallback with Logging {
 
   type UDFType = UDF
 
@@ -146,7 +146,7 @@ private[hive] class DeferredObjectAdapter(oi: ObjectInspector)
 }
 
 private[hive] case class HiveGenericUDF(funcWrapper: HiveFunctionWrapper, children: Seq[Expression])
-  extends Expression with HiveInspectors with Logging {
+  extends Expression with HiveInspectors with CodegenFallback with Logging {
   type UDFType = GenericUDF
 
   override def deterministic: Boolean = isUDFDeterministic
@@ -166,8 +166,8 @@ private[hive] case class HiveGenericUDF(funcWrapper: HiveFunctionWrapper, childr
 
   @transient
   protected lazy val isUDFDeterministic = {
-    val udfType = function.getClass().getAnnotation(classOf[HiveUDFType])
-    (udfType != null && udfType.deterministic())
+    val udfType = function.getClass.getAnnotation(classOf[HiveUDFType])
+    udfType != null && udfType.deterministic()
   }
 
   override def foldable: Boolean =
@@ -301,7 +301,7 @@ private[hive] case class HiveWindowFunction(
     pivotResult: Boolean,
     isUDAFBridgeRequired: Boolean,
     children: Seq[Expression]) extends WindowFunction
-  with HiveInspectors {
+  with HiveInspectors with Unevaluable {
 
   // Hive window functions are based on GenericUDAFResolver2.
   type UDFType = GenericUDAFResolver2
@@ -330,7 +330,7 @@ private[hive] case class HiveWindowFunction(
     evaluator.init(GenericUDAFEvaluator.Mode.COMPLETE, inputInspectors)
   }
 
-  def dataType: DataType =
+  override def dataType: DataType =
     if (!pivotResult) {
       inspectorToDataType(returnInspector)
     } else {
@@ -344,10 +344,7 @@ private[hive] case class HiveWindowFunction(
       }
     }
 
-  def nullable: Boolean = true
-
-  override def eval(input: InternalRow): Any =
-    throw new TreeNodeException(this, s"No function to evaluate expression. type: ${this.nodeName}")
+  override def nullable: Boolean = true
 
   @transient
   lazy val inputProjection = new InterpretedProjection(children)
@@ -406,7 +403,7 @@ private[hive] case class HiveWindowFunction(
     s"$nodeName#${funcWrapper.functionClassName}(${children.mkString(",")})"
   }
 
-  override def newInstance: WindowFunction =
+  override def newInstance(): WindowFunction =
     new HiveWindowFunction(funcWrapper, pivotResult, isUDAFBridgeRequired, children)
 }
 
@@ -476,7 +473,7 @@ private[hive] case class HiveUDAF(
 
 /**
  * Converts a Hive Generic User Defined Table Generating Function (UDTF) to a
- * [[catalyst.expressions.Generator Generator]].  Note that the semantics of Generators do not allow
+ * [[Generator]].  Note that the semantics of Generators do not allow
  * Generators to maintain state in between input rows.  Thus UDTFs that rely on partitioning
  * dependent operations like calls to `close()` before producing output will not operate the same as
  * in Hive.  However, in practice this should not affect compatibility for most sane UDTFs
@@ -488,7 +485,7 @@ private[hive] case class HiveUDAF(
 private[hive] case class HiveGenericUDTF(
     funcWrapper: HiveFunctionWrapper,
     children: Seq[Expression])
-  extends Generator with HiveInspectors {
+  extends Generator with HiveInspectors with CodegenFallback {
 
   @transient
   protected lazy val function: GenericUDTF = {

@@ -17,12 +17,11 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import java.security.MessageDigest
-import java.security.NoSuchAlgorithmException
+import java.security.{MessageDigest, NoSuchAlgorithmException}
 import java.util.zip.CRC32
 
 import org.apache.commons.codec.digest.DigestUtils
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -42,7 +41,7 @@ case class Md5(child: Expression) extends UnaryExpression with ImplicitCastInput
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     defineCodeGen(ctx, ev, c =>
-      s"${ctx.stringType}.fromString(org.apache.commons.codec.digest.DigestUtils.md5Hex($c))")
+      s"UTF8String.fromString(org.apache.commons.codec.digest.DigestUtils.md5Hex($c))")
   }
 }
 
@@ -93,19 +92,19 @@ case class Sha2(left: Expression, right: Expression)
           try {
             java.security.MessageDigest md = java.security.MessageDigest.getInstance("SHA-224");
             md.update($eval1);
-            ${ev.primitive} = ${ctx.stringType}.fromBytes(md.digest());
+            ${ev.primitive} = UTF8String.fromBytes(md.digest());
           } catch (java.security.NoSuchAlgorithmException e) {
             ${ev.isNull} = true;
           }
         } else if ($eval2 == 256 || $eval2 == 0) {
           ${ev.primitive} =
-            ${ctx.stringType}.fromString($digestUtils.sha256Hex($eval1));
+            UTF8String.fromString($digestUtils.sha256Hex($eval1));
         } else if ($eval2 == 384) {
           ${ev.primitive} =
-            ${ctx.stringType}.fromString($digestUtils.sha384Hex($eval1));
+            UTF8String.fromString($digestUtils.sha384Hex($eval1));
         } else if ($eval2 == 512) {
           ${ev.primitive} =
-            ${ctx.stringType}.fromString($digestUtils.sha512Hex($eval1));
+            UTF8String.fromString($digestUtils.sha512Hex($eval1));
         } else {
           ${ev.isNull} = true;
         }
@@ -129,7 +128,7 @@ case class Sha1(child: Expression) extends UnaryExpression with ImplicitCastInpu
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     defineCodeGen(ctx, ev, c =>
-      s"${ctx.stringType}.fromString(org.apache.commons.codec.digest.DigestUtils.shaHex($c))"
+      s"UTF8String.fromString(org.apache.commons.codec.digest.DigestUtils.shaHex($c))"
     )
   }
 }
