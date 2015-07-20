@@ -305,9 +305,7 @@ case class ShowTablesCommand(databaseName: Option[String]) extends RunnableComma
  * {{{
  *    SHOW FUNCTIONS
  * }}}
- * :: DeveloperApi ::
  */
-@DeveloperApi
 case object ShowFunctions extends RunnableCommand {
   override val output: Seq[Attribute] = {
     val schema = StructType(
@@ -327,9 +325,7 @@ case object ShowFunctions extends RunnableCommand {
  * {{{
  *   DESCRIBE FUNCTION [EXTENDED] upper;
  * }}}
- * :: DeveloperApi ::
  */
-@DeveloperApi
 case class DescribeFunction(
     functionName: String,
     isExtended: Boolean) extends RunnableCommand {

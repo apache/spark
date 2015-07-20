@@ -67,7 +67,7 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll with SQLTestUtils {
       "Function: upper",
       "Class: org.apache.spark.sql.catalyst.expressions.Upper",
       "Usage: upper(str) - Returns str with all characters changed to uppercase",
-      "Extended Usage: > SELECT upper('SparkSql') FROM src LIMIT 1;",
+      "Extended Usage: > SELECT upper('SparkSql');",
       "'SPARKSQL'")
 
     checkExistence(sql("describe functioN Upper"), true,
