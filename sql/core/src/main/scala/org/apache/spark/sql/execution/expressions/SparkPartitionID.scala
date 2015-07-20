@@ -41,7 +41,8 @@ private[sql] case object SparkPartitionID extends LeafExpression {
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     val idTerm = ctx.freshName("partitionId")
-    ctx.addMutableState(ctx.JAVA_INT, idTerm, "org.apache.spark.TaskContext.getPartitionId()")
+    ctx.addMutableState(ctx.JAVA_INT, idTerm,
+      s"$idTerm = org.apache.spark.TaskContext.getPartitionId();")
     ev.isNull = "false"
     s"final ${ctx.javaType(dataType)} ${ev.primitive} = $idTerm;"
   }
