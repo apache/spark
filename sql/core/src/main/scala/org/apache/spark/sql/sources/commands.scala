@@ -19,15 +19,9 @@ package org.apache.spark.sql.sources
 
 import java.util.{Date, UUID}
 
-import scala.collection.JavaConversions.asScalaIterator
-import scala.collection.mutable.HashSet
-
-import org.apache.commons.lang.NotImplementedException
-
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce._
-import org.apache.hadoop.mapreduce.lib.output.{FileOutputCommitter => MapReduceFileOutputCommitter, FileOutputFormat}
-
+import org.apache.hadoop.mapreduce.lib.output.{FileOutputFormat, FileOutputCommitter => MapReduceFileOutputCommitter}
 import org.apache.spark._
 import org.apache.spark.mapred.SparkHadoopMapRedUtil
 import org.apache.spark.mapreduce.SparkHadoopMapReduceUtil
@@ -40,6 +34,9 @@ import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.execution.RunnableCommand
 import org.apache.spark.sql.types.StringType
 import org.apache.spark.util.SerializableConfiguration
+
+import scala.collection.JavaConversions.asScalaIterator
+import scala.collection.mutable.HashSet
 
 private[sql] case class InsertIntoDataSource(
     logicalRelation: LogicalRelation,
@@ -265,8 +262,8 @@ private[sql] case class InsertIntoHadoopFsRelation(
         // Sort the data by partition so that it's possible to use a single outputWriter at a
         // time to process the incoming data
         def sortRows(iterator: Iterator[InternalRow]): Iterator[InternalRow] = {
-          // TODO Sort the data by partition key
-          throw new NotImplementedException()
+          // Sort by the same key used to look up the outputWriter to allow us to recyle the writer
+          iterator.toArray.sortBy(writerContainer.computePartitionPath).toIterator
         }
 
         // When outputting rows, we may need to interrupt the file write to sort the underlying data
@@ -277,6 +274,8 @@ private[sql] case class InsertIntoHadoopFsRelation(
           while (iterator.hasNext) {
             val internalRow = iterator.next()
 
+            // Only output rows that we haven't already output, this code can be called after a sort
+            // mid-traversal.
             if (!writtenRows.contains(internalRow) &&
                 writerContainer.canGetOutputWriter(internalRow)) {
               val partitionPart = partitionProj(internalRow)
@@ -284,7 +283,10 @@ private[sql] case class InsertIntoHadoopFsRelation(
 
               writerContainer.outputWriterForRow(partitionPart, sorted).write(dataPart)
               writtenRows += internalRow
-            } else {
+            } else if (!writtenRows.contains(internalRow)) {
+              // If there are no more available output writers, sort the data, and set the sorted
+              // flag to true. This will then cause subsequent output writers to be cleared after
+              // use, minimizing the memory footprint.
               val sortedRows: Iterator[InternalRow] = sortRows(iterator)
               sorted = true
               writeRowsSafe(sortedRows)
