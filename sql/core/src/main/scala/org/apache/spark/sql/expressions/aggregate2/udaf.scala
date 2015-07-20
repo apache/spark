@@ -112,7 +112,7 @@ class MutableAggregationBuffer private[sql] (
     var underlyingBuffer: MutableRow)
   extends AggregationBuffer(toCatalystConverters, toScalaConverters, bufferOffset) {
 
-  override def apply(i: Int): Any = {
+  override def get(i: Int): Any = {
     if (i >= length || i < 0) {
       throw new IllegalArgumentException(
         s"Could not access ${i}th value in this buffer because it only has $length values.")
@@ -147,7 +147,7 @@ class InputAggregationBuffer private[sql] (
     var underlyingInputBuffer: Row)
   extends AggregationBuffer(toCatalystConverters, toScalaConverters, bufferOffset) {
 
-  override def apply(i: Int): Any = {
+  override def get(i: Int): Any = {
     if (i >= length || i < 0) {
       throw new IllegalArgumentException(
         s"Could not access ${i}th value in this buffer because it only has $length values.")

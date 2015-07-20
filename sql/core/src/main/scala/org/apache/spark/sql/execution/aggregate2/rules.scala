@@ -39,11 +39,13 @@ case class CheckAggregateFunction(context: SQLContext) extends (LogicalPlan => U
   def apply(plan: LogicalPlan): Unit = plan.foreachUp {
     case p if context.conf.useSqlAggregate2 => p.transformExpressionsUp {
       case agg: AggregateExpression1 =>
-        failAnalysis(s"${SQLConf.USE_SQL_AGGREGATE2} is enabled. Please disable it to use $agg.")
+        failAnalysis(
+          s"${SQLConf.USE_SQL_AGGREGATE2.key} is enabled. Please disable it to use $agg.")
     }
     case p if !context.conf.useSqlAggregate2 => p.transformExpressionsUp {
       case agg: AggregateExpression2 =>
-        failAnalysis(s"${SQLConf.USE_SQL_AGGREGATE2} is disabled. Please enable it to use $agg.")
+        failAnalysis(
+          s"${SQLConf.USE_SQL_AGGREGATE2.key} is disabled. Please enable it to use $agg.")
     }
   }
 }
