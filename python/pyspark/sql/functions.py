@@ -51,7 +51,8 @@ __all__ = [
     'sparkPartitionId',
     'struct',
     'udf',
-    'when']
+    'when',
+    'size']
 
 __all__ += ['lag', 'lead', 'ntile']
 
@@ -191,10 +192,6 @@ _window_functions = {
         """returns the relative rank (i.e. percentile) of rows within a window partition.
 
         This is equivalent to the PERCENT_RANK function in SQL.""",
-}
-
-_collection_functions = {
-    'size': ""
 }
 
 for _name, _doc in _functions.items():

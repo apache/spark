@@ -37,7 +37,4 @@ case class Size(child: Expression) extends UnaryExpression with ExpectsInputType
       case MapType(_, _, _) => defineCodeGen(ctx, ev, c => s"($c).size()")
     }
   }
-
-  override def prettyName: String = "size"
-
 }
