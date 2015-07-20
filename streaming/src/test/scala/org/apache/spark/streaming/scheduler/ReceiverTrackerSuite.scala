@@ -17,6 +17,9 @@
 
 package org.apache.spark.streaming.scheduler
 
+import org.scalatest.concurrent.Eventually._
+import org.scalatest.concurrent.Timeouts
+import org.scalatest.time.SpanSugar._
 import org.apache.spark.streaming._
 import org.apache.spark.SparkConf
 import org.apache.spark.storage.StorageLevel
@@ -77,15 +80,18 @@ class ReceiverTrackerSuite extends TestSuiteBase {
   }
 
   test("Receiver tracker - propagates rate limit") {
-    val newRateLimit = 100
+    val newRateLimit = 100L
     val ids = new TestReceiverInputDStream(ssc)
     val tracker = new ReceiverTracker(ssc)
     tracker.start()
-    waitUntil(TestDummyReceiver.started, 5000)
+    eventually(timeout(5 seconds)) {
+      assert(TestDummyReceiver.started)
+    }
     tracker.sendRateUpdate(ids.id, newRateLimit)
     // this is an async message, we need to wait a bit for it to be processed
-    waitUntil(ids.getRateLimit.get == newRateLimit, 1000)
-    assert(ids.getRateLimit.get === newRateLimit)
+    eventually(timeout(3 seconds)) {
+      assert(ids.getCurrentRateLimit.get === newRateLimit)
+    }
   }
 }
 
@@ -95,8 +101,9 @@ private class TestReceiverInputDStream(@transient ssc_ : StreamingContext)
 
   override def getReceiver(): DummyReceiver = TestDummyReceiver
 
-  def getRateLimit: Option[Int] =
+  def getCurrentRateLimit: Option[Long] = {
     TestDummyReceiver.executor.getCurrentRateLimit
+  }
 }
 
 /**

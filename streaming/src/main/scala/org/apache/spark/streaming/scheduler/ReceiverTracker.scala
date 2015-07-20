@@ -180,7 +180,7 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
     logError(s"Deregistered receiver for stream $streamId: $messageWithError")
   }
 
-  /** Update a receiver's maximum rate from an estimator's update */
+  /** Update a receiver's maximum ingestion rate */
   def sendRateUpdate(streamUID: Int, newRate: Long): Unit = {
     for (info <- receiverInfo.get(streamUID); eP <- Option(info.endpoint))
       eP.send(UpdateRateLimit(newRate))

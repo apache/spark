@@ -537,19 +537,4 @@ trait TestSuiteBase extends SparkFunSuite with BeforeAndAfter with Logging {
       verifyOutput[W](output, expectedOutput, useSet)
     }
   }
-
-  /**
-   * Wait until `cond` becomes true, or timeout ms have passed. This method checks the condition
-   * every 100ms, so it won't wait more than 100ms more than necessary.
-   *
-   * @param cond     A boolean that should become `true`
-   * @param timemout How many millis to wait before giving up
-   */
-  def waitUntil(cond: => Boolean, timeout: Int): Unit = {
-    val start = System.currentTimeMillis()
-    val end = start + timeout
-    while ((System.currentTimeMillis() < end) && !cond) {
-      Thread.sleep(100)
-    }
-  }
 }

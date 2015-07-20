@@ -78,7 +78,8 @@ private[streaming] class ReceiverSupervisorImpl(
           logDebug("Received delete old batch signal")
           cleanupOldBlocks(threshTime)
         case UpdateRateLimit(eps) =>
-          blockGenerator.updateRate(eps.toInt)
+          logInfo(s"Received a new rate limit: $eps.")
+          blockGenerator.updateRate(eps)
       }
     })
 
@@ -100,8 +101,8 @@ private[streaming] class ReceiverSupervisorImpl(
     }
   }, streamId, env.conf)
 
-  override private[streaming] def getCurrentRateLimit: Option[Int] =
-    Some(blockGenerator.currentRateLimit.get)
+  override private[streaming] def getCurrentRateLimit: Option[Long] =
+    Some(blockGenerator.getCurrentLimit)
 
   /** Push a single record of received data into block generator. */
   def pushSingle(data: Any) {

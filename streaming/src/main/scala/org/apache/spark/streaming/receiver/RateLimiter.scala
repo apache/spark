@@ -37,27 +37,25 @@ import org.apache.spark.{Logging, SparkConf}
 private[receiver] abstract class RateLimiter(conf: SparkConf) extends Logging {
 
   // treated as an upper limit
-  private val maxRateLimit = conf.getInt("spark.streaming.receiver.maxRate", 0)
-  private[receiver] var currentRateLimit = new AtomicInteger(maxRateLimit)
-  private lazy val rateLimiter = GuavaRateLimiter.create(currentRateLimit.get())
+  private val maxRateLimit = conf.getLong("spark.streaming.receiver.maxRate", Long.MaxValue)
+  private lazy val rateLimiter = GuavaRateLimiter.create(maxRateLimit.toDouble)
 
   def waitToPush() {
-    if (currentRateLimit.get() > 0) {
-      rateLimiter.acquire()
-    }
+    rateLimiter.acquire()
   }
 
-  private[receiver] def updateRate(newRate: Int): Unit =
+  /**
+   * Return the current rate limit. If no limit has been set so far, it returns {{{Long.MaxValue}}}.
+   */
+  def getCurrentLimit: Long =
+    rateLimiter.getRate.toLong
+
+  private[receiver] def updateRate(newRate: Long): Unit =
     if (newRate > 0) {
-      try {
-        if (maxRateLimit > 0) {
-          currentRateLimit.set(newRate.min(maxRateLimit))
-        }
-        else {
-          currentRateLimit.set(newRate)
-        }
-      } finally {
-        rateLimiter.setRate(currentRateLimit.get())
+      if (maxRateLimit > 0) {
+        rateLimiter.setRate(newRate.min(maxRateLimit))
+      } else {
+        rateLimiter.setRate(newRate)
       }
     }
 }
