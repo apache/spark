@@ -487,7 +487,12 @@ class ExternalAppendOnlyMap[K, V, C](
       }
     }
 
-    TaskContext.get().addTaskCompletionListener(context => cleanup())
+    val context = TaskContext.get()
+    // context is null in some tests of ExternalAppendOnlyMapSuite because these tests don't run in
+    // a TaskContext.
+    if (context != null) {
+      context.addTaskCompletionListener(context => cleanup())
+    }
   }
 
   /** Convenience function to hash the given (K, C) pair by the key. */
