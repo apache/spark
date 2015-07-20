@@ -503,9 +503,11 @@ case class StringFormat(children: Expression*) extends Expression with CodegenFa
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     val pattern = children.head.gen(ctx)
-    val argListGen = children.tail.map(x => (x.dataType, x.gen(ctx)))
-    val argListCode = argListGen.map(_._2.code + "\n")
-    val argListString = argListGen.foldLeft("")((s, x) => s + s", ${x._2.primitive}" + (if (!ctx.isPrimitiveType(x._1)) ".toString()" else ""))
+
+    val argListGen = children.tail.map(_.gen(ctx))
+    val argListCode = argListGen.map(_.code + "\n")
+    val argListString = argListGen.foldLeft("")((s, v) => s + s", ${v.primitive}")
+
     val form = ctx.freshName("formatter")
     val formatter = classOf[java.util.Formatter].getName
     val sb = ctx.freshName("sb")
