@@ -22,6 +22,7 @@ import scala.collection.mutable
 import breeze.linalg.{SparseVector => BSV}
 
 import org.apache.spark.SparkContext._ 
+import org.apache.spark.storage.StorageLevel
 import org.apache.spark.Logging
 import org.apache.spark.rdd._
 import org.apache.spark.mllib.regression.LabeledPoint
@@ -40,11 +41,17 @@ import org.apache.spark.mllib.linalg._
 class MDLPDiscretizer private (val data: RDD[LabeledPoint]) extends Serializable with Logging {
 
   private val log2 = { x: Double => math.log(x) / math.log(2) }  
+  private def entropy(freqs: Seq[Long], n: Long) = {
+    //val n = freqs.reduce(_ + _)
+    freqs.aggregate(0.0)({ case (h, q) =>
+      h + (if (q == 0) 0  else (q.toDouble / n) * (math.log(q.toDouble / n) / math.log(2)))
+    }, { case (h1, h2) => h1 + h2 }) * -1
+  }
+  
   private val isBoundary = (f1: Array[Long], f2: Array[Long]) => {
     (f1, f2).zipped.map(_ + _).filter(_ != 0).size > 1
   }
   private val maxLimitBins = Byte.MaxValue - Byte.MinValue + 1
-  private val maxCandidates = 1e5  
   private val labels2Int = data.map(_.label).distinct.collect.zipWithIndex.toMap
   private val nLabels = labels2Int.size
   
@@ -53,52 +60,28 @@ class MDLPDiscretizer private (val data: RDD[LabeledPoint]) extends Serializable
    * 
    * @param contIndices Indexes to discretize (if not specified, they are calculated).
    * @param nFeatures Total number of input features.
-   * @param dense Data is dense or not.
    * @return Indexes of continuous features.
    * 
    */  
   private def processContinuousAttributes(
       contIndices: Option[Seq[Int]], 
-      nFeatures: Int, 
-      dense: Boolean) = {
-    // Generate pairs according to the data format.
-    def calcRawData = {
-      dense match {
-        case true =>
-          data.flatMap({case LabeledPoint(label, values) =>
-            for(k <- 0 until values.toArray.length) yield (k, values.toArray(k))
-          })
-        case false =>
-          data.flatMap({case LabeledPoint(label, values) =>
-            val v = values.asInstanceOf[SparseVector]
-            for(i <- 0 until v.indices.size) yield (v.indices(i), v.values(i))
-          })
-      }    
-    }
-      
-    /**
-     *  (Pre-processing) Count the number of features 
-     *  and select those with a high number of distinct values
-     */
+      nFeatures: Int) = {
     contIndices match {
       case Some(s) => 
         // Attributes are in range 0..nfeat
         val intersect = (0 until nFeatures).seq.intersect(s)
         require(intersect.size == s.size)
         s.toArray
-      case None =>        
-        val countFeat = calcRawData.distinct.mapValues(d => 1L).reduceByKey(_ + _)
-          .filter{case (_, c) => c > maxLimitBins}
-        val cvars = countFeat.sortByKey().keys.collect()
-        cvars       
+      case None =>
+        (0 until nFeatures).toArray
     }
   }
   
   /**
-   * Compute the initial candidate points by feature.
+   * Computes the initial candidate points by feature.
    * 
-   * @param points RDD with distinct points by feature to be evaluated.
-   * @param firstElements first elements by partition 
+   * @param points RDD with distinct points by feature ((feature, point), class values).
+   * @param firstElements First elements in partitions 
    * @return RDD of candidate points.
    * 
    */
@@ -114,13 +97,14 @@ class MDLPDiscretizer private (val data: RDD[LabeledPoint]) extends Serializable
         var ((lastK, lastX), lastFreqs) = it.next()
         var result = Seq.empty[((Int, Float), Array[Long])]
         var accumFreqs = lastFreqs      
+        
         for (((k, x), freqs) <- it) {           
           if(k != lastK) {
             // new attribute: add last point from the previous one
             result = ((lastK, lastX), accumFreqs.clone) +: result
             accumFreqs = Array.fill(nLabels)(0L)
           } else if(isBoundary(freqs, lastFreqs)) {
-            // new boundary point: midpoint between this one and the previous one
+            // new boundary point: midpoint between this point and the previous one
             result = ((lastK, (x + lastX) / 2), accumFreqs.clone) +: result
             accumFreqs = Array.fill(nLabels)(0L)
           }
@@ -131,15 +115,14 @@ class MDLPDiscretizer private (val data: RDD[LabeledPoint]) extends Serializable
           accumFreqs = (accumFreqs, freqs).zipped.map(_ + _)
         }
        
-        // Evaluate the last point in current partition with the first one in the next partition
+        // Evaluate the last point in this partition with the first one in the next partition
         val lastPoint = if(index < (numPartitions - 1)) {
           bcFirsts.value(index + 1) match {
-            case Some((k, x)) => 
-              if(k != lastK) lastX else (x + lastX) / 2 
-            case None => lastX // last point
+            case Some((k, x)) => if(k != lastK) lastX else (x + lastX) / 2 
+            case None => lastX // last point in the attribute
           }
         }else{
-            lastX // last partition
+            lastX // last point in the dataset
         }                    
         (((lastK, lastPoint), accumFreqs.clone) +: result).reverse.toIterator
       } else {
@@ -150,9 +133,9 @@ class MDLPDiscretizer private (val data: RDD[LabeledPoint]) extends Serializable
   
   /**
    * Evaluate boundary points and select the most relevant. This version is used when 
-   * the number of candidates exceeds the maximum per partition (distributed version).
+   * the number of candidates exceeds the maximum size per partition (distributed version).
    * 
-   * @param candidates RDD of candidates points.
+   * @param candidates RDD of candidates points (point, class histogram).
    * @param maxBins Maximum number of points to select
    * @param elementsByPart Maximum number of elements to evaluate in each partition.
    * @return Sequence of threshold values.
@@ -163,16 +146,17 @@ class MDLPDiscretizer private (val data: RDD[LabeledPoint]) extends Serializable
       maxBins: Int, 
       elementsByPart: Int) = {
 
+    // Get the number of partitions according to the maximum size established by partition
     val partitions = { x: Long => math.ceil(x.toFloat / elementsByPart).toInt }    
-    // Create queue
+    
+    // Insert the extreme values in the stack (recursive iteration)
     val stack = new mutable.Queue[((Float, Float), Option[Float])]
-    // Insert the extreme values in the stack
     stack.enqueue(((Float.NegativeInfinity, Float.PositiveInfinity), None))
     var result = Seq.empty[Float]
 
-    // As long as there are more elements to evaluate, we continue
     while(stack.length > 0 && result.size < maxBins){
       val (bounds, lastThresh) = stack.dequeue
+      // Filter the candidates between the last limits added to the stack
       var cands = candidates.filter({ case (th, _) => th > bounds._1 && th <= bounds._2 })
       val nCands = cands.count
       if (nCands > 0) {
@@ -183,35 +167,35 @@ class MDLPDiscretizer private (val data: RDD[LabeledPoint]) extends Serializable
             result = th +: result
             stack.enqueue(((bounds._1, th), Some(th)))
             stack.enqueue(((th, bounds._2), Some(th)))
-          case None => /* criteria not fulfilled, finish */
+          case None => /* criteria not fulfilled, finish! */
         }
       }
     }
-    result.sorted
+    (Float.PositiveInfinity +: result).sorted
   }
   
   /**
-   * Evaluates boundary points and selects the most relevant candidates.
-   * Here, the evaluation is bounded by partition as the number of points is enoughly small.
+   * Evaluates boundary points and selects the most relevant candidates (sequential version).
+   * Here, the evaluation is bounded by partition as the number of points is small enough.
    * 
-   * @param candidates RDD of candidates points.
+   * @param candidates RDD of candidates points (point, class histogram).
    * @param maxBins Maximum number of points to select.
    * @return Sequence of threshold values.
    * 
    */
   private def getThresholds(candidates: Array[(Float, Array[Long])], maxBins: Int) = {
 
-    // Create queue
     val stack = new mutable.Queue[((Float, Float), Option[Float])]
-    // Insert first in the stack
+    // Insert first in the stack (recursive iteration)
     stack.enqueue(((Float.NegativeInfinity, Float.PositiveInfinity), None))
     var result = Seq.empty[Float]
 
     while(stack.length > 0 && result.size < maxBins){
       val (bounds, lastThresh) = stack.dequeue
-      // Filter candidates within the last range added
+      // Filter the candidates between the last limits added to the stack
       val newCandidates = candidates.filter({ case (th, _) => 
-        th > bounds._1 && th <= bounds._2 })      
+          th > bounds._1 && th <= bounds._2 
+        })      
       if (newCandidates.size > 0) {
         evalThresholds(newCandidates, lastThresh, nLabels) match {
           case Some(th) =>
@@ -222,17 +206,16 @@ class MDLPDiscretizer private (val data: RDD[LabeledPoint]) extends Serializable
         }
       }
     }
-    result.sorted
+    (Float.PositiveInfinity +: result).sorted
   }
 
   /**
    * Compute entropy minimization for candidate points in a range,
-   * and select the best one according to MDLP criterion (RDD version).
+   * and select the best one according to the MDLP criterion (RDD version).
    * 
-   * @param candidates RDD of candidate points.
+   * @param candidates RDD of candidate points (point, class histogram).
    * @param lastSelected Last selected threshold.
-   * @param nLabels Number of labels in output attribute.
-   * @return The minimum-entropy cut point.
+   * @return The minimum-entropy candidate.
    * 
    */
   private def evalThresholds(
@@ -242,25 +225,25 @@ class MDLPDiscretizer private (val data: RDD[LabeledPoint]) extends Serializable
     val numPartitions = candidates.partitions.size
     val sc = candidates.sparkContext
 
-    // store total frequencies for each partition
+    // Compute the accumulated frequencies by partition
     val totalsByPart = sc.runJob(candidates, { case it =>
       val accum = Array.fill(nLabels)(0L)
       for ((_, freqs) <- it) {for (i <- 0 until nLabels) accum(i) += freqs(i)}
       accum
     }: (Iterator[(Float, Array[Long])]) => Array[Long])
     
-    // compute the global total
+    // Compute the total frequency for all partitions
     var totals = Array.fill(nLabels)(0L)
     for (t <- totalsByPart) totals = (totals, t).zipped.map(_ + _)
     val bcTotalsByPart = sc.broadcast(totalsByPart)
     val bcTotals = sc.broadcast(totals)
 
     val result = candidates.mapPartitionsWithIndex({ (slice, it) =>
-      // accumulate frequencies from left to the current partition
+      // Accumulate frequencies from the left to the current partition
       var leftTotal = Array.fill(nLabels)(0L)
       for (i <- 0 until slice) leftTotal = (leftTotal, bcTotalsByPart.value(i)).zipped.map(_ + _)
       var entropyFreqs = Seq.empty[(Float, Array[Long], Array[Long], Array[Long])]
-      // ... and from the current partition to the most-right partition
+      // ... and from the current partition to the rightmost partition
       for ((cand, freqs) <- it) {
         leftTotal = (leftTotal, freqs).zipped.map(_ + _)
         val rightTotal = (bcTotals.value, leftTotal).zipped.map(_ - _)
@@ -274,18 +257,16 @@ class MDLPDiscretizer private (val data: RDD[LabeledPoint]) extends Serializable
     // k: number of distinct classes
     // hs: entropy        
     val s  = totals.sum
-    val hs = InfoTheory.entropy(totals.toSeq, s)
+    val hs = entropy(totals.toSeq, s)
     val k  = totals.filter(_ != 0).size
 
-    // select the best threshold according to the criterion
+    // select the best threshold according to MDLP
     val finalCandidates = result.flatMap({
       case (cand, _, leftFreqs, rightFreqs) =>
-        val k1 = leftFreqs.filter(_ != 0).size
-        val s1 = leftFreqs.sum
-        val hs1 = InfoTheory.entropy(leftFreqs, s1)
-        val k2 = rightFreqs.filter(_ != 0).size
-        val s2 = rightFreqs.sum
-        val hs2 = InfoTheory.entropy(rightFreqs, s2)
+        val k1 = leftFreqs.filter(_ != 0).size; val s1 = leftFreqs.sum
+        val hs1 = entropy(leftFreqs, s1)
+        val k2 = rightFreqs.filter(_ != 0).size; val s2 = rightFreqs.sum
+        val hs2 = entropy(rightFreqs, s2)
         val weightedHs = (s1 * hs1 + s2 * hs2) / s
         val gain = hs - weightedHs
         val delta = log2(math.pow(3, k) - 2) - (k * hs - k1 * hs1 - k2 * hs2)
@@ -296,15 +277,15 @@ class MDLPDiscretizer private (val data: RDD[LabeledPoint]) extends Serializable
         }
         if (criterion) Seq((weightedHs, cand)) else Seq.empty[(Double, Float)]
     })
-    // Select the accepted candidate with the minimum weightedHs
+    // Select among the list of accepted candidate, that with the minimum weightedHs
     if (finalCandidates.count > 0) Some(finalCandidates.min._2) else None
   }
   
   /**
    * Compute entropy minimization for candidate points in a range,
-   * and select the best one according to MDLP criterion (single-step version).
+   * and select the best one according to MDLP criterion (sequential version).
    * 
-   * @param candidates Array of candidate points.
+   * @param candidates Array of candidate points (point, class histogram).
    * @param lastSelected last selected threshold.
    * @param nLabels Number of classes.
    * @return The minimum-entropy cut point.
@@ -315,10 +296,10 @@ class MDLPDiscretizer private (val data: RDD[LabeledPoint]) extends Serializable
       lastSelected : Option[Float],
       nLabels: Int): Option[Float] = {
     
-    // Calculate total frequencies by label
+    // Calculate the total frequencies by label
     val totals = candidates.map(_._2).reduce((freq1, freq2) => (freq1, freq2).zipped.map(_ + _))
     
-    // Compute accumulated frequencies (both left and right) by label
+    // Compute the accumulated frequencies (both left and right) by label
     var leftAccum = Array.fill(nLabels)(0L)
     var entropyFreqs = Seq.empty[(Float, Array[Long], Array[Long], Array[Long])]
     for(i <- 0 until candidates.size) {
@@ -333,7 +314,7 @@ class MDLPDiscretizer private (val data: RDD[LabeledPoint]) extends Serializable
     // k: number of distinct classes
     // hs: entropy
     val s = totals.sum
-    val hs = InfoTheory.entropy(totals.toSeq, s)
+    val hs = entropy(totals.toSeq, s)
     val k = totals.filter(_ != 0).size
 
     // select best threshold according to the criteria
@@ -341,10 +322,10 @@ class MDLPDiscretizer private (val data: RDD[LabeledPoint]) extends Serializable
       case (cand, _, leftFreqs, rightFreqs) =>
         val k1 = leftFreqs.filter(_ != 0).size
         val s1 = if (k1 > 0) leftFreqs.sum else 0
-        val hs1 = InfoTheory.entropy(leftFreqs, s1)
+        val hs1 = entropy(leftFreqs, s1)
         val k2 = rightFreqs.filter(_ != 0).size
         val s2 = if (k2 > 0) rightFreqs.sum else 0
-        val hs2 = InfoTheory.entropy(rightFreqs, s2)
+        val hs2 = entropy(rightFreqs, s2)
         val weightedHs = (s1 * hs1 + s2 * hs2) / s
         val gain = hs - weightedHs
         val delta = log2(math.pow(3, k) - 2) - (k * hs - k1 * hs1 - k2 * hs2)
@@ -357,16 +338,16 @@ class MDLPDiscretizer private (val data: RDD[LabeledPoint]) extends Serializable
 
         if (criterion) Seq((weightedHs, cand)) else Seq.empty[(Double, Float)]
     })
-    // Select the accepted candidate with the minimum weightedHs
+    // Select among the list of accepted candidate, that with the minimum weightedHs
     if (finalCandidates.size > 0) Some(finalCandidates.min._2) else None
   }
  
   /**
-   * Run the entropy minimization discretizer on previously stored input data.
+   * Run the entropy minimization discretizer on input data.
    * 
-   * @param contFeat Feature indexes to discretize (in case not specified, they are calculated).
-   * @param elementsByPart Maximum number of elements to evaluate in each partition.
-   * @param maxBins Maximum number of bins by feature.
+   * @param contFeat Indices to discretize (if not specified, the algorithm try to figure it out).
+   * @param elementsByPart Maximum number of elements to keep in each partition.
+   * @param maxBins Maximum number of thresholds per feature.
    * @return A discretization model with the thresholds by feature.
    * 
    */
@@ -374,50 +355,49 @@ class MDLPDiscretizer private (val data: RDD[LabeledPoint]) extends Serializable
       contFeat: Option[Seq[Int]], 
       elementsByPart: Int,
       maxBins: Int) = {
+    
+    if (data.getStorageLevel == StorageLevel.NONE) {
+      logWarning("The input data is not directly cached, which may hurt performance if its"
+        + " parent RDDs are also uncached.")
+    }
 
-    val sc = data.context 
-    val nInstances = data.count
+    // Basic info. about the dataset
+    val sc = data.context; val nInstances = data.count
     val bLabels2Int = sc.broadcast(labels2Int)
     val classDistrib = data.map(d => bLabels2Int.value(d.label)).countByValue()
     val bclassDistrib = sc.broadcast(classDistrib)
     val (dense, nFeatures) = data.first.features match {
       case v: DenseVector => 
         (true, v.size)
-      case v: SparseVector =>         
-          (false, v.size)
+      case v: SparseVector =>
+        (false, v.size)
     }
             
-    val continuousVars = processContinuousAttributes(contFeat, nFeatures, dense)
+    val continuousVars = processContinuousAttributes(contFeat, nFeatures)
     logInfo("Number of continuous attributes: " + continuousVars.distinct.size)
     logInfo("Total number of attributes: " + nFeatures)      
     if(continuousVars.isEmpty) logWarning("Discretization aborted. " +
       "No continous attribute in the dataset")
     
-    // Generate pairs ((attribute, value), class count)
+    // Generate pairs ((feature, point), class histogram)
     val featureValues = dense match {
       case true => 
         val bContinuousVars = sc.broadcast(continuousVars)
-        data.flatMap({case LabeledPoint(label, values) =>            
-          bContinuousVars.value.map{ k =>
+        data.flatMap({ case LabeledPoint(label, dv: DenseVector) =>            
             val c = Array.fill[Long](nLabels)(0L)
             c(bLabels2Int.value(label)) = 1L
-            // BigDecimal(d).setScale(6, BigDecimal.RoundingMode.HALF_UP).toFloat
-            ((k, values(k).toFloat), c)
-          }                   
+            for(i <- 0 until dv.values.length) yield ((i, dv(i).toFloat), c)                  
         })
       case false =>
         val bContVars = sc.broadcast(continuousVars)          
-        data.flatMap{case LabeledPoint(label, values: Vector) =>
+        data.flatMap{ case LabeledPoint(label, sv: SparseVector) =>
           val c = Array.fill[Long](nLabels)(0L)
-          val v = FeatureUtils.compress(values, bContVars.value)
-          val sv = v.asInstanceOf[SparseVector]
           c(bLabels2Int.value(label)) = 1L
-          // BigDecimal(d).setScale(6, BigDecimal.RoundingMode.HALF_UP).toFloat
-          for(i <- 0 until sv.size) yield ((sv.indices(i), sv.values(i).toFloat), c)
+          for(i <- 0 until sv.indices.length) yield ((sv.indices(i), sv.values(i).toFloat), c)
         }
     }
     
-    // Group elements by attribute and value (distinct points)
+    // Group elements by feature and point (get distinct points)
     val nonzeros = featureValues.reduceByKey{ case (v1, v2) => 
       (v1, v2).zipped.map(_ + _)
     }
@@ -426,42 +406,46 @@ class MDLPDiscretizer private (val data: RDD[LabeledPoint]) extends Serializable
     val zeros = nonzeros
       .map{case ((k, p), v) => (k, v)}
       .reduceByKey{ case (v1, v2) =>  (v1, v2).zipped.map(_ + _)}
-      .map{case (k, v) => 
+      .map{ case (k, v) => 
         val v2 = for(i <- 0 until v.length) yield bclassDistrib.value(i) - v(i)
         ((k, 0.0F), v2.toArray)
       }.filter{case (_, v) => v.sum > 0}
     val distinctValues = nonzeros.union(zeros)
     
     // Sort these values to perform the boundary points evaluation
-    val sortedValues = distinctValues.sortByKey()   
+    val sortedValues = distinctValues.sortByKey()
           
     // Get the first elements by partition for the boundary points evaluation
     val firstElements = sc.runJob(sortedValues, { case it =>
       if (it.hasNext) Some(it.next()._1) else None
     }: (Iterator[((Int, Float), Array[Long])]) => Option[(Int, Float)])
       
+    // Filter those features selected by the user
+    val arr = Array.fill(nFeatures) { false }
+    continuousVars.map(arr(_) = true)
+    val barr = sc.broadcast(arr)
+    
     // Get only boundary points from the whole set of distinct values
     val initialCandidates = initialThresholds(sortedValues, firstElements)
       .map{case ((k, point), c) => (k, (point, c))}
-      .cache() // It will be iterated through "big features" loop
+      .filter({case (k, _) => barr.value(k)})
+      .cache() // It will be iterated for "big" features
       
     // Divide RDD into two categories according to the number of points by feature
     val bigIndexes = initialCandidates
       .countByKey()
-      .filter{case (_, c) => c > maxCandidates}
+      .filter{case (_, c) => c > elementsByPart}
     val bBigIndexes = sc.broadcast(bigIndexes)
       
-    // Those feature with few points can be processed in a parallel way
-    val smallCandidatesByAtt = initialCandidates
+    // The features with a small number of points can be processed in a parallel way
+    val smallThresholds = initialCandidates
       .filter{case (k, _) => !bBigIndexes.value.contains(k) }
       .groupByKey()
       .mapValues(_.toArray)
-                    
-    val smallThresholds = smallCandidatesByAtt
       .mapValues(points => getThresholds(points.toArray.sortBy(_._1), maxBins))
     
-    // Feature with too many points must be processed iteratively (rare condition) exceed
-    logInfo("Number of features that exceed the maximum: " + 
+    // Feature with too many points must be processed iteratively (rare condition)
+    logInfo("Number of features that exceed the maximum size per partition: " + 
         bigIndexes.size)
     var bigThresholds = Map.empty[Int, Seq[Float]]
     for (k <- bigIndexes.keys){ 
@@ -469,11 +453,18 @@ class MDLPDiscretizer private (val data: RDD[LabeledPoint]) extends Serializable
       bigThresholds += ((k, getThresholds(cands, maxBins, elementsByPart)))
     }
 
-    // Join all thresholds and return them
+    // Join all thresholds in a single structure
     val bigThRDD = sc.parallelize(bigThresholds.toSeq)
-    val thresholds = smallThresholds.union(bigThRDD)
-      .sortByKey() // Important!
-      .collect                        
+    val thrs = smallThresholds.union(bigThRDD).collect()
+      //.sortByKey() // Important!
+      //.collect
+    
+    // Update the full list features with the thresholds calculated
+    val base = Array.empty[Float]
+    val thresholds = Array.fill(nFeatures)(base)   
+    thrs.foreach({case (k, vth) => thresholds(k) = vth.toArray})    
+    logInfo("Number of features with thresholds computed: " + thrs.length)
+    
     new DiscretizerModel(thresholds)
   }
 }
@@ -485,19 +476,18 @@ object MDLPDiscretizer {
    * 
    * @param input RDD of LabeledPoint's.
    * @param continuousFeaturesIndexes Indexes of features to be discretized. 
-   * Optional, if it is not provided the algorithm selects those features 
-   * with more than 256 (byte range) distinct values.
-   * @param maxBins Maximum number of bins by feature.
-   * @param elementsPerPartition Maximum number of elements by partition.
+   * If it is not provided, the algorithm selects those features with more than 
+   * 256 (byte range) distinct values.
+   * @param maxBins Maximum number of thresholds to select per feature.
+   * @param maxByPart Maximum number of elements by partition.
    * @return A DiscretizerModel with the subsequent thresholds.
    * 
    */
   def train(
-      input:
-      RDD[LabeledPoint],
+      input: RDD[LabeledPoint],
       continuousFeaturesIndexes: Option[Seq[Int]] = None,
       maxBins: Int = 15,
-      elementsByPart: Int = 10000) = {
-    new MDLPDiscretizer(input).runAll(continuousFeaturesIndexes, elementsByPart, maxBins)
+      maxByPart: Int = 10000) = {
+    new MDLPDiscretizer(input).runAll(continuousFeaturesIndexes, maxByPart, maxBins)
   }
 }

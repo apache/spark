@@ -20,121 +20,76 @@ package org.apache.spark.mllib.feature
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.rdd.RDD
 import org.apache.spark.mllib.linalg._
-import org.apache.spark.annotation.Experimental
 
 /**
- * Generic discretizer model that transform data given a list of thresholds by feature.
- * @param thresholds Thresholds defined by feature (both must be sorted)
+ * Generic a discretizer model that transform data given a list of thresholds by feature.
+ * 
+ * @param thresholds Thresholds defined for each feature (must be sorted).
  *  
  * Note: checking the second sorting condition can be much more time-consuming. 
  * We omit this condition.
  */
-
-@Experimental
-class DiscretizerModel (val thresholds: Array[(Int, Seq[Float])]) extends VectorTransformer {
-  
-  require(isSorted(thresholds.map(_._1)), "Array has to be sorted asc")
-  
-  protected def isSorted(array: Array[Int]): Boolean = {
-    var i = 1
-    while (i < array.length) {
-      if (array(i) < array(i-1)) return false
-      i += 1
-    }
-    true
-  }
+class DiscretizerModel (val thresholds: Array[Array[Float]]) extends VectorTransformer {
   
   /**
-   * Discretizes values for a single example using thresholds.
+   * Discretizes values in a given dataset using thresholds.
    *
-   * @param data Vector.
-   * @return Discretized vector (with bins from 1 to n).
+   * @param data A single continuous-valued vector.
+   * @return A resulting vector with its values discretized (from 1 to n).
    */
   override def transform(data: Vector) = {
     data match {
       case v: SparseVector =>
-        var newValues = Array.empty[Double]
-        var j = 0
-        for (i <- 0 until v.indices.length){
-          val ival = v.indices(i)
-          j = thresholds.indexWhere({case (idx, _) => ival < idx}, j)
-          val (iind, th) = if (j == -1) (-1, Seq.empty) else thresholds(j)
-          if (iind == ival) {
-            newValues = assignDiscreteValue(v.values(i), th).toDouble +: newValues
-          } else {                  
-            newValues = v.values(i) +: newValues
-          }
-        }
-        // the `index` array inside sparse vector object will not be changed
-        Vectors.sparse(v.size, v.indices, newValues)
+        val newValues = for (i <- 0 until v.indices.length) 
+          yield assignDiscreteValue(v.values(i), thresholds(v.indices(i))).toDouble
+        
+        // the `index` array inside sparse vector object will not be changed,
+        // so we can re-use it to save memory.
+        Vectors.sparse(v.size, v.indices, newValues.toArray)
         
         case v: DenseVector =>
-          var newValues = Array.empty[Double]
-          var j = 0
-          for (i <- 0 until v.values.length){
-            j = thresholds.indexWhere({case (idx, _) => i < idx}, j)
-            val (iind, th) = if (j == -1) (-1, Seq.empty) else thresholds(j)
-            if (iind == i) {
-              newValues = assignDiscreteValue(v.values(i), th).toDouble +: newValues
-            } else {                  
-              newValues = v.values(i) +: newValues
-            }
-          }          
-          Vectors.dense(newValues)
+          val newValues = for (i <- 0 until v.values.length)
+            yield assignDiscreteValue(v(i), thresholds(i)).toDouble         
+          Vectors.dense(newValues.toArray)
     }    
-  }
-
+  } 
+  
   /**
    * Discretizes values in a given dataset using thresholds.
    *
    * @param data RDD with continuous-valued vectors.
-   * @return RDD with discretized data (bins from 1 to n).
+   * @return RDD with discretized data (from 1 to n).
    */
   override def transform(data: RDD[Vector]) = {
     val bc_thresholds = data.context.broadcast(thresholds)    
-    data.map {
+    val result = data.map {
       case v: SparseVector =>
-        var newValues = Array.empty[Double]
-        var j = 0
-        for (i <- 0 until v.indices.length){
-          val ival = v.indices(i)
-          j = bc_thresholds.value.indexWhere({case (idx, _) => ival < idx}, j)
-          val (iind, th) = if (j == -1) (-1, Seq.empty) else bc_thresholds.value(j)
-          if (iind == ival) {
-            newValues = assignDiscreteValue(v.values(i), th).toDouble +: newValues
-          } else {                  
-            newValues = v.values(i) +: newValues
-          }
-        }
+        val newValues = for (i <- 0 until v.indices.length) 
+          yield assignDiscreteValue(v.values(i), bc_thresholds.value(v.indices(i))).toDouble
+        
         // the `index` array inside sparse vector object will not be changed,
         // so we can re-use it to save memory.
-        Vectors.sparse(v.size, v.indices, newValues)
+        Vectors.sparse(v.size, v.indices, newValues.toArray)
         
         case v: DenseVector =>
-          var newValues = Array.empty[Double]
-          var j = 0
-          for (i <- 0 until v.values.length){
-            j = bc_thresholds.value.indexWhere({case (idx, _) => i < idx}, j)
-            val (iind, th) = if (j == -1) (-1, Seq.empty) else bc_thresholds.value(j)
-            if (iind == i) {
-              newValues = assignDiscreteValue(v.values(i), th).toDouble +: newValues
-            } else {                  
-              newValues = v.values(i) +: newValues
-            }
-          }          
-          Vectors.dense(newValues)
-    }    
+          val newValues = for (i <- 0 until v.values.length)
+            yield assignDiscreteValue(v(i), bc_thresholds.value(i)).toDouble         
+          Vectors.dense(newValues.toArray)
+    }  
+    bc_thresholds.unpersist()
+    result
   }
 
   /**
    * Discretizes a value with a set of intervals.
    *
-   * @param value Value to be discretized
+   * @param value Value to be discretized.
    * @param thresholds Thresholds used to assign a discrete value
+   * 
+   * Note: The last threshold must be always Positive Infinity
    */
   private def assignDiscreteValue(value: Double, thresholds: Seq[Float]) = {
-    if(thresholds.isEmpty) 1 else if (value > thresholds.last) thresholds.size + 1 
-      else thresholds.indexWhere{value <= _} + 1
+    if(thresholds.isEmpty) value else thresholds.indexWhere{value <= _} + 1
   }
 
 }
