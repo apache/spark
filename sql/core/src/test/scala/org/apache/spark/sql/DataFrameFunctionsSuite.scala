@@ -381,4 +381,63 @@ class DataFrameFunctionsSuite extends QueryTest {
       df.selectExpr("split(a, '[1-9]+')"),
       Row(Seq("aa", "bb", "cc")))
   }
+
+  test("conditional function: least") {
+    checkAnswer(
+      testData2.select(least(lit(-1), lit(0), col("a"), col("b"))).limit(1),
+      Row(-1)
+    )
+    checkAnswer(
+      ctx.sql("SELECT least(a, 2) as l from testData2 order by l"),
+      Seq(Row(1), Row(1), Row(2), Row(2), Row(2), Row(2))
+    )
+  }
+
+  test("conditional function: greatest") {
+    checkAnswer(
+      testData2.select(greatest(lit(2), lit(3), col("a"), col("b"))).limit(1),
+      Row(3)
+    )
+    checkAnswer(
+      ctx.sql("SELECT greatest(a, 2) as g from testData2 order by g"),
+      Seq(Row(2), Row(2), Row(2), Row(2), Row(3), Row(3))
+    )
+  }
+
+  test("pmod") {
+    val intData = Seq((7, 3), (-7, 3)).toDF("a", "b")
+    checkAnswer(
+      intData.select(pmod('a, 'b)),
+      Seq(Row(1), Row(2))
+    )
+    checkAnswer(
+      intData.select(pmod('a, lit(3))),
+      Seq(Row(1), Row(2))
+    )
+    checkAnswer(
+      intData.select(pmod(lit(-7), 'b)),
+      Seq(Row(2), Row(2))
+    )
+    checkAnswer(
+      intData.selectExpr("pmod(a, b)"),
+      Seq(Row(1), Row(2))
+    )
+    checkAnswer(
+      intData.selectExpr("pmod(a, 3)"),
+      Seq(Row(1), Row(2))
+    )
+    checkAnswer(
+      intData.selectExpr("pmod(-7, b)"),
+      Seq(Row(2), Row(2))
+    )
+    val doubleData = Seq((7.2, 4.1)).toDF("a", "b")
+    checkAnswer(
+      doubleData.select(pmod('a, 'b)),
+      Seq(Row(3.1000000000000005))  // same as hive
+    )
+    checkAnswer(
+      doubleData.select(pmod(lit(2), lit(Int.MaxValue))),
+      Seq(Row(2))
+    )
+  }
 }

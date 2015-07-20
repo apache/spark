@@ -194,6 +194,32 @@ class HiveTypeCoercionSuite extends PlanTest {
       Project(Seq(Alias(transformed, "a")()), testRelation))
   }
 
+  test("cast NullType for expresions that implement ExpectsInputTypes") {
+    import HiveTypeCoercionSuite._
+
+    ruleTest(HiveTypeCoercion.ImplicitTypeCasts,
+      AnyTypeUnaryExpression(Literal.create(null, NullType)),
+      AnyTypeUnaryExpression(Literal.create(null, NullType)))
+
+    ruleTest(HiveTypeCoercion.ImplicitTypeCasts,
+      NumericTypeUnaryExpression(Literal.create(null, NullType)),
+      NumericTypeUnaryExpression(Cast(Literal.create(null, NullType), DoubleType)))
+  }
+
+  test("cast NullType for binary operators") {
+    import HiveTypeCoercionSuite._
+
+    ruleTest(HiveTypeCoercion.ImplicitTypeCasts,
+      AnyTypeBinaryOperator(Literal.create(null, NullType), Literal.create(null, NullType)),
+      AnyTypeBinaryOperator(Literal.create(null, NullType), Literal.create(null, NullType)))
+
+    ruleTest(HiveTypeCoercion.ImplicitTypeCasts,
+      NumericTypeBinaryOperator(Literal.create(null, NullType), Literal.create(null, NullType)),
+      NumericTypeBinaryOperator(
+        Cast(Literal.create(null, NullType), DoubleType),
+        Cast(Literal.create(null, NullType), DoubleType)))
+  }
+
   test("coalesce casts") {
     ruleTest(HiveTypeCoercion.FunctionArgumentConversion,
       Coalesce(Literal(1.0)
@@ -300,5 +326,35 @@ class HiveTypeCoercionSuite extends PlanTest {
       In(Literal("a"), Seq(Literal(1), Literal("b"))),
       In(Literal("a"), Seq(Cast(Literal(1), StringType), Cast(Literal("b"), StringType)))
     )
+  }
+}
+
+
+object HiveTypeCoercionSuite {
+
+  case class AnyTypeUnaryExpression(child: Expression)
+    extends UnaryExpression with ExpectsInputTypes {
+    override def inputTypes: Seq[AbstractDataType] = Seq(AnyDataType)
+    override def dataType: DataType = NullType
+  }
+
+  case class NumericTypeUnaryExpression(child: Expression)
+    extends UnaryExpression with ExpectsInputTypes {
+    override def inputTypes: Seq[AbstractDataType] = Seq(NumericType)
+    override def dataType: DataType = NullType
+  }
+
+  case class AnyTypeBinaryOperator(left: Expression, right: Expression)
+    extends BinaryOperator with ExpectsInputTypes {
+    override def dataType: DataType = NullType
+    override def inputType: AbstractDataType = AnyDataType
+    override def symbol: String = "anytype"
+  }
+
+  case class NumericTypeBinaryOperator(left: Expression, right: Expression)
+    extends BinaryOperator with ExpectsInputTypes {
+    override def dataType: DataType = NullType
+    override def inputType: AbstractDataType = NumericType
+    override def symbol: String = "numerictype"
   }
 }
