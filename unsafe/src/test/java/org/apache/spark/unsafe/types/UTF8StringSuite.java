@@ -96,16 +96,16 @@ public class UTF8StringSuite {
 
   @Test
   public void concatTest() {
-    assertEquals(concat(), EMPTY_UTF8);
-    assertEquals(concat(null), EMPTY_UTF8);
-    assertEquals(concat(EMPTY_UTF8), EMPTY_UTF8);
-    assertEquals(concat(fromString("ab")), fromString("ab"));
-    assertEquals(concat(fromString("a"), fromString("b")), fromString("ab"));
-    assertEquals(concat(fromString("a"), fromString("b"), fromString("c")), fromString("abc"));
-    assertEquals(concat(fromString("a"), null, fromString("c")), fromString("ac"));
-    assertEquals(concat(fromString("a"), null, null), fromString("a"));
-    assertEquals(concat(null, null, null), EMPTY_UTF8);
-    assertEquals(concat(fromString("数据"), fromString("砖头")), fromString("数据砖头"));
+    assertEquals(EMPTY_UTF8, concat());
+    assertEquals(null, concat((UTF8String) null));
+    assertEquals(EMPTY_UTF8, concat(EMPTY_UTF8));
+    assertEquals(fromString("ab"), concat(fromString("ab")));
+    assertEquals(fromString("ab"), concat(fromString("a"), fromString("b")));
+    assertEquals(fromString("abc"), concat(fromString("a"), fromString("b"), fromString("c")));
+    assertEquals(null, concat(fromString("a"), null, fromString("c")));
+    assertEquals(null, concat(fromString("a"), null, null));
+    assertEquals(null, concat(null, null, null));
+    assertEquals(fromString("数据砖头"), concat(fromString("数据"), fromString("砖头")));
   }
 
   @Test
@@ -120,26 +120,26 @@ public class UTF8StringSuite {
       EMPTY_UTF8,
       concatWs(sep, EMPTY_UTF8));
     assertEquals(
-      fromString("ab"),
-      concatWs(sep, fromString("ab")));
+        fromString("ab"),
+        concatWs(sep, fromString("ab")));
     assertEquals(
-      fromString("a哈哈b"),
-      concatWs(sep, fromString("a"), fromString("b")));
+        fromString("a哈哈b"),
+        concatWs(sep, fromString("a"), fromString("b")));
     assertEquals(
-      fromString("a哈哈b哈哈c"),
-      concatWs(sep, fromString("a"), fromString("b"), fromString("c")));
+        fromString("a哈哈b哈哈c"),
+        concatWs(sep, fromString("a"), fromString("b"), fromString("c")));
     assertEquals(
-      fromString("a哈哈c"),
-      concatWs(sep, fromString("a"), null, fromString("c")));
+        fromString("a哈哈c"),
+        concatWs(sep, fromString("a"), null, fromString("c")));
     assertEquals(
-      fromString("a"),
-      concatWs(sep, fromString("a"), null, null));
+        fromString("a"),
+        concatWs(sep, fromString("a"), null, null));
     assertEquals(
-      EMPTY_UTF8,
-      concatWs(sep, null, null, null));
+        EMPTY_UTF8,
+        concatWs(sep, null, null, null));
     assertEquals(
-      fromString("数据哈哈砖头"),
-      concatWs(sep, fromString("数据"), fromString("砖头")));
+        fromString("数据哈哈砖头"),
+        concatWs(sep, fromString("数据"), fromString("砖头")));
   }
 
   @Test
