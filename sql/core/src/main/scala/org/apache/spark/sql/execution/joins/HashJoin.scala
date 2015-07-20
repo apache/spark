@@ -47,8 +47,12 @@ trait HashJoin {
   @transient protected lazy val buildSideKeyGenerator: Projection =
     newProjection(buildKeys, buildPlan.output)
 
-  @transient protected lazy val streamSideKeyGenerator: () => MutableProjection =
-    newMutableProjection(streamedKeys, streamedPlan.output)
+  @transient protected lazy val streamSideKeyGenerator: Projection =
+    if (canUseUnsafeRow) {
+      UnsafeProjection.create(streamedKeys, streamedPlan.output)
+    } else {
+      newMutableProjection(streamedKeys, streamedPlan.output)()
+    }
 
   protected def hashJoin(
       streamIter: Iterator[InternalRow],
@@ -62,7 +66,7 @@ trait HashJoin {
       // Mutable per row objects.
       private[this] val joinRow = new JoinedRow2
 
-      private[this] val joinKeys = streamSideKeyGenerator()
+      private[this] val joinKeys = streamSideKeyGenerator
 
       override final def hasNext: Boolean =
         (currentMatchPosition != -1 && currentMatchPosition < currentHashMatches.size) ||
@@ -89,8 +93,9 @@ trait HashJoin {
 
         while (currentHashMatches == null && streamIter.hasNext) {
           currentStreamedRow = streamIter.next()
-          if (!joinKeys(currentStreamedRow).anyNull) {
-            currentHashMatches = hashedRelation.get(joinKeys.currentValue)
+          val key = joinKeys(currentStreamedRow)
+          if (!key.anyNull) {
+            currentHashMatches = hashedRelation.get(key)
           }
         }
 
@@ -104,13 +109,14 @@ trait HashJoin {
     }
   }
 
+  protected[this] def canUseUnsafeRow: Boolean = {
+    (self.codegenEnabled && UnsafeProjection.canSupport(buildKeys)
+      && UnsafeProjection.canSupport(buildPlan.schema))
+  }
+
   protected[this] def buildHashRelation(buildIter: Iterator[InternalRow]): HashedRelation = {
-    if (self.codegenEnabled && UnsafeProjection.canSupport(buildKeys)
-        && UnsafeProjection.canSupport(buildPlan.schema)) {
-      UnsafeHashedRelation(
-        buildIter,
-        buildKeys.map(BindReferences.bindReference(_, buildPlan.output)),
-        buildPlan.schema)
+    if (canUseUnsafeRow) {
+      UnsafeHashedRelation(buildIter, buildKeys, buildPlan)
     } else {
       HashedRelation(buildIter, buildSideKeyGenerator)
     }

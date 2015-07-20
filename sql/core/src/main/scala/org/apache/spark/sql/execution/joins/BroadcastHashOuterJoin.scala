@@ -71,7 +71,7 @@ case class BroadcastHashOuterJoin(
     streamedPlan.execute().mapPartitions { streamedIter =>
       val joinedRow = new JoinedRow()
       val hashTable = broadcastRelation.value
-      val keyGenerator = newProjection(streamedKeys, streamedPlan.output)
+      val keyGenerator = streamedKeyGenerator
 
       joinType match {
         case LeftOuter =>

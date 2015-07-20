@@ -67,25 +67,24 @@ class HashedRelationSuite extends SparkFunSuite {
     val data = Array(InternalRow(0), InternalRow(1), InternalRow(2), InternalRow(2))
     val buildKey = Seq(BoundReference(0, IntegerType, false))
     val schema = StructType(StructField("a", IntegerType, true) :: Nil)
-    val hashed = UnsafeHashedRelation(data.iterator, buildKey, schema)
+    val hashed = UnsafeHashedRelation(data.iterator, buildKey, schema, 1)
     assert(hashed.isInstanceOf[UnsafeHashedRelation])
 
-    // TODO: enable this once we don't return generic row from UnsafeHashRelation.get()
-    // val toUnsafe = UnsafeProjection.create(schema)
-    val toUnsafe = (x: InternalRow) => x
-    assert(hashed.get(data(0)) === CompactBuffer[InternalRow](toUnsafe(data(0))))
-    assert(hashed.get(data(1)) === CompactBuffer[InternalRow](toUnsafe(data(1))))
-    assert(hashed.get(InternalRow(10)) === null)
+    val toUnsafeKey = UnsafeProjection.create(schema)
+    val keys = data.map(toUnsafeKey(_).copy()).toArray
+    assert(hashed.get(keys(0)) === CompactBuffer[InternalRow](data(0)))
+    assert(hashed.get(keys(1)) === CompactBuffer[InternalRow](data(1)))
+    assert(hashed.get(toUnsafeKey(InternalRow(10))) === null)
 
-    val data2 = CompactBuffer[InternalRow](toUnsafe(data(2)).copy())
-    data2 += toUnsafe(data(2)).copy()
-    assert(hashed.get(data(2)) === data2)
+    val data2 = CompactBuffer[InternalRow](data(2).copy())
+    data2 += data(2).copy()
+    assert(hashed.get(keys(2)) === data2)
 
     val hashed2 = SparkSqlSerializer.deserialize(SparkSqlSerializer.serialize(hashed))
       .asInstanceOf[UnsafeHashedRelation]
-    assert(hashed2.get(data(0)) === CompactBuffer[InternalRow](toUnsafe(data(0))))
-    assert(hashed2.get(data(1)) === CompactBuffer[InternalRow](toUnsafe(data(1))))
-    assert(hashed2.get(InternalRow(10)) === null)
-    assert(hashed2.get(data(2)) === data2)
+    assert(hashed2.get(keys(0)) === CompactBuffer[InternalRow](data(0)))
+    assert(hashed2.get(keys(1)) === CompactBuffer[InternalRow](data(1)))
+    assert(hashed2.get(toUnsafeKey(InternalRow(10))) === null)
+    assert(hashed2.get(keys(2)) === data2)
   }
 }

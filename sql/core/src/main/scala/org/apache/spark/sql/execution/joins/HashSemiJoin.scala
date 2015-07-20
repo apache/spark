@@ -82,7 +82,7 @@ trait HashSemiJoin {
 
   protected def buildHashRelation(buildIter: Iterator[InternalRow]): HashedRelation = {
     if (canUseUnsafeRow) {
-      UnsafeHashedRelation(buildIter, rightKeys, right.schema)
+      UnsafeHashedRelation(buildIter, rightKeys, right)
     } else {
       HashedRelation(buildIter, newProjection(rightKeys, right.output))
     }

@@ -76,7 +76,7 @@ trait HashOuterJoin {
   }
 
   protected[this] def streamedKeyGenerator(): Projection = {
-    if (self.codegenEnabled && UnsafeProjection.canSupport(streamedKeys)) {
+    if (canUseUnsafeRow) {
       UnsafeProjection.create(streamedKeys, streamedPlan.output)
     } else {
       newProjection(streamedKeys, streamedPlan.output)
@@ -191,6 +191,7 @@ trait HashOuterJoin {
     }
   }
 
+  // This is only used by FullOuter
   protected[this] def buildHashTable(
       iter: Iterator[InternalRow],
       keyGenerator: Projection): JavaHashMap[InternalRow, CompactBuffer[InternalRow]] = {
@@ -211,13 +212,14 @@ trait HashOuterJoin {
     hashTable
   }
 
+  protected[this] def canUseUnsafeRow: Boolean = {
+    (self.codegenEnabled && UnsafeProjection.canSupport(buildKeys)
+      && UnsafeProjection.canSupport(buildPlan.schema))
+  }
+
   protected[this] def buildHashRelation(buildIter: Iterator[InternalRow]): HashedRelation = {
-    if (self.codegenEnabled && UnsafeProjection.canSupport(buildKeys)
-        && UnsafeProjection.canSupport(buildPlan.schema)) {
-      UnsafeHashedRelation(
-        buildIter,
-        buildKeys.map(BindReferences.bindReference(_, buildPlan.output)),
-        buildPlan.schema)
+    if (canUseUnsafeRow) {
+      UnsafeHashedRelation(buildIter, buildKeys, buildPlan)
     } else {
       HashedRelation(buildIter, newProjection(buildKeys, buildPlan.output))
     }
