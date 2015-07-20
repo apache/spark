@@ -543,7 +543,7 @@ case class StringReverse(child: Expression) extends UnaryExpression with String2
  * Returns a n spaces string.
  */
 case class StringSpace(child: Expression)
-  extends UnaryExpression with ImplicitCastInputTypes with CodegenFallback {
+  extends UnaryExpression with ImplicitCastInputTypes {
 
   override def dataType: DataType = StringType
   override def inputTypes: Seq[DataType] = Seq(IntegerType)
@@ -554,6 +554,16 @@ case class StringSpace(child: Expression)
     val spaces = new Array[Byte](if (length < 0) 0 else length)
     java.util.Arrays.fill(spaces, ' '.asInstanceOf[Byte])
     UTF8String.fromBytes(spaces)
+  }
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    nullSafeCodeGen(ctx, ev, (length) => {
+      val spaces = ctx.freshName("spaces")
+      s"""
+        byte[] $spaces = new byte[($length < 0) ? 0 : $length];
+        java.util.Arrays.fill($spaces, (byte) ' ');
+        ${ev.primitive} = UTF8String.fromBytes($spaces);
+       """})
   }
 
   override def prettyName: String = "space"
