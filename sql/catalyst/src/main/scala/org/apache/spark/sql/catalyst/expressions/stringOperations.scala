@@ -742,8 +742,7 @@ case class Levenshtein(left: Expression, right: Expression) extends BinaryExpres
 /**
  * Returns the numeric value of the first character of str.
  */
-case class Ascii(child: Expression)
-  extends UnaryExpression with ImplicitCastInputTypes with CodegenFallback {
+case class Ascii(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
 
   override def dataType: DataType = IntegerType
   override def inputTypes: Seq[DataType] = Seq(StringType)
@@ -756,13 +755,25 @@ case class Ascii(child: Expression)
       0
     }
   }
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    nullSafeCodeGen(ctx, ev, (child) => {
+      val bytes = ctx.freshName("bytes")
+      s"""
+        byte[] $bytes = $child.getBytes();
+        if ($bytes.length > 0) {
+          ${ev.primitive} = (int) $bytes[0];
+        } else {
+          ${ev.primitive} = 0;
+        }
+       """})
+  }
 }
 
 /**
  * Converts the argument from binary to a base 64 string.
  */
-case class Base64(child: Expression)
-  extends UnaryExpression with ImplicitCastInputTypes with CodegenFallback {
+case class Base64(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
 
   override def dataType: DataType = StringType
   override def inputTypes: Seq[DataType] = Seq(BinaryType)
@@ -772,19 +783,33 @@ case class Base64(child: Expression)
       org.apache.commons.codec.binary.Base64.encodeBase64(
         bytes.asInstanceOf[Array[Byte]]))
   }
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    nullSafeCodeGen(ctx, ev, (child) => {
+      s"""${ev.primitive} = UTF8String.fromBytes(
+            org.apache.commons.codec.binary.Base64.encodeBase64($child));
+       """})
+  }
+
 }
 
 /**
  * Converts the argument from a base 64 string to BINARY.
  */
-case class UnBase64(child: Expression)
-  extends UnaryExpression with ImplicitCastInputTypes with CodegenFallback {
+case class UnBase64(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
 
   override def dataType: DataType = BinaryType
   override def inputTypes: Seq[DataType] = Seq(StringType)
 
   protected override def nullSafeEval(string: Any): Any =
     org.apache.commons.codec.binary.Base64.decodeBase64(string.asInstanceOf[UTF8String].toString)
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    nullSafeCodeGen(ctx, ev, (child) => {
+      s"""
+         ${ev.primitive} = org.apache.commons.codec.binary.Base64.decodeBase64($child.toString());
+       """})
+  }
 }
 
 /**
