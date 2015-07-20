@@ -912,16 +912,12 @@ abstract class DStream[T: ClassTag] (
    * is defined, it will use specific `CompressionCodec` to compress the text.
    */
   def saveAsTextFiles(
-    prefix: String,
-    suffix: String = "",
-    codec: Option[Class[_ <: CompressionCodec]] = None): Unit = ssc.withScope {
+      prefix: String,
+      suffix: String = "",
+      codec: Option[Class[_ <: CompressionCodec]] = None): Unit = ssc.withScope {
     val saveFunc = (rdd: RDD[T], time: Time) => {
       val file = rddToFileName(prefix, suffix, time)
-      if (codec.isDefined) {
-        rdd.saveAsTextFile(file, codec.get)
-      } else {
-        rdd.saveAsTextFile(file)
-      }
+      codec.map(rdd.saveAsTextFile(file, _)).getOrElse(rdd.saveAsTextFile(file))
     }
     this.foreachRDD(saveFunc)
   }
