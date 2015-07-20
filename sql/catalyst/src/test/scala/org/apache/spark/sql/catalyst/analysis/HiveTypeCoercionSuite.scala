@@ -37,7 +37,6 @@ class HiveTypeCoercionSuite extends PlanTest {
     shouldCast(NullType, IntegerType, IntegerType)
     shouldCast(NullType, DecimalType, DecimalType.Unlimited)
 
-    // TODO: write the entire implicit cast table out for test cases.
     shouldCast(ByteType, IntegerType, IntegerType)
     shouldCast(IntegerType, IntegerType, IntegerType)
     shouldCast(IntegerType, LongType, LongType)
@@ -86,6 +85,16 @@ class HiveTypeCoercionSuite extends PlanTest {
       DecimalType.Unlimited, DecimalType(10, 2)).foreach { tpe =>
       shouldCast(tpe, NumericType, tpe)
     }
+
+    shouldCast(
+      ArrayType(StringType, false),
+      TypeCollection(ArrayType(StringType), StringType),
+      ArrayType(StringType, false))
+
+    shouldCast(
+      ArrayType(StringType, true),
+      TypeCollection(ArrayType(StringType), StringType),
+      ArrayType(StringType, true))
   }
 
   test("ineligible implicit type cast") {
@@ -335,6 +344,61 @@ class HiveTypeCoercionSuite extends PlanTest {
     checkOutput(r2.right, expectedTypes)
     checkOutput(r3.left, expectedTypes)
     checkOutput(r3.right, expectedTypes)
+  }
+
+  test("Transform Decimal precision/scale for union except and intersect") {
+    def checkOutput(logical: LogicalPlan, expectTypes: Seq[DataType]): Unit = {
+      logical.output.zip(expectTypes).foreach { case (attr, dt) =>
+        assert(attr.dataType === dt)
+      }
+    }
+
+    val dp = HiveTypeCoercion.DecimalPrecision
+
+    val left1 = LocalRelation(
+      AttributeReference("l", DecimalType(10, 8))())
+    val right1 = LocalRelation(
+      AttributeReference("r", DecimalType(5, 5))())
+    val expectedType1 = Seq(DecimalType(math.max(8, 5) + math.max(10 - 8, 5 - 5), math.max(8, 5)))
+
+    val r1 = dp(Union(left1, right1)).asInstanceOf[Union]
+    val r2 = dp(Except(left1, right1)).asInstanceOf[Except]
+    val r3 = dp(Intersect(left1, right1)).asInstanceOf[Intersect]
+
+    checkOutput(r1.left, expectedType1)
+    checkOutput(r1.right, expectedType1)
+    checkOutput(r2.left, expectedType1)
+    checkOutput(r2.right, expectedType1)
+    checkOutput(r3.left, expectedType1)
+    checkOutput(r3.right, expectedType1)
+
+    val plan1 = LocalRelation(
+      AttributeReference("l", DecimalType(10, 10))())
+
+    val rightTypes = Seq(ByteType, ShortType, IntegerType, LongType, FloatType, DoubleType)
+    val expectedTypes = Seq(DecimalType(3, 0), DecimalType(5, 0), DecimalType(10, 0),
+      DecimalType(20, 0), DecimalType(7, 7), DecimalType(15, 15))
+
+    rightTypes.zip(expectedTypes).map { case (rType, expectedType) =>
+      val plan2 = LocalRelation(
+        AttributeReference("r", rType)())
+
+      val r1 = dp(Union(plan1, plan2)).asInstanceOf[Union]
+      val r2 = dp(Except(plan1, plan2)).asInstanceOf[Except]
+      val r3 = dp(Intersect(plan1, plan2)).asInstanceOf[Intersect]
+
+      checkOutput(r1.right, Seq(expectedType))
+      checkOutput(r2.right, Seq(expectedType))
+      checkOutput(r3.right, Seq(expectedType))
+
+      val r4 = dp(Union(plan2, plan1)).asInstanceOf[Union]
+      val r5 = dp(Except(plan2, plan1)).asInstanceOf[Except]
+      val r6 = dp(Intersect(plan2, plan1)).asInstanceOf[Intersect]
+
+      checkOutput(r4.left, Seq(expectedType))
+      checkOutput(r5.left, Seq(expectedType))
+      checkOutput(r6.left, Seq(expectedType))
+    }
   }
 
   /**
