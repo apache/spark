@@ -355,9 +355,9 @@ class LinearRegressionSummary private[regression] (
    */
   val r2: Double = metrics.r2
 
-  /** Residuals (predicted value - label value) */
+  /** Residuals (label - predicted value) */
   @transient lazy val residuals: DataFrame = {
-    val t = udf { (pred: Double, label: Double) => pred - label}
+    val t = udf { (pred: Double, label: Double) => label - pred }
     predictions.select(t(col(predictionCol), col(labelCol)).as("residuals"))
   }
 
