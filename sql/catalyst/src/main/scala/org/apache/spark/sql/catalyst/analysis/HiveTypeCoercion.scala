@@ -369,7 +369,7 @@ object HiveTypeCoercion {
         case (lhs, rhs) if lhs.dataType != rhs.dataType =>
           (lhs.dataType, rhs.dataType) match {
             case (DecimalType.Fixed(p1, s1), DecimalType.Fixed(p2, s2)) =>
-              // Union decimals with precision/scale p1/s2 and p2/s2  will be promoted to
+              // Decimals with precision/scale p1/s2 and p2/s2  will be promoted to
               // DecimalType(max(s1, s2) + max(p1-s1, p2-s2), max(s1, s2))
               val fixedType = DecimalType(max(s1, s2) + max(p1 - s1, p2 - s2), max(s1, s2))
               (Alias(Cast(lhs, fixedType), lhs.name)(), Alias(Cast(rhs, fixedType), rhs.name)())
