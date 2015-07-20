@@ -470,7 +470,6 @@ class ExternalAppendOnlyMap[K, V, C](
       item
     }
 
-    // TODO: Ensure this gets called even if the iterator isn't drained.
     private def cleanup() {
       batchIndex = batchOffsets.length  // Prevent reading any other batch
       val ds = deserializeStream
