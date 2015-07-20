@@ -24,9 +24,10 @@ import org.apache.spark.sql.types._
 class CollectionFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("Array and Map Size") {
-    val a0 = Literal.create(Seq(1, 2, 3), ArrayType(IntegerType))
-    val a1 = Literal.create(Seq[Integer](), ArrayType(IntegerType))
-    val a2 = Literal.create(Seq(1, 2), ArrayType(IntegerType))
+
+    val a0 = Literal.create(Array(1, 2, 3), ArrayType(IntegerType))
+    val a1 = Literal.create(Array[Integer](), ArrayType(IntegerType))
+    val a2 = Literal.create(Array(1, 2), ArrayType(IntegerType))
 
     checkEvaluation(Size(a0), 3)
     checkEvaluation(Size(a1), 0)
