@@ -1157,7 +1157,10 @@ private[ui] class TaskPagedTable(
     val jsFuncName = "goToTaskPage"
     val encodedSortColumn = URLEncoder.encode(sortColumn, "UTF-8")
     val jsFunc = s"""
+      |currentTaskPageSize = ${pageSize}
       |function goToTaskPage(page, pageSize) {
+      |  // Set page to 1 if the page size changes
+      |  page = pageSize == currentTaskPageSize ? page : 1;
       |  var url = "${basePath}&task.sort=${encodedSortColumn}&task.desc=${desc}" +
       |    "&task.page=" + page + "&task.pageSize=" + pageSize;
       |  window.location.href = url;
