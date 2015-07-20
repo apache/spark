@@ -25,6 +25,8 @@ import scala.language.implicitConversions
 import scala.reflect.ClassTag
 import scala.util.matching.Regex
 
+import org.apache.hadoop.io.compress.CompressionCodec
+
 import org.apache.spark.{Logging, SparkContext, SparkException}
 import org.apache.spark.rdd.{BlockRDD, PairRDDFunctions, RDD, RDDOperationScope}
 import org.apache.spark.storage.StorageLevel
@@ -906,12 +908,16 @@ abstract class DStream[T: ClassTag] (
   /**
    * Save each RDD in this DStream as at text file, using string representation
    * of elements. The file name at each batch interval is generated based on
-   * `prefix` and `suffix`: "prefix-TIME_IN_MS.suffix".
+   * `prefix` and `suffix`: "prefix-TIME_IN_MS.suffix". If the `CompressionCodec`
+   * is defined, it will use specific `CompressionCodec` to compress the text.
    */
-  def saveAsTextFiles(prefix: String, suffix: String = ""): Unit = ssc.withScope {
+  def saveAsTextFiles(
+      prefix: String,
+      suffix: String = "",
+      codec: Option[Class[_ <: CompressionCodec]] = None): Unit = ssc.withScope {
     val saveFunc = (rdd: RDD[T], time: Time) => {
       val file = rddToFileName(prefix, suffix, time)
-      rdd.saveAsTextFile(file)
+      codec.map(rdd.saveAsTextFile(file, _)).getOrElse(rdd.saveAsTextFile(file))
     }
     this.foreachRDD(saveFunc)
   }
