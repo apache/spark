@@ -603,7 +603,7 @@ object functions {
   }
 
   /**
-   * Returns the first column that is not null.
+   * Returns the first column that is not null and not NaN.
    * {{{
    *   df.select(coalesce(df("a"), df("b")))
    * }}}
@@ -620,7 +620,7 @@ object functions {
   def explode(e: Column): Column = Explode(e.expr)
 
   /**
-   * Return true if the column is NaN
+   * Return true iff the column is NaN.
    *
    * @group normal_funcs
    * @since 1.5.0

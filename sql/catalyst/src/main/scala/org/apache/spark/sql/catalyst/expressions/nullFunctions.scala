@@ -25,13 +25,15 @@ import org.apache.spark.sql.types._
 
 
 /**
- * An expression that is evaluated to the first non-null input.
+ * An expression that is evaluated to the first non-null and non-NaN input.
  *
  * {{{
  *   coalesce(1, 2) => 1
  *   coalesce(null, 1, 2) => 1
  *   coalesce(null, null, 2) => 2
  *   coalesce(null, null, null) => null
+ *   coalesce(null, NaN, null, 5.0) => 5.0
+ *   coalesce(null, NaN, NaN, null) => null
  * }}}
  */
 case class Coalesce(children: Seq[Expression]) extends Expression {
@@ -55,8 +57,19 @@ case class Coalesce(children: Seq[Expression]) extends Expression {
   override def eval(input: InternalRow): Any = {
     var result: Any = null
     val childIterator = children.iterator
-    while (childIterator.hasNext && result == null) {
-      result = childIterator.next().eval(input)
+    dataType match {
+      case FloatType =>
+        while (childIterator.hasNext && (result == null || result.asInstanceOf[Float].isNaN)) {
+          result = childIterator.next().eval(input)
+        }
+      case DoubleType =>
+        while (childIterator.hasNext && (result == null || result.asInstanceOf[Double].isNaN)) {
+          result = childIterator.next().eval(input)
+        }
+      case _ =>
+        while (childIterator.hasNext && result == null) {
+          result = childIterator.next().eval(input)
+        }
     }
     result
   }
@@ -68,22 +81,35 @@ case class Coalesce(children: Seq[Expression]) extends Expression {
     """ +
     children.map { e =>
       val eval = e.gen(ctx)
-      s"""
-        if (${ev.isNull}) {
-          ${eval.code}
-          if (!${eval.isNull}) {
-            ${ev.isNull} = false;
-            ${ev.primitive} = ${eval.primitive};
-          }
-        }
-      """
+      dataType match {
+        case DoubleType | FloatType =>
+          s"""
+            if (${ev.isNull}) {
+              ${eval.code}
+              if (!${eval.isNull} && !Double.isNaN(${eval.primitive})) {
+                ${ev.isNull} = false;
+                ${ev.primitive} = ${eval.primitive};
+              }
+            }
+          """
+        case _ =>
+          s"""
+            if (${ev.isNull}) {
+              ${eval.code}
+              if (!${eval.isNull}) {
+                ${ev.isNull} = false;
+                ${ev.primitive} = ${eval.primitive};
+              }
+            }
+          """
+      }
     }.mkString("\n")
   }
 }
 
 
 /**
- * Evaluates to `true` if it's NaN
+ * Evaluates to `true` iff it's NaN.
  */
 case class IsNaN(child: Expression) extends UnaryExpression
   with Predicate with ImplicitCastInputTypes {
@@ -107,27 +133,12 @@ case class IsNaN(child: Expression) extends UnaryExpression
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     val eval = child.gen(ctx)
     child.dataType match {
-      case FloatType =>
+      case DoubleType | FloatType =>
         s"""
           ${eval.code}
           boolean ${ev.isNull} = false;
           ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
-          if (${eval.isNull}) {
-            ${ev.primitive} = false;
-          } else {
-            ${ev.primitive} = Float.isNaN(${eval.primitive});
-          }
-        """
-      case DoubleType =>
-        s"""
-          ${eval.code}
-          boolean ${ev.isNull} = false;
-          ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
-          if (${eval.isNull}) {
-            ${ev.primitive} = false;
-          } else {
-            ${ev.primitive} = Double.isNaN(${eval.primitive});
-          }
+          ${ev.primitive} = !${eval.isNull} && Double.isNaN(${eval.primitive});
         """
     }
   }
@@ -189,8 +200,10 @@ case class AtLeastNNonNulls(n: Int, children: Seq[Expression]) extends Predicate
       val evalC = childrenArray(i).eval(input)
       if (evalC != null) {
         childrenArray(i).dataType match {
-          case DoubleType if !evalC.asInstanceOf[Double].isNaN => numNonNulls += 1
-          case FloatType if !evalC.asInstanceOf[Float].isNaN => numNonNulls += 1
+          case DoubleType =>
+            if (!evalC.asInstanceOf[Double].isNaN) numNonNulls += 1
+          case FloatType =>
+            if (!evalC.asInstanceOf[Float].isNaN) numNonNulls += 1
           case _ => numNonNulls += 1
         }
       }
@@ -204,25 +217,12 @@ case class AtLeastNNonNulls(n: Int, children: Seq[Expression]) extends Predicate
     val code = children.map { e =>
       val eval = e.gen(ctx)
       e.dataType match {
-        case DoubleType =>
+        case DoubleType | FloatType =>
           s"""
             if ($nonnull < $n) {
               ${eval.code}
-              if (!${eval.isNull}) {
-                if (!Double.isNaN(${eval.primitive})) {
-                  $nonnull += 1;
-                }
-              }
-            }
-          """
-        case FloatType =>
-          s"""
-            if ($nonnull < $n) {
-              ${eval.code}
-              if (!${eval.isNull}) {
-                if (!Float.isNaN(${eval.primitive})) {
-                  $nonnull += 1;
-                }
+              if (!${eval.isNull} && !Double.isNaN(${eval.primitive})) {
+                $nonnull += 1;
               }
             }
           """

@@ -65,5 +65,55 @@ class NullFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       checkEvaluation(Coalesce(Seq(nullLit, lit, lit)), value)
       checkEvaluation(Coalesce(Seq(nullLit, nullLit, lit)), value)
     }
+    checkEvaluation(Coalesce(Seq(
+      Literal.create(null, DoubleType),
+      Literal(Double.NaN),
+      Literal(math.log(-2)),
+      Literal.create(null, DoubleType),
+      Literal(Double.MaxValue))), Double.MaxValue, EmptyRow)
+    checkEvaluation(Coalesce(Seq(
+      Literal(Float.NaN),
+      Literal.create(null, FloatType),
+      Literal(math.log(-2).toFloat),
+      Literal.create(null, FloatType),
+      Literal(Float.MaxValue))), Float.MaxValue, EmptyRow)
+    checkEvaluation(Coalesce(Seq(
+      Literal.create(null, DoubleType),
+      Literal(math.log(-2)),
+      Literal(Double.PositiveInfinity),
+      Literal.create(null, DoubleType),
+      Literal(Double.MaxValue))), Double.PositiveInfinity, EmptyRow)
+    checkEvaluation(Coalesce(Seq(
+      Literal(5.0),
+      Literal(math.log(-2)),
+      Literal(Double.PositiveInfinity),
+      Literal.create(null, DoubleType))), 5.0, EmptyRow)
+  }
+
+  test("AtLeastNNonNulls") {
+    val mix = Seq(Literal("x"),
+      Literal.create(null, StringType),
+      Literal.create(null, DoubleType),
+      Literal(Double.NaN),
+      Literal(5f))
+
+    val nanOnly = Seq(Literal("x"),
+      Literal(10.0),
+      Literal(Float.NaN),
+      Literal(math.log(-2)),
+      Literal(Double.MaxValue))
+
+    val nullOnly = Seq(Literal("x"),
+      Literal.create(null, DoubleType),
+      Literal.create(null, DecimalType.Unlimited),
+      Literal(Float.MaxValue),
+      Literal(false))
+
+    checkEvaluation(AtLeastNNonNulls(2, mix), true, EmptyRow)
+    checkEvaluation(AtLeastNNonNulls(3, mix), false, EmptyRow)
+    checkEvaluation(AtLeastNNonNulls(3, nanOnly), true, EmptyRow)
+    checkEvaluation(AtLeastNNonNulls(4, nanOnly), false, EmptyRow)
+    checkEvaluation(AtLeastNNonNulls(3, nullOnly), true, EmptyRow)
+    checkEvaluation(AtLeastNNonNulls(4, nullOnly), false, EmptyRow)
   }
 }

@@ -127,21 +127,21 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
   }
 
   /**
-   * Returns a new [[DataFrame]] that replaces null values in numeric columns with `value`.
+   * Returns a new [[DataFrame]] that replaces null or NaN values in numeric columns with `value`.
    *
    * @since 1.3.1
    */
   def fill(value: Double): DataFrame = fill(value, df.columns)
 
   /**
-   * Returns a new [[DataFrame ]] that replaces null values in string columns with `value`.
+   * Returns a new [[DataFrame]] that replaces null values in string columns with `value`.
    *
    * @since 1.3.1
    */
   def fill(value: String): DataFrame = fill(value, df.columns)
 
   /**
-   * Returns a new [[DataFrame]] that replaces null values in specified numeric columns.
+   * Returns a new [[DataFrame]] that replaces null or NaN values in specified numeric columns.
    * If a specified column is not a numeric column, it is ignored.
    *
    * @since 1.3.1
@@ -149,7 +149,7 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
   def fill(value: Double, cols: Array[String]): DataFrame = fill(value, cols.toSeq)
 
   /**
-   * (Scala-specific) Returns a new [[DataFrame]] that replaces null values in specified
+   * (Scala-specific) Returns a new [[DataFrame]] that replaces null or NaN values in specified
    * numeric columns. If a specified column is not a numeric column, it is ignored.
    *
    * @since 1.3.1
