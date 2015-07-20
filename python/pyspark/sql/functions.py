@@ -202,8 +202,6 @@ for _name, _doc in _binary_mathfunctions.items():
     globals()[_name] = since(1.4)(_create_binary_mathfunction(_name, _doc))
 for _name, _doc in _window_functions.items():
     globals()[_name] = since(1.4)(_create_window_function(_name, _doc))
-for _name, _doc in _collection_functions.items():
-    globals()[_name] = since(1.5)(_create_function(_name, _doc))
 del _name, _doc
 __all__ += _functions.keys()
 __all__ += _functions_1_4.keys()
