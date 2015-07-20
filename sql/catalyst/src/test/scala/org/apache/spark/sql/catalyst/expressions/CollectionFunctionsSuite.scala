@@ -14,30 +14,30 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodeGenContext, GeneratedExpressionCode}
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.types._
 
-/**
- * Given an array or map, returns its size.
- */
-case class Size(child: Expression) extends UnaryExpression with ExpectsInputTypes {
-  override def dataType: DataType = IntegerType
-  override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection(ArrayType, MapType))
 
-  override def nullSafeEval(value: Any): Int = child.dataType match {
-    case ArrayType(_, _) => value.asInstanceOf[Seq[Any]].size
-    case MapType(_, _, _) => value.asInstanceOf[Map[Any, Any]].size
+class CollectionFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
+
+  test("Array and Map Size") {
+    val a0 = Literal.create(Array(1, 2, 3), ArrayType(IntegerType))
+    val a1 = Literal.create(Array[Integer](), ArrayType(IntegerType))
+    val a2 = Literal.create(Array(1, 2), ArrayType(IntegerType))
+
+    checkEvaluation(Size(a0), 3)
+    checkEvaluation(Size(a1), 0)
+    checkEvaluation(Size(a2), 2)
+
+    val m0 = Literal.create(Map("a" -> "a", "b" -> "b"), MapType(StringType, StringType))
+    val m1 = Literal.create(Map[String, String](), MapType(StringType, StringType))
+    val m2 = Literal.create(Map("a" -> "a"), MapType(StringType, StringType))
+
+    checkEvaluation(Size(m0), 2)
+    checkEvaluation(Size(m1), 0)
+    checkEvaluation(Size(m2), 1)
   }
-
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    child.dataType match {
-      case ArrayType(_, _) => defineCodeGen(ctx, ev, c => s"($c).size")
-      case MapType(_, _, _) => defineCodeGen(ctx, ev, c => s"($c).size")
-    }
-  }
-
-  override def prettyName: String = "size"
-
 }
