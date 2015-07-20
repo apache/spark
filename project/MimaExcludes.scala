@@ -104,6 +104,10 @@ object MimaExcludes {
             // SPARK-7422 add argmax for sparse vectors
             ProblemFilters.exclude[MissingMethodProblem](
               "org.apache.spark.mllib.linalg.Vector.argmax")
+          ) ++ Seq(
+            // SPARK-4751 Dynamic allocation for standalone mode
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.SparkContext.supportDynamicAllocation")
           )
 
         case v if v.startsWith("1.4") =>
