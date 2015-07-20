@@ -32,9 +32,6 @@ case class Size(child: Expression) extends UnaryExpression with ExpectsInputType
   }
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    child.dataType match {
-      case ArrayType(_, _) => defineCodeGen(ctx, ev, c => s"($c).size()")
-      case MapType(_, _, _) => defineCodeGen(ctx, ev, c => s"($c).size()")
-    }
+    nullSafeCodeGen(ctx, ev, c => s"${ev.primitive} = ($c).size();")
   }
 }
