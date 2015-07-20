@@ -113,26 +113,26 @@ public class UTF8StringSuite {
       fromString(""),
       concatWs(sep, fromString("")));
     assertEquals(
-        fromString("ab"),
-        concatWs(sep, fromString("ab")));
+      fromString("ab"),
+      concatWs(sep, fromString("ab")));
     assertEquals(
-        fromString("a哈哈b"),
-        concatWs(sep, fromString("a"), fromString("b")));
+      fromString("a哈哈b"),
+      concatWs(sep, fromString("a"), fromString("b")));
     assertEquals(
-        fromString("a哈哈b哈哈c"),
-        concatWs(sep, fromString("a"), fromString("b"), fromString("c")));
+      fromString("a哈哈b哈哈c"),
+      concatWs(sep, fromString("a"), fromString("b"), fromString("c")));
     assertEquals(
-        fromString("a哈哈c"),
-        concatWs(sep, fromString("a"), null, fromString("c")));
+      fromString("a哈哈c"),
+      concatWs(sep, fromString("a"), null, fromString("c")));
     assertEquals(
-        fromString("a"),
-        concatWs(sep, fromString("a"), null, null));
+      fromString("a"),
+      concatWs(sep, fromString("a"), null, null));
     assertEquals(
-        fromString(""),
-        concatWs(sep, null, null, null));
+      fromString(""),
+      concatWs(sep, null, null, null));
     assertEquals(
-        fromString("数据哈哈砖头"),
-        concatWs(sep, fromString("数据"), fromString("砖头")));
+      fromString("数据哈哈砖头"),
+      concatWs(sep, fromString("数据"), fromString("砖头")));
   }
 
   @Test
@@ -267,11 +267,11 @@ public class UTF8StringSuite {
   @Test
   public void split() {
     assertTrue(Arrays.equals(fromString("ab,def,ghi").split(fromString(","), -1),
-        new UTF8String[]{fromString("ab"), fromString("def"), fromString("ghi")}));
+      new UTF8String[]{fromString("ab"), fromString("def"), fromString("ghi")}));
     assertTrue(Arrays.equals(fromString("ab,def,ghi").split(fromString(","), 2),
-        new UTF8String[]{fromString("ab"), fromString("def,ghi")}));
+      new UTF8String[]{fromString("ab"), fromString("def,ghi")}));
     assertTrue(Arrays.equals(fromString("ab,def,ghi").split(fromString(","), 2),
-        new UTF8String[]{fromString("ab"), fromString("def,ghi")}));
+      new UTF8String[]{fromString("ab"), fromString("def,ghi")}));
   }
   
   @Test
