@@ -563,7 +563,7 @@ case class StringSpace(child: Expression)
  * Splits str around pat (pattern is a regular expression).
  */
 case class StringSplit(str: Expression, pattern: Expression)
-  extends BinaryExpression with ImplicitCastInputTypes with CodegenFallback {
+  extends BinaryExpression with ImplicitCastInputTypes {
 
   override def left: Expression = str
   override def right: Expression = pattern
@@ -571,9 +571,17 @@ case class StringSplit(str: Expression, pattern: Expression)
   override def inputTypes: Seq[DataType] = Seq(StringType, StringType)
 
   override def nullSafeEval(string: Any, regex: Any): Any = {
-    val splits =
-      string.asInstanceOf[UTF8String].toString.split(regex.asInstanceOf[UTF8String].toString, -1)
+    val splits = string.asInstanceOf[UTF8String].split(regex.asInstanceOf[UTF8String], -1)
     splits.toSeq.map(UTF8String.fromString)
+  }
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    nullSafeCodeGen(ctx, ev, (str, pattern) =>
+      s"""
+          String[] splits = $str.split($pattern, -1);
+          ${ev.primitive} = scala.collection.JavaConversions.asScalaBuffer(java.util.Arrays.asList(splits)).toList();
+          // ;
+         """)
   }
 
   override def prettyName: String = "split"
