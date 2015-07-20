@@ -26,7 +26,6 @@ import org.apache.spark.sql.catalyst.trees.TreeNode
 
 
 abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
-  self: Product =>
 
   /**
    * Computes [[Statistics]] for this plan. The default implementation assumes the output
@@ -277,8 +276,6 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
  * A logical plan node with no children.
  */
 abstract class LeafNode extends LogicalPlan {
-  self: Product =>
-
   override def children: Seq[LogicalPlan] = Nil
 }
 
@@ -286,8 +283,6 @@ abstract class LeafNode extends LogicalPlan {
  * A logical plan node with single child.
  */
 abstract class UnaryNode extends LogicalPlan {
-  self: Product =>
-
   def child: LogicalPlan
 
   override def children: Seq[LogicalPlan] = child :: Nil
@@ -297,8 +292,6 @@ abstract class UnaryNode extends LogicalPlan {
  * A logical plan node with a left and right child.
  */
 abstract class BinaryNode extends LogicalPlan {
-  self: Product =>
-
   def left: LogicalPlan
   def right: LogicalPlan
 

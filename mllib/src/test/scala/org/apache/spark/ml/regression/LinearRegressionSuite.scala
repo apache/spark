@@ -302,7 +302,7 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
       .map { case Row(features: DenseVector, label: Double) =>
       val prediction =
         features(0) * model.weights(0) + features(1) * model.weights(1) + model.intercept
-      prediction - label
+      label - prediction
     }
       .zip(model.summary.residuals.map(_.getDouble(0)))
       .collect()
@@ -314,7 +314,7 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
        Use the following R code to generate model training results.
 
        predictions <- predict(fit, newx=features)
-       residuals <- predictions - label
+       residuals <- label - predictions
        > mean(residuals^2) # MSE
        [1] 0.009720325
        > mean(abs(residuals)) # MAD

@@ -26,8 +26,8 @@ import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.util.collection.OpenHashSet
 
-trait AggregateExpression extends Expression {
-  self: Product =>
+
+trait AggregateExpression extends Expression with Unevaluable {
 
   /**
    * Aggregate expressions should not be foldable.
@@ -39,13 +39,6 @@ trait AggregateExpression extends Expression {
    * of input rows/
    */
   def newInstance(): AggregateFunction
-
-  /**
-   * [[AggregateExpression.eval]] should never be invoked because [[AggregateExpression]]'s are
-   * replaced with a physical aggregate operator at runtime.
-   */
-  override def eval(input: InternalRow = null): Any =
-    throw new TreeNodeException(this, s"No function to evaluate expression. type: ${this.nodeName}")
 }
 
 /**
@@ -65,7 +58,6 @@ case class SplitEvaluation(
  * These partial evaluations can then be combined to compute the actual answer.
  */
 trait PartialAggregate extends AggregateExpression {
-  self: Product =>
 
   /**
    * Returns a [[SplitEvaluation]] that computes this aggregation using partial aggregation.
@@ -79,7 +71,6 @@ trait PartialAggregate extends AggregateExpression {
  */
 abstract class AggregateFunction
   extends LeafExpression with AggregateExpression with Serializable {
-  self: Product =>
 
   /** Base should return the generic aggregate expression that this function is computing */
   val base: AggregateExpression

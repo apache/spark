@@ -23,7 +23,7 @@ import org.apache.spark.sql.types._
 /**
  * Java can not access Projection (in package object)
  */
-abstract class BaseProject extends Projection {}
+abstract class BaseProjection extends Projection {}
 
 /**
  * Generates bytecode that produces a new [[InternalRow]] object based on a fixed set of input
@@ -160,7 +160,7 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
       return new SpecificProjection(expr);
     }
 
-    class SpecificProjection extends ${classOf[BaseProject].getName} {
+    class SpecificProjection extends ${classOf[BaseProjection].getName} {
       private $exprType[] expressions = null;
       $mutableStates
 

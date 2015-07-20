@@ -44,7 +44,6 @@ import org.apache.spark.sql.types._
  * See [[Substring]] for an example.
  */
 abstract class Expression extends TreeNode[Expression] {
-  self: Product =>
 
   /**
    * Returns true when an expression is a candidate for static evaluation before the query is
@@ -102,19 +101,7 @@ abstract class Expression extends TreeNode[Expression] {
    * @param ev an [[GeneratedExpressionCode]] with unique terms.
    * @return Java source code
    */
-  protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    ctx.references += this
-    val objectTerm = ctx.freshName("obj")
-    s"""
-      /* expression: ${this} */
-      Object $objectTerm = expressions[${ctx.references.size - 1}].eval(i);
-      boolean ${ev.isNull} = $objectTerm == null;
-      ${ctx.javaType(this.dataType)} ${ev.primitive} = ${ctx.defaultValue(this.dataType)};
-      if (!${ev.isNull}) {
-        ${ev.primitive} = (${ctx.boxedType(this.dataType)}) $objectTerm;
-      }
-    """
-  }
+  protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String
 
   /**
    * Returns `true` if this expression and all its children have been resolved to a specific schema
@@ -184,10 +171,23 @@ abstract class Expression extends TreeNode[Expression] {
 
 
 /**
+ * An expression that cannot be evaluated. Some expressions don't live past analysis or optimization
+ * time (e.g. Star). This trait is used by those expressions.
+ */
+trait Unevaluable { self: Expression =>
+
+  override def eval(input: InternalRow = null): Any =
+    throw new UnsupportedOperationException(s"Cannot evaluate expression: $this")
+
+  override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String =
+    throw new UnsupportedOperationException(s"Cannot evaluate expression: $this")
+}
+
+
+/**
  * A leaf expression, i.e. one without any child expressions.
  */
 abstract class LeafExpression extends Expression {
-  self: Product =>
 
   def children: Seq[Expression] = Nil
 }
@@ -198,7 +198,6 @@ abstract class LeafExpression extends Expression {
  * if the input is evaluated to null.
  */
 abstract class UnaryExpression extends Expression {
-  self: Product =>
 
   def child: Expression
 
@@ -277,7 +276,6 @@ abstract class UnaryExpression extends Expression {
  * if any input is evaluated to null.
  */
 abstract class BinaryExpression extends Expression {
-  self: Product =>
 
   def left: Expression
   def right: Expression
@@ -370,7 +368,6 @@ abstract class BinaryExpression extends Expression {
  *    the analyzer will find the tightest common type and do the proper type casting.
  */
 abstract class BinaryOperator extends BinaryExpression with ExpectsInputTypes {
-  self: Product =>
 
   /**
    * Expected input type from both left/right child expressions, similar to the

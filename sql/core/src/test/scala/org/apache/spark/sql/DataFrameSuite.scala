@@ -745,8 +745,8 @@ class DataFrameSuite extends QueryTest with SQLTestUtils {
   test("SPARK-8072: Better Exception for Duplicate Columns") {
     // only one duplicate column present
     val e = intercept[org.apache.spark.sql.AnalysisException] {
-      val df1 = Seq((1, 2, 3), (2, 3, 4), (3, 4, 5)).toDF("column1", "column2", "column1")
-                .write.format("parquet").save("temp")
+      Seq((1, 2, 3), (2, 3, 4), (3, 4, 5)).toDF("column1", "column2", "column1")
+        .write.format("parquet").save("temp")
     }
     assert(e.getMessage.contains("Duplicate column(s)"))
     assert(e.getMessage.contains("parquet"))
@@ -755,9 +755,9 @@ class DataFrameSuite extends QueryTest with SQLTestUtils {
 
     // multiple duplicate columns present
     val f = intercept[org.apache.spark.sql.AnalysisException] {
-      val df2 = Seq((1, 2, 3, 4, 5), (2, 3, 4, 5, 6), (3, 4, 5, 6, 7))
-                .toDF("column1", "column2", "column3", "column1", "column3")
-                .write.format("json").save("temp")
+      Seq((1, 2, 3, 4, 5), (2, 3, 4, 5, 6), (3, 4, 5, 6, 7))
+        .toDF("column1", "column2", "column3", "column1", "column3")
+        .write.format("json").save("temp")
     }
     assert(f.getMessage.contains("Duplicate column(s)"))
     assert(f.getMessage.contains("JSON"))

@@ -278,6 +278,8 @@ final class Decimal extends Ordered[Decimal] with Serializable {
       Decimal(-longVal, precision, scale)
     }
   }
+
+  def abs: Decimal = if (this.compare(Decimal(0)) < 0) this.unary_- else this
 }
 
 object Decimal {

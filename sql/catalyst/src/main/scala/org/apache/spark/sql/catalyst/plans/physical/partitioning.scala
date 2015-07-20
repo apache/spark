@@ -17,9 +17,7 @@
 
 package org.apache.spark.sql.catalyst.plans.physical
 
-import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.errors.TreeNodeException
-import org.apache.spark.sql.catalyst.expressions.{Expression, SortOrder}
+import org.apache.spark.sql.catalyst.expressions.{Unevaluable, Expression, SortOrder}
 import org.apache.spark.sql.types.{DataType, IntegerType}
 
 /**
@@ -146,8 +144,7 @@ case object BroadcastPartitioning extends Partitioning {
  * in the same partition.
  */
 case class HashPartitioning(expressions: Seq[Expression], numPartitions: Int)
-  extends Expression
-  with Partitioning {
+  extends Expression with Partitioning with Unevaluable {
 
   override def children: Seq[Expression] = expressions
   override def nullable: Boolean = false
@@ -169,9 +166,6 @@ case class HashPartitioning(expressions: Seq[Expression], numPartitions: Int)
   }
 
   override def keyExpressions: Seq[Expression] = expressions
-
-  override def eval(input: InternalRow = null): Any =
-    throw new TreeNodeException(this, s"No function to evaluate expression. type: ${this.nodeName}")
 }
 
 /**
@@ -187,8 +181,7 @@ case class HashPartitioning(expressions: Seq[Expression], numPartitions: Int)
  * into its child.
  */
 case class RangePartitioning(ordering: Seq[SortOrder], numPartitions: Int)
-  extends Expression
-  with Partitioning {
+  extends Expression with Partitioning with Unevaluable {
 
   override def children: Seq[SortOrder] = ordering
   override def nullable: Boolean = false
@@ -213,7 +206,4 @@ case class RangePartitioning(ordering: Seq[SortOrder], numPartitions: Int)
   }
 
   override def keyExpressions: Seq[Expression] = ordering.map(_.child)
-
-  override def eval(input: InternalRow): Any =
-    throw new TreeNodeException(this, s"No function to evaluate expression. type: ${this.nodeName}")
 }

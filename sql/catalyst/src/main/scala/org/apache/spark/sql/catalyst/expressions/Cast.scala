@@ -18,12 +18,10 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.math.{BigDecimal => JavaBigDecimal}
-import java.sql.{Date, Timestamp}
 
-import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodeGenContext, GeneratedExpressionCode}
+import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{Interval, UTF8String}
@@ -56,7 +54,6 @@ object Cast {
     case (_, DateType) => true
 
     case (StringType, IntervalType) => true
-    case (IntervalType, StringType) => true
 
     case (StringType, _: NumericType) => true
     case (BooleanType, _: NumericType) => true
@@ -107,7 +104,8 @@ object Cast {
 }
 
 /** Cast the child expression to the target data type. */
-case class Cast(child: Expression, dataType: DataType) extends UnaryExpression with Logging {
+case class Cast(child: Expression, dataType: DataType)
+  extends UnaryExpression with CodegenFallback {
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (Cast.canCast(child.dataType, dataType)) {
@@ -425,20 +423,20 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
 
       case (BinaryType, StringType) =>
         defineCodeGen (ctx, ev, c =>
-          s"${ctx.stringType}.fromBytes($c)")
+          s"UTF8String.fromBytes($c)")
 
       case (DateType, StringType) =>
         defineCodeGen(ctx, ev, c =>
-          s"""${ctx.stringType}.fromString(
+          s"""UTF8String.fromString(
                 org.apache.spark.sql.catalyst.util.DateTimeUtils.dateToString($c))""")
 
       case (TimestampType, StringType) =>
         defineCodeGen(ctx, ev, c =>
-          s"""${ctx.stringType}.fromString(
+          s"""UTF8String.fromString(
                 org.apache.spark.sql.catalyst.util.DateTimeUtils.timestampToString($c))""")
 
       case (_, StringType) =>
-        defineCodeGen(ctx, ev, c => s"${ctx.stringType}.fromString(String.valueOf($c))")
+        defineCodeGen(ctx, ev, c => s"UTF8String.fromString(String.valueOf($c))")
 
       case (StringType, IntervalType) =>
         defineCodeGen(ctx, ev, c =>
