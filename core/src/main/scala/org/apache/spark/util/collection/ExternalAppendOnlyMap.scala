@@ -26,7 +26,7 @@ import scala.collection.mutable.ArrayBuffer
 
 import com.google.common.io.ByteStreams
 
-import org.apache.spark.{Logging, SparkEnv}
+import org.apache.spark.{Logging, SparkEnv, TaskContext}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.serializer.{DeserializationStream, Serializer}
 import org.apache.spark.storage.{BlockId, BlockManager}
@@ -474,11 +474,20 @@ class ExternalAppendOnlyMap[K, V, C](
     private def cleanup() {
       batchIndex = batchOffsets.length  // Prevent reading any other batch
       val ds = deserializeStream
-      deserializeStream = null
-      fileStream = null
-      ds.close()
-      file.delete()
+      if (ds != null) {
+        ds.close()
+        deserializeStream = null
+      }
+      if (fileStream != null) {
+        fileStream.close()
+        fileStream = null
+      }
+      if (file.exists()) {
+        file.delete()
+      }
     }
+
+    TaskContext.get().addTaskCompletionListener(context => cleanup())
   }
 
   /** Convenience function to hash the given (K, C) pair by the key. */
