@@ -30,14 +30,25 @@ class StringFunctionsSuite extends QueryTest {
     val df = Seq[(String, String, String)](("a", "b", null)).toDF("a", "b", "c")
 
     checkAnswer(
-      df.select(concat($"a", $"b", $"c")),
-      Row("ab"))
+      df.select(concat($"a", $"b"), concat($"a", $"b", $"c")),
+      Row("ab", null))
 
     checkAnswer(
-      df.selectExpr("concat(a, b, c)"),
-      Row("ab"))
+      df.selectExpr("concat(a, b)", "concat(a, b, c)"),
+      Row("ab", null))
   }
 
+  test("string concat_ws") {
+    val df = Seq[(String, String, String)](("a", "b", null)).toDF("a", "b", "c")
+
+    checkAnswer(
+      df.select(concat_ws("||", $"a", $"b", $"c")),
+      Row("a||b"))
+
+    checkAnswer(
+      df.selectExpr("concat_ws('||', a, b, c)"),
+      Row("a||b"))
+  }
 
   test("string Levenshtein distance") {
     val df = Seq(("kitten", "sitting"), ("frog", "fog")).toDF("l", "r")
@@ -178,10 +189,6 @@ class StringFunctionsSuite extends QueryTest {
 
   test("string space function") {
     val df = Seq((2, 3)).toDF("a", "b")
-
-    checkAnswer(
-      df.select(space($"a"), space("b")),
-      Row("  ", "   "))
 
     checkAnswer(
       df.selectExpr("space(b)"),

@@ -1733,6 +1733,30 @@ object functions {
   }
 
   /**
+   * Concatenates input strings together into a single string, using the given separator.
+   *
+   * @group string_funcs
+   * @since 1.5.0
+   */
+  @scala.annotation.varargs
+  def concat_ws(sep: String, exprs: Column*): Column = {
+    ConcatWs(Literal.create(sep, StringType) +: exprs.map(_.expr))
+  }
+
+  /**
+   * Concatenates input strings together into a single string, using the given separator.
+   *
+   * This is the variant of concat_ws that takes in the column names.
+   *
+   * @group string_funcs
+   * @since 1.5.0
+   */
+  @scala.annotation.varargs
+  def concat_ws(sep: String, columnName: String, columnNames: String*): Column = {
+    concat_ws(sep, (columnName +: columnNames).map(Column.apply) : _*)
+  }
+
+  /**
    * Computes the length of a given string / binary value.
    *
    * @group string_funcs
@@ -2211,26 +2235,6 @@ object functions {
    */
   def reverse(str: Column): Column = {
     StringReverse(str.expr)
-  }
-
-  /**
-   * Make a n spaces of string.
-   *
-   * @group string_funcs
-   * @since 1.5.0
-   */
-  def space(n: String): Column = {
-    space(Column(n))
-  }
-
-  /**
-   * Make a n spaces of string.
-   *
-   * @group string_funcs
-   * @since 1.5.0
-   */
-  def space(n: Column): Column = {
-    StringSpace(n.expr)
   }
 
   //////////////////////////////////////////////////////////////////////////////////////////////

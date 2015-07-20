@@ -34,19 +34,14 @@ import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * An expression that concatenates multiple input strings into a single string.
- * Input expressions that are evaluated to nulls are skipped.
- *
- * For example, `concat("a", null, "b")` is evaluated to `"ab"`.
- *
- * Note that this is different from Hive since Hive outputs null if any input is null.
- * We never output null.
+ * If any input is null, concat returns null.
  */
 case class Concat(children: Seq[Expression]) extends Expression with ImplicitCastInputTypes {
 
   override def inputTypes: Seq[AbstractDataType] = Seq.fill(children.size)(StringType)
   override def dataType: DataType = StringType
 
-  override def nullable: Boolean = false
+  override def nullable: Boolean = children.exists(_.nullable)
   override def foldable: Boolean = children.forall(_.foldable)
 
   override def eval(input: InternalRow): Any = {
@@ -56,11 +51,72 @@ case class Concat(children: Seq[Expression]) extends Expression with ImplicitCas
 
   override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     val evals = children.map(_.gen(ctx))
-    val inputs = evals.map { eval => s"${eval.isNull} ? null : ${eval.primitive}" }.mkString(", ")
+    val inputs = evals.map { eval =>
+      s"${eval.isNull} ? (UTF8String)null : ${eval.primitive}"
+    }.mkString(", ")
     evals.map(_.code).mkString("\n") + s"""
       boolean ${ev.isNull} = false;
       UTF8String ${ev.primitive} = UTF8String.concat($inputs);
+      if (${ev.primitive} == null) {
+        ${ev.isNull} = true;
+      }
     """
+  }
+}
+
+
+/**
+ * An expression that concatenates multiple input strings or array of strings into a single string,
+ * using a given separator (the first child).
+ *
+ * Returns null if the separator is null. Otherwise, concat_ws skips all null values.
+ */
+case class ConcatWs(children: Seq[Expression])
+  extends Expression with ImplicitCastInputTypes with CodegenFallback {
+
+  require(children.nonEmpty, s"$prettyName requires at least one argument.")
+
+  override def prettyName: String = "concat_ws"
+
+  /** The 1st child (separator) is str, and rest are either str or array of str. */
+  override def inputTypes: Seq[AbstractDataType] = {
+    val arrayOrStr = TypeCollection(ArrayType(StringType), StringType)
+    StringType +: Seq.fill(children.size - 1)(arrayOrStr)
+  }
+
+  override def dataType: DataType = StringType
+
+  override def nullable: Boolean = children.head.nullable
+  override def foldable: Boolean = children.forall(_.foldable)
+
+  override def eval(input: InternalRow): Any = {
+    val flatInputs = children.flatMap { child =>
+      child.eval(input) match {
+        case s: UTF8String => Iterator(s)
+        case arr: Seq[_] => arr.asInstanceOf[Seq[UTF8String]]
+        case null => Iterator(null.asInstanceOf[UTF8String])
+      }
+    }
+    UTF8String.concatWs(flatInputs.head, flatInputs.tail : _*)
+  }
+
+  override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    if (children.forall(_.dataType == StringType)) {
+      // All children are strings. In that case we can construct a fixed size array.
+      val evals = children.map(_.gen(ctx))
+
+      val inputs = evals.map { eval =>
+        s"${eval.isNull} ? (UTF8String)null : ${eval.primitive}"
+      }.mkString(", ")
+
+      evals.map(_.code).mkString("\n") + s"""
+        UTF8String ${ev.primitive} = UTF8String.concatWs($inputs);
+        boolean ${ev.isNull} = ${ev.primitive} == null;
+      """
+    } else {
+      // Contains a mix of strings and array<string>s. Fall back to interpreted mode for now.
+      super.genCode(ctx, ev)
+    }
   }
 }
 
@@ -345,7 +401,7 @@ case class StringLocate(substr: Expression, str: Expression, start: Expression)
  * Returns str, left-padded with pad to a length of len.
  */
 case class StringLPad(str: Expression, len: Expression, pad: Expression)
-  extends Expression with ImplicitCastInputTypes with CodegenFallback {
+  extends Expression with ImplicitCastInputTypes {
 
   override def children: Seq[Expression] = str :: len :: pad :: Nil
   override def foldable: Boolean = children.forall(_.foldable)
@@ -376,6 +432,31 @@ case class StringLPad(str: Expression, len: Expression, pad: Expression)
     }
   }
 
+  override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    val lenGen = len.gen(ctx)
+    val strGen = str.gen(ctx)
+    val padGen = pad.gen(ctx)
+
+    s"""
+      ${lenGen.code}
+      boolean ${ev.isNull} = ${lenGen.isNull};
+      ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
+      if (!${ev.isNull}) {
+        ${strGen.code}
+        if (!${strGen.isNull}) {
+          ${padGen.code}
+          if (!${padGen.isNull}) {
+            ${ev.primitive} = ${strGen.primitive}.lpad(${lenGen.primitive}, ${padGen.primitive});
+          } else {
+            ${ev.isNull} = true;
+          }
+        } else {
+          ${ev.isNull} = true;
+        }
+      }
+     """
+  }
+
   override def prettyName: String = "lpad"
 }
 
@@ -383,7 +464,7 @@ case class StringLPad(str: Expression, len: Expression, pad: Expression)
  * Returns str, right-padded with pad to a length of len.
  */
 case class StringRPad(str: Expression, len: Expression, pad: Expression)
-  extends Expression with ImplicitCastInputTypes with CodegenFallback {
+  extends Expression with ImplicitCastInputTypes {
 
   override def children: Seq[Expression] = str :: len :: pad :: Nil
   override def foldable: Boolean = children.forall(_.foldable)
@@ -412,6 +493,31 @@ case class StringRPad(str: Expression, len: Expression, pad: Expression)
         }
       }
     }
+  }
+
+  override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    val lenGen = len.gen(ctx)
+    val strGen = str.gen(ctx)
+    val padGen = pad.gen(ctx)
+
+    s"""
+      ${lenGen.code}
+      boolean ${ev.isNull} = ${lenGen.isNull};
+      ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
+      if (!${ev.isNull}) {
+        ${strGen.code}
+        if (!${strGen.isNull}) {
+          ${padGen.code}
+          if (!${padGen.isNull}) {
+            ${ev.primitive} = ${strGen.primitive}.rpad(${lenGen.primitive}, ${padGen.primitive});
+          } else {
+            ${ev.isNull} = true;
+          }
+        } else {
+          ${ev.isNull} = true;
+        }
+      }
+     """
   }
 
   override def prettyName: String = "rpad"
@@ -487,17 +593,19 @@ case class StringReverse(child: Expression) extends UnaryExpression with String2
  * Returns a n spaces string.
  */
 case class StringSpace(child: Expression)
-  extends UnaryExpression with ImplicitCastInputTypes with CodegenFallback {
+  extends UnaryExpression with ImplicitCastInputTypes {
 
   override def dataType: DataType = StringType
   override def inputTypes: Seq[DataType] = Seq(IntegerType)
 
   override def nullSafeEval(s: Any): Any = {
-    val length = s.asInstanceOf[Integer]
+    val length = s.asInstanceOf[Int]
+    UTF8String.blankString(if (length < 0) 0 else length)
+  }
 
-    val spaces = new Array[Byte](if (length < 0) 0 else length)
-    java.util.Arrays.fill(spaces, ' '.asInstanceOf[Byte])
-    UTF8String.fromBytes(spaces)
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    nullSafeCodeGen(ctx, ev, (length) =>
+      s"""${ev.primitive} = UTF8String.blankString(($length < 0) ? 0 : $length);""")
   }
 
   override def prettyName: String = "space"
@@ -634,8 +742,7 @@ case class Levenshtein(left: Expression, right: Expression) extends BinaryExpres
 /**
  * Returns the numeric value of the first character of str.
  */
-case class Ascii(child: Expression)
-  extends UnaryExpression with ImplicitCastInputTypes with CodegenFallback {
+case class Ascii(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
 
   override def dataType: DataType = IntegerType
   override def inputTypes: Seq[DataType] = Seq(StringType)
@@ -648,13 +755,25 @@ case class Ascii(child: Expression)
       0
     }
   }
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    nullSafeCodeGen(ctx, ev, (child) => {
+      val bytes = ctx.freshName("bytes")
+      s"""
+        byte[] $bytes = $child.getBytes();
+        if ($bytes.length > 0) {
+          ${ev.primitive} = (int) $bytes[0];
+        } else {
+          ${ev.primitive} = 0;
+        }
+       """})
+  }
 }
 
 /**
  * Converts the argument from binary to a base 64 string.
  */
-case class Base64(child: Expression)
-  extends UnaryExpression with ImplicitCastInputTypes with CodegenFallback {
+case class Base64(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
 
   override def dataType: DataType = StringType
   override def inputTypes: Seq[DataType] = Seq(BinaryType)
@@ -664,19 +783,33 @@ case class Base64(child: Expression)
       org.apache.commons.codec.binary.Base64.encodeBase64(
         bytes.asInstanceOf[Array[Byte]]))
   }
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    nullSafeCodeGen(ctx, ev, (child) => {
+      s"""${ev.primitive} = UTF8String.fromBytes(
+            org.apache.commons.codec.binary.Base64.encodeBase64($child));
+       """})
+  }
+
 }
 
 /**
  * Converts the argument from a base 64 string to BINARY.
  */
-case class UnBase64(child: Expression)
-  extends UnaryExpression with ImplicitCastInputTypes with CodegenFallback {
+case class UnBase64(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
 
   override def dataType: DataType = BinaryType
   override def inputTypes: Seq[DataType] = Seq(StringType)
 
   protected override def nullSafeEval(string: Any): Any =
     org.apache.commons.codec.binary.Base64.decodeBase64(string.asInstanceOf[UTF8String].toString)
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    nullSafeCodeGen(ctx, ev, (child) => {
+      s"""
+         ${ev.primitive} = org.apache.commons.codec.binary.Base64.decodeBase64($child.toString());
+       """})
+  }
 }
 
 /**
@@ -685,7 +818,7 @@ case class UnBase64(child: Expression)
  * If either argument is null, the result will also be null.
  */
 case class Decode(bin: Expression, charset: Expression)
-  extends BinaryExpression with ImplicitCastInputTypes with CodegenFallback {
+  extends BinaryExpression with ImplicitCastInputTypes {
 
   override def left: Expression = bin
   override def right: Expression = charset
@@ -696,6 +829,17 @@ case class Decode(bin: Expression, charset: Expression)
     val fromCharset = input2.asInstanceOf[UTF8String].toString
     UTF8String.fromString(new String(input1.asInstanceOf[Array[Byte]], fromCharset))
   }
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    nullSafeCodeGen(ctx, ev, (bytes, charset) =>
+      s"""
+        try {
+          ${ev.primitive} = UTF8String.fromString(new String($bytes, $charset.toString()));
+        } catch (java.io.UnsupportedEncodingException e) {
+          org.apache.spark.unsafe.PlatformDependent.throwException(e);
+        }
+      """)
+  }
 }
 
 /**
@@ -704,7 +848,7 @@ case class Decode(bin: Expression, charset: Expression)
  * If either argument is null, the result will also be null.
 */
 case class Encode(value: Expression, charset: Expression)
-  extends BinaryExpression with ImplicitCastInputTypes with CodegenFallback {
+  extends BinaryExpression with ImplicitCastInputTypes {
 
   override def left: Expression = value
   override def right: Expression = charset
@@ -714,6 +858,16 @@ case class Encode(value: Expression, charset: Expression)
   protected override def nullSafeEval(input1: Any, input2: Any): Any = {
     val toCharset = input2.asInstanceOf[UTF8String].toString
     input1.asInstanceOf[UTF8String].toString.getBytes(toCharset)
+  }
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    nullSafeCodeGen(ctx, ev, (string, charset) =>
+      s"""
+        try {
+          ${ev.primitive} = $string.toString().getBytes($charset.toString());
+        } catch (java.io.UnsupportedEncodingException e) {
+          org.apache.spark.unsafe.PlatformDependent.throwException(e);
+        }""")
   }
 }
 

@@ -191,15 +191,14 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       for (task <- tasks.flatten) {
         val serializedTask = ser.serialize(task)
         if (serializedTask.limit >= akkaFrameSize - AkkaUtils.reservedSizeBytes) {
-          val taskSetId = scheduler.taskIdToTaskSetId(task.taskId)
-          scheduler.activeTaskSets.get(taskSetId).foreach { taskSet =>
+          scheduler.taskIdToTaskSetManager.get(task.taskId).foreach { taskSetMgr =>
             try {
               var msg = "Serialized task %s:%d was %d bytes, which exceeds max allowed: " +
                 "spark.akka.frameSize (%d bytes) - reserved (%d bytes). Consider increasing " +
                 "spark.akka.frameSize or using broadcast variables for large values."
               msg = msg.format(task.taskId, task.index, serializedTask.limit, akkaFrameSize,
                 AkkaUtils.reservedSizeBytes)
-              taskSet.abort(msg)
+              taskSetMgr.abort(msg)
             } catch {
               case e: Exception => logError("Exception in error callback", e)
             }

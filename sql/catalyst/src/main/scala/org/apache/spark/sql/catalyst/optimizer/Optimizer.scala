@@ -216,9 +216,9 @@ object ProjectCollapsing extends Rule[LogicalPlan] {
 
       // We only collapse these two Projects if their overlapped expressions are all
       // deterministic.
-      val hasNondeterministic = projectList1.flatMap(_.collect {
+      val hasNondeterministic = projectList1.exists(_.collect {
         case a: Attribute if aliasMap.contains(a) => aliasMap(a).child
-      }).exists(_.find(!_.deterministic).isDefined)
+      }.exists(!_.deterministic))
 
       if (hasNondeterministic) {
         p

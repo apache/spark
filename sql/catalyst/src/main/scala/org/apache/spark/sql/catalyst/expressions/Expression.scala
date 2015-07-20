@@ -65,10 +65,12 @@ abstract class Expression extends TreeNode[Expression] {
    * Note that this means that an expression should be considered as non-deterministic if:
    * - if it relies on some mutable internal state, or
    * - if it relies on some implicit input that is not part of the children expression list.
+   * - if it has non-deterministic child or children.
    *
    * An example would be `SparkPartitionID` that relies on the partition id returned by TaskContext.
+   * By default leaf expressions are deterministic as Nil.forall(_.deterministic) returns true.
    */
-  def deterministic: Boolean = true
+  def deterministic: Boolean = children.forall(_.deterministic)
 
   def nullable: Boolean
 
@@ -181,6 +183,14 @@ trait Unevaluable { self: Expression =>
 
   override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String =
     throw new UnsupportedOperationException(s"Cannot evaluate expression: $this")
+}
+
+/**
+ * An expression that is nondeterministic.
+ */
+trait Nondeterministic { self: Expression =>
+
+  override def deterministic: Boolean = false
 }
 
 
