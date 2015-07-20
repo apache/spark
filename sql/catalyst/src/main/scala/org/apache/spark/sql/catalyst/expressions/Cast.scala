@@ -435,31 +435,28 @@ case class Cast(child: Expression, dataType: DataType)
   private[this] def nullSafeCastFunction(
       from: DataType,
       to: DataType,
-      ctx: CodeGenContext): CastFunction = {
-    if (from == NullType) {
-      (c, evPrim, evNull) => s"$evNull = true;"
-    } else {
-      to match {
-        case StringType => castToStringCode(from, ctx)
-        case BinaryType => castToBinaryCode(from)
-        case DateType => castToDateCode(from)
-        case decimal: DecimalType => castToDecimalCode(from, decimal)
-        case TimestampType => castToTimestampCode(from)
-        case IntervalType => castToIntervalCode(from)
-        case BooleanType => castToBooleanCode(from)
-        case ByteType => castToByteCode(from)
-        case ShortType => castToShortCode(from)
-        case IntegerType => castToIntCode(from)
-        case FloatType => castToFloatCode(from)
-        case LongType => castToLongCode(from)
-        case DoubleType => castToDoubleCode(from)
+      ctx: CodeGenContext): CastFunction = to match {
 
-        case array: ArrayType => castArrayCode(from.asInstanceOf[ArrayType], array, ctx)
-        case map: MapType => castMapCode(from.asInstanceOf[MapType], map, ctx)
-        case struct: StructType => castStructCode(from.asInstanceOf[StructType], struct, ctx)
-        case other => null
-      }
-    }
+    case _ if from == NullType => (c, evPrim, evNull) => s"$evNull = true;"
+    case _ if to == from => (c, evPrim, evNull) => s"$evPrim = $c;"
+    case StringType => castToStringCode(from, ctx)
+    case BinaryType => castToBinaryCode(from)
+    case DateType => castToDateCode(from)
+    case decimal: DecimalType => castToDecimalCode(from, decimal)
+    case TimestampType => castToTimestampCode(from)
+    case IntervalType => castToIntervalCode(from)
+    case BooleanType => castToBooleanCode(from)
+    case ByteType => castToByteCode(from)
+    case ShortType => castToShortCode(from)
+    case IntegerType => castToIntCode(from)
+    case FloatType => castToFloatCode(from)
+    case LongType => castToLongCode(from)
+    case DoubleType => castToDoubleCode(from)
+
+    case array: ArrayType => castArrayCode(from.asInstanceOf[ArrayType], array, ctx)
+    case map: MapType => castMapCode(from.asInstanceOf[MapType], map, ctx)
+    case struct: StructType => castStructCode(from.asInstanceOf[StructType], struct, ctx)
+    case other => null
   }
 
   private[this] def castCode(ctx: CodeGenContext, childPrim: String, childNull: String,
