@@ -20,7 +20,7 @@ package org.apache.spark.ml.feature
 import scala.util.parsing.combinator.RegexParsers
 
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.ml.{Estimator, Model, Transformer}
+import org.apache.spark.ml.{Estimator, Model, Transformer, PipelineModel}
 import org.apache.spark.ml.param.{Param, ParamMap}
 import org.apache.spark.ml.param.shared.{HasFeaturesCol, HasLabelCol}
 import org.apache.spark.ml.util.Identifiable
@@ -79,7 +79,17 @@ class RFormula(override val uid: String) extends Estimator[RFormulaModel] with R
 
   override def fit(dataset: DataFrame): RFormulaModel = {
     require(parsedFormula.isDefined, "Must call setFormula() first.")
-    copyValues(new RFormulaModel(uid, parsedFormula.get).setParent(this))
+    val factorLevels = parsedFormula.get.terms.flatMap { term =>
+      dataset.schema(term) match {
+        case column if column.dataType == StringType =>
+          val idxTerm = term + "_idx_" + uid
+          val indexer = new StringIndexer(uid).setInputCol(term).setOutputCol(idxTerm))
+          Some(Map(term -> indexer.fit(dataset)))
+        case _ =>
+          None
+      }
+    }
+    copyValues(new RFormulaModel(uid, parsedFormula.get, factorLevels).setParent(this))
   }
 
   // optimistic schema; does not contain any ML attributes
@@ -102,17 +112,18 @@ class RFormula(override val uid: String) extends Estimator[RFormulaModel] with R
  */
 private[feature] class RFormulaModel(
     override val uid: String,
-    parsedFormula: ParsedRFormula)
+    parsedFormula: ParsedRFormula,
+    factorLevels: Map[String, StringIndexerModel])
   extends Model[RFormulaModel] with RFormulaBase {
 
   override def transform(dataset: DataFrame): DataFrame = {
     checkCanTransform(dataset.schema)
-    transformLabel(transformFeatures.transform(dataset))
+    transformLabel(featureTransformer(dataset.schema).transform(dataset))
   }
 
   override def transformSchema(schema: StructType): StructType = {
     checkCanTransform(schema)
-    val withFeatures = transformFeatures.transformSchema(schema)
+    val withFeatures = featureTransformer(schema).transformSchema(schema)
     if (hasLabelCol(schema)) {
       withFeatures
     } else {
@@ -126,6 +137,8 @@ private[feature] class RFormulaModel(
 
   override def copy(extra: ParamMap): RFormulaModel = copyValues(
     new RFormulaModel(uid, parsedFormula))
+
+  override def toString: String = s"RFormulaModel(${parsedFormula})"
 
   private def transformLabel(dataset: DataFrame): DataFrame = {
     if (hasLabelCol(dataset.schema)) {
@@ -149,12 +162,51 @@ private[feature] class RFormulaModel(
       "Label column already exists and is not of type DoubleType.")
   }
 
-  private def transformFeatures: Transformer = {
-    // TODO(ekl) add support for non-numeric features and feature interactions
-    new VectorAssembler(uid)
-      .setInputCols(parsedFormula.terms.toArray)
+  private def featureTransformer(schema: StructType): Transformer = {
+    // StringType terms and terms representing interactions need to be encoded before assembly.
+    // TODO(ekl) add support for feature interactions
+    var encoderStages = Seq[Transformer]()
+    var tempColumns = Seq[String]()
+    val encodedTerms = parsedFormula.terms.map { term =>
+      schema(term) match {
+        case column if column.dataType == StringType =>
+          val encodedTerm = term + "_onehot_" + uid
+          val indexer = factorLevels(term)
+          encoderStages :+= indexer
+          encoderStages :+= new OneHotEncoder(uid)
+            .setInputCol($(indexer.outputCol))
+            .setOutputCol(encodedTerm)
+          tempColumns :+= encodedTerm
+          tempColumns :+= $(indexer.outputCol)
+          encodedTerm
+        case _ =>
+          term
+      }
+    }
+    encoderStages :+= new VectorAssembler(uid)
+      .setInputCols(encodedTerms.toArray)
       .setOutputCol($(featuresCol))
+    encoderStages :+= new ColumnPruner(uid, tempColumns.toSet)
+    new PipelineModel(uid, encoderStages.toArray)
   }
+}
+
+/**
+ * Utility class for removing temporary columns from a DataFrame.
+ */
+private[ml] class ColumnPruner(
+    override val uid: String, columnsToPrune: Set[String]) extends Transformer {
+  override def transform(dataset: DataFrame): DataFrame = {
+    var res: DataFrame = dataset
+    for (column <- columnsToPrune) {
+      res = res.drop(column)
+    }
+    res
+  }
+  override def transformSchema(schema: StructType): StructType = {
+    StructType(schema.fields.filter(col => !columnsToPrune.contains(col.name)))
+  }
+  override def copy(extra: ParamMap): ColumnPruner = defaultCopy(extra)
 }
 
 /**
