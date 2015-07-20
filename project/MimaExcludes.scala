@@ -98,6 +98,10 @@ object MimaExcludes {
               "org.apache.spark.api.r.StringRRDD.this"),
             ProblemFilters.exclude[MissingMethodProblem](
               "org.apache.spark.api.r.BaseRRDD.this")
+          ) ++ Seq(
+            // SPARK-7422 add argmax for sparse vectors
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.mllib.linalg.Vector.argmax")
           )
 
         case v if v.startsWith("1.4") =>
