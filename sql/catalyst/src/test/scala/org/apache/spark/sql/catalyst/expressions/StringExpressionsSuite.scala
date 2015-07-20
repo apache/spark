@@ -361,6 +361,7 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(StringFormat(Literal("aa")), "aa", create_row(null))
     checkEvaluation(StringFormat(Literal("aa%d%s"), Literal(123), Literal("a")), "aa123a", row1)
 
+    println(StringFormat(f, d1, s1).eval(row1))
     checkEvaluation(StringFormat(f, d1, s1), "aa12cc", row1)
     checkEvaluation(StringFormat(f, d1, s1), null, row2)
   }
