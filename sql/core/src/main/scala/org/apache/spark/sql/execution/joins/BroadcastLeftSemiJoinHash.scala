@@ -47,8 +47,8 @@ case class BroadcastLeftSemiJoinHash(
         hashSemiJoin(streamIter, broadcastedRelation.value)
       }
     } else {
-      val hashed = buildHashRelation(buildIter)
-      val broadcastedRelation = sparkContext.broadcast(hashed)
+      val hashRelation = buildHashRelation(buildIter)
+      val broadcastedRelation = sparkContext.broadcast(hashRelation)
 
       left.execute().mapPartitions { streamIter =>
         hashSemiJoin(streamIter, broadcastedRelation.value)

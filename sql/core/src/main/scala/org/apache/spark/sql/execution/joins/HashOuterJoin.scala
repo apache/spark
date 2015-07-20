@@ -64,7 +64,7 @@ trait HashOuterJoin {
     case LeftOuter => (right, left)
     case x =>
       throw new IllegalArgumentException(
-        s"BroadcastHashOuterJoin should not take $x as the JoinType")
+        s"HashOuterJoin should not take $x as the JoinType")
   }
 
   protected[this] lazy val (buildKeys, streamedKeys) = joinType match {
@@ -72,11 +72,11 @@ trait HashOuterJoin {
     case LeftOuter => (rightKeys, leftKeys)
     case x =>
       throw new IllegalArgumentException(
-        s"BroadcastHashOuterJoin should not take $x as the JoinType")
+        s"HashOuterJoin should not take $x as the JoinType")
   }
 
   protected[this] def streamedKeyGenerator(): Projection = {
-    if (self.codegenEnabled && UnsafeProjection.canSupport(streamedKeys.map(_.dataType))) {
+    if (self.codegenEnabled && UnsafeProjection.canSupport(streamedKeys)) {
       UnsafeProjection.create(streamedKeys, streamedPlan.output)
     } else {
       newProjection(streamedKeys, streamedPlan.output)
@@ -105,7 +105,7 @@ trait HashOuterJoin {
             case r if boundCondition(joinedRow.withRight(r)) => joinedRow.copy()
           }
         } else {
-          List()
+          List.empty
         }
         if (temp.isEmpty) {
           joinedRow.withRight(rightNullRow).copy :: Nil
@@ -131,7 +131,7 @@ trait HashOuterJoin {
               joinedRow.copy()
           }
         } else {
-          List()
+          List.empty
         }
         if (temp.isEmpty) {
           joinedRow.withLeft(leftNullRow).copy :: Nil
@@ -212,8 +212,8 @@ trait HashOuterJoin {
   }
 
   protected[this] def buildHashRelation(buildIter: Iterator[InternalRow]): HashedRelation = {
-    if (self.codegenEnabled && UnsafeProjection.canSupport(buildKeys.map(_.dataType))
-        && UnsafeProjection.canSupport(buildPlan.output.map(_.dataType))) {
+    if (self.codegenEnabled && UnsafeProjection.canSupport(buildKeys)
+        && UnsafeProjection.canSupport(buildPlan.schema)) {
       UnsafeHashedRelation(
         buildIter,
         buildKeys.map(BindReferences.bindReference(_, buildPlan.output)),

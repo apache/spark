@@ -375,14 +375,15 @@ public final class UnsafeRow extends MutableRow {
   public boolean equals(Object other) {
     if (other instanceof UnsafeRow) {
       UnsafeRow o = (UnsafeRow) other;
-      return ByteArrayMethods.arrayEquals(baseObject, baseOffset, o.baseObject, o.baseOffset,
-        sizeInBytes);
+      return (sizeInBytes == o.sizeInBytes) &&
+        ByteArrayMethods.arrayEquals(baseObject, baseOffset, o.baseObject, o.baseOffset,
+          sizeInBytes);
     }
     return false;
   }
 
   /**
-   * Returns the underline bytes for this UnsafeRow.
+   * Returns the underlying bytes for this UnsafeRow.
    */
   public byte[] getBytes() {
     if (baseObject instanceof byte[] && baseOffset == PlatformDependent.BYTE_ARRAY_OFFSET
@@ -398,7 +399,7 @@ public final class UnsafeRow extends MutableRow {
 
   // This is for debugging
   @Override
-  public String toString(){
+  public String toString() {
     StringBuilder build = new StringBuilder("[");
     for (int i = 0; i < sizeInBytes; i += 8) {
       build.append(PlatformDependent.UNSAFE.getLong(baseObject, baseOffset + i));

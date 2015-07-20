@@ -105,8 +105,8 @@ trait HashJoin {
   }
 
   protected[this] def buildHashRelation(buildIter: Iterator[InternalRow]): HashedRelation = {
-    if (self.codegenEnabled && UnsafeProjection.canSupport(buildKeys.map(_.dataType))
-        && UnsafeProjection.canSupport(buildPlan.output.map(_.dataType))) {
+    if (self.codegenEnabled && UnsafeProjection.canSupport(buildKeys)
+        && UnsafeProjection.canSupport(buildPlan.schema)) {
       UnsafeHashedRelation(
         buildIter,
         buildKeys.map(BindReferences.bindReference(_, buildPlan.output)),

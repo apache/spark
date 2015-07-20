@@ -76,8 +76,8 @@ trait HashSemiJoin {
   }
 
   private lazy val canUseUnsafeRow: Boolean = {
-    (self.codegenEnabled && UnsafeProjection.canSupport(rightKeys.map(_.dataType))
-      && UnsafeProjection.canSupport(right.output.map(_.dataType)))
+    (self.codegenEnabled && UnsafeProjection.canSupport(rightKeys)
+      && UnsafeProjection.canSupport(right.schema))
   }
 
   protected def buildHashRelation(buildIter: Iterator[InternalRow]): HashedRelation = {

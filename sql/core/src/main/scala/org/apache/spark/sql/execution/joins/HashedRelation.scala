@@ -204,8 +204,7 @@ private[joins] final class UnsafeHashedRelation(
   override def writeExternal(out: ObjectOutput): Unit = {
     writeBytes(out, SparkSqlSerializer.serialize(keyTypes))
     writeBytes(out, SparkSqlSerializer.serialize(rowTypes))
-    val bytes = SparkSqlSerializer.serialize(hashTable)
-    writeBytes(out, bytes)
+    writeBytes(out, SparkSqlSerializer.serialize(hashTable))
   }
 
   override def readExternal(in: ObjectInput): Unit = {
@@ -218,15 +217,15 @@ private[joins] final class UnsafeHashedRelation(
 private[joins] object UnsafeHashedRelation {
 
   def apply(
-    input: Iterator[InternalRow],
-    buildKey: Seq[Expression],
-    rowSchema: StructType,
-    sizeEstimate: Int = 64): HashedRelation = {
+      input: Iterator[InternalRow],
+      buildKey: Seq[Expression],
+      rowSchema: StructType,
+      sizeEstimate: Int = 64): HashedRelation = {
 
     // TODO: Use BytesToBytesMap.
     val hashTable = new JavaHashMap[UnsafeRow, CompactBuffer[UnsafeRow]](sizeEstimate)
     var currentRow: InternalRow = null
-    val rowProj = UnsafeProjection.create(rowSchema)
+    val toUnsafe = UnsafeProjection.create(rowSchema)
     val keyGenerator = UnsafeProjection.create(buildKey)
 
     // Create a mapping of buildKeys -> rows
@@ -235,7 +234,7 @@ private[joins] object UnsafeHashedRelation {
       val unsafeRow = if (currentRow.isInstanceOf[UnsafeRow]) {
         currentRow.asInstanceOf[UnsafeRow]
       } else {
-        rowProj(currentRow)
+        toUnsafe(currentRow)
       }
       val rowKey = keyGenerator(unsafeRow)
       if (!rowKey.anyNull) {
