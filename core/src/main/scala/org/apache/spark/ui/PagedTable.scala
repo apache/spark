@@ -22,30 +22,36 @@ import scala.xml.{Node, Unparsed}
 /**
  * A data source that provides data for a page.
  *
- * @param page the page number
  * @param pageSize the number of rows in a page
  */
-private[ui] abstract class PagedDataSource[T](page: Int, val pageSize: Int) {
+private[ui] abstract class PagedDataSource[T](val pageSize: Int) {
 
   if (pageSize <= 0) {
     throw new IllegalArgumentException("Page size must be positive")
   }
 
-  protected val data: Seq[T]
+  /**
+   * Return the size of all data.
+   */
+  protected def dataSize: Int
+
+  /**
+   * Slice a range of data.
+   */
+  protected def sliceData(from: Int, to: Int): Seq[T]
 
   /**
    * Slice the data for this page
    */
-  def pageData: PageData[T] = {
-    val dataSize = data.size
+  def pageData(page: Int): PageData[T] = {
     val totalPages = (dataSize + pageSize - 1) / pageSize
     if (page <= 0 || page > totalPages) {
-      throw new IllegalArgumentException(
+      throw new IndexOutOfBoundsException(
         s"Page $page is out of range. Please select a page number between 1 and $totalPages.")
     }
     val from = (page - 1) * pageSize
     val to = dataSize.min(page * pageSize)
-    PageData(page, totalPages, data.slice(from, to))
+    PageData(totalPages, sliceData(from, to))
   }
 
 }
@@ -54,7 +60,7 @@ private[ui] abstract class PagedDataSource[T](page: Int, val pageSize: Int) {
  * The data returned by `PagedDataSource.pageData`, including the page number, the number of total
  * pages and the data in this page.
  */
-private[ui] case class PageData[T](page: Int, totalPage: Int, data: Seq[T])
+private[ui] case class PageData[T](totalPage: Int, data: Seq[T])
 
 /**
  * A paged table that will generate a HTML table for a specified page and also the page navigation.
@@ -71,18 +77,27 @@ private[ui] trait PagedTable[T] {
 
   def row(t: T): Seq[Node]
 
-  def table: Seq[Node] = {
+  def table(page: Int): Seq[Node] = {
     val _dataSource = dataSource
-    val PageData(page, totalPages, data) = _dataSource.pageData
-    <div>
-      {pageNavigation(page, _dataSource.pageSize, totalPages)}
-      <table class={tableCssClass} id={tableId}>
-        {headers}
-        <tbody>
-          {data.map(row)}
-        </tbody>
-      </table>
-    </div>
+    try {
+      val PageData(totalPages, data) = _dataSource.pageData(page)
+      <div>
+        {pageNavigation(page, _dataSource.pageSize, totalPages)}
+        <table class={tableCssClass} id={tableId}>
+          {headers}
+          <tbody>
+            {data.map(row)}
+          </tbody>
+        </table>
+      </div>
+    } catch {
+      case e: IndexOutOfBoundsException =>
+        val PageData(totalPages, _) = _dataSource.pageData(1)
+        <div>
+          {pageNavigation(1, _dataSource.pageSize, totalPages)}
+          <div class="alert alert-error">{e.getMessage}</div>
+        </div>
+    }
   }
 
   /**

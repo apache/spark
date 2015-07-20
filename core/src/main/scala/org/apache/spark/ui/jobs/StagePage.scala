@@ -256,15 +256,14 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
           stageData.hasShuffleWrite,
           stageData.hasBytesSpilled,
           currentTime,
-          page = taskPage,
           pageSize = taskPageSize,
           sortColumn = taskSortColumn,
           desc = taskSortDesc
         )
-        (_taskTable, _taskTable.table)
+        (_taskTable, _taskTable.table(taskPage))
       } catch {
-        case e: IllegalArgumentException =>
-          (null, <div style="padding: 5px 0 10px 0">{e.getMessage}</div>)
+        case e @ (_ : IllegalArgumentException | _ : IndexOutOfBoundsException) =>
+          (null, <div class="alert alert-error">{e.getMessage}</div>)
       }
 
       val jsForScrollingDownToTaskTable =
@@ -283,7 +282,8 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
         </script>
 
       val taskIdsInPage = if (taskTable == null) Set.empty[Long]
-        else taskTable.dataSource.pageData.data.map(_.taskId).toSet
+        else taskTable.dataSource.slicedTaskIds
+
       // Excludes tasks which failed and have incomplete metrics
       val validTasks = tasks.filter(t => t.taskInfo.status == "SUCCESS" && t.taskMetrics.isDefined)
 
@@ -776,15 +776,26 @@ private[ui] class TaskDataSource(
     hasShuffleWrite: Boolean,
     hasBytesSpilled: Boolean,
     currentTime: Long,
-    page: Int,
     pageSize: Int,
     sortColumn: String,
-    desc: Boolean) extends PagedDataSource[TaskTableRowData](page: Int, pageSize: Int) {
+    desc: Boolean) extends PagedDataSource[TaskTableRowData](pageSize) {
   import StagePage._
 
   // Convert TaskUIData to TaskTableRowData which contains the final contents to show in the table
   // so that we can avoid creating duplicate contents during sorting the data
-  override val data = tasks.map(taskRow).sorted(ordering(sortColumn, desc))
+  private val data = tasks.map(taskRow).sorted(ordering(sortColumn, desc))
+
+  private var _slicedTaskIds: Set[Long] = null
+
+  override def dataSize: Int = data.size
+
+  override def sliceData(from: Int, to: Int): Seq[TaskTableRowData] = {
+    val r = data.slice(from, to)
+    _slicedTaskIds = r.map(_.taskId).toSet
+    r
+  }
+
+  def slicedTaskIds: Set[Long] = _slicedTaskIds
 
   private def taskRow(taskData: TaskUIData): TaskTableRowData = {
     val TaskUIData(info, metrics, errorMessage) = taskData
@@ -1123,7 +1134,6 @@ private[ui] class TaskPagedTable(
     hasShuffleWrite: Boolean,
     hasBytesSpilled: Boolean,
     currentTime: Long,
-    page: Int,
     pageSize: Int,
     sortColumn: String,
     desc: Boolean) extends PagedTable[TaskTableRowData]{
@@ -1141,7 +1151,6 @@ private[ui] class TaskPagedTable(
     hasShuffleWrite,
     hasBytesSpilled,
     currentTime,
-    page,
     pageSize,
     sortColumn,
     desc

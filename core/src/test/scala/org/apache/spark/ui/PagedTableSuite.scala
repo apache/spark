@@ -24,34 +24,24 @@ import org.apache.spark.SparkFunSuite
 class PagedDataSourceSuite extends SparkFunSuite {
 
   test("basic") {
-    val dataSource1 = new PagedDataSource[Int](page = 1, pageSize = 2) {
-      override protected val data: Seq[Int] = (1 to 5)
-    }
-    assert(dataSource1.pageData === PageData(1, 3, (1 to 2)))
+    val dataSource1 = new SeqPagedDataSource[Int](1 to 5, pageSize = 2)
+    assert(dataSource1.pageData(1) === PageData(3, (1 to 2)))
 
-    val dataSource2 = new PagedDataSource[Int](page = 2, pageSize = 2) {
-      override protected val data: Seq[Int] = (1 to 5)
-    }
-    assert(dataSource2.pageData === PageData(2, 3, (3 to 4)))
+    val dataSource2 = new SeqPagedDataSource[Int](1 to 5, pageSize = 2)
+    assert(dataSource2.pageData(2) === PageData(3, (3 to 4)))
 
-    val dataSource3 = new PagedDataSource[Int](page = 3, pageSize = 2) {
-      override protected val data: Seq[Int] = (1 to 5)
-    }
-    assert(dataSource3.pageData === PageData(3, 3, Seq(5)))
+    val dataSource3 = new SeqPagedDataSource[Int](1 to 5, pageSize = 2)
+    assert(dataSource3.pageData(3) === PageData(3, Seq(5)))
 
-    val dataSource4 = new PagedDataSource[Int](page = 4, pageSize = 2) {
-      override protected val data: Seq[Int] = (1 to 5)
-    }
-    val e1 = intercept[IllegalArgumentException] {
-      dataSource4.pageData
+    val dataSource4 = new SeqPagedDataSource[Int](1 to 5, pageSize = 2)
+    val e1 = intercept[IndexOutOfBoundsException] {
+      dataSource4.pageData(4)
     }
     assert(e1.getMessage === "Page 4 is out of range. Please select a page number between 1 and 3.")
 
-    val dataSource5 = new PagedDataSource[Int](page = 0, pageSize = 2) {
-      override protected val data: Seq[Int] = (1 to 5)
-    }
-    val e2 = intercept[IllegalArgumentException] {
-      dataSource5.pageData
+    val dataSource5 = new SeqPagedDataSource[Int](1 to 5, pageSize = 2)
+    val e2 = intercept[IndexOutOfBoundsException] {
+      dataSource5.pageData(0)
     }
     assert(e2.getMessage === "Page 0 is out of range. Please select a page number between 1 and 3.")
 
@@ -98,4 +88,12 @@ class PagedTableSuite extends SparkFunSuite {
     assert((pagedTable.pageNavigation(93, 10, 97).head \\ "li").map(_.text.trim) ===
       Seq("<<", "<") ++ (91 to 97).map(_.toString) ++ Seq(">"))
   }
+}
+
+private[spark] class SeqPagedDataSource[T](seq: Seq[T], pageSize: Int)
+  extends PagedDataSource[T](pageSize) {
+
+  override protected def dataSize: Int = seq.size
+
+  override protected def sliceData(from: Int, to: Int): Seq[T] = seq.slice(from, to)
 }
