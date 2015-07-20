@@ -21,6 +21,8 @@ import java.text.DecimalFormat
 import java.util.Locale
 import java.util.regex.{MatchResult, Pattern}
 
+import org.apache.commons.lang.StringUtils
+
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.UnresolvedException
 import org.apache.spark.sql.catalyst.expressions.codegen._
@@ -352,6 +354,78 @@ case class StringInstr(str: Expression, substr: Expression)
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     defineCodeGen(ctx, ev, (l, r) =>
       s"($l).indexOf($r, 0) + 1")
+  }
+}
+
+/**
+ * Returns the substring from string str before count occurrences of the delimiter delim.
+ * If count is positive, everything the left of the final delimiter (counting from left) is
+ * returned. If count is negative, every to the right of the final delimiter (counting from the
+ * right) is returned. substring_index performs a case-sensitive match when searching for delim.
+ */
+case class Substring_index(strExpr: Expression, delimExpr: Expression, countExpr: Expression)
+ extends Expression with ImplicitCastInputTypes with CodegenFallback {
+
+  override def dataType: DataType = StringType
+  override def inputTypes: Seq[DataType] = Seq(StringType, StringType, IntegerType)
+  override def nullable: Boolean = strExpr.nullable || delimExpr.nullable || countExpr.nullable
+  override def children: Seq[Expression] = Seq(strExpr, delimExpr, countExpr)
+  override def prettyName: String = "substring_index"
+  override def toString: String = s"substring_index($strExpr, $delimExpr, $countExpr)"
+
+  override def eval(input: InternalRow): Any = {
+    val str = strExpr.eval(input)
+    val delim = delimExpr.eval(input)
+    val count = countExpr.eval(input)
+    if (str == null || delim == null || count == null) {
+      null
+    } else {
+      subStrIndex(
+        str.asInstanceOf[UTF8String],
+        delim.asInstanceOf[UTF8String],
+        count.asInstanceOf[Int])
+    }
+  }
+
+  private def ordinalIndexOf(str: UTF8String, delim: UTF8String, count: Int): Int = {
+    var found = 0
+    var index = -1
+    do {
+      index = str.indexOf(delim, index + 1)
+      if (index < 0) {
+        return index
+      }
+      found += 1
+    } while (found < count)
+    index
+  }
+
+  private def subStrIndex(strUtf8: UTF8String, delimUtf8: UTF8String, count: Int): UTF8String = {
+    if (strUtf8 == null || delimUtf8 == null || count == null) {
+      return null
+    }
+    if (strUtf8.numBytes() == 0 || delimUtf8.numBytes() == 0 || count == 0) {
+      return UTF8String.fromString("")
+    }
+    val res: UTF8String =
+      if (count > 0) {
+        val idx = ordinalIndexOf(strUtf8, delimUtf8, count)
+        if (idx != -1) {
+          strUtf8.substring(0, idx)
+        } else {
+          strUtf8
+        }
+      } else {
+        val str = strUtf8.toString
+        val delim = delimUtf8.toString
+        val idx = StringUtils.lastOrdinalIndexOf(str, delim, -count)
+        if (idx != -1) {
+          UTF8String.fromString(str.substring(idx + 1))
+        } else {
+          UTF8String.fromString(str)
+        }
+      }
+    res
   }
 }
 
