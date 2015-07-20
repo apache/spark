@@ -572,6 +572,8 @@ class TaskInstance(Base):
             return False
         elif self.task.end_date and self.execution_date > self.task.end_date:
             return False
+        elif self.state == State.SKIPPED:
+            return False
         elif (
                 self.state in State.runnable() and
                 self.are_dependencies_met(
