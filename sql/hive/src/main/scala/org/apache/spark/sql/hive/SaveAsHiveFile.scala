@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.hive
 
-import org.apache.spark.util.SerializableJobConf
-
 import scala.collection.JavaConversions._
 
 import org.apache.hadoop.hive.ql.plan.TableDesc
@@ -28,8 +26,8 @@ import org.apache.hadoop.hive.serde2.objectinspector.{StructObjectInspector, Obj
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorUtils.ObjectInspectorCopyOption
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.Row
-import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.util.SerializableJobConf
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.hive.HiveShim.{ShimFileSinkDesc => FileSinkDesc}
 import org.apache.spark.{Logging, SparkContext, TaskContext}
