@@ -818,7 +818,7 @@ case class UnBase64(child: Expression) extends UnaryExpression with ImplicitCast
  * If either argument is null, the result will also be null.
  */
 case class Decode(bin: Expression, charset: Expression)
-  extends BinaryExpression with ImplicitCastInputTypes with CodegenFallback {
+  extends BinaryExpression with ImplicitCastInputTypes {
 
   override def left: Expression = bin
   override def right: Expression = charset
@@ -829,6 +829,17 @@ case class Decode(bin: Expression, charset: Expression)
     val fromCharset = input2.asInstanceOf[UTF8String].toString
     UTF8String.fromString(new String(input1.asInstanceOf[Array[Byte]], fromCharset))
   }
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    nullSafeCodeGen(ctx, ev, (bytes, charset) =>
+      s"""
+        try {
+          ${ev.primitive} = UTF8String.fromString(new String($bytes, $charset.toString()));
+        } catch (java.io.UnsupportedEncodingException e) {
+          org.apache.spark.unsafe.PlatformDependent.throwException(e);
+        }
+      """)
+  }
 }
 
 /**
@@ -837,7 +848,7 @@ case class Decode(bin: Expression, charset: Expression)
  * If either argument is null, the result will also be null.
 */
 case class Encode(value: Expression, charset: Expression)
-  extends BinaryExpression with ImplicitCastInputTypes with CodegenFallback {
+  extends BinaryExpression with ImplicitCastInputTypes {
 
   override def left: Expression = value
   override def right: Expression = charset
@@ -847,6 +858,16 @@ case class Encode(value: Expression, charset: Expression)
   protected override def nullSafeEval(input1: Any, input2: Any): Any = {
     val toCharset = input2.asInstanceOf[UTF8String].toString
     input1.asInstanceOf[UTF8String].toString.getBytes(toCharset)
+  }
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    nullSafeCodeGen(ctx, ev, (string, charset) =>
+      s"""
+        try {
+          ${ev.primitive} = $string.toString().getBytes($charset.toString());
+        } catch (java.io.UnsupportedEncodingException e) {
+          org.apache.spark.unsafe.PlatformDependent.throwException(e);
+        }""")
   }
 }
 
