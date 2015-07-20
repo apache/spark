@@ -802,8 +802,6 @@ def size(col):
     Collection function: returns the length of the array or map stored in the column.
     :param col: name of column or expression
 
-    >>> from pyspark.sql import Row
-    >>> from pyspark.sql.functions import size
     >>> df = sqlContext.createDataFrame([Row(data=[1, 2, 3]), Row(data=[1]), Row(data=[])])
     >>> df.select(size(df.data)).collect()
     [Row(size(data)=3), Row(size(data)=1), Row(size(data)=0)]
