@@ -17,12 +17,12 @@
 
 package org.apache.spark.ml.feature
 
+import org.apache.spark.SparkContext
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.ml.param.{ParamMap, Param}
 import org.apache.spark.ml.Transformer
 import org.apache.spark.ml.util.Identifiable
-import org.apache.spark.sql.DataFrame
-import org.apache.spark.sql.Row
+import org.apache.spark.sql.{SQLContext, DataFrame, Row}
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -50,24 +50,12 @@ class SQLTransformer (override val uid: String) extends Transformer {
 
   private val tableIdentifier: String = "__THIS__"
 
-  /**
-   * The output schema of this transformer.
-   * It is only valid after transform function has been called.
-   */
-  private var outputSchema: StructType = null
-
   override def transform(dataset: DataFrame): DataFrame = {
-    val tableName = uid
-    val realStatement = $(statement).replace(tableIdentifier, tableName)
+    val outputSchema = transformSchema(dataset.schema, logging = true)
+    val tableName = Identifiable.randomUID("sql")
     dataset.registerTempTable(tableName)
-    val originalSchema = dataset.schema
+    val realStatement = $(statement).replace(tableIdentifier, tableName)
     val additiveDF = dataset.sqlContext.sql(realStatement)
-    val additiveSchema = additiveDF.schema
-    outputSchema = StructType(Array.concat(originalSchema.fields, additiveSchema.fields))
-    additiveSchema.fieldNames.foreach {
-      case name =>
-        require(!originalSchema.fieldNames.contains(name), s"Output column $name already exists.")
-    }
     val rdd = dataset.rdd.zip(additiveDF.rdd).map {
       case (r1, r2) => Row.merge(r1, r2)
     }
@@ -75,6 +63,17 @@ class SQLTransformer (override val uid: String) extends Transformer {
   }
 
   override def transformSchema(schema: StructType): StructType = {
+    val sc = SparkContext.getOrCreate()
+    val sqlContext = SQLContext.getOrCreate(sc)
+    val dummyRDD = sc.parallelize(Seq(Row.empty))
+    val dummyDF = sqlContext.createDataFrame(dummyRDD, schema)
+    dummyDF.registerTempTable(tableIdentifier)
+    val additiveSchema = sqlContext.sql($(statement)).schema
+    additiveSchema.fieldNames.foreach {
+      case name =>
+        require(!schema.fieldNames.contains(name), s"Output column $name already exists.")
+    }
+    val outputSchema = StructType(Array.concat(schema.fields, additiveSchema.fields))
     outputSchema
   }
 
