@@ -287,6 +287,18 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
     }
   }
 
+  test("SPARK-9170: Don't implicitly lowercase of user-provided columns") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+
+      sqlContext.range(0, 10).select('id as "Acol").write.format("orc").save(path)
+      sqlContext.read.format("orc").load(path).schema("Acol")
+      intercept[IllegalArgumentException] {
+        sqlContext.read.format("orc").load(path).schema("acol")
+      }
+    }
+  }
+
   test("SPARK-8501: Avoids discovery schema from empty ORC files") {
     withTempPath { dir =>
       val path = dir.getCanonicalPath
