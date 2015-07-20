@@ -165,8 +165,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
       val p = partsScanned until math.min(partsScanned + numPartsToTry, totalParts)
       val sc = sqlContext.sparkContext
       val res =
-        sc.runJob(childRDD, (it: Iterator[InternalRow]) => it.take(left).toArray, p,
-          allowLocal = false)
+        sc.runJob(childRDD, (it: Iterator[InternalRow]) => it.take(left).toArray, p)
 
       res.foreach(buf ++= _.take(n - buf.size))
       partsScanned += numPartsToTry

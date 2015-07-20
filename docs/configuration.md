@@ -1051,15 +1051,6 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td><code>spark.localExecution.enabled</code></td>
-  <td>false</td>
-  <td>
-    Enables Spark to run certain jobs, such as first() or take() on the driver, without sending
-    tasks to the cluster. This can make certain jobs execute very quickly, but may require
-    shipping a whole partition of data to the driver.
-  </td>
-</tr>
-<tr>
   <td><code>spark.locality.wait</code></td>
   <td>3s</td>
   <td>
