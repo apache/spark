@@ -461,7 +461,7 @@ class UserDefinedType(DataType):
 
 
 _atomic_types = [StringType, BinaryType, BooleanType, DecimalType, FloatType, DoubleType,
-                 ByteType, ShortType, IntegerType, LongType, DateType, TimestampType]
+                 ByteType, ShortType, IntegerType, LongType, DateType, TimestampType, NullType]
 _all_atomic_types = dict((t.typeName(), t) for t in _atomic_types)
 _all_complex_types = dict((v.typeName(), v)
                           for v in [ArrayType, MapType, StructType])
