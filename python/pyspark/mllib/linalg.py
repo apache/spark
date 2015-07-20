@@ -75,7 +75,7 @@ class SparseVector(object):
         25.0
         >>> a.dot(array([1., 2., 3., 4.]))
         22.0
-        >>> b = SparseVector(4, [2, 4], [1.0, 2.0])
+        >>> b = SparseVector(4, [2], [1.0])
         >>> a.dot(b)
         0.0
         >>> a.dot(array([[1, 1], [2, 2], [3, 3], [4, 4]]))
@@ -115,11 +115,11 @@ class SparseVector(object):
         0.0
         >>> a.squared_distance(array([1., 2., 3., 4.]))
         11.0
-        >>> b = SparseVector(4, [2, 4], [1.0, 2.0])
+        >>> b = SparseVector(4, [2], [1.0])
         >>> a.squared_distance(b)
-        30.0
+        26.0
         >>> b.squared_distance(a)
-        30.0
+        26.0
         """
         if type(other) == ndarray:
             if other.ndim == 1:
