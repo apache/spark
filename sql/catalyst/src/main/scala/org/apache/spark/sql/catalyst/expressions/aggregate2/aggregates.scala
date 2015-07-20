@@ -78,12 +78,21 @@ private[sql] case object NoOp extends Expression with Unevaluable {
 private[sql] case class AggregateExpression2(
     aggregateFunction: AggregateFunction2,
     mode: AggregateMode,
-    isDistinct: Boolean) extends Expression with Unevaluable {
+    isDistinct: Boolean) extends AggregateExpression {
 
   override def children: Seq[Expression] = aggregateFunction :: Nil
   override def dataType: DataType = aggregateFunction.dataType
   override def foldable: Boolean = false
   override def nullable: Boolean = aggregateFunction.nullable
+
+  override def references: AttributeSet = {
+    val childReferemces = mode match {
+      case Partial | Complete => aggregateFunction.references.toSeq
+      case PartialMerge | Final => aggregateFunction.bufferAttributes
+    }
+
+    AttributeSet(childReferemces)
+  }
 
   override def toString: String = s"(${aggregateFunction}2,mode=$mode,isDistinct=$isDistinct)"
 }
@@ -134,59 +143,6 @@ abstract class AggregateFunction2
 
   override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String =
     throw new UnsupportedOperationException(s"Cannot evaluate expression: $this")
-}
-
-/**
- * An example [[AggregateFunction2]] that is not an [[AlgebraicAggregate]].
- * This function calculate the sum of double values.
- * @param child
- */
-case class MyDoubleSum(child: Expression) extends AggregateFunction2 {
-  override val bufferSchema: StructType =
-    StructType(StructField("currentSum", DoubleType, true) :: Nil)
-
-  override val bufferAttributes: Seq[AttributeReference] = bufferSchema.toAttributes
-
-  override lazy val cloneBufferAttributes = bufferAttributes.map(_.newInstance())
-
-  override def initialize(buffer: MutableRow): Unit = {
-    buffer.update(bufferOffset, null)
-  }
-
-  override def update(buffer: MutableRow, input: InternalRow): Unit = {
-    val inputValue = child.eval(input)
-    if (inputValue != null) {
-      if (buffer.isNullAt(bufferOffset)) {
-        buffer.setDouble(bufferOffset, inputValue.asInstanceOf[Double])
-      } else {
-        val currentSum = buffer.getDouble(bufferOffset)
-        buffer.setDouble(bufferOffset, currentSum + inputValue.asInstanceOf[Double])
-      }
-    }
-  }
-
-  override def merge(buffer1: MutableRow, buffer2: InternalRow): Unit = {
-    if (!buffer2.isNullAt(bufferOffset)) {
-      if (buffer1.isNullAt(bufferOffset)) {
-        buffer1.setDouble(bufferOffset, buffer2.getDouble(bufferOffset))
-      } else {
-        val currentSum = buffer1.getDouble(bufferOffset)
-        buffer1.setDouble(bufferOffset, currentSum + buffer2.getDouble(bufferOffset))
-      }
-    }
-  }
-
-  override def eval(buffer: InternalRow = null): Any = {
-    if (buffer.isNullAt(bufferOffset)) {
-      null
-    } else {
-      buffer.getDouble(bufferOffset)
-    }
-  }
-
-  override def nullable: Boolean = true
-  override def dataType: DataType = DoubleType
-  override def children: Seq[Expression] = child :: Nil
 }
 
 /**

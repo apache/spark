@@ -28,7 +28,7 @@ import org.apache.spark.sql.types.DataType;
 import org.apache.spark.sql.types.DataTypes;
 import org.apache.spark.sql.Row;
 
-public class MyJavaUDAF extends UserDefinedAggregateFunction {
+public class MyDoubleSum extends UserDefinedAggregateFunction {
 
   private StructType _inputDataType;
 
@@ -36,7 +36,7 @@ public class MyJavaUDAF extends UserDefinedAggregateFunction {
 
   private DataType _returnDataType;
 
-  public MyJavaUDAF() {
+  public MyDoubleSum() {
     List<StructField> inputfields = new ArrayList<StructField>();
     inputfields.add(DataTypes.createStructField("inputDouble", DataTypes.DoubleType, true));
     _inputDataType = DataTypes.createStructType(inputfields);
@@ -73,7 +73,7 @@ public class MyJavaUDAF extends UserDefinedAggregateFunction {
       if (buffer.isNullAt(0)) {
         buffer.update(0, input.getDouble(0));
       } else {
-        Double newValue = input.getDouble(0) * buffer.getDouble(0);
+        Double newValue = input.getDouble(0) + buffer.getDouble(0);
         buffer.update(0, newValue);
       }
     }
@@ -84,7 +84,7 @@ public class MyJavaUDAF extends UserDefinedAggregateFunction {
       if (buffer1.isNullAt(0)) {
         buffer1.update(0, buffer2.getDouble(0));
       } else {
-        Double newValue = buffer2.getDouble(0) * buffer1.getDouble(0);
+        Double newValue = buffer2.getDouble(0) + buffer1.getDouble(0);
         buffer1.update(0, newValue);
       }
     }

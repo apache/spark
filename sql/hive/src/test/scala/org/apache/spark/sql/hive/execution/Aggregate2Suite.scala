@@ -18,9 +18,9 @@
 package org.apache.spark.sql.hive.execution
 
 import org.apache.spark.sql.hive.test.TestHive
-import org.apache.spark.sql.{QueryTest, Row}
+import org.apache.spark.sql.{SQLConf, AnalysisException, QueryTest, Row}
 import org.scalatest.BeforeAndAfterAll
-import test.org.apache.spark.sql.hive.aggregate2.MyJavaUDAF
+import test.org.apache.spark.sql.hive.aggregate2.MyDoubleSum
 
 class Aggregate2Suite extends QueryTest with BeforeAndAfterAll {
 
@@ -48,6 +48,10 @@ class Aggregate2Suite extends QueryTest with BeforeAndAfterAll {
       (3, null)).toDF("key", "value")
 
     data.write.saveAsTable("agg2")
+
+    // Register a UDAF
+    val javaUDAF = new MyDoubleSum
+    ctx.udaf.register("mydoublesum", javaUDAF)
   }
 
   test("test average2 no key in output") {
@@ -62,20 +66,6 @@ class Aggregate2Suite extends QueryTest with BeforeAndAfterAll {
   }
 
   test("test average2") {
-    ctx.sql(
-      """
-        |SELECT key, avg(value)
-        |FROM agg2
-        |GROUP BY key
-      """.stripMargin).explain(true)
-
-    ctx.sql(
-      """
-        |SELECT key, avg(value)
-        |FROM agg2
-        |GROUP BY key
-      """.stripMargin).collect().foreach(println)
-
     checkAnswer(
       ctx.sql(
         """
@@ -116,23 +106,29 @@ class Aggregate2Suite extends QueryTest with BeforeAndAfterAll {
           |SELECT avg(null)
         """.stripMargin),
       Row(null) :: Nil)
+  }
 
+  test("udaf") {
+    checkAnswer(
+      ctx.sql(
+        """
+          |SELECT
+          |  key,
+          |  mydoublesum(cast(value as double) + 1.5 * key),
+          |  avg(value - key),
+          |  mydoublesum(cast(value as double) - 1.5 * key),
+          |  avg(value)
+          |FROM agg2
+          |GROUP BY key
+        """.stripMargin),
+      Row(1, 64.5, 19.0, 55.5, 20.0) ::
+        Row(2, 5.0, -2.5, -7.0, -0.5) ::
+        Row(3, null, null, null, null) ::
+        Row(null, null, null, null, 10.0) :: Nil)
   }
 
   test("non-AlgebraicAggregate aggreguate function") {
-    ctx.sql(
-      """
-        |SELECT key, mydoublesum(cast(value as double))
-        |FROM agg2
-        |GROUP BY key
-      """.stripMargin).explain(true)
 
-    ctx.sql(
-      """
-        |SELECT key, mydoublesum(cast(value as double))
-        |FROM agg2
-        |GROUP BY key
-      """.stripMargin).collect().foreach(println)
 
     checkAnswer(
       ctx.sql(
@@ -156,7 +152,6 @@ class Aggregate2Suite extends QueryTest with BeforeAndAfterAll {
           |SELECT mydoublesum(null)
         """.stripMargin),
       Row(null) :: Nil)
-
   }
 
   test("non-AlgebraicAggregate and AlgebraicAggregate aggreguate function") {
@@ -190,53 +185,27 @@ class Aggregate2Suite extends QueryTest with BeforeAndAfterAll {
         Row(null, null, null, null, 10.0) :: Nil)
   }
 
-  test("udaf") {
-    val myJavaUDAF = new MyJavaUDAF
-    ctx.udaf.register("myjavaudaf", myJavaUDAF)
+  test("Cannot use AggregateExpression1 and AggregateExpressions2 together") {
+    Seq(true, false).foreach { useAggregate2 =>
+      ctx.sql(s"set spark.sql.useAggregate2=$useAggregate2")
+      val errorMessage = intercept[AnalysisException] {
+        ctx.sql(
+          """
+            |SELECT
+            |  key,
+            |  sum(cast(value as double) + 1.5 * key),
+            |  mydoublesum(value)
+            |FROM agg2
+            |GROUP BY key
+          """.stripMargin).collect()
+      }.getMessage
+      val expectedErrorMessage =
+        s"${SQLConf.USE_SQL_AGGREGATE2.key} is ${if (useAggregate2) "enabled" else "disabled"}. " +
+          s"Please ${if (useAggregate2) "disable" else "enable"} it to use"
+      assert(errorMessage.contains(expectedErrorMessage))
+    }
 
-    ctx.sql(
-      """
-        |SELECT
-        |  key,
-        |  mydoublesum(cast(value as double) + 1.5 * key),
-        |  avg(value - key),
-        |  myjavaudaf(value),
-        |  mydoublesum(cast(value as double) - 1.5 * key),
-        |  avg(value)
-        |FROM agg2
-        |GROUP BY key
-      """.stripMargin).explain(true)
-
-    ctx.sql(
-      """
-        |SELECT
-        |  key,
-        |  mydoublesum(cast(value as double) + 1.5 * key),
-        |  avg(value - key),
-        |  myjavaudaf(value),
-        |  mydoublesum(cast(value as double) - 1.5 * key),
-        |  avg(value)
-        |FROM agg2
-        |GROUP BY key
-      """.stripMargin).collect().foreach(println)
-
-    checkAnswer(
-      ctx.sql(
-        """
-          |SELECT
-          |  key,
-          |  mydoublesum(cast(value as double) + 1.5 * key),
-          |  avg(value - key),
-          |  myjavaudaf(value),
-          |  mydoublesum(cast(value as double) - 1.5 * key),
-          |  avg(value)
-          |FROM agg2
-          |GROUP BY key
-        """.stripMargin),
-      Row(1, 64.5, 19.0, 6000.0, 55.5, 20.0) ::
-        Row(2, 5.0, -2.5, -0.0, -7.0, -0.5) ::
-        Row(3, null, null, null, null, null) ::
-        Row(null, null, null, 60000.0, null, 10.0) :: Nil)
+    ctx.sql(s"set spark.sql.useAggregate2=true")
   }
 
   override def afterAll(): Unit = {

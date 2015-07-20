@@ -24,7 +24,6 @@ import scala.util.{Failure, Success, Try}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate2.MyDoubleSum
 import org.apache.spark.sql.catalyst.util.StringKeyHashMap
 
 
@@ -149,7 +148,6 @@ object FunctionRegistry {
     expression[Max]("max"),
     expression[Min]("min"),
     expression[Sum]("sum"),
-    expression[MyDoubleSum]("mydoublesum"),
 
     // string functions
     expression[Ascii]("ascii"),
