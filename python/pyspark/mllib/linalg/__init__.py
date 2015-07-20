@@ -43,8 +43,9 @@ from pyspark.sql.types import UserDefinedType, StructField, StructType, ArrayTyp
 
 
 __all__ = ['Vector', 'DenseVector', 'SparseVector', 'Vectors',
-           'Matrix', 'DenseMatrix', 'SparseMatrix', 'Matrices'
-           'DistributedMatrix', 'DistributedMatrices', 'RowMatrix']
+           'Matrix', 'DenseMatrix', 'SparseMatrix', 'Matrices',
+           'DistributedMatrix', 'DistributedMatrices', 'RowMatrix',
+           'IndexedRow', 'IndexedRowMatrix']
 
 
 if sys.version_info[:2] == (2, 7):
@@ -1176,6 +1177,15 @@ class DistributedMatrices(object):
         """
         return RowMatrix(rows, numRows, numCols)
 
+    @staticmethod
+    def indexedRowMatrix(rows, numRows=0, numCols=0):
+        """
+        Create an IndexedRowMatrix
+
+        :param rows: an RDD of IndexedRows
+        """
+        return IndexedRowMatrix(rows, numRows, numCols)
+
 
 class RowMatrix(DistributedMatrix):
     """
@@ -1221,6 +1231,66 @@ class RowMatrix(DistributedMatrix):
         6L
         """
         return self._jrm.call("numCols")
+
+
+class IndexedRow(object):
+    """
+    Represents a row of an IndexedRowMatrix.  Just a wrapper over a (Long, Vector) tuple.
+
+    .. note:: Experimental
+    """
+    def __init__(self, index, vector):
+        self.index = long(index)
+        self.vector = _convert_to_vector(vector)
+
+
+class IndexedRowMatrix(DistributedMatrix):
+    """
+    Represents a row-oriented distributed Matrix with indexed rows.
+
+    .. note:: Experimental
+    """
+    def __init__(self, rows, numRows=0, numCols=0):
+        """
+        Create a wrapper over a Java IndexedRowMatrix
+
+        :param rows: an RDD of IndexedRows or (Long, Vector) tuples
+        """
+        # We use DataFrames for serialization of IndexedRows from Python, so convert the RDD to a DataFrame. This
+        # will convert each IndexedRow to a Row containing the 'index' and 'vector' values, which can both be easily
+        # serialized.  We will convert back to IndexedRows on the Scala side.
+        javaIndexedRowMatrix = callMLlibFunc("createIndexedRowMatrix", rows.toDF(), long(numRows), int(numCols))
+        self._jirm = JavaModelWrapper(javaIndexedRowMatrix)
+
+    def numRows(self):
+        """Get or compute the number of rows.
+
+        >>> rows = sc.parallelize([IndexedRow(0,Vectors.dense([1, 2, 3])), IndexedRow(1,Vectors.dense([4, 5, 6])), IndexedRow(2,Vectors.dense([7, 8, 9])), IndexedRow(3,Vectors.dense([10, 11, 12]))])
+        >>> rm = IndexedRowMatrix(rows)
+        >>> rm.numRows()
+        4L
+
+        >>> rows = sc.parallelize([IndexedRow(0,Vectors.dense([1, 2, 3])), IndexedRow(1,Vectors.dense([4, 5, 6])), IndexedRow(2,Vectors.dense([7, 8, 9])), IndexedRow(3,Vectors.dense([10, 11, 12]))])
+        >>> rm = IndexedRowMatrix(rows, 7, 6)
+        >>> rm.numRows()
+        7L
+        """
+        return self._jirm.call("numRows")
+
+    def numCols(self):
+        """Get or compute the number of cols.
+
+        >>> rows = sc.parallelize([IndexedRow(0,Vectors.dense([1, 2, 3])), IndexedRow(1,Vectors.dense([4, 5, 6])), IndexedRow(2,Vectors.dense([7, 8, 9])), IndexedRow(3,Vectors.dense([10, 11, 12]))])
+        >>> rm = IndexedRowMatrix(rows)
+        >>> rm.numCols()
+        3L
+
+        >>> rows = sc.parallelize([IndexedRow(0,Vectors.dense([1, 2, 3])), IndexedRow(1,Vectors.dense([4, 5, 6])), IndexedRow(2,Vectors.dense([7, 8, 9])), IndexedRow(3,Vectors.dense([10, 11, 12]))])
+        >>> rm = IndexedRowMatrix(rows, 7, 6)
+        >>> rm.numCols()
+        6L
+        """
+        return self._jirm.call("numCols")
 
 
 def _test():

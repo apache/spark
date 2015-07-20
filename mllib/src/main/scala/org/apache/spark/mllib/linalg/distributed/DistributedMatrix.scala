@@ -42,7 +42,7 @@ trait DistributedMatrix extends Serializable {
 object DistributedMatrices {
 
   /**
-   * Creates a Row Matrix
+   * Creates a Row Matrix.
    *
    * @param rows An RDD of Vectors
    * @param numRows Number of rows in the matrix
@@ -52,4 +52,14 @@ object DistributedMatrices {
     new RowMatrix(rows, numRows, numCols)
   }
 
+  /**
+   * Creates an IndexedRowMatrix.
+   *
+   * @param rows An RDD of Vectors
+   * @param numRows Number of rows in the matrix
+   * @param numCols Number of columns in the matrix
+   */
+  def indexedRowMatrix(rows: RDD[IndexedRow], numRows: Long = 0, numCols: Int = 0): IndexedRowMatrix = {
+    new IndexedRowMatrix(rows, numRows, numCols)
+  }
 }

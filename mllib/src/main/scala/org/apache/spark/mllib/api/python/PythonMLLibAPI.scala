@@ -21,7 +21,7 @@ import java.io.OutputStream
 import java.nio.{ByteBuffer, ByteOrder}
 import java.util.{ArrayList => JArrayList, List => JList, Map => JMap}
 
-import org.apache.spark.mllib.linalg.distributed.{DistributedMatrices, RowMatrix}
+import org.apache.spark.mllib.linalg.distributed.{DistributedMatrices, RowMatrix, IndexedRowMatrix, IndexedRow}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
@@ -1099,10 +1099,24 @@ private[python] class PythonMLLibAPI extends Serializable {
   }
 
   /**
-   * Wrapper around DistributedMatrices.rowMatrix factory method
+   * Wrapper around DistributedMatrices.rowMatrix factory method.
    */
   def createRowMatrix(rows: JavaRDD[Vector], numRows: Long, numCols: Int): RowMatrix = {
     DistributedMatrices.rowMatrix(rows.rdd, numRows, numCols)
+  }
+
+  /**
+   * Wrapper around DistributedMatrices.indexedRowMatrix factory method.
+   */
+  def createIndexedRowMatrix(rows: DataFrame, numRows: Long, numCols: Int): IndexedRowMatrix = {
+    // We use DataFrames for serialization of IndexedRows from Python, so map each Row in the DataFrame
+    // back to an IndexedRow.
+    val indexedRows = rows.map { row =>
+      val index = row.getLong(0)
+      val vector = row.getAs[Vector](1)
+      IndexedRow(index, vector)
+    }
+    DistributedMatrices.indexedRowMatrix(indexedRows, numRows, numCols)
   }
 }
 
