@@ -96,15 +96,15 @@ public class UTF8StringSuite {
 
   @Test
   public void concatTest() {
-    assertEquals(concat(), fromString(""));
-    assertEquals(concat(null), fromString(""));
-    assertEquals(concat(fromString("")), fromString(""));
+    assertEquals(concat(), EMPTY_UTF8);
+    assertEquals(concat(null), EMPTY_UTF8);
+    assertEquals(concat(EMPTY_UTF8), EMPTY_UTF8);
     assertEquals(concat(fromString("ab")), fromString("ab"));
     assertEquals(concat(fromString("a"), fromString("b")), fromString("ab"));
     assertEquals(concat(fromString("a"), fromString("b"), fromString("c")), fromString("abc"));
     assertEquals(concat(fromString("a"), null, fromString("c")), fromString("ac"));
     assertEquals(concat(fromString("a"), null, null), fromString("a"));
-    assertEquals(concat(null, null, null), fromString(""));
+    assertEquals(concat(null, null, null), EMPTY_UTF8);
     assertEquals(concat(fromString("数据"), fromString("砖头")), fromString("数据砖头"));
   }
 
@@ -117,8 +117,8 @@ public class UTF8StringSuite {
     // If separator is null, concatWs should skip all null inputs and never return null.
     UTF8String sep = fromString("哈哈");
     assertEquals(
-      fromString(""),
-      concatWs(sep, fromString("")));
+      EMPTY_UTF8,
+      concatWs(sep, EMPTY_UTF8));
     assertEquals(
       fromString("ab"),
       concatWs(sep, fromString("ab")));
@@ -135,7 +135,7 @@ public class UTF8StringSuite {
       fromString("a"),
       concatWs(sep, fromString("a"), null, null));
     assertEquals(
-      fromString(""),
+      EMPTY_UTF8,
       concatWs(sep, null, null, null));
     assertEquals(
       fromString("数据哈哈砖头"),
