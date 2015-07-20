@@ -21,7 +21,8 @@ import java.io.OutputStream
 import java.nio.{ByteBuffer, ByteOrder}
 import java.util.{ArrayList => JArrayList, List => JList, Map => JMap}
 
-import org.apache.spark.mllib.linalg.distributed.{DistributedMatrices, RowMatrix, IndexedRowMatrix, IndexedRow}
+import org.apache.spark.mllib.linalg.distributed.{DistributedMatrices, RowMatrix, IndexedRowMatrix, IndexedRow,
+  MatrixEntry, CoordinateMatrix}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
@@ -1117,6 +1118,21 @@ private[python] class PythonMLLibAPI extends Serializable {
       IndexedRow(index, vector)
     }
     DistributedMatrices.indexedRowMatrix(indexedRows, numRows, numCols)
+  }
+
+  /**
+   * Wrapper around DistributedMatrices.coordinateMatrix factory method.
+   */
+  def createCoordinateMatrix(rows: DataFrame, numRows: Long, numCols: Long): CoordinateMatrix = {
+    // We use DataFrames for serialization of MatrixEntry inputs from Python, so map each Row in the DataFrame
+    // back to a MatrixEntry.
+    val entries = rows.map { row =>
+      val i = row.getLong(0)
+      val j = row.getLong(1)
+      val value = row.getDouble(2)
+      MatrixEntry(i, j, value)
+    }
+    DistributedMatrices.coordinateMatrix(entries, numRows, numCols)
   }
 }
 

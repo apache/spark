@@ -44,7 +44,7 @@ object DistributedMatrices {
   /**
    * Creates a Row Matrix.
    *
-   * @param rows An RDD of Vectors
+   * @param rows A RDD[Vector]
    * @param numRows Number of rows in the matrix
    * @param numCols Number of columns in the matrix
    */
@@ -55,11 +55,22 @@ object DistributedMatrices {
   /**
    * Creates an IndexedRowMatrix.
    *
-   * @param rows An RDD of Vectors
+   * @param rows A RDD[IndexedRow]
    * @param numRows Number of rows in the matrix
    * @param numCols Number of columns in the matrix
    */
   def indexedRowMatrix(rows: RDD[IndexedRow], numRows: Long = 0, numCols: Int = 0): IndexedRowMatrix = {
     new IndexedRowMatrix(rows, numRows, numCols)
+  }
+
+  /**
+   * Creates a CoordinateMatrix.
+   *
+   * @param rows A RDD[MatrixEntry]
+   * @param numRows Number of rows in the matrix
+   * @param numCols Number of columns in the matrix
+   */
+  def coordinateMatrix(rows: RDD[MatrixEntry], numRows: Long = 0, numCols: Long = 0): CoordinateMatrix = {
+    new CoordinateMatrix(rows, numRows, numCols)
   }
 }
