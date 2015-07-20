@@ -63,16 +63,20 @@ class CodeGenContext {
    * As an example, ("int", "count", "count = 0;") will produce code:
    * {{{
    *   private int count;
+   * }}}
+   * as a member variable, and add
+   * {{{
    *   count = 0;
    * }}}
+   * to the constructor.
    *
    * They will be kept as member variables in generated classes like `SpecificProjection`.
    */
   val mutableStates: mutable.ArrayBuffer[(String, String, String)] =
     mutable.ArrayBuffer.empty[(String, String, String)]
 
-  def addMutableState(javaType: String, variableName: String, initialCode: String): Unit = {
-    mutableStates += ((javaType, variableName, initialCode))
+  def addMutableState(javaType: String, variableName: String, initCode: String): Unit = {
+    mutableStates += ((javaType, variableName, initCode))
   }
 
   final val intervalType: String = classOf[Interval].getName
