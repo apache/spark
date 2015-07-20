@@ -264,7 +264,7 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
         (_taskTable, _taskTable.table)
       } catch {
         case e: IllegalArgumentException =>
-          (null, <div>{e.getMessage}</div>)
+          (null, <div style="padding: 5px 0 10px 0">{e.getMessage}</div>)
       }
 
       val jsForScrollingDownToTaskTable =
