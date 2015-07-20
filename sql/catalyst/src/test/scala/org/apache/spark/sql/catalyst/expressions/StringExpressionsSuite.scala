@@ -413,18 +413,24 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val row1 = create_row("hi", 5, "??")
     val row2 = create_row("hi", 1, "?")
     val row3 = create_row(null, 1, "?")
+    val row4 = create_row("hi", null, "?")
+    val row5 = create_row("hi", 1, null)
 
     checkEvaluation(StringLPad(Literal("hi"), Literal(5), Literal("??")), "???hi", row1)
     checkEvaluation(StringLPad(Literal("hi"), Literal(1), Literal("??")), "h", row1)
     checkEvaluation(StringLPad(s1, s2, s3), "???hi", row1)
     checkEvaluation(StringLPad(s1, s2, s3), "h", row2)
     checkEvaluation(StringLPad(s1, s2, s3), null, row3)
+    checkEvaluation(StringLPad(s1, s2, s3), null, row4)
+    checkEvaluation(StringLPad(s1, s2, s3), null, row5)
 
     checkEvaluation(StringRPad(Literal("hi"), Literal(5), Literal("??")), "hi???", row1)
     checkEvaluation(StringRPad(Literal("hi"), Literal(1), Literal("??")), "h", row1)
     checkEvaluation(StringRPad(s1, s2, s3), "hi???", row1)
     checkEvaluation(StringRPad(s1, s2, s3), "h", row2)
     checkEvaluation(StringRPad(s1, s2, s3), null, row3)
+    checkEvaluation(StringRPad(s1, s2, s3), null, row4)
+    checkEvaluation(StringRPad(s1, s2, s3), null, row5)
   }
 
   test("REPEAT") {

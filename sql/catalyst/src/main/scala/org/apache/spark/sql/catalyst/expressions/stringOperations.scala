@@ -401,7 +401,7 @@ case class StringLocate(substr: Expression, str: Expression, start: Expression)
  * Returns str, left-padded with pad to a length of len.
  */
 case class StringLPad(str: Expression, len: Expression, pad: Expression)
-  extends Expression with ImplicitCastInputTypes with CodegenFallback {
+  extends Expression with ImplicitCastInputTypes {
 
   override def children: Seq[Expression] = str :: len :: pad :: Nil
   override def foldable: Boolean = children.forall(_.foldable)
@@ -432,6 +432,31 @@ case class StringLPad(str: Expression, len: Expression, pad: Expression)
     }
   }
 
+  override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    val lenGen = len.gen(ctx)
+    val strGen = str.gen(ctx)
+    val padGen = pad.gen(ctx)
+
+    s"""
+      ${lenGen.code}
+      boolean ${ev.isNull} = ${lenGen.isNull};
+      ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
+      if (!${ev.isNull}) {
+        ${strGen.code}
+        if (!${strGen.isNull}) {
+          ${padGen.code}
+          if (!${padGen.isNull}) {
+            ${ev.primitive} = ${strGen.primitive}.lpad(${lenGen.primitive}, ${padGen.primitive});
+          } else {
+            ${ev.isNull} = true;
+          }
+        } else {
+          ${ev.isNull} = true;
+        }
+      }
+     """
+  }
+
   override def prettyName: String = "lpad"
 }
 
@@ -439,7 +464,7 @@ case class StringLPad(str: Expression, len: Expression, pad: Expression)
  * Returns str, right-padded with pad to a length of len.
  */
 case class StringRPad(str: Expression, len: Expression, pad: Expression)
-  extends Expression with ImplicitCastInputTypes with CodegenFallback {
+  extends Expression with ImplicitCastInputTypes {
 
   override def children: Seq[Expression] = str :: len :: pad :: Nil
   override def foldable: Boolean = children.forall(_.foldable)
@@ -468,6 +493,31 @@ case class StringRPad(str: Expression, len: Expression, pad: Expression)
         }
       }
     }
+  }
+
+  override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    val lenGen = len.gen(ctx)
+    val strGen = str.gen(ctx)
+    val padGen = pad.gen(ctx)
+
+    s"""
+      ${lenGen.code}
+      boolean ${ev.isNull} = ${lenGen.isNull};
+      ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
+      if (!${ev.isNull}) {
+        ${strGen.code}
+        if (!${strGen.isNull}) {
+          ${padGen.code}
+          if (!${padGen.isNull}) {
+            ${ev.primitive} = ${strGen.primitive}.rpad(${lenGen.primitive}, ${padGen.primitive});
+          } else {
+            ${ev.isNull} = true;
+          }
+        } else {
+          ${ev.isNull} = true;
+        }
+      }
+     """
   }
 
   override def prettyName: String = "rpad"
