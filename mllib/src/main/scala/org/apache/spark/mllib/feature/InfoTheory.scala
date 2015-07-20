@@ -68,8 +68,10 @@ class InfoTheory extends Serializable {
         for(j <- 0 until m.cols){
           val pxy = m(i, j).toFloat / nInstances
           val py = byProb.value(j); val px = xProb(i)
-          if(pxy != 0 && px != 0 && py != 0) // To avoid NaNs
+          // To avoid NaNs
+          if(pxy != 0 && px != 0 && py != 0){
             mi += pxy * (math.log(pxy / (px * py)) / math.log(2))
+          }             
         }
       } 
       mi.toFloat        
@@ -117,12 +119,14 @@ class InfoTheory extends Serializable {
           for(y <- 0 until m(z).cols) {
             val pz = zProb.value(z); val pxyz = (m(z)(x, y).toFloat / n) / pz
             val pxz = xzProb(z)(x) / pz; val pyz = yzProb.value(y, z) / pz
-            if(pxz != 0 && pyz != 0 && pxyz != 0)
+            if(pxz != 0 && pyz != 0 && pxyz != 0) {
               cmi += pz * pxyz * (math.log(pxyz / (pxz * pyz)) / math.log(2))
+            }              
             if (z == 0) { // Do MI computations only once
               val px = xProb(x); val pxy = xyProb(x, y); val py = yProb.value(y)
-              if(pxy != 0 && px != 0 && py != 0)
+              if(pxy != 0 && px != 0 && py != 0) {
                 mi += pxy * (math.log(pxy / (px * py)) / math.log(2))
+              }                
             }
           }            
         }

@@ -155,7 +155,8 @@ class InfoThSelector private[feature] (val criterionFactory: FT) extends Seriali
       val condition = (value: Double) => value <= Byte.MaxValue && 
         value >= Byte.MinValue && value % 1 == 0.0
       if (!values.forall(condition(_))) {
-        throw new SparkException(s"Info-Theoretic Framework requires positive values in range [0, 255]")
+        throw new SparkException(
+            s"Info-Theoretic Framework requires positive values in range [0, 255]")
       }           
     }
         
@@ -175,10 +176,12 @@ class InfoThSelector private[feature] (val criterionFactory: FT) extends Seriali
           + " At least, less than 2x the number of features.")
       }
       
-      val classMap = data.map(_.label).distinct.collect().zipWithIndex.map(t => t._1 -> t._2.toByte).toMap
+      val classMap = data.map(_.label).distinct.collect()
+        .zipWithIndex.map(t => t._1 -> t._2.toByte)
+        .toMap
       
       // Transform data into a columnar format by transposing the local matrix in each partition
-      val columnarData: RDD[(Int, (Int, Array[Byte]))] = data.mapPartitionsWithIndex({ (index, it) =>
+      val columnarData = data.mapPartitionsWithIndex({ (index, it) =>
         val data = it.toArray
         val mat = Array.ofDim[Byte](nFeatures, data.length)
         var j = 0
@@ -192,14 +195,17 @@ class InfoThSelector private[feature] (val criterionFactory: FT) extends Seriali
         chunks.toIterator
       })      
       
-      // Sort to group all chunks for the same feature closely. It will avoid to shuffle too much histograms
+      // Sort to group all chunks for the same feature closely. 
+      // It will avoid to shuffle too much histograms
       val denseData = columnarData.sortByKey(numPartitions = np).persist(StorageLevel.MEMORY_ONLY)
       
       ColumnarData(denseData, null, true)      
     } else {      
       
       val np = if(nPart == 0) data.conf.getInt("spark.default.parallelism", 750) else nPart
-      val classMap = data.map(_.label).distinct.collect().zipWithIndex.map(t => t._1 -> t._2.toByte).toMap
+      val classMap = data.map(_.label).distinct.collect()
+        .zipWithIndex.map(t => t._1 -> t._2.toByte)
+        .toMap
         
       val sparseData = data.zipWithIndex().flatMap ({ case (lp, r) => 
           requireByteValues(lp.features)
@@ -210,7 +216,8 @@ class InfoThSelector private[feature] (val criterionFactory: FT) extends Seriali
           output +: inputs           
       })
       
-      // Transform sparse data into a columnar format by grouping all values for the same feature in a single vector
+      // Transform sparse data into a columnar format 
+      // by grouping all values for the same feature in a single vector
       val columnarData = sparseData.groupByKey(new HashPartitioner(np))
         .mapValues({a => 
           if(a.size >= nInstances) {
@@ -232,7 +239,9 @@ class InfoThSelector private[feature] (val criterionFactory: FT) extends Seriali
     if(dense) colData.dense.unpersist() else colData.sparse.unpersist()
   
     // Print best features according to the mRMR measure
-    val out = selected.map{case F(feat, rel) => (feat + 1) + "\t" + "%.4f".format(rel)}.mkString("\n")
+    val out = selected.map{case F(feat, rel) => 
+        (feat + 1) + "\t" + "%.4f".format(rel)
+      }.mkString("\n")
     println("\n*** mRMR features ***\nFeature\tScore\n" + out)
     // Features must be sorted
     new SelectorModel(selected.map{case F(feat, rel) => feat}.sorted.toArray)
@@ -255,8 +264,8 @@ object InfoThSelector {
    * with a maximum of 256 distinct values. By doing so, data can be transformed
    * to byte class directly, making the selection process much more efficient.
    * 
-   * Note: numPartitions must be less or equal to the number of features to achieve a better performance.
-   * Therefore, the number of histograms to be shuffled is reduced. 
+   * Note: numPartitions must be less or equal to the number of features to achieve 
+   * a better performance. Therefore, the number of histograms to be shuffled is reduced. 
    * 
    */
   def train(
