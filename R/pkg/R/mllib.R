@@ -15,39 +15,51 @@
 # limitations under the License.
 #
 
-# mllib.R: Provides methods for MLLib integration
+# mllib.R: Provides methods for MLlib integration
 
-#' Fits a generalized linear model, similarly to R's glm().
-#' @param formula A symbolic description of the model to be fitted
+#' @title S4 class that represents a PipelineModel
+#' @param model A Java object reference to the backing Scala PipelineModel
+#' @export
+setClass("PipelineModel", representation(model = "jobj"))
+
+#' Fits a generalized linear model, similarly to R's glm(). Also see the glmnet package.
+#' @param formula A symbolic description of the model to be fitted. Currently only a few formula
+#'                operators are supported, including '~' and '+'.
 #' @param data DataFrame for training
 #' @param family Error distribution. "gaussian" -> linear regression, "binomial" -> logistic reg.
 #' @param lambda Regularization parameter
-#' @param alpha Elastic-net mixing parmaeter (see glmnet's documentation for details)
-#' @return a fitted MLLib model
+#' @param alpha Elastic-net mixing parameter (see glmnet's documentation for details)
+#' @return a fitted MLlib model
+#' @export
 #' @examples
 #'\dontrun{
 #' sc <- sparkR.init()
 #' sqlContext <- sparkRSQL.init(sc)
+#' data(iris)
 #' df <- createDataFrame(sqlContext, iris)
-#' model <- SparkR:::glm(Sepal_Length ~ Sepal_Width, df)
+#' model <- glm(Sepal_Length ~ Sepal_Width, df)
 #'}
-glm <- function(formula, data, family = c("gaussian", "binomial"), lambda = 0, alpha = 0) {
-  family <- match.arg(family)
-  model <- callJStatic("org.apache.spark.mllib.api.r.MLUtils",
-                       "fitRModelFormula", deparse(formula), data@sdf, family, lambda, alpha)
-  return(model)
-}
+setMethod("glm", signature(formula = "formula", family = "ANY", data = "DataFrame"),
+          function(formula, family = c("gaussian", "binomial"), data, lambda = 0, alpha = 0) {
+            family <- match.arg(family)
+            model <- callJStatic("org.apache.spark.mllib.api.r.MLUtils",
+                                 "fitRModelFormula", deparse(formula), data@sdf, family, lambda,
+                                 alpha)
+            return(new("PipelineModel", model = model))
+          })
 
 #' Fits a generalized linear model, similarly to R's glm().
-#' @param model A fitted MLLib model
+#' @param model A fitted MLlib model
 #' @param newData DataFrame for testing
 #' @return DataFrame containing predicted values
+#' @export
 #' @examples
 #'\dontrun{
-#' model <- SparkR:::glm(y ~ x, trainingData)
-#' predicted <- SparkR:::predict(model, testData)
+#' model <- glm(y ~ x, trainingData)
+#' predicted <- predict(model, testData)
 #' showDF(predicted)
 #'}
-predict <- function(model, newData) {
-  return(dataFrame(callJMethod(model, "transform", newData@sdf)))
-}
+setMethod("predict", signature(object = "PipelineModel"),
+          function(object, newData) {
+            return(dataFrame(callJMethod(object@model, "transform", newData@sdf)))
+          })

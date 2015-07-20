@@ -36,7 +36,6 @@ private[r] object MLUtils {
       case "binomial" => new LogisticRegression().setRegParam(lambda).setElasticNetParam(alpha)
     }
     val pipeline = new Pipeline().setStages(Array(formula, estimator))
-    val model = pipeline.fit(df)
-    return(model)
+    pipeline.fit(df)
   }
 }

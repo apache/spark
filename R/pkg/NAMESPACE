@@ -10,6 +10,10 @@ export("sparkR.init")
 export("sparkR.stop")
 export("print.jobj")
 
+# MLlib integration
+export("glm")
+export("predict")
+
 # Job group lifecycle management methods
 export("setJobGroup",
        "clearJobGroup",
