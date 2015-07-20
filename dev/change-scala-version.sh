@@ -20,17 +20,15 @@
 set -e
 
 usage() {
-  echo "Usage: $(basename $0) <from-version> <to-version>" 1>&2
+  echo "Usage: $(basename $0) <version>" 1>&2
   exit 1
 }
 
-if [ $# -ne 2 ]; then
-  echo "Wrong number of arguments" 1>&2
+if [ $# -ne 1 ]; then
   usage
 fi
 
-FROM_VERSION=$1
-TO_VERSION=$2
+TO_VERSION=$1
 
 VALID_VERSIONS=( 2.10 2.11 )
 
@@ -40,8 +38,13 @@ check_scala_version() {
   exit 1
 }
 
-check_scala_version "$FROM_VERSION"
 check_scala_version "$TO_VERSION"
+
+if [ $TO_VERSION = "2.11" ]; then
+  FROM_VERSION="2.10"
+else
+  FROM_VERSION="2.11"
+fi
 
 sed_i() {
   sed -e "$1" "$2" > "$2.tmp" && mv "$2.tmp" "$2"
