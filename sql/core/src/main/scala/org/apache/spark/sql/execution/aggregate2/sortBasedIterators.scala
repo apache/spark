@@ -232,6 +232,27 @@ private[sql] abstract class SortAggregationIterator(
   initialize()
 }
 
+class GroupingIterator(
+    groupingExpressions: Seq[NamedExpression],
+    newMutableProjection: (Seq[Expression], Seq[Attribute]) => (() => MutableProjection),
+    inputAttributes: Seq[Attribute],
+    inputIter: Iterator[InternalRow])
+  extends SortAggregationIterator(
+    groupingExpressions,
+    Nil,
+    newMutableProjection,
+    inputAttributes,
+    inputIter) {
+  override protected def initialBufferOffset: Int = 0
+
+  override protected def processRow(row: InternalRow): Unit = {
+    // Since we only do grouping, there is nothing to do.
+  }
+
+  override protected def generateOutput(): InternalRow = {
+    currentGroupingKey
+  }
+}
 
 class PartialSortAggregationIterator(
     groupingExpressions: Seq[NamedExpression],
@@ -360,6 +381,165 @@ class FinalSortAggregationIterator(
   }
 
   override protected def generateOutput(): InternalRow = {
+    algebraicEvalProjection.target(aggregateResult)(buffer)
+    var i = 0
+    while (i < nonAlgebraicAggregateFunctions.length) {
+      aggregateResult.update(
+        nonAlgebraicAggregateFunctionPositions(i),
+        nonAlgebraicAggregateFunctions(i).eval(buffer))
+      i += 1
+    }
+    resultProjection(joinedRow(currentGroupingKey, aggregateResult))
+  }
+}
+
+class FinalAndCompleteSortAggregationIterator(
+    groupingExpressions: Seq[NamedExpression],
+    finalAggregateExpressions: Seq[AggregateExpression2],
+    finalAggregateAttributes: Seq[Attribute],
+    completeAggregateExpressions: Seq[AggregateExpression2],
+    completeAggregateAttributes: Seq[Attribute],
+    resultExpressions: Seq[NamedExpression],
+    newMutableProjection: (Seq[Expression], Seq[Attribute]) => (() => MutableProjection),
+    inputAttributes: Seq[Attribute],
+    inputIter: Iterator[InternalRow])
+  extends SortAggregationIterator(
+    groupingExpressions,
+    // This ordering is important. Because the format of its input is
+    // groupingExprs | distinctExprs | intermediate results for non-distinct aggs.
+    completeAggregateExpressions ++ finalAggregateExpressions,
+    newMutableProjection,
+    inputAttributes,
+    inputIter) {
+
+  private val aggregateResult: MutableRow =
+    new GenericMutableRow(completeAggregateAttributes.length + finalAggregateAttributes.length)
+
+  private val resultProjection = {
+    val inputSchema =
+      groupingExpressions.map(_.toAttribute) ++
+        completeAggregateAttributes ++
+        finalAggregateAttributes
+    newMutableProjection(resultExpressions, inputSchema)()
+  }
+
+  private val offsetAttributes =
+    Seq.fill(initialBufferOffset)(AttributeReference("offset", NullType)())
+
+  private val completeAggregateFunctions: Array[AggregateFunction2] = {
+    val functions = new Array[AggregateFunction2](completeAggregateExpressions.length)
+    var i = 0
+    while (i < completeAggregateExpressions.length) {
+      functions(i) = aggregateFunctions(i)
+      i += 1
+    }
+    functions
+  }
+
+  private val completeNonAlgebraicAggregateFunctions: Array[AggregateFunction2] = {
+    completeAggregateFunctions.collect {
+      case func: AggregateFunction2 if !func.isInstanceOf[AlgebraicAggregate] => func
+    }.toArray
+  }
+
+  // This projection is used to update buffer values for all AlgebraicAggregates.
+  private val completeAlgebraicUpdateProjection = {
+    val bufferSchema = completeAggregateFunctions.flatMap {
+      case ae: AlgebraicAggregate => ae.bufferAttributes
+      case agg: AggregateFunction2 => agg.bufferAttributes
+    }
+    val updateExpressions = completeAggregateFunctions.flatMap {
+      case ae: AlgebraicAggregate => ae.updateExpressions
+      case agg: AggregateFunction2 => NoOp :: Nil
+    }
+    newMutableProjection(updateExpressions, bufferSchema ++ inputAttributes)().target(buffer)
+  }
+
+  private val finalOffsetExpressions = {
+    val size =
+      initialBufferOffset + completeAggregateFunctions.length
+    Seq.fill(size)(NoOp)
+  }
+
+  private val finalOffsetAttributes = {
+    val size =
+      initialBufferOffset + completeAggregateFunctions.length
+    Seq.fill(size)(AttributeReference("offset", NullType)())
+  }
+
+  private val finalAggregateFunctions: Array[AggregateFunction2] = {
+    val functions = new Array[AggregateFunction2](finalAggregateExpressions.length)
+    var i = completeAggregateExpressions.length
+    while (i < finalAggregateExpressions.length) {
+      functions(i) = aggregateFunctions(i)
+      i += 1
+    }
+    functions
+  }
+
+  private val finalNonAlgebraicAggregateFunctions: Array[AggregateFunction2] = {
+    finalAggregateFunctions.collect {
+      case func: AggregateFunction2 if !func.isInstanceOf[AlgebraicAggregate] => func
+    }.toArray
+  }
+
+  private val finalAlgebraicMergeProjection = {
+    val bufferSchemata =
+      finalOffsetAttributes ++ finalAggregateFunctions.flatMap {
+        case ae: AlgebraicAggregate => ae.bufferAttributes
+        case agg: AggregateFunction2 => agg.bufferAttributes
+      } ++ finalOffsetAttributes ++ finalAggregateFunctions.flatMap {
+        case ae: AlgebraicAggregate => ae.cloneBufferAttributes
+        case agg: AggregateFunction2 => agg.cloneBufferAttributes
+      }
+    val mergeExpressions = finalOffsetExpressions ++ finalAggregateFunctions.flatMap {
+      case ae: AlgebraicAggregate => ae.mergeExpressions
+      case agg: AggregateFunction2 => NoOp :: Nil
+    }
+
+    newMutableProjection(mergeExpressions, bufferSchemata)()
+  }
+
+  // This projection is used to evaluate all AlgebraicAggregates.
+  private val algebraicEvalProjection = {
+    val bufferSchemata =
+      offsetAttributes ++ aggregateFunctions.flatMap {
+        case ae: AlgebraicAggregate => ae.bufferAttributes
+        case agg: AggregateFunction2 => agg.bufferAttributes
+      } ++ offsetAttributes ++ aggregateFunctions.flatMap {
+        case ae: AlgebraicAggregate => ae.cloneBufferAttributes
+        case agg: AggregateFunction2 => agg.cloneBufferAttributes
+      }
+    val evalExpressions = aggregateFunctions.map {
+      case ae: AlgebraicAggregate => ae.evaluateExpression
+      case agg: AggregateFunction2 => NoOp
+    }
+
+    newMutableProjection(evalExpressions, bufferSchemata)()
+  }
+
+  override protected def initialBufferOffset: Int = groupingExpressions.length
+
+  override protected def processRow(row: InternalRow): Unit = {
+    println("inputRow" + row + " current buffer " + buffer)
+    val input = joinedRow(buffer, row)
+    completeAlgebraicUpdateProjection(input)
+    var i = 0
+    while (i < completeNonAlgebraicAggregateFunctions.length) {
+      completeNonAlgebraicAggregateFunctions(i).update(buffer, row)
+      i += 1
+    }
+
+    finalAlgebraicMergeProjection.target(buffer)(input)
+    i = 0
+    while (i < finalNonAlgebraicAggregateFunctions.length) {
+      finalNonAlgebraicAggregateFunctions(i).merge(buffer, row)
+      i += 1
+    }
+  }
+
+  override protected def generateOutput(): InternalRow = {
+    println("buffer " + buffer)
     algebraicEvalProjection.target(aggregateResult)(buffer)
     var i = 0
     while (i < nonAlgebraicAggregateFunctions.length) {

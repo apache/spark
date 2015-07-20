@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.expressions.aggregate2.{Complete, AggregateExpression2, AggregateFunction2}
+import org.apache.spark.sql.catalyst.expressions.aggregate2.{DistinctAggregateExpression1, Complete, AggregateExpression2, AggregateFunction2}
 import org.apache.spark.sql.catalyst.{SimpleCatalystConf, CatalystConf}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -278,7 +278,7 @@ class Analyzer(
         Project(
           projectList.flatMap {
             case s: Star => s.expand(child.output, resolver)
-            case UnresolvedAlias(f @ UnresolvedFunction(_, args)) if containsStar(args) =>
+            case UnresolvedAlias(f @ UnresolvedFunction(_, args, _)) if containsStar(args) =>
               val expandedArgs = args.flatMap {
                 case s: Star => s.expand(child.output, resolver)
                 case o => o :: Nil
@@ -518,10 +518,12 @@ class Analyzer(
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
       case q: LogicalPlan =>
         q transformExpressions {
-          case u @ UnresolvedFunction(name, children) =>
+          case u @ UnresolvedFunction(name, children, isDistinct) =>
             withPosition(u) {
               registry.lookupFunction(name, children) match {
-                case agg2: AggregateFunction2 => AggregateExpression2(agg2, Complete, false)
+                case agg2: AggregateFunction2 => AggregateExpression2(agg2, Complete, isDistinct)
+                case agg1: AggregateExpression1 if isDistinct =>
+                  DistinctAggregateExpression1(agg1)
                 case other => other
               }
             }

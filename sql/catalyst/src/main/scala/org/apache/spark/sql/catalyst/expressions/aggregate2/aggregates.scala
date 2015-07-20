@@ -68,6 +68,16 @@ private[sql] case object NoOp extends Expression with Unevaluable {
   override def children: Seq[Expression] = Nil
 }
 
+private[sql] case class DistinctAggregateExpression1(
+  aggregateExpression: AggregateExpression1) extends AggregateExpression {
+  override def children: Seq[Expression] = aggregateExpression :: Nil
+  override def dataType: DataType = aggregateExpression.dataType
+  override def foldable: Boolean = aggregateExpression.foldable
+  override def nullable: Boolean = aggregateExpression.nullable
+
+  override def toString: String = s"DISTINCT ${aggregateExpression.toString}"
+}
+
 /**
  * A container for an [[AggregateFunction2]] with its [[AggregateMode]] and a field
  * (`isDistinct`) indicating if DISTINCT keyword is specified for this function.

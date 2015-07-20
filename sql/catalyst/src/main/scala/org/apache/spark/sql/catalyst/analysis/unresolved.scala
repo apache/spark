@@ -73,7 +73,10 @@ object UnresolvedAttribute {
   def quoted(name: String): UnresolvedAttribute = new UnresolvedAttribute(Seq(name))
 }
 
-case class UnresolvedFunction(name: String, children: Seq[Expression])
+case class UnresolvedFunction(
+    name: String,
+    children: Seq[Expression],
+    isDistinct: Boolean)
   extends Expression with Unevaluable {
 
   override def dataType: DataType = throw new UnresolvedException(this, "dataType")

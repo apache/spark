@@ -19,16 +19,22 @@ package org.apache.spark.sql.execution.aggregate2
 
 import org.apache.spark.sql.{SQLConf, AnalysisException, SQLContext}
 import org.apache.spark.sql.catalyst.expressions.{Average => Average1, AggregateExpression1}
-import org.apache.spark.sql.catalyst.expressions.aggregate2.{Average => Average2, AggregateExpression2, Complete}
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.expressions.aggregate2.{Average => Average2, DistinctAggregateExpression1, AggregateExpression2, Complete}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
 
 case class ConvertAggregateFunction(context: SQLContext) extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case p: LogicalPlan if !p.childrenResolved => p
 
-    case p if context.conf.useSqlAggregate2 => p.transformExpressionsUp {
+    case p: Aggregate if context.conf.useSqlAggregate2 => p.transformExpressionsDown {
+      case DistinctAggregateExpression1(Average1(child)) =>
+        AggregateExpression2(Average2(child), Complete, true)
       case Average1(child) => AggregateExpression2(Average2(child), Complete, false)
+    }
+    case p: Aggregate if !context.conf.useSqlAggregate2 => p.transformExpressionsDown {
+      // If aggregate2 is not enabled, just remove DistinctAggregateExpression1.
+      case DistinctAggregateExpression1(agg1) => agg1
     }
   }
 }
@@ -37,15 +43,35 @@ case class CheckAggregateFunction(context: SQLContext) extends (LogicalPlan => U
   def failAnalysis(msg: String): Nothing = { throw new AnalysisException(msg) }
 
   def apply(plan: LogicalPlan): Unit = plan.foreachUp {
-    case p if context.conf.useSqlAggregate2 => p.transformExpressionsUp {
-      case agg: AggregateExpression1 =>
-        failAnalysis(
-          s"${SQLConf.USE_SQL_AGGREGATE2.key} is enabled. Please disable it to use $agg.")
+    case p: Aggregate if context.conf.useSqlAggregate2 => {
+      p.transformExpressionsUp {
+        case agg: AggregateExpression1 =>
+          failAnalysis(
+            s"${SQLConf.USE_SQL_AGGREGATE2.key} is enabled. Please disable it to use $agg.")
+        case DistinctAggregateExpression1(agg: AggregateExpression1) =>
+          failAnalysis(
+            s"${SQLConf.USE_SQL_AGGREGATE2.key} is enabled. " +
+              s"Please disable it to use $agg with DISTINCT keyword.")
+      }
+
+      val distinctColumnSets = p.aggregateExpressions.flatMap { expr =>
+        expr.collect {
+          case AggregateExpression2(func, mode, isDistinct) if isDistinct => func.children
+        }
+      }.distinct
+      if (distinctColumnSets.length > 1) {
+        // TODO: Provide more information in the error message.
+        // There are more than one distinct column sets. For example, sum(distinct a) and
+        // sum(distinct b) will generate two distinct column sets, {a} and {b}.
+        failAnalysis(s"When ${SQLConf.USE_SQL_AGGREGATE2.key} is enabled, " +
+          s"only a single distinct column set is supported.")
+      }
     }
-    case p if !context.conf.useSqlAggregate2 => p.transformExpressionsUp {
+    case p: Aggregate if !context.conf.useSqlAggregate2 => p.transformExpressionsUp {
       case agg: AggregateExpression2 =>
         failAnalysis(
           s"${SQLConf.USE_SQL_AGGREGATE2.key} is disabled. Please enable it to use $agg.")
     }
+    case _ =>
   }
 }
