@@ -232,6 +232,3 @@ case class Average(child: Expression) extends AlgebraicAggregate {
   override def dataType: DataType = resultType
   override def children: Seq[Expression] = child :: Nil
 }
-
-
-
