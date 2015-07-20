@@ -33,8 +33,6 @@ import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
 class KinesisStreamSuite extends SparkFunSuite with KinesisSuiteHelper
   with Eventually with BeforeAndAfter with BeforeAndAfterAll {
 
-
-
   // This is the name that KCL uses to save metadata to DynamoDB
   private val kinesisAppName = s"KinesisStreamSuite-${math.abs(Random.nextLong())}"
 
@@ -42,7 +40,6 @@ class KinesisStreamSuite extends SparkFunSuite with KinesisSuiteHelper
   private var sc: SparkContext = _
 
   override def beforeAll(): Unit = {
-
     val conf = new SparkConf()
       .setMaster("local[4]")
       .setAppName("KinesisStreamSuite") // Setting Spark app name to Kinesis app name
