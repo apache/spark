@@ -79,7 +79,7 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
   }
 
   /**
-   * Create a UTF8String that contains `length` spaces.
+   * Creates an UTF8String that contains `length` spaces.
    */
   public static UTF8String blankString(int length) {
     byte[] spaces = new byte[length];
