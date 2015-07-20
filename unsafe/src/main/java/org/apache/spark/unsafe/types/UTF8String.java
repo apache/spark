@@ -20,6 +20,7 @@ package org.apache.spark.unsafe.types;
 import javax.annotation.Nonnull;
 import java.io.Serializable;
 import java.io.UnsupportedEncodingException;
+import java.util.Arrays;
 
 import org.apache.spark.unsafe.PlatformDependent;
 import org.apache.spark.unsafe.array.ByteArrayMethods;
@@ -75,6 +76,15 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
       throwException(e);
       return null;
     }
+  }
+
+  /**
+   * Creates an UTF8String that contains `length` spaces.
+   */
+  public static UTF8String blankString(int length) {
+    byte[] spaces = new byte[length];
+    Arrays.fill(spaces, (byte) ' ');
+    return fromBytes(spaces);
   }
 
   protected UTF8String(Object base, long offset, int size) {
