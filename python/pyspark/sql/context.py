@@ -30,7 +30,7 @@ from pyspark.rdd import RDD, _prepare_for_python_RDD, ignore_unicode_prefix
 from pyspark.serializers import AutoBatchedSerializer, PickleSerializer
 from pyspark.sql import since
 from pyspark.sql.types import Row, StringType, StructType, _verify_type, \
-    _infer_schema, _has_nulltype, _merge_type, _create_converter, _python_to_sql_converter
+    _infer_schema, _has_nulltype, _merge_type, _create_converter
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.readwriter import DataFrameReader
 from pyspark.sql.utils import install_exception_handler
@@ -388,8 +388,7 @@ class SQLContext(object):
             raise TypeError("schema should be StructType or list or None")
 
         # convert python objects to sql data
-        converter = _python_to_sql_converter(schema)
-        rdd = rdd.map(converter)
+        rdd = rdd.map(schema.toInternal)
 
         jrdd = self._jvm.SerDeUtil.toJavaArray(rdd._to_java_object_rdd())
         df = self._ssql_ctx.applySchemaToPythonRDD(jrdd.rdd(), schema.json())

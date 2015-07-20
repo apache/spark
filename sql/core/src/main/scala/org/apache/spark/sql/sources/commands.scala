@@ -19,7 +19,7 @@ package org.apache.spark.sql.sources
 
 import java.util.{Date, UUID}
 
-import scala.collection.mutable
+import scala.collection.JavaConversions.asScalaIterator
 
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce._
@@ -28,14 +28,14 @@ import org.apache.hadoop.mapreduce.lib.output.{FileOutputCommitter => MapReduceF
 import org.apache.spark._
 import org.apache.spark.mapred.SparkHadoopMapRedUtil
 import org.apache.spark.mapreduce.SparkHadoopMapReduceUtil
-import org.apache.spark.sql.catalyst.CatalystTypeConverters
+import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateProjection
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.execution.RunnableCommand
-import org.apache.spark.sql.types.StructType
-import org.apache.spark.sql.{DataFrame, Row, SQLConf, SQLContext, SaveMode}
+import org.apache.spark.sql.types.StringType
 import org.apache.spark.util.SerializableConfiguration
 
 private[sql] case class InsertIntoDataSource(
@@ -109,7 +109,7 @@ private[sql] case class InsertIntoHadoopFsRelation(
         !exists
     }
     // If we are appending data to an existing dir.
-    val isAppend = (pathExists) && (mode == SaveMode.Append)
+    val isAppend = pathExists && (mode == SaveMode.Append)
 
     if (doInsertion) {
       val job = new Job(hadoopConf)
@@ -141,9 +141,12 @@ private[sql] case class InsertIntoHadoopFsRelation(
       }
     }
 
-    Seq.empty[InternalRow]
+    Seq.empty[Row]
   }
 
+  /**
+   * Inserts the content of the [[DataFrame]] into a table without any partitioning columns.
+   */
   private def insert(writerContainer: BaseWriterContainer, df: DataFrame): Unit = {
     // Uses local vals for serialization
     val needsConversion = relation.needConversion
@@ -168,14 +171,14 @@ private[sql] case class InsertIntoHadoopFsRelation(
       try {
         writerContainer.executorSideSetup(taskContext)
 
-        val converter = if (needsConversion) {
+        val converter: InternalRow => Row = if (needsConversion) {
           CatalystTypeConverters.createToScalaConverter(dataSchema).asInstanceOf[InternalRow => Row]
         } else {
           r: InternalRow => r.asInstanceOf[Row]
         }
         while (iterator.hasNext) {
-          val row = converter(iterator.next())
-          writerContainer.outputWriterForRow(row).write(row)
+          val internalRow = iterator.next()
+          writerContainer.outputWriterForRow(internalRow).write(converter(internalRow))
         }
 
         writerContainer.commitTask()
@@ -187,6 +190,9 @@ private[sql] case class InsertIntoHadoopFsRelation(
     }
   }
 
+  /**
+   * Inserts the content of the [[DataFrame]] into a table with partitioning columns.
+   */
   private def insertWithDynamicPartitions(
       sqlContext: SQLContext,
       writerContainer: BaseWriterContainer,
@@ -234,7 +240,9 @@ private[sql] case class InsertIntoHadoopFsRelation(
       try {
         writerContainer.executorSideSetup(taskContext)
 
-        val partitionProj = newProjection(codegenEnabled, partitionOutput, output)
+        // Projects all partition columns and casts them to strings to build partition directories.
+        val partitionCasts = partitionOutput.map(Cast(_, StringType))
+        val partitionProj = newProjection(codegenEnabled, partitionCasts, output)
         val dataProj = newProjection(codegenEnabled, dataOutput, output)
 
         val dataConverter: InternalRow => Row = if (needsConversion) {
@@ -242,15 +250,11 @@ private[sql] case class InsertIntoHadoopFsRelation(
         } else {
           r: InternalRow => r.asInstanceOf[Row]
         }
-        val partitionSchema = StructType.fromAttributes(partitionOutput)
-        val partConverter: InternalRow => Row =
-          CatalystTypeConverters.createToScalaConverter(partitionSchema)
-            .asInstanceOf[InternalRow => Row]
 
         while (iterator.hasNext) {
-          val row = iterator.next()
-          val partitionPart = partConverter(partitionProj(row))
-          val dataPart = dataConverter(dataProj(row))
+          val internalRow = iterator.next()
+          val partitionPart = partitionProj(internalRow)
+          val dataPart = dataConverter(dataProj(internalRow))
           writerContainer.outputWriterForRow(partitionPart).write(dataPart)
         }
 
@@ -271,7 +275,18 @@ private[sql] case class InsertIntoHadoopFsRelation(
     log.debug(
       s"Creating Projection: $expressions, inputSchema: $inputSchema, codegen:$codegenEnabled")
     if (codegenEnabled) {
-      GenerateProjection.generate(expressions, inputSchema)
+
+      try {
+        GenerateProjection.generate(expressions, inputSchema)
+      } catch {
+        case e: Exception =>
+          if (sys.props.contains("spark.testing")) {
+            throw e
+          } else {
+            log.error("failed to generate projection, fallback to interpreted", e)
+            new InterpretedProjection(expressions, inputSchema)
+          }
+      }
     } else {
       new InterpretedProjection(expressions, inputSchema)
     }
@@ -419,7 +434,7 @@ private[sql] abstract class BaseWriterContainer(
   }
 
   // Called on executor side when writing rows
-  def outputWriterForRow(row: Row): OutputWriter
+  def outputWriterForRow(row: InternalRow): OutputWriter
 
   protected def initWriters(): Unit
 
@@ -461,7 +476,7 @@ private[sql] class DefaultWriterContainer(
     writer = outputWriterFactory.newInstance(getWorkPath, dataSchema, taskAttemptContext)
   }
 
-  override def outputWriterForRow(row: Row): OutputWriter = writer
+  override def outputWriterForRow(row: InternalRow): OutputWriter = writer
 
   override def commitTask(): Unit = {
     try {
@@ -496,35 +511,53 @@ private[sql] class DynamicPartitionWriterContainer(
   extends BaseWriterContainer(relation, job, isAppend) {
 
   // All output writers are created on executor side.
-  @transient protected var outputWriters: mutable.Map[String, OutputWriter] = _
+  @transient protected var outputWriters: java.util.HashMap[String, OutputWriter] = _
 
   override protected def initWriters(): Unit = {
-    outputWriters = mutable.Map.empty[String, OutputWriter]
+    outputWriters = new java.util.HashMap[String, OutputWriter]
   }
 
-  override def outputWriterForRow(row: Row): OutputWriter = {
-    val partitionPath = partitionColumns.zip(row.toSeq).map { case (col, rawValue) =>
-      val string = if (rawValue == null) null else String.valueOf(rawValue)
-      val valueString = if (string == null || string.isEmpty) {
-        defaultPartitionName
-      } else {
-        PartitioningUtils.escapePathName(string)
-      }
-      s"/$col=$valueString"
-    }.mkString.stripPrefix(Path.SEPARATOR)
+  // The `row` argument is supposed to only contain partition column values which have been casted
+  // to strings.
+  override def outputWriterForRow(row: InternalRow): OutputWriter = {
+    val partitionPath = {
+      val partitionPathBuilder = new StringBuilder
+      var i = 0
 
-    outputWriters.getOrElseUpdate(partitionPath, {
+      while (i < partitionColumns.length) {
+        val col = partitionColumns(i)
+        val partitionValueString = {
+          val string = row.getString(i)
+          if (string.eq(null)) defaultPartitionName else PartitioningUtils.escapePathName(string)
+        }
+
+        if (i > 0) {
+          partitionPathBuilder.append(Path.SEPARATOR_CHAR)
+        }
+
+        partitionPathBuilder.append(s"$col=$partitionValueString")
+        i += 1
+      }
+
+      partitionPathBuilder.toString()
+    }
+
+    val writer = outputWriters.get(partitionPath)
+    if (writer.eq(null)) {
       val path = new Path(getWorkPath, partitionPath)
       taskAttemptContext.getConfiguration.set(
-        "spark.sql.sources.output.path",
-        new Path(outputPath, partitionPath).toString)
-      outputWriterFactory.newInstance(path.toString, dataSchema, taskAttemptContext)
-    })
+        "spark.sql.sources.output.path", new Path(outputPath, partitionPath).toString)
+      val newWriter = outputWriterFactory.newInstance(path.toString, dataSchema, taskAttemptContext)
+      outputWriters.put(partitionPath, newWriter)
+      newWriter
+    } else {
+      writer
+    }
   }
 
   private def clearOutputWriters(): Unit = {
-    if (outputWriters.nonEmpty) {
-      outputWriters.values.foreach(_.close())
+    if (!outputWriters.isEmpty) {
+      asScalaIterator(outputWriters.values().iterator()).foreach(_.close())
       outputWriters.clear()
     }
   }

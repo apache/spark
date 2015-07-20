@@ -100,7 +100,7 @@ private[streaming] abstract class ReceiverSupervisor(
   /** Called when supervisor is stopped */
   protected def onStop(message: String, error: Option[Throwable]) { }
 
-  /** Called when receiver is started. Return if the driver accepts us */
+  /** Called when receiver is started. Return true if the driver accepts us */
   protected def onReceiverStart(): Boolean = true
 
   /** Called when receiver is stopped */
@@ -131,7 +131,7 @@ private[streaming] abstract class ReceiverSupervisor(
         logInfo("Called receiver onStart")
       } else {
         // The driver refused us
-        stop("Registered unsuccessfully because the driver refused" + streamId, None)
+        stop("Registered unsuccessfully because Driver refused to start receiver " + streamId, None)
       }
     } catch {
       case NonFatal(t) =>
@@ -196,12 +196,12 @@ private[streaming] abstract class ReceiverSupervisor(
 
   /** Wait the thread until the supervisor is stopped */
   def awaitTermination() {
+    logInfo("Waiting for receiver to be stopped")
     stopLatch.await()
-    logInfo("Waiting for executor stop is over")
     if (stoppingError != null) {
-      logError("Stopped executor with error: " + stoppingError)
+      logError("Stopped receiver with error: " + stoppingError)
     } else {
-      logWarning("Stopped executor without error")
+      logInfo("Stopped receiver without error")
     }
     if (stoppingError != null) {
       throw stoppingError

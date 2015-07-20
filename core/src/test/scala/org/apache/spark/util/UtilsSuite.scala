@@ -684,7 +684,9 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     val buffer = new CircularBuffer(25)
     val stream = new java.io.PrintStream(buffer, true, "UTF-8")
 
+    // scalastyle:off println
     stream.println("test circular test circular test circular test circular test circular")
+    // scalastyle:on println
     assert(buffer.toString === "t circular test circular\n")
   }
 }

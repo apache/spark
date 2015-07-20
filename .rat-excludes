@@ -91,3 +91,5 @@ help/*
 html/*
 INDEX
 .lintr
+gen-java.*
+.*avpr

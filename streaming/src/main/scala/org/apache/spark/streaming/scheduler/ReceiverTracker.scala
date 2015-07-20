@@ -58,6 +58,8 @@ private[streaming] case class ReportError(streamId: Int, message: String, error:
 private[streaming] case class DeregisterReceiver(streamId: Int, msg: String, error: String)
   extends ReceiverTrackerMessage
 
+private[streaming] case object StopAllReceivers extends ReceiverTrackerMessage
+
 /**
  * This class manages the execution of the receivers of ReceiverInputDStreams. Instance of
  * this class must be created after all input streams have been added and StreamingContext.start()
@@ -84,16 +86,13 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
 
   /** Enumeration to identify current state of the ReceiverTracker */
   object TrackerState extends Enumeration {
-    type CheckpointState = Value
+    type TrackerState = Value
     val Initialized, Started, Stopping, Stopped = Value
   }
   import TrackerState._
 
   /** State of the tracker. Protected by "trackerStateLock" */
-  private var trackerState = Initialized
-
-  /** "trackerStateLock" is used to protect reading/writing "trackerState" */
-  private val trackerStateLock = new AnyRef
+  @volatile private var trackerState = Initialized
 
   // endpoint is created when generator starts.
   // This not being null means the tracker has been started and not stopped
@@ -115,21 +114,6 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
   /** Use a separate lock to avoid dead-lock */
   private val receiverTrackingInfosLock = new AnyRef
 
-  /** Check if tracker has been marked for starting */
-  private def isTrackerStarted(): Boolean = trackerStateLock.synchronized {
-    trackerState == Started
-  }
-
-  /** Check if tracker has been marked for stopping */
-  private def isTrackerStopping(): Boolean = trackerStateLock.synchronized {
-    trackerState == Stopping
-  }
-
-  /** Check if tracker has been marked for stopped */
-  private def isTrackerStopped(): Boolean = trackerStateLock.synchronized {
-    trackerState == Stopped
-  }
-
   /** Start the endpoint and receiver execution thread. */
   def start(): Unit = synchronized {
     if (isTrackerStarted) {
@@ -141,9 +125,7 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
         "ReceiverTracker", new ReceiverTrackerEndpoint(ssc.env.rpcEnv))
       if (!skipReceiverLaunch) receiverExecutor.start()
       logInfo("ReceiverTracker started")
-      trackerStateLock.synchronized {
-        trackerState = Started
-      }
+      trackerState = Started
     }
   }
 
@@ -151,19 +133,38 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
   def stop(graceful: Boolean): Unit = synchronized {
     if (isTrackerStarted) {
       // First, stop the receivers
-      trackerStateLock.synchronized {
-        trackerState = Stopping
+      trackerState = Stopping
+      if (!skipReceiverLaunch) {
+        // Send the stop signal to all the receivers
+        endpoint.askWithRetry[Boolean](StopAllReceivers)
+
+        // Wait for the Spark job that runs the receivers to be over
+        // That is, for the receivers to quit gracefully.
+        receiverExecutor.awaitTermination(10000)
+
+        if (graceful) {
+          val pollTime = 100
+          logInfo("Waiting for receiver job to terminate gracefully")
+          while (receiverInfo.nonEmpty || receiverExecutor.running) {
+            Thread.sleep(pollTime)
+          }
+          logInfo("Waited for receiver job to terminate gracefully")
+        }
+
+        // Check if all the receivers have been deregistered or not
+        if (receiverInfo.nonEmpty) {
+          logWarning("Not all of the receivers have deregistered, " + receiverInfo)
+        } else {
+          logInfo("All of the receivers have deregistered successfully")
+        }
       }
-      if (!skipReceiverLaunch) receiverExecutor.stop(graceful)
 
       // Finally, stop the endpoint
       ssc.env.rpcEnv.stop(endpoint)
       endpoint = null
       receivedBlockTracker.stop()
       logInfo("ReceiverTracker stopped")
-      trackerStateLock.synchronized {
-        trackerState = Stopped
-      }
+      trackerState = Stopped
     }
   }
 
@@ -213,22 +214,19 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
     if (!receiverInputStreamIds.contains(streamId)) {
       throw new SparkException("Register received for unexpected id " + streamId)
     }
-    trackerStateLock.synchronized {
-      if (isTrackerStopping || isTrackerStopped) {
-        false
-      } else if (!ssc.sparkContext.isLocal && // We don't need to schedule it in the local mode
-        !scheduleReceiver(streamId).contains(host)) {
-        false
-      } else {
-        // When updating "receiverInfo", we should make sure "trackerState" won't be changed at the
-        // same time. Therefore the following line should be in "trackerStateLock.synchronized".
-        receiverInfo(streamId) = ReceiverInfo(
-          streamId, s"${typ}-${streamId}", receiverEndpoint, true, host)
-        updateReceiverRunningLocation(streamId, host)
-        listenerBus.post(StreamingListenerReceiverStarted(receiverInfo(streamId)))
-        logInfo("Registered receiver for stream " + streamId + " from " + senderAddress)
-        true
-      }
+
+    if (isTrackerStopping || isTrackerStopped) {
+      false
+    } else if (!ssc.sparkContext.isLocal && // We don't need to schedule it in the local mode
+      !scheduleReceiver(streamId).contains(host)) {
+      false
+    } else {
+      receiverInfo(streamId) = ReceiverInfo(
+        streamId, s"${typ}-${streamId}", receiverEndpoint, true, host)
+      updateReceiverRunningLocation(streamId, host)
+      listenerBus.post(StreamingListenerReceiverStarted(receiverInfo(streamId)))
+      logInfo("Registered receiver for stream " + streamId + " from " + senderAddress)
+      true
     }
   }
 
@@ -305,13 +303,25 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
       case DeregisterReceiver(streamId, message, error) =>
         deregisterReceiver(streamId, message, error)
         context.reply(true)
+      case StopAllReceivers =>
+        assert(isTrackerStopping || isTrackerStopped)
+        stopReceivers()
+        context.reply(true)
+    }
+
+    /** Send stop signal to the receivers. */
+    private def stopReceivers() {
+      // Signal the receivers to stop
+      receiverInfo.values.flatMap { info => Option(info.endpoint)}
+        .foreach { _.send(StopReceiver) }
+      logInfo("Sent stop signal to all " + receiverInfo.size + " receivers")
     }
   }
 
   /** This thread class runs all the receivers on the cluster.  */
   class ReceiverLauncher {
     @transient val env = ssc.env
-    @volatile @transient private var running = false
+    @volatile @transient var running = false
     @transient val thread = new Thread() {
       override def run() {
         try {
@@ -325,31 +335,6 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
 
     def start() {
       thread.start()
-    }
-
-    def stop(graceful: Boolean) {
-      // Send the stop signal to all the receivers
-      stopReceivers()
-
-      // Wait for the Spark job that runs the receivers to be over
-      // That is, for the receivers to quit gracefully.
-      thread.join(10000)
-
-      if (graceful) {
-        val pollTime = 100
-        logInfo("Waiting for receiver job to terminate gracefully")
-        while (receiverInfo.nonEmpty || running) {
-          Thread.sleep(pollTime)
-        }
-        logInfo("Waited for receiver job to terminate gracefully")
-      }
-
-      // Check if all the receivers have been deregistered or not
-      if (receiverInfo.nonEmpty) {
-        logWarning("Not all of the receivers have deregistered, " + receiverInfo)
-      } else {
-        logInfo("All of the receivers have deregistered successfully")
-      }
     }
 
     /** Set host location(s) for each receiver so as to distribute them over
@@ -427,6 +412,7 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
       // Distribute the receivers and start them
       logInfo("Starting " + receivers.length + " receivers")
       running = true
+
       for (receiver <- receivers) {
         submitJobThread.execute(new Runnable {
           override def run(): Unit = {
@@ -482,12 +468,12 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
       }
     }
 
-    /** Stops the receivers. */
-    private def stopReceivers() {
-      // Signal the receivers to stop
-      receiverInfo.values.flatMap { info => Option(info.endpoint)}
-                         .foreach { _.send(StopReceiver) }
-      logInfo("Sent stop signal to all " + receiverInfo.size + " receivers")
+    /**
+     * Wait until the Spark job that runs the receivers is terminated, or return when
+     * `milliseconds` elapses
+     */
+    def awaitTermination(milliseconds: Long): Unit = {
+      thread.join(milliseconds)
     }
   }
 
@@ -545,4 +531,14 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
     val driver = ssc.sparkContext.getConf.get("spark.driver.host")
     executors.diff(List(driver))
   }
+
+  /** Check if tracker has been marked for starting */
+  private def isTrackerStarted(): Boolean = trackerState == Started
+
+  /** Check if tracker has been marked for stopping */
+  private def isTrackerStopping(): Boolean = trackerState == Stopping
+
+  /** Check if tracker has been marked for stopped */
+  private def isTrackerStopped(): Boolean = trackerState == Stopped
+
 }

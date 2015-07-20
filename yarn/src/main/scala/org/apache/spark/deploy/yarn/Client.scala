@@ -80,9 +80,11 @@ private[spark] class Client(
   private val isClusterMode = args.isClusterMode
 
   private var loginFromKeytab = false
+  private var principal: String = null
+  private var keytab: String = null
+
   private val fireAndForget = isClusterMode &&
     !sparkConf.getBoolean("spark.yarn.submit.waitAppCompletion", true)
-
 
   def stop(): Unit = yarnClient.stop()
 
@@ -321,8 +323,9 @@ private[spark] class Client(
           val linkname = targetDir.map(_ + "/").getOrElse("") +
             destName.orElse(Option(localURI.getFragment())).getOrElse(localPath.getName())
           val destPath = copyFileToRemote(dst, localPath, replication)
+          val destFs = FileSystem.get(destPath.toUri(), hadoopConf)
           distCacheMgr.addResource(
-            fs, hadoopConf, destPath, localResources, resType, linkname, statCache,
+            destFs, hadoopConf, destPath, localResources, resType, linkname, statCache,
             appMasterOnly = appMasterOnly)
           (false, linkname)
         } else {
@@ -338,7 +341,7 @@ private[spark] class Client(
     if (loginFromKeytab) {
       logInfo("To enable the AM to login from keytab, credentials are being copied over to the AM" +
         " via the YARN Secure Distributed Cache.")
-      val (_, localizedPath) = distribute(args.keytab,
+      val (_, localizedPath) = distribute(keytab,
         destName = Some(sparkConf.get("spark.yarn.keytab")),
         appMasterOnly = true)
       require(localizedPath != null, "Keytab file already distributed.")
@@ -615,7 +618,7 @@ private[spark] class Client(
     val appId = newAppResponse.getApplicationId
     val appStagingDir = getAppStagingDir(appId)
     val pySparkArchives =
-      if (sys.props.getOrElse("spark.yarn.isPython", "false").toBoolean) {
+      if (sparkConf.getBoolean("spark.yarn.isPython", false)) {
         findPySparkArchives()
       } else {
         Nil
@@ -731,9 +734,9 @@ private[spark] class Client(
       }
     val amClass =
       if (isClusterMode) {
-        Class.forName("org.apache.spark.deploy.yarn.ApplicationMaster").getName
+        Utils.classForName("org.apache.spark.deploy.yarn.ApplicationMaster").getName
       } else {
-        Class.forName("org.apache.spark.deploy.yarn.ExecutorLauncher").getName
+        Utils.classForName("org.apache.spark.deploy.yarn.ExecutorLauncher").getName
       }
     if (args.primaryRFile != null && args.primaryRFile.endsWith(".R")) {
       args.userArgs = ArrayBuffer(args.primaryRFile) ++ args.userArgs
@@ -784,19 +787,27 @@ private[spark] class Client(
   }
 
   def setupCredentials(): Unit = {
-    if (args.principal != null) {
-      require(args.keytab != null, "Keytab must be specified when principal is specified.")
+    loginFromKeytab = args.principal != null || sparkConf.contains("spark.yarn.principal")
+    if (loginFromKeytab) {
+      principal =
+        if (args.principal != null) args.principal else sparkConf.get("spark.yarn.principal")
+      keytab = {
+        if (args.keytab != null) {
+          args.keytab
+        } else {
+          sparkConf.getOption("spark.yarn.keytab").orNull
+        }
+      }
+
+      require(keytab != null, "Keytab must be specified when principal is specified.")
       logInfo("Attempting to login to the Kerberos" +
-        s" using principal: ${args.principal} and keytab: ${args.keytab}")
-      val f = new File(args.keytab)
+        s" using principal: $principal and keytab: $keytab")
+      val f = new File(keytab)
       // Generate a file name that can be used for the keytab file, that does not conflict
       // with any user file.
       val keytabFileName = f.getName + "-" + UUID.randomUUID().toString
-      UserGroupInformation.loginUserFromKeytab(args.principal, args.keytab)
-      loginFromKeytab = true
       sparkConf.set("spark.yarn.keytab", keytabFileName)
-      sparkConf.set("spark.yarn.principal", args.principal)
-      logInfo("Successfully logged into the KDC.")
+      sparkConf.set("spark.yarn.principal", principal)
     }
     credentials = UserGroupInformation.getCurrentUser.getCredentials
   }
@@ -937,7 +948,7 @@ private[spark] class Client(
 object Client extends Logging {
   def main(argStrings: Array[String]) {
     if (!sys.props.contains("SPARK_SUBMIT")) {
-      println("WARNING: This client is deprecated and will be removed in a " +
+      logWarning("WARNING: This client is deprecated and will be removed in a " +
         "future version of Spark. Use ./bin/spark-submit with \"--master yarn\"")
     }
 
@@ -1161,7 +1172,7 @@ object Client extends Logging {
    *
    * If not a "local:" file and no alternate name, the environment is not modified.
    *
-   * @parma conf      Spark configuration.
+   * @param conf      Spark configuration.
    * @param uri       URI to add to classpath (optional).
    * @param fileName  Alternate name for the file (optional).
    * @param env       Map holding the environment variables.

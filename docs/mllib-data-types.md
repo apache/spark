@@ -226,7 +226,8 @@ examples = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_libsvm_data.txt")
 
 A local matrix has integer-typed row and column indices and double-typed values, stored on a single
 machine.  MLlib supports dense matrices, whose entry values are stored in a single double array in
-column major.  For example, the following matrix `\[ \begin{pmatrix}
+column-major order, and sparse matrices, whose non-zero entry values are stored in the Compressed Sparse
+Column (CSC) format in column-major order.  For example, the following dense matrix `\[ \begin{pmatrix}
 1.0 & 2.0 \\
 3.0 & 4.0 \\
 5.0 & 6.0
@@ -238,28 +239,33 @@ is stored in a one-dimensional array `[1.0, 3.0, 5.0, 2.0, 4.0, 6.0]` with the m
 <div data-lang="scala" markdown="1">
 
 The base class of local matrices is
-[`Matrix`](api/scala/index.html#org.apache.spark.mllib.linalg.Matrix), and we provide one
-implementation: [`DenseMatrix`](api/scala/index.html#org.apache.spark.mllib.linalg.DenseMatrix).
+[`Matrix`](api/scala/index.html#org.apache.spark.mllib.linalg.Matrix), and we provide two
+implementations: [`DenseMatrix`](api/scala/index.html#org.apache.spark.mllib.linalg.DenseMatrix),
+and [`SparseMatrix`](api/scala/index.html#org.apache.spark.mllib.linalg.SparseMatrix).
 We recommend using the factory methods implemented
 in [`Matrices`](api/scala/index.html#org.apache.spark.mllib.linalg.Matrices$) to create local
-matrices.
+matrices. Remember, local matrices in MLlib are stored in column-major order.
 
 {% highlight scala %}
 import org.apache.spark.mllib.linalg.{Matrix, Matrices}
 
 // Create a dense matrix ((1.0, 2.0), (3.0, 4.0), (5.0, 6.0))
 val dm: Matrix = Matrices.dense(3, 2, Array(1.0, 3.0, 5.0, 2.0, 4.0, 6.0))
+
+// Create a sparse matrix ((9.0, 0.0), (0.0, 8.0), (0.0, 6.0))
+val sm: Matrix = Matrices.sparse(3, 2, Array(0, 1, 3), Array(0, 2, 1), Array(9, 6, 8))
 {% endhighlight %}
 </div>
 
 <div data-lang="java" markdown="1">
 
 The base class of local matrices is
-[`Matrix`](api/java/org/apache/spark/mllib/linalg/Matrix.html), and we provide one
-implementation: [`DenseMatrix`](api/java/org/apache/spark/mllib/linalg/DenseMatrix.html).
+[`Matrix`](api/java/org/apache/spark/mllib/linalg/Matrix.html), and we provide two
+implementations: [`DenseMatrix`](api/java/org/apache/spark/mllib/linalg/DenseMatrix.html),
+and [`SparseMatrix`](api/java/org/apache/spark/mllib/linalg/SparseMatrix.html).
 We recommend using the factory methods implemented
 in [`Matrices`](api/java/org/apache/spark/mllib/linalg/Matrices.html) to create local
-matrices.
+matrices. Remember, local matrices in MLlib are stored in column-major order.
 
 {% highlight java %}
 import org.apache.spark.mllib.linalg.Matrix;
@@ -267,6 +273,30 @@ import org.apache.spark.mllib.linalg.Matrices;
 
 // Create a dense matrix ((1.0, 2.0), (3.0, 4.0), (5.0, 6.0))
 Matrix dm = Matrices.dense(3, 2, new double[] {1.0, 3.0, 5.0, 2.0, 4.0, 6.0});
+
+// Create a sparse matrix ((9.0, 0.0), (0.0, 8.0), (0.0, 6.0))
+Matrix sm = Matrices.sparse(3, 2, new int[] {0, 1, 3}, new int[] {0, 2, 1}, new double[] {9, 6, 8});
+{% endhighlight %}
+</div>
+
+<div data-lang="python" markdown="1">
+
+The base class of local matrices is
+[`Matrix`](api/python/pyspark.mllib.html#pyspark.mllib.linalg.Matrix), and we provide two
+implementations: [`DenseMatrix`](api/python/pyspark.mllib.html#pyspark.mllib.linalg.DenseMatrix),
+and [`SparseMatrix`](api/python/pyspark.mllib.html#pyspark.mllib.linalg.SparseMatrix).
+We recommend using the factory methods implemented
+in [`Matrices`](api/python/pyspark.mllib.html#pyspark.mllib.linalg.Matrices) to create local
+matrices. Remember, local matrices in MLlib are stored in column-major order.
+
+{% highlight python %}
+import org.apache.spark.mllib.linalg.{Matrix, Matrices}
+
+// Create a dense matrix ((1.0, 2.0), (3.0, 4.0), (5.0, 6.0))
+dm2 = Matrices.dense(3, 2, [1, 2, 3, 4, 5, 6])
+
+// Create a sparse matrix ((9.0, 0.0), (0.0, 8.0), (0.0, 6.0))
+sm = Matrices.sparse(3, 2, [0, 1, 3], [0, 2, 1], [9, 6, 8])
 {% endhighlight %}
 </div>
 
