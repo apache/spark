@@ -15,11 +15,15 @@
 # limitations under the License.
 #
 
+import sys
+if sys.version >= '3':
+    basestring = str
+
 from pyspark.rdd import RDD, ignore_unicode_prefix
 from pyspark.mllib.common import callMLlibFunc, JavaModelWrapper
 from pyspark.mllib.linalg import Matrix, _convert_to_vector
 from pyspark.mllib.regression import LabeledPoint
-from pyspark.mllib.stat.test import ChiSqTestResult
+from pyspark.mllib.stat.test import ChiSqTestResult, KolmogorovSmirnovTestResult
 
 
 __all__ = ['MultivariateStatisticalSummary', 'Statistics']
@@ -237,6 +241,67 @@ class Statistics(object):
                 raise ValueError("`expected` should have same length with `observed`")
             jmodel = callMLlibFunc("chiSqTest", _convert_to_vector(observed), expected)
         return ChiSqTestResult(jmodel)
+
+    @staticmethod
+    @ignore_unicode_prefix
+    def kolmogorovSmirnovTest(data, distName="norm", *params):
+        """
+        .. note:: Experimental
+
+        Performs the Kolmogorov-Smirnov (KS) test for data sampled from
+        a continuous distribution. It tests the null hypothesis that
+        the data is generated from a particular distribution.
+
+        The given data is sorted and the Empirical Cumulative
+        Distribution Function (ECDF) is calculated
+        which for a given point is the number of points having a CDF
+        value lesser than it divided by the total number of points.
+
+        Since the data is sorted, this is a step function
+        that rises by (1 / length of data) for every ordered point.
+
+        The KS statistic gives us the maximum distance between the
+        ECDF and the CDF. Intuitively if this statistic is large, the
+        probabilty that the null hypothesis is true becomes small.
+        For specific details of the implementation, please have a look
+        at the Scala documentation.
+
+        :param data: RDD, samples from the data
+        :param distName: string, currently only "norm" is supported.
+                         (Normal distribution) to calculate the
+                         theoretical distribution of the data.
+        :param params: additional values which need to be provided for
+                       a certain distribution.
+                       If not provided, the default values are used.
+        :return: KolmogorovSmirnovTestResult object containing the test
+                 statistic, degrees of freedom, p-value,
+                 the method used, and the null hypothesis.
+
+        >>> kstest = Statistics.kolmogorovSmirnovTest
+        >>> data = sc.parallelize([-1.0, 0.0, 1.0])
+        >>> ksmodel = kstest(data, "norm")
+        >>> print(round(ksmodel.pValue, 3))
+        1.0
+        >>> print(round(ksmodel.statistic, 3))
+        0.175
+        >>> ksmodel.nullHypothesis
+        u'Sample follows theoretical distribution'
+
+        >>> data = sc.parallelize([2.0, 3.0, 4.0])
+        >>> ksmodel = kstest(data, "norm", 3.0, 1.0)
+        >>> print(round(ksmodel.pValue, 3))
+        1.0
+        >>> print(round(ksmodel.statistic, 3))
+        0.175
+        """
+        if not isinstance(data, RDD):
+            raise TypeError("data should be an RDD, got %s." % type(data))
+        if not isinstance(distName, basestring):
+            raise TypeError("distName should be a string, got %s." % type(distName))
+
+        params = [float(param) for param in params]
+        return KolmogorovSmirnovTestResult(
+            callMLlibFunc("kolmogorovSmirnovTest", data, distName, params))
 
 
 def _test():

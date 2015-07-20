@@ -869,6 +869,25 @@ class ChiSqTestTests(MLlibTestCase):
         self.assertIsNotNone(chi[1000])
 
 
+class KolmogorovSmirnovTest(MLlibTestCase):
+
+    def test_R_implementation_equivalence(self):
+        data = self.sc.parallelize([
+            1.1626852897838, -0.585924465893051, 1.78546500331661, -1.33259371048501,
+            -0.446566766553219, 0.569606122374976, -2.88971761441412, -0.869018343326555,
+            -0.461702683149641, -0.555540910137444, -0.0201353678515895, -0.150382224136063,
+            -0.628126755843964, 1.32322085193283, -1.52135057001199, -0.437427868856691,
+            0.970577579543399, 0.0282226444247749, -0.0857821886527593, 0.389214404984942
+        ])
+        model = Statistics.kolmogorovSmirnovTest(data, "norm")
+        self.assertAlmostEqual(model.statistic, 0.189, 3)
+        self.assertAlmostEqual(model.pValue, 0.422, 3)
+
+        model = Statistics.kolmogorovSmirnovTest(data, "norm", 0, 1)
+        self.assertAlmostEqual(model.statistic, 0.189, 3)
+        self.assertAlmostEqual(model.pValue, 0.422, 3)
+
+
 class SerDeTest(MLlibTestCase):
     def test_to_java_object_rdd(self):  # SPARK-6660
         data = RandomRDDs.uniformRDD(self.sc, 10, 5, seed=0)
