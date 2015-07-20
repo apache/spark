@@ -401,6 +401,14 @@ class Column(protected[sql] val expr: Expression) extends Logging {
   }
 
   /**
+   * True if the current expression is NaN or null
+   *
+   * @group expr_ops
+   * @since 1.5.0
+   */
+  def isNaN: Column = IsNaN(expr)
+
+  /**
    * True if the current expression is null.
    *
    * @group expr_ops

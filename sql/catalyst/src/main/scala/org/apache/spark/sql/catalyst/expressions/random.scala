@@ -33,7 +33,6 @@ import org.apache.spark.util.random.XORShiftRandom
  * Since this expression is stateful, it cannot be a case object.
  */
 abstract class RDG(seed: Long) extends LeafExpression with Serializable {
-  self: Product =>
 
   /**
    * Record ID within each partition. By being transient, the Random Number Generator is
@@ -61,9 +60,9 @@ case class Rand(seed: Long) extends RDG(seed) {
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     val rngTerm = ctx.freshName("rng")
-    val className = classOf[XORShiftRandom].getCanonicalName
+    val className = classOf[XORShiftRandom].getName
     ctx.addMutableState(className, rngTerm,
-      s"new $className($seed + org.apache.spark.TaskContext.getPartitionId())")
+      s"$rngTerm = new $className($seed + org.apache.spark.TaskContext.getPartitionId());")
     ev.isNull = "false"
     s"""
       final ${ctx.javaType(dataType)} ${ev.primitive} = $rngTerm.nextDouble();
@@ -84,9 +83,9 @@ case class Randn(seed: Long) extends RDG(seed) {
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     val rngTerm = ctx.freshName("rng")
-    val className = classOf[XORShiftRandom].getCanonicalName
+    val className = classOf[XORShiftRandom].getName
     ctx.addMutableState(className, rngTerm,
-      s"new $className($seed + org.apache.spark.TaskContext.getPartitionId())")
+      s"$rngTerm = new $className($seed + org.apache.spark.TaskContext.getPartitionId());")
     ev.isNull = "false"
     s"""
       final ${ctx.javaType(dataType)} ${ev.primitive} = $rngTerm.nextGaussian();

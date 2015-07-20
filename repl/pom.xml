@@ -133,7 +133,6 @@
             </goals>
             <configuration>
               <sources>
-                <source>src/main/scala</source>
                 <source>${extra.source.dir}</source>
               </sources>
             </configuration>
@@ -146,7 +145,6 @@
             </goals>
             <configuration>
               <sources>
-                <source>src/test/scala</source>
                 <source>${extra.testsource.dir}</source>
               </sources>
             </configuration>
