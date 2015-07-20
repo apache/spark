@@ -43,14 +43,8 @@ abstract class OrcSuite extends QueryTest with BeforeAndAfterAll {
     orcTableDir.mkdir()
     import org.apache.spark.sql.hive.test.TestHive.implicits._
 
-    // Originally we were using a 10-row RDD for testing.  However, when default parallelism is
-    // greater than 10 (e.g., running on a node with 32 cores), this RDD contains empty partitions,
-    // which result in empty ORC files.  Unfortunately, ORC doesn't handle empty files properly and
-    // causes build failure on Jenkins, which happens to have 32 cores. Please refer to SPARK-8501
-    // for more details.  To workaround this issue before fixing SPARK-8501, we simply increase row
-    // number in this RDD to avoid empty partitions.
     sparkContext
-      .makeRDD(1 to 100)
+      .makeRDD(1 to 10)
       .map(i => OrcData(i, s"part-$i"))
       .toDF()
       .registerTempTable(s"orc_temp_table")
@@ -76,35 +70,35 @@ abstract class OrcSuite extends QueryTest with BeforeAndAfterAll {
   }
 
   test("create temporary orc table") {
-    checkAnswer(sql("SELECT COUNT(*) FROM normal_orc_source"), Row(100))
+    checkAnswer(sql("SELECT COUNT(*) FROM normal_orc_source"), Row(10))
 
     checkAnswer(
       sql("SELECT * FROM normal_orc_source"),
-      (1 to 100).map(i => Row(i, s"part-$i")))
+      (1 to 10).map(i => Row(i, s"part-$i")))
 
     checkAnswer(
       sql("SELECT * FROM normal_orc_source where intField > 5"),
-      (6 to 100).map(i => Row(i, s"part-$i")))
+      (6 to 10).map(i => Row(i, s"part-$i")))
 
     checkAnswer(
       sql("SELECT COUNT(intField), stringField FROM normal_orc_source GROUP BY stringField"),
-      (1 to 100).map(i => Row(1, s"part-$i")))
+      (1 to 10).map(i => Row(1, s"part-$i")))
   }
 
   test("create temporary orc table as") {
-    checkAnswer(sql("SELECT COUNT(*) FROM normal_orc_as_source"), Row(100))
+    checkAnswer(sql("SELECT COUNT(*) FROM normal_orc_as_source"), Row(10))
 
     checkAnswer(
       sql("SELECT * FROM normal_orc_source"),
-      (1 to 100).map(i => Row(i, s"part-$i")))
+      (1 to 10).map(i => Row(i, s"part-$i")))
 
     checkAnswer(
       sql("SELECT * FROM normal_orc_source WHERE intField > 5"),
-      (6 to 100).map(i => Row(i, s"part-$i")))
+      (6 to 10).map(i => Row(i, s"part-$i")))
 
     checkAnswer(
       sql("SELECT COUNT(intField), stringField FROM normal_orc_source GROUP BY stringField"),
-      (1 to 100).map(i => Row(1, s"part-$i")))
+      (1 to 10).map(i => Row(1, s"part-$i")))
   }
 
   test("appending insert") {
@@ -112,7 +106,7 @@ abstract class OrcSuite extends QueryTest with BeforeAndAfterAll {
 
     checkAnswer(
       sql("SELECT * FROM normal_orc_source"),
-      (1 to 5).map(i => Row(i, s"part-$i")) ++ (6 to 100).flatMap { i =>
+      (1 to 5).map(i => Row(i, s"part-$i")) ++ (6 to 10).flatMap { i =>
         Seq.fill(2)(Row(i, s"part-$i"))
       })
   }
@@ -125,7 +119,7 @@ abstract class OrcSuite extends QueryTest with BeforeAndAfterAll {
 
     checkAnswer(
       sql("SELECT * FROM normal_orc_as_source"),
-      (6 to 100).map(i => Row(i, s"part-$i")))
+      (6 to 10).map(i => Row(i, s"part-$i")))
   }
 }
 

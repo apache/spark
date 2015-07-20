@@ -137,10 +137,10 @@ of the most common options to set are:
 </tr>
 <tr>
   <td><code>spark.driver.memory</code></td>
-  <td>512m</td>
+  <td>1g</td>
   <td>
     Amount of memory to use for the driver process, i.e. where SparkContext is initialized.
-    (e.g. <code>512m</code>, <code>2g</code>).
+    (e.g. <code>1g</code>, <code>2g</code>).
     
     <br /><em>Note:</em> In client mode, this config must not be set through the <code>SparkConf</code>
     directly in your application, because the driver JVM has already started at that point.
@@ -665,7 +665,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     Initial size of Kryo's serialization buffer. Note that there will be one buffer
      <i>per core</i> on each worker. This buffer will grow up to
-     <code>spark.kryoserializer.buffer.max.mb</code> if needed.
+     <code>spark.kryoserializer.buffer.max</code> if needed.
   </td>
 </tr>
 <tr>
@@ -1007,9 +1007,9 @@ Apart from these, the following properties are also available, and may be useful
 <tr>
   <td><code>spark.rpc.numRetries</code></td>
   <td>3</td>
+  <td>
     Number of times to retry before an RPC task gives up.
     An RPC task will run at most times of this number.
-  <td>
   </td>
 </tr>
 <tr>
@@ -1029,8 +1029,8 @@ Apart from these, the following properties are also available, and may be useful
 <tr>
   <td><code>spark.rpc.lookupTimeout</code></td>
   <td>120s</td>
-    Duration for an RPC remote endpoint lookup operation to wait before timing out.
   <td>
+    Duration for an RPC remote endpoint lookup operation to wait before timing out.  
   </td>
 </tr>
 </table>
@@ -1206,7 +1206,7 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.dynamicAllocation.cachedExecutorIdleTimeout</code></td>
-  <td>2 * executorIdleTimeout</td>
+  <td>infinity</td>
   <td>
     If dynamic allocation is enabled and an executor which has cached data blocks has been idle for more than this duration,
     the executor will be removed. For more details, see this
@@ -1222,7 +1222,7 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.dynamicAllocation.maxExecutors</code></td>
-  <td>Integer.MAX_VALUE</td>
+  <td>infinity</td>
   <td>
     Upper bound for the number of executors if dynamic allocation is enabled.
   </td>

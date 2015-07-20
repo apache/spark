@@ -27,8 +27,9 @@ import org.apache.hadoop.mapreduce.{Job, TaskAttemptContext}
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.execution.RDDConversions
 import org.apache.spark.sql.{DataFrame, Row, SaveMode, SQLContext}
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.execution.RDDConversions
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateMutableProjection
 import org.apache.spark.sql.types.StructType
@@ -74,7 +75,7 @@ trait RelationProvider {
  * A new instance of this class with be instantiated each time a DDL call is made.
  *
  * The difference between a [[RelationProvider]] and a [[SchemaRelationProvider]] is that
- * users need to provide a schema when using a SchemaRelationProvider.
+ * users need to provide a schema when using a [[SchemaRelationProvider]].
  * A relation provider can inherits both [[RelationProvider]] and [[SchemaRelationProvider]]
  * if it can support both schema inference and user-specified schemas.
  *
@@ -110,7 +111,7 @@ trait SchemaRelationProvider {
  *
  * The difference between a [[RelationProvider]] and a [[HadoopFsRelationProvider]] is
  * that users need to provide a schema and a (possibly empty) list of partition columns when
- * using a SchemaRelationProvider. A relation provider can inherits both [[RelationProvider]],
+ * using a [[HadoopFsRelationProvider]]. A relation provider can inherits both [[RelationProvider]],
  * and [[HadoopFsRelationProvider]] if it can support schema inference, user-specified
  * schemas, and accessing partitioned relations.
  *
@@ -591,7 +592,7 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
         rdd.map(_.asInstanceOf[InternalRow])
       }
     converted.mapPartitions { rows =>
-      val buildProjection = if (codegenEnabled && requiredOutput.forall(_.isThreadSafe)) {
+      val buildProjection = if (codegenEnabled) {
         GenerateMutableProjection.generate(requiredOutput, dataSchema.toAttributes)
       } else {
         () => new InterpretedMutableProjection(requiredOutput, dataSchema.toAttributes)

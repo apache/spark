@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples.ml
 
 import scala.collection.mutable
@@ -355,3 +356,4 @@ object DecisionTreeExample {
     println(s"  Root mean squared error (RMSE): $RMSE")
   }
 }
+// scalastyle:on println

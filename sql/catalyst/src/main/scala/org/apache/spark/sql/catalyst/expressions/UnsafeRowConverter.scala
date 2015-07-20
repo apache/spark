@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.util.ObjectPool
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.PlatformDependent
 import org.apache.spark.unsafe.array.ByteArrayMethods
@@ -32,6 +34,8 @@ class UnsafeRowConverter(fieldTypes: Array[DataType]) {
   def this(schema: StructType) {
     this(schema.fields.map(_.dataType))
   }
+
+  def numFields: Int = fieldTypes.length
 
   /** Re-used pointer to the unsafe row being written */
   private[this] val unsafeRow = new UnsafeRow()
@@ -66,10 +70,16 @@ class UnsafeRowConverter(fieldTypes: Array[DataType]) {
    * @param row the row to convert
    * @param baseObject the base object of the destination address
    * @param baseOffset the base offset of the destination address
+   * @param rowLengthInBytes the length calculated by `getSizeRequirement(row)`
    * @return the number of bytes written. This should be equal to `getSizeRequirement(row)`.
    */
-  def writeRow(row: InternalRow, baseObject: Object, baseOffset: Long): Int = {
-    unsafeRow.pointTo(baseObject, baseOffset, writers.length, null)
+  def writeRow(
+      row: InternalRow,
+      baseObject: Object,
+      baseOffset: Long,
+      rowLengthInBytes: Int,
+      pool: ObjectPool): Int = {
+    unsafeRow.pointTo(baseObject, baseOffset, writers.length, rowLengthInBytes, pool)
 
     if (writers.length > 0) {
       // zero-out the bitset
@@ -84,16 +94,16 @@ class UnsafeRowConverter(fieldTypes: Array[DataType]) {
     }
 
     var fieldNumber = 0
-    var appendCursor: Int = fixedLengthSize
+    var cursor: Int = fixedLengthSize
     while (fieldNumber < writers.length) {
       if (row.isNullAt(fieldNumber)) {
         unsafeRow.setNullAt(fieldNumber)
       } else {
-        appendCursor += writers(fieldNumber).write(row, unsafeRow, fieldNumber, appendCursor)
+        cursor += writers(fieldNumber).write(row, unsafeRow, fieldNumber, cursor)
       }
       fieldNumber += 1
     }
-    appendCursor
+    cursor
   }
 
 }
@@ -108,11 +118,11 @@ private abstract class UnsafeColumnWriter {
    * @param source the row being converted
    * @param target a pointer to the converted unsafe row
    * @param column the column to write
-   * @param appendCursor the offset from the start of the unsafe row to the end of the row;
+   * @param cursor the offset from the start of the unsafe row to the end of the row;
    *                     used for calculating where variable-length data should be written
    * @return the number of variable-length bytes written
    */
-  def write(source: InternalRow, target: UnsafeRow, column: Int, appendCursor: Int): Int
+  def write(source: InternalRow, target: UnsafeRow, column: Int, cursor: Int): Int
 
   /**
    * Return the number of bytes that are needed to write this variable-length value.
@@ -128,121 +138,83 @@ private object UnsafeColumnWriter {
       case BooleanType => BooleanUnsafeColumnWriter
       case ByteType => ByteUnsafeColumnWriter
       case ShortType => ShortUnsafeColumnWriter
-      case IntegerType => IntUnsafeColumnWriter
-      case LongType => LongUnsafeColumnWriter
+      case IntegerType | DateType => IntUnsafeColumnWriter
+      case LongType | TimestampType => LongUnsafeColumnWriter
       case FloatType => FloatUnsafeColumnWriter
       case DoubleType => DoubleUnsafeColumnWriter
       case StringType => StringUnsafeColumnWriter
       case BinaryType => BinaryUnsafeColumnWriter
-      case DateType => IntUnsafeColumnWriter
-      case TimestampType => LongUnsafeColumnWriter
-      case t =>
-        throw new UnsupportedOperationException(s"Do not know how to write columns of type $t")
+      case t => ObjectUnsafeColumnWriter
     }
+  }
+
+  /**
+   * Returns whether the dataType can be embedded into UnsafeRow (not using ObjectPool).
+   */
+  def canEmbed(dataType: DataType): Boolean = {
+    forType(dataType) != ObjectUnsafeColumnWriter
   }
 }
 
 // ------------------------------------------------------------------------------------------------
 
-private object NullUnsafeColumnWriter extends NullUnsafeColumnWriter
-private object BooleanUnsafeColumnWriter extends BooleanUnsafeColumnWriter
-private object ByteUnsafeColumnWriter extends ByteUnsafeColumnWriter
-private object ShortUnsafeColumnWriter extends ShortUnsafeColumnWriter
-private object IntUnsafeColumnWriter extends IntUnsafeColumnWriter
-private object LongUnsafeColumnWriter extends LongUnsafeColumnWriter
-private object FloatUnsafeColumnWriter extends FloatUnsafeColumnWriter
-private object DoubleUnsafeColumnWriter extends DoubleUnsafeColumnWriter
-private object StringUnsafeColumnWriter extends StringUnsafeColumnWriter
-private object BinaryUnsafeColumnWriter extends BinaryUnsafeColumnWriter
 
 private abstract class PrimitiveUnsafeColumnWriter extends UnsafeColumnWriter {
   // Primitives don't write to the variable-length region:
   def getSize(sourceRow: InternalRow, column: Int): Int = 0
 }
 
-private class NullUnsafeColumnWriter private() extends PrimitiveUnsafeColumnWriter {
-  override def write(
-      source: InternalRow,
-      target: UnsafeRow,
-      column: Int,
-      appendCursor: Int): Int = {
+private object NullUnsafeColumnWriter extends PrimitiveUnsafeColumnWriter {
+  override def write(source: InternalRow, target: UnsafeRow, column: Int, cursor: Int): Int = {
     target.setNullAt(column)
     0
   }
 }
 
-private class BooleanUnsafeColumnWriter private() extends PrimitiveUnsafeColumnWriter {
-  override def write(
-      source: InternalRow,
-      target: UnsafeRow,
-      column: Int,
-      appendCursor: Int): Int = {
+private object BooleanUnsafeColumnWriter extends PrimitiveUnsafeColumnWriter {
+  override def write(source: InternalRow, target: UnsafeRow, column: Int, cursor: Int): Int = {
     target.setBoolean(column, source.getBoolean(column))
     0
   }
 }
 
-private class ByteUnsafeColumnWriter private() extends PrimitiveUnsafeColumnWriter {
-  override def write(
-      source: InternalRow,
-      target: UnsafeRow,
-      column: Int,
-      appendCursor: Int): Int = {
+private object ByteUnsafeColumnWriter extends PrimitiveUnsafeColumnWriter {
+  override def write(source: InternalRow, target: UnsafeRow, column: Int, cursor: Int): Int = {
     target.setByte(column, source.getByte(column))
     0
   }
 }
 
-private class ShortUnsafeColumnWriter private() extends PrimitiveUnsafeColumnWriter {
-  override def write(
-      source: InternalRow,
-      target: UnsafeRow,
-      column: Int,
-      appendCursor: Int): Int = {
+private object ShortUnsafeColumnWriter extends PrimitiveUnsafeColumnWriter {
+  override def write(source: InternalRow, target: UnsafeRow, column: Int, cursor: Int): Int = {
     target.setShort(column, source.getShort(column))
     0
   }
 }
 
-private class IntUnsafeColumnWriter private() extends PrimitiveUnsafeColumnWriter {
-  override def write(
-      source: InternalRow,
-      target: UnsafeRow,
-      column: Int,
-      appendCursor: Int): Int = {
+private object IntUnsafeColumnWriter extends PrimitiveUnsafeColumnWriter {
+  override def write(source: InternalRow, target: UnsafeRow, column: Int, cursor: Int): Int = {
     target.setInt(column, source.getInt(column))
     0
   }
 }
 
-private class LongUnsafeColumnWriter private() extends PrimitiveUnsafeColumnWriter {
-  override def write(
-      source: InternalRow,
-      target: UnsafeRow,
-      column: Int,
-      appendCursor: Int): Int = {
+private object LongUnsafeColumnWriter extends PrimitiveUnsafeColumnWriter {
+  override def write(source: InternalRow, target: UnsafeRow, column: Int, cursor: Int): Int = {
     target.setLong(column, source.getLong(column))
     0
   }
 }
 
-private class FloatUnsafeColumnWriter private() extends PrimitiveUnsafeColumnWriter {
-  override def write(
-      source: InternalRow,
-      target: UnsafeRow,
-      column: Int,
-      appendCursor: Int): Int = {
+private object FloatUnsafeColumnWriter extends PrimitiveUnsafeColumnWriter {
+  override def write(source: InternalRow, target: UnsafeRow, column: Int, cursor: Int): Int = {
     target.setFloat(column, source.getFloat(column))
     0
   }
 }
 
-private class DoubleUnsafeColumnWriter private() extends PrimitiveUnsafeColumnWriter {
-  override def write(
-      source: InternalRow,
-      target: UnsafeRow,
-      column: Int,
-      appendCursor: Int): Int = {
+private object DoubleUnsafeColumnWriter extends PrimitiveUnsafeColumnWriter {
+  override def write(source: InternalRow, target: UnsafeRow, column: Int, cursor: Int): Int = {
     target.setDouble(column, source.getDouble(column))
     0
   }
@@ -250,20 +222,21 @@ private class DoubleUnsafeColumnWriter private() extends PrimitiveUnsafeColumnWr
 
 private abstract class BytesUnsafeColumnWriter extends UnsafeColumnWriter {
 
-  def getBytes(source: InternalRow, column: Int): Array[Byte]
+  protected[this] def isString: Boolean
+  protected[this] def getBytes(source: InternalRow, column: Int): Array[Byte]
 
-  def getSize(source: InternalRow, column: Int): Int = {
+  override def getSize(source: InternalRow, column: Int): Int = {
     val numBytes = getBytes(source, column).length
     ByteArrayMethods.roundNumberOfBytesToNearestWord(numBytes)
   }
 
-  override def write(
-      source: InternalRow,
-      target: UnsafeRow,
-      column: Int,
-      appendCursor: Int): Int = {
-    val offset = target.getBaseOffset + appendCursor
+  override def write(source: InternalRow, target: UnsafeRow, column: Int, cursor: Int): Int = {
     val bytes = getBytes(source, column)
+    write(target, bytes, column, cursor)
+  }
+
+  def write(target: UnsafeRow, bytes: Array[Byte], column: Int, cursor: Int): Int = {
+    val offset = target.getBaseOffset + cursor
     val numBytes = bytes.length
     if ((numBytes & 0x07) > 0) {
       // zero-out the padding bytes
@@ -276,19 +249,42 @@ private abstract class BytesUnsafeColumnWriter extends UnsafeColumnWriter {
       offset,
       numBytes
     )
-    target.setLong(column, (appendCursor.toLong << 32L) | numBytes.toLong)
+    val flag = if (isString) 1L << (UnsafeRow.OFFSET_BITS * 2) else 0
+    target.setLong(column, flag | (cursor.toLong << UnsafeRow.OFFSET_BITS) | numBytes.toLong)
     ByteArrayMethods.roundNumberOfBytesToNearestWord(numBytes)
   }
 }
 
-private class StringUnsafeColumnWriter private() extends BytesUnsafeColumnWriter {
+private object StringUnsafeColumnWriter extends BytesUnsafeColumnWriter {
+  protected[this] def isString: Boolean = true
   def getBytes(source: InternalRow, column: Int): Array[Byte] = {
     source.getAs[UTF8String](column).getBytes
   }
+  // TODO(davies): refactor this
+  // specialized for codegen
+  def getSize(value: UTF8String): Int =
+    ByteArrayMethods.roundNumberOfBytesToNearestWord(value.numBytes())
+  def write(target: UnsafeRow, value: UTF8String, column: Int, cursor: Int): Int = {
+    write(target, value.getBytes, column, cursor)
+  }
 }
 
-private class BinaryUnsafeColumnWriter private() extends BytesUnsafeColumnWriter {
-  def getBytes(source: InternalRow, column: Int): Array[Byte] = {
+private object BinaryUnsafeColumnWriter extends BytesUnsafeColumnWriter {
+  protected[this] override def isString: Boolean = false
+  override def getBytes(source: InternalRow, column: Int): Array[Byte] = {
     source.getAs[Array[Byte]](column)
+  }
+  // specialized for codegen
+  def getSize(value: Array[Byte]): Int =
+    ByteArrayMethods.roundNumberOfBytesToNearestWord(value.length)
+}
+
+private object ObjectUnsafeColumnWriter extends UnsafeColumnWriter {
+  override def getSize(sourceRow: InternalRow, column: Int): Int = 0
+  override def write(source: InternalRow, target: UnsafeRow, column: Int, cursor: Int): Int = {
+    val obj = source.get(column)
+    val idx = target.getPool.put(obj)
+    target.setLong(column, - idx)
+    0
   }
 }

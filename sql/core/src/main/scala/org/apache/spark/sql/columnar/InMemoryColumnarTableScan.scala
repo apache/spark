@@ -22,6 +22,7 @@ import java.nio.ByteBuffer
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
@@ -146,7 +147,8 @@ private[sql] case class InMemoryRelation(
             rowCount += 1
           }
 
-          val stats = InternalRow.merge(columnBuilders.map(_.columnStats.collectedStatistics) : _*)
+          val stats = InternalRow.fromSeq(columnBuilders.map(_.columnStats.collectedStatistics)
+                        .flatMap(_.toSeq))
 
           batchStats += stats
           CachedBatch(columnBuilders.map(_.build().array()), stats)

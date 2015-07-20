@@ -77,5 +77,8 @@ abstract class UserDefinedType[UserType] extends DataType with Serializable {
    * For UDT, asNullable will not change the nullability of its internal sqlType and just returns
    * itself.
    */
-  private[spark] override def asNullable: UserDefinedType[UserType] = this
+  override private[spark] def asNullable: UserDefinedType[UserType] = this
+
+  override private[sql] def acceptsType(dataType: DataType) =
+    this.getClass == dataType.getClass
 }

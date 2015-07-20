@@ -66,7 +66,10 @@ private[spark] class CoarseGrainedExecutorBackend(
       case Success(msg) => Utils.tryLogNonFatalError {
         Option(self).foreach(_.send(msg)) // msg must be RegisteredExecutor
       }
-      case Failure(e) => logError(s"Cannot register with driver: $driverUrl", e)
+      case Failure(e) => {
+        logError(s"Cannot register with driver: $driverUrl", e)
+        System.exit(1)
+      }
     }(ThreadUtils.sameThread)
   }
 
@@ -232,7 +235,9 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
           argv = tail
         case Nil =>
         case tail =>
+          // scalastyle:off println
           System.err.println(s"Unrecognized options: ${tail.mkString(" ")}")
+          // scalastyle:on println
           printUsageAndExit()
       }
     }
@@ -246,6 +251,7 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
   }
 
   private def printUsageAndExit() = {
+    // scalastyle:off println
     System.err.println(
       """
       |"Usage: CoarseGrainedExecutorBackend [options]
@@ -259,6 +265,7 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
       |   --worker-url <workerUrl>
       |   --user-class-path <url>
       |""".stripMargin)
+    // scalastyle:on println
     System.exit(1)
   }
 
