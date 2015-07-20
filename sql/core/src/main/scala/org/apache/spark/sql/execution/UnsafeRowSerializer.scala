@@ -59,21 +59,7 @@ private class UnsafeRowSerializerInstance(numFields: Int) extends SerializerInst
       val row = value.asInstanceOf[UnsafeRow]
       assert(row.getPool == null, "UnsafeRowSerializer does not support ObjectPool")
       dOut.writeInt(row.getSizeInBytes)
-      var dataRemaining: Int = row.getSizeInBytes
-      val baseObject = row.getBaseObject
-      var rowReadPosition: Long = row.getBaseOffset
-      while (dataRemaining > 0) {
-        val toTransfer: Int = Math.min(writeBuffer.length, dataRemaining)
-        PlatformDependent.copyMemory(
-          baseObject,
-          rowReadPosition,
-          writeBuffer,
-          PlatformDependent.BYTE_ARRAY_OFFSET,
-          toTransfer)
-        out.write(writeBuffer, 0, toTransfer)
-        rowReadPosition += toTransfer
-        dataRemaining -= toTransfer
-      }
+      row.writeToStream(out, writeBuffer)
       this
     }
     override def writeKey[T: ClassTag](key: T): SerializationStream = {
