@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.mllib.api.r
+package org.apache.spark.ml.api.r
 
 import org.apache.spark.ml.feature.RFormula
 import org.apache.spark.ml.classification.LogisticRegression
@@ -23,7 +23,7 @@ import org.apache.spark.ml.regression.LinearRegression
 import org.apache.spark.ml.{Pipeline, PipelineModel}
 import org.apache.spark.sql.DataFrame
 
-private[r] object MLUtils {
+private[r] object SparkRWrappers {
   def fitRModelFormula(
       value: String,
       df: DataFrame,

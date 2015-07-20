@@ -17,9 +17,9 @@
 
 library(testthat)
 
-context("MLLib functions")
+context("MLlib functions")
 
-# Tests for MLLib functions in SparkR
+# Tests for MLlib functions in SparkR
 
 sc <- sparkR.init()
 
