@@ -18,6 +18,7 @@
 package org.apache.spark.unsafe.types;
 
 import java.io.UnsupportedEncodingException;
+import java.util.Arrays;
 
 import org.junit.Test;
 
@@ -112,26 +113,26 @@ public class UTF8StringSuite {
       fromString(""),
       concatWs(sep, fromString("")));
     assertEquals(
-      fromString("ab"),
-      concatWs(sep, fromString("ab")));
+        fromString("ab"),
+        concatWs(sep, fromString("ab")));
     assertEquals(
-      fromString("a哈哈b"),
-      concatWs(sep, fromString("a"), fromString("b")));
+        fromString("a哈哈b"),
+        concatWs(sep, fromString("a"), fromString("b")));
     assertEquals(
-      fromString("a哈哈b哈哈c"),
-      concatWs(sep, fromString("a"), fromString("b"), fromString("c")));
+        fromString("a哈哈b哈哈c"),
+        concatWs(sep, fromString("a"), fromString("b"), fromString("c")));
     assertEquals(
-      fromString("a哈哈c"),
-      concatWs(sep, fromString("a"), null, fromString("c")));
+        fromString("a哈哈c"),
+        concatWs(sep, fromString("a"), null, fromString("c")));
     assertEquals(
-      fromString("a"),
-      concatWs(sep, fromString("a"), null, null));
+        fromString("a"),
+        concatWs(sep, fromString("a"), null, null));
     assertEquals(
-      fromString(""),
-      concatWs(sep, null, null, null));
+        fromString(""),
+        concatWs(sep, null, null, null));
     assertEquals(
-      fromString("数据哈哈砖头"),
-      concatWs(sep, fromString("数据"), fromString("砖头")));
+        fromString("数据哈哈砖头"),
+        concatWs(sep, fromString("数据"), fromString("砖头")));
   }
 
   @Test
@@ -261,6 +262,16 @@ public class UTF8StringSuite {
     assertEquals(
       fromString("数据砖头孙行者孙行者孙行"),
       fromString("数据砖头").rpad(12, fromString("孙行者")));
+  }
+
+  @Test
+  public void split() {
+    assertTrue(Arrays.equals(fromString("ab,def,ghi").split(fromString(","), -1),
+        new UTF8String[]{fromString("ab"), fromString("def"), fromString("ghi")}));
+    assertTrue(Arrays.equals(fromString("ab,def,ghi").split(fromString(","), 2),
+        new UTF8String[]{fromString("ab"), fromString("def,ghi")}));
+    assertTrue(Arrays.equals(fromString("ab,def,ghi").split(fromString(","), 2),
+        new UTF8String[]{fromString("ab"), fromString("def,ghi")}));
   }
   
   @Test

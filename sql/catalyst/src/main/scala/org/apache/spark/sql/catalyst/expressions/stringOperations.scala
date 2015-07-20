@@ -571,17 +571,13 @@ case class StringSplit(str: Expression, pattern: Expression)
   override def inputTypes: Seq[DataType] = Seq(StringType, StringType)
 
   override def nullSafeEval(string: Any, regex: Any): Any = {
-    val splits = string.asInstanceOf[UTF8String].split(regex.asInstanceOf[UTF8String], -1)
-    splits.toSeq.map(UTF8String.fromString)
+    string.asInstanceOf[UTF8String].split(regex.asInstanceOf[UTF8String], -1).toSeq
   }
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     nullSafeCodeGen(ctx, ev, (str, pattern) =>
-      s"""
-          String[] splits = $str.split($pattern, -1);
-          ${ev.primitive} = scala.collection.JavaConversions.asScalaBuffer(java.util.Arrays.asList(splits)).toList();
-          // ;
-         """)
+      s"""${ev.primitive} = scala.collection.JavaConversions.asScalaBuffer(
+            java.util.Arrays.asList($str.split($pattern, -1)));""")
   }
 
   override def prettyName: String = "split"
