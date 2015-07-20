@@ -170,6 +170,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     // Make fake resource offers on all executors
     private def makeOffers() {
       launchTasks(scheduler.resourceOffers(executorDataMap
+        // Filter out executors under killing
         .filterKeys(!executorsPendingToRemove.contains(_))
         .map { case (id, executorData) =>
           new WorkerOffer(id, executorData.executorHost, executorData.freeCores)
@@ -183,6 +184,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
 
     // Make fake resource offers on just one executor
     private def makeOffers(executorId: String) {
+      // Filter out executors under killing
       if (!executorsPendingToRemove.contains(executorId)) {
         val executorData = executorDataMap(executorId)
         launchTasks(scheduler.resourceOffers(
