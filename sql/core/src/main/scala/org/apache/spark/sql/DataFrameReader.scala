@@ -27,7 +27,7 @@ import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.jdbc.{JDBCPartition, JDBCPartitioningInfo, JDBCRelation}
-import org.apache.spark.sql.json.{JsonRDD, JSONRelation}
+import org.apache.spark.sql.json.JSONRelation
 import org.apache.spark.sql.parquet.ParquetRelation2
 import org.apache.spark.sql.sources.{LogicalRelation, ResolvedDataSource}
 import org.apache.spark.sql.types.StructType
@@ -236,17 +236,8 @@ class DataFrameReader private[sql](sqlContext: SQLContext) {
    */
   def json(jsonRDD: RDD[String]): DataFrame = {
     val samplingRatio = extraOptions.getOrElse("samplingRatio", "1.0").toDouble
-    if (sqlContext.conf.useJacksonStreamingAPI) {
-      sqlContext.baseRelationToDataFrame(
-        new JSONRelation(() => jsonRDD, None, samplingRatio, userSpecifiedSchema)(sqlContext))
-    } else {
-      val columnNameOfCorruptJsonRecord = sqlContext.conf.columnNameOfCorruptRecord
-      val appliedSchema = userSpecifiedSchema.getOrElse(
-        JsonRDD.nullTypeToStringType(
-          JsonRDD.inferSchema(jsonRDD, 1.0, columnNameOfCorruptJsonRecord)))
-      val rowRDD = JsonRDD.jsonStringToRow(jsonRDD, appliedSchema, columnNameOfCorruptJsonRecord)
-      sqlContext.internalCreateDataFrame(rowRDD, appliedSchema)
-    }
+    sqlContext.baseRelationToDataFrame(
+      new JSONRelation(() => jsonRDD, None, samplingRatio, userSpecifiedSchema)(sqlContext))
   }
 
   /**

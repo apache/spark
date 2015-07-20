@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.expressions
 
 import org.apache.spark.TaskContext
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.LeafExpression
+import org.apache.spark.sql.catalyst.expressions.{Nondeterministic, LeafExpression}
 import org.apache.spark.sql.catalyst.expressions.codegen.{GeneratedExpressionCode, CodeGenContext}
 import org.apache.spark.sql.types.{LongType, DataType}
 
@@ -33,7 +33,7 @@ import org.apache.spark.sql.types.{LongType, DataType}
  *
  * Since this expression is stateful, it cannot be a case object.
  */
-private[sql] case class MonotonicallyIncreasingID() extends LeafExpression {
+private[sql] case class MonotonicallyIncreasingID() extends LeafExpression with Nondeterministic {
 
   /**
    * Record ID within each partition. By being transient, count's value is reset to 0 every time
@@ -42,8 +42,6 @@ private[sql] case class MonotonicallyIncreasingID() extends LeafExpression {
   @transient private[this] var count: Long = 0L
 
   @transient private lazy val partitionMask = TaskContext.getPartitionId().toLong << 33
-
-  override def deterministic: Boolean = false
 
   override def nullable: Boolean = false
 
@@ -58,9 +56,9 @@ private[sql] case class MonotonicallyIncreasingID() extends LeafExpression {
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     val countTerm = ctx.freshName("count")
     val partitionMaskTerm = ctx.freshName("partitionMask")
-    ctx.addMutableState(ctx.JAVA_LONG, countTerm, "0L")
+    ctx.addMutableState(ctx.JAVA_LONG, countTerm, s"$countTerm = 0L;")
     ctx.addMutableState(ctx.JAVA_LONG, partitionMaskTerm,
-      "((long) org.apache.spark.TaskContext.getPartitionId()) << 33")
+      s"$partitionMaskTerm = ((long) org.apache.spark.TaskContext.getPartitionId()) << 33;")
 
     ev.isNull = "false"
     s"""

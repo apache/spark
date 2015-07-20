@@ -395,6 +395,18 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll with SQLTestUtils {
     )
   }
 
+  test("left semi greater than predicate and equal operator") {
+    checkAnswer(
+      sql("SELECT * FROM testData2 x LEFT SEMI JOIN testData2 y ON x.b = y.b and x.a >= y.a + 2"),
+      Seq(Row(3, 1), Row(3, 2))
+    )
+
+    checkAnswer(
+      sql("SELECT * FROM testData2 x LEFT SEMI JOIN testData2 y ON x.b = y.a and x.a >= y.b + 1"),
+      Seq(Row(2, 1), Row(2, 2), Row(3, 1), Row(3, 2))
+    )
+  }
+
   test("index into array of arrays") {
     checkAnswer(
       sql(

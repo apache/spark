@@ -21,7 +21,7 @@ import java.sql.{Date, Timestamp}
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodeGenContext, GeneratedExpressionCode}
+import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types._
@@ -75,7 +75,8 @@ object IntegerLiteral {
 /**
  * In order to do type checking, use Literal.create() instead of constructor
  */
-case class Literal protected (value: Any, dataType: DataType) extends LeafExpression {
+case class Literal protected (value: Any, dataType: DataType)
+  extends LeafExpression with CodegenFallback {
 
   override def foldable: Boolean = true
   override def nullable: Boolean = value == null
@@ -142,7 +143,7 @@ case class Literal protected (value: Any, dataType: DataType) extends LeafExpres
 
 // TODO: Specialize
 case class MutableLiteral(var value: Any, dataType: DataType, nullable: Boolean = true)
-    extends LeafExpression {
+  extends LeafExpression with CodegenFallback {
 
   def update(expression: Expression, input: InternalRow): Unit = {
     value = expression.eval(input)
