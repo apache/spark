@@ -229,10 +229,13 @@ case class WeekOfYear(child: Expression) extends UnaryExpression with ImplicitCa
     nullSafeCodeGen(ctx, ev, (time) => {
       val cal = classOf[Calendar].getName
       val c = ctx.freshName("cal")
-      ctx.addMutableState(cal, c, s"""$cal.getInstance(java.util.TimeZone.getTimeZone("UTC"));""")
+      ctx.addMutableState(cal, c,
+        s"""
+          $c = $cal.getInstance(java.util.TimeZone.getTimeZone("UTC"));
+          $c.setFirstDayOfWeek($cal.MONDAY);
+          $c.setMinimalDaysInFirstWeek(4);
+         """)
       s"""
-        $c.setFirstDayOfWeek($cal.MONDAY);
-        $c.setMinimalDaysInFirstWeek(4);
         $c.setTimeInMillis($time * 1000L * 3600L * 24L);
         ${ev.primitive} = $c.get($cal.WEEK_OF_YEAR);
       """
