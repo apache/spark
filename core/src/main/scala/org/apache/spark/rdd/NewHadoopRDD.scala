@@ -143,8 +143,7 @@ class NewHadoopRDD[K, V](
           finished = !reader.nextKeyValue
           if (finished) {
             // Close reader and release it
-            reader.close()
-            reader = null
+            close()
           }
           havePair = !finished
         }
@@ -164,7 +163,8 @@ class NewHadoopRDD[K, V](
 
       private def close() {
         try {
-          if (!finished) {
+          if (reader != null) {
+            // Close reader and release it
             reader.close()
             reader = null
           }
