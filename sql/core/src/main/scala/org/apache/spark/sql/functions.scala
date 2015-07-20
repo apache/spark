@@ -1781,6 +1781,27 @@ object functions {
     StringLocate(lit(substr).expr, str.expr, lit(pos).expr)
   }
 
+
+  /**
+   * Extract a specific(idx) group identified by a java regex, from the specified string column.
+   *
+   * @group string_funcs
+   * @since 1.5.0
+   */
+  def regexp_extract(e: Column, exp: String, groupIdx: Int): Column = {
+    RegExpExtract(e.expr, lit(exp).expr, lit(groupIdx).expr)
+  }
+
+  /**
+   * Replace all substrings of the specified string value that match regexp with rep.
+   *
+   * @group string_funcs
+   * @since 1.5.0
+   */
+  def regexp_replace(e: Column, pattern: String, replacement: String): Column = {
+    RegExpReplace(e.expr, lit(pattern).expr, lit(replacement).expr)
+  }
+
   /**
    * Computes the BASE64 encoding of a binary column and returns it as a string column.
    * This is the reverse of unbase64.

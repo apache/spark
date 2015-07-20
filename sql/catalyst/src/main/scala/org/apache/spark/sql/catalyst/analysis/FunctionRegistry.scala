@@ -161,6 +161,8 @@ object FunctionRegistry {
     expression[Lower]("lower"),
     expression[Length]("length"),
     expression[Levenshtein]("levenshtein"),
+    expression[RegExpExtract]("regexp_extract"),
+    expression[RegExpReplace]("regexp_replace"),
     expression[StringInstr]("instr"),
     expression[StringLocate]("locate"),
     expression[StringLPad]("lpad"),

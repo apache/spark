@@ -56,6 +56,22 @@ class StringFunctionsSuite extends QueryTest {
     checkAnswer(df.selectExpr("levenshtein(l, r)"), Seq(Row(3), Row(1)))
   }
 
+  test("string regex_replace / regex_extract") {
+    val df = Seq(("100-200", "")).toDF("a", "b")
+
+    checkAnswer(
+      df.select(
+        regexp_replace($"a", "(\\d+)", "num"),
+        regexp_extract($"a", "(\\d+)-(\\d+)", 1)),
+      Row("num-num", "100"))
+
+    checkAnswer(
+      df.selectExpr(
+        "regexp_replace(a, '(\\d+)', 'num')",
+        "regexp_extract(a, '(\\d+)-(\\d+)', 2)"),
+      Row("num-num", "200"))
+  }
+
   test("string ascii function") {
     val df = Seq(("abc", "")).toDF("a", "b")
     checkAnswer(

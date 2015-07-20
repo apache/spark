@@ -46,6 +46,8 @@ __all__ = [
     'monotonicallyIncreasingId',
     'rand',
     'randn',
+    'regexp_extract',
+    'regexp_replace',
     'sha1',
     'sha2',
     'sparkPartitionId',
@@ -340,6 +342,34 @@ def levenshtein(left, right):
     """
     sc = SparkContext._active_spark_context
     jc = sc._jvm.functions.levenshtein(_to_java_column(left), _to_java_column(right))
+    return Column(jc)
+
+
+@ignore_unicode_prefix
+@since(1.5)
+def regexp_extract(str, pattern, idx):
+    """Extract a specific(idx) group identified by a java regex, from the specified string column.
+
+    >>> df = sqlContext.createDataFrame([('100-200',)], ['str'])
+    >>> df.select(regexp_extract('str', '(\d+)-(\d+)', 1).alias('d')).collect()
+    [Row(d=u'100')]
+    """
+    sc = SparkContext._active_spark_context
+    jc = sc._jvm.functions.regexp_extract(_to_java_column(str), pattern, idx)
+    return Column(jc)
+
+
+@ignore_unicode_prefix
+@since(1.5)
+def regexp_replace(str, pattern, replacement):
+    """Replace all substrings of the specified string value that match regexp with rep.
+
+    >>> df = sqlContext.createDataFrame([('100-200',)], ['str'])
+    >>> df.select(regexp_replace('str', '(\\d+)', '##').alias('d')).collect()
+    [Row(d=u'##-##')]
+    """
+    sc = SparkContext._active_spark_context
+    jc = sc._jvm.functions.regexp_replace(_to_java_column(str), pattern, replacement)
     return Column(jc)
 
 

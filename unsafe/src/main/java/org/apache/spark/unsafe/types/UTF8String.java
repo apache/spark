@@ -53,6 +53,11 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
   public static final UTF8String EMPTY_UTF8 = UTF8String.fromString("");
 
   /**
+   * Empty UTF8String
+   */
+  public static final UTF8String EMPTY_STRING = UTF8String.fromBytes(new byte[0]);
+
+  /**
    * Creates an UTF8String from byte array, which should be encoded in UTF-8.
    *
    * Note: `bytes` will be hold by returned UTF8String.
