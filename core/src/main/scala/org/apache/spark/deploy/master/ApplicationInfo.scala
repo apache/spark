@@ -109,6 +109,21 @@ private[spark] class ApplicationInfo(
 
   private[master] def coresLeft: Int = requestedCores - coresGranted
 
+  /**
+   * Return the number of executors waiting to be scheduled once space frees up.
+   *
+   * This is only defined if the application explicitly set the executor limit. For instance,
+   * if an application asks for 8 executors but there is only space for 5, then there will be
+   * 3 waiting executors.
+   */
+  private[master] def numWaitingExecutors: Int = {
+    if (executorLimit != Integer.MAX_VALUE) {
+      math.max(0, executorLimit - executors.size)
+    } else {
+      0
+    }
+  }
+
   private var _retryCount = 0
 
   private[master] def retryCount = _retryCount

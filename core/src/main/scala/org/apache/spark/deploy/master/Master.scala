@@ -789,7 +789,7 @@ private[master] class Master(
   }
 
   /**
-   * Handle a request from an application to set the executors limit for this application.
+   * Handle a request to set the target number of executors for this application.
    * @return whether the application has previously registered with this Master.
    */
   private def handleRequestExecutors(appId: String, requestedTotal: Int): Boolean = {
@@ -798,16 +798,13 @@ private[master] class Master(
         logInfo(s"Application $appId requested to set total executors to $requestedTotal.")
         appInfo.executorLimit = requestedTotal
 
-        // We may have previously added workers to the blacklist. Now that the application
-        // explicitly requests more executors, we can fulfill the request by removing workers
-        // from the blacklist, if any.
+        // If the application raises the executor limit, then we can launch new executors.
+        // If there are previously blacklisted workers, then we can launch these new executors
+        // by unblacklisting a subset of these workers. For more detail, see `handleKillExecutors`.
         if (appInfo.desc.coresPerExecutor.isEmpty) {
-          val numMissingExecutors = appInfo.executorLimit - appInfo.executors.size
-          if (numMissingExecutors > 0) {
-            appInfo.blacklistedWorkers.take(numMissingExecutors).foreach { workerId =>
-              appInfo.blacklistedWorkers.remove(workerId)
-            }
-          }
+          appInfo.blacklistedWorkers
+            .take(appInfo.numWaitingExecutors)
+            .foreach { workerId => appInfo.blacklistedWorkers.remove(workerId) }
         }
         schedule()
         true
@@ -818,7 +815,28 @@ private[master] class Master(
   }
 
   /**
-   * Handle a request from an application to kill the specified list of executors.
+   * Handle a kill request from the given application.
+   *
+   * There are two distinct ways of handling kill requests. For applications that explicitly
+   * set `spark.executor.cores`, all executors have exactly N cores. In this mode, we can simply
+   * multiply the application's executor limit by N to determine a cap on the number of cores
+   * to assign to this application.
+   *
+   * The kill mechanism for applications that did not set `spark.executor.cores` is more complex.
+   * In this mode, each executor grabs all the available cores on the worker, so we cannot simply
+   * rely on the executor limit as the executors may not be uniform in the number of cores.
+   * Instead, we use a blacklisting mechanism to enforce kills. When an executor is killed, we
+   * blacklist its worker so that we do not immediately launch a new executor on the worker.
+   * A worker is removed from the blacklist only when a request to add executors is serviced.
+   *
+   * Note that in this case, we may not always want to blacklist the worker. For instance, if we
+   * previously requested 10 new executors but there is only room for 3, then we have 7 executors
+   * waiting to be scheduled once space frees up. In this case, after we kill an executor we do
+   * NOT add its worker to the blacklist because there is a prior request that we need to service.
+   *
+   * Note: this method assumes the executor limit has already been adjusted downwards through
+   * a separate [[RequestExecutors]] message.
+   *
    * @return whether the application has previously registered with this Master.
    */
   private def handleKillExecutors(appId: String, executorIds: Seq[Int]): Boolean = {
@@ -827,21 +845,22 @@ private[master] class Master(
         val (known, unknown) = executorIds.partition(appInfo.executors.contains)
         if (known.nonEmpty) {
           logInfo(s"Application $appId attempted to kill executors: " + known.mkString(", "))
-          val executors = known.map { executorId => appInfo.executors(executorId) }
-          executors.foreach { desc => killExecutor(desc) }
+          val executorsToKill = known.map { executorId => appInfo.executors(executorId) }
 
-          // If cores per executor is not set, then each worker runs at most one executor.
-          // In this case, after killing an executor we need to blacklist its worker since
-          // we don't want the worker to immediately launch a new executor.
+          // Ask the worker to kill the executor and remove state about it
+          executorsToKill.foreach { desc =>
+            killExecutor(desc)
+            appInfo.executors.remove(desc.id)
+          }
+
+          // If cores per executor is not set, then we need to use the blacklist mechanism in
+          // addition to the executor limit. For more detail, see the java doc of this method.
           if (appInfo.desc.coresPerExecutor.isEmpty) {
             // There may be executors waiting to be scheduled once space frees up.
-            // If so, keep around a few non-blacklisted workers to launch these executors.
-            // Note that this assumes the executor limit has already been adjusted downwards
-            // through a separate request message.
-            val numExecutorsAfterKill = appInfo.executors.size - known.size
-            val numWaitingExecutors = math.max(0, appInfo.executorLimit - numExecutorsAfterKill)
-            val workersToBlacklist = executors.drop(numWaitingExecutors).map(_.worker.id)
-            workersToBlacklist.foreach { workerId => appInfo.blacklistedWorkers += workerId }
+            // If so, leave a few workers unblacklisted to launch these executors.
+            executorsToKill.drop(appInfo.numWaitingExecutors).foreach { desc =>
+              appInfo.blacklistedWorkers += desc.worker.id
+            }
           }
         }
 
