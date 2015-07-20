@@ -52,7 +52,7 @@ private[spark] class ApplicationInfo(
   // at most one executor from this application can be run on each worker. When an executor is
   // killed, its worker is added to the blacklist to avoid having the master immediately schedule
   // a new executor on the worker.
-  @transient var blacklistedWorkers: mutable.HashSet[String] = _
+  @transient private var blacklistedWorkers: mutable.HashSet[String] = _
 
   @transient private var nextExecutorId: Int = _
 
@@ -122,6 +122,32 @@ private[spark] class ApplicationInfo(
     } else {
       0
     }
+  }
+
+  /**
+   * Add a worker to the blacklist, called when the executor running on the worker is killed.
+   * This is used only if cores per executor is not set.
+   */
+  private[master] def blacklistWorker(workerId: String): Unit = {
+    blacklistedWorkers += workerId
+  }
+
+  /**
+   * Remove workers from the blacklist, called when the application requests new executors.
+   * This is used only if cores per executor is not set.
+   */
+  private[master] def removeFromBlacklist(numWorkers: Int): Unit = {
+    blacklistedWorkers.take(numWorkers).foreach { workerId =>
+      blacklistedWorkers.remove(workerId)
+    }
+  }
+
+  /**
+   * Return whether the specified worker is blacklisted.
+   * This is used only if cores per executor is not set.
+   */
+  private[master] def isBlacklisted(workerId: String): Boolean = {
+    blacklistedWorkers.contains(workerId)
   }
 
   private var _retryCount = 0

@@ -581,7 +581,7 @@ private[master] class Master(
           .filter { worker =>
             worker.memoryFree >= app.desc.memoryPerExecutorMB &&
             worker.coresFree >= app.desc.coresPerExecutor.getOrElse(1) &&
-            !app.blacklistedWorkers.contains(worker.id)
+            !app.isBlacklisted(worker.id)
           }
           .sortBy(_.coresFree).reverse
         val numUsable = usableWorkers.length
@@ -802,9 +802,7 @@ private[master] class Master(
         // If there are previously blacklisted workers, then we can launch these new executors
         // by unblacklisting a subset of these workers. For more detail, see `handleKillExecutors`.
         if (appInfo.desc.coresPerExecutor.isEmpty) {
-          appInfo.blacklistedWorkers
-            .take(appInfo.numWaitingExecutors)
-            .foreach { workerId => appInfo.blacklistedWorkers.remove(workerId) }
+          appInfo.removeFromBlacklist(appInfo.numWaitingExecutors)
         }
         schedule()
         true
@@ -859,7 +857,7 @@ private[master] class Master(
             // There may be executors waiting to be scheduled once space frees up.
             // If so, leave a few workers unblacklisted to launch these executors.
             executorsToKill.drop(appInfo.numWaitingExecutors).foreach { desc =>
-              appInfo.blacklistedWorkers += desc.worker.id
+              appInfo.blacklistWorker(desc.worker.id)
             }
           }
         }
