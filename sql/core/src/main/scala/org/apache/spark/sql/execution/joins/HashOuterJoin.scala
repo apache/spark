@@ -76,8 +76,7 @@ trait HashOuterJoin {
   }
 
   protected[this] def streamedKeyGenerator(): Projection = {
-    if (self.codegenEnabled &&
-        streamedKeys.map(_.dataType).forall(UnsafeColumnWriter.canEmbed(_))) {
+    if (self.codegenEnabled && UnsafeProjection.canSupport(streamedKeys.map(_.dataType))) {
       UnsafeProjection.create(streamedKeys, streamedPlan.output)
     } else {
       newProjection(streamedKeys, streamedPlan.output)
@@ -213,8 +212,10 @@ trait HashOuterJoin {
   }
 
   protected[this] def buildHashRelation(buildIter: Iterator[InternalRow]): HashedRelation = {
-    if (self.codegenEnabled && buildKeys.map(_.dataType).forall(UnsafeColumnWriter.canEmbed(_))) {
-      UnsafeHashedRelation(buildIter,
+    if (self.codegenEnabled && UnsafeProjection.canSupport(buildKeys.map(_.dataType))
+        && UnsafeProjection.canSupport(buildPlan.output.map(_.dataType))) {
+      UnsafeHashedRelation(
+        buildIter,
         buildKeys.map(BindReferences.bindReference(_, buildPlan.output)),
         buildPlan.schema)
     } else {

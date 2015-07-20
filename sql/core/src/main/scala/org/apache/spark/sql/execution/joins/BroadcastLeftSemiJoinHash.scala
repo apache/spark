@@ -40,16 +40,15 @@ case class BroadcastLeftSemiJoinHash(
     val buildIter = right.execute().map(_.copy()).collect().toIterator
 
     if (condition.isEmpty) {
-      // rowKey may be not serializable (from codegen)
-      val hashSet = buildKeyHashSet(buildIter, copy = true)
+      val hashSet = buildKeyHashSet(buildIter)
       val broadcastedRelation = sparkContext.broadcast(hashSet)
 
       left.execute().mapPartitions { streamIter =>
         hashSemiJoin(streamIter, broadcastedRelation.value)
       }
     } else {
-      val hashRelation = HashedRelation(buildIter, rightKeyGenerator)
-      val broadcastedRelation = sparkContext.broadcast(hashRelation)
+      val hashed = buildHashRelation(buildIter)
+      val broadcastedRelation = sparkContext.broadcast(hashed)
 
       left.execute().mapPartitions { streamIter =>
         hashSemiJoin(streamIter, broadcastedRelation.value)

@@ -70,9 +70,11 @@ class HashedRelationSuite extends SparkFunSuite {
     val hashed = UnsafeHashedRelation(data.iterator, buildKey, schema)
     assert(hashed.isInstanceOf[UnsafeHashedRelation])
 
-    val toUnsafe = UnsafeProjection.create(schema)
-    assert(hashed.get(data(0)) === CompactBuffer[UnsafeRow](toUnsafe(data(0))))
-    assert(hashed.get(data(1)) === CompactBuffer[UnsafeRow](toUnsafe(data(1))))
+    // TODO: enable this once we don't return generic row from UnsafeHashRelation.get()
+    // val toUnsafe = UnsafeProjection.create(schema)
+    val toUnsafe = (x: InternalRow) => x
+    assert(hashed.get(data(0)) === CompactBuffer[InternalRow](toUnsafe(data(0))))
+    assert(hashed.get(data(1)) === CompactBuffer[InternalRow](toUnsafe(data(1))))
     assert(hashed.get(InternalRow(10)) === null)
 
     val data2 = CompactBuffer[InternalRow](toUnsafe(data(2)).copy())
@@ -81,8 +83,8 @@ class HashedRelationSuite extends SparkFunSuite {
 
     val hashed2 = SparkSqlSerializer.deserialize(SparkSqlSerializer.serialize(hashed))
       .asInstanceOf[UnsafeHashedRelation]
-    assert(hashed2.get(data(0)) === CompactBuffer[UnsafeRow](toUnsafe(data(0))))
-    assert(hashed2.get(data(1)) === CompactBuffer[UnsafeRow](toUnsafe(data(1))))
+    assert(hashed2.get(data(0)) === CompactBuffer[InternalRow](toUnsafe(data(0))))
+    assert(hashed2.get(data(1)) === CompactBuffer[InternalRow](toUnsafe(data(1))))
     assert(hashed2.get(InternalRow(10)) === null)
     assert(hashed2.get(data(2)) === data2)
   }

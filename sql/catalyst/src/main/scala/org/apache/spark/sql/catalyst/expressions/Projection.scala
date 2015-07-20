@@ -83,6 +83,9 @@ abstract class UnsafeProjection extends Projection {
 }
 
 object UnsafeProjection {
+  def canSupport(schema: StructType): Boolean = canSupport(schema.fields.map(_.dataType))
+  def canSupport(types: Seq[DataType]): Boolean = types.forall(UnsafeColumnWriter.canEmbed(_))
+
   def create(schema: StructType): UnsafeProjection = create(schema.fields.map(_.dataType))
 
   def create(fields: Array[DataType]): UnsafeProjection = {
