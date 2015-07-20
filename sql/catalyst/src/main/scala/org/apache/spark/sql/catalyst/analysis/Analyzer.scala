@@ -541,7 +541,6 @@ class Analyzer(
     def containsAggregates(exprs: Seq[Expression]): Boolean = {
       exprs.foreach(_.foreach {
         case agg: AggregateExpression => return true
-        case agg2: AggregateExpression2 => return true
         case _ =>
       })
       false

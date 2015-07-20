@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.aggregate2
 
 import org.apache.spark.sql.{SQLConf, AnalysisException, SQLContext}
-import org.apache.spark.sql.catalyst.expressions.{Average => Average1, AggregateExpression}
+import org.apache.spark.sql.catalyst.expressions.{Average => Average1, AggregateExpression1}
 import org.apache.spark.sql.catalyst.expressions.aggregate2.{Average => Average2, AggregateExpression2, Complete}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -38,7 +38,7 @@ case class CheckAggregateFunction(context: SQLContext) extends (LogicalPlan => U
 
   def apply(plan: LogicalPlan): Unit = plan.foreachUp {
     case p if context.conf.useSqlAggregate2 => p.transformExpressionsUp {
-      case agg: AggregateExpression =>
+      case agg: AggregateExpression1 =>
         failAnalysis(s"${SQLConf.USE_SQL_AGGREGATE2} is enabled. Please disable it to use $agg.")
     }
     case p if !context.conf.useSqlAggregate2 => p.transformExpressionsUp {

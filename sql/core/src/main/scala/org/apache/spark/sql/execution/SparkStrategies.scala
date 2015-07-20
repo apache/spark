@@ -184,7 +184,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case _ => Nil
     }
 
-    def canBeCodeGened(aggs: Seq[AggregateExpression]): Boolean = !aggs.exists {
+    def canBeCodeGened(aggs: Seq[AggregateExpression1]): Boolean = !aggs.exists {
       case _: CombineSum | _: Sum | _: Count | _: Max | _: Min |  _: CombineSetsAndCount => false
       // The generated set implementation is pretty limited ATM.
       case CollectHashSet(exprs) if exprs.size == 1  &&
@@ -192,8 +192,8 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case _ => true
     }
 
-    def allAggregates(exprs: Seq[Expression]): Seq[AggregateExpression] =
-      exprs.flatMap(_.collect { case a: AggregateExpression => a })
+    def allAggregates(exprs: Seq[Expression]): Seq[AggregateExpression1] =
+      exprs.flatMap(_.collect { case a: AggregateExpression1 => a })
   }
 
   /**

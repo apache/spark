@@ -20,22 +20,22 @@ package org.apache.spark.sql.catalyst.expressions.aggregate2
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
+import org.apache.spark.sql.catalyst.expressions.codegen.{GeneratedExpressionCode, CodeGenContext}
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.Row
 
-/** The mode of an [[AggregateFunction]]. */
+/** The mode of an [[AggregateFunction1]]. */
 private[sql] sealed trait AggregateMode
 
 /**
- * An [[AggregateFunction]] with [[Partial]] mode is used for partial aggregation.
+ * An [[AggregateFunction1]] with [[Partial]] mode is used for partial aggregation.
  * This function updates the given aggregation buffer with the original input of this
  * function. When it has processed all input rows, the aggregation buffer is returned.
  */
 private[sql] case object Partial extends AggregateMode
 
 /**
- * An [[AggregateFunction]] with [[PartialMerge]] mode is used to merge aggregation buffers
+ * An [[AggregateFunction1]] with [[PartialMerge]] mode is used to merge aggregation buffers
  * containing intermediate results for this function.
  * This function updates the given aggregation buffer by merging multiple aggregation buffers.
  * When it has processed all input rows, the aggregation buffer is returned.
@@ -43,7 +43,7 @@ private[sql] case object Partial extends AggregateMode
 private[sql] case object PartialMerge extends AggregateMode
 
 /**
- * An [[AggregateFunction]] with [[PartialMerge]] mode is used to merge aggregation buffers
+ * An [[AggregateFunction1]] with [[PartialMerge]] mode is used to merge aggregation buffers
  * containing intermediate results for this function and the generate final result.
  * This function updates the given aggregation buffer by merging multiple aggregation buffers.
  * When it has processed all input rows, the final result of this function is returned.
@@ -58,7 +58,7 @@ private[sql] case object Final extends AggregateMode
  */
 private[sql] case object Complete extends AggregateMode
 
-private[sql] case object NoOp extends Expression {
+private[sql] case object NoOp extends Expression with Unevaluable {
   override def nullable: Boolean = true
   override def eval(input: InternalRow): Any = {
     throw new TreeNodeException(
@@ -78,7 +78,7 @@ private[sql] case object NoOp extends Expression {
 private[sql] case class AggregateExpression2(
     aggregateFunction: AggregateFunction2,
     mode: AggregateMode,
-    isDistinct: Boolean) extends Expression {
+    isDistinct: Boolean) extends Expression with Unevaluable {
 
   override def children: Seq[Expression] = aggregateFunction :: Nil
   override def dataType: DataType = aggregateFunction.dataType
@@ -86,11 +86,6 @@ private[sql] case class AggregateExpression2(
   override def nullable: Boolean = aggregateFunction.nullable
 
   override def toString: String = s"(${aggregateFunction}2,mode=$mode,isDistinct=$isDistinct)"
-
-  override def eval(input: InternalRow = null): Any = {
-    throw new TreeNodeException(
-      this, s"No function to evaluate expression. type: ${this.nodeName}")
-  }
 }
 
 abstract class AggregateFunction2
@@ -136,6 +131,9 @@ abstract class AggregateFunction2
    * and `buffer2`.
    */
   def merge(buffer1: MutableRow, buffer2: InternalRow): Unit
+
+  override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String =
+    throw new UnsupportedOperationException(s"Cannot evaluate expression: $this")
 }
 
 /**

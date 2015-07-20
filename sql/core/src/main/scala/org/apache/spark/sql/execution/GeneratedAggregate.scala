@@ -69,7 +69,7 @@ case class GeneratedAggregate(
 
   protected override def doExecute(): RDD[InternalRow] = {
     val aggregatesToCompute = aggregateExpressions.flatMap { a =>
-      a.collect { case agg: AggregateExpression => agg}
+      a.collect { case agg: AggregateExpression1 => agg}
     }
 
     // If you add any new function support, please add tests in org.apache.spark.sql.SQLQuerySuite

@@ -29,7 +29,6 @@ case class Project(projectList: Seq[NamedExpression], child: LogicalPlan) extend
   override lazy val resolved: Boolean = {
     val hasSpecialExpressions = projectList.exists ( _.collect {
         case agg: AggregateExpression => agg
-        case agg: AggregateExpression2 => agg
         case generator: Generator => generator
         case window: WindowExpression => window
       }.nonEmpty
