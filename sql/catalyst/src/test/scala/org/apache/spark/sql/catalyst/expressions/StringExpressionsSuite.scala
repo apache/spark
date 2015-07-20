@@ -290,7 +290,7 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Base64(b), "AQIDBA==", create_row(bytes))
     checkEvaluation(Base64(b), "", create_row(Array[Byte]()))
     checkEvaluation(Base64(b), null, create_row(null))
-    checkEvaluation(Base64(Literal.create(null, StringType)), null, create_row("abdef"))
+    checkEvaluation(Base64(Literal.create(null, BinaryType)), null, create_row("abdef"))
 
     checkEvaluation(UnBase64(a), null, create_row(null))
     checkEvaluation(UnBase64(Literal.create(null, StringType)), null, create_row("abdef"))
