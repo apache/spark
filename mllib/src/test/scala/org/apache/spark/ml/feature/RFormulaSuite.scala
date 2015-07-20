@@ -31,8 +31,9 @@ class RFormulaSuite extends SparkFunSuite with MLlibTestSparkContext {
     val formula = new RFormula().setFormula("id ~ v1 + v2")
     val original = sqlContext.createDataFrame(
       Seq((0, 1.0, 3.0), (2, 2.0, 5.0))).toDF("id", "v1", "v2")
-    val result = formula.transform(original)
-    val resultSchema = formula.transformSchema(original.schema)
+    val model = formula.fit(original)
+    val result = model.transform(original)
+    val resultSchema = model.transformSchema(original.schema)
     val expected = sqlContext.createDataFrame(
       Seq(
         (0, 1.0, 3.0, Vectors.dense(Array(1.0, 3.0)), 0.0),
@@ -47,30 +48,33 @@ class RFormulaSuite extends SparkFunSuite with MLlibTestSparkContext {
   test("features column already exists") {
     val formula = new RFormula().setFormula("y ~ x").setFeaturesCol("x")
     val original = sqlContext.createDataFrame(Seq((0, 1.0), (2, 2.0))).toDF("x", "y")
+    val model = formula.fit(original)
     intercept[IllegalArgumentException] {
-      formula.transformSchema(original.schema)
+      model.transformSchema(original.schema)
     }
     intercept[IllegalArgumentException] {
-      formula.transform(original)
+      model.transform(original)
     }
   }
 
   test("label column already exists") {
     val formula = new RFormula().setFormula("y ~ x").setLabelCol("y")
     val original = sqlContext.createDataFrame(Seq((0, 1.0), (2, 2.0))).toDF("x", "y")
-    val resultSchema = formula.transformSchema(original.schema)
+    val model = formula.fit(original)
+    val resultSchema = model.transformSchema(original.schema)
     assert(resultSchema.length == 3)
-    assert(resultSchema.toString == formula.transform(original).schema.toString)
+    assert(resultSchema.toString == model.transform(original).schema.toString)
   }
 
   test("label column already exists but is not double type") {
     val formula = new RFormula().setFormula("y ~ x").setLabelCol("y")
     val original = sqlContext.createDataFrame(Seq((0, 1), (2, 2))).toDF("x", "y")
+    val model = formula.fit(original)
     intercept[IllegalArgumentException] {
-      formula.transformSchema(original.schema)
+      model.transformSchema(original.schema)
     }
     intercept[IllegalArgumentException] {
-      formula.transform(original)
+      model.transform(original)
     }
   }
 
