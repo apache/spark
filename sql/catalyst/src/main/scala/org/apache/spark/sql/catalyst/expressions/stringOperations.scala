@@ -476,7 +476,7 @@ case class StringRPad(str: Expression, len: Expression, pad: Expression)
 /**
  * Returns the input formatted according do printf-style format strings
  */
-case class StringFormat(children: Expression*) extends Expression with CodegenFallback {
+case class StringFormat(children: Expression*) extends Expression {
 
   require(children.nonEmpty, "printf() should take at least 1 argument")
 
