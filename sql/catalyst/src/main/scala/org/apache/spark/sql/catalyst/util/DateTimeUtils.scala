@@ -573,26 +573,4 @@ object DateTimeUtils {
       dayInYear - 334
     }
   }
-
-  /**
-   * Wrap `stringToTimestamp` to be used in codegen
-   * throw IllegalArgumentException if fails to do conversion
-   */
-  def stringToTimestampTE(s: UTF8String): Long = {
-    stringToTimestamp(s) match {
-      case Some(l) => l
-      case None => throw new IllegalArgumentException("conversion failure")
-    }
-  }
-
-  /**
-   * Wrap `stringToDate` to be used in codegen
-   * throw IllegalArgumentException if fails to do conversion
-   */
-  def stringToDateTE(s: UTF8String): Int = {
-    stringToDate(s) match {
-      case Some(i) => i
-      case None => throw new IllegalArgumentException("conversion failure")
-    }
-  }
 }

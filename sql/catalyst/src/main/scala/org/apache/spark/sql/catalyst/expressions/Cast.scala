@@ -441,9 +441,9 @@ case class Cast(child: Expression, dataType: DataType)
     case _ if to == from => (c, evPrim, evNull) => s"$evPrim = $c;"
     case StringType => castToStringCode(from, ctx)
     case BinaryType => castToBinaryCode(from)
-    case DateType => castToDateCode(from)
+    case DateType => castToDateCode(from, ctx)
     case decimal: DecimalType => castToDecimalCode(from, decimal)
-    case TimestampType => castToTimestampCode(from)
+    case TimestampType => castToTimestampCode(from, ctx)
     case IntervalType => castToIntervalCode(from)
     case BooleanType => castToBooleanCode(from)
     case ByteType => castToByteCode(from)
@@ -490,12 +490,17 @@ case class Cast(child: Expression, dataType: DataType)
       (c, evPrim, evNull) => s"$evPrim = $c.getBytes();"
   }
 
-  private[this] def castToDateCode(from: DataType): CastFunction = from match {
+  private[this] def castToDateCode(
+      from: DataType,
+      ctx: CodeGenContext): CastFunction = from match {
     case StringType =>
+      val intOpt = ctx.freshName("intOpt")
       (c, evPrim, evNull) => s"""
-        try {
-          $evPrim = org.apache.spark.sql.catalyst.util.DateTimeUtils.stringToDateTE($c);
-        } catch (java.lang.IllegalArgumentException e) {
+        scala.Option<Integer> $intOpt =
+          org.apache.spark.sql.catalyst.util.DateTimeUtils.stringToDate($c);
+        if ($intOpt.isDefined()) {
+          $evPrim = ((Integer) $intOpt.get()).intValue();
+        } else {
           $evNull = true;
         }
        """
@@ -589,13 +594,18 @@ case class Cast(child: Expression, dataType: DataType)
     }
   }
 
-  private[this] def castToTimestampCode(from: DataType): CastFunction = from match {
+  private[this] def castToTimestampCode(
+      from: DataType,
+      ctx: CodeGenContext): CastFunction = from match {
     case StringType =>
+      val longOpt = ctx.freshName("longOpt")
       (c, evPrim, evNull) =>
         s"""
-          try {
-            $evPrim = org.apache.spark.sql.catalyst.util.DateTimeUtils.stringToTimestampTE($c);
-          } catch (java.lang.IllegalArgumentException e) {
+          scala.Option<Long> $longOpt =
+            org.apache.spark.sql.catalyst.util.DateTimeUtils.stringToTimestamp($c);
+          if ($longOpt.isDefined()) {
+            $evPrim = ((Long) $longOpt.get()).longValue();
+          } else {
             $evNull = true;
           }
          """
