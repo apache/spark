@@ -31,13 +31,13 @@ import org.apache.spark.unsafe.types.UTF8String
  * precision.
  */
 object DateTimeUtils {
-  final val MILLIS_PER_DAY = SECONDS_PER_DAY * 1000L
-
   // see http://stackoverflow.com/questions/466321/convert-unix-timestamp-to-julian
   final val JULIAN_DAY_OF_EPOCH = 2440587  // and .5
   final val SECONDS_PER_DAY = 60 * 60 * 24L
   final val MICROS_PER_SECOND = 1000L * 1000L
   final val NANOS_PER_SECOND = MICROS_PER_SECOND * 1000L
+
+  final val MILLIS_PER_DAY = SECONDS_PER_DAY * 1000L
 
   // number of days in 400 years
   final val daysIn400Years: Int = 146097
