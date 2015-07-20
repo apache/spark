@@ -124,7 +124,7 @@ case class InsertIntoHiveTable(
     saveAsHiveFile(
       sc.sparkContext,
       child.execute(),
-      StructType.fromAttributes(output),
+      table.schema,
       outputClass,
       fileSinkConf,
       jobConfSer,
