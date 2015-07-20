@@ -286,4 +286,12 @@ public class UTF8StringSuite {
     assertEquals(
         UTF8String.fromString("世界千世").levenshteinDistance(UTF8String.fromString("千a世b")),4);
   }
+
+  @Test
+  public void createBlankString() {
+    assertEquals(fromString(" "), blankString(1));
+    assertEquals(fromString("  "), blankString(2));
+    assertEquals(fromString("   "), blankString(3));
+    assertEquals(fromString(""), blankString(0));
+  }
 }

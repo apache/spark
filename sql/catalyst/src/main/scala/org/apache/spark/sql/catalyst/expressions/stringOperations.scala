@@ -549,21 +549,13 @@ case class StringSpace(child: Expression)
   override def inputTypes: Seq[DataType] = Seq(IntegerType)
 
   override def nullSafeEval(s: Any): Any = {
-    val length = s.asInstanceOf[Integer]
-
-    val spaces = new Array[Byte](if (length < 0) 0 else length)
-    java.util.Arrays.fill(spaces, ' '.asInstanceOf[Byte])
-    UTF8String.fromBytes(spaces)
+    val length = s.asInstanceOf[Int]
+    UTF8String.blankString(if (length < 0) 0 else length)
   }
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    nullSafeCodeGen(ctx, ev, (length) => {
-      val spaces = ctx.freshName("spaces")
-      s"""
-        byte[] $spaces = new byte[($length < 0) ? 0 : $length];
-        java.util.Arrays.fill($spaces, (byte) ' ');
-        ${ev.primitive} = UTF8String.fromBytes($spaces);
-       """})
+    nullSafeCodeGen(ctx, ev, (length) =>
+      s"""${ev.primitive} = UTF8String.blankString(($length < 0) ? 0 : $length);""")
   }
 
   override def prettyName: String = "space"
