@@ -626,9 +626,9 @@ class SparseVector(Vector):
         11.0
         >>> b = SparseVector(4, [2], [1.0])
         >>> a.squared_distance(b)
-        30.0
+        26.0
         >>> b.squared_distance(a)
-        30.0
+        26.0
         >>> b.squared_distance([1., 2.])
         Traceback (most recent call last):
             ...
