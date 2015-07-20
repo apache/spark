@@ -62,7 +62,6 @@ case class BroadcastHashOuterJoin(
     // Note that we use .execute().collect() because we don't want to convert data to Scala types
     val input: Array[InternalRow] = buildPlan.execute().map(_.copy()).collect()
     val hashed = buildHashRelation(input.iterator)
-    //val hashed = buildHashTable(input.iterator, newProjection(buildKeys, buildPlan.output))
     sparkContext.broadcast(hashed)
   }(BroadcastHashOuterJoin.broadcastHashOuterJoinExecutionContext)
 
