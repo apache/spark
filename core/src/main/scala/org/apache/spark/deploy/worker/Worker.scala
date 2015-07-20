@@ -582,6 +582,7 @@ private[worker] class Worker(
           Utils.deleteRecursively(new File(dir))
         }
       }
+      shuffleService.applicationRemoved(id)
     }
   }
 
