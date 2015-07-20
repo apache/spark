@@ -72,7 +72,7 @@ class ExternalShuffleService(sparkConf: SparkConf, securityManager: SecurityMana
 
   /** Clean up all shuffle files associated with an application that has exited. */
   def applicationRemoved(appId: String): Unit = {
-    blockHandler.applicationRemoved(appId, /* cleanupLocalDirs */ true)
+    blockHandler.applicationRemoved(appId, true /* cleanupLocalDirs */)
   }
 
   def stop() {
