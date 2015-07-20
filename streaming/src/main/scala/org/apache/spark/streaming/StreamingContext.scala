@@ -192,17 +192,16 @@ class StreamingContext private[streaming] (
       None
     }
 
-  /** Register streaming source to metrics system */
+  /* Initializing a streamingSource to register metrics */
   private val streamingSource = new StreamingSource(this)
-  assert(env != null)
-  assert(env.metricsSystem != null)
-  env.metricsSystem.registerSource(streamingSource)
 
   private var state: StreamingContextState = INITIALIZED
 
   private val startSite = new AtomicReference[CallSite](null)
 
   private var shutdownHookRef: AnyRef = _
+
+  conf.getOption("spark.streaming.checkpoint.directory").foreach(checkpoint)
 
   /**
    * Return the associated Spark context
@@ -606,6 +605,9 @@ class StreamingContext private[streaming] (
         }
         shutdownHookRef = Utils.addShutdownHook(
           StreamingContext.SHUTDOWN_HOOK_PRIORITY)(stopOnShutdown)
+        // Registering Streaming Metrics at the start of the StreamingContext
+        assert(env.metricsSystem != null)
+        env.metricsSystem.registerSource(streamingSource)
         uiTab.foreach(_.attach())
         logInfo("StreamingContext started")
       case ACTIVE =>
@@ -682,6 +684,8 @@ class StreamingContext private[streaming] (
           logWarning("StreamingContext has already been stopped")
         case ACTIVE =>
           scheduler.stop(stopGracefully)
+          // Removing the streamingSource to de-register the metrics on stop()
+          env.metricsSystem.removeSource(streamingSource)
           uiTab.foreach(_.detach())
           StreamingContext.setActiveContext(null)
           waiter.notifyStop()

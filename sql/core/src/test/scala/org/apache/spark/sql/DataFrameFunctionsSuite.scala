@@ -79,10 +79,42 @@ class DataFrameFunctionsSuite extends QueryTest {
     assert(row.getAs[Row](0) === Row(2, "str"))
   }
 
-  test("struct: must use named column expression") {
-    intercept[IllegalArgumentException] {
-      struct(col("a") * 2)
-    }
+  test("struct with column expression to be automatically named") {
+    val df = Seq((1, "str")).toDF("a", "b")
+    val result = df.select(struct((col("a") * 2), col("b")))
+
+    val expectedType = StructType(Seq(
+      StructField("col1", IntegerType, nullable = false),
+      StructField("b", StringType)
+    ))
+    assert(result.first.schema(0).dataType === expectedType)
+    checkAnswer(result, Row(Row(2, "str")))
+  }
+
+  test("struct with literal columns") {
+    val df = Seq((1, "str1"), (2, "str2")).toDF("a", "b")
+    val result = df.select(struct((col("a") * 2), lit(5.0)))
+
+    val expectedType = StructType(Seq(
+      StructField("col1", IntegerType, nullable = false),
+      StructField("col2", DoubleType, nullable = false)
+    ))
+
+    assert(result.first.schema(0).dataType === expectedType)
+    checkAnswer(result, Seq(Row(Row(2, 5.0)), Row(Row(4, 5.0))))
+  }
+
+  test("struct with all literal columns") {
+    val df = Seq((1, "str1"), (2, "str2")).toDF("a", "b")
+    val result = df.select(struct(lit("v"), lit(5.0)))
+
+    val expectedType = StructType(Seq(
+      StructField("col1", StringType, nullable = false),
+      StructField("col2", DoubleType, nullable = false)
+    ))
+
+    assert(result.first.schema(0).dataType === expectedType)
+    checkAnswer(result, Seq(Row(Row("v", 5.0)), Row(Row("v", 5.0))))
   }
 
   test("constant functions") {
@@ -176,21 +208,63 @@ class DataFrameFunctionsSuite extends QueryTest {
       Row(2743272264L, 2180413220L))
   }
 
-  test("string length function") {
+  test("conditional function: least") {
     checkAnswer(
-      nullStrings.select(strlen($"s"), strlen("s")),
-      nullStrings.collect().toSeq.map { r =>
-        val v = r.getString(1)
-        val l = if (v == null) null else v.length
-        Row(l, l)
-      })
-
+      testData2.select(least(lit(-1), lit(0), col("a"), col("b"))).limit(1),
+      Row(-1)
+    )
     checkAnswer(
-      nullStrings.selectExpr("length(s)"),
-      nullStrings.collect().toSeq.map { r =>
-        val v = r.getString(1)
-        val l = if (v == null) null else v.length
-        Row(l)
-      })
+      ctx.sql("SELECT least(a, 2) as l from testData2 order by l"),
+      Seq(Row(1), Row(1), Row(2), Row(2), Row(2), Row(2))
+    )
   }
+
+  test("conditional function: greatest") {
+    checkAnswer(
+      testData2.select(greatest(lit(2), lit(3), col("a"), col("b"))).limit(1),
+      Row(3)
+    )
+    checkAnswer(
+      ctx.sql("SELECT greatest(a, 2) as g from testData2 order by g"),
+      Seq(Row(2), Row(2), Row(2), Row(2), Row(3), Row(3))
+    )
+  }
+
+  test("pmod") {
+    val intData = Seq((7, 3), (-7, 3)).toDF("a", "b")
+    checkAnswer(
+      intData.select(pmod('a, 'b)),
+      Seq(Row(1), Row(2))
+    )
+    checkAnswer(
+      intData.select(pmod('a, lit(3))),
+      Seq(Row(1), Row(2))
+    )
+    checkAnswer(
+      intData.select(pmod(lit(-7), 'b)),
+      Seq(Row(2), Row(2))
+    )
+    checkAnswer(
+      intData.selectExpr("pmod(a, b)"),
+      Seq(Row(1), Row(2))
+    )
+    checkAnswer(
+      intData.selectExpr("pmod(a, 3)"),
+      Seq(Row(1), Row(2))
+    )
+    checkAnswer(
+      intData.selectExpr("pmod(-7, b)"),
+      Seq(Row(2), Row(2))
+    )
+    val doubleData = Seq((7.2, 4.1)).toDF("a", "b")
+    checkAnswer(
+      doubleData.select(pmod('a, 'b)),
+      Seq(Row(3.1000000000000005)) // same as hive
+    )
+    checkAnswer(
+      doubleData.select(pmod(lit(2), lit(Int.MaxValue))),
+      Seq(Row(2))
+    )
+  }
+
 }

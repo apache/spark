@@ -28,6 +28,7 @@ import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat}
 
 import org.apache.spark.rdd.{RDD, UnionRDD}
 import org.apache.spark.streaming._
+import org.apache.spark.streaming.scheduler.StreamInputInfo
 import org.apache.spark.util.{SerializableConfiguration, TimeStampedHashMap, Utils}
 
 /**
@@ -144,7 +145,14 @@ class FileInputDStream[K, V, F <: NewInputFormat[K, V]](
     logInfo("New files at time " + validTime + ":\n" + newFiles.mkString("\n"))
     batchTimeToSelectedFiles += ((validTime, newFiles))
     recentlySelectedFiles ++= newFiles
-    Some(filesToRDD(newFiles))
+    val rdds = Some(filesToRDD(newFiles))
+    // Copy newFiles to immutable.List to prevent from being modified by the user
+    val metadata = Map(
+      "files" -> newFiles.toList,
+      StreamInputInfo.METADATA_KEY_DESCRIPTION -> newFiles.mkString("\n"))
+    val inputInfo = StreamInputInfo(id, 0, metadata)
+    ssc.scheduler.inputInfoTracker.reportInfo(validTime, inputInfo)
+    rdds
   }
 
   /** Clear the old time-to-files mappings along with old RDDs */

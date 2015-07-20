@@ -17,14 +17,16 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.types._
 
 /**
  * Returns an Array containing the evaluation of all children expressions.
  */
-case class CreateArray(children: Seq[Expression]) extends Expression {
+case class CreateArray(children: Seq[Expression]) extends Expression with CodegenFallback {
 
   override def foldable: Boolean = children.forall(_.foldable)
 
@@ -43,16 +45,18 @@ case class CreateArray(children: Seq[Expression]) extends Expression {
     children.map(_.eval(input))
   }
 
-  override def toString: String = s"Array(${children.mkString(",")})"
+  override def prettyName: String = "array"
 }
 
 /**
  * Returns a Row containing the evaluation of all children expressions.
  * TODO: [[CreateStruct]] does not support codegen.
  */
-case class CreateStruct(children: Seq[Expression]) extends Expression {
+case class CreateStruct(children: Seq[Expression]) extends Expression with CodegenFallback {
 
   override def foldable: Boolean = children.forall(_.foldable)
+
+  override lazy val resolved: Boolean = childrenResolved
 
   override lazy val dataType: StructType = {
     val fields = children.zipWithIndex.map { case (child, idx) =>
@@ -71,4 +75,52 @@ case class CreateStruct(children: Seq[Expression]) extends Expression {
   override def eval(input: InternalRow): Any = {
     InternalRow(children.map(_.eval(input)): _*)
   }
+
+  override def prettyName: String = "struct"
+}
+
+/**
+ * Creates a struct with the given field names and values
+ *
+ * @param children Seq(name1, val1, name2, val2, ...)
+ */
+case class CreateNamedStruct(children: Seq[Expression]) extends Expression with CodegenFallback {
+
+  private lazy val (nameExprs, valExprs) =
+    children.grouped(2).map { case Seq(name, value) => (name, value) }.toList.unzip
+
+  private lazy val names = nameExprs.map(_.eval(EmptyRow).toString)
+
+  override lazy val dataType: StructType = {
+    val fields = names.zip(valExprs).map { case (name, valExpr) =>
+      StructField(name, valExpr.dataType, valExpr.nullable, Metadata.empty)
+    }
+    StructType(fields)
+  }
+
+  override def foldable: Boolean = valExprs.forall(_.foldable)
+
+  override def nullable: Boolean = false
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    if (children.size % 2 != 0) {
+      TypeCheckResult.TypeCheckFailure(s"$prettyName expects an even number of arguments.")
+    } else {
+      val invalidNames =
+        nameExprs.filterNot(e => e.foldable && e.dataType == StringType && !nullable)
+      if (invalidNames.nonEmpty) {
+        TypeCheckResult.TypeCheckFailure(
+          s"Odd position only allow foldable and not-null StringType expressions, got :" +
+            s" ${invalidNames.mkString(",")}")
+      } else {
+        TypeCheckResult.TypeCheckSuccess
+      }
+    }
+  }
+
+  override def eval(input: InternalRow): Any = {
+    InternalRow(valExprs.map(_.eval(input)): _*)
+  }
+
+  override def prettyName: String = "named_struct"
 }

@@ -17,8 +17,10 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import javax.annotation.Nullable
+
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, Union}
+import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.types._
 
@@ -33,7 +35,6 @@ object HiveTypeCoercion {
 
   val typeCoercionRules =
     PropagateTypes ::
-      ConvertNaNs ::
       InConversion ::
       WidenTypes ::
       PromoteStrings ::
@@ -45,7 +46,7 @@ object HiveTypeCoercion {
       IfCoercion ::
       Division ::
       PropagateTypes ::
-      AddCastForAutoCastInputTypes ::
+      ImplicitTypeCasts ::
       Nil
 
   // See https://cwiki.apache.org/confluence/display/Hive/LanguageManual+Types.
@@ -147,37 +148,6 @@ object HiveTypeCoercion {
   }
 
   /**
-   * Converts string "NaN"s that are in binary operators with a NaN-able types (Float / Double) to
-   * the appropriate numeric equivalent.
-   */
-  object ConvertNaNs extends Rule[LogicalPlan] {
-    private val StringNaN = Literal("NaN")
-
-    def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-      case q: LogicalPlan => q transformExpressions {
-        // Skip nodes who's children have not been resolved yet.
-        case e if !e.childrenResolved => e
-
-        /* Double Conversions */
-        case b @ BinaryExpression(StringNaN, right @ DoubleType()) =>
-          b.makeCopy(Array(Literal(Double.NaN), right))
-        case b @ BinaryExpression(left @ DoubleType(), StringNaN) =>
-          b.makeCopy(Array(left, Literal(Double.NaN)))
-
-        /* Float Conversions */
-        case b @ BinaryExpression(StringNaN, right @ FloatType()) =>
-          b.makeCopy(Array(Literal(Float.NaN), right))
-        case b @ BinaryExpression(left @ FloatType(), StringNaN) =>
-          b.makeCopy(Array(left, Literal(Float.NaN)))
-
-        /* Use float NaN by default to avoid unnecessary type widening */
-        case b @ BinaryExpression(left @ StringNaN, StringNaN) =>
-          b.makeCopy(Array(left, Literal(Float.NaN)))
-      }
-    }
-  }
-
-  /**
    * Widens numeric types and converts strings to numbers when appropriate.
    *
    * Loosely based on rules from "Hadoop: The Definitive Guide" 2nd edition, by Tom White
@@ -198,65 +168,65 @@ object HiveTypeCoercion {
    * - LongType to DoubleType
    */
   object WidenTypes extends Rule[LogicalPlan] {
-    def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-      // TODO: unions with fixed-precision decimals
-      case u @ Union(left, right) if u.childrenResolved && !u.resolved =>
-        val castedInput = left.output.zip(right.output).map {
-          // When a string is found on one side, make the other side a string too.
-          case (lhs, rhs) if lhs.dataType == StringType && rhs.dataType != StringType =>
-            (lhs, Alias(Cast(rhs, StringType), rhs.name)())
-          case (lhs, rhs) if lhs.dataType != StringType && rhs.dataType == StringType =>
-            (Alias(Cast(lhs, StringType), lhs.name)(), rhs)
 
-          case (lhs, rhs) if lhs.dataType != rhs.dataType =>
-            logDebug(s"Resolving mismatched union input ${lhs.dataType}, ${rhs.dataType}")
-            findTightestCommonTypeOfTwo(lhs.dataType, rhs.dataType).map { widestType =>
-              val newLeft =
-                if (lhs.dataType == widestType) lhs else Alias(Cast(lhs, widestType), lhs.name)()
-              val newRight =
-                if (rhs.dataType == widestType) rhs else Alias(Cast(rhs, widestType), rhs.name)()
+    private[this] def widenOutputTypes(planName: String, left: LogicalPlan, right: LogicalPlan):
+        (LogicalPlan, LogicalPlan) = {
 
-              (newLeft, newRight)
-            }.getOrElse {
-              // If there is no applicable conversion, leave expression unchanged.
-              (lhs, rhs)
-            }
+      // TODO: with fixed-precision decimals
+      val castedInput = left.output.zip(right.output).map {
+        // When a string is found on one side, make the other side a string too.
+        case (lhs, rhs) if lhs.dataType == StringType && rhs.dataType != StringType =>
+          (lhs, Alias(Cast(rhs, StringType), rhs.name)())
+        case (lhs, rhs) if lhs.dataType != StringType && rhs.dataType == StringType =>
+          (Alias(Cast(lhs, StringType), lhs.name)(), rhs)
 
-          case other => other
+        case (lhs, rhs) if lhs.dataType != rhs.dataType =>
+          logDebug(s"Resolving mismatched $planName input ${lhs.dataType}, ${rhs.dataType}")
+          findTightestCommonTypeOfTwo(lhs.dataType, rhs.dataType).map { widestType =>
+            val newLeft =
+              if (lhs.dataType == widestType) lhs else Alias(Cast(lhs, widestType), lhs.name)()
+            val newRight =
+              if (rhs.dataType == widestType) rhs else Alias(Cast(rhs, widestType), rhs.name)()
+
+            (newLeft, newRight)
+          }.getOrElse {
+            // If there is no applicable conversion, leave expression unchanged.
+            (lhs, rhs)
+          }
+
+        case other => other
+      }
+
+      val (castedLeft, castedRight) = castedInput.unzip
+
+      val newLeft =
+        if (castedLeft.map(_.dataType) != left.output.map(_.dataType)) {
+          logDebug(s"Widening numeric types in $planName $castedLeft ${left.output}")
+          Project(castedLeft, left)
+        } else {
+          left
         }
 
-        val (castedLeft, castedRight) = castedInput.unzip
+      val newRight =
+        if (castedRight.map(_.dataType) != right.output.map(_.dataType)) {
+          logDebug(s"Widening numeric types in $planName $castedRight ${right.output}")
+          Project(castedRight, right)
+        } else {
+          right
+        }
+      (newLeft, newRight)
+    }
 
-        val newLeft =
-          if (castedLeft.map(_.dataType) != left.output.map(_.dataType)) {
-            logDebug(s"Widening numeric types in union $castedLeft ${left.output}")
-            Project(castedLeft, left)
-          } else {
-            left
-          }
-
-        val newRight =
-          if (castedRight.map(_.dataType) != right.output.map(_.dataType)) {
-            logDebug(s"Widening numeric types in union $castedRight ${right.output}")
-            Project(castedRight, right)
-          } else {
-            right
-          }
-
+    def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+      case u @ Union(left, right) if u.childrenResolved && !u.resolved =>
+        val (newLeft, newRight) = widenOutputTypes(u.nodeName, left, right)
         Union(newLeft, newRight)
-
-      // Also widen types for BinaryExpressions.
-      case q: LogicalPlan => q transformExpressions {
-        // Skip nodes who's children have not been resolved yet.
-        case e if !e.childrenResolved => e
-
-        case b @ BinaryExpression(left, right) if left.dataType != right.dataType =>
-          findTightestCommonTypeOfTwo(left.dataType, right.dataType).map { widestType =>
-            val newLeft = if (left.dataType == widestType) left else Cast(left, widestType)
-            val newRight = if (right.dataType == widestType) right else Cast(right, widestType)
-            b.makeCopy(Array(newLeft, newRight))
-          }.getOrElse(b)  // If there is no applicable conversion, leave expression unchanged.
-      }
+      case e @ Except(left, right) if e.childrenResolved && !e.resolved =>
+        val (newLeft, newRight) = widenOutputTypes(e.nodeName, left, right)
+        Except(newLeft, newRight)
+      case i @ Intersect(left, right) if i.childrenResolved && !i.resolved =>
+        val (newLeft, newRight) = widenOutputTypes(i.nodeName, left, right)
+        Intersect(newLeft, newRight)
     }
   }
 
@@ -365,7 +335,7 @@ object HiveTypeCoercion {
    * - INT gets turned into DECIMAL(10, 0)
    * - LONG gets turned into DECIMAL(20, 0)
    * - FLOAT and DOUBLE
-   *   1. Union operation:
+   *   1. Union, Intersect and Except operations:
    *      FLOAT gets turned into DECIMAL(7, 7), DOUBLE gets turned into DECIMAL(15, 15) (this is the
    *      same as Hive)
    *   2. Other operation:
@@ -392,47 +362,59 @@ object HiveTypeCoercion {
       DoubleType -> DecimalType(15, 15)
     )
 
-    def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-      // fix decimal precision for union
-      case u @ Union(left, right) if u.childrenResolved && !u.resolved =>
-        val castedInput = left.output.zip(right.output).map {
-          case (lhs, rhs) if lhs.dataType != rhs.dataType =>
-            (lhs.dataType, rhs.dataType) match {
-              case (DecimalType.Fixed(p1, s1), DecimalType.Fixed(p2, s2)) =>
-                // Union decimals with precision/scale p1/s2 and p2/s2  will be promoted to
-                // DecimalType(max(s1, s2) + max(p1-s1, p2-s2), max(s1, s2))
-                val fixedType = DecimalType(max(s1, s2) + max(p1 - s1, p2 - s2), max(s1, s2))
-                (Alias(Cast(lhs, fixedType), lhs.name)(), Alias(Cast(rhs, fixedType), rhs.name)())
-              case (t, DecimalType.Fixed(p, s)) if intTypeToFixed.contains(t) =>
-                (Alias(Cast(lhs, intTypeToFixed(t)), lhs.name)(), rhs)
-              case (DecimalType.Fixed(p, s), t) if intTypeToFixed.contains(t) =>
-                (lhs, Alias(Cast(rhs, intTypeToFixed(t)), rhs.name)())
-              case (t, DecimalType.Fixed(p, s)) if floatTypeToFixed.contains(t) =>
-                (Alias(Cast(lhs, floatTypeToFixed(t)), lhs.name)(), rhs)
-              case (DecimalType.Fixed(p, s), t) if floatTypeToFixed.contains(t) =>
-                (lhs, Alias(Cast(rhs, floatTypeToFixed(t)), rhs.name)())
-              case _ => (lhs, rhs)
-            }
-          case other => other
+    private def castDecimalPrecision(
+        left: LogicalPlan,
+        right: LogicalPlan): (LogicalPlan, LogicalPlan) = {
+      val castedInput = left.output.zip(right.output).map {
+        case (lhs, rhs) if lhs.dataType != rhs.dataType =>
+          (lhs.dataType, rhs.dataType) match {
+            case (DecimalType.Fixed(p1, s1), DecimalType.Fixed(p2, s2)) =>
+              // Decimals with precision/scale p1/s2 and p2/s2  will be promoted to
+              // DecimalType(max(s1, s2) + max(p1-s1, p2-s2), max(s1, s2))
+              val fixedType = DecimalType(max(s1, s2) + max(p1 - s1, p2 - s2), max(s1, s2))
+              (Alias(Cast(lhs, fixedType), lhs.name)(), Alias(Cast(rhs, fixedType), rhs.name)())
+            case (t, DecimalType.Fixed(p, s)) if intTypeToFixed.contains(t) =>
+              (Alias(Cast(lhs, intTypeToFixed(t)), lhs.name)(), rhs)
+            case (DecimalType.Fixed(p, s), t) if intTypeToFixed.contains(t) =>
+              (lhs, Alias(Cast(rhs, intTypeToFixed(t)), rhs.name)())
+            case (t, DecimalType.Fixed(p, s)) if floatTypeToFixed.contains(t) =>
+              (Alias(Cast(lhs, floatTypeToFixed(t)), lhs.name)(), rhs)
+            case (DecimalType.Fixed(p, s), t) if floatTypeToFixed.contains(t) =>
+              (lhs, Alias(Cast(rhs, floatTypeToFixed(t)), rhs.name)())
+            case _ => (lhs, rhs)
+          }
+        case other => other
+      }
+
+      val (castedLeft, castedRight) = castedInput.unzip
+
+      val newLeft =
+        if (castedLeft.map(_.dataType) != left.output.map(_.dataType)) {
+          Project(castedLeft, left)
+        } else {
+          left
         }
 
-        val (castedLeft, castedRight) = castedInput.unzip
+      val newRight =
+        if (castedRight.map(_.dataType) != right.output.map(_.dataType)) {
+          Project(castedRight, right)
+        } else {
+          right
+        }
+      (newLeft, newRight)
+    }
 
-        val newLeft =
-          if (castedLeft.map(_.dataType) != left.output.map(_.dataType)) {
-            Project(castedLeft, left)
-          } else {
-            left
-          }
-
-        val newRight =
-          if (castedRight.map(_.dataType) != right.output.map(_.dataType)) {
-            Project(castedRight, right)
-          } else {
-            right
-          }
-
+    def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+      // fix decimal precision for union, intersect and except
+      case u @ Union(left, right) if u.childrenResolved && !u.resolved =>
+        val (newLeft, newRight) = castDecimalPrecision(left, right)
         Union(newLeft, newRight)
+      case i @ Intersect(left, right) if i.childrenResolved && !i.resolved =>
+        val (newLeft, newRight) = castDecimalPrecision(left, right)
+        Intersect(newLeft, newRight)
+      case e @ Except(left, right) if e.childrenResolved && !e.resolved =>
+        val (newLeft, newRight) = castDecimalPrecision(left, right)
+        Except(newLeft, newRight)
 
       // fix decimal precision for expressions
       case q => q.transformExpressions {
@@ -469,6 +451,12 @@ object HiveTypeCoercion {
             DecimalType(min(p1 - s1, p2 - s2) + max(s1, s2), max(s1, s2))
           )
 
+        case Pmod(e1 @ DecimalType.Expression(p1, s1), e2 @ DecimalType.Expression(p2, s2)) =>
+          Cast(
+            Pmod(Cast(e1, DecimalType.Unlimited), Cast(e2, DecimalType.Unlimited)),
+            DecimalType(min(p1 - s1, p2 - s2) + max(s1, s2), max(s1, s2))
+          )
+
         // When we compare 2 decimal types with different precisions, cast them to the smallest
         // common precision.
         case b @ BinaryComparison(e1 @ DecimalType.Expression(p1, s1),
@@ -478,7 +466,7 @@ object HiveTypeCoercion {
 
         // Promote integers inside a binary expression with fixed-precision decimals to decimals,
         // and fixed-precision decimals in an expression with floats / doubles to doubles
-        case b @ BinaryExpression(left, right) if left.dataType != right.dataType =>
+        case b @ BinaryOperator(left, right) if left.dataType != right.dataType =>
           (left.dataType, right.dataType) match {
             case (t, DecimalType.Fixed(p, s)) if intTypeToFixed.contains(t) =>
               b.makeCopy(Array(Cast(left, intTypeToFixed(t)), right))
@@ -702,20 +690,97 @@ object HiveTypeCoercion {
   }
 
   /**
-   * Casts types according to the expected input types for Expressions that have the trait
-   * [[AutoCastInputTypes]].
+   * Casts types according to the expected input types for [[Expression]]s.
    */
-  object AddCastForAutoCastInputTypes extends Rule[LogicalPlan] {
+  object ImplicitTypeCasts extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
 
-      case e: AutoCastInputTypes if e.children.map(_.dataType) != e.expectedChildTypes =>
-        val newC = (e.children, e.children.map(_.dataType), e.expectedChildTypes).zipped.map {
-          case (child, actual, expected) =>
-            if (actual == expected) child else Cast(child, expected)
+      case b @ BinaryOperator(left, right) if left.dataType != right.dataType =>
+        findTightestCommonTypeOfTwo(left.dataType, right.dataType).map { commonType =>
+          if (b.inputType.acceptsType(commonType)) {
+            // If the expression accepts the tightest common type, cast to that.
+            val newLeft = if (left.dataType == commonType) left else Cast(left, commonType)
+            val newRight = if (right.dataType == commonType) right else Cast(right, commonType)
+            b.withNewChildren(Seq(newLeft, newRight))
+          } else {
+            // Otherwise, don't do anything with the expression.
+            b
+          }
+        }.getOrElse(b)  // If there is no applicable conversion, leave expression unchanged.
+
+      case e: ImplicitCastInputTypes if e.inputTypes.nonEmpty =>
+        val children: Seq[Expression] = e.children.zip(e.inputTypes).map { case (in, expected) =>
+          // If we cannot do the implicit cast, just use the original input.
+          implicitCast(in, expected).getOrElse(in)
         }
-        e.withNewChildren(newC)
+        e.withNewChildren(children)
+
+      case e: ExpectsInputTypes if e.inputTypes.nonEmpty =>
+        // Convert NullType into some specific target type for ExpectsInputTypes that don't do
+        // general implicit casting.
+        val children: Seq[Expression] = e.children.zip(e.inputTypes).map { case (in, expected) =>
+          if (in.dataType == NullType && !expected.acceptsType(NullType)) {
+            Literal.create(null, expected.defaultConcreteType)
+          } else {
+            in
+          }
+        }
+        e.withNewChildren(children)
+    }
+
+    /**
+     * Given an expected data type, try to cast the expression and return the cast expression.
+     *
+     * If the expression already fits the input type, we simply return the expression itself.
+     * If the expression has an incompatible type that cannot be implicitly cast, return None.
+     */
+    def implicitCast(e: Expression, expectedType: AbstractDataType): Option[Expression] = {
+      val inType = e.dataType
+
+      // Note that ret is nullable to avoid typing a lot of Some(...) in this local scope.
+      // We wrap immediately an Option after this.
+      @Nullable val ret: Expression = (inType, expectedType) match {
+
+        // If the expected type is already a parent of the input type, no need to cast.
+        case _ if expectedType.acceptsType(inType) => e
+
+        // Cast null type (usually from null literals) into target types
+        case (NullType, target) => Cast(e, target.defaultConcreteType)
+
+        // If the function accepts any numeric type and the input is a string, we follow the hive
+        // convention and cast that input into a double
+        case (StringType, NumericType) => Cast(e, NumericType.defaultConcreteType)
+
+        // Implicit cast among numeric types. When we reach here, input type is not acceptable.
+
+        // If input is a numeric type but not decimal, and we expect a decimal type,
+        // cast the input to unlimited precision decimal.
+        case (_: NumericType, DecimalType) => Cast(e, DecimalType.Unlimited)
+        // For any other numeric types, implicitly cast to each other, e.g. long -> int, int -> long
+        case (_: NumericType, target: NumericType) => Cast(e, target)
+
+        // Implicit cast between date time types
+        case (DateType, TimestampType) => Cast(e, TimestampType)
+        case (TimestampType, DateType) => Cast(e, DateType)
+
+        // Implicit cast from/to string
+        case (StringType, DecimalType) => Cast(e, DecimalType.Unlimited)
+        case (StringType, target: NumericType) => Cast(e, target)
+        case (StringType, DateType) => Cast(e, DateType)
+        case (StringType, TimestampType) => Cast(e, TimestampType)
+        case (StringType, BinaryType) => Cast(e, BinaryType)
+        case (any, StringType) if any != StringType => Cast(e, StringType)
+
+        // When we reach here, input type is not acceptable for any types in this type collection,
+        // try to find the first one we can implicitly cast.
+        case (_, TypeCollection(types)) => types.flatMap(implicitCast(e, _)).headOption.orNull
+
+        // Else, just return the same input expression
+        case _ => null
+      }
+      Option(ret)
     }
   }
 }

@@ -53,41 +53,13 @@ abstract class InternalRow extends Row {
 
   // A default implementation to change the return type
   override def copy(): InternalRow = this
-  override def apply(i: Int): Any = get(i)
 
-  override def equals(o: Any): Boolean = {
-    if (!o.isInstanceOf[Row]) {
-      return false
-    }
-
-    val other = o.asInstanceOf[Row]
-    if (length != other.length) {
-      return false
-    }
-
-    var i = 0
-    while (i < length) {
-      if (isNullAt(i) != other.isNullAt(i)) {
-        return false
-      }
-      if (!isNullAt(i)) {
-        val o1 = apply(i)
-        val o2 = other.apply(i)
-        if (o1.isInstanceOf[Array[Byte]]) {
-          // handle equality of Array[Byte]
-          val b1 = o1.asInstanceOf[Array[Byte]]
-          if (!o2.isInstanceOf[Array[Byte]] ||
-            !java.util.Arrays.equals(b1, o2.asInstanceOf[Array[Byte]])) {
-            return false
-          }
-        } else if (o1 != o2) {
-          return false
-        }
-      }
-      i += 1
-    }
-    true
-  }
+  /**
+   * Returns true if we can check equality for these 2 rows.
+   * Equality check between external row and internal row is not allowed.
+   * Here we do this check to prevent call `equals` on internal row with external row.
+   */
+  protected override def canEqual(other: Row) = other.isInstanceOf[InternalRow]
 
   // Custom hashCode function that matches the efficient code generated version.
   override def hashCode: Int = {
@@ -98,7 +70,7 @@ abstract class InternalRow extends Row {
         if (isNullAt(i)) {
           0
         } else {
-          apply(i) match {
+          get(i) match {
             case b: Boolean => if (b) 0 else 1
             case b: Byte => b.toInt
             case s: Short => s.toInt

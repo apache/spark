@@ -20,7 +20,8 @@
 # @rdname aggregateRDD
 # @seealso reduce
 # @export
-setGeneric("aggregateRDD", function(x, zeroValue, seqOp, combOp) { standardGeneric("aggregateRDD") })
+setGeneric("aggregateRDD",
+           function(x, zeroValue, seqOp, combOp) { standardGeneric("aggregateRDD") })
 
 # @rdname cache-methods
 # @export
@@ -565,6 +566,10 @@ setGeneric("asc", function(x) { standardGeneric("asc") })
 #' @rdname column
 #' @export
 setGeneric("avg", function(x, ...) { standardGeneric("avg") })
+
+#' @rdname column
+#' @export
+setGeneric("between", function(x, bounds) { standardGeneric("between") })
 
 #' @rdname column
 #' @export

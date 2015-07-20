@@ -28,6 +28,7 @@ import org.apache.hadoop.hive.ql.metadata._
 import org.apache.hadoop.hive.ql.plan.TableDesc
 
 import org.apache.spark.Logging
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{Catalog, MultiInstanceRelation, OverrideCatalog}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
@@ -594,8 +595,6 @@ private[hive] case class MetastoreRelation
     (val table: HiveTable)
     (@transient sqlContext: SQLContext)
   extends LeafNode with MultiInstanceRelation {
-
-  self: Product =>
 
   override def equals(other: Any): Boolean = other match {
     case relation: MetastoreRelation =>
