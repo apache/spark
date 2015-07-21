@@ -71,7 +71,7 @@ class HiveToDruidTransfer(BaseOperator):
         STORED AS TEXTFILE AS
         {sql};
         """.format(**locals())
-        #hive.run_cli(hql)
+        hive.run_cli(hql)
 
         m = HiveMetastoreHook(self.metastore_conn_id)
         t = m.get_table(hive_table)
