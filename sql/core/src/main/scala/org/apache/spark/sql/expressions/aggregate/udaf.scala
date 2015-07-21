@@ -67,7 +67,11 @@ abstract class UserDefinedAggregateFunction extends Serializable {
   /** Indicates if this function is deterministic. */
   def deterministic: Boolean
 
-  /** Initializes the given aggregation buffer. */
+  /**
+   *  Initializes the given aggregation buffer. Initial values set by this method should satisfy
+   *  the condition that when merging two buffers with initial values, the new buffer should
+   *  still store initial values.
+   */
   def initialize(buffer: MutableAggregationBuffer): Unit
 
   /** Updates the given aggregation buffer `buffer` with new input data from `input`. */

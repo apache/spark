@@ -865,7 +865,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
       DDLStrategy ::
       TakeOrderedAndProject ::
       HashAggregation ::
-      AggregateOperator2 ::
+      Aggregation ::
       LeftSemiJoin ::
       HashJoin ::
       InMemoryScans ::

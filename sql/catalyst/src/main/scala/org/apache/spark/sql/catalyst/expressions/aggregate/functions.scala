@@ -250,18 +250,19 @@ case class Sum(child: Expression) extends AlgebraicAggregate {
   override def dataType: DataType = resultType
 
   // Expected input data type.
-  override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection(NumericType, NullType))
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(TypeCollection(LongType, DoubleType, DecimalType, NullType))
 
   private val resultType = child.dataType match {
     case DecimalType.Fixed(precision, scale) =>
       DecimalType(precision + 4, scale + 4)
     case DecimalType.Unlimited => DecimalType.Unlimited
-    case _ => DoubleType
+    case _ => child.dataType
   }
 
   private val sumDataType = child.dataType match {
     case _ @ DecimalType() => DecimalType.Unlimited
-    case _ => DoubleType
+    case _ => child.dataType
   }
 
   private val currentSum = AttributeReference("currentSum", sumDataType)()

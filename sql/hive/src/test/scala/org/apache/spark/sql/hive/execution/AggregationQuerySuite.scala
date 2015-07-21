@@ -20,6 +20,7 @@ package org.apache.spark.sql.hive.execution
 import org.apache.spark.sql.execution.aggregate.Aggregate2Sort
 import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.test.SQLTestUtils
+import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.scalatest.BeforeAndAfterAll
 import test.org.apache.spark.sql.hive.aggregate.{MyDoubleAvg, MyDoubleSum}
@@ -66,6 +67,11 @@ class AggregationQuerySuite extends QueryTest with SQLTestUtils with BeforeAndAf
       (3, null, null)).toDF("key", "value1", "value2")
     data2.write.saveAsTable("agg2")
 
+    val emptyDF = sqlContext.createDataFrame(
+      sqlContext.sparkContext.emptyRDD[Row],
+      StructType(StructField("key", StringType) :: StructField("value", IntegerType) :: Nil))
+    emptyDF.registerTempTable("emptyTable")
+
     // Register UDAFs
     sqlContext.udaf.register("mydoublesum", new MyDoubleSum)
     sqlContext.udaf.register("mydoubleavg", new MyDoubleAvg)
@@ -74,7 +80,65 @@ class AggregationQuerySuite extends QueryTest with SQLTestUtils with BeforeAndAf
   override def afterAll(): Unit = {
     sqlContext.sql("DROP TABLE IF EXISTS agg1")
     sqlContext.sql("DROP TABLE IF EXISTS agg2")
+    sqlContext.dropTempTable("emptyTable")
     sqlContext.sql(s"set spark.sql.useAggregate2=$originalUseAggregate2")
+  }
+
+  test("empty table") {
+    // If there is no GROUP BY clause and the table is empty, we will generate a single row.
+    checkAnswer(
+      sqlContext.sql(
+        """
+          |SELECT
+          |  AVG(value),
+          |  COUNT(*),
+          |  COUNT(key),
+          |  COUNT(value),
+          |  FIRST(key),
+          |  LAST(value),
+          |  MAX(key),
+          |  MIN(value),
+          |  SUM(key)
+          |FROM emptyTable
+        """.stripMargin),
+      Row(null, 0, 0, 0, null, null, null, null, null) :: Nil)
+
+    checkAnswer(
+      sqlContext.sql(
+        """
+          |SELECT
+          |  AVG(value),
+          |  COUNT(*),
+          |  COUNT(key),
+          |  COUNT(value),
+          |  FIRST(key),
+          |  LAST(value),
+          |  MAX(key),
+          |  MIN(value),
+          |  SUM(key),
+          |  COUNT(DISTINCT value)
+          |FROM emptyTable
+        """.stripMargin),
+      Row(null, 0, 0, 0, null, null, null, null, null, 0) :: Nil)
+
+    // If there is a GROUP BY clause and the table is empty, there is no output.
+    checkAnswer(
+      sqlContext.sql(
+        """
+          |SELECT
+          |  AVG(value),
+          |  COUNT(*),
+          |  COUNT(value),
+          |  FIRST(value),
+          |  LAST(value),
+          |  MAX(value),
+          |  MIN(value),
+          |  SUM(value),
+          |  COUNT(DISTINCT value)
+          |FROM emptyTable
+          |GROUP BY key
+        """.stripMargin),
+      Nil)
   }
 
   test("only do grouping") {

@@ -1,3 +1,20 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package org.apache.spark.sql.execution.aggregate
 
 import org.apache.spark.sql.AnalysisException
@@ -6,10 +23,23 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan}
 import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.types.{StructType, MapType, ArrayType}
 
 object Utils {
+  // Right now, we do not support complex types in the grouping key schema.
+  private def groupingKeySchemaIsSupported(aggregate: Aggregate): Boolean = {
+    val hasComplexTypes = aggregate.groupingExpressions.map(_.dataType).exists {
+      case array: ArrayType => true
+      case map: MapType => true
+      case struct: StructType => true
+      case _ => false
+    }
+
+    !hasComplexTypes
+  }
+
   private def tryConvert(plan: LogicalPlan): Option[Aggregate] = plan match {
-    case p: Aggregate =>
+    case p: Aggregate if groupingKeySchemaIsSupported(p) =>
       val converted = p.transformExpressionsDown {
         case expressions.Average(child) =>
           aggregate.AggregateExpression2(
@@ -76,17 +106,32 @@ object Utils {
         }.isDefined
       }
 
-      if (!hasAggregateExpression1) Some(converted) else None
+      // Check if there are multiple distinct columns.
+      val aggregateExpressions = converted.aggregateExpressions.flatMap { expr =>
+        expr.collect {
+          case agg: AggregateExpression2 => agg
+        }
+      }.toSet.toSeq
+      val functionsWithDistinct = aggregateExpressions.filter(_.isDistinct)
+      val hasMultipleDistinctColumnSets =
+        if (functionsWithDistinct.map(_.aggregateFunction.children).distinct.length > 1) {
+          true
+        } else {
+          false
+        }
+
+      if (!hasAggregateExpression1 && !hasMultipleDistinctColumnSets) Some(converted) else None
 
     case other => None
   }
 
   def tryConvert(
       plan: LogicalPlan,
-      useNewAggregation: Boolean): Option[Aggregate] = plan match {
-    case p: Aggregate =>
+      useNewAggregation: Boolean,
+      codeGenEnabled: Boolean): Option[Aggregate] = plan match {
+    case p: Aggregate if useNewAggregation && codeGenEnabled =>
       val converted = tryConvert(p)
-      if (useNewAggregation && converted.isDefined) {
+      if (converted.isDefined) {
         converted
       } else {
         // If the plan cannot be converted, we will do a final round check to if the original

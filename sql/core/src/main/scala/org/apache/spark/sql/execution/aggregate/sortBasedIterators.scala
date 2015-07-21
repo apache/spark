@@ -149,7 +149,7 @@ private[sql] abstract class SortAggregationIterator(
     }
   }
 
-  private def initialize(): Unit = {
+  protected def initialize(): Unit = {
     if (inputIter.hasNext) {
       initializeBuffer()
       val currentRow = inputIter.next().copy()
@@ -474,6 +474,31 @@ class FinalSortAggregationIterator(
 
   override protected def initialBufferOffset: Int = groupingExpressions.length
 
+  override def initialize(): Unit = {
+    if (inputIter.hasNext) {
+      initializeBuffer()
+      val currentRow = inputIter.next().copy()
+      // partitionGenerator is a mutable projection. Since we need to track nextGroupingKey,
+      // we are making a copy at here.
+      nextGroupingKey = groupGenerator(currentRow).copy()
+      firstRowInNextGroup = currentRow
+    } else {
+      if (groupingExpressions.isEmpty) {
+        // If there is no grouping expression, we need to generate a single row as the output.
+        initializeBuffer()
+        // Right now, the buffer only contains initial buffer values. Because
+        // merging two buffers with initial values will generate a row that
+        // still store initial values. We set the currentRow as the copy of the current buffer.
+        val currentRow = buffer.copy()
+        nextGroupingKey = groupGenerator(currentRow).copy()
+        firstRowInNextGroup = currentRow
+      } else {
+        // This iter is an empty one.
+        hasNewGroup = false
+      }
+    }
+  }
+
   override protected def processRow(row: InternalRow): Unit = {
     // Process all algebraic aggregate functions.
     algebraicMergeProjection.target(buffer)(joinedRow(buffer, row))
@@ -657,6 +682,31 @@ class FinalAndCompleteSortAggregationIterator(
     }
 
     newMutableProjection(evalExpressions, bufferSchemata)()
+  }
+
+  override def initialize(): Unit = {
+    if (inputIter.hasNext) {
+      initializeBuffer()
+      val currentRow = inputIter.next().copy()
+      // partitionGenerator is a mutable projection. Since we need to track nextGroupingKey,
+      // we are making a copy at here.
+      nextGroupingKey = groupGenerator(currentRow).copy()
+      firstRowInNextGroup = currentRow
+    } else {
+      if (groupingExpressions.isEmpty) {
+        // If there is no grouping expression, we need to generate a single row as the output.
+        initializeBuffer()
+        // Right now, the buffer only contains initial buffer values. Because
+        // merging two buffers with initial values will generate a row that
+        // still store initial values. We set the currentRow as the copy of the current buffer.
+        val currentRow = buffer.copy()
+        nextGroupingKey = groupGenerator(currentRow).copy()
+        firstRowInNextGroup = currentRow
+      } else {
+        // This iter is an empty one.
+        hasNewGroup = false
+      }
+    }
   }
 
   override protected def processRow(row: InternalRow): Unit = {

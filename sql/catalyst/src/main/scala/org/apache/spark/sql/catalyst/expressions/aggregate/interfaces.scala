@@ -71,8 +71,6 @@ private[sql] case object NoOp extends Expression with Unevaluable {
   override def children: Seq[Expression] = Nil
 }
 
-
-
 /**
  * A container for an [[AggregateFunction2]] with its [[AggregateMode]] and a field
  * (`isDistinct`) indicating if DISTINCT keyword is specified for this function.
