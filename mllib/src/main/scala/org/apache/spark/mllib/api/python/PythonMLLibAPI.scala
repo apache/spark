@@ -1110,8 +1110,8 @@ private[python] class PythonMLLibAPI extends Serializable {
    * Wrapper around DistributedMatrices.indexedRowMatrix factory method.
    */
   def createIndexedRowMatrix(rows: DataFrame, numRows: Long, numCols: Int): IndexedRowMatrix = {
-    // We use DataFrames for serialization of IndexedRows from Python, so map each Row in the DataFrame
-    // back to an IndexedRow.
+    // We use DataFrames for serialization of IndexedRows from Python, so map each Row in the
+    // DataFrame back to an IndexedRow.
     val indexedRows = rows.map { row =>
       val index = row.getLong(0)
       val vector = row.getAs[Vector](1)
@@ -1133,8 +1133,8 @@ private[python] class PythonMLLibAPI extends Serializable {
    * Wrapper around DistributedMatrices.coordinateMatrix factory method.
    */
   def createCoordinateMatrix(rows: DataFrame, numRows: Long, numCols: Long): CoordinateMatrix = {
-    // We use DataFrames for serialization of MatrixEntry entries from Python, so map each Row in the DataFrame
-    // back to a MatrixEntry.
+    // We use DataFrames for serialization of MatrixEntry entries from Python, so map each Row in
+    // the DataFrame back to a MatrixEntry.
     val entries = rows.map { row =>
       val i = row.getLong(0)
       val j = row.getLong(1)

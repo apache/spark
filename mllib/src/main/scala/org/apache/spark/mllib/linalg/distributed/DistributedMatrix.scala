@@ -59,7 +59,10 @@ object DistributedMatrices {
    * @param numRows Number of rows in the matrix
    * @param numCols Number of columns in the matrix
    */
-  def indexedRowMatrix(rows: RDD[IndexedRow], numRows: Long = 0, numCols: Int = 0): IndexedRowMatrix = {
+  def indexedRowMatrix(
+      rows: RDD[IndexedRow],
+      numRows: Long = 0,
+      numCols: Int = 0): IndexedRowMatrix = {
     new IndexedRowMatrix(rows, numRows, numCols)
   }
 
@@ -70,7 +73,10 @@ object DistributedMatrices {
    * @param numRows Number of rows in the matrix
    * @param numCols Number of columns in the matrix
    */
-  def coordinateMatrix(rows: RDD[MatrixEntry], numRows: Long = 0, numCols: Long = 0): CoordinateMatrix = {
+  def coordinateMatrix(
+      rows: RDD[MatrixEntry],
+      numRows: Long = 0,
+      numCols: Long = 0): CoordinateMatrix = {
     new CoordinateMatrix(rows, numRows, numCols)
   }
 }
