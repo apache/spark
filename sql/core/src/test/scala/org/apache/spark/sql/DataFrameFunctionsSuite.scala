@@ -213,7 +213,7 @@ class DataFrameFunctionsSuite extends QueryTest {
 
     checkAnswer(
       df.selectExpr("find_in_set('ab', a)", "find_in_set('x', b)"),
-      Row(3, -1))
+      Row(3, 0))
   }
 
   test("conditional function: least") {

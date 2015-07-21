@@ -523,7 +523,7 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(FindInSet(Literal("ab"), Literal.create(null, StringType)), null)
     checkEvaluation(FindInSet(Literal.create(null, StringType), Literal("abc,b,ab,c,def")), null)
     checkEvaluation(FindInSet(Literal("ab"), Literal("abc,b,ab,c,def")), 3)
-    checkEvaluation(FindInSet(Literal("abf"), Literal("abc,b,ab,c,def")), -1)
+    checkEvaluation(FindInSet(Literal("abf"), Literal("abc,b,ab,c,def")), 0)
     checkEvaluation(FindInSet(Literal("ab,"), Literal("abc,b,ab,c,def")), 0)
   }
 }

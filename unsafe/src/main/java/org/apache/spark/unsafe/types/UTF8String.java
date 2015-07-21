@@ -235,7 +235,7 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
   /**
    * Returns the index of the string `match` in this String. This string has to be a comma separated
    * list. If `match` contains a comma 0 will be returned. If the `match` isn't part of this String,
-   * -1 will be returned, else the index of match (1-based index)
+   * 0 will be returned, else the index of match (1-based index)
    */
   public int findInSet(UTF8String match) {
     if (match.contains(COMMA_UTF8)) {
@@ -259,7 +259,7 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
           match.numBytes)) {
       return n;
     }
-    return -1;
+    return 0;
   }
 
   /**

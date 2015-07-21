@@ -285,7 +285,7 @@ case class EndsWith(left: Expression, right: Expression)
 
 /**
  * A function that returns the index (1-based) of the given string (left) in the comma-
- * delimited list (right). Returns -1, if the string wasn't found and 0 if the given
+ * delimited list (right). Returns 0, if the string wasn't found or if the given
  * string (left) contains a comma.
  */
 case class FindInSet(left: Expression, right: Expression) extends BinaryExpression
