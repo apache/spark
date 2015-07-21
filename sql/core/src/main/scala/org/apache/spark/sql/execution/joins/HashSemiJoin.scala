@@ -42,7 +42,7 @@ trait HashSemiJoin {
   @transient private lazy val boundCondition =
     newPredicate(condition.getOrElse(Literal(true)), left.output ++ right.output)
 
-  protected def buildKeyHashSet( buildIter: Iterator[InternalRow]): java.util.Set[InternalRow] = {
+  protected def buildKeyHashSet(buildIter: Iterator[InternalRow]): java.util.Set[InternalRow] = {
     val hashSet = new java.util.HashSet[InternalRow]()
     var currentRow: InternalRow = null
 

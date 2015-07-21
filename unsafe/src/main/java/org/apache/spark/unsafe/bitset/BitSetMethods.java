@@ -72,7 +72,7 @@ public final class BitSetMethods {
    */
   public static boolean anySet(Object baseObject, long baseOffset, long bitSetWidthInWords) {
     long addr = baseOffset;
-    for (int i = 0; i < bitSetWidthInWords; i += 1, addr += WORD_SIZE) {
+    for (int i = 0; i < bitSetWidthInWords; i++, addr += WORD_SIZE) {
       if (PlatformDependent.UNSAFE.getLong(baseObject, addr) != 0) {
         return true;
       }
