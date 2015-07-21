@@ -487,7 +487,7 @@ case class StringFormat(children: Expression*) extends Expression with ImplicitC
   private def args: Seq[Expression] = children.tail
 
   override def inputTypes: Seq[AbstractDataType] =
-    children.zipWithIndex.map(x => if (x._2 == 0) StringType else AnyDataType)
+    StringType :: List.fill(children.size - 1)(AnyDataType)
 
 
   override def eval(input: InternalRow): Any = {
