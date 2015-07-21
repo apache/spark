@@ -20,7 +20,7 @@ import java.util.Comparator
 
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenFallback, CodeGenContext, GeneratedExpressionCode}
-import org.apache.spark.sql.catalyst.util.TypeUtils
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.types._
 
 /**
@@ -114,4 +114,36 @@ case class SortArray(base: Expression, ascendingOrder: Expression)
   }
 
   override def prettyName: String = "sort_array"
+}
+
+case class ArrayContains(left: Expression, right: Expression) extends BinaryExpression with ExpectsInputTypes {
+  override def dataType: DataType = BooleanType
+  override def inputTypes: Seq[AbstractDataType] = Seq(ArrayType, AnyDataType)
+
+  override def eval(input: InternalRow): Boolean = {
+    val arr = left.eval(input)
+    if (arr == null) {
+      false
+    } else {
+      val element = right.eval(input)
+      arr.asInstanceOf[Seq[Any]].contains(element)
+    }
+  }
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    val arrGen = left.gen(ctx)
+    val elementGen = right.gen(ctx)
+    s"""
+       ${arrGen.code}
+       boolean ${ev.isNull} = false;
+       if (${arrGen.isNull}) {
+        ${ev.primitive} = false;
+       } else {
+        ${elementGen.code}
+        ${ev.primitive} = ${arrGen.primitive}.contains(${elementGen.primitive});
+       }
+     """
+  }
+
+  override def prettyName: String = "array_contains"
 }

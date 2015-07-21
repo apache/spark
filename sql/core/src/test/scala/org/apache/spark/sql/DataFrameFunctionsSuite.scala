@@ -344,4 +344,15 @@ class DataFrameFunctionsSuite extends QueryTest {
       Seq(Row(2), Row(0), Row(3))
     )
   }
+
+  test("array contains function") {
+    val df = Seq(
+      (Array[Int](1, 2), "x"),
+      (Array[Int](), "y")
+    ).toDF("a", "b")
+    checkAnswer(
+      df.select(array_contains("a", 1)),
+      Seq(Row(true), Row(false))
+    )
+  }
 }

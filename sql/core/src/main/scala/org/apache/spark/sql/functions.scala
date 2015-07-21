@@ -2218,6 +2218,12 @@ object functions {
    */
   def sort_array(e: Column, asc: Boolean): Column = SortArray(e.expr, lit(asc).expr)
 
+  def array_contains(columnName: String, element: Any): Column = array_contains(Column(columnName), element)
+
+  def array_contains(column: Column, element: Any): Column =
+    ArrayContains(column.expr, Literal(element))
+
+
   //////////////////////////////////////////////////////////////////////////////////////////////
   //////////////////////////////////////////////////////////////////////////////////////////////
 
