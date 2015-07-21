@@ -55,6 +55,16 @@ class NullFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(IsNaN(Literal(5.5f)), false)
   }
 
+  test("nanvl") {
+    checkEvaluation(NaNvl(Literal(5.0), Literal.create(null, DoubleType)), 5.0)
+    checkEvaluation(NaNvl(Literal.create(null, DoubleType), Literal(5.0)), null)
+    checkEvaluation(NaNvl(Literal.create(null, DoubleType), Literal(Double.NaN)), null)
+    checkEvaluation(NaNvl(Literal(Double.NaN), Literal(5.0)), 5.0)
+    checkEvaluation(NaNvl(Literal(Double.NaN), Literal.create(null, DoubleType)), null)
+    assert(NaNvl(Literal(Double.NaN), Literal(Double.NaN)).
+      eval(EmptyRow).asInstanceOf[Double].isNaN)
+  }
+
   test("coalesce") {
     testAllTypes { (value: Any, tpe: DataType) =>
       val lit = Literal.create(value, tpe)
@@ -65,29 +75,6 @@ class NullFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       checkEvaluation(Coalesce(Seq(nullLit, lit, lit)), value)
       checkEvaluation(Coalesce(Seq(nullLit, nullLit, lit)), value)
     }
-    checkEvaluation(Coalesce(Seq(
-      Literal.create(null, DoubleType),
-      Literal(Double.NaN),
-      Literal(math.log(-2)),
-      Literal.create(null, DoubleType),
-      Literal(Double.MaxValue))), Double.MaxValue, EmptyRow)
-    checkEvaluation(Coalesce(Seq(
-      Literal(Float.NaN),
-      Literal.create(null, FloatType),
-      Literal(math.log(-2).toFloat),
-      Literal.create(null, FloatType),
-      Literal(Float.MaxValue))), Float.MaxValue, EmptyRow)
-    checkEvaluation(Coalesce(Seq(
-      Literal.create(null, DoubleType),
-      Literal(math.log(-2)),
-      Literal(Double.PositiveInfinity),
-      Literal.create(null, DoubleType),
-      Literal(Double.MaxValue))), Double.PositiveInfinity, EmptyRow)
-    checkEvaluation(Coalesce(Seq(
-      Literal(5.0),
-      Literal(math.log(-2)),
-      Literal(Double.PositiveInfinity),
-      Literal.create(null, DoubleType))), 5.0, EmptyRow)
   }
 
   test("AtLeastNNonNulls") {

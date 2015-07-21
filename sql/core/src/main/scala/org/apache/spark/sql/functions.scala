@@ -653,6 +653,15 @@ object functions {
   def monotonicallyIncreasingId(): Column = execution.expressions.MonotonicallyIncreasingID()
 
   /**
+   * Return an alternative value `r` if `l` is NaN.
+   * This function is useful for mapping NaN values to null.
+   *
+   * @group normal_funcs
+   * @since 1.5.0
+   */
+  def nanvl(l: Column, r: Column): Column = NaNvl(l.expr, r.expr)
+
+  /**
    * Unary minus, i.e. negate the expression.
    * {{{
    *   // Select the amount column and negates all values.

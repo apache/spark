@@ -25,15 +25,13 @@ import org.apache.spark.sql.types._
 
 
 /**
- * An expression that is evaluated to the first non-null and non-NaN input.
+ * An expression that is evaluated to the first non-null input.
  *
  * {{{
  *   coalesce(1, 2) => 1
  *   coalesce(null, 1, 2) => 1
  *   coalesce(null, null, 2) => 2
  *   coalesce(null, null, null) => null
- *   coalesce(null, NaN, null, 5.0) => 5.0
- *   coalesce(null, NaN, NaN, null) => null
  * }}}
  */
 case class Coalesce(children: Seq[Expression]) extends Expression {
@@ -57,19 +55,8 @@ case class Coalesce(children: Seq[Expression]) extends Expression {
   override def eval(input: InternalRow): Any = {
     var result: Any = null
     val childIterator = children.iterator
-    dataType match {
-      case FloatType =>
-        while (childIterator.hasNext && (result == null || result.asInstanceOf[Float].isNaN)) {
-          result = childIterator.next().eval(input)
-        }
-      case DoubleType =>
-        while (childIterator.hasNext && (result == null || result.asInstanceOf[Double].isNaN)) {
-          result = childIterator.next().eval(input)
-        }
-      case _ =>
-        while (childIterator.hasNext && result == null) {
-          result = childIterator.next().eval(input)
-        }
+    while (childIterator.hasNext && result == null) {
+      result = childIterator.next().eval(input)
     }
     result
   }
@@ -81,28 +68,15 @@ case class Coalesce(children: Seq[Expression]) extends Expression {
     """ +
     children.map { e =>
       val eval = e.gen(ctx)
-      dataType match {
-        case DoubleType | FloatType =>
-          s"""
-            if (${ev.isNull}) {
-              ${eval.code}
-              if (!${eval.isNull} && !Double.isNaN(${eval.primitive})) {
-                ${ev.isNull} = false;
-                ${ev.primitive} = ${eval.primitive};
-              }
-            }
-          """
-        case _ =>
-          s"""
-            if (${ev.isNull}) {
-              ${eval.code}
-              if (!${eval.isNull}) {
-                ${ev.isNull} = false;
-                ${ev.primitive} = ${eval.primitive};
-              }
-            }
-          """
-      }
+      s"""
+        if (${ev.isNull}) {
+          ${eval.code}
+          if (!${eval.isNull}) {
+            ${ev.isNull} = false;
+            ${ev.primitive} = ${eval.primitive};
+          }
+        }
+      """
     }.mkString("\n")
   }
 }
@@ -139,6 +113,60 @@ case class IsNaN(child: Expression) extends UnaryExpression
           boolean ${ev.isNull} = false;
           ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
           ${ev.primitive} = !${eval.isNull} && Double.isNaN(${eval.primitive});
+        """
+    }
+  }
+}
+
+/**
+ * An Expression evaluates to `left` iff it's not NaN, or evaluates to `right` otherwise.
+ * This Expression is useful for mapping NaN values to null.
+ */
+case class NaNvl(left: Expression, right: Expression)
+    extends BinaryExpression with ImplicitCastInputTypes {
+
+  override def dataType: DataType = left.dataType
+
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(TypeCollection(DoubleType, FloatType), TypeCollection(DoubleType, FloatType))
+
+  override def eval(input: InternalRow): Any = {
+    val value = left.eval(input)
+    if (value == null) {
+      null
+    } else {
+      left.dataType match {
+        case DoubleType =>
+          if (!value.asInstanceOf[Double].isNaN) value else right.eval(input)
+        case FloatType =>
+          if (!value.asInstanceOf[Float].isNaN) value else right.eval(input)
+      }
+    }
+  }
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    val leftGen = left.gen(ctx)
+    val rightGen = right.gen(ctx)
+    left.dataType match {
+      case DoubleType | FloatType =>
+        s"""
+          ${leftGen.code}
+          boolean ${ev.isNull} = false;
+          ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
+          if (${leftGen.isNull}) {
+            ${ev.isNull} = true;
+          } else {
+            if (!Double.isNaN(${leftGen.primitive})) {
+              ${ev.primitive} = ${leftGen.primitive};
+            } else {
+              ${rightGen.code}
+              if (${rightGen.isNull}) {
+                ${ev.isNull} = true;
+              } else {
+                ${ev.primitive} = ${rightGen.primitive};
+              }
+            }
+          }
         """
     }
   }
