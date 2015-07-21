@@ -108,7 +108,7 @@ case class Aggregate(
    * A map of substitutions that are used to insert the aggregate expressions into the
    * final result expression.
    */
-  private[this] val aggMap: Map[TreeNodeRef, AttributeReference] =
+  @transient private[this] val aggMap: Map[TreeNodeRef, AttributeReference] =
     computedAggregates.map { agg => new TreeNodeRef(agg.unbound) -> agg.resultAttribute }.toMap
 
   /**
@@ -126,7 +126,7 @@ case class Aggregate(
     }
   )
 
-  protected override def doExecute(): RDD[InternalRow] = attachTree(this, "execute") {
+  protected override def doExecute(): RDD[InternalRow] = {
     if (groupingExpressions.isEmpty) {
       child.execute().mapPartitions { iter =>
         val buffer = newAggregateBuffer()
