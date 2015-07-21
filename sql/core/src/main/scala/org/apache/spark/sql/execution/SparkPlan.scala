@@ -179,9 +179,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   private[this] def isTesting: Boolean = sys.props.contains("spark.testing")
 
   protected def newProjection(
-      expressions: Seq[Expression],
-      inputSchema: Seq[Attribute],
-      mutableRow: Boolean = false): Projection = {
+      expressions: Seq[Expression], inputSchema: Seq[Attribute]): Projection = {
     log.debug(
       s"Creating Projection: $expressions, inputSchema: $inputSchema, codegen:$codegenEnabled")
     if (codegenEnabled) {
@@ -197,7 +195,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
           }
       }
     } else {
-      new InterpretedProjection(expressions, inputSchema, mutableRow)
+      new InterpretedProjection(expressions, inputSchema)
     }
   }
 
