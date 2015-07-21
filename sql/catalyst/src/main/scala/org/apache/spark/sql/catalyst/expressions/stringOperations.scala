@@ -526,7 +526,7 @@ case class StringRPad(str: Expression, len: Expression, pad: Expression)
 /**
  * Returns the input formatted according do printf-style format strings
  */
-case class StringFormat(children: Expression*) extends Expression with CodegenFallback {
+case class StringFormat(children: Expression*) extends Expression with ImplicitCastInputTypes {
 
   require(children.nonEmpty, "printf() should take at least 1 argument")
 
@@ -535,6 +535,10 @@ case class StringFormat(children: Expression*) extends Expression with CodegenFa
   override def dataType: DataType = StringType
   private def format: Expression = children(0)
   private def args: Seq[Expression] = children.tail
+
+  override def inputTypes: Seq[AbstractDataType] =
+    StringType :: List.fill(children.size - 1)(AnyDataType)
+
 
   override def eval(input: InternalRow): Any = {
     val pattern = format.eval(input)
@@ -549,6 +553,42 @@ case class StringFormat(children: Expression*) extends Expression with CodegenFa
 
       UTF8String.fromString(sb.toString)
     }
+  }
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    val pattern = children.head.gen(ctx)
+
+    val argListGen = children.tail.map(x => (x.dataType, x.gen(ctx)))
+    val argListCode = argListGen.map(_._2.code + "\n")
+
+    val argListString = argListGen.foldLeft("")((s, v) => {
+      val nullSafeString =
+        if (ctx.boxedType(v._1) != ctx.javaType(v._1)) {
+          // Java primitives get boxed in order to allow null values.
+          s"(${v._2.isNull}) ? (${ctx.boxedType(v._1)}) null : " +
+            s"new ${ctx.boxedType(v._1)}(${v._2.primitive})"
+        } else {
+          s"(${v._2.isNull}) ? null : ${v._2.primitive}"
+        }
+      s + "," + nullSafeString
+    })
+
+    val form = ctx.freshName("formatter")
+    val formatter = classOf[java.util.Formatter].getName
+    val sb = ctx.freshName("sb")
+    val stringBuffer = classOf[StringBuffer].getName
+    s"""
+      ${pattern.code}
+      boolean ${ev.isNull} = ${pattern.isNull};
+      ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
+      if (!${ev.isNull}) {
+        ${argListCode.mkString}
+        $stringBuffer $sb = new $stringBuffer();
+        $formatter $form = new $formatter($sb, ${classOf[Locale].getName}.US);
+        $form.format(${pattern.primitive}.toString() $argListString);
+        ${ev.primitive} = UTF8String.fromString($sb.toString());
+      }
+     """
   }
 
   override def prettyName: String = "printf"
