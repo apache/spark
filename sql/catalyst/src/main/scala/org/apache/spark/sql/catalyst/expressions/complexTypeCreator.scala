@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import scala.collection.mutable
+
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen.{GeneratedExpressionCode, CodeGenContext}
@@ -46,7 +48,7 @@ case class CreateArray(children: Seq[Expression]) extends Expression {
   }
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    val arraySeqClass = "scala.collection.mutable.ArraySeq"
+    val arraySeqClass = classOf[mutable.ArraySeq[Any]].getName
     s"""
       boolean ${ev.isNull} = false;
       $arraySeqClass<Object> ${ev.primitive} = new $arraySeqClass<Object>(${children.size});
@@ -94,7 +96,7 @@ case class CreateStruct(children: Seq[Expression]) extends Expression {
   }
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    val rowClass = "org.apache.spark.sql.catalyst.expressions.GenericMutableRow"
+    val rowClass = classOf[GenericMutableRow].getName
     s"""
       boolean ${ev.isNull} = false;
       final $rowClass ${ev.primitive} = new $rowClass(${children.size});
@@ -158,7 +160,7 @@ case class CreateNamedStruct(children: Seq[Expression]) extends Expression {
   }
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    val rowClass = "org.apache.spark.sql.catalyst.expressions.GenericMutableRow"
+    val rowClass = classOf[GenericMutableRow].getName
     s"""
       boolean ${ev.isNull} = false;
       final $rowClass ${ev.primitive} = new $rowClass(${valExprs.size});
