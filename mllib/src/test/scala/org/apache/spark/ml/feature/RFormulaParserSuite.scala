@@ -20,16 +20,16 @@ package org.apache.spark.ml.feature
 import org.apache.spark.SparkFunSuite
 
 class RFormulaParserSuite extends SparkFunSuite {
-  private def checkParse(formula: String, label: String, terms: Set[String]) {
+  private def checkParse(formula: String, label: String, terms: Seq[String]) {
     val parsed = RFormulaParser.parse(formula)
     assert(parsed.label == label)
     assert(parsed.terms == terms)
   }
 
   test("parse simple formulas") {
-    checkParse("y ~ x", "y", Set("x"))
-    checkParse("y ~ x + x", "y", Set("x"))
-    checkParse("y ~   ._foo  ", "y", Set("._foo"))
-    checkParse("resp ~ A_VAR + B + c123", "resp", Set("A_VAR", "B", "c123"))
+    checkParse("y ~ x", "y", Seq("x"))
+    checkParse("y ~ x + x", "y", Seq("x"))
+    checkParse("y ~   ._foo  ", "y", Seq("._foo"))
+    checkParse("resp ~ A_VAR + B + c123", "resp", Seq("A_VAR", "B", "c123"))
   }
 }

@@ -196,7 +196,7 @@ private[feature] class RFormulaModel(
       }
     }
     encoderStages :+= new VectorAssembler(uid)
-      .setInputCols(encodedTerms.toArray.sorted)
+      .setInputCols(encodedTerms.toArray)
       .setOutputCol($(featuresCol))
     encoderStages :+= new ColumnPruner(tempColumns.toSet)
     new PipelineModel(uid, encoderStages.toArray)
@@ -224,7 +224,7 @@ private class ColumnPruner(columnsToPrune: Set[String]) extends Transformer {
 /**
  * Represents a parsed R formula.
  */
-private[ml] case class ParsedRFormula(label: String, terms: Set[String])
+private[ml] case class ParsedRFormula(label: String, terms: Seq[String])
 
 /**
  * Limited implementation of R formula parsing. Currently supports: '~', '+'.
@@ -235,7 +235,7 @@ private[ml] object RFormulaParser extends RegexParsers {
   def expr: Parser[List[String]] = term ~ rep("+" ~> term) ^^ { case a ~ list => a :: list }
 
   def formula: Parser[ParsedRFormula] =
-    (term ~ "~" ~ expr) ^^ { case r ~ "~" ~ t => ParsedRFormula(r, t.toSet) }
+    (term ~ "~" ~ expr) ^^ { case r ~ "~" ~ t => ParsedRFormula(r, t.distinct) }
 
   def parse(value: String): ParsedRFormula = parseAll(formula, value) match {
     case Success(result, _) => result
