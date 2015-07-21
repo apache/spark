@@ -212,7 +212,7 @@ class DataFrameFunctionsSuite extends QueryTest {
     val df = Seq(("abc,b,ab,c,def", "abc,b,ab,c,def")).toDF("a", "b")
 
     checkAnswer(
-      df.selectExpr("find_in_set('abc', a)", "find_in_set('x', b)"),
+      df.selectExpr("find_in_set('ab', a)", "find_in_set('x', b)"),
       Row(3, -1))
   }
 
