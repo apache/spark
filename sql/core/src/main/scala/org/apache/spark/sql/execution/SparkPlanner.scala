@@ -21,11 +21,10 @@ import org.apache.spark.SparkContext
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.execution.TakeOrderedAndProject
 import org.apache.spark.sql.sources.DataSourceStrategy
 
 @Experimental
-class SparkPlanner(val sqlContext: SQLContext) extends org.apache.spark.sql.execution.SparkStrategies {
+class SparkPlanner(val sqlContext: SQLContext) extends SparkStrategies {
   val sparkContext: SparkContext = sqlContext.sparkContext
 
   def codegenEnabled: Boolean = sqlContext.conf.codegenEnabled

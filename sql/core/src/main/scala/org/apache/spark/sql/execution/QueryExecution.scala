@@ -30,9 +30,9 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
  */
 @Experimental
 class QueryExecution(val sqlContext: SQLContext, val logical: LogicalPlan) {
-  val analyzer  = sqlContext.analyzer
+  val analyzer = sqlContext.analyzer
   val optimizer = sqlContext.optimizer
-  val planner   = sqlContext.planner
+  val planner = sqlContext.planner
   val cacheManager = sqlContext.cacheManager
   val prepareForExecution = sqlContext.prepareForExecution
 

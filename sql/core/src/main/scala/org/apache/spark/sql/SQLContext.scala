@@ -185,9 +185,11 @@ class SQLContext(@transient val sparkContext: SparkContext)
 
   protected[sql] def parseSql(sql: String): LogicalPlan = ddlParser.parse(sql, false)
 
-  protected[sql] def executeSql(sql: String): sparkexecution.QueryExecution = executePlan(parseSql(sql))
+  protected[sql] def executeSql(sql: String): sparkexecution.QueryExecution =
+    executePlan(parseSql(sql))
 
-  protected[sql] def executePlan(plan: LogicalPlan) = new sparkexecution.QueryExecution(this, plan)
+  protected[sql] def executePlan(plan: LogicalPlan) =
+    new sparkexecution.QueryExecution(this, plan)
 
   @transient
   protected[sql] val tlSession = new ThreadLocal[SQLSession]() {
@@ -900,7 +902,8 @@ class SQLContext(@transient val sparkContext: SparkContext)
   }
 
   @deprecated("use org.apache.spark.sql.QueryExecution")
-  protected[sql] class QueryExecution(logical: LogicalPlan) extends sparkexecution.QueryExecution(this, logical)
+  protected[sql] class QueryExecution(logical: LogicalPlan)
+    extends sparkexecution.QueryExecution(this, logical)
 
   /**
    * Parses the data type in our internal string representation. The data type string should
