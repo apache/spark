@@ -21,10 +21,10 @@ context("SparkSQL functions")
 
 # Utility function for easily checking the values of a StructField
 checkStructField <- function(actual, expectedName, expectedType, expectedNullable) {
-  expect_equal(class(actual), "structField")
-  expect_equal(actual$name(), expectedName)
-  expect_equal(actual$dataType.toString(), expectedType)
-  expect_equal(actual$nullable(), expectedNullable)
+  testthat::expect_equal(class(actual), "structField")
+  testthat::expect_equal(actual$name(), expectedName)
+  testthat::expect_equal(actual$dataType.toString(), expectedType)
+  testthat::expect_equal(actual$nullable(), expectedNullable)
 }
 
 # Tests for SparkSQL functions in SparkR

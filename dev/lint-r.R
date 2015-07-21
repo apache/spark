@@ -25,5 +25,6 @@ library(lintr)
 argv <- commandArgs(TRUE)
 SPARK_ROOT_DIR <- as.character(argv[1])
 
+library(SparkR, lib.loc = file.path(SPARK_ROOT_DIR, "R", "lib"))
 path.to.package <- file.path(SPARK_ROOT_DIR, "R", "pkg")
 lint_package(path.to.package, cache = FALSE)
