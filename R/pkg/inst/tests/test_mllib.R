@@ -32,3 +32,11 @@ test_that("glm and predict", {
   prediction <- predict(model, test)
   expect_equal(typeof(take(select(prediction, "prediction"), 1)$prediction), "double")
 })
+
+test_that("predictions match with native glm", {
+  training <- createDataFrame(sqlContext, iris)
+  model <- glm(Sepal_Width ~ Sepal_Length, data = training)
+  vals <- collect(select(predict(model, training), "prediction"))
+  rVals <- predict(glm(Sepal.Width ~ Sepal.Length, data = iris), iris)
+  expect_true(all(abs(rVals - vals) < 1e-9), rVals - vals)
+})
