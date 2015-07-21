@@ -96,7 +96,7 @@ class InfoThSelector private[feature] (val criterionFactory: FT) extends Seriali
       
     // MIM does not use redundancy, so for this criterion all the features are selected now
     if (criterionFactory.getCriterion.toString == "MIM") {
-      selected = topByRelevance.map({case (id, relv) => F(id, relv)})
+      selected = topByRelevance.map({case (id, relv) => F(id, relv)}).reverse
     }
     
     var moreFeat = true
