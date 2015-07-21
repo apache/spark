@@ -879,7 +879,7 @@ case class Encode(value: Expression, charset: Expression)
 /**
  * Replace all substrings of str that match regexp with rep.
  *
- * NOTE: this expression is not THREAD-SAFE, we have to create a instance for each thread.
+ * NOTE: this expression is not THREAD-SAFE, as it has some internal mutable status.
  */
 case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expression)
   extends Expression with ImplicitCastInputTypes {
@@ -1001,9 +1001,9 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
 }
 
 /**
- * UDF to extract a specific(idx) group identified by a java regex.
+ * Extract a specific(idx) group identified by a Java regex.
  *
- * NOTE: this expression is not THREAD-SAFE, we have to create a instance for each thread.
+ * NOTE: this expression is not THREAD-SAFE, as it has some internal mutable status.
  */
 case class RegExpExtract(subject: Expression, regexp: Expression, idx: Expression)
   extends Expression with ImplicitCastInputTypes {
