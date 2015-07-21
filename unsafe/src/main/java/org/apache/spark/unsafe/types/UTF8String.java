@@ -487,6 +487,15 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
     return fromBytes(result);
   }
 
+  public UTF8String[] split(UTF8String pattern, int limit) {
+    String[] splits = toString().split(pattern.toString(), limit);
+    UTF8String[] res = new UTF8String[splits.length];
+    for (int i = 0; i < res.length; i++) {
+      res[i] = fromString(splits[i]);
+    }
+    return res;
+  }
+
   @Override
   public String toString() {
     try {

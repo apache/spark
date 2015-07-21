@@ -18,6 +18,7 @@
 package org.apache.spark.unsafe.types;
 
 import java.io.UnsupportedEncodingException;
+import java.util.Arrays;
 
 import org.junit.Test;
 
@@ -269,6 +270,16 @@ public class UTF8StringSuite {
     assertEquals(
       fromString("数据砖头孙行者孙行者孙行"),
       fromString("数据砖头").rpad(12, fromString("孙行者")));
+  }
+
+  @Test
+  public void split() {
+    assertTrue(Arrays.equals(fromString("ab,def,ghi").split(fromString(","), -1),
+      new UTF8String[]{fromString("ab"), fromString("def"), fromString("ghi")}));
+    assertTrue(Arrays.equals(fromString("ab,def,ghi").split(fromString(","), 2),
+      new UTF8String[]{fromString("ab"), fromString("def,ghi")}));
+    assertTrue(Arrays.equals(fromString("ab,def,ghi").split(fromString(","), 2),
+      new UTF8String[]{fromString("ab"), fromString("def,ghi")}));
   }
   
   @Test
