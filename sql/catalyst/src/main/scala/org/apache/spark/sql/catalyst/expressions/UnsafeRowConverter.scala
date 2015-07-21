@@ -111,7 +111,7 @@ class UnsafeRowConverter(fieldTypes: Array[DataType]) {
 /**
  * Function for writing a column into an UnsafeRow.
  */
-abstract class UnsafeColumnWriter {
+private abstract class UnsafeColumnWriter {
   /**
    * Write a value into an UnsafeRow.
    *
@@ -130,7 +130,7 @@ abstract class UnsafeColumnWriter {
   def getSize(source: InternalRow, column: Int): Int
 }
 
-object UnsafeColumnWriter {
+private object UnsafeColumnWriter {
 
   def forType(dataType: DataType): UnsafeColumnWriter = {
     dataType match {
