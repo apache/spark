@@ -385,28 +385,30 @@ final class OnlineLDAOptimizer extends LDAOptimizer {
           case v => throw new IllegalArgumentException("Online LDA does not support vector type "
             + v.getClass)
         }
+        if (!ids.isEmpty) {
 
-        // Initialize the variational distribution q(theta|gamma) for the mini-batch
-        var gammad: BDV[Double] =
-          new Gamma(gammaShape, 1.0 / gammaShape).samplesVector(k)                   // K
-        val expElogthetad: BDV[Double] = exp(digamma(gammad) - digamma(sum(gammad))) // K
-        val expElogbetad: BDM[Double] = expElogbeta(ids, ::).toDenseMatrix           // ids * K
+          // Initialize the variational distribution q(theta|gamma) for the mini-batch
+          val gammad: BDV[Double] =
+            new Gamma(gammaShape, 1.0 / gammaShape).samplesVector(k) // K
+          val expElogthetad: BDV[Double] = exp(digamma(gammad) - digamma(sum(gammad))) // K
+          val expElogbetad: BDM[Double] = expElogbeta(ids, ::).toDenseMatrix // ids * K
 
-        var phinorm: BDV[Double] = expElogbetad * expElogthetad :+ 1e-100            // ids
-        var meanchange = 1D
-        val ctsVector = new BDV[Double](cts)                                         // ids
+          val phinorm: BDV[Double] = expElogbetad * expElogthetad :+ 1e-100 // ids
+          var meanchange = 1D
+          val ctsVector = new BDV[Double](cts) // ids
 
-        // Iterate between gamma and phi until convergence
-        while (meanchange > 1e-3) {
-          val lastgamma = gammad.copy
-          //        K                  K * ids               ids
-          gammad := (expElogthetad :* (expElogbetad.t * (ctsVector :/ phinorm))) :+ alpha
-          expElogthetad := exp(digamma(gammad) - digamma(sum(gammad)))
-          phinorm := expElogbetad * expElogthetad :+ 1e-100
-          meanchange = sum(abs(gammad - lastgamma)) / k
+          // Iterate between gamma and phi until convergence
+          while (meanchange > 1e-3) {
+            val lastgamma = gammad.copy
+            //        K                  K * ids               ids
+            gammad := (expElogthetad :* (expElogbetad.t * (ctsVector :/ phinorm))) :+ alpha
+            expElogthetad := exp(digamma(gammad) - digamma(sum(gammad)))
+            phinorm := expElogbetad * expElogthetad :+ 1e-100
+            meanchange = sum(abs(gammad - lastgamma)) / k
+          }
+
+          stat(::, ids) := expElogthetad.asDenseMatrix.t * (ctsVector :/ phinorm).asDenseMatrix
         }
-
-        stat(::, ids) :=  expElogthetad.asDenseMatrix.t * (ctsVector :/ phinorm).asDenseMatrix
       }
       Iterator(stat)
     }
