@@ -1,23 +1,17 @@
 package org.apache.spark.streaming.kinesis
 
-import org.scalatest.BeforeAndAfterAll
+import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll}
 
 import org.apache.spark.storage.{BlockId, BlockManager, StorageLevel, StreamBlockId}
 import org.apache.spark.{SparkConf, SparkContext, SparkException, SparkFunSuite}
 
-class KinesisBackedBlockRDDSuite extends SparkFunSuite
-  with KinesisSuiteHelper with BeforeAndAfterAll {
+class KinesisBackedBlockRDDSuite extends KinesisFunSuite with BeforeAndAfterAll {
 
   private val regionId = "us-east-1"
   private val endpointUrl = "https://kinesis.us-east-1.amazonaws.com"
-
-  private val testUtils = new KinesisTestUtils(endpointUrl)
-
   private val testData = 1 to 8
 
-  private var sc: SparkContext = null
-  private var blockManager: BlockManager = null
-
+  private var testUtils: KinesisTestUtils = null
   private var shardIds: Seq[String] = null
   private var shardIdToData: Map[String, Seq[Int]] = null
   private var shardIdToSeqNumbers: Map[String, Seq[String]] = null
@@ -25,32 +19,39 @@ class KinesisBackedBlockRDDSuite extends SparkFunSuite
   private var shardIdToRange: Map[String, SequenceNumberRange] = null
   private var allRanges: Seq[SequenceNumberRange] = null
 
+  private var sc: SparkContext = null
+  private var blockManager: BlockManager = null
+
+
   override def beforeAll(): Unit = {
-    testUtils.createStream()
+    runIfTestsEnabled("Prepare KinesisTestUtils") {
+      testUtils =  new KinesisTestUtils(endpointUrl)
+      testUtils.createStream()
 
-    shardIdToDataAndSeqNumbers = testUtils.pushData(testData)
-    require(shardIdToDataAndSeqNumbers.size > 1, "Need data to be sent to multiple shards")
+      shardIdToDataAndSeqNumbers = testUtils.pushData(testData)
+      require(shardIdToDataAndSeqNumbers.size > 1, "Need data to be sent to multiple shards")
 
-    shardIds = shardIdToDataAndSeqNumbers.keySet.toSeq
-    shardIdToData = shardIdToDataAndSeqNumbers.mapValues { _.map { _._1 }}
-    shardIdToSeqNumbers = shardIdToDataAndSeqNumbers.mapValues { _.map { _._2 }}
-    shardIdToRange = shardIdToSeqNumbers.map { case (shardId, seqNumbers) =>
-      val seqNumRange = SequenceNumberRange(
-        testUtils.streamName, shardId, seqNumbers.head, seqNumbers.last)
-      (shardId, seqNumRange)
+      shardIds = shardIdToDataAndSeqNumbers.keySet.toSeq
+      shardIdToData = shardIdToDataAndSeqNumbers.mapValues { _.map { _._1 }}
+      shardIdToSeqNumbers = shardIdToDataAndSeqNumbers.mapValues { _.map { _._2 }}
+      shardIdToRange = shardIdToSeqNumbers.map { case (shardId, seqNumbers) =>
+        val seqNumRange = SequenceNumberRange(
+          testUtils.streamName, shardId, seqNumbers.head, seqNumbers.last)
+        (shardId, seqNumRange)
+      }
+      allRanges = shardIdToRange.values.toSeq
+
+      val conf = new SparkConf().setMaster("local[4]").setAppName("KinesisBackedBlockRDDSuite")
+      sc = new SparkContext(conf)
+      blockManager = sc.env.blockManager
     }
-    allRanges = shardIdToRange.values.toSeq
-
-    val conf = new SparkConf().setMaster("local[4]").setAppName("KinesisBackedBlockRDDSuite")
-    sc = new SparkContext(conf)
-    blockManager = sc.env.blockManager
   }
 
   override def afterAll(): Unit = {
     sc.stop()
   }
 
-  testOrIgnore("Basic reading from Kinesis") {
+  testIfEnabled("Basic reading from Kinesis") {
     // Verify all data using multiple ranges in a single RDD partition
     val receivedData1 = new KinesisBackedBlockRDD(sc, regionId, endpointUrl,
       fakeBlockIds(1),
@@ -76,28 +77,28 @@ class KinesisBackedBlockRDDSuite extends SparkFunSuite
     }
   }
 
-  testOrIgnore("Read data available in both block manager and Kinesis") {
+  testIfEnabled("Read data available in both block manager and Kinesis") {
     testRDD(numPartitions = 2, numPartitionsInBM = 2, numPartitionsInKinesis = 2)
   }
 
-  testOrIgnore("Read data available only in block manager, not in Kinesis") {
+  testIfEnabled("Read data available only in block manager, not in Kinesis") {
     testRDD(numPartitions = 2, numPartitionsInBM = 2, numPartitionsInKinesis = 0)
   }
 
-  testOrIgnore("Read data available only in Kinesis, not in block manager") {
+  testIfEnabled("Read data available only in Kinesis, not in block manager") {
     testRDD(numPartitions = 2, numPartitionsInBM = 0, numPartitionsInKinesis = 2)
   }
 
-  testOrIgnore("Read data available partially in block manager, rest in Kinesis") {
+  testIfEnabled("Read data available partially in block manager, rest in Kinesis") {
     testRDD(numPartitions = 2, numPartitionsInBM = 1, numPartitionsInKinesis = 1)
   }
 
-  testOrIgnore("Test isBlockValid skips block fetching from block manager") {
+  testIfEnabled("Test isBlockValid skips block fetching from block manager") {
     testRDD(numPartitions = 2, numPartitionsInBM = 2, numPartitionsInKinesis = 0,
       testIsBlockValid = true)
   }
 
-  testOrIgnore("Test whether RDD is valid after removing blocks from block anager") {
+  testIfEnabled("Test whether RDD is valid after removing blocks from block anager") {
     testRDD(numPartitions = 2, numPartitionsInBM = 2, numPartitionsInKinesis = 2,
       testBlockRemove = true)
   }
