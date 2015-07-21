@@ -537,20 +537,27 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
           (metricsOpt.flatMap(_.shuffleWriteMetrics
             .map(_.shuffleWriteTime)).getOrElse(0L) / 1e6).toLong
         val shuffleWriteTimeProportion = toProportion(shuffleWriteTime)
-        val executorComputingTime = metricsOpt.map(_.executorRunTime).getOrElse(0L) -
-          shuffleReadTime - shuffleWriteTime
-        val executorComputingTimeProportion = toProportion(executorComputingTime)
+
         val serializationTime = metricsOpt.map(_.resultSerializationTime).getOrElse(0L)
         val serializationTimeProportion = toProportion(serializationTime)
         val deserializationTime = metricsOpt.map(_.executorDeserializeTime).getOrElse(0L)
         val deserializationTimeProportion = toProportion(deserializationTime)
         val gettingResultTime = getGettingResultTime(taskUIData.taskInfo, currentTime)
         val gettingResultTimeProportion = toProportion(gettingResultTime)
-        val schedulerDelay = totalExecutionTime -
-          (executorComputingTime + shuffleReadTime + shuffleWriteTime +
-            serializationTime + deserializationTime + gettingResultTime)
-        val schedulerDelayProportion =
-          (100 - executorComputingTimeProportion - shuffleReadTimeProportion -
+        val schedulerDelay =
+          metricsOpt.map(getSchedulerDelay(taskInfo, _, currentTime)).getOrElse(0L)
+        val schedulerDelayProportion = toProportion(schedulerDelay)
+
+        val executorOverhead = serializationTime + deserializationTime
+        val executorRunTime = if (taskInfo.running) {
+          totalExecutionTime - executorOverhead - gettingResultTime
+        } else {
+          metricsOpt.map(_.executorRunTime).getOrElse(
+            totalExecutionTime - executorOverhead - gettingResultTime)
+        }
+        val executorComputingTime = executorRunTime - shuffleReadTime - shuffleWriteTime
+        val executorComputingTimeProportion =
+          (100 - schedulerDelayProportion - shuffleReadTimeProportion -
             shuffleWriteTimeProportion - serializationTimeProportion -
             deserializationTimeProportion - gettingResultTimeProportion)
 

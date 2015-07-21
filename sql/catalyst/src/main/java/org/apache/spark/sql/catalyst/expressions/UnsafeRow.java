@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql.catalyst.expressions;
 
+import java.io.IOException;
+import java.io.OutputStream;
+
 import org.apache.spark.sql.catalyst.util.ObjectPool;
 import org.apache.spark.unsafe.PlatformDependent;
 import org.apache.spark.unsafe.array.ByteArrayMethods;
@@ -216,6 +219,9 @@ public final class UnsafeRow extends MutableRow {
   public void setDouble(int ordinal, double value) {
     assertIndexIsValid(ordinal);
     setNotNullAt(ordinal);
+    if (Double.isNaN(value)) {
+      value = Double.NaN;
+    }
     PlatformDependent.UNSAFE.putDouble(baseObject, getFieldOffset(ordinal), value);
   }
 
@@ -244,6 +250,9 @@ public final class UnsafeRow extends MutableRow {
   public void setFloat(int ordinal, float value) {
     assertIndexIsValid(ordinal);
     setNotNullAt(ordinal);
+    if (Float.isNaN(value)) {
+      value = Float.NaN;
+    }
     PlatformDependent.UNSAFE.putFloat(baseObject, getFieldOffset(ordinal), value);
   }
 
@@ -363,6 +372,36 @@ public final class UnsafeRow extends MutableRow {
       rowCopy.pointTo(
         rowDataCopy, PlatformDependent.BYTE_ARRAY_OFFSET, numFields, sizeInBytes, null);
       return rowCopy;
+    }
+  }
+
+  /**
+   * Write this UnsafeRow's underlying bytes to the given OutputStream.
+   *
+   * @param out the stream to write to.
+   * @param writeBuffer a byte array for buffering chunks of off-heap data while writing to the
+   *                    output stream. If this row is backed by an on-heap byte array, then this
+   *                    buffer will not be used and may be null.
+   */
+  public void writeToStream(OutputStream out, byte[] writeBuffer) throws IOException {
+    if (baseObject instanceof byte[]) {
+      int offsetInByteArray = (int) (PlatformDependent.BYTE_ARRAY_OFFSET - baseOffset);
+      out.write((byte[]) baseObject, offsetInByteArray, sizeInBytes);
+    } else {
+      int dataRemaining = sizeInBytes;
+      long rowReadPosition = baseOffset;
+      while (dataRemaining > 0) {
+        int toTransfer = Math.min(writeBuffer.length, dataRemaining);
+        PlatformDependent.copyMemory(
+          baseObject,
+          rowReadPosition,
+          writeBuffer,
+          PlatformDependent.BYTE_ARRAY_OFFSET,
+          toTransfer);
+        out.write(writeBuffer, 0, toTransfer);
+        rowReadPosition += toTransfer;
+        dataRemaining -= toTransfer;
+      }
     }
   }
 
