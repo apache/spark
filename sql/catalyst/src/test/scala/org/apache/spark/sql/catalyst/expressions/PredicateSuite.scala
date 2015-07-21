@@ -136,11 +136,14 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(And(InSet(one, hS), InSet(two, hS)), true)
   }
 
-  private val smallValues = Seq(1, Decimal(1), Array(1.toByte), "a").map(Literal(_))
-  private val largeValues = Seq(2, Decimal(2), Array(2.toByte), "b").map(Literal(_))
+  private val smallValues = Seq(1, Decimal(1), Array(1.toByte), "a", 0f, 0d).map(Literal(_))
+  private val largeValues =
+    Seq(2, Decimal(2), Array(2.toByte), "b", Float.NaN, Double.NaN).map(Literal(_))
 
-  private val equalValues1 = smallValues
-  private val equalValues2 = Seq(1, Decimal(1), Array(1.toByte), "a").map(Literal(_))
+  private val equalValues1 =
+    Seq(1, Decimal(1), Array(1.toByte), "a", Float.NaN, Double.NaN).map(Literal(_))
+  private val equalValues2 =
+    Seq(1, Decimal(1), Array(1.toByte), "a", Float.NaN, Double.NaN).map(Literal(_))
 
   test("BinaryComparison: <") {
     for (i <- 0 until smallValues.length) {

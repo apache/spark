@@ -316,4 +316,26 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers {
     assert(setToNullAfterCreation.get(11) === rowWithNoNullColumns.get(11))
   }
 
+  test("NaN canonicalization") {
+    val fieldTypes: Array[DataType] = Array(FloatType, DoubleType)
+
+    val row1 = new SpecificMutableRow(fieldTypes)
+    row1.setFloat(0, java.lang.Float.intBitsToFloat(0x7f800001))
+    row1.setDouble(1, java.lang.Double.longBitsToDouble(0x7ff0000000000001L))
+
+    val row2 = new SpecificMutableRow(fieldTypes)
+    row2.setFloat(0, java.lang.Float.intBitsToFloat(0x7fffffff))
+    row2.setDouble(1, java.lang.Double.longBitsToDouble(0x7fffffffffffffffL))
+
+    val converter = new UnsafeRowConverter(fieldTypes)
+    val row1Buffer = new Array[Byte](converter.getSizeRequirement(row1))
+    val row2Buffer = new Array[Byte](converter.getSizeRequirement(row2))
+    converter.writeRow(
+      row1, row1Buffer, PlatformDependent.BYTE_ARRAY_OFFSET, row1Buffer.length, null)
+    converter.writeRow(
+      row2, row2Buffer, PlatformDependent.BYTE_ARRAY_OFFSET, row2Buffer.length, null)
+
+    assert(row1Buffer.toSeq === row2Buffer.toSeq)
+  }
+
 }
