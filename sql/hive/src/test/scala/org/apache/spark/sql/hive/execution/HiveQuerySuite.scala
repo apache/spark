@@ -510,7 +510,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
       |'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
       |USING 'cat' AS (tKey, tValue) ROW FORMAT SERDE
       |'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe' FROM src;
-    """.stripMargin.replaceAll("\n", " "))
+    """.stripMargin.replaceAll(System.lineSeparator(), " "))
 
   test("transform with SerDe2") {
 
@@ -529,7 +529,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
         |('avro.schema.literal'='{"namespace": "testing.hive.avro.serde","name":
         |"src","type": "record","fields": [{"name":"key","type":"int"}]}')
         |FROM small_src
-      """.stripMargin.replaceAll("\n", " ")).collect().head
+      """.stripMargin.replaceAll(System.lineSeparator(), " ")).collect().head
 
     assert(expected(0) === res(0))
   }
@@ -541,7 +541,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
       |('serialization.last.column.takes.rest'='true') USING 'cat' AS (tKey, tValue)
       |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
       |WITH SERDEPROPERTIES ('serialization.last.column.takes.rest'='true') FROM src;
-    """.stripMargin.replaceAll("\n", " "))
+    """.stripMargin.replaceAll(System.lineSeparator(), " "))
 
   createQueryTest("transform with SerDe4",
     """
@@ -550,7 +550,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
       |('serialization.last.column.takes.rest'='true') USING 'cat' ROW FORMAT SERDE
       |'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe' WITH SERDEPROPERTIES
       |('serialization.last.column.takes.rest'='true') FROM src;
-    """.stripMargin.replaceAll("\n", " "))
+    """.stripMargin.replaceAll(System.lineSeparator(), " "))
 
   createQueryTest("LIKE",
     "SELECT * FROM src WHERE value LIKE '%1%'")
