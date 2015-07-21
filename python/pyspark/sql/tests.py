@@ -333,6 +333,10 @@ class SQLTests(ReusedPySparkTestCase):
         df = self.sqlCtx.inferSchema(rdd)
         self.assertEquals(Row(field1=1, field2=u'row1'), df.first())
 
+    def test_select_null_literal(self):
+        df = self.sqlCtx.sql("select null as col")
+        self.assertEquals(Row(col=None), df.first())
+
     def test_apply_schema(self):
         from datetime import date, datetime
         rdd = self.sc.parallelize([(127, -128, -32768, 32767, 2147483647, 1.0,
@@ -413,12 +417,14 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertEquals(point, ExamplePoint(1.0, 2.0))
 
     def test_udf_with_udt(self):
-        from pyspark.sql.tests import ExamplePoint
+        from pyspark.sql.tests import ExamplePoint, ExamplePointUDT
         row = Row(label=1.0, point=ExamplePoint(1.0, 2.0))
         df = self.sc.parallelize([row]).toDF()
         self.assertEqual(1.0, df.map(lambda r: r.point.x).first())
         udf = UserDefinedFunction(lambda p: p.y, DoubleType())
         self.assertEqual(2.0, df.select(udf(df.point)).first()[0])
+        udf2 = UserDefinedFunction(lambda p: ExamplePoint(p.x + 1, p.y + 1), ExamplePointUDT())
+        self.assertEqual(ExamplePoint(2.0, 3.0), df.select(udf2(df.point)).first()[0])
 
     def test_parquet_with_udt(self):
         from pyspark.sql.tests import ExamplePoint

@@ -242,7 +242,7 @@ private[spark] object SQLConf {
     doc = "Whether the query analyzer should be case sensitive or not.")
 
   val PARQUET_SCHEMA_MERGING_ENABLED = booleanConf("spark.sql.parquet.mergeSchema",
-    defaultValue = Some(true),
+    defaultValue = Some(false),
     doc = "When true, the Parquet data source merges schemas collected from all data files, " +
           "otherwise the schema is picked from the summary file or a random data file " +
           "if no summary file is available.")
@@ -376,6 +376,11 @@ private[spark] object SQLConf {
   val OUTPUT_COMMITTER_CLASS =
     stringConf("spark.sql.sources.outputCommitterClass", isPublic = false)
 
+  val PARALLEL_PARTITION_DISCOVERY_THRESHOLD = intConf(
+    key = "spark.sql.sources.parallelPartitionDiscovery.threshold",
+    defaultValue = Some(32),
+    doc = "<TODO>")
+
   // Whether to perform eager analysis when constructing a dataframe.
   // Set to false when debugging requires the ability to look at invalid query plans.
   val DATAFRAME_EAGER_ANALYSIS = booleanConf(
@@ -494,6 +499,9 @@ private[sql] class SQLConf extends Serializable with CatalystConf {
 
   private[spark] def partitionColumnTypeInferenceEnabled(): Boolean =
     getConf(SQLConf.PARTITION_COLUMN_TYPE_INFERENCE)
+
+  private[spark] def parallelPartitionDiscoveryThreshold: Int =
+    getConf(SQLConf.PARALLEL_PARTITION_DISCOVERY_THRESHOLD)
 
   // Do not use a value larger than 4000 as the default value of this property.
   // See the comments of SCHEMA_STRING_LENGTH_THRESHOLD above for more information.
