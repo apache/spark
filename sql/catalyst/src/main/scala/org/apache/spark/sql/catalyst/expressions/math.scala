@@ -489,28 +489,8 @@ object Hex {
     (0 to 5).foreach(i => array('a' + i) = (i + 10).toByte)
     array
   }
-}
 
-/**
- * If the argument is an INT or binary, hex returns the number as a STRING in hexadecimal format.
- * Otherwise if the number is a STRING, it converts each character into its hex representation
- * and returns the resulting STRING. Negative numbers would be treated as two's complement.
- */
-case class Hex(child: Expression)
-  extends UnaryExpression with ImplicitCastInputTypes with CodegenFallback {
-
-  override def inputTypes: Seq[AbstractDataType] =
-    Seq(TypeCollection(LongType, BinaryType, StringType))
-
-  override def dataType: DataType = StringType
-
-  protected override def nullSafeEval(num: Any): Any = child.dataType match {
-    case LongType => hex(num.asInstanceOf[Long])
-    case BinaryType => hex(num.asInstanceOf[Array[Byte]])
-    case StringType => hex(num.asInstanceOf[UTF8String].getBytes)
-  }
-
-  private[this] def hex(bytes: Array[Byte]): UTF8String = {
+  def hex(bytes: Array[Byte]): UTF8String = {
     val length = bytes.length
     val value = new Array[Byte](length * 2)
     var i = 0
@@ -522,7 +502,7 @@ case class Hex(child: Expression)
     UTF8String.fromBytes(value)
   }
 
-  private def hex(num: Long): UTF8String = {
+  def hex(num: Long): UTF8String = {
     // Extract the hex digits of num into value[] from right to left
     val value = new Array[Byte](16)
     var numBuf = num
@@ -534,24 +514,8 @@ case class Hex(child: Expression)
     } while (numBuf != 0)
     UTF8String.fromBytes(java.util.Arrays.copyOfRange(value, value.length - len, value.length))
   }
-}
 
-/**
- * Performs the inverse operation of HEX.
- * Resulting characters are returned as a byte array.
- */
-case class Unhex(child: Expression)
-  extends UnaryExpression with ImplicitCastInputTypes with CodegenFallback {
-
-  override def inputTypes: Seq[AbstractDataType] = Seq(StringType)
-
-  override def nullable: Boolean = true
-  override def dataType: DataType = BinaryType
-
-  protected override def nullSafeEval(num: Any): Any =
-    unhex(num.asInstanceOf[UTF8String].getBytes)
-
-  private[this] def unhex(bytes: Array[Byte]): Array[Byte] = {
+  def unhex(bytes: Array[Byte]): Array[Byte] = {
     val out = new Array[Byte]((bytes.length + 1) >> 1)
     var i = 0
     if ((bytes.length & 0x01) != 0) {
@@ -580,6 +544,60 @@ case class Unhex(child: Expression)
       i += 2
     }
     out
+  }
+}
+
+/**
+ * If the argument is an INT or binary, hex returns the number as a STRING in hexadecimal format.
+ * Otherwise if the number is a STRING, it converts each character into its hex representation
+ * and returns the resulting STRING. Negative numbers would be treated as two's complement.
+ */
+case class Hex(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
+
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(TypeCollection(LongType, BinaryType, StringType))
+
+  override def dataType: DataType = StringType
+
+  protected override def nullSafeEval(num: Any): Any = child.dataType match {
+    case LongType => Hex.hex(num.asInstanceOf[Long])
+    case BinaryType => Hex.hex(num.asInstanceOf[Array[Byte]])
+    case StringType => Hex.hex(num.asInstanceOf[UTF8String].getBytes)
+  }
+
+  override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    nullSafeCodeGen(ctx, ev, (c) => {
+      val hex = Hex.getClass.getName.stripSuffix("$")
+      s"${ev.primitive} = " + (child.dataType match {
+        case StringType => s"""$hex.hex($c.getBytes());"""
+        case _ => s"""$hex.hex($c);"""
+      })
+    })
+  }
+}
+
+/**
+ * Performs the inverse operation of HEX.
+ * Resulting characters are returned as a byte array.
+ */
+case class Unhex(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(StringType)
+
+  override def nullable: Boolean = true
+  override def dataType: DataType = BinaryType
+
+  protected override def nullSafeEval(num: Any): Any =
+    Hex.unhex(num.asInstanceOf[UTF8String].getBytes)
+
+  override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    nullSafeCodeGen(ctx, ev, (c) => {
+      val hex = Hex.getClass.getName.stripSuffix("$")
+      s"""
+        ${ev.primitive} = $hex.unhex($c.getBytes());
+        ${ev.isNull} = ${ev.primitive} == null;
+       """
+    })
   }
 }
 
