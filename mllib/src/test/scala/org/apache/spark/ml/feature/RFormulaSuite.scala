@@ -78,20 +78,21 @@ class RFormulaSuite extends SparkFunSuite with MLlibTestSparkContext {
     }
   }
 
-// TODO(ekl) enable after we implement string label support
-//  test("transform string label") {
-//    val formula = new RFormula().setFormula("name ~ id")
-//    val original = sqlContext.createDataFrame(
-//      Seq((1, "foo"), (2, "bar"), (3, "bar"))).toDF("id", "name")
-//    val result = formula.transform(original)
-//    val resultSchema = formula.transformSchema(original.schema)
-//    val expected = sqlContext.createDataFrame(
-//      Seq(
-//        (1, "foo", Vectors.dense(Array(1.0)), 1.0),
-//        (2, "bar", Vectors.dense(Array(2.0)), 0.0),
-//        (3, "bar", Vectors.dense(Array(3.0)), 0.0))
-//      ).toDF("id", "name", "features", "label")
-//    assert(result.schema.toString == resultSchema.toString)
-//    assert(result.collect().toSeq == expected.collect().toSeq)
-//  }
+  test("encodes string terms") {
+    val formula = new RFormula().setFormula("id ~ category")
+    val original = sqlContext.createDataFrame(
+      Seq((1, "foo"), (2, "bar"), (3, "bar"), (4, "baz"))).toDF("id", "category")
+    val model = formula.fit(original)
+    val result = model.transform(original)
+    val resultSchema = model.transformSchema(original.schema)
+    val expected = sqlContext.createDataFrame(
+      Seq(
+        (1, "foo", Vectors.dense(Array(0.0, 1.0)), 1.0),
+        (2, "bar", Vectors.dense(Array(1.0, 0.0)), 2.0),
+        (3, "bar", Vectors.dense(Array(1.0, 0.0)), 3.0),
+        (4, "baz", Vectors.dense(Array(0.0, 0.0)), 4.0))
+      ).toDF("id", "name", "features", "label")
+    assert(result.schema.toString == resultSchema.toString)
+    assert(result.collect().toSeq == expected.collect().toSeq)
+  }
 }

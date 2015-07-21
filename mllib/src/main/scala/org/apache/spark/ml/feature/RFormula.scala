@@ -83,12 +83,12 @@ class RFormula(override val uid: String) extends Estimator[RFormulaModel] with R
       dataset.schema(term) match {
         case column if column.dataType == StringType =>
           val idxTerm = term + "_idx_" + uid
-          val indexer = new StringIndexer(uid).setInputCol(term).setOutputCol(idxTerm))
-          Some(Map(term -> indexer.fit(dataset)))
+          val indexer = new StringIndexer().setInputCol(term).setOutputCol(idxTerm)
+          Some(term -> indexer.fit(dataset))
         case _ =>
           None
       }
-    }
+    }.toMap
     copyValues(new RFormulaModel(uid, parsedFormula.get, factorLevels).setParent(this))
   }
 
@@ -109,6 +109,8 @@ class RFormula(override val uid: String) extends Estimator[RFormulaModel] with R
 
 /**
  * A fitted RFormula. Fitting is required to determine the factor levels of formula terms.
+ * @param parsedFormula a pre-parsed R formula
+ * @param factorLevels the fitted factor to index mappings from the training dataset.
  */
 private[feature] class RFormulaModel(
     override val uid: String,
@@ -136,7 +138,7 @@ private[feature] class RFormulaModel(
   }
 
   override def copy(extra: ParamMap): RFormulaModel = copyValues(
-    new RFormulaModel(uid, parsedFormula))
+    new RFormulaModel(uid, parsedFormula, factorLevels))
 
   override def toString: String = s"RFormulaModel(${parsedFormula})"
 
@@ -172,12 +174,13 @@ private[feature] class RFormulaModel(
         case column if column.dataType == StringType =>
           val encodedTerm = term + "_onehot_" + uid
           val indexer = factorLevels(term)
+          val indexCol = indexer.getOrDefault(indexer.outputCol)
           encoderStages :+= indexer
-          encoderStages :+= new OneHotEncoder(uid)
-            .setInputCol($(indexer.outputCol))
+          encoderStages :+= new OneHotEncoder()
+            .setInputCol(indexCol)
             .setOutputCol(encodedTerm)
           tempColumns :+= encodedTerm
-          tempColumns :+= $(indexer.outputCol)
+          tempColumns :+= indexCol
           encodedTerm
         case _ =>
           term
@@ -186,16 +189,16 @@ private[feature] class RFormulaModel(
     encoderStages :+= new VectorAssembler(uid)
       .setInputCols(encodedTerms.toArray)
       .setOutputCol($(featuresCol))
-    encoderStages :+= new ColumnPruner(uid, tempColumns.toSet)
+    encoderStages :+= new ColumnPruner(tempColumns.toSet)
     new PipelineModel(uid, encoderStages.toArray)
   }
 }
 
 /**
- * Utility class for removing temporary columns from a DataFrame.
+ * Utility transformer for removing temporary columns from a DataFrame.
  */
-private[ml] class ColumnPruner(
-    override val uid: String, columnsToPrune: Set[String]) extends Transformer {
+private class ColumnPruner(columnsToPrune: Set[String]) extends Transformer {
+  override val uid = Identifiable.randomUID("columnPruner")
   override def transform(dataset: DataFrame): DataFrame = {
     var res: DataFrame = dataset
     for (column <- columnsToPrune) {
@@ -212,7 +215,7 @@ private[ml] class ColumnPruner(
 /**
  * Represents a parsed R formula.
  */
-private[ml] case class ParsedRFormula(label: String, terms: Seq[String])
+private[ml] case class ParsedRFormula(label: String, terms: Set[String])
 
 /**
  * Limited implementation of R formula parsing. Currently supports: '~', '+'.
@@ -223,7 +226,7 @@ private[ml] object RFormulaParser extends RegexParsers {
   def expr: Parser[List[String]] = term ~ rep("+" ~> term) ^^ { case a ~ list => a :: list }
 
   def formula: Parser[ParsedRFormula] =
-    (term ~ "~" ~ expr) ^^ { case r ~ "~" ~ t => ParsedRFormula(r, t) }
+    (term ~ "~" ~ expr) ^^ { case r ~ "~" ~ t => ParsedRFormula(r, t.toSet) }
 
   def parse(value: String): ParsedRFormula = parseAll(formula, value) match {
     case Success(result, _) => result
