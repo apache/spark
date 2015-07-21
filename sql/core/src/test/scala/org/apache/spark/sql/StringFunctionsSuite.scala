@@ -170,9 +170,11 @@ class StringFunctionsSuite extends QueryTest {
     checkAnswer(
       df.select(substring_index(lit(null), "ab", 2)),
       Row(null))
+    // scalastyle:off
     checkAnswer(
       df.select(substring_index(lit("大千世界大千世界"), "千", 2)),
       Row("大千世界大"))
+    // scalastyle:on
     checkAnswer(
       df.selectExpr("""substring_index(a, ",", 2)"""),
       Row("ac,ab"))

@@ -222,6 +222,22 @@ public class UTF8StringSuite {
   }
 
   @Test
+  public void lastIndexOf() {
+    assertEquals(0, fromString("").lastIndexOf(fromString(""), 0));
+    assertEquals(-1, fromString("").lastIndexOf(fromString("l"), 0));
+    assertEquals(0, fromString("hello").lastIndexOf(fromString(""), 0));
+    assertEquals(-1, fromString("hello").lastIndexOf(fromString("l"), 0));
+    assertEquals(3, fromString("hello").lastIndexOf(fromString("l"), 3));
+    assertEquals(-1, fromString("hello").lastIndexOf(fromString("a"), 4));
+    assertEquals(2, fromString("hello").lastIndexOf(fromString("ll"), 4));
+    assertEquals(-1, fromString("hello").lastIndexOf(fromString("ll"), 0));
+    assertEquals(5, fromString("数据砖头数据砖头").lastIndexOf(fromString("据砖"), 7));
+    assertEquals(0, fromString("数据砖头").lastIndexOf(fromString("数"), 3));
+    assertEquals(0, fromString("数据砖头").lastIndexOf(fromString("数"), 0));
+    assertEquals(3, fromString("数据砖头").lastIndexOf(fromString("头"), 3));
+  }
+
+  @Test
   public void reverse() {
     assertEquals(fromString("olleh"), fromString("hello").reverse());
     assertEquals(EMPTY_UTF8, EMPTY_UTF8.reverse());

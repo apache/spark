@@ -352,6 +352,69 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
     return -1;
   }
 
+  private enum ByteType {FIRSTBYTE, MIDBYTE, SINGLEBYTECHAR};
+
+  private ByteType checkByteType(Byte b) {
+    int firstTwoBits = (b >>> 6) & 0x03;
+    if (firstTwoBits == 3) {
+       return ByteType.FIRSTBYTE;
+     } else if (firstTwoBits == 2) {
+      return ByteType.MIDBYTE;
+    } else {
+      return ByteType.SINGLEBYTECHAR;
+    }
+  }
+
+  /**
+   * Return the first byte position for a given byte which shared the same code point.
+   * @param bytePos any byte within the code point
+   * @return the first byte position of a given code point, throw exception if not a valid UTF8 str
+   */
+  private int firstOfCurrentCodePoint(int bytePos) {
+    while (bytePos >= 0) {
+      if (ByteType.FIRSTBYTE == checkByteType(getByte(bytePos))
+        || ByteType.SINGLEBYTECHAR == checkByteType(getByte(bytePos))) {
+        return bytePos;
+      }
+      bytePos--;
+    }
+    throw new RuntimeException("Invalid utf8 string");
+  }
+
+  private int endByte(int startCodePoint) {
+    int i = numBytes -1; // position in byte
+    int c = numChars() - 1; // position in character
+    while (i >=0 && c > startCodePoint) {
+      i = firstOfCurrentCodePoint(i) - 1;
+      c -= 1;
+    }
+    return i;
+  }
+
+  public int lastIndexOf(UTF8String v, int startCodePoint) {
+    if (v.numBytes == 0) {
+      return 0;
+    }
+    if (numBytes == 0) {
+      return -1;
+    }
+    int fromIndexEnd = endByte(startCodePoint);
+    int count = startCodePoint;
+    int vNumChars = v.numChars();
+    do {
+      if (fromIndexEnd - v.numBytes + 1 < 0 ) {
+        return -1;
+      }
+      if (ByteArrayMethods.arrayEquals(
+          base, offset + fromIndexEnd - v.numBytes + 1, v.base, v.offset, v.numBytes)) {
+        return count - vNumChars + 1;
+      }
+      fromIndexEnd  = firstOfCurrentCodePoint(fromIndexEnd) - 1;
+      count--;
+    } while (fromIndexEnd >= 0);
+    return -1;
+  }
+
   /**
    * Returns str, right-padded with pad to a length of len
    * For example:
