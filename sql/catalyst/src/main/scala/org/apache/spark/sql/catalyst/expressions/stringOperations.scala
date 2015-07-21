@@ -640,7 +640,7 @@ case class StringSplit(str: Expression, pattern: Expression)
  * Defined for String and Binary types.
  */
 case class Substring(str: Expression, pos: Expression, len: Expression)
-  extends Expression with ImplicitCastInputTypes with CodegenFallback {
+  extends Expression with ImplicitCastInputTypes {
 
   def this(str: Expression, pos: Expression) = {
     this(str, pos, Literal(Integer.MAX_VALUE))
@@ -649,58 +649,59 @@ case class Substring(str: Expression, pos: Expression, len: Expression)
   override def foldable: Boolean = str.foldable && pos.foldable && len.foldable
   override def nullable: Boolean = str.nullable || pos.nullable || len.nullable
 
-  override def dataType: DataType = {
-    if (!resolved) {
-      throw new UnresolvedException(this, s"Cannot resolve since $children are not resolved")
-    }
-    if (str.dataType == BinaryType) str.dataType else StringType
-  }
+  override def dataType: DataType = StringType
 
   override def inputTypes: Seq[DataType] = Seq(StringType, IntegerType, IntegerType)
 
   override def children: Seq[Expression] = str :: pos :: len :: Nil
 
-  @inline
-  def slicePos(startPos: Int, sliceLen: Int, length: () => Int): (Int, Int) = {
-    // Hive and SQL use one-based indexing for SUBSTR arguments but also accept zero and
-    // negative indices for start positions. If a start index i is greater than 0, it
-    // refers to element i-1 in the sequence. If a start index i is less than 0, it refers
-    // to the -ith element before the end of the sequence. If a start index i is 0, it
-    // refers to the first element.
-
-    val start = startPos match {
-      case pos if pos > 0 => pos - 1
-      case neg if neg < 0 => length() + neg
-      case _ => 0
+  override def eval(input: InternalRow): Any = {
+    val stringEval = str.eval(input)
+    if (stringEval != null) {
+      val posEval = pos.eval(input)
+      if (posEval != null) {
+        val lenEval = len.eval(input)
+        if (lenEval != null) {
+          stringEval.asInstanceOf[UTF8String]
+            .substringSQL(posEval.asInstanceOf[Int], lenEval.asInstanceOf[Int])
+        } else {
+          null
+        }
+      } else {
+        null
+      }
+    } else {
+      null
     }
-
-    val end = sliceLen match {
-      case max if max == Integer.MAX_VALUE => max
-      case x => start + x
-    }
-
-    (start, end)
   }
 
-  override def eval(input: InternalRow): Any = {
-    val string = str.eval(input)
-    val po = pos.eval(input)
-    val ln = len.eval(input)
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    val strGen = str.gen(ctx)
+    val posGen = pos.gen(ctx)
+    val lenGen = len.gen(ctx)
 
-    if ((string == null) || (po == null) || (ln == null)) {
-      null
-    } else {
-      val start = po.asInstanceOf[Int]
-      val length = ln.asInstanceOf[Int]
-      string match {
-        case ba: Array[Byte] =>
-          val (st, end) = slicePos(start, length, () => ba.length)
-          ba.slice(st, end)
-        case s: UTF8String =>
-          val (st, end) = slicePos(start, length, () => s.numChars())
-          s.substring(st, end)
+    val start = ctx.freshName("start")
+    val end = ctx.freshName("end")
+
+    s"""
+      ${strGen.code}
+      boolean ${ev.isNull} = ${strGen.isNull};
+      ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
+      if (!${ev.isNull}) {
+        ${posGen.code}
+        if (!${posGen.isNull}) {
+          ${lenGen.code}
+          if (!${lenGen.isNull}) {
+            ${ev.primitive} = ${strGen.primitive}
+              .substringSQL(${posGen.primitive}, ${lenGen.primitive});
+          } else {
+            ${ev.isNull} = true;
+          }
+        } else {
+          ${ev.isNull} = true;
+        }
       }
-    }
+     """
   }
 }
 

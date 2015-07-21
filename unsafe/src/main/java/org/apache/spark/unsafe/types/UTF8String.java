@@ -165,6 +165,18 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
     return fromBytes(bytes);
   }
 
+  public UTF8String substringSQL(int pos, int length) {
+    // Information regarding the pos calculation:
+    // Hive and SQL use one-based indexing for SUBSTR arguments but also accept zero and
+    // negative indices for start positions. If a start index i is greater than 0, it
+    // refers to element i-1 in the sequence. If a start index i is less than 0, it refers
+    // to the -ith element before the end of the sequence. If a start index i is 0, it
+    // refers to the first element.
+    int start = (pos > 0) ? pos -1 : ((pos < 0) ? numChars() + pos : 0);
+    int end = (length == Integer.MAX_VALUE) ? Integer.MAX_VALUE : start + length;
+    return substring(start, end);
+  }
+
   /**
    * Returns whether this contains `substring` or not.
    */
