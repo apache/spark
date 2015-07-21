@@ -20,6 +20,7 @@ _hooks = {
     'S3_hook': ['S3Hook'],
     'http_hook': ['HttpHook'],
     'druid_hook': ['DruidHook'],
+    'jdbc_hook': ['JdbcHook'],
 }
 
 _import_module_attrs(globals(), _hooks)
