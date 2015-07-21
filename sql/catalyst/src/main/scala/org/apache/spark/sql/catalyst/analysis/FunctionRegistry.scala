@@ -168,6 +168,7 @@ object FunctionRegistry {
     expression[StringLocate]("locate"),
     expression[StringLPad]("lpad"),
     expression[StringTrimLeft]("ltrim"),
+    expression[FormatString]("format_string"),
     expression[FormatString]("printf"),
     expression[StringRPad]("rpad"),
     expression[StringRepeat]("repeat"),
