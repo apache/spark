@@ -83,8 +83,8 @@ class JsonProtocolSuite extends SparkFunSuite {
     val executorAdded = SparkListenerExecutorAdded(executorAddedTime, "exec1",
       new ExecutorInfo("Hostee.awesome.com", 11, logUrlMap))
     val executorRemoved = SparkListenerExecutorRemoved(executorRemovedTime, "exec2", "test reason")
-    val executorMetricsUpdate = SparkListenerExecutorMetricsUpdate("Jean Valjean", Seq(
-      (1L,2,3,makeTaskMetrics(300L, 400L, 500L, 600L, 700, 800, hasHadoopInput = true, hasOutput = false))))
+    val executorMetricsUpdate = SparkListenerExecutorMetricsUpdate("exec3", Seq(
+      (1L,2,3,makeTaskMetrics(300L, 400L, 500L, 600L, 700, 800, hasHadoopInput = true, hasOutput = true))))
 
     testEvent(stageSubmitted, stageSubmittedJsonString)
     testEvent(stageCompleted, stageCompletedJsonString)
@@ -447,6 +447,14 @@ class JsonProtocolSuite extends SparkFunSuite {
         assertEquals(e1.executorInfo, e2.executorInfo)
       case (e1: SparkListenerExecutorRemoved, e2: SparkListenerExecutorRemoved) =>
         assert(e1.executorId == e1.executorId)
+      case (e1: SparkListenerExecutorMetricsUpdate, e2:SparkListenerExecutorMetricsUpdate) =>
+        assert(e1.execId==e2.execId)
+        assertSeqEquals[(Long, Int, Int, TaskMetrics)](e1.taskMetrics,e2.taskMetrics,(a,b) => {
+          assert(a._1==b._1)
+          assert(a._2==b._2)
+          assert(a._3==b._3)
+          assertEquals(a._4,b._4)
+        })
       case (e1, e2) =>
         assert(e1 === e2)
       case _ => fail("Events don't match in types!")
@@ -1605,8 +1613,10 @@ class JsonProtocolSuite extends SparkFunSuite {
   private val executorMetricsUpdateJsonString =
   s"""
      |{
-     |  "ExecID": "Jean Valjean",
-     |  "Metrics Updated": {
+     |  "Event": "SparkListenerExecutorMetricsUpdate",
+     |  "Executor ID": "exec3",
+     |  "Metrics Updated": [
+     |  {
      |    "Task ID": 1,
      |    "Stage ID": 2,
      |    "Stage Attempt": 3,
@@ -1647,6 +1657,7 @@ class JsonProtocolSuite extends SparkFunSuite {
      |      }
      |    ]
      |  }
+     |  }]
      |}
-   """
+   """.stripMargin
 }

@@ -227,13 +227,14 @@ private[spark] object JsonProtocol {
   def executorMetricsUpdateToJson(metricsUpdate: SparkListenerExecutorMetricsUpdate): JValue = {
     val execId = metricsUpdate.execId
     val taskMetrics = metricsUpdate.taskMetrics
-    ("ExecID" -> execId) ~
-      ("Metrics Updated" -> taskMetrics.map(s =>
-        ("Task ID" -> s._1) ~
-          ("Stage ID" -> s._2) ~
-          ("Stage Attempt" -> s._3) ~
-          ("Task Metrics" -> taskMetricsToJson(s._4)))
-        )
+    ("Event" -> Utils.getFormattedClassName(metricsUpdate)) ~
+    ("Executor ID" -> execId) ~
+    ("Metrics Updated" -> taskMetrics.map(s =>
+      ("Task ID" -> s._1) ~
+        ("Stage ID" -> s._2) ~
+        ("Stage Attempt" -> s._3) ~
+        ("Task Metrics" -> taskMetricsToJson(s._4)))
+    )
   }
 
   /** ------------------------------------------------------------------- *
@@ -613,7 +614,7 @@ private[spark] object JsonProtocol {
   }
 
   def executorMetricsUpdateFromJson(json: JValue): SparkListenerExecutorMetricsUpdate = {
-    val execInfo = (json \ "ExecID").extract[String]
+    val execInfo = (json \ "Executor ID").extract[String]
     val taskMetrics =(json \"Metrics Updated").extract[List[JValue]].map(s =>
       ((s\"Task ID").extract[Long],
         (s\"Stage ID").extract[Int],
