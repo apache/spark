@@ -65,11 +65,6 @@ case class GeneratedAggregate(
       }
     }
 
-  // even with empty input iterator, if this group-by operator is for
-  // global(groupingExpression.isEmpty) and final(partial=false),
-  // we still need to make a row from empty buffer.
-  def needEmptyBufferForwarded: Boolean = groupingExpressions.isEmpty && !partial
-
   override def output: Seq[Attribute] = aggregateExpressions.map(_.toAttribute)
 
   protected override def doExecute(): RDD[InternalRow] = {
@@ -247,7 +242,7 @@ case class GeneratedAggregate(
     child.execute().mapPartitions { iter =>
       // Builds a new custom class for holding the results of aggregation for a group.
       val initialValues = computeFunctions.flatMap(_.initialValues)
-      val newAggregationBuffer = newProjection(initialValues, child.output, mutableRow = true)
+      val newAggregationBuffer = newProjection(initialValues, child.output)
       log.info(s"Initial values: ${initialValues.mkString(",")}")
 
       // A projection that computes the group given an input tuple.
@@ -271,8 +266,17 @@ case class GeneratedAggregate(
 
       val joinedRow = new JoinedRow3
 
-      if (!iter.hasNext && !needEmptyBufferForwarded) {
-        Iterator[InternalRow]()
+      if (!iter.hasNext) {
+        // This is an empty input, so return early so that we do not allocate data structures
+        // that won't be cleaned up (see SPARK-8357).
+        if (groupingExpressions.isEmpty) {
+          // This is a global aggregate, so return an empty aggregation buffer.
+          val resultProjection = resultProjectionBuilder()
+          Iterator(resultProjection(newAggregationBuffer(EmptyRow)))
+        } else {
+          // This is a grouped aggregate, so return an empty iterator.
+          Iterator[InternalRow]()
+        }
       } else if (groupingExpressions.isEmpty) {
         // TODO: Codegening anything other than the updateProjection is probably over kill.
         val buffer = newAggregationBuffer(EmptyRow).asInstanceOf[MutableRow]
@@ -287,7 +291,6 @@ case class GeneratedAggregate(
         val resultProjection = resultProjectionBuilder()
         Iterator(resultProjection(buffer))
       } else if (unsafeEnabled) {
-        // unsafe aggregation buffer is not released if input is empty (see SPARK-8357)
         assert(iter.hasNext, "There should be at least one row for this path")
         log.info("Using Unsafe-based aggregator")
         val aggregationMap = new UnsafeFixedWidthAggregationMap(
