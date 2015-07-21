@@ -22,6 +22,7 @@ import java.nio.ByteBuffer
 
 import scala.collection.mutable.HashMap
 
+import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.{TaskContextImpl, TaskContext}
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.serializer.SerializerInstance
@@ -61,13 +62,18 @@ private[spark] abstract class Task[T](
    * @param attemptNumber how many times this task has been attempted (0 for the first attempt)
    * @return the result of the task along with updates of Accumulators.
    */
-  final def run(taskAttemptId: Long, attemptNumber: Int): (T, AccumulatorUpdates) = {
+  final def run(
+    taskAttemptId: Long,
+    attemptNumber: Int,
+    metricsSystem: MetricsSystem)
+  : (T, AccumulatorUpdates) = {
     context = new TaskContextImpl(
       stageId = stageId,
       partitionId = partitionId,
       taskAttemptId = taskAttemptId,
       attemptNumber = attemptNumber,
       taskMemoryManager = taskMemoryManager,
+      metricsSystem = metricsSystem,
       runningLocally = false)
     TaskContext.setTaskContext(context)
     context.taskMetrics.setHostname(Utils.localHostName())
