@@ -265,6 +265,15 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
   }
 
   /**
+   * Loads an ORC file and returns the result as a [[DataFrame]].
+   *
+   * @param path input path
+   * @since 1.5.0
+   * @note Currently, this method can only be used together with `HiveContext`.
+   */
+  def orc(path: String): DataFrame = format("orc").load(path)
+
+  /**
    * Returns the specified table as a [[DataFrame]].
    *
    * @since 1.4.0

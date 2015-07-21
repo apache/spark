@@ -161,6 +161,8 @@ object FunctionRegistry {
     expression[Lower]("lower"),
     expression[Length]("length"),
     expression[Levenshtein]("levenshtein"),
+    expression[RegExpExtract]("regexp_extract"),
+    expression[RegExpReplace]("regexp_replace"),
     expression[StringInstr]("instr"),
     expression[StringLocate]("locate"),
     expression[StringLPad]("lpad"),
@@ -193,8 +195,10 @@ object FunctionRegistry {
     expression[Quarter]("quarter"),
     expression[Second]("second"),
     expression[WeekOfYear]("weekofyear"),
-    expression[Year]("year")
+    expression[Year]("year"),
 
+    // collection functions
+    expression[Size]("size")
   )
 
   val builtin: FunctionRegistry = {
