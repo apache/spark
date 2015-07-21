@@ -69,7 +69,9 @@ object MimaExcludes {
             ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.json.JsonRDD"),
             // local function inside a method
             ProblemFilters.exclude[MissingMethodProblem](
-              "org.apache.spark.sql.SQLContext.org$apache$spark$sql$SQLContext$$needsConversion$1")
+              "org.apache.spark.sql.SQLContext.org$apache$spark$sql$SQLContext$$needsConversion$1"),
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.sql.UDFRegistration.org$apache$spark$sql$UDFRegistration$$builder$24")
           ) ++ Seq(
             // SPARK-8479 Add numNonzeros and numActives to Matrix.
             ProblemFilters.exclude[MissingMethodProblem](
@@ -98,6 +100,10 @@ object MimaExcludes {
               "org.apache.spark.api.r.StringRRDD.this"),
             ProblemFilters.exclude[MissingMethodProblem](
               "org.apache.spark.api.r.BaseRRDD.this")
+          ) ++ Seq(
+            // SPARK-7422 add argmax for sparse vectors
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.mllib.linalg.Vector.argmax")
           )
 
         case v if v.startsWith("1.4") =>

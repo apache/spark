@@ -74,10 +74,6 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
           }"""
     }.mkString("\n          ")
 
-    val mutableStates = ctx.mutableStates.map { case (javaType, variableName, initialValue) =>
-      s"private $javaType $variableName = $initialValue;"
-    }.mkString("\n      ")
-
     val code = s"""
     private $exprType[] expressions;
 
@@ -90,10 +86,11 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
 
       private UnsafeRow target = new UnsafeRow();
       private byte[] buffer = new byte[64];
+      ${declareMutableStates(ctx)}
 
-      $mutableStates
-
-      public SpecificProjection() {}
+      public SpecificProjection() {
+        ${initMutableStates(ctx)}
+      }
 
       // Scala.Function1 need this
       public Object apply(Object row) {
