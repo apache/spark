@@ -266,7 +266,18 @@ case class GeneratedAggregate(
 
       val joinedRow = new JoinedRow3
 
-      if (groupingExpressions.isEmpty) {
+      if (!iter.hasNext) {
+        // This is an empty input, so return early so that we do not allocate data structures
+        // that won't be cleaned up (see SPARK-8357).
+        if (groupingExpressions.isEmpty) {
+          // This is a global aggregate, so return an empty aggregation buffer.
+          val resultProjection = resultProjectionBuilder()
+          Iterator(resultProjection(newAggregationBuffer(EmptyRow)))
+        } else {
+          // This is a grouped aggregate, so return an empty iterator.
+          Iterator[InternalRow]()
+        }
+      } else if (groupingExpressions.isEmpty) {
         // TODO: Codegening anything other than the updateProjection is probably over kill.
         val buffer = newAggregationBuffer(EmptyRow).asInstanceOf[MutableRow]
         var currentRow: InternalRow = null
@@ -280,6 +291,7 @@ case class GeneratedAggregate(
         val resultProjection = resultProjectionBuilder()
         Iterator(resultProjection(buffer))
       } else if (unsafeEnabled) {
+        assert(iter.hasNext, "There should be at least one row for this path")
         log.info("Using Unsafe-based aggregator")
         val aggregationMap = new UnsafeFixedWidthAggregationMap(
           newAggregationBuffer,
