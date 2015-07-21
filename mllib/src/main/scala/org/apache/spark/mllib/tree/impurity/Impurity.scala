@@ -57,7 +57,7 @@ trait Impurity extends Serializable {
  * Note: Instances of this class do not hold the data; they operate on views of the data.
  * @param statsSize  Length of the vector of sufficient statistics for one bin.
  */
-private[tree] abstract class ImpurityAggregator(val statsSize: Int) extends Serializable {
+private[spark] abstract class ImpurityAggregator(val statsSize: Int) extends Serializable {
 
   /**
    * Merge the stats from one bin into another.
@@ -95,7 +95,7 @@ private[tree] abstract class ImpurityAggregator(val statsSize: Int) extends Seri
  * (node, feature, bin).
  * @param stats  Array of sufficient statistics for a (node, feature, bin).
  */
-private[tree] abstract class ImpurityCalculator(val stats: Array[Double]) {
+private[spark] abstract class ImpurityCalculator(val stats: Array[Double]) {
 
   /**
    * Make a deep copy of this [[ImpurityCalculator]].

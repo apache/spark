@@ -51,9 +51,11 @@ class SparkSubmitSuite
   /** Simple PrintStream that reads data into a buffer */
   private class BufferPrintStream extends PrintStream(noOpOutputStream) {
     var lineBuffer = ArrayBuffer[String]()
+    // scalastyle:off println
     override def println(line: String) {
       lineBuffer += line
     }
+    // scalastyle:on println
   }
 
   /** Returns true if the script exits and the given search string is printed. */
@@ -81,6 +83,7 @@ class SparkSubmitSuite
     }
   }
 
+  // scalastyle:off println
   test("prints usage on empty input") {
     testPrematureExit(Array[String](), "Usage: spark-submit")
   }
@@ -243,7 +246,7 @@ class SparkSubmitSuite
       mainClass should be ("org.apache.spark.deploy.Client")
     }
     classpath should have size 0
-    sysProps should have size 8
+    sysProps should have size 9
     sysProps.keys should contain ("SPARK_SUBMIT")
     sysProps.keys should contain ("spark.master")
     sysProps.keys should contain ("spark.app.name")
@@ -252,6 +255,7 @@ class SparkSubmitSuite
     sysProps.keys should contain ("spark.driver.cores")
     sysProps.keys should contain ("spark.driver.supervise")
     sysProps.keys should contain ("spark.shuffle.spill")
+    sysProps.keys should contain ("spark.submit.deployMode")
     sysProps("spark.shuffle.spill") should be ("false")
   }
 
@@ -509,6 +513,7 @@ class SparkSubmitSuite
       appArgs.executorMemory should be ("2.3g")
     }
   }
+  // scalastyle:on println
 
   // NOTE: This is an expensive operation in terms of time (10 seconds+). Use sparingly.
   private def runSparkSubmit(args: Seq[String]): Unit = {
@@ -554,8 +559,8 @@ object JarCreationTest extends Logging {
     val result = sc.makeRDD(1 to 100, 10).mapPartitions { x =>
       var exception: String = null
       try {
-        Class.forName(args(0), true, Thread.currentThread().getContextClassLoader)
-        Class.forName(args(1), true, Thread.currentThread().getContextClassLoader)
+        Utils.classForName(args(0))
+        Utils.classForName(args(1))
       } catch {
         case t: Throwable =>
           exception = t + "\n" + t.getStackTraceString

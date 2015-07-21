@@ -395,6 +395,18 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll with SQLTestUtils {
     )
   }
 
+  test("left semi greater than predicate and equal operator") {
+    checkAnswer(
+      sql("SELECT * FROM testData2 x LEFT SEMI JOIN testData2 y ON x.b = y.b and x.a >= y.a + 2"),
+      Seq(Row(3, 1), Row(3, 2))
+    )
+
+    checkAnswer(
+      sql("SELECT * FROM testData2 x LEFT SEMI JOIN testData2 y ON x.b = y.a and x.a >= y.b + 1"),
+      Seq(Row(2, 1), Row(2, 2), Row(3, 1), Row(3, 2))
+    )
+  }
+
   test("index into array of arrays") {
     checkAnswer(
       sql(
@@ -634,6 +646,15 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll with SQLTestUtils {
           |SELECT COUNT(a), COUNT(b), COUNT(1), COUNT(DISTINCT a), COUNT(DISTINCT b) FROM testData3
         """.stripMargin),
       Row(2, 1, 2, 2, 1))
+  }
+
+  test("count of empty table") {
+    withTempTable("t") {
+      Seq.empty[(Int, Int)].toDF("a", "b").registerTempTable("t")
+      checkAnswer(
+        sql("select count(a) from t"),
+        Row(0))
+    }
   }
 
   test("inner join where, one match per row") {
@@ -1491,5 +1512,22 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll with SQLTestUtils {
     checkIntervalParseError("select interval")
     // Currently we don't yet support nanosecond
     checkIntervalParseError("select interval 23 nanosecond")
+  }
+
+  test("SPARK-8945: add and subtract expressions for interval type") {
+    import org.apache.spark.unsafe.types.Interval
+
+    val df = sql("select interval 3 years -3 month 7 week 123 microseconds as i")
+    checkAnswer(df, Row(new Interval(12 * 3 - 3, 7L * 1000 * 1000 * 3600 * 24 * 7 + 123)))
+
+    checkAnswer(df.select(df("i") + new Interval(2, 123)),
+      Row(new Interval(12 * 3 - 3 + 2, 7L * 1000 * 1000 * 3600 * 24 * 7 + 123 + 123)))
+
+    checkAnswer(df.select(df("i") - new Interval(2, 123)),
+      Row(new Interval(12 * 3 - 3 - 2, 7L * 1000 * 1000 * 3600 * 24 * 7 + 123 - 123)))
+
+    // unary minus
+    checkAnswer(df.select(-df("i")),
+      Row(new Interval(-(12 * 3 - 3), -(7L * 1000 * 1000 * 3600 * 24 * 7 + 123))))
   }
 }

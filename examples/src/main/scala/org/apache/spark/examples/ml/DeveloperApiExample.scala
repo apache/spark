@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples.ml
 
 import org.apache.spark.{SparkConf, SparkContext}
@@ -181,3 +182,4 @@ private class MyLogisticRegressionModel(
     copyValues(new MyLogisticRegressionModel(uid, weights), extra)
   }
 }
+// scalastyle:on println

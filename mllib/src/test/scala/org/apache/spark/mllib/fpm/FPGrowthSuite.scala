@@ -132,6 +132,48 @@ class FPGrowthSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(model1.freqItemsets.count() === 625)
   }
 
+  test("FP-Growth String type association rule generation") {
+    val transactions = Seq(
+      "r z h k p",
+      "z y x w v u t s",
+      "s x o n r",
+      "x z y m t s q e",
+      "z",
+      "x z y r q t p")
+      .map(_.split(" "))
+    val rdd = sc.parallelize(transactions, 2).cache()
+
+    /* Verify results using the `R` code:
+       transactions = as(sapply(
+         list("r z h k p",
+              "z y x w v u t s",
+              "s x o n r",
+              "x z y m t s q e",
+              "z",
+              "x z y r q t p"),
+         FUN=function(x) strsplit(x," ",fixed=TRUE)),
+         "transactions")
+       ars = apriori(transactions,
+                     parameter = list(support = 0.0, confidence = 0.5, target="rules", minlen=2))
+       arsDF = as(ars, "data.frame")
+       arsDF$support = arsDF$support * length(transactions)
+       names(arsDF)[names(arsDF) == "support"] = "freq"
+       > nrow(arsDF)
+       [1] 23
+       > sum(arsDF$confidence == 1)
+       [1] 23
+     */
+    val rules = (new FPGrowth())
+      .setMinSupport(0.5)
+      .setNumPartitions(2)
+      .run(rdd)
+      .generateAssociationRules(0.9)
+      .collect()
+
+    assert(rules.size === 23)
+    assert(rules.count(rule => math.abs(rule.confidence - 1.0D) < 1e-6) == 23)
+  }
+
   test("FP-Growth using Int type") {
     val transactions = Seq(
       "1 2 3",

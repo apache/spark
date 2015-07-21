@@ -130,7 +130,9 @@ class FailureSuite extends SparkFunSuite with LocalSparkContext {
 
     // Non-serializable closure in foreach function
     val thrown2 = intercept[SparkException] {
+      // scalastyle:off println
       sc.parallelize(1 to 10, 2).foreach(x => println(a))
+      // scalastyle:on println
     }
     assert(thrown2.getClass === classOf[SparkException])
     assert(thrown2.getMessage.contains("NotSerializableException") ||

@@ -43,6 +43,7 @@ object MasterFailureTest extends Logging {
   @volatile var setupCalled = false
 
   def main(args: Array[String]) {
+    // scalastyle:off println
     if (args.size < 2) {
       println(
         "Usage: MasterFailureTest <local/HDFS directory> <# batches> " +
@@ -60,6 +61,7 @@ object MasterFailureTest extends Logging {
     testUpdateStateByKey(directory, numBatches, batchDuration)
 
     println("\n\nSUCCESS\n\n")
+    // scalastyle:on println
   }
 
   def testMap(directory: String, numBatches: Int, batchDuration: Duration) {
@@ -291,10 +293,12 @@ object MasterFailureTest extends Logging {
     }
 
     // Log the output
+    // scalastyle:off println
     println("Expected output, size = " + expectedOutput.size)
     println(expectedOutput.mkString("[", ",", "]"))
     println("Output, size = " + output.size)
     println(output.mkString("[", ",", "]"))
+    // scalastyle:on println
 
     // Match the output with the expected output
     output.foreach(o =>

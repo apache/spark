@@ -31,7 +31,7 @@ from pyspark.serializers import BatchedSerializer, PickleSerializer, UTF8Deseria
 from pyspark.storagelevel import StorageLevel
 from pyspark.traceback_utils import SCCallSiteSync
 from pyspark.sql import since
-from pyspark.sql.types import _create_cls, _parse_datatype_json_string
+from pyspark.sql.types import _parse_datatype_json_string
 from pyspark.sql.column import Column, _to_seq, _to_java_column
 from pyspark.sql.readwriter import DataFrameWriter
 from pyspark.sql.types import *
@@ -83,15 +83,7 @@ class DataFrame(object):
         """
         if self._lazy_rdd is None:
             jrdd = self._jdf.javaToPython()
-            rdd = RDD(jrdd, self.sql_ctx._sc, BatchedSerializer(PickleSerializer()))
-            schema = self.schema
-
-            def applySchema(it):
-                cls = _create_cls(schema)
-                return map(cls, it)
-
-            self._lazy_rdd = rdd.mapPartitions(applySchema)
-
+            self._lazy_rdd = RDD(jrdd, self.sql_ctx._sc, BatchedSerializer(PickleSerializer()))
         return self._lazy_rdd
 
     @property
@@ -287,9 +279,7 @@ class DataFrame(object):
         """
         with SCCallSiteSync(self._sc) as css:
             port = self._sc._jvm.PythonRDD.collectAndServe(self._jdf.javaToPython().rdd())
-        rs = list(_load_from_socket(port, BatchedSerializer(PickleSerializer())))
-        cls = _create_cls(self.schema)
-        return [cls(r) for r in rs]
+        return list(_load_from_socket(port, BatchedSerializer(PickleSerializer())))
 
     @ignore_unicode_prefix
     @since(1.3)

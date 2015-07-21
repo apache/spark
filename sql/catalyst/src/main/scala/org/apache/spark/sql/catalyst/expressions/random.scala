@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.TaskContext
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodeGenContext, GeneratedExpressionCode}
 import org.apache.spark.sql.types.{DataType, DoubleType}
 import org.apache.spark.util.Utils
 import org.apache.spark.util.random.XORShiftRandom
@@ -31,20 +32,15 @@ import org.apache.spark.util.random.XORShiftRandom
  *
  * Since this expression is stateful, it cannot be a case object.
  */
-abstract class RDG(seed: Long) extends LeafExpression with Serializable {
-  self: Product =>
+abstract class RDG extends LeafExpression with Nondeterministic {
+
+  protected def seed: Long
 
   /**
    * Record ID within each partition. By being transient, the Random Number Generator is
    * reset every time we serialize and deserialize it.
    */
-  @transient protected lazy val partitionId = TaskContext.get() match {
-    case null => 0
-    case _ => TaskContext.get().partitionId()
-  }
-  @transient protected lazy val rng = new XORShiftRandom(seed + partitionId)
-
-  override def deterministic: Boolean = false
+  @transient protected lazy val rng = new XORShiftRandom(seed + TaskContext.getPartitionId)
 
   override def nullable: Boolean = false
 
@@ -52,7 +48,7 @@ abstract class RDG(seed: Long) extends LeafExpression with Serializable {
 }
 
 /** Generate a random column with i.i.d. uniformly distributed values in [0, 1). */
-case class Rand(seed: Long) extends RDG(seed) {
+case class Rand(seed: Long) extends RDG {
   override def eval(input: InternalRow): Double = rng.nextDouble()
 
   def this() = this(Utils.random.nextLong())
@@ -61,10 +57,21 @@ case class Rand(seed: Long) extends RDG(seed) {
     case IntegerLiteral(s) => s
     case _ => throw new AnalysisException("Input argument to rand must be an integer literal.")
   })
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    val rngTerm = ctx.freshName("rng")
+    val className = classOf[XORShiftRandom].getName
+    ctx.addMutableState(className, rngTerm,
+      s"$rngTerm = new $className($seed + org.apache.spark.TaskContext.getPartitionId());")
+    ev.isNull = "false"
+    s"""
+      final ${ctx.javaType(dataType)} ${ev.primitive} = $rngTerm.nextDouble();
+    """
+  }
 }
 
 /** Generate a random column with i.i.d. gaussian random distribution. */
-case class Randn(seed: Long) extends RDG(seed) {
+case class Randn(seed: Long) extends RDG {
   override def eval(input: InternalRow): Double = rng.nextGaussian()
 
   def this() = this(Utils.random.nextLong())
@@ -73,4 +80,15 @@ case class Randn(seed: Long) extends RDG(seed) {
     case IntegerLiteral(s) => s
     case _ => throw new AnalysisException("Input argument to rand must be an integer literal.")
   })
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    val rngTerm = ctx.freshName("rng")
+    val className = classOf[XORShiftRandom].getName
+    ctx.addMutableState(className, rngTerm,
+      s"$rngTerm = new $className($seed + org.apache.spark.TaskContext.getPartitionId());")
+    ev.isNull = "false"
+    s"""
+      final ${ctx.javaType(dataType)} ${ev.primitive} = $rngTerm.nextGaussian();
+    """
+  }
 }

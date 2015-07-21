@@ -68,7 +68,7 @@ you can specify the packages with the `packages` argument.
 
 <div data-lang="r" markdown="1">
 {% highlight r %}
-sc <- sparkR.init(packages="com.databricks:spark-csv_2.11:1.0.3")
+sc <- sparkR.init(sparkPackages="com.databricks:spark-csv_2.11:1.0.3")
 sqlContext <- sparkRSQL.init(sc)
 {% endhighlight %}
 </div>

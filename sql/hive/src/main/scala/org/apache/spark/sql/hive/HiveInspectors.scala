@@ -267,7 +267,7 @@ private[hive] trait HiveInspectors {
         poi.getWritableConstantValue.getHiveDecimal)
     case poi: WritableConstantTimestampObjectInspector =>
       val t = poi.getWritableConstantValue
-      t.getSeconds * 10000000L + t.getNanos / 100L
+      t.getSeconds * 1000000L + t.getNanos / 1000L
     case poi: WritableConstantIntObjectInspector =>
       poi.getWritableConstantValue.get()
     case poi: WritableConstantDoubleObjectInspector =>
@@ -332,7 +332,7 @@ private[hive] trait HiveInspectors {
       case x: DateObjectInspector => DateTimeUtils.fromJavaDate(x.getPrimitiveJavaObject(data))
       case x: TimestampObjectInspector if x.preferWritable() =>
         val t = x.getPrimitiveWritableObject(data)
-        t.getSeconds * 10000000L + t.getNanos / 100
+        t.getSeconds * 1000000L + t.getNanos / 1000L
       case ti: TimestampObjectInspector =>
         DateTimeUtils.fromJavaTimestamp(ti.getPrimitiveJavaObject(data))
       case _ => pi.getPrimitiveJavaObject(data)

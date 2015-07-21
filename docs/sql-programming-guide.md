@@ -828,7 +828,7 @@ using this syntax.
 
 {% highlight scala %}
 val df = sqlContext.read.format("json").load("examples/src/main/resources/people.json")
-df.select("name", "age").write.format("json").save("namesAndAges.json")
+df.select("name", "age").write.format("parquet").save("namesAndAges.parquet")
 {% endhighlight %}
 
 </div>
