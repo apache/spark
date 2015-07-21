@@ -44,9 +44,9 @@ import org.apache.spark.sql.catalyst.ParserDialect
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.{ExecutedCommand, ExtractPythonUDFs, SetCommand}
+import org.apache.spark.sql.execution.datasources.{PreWriteCheck, PreInsertCastAndRename, DataSourceStrategy}
 import org.apache.spark.sql.hive.client._
 import org.apache.spark.sql.hive.execution.{DescribeHiveTableCommand, HiveNativeCommand}
-import org.apache.spark.sql.sources.DataSourceStrategy
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
@@ -384,11 +384,11 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) with Logging {
         catalog.PreInsertionCasts ::
         ExtractPythonUDFs ::
         ResolveHiveWindowFunction ::
-        sources.PreInsertCastAndRename ::
+        PreInsertCastAndRename ::
         Nil
 
       override val extendedCheckRules = Seq(
-        sources.PreWriteCheck(catalog)
+        PreWriteCheck(catalog)
       )
     }
 
