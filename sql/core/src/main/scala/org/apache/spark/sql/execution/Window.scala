@@ -118,22 +118,24 @@ case class Window(
           val exprs = windowSpec.orderSpec.map(_.child)
           val projection = newMutableProjection(exprs, child.output)
           (windowSpec.orderSpec, projection(), projection())
-        }
-        else if (windowSpec.orderSpec.size == 1) {
+        } else if (windowSpec.orderSpec.size == 1) {
           // Use only the first order expression when the offset is non-null.
           val sortExpr = windowSpec.orderSpec.head
           val expr = sortExpr.child
           // Create the projection which returns the current 'value'.
           val current = newMutableProjection(expr :: Nil, child.output)()
           // Flip the sign of the offset when processing the order is descending
-          val boundOffset = if (sortExpr.direction == Descending) -offset
-          else offset
+          val boundOffset =
+            if (sortExpr.direction == Descending) {
+              -offset
+            } else {
+              offset
+            }
           // Create the projection which returns the current 'value' modified by adding the offset.
           val boundExpr = Add(expr, Cast(Literal.create(boundOffset, IntegerType), expr.dataType))
           val bound = newMutableProjection(boundExpr :: Nil, child.output)()
           (sortExpr :: Nil, current, bound)
-        }
-        else {
+        } else {
           sys.error("Non-Zero range offsets are not supported for windows " +
             "with multiple order expressions.")
         }

@@ -211,15 +211,34 @@ class ColumnExpressionSuite extends QueryTest {
 
     checkAnswer(
       testData.select($"a".isNaN, $"b".isNaN),
-      Row(true, true) :: Row(true, true) :: Row(true, true) :: Row(false, false) :: Nil)
+      Row(true, true) :: Row(true, true) :: Row(false, false) :: Row(false, false) :: Nil)
 
     checkAnswer(
       testData.select(isNaN($"a"), isNaN($"b")),
-      Row(true, true) :: Row(true, true) :: Row(true, true) :: Row(false, false) :: Nil)
+      Row(true, true) :: Row(true, true) :: Row(false, false) :: Row(false, false) :: Nil)
 
     checkAnswer(
       ctx.sql("select isnan(15), isnan('invalid')"),
-      Row(false, true))
+      Row(false, false))
+  }
+
+  test("nanvl") {
+    val testData = ctx.createDataFrame(ctx.sparkContext.parallelize(
+      Row(null, 3.0, Double.NaN, Double.PositiveInfinity) :: Nil),
+      StructType(Seq(StructField("a", DoubleType), StructField("b", DoubleType),
+        StructField("c", DoubleType), StructField("d", DoubleType))))
+
+    checkAnswer(
+      testData.select(
+        nanvl($"a", lit(5)), nanvl($"b", lit(10)),
+        nanvl($"c", lit(null).cast(DoubleType)), nanvl($"d", lit(10))),
+      Row(null, 3.0, null, Double.PositiveInfinity)
+    )
+    testData.registerTempTable("t")
+    checkAnswer(
+      ctx.sql("select nanvl(a, 5), nanvl(b, 10), nanvl(c, null), nanvl(d, 10) from t"),
+      Row(null, 3.0, null, Double.PositiveInfinity)
+    )
   }
 
   test("===") {
