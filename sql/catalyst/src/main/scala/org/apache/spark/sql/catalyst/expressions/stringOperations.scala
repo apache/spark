@@ -190,6 +190,9 @@ case class Like(left: Expression, right: Expression)
 
   override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     val patternClass = classOf[Pattern].getName
+    val sb = classOf[StringBuilder].getName
+    val regex = ctx.freshName("regex")
+    val pattern = ctx.freshName("pattern")
 
     val literalRight: String = right match {
       case x @ Literal(value: String, StringType) => escape(value)
@@ -204,44 +207,46 @@ case class Like(left: Expression, right: Expression)
         s"${patternClass} pattern = $patternClass.compile($literalRight);"
       } else {
         s"""
-          StringBuilder regex = new StringBuilder("(?s)");
+          $sb $regex = new $sb("(?s)");
           for (int idx = 1; idx < rightStr.length(); idx++) {
             char prev = rightStr.charAt(idx - 1);
             char curr = rightStr.charAt(idx);
             if (prev == '\\\\') {
               if (curr == '_') {
-                regex.append("_");
+                $regex.append("_");
               } else if (curr == '%') {
-                regex.append("%");
+                $regex.append("%");
               } else {
-                regex.append(${patternClass}.quote("\\\\" + curr));
+                $regex.append(${patternClass}.quote("\\\\" + curr));
               }
             } else {
               if (curr != '\\\\') {
                 if (curr == '_') {
-                  regex.append(".");
+                  $regex.append(".");
                 } else if (curr == '%') {
-                  regex.append(".*");
+                  $regex.append(".*");
                 } else {
-                  regex.append(${patternClass}.quote((new Character(curr)).toString()));
+                  $regex.append(${patternClass}.quote((new Character(curr)).toString()));
                 }
               }
             }
           }
-          ${patternClass} pattern = ${patternClass}.compile(regex.toString());
+          ${patternClass} $pattern = ${patternClass}.compile($regex.toString());
         """
       }
 
     s"""
       ${leftGen.code}
-      ${rightGen.code}
-
-      boolean ${ev.isNull} = ${leftGen.isNull} || ${rightGen.isNull};
+      boolean ${ev.isNull} = ${leftGen.isNull};
       ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
       if (!${ev.isNull}) {
-        String rightStr = " " + ${rightGen.primitive}.toString();
-        $patternCode
-        ${ev.primitive} = pattern.matcher(${leftGen.primitive}.toString()).matches();
+        ${rightGen.code}
+        ${ev.isNull} = ${rightGen.isNull};
+        if (!${ev.isNull}) {
+          String rightStr = " " + ${rightGen.primitive}.toString();
+          $patternCode
+          ${ev.primitive} = $pattern.matcher(${leftGen.primitive}.toString()).matches();
+        }
       }
     """
   }
