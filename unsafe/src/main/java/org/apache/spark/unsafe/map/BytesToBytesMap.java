@@ -78,7 +78,7 @@ public final class BytesToBytesMap {
    * The size of the data pages that hold key and value data. Map entries cannot span multiple
    * pages, so this limits the maximum entry size.
    */
-  private static final long PAGE_SIZE_BYTES = 1L << 26; // 64 megabytes
+  private static final long PAGE_SIZE_BYTES = 1L << 22; // 4 megabytes
 
   /**
    * The maximum number of keys that BytesToBytesMap supports. The hash table has to be
