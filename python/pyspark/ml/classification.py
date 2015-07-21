@@ -605,7 +605,7 @@ class NaiveBayes(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol):
     # a placeholder to make it appear in the generated doc
     lambda_ = Param(Params._dummy(), "lambda_", "The smoothing parameter, should be >= 0.")
     modelType = Param(Params._dummy(), "modelType", "The model type which is a string " +
-        "(case-sensitive). Supported options: multinomial (default) and bernoulli.")
+                      "(case-sensitive). Supported options: multinomial (default) and bernoulli.")
 
     @keyword_only
     def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
