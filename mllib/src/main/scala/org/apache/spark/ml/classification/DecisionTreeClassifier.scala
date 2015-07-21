@@ -114,6 +114,14 @@ final class DecisionTreeClassificationModel private[ml] (
   require(rootNode != null,
     "DecisionTreeClassificationModel given null rootNode, but it requires a non-null rootNode.")
 
+  /**
+   * Construct a decision tree classificaton model.
+   * @param rootNode  Root node of tree, with other nodes attached.
+   */
+  def this(rootNode: Node, numClasses: Int) = {
+    this(Identifiable.randomUID("dtc"), rootNode, numClasses)
+  }
+
   override def predict(features: Vector): Double = {
     rootNode.predict(features)
   }
