@@ -21,8 +21,7 @@ import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.catalyst.util.sideBySide
 
-abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
-
+object RuleExecutor {
   /**
    * An execution strategy for rules that indicates the maximum number of executions. If the
    * execution reaches fix point (i.e. converge) before maxIterations, it will stop.
@@ -36,7 +35,11 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
   case class FixedPoint(maxIterations: Int) extends Strategy
 
   /** A batch of rules. */
-  protected case class Batch(name: String, strategy: Strategy, rules: Rule[TreeType]*)
+  case class Batch[TreeType <: TreeNode[_]](name: String, strategy: Strategy, rules: Rule[TreeType]*)
+}
+
+abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
+  type Batch = RuleExecutor.Batch[TreeType]
 
   /** Defines a sequence of rule batches, to be overridden by the implementation. */
   protected val batches: Seq[Batch]

@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.{SimpleCatalystConf, CatalystConf}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
+import org.apache.spark.sql.catalyst.rules.RuleExecutor._
 import org.apache.spark.sql.types._
 import scala.collection.mutable.ArrayBuffer
 
@@ -60,7 +61,7 @@ class Analyzer(
    */
   val extendedResolutionRules: Seq[Rule[LogicalPlan]] = Nil
 
-  lazy val batches: Seq[Batch] = Seq(
+  lazy val batches:Seq[Batch] = Seq(
     Batch("Substitution", fixedPoint,
       CTESubstitution ::
       WindowsSubstitution ::

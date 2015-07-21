@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.expressions.{SortOrder, Ascending, Count, E
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.{LeftSemi, PlanTest, LeftOuter, RightOuter}
 import org.apache.spark.sql.catalyst.rules._
+import org.apache.spark.sql.catalyst.rules.RuleExecutor._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.types.IntegerType
