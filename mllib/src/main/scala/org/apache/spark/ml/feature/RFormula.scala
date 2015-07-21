@@ -109,8 +109,9 @@ class RFormula(override val uid: String) extends Estimator[RFormulaModel] with R
 
 /**
  * A fitted RFormula. Fitting is required to determine the factor levels of formula terms.
- * @param parsedFormula a pre-parsed R formula
- * @param factorLevels the fitted factor to index mappings from the training dataset.
+ * @param parsedFormula a pre-parsed R formula.
+ * @param factorLevels the fitted factor to index mappings from the training dataset. These are
+ *                     calculated for each term of StringType.
  */
 private[feature] class RFormulaModel(
     override val uid: String,
