@@ -577,10 +577,10 @@ class DAGSchedulerSuite
       (Success, makeMapStatus("hostA", 2)),
       (Success, makeMapStatus("hostB", 2))))
     // The MapOutputTracker should know about both map output locations.
-    assert(mapOutputTracker.getServerStatuses(shuffleId, 0).map(_._1.host) ===
-      Array("hostA", "hostB"))
-    assert(mapOutputTracker.getServerStatuses(shuffleId, 1).map(_._1.host) ===
-      Array("hostA", "hostB"))
+    assert(mapOutputTracker.getMapSizesByExecutorId(shuffleId, 0).map(_._1.host).toSet ===
+      HashSet("hostA", "hostB"))
+    assert(mapOutputTracker.getMapSizesByExecutorId(shuffleId, 1).map(_._1.host).toSet ===
+      HashSet("hostA", "hostB"))
 
     // The first result task fails, with a fetch failure for the output from the first mapper.
     runEvent(CompletionEvent(
