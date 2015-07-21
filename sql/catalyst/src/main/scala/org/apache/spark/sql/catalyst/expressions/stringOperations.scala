@@ -24,6 +24,7 @@ import java.util.regex.{MatchResult, Pattern}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.UnresolvedException
 import org.apache.spark.sql.catalyst.expressions.codegen._
+import org.apache.spark.sql.catalyst.util.StringUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -161,28 +162,7 @@ trait StringRegexExpression extends ImplicitCastInputTypes {
 case class Like(left: Expression, right: Expression)
   extends BinaryExpression with StringRegexExpression with CodegenFallback {
 
-  // replace the _ with .{1} exactly match 1 time of any character
-  // replace the % with .*, match 0 or more times with any character
-  override def escape(v: String): String =
-    if (!v.isEmpty) {
-      "(?s)" + (' ' +: v.init).zip(v).flatMap {
-        case (prev, '\\') => ""
-        case ('\\', c) =>
-          c match {
-            case '_' => "_"
-            case '%' => "%"
-            case _ => Pattern.quote("\\" + c)
-          }
-        case (prev, c) =>
-          c match {
-            case '_' => "."
-            case '%' => ".*"
-            case _ => Pattern.quote(Character.toString(c))
-          }
-      }.mkString
-    } else {
-      v
-    }
+  override def escape(v: String): String = StringUtils.escapeLikeRegex(v)
 
   override def matches(regex: Pattern, str: String): Boolean = regex.matcher(str).matches()
 
@@ -190,8 +170,7 @@ case class Like(left: Expression, right: Expression)
 
   override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     val patternClass = classOf[Pattern].getName
-    val sb = classOf[StringBuilder].getName
-    val regex = ctx.freshName("regex")
+    val escapeFunc = StringUtils.getClass.getName.stripSuffix("$") + ".escapeLikeRegex"
     val pattern = ctx.freshName("pattern")
 
     val literalRight: String = right match {
@@ -204,35 +183,11 @@ case class Like(left: Expression, right: Expression)
 
     val patternCode =
       if (literalRight != null) {
-        s"${patternClass} $pattern = ${patternClass}.compile($literalRight);"
+        ctx.addMutableState(patternClass, pattern,
+          s"${patternClass}.compile($literalRight)")
+        ""
       } else {
-        s"""
-          $sb $regex = new $sb("(?s)");
-          for (int idx = 1; idx < rightStr.length(); idx++) {
-            char prev = rightStr.charAt(idx - 1);
-            char curr = rightStr.charAt(idx);
-            if (prev == '\\\\') {
-              if (curr == '_') {
-                $regex.append("_");
-              } else if (curr == '%') {
-                $regex.append("%");
-              } else {
-                $regex.append(${patternClass}.quote("\\\\" + curr));
-              }
-            } else {
-              if (curr != '\\\\') {
-                if (curr == '_') {
-                  $regex.append(".");
-                } else if (curr == '%') {
-                  $regex.append(".*");
-                } else {
-                  $regex.append(${patternClass}.quote((new Character(curr)).toString()));
-                }
-              }
-            }
-          }
-          ${patternClass} $pattern = ${patternClass}.compile($regex.toString());
-        """
+        s"${patternClass} $pattern = ${patternClass}.compile($escapeFunc(rightStr));"
       }
 
     s"""
@@ -243,7 +198,7 @@ case class Like(left: Expression, right: Expression)
         ${rightGen.code}
         ${ev.isNull} = ${rightGen.isNull};
         if (!${ev.isNull}) {
-          String rightStr = " " + ${rightGen.primitive}.toString();
+          String rightStr = ${rightGen.primitive}.toString();
           $patternCode
           ${ev.primitive} = $pattern.matcher(${leftGen.primitive}.toString()).matches();
         }
@@ -274,7 +229,9 @@ case class RLike(left: Expression, right: Expression)
 
     val patternCode =
       if (literalRight != null) {
-        s"${patternClass} $pattern = ${patternClass}.compile($literalRight);"
+        ctx.addMutableState(patternClass, pattern,
+          s"${patternClass}.compile($literalRight)")
+        ""
       } else {
         s"""
           ${patternClass} $pattern = ${patternClass}.compile(rightStr);
