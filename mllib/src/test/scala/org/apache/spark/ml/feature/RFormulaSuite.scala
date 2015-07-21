@@ -81,26 +81,27 @@ class RFormulaSuite extends SparkFunSuite with MLlibTestSparkContext {
   test("allow missing label column for test datasets") {
     val formula = new RFormula().setFormula("y ~ x").setLabelCol("label")
     val original = sqlContext.createDataFrame(Seq((0, 1.0), (2, 2.0))).toDF("x", "_not_y")
-    val resultSchema = formula.transformSchema(original.schema)
+    val model = formula.fit(original)
+    val resultSchema = model.transformSchema(original.schema)
     assert(resultSchema.length == 3)
     assert(!resultSchema.exists(_.name == "label"))
-    assert(resultSchema.toString == formula.transform(original).schema.toString)
+    assert(resultSchema.toString == model.transform(original).schema.toString)
   }
 
   test("encodes string terms") {
-    val formula = new RFormula().setFormula("id ~ category")
+    val formula = new RFormula().setFormula("id ~ a + b")
     val original = sqlContext.createDataFrame(
-      Seq((1, "foo"), (2, "bar"), (3, "bar"), (4, "baz"))).toDF("id", "category")
+      Seq((1, "foo", 4), (2, "bar", 4), (3, "bar", 5), (4, "baz", 5))).toDF("id", "a", "b")
     val model = formula.fit(original)
     val result = model.transform(original)
     val resultSchema = model.transformSchema(original.schema)
     val expected = sqlContext.createDataFrame(
       Seq(
-        (1, "foo", Vectors.dense(Array(0.0, 1.0)), 1.0),
-        (2, "bar", Vectors.dense(Array(1.0, 0.0)), 2.0),
-        (3, "bar", Vectors.dense(Array(1.0, 0.0)), 3.0),
-        (4, "baz", Vectors.dense(Array(0.0, 0.0)), 4.0))
-      ).toDF("id", "name", "features", "label")
+        (1, "foo", 4, Vectors.dense(Array(0.0, 1.0, 4.0)), 1.0),
+        (2, "bar", 4, Vectors.dense(Array(1.0, 0.0, 4.0)), 2.0),
+        (3, "bar", 5, Vectors.dense(Array(1.0, 0.0, 5.0)), 3.0),
+        (4, "baz", 5, Vectors.dense(Array(0.0, 0.0, 5.0)), 4.0))
+      ).toDF("id", "a", "b", "features", "label")
     assert(result.schema.toString == resultSchema.toString)
     assert(result.collect().toSeq == expected.collect().toSeq)
   }

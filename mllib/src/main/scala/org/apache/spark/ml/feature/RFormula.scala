@@ -129,8 +129,8 @@ private[feature] class RFormulaModel(
     val withFeatures = featureTransformer(schema).transformSchema(schema)
     if (hasLabelCol(schema)) {
       withFeatures
-    } else if (schema.exists(_.name == parsedFormula.get.label)) {
-      val nullable = schema(parsedFormula.get.label).dataType match {
+    } else if (schema.exists(_.name == parsedFormula.label)) {
+      val nullable = schema(parsedFormula.label).dataType match {
         case _: NumericType | BooleanType => false
         case _ => true
       }
@@ -148,7 +148,7 @@ private[feature] class RFormulaModel(
   override def toString: String = s"RFormulaModel(${parsedFormula})"
 
   private def transformLabel(dataset: DataFrame): DataFrame = {
-    val labelName = parsedFormula.get.label
+    val labelName = parsedFormula.label
     if (hasLabelCol(dataset.schema)) {
       dataset
     } else if (dataset.schema.exists(_.name == labelName)) {
@@ -196,7 +196,7 @@ private[feature] class RFormulaModel(
       }
     }
     encoderStages :+= new VectorAssembler(uid)
-      .setInputCols(encodedTerms.toArray)
+      .setInputCols(encodedTerms.toArray.sorted)
       .setOutputCol($(featuresCol))
     encoderStages :+= new ColumnPruner(tempColumns.toSet)
     new PipelineModel(uid, encoderStages.toArray)
