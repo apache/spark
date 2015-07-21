@@ -239,6 +239,14 @@ class SparkHadoopUtil extends Logging {
     }.getOrElse(Seq.empty[Path])
   }
 
+  def globPathIfNecessary(pattern: Path): Seq[Path] = {
+    if (pattern.toString.exists("{}[]*?\\".toSet.contains)) {
+      globPath(pattern)
+    } else {
+      Seq(pattern)
+    }
+  }
+
   /**
    * Lists all the files in a directory with the specified prefix, and does not end with the
    * given suffix. The returned {{FileStatus}} instances are sorted by the modification times of

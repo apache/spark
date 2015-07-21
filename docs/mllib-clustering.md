@@ -472,7 +472,7 @@ to the algorithm. We then output the topics, represented as probability distribu
 <div data-lang="scala" markdown="1">
 
 {% highlight scala %}
-import org.apache.spark.mllib.clustering.LDA
+import org.apache.spark.mllib.clustering.{LDA, DistributedLDAModel}
 import org.apache.spark.mllib.linalg.Vectors
 
 // Load and parse the data
@@ -492,6 +492,11 @@ for (topic <- Range(0, 3)) {
   for (word <- Range(0, ldaModel.vocabSize)) { print(" " + topics(word, topic)); }
   println()
 }
+
+// Save and load model.
+ldaModel.save(sc, "myLDAModel")
+val sameModel = DistributedLDAModel.load(sc, "myLDAModel")
+
 {% endhighlight %}
 </div>
 
@@ -551,6 +556,9 @@ public class JavaLDAExample {
       }
       System.out.println();
     }
+
+    ldaModel.save(sc.sc(), "myLDAModel");
+    DistributedLDAModel sameModel = DistributedLDAModel.load(sc.sc(), "myLDAModel");
   }
 }
 {% endhighlight %}

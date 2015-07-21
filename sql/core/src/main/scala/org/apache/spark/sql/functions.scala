@@ -42,6 +42,7 @@ import org.apache.spark.util.Utils
  * @groupname misc_funcs Misc functions
  * @groupname window_funcs Window functions
  * @groupname string_funcs String functions
+ * @groupname collection_funcs Collection functions
  * @groupname Ungrouped Support functions for DataFrames.
  * @since 1.3.0
  */
@@ -69,22 +70,13 @@ object functions {
   def column(colName: String): Column = Column(colName)
 
   /**
-   * Convert a number from one base to another for the specified expressions
+   * Convert a number in string format from one base to another.
    *
    * @group math_funcs
    * @since 1.5.0
    */
   def conv(num: Column, fromBase: Int, toBase: Int): Column =
     Conv(num.expr, lit(fromBase).expr, lit(toBase).expr)
-
-  /**
-   * Convert a number from one base to another for the specified expressions
-   *
-   * @group math_funcs
-   * @since 1.5.0
-   */
-  def conv(numColName: String, fromBase: Int, toBase: Int): Column =
-    conv(Column(numColName), fromBase, toBase)
 
   /**
    * Creates a [[Column]] of literal value.
@@ -603,7 +595,7 @@ object functions {
   }
 
   /**
-   * Returns the first column that is not null.
+   * Returns the first column that is not null and not NaN.
    * {{{
    *   df.select(coalesce(df("a"), df("b")))
    * }}}
@@ -620,20 +612,12 @@ object functions {
   def explode(e: Column): Column = Explode(e.expr)
 
   /**
-   * Return true if the column is NaN or null
+   * Return true iff the column is NaN.
    *
    * @group normal_funcs
    * @since 1.5.0
    */
   def isNaN(e: Column): Column = IsNaN(e.expr)
-
-  /**
-   * Converts a string expression to lower case.
-   *
-   * @group normal_funcs
-   * @since 1.3.0
-   */
-  def lower(e: Column): Column = Lower(e.expr)
 
   /**
    * A column expression that generates monotonically increasing 64-bit integers.
@@ -651,6 +635,15 @@ object functions {
    * @since 1.4.0
    */
   def monotonicallyIncreasingId(): Column = execution.expressions.MonotonicallyIncreasingID()
+
+  /**
+   * Return an alternative value `r` if `l` is NaN.
+   * This function is useful for mapping NaN values to null.
+   *
+   * @group normal_funcs
+   * @since 1.5.0
+   */
+  def nanvl(l: Column, r: Column): Column = NaNvl(l.expr, r.expr)
 
   /**
    * Unary minus, i.e. negate the expression.
@@ -790,14 +783,6 @@ object functions {
   def struct(colName: String, colNames: String*): Column = {
     struct((colName +: colNames).map(col) : _*)
   }
-
-  /**
-   * Converts a string expression to upper case.
-   *
-   * @group normal_funcs
-   * @since 1.3.0
-   */
-  def upper(e: Column): Column = Upper(e.expr)
 
   /**
    * Computes bitwise NOT.
@@ -1106,9 +1091,8 @@ object functions {
    * @since 1.5.0
    */
   @scala.annotation.varargs
-  def greatest(exprs: Column*): Column = if (exprs.length < 2) {
-    sys.error("GREATEST takes at least 2 parameters")
-  } else {
+  def greatest(exprs: Column*): Column = {
+    require(exprs.length > 1, "greatest requires at least 2 arguments.")
     Greatest(exprs.map(_.expr))
   }
 
@@ -1120,9 +1104,7 @@ object functions {
    * @since 1.5.0
    */
   @scala.annotation.varargs
-  def greatest(columnName: String, columnNames: String*): Column = if (columnNames.isEmpty) {
-    sys.error("GREATEST takes at least 2 parameters")
-  } else {
+  def greatest(columnName: String, columnNames: String*): Column = {
     greatest((columnName +: columnNames).map(Column.apply): _*)
   }
 
@@ -1135,14 +1117,6 @@ object functions {
   def hex(column: Column): Column = Hex(column.expr)
 
   /**
-   * Computes hex value of the given input.
-   *
-   * @group math_funcs
-   * @since 1.5.0
-   */
-  def hex(colName: String): Column = hex(Column(colName))
-
-  /**
    * Inverse of hex. Interprets each pair of characters as a hexadecimal number
    * and converts to the byte representation of number.
    *
@@ -1150,15 +1124,6 @@ object functions {
    * @since 1.5.0
    */
   def unhex(column: Column): Column = Unhex(column.expr)
-
-  /**
-   * Inverse of hex. Interprets each pair of characters as a hexadecimal number
-   * and converts to the byte representation of number.
-   *
-   * @group math_funcs
-   * @since 1.5.0
-   */
-  def unhex(colName: String): Column = unhex(Column(colName))
 
   /**
    * Computes `sqrt(a^2^ + b^2^)` without intermediate overflow or underflow.
@@ -1233,9 +1198,8 @@ object functions {
    * @since 1.5.0
    */
   @scala.annotation.varargs
-  def least(exprs: Column*): Column = if (exprs.length < 2) {
-    sys.error("LEAST takes at least 2 parameters")
-  } else {
+  def least(exprs: Column*): Column = {
+    require(exprs.length > 1, "least requires at least 2 arguments.")
     Least(exprs.map(_.expr))
   }
 
@@ -1247,9 +1211,7 @@ object functions {
    * @since 1.5.0
    */
   @scala.annotation.varargs
-  def least(columnName: String, columnNames: String*): Column = if (columnNames.isEmpty) {
-    sys.error("LEAST takes at least 2 parameters")
-  } else {
+  def least(columnName: String, columnNames: String*): Column = {
     least((columnName +: columnNames).map(Column.apply): _*)
   }
 
@@ -1639,7 +1601,8 @@ object functions {
   //////////////////////////////////////////////////////////////////////////////////////////////
 
   /**
-   * Calculates the MD5 digest and returns the value as a 32 character hex string.
+   * Calculates the MD5 digest of a binary column and returns the value
+   * as a 32 character hex string.
    *
    * @group misc_funcs
    * @since 1.5.0
@@ -1647,15 +1610,8 @@ object functions {
   def md5(e: Column): Column = Md5(e.expr)
 
   /**
-   * Calculates the MD5 digest and returns the value as a 32 character hex string.
-   *
-   * @group misc_funcs
-   * @since 1.5.0
-   */
-  def md5(columnName: String): Column = md5(Column(columnName))
-
-  /**
-   * Calculates the SHA-1 digest and returns the value as a 40 character hex string.
+   * Calculates the SHA-1 digest of a binary column and returns the value
+   * as a 40 character hex string.
    *
    * @group misc_funcs
    * @since 1.5.0
@@ -1663,15 +1619,11 @@ object functions {
   def sha1(e: Column): Column = Sha1(e.expr)
 
   /**
-   * Calculates the SHA-1 digest and returns the value as a 40 character hex string.
+   * Calculates the SHA-2 family of hash functions of a binary column and
+   * returns the value as a hex string.
    *
-   * @group misc_funcs
-   * @since 1.5.0
-   */
-  def sha1(columnName: String): Column = sha1(Column(columnName))
-
-  /**
-   * Calculates the SHA-2 family of hash functions and returns the value as a hex string.
+   * @param e column to compute SHA-2 on.
+   * @param numBits one of 224, 256, 384, or 512.
    *
    * @group misc_funcs
    * @since 1.5.0
@@ -1683,28 +1635,13 @@ object functions {
   }
 
   /**
-   * Calculates the SHA-2 family of hash functions and returns the value as a hex string.
-   *
-   * @group misc_funcs
-   * @since 1.5.0
-   */
-  def sha2(columnName: String, numBits: Int): Column = sha2(Column(columnName), numBits)
-
-  /**
-   * Calculates the cyclic redundancy check value and returns the value as a bigint.
+   * Calculates the cyclic redundancy check value  (CRC32) of a binary column and
+   * returns the value as a bigint.
    *
    * @group misc_funcs
    * @since 1.5.0
    */
   def crc32(e: Column): Column = Crc32(e.expr)
-
-  /**
-   * Calculates the cyclic redundancy check value and returns the value as a bigint.
-   *
-   * @group misc_funcs
-   * @since 1.5.0
-   */
-  def crc32(columnName: String): Column = crc32(Column(columnName))
 
   //////////////////////////////////////////////////////////////////////////////////////////////
   // String functions
@@ -1720,19 +1657,6 @@ object functions {
   def concat(exprs: Column*): Column = Concat(exprs.map(_.expr))
 
   /**
-   * Concatenates input strings together into a single string.
-   *
-   * This is the variant of concat that takes in the column names.
-   *
-   * @group string_funcs
-   * @since 1.5.0
-   */
-  @scala.annotation.varargs
-  def concat(columnName: String, columnNames: String*): Column = {
-    concat((columnName +: columnNames).map(Column.apply): _*)
-  }
-
-  /**
    * Concatenates input strings together into a single string, using the given separator.
    *
    * @group string_funcs
@@ -1744,19 +1668,6 @@ object functions {
   }
 
   /**
-   * Concatenates input strings together into a single string, using the given separator.
-   *
-   * This is the variant of concat_ws that takes in the column names.
-   *
-   * @group string_funcs
-   * @since 1.5.0
-   */
-  @scala.annotation.varargs
-  def concat_ws(sep: String, columnName: String, columnNames: String*): Column = {
-    concat_ws(sep, (columnName +: columnNames).map(Column.apply) : _*)
-  }
-
-  /**
    * Computes the length of a given string / binary value.
    *
    * @group string_funcs
@@ -1765,12 +1676,20 @@ object functions {
   def length(e: Column): Column = Length(e.expr)
 
   /**
-   * Computes the length of a given string / binary column.
+   * Converts a string expression to lower case.
    *
    * @group string_funcs
-   * @since 1.5.0
+   * @since 1.3.0
    */
-  def length(columnName: String): Column = length(Column(columnName))
+  def lower(e: Column): Column = Lower(e.expr)
+
+  /**
+   * Converts a string expression to upper case.
+   *
+   * @group string_funcs
+   * @since 1.3.0
+   */
+  def upper(e: Column): Column = Upper(e.expr)
 
   /**
    * Formats the number X to a format like '#,###,###.##', rounded to d decimal places,
@@ -1784,40 +1703,11 @@ object functions {
   def format_number(x: Column, d: Int): Column = FormatNumber(x.expr, lit(d).expr)
 
   /**
-   * Formats the number X to a format like '#,###,###.##', rounded to d decimal places,
-   * and returns the result as a string.
-   * If d is 0, the result has no decimal point or fractional part.
-   * If d < 0, the result will be null.
-   *
-   * @group string_funcs
-   * @since 1.5.0
-   */
-  def format_number(columnXName: String, d: Int): Column = {
-    format_number(Column(columnXName), d)
-  }
-
-  /**
-   * Computes the Levenshtein distance of the two given strings.
+   * Computes the Levenshtein distance of the two given string columns.
    * @group string_funcs
    * @since 1.5.0
    */
   def levenshtein(l: Column, r: Column): Column = Levenshtein(l.expr, r.expr)
-
-  /**
-   * Computes the Levenshtein distance of the two given strings.
-   * @group string_funcs
-   * @since 1.5.0
-   */
-  def levenshtein(leftColumnName: String, rightColumnName: String): Column =
-    levenshtein(Column(leftColumnName), Column(rightColumnName))
-
-  /**
-   * Computes the numeric value of the first character of the specified string value.
-   *
-   * @group string_funcs
-   * @since 1.5.0
-   */
-  def ascii(e: Column): Column = Ascii(e.expr)
 
   /**
    * Computes the numeric value of the first character of the specified string column.
@@ -1825,23 +1715,15 @@ object functions {
    * @group string_funcs
    * @since 1.5.0
    */
-  def ascii(columnName: String): Column = ascii(Column(columnName))
+  def ascii(e: Column): Column = Ascii(e.expr)
 
   /**
-   * Trim the spaces from both ends for the specified string value.
+   * Trim the spaces from both ends for the specified string column.
    *
    * @group string_funcs
    * @since 1.5.0
    */
   def trim(e: Column): Column = StringTrim(e.expr)
-
-  /**
-   * Trim the spaces from both ends for the specified column.
-   *
-   * @group string_funcs
-   * @since 1.5.0
-   */
-  def trim(columnName: String): Column = trim(Column(columnName))
 
   /**
    * Trim the spaces from left end for the specified string value.
@@ -1852,39 +1734,12 @@ object functions {
   def ltrim(e: Column): Column = StringTrimLeft(e.expr)
 
   /**
-   * Trim the spaces from left end for the specified column.
-   *
-   * @group string_funcs
-   * @since 1.5.0
-   */
-  def ltrim(columnName: String): Column = ltrim(Column(columnName))
-
-  /**
    * Trim the spaces from right end for the specified string value.
    *
    * @group string_funcs
    * @since 1.5.0
    */
   def rtrim(e: Column): Column = StringTrimRight(e.expr)
-
-  /**
-   * Trim the spaces from right end for the specified column.
-   *
-   * @group string_funcs
-   * @since 1.5.0
-   */
-  def rtrim(columnName: String): Column = rtrim(Column(columnName))
-
-  /**
-   * Format strings in printf-style.
-   *
-   * @group string_funcs
-   * @since 1.5.0
-   */
-  @scala.annotation.varargs
-  def formatString(format: Column, arguments: Column*): Column = {
-    StringFormat((format +: arguments).map(_.expr): _*)
-  }
 
   /**
    * Format strings in printf-style.
@@ -1899,18 +1754,6 @@ object functions {
   }
 
   /**
-   * Locate the position of the first occurrence of substr value in the given string.
-   * Returns null if either of the arguments are null.
-   *
-   * NOTE: The position is not zero based, but 1 based index, returns 0 if substr
-   * could not be found in str.
-   *
-   * @group string_funcs
-   * @since 1.5.0
-   */
-  def instr(substr: String, sub: String): Column = instr(Column(substr), Column(sub))
-
-  /**
    * Locate the position of the first occurrence of substr column in the given string.
    * Returns null if either of the arguments are null.
    *
@@ -1920,10 +1763,10 @@ object functions {
    * @group string_funcs
    * @since 1.5.0
    */
-  def instr(substr: Column, sub: Column): Column = StringInstr(substr.expr, sub.expr)
+  def instr(str: Column, substring: String): Column = StringInstr(str.expr, lit(substring).expr)
 
   /**
-   * Locate the position of the first occurrence of substr.
+   * Locate the position of the first occurrence of substr in a string column.
    *
    * NOTE: The position is not zero based, but 1 based index, returns 0 if substr
    * could not be found in str.
@@ -1931,77 +1774,47 @@ object functions {
    * @group string_funcs
    * @since 1.5.0
    */
-  def locate(substr: String, str: String): Column = {
-    locate(Column(substr), Column(str))
+  def locate(substr: String, str: Column): Column = {
+    new StringLocate(lit(substr).expr, str.expr)
   }
 
   /**
-   * Locate the position of the first occurrence of substr.
+   * Locate the position of the first occurrence of substr in a string column, after position pos.
    *
-   * NOTE: The position is not zero based, but 1 based index, returns 0 if substr
+   * NOTE: The position is not zero based, but 1 based index. returns 0 if substr
    * could not be found in str.
    *
    * @group string_funcs
    * @since 1.5.0
    */
-  def locate(substr: Column, str: Column): Column = {
-    new StringLocate(substr.expr, str.expr)
+  def locate(substr: String, str: Column, pos: Int): Column = {
+    StringLocate(lit(substr).expr, str.expr, lit(pos).expr)
   }
 
+
   /**
-   * Locate the position of the first occurrence of substr in a given string after position pos.
-   *
-   * NOTE: The position is not zero based, but 1 based index, returns 0 if substr
-   * could not be found in str.
+   * Extract a specific(idx) group identified by a java regex, from the specified string column.
    *
    * @group string_funcs
    * @since 1.5.0
    */
-  def locate(substr: String, str: String, pos: String): Column = {
-    locate(Column(substr), Column(str), Column(pos))
+  def regexp_extract(e: Column, exp: String, groupIdx: Int): Column = {
+    RegExpExtract(e.expr, lit(exp).expr, lit(groupIdx).expr)
   }
 
   /**
-   * Locate the position of the first occurrence of substr in a given string after position pos.
-   *
-   * NOTE: The position is not zero based, but 1 based index, returns 0 if substr
-   * could not be found in str.
+   * Replace all substrings of the specified string value that match regexp with rep.
    *
    * @group string_funcs
    * @since 1.5.0
    */
-  def locate(substr: Column, str: Column, pos: Column): Column = {
-    StringLocate(substr.expr, str.expr, pos.expr)
+  def regexp_replace(e: Column, pattern: String, replacement: String): Column = {
+    RegExpReplace(e.expr, lit(pattern).expr, lit(replacement).expr)
   }
 
   /**
-   * Locate the position of the first occurrence of substr in a given string after position pos.
-   *
-   * NOTE: The position is not zero based, but 1 based index, returns 0 if substr
-   * could not be found in str.
-   *
-   * @group string_funcs
-   * @since 1.5.0
-   */
-  def locate(substr: Column, str: Column, pos: Int): Column = {
-    StringLocate(substr.expr, str.expr, lit(pos).expr)
-  }
-
-  /**
-   * Locate the position of the first occurrence of substr in a given string after position pos.
-   *
-   * NOTE: The position is not zero based, but 1 based index, returns 0 if substr
-   * could not be found in str.
-   *
-   * @group string_funcs
-   * @since 1.5.0
-   */
-  def locate(substr: String, str: String, pos: Int): Column = {
-    locate(Column(substr), Column(str), lit(pos))
-  }
-
-  /**
-   * Computes the specified value from binary to a base64 string.
+   * Computes the BASE64 encoding of a binary column and returns it as a string column.
+   * This is the reverse of unbase64.
    *
    * @group string_funcs
    * @since 1.5.0
@@ -2009,15 +1822,8 @@ object functions {
   def base64(e: Column): Column = Base64(e.expr)
 
   /**
-   * Computes the specified column from binary to a base64 string.
-   *
-   * @group string_funcs
-   * @since 1.5.0
-   */
-  def base64(columnName: String): Column = base64(Column(columnName))
-
-  /**
-   * Computes the specified value from a base64 string to binary.
+   * Decodes a BASE64 encoded string column and returns it as a binary column.
+   * This is the reverse of base64.
    *
    * @group string_funcs
    * @since 1.5.0
@@ -2025,51 +1831,13 @@ object functions {
   def unbase64(e: Column): Column = UnBase64(e.expr)
 
   /**
-   * Computes the specified column from a base64 string to binary.
-   *
-   * @group string_funcs
-   * @since 1.5.0
-   */
-  def unbase64(columnName: String): Column = unbase64(Column(columnName))
-
-  /**
    * Left-padded with pad to a length of len.
    *
    * @group string_funcs
    * @since 1.5.0
    */
-  def lpad(str: String, len: String, pad: String): Column = {
-    lpad(Column(str), Column(len), Column(pad))
-  }
-
-  /**
-   * Left-padded with pad to a length of len.
-   *
-   * @group string_funcs
-   * @since 1.5.0
-   */
-  def lpad(str: Column, len: Column, pad: Column): Column = {
-    StringLPad(str.expr, len.expr, pad.expr)
-  }
-
-  /**
-   * Left-padded with pad to a length of len.
-   *
-   * @group string_funcs
-   * @since 1.5.0
-   */
-  def lpad(str: Column, len: Int, pad: Column): Column = {
-    StringLPad(str.expr, lit(len).expr, pad.expr)
-  }
-
-  /**
-   * Left-padded with pad to a length of len.
-   *
-   * @group string_funcs
-   * @since 1.5.0
-   */
-  def lpad(str: String, len: Int, pad: String): Column = {
-    lpad(Column(str), len, Column(pad))
+  def lpad(str: Column, len: Int, pad: String): Column = {
+    StringLPad(str.expr, lit(len).expr, lit(pad).expr)
   }
 
   /**
@@ -2083,18 +1851,6 @@ object functions {
   def encode(value: Column, charset: String): Column = Encode(value.expr, lit(charset).expr)
 
   /**
-   * Computes the first argument into a binary from a string using the provided character set
-   * (one of 'US-ASCII', 'ISO-8859-1', 'UTF-8', 'UTF-16BE', 'UTF-16LE', 'UTF-16').
-   * If either argument is null, the result will also be null.
-   * NOTE: charset represents the string value of the character set, not the column name.
-   *
-   * @group string_funcs
-   * @since 1.5.0
-   */
-  def encode(columnName: String, charset: String): Column =
-    encode(Column(columnName), charset)
-
-  /**
    * Computes the first argument into a string from a binary using the provided character set
    * (one of 'US-ASCII', 'ISO-8859-1', 'UTF-8', 'UTF-16BE', 'UTF-16LE', 'UTF-16').
    * If either argument is null, the result will also be null.
@@ -2105,105 +1861,23 @@ object functions {
   def decode(value: Column, charset: String): Column = Decode(value.expr, lit(charset).expr)
 
   /**
-   * Computes the first argument into a string from a binary using the provided character set
-   * (one of 'US-ASCII', 'ISO-8859-1', 'UTF-8', 'UTF-16BE', 'UTF-16LE', 'UTF-16').
-   * If either argument is null, the result will also be null.
-   * NOTE: charset represents the string value of the character set, not the column name.
-   *
-   * @group string_funcs
-   * @since 1.5.0
-   */
-  def decode(columnName: String, charset: String): Column =
-    decode(Column(columnName), charset)
-
-  /**
    * Right-padded with pad to a length of len.
    *
    * @group string_funcs
    * @since 1.5.0
    */
-  def rpad(str: String, len: String, pad: String): Column = {
-    rpad(Column(str), Column(len), Column(pad))
+  def rpad(str: Column, len: Int, pad: String): Column = {
+    StringRPad(str.expr, lit(len).expr, lit(pad).expr)
   }
 
   /**
-   * Right-padded with pad to a length of len.
+   * Repeats a string column n times, and returns it as a new string column.
    *
    * @group string_funcs
    * @since 1.5.0
    */
-  def rpad(str: Column, len: Column, pad: Column): Column = {
-    StringRPad(str.expr, len.expr, pad.expr)
-  }
-
-  /**
-   * Right-padded with pad to a length of len.
-   *
-   * @group string_funcs
-   * @since 1.5.0
-   */
-  def rpad(str: String, len: Int, pad: String): Column = {
-    rpad(Column(str), len, Column(pad))
-  }
-
-  /**
-   * Right-padded with pad to a length of len.
-   *
-   * @group string_funcs
-   * @since 1.5.0
-   */
-  def rpad(str: Column, len: Int, pad: Column): Column = {
-    StringRPad(str.expr, lit(len).expr, pad.expr)
-  }
-
-  /**
-   * Repeat the string value of the specified column n times.
-   *
-   * @group string_funcs
-   * @since 1.5.0
-   */
-  def repeat(strColumn: String, timesColumn: String): Column = {
-    repeat(Column(strColumn), Column(timesColumn))
-  }
-
-  /**
-   * Repeat the string expression value n times.
-   *
-   * @group string_funcs
-   * @since 1.5.0
-   */
-  def repeat(str: Column, times: Column): Column = {
-    StringRepeat(str.expr, times.expr)
-  }
-
-  /**
-   * Repeat the string value of the specified column n times.
-   *
-   * @group string_funcs
-   * @since 1.5.0
-   */
-  def repeat(strColumn: String, times: Int): Column = {
-    repeat(Column(strColumn), times)
-  }
-
-  /**
-   * Repeat the string expression value n times.
-   *
-   * @group string_funcs
-   * @since 1.5.0
-   */
-  def repeat(str: Column, times: Int): Column = {
-    StringRepeat(str.expr, lit(times).expr)
-  }
-
-  /**
-   * Splits str around pattern (pattern is a regular expression).
-   *
-   * @group string_funcs
-   * @since 1.5.0
-   */
-  def split(strColumnName: String, pattern: String): Column = {
-    split(Column(strColumnName), pattern)
+  def repeat(str: Column, n: Int): Column = {
+    StringRepeat(str.expr, lit(n).expr)
   }
 
   /**
@@ -2215,16 +1889,6 @@ object functions {
    */
   def split(str: Column, pattern: String): Column = {
     StringSplit(str.expr, lit(pattern).expr)
-  }
-
-  /**
-   * Reversed the string for the specified column.
-   *
-   * @group string_funcs
-   * @since 1.5.0
-   */
-  def reverse(str: String): Column = {
-    reverse(Column(str))
   }
 
   /**
@@ -2398,6 +2062,25 @@ object functions {
    * @since 1.5.0
    */
   def weekofyear(columnName: String): Column = weekofyear(Column(columnName))
+
+  //////////////////////////////////////////////////////////////////////////////////////////////
+  // Collection functions
+  //////////////////////////////////////////////////////////////////////////////////////////////
+
+  /**
+   * Returns length of array or map
+   * @group collection_funcs
+   * @since 1.5.0
+   */
+  def size(columnName: String): Column = size(Column(columnName))
+
+  /**
+   * Returns length of array or map
+   * @group collection_funcs
+   * @since 1.5.0
+   */
+  def size(column: Column): Column = Size(column.expr)
+
 
   //////////////////////////////////////////////////////////////////////////////////////////////
   //////////////////////////////////////////////////////////////////////////////////////////////
