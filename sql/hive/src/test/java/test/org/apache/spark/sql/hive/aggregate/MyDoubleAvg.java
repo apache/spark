@@ -15,14 +15,14 @@
  * limitations under the License.
  */
 
-package test.org.apache.spark.sql.hive.aggregate2;
+package test.org.apache.spark.sql.hive.aggregate;
 
 import java.util.ArrayList;
 import java.util.List;
 
 import org.apache.spark.sql.Row;
-import org.apache.spark.sql.expressions.aggregate2.MutableAggregationBuffer;
-import org.apache.spark.sql.expressions.aggregate2.UserDefinedAggregateFunction;
+import org.apache.spark.sql.expressions.aggregate.MutableAggregationBuffer;
+import org.apache.spark.sql.expressions.aggregate.UserDefinedAggregateFunction;
 import org.apache.spark.sql.types.DataType;
 import org.apache.spark.sql.types.DataTypes;
 import org.apache.spark.sql.types.StructField;

@@ -44,7 +44,6 @@ import org.apache.spark.sql.catalyst.ParserDialect
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.{ExecutedCommand, ExtractPythonUDFs, SetCommand}
-import org.apache.spark.sql.execution.aggregate2.{CheckAggregateFunction, ConvertAggregateFunction}
 import org.apache.spark.sql.hive.client._
 import org.apache.spark.sql.hive.execution.{DescribeHiveTableCommand, HiveNativeCommand}
 import org.apache.spark.sql.sources.DataSourceStrategy
@@ -386,12 +385,10 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) with Logging {
         ExtractPythonUDFs ::
         ResolveHiveWindowFunction ::
         sources.PreInsertCastAndRename ::
-        ConvertAggregateFunction(self) ::
         Nil
 
       override val extendedCheckRules = Seq(
-        sources.PreWriteCheck(catalog),
-        CheckAggregateFunction(self)
+        sources.PreWriteCheck(catalog)
       )
     }
 

@@ -15,11 +15,11 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.aggregate2
+package org.apache.spark.sql.execution.aggregate
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate2._
+import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.types.NullType
 
 import scala.collection.mutable.ArrayBuffer

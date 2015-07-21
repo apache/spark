@@ -40,7 +40,6 @@ import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.catalyst.{InternalRow, ParserDialect, _}
 import org.apache.spark.sql.execution.{Filter, _}
-import org.apache.spark.sql.execution.aggregate2.{CheckAggregateFunction, ConvertAggregateFunction}
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -148,12 +147,10 @@ class SQLContext(@transient val sparkContext: SparkContext)
       override val extendedResolutionRules =
         ExtractPythonUDFs ::
         sources.PreInsertCastAndRename ::
-        ConvertAggregateFunction(self) ::
         Nil
 
       override val extendedCheckRules = Seq(
-        sources.PreWriteCheck(catalog),
-        CheckAggregateFunction(self)
+        sources.PreWriteCheck(catalog)
       )
     }
 

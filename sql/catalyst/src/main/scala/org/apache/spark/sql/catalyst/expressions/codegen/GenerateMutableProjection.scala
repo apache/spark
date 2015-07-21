@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions.codegen
 
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate2.NoOp
+import org.apache.spark.sql.catalyst.expressions.aggregate.NoOp
 
 import scala.collection.mutable.ArrayBuffer
 

@@ -19,8 +19,7 @@ package org.apache.spark.sql
 
 import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.expressions.{Expression}
-import org.apache.spark.sql.expressions.aggregate2.{ScalaUDAF, UserDefinedAggregateFunction}
-
+import org.apache.spark.sql.expressions.aggregate.{ScalaUDAF, UserDefinedAggregateFunction}
 
 class UDAFRegistration private[sql] (sqlContext: SQLContext) extends Logging {
 

@@ -17,13 +17,14 @@
 
 package org.apache.spark.sql.hive.execution
 
+import org.apache.spark.sql.execution.aggregate.Aggregate2Sort
 import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.test.SQLTestUtils
-import org.apache.spark.sql.{SQLConf, AnalysisException, QueryTest, Row}
+import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.scalatest.BeforeAndAfterAll
-import test.org.apache.spark.sql.hive.aggregate2.{MyDoubleAvg, MyDoubleSum}
+import test.org.apache.spark.sql.hive.aggregate.{MyDoubleAvg, MyDoubleSum}
 
-class Aggregate2Suite extends QueryTest with SQLTestUtils with BeforeAndAfterAll {
+class AggregationQuerySuite extends QueryTest with SQLTestUtils with BeforeAndAfterAll {
 
   override val sqlContext = TestHive
   import sqlContext.implicits._
@@ -85,9 +86,44 @@ class Aggregate2Suite extends QueryTest with SQLTestUtils with BeforeAndAfterAll
           |GROUP BY key
         """.stripMargin),
       Row(1) :: Row(2) :: Row(3) :: Row(null) :: Nil)
+
+    checkAnswer(
+      sqlContext.sql(
+        """
+          |SELECT DISTINCT key, value1
+          |FROM agg2
+        """.stripMargin),
+      Row(1, 10) ::
+        Row(null, -60) ::
+        Row(1, 30) ::
+        Row(2, 1) ::
+        Row(null, -10) ::
+        Row(2, -1) ::
+        Row(2, null) ::
+        Row(null, 100) ::
+        Row(3, null) ::
+        Row(null, null) :: Nil)
+
+    checkAnswer(
+      sqlContext.sql(
+        """
+          |SELECT key, value1
+          |FROM agg2
+          |GROUP BY key, value1
+        """.stripMargin),
+      Row(1, 10) ::
+        Row(null, -60) ::
+        Row(1, 30) ::
+        Row(2, 1) ::
+        Row(null, -10) ::
+        Row(2, -1) ::
+        Row(2, null) ::
+        Row(null, 100) ::
+        Row(3, null) ::
+        Row(null, null) :: Nil)
   }
 
-  test("test average2 no key in output") {
+  test("test average no key in output") {
     checkAnswer(
       sqlContext.sql(
         """
@@ -98,7 +134,7 @@ class Aggregate2Suite extends QueryTest with SQLTestUtils with BeforeAndAfterAll
       Row(-0.5) :: Row(20.0) :: Row(null) :: Row(10.0) :: Nil)
   }
 
-  test("test average2") {
+  test("test average") {
     checkAnswer(
       sqlContext.sql(
         """
@@ -217,55 +253,39 @@ class Aggregate2Suite extends QueryTest with SQLTestUtils with BeforeAndAfterAll
         Row(null, null, null, null, 10.0) :: Nil)
   }
 
-  test("Cannot use AggregateExpression1 and AggregateExpressions2 together") {
-    Seq(true, false).foreach { useAggregate2 =>
-      sqlContext.sql(s"set spark.sql.useAggregate2=$useAggregate2")
-      val errorMessage = intercept[AnalysisException] {
-        sqlContext.sql(
-          """
-            |SELECT
-            |  key,
-            |  sum(value + 1.5 * key),
-            |  mydoublesum(value)
-            |FROM agg1
-            |GROUP BY key
-          """.stripMargin).collect()
-      }.getMessage
-      val expectedErrorMessage =
-        s"${SQLConf.USE_SQL_AGGREGATE2.key} is ${if (useAggregate2) "enabled" else "disabled"}. " +
-          s"Please ${if (useAggregate2) "disable" else "enable"} it to use"
-      assert(errorMessage.contains(expectedErrorMessage))
-    }
-
-    sqlContext.sql(s"set spark.sql.useAggregate2=true")
-  }
-
   test("single distinct column set") {
+    // DISTINCT is not meaningful with Max and Min, so we just ignore the DISTINCT keyword.
     checkAnswer(
       sqlContext.sql(
         """
-          |SELECT avg(distinct value1), avg(value1), avg(value2), avg(distinct value1) FROM agg2
+          |SELECT
+          |  min(distinct value1),
+          |  sum(distinct value1),
+          |  avg(value1),
+          |  avg(value2),
+          |  max(distinct value1)
+          |FROM agg2
         """.stripMargin),
-      Row(10.0, 101.0/9.0, 5.6, 10.0))
+      Row(-60, 70.0, 101.0/9.0, 5.6, 100.0))
 
     checkAnswer(
       sqlContext.sql(
         """
           |SELECT
-          |  avg(distinct value1),
+          |  mydoubleavg(distinct value1),
           |  avg(value1),
           |  avg(value2),
           |  key,
           |  mydoubleavg(value1 - 1),
-          |  avg(distinct value1),
+          |  mydoubleavg(distinct value1) * 0.1,
           |  avg(value1 + value2)
           |FROM agg2
           |GROUP BY key
         """.stripMargin),
-      Row(20.0, 70.0/3.0, -10.0/3.0, 1, 67.0/3.0 + 100.0, 20.0, 20.0) ::
-        Row(0.0, 1.0/3.0, 1.0, 2, -2.0/3.0 + 100.0, 0.0, 2.0) ::
+      Row(120.0, 70.0/3.0, -10.0/3.0, 1, 67.0/3.0 + 100.0, 12.0, 20.0) ::
+        Row(100.0, 1.0/3.0, 1.0, 2, -2.0/3.0 + 100.0, 10.0, 2.0) ::
         Row(null, null, 3.0, 3, null, null, null) ::
-        Row(10.0, 10.0, 20.0, null, 109.0, 10.0, 30.0) :: Nil)
+        Row(110.0, 10.0, 20.0, null, 109.0, 11.0, 30.0) :: Nil)
 
     checkAnswer(
       sqlContext.sql(
@@ -284,6 +304,105 @@ class Aggregate2Suite extends QueryTest with SQLTestUtils with BeforeAndAfterAll
         Row(2, 100.0, 3.0, 0.0, 100.0, 1.0/3.0 + 100.0) ::
         Row(3, null, 3.0, null, null, null) ::
         Row(null, 110.0, 60.0, 30.0, 110.0, 110.0) :: Nil)
+  }
 
+  test("test count") {
+    checkAnswer(
+      sqlContext.sql(
+        """
+          |SELECT
+          |  count(value2),
+          |  value1,
+          |  count(*),
+          |  count(1),
+          |  key
+          |FROM agg2
+          |GROUP BY key, value1
+        """.stripMargin),
+      Row(1, 10, 1, 1, 1) ::
+        Row(1, -60, 1, 1, null) ::
+        Row(2, 30, 2, 2, 1) ::
+        Row(2, 1, 2, 2, 2) ::
+        Row(1, -10, 1, 1, null) ::
+        Row(0, -1, 1, 1, 2) ::
+        Row(1, null, 1, 1, 2) ::
+        Row(1, 100, 1, 1, null) ::
+        Row(1, null, 2, 2, 3) ::
+        Row(0, null, 1, 1, null) :: Nil)
+
+    checkAnswer(
+      sqlContext.sql(
+        """
+          |SELECT
+          |  count(value2),
+          |  value1,
+          |  count(*),
+          |  count(1),
+          |  key,
+          |  count(DISTINCT abs(value2))
+          |FROM agg2
+          |GROUP BY key, value1
+        """.stripMargin),
+      Row(1, 10, 1, 1, 1, 1) ::
+        Row(1, -60, 1, 1, null, 1) ::
+        Row(2, 30, 2, 2, 1, 1) ::
+        Row(2, 1, 2, 2, 2, 1) ::
+        Row(1, -10, 1, 1, null, 1) ::
+        Row(0, -1, 1, 1, 2, 0) ::
+        Row(1, null, 1, 1, 2, 1) ::
+        Row(1, 100, 1, 1, null, 1) ::
+        Row(1, null, 2, 2, 3, 1) ::
+        Row(0, null, 1, 1, null, 0) :: Nil)
+  }
+
+  test("error handling") {
+    sqlContext.sql(s"set spark.sql.useAggregate2=false")
+    var errorMessage = intercept[AnalysisException] {
+      sqlContext.sql(
+        """
+          |SELECT
+          |  key,
+          |  sum(value + 1.5 * key),
+          |  mydoublesum(value)
+          |FROM agg1
+          |GROUP BY key
+        """.stripMargin).collect()
+    }.getMessage
+    assert(errorMessage.contains("is implemented based on new Aggregate Function interface"))
+
+    // TODO: once we support Hive UDAF in the new interface,
+    // we can remove the following two tests.
+    sqlContext.sql(s"set spark.sql.useAggregate2=true")
+    errorMessage = intercept[AnalysisException] {
+      sqlContext.sql(
+        """
+          |SELECT
+          |  key,
+          |  mydoublesum(value + 1.5 * key),
+          |  stddev_samp(value)
+          |FROM agg1
+          |GROUP BY key
+        """.stripMargin).collect()
+    }.getMessage
+    assert(errorMessage.contains("is implemented based on new Aggregate Function interface"))
+
+    // This will fall back to the old aggregate
+    val newAggregateOperators = sqlContext.sql(
+      """
+        |SELECT
+        |  key,
+        |  sum(value + 1.5 * key),
+        |  stddev_samp(value)
+        |FROM agg1
+        |GROUP BY key
+      """.stripMargin).queryExecution.executedPlan.collect {
+      case agg: Aggregate2Sort => agg
+    }
+    val message =
+      "We should fallback to the old aggregation code path if there is any aggregate function " +
+        "that cannot be converted to the new interface."
+    assert(newAggregateOperators.isEmpty, message)
+
+    sqlContext.sql(s"set spark.sql.useAggregate2=true")
   }
 }

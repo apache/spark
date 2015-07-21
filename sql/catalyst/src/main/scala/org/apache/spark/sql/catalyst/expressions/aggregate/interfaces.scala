@@ -15,9 +15,8 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst.expressions.aggregate2
+package org.apache.spark.sql.catalyst.expressions.aggregate
 
-import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.{GeneratedExpressionCode, CodeGenContext}
@@ -72,15 +71,7 @@ private[sql] case object NoOp extends Expression with Unevaluable {
   override def children: Seq[Expression] = Nil
 }
 
-private[sql] case class DistinctAggregateExpression1(
-  aggregateExpression: AggregateExpression1) extends AggregateExpression {
-  override def children: Seq[Expression] = aggregateExpression :: Nil
-  override def dataType: DataType = aggregateExpression.dataType
-  override def foldable: Boolean = aggregateExpression.foldable
-  override def nullable: Boolean = aggregateExpression.nullable
 
-  override def toString: String = s"DISTINCT ${aggregateExpression.toString}"
-}
 
 /**
  * A container for an [[AggregateFunction2]] with its [[AggregateMode]] and a field
@@ -112,7 +103,7 @@ private[sql] case class AggregateExpression2(
 }
 
 abstract class AggregateFunction2
-  extends Expression {
+  extends Expression with ImplicitCastInputTypes {
 
   self: Product =>
 
@@ -172,8 +163,19 @@ abstract class AlgebraicAggregate extends AggregateFunction2 with Serializable {
 
   override lazy val cloneBufferAttributes = bufferAttributes.map(_.newInstance())
 
+  /**
+   * A helper class for representing an attribute used in merging two
+   * aggregation buffers. When merging two buffers, `bufferLeft` and `bufferRight`,
+   * we merge buffer values and then update bufferLeft. A [[RichAttribute]]
+   * of an [[AttributeReference]] `a` has two functions `left` and `right`,
+   * which represent `a` in `bufferLeft` and `bufferRight`, respectively.
+   * @param a
+   */
   implicit class RichAttribute(a: AttributeReference) {
+    /** Represents this attribute at the mutable buffer side. */
     def left: AttributeReference = a
+
+    /** Represents this attribute at the input buffer side (the data value is read-only). */
     def right: AttributeReference = cloneBufferAttributes(bufferAttributes.indexOf(a))
   }
 
@@ -204,45 +206,3 @@ abstract class AlgebraicAggregate extends AggregateFunction2 with Serializable {
   }
 }
 
-case class Average(child: Expression) extends AlgebraicAggregate {
-  val resultType = child.dataType match {
-    case DecimalType.Fixed(precision, scale) =>
-      DecimalType(precision + 4, scale + 4)
-    case DecimalType.Unlimited => DecimalType.Unlimited
-    case _ => DoubleType
-  }
-
-  val sumDataType = child.dataType match {
-    case _ @ DecimalType() => DecimalType.Unlimited
-    case _ => DoubleType
-  }
-
-  val currentSum = AttributeReference("currentSum", sumDataType)()
-  val currentCount = AttributeReference("currentCount", LongType)()
-
-  override val bufferAttributes = currentSum :: currentCount :: Nil
-
-  val initialValues = Seq(
-    /* currentSum = */ Cast(Literal(0), sumDataType),
-    /* currentCount = */ Literal(0L)
-  )
-
-  val updateExpressions = Seq(
-    /* currentSum = */
-      Add(
-        currentSum,
-        Coalesce(Cast(child, sumDataType) :: Cast(Literal(0), sumDataType) :: Nil)),
-    /* currentCount = */ If(IsNull(child), currentCount, currentCount + 1L)
-  )
-
-  val mergeExpressions = Seq(
-    /* currentSum = */ currentSum.left + currentSum.right,
-    /* currentCount = */ currentCount.left + currentCount.right
-  )
-
-  val evaluateExpression = Cast(currentSum, resultType) / Cast(currentCount, resultType)
-
-  override def nullable: Boolean = true
-  override def dataType: DataType = resultType
-  override def children: Seq[Expression] = child :: Nil
-}

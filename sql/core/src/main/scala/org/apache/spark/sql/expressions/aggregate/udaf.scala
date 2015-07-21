@@ -15,13 +15,13 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.expressions.aggregate2
+package org.apache.spark.sql.expressions.aggregate
 
 import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateMutableProjection
 import org.apache.spark.sql.catalyst.{InternalRow, CatalystTypeConverters}
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate2.AggregateFunction2
+import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateFunction2
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.Row
 
@@ -103,7 +103,7 @@ private[sql] abstract class AggregationBuffer(
 }
 
 /**
- * A Mutable [[Row]] representing an aggregation buffer.
+ * A Mutable [[Row]] representing an mutable aggregation buffer.
  */
 class MutableAggregationBuffer private[sql] (
     toCatalystConverters: Array[Any => Any],
@@ -173,7 +173,7 @@ class InputAggregationBuffer private[sql] (
 case class ScalaUDAF(
     children: Seq[Expression],
     udaf: UserDefinedAggregateFunction)
-  extends AggregateFunction2 with ImplicitCastInputTypes with Logging {
+  extends AggregateFunction2 with Logging {
 
   require(
     children.length == udaf.inputSchema.length,
