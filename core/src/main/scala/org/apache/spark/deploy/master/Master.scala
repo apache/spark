@@ -533,7 +533,7 @@ private[master] class Master(
 
   /**
    * Schedule executors to be launched on the workers.
-   * Returns an array containing number of cores assigned to each worker.
+   * Returns an array containing number of cores assigned to each worker (None if scheduling fails)
    *
    * There are two modes of launching executors. The first attempts to spread out an application's
    * executors on as many workers as possible, while the second does the opposite (i.e. launch them
@@ -554,7 +554,7 @@ private[master] class Master(
   private[master] def scheduleExecutorsOnWorkers(
       app: ApplicationInfo,
       usableWorkers: Array[WorkerInfo],
-      spreadOutApps: Boolean): Array[Int] = {
+      spreadOutApps: Boolean): Option[Array[Int]] = {
     // If the number of cores per executor is not specified, then we can just schedule
     // 1 core at a time since we expect a single executor to be launched on each worker
     val coresPerExecutor = app.desc.coresPerExecutor.getOrElse(1)
@@ -564,6 +564,7 @@ private[master] class Master(
     val assignedMemory = new Array[Int](numUsable) // Amount of memory to give to each worker
     var coresToAssign = math.min(app.coresLeft, usableWorkers.map(_.coresFree).sum)
     var pos = 0
+    var lastCoresToAssign = coresToAssign
     if (spreadOutApps) {
       // Try to spread out executors among workers (sparse scheduling)
       while (coresToAssign > 0) {
@@ -574,6 +575,13 @@ private[master] class Master(
           assignedMemory(pos) += memoryPerExecutor
         }
         pos = (pos + 1) % numUsable
+        if (pos == 0) {
+          if (lastCoresToAssign == coresToAssign) {
+            logError("Not enough resources to schedule executors, please check configuration")
+            return None
+          }
+          lastCoresToAssign = coresToAssign
+        }
       }
     } else {
       // Pack executors into as few workers as possible (dense scheduling)
@@ -586,9 +594,16 @@ private[master] class Master(
           assignedMemory(pos) += memoryPerExecutor
         }
         pos = (pos + 1) % numUsable
+        if (pos == 0) {
+          if (lastCoresToAssign == coresToAssign) {
+            logError("Not enough resources to schedule executors, please check configuration")
+            return None
+          }
+          lastCoresToAssign = coresToAssign
+        }
       }
     }
-    assignedCores
+    Some(assignedCores)
   }
 
   /**
@@ -599,17 +614,20 @@ private[master] class Master(
     // in the queue, then the second app, etc.
     for (app <- waitingApps if app.coresLeft > 0) {
       val coresPerExecutor: Option[Int] = app.desc.coresPerExecutor
+      // Filter out workers that don't have enough resources to launch an executor
       val usableWorkers = workers.toArray.filter(_.state == WorkerState.ALIVE)
         .filter(worker => worker.memoryFree >= app.desc.memoryPerExecutorMB &&
           worker.coresFree >= coresPerExecutor.getOrElse(1))
         .sortBy(_.coresFree).reverse
-      val assignedCores = scheduleExecutorsOnWorkers(app, usableWorkers, spreadOutApps)
+      val assignedCores_ = scheduleExecutorsOnWorkers(app, usableWorkers, spreadOutApps)
 
       // Now that we've decided how many cores to allocate on each worker, let's allocate them
-      var pos = 0
-      for (pos <- 0 until usableWorkers.length if assignedCores(pos) > 0) {
-        allocateWorkerResourceToExecutors(
-          app, assignedCores(pos), coresPerExecutor, usableWorkers(pos))
+      if (assignedCores_ != None) {
+        val assignedCores = assignedCores_.get
+        for (pos <- 0 until usableWorkers.length if assignedCores(pos) > 0) {
+          allocateWorkerResourceToExecutors(
+            app, assignedCores(pos), coresPerExecutor, usableWorkers(pos))
+        }
       }
     }
   }
