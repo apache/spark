@@ -18,6 +18,7 @@
 package org.apache.spark.ml.regression
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.mllib.linalg.{DenseVector, Vectors}
 import org.apache.spark.mllib.util.{LinearDataGenerator, MLlibTestSparkContext}
 import org.apache.spark.mllib.util.TestingUtils._
@@ -55,9 +56,29 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   }
 
-  test("linear regression defaults to stabdardization enabled") {
-    val trainer = new LinearRegression
-    assert(trainer.getStandardization)
+  test("params") {
+    ParamsSuite.checkParams(new LinearRegression)
+    val model = new LinearRegressionModel("linearReg", Vectors.dense(0.0), 0.0)
+    ParamsSuite.checkParams(model)
+  }
+
+  test("linear regression: default params") {
+    val lir = new LinearRegression
+    assert(lir.getLabelCol === "label")
+    assert(lir.getFeaturesCol === "features")
+    assert(lir.getPredictionCol === "prediction")
+    assert(lir.getRegParam === 0.0)
+    assert(lir.getElasticNetParam === 0.0)
+    assert(lir.getFitIntercept)
+    assert(lir.getStandardization)
+    val model = lir.fit(dataset)
+    model.transform(dataset)
+      .select("label", "prediction")
+      .collect()
+    assert(model.getFeaturesCol === "features")
+    assert(model.getPredictionCol === "prediction")
+    assert(model.intercept !== 0.0)
+    assert(model.hasParent)
   }
 
   test("linear regression with intercept without regularization") {
@@ -439,7 +460,7 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
       .map { case Row(features: DenseVector, label: Double) =>
       val prediction =
         features(0) * model.weights(0) + features(1) * model.weights(1) + model.intercept
-      prediction - label
+      label - prediction
     }
       .zip(model.summary.residuals.map(_.getDouble(0)))
       .collect()
@@ -451,7 +472,7 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
        Use the following R code to generate model training results.
 
        predictions <- predict(fit, newx=features)
-       residuals <- predictions - label
+       residuals <- label - predictions
        > mean(residuals^2) # MSE
        [1] 0.009720325
        > mean(abs(residuals)) # MAD

@@ -426,14 +426,13 @@ private[parquet] class AppendingParquetOutputFormat(offset: Int)
   }
 }
 
+// TODO Removes this class after removing old Parquet support code
 /**
  * We extend ParquetInputFormat in order to have more control over which
  * RecordFilter we want to use.
  */
 private[parquet] class FilteringParquetRowInputFormat
   extends org.apache.parquet.hadoop.ParquetInputFormat[InternalRow] with Logging {
-
-  private var fileStatuses = Map.empty[Path, FileStatus]
 
   override def createRecordReader(
       inputSplit: InputSplit,
@@ -453,17 +452,6 @@ private[parquet] class FilteringParquetRowInputFormat
     }
   }
 
-}
-
-private[parquet] object FilteringParquetRowInputFormat {
-  private val footerCache = CacheBuilder.newBuilder()
-    .maximumSize(20000)
-    .build[FileStatus, Footer]()
-
-  private val blockLocationCache = CacheBuilder.newBuilder()
-    .maximumSize(20000)
-    .expireAfterWrite(15, TimeUnit.MINUTES)  // Expire locations since HDFS files might move
-    .build[FileStatus, Array[BlockLocation]]()
 }
 
 private[parquet] object FileSystemHelper {

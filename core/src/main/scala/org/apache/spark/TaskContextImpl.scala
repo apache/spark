@@ -17,11 +17,11 @@
 
 package org.apache.spark
 
+import scala.collection.mutable.{ArrayBuffer, HashMap}
+
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.unsafe.memory.TaskMemoryManager
 import org.apache.spark.util.{TaskCompletionListener, TaskCompletionListenerException}
-
-import scala.collection.mutable.ArrayBuffer
 
 private[spark] class TaskContextImpl(
     val stageId: Int,
@@ -94,5 +94,18 @@ private[spark] class TaskContextImpl(
   override def isRunningLocally(): Boolean = runningLocally
 
   override def isInterrupted(): Boolean = interrupted
-}
 
+  @transient private val accumulators = new HashMap[Long, Accumulable[_, _]]
+
+  private[spark] override def registerAccumulator(a: Accumulable[_, _]): Unit = synchronized {
+    accumulators(a.id) = a
+  }
+
+  private[spark] override def collectInternalAccumulators(): Map[Long, Any] = synchronized {
+    accumulators.filter(_._2.isInternal).mapValues(_.localValue).toMap
+  }
+
+  private[spark] override def collectAccumulators(): Map[Long, Any] = synchronized {
+    accumulators.mapValues(_.localValue).toMap
+  }
+}

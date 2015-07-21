@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.catalyst.plans.PlanTest
 
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, LocalRelation, Project}
+import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.types._
 
@@ -37,7 +37,6 @@ class HiveTypeCoercionSuite extends PlanTest {
     shouldCast(NullType, IntegerType, IntegerType)
     shouldCast(NullType, DecimalType, DecimalType.Unlimited)
 
-    // TODO: write the entire implicit cast table out for test cases.
     shouldCast(ByteType, IntegerType, IntegerType)
     shouldCast(IntegerType, IntegerType, IntegerType)
     shouldCast(IntegerType, LongType, LongType)
@@ -86,6 +85,16 @@ class HiveTypeCoercionSuite extends PlanTest {
       DecimalType.Unlimited, DecimalType(10, 2)).foreach { tpe =>
       shouldCast(tpe, NumericType, tpe)
     }
+
+    shouldCast(
+      ArrayType(StringType, false),
+      TypeCollection(ArrayType(StringType), StringType),
+      ArrayType(StringType, false))
+
+    shouldCast(
+      ArrayType(StringType, true),
+      TypeCollection(ArrayType(StringType), StringType),
+      ArrayType(StringType, true))
   }
 
   test("ineligible implicit type cast") {
@@ -194,6 +203,30 @@ class HiveTypeCoercionSuite extends PlanTest {
       Project(Seq(Alias(transformed, "a")()), testRelation))
   }
 
+  test("cast NullType for expresions that implement ExpectsInputTypes") {
+    import HiveTypeCoercionSuite._
+
+    ruleTest(HiveTypeCoercion.ImplicitTypeCasts,
+      AnyTypeUnaryExpression(Literal.create(null, NullType)),
+      AnyTypeUnaryExpression(Literal.create(null, NullType)))
+
+    ruleTest(HiveTypeCoercion.ImplicitTypeCasts,
+      NumericTypeUnaryExpression(Literal.create(null, NullType)),
+      NumericTypeUnaryExpression(Literal.create(null, DoubleType)))
+  }
+
+  test("cast NullType for binary operators") {
+    import HiveTypeCoercionSuite._
+
+    ruleTest(HiveTypeCoercion.ImplicitTypeCasts,
+      AnyTypeBinaryOperator(Literal.create(null, NullType), Literal.create(null, NullType)),
+      AnyTypeBinaryOperator(Literal.create(null, NullType), Literal.create(null, NullType)))
+
+    ruleTest(HiveTypeCoercion.ImplicitTypeCasts,
+      NumericTypeBinaryOperator(Literal.create(null, NullType), Literal.create(null, NullType)),
+      NumericTypeBinaryOperator(Literal.create(null, DoubleType), Literal.create(null, DoubleType)))
+  }
+
   test("coalesce casts") {
     ruleTest(HiveTypeCoercion.FunctionArgumentConversion,
       Coalesce(Literal(1.0)
@@ -281,6 +314,93 @@ class HiveTypeCoercionSuite extends PlanTest {
     )
   }
 
+  test("WidenTypes for union except and intersect") {
+    def checkOutput(logical: LogicalPlan, expectTypes: Seq[DataType]): Unit = {
+      logical.output.zip(expectTypes).foreach { case (attr, dt) =>
+        assert(attr.dataType === dt)
+      }
+    }
+
+    val left = LocalRelation(
+      AttributeReference("i", IntegerType)(),
+      AttributeReference("u", DecimalType.Unlimited)(),
+      AttributeReference("b", ByteType)(),
+      AttributeReference("d", DoubleType)())
+    val right = LocalRelation(
+      AttributeReference("s", StringType)(),
+      AttributeReference("d", DecimalType(2, 1))(),
+      AttributeReference("f", FloatType)(),
+      AttributeReference("l", LongType)())
+
+    val wt = HiveTypeCoercion.WidenTypes
+    val expectedTypes = Seq(StringType, DecimalType.Unlimited, FloatType, DoubleType)
+
+    val r1 = wt(Union(left, right)).asInstanceOf[Union]
+    val r2 = wt(Except(left, right)).asInstanceOf[Except]
+    val r3 = wt(Intersect(left, right)).asInstanceOf[Intersect]
+    checkOutput(r1.left, expectedTypes)
+    checkOutput(r1.right, expectedTypes)
+    checkOutput(r2.left, expectedTypes)
+    checkOutput(r2.right, expectedTypes)
+    checkOutput(r3.left, expectedTypes)
+    checkOutput(r3.right, expectedTypes)
+  }
+
+  test("Transform Decimal precision/scale for union except and intersect") {
+    def checkOutput(logical: LogicalPlan, expectTypes: Seq[DataType]): Unit = {
+      logical.output.zip(expectTypes).foreach { case (attr, dt) =>
+        assert(attr.dataType === dt)
+      }
+    }
+
+    val dp = HiveTypeCoercion.DecimalPrecision
+
+    val left1 = LocalRelation(
+      AttributeReference("l", DecimalType(10, 8))())
+    val right1 = LocalRelation(
+      AttributeReference("r", DecimalType(5, 5))())
+    val expectedType1 = Seq(DecimalType(math.max(8, 5) + math.max(10 - 8, 5 - 5), math.max(8, 5)))
+
+    val r1 = dp(Union(left1, right1)).asInstanceOf[Union]
+    val r2 = dp(Except(left1, right1)).asInstanceOf[Except]
+    val r3 = dp(Intersect(left1, right1)).asInstanceOf[Intersect]
+
+    checkOutput(r1.left, expectedType1)
+    checkOutput(r1.right, expectedType1)
+    checkOutput(r2.left, expectedType1)
+    checkOutput(r2.right, expectedType1)
+    checkOutput(r3.left, expectedType1)
+    checkOutput(r3.right, expectedType1)
+
+    val plan1 = LocalRelation(
+      AttributeReference("l", DecimalType(10, 10))())
+
+    val rightTypes = Seq(ByteType, ShortType, IntegerType, LongType, FloatType, DoubleType)
+    val expectedTypes = Seq(DecimalType(3, 0), DecimalType(5, 0), DecimalType(10, 0),
+      DecimalType(20, 0), DecimalType(7, 7), DecimalType(15, 15))
+
+    rightTypes.zip(expectedTypes).map { case (rType, expectedType) =>
+      val plan2 = LocalRelation(
+        AttributeReference("r", rType)())
+
+      val r1 = dp(Union(plan1, plan2)).asInstanceOf[Union]
+      val r2 = dp(Except(plan1, plan2)).asInstanceOf[Except]
+      val r3 = dp(Intersect(plan1, plan2)).asInstanceOf[Intersect]
+
+      checkOutput(r1.right, Seq(expectedType))
+      checkOutput(r2.right, Seq(expectedType))
+      checkOutput(r3.right, Seq(expectedType))
+
+      val r4 = dp(Union(plan2, plan1)).asInstanceOf[Union]
+      val r5 = dp(Except(plan2, plan1)).asInstanceOf[Except]
+      val r6 = dp(Intersect(plan2, plan1)).asInstanceOf[Intersect]
+
+      checkOutput(r4.left, Seq(expectedType))
+      checkOutput(r5.left, Seq(expectedType))
+      checkOutput(r6.left, Seq(expectedType))
+    }
+  }
+
   /**
    * There are rules that need to not fire before child expressions get resolved.
    * We use this test to make sure those rules do not fire early.
@@ -300,5 +420,35 @@ class HiveTypeCoercionSuite extends PlanTest {
       In(Literal("a"), Seq(Literal(1), Literal("b"))),
       In(Literal("a"), Seq(Cast(Literal(1), StringType), Cast(Literal("b"), StringType)))
     )
+  }
+}
+
+
+object HiveTypeCoercionSuite {
+
+  case class AnyTypeUnaryExpression(child: Expression)
+    extends UnaryExpression with ExpectsInputTypes with Unevaluable {
+    override def inputTypes: Seq[AbstractDataType] = Seq(AnyDataType)
+    override def dataType: DataType = NullType
+  }
+
+  case class NumericTypeUnaryExpression(child: Expression)
+    extends UnaryExpression with ExpectsInputTypes with Unevaluable {
+    override def inputTypes: Seq[AbstractDataType] = Seq(NumericType)
+    override def dataType: DataType = NullType
+  }
+
+  case class AnyTypeBinaryOperator(left: Expression, right: Expression)
+    extends BinaryOperator with Unevaluable {
+    override def dataType: DataType = NullType
+    override def inputType: AbstractDataType = AnyDataType
+    override def symbol: String = "anytype"
+  }
+
+  case class NumericTypeBinaryOperator(left: Expression, right: Expression)
+    extends BinaryOperator with Unevaluable {
+    override def dataType: DataType = NullType
+    override def inputType: AbstractDataType = NumericType
+    override def symbol: String = "numerictype"
   }
 }

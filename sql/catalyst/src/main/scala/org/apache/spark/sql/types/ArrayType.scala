@@ -28,7 +28,7 @@ object ArrayType extends AbstractDataType {
 
   override private[sql] def defaultConcreteType: DataType = ArrayType(NullType, containsNull = true)
 
-  override private[sql] def isSameType(other: DataType): Boolean = {
+  override private[sql] def acceptsType(other: DataType): Boolean = {
     other.isInstanceOf[ArrayType]
   }
 

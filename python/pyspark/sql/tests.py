@@ -45,9 +45,9 @@ from pyspark.sql import SQLContext, HiveContext, Column, Row
 from pyspark.sql.types import *
 from pyspark.sql.types import UserDefinedType, _infer_type
 from pyspark.tests import ReusedPySparkTestCase
-from pyspark.sql.functions import UserDefinedFunction
+from pyspark.sql.functions import UserDefinedFunction, sha2
 from pyspark.sql.window import Window
-from pyspark.sql.utils import AnalysisException
+from pyspark.sql.utils import AnalysisException, IllegalArgumentException
 
 
 class UTC(datetime.tzinfo):
@@ -333,6 +333,10 @@ class SQLTests(ReusedPySparkTestCase):
         df = self.sqlCtx.inferSchema(rdd)
         self.assertEquals(Row(field1=1, field2=u'row1'), df.first())
 
+    def test_select_null_literal(self):
+        df = self.sqlCtx.sql("select null as col")
+        self.assertEquals(Row(col=None), df.first())
+
     def test_apply_schema(self):
         from datetime import date, datetime
         rdd = self.sc.parallelize([(127, -128, -32768, 32767, 2147483647, 1.0,
@@ -413,12 +417,14 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertEquals(point, ExamplePoint(1.0, 2.0))
 
     def test_udf_with_udt(self):
-        from pyspark.sql.tests import ExamplePoint
+        from pyspark.sql.tests import ExamplePoint, ExamplePointUDT
         row = Row(label=1.0, point=ExamplePoint(1.0, 2.0))
         df = self.sc.parallelize([row]).toDF()
         self.assertEqual(1.0, df.map(lambda r: r.point.x).first())
         udf = UserDefinedFunction(lambda p: p.y, DoubleType())
         self.assertEqual(2.0, df.select(udf(df.point)).first()[0])
+        udf2 = UserDefinedFunction(lambda p: ExamplePoint(p.x + 1, p.y + 1), ExamplePointUDT())
+        self.assertEqual(ExamplePoint(2.0, 3.0), df.select(udf2(df.point)).first()[0])
 
     def test_parquet_with_udt(self):
         from pyspark.sql.tests import ExamplePoint
@@ -705,11 +711,13 @@ class SQLTests(ReusedPySparkTestCase):
     def test_time_with_timezone(self):
         day = datetime.date.today()
         now = datetime.datetime.now()
-        ts = time.mktime(now.timetuple()) + now.microsecond / 1e6
+        ts = time.mktime(now.timetuple())
         # class in __main__ is not serializable
         from pyspark.sql.tests import UTC
         utc = UTC()
-        utcnow = datetime.datetime.fromtimestamp(ts, utc)
+        utcnow = datetime.datetime.utcfromtimestamp(ts)  # without microseconds
+        # add microseconds to utcnow (keeping year,month,day,hour,minute,second)
+        utcnow = datetime.datetime(*(utcnow.timetuple()[:6] + (now.microsecond, utc)))
         df = self.sqlCtx.createDataFrame([(day, now, utcnow)])
         day1, now1, utcnow1 = df.first()
         self.assertEqual(day1, day)
@@ -891,6 +899,13 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertRaises(AnalysisException, lambda: self.df.selectExpr("a + b"))
         # RuntimeException should not be captured
         self.assertRaises(py4j.protocol.Py4JJavaError, lambda: self.sqlCtx.sql("abc"))
+
+    def test_capture_illegalargument_exception(self):
+        self.assertRaisesRegexp(IllegalArgumentException, "Setting negative mapred.reduce.tasks",
+                                lambda: self.sqlCtx.sql("SET mapred.reduce.tasks=-1"))
+        df = self.sqlCtx.createDataFrame([(1, 2)], ["a", "b"])
+        self.assertRaisesRegexp(IllegalArgumentException, "1024 is not in the permitted values",
+                                lambda: df.select(sha2(df.a, 1024)).collect())
 
 
 class HiveContextSQLTests(ReusedPySparkTestCase):

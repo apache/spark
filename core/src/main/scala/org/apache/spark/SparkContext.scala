@@ -1419,6 +1419,12 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   /**
    * :: DeveloperApi ::
    * Request that the cluster manager kill the specified executors.
+   *
+   * Note: This is an indication to the cluster manager that the application wishes to adjust
+   * its resource usage downwards. If the application wishes to replace the executors it kills
+   * through this method with new ones, it should follow up explicitly with a call to
+   * {{SparkContext#requestExecutors}}.
+   *
    * This is currently only supported in YARN mode. Return whether the request is received.
    */
   @DeveloperApi
@@ -1436,11 +1442,41 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
 
   /**
    * :: DeveloperApi ::
-   * Request that cluster manager the kill the specified executor.
-   * This is currently only supported in Yarn mode. Return whether the request is received.
+   * Request that the cluster manager kill the specified executor.
+   *
+   * Note: This is an indication to the cluster manager that the application wishes to adjust
+   * its resource usage downwards. If the application wishes to replace the executor it kills
+   * through this method with a new one, it should follow up explicitly with a call to
+   * {{SparkContext#requestExecutors}}.
+   *
+   * This is currently only supported in YARN mode. Return whether the request is received.
    */
   @DeveloperApi
   override def killExecutor(executorId: String): Boolean = super.killExecutor(executorId)
+
+  /**
+   * Request that the cluster manager kill the specified executor without adjusting the
+   * application resource requirements.
+   *
+   * The effect is that a new executor will be launched in place of the one killed by
+   * this request. This assumes the cluster manager will automatically and eventually
+   * fulfill all missing application resource requests.
+   *
+   * Note: The replace is by no means guaranteed; another application on the same cluster
+   * can steal the window of opportunity and acquire this application's resources in the
+   * mean time.
+   *
+   * This is currently only supported in YARN mode. Return whether the request is received.
+   */
+  private[spark] def killAndReplaceExecutor(executorId: String): Boolean = {
+    schedulerBackend match {
+      case b: CoarseGrainedSchedulerBackend =>
+        b.killExecutors(Seq(executorId), replace = true)
+      case _ =>
+        logWarning("Killing executors is only supported in coarse-grained mode")
+        false
+    }
+  }
 
   /** The version of Spark on which this application is running. */
   def version: String = SPARK_VERSION
@@ -1968,7 +2004,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       for (className <- listenerClassNames) {
         // Use reflection to find the right constructor
         val constructors = {
-          val listenerClass = Class.forName(className)
+          val listenerClass = Utils.classForName(className)
           listenerClass.getConstructors.asInstanceOf[Array[Constructor[_ <: SparkListener]]]
         }
         val constructorTakingSparkConf = constructors.find { c =>
@@ -2503,7 +2539,7 @@ object SparkContext extends Logging {
             "\"yarn-standalone\" is deprecated as of Spark 1.0. Use \"yarn-cluster\" instead.")
         }
         val scheduler = try {
-          val clazz = Class.forName("org.apache.spark.scheduler.cluster.YarnClusterScheduler")
+          val clazz = Utils.classForName("org.apache.spark.scheduler.cluster.YarnClusterScheduler")
           val cons = clazz.getConstructor(classOf[SparkContext])
           cons.newInstance(sc).asInstanceOf[TaskSchedulerImpl]
         } catch {
@@ -2515,7 +2551,7 @@ object SparkContext extends Logging {
         }
         val backend = try {
           val clazz =
-            Class.forName("org.apache.spark.scheduler.cluster.YarnClusterSchedulerBackend")
+            Utils.classForName("org.apache.spark.scheduler.cluster.YarnClusterSchedulerBackend")
           val cons = clazz.getConstructor(classOf[TaskSchedulerImpl], classOf[SparkContext])
           cons.newInstance(scheduler, sc).asInstanceOf[CoarseGrainedSchedulerBackend]
         } catch {
@@ -2528,8 +2564,7 @@ object SparkContext extends Logging {
 
       case "yarn-client" =>
         val scheduler = try {
-          val clazz =
-            Class.forName("org.apache.spark.scheduler.cluster.YarnScheduler")
+          val clazz = Utils.classForName("org.apache.spark.scheduler.cluster.YarnScheduler")
           val cons = clazz.getConstructor(classOf[SparkContext])
           cons.newInstance(sc).asInstanceOf[TaskSchedulerImpl]
 
@@ -2541,7 +2576,7 @@ object SparkContext extends Logging {
 
         val backend = try {
           val clazz =
-            Class.forName("org.apache.spark.scheduler.cluster.YarnClientSchedulerBackend")
+            Utils.classForName("org.apache.spark.scheduler.cluster.YarnClientSchedulerBackend")
           val cons = clazz.getConstructor(classOf[TaskSchedulerImpl], classOf[SparkContext])
           cons.newInstance(scheduler, sc).asInstanceOf[CoarseGrainedSchedulerBackend]
         } catch {

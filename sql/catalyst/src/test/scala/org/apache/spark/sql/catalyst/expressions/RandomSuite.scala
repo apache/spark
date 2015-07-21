@@ -21,13 +21,13 @@ import org.scalatest.Matchers._
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.dsl.expressions._
-import org.apache.spark.sql.types.{DoubleType, IntegerType}
+import org.apache.spark.sql.types.DoubleType
 
 
 class RandomSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("random") {
-    val row = create_row(1.1, 2.0, 3.1, null)
-    checkDoubleEvaluation(Rand(30), (0.7363714192755834 +- 0.001), row)
+    checkDoubleEvaluation(Rand(30), 0.7363714192755834 +- 0.001)
+    checkDoubleEvaluation(Randn(30), 0.5181478766595276 +- 0.001)
   }
 }

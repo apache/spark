@@ -215,7 +215,6 @@ setMethod("partitionBy",
                                        serializedHashFuncBytes,
                                        getSerializedMode(x),
                                        packageNamesArr,
-                                       as.character(.sparkREnv$libname),
                                        broadcastArr,
                                        callJMethod(jrdd, "classTag"))
 

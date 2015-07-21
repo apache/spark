@@ -404,14 +404,17 @@ public final class BytesToBytesMap {
      * at the value address.
      * <p>
      * It is only valid to call this method immediately after calling `lookup()` using the same key.
+     * </p>
      * <p>
      * The key and value must be word-aligned (that is, their sizes must multiples of 8).
+     * </p>
      * <p>
      * After calling this method, calls to `get[Key|Value]Address()` and `get[Key|Value]Length`
      * will return information on the data stored by this `putNewKey` call.
+     * </p>
      * <p>
      * As an example usage, here's the proper way to store a new key:
-     * <p>
+     * </p>
      * <pre>
      *   Location loc = map.lookup(keyBaseObject, keyBaseOffset, keyLengthInBytes);
      *   if (!loc.isDefined()) {
@@ -420,6 +423,7 @@ public final class BytesToBytesMap {
      * </pre>
      * <p>
      * Unspecified behavior if the key is not defined.
+     * </p>
      */
     public void putNewKey(
         Object keyBaseObject,

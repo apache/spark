@@ -250,7 +250,9 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
     builder.toString()
   }
 
+  // scalastyle:off println
   def printTreeString(): Unit = println(treeString)
+  // scalastyle:on println
 
   private[sql] def buildFormattedString(prefix: String, builder: StringBuilder): Unit = {
     fields.foreach(field => field.buildFormattedString(prefix, builder))
@@ -305,7 +307,7 @@ object StructType extends AbstractDataType {
 
   override private[sql] def defaultConcreteType: DataType = new StructType
 
-  override private[sql] def isSameType(other: DataType): Boolean = {
+  override private[sql] def acceptsType(other: DataType): Boolean = {
     other.isInstanceOf[StructType]
   }
 

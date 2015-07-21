@@ -86,7 +86,7 @@ object DecimalType extends AbstractDataType {
 
   override private[sql] def defaultConcreteType: DataType = Unlimited
 
-  override private[sql] def isSameType(other: DataType): Boolean = {
+  override private[sql] def acceptsType(other: DataType): Boolean = {
     other.isInstanceOf[DecimalType]
   }
 

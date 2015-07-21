@@ -283,7 +283,7 @@ approxSample = data.sampleByKey(False, fractions);
 
 Hypothesis testing is a powerful tool in statistics to determine whether a result is statistically 
 significant, whether this result occurred by chance or not. MLlib currently supports Pearson's 
-chi-squared ( $\chi^2$) tests for goodness of fit and independence. The input data types determine 
+chi-squared ( $\chi^2$) tests for goodness of fit and independence. The input data types determine
 whether the goodness of fit or the independence test is conducted. The goodness of fit test requires 
 an input type of `Vector`, whereas the independence test requires a `Matrix` as input.
 
@@ -421,6 +421,41 @@ for i, result in enumerate(featureTestResults):
 </div>
 
 </div>
+
+Additionally, MLlib provides a 1-sample, 2-sided implementation of the Kolmogorov-Smirnov (KS) test
+for equality of probability distributions. By providing the name of a theoretical distribution
+(currently solely supported for the normal distribution) and its parameters, or a function to 
+calculate the cumulative distribution according to a given theoretical distribution, the user can
+test the null hypothesis that their sample is drawn from that distribution. In the case that the
+user tests against the normal distribution (`distName="norm"`), but does not provide distribution
+parameters, the test initializes to the standard normal distribution and logs an appropriate 
+message.
+
+<div class="codetabs">
+<div data-lang="scala" markdown="1">
+[`Statistics`](api/scala/index.html#org.apache.spark.mllib.stat.Statistics$) provides methods to
+run a 1-sample, 2-sided Kolmogorov-Smirnov test. The following example demonstrates how to run
+and interpret the hypothesis tests.
+
+{% highlight scala %}
+import org.apache.spark.SparkContext
+import org.apache.spark.mllib.stat.Statistics._
+
+val data: RDD[Double] = ... // an RDD of sample data
+
+// run a KS test for the sample versus a standard normal distribution
+val testResult = Statistics.kolmogorovSmirnovTest(data, "norm", 0, 1)
+println(testResult) // summary of the test including the p-value, test statistic,
+                      // and null hypothesis
+                      // if our p-value indicates significance, we can reject the null hypothesis
+
+// perform a KS test using a cumulative distribution function of our making
+val myCDF: Double => Double = ...
+val testResult2 = Statistics.kolmogorovSmirnovTest(data, myCDF)
+{% endhighlight %}
+</div>
+</div>
+
 
 ## Random data generation
 

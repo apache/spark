@@ -18,15 +18,13 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.math.{BigDecimal => JavaBigDecimal}
-import java.sql.{Date, Timestamp}
 
-import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodeGenContext, GeneratedExpressionCode}
+import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.unsafe.types.{Interval, UTF8String}
 
 
 object Cast {
@@ -54,6 +52,8 @@ object Cast {
     case (_: NumericType, TimestampType) => true
 
     case (_, DateType) => true
+
+    case (StringType, IntervalType) => true
 
     case (StringType, _: NumericType) => true
     case (BooleanType, _: NumericType) => true
@@ -104,7 +104,8 @@ object Cast {
 }
 
 /** Cast the child expression to the target data type. */
-case class Cast(child: Expression, dataType: DataType) extends UnaryExpression with Logging {
+case class Cast(child: Expression, dataType: DataType)
+  extends UnaryExpression with CodegenFallback {
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (Cast.canCast(child.dataType, dataType)) {
@@ -164,17 +165,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
   // TimestampConverter
   private[this] def castToTimestamp(from: DataType): Any => Any = from match {
     case StringType =>
-      buildCast[UTF8String](_, utfs => {
-        // Throw away extra if more than 9 decimal places
-        val s = utfs.toString
-        val periodIdx = s.indexOf(".")
-        var n = s
-        if (periodIdx != -1 && n.length() - periodIdx > 9) {
-          n = n.substring(0, periodIdx + 10)
-        }
-        try DateTimeUtils.fromJavaTimestamp(Timestamp.valueOf(n))
-        catch { case _: java.lang.IllegalArgumentException => null }
-      })
+      buildCast[UTF8String](_, utfs => DateTimeUtils.stringToTimestamp(utfs).orNull)
     case BooleanType =>
       buildCast[Boolean](_, b => if (b) 1L else 0)
     case LongType =>
@@ -217,10 +208,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
   // DateConverter
   private[this] def castToDate(from: DataType): Any => Any = from match {
     case StringType =>
-      buildCast[UTF8String](_, s =>
-        try DateTimeUtils.fromJavaDate(Date.valueOf(s.toString))
-        catch { case _: java.lang.IllegalArgumentException => null }
-      )
+      buildCast[UTF8String](_, s => DateTimeUtils.stringToDate(s).orNull)
     case TimestampType =>
       // throw valid precision more than seconds, according to Hive.
       // Timestamp.nanos is in 0 to 999,999,999, no more than a second.
@@ -229,6 +217,13 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
     // It is never possible to compare result when hive return with exception,
     // so we can return null
     // NULL is more reasonable here, since the query itself obeys the grammar.
+    case _ => _ => null
+  }
+
+  // IntervalConverter
+  private[this] def castToInterval(from: DataType): Any => Any = from match {
+    case StringType =>
+      buildCast[UTF8String](_, s => Interval.fromString(s.toString))
     case _ => _ => null
   }
 
@@ -405,6 +400,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
     case DateType => castToDate(from)
     case decimal: DecimalType => castToDecimal(from, decimal)
     case TimestampType => castToTimestamp(from)
+    case IntervalType => castToInterval(from)
     case BooleanType => castToBoolean(from)
     case ByteType => castToByte(from)
     case ShortType => castToShort(from)
@@ -427,20 +423,24 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
 
       case (BinaryType, StringType) =>
         defineCodeGen (ctx, ev, c =>
-          s"${ctx.stringType}.fromBytes($c)")
+          s"UTF8String.fromBytes($c)")
 
       case (DateType, StringType) =>
         defineCodeGen(ctx, ev, c =>
-          s"""${ctx.stringType}.fromString(
+          s"""UTF8String.fromString(
                 org.apache.spark.sql.catalyst.util.DateTimeUtils.dateToString($c))""")
 
       case (TimestampType, StringType) =>
         defineCodeGen(ctx, ev, c =>
-          s"""${ctx.stringType}.fromString(
+          s"""UTF8String.fromString(
                 org.apache.spark.sql.catalyst.util.DateTimeUtils.timestampToString($c))""")
 
       case (_, StringType) =>
-        defineCodeGen(ctx, ev, c => s"${ctx.stringType}.fromString(String.valueOf($c))")
+        defineCodeGen(ctx, ev, c => s"UTF8String.fromString(String.valueOf($c))")
+
+      case (StringType, IntervalType) =>
+        defineCodeGen(ctx, ev, c =>
+          s"org.apache.spark.unsafe.types.Interval.fromString($c.toString())")
 
       // fallback for DecimalType, this must be before other numeric types
       case (_, dt: DecimalType) =>
