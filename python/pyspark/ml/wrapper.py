@@ -68,7 +68,7 @@ class JavaWrapper(Params):
         """
         sc = SparkContext._active_spark_context
         param = self._resolveParam(param)
-        java_param = self._java_obj.getParam(param.name)
+        java_param = self._java_obj.getParam(param.name.rstrip("_"))
         java_value = _py2java(sc, value)
         return java_param.w(java_value)
 
