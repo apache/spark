@@ -251,10 +251,13 @@ public class UTF8StringSuite {
 
   @Test
   public void findInSet() {
+    assertEquals(fromString("ab").findInSet(fromString("ab")), 1);
+    assertEquals(fromString("a,b").findInSet(fromString("b")), 2);
     assertEquals(fromString("abc,b,ab,c,def").findInSet(fromString("ab")), 3);
     assertEquals(fromString("ab,abc,b,ab,c,def").findInSet(fromString("ab")), 1);
     assertEquals(fromString(",,,ab,abc,b,ab,c,def").findInSet(fromString("ab")), 4);
     assertEquals(fromString(",ab,abc,b,ab,c,def").findInSet(fromString("")), 1);
     assertEquals(fromString("数据砖头,abc,b,ab,c,def").findInSet(fromString("ab")), 4);
+    assertEquals(fromString("数据砖头,abc,b,ab,c,def").findInSet(fromString("def")), 6);
   }
 }

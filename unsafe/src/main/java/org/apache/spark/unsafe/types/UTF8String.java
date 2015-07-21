@@ -49,6 +49,8 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
     5, 5, 5, 5,
     6, 6, 6, 6};
 
+  private static UTF8String COMMA_UTF8 = UTF8String.fromString(",");
+
   /**
    * Creates an UTF8String from byte array, which should be encoded in UTF-8.
    *
@@ -212,20 +214,26 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
    * -1 will be returned, else the index of match (1-based index)
    */
   public int findInSet(UTF8String match) {
-    if (match.contains(UTF8String.fromString(","))) {
+    if (match.contains(COMMA_UTF8)) {
       return 0;
     }
 
-    int lastComma = -1;
-    for (int i = 0, n = 1; i < numBytes; i++) {
-      if (getByte(i) == 44) {
-        if (i - (lastComma + 1) == match.numBytes && ByteArrayMethods.arrayEquals(base,
-            offset + (lastComma + 1), match.base, match.offset, i - (lastComma + 1))) {
+    int n = 1, lastComma = -1;
+    for (int i = 0; i < numBytes; i++) {
+      if (getByte(i) == (byte) ',') {
+        if (i - (lastComma + 1) == match.numBytes &&
+            ByteArrayMethods.arrayEquals(base, offset + (lastComma + 1), match.base, match.offset,
+                match.numBytes)) {
           return n;
         }
         lastComma = i;
         n++;
       }
+    }
+    if (numBytes - (lastComma + 1) == match.numBytes &&
+        ByteArrayMethods.arrayEquals(base, offset + (lastComma + 1), match.base, match.offset,
+          match.numBytes)) {
+      return n;
     }
     return -1;
   }
