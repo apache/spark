@@ -444,17 +444,19 @@ class JsonProtocolSuite extends SparkFunSuite {
       case (e1: SparkListenerEnvironmentUpdate, e2: SparkListenerEnvironmentUpdate) =>
         assertEquals(e1.environmentDetails, e2.environmentDetails)
       case (e1: SparkListenerExecutorAdded, e2: SparkListenerExecutorAdded) =>
-        assert(e1.executorId == e1.executorId)
+        assert(e1.executorId === e1.executorId)
         assertEquals(e1.executorInfo, e2.executorInfo)
       case (e1: SparkListenerExecutorRemoved, e2: SparkListenerExecutorRemoved) =>
-        assert(e1.executorId == e1.executorId)
+        assert(e1.executorId === e1.executorId)
       case (e1: SparkListenerExecutorMetricsUpdate, e2: SparkListenerExecutorMetricsUpdate) =>
-        assert(e1.execId == e2.execId)
+        assert(e1.execId === e2.execId)
         assertSeqEquals[(Long, Int, Int, TaskMetrics)](e1.taskMetrics, e2.taskMetrics, (a, b) => {
-          assert(a._1==b._1)
-          assert(a._2==b._2)
-          assert(a._3==b._3)
-          assertEquals(a._4, b._4)
+          val (taskId1, stageId1, stageAttemptId1, metrics1) = a
+          val (taskId2, stageId2, stageAttemptId2, metrics2) = b
+          assert(taskId1 === taskId2)
+          assert(stageId1 === stageId2)
+          assert(stageAttemptId1 === stageAttemptId2)
+          assertEquals(metrics1, metrics2)
         })
       case (e1, e2) =>
         assert(e1 === e2)

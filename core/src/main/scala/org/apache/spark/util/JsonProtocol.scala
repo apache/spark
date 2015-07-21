@@ -229,12 +229,12 @@ private[spark] object JsonProtocol {
     val taskMetrics = metricsUpdate.taskMetrics
     ("Event" -> Utils.getFormattedClassName(metricsUpdate)) ~
     ("Executor ID" -> execId) ~
-    ("Metrics Updated" -> taskMetrics.map(s =>
-      ("Task ID" -> s._1) ~
-        ("Stage ID" -> s._2) ~
-        ("Stage Attempt ID" -> s._3) ~
-        ("Task Metrics" -> taskMetricsToJson(s._4)))
-    )
+    ("Metrics Updated" -> taskMetrics.map { case (taskId, stageId, stageAttemptId, metrics) =>
+      ("Task ID" -> taskId) ~
+      ("Stage ID" -> stageId) ~
+      ("Stage Attempt ID" -> stageAttemptId) ~
+      ("Task Metrics" -> taskMetricsToJson(metrics))
+    })
   }
 
   /** ------------------------------------------------------------------- *
@@ -615,12 +615,13 @@ private[spark] object JsonProtocol {
 
   def executorMetricsUpdateFromJson(json: JValue): SparkListenerExecutorMetricsUpdate = {
     val execInfo = (json \ "Executor ID").extract[String]
-    val taskMetrics = (json \"Metrics Updated").extract[List[JValue]].map(s =>
-      ((s\"Task ID").extract[Long],
-        (s\"Stage ID").extract[Int],
-        (s\"Stage Attempt ID").extract[Int],
-        taskMetricsFromJson(s\"Task Metrics"))
-    ).toSeq
+    val taskMetrics = (json \ "Metrics Updated").extract[List[JValue]].map { json =>
+      val taskId = (json \ "Task ID").extract[Long]
+      val stageId = (json \ "Stage ID").extract[Int]
+      val stageAttemptId = (json \ "Stage Attempt ID").extract[Int]
+      val metrics = taskMetricsFromJson(json \ "Task Metrics")
+      (taskId, stageId, stageAttemptId, metrics)
+    }
     SparkListenerExecutorMetricsUpdate(execInfo, taskMetrics)
   }
 
