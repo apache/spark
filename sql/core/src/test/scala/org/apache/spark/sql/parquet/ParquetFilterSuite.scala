@@ -56,7 +56,7 @@ class ParquetFilterSuite extends QueryTest with ParquetTest {
         .where(Column(predicate))
 
       val maybeAnalyzedPredicate = query.queryExecution.optimizedPlan.collect {
-        case PhysicalOperation(_, filters, LogicalRelation(_: ParquetRelation2)) => filters
+        case PhysicalOperation(_, filters, LogicalRelation(_: ParquetRelation)) => filters
       }.flatten.reduceOption(_ && _)
 
       assert(maybeAnalyzedPredicate.isDefined)

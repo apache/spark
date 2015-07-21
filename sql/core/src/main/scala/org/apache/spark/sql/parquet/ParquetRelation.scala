@@ -57,7 +57,7 @@ private[sql] class DefaultSource extends HadoopFsRelationProvider {
       schema: Option[StructType],
       partitionColumns: Option[StructType],
       parameters: Map[String, String]): HadoopFsRelation = {
-    new ParquetRelation2(paths, schema, None, partitionColumns, parameters)(sqlContext)
+    new ParquetRelation(paths, schema, None, partitionColumns, parameters)(sqlContext)
   }
 }
 
@@ -93,7 +93,7 @@ private[sql] class ParquetOutputWriter(path: String, context: TaskAttemptContext
   override def close(): Unit = recordWriter.close(context)
 }
 
-private[sql] class ParquetRelation2(
+private[sql] class ParquetRelation(
     override val paths: Array[String],
     private val maybeDataSchema: Option[StructType],
     // This is for metastore conversion.
@@ -121,12 +121,12 @@ private[sql] class ParquetRelation2(
   // Should we merge schemas from all Parquet part-files?
   private val shouldMergeSchemas =
     parameters
-      .get(ParquetRelation2.MERGE_SCHEMA)
+      .get(ParquetRelation.MERGE_SCHEMA)
       .map(_.toBoolean)
       .getOrElse(sqlContext.conf.getConf(SQLConf.PARQUET_SCHEMA_MERGING_ENABLED))
 
   private val maybeMetastoreSchema = parameters
-    .get(ParquetRelation2.METASTORE_SCHEMA)
+    .get(ParquetRelation.METASTORE_SCHEMA)
     .map(DataType.fromJson(_).asInstanceOf[StructType])
 
   private lazy val metadataCache: MetadataCache = {
@@ -136,7 +136,7 @@ private[sql] class ParquetRelation2(
   }
 
   override def equals(other: Any): Boolean = other match {
-    case that: ParquetRelation2 =>
+    case that: ParquetRelation =>
       val schemaEquality = if (shouldMergeSchemas) {
         this.shouldMergeSchemas == that.shouldMergeSchemas
       } else {
@@ -242,7 +242,7 @@ private[sql] class ParquetRelation2(
     // Sets compression scheme
     conf.set(
       ParquetOutputFormat.COMPRESSION,
-      ParquetRelation2
+      ParquetRelation
         .shortParquetCompressionCodecNames
         .getOrElse(
           sqlContext.conf.parquetCompressionCodec.toUpperCase,
@@ -269,7 +269,7 @@ private[sql] class ParquetRelation2(
 
     // Create the function to set variable Parquet confs at both driver and executor side.
     val initLocalJobFuncOpt =
-      ParquetRelation2.initializeLocalJobFunc(
+      ParquetRelation.initializeLocalJobFunc(
         requiredColumns,
         filters,
         dataSchema,
@@ -280,7 +280,7 @@ private[sql] class ParquetRelation2(
         followParquetFormatSpec) _
 
     // Create the function to set input paths at the driver side.
-    val setInputPaths = ParquetRelation2.initializeDriverSideJobFunc(inputFiles) _
+    val setInputPaths = ParquetRelation.initializeDriverSideJobFunc(inputFiles) _
 
     Utils.withDummyCallSite(sqlContext.sparkContext) {
       new SqlNewHadoopRDD(
@@ -387,7 +387,7 @@ private[sql] class ParquetRelation2(
           // case insensitivity issue and possible schema mismatch (probably caused by schema
           // evolution).
           maybeMetastoreSchema
-            .map(ParquetRelation2.mergeMetastoreParquetSchema(_, dataSchema0))
+            .map(ParquetRelation.mergeMetastoreParquetSchema(_, dataSchema0))
             .getOrElse(dataSchema0)
         }
       }
@@ -442,12 +442,12 @@ private[sql] class ParquetRelation2(
         "No predefined schema found, " +
           s"and no Parquet data files or summary files found under ${paths.mkString(", ")}.")
 
-      ParquetRelation2.mergeSchemasInParallel(filesToTouch, sqlContext)
+      ParquetRelation.mergeSchemasInParallel(filesToTouch, sqlContext)
     }
   }
 }
 
-private[sql] object ParquetRelation2 extends Logging {
+private[sql] object ParquetRelation extends Logging {
   // Whether we should merge schemas collected from all Parquet part-files.
   private[sql] val MERGE_SCHEMA = "mergeSchema"
 
@@ -691,7 +691,7 @@ private[sql] object ParquetRelation2 extends Logging {
               followParquetFormatSpec = followParquetFormatSpec)
 
           footers.map { footer =>
-            ParquetRelation2.readSchemaFromFooter(footer, converter)
+            ParquetRelation.readSchemaFromFooter(footer, converter)
           }.reduceOption(_ merge _).iterator
         }.collect()
 

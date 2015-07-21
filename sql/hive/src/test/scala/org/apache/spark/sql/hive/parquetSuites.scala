@@ -28,7 +28,7 @@ import org.apache.spark.sql.hive.execution.HiveTableScan
 import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.hive.test.TestHive._
 import org.apache.spark.sql.hive.test.TestHive.implicits._
-import org.apache.spark.sql.parquet.ParquetRelation2
+import org.apache.spark.sql.parquet.ParquetRelation
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
@@ -275,10 +275,10 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
     )
 
     table("test_parquet_ctas").queryExecution.optimizedPlan match {
-      case LogicalRelation(_: ParquetRelation2) => // OK
+      case LogicalRelation(_: ParquetRelation) => // OK
       case _ => fail(
         "test_parquet_ctas should be converted to " +
-          s"${classOf[ParquetRelation2].getCanonicalName}")
+          s"${classOf[ParquetRelation].getCanonicalName}")
     }
 
     sql("DROP TABLE IF EXISTS test_parquet_ctas")
@@ -299,9 +299,9 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
 
     val df = sql("INSERT INTO TABLE test_insert_parquet SELECT a FROM jt")
     df.queryExecution.executedPlan match {
-      case ExecutedCommand(InsertIntoHadoopFsRelation(_: ParquetRelation2, _, _)) => // OK
+      case ExecutedCommand(InsertIntoHadoopFsRelation(_: ParquetRelation, _, _)) => // OK
       case o => fail("test_insert_parquet should be converted to a " +
-        s"${classOf[ParquetRelation2].getCanonicalName} and " +
+        s"${classOf[ParquetRelation].getCanonicalName} and " +
         s"${classOf[InsertIntoDataSource].getCanonicalName} is expcted as the SparkPlan. " +
         s"However, found a ${o.toString} ")
     }
@@ -329,9 +329,9 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
 
     val df = sql("INSERT INTO TABLE test_insert_parquet SELECT a FROM jt_array")
     df.queryExecution.executedPlan match {
-      case ExecutedCommand(InsertIntoHadoopFsRelation(r: ParquetRelation2, _, _)) => // OK
+      case ExecutedCommand(InsertIntoHadoopFsRelation(r: ParquetRelation, _, _)) => // OK
       case o => fail("test_insert_parquet should be converted to a " +
-        s"${classOf[ParquetRelation2].getCanonicalName} and " +
+        s"${classOf[ParquetRelation].getCanonicalName} and " +
         s"${classOf[InsertIntoDataSource].getCanonicalName} is expcted as the SparkPlan." +
         s"However, found a ${o.toString} ")
     }
@@ -362,17 +362,17 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
 
     assertResult(2) {
       analyzed.collect {
-        case r @ LogicalRelation(_: ParquetRelation2) => r
+        case r @ LogicalRelation(_: ParquetRelation) => r
       }.size
     }
 
     sql("DROP TABLE ms_convert")
   }
 
-  def collectParquetRelation(df: DataFrame): ParquetRelation2 = {
+  def collectParquetRelation(df: DataFrame): ParquetRelation = {
     val plan = df.queryExecution.analyzed
     plan.collectFirst {
-      case LogicalRelation(r: ParquetRelation2) => r
+      case LogicalRelation(r: ParquetRelation) => r
     }.getOrElse {
       fail(s"Expecting a ParquetRelation2, but got:\n$plan")
     }
@@ -422,7 +422,7 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
       // Converted test_parquet should be cached.
       catalog.cachedDataSourceTables.getIfPresent(tableIdentifier) match {
         case null => fail("Converted test_parquet should be cached in the cache.")
-        case logical @ LogicalRelation(parquetRelation: ParquetRelation2) => // OK
+        case logical @ LogicalRelation(parquetRelation: ParquetRelation) => // OK
         case other =>
           fail(
             "The cached test_parquet should be a Parquet Relation. " +
