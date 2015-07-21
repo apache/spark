@@ -138,7 +138,7 @@ class HashShuffleReaderSuite extends SparkFunSuite with LocalSparkContext {
       shuffleHandle,
       reduceId,
       reduceId + 1,
-      new TaskContextImpl(0, 0, 0, 0, null),
+      new TaskContextImpl(0, 0, 0, 0, null, null),
       blockManager,
       mapOutputTracker)
 
