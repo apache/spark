@@ -23,7 +23,7 @@ import java.util.{HashMap => JavaHashMap}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.{SparkPlan, SparkSqlSerializer}
-import org.apache.spark.sql.types.{StructType, DataType}
+import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.collection.CompactBuffer
 
 
@@ -154,51 +154,25 @@ private[joins] object HashedRelation {
  * A HashedRelation for UnsafeRow, which is backed by BytesToBytesMap that maps the key into a
  * sequence of values.
  *
- * It's safe to to use inside a broadcast, and safe to read by multiple threads.
- *
  * TODO(davies): use BytesToBytesMap
  */
 private[joins] final class UnsafeHashedRelation(
-    private var hashTable: JavaHashMap[UnsafeRow, CompactBuffer[UnsafeRow]],
-    private var rowTypes: Array[DataType])
+    private var hashTable: JavaHashMap[UnsafeRow, CompactBuffer[UnsafeRow]])
   extends HashedRelation with Externalizable {
 
-  def this() = this(null, null)  // Needed for serialization
-
-  // UnsafeProjection is not thread safe
-  @transient lazy val fromUnsafeProjection = new ThreadLocal[FromUnsafeProjection]
+  def this() = this(null)  // Needed for serialization
 
   override def get(key: InternalRow): CompactBuffer[InternalRow] = {
     val unsafeKey = key.asInstanceOf[UnsafeRow]
-
-    val values = hashTable.get(unsafeKey)
-    // Return GenericInternalRow to work with other JoinRow, which
-    // TODO(davies): return UnsafeRow once we have UnsafeJoinRow.
-    if (values != null) {
-      var proj = fromUnsafeProjection.get()
-      if (proj eq null) {
-        proj = new FromUnsafeProjection(rowTypes)
-        fromUnsafeProjection.set(proj)
-      }
-      var i = 0
-      val ret = new CompactBuffer[InternalRow]
-      while (i < values.length) {
-        ret += proj(values(i)).copy()
-        i += 1
-      }
-      ret
-    } else {
-      null
-    }
+    // Thanks to type eraser
+    hashTable.get(unsafeKey).asInstanceOf[CompactBuffer[InternalRow]]
   }
 
   override def writeExternal(out: ObjectOutput): Unit = {
-    writeBytes(out, SparkSqlSerializer.serialize(rowTypes))
     writeBytes(out, SparkSqlSerializer.serialize(hashTable))
   }
 
   override def readExternal(in: ObjectInput): Unit = {
-    rowTypes = SparkSqlSerializer.deserialize(readBytes(in))
     hashTable = SparkSqlSerializer.deserialize(readBytes(in))
   }
 }
@@ -249,7 +223,6 @@ private[joins] object UnsafeHashedRelation {
       }
     }
 
-    val rowTypes = rowSchema.fields.map(_.dataType).toArray
-    new UnsafeHashedRelation(hashTable, rowTypes)
+    new UnsafeHashedRelation(hashTable)
   }
 }

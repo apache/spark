@@ -71,20 +71,20 @@ class HashedRelationSuite extends SparkFunSuite {
     assert(hashed.isInstanceOf[UnsafeHashedRelation])
 
     val toUnsafeKey = UnsafeProjection.create(schema)
-    val keys = data.map(toUnsafeKey(_).copy()).toArray
-    assert(hashed.get(keys(0)) === CompactBuffer[InternalRow](data(0)))
-    assert(hashed.get(keys(1)) === CompactBuffer[InternalRow](data(1)))
+    val unsafeData = data.map(toUnsafeKey(_).copy()).toArray
+    assert(hashed.get(unsafeData(0)) === CompactBuffer[InternalRow](unsafeData(0)))
+    assert(hashed.get(unsafeData(1)) === CompactBuffer[InternalRow](unsafeData(1)))
     assert(hashed.get(toUnsafeKey(InternalRow(10))) === null)
 
-    val data2 = CompactBuffer[InternalRow](data(2).copy())
-    data2 += data(2).copy()
-    assert(hashed.get(keys(2)) === data2)
+    val data2 = CompactBuffer[InternalRow](unsafeData(2).copy())
+    data2 += unsafeData(2).copy()
+    assert(hashed.get(unsafeData(2)) === data2)
 
     val hashed2 = SparkSqlSerializer.deserialize(SparkSqlSerializer.serialize(hashed))
       .asInstanceOf[UnsafeHashedRelation]
-    assert(hashed2.get(keys(0)) === CompactBuffer[InternalRow](data(0)))
-    assert(hashed2.get(keys(1)) === CompactBuffer[InternalRow](data(1)))
+    assert(hashed2.get(unsafeData(0)) === CompactBuffer[InternalRow](unsafeData(0)))
+    assert(hashed2.get(unsafeData(1)) === CompactBuffer[InternalRow](unsafeData(1)))
     assert(hashed2.get(toUnsafeKey(InternalRow(10))) === null)
-    assert(hashed2.get(keys(2)) === data2)
+    assert(hashed2.get(unsafeData(2)) === data2)
   }
 }

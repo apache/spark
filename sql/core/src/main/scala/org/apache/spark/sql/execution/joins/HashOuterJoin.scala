@@ -23,7 +23,7 @@ import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, UnknownPartitioning}
-import org.apache.spark.sql.catalyst.plans.{FullOuter, JoinType, LeftOuter, RightOuter}
+import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.util.collection.CompactBuffer
 
@@ -75,13 +75,30 @@ trait HashOuterJoin {
         s"HashOuterJoin should not take $x as the JoinType")
   }
 
+  protected[this] def supportUnsafe: Boolean = {
+    (self.codegenEnabled && joinType != FullOuter
+      && UnsafeProjection.canSupport(buildKeys)
+      && UnsafeProjection.canSupport(self.schema))
+  }
+
+  override def outputsUnsafeRows: Boolean = supportUnsafe
+  override def canProcessUnsafeRows: Boolean = supportUnsafe
+
   protected[this] def streamedKeyGenerator(): Projection = {
-    if (canUseUnsafeRow) {
+    if (supportUnsafe) {
       UnsafeProjection.create(streamedKeys, streamedPlan.output)
     } else {
       newProjection(streamedKeys, streamedPlan.output)
     }
   }
+
+  @transient private[this] lazy val resultProjection: Projection =
+    if (supportUnsafe) {
+      // Converted returned JoinRow into UnsafeRow
+      UnsafeProjection.create(self.schema)
+    } else {
+      ((x: InternalRow) => x).asInstanceOf[Projection]
+    }
 
   @transient private[this] lazy val DUMMY_LIST = CompactBuffer[InternalRow](null)
   @transient protected[this] lazy val EMPTY_LIST = CompactBuffer[InternalRow]()
@@ -102,18 +119,18 @@ trait HashOuterJoin {
       if (!key.anyNull) {
         val temp = if (rightIter != null) {
           rightIter.collect {
-            case r if boundCondition(joinedRow.withRight(r)) => joinedRow.copy()
+            case r if boundCondition(joinedRow.withRight(r)) => resultProjection(joinedRow).copy()
           }
         } else {
           List.empty
         }
         if (temp.isEmpty) {
-          joinedRow.withRight(rightNullRow).copy :: Nil
+          resultProjection(joinedRow.withRight(rightNullRow)).copy :: Nil
         } else {
           temp
         }
       } else {
-        joinedRow.withRight(rightNullRow).copy :: Nil
+        resultProjection(joinedRow.withRight(rightNullRow)).copy :: Nil
       }
     }
     ret.iterator
@@ -128,18 +145,18 @@ trait HashOuterJoin {
         val temp = if (leftIter != null) {
           leftIter.collect {
             case l if boundCondition(joinedRow.withLeft(l)) =>
-              joinedRow.copy()
+              resultProjection(joinedRow).copy()
           }
         } else {
           List.empty
         }
         if (temp.isEmpty) {
-          joinedRow.withLeft(leftNullRow).copy :: Nil
+          resultProjection(joinedRow.withLeft(leftNullRow)).copy :: Nil
         } else {
           temp
         }
       } else {
-        joinedRow.withLeft(leftNullRow).copy :: Nil
+        resultProjection(joinedRow.withLeft(leftNullRow)).copy :: Nil
       }
     }
     ret.iterator
@@ -212,13 +229,8 @@ trait HashOuterJoin {
     hashTable
   }
 
-  protected[this] def canUseUnsafeRow: Boolean = {
-    (self.codegenEnabled && UnsafeProjection.canSupport(buildKeys)
-      && UnsafeProjection.canSupport(buildPlan.schema))
-  }
-
   protected[this] def buildHashRelation(buildIter: Iterator[InternalRow]): HashedRelation = {
-    if (canUseUnsafeRow) {
+    if (supportUnsafe) {
       UnsafeHashedRelation(buildIter, buildKeys, buildPlan)
     } else {
       HashedRelation(buildIter, newProjection(buildKeys, buildPlan.output))

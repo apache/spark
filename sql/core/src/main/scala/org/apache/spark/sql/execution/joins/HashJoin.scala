@@ -44,11 +44,16 @@ trait HashJoin {
 
   override def output: Seq[Attribute] = left.output ++ right.output
 
-  @transient protected lazy val buildSideKeyGenerator: Projection =
-    newProjection(buildKeys, buildPlan.output)
+  protected[this] def supportUnsafe: Boolean = {
+    (self.codegenEnabled && UnsafeProjection.canSupport(buildKeys)
+      && UnsafeProjection.canSupport(self.schema))
+  }
+
+  override def outputsUnsafeRows: Boolean = supportUnsafe
+  override def canProcessUnsafeRows: Boolean = supportUnsafe
 
   @transient protected lazy val streamSideKeyGenerator: Projection =
-    if (canUseUnsafeRow) {
+    if (supportUnsafe) {
       UnsafeProjection.create(streamedKeys, streamedPlan.output)
     } else {
       newMutableProjection(streamedKeys, streamedPlan.output)()
@@ -65,6 +70,11 @@ trait HashJoin {
 
       // Mutable per row objects.
       private[this] val joinRow = new JoinedRow2
+      private[this] val resultProjection: Projection = if (supportUnsafe) {
+        UnsafeProjection.create(self.schema)
+      } else {
+        ((r: InternalRow) => r).asInstanceOf[Projection]
+      }
 
       private[this] val joinKeys = streamSideKeyGenerator
 
@@ -78,7 +88,11 @@ trait HashJoin {
           case BuildLeft => joinRow(currentHashMatches(currentMatchPosition), currentStreamedRow)
         }
         currentMatchPosition += 1
-        ret
+        if (supportUnsafe) {
+          resultProjection(ret)
+        } else {
+          ret
+        }
       }
 
       /**
@@ -109,16 +123,11 @@ trait HashJoin {
     }
   }
 
-  protected[this] def canUseUnsafeRow: Boolean = {
-    (self.codegenEnabled && UnsafeProjection.canSupport(buildKeys)
-      && UnsafeProjection.canSupport(buildPlan.schema))
-  }
-
   protected[this] def buildHashRelation(buildIter: Iterator[InternalRow]): HashedRelation = {
-    if (canUseUnsafeRow) {
+    if (supportUnsafe) {
       UnsafeHashedRelation(buildIter, buildKeys, buildPlan)
     } else {
-      HashedRelation(buildIter, buildSideKeyGenerator)
+      HashedRelation(buildIter, newProjection(buildKeys, buildPlan.output))
     }
   }
 }

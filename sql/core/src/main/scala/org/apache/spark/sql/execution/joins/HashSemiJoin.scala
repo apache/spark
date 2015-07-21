@@ -32,11 +32,27 @@ trait HashSemiJoin {
 
   override def output: Seq[Attribute] = left.output
 
+  protected[this] def supportUnsafe: Boolean = {
+    (self.codegenEnabled && UnsafeProjection.canSupport(leftKeys)
+      && UnsafeProjection.canSupport(rightKeys)
+      && UnsafeProjection.canSupport(left.schema))
+  }
+
+  override def outputsUnsafeRows: Boolean = right.outputsUnsafeRows
+  override def canProcessUnsafeRows: Boolean = supportUnsafe
+
   @transient protected lazy val leftKeyGenerator: Projection =
-    if (canUseUnsafeRow) {
+    if (supportUnsafe) {
       UnsafeProjection.create(leftKeys, left.output)
     } else {
       newMutableProjection(leftKeys, left.output)()
+    }
+
+  @transient protected lazy val rightKeyGenerator: Projection =
+    if (supportUnsafe) {
+      UnsafeProjection.create(rightKeys, right.output)
+    } else {
+      newMutableProjection(rightKeys, right.output)()
     }
 
   @transient private lazy val boundCondition =
@@ -47,14 +63,10 @@ trait HashSemiJoin {
     var currentRow: InternalRow = null
 
     // Create a Hash set of buildKeys
-    val rightKeyGenerator = if (canUseUnsafeRow) {
-      UnsafeProjection.create(rightKeys, right.output)
-    } else {
-      newProjection(rightKeys, right.output)
-    }
+    val rightKey = rightKeyGenerator
     while (buildIter.hasNext) {
       currentRow = buildIter.next()
-      val rowKey = rightKeyGenerator(currentRow)
+      val rowKey = rightKey(currentRow)
       if (!rowKey.anyNull) {
         val keyExists = hashSet.contains(rowKey)
         if (!keyExists) {
@@ -75,13 +87,8 @@ trait HashSemiJoin {
     })
   }
 
-  private lazy val canUseUnsafeRow: Boolean = {
-    (self.codegenEnabled && UnsafeProjection.canSupport(rightKeys)
-      && UnsafeProjection.canSupport(right.schema))
-  }
-
   protected def buildHashRelation(buildIter: Iterator[InternalRow]): HashedRelation = {
-    if (canUseUnsafeRow) {
+    if (supportUnsafe) {
       UnsafeHashedRelation(buildIter, rightKeys, right)
     } else {
       HashedRelation(buildIter, newProjection(rightKeys, right.output))
