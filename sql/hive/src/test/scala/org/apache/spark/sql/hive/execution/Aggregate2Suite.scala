@@ -21,7 +21,7 @@ import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.{SQLConf, AnalysisException, QueryTest, Row}
 import org.scalatest.BeforeAndAfterAll
-import test.org.apache.spark.sql.hive.aggregate2.MyDoubleSum
+import test.org.apache.spark.sql.hive.aggregate2.{MyDoubleAvg, MyDoubleSum}
 
 class Aggregate2Suite extends QueryTest with SQLTestUtils with BeforeAndAfterAll {
 
@@ -49,25 +49,25 @@ class Aggregate2Suite extends QueryTest with SQLTestUtils with BeforeAndAfterAll
       (3, null)).toDF("key", "value")
     data1.write.saveAsTable("agg1")
 
-    val data2 = Seq[(Integer, Integer)](
-      (1, 10),
-      (null, -60),
-      (1, 30),
-      (1, 30),
-      (2, 1),
-      (null, -10),
-      (2, -1),
-      (2, 1),
-      (2, null),
-      (null, 100),
-      (3, null),
-      (null, null),
-      (3, null)).toDF("key", "value")
+    val data2 = Seq[(Integer, Integer, Integer)](
+      (1, 10, -10),
+      (null, -60, 60),
+      (1, 30, -30),
+      (1, 30, 30),
+      (2, 1, 1),
+      (null, -10, 10),
+      (2, -1, null),
+      (2, 1, 1),
+      (2, null, 1),
+      (null, 100, -10),
+      (3, null, 3),
+      (null, null, null),
+      (3, null, null)).toDF("key", "value1", "value2")
     data2.write.saveAsTable("agg2")
 
-    // Register a UDAF
-    val javaUDAF = new MyDoubleSum
-    sqlContext.udaf.register("mydoublesum", javaUDAF)
+    // Register UDAFs
+    sqlContext.udaf.register("mydoublesum", new MyDoubleSum)
+    sqlContext.udaf.register("mydoubleavg", new MyDoubleAvg)
   }
 
   override def afterAll(): Unit = {
@@ -147,24 +147,25 @@ class Aggregate2Suite extends QueryTest with SQLTestUtils with BeforeAndAfterAll
         """
           |SELECT
           |  key,
-          |  mydoublesum(cast(value as double) + 1.5 * key),
+          |  mydoublesum(value + 1.5 * key),
+          |  mydoubleavg(value),
           |  avg(value - key),
-          |  mydoublesum(cast(value as double) - 1.5 * key),
+          |  mydoublesum(value - 1.5 * key),
           |  avg(value)
           |FROM agg1
           |GROUP BY key
         """.stripMargin),
-      Row(1, 64.5, 19.0, 55.5, 20.0) ::
-        Row(2, 5.0, -2.5, -7.0, -0.5) ::
-        Row(3, null, null, null, null) ::
-        Row(null, null, null, null, 10.0) :: Nil)
+      Row(1, 64.5, 120.0, 19.0, 55.5, 20.0) ::
+        Row(2, 5.0, 99.5, -2.5, -7.0, -0.5) ::
+        Row(3, null, null, null, null, null) ::
+        Row(null, null, 110.0, null, null, 10.0) :: Nil)
   }
 
   test("non-AlgebraicAggregate aggreguate function") {
     checkAnswer(
       sqlContext.sql(
         """
-          |SELECT mydoublesum(cast(value as double)), key
+          |SELECT mydoublesum(value), key
           |FROM agg1
           |GROUP BY key
         """.stripMargin),
@@ -173,7 +174,7 @@ class Aggregate2Suite extends QueryTest with SQLTestUtils with BeforeAndAfterAll
     checkAnswer(
       sqlContext.sql(
         """
-          |SELECT mydoublesum(cast(value as double)) FROM agg1
+          |SELECT mydoublesum(value) FROM agg1
         """.stripMargin),
       Row(89.0) :: Nil)
 
@@ -189,7 +190,7 @@ class Aggregate2Suite extends QueryTest with SQLTestUtils with BeforeAndAfterAll
     checkAnswer(
       sqlContext.sql(
         """
-          |SELECT mydoublesum(cast(value as double)), key, avg(value)
+          |SELECT mydoublesum(value), key, avg(value)
           |FROM agg1
           |GROUP BY key
         """.stripMargin),
@@ -202,10 +203,10 @@ class Aggregate2Suite extends QueryTest with SQLTestUtils with BeforeAndAfterAll
       sqlContext.sql(
         """
           |SELECT
-          |  mydoublesum(cast(value as double) + 1.5 * key),
+          |  mydoublesum(value + 1.5 * key),
           |  avg(value - key),
           |  key,
-          |  mydoublesum(cast(value as double) - 1.5 * key),
+          |  mydoublesum(value - 1.5 * key),
           |  avg(value)
           |FROM agg1
           |GROUP BY key
@@ -224,7 +225,7 @@ class Aggregate2Suite extends QueryTest with SQLTestUtils with BeforeAndAfterAll
           """
             |SELECT
             |  key,
-            |  sum(cast(value as double) + 1.5 * key),
+            |  sum(value + 1.5 * key),
             |  mydoublesum(value)
             |FROM agg1
             |GROUP BY key
@@ -239,17 +240,50 @@ class Aggregate2Suite extends QueryTest with SQLTestUtils with BeforeAndAfterAll
     sqlContext.sql(s"set spark.sql.useAggregate2=true")
   }
 
-  test("single distinct column sets") {
-    sqlContext.sql(
-      """
-        |SELECT avg(distinct value) FROM agg2
-      """.stripMargin).explain(true)
+  test("single distinct column set") {
+    checkAnswer(
+      sqlContext.sql(
+        """
+          |SELECT avg(distinct value1), avg(value1), avg(value2), avg(distinct value1) FROM agg2
+        """.stripMargin),
+      Row(10.0, 101.0/9.0, 5.6, 10.0))
 
-    sqlContext.sql(
-      """
-        |SELECT avg(distinct value) FROM agg2
-      """.stripMargin).collect.foreach(println)
+    checkAnswer(
+      sqlContext.sql(
+        """
+          |SELECT
+          |  avg(distinct value1),
+          |  avg(value1),
+          |  avg(value2),
+          |  key,
+          |  mydoubleavg(value1 - 1),
+          |  avg(distinct value1),
+          |  avg(value1 + value2)
+          |FROM agg2
+          |GROUP BY key
+        """.stripMargin),
+      Row(20.0, 70.0/3.0, -10.0/3.0, 1, 67.0/3.0 + 100.0, 20.0, 20.0) ::
+        Row(0.0, 1.0/3.0, 1.0, 2, -2.0/3.0 + 100.0, 0.0, 2.0) ::
+        Row(null, null, 3.0, 3, null, null, null) ::
+        Row(10.0, 10.0, 20.0, null, 109.0, 10.0, 30.0) :: Nil)
 
-    // TODO: add both distinct agg non-distinct agg in the same query.
+    checkAnswer(
+      sqlContext.sql(
+        """
+          |SELECT
+          |  key,
+          |  mydoubleavg(distinct value1),
+          |  mydoublesum(value2),
+          |  mydoublesum(distinct value1),
+          |  mydoubleavg(distinct value1),
+          |  mydoubleavg(value1)
+          |FROM agg2
+          |GROUP BY key
+        """.stripMargin),
+      Row(1, 120.0, -10.0, 40.0, 120.0, 70.0/3.0 + 100.0) ::
+        Row(2, 100.0, 3.0, 0.0, 100.0, 1.0/3.0 + 100.0) ::
+        Row(3, null, 3.0, null, null, null) ::
+        Row(null, 110.0, 60.0, 30.0, 110.0, 110.0) :: Nil)
+
   }
 }

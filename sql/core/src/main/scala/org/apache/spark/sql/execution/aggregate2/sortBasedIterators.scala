@@ -24,6 +24,10 @@ import org.apache.spark.sql.types.NullType
 
 import scala.collection.mutable.ArrayBuffer
 
+/**
+ * An iterator used to evaluate aggregate functions. It assumes that input rows
+ * are already grouped by values of `groupingExpressions`.
+ */
 private[sql] abstract class SortAggregationIterator(
     groupingExpressions: Seq[NamedExpression],
     aggregateExpressions: Seq[AggregateExpression2],
@@ -107,13 +111,13 @@ private[sql] abstract class SortAggregationIterator(
 
   protected val joinedRow = new JoinedRow4
 
-  protected val offsetExpressions = Seq.fill(initialBufferOffset)(NoOp)
+  protected val placeholderExpressions = Seq.fill(initialBufferOffset)(NoOp)
 
   // This projection is used to initialize buffer values for all AlgebraicAggregates.
   protected val algebraicInitialProjection = {
-    val initExpressions = offsetExpressions ++ aggregateFunctions.flatMap {
+    val initExpressions = placeholderExpressions ++ aggregateFunctions.flatMap {
       case ae: AlgebraicAggregate => ae.initialValues
-      case agg: AggregateFunction2 => NoOp :: Nil
+      case agg: AggregateFunction2 => Seq.fill(agg.bufferAttributes.length)(NoOp)
     }
     newMutableProjection(initExpressions, Nil)().target(buffer)
   }
@@ -232,6 +236,10 @@ private[sql] abstract class SortAggregationIterator(
   initialize()
 }
 
+/**
+ * An iterator only used to group input rows according to values of `groupingExpressions`.
+ * It assumes that input rows are already grouped by values of `groupingExpressions`.
+ */
 class GroupingIterator(
     groupingExpressions: Seq[NamedExpression],
     newMutableProjection: (Seq[Expression], Seq[Attribute]) => (() => MutableProjection),
@@ -246,7 +254,7 @@ class GroupingIterator(
   override protected def initialBufferOffset: Int = 0
 
   override protected def processRow(row: InternalRow): Unit = {
-    // Since we only do grouping, there is nothing to do.
+    // Since we only do grouping, there is nothing to do at here.
   }
 
   override protected def generateOutput(): InternalRow = {
@@ -254,6 +262,12 @@ class GroupingIterator(
   }
 }
 
+/**
+ * An iterator used to do partial aggregations (for those aggregate functions with mode Partial).
+ * It assumes that input rows are already grouped by values of `groupingExpressions`.
+ * The format of its output rows is:
+ * |groupingExpr1|...|groupingExprN|aggregationBuffer1|...|aggregationBufferN|
+ */
 class PartialSortAggregationIterator(
     groupingExpressions: Seq[NamedExpression],
     aggregateExpressions: Seq[AggregateExpression2],
@@ -275,17 +289,17 @@ class PartialSortAggregationIterator(
     }
     val updateExpressions = aggregateFunctions.flatMap {
       case ae: AlgebraicAggregate => ae.updateExpressions
-      case agg: AggregateFunction2 => NoOp :: Nil
+      case agg: AggregateFunction2 => Seq.fill(agg.bufferAttributes.length)(NoOp)
     }
     newMutableProjection(updateExpressions, bufferSchema ++ inputAttributes)().target(buffer)
   }
 
   override protected def initialBufferOffset: Int = 0
 
-  /** Processes the current input row. */
   override protected def processRow(row: InternalRow): Unit = {
-    // The new row is still in the current group.
+    // Process all algebraic aggregate functions.
     algebraicUpdateProjection(joinedRow(buffer, row))
+    // Process all non-algebraic aggregate functions.
     var i = 0
     while (i < nonAlgebraicAggregateFunctions.length) {
       nonAlgebraicAggregateFunctions(i).update(buffer, row)
@@ -294,11 +308,107 @@ class PartialSortAggregationIterator(
   }
 
   override protected def generateOutput(): InternalRow = {
-    // We just output the grouping columns and the buffer.
+    // We just output the grouping expressions and the underlying buffer.
     joinedRow(currentGroupingKey, buffer).copy()
   }
 }
 
+/**
+ * An iterator used to do partial merge aggregations (for those aggregate functions with mode
+ * PartialMerge). It assumes that input rows are already grouped by values of
+ * `groupingExpressions`.
+ * The format of its input rows is:
+ * |groupingExpr1|...|groupingExprN|aggregationBuffer1|...|aggregationBufferN|
+ *
+ * The format of its internal buffer is:
+ * |placeholder1|...|placeholderN|aggregationBuffer1|...|aggregationBufferN|
+ * Every placeholder is for a grouping expression.
+ * The actual buffers are stored after placeholderN.
+ * The reason that we have placeholders at here is to make our underlying buffer have the same
+ * length with a input row.
+ *
+ * The format of its output rows is:
+ * |groupingExpr1|...|groupingExprN|aggregationBuffer1|...|aggregationBufferN|
+ */
+class PartialMergeSortAggregationIterator(
+    groupingExpressions: Seq[NamedExpression],
+    aggregateExpressions: Seq[AggregateExpression2],
+    newMutableProjection: (Seq[Expression], Seq[Attribute]) => (() => MutableProjection),
+    inputAttributes: Seq[Attribute],
+    inputIter: Iterator[InternalRow])
+  extends SortAggregationIterator(
+    groupingExpressions,
+    aggregateExpressions,
+    newMutableProjection,
+    inputAttributes,
+    inputIter) {
+
+  private val placeholderAttribtues =
+    Seq.fill(initialBufferOffset)(AttributeReference("placeholder", NullType)())
+
+  // This projection is used to merge buffer values for all AlgebraicAggregates.
+  private val algebraicMergeProjection = {
+    val bufferSchemata =
+      placeholderAttribtues ++ aggregateFunctions.flatMap {
+        case ae: AlgebraicAggregate => ae.bufferAttributes
+        case agg: AggregateFunction2 => agg.bufferAttributes
+      } ++ placeholderAttribtues ++ aggregateFunctions.flatMap {
+        case ae: AlgebraicAggregate => ae.cloneBufferAttributes
+        case agg: AggregateFunction2 => agg.cloneBufferAttributes
+      }
+    val mergeExpressions = placeholderExpressions ++ aggregateFunctions.flatMap {
+      case ae: AlgebraicAggregate => ae.mergeExpressions
+      case agg: AggregateFunction2 => Seq.fill(agg.bufferAttributes.length)(NoOp)
+    }
+
+    newMutableProjection(mergeExpressions, bufferSchemata)()
+  }
+
+  // This projection is used to extract aggregation buffers from the underlying buffer.
+  // We need it because the underlying buffer has placeholders at its beginning.
+  private val extractsBufferValues = {
+    val expressions = aggregateFunctions.flatMap {
+      case agg => agg.bufferAttributes
+    }
+
+    newMutableProjection(expressions, inputAttributes)()
+  }
+
+  override protected def initialBufferOffset: Int = groupingExpressions.length
+
+  override protected def processRow(row: InternalRow): Unit = {
+    // Process all algebraic aggregate functions.
+    algebraicMergeProjection.target(buffer)(joinedRow(buffer, row))
+    // Process all non-algebraic aggregate functions.
+    var i = 0
+    while (i < nonAlgebraicAggregateFunctions.length) {
+      nonAlgebraicAggregateFunctions(i).merge(buffer, row)
+      i += 1
+    }
+  }
+
+  override protected def generateOutput(): InternalRow = {
+    // We output grouping expressions and aggregation buffers.
+    joinedRow(currentGroupingKey, extractsBufferValues(buffer))
+  }
+}
+
+/**
+ * An iterator used to do final aggregations (for those aggregate functions with mode
+ * Final). It assumes that input rows are already grouped by values of
+ * `groupingExpressions`.
+ * The format of its input rows is:
+ * |groupingExpr1|...|groupingExprN|aggregationBuffer1|...|aggregationBufferN|
+ *
+ * The format of its internal buffer is:
+ * |placeholder1|...|placeholder N|aggregationBuffer1|...|aggregationBufferN|
+ * Every placeholder is for a grouping expression.
+ * The actual buffers are stored after placeholderN.
+ * The reason that we have placeholders at here is to make our underlying buffer have the same
+ * length with a input row.
+ *
+ * The format of its output rows is represented by the schema of `resultExpressions`.
+ */
 class FinalSortAggregationIterator(
     groupingExpressions: Seq[NamedExpression],
     aggregateExpressions: Seq[AggregateExpression2],
@@ -314,8 +424,7 @@ class FinalSortAggregationIterator(
     inputAttributes,
     inputIter) {
 
-  // The result of aggregate functions. It is only used when aggregate functions' modes
-  // are Final.
+  // The result of aggregate functions.
   private val aggregateResult: MutableRow = new GenericMutableRow(aggregateAttributes.length)
 
   // The projection used to generate the output rows of this operator.
@@ -324,13 +433,8 @@ class FinalSortAggregationIterator(
     newMutableProjection(
       resultExpressions, groupingExpressions.map(_.toAttribute) ++ aggregateAttributes)()
 
-  // When we merge buffers (for mode PartialMerge or Final), the input rows start with
-  // values for grouping expressions. So, when we construct our buffer for this
-  // aggregate function, the size of the buffer matches the number of values in the
-  // input rows. To simplify the code for code-gen, we need create some dummy
-  // attributes and expressions for these grouping expressions.
   private val offsetAttributes =
-    Seq.fill(initialBufferOffset)(AttributeReference("offset", NullType)())
+    Seq.fill(initialBufferOffset)(AttributeReference("placeholder", NullType)())
 
   // This projection is used to merge buffer values for all AlgebraicAggregates.
   private val algebraicMergeProjection = {
@@ -342,9 +446,9 @@ class FinalSortAggregationIterator(
         case ae: AlgebraicAggregate => ae.cloneBufferAttributes
         case agg: AggregateFunction2 => agg.cloneBufferAttributes
       }
-    val mergeExpressions = offsetExpressions ++ aggregateFunctions.flatMap {
+    val mergeExpressions = placeholderExpressions ++ aggregateFunctions.flatMap {
       case ae: AlgebraicAggregate => ae.mergeExpressions
-      case agg: AggregateFunction2 => NoOp :: Nil
+      case agg: AggregateFunction2 => Seq.fill(agg.bufferAttributes.length)(NoOp)
     }
 
     newMutableProjection(mergeExpressions, bufferSchemata)()
@@ -371,8 +475,9 @@ class FinalSortAggregationIterator(
   override protected def initialBufferOffset: Int = groupingExpressions.length
 
   override protected def processRow(row: InternalRow): Unit = {
-    // The new row is still in the current group.
+    // Process all algebraic aggregate functions.
     algebraicMergeProjection.target(buffer)(joinedRow(buffer, row))
+    // Process all non-algebraic aggregate functions.
     var i = 0
     while (i < nonAlgebraicAggregateFunctions.length) {
       nonAlgebraicAggregateFunctions(i).merge(buffer, row)
@@ -381,7 +486,9 @@ class FinalSortAggregationIterator(
   }
 
   override protected def generateOutput(): InternalRow = {
+    // Generate results for all algebraic aggregate functions.
     algebraicEvalProjection.target(aggregateResult)(buffer)
+    // Generate results for all non-algebraic aggregate functions.
     var i = 0
     while (i < nonAlgebraicAggregateFunctions.length) {
       aggregateResult.update(
@@ -389,11 +496,34 @@ class FinalSortAggregationIterator(
         nonAlgebraicAggregateFunctions(i).eval(buffer))
       i += 1
     }
+
     resultProjection(joinedRow(currentGroupingKey, aggregateResult))
   }
 }
 
+/**
+ * An iterator used to do both final aggregations (for those aggregate functions with mode
+ * Final) and complete aggregations (for those aggregate functions with mode Complete).
+ * It assumes that input rows are already grouped by values of `groupingExpressions`.
+ * The format of its input rows is:
+ * |groupingExpr1|...|groupingExprN|col1|...|colM|aggregationBuffer1|...|aggregationBufferN|
+ * col1 to colM are columns used by aggregate functions with Complete mode.
+ * aggregationBuffer1 to aggregationBufferN are buffers used by aggregate functions with
+ * Final mode.
+ *
+ * The format of its internal buffer is:
+ * |placeholder1|...|placeholder(N+M)|aggregationBuffer1|...|aggregationBuffer(N+M)|
+ * The first N placeholders represent slots of grouping expressions.
+ * Then, next M placeholders represent slots of col1 to colM.
+ * For aggregation buffers, first N aggregation buffers are used by N aggregate functions with
+ * mode Final. Then, the last M aggregation buffers are used by M aggregate functions with mode
+ * Complete. The reason that we have placeholders at here is to make our underlying buffer
+ * have the same length with a input row.
+ *
+ * The format of its output rows is represented by the schema of `resultExpressions`.
+ */
 class FinalAndCompleteSortAggregationIterator(
+    override protected val initialBufferOffset: Int,
     groupingExpressions: Seq[NamedExpression],
     finalAggregateExpressions: Seq[AggregateExpression2],
     finalAggregateAttributes: Seq[Attribute],
@@ -405,71 +535,33 @@ class FinalAndCompleteSortAggregationIterator(
     inputIter: Iterator[InternalRow])
   extends SortAggregationIterator(
     groupingExpressions,
-    // This ordering is important. Because the format of its input is
-    // groupingExprs | distinctExprs | intermediate results for non-distinct aggs.
-    completeAggregateExpressions ++ finalAggregateExpressions,
+    // TODO: document the ordering
+    finalAggregateExpressions ++ completeAggregateExpressions,
     newMutableProjection,
     inputAttributes,
     inputIter) {
 
+  // The result of aggregate functions.
   private val aggregateResult: MutableRow =
     new GenericMutableRow(completeAggregateAttributes.length + finalAggregateAttributes.length)
 
+  // The projection used to generate the output rows of this operator.
+  // This is only used when we are generating final results of aggregate functions.
   private val resultProjection = {
     val inputSchema =
       groupingExpressions.map(_.toAttribute) ++
-        completeAggregateAttributes ++
-        finalAggregateAttributes
+        finalAggregateAttributes ++
+        completeAggregateAttributes
     newMutableProjection(resultExpressions, inputSchema)()
   }
 
   private val offsetAttributes =
-    Seq.fill(initialBufferOffset)(AttributeReference("offset", NullType)())
+    Seq.fill(initialBufferOffset)(AttributeReference("placeholder", NullType)())
 
-  private val completeAggregateFunctions: Array[AggregateFunction2] = {
-    val functions = new Array[AggregateFunction2](completeAggregateExpressions.length)
-    var i = 0
-    while (i < completeAggregateExpressions.length) {
-      functions(i) = aggregateFunctions(i)
-      i += 1
-    }
-    functions
-  }
-
-  private val completeNonAlgebraicAggregateFunctions: Array[AggregateFunction2] = {
-    completeAggregateFunctions.collect {
-      case func: AggregateFunction2 if !func.isInstanceOf[AlgebraicAggregate] => func
-    }.toArray
-  }
-
-  // This projection is used to update buffer values for all AlgebraicAggregates.
-  private val completeAlgebraicUpdateProjection = {
-    val bufferSchema = completeAggregateFunctions.flatMap {
-      case ae: AlgebraicAggregate => ae.bufferAttributes
-      case agg: AggregateFunction2 => agg.bufferAttributes
-    }
-    val updateExpressions = completeAggregateFunctions.flatMap {
-      case ae: AlgebraicAggregate => ae.updateExpressions
-      case agg: AggregateFunction2 => NoOp :: Nil
-    }
-    newMutableProjection(updateExpressions, bufferSchema ++ inputAttributes)().target(buffer)
-  }
-
-  private val finalOffsetExpressions = {
-    val size =
-      initialBufferOffset + completeAggregateFunctions.length
-    Seq.fill(size)(NoOp)
-  }
-
-  private val finalOffsetAttributes = {
-    val size =
-      initialBufferOffset + completeAggregateFunctions.length
-    Seq.fill(size)(AttributeReference("offset", NullType)())
-  }
-
+  // All aggregate functions with mode Final.
   private val finalAggregateFunctions: Array[AggregateFunction2] = {
     val functions = new Array[AggregateFunction2](finalAggregateExpressions.length)
-    var i = completeAggregateExpressions.length
+    var i = 0
     while (i < finalAggregateExpressions.length) {
       functions(i) = aggregateFunctions(i)
       i += 1
@@ -477,27 +569,76 @@ class FinalAndCompleteSortAggregationIterator(
     functions
   }
 
+  // All non-algebraic aggregate functions with mode Final.
   private val finalNonAlgebraicAggregateFunctions: Array[AggregateFunction2] = {
     finalAggregateFunctions.collect {
       case func: AggregateFunction2 if !func.isInstanceOf[AlgebraicAggregate] => func
     }.toArray
   }
 
+  // All aggregate functions with mode Complete.
+  private val completeAggregateFunctions: Array[AggregateFunction2] = {
+    val functions = new Array[AggregateFunction2](completeAggregateExpressions.length)
+    var i = 0
+    while (i < completeAggregateExpressions.length) {
+      functions(i) = aggregateFunctions(finalAggregateFunctions.length + i)
+      i += 1
+    }
+    functions
+  }
+
+  // All non-algebraic aggregate functions with mode Complete.
+  private val completeNonAlgebraicAggregateFunctions: Array[AggregateFunction2] = {
+    completeAggregateFunctions.collect {
+      case func: AggregateFunction2 if !func.isInstanceOf[AlgebraicAggregate] => func
+    }.toArray
+  }
+
+  // This projection is used to merge buffer values for all AlgebraicAggregates with mode
+  // Final.
   private val finalAlgebraicMergeProjection = {
+    val numCompleteOffsetAttributes =
+      completeAggregateFunctions.map(_.bufferAttributes.length).sum
+    val completeOffsetAttributes =
+      Seq.fill(numCompleteOffsetAttributes)(AttributeReference("placeholder", NullType)())
+    val completeOffsetExpressions = Seq.fill(numCompleteOffsetAttributes)(NoOp)
+
     val bufferSchemata =
-      finalOffsetAttributes ++ finalAggregateFunctions.flatMap {
+      offsetAttributes ++ finalAggregateFunctions.flatMap {
         case ae: AlgebraicAggregate => ae.bufferAttributes
         case agg: AggregateFunction2 => agg.bufferAttributes
-      } ++ finalOffsetAttributes ++ finalAggregateFunctions.flatMap {
+      } ++ completeOffsetAttributes ++ offsetAttributes ++ finalAggregateFunctions.flatMap {
         case ae: AlgebraicAggregate => ae.cloneBufferAttributes
         case agg: AggregateFunction2 => agg.cloneBufferAttributes
-      }
-    val mergeExpressions = finalOffsetExpressions ++ finalAggregateFunctions.flatMap {
-      case ae: AlgebraicAggregate => ae.mergeExpressions
-      case agg: AggregateFunction2 => NoOp :: Nil
-    }
+      } ++ completeOffsetAttributes
+    val mergeExpressions =
+      placeholderExpressions ++ finalAggregateFunctions.flatMap {
+        case ae: AlgebraicAggregate => ae.mergeExpressions
+        case agg: AggregateFunction2 => Seq.fill(agg.bufferAttributes.length)(NoOp)
+      } ++ completeOffsetExpressions
 
     newMutableProjection(mergeExpressions, bufferSchemata)()
+  }
+
+  // This projection is used to update buffer values for all AlgebraicAggregates with mode
+  // Complete.
+  private val completeAlgebraicUpdateProjection = {
+    val numFinalOffsetAttributes = finalAggregateFunctions.map(_.bufferAttributes.length).sum
+    val finalOffsetAttributes =
+      Seq.fill(numFinalOffsetAttributes)(AttributeReference("placeholder", NullType)())
+    val finalOffsetExpressions = Seq.fill(numFinalOffsetAttributes)(NoOp)
+
+    val bufferSchema =
+      offsetAttributes ++ finalOffsetAttributes ++ completeAggregateFunctions.flatMap {
+        case ae: AlgebraicAggregate => ae.bufferAttributes
+        case agg: AggregateFunction2 => agg.bufferAttributes
+      }
+    val updateExpressions =
+      placeholderExpressions ++ finalOffsetExpressions ++ completeAggregateFunctions.flatMap {
+        case ae: AlgebraicAggregate => ae.updateExpressions
+        case agg: AggregateFunction2 => Seq.fill(agg.bufferAttributes.length)(NoOp)
+      }
+    newMutableProjection(updateExpressions, bufferSchema ++ inputAttributes)().target(buffer)
   }
 
   // This projection is used to evaluate all AlgebraicAggregates.
@@ -518,11 +659,9 @@ class FinalAndCompleteSortAggregationIterator(
     newMutableProjection(evalExpressions, bufferSchemata)()
   }
 
-  override protected def initialBufferOffset: Int = groupingExpressions.length
-
   override protected def processRow(row: InternalRow): Unit = {
-    println("inputRow" + row + " current buffer " + buffer)
     val input = joinedRow(buffer, row)
+    // For all aggregate functions with mode Complete, update buffers.
     completeAlgebraicUpdateProjection(input)
     var i = 0
     while (i < completeNonAlgebraicAggregateFunctions.length) {
@@ -530,6 +669,7 @@ class FinalAndCompleteSortAggregationIterator(
       i += 1
     }
 
+    // For all aggregate functions with mode Final, merge buffers.
     finalAlgebraicMergeProjection.target(buffer)(input)
     i = 0
     while (i < finalNonAlgebraicAggregateFunctions.length) {
@@ -539,8 +679,9 @@ class FinalAndCompleteSortAggregationIterator(
   }
 
   override protected def generateOutput(): InternalRow = {
-    println("buffer " + buffer)
+    // Generate results for all algebraic aggregate functions.
     algebraicEvalProjection.target(aggregateResult)(buffer)
+    // Generate results for all non-algebraic aggregate functions.
     var i = 0
     while (i < nonAlgebraicAggregateFunctions.length) {
       aggregateResult.update(
@@ -548,6 +689,7 @@ class FinalAndCompleteSortAggregationIterator(
         nonAlgebraicAggregateFunctions(i).eval(buffer))
       i += 1
     }
+
     resultProjection(joinedRow(currentGroupingKey, aggregateResult))
   }
 }

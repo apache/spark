@@ -34,9 +34,6 @@ case class Aggregate2Sort(
     child: SparkPlan)
   extends UnaryNode {
 
-  /** Indicates if this operator is for partial aggregations. */
-
-
   override def references: AttributeSet = {
     val referencesInResults =
       AttributeSet(resultExpressions.flatMap(_.references)) -- AttributeSet(aggregateAttributes)
@@ -55,8 +52,18 @@ case class Aggregate2Sort(
     }
   }
 
-  override def requiredChildOrdering: Seq[Seq[SortOrder]] =
+  override def requiredChildOrdering: Seq[Seq[SortOrder]] = {
+    // TODO: We should not sort the input rows if they are just in reversed order.
     groupingExpressions.map(SortOrder(_, Ascending)) :: Nil
+  }
+
+  override def outputOrdering: Seq[SortOrder] = {
+    // It is possible that the child.outputOrdering starts with the required
+    // ordering expressions (e.g. we require [a] as the sort expression and the
+    // child's outputOrdering is [a, b]). We can only guarantee the output rows
+    // are sorted by values of groupingExpressions.
+    groupingExpressions.map(SortOrder(_, Ascending))
+  }
 
   override def output: Seq[Attribute] = resultExpressions.map(_.toAttribute)
 
@@ -69,35 +76,38 @@ case class Aggregate2Sort(
           child.output,
           iter)
       } else {
-        val partialAggregation: Boolean = {
+        val aggregationIterator: SortAggregationIterator = {
           aggregateExpressions.map(_.mode).distinct.toList match {
-            case Partial :: Nil => true
-            case Final :: Nil => false
-            TODO: HANDLE PARTIAL MERGE
+            case Partial :: Nil =>
+              new PartialSortAggregationIterator(
+                groupingExpressions,
+                aggregateExpressions,
+                newMutableProjection,
+                child.output,
+                iter)
+            case PartialMerge :: Nil =>
+              new PartialMergeSortAggregationIterator(
+                groupingExpressions,
+                aggregateExpressions,
+                newMutableProjection,
+                child.output,
+                iter)
+            case Final :: Nil =>
+              new FinalSortAggregationIterator(
+                groupingExpressions,
+                aggregateExpressions,
+                aggregateAttributes,
+                resultExpressions,
+                newMutableProjection,
+                child.output,
+                iter)
             case other =>
               sys.error(
                 s"Could not evaluate ${aggregateExpressions} because we do not support evaluate " +
                   s"modes $other in this operator.")
           }
         }
-        val aggregationIterator =
-          if (partialAggregation) {
-            new PartialSortAggregationIterator(
-              groupingExpressions,
-              aggregateExpressions,
-              newMutableProjection,
-              child.output,
-              iter)
-          } else {
-            new FinalSortAggregationIterator(
-              groupingExpressions,
-              aggregateExpressions,
-              aggregateAttributes,
-              resultExpressions,
-              newMutableProjection,
-              child.output,
-              iter)
-          }
+
         aggregationIterator
       }
     }
@@ -105,6 +115,7 @@ case class Aggregate2Sort(
 }
 
 case class FinalAndCompleteAggregate2Sort(
+    previousGroupingExpressions: Seq[NamedExpression],
     groupingExpressions: Seq[NamedExpression],
     finalAggregateExpressions: Seq[AggregateExpression2],
     finalAggregateAttributes: Seq[Attribute],
@@ -143,6 +154,7 @@ case class FinalAndCompleteAggregate2Sort(
     child.execute().mapPartitions { iter =>
 
       new FinalAndCompleteSortAggregationIterator(
+        previousGroupingExpressions.length,
         groupingExpressions,
         finalAggregateExpressions,
         finalAggregateAttributes,

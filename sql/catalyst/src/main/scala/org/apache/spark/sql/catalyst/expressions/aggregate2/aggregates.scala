@@ -58,6 +58,10 @@ private[sql] case object Final extends AggregateMode
  */
 private[sql] case object Complete extends AggregateMode
 
+/**
+ * A place holder expressions used in code-gen, it does not change the corresponding value
+ * in the row.
+ */
 private[sql] case object NoOp extends Expression with Unevaluable {
   override def nullable: Boolean = true
   override def eval(input: InternalRow): Any = {

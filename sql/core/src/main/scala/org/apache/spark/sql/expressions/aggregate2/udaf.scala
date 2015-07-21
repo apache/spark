@@ -259,7 +259,7 @@ case class ScalaUDAF(
     mutableAggregateBuffer.underlyingBuffer = buffer1
     inputAggregateBuffer.underlyingInputBuffer = buffer2
 
-    udaf.update(mutableAggregateBuffer, inputAggregateBuffer)
+    udaf.merge(mutableAggregateBuffer, inputAggregateBuffer)
   }
 
   override def eval(buffer: InternalRow = null): Any = {
