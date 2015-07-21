@@ -120,6 +120,16 @@ class StringFunctionsSuite extends QueryTest {
     checkAnswer(
       df.selectExpr("printf(a, b, c)"),
       Row("aa123cc"))
+
+    val df2 = Seq(("aa%d%s".getBytes, 123, "cc")).toDF("a", "b", "c")
+
+    checkAnswer(
+      df2.select(formatString($"a", $"b", $"c"), formatString("aa%d%s", "b", "c")),
+      Row("aa123cc", "aa123cc"))
+
+    checkAnswer(
+      df2.selectExpr("printf(a, b, c)"),
+      Row("aa123cc"))
   }
 
   test("string instr function") {
