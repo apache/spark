@@ -33,7 +33,7 @@ class NumberConverterSuite extends SparkFunSuite {
     checkConv("-15", 10, -16, "-F")
     checkConv("-15", 10, 16, "FFFFFFFFFFFFFFF1")
     checkConv("big", 36, 16, "3A48")
-    checkConv("9223372036854775807", 36, 16,"FFFFFFFFFFFFFFFF")
+    checkConv("9223372036854775807", 36, 16, "FFFFFFFFFFFFFFFF")
     checkConv("11abc", 10, 16, "B")
   }
 
