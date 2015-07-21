@@ -285,7 +285,7 @@ public class UTF8StringSuite {
     assertEquals(e.substringSQL(1, 6), fromString("exampl"));
     assertEquals(e.substringSQL(2, 100), fromString("xample"));
     assertEquals(e.substringSQL(0, 0), fromString(""));
-    assertEquals(e.substringSQL(100, 4), fromString(""));
+    assertEquals(e.substringSQL(100, 4), EMPTY_UTF8);
     assertEquals(e.substringSQL(0, Integer.MAX_VALUE), fromString("example"));
     assertEquals(e.substringSQL(1, Integer.MAX_VALUE), fromString("example"));
     assertEquals(e.substringSQL(2, Integer.MAX_VALUE), fromString("xample"));
