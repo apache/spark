@@ -1592,6 +1592,7 @@ class ConnectionModelView(wwwutils.SuperUserMixin, AirflowModelView):
             ('hive_cli', 'Hive Client Wrapper',),
             ('hive_metastore', 'Hive Metastore Thrift',),
             ('hiveserver2', 'Hive Server 2 Thrift',),
+            ('jdbc', 'Jdbc Connection',),
             ('mysql', 'MySQL',),
             ('postgres', 'Postgres',),
             ('oracle', 'Oracle',),

@@ -37,6 +37,7 @@ _operators = {
     's3_file_transform_operator': ['S3FileTransformOperator'],
     'http_operator': ['SimpleHttpOperator'],
     'hive_to_druid': ['HiveToDruidTransfer'],
+    'jdbc_operator': ['JdbcOperator'],
 }
 
 _import_module_attrs(globals(), _operators)
