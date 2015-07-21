@@ -662,5 +662,6 @@ setGeneric("toRadians", function(x) { standardGeneric("toRadians") })
 #' @export
 setGeneric("upper", function(x) { standardGeneric("upper") })
 
+#' @rdname glm
 #' @export
 setGeneric("glm")

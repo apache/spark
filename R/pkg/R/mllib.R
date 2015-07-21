@@ -22,7 +22,10 @@
 #' @export
 setClass("PipelineModel", representation(model = "jobj"))
 
+#' Fits a generalized linear model
+#'
 #' Fits a generalized linear model, similarly to R's glm(). Also see the glmnet package.
+#'
 #' @param formula A symbolic description of the model to be fitted. Currently only a few formula
 #'                operators are supported, including '~' and '+'.
 #' @param data DataFrame for training
@@ -30,6 +33,7 @@ setClass("PipelineModel", representation(model = "jobj"))
 #' @param lambda Regularization parameter
 #' @param alpha Elastic-net mixing parameter (see glmnet's documentation for details)
 #' @return a fitted MLlib model
+#' @rdname glm
 #' @export
 #' @examples
 #'\dontrun{
@@ -48,10 +52,14 @@ setMethod("glm", signature(formula = "formula", family = "ANY", data = "DataFram
             return(new("PipelineModel", model = model))
           })
 
-#' Fits a generalized linear model, similarly to R's glm().
+#' Make predictions from a model
+#'
+#' Makes predictions from a model produced by glm(), similarly to R's predict().
+#'
 #' @param model A fitted MLlib model
 #' @param newData DataFrame for testing
 #' @return DataFrame containing predicted values
+#' @rdname glm
 #' @export
 #' @examples
 #'\dontrun{
