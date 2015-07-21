@@ -1346,8 +1346,8 @@ class IndexedRowMatrix(DistributedMatrix):
         >>> # This IndexedRowMatrix will have 7 rows, due to the highest index being 6
         >>> rows = sc.parallelize([IndexedRow(0,Vectors.dense([1, 2, 3])), IndexedRow(6,Vectors.dense([4, 5, 6]))])
         >>> rm = DistributedMatrices.indexedRowMatrix(rows).toRowMatrix()
-        >>> rm.numRows()
-        2L
+        >>> rm.rows.collect()
+        [DenseVector([1.0, 2.0, 3.0]), DenseVector([4.0, 5.0, 6.0])]
         """
         javaRowMatrix = self._jirm.call("toRowMatrix")
         jrm = JavaModelWrapper(javaRowMatrix)
