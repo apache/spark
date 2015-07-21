@@ -154,6 +154,8 @@ private[joins] object HashedRelation {
  * A HashedRelation for UnsafeRow, which is backed by BytesToBytesMap that maps the key into a
  * sequence of values.
  *
+ * It's safe to to use inside a broadcast, and safe to read by multiple threads.
+ *
  * TODO(davies): use BytesToBytesMap
  */
 private[joins] final class UnsafeHashedRelation(
