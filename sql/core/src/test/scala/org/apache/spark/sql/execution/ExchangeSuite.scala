@@ -15,28 +15,18 @@
  * limitations under the License.
  */
 
-package org.apache.spark.scheduler
+package org.apache.spark.sql.execution
 
-import java.io.{ObjectInputStream, ObjectOutputStream, IOException}
+import org.apache.spark.sql.Row
+import org.apache.spark.sql.catalyst.plans.physical.SinglePartition
 
-import org.apache.spark.TaskContext
-
-/**
- * A Task implementation that fails to serialize.
- */
-private[spark] class NotSerializableFakeTask(myId: Int, stageId: Int)
-  extends Task[Array[Byte]](stageId, 0, 0) {
-
-  override def runTask(context: TaskContext): Array[Byte] = Array.empty[Byte]
-  override def preferredLocations: Seq[TaskLocation] = Seq[TaskLocation]()
-
-  @throws(classOf[IOException])
-  private def writeObject(out: ObjectOutputStream): Unit = {
-    if (stageId == 0) {
-      throw new IllegalStateException("Cannot serialize")
-    }
+class ExchangeSuite extends SparkPlanTest {
+  test("shuffling UnsafeRows in exchange") {
+    val input = (1 to 1000).map(Tuple1.apply)
+    checkAnswer(
+      input.toDF(),
+      plan => ConvertToSafe(Exchange(SinglePartition, ConvertToUnsafe(plan))),
+      input.map(Row.fromTuple)
+    )
   }
-
-  @throws(classOf[IOException])
-  private def readObject(in: ObjectInputStream): Unit = {}
 }

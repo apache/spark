@@ -857,7 +857,6 @@ class DAGScheduler(
     // Get our pending tasks and remember them in our pendingTasks entry
     stage.pendingTasks.clear()
 
-
     // First figure out the indexes of partition ids to compute.
     val partitionsToCompute: Seq[Int] = {
       stage match {
@@ -918,7 +917,7 @@ class DAGScheduler(
           partitionsToCompute.map { id =>
             val locs = getPreferredLocs(stage.rdd, id)
             val part = stage.rdd.partitions(id)
-            new ShuffleMapTask(stage.id, taskBinary, part, locs)
+            new ShuffleMapTask(stage.id, stage.latestInfo.attemptId, taskBinary, part, locs)
           }
 
         case stage: ResultStage =>
@@ -927,7 +926,7 @@ class DAGScheduler(
             val p: Int = job.partitions(id)
             val part = stage.rdd.partitions(p)
             val locs = getPreferredLocs(stage.rdd, p)
-            new ResultTask(stage.id, taskBinary, part, locs, id)
+            new ResultTask(stage.id, stage.latestInfo.attemptId, taskBinary, part, locs, id)
           }
       }
     } catch {
@@ -1069,10 +1068,11 @@ class DAGScheduler(
             val execId = status.location.executorId
             logDebug("ShuffleMapTask finished on " + execId)
             if (failedEpoch.contains(execId) && smt.epoch <= failedEpoch(execId)) {
-              logInfo("Ignoring possibly bogus ShuffleMapTask completion from " + execId)
+              logInfo(s"Ignoring possibly bogus $smt completion from executor $execId")
             } else {
               shuffleStage.addOutputLoc(smt.partitionId, status)
             }
+
             if (runningStages.contains(shuffleStage) && shuffleStage.pendingTasks.isEmpty) {
               markStageAsFinished(shuffleStage)
               logInfo("looking for newly runnable stages")
@@ -1132,38 +1132,48 @@ class DAGScheduler(
         val failedStage = stageIdToStage(task.stageId)
         val mapStage = shuffleToMapStage(shuffleId)
 
-        // It is likely that we receive multiple FetchFailed for a single stage (because we have
-        // multiple tasks running concurrently on different executors). In that case, it is possible
-        // the fetch failure has already been handled by the scheduler.
-        if (runningStages.contains(failedStage)) {
-          logInfo(s"Marking $failedStage (${failedStage.name}) as failed " +
-            s"due to a fetch failure from $mapStage (${mapStage.name})")
-          markStageAsFinished(failedStage, Some(failureMessage))
-        }
+        if (failedStage.latestInfo.attemptId != task.stageAttemptId) {
+          logInfo(s"Ignoring fetch failure from $task as it's from $failedStage attempt" +
+            s" ${task.stageAttemptId} and there is a more recent attempt for that stage " +
+            s"(attempt ID ${failedStage.latestInfo.attemptId}) running")
+        } else {
 
-        if (disallowStageRetryForTest) {
-          abortStage(failedStage, "Fetch failure will not retry stage due to testing config")
-        } else if (failedStages.isEmpty) {
-          // Don't schedule an event to resubmit failed stages if failed isn't empty, because
-          // in that case the event will already have been scheduled.
-          // TODO: Cancel running tasks in the stage
-          logInfo(s"Resubmitting $mapStage (${mapStage.name}) and " +
-            s"$failedStage (${failedStage.name}) due to fetch failure")
-          messageScheduler.schedule(new Runnable {
-            override def run(): Unit = eventProcessLoop.post(ResubmitFailedStages)
-          }, DAGScheduler.RESUBMIT_TIMEOUT, TimeUnit.MILLISECONDS)
-        }
-        failedStages += failedStage
-        failedStages += mapStage
-        // Mark the map whose fetch failed as broken in the map stage
-        if (mapId != -1) {
-          mapStage.removeOutputLoc(mapId, bmAddress)
-          mapOutputTracker.unregisterMapOutput(shuffleId, mapId, bmAddress)
-        }
+          // It is likely that we receive multiple FetchFailed for a single stage (because we have
+          // multiple tasks running concurrently on different executors). In that case, it is
+          // possible the fetch failure has already been handled by the scheduler.
+          if (runningStages.contains(failedStage)) {
+            logInfo(s"Marking $failedStage (${failedStage.name}) as failed " +
+              s"due to a fetch failure from $mapStage (${mapStage.name})")
+            markStageAsFinished(failedStage, Some(failureMessage))
+          } else {
+            logDebug(s"Received fetch failure from $task, but its from $failedStage which is no " +
+              s"longer running")
+          }
 
-        // TODO: mark the executor as failed only if there were lots of fetch failures on it
-        if (bmAddress != null) {
-          handleExecutorLost(bmAddress.executorId, fetchFailed = true, Some(task.epoch))
+          if (disallowStageRetryForTest) {
+            abortStage(failedStage, "Fetch failure will not retry stage due to testing config")
+          } else if (failedStages.isEmpty) {
+            // Don't schedule an event to resubmit failed stages if failed isn't empty, because
+            // in that case the event will already have been scheduled.
+            // TODO: Cancel running tasks in the stage
+            logInfo(s"Resubmitting $mapStage (${mapStage.name}) and " +
+              s"$failedStage (${failedStage.name}) due to fetch failure")
+            messageScheduler.schedule(new Runnable {
+              override def run(): Unit = eventProcessLoop.post(ResubmitFailedStages)
+            }, DAGScheduler.RESUBMIT_TIMEOUT, TimeUnit.MILLISECONDS)
+          }
+          failedStages += failedStage
+          failedStages += mapStage
+          // Mark the map whose fetch failed as broken in the map stage
+          if (mapId != -1) {
+            mapStage.removeOutputLoc(mapId, bmAddress)
+            mapOutputTracker.unregisterMapOutput(shuffleId, mapId, bmAddress)
+          }
+
+          // TODO: mark the executor as failed only if there were lots of fetch failures on it
+          if (bmAddress != null) {
+            handleExecutorLost(bmAddress.executorId, fetchFailed = true, Some(task.epoch))
+          }
         }
 
       case commitDenied: TaskCommitDenied =>

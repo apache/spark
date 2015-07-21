@@ -191,10 +191,6 @@ class StringFunctionsSuite extends QueryTest {
     val df = Seq((2, 3)).toDF("a", "b")
 
     checkAnswer(
-      df.select(space($"a"), space("b")),
-      Row("  ", "   "))
-
-    checkAnswer(
       df.selectExpr("space(b)"),
       Row("   "))
   }
