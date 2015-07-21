@@ -28,11 +28,11 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Literal
-import org.apache.spark.sql.sources.PartitioningUtils._
-import org.apache.spark.sql.sources.{LogicalRelation, Partition, PartitionSpec}
+import org.apache.spark.sql.execution.datasources.{LogicalRelation, PartitionSpec, Partition, PartitioningUtils}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql._
 import org.apache.spark.unsafe.types.UTF8String
+import PartitioningUtils._
 
 // The data where the partitioning key exists only in the directory structure.
 case class ParquetData(intField: Int, stringField: String)
