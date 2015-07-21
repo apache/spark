@@ -22,7 +22,7 @@ import scala.annotation.varargs
 import collection.immutable.ListMap
 
 import org.apache.commons.math3.distribution.{ExponentialDistribution, GumbelDistribution,
-LogisticDistribution, NormalDistribution, WeibullDistribution}
+  LogisticDistribution, NormalDistribution, WeibullDistribution}
 
 import org.apache.spark.Logging
 import org.apache.spark.rdd.RDD
@@ -30,7 +30,7 @@ import org.apache.spark.rdd.RDD
 /**
  * The Anderson-Darling (AD) test, similarly to the Kolmogorov-Smirnov (KS) test, tests whether the
  * data follow a given theoretical distribution. It should be used with continuous data and
- * assumes that no ties occur (the presence of ties can affect the validity of the test).
+ * assumes that no repeated values occur (the presence of ties can affect the validity of the test).
  * The AD test provides an alternative to the KS test. Namely, it is better
  * suited to identify departures from the theoretical distribution at the tails.
  * It is worth noting that the the AD test's critical values depend on the
@@ -102,7 +102,7 @@ private[stat] object AndersonDarlingTest extends Logging {
     def cdf(x: Double): Double = theoretical.cumulativeProbability(x)
 
     def getCVs(n: Double): Map[Double, Double] = {
-      rawCVs.map { case (sig, cv) => sig -> cv / (1 + 0.6 / n)}
+      rawCVs.map { case (sig, cv) => sig -> cv / (1 + 0.6 / n) }
     }
   }
 
@@ -134,7 +134,7 @@ private[stat] object AndersonDarlingTest extends Logging {
     def cdf(x: Double): Double = theoretical.cumulativeProbability(x)
 
     def getCVs(n: Double): Map[Double, Double] = {
-      rawCVs.map { case (sig, cv) => sig -> cv / (1 + 0.2 / math.sqrt(n))}
+      rawCVs.map { case (sig, cv) => sig -> cv / (1 + 0.2 / math.sqrt(n)) }
     }
   }
 
@@ -150,7 +150,7 @@ private[stat] object AndersonDarlingTest extends Logging {
     def cdf(x: Double): Double = theoretical.cumulativeProbability(x)
 
     def getCVs(n: Double): Map[Double, Double] = {
-      rawCVs.map { case (sig, cv) => sig -> cv / (1 + 0.25 / n)}
+      rawCVs.map { case (sig, cv) => sig -> cv / (1 + 0.25 / n) }
     }
   }
 
@@ -166,7 +166,7 @@ private[stat] object AndersonDarlingTest extends Logging {
     def cdf(x: Double): Double = theoretical.cumulativeProbability(x)
 
     def getCVs(n: Double): Map[Double, Double] = {
-      rawCVs.map { case (sig, cv) => sig -> cv / (1 + 0.2 / math.sqrt(n))}
+      rawCVs.map { case (sig, cv) => sig -> cv / (1 + 0.2 / math.sqrt(n)) }
     }
   }
 
@@ -176,7 +176,7 @@ private[stat] object AndersonDarlingTest extends Logging {
    * @param distName name of theoretical distribution: currently supports normal,
    *            exponential, gumbel, logistic, weibull as
    *            ['norm', 'exp', 'gumbel', 'logistic', 'weibull']
-   * @param params variable-length argument providing parameters for given distribution, when none
+   * @param params variable-length argument providing parameters for given distribution. When none
    *               are provided, default parameters appropriate to each distribution are chosen. In
    *               either case, critical values reflect adjustments that assume the parameters were
    *               estimated from the data
@@ -206,13 +206,12 @@ private[stat] object AndersonDarlingTest extends Logging {
    * statistic directly, a value that must be adjusted by the number of values in the prior
    * partition, and a count of the elements in that partition
    * @param part a partition of the data sample to be analyzed
-   * @param dist a theoretical distribution that extends the AndersonDarlingTheoretical dist trait,
+   * @param dist a theoretical distribution that extends the AndersonDarlingTheoreticalDist trait,
    *             used to calculate CDF values and critical values
    * @param n the total size of the data sample
-   * @return The first element corresponds to the
-   *        position-independent contribution to the statistic, the second is the value that must
-   *        be scaled by the number of elements in prior partitions and the third is the number of
-   *        elements in this partition
+   * @return The first element corresponds to the position-independent contribution to the
+   *         statistic, the second is the value that must be scaled by the number of elements in
+   *         prior partitions, and the third is the number of elements in this partition
    */
   private def calcPartAD(part: Iterator[Double], dist: AndersonDarlingTheoreticalDist, n: Double)
     : Iterator[(Double, Double, Double)] = {
@@ -229,7 +228,7 @@ private[stat] object AndersonDarlingTest extends Logging {
   }
 
   /**
-   * Create a theoretical distribution to be used in the Anderson-Darling 1 sample test
+   * Create a theoretical distribution to be used in the 1 sample Anderson-Darling test
    * @param distName name of distribution
    * @param params Initialization parameters for distribution, if none provided, default values
    *               are chosen.
