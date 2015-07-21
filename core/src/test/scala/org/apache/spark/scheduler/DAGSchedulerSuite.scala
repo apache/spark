@@ -768,7 +768,7 @@ class DAGSchedulerSuite
     Thread.sleep(1000)
     val stage0Resubmit = taskSets(2)
     assert(stage0Resubmit.stageId == 0)
-    assert(stage0Resubmit.attempt === 1)
+    assert(stage0Resubmit.stageAttemptId === 1)
     val task = stage0Resubmit.tasks(0)
     assert(task.partitionId === 2)
     runEvent(CompletionEvent(task, Success,
@@ -779,7 +779,7 @@ class DAGSchedulerSuite
     // stage 1 still going
     val stage1Resubmit = taskSets(3)
     assert(stage1Resubmit.stageId == 1)
-    assert(stage1Resubmit.attempt === 1)
+    assert(stage1Resubmit.stageAttemptId === 1)
     assert(stage1Resubmit.tasks.length === 3)
 
     // we'll have some tasks finish from the first attempt, and some finish from the second attempt,
@@ -821,7 +821,7 @@ class DAGSchedulerSuite
     assert(taskSets.size == 5)
     val stage2TaskSet = taskSets(4)
     assert(stage2TaskSet.stageId == 2)
-    assert(stage2TaskSet.attempt == 0)
+    assert(stage2TaskSet.stageAttemptId == 0)
   }
 
   /**
@@ -834,7 +834,7 @@ class DAGSchedulerSuite
    *        |      \       |
    *        |       \      |
    *        |        \     |
-   *   reduceRdd1    reduceRdd2
+   *   reduceRdd1    reduceRddi2
    *
    * We start both shuffleMapRdds and then fail shuffleMapRdd1.  As a result, the job listeners for
    * reduceRdd1 and reduceRdd2 should both be informed that the job failed.  shuffleMapRDD2 should
