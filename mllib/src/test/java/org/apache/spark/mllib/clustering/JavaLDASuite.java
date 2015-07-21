@@ -28,12 +28,13 @@ import static org.junit.Assert.assertArrayEquals;
 import org.junit.Before;
 import org.junit.Test;
 
+import org.apache.spark.api.java.function.Function;
 import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.mllib.linalg.Matrix;
 import org.apache.spark.mllib.linalg.Vector;
-
+import org.apache.spark.mllib.linalg.Vectors;
 
 public class JavaLDASuite implements Serializable {
   private transient JavaSparkContext sc;
@@ -110,7 +111,15 @@ public class JavaLDASuite implements Serializable {
 
     // Check: topic distributions
     JavaPairRDD<Long, Vector> topicDistributions = model.javaTopicDistributions();
-    assertEquals(topicDistributions.count(), corpus.count());
+    // SPARK-5562. since the topicDistribution returns the distribution of the non empty docs
+    // over topics. Compare it against nonEmptyCorpus instead of corpus
+    JavaPairRDD<Long, Vector> nonEmptyCorpus = corpus.filter(
+      new Function<Tuple2<Long, Vector>, Boolean>() {
+        public Boolean call(Tuple2<Long, Vector> tuple2) {
+          return Vectors.norm(tuple2._2(), 1.0) != 0.0;
+        }
+    });
+    assertEquals(topicDistributions.count(), nonEmptyCorpus.count());
   }
 
   @Test

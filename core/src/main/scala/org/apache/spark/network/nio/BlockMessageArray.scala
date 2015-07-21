@@ -43,16 +43,6 @@ class BlockMessageArray(var blockMessages: Seq[BlockMessage])
     val newBlockMessages = new ArrayBuffer[BlockMessage]()
     val buffer = bufferMessage.buffers(0)
     buffer.clear()
-    /*
-    println()
-    println("BlockMessageArray: ")
-    while(buffer.remaining > 0) {
-      print(buffer.get())
-    }
-    buffer.rewind()
-    println()
-    println()
-    */
     while (buffer.remaining() > 0) {
       val size = buffer.getInt()
       logDebug("Creating block message of size " + size + " bytes")
@@ -86,23 +76,11 @@ class BlockMessageArray(var blockMessages: Seq[BlockMessage])
 
     logDebug("Buffer list:")
     buffers.foreach((x: ByteBuffer) => logDebug("" + x))
-    /*
-    println()
-    println("BlockMessageArray: ")
-    buffers.foreach(b => {
-      while(b.remaining > 0) {
-        print(b.get())
-      }
-      b.rewind()
-    })
-    println()
-    println()
-    */
     Message.createBufferMessage(buffers)
   }
 }
 
-private[nio] object BlockMessageArray {
+private[nio] object BlockMessageArray extends Logging {
 
   def fromBufferMessage(bufferMessage: BufferMessage): BlockMessageArray = {
     val newBlockMessageArray = new BlockMessageArray()
@@ -123,10 +101,10 @@ private[nio] object BlockMessageArray {
         }
       }
     val blockMessageArray = new BlockMessageArray(blockMessages)
-    println("Block message array created")
+    logDebug("Block message array created")
 
     val bufferMessage = blockMessageArray.toBufferMessage
-    println("Converted to buffer message")
+    logDebug("Converted to buffer message")
 
     val totalSize = bufferMessage.size
     val newBuffer = ByteBuffer.allocate(totalSize)
@@ -138,10 +116,11 @@ private[nio] object BlockMessageArray {
     })
     newBuffer.flip
     val newBufferMessage = Message.createBufferMessage(newBuffer)
-    println("Copied to new buffer message, size = " + newBufferMessage.size)
+    logDebug("Copied to new buffer message, size = " + newBufferMessage.size)
 
     val newBlockMessageArray = BlockMessageArray.fromBufferMessage(newBufferMessage)
-    println("Converted back to block message array")
+    logDebug("Converted back to block message array")
+    // scalastyle:off println
     newBlockMessageArray.foreach(blockMessage => {
       blockMessage.getType match {
         case BlockMessage.TYPE_PUT_BLOCK => {
@@ -154,6 +133,7 @@ private[nio] object BlockMessageArray {
         }
       }
     })
+    // scalastyle:on println
   }
 }
 

@@ -25,6 +25,7 @@ import java.util.{Arrays, Comparator}
 import scala.collection.JavaConversions._
 import scala.concurrent.duration._
 import scala.language.postfixOps
+import scala.util.control.NonFatal
 
 import com.google.common.primitives.Longs
 import org.apache.hadoop.conf.Configuration
@@ -178,7 +179,7 @@ class SparkHadoopUtil extends Logging {
 
   private def getFileSystemThreadStatisticsMethod(methodName: String): Method = {
     val statisticsDataClass =
-      Class.forName("org.apache.hadoop.fs.FileSystem$Statistics$StatisticsData")
+      Utils.classForName("org.apache.hadoop.fs.FileSystem$Statistics$StatisticsData")
     statisticsDataClass.getDeclaredMethod(methodName)
   }
 
@@ -238,6 +239,14 @@ class SparkHadoopUtil extends Logging {
     }.getOrElse(Seq.empty[Path])
   }
 
+  def globPathIfNecessary(pattern: Path): Seq[Path] = {
+    if (pattern.toString.exists("{}[]*?\\".toSet.contains)) {
+      globPath(pattern)
+    } else {
+      Seq(pattern)
+    }
+  }
+
   /**
    * Lists all the files in a directory with the specified prefix, and does not end with the
    * given suffix. The returned {{FileStatus}} instances are sorted by the modification times of
@@ -248,19 +257,25 @@ class SparkHadoopUtil extends Logging {
       dir: Path,
       prefix: String,
       exclusionSuffix: String): Array[FileStatus] = {
-    val fileStatuses = remoteFs.listStatus(dir,
-      new PathFilter {
-        override def accept(path: Path): Boolean = {
-          val name = path.getName
-          name.startsWith(prefix) && !name.endsWith(exclusionSuffix)
+    try {
+      val fileStatuses = remoteFs.listStatus(dir,
+        new PathFilter {
+          override def accept(path: Path): Boolean = {
+            val name = path.getName
+            name.startsWith(prefix) && !name.endsWith(exclusionSuffix)
+          }
+        })
+      Arrays.sort(fileStatuses, new Comparator[FileStatus] {
+        override def compare(o1: FileStatus, o2: FileStatus): Int = {
+          Longs.compare(o1.getModificationTime, o2.getModificationTime)
         }
       })
-    Arrays.sort(fileStatuses, new Comparator[FileStatus] {
-      override def compare(o1: FileStatus, o2: FileStatus): Int = {
-        Longs.compare(o1.getModificationTime, o2.getModificationTime)
-      }
-    })
-    fileStatuses
+      fileStatuses
+    } catch {
+      case NonFatal(e) =>
+        logWarning("Error while attempting to list files from application staging dir", e)
+        Array.empty
+    }
   }
 
   /**
@@ -356,7 +371,7 @@ object SparkHadoopUtil {
         System.getProperty("SPARK_YARN_MODE", System.getenv("SPARK_YARN_MODE")))
     if (yarnMode) {
       try {
-        Class.forName("org.apache.spark.deploy.yarn.YarnSparkHadoopUtil")
+        Utils.classForName("org.apache.spark.deploy.yarn.YarnSparkHadoopUtil")
           .newInstance()
           .asInstanceOf[SparkHadoopUtil]
       } catch {

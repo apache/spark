@@ -99,9 +99,13 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext {
 
     // Check: per-doc topic distributions
     val topicDistributions = model.topicDistributions.collect()
+
     //  Ensure all documents are covered.
-    assert(topicDistributions.length === tinyCorpus.length)
-    assert(tinyCorpus.map(_._1).toSet === topicDistributions.map(_._1).toSet)
+    // SPARK-5562. since the topicDistribution returns the distribution of the non empty docs
+    // over topics. Compare it against nonEmptyTinyCorpus instead of tinyCorpus
+    val nonEmptyTinyCorpus = getNonEmptyDoc(tinyCorpus)
+    assert(topicDistributions.length === nonEmptyTinyCorpus.length)
+    assert(nonEmptyTinyCorpus.map(_._1).toSet === topicDistributions.map(_._1).toSet)
     //  Ensure we have proper distributions
     topicDistributions.foreach { case (docId, topicDistribution) =>
       assert(topicDistribution.size === tinyK)
@@ -232,12 +236,17 @@ private[clustering] object LDASuite {
   }
 
   def tinyCorpus: Array[(Long, Vector)] = Array(
+    Vectors.dense(0, 0, 0, 0, 0), // empty doc
     Vectors.dense(1, 3, 0, 2, 8),
     Vectors.dense(0, 2, 1, 0, 4),
     Vectors.dense(2, 3, 12, 3, 1),
+    Vectors.dense(0, 0, 0, 0, 0), // empty doc
     Vectors.dense(0, 3, 1, 9, 8),
     Vectors.dense(1, 1, 4, 2, 6)
   ).zipWithIndex.map { case (wordCounts, docId) => (docId.toLong, wordCounts) }
   assert(tinyCorpus.forall(_._2.size == tinyVocabSize)) // sanity check for test data
 
+  def getNonEmptyDoc(corpus: Array[(Long, Vector)]): Array[(Long, Vector)] = corpus.filter {
+    case (_, wc: Vector) => Vectors.norm(wc, p = 1.0) != 0.0
+  }
 }

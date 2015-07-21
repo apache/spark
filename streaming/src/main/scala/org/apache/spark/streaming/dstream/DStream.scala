@@ -720,12 +720,14 @@ abstract class DStream[T: ClassTag] (
     def foreachFunc: (RDD[T], Time) => Unit = {
       (rdd: RDD[T], time: Time) => {
         val firstNum = rdd.take(num + 1)
+        // scalastyle:off println
         println("-------------------------------------------")
         println("Time: " + time)
         println("-------------------------------------------")
         firstNum.take(num).foreach(println)
         if (firstNum.length > num) println("...")
         println()
+        // scalastyle:on println
       }
     }
     new ForEachDStream(this, context.sparkContext.clean(foreachFunc)).register()

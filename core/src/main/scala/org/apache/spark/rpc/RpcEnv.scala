@@ -39,8 +39,7 @@ private[spark] object RpcEnv {
     val rpcEnvNames = Map("akka" -> "org.apache.spark.rpc.akka.AkkaRpcEnvFactory")
     val rpcEnvName = conf.get("spark.rpc", "akka")
     val rpcEnvFactoryClassName = rpcEnvNames.getOrElse(rpcEnvName.toLowerCase, rpcEnvName)
-    Class.forName(rpcEnvFactoryClassName, true, Utils.getContextOrSparkClassLoader).
-      newInstance().asInstanceOf[RpcEnvFactory]
+    Utils.classForName(rpcEnvFactoryClassName).newInstance().asInstanceOf[RpcEnvFactory]
   }
 
   def create(
@@ -140,6 +139,12 @@ private[spark] abstract class RpcEnv(conf: SparkConf) {
    * creating it manually because different [[RpcEnv]] may have different formats.
    */
   def uriOf(systemName: String, address: RpcAddress, endpointName: String): String
+
+  /**
+   * [[RpcEndpointRef]] cannot be deserialized without [[RpcEnv]]. So when deserializing any object
+   * that contains [[RpcEndpointRef]]s, the deserialization codes should be wrapped by this method.
+   */
+  def deserialize[T](deserializationAction: () => T): T
 }
 
 

@@ -27,7 +27,7 @@ from time import time, sleep
 from shutil import rmtree
 
 from numpy import (
-    array, array_equal, zeros, inf, random, exp, dot, all, mean, abs)
+    array, array_equal, zeros, inf, random, exp, dot, all, mean, abs, arange, tile, ones)
 from numpy import sum as array_sum
 
 from py4j.protocol import Py4JJavaError
@@ -189,6 +189,53 @@ class VectorTests(MLlibTestCase):
             for j in range(2):
                 self.assertEquals(mat[i, j], expected[i][j])
 
+    def test_repr_dense_matrix(self):
+        mat = DenseMatrix(3, 2, [0, 1, 4, 6, 8, 10])
+        self.assertTrue(
+            repr(mat),
+            'DenseMatrix(3, 2, [0.0, 1.0, 4.0, 6.0, 8.0, 10.0], False)')
+
+        mat = DenseMatrix(3, 2, [0, 1, 4, 6, 8, 10], True)
+        self.assertTrue(
+            repr(mat),
+            'DenseMatrix(3, 2, [0.0, 1.0, 4.0, 6.0, 8.0, 10.0], False)')
+
+        mat = DenseMatrix(6, 3, zeros(18))
+        self.assertTrue(
+            repr(mat),
+            'DenseMatrix(6, 3, [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, ..., \
+                0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], False)')
+
+    def test_repr_sparse_matrix(self):
+        sm1t = SparseMatrix(
+            3, 4, [0, 2, 3, 5], [0, 1, 2, 0, 2], [3.0, 2.0, 4.0, 9.0, 8.0],
+            isTransposed=True)
+        self.assertTrue(
+            repr(sm1t),
+            'SparseMatrix(3, 4, [0, 2, 3, 5], [0, 1, 2, 0, 2], [3.0, 2.0, 4.0, 9.0, 8.0], True)')
+
+        indices = tile(arange(6), 3)
+        values = ones(18)
+        sm = SparseMatrix(6, 3, [0, 6, 12, 18], indices, values)
+        self.assertTrue(
+            repr(sm), "SparseMatrix(6, 3, [0, 6, 12, 18], \
+                [0, 1, 2, 3, 4, 5, 0, 1, ..., 4, 5, 0, 1, 2, 3, 4, 5], \
+                [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, ..., \
+                1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0], False)")
+
+        self.assertTrue(
+            str(sm),
+            "6 X 3 CSCMatrix\n\
+            (0,0) 1.0\n(1,0) 1.0\n(2,0) 1.0\n(3,0) 1.0\n(4,0) 1.0\n(5,0) 1.0\n\
+            (0,1) 1.0\n(1,1) 1.0\n(2,1) 1.0\n(3,1) 1.0\n(4,1) 1.0\n(5,1) 1.0\n\
+            (0,2) 1.0\n(1,2) 1.0\n(2,2) 1.0\n(3,2) 1.0\n..\n..")
+
+        sm = SparseMatrix(1, 18, zeros(19), [], [])
+        self.assertTrue(
+            repr(sm),
+            'SparseMatrix(1, 18, \
+                [0, 0, 0, 0, 0, 0, 0, 0, ..., 0, 0, 0, 0, 0, 0, 0, 0], [], [], False)')
+
     def test_sparse_matrix(self):
         # Test sparse matrix creation.
         sm1 = SparseMatrix(
@@ -198,6 +245,9 @@ class VectorTests(MLlibTestCase):
         self.assertEquals(sm1.colPtrs.tolist(), [0, 2, 2, 4, 4])
         self.assertEquals(sm1.rowIndices.tolist(), [1, 2, 1, 2])
         self.assertEquals(sm1.values.tolist(), [1.0, 2.0, 4.0, 5.0])
+        self.assertTrue(
+            repr(sm1),
+            'SparseMatrix(3, 4, [0, 2, 2, 4, 4], [1, 2, 1, 2], [1.0, 2.0, 4.0, 5.0], False)')
 
         # Test indexing
         expected = [
@@ -817,6 +867,25 @@ class ChiSqTestTests(MLlibTestCase):
         chi = Statistics.chiSqTest(self.sc.parallelize(sparse_data))
         self.assertEqual(len(chi), num_cols)
         self.assertIsNotNone(chi[1000])
+
+
+class KolmogorovSmirnovTest(MLlibTestCase):
+
+    def test_R_implementation_equivalence(self):
+        data = self.sc.parallelize([
+            1.1626852897838, -0.585924465893051, 1.78546500331661, -1.33259371048501,
+            -0.446566766553219, 0.569606122374976, -2.88971761441412, -0.869018343326555,
+            -0.461702683149641, -0.555540910137444, -0.0201353678515895, -0.150382224136063,
+            -0.628126755843964, 1.32322085193283, -1.52135057001199, -0.437427868856691,
+            0.970577579543399, 0.0282226444247749, -0.0857821886527593, 0.389214404984942
+        ])
+        model = Statistics.kolmogorovSmirnovTest(data, "norm")
+        self.assertAlmostEqual(model.statistic, 0.189, 3)
+        self.assertAlmostEqual(model.pValue, 0.422, 3)
+
+        model = Statistics.kolmogorovSmirnovTest(data, "norm", 0, 1)
+        self.assertAlmostEqual(model.statistic, 0.189, 3)
+        self.assertAlmostEqual(model.pValue, 0.422, 3)
 
 
 class SerDeTest(MLlibTestCase):

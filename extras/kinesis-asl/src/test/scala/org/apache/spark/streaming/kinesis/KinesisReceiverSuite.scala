@@ -26,23 +26,18 @@ import com.amazonaws.services.kinesis.clientlibrary.lib.worker.InitialPositionIn
 import com.amazonaws.services.kinesis.clientlibrary.types.ShutdownReason
 import com.amazonaws.services.kinesis.model.Record
 import org.mockito.Mockito._
-// scalastyle:off
-// To avoid introducing a dependency on Spark core tests, simply use scalatest's FunSuite
-// here instead of our own SparkFunSuite. Introducing the dependency has caused problems
-// in the past (SPARK-8781) that are complicated by bugs in the maven shade plugin (MSHADE-148).
-import org.scalatest.{BeforeAndAfter, FunSuite, Matchers}
+import org.scalatest.{BeforeAndAfter, Matchers}
 import org.scalatest.mock.MockitoSugar
 
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.streaming.{Milliseconds, Seconds, StreamingContext}
+import org.apache.spark.streaming.{Milliseconds, Seconds, StreamingContext, TestSuiteBase}
 import org.apache.spark.util.{Clock, ManualClock, Utils}
 
 /**
  * Suite of Kinesis streaming receiver tests focusing mostly on the KinesisRecordProcessor
  */
-class KinesisReceiverSuite extends FunSuite with Matchers with BeforeAndAfter
-  with MockitoSugar {
-// scalastyle:on
+class KinesisReceiverSuite extends TestSuiteBase with Matchers with BeforeAndAfter
+    with MockitoSugar {
 
   val app = "TestKinesisReceiver"
   val stream = "mySparkStream"
@@ -62,7 +57,7 @@ class KinesisReceiverSuite extends FunSuite with Matchers with BeforeAndAfter
   var checkpointStateMock: KinesisCheckpointState = _
   var currentClockMock: Clock = _
 
-  before {
+  override def beforeFunction(): Unit = {
     receiverMock = mock[KinesisReceiver]
     checkpointerMock = mock[IRecordProcessorCheckpointer]
     checkpointClockMock = mock[ManualClock]
@@ -70,28 +65,12 @@ class KinesisReceiverSuite extends FunSuite with Matchers with BeforeAndAfter
     currentClockMock = mock[Clock]
   }
 
-  after {
+  override def afterFunction(): Unit = {
+    super.afterFunction()
     // Since this suite was originally written using EasyMock, add this to preserve the old
     // mocking semantics (see SPARK-5735 for more details)
     verifyNoMoreInteractions(receiverMock, checkpointerMock, checkpointClockMock,
       checkpointStateMock, currentClockMock)
-  }
-
-  test("KinesisUtils API") {
-    val ssc = new StreamingContext("local[2]", getClass.getSimpleName, Seconds(1))
-    // Tests the API, does not actually test data receiving
-    val kinesisStream1 = KinesisUtils.createStream(ssc, "mySparkStream",
-      "https://kinesis.us-west-2.amazonaws.com", Seconds(2),
-      InitialPositionInStream.LATEST, StorageLevel.MEMORY_AND_DISK_2)
-    val kinesisStream2 = KinesisUtils.createStream(ssc, "myAppNam", "mySparkStream",
-      "https://kinesis.us-west-2.amazonaws.com", "us-west-2",
-      InitialPositionInStream.LATEST, Seconds(2), StorageLevel.MEMORY_AND_DISK_2)
-    val kinesisStream3 = KinesisUtils.createStream(ssc, "myAppNam", "mySparkStream",
-      "https://kinesis.us-west-2.amazonaws.com", "us-west-2",
-      InitialPositionInStream.LATEST, Seconds(2), StorageLevel.MEMORY_AND_DISK_2,
-      "awsAccessKey", "awsSecretKey")
-
-    ssc.stop()
   }
 
   test("check serializability of SerializableAWSCredentials") {
