@@ -36,6 +36,7 @@ from pyspark.mllib.common import callMLlibFunc, JavaModelWrapper
 from pyspark.mllib.linalg import (
     Vector, Vectors, DenseVector, SparseVector, _convert_to_vector)
 from pyspark.mllib.regression import LabeledPoint
+from pyspark.mllib.util import JavaLoader, JavaSaveable
 
 __all__ = ['Normalizer', 'StandardScalerModel', 'StandardScaler',
            'HashingTF', 'IDFModel', 'IDF', 'Word2Vec', 'Word2VecModel',
@@ -111,6 +112,15 @@ class JavaVectorTransformer(JavaModelWrapper, VectorTransformer):
     """
 
     def transform(self, vector):
+        """
+        Applies transformation on a vector or an RDD[Vector].
+
+        Note: In Python, transform cannot currently be used within
+              an RDD transformation or action.
+              Call transform directly on the RDD instead.
+
+        :param vector: Vector or RDD of Vector to be transformed.
+        """
         if isinstance(vector, RDD):
             vector = vector.map(_convert_to_vector)
         else:
@@ -191,7 +201,7 @@ class StandardScaler(object):
         Computes the mean and variance and stores as a model to be used
         for later scaling.
 
-        :param data: The data used to compute the mean and variance
+        :param dataset: The data used to compute the mean and variance
                      to build the transformation model.
         :return: a StandardScalarModel
         """
@@ -346,10 +356,6 @@ class IDFModel(JavaVectorTransformer):
                   vector
         :return: an RDD of TF-IDF vectors or a TF-IDF vector
         """
-        if isinstance(x, RDD):
-            return JavaVectorTransformer.transform(self, x)
-
-        x = _convert_to_vector(x)
         return JavaVectorTransformer.transform(self, x)
 
     def idf(self):
@@ -411,7 +417,7 @@ class IDF(object):
         return IDFModel(jmodel)
 
 
-class Word2VecModel(JavaVectorTransformer):
+class Word2VecModel(JavaVectorTransformer, JavaSaveable, JavaLoader):
     """
     class for Word2Vec model
     """
@@ -450,6 +456,12 @@ class Word2VecModel(JavaVectorTransformer):
         """
         return self.call("getVectors")
 
+    @classmethod
+    def load(cls, sc, path):
+        jmodel = sc._jvm.org.apache.spark.mllib.feature \
+            .Word2VecModel.load(sc._jsc.sc(), path)
+        return Word2VecModel(jmodel)
+
 
 @ignore_unicode_prefix
 class Word2Vec(object):
@@ -483,6 +495,18 @@ class Word2Vec(object):
     >>> syms = model.findSynonyms(vec, 2)
     >>> [s[0] for s in syms]
     [u'b', u'c']
+
+    >>> import os, tempfile
+    >>> path = tempfile.mkdtemp()
+    >>> model.save(sc, path)
+    >>> sameModel = Word2VecModel.load(sc, path)
+    >>> model.transform("a") == sameModel.transform("a")
+    True
+    >>> from shutil import rmtree
+    >>> try:
+    ...     rmtree(path)
+    ... except OSError:
+    ...     pass
     """
     def __init__(self):
         """
@@ -549,7 +573,7 @@ class Word2Vec(object):
         """
         if not isinstance(data, RDD):
             raise TypeError("data should be an RDD of list of string")
-        jmodel = callMLlibFunc("trainWord2Vec", data, int(self.vectorSize),
+        jmodel = callMLlibFunc("trainWord2VecModel", data, int(self.vectorSize),
                                float(self.learningRate), int(self.numPartitions),
                                int(self.numIterations), int(self.seed),
                                int(self.minCount))

@@ -86,4 +86,10 @@ local-1430917381535_2
 DESCRIPTION
 NAMESPACE
 test_support/*
+.*Rd
+help/*
+html/*
+INDEX
 .lintr
+gen-java.*
+.*avpr

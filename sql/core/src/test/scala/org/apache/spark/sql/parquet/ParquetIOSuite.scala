@@ -99,7 +99,6 @@ class ParquetIOSuiteBase extends QueryTest with ParquetTest {
   }
 
   test("fixed-length decimals") {
-
     def makeDecimalRDD(decimal: DecimalType): DataFrame =
       sqlContext.sparkContext
         .parallelize(0 to 1000)
@@ -155,6 +154,11 @@ class ParquetIOSuiteBase extends QueryTest with ParquetTest {
 
   test("array") {
     val data = (1 to 4).map(i => Tuple1(Seq(i, i + 1)))
+    checkParquetFile(data)
+  }
+
+  test("array and double") {
+    val data = (1 to 4).map(i => (i.toDouble, Seq(i.toDouble, (i + 1).toDouble)))
     checkParquetFile(data)
   }
 

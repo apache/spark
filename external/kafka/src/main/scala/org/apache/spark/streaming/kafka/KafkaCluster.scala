@@ -410,7 +410,7 @@ object KafkaCluster {
       }
 
       Seq("zookeeper.connect", "group.id").foreach { s =>
-        if (!props.contains(s)) {
+        if (!props.containsKey(s)) {
           props.setProperty(s, "")
         }
       }

@@ -53,19 +53,59 @@ object MimaExcludes {
             // Removing a testing method from a private class
             ProblemFilters.exclude[MissingMethodProblem](
               "org.apache.spark.streaming.kafka.KafkaTestUtils.waitUntilLeaderOffset"),
+            // While private MiMa is still not happy about the changes,
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.ml.regression.LeastSquaresAggregator.this"),
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.ml.regression.LeastSquaresCostFun.this"),
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.ml.classification.LogisticCostFun.this"),
             // SQL execution is considered private.
             excludePackage("org.apache.spark.sql.execution"),
-            // NanoTime and CatalystTimestampConverter is only used inside catalyst,
-            // not needed anymore
+            // Parquet support is considered private.
+            excludePackage("org.apache.spark.sql.parquet"),
+            // The old JSON RDD is removed in favor of streaming Jackson
+            ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.json.JsonRDD$"),
+            ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.json.JsonRDD"),
+            // local function inside a method
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.sql.SQLContext.org$apache$spark$sql$SQLContext$$needsConversion$1"),
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.sql.UDFRegistration.org$apache$spark$sql$UDFRegistration$$builder$24")
+          ) ++ Seq(
+            // SPARK-8479 Add numNonzeros and numActives to Matrix.
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.mllib.linalg.Matrix.numNonzeros"),
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.mllib.linalg.Matrix.numActives")
+          ) ++ Seq(
+            // SPARK-8914 Remove RDDApi
             ProblemFilters.exclude[MissingClassProblem](
-              "org.apache.spark.sql.parquet.timestamp.NanoTime"),
-              ProblemFilters.exclude[MissingClassProblem](
-              "org.apache.spark.sql.parquet.timestamp.NanoTime$"),
+            "org.apache.spark.sql.RDDApi")
+          ) ++ Seq(
+            // SPARK-8701 Add input metadata in the batch page.
             ProblemFilters.exclude[MissingClassProblem](
-              "org.apache.spark.sql.parquet.CatalystTimestampConverter"),
+              "org.apache.spark.streaming.scheduler.InputInfo$"),
             ProblemFilters.exclude[MissingClassProblem](
-              "org.apache.spark.sql.parquet.CatalystTimestampConverter$")
+              "org.apache.spark.streaming.scheduler.InputInfo")
+          ) ++ Seq(
+            // SPARK-6797 Support YARN modes for SparkR
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.api.r.PairwiseRRDD.this"),
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.api.r.RRDD.createRWorker"),
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.api.r.RRDD.this"),
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.api.r.StringRRDD.this"),
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.api.r.BaseRRDD.this")
+          ) ++ Seq(
+            // SPARK-7422 add argmax for sparse vectors
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.mllib.linalg.Vector.argmax")
           )
+
         case v if v.startsWith("1.4") =>
           Seq(
             MimaBuild.excludeSparkPackage("deploy"),

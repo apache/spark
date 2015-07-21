@@ -20,4 +20,4 @@
 FWDIR="$(cd "`dirname $0`"/..; pwd)"
 cd "$FWDIR"
 
-exec python -u ./dev/run-tests.py
+exec python -u ./dev/run-tests.py "$@"

@@ -141,4 +141,10 @@ class PlannerSuite extends SparkFunSuite {
 
     setConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD, origThreshold)
   }
+
+  test("efficient limit -> project -> sort") {
+    val query = testData.sort('key).select('value).limit(2).logicalPlan
+    val planned = planner.TakeOrderedAndProject(query)
+    assert(planned.head.isInstanceOf[execution.TakeOrderedAndProject])
+  }
 }

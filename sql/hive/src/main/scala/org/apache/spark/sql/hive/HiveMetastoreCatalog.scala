@@ -28,6 +28,7 @@ import org.apache.hadoop.hive.ql.metadata._
 import org.apache.hadoop.hive.ql.plan.TableDesc
 
 import org.apache.spark.Logging
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{Catalog, MultiInstanceRelation, OverrideCatalog}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
@@ -300,7 +301,9 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
     val result = if (metastoreRelation.hiveQlTable.isPartitioned) {
       val partitionSchema = StructType.fromAttributes(metastoreRelation.partitionKeys)
       val partitionColumnDataTypes = partitionSchema.map(_.dataType)
-      val partitions = metastoreRelation.hiveQlPartitions.map { p =>
+      // We're converting the entire table into ParquetRelation, so predicates to Hive metastore
+      // are empty.
+      val partitions = metastoreRelation.getHiveQlPartitions().map { p =>
         val location = p.getLocation
         val values = InternalRow.fromSeq(p.getValues.zip(partitionColumnDataTypes).map {
           case (rawValue, dataType) => Cast(Literal(rawValue), dataType).eval(null)
@@ -595,8 +598,6 @@ private[hive] case class MetastoreRelation
     (@transient sqlContext: SQLContext)
   extends LeafNode with MultiInstanceRelation {
 
-  self: Product =>
-
   override def equals(other: Any): Boolean = other match {
     case relation: MetastoreRelation =>
       databaseName == relation.databaseName &&
@@ -643,32 +644,6 @@ private[hive] case class MetastoreRelation
     new Table(tTable)
   }
 
-  @transient val hiveQlPartitions: Seq[Partition] = table.getAllPartitions.map { p =>
-    val tPartition = new org.apache.hadoop.hive.metastore.api.Partition
-    tPartition.setDbName(databaseName)
-    tPartition.setTableName(tableName)
-    tPartition.setValues(p.values)
-
-    val sd = new org.apache.hadoop.hive.metastore.api.StorageDescriptor()
-    tPartition.setSd(sd)
-    sd.setCols(table.schema.map(c => new FieldSchema(c.name, c.hiveType, c.comment)))
-
-    sd.setLocation(p.storage.location)
-    sd.setInputFormat(p.storage.inputFormat)
-    sd.setOutputFormat(p.storage.outputFormat)
-
-    val serdeInfo = new org.apache.hadoop.hive.metastore.api.SerDeInfo
-    sd.setSerdeInfo(serdeInfo)
-    serdeInfo.setSerializationLib(p.storage.serde)
-
-    val serdeParameters = new java.util.HashMap[String, String]()
-    serdeInfo.setParameters(serdeParameters)
-    table.serdeProperties.foreach { case (k, v) => serdeParameters.put(k, v) }
-    p.storage.serdeProperties.foreach { case (k, v) => serdeParameters.put(k, v) }
-
-    new Partition(hiveQlTable, tPartition)
-  }
-
   @transient override lazy val statistics: Statistics = Statistics(
     sizeInBytes = {
       val totalSize = hiveQlTable.getParameters.get(StatsSetupConst.TOTAL_SIZE)
@@ -688,6 +663,34 @@ private[hive] case class MetastoreRelation
           .getOrElse(sqlContext.conf.defaultSizeInBytes)))
     }
   )
+
+  def getHiveQlPartitions(predicates: Seq[Expression] = Nil): Seq[Partition] = {
+    table.getPartitions(predicates).map { p =>
+      val tPartition = new org.apache.hadoop.hive.metastore.api.Partition
+      tPartition.setDbName(databaseName)
+      tPartition.setTableName(tableName)
+      tPartition.setValues(p.values)
+
+      val sd = new org.apache.hadoop.hive.metastore.api.StorageDescriptor()
+      tPartition.setSd(sd)
+      sd.setCols(table.schema.map(c => new FieldSchema(c.name, c.hiveType, c.comment)))
+
+      sd.setLocation(p.storage.location)
+      sd.setInputFormat(p.storage.inputFormat)
+      sd.setOutputFormat(p.storage.outputFormat)
+
+      val serdeInfo = new org.apache.hadoop.hive.metastore.api.SerDeInfo
+      sd.setSerdeInfo(serdeInfo)
+      serdeInfo.setSerializationLib(p.storage.serde)
+
+      val serdeParameters = new java.util.HashMap[String, String]()
+      serdeInfo.setParameters(serdeParameters)
+      table.serdeProperties.foreach { case (k, v) => serdeParameters.put(k, v) }
+      p.storage.serdeProperties.foreach { case (k, v) => serdeParameters.put(k, v) }
+
+      new Partition(hiveQlTable, tPartition)
+    }
+  }
 
   /** Only compare database and tablename, not alias. */
   override def sameResult(plan: LogicalPlan): Boolean = {

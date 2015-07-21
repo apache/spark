@@ -192,7 +192,7 @@ private[spark] class ExternalBlockStore(blockManager: BlockManager, executorId: 
       .getOrElse(ExternalBlockStore.DEFAULT_BLOCK_MANAGER_NAME)
 
     try {
-      val instance = Class.forName(clsName)
+      val instance = Utils.classForName(clsName)
         .newInstance()
         .asInstanceOf[ExternalBlockManager]
       instance.init(blockManager, executorId)

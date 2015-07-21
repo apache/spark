@@ -94,17 +94,21 @@ private[sql] abstract class NativeColumnBuilder[T <: AtomicType](
 
 private[sql] class BooleanColumnBuilder extends NativeColumnBuilder(new BooleanColumnStats, BOOLEAN)
 
-private[sql] class IntColumnBuilder extends NativeColumnBuilder(new IntColumnStats, INT)
+private[sql] class ByteColumnBuilder extends NativeColumnBuilder(new ByteColumnStats, BYTE)
 
 private[sql] class ShortColumnBuilder extends NativeColumnBuilder(new ShortColumnStats, SHORT)
 
+private[sql] class IntColumnBuilder extends NativeColumnBuilder(new IntColumnStats, INT)
+
 private[sql] class LongColumnBuilder extends NativeColumnBuilder(new LongColumnStats, LONG)
 
-private[sql] class ByteColumnBuilder extends NativeColumnBuilder(new ByteColumnStats, BYTE)
+private[sql] class FloatColumnBuilder extends NativeColumnBuilder(new FloatColumnStats, FLOAT)
 
 private[sql] class DoubleColumnBuilder extends NativeColumnBuilder(new DoubleColumnStats, DOUBLE)
 
-private[sql] class FloatColumnBuilder extends NativeColumnBuilder(new FloatColumnStats, FLOAT)
+private[sql] class StringColumnBuilder extends NativeColumnBuilder(new StringColumnStats, STRING)
+
+private[sql] class BinaryColumnBuilder extends ComplexColumnBuilder(new BinaryColumnStats, BINARY)
 
 private[sql] class FixedDecimalColumnBuilder(
     precision: Int,
@@ -113,18 +117,14 @@ private[sql] class FixedDecimalColumnBuilder(
     new FixedDecimalColumnStats,
     FIXED_DECIMAL(precision, scale))
 
-private[sql] class StringColumnBuilder extends NativeColumnBuilder(new StringColumnStats, STRING)
+// TODO (lian) Add support for array, struct and map
+private[sql] class GenericColumnBuilder
+  extends ComplexColumnBuilder(new GenericColumnStats, GENERIC)
 
 private[sql] class DateColumnBuilder extends NativeColumnBuilder(new DateColumnStats, DATE)
 
 private[sql] class TimestampColumnBuilder
   extends NativeColumnBuilder(new TimestampColumnStats, TIMESTAMP)
-
-private[sql] class BinaryColumnBuilder extends ComplexColumnBuilder(new BinaryColumnStats, BINARY)
-
-// TODO (lian) Add support for array, struct and map
-private[sql] class GenericColumnBuilder
-  extends ComplexColumnBuilder(new GenericColumnStats, GENERIC)
 
 private[sql] object ColumnBuilder {
   val DEFAULT_INITIAL_BUFFER_SIZE = 1024 * 1024
@@ -151,17 +151,17 @@ private[sql] object ColumnBuilder {
       columnName: String = "",
       useCompression: Boolean = false): ColumnBuilder = {
     val builder: ColumnBuilder = dataType match {
-      case IntegerType => new IntColumnBuilder
-      case LongType => new LongColumnBuilder
-      case FloatType => new FloatColumnBuilder
-      case DoubleType => new DoubleColumnBuilder
       case BooleanType => new BooleanColumnBuilder
       case ByteType => new ByteColumnBuilder
       case ShortType => new ShortColumnBuilder
+      case IntegerType => new IntColumnBuilder
+      case DateType => new DateColumnBuilder
+      case LongType => new LongColumnBuilder
+      case TimestampType => new TimestampColumnBuilder
+      case FloatType => new FloatColumnBuilder
+      case DoubleType => new DoubleColumnBuilder
       case StringType => new StringColumnBuilder
       case BinaryType => new BinaryColumnBuilder
-      case DateType => new DateColumnBuilder
-      case TimestampType => new TimestampColumnBuilder
       case DecimalType.Fixed(precision, scale) if precision < 19 =>
         new FixedDecimalColumnBuilder(precision, scale)
       case _ => new GenericColumnBuilder

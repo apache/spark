@@ -119,6 +119,8 @@ class SimpleTextRelation(
   }
 
   override def prepareJobForWrite(job: Job): OutputWriterFactory = new OutputWriterFactory {
+    job.setOutputFormatClass(classOf[TextOutputFormat[_, _]])
+
     override def newInstance(
         path: String,
         dataSchema: StructType,

@@ -23,10 +23,7 @@ import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hadoop.hive.ql.io.orc.CompressionKind
 import org.scalatest.BeforeAndAfterAll
 
-import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.expressions.InternalRow
-import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.hive.test.TestHive._
 import org.apache.spark.sql.hive.test.TestHive.implicits._
 
@@ -66,14 +63,14 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
 
     withOrcFile(data) { file =>
       checkAnswer(
-        sqlContext.read.format("orc").load(file),
+        sqlContext.read.orc(file),
         data.toDF().collect())
     }
   }
 
   test("Read/write binary data") {
     withOrcFile(BinaryData("test".getBytes("utf8")) :: Nil) { file =>
-      val bytes = read.format("orc").load(file).head().getAs[Array[Byte]](0)
+      val bytes = read.orc(file).head().getAs[Array[Byte]](0)
       assert(new String(bytes, "utf8") === "test")
     }
   }
@@ -91,7 +88,7 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
 
     withOrcFile(data) { file =>
       checkAnswer(
-        read.format("orc").load(file),
+        read.orc(file),
         data.toDF().collect())
     }
   }
@@ -161,7 +158,7 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
 
     withOrcFile(data) { file =>
       checkAnswer(
-        read.format("orc").load(file),
+        read.orc(file),
         Row(Seq.fill(5)(null): _*))
     }
   }
@@ -170,7 +167,7 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
   test("Default compression options for writing to an ORC file") {
     withOrcFile((1 to 100).map(i => (i, s"val_$i"))) { file =>
       assertResult(CompressionKind.ZLIB) {
-        OrcFileOperator.getFileReader(file).getCompression
+        OrcFileOperator.getFileReader(file).get.getCompression
       }
     }
   }
@@ -183,21 +180,21 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
     conf.set(ConfVars.HIVE_ORC_DEFAULT_COMPRESS.varname, "SNAPPY")
     withOrcFile(data) { file =>
       assertResult(CompressionKind.SNAPPY) {
-        OrcFileOperator.getFileReader(file).getCompression
+        OrcFileOperator.getFileReader(file).get.getCompression
       }
     }
 
     conf.set(ConfVars.HIVE_ORC_DEFAULT_COMPRESS.varname, "NONE")
     withOrcFile(data) { file =>
       assertResult(CompressionKind.NONE) {
-        OrcFileOperator.getFileReader(file).getCompression
+        OrcFileOperator.getFileReader(file).get.getCompression
       }
     }
 
     conf.set(ConfVars.HIVE_ORC_DEFAULT_COMPRESS.varname, "LZO")
     withOrcFile(data) { file =>
       assertResult(CompressionKind.LZO) {
-        OrcFileOperator.getFileReader(file).getCompression
+        OrcFileOperator.getFileReader(file).get.getCompression
       }
     }
   }
@@ -287,6 +284,50 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
       checkAnswer(
         sql("SELECT `_1`, `_2`, SUM(`_3`) FROM t WHERE `_2` = 'run_5' GROUP BY `_1`, `_2`"),
         List(Row("same", "run_5", 100)))
+    }
+  }
+
+  test("SPARK-8501: Avoids discovery schema from empty ORC files") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+
+      withTable("empty_orc") {
+        withTempTable("empty", "single") {
+          sqlContext.sql(
+            s"""CREATE TABLE empty_orc(key INT, value STRING)
+               |STORED AS ORC
+               |LOCATION '$path'
+             """.stripMargin)
+
+          val emptyDF = Seq.empty[(Int, String)].toDF("key", "value").coalesce(1)
+          emptyDF.registerTempTable("empty")
+
+          // This creates 1 empty ORC file with Hive ORC SerDe.  We are using this trick because
+          // Spark SQL ORC data source always avoids write empty ORC files.
+          sqlContext.sql(
+            s"""INSERT INTO TABLE empty_orc
+               |SELECT key, value FROM empty
+             """.stripMargin)
+
+          val errorMessage = intercept[AnalysisException] {
+            sqlContext.read.orc(path)
+          }.getMessage
+
+          assert(errorMessage.contains("Failed to discover schema from ORC files"))
+
+          val singleRowDF = Seq((0, "foo")).toDF("key", "value").coalesce(1)
+          singleRowDF.registerTempTable("single")
+
+          sqlContext.sql(
+            s"""INSERT INTO TABLE empty_orc
+               |SELECT key, value FROM single
+             """.stripMargin)
+
+          val df = sqlContext.read.orc(path)
+          assert(df.schema === singleRowDF.schema.asNullable)
+          checkAnswer(df, singleRowDF)
+        }
+      }
     }
   }
 }

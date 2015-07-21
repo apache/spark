@@ -17,10 +17,6 @@
 
 .sparkREnv <- new.env()
 
-sparkR.onLoad <- function(libname, pkgname) {
-  .sparkREnv$libname <- libname
-}
-
 # Utility function that returns TRUE if we have an active connection to the
 # backend and FALSE otherwise
 connExists <- function(env) {
@@ -80,7 +76,7 @@ sparkR.stop <- function() {
 #' @param sparkEnvir Named list of environment variables to set on worker nodes.
 #' @param sparkExecutorEnv Named list of environment variables to be used when launching executors.
 #' @param sparkJars Character string vector of jar files to pass to the worker nodes.
-#' @param sparkRLibDir The path where R is installed on the worker nodes.
+#' @param sparkPackages Character string vector of packages from spark-packages.org
 #' @export
 #' @examples
 #'\dontrun{
@@ -100,14 +96,15 @@ sparkR.init <- function(
   sparkEnvir = list(),
   sparkExecutorEnv = list(),
   sparkJars = "",
-  sparkRLibDir = "") {
+  sparkPackages = "") {
 
   if (exists(".sparkRjsc", envir = .sparkREnv)) {
-    cat("Re-using existing Spark Context. Please stop SparkR with sparkR.stop() or restart R to create a new Spark Context\n")
+    cat(paste("Re-using existing Spark Context.",
+              "Please stop SparkR with sparkR.stop() or restart R to create a new Spark Context\n"))
     return(get(".sparkRjsc", envir = .sparkREnv))
   }
 
-  sparkMem <- Sys.getenv("SPARK_MEM", "512m")
+  sparkMem <- Sys.getenv("SPARK_MEM", "1024m")
   jars <- suppressWarnings(normalizePath(as.character(sparkJars)))
 
   # Classpath separator is ";" on Windows
@@ -129,7 +126,8 @@ sparkR.init <- function(
         args = path,
         sparkHome = sparkHome,
         jars = jars,
-        sparkSubmitOpts = Sys.getenv("SPARKR_SUBMIT_ARGS", "sparkr-shell"))
+        sparkSubmitOpts = Sys.getenv("SPARKR_SUBMIT_ARGS", "sparkr-shell"),
+        packages = sparkPackages)
     # wait atmost 100 seconds for JVM to launch
     wait <- 0.1
     for (i in 1:25) {
@@ -142,7 +140,7 @@ sparkR.init <- function(
     if (!file.exists(path)) {
       stop("JVM is not ready after 10 seconds")
     }
-    f <- file(path, open='rb')
+    f <- file(path, open="rb")
     backendPort <- readInt(f)
     monitorPort <- readInt(f)
     close(f)
@@ -166,10 +164,6 @@ sparkR.init <- function(
     sparkHome <- normalizePath(sparkHome)
   }
 
-  if (nchar(sparkRLibDir) != 0) {
-    .sparkREnv$libname <- sparkRLibDir
-  }
-
   sparkEnvirMap <- new.env()
   for (varname in names(sparkEnvir)) {
     sparkEnvirMap[[varname]] <- sparkEnvir[[varname]]
@@ -177,14 +171,16 @@ sparkR.init <- function(
 
   sparkExecutorEnvMap <- new.env()
   if (!any(names(sparkExecutorEnv) == "LD_LIBRARY_PATH")) {
-    sparkExecutorEnvMap[["LD_LIBRARY_PATH"]] <- paste0("$LD_LIBRARY_PATH:",Sys.getenv("LD_LIBRARY_PATH"))
+    sparkExecutorEnvMap[["LD_LIBRARY_PATH"]] <-
+      paste0("$LD_LIBRARY_PATH:",Sys.getenv("LD_LIBRARY_PATH"))
   }
   for (varname in names(sparkExecutorEnv)) {
     sparkExecutorEnvMap[[varname]] <- sparkExecutorEnv[[varname]]
   }
 
   nonEmptyJars <- Filter(function(x) { x != "" }, jars)
-  localJarPaths <- sapply(nonEmptyJars, function(j) { utils::URLencode(paste("file:", uriSep, j, sep = "")) })
+  localJarPaths <- sapply(nonEmptyJars,
+                          function(j) { utils::URLencode(paste("file:", uriSep, j, sep = "")) })
 
   # Set the start time to identify jobjs
   # Seconds resolution is good enough for this purpose, so use ints

@@ -1079,28 +1079,23 @@ class JsonSuite extends QueryTest with TestJsonData {
   }
 
   test("SPARK-7565 MapType in JsonRDD") {
-    val useStreaming = ctx.conf.useJacksonStreamingAPI
     val oldColumnNameOfCorruptRecord = ctx.conf.columnNameOfCorruptRecord
     ctx.setConf(SQLConf.COLUMN_NAME_OF_CORRUPT_RECORD, "_unparsed")
 
     val schemaWithSimpleMap = StructType(
       StructField("map", MapType(StringType, IntegerType, true), false) :: Nil)
-    try{
-      for (useStreaming <- List(true, false)) {
-        ctx.setConf(SQLConf.USE_JACKSON_STREAMING_API, useStreaming)
-        val temp = Utils.createTempDir().getPath
+    try {
+      val temp = Utils.createTempDir().getPath
 
-        val df = ctx.read.schema(schemaWithSimpleMap).json(mapType1)
-        df.write.mode("overwrite").parquet(temp)
-        // order of MapType is not defined
-        assert(ctx.read.parquet(temp).count() == 5)
+      val df = ctx.read.schema(schemaWithSimpleMap).json(mapType1)
+      df.write.mode("overwrite").parquet(temp)
+      // order of MapType is not defined
+      assert(ctx.read.parquet(temp).count() == 5)
 
-        val df2 = ctx.read.json(corruptRecords)
-        df2.write.mode("overwrite").parquet(temp)
-        checkAnswer(ctx.read.parquet(temp), df2.collect())
-      }
+      val df2 = ctx.read.json(corruptRecords)
+      df2.write.mode("overwrite").parquet(temp)
+      checkAnswer(ctx.read.parquet(temp), df2.collect())
     } finally {
-      ctx.setConf(SQLConf.USE_JACKSON_STREAMING_API, useStreaming)
       ctx.setConf(SQLConf.COLUMN_NAME_OF_CORRUPT_RECORD, oldColumnNameOfCorruptRecord)
     }
   }

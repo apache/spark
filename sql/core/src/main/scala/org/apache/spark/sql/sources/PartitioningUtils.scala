@@ -84,7 +84,7 @@ private[sql] object PartitioningUtils {
     } else {
       // This dataset is partitioned. We need to check whether all partitions have the same
       // partition columns and resolve potential type conflicts.
-      val resolvedPartitionValues = resolvePartitions(pathsWithPartitionValues.map(_._2))
+      val resolvedPartitionValues = resolvePartitions(pathsWithPartitionValues)
 
       // Creates the StructType which represents the partition columns.
       val fields = {
@@ -181,19 +181,18 @@ private[sql] object PartitioningUtils {
    *   StringType
    * }}}
    */
-  private[sql] def resolvePartitions(values: Seq[PartitionValues]): Seq[PartitionValues] = {
-    // Column names of all partitions must match
-    val distinctPartitionsColNames = values.map(_.columnNames).distinct
-
-    if (distinctPartitionsColNames.isEmpty) {
+  private[sql] def resolvePartitions(
+      pathsWithPartitionValues: Seq[(Path, PartitionValues)]): Seq[PartitionValues] = {
+    if (pathsWithPartitionValues.isEmpty) {
       Seq.empty
     } else {
-      assert(distinctPartitionsColNames.size == 1, {
-        val list = distinctPartitionsColNames.mkString("\t", "\n\t", "")
-        s"Conflicting partition column names detected:\n$list"
-      })
+      val distinctPartColNames = pathsWithPartitionValues.map(_._2.columnNames).distinct
+      assert(
+        distinctPartColNames.size == 1,
+        listConflictingPartitionColumns(pathsWithPartitionValues))
 
       // Resolves possible type conflicts for each column
+      val values = pathsWithPartitionValues.map(_._2)
       val columnCount = values.head.columnNames.size
       val resolvedValues = (0 until columnCount).map { i =>
         resolveTypeConflicts(values.map(_.literals(i)))
@@ -204,6 +203,34 @@ private[sql] object PartitioningUtils {
         d.copy(literals = resolvedValues.map(_(index)))
       }
     }
+  }
+
+  private[sql] def listConflictingPartitionColumns(
+      pathWithPartitionValues: Seq[(Path, PartitionValues)]): String = {
+    val distinctPartColNames = pathWithPartitionValues.map(_._2.columnNames).distinct
+
+    def groupByKey[K, V](seq: Seq[(K, V)]): Map[K, Iterable[V]] =
+      seq.groupBy { case (key, _) => key }.mapValues(_.map { case (_, value) => value })
+
+    val partColNamesToPaths = groupByKey(pathWithPartitionValues.map {
+      case (path, partValues) => partValues.columnNames -> path
+    })
+
+    val distinctPartColLists = distinctPartColNames.map(_.mkString(", ")).zipWithIndex.map {
+      case (names, index) =>
+        s"Partition column name list #$index: $names"
+    }
+
+    // Lists out those non-leaf partition directories that also contain files
+    val suspiciousPaths = distinctPartColNames.sortBy(_.length).flatMap(partColNamesToPaths)
+
+    s"Conflicting partition column names detected:\n" +
+      distinctPartColLists.mkString("\n\t", "\n\t", "\n\n") +
+      "For partitioned table directories, data files should only live in leaf directories.\n" +
+      "And directories at the same level should have the same partition column name.\n" +
+      "Please check the following directories for unexpected files or " +
+      "inconsistent partition column names:\n" +
+      suspiciousPaths.map("\t" + _).mkString("\n", "\n", "")
   }
 
   /**
