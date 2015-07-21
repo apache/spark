@@ -40,7 +40,7 @@ object DefaultOptimizer extends Optimizer {
       ReplaceDistinctWithAggregate) ::
     Batch("Operator Optimizations", FixedPoint(100),
       // Operator push down
-      UnionPushDown,
+      SetOperationPushDown,
       SamplePushDown,
       PushPredicateThroughJoin,
       PushPredicateThroughProject,
@@ -86,7 +86,7 @@ object SamplePushDown extends Rule[LogicalPlan] {
 /**
  * Pushes operations to either side of a Union, Intersect or Except.
  */
-object UnionPushDown extends Rule[LogicalPlan] {
+object SetOperationPushDown extends Rule[LogicalPlan] {
 
   /**
    * Maps Attributes from the left side to the corresponding Attribute on the right side.
