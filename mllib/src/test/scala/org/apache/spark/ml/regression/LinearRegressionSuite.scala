@@ -56,7 +56,7 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   }
 
-    test("params") {
+  test("params") {
     ParamsSuite.checkParams(new LinearRegression)
     val model = new LinearRegressionModel("linearReg", Vectors.dense(0.0), 0.0)
     ParamsSuite.checkParams(model)
@@ -79,7 +79,6 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(model.intercept !== 0.0)
     assert(model.hasParent)
   }
-
 
   test("linear regression with intercept without regularization") {
     val trainer = new LinearRegression
