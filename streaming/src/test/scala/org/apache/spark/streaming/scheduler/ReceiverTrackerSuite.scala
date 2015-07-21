@@ -26,6 +26,7 @@ import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.receiver._
 import org.apache.spark.util.Utils
 import org.apache.spark.streaming.dstream.InputDStream
+import scala.reflect.ClassTag
 import org.apache.spark.streaming.dstream.ReceiverInputDStream
 
 /** Testsuite for receiver scheduling */
