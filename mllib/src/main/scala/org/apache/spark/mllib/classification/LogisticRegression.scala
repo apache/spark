@@ -158,7 +158,7 @@ class LogisticRegressionModel (
     }
   }
 
-   /**
+  /**
    * @since 1.3.0
    */
   override def save(sc: SparkContext, path: String): Unit = {
