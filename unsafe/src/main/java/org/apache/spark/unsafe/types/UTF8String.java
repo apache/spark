@@ -50,7 +50,7 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
     5, 5, 5, 5,
     6, 6, 6, 6};
 
-  private static UTF8String COMMA_UTF8 = UTF8String.fromString(",");
+  private static final UTF8String COMMA_UTF8 = UTF8String.fromString(",");
 
   public static final UTF8String EMPTY_UTF8 = UTF8String.fromString("");
 
