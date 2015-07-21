@@ -661,3 +661,6 @@ setGeneric("toRadians", function(x) { standardGeneric("toRadians") })
 #' @rdname column
 #' @export
 setGeneric("upper", function(x) { standardGeneric("upper") })
+
+#' @export
+setGeneric("glm")
