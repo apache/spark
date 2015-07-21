@@ -80,12 +80,27 @@ class ReceiverTrackerSuite extends TestSuiteBase {
   }
 
   test("Receiver tracker - propagates rate limit") {
+    object streamingListener extends StreamingListener {
+      @volatile
+      var started = false
+
+      override def onReceiverStarted(receiverStarted: StreamingListenerReceiverStarted): Unit = {
+        started = true
+      }
+    }
+
+    ssc.addStreamingListener(streamingListener)
+    ssc.scheduler.listenerBus.start(ssc.sc)
+
     val newRateLimit = 100L
     val ids = new TestReceiverInputDStream(ssc)
     val tracker = new ReceiverTracker(ssc)
     tracker.start()
+
+    // we wait until the Receiver has registered with the tracker,
+    // otherwise our rate update is lost
     eventually(timeout(5 seconds)) {
-      assert(TestDummyReceiver.started)
+      assert(streamingListener.started)
     }
     tracker.sendRateUpdate(ids.id, newRateLimit)
     // this is an async message, we need to wait a bit for it to be processed
@@ -102,7 +117,14 @@ private class TestReceiverInputDStream(@transient ssc_ : StreamingContext)
   override def getReceiver(): DummyReceiver = TestDummyReceiver
 
   def getCurrentRateLimit: Option[Long] = {
-    TestDummyReceiver.executor.getCurrentRateLimit
+    invokeExecutorMethod.getCurrentRateLimit
+  }
+
+  private def invokeExecutorMethod: ReceiverSupervisor = {
+    val c = classOf[Receiver[_]]
+    val ex = c.getDeclaredMethod("executor")
+    ex.setAccessible(true)
+    ex.invoke(TestDummyReceiver).asInstanceOf[ReceiverSupervisor]
   }
 }
 
@@ -118,10 +140,7 @@ private object TestDummyReceiver extends DummyReceiver
 private class DummyReceiver(host: Option[String] = None)
   extends Receiver[Int](StorageLevel.MEMORY_ONLY) {
 
-  var started = false
-
   def onStart() {
-    started = true
   }
 
   def onStop() {

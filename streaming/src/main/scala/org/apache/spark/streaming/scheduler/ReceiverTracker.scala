@@ -182,8 +182,9 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
 
   /** Update a receiver's maximum ingestion rate */
   def sendRateUpdate(streamUID: Int, newRate: Long): Unit = {
-    for (info <- receiverInfo.get(streamUID); eP <- Option(info.endpoint))
+    for (info <- receiverInfo.get(streamUID); eP <- Option(info.endpoint)) {
       eP.send(UpdateRateLimit(newRate))
+    }
   }
 
   /** Add new blocks for the given stream */

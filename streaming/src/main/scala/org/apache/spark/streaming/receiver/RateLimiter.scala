@@ -17,8 +17,6 @@
 
 package org.apache.spark.streaming.receiver
 
-import java.util.concurrent.atomic.AtomicInteger
-
 import com.google.common.util.concurrent.{RateLimiter => GuavaRateLimiter}
 
 import org.apache.spark.{Logging, SparkConf}
