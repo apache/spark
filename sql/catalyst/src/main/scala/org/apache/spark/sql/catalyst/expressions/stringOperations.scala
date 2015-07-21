@@ -606,24 +606,14 @@ case class Substring(str: Expression, pos: Expression, len: Expression)
     // refers to element i-1 in the sequence. If a start index i is less than 0, it refers
     // to the -ith element before the end of the sequence. If a start index i is 0, it
     // refers to the first element.
-    val string = str.eval(input)
-    if (string != null) {
-      val po = pos.eval(input)
-      if (po != null) {
-        val ln = len.eval(input)
-        if (ln != null) {
-          val length = ln.asInstanceOf[Int]
-          val s = string.asInstanceOf[UTF8String]
-          val pos = po.asInstanceOf[Int]
-          val start = {
-            if (pos > 0) {
-              pos - 1
-            } else {
-              if (pos < 0) s.numChars() + pos else 0
-            }
-          }
-          val end = if (length == Integer.MAX_VALUE) Integer.MAX_VALUE else start + length
-          s.substring(start, end)
+    val stringEval = str.eval(input)
+    if (stringEval != null) {
+      val posEval = pos.eval(input)
+      if (posEval != null) {
+        val lenEval = len.eval(input)
+        if (lenEval != null) {
+          stringEval.asInstanceOf[UTF8String]
+            .substringSQL(posEval.asInstanceOf[Int], lenEval.asInstanceOf[Int])
         } else {
           null
         }
@@ -652,12 +642,8 @@ case class Substring(str: Expression, pos: Expression, len: Expression)
         if (!${posGen.isNull}) {
           ${lenGen.code}
           if (!${lenGen.isNull}) {
-            int $start = (${posGen.primitive} > 0) ? ${posGen.primitive} - 1 :
-              ((${posGen.primitive} < 0) ? ${strGen.primitive}.numChars() + ${posGen.primitive} :
-                0);
-            int $end = (${lenGen.primitive} == Integer.MAX_VALUE) ? Integer.MAX_VALUE :
-              $start + ${lenGen.primitive};
-            ${ev.primitive} = ${strGen.primitive}.substring($start, $end);
+            ${ev.primitive} = ${strGen.primitive}
+              .substringSQL(${posGen.primitive}, ${lenGen.primitive});
           } else {
             ${ev.isNull} = true;
           }

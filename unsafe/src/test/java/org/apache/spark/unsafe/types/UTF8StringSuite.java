@@ -112,26 +112,26 @@ public class UTF8StringSuite {
       fromString(""),
       concatWs(sep, fromString("")));
     assertEquals(
-      fromString("ab"),
-      concatWs(sep, fromString("ab")));
+        fromString("ab"),
+        concatWs(sep, fromString("ab")));
     assertEquals(
-      fromString("a哈哈b"),
-      concatWs(sep, fromString("a"), fromString("b")));
+        fromString("a哈哈b"),
+        concatWs(sep, fromString("a"), fromString("b")));
     assertEquals(
-      fromString("a哈哈b哈哈c"),
-      concatWs(sep, fromString("a"), fromString("b"), fromString("c")));
+        fromString("a哈哈b哈哈c"),
+        concatWs(sep, fromString("a"), fromString("b"), fromString("c")));
     assertEquals(
-      fromString("a哈哈c"),
-      concatWs(sep, fromString("a"), null, fromString("c")));
+        fromString("a哈哈c"),
+        concatWs(sep, fromString("a"), null, fromString("c")));
     assertEquals(
-      fromString("a"),
-      concatWs(sep, fromString("a"), null, null));
+        fromString("a"),
+        concatWs(sep, fromString("a"), null, null));
     assertEquals(
-      fromString(""),
-      concatWs(sep, null, null, null));
+        fromString(""),
+        concatWs(sep, null, null, null));
     assertEquals(
-      fromString("数据哈哈砖头"),
-      concatWs(sep, fromString("数据"), fromString("砖头")));
+        fromString("数据哈哈砖头"),
+        concatWs(sep, fromString("数据"), fromString("砖头")));
   }
 
   @Test
@@ -261,6 +261,25 @@ public class UTF8StringSuite {
     assertEquals(
       fromString("数据砖头孙行者孙行者孙行"),
       fromString("数据砖头").rpad(12, fromString("孙行者")));
+  }
+
+  @Test
+  public void substringSQL() {
+    UTF8String e = fromString("example");
+    assertEquals(e.substringSQL(0, 2), fromString("ex"));
+    assertEquals(e.substringSQL(1, 2), fromString("ex"));
+    assertEquals(e.substringSQL(0, 7), fromString("example"));
+    assertEquals(e.substringSQL(1, 2), fromString("ex"));
+    assertEquals(e.substringSQL(0, 100), fromString("example"));
+    assertEquals(e.substringSQL(1, 100), fromString("example"));
+    assertEquals(e.substringSQL(2, 2), fromString("xa"));
+    assertEquals(e.substringSQL(1, 6), fromString("exampl"));
+    assertEquals(e.substringSQL(2, 100), fromString("xample"));
+    assertEquals(e.substringSQL(0, 0), fromString(""));
+    assertEquals(e.substringSQL(100, 4), fromString(""));
+    assertEquals(e.substringSQL(0, Integer.MAX_VALUE), fromString("example"));
+    assertEquals(e.substringSQL(1, Integer.MAX_VALUE), fromString("example"));
+    assertEquals(e.substringSQL(2, Integer.MAX_VALUE), fromString("xample"));
   }
   
   @Test
