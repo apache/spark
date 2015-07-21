@@ -95,10 +95,18 @@ final class EMLDAOptimizer extends LDAOptimizer {
    * Compute bipartite term/doc graph.
    */
   override private[clustering] def initialize(docs: RDD[(Long, Vector)], lda: LDA): LDAOptimizer = {
+<<<<<<< HEAD
     val docConcentration = lda.getDocConcentration(0)
     require({
       lda.getDocConcentration.toArray.forall(_ == docConcentration)
     }, "EMLDAOptimizer currently only supports symmetric document-topic priors")
+||||||| merged common ancestors
+=======
+    val docConcentration = breeze.stats.mean(lda.getDocConcentration.toBreeze)
+    require({
+      lda.getDocConcentration.toArray.forall(_ == docConcentration)
+    }, "EMLDAOptimizer currently only supports symmetric document-topic priors")
+>>>>>>> 5568d2fd9994c0df7366adf65181d7bf939aa353
 
     val topicConcentration = lda.getTopicConcentration
     val k = lda.getK
@@ -346,6 +354,7 @@ final class OnlineLDAOptimizer extends LDAOptimizer {
     this.k = lda.getK
     this.corpusSize = docs.count()
     this.vocabSize = docs.first()._2.size
+<<<<<<< HEAD
     this.alpha = if (lda.getDocConcentration.size == 1) {
       if (lda.getDocConcentration(0) == -1) Vectors.dense(Array.fill(k)(1.0 / k))
       else {
@@ -359,6 +368,23 @@ final class OnlineLDAOptimizer extends LDAOptimizer {
       }
       lda.getDocConcentration
     }
+||||||| merged common ancestors
+    this.alpha = if (lda.getDocConcentration == -1) 1.0 / k else lda.getDocConcentration
+=======
+    this.alpha = if (lda.getDocConcentration.size == 1) {
+      if (lda.getDocConcentration(0) == -1) Vectors.dense(Array.fill(k)(1.0 / k))
+      else {
+        require(lda.getDocConcentration(0) >= 0, "all entries in alpha must be >=0")
+        Vectors.dense(Array.fill(k)(lda.getDocConcentration(0)))
+      }
+    } else {
+      require(lda.getDocConcentration.size == k, "alpha must have length k")
+      lda.getDocConcentration.foreachActive { case (_, x) =>
+        require(x >= 0, "all entries in alpha must be >= 0")
+      }
+      lda.getDocConcentration
+    }
+>>>>>>> 5568d2fd9994c0df7366adf65181d7bf939aa353
     this.eta = if (lda.getTopicConcentration == -1) 1.0 / k else lda.getTopicConcentration
     this.randomGenerator = new Random(lda.getSeed)
 
