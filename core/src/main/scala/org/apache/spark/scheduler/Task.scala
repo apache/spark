@@ -136,17 +136,6 @@ private[spark] abstract class Task[T](
       taskThread.interrupt()
     }
   }
-
-  override def hashCode(): Int = {
-    31 * stageId.hashCode() + partitionId.hashCode()
-  }
-
-  override def equals(other: Any): Boolean = other match {
-    case that: Task[_] =>
-        stageId == that.stageId &&
-        partitionId == that.partitionId
-    case _ => false
-  }
 }
 
 /**
