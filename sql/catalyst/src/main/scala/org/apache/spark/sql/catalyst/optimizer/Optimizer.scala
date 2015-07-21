@@ -216,9 +216,9 @@ object ProjectCollapsing extends Rule[LogicalPlan] {
 
       // We only collapse these two Projects if their overlapped expressions are all
       // deterministic.
-      val hasNondeterministic = projectList1.flatMap(_.collect {
+      val hasNondeterministic = projectList1.exists(_.collect {
         case a: Attribute if aliasMap.contains(a) => aliasMap(a).child
-      }).exists(_.find(!_.deterministic).isDefined)
+      }.exists(!_.deterministic))
 
       if (hasNondeterministic) {
         p
@@ -684,7 +684,7 @@ object CombineLimits extends Rule[LogicalPlan] {
 }
 
 /**
- * Removes the inner [[CaseConversionExpression]] that are unnecessary because
+ * Removes the inner case conversion expressions that are unnecessary because
  * the inner conversion is overwritten by the outer one.
  */
 object SimplifyCaseConversionExpressions extends Rule[LogicalPlan] {

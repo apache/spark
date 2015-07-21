@@ -153,6 +153,7 @@ object FunctionRegistry {
     expression[Ascii]("ascii"),
     expression[Base64]("base64"),
     expression[Concat]("concat"),
+    expression[ConcatWs]("concat_ws"),
     expression[Encode]("encode"),
     expression[Decode]("decode"),
     expression[FindInSet]("find_in_set"),
@@ -184,15 +185,15 @@ object FunctionRegistry {
     expression[CurrentDate]("current_date"),
     expression[CurrentTimestamp]("current_timestamp"),
     expression[DateFormatClass]("date_format"),
-    expression[Day]("day"),
-    expression[DayInYear]("day_in_year"),
-    expression[Day]("day_of_month"),
+    expression[DayOfMonth]("day"),
+    expression[DayOfYear]("dayofyear"),
+    expression[DayOfMonth]("dayofmonth"),
     expression[Hour]("hour"),
     expression[Month]("month"),
     expression[Minute]("minute"),
     expression[Quarter]("quarter"),
     expression[Second]("second"),
-    expression[WeekOfYear]("week_of_year"),
+    expression[WeekOfYear]("weekofyear"),
     expression[Year]("year")
 
   )
@@ -212,7 +213,10 @@ object FunctionRegistry {
     val builder = (expressions: Seq[Expression]) => {
       if (varargCtor.isDefined) {
         // If there is an apply method that accepts Seq[Expression], use that one.
-        varargCtor.get.newInstance(expressions).asInstanceOf[Expression]
+        Try(varargCtor.get.newInstance(expressions).asInstanceOf[Expression]) match {
+          case Success(e) => e
+          case Failure(e) => throw new AnalysisException(e.getMessage)
+        }
       } else {
         // Otherwise, find an ctor method that matches the number of arguments, and use that.
         val params = Seq.fill(expressions.size)(classOf[Expression])
@@ -222,7 +226,10 @@ object FunctionRegistry {
           case Failure(e) =>
             throw new AnalysisException(s"Invalid number of arguments for function $name")
         }
-        f.newInstance(expressions : _*).asInstanceOf[Expression]
+        Try(f.newInstance(expressions : _*).asInstanceOf[Expression]) match {
+          case Success(e) => e
+          case Failure(e) => throw new AnalysisException(e.getMessage)
+        }
       }
     }
     (name, builder)

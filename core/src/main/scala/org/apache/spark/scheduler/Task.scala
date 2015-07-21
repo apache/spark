@@ -43,7 +43,10 @@ import org.apache.spark.util.Utils
  * @param stageId id of the stage this task belongs to
  * @param partitionId index of the number in the RDD
  */
-private[spark] abstract class Task[T](val stageId: Int, var partitionId: Int) extends Serializable {
+private[spark] abstract class Task[T](
+    val stageId: Int,
+    val stageAttemptId: Int,
+    var partitionId: Int) extends Serializable {
 
   /**
    * The key of the Map is the accumulator id and the value of the Map is the latest accumulator

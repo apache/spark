@@ -19,19 +19,19 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.sql.{Timestamp, Date}
 import java.text.SimpleDateFormat
-import java.util.{TimeZone, Calendar}
+import java.util.Calendar
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.types.{StringType, TimestampType, DateType}
 
-class DateFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
+class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   val sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss")
   val sdfDate = new SimpleDateFormat("yyyy-MM-dd")
   val d = new Date(sdf.parse("2015-04-08 13:10:15").getTime)
   val ts = new Timestamp(sdf.parse("2013-11-08 13:10:15").getTime)
 
-  test("Day in Year") {
+  test("DayOfYear") {
     val sdfDay = new SimpleDateFormat("D")
     (2002 to 2004).foreach { y =>
       (0 to 11).foreach { m =>
@@ -39,7 +39,7 @@ class DateFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
           val c = Calendar.getInstance()
           c.set(y, m, 28, 0, 0, 0)
           c.add(Calendar.DATE, i)
-          checkEvaluation(DayInYear(Cast(Literal(new Date(c.getTimeInMillis)), DateType)),
+          checkEvaluation(DayOfYear(Cast(Literal(new Date(c.getTimeInMillis)), DateType)),
             sdfDay.format(c.getTime).toInt)
         }
       }
@@ -51,7 +51,7 @@ class DateFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
           val c = Calendar.getInstance()
           c.set(y, m, 28, 0, 0, 0)
           c.add(Calendar.DATE, i)
-          checkEvaluation(DayInYear(Cast(Literal(new Date(c.getTimeInMillis)), DateType)),
+          checkEvaluation(DayOfYear(Cast(Literal(new Date(c.getTimeInMillis)), DateType)),
             sdfDay.format(c.getTime).toInt)
         }
       }
@@ -63,7 +63,7 @@ class DateFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
           val c = Calendar.getInstance()
           c.set(y, m, 28, 0, 0, 0)
           c.add(Calendar.DATE, i)
-          checkEvaluation(DayInYear(Cast(Literal(new Date(c.getTimeInMillis)), DateType)),
+          checkEvaluation(DayOfYear(Cast(Literal(new Date(c.getTimeInMillis)), DateType)),
             sdfDay.format(c.getTime).toInt)
         }
       }
@@ -74,8 +74,8 @@ class DateFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         (0 to 5).foreach { i =>
           val c = Calendar.getInstance()
           c.set(y, m, 28, 0, 0, 0)
-          c.add(Calendar.DATE, 1)
-          checkEvaluation(DayInYear(Cast(Literal(new Date(c.getTimeInMillis)), DateType)),
+          c.add(Calendar.DATE, i)
+          checkEvaluation(DayOfYear(Cast(Literal(new Date(c.getTimeInMillis)), DateType)),
             sdfDay.format(c.getTime).toInt)
         }
       }
@@ -86,8 +86,8 @@ class DateFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         (0 to 5).foreach { i =>
           val c = Calendar.getInstance()
           c.set(y, m, 28, 0, 0, 0)
-          c.add(Calendar.DATE, 1)
-          checkEvaluation(DayInYear(Cast(Literal(new Date(c.getTimeInMillis)), DateType)),
+          c.add(Calendar.DATE, i)
+          checkEvaluation(DayOfYear(Cast(Literal(new Date(c.getTimeInMillis)), DateType)),
             sdfDay.format(c.getTime).toInt)
         }
       }
@@ -163,19 +163,19 @@ class DateFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
-  test("Day") {
-    checkEvaluation(Day(Cast(Literal("2000-02-29"), DateType)), 29)
-    checkEvaluation(Day(Literal.create(null, DateType)), null)
-    checkEvaluation(Day(Cast(Literal(d), DateType)), 8)
-    checkEvaluation(Day(Cast(Literal(sdfDate.format(d)), DateType)), 8)
-    checkEvaluation(Day(Cast(Literal(ts), DateType)), 8)
+  test("Day / DayOfMonth") {
+    checkEvaluation(DayOfMonth(Cast(Literal("2000-02-29"), DateType)), 29)
+    checkEvaluation(DayOfMonth(Literal.create(null, DateType)), null)
+    checkEvaluation(DayOfMonth(Cast(Literal(d), DateType)), 8)
+    checkEvaluation(DayOfMonth(Cast(Literal(sdfDate.format(d)), DateType)), 8)
+    checkEvaluation(DayOfMonth(Cast(Literal(ts), DateType)), 8)
 
     (1999 to 2000).foreach { y =>
       val c = Calendar.getInstance()
       c.set(y, 0, 1, 0, 0, 0)
       (0 to 365).foreach { d =>
         c.add(Calendar.DATE, 1)
-        checkEvaluation(Day(Cast(Literal(new Date(c.getTimeInMillis)), DateType)),
+        checkEvaluation(DayOfMonth(Cast(Literal(new Date(c.getTimeInMillis)), DateType)),
           c.get(Calendar.DAY_OF_MONTH))
       }
     }

@@ -22,7 +22,7 @@ import java.text.SimpleDateFormat
 
 import org.apache.spark.sql.functions._
 
-class DateExpressionsSuite extends QueryTest {
+class DateFunctionsSuite extends QueryTest {
   private lazy val ctx = org.apache.spark.sql.test.TestSQLContext
 
   import ctx.implicits._
@@ -32,6 +32,35 @@ class DateExpressionsSuite extends QueryTest {
   val d = new Date(sdf.parse("2015-04-08 13:10:15").getTime)
   val ts = new Timestamp(sdf.parse("2013-04-08 13:10:15").getTime)
 
+  test("timestamp comparison with date strings") {
+    val df = Seq(
+      (1, Timestamp.valueOf("2015-01-01 00:00:00")),
+      (2, Timestamp.valueOf("2014-01-01 00:00:00"))).toDF("i", "t")
+
+    checkAnswer(
+      df.select("t").filter($"t" <= "2014-06-01"),
+      Row(Timestamp.valueOf("2014-01-01 00:00:00")) :: Nil)
+
+
+    checkAnswer(
+      df.select("t").filter($"t" >= "2014-06-01"),
+      Row(Timestamp.valueOf("2015-01-01 00:00:00")) :: Nil)
+  }
+
+  test("date comparison with date strings") {
+    val df = Seq(
+      (1, Date.valueOf("2015-01-01")),
+      (2, Date.valueOf("2014-01-01"))).toDF("i", "t")
+
+    checkAnswer(
+      df.select("t").filter($"t" <= "2014-06-01"),
+      Row(Date.valueOf("2014-01-01")) :: Nil)
+
+
+    checkAnswer(
+      df.select("t").filter($"t" >= "2015"),
+      Row(Date.valueOf("2015-01-01")) :: Nil)
+  }
 
   test("date format") {
     val df = Seq((d, sdf.format(d), ts)).toDF("a", "b", "c")
@@ -83,39 +112,27 @@ class DateExpressionsSuite extends QueryTest {
       Row(4, 4, 4))
   }
 
-  test("day") {
+  test("dayofmonth") {
     val df = Seq((d, sdfDate.format(d), ts)).toDF("a", "b", "c")
 
     checkAnswer(
-      df.select(day("a"), day("b"), day("c")),
+      df.select(dayofmonth("a"), dayofmonth("b"), dayofmonth("c")),
       Row(8, 8, 8))
 
     checkAnswer(
-      df.selectExpr("day(a)", "day(b)", "day(c)"),
+      df.selectExpr("day(a)", "day(b)", "dayofmonth(c)"),
       Row(8, 8, 8))
   }
 
-  test("day of month") {
+  test("dayofyear") {
     val df = Seq((d, sdfDate.format(d), ts)).toDF("a", "b", "c")
 
     checkAnswer(
-      df.select(day_of_month("a"), day_of_month("b"), day_of_month("c")),
-      Row(8, 8, 8))
-
-    checkAnswer(
-      df.selectExpr("day_of_month(a)", "day_of_month(b)", "day_of_month(c)"),
-      Row(8, 8, 8))
-  }
-
-  test("day in year") {
-    val df = Seq((d, sdfDate.format(d), ts)).toDF("a", "b", "c")
-
-    checkAnswer(
-      df.select(day_in_year("a"), day_in_year("b"), day_in_year("c")),
+      df.select(dayofyear("a"), dayofyear("b"), dayofyear("c")),
       Row(98, 98, 98))
 
     checkAnswer(
-      df.selectExpr("day_in_year(a)", "day_in_year(b)", "day_in_year(c)"),
+      df.selectExpr("dayofyear(a)", "dayofyear(b)", "dayofyear(c)"),
       Row(98, 98, 98))
   }
 
@@ -155,15 +172,15 @@ class DateExpressionsSuite extends QueryTest {
       Row(0, 15, 15))
   }
 
-  test("week of year") {
+  test("weekofyear") {
     val df = Seq((d, sdfDate.format(d), ts)).toDF("a", "b", "c")
 
     checkAnswer(
-      df.select(week_of_year("a"), week_of_year("b"), week_of_year("c")),
+      df.select(weekofyear("a"), weekofyear("b"), weekofyear("c")),
       Row(15, 15, 15))
 
     checkAnswer(
-      df.selectExpr("week_of_year(a)", "week_of_year(b)", "week_of_year(c)"),
+      df.selectExpr("weekofyear(a)", "weekofyear(b)", "weekofyear(c)"),
       Row(15, 15, 15))
   }
 

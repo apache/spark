@@ -55,6 +55,11 @@ __all__ = [
 
 __all__ += ['lag', 'lead', 'ntile']
 
+__all__ += [
+    'date_format',
+    'year', 'quarter', 'month', 'hour', 'minute', 'second',
+    'dayofmonth', 'dayofyear', 'weekofyear']
+
 
 def _create_function(name, doc=""):
     """ Create a function for aggregator by name"""
@@ -713,41 +718,29 @@ def month(col):
 
 
 @since(1.5)
-def day(col):
-    """
-    Extract the day of the month of a given date as integer.
-
-    >>> sqlContext.createDataFrame([('2015-04-08',)], ['a']).select(day('a').alias('day')).collect()
-    [Row(day=8)]
-    """
-    sc = SparkContext._active_spark_context
-    return Column(sc._jvm.functions.day(col))
-
-
-@since(1.5)
-def day_of_month(col):
+def dayofmonth(col):
     """
     Extract the day of the month of a given date as integer.
 
     >>> df = sqlContext.createDataFrame([('2015-04-08',)], ['a'])
-    >>> df.select(day_of_month('a').alias('day')).collect()
+    >>> df.select(dayofmonth('a').alias('day')).collect()
     [Row(day=8)]
     """
     sc = SparkContext._active_spark_context
-    return Column(sc._jvm.functions.day_of_month(col))
+    return Column(sc._jvm.functions.dayofmonth(col))
 
 
 @since(1.5)
-def day_in_year(col):
+def dayofyear(col):
     """
     Extract the day of the year of a given date as integer.
 
     >>> df = sqlContext.createDataFrame([('2015-04-08',)], ['a'])
-    >>> df.select(day_in_year('a').alias('day')).collect()
+    >>> df.select(dayofyear('a').alias('day')).collect()
     [Row(day=98)]
     """
     sc = SparkContext._active_spark_context
-    return Column(sc._jvm.functions.day_in_year(col))
+    return Column(sc._jvm.functions.dayofyear(col))
 
 
 @since(1.5)
@@ -790,16 +783,16 @@ def second(col):
 
 
 @since(1.5)
-def week_of_year(col):
+def weekofyear(col):
     """
     Extract the week number of a given date as integer.
 
     >>> df = sqlContext.createDataFrame([('2015-04-08',)], ['a'])
-    >>> df.select(week_of_year('a').alias('week')).collect()
+    >>> df.select(weekofyear('a').alias('week')).collect()
     [Row(week=15)]
     """
     sc = SparkContext._active_spark_context
-    return Column(sc._jvm.functions.week_of_year(col))
+    return Column(sc._jvm.functions.weekofyear(col))
 
 
 class UserDefinedFunction(object):
@@ -808,23 +801,24 @@ class UserDefinedFunction(object):
 
     .. versionadded:: 1.3
     """
-    def __init__(self, func, returnType):
+    def __init__(self, func, returnType, name=None):
         self.func = func
         self.returnType = returnType
         self._broadcast = None
-        self._judf = self._create_judf()
+        self._judf = self._create_judf(name)
 
-    def _create_judf(self):
-        f = self.func  # put it in closure `func`
-        func = lambda _, it: map(lambda x: f(*x), it)
+    def _create_judf(self, name):
+        f, returnType = self.func, self.returnType  # put them in closure `func`
+        func = lambda _, it: map(lambda x: returnType.toInternal(f(*x)), it)
         ser = AutoBatchedSerializer(PickleSerializer())
         command = (func, None, ser, ser)
         sc = SparkContext._active_spark_context
         pickled_command, broadcast_vars, env, includes = _prepare_for_python_RDD(sc, command, self)
         ssql_ctx = sc._jvm.SQLContext(sc._jsc.sc())
         jdt = ssql_ctx.parseDataType(self.returnType.json())
-        fname = f.__name__ if hasattr(f, '__name__') else f.__class__.__name__
-        judf = sc._jvm.UserDefinedPythonFunction(fname, bytearray(pickled_command), env, includes,
+        if name is None:
+            name = f.__name__ if hasattr(f, '__name__') else f.__class__.__name__
+        judf = sc._jvm.UserDefinedPythonFunction(name, bytearray(pickled_command), env, includes,
                                                  sc.pythonExec, sc.pythonVer, broadcast_vars,
                                                  sc._javaAccumulator, jdt)
         return judf
