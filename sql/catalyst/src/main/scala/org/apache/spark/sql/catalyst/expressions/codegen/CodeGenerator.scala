@@ -297,8 +297,9 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
       evaluator.cook(code)
     } catch {
       case e: Exception =>
-        logError(s"failed to compile:\n $code", e)
-        throw e
+        val msg = s"failed to compile:\n $code"
+        logError(msg, e)
+        throw new Exception(msg, e)
     }
     evaluator.getClazz().newInstance().asInstanceOf[GeneratedClass]
   }
