@@ -526,29 +526,26 @@ case class StringRPad(str: Expression, len: Expression, pad: Expression)
 /**
  * Returns the input formatted according do printf-style format strings
  */
-case class StringFormat(children: Expression*) extends Expression with ImplicitCastInputTypes {
+case class FormatString(children: Expression*) extends Expression with ImplicitCastInputTypes {
 
-  require(children.nonEmpty, "printf() should take at least 1 argument")
+  require(children.nonEmpty, "format_string() should take at least 1 argument")
 
   override def foldable: Boolean = children.forall(_.foldable)
   override def nullable: Boolean = children(0).nullable
   override def dataType: DataType = StringType
-  private def format: Expression = children(0)
-  private def args: Seq[Expression] = children.tail
 
   override def inputTypes: Seq[AbstractDataType] =
     StringType :: List.fill(children.size - 1)(AnyDataType)
 
-
   override def eval(input: InternalRow): Any = {
-    val pattern = format.eval(input)
+    val pattern = children(0).eval(input)
     if (pattern == null) {
       null
     } else {
       val sb = new StringBuffer()
       val formatter = new java.util.Formatter(sb, Locale.US)
 
-      val arglist = args.map(_.eval(input).asInstanceOf[AnyRef])
+      val arglist = children.tail.map(_.eval(input).asInstanceOf[AnyRef])
       formatter.format(pattern.asInstanceOf[UTF8String].toString, arglist: _*)
 
       UTF8String.fromString(sb.toString)
@@ -591,7 +588,7 @@ case class StringFormat(children: Expression*) extends Expression with ImplicitC
      """
   }
 
-  override def prettyName: String = "printf"
+  override def prettyName: String = "format_string"
 }
 
 /**

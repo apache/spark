@@ -126,17 +126,13 @@ class StringFunctionsSuite extends QueryTest {
     val df = Seq(("aa%d%s", 123, "cc")).toDF("a", "b", "c")
 
     checkAnswer(
-      df.select(formatString("aa%d%s", "b", "c")),
-      Row("aa123cc"))
-
-    checkAnswer(
       df.selectExpr("printf(a, b, c)"),
       Row("aa123cc"))
 
     val df2 = Seq(("aa%d%s".getBytes, 123, "cc")).toDF("a", "b", "c")
 
     checkAnswer(
-      df2.select(formatString($"a", $"b", $"c"), formatString("aa%d%s", "b", "c")),
+      df2.select(format_string("a", $"b", $"c"), format_string("aa%d%s", $"b", $"c")),
       Row("aa123cc", "aa123cc"))
 
     checkAnswer(
