@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckSuccess, TypeCheckFailure}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.util.NumberConverter
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -164,7 +165,7 @@ case class Cosh(child: Expression) extends UnaryMathExpression(math.cosh, "COSH"
  * @param toBaseExpr to which base
  */
 case class Conv(numExpr: Expression, fromBaseExpr: Expression, toBaseExpr: Expression)
-  extends Expression with ImplicitCastInputTypes with CodegenFallback {
+  extends Expression with ImplicitCastInputTypes {
 
   override def foldable: Boolean = numExpr.foldable && fromBaseExpr.foldable && toBaseExpr.foldable
 
@@ -179,169 +180,54 @@ case class Conv(numExpr: Expression, fromBaseExpr: Expression, toBaseExpr: Expre
   /** Returns the result of evaluating this expression on a given input Row */
   override def eval(input: InternalRow): Any = {
     val num = numExpr.eval(input)
-    val fromBase = fromBaseExpr.eval(input)
-    val toBase = toBaseExpr.eval(input)
-    if (num == null || fromBase == null || toBase == null) {
-      null
-    } else {
-      conv(
-        num.asInstanceOf[UTF8String].getBytes,
-        fromBase.asInstanceOf[Int],
-        toBase.asInstanceOf[Int])
-    }
-  }
-
-  private val value = new Array[Byte](64)
-
-  /**
-   * Divide x by m as if x is an unsigned 64-bit integer. Examples:
-   * unsignedLongDiv(-1, 2) == Long.MAX_VALUE unsignedLongDiv(6, 3) == 2
-   * unsignedLongDiv(0, 5) == 0
-   *
-   * @param x is treated as unsigned
-   * @param m is treated as signed
-   */
-  private def unsignedLongDiv(x: Long, m: Int): Long = {
-    if (x >= 0) {
-      x / m
-    } else {
-      // Let uval be the value of the unsigned long with the same bits as x
-      // Two's complement => x = uval - 2*MAX - 2
-      // => uval = x + 2*MAX + 2
-      // Now, use the fact: (a+b)/c = a/c + b/c + (a%c+b%c)/c
-      x / m + 2 * (Long.MaxValue / m) + 2 / m + (x % m + 2 * (Long.MaxValue % m) + 2 % m) / m
-    }
-  }
-
-  /**
-   * Decode v into value[].
-   *
-   * @param v is treated as an unsigned 64-bit integer
-   * @param radix must be between MIN_RADIX and MAX_RADIX
-   */
-  private def decode(v: Long, radix: Int): Unit = {
-    var tmpV = v
-    java.util.Arrays.fill(value, 0.asInstanceOf[Byte])
-    var i = value.length - 1
-    while (tmpV != 0) {
-      val q = unsignedLongDiv(tmpV, radix)
-      value(i) = (tmpV - q * radix).asInstanceOf[Byte]
-      tmpV = q
-      i -= 1
-    }
-  }
-
-  /**
-   * Convert value[] into a long. On overflow, return -1 (as mySQL does). If a
-   * negative digit is found, ignore the suffix starting there.
-   *
-   * @param radix  must be between MIN_RADIX and MAX_RADIX
-   * @param fromPos is the first element that should be conisdered
-   * @return the result should be treated as an unsigned 64-bit integer.
-   */
-  private def encode(radix: Int, fromPos: Int): Long = {
-    var v: Long = 0L
-    val bound = unsignedLongDiv(-1 - radix, radix) // Possible overflow once
-    // val
-    // exceeds this value
-    var i = fromPos
-    while (i < value.length && value(i) >= 0) {
-      if (v >= bound) {
-        // Check for overflow
-        if (unsignedLongDiv(-1 - value(i), radix) < v) {
-          return -1
+    if (num != null) {
+      val fromBase = fromBaseExpr.eval(input)
+      if (fromBase != null) {
+        val toBase = toBaseExpr.eval(input)
+        if (toBase != null) {
+          NumberConverter.convert(
+            num.asInstanceOf[UTF8String].getBytes,
+            fromBase.asInstanceOf[Int],
+            toBase.asInstanceOf[Int])
+        } else {
+          null
         }
-      }
-      v = v * radix + value(i)
-      i += 1
-    }
-    v
-  }
-
-  /**
-   * Convert the bytes in value[] to the corresponding chars.
-   *
-   * @param radix must be between MIN_RADIX and MAX_RADIX
-   * @param fromPos is the first nonzero element
-   */
-  private def byte2char(radix: Int, fromPos: Int): Unit = {
-    var i = fromPos
-    while (i < value.length) {
-      value(i) = Character.toUpperCase(Character.forDigit(value(i), radix)).asInstanceOf[Byte]
-      i += 1
-    }
-  }
-
-  /**
-   * Convert the chars in value[] to the corresponding integers. Convert invalid
-   * characters to -1.
-   *
-   * @param radix must be between MIN_RADIX and MAX_RADIX
-   * @param fromPos is the first nonzero element
-   */
-  private def char2byte(radix: Int, fromPos: Int): Unit = {
-    var i = fromPos
-    while ( i < value.length) {
-      value(i) = Character.digit(value(i), radix).asInstanceOf[Byte]
-      i += 1
-    }
-  }
-
-  /**
-   * Convert numbers between different number bases. If toBase>0 the result is
-   * unsigned, otherwise it is signed.
-   * NB: This logic is borrowed from org.apache.hadoop.hive.ql.ud.UDFConv
-   */
-  private def conv(n: Array[Byte] , fromBase: Int, toBase: Int ): UTF8String = {
-    if (fromBase < Character.MIN_RADIX || fromBase > Character.MAX_RADIX
-      || Math.abs(toBase) < Character.MIN_RADIX
-      || Math.abs(toBase) > Character.MAX_RADIX) {
-      return null
-    }
-
-    if (n.length == 0) {
-      return null
-    }
-
-    var (negative, first) = if (n(0) == '-') (true, 1) else (false, 0)
-
-    // Copy the digits in the right side of the array
-    var i = 1
-    while (i <= n.length - first) {
-      value(value.length - i) = n(n.length - i)
-      i += 1
-    }
-    char2byte(fromBase, value.length - n.length + first)
-
-    // Do the conversion by going through a 64 bit integer
-    var v = encode(fromBase, value.length - n.length + first)
-    if (negative && toBase > 0) {
-      if (v < 0) {
-        v = -1
       } else {
-        v = -v
+        null
       }
+    } else {
+      null
     }
-    if (toBase < 0 && v < 0) {
-      v = -v
-      negative = true
-    }
-    decode(v, Math.abs(toBase))
+  }
 
-    // Find the first non-zero digit or the last digits if all are zero.
-    val firstNonZeroPos = {
-      val firstNonZero = value.indexWhere( _ != 0)
-      if (firstNonZero != -1) firstNonZero else value.length - 1
-    }
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    val numGen = numExpr.gen(ctx)
+    val from = fromBaseExpr.gen(ctx)
+    val to = toBaseExpr.gen(ctx)
 
-    byte2char(Math.abs(toBase), firstNonZeroPos)
-
-    var resultStartPos = firstNonZeroPos
-    if (negative && toBase < 0) {
-      resultStartPos = firstNonZeroPos - 1
-      value(resultStartPos) = '-'
-    }
-    UTF8String.fromBytes(java.util.Arrays.copyOfRange(value, resultStartPos, value.length))
+    val numconv = NumberConverter.getClass.getName.stripSuffix("$")
+    s"""
+       ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
+       ${numGen.code}
+       boolean ${ev.isNull} = ${numGen.isNull};
+       if (!${ev.isNull}) {
+         ${from.code}
+         if (!${from.isNull}) {
+           ${to.code}
+           if (!${to.isNull}) {
+             ${ev.primitive} = $numconv.convert(${numGen.primitive}.getBytes(),
+               ${from.primitive}, ${to.primitive});
+             if (${ev.primitive} == null) {
+               ${ev.isNull} = true;
+             }
+           } else {
+             ${ev.isNull} = true;
+           }
+         } else {
+           ${ev.isNull} = true;
+         }
+       }
+     """
   }
 }
 
@@ -489,28 +375,8 @@ object Hex {
     (0 to 5).foreach(i => array('a' + i) = (i + 10).toByte)
     array
   }
-}
 
-/**
- * If the argument is an INT or binary, hex returns the number as a STRING in hexadecimal format.
- * Otherwise if the number is a STRING, it converts each character into its hex representation
- * and returns the resulting STRING. Negative numbers would be treated as two's complement.
- */
-case class Hex(child: Expression)
-  extends UnaryExpression with ImplicitCastInputTypes with CodegenFallback {
-
-  override def inputTypes: Seq[AbstractDataType] =
-    Seq(TypeCollection(LongType, BinaryType, StringType))
-
-  override def dataType: DataType = StringType
-
-  protected override def nullSafeEval(num: Any): Any = child.dataType match {
-    case LongType => hex(num.asInstanceOf[Long])
-    case BinaryType => hex(num.asInstanceOf[Array[Byte]])
-    case StringType => hex(num.asInstanceOf[UTF8String].getBytes)
-  }
-
-  private[this] def hex(bytes: Array[Byte]): UTF8String = {
+  def hex(bytes: Array[Byte]): UTF8String = {
     val length = bytes.length
     val value = new Array[Byte](length * 2)
     var i = 0
@@ -522,7 +388,7 @@ case class Hex(child: Expression)
     UTF8String.fromBytes(value)
   }
 
-  private def hex(num: Long): UTF8String = {
+  def hex(num: Long): UTF8String = {
     // Extract the hex digits of num into value[] from right to left
     val value = new Array[Byte](16)
     var numBuf = num
@@ -534,24 +400,8 @@ case class Hex(child: Expression)
     } while (numBuf != 0)
     UTF8String.fromBytes(java.util.Arrays.copyOfRange(value, value.length - len, value.length))
   }
-}
 
-/**
- * Performs the inverse operation of HEX.
- * Resulting characters are returned as a byte array.
- */
-case class Unhex(child: Expression)
-  extends UnaryExpression with ImplicitCastInputTypes with CodegenFallback {
-
-  override def inputTypes: Seq[AbstractDataType] = Seq(StringType)
-
-  override def nullable: Boolean = true
-  override def dataType: DataType = BinaryType
-
-  protected override def nullSafeEval(num: Any): Any =
-    unhex(num.asInstanceOf[UTF8String].getBytes)
-
-  private[this] def unhex(bytes: Array[Byte]): Array[Byte] = {
+  def unhex(bytes: Array[Byte]): Array[Byte] = {
     val out = new Array[Byte]((bytes.length + 1) >> 1)
     var i = 0
     if ((bytes.length & 0x01) != 0) {
@@ -580,6 +430,60 @@ case class Unhex(child: Expression)
       i += 2
     }
     out
+  }
+}
+
+/**
+ * If the argument is an INT or binary, hex returns the number as a STRING in hexadecimal format.
+ * Otherwise if the number is a STRING, it converts each character into its hex representation
+ * and returns the resulting STRING. Negative numbers would be treated as two's complement.
+ */
+case class Hex(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
+
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(TypeCollection(LongType, BinaryType, StringType))
+
+  override def dataType: DataType = StringType
+
+  protected override def nullSafeEval(num: Any): Any = child.dataType match {
+    case LongType => Hex.hex(num.asInstanceOf[Long])
+    case BinaryType => Hex.hex(num.asInstanceOf[Array[Byte]])
+    case StringType => Hex.hex(num.asInstanceOf[UTF8String].getBytes)
+  }
+
+  override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    nullSafeCodeGen(ctx, ev, (c) => {
+      val hex = Hex.getClass.getName.stripSuffix("$")
+      s"${ev.primitive} = " + (child.dataType match {
+        case StringType => s"""$hex.hex($c.getBytes());"""
+        case _ => s"""$hex.hex($c);"""
+      })
+    })
+  }
+}
+
+/**
+ * Performs the inverse operation of HEX.
+ * Resulting characters are returned as a byte array.
+ */
+case class Unhex(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(StringType)
+
+  override def nullable: Boolean = true
+  override def dataType: DataType = BinaryType
+
+  protected override def nullSafeEval(num: Any): Any =
+    Hex.unhex(num.asInstanceOf[UTF8String].getBytes)
+
+  override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    nullSafeCodeGen(ctx, ev, (c) => {
+      val hex = Hex.getClass.getName.stripSuffix("$")
+      s"""
+        ${ev.primitive} = $hex.unhex($c.getBytes());
+        ${ev.isNull} = ${ev.primitive} == null;
+       """
+    })
   }
 }
 
