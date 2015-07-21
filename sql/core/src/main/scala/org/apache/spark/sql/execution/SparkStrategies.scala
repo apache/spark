@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.{BroadcastHint, LogicalPlan}
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.columnar.{InMemoryColumnarTableScan, InMemoryRelation}
-import org.apache.spark.sql.execution.{DescribeCommand => RunnableDescribeCommand, aggregate}
+import org.apache.spark.sql.execution.{DescribeCommand => RunnableDescribeCommand}
 import org.apache.spark.sql.execution.datasources.{CreateTableUsing, CreateTempTableUsing, DescribeCommand => LogicalDescribeCommand, _}
 import org.apache.spark.sql.parquet._
 import org.apache.spark.sql.types._
@@ -409,9 +409,21 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         execution.Filter(condition, planLater(child)) :: Nil
       case e @ logical.Expand(_, _, _, child) =>
         execution.Expand(e.projections, e.output, planLater(child)) :: Nil
-      case a @ logical.Aggregate(group, agg, child)
-        if !aggregate.Utils.tryConvert(a, sqlContext.conf.useSqlAggregate2).isDefined =>
-        execution.Aggregate(partial = false, group, agg, planLater(child)) :: Nil
+      case a @ logical.Aggregate(group, agg, child) => {
+        val useNewAggregation =
+          aggregate.Utils.tryConvert(
+            a,
+            sqlContext.conf.useSqlAggregate2,
+            sqlContext.conf.codegenEnabled).isDefined
+        if (useNewAggregation) {
+          // If this logical.Aggregate can be planned to use new aggregation code path
+          // (i.e. it can be planned by the Strategy Aggregation), we will not use the old
+          // aggregation code path.
+          Nil
+        } else {
+          execution.Aggregate(partial = false, group, agg, planLater(child)) :: Nil
+        }
+      }
       case logical.Window(projectList, windowExpressions, spec, child) =>
         execution.Window(projectList, windowExpressions, spec, planLater(child)) :: Nil
       case logical.Sample(lb, ub, withReplacement, seed, child) =>

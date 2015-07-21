@@ -338,12 +338,3 @@ object Utils {
     finalAndCompleteAggregate :: Nil
   }
 }
-
-object NewAggregation {
-  type ReturnType = (Seq[Expression], Seq[NamedExpression], LogicalPlan)
-
-  def unapply(plan: LogicalPlan): Option[ReturnType] = {
-    Utils.tryConvert(plan, true).map(agg =>
-      (agg.groupingExpressions, agg.aggregateExpressions, agg.child))
-  }
-}
