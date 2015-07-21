@@ -232,7 +232,7 @@ private[spark] object JsonProtocol {
     ("Metrics Updated" -> taskMetrics.map(s =>
       ("Task ID" -> s._1) ~
         ("Stage ID" -> s._2) ~
-        ("Stage Attempt" -> s._3) ~
+        ("Stage Attempt ID" -> s._3) ~
         ("Task Metrics" -> taskMetricsToJson(s._4)))
     )
   }
@@ -618,7 +618,7 @@ private[spark] object JsonProtocol {
     val taskMetrics = (json \"Metrics Updated").extract[List[JValue]].map(s =>
       ((s\"Task ID").extract[Long],
         (s\"Stage ID").extract[Int],
-        (s\"Stage Attempt").extract[Int],
+        (s\"Stage Attempt ID").extract[Int],
         taskMetricsFromJson(s\"Task Metrics"))
     ).toSeq
     SparkListenerExecutorMetricsUpdate(execInfo, taskMetrics)

@@ -1620,7 +1620,7 @@ class JsonProtocolSuite extends SparkFunSuite {
      |  {
      |    "Task ID": 1,
      |    "Stage ID": 2,
-     |    "Stage Attempt": 3,
+     |    "Stage Attempt ID": 3,
      |    "Task Metrics": {
      |    "Host Name": "localhost",
      |    "Executor Deserialize Time": 300,
