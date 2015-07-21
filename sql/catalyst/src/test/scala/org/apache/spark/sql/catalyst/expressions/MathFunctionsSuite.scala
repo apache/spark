@@ -115,8 +115,8 @@ class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Conv(Literal("-15"), Literal(10), Literal(-16)), "-F")
     checkEvaluation(Conv(Literal("-15"), Literal(10), Literal(16)), "FFFFFFFFFFFFFFF1")
     checkEvaluation(Conv(Literal("big"), Literal(36), Literal(16)), "3A48")
-    checkEvaluation(Conv(Literal(null), Literal(36), Literal(16)), null)
-    checkEvaluation(Conv(Literal("3"), Literal(null), Literal(16)), null)
+    checkEvaluation(Conv(Literal.create(null, StringType), Literal(36), Literal(16)), null)
+    checkEvaluation(Conv(Literal("3"), Literal.create(null, IntegerType), Literal(16)), null)
     checkEvaluation(
       Conv(Literal("1234"), Literal(10), Literal(37)), null)
     checkEvaluation(
