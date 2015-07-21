@@ -126,7 +126,11 @@ case class ArrayContains(left: Expression, right: Expression) extends BinaryExpr
       false
     } else {
       val element = right.eval(input)
-      arr.asInstanceOf[Seq[Any]].contains(element)
+      if (element == null) {
+        false
+      } else {
+        arr.asInstanceOf[Seq[Any]].contains(element)
+      }
     }
   }
 
@@ -140,7 +144,11 @@ case class ArrayContains(left: Expression, right: Expression) extends BinaryExpr
         ${ev.primitive} = false;
        } else {
         ${elementGen.code}
-        ${ev.primitive} = ${arrGen.primitive}.contains(${elementGen.primitive});
+        if (${elementGen.isNull}) {
+          ${ev.primitive} = false;
+        } else {
+          ${ev.primitive} = ${arrGen.primitive}.contains(${elementGen.primitive});
+        }
        }
      """
   }
