@@ -41,7 +41,7 @@ public final class UnsafeExternalSorter {
 
   private final Logger logger = LoggerFactory.getLogger(UnsafeExternalSorter.class);
 
-  private static final int PAGE_SIZE = 1 << 27;  // 128 megabytes
+  private static final int PAGE_SIZE = 1 << 22;  // 4 megabytes
   @VisibleForTesting
   static final int MAX_RECORD_SIZE = PAGE_SIZE - 4;
 
