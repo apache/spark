@@ -40,7 +40,7 @@ import org.apache.spark.sql.{DataFrame, SQLContext}
  *              where D is number of features
  * @param modelType The type of NB model to fit  can be "multinomial" or "bernoulli"
  */
-class NaiveBayesModel private[mllib] (
+class NaiveBayesModel private[spark] (
     val labels: Array[Double],
     val pi: Array[Double],
     val theta: Array[Array[Double]],
@@ -382,7 +382,7 @@ class NaiveBayes private (
         BLAS.axpy(1.0, c2._2, c1._2)
         (c1._1 + c2._1, c1._2)
       }
-    ).collect()
+    ).collect().sortBy(_._1)
 
     val numLabels = aggregated.length
     var numDocuments = 0L
@@ -425,13 +425,13 @@ class NaiveBayes private (
 object NaiveBayes {
 
   /** String name for multinomial model type. */
-  private[classification] val Multinomial: String = "multinomial"
+  private[spark] val Multinomial: String = "multinomial"
 
   /** String name for Bernoulli model type. */
-  private[classification] val Bernoulli: String = "bernoulli"
+  private[spark] val Bernoulli: String = "bernoulli"
 
   /* Set of modelTypes that NaiveBayes supports */
-  private[classification] val supportedModelTypes = Set(Multinomial, Bernoulli)
+  private[spark] val supportedModelTypes = Set(Multinomial, Bernoulli)
 
   /**
    * Trains a Naive Bayes model given an RDD of `(label, features)` pairs.

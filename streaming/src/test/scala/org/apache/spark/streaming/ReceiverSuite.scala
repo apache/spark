@@ -346,6 +346,8 @@ class ReceiverSuite extends TestSuiteBase with Timeouts with Serializable {
     def reportError(message: String, throwable: Throwable) {
       errors += throwable
     }
+
+    override protected def onReceiverStart(): Boolean = true
   }
 
   /**

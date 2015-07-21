@@ -150,6 +150,12 @@ sealed trait Vector extends Serializable {
       toDense
     }
   }
+
+  /**
+   * Find the index of a maximal element.  Returns the first maximal element in case of a tie.
+   * Returns -1 if vector has length 0.
+   */
+  def argmax: Int
 }
 
 /**
@@ -588,11 +594,7 @@ class DenseVector(val values: Array[Double]) extends Vector {
     new SparseVector(size, ii, vv)
   }
 
-  /**
-   * Find the index of a maximal element.  Returns the first maximal element in case of a tie.
-   * Returns -1 if vector has length 0.
-   */
-  private[spark] def argmax: Int = {
+  override def argmax: Int = {
     if (size == 0) {
       -1
     } else {
@@ -715,6 +717,51 @@ class SparseVector(
         }
       }
       new SparseVector(size, ii, vv)
+    }
+  }
+
+  override def argmax: Int = {
+    if (size == 0) {
+      -1
+    } else {
+      // Find the max active entry.
+      var maxIdx = indices(0)
+      var maxValue = values(0)
+      var maxJ = 0
+      var j = 1
+      val na = numActives
+      while (j < na) {
+        val v = values(j)
+        if (v > maxValue) {
+          maxValue = v
+          maxIdx = indices(j)
+          maxJ = j
+        }
+        j += 1
+      }
+
+      // If the max active entry is nonpositive and there exists inactive ones, find the first zero.
+      if (maxValue <= 0.0 && na < size) {
+        if (maxValue == 0.0) {
+          // If there exists an inactive entry before maxIdx, find it and return its index.
+          if (maxJ < maxIdx) {
+            var k = 0
+            while (k < maxJ && indices(k) == k) {
+              k += 1
+            }
+            maxIdx = k
+          }
+        } else {
+          // If the max active value is negative, find and return the first inactive index.
+          var k = 0
+          while (k < na && indices(k) == k) {
+            k += 1
+          }
+          maxIdx = k
+        }
+      }
+
+      maxIdx
     }
   }
 }

@@ -69,6 +69,24 @@ object functions {
   def column(colName: String): Column = Column(colName)
 
   /**
+   * Convert a number from one base to another for the specified expressions
+   *
+   * @group math_funcs
+   * @since 1.5.0
+   */
+  def conv(num: Column, fromBase: Int, toBase: Int): Column =
+    Conv(num.expr, lit(fromBase).expr, lit(toBase).expr)
+
+  /**
+   * Convert a number from one base to another for the specified expressions
+   *
+   * @group math_funcs
+   * @since 1.5.0
+   */
+  def conv(numColName: String, fromBase: Int, toBase: Int): Column =
+    conv(Column(numColName), fromBase, toBase)
+
+  /**
    * Creates a [[Column]] of literal value.
    *
    * The passed in object is returned directly if it is already a [[Column]].
@@ -602,7 +620,15 @@ object functions {
   def explode(e: Column): Column = Explode(e.expr)
 
   /**
-   * Converts a string exprsesion to lower case.
+   * Return true if the column is NaN or null
+   *
+   * @group normal_funcs
+   * @since 1.5.0
+   */
+  def isNaN(e: Column): Column = IsNaN(e.expr)
+
+  /**
+   * Converts a string expression to lower case.
    *
    * @group normal_funcs
    * @since 1.3.0
@@ -1372,6 +1398,23 @@ object functions {
   def pow(l: Double, rightName: String): Column = pow(l, Column(rightName))
 
   /**
+   * Returns the positive value of dividend mod divisor.
+   *
+   * @group math_funcs
+   * @since 1.5.0
+   */
+  def pmod(dividend: Column, divisor: Column): Column = Pmod(dividend.expr, divisor.expr)
+
+  /**
+   * Returns the positive value of dividend mod divisor.
+   *
+   * @group math_funcs
+   * @since 1.5.0
+   */
+  def pmod(dividendColName: String, divisorColName: String): Column =
+    pmod(Column(dividendColName), Column(divisorColName))
+
+  /**
    * Returns the double value that is closest in value to the argument and
    * is equal to a mathematical integer.
    *
@@ -1668,20 +1711,90 @@ object functions {
   //////////////////////////////////////////////////////////////////////////////////////////////
 
   /**
-   * Computes the length of a given string value.
+   * Concatenates input strings together into a single string.
    *
    * @group string_funcs
    * @since 1.5.0
    */
-  def strlen(e: Column): Column = StringLength(e.expr)
+  @scala.annotation.varargs
+  def concat(exprs: Column*): Column = Concat(exprs.map(_.expr))
 
   /**
-   * Computes the length of a given string column.
+   * Concatenates input strings together into a single string.
+   *
+   * This is the variant of concat that takes in the column names.
    *
    * @group string_funcs
    * @since 1.5.0
    */
-  def strlen(columnName: String): Column = strlen(Column(columnName))
+  @scala.annotation.varargs
+  def concat(columnName: String, columnNames: String*): Column = {
+    concat((columnName +: columnNames).map(Column.apply): _*)
+  }
+
+  /**
+   * Concatenates input strings together into a single string, using the given separator.
+   *
+   * @group string_funcs
+   * @since 1.5.0
+   */
+  @scala.annotation.varargs
+  def concat_ws(sep: String, exprs: Column*): Column = {
+    ConcatWs(Literal.create(sep, StringType) +: exprs.map(_.expr))
+  }
+
+  /**
+   * Concatenates input strings together into a single string, using the given separator.
+   *
+   * This is the variant of concat_ws that takes in the column names.
+   *
+   * @group string_funcs
+   * @since 1.5.0
+   */
+  @scala.annotation.varargs
+  def concat_ws(sep: String, columnName: String, columnNames: String*): Column = {
+    concat_ws(sep, (columnName +: columnNames).map(Column.apply) : _*)
+  }
+
+  /**
+   * Computes the length of a given string / binary value.
+   *
+   * @group string_funcs
+   * @since 1.5.0
+   */
+  def length(e: Column): Column = Length(e.expr)
+
+  /**
+   * Computes the length of a given string / binary column.
+   *
+   * @group string_funcs
+   * @since 1.5.0
+   */
+  def length(columnName: String): Column = length(Column(columnName))
+
+  /**
+   * Formats the number X to a format like '#,###,###.##', rounded to d decimal places,
+   * and returns the result as a string.
+   * If d is 0, the result has no decimal point or fractional part.
+   * If d < 0, the result will be null.
+   *
+   * @group string_funcs
+   * @since 1.5.0
+   */
+  def format_number(x: Column, d: Int): Column = FormatNumber(x.expr, lit(d).expr)
+
+  /**
+   * Formats the number X to a format like '#,###,###.##', rounded to d decimal places,
+   * and returns the result as a string.
+   * If d is 0, the result has no decimal point or fractional part.
+   * If d < 0, the result will be null.
+   *
+   * @group string_funcs
+   * @since 1.5.0
+   */
+  def format_number(columnXName: String, d: Int): Column = {
+    format_number(Column(columnXName), d)
+  }
 
   /**
    * Computes the Levenshtein distance of the two given strings.
@@ -2124,25 +2237,167 @@ object functions {
     StringReverse(str.expr)
   }
 
-  /**
-   * Make a n spaces of string.
-   *
-   * @group string_funcs
-   * @since 1.5.0
-   */
-  def space(n: String): Column = {
-    space(Column(n))
-  }
+  //////////////////////////////////////////////////////////////////////////////////////////////
+  // DateTime functions
+  //////////////////////////////////////////////////////////////////////////////////////////////
 
   /**
-   * Make a n spaces of string.
+   * Converts a date/timestamp/string to a value of string in the format specified by the date
+   * format given by the second argument.
    *
-   * @group string_funcs
+   * A pattern could be for instance `dd.MM.yyyy` and could return a string like '18.03.1993'. All
+   * pattern letters of [[java.text.SimpleDateFormat]] can be used.
+   *
+   * NOTE: Use when ever possible specialized functions like [[year]]. These benefit from a
+   * specialized implementation.
+   *
+   * @group datetime_funcs
    * @since 1.5.0
    */
-  def space(n: Column): Column = {
-    StringSpace(n.expr)
-  }
+  def date_format(dateExpr: Column, format: String): Column =
+    DateFormatClass(dateExpr.expr, Literal(format))
+
+  /**
+   * Converts a date/timestamp/string to a value of string in the format specified by the date
+   * format given by the second argument.
+   *
+   * A pattern could be for instance `dd.MM.yyyy` and could return a string like '18.03.1993'. All
+   * pattern letters of [[java.text.SimpleDateFormat]] can be used.
+   *
+   * NOTE: Use when ever possible specialized functions like [[year]]. These benefit from a
+   * specialized implementation.
+   *
+   * @group datetime_funcs
+   * @since 1.5.0
+   */
+  def date_format(dateColumnName: String, format: String): Column =
+    date_format(Column(dateColumnName), format)
+
+  /**
+   * Extracts the year as an integer from a given date/timestamp/string.
+   * @group datetime_funcs
+   * @since 1.5.0
+   */
+  def year(e: Column): Column = Year(e.expr)
+
+  /**
+   * Extracts the year as an integer from a given date/timestamp/string.
+   * @group datetime_funcs
+   * @since 1.5.0
+   */
+  def year(columnName: String): Column = year(Column(columnName))
+
+  /**
+   * Extracts the quarter as an integer from a given date/timestamp/string.
+   * @group datetime_funcs
+   * @since 1.5.0
+   */
+  def quarter(e: Column): Column = Quarter(e.expr)
+
+  /**
+   * Extracts the quarter as an integer from a given date/timestamp/string.
+   * @group datetime_funcs
+   * @since 1.5.0
+   */
+  def quarter(columnName: String): Column = quarter(Column(columnName))
+
+  /**
+   * Extracts the month as an integer from a given date/timestamp/string.
+   * @group datetime_funcs
+   * @since 1.5.0
+   */
+  def month(e: Column): Column = Month(e.expr)
+
+  /**
+   * Extracts the month as an integer from a given date/timestamp/string.
+   * @group datetime_funcs
+   * @since 1.5.0
+   */
+  def month(columnName: String): Column = month(Column(columnName))
+
+  /**
+   * Extracts the day of the month as an integer from a given date/timestamp/string.
+   * @group datetime_funcs
+   * @since 1.5.0
+   */
+  def dayofmonth(e: Column): Column = DayOfMonth(e.expr)
+
+  /**
+   * Extracts the day of the month as an integer from a given date/timestamp/string.
+   * @group datetime_funcs
+   * @since 1.5.0
+   */
+  def dayofmonth(columnName: String): Column = dayofmonth(Column(columnName))
+
+  /**
+   * Extracts the day of the year as an integer from a given date/timestamp/string.
+   * @group datetime_funcs
+   * @since 1.5.0
+   */
+  def dayofyear(e: Column): Column = DayOfYear(e.expr)
+
+  /**
+   * Extracts the day of the year as an integer from a given date/timestamp/string.
+   * @group datetime_funcs
+   * @since 1.5.0
+   */
+  def dayofyear(columnName: String): Column = dayofyear(Column(columnName))
+
+  /**
+   * Extracts the hours as an integer from a given date/timestamp/string.
+   * @group datetime_funcs
+   * @since 1.5.0
+   */
+  def hour(e: Column): Column = Hour(e.expr)
+
+  /**
+   * Extracts the hours as an integer from a given date/timestamp/string.
+   * @group datetime_funcs
+   * @since 1.5.0
+   */
+  def hour(columnName: String): Column = hour(Column(columnName))
+
+  /**
+   * Extracts the minutes as an integer from a given date/timestamp/string.
+   * @group datetime_funcs
+   * @since 1.5.0
+   */
+  def minute(e: Column): Column = Minute(e.expr)
+
+  /**
+   * Extracts the minutes as an integer from a given date/timestamp/string.
+   * @group datetime_funcs
+   * @since 1.5.0
+   */
+  def minute(columnName: String): Column = minute(Column(columnName))
+
+  /**
+   * Extracts the seconds as an integer from a given date/timestamp/string.
+   * @group datetime_funcs
+   * @since 1.5.0
+   */
+  def second(e: Column): Column = Second(e.expr)
+
+  /**
+   * Extracts the seconds as an integer from a given date/timestamp/string.
+   * @group datetime_funcs
+   * @since 1.5.0
+   */
+  def second(columnName: String): Column = second(Column(columnName))
+
+  /**
+   * Extracts the week number as an integer from a given date/timestamp/string.
+   * @group datetime_funcs
+   * @since 1.5.0
+   */
+  def weekofyear(e: Column): Column = WeekOfYear(e.expr)
+
+  /**
+   * Extracts the week number as an integer from a given date/timestamp/string.
+   * @group datetime_funcs
+   * @since 1.5.0
+   */
+  def weekofyear(columnName: String): Column = weekofyear(Column(columnName))
 
   //////////////////////////////////////////////////////////////////////////////////////////////
   //////////////////////////////////////////////////////////////////////////////////////////////

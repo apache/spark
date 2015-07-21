@@ -32,7 +32,20 @@ object TaskContext {
    */
   def get(): TaskContext = taskContext.get
 
-  private val taskContext: ThreadLocal[TaskContext] = new ThreadLocal[TaskContext]
+  /**
+   * Returns the partition id of currently active TaskContext. It will return 0
+   * if there is no active TaskContext for cases like local execution.
+   */
+  def getPartitionId(): Int = {
+    val tc = taskContext.get()
+    if (tc eq null) {
+      0
+    } else {
+      tc.partitionId()
+    }
+  }
+
+  private[this] val taskContext: ThreadLocal[TaskContext] = new ThreadLocal[TaskContext]
 
   // Note: protected[spark] instead of private[spark] to prevent the following two from
   // showing up in JavaDoc.
@@ -139,4 +152,22 @@ abstract class TaskContext extends Serializable {
    * Returns the manager for this task's managed memory.
    */
   private[spark] def taskMemoryManager(): TaskMemoryManager
+
+  /**
+   * Register an accumulator that belongs to this task. Accumulators must call this method when
+   * deserializing in executors.
+   */
+  private[spark] def registerAccumulator(a: Accumulable[_, _]): Unit
+
+  /**
+   * Return the local values of internal accumulators that belong to this task. The key of the Map
+   * is the accumulator id and the value of the Map is the latest accumulator local value.
+   */
+  private[spark] def collectInternalAccumulators(): Map[Long, Any]
+
+  /**
+   * Return the local values of accumulators that belong to this task. The key of the Map is the
+   * accumulator id and the value of the Map is the latest accumulator local value.
+   */
+  private[spark] def collectAccumulators(): Map[Long, Any]
 }

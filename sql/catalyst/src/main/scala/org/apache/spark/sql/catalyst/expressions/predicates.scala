@@ -18,11 +18,11 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.util.TypeUtils
-import org.apache.spark.sql.catalyst.expressions.codegen.{GeneratedExpressionCode, CodeGenContext}
+import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.types._
+
 
 object InterpretedPredicate {
   def create(expression: Expression, inputSchema: Seq[Attribute]): (InternalRow => Boolean) =
@@ -38,8 +38,6 @@ object InterpretedPredicate {
  * An [[Expression]] that returns a boolean value.
  */
 trait Predicate extends Expression {
-  self: Product =>
-
   override def dataType: DataType = BooleanType
 }
 
@@ -94,7 +92,7 @@ case class Not(child: Expression)
 /**
  * Evaluates to `true` if `list` contains `value`.
  */
-case class In(value: Expression, list: Seq[Expression]) extends Predicate {
+case class In(value: Expression, list: Seq[Expression]) extends Predicate with CodegenFallback {
   override def children: Seq[Expression] = value +: list
 
   override def nullable: Boolean = true // TODO: Figure out correct nullability semantics of IN.
@@ -112,7 +110,7 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
  * static.
  */
 case class InSet(child: Expression, hset: Set[Any])
-  extends UnaryExpression with Predicate {
+  extends UnaryExpression with Predicate with CodegenFallback {
 
   override def nullable: Boolean = true // TODO: Figure out correct nullability semantics of IN.
   override def toString: String = s"$child INSET ${hset.mkString("(", ",", ")")}"
@@ -222,7 +220,6 @@ case class Or(left: Expression, right: Expression) extends BinaryOperator with P
 
 
 abstract class BinaryComparison extends BinaryOperator with Predicate {
-  self: Product =>
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     if (ctx.isPrimitiveType(left.dataType)) {

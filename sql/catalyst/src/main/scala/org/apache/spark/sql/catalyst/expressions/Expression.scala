@@ -20,7 +20,6 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, UnresolvedAttribute}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodeGenContext, GeneratedExpressionCode}
-import org.apache.spark.sql.catalyst.trees
 import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.types._
 
@@ -45,7 +44,6 @@ import org.apache.spark.sql.types._
  * See [[Substring]] for an example.
  */
 abstract class Expression extends TreeNode[Expression] {
-  self: Product =>
 
   /**
    * Returns true when an expression is a candidate for static evaluation before the query is
@@ -61,10 +59,18 @@ abstract class Expression extends TreeNode[Expression] {
   def foldable: Boolean = false
 
   /**
-   * Returns true when the current expression always return the same result for fixed input values.
+   * Returns true when the current expression always return the same result for fixed inputs from
+   * children.
+   *
+   * Note that this means that an expression should be considered as non-deterministic if:
+   * - if it relies on some mutable internal state, or
+   * - if it relies on some implicit input that is not part of the children expression list.
+   * - if it has non-deterministic child or children.
+   *
+   * An example would be `SparkPartitionID` that relies on the partition id returned by TaskContext.
+   * By default leaf expressions are deterministic as Nil.forall(_.deterministic) returns true.
    */
-  // TODO: Need to define explicit input values vs implicit input values.
-  def deterministic: Boolean = true
+  def deterministic: Boolean = children.forall(_.deterministic)
 
   def nullable: Boolean
 
@@ -97,19 +103,7 @@ abstract class Expression extends TreeNode[Expression] {
    * @param ev an [[GeneratedExpressionCode]] with unique terms.
    * @return Java source code
    */
-  protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    ctx.references += this
-    val objectTerm = ctx.freshName("obj")
-    s"""
-      /* expression: ${this} */
-      Object $objectTerm = expressions[${ctx.references.size - 1}].eval(i);
-      boolean ${ev.isNull} = $objectTerm == null;
-      ${ctx.javaType(this.dataType)} ${ev.primitive} = ${ctx.defaultValue(this.dataType)};
-      if (!${ev.isNull}) {
-        ${ev.primitive} = (${ctx.boxedType(this.dataType)}) $objectTerm;
-      }
-    """
-  }
+  protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String
 
   /**
    * Returns `true` if this expression and all its children have been resolved to a specific schema
@@ -179,10 +173,33 @@ abstract class Expression extends TreeNode[Expression] {
 
 
 /**
+ * An expression that cannot be evaluated. Some expressions don't live past analysis or optimization
+ * time (e.g. Star). This trait is used by those expressions.
+ */
+trait Unevaluable { self: Expression =>
+
+  override def eval(input: InternalRow = null): Any =
+    throw new UnsupportedOperationException(s"Cannot evaluate expression: $this")
+
+  override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String =
+    throw new UnsupportedOperationException(s"Cannot evaluate expression: $this")
+}
+
+/**
+ * An expression that is nondeterministic.
+ */
+trait Nondeterministic { self: Expression =>
+
+  override def deterministic: Boolean = false
+}
+
+
+/**
  * A leaf expression, i.e. one without any child expressions.
  */
-abstract class LeafExpression extends Expression with trees.LeafNode[Expression] {
-  self: Product =>
+abstract class LeafExpression extends Expression {
+
+  def children: Seq[Expression] = Nil
 }
 
 
@@ -190,8 +207,11 @@ abstract class LeafExpression extends Expression with trees.LeafNode[Expression]
  * An expression with one input and one output. The output is by default evaluated to null
  * if the input is evaluated to null.
  */
-abstract class UnaryExpression extends Expression with trees.UnaryNode[Expression] {
-  self: Product =>
+abstract class UnaryExpression extends Expression {
+
+  def child: Expression
+
+  override def children: Seq[Expression] = child :: Nil
 
   override def foldable: Boolean = child.foldable
   override def nullable: Boolean = child.nullable
@@ -265,8 +285,12 @@ abstract class UnaryExpression extends Expression with trees.UnaryNode[Expressio
  * An expression with two inputs and one output. The output is by default evaluated to null
  * if any input is evaluated to null.
  */
-abstract class BinaryExpression extends Expression with trees.BinaryNode[Expression] {
-  self: Product =>
+abstract class BinaryExpression extends Expression {
+
+  def left: Expression
+  def right: Expression
+
+  override def children: Seq[Expression] = Seq(left, right)
 
   override def foldable: Boolean = left.foldable && right.foldable
 
@@ -354,7 +378,6 @@ abstract class BinaryExpression extends Expression with trees.BinaryNode[Express
  *    the analyzer will find the tightest common type and do the proper type casting.
  */
 abstract class BinaryOperator extends BinaryExpression with ExpectsInputTypes {
-  self: Product =>
 
   /**
    * Expected input type from both left/right child expressions, similar to the
@@ -369,17 +392,15 @@ abstract class BinaryOperator extends BinaryExpression with ExpectsInputTypes {
   override def inputTypes: Seq[AbstractDataType] = Seq(inputType, inputType)
 
   override def checkInputDataTypes(): TypeCheckResult = {
-    // First call the checker for ExpectsInputTypes, and then check whether left and right have
-    // the same type.
-    super.checkInputDataTypes() match {
-      case TypeCheckResult.TypeCheckSuccess =>
-        if (left.dataType != right.dataType) {
-          TypeCheckResult.TypeCheckFailure(s"differing types in '$prettyString' " +
-            s"(${left.dataType.simpleString} and ${right.dataType.simpleString}).")
-        } else {
-          TypeCheckResult.TypeCheckSuccess
-        }
-      case TypeCheckResult.TypeCheckFailure(msg) => TypeCheckResult.TypeCheckFailure(msg)
+    // First check whether left and right have the same type, then check if the type is acceptable.
+    if (left.dataType != right.dataType) {
+      TypeCheckResult.TypeCheckFailure(s"differing types in '$prettyString' " +
+        s"(${left.dataType.simpleString} and ${right.dataType.simpleString}).")
+    } else if (!inputType.acceptsType(left.dataType)) {
+      TypeCheckResult.TypeCheckFailure(s"'$prettyString' accepts ${inputType.simpleString} type," +
+        s" not ${left.dataType.simpleString}")
+    } else {
+      TypeCheckResult.TypeCheckSuccess
     }
   }
 }

@@ -30,6 +30,7 @@ if sys.version >= '3':
     basestring = str
     xrange = range
     import copyreg as copy_reg
+    long = int
 else:
     from itertools import izip as zip
     import copy_reg
@@ -565,7 +566,7 @@ class SparseVector(Vector):
         25.0
         >>> a.dot(array.array('d', [1., 2., 3., 4.]))
         22.0
-        >>> b = SparseVector(4, [2, 4], [1.0, 2.0])
+        >>> b = SparseVector(4, [2], [1.0])
         >>> a.dot(b)
         0.0
         >>> a.dot(np.array([[1, 1], [2, 2], [3, 3], [4, 4]]))
@@ -623,11 +624,11 @@ class SparseVector(Vector):
         11.0
         >>> a.squared_distance(np.array([1., 2., 3., 4.]))
         11.0
-        >>> b = SparseVector(4, [2, 4], [1.0, 2.0])
+        >>> b = SparseVector(4, [2], [1.0])
         >>> a.squared_distance(b)
-        30.0
+        26.0
         >>> b.squared_distance(a)
-        30.0
+        26.0
         >>> b.squared_distance([1., 2.])
         Traceback (most recent call last):
             ...
@@ -770,14 +771,18 @@ class Vectors(object):
         return SparseVector(size, *args)
 
     @staticmethod
-    def dense(elements):
+    def dense(*elements):
         """
-        Create a dense vector of 64-bit floats from a Python list. Always
-        returns a NumPy array.
+        Create a dense vector of 64-bit floats from a Python list or numbers.
 
         >>> Vectors.dense([1, 2, 3])
         DenseVector([1.0, 2.0, 3.0])
+        >>> Vectors.dense(1.0, 2.0)
+        DenseVector([1.0, 2.0])
         """
+        if len(elements) == 1 and not isinstance(elements[0], (float, int, long)):
+            # it's list, numpy.array or other iterable object.
+            elements = elements[0]
         return DenseVector(elements)
 
     @staticmethod

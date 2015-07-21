@@ -19,10 +19,61 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.dsl.expressions._
-import org.apache.spark.sql.types.{BinaryType, IntegerType, StringType}
+import org.apache.spark.sql.types._
 
 
-class StringFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
+class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
+
+  test("concat") {
+    def testConcat(inputs: String*): Unit = {
+      val expected = if (inputs.contains(null)) null else inputs.mkString
+      checkEvaluation(Concat(inputs.map(Literal.create(_, StringType))), expected, EmptyRow)
+    }
+
+    testConcat()
+    testConcat(null)
+    testConcat("")
+    testConcat("ab")
+    testConcat("a", "b")
+    testConcat("a", "b", "C")
+    testConcat("a", null, "C")
+    testConcat("a", null, null)
+    testConcat(null, null, null)
+
+    // scalastyle:off
+    // non ascii characters are not allowed in the code, so we disable the scalastyle here.
+    testConcat("数据", null, "砖头")
+    // scalastyle:on
+  }
+
+  test("concat_ws") {
+    def testConcatWs(expected: String, sep: String, inputs: Any*): Unit = {
+      val inputExprs = inputs.map {
+        case s: Seq[_] => Literal.create(s, ArrayType(StringType))
+        case null => Literal.create(null, StringType)
+        case s: String => Literal.create(s, StringType)
+      }
+      val sepExpr = Literal.create(sep, StringType)
+      checkEvaluation(ConcatWs(sepExpr +: inputExprs), expected, EmptyRow)
+    }
+
+    // scalastyle:off
+    // non ascii characters are not allowed in the code, so we disable the scalastyle here.
+    testConcatWs(null, null)
+    testConcatWs(null, null, "a", "b")
+    testConcatWs("", "")
+    testConcatWs("ab", "哈哈", "ab")
+    testConcatWs("a哈哈b", "哈哈", "a", "b")
+    testConcatWs("a哈哈b", "哈哈", "a", null, "b")
+    testConcatWs("a哈哈b哈哈c", "哈哈", null, "a", null, "b", "c")
+
+    testConcatWs("ab", "哈哈", Seq("ab"))
+    testConcatWs("a哈哈b", "哈哈", Seq("a", "b"))
+    testConcatWs("a哈哈b哈哈c哈哈d", "哈哈", Seq("a", null, "b"), null, "c", Seq(null, "d"))
+    testConcatWs("a哈哈b哈哈c", "哈哈", Seq("a", null, "b"), null, "c", Seq.empty[String])
+    testConcatWs("a哈哈b哈哈c", "哈哈", Seq("a", null, "b"), null, "c", Seq[String](null))
+    // scalastyle:on
+  }
 
   test("StringComparison") {
     val row = create_row("abc", null)
@@ -216,15 +267,6 @@ class StringFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
-  test("length for string") {
-    val a = 'a.string.at(0)
-    checkEvaluation(StringLength(Literal("abc")), 3, create_row("abdef"))
-    checkEvaluation(StringLength(a), 5, create_row("abdef"))
-    checkEvaluation(StringLength(a), 0, create_row(""))
-    checkEvaluation(StringLength(a), null, create_row(null))
-    checkEvaluation(StringLength(Literal.create(null, StringType)), null, create_row("abdef"))
-  }
-
   test("ascii for string") {
     val a = 'a.string.at(0)
     checkEvaluation(Ascii(Literal("efg")), 101, create_row("abdef"))
@@ -248,7 +290,7 @@ class StringFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Base64(b), "AQIDBA==", create_row(bytes))
     checkEvaluation(Base64(b), "", create_row(Array[Byte]()))
     checkEvaluation(Base64(b), null, create_row(null))
-    checkEvaluation(Base64(Literal.create(null, StringType)), null, create_row("abdef"))
+    checkEvaluation(Base64(Literal.create(null, BinaryType)), null, create_row("abdef"))
 
     checkEvaluation(UnBase64(a), null, create_row(null))
     checkEvaluation(UnBase64(Literal.create(null, StringType)), null, create_row("abdef"))
@@ -371,18 +413,24 @@ class StringFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val row1 = create_row("hi", 5, "??")
     val row2 = create_row("hi", 1, "?")
     val row3 = create_row(null, 1, "?")
+    val row4 = create_row("hi", null, "?")
+    val row5 = create_row("hi", 1, null)
 
     checkEvaluation(StringLPad(Literal("hi"), Literal(5), Literal("??")), "???hi", row1)
     checkEvaluation(StringLPad(Literal("hi"), Literal(1), Literal("??")), "h", row1)
     checkEvaluation(StringLPad(s1, s2, s3), "???hi", row1)
     checkEvaluation(StringLPad(s1, s2, s3), "h", row2)
     checkEvaluation(StringLPad(s1, s2, s3), null, row3)
+    checkEvaluation(StringLPad(s1, s2, s3), null, row4)
+    checkEvaluation(StringLPad(s1, s2, s3), null, row5)
 
     checkEvaluation(StringRPad(Literal("hi"), Literal(5), Literal("??")), "hi???", row1)
     checkEvaluation(StringRPad(Literal("hi"), Literal(1), Literal("??")), "h", row1)
     checkEvaluation(StringRPad(s1, s2, s3), "hi???", row1)
     checkEvaluation(StringRPad(s1, s2, s3), "h", row2)
     checkEvaluation(StringRPad(s1, s2, s3), null, row3)
+    checkEvaluation(StringRPad(s1, s2, s3), null, row4)
+    checkEvaluation(StringRPad(s1, s2, s3), null, row5)
   }
 
   test("REPEAT") {
@@ -425,5 +473,47 @@ class StringFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       StringSplit(Literal("aa2bb3cc"), Literal("[1-9]+")), Seq("aa", "bb", "cc"), row1)
     checkEvaluation(
       StringSplit(s1, s2), Seq("aa", "bb", "cc"), row1)
+  }
+
+  test("length for string / binary") {
+    val a = 'a.string.at(0)
+    val b = 'b.binary.at(0)
+    val bytes = Array[Byte](1, 2, 3, 1, 2)
+    val string = "abdef"
+
+    // scalastyle:off
+    // non ascii characters are not allowed in the source code, so we disable the scalastyle.
+    checkEvaluation(Length(Literal("a花花c")), 4, create_row(string))
+    // scalastyle:on
+    checkEvaluation(Length(Literal(bytes)), 5, create_row(Array[Byte]()))
+
+    checkEvaluation(Length(a), 5, create_row(string))
+    checkEvaluation(Length(b), 5, create_row(bytes))
+
+    checkEvaluation(Length(a), 0, create_row(""))
+    checkEvaluation(Length(b), 0, create_row(Array[Byte]()))
+
+    checkEvaluation(Length(a), null, create_row(null))
+    checkEvaluation(Length(b), null, create_row(null))
+
+    checkEvaluation(Length(Literal.create(null, StringType)), null, create_row(string))
+    checkEvaluation(Length(Literal.create(null, BinaryType)), null, create_row(bytes))
+  }
+
+  test("number format") {
+    checkEvaluation(FormatNumber(Literal(4.asInstanceOf[Byte]), Literal(3)), "4.000")
+    checkEvaluation(FormatNumber(Literal(4.asInstanceOf[Short]), Literal(3)), "4.000")
+    checkEvaluation(FormatNumber(Literal(4.0f), Literal(3)), "4.000")
+    checkEvaluation(FormatNumber(Literal(4), Literal(3)), "4.000")
+    checkEvaluation(FormatNumber(Literal(12831273.23481d), Literal(3)), "12,831,273.235")
+    checkEvaluation(FormatNumber(Literal(12831273.83421d), Literal(0)), "12,831,274")
+    checkEvaluation(FormatNumber(Literal(123123324123L), Literal(3)), "123,123,324,123.000")
+    checkEvaluation(FormatNumber(Literal(123123324123L), Literal(-1)), null)
+    checkEvaluation(
+      FormatNumber(
+        Literal(Decimal(123123324123L) * Decimal(123123.21234d)), Literal(4)),
+      "15,159,339,180,002,773.2778")
+    checkEvaluation(FormatNumber(Literal.create(null, IntegerType), Literal(3)), null)
+    checkEvaluation(FormatNumber(Literal.create(null, NullType), Literal(3)), null)
   }
 }
