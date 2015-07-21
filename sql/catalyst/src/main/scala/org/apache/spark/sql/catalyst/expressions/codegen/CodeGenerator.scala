@@ -60,13 +60,23 @@ class CodeGenContext {
   /**
    * Holding expressions' mutable states like `MonotonicallyIncreasingID.count` as a
    * 3-tuple: java type, variable name, code to init it.
+   * As an example, ("int", "count", "count = 0;") will produce code:
+   * {{{
+   *   private int count;
+   * }}}
+   * as a member variable, and add
+   * {{{
+   *   count = 0;
+   * }}}
+   * to the constructor.
+   *
    * They will be kept as member variables in generated classes like `SpecificProjection`.
    */
   val mutableStates: mutable.ArrayBuffer[(String, String, String)] =
     mutable.ArrayBuffer.empty[(String, String, String)]
 
-  def addMutableState(javaType: String, variableName: String, initialValue: String): Unit = {
-    mutableStates += ((javaType, variableName, initialValue))
+  def addMutableState(javaType: String, variableName: String, initCode: String): Unit = {
+    mutableStates += ((javaType, variableName, initCode))
   }
 
   final val intervalType: String = classOf[Interval].getName
@@ -233,6 +243,16 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
   protected val exprType: String = classOf[Expression].getName
   protected val mutableRowType: String = classOf[MutableRow].getName
   protected val genericMutableRowType: String = classOf[GenericMutableRow].getName
+
+  protected def declareMutableStates(ctx: CodeGenContext) = {
+    ctx.mutableStates.map { case (javaType, variableName, _) =>
+      s"private $javaType $variableName;"
+    }.mkString("\n      ")
+  }
+
+  protected def initMutableStates(ctx: CodeGenContext) = {
+    ctx.mutableStates.map(_._3).mkString("\n        ")
+  }
 
   /**
    * Generates a class for a given input expression.  Called when there is not cached code

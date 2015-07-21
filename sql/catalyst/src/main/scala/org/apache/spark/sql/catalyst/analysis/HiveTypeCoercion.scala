@@ -335,7 +335,7 @@ object HiveTypeCoercion {
    * - INT gets turned into DECIMAL(10, 0)
    * - LONG gets turned into DECIMAL(20, 0)
    * - FLOAT and DOUBLE
-   *   1. Union operation:
+   *   1. Union, Intersect and Except operations:
    *      FLOAT gets turned into DECIMAL(7, 7), DOUBLE gets turned into DECIMAL(15, 15) (this is the
    *      same as Hive)
    *   2. Other operation:
@@ -362,47 +362,59 @@ object HiveTypeCoercion {
       DoubleType -> DecimalType(15, 15)
     )
 
-    def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-      // fix decimal precision for union
-      case u @ Union(left, right) if u.childrenResolved && !u.resolved =>
-        val castedInput = left.output.zip(right.output).map {
-          case (lhs, rhs) if lhs.dataType != rhs.dataType =>
-            (lhs.dataType, rhs.dataType) match {
-              case (DecimalType.Fixed(p1, s1), DecimalType.Fixed(p2, s2)) =>
-                // Union decimals with precision/scale p1/s2 and p2/s2  will be promoted to
-                // DecimalType(max(s1, s2) + max(p1-s1, p2-s2), max(s1, s2))
-                val fixedType = DecimalType(max(s1, s2) + max(p1 - s1, p2 - s2), max(s1, s2))
-                (Alias(Cast(lhs, fixedType), lhs.name)(), Alias(Cast(rhs, fixedType), rhs.name)())
-              case (t, DecimalType.Fixed(p, s)) if intTypeToFixed.contains(t) =>
-                (Alias(Cast(lhs, intTypeToFixed(t)), lhs.name)(), rhs)
-              case (DecimalType.Fixed(p, s), t) if intTypeToFixed.contains(t) =>
-                (lhs, Alias(Cast(rhs, intTypeToFixed(t)), rhs.name)())
-              case (t, DecimalType.Fixed(p, s)) if floatTypeToFixed.contains(t) =>
-                (Alias(Cast(lhs, floatTypeToFixed(t)), lhs.name)(), rhs)
-              case (DecimalType.Fixed(p, s), t) if floatTypeToFixed.contains(t) =>
-                (lhs, Alias(Cast(rhs, floatTypeToFixed(t)), rhs.name)())
-              case _ => (lhs, rhs)
-            }
-          case other => other
+    private def castDecimalPrecision(
+        left: LogicalPlan,
+        right: LogicalPlan): (LogicalPlan, LogicalPlan) = {
+      val castedInput = left.output.zip(right.output).map {
+        case (lhs, rhs) if lhs.dataType != rhs.dataType =>
+          (lhs.dataType, rhs.dataType) match {
+            case (DecimalType.Fixed(p1, s1), DecimalType.Fixed(p2, s2)) =>
+              // Decimals with precision/scale p1/s2 and p2/s2  will be promoted to
+              // DecimalType(max(s1, s2) + max(p1-s1, p2-s2), max(s1, s2))
+              val fixedType = DecimalType(max(s1, s2) + max(p1 - s1, p2 - s2), max(s1, s2))
+              (Alias(Cast(lhs, fixedType), lhs.name)(), Alias(Cast(rhs, fixedType), rhs.name)())
+            case (t, DecimalType.Fixed(p, s)) if intTypeToFixed.contains(t) =>
+              (Alias(Cast(lhs, intTypeToFixed(t)), lhs.name)(), rhs)
+            case (DecimalType.Fixed(p, s), t) if intTypeToFixed.contains(t) =>
+              (lhs, Alias(Cast(rhs, intTypeToFixed(t)), rhs.name)())
+            case (t, DecimalType.Fixed(p, s)) if floatTypeToFixed.contains(t) =>
+              (Alias(Cast(lhs, floatTypeToFixed(t)), lhs.name)(), rhs)
+            case (DecimalType.Fixed(p, s), t) if floatTypeToFixed.contains(t) =>
+              (lhs, Alias(Cast(rhs, floatTypeToFixed(t)), rhs.name)())
+            case _ => (lhs, rhs)
+          }
+        case other => other
+      }
+
+      val (castedLeft, castedRight) = castedInput.unzip
+
+      val newLeft =
+        if (castedLeft.map(_.dataType) != left.output.map(_.dataType)) {
+          Project(castedLeft, left)
+        } else {
+          left
         }
 
-        val (castedLeft, castedRight) = castedInput.unzip
+      val newRight =
+        if (castedRight.map(_.dataType) != right.output.map(_.dataType)) {
+          Project(castedRight, right)
+        } else {
+          right
+        }
+      (newLeft, newRight)
+    }
 
-        val newLeft =
-          if (castedLeft.map(_.dataType) != left.output.map(_.dataType)) {
-            Project(castedLeft, left)
-          } else {
-            left
-          }
-
-        val newRight =
-          if (castedRight.map(_.dataType) != right.output.map(_.dataType)) {
-            Project(castedRight, right)
-          } else {
-            right
-          }
-
+    def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+      // fix decimal precision for union, intersect and except
+      case u @ Union(left, right) if u.childrenResolved && !u.resolved =>
+        val (newLeft, newRight) = castDecimalPrecision(left, right)
         Union(newLeft, newRight)
+      case i @ Intersect(left, right) if i.childrenResolved && !i.resolved =>
+        val (newLeft, newRight) = castDecimalPrecision(left, right)
+        Intersect(newLeft, newRight)
+      case e @ Except(left, right) if e.childrenResolved && !e.resolved =>
+        val (newLeft, newRight) = castDecimalPrecision(left, right)
+        Except(newLeft, newRight)
 
       // fix decimal precision for expressions
       case q => q.transformExpressions {

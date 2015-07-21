@@ -2237,26 +2237,6 @@ object functions {
     StringReverse(str.expr)
   }
 
-  /**
-   * Make a n spaces of string.
-   *
-   * @group string_funcs
-   * @since 1.5.0
-   */
-  def space(n: String): Column = {
-    space(Column(n))
-  }
-
-  /**
-   * Make a n spaces of string.
-   *
-   * @group string_funcs
-   * @since 1.5.0
-   */
-  def space(n: Column): Column = {
-    StringSpace(n.expr)
-  }
-
   //////////////////////////////////////////////////////////////////////////////////////////////
   // DateTime functions
   //////////////////////////////////////////////////////////////////////////////////////////////
