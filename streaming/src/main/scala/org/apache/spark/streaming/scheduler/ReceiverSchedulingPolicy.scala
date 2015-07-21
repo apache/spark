@@ -17,29 +17,8 @@
 
 package org.apache.spark.streaming.scheduler
 
+import scala.collection.Map
 import scala.collection.mutable
-import scala.util.Random
-
-import org.apache.spark.streaming.scheduler.ReceiverState._
-
-private[streaming] case class ReceiverTrackingInfo(
-    receiverId: Int,
-    state: ReceiverState,
-    scheduledLocations: Option[Seq[String]],
-    runningLocation: Option[String])
-
-private[streaming] trait ReceiverSchedulingPolicy {
-
-  /**
-   * Return a list of candidate executors to run the receiver. If the list is empty, the caller can
-   * run this receiver in arbitrary executor.
-   */
-  def scheduleReceiver(
-      receiverId: Int,
-      preferredLocation: Option[String],
-      receiverTrackingInfoMap: Map[Int, ReceiverTrackingInfo],
-      executors: Seq[String]): Seq[String]
-}
 
 /**
  * A ReceiverScheduler trying to balance executors' load. Here is the approach to schedule executors
@@ -65,8 +44,12 @@ private[streaming] trait ReceiverSchedulingPolicy {
  * </ol>
  *
  */
-private[streaming] class LoadBalanceReceiverSchedulingPolicyImpl extends ReceiverSchedulingPolicy {
+private[streaming] class ReceiverSchedulingPolicy {
 
+  /**
+   * Return a list of candidate executors to run the receiver. If the list is empty, the caller can
+   * run this receiver in arbitrary executor.
+   */
   def scheduleReceiver(
       receiverId: Int,
       preferredLocation: Option[String],
@@ -80,17 +63,14 @@ private[streaming] class LoadBalanceReceiverSchedulingPolicyImpl extends Receive
     val locations = mutable.Set[String]()
     locations ++= preferredLocation
 
-    val executorWeights = receiverTrackingInfoMap.filter { case (id, _) =>
-      // Ignore the receiver to be scheduled. It may be still running.
-      id != receiverId
-    }.values.flatMap { receiverTrackingInfo =>
+    val executorWeights = receiverTrackingInfoMap.values.flatMap { receiverTrackingInfo =>
       receiverTrackingInfo.state match {
         case ReceiverState.INACTIVE => Nil
         case ReceiverState.SCHEDULED =>
           val scheduledLocations = receiverTrackingInfo.scheduledLocations.get
           // The probability that a scheduled receiver will run in an executor is
           // 1.0 / scheduledLocations.size
-          scheduledLocations.map(location => location -> 1.0 / scheduledLocations.size)
+          scheduledLocations.map(location => location -> (1.0 / scheduledLocations.size))
         case ReceiverState.ACTIVE => Seq(receiverTrackingInfo.runningLocation.get -> 1.0)
       }
     }.groupBy(_._1).mapValues(_.map(_._2).sum) // Sum weights for each executor

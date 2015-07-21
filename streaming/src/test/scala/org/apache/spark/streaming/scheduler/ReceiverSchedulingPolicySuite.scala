@@ -19,9 +19,9 @@ package org.apache.spark.streaming.scheduler
 
 import org.apache.spark.SparkFunSuite
 
-class LoadBalanceReceiverSchedulingPolicyImplSuite extends SparkFunSuite {
+class ReceiverSchedulingPolicySuite extends SparkFunSuite {
 
-  val receiverSchedulingPolicy = new LoadBalanceReceiverSchedulingPolicyImpl
+  val receiverSchedulingPolicy = new ReceiverSchedulingPolicy
 
   test("empty executors") {
     val scheduledLocations =
@@ -37,43 +37,26 @@ class LoadBalanceReceiverSchedulingPolicyImplSuite extends SparkFunSuite {
     assert(scheduledLocations.toSet === Set("host1", "host2"))
   }
 
-  test("choose the idle executor") {
-    val executors = Seq("host1", "host2", "host3")
+  test("return all idle executors if more than 3 idle executors") {
+    val executors = Seq("host1", "host2", "host3", "host4", "host5")
     // host3 is idle
     val receiverTrackingInfoMap = Map(
-      0 -> ReceiverTrackingInfo(0, ReceiverState.ACTIVE, None, Some("host1")),
-      1 -> ReceiverTrackingInfo(1, ReceiverState.SCHEDULED, Some(Seq("host2")), None))
+      0 -> ReceiverTrackingInfo(0, ReceiverState.ACTIVE, None, Some("host1")))
     val scheduledLocations = receiverSchedulingPolicy.scheduleReceiver(
-      2, None, receiverTrackingInfoMap, executors)
-    assert(scheduledLocations.toSet === Set("host3"))
+      1, None, receiverTrackingInfoMap, executors)
+    assert(scheduledLocations.toSet === Set("host2", "host3", "host4", "host5"))
   }
 
-  test("all executors are busy") {
-    val executors = Seq("host1", "host2", "host3")
+  test("return 3 best options if less than 3 idle executors") {
+    val executors = Seq("host1", "host2", "host3", "host4", "host5")
     // Weights: host1 = 1.5, host2 = 0.5, host3 = 1.0
+    // host4 and host5 are idle
     val receiverTrackingInfoMap = Map(
       0 -> ReceiverTrackingInfo(0, ReceiverState.ACTIVE, None, Some("host1")),
       1 -> ReceiverTrackingInfo(1, ReceiverState.SCHEDULED, Some(Seq("host2", "host3")), None),
       2 -> ReceiverTrackingInfo(1, ReceiverState.SCHEDULED, Some(Seq("host1", "host3")), None))
     val scheduledLocations = receiverSchedulingPolicy.scheduleReceiver(
       3, None, receiverTrackingInfoMap, executors)
-    assert(scheduledLocations.toSet === Set("host2"))
-  }
-
-  test("ignore the receiver's info") {
-    val executors = Seq("host1", "host2", "host3")
-    // Weights: host1 = 1.0, host2 = 1.5, host3 = 1.5
-    // But since we are scheduling the receiver 1, we should ignore
-    // receiver 1's ReceiverTrackingInfo
-    // So the new weights are host1 = 1.0, host2 = 0.5, host3 = 1.5
-    // Then the scheduled location should be "host2"
-    val receiverTrackingInfoMap = Map(
-      0 -> ReceiverTrackingInfo(0, ReceiverState.ACTIVE, None, Some("host1")),
-      1 -> ReceiverTrackingInfo(1, ReceiverState.SCHEDULED, Some(Seq("host2")), None),
-      2 -> ReceiverTrackingInfo(1, ReceiverState.SCHEDULED, Some(Seq("host3")), None),
-      3 -> ReceiverTrackingInfo(1, ReceiverState.SCHEDULED, Some(Seq("host2", "host3")), None))
-    val scheduledLocations = receiverSchedulingPolicy.scheduleReceiver(
-      1, None, receiverTrackingInfoMap, executors)
-    assert(scheduledLocations.toSet === Set("host2"))
+    assert(scheduledLocations.toSet === Set("host2", "host4", "host5"))
   }
 }

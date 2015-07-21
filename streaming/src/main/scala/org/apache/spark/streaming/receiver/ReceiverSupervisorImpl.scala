@@ -182,5 +182,4 @@ private[streaming] class ReceiverSupervisorImpl(
     logDebug(s"Cleaning up blocks older then $cleanupThreshTime")
     receivedBlockHandler.cleanupOldBlocks(cleanupThreshTime.milliseconds)
   }
-
 }
