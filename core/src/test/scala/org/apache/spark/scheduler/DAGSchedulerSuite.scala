@@ -742,7 +742,7 @@ class DAGSchedulerSuite
     assertDataStructuresEmpty()
   }
 
-  test("run with ShuffleMapStage retry") {
+  test("verify not submit next stage while not have registered mapStatus") {
     val firstRDD = new MyRDD(sc, 3, Nil)
     val firstShuffleDep = new ShuffleDependency(firstRDD, null)
     val firstShuffleId = firstShuffleDep.shuffleId
