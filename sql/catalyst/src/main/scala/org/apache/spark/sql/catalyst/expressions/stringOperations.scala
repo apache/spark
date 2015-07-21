@@ -902,22 +902,15 @@ case class FormatNumber(x: Expression, d: Expression)
   @transient
   private val numberFormat: DecimalFormat = new DecimalFormat("")
 
-  override def eval(input: InternalRow): Any = {
-    val xObject = x.eval(input)
-    if (xObject == null) {
-      return null
-    }
-
-    val dObject = d.eval(input)
-
-    if (dObject == null || dObject.asInstanceOf[Int] < 0) {
-      return null
-    }
+  override protected def nullSafeEval(xObject: Any, dObject: Any): Any = {
     val dValue = dObject.asInstanceOf[Int]
+    if (dValue < 0) {
+      return null
+    }
 
     if (dValue != lastDValue) {
       // construct a new DecimalFormat only if a new dValue
-      pattern.delete(0, pattern.length())
+      pattern.delete(0, pattern.length)
       pattern.append("#,###,###,###,###,###,##0")
 
       // decimal place
@@ -930,9 +923,10 @@ case class FormatNumber(x: Expression, d: Expression)
           pattern.append("0")
         }
       }
-      val dFormat = new DecimalFormat(pattern.toString())
-      lastDValue = dValue;
-      numberFormat.applyPattern(dFormat.toPattern())
+      val dFormat = new DecimalFormat(pattern.toString)
+      lastDValue = dValue
+
+      numberFormat.applyPattern(dFormat.toPattern)
     }
 
     x.dataType match {
@@ -945,6 +939,52 @@ case class FormatNumber(x: Expression, d: Expression)
       case _: DecimalType =>
         UTF8String.fromString(numberFormat.format(xObject.asInstanceOf[Decimal].toJavaBigDecimal))
     }
+  }
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    nullSafeCodeGen(ctx, ev, (num, d) => {
+
+      def typeHelper(p: String): String = {
+        x.dataType match {
+          case _ : DecimalType => s"""$p.toJavaBigDecimal()"""
+          case _ => s"$p"
+        }
+      }
+
+      val sb = classOf[StringBuffer].getName
+      val df = classOf[DecimalFormat].getName
+      val lastDValue = ctx.freshName("lastDValue")
+      val pattern = ctx.freshName("pattern")
+      val numberFormat = ctx.freshName("numberFormat")
+      val i = ctx.freshName("i")
+      val dFormat = ctx.freshName("dFormat")
+      ctx.addMutableState("int", lastDValue, s"$lastDValue = -100;")
+      ctx.addMutableState(sb, pattern, s"$pattern = new $sb();")
+      ctx.addMutableState(df, numberFormat, s"""$numberFormat = new $df("");""")
+
+      s"""
+        if ($d >= 0) {
+          $pattern.delete(0, $pattern.length());
+          if ($d != $lastDValue) {
+            $pattern.append("#,###,###,###,###,###,##0");
+
+            if ($d > 0) {
+              $pattern.append(".");
+              for (int $i = 0; $i < $d; $i++) {
+                $pattern.append("0");
+              }
+            }
+            $df $dFormat = new $df($pattern.toString());
+            $lastDValue = $d;
+            $numberFormat.applyPattern($dFormat.toPattern());
+            ${ev.primitive} = UTF8String.fromString($numberFormat.format(${typeHelper(num)}));
+          }
+        } else {
+          ${ev.primitive} = null;
+          ${ev.isNull} = true;
+        }
+       """
+    })
   }
 
   override def prettyName: String = "format_number"
