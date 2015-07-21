@@ -22,8 +22,8 @@ import java.util.Properties
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.plans.logical.InsertIntoTable
+import org.apache.spark.sql.execution.datasources.{CreateTableUsingAsSelect, ResolvedDataSource}
 import org.apache.spark.sql.jdbc.{JDBCWriteDetails, JdbcUtils}
-import org.apache.spark.sql.sources.{ResolvedDataSource, CreateTableUsingAsSelect}
 
 
 /**
