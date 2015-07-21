@@ -247,8 +247,8 @@ private[spark] object BLAS extends Serializable with Logging {
       B: DenseMatrix,
       beta: Double,
       C: DenseMatrix): Unit = {
-    if (alpha == 0.0) {
-      logDebug("gemm: alpha is equal to 0. Returning C.")
+    if (alpha == 0.0 && beta == 1.0) {
+      logDebug("gemm: alpha is equal to 0 and beta is equal to 1. Returning C.")
     } else {
       A match {
         case sparse: SparseMatrix =>
