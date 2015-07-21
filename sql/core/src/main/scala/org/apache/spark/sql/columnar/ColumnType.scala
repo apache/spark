@@ -447,17 +447,17 @@ private[sql] object GENERIC extends ByteArrayColumnType[DataType](12, 16) {
 private[sql] object ColumnType {
   def apply(dataType: DataType): ColumnType[_, _] = {
     dataType match {
-      case IntegerType => INT
-      case LongType => LONG
-      case FloatType => FLOAT
-      case DoubleType => DOUBLE
       case BooleanType => BOOLEAN
       case ByteType => BYTE
       case ShortType => SHORT
+      case IntegerType => INT
+      case DateType => DATE
+      case LongType => LONG
+      case TimestampType => TIMESTAMP
+      case FloatType => FLOAT
+      case DoubleType => DOUBLE
       case StringType => STRING
       case BinaryType => BINARY
-      case DateType => DATE
-      case TimestampType => TIMESTAMP
       case DecimalType.Fixed(precision, scale) if precision < 19 =>
         FIXED_DECIMAL(precision, scale)
       case _ => GENERIC

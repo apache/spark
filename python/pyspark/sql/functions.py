@@ -39,9 +39,14 @@ __all__ = [
     'coalesce',
     'countDistinct',
     'explode',
+    'format_number',
+    'length',
+    'log2',
+    'md5',
     'monotonicallyIncreasingId',
     'rand',
     'randn',
+    'sha1',
     'sha2',
     'sparkPartitionId',
     'struct',
@@ -49,6 +54,11 @@ __all__ = [
     'when']
 
 __all__ += ['lag', 'lead', 'ntile']
+
+__all__ += [
+    'date_format',
+    'year', 'quarter', 'month', 'hour', 'minute', 'second',
+    'dayofmonth', 'dayofyear', 'weekofyear']
 
 
 def _create_function(name, doc=""):
@@ -262,7 +272,7 @@ def coalesce(*cols):
 
     >>> cDf.select(coalesce(cDf["a"], cDf["b"])).show()
     +-------------+
-    |Coalesce(a,b)|
+    |coalesce(a,b)|
     +-------------+
     |         null|
     |            1|
@@ -271,7 +281,7 @@ def coalesce(*cols):
 
     >>> cDf.select('*', coalesce(cDf["a"], lit(0.0))).show()
     +----+----+---------------+
-    |   a|   b|Coalesce(a,0.0)|
+    |   a|   b|coalesce(a,0.0)|
     +----+----+---------------+
     |null|null|            0.0|
     |   1|null|            1.0|
@@ -316,6 +326,33 @@ def explode(col):
     """
     sc = SparkContext._active_spark_context
     jc = sc._jvm.functions.explode(_to_java_column(col))
+    return Column(jc)
+
+
+@ignore_unicode_prefix
+@since(1.5)
+def levenshtein(left, right):
+    """Computes the Levenshtein distance of the two given strings.
+
+    >>> df0 = sqlContext.createDataFrame([('kitten', 'sitting',)], ['l', 'r'])
+    >>> df0.select(levenshtein('l', 'r').alias('d')).collect()
+    [Row(d=3)]
+    """
+    sc = SparkContext._active_spark_context
+    jc = sc._jvm.functions.levenshtein(_to_java_column(left), _to_java_column(right))
+    return Column(jc)
+
+
+@ignore_unicode_prefix
+@since(1.5)
+def md5(col):
+    """Calculates the MD5 digest and returns the value as a 32 character hex string.
+
+    >>> sqlContext.createDataFrame([('ABC',)], ['a']).select(md5('a').alias('hash')).collect()
+    [Row(hash=u'902fbdd2b1df0c4f70b4a5d23525e932')]
+    """
+    sc = SparkContext._active_spark_context
+    jc = sc._jvm.functions.md5(_to_java_column(col))
     return Column(jc)
 
 
@@ -366,6 +403,47 @@ def randn(seed=None):
 
 @ignore_unicode_prefix
 @since(1.5)
+def hex(col):
+    """Computes hex value of the given column, which could be StringType,
+    BinaryType, IntegerType or LongType.
+
+    >>> sqlContext.createDataFrame([('ABC', 3)], ['a', 'b']).select(hex('a'), hex('b')).collect()
+    [Row(hex(a)=u'414243', hex(b)=u'3')]
+    """
+    sc = SparkContext._active_spark_context
+    jc = sc._jvm.functions.hex(_to_java_column(col))
+    return Column(jc)
+
+
+@ignore_unicode_prefix
+@since(1.5)
+def unhex(col):
+    """Inverse of hex. Interprets each pair of characters as a hexadecimal number
+    and converts to the byte representation of number.
+
+    >>> sqlContext.createDataFrame([('414243',)], ['a']).select(unhex('a')).collect()
+    [Row(unhex(a)=bytearray(b'ABC'))]
+    """
+    sc = SparkContext._active_spark_context
+    jc = sc._jvm.functions.unhex(_to_java_column(col))
+    return Column(jc)
+
+
+@ignore_unicode_prefix
+@since(1.5)
+def sha1(col):
+    """Returns the hex string result of SHA-1.
+
+    >>> sqlContext.createDataFrame([('ABC',)], ['a']).select(sha1('a').alias('hash')).collect()
+    [Row(hash=u'3c01bdbb26f358bab27f267924aa2c9a03fcfdb8')]
+    """
+    sc = SparkContext._active_spark_context
+    jc = sc._jvm.functions.sha1(_to_java_column(col))
+    return Column(jc)
+
+
+@ignore_unicode_prefix
+@since(1.5)
 def sha2(col, numBits):
     """Returns the hex string result of SHA-2 family of hash functions (SHA-224, SHA-256, SHA-384,
     and SHA-512). The numBits indicates the desired bit length of the result, which must have a
@@ -379,6 +457,43 @@ def sha2(col, numBits):
     """
     sc = SparkContext._active_spark_context
     jc = sc._jvm.functions.sha2(_to_java_column(col), numBits)
+    return Column(jc)
+
+
+@since(1.5)
+def shiftLeft(col, numBits):
+    """Shift the the given value numBits left.
+
+    >>> sqlContext.createDataFrame([(21,)], ['a']).select(shiftLeft('a', 1).alias('r')).collect()
+    [Row(r=42)]
+    """
+    sc = SparkContext._active_spark_context
+    jc = sc._jvm.functions.shiftLeft(_to_java_column(col), numBits)
+    return Column(jc)
+
+
+@since(1.5)
+def shiftRight(col, numBits):
+    """Shift the the given value numBits right.
+
+    >>> sqlContext.createDataFrame([(42,)], ['a']).select(shiftRight('a', 1).alias('r')).collect()
+    [Row(r=21)]
+    """
+    sc = SparkContext._active_spark_context
+    jc = sc._jvm.functions.shiftRight(_to_java_column(col), numBits)
+    return Column(jc)
+
+
+@since(1.5)
+def shiftRightUnsigned(col, numBits):
+    """Unsigned shift the the given value numBits right.
+
+    >>> sqlContext.createDataFrame([(-42,)], ['a']).select(shiftRightUnsigned('a', 1).alias('r'))\
+    .collect()
+    [Row(r=9223372036854775787)]
+    """
+    sc = SparkContext._active_spark_context
+    jc = sc._jvm.functions.shiftRightUnsigned(_to_java_column(col), numBits)
     return Column(jc)
 
 
@@ -396,12 +511,37 @@ def sparkPartitionId():
 
 
 @ignore_unicode_prefix
+@since(1.5)
+def length(col):
+    """Calculates the length of a string or binary expression.
+
+    >>> sqlContext.createDataFrame([('ABC',)], ['a']).select(length('a').alias('length')).collect()
+    [Row(length=3)]
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.length(_to_java_column(col)))
+
+
+@ignore_unicode_prefix
+@since(1.5)
+def format_number(col, d):
+    """Formats the number X to a format like '#,###,###.##', rounded to d decimal places,
+       and returns the result as a string.
+    :param col: the column name of the numeric value to be formatted
+    :param d: the N decimal places
+    >>> sqlContext.createDataFrame([(5,)], ['a']).select(format_number('a', 4).alias('v')).collect()
+    [Row(v=u'5.0000')]
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.format_number(_to_java_column(col), d))
+
+
+@ignore_unicode_prefix
 @since(1.4)
 def struct(*cols):
     """Creates a new struct column.
 
     :param cols: list of column names (string) or list of :class:`Column` expressions
-        that are named or aliased.
 
     >>> df.select(struct('age', 'name').alias("struct")).collect()
     [Row(struct=Row(age=2, name=u'Alice')), Row(struct=Row(age=5, name=u'Bob'))]
@@ -457,6 +597,17 @@ def log(arg1, arg2=None):
     return Column(jc)
 
 
+@since(1.5)
+def log2(col):
+    """Returns the base-2 logarithm of the argument.
+
+    >>> sqlContext.createDataFrame([(4,)], ['a']).select(log2('a').alias('log2')).collect()
+    [Row(log2=2.0)]
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.log2(_to_java_column(col)))
+
+
 @since(1.4)
 def lag(col, count=1, default=None):
     """
@@ -506,29 +657,168 @@ def ntile(n):
     return Column(sc._jvm.functions.ntile(int(n)))
 
 
+@ignore_unicode_prefix
+@since(1.5)
+def date_format(dateCol, format):
+    """
+    Converts a date/timestamp/string to a value of string in the format specified by the date
+    format given by the second argument.
+
+    A pattern could be for instance `dd.MM.yyyy` and could return a string like '18.03.1993'. All
+    pattern letters of the Java class `java.text.SimpleDateFormat` can be used.
+
+    NOTE: Use when ever possible specialized functions like `year`. These benefit from a
+    specialized implementation.
+
+    >>> df = sqlContext.createDataFrame([('2015-04-08',)], ['a'])
+    >>> df.select(date_format('a', 'MM/dd/yyy').alias('date')).collect()
+    [Row(date=u'04/08/2015')]
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.date_format(dateCol, format))
+
+
+@since(1.5)
+def year(col):
+    """
+    Extract the year of a given date as integer.
+
+    >>> df = sqlContext.createDataFrame([('2015-04-08',)], ['a'])
+    >>> df.select(year('a').alias('year')).collect()
+    [Row(year=2015)]
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.year(col))
+
+
+@since(1.5)
+def quarter(col):
+    """
+    Extract the quarter of a given date as integer.
+
+    >>> df = sqlContext.createDataFrame([('2015-04-08',)], ['a'])
+    >>> df.select(quarter('a').alias('quarter')).collect()
+    [Row(quarter=2)]
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.quarter(col))
+
+
+@since(1.5)
+def month(col):
+    """
+    Extract the month of a given date as integer.
+
+    >>> df = sqlContext.createDataFrame([('2015-04-08',)], ['a'])
+    >>> df.select(month('a').alias('month')).collect()
+    [Row(month=4)]
+   """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.month(col))
+
+
+@since(1.5)
+def dayofmonth(col):
+    """
+    Extract the day of the month of a given date as integer.
+
+    >>> df = sqlContext.createDataFrame([('2015-04-08',)], ['a'])
+    >>> df.select(dayofmonth('a').alias('day')).collect()
+    [Row(day=8)]
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.dayofmonth(col))
+
+
+@since(1.5)
+def dayofyear(col):
+    """
+    Extract the day of the year of a given date as integer.
+
+    >>> df = sqlContext.createDataFrame([('2015-04-08',)], ['a'])
+    >>> df.select(dayofyear('a').alias('day')).collect()
+    [Row(day=98)]
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.dayofyear(col))
+
+
+@since(1.5)
+def hour(col):
+    """
+    Extract the hours of a given date as integer.
+
+    >>> df = sqlContext.createDataFrame([('2015-04-08 13:08:15',)], ['a'])
+    >>> df.select(hour('a').alias('hour')).collect()
+    [Row(hour=13)]
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.hour(col))
+
+
+@since(1.5)
+def minute(col):
+    """
+    Extract the minutes of a given date as integer.
+
+    >>> df = sqlContext.createDataFrame([('2015-04-08 13:08:15',)], ['a'])
+    >>> df.select(minute('a').alias('minute')).collect()
+    [Row(minute=8)]
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.minute(col))
+
+
+@since(1.5)
+def second(col):
+    """
+    Extract the seconds of a given date as integer.
+
+    >>> df = sqlContext.createDataFrame([('2015-04-08 13:08:15',)], ['a'])
+    >>> df.select(second('a').alias('second')).collect()
+    [Row(second=15)]
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.second(col))
+
+
+@since(1.5)
+def weekofyear(col):
+    """
+    Extract the week number of a given date as integer.
+
+    >>> df = sqlContext.createDataFrame([('2015-04-08',)], ['a'])
+    >>> df.select(weekofyear('a').alias('week')).collect()
+    [Row(week=15)]
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.weekofyear(col))
+
+
 class UserDefinedFunction(object):
     """
     User defined function in Python
 
     .. versionadded:: 1.3
     """
-    def __init__(self, func, returnType):
+    def __init__(self, func, returnType, name=None):
         self.func = func
         self.returnType = returnType
         self._broadcast = None
-        self._judf = self._create_judf()
+        self._judf = self._create_judf(name)
 
-    def _create_judf(self):
-        f = self.func  # put it in closure `func`
-        func = lambda _, it: map(lambda x: f(*x), it)
+    def _create_judf(self, name):
+        f, returnType = self.func, self.returnType  # put them in closure `func`
+        func = lambda _, it: map(lambda x: returnType.toInternal(f(*x)), it)
         ser = AutoBatchedSerializer(PickleSerializer())
         command = (func, None, ser, ser)
         sc = SparkContext._active_spark_context
         pickled_command, broadcast_vars, env, includes = _prepare_for_python_RDD(sc, command, self)
         ssql_ctx = sc._jvm.SQLContext(sc._jsc.sc())
         jdt = ssql_ctx.parseDataType(self.returnType.json())
-        fname = f.__name__ if hasattr(f, '__name__') else f.__class__.__name__
-        judf = sc._jvm.UserDefinedPythonFunction(fname, bytearray(pickled_command), env, includes,
+        if name is None:
+            name = f.__name__ if hasattr(f, '__name__') else f.__class__.__name__
+        judf = sc._jvm.UserDefinedPythonFunction(name, bytearray(pickled_command), env, includes,
                                                  sc.pythonExec, sc.pythonVer, broadcast_vars,
                                                  sc._javaAccumulator, jdt)
         return judf

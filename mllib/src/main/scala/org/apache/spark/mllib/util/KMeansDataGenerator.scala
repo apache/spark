@@ -64,8 +64,10 @@ object KMeansDataGenerator {
 
   def main(args: Array[String]) {
     if (args.length < 6) {
+      // scalastyle:off println
       println("Usage: KMeansGenerator " +
         "<master> <output_dir> <num_points> <k> <d> <r> [<num_partitions>]")
+      // scalastyle:on println
       System.exit(1)
     }
 

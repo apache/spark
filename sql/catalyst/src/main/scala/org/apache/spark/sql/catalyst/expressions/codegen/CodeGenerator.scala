@@ -24,9 +24,10 @@ import com.google.common.cache.{CacheBuilder, CacheLoader}
 import org.codehaus.janino.ClassBodyEvaluator
 
 import org.apache.spark.Logging
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.unsafe.types._
 
 
 // These classes are here to avoid issues with serialization and integration with quasiquotes.
@@ -56,9 +57,29 @@ class CodeGenContext {
    */
   val references: mutable.ArrayBuffer[Expression] = new mutable.ArrayBuffer[Expression]()
 
-  val stringType: String = classOf[UTF8String].getName
-  val decimalType: String = classOf[Decimal].getName
+  /**
+   * Holding expressions' mutable states like `MonotonicallyIncreasingID.count` as a
+   * 3-tuple: java type, variable name, code to init it.
+   * As an example, ("int", "count", "count = 0;") will produce code:
+   * {{{
+   *   private int count;
+   * }}}
+   * as a member variable, and add
+   * {{{
+   *   count = 0;
+   * }}}
+   * to the constructor.
+   *
+   * They will be kept as member variables in generated classes like `SpecificProjection`.
+   */
+  val mutableStates: mutable.ArrayBuffer[(String, String, String)] =
+    mutable.ArrayBuffer.empty[(String, String, String)]
 
+  def addMutableState(javaType: String, variableName: String, initCode: String): Unit = {
+    mutableStates += ((javaType, variableName, initCode))
+  }
+
+  final val intervalType: String = classOf[Interval].getName
   final val JAVA_BOOLEAN = "boolean"
   final val JAVA_BYTE = "byte"
   final val JAVA_SHORT = "short"
@@ -82,24 +103,24 @@ class CodeGenContext {
   /**
    * Returns the code to access a column in Row for a given DataType.
    */
-  def getColumn(dataType: DataType, ordinal: Int): String = {
+  def getColumn(row: String, dataType: DataType, ordinal: Int): String = {
     val jt = javaType(dataType)
     if (isPrimitiveType(jt)) {
-      s"i.get${primitiveTypeName(jt)}($ordinal)"
+      s"$row.get${primitiveTypeName(jt)}($ordinal)"
     } else {
-      s"($jt)i.apply($ordinal)"
+      s"($jt)$row.apply($ordinal)"
     }
   }
 
   /**
    * Returns the code to update a column in Row for a given DataType.
    */
-  def setColumn(dataType: DataType, ordinal: Int, value: String): String = {
+  def setColumn(row: String, dataType: DataType, ordinal: Int, value: String): String = {
     val jt = javaType(dataType)
     if (isPrimitiveType(jt)) {
-      s"set${primitiveTypeName(jt)}($ordinal, $value)"
+      s"$row.set${primitiveTypeName(jt)}($ordinal, $value)"
     } else {
-      s"update($ordinal, $value)"
+      s"$row.update($ordinal, $value)"
     }
   }
 
@@ -120,15 +141,17 @@ class CodeGenContext {
     case BooleanType => JAVA_BOOLEAN
     case ByteType => JAVA_BYTE
     case ShortType => JAVA_SHORT
-    case IntegerType => JAVA_INT
-    case LongType => JAVA_LONG
+    case IntegerType | DateType => JAVA_INT
+    case LongType | TimestampType => JAVA_LONG
     case FloatType => JAVA_FLOAT
     case DoubleType => JAVA_DOUBLE
-    case dt: DecimalType => decimalType
+    case dt: DecimalType => "Decimal"
     case BinaryType => "byte[]"
-    case StringType => stringType
-    case DateType => JAVA_INT
-    case TimestampType => JAVA_LONG
+    case StringType => "UTF8String"
+    case IntervalType => intervalType
+    case _: StructType => "InternalRow"
+    case _: ArrayType => s"scala.collection.Seq"
+    case _: MapType => s"scala.collection.Map"
     case dt: OpenHashSetUDT if dt.elementType == IntegerType => classOf[IntegerHashSet].getName
     case dt: OpenHashSetUDT if dt.elementType == LongType => classOf[LongHashSet].getName
     case _ => "Object"
@@ -184,6 +207,7 @@ class CodeGenContext {
     // use c1 - c2 may overflow
     case dt: DataType if isPrimitiveType(dt) => s"($c1 > $c2 ? 1 : $c1 < $c2 ? -1 : 0)"
     case BinaryType => s"org.apache.spark.sql.catalyst.util.TypeUtils.compareBinary($c1, $c2)"
+    case NullType => "0"
     case other => s"$c1.compare($c2)"
   }
 
@@ -201,7 +225,10 @@ class CodeGenContext {
   def isPrimitiveType(dt: DataType): Boolean = isPrimitiveType(javaType(dt))
 }
 
-
+/**
+ * A wrapper for generated class, defines a `generate` method so that we can pass extra objects
+ * into generated class.
+ */
 abstract class GeneratedClass {
   def generate(expressions: Array[Expression]): Any
 }
@@ -216,6 +243,16 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
   protected val exprType: String = classOf[Expression].getName
   protected val mutableRowType: String = classOf[MutableRow].getName
   protected val genericMutableRowType: String = classOf[GenericMutableRow].getName
+
+  protected def declareMutableStates(ctx: CodeGenContext) = {
+    ctx.mutableStates.map { case (javaType, variableName, _) =>
+      s"private $javaType $variableName;"
+    }.mkString("\n      ")
+  }
+
+  protected def initMutableStates(ctx: CodeGenContext) = {
+    ctx.mutableStates.map(_._3).mkString("\n        ")
+  }
 
   /**
    * Generates a class for a given input expression.  Called when there is not cached code
@@ -234,14 +271,23 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
 
   /**
    * Compile the Java source code into a Java class, using Janino.
-   *
-   * It will track the time used to compile
    */
   protected def compile(code: String): GeneratedClass = {
-    val startTime = System.nanoTime()
+    cache.get(code)
+  }
+
+  /**
+   * Compile the Java source code into a Java class, using Janino.
+   */
+  private[this] def doCompile(code: String): GeneratedClass = {
     val evaluator = new ClassBodyEvaluator()
     evaluator.setParentClassLoader(getClass.getClassLoader)
-    evaluator.setDefaultImports(Array("org.apache.spark.sql.catalyst.InternalRow"))
+    evaluator.setDefaultImports(Array(
+      classOf[InternalRow].getName,
+      classOf[UnsafeRow].getName,
+      classOf[UTF8String].getName,
+      classOf[Decimal].getName
+    ))
     evaluator.setExtendedClass(classOf[GeneratedClass])
     try {
       evaluator.cook(code)
@@ -250,9 +296,6 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
         logError(s"failed to compile:\n $code", e)
         throw e
     }
-    val endTime = System.nanoTime()
-    def timeMs: Double = (endTime - startTime).toDouble / 1000000
-    logDebug(s"Code (${code.size} bytes) compiled in $timeMs ms")
     evaluator.getClazz().newInstance().asInstanceOf[GeneratedClass]
   }
 
@@ -265,16 +308,16 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
    * automatically, in order to constrain its memory footprint.  Note that this cache does not use
    * weak keys/values and thus does not respond to memory pressure.
    */
-  protected val cache = CacheBuilder.newBuilder()
+  private val cache = CacheBuilder.newBuilder()
     .maximumSize(100)
     .build(
-      new CacheLoader[InType, OutType]() {
-        override def load(in: InType): OutType = {
+      new CacheLoader[String, GeneratedClass]() {
+        override def load(code: String): GeneratedClass = {
           val startTime = System.nanoTime()
-          val result = create(in)
+          val result = doCompile(code)
           val endTime = System.nanoTime()
           def timeMs: Double = (endTime - startTime).toDouble / 1000000
-          logInfo(s"Code generated expression $in in $timeMs ms")
+          logInfo(s"Code generated in $timeMs ms")
           result
         }
       })
@@ -284,7 +327,7 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
     generate(bind(expressions, inputSchema))
 
   /** Generates the requested evaluator given already bound expression(s). */
-  def generate(expressions: InType): OutType = cache.get(canonicalize(expressions))
+  def generate(expressions: InType): OutType = create(canonicalize(expressions))
 
   /**
    * Create a new codegen context for expression evaluator, used to store those

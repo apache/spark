@@ -19,6 +19,7 @@
 
 from __future__ import print_function
 import itertools
+from optparse import OptionParser
 import os
 import re
 import sys
@@ -95,8 +96,8 @@ def determine_modules_to_test(changed_modules):
     ['examples', 'graphx']
     >>> x = sorted(x.name for x in determine_modules_to_test([modules.sql]))
     >>> x # doctest: +NORMALIZE_WHITESPACE
-    ['examples', 'hive-thriftserver', 'mllib', 'pyspark-core', 'pyspark-ml', \
-     'pyspark-mllib', 'pyspark-sql', 'pyspark-streaming', 'sparkr', 'sql']
+    ['examples', 'hive-thriftserver', 'mllib', 'pyspark-ml', \
+     'pyspark-mllib', 'pyspark-sql', 'sparkr', 'sql']
     """
     # If we're going to have to run all of the tests, then we can just short-circuit
     # and return 'root'. No module depends on root, so if it appears then it will be
@@ -210,7 +211,7 @@ def build_spark_documentation():
     jekyll_bin = which("jekyll")
 
     if not jekyll_bin:
-        print("[error] Cannot find a version of `jekyll` on the system; please"
+        print("[error] Cannot find a version of `jekyll` on the system; please",
               " install one and retry to build documentation.")
         sys.exit(int(os.environ.get("CURRENT_BLOCK", 255)))
     else:
@@ -261,7 +262,7 @@ def get_hadoop_profiles(hadoop_version):
     """
 
     sbt_maven_hadoop_profiles = {
-        "hadoop1.0": ["-Phadoop-1", "-Dhadoop.version=1.0.4"],
+        "hadoop1.0": ["-Phadoop-1", "-Dhadoop.version=1.2.1"],
         "hadoop2.0": ["-Phadoop-1", "-Dhadoop.version=2.0.0-mr1-cdh4.1.1"],
         "hadoop2.2": ["-Pyarn", "-Phadoop-2.2"],
         "hadoop2.3": ["-Pyarn", "-Phadoop-2.3", "-Dhadoop.version=2.3.0"],
@@ -270,7 +271,7 @@ def get_hadoop_profiles(hadoop_version):
     if hadoop_version in sbt_maven_hadoop_profiles:
         return sbt_maven_hadoop_profiles[hadoop_version]
     else:
-        print("[error] Could not find", hadoop_version, "in the list. Valid options"
+        print("[error] Could not find", hadoop_version, "in the list. Valid options",
               " are", sbt_maven_hadoop_profiles.keys())
         sys.exit(int(os.environ.get("CURRENT_BLOCK", 255)))
 
@@ -281,7 +282,7 @@ def build_spark_maven(hadoop_version):
     mvn_goals = ["clean", "package", "-DskipTests"]
     profiles_and_goals = build_profiles + mvn_goals
 
-    print("[info] Building Spark (w/Hive 0.13.1) using Maven with these arguments: "
+    print("[info] Building Spark (w/Hive 0.13.1) using Maven with these arguments: ",
           " ".join(profiles_and_goals))
 
     exec_maven(profiles_and_goals)
@@ -292,10 +293,11 @@ def build_spark_sbt(hadoop_version):
     build_profiles = get_hadoop_profiles(hadoop_version) + modules.root.build_profile_flags
     sbt_goals = ["package",
                  "assembly/assembly",
-                 "streaming-kafka-assembly/assembly"]
+                 "streaming-kafka-assembly/assembly",
+                 "streaming-flume-assembly/assembly"]
     profiles_and_goals = build_profiles + sbt_goals
 
-    print("[info] Building Spark (w/Hive 0.13.1) using SBT with these arguments: "
+    print("[info] Building Spark (w/Hive 0.13.1) using SBT with these arguments: ",
           " ".join(profiles_and_goals))
 
     exec_sbt(profiles_and_goals)
@@ -324,7 +326,7 @@ def run_scala_tests_maven(test_profiles):
     mvn_test_goals = ["test", "--fail-at-end"]
     profiles_and_goals = test_profiles + mvn_test_goals
 
-    print("[info] Running Spark tests using Maven with these arguments: "
+    print("[info] Running Spark tests using Maven with these arguments: ",
           " ".join(profiles_and_goals))
 
     exec_maven(profiles_and_goals)
@@ -339,7 +341,7 @@ def run_scala_tests_sbt(test_modules, test_profiles):
 
     profiles_and_goals = test_profiles + list(sbt_test_goals)
 
-    print("[info] Running Spark tests using SBT with these arguments: "
+    print("[info] Running Spark tests using SBT with these arguments: ",
           " ".join(profiles_and_goals))
 
     exec_sbt(profiles_and_goals)
@@ -360,12 +362,13 @@ def run_scala_tests(build_tool, hadoop_version, test_modules):
         run_scala_tests_sbt(test_modules, test_profiles)
 
 
-def run_python_tests(test_modules):
+def run_python_tests(test_modules, parallelism):
     set_title_and_block("Running PySpark tests", "BLOCK_PYSPARK_UNIT_TESTS")
 
     command = [os.path.join(SPARK_HOME, "python", "run-tests")]
     if test_modules != [modules.root]:
         command.append("--modules=%s" % ','.join(m.name for m in test_modules))
+    command.append("--parallelism=%i" % parallelism)
     run_cmd(command)
 
 
@@ -379,10 +382,28 @@ def run_sparkr_tests():
         print("Ignoring SparkR tests as R was not found in PATH")
 
 
+def parse_opts():
+    parser = OptionParser(
+        prog="run-tests"
+    )
+    parser.add_option(
+        "-p", "--parallelism", type="int", default=4,
+        help="The number of suites to test in parallel (default %default)"
+    )
+
+    (opts, args) = parser.parse_args()
+    if args:
+        parser.error("Unsupported arguments: %s" % ' '.join(args))
+    if opts.parallelism < 1:
+        parser.error("Parallelism cannot be less than 1")
+    return opts
+
+
 def main():
+    opts = parse_opts()
     # Ensure the user home directory (HOME) is valid and is an absolute directory
     if not USER_HOME or not os.path.isabs(USER_HOME):
-        print("[error] Cannot determine your home directory as an absolute path;"
+        print("[error] Cannot determine your home directory as an absolute path;",
               " ensure the $HOME environment variable is set properly.")
         sys.exit(1)
 
@@ -397,7 +418,7 @@ def main():
     java_exe = determine_java_executable()
 
     if not java_exe:
-        print("[error] Cannot find a version of `java` on the system; please"
+        print("[error] Cannot find a version of `java` on the system; please",
               " install one and retry.")
         sys.exit(2)
 
@@ -461,7 +482,7 @@ def main():
 
     modules_with_python_tests = [m for m in test_modules if m.python_test_goals]
     if modules_with_python_tests:
-        run_python_tests(modules_with_python_tests)
+        run_python_tests(modules_with_python_tests, opts.parallelism)
     if any(m.should_run_r_tests for m in test_modules):
         run_sparkr_tests()
 

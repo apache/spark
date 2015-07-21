@@ -17,28 +17,26 @@
 
 package org.apache.spark.sql.hive.client
 
-import java.io.{BufferedReader, InputStreamReader, File, PrintStream}
-import java.net.URI
-import java.util.{ArrayList => JArrayList, Map => JMap, List => JList, Set => JSet}
+import java.io.{File, PrintStream}
+import java.util.{Map => JMap}
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.JavaConversions._
 import scala.language.reflectiveCalls
 
 import org.apache.hadoop.fs.Path
-import org.apache.hadoop.hive.metastore.api.Database
 import org.apache.hadoop.hive.conf.HiveConf
+import org.apache.hadoop.hive.metastore.api.{Database, FieldSchema}
 import org.apache.hadoop.hive.metastore.{TableType => HTableType}
-import org.apache.hadoop.hive.metastore.api
-import org.apache.hadoop.hive.metastore.api.FieldSchema
-import org.apache.hadoop.hive.ql.metadata
 import org.apache.hadoop.hive.ql.metadata.Hive
-import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hadoop.hive.ql.processors._
-import org.apache.hadoop.hive.ql.Driver
+import org.apache.hadoop.hive.ql.session.SessionState
+import org.apache.hadoop.hive.ql.{Driver, metadata}
 
 import org.apache.spark.Logging
+import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.execution.QueryExecutionException
+import org.apache.spark.util.{CircularBuffer, Utils}
 
 
 /**
@@ -66,37 +64,15 @@ private[hive] class ClientWrapper(
   with Logging {
 
   // Circular buffer to hold what hive prints to STDOUT and ERR.  Only printed when failures occur.
-  private val outputBuffer = new java.io.OutputStream {
-    var pos: Int = 0
-    var buffer = new Array[Int](10240)
-    def write(i: Int): Unit = {
-      buffer(pos) = i
-      pos = (pos + 1) % buffer.size
-    }
-
-    override def toString: String = {
-      val (end, start) = buffer.splitAt(pos)
-      val input = new java.io.InputStream {
-        val iterator = (start ++ end).iterator
-
-        def read(): Int = if (iterator.hasNext) iterator.next() else -1
-      }
-      val reader = new BufferedReader(new InputStreamReader(input))
-      val stringBuilder = new StringBuilder
-      var line = reader.readLine()
-      while(line != null) {
-        stringBuilder.append(line)
-        stringBuilder.append("\n")
-        line = reader.readLine()
-      }
-      stringBuilder.toString()
-    }
-  }
+  private val outputBuffer = new CircularBuffer()
 
   private val shim = version match {
     case hive.v12 => new Shim_v0_12()
     case hive.v13 => new Shim_v0_13()
     case hive.v14 => new Shim_v0_14()
+    case hive.v1_0 => new Shim_v1_0()
+    case hive.v1_1 => new Shim_v1_1()
+    case hive.v1_2 => new Shim_v1_2()
   }
 
   // Create an internal session state for this ClientWrapper.
@@ -272,10 +248,10 @@ private[hive] class ClientWrapper(
   }
 
   private def toInputFormat(name: String) =
-    Class.forName(name).asInstanceOf[Class[_ <: org.apache.hadoop.mapred.InputFormat[_, _]]]
+    Utils.classForName(name).asInstanceOf[Class[_ <: org.apache.hadoop.mapred.InputFormat[_, _]]]
 
   private def toOutputFormat(name: String) =
-    Class.forName(name)
+    Utils.classForName(name)
       .asInstanceOf[Class[_ <: org.apache.hadoop.hive.ql.io.HiveOutputFormat[_, _]]]
 
   private def toQlTable(table: HiveTable): metadata.Table = {
@@ -336,6 +312,13 @@ private[hive] class ClientWrapper(
     shim.getAllPartitions(client, qlTable).map(toHivePartition)
   }
 
+  override def getPartitionsByFilter(
+      hTable: HiveTable,
+      predicates: Seq[Expression]): Seq[HivePartition] = withHiveState {
+    val qlTable = toQlTable(hTable)
+    shim.getPartitionsByFilter(client, qlTable, predicates).map(toHivePartition)
+  }
+
   override def listTables(dbName: String): Seq[String] = withHiveState {
     client.getAllTables(dbName)
   }
@@ -380,7 +363,9 @@ private[hive] class ClientWrapper(
 
         case _ =>
           if (state.out != null) {
+            // scalastyle:off println
             state.out.println(tokens(0) + " " + cmd_1)
+            // scalastyle:on println
           }
           Seq(proc.run(cmd_1).getResponseCode.toString)
       }
@@ -456,7 +441,7 @@ private[hive] class ClientWrapper(
         logDebug(s"Deleting table $t")
         val table = client.getTable("default", t)
         client.getIndexes("default", t, 255).foreach { index =>
-          client.dropIndex("default", t, index.getIndexName, true)
+          shim.dropIndex(client, "default", t, index.getIndexName)
         }
         if (!table.isIndexTable) {
           client.dropTable("default", t)

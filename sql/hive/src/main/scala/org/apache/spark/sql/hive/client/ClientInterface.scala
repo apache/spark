@@ -21,6 +21,7 @@ import java.io.PrintStream
 import java.util.{Map => JMap}
 
 import org.apache.spark.sql.catalyst.analysis.{NoSuchDatabaseException, NoSuchTableException}
+import org.apache.spark.sql.catalyst.expressions.Expression
 
 private[hive] case class HiveDatabase(
     name: String,
@@ -71,7 +72,12 @@ private[hive] case class HiveTable(
 
   def isPartitioned: Boolean = partitionColumns.nonEmpty
 
-  def getAllPartitions: Seq[HivePartition] = client.getAllPartitions(this)
+  def getPartitions(predicates: Seq[Expression]): Seq[HivePartition] = {
+    predicates match {
+      case Nil => client.getAllPartitions(this)
+      case _ => client.getPartitionsByFilter(this, predicates)
+    }
+  }
 
   // Hive does not support backticks when passing names to the client.
   def qualifiedName: String = s"$database.$name"
@@ -131,6 +137,9 @@ private[hive] trait ClientInterface {
 
   /** Returns all partitions for the given table. */
   def getAllPartitions(hTable: HiveTable): Seq[HivePartition]
+
+  /** Returns partitions filtered by predicates for the given table. */
+  def getPartitionsByFilter(hTable: HiveTable, predicates: Seq[Expression]): Seq[HivePartition]
 
   /** Loads a static partition into an existing table. */
   def loadPartition(
