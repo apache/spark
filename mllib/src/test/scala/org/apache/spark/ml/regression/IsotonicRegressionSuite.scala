@@ -56,8 +56,7 @@ class IsotonicRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
       .transform(dataset)
       .select("prediction").map {
         case Row(pred) => pred
-      }
-      .collect()
+      }.collect()
 
     assert(predictions === Array(1, 2, 2, 2, 6, 16.5, 16.5, 17, 18))
 
@@ -76,9 +75,8 @@ class IsotonicRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
     val predictions = model
       .transform(features)
       .select("prediction").map {
-      case Row(pred) => pred
-    }
-    .collect()
+        case Row(pred) => pred
+      }.collect()
 
     assert(predictions === Array(7, 7, 6, 5.5, 5, 4, 1))
   }

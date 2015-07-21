@@ -35,6 +35,8 @@ private[regression] trait IsotonicRegressionParams extends PredictorParams {
 
   /**
    * Param for weight column name.
+   * TODO: Move weightCol to sharedParams.
+   *
    * @group param
    */
   final val weightCol: Param[String] =
@@ -45,13 +47,14 @@ private[regression] trait IsotonicRegressionParams extends PredictorParams {
 
   /**
    * Param for isotonic parameter.
+   * Isotonic (increasing) or antitonic (decreasing) sequence.
    * @group param
    */
-  final val isotonicParam: BooleanParam =
-    new BooleanParam(this, "isotonicParam", "isotonic parameter")
+  final val isotonic: BooleanParam =
+    new BooleanParam(this, "isotonic", "isotonic (increasing) or antitonic (decreasing) sequence")
 
   /** @group getParam */
-  final def getIsotonicParam: Boolean = $(isotonicParam)
+  final def getIsotonicParam: Boolean = $(isotonic)
 }
 
 /**
@@ -75,8 +78,8 @@ class IsotonicRegression(override val uid: String)
    * Default is true.
    * @group setParam
    */
-  def setIsotonicParam(value: Boolean): this.type = set(isotonicParam, value)
-  setDefault(isotonicParam -> true)
+  def setIsotonicParam(value: Boolean): this.type = set(isotonic, value)
+  setDefault(isotonic -> true)
 
   /**
    * Set weight column param.
@@ -94,8 +97,8 @@ class IsotonicRegression(override val uid: String)
       dataset: DataFrame): RDD[(Double, Double, Double)] = {
 
     dataset.select($(labelCol), $(featuresCol), $(weightCol))
-      .map {
-        case Row(label: Double, features: Double, weights: Double) => (label, features, weights)
+      .map { case Row(label: Double, features: Double, weights: Double) =>
+        (label, features, weights)
       }
   }
 
@@ -106,7 +109,7 @@ class IsotonicRegression(override val uid: String)
     val handlePersistence = dataset.rdd.getStorageLevel == StorageLevel.NONE
     if (handlePersistence) instances.persist(StorageLevel.MEMORY_AND_DISK)
 
-    val isotonicRegression = new MLlibIsotonicRegression().setIsotonic($(isotonicParam))
+    val isotonicRegression = new MLlibIsotonicRegression().setIsotonic($(isotonic))
     val parentModel = isotonicRegression.run(instances)
 
     new IsotonicRegressionModel(uid, parentModel)
