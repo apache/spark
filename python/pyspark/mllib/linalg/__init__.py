@@ -1218,6 +1218,19 @@ class RowMatrix(DistributedMatrix):
     def __init__(self, jrm):
         """ Create a wrapper over a Java RowMatrix. """
         self._jrm = jrm
+        self.rows = self._rows()
+
+    def _rows(self):
+        """
+        Get the rows of the RowMatrix as a RDD of Vectors.
+
+        >>> rows = sc.parallelize([Vectors.dense([1, 2, 3]), Vectors.dense([4, 5, 6]), Vectors.dense([7, 8, 9]), Vectors.dense([10, 11, 12])])
+        >>> rm = DistributedMatrices.rowMatrix(rows)
+        >>> rowsRDD = rm.rows
+        >>> rowsRDD.first()
+        DenseVector([1.0, 2.0, 3.0])
+        """
+        return self._jrm.call("rows")
 
     def numRows(self):
         """
@@ -1262,6 +1275,9 @@ class IndexedRow(object):
         self.index = long(index)
         self.vector = _convert_to_vector(vector)
 
+    def __repr__(self):
+        return "IndexedRow(%s, %s)" % (self.index, self.vector)
+
 
 class IndexedRowMatrix(DistributedMatrix):
     """
@@ -1272,6 +1288,24 @@ class IndexedRowMatrix(DistributedMatrix):
     def __init__(self, jirm):
         """ Create a wrapper over a Java IndexedRowMatrix. """
         self._jirm = jirm
+        self.rows = self._rows()
+
+    def _rows(self):
+        """
+        Get the rows of the IndexedRowMatrix as a RDD of IndexedRows.
+
+        >>> rows = sc.parallelize([IndexedRow(0,Vectors.dense([1, 2, 3])), IndexedRow(1,Vectors.dense([4, 5, 6])), IndexedRow(2,Vectors.dense([7, 8, 9])), IndexedRow(3,Vectors.dense([10, 11, 12]))])
+        >>> rm = DistributedMatrices.indexedRowMatrix(rows)
+        >>> rowsRDD = rm.rows
+        >>> rowsRDD.first()
+        IndexedRow(0, [1.0,2.0,3.0])
+        """
+        # We use DataFrames for serialization of IndexedRows between Python and Java, so we convert the RDD of rows to
+        # a DataFrame first on the Scala/Java side. Then we map each Row in the DataFrame back to an IndexedRow on this
+        # side.
+        rowsDF = callMLlibFunc("getIndexedRows", self._jirm._java_model)
+        rowsRDD = rowsDF.map(lambda row: IndexedRow(row[0], row[1]))
+        return rowsRDD
 
     def numRows(self):
         """
@@ -1319,6 +1353,20 @@ class IndexedRowMatrix(DistributedMatrix):
         jrm = JavaModelWrapper(javaRowMatrix)
         return RowMatrix(jrm)
 
+    def toCoordinateMatrix(self):
+        """
+        Convert this matrix to a CoordinateMatrix.
+
+        >>> # This IndexedRowMatrix will have 7 rows, due to the highest index being 6
+        >>> rows = sc.parallelize([IndexedRow(0,Vectors.dense([1, 0])), IndexedRow(6,Vectors.dense([0, 5]))])
+        >>> cm = DistributedMatrices.indexedRowMatrix(rows).toCoordinateMatrix()
+        >>> cm.entries.collect()
+        [MatrixEntry(0, 0, 1.0), MatrixEntry(0, 1, 0.0), MatrixEntry(6, 0, 0.0), MatrixEntry(6, 1, 5.0)]
+        """
+        javaCoordinateMatrix = self._jirm.call("toCoordinateMatrix")
+        jcm = JavaModelWrapper(javaCoordinateMatrix)
+        return CoordinateMatrix(jcm)
+
 
 class MatrixEntry(object):
     """
@@ -1331,6 +1379,9 @@ class MatrixEntry(object):
         self.j = long(j)
         self.value = float(value)
 
+    def __repr__(self):
+        return "MatrixEntry(%s, %s, %s)" % (self.i, self.j, self.value)
+
 
 class CoordinateMatrix(object):
     """
@@ -1341,19 +1392,37 @@ class CoordinateMatrix(object):
     def __init__(self, jcm):
         """ Create a wrapper over a Java CoordinateMatrix. """
         self._jcm = jcm
+        self.entries = self._entries()
+
+    def _entries(self):
+        """
+        Get the entries of the CoordinateMatrix as a RDD of MatrixEntry rows.
+
+        >>> entries = sc.parallelize([MatrixEntry(0, 0, 1.2), MatrixEntry(1, 0, 2.1), MatrixEntry(2, 1, 3.7)])
+        >>> cm = DistributedMatrices.coordinateMatrix(entries)
+        >>> entriesRDD = cm.entries
+        >>> entriesRDD.first()
+        MatrixEntry(0, 0, 1.2)
+        """
+        # We use DataFrames for serialization of MatrixEntry entries between Python and Java, so we convert the RDD of
+        # entries to a DataFrame first on the Scala/Java side. Then we map each Row in the DataFrame back to a
+        # MatrixEntry on this side.
+        entriesDF = callMLlibFunc("getMatrixEntries", self._jcm._java_model)
+        entriesRDD = entriesDF.map(lambda row: MatrixEntry(row[0], row[1], row[2]))
+        return entriesRDD
 
     def numRows(self):
         """
         Get or compute the number of rows.
 
         >>> entries = sc.parallelize([MatrixEntry(0, 0, 1.2), MatrixEntry(1, 0, 2.1), MatrixEntry(2, 1, 3.7)])
-        >>> rm = DistributedMatrices.coordinateMatrix(entries)
-        >>> rm.numRows()
+        >>> cm = DistributedMatrices.coordinateMatrix(entries)
+        >>> cm.numRows()
         3L
 
         >>> entries = sc.parallelize([MatrixEntry(0, 0, 1.2), MatrixEntry(1, 0, 2.1), MatrixEntry(2, 1, 3.7)])
-        >>> rm = DistributedMatrices.coordinateMatrix(entries, 7, 6)
-        >>> rm.numRows()
+        >>> cm = DistributedMatrices.coordinateMatrix(entries, 7, 6)
+        >>> cm.numRows()
         7L
         """
         return self._jcm.call("numRows")
@@ -1363,13 +1432,13 @@ class CoordinateMatrix(object):
         Get or compute the number of cols.
 
         >>> entries = sc.parallelize([MatrixEntry(0, 0, 1.2), MatrixEntry(1, 0, 2.1), MatrixEntry(2, 1, 3.7)])
-        >>> rm = DistributedMatrices.coordinateMatrix(entries)
-        >>> rm.numCols()
+        >>> cm = DistributedMatrices.coordinateMatrix(entries)
+        >>> cm.numCols()
         2L
 
         >>> entries = sc.parallelize([MatrixEntry(0, 0, 1.2), MatrixEntry(1, 0, 2.1), MatrixEntry(2, 1, 3.7)])
-        >>> rm = DistributedMatrices.coordinateMatrix(entries, 7, 6)
-        >>> rm.numCols()
+        >>> cm = DistributedMatrices.coordinateMatrix(entries, 7, 6)
+        >>> cm.numCols()
         6L
         """
         return self._jcm.call("numCols")
@@ -1403,15 +1472,15 @@ class CoordinateMatrix(object):
         >>> # This CoordinateMatrix will have 7 effective rows, due to the highest row index being 6,
         >>> # and the ensuing IndexedRowMatrix will have 7 rows as well.
         >>> entries = sc.parallelize([MatrixEntry(0, 0, 1.2), MatrixEntry(6, 4, 2.1)])
-        >>> rm = DistributedMatrices.coordinateMatrix(entries).toIndexedRowMatrix()
-        >>> rm.numRows()
+        >>> irm = DistributedMatrices.coordinateMatrix(entries).toIndexedRowMatrix()
+        >>> irm.numRows()
         7L
 
         >>> # This CoordinateMatrix will have 5 columns, due to the highest column index being 4,
         >>> # and the ensuing IndexedRowMatrix will have 5 columns as well.
         >>> entries = sc.parallelize([MatrixEntry(0, 0, 1.2), MatrixEntry(6, 4, 2.1)])
-        >>> rm = DistributedMatrices.coordinateMatrix(entries).toIndexedRowMatrix()
-        >>> rm.numCols()
+        >>> irm = DistributedMatrices.coordinateMatrix(entries).toIndexedRowMatrix()
+        >>> irm.numCols()
         5L
         """
         javaIndexedRowMatrix = self._jcm.call("toIndexedRowMatrix")

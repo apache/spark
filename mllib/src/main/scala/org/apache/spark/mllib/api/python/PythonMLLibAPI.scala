@@ -57,7 +57,7 @@ import org.apache.spark.mllib.tree.{DecisionTree, GradientBoostedTrees, RandomFo
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.mllib.util.LinearDataGenerator
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.{SQLContext, DataFrame}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.Utils
 
@@ -1121,10 +1121,19 @@ private[python] class PythonMLLibAPI extends Serializable {
   }
 
   /**
+   * Return the rows of an IndexedRowMatrix
+   */
+  def getIndexedRows(indexedRowMatrix: IndexedRowMatrix): DataFrame = {
+    // We use DataFrames for serialization of IndexedRows to Python, so return a DataFrame.
+    val sqlContext = SQLContext.getOrCreate(SparkContext.getOrCreate())
+    sqlContext.createDataFrame(indexedRowMatrix.rows)
+  }
+
+  /**
    * Wrapper around DistributedMatrices.coordinateMatrix factory method.
    */
   def createCoordinateMatrix(rows: DataFrame, numRows: Long, numCols: Long): CoordinateMatrix = {
-    // We use DataFrames for serialization of MatrixEntry inputs from Python, so map each Row in the DataFrame
+    // We use DataFrames for serialization of MatrixEntry entries from Python, so map each Row in the DataFrame
     // back to a MatrixEntry.
     val entries = rows.map { row =>
       val i = row.getLong(0)
@@ -1133,6 +1142,15 @@ private[python] class PythonMLLibAPI extends Serializable {
       MatrixEntry(i, j, value)
     }
     DistributedMatrices.coordinateMatrix(entries, numRows, numCols)
+  }
+
+  /**
+   * Return the entries of an CoordinateMatrix
+   */
+  def getMatrixEntries(coordinateMatrix: CoordinateMatrix): DataFrame = {
+    // We use DataFrames for serialization of MatrixEntry entries to Python, so return a DataFrame.
+    val sqlContext = SQLContext.getOrCreate(SparkContext.getOrCreate())
+    sqlContext.createDataFrame(coordinateMatrix.entries)
   }
 }
 
