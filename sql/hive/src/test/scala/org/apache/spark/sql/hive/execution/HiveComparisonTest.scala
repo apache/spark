@@ -19,10 +19,10 @@ package org.apache.spark.sql.hive.execution
 
 import java.io._
 
+import org.apache.spark.sql.execution.datasources.DescribeCommand
 import org.scalatest.{BeforeAndAfterAll, GivenWhenThen}
 
 import org.apache.spark.{Logging, SparkFunSuite}
-import org.apache.spark.sql.sources.DescribeCommand
 import org.apache.spark.sql.execution.{SetCommand, ExplainCommand}
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._

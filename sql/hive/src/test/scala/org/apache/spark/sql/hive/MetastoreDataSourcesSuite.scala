@@ -19,6 +19,8 @@ package org.apache.spark.sql.hive
 
 import java.io.File
 
+import org.apache.spark.sql.execution.datasources.LogicalRelation
+
 import scala.collection.mutable.ArrayBuffer
 
 import org.scalatest.BeforeAndAfterAll
@@ -33,7 +35,6 @@ import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.hive.test.TestHive._
 import org.apache.spark.sql.hive.test.TestHive.implicits._
 import org.apache.spark.sql.parquet.ParquetRelation2
-import org.apache.spark.sql.sources.LogicalRelation
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils

@@ -18,6 +18,7 @@
 package org.apache.spark.sql.sources
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.execution.datasources.ResolvedDataSource
 
 class ResolvedDataSourceSuite extends SparkFunSuite {
 

@@ -20,6 +20,9 @@ package org.apache.spark.sql.parquet
 import java.net.URI
 import java.util.{List => JList}
 
+import org.apache.spark.sql.execution.{SqlNewHadoopPartition, SqlNewHadoopRDD}
+import org.apache.spark.sql.execution.datasources.PartitionSpec
+
 import scala.collection.JavaConversions._
 import scala.collection.mutable
 import scala.util.{Failure, Try}

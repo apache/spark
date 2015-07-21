@@ -19,6 +19,7 @@ package org.apache.spark.sql.sources
 
 import java.io.{File, IOException}
 
+import org.apache.spark.sql.execution.datasources.DDLException
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.sql.AnalysisException
