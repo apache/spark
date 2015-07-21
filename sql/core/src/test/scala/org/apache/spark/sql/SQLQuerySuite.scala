@@ -648,6 +648,15 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll with SQLTestUtils {
       Row(2, 1, 2, 2, 1))
   }
 
+  test("count of empty table") {
+    withTempTable("t") {
+      Seq.empty[(Int, Int)].toDF("a", "b").registerTempTable("t")
+      checkAnswer(
+        sql("select count(a) from t"),
+        Row(0))
+    }
+  }
+
   test("inner join where, one match per row") {
     checkAnswer(
       sql("SELECT * FROM upperCaseData JOIN lowerCaseData WHERE n = N"),
