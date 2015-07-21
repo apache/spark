@@ -487,7 +487,7 @@ class LogisticRegressionSummary private[classification] (
     val distributedRoc = metrics.roc()
     val sqlContext = SQLContext.getOrCreate(distributedRoc.sparkContext)
     import sqlContext.implicits._
-    distributedRoc.toDF("False Positive Rate", "True Positive Rate")
+    distributedRoc.toDF("FalsePositiveRate", "TruePositiveRate")
   }
 
   /**

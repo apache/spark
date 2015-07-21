@@ -703,7 +703,6 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
   }
 
   test("evaluate on test set") {
-
     // Evaluate on test set should be same as that of the transformed training data.
     val lr = new LogisticRegression()
       .setMaxIter(10)
@@ -714,6 +713,24 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
 
     val sameSummary = model.evaluate(dataset)
     assert(summary.areaUnderROC === sameSummary.areaUnderROC)
+    assert(summary.roc.collect() === sameSummary.roc.collect())
+    assert(summary.pr.collect() === sameSummary.pr.collect())
+    assert(summary.fMeasureByThreshold.collect() === sameSummary.fMeasureByThreshold.collect())
+    assert(summary.recallByThreshold.collect() === sameSummary.recallByThreshold.collect())
+    assert(summary.precisionByThreshold.collect() === sameSummary.precisionByThreshold.collect())
+  }
+
+  test("statistics on training data") {
+    val lr = new LogisticRegression()
+      .setMaxIter(10)
+      .setRegParam(1.0)
+      .setThreshold(0.6)
+    val model = lr.fit(dataset)
+    assert(
+      model.summary
+        .objectiveHistory
+        .sliding(2)
+        .forall(x => x(0) >= x(1)))
 
   }
 }
