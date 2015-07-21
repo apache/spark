@@ -95,7 +95,7 @@ final class EMLDAOptimizer extends LDAOptimizer {
    * Compute bipartite term/doc graph.
    */
   override private[clustering] def initialize(docs: RDD[(Long, Vector)], lda: LDA): LDAOptimizer = {
-    val docConcentration = breeze.stats.mean(lda.getDocConcentration.toBreeze)
+    val docConcentration = lda.getDocConcentration(0)
     require({
       lda.getDocConcentration.toArray.forall(_ == docConcentration)
     }, "EMLDAOptimizer currently only supports symmetric document-topic priors")
@@ -349,13 +349,13 @@ final class OnlineLDAOptimizer extends LDAOptimizer {
     this.alpha = if (lda.getDocConcentration.size == 1) {
       if (lda.getDocConcentration(0) == -1) Vectors.dense(Array.fill(k)(1.0 / k))
       else {
-        require(lda.getDocConcentration(0) >= 0, "all entries in alpha must be >=0")
+        require(lda.getDocConcentration(0) >= 0, s"all entries in alpha must be >=0, got: $alpha")
         Vectors.dense(Array.fill(k)(lda.getDocConcentration(0)))
       }
     } else {
-      require(lda.getDocConcentration.size == k, "alpha must have length k")
+      require(lda.getDocConcentration.size == k, s"alpha must have length k, got: $alpha")
       lda.getDocConcentration.foreachActive { case (_, x) =>
-        require(x >= 0, "all entries in alpha must be >= 0")
+        require(x >= 0, s"all entries in alpha must be >= 0, got: $alpha")
       }
       lda.getDocConcentration
     }

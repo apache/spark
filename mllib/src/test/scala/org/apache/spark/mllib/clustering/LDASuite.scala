@@ -148,7 +148,7 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext {
 
   test("initializing with elements in alpha < 0 fails") {
     intercept[IllegalArgumentException] {
-      val lda = new LDA().setK(2).setAlpha(Vectors.dense(-1, 2, 3, 4))
+      val lda = new LDA().setK(4).setAlpha(Vectors.dense(-1, 2, 3, 4))
       val corpus = sc.parallelize(tinyCorpus, 2)
       lda.run(corpus)
     }
