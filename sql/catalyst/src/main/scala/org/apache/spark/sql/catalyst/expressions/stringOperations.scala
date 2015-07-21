@@ -204,7 +204,7 @@ case class Like(left: Expression, right: Expression)
 
     val patternCode =
       if (literalRight != null) {
-        s"${patternClass} pattern = $patternClass.compile($literalRight);"
+        s"${patternClass} $pattern = ${patternClass}.compile($literalRight);"
       } else {
         s"""
           $sb $regex = new $sb("(?s)");
@@ -262,6 +262,7 @@ case class RLike(left: Expression, right: Expression)
 
   override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     val patternClass = classOf[Pattern].getName
+    val pattern = ctx.freshName("pattern")
 
     val literalRight: String = right match {
       case x @ Literal(value: String, StringType) => escape(value)
@@ -273,23 +274,25 @@ case class RLike(left: Expression, right: Expression)
 
     val patternCode =
       if (literalRight != null) {
-        s"${patternClass} pattern = $patternClass.compile($literalRight);"
+        s"${patternClass} $pattern = ${patternClass}.compile($literalRight);"
       } else {
         s"""
-          ${patternClass} pattern = ${patternClass}.compile(rightStr);
+          ${patternClass} $pattern = ${patternClass}.compile(rightStr);
         """
       }
 
     s"""
       ${leftGen.code}
-      ${rightGen.code}
-
-      boolean ${ev.isNull} = ${leftGen.isNull} || ${rightGen.isNull};
+      boolean ${ev.isNull} = ${leftGen.isNull};
       ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
       if (!${ev.isNull}) {
-        String rightStr = ${rightGen.primitive}.toString();
-        $patternCode
-        ${ev.primitive} = pattern.matcher(${leftGen.primitive}.toString()).find(0);
+        ${rightGen.code}
+        ${ev.isNull} = ${rightGen.isNull};
+        if (!${ev.isNull}) {
+          String rightStr = ${rightGen.primitive}.toString();
+          $patternCode
+          ${ev.primitive} = $pattern.matcher(${leftGen.primitive}.toString()).find(0);
+        }
       }
     """
   }
