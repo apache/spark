@@ -48,11 +48,11 @@ __all__ = [
     'randn',
     'sha1',
     'sha2',
+    'size',
     'sparkPartitionId',
     'struct',
     'udf',
-    'when',
-    'size']
+    'when']
 
 __all__ += ['lag', 'lead', 'ntile']
 
@@ -802,7 +802,7 @@ def size(col):
     Collection function: returns the length of the array or map stored in the column.
     :param col: name of column or expression
 
-    >>> df = sqlContext.createDataFrame([Row(data=[1, 2, 3]), Row(data=[1]), Row(data=[])])
+    >>> df = sqlContext.createDataFrame([([1, 2, 3],),([1],),([],)], ['data'])
     >>> df.select(size(df.data)).collect()
     [Row(size(data)=3), Row(size(data)=1), Row(size(data)=0)]
     """
