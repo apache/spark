@@ -23,10 +23,12 @@ import java.util.{Collections, List => JList}
 
 import scala.collection.JavaConversions._
 import scala.collection.mutable.{HashMap, HashSet}
+import scala.concurrent.ExecutionContext.Implicits.global
 
 import com.google.common.collect.HashBiMap
 import org.apache.mesos.Protos.{TaskInfo => MesosTaskInfo, _}
 import org.apache.mesos.{Scheduler => MScheduler, _}
+import org.apache.spark.deploy.mesos.{RegisterMesosDriver, MesosExternalShuffleService}
 import org.apache.spark.rpc.RpcAddress
 import org.apache.spark.scheduler.TaskSchedulerImpl
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
@@ -61,6 +63,8 @@ private[spark] class CoarseMesosSchedulerBackend(
   var totalCoresAcquired = 0
 
   val slaveIdsWithExecutors = new HashSet[String]
+
+  val slaveIdsToShuffleEndpoints = new HashMap[String, RpcAddress]
 
   val taskIdToSlaveId: HashBiMap[Int, String] = HashBiMap.create[Int, String]
   // How many times tasks on each slave failed
@@ -244,6 +248,10 @@ private[spark] class CoarseMesosSchedulerBackend(
 
           // accept the offer and launch the task
           logDebug(s"Accepting offer: $id with attributes: $offerAttributes mem: $mem cpu: $cpus")
+          if (conf.getBoolean("spark.shuffle.service.enabled", false)) {
+            slaveIdsToShuffleEndpoints(offer.getSlaveId.getValue) =
+              RpcAddress(offer.getHostname, conf.getInt("spark.mesos.shuffle.service.port", 7327))
+          }
           d.launchTasks(
             Collections.singleton(offer.getId),
             Collections.singleton(taskBuilder.build()), filters)
@@ -261,7 +269,27 @@ private[spark] class CoarseMesosSchedulerBackend(
     val taskId = status.getTaskId.getValue.toInt
     val state = status.getState
     logInfo(s"Mesos task $taskId is now $state")
+    val slaveId: String = status.getSlaveId.getValue
     stateLock.synchronized {
+      if (TaskState.fromMesos(state).equals(TaskState.RUNNING) &&
+        slaveIdsToShuffleEndpoints.contains(slaveId)) {
+        val rpcAddress = slaveIdsToShuffleEndpoints.remove(slaveId).get
+        logDebug(s"Connecting to shuffle service on slave ${slaveId}, " +
+            s"address $rpcAddress for app ${conf.getAppId}")
+        sc.env.rpcEnv.asyncSetupEndpointRef(
+          MesosExternalShuffleService.SYSTEM_NAME,
+          rpcAddress,
+          MesosExternalShuffleService.ENDPOINT_NAME).onComplete { ref =>
+          if (ref.isSuccess) {
+            ref.get.send(RegisterMesosDriver(conf.getAppId, sc.env.rpcEnv.address))
+          } else {
+            logWarning(s"Unable to connect to shuffle service for slave ${slaveId}" +
+              s", please manually remove shuffle data after driver exit. " +
+              s"Error: ${ref.failed.get}")
+          }
+        }
+      }
+
       if (TaskState.isFinished(TaskState.fromMesos(state))) {
         val slaveId = taskIdToSlaveId(taskId)
         slaveIdsWithExecutors -= slaveId

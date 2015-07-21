@@ -44,14 +44,14 @@ private[spark] trait ThreadSafeRpcEndpoint extends RpcEndpoint
 
 /**
  * An end point for the RPC that defines what functions to trigger given a message.
- *
+ *M
  * It is guaranteed that `onStart`, `receive` and `onStop` will be called in sequence.
  *
- * The lift-cycle will be:
+ * The life-cycle of an end point is:
  *
- * constructor onStart receive* onStop
+ * constructor -> onStart -> receive* -> onStop
  *
- * Note: `receive` can be called concurrently. If you want `receive` is thread-safe, please use
+ * Note: `receive` can be called concurrently. If you want `receive` to be thread-safe, please use
  * [[ThreadSafeRpcEndpoint]]
  *
  * If any error is thrown from one of [[RpcEndpoint]] methods except `onError`, `onError` will be
