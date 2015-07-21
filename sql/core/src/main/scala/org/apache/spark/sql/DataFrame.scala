@@ -20,8 +20,6 @@ package org.apache.spark.sql
 import java.io.CharArrayWriter
 import java.util.Properties
 
-import org.apache.spark.sql.execution.datasources.CreateTableUsingAsSelect
-
 import scala.language.implicitConversions
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
@@ -40,6 +38,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{Filter, _}
 import org.apache.spark.sql.catalyst.plans.{Inner, JoinType}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, ScalaReflection, SqlParser}
 import org.apache.spark.sql.execution.{EvaluatePython, ExplainCommand, LogicalRDD}
+import org.apache.spark.sql.execution.datasources.CreateTableUsingAsSelect
 import org.apache.spark.sql.json.JacksonGenerator
 import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel

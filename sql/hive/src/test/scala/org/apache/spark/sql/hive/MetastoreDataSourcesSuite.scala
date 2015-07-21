@@ -19,8 +19,6 @@ package org.apache.spark.sql.hive
 
 import java.io.File
 
-import org.apache.spark.sql.execution.datasources.LogicalRelation
-
 import scala.collection.mutable.ArrayBuffer
 
 import org.scalatest.BeforeAndAfterAll
@@ -30,6 +28,7 @@ import org.apache.hadoop.mapred.InvalidInputException
 
 import org.apache.spark.Logging
 import org.apache.spark.sql._
+import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.hive.client.{HiveTable, ManagedTable}
 import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.hive.test.TestHive._

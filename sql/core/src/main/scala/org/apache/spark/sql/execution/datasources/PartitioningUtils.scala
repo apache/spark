@@ -17,8 +17,11 @@
 
 package org.apache.spark.sql.execution.datasources
 
-import java.lang.{Double => JDouble, Float => JFloat, Integer => JInteger, Long => JLong}
+import java.lang.{Double => JDouble, Long => JLong}
 import java.math.{BigDecimal => JBigDecimal}
+
+import scala.collection.mutable.ArrayBuffer
+import scala.util.Try
 
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.util.Shell
@@ -26,8 +29,6 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Cast, Literal}
 import org.apache.spark.sql.types._
 
-import scala.collection.mutable.ArrayBuffer
-import scala.util.Try
 
 private[sql] case class Partition(values: InternalRow, path: String)
 

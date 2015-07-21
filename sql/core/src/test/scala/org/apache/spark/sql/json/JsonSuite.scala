@@ -21,12 +21,12 @@ import java.io.StringWriter
 import java.sql.{Date, Timestamp}
 
 import com.fasterxml.jackson.core.JsonFactory
-import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.scalactic.Tolerance._
 
 import org.apache.spark.sql.{QueryTest, Row, SQLConf}
 import org.apache.spark.sql.TestData._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.json.InferSchema.compatibleType
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
