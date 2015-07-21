@@ -88,11 +88,7 @@ trait HashJoin {
           case BuildLeft => joinRow(currentHashMatches(currentMatchPosition), currentStreamedRow)
         }
         currentMatchPosition += 1
-        if (supportUnsafe) {
-          resultProjection(ret)
-        } else {
-          ret
-        }
+        resultProjection(ret)
       }
 
       /**

@@ -197,13 +197,12 @@ private[joins] object UnsafeHashedRelation {
 
     // TODO: Use BytesToBytesMap.
     val hashTable = new JavaHashMap[UnsafeRow, CompactBuffer[UnsafeRow]](sizeEstimate)
-    var currentRow: InternalRow = null
     val toUnsafe = UnsafeProjection.create(rowSchema)
     val keyGenerator = UnsafeProjection.create(buildKeys)
 
     // Create a mapping of buildKeys -> rows
     while (input.hasNext) {
-      currentRow = input.next()
+      val currentRow = input.next()
       val unsafeRow = if (currentRow.isInstanceOf[UnsafeRow]) {
         currentRow.asInstanceOf[UnsafeRow]
       } else {

@@ -100,12 +100,12 @@ trait HashSemiJoin {
       hashedRelation: HashedRelation): Iterator[InternalRow] = {
     val joinKeys = leftKeyGenerator
     val joinedRow = new JoinedRow
-    streamIter.filter(current => {
+    streamIter.filter { current =>
       val key = joinKeys(current)
       lazy val rowBuffer = hashedRelation.get(key)
       !key.anyNull && rowBuffer != null && rowBuffer.exists {
         (row: InternalRow) => boundCondition(joinedRow(current, row))
       }
-    })
+    }
   }
 }
