@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.expressions.Expression
 /**
  * A trait that can be used to provide a fallback mode for expression code generation.
  */
-trait CodegenFallback { self: Expression =>
+trait CodegenFallback extends Expression {
 
   protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     ctx.references += this
