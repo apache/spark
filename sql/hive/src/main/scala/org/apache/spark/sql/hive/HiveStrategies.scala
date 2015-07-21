@@ -22,9 +22,10 @@ import scala.collection.JavaConversions._
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.expressions.codegen.GeneratePredicate
-import org.apache.spark.sql.catalyst.expressions.{InternalRow, _}
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
@@ -124,7 +125,7 @@ private[hive] trait HiveStrategies {
                 InterpretedPredicate.create(castedPredicate)
               }
 
-            val partitions = relation.hiveQlPartitions.filter { part =>
+            val partitions = relation.getHiveQlPartitions(pruningPredicates).filter { part =>
               val partitionValues = part.getValues
               var i = 0
               while (i < partitionValues.size()) {
@@ -212,7 +213,7 @@ private[hive] trait HiveStrategies {
           projectList,
           otherPredicates,
           identity[Seq[Expression]],
-          HiveTableScan(_, relation, pruningPredicates.reduceLeftOption(And))(hiveContext)) :: Nil
+          HiveTableScan(_, relation, pruningPredicates)(hiveContext)) :: Nil
       case _ =>
         Nil
     }

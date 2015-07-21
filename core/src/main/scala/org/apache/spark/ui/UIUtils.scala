@@ -27,7 +27,7 @@ import org.apache.spark.ui.scope.RDDOperationGraph
 
 /** Utility functions for generating XML pages with spark content. */
 private[spark] object UIUtils extends Logging {
-  val TABLE_CLASS_NOT_STRIPED = "table table-bordered table-condensed sortable"
+  val TABLE_CLASS_NOT_STRIPED = "table table-bordered table-condensed"
   val TABLE_CLASS_STRIPED = TABLE_CLASS_NOT_STRIPED + " table-striped"
 
   // SimpleDateFormat is not thread-safe. Don't expose it to avoid improper use.
@@ -267,9 +267,17 @@ private[spark] object UIUtils extends Logging {
       fixedWidth: Boolean = false,
       id: Option[String] = None,
       headerClasses: Seq[String] = Seq.empty,
-      stripeRowsWithCss: Boolean = true): Seq[Node] = {
+      stripeRowsWithCss: Boolean = true,
+      sortable: Boolean = true): Seq[Node] = {
 
-    val listingTableClass = if (stripeRowsWithCss) TABLE_CLASS_STRIPED else TABLE_CLASS_NOT_STRIPED
+    val listingTableClass = {
+      val _tableClass = if (stripeRowsWithCss) TABLE_CLASS_STRIPED else TABLE_CLASS_NOT_STRIPED
+      if (sortable) {
+        _tableClass + " sortable"
+      } else {
+        _tableClass
+      }
+    }
     val colWidth = 100.toDouble / headers.size
     val colWidthAttr = if (fixedWidth) colWidth + "%" else ""
 

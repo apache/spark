@@ -99,7 +99,7 @@ public abstract class AbstractBytesToBytesMapSuite {
       byte[] expected,
       MemoryLocation actualAddr,
       long actualLengthBytes) {
-    return (actualLengthBytes == expected.length) && ByteArrayMethods.wordAlignedArrayEquals(
+    return (actualLengthBytes == expected.length) && ByteArrayMethods.arrayEquals(
       expected,
       BYTE_ARRAY_OFFSET,
       actualAddr.getBaseObject(),

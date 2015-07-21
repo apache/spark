@@ -57,16 +57,6 @@ private[nio] class BlockMessage() {
   }
 
   def set(buffer: ByteBuffer) {
-    /*
-    println()
-    println("BlockMessage: ")
-    while(buffer.remaining > 0) {
-      print(buffer.get())
-    }
-    buffer.rewind()
-    println()
-    println()
-    */
     typ = buffer.getInt()
     val idLength = buffer.getInt()
     val idBuilder = new StringBuilder(idLength)
@@ -138,18 +128,6 @@ private[nio] class BlockMessage() {
       buffers += data
     }
 
-    /*
-    println()
-    println("BlockMessage: ")
-    buffers.foreach(b => {
-      while(b.remaining > 0) {
-        print(b.get())
-      }
-      b.rewind()
-    })
-    println()
-    println()
-    */
     Message.createBufferMessage(buffers)
   }
 
