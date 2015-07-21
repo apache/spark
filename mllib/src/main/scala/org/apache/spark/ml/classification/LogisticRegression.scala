@@ -34,7 +34,7 @@ import org.apache.spark.mllib.evaluation.BinaryClassificationMetrics
 import org.apache.spark.mllib.stat.MultivariateOnlineSummarizer
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.sql.{DataFrame, Row, SQLContext}
 import org.apache.spark.sql.functions.{col, udf}
 import org.apache.spark.storage.StorageLevel
 
@@ -297,14 +297,14 @@ class LogisticRegressionModel private[ml] (
   private var trainingSummary: Option[LogisticRegressionTrainingSummary] = None
 
   /**
-   * Gets summary (e.g. residuals, mse, r-squared ) of model on training set. An exception is
+   * Gets summary of model on training set. An exception is
    * thrown if `trainingSummary == None`.
    */
   def summary: LogisticRegressionTrainingSummary = trainingSummary match {
     case Some(summ) => summ
     case None =>
       throw new SparkException(
-        "No training summary available for this LinearRegressionModel",
+        "No training summary available for this LogisticRegressionModel",
         new NullPointerException())
   }
 
@@ -468,6 +468,8 @@ class LogisticRegressionSummary private[classification] (
   val probabilityCol: String,
   val labelCol: String) extends Serializable {
 
+  /** Returns a BinaryClassificationMetrics object.
+  */
   @transient val metrics = new BinaryClassificationMetrics(
     predictions.select(probabilityCol, labelCol).map {
       case Row(score: Vector, label: Double) => (score(1), label)
@@ -476,10 +478,17 @@ class LogisticRegressionSummary private[classification] (
 
   /**
    * Returns the receiver operating characteristic (ROC) curve,
-   * which is an RDD of (false positive rate, true positive rate)
+   * which is an Dataframe having two fields (false positive rate, true positive rate)
    * with (0.0, 0.0) prepended and (1.0, 1.0) appended to it.
+   * Every possible probability obtained in transforming the dataset are used
+   * as thresholds used in calculating the FPR and TPR.
    */
-  val roc: RDD[(Double, Double)] = metrics.roc()
+  @transient val roc: DataFrame = {
+    val distributedRoc = metrics.roc()
+    val sqlContext = SQLContext.getOrCreate(distributedRoc.sparkContext)
+    import sqlContext.implicits._
+    distributedRoc.toDF("False Positive Rate", "True Positive Rate")
+  }
 
   /**
    * Computes the area under the receiver operating characteristic (ROC) curve.
@@ -487,20 +496,50 @@ class LogisticRegressionSummary private[classification] (
   val areaUnderROC: Double = metrics.areaUnderROC()
 
   /**
-   * Returns the precision-recall curve, which is an RDD of (recall, precision),
-   * NOT (precision, recall), with (0.0, 1.0) prepended to it.
+   * Returns the precision-recall curve, which is an Dataframe containing
+   * two fields (recall, precision) NOT (precision, recall), with (0.0, 1.0) prepended to it.
+   * Every possible probability obtained in transforming the dataset are used
+   * as thresholds used in calculating the precision and recall.
    */
-  val pr: RDD[(Double, Double)] = metrics.pr()
+  @transient val pr: DataFrame = {
+    val distributedPr = metrics.pr()
+    val sqlContext = SQLContext.getOrCreate(distributedPr.sparkContext)
+    import sqlContext.implicits._
+    distributedPr.toDF("recall", "precision")
+  }
 
-  /** Returns the (threshold, F-Measure) curve with beta = 1.0. */
-  val fMeasureByThreshold: RDD[(Double, Double)] = metrics.fMeasureByThreshold()
+  /** Returns a dataframe with two fields (threshold, F-Measure) curve with beta = 1.0.
+   * Every possible probability obtained in transforming the dataset are used
+   * as thresholds used in calculating the F-measure.
+   */
+  @transient val fMeasureByThreshold: DataFrame = {
+    val distributedFMeasure = metrics.fMeasureByThreshold()
+    val sqlContext = SQLContext.getOrCreate(distributedFMeasure.sparkContext)
+    import sqlContext.implicits._
+    distributedFMeasure.toDF("threshold", "F-Measure")
+  }
 
-  /** Returns the (threshold, precision) curve. */
-  val precisionByThreshold: RDD[(Double, Double)] = metrics.precisionByThreshold()
+  /** Returns a dataframe with two fields (threshold, precision) curve.
+   * Every possible probability obtained in transforming the dataset are used
+   * as thresholds used in calculating the precision.
+   */
+  @transient val precisionByThreshold: DataFrame = {
+    val distributedPrecision = metrics.precisionByThreshold()
+    val sqlContext = SQLContext.getOrCreate(distributedPrecision.sparkContext)
+    import sqlContext.implicits._
+    distributedPrecision.toDF("threshold", "precision")
+  }
 
-  /** Returns the (threshold, recall) curve. */
-  val recallByThreshold: RDD[(Double, Double)] = metrics.recallByThreshold()
-
+  /** Returns a dataframe with two fields (threshold, recall) curve.
+   * Every possible probability obtained in transforming the dataset are used
+   * as thresholds used in calculating the recall.
+   */
+  @transient val recallByThreshold: DataFrame = {
+    val distributedRecall = metrics.recallByThreshold()
+    val sqlContext = SQLContext.getOrCreate(distributedRecall.sparkContext)
+    import sqlContext.implicits._
+    distributedRecall.toDF("threshold", "recall")
+  }
 }
 
 /**
