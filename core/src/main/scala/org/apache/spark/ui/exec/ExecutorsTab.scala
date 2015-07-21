@@ -56,11 +56,15 @@ class ExecutorsListener(storageStatusListener: StorageStatusListener) extends Sp
   val executorToShuffleWrite = HashMap[String, Long]()
   val executorToLogUrls = HashMap[String, Map[String, String]]()
   val executorIdToData = HashMap[String, ExecutorUIData]()
+  private var executorIds = Seq[String]()
 
   def storageStatusList: Seq[StorageStatus] = storageStatusListener.storageStatusList
+  
+  def getExecutorIds: Seq[String] = executorIds
 
   override def onExecutorAdded(executorAdded: SparkListenerExecutorAdded): Unit = synchronized {
     val eid = executorAdded.executorId
+    executorIds = executorIds.:+(eid)
     executorToLogUrls(eid) = executorAdded.executorInfo.logUrlMap
     executorIdToData(eid) = ExecutorUIData(executorAdded.time)
   }
@@ -68,6 +72,7 @@ class ExecutorsListener(storageStatusListener: StorageStatusListener) extends Sp
   override def onExecutorRemoved(
       executorRemoved: SparkListenerExecutorRemoved): Unit = synchronized {
     val eid = executorRemoved.executorId
+    executorIds = executorIds.filter(x => (x != eid))
     val uiData = executorIdToData(eid)
     uiData.finishTime = Some(executorRemoved.time)
     uiData.finishReason = Some(executorRemoved.reason)
