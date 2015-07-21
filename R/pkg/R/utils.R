@@ -445,8 +445,8 @@ processClosure <- function(node, oldEnv, defVars, checkedFuncs, newEnv) {
       while (!identical(func.env, topEnv)) {
         # Namespaces other than "SparkR" will not be searched.
         if (!isNamespace(func.env) ||
-              (getNamespaceName(func.env) == "SparkR" &&
-              !(nodeChar %in% getNamespaceExports("SparkR")))) {
+            (getNamespaceName(func.env) == "SparkR" &&
+               !(nodeChar %in% getNamespaceExports("SparkR")))) {
           # Only include SparkR internals.
 
           # Set parameter 'inherits' to FALSE since we do not need to search in
