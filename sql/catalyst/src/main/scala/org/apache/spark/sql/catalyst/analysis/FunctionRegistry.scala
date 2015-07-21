@@ -195,8 +195,10 @@ object FunctionRegistry {
     expression[Quarter]("quarter"),
     expression[Second]("second"),
     expression[WeekOfYear]("weekofyear"),
-    expression[Year]("year")
+    expression[Year]("year"),
 
+    // collection functions
+    expression[Size]("size")
   )
 
   val builtin: FunctionRegistry = {

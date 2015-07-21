@@ -42,6 +42,7 @@ import org.apache.spark.util.Utils
  * @groupname misc_funcs Misc functions
  * @groupname window_funcs Window functions
  * @groupname string_funcs String functions
+ * @groupname collection_funcs Collection functions
  * @groupname Ungrouped Support functions for DataFrames.
  * @since 1.3.0
  */
@@ -2052,6 +2053,25 @@ object functions {
    * @since 1.5.0
    */
   def weekofyear(columnName: String): Column = weekofyear(Column(columnName))
+
+  //////////////////////////////////////////////////////////////////////////////////////////////
+  // Collection functions
+  //////////////////////////////////////////////////////////////////////////////////////////////
+
+  /**
+   * Returns length of array or map
+   * @group collection_funcs
+   * @since 1.5.0
+   */
+  def size(columnName: String): Column = size(Column(columnName))
+
+  /**
+   * Returns length of array or map
+   * @group collection_funcs
+   * @since 1.5.0
+   */
+  def size(column: Column): Column = Size(column.expr)
+
 
   //////////////////////////////////////////////////////////////////////////////////////////////
   //////////////////////////////////////////////////////////////////////////////////////////////
