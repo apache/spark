@@ -595,7 +595,7 @@ object functions {
   }
 
   /**
-   * Returns the first column that is not null.
+   * Returns the first column that is not null and not NaN.
    * {{{
    *   df.select(coalesce(df("a"), df("b")))
    * }}}
@@ -612,7 +612,7 @@ object functions {
   def explode(e: Column): Column = Explode(e.expr)
 
   /**
-   * Return true if the column is NaN or null
+   * Return true iff the column is NaN.
    *
    * @group normal_funcs
    * @since 1.5.0
@@ -635,6 +635,15 @@ object functions {
    * @since 1.4.0
    */
   def monotonicallyIncreasingId(): Column = execution.expressions.MonotonicallyIncreasingID()
+
+  /**
+   * Return an alternative value `r` if `l` is NaN.
+   * This function is useful for mapping NaN values to null.
+   *
+   * @group normal_funcs
+   * @since 1.5.0
+   */
+  def nanvl(l: Column, r: Column): Column = NaNvl(l.expr, r.expr)
 
   /**
    * Unary minus, i.e. negate the expression.

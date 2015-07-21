@@ -17,10 +17,10 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenFallback, GeneratedExpressionCode, CodeGenContext}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.util.TypeUtils
-import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
@@ -120,7 +120,6 @@ case class InSet(child: Expression, hset: Set[Any])
     hset.contains(child.eval(input))
   }
 }
-
 
 case class And(left: Expression, right: Expression) extends BinaryOperator with Predicate {
 

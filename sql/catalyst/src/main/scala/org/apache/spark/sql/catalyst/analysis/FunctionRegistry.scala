@@ -89,6 +89,7 @@ object FunctionRegistry {
     expression[CreateStruct]("struct"),
     expression[CreateNamedStruct]("named_struct"),
     expression[Sqrt]("sqrt"),
+    expression[NaNvl]("nanvl"),
 
     // math functions
     expression[Acos]("acos"),
