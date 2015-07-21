@@ -187,7 +187,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       // Filter out executors under killing
       if (!executorsPendingToRemove.contains(executorId)) {
         val executorData = executorDataMap(executorId)
-        val workOffers = Seq(new WorkerOffer(executorId, executorData.executorHost, executorData.freeCores))
+        val workOffers = Seq(
+          new WorkerOffer(executorId, executorData.executorHost, executorData.freeCores))
         launchTasks(scheduler.resourceOffers(workOffers))
       }
     }
