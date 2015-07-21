@@ -554,7 +554,7 @@ private[master] class Master(
   private[master] def scheduleExecutorsOnWorkers(
       app: ApplicationInfo,
       usableWorkers: Array[WorkerInfo],
-      spreadOutApps: Boolean): Option[Array[Int]] = {
+      spreadOutApps: Boolean): Array[Int] = {
     // If the number of cores per executor is not specified, then we can just schedule
     // 1 core at a time since we expect a single executor to be launched on each worker
     val coresPerExecutor = app.desc.coresPerExecutor.getOrElse(1)
@@ -577,8 +577,7 @@ private[master] class Master(
         pos = (pos + 1) % numUsable
         if (pos == 0) {
           if (lastCoresToAssign == coresToAssign) {
-            logError("Not enough resources to schedule executors, please check configuration")
-            return None
+            return assignedCores
           }
           lastCoresToAssign = coresToAssign
         }
@@ -596,14 +595,13 @@ private[master] class Master(
         pos = (pos + 1) % numUsable
         if (pos == 0) {
           if (lastCoresToAssign == coresToAssign) {
-            logError("Not enough resources to schedule executors, please check configuration")
-            return None
+            return assignedCores
           }
           lastCoresToAssign = coresToAssign
         }
       }
     }
-    Some(assignedCores)
+    assignedCores
   }
 
   /**
@@ -619,15 +617,12 @@ private[master] class Master(
         .filter(worker => worker.memoryFree >= app.desc.memoryPerExecutorMB &&
           worker.coresFree >= coresPerExecutor.getOrElse(1))
         .sortBy(_.coresFree).reverse
-      val assignedCores_ = scheduleExecutorsOnWorkers(app, usableWorkers, spreadOutApps)
+      val assignedCores = scheduleExecutorsOnWorkers(app, usableWorkers, spreadOutApps)
 
       // Now that we've decided how many cores to allocate on each worker, let's allocate them
-      if (assignedCores_ != None) {
-        val assignedCores = assignedCores_.get
-        for (pos <- 0 until usableWorkers.length if assignedCores(pos) > 0) {
-          allocateWorkerResourceToExecutors(
-            app, assignedCores(pos), coresPerExecutor, usableWorkers(pos))
-        }
+      for (pos <- 0 until usableWorkers.length if assignedCores(pos) > 0) {
+        allocateWorkerResourceToExecutors(
+          app, assignedCores(pos), coresPerExecutor, usableWorkers(pos))
       }
     }
   }
