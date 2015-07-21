@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.rdd.{RDD, ShuffledRDD}
+import org.apache.spark.rdd.RDD
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.shuffle.hash.HashShuffleManager
 import org.apache.spark.shuffle.sort.SortShuffleManager
@@ -29,7 +29,6 @@ import org.apache.spark.sql.catalyst.errors.attachTree
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.types.DataType
 import org.apache.spark.util.MutablePair
 import org.apache.spark.{HashPartitioner, Partitioner, RangePartitioner, SparkEnv}
 
@@ -43,6 +42,12 @@ case class Exchange(newPartitioning: Partitioning, child: SparkPlan) extends Una
   override def outputPartitioning: Partitioning = newPartitioning
 
   override def output: Seq[Attribute] = child.output
+
+  override def outputsUnsafeRows: Boolean = child.outputsUnsafeRows
+
+  override def canProcessSafeRows: Boolean = true
+
+  override def canProcessUnsafeRows: Boolean = true
 
   /**
    * Determines whether records must be defensively copied before being sent to the shuffle.
@@ -112,109 +117,70 @@ case class Exchange(newPartitioning: Partitioning, child: SparkPlan) extends Una
 
   @transient private lazy val sparkConf = child.sqlContext.sparkContext.getConf
 
-  private def getSerializer(
-      keySchema: Array[DataType],
-      valueSchema: Array[DataType],
-      numPartitions: Int): Serializer = {
+  private val serializer: Serializer = {
+    val rowDataTypes = child.output.map(_.dataType).toArray
     // It is true when there is no field that needs to be write out.
     // For now, we will not use SparkSqlSerializer2 when noField is true.
-    val noField =
-      (keySchema == null || keySchema.length == 0) &&
-      (valueSchema == null || valueSchema.length == 0)
+    val noField = rowDataTypes == null || rowDataTypes.length == 0
 
     val useSqlSerializer2 =
         child.sqlContext.conf.useSqlSerializer2 &&   // SparkSqlSerializer2 is enabled.
-        SparkSqlSerializer2.support(keySchema) &&    // The schema of key is supported.
-        SparkSqlSerializer2.support(valueSchema) &&  // The schema of value is supported.
+        SparkSqlSerializer2.support(rowDataTypes) &&  // The schema of row is supported.
         !noField
 
-    val serializer = if (useSqlSerializer2) {
+    if (child.outputsUnsafeRows) {
+      logInfo("Using UnsafeRowSerializer.")
+      new UnsafeRowSerializer(child.output.size)
+    } else if (useSqlSerializer2) {
       logInfo("Using SparkSqlSerializer2.")
-      new SparkSqlSerializer2(keySchema, valueSchema)
+      new SparkSqlSerializer2(rowDataTypes)
     } else {
       logInfo("Using SparkSqlSerializer.")
       new SparkSqlSerializer(sparkConf)
     }
-
-    serializer
   }
 
   protected override def doExecute(): RDD[InternalRow] = attachTree(this , "execute") {
-    newPartitioning match {
-      case HashPartitioning(expressions, numPartitions) =>
-        val keySchema = expressions.map(_.dataType).toArray
-        val valueSchema = child.output.map(_.dataType).toArray
-        val serializer = getSerializer(keySchema, valueSchema, numPartitions)
-        val part = new HashPartitioner(numPartitions)
-
-        val rdd = if (needToCopyObjectsBeforeShuffle(part, serializer)) {
-          child.execute().mapPartitions { iter =>
-            val hashExpressions = newMutableProjection(expressions, child.output)()
-            iter.map(r => (hashExpressions(r).copy(), r.copy()))
-          }
-        } else {
-          child.execute().mapPartitions { iter =>
-            val hashExpressions = newMutableProjection(expressions, child.output)()
-            val mutablePair = new MutablePair[InternalRow, InternalRow]()
-            iter.map(r => mutablePair.update(hashExpressions(r), r))
-          }
-        }
-        val shuffled = new ShuffledRDD[InternalRow, InternalRow, InternalRow](rdd, part)
-        shuffled.setSerializer(serializer)
-        shuffled.map(_._2)
-
+    val rdd = child.execute()
+    val part: Partitioner = newPartitioning match {
+      case HashPartitioning(expressions, numPartitions) => new HashPartitioner(numPartitions)
       case RangePartitioning(sortingExpressions, numPartitions) =>
-        val keySchema = child.output.map(_.dataType).toArray
-        val serializer = getSerializer(keySchema, null, numPartitions)
-
-        val childRdd = child.execute()
-        val part: Partitioner = {
-          // Internally, RangePartitioner runs a job on the RDD that samples keys to compute
-          // partition bounds. To get accurate samples, we need to copy the mutable keys.
-          val rddForSampling = childRdd.mapPartitions { iter =>
-            val mutablePair = new MutablePair[InternalRow, Null]()
-            iter.map(row => mutablePair.update(row.copy(), null))
-          }
-          // TODO: RangePartitioner should take an Ordering.
-          implicit val ordering = new RowOrdering(sortingExpressions, child.output)
-          new RangePartitioner(numPartitions, rddForSampling, ascending = true)
+        // Internally, RangePartitioner runs a job on the RDD that samples keys to compute
+        // partition bounds. To get accurate samples, we need to copy the mutable keys.
+        val rddForSampling = rdd.mapPartitions { iter =>
+          val mutablePair = new MutablePair[InternalRow, Null]()
+          iter.map(row => mutablePair.update(row.copy(), null))
         }
-
-        val rdd = if (needToCopyObjectsBeforeShuffle(part, serializer)) {
-          childRdd.mapPartitions { iter => iter.map(row => (row.copy(), null))}
-        } else {
-          childRdd.mapPartitions { iter =>
-            val mutablePair = new MutablePair[InternalRow, Null]()
-            iter.map(row => mutablePair.update(row, null))
-          }
-        }
-
-        val shuffled = new ShuffledRDD[InternalRow, Null, Null](rdd, part)
-        shuffled.setSerializer(serializer)
-        shuffled.map(_._1)
-
+        implicit val ordering = new RowOrdering(sortingExpressions, child.output)
+        new RangePartitioner(numPartitions, rddForSampling, ascending = true)
       case SinglePartition =>
-        val valueSchema = child.output.map(_.dataType).toArray
-        val serializer = getSerializer(null, valueSchema, numPartitions = 1)
-        val partitioner = new HashPartitioner(1)
-
-        val rdd = if (needToCopyObjectsBeforeShuffle(partitioner, serializer)) {
-          child.execute().mapPartitions {
-            iter => iter.map(r => (null, r.copy()))
-          }
-        } else {
-          child.execute().mapPartitions { iter =>
-            val mutablePair = new MutablePair[Null, InternalRow]()
-            iter.map(r => mutablePair.update(null, r))
-          }
+        new Partitioner {
+          override def numPartitions: Int = 1
+          override def getPartition(key: Any): Int = 0
         }
-        val shuffled = new ShuffledRDD[Null, InternalRow, InternalRow](rdd, partitioner)
-        shuffled.setSerializer(serializer)
-        shuffled.map(_._2)
-
       case _ => sys.error(s"Exchange not implemented for $newPartitioning")
       // TODO: Handle BroadcastPartitioning.
     }
+    def getPartitionKeyExtractor(): InternalRow => InternalRow = newPartitioning match {
+      case HashPartitioning(expressions, _) => newMutableProjection(expressions, child.output)()
+      case RangePartitioning(_, _) | SinglePartition => identity
+      case _ => sys.error(s"Exchange not implemented for $newPartitioning")
+    }
+    val rddWithPartitionIds: RDD[Product2[Int, InternalRow]] = {
+      if (needToCopyObjectsBeforeShuffle(part, serializer)) {
+        rdd.mapPartitions { iter =>
+          val getPartitionKey = getPartitionKeyExtractor()
+          iter.map { row => (part.getPartition(getPartitionKey(row)), row.copy()) }
+        }
+      } else {
+        rdd.mapPartitions { iter =>
+          val getPartitionKey = getPartitionKeyExtractor()
+          val mutablePair = new MutablePair[Int, InternalRow]()
+          iter.map { row => mutablePair.update(part.getPartition(getPartitionKey(row)), row) }
+        }
+      }
+    }
+    new ShuffledRowRDD(rddWithPartitionIds, serializer, part.numPartitions)
   }
 }
 

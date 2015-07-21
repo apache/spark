@@ -20,6 +20,7 @@ package org.apache.spark.unsafe.types;
 import javax.annotation.Nonnull;
 import java.io.Serializable;
 import java.io.UnsupportedEncodingException;
+import java.util.Arrays;
 
 import org.apache.spark.unsafe.PlatformDependent;
 import org.apache.spark.unsafe.array.ByteArrayMethods;
@@ -49,6 +50,8 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
     5, 5, 5, 5,
     6, 6, 6, 6};
 
+  public static final UTF8String EMPTY_UTF8 = UTF8String.fromString("");
+
   /**
    * Creates an UTF8String from byte array, which should be encoded in UTF-8.
    *
@@ -75,6 +78,15 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
       throwException(e);
       return null;
     }
+  }
+
+  /**
+   * Creates an UTF8String that contains `length` spaces.
+   */
+  public static UTF8String blankString(int length) {
+    byte[] spaces = new byte[length];
+    Arrays.fill(spaces, (byte) ' ');
+    return fromBytes(spaces);
   }
 
   protected UTF8String(Object base, long offset, int size) {
@@ -151,6 +163,18 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
     byte[] bytes = new byte[i - j];
     copyMemory(base, offset + j, bytes, BYTE_ARRAY_OFFSET, i - j);
     return fromBytes(bytes);
+  }
+
+  public UTF8String substringSQL(int pos, int length) {
+    // Information regarding the pos calculation:
+    // Hive and SQL use one-based indexing for SUBSTR arguments but also accept zero and
+    // negative indices for start positions. If a start index i is greater than 0, it
+    // refers to element i-1 in the sequence. If a start index i is less than 0, it refers
+    // to the -ith element before the end of the sequence. If a start index i is 0, it
+    // refers to the first element.
+    int start = (pos > 0) ? pos -1 : ((pos < 0) ? numChars() + pos : 0);
+    int end = (length == Integer.MAX_VALUE) ? Integer.MAX_VALUE : start + length;
+    return substring(start, end);
   }
 
   /**
@@ -473,6 +497,15 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
       }
     }
     return fromBytes(result);
+  }
+
+  public UTF8String[] split(UTF8String pattern, int limit) {
+    String[] splits = toString().split(pattern.toString(), limit);
+    UTF8String[] res = new UTF8String[splits.length];
+    for (int i = 0; i < res.length; i++) {
+      res[i] = fromString(splits[i]);
+    }
+    return res;
   }
 
   @Override

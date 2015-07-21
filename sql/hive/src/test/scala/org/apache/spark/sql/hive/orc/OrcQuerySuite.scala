@@ -63,14 +63,14 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
 
     withOrcFile(data) { file =>
       checkAnswer(
-        sqlContext.read.format("orc").load(file),
+        sqlContext.read.orc(file),
         data.toDF().collect())
     }
   }
 
   test("Read/write binary data") {
     withOrcFile(BinaryData("test".getBytes("utf8")) :: Nil) { file =>
-      val bytes = read.format("orc").load(file).head().getAs[Array[Byte]](0)
+      val bytes = read.orc(file).head().getAs[Array[Byte]](0)
       assert(new String(bytes, "utf8") === "test")
     }
   }
@@ -88,7 +88,7 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
 
     withOrcFile(data) { file =>
       checkAnswer(
-        read.format("orc").load(file),
+        read.orc(file),
         data.toDF().collect())
     }
   }
@@ -158,7 +158,7 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
 
     withOrcFile(data) { file =>
       checkAnswer(
-        read.format("orc").load(file),
+        read.orc(file),
         Row(Seq.fill(5)(null): _*))
     }
   }
@@ -310,7 +310,7 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
              """.stripMargin)
 
           val errorMessage = intercept[AnalysisException] {
-            sqlContext.read.format("orc").load(path)
+            sqlContext.read.orc(path)
           }.getMessage
 
           assert(errorMessage.contains("Failed to discover schema from ORC files"))
@@ -323,7 +323,7 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
                |SELECT key, value FROM single
              """.stripMargin)
 
-          val df = sqlContext.read.format("orc").load(path)
+          val df = sqlContext.read.orc(path)
           assert(df.schema === singleRowDF.schema.asNullable)
           checkAnswer(df, singleRowDF)
         }
