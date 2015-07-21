@@ -368,9 +368,11 @@ def send_MIME_email(e_from, e_to, mime_msg):
     SMTP_PORT = conf.get('smtp', 'SMTP_PORT')
     SMTP_USER = conf.get('smtp', 'SMTP_USER')
     SMTP_PASSWORD = conf.get('smtp', 'SMTP_PASSWORD')
+    SMTP_STARTTLS = conf.getboolean('smtp', 'SMTP_STARTTLS')
 
     s = smtplib.SMTP(SMTP_HOST, SMTP_PORT)
-    s.starttls()
+    if SMTP_STARTTLS:
+        s.starttls()
     if SMTP_USER and SMTP_PASSWORD:
         s.login(SMTP_USER, SMTP_PASSWORD)
     logging.info("Sent an alert email to " + str(e_to))
