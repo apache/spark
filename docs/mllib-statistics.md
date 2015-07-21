@@ -463,7 +463,7 @@ val data2: RDD[Double] = ... // another RDD of sample data
 // this corresponds to a 2-sample test
 // the statistic provides a test for the null hypothesis that both samples are drawn from the 
 // same distribution
-val ksTestResult2 = Statistics.kolmogorovSmirnovTest2(data, data2)
+val ksTestResult2 = Statistics.kolmogorovSmirnovTest2Sample(data, data2)
 {% endhighlight %}
 </div>
 </div>

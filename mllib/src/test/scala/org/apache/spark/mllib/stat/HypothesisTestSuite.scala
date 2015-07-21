@@ -274,12 +274,12 @@ class HypothesisTestSuite extends SparkFunSuite with MLlibTestSparkContext {
     val sampledNormP = sc.parallelize(sampledNormL, 10)
     val sampledExpP = sc.parallelize(sampledExpL, 10)
 
-    // Use apache math commons local KS test for verify calculations
+    // Use apache math commons local KS test to verify calculations
     val ksTest = new KolmogorovSmirnovTest()
     val pThreshold = 0.05
 
     // Comparing 2 samples from same standard normal distribution
-    val result1 = Statistics.kolmogorovSmirnovTest2(sampledStdNorm1P, sampledStdNorm2P)
+    val result1 = Statistics.kolmogorovSmirnovTest2Sample(sampledStdNorm1P, sampledStdNorm2P)
     val refStat1 = ksTest.kolmogorovSmirnovStatistic(sampledStdNorm1L, sampledStdNorm2L)
     val refP1 = ksTest.kolmogorovSmirnovTest(sampledStdNorm1L, sampledStdNorm2L)
     assert(result1.statistic ~== refStat1 relTol 1e-4)
@@ -287,7 +287,7 @@ class HypothesisTestSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(result1.pValue > pThreshold) // accept H0
 
     // Comparing 2 samples from different normal distributions
-    val result2 = Statistics.kolmogorovSmirnovTest2(sampledStdNorm1P, sampledNormP)
+    val result2 = Statistics.kolmogorovSmirnovTest2Sample(sampledStdNorm1P, sampledNormP)
     val refStat2 = ksTest.kolmogorovSmirnovStatistic(sampledStdNorm1L, sampledNormL)
     val refP2 = ksTest.kolmogorovSmirnovTest(sampledStdNorm1L, sampledNormL)
     assert(result2.statistic ~== refStat2 relTol 1e-4)
@@ -295,7 +295,7 @@ class HypothesisTestSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(result2.pValue < pThreshold) // reject H0
 
     // Comparing 1 sample from normal distribution to 1 sample from exponential distribution
-    val result3 = Statistics.kolmogorovSmirnovTest2(sampledNormP, sampledExpP)
+    val result3 = Statistics.kolmogorovSmirnovTest2Sample(sampledNormP, sampledExpP)
     val refStat3 = ksTest.kolmogorovSmirnovStatistic(sampledNormL, sampledExpL)
     val refP3 = ksTest.kolmogorovSmirnovTest(sampledNormL, sampledExpL)
     assert(result3.statistic ~== refStat3 relTol 1e-4)
@@ -309,7 +309,7 @@ class HypothesisTestSuite extends SparkFunSuite with MLlibTestSparkContext {
     val nonOverlap1P = sc.parallelize(nonOverlap1L, 20)
     val nonOverlap2P = sc.parallelize(nonOverlap2L, 20)
 
-    val result4 = Statistics.kolmogorovSmirnovTest2(nonOverlap1P, nonOverlap2P)
+    val result4 = Statistics.kolmogorovSmirnovTest2Sample(nonOverlap1P, nonOverlap2P)
     val refStat4 = ksTest.kolmogorovSmirnovStatistic(nonOverlap1L, nonOverlap2L)
     val refP4 = ksTest.kolmogorovSmirnovTest(nonOverlap1L, nonOverlap2L)
     assert(result4.statistic ~== refStat4 relTol 1e-3)
@@ -359,7 +359,7 @@ class HypothesisTestSuite extends SparkFunSuite with MLlibTestSparkContext {
 
     val rKSStat = 0.15
     val rKSPval = 0.9831
-    val kSCompResult = Statistics.kolmogorovSmirnovTest2(rData1, rData2)
+    val kSCompResult = Statistics.kolmogorovSmirnovTest2Sample(rData1, rData2)
     assert(kSCompResult.statistic ~== rKSStat relTol 1e-4)
     // we're more lenient with the p-value here since the approximate p-value calculated
     // by apache math commons is likely to be slightly off given the small sample size

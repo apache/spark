@@ -205,7 +205,7 @@ object Statistics {
    * @return [[org.apache.spark.mllib.stat.test.KolmogorovSmirnovTestResult]] object containing test
    *        statistic, p-value, and null hypothesis
    */
-  def kolmogorovSmirnovTest2(data1: RDD[Double], data2: RDD[Double])
+  def kolmogorovSmirnovTest2Sample(data1: RDD[Double], data2: RDD[Double])
     : KolmogorovSmirnovTestResult = {
     KolmogorovSmirnovTest.testTwoSamples(data1, data2)
   }
