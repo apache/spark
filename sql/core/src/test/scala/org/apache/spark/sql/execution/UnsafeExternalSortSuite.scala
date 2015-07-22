@@ -83,11 +83,7 @@ class UnsafeExternalSortSuite extends SparkPlanTest with BeforeAndAfterAll {
     randomDataGenerator <- RandomDataGenerator.forType(dataType, nullable)
   ) {
     test(s"sorting on $dataType with nullable=$nullable, sortOrder=$sortOrder") {
-      val inputData = Seq.fill(1000)(randomDataGenerator()).filter {
-        case d: Double => !d.isNaN
-        case f: Float => !java.lang.Float.isNaN(f)
-        case x => true
-      }
+      val inputData = Seq.fill(1000)(randomDataGenerator())
       val inputDf = TestSQLContext.createDataFrame(
         TestSQLContext.sparkContext.parallelize(Random.shuffle(inputData).map(v => Row(v))),
         StructType(StructField("a", dataType, nullable = true) :: Nil)

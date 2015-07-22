@@ -79,7 +79,6 @@ trait ExpressionEvalHelper {
         fail(
           s"""
             |Code generation of $expression failed:
-            |${evaluated.code}
             |$e
           """.stripMargin)
     }

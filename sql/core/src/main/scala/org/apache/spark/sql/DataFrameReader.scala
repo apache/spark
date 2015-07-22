@@ -20,16 +20,16 @@ package org.apache.spark.sql
 import java.util.Properties
 
 import org.apache.hadoop.fs.Path
-import org.apache.spark.{Logging, Partition}
 
+import org.apache.spark.{Logging, Partition}
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.execution.datasources.{ResolvedDataSource, LogicalRelation}
 import org.apache.spark.sql.jdbc.{JDBCPartition, JDBCPartitioningInfo, JDBCRelation}
 import org.apache.spark.sql.json.JSONRelation
 import org.apache.spark.sql.parquet.ParquetRelation2
-import org.apache.spark.sql.sources.{LogicalRelation, ResolvedDataSource}
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -263,6 +263,15 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
           globbedPaths.map(_.toString), None, None, extraOptions.toMap)(sqlContext))
     }
   }
+
+  /**
+   * Loads an ORC file and returns the result as a [[DataFrame]].
+   *
+   * @param path input path
+   * @since 1.5.0
+   * @note Currently, this method can only be used together with `HiveContext`.
+   */
+  def orc(path: String): DataFrame = format("orc").load(path)
 
   /**
    * Returns the specified table as a [[DataFrame]].

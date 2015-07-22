@@ -40,7 +40,7 @@ object DefaultOptimizer extends Optimizer {
       ReplaceDistinctWithAggregate) ::
     Batch("Operator Optimizations", FixedPoint(100),
       // Operator push down
-      UnionPushDown,
+      SetOperationPushDown,
       SamplePushDown,
       PushPredicateThroughJoin,
       PushPredicateThroughProject,
@@ -84,23 +84,24 @@ object SamplePushDown extends Rule[LogicalPlan] {
 }
 
 /**
- * Pushes operations to either side of a Union.
+ * Pushes operations to either side of a Union, Intersect or Except.
  */
-object UnionPushDown extends Rule[LogicalPlan] {
+object SetOperationPushDown extends Rule[LogicalPlan] {
 
   /**
    * Maps Attributes from the left side to the corresponding Attribute on the right side.
    */
-  private def buildRewrites(union: Union): AttributeMap[Attribute] = {
-    assert(union.left.output.size == union.right.output.size)
+  private def buildRewrites(bn: BinaryNode): AttributeMap[Attribute] = {
+    assert(bn.isInstanceOf[Union] || bn.isInstanceOf[Intersect] || bn.isInstanceOf[Except])
+    assert(bn.left.output.size == bn.right.output.size)
 
-    AttributeMap(union.left.output.zip(union.right.output))
+    AttributeMap(bn.left.output.zip(bn.right.output))
   }
 
   /**
-   * Rewrites an expression so that it can be pushed to the right side of a Union operator.
-   * This method relies on the fact that the output attributes of a union are always equal
-   * to the left child's output.
+   * Rewrites an expression so that it can be pushed to the right side of a
+   * Union, Intersect or Except operator. This method relies on the fact that the output attributes
+   * of a union/intersect/except are always equal to the left child's output.
    */
   private def pushToRight[A <: Expression](e: A, rewrites: AttributeMap[Attribute]) = {
     val result = e transform {
@@ -124,6 +125,34 @@ object UnionPushDown extends Rule[LogicalPlan] {
     case Project(projectList, u @ Union(left, right)) =>
       val rewrites = buildRewrites(u)
       Union(
+        Project(projectList, left),
+        Project(projectList.map(pushToRight(_, rewrites)), right))
+
+    // Push down filter into intersect
+    case Filter(condition, i @ Intersect(left, right)) =>
+      val rewrites = buildRewrites(i)
+      Intersect(
+        Filter(condition, left),
+        Filter(pushToRight(condition, rewrites), right))
+
+    // Push down projection into intersect
+    case Project(projectList, i @ Intersect(left, right)) =>
+      val rewrites = buildRewrites(i)
+      Intersect(
+        Project(projectList, left),
+        Project(projectList.map(pushToRight(_, rewrites)), right))
+
+    // Push down filter into except
+    case Filter(condition, e @ Except(left, right)) =>
+      val rewrites = buildRewrites(e)
+      Except(
+        Filter(condition, left),
+        Filter(pushToRight(condition, rewrites), right))
+
+    // Push down projection into except
+    case Project(projectList, e @ Except(left, right)) =>
+      val rewrites = buildRewrites(e)
+      Except(
         Project(projectList, left),
         Project(projectList.map(pushToRight(_, rewrites)), right))
   }
@@ -684,7 +713,7 @@ object CombineLimits extends Rule[LogicalPlan] {
 }
 
 /**
- * Removes the inner [[CaseConversionExpression]] that are unnecessary because
+ * Removes the inner case conversion expressions that are unnecessary because
  * the inner conversion is overwritten by the outer one.
  */
 object SimplifyCaseConversionExpressions extends Rule[LogicalPlan] {

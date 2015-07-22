@@ -351,18 +351,16 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("FORMAT") {
-    val f = 'f.string.at(0)
-    val d1 = 'd.int.at(1)
-    val s1 = 's.int.at(2)
+    checkEvaluation(FormatString(Literal("aa%d%s"), Literal(123), Literal("a")), "aa123a")
+    checkEvaluation(FormatString(Literal("aa")), "aa", create_row(null))
+    checkEvaluation(FormatString(Literal("aa%d%s"), Literal(123), Literal("a")), "aa123a")
+    checkEvaluation(FormatString(Literal("aa%d%s"), 12, "cc"), "aa12cc")
 
-    val row1 = create_row("aa%d%s", 12, "cc")
-    val row2 = create_row(null, 12, "cc")
-    checkEvaluation(StringFormat(Literal("aa%d%s"), Literal(123), Literal("a")), "aa123a", row1)
-    checkEvaluation(StringFormat(Literal("aa")), "aa", create_row(null))
-    checkEvaluation(StringFormat(Literal("aa%d%s"), Literal(123), Literal("a")), "aa123a", row1)
-
-    checkEvaluation(StringFormat(f, d1, s1), "aa12cc", row1)
-    checkEvaluation(StringFormat(f, d1, s1), null, row2)
+    checkEvaluation(FormatString(Literal.create(null, StringType), 12, "cc"), null)
+    checkEvaluation(
+      FormatString(Literal("aa%d%s"), Literal.create(null, IntegerType), "cc"), "aanullcc")
+    checkEvaluation(
+      FormatString(Literal("aa%d%s"), 12, Literal.create(null, StringType)), "aa12null")
   }
 
   test("INSTR") {
@@ -462,6 +460,41 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(StringSpace(Literal(0)), "", row1)
     checkEvaluation(StringSpace(s1), "  ", row1)
     checkEvaluation(StringSpace(s1), null, row2)
+  }
+
+  test("RegexReplace") {
+    val row1 = create_row("100-200", "(\\d+)", "num")
+    val row2 = create_row("100-200", "(\\d+)", "###")
+    val row3 = create_row("100-200", "(-)", "###")
+
+    val s = 's.string.at(0)
+    val p = 'p.string.at(1)
+    val r = 'r.string.at(2)
+
+    val expr = RegExpReplace(s, p, r)
+    checkEvaluation(expr, "num-num", row1)
+    checkEvaluation(expr, "###-###", row2)
+    checkEvaluation(expr, "100###200", row3)
+  }
+
+  test("RegexExtract") {
+    val row1 = create_row("100-200", "(\\d+)-(\\d+)", 1)
+    val row2 = create_row("100-200", "(\\d+)-(\\d+)", 2)
+    val row3 = create_row("100-200", "(\\d+).*", 1)
+    val row4 = create_row("100-200", "([a-z])", 1)
+
+    val s = 's.string.at(0)
+    val p = 'p.string.at(1)
+    val r = 'r.int.at(2)
+
+    val expr = RegExpExtract(s, p, r)
+    checkEvaluation(expr, "100", row1)
+    checkEvaluation(expr, "200", row2)
+    checkEvaluation(expr, "100", row3)
+    checkEvaluation(expr, "", row4) // will not match anything, empty string get
+
+    val expr1 = new RegExpExtract(s, p)
+    checkEvaluation(expr1, "100", row1)
   }
 
   test("SPLIT") {
