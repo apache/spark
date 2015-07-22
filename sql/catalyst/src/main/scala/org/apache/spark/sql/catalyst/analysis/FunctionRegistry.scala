@@ -17,44 +17,38 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.catalyst.CatalystConf
-import org.apache.spark.sql.catalyst.expressions.Expression
-import scala.collection.mutable
+import scala.language.existentials
+import scala.reflect.ClassTag
+import scala.util.{Failure, Success, Try}
+
+import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
+import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.util.StringKeyHashMap
+
 
 /** A catalog for looking up user defined functions, used by an [[Analyzer]]. */
 trait FunctionRegistry {
-  type FunctionBuilder = Seq[Expression] => Expression
 
   def registerFunction(name: String, builder: FunctionBuilder): Unit
 
+  @throws[AnalysisException]("If function does not exist")
   def lookupFunction(name: String, children: Seq[Expression]): Expression
-
-  def conf: CatalystConf
 }
 
-trait OverrideFunctionRegistry extends FunctionRegistry {
+class SimpleFunctionRegistry extends FunctionRegistry {
 
-  val functionBuilders = StringKeyHashMap[FunctionBuilder](conf.caseSensitiveAnalysis)
-
-  override def registerFunction(name: String, builder: FunctionBuilder): Unit = {
-    functionBuilders.put(name, builder)
-  }
-
-  abstract override def lookupFunction(name: String, children: Seq[Expression]): Expression = {
-    functionBuilders.get(name).map(_(children)).getOrElse(super.lookupFunction(name, children))
-  }
-}
-
-class SimpleFunctionRegistry(val conf: CatalystConf) extends FunctionRegistry {
-
-  val functionBuilders = StringKeyHashMap[FunctionBuilder](conf.caseSensitiveAnalysis)
+  private val functionBuilders = StringKeyHashMap[FunctionBuilder](caseSensitive = false)
 
   override def registerFunction(name: String, builder: FunctionBuilder): Unit = {
     functionBuilders.put(name, builder)
   }
 
   override def lookupFunction(name: String, children: Seq[Expression]): Expression = {
-    functionBuilders(name)(children)
+    val func = functionBuilders.get(name).getOrElse {
+      throw new AnalysisException(s"undefined function $name")
+    }
+    func(children)
   }
 }
 
@@ -70,30 +64,154 @@ object EmptyFunctionRegistry extends FunctionRegistry {
   override def lookupFunction(name: String, children: Seq[Expression]): Expression = {
     throw new UnsupportedOperationException
   }
-
-  override def conf: CatalystConf = throw new UnsupportedOperationException
 }
 
-/**
- * Build a map with String type of key, and it also supports either key case
- * sensitive or insensitive.
- * TODO move this into util folder?
- */
-object StringKeyHashMap {
-  def apply[T](caseSensitive: Boolean): StringKeyHashMap[T] = caseSensitive match {
-    case false => new StringKeyHashMap[T](_.toLowerCase)
-    case true => new StringKeyHashMap[T](identity)
+
+object FunctionRegistry {
+
+  type FunctionBuilder = Seq[Expression] => Expression
+
+  val expressions: Map[String, FunctionBuilder] = Map(
+    // misc non-aggregate functions
+    expression[Abs]("abs"),
+    expression[CreateArray]("array"),
+    expression[Coalesce]("coalesce"),
+    expression[Explode]("explode"),
+    expression[Greatest]("greatest"),
+    expression[If]("if"),
+    expression[IsNaN]("isnan"),
+    expression[IsNull]("isnull"),
+    expression[IsNotNull]("isnotnull"),
+    expression[Least]("least"),
+    expression[Coalesce]("nvl"),
+    expression[Rand]("rand"),
+    expression[Randn]("randn"),
+    expression[CreateStruct]("struct"),
+    expression[CreateNamedStruct]("named_struct"),
+    expression[Sqrt]("sqrt"),
+
+    // math functions
+    expression[Acos]("acos"),
+    expression[Asin]("asin"),
+    expression[Atan]("atan"),
+    expression[Atan2]("atan2"),
+    expression[Bin]("bin"),
+    expression[Cbrt]("cbrt"),
+    expression[Ceil]("ceil"),
+    expression[Ceil]("ceiling"),
+    expression[Cos]("cos"),
+    expression[Conv]("conv"),
+    expression[EulerNumber]("e"),
+    expression[Exp]("exp"),
+    expression[Expm1]("expm1"),
+    expression[Floor]("floor"),
+    expression[Factorial]("factorial"),
+    expression[Hypot]("hypot"),
+    expression[Hex]("hex"),
+    expression[Logarithm]("log"),
+    expression[Log]("ln"),
+    expression[Log10]("log10"),
+    expression[Log1p]("log1p"),
+    expression[Log2]("log2"),
+    expression[UnaryMinus]("negative"),
+    expression[Pi]("pi"),
+    expression[Pow]("pow"),
+    expression[Pow]("power"),
+    expression[Pmod]("pmod"),
+    expression[UnaryPositive]("positive"),
+    expression[Rint]("rint"),
+    expression[Round]("round"),
+    expression[ShiftLeft]("shiftleft"),
+    expression[ShiftRight]("shiftright"),
+    expression[ShiftRightUnsigned]("shiftrightunsigned"),
+    expression[Signum]("sign"),
+    expression[Signum]("signum"),
+    expression[Sin]("sin"),
+    expression[Sinh]("sinh"),
+    expression[Tan]("tan"),
+    expression[Tanh]("tanh"),
+    expression[ToDegrees]("degrees"),
+    expression[ToRadians]("radians"),
+
+    // misc functions
+    expression[Md5]("md5"),
+    expression[Sha2]("sha2"),
+    expression[Sha1]("sha1"),
+    expression[Sha1]("sha"),
+    expression[Crc32]("crc32"),
+
+    // aggregate functions
+    expression[Average]("avg"),
+    expression[Count]("count"),
+    expression[First]("first"),
+    expression[Last]("last"),
+    expression[Max]("max"),
+    expression[Min]("min"),
+    expression[Sum]("sum"),
+
+    // string functions
+    expression[Ascii]("ascii"),
+    expression[Base64]("base64"),
+    expression[Concat]("concat"),
+    expression[Encode]("encode"),
+    expression[Decode]("decode"),
+    expression[FormatNumber]("format_number"),
+    expression[Lower]("lcase"),
+    expression[Lower]("lower"),
+    expression[Length]("length"),
+    expression[Levenshtein]("levenshtein"),
+    expression[StringInstr]("instr"),
+    expression[StringLocate]("locate"),
+    expression[StringLPad]("lpad"),
+    expression[StringTrimLeft]("ltrim"),
+    expression[StringFormat]("printf"),
+    expression[StringRPad]("rpad"),
+    expression[StringRepeat]("repeat"),
+    expression[StringReverse]("reverse"),
+    expression[StringTrimRight]("rtrim"),
+    expression[StringSpace]("space"),
+    expression[StringSplit]("split"),
+    expression[Substring]("substr"),
+    expression[Substring]("substring"),
+    expression[StringTrim]("trim"),
+    expression[UnBase64]("unbase64"),
+    expression[Upper]("ucase"),
+    expression[Unhex]("unhex"),
+    expression[Upper]("upper"),
+
+    // datetime functions
+    expression[CurrentDate]("current_date"),
+    expression[CurrentTimestamp]("current_timestamp")
+  )
+
+  val builtin: FunctionRegistry = {
+    val fr = new SimpleFunctionRegistry
+    expressions.foreach { case (name, builder) => fr.registerFunction(name, builder) }
+    fr
+  }
+
+  /** See usage above. */
+  private def expression[T <: Expression](name: String)
+      (implicit tag: ClassTag[T]): (String, FunctionBuilder) = {
+
+    // See if we can find a constructor that accepts Seq[Expression]
+    val varargCtor = Try(tag.runtimeClass.getDeclaredConstructor(classOf[Seq[_]])).toOption
+    val builder = (expressions: Seq[Expression]) => {
+      if (varargCtor.isDefined) {
+        // If there is an apply method that accepts Seq[Expression], use that one.
+        varargCtor.get.newInstance(expressions).asInstanceOf[Expression]
+      } else {
+        // Otherwise, find an ctor method that matches the number of arguments, and use that.
+        val params = Seq.fill(expressions.size)(classOf[Expression])
+        val f = Try(tag.runtimeClass.getDeclaredConstructor(params : _*)) match {
+          case Success(e) =>
+            e
+          case Failure(e) =>
+            throw new AnalysisException(s"Invalid number of arguments for function $name")
+        }
+        f.newInstance(expressions : _*).asInstanceOf[Expression]
+      }
+    }
+    (name, builder)
   }
 }
-
-class StringKeyHashMap[T](normalizer: (String) => String) {
-  private val base = new collection.mutable.HashMap[String, T]()
-
-  def apply(key: String): T = base(normalizer(key))
-
-  def get(key: String): Option[T] = base.get(normalizer(key))
-  def put(key: String, value: T): Option[T] = base.put(normalizer(key), value)
-  def remove(key: String): Option[T] = base.remove(normalizer(key))
-  def iterator: Iterator[(String, T)] = base.toIterator
-}
-

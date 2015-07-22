@@ -7,7 +7,19 @@ description: MLlib machine learning library overview for Spark SPARK_VERSION_SHO
 
 MLlib is Spark's scalable machine learning library consisting of common learning algorithms and utilities,
 including classification, regression, clustering, collaborative
-filtering, dimensionality reduction, as well as underlying optimization primitives, as outlined below:
+filtering, dimensionality reduction, as well as underlying optimization primitives.
+Guides for individual algorithms are listed below.
+
+The API is divided into 2 parts:
+
+* [The original `spark.mllib` API](mllib-guide.html#mllib-types-algorithms-and-utilities) is the primary API.
+* [The "Pipelines" `spark.ml` API](mllib-guide.html#sparkml-high-level-apis-for-ml-pipelines) is a higher-level API for constructing ML workflows.
+
+We list major functionality from both below, with links to detailed guides.
+
+# MLlib types, algorithms and utilities
+
+This lists functionality included in `spark.mllib`, the main MLlib API.
 
 * [Data types](mllib-data-types.html)
 * [Basic statistics](mllib-statistics.html)
@@ -49,8 +61,8 @@ and the migration guide below will explain all changes between releases.
 
 Spark 1.2 introduced a new package called `spark.ml`, which aims to provide a uniform set of
 high-level APIs that help users create and tune practical machine learning pipelines.
-It is currently an alpha component, and we would like to hear back from the community about
-how it fits real-world use cases and how it could be improved.
+
+*Graduated from Alpha!*  The Pipelines API is no longer an alpha component, although many elements of it are still `Experimental` or `DeveloperApi`.
 
 Note that we will keep supporting and adding features to `spark.mllib` along with the
 development of `spark.ml`.
@@ -58,7 +70,11 @@ Users should be comfortable using `spark.mllib` features and expect more feature
 Developers should contribute new algorithms to `spark.mllib` and can optionally contribute
 to `spark.ml`.
 
-See the **[spark.ml programming guide](ml-guide.html)** for more information on this package.
+More detailed guides for `spark.ml` include:
+
+* **[spark.ml programming guide](ml-guide.html)**: overview of the Pipelines API and major concepts
+* [Feature transformers](ml-features.html): Details on transformers supported in the Pipelines API, including a few not in the lower-level `spark.mllib` API
+* [Ensembles](ml-ensembles.html): Details on ensemble learning methods in the Pipelines API
 
 # Dependencies
 
@@ -90,21 +106,14 @@ version 1.4 or newer.
 
 For the `spark.ml` package, please see the [spark.ml Migration Guide](ml-guide.html#migration-guide).
 
-## From 1.2 to 1.3
+## From 1.3 to 1.4
 
-In the `spark.mllib` package, there were several breaking changes.  The first change (in `ALS`) is the only one in a component not marked as Alpha or Experimental.
+In the `spark.mllib` package, there were several breaking changes, but all in `DeveloperApi` or `Experimental` APIs:
 
-* *(Breaking change)* In [`ALS`](api/scala/index.html#org.apache.spark.mllib.recommendation.ALS), the extraneous method `solveLeastSquares` has been removed.  The `DeveloperApi` method `analyzeBlocks` was also removed.
-* *(Breaking change)* [`StandardScalerModel`](api/scala/index.html#org.apache.spark.mllib.feature.StandardScalerModel) remains an Alpha component. In it, the `variance` method has been replaced with the `std` method.  To compute the column variance values returned by the original `variance` method, simply square the standard deviation values returned by `std`.
-* *(Breaking change)* [`StreamingLinearRegressionWithSGD`](api/scala/index.html#org.apache.spark.mllib.regression.StreamingLinearRegressionWithSGD) remains an Experimental component.  In it, there were two changes:
-    * The constructor taking arguments was removed in favor of a builder patten using the default constructor plus parameter setter methods.
-    * Variable `model` is no longer public.
-* *(Breaking change)* [`DecisionTree`](api/scala/index.html#org.apache.spark.mllib.tree.DecisionTree) remains an Experimental component.  In it and its associated classes, there were several changes:
-    * In `DecisionTree`, the deprecated class method `train` has been removed.  (The object/static `train` methods remain.)
-    * In `Strategy`, the `checkpointDir` parameter has been removed.  Checkpointing is still supported, but the checkpoint directory must be set before calling tree and tree ensemble training.
-* `PythonMLlibAPI` (the interface between Scala/Java and Python for MLlib) was a public API but is now private, declared `private[python]`.  This was never meant for external use.
-* In linear regression (including Lasso and ridge regression), the squared loss is now divided by 2.
-  So in order to produce the same result as in 1.2, the regularization parameter needs to be divided by 2 and the step size needs to be multiplied by 2.
+* Gradient-Boosted Trees
+    * *(Breaking change)* The signature of the [`Loss.gradient`](api/scala/index.html#org.apache.spark.mllib.tree.loss.Loss) method was changed.  This is only an issues for users who wrote their own losses for GBTs.
+    * *(Breaking change)* The `apply` and `copy` methods for the case class [`BoostingStrategy`](api/scala/index.html#org.apache.spark.mllib.tree.configuration.BoostingStrategy) have been changed because of a modification to the case class fields.  This could be an issue for users who use `BoostingStrategy` to set GBT parameters.
+* *(Breaking change)* The return value of [`LDA.run`](api/scala/index.html#org.apache.spark.mllib.clustering.LDA) has changed.  It now returns an abstract class `LDAModel` instead of the concrete class `DistributedLDAModel`.  The object of type `LDAModel` can still be cast to the appropriate concrete type, which depends on the optimization algorithm.
 
 ## Previous Spark Versions
 

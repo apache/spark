@@ -23,7 +23,7 @@ import org.apache.spark.Accumulator
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.python.PythonBroadcast
 import org.apache.spark.broadcast.Broadcast
-import org.apache.spark.sql.catalyst.expressions.ScalaUdf
+import org.apache.spark.sql.catalyst.expressions.ScalaUDF
 import org.apache.spark.sql.execution.PythonUDF
 import org.apache.spark.sql.types.DataType
 
@@ -41,10 +41,13 @@ import org.apache.spark.sql.types.DataType
  * @since 1.3.0
  */
 @Experimental
-case class UserDefinedFunction protected[sql] (f: AnyRef, dataType: DataType) {
+case class UserDefinedFunction protected[sql] (
+    f: AnyRef,
+    dataType: DataType,
+    inputTypes: Seq[DataType] = Nil) {
 
   def apply(exprs: Column*): Column = {
-    Column(ScalaUdf(f, dataType, exprs.map(_.expr)))
+    Column(ScalaUDF(f, dataType, exprs.map(_.expr), inputTypes))
   }
 }
 

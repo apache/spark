@@ -557,7 +557,7 @@ private[spark] object SparkConf extends Logging {
   def isExecutorStartupConf(name: String): Boolean = {
     isAkkaConf(name) ||
     name.startsWith("spark.akka") ||
-    name.startsWith("spark.auth") ||
+    (name.startsWith("spark.auth") && name != SecurityManager.SPARK_AUTH_SECRET_CONF) ||
     name.startsWith("spark.ssl") ||
     isSparkPortConf(name)
   }

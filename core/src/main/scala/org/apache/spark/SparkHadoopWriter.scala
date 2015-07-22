@@ -28,6 +28,7 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.mapred.SparkHadoopMapRedUtil
 import org.apache.spark.rdd.HadoopRDD
+import org.apache.spark.util.SerializableJobConf
 
 /**
  * Internal helper class that saves an RDD using a Hadoop OutputFormat.
@@ -42,7 +43,7 @@ class SparkHadoopWriter(@transient jobConf: JobConf)
   with Serializable {
 
   private val now = new Date()
-  private val conf = new SerializableWritable(jobConf)
+  private val conf = new SerializableJobConf(jobConf)
 
   private var jobID = 0
   private var splitID = 0

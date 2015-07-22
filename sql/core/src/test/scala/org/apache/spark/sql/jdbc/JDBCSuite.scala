@@ -21,13 +21,12 @@ import java.math.BigDecimal
 import java.sql.DriverManager
 import java.util.{Calendar, GregorianCalendar, Properties}
 
-import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.test._
-import org.apache.spark.sql.types._
 import org.h2.jdbc.JdbcSQLException
 import org.scalatest.BeforeAndAfter
-import TestSQLContext._
-import TestSQLContext.implicits._
+
+import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.types._
+import org.apache.spark.util.Utils
 
 class JDBCSuite extends SparkFunSuite with BeforeAndAfter {
   val url = "jdbc:h2:mem:testdb0"
@@ -37,14 +36,18 @@ class JDBCSuite extends SparkFunSuite with BeforeAndAfter {
   val testBytes = Array[Byte](99.toByte, 134.toByte, 135.toByte, 200.toByte, 205.toByte)
 
   val testH2Dialect = new JdbcDialect {
-    def canHandle(url: String) : Boolean = url.startsWith("jdbc:h2")
+    override def canHandle(url: String) : Boolean = url.startsWith("jdbc:h2")
     override def getCatalystType(
         sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] =
       Some(StringType)
   }
 
+  private lazy val ctx = org.apache.spark.sql.test.TestSQLContext
+  import ctx.implicits._
+  import ctx.sql
+
   before {
-    Class.forName("org.h2.Driver")
+    Utils.classForName("org.h2.Driver")
     // Extra properties that will be specified for our database. We need these to test
     // usage of parameters from OPTIONS clause in queries.
     val properties = new Properties()
@@ -253,26 +256,26 @@ class JDBCSuite extends SparkFunSuite with BeforeAndAfter {
   }
 
   test("Basic API") {
-    assert(TestSQLContext.read.jdbc(
+    assert(ctx.read.jdbc(
       urlWithUserAndPass, "TEST.PEOPLE", new Properties).collect().length === 3)
   }
 
   test("Basic API with FetchSize") {
     val properties = new Properties
     properties.setProperty("fetchSize", "2")
-    assert(TestSQLContext.read.jdbc(
+    assert(ctx.read.jdbc(
       urlWithUserAndPass, "TEST.PEOPLE", properties).collect().length === 3)
   }
 
   test("Partitioning via JDBCPartitioningInfo API") {
     assert(
-      TestSQLContext.read.jdbc(urlWithUserAndPass, "TEST.PEOPLE", "THEID", 0, 4, 3, new Properties)
+      ctx.read.jdbc(urlWithUserAndPass, "TEST.PEOPLE", "THEID", 0, 4, 3, new Properties)
       .collect().length === 3)
   }
 
   test("Partitioning via list-of-where-clauses API") {
     val parts = Array[String]("THEID < 2", "THEID >= 2")
-    assert(TestSQLContext.read.jdbc(urlWithUserAndPass, "TEST.PEOPLE", parts, new Properties)
+    assert(ctx.read.jdbc(urlWithUserAndPass, "TEST.PEOPLE", parts, new Properties)
       .collect().length === 3)
   }
 
@@ -324,13 +327,13 @@ class JDBCSuite extends SparkFunSuite with BeforeAndAfter {
     assert(cal.get(Calendar.HOUR) === 11)
     assert(cal.get(Calendar.MINUTE) === 22)
     assert(cal.get(Calendar.SECOND) === 33)
-    assert(rows(0).getAs[java.sql.Timestamp](2).getNanos === 543543543)
+    assert(rows(0).getAs[java.sql.Timestamp](2).getNanos === 543543000)
   }
 
   test("test DATE types") {
-    val rows = TestSQLContext.read.jdbc(
+    val rows = ctx.read.jdbc(
       urlWithUserAndPass, "TEST.TIMETYPES", new Properties).collect()
-    val cachedRows = TestSQLContext.read.jdbc(urlWithUserAndPass, "TEST.TIMETYPES", new Properties)
+    val cachedRows = ctx.read.jdbc(urlWithUserAndPass, "TEST.TIMETYPES", new Properties)
       .cache().collect()
     assert(rows(0).getAs[java.sql.Date](1) === java.sql.Date.valueOf("1996-01-01"))
     assert(rows(1).getAs[java.sql.Date](1) === null)
@@ -338,9 +341,8 @@ class JDBCSuite extends SparkFunSuite with BeforeAndAfter {
   }
 
   test("test DATE types in cache") {
-    val rows =
-      TestSQLContext.read.jdbc(urlWithUserAndPass, "TEST.TIMETYPES", new Properties).collect()
-    TestSQLContext.read.jdbc(urlWithUserAndPass, "TEST.TIMETYPES", new Properties)
+    val rows = ctx.read.jdbc(urlWithUserAndPass, "TEST.TIMETYPES", new Properties).collect()
+    ctx.read.jdbc(urlWithUserAndPass, "TEST.TIMETYPES", new Properties)
       .cache().registerTempTable("mycached_date")
     val cachedRows = sql("select * from mycached_date").collect()
     assert(rows(0).getAs[java.sql.Date](1) === java.sql.Date.valueOf("1996-01-01"))
@@ -348,7 +350,7 @@ class JDBCSuite extends SparkFunSuite with BeforeAndAfter {
   }
 
   test("test types for null value") {
-    val rows = TestSQLContext.read.jdbc(
+    val rows = ctx.read.jdbc(
       urlWithUserAndPass, "TEST.NULLTYPES", new Properties).collect()
     assert((0 to 14).forall(i => rows(0).isNullAt(i)))
   }
@@ -395,10 +397,8 @@ class JDBCSuite extends SparkFunSuite with BeforeAndAfter {
 
   test("Remap types via JdbcDialects") {
     JdbcDialects.registerDialect(testH2Dialect)
-    val df = TestSQLContext.read.jdbc(urlWithUserAndPass, "TEST.PEOPLE", new Properties)
-    assert(df.schema.filter(
-      _.dataType != org.apache.spark.sql.types.StringType
-    ).isEmpty)
+    val df = ctx.read.jdbc(urlWithUserAndPass, "TEST.PEOPLE", new Properties)
+    assert(df.schema.filter(_.dataType != org.apache.spark.sql.types.StringType).isEmpty)
     val rows = df.collect()
     assert(rows(0).get(0).isInstanceOf[String])
     assert(rows(0).get(1).isInstanceOf[String])
@@ -411,6 +411,17 @@ class JDBCSuite extends SparkFunSuite with BeforeAndAfter {
     assert(JdbcDialects.get("test.invalid") == NoopDialect)
   }
 
+  test("quote column names by jdbc dialect") {
+    val MySQL = JdbcDialects.get("jdbc:mysql://127.0.0.1/db")
+    val Postgres = JdbcDialects.get("jdbc:postgresql://127.0.0.1/db")
+
+    val columns = Seq("abc", "key")
+    val MySQLColumns = columns.map(MySQL.quoteIdentifier(_))
+    val PostgresColumns = columns.map(Postgres.quoteIdentifier(_))
+    assert(MySQLColumns === Seq("`abc`", "`key`"))
+    assert(PostgresColumns === Seq(""""abc"""", """"key""""))
+  }
+
   test("Dialect unregister") {
     JdbcDialects.registerDialect(testH2Dialect)
     JdbcDialects.unregisterDialect(testH2Dialect)
@@ -419,7 +430,7 @@ class JDBCSuite extends SparkFunSuite with BeforeAndAfter {
 
   test("Aggregated dialects") {
     val agg = new AggregatedDialect(List(new JdbcDialect {
-      def canHandle(url: String) : Boolean = url.startsWith("jdbc:h2:")
+      override def canHandle(url: String) : Boolean = url.startsWith("jdbc:h2:")
       override def getCatalystType(
           sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] =
         if (sqlType % 2 == 0) {
@@ -430,8 +441,8 @@ class JDBCSuite extends SparkFunSuite with BeforeAndAfter {
     }, testH2Dialect))
     assert(agg.canHandle("jdbc:h2:xxx"))
     assert(!agg.canHandle("jdbc:h2"))
-    assert(agg.getCatalystType(0, "", 1, null) == Some(LongType))
-    assert(agg.getCatalystType(1, "", 1, null) == Some(StringType))
+    assert(agg.getCatalystType(0, "", 1, null) === Some(LongType))
+    assert(agg.getCatalystType(1, "", 1, null) === Some(StringType))
   }
 
 }

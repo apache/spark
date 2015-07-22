@@ -18,6 +18,7 @@
 """
 A collections of builtin functions
 """
+import math
 import sys
 
 if sys.version < "3":
@@ -34,12 +35,19 @@ from pyspark.sql.column import Column, _to_java_column, _to_seq
 __all__ = [
     'array',
     'approxCountDistinct',
+    'bin',
     'coalesce',
     'countDistinct',
     'explode',
+    'format_number',
+    'length',
+    'log2',
+    'md5',
     'monotonicallyIncreasingId',
     'rand',
     'randn',
+    'sha1',
+    'sha2',
     'sparkPartitionId',
     'struct',
     'udf',
@@ -143,7 +151,7 @@ _binary_mathfunctions = {
     'atan2': 'Returns the angle theta from the conversion of rectangular coordinates (x, y) to' +
              'polar coordinates (r, theta).',
     'hypot': 'Computes `sqrt(a^2^ + b^2^)` without intermediate overflow or underflow.',
-    'pow': 'Returns the value of the first argument raised to the power of the second argument.'
+    'pow': 'Returns the value of the first argument raised to the power of the second argument.',
 }
 
 _window_functions = {
@@ -230,6 +238,19 @@ def approxCountDistinct(col, rsd=None):
     return Column(jc)
 
 
+@ignore_unicode_prefix
+@since(1.5)
+def bin(col):
+    """Returns the string representation of the binary value of the given column.
+
+    >>> df.select(bin(df.age).alias('c')).collect()
+    [Row(c=u'10'), Row(c=u'101')]
+    """
+    sc = SparkContext._active_spark_context
+    jc = sc._jvm.functions.bin(_to_java_column(col))
+    return Column(jc)
+
+
 @since(1.4)
 def coalesce(*cols):
     """Returns the first column that is not null.
@@ -246,7 +267,7 @@ def coalesce(*cols):
 
     >>> cDf.select(coalesce(cDf["a"], cDf["b"])).show()
     +-------------+
-    |Coalesce(a,b)|
+    |coalesce(a,b)|
     +-------------+
     |         null|
     |            1|
@@ -255,7 +276,7 @@ def coalesce(*cols):
 
     >>> cDf.select('*', coalesce(cDf["a"], lit(0.0))).show()
     +----+----+---------------+
-    |   a|   b|Coalesce(a,0.0)|
+    |   a|   b|coalesce(a,0.0)|
     +----+----+---------------+
     |null|null|            0.0|
     |   1|null|            1.0|
@@ -300,6 +321,33 @@ def explode(col):
     """
     sc = SparkContext._active_spark_context
     jc = sc._jvm.functions.explode(_to_java_column(col))
+    return Column(jc)
+
+
+@ignore_unicode_prefix
+@since(1.5)
+def levenshtein(left, right):
+    """Computes the Levenshtein distance of the two given strings.
+
+    >>> df0 = sqlContext.createDataFrame([('kitten', 'sitting',)], ['l', 'r'])
+    >>> df0.select(levenshtein('l', 'r').alias('d')).collect()
+    [Row(d=3)]
+    """
+    sc = SparkContext._active_spark_context
+    jc = sc._jvm.functions.levenshtein(_to_java_column(left), _to_java_column(right))
+    return Column(jc)
+
+
+@ignore_unicode_prefix
+@since(1.5)
+def md5(col):
+    """Calculates the MD5 digest and returns the value as a 32 character hex string.
+
+    >>> sqlContext.createDataFrame([('ABC',)], ['a']).select(md5('a').alias('hash')).collect()
+    [Row(hash=u'902fbdd2b1df0c4f70b4a5d23525e932')]
+    """
+    sc = SparkContext._active_spark_context
+    jc = sc._jvm.functions.md5(_to_java_column(col))
     return Column(jc)
 
 
@@ -348,6 +396,102 @@ def randn(seed=None):
     return Column(jc)
 
 
+@ignore_unicode_prefix
+@since(1.5)
+def hex(col):
+    """Computes hex value of the given column, which could be StringType,
+    BinaryType, IntegerType or LongType.
+
+    >>> sqlContext.createDataFrame([('ABC', 3)], ['a', 'b']).select(hex('a'), hex('b')).collect()
+    [Row(hex(a)=u'414243', hex(b)=u'3')]
+    """
+    sc = SparkContext._active_spark_context
+    jc = sc._jvm.functions.hex(_to_java_column(col))
+    return Column(jc)
+
+
+@ignore_unicode_prefix
+@since(1.5)
+def unhex(col):
+    """Inverse of hex. Interprets each pair of characters as a hexadecimal number
+    and converts to the byte representation of number.
+
+    >>> sqlContext.createDataFrame([('414243',)], ['a']).select(unhex('a')).collect()
+    [Row(unhex(a)=bytearray(b'ABC'))]
+    """
+    sc = SparkContext._active_spark_context
+    jc = sc._jvm.functions.unhex(_to_java_column(col))
+    return Column(jc)
+
+
+@ignore_unicode_prefix
+@since(1.5)
+def sha1(col):
+    """Returns the hex string result of SHA-1.
+
+    >>> sqlContext.createDataFrame([('ABC',)], ['a']).select(sha1('a').alias('hash')).collect()
+    [Row(hash=u'3c01bdbb26f358bab27f267924aa2c9a03fcfdb8')]
+    """
+    sc = SparkContext._active_spark_context
+    jc = sc._jvm.functions.sha1(_to_java_column(col))
+    return Column(jc)
+
+
+@ignore_unicode_prefix
+@since(1.5)
+def sha2(col, numBits):
+    """Returns the hex string result of SHA-2 family of hash functions (SHA-224, SHA-256, SHA-384,
+    and SHA-512). The numBits indicates the desired bit length of the result, which must have a
+    value of 224, 256, 384, 512, or 0 (which is equivalent to 256).
+
+    >>> digests = df.select(sha2(df.name, 256).alias('s')).collect()
+    >>> digests[0]
+    Row(s=u'3bc51062973c458d5a6f2d8d64a023246354ad7e064b1e4e009ec8a0699a3043')
+    >>> digests[1]
+    Row(s=u'cd9fb1e148ccd8442e5aa74904cc73bf6fb54d1d54d333bd596aa9bb4bb4e961')
+    """
+    sc = SparkContext._active_spark_context
+    jc = sc._jvm.functions.sha2(_to_java_column(col), numBits)
+    return Column(jc)
+
+
+@since(1.5)
+def shiftLeft(col, numBits):
+    """Shift the the given value numBits left.
+
+    >>> sqlContext.createDataFrame([(21,)], ['a']).select(shiftLeft('a', 1).alias('r')).collect()
+    [Row(r=42)]
+    """
+    sc = SparkContext._active_spark_context
+    jc = sc._jvm.functions.shiftLeft(_to_java_column(col), numBits)
+    return Column(jc)
+
+
+@since(1.5)
+def shiftRight(col, numBits):
+    """Shift the the given value numBits right.
+
+    >>> sqlContext.createDataFrame([(42,)], ['a']).select(shiftRight('a', 1).alias('r')).collect()
+    [Row(r=21)]
+    """
+    sc = SparkContext._active_spark_context
+    jc = sc._jvm.functions.shiftRight(_to_java_column(col), numBits)
+    return Column(jc)
+
+
+@since(1.5)
+def shiftRightUnsigned(col, numBits):
+    """Unsigned shift the the given value numBits right.
+
+    >>> sqlContext.createDataFrame([(-42,)], ['a']).select(shiftRightUnsigned('a', 1).alias('r'))\
+    .collect()
+    [Row(r=9223372036854775787)]
+    """
+    sc = SparkContext._active_spark_context
+    jc = sc._jvm.functions.shiftRightUnsigned(_to_java_column(col), numBits)
+    return Column(jc)
+
+
 @since(1.4)
 def sparkPartitionId():
     """A column for partition ID of the Spark task.
@@ -362,12 +506,37 @@ def sparkPartitionId():
 
 
 @ignore_unicode_prefix
+@since(1.5)
+def length(col):
+    """Calculates the length of a string or binary expression.
+
+    >>> sqlContext.createDataFrame([('ABC',)], ['a']).select(length('a').alias('length')).collect()
+    [Row(length=3)]
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.length(_to_java_column(col)))
+
+
+@ignore_unicode_prefix
+@since(1.5)
+def format_number(col, d):
+    """Formats the number X to a format like '#,###,###.##', rounded to d decimal places,
+       and returns the result as a string.
+    :param col: the column name of the numeric value to be formatted
+    :param d: the N decimal places
+    >>> sqlContext.createDataFrame([(5,)], ['a']).select(format_number('a', 4).alias('v')).collect()
+    [Row(v=u'5.0000')]
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.format_number(_to_java_column(col), d))
+
+
+@ignore_unicode_prefix
 @since(1.4)
 def struct(*cols):
     """Creates a new struct column.
 
     :param cols: list of column names (string) or list of :class:`Column` expressions
-        that are named or aliased.
 
     >>> df.select(struct('age', 'name').alias("struct")).collect()
     [Row(struct=Row(age=2, name=u'Alice')), Row(struct=Row(age=5, name=u'Bob'))]
@@ -401,6 +570,37 @@ def when(condition, value):
     v = value._jc if isinstance(value, Column) else value
     jc = sc._jvm.functions.when(condition._jc, v)
     return Column(jc)
+
+
+@since(1.5)
+def log(arg1, arg2=None):
+    """Returns the first argument-based logarithm of the second argument.
+
+    If there is only one argument, then this takes the natural logarithm of the argument.
+
+    >>> df.select(log(10.0, df.age).alias('ten')).map(lambda l: str(l.ten)[:7]).collect()
+    ['0.30102', '0.69897']
+
+    >>> df.select(log(df.age).alias('e')).map(lambda l: str(l.e)[:7]).collect()
+    ['0.69314', '1.60943']
+    """
+    sc = SparkContext._active_spark_context
+    if arg2 is None:
+        jc = sc._jvm.functions.log(_to_java_column(arg1))
+    else:
+        jc = sc._jvm.functions.log(arg1, _to_java_column(arg2))
+    return Column(jc)
+
+
+@since(1.5)
+def log2(col):
+    """Returns the base-2 logarithm of the argument.
+
+    >>> sqlContext.createDataFrame([(4,)], ['a']).select(log2('a').alias('log2')).collect()
+    [Row(log2=2.0)]
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.log2(_to_java_column(col)))
 
 
 @since(1.4)

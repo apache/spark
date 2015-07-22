@@ -32,7 +32,6 @@ def _to_java_cols(cols):
 
 
 class Window(object):
-
     """
     Utility functions for defining window in DataFrames.
 

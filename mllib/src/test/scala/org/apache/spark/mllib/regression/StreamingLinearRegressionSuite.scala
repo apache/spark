@@ -53,6 +53,7 @@ class StreamingLinearRegressionSuite extends SparkFunSuite with TestSuiteBase {
       .setInitialWeights(Vectors.dense(0.0, 0.0))
       .setStepSize(0.2)
       .setNumIterations(25)
+      .setConvergenceTol(0.0001)
 
     // generate sequence of simulated data
     val numBatches = 10
@@ -165,5 +166,23 @@ class StreamingLinearRegressionSuite extends SparkFunSuite with TestSuiteBase {
     // assert that prediction error improves, ensuring that the updated model is being used
     val error = output.map(batch => batch.map(p => math.abs(p._1 - p._2)).sum / nPoints).toList
     assert((error.head - error.last) > 2)
+  }
+
+  // Test empty RDDs in a stream
+  test("handling empty RDDs in a stream") {
+    val model = new StreamingLinearRegressionWithSGD()
+      .setInitialWeights(Vectors.dense(0.0, 0.0))
+      .setStepSize(0.2)
+      .setNumIterations(25)
+    val numBatches = 10
+    val nPoints = 100
+    val emptyInput = Seq.empty[Seq[LabeledPoint]]
+    val ssc = setupStreams(emptyInput,
+      (inputDStream: DStream[LabeledPoint]) => {
+        model.trainOn(inputDStream)
+        model.predictOnValues(inputDStream.map(x => (x.label, x.features)))
+      }
+    )
+    val output: Seq[Seq[(Double, Double)]] = runStreams(ssc, numBatches, numBatches)
   }
 }

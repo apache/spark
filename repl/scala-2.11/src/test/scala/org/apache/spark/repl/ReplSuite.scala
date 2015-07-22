@@ -22,13 +22,10 @@ import java.net.URLClassLoader
 
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.duration._
-import scala.tools.nsc.interpreter.SparkILoop
 
 import org.apache.commons.lang3.StringEscapeUtils
 import org.apache.spark.{SparkContext, SparkFunSuite}
 import org.apache.spark.util.Utils
-
-
 
 class ReplSuite extends SparkFunSuite {
 
@@ -87,10 +84,6 @@ class ReplSuite extends SparkFunSuite {
       settings = new scala.tools.nsc.Settings
       settings.usejavacp.value = true
       org.apache.spark.repl.Main.interp = this
-      override def createInterpreter() {
-        intp = new SparkILoopInterpreter
-        intp.setContextClassLoader()
-      }
     }
 
     val out = new StringWriter()
@@ -274,7 +267,7 @@ class ReplSuite extends SparkFunSuite {
 
   test("SPARK-2632 importing a method from non serializable class and not using it.") {
     val output = runInterpreter("local",
-    """
+      """
       |class TestClass() { def testMethod = 3 }
       |val t = new TestClass
       |import t.testMethod
@@ -319,7 +312,7 @@ class ReplSuite extends SparkFunSuite {
     assertDoesNotContain("Exception", output)
     assertContains("ret: Array[Foo] = Array(Foo(1),", output)
   }
-  
+
   test("collecting objects of class defined in repl - shuffling") {
     val output = runInterpreter("local-cluster[1,1,512]",
       """

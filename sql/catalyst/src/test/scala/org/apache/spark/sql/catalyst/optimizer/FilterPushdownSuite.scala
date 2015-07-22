@@ -34,8 +34,10 @@ class FilterPushdownSuite extends PlanTest {
       Batch("Subqueries", Once,
         EliminateSubQueries) ::
       Batch("Filter Pushdown", Once,
+        SamplePushDown,
         CombineFilters,
         PushPredicateThroughProject,
+        BooleanSimplification,
         PushPredicateThroughJoin,
         PushPredicateThroughGenerate,
         ColumnPruning,
@@ -156,10 +158,8 @@ class FilterPushdownSuite extends PlanTest {
         .where('a === 1 && 'a === 2)
         .select('a).analyze
 
-
     comparePlans(optimized, correctAnswer)
   }
-
 
   test("joins: push to either side") {
     val x = testRelation.subquery('x)
@@ -194,6 +194,25 @@ class FilterPushdownSuite extends PlanTest {
     val right = testRelation
     val correctAnswer =
       left.join(right).analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("joins: push to one side after transformCondition") {
+    val x = testRelation.subquery('x)
+    val y = testRelation1.subquery('y)
+
+    val originalQuery = {
+      x.join(y)
+       .where(("x.a".attr === 1 && "y.d".attr === "x.b".attr) ||
+              ("x.a".attr === 1 && "y.d".attr === "x.c".attr))
+    }
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+    val left = testRelation.where('a === 1)
+    val right = testRelation1
+    val correctAnswer =
+      left.join(right, condition = Some("d".attr === "b".attr || "d".attr === "c".attr)).analyze
 
     comparePlans(optimized, correctAnswer)
   }
@@ -563,17 +582,31 @@ class FilterPushdownSuite extends PlanTest {
     // push down invalid
     val originalQuery1 = {
       x.select('a, 'b)
-        .sortBy(SortOrder('a, Ascending))
-        .select('b)
+       .sortBy(SortOrder('a, Ascending))
+       .select('b)
     }
 
     val optimized1 = Optimize.execute(originalQuery1.analyze)
     val correctAnswer1 =
       x.select('a, 'b)
-        .sortBy(SortOrder('a, Ascending))
-        .select('b).analyze
+       .sortBy(SortOrder('a, Ascending))
+       .select('b).analyze
 
     comparePlans(optimized1, analysis.EliminateSubQueries(correctAnswer1))
+  }
 
+  test("push project and filter down into sample") {
+    val x = testRelation.subquery('x)
+    val originalQuery =
+      Sample(0.0, 0.6, false, 11L, x).select('a)
+
+    val originalQueryAnalyzed = EliminateSubQueries(analysis.SimpleAnalyzer.execute(originalQuery))
+
+    val optimized = Optimize.execute(originalQueryAnalyzed)
+
+    val correctAnswer =
+      Sample(0.0, 0.6, false, 11L, x.select('a))
+
+    comparePlans(optimized, correctAnswer.analyze)
   }
 }

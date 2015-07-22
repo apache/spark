@@ -123,7 +123,9 @@ private[spark] class PipedRDD[T: ClassTag](
     new Thread("stderr reader for " + command) {
       override def run() {
         for (line <- Source.fromInputStream(proc.getErrorStream).getLines) {
+          // scalastyle:off println
           System.err.println(line)
+          // scalastyle:on println
         }
       }
     }.start()
@@ -133,6 +135,7 @@ private[spark] class PipedRDD[T: ClassTag](
       override def run() {
         val out = new PrintWriter(proc.getOutputStream)
 
+        // scalastyle:off println
         // input the pipe context firstly
         if (printPipeContext != null) {
           printPipeContext(out.println(_))
@@ -144,6 +147,7 @@ private[spark] class PipedRDD[T: ClassTag](
             out.println(elem)
           }
         }
+        // scalastyle:on println
         out.close()
       }
     }.start()

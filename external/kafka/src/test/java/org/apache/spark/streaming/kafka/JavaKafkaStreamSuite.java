@@ -18,9 +18,7 @@
 package org.apache.spark.streaming.kafka;
 
 import java.io.Serializable;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Random;
+import java.util.*;
 
 import scala.Tuple2;
 
@@ -94,7 +92,7 @@ public class JavaKafkaStreamSuite implements Serializable {
       topics,
       StorageLevel.MEMORY_ONLY_SER());
 
-    final HashMap<String, Long> result = new HashMap<String, Long>();
+    final Map<String, Long> result = Collections.synchronizedMap(new HashMap<String, Long>());
 
     JavaDStream<String> words = stream.map(
       new Function<Tuple2<String, String>, String>() {

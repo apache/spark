@@ -4,7 +4,7 @@
 #  divided into instances which correspond to internal components.
 #  Each instance can be configured to report its metrics to one or more sinks.
 #  Accepted values for [instance] are "master", "worker", "executor", "driver",
-#  and "applications". A wild card "*" can be used as an instance name, in
+#  and "applications". A wildcard "*" can be used as an instance name, in
 #  which case all instances will inherit the supplied property.
 #
 #  Within an instance, a "source" specifies a particular set of grouped metrics.
@@ -32,7 +32,7 @@
 #    name (see examples below).
 #    2. Some sinks involve a polling period. The minimum allowed polling period
 #    is 1 second.
-#    3. Wild card properties can be overridden by more specific properties.
+#    3. Wildcard properties can be overridden by more specific properties.
 #    For example, master.sink.console.period takes precedence over
 #    *.sink.console.period.
 #    4. A metrics specific configuration
@@ -46,6 +46,13 @@
 #    "/metrics/applications/json" can be sent seperately to get metrics snapshot of
 #    instance master and applications. MetricsServlet may not be configured by self.
 #
+
+## List of available common sources and their properties.
+
+# org.apache.spark.metrics.source.JvmSource
+#   Note: Currently, JvmSource is the only available common source 
+#         to add additionaly to an instance, to enable this, 
+#         set the "class" option to its fully qulified class name (see examples below)
 
 ## List of available sinks and their properties.
 

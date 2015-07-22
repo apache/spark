@@ -25,12 +25,12 @@ import scala.collection.JavaConverters._
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.attribute._
-import org.apache.spark.ml.param.{IntParam, ParamValidators, Params}
+import org.apache.spark.ml.param.{IntParam, ParamMap, ParamValidators, Params}
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util.{Identifiable, SchemaUtils}
 import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vector, VectorUDT}
 import org.apache.spark.sql.{DataFrame, Row}
-import org.apache.spark.sql.functions.callUDF
+import org.apache.spark.sql.functions.udf
 import org.apache.spark.sql.types.{StructField, StructType}
 import org.apache.spark.util.collection.OpenHashSet
 
@@ -131,6 +131,8 @@ class VectorIndexer(override val uid: String) extends Estimator[VectorIndexerMod
     SchemaUtils.checkColumnType(schema, $(inputCol), dataType)
     SchemaUtils.appendColumn(schema, $(outputCol), dataType)
   }
+
+  override def copy(extra: ParamMap): VectorIndexer = defaultCopy(extra)
 }
 
 private object VectorIndexer {
@@ -337,7 +339,8 @@ class VectorIndexerModel private[ml] (
   override def transform(dataset: DataFrame): DataFrame = {
     transformSchema(dataset.schema, logging = true)
     val newField = prepOutputField(dataset.schema)
-    val newCol = callUDF(transformFunc, new VectorUDT, dataset($(inputCol)))
+    val transformUDF = udf { (vector: Vector) => transformFunc(vector) }
+    val newCol = transformUDF(dataset($(inputCol)))
     dataset.withColumn($(outputCol), newCol.as($(outputCol), newField.metadata))
   }
 
@@ -398,5 +401,10 @@ class VectorIndexerModel private[ml] (
     }
     val newAttributeGroup = new AttributeGroup($(outputCol), featureAttributes)
     newAttributeGroup.toStructField()
+  }
+
+  override def copy(extra: ParamMap): VectorIndexerModel = {
+    val copied = new VectorIndexerModel(uid, numFeatures, categoryMaps)
+    copyValues(copied, extra)
   }
 }

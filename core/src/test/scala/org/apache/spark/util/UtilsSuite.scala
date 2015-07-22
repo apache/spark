@@ -486,11 +486,17 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
 
   // Test for using the util function to change our log levels.
   test("log4j log level change") {
-    Utils.setLogLevel(org.apache.log4j.Level.ALL)
-    assert(log.isInfoEnabled())
-    Utils.setLogLevel(org.apache.log4j.Level.ERROR)
-    assert(!log.isInfoEnabled())
-    assert(log.isErrorEnabled())
+    val current = org.apache.log4j.Logger.getRootLogger().getLevel()
+    try {
+      Utils.setLogLevel(org.apache.log4j.Level.ALL)
+      assert(log.isInfoEnabled())
+      Utils.setLogLevel(org.apache.log4j.Level.ERROR)
+      assert(!log.isInfoEnabled())
+      assert(log.isErrorEnabled())
+    } finally {
+      // Best effort at undoing changes this test made.
+      Utils.setLogLevel(current)
+    }
   }
 
   test("deleteRecursively") {
@@ -672,5 +678,15 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     assert(!Utils.isInDirectory(childFile3, nullFile))
     assert(!Utils.isInDirectory(nullFile, parentDir))
     assert(!Utils.isInDirectory(nullFile, childFile3))
+  }
+
+  test("circular buffer") {
+    val buffer = new CircularBuffer(25)
+    val stream = new java.io.PrintStream(buffer, true, "UTF-8")
+
+    // scalastyle:off println
+    stream.println("test circular test circular test circular test circular test circular")
+    // scalastyle:on println
+    assert(buffer.toString === "t circular test circular\n")
   }
 }

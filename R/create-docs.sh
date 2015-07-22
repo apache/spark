@@ -30,10 +30,7 @@ set -e
 export FWDIR="$(cd "`dirname "$0"`"; pwd)"
 pushd $FWDIR
 
-# Generate Rd file
-Rscript -e 'library(devtools); devtools::document(pkg="./pkg", roclets=c("rd"))'
-
-# Install the package
+# Install the package (this will also generate the Rd files)
 ./install-dev.sh
 
 # Now create HTML files

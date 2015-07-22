@@ -17,23 +17,76 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import java.sql.{Date, Timestamp}
-import java.text.{DateFormat, SimpleDateFormat}
+import java.math.{BigDecimal => JavaBigDecimal}
 
-import org.apache.spark.Logging
-import org.apache.spark.sql.catalyst.util.DateUtils
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.expressions.codegen._
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.{Interval, UTF8String}
 
-/** Cast the child expression to the target data type. */
-case class Cast(child: Expression, dataType: DataType) extends UnaryExpression with Logging {
 
-  override lazy val resolved = childrenResolved && resolve(child.dataType, dataType)
+object Cast {
 
-  override def foldable: Boolean = child.foldable
+  /**
+   * Returns true iff we can cast `from` type to `to` type.
+   */
+  def canCast(from: DataType, to: DataType): Boolean = (from, to) match {
+    case (fromType, toType) if fromType == toType => true
 
-  override def nullable: Boolean = forceNullable(child.dataType, dataType) || child.nullable
+    case (NullType, _) => true
 
-  private[this] def forceNullable(from: DataType, to: DataType) = (from, to) match {
+    case (_, StringType) => true
+
+    case (StringType, BinaryType) => true
+
+    case (StringType, BooleanType) => true
+    case (DateType, BooleanType) => true
+    case (TimestampType, BooleanType) => true
+    case (_: NumericType, BooleanType) => true
+
+    case (StringType, TimestampType) => true
+    case (BooleanType, TimestampType) => true
+    case (DateType, TimestampType) => true
+    case (_: NumericType, TimestampType) => true
+
+    case (_, DateType) => true
+
+    case (StringType, IntervalType) => true
+
+    case (StringType, _: NumericType) => true
+    case (BooleanType, _: NumericType) => true
+    case (DateType, _: NumericType) => true
+    case (TimestampType, _: NumericType) => true
+    case (_: NumericType, _: NumericType) => true
+
+    case (ArrayType(fromType, fn), ArrayType(toType, tn)) =>
+      canCast(fromType, toType) &&
+        resolvableNullability(fn || forceNullable(fromType, toType), tn)
+
+    case (MapType(fromKey, fromValue, fn), MapType(toKey, toValue, tn)) =>
+      canCast(fromKey, toKey) &&
+        (!forceNullable(fromKey, toKey)) &&
+        canCast(fromValue, toValue) &&
+        resolvableNullability(fn || forceNullable(fromValue, toValue), tn)
+
+    case (StructType(fromFields), StructType(toFields)) =>
+      fromFields.length == toFields.length &&
+        fromFields.zip(toFields).forall {
+          case (fromField, toField) =>
+            canCast(fromField.dataType, toField.dataType) &&
+              resolvableNullability(
+                fromField.nullable || forceNullable(fromField.dataType, toField.dataType),
+                toField.nullable)
+        }
+
+    case _ => false
+  }
+
+  private def resolvableNullability(from: Boolean, to: Boolean) = !from || to
+
+  private def forceNullable(from: DataType, to: DataType) = (from, to) match {
     case (StringType, _: NumericType) => true
     case (StringType, TimestampType) => true
     case (DoubleType, TimestampType) => true
@@ -48,60 +101,22 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
     case (_, DecimalType.Fixed(_, _)) => true // TODO: not all upcasts here can really give null
     case _ => false
   }
+}
 
-  private[this] def resolvableNullability(from: Boolean, to: Boolean) = !from || to
+/** Cast the child expression to the target data type. */
+case class Cast(child: Expression, dataType: DataType)
+  extends UnaryExpression with CodegenFallback {
 
-  private[this] def resolve(from: DataType, to: DataType): Boolean = {
-    (from, to) match {
-      case (from, to) if from == to => true
-
-      case (NullType, _) => true
-
-      case (_, StringType) => true
-
-      case (StringType, BinaryType) => true
-
-      case (StringType, BooleanType) => true
-      case (DateType, BooleanType) => true
-      case (TimestampType, BooleanType) => true
-      case (_: NumericType, BooleanType) => true
-
-      case (StringType, TimestampType) => true
-      case (BooleanType, TimestampType) => true
-      case (DateType, TimestampType) => true
-      case (_: NumericType, TimestampType) => true
-
-      case (_, DateType) => true
-
-      case (StringType, _: NumericType) => true
-      case (BooleanType, _: NumericType) => true
-      case (DateType, _: NumericType) => true
-      case (TimestampType, _: NumericType) => true
-      case (_: NumericType, _: NumericType) => true
-
-      case (ArrayType(from, fn), ArrayType(to, tn)) =>
-        resolve(from, to) &&
-          resolvableNullability(fn || forceNullable(from, to), tn)
-
-      case (MapType(fromKey, fromValue, fn), MapType(toKey, toValue, tn)) =>
-        resolve(fromKey, toKey) &&
-          (!forceNullable(fromKey, toKey)) &&
-          resolve(fromValue, toValue) &&
-          resolvableNullability(fn || forceNullable(fromValue, toValue), tn)
-
-      case (StructType(fromFields), StructType(toFields)) =>
-        fromFields.size == toFields.size &&
-          fromFields.zip(toFields).forall {
-            case (fromField, toField) =>
-              resolve(fromField.dataType, toField.dataType) &&
-                resolvableNullability(
-                  fromField.nullable || forceNullable(fromField.dataType, toField.dataType),
-                  toField.nullable)
-          }
-
-      case _ => false
+  override def checkInputDataTypes(): TypeCheckResult = {
+    if (Cast.canCast(child.dataType, dataType)) {
+      TypeCheckResult.TypeCheckSuccess
+    } else {
+      TypeCheckResult.TypeCheckFailure(
+        s"cannot cast ${child.dataType} to $dataType")
     }
   }
+
+  override def nullable: Boolean = Cast.forceNullable(child.dataType, dataType) || child.nullable
 
   override def toString: String = s"CAST($child, $dataType)"
 
@@ -110,10 +125,11 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
 
   // UDFToString
   private[this] def castToString(from: DataType): Any => Any = from match {
-    case BinaryType => buildCast[Array[Byte]](_, UTF8String(_))
-    case DateType => buildCast[Int](_, d => UTF8String(DateUtils.toString(d)))
-    case TimestampType => buildCast[Timestamp](_, t => UTF8String(timestampToString(t)))
-    case _ => buildCast[Any](_, o => UTF8String(o.toString))
+    case BinaryType => buildCast[Array[Byte]](_, UTF8String.fromBytes)
+    case DateType => buildCast[Int](_, d => UTF8String.fromString(DateTimeUtils.dateToString(d)))
+    case TimestampType => buildCast[Long](_,
+      t => UTF8String.fromString(DateTimeUtils.timestampToString(t)))
+    case _ => buildCast[Any](_, o => UTF8String.fromString(o.toString))
   }
 
   // BinaryConverter
@@ -124,9 +140,9 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
   // UDFToBoolean
   private[this] def castToBoolean(from: DataType): Any => Any = from match {
     case StringType =>
-      buildCast[UTF8String](_, _.length() != 0)
+      buildCast[UTF8String](_, _.numBytes() != 0)
     case TimestampType =>
-      buildCast[Timestamp](_, t => t.getTime() != 0 || t.getNanos() != 0)
+      buildCast[Long](_, t => t != 0)
     case DateType =>
       // Hive would return null when cast from date to boolean
       buildCast[Int](_, d => null)
@@ -139,7 +155,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
     case ByteType =>
       buildCast[Byte](_, _ != 0)
     case DecimalType() =>
-      buildCast[Decimal](_, _ != 0)
+      buildCast[Decimal](_, _ != Decimal(0))
     case DoubleType =>
       buildCast[Double](_, _ != 0)
     case FloatType =>
@@ -149,95 +165,65 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
   // TimestampConverter
   private[this] def castToTimestamp(from: DataType): Any => Any = from match {
     case StringType =>
-      buildCast[UTF8String](_, utfs => {
-        // Throw away extra if more than 9 decimal places
-        val s = utfs.toString
-        val periodIdx = s.indexOf(".")
-        var n = s
-        if (periodIdx != -1 && n.length() - periodIdx > 9) {
-          n = n.substring(0, periodIdx + 10)
-        }
-        try Timestamp.valueOf(n) catch { case _: java.lang.IllegalArgumentException => null }
-      })
+      buildCast[UTF8String](_, utfs => DateTimeUtils.stringToTimestamp(utfs).orNull)
     case BooleanType =>
-      buildCast[Boolean](_, b => new Timestamp((if (b) 1 else 0)))
+      buildCast[Boolean](_, b => if (b) 1L else 0)
     case LongType =>
-      buildCast[Long](_, l => new Timestamp(l))
+      buildCast[Long](_, l => longToTimestamp(l))
     case IntegerType =>
-      buildCast[Int](_, i => new Timestamp(i))
+      buildCast[Int](_, i => longToTimestamp(i.toLong))
     case ShortType =>
-      buildCast[Short](_, s => new Timestamp(s))
+      buildCast[Short](_, s => longToTimestamp(s.toLong))
     case ByteType =>
-      buildCast[Byte](_, b => new Timestamp(b))
+      buildCast[Byte](_, b => longToTimestamp(b.toLong))
     case DateType =>
-      buildCast[Int](_, d => new Timestamp(DateUtils.toJavaDate(d).getTime))
+      buildCast[Int](_, d => DateTimeUtils.daysToMillis(d) * 1000)
     // TimestampWritable.decimalToTimestamp
     case DecimalType() =>
       buildCast[Decimal](_, d => decimalToTimestamp(d))
     // TimestampWritable.doubleToTimestamp
     case DoubleType =>
-      buildCast[Double](_, d => try {
-        decimalToTimestamp(Decimal(d))
-      } catch {
-        case _: NumberFormatException => null
-      })
+      buildCast[Double](_, d => doubleToTimestamp(d))
     // TimestampWritable.floatToTimestamp
     case FloatType =>
-      buildCast[Float](_, f => try {
-        decimalToTimestamp(Decimal(f))
-      } catch {
-        case _: NumberFormatException => null
-      })
+      buildCast[Float](_, f => doubleToTimestamp(f.toDouble))
   }
 
-  private[this] def decimalToTimestamp(d: Decimal) = {
-    val seconds = Math.floor(d.toDouble).toLong
-    val bd = (d.toBigDecimal - seconds) * 1000000000
-    val nanos = bd.intValue()
-
-    val millis = seconds * 1000
-    val t = new Timestamp(millis)
-
-    // remaining fractional portion as nanos
-    t.setNanos(nanos)
-    t
+  private[this] def decimalToTimestamp(d: Decimal): Long = {
+    (d.toBigDecimal * 1000000L).longValue()
+  }
+  private[this] def doubleToTimestamp(d: Double): Any = {
+    if (d.isNaN || d.isInfinite) null else (d * 1000000L).toLong
   }
 
-  // Timestamp to long, converting milliseconds to seconds
-  private[this] def timestampToLong(ts: Timestamp) = Math.floor(ts.getTime / 1000.0).toLong
-
-  private[this] def timestampToDouble(ts: Timestamp) = {
-    // First part is the seconds since the beginning of time, followed by nanosecs.
-    Math.floor(ts.getTime / 1000.0).toLong + ts.getNanos.toDouble / 1000000000
-  }
-
-  // Converts Timestamp to string according to Hive TimestampWritable convention
-  private[this] def timestampToString(ts: Timestamp): String = {
-    val timestampString = ts.toString
-    val formatted = Cast.threadLocalTimestampFormat.get.format(ts)
-
-    if (timestampString.length > 19 && timestampString.substring(19) != ".0") {
-      formatted + timestampString.substring(19)
-    } else {
-      formatted
-    }
+  // converting milliseconds to us
+  private[this] def longToTimestamp(t: Long): Long = t * 1000L
+  // converting us to seconds
+  private[this] def timestampToLong(ts: Long): Long = math.floor(ts.toDouble / 1000000L).toLong
+  // converting us to seconds in double
+  private[this] def timestampToDouble(ts: Long): Double = {
+    ts / 1000000.0
   }
 
   // DateConverter
   private[this] def castToDate(from: DataType): Any => Any = from match {
     case StringType =>
-      buildCast[UTF8String](_, s =>
-        try DateUtils.fromJavaDate(Date.valueOf(s.toString))
-        catch { case _: java.lang.IllegalArgumentException => null }
-      )
+      buildCast[UTF8String](_, s => DateTimeUtils.stringToDate(s).orNull)
     case TimestampType =>
       // throw valid precision more than seconds, according to Hive.
       // Timestamp.nanos is in 0 to 999,999,999, no more than a second.
-      buildCast[Timestamp](_, t => DateUtils.millisToDays(t.getTime))
+      buildCast[Long](_, t => DateTimeUtils.millisToDays(t / 1000L))
     // Hive throws this exception as a Semantic Exception
     // It is never possible to compare result when hive return with exception,
     // so we can return null
     // NULL is more reasonable here, since the query itself obeys the grammar.
+    case _ => _ => null
+  }
+
+  // IntervalConverter
+  private[this] def castToInterval(from: DataType): Any => Any = from match {
+    case StringType =>
+      buildCast[UTF8String](_, s => Interval.fromString(s.toString))
     case _ => _ => null
   }
 
@@ -252,7 +238,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
     case DateType =>
       buildCast[Int](_, d => null)
     case TimestampType =>
-      buildCast[Timestamp](_, t => timestampToLong(t))
+      buildCast[Long](_, t => timestampToLong(t))
     case x: NumericType =>
       b => x.numeric.asInstanceOf[Numeric[Any]].toLong(b)
   }
@@ -268,7 +254,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
     case DateType =>
       buildCast[Int](_, d => null)
     case TimestampType =>
-      buildCast[Timestamp](_, t => timestampToLong(t).toInt)
+      buildCast[Long](_, t => timestampToLong(t).toInt)
     case x: NumericType =>
       b => x.numeric.asInstanceOf[Numeric[Any]].toInt(b)
   }
@@ -284,7 +270,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
     case DateType =>
       buildCast[Int](_, d => null)
     case TimestampType =>
-      buildCast[Timestamp](_, t => timestampToLong(t).toShort)
+      buildCast[Long](_, t => timestampToLong(t).toShort)
     case x: NumericType =>
       b => x.numeric.asInstanceOf[Numeric[Any]].toInt(b).toShort
   }
@@ -300,7 +286,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
     case DateType =>
       buildCast[Int](_, d => null)
     case TimestampType =>
-      buildCast[Timestamp](_, t => timestampToLong(t).toByte)
+      buildCast[Long](_, t => timestampToLong(t).toByte)
     case x: NumericType =>
       b => x.numeric.asInstanceOf[Numeric[Any]].toInt(b).toByte
   }
@@ -323,7 +309,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
   private[this] def castToDecimal(from: DataType, target: DecimalType): Any => Any = from match {
     case StringType =>
       buildCast[UTF8String](_, s => try {
-        changePrecision(Decimal(s.toString.toDouble), target)
+        changePrecision(Decimal(new JavaBigDecimal(s.toString)), target)
       } catch {
         case _: NumberFormatException => null
       })
@@ -333,7 +319,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
       buildCast[Int](_, d => null) // date can't cast to decimal in Hive
     case TimestampType =>
       // Note that we lose precision here.
-      buildCast[Timestamp](_, t => changePrecision(Decimal(timestampToDouble(t)), target))
+      buildCast[Long](_, t => changePrecision(Decimal(timestampToDouble(t)), target))
     case DecimalType() =>
       b => changePrecision(b.asInstanceOf[Decimal].clone(), target)
     case LongType =>
@@ -357,7 +343,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
     case DateType =>
       buildCast[Int](_, d => null)
     case TimestampType =>
-      buildCast[Timestamp](_, t => timestampToDouble(t))
+      buildCast[Long](_, t => timestampToDouble(t))
     case x: NumericType =>
       b => x.numeric.asInstanceOf[Numeric[Any]].toDouble(b)
   }
@@ -373,7 +359,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
     case DateType =>
       buildCast[Int](_, d => null)
     case TimestampType =>
-      buildCast[Timestamp](_, t => timestampToDouble(t).toFloat)
+      buildCast[Long](_, t => timestampToDouble(t).toFloat)
     case x: NumericType =>
       b => x.numeric.asInstanceOf[Numeric[Any]].toFloat(b)
   }
@@ -396,12 +382,11 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
       case (fromField, toField) => cast(fromField.dataType, toField.dataType)
     }
     // TODO: Could be faster?
-    val newRow = new GenericMutableRow(from.fields.size)
-    buildCast[Row](_, row => {
+    val newRow = new GenericMutableRow(from.fields.length)
+    buildCast[InternalRow](_, row => {
       var i = 0
       while (i < row.length) {
-        val v = row(i)
-        newRow.update(i, if (v == null) null else casts(i)(v))
+        newRow.update(i, if (row.isNullAt(i)) null else casts(i)(row(i)))
         i += 1
       }
       newRow.copy()
@@ -415,6 +400,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
     case DateType => castToDate(from)
     case decimal: DecimalType => castToDecimal(from, decimal)
     case TimestampType => castToTimestamp(from)
+    case IntervalType => castToInterval(from)
     case BooleanType => castToBoolean(from)
     case ByteType => castToByte(from)
     case ShortType => castToShort(from)
@@ -429,24 +415,54 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
 
   private[this] lazy val cast: Any => Any = cast(child.dataType, dataType)
 
-  override def eval(input: Row): Any = {
-    val evaluated = child.eval(input)
-    if (evaluated == null) null else cast(evaluated)
-  }
-}
+  protected override def nullSafeEval(input: Any): Any = cast(input)
 
-object Cast {
-  // `SimpleDateFormat` is not thread-safe.
-  private[sql] val threadLocalTimestampFormat = new ThreadLocal[DateFormat] {
-    override def initialValue(): SimpleDateFormat = {
-      new SimpleDateFormat("yyyy-MM-dd HH:mm:ss")
-    }
-  }
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    // TODO: Add support for more data types.
+    (child.dataType, dataType) match {
 
-  // `SimpleDateFormat` is not thread-safe.
-  private[sql] val threadLocalDateFormat = new ThreadLocal[DateFormat] {
-    override def initialValue(): SimpleDateFormat = {
-      new SimpleDateFormat("yyyy-MM-dd")
+      case (BinaryType, StringType) =>
+        defineCodeGen (ctx, ev, c =>
+          s"UTF8String.fromBytes($c)")
+
+      case (DateType, StringType) =>
+        defineCodeGen(ctx, ev, c =>
+          s"""UTF8String.fromString(
+                org.apache.spark.sql.catalyst.util.DateTimeUtils.dateToString($c))""")
+
+      case (TimestampType, StringType) =>
+        defineCodeGen(ctx, ev, c =>
+          s"""UTF8String.fromString(
+                org.apache.spark.sql.catalyst.util.DateTimeUtils.timestampToString($c))""")
+
+      case (_, StringType) =>
+        defineCodeGen(ctx, ev, c => s"UTF8String.fromString(String.valueOf($c))")
+
+      case (StringType, IntervalType) =>
+        defineCodeGen(ctx, ev, c =>
+          s"org.apache.spark.unsafe.types.Interval.fromString($c.toString())")
+
+      // fallback for DecimalType, this must be before other numeric types
+      case (_, dt: DecimalType) =>
+        super.genCode(ctx, ev)
+
+      case (BooleanType, dt: NumericType) =>
+        defineCodeGen(ctx, ev, c => s"(${ctx.javaType(dt)})($c ? 1 : 0)")
+
+      case (dt: DecimalType, BooleanType) =>
+        defineCodeGen(ctx, ev, c => s"!$c.isZero()")
+
+      case (dt: NumericType, BooleanType) =>
+        defineCodeGen(ctx, ev, c => s"$c != 0")
+
+      case (_: DecimalType, dt: NumericType) =>
+        defineCodeGen(ctx, ev, c => s"($c).to${ctx.primitiveTypeName(dt)}()")
+
+      case (_: NumericType, dt: NumericType) =>
+        defineCodeGen(ctx, ev, c => s"(${ctx.javaType(dt)})($c)")
+
+      case other =>
+        super.genCode(ctx, ev)
     }
   }
 }

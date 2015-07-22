@@ -46,7 +46,5 @@ abstract class Evaluator extends Params {
    */
   def evaluate(dataset: DataFrame): Double
 
-  override def copy(extra: ParamMap): Evaluator = {
-    super.copy(extra).asInstanceOf[Evaluator]
-  }
+  override def copy(extra: ParamMap): Evaluator
 }

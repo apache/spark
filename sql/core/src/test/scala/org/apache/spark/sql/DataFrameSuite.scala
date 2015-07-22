@@ -17,21 +17,27 @@
 
 package org.apache.spark.sql
 
+import java.io.File
+
 import scala.language.postfixOps
 
+import org.apache.spark.sql.catalyst.plans.logical.OneRowRelation
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.test.{ExamplePointUDT, ExamplePoint, TestSQLContext}
-import org.apache.spark.sql.test.TestSQLContext.implicits._
+import org.apache.spark.sql.test.{ExamplePointUDT, ExamplePoint, SQLTestUtils}
 
-
-class DataFrameSuite extends QueryTest {
+class DataFrameSuite extends QueryTest with SQLTestUtils {
   import org.apache.spark.sql.TestData._
 
+  lazy val ctx = org.apache.spark.sql.test.TestSQLContext
+  import ctx.implicits._
+
+  def sqlContext: SQLContext = ctx
+
   test("analysis error should be eagerly reported") {
-    val oldSetting = TestSQLContext.conf.dataFrameEagerAnalysis
+    val oldSetting = ctx.conf.dataFrameEagerAnalysis
     // Eager analysis.
-    TestSQLContext.setConf(SQLConf.DATAFRAME_EAGER_ANALYSIS, "true")
+    ctx.setConf(SQLConf.DATAFRAME_EAGER_ANALYSIS, true)
 
     intercept[Exception] { testData.select('nonExistentName) }
     intercept[Exception] {
@@ -45,11 +51,11 @@ class DataFrameSuite extends QueryTest {
     }
 
     // No more eager analysis once the flag is turned off
-    TestSQLContext.setConf(SQLConf.DATAFRAME_EAGER_ANALYSIS, "false")
+    ctx.setConf(SQLConf.DATAFRAME_EAGER_ANALYSIS, false)
     testData.select('nonExistentName)
 
     // Set the flag back to original value before this test.
-    TestSQLContext.setConf(SQLConf.DATAFRAME_EAGER_ANALYSIS, oldSetting.toString)
+    ctx.setConf(SQLConf.DATAFRAME_EAGER_ANALYSIS, oldSetting)
   }
 
   test("dataframe toString") {
@@ -67,12 +73,12 @@ class DataFrameSuite extends QueryTest {
   }
 
   test("invalid plan toString, debug mode") {
-    val oldSetting = TestSQLContext.conf.dataFrameEagerAnalysis
-    TestSQLContext.setConf(SQLConf.DATAFRAME_EAGER_ANALYSIS, "true")
+    val oldSetting = ctx.conf.dataFrameEagerAnalysis
+    ctx.setConf(SQLConf.DATAFRAME_EAGER_ANALYSIS, true)
 
     // Turn on debug mode so we can see invalid query plans.
     import org.apache.spark.sql.execution.debug._
-    TestSQLContext.debug()
+    ctx.debug()
 
     val badPlan = testData.select('badColumn)
 
@@ -81,7 +87,7 @@ class DataFrameSuite extends QueryTest {
         badPlan.toString)
 
     // Set the flag back to original value before this test.
-    TestSQLContext.setConf(SQLConf.DATAFRAME_EAGER_ANALYSIS, oldSetting.toString)
+    ctx.setConf(SQLConf.DATAFRAME_EAGER_ANALYSIS, oldSetting)
   }
 
   test("access complex data") {
@@ -97,8 +103,8 @@ class DataFrameSuite extends QueryTest {
   }
 
   test("empty data frame") {
-    assert(TestSQLContext.emptyDataFrame.columns.toSeq === Seq.empty[String])
-    assert(TestSQLContext.emptyDataFrame.count() === 0)
+    assert(ctx.emptyDataFrame.columns.toSeq === Seq.empty[String])
+    assert(ctx.emptyDataFrame.count() === 0)
   }
 
   test("head and take") {
@@ -132,6 +138,14 @@ class DataFrameSuite extends QueryTest {
     )
   }
 
+  test("explode alias and star") {
+    val df = Seq((Array("a"), 1)).toDF("a", "b")
+
+    checkAnswer(
+      df.select(explode($"a").as("a"), $"*"),
+      Row("a", Seq("a"), 1) :: Nil)
+  }
+
   test("selectExpr") {
     checkAnswer(
       testData.selectExpr("abs(key)", "value"),
@@ -148,6 +162,12 @@ class DataFrameSuite extends QueryTest {
     checkAnswer(
       testData.filter("key > 90"),
       testData.collect().filter(_.getInt(0) > 90).toSeq)
+  }
+
+  test("filterExpr using where") {
+    checkAnswer(
+      testData.where("key > 50"),
+      testData.collect().filter(_.getInt(0) > 50).toSeq)
   }
 
   test("repartition") {
@@ -291,12 +311,21 @@ class DataFrameSuite extends QueryTest {
     )
   }
 
-  test("call udf in SQLContext") {
+  test("deprecated callUdf in SQLContext") {
     val df = Seq(("id1", 1), ("id2", 4), ("id3", 5)).toDF("id", "value")
     val sqlctx = df.sqlContext
     sqlctx.udf.register("simpleUdf", (v: Int) => v * v)
     checkAnswer(
       df.select($"id", callUdf("simpleUdf", $"value")),
+      Row("id1", 1) :: Row("id2", 16) :: Row("id3", 25) :: Nil)
+  }
+
+  test("callUDF in SQLContext") {
+    val df = Seq(("id1", 1), ("id2", 4), ("id3", 5)).toDF("id", "value")
+    val sqlctx = df.sqlContext
+    sqlctx.udf.register("simpleUDF", (v: Int) => v * v)
+    checkAnswer(
+      df.select($"id", callUDF("simpleUDF", $"value")),
       Row("id1", 1) :: Row("id2", 16) :: Row("id3", 25) :: Nil)
   }
 
@@ -311,7 +340,7 @@ class DataFrameSuite extends QueryTest {
   }
 
   test("replace column using withColumn") {
-    val df2 = TestSQLContext.sparkContext.parallelize(Array(1, 2, 3)).toDF("x")
+    val df2 = ctx.sparkContext.parallelize(Array(1, 2, 3)).toDF("x")
     val df3 = df2.withColumn("x", df2("x") + 1)
     checkAnswer(
       df3.select("x"),
@@ -334,6 +363,51 @@ class DataFrameSuite extends QueryTest {
     assert(df.schema.map(_.name) === Seq("key", "value"))
   }
 
+  test("drop column using drop with column reference") {
+    val col = testData("key")
+    val df = testData.drop(col)
+    checkAnswer(
+      df,
+      testData.collect().map(x => Row(x.getString(1))).toSeq)
+    assert(df.schema.map(_.name) === Seq("value"))
+  }
+
+  test("drop unknown column (no-op) with column reference") {
+    val col = Column("random")
+    val df = testData.drop(col)
+    checkAnswer(
+      df,
+      testData.collect().toSeq)
+    assert(df.schema.map(_.name) === Seq("key", "value"))
+  }
+
+  test("drop unknown column with same name (no-op) with column reference") {
+    val col = Column("key")
+    val df = testData.drop(col)
+    checkAnswer(
+      df,
+      testData.collect().toSeq)
+    assert(df.schema.map(_.name) === Seq("key", "value"))
+  }
+
+  test("drop column after join with duplicate columns using column reference") {
+    val newSalary = salary.withColumnRenamed("personId", "id")
+    val col = newSalary("id")
+    // this join will result in duplicate "id" columns
+    val joinedDf = person.join(newSalary,
+      person("id") === newSalary("id"), "inner")
+    // remove only the "id" column that was associated with newSalary
+    val df = joinedDf.drop(col)
+    checkAnswer(
+      df,
+      joinedDf.collect().map {
+        case Row(id: Int, name: String, age: Int, idToDrop: Int, salary: Double) =>
+          Row(id, name, age, salary)
+      }.toSeq)
+    assert(df.schema.map(_.name) === Seq("id", "name", "age", "salary"))
+    assert(df("id") == person("id"))
+  }
+
   test("withColumnRenamed") {
     val df = testData.toDF().withColumn("newCol", col("key") + 1)
       .withColumnRenamed("value", "valueRenamed")
@@ -347,7 +421,7 @@ class DataFrameSuite extends QueryTest {
 
   test("randomSplit") {
     val n = 600
-    val data = TestSQLContext.sparkContext.parallelize(1 to n, 2).toDF("id")
+    val data = ctx.sparkContext.parallelize(1 to n, 2).toDF("id")
     for (seed <- 1 to 5) {
       val splits = data.randomSplit(Array[Double](1, 2, 3), seed)
       assert(splits.length == 3, "wrong number of splits")
@@ -422,12 +496,84 @@ class DataFrameSuite extends QueryTest {
     testData.select($"*").show(1000)
   }
 
+  test("showString: truncate = [true, false]") {
+    val longString = Array.fill(21)("1").mkString
+    val df = ctx.sparkContext.parallelize(Seq("1", longString)).toDF()
+    val expectedAnswerForFalse = """+---------------------+
+                                   ||_1                   |
+                                   |+---------------------+
+                                   ||1                    |
+                                   ||111111111111111111111|
+                                   |+---------------------+
+                                   |""".stripMargin
+    assert(df.showString(10, false) === expectedAnswerForFalse)
+    val expectedAnswerForTrue = """+--------------------+
+                                  ||                  _1|
+                                  |+--------------------+
+                                  ||                   1|
+                                  ||11111111111111111...|
+                                  |+--------------------+
+                                  |""".stripMargin
+    assert(df.showString(10, true) === expectedAnswerForTrue)
+  }
+
+  test("showString(negative)") {
+    val expectedAnswer = """+---+-----+
+                           ||key|value|
+                           |+---+-----+
+                           |+---+-----+
+                           |only showing top 0 rows
+                           |""".stripMargin
+    assert(testData.select($"*").showString(-1) === expectedAnswer)
+  }
+
+  test("showString(0)") {
+    val expectedAnswer = """+---+-----+
+                           ||key|value|
+                           |+---+-----+
+                           |+---+-----+
+                           |only showing top 0 rows
+                           |""".stripMargin
+    assert(testData.select($"*").showString(0) === expectedAnswer)
+  }
+
+  test("showString: array") {
+    val df = Seq(
+      (Array(1, 2, 3), Array(1, 2, 3)),
+      (Array(2, 3, 4), Array(2, 3, 4))
+    ).toDF()
+    val expectedAnswer = """+---------+---------+
+                           ||       _1|       _2|
+                           |+---------+---------+
+                           ||[1, 2, 3]|[1, 2, 3]|
+                           ||[2, 3, 4]|[2, 3, 4]|
+                           |+---------+---------+
+                           |""".stripMargin
+    assert(df.showString(10) === expectedAnswer)
+  }
+
+  test("showString: minimum column width") {
+    val df = Seq(
+      (1, 1),
+      (2, 2)
+    ).toDF()
+    val expectedAnswer = """+---+---+
+                           || _1| _2|
+                           |+---+---+
+                           ||  1|  1|
+                           ||  2|  2|
+                           |+---+---+
+                           |""".stripMargin
+    assert(df.showString(10) === expectedAnswer)
+  }
+
   test("SPARK-7319 showString") {
     val expectedAnswer = """+---+-----+
                            ||key|value|
                            |+---+-----+
                            ||  1|    1|
                            |+---+-----+
+                           |only showing top 1 row
                            |""".stripMargin
     assert(testData.select($"*").showString(1) === expectedAnswer)
   }
@@ -442,19 +588,22 @@ class DataFrameSuite extends QueryTest {
   }
 
   test("createDataFrame(RDD[Row], StructType) should convert UDTs (SPARK-6672)") {
-    val rowRDD = TestSQLContext.sparkContext.parallelize(Seq(Row(new ExamplePoint(1.0, 2.0))))
+    val rowRDD = ctx.sparkContext.parallelize(Seq(Row(new ExamplePoint(1.0, 2.0))))
     val schema = StructType(Array(StructField("point", new ExamplePointUDT(), false)))
-    val df = TestSQLContext.createDataFrame(rowRDD, schema)
+    val df = ctx.createDataFrame(rowRDD, schema)
     df.rdd.collect()
   }
 
   test("SPARK-6899") {
-    val originalValue = TestSQLContext.conf.codegenEnabled
-    TestSQLContext.setConf(SQLConf.CODEGEN_ENABLED, "true")
-    checkAnswer(
-      decimalData.agg(avg('a)),
-      Row(new java.math.BigDecimal(2.0)))
-    TestSQLContext.setConf(SQLConf.CODEGEN_ENABLED, originalValue.toString)
+    val originalValue = ctx.conf.codegenEnabled
+    ctx.setConf(SQLConf.CODEGEN_ENABLED, true)
+    try{
+      checkAnswer(
+        decimalData.agg(avg('a)),
+        Row(new java.math.BigDecimal(2.0)))
+    } finally {
+      ctx.setConf(SQLConf.CODEGEN_ENABLED, originalValue)
+    }
   }
 
   test("SPARK-7133: Implement struct, array, and map field accessor") {
@@ -465,14 +614,14 @@ class DataFrameSuite extends QueryTest {
   }
 
   test("SPARK-7551: support backticks for DataFrame attribute resolution") {
-    val df = TestSQLContext.read.json(TestSQLContext.sparkContext.makeRDD(
+    val df = ctx.read.json(ctx.sparkContext.makeRDD(
       """{"a.b": {"c": {"d..e": {"f": 1}}}}""" :: Nil))
     checkAnswer(
       df.select(df("`a.b`.c.`d..e`.`f`")),
       Row(1)
     )
 
-    val df2 = TestSQLContext.read.json(TestSQLContext.sparkContext.makeRDD(
+    val df2 = ctx.read.json(ctx.sparkContext.makeRDD(
       """{"a  b": {"c": {"d  e": {"f": 1}}}}""" :: Nil))
     checkAnswer(
       df2.select(df2("`a  b`.c.d  e.f")),
@@ -492,7 +641,7 @@ class DataFrameSuite extends QueryTest {
   }
 
   test("SPARK-7324 dropDuplicates") {
-    val testData = TestSQLContext.sparkContext.parallelize(
+    val testData = ctx.sparkContext.parallelize(
       (2, 1, 2) :: (1, 1, 1) ::
       (1, 2, 1) :: (2, 1, 2) ::
       (2, 2, 2) :: (2, 2, 1) ::
@@ -540,49 +689,125 @@ class DataFrameSuite extends QueryTest {
 
   test("SPARK-7150 range api") {
     // numSlice is greater than length
-    val res1 = TestSQLContext.range(0, 10, 1, 15).select("id")
+    val res1 = ctx.range(0, 10, 1, 15).select("id")
     assert(res1.count == 10)
     assert(res1.agg(sum("id")).as("sumid").collect() === Seq(Row(45)))
 
-    val res2 = TestSQLContext.range(3, 15, 3, 2).select("id")
+    val res2 = ctx.range(3, 15, 3, 2).select("id")
     assert(res2.count == 4)
     assert(res2.agg(sum("id")).as("sumid").collect() === Seq(Row(30)))
 
-    val res3 = TestSQLContext.range(1, -2).select("id")
+    val res3 = ctx.range(1, -2).select("id")
     assert(res3.count == 0)
 
     // start is positive, end is negative, step is negative
-    val res4 = TestSQLContext.range(1, -2, -2, 6).select("id")
+    val res4 = ctx.range(1, -2, -2, 6).select("id")
     assert(res4.count == 2)
     assert(res4.agg(sum("id")).as("sumid").collect() === Seq(Row(0)))
 
     // start, end, step are negative
-    val res5 = TestSQLContext.range(-3, -8, -2, 1).select("id")
+    val res5 = ctx.range(-3, -8, -2, 1).select("id")
     assert(res5.count == 3)
     assert(res5.agg(sum("id")).as("sumid").collect() === Seq(Row(-15)))
 
     // start, end are negative, step is positive
-    val res6 = TestSQLContext.range(-8, -4, 2, 1).select("id")
+    val res6 = ctx.range(-8, -4, 2, 1).select("id")
     assert(res6.count == 2)
     assert(res6.agg(sum("id")).as("sumid").collect() === Seq(Row(-14)))
 
-    val res7 = TestSQLContext.range(-10, -9, -20, 1).select("id")
+    val res7 = ctx.range(-10, -9, -20, 1).select("id")
     assert(res7.count == 0)
 
-    val res8 = TestSQLContext.range(Long.MinValue, Long.MaxValue, Long.MaxValue, 100).select("id")
+    val res8 = ctx.range(Long.MinValue, Long.MaxValue, Long.MaxValue, 100).select("id")
     assert(res8.count == 3)
     assert(res8.agg(sum("id")).as("sumid").collect() === Seq(Row(-3)))
 
-    val res9 = TestSQLContext.range(Long.MaxValue, Long.MinValue, Long.MinValue, 100).select("id")
+    val res9 = ctx.range(Long.MaxValue, Long.MinValue, Long.MinValue, 100).select("id")
     assert(res9.count == 2)
     assert(res9.agg(sum("id")).as("sumid").collect() === Seq(Row(Long.MaxValue - 1)))
 
     // only end provided as argument
-    val res10 = TestSQLContext.range(10).select("id")
+    val res10 = ctx.range(10).select("id")
     assert(res10.count == 10)
     assert(res10.agg(sum("id")).as("sumid").collect() === Seq(Row(45)))
 
-    val res11 = TestSQLContext.range(-1).select("id")
+    val res11 = ctx.range(-1).select("id")
     assert(res11.count == 0)
+  }
+
+  test("SPARK-8621: support empty string column name") {
+    val df = Seq(Tuple1(1)).toDF("").as("t")
+    // We should allow empty string as column name
+    df.col("")
+    df.col("t.``")
+  }
+
+  test("SPARK-8072: Better Exception for Duplicate Columns") {
+    // only one duplicate column present
+    val e = intercept[org.apache.spark.sql.AnalysisException] {
+      Seq((1, 2, 3), (2, 3, 4), (3, 4, 5)).toDF("column1", "column2", "column1")
+        .write.format("parquet").save("temp")
+    }
+    assert(e.getMessage.contains("Duplicate column(s)"))
+    assert(e.getMessage.contains("parquet"))
+    assert(e.getMessage.contains("column1"))
+    assert(!e.getMessage.contains("column2"))
+
+    // multiple duplicate columns present
+    val f = intercept[org.apache.spark.sql.AnalysisException] {
+      Seq((1, 2, 3, 4, 5), (2, 3, 4, 5, 6), (3, 4, 5, 6, 7))
+        .toDF("column1", "column2", "column3", "column1", "column3")
+        .write.format("json").save("temp")
+    }
+    assert(f.getMessage.contains("Duplicate column(s)"))
+    assert(f.getMessage.contains("JSON"))
+    assert(f.getMessage.contains("column1"))
+    assert(f.getMessage.contains("column3"))
+    assert(!f.getMessage.contains("column2"))
+  }
+
+  test("SPARK-6941: Better error message for inserting into RDD-based Table") {
+    withTempDir { dir =>
+
+      val tempParquetFile = new File(dir, "tmp_parquet")
+      val tempJsonFile = new File(dir, "tmp_json")
+
+      val df = Seq(Tuple1(1)).toDF()
+      val insertion = Seq(Tuple1(2)).toDF("col")
+
+      // pass case: parquet table (HadoopFsRelation)
+      df.write.mode(SaveMode.Overwrite).parquet(tempParquetFile.getCanonicalPath)
+      val pdf = ctx.read.parquet(tempParquetFile.getCanonicalPath)
+      pdf.registerTempTable("parquet_base")
+      insertion.write.insertInto("parquet_base")
+
+      // pass case: json table (InsertableRelation)
+      df.write.mode(SaveMode.Overwrite).json(tempJsonFile.getCanonicalPath)
+      val jdf = ctx.read.json(tempJsonFile.getCanonicalPath)
+      jdf.registerTempTable("json_base")
+      insertion.write.mode(SaveMode.Overwrite).insertInto("json_base")
+
+      // error cases: insert into an RDD
+      df.registerTempTable("rdd_base")
+      val e1 = intercept[AnalysisException] {
+        insertion.write.insertInto("rdd_base")
+      }
+      assert(e1.getMessage.contains("Inserting into an RDD-based table is not allowed."))
+
+      // error case: insert into a logical plan that is not a LeafNode
+      val indirectDS = pdf.select("_1").filter($"_1" > 5)
+      indirectDS.registerTempTable("indirect_ds")
+      val e2 = intercept[AnalysisException] {
+        insertion.write.insertInto("indirect_ds")
+      }
+      assert(e2.getMessage.contains("Inserting into an RDD-based table is not allowed."))
+
+      // error case: insert into an OneRowRelation
+      new DataFrame(ctx, OneRowRelation).registerTempTable("one_row")
+      val e3 = intercept[AnalysisException] {
+        insertion.write.insertInto("one_row")
+      }
+      assert(e3.getMessage.contains("Inserting into an RDD-based table is not allowed."))
+    }
   }
 }

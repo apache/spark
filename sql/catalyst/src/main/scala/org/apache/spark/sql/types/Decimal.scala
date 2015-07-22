@@ -86,7 +86,7 @@ final class Decimal extends Ordered[Decimal] with Serializable {
       if (precision < 19) {
         return null  // Requested precision is too low to represent this value
       }
-      this.decimalVal = BigDecimal(longVal)
+      this.decimalVal = BigDecimal(unscaled)
       this.longVal = 0L
     } else {
       val p = POW_10(math.min(precision, MAX_LONG_DIGITS))
@@ -278,6 +278,8 @@ final class Decimal extends Ordered[Decimal] with Serializable {
       Decimal(-longVal, precision, scale)
     }
   }
+
+  def abs: Decimal = if (this.compare(Decimal(0)) < 0) this.unary_- else this
 }
 
 object Decimal {

@@ -526,8 +526,14 @@ abstract class HiveWindowFunctionQueryBaseSuite extends HiveComparisonTest with 
       |             rows between 2 preceding and 2 following);
     """.stripMargin, reset = false)
 
+  // collect_set() output array in an arbitrary order, hence causes different result
+  // when running this test suite under Java 7 and 8.
+  // We change the original sql query a little bit for making the test suite passed
+  // under different JDK
   createQueryTest("windowing.q -- 20. testSTATs",
     """
+      |select p_mfgr,p_name, p_size, sdev, sdev_pop, uniq_data, var, cor, covarp
+      |from (
       |select  p_mfgr,p_name, p_size,
       |stddev(p_retailprice) over w1 as sdev,
       |stddev_pop(p_retailprice) over w1 as sdev_pop,
@@ -538,6 +544,8 @@ abstract class HiveWindowFunctionQueryBaseSuite extends HiveComparisonTest with 
       |from part
       |window w1 as (distribute by p_mfgr sort by p_mfgr, p_name
       |             rows between 2 preceding and 2 following)
+      |) t lateral view explode(uniq_size) d as uniq_data
+      |order by p_mfgr,p_name, p_size, sdev, sdev_pop, uniq_data, var, cor, covarp
     """.stripMargin, reset = false)
 
   createQueryTest("windowing.q -- 21. testDISTs",

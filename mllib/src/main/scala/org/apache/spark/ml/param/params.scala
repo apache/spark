@@ -296,8 +296,24 @@ class DoubleArrayParam(parent: Params, name: String, doc: String, isValid: Array
 }
 
 /**
+ * :: DeveloperApi ::
+ * Specialized version of [[Param[Array[Int]]]] for Java.
+ */
+@DeveloperApi
+class IntArrayParam(parent: Params, name: String, doc: String, isValid: Array[Int] => Boolean)
+  extends Param[Array[Int]](parent, name, doc, isValid) {
+
+  def this(parent: Params, name: String, doc: String) =
+    this(parent, name, doc, ParamValidators.alwaysTrue)
+
+  /** Creates a param pair with a [[java.util.List]] of values (for Java and Python). */
+  def w(value: java.util.List[java.lang.Integer]): ParamPair[Array[Int]] =
+    w(value.asScala.map(_.asInstanceOf[Int]).toArray)
+}
+
+/**
  * :: Experimental ::
- * A param amd its value.
+ * A param and its value.
  */
 @Experimental
 case class ParamPair[T](param: Param[T], value: T) {
@@ -341,9 +357,7 @@ trait Params extends Identifiable with Serializable {
    * those are checked during schema validation.
    */
   def validateParams(): Unit = {
-    params.filter(isDefined).foreach { param =>
-      param.asInstanceOf[Param[Any]].validate($(param))
-    }
+    // Do nothing by default.  Override to handle Param interactions.
   }
 
   /**
@@ -492,13 +506,20 @@ trait Params extends Identifiable with Serializable {
 
   /**
    * Creates a copy of this instance with the same UID and some extra params.
-   * The default implementation tries to create a new instance with the same UID.
-   * Then it copies the embedded and extra parameters over and returns the new instance.
-   * Subclasses should override this method if the default approach is not sufficient.
+   * Subclasses should implement this method and set the return type properly.
+   *
+   * @see [[defaultCopy()]]
    */
-  def copy(extra: ParamMap): Params = {
+  def copy(extra: ParamMap): Params
+
+  /**
+   * Default implementation of copy with extra params.
+   * It tries to create a new instance with the same UID.
+   * Then it copies the embedded and extra parameters over and returns the new instance.
+   */
+  protected final def defaultCopy[T <: Params](extra: ParamMap): T = {
     val that = this.getClass.getConstructor(classOf[String]).newInstance(uid)
-    copyValues(that, extra)
+    copyValues(that, extra).asInstanceOf[T]
   }
 
   /**

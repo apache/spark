@@ -19,6 +19,9 @@ package org.apache.spark.ml.classification
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.impl.TreeTests
+import org.apache.spark.ml.param.ParamsSuite
+import org.apache.spark.ml.regression.DecisionTreeRegressionModel
+import org.apache.spark.ml.tree.LeafNode
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.{EnsembleTestHelper, GradientBoostedTrees => OldGBT}
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo}
@@ -49,6 +52,14 @@ class GBTClassifierSuite extends SparkFunSuite with MLlibTestSparkContext {
       sc.parallelize(EnsembleTestHelper.generateOrderedLabeledPoints(numFeatures = 20, 120), 2)
     validationData =
       sc.parallelize(EnsembleTestHelper.generateOrderedLabeledPoints(numFeatures = 20, 80), 2)
+  }
+
+  test("params") {
+    ParamsSuite.checkParams(new GBTClassifier)
+    val model = new GBTClassificationModel("gbtc",
+      Array(new DecisionTreeRegressionModel("dtr", new LeafNode(0.0, 0.0))),
+      Array(1.0))
+    ParamsSuite.checkParams(model)
   }
 
   test("Binary classification with continuous features: Log Loss") {

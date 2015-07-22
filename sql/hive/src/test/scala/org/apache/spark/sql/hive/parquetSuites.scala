@@ -21,16 +21,16 @@ import java.io.File
 
 import org.scalatest.BeforeAndAfterAll
 
-import org.apache.spark.sql.catalyst.expressions.Row
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql._
 import org.apache.spark.sql.execution.{ExecutedCommand, PhysicalRDD}
 import org.apache.spark.sql.hive.execution.HiveTableScan
+import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.hive.test.TestHive._
 import org.apache.spark.sql.hive.test.TestHive.implicits._
 import org.apache.spark.sql.parquet.{ParquetRelation2, ParquetTableScan}
 import org.apache.spark.sql.sources.{InsertIntoDataSource, InsertIntoHadoopFsRelation, LogicalRelation}
+import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.{DataFrame, QueryTest, SQLConf, SaveMode}
 import org.apache.spark.util.Utils
 
 // The data where the partitioning key exists only in the directory structure.
@@ -155,7 +155,7 @@ class ParquetMetastoreSuiteBase extends ParquetPartitioningTest {
     val rdd2 = sparkContext.parallelize((1 to 10).map(i => s"""{"a":[$i, null]}"""))
     read.json(rdd2).registerTempTable("jt_array")
 
-    setConf("spark.sql.hive.convertMetastoreParquet", "true")
+    setConf(HiveContext.CONVERT_METASTORE_PARQUET, true)
   }
 
   override def afterAll(): Unit = {
@@ -166,7 +166,7 @@ class ParquetMetastoreSuiteBase extends ParquetPartitioningTest {
     sql("DROP TABLE normal_parquet")
     sql("DROP TABLE IF EXISTS jt")
     sql("DROP TABLE IF EXISTS jt_array")
-    setConf("spark.sql.hive.convertMetastoreParquet", "false")
+    setConf(HiveContext.CONVERT_METASTORE_PARQUET, false)
   }
 
   test(s"conversion is working") {
@@ -201,14 +201,14 @@ class ParquetDataSourceOnMetastoreSuite extends ParquetMetastoreSuiteBase {
         |  OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat'
       """.stripMargin)
 
-    conf.setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, "true")
+    conf.setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, true)
   }
 
   override def afterAll(): Unit = {
     super.afterAll()
     sql("DROP TABLE IF EXISTS test_parquet")
 
-    setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, originalConf.toString)
+    setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, originalConf)
   }
 
   test("scan an empty parquet table") {
@@ -548,12 +548,12 @@ class ParquetDataSourceOffMetastoreSuite extends ParquetMetastoreSuiteBase {
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-    conf.setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, "false")
+    conf.setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, false)
   }
 
   override def afterAll(): Unit = {
     super.afterAll()
-    setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, originalConf.toString)
+    setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, originalConf)
   }
 
   test("MetastoreRelation in InsertIntoTable will not be converted") {
@@ -687,6 +687,31 @@ class ParquetSourceSuiteBase extends ParquetPartitioningTest {
 
     sql("drop table spark_6016_fix")
   }
+
+  test("SPARK-8811: compatibility with array of struct in Hive") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+
+      withTable("array_of_struct") {
+        val conf = Seq(
+          HiveContext.CONVERT_METASTORE_PARQUET.key -> "false",
+          SQLConf.PARQUET_BINARY_AS_STRING.key -> "true",
+          SQLConf.PARQUET_FOLLOW_PARQUET_FORMAT_SPEC.key -> "true")
+
+        withSQLConf(conf: _*) {
+          sql(
+            s"""CREATE TABLE array_of_struct
+               |STORED AS PARQUET LOCATION '$path'
+               |AS SELECT '1st', '2nd', ARRAY(NAMED_STRUCT('a', 'val_a', 'b', 'val_b'))
+             """.stripMargin)
+
+          checkAnswer(
+            sqlContext.read.parquet(path),
+            Row("1st", "2nd", Seq(Row("val_a", "val_b"))))
+        }
+      }
+    }
+  }
 }
 
 class ParquetDataSourceOnSourceSuite extends ParquetSourceSuiteBase {
@@ -694,12 +719,12 @@ class ParquetDataSourceOnSourceSuite extends ParquetSourceSuiteBase {
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-    conf.setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, "true")
+    conf.setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, true)
   }
 
   override def afterAll(): Unit = {
     super.afterAll()
-    setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, originalConf.toString)
+    setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, originalConf)
   }
 
   test("values in arrays and maps stored in parquet are always nullable") {
@@ -752,19 +777,21 @@ class ParquetDataSourceOffSourceSuite extends ParquetSourceSuiteBase {
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-    conf.setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, "false")
+    conf.setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, false)
   }
 
   override def afterAll(): Unit = {
     super.afterAll()
-    setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, originalConf.toString)
+    setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, originalConf)
   }
 }
 
 /**
  * A collection of tests for parquet data with various forms of partitioning.
  */
-abstract class ParquetPartitioningTest extends QueryTest with BeforeAndAfterAll {
+abstract class ParquetPartitioningTest extends QueryTest with SQLTestUtils with BeforeAndAfterAll {
+  override def sqlContext: SQLContext = TestHive
+
   var partitionedTableDir: File = null
   var normalTableDir: File = null
   var partitionedTableDirWithKey: File = null

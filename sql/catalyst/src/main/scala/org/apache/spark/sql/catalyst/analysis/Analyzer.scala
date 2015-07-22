@@ -17,14 +17,13 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import scala.collection.mutable.ArrayBuffer
-
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{SimpleCatalystConf, CatalystConf}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.types._
+import scala.collection.mutable.ArrayBuffer
 
 /**
  * A trivial [[Analyzer]] with an [[EmptyCatalog]] and [[EmptyFunctionRegistry]]. Used for testing
@@ -44,7 +43,7 @@ class Analyzer(
     registry: FunctionRegistry,
     conf: CatalystConf,
     maxIterations: Int = 100)
-  extends RuleExecutor[LogicalPlan] with HiveTypeCoercion with CheckAnalysis {
+  extends RuleExecutor[LogicalPlan] with CheckAnalysis {
 
   def resolver: Resolver = {
     if (conf.caseSensitiveAnalysis) {
@@ -73,11 +72,11 @@ class Analyzer(
       ResolveSortReferences ::
       ResolveGenerate ::
       ResolveFunctions ::
+      ResolveAliases ::
       ExtractWindowExpressions ::
       GlobalAggregates ::
       UnresolvedHavingClauseAttributes ::
-      TrimGroupingAliases ::
-      typeCoercionRules ++
+      HiveTypeCoercion.typeCoercionRules ++
       extendedResolutionRules : _*)
   )
 
@@ -86,7 +85,7 @@ class Analyzer(
    */
   object CTESubstitution extends Rule[LogicalPlan] {
     // TODO allow subquery to define CTE
-    def apply(plan: LogicalPlan): LogicalPlan = plan match {
+    def apply(plan: LogicalPlan): LogicalPlan = plan transform  {
       case With(child, relations) => substituteCTE(child, relations)
       case other => other
     }
@@ -131,12 +130,39 @@ class Analyzer(
   }
 
   /**
-   * Removes no-op Alias expressions from the plan.
+   * Replaces [[UnresolvedAlias]]s with concrete aliases.
    */
-  object TrimGroupingAliases extends Rule[LogicalPlan] {
-    def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-      case Aggregate(groups, aggs, child) =>
-        Aggregate(groups.map(_.transform { case Alias(c, _) => c }), aggs, child)
+  object ResolveAliases extends Rule[LogicalPlan] {
+    private def assignAliases(exprs: Seq[NamedExpression]) = {
+      // The `UnresolvedAlias`s will appear only at root of a expression tree, we don't need
+      // to transform down the whole tree.
+      exprs.zipWithIndex.map {
+        case (u @ UnresolvedAlias(child), i) =>
+          child match {
+            case _: UnresolvedAttribute => u
+            case ne: NamedExpression => ne
+            case g: GetStructField => Alias(g, g.field.name)()
+            case g: GetArrayStructFields => Alias(g, g.field.name)()
+            case g: Generator if g.resolved && g.elementTypes.size > 1 => MultiAlias(g, Nil)
+            case e if !e.resolved => u
+            case other => Alias(other, s"_c$i")()
+          }
+        case (other, _) => other
+      }
+    }
+
+    def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
+      case Aggregate(groups, aggs, child)
+        if child.resolved && aggs.exists(_.isInstanceOf[UnresolvedAlias]) =>
+        Aggregate(groups, assignAliases(aggs), child)
+
+      case g: GroupingAnalytics
+        if g.child.resolved && g.aggregations.exists(_.isInstanceOf[UnresolvedAlias]) =>
+        g.withNewAggs(assignAliases(g.aggregations))
+
+      case Project(projectList, child)
+        if child.resolved && projectList.exists(_.isInstanceOf[UnresolvedAlias]) =>
+        Project(assignAliases(projectList), child)
     }
   }
 
@@ -167,49 +193,53 @@ class Analyzer(
       Seq.tabulate(1 << c.groupByExprs.length)(i => i)
     }
 
-    /**
-     * Create an array of Projections for the child projection, and replace the projections'
-     * expressions which equal GroupBy expressions with Literal(null), if those expressions
-     * are not set for this grouping set (according to the bit mask).
-     */
-    private[this] def expand(g: GroupingSets): Seq[GroupExpression] = {
-      val result = new scala.collection.mutable.ArrayBuffer[GroupExpression]
+    def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+      case a if !a.childrenResolved => a // be sure all of the children are resolved.
+      case a: Cube =>
+        GroupingSets(bitmasks(a), a.groupByExprs, a.child, a.aggregations)
+      case a: Rollup =>
+        GroupingSets(bitmasks(a), a.groupByExprs, a.child, a.aggregations)
+      case x: GroupingSets =>
+        val gid = AttributeReference(VirtualColumn.groupingIdName, IntegerType, false)()
+        // We will insert another Projection if the GROUP BY keys contains the
+        // non-attribute expressions. And the top operators can references those
+        // expressions by its alias.
+        // e.g. SELECT key%5 as c1 FROM src GROUP BY key%5 ==>
+        //      SELECT a as c1 FROM (SELECT key%5 AS a FROM src) GROUP BY a
 
-      g.bitmasks.foreach { bitmask =>
-        // get the non selected grouping attributes according to the bit mask
-        val nonSelectedGroupExprs = ArrayBuffer.empty[Expression]
-        var bit = g.groupByExprs.length - 1
-        while (bit >= 0) {
-          if (((bitmask >> bit) & 1) == 0) nonSelectedGroupExprs += g.groupByExprs(bit)
-          bit -= 1
-        }
+        // find all of the non-attribute expressions in the GROUP BY keys
+        val nonAttributeGroupByExpressions = new ArrayBuffer[Alias]()
 
-        val substitution = (g.child.output :+ g.gid).map(expr => expr transformDown {
-          case x: Expression if nonSelectedGroupExprs.find(_ semanticEquals x).isDefined =>
-            // if the input attribute in the Invalid Grouping Expression set of for this group
-            // replace it with constant null
-            Literal.create(null, expr.dataType)
-          case x if x == g.gid =>
-            // replace the groupingId with concrete value (the bit mask)
-            Literal.create(bitmask, IntegerType)
+        // The pair of (the original GROUP BY key, associated attribute)
+        val groupByExprPairs = x.groupByExprs.map(_ match {
+          case e: NamedExpression => (e, e.toAttribute)
+          case other => {
+            val alias = Alias(other, other.toString)()
+            nonAttributeGroupByExpressions += alias // add the non-attributes expression alias
+            (other, alias.toAttribute)
+          }
         })
 
-        result += GroupExpression(substitution)
-      }
+        // substitute the non-attribute expressions for aggregations.
+        val aggregation = x.aggregations.map(expr => expr.transformDown {
+          case e => groupByExprPairs.find(_._1.semanticEquals(e)).map(_._2).getOrElse(e)
+        }.asInstanceOf[NamedExpression])
 
-      result.toSeq
-    }
+        // substitute the group by expressions.
+        val newGroupByExprs = groupByExprPairs.map(_._2)
 
-    def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-      case a: Cube if a.resolved =>
-        GroupingSets(bitmasks(a), a.groupByExprs, a.child, a.aggregations, a.gid)
-      case a: Rollup if a.resolved =>
-        GroupingSets(bitmasks(a), a.groupByExprs, a.child, a.aggregations, a.gid)
-      case x: GroupingSets if x.resolved =>
+        val child = if (nonAttributeGroupByExpressions.length > 0) {
+          // insert additional projection if contains the
+          // non-attribute expressions in the GROUP BY keys
+          Project(x.child.output ++ nonAttributeGroupByExpressions, x.child)
+        } else {
+          x.child
+        }
+
         Aggregate(
-          x.groupByExprs :+ x.gid,
-          x.aggregations,
-          Expand(expand(x), x.child.output :+ x.gid, x.child))
+          newGroupByExprs :+ VirtualColumn.groupingIdAttribute,
+          aggregation,
+          Expand(x.bitmasks, newGroupByExprs, gid, child))
     }
   }
 
@@ -227,7 +257,7 @@ class Analyzer(
     }
 
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-      case i@InsertIntoTable(u: UnresolvedRelation, _, _, _, _) =>
+      case i @ InsertIntoTable(u: UnresolvedRelation, _, _, _, _) =>
         i.copy(table = EliminateSubQueries(getTable(u)))
       case u: UnresolvedRelation =>
         getTable(u)
@@ -235,9 +265,8 @@ class Analyzer(
   }
 
   /**
-   * Replaces [[UnresolvedAttribute]]s with concrete
-   * [[catalyst.expressions.AttributeReference AttributeReferences]] from a logical plan node's
-   * children.
+   * Replaces [[UnresolvedAttribute]]s with concrete [[AttributeReference]]s from
+   * a logical plan node's children.
    */
   object ResolveReferences extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
@@ -248,24 +277,24 @@ class Analyzer(
         Project(
           projectList.flatMap {
             case s: Star => s.expand(child.output, resolver)
-            case Alias(f @ UnresolvedFunction(_, args), name) if containsStar(args) =>
+            case UnresolvedAlias(f @ UnresolvedFunction(_, args)) if containsStar(args) =>
               val expandedArgs = args.flatMap {
                 case s: Star => s.expand(child.output, resolver)
                 case o => o :: Nil
               }
-              Alias(child = f.copy(children = expandedArgs), name)() :: Nil
-            case Alias(c @ CreateArray(args), name) if containsStar(args) =>
+              UnresolvedAlias(child = f.copy(children = expandedArgs)) :: Nil
+            case UnresolvedAlias(c @ CreateArray(args)) if containsStar(args) =>
               val expandedArgs = args.flatMap {
                 case s: Star => s.expand(child.output, resolver)
                 case o => o :: Nil
               }
-              Alias(c.copy(children = expandedArgs), name)() :: Nil
-            case Alias(c @ CreateStruct(args), name) if containsStar(args) =>
+              UnresolvedAlias(c.copy(children = expandedArgs)) :: Nil
+            case UnresolvedAlias(c @ CreateStruct(args)) if containsStar(args) =>
               val expandedArgs = args.flatMap {
                 case s: Star => s.expand(child.output, resolver)
                 case o => o :: Nil
               }
-              Alias(c.copy(children = expandedArgs), name)() :: Nil
+              UnresolvedAlias(c.copy(children = expandedArgs)) :: Nil
             case o => o :: Nil
           },
           child)
@@ -287,11 +316,11 @@ class Analyzer(
         )
 
       // Special handling for cases when self-join introduce duplicate expression ids.
-      case j @ Join(left, right, _, _) if left.outputSet.intersect(right.outputSet).nonEmpty =>
+      case j @ Join(left, right, _, _) if !j.selfJoinResolved =>
         val conflictingAttributes = left.outputSet.intersect(right.outputSet)
         logDebug(s"Conflicting attributes ${conflictingAttributes.mkString(",")} in $j")
 
-        val (oldRelation, newRelation) = right.collect {
+        right.collect {
           // Handle base relations that might appear more than once.
           case oldVersion: MultiInstanceRelation
               if oldVersion.outputSet.intersect(conflictingAttributes).nonEmpty =>
@@ -316,38 +345,43 @@ class Analyzer(
               if AttributeSet(windowExpressions.map(_.toAttribute)).intersect(conflictingAttributes)
                 .nonEmpty =>
             (oldVersion, oldVersion.copy(windowExpressions = newAliases(windowExpressions)))
-        }.headOption.getOrElse { // Only handle first case, others will be fixed on the next pass.
-          sys.error(
-            s"""
-              |Failure when resolving conflicting references in Join:
-              |$plan
-              |
-              |Conflicting attributes: ${conflictingAttributes.mkString(",")}
-              """.stripMargin)
+        }
+        // Only handle first case, others will be fixed on the next pass.
+        .headOption match {
+          case None =>
+            /*
+             * No result implies that there is a logical plan node that produces new references
+             * that this rule cannot handle. When that is the case, there must be another rule
+             * that resolves these conflicts. Otherwise, the analysis will fail.
+             */
+            j
+          case Some((oldRelation, newRelation)) =>
+            val attributeRewrites = AttributeMap(oldRelation.output.zip(newRelation.output))
+            val newRight = right transformUp {
+              case r if r == oldRelation => newRelation
+            } transformUp {
+              case other => other transformExpressions {
+                case a: Attribute => attributeRewrites.get(a).getOrElse(a)
+              }
+            }
+            j.copy(right = newRight)
         }
 
-        val attributeRewrites = AttributeMap(oldRelation.output.zip(newRelation.output))
-        val newRight = right transformUp {
-          case r if r == oldRelation => newRelation
-        } transformUp {
-          case other => other transformExpressions {
-            case a: Attribute => attributeRewrites.get(a).getOrElse(a)
-          }
-        }
-        j.copy(right = newRight)
+      // When resolve `SortOrder`s in Sort based on child, don't report errors as
+      // we still have chance to resolve it based on grandchild
+      case s @ Sort(ordering, global, child) if child.resolved && !s.resolved =>
+        val newOrdering = resolveSortOrders(ordering, child, throws = false)
+        Sort(newOrdering, global, child)
 
       case q: LogicalPlan =>
         logTrace(s"Attempting to resolve ${q.simpleString}")
         q transformExpressionsUp  {
-          case u @ UnresolvedAttribute(nameParts) if nameParts.length == 1 &&
-            resolver(nameParts(0), VirtualColumn.groupingIdName) &&
-            q.isInstanceOf[GroupingAnalytics] =>
-            // Resolve the virtual column GROUPING__ID for the operator GroupingAnalytics
-            q.asInstanceOf[GroupingAnalytics].gid
           case u @ UnresolvedAttribute(nameParts) =>
             // Leave unchanged if resolution fails.  Hopefully will be resolved next round.
             val result =
-              withPosition(u) { q.resolveChildren(nameParts, resolver).getOrElse(u) }
+              withPosition(u) {
+                q.resolveChildren(nameParts, resolver).map(trimUnresolvedAlias).getOrElse(u)
+              }
             logDebug(s"Resolving $u to $result")
             result
           case UnresolvedExtractValue(child, fieldExpr) if child.resolved =>
@@ -373,6 +407,31 @@ class Analyzer(
       exprs.exists(_.collect { case _: Star => true }.nonEmpty)
   }
 
+  private def trimUnresolvedAlias(ne: NamedExpression) = ne match {
+    case UnresolvedAlias(child) => child
+    case other => other
+  }
+
+  private def resolveSortOrders(ordering: Seq[SortOrder], plan: LogicalPlan, throws: Boolean) = {
+    ordering.map { order =>
+      // Resolve SortOrder in one round.
+      // If throws == false or the desired attribute doesn't exist
+      // (like try to resolve `a.b` but `a` doesn't exist), fail and return the origin one.
+      // Else, throw exception.
+      try {
+        val newOrder = order transformUp {
+          case u @ UnresolvedAttribute(nameParts) =>
+            plan.resolve(nameParts, resolver).map(trimUnresolvedAlias).getOrElse(u)
+          case UnresolvedExtractValue(child, fieldName) if child.resolved =>
+            ExtractValue(child, fieldName, resolver)
+        }
+        newOrder.asInstanceOf[SortOrder]
+      } catch {
+        case a: AnalysisException if !throws => order
+      }
+    }
+  }
+
   /**
    * In many dialects of SQL it is valid to sort by attributes that are not present in the SELECT
    * clause.  This rule detects such queries and adds the required attributes to the original
@@ -383,13 +442,13 @@ class Analyzer(
     def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
       case s @ Sort(ordering, global, p @ Project(projectList, child))
           if !s.resolved && p.resolved =>
-        val (resolvedOrdering, missing) = resolveAndFindMissing(ordering, p, child)
+        val (newOrdering, missing) = resolveAndFindMissing(ordering, p, child)
 
         // If this rule was not a no-op, return the transformed plan, otherwise return the original.
         if (missing.nonEmpty) {
           // Add missing attributes and then project them away after the sort.
           Project(p.output,
-            Sort(resolvedOrdering, global,
+            Sort(newOrdering, global,
               Project(projectList ++ missing, child)))
         } else {
           logDebug(s"Failed to find $missing in ${p.output.mkString(", ")}")
@@ -397,19 +456,31 @@ class Analyzer(
         }
       case s @ Sort(ordering, global, a @ Aggregate(grouping, aggs, child))
           if !s.resolved && a.resolved =>
-        val unresolved = ordering.flatMap(_.collect { case UnresolvedAttribute(name) => name })
         // A small hack to create an object that will allow us to resolve any references that
         // refer to named expressions that are present in the grouping expressions.
         val groupingRelation = LocalRelation(
           grouping.collect { case ne: NamedExpression => ne.toAttribute }
         )
 
-        val (resolvedOrdering, missing) = resolveAndFindMissing(ordering, a, groupingRelation)
+        // Find sort attributes that are projected away so we can temporarily add them back in.
+        val (newOrdering, missingAttr) = resolveAndFindMissing(ordering, a, groupingRelation)
+
+        // Find aggregate expressions and evaluate them early, since they can't be evaluated in a
+        // Sort.
+        val (withAggsRemoved, aliasedAggregateList) = newOrdering.map {
+          case aggOrdering if aggOrdering.collect { case a: AggregateExpression => a }.nonEmpty =>
+            val aliased = Alias(aggOrdering.child, "_aggOrdering")()
+            (aggOrdering.copy(child = aliased.toAttribute), Some(aliased))
+
+          case other => (other, None)
+        }.unzip
+
+        val missing = missingAttr ++ aliasedAggregateList.flatten
 
         if (missing.nonEmpty) {
           // Add missing grouping exprs and then project them away after the sort.
           Project(a.output,
-            Sort(resolvedOrdering, global,
+            Sort(withAggsRemoved, global,
               Aggregate(grouping, aggs ++ missing, child)))
         } else {
           s // Nothing we can do here. Return original plan.
@@ -417,52 +488,39 @@ class Analyzer(
     }
 
     /**
-     * Given a child and a grandchild that are present beneath a sort operator, returns
-     * a resolved sort ordering and a list of attributes that are missing from the child
-     * but are present in the grandchild.
+     * Given a child and a grandchild that are present beneath a sort operator, try to resolve
+     * the sort ordering and returns it with a list of attributes that are missing from the
+     * child but are present in the grandchild.
      */
     def resolveAndFindMissing(
         ordering: Seq[SortOrder],
         child: LogicalPlan,
         grandchild: LogicalPlan): (Seq[SortOrder], Seq[Attribute]) = {
-      // Find any attributes that remain unresolved in the sort.
-      val unresolved: Seq[Seq[String]] =
-        ordering.flatMap(_.collect { case UnresolvedAttribute(nameParts) => nameParts })
-
-      // Create a map from name, to resolved attributes, when the desired name can be found
-      // prior to the projection.
-      val resolved: Map[Seq[String], NamedExpression] =
-        unresolved.flatMap(u => grandchild.resolve(u, resolver).map(a => u -> a)).toMap
-
+      val newOrdering = resolveSortOrders(ordering, grandchild, throws = true)
       // Construct a set that contains all of the attributes that we need to evaluate the
       // ordering.
-      val requiredAttributes = AttributeSet(resolved.values)
-
+      val requiredAttributes = AttributeSet(newOrdering.filter(_.resolved))
       // Figure out which ones are missing from the projection, so that we can add them and
       // remove them after the sort.
       val missingInProject = requiredAttributes -- child.output
-
-      // Now that we have all the attributes we need, reconstruct a resolved ordering.
-      // It is important to do it here, instead of waiting for the standard resolved as adding
-      // attributes to the project below can actually introduce ambiquity that was not present
-      // before.
-      val resolvedOrdering = ordering.map(_ transform {
-        case u @ UnresolvedAttribute(name) => resolved.getOrElse(name, u)
-      }).asInstanceOf[Seq[SortOrder]]
-
-      (resolvedOrdering, missingInProject.toSeq)
+      // It is important to return the new SortOrders here, instead of waiting for the standard
+      // resolving process as adding attributes to the project below can actually introduce
+      // ambiguity that was not present before.
+      (newOrdering, missingInProject.toSeq)
     }
   }
 
   /**
-   * Replaces [[UnresolvedFunction]]s with concrete [[catalyst.expressions.Expression Expressions]].
+   * Replaces [[UnresolvedFunction]]s with concrete [[Expression]]s.
    */
   object ResolveFunctions extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
       case q: LogicalPlan =>
         q transformExpressions {
-          case u @ UnresolvedFunction(name, children) if u.childrenResolved =>
-            registry.lookupFunction(name, children)
+          case u @ UnresolvedFunction(name, children) =>
+            withPosition(u) {
+              registry.lookupFunction(name, children)
+            }
         }
     }
   }
@@ -493,20 +551,21 @@ class Analyzer(
   object UnresolvedHavingClauseAttributes extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
       case filter @ Filter(havingCondition, aggregate @ Aggregate(_, originalAggExprs, _))
-          if aggregate.resolved && containsAggregate(havingCondition) => {
+          if aggregate.resolved && containsAggregate(havingCondition) =>
+
         val evaluatedCondition = Alias(havingCondition, "havingCondition")()
         val aggExprsWithHaving = evaluatedCondition +: originalAggExprs
 
         Project(aggregate.output,
           Filter(evaluatedCondition.toAttribute,
             aggregate.copy(aggregateExpressions = aggExprsWithHaving)))
-      }
     }
 
-    protected def containsAggregate(condition: Expression): Boolean =
+    protected def containsAggregate(condition: Expression): Boolean = {
       condition
         .collect { case ae: AggregateExpression => ae }
         .nonEmpty
+    }
   }
 
   /**
@@ -560,23 +619,13 @@ class Analyzer(
     /** Extracts a [[Generator]] expression and any names assigned by aliases to their output. */
     private object AliasedGenerator {
       def unapply(e: Expression): Option[(Generator, Seq[String])] = e match {
-        case Alias(g: Generator, name)
-          if g.elementTypes.size > 1 && java.util.regex.Pattern.matches("_c[0-9]+", name) => {
-          // Assume the default name given by parser is "_c[0-9]+",
-          // TODO in long term, move the naming logic from Parser to Analyzer.
-          // In projection, Parser gave default name for TGF as does for normal UDF,
-          // but the TGF probably have multiple output columns/names.
-          //    e.g. SELECT explode(map(key, value)) FROM src;
-          // Let's simply ignore the default given name for this case.
-          Some((g, Nil))
-        }
-        case Alias(g: Generator, name) if g.elementTypes.size > 1 =>
+        case Alias(g: Generator, name) if g.resolved && g.elementTypes.size > 1 =>
           // If not given the default names, and the TGF with multiple output columns
           failAnalysis(
             s"""Expect multiple names given for ${g.getClass.getName},
                |but only single name '${name}' specified""".stripMargin)
-        case Alias(g: Generator, name) => Some((g, name :: Nil))
-        case MultiAlias(g: Generator, names) => Some(g, names)
+        case Alias(g: Generator, name) if g.resolved => Some((g, name :: Nil))
+        case MultiAlias(g: Generator, names) if g.resolved => Some(g, names)
         case _ => None
       }
     }
@@ -846,9 +895,8 @@ class Analyzer(
 }
 
 /**
- * Removes [[catalyst.plans.logical.Subquery Subquery]] operators from the plan.  Subqueries are
- * only required to provide scoping information for attributes and can be removed once analysis is
- * complete.
+ * Removes [[Subquery]] operators from the plan. Subqueries are only required to provide
+ * scoping information for attributes and can be removed once analysis is complete.
  */
 object EliminateSubQueries extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
