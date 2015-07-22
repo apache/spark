@@ -51,6 +51,9 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
 
   protected def sparkContext = sqlContext.sparkContext
 
+  protected val metricToAccumulator = Map(
+    "numTuples"->sparkContext.accumulator(0L, "number of tuples", internal = true))
+
   // sqlContext will be null when we are being deserialized on the slaves.  In this instance
   // the value of codegenEnabled will be set by the desserializer after the constructor has run.
   val codegenEnabled: Boolean = if (sqlContext != null) {
@@ -95,8 +98,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
    * Returns instrumentation metrics. The key of the Map is the metric's name and the value is the
    * current value of the metric.
    */
-  def accumulators: Map[String, Accumulator[_]] = Map(
-    "numTuples"->sparkContext.accumulator(0L, "number of tuples", internal = true))
+  def accumulators: Map[String, Accumulator[_]] = metricToAccumulator
 
   /**
    * Returns the result of this query as an RDD[InternalRow] by delegating to doExecute
