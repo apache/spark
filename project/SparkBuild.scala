@@ -177,6 +177,9 @@ object SparkBuild extends PomBuild {
   /* Enable Assembly for all assembly projects */
   assemblyProjects.foreach(enable(Assembly.settings))
 
+  /* Enable Assembly for streamingMqtt test */
+  enable(inConfig(Test)(Assembly.settings))(streamingMqtt)
+
   /* Package pyspark artifacts in a separate zip file for YARN. */
   enable(PySparkAssembly.settings)(assembly)
 
@@ -353,6 +356,9 @@ object Assembly {
       } else {
         s"${mName}-${v}-hadoop${hv}.jar"
       }
+    },
+    jarName in (Test, assembly) <<= (version, moduleName, hadoopVersion) map { (v, mName, hv) =>
+      s"${mName}-test-${v}.jar"
     },
     mergeStrategy in assembly := {
       case PathList("org", "datanucleus", xs @ _*)             => MergeStrategy.discard
