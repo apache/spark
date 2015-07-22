@@ -31,7 +31,6 @@ import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.expressions.UnsafeColumnWriter;
 import org.apache.spark.sql.catalyst.expressions.UnsafeProjection;
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow;
-import org.apache.spark.sql.catalyst.util.ObjectPool;
 import org.apache.spark.sql.types.*;
 import org.apache.spark.unsafe.PlatformDependent;
 import org.apache.spark.util.collection.unsafe.sort.PrefixComparator;
@@ -73,7 +72,7 @@ final class UnsafeExternalRowSorter {
       sparkEnv.shuffleMemoryManager(),
       sparkEnv.blockManager(),
       taskContext,
-      new RowComparator(ordering, schema.length(), null),
+      new RowComparator(ordering, schema.length()),
       prefixComparator,
       4096,
       sparkEnv.conf()
@@ -141,8 +140,7 @@ final class UnsafeExternalRowSorter {
               sortedIterator.getBaseObject(),
               sortedIterator.getBaseOffset(),
               numFields,
-              sortedIterator.getRecordLength(),
-              null);
+              sortedIterator.getRecordLength());
             if (!hasNext()) {
               row.copy(); // so that we don't have dangling pointers to freed page
               cleanupResources();
@@ -187,20 +185,19 @@ final class UnsafeExternalRowSorter {
   private static final class RowComparator extends RecordComparator {
     private final Ordering<InternalRow> ordering;
     private final int numFields;
-    private final ObjectPool objPool;
     private final UnsafeRow row1 = new UnsafeRow();
     private final UnsafeRow row2 = new UnsafeRow();
 
-    public RowComparator(Ordering<InternalRow> ordering, int numFields, ObjectPool objPool) {
+    public RowComparator(Ordering<InternalRow> ordering, int numFields) {
       this.numFields = numFields;
       this.ordering = ordering;
-      this.objPool = objPool;
     }
 
     @Override
     public int compare(Object baseObj1, long baseOff1, Object baseObj2, long baseOff2) {
-      row1.pointTo(baseObj1, baseOff1, numFields, -1, objPool);
-      row2.pointTo(baseObj2, baseOff2, numFields, -1, objPool);
+      // TODO: Why are the sizes -1?
+      row1.pointTo(baseObj1, baseOff1, numFields, -1);
+      row2.pointTo(baseObj2, baseOff2, numFields, -1);
       return ordering.compare(row1, row2);
     }
   }

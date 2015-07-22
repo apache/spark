@@ -53,8 +53,7 @@ class UnsafeRowSuite extends SparkFunSuite {
           offheapRowPage.getBaseObject,
           offheapRowPage.getBaseOffset,
           3, // num fields
-          arrayBackedUnsafeRow.getSizeInBytes,
-          null // object pool
+          arrayBackedUnsafeRow.getSizeInBytes
         )
         assert(offheapUnsafeRow.getBaseObject === null)
         val baos = new ByteArrayOutputStream()
