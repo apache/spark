@@ -19,7 +19,6 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression2
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.types._
 
@@ -47,96 +46,98 @@ trait CheckAnalysis {
   def checkAnalysis(plan: LogicalPlan): Unit = {
     // We transform up and order the rules so as to catch the first possible failure instead
     // of the result of cascading resolution failures.
-    plan.foreachUp { operator =>
-      operator transformExpressionsUp {
-        case a: Attribute if !a.resolved =>
-          val from = operator.inputSet.map(_.name).mkString(", ")
-          a.failAnalysis(s"cannot resolve '${a.prettyString}' given input columns $from")
+    plan.foreachUp {
 
-        case e: Expression if e.checkInputDataTypes().isFailure =>
-          e.checkInputDataTypes() match {
-            case TypeCheckResult.TypeCheckFailure(message) =>
-              e.failAnalysis(
-                s"cannot resolve '${e.prettyString}' due to data type mismatch: $message")
-          }
+      case operator: LogicalPlan =>
+        operator transformExpressionsUp {
+          case a: Attribute if !a.resolved =>
+            val from = operator.inputSet.map(_.name).mkString(", ")
+            a.failAnalysis(s"cannot resolve '${a.prettyString}' given input columns $from")
 
-        case c: Cast if !c.resolved =>
-          failAnalysis(
-            s"invalid cast from ${c.child.dataType.simpleString} to ${c.dataType.simpleString}")
+          case e: Expression if e.checkInputDataTypes().isFailure =>
+            e.checkInputDataTypes() match {
+              case TypeCheckResult.TypeCheckFailure(message) =>
+                e.failAnalysis(
+                  s"cannot resolve '${e.prettyString}' due to data type mismatch: $message")
+            }
 
-        case WindowExpression(UnresolvedWindowFunction(name, _), _) =>
-          failAnalysis(
-            s"Could not resolve window function '$name'. " +
-            "Note that, using window functions currently requires a HiveContext")
+          case c: Cast if !c.resolved =>
+            failAnalysis(
+              s"invalid cast from ${c.child.dataType.simpleString} to ${c.dataType.simpleString}")
 
-        case w @ WindowExpression(windowFunction, windowSpec) if windowSpec.validate.nonEmpty =>
-          // The window spec is not valid.
-          val reason = windowSpec.validate.get
-          failAnalysis(s"Window specification $windowSpec is not valid because $reason")
-      }
+          case WindowExpression(UnresolvedWindowFunction(name, _), _) =>
+            failAnalysis(
+              s"Could not resolve window function '$name'. " +
+              "Note that, using window functions currently requires a HiveContext")
 
-      operator match {
-        case f: Filter if f.condition.dataType != BooleanType =>
-          failAnalysis(
-            s"filter expression '${f.condition.prettyString}' " +
-              s"of type ${f.condition.dataType.simpleString} is not a boolean.")
+          case w @ WindowExpression(windowFunction, windowSpec) if windowSpec.validate.nonEmpty =>
+            // The window spec is not valid.
+            val reason = windowSpec.validate.get
+            failAnalysis(s"Window specification $windowSpec is not valid because $reason")
+        }
 
-        case Aggregate(groupingExprs, aggregateExprs, child) =>
-          def checkValidAggregateExpression(expr: Expression): Unit = expr match {
-            case _: AggregateExpression => // OK
-            case e: Attribute if !groupingExprs.exists(_.semanticEquals(e)) =>
-              failAnalysis(
-                s"expression '${e.prettyString}' is neither present in the group by, " +
-                  s"nor is it an aggregate function. " +
-                  "Add to group by or wrap in first() if you don't care which value you get.")
-            case e if groupingExprs.exists(_.semanticEquals(e)) => // OK
-            case e if e.references.isEmpty => // OK
-            case e => e.children.foreach(checkValidAggregateExpression)
-          }
+        operator match {
+          case f: Filter if f.condition.dataType != BooleanType =>
+            failAnalysis(
+              s"filter expression '${f.condition.prettyString}' " +
+                s"of type ${f.condition.dataType.simpleString} is not a boolean.")
 
-          aggregateExprs.foreach(checkValidAggregateExpression)
+          case Aggregate(groupingExprs, aggregateExprs, child) =>
+            def checkValidAggregateExpression(expr: Expression): Unit = expr match {
+              case _: AggregateExpression => // OK
+              case e: Attribute if !groupingExprs.exists(_.semanticEquals(e)) =>
+                failAnalysis(
+                  s"expression '${e.prettyString}' is neither present in the group by, " +
+                    s"nor is it an aggregate function. " +
+                    "Add to group by or wrap in first() if you don't care which value you get.")
+              case e if groupingExprs.exists(_.semanticEquals(e)) => // OK
+              case e if e.references.isEmpty => // OK
+              case e => e.children.foreach(checkValidAggregateExpression)
+            }
 
-        case _ => // Fallbacks to the following checks
-      }
+            aggregateExprs.foreach(checkValidAggregateExpression)
 
-      operator match {
-        case o if o.children.nonEmpty && o.missingInput.nonEmpty =>
-          val missingAttributes = o.missingInput.mkString(",")
-          val input = o.inputSet.mkString(",")
+          case _ => // Fallbacks to the following checks
+        }
 
-          failAnalysis(
-            s"resolved attribute(s) $missingAttributes missing from $input " +
-              s"in operator ${operator.simpleString}")
+        operator match {
+          case o if o.children.nonEmpty && o.missingInput.nonEmpty =>
+            val missingAttributes = o.missingInput.mkString(",")
+            val input = o.inputSet.mkString(",")
 
-        case p @ Project(exprs, _) if containsMultipleGenerators(exprs) =>
-          failAnalysis(
-            s"""Only a single table generating function is allowed in a SELECT clause, found:
-               | ${exprs.map(_.prettyString).mkString(",")}""".stripMargin)
+            failAnalysis(
+              s"resolved attribute(s) $missingAttributes missing from $input " +
+                s"in operator ${operator.simpleString}")
 
-        // Special handling for cases when self-join introduce duplicate expression ids.
-        case j @ Join(left, right, _, _) if left.outputSet.intersect(right.outputSet).nonEmpty =>
-          val conflictingAttributes = left.outputSet.intersect(right.outputSet)
-          failAnalysis(
-            s"""
-               |Failure when resolving conflicting references in Join:
-               |$plan
-                |Conflicting attributes: ${conflictingAttributes.mkString(",")}
-                |""".stripMargin)
+          case p @ Project(exprs, _) if containsMultipleGenerators(exprs) =>
+            failAnalysis(
+              s"""Only a single table generating function is allowed in a SELECT clause, found:
+                 | ${exprs.map(_.prettyString).mkString(",")}""".stripMargin)
 
-        case o if !o.resolved =>
-          failAnalysis(
-            s"unresolved operator ${operator.simpleString}")
+          // Special handling for cases when self-join introduce duplicate expression ids.
+          case j @ Join(left, right, _, _) if left.outputSet.intersect(right.outputSet).nonEmpty =>
+            val conflictingAttributes = left.outputSet.intersect(right.outputSet)
+            failAnalysis(
+              s"""
+                 |Failure when resolving conflicting references in Join:
+                 |$plan
+                  |Conflicting attributes: ${conflictingAttributes.mkString(",")}
+                  |""".stripMargin)
 
-        case o if o.expressions.exists(!_.deterministic) &&
-          !o.isInstanceOf[Project] && !o.isInstanceOf[Filter] =>
-          failAnalysis(
-            s"""nondeterministic expressions are only allowed in Project or Filter, found:
-               | ${o.expressions.map(_.prettyString).mkString(",")}
-               |in operator ${operator.simpleString}
+          case o if !o.resolved =>
+            failAnalysis(
+              s"unresolved operator ${operator.simpleString}")
+
+          case o if o.expressions.exists(!_.deterministic) &&
+            !o.isInstanceOf[Project] && !o.isInstanceOf[Filter] =>
+            failAnalysis(
+              s"""nondeterministic expressions are only allowed in Project or Filter, found:
+                 | ${o.expressions.map(_.prettyString).mkString(",")}
+                  |in operator ${operator.simpleString}
              """.stripMargin)
 
-        case _ => // Analysis successful!
-      }
+          case _ => // Analysis successful!
+        }
     }
     extendedCheckRules.foreach(_(plan))
   }
