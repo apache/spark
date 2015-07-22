@@ -418,14 +418,10 @@ case class Cast(child: Expression, dataType: DataType)
   protected override def nullSafeEval(input: Any): Any = cast(input)
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    val eval = child.gen(ctx)
     val nullSafeCast = nullSafeCastFunction(child.dataType, dataType, ctx)
-    if (nullSafeCast != null) {
-      val eval = child.gen(ctx)
-      eval.code +
-        castCode(ctx, eval.primitive, eval.isNull, ev.primitive, ev.isNull, dataType, nullSafeCast)
-    } else {
-      super.genCode(ctx, ev)
-    }
+    eval.code +
+      castCode(ctx, eval.primitive, eval.isNull, ev.primitive, ev.isNull, dataType, nullSafeCast)
   }
 
   // three function arguments are: child.primitive, result.primitive and result.isNull
@@ -456,9 +452,10 @@ case class Cast(child: Expression, dataType: DataType)
     case array: ArrayType => castArrayCode(from.asInstanceOf[ArrayType], array, ctx)
     case map: MapType => castMapCode(from.asInstanceOf[MapType], map, ctx)
     case struct: StructType => castStructCode(from.asInstanceOf[StructType], struct, ctx)
-    case other => null
   }
 
+  // Since we need to cast child expressions recursively inside ComplexTypes, such as Map's
+  // Key and Value, Struct's field, we need to name out all the variable names involved in a cast.
   private[this] def castCode(ctx: CodeGenContext, childPrim: String, childNull: String,
     resultPrim: String, resultNull: String, resultType: DataType, cast: CastFunction): String = {
     s"""
