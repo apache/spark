@@ -27,6 +27,10 @@ import org.apache.spark.unsafe.types.UTF8String
  */
 abstract class InternalRow extends Row {
 
+  def getUTF8String(i: Int): UTF8String = getAs[UTF8String](i)
+
+  def getBinary(i: Int): Array[Byte] = getAs[Array[Byte]](i)
+
   // This is only use for test
   override def getString(i: Int): String = getAs[UTF8String](i).toString
 

@@ -282,11 +282,13 @@ public final class UnsafeRow extends MutableRow {
     }
   }
 
+  @Override
   public UTF8String getUTF8String(int i) {
     assertIndexIsValid(i);
     return isNullAt(i) ? null : UTF8String.fromBytes(getBinary(i));
   }
 
+  @Override
   public byte[] getBinary(int i) {
     if (isNullAt(i)) {
       return null;
