@@ -685,9 +685,11 @@ class DAGScheduler(
           metricsSystem = env.metricsSystem,
           runningLocally = true)
       TaskContext.setTaskContext(taskContext)
+      var threwException = true
       try {
         val result = job.func(taskContext, rdd.iterator(split, taskContext))
         job.listener.taskSucceeded(0, result)
+        threwException = false
       } finally {
         taskContext.markTaskCompleted()
         TaskContext.unset()
@@ -695,7 +697,8 @@ class DAGScheduler(
         // make sure to update both copies.
         val freedMemory = taskMemoryManager.cleanUpAllAllocatedMemory()
         if (freedMemory > 0) {
-          if (sc.getConf.getBoolean("spark.unsafe.exceptionOnMemoryLeak", false)) {
+          if (sc.getConf.getBoolean("spark.unsafe.exceptionOnMemoryLeak", false)
+              && !threwException) {
             throw new SparkException(s"Managed memory leak detected; size = $freedMemory bytes")
           } else {
             logError(s"Managed memory leak detected; size = $freedMemory bytes")
