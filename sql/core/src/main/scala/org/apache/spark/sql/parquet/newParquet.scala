@@ -345,59 +345,59 @@ private[sql] class ParquetRelation2(
     // Schema of the whole table, including partition columns.
     var schema: StructType = _
 
-    // Cached leaf statuses
-    var localCachedLeafStatuses: Set[FileStatus] = _
-
-    var lastRefreshTime: Long = 0
-
     // Cached leaves
-    var cachedLeaves: Array[FileStatus] = Array()
+    val cachedLeaves: mutable.Map[Path, FileStatus] = new mutable.HashMap[Path, FileStatus]()
 
     /**
      * Refreshes `FileStatus`es, footers, partition spec, and table schema.
      */
     def refresh(): Unit = {
-      // Check if cachedLeafStatuses is changed or not
-      val leafStatusesChanged = localCachedLeafStatuses != cachedLeafStatuses()
-
       // Lists `FileStatus`es of all leaf nodes (files) under all base directories.
-      val leaves = if (leafStatusesChanged) {
-        localCachedLeafStatuses = cachedLeafStatuses()
-        val updatedLeaves = cachedLeafStatuses().filter { f =>
-          (isSummaryFile(f.getPath) ||
-            !(f.getPath.getName.startsWith("_") || f.getPath.getName.startsWith("."))) &&
-            (f.getModificationTime > lastRefreshTime)
-        }.toArray
-        lastRefreshTime = System.currentTimeMillis
-        cachedLeaves = updatedLeaves
-        cachedLeaves
-      } else {
-        cachedLeaves
-      }
+      // We only care about new FileStatus and updated FileStatus.
+      val leaves = cachedLeafStatuses().filter { f =>
+        (isSummaryFile(f.getPath) ||
+          !(f.getPath.getName.startsWith("_") || f.getPath.getName.startsWith("."))) &&
+          (!cachedLeaves.contains(f.getPath) ||
+            cachedLeaves(f.getPath).getModificationTime < f.getModificationTime)
+      }.map { f =>
+        cachedLeaves += (f.getPath -> f)
+        f
+      }.toArray
 
       dataStatuses = leaves.filterNot(f => isSummaryFile(f.getPath))
       metadataStatuses = leaves.filter(_.getPath.getName == ParquetFileWriter.PARQUET_METADATA_FILE)
       commonMetadataStatuses =
         leaves.filter(_.getPath.getName == ParquetFileWriter.PARQUET_COMMON_METADATA_FILE)
 
-      // If we already get the schema, don't need to re-compute it since the schema merging is
-      // time-consuming.
-      if (dataSchema == null) {
-        dataSchema = {
-          val dataSchema0 = maybeDataSchema
-            .orElse(readSchema())
-            .orElse(maybeMetastoreSchema)
-            .getOrElse(throw new AnalysisException(
-              s"Failed to discover schema of Parquet file(s) in the following location(s):\n" +
-                paths.mkString("\n\t")))
+      dataSchema = {
+        val dataSchema0 = maybeDataSchema
+          .orElse(readSchema())
+          .orElse(maybeMetastoreSchema)
 
-          // If this Parquet relation is converted from a Hive Metastore table, must reconcile case
-          // case insensitivity issue and possible schema mismatch (probably caused by schema
-          // evolution).
-          maybeMetastoreSchema
-            .map(ParquetRelation2.mergeMetastoreParquetSchema(_, dataSchema0))
-            .getOrElse(dataSchema0)
-        }
+        // If we already have previous loaded schema, merge it with newly loaded schema.
+        val dataSchema1 =
+          if (dataSchema != null) {
+            if (dataSchema0.isDefined) {
+              dataSchema0.get.merge(dataSchema)
+            } else {
+              dataSchema
+            }
+          } else {
+            if (dataSchema0.isDefined) {
+              dataSchema0.get
+            } else {
+              throw new AnalysisException(
+                s"Failed to discover schema of Parquet file(s) in the following location(s):\n" +
+                  paths.mkString("\n\t"))
+            }
+          }
+
+        // If this Parquet relation is converted from a Hive Metastore table, must reconcile case
+        // case insensitivity issue and possible schema mismatch (probably caused by schema
+        // evolution).
+        maybeMetastoreSchema
+          .map(ParquetRelation2.mergeMetastoreParquetSchema(_, dataSchema1))
+          .getOrElse(dataSchema1)
       }
     }
 
@@ -446,11 +446,15 @@ private[sql] class ParquetRelation2(
         }
 
       assert(
-        filesToTouch.nonEmpty || maybeDataSchema.isDefined || maybeMetastoreSchema.isDefined,
-        "No predefined schema found, " +
-          s"and no Parquet data files or summary files found under ${paths.mkString(", ")}.")
+        filesToTouch.nonEmpty || maybeDataSchema.isDefined || maybeMetastoreSchema.isDefined ||
+          dataSchema != null, "No predefined schema found, " +
+            s"and no Parquet data files or summary files found under ${paths.mkString(", ")}.")
 
-      ParquetRelation2.mergeSchemasInParallel(filesToTouch, sqlContext)
+      if (filesToTouch.nonEmpty) {
+        ParquetRelation2.mergeSchemasInParallel(filesToTouch, sqlContext)
+      } else {
+        None
+      }
     }
   }
 }
