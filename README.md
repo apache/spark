@@ -26,5 +26,6 @@ the platform. Please send a PR with your company name and @githubhandle
 if you may.
 
 * Airbnb [@mistercrunch]
+* Lyft
 
 [Full documentation on pythonhosted.com](http://pythonhosted.org/airflow/)
