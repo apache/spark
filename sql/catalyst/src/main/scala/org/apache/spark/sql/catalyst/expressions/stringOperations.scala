@@ -21,6 +21,8 @@ import java.text.DecimalFormat
 import java.util.Locale
 import java.util.regex.{MatchResult, Pattern}
 
+import org.apache.commons.lang3.StringEscapeUtils
+
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.UnresolvedException
 import org.apache.spark.sql.catalyst.expressions.codegen._
@@ -173,21 +175,27 @@ case class Like(left: Expression, right: Expression)
     val escapeFunc = StringUtils.getClass.getName.stripSuffix("$") + ".escapeLikeRegex"
     val pattern = ctx.freshName("pattern")
 
-    val literalRight: String = right match {
-      case x @ Literal(value: String, StringType) => escape(value)
-      case _ => null
-    }
-
     val leftGen = left.gen(ctx)
     val rightGen = right.gen(ctx)
 
     val patternCode =
-      if (literalRight != null) {
-        ctx.addMutableState(patternClass, pattern,
-          s"${patternClass}.compile($literalRight)")
-        ""
+      if (right.foldable) {
+        val rVal = right.eval()
+        if (rVal != null) {
+          val regexStr =
+            StringEscapeUtils.escapeJava(escape(rVal.asInstanceOf[UTF8String].toString()))
+          ctx.addMutableState(patternClass, pattern,
+            s"""$pattern = ${patternClass}.compile("$regexStr");""")
+          s"${ev.primitive} = $pattern.matcher(${leftGen.primitive}.toString()).matches();"
+        } else {
+          ""
+        }
       } else {
-        s"${patternClass} $pattern = ${patternClass}.compile($escapeFunc(rightStr));"
+        s"""
+          String rightStr = ${rightGen.primitive}.toString();
+          ${patternClass} $pattern = ${patternClass}.compile($escapeFunc(rightStr));
+          ${ev.primitive} = $pattern.matcher(${leftGen.primitive}.toString()).matches();
+        """
       }
 
     s"""
@@ -198,9 +206,7 @@ case class Like(left: Expression, right: Expression)
         ${rightGen.code}
         ${ev.isNull} = ${rightGen.isNull};
         if (!${ev.isNull}) {
-          String rightStr = ${rightGen.primitive}.toString();
           $patternCode
-          ${ev.primitive} = $pattern.matcher(${leftGen.primitive}.toString()).matches();
         }
       }
     """
@@ -219,22 +225,26 @@ case class RLike(left: Expression, right: Expression)
     val patternClass = classOf[Pattern].getName
     val pattern = ctx.freshName("pattern")
 
-    val literalRight: String = right match {
-      case x @ Literal(value: String, StringType) => escape(value)
-      case _ => null
-    }
-
     val leftGen = left.gen(ctx)
     val rightGen = right.gen(ctx)
 
     val patternCode =
-      if (literalRight != null) {
-        ctx.addMutableState(patternClass, pattern,
-          s"${patternClass}.compile($literalRight)")
-        ""
+      if (right.foldable) {
+        val rVal = right.eval()
+        if (rVal != null) {
+          val regexStr =
+            StringEscapeUtils.escapeJava(rVal.asInstanceOf[UTF8String].toString())
+          ctx.addMutableState(patternClass, pattern,
+            s"""$pattern = ${patternClass}.compile("$regexStr");""")
+          s"${ev.primitive} = $pattern.matcher(${leftGen.primitive}.toString()).find(0);"
+        } else {
+          ""
+        }
       } else {
         s"""
+          String rightStr = ${rightGen.primitive}.toString();
           ${patternClass} $pattern = ${patternClass}.compile(rightStr);
+          ${ev.primitive} = $pattern.matcher(${leftGen.primitive}.toString()).find(0);
         """
       }
 
@@ -246,9 +256,7 @@ case class RLike(left: Expression, right: Expression)
         ${rightGen.code}
         ${ev.isNull} = ${rightGen.isNull};
         if (!${ev.isNull}) {
-          String rightStr = ${rightGen.primitive}.toString();
           $patternCode
-          ${ev.primitive} = $pattern.matcher(${leftGen.primitive}.toString()).find(0);
         }
       }
     """
