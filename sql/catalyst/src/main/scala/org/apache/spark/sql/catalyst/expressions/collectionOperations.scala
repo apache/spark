@@ -16,6 +16,7 @@
  */
 package org.apache.spark.sql.catalyst.expressions
 
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenFallback, CodeGenContext, GeneratedExpressionCode}
 import org.apache.spark.sql.types._
 
@@ -50,13 +51,16 @@ case class SortArray(child: Expression)
   override def dataType: DataType = child.dataType
   override def inputTypes: Seq[AbstractDataType] = Seq(ArrayType)
 
+  override def checkInputDataTypes(): TypeCheckResult = child.dataType match {
+    case _ @ ArrayType(n: AtomicType, _) => TypeCheckResult.TypeCheckSuccess
+    case other => TypeCheckResult.TypeCheckFailure(
+                    s"Type $other is not supported for ordering operations")
+  }
+
   @transient
   private lazy val lt: (Any, Any) => Boolean = {
     val ordering = child.dataType match {
-      case ArrayType(elementType, _) => elementType match {
-        case n: AtomicType => n.ordering.asInstanceOf[Ordering[Any]]
-        case other => sys.error(s"Type $other does not support ordered operations")
-      }
+      case _ @ ArrayType(n: AtomicType, _) => n.ordering.asInstanceOf[Ordering[Any]]
     }
 
     (left, right) => {

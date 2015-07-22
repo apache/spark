@@ -287,6 +287,12 @@ class DataFrameFunctionsSuite extends QueryTest {
         Row(Seq[Int](), Seq[String]()),
         Row(null, null))
     )
+
+    val df2 = Seq((Array[Array[Int]](Array(2)), "x")).toDF("a", "b")
+    assert(intercept[AnalysisException] {
+      df2.selectExpr("sort_array(a)").collect()
+    }.getMessage().contains("Type ArrayType(ArrayType(IntegerType,false),true) " +
+      "is not supported for ordering operations"))
   }
 
   test("array size function") {
