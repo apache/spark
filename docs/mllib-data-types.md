@@ -375,20 +375,22 @@ long n = mat.numCols();
 
 <div data-lang="python" markdown="1">
 
-A [`RowMatrix`](api/python/pyspark.mllib.html#pyspark.mllib.linalg.RowMatrix) can be created from an `RDD` of Vectors.
+A [`RowMatrix`](api/python/pyspark.mllib.html#pyspark.mllib.linalg.RowMatrix) can be created from 
+an `RDD` of Vectors.
 
 {% highlight python %}
 from pyspark.mllib.linalg import DistributedMatrices, Vectors
 
 # Create an RDD of Vectors.
-rows = sc.parallelize([Vectors.dense([1, 2, 3]), Vectors.dense([4, 5, 6]), Vectors.dense([7, 8, 9]), Vectors.dense([10, 11, 12])])
+rows = sc.parallelize([Vectors.dense([1, 2, 3]), Vectors.dense([4, 5, 6]), 
+                       Vectors.dense([7, 8, 9]), Vectors.dense([10, 11, 12])])
 
 # Create a RowMatrix from an RDD[Vector].
 mat = DistributedMatrices.rowMatrix(rows)
 
 # Get its size.
-m = mat.numRows() # 4
-n = mat.numCols() # 3
+m = mat.numRows()  # 4
+n = mat.numCols()  # 3
 
 # Get the rows as an RDD of Vectors again.
 rowsRDD = mat.rows
@@ -400,7 +402,8 @@ rowsRDD = mat.rows
 ### IndexedRowMatrix
 
 An `IndexedRowMatrix` is similar to a `RowMatrix` but with meaningful row indices.  It is backed by
-an RDD of indexed rows, so that each row is represented by its index (long-typed) and a local vector.
+an RDD of indexed rows, so that each row is represented by its index (long-typed) and a local 
+vector.
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
@@ -458,27 +461,33 @@ RowMatrix rowMat = mat.toRowMatrix();
 
 <div data-lang="python" markdown="1">
 
-An [`IndexedRowMatrix`](api/python/pyspark.mllib.html#pyspark.mllib.linalg.IndexedRowMatrix) can be created from an 
-`RDD` of IndexedRows, where [`IndexedRow`](api/python/pyspark.mllib.html#pyspark.mllib.linalg.IndexedRow) is a 
-wrapper over `(long, Vector)`.  An `IndexedRowMatrix` can be converted to a `RowMatrix` by dropping its row indices.
+An [`IndexedRowMatrix`](api/python/pyspark.mllib.html#pyspark.mllib.linalg.IndexedRowMatrix) can be
+created from an `RDD` of IndexedRows, where 
+[`IndexedRow`](api/python/pyspark.mllib.html#pyspark.mllib.linalg.IndexedRow) is a wrapper over 
+`(long, Vector)`.  An `IndexedRowMatrix` can be converted to a `RowMatrix` by dropping its row 
+indices.
 
 {% highlight python %}
 from pyspark.mllib.linalg import Vectors, DistributedMatrices, IndexedRow, IndexedRowMatrix
 
 # Create an RDD of indexed rows.
 #   - This can be done explicitly with the IndexedRow class:
-indexedRows = sc.parallelize([IndexedRow(0,Vectors.dense([1, 2, 3])), IndexedRow(1,Vectors.dense([4, 5, 6])), IndexedRow(2,Vectors.dense([7, 8, 9])), IndexedRow(3,Vectors.dense([10, 11, 12]))])
+indexedRows = sc.parallelize([IndexedRow(0, Vectors.dense([1, 2, 3])), 
+                              IndexedRow(1, Vectors.dense([4, 5, 6])), 
+                              IndexedRow(2, Vectors.dense([7, 8, 9])), 
+                              IndexedRow(3, Vectors.dense([10, 11, 12]))])
 #   - or by using (long, Vector) tuples:
-indexedRows = sc.parallelize([(0,Vectors.dense([1, 2, 3])), (1,Vectors.dense([4, 5, 6])), (2,Vectors.dense([7, 8, 9])), (3,Vectors.dense([10, 11, 12]))])
+indexedRows = sc.parallelize([(0, Vectors.dense([1, 2, 3])), (1, Vectors.dense([4, 5, 6])), 
+                              (2, Vectors.dense([7, 8, 9])), (3, Vectors.dense([10, 11, 12]))])
 
 # Create an IndexedRowMatrix from an RDD[IndexedRow].
 mat = DistributedMatrices.indexedRowMatrix(indexedRows)
 
 # Get its size.
-m = mat.numRows() # 4
-n = mat.numCols() # 3
+m = mat.numRows()  # 4
+n = mat.numCols()  # 3
 
-# Get the rows as a RDD of IndexedRows.
+# Get the rows as an RDD of IndexedRows.
 rowsRDD = mat.rows
 
 # Drop its row indices to form a RowMatrix.
@@ -556,9 +565,10 @@ IndexedRowMatrix indexedRowMatrix = mat.toIndexedRowMatrix();
 
 <div data-lang="python" markdown="1">
 
-A [`CoordinateMatrix`](api/python/pyspark.mllib.html#pyspark.mllib.linalg.CoordinateMatrix) can be created from an 
-`RDD` of MatrixEntry entries, where [`MatrixEntry`](api/python/pyspark.mllib.html#pyspark.mllib.linalg.MatrixEntry) 
-is a wrapper over `(long, long, float)`.  A `CoordinateMatrix` can be converted to a `RowMatrix` by calling 
+A [`CoordinateMatrix`](api/python/pyspark.mllib.html#pyspark.mllib.linalg.CoordinateMatrix) can be 
+created from a `RDD` of MatrixEntry entries, where 
+[`MatrixEntry`](api/python/pyspark.mllib.html#pyspark.mllib.linalg.MatrixEntry) is a wrapper over 
+`(long, long, float)`.  A `CoordinateMatrix` can be converted to a `RowMatrix` by calling 
 `toRowMatrix`, or to an `IndexedRowMatrix` with sparse rows by calling `toIndexedRowMatrix`.
 
 {% highlight python %}
@@ -574,10 +584,10 @@ entries = sc.parallelize([(0, 0, 1.2), (1, 0, 2.1), (2, 1, 3.7)])
 mat = DistributedMatrices.coordinateMatrix(entries)
 
 # Get its size.
-m = mat.numRows() # 3
-n = mat.numCols() # 2
+m = mat.numRows()  # 3
+n = mat.numCols()  # 2
 
-# Get the entries as a RDD of MatrixEntry.
+# Get the entries as an RDD of MatrixEntry.
 entriesRDD = mat.entries
 
 # Convert to a RowMatrix.

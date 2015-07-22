@@ -1157,7 +1157,11 @@ class Matrices(object):
 
 
 class DistributedMatrix(object):
-    """Represents a distributively stored matrix backed by one or more RDDs."""
+    """
+    Represents a distributively stored matrix backed by one or
+    more RDDs.
+
+    """
     def numRows(self):
         """Get or compute the number of rows."""
         raise NotImplementedError
@@ -1201,7 +1205,8 @@ class DistributedMatrices(object):
         """
         Create a CoordinateMatrix.
 
-        :param entries: An RDD of MatrixEntry inputs or (long, long, float) tuples.
+        :param entries: An RDD of MatrixEntry inputs or
+                        (long, long, float) tuples.
         """
         # We use DataFrames for serialization of MatrixEntry inputs from Python, so convert the RDD
         # to a DataFrame. This will convert each MatrixEntry to a Row containing the 'i', 'j', and
@@ -1215,18 +1220,19 @@ class DistributedMatrices(object):
 
 class RowMatrix(DistributedMatrix):
     """
-    Represents a row-oriented distributed Matrix with no meaningful row indices.
+    Represents a row-oriented distributed Matrix with no meaningful
+    row indices.
 
     .. note:: Experimental
     """
     def __init__(self, jrm):
-        """ Create a wrapper over a Java RowMatrix. """
+        """Create a wrapper over a Java RowMatrix."""
         self._jrm = jrm
         self.rows = self._rows()
 
     def _rows(self):
         """
-        Get the rows of the RowMatrix as a RDD of Vectors.
+        Get the rows of the RowMatrix as an RDD of Vectors.
 
         >>> rows = sc.parallelize([Vectors.dense([1, 2, 3]), Vectors.dense([4, 5, 6]),
         ...                        Vectors.dense([7, 8, 9]), Vectors.dense([10, 11, 12])])
@@ -1276,7 +1282,9 @@ class RowMatrix(DistributedMatrix):
 
 class IndexedRow(object):
     """
-    Represents a row of an IndexedRowMatrix.  Just a wrapper over a (long, Vector) tuple.
+    Represents a row of an IndexedRowMatrix.
+
+    Just a wrapper over a (long, Vector) tuple.
 
     .. note:: Experimental
     """
@@ -1295,18 +1303,18 @@ class IndexedRowMatrix(DistributedMatrix):
     .. note:: Experimental
     """
     def __init__(self, jirm):
-        """ Create a wrapper over a Java IndexedRowMatrix. """
+        """Create a wrapper over a Java IndexedRowMatrix."""
         self._jirm = jirm
         self.rows = self._rows()
 
     def _rows(self):
         """
-        Get the rows of the IndexedRowMatrix as a RDD of IndexedRows.
+        Get the rows of the IndexedRowMatrix as an RDD of IndexedRows.
 
-        >>> rows = sc.parallelize([IndexedRow(0,Vectors.dense([1, 2, 3])),
-        ...                        IndexedRow(1,Vectors.dense([4, 5, 6])),
-        ...                        IndexedRow(2,Vectors.dense([7, 8, 9])),
-        ...                        IndexedRow(3,Vectors.dense([10, 11, 12]))])
+        >>> rows = sc.parallelize([IndexedRow(0, Vectors.dense([1, 2, 3])),
+        ...                        IndexedRow(1, Vectors.dense([4, 5, 6])),
+        ...                        IndexedRow(2, Vectors.dense([7, 8, 9])),
+        ...                        IndexedRow(3, Vectors.dense([10, 11, 12]))])
         >>> rm = DistributedMatrices.indexedRowMatrix(rows)
         >>> rowsRDD = rm.rows
         >>> rowsRDD.first()
@@ -1323,18 +1331,18 @@ class IndexedRowMatrix(DistributedMatrix):
         """
         Get or compute the number of rows.
 
-        >>> rows = sc.parallelize([IndexedRow(0,Vectors.dense([1, 2, 3])),
-        ...                        IndexedRow(1,Vectors.dense([4, 5, 6])),
-        ...                        IndexedRow(2,Vectors.dense([7, 8, 9])),
-        ...                        IndexedRow(3,Vectors.dense([10, 11, 12]))])
+        >>> rows = sc.parallelize([IndexedRow(0, Vectors.dense([1, 2, 3])),
+        ...                        IndexedRow(1, Vectors.dense([4, 5, 6])),
+        ...                        IndexedRow(2, Vectors.dense([7, 8, 9])),
+        ...                        IndexedRow(3, Vectors.dense([10, 11, 12]))])
         >>> rm = DistributedMatrices.indexedRowMatrix(rows)
         >>> int(rm.numRows())
         4
 
-        >>> rows = sc.parallelize([IndexedRow(0,Vectors.dense([1, 2, 3])),
-        ...                        IndexedRow(1,Vectors.dense([4, 5, 6])),
-        ...                        IndexedRow(2,Vectors.dense([7, 8, 9])),
-        ...                        IndexedRow(3,Vectors.dense([10, 11, 12]))])
+        >>> rows = sc.parallelize([IndexedRow(0, Vectors.dense([1, 2, 3])),
+        ...                        IndexedRow(1, Vectors.dense([4, 5, 6])),
+        ...                        IndexedRow(2, Vectors.dense([7, 8, 9])),
+        ...                        IndexedRow(3, Vectors.dense([10, 11, 12]))])
         >>> rm = DistributedMatrices.indexedRowMatrix(rows, 7, 6)
         >>> int(rm.numRows())
         7
@@ -1345,18 +1353,18 @@ class IndexedRowMatrix(DistributedMatrix):
         """
         Get or compute the number of cols.
 
-        >>> rows = sc.parallelize([IndexedRow(0,Vectors.dense([1, 2, 3])),
-        ...                        IndexedRow(1,Vectors.dense([4, 5, 6])),
-        ...                        IndexedRow(2,Vectors.dense([7, 8, 9])),
-        ...                        IndexedRow(3,Vectors.dense([10, 11, 12]))])
+        >>> rows = sc.parallelize([IndexedRow(0, Vectors.dense([1, 2, 3])),
+        ...                        IndexedRow(1, Vectors.dense([4, 5, 6])),
+        ...                        IndexedRow(2, Vectors.dense([7, 8, 9])),
+        ...                        IndexedRow(3, Vectors.dense([10, 11, 12]))])
         >>> rm = DistributedMatrices.indexedRowMatrix(rows)
         >>> int(rm.numCols())
         3
 
-        >>> rows = sc.parallelize([IndexedRow(0,Vectors.dense([1, 2, 3])),
-        ...                        IndexedRow(1,Vectors.dense([4, 5, 6])),
-        ...                        IndexedRow(2,Vectors.dense([7, 8, 9])),
-        ...                        IndexedRow(3,Vectors.dense([10, 11, 12]))])
+        >>> rows = sc.parallelize([IndexedRow(0, Vectors.dense([1, 2, 3])),
+        ...                        IndexedRow(1, Vectors.dense([4, 5, 6])),
+        ...                        IndexedRow(2, Vectors.dense([7, 8, 9])),
+        ...                        IndexedRow(3, Vectors.dense([10, 11, 12]))])
         >>> rm = DistributedMatrices.indexedRowMatrix(rows, 7, 6)
         >>> int(rm.numCols())
         6
@@ -1368,8 +1376,8 @@ class IndexedRowMatrix(DistributedMatrix):
         Drop row indices and convert this matrix to a RowMatrix.
 
         >>> # This IndexedRowMatrix will have 7 rows, due to the highest index being 6
-        >>> rows = sc.parallelize([IndexedRow(0,Vectors.dense([1, 2, 3])),
-        ...                        IndexedRow(6,Vectors.dense([4, 5, 6]))])
+        >>> rows = sc.parallelize([IndexedRow(0, Vectors.dense([1, 2, 3])),
+        ...                        IndexedRow(6, Vectors.dense([4, 5, 6]))])
         >>> rm = DistributedMatrices.indexedRowMatrix(rows).toRowMatrix()
         >>> rm.rows.collect()
         [DenseVector([1.0, 2.0, 3.0]), DenseVector([4.0, 5.0, 6.0])]
@@ -1383,8 +1391,8 @@ class IndexedRowMatrix(DistributedMatrix):
         Convert this matrix to a CoordinateMatrix.
 
         >>> # This IndexedRowMatrix will have 7 rows, due to the highest index being 6
-        >>> rows = sc.parallelize([IndexedRow(0,Vectors.dense([1, 0])),
-        ...                        IndexedRow(6,Vectors.dense([0, 5]))])
+        >>> rows = sc.parallelize([IndexedRow(0, Vectors.dense([1, 0])),
+        ...                        IndexedRow(6, Vectors.dense([0, 5]))])
         >>> cm = DistributedMatrices.indexedRowMatrix(rows).toCoordinateMatrix()
         >>> cm.entries.take(3)
         [MatrixEntry(0, 0, 1.0), MatrixEntry(0, 1, 0.0), MatrixEntry(6, 0, 0.0)]
@@ -1396,7 +1404,9 @@ class IndexedRowMatrix(DistributedMatrix):
 
 class MatrixEntry(object):
     """
-    Represents an entry of a CoordinateMatrix.  Just a wrapper over a (long, long, float) tuple.
+    Represents an entry of a CoordinateMatrix.
+
+    Just a wrapper over a (long, long, float) tuple.
 
     .. note:: Experimental
     """
@@ -1416,13 +1426,14 @@ class CoordinateMatrix(object):
     .. note:: Experimental
     """
     def __init__(self, jcm):
-        """ Create a wrapper over a Java CoordinateMatrix. """
+        """Create a wrapper over a Java CoordinateMatrix."""
         self._jcm = jcm
         self.entries = self._entries()
 
     def _entries(self):
         """
-        Get the entries of the CoordinateMatrix as a RDD of MatrixEntry rows.
+        Get the entries of the CoordinateMatrix as an RDD of
+        MatrixEntry rows.
 
         >>> entries = sc.parallelize([MatrixEntry(0, 0, 1.2),
         ...                           MatrixEntry(1, 0, 2.1),
