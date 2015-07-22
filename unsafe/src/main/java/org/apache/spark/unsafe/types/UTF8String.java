@@ -381,7 +381,7 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
     throw new RuntimeException("Invalid utf8 string");
   }
 
-  private int endByte(int startCodePoint) {
+  private int indexEnd(int startCodePoint) {
     int i = numBytes -1; // position in byte
     int c = numChars() - 1; // position in character
     while (i >=0 && c > startCodePoint) {
@@ -398,7 +398,7 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
     if (numBytes == 0) {
       return -1;
     }
-    int fromIndexEnd = endByte(startCodePoint);
+    int fromIndexEnd = indexEnd(startCodePoint);
     int count = startCodePoint;
     int vNumChars = v.numChars();
     do {

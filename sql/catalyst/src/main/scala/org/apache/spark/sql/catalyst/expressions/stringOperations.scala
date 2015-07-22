@@ -434,7 +434,7 @@ case class Substring_index(strExpr: Expression, delimExpr: Expression, countExpr
     } else {
       val idx = lastOrdinalIndexOf(strUtf8, delimUtf8, -count)
       if (idx != -1) {
-        strUtf8.substring(idx + 1, strUtf8.numChars())
+        strUtf8.substring(idx + delimUtf8.numChars(), strUtf8.numChars())
       } else {
         strUtf8
       }
