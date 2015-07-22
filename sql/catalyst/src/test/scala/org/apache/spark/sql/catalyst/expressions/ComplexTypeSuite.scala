@@ -125,12 +125,12 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(CreateArray(longSeq.map(Literal(_))), longSeq, EmptyRow)
     checkEvaluation(CreateArray(strSeq.map(Literal(_))), strSeq, EmptyRow)
 
-    val intWithNull = intSeq.map(Literal(_)).+:(Literal.create(null, IntegerType))
-    val longWithNull = longSeq.map(Literal(_)).+:(Literal.create(null, LongType))
-    val strWithNull = strSeq.map(Literal(_)).+:(Literal.create(null, StringType))
-    checkEvaluation(CreateArray(intWithNull), intSeq.+:(null), EmptyRow)
-    checkEvaluation(CreateArray(longWithNull), longSeq.+:(null), EmptyRow)
-    checkEvaluation(CreateArray(strWithNull), strSeq.+:(null), EmptyRow)
+    val intWithNull = intSeq.map(Literal(_)) :+ Literal.create(null, IntegerType)
+    val longWithNull = longSeq.map(Literal(_)) :+ Literal.create(null, LongType)
+    val strWithNull = strSeq.map(Literal(_)) :+ Literal.create(null, StringType)
+    checkEvaluation(CreateArray(intWithNull), intSeq :+ null, EmptyRow)
+    checkEvaluation(CreateArray(longWithNull), longSeq :+ null, EmptyRow)
+    checkEvaluation(CreateArray(strWithNull), strSeq :+ null, EmptyRow)
   }
 
   test("CreateStruct") {
