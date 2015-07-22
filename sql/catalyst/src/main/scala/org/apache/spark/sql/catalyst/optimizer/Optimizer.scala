@@ -541,20 +541,50 @@ object SimplifyFilters extends Rule[LogicalPlan] {
  *
  * This heuristic is valid assuming the expression evaluation cost is minimal.
  */
-object PushPredicateThroughProject extends Rule[LogicalPlan] {
+object PushPredicateThroughProject extends Rule[LogicalPlan] with PredicateHelper {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case filter @ Filter(condition, project @ Project(fields, grandChild)) =>
-      val sourceAliases = fields.collect { case a @ Alias(c, _) =>
-        (a.toAttribute: Attribute) -> c
-      }.toMap
-      project.copy(child = filter.copy(
-        replaceAlias(condition, sourceAliases),
-        grandChild))
+      // Create a map of Aliases to their values from the child projection.
+      // e.g., 'SELECT a + b AS c, d ...' produces Map(c -> a + b).
+      val aliasMap = AttributeMap(fields.collect {
+        case a: Alias => (a.toAttribute, a.child)
+      })
+
+      // Split the condition into small conditions by `And`, so that we can push down part of this
+      // condition without nondeterministic expressions.
+      val andConditions = splitConjunctivePredicates(condition)
+      val nondeterministicConditions = andConditions.filter(hasNondeterministic(_, aliasMap))
+
+      // If there is no nondeterministic conditions, push down the whole condition.
+      if (nondeterministicConditions.isEmpty) {
+        project.copy(child = Filter(replaceAlias(condition, aliasMap), grandChild))
+      } else {
+        // If they are all nondeterministic conditions, leave it un-changed.
+        if (nondeterministicConditions.length == andConditions.length) {
+          filter
+        } else {
+          val deterministicConditions = andConditions.filterNot(hasNondeterministic(_, aliasMap))
+          // Push down the small conditions without nondeterministic expressions.
+          val pushedCondition = deterministicConditions.map(replaceAlias(_, aliasMap)).reduce(And)
+          Filter(nondeterministicConditions.reduce(And),
+            project.copy(child = Filter(pushedCondition, grandChild)))
+        }
+      }
   }
 
-  private def replaceAlias(condition: Expression, sourceAliases: Map[Attribute, Expression]) = {
-    condition transform {
-      case a: AttributeReference => sourceAliases.getOrElse(a, a)
+  private def hasNondeterministic(
+      condition: Expression,
+      sourceAliases: AttributeMap[Expression]) = {
+    condition.collect {
+      case a: Attribute if sourceAliases.contains(a) => sourceAliases(a)
+    }.exists(!_.deterministic)
+  }
+
+  // Substitute any attributes that are produced by the child projection, so that we safely
+  // eliminate it.
+  private def replaceAlias(condition: Expression, sourceAliases: AttributeMap[Expression]) = {
+    condition.transform {
+      case a: Attribute => sourceAliases.getOrElse(a, a)
     }
   }
 }

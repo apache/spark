@@ -91,7 +91,8 @@ class UnsafeExternalSortSuite extends SparkPlanTest with BeforeAndAfterAll {
       assert(UnsafeExternalSort.supportsSchema(inputDf.schema))
       checkThatPlansAgree(
         inputDf,
-        UnsafeExternalSort(sortOrder, global = true, _: SparkPlan, testSpillFrequency = 23),
+        plan => ConvertToSafe(
+          UnsafeExternalSort(sortOrder, global = true, plan: SparkPlan, testSpillFrequency = 23)),
         Sort(sortOrder, global = true, _: SparkPlan),
         sortAnswers = false
       )
