@@ -151,18 +151,19 @@ case class ArrayContains(left: Expression, right: Expression) extends BinaryExpr
     val arrGen = left.gen(ctx)
     val elementGen = right.gen(ctx)
     s"""
-       ${arrGen.code}
-       boolean ${ev.isNull} = false;
-       if (${arrGen.isNull}) {
-        ${ev.primitive} = false;
-       } else {
-        ${elementGen.code}
-        if (${elementGen.isNull}) {
+        ${arrGen.code}
+        boolean ${ev.isNull} = false;
+        boolean ${ev.primitive} = false;
+        if (${arrGen.isNull}) {
           ${ev.primitive} = false;
         } else {
-          ${ev.primitive} = ${arrGen.primitive}.contains(${elementGen.primitive});
+          ${elementGen.code}
+          if (${elementGen.isNull}) {
+            ${ev.primitive} = false;
+          } else {
+            ${ev.primitive} = ${arrGen.primitive}.contains(${elementGen.primitive});
+          }
         }
-       }
      """
   }
 
