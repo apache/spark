@@ -131,8 +131,8 @@
     <flume.version>1.6.0</flume.version>
     <zookeeper.version>3.4.5</zookeeper.version>
     <curator.version>2.4.0</curator.version>
- <!-- 
-    <hive.group>org.spark-project.hive</hive.group> 
+ <!--
+    <hive.group>org.spark-project.hive</hive.group>
     <hive.group>org.apache.hive</hive.group>
     <hive.version>1.2.0</hive.version>
     <hive.version>1.2.1</hive.version>
@@ -1086,10 +1086,14 @@
         <version>${hive.version}</version>
         <scope>${hive.deps.scope}</scope>
         <exclusions>
+<!--
+
           <exclusion>
             <groupId>org.apache.hive</groupId>
             <artifactId>hive-shims</artifactId>
           </exclusion>
+
+-->
           <exclusion>
             <groupId>org.apache.hadoop</groupId>
             <artifactId>hadoop-yarn-server-resourcemanager</artifactId>
