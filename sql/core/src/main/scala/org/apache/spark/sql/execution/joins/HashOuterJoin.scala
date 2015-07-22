@@ -23,7 +23,7 @@ import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, UnknownPartitioning}
-import org.apache.spark.sql.catalyst.plans.{FullOuter, JoinType, LeftOuter, RightOuter}
+import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.util.collection.CompactBuffer
 
@@ -38,7 +38,7 @@ trait HashOuterJoin {
   val left: SparkPlan
   val right: SparkPlan
 
-override def outputPartitioning: Partitioning = joinType match {
+  override def outputPartitioning: Partitioning = joinType match {
     case LeftOuter => left.outputPartitioning
     case RightOuter => right.outputPartitioning
     case FullOuter => UnknownPartitioning(left.outputPartitioning.numPartitions)
@@ -59,6 +59,49 @@ override def outputPartitioning: Partitioning = joinType match {
     }
   }
 
+  protected[this] lazy val (buildPlan, streamedPlan) = joinType match {
+    case RightOuter => (left, right)
+    case LeftOuter => (right, left)
+    case x =>
+      throw new IllegalArgumentException(
+        s"HashOuterJoin should not take $x as the JoinType")
+  }
+
+  protected[this] lazy val (buildKeys, streamedKeys) = joinType match {
+    case RightOuter => (leftKeys, rightKeys)
+    case LeftOuter => (rightKeys, leftKeys)
+    case x =>
+      throw new IllegalArgumentException(
+        s"HashOuterJoin should not take $x as the JoinType")
+  }
+
+  protected[this] def supportUnsafe: Boolean = {
+    (self.codegenEnabled && joinType != FullOuter
+      && UnsafeProjection.canSupport(buildKeys)
+      && UnsafeProjection.canSupport(self.schema))
+  }
+
+  override def outputsUnsafeRows: Boolean = supportUnsafe
+  override def canProcessUnsafeRows: Boolean = supportUnsafe
+
+  protected[this] def streamedKeyGenerator(): Projection = {
+    if (supportUnsafe) {
+      UnsafeProjection.create(streamedKeys, streamedPlan.output)
+    } else {
+      newProjection(streamedKeys, streamedPlan.output)
+    }
+  }
+
+  @transient private[this] lazy val resultProjection: Projection = {
+    if (supportUnsafe) {
+      UnsafeProjection.create(self.schema)
+    } else {
+      new Projection {
+        override def apply(r: InternalRow): InternalRow = r
+      }
+    }
+  }
+
   @transient private[this] lazy val DUMMY_LIST = CompactBuffer[InternalRow](null)
   @transient protected[this] lazy val EMPTY_LIST = CompactBuffer[InternalRow]()
 
@@ -76,16 +119,20 @@ override def outputPartitioning: Partitioning = joinType match {
       rightIter: Iterable[InternalRow]): Iterator[InternalRow] = {
     val ret: Iterable[InternalRow] = {
       if (!key.anyNull) {
-        val temp = rightIter.collect {
-          case r if boundCondition(joinedRow.withRight(r)) => joinedRow.copy()
+        val temp = if (rightIter != null) {
+          rightIter.collect {
+            case r if boundCondition(joinedRow.withRight(r)) => resultProjection(joinedRow).copy()
+          }
+        } else {
+          List.empty
         }
         if (temp.isEmpty) {
-          joinedRow.withRight(rightNullRow).copy :: Nil
+          resultProjection(joinedRow.withRight(rightNullRow)).copy :: Nil
         } else {
           temp
         }
       } else {
-        joinedRow.withRight(rightNullRow).copy :: Nil
+        resultProjection(joinedRow.withRight(rightNullRow)).copy :: Nil
       }
     }
     ret.iterator
@@ -97,17 +144,21 @@ override def outputPartitioning: Partitioning = joinType match {
       joinedRow: JoinedRow): Iterator[InternalRow] = {
     val ret: Iterable[InternalRow] = {
       if (!key.anyNull) {
-        val temp = leftIter.collect {
-          case l if boundCondition(joinedRow.withLeft(l)) =>
-            joinedRow.copy()
+        val temp = if (leftIter != null) {
+          leftIter.collect {
+            case l if boundCondition(joinedRow.withLeft(l)) =>
+              resultProjection(joinedRow).copy()
+          }
+        } else {
+          List.empty
         }
         if (temp.isEmpty) {
-          joinedRow.withLeft(leftNullRow).copy :: Nil
+          resultProjection(joinedRow.withLeft(leftNullRow)).copy :: Nil
         } else {
           temp
         }
       } else {
-        joinedRow.withLeft(leftNullRow).copy :: Nil
+        resultProjection(joinedRow.withLeft(leftNullRow)).copy :: Nil
       }
     }
     ret.iterator
@@ -159,6 +210,7 @@ override def outputPartitioning: Partitioning = joinType match {
     }
   }
 
+  // This is only used by FullOuter
   protected[this] def buildHashTable(
       iter: Iterator[InternalRow],
       keyGenerator: Projection): JavaHashMap[InternalRow, CompactBuffer[InternalRow]] = {
@@ -177,5 +229,13 @@ override def outputPartitioning: Partitioning = joinType match {
     }
 
     hashTable
+  }
+
+  protected[this] def buildHashRelation(buildIter: Iterator[InternalRow]): HashedRelation = {
+    if (supportUnsafe) {
+      UnsafeHashedRelation(buildIter, buildKeys, buildPlan)
+    } else {
+      HashedRelation(buildIter, newProjection(buildKeys, buildPlan.output))
+    }
   }
 }
