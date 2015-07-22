@@ -442,10 +442,11 @@ private[sql] class ParquetRelation2(
 
           // mergeRespectSummaries is useful when dealing with partitioned tables, where each
           // partition directory contains its own summary files.
-          // Basically in this mode, we only need to merge schemas contained in all those summary
-          // files. For non-partitioned tables, mergeRespectSummaries essentially disables
-          // shouldMergeSchema because all part-files will be ignored.
-          // You should enable this configuration ony if you are very sure that all partition
+          // In this mode, we only need to merge schemas contained in all those summary files.
+          // For non-partitioned tables, or the partition directories that don't contain
+          // summary files, we still merge their part-files because it is possible their schemas
+          // are different with other summary files.
+          // You should enable this configuration only if you are very sure that all partition
           // directories contain the summary files with consistent schema with its part-files.
 
           val needMerged: Seq[FileStatus] =
