@@ -95,6 +95,25 @@ class SparkSubmitUtilsSuite extends SparkFunSuite with BeforeAndAfterAll {
     assert(md.getDependencies.length === 2)
   }
 
+  test("add excludes works correctly") {
+    val md = SparkSubmitUtils.getModuleDescriptor
+    val excludes = Seq("a:b, c:d")
+    excludes.foreach { e =>
+      md.addExcludeRule(SparkSubmitUtils.createExclusion(e + ":*", new IvySettings, "default"))
+    }
+    val rules = md.getAllExcludeRules
+    assert(rules.length === 2)
+    val rule1 = rules(0).getId.getModuleId
+    assert(rule1.getOrganisation === "a")
+    assert(rule1.getName === "b")
+    val rule2 = rules(1).getId.getModuleId
+    assert(rule2.getOrganisation === "c")
+    assert(rule2.getName === "d")
+    intercept[IllegalArgumentException] {
+      SparkSubmitUtils.createExclusion("e:f:g:h", new IvySettings, "default")
+    }
+  }
+
   test("ivy path works correctly") {
     val md = SparkSubmitUtils.getModuleDescriptor
     val artifacts = for (i <- 0 until 3) yield new MDArtifact(md, s"jar-$i", "jar", "jar")

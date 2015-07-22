@@ -275,17 +275,23 @@ object SparkSubmit {
 
     // Resolve maven dependencies if there are any and add classpath to jars. Add them to py-files
     // too for packages that include Python code
+    val exclusions: Seq[String] =
+      if (!Utils.isEmptyString(args.packagesExclusions)) {
+        args.packagesExclusions.split(",")
+      } else {
+        Nil
+      }
     val resolvedMavenCoordinates =
       SparkSubmitUtils.resolveMavenCoordinates(
-        args.packages, Option(args.repositories), Option(args.ivyRepoPath))
-    if (!resolvedMavenCoordinates.trim.isEmpty) {
-      if (args.jars == null || args.jars.trim.isEmpty) {
+        args.packages, Option(args.repositories), Option(args.ivyRepoPath), exclusions)
+    if (!Utils.isEmptyString(resolvedMavenCoordinates)) {
+      if (Utils.isEmptyString(args.jars)) {
         args.jars = resolvedMavenCoordinates
       } else {
         args.jars += s",$resolvedMavenCoordinates"
       }
       if (args.isPython) {
-        if (args.pyFiles == null || args.pyFiles.trim.isEmpty) {
+        if (Utils.isEmptyString(args.pyFiles)) {
           args.pyFiles = resolvedMavenCoordinates
         } else {
           args.pyFiles += s",$resolvedMavenCoordinates"
@@ -1010,7 +1016,7 @@ private[spark] object SparkSubmitUtils {
     }
   }
 
-  private def createExclusion(
+  private[deploy] def createExclusion(
       coords: String,
       ivySettings: IvySettings,
       ivyConfName: String): ExcludeRule = {
