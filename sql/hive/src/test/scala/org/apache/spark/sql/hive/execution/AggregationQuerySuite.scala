@@ -154,36 +154,36 @@ class AggregationQuerySuite extends QueryTest with SQLTestUtils with BeforeAndAf
     checkAnswer(
       sqlContext.sql(
         """
-          |SELECT DISTINCT key, value1
+          |SELECT DISTINCT value1, key
           |FROM agg2
         """.stripMargin),
-      Row(1, 10) ::
-        Row(null, -60) ::
-        Row(1, 30) ::
-        Row(2, 1) ::
-        Row(null, -10) ::
-        Row(2, -1) ::
-        Row(2, null) ::
-        Row(null, 100) ::
-        Row(3, null) ::
+      Row(10, 1) ::
+        Row(-60, null) ::
+        Row(30, 1) ::
+        Row(1, 2) ::
+        Row(-10, null) ::
+        Row(-1, 2) ::
+        Row(null, 2) ::
+        Row(100, null) ::
+        Row(null, 3) ::
         Row(null, null) :: Nil)
 
     checkAnswer(
       sqlContext.sql(
         """
-          |SELECT key, value1
+          |SELECT value1, key
           |FROM agg2
           |GROUP BY key, value1
         """.stripMargin),
-      Row(1, 10) ::
-        Row(null, -60) ::
-        Row(1, 30) ::
-        Row(2, 1) ::
-        Row(null, -10) ::
-        Row(2, -1) ::
-        Row(2, null) ::
-        Row(null, 100) ::
-        Row(3, null) ::
+      Row(10, 1) ::
+        Row(-60, null) ::
+        Row(30, 1) ::
+        Row(1, 2) ::
+        Row(-10, null) ::
+        Row(-1, 2) ::
+        Row(null, 2) ::
+        Row(100, null) ::
+        Row(null, 3) ::
         Row(null, null) :: Nil)
   }
 
@@ -427,12 +427,13 @@ class AggregationQuerySuite extends QueryTest with SQLTestUtils with BeforeAndAf
           |SELECT
           |  key,
           |  sum(value + 1.5 * key),
-          |  mydoublesum(value)
+          |  mydoublesum(value),
+          |  mydoubleavg(value)
           |FROM agg1
           |GROUP BY key
         """.stripMargin).collect()
     }.getMessage
-    assert(errorMessage.contains("is implemented based on new Aggregate Function interface"))
+    assert(errorMessage.contains("implemented based on the new Aggregate Function interface"))
 
     // TODO: once we support Hive UDAF in the new interface,
     // we can remove the following two tests.
@@ -448,7 +449,7 @@ class AggregationQuerySuite extends QueryTest with SQLTestUtils with BeforeAndAf
           |GROUP BY key
         """.stripMargin).collect()
     }.getMessage
-    assert(errorMessage.contains("is implemented based on new Aggregate Function interface"))
+    assert(errorMessage.contains("implemented based on the new Aggregate Function interface"))
 
     // This will fall back to the old aggregate
     val newAggregateOperators = sqlContext.sql(

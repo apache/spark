@@ -242,6 +242,7 @@ private[sql] abstract class SortAggregationIterator(
  */
 class GroupingIterator(
     groupingExpressions: Seq[NamedExpression],
+    resultExpressions: Seq[NamedExpression],
     newMutableProjection: (Seq[Expression], Seq[Attribute]) => (() => MutableProjection),
     inputAttributes: Seq[Attribute],
     inputIter: Iterator[InternalRow])
@@ -251,6 +252,10 @@ class GroupingIterator(
     newMutableProjection,
     inputAttributes,
     inputIter) {
+
+  private val resultProjection =
+    newMutableProjection(resultExpressions, groupingExpressions.map(_.toAttribute))()
+
   override protected def initialBufferOffset: Int = 0
 
   override protected def processRow(row: InternalRow): Unit = {
@@ -258,7 +263,7 @@ class GroupingIterator(
   }
 
   override protected def generateOutput(): InternalRow = {
-    currentGroupingKey
+    resultProjection(currentGroupingKey)
   }
 }
 
@@ -521,7 +526,6 @@ class FinalSortAggregationIterator(
         nonAlgebraicAggregateFunctions(i).eval(buffer))
       i += 1
     }
-
     resultProjection(joinedRow(currentGroupingKey, aggregateResult))
   }
 }

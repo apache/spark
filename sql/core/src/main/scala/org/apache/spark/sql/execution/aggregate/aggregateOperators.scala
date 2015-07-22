@@ -34,6 +34,8 @@ case class Aggregate2Sort(
     child: SparkPlan)
   extends UnaryNode {
 
+  override def canProcessUnsafeRows: Boolean = true
+
   override def references: AttributeSet = {
     val referencesInResults =
       AttributeSet(resultExpressions.flatMap(_.references)) -- AttributeSet(aggregateAttributes)
@@ -72,6 +74,7 @@ case class Aggregate2Sort(
       if (aggregateExpressions.length == 0) {
         new GroupingIterator(
           groupingExpressions,
+          resultExpressions,
           newMutableProjection,
           child.output,
           iter)

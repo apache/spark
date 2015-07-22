@@ -27,7 +27,7 @@ import org.apache.spark.sql.types.{StructType, MapType, ArrayType}
 
 object Utils {
   // Right now, we do not support complex types in the grouping key schema.
-  private def groupingKeySchemaIsSupported(aggregate: Aggregate): Boolean = {
+  private def supportsGroupingKeySchema(aggregate: Aggregate): Boolean = {
     val hasComplexTypes = aggregate.groupingExpressions.map(_.dataType).exists {
       case array: ArrayType => true
       case map: MapType => true
@@ -39,7 +39,7 @@ object Utils {
   }
 
   private def tryConvert(plan: LogicalPlan): Option[Aggregate] = plan match {
-    case p: Aggregate if groupingKeySchemaIsSupported(p) =>
+    case p: Aggregate if supportsGroupingKeySchema(p) =>
       val converted = p.transformExpressionsDown {
         case expressions.Average(child) =>
           aggregate.AggregateExpression2(
@@ -125,6 +125,33 @@ object Utils {
     case other => None
   }
 
+  private def checkInvalidAggregateFunction2(aggregate: Aggregate): Unit = {
+    // If the plan cannot be converted, we will do a final round check to if the original
+    // logical.Aggregate contains both AggregateExpression1 and AggregateExpression2. If so,
+    // we need to throw an exception.
+    val aggregateFunction2s = aggregate.aggregateExpressions.flatMap { expr =>
+      expr.collect {
+        case agg: AggregateExpression2 => agg.aggregateFunction
+      }
+    }.distinct
+    if (aggregateFunction2s.nonEmpty) {
+      // For functions implemented based on the new interface, prepare a list of function names.
+      val invalidFunctions = {
+        if (aggregateFunction2s.length > 1) {
+          s"${aggregateFunction2s.tail.map(_.nodeName).mkString(",")} " +
+            s"and ${aggregateFunction2s.head.nodeName} are"
+        } else {
+          s"${aggregateFunction2s.head.nodeName} is"
+        }
+      }
+      val errorMessage =
+        s"${invalidFunctions} implemented based on the new Aggregate Function " +
+          s"interface and it cannot be used with functions implemented based on " +
+          s"the old Aggregate Function interface."
+      throw new AnalysisException(errorMessage)
+    }
+  }
+
   def tryConvert(
       plan: LogicalPlan,
       useNewAggregation: Boolean,
@@ -134,26 +161,12 @@ object Utils {
       if (converted.isDefined) {
         converted
       } else {
-        // If the plan cannot be converted, we will do a final round check to if the original
-        // logical.Aggregate contains both AggregateExpression1 and AggregateExpression2. If so,
-        // we need to throw an exception.
-        p match {
-          case Aggregate(_, aggregateExpressions, _) => aggregateExpressions.foreach { expr =>
-            expr.foreach {
-              case agg2: AggregateExpression2 =>
-                // TODO: Make this errorMessage more user-friendly.
-                val errorMessage =
-                  s"${agg2.aggregateFunction} is implemented based on new Aggregate Function " +
-                    s"interface and it cannot be used with old Aggregate Function implementaion."
-                throw new AnalysisException(errorMessage)
-              case other => // OK
-            }
-          }
-          case other => // OK
-        }
-
+        checkInvalidAggregateFunction2(p)
         None
       }
+    case p: Aggregate =>
+      checkInvalidAggregateFunction2(p)
+      None
     case other => None
   }
 
