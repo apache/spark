@@ -95,7 +95,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   def canProcessSafeRows: Boolean = true
 
   /**
-   * Returns instrumentation metrics. The key of the Map is the metric's name and the value is the
+   * Returns accumulators for metrics. The key of the Map is the metric's name and the value is the
    * current value of the metric.
    */
   def accumulators: Map[String, Accumulator[_]] = metricToAccumulator
