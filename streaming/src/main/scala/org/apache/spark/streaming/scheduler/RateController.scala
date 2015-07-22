@@ -19,11 +19,11 @@ package org.apache.spark.streaming.scheduler
 
 import java.util.concurrent.atomic.AtomicLong
 
+import scala.concurrent.{ExecutionContext, Future}
+
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.streaming.scheduler.rate.RateEstimator
 import org.apache.spark.util.ThreadUtils
-
-import scala.concurrent.{ExecutionContext, Future}
 
 /**
  * :: DeveloperApi ::
@@ -38,12 +38,15 @@ private [streaming] abstract class RateController(val streamUID: Int, rateEstima
   protected def publish(rate: Long): Unit
 
   // Used to compute & publish the rate update asynchronously
-  @transient private val executionContext = ExecutionContext.fromExecutorService(
+  @transient
+  implicit private val executionContext = ExecutionContext.fromExecutorService(
     ThreadUtils.newDaemonSingleThreadExecutor("stream-rate-update"))
 
-  private val rateLimit : AtomicLong = new AtomicLong(-1L)
+  private val rateLimit: AtomicLong = new AtomicLong(-1L)
 
-  // Asynchronous computation of the rate update
+  /**
+   * Compute the new rate limit and publish it asynchronously.
+   */
   private def computeAndPublish(time: Long, elems: Long, workDelay: Long, waitDelay: Long): Unit =
     Future[Unit] {
       val newSpeed = rateEstimator.compute(time, elems, workDelay, waitDelay)
@@ -51,19 +54,18 @@ private [streaming] abstract class RateController(val streamUID: Int, rateEstima
         rateLimit.set(s.toLong)
         publish(getLatestRate())
       }
-    } (executionContext)
+    }
 
   def getLatestRate(): Long = rateLimit.get()
 
-  override def onBatchCompleted(batchCompleted: StreamingListenerBatchCompleted){
-      val elements = batchCompleted.batchInfo.streamIdToInputInfo
+  override def onBatchCompleted(batchCompleted: StreamingListenerBatchCompleted) {
+    val elements = batchCompleted.batchInfo.streamIdToInputInfo
 
-    for (
+    for {
       processingEnd <- batchCompleted.batchInfo.processingEndTime;
       workDelay <- batchCompleted.batchInfo.processingDelay;
       waitDelay <- batchCompleted.batchInfo.schedulingDelay;
       elems <- elements.get(streamUID).map(_.numRecords)
-    ) computeAndPublish(processingEnd, elems, workDelay, waitDelay)
+    } computeAndPublish(processingEnd, elems, workDelay, waitDelay)
   }
-
 }

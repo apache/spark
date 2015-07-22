@@ -53,11 +53,17 @@ abstract class InputDStream[T: ClassTag] (@transient ssc_ : StreamingContext)
    * A rate estimator configured by the user to compute a dynamic ingestion bound for this stream.
    * @see `RateEstimator`
    */
-  protected [streaming] val rateEstimator = ssc.conf
-                                               .getOption("spark.streaming.RateEstimator")
-                                               .getOrElse("noop") match {
-                                                 case _ => new NoopRateEstimator()
-                                               }
+  protected [streaming] val rateEstimator = newEstimator()
+
+  /**
+   * Return the configured estimator, or `noop` if none was specified.
+   */
+  private def newEstimator() =
+    ssc.conf.get("spark.streaming.RateEstimator", "noop") match {
+      case "noop" => new NoopRateEstimator()
+      case estimator => throw new IllegalArgumentException(s"Unknown rate estimator: $estimator")
+    }
+
 
   // Keep track of the freshest rate for this stream using the rateEstimator
   protected[streaming] val rateController: RateController = new RateController(id, rateEstimator) {

@@ -31,16 +31,27 @@ private[streaming] trait RateEstimator extends Serializable {
    * Computes the number of elements the stream attached to this `RateEstimator`
    * should ingest per second, given an update on the size and completion
    * times of the latest batch.
+   *
+   * @param time The timetamp of the current batch interval that just finished
+   * @param elements The number of elements that were processed in this batch
+   * @param processingDelay The time in ms that took for the job to complete
+   * @param schedulingDelay The time in ms that the job spent in the scheduling queue
    */
-  def compute(time: Long, elements: Long,
-      processingDelay: Long, schedulingDelay: Long): Option[Double]
+  def compute(
+      time: Long,
+      elements: Long,
+      processingDelay: Long,
+      schedulingDelay: Long): Option[Double]
 }
 
 /**
- *  The trivial rate estimator never sends an update
+ * The trivial rate estimator never sends an update
  */
 private[streaming] class NoopRateEstimator extends RateEstimator {
 
-  def compute(time: Long, elements: Long,
-      processingDelay: Long, schedulingDelay: Long): Option[Double] = None
+  def compute(
+      time: Long,
+      elements: Long,
+      processingDelay: Long,
+      schedulingDelay: Long): Option[Double] = None
 }

@@ -45,9 +45,9 @@ abstract class ReceiverInputDStream[T: ClassTag](@transient ssc_ : StreamingCont
    * Asynchronously maintains & sends new rate limits to the receiver through the receiver tracker.
    */
   override val rateController: RateController = new RateController(id, rateEstimator) {
-      override def publish(rate: Long): Unit =
-        ssc.scheduler.receiverTracker.sendRateUpdate(id, rate)
-    }
+    override def publish(rate: Long): Unit =
+      ssc.scheduler.receiverTracker.sendRateUpdate(id, rate)
+  }
 
   /**
    * Gets the receiver object that will be sent to the worker nodes
