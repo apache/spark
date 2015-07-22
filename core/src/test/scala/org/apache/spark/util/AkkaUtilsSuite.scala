@@ -156,14 +156,9 @@ class AkkaUtilsSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
     slaveTracker.updateEpoch(masterTracker.getEpoch)
 
     // this should succeed since security on and passwords match
-<<<<<<< HEAD
-    assert(slaveTracker.getServerStatuses(10, 0).toSeq ===
-           Seq(ServerAttemptSize(BlockManagerId("a", "hostA", 1000), 0, size1000)))
-=======
     assert(slaveTracker.getMapSizesByExecutorId(10, 0) ===
            Seq((BlockManagerId("a", "hostA", 1000),
-             ArrayBuffer((ShuffleBlockId(10, 0, 0), size1000)))))
->>>>>>> master
+             ArrayBuffer((ShuffleBlockId(10, 0, 0, 0), size1000)))))
 
     rpcEnv.shutdown()
     slaveRpcEnv.shutdown()
@@ -241,13 +236,8 @@ class AkkaUtilsSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
     slaveTracker.updateEpoch(masterTracker.getEpoch)
 
     // this should succeed since security off
-<<<<<<< HEAD
-    assert(slaveTracker.getServerStatuses(10, 0).toSeq ===
-      Seq(ServerAttemptSize(BlockManagerId("a", "hostA", 1000), 0, size1000)))
-=======
     assert(slaveTracker.getMapSizesByExecutorId(10, 0) ===
-      Seq((BlockManagerId("a", "hostA", 1000), ArrayBuffer((ShuffleBlockId(10, 0, 0), size1000)))))
->>>>>>> master
+      Seq((BlockManagerId("a", "hostA", 1000), ArrayBuffer((ShuffleBlockId(10, 0, 0, 0), size1000)))))
 
     rpcEnv.shutdown()
     slaveRpcEnv.shutdown()
@@ -292,13 +282,8 @@ class AkkaUtilsSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
     masterTracker.incrementEpoch()
     slaveTracker.updateEpoch(masterTracker.getEpoch)
 
-<<<<<<< HEAD
-    assert(slaveTracker.getServerStatuses(10, 0).toSeq ===
-      Seq(ServerAttemptSize(BlockManagerId("a", "hostA", 1000), 0, size1000)))
-=======
     assert(slaveTracker.getMapSizesByExecutorId(10, 0) ===
-      Seq((BlockManagerId("a", "hostA", 1000), ArrayBuffer((ShuffleBlockId(10, 0, 0), size1000)))))
->>>>>>> master
+      Seq((BlockManagerId("a", "hostA", 1000), ArrayBuffer((ShuffleBlockId(10, 0, 0, 0), size1000)))))
 
     rpcEnv.shutdown()
     slaveRpcEnv.shutdown()
