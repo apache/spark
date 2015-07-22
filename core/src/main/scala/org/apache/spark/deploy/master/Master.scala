@@ -570,11 +570,11 @@ private[master] class Master(
       usableWorkers(pos).memoryFree - assignedMemory(pos) >= memoryPerExecutor
     }
 
-    while (coresToAssign > 0 && freeWorkers.nonEmpty) {
+    while (coresToAssign >= coresPerExecutor && freeWorkers.nonEmpty) {
       freeWorkers = freeWorkers.filter(canLaunchExecutor)
       freeWorkers.foreach { pos =>
         var keepScheduling = true
-        while (keepScheduling && canLaunchExecutor(pos) && coresToAssign > 0) {
+        while (keepScheduling && canLaunchExecutor(pos) && coresToAssign >= coresPerExecutor) {
           coresToAssign -= coresPerExecutor
           assignedCores(pos) += coresPerExecutor
           assignedMemory(pos) += memoryPerExecutor
