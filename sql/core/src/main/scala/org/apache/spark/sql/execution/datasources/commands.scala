@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.sources
+package org.apache.spark.sql.execution.datasources
 
 import java.util.{Date, UUID}
 
@@ -24,7 +24,6 @@ import scala.collection.JavaConversions.asScalaIterator
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce._
 import org.apache.hadoop.mapreduce.lib.output.{FileOutputCommitter => MapReduceFileOutputCommitter, FileOutputFormat}
-
 import org.apache.spark._
 import org.apache.spark.mapred.SparkHadoopMapRedUtil
 import org.apache.spark.mapreduce.SparkHadoopMapReduceUtil
@@ -35,8 +34,10 @@ import org.apache.spark.sql.catalyst.expressions.codegen.GenerateProjection
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.execution.RunnableCommand
+import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.StringType
 import org.apache.spark.util.SerializableConfiguration
+
 
 private[sql] case class InsertIntoDataSource(
     logicalRelation: LogicalRelation,

@@ -247,8 +247,15 @@ private[sql] case class EnsureRequirements(sqlContext: SQLContext) extends Rule[
         }
 
         def addSortIfNecessary(child: SparkPlan): SparkPlan = {
-          if (rowOrdering.nonEmpty && child.outputOrdering != rowOrdering) {
-            sqlContext.planner.BasicOperators.getSortOperator(rowOrdering, global = false, child)
+
+          if (rowOrdering.nonEmpty) {
+            // If child.outputOrdering is [a, b] and rowOrdering is [a], we do not need to sort.
+            val minSize = Seq(rowOrdering.size, child.outputOrdering.size).min
+            if (minSize == 0 || rowOrdering.take(minSize) != child.outputOrdering.take(minSize)) {
+              sqlContext.planner.BasicOperators.getSortOperator(rowOrdering, global = false, child)
+            } else {
+              child
+            }
           } else {
             child
           }
