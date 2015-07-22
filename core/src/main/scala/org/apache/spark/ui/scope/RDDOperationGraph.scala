@@ -184,15 +184,15 @@ private[ui] object RDDOperationGraph extends Logging {
   private def makeDotSubgraph(cluster: RDDOperationCluster, indent: StringBuilder): String = {
     val subgraph = new StringBuilder
     try {
-      subgraph.append(indent.append(s"subgraph cluster${cluster.id} {\n"))
-      subgraph.append(indent.append(s"""  label="${cluster.name}";\n"""))
+      subgraph.append(indent).append(s"subgraph cluster${cluster.id} {\n")
+      subgraph.append(indent).append(s"""  label="${cluster.name}";\n""")
       cluster.childNodes.foreach { node =>
-        subgraph.append(indent.append(s"  ${makeDotNode(node)};\n"))
+        subgraph.append(indent).append(s"  ${makeDotNode(node)};\n")
       }
       cluster.childClusters.foreach { cscope =>
         subgraph.append(makeDotSubgraph(cscope, indent.append("  ")))
       }
-      subgraph.append(indent.append("}\n"))
+      subgraph.append(indent).append("}\n")
       subgraph.toString()
     } catch {
       case oom: OutOfMemoryError =>
