@@ -1322,7 +1322,7 @@ setMethod("write.df",
                                     "org.apache.spark.sql.parquet")
             }
             allModes <- c("append", "overwrite", "error", "ignore")
-            if (!(mode %in% allModes)) {
+            if (! (mode %in% allModes)) {
               stop('mode should be one of "append", "overwrite", "error", "ignore"')
             }
             jmode <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "saveMode", mode)
@@ -1384,7 +1384,7 @@ setMethod("saveAsTable",
                                     "org.apache.spark.sql.parquet")
             }
             allModes <- c("append", "overwrite", "error", "ignore")
-            if (!(mode %in% allModes)) {
+            if (! (mode %in% allModes)) {
               stop('mode should be one of "append", "overwrite", "error", "ignore"')
             }
             jmode <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "saveMode", mode)
