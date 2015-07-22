@@ -248,7 +248,7 @@ GrowableAccumulableParam[R <% Growable[T] with TraversableOnce[T] with Serializa
  * @param param helper object defining how to add elements of type `T`
  * @tparam T result type
  */
-class Accumulator[T](
+class Accumulator[T] private[spark] (
     @transient initialValue: T,
     param: AccumulatorParam[T],
     name: Option[String],

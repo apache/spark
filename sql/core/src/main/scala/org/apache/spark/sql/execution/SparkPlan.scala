@@ -52,7 +52,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   protected def sparkContext = sqlContext.sparkContext
 
   protected val metricToAccumulator = Map(
-    "numTuples"->sparkContext.internalAccumulator(0L, "number of tuples"))
+    "numTuples" -> sparkContext.internalAccumulator(0L, "number of tuples"))
 
   // sqlContext will be null when we are being deserialized on the slaves.  In this instance
   // the value of codegenEnabled will be set by the desserializer after the constructor has run.
