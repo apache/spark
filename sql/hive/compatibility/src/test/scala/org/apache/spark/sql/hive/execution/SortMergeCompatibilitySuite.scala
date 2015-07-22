@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.hive.execution
 
+import java.io.File
+
 import org.apache.spark.sql.SQLConf
 import org.apache.spark.sql.hive.test.TestHive
 
@@ -159,4 +161,9 @@ class SortMergeCompatibilitySuite extends HiveCompatibilitySuite {
     "join_reorder4",
     "join_star"
   )
+
+  // Only run those query tests in the realWhileList (do not try other ignored query files).
+  override def testCases: Seq[(String, File)] = super.testCases.filter {
+    case (name, _) => realWhiteList.contains(name)
+  }
 }

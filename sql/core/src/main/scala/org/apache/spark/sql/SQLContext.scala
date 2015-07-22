@@ -285,6 +285,9 @@ class SQLContext(@transient val sparkContext: SparkContext)
   @transient
   val udf: UDFRegistration = new UDFRegistration(this)
 
+  @transient
+  val udaf: UDAFRegistration = new UDAFRegistration(this)
+
   /**
    * Returns true if the table is currently cached in-memory.
    * @group cachemgmt
@@ -863,6 +866,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
       DDLStrategy ::
       TakeOrderedAndProject ::
       HashAggregation ::
+      Aggregation ::
       LeftSemiJoin ::
       HashJoin ::
       InMemoryScans ::
