@@ -508,6 +508,18 @@ abstract class HiveThriftServer2Test extends SparkFunSuite with BeforeAndAfterAl
      """.stripMargin.split("\\s+").toSeq
   }
 
+  /**
+   * String to scan for when looking for the the thrift binary endpoint running.
+   * This may change across Hive versions.
+   */
+  val THRIFT_BINARY_SERVICE_LIVE = "ThriftBinaryCLIService listening on"
+
+  /**
+   * String to scan for when looking for the the thrift HTTP endpoint running.
+   * This may change across Hive versions.
+   */
+  val THRIFT_HTTP_SERVICE_LIVE = "Started ThriftHttpCLIService in http"
+
   private def startThriftServer(port: Int, attempt: Int) = {
     warehousePath = Utils.createTempDir()
     warehousePath.delete()
@@ -551,8 +563,8 @@ abstract class HiveThriftServer2Test extends SparkFunSuite with BeforeAndAfterAl
         (line: String) => {
           diagnosisBuffer += line
 
-          if (line.contains("ThriftBinaryCLIService listening on") ||
-              line.contains("Started ThriftHttpCLIService in http")) {
+          if (line.contains(THRIFT_BINARY_SERVICE_LIVE) ||
+              line.contains(THRIFT_HTTP_SERVICE_LIVE)) {
             serverStarted.trySuccess(())
           } else if (line.contains("HiveServer2 is stopped")) {
             // This log line appears when the server fails to start and terminates gracefully (e.g.
