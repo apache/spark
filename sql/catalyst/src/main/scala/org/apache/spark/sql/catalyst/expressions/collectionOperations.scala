@@ -16,7 +16,7 @@
  */
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodeGenContext, GeneratedExpressionCode}
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenFallback, CodeGenContext, GeneratedExpressionCode}
 import org.apache.spark.sql.types._
 
 /**
@@ -38,4 +38,43 @@ case class Size(child: Expression) extends UnaryExpression with ExpectsInputType
     }
     nullSafeCodeGen(ctx, ev, c => s"${ev.primitive} = ($c).$sizeCall;")
   }
+}
+
+/**
+ * Sorts the input array in ascending order according to the natural ordering of
+ * the array elements and returns it.
+ */
+case class SortArray(child: Expression)
+  extends UnaryExpression with ExpectsInputTypes with CodegenFallback {
+
+  override def dataType: DataType = child.dataType
+  override def inputTypes: Seq[AbstractDataType] = Seq(ArrayType)
+
+  @transient
+  private lazy val lt: (Any, Any) => Boolean = {
+    val ordering = child.dataType match {
+      case ArrayType(elementType, _) => elementType match {
+        case n: AtomicType => n.ordering.asInstanceOf[Ordering[Any]]
+        case other => sys.error(s"Type $other does not support ordered operations")
+      }
+    }
+
+    (left, right) => {
+      if (left == null && right == null) {
+        false
+      } else if (left == null) {
+        true
+      } else if (right == null) {
+        false
+      } else {
+        ordering.compare(left, right) < 0
+      }
+    }
+  }
+
+  override def nullSafeEval(value: Any): Seq[Any] = {
+    value.asInstanceOf[Seq[Any]].sortWith(lt)
+  }
+
+  override def prettyName: String = "sort_array"
 }

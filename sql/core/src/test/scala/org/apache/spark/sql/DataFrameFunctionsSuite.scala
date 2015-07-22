@@ -267,6 +267,28 @@ class DataFrameFunctionsSuite extends QueryTest {
     )
   }
 
+  test("sort_array function") {
+    val df = Seq(
+      (Array[Int](2, 1, 3), Array("b", "c", "a")),
+      (Array[Int](), Array[String]()),
+      (null, null)
+    ).toDF("a", "b")
+    checkAnswer(
+      df.select(sort_array($"a"), sort_array($"b")),
+      Seq(
+        Row(Seq(1, 2, 3), Seq("a", "b", "c")),
+        Row(Seq[Int](), Seq[String]()),
+        Row(null, null))
+    )
+    checkAnswer(
+      df.selectExpr("sort_array(a)", "sort_array(b)"),
+      Seq(
+        Row(Seq(1, 2, 3), Seq("a", "b", "c")),
+        Row(Seq[Int](), Seq[String]()),
+        Row(null, null))
+    )
+  }
+
   test("array size function") {
     val df = Seq(
       (Array[Int](1, 2), "x"),
@@ -274,7 +296,7 @@ class DataFrameFunctionsSuite extends QueryTest {
       (Array[Int](1, 2, 3), "z")
     ).toDF("a", "b")
     checkAnswer(
-      df.select(size("a")),
+      df.select(size($"a")),
       Seq(Row(2), Row(0), Row(3))
     )
     checkAnswer(
@@ -290,7 +312,7 @@ class DataFrameFunctionsSuite extends QueryTest {
       (Map[Int, Int](1 -> 1, 2 -> 2, 3 -> 3), "z")
     ).toDF("a", "b")
     checkAnswer(
-      df.select(size("a")),
+      df.select(size($"a")),
       Seq(Row(2), Row(0), Row(3))
     )
     checkAnswer(

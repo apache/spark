@@ -43,4 +43,16 @@ class CollectionFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Literal.create(null, MapType(StringType, StringType)), null)
     checkEvaluation(Literal.create(null, ArrayType(StringType)), null)
   }
+
+  test("Sort Array") {
+    val a0 = Literal.create(Seq(2, 1, 3), ArrayType(IntegerType))
+    val a1 = Literal.create(Seq[Integer](), ArrayType(IntegerType))
+    val a2 = Literal.create(Seq("b", "a"), ArrayType(StringType))
+
+    checkEvaluation(SortArray(a0), Seq(1, 2, 3))
+    checkEvaluation(SortArray(a1), Seq[Integer]())
+    checkEvaluation(SortArray(a2), Seq("a", "b"))
+
+    checkEvaluation(Literal.create(null, ArrayType(StringType)), null)
+  }
 }

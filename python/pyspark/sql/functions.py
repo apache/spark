@@ -51,6 +51,7 @@ __all__ = [
     'sha1',
     'sha2',
     'size',
+    'sort_array',
     'sparkPartitionId',
     'struct',
     'udf',
@@ -900,6 +901,20 @@ def size(col):
     """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.size(_to_java_column(col)))
+
+
+@since(1.5)
+def sort_array(col):
+    """
+    Collection function: sorts the input array for the given column in ascending order.
+    :param col: name of column or expression
+
+    >>> df = sqlContext.createDataFrame([([2, 1, 3],),([1],),([],)], ['data'])
+    >>> df.select(sort_array(df.data)).collect()
+    [Row(sort_array(data)=[1, 2, 3]), Row(sort_array(data)=[1]), Row(sort_array(data)=[])]
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.sort_array(_to_java_column(col)))
 
 
 class UserDefinedFunction(object):
