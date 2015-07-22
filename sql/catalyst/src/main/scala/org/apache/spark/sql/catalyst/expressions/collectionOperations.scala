@@ -126,14 +126,14 @@ case class ArrayContains(left: Expression, right: Expression) extends BinaryExpr
     } else if (left.dataType.asInstanceOf[ArrayType].elementType != right.dataType) {
       TypeCheckResult.TypeCheckFailure(
         s"type of value must match array type " +
-          s"${left.dataType.asInstanceOf[ArrayType].elementType.simpleString}, not "+
+          s"${left.dataType.asInstanceOf[ArrayType].elementType.simpleString}, not " +
           s"${right.dataType.simpleString}")
     } else {
       TypeCheckResult.TypeCheckSuccess
     }
   }
 
-  override def nullable = false
+  override def nullable: Boolean = false
 
   override def eval(input: InternalRow): Boolean = {
     val arr = left.eval(input)
