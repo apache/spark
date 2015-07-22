@@ -69,7 +69,7 @@ object ActorSupervisorStrategy {
  *       should be same.
  */
 @DeveloperApi
-trait ActorHelper extends Logging{
+trait ActorHelper extends Logging {
 
   self: Actor => // to ensure that this can be added to Actor classes only
 
@@ -139,13 +139,6 @@ trait ActorHelper extends Logging{
   }
 }
 
-/**
- * :: DeveloperApi ::
- * Statistics for querying the supervisor about state of workers. Used in
- * conjunction with `StreamingContext.actorStream` and
- * [[org.apache.spark.streaming.receiver.ActorHelper]].
- */
-@DeveloperApi
 case class Statistics(numberOfMsgs: Int,
   numberOfWorkers: Int,
   numberOfHiccups: Int,
@@ -185,7 +178,7 @@ private[streaming] class ActorReceiver[T: ClassTag](
     private val worker = context.actorOf(props, name)
     logInfo("Started receiver worker at:" + worker.path)
 
-    private var n = 0
+    private var messageCount = 0
     private var hiccups = 0
     private val childClass = props.actorClass()
 
@@ -194,23 +187,23 @@ private[streaming] class ActorReceiver[T: ClassTag](
       case IteratorData(iterator) =>
         logDebug("received iterator")
         store(iterator.asInstanceOf[Iterator[T]])
-        n += 1
+        messageCount += 1
 
       case SingleItemData(msg) =>
         logDebug("received single")
         store(msg.asInstanceOf[T])
-        n += 1
+        messageCount += 1
 
       case ByteBufferData(bytes) =>
         logDebug("received bytes")
         store(bytes)
-        n += 1
+        messageCount += 1
 
       case props: Props =>
         if (props.actorClass() == childClass) {
           val worker = context.actorOf(props)
           logInfo("Started receiver worker at:" + worker.path)
-          n += 1
+          messageCount += 1
           sender ! worker
         } else {
           logWarning("Received different props object of the child actor")
@@ -220,20 +213,20 @@ private[streaming] class ActorReceiver[T: ClassTag](
         if (props.actorClass() == childClass) {
           val worker = context.actorOf(props, name)
           logInfo("Started receiver worker at:" + worker.path)
-          n += 1
+          messageCount += 1
           sender ! worker
         } else {
           logWarning("Received different props object of the child actor")
         }
 
       case _: PossiblyHarmful =>
-        n += 1
+        messageCount += 1
         hiccups += 1
 
       case _: Statistics =>
-        n += 1
+        messageCount += 1
         val workers = context.children
-        sender ! Statistics(n, workers.size, hiccups, workers.mkString("\n"))
+        sender ! Statistics(messageCount, workers.size, hiccups, workers.mkString("\n"))
     }
   }
 
