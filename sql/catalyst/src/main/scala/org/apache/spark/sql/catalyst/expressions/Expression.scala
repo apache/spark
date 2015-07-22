@@ -19,19 +19,12 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, UnresolvedAttribute}
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodeGenContext, GeneratedExpressionCode}
+import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.types._
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
-// This file defines the basic expression abstract classes in Catalyst, including:
-// Expression: the base expression abstract class
-// LeafExpression
-// UnaryExpression
-// BinaryExpression
-// BinaryOperator
-//
-// For details, see their classdocs.
+// This file defines the basic expression abstract classes in Catalyst.
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 /**
@@ -39,12 +32,23 @@ import org.apache.spark.sql.types._
  *
  * If an expression wants to be exposed in the function registry (so users can call it with
  * "name(arguments...)", the concrete implementation must be a case class whose constructor
- * arguments are all Expressions types.
+ * arguments are all Expressions types. See [[Substring]] for an example.
  *
- * See [[Substring]] for an example.
+ * There are a few important traits:
+ *
+ * - [[Nondeterministic]]: an expression that is not deterministic.
+ * - [[Unevaluable]]: an expression that is not supposed to be evaluated.
+ * - [[CodegenFallback]]: an expression that does not have code gen implemented and falls back to
+ *                        interpreted mode.
+ *
+ * - [[LeafExpression]]: an expression that has no child.
+ * - [[UnaryExpression]]: an expression that has one child.
+ * - [[BinaryExpression]]: an expression that has two children.
+ * - [[BinaryOperator]]: a special case of [[BinaryExpression]] that requires two children to have
+ *                       the same output data type.
+ *
  */
 abstract class Expression extends TreeNode[Expression] {
-  self: Product =>
 
   /**
    * Returns true when an expression is a candidate for static evaluation before the query is
@@ -66,10 +70,12 @@ abstract class Expression extends TreeNode[Expression] {
    * Note that this means that an expression should be considered as non-deterministic if:
    * - if it relies on some mutable internal state, or
    * - if it relies on some implicit input that is not part of the children expression list.
+   * - if it has non-deterministic child or children.
    *
    * An example would be `SparkPartitionID` that relies on the partition id returned by TaskContext.
+   * By default leaf expressions are deterministic as Nil.forall(_.deterministic) returns true.
    */
-  def deterministic: Boolean = true
+  def deterministic: Boolean = children.forall(_.deterministic)
 
   def nullable: Boolean
 
@@ -90,7 +96,8 @@ abstract class Expression extends TreeNode[Expression] {
     val primitive = ctx.freshName("primitive")
     val ve = GeneratedExpressionCode("", isNull, primitive)
     ve.code = genCode(ctx, ve)
-    ve
+    // Add `this` in the comment.
+    ve.copy(s"/* $this */\n" + ve.code)
   }
 
   /**
@@ -102,19 +109,7 @@ abstract class Expression extends TreeNode[Expression] {
    * @param ev an [[GeneratedExpressionCode]] with unique terms.
    * @return Java source code
    */
-  protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    ctx.references += this
-    val objectTerm = ctx.freshName("obj")
-    s"""
-      /* expression: ${this} */
-      Object $objectTerm = expressions[${ctx.references.size - 1}].eval(i);
-      boolean ${ev.isNull} = $objectTerm == null;
-      ${ctx.javaType(this.dataType)} ${ev.primitive} = ${ctx.defaultValue(this.dataType)};
-      if (!${ev.isNull}) {
-        ${ev.primitive} = (${ctx.boxedType(this.dataType)}) $objectTerm;
-      }
-    """
-  }
+  protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String
 
   /**
    * Returns `true` if this expression and all its children have been resolved to a specific schema
@@ -184,10 +179,31 @@ abstract class Expression extends TreeNode[Expression] {
 
 
 /**
+ * An expression that cannot be evaluated. Some expressions don't live past analysis or optimization
+ * time (e.g. Star). This trait is used by those expressions.
+ */
+trait Unevaluable extends Expression {
+
+  override def eval(input: InternalRow = null): Any =
+    throw new UnsupportedOperationException(s"Cannot evaluate expression: $this")
+
+  override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String =
+    throw new UnsupportedOperationException(s"Cannot evaluate expression: $this")
+}
+
+
+/**
+ * An expression that is nondeterministic.
+ */
+trait Nondeterministic extends Expression {
+  override def deterministic: Boolean = false
+}
+
+
+/**
  * A leaf expression, i.e. one without any child expressions.
  */
 abstract class LeafExpression extends Expression {
-  self: Product =>
 
   def children: Seq[Expression] = Nil
 }
@@ -198,7 +214,6 @@ abstract class LeafExpression extends Expression {
  * if the input is evaluated to null.
  */
 abstract class UnaryExpression extends Expression {
-  self: Product =>
 
   def child: Expression
 
@@ -277,7 +292,6 @@ abstract class UnaryExpression extends Expression {
  * if any input is evaluated to null.
  */
 abstract class BinaryExpression extends Expression {
-  self: Product =>
 
   def left: Expression
   def right: Expression
@@ -370,7 +384,6 @@ abstract class BinaryExpression extends Expression {
  *    the analyzer will find the tightest common type and do the proper type casting.
  */
 abstract class BinaryOperator extends BinaryExpression with ExpectsInputTypes {
-  self: Product =>
 
   /**
    * Expected input type from both left/right child expressions, similar to the

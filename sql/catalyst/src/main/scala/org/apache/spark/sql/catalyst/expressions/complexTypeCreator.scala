@@ -17,8 +17,11 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import scala.collection.mutable
+
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.expressions.codegen.{GeneratedExpressionCode, CodeGenContext}
 import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.types._
 
@@ -44,12 +47,29 @@ case class CreateArray(children: Seq[Expression]) extends Expression {
     children.map(_.eval(input))
   }
 
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    val arraySeqClass = classOf[mutable.ArraySeq[Any]].getName
+    s"""
+      boolean ${ev.isNull} = false;
+      $arraySeqClass<Object> ${ev.primitive} = new $arraySeqClass<Object>(${children.size});
+    """ +
+      children.zipWithIndex.map { case (e, i) =>
+        val eval = e.gen(ctx)
+        eval.code + s"""
+          if (${eval.isNull}) {
+            ${ev.primitive}.update($i, null);
+          } else {
+            ${ev.primitive}.update($i, ${eval.primitive});
+          }
+         """
+      }.mkString("\n")
+  }
+
   override def prettyName: String = "array"
 }
 
 /**
  * Returns a Row containing the evaluation of all children expressions.
- * TODO: [[CreateStruct]] does not support codegen.
  */
 case class CreateStruct(children: Seq[Expression]) extends Expression {
 
@@ -73,6 +93,24 @@ case class CreateStruct(children: Seq[Expression]) extends Expression {
 
   override def eval(input: InternalRow): Any = {
     InternalRow(children.map(_.eval(input)): _*)
+  }
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    val rowClass = classOf[GenericMutableRow].getName
+    s"""
+      boolean ${ev.isNull} = false;
+      final $rowClass ${ev.primitive} = new $rowClass(${children.size});
+    """ +
+      children.zipWithIndex.map { case (e, i) =>
+        val eval = e.gen(ctx)
+        eval.code + s"""
+        if (${eval.isNull}) {
+          ${ev.primitive}.update($i, null);
+        } else {
+          ${ev.primitive}.update($i, ${eval.primitive});
+        }
+       """
+      }.mkString("\n")
   }
 
   override def prettyName: String = "struct"
@@ -103,11 +141,11 @@ case class CreateNamedStruct(children: Seq[Expression]) extends Expression {
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (children.size % 2 != 0) {
-      TypeCheckResult.TypeCheckFailure("CreateNamedStruct expects an even number of arguments.")
+      TypeCheckResult.TypeCheckFailure(s"$prettyName expects an even number of arguments.")
     } else {
       val invalidNames =
         nameExprs.filterNot(e => e.foldable && e.dataType == StringType && !nullable)
-      if (invalidNames.size != 0) {
+      if (invalidNames.nonEmpty) {
         TypeCheckResult.TypeCheckFailure(
           s"Odd position only allow foldable and not-null StringType expressions, got :" +
             s" ${invalidNames.mkString(",")}")
@@ -119,6 +157,24 @@ case class CreateNamedStruct(children: Seq[Expression]) extends Expression {
 
   override def eval(input: InternalRow): Any = {
     InternalRow(valExprs.map(_.eval(input)): _*)
+  }
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    val rowClass = classOf[GenericMutableRow].getName
+    s"""
+      boolean ${ev.isNull} = false;
+      final $rowClass ${ev.primitive} = new $rowClass(${valExprs.size});
+    """ +
+      valExprs.zipWithIndex.map { case (e, i) =>
+        val eval = e.gen(ctx)
+        eval.code + s"""
+        if (${eval.isNull}) {
+          ${ev.primitive}.update($i, null);
+        } else {
+          ${ev.primitive}.update($i, ${eval.primitive});
+        }
+       """
+      }.mkString("\n")
   }
 
   override def prettyName: String = "named_struct"

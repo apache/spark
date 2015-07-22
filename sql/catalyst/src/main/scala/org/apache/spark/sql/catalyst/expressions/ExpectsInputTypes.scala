@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.analysis.HiveTypeCoercion.ImplicitTypeCasts
  *
  * Most function expressions (e.g. [[Substring]] should extends [[ImplicitCastInputTypes]]) instead.
  */
-trait ExpectsInputTypes { self: Expression =>
+trait ExpectsInputTypes extends Expression {
 
   /**
    * Expected input types from child expressions. The i-th position in the returned seq indicates
@@ -60,6 +60,6 @@ trait ExpectsInputTypes { self: Expression =>
 /**
  * A mixin for the analyzer to perform implicit type casting using [[ImplicitTypeCasts]].
  */
-trait ImplicitCastInputTypes extends ExpectsInputTypes { self: Expression =>
+trait ImplicitCastInputTypes extends ExpectsInputTypes {
   // No other methods
 }

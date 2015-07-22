@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.util
 
 import java.sql.{Date, Timestamp}
 import java.text.{DateFormat, SimpleDateFormat}
-import java.util.{Calendar, TimeZone}
+import java.util.{TimeZone, Calendar}
 
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -31,14 +31,23 @@ import org.apache.spark.unsafe.types.UTF8String
  * precision.
  */
 object DateTimeUtils {
-  final val MILLIS_PER_DAY = SECONDS_PER_DAY * 1000L
-
   // see http://stackoverflow.com/questions/466321/convert-unix-timestamp-to-julian
   final val JULIAN_DAY_OF_EPOCH = 2440587  // and .5
   final val SECONDS_PER_DAY = 60 * 60 * 24L
   final val MICROS_PER_SECOND = 1000L * 1000L
   final val NANOS_PER_SECOND = MICROS_PER_SECOND * 1000L
 
+  final val MILLIS_PER_DAY = SECONDS_PER_DAY * 1000L
+
+  // number of days in 400 years
+  final val daysIn400Years: Int = 146097
+  // number of days between 1.1.1970 and 1.1.2001
+  final val to2001 = -11323
+
+  // this is year -17999, calculation: 50 * daysIn400Year
+  final val toYearZero = to2001 + 7304850
+
+  @transient lazy val defaultTimeZone = TimeZone.getDefault
 
   // Java TimeZone has no mention of thread safety. Use thread local instance to be safe.
   private val threadLocalLocalTimeZone = new ThreadLocal[TimeZone] {
@@ -65,8 +74,8 @@ object DateTimeUtils {
   def millisToDays(millisUtc: Long): Int = {
     // SPARK-6785: use Math.floor so negative number of days (dates before 1970)
     // will correctly work as input for function toJavaDate(Int)
-    val millisLocal = millisUtc.toDouble + threadLocalLocalTimeZone.get().getOffset(millisUtc)
-    Math.floor(millisLocal / MILLIS_PER_DAY).toInt
+    val millisLocal = millisUtc + threadLocalLocalTimeZone.get().getOffset(millisUtc)
+    Math.floor(millisLocal.toDouble / MILLIS_PER_DAY).toInt
   }
 
   // reverse of millisToDays
@@ -320,16 +329,17 @@ object DateTimeUtils {
       Calendar.getInstance(
         TimeZone.getTimeZone(f"GMT${timeZone.get.toChar}${segments(7)}%02d:${segments(8)}%02d"))
     }
+    c.set(Calendar.MILLISECOND, 0)
 
     if (justTime) {
-      c.set(Calendar.HOUR, segments(3))
+      c.set(Calendar.HOUR_OF_DAY, segments(3))
       c.set(Calendar.MINUTE, segments(4))
       c.set(Calendar.SECOND, segments(5))
     } else {
       c.set(segments(0), segments(1) - 1, segments(2), segments(3), segments(4), segments(5))
     }
 
-    Some(c.getTimeInMillis / 1000 * 1000000 + segments(6))
+    Some(c.getTimeInMillis * 1000 + segments(6))
   }
 
   /**
@@ -374,8 +384,193 @@ object DateTimeUtils {
         segments(2) < 1 || segments(2) > 31) {
       return None
     }
-    val c = Calendar.getInstance()
+    val c = Calendar.getInstance(TimeZone.getTimeZone("GMT"))
     c.set(segments(0), segments(1) - 1, segments(2), 0, 0, 0)
-    Some((c.getTimeInMillis / 1000 / 3600 / 24).toInt)
+    c.set(Calendar.MILLISECOND, 0)
+    Some((c.getTimeInMillis / MILLIS_PER_DAY).toInt)
+  }
+
+  /**
+   * Returns the hour value of a given timestamp value. The timestamp is expressed in microseconds.
+   */
+  def getHours(timestamp: Long): Int = {
+    val localTs = (timestamp / 1000) + defaultTimeZone.getOffset(timestamp / 1000)
+    ((localTs / 1000 / 3600) % 24).toInt
+  }
+
+  /**
+   * Returns the minute value of a given timestamp value. The timestamp is expressed in
+   * microseconds.
+   */
+  def getMinutes(timestamp: Long): Int = {
+    val localTs = (timestamp / 1000) + defaultTimeZone.getOffset(timestamp / 1000)
+    ((localTs / 1000 / 60) % 60).toInt
+  }
+
+  /**
+   * Returns the second value of a given timestamp value. The timestamp is expressed in
+   * microseconds.
+   */
+  def getSeconds(timestamp: Long): Int = {
+    ((timestamp / 1000 / 1000) % 60).toInt
+  }
+
+  private[this] def isLeapYear(year: Int): Boolean = {
+    (year % 4) == 0 && ((year % 100) != 0 || (year % 400) == 0)
+  }
+
+  /**
+   * Return the number of days since the start of 400 year period.
+   * The second year of a 400 year period (year 1) starts on day 365.
+   */
+  private[this] def yearBoundary(year: Int): Int = {
+    year * 365 + ((year / 4 ) - (year / 100) + (year / 400))
+  }
+
+  /**
+   * Calculates the number of years for the given number of days. This depends
+   * on a 400 year period.
+   * @param days days since the beginning of the 400 year period
+   * @return (number of year, days in year)
+   */
+  private[this] def numYears(days: Int): (Int, Int) = {
+    val year = days / 365
+    val boundary = yearBoundary(year)
+    if (days > boundary) (year, days - boundary) else (year - 1, days - yearBoundary(year - 1))
+  }
+
+  /**
+   * Calculates the year and and the number of the day in the year for the given
+   * number of days. The given days is the number of days since 1.1.1970.
+   *
+   * The calculation uses the fact that the period 1.1.2001 until 31.12.2400 is
+   * equals to the period 1.1.1601 until 31.12.2000.
+   */
+  private[this] def getYearAndDayInYear(daysSince1970: Int): (Int, Int) = {
+    // add the difference (in days) between 1.1.1970 and the artificial year 0 (-17999)
+    val daysNormalized = daysSince1970 + toYearZero
+    val numOfQuarterCenturies = daysNormalized / daysIn400Years
+    val daysInThis400 = daysNormalized % daysIn400Years + 1
+    val (years, dayInYear) = numYears(daysInThis400)
+    val year: Int = (2001 - 20000) + 400 * numOfQuarterCenturies + years
+    (year, dayInYear)
+  }
+
+  /**
+   * Returns the 'day in year' value for the given date. The date is expressed in days
+   * since 1.1.1970.
+   */
+  def getDayInYear(date: Int): Int = {
+    getYearAndDayInYear(date)._2
+  }
+
+  /**
+   * Returns the year value for the given date. The date is expressed in days
+   * since 1.1.1970.
+   */
+  def getYear(date: Int): Int = {
+    getYearAndDayInYear(date)._1
+  }
+
+  /**
+   * Returns the quarter for the given date. The date is expressed in days
+   * since 1.1.1970.
+   */
+  def getQuarter(date: Int): Int = {
+    var (year, dayInYear) = getYearAndDayInYear(date)
+    if (isLeapYear(year)) {
+      dayInYear = dayInYear - 1
+    }
+    if (dayInYear <= 90) {
+      1
+    } else if (dayInYear <= 181) {
+      2
+    } else if (dayInYear <= 273) {
+      3
+    } else {
+      4
+    }
+  }
+
+  /**
+   * Returns the month value for the given date. The date is expressed in days
+   * since 1.1.1970. January is month 1.
+   */
+  def getMonth(date: Int): Int = {
+    var (year, dayInYear) = getYearAndDayInYear(date)
+    if (isLeapYear(year)) {
+      if (dayInYear == 60) {
+        return 2
+      } else if (dayInYear > 60) {
+        dayInYear = dayInYear - 1
+      }
+    }
+
+    if (dayInYear <= 31) {
+      1
+    } else if (dayInYear <= 59) {
+      2
+    } else if (dayInYear <= 90) {
+      3
+    } else if (dayInYear <= 120) {
+      4
+    } else if (dayInYear <= 151) {
+      5
+    } else if (dayInYear <= 181) {
+      6
+    } else if (dayInYear <= 212) {
+      7
+    } else if (dayInYear <= 243) {
+      8
+    } else if (dayInYear <= 273) {
+      9
+    } else if (dayInYear <= 304) {
+      10
+    } else if (dayInYear <= 334) {
+      11
+    } else {
+      12
+    }
+  }
+
+  /**
+   * Returns the 'day of month' value for the given date. The date is expressed in days
+   * since 1.1.1970.
+   */
+  def getDayOfMonth(date: Int): Int = {
+    var (year, dayInYear) = getYearAndDayInYear(date)
+    if (isLeapYear(year)) {
+      if (dayInYear == 60) {
+        return 29
+      } else if (dayInYear > 60) {
+        dayInYear = dayInYear - 1
+      }
+    }
+
+    if (dayInYear <= 31) {
+      dayInYear
+    } else if (dayInYear <= 59) {
+      dayInYear - 31
+    } else if (dayInYear <= 90) {
+      dayInYear - 59
+    } else if (dayInYear <= 120) {
+      dayInYear - 90
+    } else if (dayInYear <= 151) {
+      dayInYear - 120
+    } else if (dayInYear <= 181) {
+      dayInYear - 151
+    } else if (dayInYear <= 212) {
+      dayInYear - 181
+    } else if (dayInYear <= 243) {
+      dayInYear - 212
+    } else if (dayInYear <= 273) {
+      dayInYear - 243
+    } else if (dayInYear <= 304) {
+      dayInYear - 273
+    } else if (dayInYear <= 334) {
+      dayInYear - 304
+    } else {
+      dayInYear - 334
+    }
   }
 }

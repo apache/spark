@@ -296,6 +296,22 @@ class DoubleArrayParam(parent: Params, name: String, doc: String, isValid: Array
 }
 
 /**
+ * :: DeveloperApi ::
+ * Specialized version of [[Param[Array[Int]]]] for Java.
+ */
+@DeveloperApi
+class IntArrayParam(parent: Params, name: String, doc: String, isValid: Array[Int] => Boolean)
+  extends Param[Array[Int]](parent, name, doc, isValid) {
+
+  def this(parent: Params, name: String, doc: String) =
+    this(parent, name, doc, ParamValidators.alwaysTrue)
+
+  /** Creates a param pair with a [[java.util.List]] of values (for Java and Python). */
+  def w(value: java.util.List[java.lang.Integer]): ParamPair[Array[Int]] =
+    w(value.asScala.map(_.asInstanceOf[Int]).toArray)
+}
+
+/**
  * :: Experimental ::
  * A param and its value.
  */

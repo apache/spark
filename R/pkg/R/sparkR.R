@@ -140,7 +140,7 @@ sparkR.init <- function(
     if (!file.exists(path)) {
       stop("JVM is not ready after 10 seconds")
     }
-    f <- file(path, open='rb')
+    f <- file(path, open="rb")
     backendPort <- readInt(f)
     monitorPort <- readInt(f)
     close(f)

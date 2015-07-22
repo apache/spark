@@ -130,7 +130,12 @@ def merge_pr(pr_num, target_ref, title, body, pr_repo_desc):
                              '--pretty=format:%an <%ae>']).split("\n")
     distinct_authors = sorted(set(commit_authors),
                               key=lambda x: commit_authors.count(x), reverse=True)
-    primary_author = distinct_authors[0]
+    primary_author = raw_input(
+        "Enter primary author in the format of \"name <email>\" [%s]: " %
+        distinct_authors[0])
+    if primary_author == "":
+        primary_author = distinct_authors[0]
+
     commits = run_cmd(['git', 'log', 'HEAD..%s' % pr_branch_name,
                       '--pretty=format:%h [%an] %s']).split("\n\n")
 
@@ -281,7 +286,7 @@ def resolve_jira_issue(merge_branches, comment, default_jira_id=""):
     resolve = filter(lambda a: a['name'] == "Resolve Issue", asf_jira.transitions(jira_id))[0]
     resolution = filter(lambda r: r.raw['name'] == "Fixed", asf_jira.resolutions())[0]
     asf_jira.transition_issue(
-        jira_id, resolve["id"], fixVersions = jira_fix_versions, 
+        jira_id, resolve["id"], fixVersions = jira_fix_versions,
         comment = comment, resolution = {'id': resolution.raw['id']})
 
     print "Successfully resolved %s with fixVersions=%s!" % (jira_id, fix_versions)
@@ -300,7 +305,7 @@ def standardize_jira_ref(text):
     """
     Standardize the [SPARK-XXXXX] [MODULE] prefix
     Converts "[SPARK-XXX][mllib] Issue", "[MLLib] SPARK-XXX. Issue" or "SPARK XXX [MLLIB]: Issue" to "[SPARK-XXX] [MLLIB] Issue"
-    
+
     >>> standardize_jira_ref("[SPARK-5821] [SQL] ParquetRelation2 CTAS should check if delete is successful")
     '[SPARK-5821] [SQL] ParquetRelation2 CTAS should check if delete is successful'
     >>> standardize_jira_ref("[SPARK-4123][Project Infra][WIP]: Show new dependencies added in pull requests")
@@ -322,11 +327,11 @@ def standardize_jira_ref(text):
     """
     jira_refs = []
     components = []
-    
+
     # If the string is compliant, no need to process any further
     if (re.search(r'^\[SPARK-[0-9]{3,6}\] (\[[A-Z0-9_\s,]+\] )+\S+', text)):
         return text
-    
+
     # Extract JIRA ref(s):
     pattern = re.compile(r'(SPARK[-\s]*[0-9]{3,6})+', re.IGNORECASE)
     for ref in pattern.findall(text):
@@ -348,18 +353,18 @@ def standardize_jira_ref(text):
 
     # Assemble full text (JIRA ref(s), module(s), remaining text)
     clean_text = ' '.join(jira_refs).strip() + " " + ' '.join(components).strip() + " " + text.strip()
-    
+
     # Replace multiple spaces with a single space, e.g. if no jira refs and/or components were included
     clean_text = re.sub(r'\s+', ' ', clean_text.strip())
-    
+
     return clean_text
 
 def main():
     global original_head
-    
+
     os.chdir(SPARK_HOME)
     original_head = run_cmd("git rev-parse HEAD")[:8]
-    
+
     branches = get_json("%s/branches" % GITHUB_API_BASE)
     branch_names = filter(lambda x: x.startswith("branch-"), [x['name'] for x in branches])
     # Assumes branch names can be sorted lexicographically
@@ -448,5 +453,5 @@ if __name__ == "__main__":
     (failure_count, test_count) = doctest.testmod()
     if failure_count:
         exit(-1)
-    
+
     main()

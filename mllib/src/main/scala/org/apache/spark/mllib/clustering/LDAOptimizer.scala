@@ -19,14 +19,15 @@ package org.apache.spark.mllib.clustering
 
 import java.util.Random
 
+<<<<<<< HEAD
 import breeze.linalg.{DenseMatrix => BDM, DenseVector => BDV, all, normalize, sum}
-import breeze.numerics._
+import breeze.numerics.{abs, digamma, exp}
 import breeze.stats.distributions.{Gamma, RandBasis}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.graphx._
 import org.apache.spark.graphx.impl.GraphImpl
 import org.apache.spark.mllib.impl.PeriodicGraphCheckpointer
-import org.apache.spark.mllib.linalg._
+import org.apache.spark.mllib.linalg.{DenseVector, Matrices, SparseVector, Vector, Vectors}
 import org.apache.spark.rdd.RDD
 
 /**
@@ -94,8 +95,11 @@ final class EMLDAOptimizer extends LDAOptimizer {
    * Compute bipartite term/doc graph.
    */
   override private[clustering] def initialize(docs: RDD[(Long, Vector)], lda: LDA): LDAOptimizer = {
+    val docConcentration = lda.getDocConcentration(0)
+    require({
+      lda.getDocConcentration.toArray.forall(_ == docConcentration)
+    }, "EMLDAOptimizer currently only supports symmetric document-topic priors")
 
-    val docConcentration = lda.getDocConcentration
     val topicConcentration = lda.getTopicConcentration
     val k = lda.getK
 
@@ -229,10 +233,10 @@ final class OnlineLDAOptimizer extends LDAOptimizer {
   private var vocabSize: Int = 0
 
   /** alias for docConcentration */
-  private var alpha: Double = 0
+  private var alpha: Vector = Vectors.dense(0)
 
   /** (private[clustering] for debugging)  Get docConcentration */
-  private[clustering] def getAlpha: Double = alpha
+  private[clustering] def getAlpha: Vector = alpha
 
   /** alias for topicConcentration */
   private var eta: Double = 0
@@ -320,15 +324,17 @@ final class OnlineLDAOptimizer extends LDAOptimizer {
   /**
    * Optimize alpha, indicates whether alpha (Dirichlet parameter for prior document-topic
    * distributions) will be optimized during training.
+   *
+   * TODO: expose to public API
    */
-  def getOptimzeAlpha: Boolean = this.optimizeAlpha
+  private def getOptimzeAlpha: Boolean = this.optimizeAlpha
 
   /**
    * Sets whether to optimize alpha parameter during training.
    *
    * Default: false
    */
-  def setOptimzeAlpha(optimizeAlpha: Boolean): this.type = {
+  private def setOptimzeAlpha(optimizeAlpha: Boolean): this.type = {
     this.optimizeAlpha = optimizeAlpha
     this
   }
@@ -360,7 +366,19 @@ final class OnlineLDAOptimizer extends LDAOptimizer {
     this.k = lda.getK
     this.corpusSize = docs.count()
     this.vocabSize = docs.first()._2.size
-    this.alpha = if (lda.getDocConcentration == -1) 1.0 / k else lda.getDocConcentration
+    this.alpha = if (lda.getDocConcentration.size == 1) {
+      if (lda.getDocConcentration(0) == -1) Vectors.dense(Array.fill(k)(1.0 / k))
+      else {
+        require(lda.getDocConcentration(0) >= 0, s"all entries in alpha must be >=0, got: $alpha")
+        Vectors.dense(Array.fill(k)(lda.getDocConcentration(0)))
+      }
+    } else {
+      require(lda.getDocConcentration.size == k, s"alpha must have length k, got: $alpha")
+      lda.getDocConcentration.foreachActive { case (_, x) =>
+        require(x >= 0, s"all entries in alpha must be >= 0, got: $alpha")
+      }
+      lda.getDocConcentration
+    }
     this.eta = if (lda.getTopicConcentration == -1) 1.0 / k else lda.getTopicConcentration
     this.randomGenerator = new Random(lda.getSeed)
 
@@ -388,19 +406,17 @@ final class OnlineLDAOptimizer extends LDAOptimizer {
     val k = this.k
     val vocabSize = this.vocabSize
     val expElogbeta = exp(LDAUtils.dirichletExpectation(lambda)).t
-    val alpha = this.alpha
+    val alpha = this.alpha.toBreeze
     val gammaShape = this.gammaShape
 
     val stats: RDD[BDM[Double]] = batch.mapPartitions { docs =>
       val stat = BDM.zeros[Double](k, vocabSize)
-      docs.foreach { case (_, termCounts: Vector) =>
-        val ids: List[Int] = termCounts match {
-          case v: DenseVector => (0 until v.size).toList
-          case v: SparseVector => v.indices.toList
-        }
-        val (_, sstats) = OnlineLDAOptimizer.variationalTopicInference(
-          termCounts, expElogbeta, alpha, gammaShape, k)
-        stat(::, ids) := sstats
+      docs.foreach { doc =>
+        val termCounts = doc._2
+        if (termCounts.size > 0) {
+          val (_, sstats) = OnlineLDAOptimizer.variationalTopicInference(
+            termCounts, expElogbeta, alpha, gammaShape, k)
+          stat(::, ids) := sstats
       }
       Iterator(stat)
     }
@@ -473,14 +489,16 @@ final class OnlineLDAOptimizer extends LDAOptimizer {
  */
 object OnlineLDAOptimizer {
   private[clustering] def variationalTopicInference(
-    termCounts: Vector,
-    expElogbeta: BDM[Double],
-    alpha: Double,
-    gammaShape: Double,
-    k: Int): (BDV[Double], BDM[Double]) = {
+      termCounts: Vector,
+      expElogbeta: BDM[Double],
+      alpha: Double,
+      gammaShape: Double,
+      k: Int): (BDV[Double], BDM[Double]) = {
     val (ids: List[Int], cts: Array[Double]) = termCounts match {
       case v: DenseVector => ((0 until v.size).toList, v.values)
       case v: SparseVector => (v.indices.toList, v.values)
+      case v => throw new IllegalArgumentException("Online LDA does not support vector type "
+        + v.getClass)
     }
     // Initialize the variational distribution q(theta|gamma) for the mini-batch
     val gammad: BDV[Double] =
