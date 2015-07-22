@@ -76,5 +76,5 @@ case class BroadcastCartesianProduct(
 
 object BroadcastCartesianProduct {
   private val broadcastCartesianProductExecutionContext = ExecutionContext.fromExecutorService(
-    ThreadUtils.newDaemonCachedThreadPool("broadcast-hash-join", 128))
+    ThreadUtils.newDaemonCachedThreadPool("broadcast-cartesian-product", 128))
 }
