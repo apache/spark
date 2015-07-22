@@ -785,6 +785,21 @@ case class Levenshtein(left: Expression, right: Expression) extends BinaryExpres
 }
 
 /**
+ * A function that return soundex code of the given string expression.
+ */
+case class SoundEx(child: Expression) extends UnaryExpression with ExpectsInputTypes
+  with CodegenFallback {
+
+  override def dataType: DataType = StringType
+
+  override def inputTypes: Seq[DataType] = Seq(StringType)
+
+  override def nullSafeEval(input: Any): Any = {
+    input.asInstanceOf[UTF8String].soundex()
+  }
+}
+
+/**
  * Returns the numeric value of the first character of str.
  */
 case class Ascii(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {

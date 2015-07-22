@@ -50,6 +50,12 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
     5, 5, 5, 5,
     6, 6, 6, 6};
 
+  /**
+   * Soundex mapping table
+   */
+  private static final char[] US_ENGLISH_MAPPING = {'0', '1', '2', '3', '0', '1', '2', '0',
+          '0', '2', '2', '4', '5', '5', '0', '1', '2', '6', '2', '3', '0', '1', '0', '2', '0', '2'};
+
   public static final UTF8String EMPTY_UTF8 = UTF8String.fromString("");
 
   /**
@@ -627,5 +633,94 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
       result = 31 * result + getByte(i);
     }
     return result;
+  }
+
+  /**
+   * Encodes a string into a Soundex value. Soundex is an encoding used to relate similar names,
+   * but can also be used as a general purpose scheme to find word with similar phonemes.
+   * https://en.wikipedia.org/wiki/Soundex
+   */
+  public UTF8String soundex() {
+    if (numBytes == 0) {
+      return UTF8String.fromBytes(new byte[0]);
+    }
+    String tmp;
+    byte data[] = {'0', '0', '0', '0'};
+    char ch;
+    int idx = 0;
+    int idxp0 = 0;
+    int idxp = 0;
+    int idxpp = 0;
+    int offset = numBytesForFirstByte(getByte(0));
+    if (offset > 1 || getByte(0) < 97 && getByte(0) > 90
+            || getByte(0) < 65 || getByte(0) > 122) {
+      return this;
+    }
+    int i = 1;
+    int j = 1;
+    data[0] = getByte(0);
+
+    while (i < numBytes) {
+
+      if (j > 3) break;
+      if (numBytesForFirstByte(getByte(i)) > 1 || getByte(i) < 97 && getByte(i) > 90
+              || getByte(i) < 65 || getByte(i) > 122) {
+        return this;
+      }
+      if (getByte(i) == getByte(i - 1)
+              || (getByte(i) - 32 == getByte(i - 1)
+              || (getByte(i) == getByte(i - 1) - 32))) {
+        i += 1;
+        continue;
+      }
+      if (getByte(i) <= 122 && getByte(i) >= 97) {
+        idx = getByte(i) - 'A' - 32;
+      } else {
+        idx = getByte(i) - 'A';
+      }
+      if (i > 1) {
+        if (getByte(i - 2) <= 122 && getByte(i - 2) >= 97) {
+          idxpp = getByte(i - 2) - 'A' - 32;
+        } else {
+          idxpp = getByte(i - 2) - 'A';
+        }
+      }
+      if (getByte(i - 1) <= 122 && getByte(i - 1) >= 97) {
+        idxp = getByte(i - 1) - 'A' - 32;
+      } else {
+        idxp = getByte(i - 1) - 'A';
+      }
+      if (getByte(0) <= 122 && getByte(0) >= 97) {
+        idxp0 = getByte(0) - 'A' - 32;
+      } else {
+        idxp0 = getByte(0) - 'A';
+      }
+
+      if (idx >= 0 && idx <= US_ENGLISH_MAPPING.length) {
+        ch = US_ENGLISH_MAPPING[idx];
+        if (i > 1 && (getByte(i - 1) - 'H' == 0 || getByte(i - 1) - 'W' == 0
+                || getByte(i - 1) - 'H' - 32 == 0 || getByte(i - 1) - 'W' - 32 == 0)
+                && idxpp >= 0 && idxpp <= US_ENGLISH_MAPPING.length
+                && (ch == US_ENGLISH_MAPPING[idxpp])
+                || i == 1 && idxp0 >= 0 && idxp0 <= US_ENGLISH_MAPPING.length
+                && (ch == US_ENGLISH_MAPPING[idxp0])) {
+          i += 1;
+          continue;
+        }
+        if (idxp >= 0 && idxp <= US_ENGLISH_MAPPING.length
+                && US_ENGLISH_MAPPING[idxp] - '0' != 0
+                && ch - data[j - 1] == 0) {
+          i += 1;
+          continue;
+        }
+        if (ch - '0' > 0) {
+          tmp = Character.toString(ch);
+          System.arraycopy(tmp.getBytes(), 0, data, j, 1);
+          j += 1;
+        }
+      }
+      i += 1;
+    }
+    return UTF8String.fromBytes(data);
   }
 }
