@@ -379,13 +379,13 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
   }
 
   /** Check if tracker has been marked for starting */
-  private def isTrackerStarted(): Boolean = trackerState == Started
+  private def isTrackerStarted: Boolean = trackerState == Started
 
   /** Check if tracker has been marked for stopping */
-  private def isTrackerStopping(): Boolean = trackerState == Stopping
+  private def isTrackerStopping: Boolean = trackerState == Stopping
 
   /** Check if tracker has been marked for stopped */
-  private def isTrackerStopped(): Boolean = trackerState == Stopped
+  private def isTrackerStopped: Boolean = trackerState == Stopped
 
   /** RpcEndpoint to receive messages from the receivers. */
   private class ReceiverTrackerEndpoint(override val rpcEnv: RpcEnv) extends ThreadSafeRpcEndpoint {
@@ -436,7 +436,7 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
       receiverPreferredLocations(receiver.streamId) = receiver.preferredLocation
       val receiverId = receiver.streamId
 
-      if (isTrackerStopping() || isTrackerStopped()) {
+      if (!isTrackerStarted) {
         onReceiverJobFinish(receiverId)
         return
       }
@@ -455,19 +455,20 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
         } else {
           ssc.sc.makeRDD(Seq(receiver -> scheduledLocations))
         }
+      receiverRDD.setName(s"Receiver $receiverId")
       val future = ssc.sparkContext.submitJob[Receiver[_], Unit, Unit](
         receiverRDD, startReceiverFunc, Seq(0), (_, _) => Unit, ())
       // We will keep restarting the receiver job until ReceiverTracker is stopped
       future.onComplete {
         case Success(_) =>
-          if (isTrackerStopping() || isTrackerStopped()) {
+          if (!isTrackerStarted) {
             onReceiverJobFinish(receiverId)
           } else {
             logInfo(s"Restarting Receiver $receiverId")
             self.send(StartReceiver(receiver))
           }
         case Failure(e) =>
-          if (isTrackerStopping() || isTrackerStopped()) {
+          if (!isTrackerStarted) {
             onReceiverJobFinish(receiverId)
           } else {
             logError("Receiver has been stopped. Try to restart it.", e)
