@@ -24,9 +24,12 @@ if ("lintr" %in% row.names(installed.packages())  == FALSE) {
   devtools::install_github("jimhester/lintr")
 }
 
-# NOTE: You should install SparkR with `R/install-dev.sh` before running this script.
 library(lintr)
+library(methods)
 library(testthat)
-library(SparkR, lib.loc = file.path(SPARK_ROOT_DIR, "R", "lib"))
+if (! library(SparkR, lib.loc = file.path(SPARK_ROOT_DIR, "R", "lib"), logical.return = TRUE)) {
+  stop("You should install SparkR in a local directory with `R/instlal-dev.sh`.")
+}
+
 path.to.package <- file.path(SPARK_ROOT_DIR, "R", "pkg")
 lint_package(path.to.package, cache = FALSE)
