@@ -28,7 +28,8 @@ import org.apache.hadoop.hive.serde2.objectinspector.primitive.PrimitiveObjectIn
 import org.apache.hadoop.io.LongWritable
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.expressions.{Literal, InternalRow}
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.Row
 
@@ -202,9 +203,9 @@ class HiveInspectorSuite extends SparkFunSuite with HiveInspectors {
     val dt = StructType(dataTypes.zipWithIndex.map {
       case (t, idx) => StructField(s"c_$idx", t)
     })
-
+    val inspector = toInspector(dt)
     checkValues(row,
-      unwrap(wrap(Row.fromSeq(row), toInspector(dt)), toInspector(dt)).asInstanceOf[InternalRow])
+      unwrap(wrap(InternalRow.fromSeq(row), inspector), inspector).asInstanceOf[InternalRow])
     checkValue(null, unwrap(wrap(null, toInspector(dt)), toInspector(dt)))
   }
 

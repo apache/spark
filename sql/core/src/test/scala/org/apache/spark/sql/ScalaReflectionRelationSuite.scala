@@ -20,7 +20,6 @@ package org.apache.spark.sql
 import java.sql.{Date, Timestamp}
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.expressions._
 
 case class ReflectData(
     stringField: String,
@@ -79,7 +78,7 @@ class ScalaReflectionRelationSuite extends SparkFunSuite {
 
   test("query case class RDD") {
     val data = ReflectData("a", 1, 1L, 1.toFloat, 1.toDouble, 1.toShort, 1.toByte, true,
-      new java.math.BigDecimal(1), new Date(12345), new Timestamp(12345), Seq(1, 2, 3))
+      new java.math.BigDecimal(1), Date.valueOf("1970-01-01"), new Timestamp(12345), Seq(1, 2, 3))
     Seq(data).toDF().registerTempTable("reflectData")
 
     assert(ctx.sql("SELECT * FROM reflectData").collect().head ===
@@ -128,16 +127,16 @@ class ScalaReflectionRelationSuite extends SparkFunSuite {
 
     Seq(data).toDF().registerTempTable("reflectComplexData")
     assert(ctx.sql("SELECT * FROM reflectComplexData").collect().head ===
-      new GenericRow(Array[Any](
+      Row(
         Seq(1, 2, 3),
         Seq(1, 2, null),
         Map(1 -> 10L, 2 -> 20L),
         Map(1 -> 10L, 2 -> 20L, 3 -> null),
-        new GenericRow(Array[Any](
+        Row(
           Seq(10, 20, 30),
           Seq(10, 20, null),
           Map(10 -> 100L, 20 -> 200L),
           Map(10 -> 100L, 20 -> 200L, 30 -> null),
-          new GenericRow(Array[Any](null, "abc")))))))
+          Row(null, "abc"))))
   }
 }

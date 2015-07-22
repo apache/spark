@@ -59,8 +59,8 @@ test_that("take() gives back the original elements in correct count and order", 
   expect_equal(take(strListRDD, 3), as.list(head(strList, n = 3)))
   expect_equal(take(strListRDD2, 1), as.list(head(strList, n = 1)))
 
-  expect_true(length(take(strListRDD, 0)) == 0)
-  expect_true(length(take(strVectorRDD, 0)) == 0)
-  expect_true(length(take(numListRDD, 0)) == 0)
-  expect_true(length(take(numVectorRDD, 0)) == 0)
+  expect_equal(length(take(strListRDD, 0)), 0)
+  expect_equal(length(take(strVectorRDD, 0)), 0)
+  expect_equal(length(take(numListRDD, 0)), 0)
+  expect_equal(length(take(numVectorRDD, 0)), 0)
 })

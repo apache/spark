@@ -948,6 +948,6 @@ The following components are provided under the MIT License. See project link fo
      (MIT License) SLF4J LOG4J-12 Binding (org.slf4j:slf4j-log4j12:1.7.5 - http://www.slf4j.org)
      (MIT License) pyrolite (org.spark-project:pyrolite:2.0.1 - http://pythonhosted.org/Pyro4/)
      (MIT License) scopt (com.github.scopt:scopt_2.10:3.2.0 - https://github.com/scopt/scopt)
-     (The MIT License) Mockito (org.mockito:mockito-all:1.8.5 - http://www.mockito.org)
+     (The MIT License) Mockito (org.mockito:mockito-core:1.9.5 - http://www.mockito.org)
      (MIT License) jquery (https://jquery.org/license/)
      (MIT License) AnchorJS (https://github.com/bryanbraun/anchorjs)

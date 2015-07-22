@@ -62,22 +62,28 @@ private[spark] abstract class Stage(
 
   var pendingTasks = new HashSet[Task[_]]
 
+  /** The ID to use for the next new attempt for this stage. */
   private var nextAttemptId: Int = 0
 
   val name = callSite.shortForm
   val details = callSite.longForm
 
-  /** Pointer to the latest [StageInfo] object, set by DAGScheduler. */
-  var latestInfo: StageInfo = StageInfo.fromStage(this)
+  /**
+   * Pointer to the [StageInfo] object for the most recent attempt. This needs to be initialized
+   * here, before any attempts have actually been created, because the DAGScheduler uses this
+   * StageInfo to tell SparkListeners when a job starts (which happens before any stage attempts
+   * have been created).
+   */
+  private var _latestInfo: StageInfo = StageInfo.fromStage(this, nextAttemptId)
 
-  /** Return a new attempt id, starting with 0. */
-  def newAttemptId(): Int = {
-    val id = nextAttemptId
+  /** Creates a new attempt for this stage by creating a new StageInfo with a new attempt ID. */
+  def makeNewStageAttempt(numPartitionsToCompute: Int): Unit = {
+    _latestInfo = StageInfo.fromStage(this, nextAttemptId, Some(numPartitionsToCompute))
     nextAttemptId += 1
-    id
   }
 
-  def attemptId: Int = nextAttemptId
+  /** Returns the StageInfo for the most recent attempt for this stage. */
+  def latestInfo: StageInfo = _latestInfo
 
   override final def hashCode(): Int = id
   override final def equals(other: Any): Boolean = other match {

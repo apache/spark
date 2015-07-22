@@ -364,6 +364,14 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
   @SuppressWarnings("unchecked")
   @Test
   public void testQueueStream() {
+    ssc.stop();
+    // Create a new JavaStreamingContext without checkpointing
+    SparkConf conf = new SparkConf()
+        .setMaster("local[2]")
+        .setAppName("test")
+        .set("spark.streaming.clock", "org.apache.spark.util.ManualClock");
+    ssc = new JavaStreamingContext(conf, new Duration(1000));
+
     List<List<Integer>> expected = Arrays.asList(
         Arrays.asList(1,2,3),
         Arrays.asList(4,5,6),

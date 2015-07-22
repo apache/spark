@@ -21,7 +21,7 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.types._
 
 /**
- * Helper function to check for valid data types
+ * Helper functions to check for valid data types.
  */
 object TypeUtils {
   def checkForNumericExpr(t: DataType, caller: String): TypeCheckResult = {
@@ -32,19 +32,20 @@ object TypeUtils {
     }
   }
 
-  def checkForBitwiseExpr(t: DataType, caller: String): TypeCheckResult = {
-    if (t.isInstanceOf[IntegralType] || t == NullType) {
-      TypeCheckResult.TypeCheckSuccess
-    } else {
-      TypeCheckResult.TypeCheckFailure(s"$caller accepts integral types, not $t")
-    }
-  }
-
   def checkForOrderingExpr(t: DataType, caller: String): TypeCheckResult = {
     if (t.isInstanceOf[AtomicType] || t == NullType) {
       TypeCheckResult.TypeCheckSuccess
     } else {
       TypeCheckResult.TypeCheckFailure(s"$caller accepts non-complex types, not $t")
+    }
+  }
+
+  def checkForSameTypeInputExpr(types: Seq[DataType], caller: String): TypeCheckResult = {
+    if (types.distinct.size > 1) {
+      TypeCheckResult.TypeCheckFailure(
+        s"input to $caller should all be the same type, but it's ${types.mkString("[", ", ", "]")}")
+    } else {
+      TypeCheckResult.TypeCheckSuccess
     }
   }
 

@@ -88,10 +88,10 @@ case class AllDataTypesScan(
         UTF8String.fromString(s"varchar_$i"),
         Seq(i, i + 1),
         Seq(Map(UTF8String.fromString(s"str_$i") -> InternalRow(i.toLong))),
-        Map(i -> i.toString),
+        Map(i -> UTF8String.fromString(i.toString)),
         Map(Map(UTF8String.fromString(s"str_$i") -> i.toFloat) -> InternalRow(i.toLong)),
-        Row(i, i.toString),
-        Row(Seq(UTF8String.fromString(s"str_$i"), UTF8String.fromString(s"str_${i + 1}")),
+        InternalRow(i, UTF8String.fromString(i.toString)),
+        InternalRow(Seq(UTF8String.fromString(s"str_$i"), UTF8String.fromString(s"str_${i + 1}")),
           InternalRow(Seq(DateTimeUtils.fromJavaDate(new Date(1970, 1, i + 1))))))
     }
   }

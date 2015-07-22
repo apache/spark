@@ -17,14 +17,13 @@
 
 package org.apache.spark.sql.catalyst.expressions.codegen
 
-import org.apache.spark.sql.BaseMutableRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types._
 
 /**
  * Java can not access Projection (in package object)
  */
-abstract class BaseProject extends Projection {}
+abstract class BaseProjection extends Projection {}
 
 /**
  * Generates bytecode that produces a new [[InternalRow]] object based on a fixed set of input
@@ -33,7 +32,6 @@ abstract class BaseProject extends Projection {}
  * primitive values.
  */
 object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
-  import scala.reflect.runtime.universe._
 
   protected def canonicalize(in: Seq[Expression]): Seq[Expression] =
     in.map(ExpressionCanonicalizer.execute)
@@ -72,54 +70,56 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
       s"case $i: { c$i = (${ctx.boxedType(e.dataType)})value; return;}"
     }.mkString("\n        ")
 
-    val specificAccessorFunctions = ctx.nativeTypes.map { dataType =>
+    val specificAccessorFunctions = ctx.primitiveTypes.map { jt =>
       val cases = expressions.zipWithIndex.flatMap {
-        case (e, i) if ctx.javaType(e.dataType) == ctx.javaType(dataType) =>
-          List(s"case $i: return c$i;")
-        case _ => Nil
+        case (e, i) if ctx.javaType(e.dataType) == jt =>
+          Some(s"case $i: return c$i;")
+        case _ => None
       }.mkString("\n        ")
       if (cases.length > 0) {
+        val getter = "get" + ctx.primitiveTypeName(jt)
         s"""
       @Override
-      public ${ctx.javaType(dataType)} ${ctx.accessorForType(dataType)}(int i) {
+      public $jt $getter(int i) {
         if (isNullAt(i)) {
-          return ${ctx.defaultValue(dataType)};
+          return ${ctx.defaultValue(jt)};
         }
         switch (i) {
         $cases
         }
         throw new IllegalArgumentException("Invalid index: " + i
-          + " in ${ctx.accessorForType(dataType)}");
+          + " in $getter");
       }"""
       } else {
         ""
       }
-    }.mkString("\n")
+    }.filter(_.length > 0).mkString("\n")
 
-    val specificMutatorFunctions = ctx.nativeTypes.map { dataType =>
+    val specificMutatorFunctions = ctx.primitiveTypes.map { jt =>
       val cases = expressions.zipWithIndex.flatMap {
-        case (e, i) if ctx.javaType(e.dataType) == ctx.javaType(dataType) =>
-          List(s"case $i: { c$i = value; return; }")
-        case _ => Nil
+        case (e, i) if ctx.javaType(e.dataType) == jt =>
+          Some(s"case $i: { c$i = value; return; }")
+        case _ => None
       }.mkString("\n        ")
       if (cases.length > 0) {
+        val setter = "set" + ctx.primitiveTypeName(jt)
         s"""
       @Override
-      public void ${ctx.mutatorForType(dataType)}(int i, ${ctx.javaType(dataType)} value) {
+      public void $setter(int i, $jt value) {
         nullBits[i] = false;
         switch (i) {
         $cases
         }
         throw new IllegalArgumentException("Invalid index: " + i +
-          " in ${ctx.mutatorForType(dataType)}");
+          " in $setter}");
       }"""
       } else {
         ""
       }
-    }.mkString("\n")
+    }.filter(_.length > 0).mkString("\n")
 
     val hashValues = expressions.zipWithIndex.map { case (e, i) =>
-      val col = newTermName(s"c$i")
+      val col = s"c$i"
       val nonNull = e.dataType match {
         case BooleanType => s"$col ? 0 : 1"
         case ByteType | ShortType | IntegerType | DateType => s"$col"
@@ -127,6 +127,7 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
         case FloatType => s"Float.floatToIntBits($col)"
         case DoubleType =>
             s"(int)(Double.doubleToLongBits($col) ^ (Double.doubleToLongBits($col) >>> 32))"
+        case BinaryType => s"java.util.Arrays.hashCode($col)"
         case _ => s"$col.hashCode()"
       }
       s"isNullAt($i) ? 0 : ($nonNull)"
@@ -146,72 +147,85 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
       """
     }.mkString("\n")
 
+    val copyColumns = expressions.zipWithIndex.map { case (e, i) =>
+        s"""if (!nullBits[$i]) arr[$i] = c$i;"""
+    }.mkString("\n      ")
+
     val code = s"""
     public SpecificProjection generate($exprType[] expr) {
       return new SpecificProjection(expr);
     }
 
-    class SpecificProjection extends ${typeOf[BaseProject]} {
-      private $exprType[] expressions = null;
+    class SpecificProjection extends ${classOf[BaseProjection].getName} {
+      private $exprType[] expressions;
+      ${declareMutableStates(ctx)}
 
       public SpecificProjection($exprType[] expr) {
         expressions = expr;
+        ${initMutableStates(ctx)}
       }
 
       @Override
       public Object apply(Object r) {
-        return new SpecificRow(expressions, (InternalRow) r);
-      }
-    }
-
-    final class SpecificRow extends ${typeOf[BaseMutableRow]} {
-
-      $columns
-
-      public SpecificRow($exprType[] expressions, InternalRow i) {
-        $initColumns
+        return new SpecificRow((InternalRow) r);
       }
 
-      public int size() { return ${expressions.length};}
-      protected boolean[] nullBits = new boolean[${expressions.length}];
-      public void setNullAt(int i) { nullBits[i] = true; }
-      public boolean isNullAt(int i) { return nullBits[i]; }
+      final class SpecificRow extends ${classOf[MutableRow].getName} {
 
-      public Object get(int i) {
-        if (isNullAt(i)) return null;
-        switch (i) {
-        $getCases
+        $columns
+
+        public SpecificRow(InternalRow i) {
+          $initColumns
         }
-        return null;
-      }
-      public void update(int i, Object value) {
-        if (value == null) {
-          setNullAt(i);
-          return;
-        }
-        nullBits[i] = false;
-        switch (i) {
-        $updateCases
-        }
-      }
-      $specificAccessorFunctions
-      $specificMutatorFunctions
 
-      @Override
-      public int hashCode() {
-        int result = 37;
-        $hashUpdates
-        return result;
-      }
+        public int length() { return ${expressions.length};}
+        protected boolean[] nullBits = new boolean[${expressions.length}];
+        public void setNullAt(int i) { nullBits[i] = true; }
+        public boolean isNullAt(int i) { return nullBits[i]; }
 
-      @Override
-      public boolean equals(Object other) {
-        if (other instanceof SpecificRow) {
-          SpecificRow row = (SpecificRow) other;
-          $columnChecks
-          return true;
+        public Object get(int i) {
+          if (isNullAt(i)) return null;
+          switch (i) {
+          $getCases
+          }
+          return null;
         }
-        return super.equals(other);
+        public void update(int i, Object value) {
+          if (value == null) {
+            setNullAt(i);
+            return;
+          }
+          nullBits[i] = false;
+          switch (i) {
+          $updateCases
+          }
+        }
+        $specificAccessorFunctions
+        $specificMutatorFunctions
+
+        @Override
+        public int hashCode() {
+          int result = 37;
+          $hashUpdates
+          return result;
+        }
+
+        @Override
+        public boolean equals(Object other) {
+          if (other instanceof SpecificRow) {
+            SpecificRow row = (SpecificRow) other;
+            $columnChecks
+            return true;
+          }
+          return super.equals(other);
+        }
+
+        @Override
+        public InternalRow copy() {
+          Object[] arr = new Object[${expressions.length}];
+          ${copyColumns}
+          return new ${classOf[GenericInternalRow].getName}(arr);
+        }
       }
     }
     """

@@ -25,7 +25,7 @@ import org.apache.spark.annotation.Experimental
  * Time tracker implementation which holds labeled timers.
  */
 @Experimental
-private[tree] class TimeTracker extends Serializable {
+private[spark] class TimeTracker extends Serializable {
 
   private val starts: MutableHashMap[String, Long] = new MutableHashMap[String, Long]()
 

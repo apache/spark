@@ -41,9 +41,11 @@ class SparkSubmitUtilsSuite extends SparkFunSuite with BeforeAndAfterAll {
   /** Simple PrintStream that reads data into a buffer */
   private class BufferPrintStream extends PrintStream(noOpOutputStream) {
     var lineBuffer = ArrayBuffer[String]()
+    // scalastyle:off println
     override def println(line: String) {
       lineBuffer += line
     }
+    // scalastyle:on println
   }
 
   override def beforeAll() {
@@ -77,9 +79,9 @@ class SparkSubmitUtilsSuite extends SparkFunSuite with BeforeAndAfterAll {
     assert(resolver2.getResolvers.size() === 7)
     val expected = repos.split(",").map(r => s"$r/")
     resolver2.getResolvers.toArray.zipWithIndex.foreach { case (resolver: AbstractResolver, i) =>
-      if (i > 3) {
-        assert(resolver.getName === s"repo-${i - 3}")
-        assert(resolver.asInstanceOf[IBiblioResolver].getRoot === expected(i - 4))
+      if (i < 3) {
+        assert(resolver.getName === s"repo-${i + 1}")
+        assert(resolver.asInstanceOf[IBiblioResolver].getRoot === expected(i))
       }
     }
   }
