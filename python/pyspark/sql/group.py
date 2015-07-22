@@ -75,11 +75,11 @@ class GroupedData(object):
 
         >>> gdf = df.groupBy(df.name)
         >>> gdf.agg({"*": "count"}).collect()
-        [Row(name=u'Alice', COUNT(1)=1), Row(name=u'Bob', COUNT(1)=1)]
+        [Row(name=u'Alice', count(1)=1), Row(name=u'Bob', count(1)=1)]
 
         >>> from pyspark.sql import functions as F
         >>> gdf.agg(F.min(df.age)).collect()
-        [Row(name=u'Alice', MIN(age)=2), Row(name=u'Bob', MIN(age)=5)]
+        [Row(name=u'Alice', min(age)=2), Row(name=u'Bob', min(age)=5)]
         """
         assert exprs, "exprs should not be empty"
         if len(exprs) == 1 and isinstance(exprs[0], dict):
@@ -110,9 +110,9 @@ class GroupedData(object):
         :param cols: list of column names (string). Non-numeric columns are ignored.
 
         >>> df.groupBy().mean('age').collect()
-        [Row(AVG(age)=3.5)]
+        [Row(avg(age)=3.5)]
         >>> df3.groupBy().mean('age', 'height').collect()
-        [Row(AVG(age)=3.5, AVG(height)=82.5)]
+        [Row(avg(age)=3.5, avg(height)=82.5)]
         """
 
     @df_varargs_api
@@ -125,9 +125,9 @@ class GroupedData(object):
         :param cols: list of column names (string). Non-numeric columns are ignored.
 
         >>> df.groupBy().avg('age').collect()
-        [Row(AVG(age)=3.5)]
+        [Row(avg(age)=3.5)]
         >>> df3.groupBy().avg('age', 'height').collect()
-        [Row(AVG(age)=3.5, AVG(height)=82.5)]
+        [Row(avg(age)=3.5, avg(height)=82.5)]
         """
 
     @df_varargs_api
@@ -136,9 +136,9 @@ class GroupedData(object):
         """Computes the max value for each numeric columns for each group.
 
         >>> df.groupBy().max('age').collect()
-        [Row(MAX(age)=5)]
+        [Row(max(age)=5)]
         >>> df3.groupBy().max('age', 'height').collect()
-        [Row(MAX(age)=5, MAX(height)=85)]
+        [Row(max(age)=5, max(height)=85)]
         """
 
     @df_varargs_api
@@ -149,9 +149,9 @@ class GroupedData(object):
         :param cols: list of column names (string). Non-numeric columns are ignored.
 
         >>> df.groupBy().min('age').collect()
-        [Row(MIN(age)=2)]
+        [Row(min(age)=2)]
         >>> df3.groupBy().min('age', 'height').collect()
-        [Row(MIN(age)=2, MIN(height)=80)]
+        [Row(min(age)=2, min(height)=80)]
         """
 
     @df_varargs_api
@@ -162,9 +162,9 @@ class GroupedData(object):
         :param cols: list of column names (string). Non-numeric columns are ignored.
 
         >>> df.groupBy().sum('age').collect()
-        [Row(SUM(age)=7)]
+        [Row(sum(age)=7)]
         >>> df3.groupBy().sum('age', 'height').collect()
-        [Row(SUM(age)=7, SUM(height)=165)]
+        [Row(sum(age)=7, sum(height)=165)]
         """
 
 

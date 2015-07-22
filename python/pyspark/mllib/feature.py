@@ -36,6 +36,7 @@ from pyspark.mllib.common import callMLlibFunc, JavaModelWrapper
 from pyspark.mllib.linalg import (
     Vector, Vectors, DenseVector, SparseVector, _convert_to_vector)
 from pyspark.mllib.regression import LabeledPoint
+from pyspark.mllib.util import JavaLoader, JavaSaveable
 
 __all__ = ['Normalizer', 'StandardScalerModel', 'StandardScaler',
            'HashingTF', 'IDFModel', 'IDF', 'Word2Vec', 'Word2VecModel',
@@ -416,7 +417,7 @@ class IDF(object):
         return IDFModel(jmodel)
 
 
-class Word2VecModel(JavaVectorTransformer):
+class Word2VecModel(JavaVectorTransformer, JavaSaveable, JavaLoader):
     """
     class for Word2Vec model
     """
@@ -455,6 +456,12 @@ class Word2VecModel(JavaVectorTransformer):
         """
         return self.call("getVectors")
 
+    @classmethod
+    def load(cls, sc, path):
+        jmodel = sc._jvm.org.apache.spark.mllib.feature \
+            .Word2VecModel.load(sc._jsc.sc(), path)
+        return Word2VecModel(jmodel)
+
 
 @ignore_unicode_prefix
 class Word2Vec(object):
@@ -488,6 +495,18 @@ class Word2Vec(object):
     >>> syms = model.findSynonyms(vec, 2)
     >>> [s[0] for s in syms]
     [u'b', u'c']
+
+    >>> import os, tempfile
+    >>> path = tempfile.mkdtemp()
+    >>> model.save(sc, path)
+    >>> sameModel = Word2VecModel.load(sc, path)
+    >>> model.transform("a") == sameModel.transform("a")
+    True
+    >>> from shutil import rmtree
+    >>> try:
+    ...     rmtree(path)
+    ... except OSError:
+    ...     pass
     """
     def __init__(self):
         """

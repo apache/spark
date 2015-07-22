@@ -23,10 +23,9 @@ import java.{util => ju}
 import java.util.concurrent._
 
 import scala.collection.mutable
-import scala.concurrent.duration._
 import scala.concurrent.{Future, Promise}
 import scala.reflect.ClassTag
-import scala.util.{Failure, Success}
+import scala.util.{DynamicVariable, Failure, Success}
 import scala.util.control.NonFatal
 
 import org.apache.spark.network.TransportContext
@@ -187,12 +186,8 @@ private[netty] class NettyRpcEnv(
   }
 
   private[netty] def deserialize[T: ClassTag](bytes: Array[Byte]): T = {
-    val prevEnv = NettyRpcEnv.currentEnv
-    NettyRpcEnv.setCurrentEnv(this)
-    try {
+    deserialize { () =>
       serializer.newInstance().deserialize[T](ByteBuffer.wrap(bytes))
-    } finally {
-      NettyRpcEnv.setCurrentEnv(prevEnv)
     }
   }
 
@@ -225,22 +220,27 @@ private[netty] class NettyRpcEnv(
       dispatcher.stop()
     }
   }
+
+  override def deserialize[T](deserializationAction: () => T): T = {
+    NettyRpcEnv.currentEnv.withValue(this) {
+      deserializationAction()
+    }
+  }
 }
 
 private[netty] object NettyRpcEnv extends Logging {
 
   /**
    * When deserializing the [[NettyRpcEndpointRef]], it needs a reference to [[NettyRpcEnv]].
-   * [[NettyRpcEnv]] will call `setCurrentEnv` before deserializing messages so that
-   * [[NettyRpcEndpointRef]] can get it via `currentEnv`.
+   * Use `currentEnv` to wrap the deserialization codes. E.g.,
+   *
+   * {{{
+   *   NettyRpcEnv.currentEnv.withValue(this) {
+   *     your deserialization codes
+   *   }
+   * }}}
    */
-  private val _env = new ThreadLocal[NettyRpcEnv]
-
-  private[netty] def setCurrentEnv(env: NettyRpcEnv): Unit = {
-    _env.set(env)
-  }
-
-  private[netty] def currentEnv: NettyRpcEnv = _env.get
+  private[netty] val currentEnv = new DynamicVariable[NettyRpcEnv](null)
 }
 
 private[netty] class NettyRpcEnvFactory extends RpcEnvFactory with Logging {
@@ -259,16 +259,6 @@ private[netty] class NettyRpcEnvFactory extends RpcEnvFactory with Logging {
       case NonFatal(e) =>
         nettyEnv.shutdown()
         throw e
-    }
-  }
-
-  def instantiateClass[T](conf: SparkConf, className: String): T = {
-    val cls = Class.forName(className, true, Utils.getContextOrSparkClassLoader)
-    try {
-      cls.getConstructor(classOf[SparkConf]).newInstance(conf).asInstanceOf[T]
-    } catch {
-      case _: NoSuchMethodException =>
-        cls.getConstructor().newInstance().asInstanceOf[T]
     }
   }
 }
@@ -291,7 +281,7 @@ private[netty] class NettyRpcEndpointRef(@transient conf: SparkConf)
   private def readObject(in: ObjectInputStream): Unit = {
     in.defaultReadObject()
     _address = in.readObject().asInstanceOf[NettyRpcAddress]
-    nettyEnv = NettyRpcEnv.currentEnv
+    nettyEnv = NettyRpcEnv.currentEnv.value
   }
 
   private def writeObject(out: ObjectOutputStream): Unit = {
@@ -302,13 +292,13 @@ private[netty] class NettyRpcEndpointRef(@transient conf: SparkConf)
   override def name: String = _address.name
 
 
-  override def ask[T: ClassTag](message: Any, timeout: FiniteDuration): Future[T] = {
+  override def ask[T: ClassTag](message: Any, timeout: RpcTimeout): Future[T] = {
     val promise = Promise[Any]()
     val timeoutCancelable = nettyEnv.timeoutScheduler.schedule(new Runnable {
       override def run(): Unit = {
-        promise.tryFailure(new TimeoutException("Cannot receive any reply in " + timeout))
+        promise.tryFailure(new TimeoutException("Cannot receive any reply in " + timeout.duration))
       }
-    }, timeout.toNanos, TimeUnit.NANOSECONDS)
+    }, timeout.duration.toNanos, TimeUnit.NANOSECONDS)
     val f = nettyEnv.ask(RequestMessage(nettyEnv.address, this, message, true))
     f.onComplete(v => {
       timeoutCancelable.cancel(true)
@@ -316,7 +306,7 @@ private[netty] class NettyRpcEndpointRef(@transient conf: SparkConf)
         logWarning(s"Ignore message $v")
       }
     })(ThreadUtils.sameThread)
-    f.mapTo[T]
+    promise.future.mapTo[T].recover(timeout.addMessageIfTimeout)(ThreadUtils.sameThread)
   }
 
   override def send(message: Any): Unit = {

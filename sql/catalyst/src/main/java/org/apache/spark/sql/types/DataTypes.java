@@ -50,6 +50,11 @@ public class DataTypes {
   public static final DataType TimestampType = TimestampType$.MODULE$;
 
   /**
+   * Gets the IntervalType object.
+   */
+  public static final DataType IntervalType = IntervalType$.MODULE$;
+
+  /**
    * Gets the DoubleType object.
    */
   public static final DataType DoubleType = DoubleType$.MODULE$;

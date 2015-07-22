@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.types.{ArrayType, DataType, StructField, StructType}
 
 abstract class QueryPlan[PlanType <: TreeNode[PlanType]] extends TreeNode[PlanType] {
-  self: PlanType with Product =>
+  self: PlanType =>
 
   def output: Seq[Attribute]
 
@@ -154,7 +154,9 @@ abstract class QueryPlan[PlanType <: TreeNode[PlanType]] extends TreeNode[PlanTy
   def schemaString: String = schema.treeString
 
   /** Prints out the schema in the tree format */
+  // scalastyle:off println
   def printSchema(): Unit = println(schemaString)
+  // scalastyle:on println
 
   /**
    * A prefix string used when printing the plan.

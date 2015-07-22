@@ -20,7 +20,6 @@ package org.apache.spark.rpc.akka
 import java.util.concurrent.ConcurrentHashMap
 
 import scala.concurrent.Future
-import scala.concurrent.duration._
 import scala.language.postfixOps
 import scala.reflect.ClassTag
 import scala.util.control.NonFatal
@@ -29,7 +28,7 @@ import akka.actor.{ActorSystem, ExtendedActorSystem, Actor, ActorRef, Props, Add
 import akka.event.Logging.Error
 import akka.pattern.{ask => akkaAsk}
 import akka.remote.{AssociationEvent, AssociatedEvent, DisassociatedEvent, AssociationErrorEvent}
-import com.google.common.util.concurrent.MoreExecutors
+import akka.serialization.JavaSerializer
 
 import org.apache.spark.{SparkException, Logging, SparkConf}
 import org.apache.spark.rpc._
@@ -218,8 +217,11 @@ private[spark] class AkkaRpcEnv private[akka] (
 
   override def asyncSetupEndpointRefByURI(uri: String): Future[RpcEndpointRef] = {
     import actorSystem.dispatcher
-    actorSystem.actorSelection(uri).resolveOne(defaultLookupTimeout).
-      map(new AkkaRpcEndpointRef(defaultAddress, _, conf))
+    actorSystem.actorSelection(uri).resolveOne(defaultLookupTimeout.duration).
+      map(new AkkaRpcEndpointRef(defaultAddress, _, conf)).
+      // this is just in case there is a timeout from creating the future in resolveOne, we want the
+      // exception to indicate the conf that determines the timeout
+      recover(defaultLookupTimeout.addMessageIfTimeout)
   }
 
   override def uriOf(systemName: String, address: RpcAddress, endpointName: String): String = {
@@ -241,6 +243,12 @@ private[spark] class AkkaRpcEnv private[akka] (
   }
 
   override def toString: String = s"${getClass.getSimpleName}($actorSystem)"
+
+  override def deserialize[T](deserializationAction: () => T): T = {
+    JavaSerializer.currentSystem.withValue(actorSystem.asInstanceOf[ExtendedActorSystem]) {
+      deserializationAction()
+    }
+  }
 }
 
 private[spark] class AkkaRpcEnvFactory extends RpcEnvFactory {
@@ -299,8 +307,8 @@ private[akka] class AkkaRpcEndpointRef(
     actorRef ! AkkaMessage(message, false)
   }
 
-  override def ask[T: ClassTag](message: Any, timeout: FiniteDuration): Future[T] = {
-    actorRef.ask(AkkaMessage(message, true))(timeout).flatMap {
+  override def ask[T: ClassTag](message: Any, timeout: RpcTimeout): Future[T] = {
+    actorRef.ask(AkkaMessage(message, true))(timeout.duration).flatMap {
       // The function will run in the calling thread, so it should be short and never block.
       case msg @ AkkaMessage(message, reply) =>
         if (reply) {
@@ -311,11 +319,18 @@ private[akka] class AkkaRpcEndpointRef(
         }
       case AkkaFailure(e) =>
         Future.failed(e)
-    }(ThreadUtils.sameThread).mapTo[T]
+    }(ThreadUtils.sameThread).mapTo[T].
+    recover(timeout.addMessageIfTimeout)(ThreadUtils.sameThread)
   }
 
   override def toString: String = s"${getClass.getSimpleName}($actorRef)"
 
+  final override def equals(that: Any): Boolean = that match {
+    case other: AkkaRpcEndpointRef => actorRef == other.actorRef
+    case _ => false
+  }
+
+  final override def hashCode(): Int = if (actorRef == null) 0 else actorRef.hashCode()
 }
 
 /**

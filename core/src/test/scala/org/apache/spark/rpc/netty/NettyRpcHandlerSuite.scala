@@ -30,7 +30,7 @@ import org.apache.spark.rpc._
 class NettyRpcHandlerSuite extends SparkFunSuite {
 
   val env = mock(classOf[NettyRpcEnv])
-  when(env.deserialize(any())(any())).
+  when(env.deserialize(any(classOf[Array[Byte]]))(any())).
     thenReturn(RequestMessage(RpcAddress("localhost", 12345), null, null, false))
 
   test("receive") {

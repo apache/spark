@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql.catalyst.expressions;
 
+import java.io.IOException;
+import java.io.OutputStream;
+
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.util.ObjectPool;
 import org.apache.spark.unsafe.PlatformDependent;
@@ -61,12 +64,16 @@ public final class UnsafeRow extends MutableRow {
   /** A pool to hold non-primitive objects */
   private ObjectPool pool;
 
-  Object getBaseObject() { return baseObject; }
-  long getBaseOffset() { return baseOffset; }
-  ObjectPool getPool() { return pool; }
+  public Object getBaseObject() { return baseObject; }
+  public long getBaseOffset() { return baseOffset; }
+  public int getSizeInBytes() { return sizeInBytes; }
+  public ObjectPool getPool() { return pool; }
 
   /** The number of fields in this row, used for calculating the bitset width (and in assertions) */
   private int numFields;
+
+  /** The size of this row's backing data, in bytes) */
+  private int sizeInBytes;
 
   public int length() { return numFields; }
 
@@ -95,14 +102,17 @@ public final class UnsafeRow extends MutableRow {
    * @param baseObject the base object
    * @param baseOffset the offset within the base object
    * @param numFields the number of fields in this row
+   * @param sizeInBytes the size of this row's backing data, in bytes
    * @param pool the object pool to hold arbitrary objects
    */
-  public void pointTo(Object baseObject, long baseOffset, int numFields, ObjectPool pool) {
+  public void pointTo(
+      Object baseObject, long baseOffset, int numFields, int sizeInBytes, ObjectPool pool) {
     assert numFields >= 0 : "numFields should >= 0";
     this.bitSetWidthInBytes = calculateBitSetWidthInBytes(numFields);
     this.baseObject = baseObject;
     this.baseOffset = baseOffset;
     this.numFields = numFields;
+    this.sizeInBytes = sizeInBytes;
     this.pool = pool;
   }
 
@@ -208,6 +218,9 @@ public final class UnsafeRow extends MutableRow {
   public void setDouble(int ordinal, double value) {
     assertIndexIsValid(ordinal);
     setNotNullAt(ordinal);
+    if (Double.isNaN(value)) {
+      value = Double.NaN;
+    }
     PlatformDependent.UNSAFE.putDouble(baseObject, getFieldOffset(ordinal), value);
   }
 
@@ -236,12 +249,10 @@ public final class UnsafeRow extends MutableRow {
   public void setFloat(int ordinal, float value) {
     assertIndexIsValid(ordinal);
     setNotNullAt(ordinal);
+    if (Float.isNaN(value)) {
+      value = Float.NaN;
+    }
     PlatformDependent.UNSAFE.putFloat(baseObject, getFieldOffset(ordinal), value);
-  }
-
-  @Override
-  public int size() {
-    return numFields;
   }
 
   /**
@@ -264,6 +275,7 @@ public final class UnsafeRow extends MutableRow {
       int offset = (int) ((v >> OFFSET_BITS) & Integer.MAX_VALUE);
       int size = (int) (v & Integer.MAX_VALUE);
       final byte[] bytes = new byte[size];
+      // TODO(davies): Avoid the copy once we can manage the life cycle of Row well.
       PlatformDependent.copyMemory(
         baseObject,
         baseOffset + offset,
@@ -335,9 +347,61 @@ public final class UnsafeRow extends MutableRow {
     }
   }
 
+  /**
+   * Copies this row, returning a self-contained UnsafeRow that stores its data in an internal
+   * byte array rather than referencing data stored in a data page.
+   * <p>
+   * This method is only supported on UnsafeRows that do not use ObjectPools.
+   */
   @Override
   public InternalRow copy() {
-    throw new UnsupportedOperationException();
+    if (pool != null) {
+      throw new UnsupportedOperationException(
+        "Copy is not supported for UnsafeRows that use object pools");
+    } else {
+      UnsafeRow rowCopy = new UnsafeRow();
+      final byte[] rowDataCopy = new byte[sizeInBytes];
+      PlatformDependent.copyMemory(
+        baseObject,
+        baseOffset,
+        rowDataCopy,
+        PlatformDependent.BYTE_ARRAY_OFFSET,
+        sizeInBytes
+      );
+      rowCopy.pointTo(
+        rowDataCopy, PlatformDependent.BYTE_ARRAY_OFFSET, numFields, sizeInBytes, null);
+      return rowCopy;
+    }
+  }
+
+  /**
+   * Write this UnsafeRow's underlying bytes to the given OutputStream.
+   *
+   * @param out the stream to write to.
+   * @param writeBuffer a byte array for buffering chunks of off-heap data while writing to the
+   *                    output stream. If this row is backed by an on-heap byte array, then this
+   *                    buffer will not be used and may be null.
+   */
+  public void writeToStream(OutputStream out, byte[] writeBuffer) throws IOException {
+    if (baseObject instanceof byte[]) {
+      int offsetInByteArray = (int) (PlatformDependent.BYTE_ARRAY_OFFSET - baseOffset);
+      out.write((byte[]) baseObject, offsetInByteArray, sizeInBytes);
+    } else {
+      int dataRemaining = sizeInBytes;
+      long rowReadPosition = baseOffset;
+      while (dataRemaining > 0) {
+        int toTransfer = Math.min(writeBuffer.length, dataRemaining);
+        PlatformDependent.copyMemory(
+          baseObject,
+          rowReadPosition,
+          writeBuffer,
+          PlatformDependent.BYTE_ARRAY_OFFSET,
+          toTransfer);
+        out.write(writeBuffer, 0, toTransfer);
+        rowReadPosition += toTransfer;
+        dataRemaining -= toTransfer;
+      }
+    }
   }
 
   @Override

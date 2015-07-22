@@ -31,13 +31,15 @@ from pyspark import SparkContext
 from pyspark.rdd import RDD, ignore_unicode_prefix
 from pyspark.mllib.common import JavaModelWrapper, callMLlibFunc, callJavaFunc, _py2java, _java2py
 from pyspark.mllib.linalg import SparseVector, _convert_to_vector, DenseVector
+from pyspark.mllib.regression import LabeledPoint
 from pyspark.mllib.stat.distribution import MultivariateGaussian
 from pyspark.mllib.util import Saveable, Loader, inherit_doc, JavaLoader, JavaSaveable
 from pyspark.streaming import DStream
 
 __all__ = ['KMeansModel', 'KMeans', 'GaussianMixtureModel', 'GaussianMixture',
            'PowerIterationClusteringModel', 'PowerIterationClustering',
-           'StreamingKMeans', 'StreamingKMeansModel']
+           'StreamingKMeans', 'StreamingKMeansModel',
+           'LDA', 'LDAModel']
 
 
 @inherit_doc
@@ -282,22 +284,30 @@ class PowerIterationClusteringModel(JavaModelWrapper, JavaSaveable, JavaLoader):
 
     Model produced by [[PowerIterationClustering]].
 
-    >>> data = [(0, 1, 1.0), (0, 2, 1.0), (1, 3, 1.0), (2, 3, 1.0),
-    ...     (0, 3, 1.0), (1, 2, 1.0), (0, 4, 0.1)]
+    >>> data = [(0, 1, 1.0), (0, 2, 1.0), (0, 3, 1.0), (1, 2, 1.0), (1, 3, 1.0),
+    ... (2, 3, 1.0), (3, 4, 0.1), (4, 5, 1.0), (4, 15, 1.0), (5, 6, 1.0),
+    ... (6, 7, 1.0), (7, 8, 1.0), (8, 9, 1.0), (9, 10, 1.0), (10, 11, 1.0),
+    ... (11, 12, 1.0), (12, 13, 1.0), (13, 14, 1.0), (14, 15, 1.0)]
     >>> rdd = sc.parallelize(data, 2)
     >>> model = PowerIterationClustering.train(rdd, 2, 100)
     >>> model.k
     2
-    >>> sorted(model.assignments().collect())
-    [Assignment(id=0, cluster=1), Assignment(id=1, cluster=0), ...
+    >>> result = sorted(model.assignments().collect(), key=lambda x: x.id)
+    >>> result[0].cluster == result[1].cluster == result[2].cluster == result[3].cluster
+    True
+    >>> result[4].cluster == result[5].cluster == result[6].cluster == result[7].cluster
+    True
     >>> import os, tempfile
     >>> path = tempfile.mkdtemp()
     >>> model.save(sc, path)
     >>> sameModel = PowerIterationClusteringModel.load(sc, path)
     >>> sameModel.k
     2
-    >>> sorted(sameModel.assignments().collect())
-    [Assignment(id=0, cluster=1), Assignment(id=1, cluster=0), ...
+    >>> result = sorted(model.assignments().collect(), key=lambda x: x.id)
+    >>> result[0].cluster == result[1].cluster == result[2].cluster == result[3].cluster
+    True
+    >>> result[4].cluster == result[5].cluster == result[6].cluster == result[7].cluster
+    True
     >>> from shutil import rmtree
     >>> try:
     ...     rmtree(path)
@@ -553,6 +563,68 @@ class StreamingKMeans(object):
         """
         self._validate(dstream)
         return dstream.mapValues(lambda x: self._model.predict(x))
+
+
+class LDAModel(JavaModelWrapper):
+
+    """ A clustering model derived from the LDA method.
+
+    Latent Dirichlet Allocation (LDA), a topic model designed for text documents.
+    Terminology
+    - "word" = "term": an element of the vocabulary
+    - "token": instance of a term appearing in a document
+    - "topic": multinomial distribution over words representing some concept
+    References:
+    - Original LDA paper (journal version):
+    Blei, Ng, and Jordan.  "Latent Dirichlet Allocation."  JMLR, 2003.
+
+    >>> from pyspark.mllib.linalg import Vectors
+    >>> from numpy.testing import assert_almost_equal
+    >>> data = [
+    ...     [1, Vectors.dense([0.0, 1.0])],
+    ...     [2, SparseVector(2, {0: 1.0})],
+    ... ]
+    >>> rdd =  sc.parallelize(data)
+    >>> model = LDA.train(rdd, k=2)
+    >>> model.vocabSize()
+    2
+    >>> topics = model.topicsMatrix()
+    >>> topics_expect = array([[0.5,  0.5], [0.5, 0.5]])
+    >>> assert_almost_equal(topics, topics_expect, 1)
+    """
+
+    def topicsMatrix(self):
+        """Inferred topics, where each topic is represented by a distribution over terms."""
+        return self.call("topicsMatrix").toArray()
+
+    def vocabSize(self):
+        """Vocabulary size (number of terms or terms in the vocabulary)"""
+        return self.call("vocabSize")
+
+
+class LDA(object):
+
+    @classmethod
+    def train(cls, rdd, k=10, maxIterations=20, docConcentration=-1.0,
+              topicConcentration=-1.0, seed=None, checkpointInterval=10, optimizer="em"):
+        """Train a LDA model.
+
+        :param rdd:                 RDD of data points
+        :param k:                   Number of clusters you want
+        :param maxIterations:       Number of iterations. Default to 20
+        :param docConcentration:    Concentration parameter (commonly named "alpha")
+            for the prior placed on documents' distributions over topics ("theta").
+        :param topicConcentration:  Concentration parameter (commonly named "beta" or "eta")
+            for the prior placed on topics' distributions over terms.
+        :param seed:                Random Seed
+        :param checkpointInterval:  Period (in iterations) between checkpoints.
+        :param optimizer:           LDAOptimizer used to perform the actual calculation.
+            Currently "em", "online" are supported. Default to "em".
+        """
+        model = callMLlibFunc("trainLDAModel", rdd, k, maxIterations,
+                              docConcentration, topicConcentration, seed,
+                              checkpointInterval, optimizer)
+        return LDAModel(model)
 
 
 def _test():

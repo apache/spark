@@ -73,4 +73,16 @@ class RowSuite extends SparkFunSuite {
       row.getAs[Int]("c")
     }
   }
+
+  test("float NaN == NaN") {
+    val r1 = Row(Float.NaN)
+    val r2 = Row(Float.NaN)
+    assert(r1 === r2)
+  }
+
+  test("double NaN == NaN") {
+    val r1 = Row(Double.NaN)
+    val r2 = Row(Double.NaN)
+    assert(r1 === r2)
+  }
 }

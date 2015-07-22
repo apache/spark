@@ -142,7 +142,7 @@ private[parquet] class CatalystSchemaConverter(
       DecimalType(precision, scale)
     }
 
-    field.getPrimitiveTypeName match {
+    typeName match {
       case BOOLEAN => BooleanType
 
       case FLOAT => FloatType
@@ -150,7 +150,7 @@ private[parquet] class CatalystSchemaConverter(
       case DOUBLE => DoubleType
 
       case INT32 =>
-        field.getOriginalType match {
+        originalType match {
           case INT_8 => ByteType
           case INT_16 => ShortType
           case INT_32 | null => IntegerType
@@ -161,7 +161,7 @@ private[parquet] class CatalystSchemaConverter(
         }
 
       case INT64 =>
-        field.getOriginalType match {
+        originalType match {
           case INT_64 | null => LongType
           case DECIMAL => makeDecimalType(maxPrecisionForBytes(8))
           case TIMESTAMP_MILLIS => typeNotImplemented()
@@ -176,7 +176,7 @@ private[parquet] class CatalystSchemaConverter(
         TimestampType
 
       case BINARY =>
-        field.getOriginalType match {
+        originalType match {
           case UTF8 | ENUM => StringType
           case null if assumeBinaryIsString => StringType
           case null => BinaryType
@@ -185,7 +185,7 @@ private[parquet] class CatalystSchemaConverter(
         }
 
       case FIXED_LEN_BYTE_ARRAY =>
-        field.getOriginalType match {
+        originalType match {
           case DECIMAL => makeDecimalType(maxPrecisionForBytes(field.getTypeLength))
           case INTERVAL => typeNotImplemented()
           case _ => illegalType()
@@ -261,7 +261,7 @@ private[parquet] class CatalystSchemaConverter(
   // Here we implement Parquet LIST backwards-compatibility rules.
   // See: https://github.com/apache/parquet-format/blob/master/LogicalTypes.md#backward-compatibility-rules
   // scalastyle:on
-  private def isElementType(repeatedType: Type, parentName: String) = {
+  private def isElementType(repeatedType: Type, parentName: String): Boolean = {
     {
       // For legacy 2-level list types with primitive element type, e.g.:
       //
@@ -358,9 +358,24 @@ private[parquet] class CatalystSchemaConverter(
       case DateType =>
         Types.primitive(INT32, repetition).as(DATE).named(field.name)
 
-      // NOTE: !! This timestamp type is not specified in Parquet format spec !!
-      // However, Impala and older versions of Spark SQL use INT96 to store timestamps with
-      // nanosecond precision (not TIME_MILLIS or TIMESTAMP_MILLIS described in the spec).
+      // NOTE: Spark SQL TimestampType is NOT a well defined type in Parquet format spec.
+      //
+      // As stated in PARQUET-323, Parquet `INT96` was originally introduced to represent nanosecond
+      // timestamp in Impala for some historical reasons, it's not recommended to be used for any
+      // other types and will probably be deprecated in future Parquet format spec.  That's the
+      // reason why Parquet format spec only defines `TIMESTAMP_MILLIS` and `TIMESTAMP_MICROS` which
+      // are both logical types annotating `INT64`.
+      //
+      // Originally, Spark SQL uses the same nanosecond timestamp type as Impala and Hive.  Starting
+      // from Spark 1.5.0, we resort to a timestamp type with 100 ns precision so that we can store
+      // a timestamp into a `Long`.  This design decision is subject to change though, for example,
+      // we may resort to microsecond precision in the future.
+      //
+      // For Parquet, we plan to write all `TimestampType` value as `TIMESTAMP_MICROS`, but it's
+      // currently not implemented yet because parquet-mr 1.7.0 (the version we're currently using)
+      // hasn't implemented `TIMESTAMP_MICROS` yet.
+      //
+      // TODO Implements `TIMESTAMP_MICROS` once parquet-mr has that.
       case TimestampType =>
         Types.primitive(INT96, repetition).named(field.name)
 
@@ -446,7 +461,8 @@ private[parquet] class CatalystSchemaConverter(
           field.name,
           Types
             .buildGroup(REPEATED)
-            .addField(convertField(StructField("element", elementType, nullable)))
+            // "array_element" is the name chosen by parquet-hive (1.7.0 and prior version)
+            .addField(convertField(StructField("array_element", elementType, nullable)))
             .named(CatalystConverter.ARRAY_CONTAINS_NULL_BAG_SCHEMA_NAME))
 
       // Spark 1.4.x and prior versions convert ArrayType with non-nullable elements into a 2-level
@@ -459,7 +475,8 @@ private[parquet] class CatalystSchemaConverter(
         ConversionPatterns.listType(
           repetition,
           field.name,
-          convertField(StructField("element", elementType, nullable), REPEATED))
+          // "array" is the name chosen by parquet-avro (1.7.0 and prior version)
+          convertField(StructField("array", elementType, nullable), REPEATED))
 
       // Spark 1.4.x and prior versions convert MapType into a 3-level group annotated by
       // MAP_KEY_VALUE.  This is covered by `convertGroupField(field: GroupType): DataType`.

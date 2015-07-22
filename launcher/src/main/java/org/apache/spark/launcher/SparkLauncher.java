@@ -25,11 +25,12 @@ import java.util.Map;
 
 import static org.apache.spark.launcher.CommandBuilderUtils.*;
 
-/**
+/** 
  * Launcher for Spark applications.
- * <p/>
+ * <p>
  * Use this class to start Spark applications programmatically. The class uses a builder pattern
  * to allow clients to configure the Spark application and launch it as a child process.
+ * </p>
  */
 public class SparkLauncher {
 

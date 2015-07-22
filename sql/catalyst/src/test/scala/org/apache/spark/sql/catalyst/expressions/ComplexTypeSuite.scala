@@ -18,10 +18,10 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.UnresolvedExtractValue
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.UTF8String
 
 
 class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
@@ -119,9 +119,27 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("CreateStruct") {
     val row = create_row(1, 2, 3)
-    val c1 = 'a.int.at(0).as("a")
-    val c3 = 'c.int.at(2).as("c")
+    val c1 = 'a.int.at(0)
+    val c3 = 'c.int.at(2)
     checkEvaluation(CreateStruct(Seq(c1, c3)), create_row(1, 3), row)
+  }
+
+  test("CreateNamedStruct") {
+    val row = InternalRow(1, 2, 3)
+    val c1 = 'a.int.at(0)
+    val c3 = 'c.int.at(2)
+    checkEvaluation(CreateNamedStruct(Seq("a", c1, "b", c3)), InternalRow(1, 3), row)
+  }
+
+  test("CreateNamedStruct with literal field") {
+    val row = InternalRow(1, 2, 3)
+    val c1 = 'a.int.at(0)
+    checkEvaluation(CreateNamedStruct(Seq("a", c1, "b", "y")), InternalRow(1, "y"), row)
+  }
+
+  test("CreateNamedStruct from all literal fields") {
+    checkEvaluation(
+      CreateNamedStruct(Seq("a", "x", "b", 2.0)), InternalRow("x", 2.0), InternalRow.empty)
   }
 
   test("test dsl for complex type") {

@@ -17,9 +17,16 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import com.google.common.math.LongMath
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.dsl.expressions._
-import org.apache.spark.sql.types.{DataType, DoubleType, LongType}
+import org.apache.spark.sql.catalyst.expressions.codegen.{GenerateProjection, GenerateMutableProjection}
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.optimizer.DefaultOptimizer
+import org.apache.spark.sql.catalyst.plans.logical.{OneRowRelation, Project}
+import org.apache.spark.sql.types._
+
 
 class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
@@ -44,6 +51,7 @@ class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
    * @param f The functions in scala.math or elsewhere used to generate expected results
    * @param domain The set of values to run the function with
    * @param expectNull Whether the given values should return null or not
+   * @param expectNaN Whether the given values should eval to NaN or not
    * @tparam T Generic type for primitives
    * @tparam U Generic type for the output of the given function `f`
    */
@@ -52,10 +60,15 @@ class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       f: T => U,
       domain: Iterable[T] = (-20 to 20).map(_ * 0.1),
       expectNull: Boolean = false,
+      expectNaN: Boolean = false,
       evalType: DataType = DoubleType): Unit = {
     if (expectNull) {
       domain.foreach { value =>
         checkEvaluation(c(Literal(value)), null, EmptyRow)
+      }
+    } else if (expectNaN) {
+      domain.foreach { value =>
+        checkNaN(c(Literal(value)), EmptyRow)
       }
     } else {
       domain.foreach { value =>
@@ -71,15 +84,21 @@ class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
    * @param c The DataFrame function
    * @param f The functions in scala.math
    * @param domain The set of values to run the function with
+   * @param expectNull Whether the given values should return null or not
+   * @param expectNaN Whether the given values should eval to NaN or not
    */
   private def testBinary(
       c: (Expression, Expression) => Expression,
       f: (Double, Double) => Double,
       domain: Iterable[(Double, Double)] = (-20 to 20).map(v => (v * 0.1, v * -0.1)),
-      expectNull: Boolean = false): Unit = {
+      expectNull: Boolean = false, expectNaN: Boolean = false): Unit = {
     if (expectNull) {
       domain.foreach { case (v1, v2) =>
         checkEvaluation(c(Literal(v1), Literal(v2)), null, create_row(null))
+      }
+    } else if (expectNaN) {
+      domain.foreach { case (v1, v2) =>
+        checkNaN(c(Literal(v1), Literal(v2)), EmptyRow)
       }
     } else {
       domain.foreach { case (v1, v2) =>
@@ -89,6 +108,68 @@ class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
     checkEvaluation(c(Literal.create(null, DoubleType), Literal(1.0)), null, create_row(null))
     checkEvaluation(c(Literal(1.0), Literal.create(null, DoubleType)), null, create_row(null))
+  }
+
+  test("conv") {
+    checkEvaluation(Conv(Literal("3"), Literal(10), Literal(2)), "11")
+    checkEvaluation(Conv(Literal("-15"), Literal(10), Literal(-16)), "-F")
+    checkEvaluation(Conv(Literal("-15"), Literal(10), Literal(16)), "FFFFFFFFFFFFFFF1")
+    checkEvaluation(Conv(Literal("big"), Literal(36), Literal(16)), "3A48")
+    checkEvaluation(Conv(Literal.create(null, StringType), Literal(36), Literal(16)), null)
+    checkEvaluation(Conv(Literal("3"), Literal.create(null, IntegerType), Literal(16)), null)
+    checkEvaluation(
+      Conv(Literal("1234"), Literal(10), Literal(37)), null)
+    checkEvaluation(
+      Conv(Literal(""), Literal(10), Literal(16)), null)
+    checkEvaluation(
+      Conv(Literal("9223372036854775807"), Literal(36), Literal(16)), "FFFFFFFFFFFFFFFF")
+    // If there is an invalid digit in the number, the longest valid prefix should be converted.
+    checkEvaluation(
+      Conv(Literal("11abc"), Literal(10), Literal(16)), "B")
+  }
+
+  private def checkNaN(
+      expression: Expression, inputRow: InternalRow = EmptyRow): Unit = {
+    checkNaNWithoutCodegen(expression, inputRow)
+    checkNaNWithGeneratedProjection(expression, inputRow)
+    checkNaNWithOptimization(expression, inputRow)
+  }
+
+  private def checkNaNWithoutCodegen(
+      expression: Expression,
+      expected: Any,
+      inputRow: InternalRow = EmptyRow): Unit = {
+    val actual = try evaluate(expression, inputRow) catch {
+      case e: Exception => fail(s"Exception evaluating $expression", e)
+    }
+    if (!actual.asInstanceOf[Double].isNaN) {
+      fail(s"Incorrect evaluation (codegen off): $expression, " +
+        s"actual: $actual, " +
+        s"expected: NaN")
+    }
+  }
+
+
+  private def checkNaNWithGeneratedProjection(
+    expression: Expression,
+    inputRow: InternalRow = EmptyRow): Unit = {
+
+    val plan = generateProject(
+      GenerateMutableProjection.generate(Alias(expression, s"Optimized($expression)")() :: Nil)(),
+      expression)
+
+    val actual = plan(inputRow).apply(0)
+    if (!actual.asInstanceOf[Double].isNaN) {
+      fail(s"Incorrect Evaluation: $expression, actual: $actual, expected: NaN")
+    }
+  }
+
+  private def checkNaNWithOptimization(
+    expression: Expression,
+    inputRow: InternalRow = EmptyRow): Unit = {
+    val plan = Project(Alias(expression, s"Optimized($expression)")() :: Nil, OneRowRelation)
+    val optimizedPlan = DefaultOptimizer.execute(plan)
+    checkNaNWithoutCodegen(optimizedPlan.expressions.head, inputRow)
   }
 
   test("e") {
@@ -105,7 +186,7 @@ class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("asin") {
     testUnary(Asin, math.asin, (-10 to 10).map(_ * 0.1))
-    testUnary(Asin, math.asin, (11 to 20).map(_ * 0.1), expectNull = true)
+    testUnary(Asin, math.asin, (11 to 20).map(_ * 0.1), expectNaN = true)
   }
 
   test("sinh") {
@@ -118,7 +199,7 @@ class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("acos") {
     testUnary(Acos, math.acos, (-10 to 10).map(_ * 0.1))
-    testUnary(Acos, math.acos, (11 to 20).map(_ * 0.1), expectNull = true)
+    testUnary(Acos, math.acos, (11 to 20).map(_ * 0.1), expectNaN = true)
   }
 
   test("cosh") {
@@ -157,6 +238,15 @@ class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     testUnary(Floor, math.floor)
   }
 
+  test("factorial") {
+    (0 to 20).foreach { value =>
+      checkEvaluation(Factorial(Literal(value)), LongMath.factorial(value), EmptyRow)
+    }
+    checkEvaluation(Literal.create(null, IntegerType), null, create_row(null))
+    checkEvaluation(Factorial(Literal(20)), 2432902008176640000L, EmptyRow)
+    checkEvaluation(Factorial(Literal(21)), null, EmptyRow)
+  }
+
   test("rint") {
     testUnary(Rint, math.rint)
   }
@@ -174,18 +264,18 @@ class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("log") {
-    testUnary(Log, math.log, (0 to 20).map(_ * 0.1))
-    testUnary(Log, math.log, (-5 to -1).map(_ * 0.1), expectNull = true)
+    testUnary(Log, math.log, (1 to 20).map(_ * 0.1))
+    testUnary(Log, math.log, (-5 to 0).map(_ * 0.1), expectNull = true)
   }
 
   test("log10") {
-    testUnary(Log10, math.log10, (0 to 20).map(_ * 0.1))
-    testUnary(Log10, math.log10, (-5 to -1).map(_ * 0.1), expectNull = true)
+    testUnary(Log10, math.log10, (1 to 20).map(_ * 0.1))
+    testUnary(Log10, math.log10, (-5 to 0).map(_ * 0.1), expectNull = true)
   }
 
   test("log1p") {
-    testUnary(Log1p, math.log1p, (-1 to 20).map(_ * 0.1))
-    testUnary(Log1p, math.log1p, (-10 to -2).map(_ * 1.0), expectNull = true)
+    testUnary(Log1p, math.log1p, (0 to 20).map(_ * 0.1))
+    testUnary(Log1p, math.log1p, (-10 to -1).map(_ * 1.0), expectNull = true)
   }
 
   test("bin") {
@@ -207,34 +297,83 @@ class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("log2") {
     def f: (Double) => Double = (x: Double) => math.log(x) / math.log(2)
-    testUnary(Log2, f, (0 to 20).map(_ * 0.1))
-    testUnary(Log2, f, (-5 to -1).map(_ * 1.0), expectNull = true)
+    testUnary(Log2, f, (1 to 20).map(_ * 0.1))
+    testUnary(Log2, f, (-5 to 0).map(_ * 1.0), expectNull = true)
   }
 
   test("sqrt") {
     testUnary(Sqrt, math.sqrt, (0 to 20).map(_ * 0.1))
-    testUnary(Sqrt, math.sqrt, (-5 to -1).map(_ * 1.0), expectNull = true)
+    testUnary(Sqrt, math.sqrt, (-5 to -1).map(_ * 1.0), expectNaN = true)
 
     checkEvaluation(Sqrt(Literal.create(null, DoubleType)), null, create_row(null))
-    checkEvaluation(Sqrt(Literal(-1.0)), null, EmptyRow)
-    checkEvaluation(Sqrt(Literal(-1.5)), null, EmptyRow)
+    checkNaN(Sqrt(Literal(-1.0)), EmptyRow)
+    checkNaN(Sqrt(Literal(-1.5)), EmptyRow)
   }
 
   test("pow") {
     testBinary(Pow, math.pow, (-5 to 5).map(v => (v * 1.0, v * 1.0)))
-    testBinary(Pow, math.pow, Seq((-1.0, 0.9), (-2.2, 1.7), (-2.2, -1.7)), expectNull = true)
+    testBinary(Pow, math.pow, Seq((-1.0, 0.9), (-2.2, 1.7), (-2.2, -1.7)), expectNaN = true)
+  }
+
+  test("shift left") {
+    checkEvaluation(ShiftLeft(Literal.create(null, IntegerType), Literal(1)), null)
+    checkEvaluation(ShiftLeft(Literal(21), Literal.create(null, IntegerType)), null)
+    checkEvaluation(
+      ShiftLeft(Literal.create(null, IntegerType), Literal.create(null, IntegerType)), null)
+    checkEvaluation(ShiftLeft(Literal(21), Literal(1)), 42)
+
+    checkEvaluation(ShiftLeft(Literal(21.toLong), Literal(1)), 42.toLong)
+    checkEvaluation(ShiftLeft(Literal(-21.toLong), Literal(1)), -42.toLong)
+  }
+
+  test("shift right") {
+    checkEvaluation(ShiftRight(Literal.create(null, IntegerType), Literal(1)), null)
+    checkEvaluation(ShiftRight(Literal(42), Literal.create(null, IntegerType)), null)
+    checkEvaluation(
+      ShiftRight(Literal.create(null, IntegerType), Literal.create(null, IntegerType)), null)
+    checkEvaluation(ShiftRight(Literal(42), Literal(1)), 21)
+
+    checkEvaluation(ShiftRight(Literal(42.toLong), Literal(1)), 21.toLong)
+    checkEvaluation(ShiftRight(Literal(-42.toLong), Literal(1)), -21.toLong)
+  }
+
+  test("shift right unsigned") {
+    checkEvaluation(ShiftRightUnsigned(Literal.create(null, IntegerType), Literal(1)), null)
+    checkEvaluation(ShiftRightUnsigned(Literal(42), Literal.create(null, IntegerType)), null)
+    checkEvaluation(
+      ShiftRight(Literal.create(null, IntegerType), Literal.create(null, IntegerType)), null)
+    checkEvaluation(ShiftRightUnsigned(Literal(42), Literal(1)), 21)
+
+    checkEvaluation(ShiftRightUnsigned(Literal(42.toLong), Literal(1)), 21.toLong)
+    checkEvaluation(ShiftRightUnsigned(Literal(-42.toLong), Literal(1)), 9223372036854775787L)
   }
 
   test("hex") {
-    checkEvaluation(Hex(Literal(28)), "1C")
-    checkEvaluation(Hex(Literal(-28)), "FFFFFFFFFFFFFFE4")
+    checkEvaluation(Hex(Literal.create(null, LongType)), null)
+    checkEvaluation(Hex(Literal(28L)), "1C")
+    checkEvaluation(Hex(Literal(-28L)), "FFFFFFFFFFFFFFE4")
     checkEvaluation(Hex(Literal(100800200404L)), "177828FED4")
     checkEvaluation(Hex(Literal(-100800200404L)), "FFFFFFE887D7012C")
-    checkEvaluation(Hex(Literal("helloHex")), "68656C6C6F486578")
+    checkEvaluation(Hex(Literal.create(null, BinaryType)), null)
     checkEvaluation(Hex(Literal("helloHex".getBytes())), "68656C6C6F486578")
     // scalastyle:off
     // Turn off scala style for non-ascii chars
-    checkEvaluation(Hex(Literal("三重的")), "E4B889E9878DE79A84")
+    checkEvaluation(Hex(Literal("三重的".getBytes("UTF8"))), "E4B889E9878DE79A84")
+    // scalastyle:on
+  }
+
+  test("unhex") {
+    checkEvaluation(Unhex(Literal.create(null, StringType)), null)
+    checkEvaluation(Unhex(Literal("737472696E67")), "string".getBytes)
+    checkEvaluation(Unhex(Literal("")), new Array[Byte](0))
+    checkEvaluation(Unhex(Literal("F")), Array[Byte](15))
+    checkEvaluation(Unhex(Literal("ff")), Array[Byte](-1))
+    checkEvaluation(Unhex(Literal("GG")), null)
+    // scalastyle:off
+    // Turn off scala style for non-ascii chars
+    checkEvaluation(Unhex(Literal("E4B889E9878DE79A84")), "三重的".getBytes("UTF-8"))
+    checkEvaluation(Unhex(Literal("三重的")), null)
+
     // scalastyle:on
   }
 
@@ -255,6 +394,8 @@ class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       checkEvaluation(Logarithm(Literal(v2), Literal(v1)), f(v2 + 0.0, v1 + 0.0), EmptyRow)
       checkEvaluation(new Logarithm(Literal(v1)), f(math.E, v1 + 0.0), EmptyRow)
     }
+
+    // null input should yield null output
     checkEvaluation(
       Logarithm(Literal.create(null, DoubleType), Literal(1.0)),
       null,
@@ -263,5 +404,57 @@ class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       Logarithm(Literal(1.0), Literal.create(null, DoubleType)),
       null,
       create_row(null))
+
+    // negative input should yield null output
+    checkEvaluation(
+      Logarithm(Literal(-1.0), Literal(1.0)),
+      null,
+      create_row(null))
+    checkEvaluation(
+      Logarithm(Literal(1.0), Literal(-1.0)),
+      null,
+      create_row(null))
+  }
+
+  test("round") {
+    val domain = -6 to 6
+    val doublePi: Double = math.Pi
+    val shortPi: Short = 31415
+    val intPi: Int = 314159265
+    val longPi: Long = 31415926535897932L
+    val bdPi: BigDecimal = BigDecimal(31415927L, 7)
+
+    val doubleResults: Seq[Double] = Seq(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 3.0, 3.1, 3.14, 3.142,
+      3.1416, 3.14159, 3.141593)
+
+    val shortResults: Seq[Short] = Seq[Short](0, 0, 30000, 31000, 31400, 31420) ++
+      Seq.fill[Short](7)(31415)
+
+    val intResults: Seq[Int] = Seq(314000000, 314200000, 314160000, 314159000, 314159300,
+      314159270) ++ Seq.fill(7)(314159265)
+
+    val longResults: Seq[Long] = Seq(31415926536000000L, 31415926535900000L,
+      31415926535900000L, 31415926535898000L, 31415926535897900L, 31415926535897930L) ++
+      Seq.fill(7)(31415926535897932L)
+
+    val bdResults: Seq[BigDecimal] = Seq(BigDecimal(3.0), BigDecimal(3.1), BigDecimal(3.14),
+      BigDecimal(3.142), BigDecimal(3.1416), BigDecimal(3.14159),
+      BigDecimal(3.141593), BigDecimal(3.1415927))
+
+    domain.zipWithIndex.foreach { case (scale, i) =>
+      checkEvaluation(Round(doublePi, scale), doubleResults(i), EmptyRow)
+      checkEvaluation(Round(shortPi, scale), shortResults(i), EmptyRow)
+      checkEvaluation(Round(intPi, scale), intResults(i), EmptyRow)
+      checkEvaluation(Round(longPi, scale), longResults(i), EmptyRow)
+    }
+
+    // round_scale > current_scale would result in precision increase
+    // and not allowed by o.a.s.s.types.Decimal.changePrecision, therefore null
+    (0 to 7).foreach { i =>
+      checkEvaluation(Round(bdPi, i), bdResults(i), EmptyRow)
+    }
+    (8 to 10).foreach { scale =>
+      checkEvaluation(Round(bdPi, scale), null, EmptyRow)
+    }
   }
 }

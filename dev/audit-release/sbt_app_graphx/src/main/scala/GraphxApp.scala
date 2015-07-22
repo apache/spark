@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package main.scala
 
 import org.apache.spark.{SparkContext, SparkConf}
@@ -51,3 +52,4 @@ object GraphXApp {
     println("Test succeeded")
   }
 }
+// scalastyle:on println
