@@ -480,13 +480,6 @@ private[sql] class SQLConf extends Serializable with CatalystConf {
 
   private[spark] def useSqlSerializer2: Boolean = getConf(USE_SQL_SERIALIZER2)
 
-  /**
-   * Upper bound on the sizes (in bytes) of the tables qualified for the auto conversion to
-   * a broadcast value during the physical executions of join operations.  Setting this to -1
-   * effectively disables auto conversion.
-   *
-   * Hive setting: hive.auto.convert.join.noconditionaltask.size, whose default value is 10000.
-   */
   private[spark] def autoBroadcastJoinThreshold: Int = getConf(AUTO_BROADCASTJOIN_THRESHOLD)
 
   private[spark] def defaultSizeInBytes: Long =
