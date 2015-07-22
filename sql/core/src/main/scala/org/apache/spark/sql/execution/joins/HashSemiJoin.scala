@@ -32,34 +32,45 @@ trait HashSemiJoin {
 
   override def output: Seq[Attribute] = left.output
 
-  @transient protected lazy val rightKeyGenerator: Projection =
-    newProjection(rightKeys, right.output)
+  protected[this] def supportUnsafe: Boolean = {
+    (self.codegenEnabled && UnsafeProjection.canSupport(leftKeys)
+      && UnsafeProjection.canSupport(rightKeys)
+      && UnsafeProjection.canSupport(left.schema))
+  }
 
-  @transient protected lazy val leftKeyGenerator: () => MutableProjection =
-    newMutableProjection(leftKeys, left.output)
+  override def outputsUnsafeRows: Boolean = right.outputsUnsafeRows
+  override def canProcessUnsafeRows: Boolean = supportUnsafe
+
+  @transient protected lazy val leftKeyGenerator: Projection =
+    if (supportUnsafe) {
+      UnsafeProjection.create(leftKeys, left.output)
+    } else {
+      newMutableProjection(leftKeys, left.output)()
+    }
+
+  @transient protected lazy val rightKeyGenerator: Projection =
+    if (supportUnsafe) {
+      UnsafeProjection.create(rightKeys, right.output)
+    } else {
+      newMutableProjection(rightKeys, right.output)()
+    }
 
   @transient private lazy val boundCondition =
     newPredicate(condition.getOrElse(Literal(true)), left.output ++ right.output)
 
-  protected def buildKeyHashSet(
-      buildIter: Iterator[InternalRow],
-      copy: Boolean): java.util.Set[InternalRow] = {
+  protected def buildKeyHashSet(buildIter: Iterator[InternalRow]): java.util.Set[InternalRow] = {
     val hashSet = new java.util.HashSet[InternalRow]()
     var currentRow: InternalRow = null
 
     // Create a Hash set of buildKeys
+    val rightKey = rightKeyGenerator
     while (buildIter.hasNext) {
       currentRow = buildIter.next()
-      val rowKey = rightKeyGenerator(currentRow)
+      val rowKey = rightKey(currentRow)
       if (!rowKey.anyNull) {
         val keyExists = hashSet.contains(rowKey)
         if (!keyExists) {
-          if (copy) {
-            hashSet.add(rowKey.copy())
-          } else {
-            // rowKey may be not serializable (from codegen)
-            hashSet.add(rowKey)
-          }
+          hashSet.add(rowKey.copy())
         }
       }
     }
@@ -67,25 +78,34 @@ trait HashSemiJoin {
   }
 
   protected def hashSemiJoin(
-      streamIter: Iterator[InternalRow],
-      hashedRelation: HashedRelation): Iterator[InternalRow] = {
-    val joinKeys = leftKeyGenerator()
-    val joinedRow = new JoinedRow
+    streamIter: Iterator[InternalRow],
+    hashSet: java.util.Set[InternalRow]): Iterator[InternalRow] = {
+    val joinKeys = leftKeyGenerator
     streamIter.filter(current => {
-      lazy val rowBuffer = hashedRelation.get(joinKeys.currentValue)
-      !joinKeys(current).anyNull && rowBuffer != null && rowBuffer.exists {
-        (build: InternalRow) => boundCondition(joinedRow(current, build))
-      }
+      val key = joinKeys(current)
+      !key.anyNull && hashSet.contains(key)
     })
+  }
+
+  protected def buildHashRelation(buildIter: Iterator[InternalRow]): HashedRelation = {
+    if (supportUnsafe) {
+      UnsafeHashedRelation(buildIter, rightKeys, right)
+    } else {
+      HashedRelation(buildIter, newProjection(rightKeys, right.output))
+    }
   }
 
   protected def hashSemiJoin(
       streamIter: Iterator[InternalRow],
-      hashSet: java.util.Set[InternalRow]): Iterator[InternalRow] = {
-    val joinKeys = leftKeyGenerator()
+      hashedRelation: HashedRelation): Iterator[InternalRow] = {
+    val joinKeys = leftKeyGenerator
     val joinedRow = new JoinedRow
-    streamIter.filter(current => {
-      !joinKeys(current.copy()).anyNull && hashSet.contains(joinKeys.currentValue)
-    })
+    streamIter.filter { current =>
+      val key = joinKeys(current)
+      lazy val rowBuffer = hashedRelation.get(key)
+      !key.anyNull && rowBuffer != null && rowBuffer.exists {
+        (row: InternalRow) => boundCondition(joinedRow(current, row))
+      }
+    }
   }
 }

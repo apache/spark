@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.expressions.aggregate.{Complete, AggregateExpression2, AggregateFunction2}
 import org.apache.spark.sql.catalyst.{SimpleCatalystConf, CatalystConf}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -277,7 +278,7 @@ class Analyzer(
         Project(
           projectList.flatMap {
             case s: Star => s.expand(child.output, resolver)
-            case UnresolvedAlias(f @ UnresolvedFunction(_, args)) if containsStar(args) =>
+            case UnresolvedAlias(f @ UnresolvedFunction(_, args, _)) if containsStar(args) =>
               val expandedArgs = args.flatMap {
                 case s: Star => s.expand(child.output, resolver)
                 case o => o :: Nil
@@ -517,9 +518,26 @@ class Analyzer(
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
       case q: LogicalPlan =>
         q transformExpressions {
-          case u @ UnresolvedFunction(name, children) =>
+          case u @ UnresolvedFunction(name, children, isDistinct) =>
             withPosition(u) {
-              registry.lookupFunction(name, children)
+              registry.lookupFunction(name, children) match {
+                // We get an aggregate function built based on AggregateFunction2 interface.
+                // So, we wrap it in AggregateExpression2.
+                case agg2: AggregateFunction2 => AggregateExpression2(agg2, Complete, isDistinct)
+                // Currently, our old aggregate function interface supports SUM(DISTINCT ...)
+                // and COUTN(DISTINCT ...).
+                case sumDistinct: SumDistinct => sumDistinct
+                case countDistinct: CountDistinct => countDistinct
+                // DISTINCT is not meaningful with Max and Min.
+                case max: Max if isDistinct => max
+                case min: Min if isDistinct => min
+                // For other aggregate functions, DISTINCT keyword is not supported for now.
+                // Once we converted to the new code path, we will allow using DISTINCT keyword.
+                case other if isDistinct =>
+                  failAnalysis(s"$name does not support DISTINCT keyword.")
+                // If it does not have DISTINCT keyword, we will return it as is.
+                case other => other
+              }
             }
         }
     }

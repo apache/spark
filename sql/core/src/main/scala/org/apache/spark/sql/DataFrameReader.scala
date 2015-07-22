@@ -20,16 +20,16 @@ package org.apache.spark.sql
 import java.util.Properties
 
 import org.apache.hadoop.fs.Path
-import org.apache.spark.{Logging, Partition}
 
+import org.apache.spark.{Logging, Partition}
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.execution.datasources.{ResolvedDataSource, LogicalRelation}
 import org.apache.spark.sql.jdbc.{JDBCPartition, JDBCPartitioningInfo, JDBCRelation}
 import org.apache.spark.sql.json.JSONRelation
 import org.apache.spark.sql.parquet.ParquetRelation2
-import org.apache.spark.sql.sources.{LogicalRelation, ResolvedDataSource}
 import org.apache.spark.sql.types.StructType
 
 /**
