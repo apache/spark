@@ -354,7 +354,7 @@ case class DescribeFunction(
           Row(s"Usage: ${replaceFunctionName(info.getUsage(), info.getName)}") :: Nil
 
         if (isExtended) {
-          result :+ Row(s"Extended Usage: ${replaceFunctionName(info.getExtended, info.getName)}")
+          result :+ Row(s"Extended Usage:\n${replaceFunctionName(info.getExtended, info.getName)}")
         } else {
           result
         }

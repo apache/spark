@@ -216,8 +216,7 @@ trait String2StringExpression extends ImplicitCastInputTypes {
  */
 @ExpressionDescription(
   usage = "_FUNC_(str) - Returns str with all characters changed to uppercase",
-  extended = """> SELECT _FUNC_('SparkSql');
-               'SPARKSQL'""")
+  extended = "> SELECT _FUNC_('SparkSql');\n 'SPARKSQL'")
 case class Upper(child: Expression)
   extends UnaryExpression with String2StringExpression {
 
@@ -233,8 +232,7 @@ case class Upper(child: Expression)
  */
 @ExpressionDescription(
   usage = "_FUNC_(str) - Returns str with all characters changed to lowercase",
-  extended = """> SELECT _FUNC_('SparkSql');
-               'sparksql'""")
+  extended = "> SELECT _FUNC_('SparkSql');\n'sparksql'")
 case class Lower(child: Expression) extends UnaryExpression with String2StringExpression {
 
   override def convert(v: UTF8String): UTF8String = v.toLowerCase
