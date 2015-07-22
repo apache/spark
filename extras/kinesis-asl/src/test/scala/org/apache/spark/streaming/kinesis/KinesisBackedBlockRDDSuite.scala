@@ -42,7 +42,7 @@ class KinesisBackedBlockRDDSuite extends KinesisFunSuite with BeforeAndAfterAll 
 
   override def beforeAll(): Unit = {
     runIfTestsEnabled("Prepare KinesisTestUtils") {
-      testUtils =  new KinesisTestUtils(endpointUrl)
+      testUtils = new KinesisTestUtils(endpointUrl)
       testUtils.createStream()
 
       shardIdToDataAndSeqNumbers = testUtils.pushData(testData)
@@ -229,7 +229,8 @@ class KinesisBackedBlockRDDSuite extends KinesisFunSuite with BeforeAndAfterAll 
     // Verify that the RDD is not invalid after the blocks are removed and can still read data
     // from write ahead log
     if (testBlockRemove) {
-      require(numPartitions === numPartitionsInKinesis, "All partitions must be in WAL for this test")
+      require(numPartitions === numPartitionsInKinesis,
+        "All partitions must be in WAL for this test")
       require(numPartitionsInBM > 0, "Some partitions must be in BlockManager for this test")
       rdd.removeBlocks()
       assert(rdd.map { bytes => new String(bytes).toInt }.collect().toSet === testData.toSet)
