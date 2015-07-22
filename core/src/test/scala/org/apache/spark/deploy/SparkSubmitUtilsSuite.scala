@@ -95,9 +95,9 @@ class SparkSubmitUtilsSuite extends SparkFunSuite with BeforeAndAfterAll {
     assert(md.getDependencies.length === 2)
   }
 
-  test("add excludes works correctly") {
+  test("excludes works correctly") {
     val md = SparkSubmitUtils.getModuleDescriptor
-    val excludes = Seq("a:b, c:d")
+    val excludes = Seq("a:b", "c:d")
     excludes.foreach { e =>
       md.addExcludeRule(SparkSubmitUtils.createExclusion(e + ":*", new IvySettings, "default"))
     }
@@ -185,6 +185,17 @@ class SparkSubmitUtilsSuite extends SparkFunSuite with BeforeAndAfterAll {
       val files = SparkSubmitUtils.resolveMavenCoordinates(coordinates + "," + main.toString,
         Some(repo), None, isTest = true)
       assert(files.indexOf(main.artifactId) >= 0, "Did not return artifact")
+    }
+  }
+
+  test("exclude dependencies end to end") {
+    val main = new MavenCoordinate("my.great.lib", "mylib", "0.1")
+    val dep = "my.great.dep:mydep:0.5"
+    IvyTestUtils.withRepository(main, Some(dep), None) { repo =>
+      val files = SparkSubmitUtils.resolveMavenCoordinates(main.toString,
+        Some(repo), None, Seq("my.great.dep:mydep"), isTest = true)
+      assert(files.indexOf(main.artifactId) >= 0, "Did not return artifact")
+      assert(files.indexOf("my.great.dep") < 0, "Returned excluded artifact")
     }
   }
 }

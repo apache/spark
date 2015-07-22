@@ -1399,11 +1399,6 @@ private[spark] object Utils extends Logging {
     CallSite(shortForm, longForm)
   }
 
-  /** Checks whether a string argument is empty, i.e. null or trim.isEmpty. */
-  def isEmptyString(arg: String): Boolean = {
-    arg == null || arg.trim.isEmpty
-  }
-
   /** Return a string containing part of a file from byte 'start' to 'end'. */
   def offsetBytes(path: String, start: Long, end: Long): String = {
     val file = new File(path)

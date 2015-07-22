@@ -490,7 +490,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
         |                              maven repo, then maven central and any additional remote
         |                              repositories given by --repositories. The format for the
         |                              coordinates should be groupId:artifactId:version.
-        |  --packages-exclude          Comma-separated list of groupId:artifactId to exclude while
+        |  --exclude-packages          Comma-separated list of groupId:artifactId to exclude while
         |                              resolving the dependencies provided in --packages to avoid
         |                              dependency conflicts.
         |  --repositories              Comma-separated list of additional remote repositories to

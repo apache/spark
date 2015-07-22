@@ -22,6 +22,8 @@ import java.lang.reflect.{InvocationTargetException, Modifier, UndeclaredThrowab
 import java.net.URL
 import java.security.PrivilegedExceptionAction
 
+import org.apache.commons.lang3.StringUtils
+
 import scala.collection.mutable.{ArrayBuffer, HashMap, Map}
 
 import org.apache.hadoop.fs.Path
@@ -276,26 +278,17 @@ object SparkSubmit {
     // Resolve maven dependencies if there are any and add classpath to jars. Add them to py-files
     // too for packages that include Python code
     val exclusions: Seq[String] =
-      if (!Utils.isEmptyString(args.packagesExclusions)) {
+      if (!StringUtils.isBlank(args.packagesExclusions)) {
         args.packagesExclusions.split(",")
       } else {
         Nil
       }
-    val resolvedMavenCoordinates =
-      SparkSubmitUtils.resolveMavenCoordinates(
-        args.packages, Option(args.repositories), Option(args.ivyRepoPath), exclusions)
-    if (!Utils.isEmptyString(resolvedMavenCoordinates)) {
-      if (Utils.isEmptyString(args.jars)) {
-        args.jars = resolvedMavenCoordinates
-      } else {
-        args.jars += s",$resolvedMavenCoordinates"
-      }
+    val resolvedMavenCoordinates = SparkSubmitUtils.resolveMavenCoordinates(args.packages,
+      Some(args.repositories), Some(args.ivyRepoPath), exclusions = exclusions)
+    if (!StringUtils.isBlank(resolvedMavenCoordinates)) {
+      args.jars = mergeFileLists(args.jars, resolvedMavenCoordinates)
       if (args.isPython) {
-        if (Utils.isEmptyString(args.pyFiles)) {
-          args.pyFiles = resolvedMavenCoordinates
-        } else {
-          args.pyFiles += s",$resolvedMavenCoordinates"
-        }
+        args.pyFiles = mergeFileLists(args.pyFiles, resolvedMavenCoordinates)
       }
     }
 
@@ -742,7 +735,7 @@ object SparkSubmit {
    * no files, into a single comma-separated string.
    */
   private def mergeFileLists(lists: String*): String = {
-    val merged = lists.filter(_ != null)
+    val merged = lists.filterNot(StringUtils.isBlank)
                       .flatMap(_.split(","))
                       .mkString(",")
     if (merged == "") null else merged
