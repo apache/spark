@@ -123,7 +123,6 @@
             </goals>
             <configuration>
               <sources>
-                <source>src/test/scala</source>
                 <source>src/test/gen-java</source>
               </sources>
             </configuration>

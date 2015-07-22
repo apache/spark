@@ -17,6 +17,8 @@
 
 package org.apache.spark.util
 
+import scala.collection.mutable.ArrayBuffer
+
 import java.util.concurrent.TimeoutException
 
 import akka.actor.ActorNotFound
@@ -24,7 +26,7 @@ import akka.actor.ActorNotFound
 import org.apache.spark._
 import org.apache.spark.rpc.RpcEnv
 import org.apache.spark.scheduler.MapStatus
-import org.apache.spark.storage.BlockManagerId
+import org.apache.spark.storage.{BlockManagerId, ShuffleBlockId}
 import org.apache.spark.SSLSampleConfigs._
 
 
@@ -107,8 +109,9 @@ class AkkaUtilsSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
     slaveTracker.updateEpoch(masterTracker.getEpoch)
 
     // this should succeed since security off
-    assert(slaveTracker.getServerStatuses(10, 0).toSeq ===
-           Seq(ServerAttemptSize(BlockManagerId("a", "hostA", 1000), 0, size1000)))
+    assert(slaveTracker.getMapSizesByExecutorId(10, 0).toSeq ===
+           Seq((BlockManagerId("a", "hostA", 1000),
+             ArrayBuffer((ShuffleBlockId(10, 0, 0, 0), size1000)))))
 
     rpcEnv.shutdown()
     slaveRpcEnv.shutdown()
@@ -153,8 +156,14 @@ class AkkaUtilsSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
     slaveTracker.updateEpoch(masterTracker.getEpoch)
 
     // this should succeed since security on and passwords match
+<<<<<<< HEAD
     assert(slaveTracker.getServerStatuses(10, 0).toSeq ===
            Seq(ServerAttemptSize(BlockManagerId("a", "hostA", 1000), 0, size1000)))
+=======
+    assert(slaveTracker.getMapSizesByExecutorId(10, 0) ===
+           Seq((BlockManagerId("a", "hostA", 1000),
+             ArrayBuffer((ShuffleBlockId(10, 0, 0), size1000)))))
+>>>>>>> master
 
     rpcEnv.shutdown()
     slaveRpcEnv.shutdown()
@@ -232,8 +241,13 @@ class AkkaUtilsSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
     slaveTracker.updateEpoch(masterTracker.getEpoch)
 
     // this should succeed since security off
+<<<<<<< HEAD
     assert(slaveTracker.getServerStatuses(10, 0).toSeq ===
       Seq(ServerAttemptSize(BlockManagerId("a", "hostA", 1000), 0, size1000)))
+=======
+    assert(slaveTracker.getMapSizesByExecutorId(10, 0) ===
+      Seq((BlockManagerId("a", "hostA", 1000), ArrayBuffer((ShuffleBlockId(10, 0, 0), size1000)))))
+>>>>>>> master
 
     rpcEnv.shutdown()
     slaveRpcEnv.shutdown()
@@ -278,8 +292,13 @@ class AkkaUtilsSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
     masterTracker.incrementEpoch()
     slaveTracker.updateEpoch(masterTracker.getEpoch)
 
+<<<<<<< HEAD
     assert(slaveTracker.getServerStatuses(10, 0).toSeq ===
       Seq(ServerAttemptSize(BlockManagerId("a", "hostA", 1000), 0, size1000)))
+=======
+    assert(slaveTracker.getMapSizesByExecutorId(10, 0) ===
+      Seq((BlockManagerId("a", "hostA", 1000), ArrayBuffer((ShuffleBlockId(10, 0, 0), size1000)))))
+>>>>>>> master
 
     rpcEnv.shutdown()
     slaveRpcEnv.shutdown()

@@ -101,9 +101,15 @@ class DAGSchedulerSuite
   /** Length of time to wait while draining listener events. */
   val WAIT_TIMEOUT_MILLIS = 10000
   val sparkListener = new SparkListener() {
+    val submittedStageInfos = new HashSet[StageInfo]
     val successfulStages = new HashSet[Int]
     val failedStages = new ArrayBuffer[Int]
     val stageByOrderOfExecution = new ArrayBuffer[Int]
+
+    override def onStageSubmitted(stageSubmitted: SparkListenerStageSubmitted) {
+      submittedStageInfos += stageSubmitted.stageInfo
+    }
+
     override def onStageCompleted(stageCompleted: SparkListenerStageCompleted) {
       val stageInfo = stageCompleted.stageInfo
       stageByOrderOfExecution += stageInfo.stageId
@@ -150,6 +156,7 @@ class DAGSchedulerSuite
     // Enable local execution for this test
     val conf = new SparkConf().set("spark.localExecution.enabled", "true")
     sc = new SparkContext("local", "DAGSchedulerSuite", conf)
+    sparkListener.submittedStageInfos.clear()
     sparkListener.successfulStages.clear()
     sparkListener.failedStages.clear()
     failure = null
@@ -476,8 +483,8 @@ class DAGSchedulerSuite
     complete(taskSets(0), Seq(
         (Success, makeMapStatus("hostA", 1)),
         (Success, makeMapStatus("hostB", 1))))
-    assert(mapOutputTracker.getServerStatuses(shuffleId, 0).map(_.bmId) ===
-           Array(makeBlockManagerId("hostA"), makeBlockManagerId("hostB")))
+    assert(mapOutputTracker.getMapSizesByExecutorId(shuffleId, 0).map(_._1).toSet ===
+      HashSet(makeBlockManagerId("hostA"), makeBlockManagerId("hostB")))
     complete(taskSets(1), Seq((Success, 42)))
     assert(results === Map(0 -> 42))
     assertDataStructuresEmpty()
@@ -503,8 +510,8 @@ class DAGSchedulerSuite
     // have the 2nd attempt pass
     complete(taskSets(2), Seq((Success, makeMapStatus("hostA", reduceRdd.partitions.size))))
     // we can see both result blocks now
-    assert(mapOutputTracker.getServerStatuses(shuffleId, 0).map(_.bmId.host) ===
-      Array("hostA", "hostB"))
+    assert(mapOutputTracker.getMapSizesByExecutorId(shuffleId, 0).map(_._1.host).toSet ===
+      HashSet("hostA", "hostB"))
     complete(taskSets(3), Seq((Success, 43)))
     assert(results === Map(0 -> 42, 1 -> 43))
     assertDataStructuresEmpty()
@@ -520,8 +527,8 @@ class DAGSchedulerSuite
       (Success, makeMapStatus("hostA", reduceRdd.partitions.size)),
       (Success, makeMapStatus("hostB", reduceRdd.partitions.size))))
     // The MapOutputTracker should know about both map output locations.
-    assert(mapOutputTracker.getServerStatuses(shuffleId, 0).map(_.bmId.host) ===
-      Array("hostA", "hostB"))
+    assert(mapOutputTracker.getMapSizesByExecutorId(shuffleId, 0).map(_._1.host).toSet ===
+      HashSet("hostA", "hostB"))
 
     // The first result task fails, with a fetch failure for the output from the first mapper.
     runEvent(CompletionEvent(
@@ -545,6 +552,140 @@ class DAGSchedulerSuite
     // The SparkListener should not receive redundant failure events.
     sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
     assert(sparkListener.failedStages.size == 1)
+  }
+
+  /**
+   * This tests the case where another FetchFailed comes in while the map stage is getting
+   * re-run.
+   */
+  test("late fetch failures don't cause multiple concurrent attempts for the same map stage") {
+    val shuffleMapRdd = new MyRDD(sc, 2, Nil)
+    val shuffleDep = new ShuffleDependency(shuffleMapRdd, null)
+    val shuffleId = shuffleDep.shuffleId
+    val reduceRdd = new MyRDD(sc, 2, List(shuffleDep))
+    submit(reduceRdd, Array(0, 1))
+
+    val mapStageId = 0
+    def countSubmittedMapStageAttempts(): Int = {
+      sparkListener.submittedStageInfos.count(_.stageId == mapStageId)
+    }
+
+    // The map stage should have been submitted.
+    assert(countSubmittedMapStageAttempts() === 1)
+
+    complete(taskSets(0), Seq(
+      (Success, makeMapStatus("hostA", 2)),
+      (Success, makeMapStatus("hostB", 2))))
+    // The MapOutputTracker should know about both map output locations.
+    assert(mapOutputTracker.getMapSizesByExecutorId(shuffleId, 0).map(_._1.host).toSet ===
+      HashSet("hostA", "hostB"))
+    assert(mapOutputTracker.getMapSizesByExecutorId(shuffleId, 1).map(_._1.host).toSet ===
+      HashSet("hostA", "hostB"))
+
+    // The first result task fails, with a fetch failure for the output from the first mapper.
+    runEvent(CompletionEvent(
+      taskSets(1).tasks(0),
+      FetchFailed(makeBlockManagerId("hostA"), shuffleId, 0, 0, "ignored"),
+      null,
+      Map[Long, Any](),
+      createFakeTaskInfo(),
+      null))
+    sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
+    assert(sparkListener.failedStages.contains(1))
+
+    // Trigger resubmission of the failed map stage.
+    runEvent(ResubmitFailedStages)
+    sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
+
+    // Another attempt for the map stage should have been submitted, resulting in 2 total attempts.
+    assert(countSubmittedMapStageAttempts() === 2)
+
+    // The second ResultTask fails, with a fetch failure for the output from the second mapper.
+    runEvent(CompletionEvent(
+      taskSets(1).tasks(1),
+      FetchFailed(makeBlockManagerId("hostB"), shuffleId, 1, 1, "ignored"),
+      null,
+      Map[Long, Any](),
+      createFakeTaskInfo(),
+      null))
+
+    // Another ResubmitFailedStages event should not result in another attempt for the map
+    // stage being run concurrently.
+    // NOTE: the actual ResubmitFailedStages may get called at any time during this, but it
+    // shouldn't effect anything -- our calling it just makes *SURE* it gets called between the
+    // desired event and our check.
+    runEvent(ResubmitFailedStages)
+    sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
+    assert(countSubmittedMapStageAttempts() === 2)
+
+  }
+
+  /**
+    * This tests the case where a late FetchFailed comes in after the map stage has finished getting
+    * retried and a new reduce stage starts running.
+    */
+  test("extremely late fetch failures don't cause multiple concurrent attempts for " +
+      "the same stage") {
+    val shuffleMapRdd = new MyRDD(sc, 2, Nil)
+    val shuffleDep = new ShuffleDependency(shuffleMapRdd, null)
+    val shuffleId = shuffleDep.shuffleId
+    val reduceRdd = new MyRDD(sc, 2, List(shuffleDep))
+    submit(reduceRdd, Array(0, 1))
+
+    def countSubmittedReduceStageAttempts(): Int = {
+      sparkListener.submittedStageInfos.count(_.stageId == 1)
+    }
+    def countSubmittedMapStageAttempts(): Int = {
+      sparkListener.submittedStageInfos.count(_.stageId == 0)
+    }
+
+    // The map stage should have been submitted.
+    sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
+    assert(countSubmittedMapStageAttempts() === 1)
+
+    // Complete the map stage.
+    complete(taskSets(0), Seq(
+      (Success, makeMapStatus("hostA", 2)),
+      (Success, makeMapStatus("hostB", 2))))
+
+    // The reduce stage should have been submitted.
+    sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
+    assert(countSubmittedReduceStageAttempts() === 1)
+
+    // The first result task fails, with a fetch failure for the output from the first mapper.
+    runEvent(CompletionEvent(
+      taskSets(1).tasks(0),
+      FetchFailed(makeBlockManagerId("hostA"), shuffleId, 0, 0, "ignored"),
+      null,
+      Map[Long, Any](),
+      createFakeTaskInfo(),
+      null))
+
+    // Trigger resubmission of the failed map stage and finish the re-started map task.
+    runEvent(ResubmitFailedStages)
+    complete(taskSets(2), Seq((Success, makeMapStatus("hostA", 1))))
+
+    // Because the map stage finished, another attempt for the reduce stage should have been
+    // submitted, resulting in 2 total attempts for each the map and the reduce stage.
+    sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
+    assert(countSubmittedMapStageAttempts() === 2)
+    assert(countSubmittedReduceStageAttempts() === 2)
+
+    // A late FetchFailed arrives from the second task in the original reduce stage.
+    runEvent(CompletionEvent(
+      taskSets(1).tasks(1),
+      FetchFailed(makeBlockManagerId("hostB"), shuffleId, 1, 1, "ignored"),
+      null,
+      Map[Long, Any](),
+      createFakeTaskInfo(),
+      null))
+
+    // Running ResubmitFailedStages shouldn't result in any more attempts for the map stage, because
+    // the FetchFailed should have been ignored
+    runEvent(ResubmitFailedStages)
+
+    // The FetchFailed from the original reduce stage should be ignored.
+    assert(countSubmittedMapStageAttempts() === 2)
   }
 
   test("ignore late map task completions") {
@@ -572,8 +713,8 @@ class DAGSchedulerSuite
     taskSet.tasks(1).epoch = newEpoch
     runEvent(CompletionEvent(taskSet.tasks(1), Success, makeMapStatus("hostA",
       reduceRdd.partitions.size), null, createFakeTaskInfo(), null))
-    assert(mapOutputTracker.getServerStatuses(shuffleId, 0).map(_.bmId) ===
-           Array(makeBlockManagerId("hostB"), makeBlockManagerId("hostA")))
+    assert(mapOutputTracker.getMapSizesByExecutorId(shuffleId, 0).map(_._1).toSet ===
+           HashSet(makeBlockManagerId("hostB"), makeBlockManagerId("hostA")))
     complete(taskSets(1), Seq((Success, 42), (Success, 43)))
     assert(results === Map(0 -> 42, 1 -> 43))
     assertDataStructuresEmpty()
@@ -668,8 +809,8 @@ class DAGSchedulerSuite
        (Success, makeMapStatus("hostB", 1))))
     // have hostC complete the resubmitted task
     complete(taskSets(1), Seq((Success, makeMapStatus("hostC", 1))))
-    assert(mapOutputTracker.getServerStatuses(shuffleId, 0).map(_.bmId) ===
-           Array(makeBlockManagerId("hostC"), makeBlockManagerId("hostB")))
+    assert(mapOutputTracker.getMapSizesByExecutorId(shuffleId, 0).map(_._1).toSet ===
+           HashSet(makeBlockManagerId("hostC"), makeBlockManagerId("hostB")))
     complete(taskSets(2), Seq((Success, 42)))
     assert(results === Map(0 -> 42))
     assertDataStructuresEmpty()
@@ -840,8 +981,8 @@ class DAGSchedulerSuite
     submit(reduceRdd, Array(0))
     complete(taskSets(0), Seq(
         (Success, makeMapStatus("hostA", 1))))
-    assert(mapOutputTracker.getServerStatuses(shuffleId, 0).map(_.bmId) ===
-           Array(makeBlockManagerId("hostA")))
+    assert(mapOutputTracker.getMapSizesByExecutorId(shuffleId, 0).map(_._1).toSet ===
+           HashSet(makeBlockManagerId("hostA")))
 
     // Reducer should run on the same host that map task ran
     val reduceTaskSet = taskSets(1)
@@ -873,6 +1014,21 @@ class DAGSchedulerSuite
     complete(reduceTaskSet, Seq((Success, 42)))
     assert(results === Map(0 -> 42))
     assertDataStructuresEmpty
+  }
+
+  test("Spark exceptions should include call site in stack trace") {
+    val e = intercept[SparkException] {
+      sc.parallelize(1 to 10, 2).map { _ => throw new RuntimeException("uh-oh!") }.count()
+    }
+
+    // Does not include message, ONLY stack trace.
+    val stackTraceString = e.getStackTraceString
+
+    // should actually include the RDD operation that invoked the method:
+    assert(stackTraceString.contains("org.apache.spark.rdd.RDD.count"))
+
+    // should include the FunSuite setup:
+    assert(stackTraceString.contains("org.scalatest.FunSuite"))
   }
 
   /**

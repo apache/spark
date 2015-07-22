@@ -23,16 +23,17 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.types._
-import org.apache.spark.sql.catalyst.{InternalRow, SimpleCatalystConf}
+import org.apache.spark.sql.catalyst.plans.Inner
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
+import org.apache.spark.sql.types._
 
 case class TestFunction(
     children: Seq[Expression],
-    inputTypes: Seq[AbstractDataType]) extends Expression with ImplicitCastInputTypes {
+    inputTypes: Seq[AbstractDataType])
+  extends Expression with ImplicitCastInputTypes with Unevaluable {
   override def nullable: Boolean = true
-  override def eval(input: InternalRow): Any = throw new UnsupportedOperationException
   override def dataType: DataType = StringType
 }
 
@@ -163,5 +164,14 @@ class AnalysisErrorSuite extends SparkFunSuite with BeforeAndAfter {
     }.getMessage
 
     assert(message.contains("resolved attribute(s) a#1 missing from a#2"))
+  }
+
+  test("error test for self-join") {
+    val join = Join(testRelation, testRelation, Inner, None)
+    val error = intercept[AnalysisException] {
+      SimpleAnalyzer.checkAnalysis(join)
+    }
+    error.message.contains("Failure when resolving conflicting references in Join")
+    error.message.contains("Conflicting attributes")
   }
 }

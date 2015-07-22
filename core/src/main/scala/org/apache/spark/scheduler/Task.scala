@@ -22,6 +22,7 @@ import java.nio.ByteBuffer
 
 import scala.collection.mutable.HashMap
 
+import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.{TaskContextImpl, TaskContext}
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.serializer.SerializerInstance
@@ -49,13 +50,23 @@ private[spark] abstract class Task[T](
     var partitionId: Int) extends Serializable {
 
   /**
+   * The key of the Map is the accumulator id and the value of the Map is the latest accumulator
+   * local value.
+   */
+  type AccumulatorUpdates = Map[Long, Any]
+
+  /**
    * Called by [[Executor]] to run this task.
    *
    * @param taskAttemptId an identifier for this task attempt that is unique within a SparkContext.
    * @param attemptNumber how many times this task has been attempted (0 for the first attempt)
-   * @return the result of the task
+   * @return the result of the task along with updates of Accumulators.
    */
-  final def run(taskAttemptId: Long, attemptNumber: Int): T = {
+  final def run(
+    taskAttemptId: Long,
+    attemptNumber: Int,
+    metricsSystem: MetricsSystem)
+  : (T, AccumulatorUpdates) = {
     context = new TaskContextImpl(
       stageId = stageId,
       stageAttemptId = stageAttemptId,
@@ -63,15 +74,17 @@ private[spark] abstract class Task[T](
       taskAttemptId = taskAttemptId,
       attemptNumber = attemptNumber,
       taskMemoryManager = taskMemoryManager,
+      metricsSystem = metricsSystem,
       runningLocally = false)
     TaskContext.setTaskContext(context)
     context.taskMetrics.setHostname(Utils.localHostName())
+    context.taskMetrics.setAccumulatorsUpdater(context.collectInternalAccumulators)
     taskThread = Thread.currentThread()
     if (_killed) {
       kill(interruptThread = false)
     }
     try {
-      runTask(context)
+      (runTask(context), context.collectAccumulators())
     } finally {
       context.markTaskCompleted()
       TaskContext.unset()

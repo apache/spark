@@ -17,9 +17,9 @@
 
 package org.apache.spark.sql.sources
 
-import scala.collection.JavaConversions._
-
 import java.io.File
+
+import scala.collection.JavaConversions._
 
 import com.google.common.io.Files
 import org.apache.hadoop.conf.Configuration
@@ -31,9 +31,11 @@ import org.apache.parquet.hadoop.ParquetOutputCommitter
 import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.sql._
+import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
+
 
 abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils {
   override lazy val sqlContext: SQLContext = TestHive
