@@ -24,7 +24,7 @@ import org.apache.spark.ml.param.{ParamMap, Param, Params}
 
 /**
  * :: DeveloperApi ::
- * Common params for [[TrainValidatorSplitParams]] and [[CrossValidatorParams]].
+ * Common params for [[TrainValidationSplitParams]] and [[CrossValidatorParams]].
  */
 @DeveloperApi
 private[ml] trait ValidatorParams extends Params {

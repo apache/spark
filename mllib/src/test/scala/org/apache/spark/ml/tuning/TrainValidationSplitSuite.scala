@@ -40,7 +40,7 @@ class TrainValidationSplitSuite extends SparkFunSuite with MLlibTestSparkContext
       .addGrid(lr.maxIter, Array(0, 10))
       .build()
     val eval = new BinaryClassificationEvaluator
-    val cv = new TrainValidatorSplit()
+    val cv = new TrainValidationSplit()
       .setEstimator(lr)
       .setEstimatorParamMaps(lrParamMaps)
       .setEvaluator(eval)
@@ -50,7 +50,7 @@ class TrainValidationSplitSuite extends SparkFunSuite with MLlibTestSparkContext
     assert(cv.getTrainRatio === 0.5)
     assert(parent.getRegParam === 0.001)
     assert(parent.getMaxIter === 10)
-    assert(cvModel.avgMetrics.length === lrParamMaps.length)
+    assert(cvModel.validationMetrics.length === lrParamMaps.length)
   }
 
   test("train validation with linear regression") {
@@ -64,7 +64,7 @@ class TrainValidationSplitSuite extends SparkFunSuite with MLlibTestSparkContext
       .addGrid(trainer.maxIter, Array(0, 10))
       .build()
     val eval = new RegressionEvaluator()
-    val cv = new TrainValidatorSplit()
+    val cv = new TrainValidationSplit()
       .setEstimator(trainer)
       .setEstimatorParamMaps(lrParamMaps)
       .setEvaluator(eval)
@@ -73,14 +73,14 @@ class TrainValidationSplitSuite extends SparkFunSuite with MLlibTestSparkContext
     val parent = cvModel.bestModel.parent.asInstanceOf[LinearRegression]
     assert(parent.getRegParam === 0.001)
     assert(parent.getMaxIter === 10)
-    assert(cvModel.avgMetrics.length === lrParamMaps.length)
+    assert(cvModel.validationMetrics.length === lrParamMaps.length)
 
       eval.setMetricName("r2")
     val cvModel2 = cv.fit(dataset)
     val parent2 = cvModel2.bestModel.parent.asInstanceOf[LinearRegression]
     assert(parent2.getRegParam === 0.001)
     assert(parent2.getMaxIter === 10)
-    assert(cvModel2.avgMetrics.length === lrParamMaps.length)
+    assert(cvModel2.validationMetrics.length === lrParamMaps.length)
   }
 
   test("validateParams should check estimatorParamMaps") {
@@ -92,7 +92,7 @@ class TrainValidationSplitSuite extends SparkFunSuite with MLlibTestSparkContext
       .addGrid(est.inputCol, Array("input1", "input2"))
       .build()
 
-    val cv = new TrainValidatorSplit()
+    val cv = new TrainValidationSplit()
       .setEstimator(est)
       .setEstimatorParamMaps(paramMaps)
       .setEvaluator(eval)
