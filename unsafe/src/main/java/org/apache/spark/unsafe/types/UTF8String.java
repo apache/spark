@@ -42,7 +42,7 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
     3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3,
     4, 4, 4, 4, 4, 4, 4, 4,
     5, 5, 5, 5,
-    6, 6, 6, 6};
+    6, 6};
 
   public static UTF8String fromBytes(byte[] bytes) {
     return (bytes != null) ? new UTF8String().set(bytes) : null;
