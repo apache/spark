@@ -17,7 +17,7 @@
 
 package org.apache.spark.streaming.scheduler
 
-import java.util.concurrent.CountDownLatch
+import java.util.concurrent.{TimeUnit, CountDownLatch}
 
 import scala.collection.mutable.HashMap
 import scala.concurrent.ExecutionContext
@@ -91,7 +91,6 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
 
   private val receiverInputStreams = ssc.graph.getReceiverInputStreams()
   private val receiverInputStreamIds = receiverInputStreams.map { _.id }
-  private val receiverExecutor = new ReceiverLauncher()
   private val receivedBlockTracker = new ReceivedBlockTracker(
     ssc.sparkContext.conf,
     ssc.sparkContext.hadoopConfiguration,
@@ -116,7 +115,7 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
   // This not being null means the tracker has been started and not stopped
   private var endpoint: RpcEndpointRef = null
 
-  private val schedulingPolicy: ReceiverSchedulingPolicy = new ReceiverSchedulingPolicy()
+  private val schedulingPolicy = new ReceiverSchedulingPolicy()
 
   // Track the active receiver job number. When a receiver job exits ultimately, countDown will
   // be called.
@@ -142,7 +141,7 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
     if (!receiverInputStreams.isEmpty) {
       endpoint = ssc.env.rpcEnv.setupEndpoint(
         "ReceiverTracker", new ReceiverTrackerEndpoint(ssc.env.rpcEnv))
-      if (!skipReceiverLaunch) receiverExecutor.start()
+      if (!skipReceiverLaunch) launchReceivers()
       logInfo("ReceiverTracker started")
       trackerState = Started
     }
@@ -159,14 +158,11 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
 
         // Wait for the Spark job that runs the receivers to be over
         // That is, for the receivers to quit gracefully.
-        receiverExecutor.awaitTermination(10000)
+        receiverJobExitLatch.await(10, TimeUnit.SECONDS)
 
         if (graceful) {
-          val pollTime = 100
           logInfo("Waiting for receiver job to terminate gracefully")
-          while (receiverExecutor.running) {
-            Thread.sleep(pollTime)
-          }
+          receiverJobExitLatch.await()
           logInfo("Waited for receiver job to terminate gracefully")
         }
 
@@ -347,6 +343,41 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
     executors.diff(List(driver))
   }
 
+  /**
+   * Run the dummy Spark job to ensure that all slaves have registered. This avoids all the
+   * receivers to be scheduled on the same node.
+   *
+   * TODO Should poll the executor number and wait for executors according to
+   * "spark.scheduler.minRegisteredResourcesRatio" and
+   * "spark.scheduler.maxRegisteredResourcesWaitingTime" rather than running a dummy job.
+   */
+  private def runDummySparkJob(): Unit = {
+    if (!ssc.sparkContext.isLocal) {
+      ssc.sparkContext.makeRDD(1 to 50, 50).map(x => (x, 1)).reduceByKey(_ + _, 20).collect()
+    }
+  }
+
+  /**
+   * Get the receivers from the ReceiverInputDStreams, distributes them to the
+   * worker nodes as a parallel collection, and runs them.
+   */
+  private def launchReceivers(): Unit = {
+    val receivers = receiverInputStreams.map(nis => {
+      val rcvr = nis.getReceiver()
+      rcvr.setReceiverId(nis.id)
+      rcvr
+    })
+
+    runDummySparkJob()
+
+    // Distribute the receivers and start them
+    logInfo("Starting " + receivers.length + " receivers")
+
+    for (receiver <- receivers) {
+      endpoint.send(StartReceiver(receiver))
+    }
+  }
+
   /** Check if tracker has been marked for starting */
   private def isTrackerStarted(): Boolean = trackerState == Started
 
@@ -465,70 +496,8 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
 
     /** Send stop signal to the receivers. */
     private def stopReceivers() {
-      // Signal the receivers to stop
       receiverTrackingInfos.values.flatMap(_.endpoint).foreach { _.send(StopReceiver) }
       logInfo("Sent stop signal to all " + receiverTrackingInfos.size + " receivers")
-    }
-  }
-
-  /** This thread class runs all the receivers on the cluster.  */
-  class ReceiverLauncher {
-    @transient val env = ssc.env
-    @volatile @transient var running = false
-    @transient val thread = new Thread() {
-      override def run() {
-        try {
-          SparkEnv.set(env)
-          startReceivers()
-        } catch {
-          case ie: InterruptedException => logInfo("ReceiverLauncher interrupted")
-        }
-      }
-    }
-
-    def start() {
-      thread.start()
-    }
-
-    /**
-     * Get the receivers from the ReceiverInputDStreams, distributes them to the
-     * worker nodes as a parallel collection, and runs them.
-     */
-    private def startReceivers() {
-      val receivers = receiverInputStreams.map(nis => {
-        val rcvr = nis.getReceiver()
-        rcvr.setReceiverId(nis.id)
-        rcvr
-      })
-
-      // Run the dummy Spark job to ensure that all slaves have registered.
-      // This avoids all the receivers to be scheduled on the same node.
-      if (!ssc.sparkContext.isLocal) {
-        ssc.sparkContext.makeRDD(1 to 50, 50).map(x => (x, 1)).reduceByKey(_ + _, 20).collect()
-      }
-
-      // Distribute the receivers and start them
-      logInfo("Starting " + receivers.length + " receivers")
-      running = true
-
-      try {
-        for (receiver <- receivers) {
-          endpoint.send(StartReceiver(receiver))
-        }
-        // Wait until all receivers exit
-        receiverJobExitLatch.await()
-        logInfo("All of the receivers have been terminated")
-      } finally {
-        running = false
-      }
-    }
-
-    /**
-     * Wait until the Spark job that runs the receivers is terminated, or return when
-     * `milliseconds` elapses
-     */
-    def awaitTermination(milliseconds: Long): Unit = {
-      thread.join(milliseconds)
     }
   }
 
