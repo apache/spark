@@ -79,6 +79,7 @@ class Analyzer(
       ExtractWindowExpressions ::
       GlobalAggregates ::
       UnresolvedHavingClauseAttributes ::
+      RemoveEvaluationFromSort ::
       HiveTypeCoercion.typeCoercionRules ++
       extendedResolutionRules : _*),
     Batch("Nondeterministic", Once,
@@ -945,6 +946,28 @@ class Analyzer(
         }
         val newChild = Project(p.child.output ++ nondeterministicExprs.values, p.child)
         Project(p.output, newPlan.withNewChildren(newChild :: Nil))
+    }
+  }
+
+  object RemoveEvaluationFromSort extends Rule[LogicalPlan] {
+    override def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+      case s @ Sort(ordering, global, child)
+        if s.expressions.forall(_.resolved) && s.childrenResolved && !s.hasNoEvaluation =>
+
+        val (ref, needEval) = ordering.partition(_.child.isInstanceOf[AttributeReference])
+
+        val namedExpr = needEval.map(_.child match {
+          case n: NamedExpression => n
+          case e => Alias(e, "sortCondition")()
+        })
+
+        val newOrdering = ref ++ needEval.zip(namedExpr).map { case (order, ne) =>
+          order.copy(child = ne.toAttribute)
+        }
+
+        Project(child.output,
+          Sort(newOrdering, global,
+            Project(child.output ++ namedExpr, child)))
     }
   }
 }
