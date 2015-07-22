@@ -512,7 +512,7 @@ abstract class HiveThriftServer2Test extends SparkFunSuite with BeforeAndAfterAl
    * String to scan for when looking for the the thrift binary endpoint running.
    * This may change across Hive versions.
    */
-  val THRIFT_BINARY_SERVICE_LIVE = "ThriftBinaryCLIService listening on"
+  val THRIFT_BINARY_SERVICE_LIVE = "Starting ThriftBinaryCLIService on port"
 
   /**
    * String to scan for when looking for the the thrift HTTP endpoint running.
