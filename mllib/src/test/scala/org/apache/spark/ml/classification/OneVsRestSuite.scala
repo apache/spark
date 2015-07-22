@@ -106,7 +106,6 @@ class OneVsRestSuite extends SparkFunSuite with MLlibTestSparkContext {
   }
 
   test("SPARK-8092: ensure label features and prediction cols are configurable") {
-    val numClasses = 3
     val labelIndexer = new StringIndexer()
       .setInputCol("label")
       .setOutputCol("indexed")
