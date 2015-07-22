@@ -355,14 +355,14 @@ class DataFrameFunctionsSuite extends QueryTest {
       df.select(array_contains("a", 1)),
       Seq(Row(true), Row(false), Row(false))
     )
-    //checkAnswer(
-    //  df.select(array_contains("a", null)),
-    //  Seq(Row(false), Row(false), Row(false))
-    //)
     checkAnswer(
       df.selectExpr("array_contains(a, 1)"),
       Seq(Row(true), Row(false), Row(false))
     )
+    //checkAnswer(
+    //  df.select(array_contains("a", null)),
+    //  Seq(Row(false), Row(false), Row(false))
+    //)
     //checkAnswer(
     //  df.selectExpr("array_contains(null, 1)"),
     //  Seq(Row(false), Row(false), Row(false))
