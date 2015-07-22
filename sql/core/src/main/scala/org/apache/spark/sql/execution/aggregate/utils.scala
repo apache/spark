@@ -25,6 +25,9 @@ import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan}
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.types.{StructType, MapType, ArrayType}
 
+/**
+ * Utility functions used by the query planner to convert our plan to new aggregation code path.
+ */
 object Utils {
   // Right now, we do not support complex types in the grouping key schema.
   private def supportsGroupingKeySchema(aggregate: Aggregate): Boolean = {
@@ -214,11 +217,15 @@ object Utils {
         expr => aggregateFunctionMap(expr.aggregateFunction, expr.isDistinct)
       }
     val rewrittenResultExpressions = resultExpressions.map { expr =>
-      expr.transform {
+      expr.transformDown {
         case agg: AggregateExpression2 =>
           aggregateFunctionMap(agg.aggregateFunction, agg.isDistinct).toAttribute
-        case expression if groupExpressionMap.contains(expression) =>
-          groupExpressionMap(expression).toAttribute
+        case expression =>
+          // We do not rely on the equality check at here since attributes may
+          // different cosmetically. Instead, we use semanticEquals.
+          groupExpressionMap.collectFirst {
+            case (expr, ne) if expr semanticEquals expression => ne.toAttribute
+          }.getOrElse(expression)
       }.asInstanceOf[NamedExpression]
     }
     val finalAggregate = Aggregate2Sort(
@@ -334,8 +341,12 @@ object Utils {
       expr.transform {
         case agg: AggregateExpression2 =>
           aggregateFunctionMap(agg.aggregateFunction, agg.isDistinct).toAttribute
-        case expression if groupExpressionMap.contains(expression) =>
-          groupExpressionMap(expression).toAttribute
+        case expression =>
+          // We do not rely on the equality check at here since attributes may
+          // different cosmetically. Instead, we use semanticEquals.
+          groupExpressionMap.collectFirst {
+            case (expr, ne) if expr semanticEquals expression => ne.toAttribute
+          }.getOrElse(expression)
       }.asInstanceOf[NamedExpression]
     }
     val finalAndCompleteAggregate = FinalAndCompleteAggregate2Sort(

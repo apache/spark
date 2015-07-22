@@ -187,6 +187,40 @@ class AggregationQuerySuite extends QueryTest with SQLTestUtils with BeforeAndAf
         Row(null, null) :: Nil)
   }
 
+  test("case in-sensitive resolution") {
+    checkAnswer(
+      sqlContext.sql(
+        """
+          |SELECT avg(value), kEY - 100
+          |FROM agg1
+          |GROUP BY Key - 100
+        """.stripMargin),
+      Row(20.0, -99) :: Row(-0.5, -98) :: Row(null, -97) :: Row(10.0, null) :: Nil)
+
+    checkAnswer(
+      sqlContext.sql(
+        """
+          |SELECT sum(distinct value1), kEY - 100, count(distinct value1)
+          |FROM agg2
+          |GROUP BY Key - 100
+        """.stripMargin),
+      Row(40, -99, 2) :: Row(0, -98, 2) :: Row(null, -97, 0) :: Row(30, null, 3) :: Nil)
+
+    checkAnswer(
+      sqlContext.sql(
+        """
+          |SELECT valUe * key - 100
+          |FROM agg1
+          |GROUP BY vAlue * keY - 100
+        """.stripMargin),
+      Row(-90) ::
+        Row(-80) ::
+        Row(-70) ::
+        Row(-100) ::
+        Row(-102) ::
+        Row(null) :: Nil)
+  }
+
   test("test average no key in output") {
     checkAnswer(
       sqlContext.sql(
