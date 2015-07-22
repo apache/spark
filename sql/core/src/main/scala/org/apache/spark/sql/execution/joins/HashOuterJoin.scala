@@ -92,12 +92,11 @@ trait HashOuterJoin {
     }
   }
 
-  @transient private[this] lazy val resultProjection: Projection =
+  @transient private[this] lazy val resultProjection: InternalRow => InternalRow =
     if (supportUnsafe) {
-      // Converted returned JoinRow into UnsafeRow
       UnsafeProjection.create(self.schema)
     } else {
-      ((x: InternalRow) => x).asInstanceOf[Projection]
+      (r: InternalRow) => r
     }
 
   @transient private[this] lazy val DUMMY_LIST = CompactBuffer[InternalRow](null)

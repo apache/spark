@@ -70,11 +70,12 @@ trait HashJoin {
 
       // Mutable per row objects.
       private[this] val joinRow = new JoinedRow2
-      private[this] val resultProjection: Projection = if (supportUnsafe) {
-        UnsafeProjection.create(self.schema)
-      } else {
-        ((r: InternalRow) => r).asInstanceOf[Projection]
-      }
+      private[this] val resultProjection: InternalRow => InternalRow =
+        if (supportUnsafe) {
+          UnsafeProjection.create(self.schema)
+        } else {
+          (r: InternalRow) => r
+        }
 
       private[this] val joinKeys = streamSideKeyGenerator
 

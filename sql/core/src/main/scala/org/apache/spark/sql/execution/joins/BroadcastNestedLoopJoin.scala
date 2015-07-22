@@ -47,13 +47,12 @@ case class BroadcastNestedLoopJoin(
   override def outputsUnsafeRows: Boolean = left.outputsUnsafeRows || right.outputsUnsafeRows
   override def canProcessUnsafeRows: Boolean = true
 
-  @transient private[this] lazy val resultProjection: Projection = {
+  @transient private[this] lazy val resultProjection: InternalRow => InternalRow =
     if (outputsUnsafeRows) {
       UnsafeProjection.create(schema)
     } else {
-      ((r: InternalRow) => r).asInstanceOf[Projection]
+      (r: InternalRow) => r
     }
-  }
 
   override def outputPartitioning: Partitioning = streamed.outputPartitioning
 
