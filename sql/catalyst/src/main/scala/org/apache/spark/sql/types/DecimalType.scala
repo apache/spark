@@ -20,13 +20,18 @@ package org.apache.spark.sql.types
 import scala.reflect.runtime.universe.typeTag
 
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.ScalaReflectionLock
 import org.apache.spark.sql.catalyst.expressions.Expression
 
 
 /** Precision parameters for a Decimal */
-case class PrecisionInfo(precision: Int, scale: Int)
-
+case class PrecisionInfo(precision: Int, scale: Int) {
+  if (scale > precision) {
+    throw new AnalysisException(
+      s"Decimal scale ($scale) cannot be greater than precision ($precision).")
+  }
+}
 
 /**
  * :: DeveloperApi ::
@@ -34,8 +39,6 @@ case class PrecisionInfo(precision: Int, scale: Int)
  * A Decimal that might have fixed precision and scale, or unlimited values for these.
  *
  * Please use [[DataTypes.createDecimalType()]] to create a specific instance.
- *
- * @group dataType
  */
 @DeveloperApi
 case class DecimalType(precisionInfo: Option[PrecisionInfo]) extends FractionalType {
@@ -79,15 +82,24 @@ case class DecimalType(precisionInfo: Option[PrecisionInfo]) extends FractionalT
 
 
 /** Extra factory methods and pattern matchers for Decimals */
-object DecimalType {
+object DecimalType extends AbstractDataType {
+
+  override private[sql] def defaultConcreteType: DataType = Unlimited
+
+  override private[sql] def acceptsType(other: DataType): Boolean = {
+    other.isInstanceOf[DecimalType]
+  }
+
+  override private[sql] def simpleString: String = "decimal"
+
   val Unlimited: DecimalType = DecimalType(None)
 
-  object Fixed {
+  private[sql] object Fixed {
     def unapply(t: DecimalType): Option[(Int, Int)] =
       t.precisionInfo.map(p => (p.precision, p.scale))
   }
 
-  object Expression {
+  private[sql] object Expression {
     def unapply(e: Expression): Option[(Int, Int)] = e.dataType match {
       case t: DecimalType => t.precisionInfo.map(p => (p.precision, p.scale))
       case _ => None

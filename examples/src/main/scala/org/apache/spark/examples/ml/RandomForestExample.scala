@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples.ml
 
 import scala.collection.mutable
@@ -117,7 +118,7 @@ object RandomForestExample {
         .text(s"input path to test dataset.  If given, option fracTest is ignored." +
         s" default: ${defaultParams.testInput}")
         .action((x, c) => c.copy(testInput = x))
-      opt[String]("<dataFormat>")
+      opt[String]("dataFormat")
         .text("data format: libsvm (default), dense (deprecated in Spark v1.1)")
         .action((x, c) => c.copy(dataFormat = x))
       arg[String]("<input>")
@@ -244,3 +245,4 @@ object RandomForestExample {
     sc.stop()
   }
 }
+// scalastyle:on println

@@ -109,7 +109,7 @@ private[python] object PythonTransformFunctionSerializer {
   }
 
   def serialize(func: PythonTransformFunction): Array[Byte] = {
-    assert(serializer != null, "Serializer has not been registered!")
+    require(serializer != null, "Serializer has not been registered!")
     // get the id of PythonTransformFunction in py4j
     val h = Proxy.getInvocationHandler(func.asInstanceOf[Proxy])
     val f = h.getClass().getDeclaredField("id")
@@ -119,7 +119,7 @@ private[python] object PythonTransformFunctionSerializer {
   }
 
   def deserialize(bytes: Array[Byte]): PythonTransformFunction = {
-    assert(serializer != null, "Serializer has not been registered!")
+    require(serializer != null, "Serializer has not been registered!")
     serializer.loads(bytes)
   }
 }

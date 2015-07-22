@@ -212,6 +212,8 @@ public class JavaAPISuite implements Serializable {
 
     JavaPairRDD<Integer, Integer> repartitioned =
         rdd.repartitionAndSortWithinPartitions(partitioner);
+    Assert.assertTrue(repartitioned.partitioner().isPresent());
+    Assert.assertEquals(repartitioned.partitioner().get(), partitioner);
     List<List<Tuple2<Integer, Integer>>> partitions = repartitioned.glom().collect();
     Assert.assertEquals(partitions.get(0), Arrays.asList(new Tuple2<Integer, Integer>(0, 5),
         new Tuple2<Integer, Integer>(0, 8), new Tuple2<Integer, Integer>(2, 6)));
@@ -1009,7 +1011,7 @@ public class JavaAPISuite implements Serializable {
   @Test
   public void iterator() {
     JavaRDD<Integer> rdd = sc.parallelize(Arrays.asList(1, 2, 3, 4, 5), 2);
-    TaskContext context = new TaskContextImpl(0, 0, 0L, 0, null, false, new TaskMetrics());
+    TaskContext context = new TaskContextImpl(0, 0, 0L, 0, null, null, false, new TaskMetrics());
     Assert.assertEquals(1, rdd.iterator(rdd.partitions().get(0), context).next().intValue());
   }
 

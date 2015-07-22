@@ -156,8 +156,8 @@ class EdgePartition[
     val size = data.size
     var i = 0
     while (i < size) {
-      edge.srcId  = srcIds(i)
-      edge.dstId  = dstIds(i)
+      edge.srcId = srcIds(i)
+      edge.dstId = dstIds(i)
       edge.attr = data(i)
       newData(i) = f(edge)
       i += 1

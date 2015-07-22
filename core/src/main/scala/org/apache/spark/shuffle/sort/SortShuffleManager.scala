@@ -72,7 +72,7 @@ private[spark] class SortShuffleManager(conf: SparkConf) extends ShuffleManager 
     true
   }
 
-  override def shuffleBlockResolver: IndexShuffleBlockResolver = {
+  override val shuffleBlockResolver: IndexShuffleBlockResolver = {
     indexShuffleBlockResolver
   }
 

@@ -60,7 +60,7 @@ Model is created using the training set and a mean squared error is calculated f
 labels and real labels in the test set.
 
 {% highlight scala %}
-import org.apache.spark.mllib.regression.IsotonicRegression
+import org.apache.spark.mllib.regression.{IsotonicRegression, IsotonicRegressionModel}
 
 val data = sc.textFile("data/mllib/sample_isotonic_regression_data.txt")
 
@@ -88,6 +88,10 @@ val predictionAndLabel = test.map { point =>
 // Calculate mean squared error between predicted and real labels.
 val meanSquaredError = predictionAndLabel.map{case(p, l) => math.pow((p - l), 2)}.mean()
 println("Mean Squared Error = " + meanSquaredError)
+
+// Save and load model
+model.save(sc, "myModelPath")
+val sameModel = IsotonicRegressionModel.load(sc, "myModelPath")
 {% endhighlight %}
 </div>
 
@@ -150,6 +154,10 @@ Double meanSquaredError = new JavaDoubleRDD(predictionAndLabel.map(
 ).rdd()).mean();
 
 System.out.println("Mean Squared Error = " + meanSquaredError);
+
+// Save and load model
+model.save(sc.sc(), "myModelPath");
+IsotonicRegressionModel sameModel = IsotonicRegressionModel.load(sc.sc(), "myModelPath");
 {% endhighlight %}
 </div>
 </div>

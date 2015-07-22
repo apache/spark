@@ -86,7 +86,7 @@ class PartitionerAwareUnionRDD[T: ClassTag](
     }
     val location = if (locations.isEmpty) {
       None
-    } else  {
+    } else {
       // Find the location that maximum number of parent partitions prefer
       Some(locations.groupBy(x => x).maxBy(_._2.length)._1)
     }

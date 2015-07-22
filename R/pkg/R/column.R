@@ -55,12 +55,17 @@ operators <- list(
   "+" = "plus", "-" = "minus", "*" = "multiply", "/" = "divide", "%%" = "mod",
   "==" = "equalTo", ">" = "gt", "<" = "lt", "!=" = "notEqual", "<=" = "leq", ">=" = "geq",
   # we can not override `&&` and `||`, so use `&` and `|` instead
-  "&" = "and", "|" = "or" #, "!" = "unary_$bang"
+  "&" = "and", "|" = "or", #, "!" = "unary_$bang"
+  "^" = "pow"
 )
 column_functions1 <- c("asc", "desc", "isNull", "isNotNull")
 column_functions2 <- c("like", "rlike", "startsWith", "endsWith", "getField", "getItem", "contains")
 functions <- c("min", "max", "sum", "avg", "mean", "count", "abs", "sqrt",
-               "first", "last", "lower", "upper", "sumDistinct")
+               "first", "last", "lower", "upper", "sumDistinct",
+               "acos", "asin", "atan", "cbrt", "ceiling", "cos", "cosh", "exp",
+               "expm1", "floor", "log", "log10", "log1p", "rint", "sign",
+               "sin", "sinh", "tan", "tanh", "toDegrees", "toRadians")
+binary_mathfunctions<- c("atan2", "hypot")
 
 createOperator <- function(op) {
   setMethod(op,
@@ -76,7 +81,11 @@ createOperator <- function(op) {
                 if (class(e2) == "Column") {
                   e2 <- e2@jc
                 }
-                callJMethod(e1@jc, operators[[op]], e2)
+                if (op == "^") {
+                  jc <- callJStatic("org.apache.spark.sql.functions", operators[[op]], e1@jc, e2)
+                } else {
+                  callJMethod(e1@jc, operators[[op]], e2)
+                }
               }
               column(jc)
             })
@@ -106,7 +115,25 @@ createStaticFunction <- function(name) {
   setMethod(name,
             signature(x = "Column"),
             function(x) {
+              if (name == "ceiling") {
+                  name <- "ceil"
+              }
+              if (name == "sign") {
+                  name <- "signum"
+              }
               jc <- callJStatic("org.apache.spark.sql.functions", name, x@jc)
+              column(jc)
+            })
+}
+
+createBinaryMathfunctions <- function(name) {
+  setMethod(name,
+            signature(y = "Column"),
+            function(y, x) {
+              if (class(x) == "Column") {
+                x <- x@jc
+              }
+              jc <- callJStatic("org.apache.spark.sql.functions", name, y@jc, x)
               column(jc)
             })
 }
@@ -123,6 +150,9 @@ createMethods <- function() {
   }
   for (x in functions) {
     createStaticFunction(x)
+  }
+  for (name in binary_mathfunctions) {
+    createBinaryMathfunctions(name)
   }
 }
 
@@ -157,6 +187,23 @@ setMethod("substr", signature(x = "Column"),
             column(jc)
           })
 
+#' between
+#'
+#' Test if the column is between the lower bound and upper bound, inclusive.
+#'
+#' @rdname column
+#'
+#' @param bounds lower and upper bounds
+setMethod("between", signature(x = "Column"),
+          function(x, bounds) {
+            if (is.vector(bounds) && length(bounds) == 2) {
+              jc <- callJMethod(x@jc, "between", bounds[1], bounds[2])
+              column(jc)
+            } else {
+              stop("bounds should be a vector of lower and upper bounds")
+            }
+          })
+
 #' Casts the column to a different data type.
 #'
 #' @rdname column
@@ -178,6 +225,22 @@ setMethod("cast",
             } else {
               stop("dataType should be character or list")
             }
+          })
+
+#' Match a column with given values.
+#'
+#' @rdname column
+#' @return a matched values as a result of comparing with given values.
+#' \dontrun{
+#'   filter(df, "age in (10, 30)")
+#'   where(df, df$age %in% c(10, 30))
+#' }
+setMethod("%in%",
+          signature(x = "Column"),
+          function(x, table) {
+            table <- listToSeq(as.list(table))
+            jc <- callJMethod(x@jc, "in", table)
+            return(column(jc))
           })
 
 #' Approx Count Distinct

@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+ // scalastyle:off println
 package org.apache.spark.examples
 
 import java.nio.ByteBuffer
@@ -104,8 +105,8 @@ object CassandraCQLTest {
 
     val casRdd = sc.newAPIHadoopRDD(job.getConfiguration(),
       classOf[CqlPagingInputFormat],
-      classOf[java.util.Map[String,ByteBuffer]],
-      classOf[java.util.Map[String,ByteBuffer]])
+      classOf[java.util.Map[String, ByteBuffer]],
+      classOf[java.util.Map[String, ByteBuffer]])
 
     println("Count: " + casRdd.count)
     val productSaleRDD = casRdd.map {
@@ -118,7 +119,7 @@ object CassandraCQLTest {
       case (productId, saleCount) => println(productId + ":" + saleCount)
     }
 
-    val casoutputCF  = aggregatedRDD.map {
+    val casoutputCF = aggregatedRDD.map {
       case (productId, saleCount) => {
         val outColFamKey = Map("prod_id" -> ByteBufferUtil.bytes(productId))
         val outKey: java.util.Map[String, ByteBuffer] = outColFamKey
@@ -140,3 +141,4 @@ object CassandraCQLTest {
     sc.stop()
   }
 }
+// scalastyle:on println

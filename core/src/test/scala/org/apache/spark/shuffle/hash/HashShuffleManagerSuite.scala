@@ -21,16 +21,14 @@ import java.io.{File, FileWriter}
 
 import scala.language.reflectiveCalls
 
-import org.scalatest.FunSuite
-
-import org.apache.spark.{SparkEnv, SparkContext, LocalSparkContext, SparkConf}
+import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkEnv, SparkFunSuite}
 import org.apache.spark.executor.ShuffleWriteMetrics
 import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer}
 import org.apache.spark.serializer.JavaSerializer
 import org.apache.spark.shuffle.FileShuffleBlockResolver
 import org.apache.spark.storage.{ShuffleBlockId, FileSegment}
 
-class HashShuffleManagerSuite extends FunSuite with LocalSparkContext {
+class HashShuffleManagerSuite extends SparkFunSuite with LocalSparkContext {
   private val testConf = new SparkConf(false)
 
   private def checkSegments(expected: FileSegment, buffer: ManagedBuffer) {

@@ -194,7 +194,7 @@ abstract class RDD[T: ClassTag](
   @transient private var partitions_ : Array[Partition] = null
 
   /** An Option holding our checkpoint RDD, if we are checkpointed */
-  private def checkpointRDD: Option[RDD[T]] = checkpointData.flatMap(_.checkpointRDD)
+  private def checkpointRDD: Option[CheckpointRDD[T]] = checkpointData.flatMap(_.checkpointRDD)
 
   /**
    * Get the list of dependencies of this RDD, taking into account whether the
@@ -434,11 +434,11 @@ abstract class RDD[T: ClassTag](
    * @return A random sub-sample of the RDD without replacement.
    */
   private[spark] def randomSampleWithRange(lb: Double, ub: Double, seed: Long): RDD[T] = {
-    this.mapPartitionsWithIndex { case (index, partition) =>
+    this.mapPartitionsWithIndex( { (index, partition) =>
       val sampler = new BernoulliCellSampler[T](lb, ub)
       sampler.setSeed(seed + index)
       sampler.sample(partition)
-    }
+    }, preservesPartitioning = true)
   }
 
   /**
@@ -454,7 +454,7 @@ abstract class RDD[T: ClassTag](
       withReplacement: Boolean,
       num: Int,
       seed: Long = Utils.random.nextLong): Array[T] = {
-    val numStDev =  10.0
+    val numStDev = 10.0
 
     if (num < 0) {
       throw new IllegalArgumentException("Negative number of elements requested")
@@ -890,6 +890,10 @@ abstract class RDD[T: ClassTag](
    * Return an iterator that contains all of the elements in this RDD.
    *
    * The iterator will consume as much memory as the largest partition in this RDD.
+   *
+   * Note: this results in multiple Spark jobs, and if the input RDD is the result
+   * of a wide transformation (e.g. join with different partitioners), to avoid
+   * recomputing the input RDD should be cached first.
    */
   def toLocalIterator: Iterator[T] = withScope {
     def collectPartition(p: Int): Array[T] = {
@@ -1015,9 +1019,16 @@ abstract class RDD[T: ClassTag](
 
   /**
    * Aggregate the elements of each partition, and then the results for all the partitions, using a
-   * given associative function and a neutral "zero value". The function op(t1, t2) is allowed to
-   * modify t1 and return it as its result value to avoid object allocation; however, it should not
-   * modify t2.
+   * given associative and commutative function and a neutral "zero value". The function
+   * op(t1, t2) is allowed to modify t1 and return it as its result value to avoid object
+   * allocation; however, it should not modify t2.
+   *
+   * This behaves somewhat differently from fold operations implemented for non-distributed
+   * collections in functional languages like Scala. This fold operation may be applied to
+   * partitions individually, and then fold those results into the final result, rather than
+   * apply the fold to each element sequentially in some defined ordering. For functions
+   * that are not commutative, the result may differ from that of a fold applied to a
+   * non-distributed collection.
    */
   def fold(zeroValue: T)(op: (T, T) => T): T = withScope {
     // Clone the zero value since we will also be serializing it as part of tasks
@@ -1131,8 +1142,8 @@ abstract class RDD[T: ClassTag](
     if (elementClassTag.runtimeClass.isArray) {
       throw new SparkException("countByValueApprox() does not support arrays")
     }
-    val countPartition: (TaskContext, Iterator[T]) => OpenHashMap[T,Long] = { (ctx, iter) =>
-      val map = new OpenHashMap[T,Long]
+    val countPartition: (TaskContext, Iterator[T]) => OpenHashMap[T, Long] = { (ctx, iter) =>
+      val map = new OpenHashMap[T, Long]
       iter.foreach {
         t => map.changeValue(t, 1L, _ + 1L)
       }
@@ -1440,12 +1451,16 @@ abstract class RDD[T: ClassTag](
    * executed on this RDD. It is strongly recommended that this RDD is persisted in
    * memory, otherwise saving it on a file will require recomputation.
    */
-  def checkpoint() {
+  def checkpoint(): Unit = {
     if (context.checkpointDir.isEmpty) {
       throw new SparkException("Checkpoint directory has not been set in the SparkContext")
     } else if (checkpointData.isEmpty) {
-      checkpointData = Some(new RDDCheckpointData(this))
-      checkpointData.get.markForCheckpoint()
+      // NOTE: we use a global lock here due to complexities downstream with ensuring
+      // children RDD partitions point to the correct parent partitions. In the future
+      // we should revisit this consideration.
+      RDDCheckpointData.synchronized {
+        checkpointData = Some(new RDDCheckpointData(this))
+      }
     }
   }
 
@@ -1486,7 +1501,7 @@ abstract class RDD[T: ClassTag](
   private[spark] var checkpointData: Option[RDDCheckpointData[T]] = None
 
   /** Returns the first parent RDD */
-  protected[spark] def firstParent[U: ClassTag] = {
+  protected[spark] def firstParent[U: ClassTag]: RDD[U] = {
     dependencies.head.rdd.asInstanceOf[RDD[U]]
   }
 
@@ -1523,13 +1538,15 @@ abstract class RDD[T: ClassTag](
    * has completed (therefore the RDD has been materialized and potentially stored in memory).
    * doCheckpoint() is called recursively on the parent RDDs.
    */
-  private[spark] def doCheckpoint() {
-    if (!doCheckpointCalled) {
-      doCheckpointCalled = true
-      if (checkpointData.isDefined) {
-        checkpointData.get.doCheckpoint()
-      } else {
-        dependencies.foreach(_.rdd.doCheckpoint())
+  private[spark] def doCheckpoint(): Unit = {
+    RDDOperationScope.withScope(sc, "checkpoint", allowNesting = false, ignoreParent = true) {
+      if (!doCheckpointCalled) {
+        doCheckpointCalled = true
+        if (checkpointData.isDefined) {
+          checkpointData.get.doCheckpoint()
+        } else {
+          dependencies.foreach(_.rdd.doCheckpoint())
+        }
       }
     }
   }
@@ -1576,15 +1593,15 @@ abstract class RDD[T: ClassTag](
         case 0 => Seq.empty
         case 1 =>
           val d = rdd.dependencies.head
-          debugString(d.rdd, prefix, d.isInstanceOf[ShuffleDependency[_,_,_]], true)
+          debugString(d.rdd, prefix, d.isInstanceOf[ShuffleDependency[_, _, _]], true)
         case _ =>
           val frontDeps = rdd.dependencies.take(len - 1)
           val frontDepStrings = frontDeps.flatMap(
-            d => debugString(d.rdd, prefix, d.isInstanceOf[ShuffleDependency[_,_,_]]))
+            d => debugString(d.rdd, prefix, d.isInstanceOf[ShuffleDependency[_, _, _]]))
 
           val lastDep = rdd.dependencies.last
           val lastDepStrings =
-            debugString(lastDep.rdd, prefix, lastDep.isInstanceOf[ShuffleDependency[_,_,_]], true)
+            debugString(lastDep.rdd, prefix, lastDep.isInstanceOf[ShuffleDependency[_, _, _]], true)
 
           (frontDepStrings ++ lastDepStrings)
       }

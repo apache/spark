@@ -68,38 +68,11 @@ function codeTabs() {
   });
 }
 
-function makeCollapsable(elt, accordionClass, accordionBodyId, title) {
-  $(elt).addClass("accordion-inner");
-  $(elt).wrap('<div class="accordion ' + accordionClass + '"></div>')
-  $(elt).wrap('<div class="accordion-group"></div>')
-  $(elt).wrap('<div id="' + accordionBodyId + '" class="accordion-body collapse"></div>')
-  $(elt).parent().before(
-    '<div class="accordion-heading">' +
-      '<a class="accordion-toggle" data-toggle="collapse" href="#' + accordionBodyId + '">' +
-             title +
-      '</a>' +
-    '</div>'
-  );
-}
-
-// Enable "view solution" sections (for exercises)
-function viewSolution() {
-  var counter = 0
-  $("div.solution").each(function() {
-    var id = "solution_" + counter
-    makeCollapsable(this, "", id,
-      '<i class="icon-ok-sign" style="text-decoration: none; color: #0088cc">' +
-      '</i>' + "View Solution");
-    counter++;
-  });
-}
 
 // A script to fix internal hash links because we have an overlapping top bar.
 // Based on https://github.com/twitter/bootstrap/issues/193#issuecomment-2281510
 function maybeScrollToHash() {
-  console.log("HERE");
   if (window.location.hash && $(window.location.hash).length) {
-    console.log("HERE2", $(window.location.hash), $(window.location.hash).offset().top);
     var newTop = $(window.location.hash).offset().top - 57;
     $(window).scrollTop(newTop);
   }
@@ -107,7 +80,12 @@ function maybeScrollToHash() {
 
 $(function() {
   codeTabs();
-  viewSolution();
+  // Display anchor links when hovering over headers. For documentation of the
+  // configuration options, see the AnchorJS documentation.
+  anchors.options = {
+    placement: 'left'
+  };
+  anchors.add();
 
   $(window).bind('hashchange', function() {
     maybeScrollToHash();

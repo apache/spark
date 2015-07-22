@@ -209,8 +209,11 @@ private[spark] class Executor(
 
         // Run the actual task and measure its runtime.
         taskStart = System.currentTimeMillis()
-        val value = try {
-          task.run(taskAttemptId = taskId, attemptNumber = attemptNumber)
+        val (value, accumUpdates) = try {
+          task.run(
+            taskAttemptId = taskId,
+            attemptNumber = attemptNumber,
+            metricsSystem = env.metricsSystem)
         } finally {
           // Note: this memory freeing logic is duplicated in DAGScheduler.runLocallyWithinThread;
           // when changing this, make sure to update both copies.
@@ -247,7 +250,6 @@ private[spark] class Executor(
           m.setResultSerializationTime(afterSerialization - beforeSerialization)
         }
 
-        val accumUpdates = Accumulators.values
         val directResult = new DirectTaskResult(valueBytes, accumUpdates, task.metrics.orNull)
         val serializedDirectResult = ser.serialize(directResult)
         val resultSize = serializedDirectResult.limit
@@ -314,8 +316,6 @@ private[spark] class Executor(
         env.shuffleMemoryManager.releaseMemoryForThisThread()
         // Release memory used by this thread for unrolling blocks
         env.blockManager.memoryStore.releaseUnrollMemoryForThisThread()
-        // Release memory used by this thread for accumulators
-        Accumulators.clear()
         runningTasks.remove(taskId)
       }
     }
@@ -356,7 +356,7 @@ private[spark] class Executor(
       logInfo("Using REPL class URI: " + classUri)
       try {
         val _userClassPathFirst: java.lang.Boolean = userClassPathFirst
-        val klass = Class.forName("org.apache.spark.repl.ExecutorClassLoader")
+        val klass = Utils.classForName("org.apache.spark.repl.ExecutorClassLoader")
           .asInstanceOf[Class[_ <: ClassLoader]]
         val constructor = klass.getConstructor(classOf[SparkConf], classOf[String],
           classOf[ClassLoader], classOf[Boolean])
@@ -424,6 +424,7 @@ private[spark] class Executor(
           metrics.updateShuffleReadMetrics()
           metrics.updateInputMetrics()
           metrics.setJvmGCTime(curGCTime - taskRunner.startGCTime)
+          metrics.updateAccumulators()
 
           if (isLocal) {
             // JobProgressListener will hold an reference of it during
@@ -443,7 +444,7 @@ private[spark] class Executor(
     try {
       val response = heartbeatReceiverRef.askWithRetry[HeartbeatResponse](message)
       if (response.reregisterBlockManager) {
-        logWarning("Told to re-register on heartbeat")
+        logInfo("Told to re-register on heartbeat")
         env.blockManager.reregister()
       }
     } catch {

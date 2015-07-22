@@ -19,13 +19,14 @@ package org.apache.spark.ml.classification
 
 import scala.collection.mutable
 
-import breeze.linalg.{norm => brzNorm, DenseVector => BDV}
-import breeze.optimize.{LBFGS => BreezeLBFGS, OWLQN => BreezeOWLQN}
-import breeze.optimize.{CachedDiffFunction, DiffFunction}
+import breeze.linalg.{DenseVector => BDV}
+import breeze.optimize.{CachedDiffFunction, DiffFunction, LBFGS => BreezeLBFGS, OWLQN => BreezeOWLQN}
 
-import org.apache.spark.annotation.AlphaComponent
+import org.apache.spark.{Logging, SparkException}
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
+import org.apache.spark.ml.util.Identifiable
 import org.apache.spark.mllib.linalg._
 import org.apache.spark.mllib.linalg.BLAS._
 import org.apache.spark.mllib.regression.LabeledPoint
@@ -34,25 +35,25 @@ import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.{SparkException, Logging}
 
 /**
  * Params for logistic regression.
  */
 private[classification] trait LogisticRegressionParams extends ProbabilisticClassifierParams
   with HasRegParam with HasElasticNetParam with HasMaxIter with HasFitIntercept with HasTol
-  with HasThreshold
+  with HasThreshold with HasStandardization
 
 /**
- * :: AlphaComponent ::
- *
+ * :: Experimental ::
  * Logistic regression.
  * Currently, this class only supports binary classification.
  */
-@AlphaComponent
-class LogisticRegression
+@Experimental
+class LogisticRegression(override val uid: String)
   extends ProbabilisticClassifier[Vector, LogisticRegression, LogisticRegressionModel]
   with LogisticRegressionParams with Logging {
+
+  def this() = this(Identifiable.randomUID("logreg"))
 
   /**
    * Set the regularization parameter.
@@ -73,7 +74,7 @@ class LogisticRegression
   setDefault(elasticNetParam -> 0.0)
 
   /**
-   * Set the maximal number of iterations.
+   * Set the maximum number of iterations.
    * Default is 100.
    * @group setParam
    */
@@ -89,9 +90,25 @@ class LogisticRegression
   def setTol(value: Double): this.type = set(tol, value)
   setDefault(tol -> 1E-6)
 
-  /** @group setParam */
+  /**
+   * Whether to fit an intercept term.
+   * Default is true.
+   * @group setParam
+   * */
   def setFitIntercept(value: Boolean): this.type = set(fitIntercept, value)
   setDefault(fitIntercept -> true)
+
+  /**
+   * Whether to standardize the training features before fitting the model.
+   * The coefficients of models will be always returned on the original scale,
+   * so it will be transparent for users. Note that when no regularization,
+   * with or without standardization, the models should be always converged to
+   * the same solution.
+   * Default is true.
+   * @group setParam
+   * */
+  def setStandardization(value: Boolean): this.type = set(standardization, value)
+  setDefault(standardization -> true)
 
   /** @group setParam */
   def setThreshold(value: Double): this.type = set(threshold, value)
@@ -111,7 +128,7 @@ class LogisticRegression
           case ((summarizer: MultivariateOnlineSummarizer, labelSummarizer: MultiClassSummarizer),
           (label: Double, features: Vector)) =>
             (summarizer.add(features), labelSummarizer.add(label))
-      },
+        },
         combOp = (c1, c2) => (c1, c2) match {
           case ((summarizer1: MultivariateOnlineSummarizer,
           classSummarizer1: MultiClassSummarizer), (summarizer2: MultivariateOnlineSummarizer,
@@ -144,15 +161,28 @@ class LogisticRegression
     val regParamL1 = $(elasticNetParam) * $(regParam)
     val regParamL2 = (1.0 - $(elasticNetParam)) * $(regParam)
 
-    val costFun = new LogisticCostFun(instances, numClasses, $(fitIntercept),
+    val costFun = new LogisticCostFun(instances, numClasses, $(fitIntercept), $(standardization),
       featuresStd, featuresMean, regParamL2)
 
     val optimizer = if ($(elasticNetParam) == 0.0 || $(regParam) == 0.0) {
       new BreezeLBFGS[BDV[Double]]($(maxIter), 10, $(tol))
     } else {
-      // Remove the L1 penalization on the intercept
       def regParamL1Fun = (index: Int) => {
-        if (index == numFeatures) 0.0 else regParamL1
+        // Remove the L1 penalization on the intercept
+        if (index == numFeatures) {
+          0.0
+        } else {
+          if ($(standardization)) {
+            regParamL1
+          } else {
+            // If `standardization` is false, we still standardize the data
+            // to improve the rate of convergence; as a result, we have to
+            // perform this reverse standardization by penalizing each component
+            // differently to get effectively the same objective function when
+            // the training dataset is not standardized.
+            if (featuresStd(index) != 0.0) regParamL1 / featuresStd(index) else 0.0
+          }
+        }
       }
       new BreezeOWLQN[Int, BDV[Double]]($(maxIter), 10, regParamL1Fun, $(tol))
     }
@@ -161,70 +191,80 @@ class LogisticRegression
       Vectors.zeros(if ($(fitIntercept)) numFeatures + 1 else numFeatures)
 
     if ($(fitIntercept)) {
-      /**
-       * For binary logistic regression, when we initialize the weights as zeros,
-       * it will converge faster if we initialize the intercept such that
-       * it follows the distribution of the labels.
-       *
-       * {{{
-       * P(0) = 1 / (1 + \exp(b)), and
-       * P(1) = \exp(b) / (1 + \exp(b))
-       * }}}, hence
-       * {{{
-       * b = \log{P(1) / P(0)} = \log{count_1 / count_0}
-       * }}}
+      /*
+         For binary logistic regression, when we initialize the weights as zeros,
+         it will converge faster if we initialize the intercept such that
+         it follows the distribution of the labels.
+
+         {{{
+         P(0) = 1 / (1 + \exp(b)), and
+         P(1) = \exp(b) / (1 + \exp(b))
+         }}}, hence
+         {{{
+         b = \log{P(1) / P(0)} = \log{count_1 / count_0}
+         }}}
        */
       initialWeightsWithIntercept.toArray(numFeatures)
-        = Math.log(histogram(1).toDouble / histogram(0).toDouble)
+        = math.log(histogram(1).toDouble / histogram(0).toDouble)
     }
 
     val states = optimizer.iterations(new CachedDiffFunction(costFun),
       initialWeightsWithIntercept.toBreeze.toDenseVector)
 
-    var state = states.next()
-    val lossHistory = mutable.ArrayBuilder.make[Double]
+    val (weights, intercept, objectiveHistory) = {
+      /*
+         Note that in Logistic Regression, the objective history (loss + regularization)
+         is log-likelihood which is invariance under feature standardization. As a result,
+         the objective history from optimizer is the same as the one in the original space.
+       */
+      val arrayBuilder = mutable.ArrayBuilder.make[Double]
+      var state: optimizer.State = null
+      while (states.hasNext) {
+        state = states.next()
+        arrayBuilder += state.adjustedValue
+      }
 
-    while (states.hasNext) {
-      lossHistory += state.value
-      state = states.next()
-    }
-    lossHistory += state.value
+      if (state == null) {
+        val msg = s"${optimizer.getClass.getName} failed."
+        logError(msg)
+        throw new SparkException(msg)
+      }
 
-    // The weights are trained in the scaled space; we're converting them back to
-    // the original space.
-    val weightsWithIntercept = {
+      /*
+         The weights are trained in the scaled space; we're converting them back to
+         the original space.
+         Note that the intercept in scaled space and original space is the same;
+         as a result, no scaling is needed.
+       */
       val rawWeights = state.x.toArray.clone()
       var i = 0
-      // Note that the intercept in scaled space and original space is the same;
-      // as a result, no scaling is needed.
       while (i < numFeatures) {
         rawWeights(i) *= { if (featuresStd(i) != 0.0) 1.0 / featuresStd(i) else 0.0 }
         i += 1
       }
-      Vectors.dense(rawWeights)
+
+      if ($(fitIntercept)) {
+        (Vectors.dense(rawWeights.dropRight(1)).compressed, rawWeights.last, arrayBuilder.result())
+      } else {
+        (Vectors.dense(rawWeights).compressed, 0.0, arrayBuilder.result())
+      }
     }
 
     if (handlePersistence) instances.unpersist()
 
-    val (weights, intercept) = if ($(fitIntercept)) {
-      (Vectors.dense(weightsWithIntercept.toArray.slice(0, weightsWithIntercept.size - 1)),
-        weightsWithIntercept(weightsWithIntercept.size - 1))
-    } else {
-      (weightsWithIntercept, 0.0)
-    }
-
-    new LogisticRegressionModel(this, weights.compressed, intercept)
+    copyValues(new LogisticRegressionModel(uid, weights, intercept))
   }
+
+  override def copy(extra: ParamMap): LogisticRegression = defaultCopy(extra)
 }
 
 /**
- * :: AlphaComponent ::
- *
+ * :: Experimental ::
  * Model produced by [[LogisticRegression]].
  */
-@AlphaComponent
+@Experimental
 class LogisticRegressionModel private[ml] (
-    override val parent: LogisticRegression,
+    override val uid: String,
     val weights: Vector,
     val intercept: Double)
   extends ProbabilisticClassificationModel[Vector, LogisticRegressionModel]
@@ -258,7 +298,8 @@ class LogisticRegressionModel private[ml] (
     rawPrediction match {
       case dv: DenseVector =>
         var i = 0
-        while (i < dv.size) {
+        val size = dv.size
+        while (i < size) {
           dv.values(i) = 1.0 / (1.0 + math.exp(-dv.values(i)))
           i += 1
         }
@@ -275,7 +316,7 @@ class LogisticRegressionModel private[ml] (
   }
 
   override def copy(extra: ParamMap): LogisticRegressionModel = {
-    copyValues(new LogisticRegressionModel(parent, weights, intercept), extra)
+    copyValues(new LogisticRegressionModel(uid, weights, intercept), extra)
   }
 
   override protected def raw2prediction(rawPrediction: Vector): Double = {
@@ -285,7 +326,7 @@ class LogisticRegressionModel private[ml] (
     } else if (t == 1.0) {
       Double.PositiveInfinity
     } else {
-      Math.log(t / (1.0 - t))
+      math.log(t / (1.0 - t))
     }
     if (rawPrediction(1) > rawThreshold) 1 else 0
   }
@@ -357,7 +398,8 @@ private[classification] class MultiClassSummarizer extends Serializable {
   def histogram: Array[Long] = {
     val result = Array.ofDim[Long](numClasses)
     var i = 0
-    while (i < result.length) {
+    val len = result.length
+    while (i < len) {
       result(i) = distinctMap.getOrElse(i, 0L)
       i += 1
     }
@@ -415,16 +457,12 @@ private class LogisticAggregator(
     require(dim == data.size, s"Dimensions mismatch when adding new sample." +
       s" Expecting $dim but got ${data.size}.")
 
-    val dataSize = data.size
-
     val localWeightsArray = weightsArray
     val localGradientSumArray = gradientSumArray
 
     numClasses match {
       case 2 =>
-        /**
-         * For Binary Logistic Regression.
-         */
+        // For Binary Logistic Regression.
         val margin = - {
           var sum = 0.0
           data.foreachActive { (index, value) =>
@@ -480,7 +518,8 @@ private class LogisticAggregator(
       var i = 0
       val localThisGradientSumArray = this.gradientSumArray
       val localOtherGradientSumArray = other.gradientSumArray
-      while (i < localThisGradientSumArray.length) {
+      val len = localThisGradientSumArray.length
+      while (i < len) {
         localThisGradientSumArray(i) += localOtherGradientSumArray(i)
         i += 1
       }
@@ -509,11 +548,13 @@ private class LogisticCostFun(
     data: RDD[(Double, Vector)],
     numClasses: Int,
     fitIntercept: Boolean,
+    standardization: Boolean,
     featuresStd: Array[Double],
     featuresMean: Array[Double],
     regParamL2: Double) extends DiffFunction[BDV[Double]] {
 
   override def calculate(weights: BDV[Double]): (Double, BDV[Double]) = {
+    val numFeatures = featuresStd.length
     val w = Vectors.fromBreeze(weights)
 
     val logisticAggregator = data.treeAggregate(new LogisticAggregator(w, numClasses, fitIntercept,
@@ -525,27 +566,43 @@ private class LogisticCostFun(
           case (aggregator1, aggregator2) => aggregator1.merge(aggregator2)
         })
 
-    // regVal is the sum of weight squares for L2 regularization
-    val norm = if (regParamL2 == 0.0) {
+    val totalGradientArray = logisticAggregator.gradient.toArray
+
+    // regVal is the sum of weight squares excluding intercept for L2 regularization.
+    val regVal = if (regParamL2 == 0.0) {
       0.0
-    } else if (fitIntercept) {
-      brzNorm(Vectors.dense(weights.toArray.slice(0, weights.size -1)).toBreeze, 2.0)
     } else {
-      brzNorm(weights, 2.0)
+      var sum = 0.0
+      w.foreachActive { (index, value) =>
+        // If `fitIntercept` is true, the last term which is intercept doesn't
+        // contribute to the regularization.
+        if (index != numFeatures) {
+          // The following code will compute the loss of the regularization; also
+          // the gradient of the regularization, and add back to totalGradientArray.
+          sum += {
+            if (standardization) {
+              totalGradientArray(index) += regParamL2 * value
+              value * value
+            } else {
+              if (featuresStd(index) != 0.0) {
+                // If `standardization` is false, we still standardize the data
+                // to improve the rate of convergence; as a result, we have to
+                // perform this reverse standardization by penalizing each component
+                // differently to get effectively the same objective function when
+                // the training dataset is not standardized.
+                val temp = value / (featuresStd(index) * featuresStd(index))
+                totalGradientArray(index) += regParamL2 * temp
+                value * temp
+              } else {
+                0.0
+              }
+            }
+          }
+        }
+      }
+      0.5 * regParamL2 * sum
     }
-    val regVal = 0.5 * regParamL2 * norm * norm
 
-    val loss = logisticAggregator.loss + regVal
-    val gradient = logisticAggregator.gradient
-
-    if (fitIntercept) {
-      val wArray = w.toArray.clone()
-      wArray(wArray.length - 1) = 0.0
-      axpy(regParamL2, Vectors.dense(wArray), gradient)
-    } else {
-      axpy(regParamL2, w, gradient)
-    }
-
-    (loss, gradient.toBreeze.asInstanceOf[BDV[Double]])
+    (logisticAggregator.loss + regVal, new BDV(totalGradientArray))
   }
 }

@@ -152,6 +152,11 @@ class SparkContext(object):
         self.master = self._conf.get("spark.master")
         self.appName = self._conf.get("spark.app.name")
         self.sparkHome = self._conf.get("spark.home", None)
+
+        # Let YARN know it's a pyspark app, so it distributes needed libraries.
+        if self.master == "yarn-client":
+            self._conf.set("spark.yarn.isPython", "true")
+
         for (k, v) in self._conf.getAll():
             if k.startswith("spark.executorEnv."):
                 varName = k[len("spark.executorEnv."):]
@@ -173,6 +178,7 @@ class SparkContext(object):
             self._jvm.PythonAccumulatorParam(host, port))
 
         self.pythonExec = os.environ.get("PYSPARK_PYTHON", 'python')
+        self.pythonVer = "%d.%d" % sys.version_info[:2]
 
         # Broadcast's __reduce__ method stores Broadcast instances here.
         # This allows other code to determine which Broadcast instances have
@@ -291,6 +297,26 @@ class SparkContext(object):
         return self._jsc.version()
 
     @property
+    @ignore_unicode_prefix
+    def applicationId(self):
+        """
+        A unique identifier for the Spark application.
+        Its format depends on the scheduler implementation.
+        (i.e.
+            in case of local spark app something like 'local-1433865536131'
+            in case of YARN something like 'application_1433865536131_34483'
+        )
+        >>> sc.applicationId  # doctest: +ELLIPSIS
+        u'local-...'
+        """
+        return self._jsc.sc().applicationId()
+
+    @property
+    def startTime(self):
+        """Return the epoch time when the Spark Context was started."""
+        return self._jsc.startTime()
+
+    @property
     def defaultParallelism(self):
         """
         Default level of parallelism to use when not given by user (e.g. for
@@ -317,6 +343,38 @@ class SparkContext(object):
             self._accumulatorServer = None
         with SparkContext._lock:
             SparkContext._active_spark_context = None
+
+    def emptyRDD(self):
+        """
+        Create an RDD that has no partitions or elements.
+        """
+        return RDD(self._jsc.emptyRDD(), self, NoOpSerializer())
+
+    def range(self, start, end=None, step=1, numSlices=None):
+        """
+        Create a new RDD of int containing elements from `start` to `end`
+        (exclusive), increased by `step` every element. Can be called the same
+        way as python's built-in range() function. If called with a single argument,
+        the argument is interpreted as `end`, and `start` is set to 0.
+
+        :param start: the start value
+        :param end: the end value (exclusive)
+        :param step: the incremental step (default: 1)
+        :param numSlices: the number of partitions of the new RDD
+        :return: An RDD of int
+
+        >>> sc.range(5).collect()
+        [0, 1, 2, 3, 4]
+        >>> sc.range(2, 4).collect()
+        [2, 3]
+        >>> sc.range(1, 7, 2).collect()
+        [1, 3, 5]
+        """
+        if end is None:
+            end = start
+            start = 0
+
+        return self.parallelize(xrange(start, end, step), numSlices)
 
     def parallelize(self, c, numSlices=None):
         """

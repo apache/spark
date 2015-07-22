@@ -49,45 +49,28 @@ private[spark] object ClosureCleaner extends Logging {
     cls.getName.contains("$anonfun$")
   }
 
-  // Get a list of the classes of the outer objects of a given closure object, obj;
+  // Get a list of the outer objects and their classes of a given closure object, obj;
   // the outer objects are defined as any closures that obj is nested within, plus
   // possibly the class that the outermost closure is in, if any. We stop searching
   // for outer objects beyond that because cloning the user's object is probably
   // not a good idea (whereas we can clone closure objects just fine since we
   // understand how all their fields are used).
-  private def getOuterClasses(obj: AnyRef): List[Class[_]] = {
+  private def getOuterClassesAndObjects(obj: AnyRef): (List[Class[_]], List[AnyRef]) = {
     for (f <- obj.getClass.getDeclaredFields if f.getName == "$outer") {
       f.setAccessible(true)
       val outer = f.get(obj)
       // The outer pointer may be null if we have cleaned this closure before
       if (outer != null) {
         if (isClosure(f.getType)) {
-          return f.getType :: getOuterClasses(outer)
+          val recurRet = getOuterClassesAndObjects(outer)
+          return (f.getType :: recurRet._1, outer :: recurRet._2)
         } else {
-          return f.getType :: Nil // Stop at the first $outer that is not a closure
+          return (f.getType :: Nil, outer :: Nil) // Stop at the first $outer that is not a closure
         }
       }
     }
-    Nil
+    (Nil, Nil)
   }
-
-  // Get a list of the outer objects for a given closure object.
-  private def getOuterObjects(obj: AnyRef): List[AnyRef] = {
-    for (f <- obj.getClass.getDeclaredFields if f.getName == "$outer") {
-      f.setAccessible(true)
-      val outer = f.get(obj)
-      // The outer pointer may be null if we have cleaned this closure before
-      if (outer != null) {
-        if (isClosure(f.getType)) {
-          return outer :: getOuterObjects(outer)
-        } else {
-          return outer :: Nil // Stop at the first $outer that is not a closure
-        }
-      }
-    }
-    Nil
-  }
-
   /**
    * Return a list of classes that represent closures enclosed in the given closure object.
    */
@@ -109,7 +92,14 @@ private[spark] object ClosureCleaner extends Logging {
 
   private def createNullValue(cls: Class[_]): AnyRef = {
     if (cls.isPrimitive) {
-      new java.lang.Byte(0: Byte) // Should be convertible to any primitive type
+      cls match {
+        case java.lang.Boolean.TYPE => new java.lang.Boolean(false)
+        case java.lang.Character.TYPE => new java.lang.Character('\0')
+        case java.lang.Void.TYPE =>
+          // This should not happen because `Foo(void x) {}` does not compile.
+          throw new IllegalStateException("Unexpected void parameter in constructor")
+        case _ => new java.lang.Byte(0: Byte)
+      }
     } else {
       null
     }
@@ -198,8 +188,7 @@ private[spark] object ClosureCleaner extends Logging {
 
     // A list of enclosing objects and their respective classes, from innermost to outermost
     // An outer object at a given index is of type outer class at the same index
-    val outerClasses = getOuterClasses(func)
-    val outerObjects = getOuterObjects(func)
+    val (outerClasses, outerObjects) = getOuterClassesAndObjects(func)
 
     // For logging purposes only
     val declaredFields = func.getClass.getDeclaredFields
@@ -239,15 +228,6 @@ private[spark] object ClosureCleaner extends Logging {
     logDebug(s" + fields accessed by starting closure: " + accessedFields.size)
     accessedFields.foreach { f => logDebug("     " + f) }
 
-    val inInterpreter = {
-      try {
-        val interpClass = Class.forName("spark.repl.Main")
-        interpClass.getMethod("interp").invoke(null) != null
-      } catch {
-        case _: ClassNotFoundException => true
-      }
-    }
-
     // List of outer (class, object) pairs, ordered from outermost to innermost
     // Note that all outer objects but the outermost one (first one in this list) must be closures
     var outerPairs: List[(Class[_], AnyRef)] = (outerClasses zip outerObjects).reverse
@@ -274,7 +254,7 @@ private[spark] object ClosureCleaner extends Logging {
       // required fields from the original object. We need the parent here because the Java
       // language specification requires the first constructor parameter of any closure to be
       // its enclosing object.
-      val clone = instantiateClass(cls, parent, inInterpreter)
+      val clone = instantiateClass(cls, parent)
       for (fieldName <- accessedFields(cls)) {
         val field = cls.getDeclaredField(fieldName)
         field.setAccessible(true)
@@ -327,30 +307,18 @@ private[spark] object ClosureCleaner extends Logging {
 
   private def instantiateClass(
       cls: Class[_],
-      enclosingObject: AnyRef,
-      inInterpreter: Boolean): AnyRef = {
-    if (!inInterpreter) {
-      // This is a bona fide closure class, whose constructor has no effects
-      // other than to set its fields, so use its constructor
-      val cons = cls.getConstructors()(0)
-      val params = cons.getParameterTypes.map(createNullValue).toArray
-      if (enclosingObject != null) {
-        params(0) = enclosingObject // First param is always enclosing object
-      }
-      return cons.newInstance(params: _*).asInstanceOf[AnyRef]
-    } else {
-      // Use reflection to instantiate object without calling constructor
-      val rf = sun.reflect.ReflectionFactory.getReflectionFactory()
-      val parentCtor = classOf[java.lang.Object].getDeclaredConstructor()
-      val newCtor = rf.newConstructorForSerialization(cls, parentCtor)
-      val obj = newCtor.newInstance().asInstanceOf[AnyRef]
-      if (enclosingObject != null) {
-        val field = cls.getDeclaredField("$outer")
-        field.setAccessible(true)
-        field.set(obj, enclosingObject)
-      }
-      obj
+      enclosingObject: AnyRef): AnyRef = {
+    // Use reflection to instantiate object without calling constructor
+    val rf = sun.reflect.ReflectionFactory.getReflectionFactory()
+    val parentCtor = classOf[java.lang.Object].getDeclaredConstructor()
+    val newCtor = rf.newConstructorForSerialization(cls, parentCtor)
+    val obj = newCtor.newInstance().asInstanceOf[AnyRef]
+    if (enclosingObject != null) {
+      val field = cls.getDeclaredField("$outer")
+      field.setAccessible(true)
+      field.set(obj, enclosingObject)
     }
+    obj
   }
 }
 
@@ -462,10 +430,12 @@ private class InnerClosureFinder(output: Set[Class[_]]) extends ClassVisitor(ASM
         if (op == INVOKESPECIAL && name == "<init>" && argTypes.length > 0
             && argTypes(0).toString.startsWith("L") // is it an object?
             && argTypes(0).getInternalName == myName) {
+          // scalastyle:off classforname
           output += Class.forName(
               owner.replace('/', '.'),
               false,
               Thread.currentThread.getContextClassLoader)
+          // scalastyle:on classforname
         }
       }
     }

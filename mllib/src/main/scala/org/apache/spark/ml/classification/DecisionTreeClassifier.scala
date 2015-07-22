@@ -17,31 +17,32 @@
 
 package org.apache.spark.ml.classification
 
-import org.apache.spark.annotation.AlphaComponent
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.ml.{PredictionModel, Predictor}
 import org.apache.spark.ml.param.ParamMap
-import org.apache.spark.ml.tree.{TreeClassifierParams, DecisionTreeParams, DecisionTreeModel, Node}
-import org.apache.spark.ml.util.MetadataUtils
+import org.apache.spark.ml.tree.{DecisionTreeModel, DecisionTreeParams, Node, TreeClassifierParams}
+import org.apache.spark.ml.tree.impl.RandomForest
+import org.apache.spark.ml.util.{Identifiable, MetadataUtils}
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.regression.LabeledPoint
-import org.apache.spark.mllib.tree.{DecisionTree => OldDecisionTree}
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo, Strategy => OldStrategy}
 import org.apache.spark.mllib.tree.model.{DecisionTreeModel => OldDecisionTreeModel}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.DataFrame
 
 /**
- * :: AlphaComponent ::
- *
+ * :: Experimental ::
  * [[http://en.wikipedia.org/wiki/Decision_tree_learning Decision tree]] learning algorithm
  * for classification.
  * It supports both binary and multiclass labels, as well as both continuous and categorical
  * features.
  */
-@AlphaComponent
-final class DecisionTreeClassifier
+@Experimental
+final class DecisionTreeClassifier(override val uid: String)
   extends Predictor[Vector, DecisionTreeClassifier, DecisionTreeClassificationModel]
   with DecisionTreeParams with TreeClassifierParams {
+
+  def this() = this(Identifiable.randomUID("dtc"))
 
   // Override parameter setters from parent trait for Java API compatibility.
 
@@ -74,8 +75,9 @@ final class DecisionTreeClassifier
     }
     val oldDataset: RDD[LabeledPoint] = extractLabeledPoints(dataset)
     val strategy = getOldStrategy(categoricalFeatures, numClasses)
-    val oldModel = OldDecisionTree.train(oldDataset, strategy)
-    DecisionTreeClassificationModel.fromOld(oldModel, this, categoricalFeatures)
+    val trees = RandomForest.run(oldDataset, strategy, numTrees = 1, featureSubsetStrategy = "all",
+      seed = 0L, parentUID = Some(uid))
+    trees.head.asInstanceOf[DecisionTreeClassificationModel]
   }
 
   /** (private[ml]) Create a Strategy instance to use with the old API. */
@@ -85,23 +87,25 @@ final class DecisionTreeClassifier
     super.getOldStrategy(categoricalFeatures, numClasses, OldAlgo.Classification, getOldImpurity,
       subsamplingRate = 1.0)
   }
+
+  override def copy(extra: ParamMap): DecisionTreeClassifier = defaultCopy(extra)
 }
 
+@Experimental
 object DecisionTreeClassifier {
   /** Accessor for supported impurities: entropy, gini */
   final val supportedImpurities: Array[String] = TreeClassifierParams.supportedImpurities
 }
 
 /**
- * :: AlphaComponent ::
- *
+ * :: Experimental ::
  * [[http://en.wikipedia.org/wiki/Decision_tree_learning Decision tree]] model for classification.
  * It supports both binary and multiclass labels, as well as both continuous and categorical
  * features.
  */
-@AlphaComponent
+@Experimental
 final class DecisionTreeClassificationModel private[ml] (
-    override val parent: DecisionTreeClassifier,
+    override val uid: String,
     override val rootNode: Node)
   extends PredictionModel[Vector, DecisionTreeClassificationModel]
   with DecisionTreeModel with Serializable {
@@ -109,12 +113,18 @@ final class DecisionTreeClassificationModel private[ml] (
   require(rootNode != null,
     "DecisionTreeClassificationModel given null rootNode, but it requires a non-null rootNode.")
 
+  /**
+   * Construct a decision tree classification model.
+   * @param rootNode  Root node of tree, with other nodes attached.
+   */
+  def this(rootNode: Node) = this(Identifiable.randomUID("dtc"), rootNode)
+
   override protected def predict(features: Vector): Double = {
     rootNode.predict(features)
   }
 
   override def copy(extra: ParamMap): DecisionTreeClassificationModel = {
-    copyValues(new DecisionTreeClassificationModel(parent, rootNode), extra)
+    copyValues(new DecisionTreeClassificationModel(uid, rootNode), extra)
   }
 
   override def toString: String = {
@@ -138,6 +148,7 @@ private[ml] object DecisionTreeClassificationModel {
       s"Cannot convert non-classification DecisionTreeModel (old API) to" +
         s" DecisionTreeClassificationModel (new API).  Algo is: ${oldModel.algo}")
     val rootNode = Node.fromOld(oldModel.topNode, categoricalFeatures)
-    new DecisionTreeClassificationModel(parent, rootNode)
+    val uid = if (parent != null) parent.uid else Identifiable.randomUID("dtc")
+    new DecisionTreeClassificationModel(uid, rootNode)
   }
 }

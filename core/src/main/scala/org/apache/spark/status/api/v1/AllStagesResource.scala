@@ -169,7 +169,7 @@ private[v1] object AllStagesResource {
 
     val outputMetrics: Option[OutputMetricDistributions] =
       new MetricHelper[InternalOutputMetrics, OutputMetricDistributions](rawMetrics, quantiles) {
-        def getSubmetrics(raw:InternalTaskMetrics): Option[InternalOutputMetrics] = {
+        def getSubmetrics(raw: InternalTaskMetrics): Option[InternalOutputMetrics] = {
           raw.outputMetrics
         }
         def build: OutputMetricDistributions = new OutputMetricDistributions(
@@ -284,7 +284,7 @@ private[v1] object AllStagesResource {
  * the options (returning None if the metrics are all empty), and extract the quantiles for each
  * metric.  After creating an instance, call metricOption to get the result type.
  */
-private[v1] abstract class MetricHelper[I,O](
+private[v1] abstract class MetricHelper[I, O](
     rawMetrics: Seq[InternalTaskMetrics],
     quantiles: Array[Double]) {
 

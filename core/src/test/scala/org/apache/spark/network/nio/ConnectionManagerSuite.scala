@@ -24,15 +24,13 @@ import scala.concurrent.duration._
 import scala.concurrent.{Await, TimeoutException}
 import scala.language.postfixOps
 
-import org.scalatest.FunSuite
-
-import org.apache.spark.{SecurityManager, SparkConf}
+import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
 import org.apache.spark.util.Utils
 
 /**
   * Test the ConnectionManager with various security settings.
   */
-class ConnectionManagerSuite extends FunSuite {
+class ConnectionManagerSuite extends SparkFunSuite {
 
   test("security default off") {
     val conf = new SparkConf

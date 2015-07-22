@@ -27,7 +27,7 @@ import org.apache.spark.ui.scope.RDDOperationGraph
 
 /** Utility functions for generating XML pages with spark content. */
 private[spark] object UIUtils extends Logging {
-  val TABLE_CLASS_NOT_STRIPED = "table table-bordered table-condensed sortable"
+  val TABLE_CLASS_NOT_STRIPED = "table table-bordered table-condensed"
   val TABLE_CLASS_STRIPED = TABLE_CLASS_NOT_STRIPED + " table-striped"
 
   // SimpleDateFormat is not thread-safe. Don't expose it to avoid improper use.
@@ -194,11 +194,7 @@ private[spark] object UIUtils extends Logging {
         <a href={prependBaseUri(activeTab.basePath, "/" + tab.prefix + "/")}>{tab.name}</a>
       </li>
     }
-    val helpButton: Seq[Node] = helpText.map { helpText =>
-      <sup>
-        (<a data-toggle="tooltip" data-placement="bottom" title={helpText}>?</a>)
-      </sup>
-    }.getOrElse(Seq.empty)
+    val helpButton: Seq[Node] = helpText.map(tooltip(_, "bottom")).getOrElse(Seq.empty)
 
     <html>
       <head>
@@ -271,9 +267,17 @@ private[spark] object UIUtils extends Logging {
       fixedWidth: Boolean = false,
       id: Option[String] = None,
       headerClasses: Seq[String] = Seq.empty,
-      stripeRowsWithCss: Boolean = true): Seq[Node] = {
+      stripeRowsWithCss: Boolean = true,
+      sortable: Boolean = true): Seq[Node] = {
 
-    val listingTableClass = if (stripeRowsWithCss) TABLE_CLASS_STRIPED else TABLE_CLASS_NOT_STRIPED
+    val listingTableClass = {
+      val _tableClass = if (stripeRowsWithCss) TABLE_CLASS_STRIPED else TABLE_CLASS_NOT_STRIPED
+      if (sortable) {
+        _tableClass + " sortable"
+      } else {
+        _tableClass
+      }
+    }
     val colWidth = 100.toDouble / headers.size
     val colWidthAttr = if (fixedWidth) colWidth + "%" else ""
 
@@ -313,7 +317,7 @@ private[spark] object UIUtils extends Logging {
       started: Int,
       completed: Int,
       failed: Int,
-      skipped:Int,
+      skipped: Int,
       total: Int): Seq[Node] = {
     val completeWidth = "width: %s%%".format((completed.toDouble/total)*100)
     val startWidth = "width: %s%%".format((started.toDouble/total)*100)
@@ -356,15 +360,17 @@ private[spark] object UIUtils extends Logging {
         </a>
       </span>
       <div id="dag-viz-graph"></div>
-      <div id="dag-viz-metadata">
+      <div id="dag-viz-metadata" style="display:none">
         {
           graphs.map { g =>
-            <div class="stage-metadata" stage-id={g.rootCluster.id} style="display:none">
-              <div class="dot-file">{RDDOperationGraph.makeDotFile(g, forJob)}</div>
+            val stageId = g.rootCluster.id.replaceAll(RDDOperationGraph.STAGE_CLUSTER_PREFIX, "")
+            val skipped = g.rootCluster.name.contains("skipped").toString
+            <div class="stage-metadata" stage-id={stageId} skipped={skipped}>
+              <div class="dot-file">{RDDOperationGraph.makeDotFile(g)}</div>
               { g.incomingEdges.map { e => <div class="incoming-edge">{e.fromId},{e.toId}</div> } }
               { g.outgoingEdges.map { e => <div class="outgoing-edge">{e.fromId},{e.toId}</div> } }
               {
-                g.rootCluster.getAllNodes.filter(_.cached).map { n =>
+                g.rootCluster.getCachedNodes.map { n =>
                   <div class="cached-rdd">{n.id}</div>
                 }
               }
@@ -373,6 +379,12 @@ private[spark] object UIUtils extends Logging {
         }
       </div>
     </div>
+  }
+
+  def tooltip(text: String, position: String): Seq[Node] = {
+    <sup>
+      (<a data-toggle="tooltip" data-placement={position} title={text}>?</a>)
+    </sup>
   }
 
   /** Return a script element that automatically expands the DAG visualization on page load. */

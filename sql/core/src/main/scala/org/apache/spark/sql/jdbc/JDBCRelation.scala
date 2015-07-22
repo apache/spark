@@ -17,25 +17,15 @@
 
 package org.apache.spark.sql.jdbc
 
-import java.sql.DriverManager
 import java.util.Properties
 
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.Partition
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.SQLContext
-import org.apache.spark.sql.catalyst.expressions.Row
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.util.Utils
-
-/**
- * Data corresponding to one partition of a JDBCRDD.
- */
-private[sql] case class JDBCPartition(whereClause: String, idx: Int) extends Partition {
-  override def index: Int = idx
-}
+import org.apache.spark.sql.{DataFrame, Row, SQLContext, SaveMode}
 
 /**
  * Instructions on how to partition the table among workers.
@@ -63,7 +53,7 @@ private[sql] object JDBCRelation {
     if (numPartitions == 1) return Array[Partition](JDBCPartition(null, 0))
     // Overflow and silliness can happen if you subtract then divide.
     // Here we get a little roundoff, but that's (hopefully) OK.
-    val stride: Long = (partitioning.upperBound / numPartitions 
+    val stride: Long = (partitioning.upperBound / numPartitions
                       - partitioning.lowerBound / numPartitions)
     var i: Int = 0
     var currentValue: Long = partitioning.lowerBound
@@ -129,7 +119,8 @@ private[sql] case class JDBCRelation(
     parts: Array[Partition],
     properties: Properties = new Properties())(@transient val sqlContext: SQLContext)
   extends BaseRelation
-  with PrunedFilteredScan {
+  with PrunedFilteredScan
+  with InsertableRelation {
 
   override val needConversion: Boolean = false
 
@@ -146,6 +137,12 @@ private[sql] case class JDBCRelation(
       table,
       requiredColumns,
       filters,
-      parts)
+      parts).map(_.asInstanceOf[Row])
+  }
+
+  override def insert(data: DataFrame, overwrite: Boolean): Unit = {
+    data.write
+      .mode(if (overwrite) SaveMode.Overwrite else SaveMode.Append)
+      .jdbc(url, table, properties)
   }
 }

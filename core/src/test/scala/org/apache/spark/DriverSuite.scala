@@ -19,14 +19,13 @@ package org.apache.spark
 
 import java.io.File
 
-import org.scalatest.FunSuite
 import org.scalatest.concurrent.Timeouts
 import org.scalatest.prop.TableDrivenPropertyChecks._
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.util.Utils
 
-class DriverSuite extends FunSuite with Timeouts {
+class DriverSuite extends SparkFunSuite with Timeouts {
 
   ignore("driver should exit after finishing without cleanup (SPARK-530)") {
     val sparkHome = sys.props.getOrElse("spark.test.home", fail("spark.test.home is not set!"))

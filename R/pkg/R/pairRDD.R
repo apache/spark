@@ -215,7 +215,6 @@ setMethod("partitionBy",
                                        serializedHashFuncBytes,
                                        getSerializedMode(x),
                                        packageNamesArr,
-                                       as.character(.sparkREnv$libname),
                                        broadcastArr,
                                        callJMethod(jrdd, "classTag"))
 
@@ -329,7 +328,7 @@ setMethod("reduceByKey",
               convertEnvsToList(keys, vals)
             }
             locallyReduced <- lapplyPartition(x, reduceVals)
-            shuffled <- partitionBy(locallyReduced, numPartitions)
+            shuffled <- partitionBy(locallyReduced, numToInt(numPartitions))
             lapplyPartition(shuffled, reduceVals)
           })
 
@@ -436,7 +435,7 @@ setMethod("combineByKey",
               convertEnvsToList(keys, combiners)
             }
             locallyCombined <- lapplyPartition(x, combineLocally)
-            shuffled <- partitionBy(locallyCombined, numPartitions)
+            shuffled <- partitionBy(locallyCombined, numToInt(numPartitions))
             mergeAfterShuffle <- function(part) {
               combiners <- new.env()
               keys <- new.env()
@@ -560,8 +559,8 @@ setMethod("join",
 # Left outer join two RDDs
 #
 # @description
-# \code{leftouterjoin} This function left-outer-joins two RDDs where every element is of the form list(K, V).
-# The key types of the two RDDs should be the same.
+# \code{leftouterjoin} This function left-outer-joins two RDDs where every element is of
+# the form list(K, V). The key types of the two RDDs should be the same.
 #
 # @param x An RDD to be joined. Should be an RDD where each element is
 #             list(K, V).
@@ -597,8 +596,8 @@ setMethod("leftOuterJoin",
 # Right outer join two RDDs
 #
 # @description
-# \code{rightouterjoin} This function right-outer-joins two RDDs where every element is of the form list(K, V).
-# The key types of the two RDDs should be the same.
+# \code{rightouterjoin} This function right-outer-joins two RDDs where every element is of
+# the form list(K, V). The key types of the two RDDs should be the same.
 #
 # @param x An RDD to be joined. Should be an RDD where each element is
 #             list(K, V).
@@ -634,8 +633,8 @@ setMethod("rightOuterJoin",
 # Full outer join two RDDs
 #
 # @description
-# \code{fullouterjoin} This function full-outer-joins two RDDs where every element is of the form list(K, V).
-# The key types of the two RDDs should be the same.
+# \code{fullouterjoin} This function full-outer-joins two RDDs where every element is of
+# the form list(K, V). The key types of the two RDDs should be the same.
 #
 # @param x An RDD to be joined. Should be an RDD where each element is
 #             list(K, V).
@@ -784,7 +783,7 @@ setMethod("sortByKey",
             newRDD <- partitionBy(x, numPartitions, rangePartitionFunc)
             lapplyPartition(newRDD, partitionFunc)
           })
-          
+
 # Subtract a pair RDD with another pair RDD.
 #
 # Return an RDD with the pairs from x whose keys are not in other.
@@ -820,7 +819,7 @@ setMethod("subtractByKey",
           })
 
 # Return a subset of this RDD sampled by key.
-# 
+#
 # @description
 # \code{sampleByKey} Create a sample of this RDD using variable sampling rates
 # for different keys as specified by fractions, a key to sampling rate map.

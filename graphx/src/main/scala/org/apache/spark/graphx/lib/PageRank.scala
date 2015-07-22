@@ -116,7 +116,7 @@ object PageRank extends Logging {
 
     val personalized = srcId isDefined
     val src: VertexId = srcId.getOrElse(-1L)
-    def delta(u: VertexId, v: VertexId):Double = { if (u == v) 1.0 else 0.0 }
+    def delta(u: VertexId, v: VertexId): Double = { if (u == v) 1.0 else 0.0 }
 
     var iteration = 0
     var prevRankGraph: Graph[Double, Double] = null
@@ -133,13 +133,13 @@ object PageRank extends Logging {
       // edge partitions.
       prevRankGraph = rankGraph
       val rPrb = if (personalized) {
-        (src: VertexId ,id: VertexId) => resetProb * delta(src,id)
+        (src: VertexId , id: VertexId) => resetProb * delta(src, id)
       } else {
         (src: VertexId, id: VertexId) => resetProb
       }
 
       rankGraph = rankGraph.joinVertices(rankUpdates) {
-        (id, oldRank, msgSum) => rPrb(src,id) + (1.0 - resetProb) * msgSum
+        (id, oldRank, msgSum) => rPrb(src, id) + (1.0 - resetProb) * msgSum
       }.cache()
 
       rankGraph.edges.foreachPartition(x => {}) // also materializes rankGraph.vertices
@@ -243,7 +243,7 @@ object PageRank extends Logging {
 
     // Execute a dynamic version of Pregel.
     val vp = if (personalized) {
-      (id: VertexId, attr: (Double, Double),msgSum: Double) =>
+      (id: VertexId, attr: (Double, Double), msgSum: Double) =>
         personalizedVertexProgram(id, attr, msgSum)
     } else {
       (id: VertexId, attr: (Double, Double), msgSum: Double) =>

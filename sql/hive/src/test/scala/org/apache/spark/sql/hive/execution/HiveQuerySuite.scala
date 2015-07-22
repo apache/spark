@@ -20,14 +20,15 @@ package org.apache.spark.sql.hive.execution
 import java.io.File
 import java.util.{Locale, TimeZone}
 
-import org.scalatest.BeforeAndAfter
-
 import scala.util.Try
+
+import org.scalatest.BeforeAndAfter
 
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 
 import org.apache.spark.{SparkFiles, SparkException}
 import org.apache.spark.sql.{AnalysisException, DataFrame, Row}
+import org.apache.spark.sql.catalyst.expressions.Cast
 import org.apache.spark.sql.catalyst.plans.logical.Project
 import org.apache.spark.sql.hive._
 import org.apache.spark.sql.hive.test.TestHive
@@ -51,13 +52,31 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
     TimeZone.setDefault(TimeZone.getTimeZone("America/Los_Angeles"))
     // Add Locale setting
     Locale.setDefault(Locale.US)
+    sql(s"ADD JAR ${TestHive.getHiveFile("TestUDTF.jar").getCanonicalPath()}")
+    // The function source code can be found at:
+    // https://cwiki.apache.org/confluence/display/Hive/DeveloperGuide+UDTF
+    sql(
+      """
+        |CREATE TEMPORARY FUNCTION udtf_count2
+        |AS 'org.apache.spark.sql.hive.execution.GenericUDTFCount2'
+      """.stripMargin)
   }
 
   override def afterAll() {
     TestHive.cacheTables = false
     TimeZone.setDefault(originalTimeZone)
     Locale.setDefault(originalLocale)
+    sql("DROP TEMPORARY FUNCTION udtf_count2")
   }
+
+  createQueryTest("Test UDTF.close in Lateral Views",
+     """
+       |SELECT key, cc
+       |FROM src LATERAL VIEW udtf_count2(value) dd AS cc
+     """.stripMargin, false) // false mean we have to keep the temp function in registry
+
+  createQueryTest("Test UDTF.close in SELECT",
+     "SELECT udtf_count2(a) FROM (SELECT 1 AS a FROM src LIMIT 3) table", false)
 
   test("SPARK-4908: concurrent hive native commands") {
     (1 to 100).par.map { _ =>
@@ -65,6 +84,60 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
       sql("SHOW DATABASES")
     }
   }
+
+  createQueryTest("SPARK-8976 Wrong Result for Rollup #1",
+    """
+      SELECT count(*) AS cnt, key % 5,GROUPING__ID FROM src group by key%5 WITH ROLLUP
+    """.stripMargin)
+
+  createQueryTest("SPARK-8976 Wrong Result for Rollup #2",
+    """
+      SELECT
+        count(*) AS cnt,
+        key % 5 as k1,
+        key-5 as k2,
+        GROUPING__ID as k3
+      FROM src group by key%5, key-5
+      WITH ROLLUP ORDER BY cnt, k1, k2, k3 LIMIT 10
+    """.stripMargin)
+
+  createQueryTest("SPARK-8976 Wrong Result for Rollup #3",
+    """
+      SELECT
+        count(*) AS cnt,
+        key % 5 as k1,
+        key-5 as k2,
+        GROUPING__ID as k3
+      FROM (SELECT key, key%2, key - 5 FROM src) t group by key%5, key-5
+      WITH ROLLUP ORDER BY cnt, k1, k2, k3 LIMIT 10
+    """.stripMargin)
+
+  createQueryTest("SPARK-8976 Wrong Result for CUBE #1",
+    """
+      SELECT count(*) AS cnt, key % 5,GROUPING__ID FROM src group by key%5 WITH CUBE
+    """.stripMargin)
+
+  createQueryTest("SPARK-8976 Wrong Result for CUBE #2",
+    """
+      SELECT
+        count(*) AS cnt,
+        key % 5 as k1,
+        key-5 as k2,
+        GROUPING__ID as k3
+      FROM (SELECT key, key%2, key - 5 FROM src) t group by key%5, key-5
+      WITH CUBE ORDER BY cnt, k1, k2, k3 LIMIT 10
+    """.stripMargin)
+
+  createQueryTest("SPARK-8976 Wrong Result for GroupingSet",
+    """
+      SELECT
+        count(*) AS cnt,
+        key % 5 as k1,
+        key-5 as k2,
+        GROUPING__ID as k3
+      FROM (SELECT key, key%2, key - 5 FROM src) t group by key%5, key-5
+      GROUPING SETS (key%5, key-5) ORDER BY cnt, k1, k2, k3 LIMIT 10
+    """.stripMargin)
 
   createQueryTest("insert table with generator with column name",
     """
@@ -90,13 +163,13 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
       |  SELECT key FROM gen_tmp ORDER BY key ASC;
     """.stripMargin)
 
-  test("multiple generator in projection") {
+  test("multiple generators in projection") {
     intercept[AnalysisException] {
-      sql("SELECT explode(map(key, value)), key FROM src").collect()
+      sql("SELECT explode(array(key, key)), explode(array(key, key)) FROM src").collect()
     }
 
     intercept[AnalysisException] {
-      sql("SELECT explode(map(key, value)) as k1, k2, key FROM src").collect()
+      sql("SELECT explode(array(key, key)) as k1, explode(array(key, key)) FROM src").collect()
     }
   }
 
@@ -113,7 +186,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
       lower("AA"), "10",
       repeat(lower("AA"), 3), "11",
       lower(repeat("AA", 3)), "12",
-      printf("Bb%d", 12), "13",
+      printf("bb%d", 12), "13",
       repeat(printf("s%d", 14), 2), "14") FROM src LIMIT 1""")
 
   createQueryTest("NaN to Decimal",
@@ -305,20 +378,6 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
       | FROM src LIMIT 1
     """.stripMargin)
 
-  createQueryTest("Date comparison test 2",
-    "SELECT CAST(CAST(0 AS timestamp) AS date) > CAST(0 AS timestamp) FROM src LIMIT 1")
-
-  createQueryTest("Date cast",
-    """
-      | SELECT
-      | CAST(CAST(0 AS timestamp) AS date),
-      | CAST(CAST(CAST(0 AS timestamp) AS date) AS string),
-      | CAST(0 AS timestamp),
-      | CAST(CAST(0 AS timestamp) AS string),
-      | CAST(CAST(CAST('1970-01-01 23:00:00' AS timestamp) AS date) AS timestamp)
-      | FROM src LIMIT 1
-    """.stripMargin)
-
   createQueryTest("Simple Average",
     "SELECT AVG(key) FROM src")
 
@@ -396,6 +455,25 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
       |INSERT OVERWRITE TABLE createdtable SELECT * FROM src WHERE key = 86;
       |SELECT * FROM createdtable;
     """.stripMargin)
+
+  test("SPARK-7270: consider dynamic partition when comparing table output") {
+    sql(s"CREATE TABLE test_partition (a STRING) PARTITIONED BY (b BIGINT, c STRING)")
+    sql(s"CREATE TABLE ptest (a STRING, b BIGINT, c STRING)")
+
+    val analyzedPlan = sql(
+      """
+        |INSERT OVERWRITE table test_partition PARTITION (b=1, c)
+        |SELECT 'a', 'c' from ptest
+      """.stripMargin).queryExecution.analyzed
+
+    assertResult(false, "Incorrect cast detected\n" + analyzedPlan) {
+      var hasCast = false
+      analyzedPlan.collect {
+        case p: Project => p.transformExpressionsUp { case c: Cast => hasCast = true; c }
+      }
+      hasCast
+    }
+  }
 
   createQueryTest("transform",
     "SELECT TRANSFORM (key) USING 'cat' AS (tKey) FROM src")
@@ -836,15 +914,6 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
           |WITH serdeproperties('s1'='9')
         """.stripMargin)
     }
-    // Now only verify 0.12.0, and ignore other versions due to binary compatibility
-    // current TestSerDe.jar is from 0.12.0
-    if (HiveShim.version == "0.12.0") {
-      sql(s"ADD JAR $testJar")
-      sql(
-        """ALTER TABLE alter1 SET SERDE 'org.apache.hadoop.hive.serde2.TestSerDe'
-          |WITH serdeproperties('s1'='9')
-        """.stripMargin)
-    }
     sql("DROP TABLE alter1")
   }
 
@@ -852,15 +921,13 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
     // this is a test case from mapjoin_addjar.q
     val testJar = TestHive.getHiveFile("hive-hcatalog-core-0.13.1.jar").getCanonicalPath
     val testData = TestHive.getHiveFile("data/files/sample.json").getCanonicalPath
-    if (HiveShim.version == "0.13.1") {
-      sql(s"ADD JAR $testJar")
-      sql(
-        """CREATE TABLE t1(a string, b string)
-        |ROW FORMAT SERDE 'org.apache.hive.hcatalog.data.JsonSerDe'""".stripMargin)
-      sql(s"""LOAD DATA LOCAL INPATH "$testData" INTO TABLE t1""")
-      sql("select * from src join t1 on src.key = t1.a")
-      sql("DROP TABLE t1")
-    }
+    sql(s"ADD JAR $testJar")
+    sql(
+      """CREATE TABLE t1(a string, b string)
+      |ROW FORMAT SERDE 'org.apache.hive.hcatalog.data.JsonSerDe'""".stripMargin)
+    sql(s"""LOAD DATA LOCAL INPATH "$testData" INTO TABLE t1""")
+    sql("select * from src join t1 on src.key = t1.a")
+    sql("DROP TABLE t1")
   }
 
   test("ADD FILE command") {
@@ -1057,13 +1124,15 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
     val testKey = "spark.sql.key.usedfortestonly"
     val testVal = "test.val.0"
     val nonexistentKey = "nonexistent"
-    val KV = "([^=]+)=([^=]*)".r
-    def collectResults(df: DataFrame): Set[(String, String)] =
+    def collectResults(df: DataFrame): Set[Any] =
       df.collect().map {
         case Row(key: String, value: String) => key -> value
-        case Row(KV(key, value)) => key -> value
+        case Row(key: String, defaultValue: String, doc: String) => (key, defaultValue, doc)
       }.toSet
     conf.clear()
+
+    val expectedConfs = conf.getAllDefinedConfs.toSet
+    assertResult(expectedConfs)(collectResults(sql("SET -v")))
 
     // "SET" itself returns all config variables currently specified in SQLConf.
     // TODO: Should we be listing the default here always? probably...
@@ -1075,15 +1144,11 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
 
     assert(hiveconf.get(testKey, "") == testVal)
     assertResult(Set(testKey -> testVal))(collectResults(sql("SET")))
-    assertResult(Set(testKey -> testVal))(collectResults(sql("SET -v")))
 
     sql(s"SET ${testKey + testKey}=${testVal + testVal}")
     assert(hiveconf.get(testKey + testKey, "") == testVal + testVal)
     assertResult(Set(testKey -> testVal, (testKey + testKey) -> (testVal + testVal))) {
       collectResults(sql("SET"))
-    }
-    assertResult(Set(testKey -> testVal, (testKey + testKey) -> (testVal + testVal))) {
-      collectResults(sql("SET -v"))
     }
 
     // "SET key"

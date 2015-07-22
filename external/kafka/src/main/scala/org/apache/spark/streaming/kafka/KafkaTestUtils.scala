@@ -195,6 +195,8 @@ private class KafkaTestUtils extends Logging {
     val props = new Properties()
     props.put("metadata.broker.list", brokerAddress)
     props.put("serializer.class", classOf[StringEncoder].getName)
+    // wait for all in-sync replicas to ack sends
+    props.put("request.required.acks", "-1")
     props
   }
 
@@ -227,21 +229,6 @@ private class KafkaTestUtils extends Logging {
     }
 
     tryAgain(1)
-  }
-
-  /** Wait until the leader offset for the given topic/partition equals the specified offset */
-  def waitUntilLeaderOffset(
-      topic: String,
-      partition: Int,
-      offset: Long): Unit = {
-    eventually(Time(10000), Time(100)) {
-      val kc = new KafkaCluster(Map("metadata.broker.list" -> brokerAddress))
-      val tp = TopicAndPartition(topic, partition)
-      val llo = kc.getLatestLeaderOffsets(Set(tp)).right.get.apply(tp).offset
-      assert(
-        llo == offset,
-        s"$topic $partition $offset not reached after timeout")
-    }
   }
 
   private def waitUntilMetadataIsPropagated(topic: String, partition: Int): Unit = {

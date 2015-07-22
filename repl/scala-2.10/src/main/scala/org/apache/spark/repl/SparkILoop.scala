@@ -206,7 +206,8 @@ class SparkILoop(
         // e.g. file:/C:/my/path.jar -> C:/my/path.jar
         SparkILoop.getAddedJars.map { jar => new URI(jar).getPath.stripPrefix("/") }
       } else {
-        SparkILoop.getAddedJars
+        // We need new URI(jar).getPath here for the case that `jar` includes encoded white space (%20).
+        SparkILoop.getAddedJars.map { jar => new URI(jar).getPath }
       }
     // work around for Scala bug
     val totalClassPath = addedJars.foldLeft(
@@ -1100,7 +1101,9 @@ object SparkILoop extends Logging {
             val s = super.readLine()
             // helping out by printing the line being interpreted.
             if (s != null)
+              // scalastyle:off println
               output.println(s)
+              // scalastyle:on println
             s
           }
         }
@@ -1109,7 +1112,7 @@ object SparkILoop extends Logging {
         if (settings.classpath.isDefault)
           settings.classpath.value = sys.props("java.class.path")
 
-        getAddedJars.foreach(settings.classpath.append(_))
+        getAddedJars.map(jar => new URI(jar).getPath).foreach(settings.classpath.append(_))
 
         repl process settings
       }

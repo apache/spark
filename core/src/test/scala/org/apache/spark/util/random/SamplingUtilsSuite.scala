@@ -20,9 +20,10 @@ package org.apache.spark.util.random
 import scala.util.Random
 
 import org.apache.commons.math3.distribution.{BinomialDistribution, PoissonDistribution}
-import org.scalatest.FunSuite
 
-class SamplingUtilsSuite extends FunSuite {
+import org.apache.spark.SparkFunSuite
+
+class SamplingUtilsSuite extends SparkFunSuite {
 
   test("reservoirSampleAndCount") {
     val input = Seq.fill(100)(Random.nextInt())

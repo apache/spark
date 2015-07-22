@@ -18,13 +18,15 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.unsafe.types.UTF8String
 
 import scala.collection.mutable.HashSet
 
-import org.apache.spark.{AccumulatorParam, Accumulator}
+import org.apache.spark.{AccumulatorParam, Accumulator, Logging}
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.sql.{SQLConf, SQLContext, DataFrame, Row}
+import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.trees.TreeNodeRef
 import org.apache.spark.sql.types._
 
@@ -46,7 +48,7 @@ package object debug {
    */
   implicit class DebugSQLContext(sqlContext: SQLContext) {
     def debug(): Unit = {
-      sqlContext.setConf(SQLConf.DATAFRAME_EAGER_ANALYSIS, "false")
+      sqlContext.setConf(SQLConf.DATAFRAME_EAGER_ANALYSIS, false)
     }
   }
 
@@ -55,7 +57,7 @@ package object debug {
    * Augments [[DataFrame]]s with debug methods.
    */
   @DeveloperApi
-  implicit class DebugQuery(query: DataFrame) {
+  implicit class DebugQuery(query: DataFrame) extends Logging {
     def debug(): Unit = {
       val plan = query.queryExecution.executedPlan
       val visited = new collection.mutable.HashSet[TreeNodeRef]()
@@ -64,7 +66,7 @@ package object debug {
           visited += new TreeNodeRef(s)
           DebugNode(s)
       }
-      println(s"Results returned: ${debugPlan.execute().count()}")
+      logDebug(s"Results returned: ${debugPlan.execute().count()}")
       debugPlan.foreach {
         case d: DebugNode => d.dumpStats()
         case _ =>
@@ -80,11 +82,11 @@ package object debug {
           TypeCheck(s)
       }
       try {
-        println(s"Results returned: ${debugPlan.execute().count()}")
+        logDebug(s"Results returned: ${debugPlan.execute().count()}")
       } catch {
         case e: Exception =>
           def unwrap(e: Throwable): Throwable = if (e.getCause == null) e else unwrap(e.getCause)
-          println(s"Deepest Error: ${unwrap(e)}")
+          logDebug(s"Deepest Error: ${unwrap(e)}")
       }
     }
   }
@@ -117,19 +119,19 @@ package object debug {
     val columnStats: Array[ColumnMetrics] = Array.fill(child.output.size)(new ColumnMetrics())
 
     def dumpStats(): Unit = {
-      println(s"== ${child.simpleString} ==")
-      println(s"Tuples output: ${tupleCount.value}")
+      logDebug(s"== ${child.simpleString} ==")
+      logDebug(s"Tuples output: ${tupleCount.value}")
       child.output.zip(columnStats).foreach { case(attr, metric) =>
         val actualDataTypes = metric.elementTypes.value.mkString("{", ",", "}")
-        println(s" ${attr.name} ${attr.dataType}: $actualDataTypes")
+        logDebug(s" ${attr.name} ${attr.dataType}: $actualDataTypes")
       }
     }
 
-    protected override def doExecute(): RDD[Row] = {
+    protected override def doExecute(): RDD[InternalRow] = {
       child.execute().mapPartitions { iter =>
-        new Iterator[Row] {
+        new Iterator[InternalRow] {
           def hasNext: Boolean = iter.hasNext
-          def next(): Row = {
+          def next(): InternalRow = {
             val currentRow = iter.next()
             tupleCount += 1
             var i = 0
@@ -154,7 +156,7 @@ package object debug {
     def typeCheck(data: Any, schema: DataType): Unit = (data, schema) match {
       case (null, _) =>
 
-      case (row: Row, StructType(fields)) =>
+      case (row: InternalRow, StructType(fields)) =>
         row.toSeq.zip(fields.map(_.dataType)).foreach { case(d, t) => typeCheck(d, t) }
       case (s: Seq[_], ArrayType(elemType, _)) =>
         s.foreach(typeCheck(_, elemType))
@@ -170,6 +172,8 @@ package object debug {
       case (_: Short, ShortType) =>
       case (_: Boolean, BooleanType) =>
       case (_: Double, DoubleType) =>
+      case (_: Int, DateType) =>
+      case (_: Long, TimestampType) =>
       case (v, udt: UserDefinedType[_]) => typeCheck(v, udt.sqlType)
 
       case (d, t) => sys.error(s"Invalid data found: got $d (${d.getClass}) expected $t")
@@ -193,7 +197,7 @@ package object debug {
 
     def children: List[SparkPlan] = child :: Nil
 
-    protected override def doExecute(): RDD[Row] = {
+    protected override def doExecute(): RDD[InternalRow] = {
       child.execute().map { row =>
         try typeCheck(row, child.schema) catch {
           case e: Exception =>
