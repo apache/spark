@@ -247,7 +247,7 @@ private[spark] object SQLConf {
           "otherwise the schema is picked from the summary file or a random data file " +
           "if no summary file is available.")
 
-  val PARQUET_SCHEMA_SKIP_MERGE_PARTFILES = booleanConf("spark.sql.parquet.skipMergePartFiles",
+  val PARQUET_SCHEMA_RESPECT_SUMMARIES = booleanConf("spark.sql.parquet.respectSummaryFiles",
     defaultValue = Some(false),
     doc = "When true, we make assumption that all part-files of Parquet are consistent with " +
           "summary files and we will ignore them when merging schema. Otherwise, if this is " +

@@ -133,7 +133,7 @@ class ParquetQuerySuiteBase extends QueryTest with ParquetTest {
         val basePath = dir.getCanonicalPath
         sqlContext.range(0, 10).toDF("a").write.parquet(new Path(basePath, "foo=1").toString)
         sqlContext.range(0, 10).toDF("b").write.parquet(new Path(basePath, "foo=2").toString)
-        // delete summary files, so if we don't merge part-files, one column will not be included.
+        // delete summary files, we still merge part-files without summary files.
         Utils.deleteRecursively(new File(basePath + "/foo=1/_metadata"))
         Utils.deleteRecursively(new File(basePath + "/foo=1/_common_metadata"))
         assert(sqlContext.read.parquet(basePath).columns.length === expectedColumnNumber)
@@ -141,12 +141,12 @@ class ParquetQuerySuiteBase extends QueryTest with ParquetTest {
     }
 
     withSQLConf(SQLConf.PARQUET_SCHEMA_MERGING_ENABLED.key -> "true",
-      SQLConf.PARQUET_SCHEMA_SKIP_MERGE_PARTFILES.key -> "true") {
-      testSchemaMerging(2)
+      SQLConf.PARQUET_SCHEMA_RESPECT_SUMMARIES.key -> "true") {
+      testSchemaMerging(3)
     }
 
     withSQLConf(SQLConf.PARQUET_SCHEMA_MERGING_ENABLED.key -> "true",
-      SQLConf.PARQUET_SCHEMA_SKIP_MERGE_PARTFILES.key -> "false") {
+      SQLConf.PARQUET_SCHEMA_RESPECT_SUMMARIES.key -> "false") {
       testSchemaMerging(3)
     }
   }

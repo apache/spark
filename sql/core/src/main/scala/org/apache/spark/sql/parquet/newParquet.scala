@@ -42,7 +42,7 @@ import org.apache.spark.rdd.RDD._
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.{SqlNewHadoopPartition, SqlNewHadoopRDD}
-import org.apache.spark.sql.execution.datasources.PartitionSpec
+import org.apache.spark.sql.execution.datasources.{PartitionSpec, PartitioningUtils}
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.util.{SerializableConfiguration, Utils}
@@ -123,8 +123,8 @@ private[sql] class ParquetRelation2(
       .map(_.toBoolean)
       .getOrElse(sqlContext.conf.getConf(SQLConf.PARQUET_SCHEMA_MERGING_ENABLED))
 
-  private val skipMergePartFiles =
-    sqlContext.conf.getConf(SQLConf.PARQUET_SCHEMA_SKIP_MERGE_PARTFILES)
+  private val mergeRespectSummaries =
+    sqlContext.conf.getConf(SQLConf.PARQUET_SCHEMA_RESPECT_SUMMARIES)
 
   private val maybeMetastoreSchema = parameters
     .get(ParquetRelation2.METASTORE_SCHEMA)
@@ -348,6 +348,28 @@ private[sql] class ParquetRelation2(
     // Schema of the whole table, including partition columns.
     var schema: StructType = _
 
+    def filterDataStatusesWithoutSummaries(
+      leaves: Seq[FileStatus],
+      dataStatuses: Seq[FileStatus]): Seq[FileStatus] = {
+
+      // Get the partitions that have summary files
+      val typeInference = sqlContext.conf.partitionColumnTypeInferenceEnabled()
+      val summariesPaths = metadataStatuses.map(_.getPath.getParent()) ++
+        commonMetadataStatuses.map(_.getPath.getParent())
+      val summariesPartitions = PartitioningUtils.parsePartitions(summariesPaths,
+        PartitioningUtils.DEFAULT_PARTITION_NAME, typeInference).partitions.toSet
+
+      dataStatuses.filterNot { d =>
+        val part = PartitioningUtils.parsePartitions(Seq(d.getPath.getParent()),
+          PartitioningUtils.DEFAULT_PARTITION_NAME, typeInference)
+        if (summariesPartitions.size > 0 && part.partitions.length > 0) {
+          summariesPartitions.contains(part.partitions(0))
+        } else {
+          false
+        }
+      }
+    }
+
     /**
      * Refreshes `FileStatus`es, footers, partition spec, and table schema.
      */
@@ -414,12 +436,24 @@ private[sql] class ParquetRelation2(
         if (shouldMergeSchemas) {
           // Also includes summary files, 'cause there might be empty partition directories.
 
-          // If skipMergePartFiles config is true, we assume that all part-files are the same for
+          // If mergeRespectSummaries config is true, we assume that all part-files are the same for
           // their schema with summary files, so we ignore them when merging schema.
           // If the config is false, which is the default setting, we merge all part-files.
+
+          // mergeRespectSummaries is useful when dealing with partitioned tables, where each
+          // partition directory contains its own summary files.
+          // Basically in this mode, we only need to merge schemas contained in all those summary
+          // files. For non-partitioned tables, mergeRespectSummaries essentially disables
+          // shouldMergeSchema because all part-files will be ignored.
+          // You should enable this configuration ony if you are very sure that all partition
+          // directories contain the summary files with consistent schema with its part-files.
+
           val needMerged: Seq[FileStatus] =
-            if (skipMergePartFiles) {
-              Seq()
+            if (mergeRespectSummaries) {
+              // If we want to merge parquet schema and only respect summary files,
+              // we still need to merge these part-files without summaries files.
+              filterDataStatusesWithoutSummaries(metadataStatuses ++
+                commonMetadataStatuses, dataStatuses)
             } else {
               dataStatuses
             }
