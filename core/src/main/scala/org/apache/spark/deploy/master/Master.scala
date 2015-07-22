@@ -533,7 +533,7 @@ private[master] class Master(
 
   /**
    * Schedule executors to be launched on the workers.
-   * Returns an array containing number of cores assigned to each worker (None if scheduling fails)
+   * Returns an array containing number of cores assigned to each worker.
    *
    * There are two modes of launching executors. The first attempts to spread out an application's
    * executors on as many workers as possible, while the second does the opposite (i.e. launch them
@@ -563,41 +563,29 @@ private[master] class Master(
     val assignedCores = new Array[Int](numUsable) // Number of cores to give to each worker
     val assignedMemory = new Array[Int](numUsable) // Amount of memory to give to each worker
     var coresToAssign = math.min(app.coresLeft, usableWorkers.map(_.coresFree).sum)
-    var pos = 0
-    var lastCoresToAssign = coresToAssign
-    if (spreadOutApps) {
-      // Try to spread out executors among workers (sparse scheduling)
-      while (coresToAssign > 0) {
-        if (usableWorkers(pos).coresFree - assignedCores(pos) >= coresPerExecutor &&
-            usableWorkers(pos).memoryFree - assignedMemory(pos) >= memoryPerExecutor) {
+    var freeWorkers = (0 until numUsable).toIndexedSeq
+
+    def canLaunchExecutor(pos: Int): Boolean = {
+      usableWorkers(pos).coresFree - assignedCores(pos) >= coresPerExecutor &&
+      usableWorkers(pos).memoryFree - assignedMemory(pos) >= memoryPerExecutor
+    }
+
+    while (coresToAssign > 0 && freeWorkers.nonEmpty) {
+      freeWorkers = freeWorkers.filter(canLaunchExecutor)
+      freeWorkers.foreach { pos =>
+        var keepScheduling = true
+        while (keepScheduling && canLaunchExecutor(pos) && coresToAssign > 0) {
           coresToAssign -= coresPerExecutor
           assignedCores(pos) += coresPerExecutor
           assignedMemory(pos) += memoryPerExecutor
-        }
-        pos = (pos + 1) % numUsable
-        if (pos == 0) {
-          if (lastCoresToAssign == coresToAssign) {
-            return assignedCores
+
+          // Spreading out an application means spreading out its executors across as
+          // many workers as possible. If we are not spreading out, then we should keep
+          // scheduling executors on this worker until we use all of its resources.
+          // Otherwise, just move on to the next worker.
+          if (spreadOutApps) {
+            keepScheduling = false
           }
-          lastCoresToAssign = coresToAssign
-        }
-      }
-    } else {
-      // Pack executors into as few workers as possible (dense scheduling)
-      while (coresToAssign > 0) {
-        while (usableWorkers(pos).coresFree - assignedCores(pos) >= coresPerExecutor &&
-               usableWorkers(pos).memoryFree - assignedMemory(pos) >= memoryPerExecutor &&
-               coresToAssign > 0) {
-          coresToAssign -= coresPerExecutor
-          assignedCores(pos) += coresPerExecutor
-          assignedMemory(pos) += memoryPerExecutor
-        }
-        pos = (pos + 1) % numUsable
-        if (pos == 0) {
-          if (lastCoresToAssign == coresToAssign) {
-            return assignedCores
-          }
-          lastCoresToAssign = coresToAssign
         }
       }
     }
