@@ -51,7 +51,7 @@ private[spark] class CompactBuffer[T: ClassTag] extends Seq[T] with Serializable
     }
   }
 
-  private def update(position: Int, value: T): Unit = {
+  protected def update(position: Int, value: T): Unit = {
     if (position < 0 || position >= curSize) {
       throw new IndexOutOfBoundsException
     }
@@ -125,7 +125,7 @@ private[spark] class CompactBuffer[T: ClassTag] extends Seq[T] with Serializable
   }
 
   /** Increase our size to newSize and grow the backing array if needed. */
-  private def growToSize(newSize: Int): Unit = {
+  protected def growToSize(newSize: Int): Unit = {
     if (newSize < 0) {
       throw new UnsupportedOperationException("Can't grow buffer past Int.MaxValue elements")
     }

@@ -17,11 +17,12 @@
 
 package org.apache.spark.sql.execution.joins
 
+import java.io.{ByteArrayInputStream, ByteArrayOutputStream, ObjectInputStream, ObjectOutputStream}
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.execution.SparkSqlSerializer
-import org.apache.spark.sql.types.{StructField, StructType, IntegerType}
+import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 import org.apache.spark.util.collection.CompactBuffer
 
 
@@ -80,8 +81,13 @@ class HashedRelationSuite extends SparkFunSuite {
     data2 += unsafeData(2).copy()
     assert(hashed.get(unsafeData(2)) === data2)
 
-    val hashed2 = SparkSqlSerializer.deserialize(SparkSqlSerializer.serialize(hashed))
-      .asInstanceOf[UnsafeHashedRelation]
+    val os = new ByteArrayOutputStream()
+    val out = new ObjectOutputStream(os)
+    hashed.asInstanceOf[UnsafeHashedRelation].writeExternal(out)
+    out.flush()
+    val in = new ObjectInputStream(new ByteArrayInputStream(os.toByteArray))
+    val hashed2 = new UnsafeHashedRelation()
+    hashed2.readExternal(in)
     assert(hashed2.get(unsafeData(0)) === CompactBuffer[InternalRow](unsafeData(0)))
     assert(hashed2.get(unsafeData(1)) === CompactBuffer[InternalRow](unsafeData(1)))
     assert(hashed2.get(toUnsafeKey(InternalRow(10))) === null)
