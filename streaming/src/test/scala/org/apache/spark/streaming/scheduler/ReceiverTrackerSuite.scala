@@ -80,7 +80,7 @@ class ReceiverTrackerSuite extends TestSuiteBase {
   }
 
   test("Receiver tracker - propagates rate limit") {
-    object streamingListener extends StreamingListener {
+    object ReceiverStartedWaiter extends StreamingListener {
       @volatile
       var started = false
 
@@ -89,32 +89,32 @@ class ReceiverTrackerSuite extends TestSuiteBase {
       }
     }
 
-    ssc.addStreamingListener(streamingListener)
+    ssc.addStreamingListener(ReceiverStartedWaiter)
     ssc.scheduler.listenerBus.start(ssc.sc)
 
     val newRateLimit = 100L
-    val ids = new TestReceiverInputDStream(ssc)
+    val inputDStream = new RateLimitInputDStream(ssc)
     val tracker = new ReceiverTracker(ssc)
     tracker.start()
 
     // we wait until the Receiver has registered with the tracker,
     // otherwise our rate update is lost
     eventually(timeout(5 seconds)) {
-      assert(streamingListener.started)
+      assert(ReceiverStartedWaiter.started)
     }
-    tracker.sendRateUpdate(ids.id, newRateLimit)
+    tracker.sendRateUpdate(inputDStream.id, newRateLimit)
     // this is an async message, we need to wait a bit for it to be processed
     eventually(timeout(3 seconds)) {
-      assert(ids.getCurrentRateLimit.get === newRateLimit)
+      assert(inputDStream.getCurrentRateLimit.get === newRateLimit)
     }
   }
 }
 
 /** An input DStream with a hard-coded receiver that gives access to internals for testing. */
-private class TestReceiverInputDStream(@transient ssc_ : StreamingContext)
+private class RateLimitInputDStream(@transient ssc_ : StreamingContext)
   extends ReceiverInputDStream[Int](ssc_) {
 
-  override def getReceiver(): DummyReceiver = TestDummyReceiver
+  override def getReceiver(): DummyReceiver = SingletonDummyReceiver
 
   def getCurrentRateLimit: Option[Long] = {
     invokeExecutorMethod.getCurrentRateLimit
@@ -124,15 +124,17 @@ private class TestReceiverInputDStream(@transient ssc_ : StreamingContext)
     val c = classOf[Receiver[_]]
     val ex = c.getDeclaredMethod("executor")
     ex.setAccessible(true)
-    ex.invoke(TestDummyReceiver).asInstanceOf[ReceiverSupervisor]
+    ex.invoke(SingletonDummyReceiver).asInstanceOf[ReceiverSupervisor]
   }
 }
 
 /**
- * We need the receiver to be an object, otherwise serialization will create another one
- * and we won't be able to read its rate limit.
+ * A Receiver as an object so we can read its rate limit.
+ *
+ * @note It's necessary to be a top-level object, or else serialization would create another
+ *       one on the executor side and we won't be able to read its rate limit.
  */
-private object TestDummyReceiver extends DummyReceiver
+private object SingletonDummyReceiver extends DummyReceiver
 
 /**
  * Dummy receiver implementation

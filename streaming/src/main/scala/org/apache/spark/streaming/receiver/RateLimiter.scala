@@ -48,6 +48,12 @@ private[receiver] abstract class RateLimiter(conf: SparkConf) extends Logging {
   def getCurrentLimit: Long =
     rateLimiter.getRate.toLong
 
+  /**
+   * Set the rate limit to `newRate`. The new rate will not exceed the maximum rate configured by
+   * {{{spark.streaming.receiver.maxRate}}}, even if `newRate` is higher than that.
+   *
+   * @param newRate A new rate in events per second. It has no effect if it's 0 or negative.
+   */
   private[receiver] def updateRate(newRate: Long): Unit =
     if (newRate > 0) {
       if (maxRateLimit > 0) {
