@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.Logging
+import org.apache.spark.{Accumulator, Logging}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.{RDD, RDDOperationScope}
 import org.apache.spark.sql.SQLContext
@@ -90,6 +90,13 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
    * that are not UnsafeRows).
    */
   def canProcessSafeRows: Boolean = true
+
+  /**
+   * Returns instrumentation metrics. The key of the Map is the metric's name and the value is the
+   * current value of the metric.
+   */
+  def accumulators: Map[String, Accumulator[_]] = Map(
+    "numTuples"->sparkContext.accumulator(0L, "number of tuples", internal = true))
 
   /**
    * Returns the result of this query as an RDD[InternalRow] by delegating to doExecute

@@ -17,11 +17,11 @@
 
 package org.apache.spark.sql.execution
 
+import org.apache.spark.Accumulator
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.catalyst.{InternalRow, CatalystTypeConverters}
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions.Attribute
-
 
 /**
  * Physical plan node for scanning data from a local collection.
@@ -32,7 +32,10 @@ private[sql] case class LocalTableScan(
 
   private lazy val rdd = sqlContext.sparkContext.parallelize(rows)
 
-  protected override def doExecute(): RDD[InternalRow] = rdd
+  protected override def doExecute(): RDD[InternalRow] = {
+    accumulators("numTuples").asInstanceOf[Accumulator[Long]] += rdd.count()
+    rdd
+  }
 
 
   override def executeCollect(): Array[Row] = {

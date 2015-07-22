@@ -248,10 +248,17 @@ GrowableAccumulableParam[R <% Growable[T] with TraversableOnce[T] with Serializa
  * @param param helper object defining how to add elements of type `T`
  * @tparam T result type
  */
-class Accumulator[T](@transient initialValue: T, param: AccumulatorParam[T], name: Option[String])
-  extends Accumulable[T, T](initialValue, param, name) {
+class Accumulator[T](
+    @transient initialValue: T,
+    param: AccumulatorParam[T],
+    name: Option[String],
+    internal: Boolean)
+  extends Accumulable[T, T](initialValue, param, name, internal) {
 
-  def this(initialValue: T, param: AccumulatorParam[T]) = this(initialValue, param, None)
+  def this(initialValue: T, param: AccumulatorParam[T]) = this(initialValue, param, None, false)
+
+  def this(initialValue: T, param: AccumulatorParam[T], name: Option[String]) = this(
+    initialValue, param, name, false)
 }
 
 /**
