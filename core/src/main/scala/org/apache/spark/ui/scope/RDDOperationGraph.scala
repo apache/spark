@@ -18,7 +18,7 @@
 package org.apache.spark.ui.scope
 
 import scala.collection.mutable
-import scala.collection.mutable.ListBuffer
+import scala.collection.mutable.{StringBuilder, ListBuffer}
 
 import org.apache.spark.Logging
 import org.apache.spark.scheduler.StageInfo
@@ -167,7 +167,7 @@ private[ui] object RDDOperationGraph extends Logging {
   def makeDotFile(graph: RDDOperationGraph): String = {
     val dotFile = new StringBuilder
     dotFile.append("digraph G {\n")
-    dotFile.append(makeDotSubgraph(graph.rootCluster, indent = "  "))
+    dotFile.append(makeDotSubgraph(graph.rootCluster, indent = new StringBuilder("  ")))
     graph.edges.foreach { edge => dotFile.append(s"""  ${edge.fromId}->${edge.toId};\n""") }
     dotFile.append("}")
     val result = dotFile.toString()
@@ -181,17 +181,26 @@ private[ui] object RDDOperationGraph extends Logging {
   }
 
   /** Return the dot representation of a subgraph in an RDDOperationGraph. */
-  private def makeDotSubgraph(cluster: RDDOperationCluster, indent: String): String = {
+  private def makeDotSubgraph(cluster: RDDOperationCluster, indent: StringBuilder): String = {
     val subgraph = new StringBuilder
-    subgraph.append(indent + s"subgraph cluster${cluster.id} {\n")
-    subgraph.append(indent + s"""  label="${cluster.name}";\n""")
-    cluster.childNodes.foreach { node =>
-      subgraph.append(indent + s"  ${makeDotNode(node)};\n")
+    try {
+      subgraph.append(indent.append(s"subgraph cluster${cluster.id} {\n"))
+      subgraph.append(indent.append(s"""  label="${cluster.name}";\n"""))
+      cluster.childNodes.foreach { node =>
+        subgraph.append(indent.append(s"  ${makeDotNode(node)};\n"))
+      }
+      cluster.childClusters.foreach { cscope =>
+        subgraph.append(makeDotSubgraph(cscope, indent.append("  ")))
+      }
+      subgraph.append(indent.append("}\n"))
+      subgraph.toString()
+    } catch {
+      case oom: OutOfMemoryError =>
+        logError(s"Failed to create graph for job in $cluster.id. Not enough heap space.")
+        ""
+      case _: Exception =>
+        logError(s"Failed to create graph for job in $cluster.id.")
+        ""
     }
-    cluster.childClusters.foreach { cscope =>
-      subgraph.append(makeDotSubgraph(cscope, indent + "  "))
-    }
-    subgraph.append(indent + "}\n")
-    subgraph.toString()
   }
 }
