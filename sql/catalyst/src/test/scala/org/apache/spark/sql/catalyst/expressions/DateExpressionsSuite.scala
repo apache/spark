@@ -24,6 +24,7 @@ import java.util.Calendar
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types.{IntegerType, StringType, TimestampType, DateType}
+import org.apache.spark.unsafe.types.Interval
 
 class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
@@ -278,5 +279,25 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       DateTimeUtils.fromJavaDate(Date.valueOf("2015-01-01")))
     checkResult(
       DateSub(Literal("2015-01-01"), Literal.create(null, IntegerType)), null)
+  }
+
+  test("time_add") {
+    checkResult(
+      TimeAdd(Literal(Date.valueOf("2016-02-28")), Literal(new Interval(1, 0))),
+      DateTimeUtils.fromJavaDate(Date.valueOf("2016-02-29")))
+    checkResult(
+      TimeAdd(Literal(Date.valueOf("2016-03-01")), Literal(new Interval(1, 2000000.toLong))),
+      DateTimeUtils.fromJavaTimestamp(Timestamp.valueOf("2016-03-02 00:00:02")))
+  }
+
+  test("time_sub") {
+    checkResult(
+      TimeSub(Literal(Timestamp.valueOf("2016-02-28 10:00:00")), Literal(new Interval(1, 0))),
+      DateTimeUtils.fromJavaTimestamp(Timestamp.valueOf("2016-02-27 10:00:00")))
+    checkResult(
+      TimeSub(
+        Literal(Timestamp.valueOf("2016-03-01 00:00:02")),
+        Literal(new Interval(1, 2000000.toLong))),
+      DateTimeUtils.fromJavaTimestamp(Timestamp.valueOf("2016-02-28 23:59:59")))
   }
 }

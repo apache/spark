@@ -573,4 +573,61 @@ object DateTimeUtils {
       dayInYear - 334
     }
   }
+
+  /**
+   * Returns the date value for the first day of the given month.
+   * The month is expressed in months since 1.1.1970, starting from 0.
+   */
+  def getDaysFromMonths(months: Int): Int = {
+    val yearSinceEpoch = if (months < 0) months / 12 - 1 else months / 12
+    val monthInYearFromZero = months - yearSinceEpoch * 12
+    val daysFromYears = getDaysFromYears(yearSinceEpoch)
+    val febDays = if (isLeapYear(1970 + yearSinceEpoch)) 29 else 28
+    val daysForMonths = Seq(31, febDays, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31)
+    daysForMonths.slice(0, monthInYearFromZero + 1).sum + daysFromYears
+  }
+
+  /**
+   * Returns the date value for January 1 of the given year.
+   * The year is expressed in years since 1.1.1970, starting from 0.
+   */
+  def getDaysFromYears(years: Int): Int = {
+    val remainYear = (years % 400 + 400) % 400
+    val cycles = (years - remainYear) / 400
+    val numLeaps = if (remainYear < 130) {
+      remainYear / 4
+    } else if (remainYear < 230) {
+      remainYear / 4 - 1
+    } else if (remainYear < 330) {
+      remainYear / 4 - 2
+    } else {
+      remainYear / 4 - 3
+    }
+    cycles * (365 * 400 + 397) + remainYear * 365 + numLeaps
+  }
+
+  /**
+   * Add date and year-month interval.
+   * Returns a date value, expressed in days since 1.1.1970.
+   */
+  def dateAddYearMonthInterval(days: Int, months: Int): Int = {
+    getDaysFromMonths(getYear(days) * 12 + getMonth(days) + months) + getDayOfMonth(days)
+  }
+
+  /**
+   * Add date and full interval.
+   * Returns a timestamp value, expressed in microseconds since 1.1.1970 00:00:00.
+   */
+  def dateAddFullInterval(days: Int, months: Int, microseconds: Long): Long = {
+    daysToMillis(dateAddYearMonthInterval(days, months)) * 1000 + microseconds
+  }
+
+  /**
+   * Add timestamp and full interval.
+   * Returns a timestamp value, expressed in microseconds since 1.1.1970 00:00:00.
+   */
+  def timestampAddFullInterval(micros: Long, months: Int, microseconds: Long): Long = {
+    dateAddYearMonthInterval(
+      millisToDays(micros / 1000), months) + micros % (MILLIS_PER_DAY * 1000) + microseconds
+  }
 }

@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.unsafe.types.{Interval, UTF8String}
 
 /**
  * Returns the current date at the start of query evaluation.
@@ -303,5 +303,61 @@ case class DateFormatClass(left: Expression, right: Expression) extends BinaryEx
       s"""UTF8String.fromString((new $sdf($format.toString()))
           .format(new java.sql.Date($timestamp / 1000)))"""
     })
+  }
+}
+
+/**
+ * Time Adds Interval.
+ */
+case class TimeAdd(start: Expression, interval: Expression)
+  extends BinaryExpression with ExpectsInputTypes with CodegenFallback {
+
+  override def left: Expression = start
+  override def right: Expression = interval
+
+  override def toString: String = s"$left + $right"
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(TypeCollection(DateType, TimestampType), IntervalType)
+
+  override def dataType: DataType = TimestampType
+
+  override def nullSafeEval(start: Any, inter: Any): Any = {
+    val itvl = inter.asInstanceOf[Interval]
+    dataType match {
+      case DateType =>
+        DateTimeUtils.dateAddFullInterval(
+          start.asInstanceOf[Int], itvl.months, itvl.microseconds)
+      case TimestampType =>
+        DateTimeUtils.timestampAddFullInterval(
+          start.asInstanceOf[Long], itvl.months, itvl.microseconds)
+    }
+  }
+}
+
+/**
+ * Time Subtracts Interval.
+ */
+case class TimeSub(start: Expression, interval: Expression)
+  extends BinaryExpression with ExpectsInputTypes with CodegenFallback {
+
+  override def left: Expression = start
+  override def right: Expression = interval
+
+  override def toString: String = s"$left - $right"
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(TypeCollection(DateType, TimestampType), IntervalType)
+
+  override def dataType: DataType = TimestampType
+
+  override def nullSafeEval(start: Any, inter: Any): Any = {
+    val itvl = inter.asInstanceOf[Interval]
+    dataType match {
+      case DateType =>
+        DateTimeUtils.dateAddFullInterval(
+          start.asInstanceOf[Int], 0 - itvl.months, 0 - itvl.microseconds)
+      case TimestampType =>
+        DateTimeUtils.timestampAddFullInterval(
+          start.asInstanceOf[Long], 0 - itvl.months, 0 - itvl.microseconds)
+    }
   }
 }
