@@ -34,6 +34,7 @@ from pyspark.sql.column import Column, _to_java_column, _to_seq
 
 __all__ = [
     'array',
+    'array_contains',
     'approxCountDistinct',
     'bin',
     'coalesce',
@@ -1014,6 +1015,21 @@ def soundex(col):
     """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.size(_to_java_column(col)))
+
+
+@since(1.5)
+def array_contains(col, value):
+    """
+    Collection function: returns True if the array contains the given value
+    :param col: name of column containing array
+    :param value: value to check for in array
+
+    >>> df = sqlContext.createDataFrame([([1, 2, 3],), ([],)], ['data'])
+    >>> df.select(array_contains(df.data, 1)).collect()
+    [Row(array_contains(data, 1)=True), Row(array_contains(data, 1)=False)]
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.array_contains(_to_java_column(col), value))
 
 
 class UserDefinedFunction(object):
