@@ -26,13 +26,14 @@ import org.scalatest.BeforeAndAfterAll
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapred.InvalidInputException
 
+import org.apache.spark.Logging
 import org.apache.spark.sql._
+import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.hive.client.{HiveTable, ManagedTable}
 import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.hive.test.TestHive._
 import org.apache.spark.sql.hive.test.TestHive.implicits._
 import org.apache.spark.sql.parquet.ParquetRelation2
-import org.apache.spark.sql.sources.LogicalRelation
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
@@ -40,7 +41,8 @@ import org.apache.spark.util.Utils
 /**
  * Tests for persisting tables created though the data sources API into the metastore.
  */
-class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with BeforeAndAfterAll {
+class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with BeforeAndAfterAll
+  with Logging {
   override val sqlContext = TestHive
 
   var jsonFilePath: String = _
@@ -415,7 +417,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with BeforeA
            |)
          """.stripMargin)
 
-      sql("DROP TABLE jsonTable").collect().foreach(println)
+      sql("DROP TABLE jsonTable").collect().foreach(i => logInfo(i.toString))
     }
   }
 

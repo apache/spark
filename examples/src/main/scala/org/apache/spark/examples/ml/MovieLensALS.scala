@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples.ml
 
 import scopt.OptionParser
@@ -178,3 +179,4 @@ object MovieLensALS {
     sc.stop()
   }
 }
+// scalastyle:on println

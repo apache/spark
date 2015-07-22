@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -196,15 +197,15 @@ final class SpecificMutableRow(val values: Array[MutableValue]) extends MutableR
   def this(dataTypes: Seq[DataType]) =
     this(
       dataTypes.map {
-        case IntegerType => new MutableInt
-        case ByteType => new MutableByte
-        case FloatType => new MutableFloat
-        case ShortType => new MutableShort
-        case DoubleType => new MutableDouble
         case BooleanType => new MutableBoolean
-        case LongType => new MutableLong
-        case DateType => new MutableInt // We use INT for DATE internally
-        case TimestampType => new MutableLong  // We use Long for Timestamp internally
+        case ByteType => new MutableByte
+        case ShortType => new MutableShort
+        // We use INT for DATE internally
+        case IntegerType | DateType => new MutableInt
+        // We use Long for Timestamp internally
+        case LongType | TimestampType => new MutableLong
+        case FloatType => new MutableFloat
+        case DoubleType => new MutableDouble
         case _ => new MutableAny
       }.toArray)
 
@@ -218,7 +219,7 @@ final class SpecificMutableRow(val values: Array[MutableValue]) extends MutableR
     values(i).isNull = true
   }
 
-  override def apply(i: Int): Any = values(i).boxed
+  override def get(i: Int): Any = values(i).boxed
 
   override def isNullAt(i: Int): Boolean = values(i).isNull
 
@@ -230,7 +231,7 @@ final class SpecificMutableRow(val values: Array[MutableValue]) extends MutableR
       i += 1
     }
 
-    new GenericRow(newValues)
+    new GenericInternalRow(newValues)
   }
 
   override def update(ordinal: Int, value: Any) {
