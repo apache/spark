@@ -23,15 +23,18 @@ import com.amazonaws.auth.{AWSCredentials, DefaultAWSCredentialsProviderChain}
 import com.amazonaws.services.kinesis.AmazonKinesisClient
 import com.amazonaws.services.kinesis.model._
 
+import org.apache.spark._
 import org.apache.spark.rdd.{BlockRDD, BlockRDDPartition}
 import org.apache.spark.storage.BlockId
 import org.apache.spark.util.NextIterator
-import org.apache.spark.{Partition, SparkContext, SparkEnv, TaskContext}
 
+
+/** Class representing a range of Kinesis sequence numbers */
 private[kinesis]
 case class SequenceNumberRange(
     streamName: String, shardId: String, fromSeqNumber: String, toSeqNumber: String)
 
+/** Class representing an array of Kinesis sequence number ranges */
 private[kinesis]
 case class SequenceNumberRanges(ranges: Array[SequenceNumberRange]) {
   def isEmpty(): Boolean = ranges.isEmpty
@@ -41,20 +44,13 @@ case class SequenceNumberRanges(ranges: Array[SequenceNumberRange]) {
 
 private[kinesis]
 object SequenceNumberRanges {
-
   def apply(range: SequenceNumberRange): SequenceNumberRanges = {
     new SequenceNumberRanges(Array(range))
   }
-
-  def apply(ranges: Seq[SequenceNumberRange]): SequenceNumberRanges = {
-    new SequenceNumberRanges(ranges.toArray)
-  }
-
-  def empty: SequenceNumberRanges = {
-    new SequenceNumberRanges(Array.empty)
-  }
 }
 
+
+/** Partition storing the information of the ranges of Kinesis sequence numbers to read */
 private[kinesis]
 class KinesisBackedBlockRDDPartition(
     idx: Int,
@@ -63,6 +59,10 @@ class KinesisBackedBlockRDDPartition(
     val seqNumberRanges: SequenceNumberRanges
   ) extends BlockRDDPartition(blockId, idx)
 
+/**
+ * A BlockRDD where the block data is backed by Kinesis, which can accessed using the
+ * sequence numbers of the corresponding blocks.
+ */
 private[kinesis]
 class KinesisBackedBlockRDD(
     sc: SparkContext,
@@ -70,7 +70,8 @@ class KinesisBackedBlockRDD(
     endpointUrl: String,
     @transient blockIds: Array[BlockId],
     @transient arrayOfseqNumberRanges: Array[SequenceNumberRanges],
-    @transient isBlockIdValid: Array[Boolean] = Array.empty
+    @transient isBlockIdValid: Array[Boolean] = Array.empty,
+    awsCredentialsOption: Option[SerializableAWSCredentials] = None
 ) extends BlockRDD[Array[Byte]](sc, blockIds) {
 
   require(blockIds.length == arrayOfseqNumberRanges.length,
@@ -96,11 +97,11 @@ class KinesisBackedBlockRDD(
     }
 
     def getBlockFromKinesis(): Iterator[Array[Byte]] = {
-      val credenentials = new DefaultAWSCredentialsProviderChain().getCredentials()
+      val credenentials = awsCredentialsOption.getOrElse {
+        new DefaultAWSCredentialsProviderChain().getCredentials()
+      }
       partition.seqNumberRanges.ranges.iterator.flatMap { range =>
-        new KinesisSequenceRangeIterator(
-          credenentials, endpointUrl, regionId,
-          range.streamName, range.shardId, range.fromSeqNumber, range.toSeqNumber)
+        new KinesisSequenceRangeIterator(credenentials, endpointUrl, regionId, range)
       }
     }
     if (partition.isBlockIdValid) {
@@ -112,15 +113,13 @@ class KinesisBackedBlockRDD(
 }
 
 
+/** An iterator that return the Kinesis data based on the given range of Sequence numbers */
 private[kinesis]
 class KinesisSequenceRangeIterator(
     credentials: AWSCredentials,
     endpointUrl: String,
     regionId: String,
-    streamName: String,
-    shardId: String,
-    fromSeqNumber: String,
-    toSeqNumber: String
+    range: SequenceNumberRange
   ) extends NextIterator[Array[Byte]] {
 
   private val backoffTimeMillis = 1000
@@ -142,7 +141,7 @@ class KinesisSequenceRangeIterator(
 
         // If the internal iterator has not been initialized,
         // then fetch records from starting sequence number
-        getRecords(ShardIteratorType.AT_SEQUENCE_NUMBER, fromSeqNumber)
+        getRecords(ShardIteratorType.AT_SEQUENCE_NUMBER, range.fromSeqNumber)
       } else if (!internalIterator.hasNext) {
 
         // If the internal iterator does not have any more records,
@@ -155,9 +154,7 @@ class KinesisSequenceRangeIterator(
         // If the internal iterator still does not have any data, then throw exception
         // and terminate this iterator
         finished = true
-        throw new Exception("Could not read until the specified end sequence number: " +
-          s"shardId = $shardId, fromSequenceNumber = $fromSeqNumber, " +
-          s"toSequenceNumber = $toSeqNumber")
+        throw new SparkException(s"Could not read until the specified end sequence number: $range")
       } else {
 
         // Get the record, and remember its sequence number
@@ -167,7 +164,7 @@ class KinesisSequenceRangeIterator(
 
         // If the this record's sequence number matches the stopping sequence number, then make sure
         // the iterator is marked finished next time getNext() is called
-        if (nextRecord.getSequenceNumber == toSeqNumber) {
+        if (nextRecord.getSequenceNumber == range.toSeqNumber) {
           toSeqNumberReceived = true
         }
       }
@@ -179,11 +176,12 @@ class KinesisSequenceRangeIterator(
   override protected def close(): Unit = { }
 
   private def getRecords(iteratorType: ShardIteratorType, seqNum: String): Unit = {
-    val shardIterator = getKinesisIterator(streamName, shardId, iteratorType, seqNum)
+    val shardIterator = getKinesisIterator(range.streamName, range.shardId, iteratorType, seqNum)
     var records: Seq[Record] = null
     do {
       try {
-        val getResult = getRecordsAndNextKinesisIterator(streamName, shardId, shardIterator)
+        val getResult = getRecordsAndNextKinesisIterator(
+          range.streamName, range.shardId, shardIterator)
         records = getResult._1
       } catch {
         case ptee: ProvisionedThroughputExceededException =>
