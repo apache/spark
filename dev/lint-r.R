@@ -28,7 +28,7 @@ library(lintr)
 library(methods)
 library(testthat)
 if (! library(SparkR, lib.loc = file.path(SPARK_ROOT_DIR, "R", "lib"), logical.return = TRUE)) {
-  stop("You should install SparkR in a local directory with `R/instlal-dev.sh`.")
+  stop("You should install SparkR in a local directory with `R/install-dev.sh`.")
 }
 
 path.to.package <- file.path(SPARK_ROOT_DIR, "R", "pkg")
