@@ -437,12 +437,18 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll with SQLTestUtils {
   }
 
   test("literal in agg grouping expressions") {
-    checkAnswer(
-      sql("SELECT a, count(1) FROM testData2 GROUP BY a, 1"),
-      Seq(Row(1, 2), Row(2, 2), Row(3, 2)))
-    checkAnswer(
-      sql("SELECT a, count(2) FROM testData2 GROUP BY a, 2"),
-      Seq(Row(1, 2), Row(2, 2), Row(3, 2)))
+    def literalInAggTest(): Unit = {
+      checkAnswer(
+        sql("SELECT a, count(1) FROM testData2 GROUP BY a, 1"),
+        Seq(Row(1, 2), Row(2, 2), Row(3, 2)))
+      checkAnswer(
+        sql("SELECT a, count(2) FROM testData2 GROUP BY a, 2"),
+        Seq(Row(1, 2), Row(2, 2), Row(3, 2)))
+    }
+    literalInAggTest()
+    withSQLConf(SQLConf.USE_SQL_AGGREGATE2.key -> "false") {
+      literalInAggTest()
+    }
   }
 
   test("aggregates with nulls") {
