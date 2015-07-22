@@ -145,8 +145,8 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers {
       DoubleType,
       StringType,
       BinaryType
-      //DecimalType.Unlimited,
-      //ArrayType(IntegerType)
+      // DecimalType.Unlimited,
+      // ArrayType(IntegerType)
     )
     val converter = new UnsafeRowConverter(fieldTypes)
 
@@ -180,8 +180,8 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers {
     assert(java.lang.Double.isNaN(createdFromNull.getDouble(7)))
     assert(createdFromNull.getUTF8String(8) === null)
     assert(createdFromNull.getBinary(9) === null)
-    //assert(createdFromNull.get(10) === null)
-    //assert(createdFromNull.get(11) === null)
+    // assert(createdFromNull.get(10) === null)
+    // assert(createdFromNull.get(11) === null)
 
     // If we have an UnsafeRow with columns that are initially non-null and we null out those
     // columns, then the serialized row representation should be identical to what we would get by
@@ -198,8 +198,8 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers {
       r.setDouble(7, 700)
       r.update(8, UTF8String.fromString("hello"))
       r.update(9, "world".getBytes)
-      //r.update(10, Decimal(10))
-      //r.update(11, Array(11))
+      // r.update(10, Decimal(10))
+      // r.update(11, Array(11))
       r
     }
     val setToNullAfterCreationBuffer: Array[Long] = new Array[Long](sizeRequired / 8 + 2)
@@ -221,8 +221,8 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers {
     assert(setToNullAfterCreation.getDouble(7) === rowWithNoNullColumns.getDouble(7))
     assert(setToNullAfterCreation.getString(8) === rowWithNoNullColumns.getString(8))
     assert(setToNullAfterCreation.getBinary(9) === rowWithNoNullColumns.get(9))
-    //assert(setToNullAfterCreation.get(10) === rowWithNoNullColumns.get(10))
-    //assert(setToNullAfterCreation.get(11) === rowWithNoNullColumns.get(11))
+    // assert(setToNullAfterCreation.get(10) === rowWithNoNullColumns.get(10))
+    // assert(setToNullAfterCreation.get(11) === rowWithNoNullColumns.get(11))
 
     for (i <- fieldTypes.indices) {
       setToNullAfterCreation.setNullAt(i)
@@ -239,10 +239,10 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers {
     setToNullAfterCreation.setLong(5, 500)
     setToNullAfterCreation.setFloat(6, 600)
     setToNullAfterCreation.setDouble(7, 700)
-    //setToNullAfterCreation.update(8, UTF8String.fromString("hello"))
-    //setToNullAfterCreation.update(9, "world".getBytes)
-    //setToNullAfterCreation.update(10, Decimal(10))
-    //setToNullAfterCreation.update(11, Array(11))
+    // setToNullAfterCreation.update(8, UTF8String.fromString("hello"))
+    // setToNullAfterCreation.update(9, "world".getBytes)
+    // setToNullAfterCreation.update(10, Decimal(10))
+    // setToNullAfterCreation.update(11, Array(11))
 
     assert(setToNullAfterCreation.isNullAt(0) === rowWithNoNullColumns.isNullAt(0))
     assert(setToNullAfterCreation.getBoolean(1) === rowWithNoNullColumns.getBoolean(1))
@@ -252,10 +252,10 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers {
     assert(setToNullAfterCreation.getLong(5) === rowWithNoNullColumns.getLong(5))
     assert(setToNullAfterCreation.getFloat(6) === rowWithNoNullColumns.getFloat(6))
     assert(setToNullAfterCreation.getDouble(7) === rowWithNoNullColumns.getDouble(7))
-    //assert(setToNullAfterCreation.getString(8) === rowWithNoNullColumns.getString(8))
-    //assert(setToNullAfterCreation.get(9) === rowWithNoNullColumns.get(9))
-    //assert(setToNullAfterCreation.get(10) === rowWithNoNullColumns.get(10))
-    //assert(setToNullAfterCreation.get(11) === rowWithNoNullColumns.get(11))
+    // assert(setToNullAfterCreation.getString(8) === rowWithNoNullColumns.getString(8))
+    // assert(setToNullAfterCreation.get(9) === rowWithNoNullColumns.get(9))
+    // assert(setToNullAfterCreation.get(10) === rowWithNoNullColumns.get(10))
+    // assert(setToNullAfterCreation.get(11) === rowWithNoNullColumns.get(11))
   }
 
   test("NaN canonicalization") {
