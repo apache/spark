@@ -1783,7 +1783,7 @@ public class JavaAPISuite implements Serializable {
     // Stop the context created in setUp() and start a local-cluster one, to force usage of the
     // assembly.
     sc.stop();
-    JavaSparkContext localCluster = new JavaSparkContext("local-cluster[1,1,512]", "JavaAPISuite");
+    JavaSparkContext localCluster = new JavaSparkContext("local-cluster[1,1,1024]", "JavaAPISuite");
     try {
       JavaRDD<Integer> rdd1 = localCluster.parallelize(Arrays.asList(1, 2, null), 3);
       JavaRDD<Optional<Integer>> rdd2 = rdd1.map(

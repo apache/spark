@@ -292,7 +292,7 @@ class ContextCleanerSuite extends ContextCleanerSuiteBase {
     sc.stop()
 
     val conf2 = new SparkConf()
-      .setMaster("local-cluster[2, 1, 512]")
+      .setMaster("local-cluster[2, 1, 1024]")
       .setAppName("ContextCleanerSuite")
       .set("spark.cleaner.referenceTracking.blocking", "true")
       .set("spark.cleaner.referenceTracking.blocking.shuffle", "true")
@@ -370,7 +370,7 @@ class SortShuffleContextCleanerSuite extends ContextCleanerSuiteBase(classOf[Sor
     sc.stop()
 
     val conf2 = new SparkConf()
-      .setMaster("local-cluster[2, 1, 512]")
+      .setMaster("local-cluster[2, 1, 1024]")
       .setAppName("ContextCleanerSuite")
       .set("spark.cleaner.referenceTracking.blocking", "true")
       .set("spark.cleaner.referenceTracking.blocking.shuffle", "true")
