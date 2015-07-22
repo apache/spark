@@ -26,6 +26,8 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{Interval, UTF8String}
 
+import scala.collection.mutable
+
 
 object Cast {
 
@@ -794,20 +796,11 @@ case class Cast(child: Expression, dataType: DataType)
       (c, evPrim, evNull) => s"$evPrim = (double) $c;"
   }
 
-  private[this] def unboxPrimitive(ctx: CodeGenContext, dt: DataType, obj: String): String = {
-    dt match {
-      case _: IntegralType | FloatType | DoubleType =>
-        s"((${ctx.boxedType(dt)}) $obj).${ctx.javaType(dt)}Value()";
-      case _ =>
-        s"(${ctx.javaType(dt)}) $obj"
-    }
-  }
-
   private[this] def castArrayCode(
       from: ArrayType, to: ArrayType, ctx: CodeGenContext): CastFunction = {
     val elementCast = nullSafeCastFunction(from.elementType, to.elementType, ctx)
 
-    val arraySeqClass = "scala.collection.mutable.ArraySeq"
+    val arraySeqClass = classOf[mutable.ArraySeq[Any]].getName
     val fromElementNull = ctx.freshName("feNull")
     val fromElementPrim = ctx.freshName("fePrim")
     val toElementNull = ctx.freshName("teNull")
@@ -826,7 +819,7 @@ case class Cast(child: Expression, dataType: DataType)
           } else {
             boolean $fromElementNull = false;
             ${ctx.javaType(from.elementType)} $fromElementPrim =
-              ${unboxPrimitive(ctx, from.elementType, s"$c.apply($j)")};
+              (${ctx.boxedType(from.elementType)}) $c.apply($j);
             ${castCode(ctx, fromElementPrim,
               fromElementNull, toElementPrim, toElementNull, to.elementType, elementCast)}
             if ($toElementNull) {
@@ -844,7 +837,7 @@ case class Cast(child: Expression, dataType: DataType)
     val keyCast = nullSafeCastFunction(from.keyType, to.keyType, ctx)
     val valueCast = nullSafeCastFunction(from.valueType, to.valueType, ctx)
 
-    val hashMapClass = "scala.collection.mutable.HashMap"
+    val hashMapClass = classOf[mutable.HashMap[Any, Any]].getName
     val fromKeyPrim = ctx.freshName("fkp")
     val fromKeyNull = ctx.freshName("fkn")
     val fromValuePrim = ctx.freshName("fvp")
@@ -863,7 +856,7 @@ case class Cast(child: Expression, dataType: DataType)
           scala.Tuple2 kv = (scala.Tuple2) iter.next();
           boolean $fromKeyNull = false;
           ${ctx.javaType(from.keyType)} $fromKeyPrim =
-            ${unboxPrimitive(ctx, from.keyType, "kv._1()")};
+            (${ctx.boxedType(from.keyType)}) kv._1();
           ${castCode(ctx, fromKeyPrim,
             fromKeyNull, toKeyPrim, toKeyNull, to.keyType, keyCast)}
 
@@ -872,7 +865,7 @@ case class Cast(child: Expression, dataType: DataType)
             $result.put($toKeyPrim, null);
           } else {
             ${ctx.javaType(from.valueType)} $fromValuePrim =
-              ${unboxPrimitive(ctx, from.valueType, "kv._2()")};
+              (${ctx.boxedType(from.valueType)}) kv._2();
             ${castCode(ctx, fromValuePrim,
               fromValueNull, toValuePrim, toValueNull, to.valueType, valueCast)}
             if ($toValueNull) {
@@ -892,7 +885,7 @@ case class Cast(child: Expression, dataType: DataType)
     val fieldsCasts = from.fields.zip(to.fields).map {
       case (fromField, toField) => nullSafeCastFunction(fromField.dataType, toField.dataType, ctx)
     }
-    val rowClass = "org.apache.spark.sql.catalyst.expressions.GenericMutableRow"
+    val rowClass = classOf[GenericMutableRow].getName
     val result = ctx.freshName("result")
     val tmpRow = ctx.freshName("tmpRow")
 
@@ -905,16 +898,16 @@ case class Cast(child: Expression, dataType: DataType)
       s"""
         boolean $fromFieldNull = $tmpRow.isNullAt($i);
         if ($fromFieldNull) {
-          $result.update($i, null);
+          $result.setNullAt($i);
         } else {
           $fromType $fromFieldPrim =
-            ${unboxPrimitive(ctx, from.fields(i).dataType, s"$tmpRow.apply($i)")};
+            ${ctx.getColumn(tmpRow, from.fields(i).dataType, i)};
           ${castCode(ctx, fromFieldPrim,
             fromFieldNull, toFieldPrim, toFieldNull, to.fields(i).dataType, cast)}
           if ($toFieldNull) {
-            $result.update($i, null);
+            $result.setNullAt($i);
           } else {
-            $result.update($i, $toFieldPrim);
+            ${ctx.setColumn(result, to.fields(i).dataType, i, toFieldPrim)};
           }
         }
        """
