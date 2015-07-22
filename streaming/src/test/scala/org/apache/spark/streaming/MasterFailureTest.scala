@@ -150,25 +150,29 @@ object MasterFailureTest extends Logging {
       setupStreams(batchDuration, operation, checkpointDir, testDir)
     })
 
-    // Check if setupStream was called to create StreamingContext
-    // (and not created from checkpoint file)
-    assert(setupCalled, "Setup was not called in the first call to StreamingContext.getOrCreate")
+    try {
+      // Check if setupStream was called to create StreamingContext
+      // (and not created from checkpoint file)
+      assert(setupCalled, "Setup was not called in the first call to StreamingContext.getOrCreate")
 
-    // Start generating files in the a different thread
-    val fileGeneratingThread = new FileGeneratingThread(input, testDir, batchDuration.milliseconds)
-    fileGeneratingThread.start()
+      // Start generating files in the a different thread
+      val fileGeneratingThread = new FileGeneratingThread(input, testDir, batchDuration.milliseconds)
+      fileGeneratingThread.start()
 
-    // Run the streams and repeatedly kill it until the last expected output
-    // has been generated, or until it has run for twice the expected time
-    val lastExpectedOutput = expectedOutput.last
-    val maxTimeToRun = expectedOutput.size * batchDuration.milliseconds * 2
-    val mergedOutput = runStreams(ssc, lastExpectedOutput, maxTimeToRun)
+      // Run the streams and repeatedly kill it until the last expected output
+      // has been generated, or until it has run for twice the expected time
+      val lastExpectedOutput = expectedOutput.last
+      val maxTimeToRun = expectedOutput.size * batchDuration.milliseconds * 2
+      val mergedOutput = runStreams(ssc, lastExpectedOutput, maxTimeToRun)
 
-    fileGeneratingThread.join()
-    fs.delete(checkpointDir, true)
-    fs.delete(testDir, true)
-    logInfo("Finished test after " + killCount + " failures")
-    mergedOutput
+      fileGeneratingThread.join()
+      fs.delete(checkpointDir, true)
+      fs.delete(testDir, true)
+      logInfo("Finished test after " + killCount + " failures")
+      mergedOutput
+    } finally {
+      ssc.stop()
+    }
   }
 
   /**

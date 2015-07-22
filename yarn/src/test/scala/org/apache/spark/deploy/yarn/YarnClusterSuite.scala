@@ -33,6 +33,7 @@ import org.apache.hadoop.yarn.server.MiniYARNCluster
 import org.scalatest.{BeforeAndAfterAll, Matchers}
 
 import org.apache.spark._
+import org.apache.spark.launcher.TestClasspathBuilder
 import org.apache.spark.scheduler.cluster.ExecutorInfo
 import org.apache.spark.scheduler.{SparkListener, SparkListenerApplicationStart,
   SparkListenerExecutorAdded}
@@ -53,6 +54,9 @@ class YarnClusterSuite extends SparkFunSuite with BeforeAndAfterAll with Matcher
     |log4j.appender.console.target=System.err
     |log4j.appender.console.layout=org.apache.log4j.PatternLayout
     |log4j.appender.console.layout.ConversionPattern=%d{yy/MM/dd HH:mm:ss} %p %c{1}: %m%n
+    |log4j.logger.org.apache.hadoop=WARN
+    |log4j.logger.org.eclipse.jetty=WARN
+    |log4j.logger.org.spark-project.jetty=WARN
     """.stripMargin
 
   private val TEST_PYFILE = """
@@ -99,7 +103,13 @@ class YarnClusterSuite extends SparkFunSuite with BeforeAndAfterAll with Matcher
     val logConfFile = new File(logConfDir, "log4j.properties")
     Files.write(LOG4J_CONF, logConfFile, UTF_8)
 
+    // Disable the disk utilization check to avoid the test hanging when people's disks are
+    // getting full.
+    val yarnConf = new YarnConfiguration()
+    yarnConf.set(YarnConfiguration.NM_MAX_PER_DISK_UTILIZATION_PERCENTAGE, "100.0")
+
     yarnCluster = new MiniYARNCluster(getClass().getName(), 1, 1, 1)
+    yarnCluster.init(yarnConf)
     yarnCluster.init(new YarnConfiguration())
     yarnCluster.start()
 
@@ -184,6 +194,17 @@ class YarnClusterSuite extends SparkFunSuite with BeforeAndAfterAll with Matcher
     val primaryPyFile = new File(tempDir, "test.py")
     Files.write(TEST_PYFILE, primaryPyFile, UTF_8)
 
+    // When running tests, let's not assume the user has built the assembly module, which also
+    // creates the pyspark archive. Instead, let's use PYSPARK_ARCHIVES_PATH to point at the
+    // needed locations.
+    val sparkHome = sys.props("spark.test.home");
+    val pythonPath = Seq(
+        s"$sparkHome/python/lib/py4j-0.8.2.1-src.zip",
+        s"$sparkHome/python")
+    val extraEnv = Map(
+      "PYSPARK_ARCHIVES_PATH" -> pythonPath.map("local:" + _).mkString(File.pathSeparator),
+      "PYTHONPATH" -> pythonPath.mkString(File.pathSeparator))
+
     val moduleDir =
       if (clientMode) {
         // In client-mode, .py files added with --py-files are not visible in the driver.
@@ -203,7 +224,8 @@ class YarnClusterSuite extends SparkFunSuite with BeforeAndAfterAll with Matcher
 
     runSpark(clientMode, primaryPyFile.getAbsolutePath(),
       sparkArgs = Seq("--py-files", pyFiles),
-      appArgs = Seq(result.getAbsolutePath()))
+      appArgs = Seq(result.getAbsolutePath()),
+      extraEnv = extraEnv)
     checkResult(result)
   }
 
@@ -231,19 +253,22 @@ class YarnClusterSuite extends SparkFunSuite with BeforeAndAfterAll with Matcher
       sparkArgs: Seq[String] = Nil,
       extraClassPath: Seq[String] = Nil,
       extraJars: Seq[String] = Nil,
-      extraConf: Map[String, String] = Map()): Unit = {
+      extraConf: Map[String, String] = Map(),
+      extraEnv: Map[String, String] = Map()): Unit = {
     val master = if (clientMode) "yarn-client" else "yarn-cluster"
     val props = new Properties()
 
     props.setProperty("spark.yarn.jar", "local:" + fakeSparkJar.getAbsolutePath())
 
-    val childClasspath = logConfDir.getAbsolutePath() +
-      File.pathSeparator +
-      sys.props("java.class.path") +
-      File.pathSeparator +
-      extraClassPath.mkString(File.pathSeparator)
-    props.setProperty("spark.driver.extraClassPath", childClasspath)
-    props.setProperty("spark.executor.extraClassPath", childClasspath)
+    val testClasspath = new TestClasspathBuilder()
+      .buildClassPath(
+        logConfDir.getAbsolutePath() +
+        File.pathSeparator +
+        extraClassPath.mkString(File.pathSeparator))
+      .mkString(File.pathSeparator)
+
+    props.setProperty("spark.driver.extraClassPath", testClasspath)
+    props.setProperty("spark.executor.extraClassPath", testClasspath)
 
     // SPARK-4267: make sure java options are propagated correctly.
     props.setProperty("spark.driver.extraJavaOptions", "-Dfoo=\"one two three\"")
@@ -285,7 +310,7 @@ class YarnClusterSuite extends SparkFunSuite with BeforeAndAfterAll with Matcher
       appArgs
 
     Utils.executeAndGetOutput(argv,
-      extraEnvironment = Map("YARN_CONF_DIR" -> hadoopConfDir.getAbsolutePath()))
+      extraEnvironment = Map("YARN_CONF_DIR" -> hadoopConfDir.getAbsolutePath()) ++ extraEnv)
   }
 
   /**
