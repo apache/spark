@@ -133,6 +133,8 @@ case class ArrayContains(left: Expression, right: Expression) extends BinaryExpr
     }
   }
 
+  override def nullable = false
+
   override def eval(input: InternalRow): Boolean = {
     val arr = left.eval(input)
     if (arr == null) {
