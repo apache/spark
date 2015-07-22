@@ -94,7 +94,7 @@ class CoGroupedRDD[K](@transient var rdds: Seq[RDD[_ <: Product2[K, _]]], part: 
   }
 
   override def getDependencies: Seq[Dependency[_]] = {
-    rdds.map { rdd: RDD[_ <: Product2[K, _]] =>
+    rdds.map { rdd: RDD[_ <: Product2[K, _]]@unchecked =>
       if (rdd.partitioner == Some(part)) {
         logDebug("Adding one-to-one dependency with " + rdd)
         new OneToOneDependency(rdd)
