@@ -27,7 +27,7 @@ if you may.
 
 * Airbnb [@mistercrunch]
 * Lyft
-
+* Agari [@r39132]
 
 ## Documentation
 
