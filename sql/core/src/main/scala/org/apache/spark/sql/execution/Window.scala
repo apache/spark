@@ -240,7 +240,7 @@ case class Window(
 
         // Bind the expressions.
         val functions = unboundFrameExpressions.map { e =>
-          BindReferences.bindReference(e.windowFunction, child.output)
+          BindReferences.bindReference(e.windowFunction.asInstanceOf[WindowFunction], child.output)
         }.toArray
 
         // Create the frame processor factory.

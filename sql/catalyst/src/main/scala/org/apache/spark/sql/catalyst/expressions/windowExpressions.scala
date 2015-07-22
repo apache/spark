@@ -19,7 +19,10 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.UnresolvedException
-import org.apache.spark.sql.types.{DataType, NumericType}
+import org.apache.spark.sql.catalyst.expressions.aggregate.AlgebraicAggregate
+import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
+import org.apache.spark.sql.catalyst.dsl.expressions._
+import org.apache.spark.sql.types._
 
 /**
  * The trait of the Window Specification (specified in the OVER clause or WINDOW clause) for
@@ -305,7 +308,7 @@ case class UnresolvedWindowExpression(
 }
 
 case class WindowExpression(
-    windowFunction: WindowFunction,
+    windowFunction: Expression,
     windowSpec: WindowSpecDefinition) extends Expression with Unevaluable {
 
   override def children: Seq[Expression] = windowFunction :: windowSpec :: Nil
@@ -327,4 +330,185 @@ object FrameBoundaryExtractor {
     case ValueFollowing(offset) => Some(offset)
     case _ => None
   }
+}
+
+/**
+ * A window function is a function that can only be evaluated in the context of a window operator.
+ */
+trait WindowFunction2 extends Expression {
+  /**
+   * Define the frame in which the window operator must be executed.
+   */
+  def frame: WindowFrame = UnspecifiedFrame
+}
+
+abstract class OffsetWindowFunction(child: Expression, offset: Int, default: Expression)
+    extends Expression with WindowFunction2 with CodegenFallback {
+  self: Product =>
+
+  override lazy val resolved = child.resolved && default.resolved && child.dataType == default.dataType
+
+  override def children: Seq[Expression] = child :: default :: Nil
+
+  override def dataType: DataType = child.dataType
+
+  override def foldable: Boolean = child.foldable && default.foldable
+
+  override def nullable: Boolean = child.nullable && default.nullable
+
+  override def eval(input: InternalRow): Any = {
+    val result = child.eval(input)
+    if (result != null) result
+    else default.eval(input)
+  }
+
+  override def toString: String = s"${simpleString}($child, $offset, $default)"
+}
+
+case class Lead(child: Expression, offset: Int, default: Expression)
+    extends OffsetWindowFunction(child, offset, default) {
+  def this(child: Expression, offset: Int) =
+    this(child, offset, Literal.create(null, child.dataType))
+
+  def this(child: Expression) =
+    this(child, 1, Literal.create(null, child.dataType))
+
+  override val frame = SpecifiedWindowFrame(RowFrame,
+    ValueFollowing(offset),
+    ValueFollowing(offset))
+}
+
+case class Lag(child: Expression, offset: Int, default: Expression)
+    extends OffsetWindowFunction(child, offset, default) {
+  def this(child: Expression, offset: Int) =
+    this(child, offset, Literal.create(null, child.dataType))
+
+  def this(child: Expression) =
+    this(child, 1, Literal.create(null, child.dataType))
+
+  override val frame = SpecifiedWindowFrame(RowFrame,
+    ValuePreceding(offset),
+    ValuePreceding(offset))
+}
+
+abstract class AggregateWindowFunction extends AlgebraicAggregate with WindowFunction2 {
+  self:Product =>
+  override val frame = SpecifiedWindowFrame(RowFrame, UnboundedPreceding, CurrentRow)
+  override def dataType: DataType = IntegerType
+  override def foldable: Boolean = false
+  override def nullable: Boolean = false
+  def withContext(order: Seq[SortOrder], n: MutableLiteral): AggregateWindowFunction = this
+  override val mergeExpressions = Nil // TODO how to deal with this?
+}
+
+abstract class RowNumberLike extends AggregateWindowFunction {
+  override def children: Seq[Expression] = Nil
+  override def deterministic: Boolean = false
+  override def inputTypes: Seq[AbstractDataType] = Nil
+  protected val rowNumber = AttributeReference("rowNumber", IntegerType)()
+  override val bufferAttributes: Seq[AttributeReference] = rowNumber :: Nil
+  override val initialValues: Seq[Expression] = Literal(0) :: Nil
+  override val updateExpressions: Seq[Expression] = rowNumber + 1 :: Nil
+}
+
+case object RowNumber extends RowNumberLike {
+  override val evaluateExpression = Cast(rowNumber, IntegerType)
+}
+
+// TODO check if this works in combination with CodeGeneration?
+case class CumeDist(n: MutableLiteral) extends RowNumberLike {
+  def this() = this(MutableLiteral(0, IntegerType))
+  override def dataType: DataType = DoubleType
+  override def deterministic: Boolean = true
+  override def withContext(order: Seq[SortOrder], n: MutableLiteral): CumeDist = CumeDist(n)
+  override val frame = SpecifiedWindowFrame(RangeFrame, UnboundedPreceding, CurrentRow)
+  override val evaluateExpression = Cast(rowNumber / n, DoubleType)
+}
+
+// TODO check if this works in combination with CodeGeneration?
+// TODO check logic
+case class NTile(n: MutableLiteral, buckets: Int) extends RowNumberLike {
+  require(buckets > 0, "Number of buckets must be > 0")
+  def this(buckets: Int) = this(MutableLiteral(0, IntegerType), buckets)
+  override def withContext(order: Seq[SortOrder], n: MutableLiteral): NTile = NTile(n, buckets)
+  private val bucket = AttributeReference("bucket", IntegerType)()
+  private val bucketThreshold = AttributeReference("bucketThreshold", IntegerType)()
+  private val bucketSize = AttributeReference("bucketSize", IntegerType)()
+  private val bucketsWithPadding = AttributeReference("bucketsWithPadding", IntegerType)()
+
+  override val bufferAttributes = Seq(
+    rowNumber,
+    bucket,
+    bucketThreshold,
+    bucketSize,
+    bucketsWithPadding
+  )
+
+  override val initialValues = Seq(
+    Literal(0),
+    Literal(0),
+    Literal(0),
+    Cast(n / buckets, IntegerType),
+    Cast(n % buckets, IntegerType)
+  )
+
+  override val updateExpressions = Seq(
+    rowNumber + 1,
+    bucket +If(rowNumber >= bucketThreshold, 1, 0),
+    bucketThreshold +
+      If(rowNumber >= bucketThreshold, bucketSize + If(bucket <= bucketsWithPadding, 1, 0), 0),
+    bucketSize,
+    bucketsWithPadding
+  )
+
+  override val evaluateExpression = bucket
+}
+
+abstract class RankLike(order: Seq[SortOrder]) extends AggregateWindowFunction {
+  override def children: Seq[Expression] = order
+  override def deterministic: Boolean = true
+  override def inputTypes: Seq[AbstractDataType] = Seq(AnyDataType)
+
+  protected val orderExprs = order.map(_.expr)
+
+  protected val orderAttrs = orderExprs.zipWithIndex.map{ case (expr, i) =>
+    AttributeReference(i.toString, expr.dataType)()
+  }
+
+  protected val orderEquals = orderExprs.zip(orderAttrs).map(EqualNullSafe.tupled).reduce(And)
+  protected val orderInit = orderExprs.map(e => Literal.create(null, e.dataType))
+  protected val rank = AttributeReference("rank", IntegerType)()
+  protected val rowNumber = AttributeReference("rowNumber", IntegerType)()
+  protected val updateRank = If(And(orderEquals, rank !== 0), rank, doUpdateRank)
+
+  // Implementation for RANK()
+  protected val doUpdateRank: Expression = rowNumber + 1L
+  override val bufferAttributes = rank +: rowNumber +: orderAttrs
+  override val initialValues = Literal(0) +: Literal(0) +: orderInit
+  override val updateExpressions = doUpdateRank +: (rowNumber + 1) +: orderExprs
+  override val evaluateExpression: Expression = Cast(rank, LongType)
+
+}
+
+case class Rank(order: Seq[SortOrder]) extends RankLike(order) {
+  def this() = this(Nil)
+  override def withContext(order: Seq[SortOrder], n: MutableLiteral): Rank = Rank(order)
+}
+
+case class DenseRank(order: Seq[SortOrder]) extends RankLike(order) {
+  def this() = this(Nil)
+  override def withContext(o: Seq[SortOrder], n: MutableLiteral): DenseRank = DenseRank(o)
+  override val bufferAttributes = rank +: orderAttrs
+  override val initialValues = Literal(0) +: orderInit
+  override val updateExpressions = doUpdateRank +: orderExprs
+  override val doUpdateRank = rank + 1
+}
+
+// TODO check if this works in combination with CodeGeneration?
+case class PercentRank(order: Seq[SortOrder], n: MutableLiteral) extends RankLike(order) {
+  def this() = this(Nil, MutableLiteral(0, IntegerType))
+  override def withContext(o: Seq[SortOrder], n: MutableLiteral): PercentRank = PercentRank(o, n)
+  override def dataType: DataType = DoubleType
+  override val evaluateExpression =
+    If(n > 1, Cast((rank - 1) / (n - 1), DoubleType), Literal.create(0.0d, DoubleType))
 }
