@@ -20,6 +20,8 @@ package org.apache.spark
 import scala.collection.mutable.{ArrayBuffer, HashMap}
 
 import org.apache.spark.executor.TaskMetrics
+import org.apache.spark.metrics.MetricsSystem
+import org.apache.spark.metrics.source.Source
 import org.apache.spark.unsafe.memory.TaskMemoryManager
 import org.apache.spark.util.{TaskCompletionListener, TaskCompletionListenerException}
 
@@ -29,6 +31,7 @@ private[spark] class TaskContextImpl(
     override val taskAttemptId: Long,
     override val attemptNumber: Int,
     override val taskMemoryManager: TaskMemoryManager,
+    @transient private val metricsSystem: MetricsSystem,
     val runningLocally: Boolean = false,
     val taskMetrics: TaskMetrics = TaskMetrics.empty)
   extends TaskContext
@@ -94,6 +97,9 @@ private[spark] class TaskContextImpl(
   override def isRunningLocally(): Boolean = runningLocally
 
   override def isInterrupted(): Boolean = interrupted
+
+  override def getMetricsSources(sourceName: String): Seq[Source] =
+    metricsSystem.getSourcesByName(sourceName)
 
   @transient private val accumulators = new HashMap[Long, Accumulable[_, _]]
 
