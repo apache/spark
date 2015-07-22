@@ -68,10 +68,18 @@ class HiveToDruidTransfer(BaseOperator):
         DROP TABLE IF EXISTS {hive_table};
         CREATE TABLE {hive_table}
         ROW FORMAT DELIMITED FIELDS TERMINATED BY  '\t'
-        STORED AS TEXTFILE AS
-        {sql};
+        STORED AS TEXTFILE
+        TBLPROPERTIES ('serialization.null.format' = '')
+        AS
+        {sql}
         """.format(**locals())
         hive.run_cli(hql)
+        #hqls = hql.split(';')
+        #logging.info(str(hqls))
+        #from airflow.hooks import HiveServer2Hook
+        #hive = HiveServer2Hook(hiveserver2_conn_id="hiveserver2_silver")
+        #hive.get_results(hqls)
+
 
         m = HiveMetastoreHook(self.metastore_conn_id)
         t = m.get_table(hive_table)
@@ -82,11 +90,21 @@ class HiveToDruidTransfer(BaseOperator):
         pos = hdfs_uri.find('/user')
         static_path = hdfs_uri[pos:]
 
+        schema, table = hive_table.split('.')
+
         druid = DruidHook(druid_ingest_conn_id=self.druid_ingest_conn_id)
         logging.info("Inserting rows into Druid")
+        logging.info("HDFS path: " + static_path)
+
         druid.load_from_hdfs(
             datasource=self.druid_datasource,
             intervals=self.intervals,
             static_path=static_path, ts_dim=self.ts_dim,
             columns=columns, metric_spec=self.metric_spec)
         logging.info("Load seems to have succeeded!")
+
+        logging.info(
+            "Cleaning up by dropping the temp "
+            "Hive table {}".format(hive_table))
+        hql = "DROP TABLE IF EXISTS {}".format(hive_table)
+        #hive.run_cli(hql)
