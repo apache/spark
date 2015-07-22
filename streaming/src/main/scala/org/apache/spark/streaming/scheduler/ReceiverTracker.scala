@@ -62,9 +62,16 @@ private[streaming] case class DeregisterReceiver(streamId: Int, msg: String, err
 private[streaming] sealed trait ReceiverTrackerLocalMessage
 
 /**
- * This message will trigger ReceiverTrackerEndpoint to start a Spark job for the receiver.
+ * This message will trigger ReceiverTrackerEndpoint to restart a Spark job for the receiver.
  */
-private[streaming] case class StartReceiver(receiver: Receiver[_])
+private[streaming] case class RestartReceiver(receiver: Receiver[_])
+  extends ReceiverTrackerLocalMessage
+
+/**
+ * This message is sent to ReceiverTrackerEndpoint when we start to launch Spark jobs for receivers
+ * at the first time.
+ */
+private[streaming] case class StartAllReceivers(receiver: Seq[Receiver[_]])
   extends ReceiverTrackerLocalMessage
 
 /**
@@ -307,8 +314,8 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
 
   private def scheduleReceiver(receiverId: Int): Seq[String] = {
     val preferredLocation = receiverPreferredLocations.getOrElse(receiverId, None)
-    val scheduledLocations = schedulingPolicy.scheduleReceiver(
-      receiverId, preferredLocation, receiverTrackingInfos, getExecutors(ssc))
+    val scheduledLocations = schedulingPolicy.rescheduleReceiver(
+      receiverId, preferredLocation, receiverTrackingInfos, getExecutors)
     updateReceiverScheduledLocations(receiverId, scheduledLocations)
     scheduledLocations
   }
@@ -337,10 +344,14 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
   /**
    * Get the list of executors excluding driver
    */
-  private def getExecutors(ssc: StreamingContext): List[String] = {
-    val executors = ssc.sparkContext.getExecutorMemoryStatus.map(_._1.split(":")(0)).toList
-    val driver = ssc.sparkContext.getConf.get("spark.driver.host")
-    executors.diff(List(driver))
+  private def getExecutors: List[String] = {
+    if (ssc.sc.isLocal) {
+      List("localhost")
+    } else {
+      val executors = ssc.sparkContext.getExecutorMemoryStatus.map(_._1.split(":")(0)).toList
+      val driver = ssc.sparkContext.getConf.get("spark.driver.host")
+      executors.diff(List(driver))
+    }
   }
 
   /**
@@ -355,6 +366,7 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
     if (!ssc.sparkContext.isLocal) {
       ssc.sparkContext.makeRDD(1 to 50, 50).map(x => (x, 1)).reduceByKey(_ + _, 20).collect()
     }
+    assert(getExecutors.nonEmpty)
   }
 
   /**
@@ -370,12 +382,8 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
 
     runDummySparkJob()
 
-    // Distribute the receivers and start them
     logInfo("Starting " + receivers.length + " receivers")
-
-    for (receiver <- receivers) {
-      endpoint.send(StartReceiver(receiver))
-    }
+    endpoint.send(StartAllReceivers)
   }
 
   /** Check if tracker has been marked for starting */
@@ -396,8 +404,22 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
 
     override def receive: PartialFunction[Any, Unit] = {
       // Local messages
-      case StartReceiver(receiver) =>
-        startReceiver(receiver)
+      case StartAllReceivers(receivers) =>
+        val scheduledLocations = schedulingPolicy.scheduleReceivers(receivers, getExecutors)
+        for (receiver <- receivers) {
+          val locations = scheduledLocations(receiver.streamId)
+          updateReceiverScheduledLocations(receiver.streamId, locations)
+          receiverPreferredLocations(receiver.streamId) = receiver.preferredLocation
+          startReceiver(receiver, locations)
+        }
+      case RestartReceiver(receiver) =>
+        val scheduledLocations = schedulingPolicy.rescheduleReceiver(
+          receiver.streamId,
+          receiver.preferredLocation,
+          receiverTrackingInfos,
+          getExecutors)
+        updateReceiverScheduledLocations(receiver.streamId, scheduledLocations)
+        startReceiver(receiver, scheduledLocations)
       case c @ CleanupOldBlocks(cleanupThreshTime) =>
         receiverTrackingInfos.values.flatMap(_.endpoint).foreach(_.send(c))
       // Remote messages
@@ -425,28 +447,22 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
         context.reply(true)
     }
 
-    private def startReceiver(receiver: Receiver[_]): Unit = {
+    /**
+     * Start a receiver along with its scheduled locations
+     */
+    private def startReceiver(receiver: Receiver[_], scheduledLocations: Seq[String]): Unit = {
+      val receiverId = receiver.streamId
+      if (!isTrackerStarted) {
+        onReceiverJobFinish(receiverId)
+        return
+      }
+
       val checkpointDirOption = Option(ssc.checkpointDir)
       val serializableHadoopConf =
         new SerializableConfiguration(ssc.sparkContext.hadoopConfiguration)
 
       // Function to start the receiver on the worker node
       val startReceiverFunc = new StartReceiverFunc(checkpointDirOption, serializableHadoopConf)
-
-      receiverPreferredLocations(receiver.streamId) = receiver.preferredLocation
-      val receiverId = receiver.streamId
-
-      if (!isTrackerStarted) {
-        onReceiverJobFinish(receiverId)
-        return
-      }
-
-      val scheduledLocations = schedulingPolicy.scheduleReceiver(
-        receiverId,
-        receiver.preferredLocation,
-        receiverTrackingInfos,
-        getExecutors(ssc))
-      updateReceiverScheduledLocations(receiver.streamId, scheduledLocations)
 
       // Create the RDD using the scheduledLocations to run the receiver in a Spark job
       val receiverRDD: RDD[Receiver[_]] =
@@ -465,7 +481,7 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
             onReceiverJobFinish(receiverId)
           } else {
             logInfo(s"Restarting Receiver $receiverId")
-            self.send(StartReceiver(receiver))
+            self.send(RestartReceiver(receiver))
           }
         case Failure(e) =>
           if (!isTrackerStarted) {
@@ -473,7 +489,7 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
           } else {
             logError("Receiver has been stopped. Try to restart it.", e)
             logInfo(s"Restarting Receiver $receiverId")
-            self.send(StartReceiver(receiver))
+            self.send(RestartReceiver(receiver))
           }
       }(submitJobThreadPool)
       logInfo(s"Receiver ${receiver.streamId} started")

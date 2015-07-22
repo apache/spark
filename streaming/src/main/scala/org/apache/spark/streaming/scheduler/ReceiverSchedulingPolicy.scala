@@ -20,6 +20,8 @@ package org.apache.spark.streaming.scheduler
 import scala.collection.Map
 import scala.collection.mutable
 
+import org.apache.spark.streaming.receiver.Receiver
+
 /**
  * A ReceiverScheduler trying to balance executors' load. Here is the approach to schedule executors
  * for a receiver.
@@ -47,10 +49,79 @@ import scala.collection.mutable
 private[streaming] class ReceiverSchedulingPolicy {
 
   /**
+   * Try our best to schedule receivers with evenly distributed. However, if the
+   * `preferredLocation`s of receivers are not even, we may not be able to schedule them evenly
+   * because we have to respect them.
+   *
+   * This method is called when we start to launch receivers at the first time.
+   */
+  def scheduleReceivers(
+      receivers: Seq[Receiver[_]], executors: Seq[String]): Map[Int, Seq[String]] = {
+    if (receivers.isEmpty) {
+      return Map.empty
+    }
+
+    require(executors.nonEmpty, "There is no executor up")
+
+    val hostToExecutors = executors.groupBy(_.split(":")(0))
+    val locations = new Array[mutable.ArrayBuffer[String]](receivers.length)
+    val numReceiversOnExecutor = mutable.HashMap[String, Int]()
+    // Set the initial value to 0
+    executors.foreach(numReceiversOnExecutor(_) = 0)
+
+    // Firstly, we need to respect "preferredLocation". So if a receiver has "preferredLocation",
+    // we need to make sure the "preferredLocation" is in the candidate location list.
+    for (i <- 0 until receivers.length) {
+      locations(i) = new mutable.ArrayBuffer[String]()
+      // Note: preferredLocation is host but executors are host:port
+      receivers(i).preferredLocation.foreach { host =>
+        hostToExecutors.get(host) match {
+          case Some(executorsOnHost) =>
+            // preferredLocation is a known host. Select an executor that has the least receivers in
+            // this host
+            val scheduledLocation =
+              executorsOnHost.minBy(executor => numReceiversOnExecutor(executor))
+            locations(i) += scheduledLocation
+            numReceiversOnExecutor(scheduledLocation) =
+              numReceiversOnExecutor(scheduledLocation) + 1
+          case None =>
+            // preferredLocation is an unknown host.
+            // Note: There are two cases:
+            // 1. This executor is not up. But it may be up later.
+            // 2. This executor is dead, or it's not a host in the cluster.
+            // Currently, simply add host to the scheduled locations
+            locations(i) += host
+        }
+      }
+    }
+
+    // For those receivers that don't have preferredLocation, make sure we assign at least one
+    // executor to them.
+    for (scheduledLocations <- locations.filter(_.isEmpty)) {
+      // Select the executor that has the least receivers
+      val (executor, numReceivers) = numReceiversOnExecutor.minBy(_._2)
+      scheduledLocations += executor
+      numReceiversOnExecutor(executor) = numReceivers + 1
+    }
+
+    // Assign idle executors to receivers that have less executors
+    val idleExecutors = numReceiversOnExecutor.filter(_._2 == 0).map(_._1)
+    for (executor <- idleExecutors) {
+      // Assign an idle executor to the receiver that has least locations.
+      val scheduledLocations = locations.minBy(_.size)
+      scheduledLocations += executor
+    }
+
+    receivers.map(_.streamId).zip(locations).toMap
+  }
+
+  /**
    * Return a list of candidate executors to run the receiver. If the list is empty, the caller can
    * run this receiver in arbitrary executor.
+   *
+   * This method is called when a receiver is registering with ReceiverTracker or is restarting.
    */
-  def scheduleReceiver(
+  def rescheduleReceiver(
       receiverId: Int,
       preferredLocation: Option[String],
       receiverTrackingInfoMap: Map[Int, ReceiverTrackingInfo],
