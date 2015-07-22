@@ -89,6 +89,7 @@ object FunctionRegistry {
     expression[CreateStruct]("struct"),
     expression[CreateNamedStruct]("named_struct"),
     expression[Sqrt]("sqrt"),
+    expression[NaNvl]("nanvl"),
 
     // math functions
     expression[Acos]("acos"),
@@ -167,7 +168,8 @@ object FunctionRegistry {
     expression[StringLocate]("locate"),
     expression[StringLPad]("lpad"),
     expression[StringTrimLeft]("ltrim"),
-    expression[StringFormat]("printf"),
+    expression[FormatString]("format_string"),
+    expression[FormatString]("printf"),
     expression[StringRPad]("rpad"),
     expression[StringRepeat]("repeat"),
     expression[StringReverse]("reverse"),
