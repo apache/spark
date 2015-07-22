@@ -2298,6 +2298,20 @@ object functions {
    * @group datetime_funcs
    * @since 1.5.0
    */
+  def date_add(startdate: Column, days: Column): Column = DateAdd(startdate.expr, days.expr)
+
+  /**
+   * Extracts the year as an integer from a given date/timestamp/string.
+   * @group datetime_funcs
+   * @since 1.5.0
+   */
+  def date_sub(startdate: Column, days: Column): Column = DateSub(startdate.expr, days.expr)
+
+  /**
+   * Extracts the year as an integer from a given date/timestamp/string.
+   * @group datetime_funcs
+   * @since 1.5.0
+   */
   def year(e: Column): Column = Year(e.expr)
 
   /**

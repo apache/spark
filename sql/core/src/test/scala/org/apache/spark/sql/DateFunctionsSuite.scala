@@ -184,4 +184,34 @@ class DateFunctionsSuite extends QueryTest {
       Row(15, 15, 15))
   }
 
+  test("function date_add") {
+    val df =
+      Seq((1, Date.valueOf("2015-06-01")), (3, Date.valueOf("2015-06-02"))).toDF("num", "day")
+    checkAnswer(
+      df.select(date_add(col("day"), col("num"))),
+      Seq(Row(Date.valueOf("2015-06-02")), Row(Date.valueOf("2015-06-05"))))
+    checkAnswer(
+      df.select(date_add(column("day"), lit(null))).limit(1), Row(null))
+
+    checkAnswer(df.selectExpr("DATE_ADD(null, num)"), Seq(Row(null), Row(null)))
+    checkAnswer(
+      df.selectExpr("""DATE_ADD(day, num)"""),
+      Seq(Row(Date.valueOf("2015-06-02")), Row(Date.valueOf("2015-06-05"))))
+  }
+
+  test("function date_sub") {
+    val df =
+      Seq((1, Date.valueOf("2015-06-01")), (3, Date.valueOf("2015-06-02"))).toDF("num", "day")
+    checkAnswer(
+      df.select(date_sub(col("day"), col("num"))),
+      Seq(Row(Date.valueOf("2015-05-31")), Row(Date.valueOf("2015-05-30"))))
+    checkAnswer(
+      df.select(date_sub(lit(null), column("num"))).limit(1), Row(null))
+
+    checkAnswer(df.selectExpr("""DATE_SUB(day, null)"""), Seq(Row(null), Row(null)))
+    checkAnswer(
+      df.selectExpr("""DATE_SUB(day, num)"""),
+      Seq(Row(Date.valueOf("2015-05-31")), Row(Date.valueOf("2015-05-30"))))
+  }
+
 }

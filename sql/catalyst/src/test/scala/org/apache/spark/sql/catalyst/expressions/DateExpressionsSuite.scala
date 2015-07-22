@@ -22,7 +22,8 @@ import java.text.SimpleDateFormat
 import java.util.Calendar
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.types.{StringType, TimestampType, DateType}
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.types.{IntegerType, StringType, TimestampType, DateType}
 
 class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
@@ -246,4 +247,36 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
+  test("date_add") {
+    checkResult(
+      DateAdd(Literal(Date.valueOf("2016-02-28")), Literal(1)),
+      DateTimeUtils.fromJavaDate(Date.valueOf("2016-02-29")))
+    checkResult(
+      DateAdd(Literal("2016-03-01"), Literal(-1)),
+      DateTimeUtils.fromJavaDate(Date.valueOf("2016-02-29")))
+    checkResult(
+      DateAdd(Literal(Timestamp.valueOf("2016-03-01 23:59:59")), Literal(-2)),
+      DateTimeUtils.fromJavaDate(Date.valueOf("2016-02-28")))
+    checkResult(
+      DateAdd(Literal("2016-03-01 23:59:59"), Literal(-3)),
+      DateTimeUtils.fromJavaDate(Date.valueOf("2016-02-27")))
+    checkResult(DateAdd(Literal(null), Literal(-1)), null)
+  }
+
+  test("date_sub") {
+    checkResult(
+      DateSub(Literal("2015-01-01"), Literal(1)),
+      DateTimeUtils.fromJavaDate(Date.valueOf("2014-12-31")))
+    checkResult(
+      DateSub(Literal(Date.valueOf("2015-01-01")), Literal(-1)),
+      DateTimeUtils.fromJavaDate(Date.valueOf("2015-01-02")))
+    checkResult(
+      DateSub(Literal(Timestamp.valueOf("2015-01-01 01:00:00")), Literal(-1)),
+      DateTimeUtils.fromJavaDate(Date.valueOf("2015-01-02")))
+    checkResult(
+      DateSub(Literal("2015-01-01 01:00:00"), Literal(0)),
+      DateTimeUtils.fromJavaDate(Date.valueOf("2015-01-01")))
+    checkResult(
+      DateSub(Literal("2015-01-01"), Literal.create(null, IntegerType)), null)
+  }
 }

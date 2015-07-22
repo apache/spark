@@ -62,6 +62,53 @@ case class CurrentTimestamp() extends LeafExpression with CodegenFallback {
   }
 }
 
+/**
+ * Adds a number of days to startdate.
+ */
+case class DateAdd(startDate: Expression, days: Expression)
+  extends BinaryExpression with ImplicitCastInputTypes {
+
+  override def left: Expression = startDate
+  override def right: Expression = days
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(DateType, IntegerType)
+
+  override def dataType: DataType = DateType
+
+  override def nullSafeEval(start: Any, d: Any): Any = {
+    start.asInstanceOf[Int] + d.asInstanceOf[Int]
+  }
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    nullSafeCodeGen(ctx, ev, (sd, d) => {
+      s"""${ev.primitive} = $sd + $d;"""
+    })
+  }
+}
+
+/**
+ * Subtracts a number of days to startdate.
+ */
+case class DateSub(startDate: Expression, days: Expression)
+  extends BinaryExpression with ImplicitCastInputTypes {
+  override def left: Expression = startDate
+  override def right: Expression = days
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(DateType, IntegerType)
+
+  override def dataType: DataType = DateType
+
+  override def nullSafeEval(start: Any, d: Any): Any = {
+    start.asInstanceOf[Int] - d.asInstanceOf[Int]
+  }
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    nullSafeCodeGen(ctx, ev, (sd, d) => {
+      s"""${ev.primitive} = $sd - $d;"""
+    })
+  }
+}
+
 case class Hour(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType)
