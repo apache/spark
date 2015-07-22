@@ -41,6 +41,10 @@ import org.apache.spark.Logging
 import org.apache.spark.sql.hive.HiveContext
 import org.apache.spark.util.Utils
 
+/**
+ * This code doesn't support remote connections in Hive 1.2+, as the underlying CliDriver
+ * has dropped its support.
+ */
 private[hive] object SparkSQLCLIDriver extends Logging {
   private var prompt = "spark-sql"
   private var continuedPrompt = "".padTo(prompt.length, ' ')
@@ -136,6 +140,9 @@ private[hive] object SparkSQLCLIDriver extends Logging {
       }
       conf.setClassLoader(loader)
       Thread.currentThread().setContextClassLoader(loader)
+    } else {
+      // Hive 1.2 + not supported in CLI
+      throw new RuntimeException("Remote operations not supported")
     }
 
     val cli = new SparkSQLCLIDriver
@@ -243,7 +250,7 @@ private[hive] object SparkSQLCLIDriver extends Logging {
 
   def isRemoteMode(state: CliSessionState): Boolean = {
     //    sessionState.isRemoteMode
-    false
+    state.isHiveServerQuery
   }
 
 }
@@ -266,6 +273,9 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
   // because the Hive unit tests do not go through the main() code path.
   if (!isRemoteMode) {
     SparkSQLEnv.init()
+  } else {
+    // Hive 1.2 + not supported in CLI
+    throw new RuntimeException("Remote operations not supported")
   }
 
   override def processCmd(cmd: String): Int = {
