@@ -1726,7 +1726,7 @@ object functions {
    * Parsers the comma separated expression strings into the columns they represent, similar to
    * DataFrame.selectExpr
    */
-  def expr(expStrs: String*): Seq[Column] = expStrs.flatMap { str =>
-    str.split(",").map(expr => Column(new SqlParser().parseExpression(expr)))
+  def expr(expStrs: String*): Seq[Column] = expStrs.map { expr =>
+    Column(new SqlParser().parseExpression(expr))
   }
 }
