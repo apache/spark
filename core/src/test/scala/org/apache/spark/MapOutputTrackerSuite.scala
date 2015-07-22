@@ -59,9 +59,10 @@ class MapOutputTrackerSuite extends SparkFunSuite {
         Array(10000L, 1000L)))
     val statuses = tracker.getMapSizesByExecutorId(10, 0)
     assert(statuses.toSet ===
-      Seq((BlockManagerId("a", "hostA", 1000), ArrayBuffer((ShuffleBlockId(10, 0, 0, 0), size1000))),
-          (BlockManagerId("b", "hostB", 1000), ArrayBuffer((ShuffleBlockId(10, 1, 0, 0), size10000))))
-        .toSet)
+      Seq(
+        (BlockManagerId("a", "hostA", 1000), ArrayBuffer((ShuffleBlockId(10, 0, 0, 0), size1000))),
+        (BlockManagerId("b", "hostB", 1000), ArrayBuffer((ShuffleBlockId(10, 1, 0, 0), size10000)))
+      ).toSet)
     tracker.stop()
     rpcEnv.shutdown()
   }
@@ -138,7 +139,8 @@ class MapOutputTrackerSuite extends SparkFunSuite {
     masterTracker.incrementEpoch()
     slaveTracker.updateEpoch(masterTracker.getEpoch)
     assert(slaveTracker.getMapSizesByExecutorId(10, 0) ===
-      Seq((BlockManagerId("a", "hostA", 1000), ArrayBuffer((ShuffleBlockId(10, 0, 0, 0), size1000)))))
+      Seq((BlockManagerId("a", "hostA", 1000),
+        ArrayBuffer((ShuffleBlockId(10, 0, 0, 0), size1000)))))
 
     masterTracker.unregisterMapOutput(10, 0, BlockManagerId("a", "hostA", 1000))
     masterTracker.incrementEpoch()
