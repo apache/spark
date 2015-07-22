@@ -165,6 +165,27 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
     return fromBytes(bytes);
   }
 
+  /**
+   * Returns a substring of this from start to end.
+   * @param start the position of first code point
+   */
+  public UTF8String substring(final int start) {
+    if (start >= numBytes) {
+      return fromBytes(new byte[0]);
+    }
+
+    int i = 0;
+    int c = 0;
+    while (i < numBytes && c < start) {
+      i += numBytesForFirstByte(getByte(i));
+      c += 1;
+    }
+
+    byte[] bytes = new byte[numBytes - i];
+    copyMemory(base, offset + i, bytes, BYTE_ARRAY_OFFSET, numBytes - i);
+    return fromBytes(bytes);
+  }
+
   public UTF8String substringSQL(int pos, int length) {
     // Information regarding the pos calculation:
     // Hive and SQL use one-based indexing for SUBSTR arguments but also accept zero and
@@ -391,7 +412,19 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
     return i;
   }
 
+  /**
+   * Returns the index within this string of the last occurrence of the
+   * specified substring, searching backward starting at the specified index.
+   * @param v the substring to search for.
+   * @param startCodePoint the index to start search from
+   * @return the index of the last occurrence of the specified substring,
+   *         searching backward from the specified index,
+   *         or {@code -1} if there is no such occurrence.
+   */
   public int lastIndexOf(UTF8String v, int startCodePoint) {
+    return lastIndexOf(v, v.numChars(), startCodePoint);
+  }
+  public int lastIndexOf(UTF8String v, int vNumChars, int startCodePoint) {
     if (v.numBytes == 0) {
       return 0;
     }
@@ -399,20 +432,119 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
       return -1;
     }
     int fromIndexEnd = indexEnd(startCodePoint);
-    int count = startCodePoint;
-    int vNumChars = v.numChars();
     do {
       if (fromIndexEnd - v.numBytes + 1 < 0 ) {
         return -1;
       }
       if (ByteArrayMethods.arrayEquals(
           base, offset + fromIndexEnd - v.numBytes + 1, v.base, v.offset, v.numBytes)) {
-        return count - vNumChars + 1;
+        int count = 0; // count from right most to the match end in byte.
+        while (fromIndexEnd >= 0) {
+          count++;
+          fromIndexEnd = firstOfCurrentCodePoint(fromIndexEnd) - 1;
+        }
+        return count - vNumChars;
       }
       fromIndexEnd  = firstOfCurrentCodePoint(fromIndexEnd) - 1;
-      count--;
     } while (fromIndexEnd >= 0);
     return -1;
+  }
+
+  /**
+   * Finds the n-th last index within a String.
+   * This method uses {@link String#lastIndexOf(String)}.</p>
+   *
+   * @param str  the String to check, may be null
+   * @param searchStr  the String to find, may be null
+   * @param searchStrNumChars num of code ponts of the searchStr
+   * @param ordinal  the n-th last <code>searchStr</code> to find
+   * @return the n-th last index of the search String,
+   *  <code>-1</code> if no match or <code>null</code> string input
+   */
+  public static int lastOrdinalIndexOf(
+          UTF8String str,
+          UTF8String searchStr,
+          int searchStrNumChars,
+          int ordinal) {
+    return doOrdinalIndexOf(str, searchStr, searchStrNumChars, ordinal, true);
+  }
+  /**
+   * Finds the n-th index within a String, handling <code>null</code>.
+   * A <code>null</code> String will return <code>-1</code>
+   *
+   * @param str  the String to check, may be null
+   * @param searchStr  the String to find, may be null
+   * @param searchStrNumChars num of code points of searchStr
+   * @param ordinal  the n-th <code>searchStr</code> to find
+   * @return the n-th index of the search String,
+   *  <code>-1</code> if no match or <code>null</code> string input
+   */
+  public static int ordinalIndexOf(
+          UTF8String str,
+          UTF8String searchStr,
+          int searchStrNumChars,
+          int ordinal) {
+    return doOrdinalIndexOf(str, searchStr, searchStrNumChars, ordinal, false);
+  }
+
+  private static int doOrdinalIndexOf(
+          UTF8String str,
+          UTF8String searchStr,
+          int searchStrNumChars,
+          int ordinal,
+          boolean lastIndex) {
+    if (str == null || searchStr == null || ordinal <= 0) {
+      return -1;
+    }
+    // Only calc numChars when lastIndex == true sicnc the calculation is expensive
+    int strNumChars = 0;
+    if (lastIndex) {
+      strNumChars = str.numChars();
+    }
+    if (searchStr.numBytes == 0) {
+      return lastIndex ? strNumChars : 0;
+    }
+    int found = 0;
+    int index = lastIndex ? strNumChars : 0;
+    do {
+      if (lastIndex) {
+        index = str.lastIndexOf(searchStr, searchStrNumChars, index - 1);
+      } else {
+        index = str.indexOf(searchStr, index + 1);
+      }
+      if (index < 0) {
+        return index;
+      }
+      found += 1;
+    } while (found < ordinal);
+    return index;
+  }
+  /**
+   * Returns the substring from string str before count occurrences of the delimiter delim.
+   * If count is positive, everything the left of the final delimiter (counting from left) is
+   * returned. If count is negative, every to the right of the final delimiter (counting from the
+   * right) is returned. substring_index performs a case-sensitive match when searching for delim.
+   */
+  public static UTF8String subStringIndex(UTF8String str, UTF8String delim, int count) {
+    if (str.numBytes == 0 || delim.numBytes == 0 || count == 0) {
+      return UTF8String.EMPTY_UTF8;
+    }
+    int delimNumChars = delim.numChars();
+    if (count > 0) {
+      int idx = ordinalIndexOf(str, delim, delimNumChars, count);
+      if (idx != -1) {
+        return str.substring(0, idx);
+      } else {
+        return str;
+      }
+    } else {
+      int idx = lastOrdinalIndexOf(str, delim, delimNumChars, -count);
+      if (idx != -1) {
+        return str.substring(idx + delimNumChars);
+      } else {
+        return str;
+      }
+    }
   }
 
   /**

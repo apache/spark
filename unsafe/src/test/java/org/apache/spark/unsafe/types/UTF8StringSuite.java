@@ -226,6 +226,7 @@ public class UTF8StringSuite {
     assertEquals(0, fromString("").lastIndexOf(fromString(""), 0));
     assertEquals(-1, fromString("").lastIndexOf(fromString("l"), 0));
     assertEquals(0, fromString("hello").lastIndexOf(fromString(""), 0));
+    assertEquals(0, fromString("hello").lastIndexOf(fromString("h"), 4));
     assertEquals(-1, fromString("hello").lastIndexOf(fromString("l"), 0));
     assertEquals(3, fromString("hello").lastIndexOf(fromString("l"), 3));
     assertEquals(-1, fromString("hello").lastIndexOf(fromString("a"), 4));

@@ -21,10 +21,7 @@ import java.text.DecimalFormat
 import java.util.Locale
 import java.util.regex.{MatchResult, Pattern}
 
-import org.apache.commons.lang.StringUtils
-
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.UnresolvedException
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -371,75 +368,22 @@ case class Substring_index(strExpr: Expression, delimExpr: Expression, countExpr
   override def nullable: Boolean = strExpr.nullable || delimExpr.nullable || countExpr.nullable
   override def children: Seq[Expression] = Seq(strExpr, delimExpr, countExpr)
   override def prettyName: String = "substring_index"
-  override def toString: String = s"substring_index($strExpr, $delimExpr, $countExpr)"
 
   override def eval(input: InternalRow): Any = {
     val str = strExpr.eval(input)
-    val delim = delimExpr.eval(input)
-    val count = countExpr.eval(input)
-    if (str == null || delim == null || count == null) {
-      null
-    } else {
-      subStrIndex(
-        str.asInstanceOf[UTF8String],
-        delim.asInstanceOf[UTF8String],
-        count.asInstanceOf[Int])
-    }
-  }
-
-  private def lastOrdinalIndexOf(
-    str: UTF8String, searchStr: UTF8String, ordinal: Int, lastIndex: Boolean = false): Int = {
-    ordinalIndexOf(str, searchStr, ordinal, true)
-  }
-
-  private def ordinalIndexOf(
-      str: UTF8String, searchStr: UTF8String, ordinal: Int, lastIndex: Boolean = false): Int = {
-    if (str == null || searchStr == null || ordinal <= 0) {
-      return -1
-    }
-    val strNumChars = str.numChars()
-    if (searchStr.numBytes() == 0) {
-      return if (lastIndex) {strNumChars} else {0}
-    }
-    var found = 0
-    var index = if (lastIndex) {strNumChars} else {0}
-    do {
-      if (lastIndex) {
-        index = str.lastIndexOf(searchStr, index - 1)
-      } else {
-        index = str.indexOf(searchStr, index + 1)
-      }
-      if (index < 0) {
-        return index
-      }
-      found += 1
-    } while (found < ordinal)
-    index
-  }
-
-  private def subStrIndex(strUtf8: UTF8String, delimUtf8: UTF8String, count: Int): UTF8String = {
-    if (strUtf8 == null || delimUtf8 == null || count == null) {
-      return null
-    }
-    if (strUtf8.numBytes() == 0 || delimUtf8.numBytes() == 0 || count == 0) {
-      return UTF8String.fromString("")
-    }
-    val res = if (count > 0) {
-      val idx = ordinalIndexOf(strUtf8, delimUtf8, count)
-      if (idx != -1) {
-        strUtf8.substring(0, idx)
-      } else {
-        strUtf8
-      }
-    } else {
-      val idx = lastOrdinalIndexOf(strUtf8, delimUtf8, -count)
-      if (idx != -1) {
-        strUtf8.substring(idx + delimUtf8.numChars(), strUtf8.numChars())
-      } else {
-        strUtf8
+    if (str != null) {
+      val delim = delimExpr.eval(input)
+      if (delim != null) {
+        val count = countExpr.eval(input)
+        if (count != null) {
+          return UTF8String.subStringIndex(
+            str.asInstanceOf[UTF8String],
+            delim.asInstanceOf[UTF8String],
+            count.asInstanceOf[Int])
+        }
       }
     }
-    res
+    null
   }
 }
 
