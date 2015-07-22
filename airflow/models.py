@@ -808,9 +808,11 @@ class TaskInstance(Base):
                     msg = "Executing "
                 msg += "{self.task} on {self.execution_date}"
 
+            context = {}
             try:
                 logging.info(msg.format(self=self))
                 if not mark_success:
+                    context = self.get_template_context()
 
                     task_copy = copy.copy(task)
                     self.task = task_copy
@@ -823,7 +825,6 @@ class TaskInstance(Base):
                     signal.signal(signal.SIGTERM, signal_handler)
 
                     self.render_templates()
-                    context = self.get_template_context()
                     settings.policy(task_copy)
                     task_copy.pre_execute(context=context)
 
