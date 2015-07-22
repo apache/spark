@@ -36,13 +36,6 @@ private[spark] case class GetMapOutputStatuses(shuffleId: Int)
   extends MapOutputTrackerMessage
 private[spark] case object StopMapOutputTracker extends MapOutputTrackerMessage
 
-/**
- * Metadata used on the shuffle-read side to know where to find the data from the map side.
- * This corresponds to one map partition and one reduce partition, though those partitions
- * are not explicitly represented -- users must know from context.
- */
-private[spark] case class ServerAttemptSize(bmId: BlockManagerId, stageAttempt: Int, size: Long)
-
 /** RpcEndpoint class for MapOutputTrackerMaster */
 private[spark] class MapOutputTrackerMasterEndpoint(
     override val rpcEnv: RpcEnv, tracker: MapOutputTrackerMaster, conf: SparkConf)
