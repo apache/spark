@@ -39,56 +39,114 @@ private[fpm] object LocalPrefixSpan extends Logging with Serializable {
   def run(
       minCount: Long,
       maxPatternLength: Int,
-      prefixes: List[Int],
-      database: Array[Array[Int]]): Iterator[(List[Int], Long)] = {
-    if (prefixes.length == maxPatternLength || database.isEmpty) return Iterator.empty
-    val frequentItemAndCounts = getFreqItemAndCounts(minCount, database)
-    val filteredDatabase = database.map(x => x.filter(frequentItemAndCounts.contains))
-    frequentItemAndCounts.iterator.flatMap { case (item, count) =>
-      val newPrefixes = item :: prefixes
-      val newProjected = project(filteredDatabase, item)
-      Iterator.single((newPrefixes, count)) ++
-        run(minCount, maxPatternLength, newPrefixes, newProjected)
+      prefixes: List[Array[Int]],
+      database: Array[(Array[Array[Int]], Int)]): Iterator[(List[Array[Int]], Long)] = {
+    if ((prefixes.nonEmpty && prefixes.map(_.length).sum == maxPatternLength)
+      || database.length < minCount) return Iterator.empty
+    val frequentItemAndCounts = getFreqPrefixAndCounts(minCount, prefixes, database)
+    frequentItemAndCounts.iterator.flatMap { case (prefix, count) =>
+      val newProjected = project(database, prefix)
+      Iterator.single((prefix, count)) ++
+        run(minCount, maxPatternLength, prefix, newProjected)
     }
   }
 
   /**
    * Calculate suffix sequence immediately after the first occurrence of an item.
-   * @param item item to get suffix after
-   * @param sequence sequence to extract suffix from
+   * @param element the last element of prefix
+   * @param sequenceAndFlag sequence to extract suffix from
    * @return suffix sequence
    */
-  def getSuffix(item: Int, sequence: Array[Int]): Array[Int] = {
-    val index = sequence.indexOf(item)
-    if (index == -1) {
-      Array()
+  def getSuffix(
+      element: Array[Int],
+      sequenceAndFlag: (Array[Array[Int]], Int)): (Array[Array[Int]], Int) = {
+    val (originalSequence, flag) = sequenceAndFlag
+    var index = 0
+    if (element.length == 1 && flag == 1) index = 1
+    val sequence =
+      if (element.length > 1 && flag == 1) {
+        (element.take(element.length - 1) ++ originalSequence.head) +: originalSequence.drop(1)
+      } else {
+        originalSequence
+      }
+    var found = false
+    while (index < sequence.length && !found) {
+      found = element.toSet.subsetOf(sequence.apply(index).toSet)
+      index = index + 1
+    }
+    index = index - 1
+    if (found) {
+      val pos = sequence.apply(index).indexOf(element.apply(0))
+      if (pos == sequence.apply(index).length - 1) {
+        (sequence.drop(index + 1), 0)
+      } else {
+        (sequence.apply(index).drop(pos + 1) +: sequence.drop(index + 1), 1)
+      }
     } else {
-      sequence.drop(index + 1)
+      (Array(), 0)
     }
   }
 
-  def project(database: Array[Array[Int]], prefix: Int): Array[Array[Int]] = {
+  private def project(
+      database: Array[(Array[Array[Int]], Int)],
+      prefix: List[Array[Int]]): Array[(Array[Array[Int]], Int)] = {
     database
-      .map(getSuffix(prefix, _))
-      .filter(_.nonEmpty)
+      .map(getSuffix(prefix.last, _))
+      .filter(_._1.nonEmpty)
   }
 
   /**
-   * Generates frequent items by filtering the input data using minimal count level.
+   * Generates frequent prefixes by filtering the input data using minimal count level.
    * @param minCount the minimum count for an item to be frequent
-   * @param database database of sequences
-   * @return freq item to count map
+   * @param prefix prefix
+   * @param suffixes suffixes
+   * @return freq prefix to count map
    */
-  private def getFreqItemAndCounts(
+  private def getFreqPrefixAndCounts(
       minCount: Long,
-      database: Array[Array[Int]]): mutable.Map[Int, Long] = {
-    // TODO: use PrimitiveKeyOpenHashMap
-    val counts = mutable.Map[Int, Long]().withDefaultValue(0L)
-    database.foreach { sequence =>
-      sequence.distinct.foreach { item =>
-        counts(item) += 1L
-      }
+      prefix: List[Array[Int]],
+      suffixes: Array[(Array[Array[Int]], Int)]): mutable.Map[List[Array[Int]], Long] = {
+    val counts = mutable.Map[List[Array[Int]], Long]().withDefaultValue(0L)
+    val singleItemSet = suffixes.map { case (suffix, flag) =>
+      if (flag == 0) suffix else suffix.drop(1)
+    }.flatMap { suffix =>
+      suffix.flatMap(element => element).distinct
+    }.groupBy(item => item).map(x => (x._1, x._2.length.toLong))
+    singleItemSet.filter(_._2 >= minCount).foreach { case (item, count) =>
+      counts(prefix :+ Array(item)) = count
     }
-    counts.filter(_._2 >= minCount)
+    if (prefix.nonEmpty) {
+      val multiItemSet = mutable.Map[Int, Long]().withDefaultValue(0L)
+      suffixes.map { case (suffix, flag) =>
+        if (flag == 0) suffix else (prefix.last ++ suffix.head) +: suffix.drop(1)
+      }.foreach { suffix =>
+        singleItemSet.keys.foreach { item =>
+          if (!prefix.last.contains(item)) {
+            val element = prefix.last :+ item
+            if (isSubElement(suffix, element)) {
+              multiItemSet(item) += 1L
+            }
+          }
+        }
+      }
+      multiItemSet.filter(_._2 >= minCount).foreach { case (item, count) =>
+        if (prefix.nonEmpty) {
+          counts(prefix.take(prefix.length - 1) :+ (prefix.last :+ item)) = count
+        } else {
+          counts(List(Array(item))) = count
+        }
+      }
+   }
+   counts
+  }
+
+  private def isSubElement(sequence: Array[Array[Int]], element: Array[Int]): Boolean = {
+    var i = 0
+    var found = false
+    while (i < sequence.length && !found) {
+      found = element.toSet.subsetOf(sequence.apply(i).toSet)
+      i = i + 1
+    }
+    found
   }
 }
