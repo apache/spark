@@ -189,7 +189,7 @@ object FunctionRegistry {
   }
 
   /** See usage above. */
-  private def expression[T <: Expression](name: String)
+  private[sql] def expression[T <: Expression](name: String)
       (implicit tag: ClassTag[T]): (String, FunctionBuilder) = {
 
     // See if we can find a constructor that accepts Seq[Expression]
