@@ -169,9 +169,10 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
    * record serializer can decrease network IO
    */
   def registerAvroSchemas(schemas: Schema*): SparkConf = {
-    schemas.foldLeft(this) { (conf, schema) =>
-      conf.set(avroNamespace + SchemaNormalization.parsingFingerprint64(schema), schema.toString)
+    for (schema <- schemas) {
+      set(avroNamespace + SchemaNormalization.parsingFingerprint64(schema), schema.toString)
     }
+    this
   }
 
   /** Gets all the avro schemas in the configuration used in the generic Avro record serializer */

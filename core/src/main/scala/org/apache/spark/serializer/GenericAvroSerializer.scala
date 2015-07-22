@@ -29,7 +29,7 @@ import org.apache.avro.generic.{GenericData, GenericRecord}
 import org.apache.avro.io._
 import org.apache.commons.io.IOUtils
 
-import org.apache.spark.SparkEnv
+import org.apache.spark.{SparkException, SparkEnv}
 import org.apache.spark.io.CompressionCodec
 
 /**
@@ -38,6 +38,9 @@ import org.apache.spark.io.CompressionCodec
  * schema, as to reduce network IO.
  * Actions like parsing or compressing schemas are computationally expensive so the serializer
  * caches all previously seen values as to reduce the amount of work needed to do.
+ * @param schemas a map where the keys are unique IDs for Avro schemas and the values are the
+ *                string representation of the Avro schema, used to decrease the amount of data
+ *                that needs to be serialized.
  */
 private[serializer] class GenericAvroSerializer(schemas: Map[Long, String])
   extends KSerializer[GenericRecord] {
@@ -118,7 +121,12 @@ private[serializer] class GenericAvroSerializer(schemas: Map[Long, String])
         schemaCache.getOrElseUpdate(fingerprint, {
           schemas.get(fingerprint) match {
             case Some(s) => new Schema.Parser().parse(s)
-            case None => throw new RuntimeException(s"Unknown fingerprint: $fingerprint")
+            case None =>
+              throw new SparkException(
+                """Error reading attempting to read avro data --
+                  |encountered an unknown fingerprint: $fingerprint, not sure what schema to use.
+                  |This could happen if you registered additional schemas after starting your
+                  |spark context.""".stripMargin)
           }
         })
       } else {
