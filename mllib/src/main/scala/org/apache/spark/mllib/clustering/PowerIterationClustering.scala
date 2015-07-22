@@ -157,11 +157,11 @@ class PowerIterationClustering private[clustering] (
    * Run the PIC algorithm on Graph.
    *
    * @param graph an affinity matrix represented as graph, which is the matrix A in the PIC paper.
-   *                     The similarity s,,ij,, represented as the edge between vertices (i, j) must
-   *                     be nonnegative. This is a symmetric matrix and hence s,,ij,, = s,,ji,,. For
-   *                     any (i, j) with nonzero similarity, there should be either (i, j, s,,ij,,)
-   *                     or (j, i, s,,ji,,) in the input. Tuples with i = j are ignored, because we
-   *                     assume s,,ij,, = 0.0.
+   *              The similarity s,,ij,, represented as the edge between vertices (i, j) must
+   *              be nonnegative. This is a symmetric matrix and hence s,,ij,, = s,,ji,,. For
+   *              any (i, j) with nonzero similarity, there should be either (i, j, s,,ij,,)
+   *              or (j, i, s,,ji,,) in the input. Tuples with i = j are ignored, because we
+   *              assume s,,ij,, = 0.0.
    *
    * @return a [[PowerIterationClusteringModel]] that contains the clustering result
    */
