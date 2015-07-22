@@ -569,6 +569,10 @@ setGeneric("avg", function(x, ...) { standardGeneric("avg") })
 
 #' @rdname column
 #' @export
+setGeneric("between", function(x, bounds) { standardGeneric("between") })
+
+#' @rdname column
+#' @export
 setGeneric("cast", function(x, dataType) { standardGeneric("cast") })
 
 #' @rdname column

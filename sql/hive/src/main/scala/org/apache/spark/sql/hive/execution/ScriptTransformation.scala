@@ -18,7 +18,6 @@
 package org.apache.spark.sql.hive.execution
 
 import java.io.{BufferedReader, DataInputStream, DataOutputStream, EOFException, InputStreamReader}
-import java.lang.ProcessBuilder.Redirect
 import java.util.Properties
 
 import scala.collection.JavaConversions._
@@ -28,6 +27,7 @@ import org.apache.hadoop.hive.serde2.AbstractSerDe
 import org.apache.hadoop.hive.serde2.objectinspector._
 
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.ScriptInputOutputSchema

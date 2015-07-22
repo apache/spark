@@ -19,6 +19,7 @@ package org.apache.spark
 
 import org.scalatest.PrivateMethodTester
 
+import org.apache.spark.util.Utils
 import org.apache.spark.scheduler.{SchedulerBackend, TaskScheduler, TaskSchedulerImpl}
 import org.apache.spark.scheduler.cluster.{SimrSchedulerBackend, SparkDeploySchedulerBackend}
 import org.apache.spark.scheduler.cluster.mesos.{CoarseMesosSchedulerBackend, MesosSchedulerBackend}
@@ -131,7 +132,7 @@ class SparkContextSchedulerCreationSuite
   def testYarn(master: String, expectedClassName: String) {
     try {
       val sched = createTaskScheduler(master)
-      assert(sched.getClass === Class.forName(expectedClassName))
+      assert(sched.getClass === Utils.classForName(expectedClassName))
     } catch {
       case e: SparkException =>
         assert(e.getMessage.contains("YARN mode not available"))
