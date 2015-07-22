@@ -111,6 +111,22 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll with SQLTestUtils {
       Row("1", 1) :: Row("2", 1) :: Row("3", 1) :: Nil)
   }
 
+  test("SPARK-8668 expr function") {
+    checkAnswer(Seq((1, "Bobby G."))
+      .toDF("id", "name")
+      .select(expr("length(name), abs(id)") : _*), Row(8, 1))
+
+    checkAnswer(Seq((1, "testing"))
+      .toDF("id", "word")
+      .select(expr("abs(id)", "length(word)") : _*), Row(1, 7))
+
+    checkAnswer(Seq((1, "building burrito tunnels"), (1, "major projects"))
+      .toDF("id", "saying")
+      .groupBy(expr("length(saying)") : _*)
+      .count()
+      .orderBy("count"), Row(24, 1) :: Row(14, 1) :: Nil)
+  }
+
   test("SQL Dialect Switching to a new SQL parser") {
     val newContext = new SQLContext(sqlContext.sparkContext)
     newContext.setConf("spark.sql.dialect", classOf[MyDialect].getCanonicalName())

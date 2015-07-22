@@ -17,11 +17,13 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.sql.Column
+
 import scala.language.implicitConversions
 import scala.reflect.runtime.universe.{TypeTag, typeTag}
 
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.sql.catalyst.ScalaReflection
+import org.apache.spark.sql.catalyst.{SqlParser, ScalaReflection}
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedFunction, Star}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types._
@@ -1720,4 +1722,11 @@ object functions {
      UnresolvedFunction(udfName, cols.map(_.expr))
   }
 
+  /**
+   * Parsers the comma separated expression strings into the columns they represent, similar to
+   * DataFrame.selectExpr
+   */
+  def expr(expStrs: String*): Seq[Column] = expStrs.flatMap { str =>
+    str.split(",").map(expr => Column(new SqlParser().parseExpression(expr)))
+  }
 }
