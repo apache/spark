@@ -46,6 +46,8 @@ private[streaming] class ReceiverSupervisorImpl(
     checkpointDirOption: Option[String]
   ) extends ReceiverSupervisor(receiver, env.conf) with Logging {
 
+  private val hostPort = SparkEnv.get.blockManager.blockManagerId.hostPort
+
   private val receivedBlockHandler: ReceivedBlockHandler = {
     if (WriteAheadLogUtils.enableReceiverLog(env.conf)) {
       if (checkpointDirOption.isEmpty) {
@@ -164,7 +166,7 @@ private[streaming] class ReceiverSupervisorImpl(
 
   override protected def onReceiverStart(): Boolean = {
     val msg = RegisterReceiver(
-      streamId, receiver.getClass.getSimpleName, host, endpoint)
+      streamId, receiver.getClass.getSimpleName, hostPort, endpoint)
     trackerEndpoint.askWithRetry[Boolean](msg)
   }
 

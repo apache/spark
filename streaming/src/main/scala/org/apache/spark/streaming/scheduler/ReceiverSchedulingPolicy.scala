@@ -22,30 +22,6 @@ import scala.collection.mutable
 
 import org.apache.spark.streaming.receiver.Receiver
 
-/**
- * A ReceiverScheduler trying to balance executors' load. Here is the approach to schedule executors
- * for a receiver.
- * <ol>
- *   <li>
- *     If preferredLocation is set, preferredLocation should be one of the candidate executors.
- *   </li>
- *   <li>
- *     Every executor will be assigned to a weight according to the receivers running or scheduling
- *     on it.
- *     <ul>
- *       <li>
- *         If a receiver is running on an executor, it contributes 1.0 to the executor's weight.
- *       </li>
- *       <li>
- *         If a receiver is scheduled to an executor but has not yet run, it contributes
- *         `1.0 / #candidate_executors_of_this_receiver` to the executor's weight.</li>
- *     </ul>
- *     At last, if there are more than 3 idle executors (weight = 0), returns all idle executors.
- *     Otherwise, we only return 3 best options according to the weights.
- *   </li>
- * </ol>
- *
- */
 private[streaming] class ReceiverSchedulingPolicy {
 
   /**
@@ -61,7 +37,9 @@ private[streaming] class ReceiverSchedulingPolicy {
       return Map.empty
     }
 
-    require(executors.nonEmpty, "There is no executor up")
+    if (executors.isEmpty) {
+      return receivers.map(_.streamId -> Seq.empty).toMap
+    }
 
     val hostToExecutors = executors.groupBy(_.split(":")(0))
     val locations = new Array[mutable.ArrayBuffer[String]](receivers.length)
@@ -118,6 +96,28 @@ private[streaming] class ReceiverSchedulingPolicy {
   /**
    * Return a list of candidate executors to run the receiver. If the list is empty, the caller can
    * run this receiver in arbitrary executor.
+   *
+   * This method tries to balance executors' load. Here is the approach to schedule executors
+   * for a receiver.
+   * <ol>
+   *   <li>
+   *     If preferredLocation is set, preferredLocation should be one of the candidate executors.
+   *   </li>
+   *   <li>
+   *     Every executor will be assigned to a weight according to the receivers running or
+   *     scheduling on it.
+   *     <ul>
+   *       <li>
+   *         If a receiver is running on an executor, it contributes 1.0 to the executor's weight.
+   *       </li>
+   *       <li>
+   *         If a receiver is scheduled to an executor but has not yet run, it contributes
+   *         `1.0 / #candidate_executors_of_this_receiver` to the executor's weight.</li>
+   *     </ul>
+   *     At last, if there are more than 3 idle executors (weight = 0), returns all idle executors.
+   *     Otherwise, we only return 3 best options according to the weights.
+   *   </li>
+   * </ol>
    *
    * This method is called when a receiver is registering with ReceiverTracker or is restarting.
    */

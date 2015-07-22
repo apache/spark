@@ -25,7 +25,7 @@ import scala.language.existentials
 import scala.util.{Failure, Success}
 
 import org.apache.spark.streaming.util.WriteAheadLogUtils
-import org.apache.spark.{TaskContext, Logging, SparkEnv, SparkException}
+import org.apache.spark._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.rpc._
 import org.apache.spark.streaming.{StreamingContext, Time}
@@ -47,7 +47,7 @@ private[streaming] sealed trait ReceiverTrackerMessage
 private[streaming] case class RegisterReceiver(
     streamId: Int,
     typ: String,
-    host: String,
+    hostPort: String,
     receiverEndpoint: RpcEndpointRef
   ) extends ReceiverTrackerMessage
 private[streaming] case class AddBlock(receivedBlockInfo: ReceivedBlockInfo)
@@ -130,12 +130,13 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
 
   /**
    * Track all receivers' information. The key is the receiver id, the value is the receiver info.
+   * It's only accessed in ReceiverTrackerEndpoint.
    */
   private val receiverTrackingInfos = new HashMap[Int, ReceiverTrackingInfo]
 
   /**
    * Store all preferred locations for all receivers. We need this information to schedule
-   * receivers
+   * receivers. It's only accessed in ReceiverTrackerEndpoint.
    */
   private val receiverPreferredLocations = new HashMap[Int, Option[String]]
 
@@ -227,7 +228,7 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
   private def registerReceiver(
       streamId: Int,
       typ: String,
-      host: String,
+      hostPort: String,
       receiverEndpoint: RpcEndpointRef,
       senderAddress: RpcAddress
     ): Boolean = {
@@ -237,19 +238,18 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
 
     if (isTrackerStopping || isTrackerStopped) {
       false
-    } else if (!ssc.sparkContext.isLocal && // We don't need to schedule it in the local mode
-      !scheduleReceiver(streamId).contains(host)) {
+    } else if (!scheduleReceiver(streamId).contains(hostPort)) {
       // Refuse it since it's scheduled to a wrong executor
       false
     } else {
       val name = s"${typ}-${streamId}"
-      val receiverInfo = ReceiverInfo(streamId, name, true, host)
+      val receiverInfo = ReceiverInfo(streamId, name, true, hostPort)
       receiverTrackingInfos.put(streamId,
         ReceiverTrackingInfo(
           streamId,
           ReceiverState.ACTIVE,
           scheduledLocations = None,
-          runningLocation = Some(host),
+          runningLocation = Some(hostPort),
           name = Some(name),
           endpoint = Some(receiverEndpoint)))
       listenerBus.post(StreamingListenerReceiverStarted(receiverInfo))
@@ -344,13 +344,13 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
   /**
    * Get the list of executors excluding driver
    */
-  private def getExecutors: List[String] = {
+  private def getExecutors: Seq[String] = {
     if (ssc.sc.isLocal) {
-      List("localhost")
+      Seq(ssc.sparkContext.env.blockManager.blockManagerId.hostPort)
     } else {
-      val executors = ssc.sparkContext.getExecutorMemoryStatus.map(_._1.split(":")(0)).toList
-      val driver = ssc.sparkContext.getConf.get("spark.driver.host")
-      executors.diff(List(driver))
+      ssc.sparkContext.env.blockManager.master.getMemoryStatus.filter { case (blockManagerId, _) =>
+        blockManagerId.executorId != SparkContext.DRIVER_IDENTIFIER // Ignore the driver location
+      }.map { case (blockManagerId, _) => blockManagerId.hostPort }.toSeq
     }
   }
 
@@ -383,7 +383,7 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
     runDummySparkJob()
 
     logInfo("Starting " + receivers.length + " receivers")
-    endpoint.send(StartAllReceivers)
+    endpoint.send(StartAllReceivers(receivers))
   }
 
   /** Check if tracker has been marked for starting */
@@ -429,9 +429,9 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
 
     override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
       // Remote messages
-      case RegisterReceiver(streamId, typ, host, receiverEndpoint) =>
+      case RegisterReceiver(streamId, typ, hostPort, receiverEndpoint) =>
         val successful =
-          registerReceiver(streamId, typ, host, receiverEndpoint, context.sender.address)
+          registerReceiver(streamId, typ, hostPort, receiverEndpoint, context.sender.address)
         context.reply(successful)
       case AddBlock(receivedBlockInfo) =>
         context.reply(addBlock(receivedBlockInfo))

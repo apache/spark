@@ -24,7 +24,7 @@ import scala.collection.mutable.ArrayBuffer
 import scala.concurrent._
 import scala.util.control.NonFatal
 
-import org.apache.spark.{Logging, SparkConf}
+import org.apache.spark.{SparkEnv, Logging, SparkConf}
 import org.apache.spark.storage.StreamBlockId
 import org.apache.spark.util.{Utils, ThreadUtils}
 
@@ -64,8 +64,6 @@ private[streaming] abstract class ReceiverSupervisor(
 
   /** State of the receiver */
   @volatile private[streaming] var receiverState = Initialized
-
-  protected val host = Utils.localHostName()
 
   /** Push a single data item to backend data store. */
   def pushSingle(data: Any)
