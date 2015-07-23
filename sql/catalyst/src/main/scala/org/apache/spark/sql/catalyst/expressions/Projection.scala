@@ -31,6 +31,11 @@ class InterpretedProjection(expressions: Seq[Expression]) extends Projection {
   def this(expressions: Seq[Expression], inputSchema: Seq[Attribute]) =
     this(expressions.map(BindReferences.bindReference(_, inputSchema)))
 
+  expressions.foreach(_.foreach {
+    case n: Nondeterministic => n.initialize()
+    case _ =>
+  })
+
   // null check is required for when Kryo invokes the no-arg constructor.
   protected val exprArray = if (expressions != null) expressions.toArray else null
 
@@ -56,6 +61,11 @@ class InterpretedProjection(expressions: Seq[Expression]) extends Projection {
 case class InterpretedMutableProjection(expressions: Seq[Expression]) extends MutableProjection {
   def this(expressions: Seq[Expression], inputSchema: Seq[Attribute]) =
     this(expressions.map(BindReferences.bindReference(_, inputSchema)))
+
+  expressions.foreach(_.foreach {
+    case n: Nondeterministic => n.initialize()
+    case _ =>
+  })
 
   private[this] val exprArray = expressions.toArray
   private[this] var mutableRow: MutableRow = new GenericMutableRow(exprArray.length)

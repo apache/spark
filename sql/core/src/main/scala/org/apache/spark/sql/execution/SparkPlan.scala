@@ -194,10 +194,6 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
           }
       }
     } else {
-      expressions.foreach(_.foreach {
-        case n: Nondeterministic => n.initialize()
-        case _ =>
-      })
       new InterpretedProjection(expressions, inputSchema)
     }
   }
@@ -220,10 +216,6 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
           }
       }
     } else {
-      expressions.foreach(_.foreach {
-        case n: Nondeterministic => n.initialize()
-        case _ =>
-      })
       () => new InterpretedMutableProjection(expressions, inputSchema)
     }
   }
@@ -243,10 +235,6 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
           }
       }
     } else {
-      expressions.foreach(_.foreach {
-        case n: Nondeterministic => n.initialize()
-        case _ =>
-      })
       InterpretedPredicate.create(expression, inputSchema)
     }
   }
