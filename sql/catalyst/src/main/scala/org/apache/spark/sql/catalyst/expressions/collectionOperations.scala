@@ -116,22 +116,10 @@ case class SortArray(base: Expression, ascendingOrder: Expression)
   override def prettyName: String = "sort_array"
 }
 
-case class ArrayContains(left: Expression, right: Expression) extends BinaryExpression {
+case class ArrayContains(left: Expression, right: Expression) extends BinaryExpression with ExpectsInputTypes {
   override def dataType: DataType = BooleanType
 
-  override def checkInputDataTypes(): TypeCheckResult = {
-    if (!left.dataType.isInstanceOf[ArrayType]) {
-      TypeCheckResult.TypeCheckFailure(
-        s"type of first input must be an array, not ${left.dataType.simpleString}")
-    } else if (left.dataType.asInstanceOf[ArrayType].elementType != right.dataType) {
-      TypeCheckResult.TypeCheckFailure(
-        s"type of value must match array type " +
-          s"${left.dataType.asInstanceOf[ArrayType].elementType.simpleString}, not " +
-          s"${right.dataType.simpleString}")
-    } else {
-      TypeCheckResult.TypeCheckSuccess
-    }
-  }
+  override def inputTypes: Seq[AbstractDataType] = Seq(ArrayType, AnyDataType)
 
   override def nullable: Boolean = false
 

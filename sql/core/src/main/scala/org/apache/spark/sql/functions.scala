@@ -2223,14 +2223,6 @@ object functions {
    * @group collection_funcs
    * @since 1.5.0
    */
-  def array_contains(columnName: String, value: Any): Column =
-    array_contains(Column(columnName), value)
-
-  /**
-   * Returns true if the array contain the value
-   * @group collection_funcs
-   * @since 1.5.0
-   */
   def array_contains(column: Column, value: Any): Column =
     ArrayContains(column.expr, Literal(value))
 
