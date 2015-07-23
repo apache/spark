@@ -77,7 +77,6 @@ case class If(predicate: Expression, trueValue: Expression, falseValue: Expressi
 }
 
 trait CaseWhenLike extends Expression {
-  self: Product =>
 
   // Note that `branches` are considered in consecutive pairs (cond, val), and the optional last
   // element is the value for the default catch-all case (if provided).

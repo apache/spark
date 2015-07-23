@@ -1554,3 +1554,31 @@ setMethod("fillna",
             }
             dataFrame(sdf)
           })
+
+#' crosstab
+#'
+#' Computes a pair-wise frequency table of the given columns. Also known as a contingency
+#' table. The number of distinct values for each column should be less than 1e4. At most 1e6
+#' non-zero pair frequencies will be returned.
+#'
+#' @param col1 name of the first column. Distinct items will make the first item of each row.
+#' @param col2 name of the second column. Distinct items will make the column names of the output.
+#' @return a local R data.frame representing the contingency table. The first column of each row
+#'         will be the distinct values of `col1` and the column names will be the distinct values
+#'         of `col2`. The name of the first column will be `$col1_$col2`. Pairs that have no
+#'         occurrences will have `null` as their counts.
+#'
+#' @rdname statfunctions
+#' @export
+#' @examples
+#' \dontrun{
+#' df <- jsonFile(sqlCtx, "/path/to/file.json")
+#' ct = crosstab(df, "title", "gender")
+#' }
+setMethod("crosstab",
+          signature(x = "DataFrame", col1 = "character", col2 = "character"),
+          function(x, col1, col2) {
+            statFunctions <- callJMethod(x@sdf, "stat")
+            sct <- callJMethod(statFunctions, "crosstab", col1, col2)
+            collect(dataFrame(sct))
+          })

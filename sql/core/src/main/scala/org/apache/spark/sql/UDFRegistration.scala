@@ -22,13 +22,10 @@ import java.util.{List => JList, Map => JMap}
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.Try
 
-import org.apache.spark.{Accumulator, Logging}
-import org.apache.spark.api.python.PythonBroadcast
-import org.apache.spark.broadcast.Broadcast
+import org.apache.spark.Logging
 import org.apache.spark.sql.api.java._
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.expressions.{Expression, ScalaUDF}
-import org.apache.spark.sql.execution.PythonUDF
 import org.apache.spark.sql.types.DataType
 
 /**
@@ -40,44 +37,19 @@ class UDFRegistration private[sql] (sqlContext: SQLContext) extends Logging {
 
   private val functionRegistry = sqlContext.functionRegistry
 
-  protected[sql] def registerPython(
-      name: String,
-      command: Array[Byte],
-      envVars: JMap[String, String],
-      pythonIncludes: JList[String],
-      pythonExec: String,
-      pythonVer: String,
-      broadcastVars: JList[Broadcast[PythonBroadcast]],
-      accumulator: Accumulator[JList[Array[Byte]]],
-      stringDataType: String): Unit = {
+  protected[sql] def registerPython(name: String, udf: UserDefinedPythonFunction): Unit = {
     log.debug(
       s"""
         | Registering new PythonUDF:
         | name: $name
-        | command: ${command.toSeq}
-        | envVars: $envVars
-        | pythonIncludes: $pythonIncludes
-        | pythonExec: $pythonExec
-        | dataType: $stringDataType
+        | command: ${udf.command.toSeq}
+        | envVars: ${udf.envVars}
+        | pythonIncludes: ${udf.pythonIncludes}
+        | pythonExec: ${udf.pythonExec}
+        | dataType: ${udf.dataType}
       """.stripMargin)
 
-
-    val dataType = sqlContext.parseDataType(stringDataType)
-
-    def builder(e: Seq[Expression]): PythonUDF =
-      PythonUDF(
-        name,
-        command,
-        envVars,
-        pythonIncludes,
-        pythonExec,
-        pythonVer,
-        broadcastVars,
-        accumulator,
-        dataType,
-        e)
-
-    functionRegistry.registerFunction(name, builder)
+    functionRegistry.registerFunction(name, udf.builder)
   }
 
   // scalastyle:off

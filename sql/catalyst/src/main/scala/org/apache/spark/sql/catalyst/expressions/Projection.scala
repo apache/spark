@@ -18,6 +18,8 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.codegen.{GenerateUnsafeProjection, GenerateMutableProjection}
+import org.apache.spark.sql.types.{StructType, DataType}
 
 /**
  * A [[Projection]] that is calculated by calling the `eval` of each of the specified expressions.
@@ -70,6 +72,71 @@ case class InterpretedMutableProjection(expressions: Seq[Expression]) extends Mu
       i += 1
     }
     mutableRow
+  }
+}
+
+/**
+ * A projection that returns UnsafeRow.
+ */
+abstract class UnsafeProjection extends Projection {
+  override def apply(row: InternalRow): UnsafeRow
+}
+
+object UnsafeProjection {
+
+  /*
+   * Returns whether UnsafeProjection can support given StructType, Array[DataType] or
+   * Seq[Expression].
+   */
+  def canSupport(schema: StructType): Boolean = canSupport(schema.fields.map(_.dataType))
+  def canSupport(types: Array[DataType]): Boolean = types.forall(UnsafeColumnWriter.canEmbed(_))
+  def canSupport(exprs: Seq[Expression]): Boolean = canSupport(exprs.map(_.dataType).toArray)
+
+  /**
+   * Returns an UnsafeProjection for given StructType.
+   */
+  def create(schema: StructType): UnsafeProjection = create(schema.fields.map(_.dataType))
+
+  /**
+   * Returns an UnsafeProjection for given Array of DataTypes.
+   */
+  def create(fields: Array[DataType]): UnsafeProjection = {
+    val exprs = fields.zipWithIndex.map(x => new BoundReference(x._2, x._1, true))
+    create(exprs)
+  }
+
+  /**
+   * Returns an UnsafeProjection for given sequence of Expressions (bounded).
+   */
+  def create(exprs: Seq[Expression]): UnsafeProjection = {
+    GenerateUnsafeProjection.generate(exprs)
+  }
+
+  /**
+   * Returns an UnsafeProjection for given sequence of Expressions, which will be bound to
+   * `inputSchema`.
+   */
+  def create(exprs: Seq[Expression], inputSchema: Seq[Attribute]): UnsafeProjection = {
+    create(exprs.map(BindReferences.bindReference(_, inputSchema)))
+  }
+}
+
+/**
+ * A projection that could turn UnsafeRow into GenericInternalRow
+ */
+case class FromUnsafeProjection(fields: Seq[DataType]) extends Projection {
+
+  def this(schema: StructType) = this(schema.fields.map(_.dataType))
+
+  private[this] val expressions = fields.zipWithIndex.map { case (dt, idx) =>
+    new BoundReference(idx, dt, true)
+  }
+
+  @transient private[this] lazy val generatedProj =
+    GenerateMutableProjection.generate(expressions)()
+
+  override def apply(input: InternalRow): InternalRow = {
+    generatedProj(input)
   }
 }
 

@@ -44,11 +44,20 @@ trait HashJoin {
 
   override def output: Seq[Attribute] = left.output ++ right.output
 
-  @transient protected lazy val buildSideKeyGenerator: Projection =
-    newProjection(buildKeys, buildPlan.output)
+  protected[this] def supportUnsafe: Boolean = {
+    (self.codegenEnabled && UnsafeProjection.canSupport(buildKeys)
+      && UnsafeProjection.canSupport(self.schema))
+  }
 
-  @transient protected lazy val streamSideKeyGenerator: () => MutableProjection =
-    newMutableProjection(streamedKeys, streamedPlan.output)
+  override def outputsUnsafeRows: Boolean = supportUnsafe
+  override def canProcessUnsafeRows: Boolean = supportUnsafe
+
+  @transient protected lazy val streamSideKeyGenerator: Projection =
+    if (supportUnsafe) {
+      UnsafeProjection.create(streamedKeys, streamedPlan.output)
+    } else {
+      newMutableProjection(streamedKeys, streamedPlan.output)()
+    }
 
   protected def hashJoin(
       streamIter: Iterator[InternalRow],
@@ -61,8 +70,17 @@ trait HashJoin {
 
       // Mutable per row objects.
       private[this] val joinRow = new JoinedRow2
+      private[this] val resultProjection: Projection = {
+        if (supportUnsafe) {
+          UnsafeProjection.create(self.schema)
+        } else {
+          new Projection {
+            override def apply(r: InternalRow): InternalRow = r
+          }
+        }
+      }
 
-      private[this] val joinKeys = streamSideKeyGenerator()
+      private[this] val joinKeys = streamSideKeyGenerator
 
       override final def hasNext: Boolean =
         (currentMatchPosition != -1 && currentMatchPosition < currentHashMatches.size) ||
@@ -74,7 +92,7 @@ trait HashJoin {
           case BuildLeft => joinRow(currentHashMatches(currentMatchPosition), currentStreamedRow)
         }
         currentMatchPosition += 1
-        ret
+        resultProjection(ret)
       }
 
       /**
@@ -89,8 +107,9 @@ trait HashJoin {
 
         while (currentHashMatches == null && streamIter.hasNext) {
           currentStreamedRow = streamIter.next()
-          if (!joinKeys(currentStreamedRow).anyNull) {
-            currentHashMatches = hashedRelation.get(joinKeys.currentValue)
+          val key = joinKeys(currentStreamedRow)
+          if (!key.anyNull) {
+            currentHashMatches = hashedRelation.get(key)
           }
         }
 
@@ -101,6 +120,14 @@ trait HashJoin {
           true
         }
       }
+    }
+  }
+
+  protected[this] def buildHashRelation(buildIter: Iterator[InternalRow]): HashedRelation = {
+    if (supportUnsafe) {
+      UnsafeHashedRelation(buildIter, buildKeys, buildPlan)
+    } else {
+      HashedRelation(buildIter, newProjection(buildKeys, buildPlan.output))
     }
   }
 }

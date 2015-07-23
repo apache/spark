@@ -862,6 +862,9 @@ class RDD(object):
             for obj in iterator:
                 acc = op(obj, acc)
             yield acc
+        # collecting result of mapPartitions here ensures that the copy of
+        # zeroValue provided to each partition is unique from the one provided
+        # to the final reduce call
         vals = self.mapPartitions(func).collect()
         return reduce(op, vals, zeroValue)
 
@@ -891,8 +894,11 @@ class RDD(object):
             for obj in iterator:
                 acc = seqOp(acc, obj)
             yield acc
-
-        return self.mapPartitions(func).fold(zeroValue, combOp)
+        # collecting result of mapPartitions here ensures that the copy of
+        # zeroValue provided to each partition is unique from the one provided
+        # to the final reduce call
+        vals = self.mapPartitions(func).collect()
+        return reduce(combOp, vals, zeroValue)
 
     def treeAggregate(self, zeroValue, seqOp, combOp, depth=2):
         """
@@ -1287,7 +1293,7 @@ class RDD(object):
                     taken += 1
 
             p = range(partsScanned, min(partsScanned + numPartsToTry, totalParts))
-            res = self.context.runJob(self, takeUpToNumLeft, p, True)
+            res = self.context.runJob(self, takeUpToNumLeft, p)
 
             items += res
             partsScanned += numPartsToTry
@@ -2187,7 +2193,7 @@ class RDD(object):
         values = self.filter(lambda kv: kv[0] == key).values()
 
         if self.partitioner is not None:
-            return self.ctx.runJob(values, lambda x: x, [self.partitioner(key)], False)
+            return self.ctx.runJob(values, lambda x: x, [self.partitioner(key)])
 
         return values.collect()
 
