@@ -26,10 +26,16 @@ import org.apache.spark.sql.catalyst.expressions.Expression
 
 
 /** Precision parameters for a Decimal */
+@deprecated("Use DecimalType(precision, scale) directly", "1.5")
 case class PrecisionInfo(precision: Int, scale: Int) {
   if (scale > precision) {
     throw new AnalysisException(
       s"Decimal scale ($scale) cannot be greater than precision ($precision).")
+  }
+  if (precision > DecimalType.MAX_PRECISION) {
+    throw new AnalysisException(
+      s"DecimalType can only support precision up to 38"
+    )
   }
 }
 
@@ -41,10 +47,19 @@ case class PrecisionInfo(precision: Int, scale: Int) {
  * Please use [[DataTypes.createDecimalType()]] to create a specific instance.
  */
 @DeveloperApi
-case class DecimalType(precisionInfo: Option[PrecisionInfo]) extends FractionalType {
+case class DecimalType(precision: Int, scale: Int) extends FractionalType {
 
   /** No-arg constructor for kryo. */
-  protected def this() = this(null)
+  private def this() = this(0, 0)
+
+  @deprecated("Use DecimalType(precision, scale) instead", "1.5")
+  def this(precisionInfo: Option[PrecisionInfo]) {
+    this(precisionInfo.getOrElse(PrecisionInfo(10, 0)).precision,
+      precisionInfo.getOrElse(PrecisionInfo(10, 0)).scale)
+  }
+
+  @deprecated("Use DecimalType.precision and DecimalType.scale instead", "1.5")
+  val precisionInfo = Some(PrecisionInfo(precision, scale))
 
   private[sql] type InternalType = Decimal
   @transient private[sql] lazy val tag = ScalaReflectionLock.synchronized { typeTag[InternalType] }
@@ -52,10 +67,6 @@ case class DecimalType(precisionInfo: Option[PrecisionInfo]) extends FractionalT
   private[sql] val fractional = Decimal.DecimalIsFractional
   private[sql] val ordering = Decimal.DecimalIsFractional
   private[sql] val asIntegral = Decimal.DecimalAsIfIntegral
-
-  def precision: Int = precisionInfo.map(_.precision).getOrElse(10)
-
-  def scale: Int = precisionInfo.map(_.scale).getOrElse(0)
 
   override def typeName: String = s"decimal($precision,$scale)"
 
@@ -82,6 +93,7 @@ case class DecimalType(precisionInfo: Option[PrecisionInfo]) extends FractionalT
 
 /** Extra factory methods and pattern matchers for Decimals */
 object DecimalType extends AbstractDataType {
+  import scala.math.min
 
   val MAX_PRECISION = 38
   val MAX_SCALE = 38
@@ -94,28 +106,29 @@ object DecimalType extends AbstractDataType {
 
   override private[sql] def simpleString: String = "decimal"
 
-  val Maximum: DecimalType = DecimalType(Some(PrecisionInfo(MAX_PRECISION, 18)))
+  val Maximum: DecimalType = DecimalType(MAX_PRECISION, 18)
 
-  val Default: DecimalType = DecimalType(Some(PrecisionInfo(10, 0)))
+  val Default: DecimalType = DecimalType(10, 0)
 
   val Unlimited: DecimalType = Maximum  // backward compatibility
 
   private[sql] object Fixed {
     def unapply(t: DecimalType): Option[(Int, Int)] =
-      t.precisionInfo.map(p => (p.precision, p.scale)).orElse(Some((10, 0)))
+      Some((t.precision, t.scale))
   }
 
   private[sql] object Expression {
     def unapply(e: Expression): Option[(Int, Int)] = e.dataType match {
-      case t: DecimalType => t.precisionInfo.map(p => (p.precision, p.scale)).orElse(Some((10, 0)))
+      case t: DecimalType => Some((t.precision, t.scale))
       case _ => None
     }
   }
 
   def apply(): DecimalType = Default
 
-  def apply(precision: Int, scale: Int): DecimalType =
-    DecimalType(Some(PrecisionInfo(precision, scale)))
+  def bounded(precision: Int, scale: Int): DecimalType = {
+    DecimalType(min(precision, MAX_PRECISION), min(scale, MAX_SCALE))
+  }
 
   // The decimal types compatible with IntegralTypes
   private[sql] val ByteDecimal = DecimalType(3, 0)

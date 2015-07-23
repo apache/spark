@@ -66,7 +66,7 @@ private[sql] object JDBCRDD extends Logging {
       case java.sql.Types.DATALINK      => null
       case java.sql.Types.DATE          => DateType
       case java.sql.Types.DECIMAL
-        if precision != 0 || scale != 0 => DecimalType(precision, scale)
+        if precision != 0 || scale != 0 => DecimalType.bounded(precision, scale)
       case java.sql.Types.DECIMAL       => DecimalType.Maximum
       case java.sql.Types.DISTINCT      => null
       case java.sql.Types.DOUBLE        => DoubleType
@@ -80,7 +80,7 @@ private[sql] object JDBCRDD extends Logging {
       case java.sql.Types.NCLOB         => StringType
       case java.sql.Types.NULL          => null
       case java.sql.Types.NUMERIC
-        if precision != 0 || scale != 0 => DecimalType(precision, scale)
+        if precision != 0 || scale != 0 => DecimalType.bounded(precision, scale)
       case java.sql.Types.NUMERIC       => DecimalType.Maximum
       case java.sql.Types.NVARCHAR      => StringType
       case java.sql.Types.OTHER         => null
@@ -314,7 +314,7 @@ private[sql] class JDBCRDD(
   abstract class JDBCConversion
   case object BooleanConversion extends JDBCConversion
   case object DateConversion extends JDBCConversion
-  case class  DecimalConversion(precisionInfo: Option[(Int, Int)]) extends JDBCConversion
+  case class  DecimalConversion(precision: Int, scale: Int) extends JDBCConversion
   case object DoubleConversion extends JDBCConversion
   case object FloatConversion extends JDBCConversion
   case object IntegerConversion extends JDBCConversion
@@ -331,7 +331,7 @@ private[sql] class JDBCRDD(
     schema.fields.map(sf => sf.dataType match {
       case BooleanType => BooleanConversion
       case DateType => DateConversion
-      case DecimalType.Fixed(d) => DecimalConversion(Some(d))
+      case DecimalType.Fixed(p, s) => DecimalConversion(p, s)
       case DoubleType => DoubleConversion
       case FloatType => FloatConversion
       case IntegerType => IntegerConversion
@@ -398,19 +398,12 @@ private[sql] class JDBCRDD(
             // DecimalType(12, 2). Thus, after saving the dataframe into parquet file and then
             // retrieve it, you will get wrong result 199.99.
             // So it is needed to set precision and scale for Decimal based on JDBC metadata.
-            case DecimalConversion(Some((p, s))) =>
+            case DecimalConversion(p, s) =>
               val decimalVal = rs.getBigDecimal(pos)
               if (decimalVal == null) {
                 mutableRow.update(i, null)
               } else {
                 mutableRow.update(i, Decimal(decimalVal, p, s))
-              }
-            case DecimalConversion(None) =>
-              val decimalVal = rs.getBigDecimal(pos)
-              if (decimalVal == null) {
-                mutableRow.update(i, null)
-              } else {
-                mutableRow.update(i, Decimal(decimalVal))
               }
             case DoubleConversion => mutableRow.setDouble(i, rs.getDouble(pos))
             case FloatConversion => mutableRow.setFloat(i, rs.getFloat(pos))

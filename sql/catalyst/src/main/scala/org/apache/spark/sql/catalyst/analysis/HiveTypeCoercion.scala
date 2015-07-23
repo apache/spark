@@ -19,7 +19,9 @@ package org.apache.spark.sql.catalyst.analysis
 
 import javax.annotation.Nullable
 
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.codegen.{GeneratedExpressionCode, CodeGenContext}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.types._
@@ -158,6 +160,9 @@ object HiveTypeCoercion {
    *     converted to DOUBLE.
    *   - TINYINT, SMALLINT, and INT can all be converted to FLOAT.
    *   - BOOLEAN types cannot be converted to any other type.
+   *   - Any integral numeric type can be implicitly converted to decimal type.
+   *   - two different decimal types will be converted into a wider decimal type for both of them.
+   *   - decimal type will be converted into double if there float or double together with it.
    *
    * Additionally, all types when UNION-ed with strings will be promoted to strings.
    * Other string conversions are handled by PromoteStrings.
@@ -166,56 +171,50 @@ object HiveTypeCoercion {
    * - IntegerType to FloatType
    * - LongType to FloatType
    * - LongType to DoubleType
+   * - DecimalType to Double
+   *
+   * This rule is only applied to Union/Except/Intersect
    */
   object WidenTypes extends Rule[LogicalPlan] {
-    import scala.math.{max, min}
 
-    private[this] def widenOutputTypes(planName: String, left: LogicalPlan, right: LogicalPlan):
-        (LogicalPlan, LogicalPlan) = {
+    private[this] def widenOutputTypes(
+        planName: String,
+        left: LogicalPlan,
+        right: LogicalPlan): (LogicalPlan, LogicalPlan) = {
 
-      val castedInput = left.output.zip(right.output).map {
-        case (lhs @ DecimalType.Expression(p1, s1), rhs @ DecimalType.Expression(p2, s2))
-            if p1 != p2 || s1 != s2 =>
-          val dt = DecimalType(
-            min(max(p1 - s1, p2 - s2) + max(s1, s2), DecimalType.MAX_PRECISION),
-            max(s1, s2))
-          (Alias(Cast(lhs, dt), lhs.name)(), Alias(Cast(rhs, dt), rhs.name)())
-
+      val castedTypes = left.output.zip(right.output).map {
         case (lhs, rhs) if lhs.dataType != rhs.dataType =>
-          logDebug(s"Resolving mismatched $planName input ${lhs.dataType}, ${rhs.dataType}")
-          findTightestCommonTypeToString(lhs.dataType, rhs.dataType).map { widestType =>
-            val newLeft =
-              if (lhs.dataType == widestType) lhs else Alias(Cast(lhs, widestType), lhs.name)()
-            val newRight =
-              if (rhs.dataType == widestType) rhs else Alias(Cast(rhs, widestType), rhs.name)()
-
-            (newLeft, newRight)
-          }.getOrElse {
-            // If there is no applicable conversion, leave expression unchanged.
-            (lhs, rhs)
+          (lhs.dataType, rhs.dataType) match {
+            case (t1: DecimalType, t2: DecimalType) =>
+              Some(DecimalPrecision.widerDecimalType(t1, t2))
+            case (t: IntegralType, d: DecimalType) =>
+              Some(DecimalPrecision.widerDecimalType(DecimalType.forType(t), d))
+            case (d: DecimalType, t: IntegralType) =>
+              Some(DecimalPrecision.widerDecimalType(DecimalType.forType(t), d))
+            case (t: FractionalType, d: DecimalType) =>
+              Some(DoubleType)
+            case (d: DecimalType, t: FractionalType) =>
+              Some(DoubleType)
+            case _ =>
+              findTightestCommonTypeToString(lhs.dataType, rhs.dataType)
           }
-
-        case other => other
+        case other => None
       }
 
-      val (castedLeft, castedRight) = castedInput.unzip
-
-      val newLeft =
-        if (castedLeft.map(_.dataType) != left.output.map(_.dataType)) {
-          logDebug(s"Widening numeric types in $planName $castedLeft ${left.output}")
-          Project(castedLeft, left)
-        } else {
-          left
+      def castOutput(plan: LogicalPlan): LogicalPlan = {
+        val casted = plan.output.zip(castedTypes).map {
+          case (hs, Some(dt)) if dt != hs.dataType =>
+            Alias(Cast(hs, dt), hs.name)()
+          case (hs, _) => hs
         }
+        Project(casted, plan)
+      }
 
-      val newRight =
-        if (castedRight.map(_.dataType) != right.output.map(_.dataType)) {
-          logDebug(s"Widening numeric types in $planName $castedRight ${right.output}")
-          Project(castedRight, right)
-        } else {
-          right
-        }
-      (newLeft, newRight)
+      if (castedTypes.exists(_.isDefined)) {
+        (castOutput(left), castOutput(right))
+      } else {
+        (left, right)
+      }
     }
 
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
@@ -335,13 +334,9 @@ object HiveTypeCoercion {
    * - SHORT gets turned into DECIMAL(5, 0)
    * - INT gets turned into DECIMAL(10, 0)
    * - LONG gets turned into DECIMAL(20, 0)
-   * - FLOAT and DOUBLE
-   *   1. Union, Intersect and Except operations:
-   *      FLOAT gets turned into DECIMAL(14, 7), DOUBLE gets turned into DECIMAL(30, 15)
-   *      (this is the same as Hive)
-   *   2. Other operation:
-   *      FLOAT and DOUBLE cause fixed-length decimals to turn into DOUBLE (this is the same as Hive,
-   *   but note that unlimited decimals are considered bigger than doubles in WidenTypes)
+   * - FLOAT and DOUBLE cause fixed-length decimals to turn into DOUBLE
+   *
+   * Note: Union/Except/Interact is handled by WidenTypes
    */
   // scalastyle:on
   object DecimalPrecision extends Rule[LogicalPlan] {
@@ -357,109 +352,66 @@ object HiveTypeCoercion {
     def widerDecimalType(p1: Int, s1: Int, p2: Int, s2: Int): DecimalType = {
       val scale = max(s1, s2)
       val range = max(p1 - s1, p2 - s2)
-      DecimalType(min(range + scale, DecimalType.MAX_PRECISION), scale)
+      DecimalType.bounded(range + scale, scale)
     }
 
-    private def castDecimalPrecision(
-        left: LogicalPlan,
-        right: LogicalPlan): (LogicalPlan, LogicalPlan) = {
-      val castedTypes = left.output.zip(right.output).map {
-        case (lhs, rhs) if lhs.dataType != rhs.dataType =>
-          (lhs.dataType, rhs.dataType) match {
-            case (t1: DecimalType, t2: DecimalType) =>
-              Some(widerDecimalType(t1, t2))
-            case (t: IntegralType, d: DecimalType) =>
-              Some(widerDecimalType(DecimalType.forType(t), d))
-            case (d: DecimalType, t: IntegralType) =>
-              Some(widerDecimalType(DecimalType.forType(t), d))
-            case (t: FractionalType, d: DecimalType) =>
-              Some(DoubleType)
-            case (d: DecimalType, t: FractionalType) =>
-              Some(DoubleType)
-            case _ => None
-          }
-        case other => None
-      }
+    /**
+     * An expression used to wrap the children when promote the precision of DecimalType to avoid
+     * promote multiple times.
+     */
+    case class ChangePrecision(child: Expression) extends UnaryExpression {
+      override def dataType: DataType = child.dataType
+      override def eval(input: InternalRow): Any = child.eval(input)
+      override def gen(ctx: CodeGenContext): GeneratedExpressionCode = child.gen(ctx)
+      override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = ""
+      override def prettyName: String = "change_precision"
+    }
 
-      def castOutput(plan: LogicalPlan): LogicalPlan = {
-        val casted = plan.output.zip(castedTypes).map {
-          case (hs, Some(dt)) if dt != hs.dataType =>
-            Alias(Cast(hs, dt), hs.name)()
-          case (hs, _) => hs
-        }
-        Project(casted, plan)
-      }
-
-      if (castedTypes.exists(_.isDefined)) {
-        (castOutput(left), castOutput(right))
-      } else {
-        (left, right)
-      }
+    def changePrecision(e: Expression, dataType: DataType): Expression = {
+      ChangePrecision(Cast(e, dataType))
     }
 
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-      // fix decimal precision for union, intersect and except
-      case u @ Union(left, right) if u.childrenResolved && !u.resolved =>
-        val (newLeft, newRight) = castDecimalPrecision(left, right)
-        Union(newLeft, newRight)
-      case i @ Intersect(left, right) if i.childrenResolved && !i.resolved =>
-        val (newLeft, newRight) = castDecimalPrecision(left, right)
-        Intersect(newLeft, newRight)
-      case e @ Except(left, right) if e.childrenResolved && !e.resolved =>
-        val (newLeft, newRight) = castDecimalPrecision(left, right)
-        Except(newLeft, newRight)
-
       // fix decimal precision for expressions
       case q => q.transformExpressions {
         // Skip nodes whose children have not been resolved yet
         case e if !e.childrenResolved => e
 
         // Skip nodes who is already promoted
-        case e: BinaryArithmetic if e.decimalPromoted => e
+        case e: BinaryArithmetic if e.left.isInstanceOf[ChangePrecision] => e
 
         case Add(e1 @ DecimalType.Expression(p1, s1), e2 @ DecimalType.Expression(p2, s2)) =>
-          val dt = DecimalType(
-            min(max(s1, s2) + max(p1 - s1, p2 - s2) + 1, DecimalType.MAX_PRECISION),
-            max(s1, s2))
-          Add(Cast(e1, dt), Cast(e2, dt)).markPromoted()
+          val dt = DecimalType.bounded(max(s1, s2) + max(p1 - s1, p2 - s2) + 1, max(s1, s2))
+          Add(changePrecision(e1, dt), changePrecision(e2, dt))
 
         case Subtract(e1 @ DecimalType.Expression(p1, s1), e2 @ DecimalType.Expression(p2, s2)) =>
-          val dt = DecimalType(
-            min(max(s1, s2) + max(p1 - s1, p2 - s2) + 1, DecimalType.MAX_PRECISION),
-            max(s1, s2))
-          Subtract(Cast(e1, dt), Cast(e2, dt)).markPromoted()
+          val dt = DecimalType.bounded(max(s1, s2) + max(p1 - s1, p2 - s2) + 1, max(s1, s2))
+          Subtract(changePrecision(e1, dt), changePrecision(e2, dt))
 
         case Multiply(e1 @ DecimalType.Expression(p1, s1), e2 @ DecimalType.Expression(p2, s2)) =>
-          val dt = DecimalType(
-            min(p1 + p2 + 1, DecimalType.MAX_PRECISION),
-            min(s1 + s2, DecimalType.MAX_PRECISION))
-          Multiply(Cast(e1, dt), Cast(e2, dt)).markPromoted()
+          val dt = DecimalType.bounded(p1 + p2 + 1, s1 + s2)
+          Multiply(changePrecision(e1, dt), changePrecision(e2, dt))
 
         case Divide(e1 @ DecimalType.Expression(p1, s1), e2 @ DecimalType.Expression(p2, s2)) =>
-          val dt = DecimalType(
-            min(p1 - s1 + s2 + max(6, s1 + p2 + 1), DecimalType.MAX_PRECISION),
-            min(max(6, s1 + p2 + 1), DecimalType.MAX_PRECISION))
-          Divide(Cast(e1, dt), Cast(e2, dt)).markPromoted()
+          val dt = DecimalType.bounded(p1 - s1 + s2 + max(6, s1 + p2 + 1), max(6, s1 + p2 + 1))
+          Divide(changePrecision(e1, dt), changePrecision(e2, dt))
 
         case Remainder(e1 @ DecimalType.Expression(p1, s1), e2 @ DecimalType.Expression(p2, s2)) =>
-          val castType = widerDecimalType(p1, s1, p2, s2)
-          val resultType = DecimalType(
-            min(min(p1 - s1, p2 - s2) + max(s1, s2), DecimalType.MAX_PRECISION),
-            max(s1, s2))
-          Cast(Remainder(Cast(e1, castType), Cast(e2, castType)).markPromoted(), resultType)
+          val resultType = DecimalType.bounded(min(p1 - s1, p2 - s2) + max(s1, s2), max(s1, s2))
+          // resultType may have lower precision, so we cast them into wider type first.
+          val widerType = widerDecimalType(p1, s1, p2, s2)
+          Cast(Remainder(changePrecision(e1, widerType), changePrecision(e2, widerType)),
+            resultType)
 
         case Pmod(e1 @ DecimalType.Expression(p1, s1), e2 @ DecimalType.Expression(p2, s2)) =>
-          val castType = widerDecimalType(p1, s1, p2, s2)
-          val resultType = DecimalType(
-            min(min(p1 - s1, p2 - s2) + max(s1, s2), DecimalType.MAX_PRECISION),
-            max(s1, s2))
-          Cast(Pmod(Cast(e1, castType), Cast(e2, castType)).markPromoted(), resultType)
+          val resultType = DecimalType.bounded(min(p1 - s1, p2 - s2) + max(s1, s2), max(s1, s2))
+          // resultType may have lower precision, so we cast them into wider type first.
+          val widerType = widerDecimalType(p1, s1, p2, s2)
+          Cast(Pmod(changePrecision(e1, widerType), changePrecision(e2, widerType)), resultType)
 
-        // When we compare 2 decimal types with different precisions, cast them to the smallest
-        // common precision.
         case b @ BinaryComparison(e1 @ DecimalType.Expression(p1, s1),
                                   e2 @ DecimalType.Expression(p2, s2)) if p1 != p2 || s1 != s2 =>
-          val resultType = DecimalType(max(p1, p2), max(s1, s2))
+          val resultType = widerDecimalType(p1, s1, p2, s2)
           b.makeCopy(Array(Cast(e1, resultType), Cast(e2, resultType)))
 
         // Promote integers inside a binary expression with fixed-precision decimals to decimals,
@@ -560,7 +512,7 @@ object HiveTypeCoercion {
       case e if !e.childrenResolved => e
 
       case Cast(e @ StringType(), t: IntegralType) =>
-        Cast(Cast(e, DecimalType.Maximum), t)
+        Cast(Cast(e, DecimalType.forType(LongType)), t)
     }
   }
 
@@ -753,8 +705,8 @@ object HiveTypeCoercion {
         // Implicit cast among numeric types. When we reach here, input type is not acceptable.
 
         // If input is a numeric type but not decimal, and we expect a decimal type,
-        // cast the input to unlimited precision decimal.
-        case (_: NumericType, DecimalType) => Cast(e, DecimalType.Maximum)
+        // cast the input to decimal.
+        case (d: NumericType, DecimalType) => Cast(e, DecimalType.forType(d))
         // For any other numeric types, implicitly cast to each other, e.g. long -> int, int -> long
         case (_: NumericType, target: NumericType) => Cast(e, target)
 

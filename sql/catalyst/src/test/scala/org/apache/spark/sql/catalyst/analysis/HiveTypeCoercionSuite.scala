@@ -338,7 +338,7 @@ class HiveTypeCoercionSuite extends PlanTest {
       }
     }
 
-    val dp = HiveTypeCoercion.DecimalPrecision
+    val dp = HiveTypeCoercion.WidenTypes
 
     val left1 = LocalRelation(
       AttributeReference("l", DecimalType(10, 8))())

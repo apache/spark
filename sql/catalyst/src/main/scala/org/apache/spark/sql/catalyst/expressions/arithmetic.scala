@@ -88,14 +88,6 @@ abstract class BinaryArithmetic extends BinaryOperator {
 
   override def dataType: DataType = left.dataType
 
-  // Whether the dataType is promoted or not, we should only promote DecimalType once
-  var decimalPromoted: Boolean = false
-
-  def markPromoted(): this.type = {
-    decimalPromoted = true
-    this
-  }
-
   override lazy val resolved = childrenResolved && checkInputDataTypes().isSuccess
 
   /** Name of the function for this expression on a [[Decimal]] type. */
