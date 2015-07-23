@@ -391,7 +391,7 @@ case class Average(child: Expression) extends UnaryExpression with PartialAggreg
   override def dataType: DataType = child.dataType match {
     case DecimalType.Fixed(precision, scale) =>
       // Add 4 digits after decimal point, like Hive
-      DecimalType.bounded(precision + 4,scale + 4)
+      DecimalType.bounded(precision + 4, scale + 4)
     case _ =>
       DoubleType
   }
