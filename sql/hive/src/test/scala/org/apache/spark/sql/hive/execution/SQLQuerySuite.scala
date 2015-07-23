@@ -264,47 +264,50 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils {
 
     setConf(HiveContext.CONVERT_CTAS, true)
 
-    sql("CREATE TABLE ctas1 AS SELECT key k, value FROM src ORDER BY k, value")
-    sql("CREATE TABLE IF NOT EXISTS ctas1 AS SELECT key k, value FROM src ORDER BY k, value")
-    var message = intercept[AnalysisException] {
+    try {
       sql("CREATE TABLE ctas1 AS SELECT key k, value FROM src ORDER BY k, value")
-    }.getMessage
-    assert(message.contains("ctas1 already exists"))
-    checkRelation("ctas1", true)
-    sql("DROP TABLE ctas1")
+      sql("CREATE TABLE IF NOT EXISTS ctas1 AS SELECT key k, value FROM src ORDER BY k, value")
+      var message = intercept[AnalysisException] {
+        sql("CREATE TABLE ctas1 AS SELECT key k, value FROM src ORDER BY k, value")
+      }.getMessage
+      assert(message.contains("ctas1 already exists"))
+      checkRelation("ctas1", true)
+      sql("DROP TABLE ctas1")
 
-    // Specifying database name for query can be converted to data source write path
-    // is not allowed right now.
-    message = intercept[AnalysisException] {
-      sql("CREATE TABLE default.ctas1 AS SELECT key k, value FROM src ORDER BY k, value")
-    }.getMessage
-    assert(
-      message.contains("Cannot specify database name in a CTAS statement"),
-      "When spark.sql.hive.convertCTAS is true, we should not allow " +
-      "database name specified.")
+      // Specifying database name for query can be converted to data source write path
+      // is not allowed right now.
+      message = intercept[AnalysisException] {
+        sql("CREATE TABLE default.ctas1 AS SELECT key k, value FROM src ORDER BY k, value")
+      }.getMessage
+      assert(
+        message.contains("Cannot specify database name in a CTAS statement"),
+        "When spark.sql.hive.convertCTAS is true, we should not allow " +
+            "database name specified.")
 
-    sql("CREATE TABLE ctas1 stored as textfile AS SELECT key k, value FROM src ORDER BY k, value")
-    checkRelation("ctas1", true)
-    sql("DROP TABLE ctas1")
+      sql("CREATE TABLE ctas1 stored as textfile AS SELECT key k, value FROM src ORDER BY k, value")
+      checkRelation("ctas1", true)
+      sql("DROP TABLE ctas1")
 
-    sql(
-      "CREATE TABLE ctas1 stored as sequencefile AS SELECT key k, value FROM src ORDER BY k, value")
-    checkRelation("ctas1", true)
-    sql("DROP TABLE ctas1")
+      sql(
+        "CREATE TABLE ctas1 stored as sequencefile AS SELECT key k, value FROM src ORDER BY k, value")
+      checkRelation("ctas1", true)
+      sql("DROP TABLE ctas1")
 
-    sql("CREATE TABLE ctas1 stored as rcfile AS SELECT key k, value FROM src ORDER BY k, value")
-    checkRelation("ctas1", false)
-    sql("DROP TABLE ctas1")
+      sql("CREATE TABLE ctas1 stored as rcfile AS SELECT key k, value FROM src ORDER BY k, value")
+      checkRelation("ctas1", false)
+      sql("DROP TABLE ctas1")
 
-    sql("CREATE TABLE ctas1 stored as orc AS SELECT key k, value FROM src ORDER BY k, value")
-    checkRelation("ctas1", false)
-    sql("DROP TABLE ctas1")
+      sql("CREATE TABLE ctas1 stored as orc AS SELECT key k, value FROM src ORDER BY k, value")
+      checkRelation("ctas1", false)
+      sql("DROP TABLE ctas1")
 
-    sql("CREATE TABLE ctas1 stored as parquet AS SELECT key k, value FROM src ORDER BY k, value")
-    checkRelation("ctas1", false)
-    sql("DROP TABLE ctas1")
-
-    setConf(HiveContext.CONVERT_CTAS, originalConf)
+      sql("CREATE TABLE ctas1 stored as parquet AS SELECT key k, value FROM src ORDER BY k, value")
+      checkRelation("ctas1", false)
+      sql("DROP TABLE ctas1")
+    } finally {
+      setConf(HiveContext.CONVERT_CTAS, originalConf)
+      sql("DROP TABLE IF EXISTS ctas1")
+    }
   }
 
   test("SQL Dialect Switching") {
@@ -670,22 +673,25 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils {
     val originalConf = convertCTAS
     setConf(HiveContext.CONVERT_CTAS, false)
 
-    sql("CREATE TABLE explodeTest (key bigInt)")
-    table("explodeTest").queryExecution.analyzed match {
-      case metastoreRelation: MetastoreRelation => // OK
-      case _ =>
-        fail("To correctly test the fix of SPARK-5875, explodeTest should be a MetastoreRelation")
+    try {
+      sql("CREATE TABLE explodeTest (key bigInt)")
+      table("explodeTest").queryExecution.analyzed match {
+        case metastoreRelation: MetastoreRelation => // OK
+        case _ =>
+          fail("To correctly test the fix of SPARK-5875, explodeTest should be a MetastoreRelation")
+      }
+
+      sql(s"INSERT OVERWRITE TABLE explodeTest SELECT explode(a) AS val FROM data")
+      checkAnswer(
+        sql("SELECT key from explodeTest"),
+        (1 to 5).flatMap(i => Row(i) :: Row(i + 1) :: Nil)
+      )
+
+      sql("DROP TABLE explodeTest")
+      dropTempTable("data")
+    } finally {
+      setConf(HiveContext.CONVERT_CTAS, originalConf)
     }
-
-    sql(s"INSERT OVERWRITE TABLE explodeTest SELECT explode(a) AS val FROM data")
-    checkAnswer(
-      sql("SELECT key from explodeTest"),
-      (1 to 5).flatMap(i => Row(i) :: Row(i + 1) :: Nil)
-    )
-
-    sql("DROP TABLE explodeTest")
-    dropTempTable("data")
-    setConf(HiveContext.CONVERT_CTAS, originalConf)
   }
 
   test("sanity test for SPARK-6618") {
