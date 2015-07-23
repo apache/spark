@@ -339,6 +339,9 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext {
       print(lda.alpha)
       > [ 0.42582646  0.43511073 ]
      */
+
+    println(ldaModel.getDocConcentration)
+    assert(ldaModel.getDocConcentration ~== Vectors.dense(0.42582646, 0.43511073) relTol 1E-3)
   }
 
   test("OnlineLDAOptimizer with asymmetric prior") {

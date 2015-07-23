@@ -406,27 +406,32 @@ final class OnlineLDAOptimizer extends LDAOptimizer {
     val alpha = this.alpha.toBreeze
     val gammaShape = this.gammaShape
 
-    val stats: RDD[BDM[Double]] = batch.mapPartitions { docs =>
+    val stats: RDD[(BDM[Double], List[BDV[Double]])] = batch.mapPartitions { docs =>
       val stat = BDM.zeros[Double](k, vocabSize)
+      var gammaPart = List[BDV[Double]]()
       docs.foreach { case (_, termCounts: Vector) =>
         val ids: List[Int] = termCounts match {
           case v: DenseVector => (0 until v.size).toList
           case v: SparseVector => v.indices.toList
         }
         if (!ids.isEmpty) {
-          val (_, sstats) = OnlineLDAOptimizer.variationalTopicInference(
+          val (gammad, sstats) = OnlineLDAOptimizer.variationalTopicInference(
             termCounts, expElogbeta, alpha, gammaShape, k)
           stat(::, ids) := sstats
+          gammaPart = gammad :: gammaPart
         }
       }
-      Iterator(stat)
+      Iterator((stat, gammaPart))
     }
 
-    val statsSum: BDM[Double] = stats.reduce(_ += _)
+    val statsSum: BDM[Double] = stats.map(_._1).reduce(_ += _)
+    val gammat: BDM[Double] = breeze.linalg.DenseMatrix.vertcat(
+      stats.map(_._2).reduce(_ ++ _).map(_.toDenseMatrix): _*)
     val batchResult = statsSum :* expElogbeta.t
 
     // Note that this is an optimization to avoid batch.count
-    update(batchResult, iteration, (miniBatchFraction * corpusSize).ceil.toInt)
+    updateLambda(batchResult, (miniBatchFraction * corpusSize).ceil.toInt)
+    if (optimizeAlpha) updateAlpha(gammat)
     this
   }
 
@@ -437,15 +442,14 @@ final class OnlineLDAOptimizer extends LDAOptimizer {
   /**
    * Update lambda based on the batch submitted. batchSize can be different for each iteration.
    */
-  private def update(stat: BDM[Double], iter: Int, batchSize: Int): Unit = {
+  private def updateLambda(stat: BDM[Double], batchSize: Int): Unit = {
     // weight of the mini-batch.
-    val weight = math.pow(getTau0 + iter, -getKappa)
+    val weight = rho()
 
     // Update lambda based on documents.
     lambda := (1 - weight) * lambda +
       weight * (stat * (corpusSize.toDouble / batchSize.toDouble) + eta)
   }
-
 
   /**
    *    Update (in place) parameters for the Dirichlet prior on the per-document
@@ -454,11 +458,12 @@ final class OnlineLDAOptimizer extends LDAOptimizer {
    *    @see Huang: Maximum Likelihood Estimation of Dirichlet Distribution Parameters
    *         (http://www.stanford.edu/~jhuang11/research/dirichlet/dirichlet.pdf)
    */
-  private def updateAlpha(gammat: BDV[Double], rho: Double): Unit = {
-    val N = gammat.length.toDouble
+  private def updateAlpha(gammat: BDM[Double]): Unit = {
+    val weight = rho()
+    val N = gammat.rows.toDouble
     val alpha = this.alpha.toBreeze.toDenseVector
-    val logphat = sum(LDAUtils.dirichletExpectation(gammat)) / N
-    val gradf = N * (-LDAUtils.dirichletExpectation(alpha) + logphat)
+    val logphat: BDM[Double] = sum(LDAUtils.dirichletExpectation(gammat)(::, breeze.linalg.*)) / N
+    val gradf = N * (-LDAUtils.dirichletExpectation(alpha) + logphat.toDenseVector)
 
     val c = N * trigamma(sum(alpha))
     val q = -N * trigamma(alpha)
@@ -467,11 +472,18 @@ final class OnlineLDAOptimizer extends LDAOptimizer {
 
     val dalpha = -(gradf - b) / q
 
-    if (all((rho * dalpha + alpha) :> 0D)) {
-      alpha :+= rho * dalpha
+    if (all((weight * dalpha + alpha) :> 0D)) {
+      alpha :+= weight * dalpha
       this.alpha = Vectors.dense(alpha.toArray)
+      println(alpha)
     }
   }
+
+  /** Calculates learning rate rho, which decays as a function of [[iteration]] */
+  private def rho(): Double = {
+    math.pow(getTau0 + this.iteration, -getKappa)
+  }
+
 
   /**
    * Get a random matrix to initialize lambda

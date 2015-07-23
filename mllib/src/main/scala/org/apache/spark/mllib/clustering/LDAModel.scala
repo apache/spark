@@ -57,8 +57,27 @@ abstract class LDAModel private[clustering] extends Saveable {
   /** Dirichlet parameters for document-topic distribution. */
   protected def docConcentration: Vector
 
+  /**
+   * Concentration parameter (commonly named "alpha") for the prior placed on documents'
+   * distributions over topics ("theta").
+   *
+   * This is the parameter to a Dirichlet distribution.
+   */
+  def getDocConcentration: Vector = this.docConcentration
+
   /** Dirichlet parameters for topic-word distribution. */
   protected def topicConcentration: Double
+
+  /**
+   * Concentration parameter (commonly named "beta" or "eta") for the prior placed on topics'
+   * distributions over terms.
+   *
+   * This is the parameter to a symmetric Dirichlet distribution.
+   *
+   * Note: The topics' distributions over terms are called "beta" in the original LDA paper
+   * by Blei et al., but are called "phi" in many later papers such as Asuncion et al., 2009.
+   */
+  def getTopicConcentration: Double = this.topicConcentration
 
   /** Shape parameter for random initialization of gamma. */
   protected def gammaShape: Double
@@ -227,6 +246,8 @@ class LocalLDAModel private[clustering] (
    * Calculate and return per-word likelihood bound, using the `batch` of
    * documents as evaluation corpus.
    */
+  // TODO: calcualte logPerplexity over training set online during training, reusing gammad instead
+  // of performing variational inference again in [[bound()]]
   def logPerplexity(
       batch: RDD[(Long, Vector)],
       totalDocs: Long): Double = {
@@ -253,7 +274,6 @@ class LocalLDAModel private[clustering] (
    *  Estimate the variational bound of documents from `batch`:
    *  E_q[log p(bath)] - E_q[log q(batch)]
    */
-  // TODO: precompute gamma during training to use for logPerplexity's call to bound
   private def bound(
       batch: RDD[(Long, Vector)],
       subsampleRatio: Double,
