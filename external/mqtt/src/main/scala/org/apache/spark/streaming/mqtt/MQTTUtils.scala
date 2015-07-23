@@ -87,12 +87,7 @@ private class MQTTUtilsPythonHelper {
       brokerUrl: String,
       topic: String,
       storageLevel: StorageLevel
-    ): JavaDStream[Array[Byte]] = {
-    val dstream = MQTTUtils.createStream(jssc, brokerUrl, topic, storageLevel)
-    dstream.map(new Function[String, Array[Byte]] {
-      override def call(data: String): Array[Byte] = {
-        data.getBytes("UTF-8")
-      }
-    })
+    ): JavaDStream[String] = {
+    MQTTUtils.createStream(jssc, brokerUrl, topic, storageLevel)
   }
 }

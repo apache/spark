@@ -18,7 +18,7 @@
 package org.apache.spark.streaming.mqtt
 
 import java.net.{ServerSocket, URI}
-import java.util.concurrent.{TimeUnit, CountDownLatch}
+import java.util.concurrent.{CountDownLatch, TimeUnit}
 
 import scala.language.postfixOps
 
@@ -27,7 +27,7 @@ import org.apache.commons.lang3.RandomUtils
 import org.eclipse.paho.client.mqttv3._
 import org.eclipse.paho.client.mqttv3.persist.MqttDefaultFilePersistence
 
-import org.apache.spark.streaming.{StreamingContext, Milliseconds}
+import org.apache.spark.streaming.StreamingContext
 import org.apache.spark.streaming.scheduler.StreamingListener
 import org.apache.spark.streaming.scheduler.StreamingListenerReceiverStarted
 import org.apache.spark.util.Utils
@@ -40,7 +40,7 @@ private class MQTTTestUtils extends Logging {
 
   private val persistenceDir = Utils.createTempDir()
   private val brokerHost = "localhost"
-  private var brokerPort = findFreePort()
+  private val brokerPort = findFreePort()
 
   private var broker: BrokerService = _
   private var connector: TransportConnector = _
