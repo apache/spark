@@ -761,6 +761,14 @@ object functions {
    */
   def bitwiseNOT(e: Column): Column = BitwiseNot(e.expr)
 
+  /**
+   * Parses the comma separated expression strings into the columns they represent, similar to
+   * DataFrame.selectExpr
+   *
+   * @group normal_funcs
+   */
+  def expr(expr: String): Column = Column(new SqlParser().parseExpression(expr))
+
   //////////////////////////////////////////////////////////////////////////////////////////////
   // Math Functions
   //////////////////////////////////////////////////////////////////////////////////////////////
@@ -1719,12 +1727,4 @@ object functions {
   def callUdf(udfName: String, cols: Column*): Column = {
      UnresolvedFunction(udfName, cols.map(_.expr))
   }
-
-  /**
-   * Parses the comma separated expression strings into the columns they represent, similar to
-   * DataFrame.selectExpr
-   *
-   * @group normal_funcs
-   */
-  def expr(expr: String): Column = Column(new SqlParser().parseExpression(expr))
 }
