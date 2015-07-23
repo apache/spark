@@ -17,8 +17,6 @@
 
 package org.apache.spark.ml.feature
 
-import scala.util.parsing.combinator.RegexParsers
-
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.ml.{Estimator, Model, Transformer, PipelineModel}
 import org.apache.spark.ml.param.{Param, ParamMap}
@@ -79,7 +77,8 @@ class RFormula(override val uid: String) extends Estimator[RFormulaModel] with R
 
   override def fit(dataset: DataFrame): RFormulaModel = {
     require(parsedFormula.isDefined, "Must call setFormula() first.")
-    val factorLevels = parsedFormula.get.terms.flatMap { term =>
+    val fittedFormula = parsedFormula.get.fit(dataset.schema)
+    val factorLevels = fittedFormula.terms.flatMap { term =>
       dataset.schema(term) match {
         case column if column.dataType == StringType =>
           val idxTerm = term + "_idx_" + uid
@@ -89,7 +88,7 @@ class RFormula(override val uid: String) extends Estimator[RFormulaModel] with R
           None
       }
     }.toMap
-    copyValues(new RFormulaModel(uid, parsedFormula.get, factorLevels).setParent(this))
+    copyValues(new RFormulaModel(uid, fittedFormula, factorLevels).setParent(this))
   }
 
   // optimistic schema; does not contain any ML attributes
@@ -115,7 +114,7 @@ class RFormula(override val uid: String) extends Estimator[RFormulaModel] with R
  */
 private[feature] class RFormulaModel(
     override val uid: String,
-    parsedFormula: ParsedRFormula,
+    fittedFormula: FittedRFormula,
     factorLevels: Map[String, StringIndexerModel])
   extends Model[RFormulaModel] with RFormulaBase {
 
@@ -129,8 +128,8 @@ private[feature] class RFormulaModel(
     val withFeatures = featureTransformer(schema).transformSchema(schema)
     if (hasLabelCol(schema)) {
       withFeatures
-    } else if (schema.exists(_.name == parsedFormula.label)) {
-      val nullable = schema(parsedFormula.label).dataType match {
+    } else if (schema.exists(_.name == fittedFormula.label)) {
+      val nullable = schema(fittedFormula.label).dataType match {
         case _: NumericType | BooleanType => false
         case _ => true
       }
@@ -143,12 +142,12 @@ private[feature] class RFormulaModel(
   }
 
   override def copy(extra: ParamMap): RFormulaModel = copyValues(
-    new RFormulaModel(uid, parsedFormula, factorLevels))
+    new RFormulaModel(uid, fittedFormula, factorLevels))
 
-  override def toString: String = s"RFormulaModel(${parsedFormula})"
+  override def toString: String = s"RFormulaModel(${fittedFormula})"
 
   private def transformLabel(dataset: DataFrame): DataFrame = {
-    val labelName = parsedFormula.label
+    val labelName = fittedFormula.label
     if (hasLabelCol(dataset.schema)) {
       dataset
     } else if (dataset.schema.exists(_.name == labelName)) {
@@ -178,7 +177,7 @@ private[feature] class RFormulaModel(
     // TODO(ekl) add support for feature interactions
     var encoderStages = Seq[Transformer]()
     var tempColumns = Seq[String]()
-    val encodedTerms = parsedFormula.terms.map { term =>
+    val encodedTerms = fittedFormula.terms.map { term =>
       schema(term) match {
         case column if column.dataType == StringType =>
           val encodedTerm = term + "_onehot_" + uid
@@ -219,27 +218,4 @@ private class ColumnPruner(columnsToPrune: Set[String]) extends Transformer {
     StructType(schema.fields.filter(col => !columnsToPrune.contains(col.name)))
   }
   override def copy(extra: ParamMap): ColumnPruner = defaultCopy(extra)
-}
-
-/**
- * Represents a parsed R formula.
- */
-private[ml] case class ParsedRFormula(label: String, terms: Seq[String])
-
-/**
- * Limited implementation of R formula parsing. Currently supports: '~', '+'.
- */
-private[ml] object RFormulaParser extends RegexParsers {
-  def term: Parser[String] = "([a-zA-Z]|\\.[a-zA-Z_])[a-zA-Z0-9._]*".r
-
-  def expr: Parser[List[String]] = term ~ rep("+" ~> term) ^^ { case a ~ list => a :: list }
-
-  def formula: Parser[ParsedRFormula] =
-    (term ~ "~" ~ expr) ^^ { case r ~ "~" ~ t => ParsedRFormula(r, t.distinct) }
-
-  def parse(value: String): ParsedRFormula = parseAll(formula, value) match {
-    case Success(result, _) => result
-    case failure: NoSuccess => throw new IllegalArgumentException(
-      "Could not parse formula: " + value)
-  }
 }

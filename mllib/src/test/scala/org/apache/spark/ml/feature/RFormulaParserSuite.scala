@@ -18,10 +18,15 @@
 package org.apache.spark.ml.feature
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.types._
 
 class RFormulaParserSuite extends SparkFunSuite {
-  private def checkParse(formula: String, label: String, terms: Seq[String]) {
-    val parsed = RFormulaParser.parse(formula)
+  private def checkParse(
+      formula: String,
+      label: String,
+      terms: Seq[String],
+      schema: StructType = null) {
+    val parsed = RFormulaParser.parse(formula).fit(schema)
     assert(parsed.label == label)
     assert(parsed.terms == terms)
   }
@@ -31,5 +36,29 @@ class RFormulaParserSuite extends SparkFunSuite {
     checkParse("y ~ x + x", "y", Seq("x"))
     checkParse("y ~   ._foo  ", "y", Seq("._foo"))
     checkParse("resp ~ A_VAR + B + c123", "resp", Seq("A_VAR", "B", "c123"))
+  }
+
+  test("parse dot") {
+    val schema = (new StructType)
+      .add("a", "int", true, Metadata.empty)
+      .add("b", "long", false, Metadata.empty)
+      .add("c", "string", true, Metadata.empty)
+    checkParse("a ~ .", "a", Seq("b", "c"), schema)
+  }
+
+  test("parse deletion") {
+    val schema = (new StructType)
+      .add("a", "int", true, Metadata.empty)
+      .add("b", "long", false, Metadata.empty)
+      .add("c", "string", true, Metadata.empty)
+    checkParse("a ~ c - b", "a", Seq("c"), schema)
+  }
+
+  test("parse additions and deletions in order") {
+    val schema = (new StructType)
+      .add("a", "int", true, Metadata.empty)
+      .add("b", "long", false, Metadata.empty)
+      .add("c", "string", true, Metadata.empty)
+    checkParse("a ~ . - b + . - c", "a", Seq("b"), schema)
   }
 }
