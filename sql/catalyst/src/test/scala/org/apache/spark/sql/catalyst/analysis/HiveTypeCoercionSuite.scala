@@ -344,7 +344,7 @@ class HiveTypeCoercionSuite extends PlanTest {
       AttributeReference("l", DecimalType(10, 8))())
     val right1 = LocalRelation(
       AttributeReference("r", DecimalType(5, 5))())
-    val expectedType1 = Seq(DecimalType(math.max(8, 5) + math.max(10 - 8, 5 - 5), math.max(8, 5)))
+    val expectedType1 = Seq(DecimalType(10, 8))
 
     val r1 = dp(Union(left1, right1)).asInstanceOf[Union]
     val r2 = dp(Except(left1, right1)).asInstanceOf[Except]
@@ -362,7 +362,7 @@ class HiveTypeCoercionSuite extends PlanTest {
 
     val rightTypes = Seq(ByteType, ShortType, IntegerType, LongType, FloatType, DoubleType)
     val expectedTypes = Seq(DecimalType(3, 0), DecimalType(5, 0), DecimalType(10, 0),
-      DecimalType(20, 0), DecimalType(14, 7), DecimalType(30, 15))
+      DecimalType(20, 0), DoubleType, DoubleType)
 
     rightTypes.zip(expectedTypes).map { case (rType, expectedType) =>
       val plan2 = LocalRelation(

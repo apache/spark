@@ -174,12 +174,6 @@ object HiveTypeCoercion {
         (LogicalPlan, LogicalPlan) = {
 
       val castedInput = left.output.zip(right.output).map {
-        // When a string is found on one side, make the other side a string too.
-        case (lhs, rhs) if lhs.dataType == StringType && rhs.dataType != StringType =>
-          (lhs, Alias(Cast(rhs, StringType), rhs.name)())
-        case (lhs, rhs) if lhs.dataType != StringType && rhs.dataType == StringType =>
-          (Alias(Cast(lhs, StringType), lhs.name)(), rhs)
-
         case (lhs @ DecimalType.Expression(p1, s1), rhs @ DecimalType.Expression(p2, s2))
             if p1 != p2 || s1 != s2 =>
           val dt = DecimalType(
@@ -189,7 +183,7 @@ object HiveTypeCoercion {
 
         case (lhs, rhs) if lhs.dataType != rhs.dataType =>
           logDebug(s"Resolving mismatched $planName input ${lhs.dataType}, ${rhs.dataType}")
-          findTightestCommonTypeOfTwo(lhs.dataType, rhs.dataType).map { widestType =>
+          findTightestCommonTypeToString(lhs.dataType, rhs.dataType).map { widestType =>
             val newLeft =
               if (lhs.dataType == widestType) lhs else Alias(Cast(lhs, widestType), lhs.name)()
             val newRight =
@@ -368,15 +362,16 @@ object HiveTypeCoercion {
                 min(max(s1, s2) + max(p1 - s1, p2 - s2), DecimalType.MAX_PRECISION),
                 max(s1, s2))
               (Alias(Cast(lhs, fixedType), lhs.name)(), Alias(Cast(rhs, fixedType), rhs.name)())
+
             case (t: IntegralType, DecimalType.Fixed(p, s)) =>
               (Alias(Cast(lhs, DecimalType.forType(t)), lhs.name)(), rhs)
             case (DecimalType.Fixed(p, s), t: IntegralType) =>
               (lhs, Alias(Cast(rhs, DecimalType.forType(t)), rhs.name)())
-            // FIXME(davies): Should we turn them into DoubleType? as we do for BinaryOperator
+
             case (t: FractionalType, DecimalType.Fixed(p, s)) =>
-              (Alias(Cast(lhs, DecimalType.forType(t)), lhs.name)(), rhs)
+              (Alias(Cast(lhs, DoubleType), lhs.name)(), Alias(Cast(rhs, DoubleType), rhs.name)())
             case (DecimalType.Fixed(p, s), t: FractionalType) =>
-              (lhs, Alias(Cast(rhs, DecimalType.forType(t)), rhs.name)())
+              (Alias(Cast(lhs, DoubleType), lhs.name)(), Alias(Cast(rhs, DoubleType), rhs.name)())
             case _ => (lhs, rhs)
           }
         case other => other
