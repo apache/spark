@@ -359,13 +359,13 @@ private[sql] class ParquetRelation2(
         !cachedLeaves.equals(currentLeafStatuses)
 
       if (leafStatusesChanged) {
-        cachedLeaves = currentLeafStatuses.filter { f =>
-          isSummaryFile(f.getPath) ||
-            !(f.getPath.getName.startsWith("_") || f.getPath.getName.startsWith("."))
-        }
+        cachedLeaves = currentLeafStatuses.toIterator.toSet
 
         // Lists `FileStatus`es of all leaf nodes (files) under all base directories.
-        val leaves = cachedLeaves.toArray
+        val leaves = currentLeafStatuses.filter { f =>
+          isSummaryFile(f.getPath) ||
+            !(f.getPath.getName.startsWith("_") || f.getPath.getName.startsWith("."))
+        }.toArray
 
         dataStatuses = leaves.filterNot(f => isSummaryFile(f.getPath))
         metadataStatuses =
