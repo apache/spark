@@ -154,7 +154,38 @@ object SparkBuild extends PomBuild {
       if (major.toInt >= 1 && minor.toInt >= 8) Seq("-Xdoclint:all", "-Xdoclint:-missing") else Seq.empty
     },
 
-    javacOptions in Compile ++= Seq("-encoding", "UTF-8")
+    javacOptions in Compile ++= Seq("-encoding", "UTF-8"),
+
+    // Implements -Xfatal-warnings, ignoring deprecation warnings.
+    // Code snippet taken from https://issues.scala-lang.org/browse/SI-8410.
+    compile in Compile := {
+      val analysis = (compile in Compile).value
+      val s = streams.value
+
+      def logProblem(l: (=> String) => Unit, f: File, p: xsbti.Problem) = {
+        l(f.toString + ":" + p.position.line.fold("")(_ + ":") + " " + p.message)
+        l(p.position.lineContent)
+        l("")
+      }
+
+      var failed = 0
+      analysis.infos.allInfos.foreach { case (k, i) =>
+        i.reportedProblems foreach { p =>
+          val deprecation = p.message.contains("is deprecated")
+
+          if (!deprecation) {
+            failed = failed + 1
+          }
+
+          logProblem(if (deprecation) s.log.warn else s.log.error, k, p)
+        }
+      }
+
+      if (failed > 0) {
+        sys.error(s"$failed fatal warnings")
+      }
+      analysis
+    }
   )
 
   def enable(settings: Seq[Setting[_]])(projectRef: ProjectRef) = {
@@ -512,7 +543,7 @@ object TestSettings {
     javaOptions in Test += "-Dspark.ui.enabled=false",
     javaOptions in Test += "-Dspark.ui.showConsoleProgress=false",
     javaOptions in Test += "-Dspark.driver.allowMultipleContexts=true",
-    javaOptions in Test += "-Dspark.unsafe.exceptionOnMemoryLeak=true",
+    //javaOptions in Test += "-Dspark.unsafe.exceptionOnMemoryLeak=true",
     javaOptions in Test += "-Dsun.io.serialization.extendedDebugInfo=true",
     javaOptions in Test += "-Dderby.system.durability=test",
     javaOptions in Test ++= System.getProperties.filter(_._1 startsWith "spark")
