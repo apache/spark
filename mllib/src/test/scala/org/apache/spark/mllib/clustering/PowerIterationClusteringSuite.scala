@@ -67,7 +67,7 @@ class PowerIterationClusteringSuite extends SparkFunSuite with MLlibTestSparkCon
     }
     assert(predictions2.toSet == Set((0 to 3).toSet, (4 to 15).toSet))
   }
- 
+
   test("power iteration clustering on graph") {
     /*
      We use the following graph to test PIC. All edges are assigned similarity 1.0 except 0.1 for
@@ -104,7 +104,7 @@ class PowerIterationClusteringSuite extends SparkFunSuite with MLlibTestSparkCon
       predictions(a.cluster) += a.id
     }
     assert(predictions.toSet == Set((0 to 3).toSet, (4 to 15).toSet))
- 
+
     val model2 = new PowerIterationClustering()
       .setK(2)
       .setInitializationMode("degree")
@@ -115,7 +115,7 @@ class PowerIterationClusteringSuite extends SparkFunSuite with MLlibTestSparkCon
     }
     assert(predictions2.toSet == Set((0 to 3).toSet, (4 to 15).toSet))
   }
- 
+
   test("normalize and powerIter") {
     /*
      Test normalize() with the following graph:

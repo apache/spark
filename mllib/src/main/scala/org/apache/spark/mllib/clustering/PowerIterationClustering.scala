@@ -152,7 +152,7 @@ class PowerIterationClustering private[clustering] (
     }
     this
   }
- 
+
   /**
    * Run the PIC algorithm on Graph.
    *
@@ -173,7 +173,7 @@ class PowerIterationClustering private[clustering] (
     }
     pic(w0)
   }
- 
+
   /**
    * Run the PIC algorithm.
    *
@@ -257,7 +257,7 @@ object PowerIterationClustering extends Logging {
         e => e.attr / math.max(e.srcAttr, MLUtils.EPSILON),
         TripletFields.Src)
   }
- 
+
   /**
    * Normalizes the affinity matrix (A) by row sums and returns the normalized affinity matrix (W).
    */
