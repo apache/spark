@@ -24,6 +24,7 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * Test suite for data type casting expression [[Cast]].
@@ -580,14 +581,21 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("cast from struct") {
     val struct = Literal.create(
-      InternalRow("123", "abc", "", null),
+      InternalRow(
+        UTF8String.fromString("123"),
+        UTF8String.fromString("abc"),
+        UTF8String.fromString(""),
+        null),
       StructType(Seq(
         StructField("a", StringType, nullable = true),
         StructField("b", StringType, nullable = true),
         StructField("c", StringType, nullable = true),
         StructField("d", StringType, nullable = true))))
     val struct_notNull = Literal.create(
-      InternalRow("123", "abc", ""),
+      InternalRow(
+        UTF8String.fromString("123"),
+        UTF8String.fromString("abc"),
+        UTF8String.fromString("")),
       StructType(Seq(
         StructField("a", StringType, nullable = false),
         StructField("b", StringType, nullable = false),
@@ -676,8 +684,11 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("complex casting") {
     val complex = Literal.create(
       InternalRow(
-        Seq("123", "abc", ""),
-        Map("a" -> "123", "b" -> "abc", "c" -> ""),
+        Seq(UTF8String.fromString("123"), UTF8String.fromString("abc"), UTF8String.fromString("")),
+        Map(
+          UTF8String.fromString("a") -> UTF8String.fromString("123"),
+          UTF8String.fromString("b") -> UTF8String.fromString("abc"),
+          UTF8String.fromString("c") -> UTF8String.fromString("")),
         InternalRow(0)),
       StructType(Seq(
         StructField("a",
@@ -700,7 +711,10 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(ret.resolved === true)
     checkEvaluation(ret, InternalRow(
       Seq(123, null, null),
-      Map("a" -> true, "b" -> true, "c" -> false),
+      Map(
+        UTF8String.fromString("a") -> true,
+        UTF8String.fromString("b") -> true,
+        UTF8String.fromString("c") -> false),
       InternalRow(0L)))
   }
 

@@ -108,7 +108,7 @@ private[parquet] class CatalystRowConverter(
 
   override def start(): Unit = {
     var i = 0
-    while (i < currentRow.length) {
+    while (i < currentRow.numFields) {
       currentRow.setNullAt(i)
       i += 1
     }

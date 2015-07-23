@@ -387,8 +387,8 @@ case class Cast(child: Expression, dataType: DataType)
     val newRow = new GenericMutableRow(from.fields.length)
     buildCast[InternalRow](_, row => {
       var i = 0
-      while (i < row.length) {
-        newRow.update(i, if (row.isNullAt(i)) null else casts(i)(row(i)))
+      while (i < row.numFields) {
+        newRow.update(i, if (row.isNullAt(i)) null else casts(i)(row.get(i)))
         i += 1
       }
       newRow.copy()

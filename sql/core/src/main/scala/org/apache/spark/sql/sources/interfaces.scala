@@ -344,6 +344,13 @@ abstract class OutputWriter {
   def close(): Unit
 }
 
+private[sql] abstract class OutputWriterInternal extends OutputWriter {
+
+  override def write(row: Row): Unit = throw new UnsupportedOperationException
+
+  def writeInternal(row: InternalRow): Unit
+}
+
 /**
  * ::Experimental::
  * A [[BaseRelation]] that provides much of the common code required for formats that store their

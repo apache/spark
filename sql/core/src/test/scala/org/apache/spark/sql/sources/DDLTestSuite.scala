@@ -62,8 +62,8 @@ case class SimpleDDLScan(from: Int, to: Int, table: String)(@transient val sqlCo
 
   override def buildScan(): RDD[Row] = {
     sqlContext.sparkContext.parallelize(from to to).map { e =>
-      InternalRow(UTF8String.fromString(s"people$e"), e * 2): Row
-    }
+      InternalRow(UTF8String.fromString(s"people$e"), e * 2)
+    }.asInstanceOf[RDD[Row]]
   }
 }
 

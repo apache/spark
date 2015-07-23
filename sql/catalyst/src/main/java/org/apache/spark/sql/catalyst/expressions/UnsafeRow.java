@@ -64,7 +64,8 @@ public final class UnsafeRow extends MutableRow {
   /** The size of this row's backing data, in bytes) */
   private int sizeInBytes;
 
-  public int length() { return numFields; }
+  @Override
+  public int numFields() { return numFields; }
 
   /** The width of the null tracking bit set, in bytes */
   private int bitSetWidthInBytes;
@@ -218,12 +219,12 @@ public final class UnsafeRow extends MutableRow {
   }
 
   @Override
-  public int size() {
-    return numFields;
+  public Object get(int i) {
+    throw new UnsupportedOperationException();
   }
 
   @Override
-  public Object get(int i) {
+  public <T> T getAs(int i) {
     throw new UnsupportedOperationException();
   }
 

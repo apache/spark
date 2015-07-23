@@ -178,7 +178,7 @@ private[sql] case class ParquetTableScan(
               val row = iter.next()._2.asInstanceOf[InternalRow]
 
               var i = 0
-              while (i < row.size) {
+              while (i < row.numFields) {
                 mutableRow(i) = row(i)
                 i += 1
               }

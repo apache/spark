@@ -214,7 +214,8 @@ case class IsNotNull(child: Expression) extends UnaryExpression with Predicate {
 /**
  * A predicate that is evaluated to be true if there are at least `n` non-null and non-NaN values.
  */
-case class AtLeastNNonNulls(n: Int, children: Seq[Expression]) extends Predicate {
+case class AtLeastNNonNulls(n: Int, children: Seq[Expression]) extends
+Predicate {
   override def nullable: Boolean = false
   override def foldable: Boolean = children.forall(_.foldable)
   override def toString: String = s"AtLeastNNulls(n, ${children.mkString(",")})"
