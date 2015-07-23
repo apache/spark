@@ -90,11 +90,17 @@ class KinesisUtils(object):
         print("""
 ________________________________________________________________________________________________
 
-  Spark Streaming's Kinesis libraries not found in class path. Try the following steps:
+  Spark Streaming's Kinesis libraries not found in class path. Try one of the following.
 
-  1. Download Spark source and follow the instructions to build Spark with profile -Pkinesis-asl.
+  1. Include the Kinesis library and its dependencies with in the
+     spark-submit command as
 
-     $ mvn -Pkinesis-asl -DskipTests clean package
+     $ bin/spark-submit --packages org.apache.spark:spark-streaming-kinesis-asl:%s ...
+
+  2. Download the JAR of the artifact from Maven Central http://search.maven.org/,
+     Group Id = org.apache.spark, Artifact Id = spark-streaming-kinesis-asl-assembly, Version = %s.
+     Then, include the jar in the spark-submit command as
+
      $ bin/spark-submit --jars <spark-streaming-kinesis-asl-assembly.jar> ...
 
 ________________________________________________________________________________________________
