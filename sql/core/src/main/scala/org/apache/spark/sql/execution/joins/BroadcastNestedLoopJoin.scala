@@ -47,13 +47,11 @@ case class BroadcastNestedLoopJoin(
   override def outputsUnsafeRows: Boolean = left.outputsUnsafeRows || right.outputsUnsafeRows
   override def canProcessUnsafeRows: Boolean = true
 
-  @transient private[this] lazy val resultProjection: Projection = {
+  @transient private[this] lazy val resultProjection: InternalRow => InternalRow = {
     if (outputsUnsafeRows) {
       UnsafeProjection.create(schema)
     } else {
-      new Projection {
-        override def apply(r: InternalRow): InternalRow = r
-      }
+      identity[InternalRow]
     }
   }
 
@@ -140,7 +138,7 @@ case class BroadcastNestedLoopJoin(
           joinedRow.withLeft(leftNulls)
           while (i < rel.length) {
             if (!allIncludedBroadcastTuples.contains(i)) {
-              buf += resultProjection(joinedRow.withRight(rel(i)))
+              buf += resultProjection(joinedRow.withRight(rel(i))).copy()
             }
             i += 1
           }
@@ -149,7 +147,7 @@ case class BroadcastNestedLoopJoin(
           joinedRow.withRight(rightNulls)
           while (i < rel.length) {
             if (!allIncludedBroadcastTuples.contains(i)) {
-              buf += resultProjection(joinedRow.withLeft(rel(i)))
+              buf += resultProjection(joinedRow.withLeft(rel(i))).copy()
             }
             i += 1
           }
