@@ -13,6 +13,11 @@ _operators = {
         'PrestoValueCheckOperator',
         'PrestoIntervalCheckOperator',
     ],
+    'check_operator': [
+        'CheckOperator',
+        'ValueCheckOperator',
+        'IntervalCheckOperator',
+    ],
     'dummy_operator': ['DummyOperator'],
     'email_operator': ['EmailOperator'],
     'hive_to_samba_operator': ['Hive2SambaOperator'],
