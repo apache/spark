@@ -91,13 +91,13 @@ class CliSuite extends SparkFunSuite with BeforeAndAfter with Logging {
     try {
       Await.result(foundAllExpectedAnswers.future, timeout)
     } catch { case cause: Throwable =>
-      logError(
+      val message =
         s"""
            |=======================
            |CliSuite failure output
            |=======================
            |Spark SQL CLI command line: ${command.mkString(" ")}
-           |
+           |Exception: $cause
            |Executed query $next "${queries(next)}",
            |But failed to capture expected output "${expectedAnswers(next)}" within $timeout.
            |
@@ -105,8 +105,9 @@ class CliSuite extends SparkFunSuite with BeforeAndAfter with Logging {
            |===========================
            |End CliSuite failure output
            |===========================
-         """.stripMargin, cause)
-      throw cause
+         """.stripMargin
+      logError(message, cause)
+      fail(message, cause)
     } finally {
       process.destroy()
     }
