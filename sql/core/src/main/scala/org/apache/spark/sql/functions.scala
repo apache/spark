@@ -1721,7 +1721,7 @@ object functions {
   }
 
   /**
-   * Parsers the comma separated expression strings into the columns they represent, similar to
+   * Parses the comma separated expression strings into the columns they represent, similar to
    * DataFrame.selectExpr
    *
    * @group normal_funcs
