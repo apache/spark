@@ -41,8 +41,8 @@ private[fpm] object LocalPrefixSpan extends Logging with Serializable {
       maxPatternLength: Int,
       prefixes: List[Array[Int]],
       database: Array[(Array[Array[Int]], Int)]): Iterator[(List[Array[Int]], Long)] = {
-    if ((prefixes.nonEmpty && prefixes.map(_.length).sum == maxPatternLength)
-      || database.length < minCount) return Iterator.empty
+    if ((prefixes.nonEmpty && prefixes.map(_.length).sum == maxPatternLength) ||
+      database.length < minCount) { return Iterator.empty }
     val frequentItemAndCounts = getFreqPrefixAndCounts(minCount, prefixes, database)
     frequentItemAndCounts.iterator.flatMap { case (prefix, count) =>
       val newProjected = project(database, prefix)
