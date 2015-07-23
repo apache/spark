@@ -102,7 +102,8 @@ private[streaming] class ReceiverSchedulingPolicy {
 
   /**
    * Return a list of candidate executors to run the receiver. If the list is empty, the caller can
-   * run this receiver in arbitrary executor.
+   * run this receiver in arbitrary executor. The caller can use `preferredNumExecutors` to require
+   * returning `preferredNumExecutors` executors if possible.
    *
    * This method tries to balance executors' load. Here is the approach to schedule executors
    * for a receiver.
@@ -121,8 +122,9 @@ private[streaming] class ReceiverSchedulingPolicy {
    *         If a receiver is scheduled to an executor but has not yet run, it contributes
    *         `1.0 / #candidate_executors_of_this_receiver` to the executor's weight.</li>
    *     </ul>
-   *     At last, if there are more than 3 idle executors (weight = 0), returns all idle executors.
-   *     Otherwise, we only return 3 best options according to the weights.
+   *     At last, if there are more than `preferredNumExecutors` idle executors (weight = 0),
+   *     returns all idle executors. Otherwise, we only return `preferredNumExecutors` best options
+   *     according to the weights.
    *   </li>
    * </ol>
    *
@@ -132,7 +134,8 @@ private[streaming] class ReceiverSchedulingPolicy {
       receiverId: Int,
       preferredLocation: Option[String],
       receiverTrackingInfoMap: Map[Int, ReceiverTrackingInfo],
-      executors: Seq[String]): Seq[String] = {
+      executors: Seq[String],
+      preferredNumExecutors: Int = 3): Seq[String] = {
     if (executors.isEmpty) {
       return Seq.empty
     }
@@ -154,14 +157,14 @@ private[streaming] class ReceiverSchedulingPolicy {
     }.groupBy(_._1).mapValues(_.map(_._2).sum) // Sum weights for each executor
 
     val idleExecutors = (executors.toSet -- executorWeights.keys).toSeq
-    if (idleExecutors.size >= 3) {
-      // If there are more than 3 idle executors, return all of them
+    if (idleExecutors.size >= preferredNumExecutors) {
+      // If there are more than `preferredNumExecutors` idle executors, return all of them
       scheduledExecutors ++= idleExecutors
     } else {
-      // If there are less than 3 idle executors, return 3 best options
+      // If there are less than `preferredNumExecutors` idle executors, return 3 best options
       scheduledExecutors ++= idleExecutors
       val sortedExecutors = executorWeights.toSeq.sortBy(_._2).map(_._1)
-      scheduledExecutors ++= (idleExecutors ++ sortedExecutors).take(3)
+      scheduledExecutors ++= (idleExecutors ++ sortedExecutors).take(preferredNumExecutors)
     }
     scheduledExecutors.toSeq
   }
