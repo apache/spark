@@ -133,9 +133,6 @@
     <curator.version>2.4.0</curator.version>
  <!--
     <hive.group>org.spark-project.hive</hive.group>
-    <hive.group>org.apache.hive</hive.group>
-    <hive.version>1.2.0</hive.version>
-    <hive.version>1.2.1</hive.version>
    -->
     <hive.group>org.apache.hive</hive.group>
     <!-- Version used in Maven Hive dependency -->
@@ -1082,7 +1079,7 @@
           </exclusion>
           <exclusion>
             <groupId>org.pentaho</groupId>
-            <artifactId>jpentaho-aggdesigner-algorithm</artifactId>
+            <artifactId>pentaho-aggdesigner-algorithm</artifactId>
           </exclusion>
           <!-- excluded to keep out transitive dependencies -->
           <exclusion>
@@ -1210,7 +1207,7 @@
           </exclusion>
           <exclusion>
             <groupId>org.pentaho</groupId>
-            <artifactId>jpentaho-aggdesigner-algorithm</artifactId>
+            <artifactId>pentaho-aggdesigner-algorithm</artifactId>
           </exclusion>
         </exclusions>
       </dependency>
