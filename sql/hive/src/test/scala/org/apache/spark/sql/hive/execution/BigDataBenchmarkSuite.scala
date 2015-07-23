@@ -87,7 +87,7 @@ class BigDataBenchmarkSuite extends HiveComparisonTest {
       """
         |SELECT SUBSTR(sourceIP, 1, 10), SUM(adRevenue) FROM uservisits
         |GROUP BY SUBSTR(sourceIP, 1, 10)
-      """.stripMargin)
+      """.stripMargin.replaceAll("[\r\n]+", "\n"))
 
     createQueryTest("query3",
       """
@@ -104,7 +104,7 @@ class BigDataBenchmarkSuite extends HiveComparisonTest {
         |GROUP BY sourceIP
         |ORDER BY totalRevenue DESC
         |LIMIT 1
-      """.stripMargin)
+      """.stripMargin.replaceAll("[\r\n]+", "\n"))
 
     createQueryTest("query4",
       """
@@ -123,6 +123,6 @@ class BigDataBenchmarkSuite extends HiveComparisonTest {
         |-- SELECT COUNT(*) FROM url_counts_partial
         |-- SELECT * FROM url_counts_partial
         |-- SELECT * FROM url_counts_total
-      """.stripMargin)
+      """.stripMargin.replaceAll("[\r\n]+", "\n"))
   }
 }
