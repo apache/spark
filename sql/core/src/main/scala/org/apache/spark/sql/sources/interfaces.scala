@@ -344,6 +344,11 @@ abstract class OutputWriter {
   def close(): Unit
 }
 
+/**
+ * This is an internal, private version of [[OutputWriter]] with an writeInternal method that
+ * accepts an [[InternalRow]] rather than an [[Row]]. Data sources that return this must have
+ * the conversion flag set to false.
+ */
 private[sql] abstract class OutputWriterInternal extends OutputWriter {
 
   override def write(row: Row): Unit = throw new UnsupportedOperationException

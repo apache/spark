@@ -55,7 +55,7 @@ abstract class InternalRow {
   override def toString: String = s"[${this.mkString(",")}]"
 
   /**
-   * Make a copy of the current [[Row]] object.
+   * Make a copy of the current [[InternalRow]] object.
    */
   def copy(): InternalRow = this
 

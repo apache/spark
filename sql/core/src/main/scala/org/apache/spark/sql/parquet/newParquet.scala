@@ -86,9 +86,7 @@ private[sql] class ParquetOutputWriter(path: String, context: TaskAttemptContext
     outputFormat.getRecordWriter(context)
   }
 
-  override def writeInternal(row: InternalRow): Unit = {
-    recordWriter.write(null, row.asInstanceOf[InternalRow])
-  }
+  override def writeInternal(row: InternalRow): Unit = recordWriter.write(null, row)
 
   override def close(): Unit = recordWriter.close(context)
 }

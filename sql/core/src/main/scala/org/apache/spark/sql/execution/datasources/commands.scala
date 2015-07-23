@@ -540,8 +540,12 @@ private[sql] class DynamicPartitionWriterContainer(
       while (i < partitionColumns.length) {
         val col = partitionColumns(i)
         val partitionValueString = {
-          val string = row.getString(i)
-          if (string.eq(null)) defaultPartitionName else PartitioningUtils.escapePathName(string)
+          val string = row.getUTF8String(i)
+          if (string.eq(null)) {
+            defaultPartitionName
+          } else {
+            PartitioningUtils.escapePathName(string.toString)
+          }
         }
 
         if (i > 0) {

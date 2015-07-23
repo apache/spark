@@ -44,9 +44,10 @@ abstract class MutableRow extends InternalRow {
   }
 
   override def copy(): InternalRow = {
-    val arr = new Array[Any](numFields)
+    val n = numFields
+    val arr = new Array[Any](n)
     var i = 0
-    while (i < numFields) {
+    while (i < n) {
       arr(i) = get(i)
       i += 1
     }
