@@ -147,8 +147,7 @@ abstract class AggregateFunction2
 /**
  * A helper class for aggregate functions that can be implemented in terms of catalyst expressions.
  */
-abstract class AlgebraicAggregate extends AggregateFunction2 with Serializable {
-  self: Product =>
+abstract class AlgebraicAggregate extends AggregateFunction2 with Serializable with Unevaluable {
 
   val initialValues: Seq[Expression]
   val updateExpressions: Seq[Expression]
@@ -184,19 +183,15 @@ abstract class AlgebraicAggregate extends AggregateFunction2 with Serializable {
     }
   }
 
-  override def update(buffer: MutableRow, input: InternalRow): Unit = {
+  override final def update(buffer: MutableRow, input: InternalRow): Unit = {
     throw new UnsupportedOperationException(
       "AlgebraicAggregate's update should not be called directly")
   }
 
-  override def merge(buffer1: MutableRow, buffer2: InternalRow): Unit = {
+  override final def merge(buffer1: MutableRow, buffer2: InternalRow): Unit = {
     throw new UnsupportedOperationException(
       "AlgebraicAggregate's merge should not be called directly")
   }
 
-  override def eval(buffer: InternalRow): Any = {
-    throw new UnsupportedOperationException(
-      "AlgebraicAggregate's eval should not be called directly")
-  }
 }
 
