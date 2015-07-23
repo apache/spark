@@ -17,8 +17,14 @@
 
 package org.apache.spark.mllib.clustering
 
+<<<<<<< HEAD
 import breeze.linalg.{DenseVector => BDV, DenseMatrix => BDM, sum, normalize}
 import breeze.numerics.{lgamma, digamma, exp}
+||||||| merged common ancestors
+import breeze.linalg.{DenseMatrix => BDM, normalize, sum => brzSum}
+=======
+import breeze.linalg.{DenseMatrix => BDM, normalize, sum => brzSum, DenseVector => BDV}
+>>>>>>> master
 
 import org.apache.hadoop.fs.Path
 
@@ -55,10 +61,10 @@ abstract class LDAModel private[clustering] extends Saveable {
   def vocabSize: Int
 
   /** Dirichlet parameters for document-topic distribution. */
-  protected def docConcentration: Vector
+  protected def alpha: Double
 
   /** Dirichlet parameters for topic-word distribution. */
-  protected def topicConcentration: Double
+  protected def eta: Double
 
   /** Shape parameter for random initialization of gamma. */
   protected def gammaShape: Double
@@ -179,8 +185,8 @@ abstract class LDAModel private[clustering] extends Saveable {
 @Experimental
 class LocalLDAModel private[clustering] (
     private val topics: Matrix,
-    protected val docConcentration: Vector,
-    protected val topicConcentration: Double,
+    protected val alpha: Double,
+    protected val eta: Double,
     protected val gammaShape: Double) extends LDAModel with Serializable {
 
   override def k: Int = topics.numCols
@@ -199,29 +205,31 @@ class LocalLDAModel private[clustering] (
     }.toArray
   }
 
+<<<<<<< HEAD
   /**
-   * Backwards compatibility constructor, assumes symmetric docConcentration=1/numTopics,
-   * topicConcentration=1, gammaShape=100. This is probably NOT what you want (instead you should
-   * set the parameters explicitly in constructor)
+   * Backwards compatibility constructor, assumes sensible values for other arguments. This will
+   * NOT be what you want (prefer setting explicitly in other constructor)
    * @deprecated Provide alpha, eta, and gammaShape in constructor.
    */
-  @deprecated(
-    "Provide docConcentration, topicConcentration, and gammaShape in constructor", "1.5.0")
+  @deprecated("Provide alpha, eta, and gammaShape in constructor", "1.5.0")
   def this(topics: Matrix) {
-    this(topics, Vectors.dense(Array.fill(topics.numRows)(1.0 / topics.numRows)), 1D, 100D)
+    this(topics, 1D, 1D, 100D)
   }
 
+||||||| merged common ancestors
+=======
   override protected def formatVersion = "1.0"
 
   override def save(sc: SparkContext, path: String): Unit = {
     LocalLDAModel.SaveLoadV1_0.save(sc, path, topicsMatrix)
   }
-
+>>>>>>> master
   // TODO
   // override def logLikelihood(documents: RDD[(Long, Vector)]): Double = ???
 
   // TODO:
   // override def topicDistributions(documents: RDD[(Long, Vector)]): RDD[(Long, Vector)] = ???
+
 
   /**
    * Calculate and return per-word likelihood bound, using the `batch` of
@@ -237,8 +245,8 @@ class LocalLDAModel private[clustering] (
     val batchVariationalBound = bound(
       batch,
       subsampleRatio,
-      docConcentration,
-      topicConcentration,
+      alpha,
+      eta,
       topicsMatrix.toBreeze.toDenseMatrix,
       gammaShape,
       k,
@@ -257,21 +265,20 @@ class LocalLDAModel private[clustering] (
   private def bound(
       batch: RDD[(Long, Vector)],
       subsampleRatio: Double,
-      alpha: Vector,
+      alpha: Double,
       eta: Double,
       lambda: BDM[Double],
       gammaShape: Double,
       k: Int,
       vocabSize: Long): Double = {
-    val brzAlpha = alpha.toBreeze.toDenseVector
-    // transpose because dirichletExpectation normalizes by row and we need to normalize
+    // Double transpose because dirichletExpectation normalizes by row and we need to normalize
     // by topic (columns of lambda)
     val Elogbeta = LDAUtils.dirichletExpectation(lambda.t).t
 
     var score = batch.map { case (id: Long, termCounts: Vector) =>
       var docScore = 0.0D
       val (gammad: BDV[Double], _) = OnlineLDAOptimizer.variationalTopicInference(
-        termCounts, exp(Elogbeta), brzAlpha, gammaShape, k)
+        termCounts, exp(Elogbeta), alpha, gammaShape, k)
       val Elogthetad: BDV[Double] = LDAUtils.dirichletExpectation(gammad)
 
       // E[log p(doc | theta, beta)]
@@ -279,9 +286,10 @@ class LocalLDAModel private[clustering] (
         docScore += LDAUtils.logSumExp(Elogthetad + Elogbeta(id, ::).t)
       }
       // E[log p(theta | alpha) - log q(theta | gamma)]; assumes alpha is a vector
-      docScore += sum((brzAlpha - gammad) :* Elogthetad)
-      docScore += sum(lgamma(gammad) - lgamma(brzAlpha))
-      docScore += lgamma(sum(brzAlpha)) - lgamma(sum(gammad))
+      docScore += sum((alpha - gammad) :* Elogthetad)
+      docScore += sum(lgamma(gammad) - lgamma(alpha))
+      // TODO: change k * alpha to sum(alpha) when alpha is vector
+      docScore += lgamma(k * alpha) - lgamma(sum(gammad))
 
       docScore
     }.sum()
@@ -310,7 +318,7 @@ class LocalLDAModel private[clustering] (
     val (gamma, _) = OnlineLDAOptimizer.variationalTopicInference(
       doc._2,
       exp(Elogbeta),
-      this.docConcentration,
+      this.alpha,
       this.gammaShape,
       this.k)
     (doc._1, Vectors.dense((gamma / sum(gamma)).toArray))
@@ -331,8 +339,6 @@ object LocalLDAModel extends Loader[LocalLDAModel] {
     // as a Row in data.
     case class Data(topic: Vector, index: Int)
 
-    // TODO: explicitly save docConcentration, topicConcentration, and gammaShape for use in
-    // model.predict()
     def save(sc: SparkContext, path: String, topicsMatrix: Matrix): Unit = {
       val sqlContext = SQLContext.getOrCreate(sc)
       import sqlContext.implicits._
@@ -408,8 +414,8 @@ class DistributedLDAModel private (
     private val globalTopicTotals: LDA.TopicCounts,
     val k: Int,
     val vocabSize: Int,
-    protected val docConcentration: Vector,
-    protected val topicConcentration: Double,
+    protected val alpha: Double,
+    protected val eta: Double,
     protected val gammaShape: Double,
     private[spark] val iterationTimes: Array[Double]) extends LDAModel {
 
@@ -419,15 +425,8 @@ class DistributedLDAModel private (
       state: EMLDAOptimizer,
       iterationTimes: Array[Double],
       gammaShape: Double) = {
-    this(
-      state.graph,
-      state.globalTopicTotals,
-      state.k,
-      state.vocabSize,
-      Vectors.dense(Array.fill(state.k)(state.docConcentration)),
-      state.topicConcentration,
-      gammaShape,
-      iterationTimes)
+    this(state.graph, state.globalTopicTotals, state.k, state.vocabSize, state.docConcentration,
+      state.topicConcentration, gammaShape, iterationTimes)
   }
 
   /**
@@ -435,11 +434,7 @@ class DistributedLDAModel private (
    * The local model stores the inferred topics but not the topic distributions for training
    * documents.
    */
-  def toLocal: LocalLDAModel = new LocalLDAModel(
-    topicsMatrix,
-    docConcentration,
-    topicConcentration,
-    gammaShape)
+  def toLocal: LocalLDAModel = new LocalLDAModel(topicsMatrix, alpha, eta, gammaShape)
 
   /**
    * Inferred topics, where each topic is represented by a distribution over terms.
@@ -511,9 +506,8 @@ class DistributedLDAModel private (
    *    hyperparameters.
    */
   lazy val logLikelihood: Double = {
-    // TODO: generalize this for asymmetric (non-scalar) alpha
-    val alpha = this.docConcentration(0) // To avoid closure capture of enclosing object
-    val eta = this.topicConcentration
+    val alpha = this.alpha // To avoid closure capture of this
+    val eta = this.eta
     assert(eta > 1.0)
     assert(alpha > 1.0)
     val N_k = globalTopicTotals
@@ -537,11 +531,10 @@ class DistributedLDAModel private (
    *  log P(topics, topic distributions for docs | alpha, eta)
    */
   lazy val logPrior: Double = {
-    // TODO: generalize this for asymmetric (non-scalar) alpha
-    val alpha = this.docConcentration(0) // To avoid closure capture of enclosing object
-    val eta = this.topicConcentration
     // Term vertices: Compute phi_{wk}.  Use to compute prior log probability.
     // Doc vertex: Compute theta_{kj}.  Use to compute prior log probability.
+    val alpha = this.alpha // To avoid closure capture of this
+    val eta = this.eta
     val N_k = globalTopicTotals
     val smoothed_N_k: TopicCounts = N_k + (vocabSize * (eta - 1.0))
     val seqOp: (Double, (VertexId, TopicCounts)) => Double = {
@@ -586,7 +579,7 @@ class DistributedLDAModel private (
   override def save(sc: SparkContext, path: String): Unit = {
     DistributedLDAModel.SaveLoadV1_0.save(
       sc, path, graph, globalTopicTotals, k, vocabSize, docConcentration, topicConcentration,
-      iterationTimes, gammaShape)
+      iterationTimes)
   }
 }
 
@@ -616,20 +609,17 @@ object DistributedLDAModel extends Loader[DistributedLDAModel] {
         globalTopicTotals: LDA.TopicCounts,
         k: Int,
         vocabSize: Int,
-        docConcentration: Vector,
+        docConcentration: Double,
         topicConcentration: Double,
-        iterationTimes: Array[Double],
-        gammaShape: Double): Unit = {
+        iterationTimes: Array[Double]): Unit = {
       val sqlContext = SQLContext.getOrCreate(sc)
       import sqlContext.implicits._
 
       val metadata = compact(render
         (("class" -> classNameV1_0) ~ ("version" -> thisFormatVersion) ~
-          ("k" -> k) ~ ("vocabSize" -> vocabSize) ~
-          ("docConcentration" -> docConcentration.toArray.toSeq) ~
-          ("topicConcentration" -> topicConcentration) ~
-          ("iterationTimes" -> iterationTimes.toSeq) ~
-          ("gammaShape" -> gammaShape)))
+         ("k" -> k) ~ ("vocabSize" -> vocabSize) ~ ("docConcentration" -> docConcentration) ~
+         ("topicConcentration" -> topicConcentration) ~
+         ("iterationTimes" -> iterationTimes.toSeq)))
       sc.parallelize(Seq(metadata), 1).saveAsTextFile(Loader.metadataPath(path))
 
       val newPath = new Path(Loader.dataPath(path), "globalTopicTotals").toUri.toString
@@ -651,10 +641,9 @@ object DistributedLDAModel extends Loader[DistributedLDAModel] {
         sc: SparkContext,
         path: String,
         vocabSize: Int,
-        docConcentration: Vector,
+        docConcentration: Double,
         topicConcentration: Double,
-        iterationTimes: Array[Double],
-        gammaShape: Double): DistributedLDAModel = {
+        iterationTimes: Array[Double]): DistributedLDAModel = {
       val dataPath = new Path(Loader.dataPath(path), "globalTopicTotals").toUri.toString
       val vertexDataPath = new Path(Loader.dataPath(path), "topicCounts").toUri.toString
       val edgeDataPath = new Path(Loader.dataPath(path), "tokenCounts").toUri.toString
@@ -678,7 +667,7 @@ object DistributedLDAModel extends Loader[DistributedLDAModel] {
       val graph: Graph[LDA.TopicCounts, LDA.TokenCount] = Graph(vertices, edges)
 
       new DistributedLDAModel(graph, globalTopicTotals, globalTopicTotals.length, vocabSize,
-        docConcentration, topicConcentration, gammaShape, iterationTimes)
+        docConcentration, topicConcentration, iterationTimes)
     }
 
   }
@@ -688,23 +677,15 @@ object DistributedLDAModel extends Loader[DistributedLDAModel] {
     implicit val formats = DefaultFormats
     val expectedK = (metadata \ "k").extract[Int]
     val vocabSize = (metadata \ "vocabSize").extract[Int]
-    val docConcentration =
-      Vectors.dense((metadata \ "docConcentration").extract[Seq[Double]].toArray)
+    val docConcentration = (metadata \ "docConcentration").extract[Double]
     val topicConcentration = (metadata \ "topicConcentration").extract[Double]
     val iterationTimes = (metadata \ "iterationTimes").extract[Seq[Double]]
-    val gammaShape = (metadata \ "gammaShape").extract[Double]
     val classNameV1_0 = SaveLoadV1_0.classNameV1_0
 
     val model = (loadedClassName, loadedVersion) match {
       case (className, "1.0") if className == classNameV1_0 => {
         DistributedLDAModel.SaveLoadV1_0.load(
-          sc,
-          path,
-          vocabSize,
-          docConcentration,
-          topicConcentration,
-          iterationTimes.toArray,
-          gammaShape)
+          sc, path, vocabSize, docConcentration, topicConcentration, iterationTimes.toArray)
       }
       case _ => throw new Exception(
         s"DistributedLDAModel.load did not recognize model with (className, format version):" +

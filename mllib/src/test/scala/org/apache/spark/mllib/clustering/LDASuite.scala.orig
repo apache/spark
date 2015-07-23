@@ -235,6 +235,7 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext {
     }
   }
 
+<<<<<<< HEAD
   test("LocalLDAModel logPerplexity and predict") {
     val k = 2
     val vocabSize = 6
@@ -256,8 +257,7 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext {
     val docs = sc.parallelize(toydata)
 
 
-    val ldaModel: LocalLDAModel = new LocalLDAModel(
-      topics, Vectors.dense(Array.fill(k)(alpha)), eta, gammaShape)
+    val ldaModel: LocalLDAModel = new LocalLDAModel(topics, alpha, eta, gammaShape)
 
     /* Verify results using gensim:
        import numpy as np
@@ -299,7 +299,7 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext {
     }
   }
 
-  // TODO: finish this test
+  // TODO: Blocked by SPARK-8536, requires asymmetric alpha
   test("OnlineLDAOptimizer alpha hyperparameter optimization") {
     def toydata: Array[(Long, Vector)] = Array(
       Vectors.sparse(6, Array(0, 1), Array(1, 1)),
@@ -340,7 +340,8 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext {
       > [ 0.42582646  0.43511073 ]
      */
   }
-
+||||||| merged common ancestors
+=======
   test("OnlineLDAOptimizer with asymmetric prior") {
     def toydata: Array[(Long, Vector)] = Array(
       Vectors.sparse(6, Array(0, 1), Array(1, 1)),
@@ -431,6 +432,7 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext {
     }
   }
 
+>>>>>>> master
 }
 
 private[clustering] object LDASuite {
