@@ -47,14 +47,14 @@ private[spark] class IndexShuffleBlockResolver(conf: SparkConf) extends ShuffleB
   private val transportConf = SparkTransportConf.fromSparkConf(conf)
 
   def getDataFile(shuffleId: Int, mapId: Int, stageAttemptId: Int): File = {
-    blockManager.diskBlockManager.getFile(ShuffleDataBlockId(shuffleId, mapId, NOOP_REDUCE_ID,
-      stageAttemptId))
+    blockManager.diskBlockManager.getFile(
+      ShuffleDataBlockId(shuffleId, mapId, NOOP_REDUCE_ID, stageAttemptId))
   }
 
   @VisibleForTesting
   private[shuffle] def getIndexFile(shuffleId: Int, mapId: Int, stageAttemptId: Int): File = {
-    blockManager.diskBlockManager.getFile(ShuffleIndexBlockId(shuffleId, mapId, NOOP_REDUCE_ID,
-      stageAttemptId))
+    blockManager.diskBlockManager.getFile(
+      ShuffleIndexBlockId(shuffleId, mapId, NOOP_REDUCE_ID, stageAttemptId))
   }
 
   /**

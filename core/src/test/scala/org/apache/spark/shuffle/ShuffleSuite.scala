@@ -350,7 +350,7 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkC
 
       // interleave writes of both attempts -- we want to test that both attempts can occur
       // simultaneously, and everything is still OK
-      val interleaver = new InterleavingIterator(
+      val interleaver = new InterleaveIterators(
         data1, {iter: Iterator[(Int, Int)] => writer1.write(iter); writer1.stop(true)},
         data2, {iter: Iterator[(Int, Int)] => writer2.write(iter); writer2.stop(true)})
       val (mapOutput1, mapOutput2) = interleaver.run()
@@ -394,7 +394,13 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkC
 
 }
 
-class InterleavingIterator[T, R](
+/**
+ * Utility to help tests make sure that we can process two different iterators simultaneously
+ * in different threads.  This makes sure that in your test, you don't completely process data1 with
+ * f1 before processing data2 with f2 (or vice versa).  It adds a barrier so that the functions only
+ * process one element, before pausing to wait for the other function to "catch up".
+ */
+class InterleaveIterators[T, R](
     data1: Seq[T],
     f1: Iterator[T] => R,
     data2: Seq[T],

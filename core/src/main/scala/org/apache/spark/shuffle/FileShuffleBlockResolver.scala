@@ -106,8 +106,12 @@ private[spark] class FileShuffleBlockResolver(conf: SparkConf)
    * Get a ShuffleWriterGroup for the given map task, which will register it as complete
    * when the writers are closed successfully
    */
-  def forMapTask(shuffleAndAttempt: ShuffleIdAndAttempt, mapId: Int, numBuckets: Int,
-      serializer: Serializer, writeMetrics: ShuffleWriteMetrics): ShuffleWriterGroup = {
+  def forMapTask(
+      shuffleAndAttempt: ShuffleIdAndAttempt,
+      mapId: Int,
+      numBuckets: Int,
+      serializer: Serializer,
+      writeMetrics: ShuffleWriteMetrics): ShuffleWriterGroup = {
     new ShuffleWriterGroup {
       shuffleStates.putIfAbsent(shuffleAndAttempt, new ShuffleState(numBuckets))
       private val shuffleState = shuffleStates(shuffleAndAttempt)
