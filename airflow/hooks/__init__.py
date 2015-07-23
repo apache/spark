@@ -21,6 +21,7 @@ _hooks = {
     'http_hook': ['HttpHook'],
     'druid_hook': ['DruidHook'],
     'jdbc_hook': ['JdbcHook'],
+    'dbapi_hook': ['DbApiHook'],
 }
 
 _import_module_attrs(globals(), _hooks)
