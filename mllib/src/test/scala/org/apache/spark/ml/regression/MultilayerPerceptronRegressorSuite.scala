@@ -37,7 +37,7 @@ class MultilayerPerceptronRegressorSuite extends SparkFunSuite with MLlibTestSpa
       (Vectors.dense(features), Vectors.dense(Array(label)))
     }
     val rddData = sc.parallelize(data, 1)
-    val dataFrame = sqlContext.createDataFrame(rddData).toDF("inputCol","outputCol")
+    val dataFrame = sqlContext.createDataFrame(rddData).toDF("inputCol", "outputCol")
     val hiddenLayersTopology = Array[Int](5)
     val dataSample = rddData.first()
     val layerSizes = dataSample._1.size +: hiddenLayersTopology :+ dataSample._2.size
