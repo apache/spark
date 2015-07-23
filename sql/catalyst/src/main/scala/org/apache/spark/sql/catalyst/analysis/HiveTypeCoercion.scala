@@ -413,7 +413,7 @@ object HiveTypeCoercion {
         Except(newLeft, newRight)
 
       // fix decimal precision for expressions
-      case q =>  q.transformExpressions {
+      case q => q.transformExpressions {
         // Skip nodes whose children have not been resolved yet
         case e if !e.childrenResolved => e
 
@@ -467,7 +467,7 @@ object HiveTypeCoercion {
         // and fixed-precision decimals in an expression with floats / doubles to doubles
         case b @ BinaryOperator(left, right) if left.dataType != right.dataType =>
           (left.dataType, right.dataType) match {
-            case (t: IntegralType, DecimalType.Fixed(p, s))=>
+            case (t: IntegralType, DecimalType.Fixed(p, s)) =>
               b.makeCopy(Array(Cast(left, DecimalType.forType(t)), right))
             case (DecimalType.Fixed(p, s), t: IntegralType) =>
               b.makeCopy(Array(left, Cast(right, DecimalType.forType(t))))
