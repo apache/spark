@@ -119,8 +119,9 @@ object MLUtils {
 
   /**
    * @since 1.0.0
-   * @deprecated("use method without multiclass argument, which no longer has effect", "1.1.0")
+   *
    */
+  @deprecated("use method without multiclass argument, which no longer has effect", "1.1.0")
   def loadLibSVMFile(
       sc: SparkContext,
       path: String,
