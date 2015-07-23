@@ -707,7 +707,7 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
           }
         case Token("TOK_FILEFORMAT_GENERIC", child :: Nil) =>
           throw new SemanticException(
-            "Unrecognized file format in STORED AS clause:${child.getText}")
+            s"Unrecognized file format in STORED AS clause: ${child.getText}")
 
         case Token("TOK_TBLRCFILE", Nil) =>
           tableDesc = tableDesc.copy(
