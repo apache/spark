@@ -18,16 +18,15 @@
 package org.apache.spark.streaming.scheduler
 
 import org.scalatest.concurrent.Eventually._
-import org.scalatest.concurrent.Timeouts
 import org.scalatest.time.SpanSugar._
-import org.apache.spark.streaming._
+
 import org.apache.spark.SparkConf
+import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.streaming.receiver._
-import org.apache.spark.util.Utils
-import org.apache.spark.streaming.dstream.InputDStream
-import scala.reflect.ClassTag
+import org.apache.spark.streaming.{Milliseconds, StreamingContext, TestSuiteBase}
 import org.apache.spark.streaming.dstream.ReceiverInputDStream
+import org.apache.spark.streaming.receiver.{Receiver, ReceiverSupervisor}
+
 
 /** Testsuite for receiver scheduling */
 class ReceiverTrackerSuite extends TestSuiteBase {
@@ -129,12 +128,20 @@ private class RateLimitInputDStream(@transient ssc_ : StreamingContext)
 }
 
 /**
- * A Receiver as an object so we can read its rate limit.
+ * A Receiver as an object so we can read its rate limit. Make sure to call `reset()` when
+ * reusing this receiver, otherwise a non-null `executor_` field will prevent it from being
+ * serialized when receivers are installed on executors.
  *
  * @note It's necessary to be a top-level object, or else serialization would create another
  *       one on the executor side and we won't be able to read its rate limit.
  */
-private object SingletonDummyReceiver extends DummyReceiver
+private object SingletonDummyReceiver extends DummyReceiver {
+
+  /** Reset the object to be usable in another test. */
+  def reset(): Unit = {
+    executor_ = null
+  }
+}
 
 /**
  * Dummy receiver implementation
