@@ -70,9 +70,10 @@ public final class BitSetMethods {
   /**
    * Returns {@code true} if any bit is set.
    */
-  public static boolean anySet(Object baseObject, long baseOffset, long bitSetWidthInBytes) {
-    for (int i = 0; i <= bitSetWidthInBytes; i++) {
-      if (PlatformDependent.UNSAFE.getByte(baseObject, baseOffset + i) != 0) {
+  public static boolean anySet(Object baseObject, long baseOffset, long bitSetWidthInWords) {
+    long addr = baseOffset;
+    for (int i = 0; i < bitSetWidthInWords; i++, addr += WORD_SIZE) {
+      if (PlatformDependent.UNSAFE.getLong(baseObject, addr) != 0) {
         return true;
       }
     }
@@ -86,7 +87,7 @@ public final class BitSetMethods {
    * To iterate over the true bits in a BitSet, use the following loop:
    * <pre>
    * <code>
-   *  for (long i = bs.nextSetBit(0, sizeInWords); i >= 0; i = bs.nextSetBit(i + 1, sizeInWords)) {
+   *  for (long i = bs.nextSetBit(0, sizeInWords); i &gt;= 0; i = bs.nextSetBit(i + 1, sizeInWords)) {
    *    // operate on index i here
    *  }
    * </code>

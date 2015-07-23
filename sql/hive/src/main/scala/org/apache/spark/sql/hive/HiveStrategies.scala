@@ -22,16 +22,17 @@ import scala.collection.JavaConversions._
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.expressions.codegen.GeneratePredicate
-import org.apache.spark.sql.catalyst.expressions.{Row, _}
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.{DescribeCommand => RunnableDescribeCommand, _}
+import org.apache.spark.sql.execution.datasources.{CreateTableUsing, CreateTableUsingAsSelect, DescribeCommand}
 import org.apache.spark.sql.hive.execution._
 import org.apache.spark.sql.parquet.ParquetRelation
-import org.apache.spark.sql.sources.{CreateTableUsing, CreateTableUsingAsSelect, DescribeCommand}
 import org.apache.spark.sql.types.StringType
 
 
@@ -124,7 +125,7 @@ private[hive] trait HiveStrategies {
                 InterpretedPredicate.create(castedPredicate)
               }
 
-            val partitions = relation.hiveQlPartitions.filter { part =>
+            val partitions = relation.getHiveQlPartitions(pruningPredicates).filter { part =>
               val partitionValues = part.getValues
               var i = 0
               while (i < partitionValues.size()) {
@@ -137,10 +138,10 @@ private[hive] trait HiveStrategies {
             val partitionLocations = partitions.map(_.getLocation)
 
             if (partitionLocations.isEmpty) {
-              PhysicalRDD(plan.output, sparkContext.emptyRDD[Row]) :: Nil
+              PhysicalRDD(plan.output, sparkContext.emptyRDD[InternalRow]) :: Nil
             } else {
               hiveContext
-                .parquetFile(partitionLocations: _*)
+                .read.parquet(partitionLocations: _*)
                 .addPartitioningAttributes(relation.partitionKeys)
                 .lowerCase
                 .where(unresolvedOtherPredicates)
@@ -152,7 +153,7 @@ private[hive] trait HiveStrategies {
 
           } else {
             hiveContext
-              .parquetFile(relation.hiveQlTable.getDataLocation.toString)
+              .read.parquet(relation.hiveQlTable.getDataLocation.toString)
               .lowerCase
               .where(unresolvedOtherPredicates)
               .select(unresolvedProjection: _*)
@@ -165,7 +166,7 @@ private[hive] trait HiveStrategies {
           // TODO: Remove this hack for Spark 1.3.
           case iae: java.lang.IllegalArgumentException
               if iae.getMessage.contains("Can not create a Path from an empty string") =>
-            PhysicalRDD(plan.output, sparkContext.emptyRDD[Row]) :: Nil
+            PhysicalRDD(plan.output, sparkContext.emptyRDD[InternalRow]) :: Nil
         }
       case _ => Nil
     }
@@ -212,7 +213,7 @@ private[hive] trait HiveStrategies {
           projectList,
           otherPredicates,
           identity[Seq[Expression]],
-          HiveTableScan(_, relation, pruningPredicates.reduceLeftOption(And))(hiveContext)) :: Nil
+          HiveTableScan(_, relation, pruningPredicates)(hiveContext)) :: Nil
       case _ =>
         Nil
     }
@@ -221,14 +222,14 @@ private[hive] trait HiveStrategies {
   object HiveDDLStrategy extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case CreateTableUsing(
-      tableName, userSpecifiedSchema, provider, false, opts, allowExisting, managedIfNoPath) =>
+          tableName, userSpecifiedSchema, provider, false, opts, allowExisting, managedIfNoPath) =>
         ExecutedCommand(
           CreateMetastoreDataSource(
             tableName, userSpecifiedSchema, provider, opts, allowExisting, managedIfNoPath)) :: Nil
 
-      case CreateTableUsingAsSelect(tableName, provider, false, mode, opts, query) =>
+      case CreateTableUsingAsSelect(tableName, provider, false, partitionCols, mode, opts, query) =>
         val cmd =
-          CreateMetastoreDataSourceAsSelect(tableName, provider, mode, opts, query)
+          CreateMetastoreDataSourceAsSelect(tableName, provider, partitionCols, mode, opts, query)
         ExecutedCommand(cmd) :: Nil
 
       case _ => Nil

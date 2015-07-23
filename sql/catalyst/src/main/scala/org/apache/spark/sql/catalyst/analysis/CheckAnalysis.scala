@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression2
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.types._
 
@@ -26,7 +27,6 @@ import org.apache.spark.sql.types._
  * Throws user facing errors when passed invalid queries that fail to analyze.
  */
 trait CheckAnalysis {
-  self: Analyzer =>
 
   /**
    * Override to provide additional checks for correct analysis.
@@ -41,35 +41,40 @@ trait CheckAnalysis {
   def containsMultipleGenerators(exprs: Seq[Expression]): Boolean = {
     exprs.flatMap(_.collect {
       case e: Generator => true
-    }).length >= 1
+    }).nonEmpty
   }
 
   def checkAnalysis(plan: LogicalPlan): Unit = {
     // We transform up and order the rules so as to catch the first possible failure instead
     // of the result of cascading resolution failures.
     plan.foreachUp {
+
       case operator: LogicalPlan =>
         operator transformExpressionsUp {
           case a: Attribute if !a.resolved =>
-            if (operator.childrenResolved) {
-              a match {
-                case UnresolvedAttribute(nameParts) =>
-                  // Throw errors for specific problems with get field.
-                  operator.resolveChildren(nameParts, resolver, throwErrors = true)
-              }
-            }
-
             val from = operator.inputSet.map(_.name).mkString(", ")
             a.failAnalysis(s"cannot resolve '${a.prettyString}' given input columns $from")
+
+          case e: Expression if e.checkInputDataTypes().isFailure =>
+            e.checkInputDataTypes() match {
+              case TypeCheckResult.TypeCheckFailure(message) =>
+                e.failAnalysis(
+                  s"cannot resolve '${e.prettyString}' due to data type mismatch: $message")
+            }
 
           case c: Cast if !c.resolved =>
             failAnalysis(
               s"invalid cast from ${c.child.dataType.simpleString} to ${c.dataType.simpleString}")
 
-          case b: BinaryExpression if !b.resolved =>
+          case WindowExpression(UnresolvedWindowFunction(name, _), _) =>
             failAnalysis(
-              s"invalid expression ${b.prettyString} " +
-                s"between ${b.left.simpleString} and ${b.right.simpleString}")
+              s"Could not resolve window function '$name'. " +
+              "Note that, using window functions currently requires a HiveContext")
+
+          case w @ WindowExpression(windowFunction, windowSpec) if windowSpec.validate.nonEmpty =>
+            // The window spec is not valid.
+            val reason = windowSpec.validate.get
+            failAnalysis(s"Window specification $windowSpec is not valid because $reason")
         }
 
         operator match {
@@ -81,24 +86,17 @@ trait CheckAnalysis {
           case Aggregate(groupingExprs, aggregateExprs, child) =>
             def checkValidAggregateExpression(expr: Expression): Unit = expr match {
               case _: AggregateExpression => // OK
-              case e: Attribute if !groupingExprs.contains(e) =>
+              case e: Attribute if !groupingExprs.exists(_.semanticEquals(e)) =>
                 failAnalysis(
                   s"expression '${e.prettyString}' is neither present in the group by, " +
                     s"nor is it an aggregate function. " +
                     "Add to group by or wrap in first() if you don't care which value you get.")
-              case e if groupingExprs.contains(e) => // OK
+              case e if groupingExprs.exists(_.semanticEquals(e)) => // OK
               case e if e.references.isEmpty => // OK
               case e => e.children.foreach(checkValidAggregateExpression)
             }
 
-            val cleaned = aggregateExprs.map(_.transform {
-              // Should trim aliases around `GetField`s. These aliases are introduced while
-              // resolving struct field accesses, because `GetField` is not a `NamedExpression`.
-              // (Should we just turn `GetField` into a `NamedExpression`?)
-              case Alias(g, _) => g
-            })
-
-            cleaned.foreach(checkValidAggregateExpression)
+            aggregateExprs.foreach(checkValidAggregateExpression)
 
           case _ => // Fallbacks to the following checks
         }
@@ -112,15 +110,24 @@ trait CheckAnalysis {
               s"resolved attribute(s) $missingAttributes missing from $input " +
                 s"in operator ${operator.simpleString}")
 
-          case o if !o.resolved =>
-            failAnalysis(
-              s"unresolved operator ${operator.simpleString}")
-
           case p @ Project(exprs, _) if containsMultipleGenerators(exprs) =>
             failAnalysis(
               s"""Only a single table generating function is allowed in a SELECT clause, found:
                  | ${exprs.map(_.prettyString).mkString(",")}""".stripMargin)
 
+          // Special handling for cases when self-join introduce duplicate expression ids.
+          case j @ Join(left, right, _, _) if left.outputSet.intersect(right.outputSet).nonEmpty =>
+            val conflictingAttributes = left.outputSet.intersect(right.outputSet)
+            failAnalysis(
+              s"""
+                 |Failure when resolving conflicting references in Join:
+                 |$plan
+                  |Conflicting attributes: ${conflictingAttributes.mkString(",")}
+                  |""".stripMargin)
+
+          case o if !o.resolved =>
+            failAnalysis(
+              s"unresolved operator ${operator.simpleString}")
 
           case _ => // Analysis successful!
         }

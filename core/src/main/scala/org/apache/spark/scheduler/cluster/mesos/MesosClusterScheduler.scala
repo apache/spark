@@ -29,6 +29,7 @@ import org.apache.mesos.Protos.Environment.Variable
 import org.apache.mesos.Protos.TaskStatus.Reason
 import org.apache.mesos.Protos.{TaskState => MesosTaskState, _}
 import org.apache.mesos.{Scheduler, SchedulerDriver}
+
 import org.apache.spark.deploy.mesos.MesosDriverDescription
 import org.apache.spark.deploy.rest.{CreateSubmissionResponse, KillSubmissionResponse, SubmissionStatusResponse}
 import org.apache.spark.metrics.MetricsSystem
@@ -294,20 +295,24 @@ private[spark] class MesosClusterScheduler(
   def start(): Unit = {
     // TODO: Implement leader election to make sure only one framework running in the cluster.
     val fwId = schedulerState.fetch[String]("frameworkId")
-    val builder = FrameworkInfo.newBuilder()
-      .setUser(Utils.getCurrentUserName())
-      .setName(appName)
-      .setWebuiUrl(frameworkUrl)
-      .setCheckpoint(true)
-      .setFailoverTimeout(Integer.MAX_VALUE) // Setting to max so tasks keep running on crash
     fwId.foreach { id =>
-      builder.setId(FrameworkID.newBuilder().setValue(id).build())
       frameworkId = id
     }
     recoverState()
     metricsSystem.registerSource(new MesosClusterSchedulerSource(this))
     metricsSystem.start()
-    startScheduler(master, MesosClusterScheduler.this, builder.build())
+    val driver = createSchedulerDriver(
+      master,
+      MesosClusterScheduler.this,
+      Utils.getCurrentUserName(),
+      appName,
+      conf,
+      Some(frameworkUrl),
+      Some(true),
+      Some(Integer.MAX_VALUE),
+      fwId)
+
+    startScheduler(driver)
     ready = true
   }
 
@@ -370,16 +375,21 @@ private[spark] class MesosClusterScheduler(
     val executorOpts = desc.schedulerProperties.map { case (k, v) => s"-D$k=$v" }.mkString(" ")
     envBuilder.addVariables(
       Variable.newBuilder().setName("SPARK_EXECUTOR_OPTS").setValue(executorOpts))
-    val cmdOptions = generateCmdOption(desc)
+    val cmdOptions = generateCmdOption(desc).mkString(" ")
+    val dockerDefined = desc.schedulerProperties.contains("spark.mesos.executor.docker.image")
     val executorUri = desc.schedulerProperties.get("spark.executor.uri")
       .orElse(desc.command.environment.get("SPARK_EXECUTOR_URI"))
     val appArguments = desc.command.arguments.mkString(" ")
-    val cmd = if (executorUri.isDefined) {
+    val (executable, jar) = if (dockerDefined) {
+      // Application jar is automatically downloaded in the mounted sandbox by Mesos,
+      // and the path to the mounted volume is stored in $MESOS_SANDBOX env variable.
+      ("./bin/spark-submit", s"$$MESOS_SANDBOX/${desc.jarUrl.split("/").last}")
+    } else if (executorUri.isDefined) {
       builder.addUris(CommandInfo.URI.newBuilder().setValue(executorUri.get).build())
       val folderBasename = executorUri.get.split('/').last.split('.').head
       val cmdExecutable = s"cd $folderBasename*; $prefixEnv bin/spark-submit"
       val cmdJar = s"../${desc.jarUrl.split("/").last}"
-      s"$cmdExecutable ${cmdOptions.mkString(" ")} $cmdJar $appArguments"
+      (cmdExecutable, cmdJar)
     } else {
       val executorSparkHome = desc.schedulerProperties.get("spark.mesos.executor.home")
         .orElse(conf.getOption("spark.home"))
@@ -389,9 +399,9 @@ private[spark] class MesosClusterScheduler(
         }
       val cmdExecutable = new File(executorSparkHome, "./bin/spark-submit").getCanonicalPath
       val cmdJar = desc.jarUrl.split("/").last
-      s"$cmdExecutable ${cmdOptions.mkString(" ")} $cmdJar $appArguments"
+      (cmdExecutable, cmdJar)
     }
-    builder.setValue(cmd)
+    builder.setValue(s"$executable $cmdOptions $jar $appArguments")
     builder.setEnvironment(envBuilder.build())
     builder.build()
   }
@@ -443,12 +453,8 @@ private[spark] class MesosClusterScheduler(
         offer.cpu -= driverCpu
         offer.mem -= driverMem
         val taskId = TaskID.newBuilder().setValue(submission.submissionId).build()
-        val cpuResource = Resource.newBuilder()
-          .setName("cpus").setType(Value.Type.SCALAR)
-          .setScalar(Value.Scalar.newBuilder().setValue(driverCpu)).build()
-        val memResource = Resource.newBuilder()
-          .setName("mem").setType(Value.Type.SCALAR)
-          .setScalar(Value.Scalar.newBuilder().setValue(driverMem)).build()
+        val cpuResource = createResource("cpus", driverCpu)
+        val memResource = createResource("mem", driverMem)
         val commandInfo = buildDriverCommand(submission)
         val appName = submission.schedulerProperties("spark.app.name")
         val taskInfo = TaskInfo.newBuilder()
@@ -458,9 +464,20 @@ private[spark] class MesosClusterScheduler(
           .setCommand(commandInfo)
           .addResources(cpuResource)
           .addResources(memResource)
-          .build()
+        submission.schedulerProperties.get("spark.mesos.executor.docker.image").foreach { image =>
+          val container = taskInfo.getContainerBuilder()
+          val volumes = submission.schedulerProperties
+            .get("spark.mesos.executor.docker.volumes")
+            .map(MesosSchedulerBackendUtil.parseVolumesSpec)
+          val portmaps = submission.schedulerProperties
+            .get("spark.mesos.executor.docker.portmaps")
+            .map(MesosSchedulerBackendUtil.parsePortMappingsSpec)
+          MesosSchedulerBackendUtil.addDockerInfo(
+            container, image, volumes = volumes, portmaps = portmaps)
+          taskInfo.setContainer(container.build())
+        }
         val queuedTasks = tasks.getOrElseUpdate(offer.offer.getId, new ArrayBuffer[TaskInfo])
-        queuedTasks += taskInfo
+        queuedTasks += taskInfo.build()
         logTrace(s"Using offer ${offer.offer.getId.getValue} to launch driver " +
           submission.submissionId)
         val newState = new MesosClusterSubmissionState(submission, taskId, offer.offer.getSlaveId,

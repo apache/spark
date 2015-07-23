@@ -17,12 +17,11 @@
 
 package org.apache.spark.scheduler
 
-import scala.collection.mutable
-import scala.collection.mutable.HashSet
-
 import org.apache.spark._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.CallSite
+
+import scala.collection.mutable.HashSet
 
 /**
  * A stage is a set of independent tasks all computing the same function that need to run as part
@@ -35,7 +34,7 @@ import org.apache.spark.util.CallSite
  * initiated a job (e.g. count(), save(), etc). For shuffle map stages, we also track the nodes
  * that each output partition is on.
  *
- * Each Stage also has a jobId, identifying the job that first submitted the stage.  When FIFO
+ * Each Stage also has a firstJobId, identifying the job that first submitted the stage.  When FIFO
  * scheduling is used, this allows Stages from earlier jobs to be computed first or recovered
  * faster on failure.
  *
@@ -52,7 +51,7 @@ private[spark] abstract class Stage(
     val rdd: RDD[_],
     val numTasks: Int,
     val parents: List[Stage],
-    val jobId: Int,
+    val firstJobId: Int,
     val callSite: CallSite)
   extends Logging {
 
@@ -63,26 +62,27 @@ private[spark] abstract class Stage(
 
   var pendingTasks = new HashSet[Task[_]]
 
+  /** The ID to use for the next new attempt for this stage. */
   private var nextAttemptId: Int = 0
 
   val name = callSite.shortForm
   val details = callSite.longForm
 
-  /** Pointer to the latest [StageInfo] object, set by DAGScheduler. */
-  var latestInfo: StageInfo = StageInfo.fromStage(this)
+  /**
+   * Pointer to the [StageInfo] object for the most recent attempt. This needs to be initialized
+   * here, before any attempts have actually been created, because the DAGScheduler uses this
+   * StageInfo to tell SparkListeners when a job starts (which happens before any stage attempts
+   * have been created).
+   */
+  private var _latestInfo: StageInfo = StageInfo.fromStage(this, nextAttemptId)
 
   /**
    * Spark is resilient to executors dying by retrying stages on FetchFailures. Here, we keep track
-   * of the number of stage failures to prevent endless stage retries. However, because 
-   * FetchFailures may cause multiple tasks to retry a Stage in parallel, we cannot count stage 
-   * failures alone since the same stage may be attempted multiple times simultaneously. 
-   * We deal with this by tracking the number of failures per attemptId.
+   * of the number of stage failures to prevent endless stage retries.
    */
-  private val failedStageAttemptIds = new mutable.HashMap[Int, HashSet[Int]]
   private var failedStageCount = 0
   
-  private[scheduler] def clearFailures() : Unit = { 
-    failedStageAttemptIds.clear()
+  private[scheduler] def clearFailures() : Unit = {
     failedStageCount = 0
   }
 
@@ -93,30 +93,24 @@ private[spark] abstract class Stage(
    */
   private[scheduler] def failAndShouldAbort(): Boolean = {
     // We increment the failure count on the first attempt for a particular Stage
-    if (latestInfo.attemptId == 0)
+    if (_latestInfo.attemptId == 0)
     {
       failedStageCount += 1
     }
     
-    val concurrentFailures = failedStageAttemptIds
-      .getOrElseUpdate(failedStageCount, new HashSet[Int]())
-      
-    concurrentFailures.add(latestInfo.attemptId)
-    
     // Check for multiple FetchFailures in a Stage and for the stage failing repeatedly following
     // resubmissions.
-    failedStageCount >= Stage.MAX_STAGE_FAILURES || 
-      concurrentFailures.size >= Stage.MAX_STAGE_FAILURES
-  }
-  
-  /** Return a new attempt id, starting with 0. */
-  def newAttemptId(): Int = {
-    val id = nextAttemptId
-    nextAttemptId += 1
-    id
+    failedStageCount >= Stage.MAX_STAGE_FAILURES
   }
 
-  def attemptId: Int = nextAttemptId
+  /** Creates a new attempt for this stage by creating a new StageInfo with a new attempt ID. */
+  def makeNewStageAttempt(numPartitionsToCompute: Int): Unit = {
+    _latestInfo = StageInfo.fromStage(this, nextAttemptId, Some(numPartitionsToCompute))
+    nextAttemptId += 1
+  }
+
+  /** Returns the StageInfo for the most recent attempt for this stage. */
+  def latestInfo: StageInfo = _latestInfo
 
   override final def hashCode(): Int = id
   override final def equals(other: Any): Boolean = other match {

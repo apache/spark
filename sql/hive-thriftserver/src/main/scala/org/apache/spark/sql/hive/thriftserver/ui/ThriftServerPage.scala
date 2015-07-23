@@ -29,7 +29,7 @@ import org.apache.spark.ui.UIUtils._
 import org.apache.spark.ui._
 
 
-/** Page for Spark Web UI that shows statistics of a streaming job */
+/** Page for Spark Web UI that shows statistics of a thrift server */
 private[ui] class ThriftServerPage(parent: ThriftServerTab) extends WebUIPage("") with Logging {
 
   private val listener = parent.listener
@@ -42,20 +42,20 @@ private[ui] class ThriftServerPage(parent: ThriftServerTab) extends WebUIPage(""
       generateBasicStats() ++
       <br/> ++
       <h4>
-        {listener.sessionList.size} session(s) are online,
+        {listener.onlineSessionNum} session(s) are online,
         running {listener.totalRunning} SQL statement(s)
       </h4> ++
       generateSessionStatsTable() ++
       generateSQLStatsTable()
-    UIUtils.headerSparkPage("ThriftServer", content, parent, Some(5000))
+    UIUtils.headerSparkPage("JDBC/ODBC Server", content, parent, Some(5000))
   }
 
-  /** Generate basic stats of the streaming program */
+  /** Generate basic stats of the thrift server program */
   private def generateBasicStats(): Seq[Node] = {
     val timeSinceStart = System.currentTimeMillis() - startTime.getTime
     <ul class ="unstyled">
       <li>
-        <strong>Started at: </strong> {startTime.toString}
+        <strong>Started at: </strong> {formatDate(startTime)}
       </li>
       <li>
         <strong>Time since start: </strong>{formatDurationVerbose(timeSinceStart)}
@@ -77,7 +77,7 @@ private[ui] class ThriftServerPage(parent: ThriftServerTab) extends WebUIPage(""
             [{id}]
           </a>
         }
-        val detail = if(info.state == ExecutionState.FAILED) info.detail else info.executePlan
+        val detail = if (info.state == ExecutionState.FAILED) info.detail else info.executePlan
         <tr>
           <td>{info.userName}</td>
           <td>
@@ -85,7 +85,7 @@ private[ui] class ThriftServerPage(parent: ThriftServerTab) extends WebUIPage(""
           </td>
           <td>{info.groupId}</td>
           <td>{formatDate(info.startTimestamp)}</td>
-          <td>{if(info.finishTimestamp > 0) formatDate(info.finishTimestamp)}</td>
+          <td>{if (info.finishTimestamp > 0) formatDate(info.finishTimestamp)}</td>
           <td>{formatDurationOption(Some(info.totalTime))}</td>
           <td>{info.statement}</td>
           <td>{info.state}</td>
@@ -143,14 +143,14 @@ private[ui] class ThriftServerPage(parent: ThriftServerTab) extends WebUIPage(""
       val headerRow = Seq("User", "IP", "Session ID", "Start Time", "Finish Time", "Duration",
         "Total Execute")
       def generateDataRow(session: SessionInfo): Seq[Node] = {
-        val sessionLink = "%s/ThriftServer/session?id=%s"
+        val sessionLink = "%s/sql/session?id=%s"
           .format(UIUtils.prependBaseUri(parent.basePath), session.sessionId)
         <tr>
           <td> {session.userName} </td>
           <td> {session.ip} </td>
-          <td> <a href={sessionLink}> {session.sessionId} </a> </td>,
+          <td> <a href={sessionLink}> {session.sessionId} </a> </td>
           <td> {formatDate(session.startTimestamp)} </td>
-          <td> {if(session.finishTimestamp > 0) formatDate(session.finishTimestamp)} </td>
+          <td> {if (session.finishTimestamp > 0) formatDate(session.finishTimestamp)} </td>
           <td> {formatDurationOption(Some(session.totalTime))} </td>
           <td> {session.totalExecution.toString} </td>
         </tr>

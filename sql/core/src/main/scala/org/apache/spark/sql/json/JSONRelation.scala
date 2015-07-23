@@ -19,20 +19,34 @@ package org.apache.spark.sql.json
 
 import java.io.IOException
 
-import org.apache.hadoop.fs.Path
+import org.apache.hadoop.fs.{FileSystem, Path}
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalyst.expressions.Row
+import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression}
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.sql.{DataFrame, SQLContext, SaveMode}
+import org.apache.spark.sql.{DataFrame, Row, SQLContext, SaveMode}
 
 
 private[sql] class DefaultSource
-  extends RelationProvider with SchemaRelationProvider with CreatableRelationProvider {
+  extends RelationProvider
+  with SchemaRelationProvider
+  with CreatableRelationProvider {
 
   private def checkPath(parameters: Map[String, String]): String = {
     parameters.getOrElse("path", sys.error("'path' must be specified for json data."))
+  }
+
+  /** Constraints to be imposed on dataframe to be stored. */
+  private def checkConstraints(data: DataFrame): Unit = {
+    if (data.schema.fieldNames.length != data.schema.fieldNames.distinct.length) {
+      val duplicateColumns = data.schema.fieldNames.groupBy(identity).collect {
+        case (x, ys) if ys.length > 1 => "\"" + x + "\""
+      }.mkString(", ")
+      throw new AnalysisException(s"Duplicate column(s) : $duplicateColumns found, " +
+        s"cannot save to JSON format")
+    }
   }
 
   /** Returns a new base relation with the parameters. */
@@ -42,7 +56,7 @@ private[sql] class DefaultSource
     val path = checkPath(parameters)
     val samplingRatio = parameters.get("samplingRatio").map(_.toDouble).getOrElse(1.0)
 
-    JSONRelation(path, samplingRatio, None)(sqlContext)
+    new JSONRelation(path, samplingRatio, None, sqlContext)
   }
 
   /** Returns a new base relation with the given schema and parameters. */
@@ -53,7 +67,7 @@ private[sql] class DefaultSource
     val path = checkPath(parameters)
     val samplingRatio = parameters.get("samplingRatio").map(_.toDouble).getOrElse(1.0)
 
-    JSONRelation(path, samplingRatio, Some(schema))(sqlContext)
+    new JSONRelation(path, samplingRatio, Some(schema), sqlContext)
   }
 
   override def createRelation(
@@ -61,6 +75,10 @@ private[sql] class DefaultSource
       mode: SaveMode,
       parameters: Map[String, String],
       data: DataFrame): BaseRelation = {
+    // check if dataframe satisfies the constraints
+    // before moving forward
+    checkConstraints(data)
+
     val path = checkPath(parameters)
     val filesystemPath = new Path(path)
     val fs = filesystemPath.getFileSystem(sqlContext.sparkContext.hadoopConfiguration)
@@ -69,20 +87,7 @@ private[sql] class DefaultSource
         case SaveMode.Append =>
           sys.error(s"Append mode is not supported by ${this.getClass.getCanonicalName}")
         case SaveMode.Overwrite => {
-          var success: Boolean = false
-          try {
-            success = fs.delete(filesystemPath, true)
-          } catch {
-            case e: IOException =>
-              throw new IOException(
-                s"Unable to clear output directory ${filesystemPath.toString} prior"
-                  + s" to writing to JSON table:\n${e.toString}")
-          }
-          if (!success) {
-            throw new IOException(
-              s"Unable to clear output directory ${filesystemPath.toString} prior"
-                + s" to writing to JSON table.")
-          }
+          JSONRelation.delete(filesystemPath, fs)
           true
         }
         case SaveMode.ErrorIfExists =>
@@ -101,53 +106,86 @@ private[sql] class DefaultSource
   }
 }
 
-private[sql] case class JSONRelation(
-    path: String,
-    samplingRatio: Double,
+private[sql] class JSONRelation(
+    // baseRDD is not immutable with respect to INSERT OVERWRITE
+    // and so it must be recreated at least as often as the
+    // underlying inputs are modified. To be safe, a function is
+    // used instead of a regular RDD value to ensure a fresh RDD is
+    // recreated for each and every operation.
+    baseRDD: () => RDD[String],
+    val path: Option[String],
+    val samplingRatio: Double,
     userSpecifiedSchema: Option[StructType])(
     @transient val sqlContext: SQLContext)
   extends BaseRelation
   with TableScan
-  with InsertableRelation {
+  with InsertableRelation
+  with CatalystScan {
 
-  // TODO: Support partitioned JSON relation.
-  private def baseRDD = sqlContext.sparkContext.textFile(path)
+  def this(
+      path: String,
+      samplingRatio: Double,
+      userSpecifiedSchema: Option[StructType],
+      sqlContext: SQLContext) =
+    this(
+      () => sqlContext.sparkContext.textFile(path),
+      Some(path),
+      samplingRatio,
+      userSpecifiedSchema)(sqlContext)
+
+  /** Constraints to be imposed on dataframe to be stored. */
+  private def checkConstraints(data: DataFrame): Unit = {
+    if (data.schema.fieldNames.length != data.schema.fieldNames.distinct.length) {
+      val duplicateColumns = data.schema.fieldNames.groupBy(identity).collect {
+        case (x, ys) if ys.length > 1 => "\"" + x + "\""
+      }.mkString(", ")
+      throw new AnalysisException(s"Duplicate column(s) : $duplicateColumns found, " +
+        s"cannot save to JSON format")
+    }
+  }
 
   override val needConversion: Boolean = false
 
-  override val schema = userSpecifiedSchema.getOrElse(
-    JsonRDD.nullTypeToStringType(
-      JsonRDD.inferSchema(
-        baseRDD,
-        samplingRatio,
-        sqlContext.conf.columnNameOfCorruptRecord)))
+  override lazy val schema = userSpecifiedSchema.getOrElse {
+    InferSchema(
+      baseRDD(),
+      samplingRatio,
+      sqlContext.conf.columnNameOfCorruptRecord)
+  }
 
-  override def buildScan(): RDD[Row] =
-    JsonRDD.jsonStringToRow(baseRDD, schema, sqlContext.conf.columnNameOfCorruptRecord)
+  override def buildScan(): RDD[Row] = {
+    JacksonParser(
+      baseRDD(),
+      schema,
+      sqlContext.conf.columnNameOfCorruptRecord).map(_.asInstanceOf[Row])
+  }
+
+  override def buildScan(requiredColumns: Seq[Attribute], filters: Seq[Expression]): RDD[Row] = {
+    JacksonParser(
+      baseRDD(),
+      StructType.fromAttributes(requiredColumns),
+      sqlContext.conf.columnNameOfCorruptRecord).map(_.asInstanceOf[Row])
+  }
 
   override def insert(data: DataFrame, overwrite: Boolean): Unit = {
-    val filesystemPath = new Path(path)
+    // check if dataframe satisfies constraints
+    // before moving forward
+    checkConstraints(data)
+
+    val filesystemPath = path match {
+      case Some(p) => new Path(p)
+      case None =>
+        throw new IOException(s"Cannot INSERT into table with no path defined")
+    }
+
     val fs = filesystemPath.getFileSystem(sqlContext.sparkContext.hadoopConfiguration)
 
     if (overwrite) {
       if (fs.exists(filesystemPath)) {
-        var success: Boolean = false
-        try {
-          success = fs.delete(filesystemPath, true)
-        } catch {
-          case e: IOException =>
-            throw new IOException(
-              s"Unable to clear output directory ${filesystemPath.toString} prior"
-                + s" to writing to JSON table:\n${e.toString}")
-        }
-        if (!success) {
-          throw new IOException(
-            s"Unable to clear output directory ${filesystemPath.toString} prior"
-              + s" to writing to JSON table.")
-        }
+        JSONRelation.delete(filesystemPath, fs)
       }
       // Write the data.
-      data.toJSON.saveAsTextFile(path)
+      data.toJSON.saveAsTextFile(filesystemPath.toString)
       // Right now, we assume that the schema is not changed. We will not update the schema.
       // schema = data.schema
     } else {
@@ -162,5 +200,23 @@ private[sql] case class JSONRelation(
     case that: JSONRelation =>
       (this.path == that.path) && this.schema.sameType(that.schema)
     case _ => false
+  }
+}
+
+private object JSONRelation {
+
+  /** Delete the specified directory to overwrite it with new JSON data. */
+  def delete(dir: Path, fs: FileSystem): Unit = {
+    var success: Boolean = false
+    val failMessage = s"Unable to clear output directory $dir prior to writing to JSON table"
+    try {
+      success = fs.delete(dir, true /* recursive */)
+    } catch {
+      case e: IOException =>
+        throw new IOException(s"$failMessage\n${e.toString}")
+    }
+    if (!success) {
+      throw new IOException(failMessage)
+    }
   }
 }

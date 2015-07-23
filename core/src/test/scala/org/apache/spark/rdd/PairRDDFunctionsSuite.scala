@@ -28,12 +28,10 @@ import org.apache.hadoop.conf.{Configurable, Configuration}
 import org.apache.hadoop.mapreduce.{JobContext => NewJobContext, OutputCommitter => NewOutputCommitter,
 OutputFormat => NewOutputFormat, RecordWriter => NewRecordWriter,
 TaskAttemptContext => NewTaskAttempContext}
-import org.apache.spark.{Partitioner, SharedSparkContext}
+import org.apache.spark.{Partitioner, SharedSparkContext, SparkFunSuite}
 import org.apache.spark.util.Utils
 
-import org.scalatest.FunSuite
-
-class PairRDDFunctionsSuite extends FunSuite with SharedSparkContext {
+class PairRDDFunctionsSuite extends SparkFunSuite with SharedSparkContext {
   test("aggregateByKey") {
     val pairs = sc.parallelize(Array((1, 1), (1, 1), (3, 2), (5, 1), (5, 3)), 2)
 
@@ -512,17 +510,17 @@ class PairRDDFunctionsSuite extends FunSuite with SharedSparkContext {
   }
 
   test("lookup") {
-    val pairs = sc.parallelize(Array((1,2), (3,4), (5,6), (5,7)))
+    val pairs = sc.parallelize(Array((1, 2), (3, 4), (5, 6), (5, 7)))
 
     assert(pairs.partitioner === None)
     assert(pairs.lookup(1) === Seq(2))
-    assert(pairs.lookup(5) === Seq(6,7))
+    assert(pairs.lookup(5) === Seq(6, 7))
     assert(pairs.lookup(-1) === Seq())
 
   }
 
   test("lookup with partitioner") {
-    val pairs = sc.parallelize(Array((1,2), (3,4), (5,6), (5,7)))
+    val pairs = sc.parallelize(Array((1, 2), (3, 4), (5, 6), (5, 7)))
 
     val p = new Partitioner {
       def numPartitions: Int = 2
@@ -533,12 +531,12 @@ class PairRDDFunctionsSuite extends FunSuite with SharedSparkContext {
 
     assert(shuffled.partitioner === Some(p))
     assert(shuffled.lookup(1) === Seq(2))
-    assert(shuffled.lookup(5) === Seq(6,7))
+    assert(shuffled.lookup(5) === Seq(6, 7))
     assert(shuffled.lookup(-1) === Seq())
   }
 
   test("lookup with bad partitioner") {
-    val pairs = sc.parallelize(Array((1,2), (3,4), (5,6), (5,7)))
+    val pairs = sc.parallelize(Array((1, 2), (3, 4), (5, 6), (5, 7)))
 
     val p = new Partitioner {
       def numPartitions: Int = 2

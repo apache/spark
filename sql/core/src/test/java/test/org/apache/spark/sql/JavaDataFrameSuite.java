@@ -34,11 +34,11 @@ import scala.collection.mutable.Buffer;
 
 import java.io.Serializable;
 import java.util.Arrays;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 
 import static org.apache.spark.sql.functions.*;
-import static org.apache.spark.sql.mathfunctions.*;
 
 public class JavaDataFrameSuite {
   private transient JavaSparkContext jsc;
@@ -176,6 +176,33 @@ public class JavaDataFrameSuite {
     Assert.assertEquals(bean.getD().size(), d.length());
     for (int i = 0; i < d.length(); i++) {
       Assert.assertEquals(bean.getD().get(i), d.apply(i));
+    }
+  }
+
+  private static Comparator<Row> CrosstabRowComparator = new Comparator<Row>() {
+    public int compare(Row row1, Row row2) {
+      String item1 = row1.getString(0);
+      String item2 = row2.getString(0);
+      return item1.compareTo(item2);
+    }
+  };
+
+  @Test
+  public void testCrosstab() {
+    DataFrame df = context.table("testData2");
+    DataFrame crosstab = df.stat().crosstab("a", "b");
+    String[] columnNames = crosstab.schema().fieldNames();
+    Assert.assertEquals(columnNames[0], "a_b");
+    Assert.assertEquals(columnNames[1], "1");
+    Assert.assertEquals(columnNames[2], "2");
+    Row[] rows = crosstab.collect();
+    Arrays.sort(rows, CrosstabRowComparator);
+    Integer count = 1;
+    for (Row row : rows) {
+      Assert.assertEquals(row.get(0).toString(), count.toString());
+      Assert.assertEquals(row.getLong(1), 1L);
+      Assert.assertEquals(row.getLong(2), 1L);
+      count++;
     }
   }
   

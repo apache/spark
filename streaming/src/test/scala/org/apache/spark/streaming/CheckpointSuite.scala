@@ -191,8 +191,51 @@ class CheckpointSuite extends TestSuiteBase {
     }
   }
 
+  // This tests if "spark.driver.host" and "spark.driver.port" is set by user, can be recovered
+  // with correct value.
+  test("get correct spark.driver.[host|port] from checkpoint") {
+    val conf = Map("spark.driver.host" -> "localhost", "spark.driver.port" -> "9999")
+    conf.foreach(kv => System.setProperty(kv._1, kv._2))
+    ssc = new StreamingContext(master, framework, batchDuration)
+    val originalConf = ssc.conf
+    assert(originalConf.get("spark.driver.host") === "localhost")
+    assert(originalConf.get("spark.driver.port") === "9999")
 
-  // This tests whether the systm can recover from a master failure with simple
+    val cp = new Checkpoint(ssc, Time(1000))
+    ssc.stop()
+
+    // Serialize/deserialize to simulate write to storage and reading it back
+    val newCp = Utils.deserialize[Checkpoint](Utils.serialize(cp))
+
+    val newCpConf = newCp.createSparkConf()
+    assert(newCpConf.contains("spark.driver.host"))
+    assert(newCpConf.contains("spark.driver.port"))
+    assert(newCpConf.get("spark.driver.host") === "localhost")
+    assert(newCpConf.get("spark.driver.port") === "9999")
+
+    // Check if all the parameters have been restored
+    ssc = new StreamingContext(null, newCp, null)
+    val restoredConf = ssc.conf
+    assert(restoredConf.get("spark.driver.host") === "localhost")
+    assert(restoredConf.get("spark.driver.port") === "9999")
+    ssc.stop()
+
+    // If spark.driver.host and spark.driver.host is not set in system property, these two
+    // parameters should not be presented in the newly recovered conf.
+    conf.foreach(kv => System.clearProperty(kv._1))
+    val newCpConf1 = newCp.createSparkConf()
+    assert(!newCpConf1.contains("spark.driver.host"))
+    assert(!newCpConf1.contains("spark.driver.port"))
+
+    // Spark itself will dispatch a random, not-used port for spark.driver.port if it is not set
+    // explicitly.
+    ssc = new StreamingContext(null, newCp, null)
+    val restoredConf1 = ssc.conf
+    assert(restoredConf1.get("spark.driver.host") === "localhost")
+    assert(restoredConf1.get("spark.driver.port") !== "9999")
+  }
+
+  // This tests whether the system can recover from a master failure with simple
   // non-stateful operations. This assumes as reliable, replayable input
   // source - TestInputDStream.
   test("recovery with map and reduceByKey operations") {
@@ -424,11 +467,11 @@ class CheckpointSuite extends TestSuiteBase {
             }
           }
         }
-        clock.advance(batchDuration.milliseconds)
         eventually(eventuallyTimeout) {
           // Wait until all files have been recorded and all batches have started
           assert(recordedFiles(ssc) === Seq(1, 2, 3) && batchCounter.getNumStartedBatches === 3)
         }
+        clock.advance(batchDuration.milliseconds)
         // Wait for a checkpoint to be written
         eventually(eventuallyTimeout) {
           assert(Checkpoint.getCheckpointFiles(checkpointDir).size === 6)
@@ -454,9 +497,12 @@ class CheckpointSuite extends TestSuiteBase {
       // recorded before failure were saved and successfully recovered
       logInfo("*********** RESTARTING ************")
       withStreamingContext(new StreamingContext(checkpointDir)) { ssc =>
-        // So that the restarted StreamingContext's clock has gone forward in time since failure
-        ssc.conf.set("spark.streaming.manualClock.jump", (batchDuration * 3).milliseconds.toString)
-        val oldClockTime = clock.getTimeMillis()
+        // "batchDuration.milliseconds * 3" has gone before restarting StreamingContext. And because
+        // the recovery time is read from the checkpoint time but the original clock doesn't align
+        // with the batch time, we need to add the offset "batchDuration.milliseconds / 2".
+        ssc.conf.set("spark.streaming.manualClock.jump",
+          (batchDuration.milliseconds / 2 + batchDuration.milliseconds * 3).toString)
+        val oldClockTime = clock.getTimeMillis() // 15000ms
         clock = ssc.scheduler.clock.asInstanceOf[ManualClock]
         val batchCounter = new BatchCounter(ssc)
         val outputStream = ssc.graph.getOutputStreams().head.asInstanceOf[TestOutputStream[Int]]
@@ -467,10 +513,10 @@ class CheckpointSuite extends TestSuiteBase {
         ssc.start()
         // Verify that the clock has traveled forward to the expected time
         eventually(eventuallyTimeout) {
-          clock.getTimeMillis() === oldClockTime
+          assert(clock.getTimeMillis() === oldClockTime)
         }
-        // Wait for pre-failure batch to be recomputed (3 while SSC was down plus last batch)
-        val numBatchesAfterRestart = 4
+        // There are 5 batches between 6000ms and 15000ms (inclusive).
+        val numBatchesAfterRestart = 5
         eventually(eventuallyTimeout) {
           assert(batchCounter.getNumCompletedBatches === numBatchesAfterRestart)
         }
@@ -483,7 +529,6 @@ class CheckpointSuite extends TestSuiteBase {
             assert(batchCounter.getNumCompletedBatches === index + numBatchesAfterRestart + 1)
           }
         }
-        clock.advance(batchDuration.milliseconds)
         logInfo("Output after restart = " + outputStream.output.mkString("[", ", ", "]"))
         assert(outputStream.output.size > 0, "No files processed after restart")
         ssc.stop()

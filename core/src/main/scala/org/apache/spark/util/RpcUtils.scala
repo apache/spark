@@ -17,11 +17,11 @@
 
 package org.apache.spark.util
 
-import scala.concurrent.duration._
+import scala.concurrent.duration.FiniteDuration
 import scala.language.postfixOps
 
 import org.apache.spark.{SparkEnv, SparkConf}
-import org.apache.spark.rpc.{RpcAddress, RpcEndpointRef, RpcEnv}
+import org.apache.spark.rpc.{RpcAddress, RpcEndpointRef, RpcEnv, RpcTimeout}
 
 object RpcUtils {
 
@@ -47,14 +47,22 @@ object RpcUtils {
   }
 
   /** Returns the default Spark timeout to use for RPC ask operations. */
+  private[spark] def askRpcTimeout(conf: SparkConf): RpcTimeout = {
+    RpcTimeout(conf, Seq("spark.rpc.askTimeout", "spark.network.timeout"), "120s")
+  }
+
+  @deprecated("use askRpcTimeout instead, this method was not intended to be public", "1.5.0")
   def askTimeout(conf: SparkConf): FiniteDuration = {
-    conf.getTimeAsSeconds("spark.rpc.askTimeout",
-      conf.get("spark.network.timeout", "120s")) seconds
+    askRpcTimeout(conf).duration
   }
 
   /** Returns the default Spark timeout to use for RPC remote endpoint lookup. */
+  private[spark] def lookupRpcTimeout(conf: SparkConf): RpcTimeout = {
+    RpcTimeout(conf, Seq("spark.rpc.lookupTimeout", "spark.network.timeout"), "120s")
+  }
+
+  @deprecated("use lookupRpcTimeout instead, this method was not intended to be public", "1.5.0")
   def lookupTimeout(conf: SparkConf): FiniteDuration = {
-    conf.getTimeAsSeconds("spark.rpc.lookupTimeout",
-      conf.get("spark.network.timeout", "120s")) seconds
+    lookupRpcTimeout(conf).duration
   }
 }

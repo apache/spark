@@ -19,13 +19,13 @@ package org.apache.spark.mllib.clustering
 
 import breeze.linalg.{DenseMatrix => BDM}
 
-import org.scalatest.FunSuite
-
-import org.apache.spark.mllib.linalg.{Vector, DenseMatrix, Matrix, Vectors}
+import org.apache.spark.SparkFunSuite
+import org.apache.spark.mllib.linalg.{DenseMatrix, Matrix, Vector, Vectors}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
+import org.apache.spark.util.Utils
 
-class LDASuite extends FunSuite with MLlibTestSparkContext {
+class LDASuite extends SparkFunSuite with MLlibTestSparkContext {
 
   import LDASuite._
 
@@ -100,9 +100,13 @@ class LDASuite extends FunSuite with MLlibTestSparkContext {
 
     // Check: per-doc topic distributions
     val topicDistributions = model.topicDistributions.collect()
+
     //  Ensure all documents are covered.
-    assert(topicDistributions.length === tinyCorpus.length)
-    assert(tinyCorpus.map(_._1).toSet === topicDistributions.map(_._1).toSet)
+    // SPARK-5562. since the topicDistribution returns the distribution of the non empty docs
+    // over topics. Compare it against nonEmptyTinyCorpus instead of tinyCorpus
+    val nonEmptyTinyCorpus = getNonEmptyDoc(tinyCorpus)
+    assert(topicDistributions.length === nonEmptyTinyCorpus.length)
+    assert(nonEmptyTinyCorpus.map(_._1).toSet === topicDistributions.map(_._1).toSet)
     //  Ensure we have proper distributions
     topicDistributions.foreach { case (docId, topicDistribution) =>
       assert(topicDistribution.size === tinyK)
@@ -128,22 +132,38 @@ class LDASuite extends FunSuite with MLlibTestSparkContext {
 
   test("setter alias") {
     val lda = new LDA().setAlpha(2.0).setBeta(3.0)
-    assert(lda.getAlpha === 2.0)
-    assert(lda.getDocConcentration === 2.0)
+    assert(lda.getAlpha.toArray.forall(_ === 2.0))
+    assert(lda.getDocConcentration.toArray.forall(_ === 2.0))
     assert(lda.getBeta === 3.0)
     assert(lda.getTopicConcentration === 3.0)
+  }
+
+  test("initializing with alpha length != k or 1 fails") {
+    intercept[IllegalArgumentException] {
+      val lda = new LDA().setK(2).setAlpha(Vectors.dense(1, 2, 3, 4))
+      val corpus = sc.parallelize(tinyCorpus, 2)
+      lda.run(corpus)
+    }
+  }
+
+  test("initializing with elements in alpha < 0 fails") {
+    intercept[IllegalArgumentException] {
+      val lda = new LDA().setK(4).setAlpha(Vectors.dense(-1, 2, 3, 4))
+      val corpus = sc.parallelize(tinyCorpus, 2)
+      lda.run(corpus)
+    }
   }
 
   test("OnlineLDAOptimizer initialization") {
     val lda = new LDA().setK(2)
     val corpus = sc.parallelize(tinyCorpus, 2)
     val op = new OnlineLDAOptimizer().initialize(corpus, lda)
-    op.setKappa(0.9876).setMiniBatchFraction(0.123).setTau_0(567)
-    assert(op.getAlpha == 0.5) // default 1.0 / k
-    assert(op.getEta == 0.5)   // default 1.0 / k
-    assert(op.getKappa == 0.9876)
-    assert(op.getMiniBatchFraction == 0.123)
-    assert(op.getTau_0 == 567)
+    op.setKappa(0.9876).setMiniBatchFraction(0.123).setTau0(567)
+    assert(op.getAlpha.toArray.forall(_ === 0.5)) // default 1.0 / k
+    assert(op.getEta === 0.5)   // default 1.0 / k
+    assert(op.getKappa === 0.9876)
+    assert(op.getMiniBatchFraction === 0.123)
+    assert(op.getTau0 === 567)
   }
 
   test("OnlineLDAOptimizer one iteration") {
@@ -159,7 +179,7 @@ class LDASuite extends FunSuite with MLlibTestSparkContext {
     val corpus = sc.parallelize(docs, 2)
 
     // Set GammaShape large to avoid the stochastic impact.
-    val op = new OnlineLDAOptimizer().setTau_0(1024).setKappa(0.51).setGammaShape(1e40)
+    val op = new OnlineLDAOptimizer().setTau0(1024).setKappa(0.51).setGammaShape(1e40)
       .setMiniBatchFraction(1)
     val lda = new LDA().setK(k).setMaxIterations(1).setOptimizer(op).setSeed(12345)
 
@@ -192,7 +212,7 @@ class LDASuite extends FunSuite with MLlibTestSparkContext {
     ).zipWithIndex.map { case (wordCounts, docId) => (docId.toLong, wordCounts) }
 
     val docs = sc.parallelize(toydata)
-    val op = new OnlineLDAOptimizer().setMiniBatchFraction(1).setTau_0(1024).setKappa(0.51)
+    val op = new OnlineLDAOptimizer().setMiniBatchFraction(1).setTau0(1024).setKappa(0.51)
       .setGammaShape(1e10)
     val lda = new LDA().setK(2)
       .setDocConcentration(0.01)
@@ -211,6 +231,96 @@ class LDASuite extends FunSuite with MLlibTestSparkContext {
     topics.foreach { topic =>
       val smalls = topic.filter(t => t._2 < 0.1).map(_._2)
       assert(smalls.length == 3 && smalls.sum < 0.2)
+    }
+  }
+
+  test("OnlineLDAOptimizer with asymmetric prior") {
+    def toydata: Array[(Long, Vector)] = Array(
+      Vectors.sparse(6, Array(0, 1), Array(1, 1)),
+      Vectors.sparse(6, Array(1, 2), Array(1, 1)),
+      Vectors.sparse(6, Array(0, 2), Array(1, 1)),
+      Vectors.sparse(6, Array(3, 4), Array(1, 1)),
+      Vectors.sparse(6, Array(3, 5), Array(1, 1)),
+      Vectors.sparse(6, Array(4, 5), Array(1, 1))
+    ).zipWithIndex.map { case (wordCounts, docId) => (docId.toLong, wordCounts) }
+
+    val docs = sc.parallelize(toydata)
+    val op = new OnlineLDAOptimizer().setMiniBatchFraction(1).setTau0(1024).setKappa(0.51)
+      .setGammaShape(1e10)
+    val lda = new LDA().setK(2)
+      .setDocConcentration(Vectors.dense(0.00001, 0.1))
+      .setTopicConcentration(0.01)
+      .setMaxIterations(100)
+      .setOptimizer(op)
+      .setSeed(12345)
+
+    val ldaModel = lda.run(docs)
+    val topicIndices = ldaModel.describeTopics(maxTermsPerTopic = 10)
+    val topics = topicIndices.map { case (terms, termWeights) =>
+      terms.zip(termWeights)
+    }
+
+    /* Verify results with Python:
+
+       import numpy as np
+       from gensim import models
+       corpus = [
+           [(0, 1.0), (1, 1.0)],
+           [(1, 1.0), (2, 1.0)],
+           [(0, 1.0), (2, 1.0)],
+           [(3, 1.0), (4, 1.0)],
+           [(3, 1.0), (5, 1.0)],
+           [(4, 1.0), (5, 1.0)]]
+       np.random.seed(10)
+       lda = models.ldamodel.LdaModel(
+           corpus=corpus, alpha=np.array([0.00001, 0.1]), num_topics=2, update_every=0, passes=100)
+       lda.print_topics()
+
+       > ['0.167*0 + 0.167*1 + 0.167*2 + 0.167*3 + 0.167*4 + 0.167*5',
+          '0.167*0 + 0.167*1 + 0.167*2 + 0.167*4 + 0.167*3 + 0.167*5']
+     */
+    topics.foreach { topic =>
+      assert(topic.forall { case (_, p) => p ~= 0.167 absTol 0.05 })
+    }
+  }
+
+  test("model save/load") {
+    // Test for LocalLDAModel.
+    val localModel = new LocalLDAModel(tinyTopics)
+    val tempDir1 = Utils.createTempDir()
+    val path1 = tempDir1.toURI.toString
+
+    // Test for DistributedLDAModel.
+    val k = 3
+    val docConcentration = 1.2
+    val topicConcentration = 1.5
+    val lda = new LDA()
+    lda.setK(k)
+      .setDocConcentration(docConcentration)
+      .setTopicConcentration(topicConcentration)
+      .setMaxIterations(5)
+      .setSeed(12345)
+    val corpus = sc.parallelize(tinyCorpus, 2)
+    val distributedModel: DistributedLDAModel = lda.run(corpus).asInstanceOf[DistributedLDAModel]
+    val tempDir2 = Utils.createTempDir()
+    val path2 = tempDir2.toURI.toString
+
+    try {
+      localModel.save(sc, path1)
+      distributedModel.save(sc, path2)
+      val samelocalModel = LocalLDAModel.load(sc, path1)
+      assert(samelocalModel.topicsMatrix === localModel.topicsMatrix)
+      assert(samelocalModel.k === localModel.k)
+      assert(samelocalModel.vocabSize === localModel.vocabSize)
+
+      val sameDistributedModel = DistributedLDAModel.load(sc, path2)
+      assert(distributedModel.topicsMatrix === sameDistributedModel.topicsMatrix)
+      assert(distributedModel.k === sameDistributedModel.k)
+      assert(distributedModel.vocabSize === sameDistributedModel.vocabSize)
+      assert(distributedModel.iterationTimes === sameDistributedModel.iterationTimes)
+    } finally {
+      Utils.deleteRecursively(tempDir1)
+      Utils.deleteRecursively(tempDir2)
     }
   }
 
@@ -233,12 +343,17 @@ private[clustering] object LDASuite {
   }
 
   def tinyCorpus: Array[(Long, Vector)] = Array(
+    Vectors.dense(0, 0, 0, 0, 0), // empty doc
     Vectors.dense(1, 3, 0, 2, 8),
     Vectors.dense(0, 2, 1, 0, 4),
     Vectors.dense(2, 3, 12, 3, 1),
+    Vectors.dense(0, 0, 0, 0, 0), // empty doc
     Vectors.dense(0, 3, 1, 9, 8),
     Vectors.dense(1, 1, 4, 2, 6)
   ).zipWithIndex.map { case (wordCounts, docId) => (docId.toLong, wordCounts) }
   assert(tinyCorpus.forall(_._2.size == tinyVocabSize)) // sanity check for test data
 
+  def getNonEmptyDoc(corpus: Array[(Long, Vector)]): Array[(Long, Vector)] = corpus.filter {
+    case (_, wc: Vector) => Vectors.norm(wc, p = 1.0) != 0.0
+  }
 }

@@ -19,21 +19,17 @@ package org.apache.spark.ml.feature
 
 import scala.beans.{BeanInfo, BeanProperty}
 
-import org.scalatest.FunSuite
-
-import org.apache.spark.SparkException
+import org.apache.spark.{Logging, SparkException, SparkFunSuite}
 import org.apache.spark.ml.attribute._
+import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.mllib.linalg.{SparseVector, Vector, Vectors}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{DataFrame, SQLContext}
+import org.apache.spark.sql.DataFrame
 
-
-class VectorIndexerSuite extends FunSuite with MLlibTestSparkContext {
+class VectorIndexerSuite extends SparkFunSuite with MLlibTestSparkContext with Logging {
 
   import VectorIndexerSuite.FeatureData
-
-  @transient var sqlContext: SQLContext = _
 
   // identical, of length 3
   @transient var densePoints1: DataFrame = _
@@ -86,7 +82,6 @@ class VectorIndexerSuite extends FunSuite with MLlibTestSparkContext {
     checkPair(densePoints1Seq, sparsePoints1Seq)
     checkPair(densePoints2Seq, sparsePoints2Seq)
 
-    sqlContext = new SQLContext(sc)
     densePoints1 = sqlContext.createDataFrame(sc.parallelize(densePoints1Seq, 2).map(FeatureData))
     sparsePoints1 = sqlContext.createDataFrame(sc.parallelize(sparsePoints1Seq, 2).map(FeatureData))
     densePoints2 = sqlContext.createDataFrame(sc.parallelize(densePoints2Seq, 2).map(FeatureData))
@@ -96,6 +91,12 @@ class VectorIndexerSuite extends FunSuite with MLlibTestSparkContext {
 
   private def getIndexer: VectorIndexer =
     new VectorIndexer().setInputCol("features").setOutputCol("indexed")
+
+  test("params") {
+    ParamsSuite.checkParams(new VectorIndexer)
+    val model = new VectorIndexerModel("indexer", 1, Map.empty)
+    ParamsSuite.checkParams(model)
+  }
 
   test("Cannot fit an empty DataFrame") {
     val rdd = sqlContext.createDataFrame(sc.parallelize(Array.empty[Vector], 2).map(FeatureData))
@@ -112,11 +113,11 @@ class VectorIndexerSuite extends FunSuite with MLlibTestSparkContext {
     model.transform(sparsePoints1) // should work
     intercept[SparkException] {
       model.transform(densePoints2).collect()
-      println("Did not throw error when fit, transform were called on vectors of different lengths")
+      logInfo("Did not throw error when fit, transform were called on vectors of different lengths")
     }
     intercept[SparkException] {
       vectorIndexer.fit(badPoints)
-      println("Did not throw error when fitting vectors of different lengths in same RDD.")
+      logInfo("Did not throw error when fitting vectors of different lengths in same RDD.")
     }
   }
 
@@ -195,7 +196,7 @@ class VectorIndexerSuite extends FunSuite with MLlibTestSparkContext {
         }
       } catch {
         case e: org.scalatest.exceptions.TestFailedException =>
-          println(errMsg)
+          logError(errMsg)
           throw e
       }
     }

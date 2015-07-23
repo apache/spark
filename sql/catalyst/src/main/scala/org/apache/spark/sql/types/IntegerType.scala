@@ -27,8 +27,6 @@ import org.apache.spark.sql.catalyst.ScalaReflectionLock
 /**
  * :: DeveloperApi ::
  * The data type representing `Int` values. Please use the singleton [[DataTypes.IntegerType]].
- *
- * @group dataType
  */
 @DeveloperApi
 class IntegerType private() extends IntegralType {

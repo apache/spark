@@ -89,7 +89,7 @@ private[spark] object MetadataCleaner {
       conf: SparkConf,
       cleanerType: MetadataCleanerType.MetadataCleanerType,
       delay: Int) {
-    conf.set(MetadataCleanerType.systemProperty(cleanerType),  delay.toString)
+    conf.set(MetadataCleanerType.systemProperty(cleanerType), delay.toString)
   }
 
   /**

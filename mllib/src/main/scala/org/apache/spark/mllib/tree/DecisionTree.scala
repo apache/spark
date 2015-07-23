@@ -169,7 +169,7 @@ object DecisionTree extends Serializable with Logging {
       numClasses: Int,
       maxBins: Int,
       quantileCalculationStrategy: QuantileStrategy,
-      categoricalFeaturesInfo: Map[Int,Int]): DecisionTreeModel = {
+      categoricalFeaturesInfo: Map[Int, Int]): DecisionTreeModel = {
     val strategy = new Strategy(algo, impurity, maxDepth, numClasses, maxBins,
       quantileCalculationStrategy, categoricalFeaturesInfo)
     new DecisionTree(strategy).run(input)
@@ -768,7 +768,7 @@ object DecisionTree extends Serializable with Logging {
    */
   private def calculatePredictImpurity(
       leftImpurityCalculator: ImpurityCalculator,
-      rightImpurityCalculator: ImpurityCalculator): (Predict, Double) =  {
+      rightImpurityCalculator: ImpurityCalculator): (Predict, Double) = {
     val parentNodeAgg = leftImpurityCalculator.copy
     parentNodeAgg.add(rightImpurityCalculator)
     val predict = calculatePredict(parentNodeAgg)

@@ -37,7 +37,7 @@ import org.apache.spark.{Logging, SecurityManager, SparkConf}
  * pages. The use of tabs is optional, however; a WebUI may choose to include pages directly.
  */
 private[spark] abstract class WebUI(
-    securityManager: SecurityManager,
+    val securityManager: SecurityManager,
     port: Int,
     conf: SparkConf,
     basePath: String = "",
@@ -62,12 +62,12 @@ private[spark] abstract class WebUI(
     tab.pages.foreach(attachPage)
     tabs += tab
   }
-  
+
   def detachTab(tab: WebUITab) {
     tab.pages.foreach(detachPage)
     tabs -= tab
   }
-  
+
   def detachPage(page: WebUIPage) {
     pageToHandlers.remove(page).foreach(_.foreach(detachHandler))
   }
@@ -83,9 +83,6 @@ private[spark] abstract class WebUI(
     attachHandler(renderJsonHandler)
     pageToHandlers.getOrElseUpdate(page, ArrayBuffer[ServletContextHandler]())
       .append(renderHandler)
-    pageToHandlers.getOrElseUpdate(page, ArrayBuffer[ServletContextHandler]())
-      .append(renderJsonHandler)
-    
   }
 
   /** Attach a handler to this UI. */
@@ -100,7 +97,7 @@ private[spark] abstract class WebUI(
   }
 
   /** Detach a handler from this UI. */
-  protected def detachHandler(handler: ServletContextHandler) {
+  def detachHandler(handler: ServletContextHandler) {
     handlers -= handler
     serverInfo.foreach { info =>
       info.rootHandler.removeHandler(handler)

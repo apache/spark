@@ -26,7 +26,7 @@ import org.apache.spark.shuffle._
  */
 private[spark] class HashShuffleManager(conf: SparkConf) extends ShuffleManager {
 
-  private val fileShuffleBlockManager = new FileShuffleBlockManager(conf)
+  private val fileShuffleBlockResolver = new FileShuffleBlockResolver(conf)
 
   /* Register a shuffle with the manager and obtain a handle for it to pass to tasks. */
   override def registerShuffle[K, V, C](
@@ -61,8 +61,8 @@ private[spark] class HashShuffleManager(conf: SparkConf) extends ShuffleManager 
     shuffleBlockResolver.removeShuffle(shuffleId)
   }
 
-  override def shuffleBlockResolver: FileShuffleBlockManager = {
-    fileShuffleBlockManager
+  override def shuffleBlockResolver: FileShuffleBlockResolver = {
+    fileShuffleBlockResolver
   }
 
   /** Shut down this ShuffleManager. */

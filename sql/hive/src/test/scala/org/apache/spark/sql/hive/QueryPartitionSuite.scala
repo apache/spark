@@ -20,16 +20,17 @@ package org.apache.spark.sql.hive
 import com.google.common.io.Files
 
 import org.apache.spark.sql.{QueryTest, _}
-import org.apache.spark.sql.hive.test.TestHive
-import org.apache.spark.sql.hive.test.TestHive._
 import org.apache.spark.util.Utils
 
 
 class QueryPartitionSuite extends QueryTest {
-  import org.apache.spark.sql.hive.test.TestHive.implicits._
+
+  private lazy val ctx = org.apache.spark.sql.hive.test.TestHive
+  import ctx.implicits._
+  import ctx.sql
 
   test("SPARK-5068: query data when path doesn't exist"){
-    val testData = TestHive.sparkContext.parallelize(
+    val testData = ctx.sparkContext.parallelize(
       (1 to 10).map(i => TestData(i, i.toString))).toDF()
     testData.registerTempTable("testData")
 
@@ -48,8 +49,8 @@ class QueryPartitionSuite extends QueryTest {
 
     // test for the exist path
     checkAnswer(sql("select key,value from table_with_partition"),
-      testData.toSchemaRDD.collect ++ testData.toSchemaRDD.collect
-        ++ testData.toSchemaRDD.collect ++ testData.toSchemaRDD.collect)
+      testData.toDF.collect ++ testData.toDF.collect
+        ++ testData.toDF.collect ++ testData.toDF.collect)
 
     // delete the path of one partition
     tmpDir.listFiles
@@ -58,8 +59,7 @@ class QueryPartitionSuite extends QueryTest {
 
     // test for after delete the path
     checkAnswer(sql("select key,value from table_with_partition"),
-      testData.toSchemaRDD.collect ++ testData.toSchemaRDD.collect
-        ++ testData.toSchemaRDD.collect)
+      testData.toDF.collect ++ testData.toDF.collect ++ testData.toDF.collect)
 
     sql("DROP TABLE table_with_partition")
     sql("DROP TABLE createAndInsertTest")

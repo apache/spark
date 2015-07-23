@@ -20,12 +20,11 @@ package org.apache.spark.sql.execution
 import java.util.HashMap
 
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical._
-import org.apache.spark.sql.SQLContext
 
 /**
  * :: DeveloperApi ::
@@ -69,14 +68,14 @@ case class Aggregate(
    *                        output.
    */
   case class ComputedAggregate(
-      unbound: AggregateExpression,
-      aggregate: AggregateExpression,
+      unbound: AggregateExpression1,
+      aggregate: AggregateExpression1,
       resultAttribute: AttributeReference)
 
   /** A list of aggregates that need to be computed for each group. */
   private[this] val computedAggregates = aggregateExpressions.flatMap { agg =>
     agg.collect {
-      case a: AggregateExpression =>
+      case a: AggregateExpression1 =>
         ComputedAggregate(
           a,
           BindReferences.bindReference(a, child.output),
@@ -88,8 +87,8 @@ case class Aggregate(
   private[this] val computedSchema = computedAggregates.map(_.resultAttribute)
 
   /** Creates a new aggregate buffer for a group. */
-  private[this] def newAggregateBuffer(): Array[AggregateFunction] = {
-    val buffer = new Array[AggregateFunction](computedAggregates.length)
+  private[this] def newAggregateBuffer(): Array[AggregateFunction1] = {
+    val buffer = new Array[AggregateFunction1](computedAggregates.length)
     var i = 0
     while (i < computedAggregates.length) {
       buffer(i) = computedAggregates(i).aggregate.newInstance()
@@ -121,11 +120,11 @@ case class Aggregate(
     }
   }
 
-  override def execute(): RDD[Row] = attachTree(this, "execute") {
+  protected override def doExecute(): RDD[InternalRow] = attachTree(this, "execute") {
     if (groupingExpressions.isEmpty) {
       child.execute().mapPartitions { iter =>
         val buffer = newAggregateBuffer()
-        var currentRow: Row = null
+        var currentRow: InternalRow = null
         while (iter.hasNext) {
           currentRow = iter.next()
           var i = 0
@@ -147,10 +146,10 @@ case class Aggregate(
       }
     } else {
       child.execute().mapPartitions { iter =>
-        val hashTable = new HashMap[Row, Array[AggregateFunction]]
+        val hashTable = new HashMap[InternalRow, Array[AggregateFunction1]]
         val groupingProjection = new InterpretedMutableProjection(groupingExpressions, child.output)
 
-        var currentRow: Row = null
+        var currentRow: InternalRow = null
         while (iter.hasNext) {
           currentRow = iter.next()
           val currentGroup = groupingProjection(currentRow)
@@ -167,7 +166,7 @@ case class Aggregate(
           }
         }
 
-        new Iterator[Row] {
+        new Iterator[InternalRow] {
           private[this] val hashTableIter = hashTable.entrySet().iterator()
           private[this] val aggregateResults = new GenericMutableRow(computedAggregates.length)
           private[this] val resultProjection =
@@ -177,7 +176,7 @@ case class Aggregate(
 
           override final def hasNext: Boolean = hashTableIter.hasNext
 
-          override final def next(): Row = {
+          override final def next(): InternalRow = {
             val currentEntry = hashTableIter.next()
             val currentGroup = currentEntry.getKey
             val currentBuffer = currentEntry.getValue

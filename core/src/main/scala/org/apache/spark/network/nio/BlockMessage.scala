@@ -57,16 +57,6 @@ private[nio] class BlockMessage() {
   }
 
   def set(buffer: ByteBuffer) {
-    /*
-    println()
-    println("BlockMessage: ")
-    while(buffer.remaining > 0) {
-      print(buffer.get())
-    }
-    buffer.rewind()
-    println()
-    println()
-    */
     typ = buffer.getInt()
     val idLength = buffer.getInt()
     val idBuilder = new StringBuilder(idLength)
@@ -110,7 +100,7 @@ private[nio] class BlockMessage() {
   def getType: Int = typ
   def getId: BlockId = id
   def getData: ByteBuffer = data
-  def getLevel: StorageLevel =  level
+  def getLevel: StorageLevel = level
 
   def toBufferMessage: BufferMessage = {
     val buffers = new ArrayBuffer[ByteBuffer]()
@@ -138,24 +128,12 @@ private[nio] class BlockMessage() {
       buffers += data
     }
 
-    /*
-    println()
-    println("BlockMessage: ")
-    buffers.foreach(b => {
-      while(b.remaining > 0) {
-        print(b.get())
-      }
-      b.rewind()
-    })
-    println()
-    println()
-    */
     Message.createBufferMessage(buffers)
   }
 
   override def toString: String = {
     "BlockMessage [type = " + typ + ", id = " + id + ", level = " + level +
-    ", data = " + (if (data != null) data.remaining.toString  else "null") + "]"
+    ", data = " + (if (data != null) data.remaining.toString else "null") + "]"
   }
 }
 

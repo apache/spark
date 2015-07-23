@@ -17,9 +17,9 @@
 
 package org.apache.spark.sql.types
 
-import org.scalatest.FunSuite
+import org.apache.spark.SparkFunSuite
 
-class DataTypeParserSuite extends FunSuite {
+class DataTypeParserSuite extends SparkFunSuite {
 
   def checkDataType(dataTypeString: String, expectedDataType: DataType): Unit = {
     test(s"parse ${dataTypeString.replace("\n", "")}") {

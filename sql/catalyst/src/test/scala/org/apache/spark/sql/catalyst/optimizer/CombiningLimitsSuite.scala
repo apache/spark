@@ -71,7 +71,7 @@ class CombiningLimitsSuite extends PlanTest {
 
     comparePlans(optimized, correctAnswer)
   }
-  
+
   test("limits: combines two limits after ColumnPruning") {
     val originalQuery =
       testRelation
@@ -79,7 +79,7 @@ class CombiningLimitsSuite extends PlanTest {
         .limit(2)
         .select('a)
         .limit(5)
-        
+
     val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer =
       testRelation
