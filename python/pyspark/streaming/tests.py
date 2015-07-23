@@ -944,7 +944,7 @@ def search_flume_assembly_jar():
 
 def search_kinesis_asl_assembly_jar():
     SPARK_HOME = os.environ["SPARK_HOME"]
-    flume_assembly_dir = os.path.join(SPARK_HOME, "external/kinesis-asl-assembly")
+    flume_assembly_dir = os.path.join(SPARK_HOME, "extras/kinesis-asl-assembly")
     jars = glob.glob(
         os.path.join(flume_assembly_dir, "target/scala-*/spark-streaming-kinesis-asl-assembly-*.jar"))
     if not jars:
