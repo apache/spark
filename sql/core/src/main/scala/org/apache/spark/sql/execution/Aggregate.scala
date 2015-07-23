@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical._
+import org.apache.spark.sql.catalyst.trees.TreeNodeRef
 
 /**
  * :: DeveloperApi ::
@@ -104,23 +105,28 @@ case class Aggregate(
   }
 
   /**
-   * A map of substitutions that are used to insert the aggregate expressions and grouping
-   * expression into the final result expression.
+   * A map of substitutions that are used to insert the aggregate expressions into the
+   * final result expression.
    */
-  private[this] val resultMap =
-    (computedAggregates.map { agg => agg.unbound -> agg.resultAttribute } ++ namedGroups).toMap
+  @transient private[this] val aggMap: Map[TreeNodeRef, AttributeReference] =
+    computedAggregates.map { agg => new TreeNodeRef(agg.unbound) -> agg.resultAttribute }.toMap
 
   /**
    * Substituted version of aggregateExpressions expressions which are used to compute final
    * output rows given a group and the result of all aggregate computations.
    */
-  private[this] val resultExpressions = aggregateExpressions.map { agg =>
-    agg.transform {
-      case e: Expression if resultMap.contains(e) => resultMap(e)
-    }
-  }
+  private[this] val resultExpressions = aggregateExpressions.map(_.transformUp {
+    // All AggregateExpressions exist in the aggMap for sure.
+    case a: AggregateExpression1 => aggMap(new TreeNodeRef(a))
 
-  protected override def doExecute(): RDD[InternalRow] = attachTree(this, "execute") {
+    case e: Expression =>
+      namedGroups.collectFirst {
+        case (expr, attr) if expr semanticEquals e => attr
+      }.getOrElse(e)
+    }
+  )
+
+  protected override def doExecute(): RDD[InternalRow] = {
     if (groupingExpressions.isEmpty) {
       child.execute().mapPartitions { iter =>
         val buffer = newAggregateBuffer()

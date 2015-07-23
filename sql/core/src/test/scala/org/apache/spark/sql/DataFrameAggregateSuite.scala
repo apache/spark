@@ -19,13 +19,14 @@ package org.apache.spark.sql
 
 import org.apache.spark.sql.TestData._
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types.DecimalType
 
 
-class DataFrameAggregateSuite extends QueryTest {
+class DataFrameAggregateSuite extends QueryTest with SQLTestUtils {
 
-  private lazy val ctx = org.apache.spark.sql.test.TestSQLContext
-  import ctx.implicits._
+  val sqlContext = org.apache.spark.sql.test.TestSQLContext
+  import sqlContext.implicits._
 
   test("groupBy") {
     checkAnswer(
@@ -68,12 +69,12 @@ class DataFrameAggregateSuite extends QueryTest {
       Seq(Row(1, 3), Row(2, 3), Row(3, 3))
     )
 
-    ctx.conf.setConf(SQLConf.DATAFRAME_RETAIN_GROUP_COLUMNS, false)
-    checkAnswer(
-      testData2.groupBy("a").agg(sum($"b")),
-      Seq(Row(3), Row(3), Row(3))
-    )
-    ctx.conf.setConf(SQLConf.DATAFRAME_RETAIN_GROUP_COLUMNS, true)
+    withSQLConf(SQLConf.DATAFRAME_RETAIN_GROUP_COLUMNS.key -> "false") {
+      checkAnswer(
+        testData2.groupBy("a").agg(sum($"b")),
+        Seq(Row(3), Row(3), Row(3))
+      )
+    }
   }
 
   test("agg without groups") {
@@ -191,4 +192,15 @@ class DataFrameAggregateSuite extends QueryTest {
       Row(null))
   }
 
+  test("case insensitive resolution for non-partial aggregation") {
+    import org.apache.spark.sql.catalyst.expressions.CollectHashSet
+
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false",
+      SQLConf.DATAFRAME_RETAIN_GROUP_COLUMNS.key -> "false") {
+      val emptyTableData = Seq.empty[(Int, Int)].toDF("a", "b")
+      checkAnswer(emptyTableData.groupBy('A + 1).agg('a + 1,
+        Column(CollectHashSet(Seq(emptyTableData("b").expr)))),
+        Nil)
+    }
+  }
 }
