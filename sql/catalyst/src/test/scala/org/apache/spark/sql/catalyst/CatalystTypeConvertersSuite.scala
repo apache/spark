@@ -59,4 +59,10 @@ class CatalystTypeConvertersSuite extends SparkFunSuite {
   test("option handling in createToCatalystConverter") {
     assert(CatalystTypeConverters.createToCatalystConverter(IntegerType)(Some(123)) === 123)
   }
+
+  test("Set data in ArrayConverter") {
+    val convertToCatalyst = CatalystTypeConverters.createToCatalystConverter(ArrayType(StringType, containsNull = true))
+    val convertToScala = CatalystTypeConverters.createToScalaConverter(ArrayType(StringType, containsNull = true))
+    assert(convertToScala(convertToCatalyst(Some(Set("123", "124")))) === Seq("123", "124"))
+  }
 }
