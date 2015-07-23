@@ -114,11 +114,11 @@ class PrefixSpanSuite extends SparkFunSuite with MLlibTestSparkContext {
       "ad,c,bc,ae",
       "ef,ab,df,c,b",
       "e,g,af,c,b,c")
-    val coder = Array("a", "b", "c", "d", "e", "f", "g").zip(Array(1, 2, 3, 4, 5, 6, 7)).toMap
-    val intSequences = sequences4.map(_.split(",").map(_.split("").map(coder)))
+    val coder = Array('a', 'b', 'c', 'd', 'e', 'f', 'g').zip(Array(1, 2, 3, 4, 5, 6, 7)).toMap
+    val intSequences = sequences4.map(_.split(",").map(_.toArray.map(coder)))
     val rdd4 = sc.parallelize(intSequences, 2).cache()
     prefixspan.setMinSupport(0.5).setMaxPatternLength(5)
-    val result4 = prefixspan.run(rdd)
+    val result4 = prefixspan.run(rdd4)
     val expectedValue4 = Array(
       "a:4",
       "b:4",
@@ -173,9 +173,9 @@ class PrefixSpanSuite extends SparkFunSuite with MLlibTestSparkContext {
       "f,b,c:2",
       "f,c:2",
       "f,c,b:2")
-    val intexpectedValue = expectedValue4
+    val intExpectedValue = expectedValue4
       .map(_.split(":"))
-      .map(x => (x.apply(0).split(",").map(_.split("").map(coder)), x.apply(1).toLong))
-    assert(compareResult(intexpectedValue, result4.collect()))
+      .map(x => (x.apply(0).split(",").map(_.toArray.map(coder)), x.apply(1).toLong))
+    assert(compareResult(intExpectedValue, result4.collect()))
   }
 }
