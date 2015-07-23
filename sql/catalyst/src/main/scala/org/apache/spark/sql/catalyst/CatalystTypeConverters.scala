@@ -24,6 +24,7 @@ import java.util.{Map => JavaMap}
 import javax.annotation.Nullable
 
 import scala.collection.mutable.HashMap
+import scala.language.existentials
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions._
@@ -401,7 +402,7 @@ object CatalystTypeConverters {
     case seq: Seq[Any] => seq.map(convertToCatalyst)
     case r: Row => InternalRow(r.toSeq.map(convertToCatalyst): _*)
     case arr: Array[Any] => arr.toSeq.map(convertToCatalyst).toArray
-    case m: Map[Any, Any] =>
+    case m: Map[_, _] =>
       m.map { case (k, v) => (convertToCatalyst(k), convertToCatalyst(v)) }.toMap
     case other => other
   }
