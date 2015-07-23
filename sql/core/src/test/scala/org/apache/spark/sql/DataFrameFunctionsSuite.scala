@@ -208,6 +208,14 @@ class DataFrameFunctionsSuite extends QueryTest {
       Row(2743272264L, 2180413220L))
   }
 
+  test("string function find_in_set") {
+    val df = Seq(("abc,b,ab,c,def", "abc,b,ab,c,def")).toDF("a", "b")
+
+    checkAnswer(
+      df.selectExpr("find_in_set('ab', a)", "find_in_set('x', b)"),
+      Row(3, 0))
+  }
+
   test("conditional function: least") {
     checkAnswer(
       testData2.select(least(lit(-1), lit(0), col("a"), col("b"))).limit(1),

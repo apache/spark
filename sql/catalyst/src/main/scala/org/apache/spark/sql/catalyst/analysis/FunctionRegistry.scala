@@ -157,6 +157,7 @@ object FunctionRegistry {
     expression[ConcatWs]("concat_ws"),
     expression[Encode]("encode"),
     expression[Decode]("decode"),
+    expression[FindInSet]("find_in_set"),
     expression[FormatNumber]("format_number"),
     expression[Lower]("lcase"),
     expression[Lower]("lower"),
