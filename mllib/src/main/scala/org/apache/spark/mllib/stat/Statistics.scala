@@ -218,7 +218,9 @@ object Statistics {
    *               Gumbel -> [mu, beta] (location, scale)
    *               Logistic -> [mu, s] (location, scale)
    *               Weibull -> [lambda, k]  (scale, shape)
-   * @return
+   * @return [[org.apache.spark.mllib.stat.test.AndersonDarlingTestResult]] object containing
+   *        the test statistic, various critical values at different significance levels,
+   *        and a summary of the null hypothesis
    */
   @varargs
   def andersonDarlingTest(data: RDD[Double], distName: String, params: Double*)

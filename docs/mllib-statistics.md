@@ -456,10 +456,10 @@ val testResult2 = Statistics.kolmogorovSmirnovTest(data, myCDF)
 </div>
 </div>
 
-MLlib also provides a 1-sample Anderson-Darling test, which allows users to test a given 
+MLlib also provides a one sample Anderson-Darling test, which allows users to test a given 
 sample of data, in the form of `RDD[Double]`, against one of various continuous distributions.
 The statistic can be used to test the null hypothesis that the data come from that given 
-distribution. Thus the Anderson-Darling test is a goodness-of-fit for continuous
+distribution. Thus the Anderson-Darling test is a goodness-of-fit test for continuous
 samples, an alternative to other such tests like Kolmogorov-Smirnov.
 Currently, the test supports the Normal, Exponential, Gumbel, Logistic, and Weibull distributions.
 The user should pass parameters appropriate for each distribution. However, in the case that

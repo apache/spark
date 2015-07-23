@@ -56,11 +56,12 @@ private[stat] object AndersonDarlingTest extends Logging {
    * that they should be added)
    */
   sealed trait AndersonDarlingTheoreticalDist extends Serializable {
-    val params: Seq[Double]  // parameters used to initialized the distribution
-
-    def cdf(x: Double): Double // calculate the cdf under the given distribution for value x
-
-    def getCVs(n: Double): Map[Double, Double] // return appropriate CVs, adjusted for sample size
+    // parameters used to initialized the distribution
+    val params: Seq[Double]
+    // calculate the cdf under the given distribution for value x
+    def cdf(x: Double): Double
+    // return appropriate CVs, adjusted for sample size
+    def getCriticalValues(n: Double): Map[Double, Double]
   }
 
   /**
@@ -94,15 +95,14 @@ private[stat] object AndersonDarlingTest extends Logging {
   class AndersonDarlingExponential(val params: Seq[Double]) extends AndersonDarlingTheoreticalDist {
     private val theoretical = new ExponentialDistribution(params(0))
 
-    private val rawCVs = ListMap(
-      0.15 -> 0.922, 0.10 -> 1.078,
-      0.05 -> 1.341, 0.025 -> 1.606, 0.01 -> 1.957
+    private val rawCriticalValues = ListMap(
+      0.15 -> 0.922, 0.10 -> 1.078, 0.05 -> 1.341, 0.025 -> 1.606, 0.01 -> 1.957
     )
 
     def cdf(x: Double): Double = theoretical.cumulativeProbability(x)
 
-    def getCVs(n: Double): Map[Double, Double] = {
-      rawCVs.map { case (sig, cv) => sig -> cv / (1 + 0.6 / n) }
+    def getCriticalValues(n: Double): Map[Double, Double] = {
+      rawCriticalValues.map { case (sig, cv) => sig -> cv / (1 + 0.6 / n) }
     }
   }
 
@@ -110,15 +110,14 @@ private[stat] object AndersonDarlingTest extends Logging {
   class AndersonDarlingNormal(val params: Seq[Double]) extends AndersonDarlingTheoreticalDist {
     private val theoretical = new NormalDistribution(params(0), params(1))
 
-    private val rawCVs = ListMap(
-      0.15 -> 0.576, 0.10 -> 0.656,
-      0.05 -> 0.787, 0.025 -> 0.918, 0.01 -> 1.092
+    private val rawCriticalValues = ListMap(
+      0.15 -> 0.576, 0.10 -> 0.656, 0.05 -> 0.787, 0.025 -> 0.918, 0.01 -> 1.092
     )
 
     def cdf(x: Double): Double = theoretical.cumulativeProbability(x)
 
-    def getCVs(n: Double): Map[Double, Double] = {
-      rawCVs.map { case (sig, cv) => sig -> cv / (1 + 4.0 / n - 25.0 / (n * n)) }
+    def getCriticalValues(n: Double): Map[Double, Double] = {
+      rawCriticalValues.map { case (sig, cv) => sig -> cv / (1 + 4.0 / n - 25.0 / (n * n)) }
     }
   }
 
@@ -126,15 +125,14 @@ private[stat] object AndersonDarlingTest extends Logging {
   class AndersonDarlingGumbel(val params: Seq[Double]) extends AndersonDarlingTheoreticalDist {
     private val theoretical = new GumbelDistribution(params(0), params(1))
 
-    private val rawCVs = ListMap(
-      0.25 -> 0.474, 0.10 -> 0.637,
-      0.05 -> 0.757, 0.025 -> 0.877, 0.01 -> 1.038
+    private val rawCriticalValues = ListMap(
+      0.25 -> 0.474, 0.10 -> 0.637, 0.05 -> 0.757, 0.025 -> 0.877, 0.01 -> 1.038
     )
 
     def cdf(x: Double): Double = theoretical.cumulativeProbability(x)
 
-    def getCVs(n: Double): Map[Double, Double] = {
-      rawCVs.map { case (sig, cv) => sig -> cv / (1 + 0.2 / math.sqrt(n)) }
+    def getCriticalValues(n: Double): Map[Double, Double] = {
+      rawCriticalValues.map { case (sig, cv) => sig -> cv / (1 + 0.2 / math.sqrt(n)) }
     }
   }
 
@@ -142,15 +140,14 @@ private[stat] object AndersonDarlingTest extends Logging {
   class AndersonDarlingLogistic(val params: Seq[Double]) extends AndersonDarlingTheoreticalDist {
     private val theoretical = new LogisticDistribution(params(0), params(1))
 
-    private val rawCVs = ListMap(
-      0.25 -> 0.426, 0.10 -> 0.563, 0.05 -> 0.660,
-      0.025 -> 0.769, 0.01 -> 0.906, 0.005 -> 1.010
+    private val rawCriticalValues = ListMap(
+      0.25 -> 0.426, 0.10 -> 0.563, 0.05 -> 0.660, 0.025 -> 0.769, 0.01 -> 0.906, 0.005 -> 1.010
     )
 
     def cdf(x: Double): Double = theoretical.cumulativeProbability(x)
 
-    def getCVs(n: Double): Map[Double, Double] = {
-      rawCVs.map { case (sig, cv) => sig -> cv / (1 + 0.25 / n) }
+    def getCriticalValues(n: Double): Map[Double, Double] = {
+      rawCriticalValues.map { case (sig, cv) => sig -> cv / (1 + 0.25 / n) }
     }
   }
 
@@ -158,15 +155,14 @@ private[stat] object AndersonDarlingTest extends Logging {
   class AndersonDarlingWeibull(val params: Seq[Double]) extends AndersonDarlingTheoreticalDist {
     private val theoretical = new WeibullDistribution(params(0), params(1))
 
-    private val rawCVs = ListMap(
-      0.25 -> 0.474, 0.10 -> 0.637,
-      0.05 -> 0.757, 0.025 -> 0.877, 0.01 -> 1.038
+    private val rawCriticalValuess = ListMap(
+      0.25 -> 0.474, 0.10 -> 0.637, 0.05 -> 0.757, 0.025 -> 0.877, 0.01 -> 1.038
     )
 
     def cdf(x: Double): Double = theoretical.cumulativeProbability(x)
 
-    def getCVs(n: Double): Map[Double, Double] = {
-      rawCVs.map { case (sig, cv) => sig -> cv / (1 + 0.2 / math.sqrt(n)) }
+    def getCriticalValues(n: Double): Map[Double, Double] = {
+      rawCriticalValuess.map { case (sig, cv) => sig -> cv / (1 + 0.2 / math.sqrt(n)) }
     }
   }
 
@@ -195,7 +191,7 @@ private[stat] object AndersonDarlingTest extends Logging {
       (prevStat + adjustedStat, cumCt)
     }._1
     val ADStat = -1 * n - s / n
-    val criticalVals = dist.getCVs(n)
+    val criticalVals = dist.getCriticalValues(n)
     new AndersonDarlingTestResult(ADStat, criticalVals, NullHypothesis.OneSample.toString)
   }
 
@@ -204,7 +200,7 @@ private[stat] object AndersonDarlingTest extends Logging {
    * Calculate a partition's contribution to the Anderson-Darling statistic.
    * In each partition we calculate 2 values, an unadjusted value that is contributed to the AD
    * statistic directly, a value that must be adjusted by the number of values in the prior
-   * partition, and a count of the elements in that partition
+   * partitions, and a count of the elements in that partition
    * @param part a partition of the data sample to be analyzed
    * @param dist a theoretical distribution that extends the AndersonDarlingTheoreticalDist trait,
    *             used to calculate CDF values and critical values
@@ -228,7 +224,7 @@ private[stat] object AndersonDarlingTest extends Logging {
   }
 
   /**
-   * Create a theoretical distribution to be used in the 1 sample Anderson-Darling test
+   * Create a theoretical distribution to be used in the one sample Anderson-Darling test
    * @param distName name of distribution
    * @param params Initialization parameters for distribution, if none provided, default values
    *               are chosen.
@@ -275,8 +271,7 @@ private[stat] object AndersonDarlingTest extends Logging {
       distName: String,
       params: Seq[Double],
       reqLen: Int,
-      defParams: Seq[Double])
-    : Seq[Double] = {
+      defParams: Seq[Double]): Seq[Double] = {
     if (params.nonEmpty) {
       require(params.length == reqLen, s"$distName distribution requires $reqLen parameters.")
       params
