@@ -159,8 +159,8 @@ private[joins] object HashedRelation {
  * An extended CompactBuffer that could grow and update.
  */
 class MutableCompactBuffer[T: ClassTag] extends CompactBuffer[T] {
-  override def growToSize(newSize: Int) = super.growToSize(newSize)
-  override def update(i: Int, v: T) = super.update(i, v)
+  override def growToSize(newSize: Int): Unit = super.growToSize(newSize)
+  override def update(i: Int, v: T): Unit = super.update(i, v)
 }
 
 /**
@@ -199,7 +199,7 @@ private[joins] final class UnsafeHashedRelation(
         val last = loc.getValueAddress.getBaseOffset + loc.getValueLength
         var i = 0
         while (offset < last) {
-          val numFields = PlatformDependent.UNSAFE.getInt(base,  offset)
+          val numFields = PlatformDependent.UNSAFE.getInt(base, offset)
           val sizeInBytes = PlatformDependent.UNSAFE.getInt(base, offset + 4)
           offset += 8
 
