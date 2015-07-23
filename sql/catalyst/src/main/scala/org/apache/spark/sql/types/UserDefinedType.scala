@@ -63,7 +63,6 @@ abstract class UserDefinedType[UserType] extends DataType with Serializable {
     ("type" -> "udt") ~
       ("class" -> this.getClass.getName) ~
       ("pyClass" -> pyUDT) ~
-      ("serializedClass" -> serializedPyClass) ~
       ("sqlType" -> sqlType.jsonValue)
   }
 
@@ -104,4 +103,11 @@ private[sql] class PythonUserDefinedType(
 
   /* There is no Java class for Python UDT */
   override def userClass: java.lang.Class[Any] = null
+
+  override private[sql] def jsonValue: JValue = {
+    ("type" -> "udt") ~
+      ("pyClass" -> pyUDT) ~
+      ("serializedClass" -> serializedPyClass) ~
+      ("sqlType" -> sqlType.jsonValue)
+  }
 }

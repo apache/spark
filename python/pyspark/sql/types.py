@@ -649,7 +649,7 @@ class UserDefinedType(DataType):
         pyModule = pyUDT[:split]
         pyClass = pyUDT[split+1:]
         m = __import__(pyModule, globals(), locals(), [pyClass])
-        if pyModule == '__main__' and not hasattr(m, pyClass):
+        if not hasattr(m, pyClass):
             s = base64.b64decode(json['serializedClass'].encode('utf-8'))
             UDT = CloudPickleSerializer().loads(s)
         else:
