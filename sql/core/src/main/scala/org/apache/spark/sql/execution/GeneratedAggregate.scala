@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution
 
+import scala.math.min
+
 import org.apache.spark.TaskContext
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
@@ -92,8 +94,8 @@ case class GeneratedAggregate(
       case s @ Sum(expr) =>
         val calcType =
           expr.dataType match {
-            case DecimalType.Fixed(_, _) =>
-              DecimalType.Unlimited
+            case DecimalType.Fixed(p, s) =>
+              DecimalType(min(p + 10, DecimalType.MAX_PRECISION), s)
             case _ =>
               expr.dataType
           }
@@ -121,8 +123,8 @@ case class GeneratedAggregate(
       case cs @ CombineSum(expr) =>
         val calcType =
           expr.dataType match {
-            case DecimalType.Fixed(_, _) =>
-              DecimalType.Unlimited
+            case DecimalType.Fixed(p, s) =>
+              DecimalType(min(p + 10, DecimalType.MAX_PRECISION), s)
             case _ =>
               expr.dataType
           }

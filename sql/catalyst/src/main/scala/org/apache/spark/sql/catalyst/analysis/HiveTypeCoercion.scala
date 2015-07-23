@@ -58,8 +58,7 @@ object HiveTypeCoercion {
       IntegerType,
       LongType,
       FloatType,
-      DoubleType,
-      DecimalType.Unlimited)
+      DoubleType)
 
   /**
    * Find the tightest common type of two types that might be used in a binary expression.
@@ -72,14 +71,15 @@ object HiveTypeCoercion {
     case (NullType, t1) => Some(t1)
     case (t1, NullType) => Some(t1)
 
-    // Promote numeric types to the highest of the two and all numeric types to unlimited decimal
+    case (t1: IntegralType, t2: DecimalType) if t2.isWiderThan(t1) =>
+      Some(t2)
+    case (t1: DecimalType, t2: IntegralType) if t1.isWiderThan(t2) =>
+      Some(t1)
+
+    // Promote numeric types to the highest of the two
     case (t1, t2) if Seq(t1, t2).forall(numericPrecedence.contains) =>
       val index = numericPrecedence.lastIndexWhere(t => t == t1 || t == t2)
       Some(numericPrecedence(index))
-
-    // Fixed-precision decimals can up-cast into unlimited
-    case (DecimalType.Unlimited, _: DecimalType) => Some(DecimalType.Unlimited)
-    case (_: DecimalType, DecimalType.Unlimited) => Some(DecimalType.Unlimited)
 
     case _ => None
   }
@@ -101,7 +101,7 @@ object HiveTypeCoercion {
     types.foldLeft[Option[DataType]](Some(NullType))((r, c) => r match {
       case None => None
       case Some(d) =>
-        findTightestCommonTypeOfTwo(d, c).orElse(findTightestCommonTypeToString(d, c))
+        findTightestCommonTypeToString(d, c)
     })
   }
 
@@ -168,17 +168,24 @@ object HiveTypeCoercion {
    * - LongType to DoubleType
    */
   object WidenTypes extends Rule[LogicalPlan] {
+    import scala.math.{max, min}
 
     private[this] def widenOutputTypes(planName: String, left: LogicalPlan, right: LogicalPlan):
         (LogicalPlan, LogicalPlan) = {
 
-      // TODO: with fixed-precision decimals
       val castedInput = left.output.zip(right.output).map {
         // When a string is found on one side, make the other side a string too.
         case (lhs, rhs) if lhs.dataType == StringType && rhs.dataType != StringType =>
           (lhs, Alias(Cast(rhs, StringType), rhs.name)())
         case (lhs, rhs) if lhs.dataType != StringType && rhs.dataType == StringType =>
           (Alias(Cast(lhs, StringType), lhs.name)(), rhs)
+
+        case (lhs @ DecimalType.Expression(p1, s1), rhs @ DecimalType.Expression(p2, s2))
+            if p1 != p2 || s1 != s2 =>
+          val dt = DecimalType(
+            min(max(p1 - s1, p2 - s2) + max(s1, s2), DecimalType.MAX_PRECISION),
+            max(s1, s2))
+          (Alias(Cast(lhs, dt), lhs.name)(), Alias(Cast(rhs, dt), rhs.name)())
 
         case (lhs, rhs) if lhs.dataType != rhs.dataType =>
           logDebug(s"Resolving mismatched $planName input ${lhs.dataType}, ${rhs.dataType}")
@@ -336,8 +343,8 @@ object HiveTypeCoercion {
    * - LONG gets turned into DECIMAL(20, 0)
    * - FLOAT and DOUBLE
    *   1. Union, Intersect and Except operations:
-   *      FLOAT gets turned into DECIMAL(7, 7), DOUBLE gets turned into DECIMAL(15, 15) (this is the
-   *      same as Hive)
+   *      FLOAT gets turned into DECIMAL(14, 7), DOUBLE gets turned into DECIMAL(30, 15)
+   *      (this is the same as Hive)
    *   2. Other operation:
    *      FLOAT and DOUBLE cause fixed-length decimals to turn into DOUBLE (this is the same as Hive,
    *   but note that unlimited decimals are considered bigger than doubles in WidenTypes)
@@ -346,21 +353,7 @@ object HiveTypeCoercion {
   object DecimalPrecision extends Rule[LogicalPlan] {
     import scala.math.{max, min}
 
-    // Conversion rules for integer types into fixed-precision decimals
-    private val intTypeToFixed: Map[DataType, DecimalType] = Map(
-      ByteType -> DecimalType(3, 0),
-      ShortType -> DecimalType(5, 0),
-      IntegerType -> DecimalType(10, 0),
-      LongType -> DecimalType(20, 0)
-    )
-
     private def isFloat(t: DataType): Boolean = t == FloatType || t == DoubleType
-
-    // Conversion rules for float and double into fixed-precision decimals
-    private val floatTypeToFixed: Map[DataType, DecimalType] = Map(
-      FloatType -> DecimalType(7, 7),
-      DoubleType -> DecimalType(15, 15)
-    )
 
     private def castDecimalPrecision(
         left: LogicalPlan,
@@ -371,16 +364,19 @@ object HiveTypeCoercion {
             case (DecimalType.Fixed(p1, s1), DecimalType.Fixed(p2, s2)) =>
               // Decimals with precision/scale p1/s2 and p2/s2  will be promoted to
               // DecimalType(max(s1, s2) + max(p1-s1, p2-s2), max(s1, s2))
-              val fixedType = DecimalType(max(s1, s2) + max(p1 - s1, p2 - s2), max(s1, s2))
+              val fixedType = DecimalType(
+                min(max(s1, s2) + max(p1 - s1, p2 - s2), DecimalType.MAX_PRECISION),
+                max(s1, s2))
               (Alias(Cast(lhs, fixedType), lhs.name)(), Alias(Cast(rhs, fixedType), rhs.name)())
-            case (t, DecimalType.Fixed(p, s)) if intTypeToFixed.contains(t) =>
-              (Alias(Cast(lhs, intTypeToFixed(t)), lhs.name)(), rhs)
-            case (DecimalType.Fixed(p, s), t) if intTypeToFixed.contains(t) =>
-              (lhs, Alias(Cast(rhs, intTypeToFixed(t)), rhs.name)())
-            case (t, DecimalType.Fixed(p, s)) if floatTypeToFixed.contains(t) =>
-              (Alias(Cast(lhs, floatTypeToFixed(t)), lhs.name)(), rhs)
-            case (DecimalType.Fixed(p, s), t) if floatTypeToFixed.contains(t) =>
-              (lhs, Alias(Cast(rhs, floatTypeToFixed(t)), rhs.name)())
+            case (t: IntegralType, DecimalType.Fixed(p, s)) =>
+              (Alias(Cast(lhs, DecimalType.forType(t)), lhs.name)(), rhs)
+            case (DecimalType.Fixed(p, s), t: IntegralType) =>
+              (lhs, Alias(Cast(rhs, DecimalType.forType(t)), rhs.name)())
+            // FIXME(davies): Should we turn them into DoubleType? as we do for BinaryOperator
+            case (t: FractionalType, DecimalType.Fixed(p, s)) =>
+              (Alias(Cast(lhs, DecimalType.forType(t)), lhs.name)(), rhs)
+            case (DecimalType.Fixed(p, s), t: FractionalType) =>
+              (lhs, Alias(Cast(rhs, DecimalType.forType(t)), rhs.name)())
             case _ => (lhs, rhs)
           }
         case other => other
@@ -417,45 +413,48 @@ object HiveTypeCoercion {
         Except(newLeft, newRight)
 
       // fix decimal precision for expressions
-      case q => q.transformExpressions {
+      case q =>  q.transformExpressions {
         // Skip nodes whose children have not been resolved yet
         case e if !e.childrenResolved => e
 
+        // Skip notes who is already promoted
+        case e: BinaryArithmetic if e.decimalPromoted => e
+
         case Add(e1 @ DecimalType.Expression(p1, s1), e2 @ DecimalType.Expression(p2, s2)) =>
-          Cast(
-            Add(Cast(e1, DecimalType.Unlimited), Cast(e2, DecimalType.Unlimited)),
-            DecimalType(max(s1, s2) + max(p1 - s1, p2 - s2) + 1, max(s1, s2))
-          )
+          val dt = DecimalType(
+            min(max(s1, s2) + max(p1 - s1, p2 - s2) + 1, DecimalType.MAX_PRECISION),
+            max(s1, s2))
+          Add(Cast(e1, dt), Cast(e2, dt)).markPromoted()
 
         case Subtract(e1 @ DecimalType.Expression(p1, s1), e2 @ DecimalType.Expression(p2, s2)) =>
-          Cast(
-            Subtract(Cast(e1, DecimalType.Unlimited), Cast(e2, DecimalType.Unlimited)),
-            DecimalType(max(s1, s2) + max(p1 - s1, p2 - s2) + 1, max(s1, s2))
-          )
+          val dt = DecimalType(
+            min(max(s1, s2) + max(p1 - s1, p2 - s2) + 1, DecimalType.MAX_PRECISION),
+            max(s1, s2))
+          Subtract(Cast(e1, dt), Cast(e2, dt)).markPromoted()
 
         case Multiply(e1 @ DecimalType.Expression(p1, s1), e2 @ DecimalType.Expression(p2, s2)) =>
-          Cast(
-            Multiply(Cast(e1, DecimalType.Unlimited), Cast(e2, DecimalType.Unlimited)),
-            DecimalType(p1 + p2 + 1, s1 + s2)
-          )
+          val dt = DecimalType(
+            min(p1 + p2 + 1, DecimalType.MAX_PRECISION),
+            min(s1 + s2, 18))  // limit the scale or it's easy to overflow
+          Multiply(Cast(e1, dt), Cast(e2, dt)).markPromoted()
 
         case Divide(e1 @ DecimalType.Expression(p1, s1), e2 @ DecimalType.Expression(p2, s2)) =>
-          Cast(
-            Divide(Cast(e1, DecimalType.Unlimited), Cast(e2, DecimalType.Unlimited)),
-            DecimalType(p1 - s1 + s2 + max(6, s1 + p2 + 1), max(6, s1 + p2 + 1))
-          )
+          val dt = DecimalType(
+            min(p1 - s1 + s2 + max(6, s1 + p2 + 1), DecimalType.MAX_PRECISION),
+            min(max(6, s1 + p2 + 1), 18))  // limit the scale or it's easy to overflow
+          Divide(Cast(e1, dt), Cast(e2, dt)).markPromoted()
 
         case Remainder(e1 @ DecimalType.Expression(p1, s1), e2 @ DecimalType.Expression(p2, s2)) =>
-          Cast(
-            Remainder(Cast(e1, DecimalType.Unlimited), Cast(e2, DecimalType.Unlimited)),
-            DecimalType(min(p1 - s1, p2 - s2) + max(s1, s2), max(s1, s2))
-          )
+          val dt = DecimalType(
+            min(min(p1 - s1, p2 - s2) + max(s1, s2), DecimalType.MAX_PRECISION),
+            max(s1, s2))
+          Remainder(Cast(e1, dt), Cast(e2, dt)).markPromoted()
 
         case Pmod(e1 @ DecimalType.Expression(p1, s1), e2 @ DecimalType.Expression(p2, s2)) =>
-          Cast(
-            Pmod(Cast(e1, DecimalType.Unlimited), Cast(e2, DecimalType.Unlimited)),
-            DecimalType(min(p1 - s1, p2 - s2) + max(s1, s2), max(s1, s2))
-          )
+          val dt = DecimalType(
+            min(min(p1 - s1, p2 - s2) + max(s1, s2), DecimalType.MAX_PRECISION),
+            max(s1, s2))
+          Pmod(Cast(e1, dt), Cast(e2, dt)).markPromoted()
 
         // When we compare 2 decimal types with different precisions, cast them to the smallest
         // common precision.
@@ -468,10 +467,10 @@ object HiveTypeCoercion {
         // and fixed-precision decimals in an expression with floats / doubles to doubles
         case b @ BinaryOperator(left, right) if left.dataType != right.dataType =>
           (left.dataType, right.dataType) match {
-            case (t, DecimalType.Fixed(p, s)) if intTypeToFixed.contains(t) =>
-              b.makeCopy(Array(Cast(left, intTypeToFixed(t)), right))
-            case (DecimalType.Fixed(p, s), t) if intTypeToFixed.contains(t) =>
-              b.makeCopy(Array(left, Cast(right, intTypeToFixed(t))))
+            case (t: IntegralType, DecimalType.Fixed(p, s))=>
+              b.makeCopy(Array(Cast(left, DecimalType.forType(t)), right))
+            case (DecimalType.Fixed(p, s), t: IntegralType) =>
+              b.makeCopy(Array(left, Cast(right, DecimalType.forType(t))))
             case (t, DecimalType.Fixed(p, s)) if isFloat(t) =>
               b.makeCopy(Array(left, Cast(right, DoubleType)))
             case (DecimalType.Fixed(p, s), t) if isFloat(t) =>
@@ -485,7 +484,6 @@ object HiveTypeCoercion {
         // SUM and AVERAGE are handled by the implementations of those expressions
       }
     }
-
   }
 
   /**
@@ -563,7 +561,7 @@ object HiveTypeCoercion {
       case e if !e.childrenResolved => e
 
       case Cast(e @ StringType(), t: IntegralType) =>
-        Cast(Cast(e, DecimalType.Unlimited), t)
+        Cast(Cast(e, DecimalType.Maximum), t)
     }
   }
 
@@ -757,7 +755,7 @@ object HiveTypeCoercion {
 
         // If input is a numeric type but not decimal, and we expect a decimal type,
         // cast the input to unlimited precision decimal.
-        case (_: NumericType, DecimalType) => Cast(e, DecimalType.Unlimited)
+        case (_: NumericType, DecimalType) => Cast(e, DecimalType.Maximum)
         // For any other numeric types, implicitly cast to each other, e.g. long -> int, int -> long
         case (_: NumericType, target: NumericType) => Cast(e, target)
 
@@ -766,7 +764,7 @@ object HiveTypeCoercion {
         case (TimestampType, DateType) => Cast(e, DateType)
 
         // Implicit cast from/to string
-        case (StringType, DecimalType) => Cast(e, DecimalType.Unlimited)
+        case (StringType, DecimalType) => Cast(e, DecimalType.Maximum)
         case (StringType, target: NumericType) => Cast(e, target)
         case (StringType, DateType) => Cast(e, DateType)
         case (StringType, TimestampType) => Cast(e, TimestampType)

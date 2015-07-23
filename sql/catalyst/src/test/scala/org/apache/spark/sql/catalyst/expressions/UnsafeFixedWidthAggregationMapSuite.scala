@@ -118,9 +118,9 @@ class UnsafeFixedWidthAggregationMapSuite
 
   test("with decimal in the key and values") {
     val groupKeySchema = StructType(StructField("price", DecimalType(10, 0)) :: Nil)
-    val aggBufferSchema = StructType(StructField("amount", DecimalType.Unlimited) :: Nil)
+    val aggBufferSchema = StructType(StructField("amount", DecimalType.Default) :: Nil)
     val emptyProjection = GenerateProjection.generate(Seq(Literal(Decimal(0))),
-      Seq(AttributeReference("price", DecimalType.Unlimited)()))
+      Seq(AttributeReference("price", DecimalType.Default)()))
     val map = new UnsafeFixedWidthAggregationMap(
       emptyProjection,
       new UnsafeRowConverter(groupKeySchema),

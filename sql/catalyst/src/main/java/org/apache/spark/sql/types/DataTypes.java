@@ -116,7 +116,7 @@ public class DataTypes {
   }
 
   public static DecimalType createDecimalType() {
-    return DecimalType$.MODULE$.Unlimited();
+    return DecimalType$.MODULE$.Default();
   }
 
   /**

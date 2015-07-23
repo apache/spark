@@ -36,7 +36,7 @@ case class PrecisionInfo(precision: Int, scale: Int) {
 /**
  * :: DeveloperApi ::
  * The data type representing `java.math.BigDecimal` values.
- * A Decimal that might have fixed precision and scale, or unlimited values for these.
+ * A Decimal that must have fixed precision and scale.
  *
  * Please use [[DataTypes.createDecimalType()]] to create a specific instance.
  */
@@ -53,18 +53,20 @@ case class DecimalType(precisionInfo: Option[PrecisionInfo]) extends FractionalT
   private[sql] val ordering = Decimal.DecimalIsFractional
   private[sql] val asIntegral = Decimal.DecimalAsIfIntegral
 
-  def precision: Int = precisionInfo.map(_.precision).getOrElse(-1)
+  def precision: Int = precisionInfo.map(_.precision).getOrElse(10)
 
-  def scale: Int = precisionInfo.map(_.scale).getOrElse(-1)
+  def scale: Int = precisionInfo.map(_.scale).getOrElse(0)
 
-  override def typeName: String = precisionInfo match {
-    case Some(PrecisionInfo(precision, scale)) => s"decimal($precision,$scale)"
-    case None => "decimal"
-  }
+  override def typeName: String = s"decimal($precision,$scale)"
 
-  override def toString: String = precisionInfo match {
-    case Some(PrecisionInfo(precision, scale)) => s"DecimalType($precision,$scale)"
-    case None => "DecimalType()"
+  override def toString: String = s"DecimalType($precision,$scale)"
+
+  private[sql] def isWiderThan(other: DataType): Boolean = other match {
+    case dt: DecimalType =>
+      (precision - scale) >= (dt.precision - dt.scale) && scale >= dt.scale
+    case dt: IntegralType =>
+      isWiderThan(DecimalType.forType(dt))
+    case _ => false
   }
 
   /**
@@ -72,10 +74,7 @@ case class DecimalType(precisionInfo: Option[PrecisionInfo]) extends FractionalT
    */
   override def defaultSize: Int = 4096
 
-  override def simpleString: String = precisionInfo match {
-    case Some(PrecisionInfo(precision, scale)) => s"decimal($precision,$scale)"
-    case None => "decimal(10,0)"
-  }
+  override def simpleString: String = s"decimal($precision,$scale)"
 
   private[spark] override def asNullable: DecimalType = this
 }
@@ -84,7 +83,10 @@ case class DecimalType(precisionInfo: Option[PrecisionInfo]) extends FractionalT
 /** Extra factory methods and pattern matchers for Decimals */
 object DecimalType extends AbstractDataType {
 
-  override private[sql] def defaultConcreteType: DataType = Unlimited
+  val MAX_PRECISION = 38
+  val MAX_SCALE = 38
+
+  override private[sql] def defaultConcreteType: DataType = Default
 
   override private[sql] def acceptsType(other: DataType): Boolean = {
     other.isInstanceOf[DecimalType]
@@ -92,31 +94,47 @@ object DecimalType extends AbstractDataType {
 
   override private[sql] def simpleString: String = "decimal"
 
-  val Unlimited: DecimalType = DecimalType(None)
+  val Maximum: DecimalType = DecimalType(Some(PrecisionInfo(MAX_PRECISION, 18)))
+
+  val Default: DecimalType = DecimalType(Some(PrecisionInfo(10, 0)))
+
+  val Unlimited: DecimalType = Maximum  // backward compatibility
 
   private[sql] object Fixed {
     def unapply(t: DecimalType): Option[(Int, Int)] =
-      t.precisionInfo.map(p => (p.precision, p.scale))
+      t.precisionInfo.map(p => (p.precision, p.scale)).orElse(Some((10, 0)))
   }
 
   private[sql] object Expression {
     def unapply(e: Expression): Option[(Int, Int)] = e.dataType match {
-      case t: DecimalType => t.precisionInfo.map(p => (p.precision, p.scale))
+      case t: DecimalType => t.precisionInfo.map(p => (p.precision, p.scale)).orElse(Some((10, 0)))
       case _ => None
     }
   }
 
-  def apply(): DecimalType = Unlimited
+  def apply(): DecimalType = Default
 
   def apply(precision: Int, scale: Int): DecimalType =
     DecimalType(Some(PrecisionInfo(precision, scale)))
 
+  // The decimal types compatible with IntegralTypes
+  private[sql] val ByteDecimal = DecimalType(3, 0)
+  private[sql] val ShortDecimal = DecimalType(5, 0)
+  private[sql] val IntDecimal = DecimalType(10, 0)
+  private[sql] val LongDecimal = DecimalType(20, 0)
+  private[sql] val FloatDecimal = DecimalType(14, 7)
+  private[sql] val DoubleDecimal = DecimalType(30, 15)
+
+  private[sql] def forType(dataType: DataType): DecimalType = dataType match {
+    case ByteType => ByteDecimal
+    case ShortType => ShortDecimal
+    case IntegerType => IntDecimal
+    case LongType => LongDecimal
+    case FloatType => FloatDecimal
+    case DoubleType => DoubleDecimal
+  }
+
   def unapply(t: DataType): Boolean = t.isInstanceOf[DecimalType]
 
   def unapply(e: Expression): Boolean = e.dataType.isInstanceOf[DecimalType]
-
-  def isFixed(dataType: DataType): Boolean = dataType match {
-    case DecimalType.Fixed(_, _) => true
-    case _ => false
-  }
 }

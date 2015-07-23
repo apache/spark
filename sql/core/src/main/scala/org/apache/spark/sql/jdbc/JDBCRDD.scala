@@ -67,7 +67,7 @@ private[sql] object JDBCRDD extends Logging {
       case java.sql.Types.DATE          => DateType
       case java.sql.Types.DECIMAL
         if precision != 0 || scale != 0 => DecimalType(precision, scale)
-      case java.sql.Types.DECIMAL       => DecimalType.Unlimited
+      case java.sql.Types.DECIMAL       => DecimalType.Maximum
       case java.sql.Types.DISTINCT      => null
       case java.sql.Types.DOUBLE        => DoubleType
       case java.sql.Types.FLOAT         => FloatType
@@ -81,7 +81,7 @@ private[sql] object JDBCRDD extends Logging {
       case java.sql.Types.NULL          => null
       case java.sql.Types.NUMERIC
         if precision != 0 || scale != 0 => DecimalType(precision, scale)
-      case java.sql.Types.NUMERIC       => DecimalType.Unlimited
+      case java.sql.Types.NUMERIC       => DecimalType.Maximum
       case java.sql.Types.NVARCHAR      => StringType
       case java.sql.Types.OTHER         => null
       case java.sql.Types.REAL          => DoubleType
@@ -331,7 +331,6 @@ private[sql] class JDBCRDD(
     schema.fields.map(sf => sf.dataType match {
       case BooleanType => BooleanConversion
       case DateType => DateConversion
-      case DecimalType.Unlimited => DecimalConversion(None)
       case DecimalType.Fixed(d) => DecimalConversion(Some(d))
       case DoubleType => DoubleConversion
       case FloatType => FloatConversion

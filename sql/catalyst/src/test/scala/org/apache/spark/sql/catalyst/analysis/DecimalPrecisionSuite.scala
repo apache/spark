@@ -34,7 +34,7 @@ class DecimalPrecisionSuite extends SparkFunSuite with BeforeAndAfter {
     AttributeReference("i", IntegerType)(),
     AttributeReference("d1", DecimalType(2, 1))(),
     AttributeReference("d2", DecimalType(5, 2))(),
-    AttributeReference("u", DecimalType.Unlimited)(),
+    AttributeReference("u", DecimalType.Maximum)(),
     AttributeReference("f", FloatType)(),
     AttributeReference("b", DoubleType)()
   )
@@ -96,7 +96,7 @@ class DecimalPrecisionSuite extends SparkFunSuite with BeforeAndAfter {
     checkComparison(EqualNullSafe(d2, d1), DecimalType(5, 2))
     checkComparison(LessThan(i, d1), DecimalType(10, 1))
     checkComparison(LessThanOrEqual(d1, d2), DecimalType(5, 2))
-    checkComparison(GreaterThan(d2, u), DecimalType.Unlimited)
+    checkComparison(GreaterThan(d2, u), DecimalType.Maximum)
     checkComparison(GreaterThanOrEqual(d1, f), DoubleType)
     checkComparison(GreaterThan(d2, d2), DecimalType(5, 2))
   }
@@ -106,12 +106,12 @@ class DecimalPrecisionSuite extends SparkFunSuite with BeforeAndAfter {
     checkUnion(i, d2, DecimalType(12, 2))
     checkUnion(d1, d2, DecimalType(5, 2))
     checkUnion(d2, d1, DecimalType(5, 2))
-    checkUnion(d1, f, DecimalType(8, 7))
-    checkUnion(f, d2, DecimalType(10, 7))
-    checkUnion(d1, b, DecimalType(16, 15))
-    checkUnion(b, d2, DecimalType(18, 15))
-    checkUnion(d1, u, DecimalType.Unlimited)
-    checkUnion(u, d2, DecimalType.Unlimited)
+    checkUnion(d1, f, DecimalType(14, 7))
+    checkUnion(f, d2, DecimalType(14, 7))
+    checkUnion(d1, b, DecimalType(30, 15))
+    checkUnion(b, d2, DecimalType(30, 15))
+    checkUnion(d1, u, DecimalType.Maximum)
+    checkUnion(u, d2, DecimalType.Maximum)
   }
 
   test("bringing in primitive types") {
@@ -125,13 +125,24 @@ class DecimalPrecisionSuite extends SparkFunSuite with BeforeAndAfter {
     checkType(Add(d1, Cast(i, DoubleType)), DoubleType)
   }
 
-  test("unlimited decimals make everything else cast up") {
-    for (expr <- Seq(d1, d2, i, f, u)) {
-      checkType(Add(expr, u), DecimalType.Unlimited)
-      checkType(Subtract(expr, u), DecimalType.Unlimited)
-      checkType(Multiply(expr, u), DecimalType.Unlimited)
-      checkType(Divide(expr, u), DecimalType.Unlimited)
-      checkType(Remainder(expr, u), DecimalType.Unlimited)
+  test("maximum decimals") {
+    for (expr <- Seq(d1, d2, i, u)) {
+      checkType(Add(expr, u), DecimalType.Maximum)
+      checkType(Subtract(expr, u), DecimalType.Maximum)
+      checkType(Multiply(expr, u), DecimalType.Maximum)
+      checkType(Divide(expr, u), DecimalType.Maximum)
+    }
+    checkType(Remainder(d1, u), DecimalType(19, 18))
+    checkType(Remainder(d2, u), DecimalType(21, 18))
+    checkType(Remainder(i, u), DecimalType(28, 18))
+    checkType(Remainder(u, u), DecimalType.Maximum)
+
+    for (expr <- Seq(f, b)) {
+      checkType(Add(expr, u), DoubleType)
+      checkType(Subtract(expr, u), DoubleType)
+      checkType(Multiply(expr, u), DoubleType)
+      checkType(Divide(expr, u), DoubleType)
+      checkType(Remainder(expr, u), DoubleType)
     }
   }
 }

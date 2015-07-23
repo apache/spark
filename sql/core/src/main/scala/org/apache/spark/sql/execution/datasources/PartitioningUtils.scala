@@ -25,6 +25,7 @@ import scala.util.Try
 
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.util.Shell
+
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Cast, Literal}
 import org.apache.spark.sql.types._
@@ -236,7 +237,7 @@ private[sql] object PartitioningUtils {
 
   /**
    * Converts a string to a [[Literal]] with automatic type inference.  Currently only supports
-   * [[IntegerType]], [[LongType]], [[DoubleType]], [[DecimalType.Unlimited]], and
+   * [[IntegerType]], [[LongType]], [[DoubleType]], [[DecimalType.Maximum]], and
    * [[StringType]].
    */
   private[sql] def inferPartitionColumnValue(
@@ -249,7 +250,7 @@ private[sql] object PartitioningUtils {
         .orElse(Try(Literal.create(JLong.parseLong(raw), LongType)))
         // Then falls back to fractional types
         .orElse(Try(Literal.create(JDouble.parseDouble(raw), DoubleType)))
-        .orElse(Try(Literal.create(new JBigDecimal(raw), DecimalType.Unlimited)))
+        .orElse(Try(Literal(new JBigDecimal(raw))))
         // Then falls back to string
         .getOrElse {
           if (raw == defaultPartitionName) {
@@ -268,7 +269,7 @@ private[sql] object PartitioningUtils {
   }
 
   private val upCastingOrder: Seq[DataType] =
-    Seq(NullType, IntegerType, LongType, FloatType, DoubleType, DecimalType.Unlimited, StringType)
+    Seq(NullType, IntegerType, LongType, FloatType, DoubleType, StringType)
 
   /**
    * Given a collection of [[Literal]]s, resolves possible type conflicts by up-casting "lower"

@@ -509,7 +509,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest {
         FloatType,
         DoubleType,
         DecimalType(10, 5),
-        DecimalType.Unlimited,
+        DecimalType.Maximum,
         DateType,
         TimestampType,
         StringType)

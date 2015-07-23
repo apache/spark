@@ -131,10 +131,10 @@ trait ScalaReflection {
       case t if t <:< localTypeOf[String] => Schema(StringType, nullable = true)
       case t if t <:< localTypeOf[java.sql.Timestamp] => Schema(TimestampType, nullable = true)
       case t if t <:< localTypeOf[java.sql.Date] => Schema(DateType, nullable = true)
-      case t if t <:< localTypeOf[BigDecimal] => Schema(DecimalType.Unlimited, nullable = true)
+      case t if t <:< localTypeOf[BigDecimal] => Schema(DecimalType.Maximum, nullable = true)
       case t if t <:< localTypeOf[java.math.BigDecimal] =>
-        Schema(DecimalType.Unlimited, nullable = true)
-      case t if t <:< localTypeOf[Decimal] => Schema(DecimalType.Unlimited, nullable = true)
+        Schema(DecimalType.Maximum, nullable = true)
+      case t if t <:< localTypeOf[Decimal] => Schema(DecimalType.Maximum, nullable = true)
       case t if t <:< localTypeOf[java.lang.Integer] => Schema(IntegerType, nullable = true)
       case t if t <:< localTypeOf[java.lang.Long] => Schema(LongType, nullable = true)
       case t if t <:< localTypeOf[java.lang.Double] => Schema(DoubleType, nullable = true)
@@ -167,8 +167,8 @@ trait ScalaReflection {
     case obj: Float => FloatType
     case obj: Double => DoubleType
     case obj: java.sql.Date => DateType
-    case obj: java.math.BigDecimal => DecimalType.Unlimited
-    case obj: Decimal => DecimalType.Unlimited
+    case obj: java.math.BigDecimal => DecimalType.Maximum
+    case obj: Decimal => DecimalType.Maximum
     case obj: java.sql.Timestamp => TimestampType
     case null => NullType
     // For other cases, there is no obvious mapping from the type of the given object to a

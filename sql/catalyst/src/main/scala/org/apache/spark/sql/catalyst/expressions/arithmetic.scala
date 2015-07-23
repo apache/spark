@@ -88,6 +88,16 @@ abstract class BinaryArithmetic extends BinaryOperator {
 
   override def dataType: DataType = left.dataType
 
+  // Whether the dataType is promoted or not, we should only promote DecimalType once
+  var decimalPromoted: Boolean = false
+
+  def markPromoted(): this.type = {
+    decimalPromoted = true
+    this
+  }
+
+  override lazy val resolved = childrenResolved && checkInputDataTypes().isSuccess
+
   /** Name of the function for this expression on a [[Decimal]] type. */
   def decimalMethod: String =
     sys.error("BinaryArithmetics must override either decimalMethod or genCode")
@@ -113,9 +123,6 @@ case class Add(left: Expression, right: Expression) extends BinaryArithmetic {
   override def inputType: AbstractDataType = TypeCollection.NumericAndInterval
 
   override def symbol: String = "+"
-
-  override lazy val resolved =
-    childrenResolved && checkInputDataTypes().isSuccess && !DecimalType.isFixed(dataType)
 
   private lazy val numeric = TypeUtils.getNumeric(dataType)
 
@@ -145,9 +152,6 @@ case class Subtract(left: Expression, right: Expression) extends BinaryArithmeti
   override def inputType: AbstractDataType = TypeCollection.NumericAndInterval
 
   override def symbol: String = "-"
-
-  override lazy val resolved =
-    childrenResolved && checkInputDataTypes().isSuccess && !DecimalType.isFixed(dataType)
 
   private lazy val numeric = TypeUtils.getNumeric(dataType)
 
@@ -179,9 +183,6 @@ case class Multiply(left: Expression, right: Expression) extends BinaryArithmeti
   override def symbol: String = "*"
   override def decimalMethod: String = "$times"
 
-  override lazy val resolved =
-    childrenResolved && checkInputDataTypes().isSuccess && !DecimalType.isFixed(dataType)
-
   private lazy val numeric = TypeUtils.getNumeric(dataType)
 
   protected override def nullSafeEval(input1: Any, input2: Any): Any = numeric.times(input1, input2)
@@ -194,9 +195,6 @@ case class Divide(left: Expression, right: Expression) extends BinaryArithmetic 
   override def symbol: String = "/"
   override def decimalMethod: String = "$div"
   override def nullable: Boolean = true
-
-  override lazy val resolved =
-    childrenResolved && checkInputDataTypes().isSuccess && !DecimalType.isFixed(dataType)
 
   private lazy val div: (Any, Any) => Any = dataType match {
     case ft: FractionalType => ft.fractional.asInstanceOf[Fractional[Any]].div
@@ -259,9 +257,6 @@ case class Remainder(left: Expression, right: Expression) extends BinaryArithmet
   override def symbol: String = "%"
   override def decimalMethod: String = "remainder"
   override def nullable: Boolean = true
-
-  override lazy val resolved =
-    childrenResolved && checkInputDataTypes().isSuccess && !DecimalType.isFixed(dataType)
 
   private lazy val integral = dataType match {
     case i: IntegralType => i.integral.asInstanceOf[Integral[Any]]

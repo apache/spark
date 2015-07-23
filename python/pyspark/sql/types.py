@@ -196,28 +196,19 @@ class DecimalType(FractionalType):
     """Decimal (decimal.Decimal) data type.
     """
 
-    def __init__(self, precision=None, scale=None):
+    def __init__(self, precision=10, scale=0):
         self.precision = precision
         self.scale = scale
-        self.hasPrecisionInfo = precision is not None
+        self.hasPrecisionInfo = True  # this is public API
 
     def simpleString(self):
-        if self.hasPrecisionInfo:
-            return "decimal(%d,%d)" % (self.precision, self.scale)
-        else:
-            return "decimal(10,0)"
+        return "decimal(%d,%d)" % (self.precision, self.scale)
 
     def jsonValue(self):
-        if self.hasPrecisionInfo:
-            return "decimal(%d,%d)" % (self.precision, self.scale)
-        else:
-            return "decimal"
+        return "decimal(%d,%d)" % (self.precision, self.scale)
 
     def __repr__(self):
-        if self.hasPrecisionInfo:
-            return "DecimalType(%d,%d)" % (self.precision, self.scale)
-        else:
-            return "DecimalType()"
+        return "DecimalType(%d,%d)" % (self.precision, self.scale)
 
 
 class DoubleType(FractionalType):

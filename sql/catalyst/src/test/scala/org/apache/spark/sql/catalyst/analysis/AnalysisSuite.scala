@@ -55,7 +55,7 @@ object AnalysisSuite {
     AttributeReference("a", StringType)(),
     AttributeReference("b", StringType)(),
     AttributeReference("c", DoubleType)(),
-    AttributeReference("d", DecimalType.Unlimited)(),
+    AttributeReference("d", DecimalType.Maximum)(),
     AttributeReference("e", ShortType)())
 
   val nestedRelation = LocalRelation(
@@ -158,7 +158,7 @@ class AnalysisSuite extends SparkFunSuite with BeforeAndAfter {
       AttributeReference("a", StringType)(),
       AttributeReference("b", StringType)(),
       AttributeReference("c", DoubleType)(),
-      AttributeReference("d", DecimalType.Unlimited)(),
+      AttributeReference("d", DecimalType(10, 2))(),
       AttributeReference("e", ShortType)())
 
     val plan = caseInsensitiveAnalyzer.execute(
@@ -173,7 +173,7 @@ class AnalysisSuite extends SparkFunSuite with BeforeAndAfter {
     assert(pl(0).dataType == DoubleType)
     assert(pl(1).dataType == DoubleType)
     assert(pl(2).dataType == DoubleType)
-    assert(pl(3).dataType == DecimalType.Unlimited)
+    assert(pl(3).dataType == DoubleType)  // StringType will be promoted into Double
     assert(pl(4).dataType == DoubleType)
   }
 }
