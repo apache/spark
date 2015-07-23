@@ -150,8 +150,9 @@ class PrefixSpan private (
   private def getPatternsInLocal(
       minCount: Long,
       data: RDD[(Array[Int], Array[Array[Int]])]): RDD[(Array[Int], Long)] = {
-    data.flatMap { x =>
-      LocalPrefixSpan.run(minCount, maxPatternLength, x._1, x._2)
+    data.flatMap { case (prefix, projDB) =>
+      LocalPrefixSpan.run(minCount, maxPatternLength, prefix.toList, projDB)
+        .map { case (pattern: List[Int], count: Long) => (pattern.toArray.reverse, count) }
     }
   }
 }

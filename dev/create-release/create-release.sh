@@ -122,13 +122,13 @@ if [[ ! "$@" =~ --skip-publish ]]; then
     -Phive-thriftserver -Phadoop-2.2 -Pspark-ganglia-lgpl -Pkinesis-asl \
     clean install
 
-  ./dev/change-version-to-2.11.sh
+  ./dev/change-scala-version.sh 2.11
   
   build/mvn -DskipTests -Pyarn -Phive -Prelease\
     -Dscala-2.11 -Phadoop-2.2 -Pspark-ganglia-lgpl -Pkinesis-asl \
     clean install
 
-  ./dev/change-version-to-2.10.sh
+  ./dev/change-scala-version.sh 2.10
 
   pushd $SPARK_REPO
 
@@ -205,7 +205,7 @@ if [[ ! "$@" =~ --skip-package ]]; then
 
     # TODO There should probably be a flag to make-distribution to allow 2.11 support
     if [[ $FLAGS == *scala-2.11* ]]; then
-      ./dev/change-version-to-2.11.sh
+      ./dev/change-scala-version.sh 2.11
     fi
 
     export ZINC_PORT=$ZINC_PORT

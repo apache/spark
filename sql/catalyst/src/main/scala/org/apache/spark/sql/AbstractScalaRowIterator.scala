@@ -17,11 +17,14 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.catalyst.InternalRow
-
 /**
  * Shim to allow us to implement [[scala.Iterator]] in Java. Scala 2.11+ has an AbstractIterator
  * class for this, but that class is `private[scala]` in 2.10. We need to explicitly fix this to
- * `Row` in order to work around a spurious IntelliJ compiler error.
+ * `Row` in order to work around a spurious IntelliJ compiler error. This cannot be an abstract
+ * class because that leads to compilation errors under Scala 2.11.
  */
-private[spark] abstract class AbstractScalaRowIterator extends Iterator[InternalRow]
+private[spark] class AbstractScalaRowIterator[T] extends Iterator[T] {
+  override def hasNext: Boolean = throw new NotImplementedError
+
+  override def next(): T = throw new NotImplementedError
+}

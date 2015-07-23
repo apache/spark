@@ -24,9 +24,10 @@ import com.google.common.cache.{CacheBuilder, CacheLoader}
 import org.codehaus.janino.ClassBodyEvaluator
 
 import org.apache.spark.Logging
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.unsafe.types._
 
 
 // These classes are here to avoid issues with serialization and integration with quasiquotes.
@@ -56,9 +57,29 @@ class CodeGenContext {
    */
   val references: mutable.ArrayBuffer[Expression] = new mutable.ArrayBuffer[Expression]()
 
-  val stringType: String = classOf[UTF8String].getName
-  val decimalType: String = classOf[Decimal].getName
+  /**
+   * Holding expressions' mutable states like `MonotonicallyIncreasingID.count` as a
+   * 3-tuple: java type, variable name, code to init it.
+   * As an example, ("int", "count", "count = 0;") will produce code:
+   * {{{
+   *   private int count;
+   * }}}
+   * as a member variable, and add
+   * {{{
+   *   count = 0;
+   * }}}
+   * to the constructor.
+   *
+   * They will be kept as member variables in generated classes like `SpecificProjection`.
+   */
+  val mutableStates: mutable.ArrayBuffer[(String, String, String)] =
+    mutable.ArrayBuffer.empty[(String, String, String)]
 
+  def addMutableState(javaType: String, variableName: String, initCode: String): Unit = {
+    mutableStates += ((javaType, variableName, initCode))
+  }
+
+  final val intervalType: String = classOf[Interval].getName
   final val JAVA_BOOLEAN = "boolean"
   final val JAVA_BYTE = "byte"
   final val JAVA_SHORT = "short"
@@ -84,10 +105,11 @@ class CodeGenContext {
    */
   def getColumn(row: String, dataType: DataType, ordinal: Int): String = {
     val jt = javaType(dataType)
-    if (isPrimitiveType(jt)) {
-      s"$row.get${primitiveTypeName(jt)}($ordinal)"
-    } else {
-      s"($jt)$row.apply($ordinal)"
+    dataType match {
+      case _ if isPrimitiveType(jt) => s"$row.get${primitiveTypeName(jt)}($ordinal)"
+      case StringType => s"$row.getUTF8String($ordinal)"
+      case BinaryType => s"$row.getBinary($ordinal)"
+      case _ => s"($jt)$row.apply($ordinal)"
     }
   }
 
@@ -124,9 +146,10 @@ class CodeGenContext {
     case LongType | TimestampType => JAVA_LONG
     case FloatType => JAVA_FLOAT
     case DoubleType => JAVA_DOUBLE
-    case dt: DecimalType => decimalType
+    case dt: DecimalType => "Decimal"
     case BinaryType => "byte[]"
-    case StringType => stringType
+    case StringType => "UTF8String"
+    case IntervalType => intervalType
     case _: StructType => "InternalRow"
     case _: ArrayType => s"scala.collection.Seq"
     case _: MapType => s"scala.collection.Map"
@@ -172,6 +195,8 @@ class CodeGenContext {
    */
   def genEqual(dataType: DataType, c1: String, c2: String): String = dataType match {
     case BinaryType => s"java.util.Arrays.equals($c1, $c2)"
+    case FloatType => s"(java.lang.Float.isNaN($c1) && java.lang.Float.isNaN($c2)) || $c1 == $c2"
+    case DoubleType => s"(java.lang.Double.isNaN($c1) && java.lang.Double.isNaN($c2)) || $c1 == $c2"
     case dt: DataType if isPrimitiveType(dt) => s"$c1 == $c2"
     case other => s"$c1.equals($c2)"
   }
@@ -182,6 +207,8 @@ class CodeGenContext {
   def genComp(dataType: DataType, c1: String, c2: String): String = dataType match {
     // java boolean doesn't support > or < operator
     case BooleanType => s"($c1 == $c2 ? 0 : ($c1 ? 1 : -1))"
+    case DoubleType => s"org.apache.spark.util.Utils.nanSafeCompareDoubles($c1, $c2)"
+    case FloatType => s"org.apache.spark.util.Utils.nanSafeCompareFloats($c1, $c2)"
     // use c1 - c2 may overflow
     case dt: DataType if isPrimitiveType(dt) => s"($c1 > $c2 ? 1 : $c1 < $c2 ? -1 : 0)"
     case BinaryType => s"org.apache.spark.sql.catalyst.util.TypeUtils.compareBinary($c1, $c2)"
@@ -203,7 +230,10 @@ class CodeGenContext {
   def isPrimitiveType(dt: DataType): Boolean = isPrimitiveType(javaType(dt))
 }
 
-
+/**
+ * A wrapper for generated class, defines a `generate` method so that we can pass extra objects
+ * into generated class.
+ */
 abstract class GeneratedClass {
   def generate(expressions: Array[Expression]): Any
 }
@@ -218,6 +248,16 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
   protected val exprType: String = classOf[Expression].getName
   protected val mutableRowType: String = classOf[MutableRow].getName
   protected val genericMutableRowType: String = classOf[GenericMutableRow].getName
+
+  protected def declareMutableStates(ctx: CodeGenContext) = {
+    ctx.mutableStates.map { case (javaType, variableName, _) =>
+      s"private $javaType $variableName;"
+    }.mkString("\n      ")
+  }
+
+  protected def initMutableStates(ctx: CodeGenContext) = {
+    ctx.mutableStates.map(_._3).mkString("\n        ")
+  }
 
   /**
    * Generates a class for a given input expression.  Called when there is not cached code
@@ -247,14 +287,20 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
   private[this] def doCompile(code: String): GeneratedClass = {
     val evaluator = new ClassBodyEvaluator()
     evaluator.setParentClassLoader(getClass.getClassLoader)
-    evaluator.setDefaultImports(Array("org.apache.spark.sql.catalyst.InternalRow"))
+    evaluator.setDefaultImports(Array(
+      classOf[InternalRow].getName,
+      classOf[UnsafeRow].getName,
+      classOf[UTF8String].getName,
+      classOf[Decimal].getName
+    ))
     evaluator.setExtendedClass(classOf[GeneratedClass])
     try {
       evaluator.cook(code)
     } catch {
       case e: Exception =>
-        logError(s"failed to compile:\n $code", e)
-        throw e
+        val msg = s"failed to compile:\n $code"
+        logError(msg, e)
+        throw new Exception(msg, e)
     }
     evaluator.getClazz().newInstance().asInstanceOf[GeneratedClass]
   }

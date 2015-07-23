@@ -53,7 +53,7 @@ class HiveSparkSubmitSuite
     val args = Seq(
       "--class", SparkSubmitClassLoaderTest.getClass.getName.stripSuffix("$"),
       "--name", "SparkSubmitClassLoaderTest",
-      "--master", "local-cluster[2,1,512]",
+      "--master", "local-cluster[2,1,1024]",
       "--jars", jarsString,
       unusedJar.toString, "SparkSubmitClassA", "SparkSubmitClassB")
     runSparkSubmit(args)
@@ -64,7 +64,7 @@ class HiveSparkSubmitSuite
     val args = Seq(
       "--class", SparkSQLConfTest.getClass.getName.stripSuffix("$"),
       "--name", "SparkSQLConfTest",
-      "--master", "local-cluster[2,1,512]",
+      "--master", "local-cluster[2,1,1024]",
       unusedJar.toString)
     runSparkSubmit(args)
   }
@@ -120,8 +120,8 @@ object SparkSubmitClassLoaderTest extends Logging {
     logInfo("Testing load classes at the driver side.")
     // First, we load classes at driver side.
     try {
-      Class.forName(args(0), true, Thread.currentThread().getContextClassLoader)
-      Class.forName(args(1), true, Thread.currentThread().getContextClassLoader)
+      Utils.classForName(args(0))
+      Utils.classForName(args(1))
     } catch {
       case t: Throwable =>
         throw new Exception("Could not load user class from jar:\n", t)
@@ -131,8 +131,8 @@ object SparkSubmitClassLoaderTest extends Logging {
     val result = df.mapPartitions { x =>
       var exception: String = null
       try {
-        Class.forName(args(0), true, Thread.currentThread().getContextClassLoader)
-        Class.forName(args(1), true, Thread.currentThread().getContextClassLoader)
+        Utils.classForName(args(0))
+        Utils.classForName(args(1))
       } catch {
         case t: Throwable =>
           exception = t + "\n" + t.getStackTraceString

@@ -37,6 +37,7 @@ import org.apache.ivy.core.settings.IvySettings
 import org.apache.ivy.plugins.matcher.GlobPatternMatcher
 import org.apache.ivy.plugins.repository.file.FileRepository
 import org.apache.ivy.plugins.resolver.{FileSystemResolver, ChainResolver, IBiblioResolver}
+import org.apache.spark.api.r.RUtils
 import org.apache.spark.SPARK_VERSION
 import org.apache.spark.deploy.rest._
 import org.apache.spark.util.{ChildFirstURLClassLoader, MutableURLClassLoader, Utils}
@@ -79,6 +80,7 @@ object SparkSubmit {
   private val SPARK_SHELL = "spark-shell"
   private val PYSPARK_SHELL = "pyspark-shell"
   private val SPARKR_SHELL = "sparkr-shell"
+  private val SPARKR_PACKAGE_ARCHIVE = "sparkr.zip"
 
   private val CLASS_NOT_FOUND_EXIT_STATUS = 101
 
@@ -262,6 +264,12 @@ object SparkSubmit {
       }
     }
 
+    // Update args.deployMode if it is null. It will be passed down as a Spark property later.
+    (args.deployMode, deployMode) match {
+      case (null, CLIENT) => args.deployMode = "client"
+      case (null, CLUSTER) => args.deployMode = "cluster"
+      case _ =>
+    }
     val isYarnCluster = clusterManager == YARN && deployMode == CLUSTER
     val isMesosCluster = clusterManager == MESOS && deployMode == CLUSTER
 
@@ -347,6 +355,23 @@ object SparkSubmit {
       }
     }
 
+    // In YARN mode for an R app, add the SparkR package archive to archives
+    // that can be distributed with the job
+    if (args.isR && clusterManager == YARN) {
+      val rPackagePath = RUtils.localSparkRPackagePath
+      if (rPackagePath.isEmpty) {
+        printErrorAndExit("SPARK_HOME does not exist for R application in YARN mode.")
+      }
+      val rPackageFile = new File(rPackagePath.get, SPARKR_PACKAGE_ARCHIVE)
+      if (!rPackageFile.exists()) {
+        printErrorAndExit(s"$SPARKR_PACKAGE_ARCHIVE does not exist for R application in YARN mode.")
+      }
+      val localURI = Utils.resolveURI(rPackageFile.getAbsolutePath)
+
+      // Assigns a symbol link name "sparkr" to the shipped package.
+      args.archives = mergeFileLists(args.archives, localURI.toString + "#sparkr")
+    }
+
     // If we're running a R app, set the main class to our specific R runner
     if (args.isR && deployMode == CLIENT) {
       if (args.primaryResource == SPARKR_SHELL) {
@@ -375,6 +400,8 @@ object SparkSubmit {
 
       // All cluster managers
       OptionAssigner(args.master, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES, sysProp = "spark.master"),
+      OptionAssigner(args.deployMode, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES,
+        sysProp = "spark.submit.deployMode"),
       OptionAssigner(args.name, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES, sysProp = "spark.app.name"),
       OptionAssigner(args.jars, ALL_CLUSTER_MGRS, CLIENT, sysProp = "spark.jars"),
       OptionAssigner(args.ivyRepoPath, ALL_CLUSTER_MGRS, CLIENT, sysProp = "spark.jars.ivy"),
@@ -481,8 +508,14 @@ object SparkSubmit {
     }
 
     // Let YARN know it's a pyspark app, so it distributes needed libraries.
-    if (clusterManager == YARN && args.isPython) {
-      sysProps.put("spark.yarn.isPython", "true")
+    if (clusterManager == YARN) {
+      if (args.isPython) {
+        sysProps.put("spark.yarn.isPython", "true")
+      }
+      if (args.principal != null) {
+        require(args.keytab != null, "Keytab must be specified when the keytab is specified")
+        UserGroupInformation.loginUserFromKeytab(args.principal, args.keytab)
+      }
     }
 
     // In yarn-cluster mode, use yarn.Client as a wrapper around the user class
@@ -597,7 +630,7 @@ object SparkSubmit {
     var mainClass: Class[_] = null
 
     try {
-      mainClass = Class.forName(childMainClass, true, loader)
+      mainClass = Utils.classForName(childMainClass)
     } catch {
       case e: ClassNotFoundException =>
         e.printStackTrace(printStream)

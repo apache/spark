@@ -75,6 +75,12 @@ public class IntervalSuite {
     Interval result = new Interval(-5 * 12 + 23, 0);
     assertEquals(Interval.fromString(input), result);
 
+    input = "interval   -5  years  23   month   ";
+    assertEquals(Interval.fromString(input), result);
+
+    input = "  interval   -5  years  23   month   ";
+    assertEquals(Interval.fromString(input), result);
+
     // Error cases
     input = "interval   3month 1 hour";
     assertEquals(Interval.fromString(input), null);
@@ -93,6 +99,44 @@ public class IntervalSuite {
 
     input = null;
     assertEquals(Interval.fromString(input), null);
+  }
+
+  @Test
+  public void addTest() {
+    String input = "interval 3 month 1 hour";
+    String input2 = "interval 2 month 100 hour";
+
+    Interval interval = Interval.fromString(input);
+    Interval interval2 = Interval.fromString(input2);
+
+    assertEquals(interval.add(interval2), new Interval(5, 101 * MICROS_PER_HOUR));
+
+    input = "interval -10 month -81 hour";
+    input2 = "interval 75 month 200 hour";
+
+    interval = Interval.fromString(input);
+    interval2 = Interval.fromString(input2);
+
+    assertEquals(interval.add(interval2), new Interval(65, 119 * MICROS_PER_HOUR));
+  }
+
+  @Test
+  public void subtractTest() {
+    String input = "interval 3 month 1 hour";
+    String input2 = "interval 2 month 100 hour";
+
+    Interval interval = Interval.fromString(input);
+    Interval interval2 = Interval.fromString(input2);
+
+    assertEquals(interval.subtract(interval2), new Interval(1, -99 * MICROS_PER_HOUR));
+
+    input = "interval -10 month -81 hour";
+    input2 = "interval 75 month 200 hour";
+
+    interval = Interval.fromString(input);
+    interval2 = Interval.fromString(input2);
+
+    assertEquals(interval.subtract(interval2), new Interval(-85, -281 * MICROS_PER_HOUR));
   }
 
   private void testSingleUnit(String unit, int number, int months, long microseconds) {

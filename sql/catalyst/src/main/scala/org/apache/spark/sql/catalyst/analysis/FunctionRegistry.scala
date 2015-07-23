@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import scala.language.existentials
 import scala.reflect.ClassTag
 import scala.util.{Failure, Success, Try}
 
@@ -78,6 +79,7 @@ object FunctionRegistry {
     expression[Explode]("explode"),
     expression[Greatest]("greatest"),
     expression[If]("if"),
+    expression[IsNaN]("isnan"),
     expression[IsNull]("isnull"),
     expression[IsNotNull]("isnotnull"),
     expression[Least]("least"),
@@ -87,6 +89,7 @@ object FunctionRegistry {
     expression[CreateStruct]("struct"),
     expression[CreateNamedStruct]("named_struct"),
     expression[Sqrt]("sqrt"),
+    expression[NaNvl]("nanvl"),
 
     // math functions
     expression[Acos]("acos"),
@@ -98,6 +101,7 @@ object FunctionRegistry {
     expression[Ceil]("ceil"),
     expression[Ceil]("ceiling"),
     expression[Cos]("cos"),
+    expression[Conv]("conv"),
     expression[EulerNumber]("e"),
     expression[Exp]("exp"),
     expression[Expm1]("expm1"),
@@ -109,13 +113,15 @@ object FunctionRegistry {
     expression[Log]("ln"),
     expression[Log10]("log10"),
     expression[Log1p]("log1p"),
+    expression[Log2]("log2"),
     expression[UnaryMinus]("negative"),
     expression[Pi]("pi"),
-    expression[Log2]("log2"),
     expression[Pow]("pow"),
     expression[Pow]("power"),
+    expression[Pmod]("pmod"),
     expression[UnaryPositive]("positive"),
     expression[Rint]("rint"),
+    expression[Round]("round"),
     expression[ShiftLeft]("shiftleft"),
     expression[ShiftRight]("shiftright"),
     expression[ShiftRightUnsigned]("shiftrightunsigned"),
@@ -147,17 +153,23 @@ object FunctionRegistry {
     // string functions
     expression[Ascii]("ascii"),
     expression[Base64]("base64"),
+    expression[Concat]("concat"),
+    expression[ConcatWs]("concat_ws"),
     expression[Encode]("encode"),
     expression[Decode]("decode"),
-    expression[StringInstr]("instr"),
+    expression[FormatNumber]("format_number"),
     expression[Lower]("lcase"),
     expression[Lower]("lower"),
-    expression[StringLength]("length"),
+    expression[Length]("length"),
     expression[Levenshtein]("levenshtein"),
+    expression[RegExpExtract]("regexp_extract"),
+    expression[RegExpReplace]("regexp_replace"),
+    expression[StringInstr]("instr"),
     expression[StringLocate]("locate"),
     expression[StringLPad]("lpad"),
     expression[StringTrimLeft]("ltrim"),
-    expression[StringFormat]("printf"),
+    expression[FormatString]("format_string"),
+    expression[FormatString]("printf"),
     expression[StringRPad]("rpad"),
     expression[StringRepeat]("repeat"),
     expression[StringReverse]("reverse"),
@@ -174,7 +186,21 @@ object FunctionRegistry {
 
     // datetime functions
     expression[CurrentDate]("current_date"),
-    expression[CurrentTimestamp]("current_timestamp")
+    expression[CurrentTimestamp]("current_timestamp"),
+    expression[DateFormatClass]("date_format"),
+    expression[DayOfMonth]("day"),
+    expression[DayOfYear]("dayofyear"),
+    expression[DayOfMonth]("dayofmonth"),
+    expression[Hour]("hour"),
+    expression[Month]("month"),
+    expression[Minute]("minute"),
+    expression[Quarter]("quarter"),
+    expression[Second]("second"),
+    expression[WeekOfYear]("weekofyear"),
+    expression[Year]("year"),
+
+    // collection functions
+    expression[Size]("size")
   )
 
   val builtin: FunctionRegistry = {
@@ -192,7 +218,10 @@ object FunctionRegistry {
     val builder = (expressions: Seq[Expression]) => {
       if (varargCtor.isDefined) {
         // If there is an apply method that accepts Seq[Expression], use that one.
-        varargCtor.get.newInstance(expressions).asInstanceOf[Expression]
+        Try(varargCtor.get.newInstance(expressions).asInstanceOf[Expression]) match {
+          case Success(e) => e
+          case Failure(e) => throw new AnalysisException(e.getMessage)
+        }
       } else {
         // Otherwise, find an ctor method that matches the number of arguments, and use that.
         val params = Seq.fill(expressions.size)(classOf[Expression])
@@ -202,7 +231,10 @@ object FunctionRegistry {
           case Failure(e) =>
             throw new AnalysisException(s"Invalid number of arguments for function $name")
         }
-        f.newInstance(expressions : _*).asInstanceOf[Expression]
+        Try(f.newInstance(expressions : _*).asInstanceOf[Expression]) match {
+          case Success(e) => e
+          case Failure(e) => throw new AnalysisException(e.getMessage)
+        }
       }
     }
     (name, builder)

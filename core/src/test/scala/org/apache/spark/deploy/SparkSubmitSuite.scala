@@ -246,7 +246,7 @@ class SparkSubmitSuite
       mainClass should be ("org.apache.spark.deploy.Client")
     }
     classpath should have size 0
-    sysProps should have size 8
+    sysProps should have size 9
     sysProps.keys should contain ("SPARK_SUBMIT")
     sysProps.keys should contain ("spark.master")
     sysProps.keys should contain ("spark.app.name")
@@ -255,6 +255,7 @@ class SparkSubmitSuite
     sysProps.keys should contain ("spark.driver.cores")
     sysProps.keys should contain ("spark.driver.supervise")
     sysProps.keys should contain ("spark.shuffle.spill")
+    sysProps.keys should contain ("spark.submit.deployMode")
     sysProps("spark.shuffle.spill") should be ("false")
   }
 
@@ -336,7 +337,7 @@ class SparkSubmitSuite
     val args = Seq(
       "--class", JarCreationTest.getClass.getName.stripSuffix("$"),
       "--name", "testApp",
-      "--master", "local-cluster[2,1,512]",
+      "--master", "local-cluster[2,1,1024]",
       "--jars", jarsString,
       unusedJar.toString, "SparkSubmitClassA", "SparkSubmitClassB")
     runSparkSubmit(args)
@@ -351,7 +352,7 @@ class SparkSubmitSuite
       val args = Seq(
         "--class", JarCreationTest.getClass.getName.stripSuffix("$"),
         "--name", "testApp",
-        "--master", "local-cluster[2,1,512]",
+        "--master", "local-cluster[2,1,1024]",
         "--packages", Seq(main, dep).mkString(","),
         "--repositories", repo,
         "--conf", "spark.ui.enabled=false",
@@ -540,8 +541,8 @@ object JarCreationTest extends Logging {
     val result = sc.makeRDD(1 to 100, 10).mapPartitions { x =>
       var exception: String = null
       try {
-        Class.forName(args(0), true, Thread.currentThread().getContextClassLoader)
-        Class.forName(args(1), true, Thread.currentThread().getContextClassLoader)
+        Utils.classForName(args(0))
+        Utils.classForName(args(1))
       } catch {
         case t: Throwable =>
           exception = t + "\n" + t.getStackTraceString

@@ -121,7 +121,7 @@ private[graphx] object BytecodeUtils {
           override def visitMethodInsn(op: Int, owner: String, name: String, desc: String) {
             if (op == INVOKEVIRTUAL || op == INVOKESPECIAL || op == INVOKESTATIC) {
               if (!skipClass(owner)) {
-                methodsInvoked.add((Class.forName(owner.replace("/", ".")), name))
+                methodsInvoked.add((Utils.classForName(owner.replace("/", ".")), name))
               }
             }
           }

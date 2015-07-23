@@ -35,8 +35,8 @@ case class If(predicate: Expression, trueValue: Expression, falseValue: Expressi
       TypeCheckResult.TypeCheckFailure(
         s"type of predicate expression in If should be boolean, not ${predicate.dataType}")
     } else if (trueValue.dataType != falseValue.dataType) {
-      TypeCheckResult.TypeCheckFailure(
-        s"differing types in If (${trueValue.dataType} and ${falseValue.dataType}).")
+      TypeCheckResult.TypeCheckFailure(s"differing types in '$prettyString' " +
+        s"(${trueValue.dataType.simpleString} and ${falseValue.dataType.simpleString}).")
     } else {
       TypeCheckResult.TypeCheckSuccess
     }
@@ -77,7 +77,6 @@ case class If(predicate: Expression, trueValue: Expression, falseValue: Expressi
 }
 
 trait CaseWhenLike extends Expression {
-  self: Product =>
 
   // Note that `branches` are considered in consecutive pairs (cond, val), and the optional last
   // element is the value for the default catch-all case (if provided).
@@ -230,24 +229,31 @@ case class CaseKeyWhen(key: Expression, branches: Seq[Expression]) extends CaseW
     }
   }
 
+  private def evalElse(input: InternalRow): Any = {
+    if (branchesArr.length % 2 == 0) {
+      null
+    } else {
+      branchesArr(branchesArr.length - 1).eval(input)
+    }
+  }
+
   /** Written in imperative fashion for performance considerations. */
   override def eval(input: InternalRow): Any = {
     val evaluatedKey = key.eval(input)
-    val len = branchesArr.length
-    var i = 0
-    // If all branches fail and an elseVal is not provided, the whole statement
-    // defaults to null, according to Hive's semantics.
-    while (i < len - 1) {
-      if (equalNullSafe(evaluatedKey, branchesArr(i).eval(input))) {
-        return branchesArr(i + 1).eval(input)
+    // If key is null, we can just return the else part or null if there is no else.
+    // If key is not null but doesn't match any when part, we need to return
+    // the else part or null if there is no else, according to Hive's semantics.
+    if (evaluatedKey != null) {
+      val len = branchesArr.length
+      var i = 0
+      while (i < len - 1) {
+        if (evaluatedKey ==  branchesArr(i).eval(input)) {
+          return branchesArr(i + 1).eval(input)
+        }
+        i += 2
       }
-      i += 2
     }
-    var res: Any = null
-    if (i == len - 1) {
-      res = branchesArr(i).eval(input)
-    }
-    return res
+    evalElse(input)
   }
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
@@ -261,9 +267,7 @@ case class CaseKeyWhen(key: Expression, branches: Seq[Expression]) extends CaseW
       s"""
         if (!$got) {
           ${cond.code}
-          if (${keyEval.isNull} && ${cond.isNull} ||
-            !${keyEval.isNull} && !${cond.isNull}
-             && ${ctx.genEqual(key.dataType, keyEval.primitive, cond.primitive)}) {
+          if (!${cond.isNull} && ${ctx.genEqual(key.dataType, keyEval.primitive, cond.primitive)}) {
             $got = true;
             ${res.code}
             ${ev.isNull} = ${res.isNull};
@@ -291,19 +295,11 @@ case class CaseKeyWhen(key: Expression, branches: Seq[Expression]) extends CaseW
       boolean ${ev.isNull} = true;
       ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
       ${keyEval.code}
-      $cases
+      if (!${keyEval.isNull}) {
+        $cases
+      }
       $other
     """
-  }
-
-  private def equalNullSafe(l: Any, r: Any) = {
-    if (l == null && r == null) {
-      true
-    } else if (l == null || r == null) {
-      false
-    } else {
-      l == r
-    }
   }
 
   override def toString: String = {
@@ -314,7 +310,11 @@ case class CaseKeyWhen(key: Expression, branches: Seq[Expression]) extends CaseW
   }
 }
 
-case class Least(children: Expression*) extends Expression {
+/**
+ * A function that returns the least value of all parameters, skipping null values.
+ * It takes at least 2 parameters, and returns null iff all parameters are null.
+ */
+case class Least(children: Seq[Expression]) extends Expression {
   require(children.length > 1, "LEAST requires at least 2 arguments, got " + children.length)
 
   override def nullable: Boolean = children.forall(_.nullable)
@@ -359,12 +359,16 @@ case class Least(children: Expression*) extends Expression {
       ${evalChildren.map(_.code).mkString("\n")}
       boolean ${ev.isNull} = true;
       ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
-      ${(0 until children.length).map(updateEval).mkString("\n")}
+      ${children.indices.map(updateEval).mkString("\n")}
     """
   }
 }
 
-case class Greatest(children: Expression*) extends Expression {
+/**
+ * A function that returns the greatest value of all parameters, skipping null values.
+ * It takes at least 2 parameters, and returns null iff all parameters are null.
+ */
+case class Greatest(children: Seq[Expression]) extends Expression {
   require(children.length > 1, "GREATEST requires at least 2 arguments, got " + children.length)
 
   override def nullable: Boolean = children.forall(_.nullable)
@@ -409,7 +413,7 @@ case class Greatest(children: Expression*) extends Expression {
       ${evalChildren.map(_.code).mkString("\n")}
       boolean ${ev.isNull} = true;
       ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
-      ${(0 until children.length).map(updateEval).mkString("\n")}
+      ${children.indices.map(updateEval).mkString("\n")}
     """
   }
 }

@@ -23,6 +23,7 @@
 # Int -> integer
 # String -> character
 # Boolean -> logical
+# Float -> double
 # Double -> double
 # Long -> double
 # Array[Byte] -> raw

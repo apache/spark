@@ -64,9 +64,14 @@ object MimaExcludes {
             excludePackage("org.apache.spark.sql.execution"),
             // Parquet support is considered private.
             excludePackage("org.apache.spark.sql.parquet"),
+            // The old JSON RDD is removed in favor of streaming Jackson
+            ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.json.JsonRDD$"),
+            ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.json.JsonRDD"),
             // local function inside a method
             ProblemFilters.exclude[MissingMethodProblem](
-              "org.apache.spark.sql.SQLContext.org$apache$spark$sql$SQLContext$$needsConversion$1")
+              "org.apache.spark.sql.SQLContext.org$apache$spark$sql$SQLContext$$needsConversion$1"),
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.sql.UDFRegistration.org$apache$spark$sql$UDFRegistration$$builder$24")
           ) ++ Seq(
             // SPARK-8479 Add numNonzeros and numActives to Matrix.
             ProblemFilters.exclude[MissingMethodProblem](
@@ -83,6 +88,69 @@ object MimaExcludes {
               "org.apache.spark.streaming.scheduler.InputInfo$"),
             ProblemFilters.exclude[MissingClassProblem](
               "org.apache.spark.streaming.scheduler.InputInfo")
+          ) ++ Seq(
+            // SPARK-6797 Support YARN modes for SparkR
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.api.r.PairwiseRRDD.this"),
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.api.r.RRDD.createRWorker"),
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.api.r.RRDD.this"),
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.api.r.StringRRDD.this"),
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.api.r.BaseRRDD.this")
+          ) ++ Seq(
+            // SPARK-7422 add argmax for sparse vectors
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.mllib.linalg.Vector.argmax")
+          ) ++ Seq(
+            // SPARK-8906 Move all internal data source classes into execution.datasources
+            ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.sources.ResolvedDataSource"),
+            ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.sources.PreInsertCastAndRename$"),
+            ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.sources.CreateTableUsingAsSelect$"),
+            ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.sources.InsertIntoDataSource$"),
+            ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.sources.SqlNewHadoopPartition"),
+            ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.sources.PartitioningUtils$PartitionValues$"),
+            ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.sources.DefaultWriterContainer"),
+            ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.sources.PartitioningUtils$PartitionValues"),
+            ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.sources.RefreshTable$"),
+            ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.sources.CreateTempTableUsing$"),
+            ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.sources.PartitionSpec"),
+            ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.sources.DynamicPartitionWriterContainer"),
+            ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.sources.CreateTableUsingAsSelect"),
+            ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.sources.SqlNewHadoopRDD$"),
+            ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.sources.DescribeCommand$"),
+            ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.sources.PartitioningUtils$"),
+            ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.sources.SqlNewHadoopRDD"),
+            ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.sources.PreInsertCastAndRename"),
+            ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.sources.Partition$"),
+            ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.sources.LogicalRelation$"),
+            ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.sources.PartitioningUtils"),
+            ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.sources.LogicalRelation"),
+            ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.sources.Partition"),
+            ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.sources.BaseWriterContainer"),
+            ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.sources.PreWriteCheck"),
+            ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.sources.CreateTableUsing"),
+            ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.sources.RefreshTable"),
+            ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.sources.SqlNewHadoopRDD$NewHadoopMapPartitionsWithSplitRDD"),
+            ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.sources.DataSourceStrategy$"),
+            ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.sources.CreateTempTableUsing"),
+            ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.sources.CreateTempTableUsingAsSelect$"),
+            ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.sources.CreateTempTableUsingAsSelect"),
+            ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.sources.CreateTableUsing$"),
+            ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.sources.ResolvedDataSource$"),
+            ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.sources.PreWriteCheck$"),
+            ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.sources.InsertIntoDataSource"),
+            ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.sources.InsertIntoHadoopFsRelation"),
+            ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.sources.DDLParser"),
+            ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.sources.CaseInsensitiveMap"),
+            ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.sources.InsertIntoHadoopFsRelation$"),
+            ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.sources.DataSourceStrategy"),
+            ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.sources.SqlNewHadoopRDD$NewHadoopMapPartitionsWithSplitRDD$"),
+            ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.sources.PartitionSpec$"),
+            ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.sources.DescribeCommand"),
+            ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.sources.DDLException")
           )
 
         case v if v.startsWith("1.4") =>

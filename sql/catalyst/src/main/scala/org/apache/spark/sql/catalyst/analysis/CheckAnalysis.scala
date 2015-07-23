@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression2
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.types._
 
@@ -109,29 +110,27 @@ trait CheckAnalysis {
               s"resolved attribute(s) $missingAttributes missing from $input " +
                 s"in operator ${operator.simpleString}")
 
-          case o if !o.resolved =>
-            failAnalysis(
-              s"unresolved operator ${operator.simpleString}")
-
           case p @ Project(exprs, _) if containsMultipleGenerators(exprs) =>
             failAnalysis(
               s"""Only a single table generating function is allowed in a SELECT clause, found:
                  | ${exprs.map(_.prettyString).mkString(",")}""".stripMargin)
 
+          // Special handling for cases when self-join introduce duplicate expression ids.
+          case j @ Join(left, right, _, _) if left.outputSet.intersect(right.outputSet).nonEmpty =>
+            val conflictingAttributes = left.outputSet.intersect(right.outputSet)
+            failAnalysis(
+              s"""
+                 |Failure when resolving conflicting references in Join:
+                 |$plan
+                  |Conflicting attributes: ${conflictingAttributes.mkString(",")}
+                  |""".stripMargin)
+
+          case o if !o.resolved =>
+            failAnalysis(
+              s"unresolved operator ${operator.simpleString}")
 
           case _ => // Analysis successful!
         }
-
-      // Special handling for cases when self-join introduce duplicate expression ids.
-      case j @ Join(left, right, _, _) if left.outputSet.intersect(right.outputSet).nonEmpty =>
-        val conflictingAttributes = left.outputSet.intersect(right.outputSet)
-        failAnalysis(
-          s"""
-             |Failure when resolving conflicting references in Join:
-             |$plan
-             |Conflicting attributes: ${conflictingAttributes.mkString(",")}
-             |""".stripMargin)
-
     }
     extendedCheckRules.foreach(_(plan))
   }
