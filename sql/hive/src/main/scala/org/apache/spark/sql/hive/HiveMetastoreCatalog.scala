@@ -347,6 +347,15 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
     client.listTables(db).map(tableName => (tableName, false))
   }
 
+  override def processTableIdentifier(tableIdentifier: Seq[String]): Seq[String] = {
+    // If tblName contains a comma, split it into dbName and tblName
+    if (tableIdentifier.last.contains(".")) {
+      super.processTableIdentifier(tableIdentifier.last.split("\\.").toSeq)
+    } else {
+      super.processTableIdentifier(tableIdentifier)
+    }
+  }
+
   protected def processDatabaseAndTableName(
       databaseName: Option[String],
       tableName: String): (Option[String], String) = {
