@@ -349,50 +349,52 @@ object HiveTypeCoercion {
 
     private def isFloat(t: DataType): Boolean = t == FloatType || t == DoubleType
 
+    // Returns the wider decimal type that's wider than both of them
+    def widerDecimalType(d1: DecimalType, d2: DecimalType): DecimalType = {
+      widerDecimalType(d1.precision, d1.scale, d2.precision, d2.scale)
+    }
+    // max(s1, s2) + max(p1-s1, p2-s2), max(s1, s2)
+    def widerDecimalType(p1: Int, s1: Int, p2: Int, s2: Int): DecimalType = {
+      val scale = max(s1, s2)
+      val range = max(p1 - s1, p2 - s2)
+      DecimalType(min(range + scale, DecimalType.MAX_PRECISION), scale)
+    }
+
     private def castDecimalPrecision(
         left: LogicalPlan,
         right: LogicalPlan): (LogicalPlan, LogicalPlan) = {
-      val castedInput = left.output.zip(right.output).map {
+      val castedTypes = left.output.zip(right.output).map {
         case (lhs, rhs) if lhs.dataType != rhs.dataType =>
           (lhs.dataType, rhs.dataType) match {
-            case (DecimalType.Fixed(p1, s1), DecimalType.Fixed(p2, s2)) =>
-              // Decimals with precision/scale p1/s2 and p2/s2  will be promoted to
-              // DecimalType(max(s1, s2) + max(p1-s1, p2-s2), max(s1, s2))
-              val fixedType = DecimalType(
-                min(max(s1, s2) + max(p1 - s1, p2 - s2), DecimalType.MAX_PRECISION),
-                max(s1, s2))
-              (Alias(Cast(lhs, fixedType), lhs.name)(), Alias(Cast(rhs, fixedType), rhs.name)())
-
-            case (t: IntegralType, DecimalType.Fixed(p, s)) =>
-              (Alias(Cast(lhs, DecimalType.forType(t)), lhs.name)(), rhs)
-            case (DecimalType.Fixed(p, s), t: IntegralType) =>
-              (lhs, Alias(Cast(rhs, DecimalType.forType(t)), rhs.name)())
-
-            case (t: FractionalType, DecimalType.Fixed(p, s)) =>
-              (Alias(Cast(lhs, DoubleType), lhs.name)(), Alias(Cast(rhs, DoubleType), rhs.name)())
-            case (DecimalType.Fixed(p, s), t: FractionalType) =>
-              (Alias(Cast(lhs, DoubleType), lhs.name)(), Alias(Cast(rhs, DoubleType), rhs.name)())
-            case _ => (lhs, rhs)
+            case (t1: DecimalType, t2: DecimalType) =>
+              Some(widerDecimalType(t1, t2))
+            case (t: IntegralType, d: DecimalType) =>
+              Some(widerDecimalType(DecimalType.forType(t), d))
+            case (d: DecimalType, t: IntegralType) =>
+              Some(widerDecimalType(DecimalType.forType(t), d))
+            case (t: FractionalType, d: DecimalType) =>
+              Some(DoubleType)
+            case (d: DecimalType, t: FractionalType) =>
+              Some(DoubleType)
+            case _ => None
           }
-        case other => other
+        case other => None
       }
 
-      val (castedLeft, castedRight) = castedInput.unzip
-
-      val newLeft =
-        if (castedLeft.map(_.dataType) != left.output.map(_.dataType)) {
-          Project(castedLeft, left)
-        } else {
-          left
+      def castOutput(plan: LogicalPlan): LogicalPlan = {
+        val casted = plan.output.zip(castedTypes).map {
+          case (hs, Some(dt)) if dt != hs.dataType =>
+            Alias(Cast(hs, dt), hs.name)()
+          case (hs, _) => hs
         }
+        Project(casted, plan)
+      }
 
-      val newRight =
-        if (castedRight.map(_.dataType) != right.output.map(_.dataType)) {
-          Project(castedRight, right)
-        } else {
-          right
-        }
-      (newLeft, newRight)
+      if (castedTypes.exists(_.isDefined)) {
+        (castOutput(left), castOutput(right))
+      } else {
+        (left, right)
+      }
     }
 
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
@@ -412,7 +414,7 @@ object HiveTypeCoercion {
         // Skip nodes whose children have not been resolved yet
         case e if !e.childrenResolved => e
 
-        // Skip notes who is already promoted
+        // Skip nodes who is already promoted
         case e: BinaryArithmetic if e.decimalPromoted => e
 
         case Add(e1 @ DecimalType.Expression(p1, s1), e2 @ DecimalType.Expression(p2, s2)) =>
@@ -430,26 +432,28 @@ object HiveTypeCoercion {
         case Multiply(e1 @ DecimalType.Expression(p1, s1), e2 @ DecimalType.Expression(p2, s2)) =>
           val dt = DecimalType(
             min(p1 + p2 + 1, DecimalType.MAX_PRECISION),
-            min(s1 + s2, 18))  // limit the scale or it's easy to overflow
+            min(s1 + s2, DecimalType.MAX_PRECISION))
           Multiply(Cast(e1, dt), Cast(e2, dt)).markPromoted()
 
         case Divide(e1 @ DecimalType.Expression(p1, s1), e2 @ DecimalType.Expression(p2, s2)) =>
           val dt = DecimalType(
             min(p1 - s1 + s2 + max(6, s1 + p2 + 1), DecimalType.MAX_PRECISION),
-            min(max(6, s1 + p2 + 1), 18))  // limit the scale or it's easy to overflow
+            min(max(6, s1 + p2 + 1), DecimalType.MAX_PRECISION))
           Divide(Cast(e1, dt), Cast(e2, dt)).markPromoted()
 
         case Remainder(e1 @ DecimalType.Expression(p1, s1), e2 @ DecimalType.Expression(p2, s2)) =>
-          val dt = DecimalType(
+          val castType = widerDecimalType(p1, s1, p2, s2)
+          val resultType = DecimalType(
             min(min(p1 - s1, p2 - s2) + max(s1, s2), DecimalType.MAX_PRECISION),
             max(s1, s2))
-          Remainder(Cast(e1, dt), Cast(e2, dt)).markPromoted()
+          Cast(Remainder(Cast(e1, castType), Cast(e2, castType)).markPromoted(), resultType)
 
         case Pmod(e1 @ DecimalType.Expression(p1, s1), e2 @ DecimalType.Expression(p2, s2)) =>
-          val dt = DecimalType(
+          val castType = widerDecimalType(p1, s1, p2, s2)
+          val resultType = DecimalType(
             min(min(p1 - s1, p2 - s2) + max(s1, s2), DecimalType.MAX_PRECISION),
             max(s1, s2))
-          Pmod(Cast(e1, dt), Cast(e2, dt)).markPromoted()
+          Cast(Pmod(Cast(e1, castType), Cast(e2, castType)).markPromoted(), resultType)
 
         // When we compare 2 decimal types with different precisions, cast them to the smallest
         // common precision.

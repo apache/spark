@@ -813,9 +813,6 @@ private[hive] trait HiveInspectors {
 
     private def decimalTypeInfo(decimalType: DecimalType): TypeInfo = decimalType match {
       case DecimalType.Fixed(precision, scale) => new DecimalTypeInfo(precision, scale)
-      case _ => new DecimalTypeInfo(
-        HiveShim.UNLIMITED_DECIMAL_PRECISION,
-        HiveShim.UNLIMITED_DECIMAL_SCALE)
     }
 
     def toTypeInfo: TypeInfo = dt match {
