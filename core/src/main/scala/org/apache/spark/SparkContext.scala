@@ -471,7 +471,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       .orElse(Option(System.getenv("SPARK_MEM"))
       .map(warnSparkMem))
       .map(Utils.memoryStringToMb)
-      .getOrElse(512)
+      .getOrElse(1024)
 
     // Convert java options to env vars as a work around
     // since we can't set env vars directly in sbt.
@@ -1758,16 +1758,13 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
 
   /**
    * Run a function on a given set of partitions in an RDD and pass the results to the given
-   * handler function. This is the main entry point for all actions in Spark. The allowLocal
-   * flag specifies whether the scheduler can run the computation on the driver rather than
-   * shipping it out to the cluster, for short actions like first().
+   * handler function. This is the main entry point for all actions in Spark.
    */
   def runJob[T, U: ClassTag](
       rdd: RDD[T],
       func: (TaskContext, Iterator[T]) => U,
       partitions: Seq[Int],
-      allowLocal: Boolean,
-      resultHandler: (Int, U) => Unit) {
+      resultHandler: (Int, U) => Unit): Unit = {
     if (stopped.get()) {
       throw new IllegalStateException("SparkContext has been shutdown")
     }
@@ -1777,25 +1774,20 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     if (conf.getBoolean("spark.logLineage", false)) {
       logInfo("RDD's recursive dependencies:\n" + rdd.toDebugString)
     }
-    dagScheduler.runJob(rdd, cleanedFunc, partitions, callSite, allowLocal,
-      resultHandler, localProperties.get)
+    dagScheduler.runJob(rdd, cleanedFunc, partitions, callSite, resultHandler, localProperties.get)
     progressBar.foreach(_.finishAll())
     rdd.doCheckpoint()
   }
 
   /**
-   * Run a function on a given set of partitions in an RDD and return the results as an array. The
-   * allowLocal flag specifies whether the scheduler can run the computation on the driver rather
-   * than shipping it out to the cluster, for short actions like first().
+   * Run a function on a given set of partitions in an RDD and return the results as an array.
    */
   def runJob[T, U: ClassTag](
       rdd: RDD[T],
       func: (TaskContext, Iterator[T]) => U,
-      partitions: Seq[Int],
-      allowLocal: Boolean
-      ): Array[U] = {
+      partitions: Seq[Int]): Array[U] = {
     val results = new Array[U](partitions.size)
-    runJob[T, U](rdd, func, partitions, allowLocal, (index, res) => results(index) = res)
+    runJob[T, U](rdd, func, partitions, (index, res) => results(index) = res)
     results
   }
 
@@ -1806,25 +1798,80 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   def runJob[T, U: ClassTag](
       rdd: RDD[T],
       func: Iterator[T] => U,
+      partitions: Seq[Int]): Array[U] = {
+    val cleanedFunc = clean(func)
+    runJob(rdd, (ctx: TaskContext, it: Iterator[T]) => cleanedFunc(it), partitions)
+  }
+
+
+  /**
+   * Run a function on a given set of partitions in an RDD and pass the results to the given
+   * handler function. This is the main entry point for all actions in Spark.
+   *
+   * The allowLocal flag is deprecated as of Spark 1.5.0+.
+   */
+  @deprecated("use the version of runJob without the allowLocal parameter", "1.5.0")
+  def runJob[T, U: ClassTag](
+      rdd: RDD[T],
+      func: (TaskContext, Iterator[T]) => U,
+      partitions: Seq[Int],
+      allowLocal: Boolean,
+      resultHandler: (Int, U) => Unit): Unit = {
+    if (allowLocal) {
+      logWarning("sc.runJob with allowLocal=true is deprecated in Spark 1.5.0+")
+    }
+    runJob(rdd, func, partitions, resultHandler)
+  }
+
+  /**
+   * Run a function on a given set of partitions in an RDD and return the results as an array.
+   *
+   * The allowLocal flag is deprecated as of Spark 1.5.0+.
+   */
+  @deprecated("use the version of runJob without the allowLocal parameter", "1.5.0")
+  def runJob[T, U: ClassTag](
+      rdd: RDD[T],
+      func: (TaskContext, Iterator[T]) => U,
       partitions: Seq[Int],
       allowLocal: Boolean
       ): Array[U] = {
-    val cleanedFunc = clean(func)
-    runJob(rdd, (ctx: TaskContext, it: Iterator[T]) => cleanedFunc(it), partitions, allowLocal)
+    if (allowLocal) {
+      logWarning("sc.runJob with allowLocal=true is deprecated in Spark 1.5.0+")
+    }
+    runJob(rdd, func, partitions)
+  }
+
+  /**
+   * Run a job on a given set of partitions of an RDD, but take a function of type
+   * `Iterator[T] => U` instead of `(TaskContext, Iterator[T]) => U`.
+   *
+   * The allowLocal argument is deprecated as of Spark 1.5.0+.
+   */
+  @deprecated("use the version of runJob without the allowLocal parameter", "1.5.0")
+  def runJob[T, U: ClassTag](
+      rdd: RDD[T],
+      func: Iterator[T] => U,
+      partitions: Seq[Int],
+      allowLocal: Boolean
+      ): Array[U] = {
+    if (allowLocal) {
+      logWarning("sc.runJob with allowLocal=true is deprecated in Spark 1.5.0+")
+    }
+    runJob(rdd, func, partitions)
   }
 
   /**
    * Run a job on all partitions in an RDD and return the results in an array.
    */
   def runJob[T, U: ClassTag](rdd: RDD[T], func: (TaskContext, Iterator[T]) => U): Array[U] = {
-    runJob(rdd, func, 0 until rdd.partitions.size, false)
+    runJob(rdd, func, 0 until rdd.partitions.length)
   }
 
   /**
    * Run a job on all partitions in an RDD and return the results in an array.
    */
   def runJob[T, U: ClassTag](rdd: RDD[T], func: Iterator[T] => U): Array[U] = {
-    runJob(rdd, func, 0 until rdd.partitions.size, false)
+    runJob(rdd, func, 0 until rdd.partitions.length)
   }
 
   /**
@@ -1835,7 +1882,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     processPartition: (TaskContext, Iterator[T]) => U,
     resultHandler: (Int, U) => Unit)
   {
-    runJob[T, U](rdd, processPartition, 0 until rdd.partitions.size, false, resultHandler)
+    runJob[T, U](rdd, processPartition, 0 until rdd.partitions.length, resultHandler)
   }
 
   /**
@@ -1847,7 +1894,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       resultHandler: (Int, U) => Unit)
   {
     val processFunc = (context: TaskContext, iter: Iterator[T]) => processPartition(iter)
-    runJob[T, U](rdd, processFunc, 0 until rdd.partitions.size, false, resultHandler)
+    runJob[T, U](rdd, processFunc, 0 until rdd.partitions.length, resultHandler)
   }
 
   /**
@@ -1892,7 +1939,6 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       (context: TaskContext, iter: Iterator[T]) => cleanF(iter),
       partitions,
       callSite,
-      allowLocal = false,
       resultHandler,
       localProperties.get)
     new SimpleFutureAction(waiter, resultFunc)

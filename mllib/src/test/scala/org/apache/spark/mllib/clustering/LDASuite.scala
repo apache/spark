@@ -20,7 +20,7 @@ package org.apache.spark.mllib.clustering
 import breeze.linalg.{DenseMatrix => BDM}
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.mllib.linalg.{Vector, DenseMatrix, Matrix, Vectors}
+import org.apache.spark.mllib.linalg.{DenseMatrix, Matrix, Vector, Vectors}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.util.Utils
@@ -132,10 +132,26 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext {
 
   test("setter alias") {
     val lda = new LDA().setAlpha(2.0).setBeta(3.0)
-    assert(lda.getAlpha === 2.0)
-    assert(lda.getDocConcentration === 2.0)
+    assert(lda.getAlpha.toArray.forall(_ === 2.0))
+    assert(lda.getDocConcentration.toArray.forall(_ === 2.0))
     assert(lda.getBeta === 3.0)
     assert(lda.getTopicConcentration === 3.0)
+  }
+
+  test("initializing with alpha length != k or 1 fails") {
+    intercept[IllegalArgumentException] {
+      val lda = new LDA().setK(2).setAlpha(Vectors.dense(1, 2, 3, 4))
+      val corpus = sc.parallelize(tinyCorpus, 2)
+      lda.run(corpus)
+    }
+  }
+
+  test("initializing with elements in alpha < 0 fails") {
+    intercept[IllegalArgumentException] {
+      val lda = new LDA().setK(4).setAlpha(Vectors.dense(-1, 2, 3, 4))
+      val corpus = sc.parallelize(tinyCorpus, 2)
+      lda.run(corpus)
+    }
   }
 
   test("OnlineLDAOptimizer initialization") {
@@ -143,11 +159,11 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext {
     val corpus = sc.parallelize(tinyCorpus, 2)
     val op = new OnlineLDAOptimizer().initialize(corpus, lda)
     op.setKappa(0.9876).setMiniBatchFraction(0.123).setTau0(567)
-    assert(op.getAlpha == 0.5) // default 1.0 / k
-    assert(op.getEta == 0.5)   // default 1.0 / k
-    assert(op.getKappa == 0.9876)
-    assert(op.getMiniBatchFraction == 0.123)
-    assert(op.getTau0 == 567)
+    assert(op.getAlpha.toArray.forall(_ === 0.5)) // default 1.0 / k
+    assert(op.getEta === 0.5)   // default 1.0 / k
+    assert(op.getKappa === 0.9876)
+    assert(op.getMiniBatchFraction === 0.123)
+    assert(op.getTau0 === 567)
   }
 
   test("OnlineLDAOptimizer one iteration") {
@@ -215,6 +231,56 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext {
     topics.foreach { topic =>
       val smalls = topic.filter(t => t._2 < 0.1).map(_._2)
       assert(smalls.length == 3 && smalls.sum < 0.2)
+    }
+  }
+
+  test("OnlineLDAOptimizer with asymmetric prior") {
+    def toydata: Array[(Long, Vector)] = Array(
+      Vectors.sparse(6, Array(0, 1), Array(1, 1)),
+      Vectors.sparse(6, Array(1, 2), Array(1, 1)),
+      Vectors.sparse(6, Array(0, 2), Array(1, 1)),
+      Vectors.sparse(6, Array(3, 4), Array(1, 1)),
+      Vectors.sparse(6, Array(3, 5), Array(1, 1)),
+      Vectors.sparse(6, Array(4, 5), Array(1, 1))
+    ).zipWithIndex.map { case (wordCounts, docId) => (docId.toLong, wordCounts) }
+
+    val docs = sc.parallelize(toydata)
+    val op = new OnlineLDAOptimizer().setMiniBatchFraction(1).setTau0(1024).setKappa(0.51)
+      .setGammaShape(1e10)
+    val lda = new LDA().setK(2)
+      .setDocConcentration(Vectors.dense(0.00001, 0.1))
+      .setTopicConcentration(0.01)
+      .setMaxIterations(100)
+      .setOptimizer(op)
+      .setSeed(12345)
+
+    val ldaModel = lda.run(docs)
+    val topicIndices = ldaModel.describeTopics(maxTermsPerTopic = 10)
+    val topics = topicIndices.map { case (terms, termWeights) =>
+      terms.zip(termWeights)
+    }
+
+    /* Verify results with Python:
+
+       import numpy as np
+       from gensim import models
+       corpus = [
+           [(0, 1.0), (1, 1.0)],
+           [(1, 1.0), (2, 1.0)],
+           [(0, 1.0), (2, 1.0)],
+           [(3, 1.0), (4, 1.0)],
+           [(3, 1.0), (5, 1.0)],
+           [(4, 1.0), (5, 1.0)]]
+       np.random.seed(10)
+       lda = models.ldamodel.LdaModel(
+           corpus=corpus, alpha=np.array([0.00001, 0.1]), num_topics=2, update_every=0, passes=100)
+       lda.print_topics()
+
+       > ['0.167*0 + 0.167*1 + 0.167*2 + 0.167*3 + 0.167*4 + 0.167*5',
+          '0.167*0 + 0.167*1 + 0.167*2 + 0.167*4 + 0.167*3 + 0.167*5']
+     */
+    topics.foreach { topic =>
+      assert(topic.forall { case (_, p) => p ~= 0.167 absTol 0.05 })
     }
   }
 
