@@ -150,7 +150,8 @@ class SQLQuerySuite extends QueryTest {
       "Function: upper",
       "Class: org.apache.spark.sql.catalyst.expressions.Upper",
       "Usage: upper(str) - Returns str with all characters changed to uppercase",
-      "Extended Usage: > SELECT upper('SparkSql') FROM src LIMIT 1;",
+      "Extended Usage:",
+      "> SELECT upper('SparkSql')",
       "'SPARKSQL'")
 
     checkExistence(sql("describe functioN Upper"), true,
@@ -163,14 +164,6 @@ class SQLQuerySuite extends QueryTest {
 
     checkExistence(sql("describe functioN abcadf"), true,
       "Function: abcadf is not found.")
-
-    // The Hive built-in functions which is not implemented by Spark SQL
-    checkExistence(sql("describe function extended array_contains"), true,
-      "Function: array_contains",
-      "Class: org.apache.hadoop.hive.ql.udf.generic.GenericUDFArrayContains",
-      "Usage: array_contains(array, value) - Returns TRUE if the array contains value.",
-      "Extended Usage: Example:",
-      "SELECT array_contains(array(1, 2, 3), 2) FROM src LIMIT 1;")
   }
 
   test("SPARK-5371: union with null and sum") {
