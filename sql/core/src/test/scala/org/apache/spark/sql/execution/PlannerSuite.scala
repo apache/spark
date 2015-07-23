@@ -109,7 +109,7 @@ class PlannerSuite extends SparkFunSuite {
       FloatType ::
       DoubleType ::
       DecimalType(10, 5) ::
-      DecimalType.Maximum ::
+      DecimalType.SYSTEM_DEFAULT ::
       DateType ::
       TimestampType ::
       StringType ::

@@ -17,15 +17,13 @@
 
 package org.apache.spark.sql.execution
 
-import scala.math.min
-
 import org.apache.spark.TaskContext
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.trees._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical._
+import org.apache.spark.sql.catalyst.trees._
 import org.apache.spark.sql.types._
 
 case class AggregateEvaluation(
@@ -95,7 +93,7 @@ case class GeneratedAggregate(
         val calcType =
           expr.dataType match {
             case DecimalType.Fixed(p, s) =>
-              DecimalType(min(p + 10, DecimalType.MAX_PRECISION), s)
+              DecimalType.bounded(p + 10, s)
             case _ =>
               expr.dataType
           }
@@ -124,7 +122,7 @@ case class GeneratedAggregate(
         val calcType =
           expr.dataType match {
             case DecimalType.Fixed(p, s) =>
-              DecimalType(min(p + 10, DecimalType.MAX_PRECISION), s)
+              DecimalType.bounded(p + 10, s)
             case _ =>
               expr.dataType
           }

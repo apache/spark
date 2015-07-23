@@ -144,7 +144,7 @@ package object jdbc {
             case BinaryType => "BLOB"
             case TimestampType => "TIMESTAMP"
             case DateType => "DATE"
-            case t: DecimalType => s"DECIMAL(40,20)"
+            case t: DecimalType => s"DECIMAL(${t.precision}},${t.scale}})"
             case _ => throw new IllegalArgumentException(s"Don't know how to save $field to JDBC")
           })
         val nullable = if (field.nullable) "" else "NOT NULL"

@@ -34,7 +34,7 @@ object DataTypeTestUtils {
    * decimal types.
    */
   val fractionalTypes: Set[FractionalType] = Set(
-    DecimalType.Maximum,
+    DecimalType.SYSTEM_DEFAULT,
     DecimalType(2, 1),
     DoubleType,
     FloatType

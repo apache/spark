@@ -55,7 +55,7 @@ object AnalysisSuite {
     AttributeReference("a", StringType)(),
     AttributeReference("b", StringType)(),
     AttributeReference("c", DoubleType)(),
-    AttributeReference("d", DecimalType.Maximum)(),
+    AttributeReference("d", DecimalType.SYSTEM_DEFAULT)(),
     AttributeReference("e", ShortType)())
 
   val nestedRelation = LocalRelation(

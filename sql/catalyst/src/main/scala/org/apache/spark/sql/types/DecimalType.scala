@@ -42,15 +42,21 @@ case class PrecisionInfo(precision: Int, scale: Int) {
 /**
  * :: DeveloperApi ::
  * The data type representing `java.math.BigDecimal` values.
- * A Decimal that must have fixed precision and scale.
+ * A Decimal that must have fixed precision (the maximum number of digits) and scale (the number
+ * of digits on right side of dot).
+ *
+ * The precision can be up to 38, scale can also be up to 38 (less or equal to precision).
+ *
+ * The default precision and scale is (10, 0).
  *
  * Please use [[DataTypes.createDecimalType()]] to create a specific instance.
  */
 @DeveloperApi
 case class DecimalType(precision: Int, scale: Int) extends FractionalType {
 
-  /** No-arg constructor for kryo. */
-  private def this() = this(0, 0)
+  // default constructor for Java
+  def this(precision: Int) = this(precision, 0)
+  def this() = this(10)
 
   @deprecated("Use DecimalType(precision, scale) instead", "1.5")
   def this(precisionInfo: Option[PrecisionInfo]) {
@@ -95,42 +101,15 @@ case class DecimalType(precision: Int, scale: Int) extends FractionalType {
 object DecimalType extends AbstractDataType {
   import scala.math.min
 
-  val MAX_PRECISION = 38
-  val MAX_SCALE = 38
+  private[sql] val MAX_PRECISION = 38
+  private[sql] val MAX_SCALE = 38
+  private[sql] val SYSTEM_DEFAULT: DecimalType = DecimalType(MAX_PRECISION, 18)
+  private[sql] val USER_DEFAULT: DecimalType = DecimalType(10, 0)
 
-  override private[sql] def defaultConcreteType: DataType = Default
+  @deprecated("Does not support unlimited precision, please specify the precision and scale", "1.5")
+  val Unlimited: DecimalType = SYSTEM_DEFAULT
 
-  override private[sql] def acceptsType(other: DataType): Boolean = {
-    other.isInstanceOf[DecimalType]
-  }
-
-  override private[sql] def simpleString: String = "decimal"
-
-  val Maximum: DecimalType = DecimalType(MAX_PRECISION, 18)
-
-  val Default: DecimalType = DecimalType(10, 0)
-
-  val Unlimited: DecimalType = Maximum  // backward compatibility
-
-  private[sql] object Fixed {
-    def unapply(t: DecimalType): Option[(Int, Int)] =
-      Some((t.precision, t.scale))
-  }
-
-  private[sql] object Expression {
-    def unapply(e: Expression): Option[(Int, Int)] = e.dataType match {
-      case t: DecimalType => Some((t.precision, t.scale))
-      case _ => None
-    }
-  }
-
-  def apply(): DecimalType = Default
-
-  def bounded(precision: Int, scale: Int): DecimalType = {
-    DecimalType(min(precision, MAX_PRECISION), min(scale, MAX_SCALE))
-  }
-
-  // The decimal types compatible with IntegralTypes
+  // The decimal types compatible with other numberic types
   private[sql] val ByteDecimal = DecimalType(3, 0)
   private[sql] val ShortDecimal = DecimalType(5, 0)
   private[sql] val IntDecimal = DecimalType(10, 0)
@@ -145,6 +124,32 @@ object DecimalType extends AbstractDataType {
     case LongType => LongDecimal
     case FloatType => FloatDecimal
     case DoubleType => DoubleDecimal
+  }
+
+  @deprecated("please specify precision and scale", "1.5")
+  def apply(): DecimalType = USER_DEFAULT
+
+  private[sql] def bounded(precision: Int, scale: Int): DecimalType = {
+    DecimalType(min(precision, MAX_PRECISION), min(scale, MAX_SCALE))
+  }
+
+  override private[sql] def defaultConcreteType: DataType = SYSTEM_DEFAULT
+
+  override private[sql] def acceptsType(other: DataType): Boolean = {
+    other.isInstanceOf[DecimalType]
+  }
+
+  override private[sql] def simpleString: String = "decimal"
+
+  private[sql] object Fixed {
+    def unapply(t: DecimalType): Option[(Int, Int)] = Some((t.precision, t.scale))
+  }
+
+  private[sql] object Expression {
+    def unapply(e: Expression): Option[(Int, Int)] = e.dataType match {
+      case t: DecimalType => Some((t.precision, t.scale))
+      case _ => None
+    }
   }
 
   def unapply(t: DataType): Boolean = t.isInstanceOf[DecimalType]
