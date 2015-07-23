@@ -246,7 +246,9 @@ object PowerIterationClustering extends Logging {
         if (s < 0.0) {
           throw new SparkException("Similarity must be nonnegative but found s($i, $j) = $s.")
         }
-        ctx.sendToSrc(s)
+        if (s > 0.0) {
+          ctx.sendToSrc(s)
+        }
       },
       mergeMsg = _ + _,
       TripletFields.EdgeOnly)
