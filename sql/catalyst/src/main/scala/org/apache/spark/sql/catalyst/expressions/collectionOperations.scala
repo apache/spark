@@ -117,7 +117,9 @@ case class SortArray(base: Expression, ascendingOrder: Expression)
   override def prettyName: String = "sort_array"
 }
 
-case class ArrayContains(left: Expression, right: Expression) extends BinaryExpression with ExpectsInputTypes {
+case class ArrayContains(left: Expression, right: Expression)
+  extends BinaryExpression with ExpectsInputTypes {
+
   override def dataType: DataType = BooleanType
 
   override def inputTypes: Seq[AbstractDataType] = left.dataType match {
