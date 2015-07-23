@@ -249,8 +249,8 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
       val receiverTrackingInfo = ReceiverTrackingInfo(
         streamId,
         ReceiverState.ACTIVE,
-        scheduledLocations = None,
-        runningLocation = Some(hostPort),
+        scheduledExecutors = None,
+        runningExecutor = Some(hostPort),
         name = Some(name),
         endpoint = Some(receiverEndpoint))
       receiverTrackingInfos.put(streamId, receiverTrackingInfo)
@@ -321,23 +321,23 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
 
   private def scheduleReceiver(receiverId: Int): Seq[String] = {
     val preferredLocation = receiverPreferredLocations.getOrElse(receiverId, None)
-    val scheduledLocations = schedulingPolicy.rescheduleReceiver(
+    val scheduledExecutors = schedulingPolicy.rescheduleReceiver(
       receiverId, preferredLocation, receiverTrackingInfos, getExecutors)
-    updateReceiverScheduledLocations(receiverId, scheduledLocations)
-    scheduledLocations
+    updateReceiverScheduledExecutors(receiverId, scheduledExecutors)
+    scheduledExecutors
   }
 
-  private def updateReceiverScheduledLocations(
-      receiverId: Int, scheduledLocations: Seq[String]): Unit = {
+  private def updateReceiverScheduledExecutors(
+      receiverId: Int, scheduledExecutors: Seq[String]): Unit = {
     val newReceiverTrackingInfo = receiverTrackingInfos.get(receiverId) match {
       case Some(oldInfo) =>
         oldInfo.copy(state = ReceiverState.SCHEDULED,
-          scheduledLocations = Some(scheduledLocations))
+          scheduledExecutors = Some(scheduledExecutors))
       case None =>
         ReceiverTrackingInfo(
           receiverId,
           ReceiverState.SCHEDULED,
-          Some(scheduledLocations),
+          Some(scheduledExecutors),
           None)
     }
     receiverTrackingInfos.put(receiverId, newReceiverTrackingInfo)
@@ -412,21 +412,21 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
     override def receive: PartialFunction[Any, Unit] = {
       // Local messages
       case StartAllReceivers(receivers) =>
-        val scheduledLocations = schedulingPolicy.scheduleReceivers(receivers, getExecutors)
+        val scheduledExecutors = schedulingPolicy.scheduleReceivers(receivers, getExecutors)
         for (receiver <- receivers) {
-          val locations = scheduledLocations(receiver.streamId)
-          updateReceiverScheduledLocations(receiver.streamId, locations)
+          val executors = scheduledExecutors(receiver.streamId)
+          updateReceiverScheduledExecutors(receiver.streamId, executors)
           receiverPreferredLocations(receiver.streamId) = receiver.preferredLocation
-          startReceiver(receiver, locations)
+          startReceiver(receiver, executors)
         }
       case RestartReceiver(receiver) =>
-        val scheduledLocations = schedulingPolicy.rescheduleReceiver(
+        val scheduledExecutors = schedulingPolicy.rescheduleReceiver(
           receiver.streamId,
           receiver.preferredLocation,
           receiverTrackingInfos,
           getExecutors)
-        updateReceiverScheduledLocations(receiver.streamId, scheduledLocations)
-        startReceiver(receiver, scheduledLocations)
+        updateReceiverScheduledExecutors(receiver.streamId, scheduledExecutors)
+        startReceiver(receiver, scheduledExecutors)
       case c: CleanupOldBlocks =>
         receiverTrackingInfos.values.flatMap(_.endpoint).foreach(_.send(c))
       case UpdateReceiverRateLimit(streamUID, newRate) =>
@@ -459,9 +459,9 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
     }
 
     /**
-     * Start a receiver along with its scheduled locations
+     * Start a receiver along with its scheduled executors
      */
-    private def startReceiver(receiver: Receiver[_], scheduledLocations: Seq[String]): Unit = {
+    private def startReceiver(receiver: Receiver[_], scheduledExecutors: Seq[String]): Unit = {
       val receiverId = receiver.streamId
       if (!isTrackerStarted) {
         onReceiverJobFinish(receiverId)
@@ -475,12 +475,12 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
       // Function to start the receiver on the worker node
       val startReceiverFunc = new StartReceiverFunc(checkpointDirOption, serializableHadoopConf)
 
-      // Create the RDD using the scheduledLocations to run the receiver in a Spark job
+      // Create the RDD using the scheduledExecutors to run the receiver in a Spark job
       val receiverRDD: RDD[Receiver[_]] =
-        if (scheduledLocations.isEmpty) {
+        if (scheduledExecutors.isEmpty) {
           ssc.sc.makeRDD(Seq(receiver), 1)
         } else {
-          ssc.sc.makeRDD(Seq(receiver -> scheduledLocations))
+          ssc.sc.makeRDD(Seq(receiver -> scheduledExecutors))
         }
       receiverRDD.setName(s"Receiver $receiverId")
       val future = ssc.sparkContext.submitJob[Receiver[_], Unit, Unit](

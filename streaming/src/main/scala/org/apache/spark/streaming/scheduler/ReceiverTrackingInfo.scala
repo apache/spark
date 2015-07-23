@@ -28,8 +28,8 @@ private[streaming] case class ReceiverErrorInfo(
  *
  * @param receiverId the unique receiver id
  * @param state the current Receiver state
- * @param scheduledLocations the scheduled locations provided by ReceiverSchedulingPolicy
- * @param runningLocation the running location if the receiver is active
+ * @param scheduledExecutors the scheduled executors provided by ReceiverSchedulingPolicy
+ * @param runningExecutor the running executor if the receiver is active
  * @param name the receiver name
  * @param endpoint the receiver endpoint. It can be used to send messages to the receiver
  * @param errorInfo the receiver error information if it fails
@@ -37,8 +37,8 @@ private[streaming] case class ReceiverErrorInfo(
 private[streaming] case class ReceiverTrackingInfo(
     receiverId: Int,
     state: ReceiverState,
-    scheduledLocations: Option[Seq[String]],
-    runningLocation: Option[String],
+    scheduledExecutors: Option[Seq[String]],
+    runningExecutor: Option[String],
     name: Option[String] = None,
     endpoint: Option[RpcEndpointRef] = None,
     errorInfo: Option[ReceiverErrorInfo] = None) {
@@ -47,7 +47,7 @@ private[streaming] case class ReceiverTrackingInfo(
     receiverId,
     name.getOrElse(""),
     state == ReceiverState.ACTIVE,
-    location = runningLocation.getOrElse(""),
+    location = runningExecutor.getOrElse(""),
     lastErrorMessage = errorInfo.map(_.lastErrorMessage).getOrElse(""),
     lastError = errorInfo.map(_.lastError).getOrElse(""),
     lastErrorTime = errorInfo.map(_.lastErrorTime).getOrElse(-1L)
