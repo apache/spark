@@ -153,7 +153,7 @@ object PartialAggregation {
         // computed partial evaluations and grouping values.
         val rewrittenAggregateExpressions = aggregateExpressions.map(_.transformUp {
           // All PartialAggregates exist in the partialEvaluations for sure.
-          case p: PartialAggregate => partialEvaluations(new TreeNodeRef(p)).finalEvaluation
+          case p: PartialAggregate1 => partialEvaluations(new TreeNodeRef(p)).finalEvaluation
 
           case e: Expression =>
             namedGroupingExpressions.collectFirst {

@@ -117,7 +117,7 @@ case class Aggregate(
    */
   private[this] val resultExpressions = aggregateExpressions.map(_.transformUp {
     // All AggregateExpressions exist in the aggMap for sure.
-    case a: AggregateExpression => aggMap(new TreeNodeRef(a))
+    case a: AggregateExpression1 => aggMap(new TreeNodeRef(a))
 
     case e: Expression =>
       namedGroups.collectFirst {
