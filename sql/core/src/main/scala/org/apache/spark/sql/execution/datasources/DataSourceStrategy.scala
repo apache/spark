@@ -315,7 +315,7 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
     if (relation.relation.needConversion) {
       execution.RDDConversions.rowToRowRdd(rdd, output.map(_.dataType))
     } else {
-      rdd.map(_.asInstanceOf[InternalRow])
+      rdd.asInstanceOf[RDD[InternalRow]]
     }
   }
 

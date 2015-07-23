@@ -25,7 +25,7 @@ import org.apache.spark.unsafe.types.UTF8String
  * An abstract class for row used internal in Spark SQL, which only contain the columns as
  * internal types.
  */
-abstract class InternalRow {
+abstract class InternalRow extends Serializable {
 
   def numFields: Int
 
@@ -71,8 +71,14 @@ abstract class InternalRow {
   }
 
   override def equals(o: Any): Boolean = {
+    if (!o.isInstanceOf[InternalRow]) {
+      return false
+    }
+
     val other = o.asInstanceOf[InternalRow]
-    if (other eq null) return false
+    if (other eq null) {
+      return false
+    }
 
     val len = numFields
     if (len != other.numFields) {
