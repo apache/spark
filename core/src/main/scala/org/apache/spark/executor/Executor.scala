@@ -215,8 +215,6 @@ private[spark] class Executor(
             attemptNumber = attemptNumber,
             metricsSystem = env.metricsSystem)
         } finally {
-          // Note: this memory freeing logic is duplicated in DAGScheduler.runLocallyWithinThread;
-          // when changing this, make sure to update both copies.
           val freedMemory = taskMemoryManager.cleanUpAllAllocatedMemory()
           if (freedMemory > 0) {
             val errMsg = s"Managed memory leak detected; size = $freedMemory bytes, TID = $taskId"
