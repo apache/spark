@@ -101,10 +101,10 @@ case class DecimalType(precision: Int, scale: Int) extends FractionalType {
 object DecimalType extends AbstractDataType {
   import scala.math.min
 
-  private[sql] val MAX_PRECISION = 38
-  private[sql] val MAX_SCALE = 38
-  private[sql] val SYSTEM_DEFAULT: DecimalType = DecimalType(MAX_PRECISION, 18)
-  private[sql] val USER_DEFAULT: DecimalType = DecimalType(10, 0)
+  val MAX_PRECISION = 38
+  val MAX_SCALE = 38
+  val SYSTEM_DEFAULT: DecimalType = DecimalType(MAX_PRECISION, 18)
+  val USER_DEFAULT: DecimalType = DecimalType(10, 0)
 
   @deprecated("Does not support unlimited precision, please specify the precision and scale", "1.5")
   val Unlimited: DecimalType = SYSTEM_DEFAULT
@@ -128,6 +128,12 @@ object DecimalType extends AbstractDataType {
 
   @deprecated("please specify precision and scale", "1.5")
   def apply(): DecimalType = USER_DEFAULT
+
+  @deprecated("Use DecimalType(precision, scale) instead", "1.5")
+  def apply(precisionInfo: Option[PrecisionInfo]) {
+    this(precisionInfo.getOrElse(PrecisionInfo(10, 0)).precision,
+      precisionInfo.getOrElse(PrecisionInfo(10, 0)).scale)
+  }
 
   private[sql] def bounded(precision: Int, scale: Int): DecimalType = {
     DecimalType(min(precision, MAX_PRECISION), min(scale, MAX_SCALE))

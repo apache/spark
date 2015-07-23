@@ -202,7 +202,7 @@ class TableScanSuite extends DataSourceTest {
       StructField("longField_:,<>=+/~^", LongType, true) ::
       StructField("floatField", FloatType, true) ::
       StructField("doubleField", DoubleType, true) ::
-      StructField("decimalField1", DecimalType.SYSTEM_DEFAULT, true) ::
+      StructField("decimalField1", DecimalType.USER_DEFAULT, true) ::
       StructField("decimalField2", DecimalType(9, 2), true) ::
       StructField("dateField", DateType, true) ::
       StructField("timestampField", TimestampType, true) ::

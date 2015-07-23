@@ -156,7 +156,8 @@ class JsonSuite extends QueryTest with TestJsonData {
     checkDataType(DoubleType, StructType(Nil), StringType)
 
     // DecimalType
-    checkDataType(DecimalType.SYSTEM_DEFAULT, DecimalType.SYSTEM_DEFAULT, DecimalType.SYSTEM_DEFAULT)
+    checkDataType(DecimalType.SYSTEM_DEFAULT, DecimalType.SYSTEM_DEFAULT,
+      DecimalType.SYSTEM_DEFAULT)
     checkDataType(DecimalType.SYSTEM_DEFAULT, StringType, StringType)
     checkDataType(DecimalType.SYSTEM_DEFAULT, ArrayType(IntegerType), StringType)
     checkDataType(DecimalType.SYSTEM_DEFAULT, StructType(Nil), StringType)
