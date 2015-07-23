@@ -19,7 +19,7 @@ package org.apache.spark.sql.json
 
 import java.io.IOException
 
-import org.apache.hadoop.fs.Path
+import org.apache.hadoop.fs.{FileSystem, Path}
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.AnalysisException
@@ -87,20 +87,7 @@ private[sql] class DefaultSource
         case SaveMode.Append =>
           sys.error(s"Append mode is not supported by ${this.getClass.getCanonicalName}")
         case SaveMode.Overwrite => {
-          var success: Boolean = false
-          try {
-            success = fs.delete(filesystemPath, true)
-          } catch {
-            case e: IOException =>
-              throw new IOException(
-                s"Unable to clear output directory ${filesystemPath.toString} prior"
-                  + s" to writing to JSON table:\n${e.toString}")
-          }
-          if (!success) {
-            throw new IOException(
-              s"Unable to clear output directory ${filesystemPath.toString} prior"
-                + s" to writing to JSON table.")
-          }
+          JSONRelation.delete(filesystemPath, fs)
           true
         }
         case SaveMode.ErrorIfExists =>
@@ -195,20 +182,7 @@ private[sql] class JSONRelation(
 
     if (overwrite) {
       if (fs.exists(filesystemPath)) {
-        var success: Boolean = false
-        try {
-          success = fs.delete(filesystemPath, true)
-        } catch {
-          case e: IOException =>
-            throw new IOException(
-              s"Unable to clear output directory ${filesystemPath.toString} prior"
-                + s" to writing to JSON table:\n${e.toString}")
-        }
-        if (!success) {
-          throw new IOException(
-            s"Unable to clear output directory ${filesystemPath.toString} prior"
-              + s" to writing to JSON table.")
-        }
+        JSONRelation.delete(filesystemPath, fs)
       }
       // Write the data.
       data.toJSON.saveAsTextFile(filesystemPath.toString)
@@ -226,5 +200,23 @@ private[sql] class JSONRelation(
     case that: JSONRelation =>
       (this.path == that.path) && this.schema.sameType(that.schema)
     case _ => false
+  }
+}
+
+private object JSONRelation {
+
+  /** Delete the specified directory to overwrite it with new JSON data. */
+  def delete(dir: Path, fs: FileSystem): Unit = {
+    var success: Boolean = false
+    val failMessage = s"Unable to clear output directory $dir prior to writing to JSON table"
+    try {
+      success = fs.delete(dir, true /* recursive */)
+    } catch {
+      case e: IOException =>
+        throw new IOException(s"$failMessage\n${e.toString}")
+    }
+    if (!success) {
+      throw new IOException(failMessage)
+    }
   }
 }

@@ -1742,26 +1742,14 @@ object functions {
   def rtrim(e: Column): Column = StringTrimRight(e.expr)
 
   /**
-   * Format strings in printf-style.
+   * Formats the arguments in printf-style and returns the result as a string column.
    *
    * @group string_funcs
    * @since 1.5.0
    */
   @scala.annotation.varargs
-  def formatString(format: Column, arguments: Column*): Column = {
-    StringFormat((format +: arguments).map(_.expr): _*)
-  }
-
-  /**
-   * Format strings in printf-style.
-   * NOTE: `format` is the string value of the formatter, not column name.
-   *
-   * @group string_funcs
-   * @since 1.5.0
-   */
-  @scala.annotation.varargs
-  def formatString(format: String, arguNames: String*): Column = {
-    StringFormat(lit(format).expr +: arguNames.map(Column(_).expr): _*)
+  def format_string(format: String, arguments: Column*): Column = {
+    FormatString((lit(format) +: arguments).map(_.expr): _*)
   }
 
   /**
@@ -2448,7 +2436,7 @@ object functions {
    * @since 1.5.0
    */
   def callUDF(udfName: String, cols: Column*): Column = {
-    UnresolvedFunction(udfName, cols.map(_.expr))
+    UnresolvedFunction(udfName, cols.map(_.expr), isDistinct = false)
   }
 
   /**
@@ -2477,7 +2465,7 @@ object functions {
       exprs(i) = cols(i).expr
       i += 1
     }
-    UnresolvedFunction(udfName, exprs)
+    UnresolvedFunction(udfName, exprs, isDistinct = false)
   }
 
 }

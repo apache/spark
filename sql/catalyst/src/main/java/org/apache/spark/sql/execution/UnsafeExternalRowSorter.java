@@ -28,11 +28,10 @@ import org.apache.spark.SparkEnv;
 import org.apache.spark.TaskContext;
 import org.apache.spark.sql.AbstractScalaRowIterator;
 import org.apache.spark.sql.catalyst.InternalRow;
-import org.apache.spark.sql.catalyst.expressions.UnsafeColumnWriter;
 import org.apache.spark.sql.catalyst.expressions.UnsafeProjection;
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow;
 import org.apache.spark.sql.catalyst.util.ObjectPool;
-import org.apache.spark.sql.types.*;
+import org.apache.spark.sql.types.StructType;
 import org.apache.spark.unsafe.PlatformDependent;
 import org.apache.spark.util.collection.unsafe.sort.PrefixComparator;
 import org.apache.spark.util.collection.unsafe.sort.RecordComparator;
@@ -176,12 +175,7 @@ final class UnsafeExternalRowSorter {
    */
   public static boolean supportsSchema(StructType schema) {
     // TODO: add spilling note to explain why we do this for now:
-    for (StructField field : schema.fields()) {
-      if (!UnsafeColumnWriter.canEmbed(field.dataType())) {
-        return false;
-      }
-    }
-    return true;
+    return UnsafeProjection.canSupport(schema);
   }
 
   private static final class RowComparator extends RecordComparator {
