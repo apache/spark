@@ -605,10 +605,9 @@ case class InitCap(child: Expression) extends UnaryExpression
   override def inputTypes: Seq[DataType] = Seq(StringType)
 
   override def nullSafeEval(string: Any): Any = {
-    if (string.asInstanceOf[UTF8String].getBytes.length == 0) {
+    if (string.asInstanceOf[UTF8String].numBytes() == 0) {
       return string
-    }
-    else {
+    } else {
       val sb = new StringBuffer()
       sb.append(string)
       sb.setCharAt(0, sb.charAt(0).toUpper)
