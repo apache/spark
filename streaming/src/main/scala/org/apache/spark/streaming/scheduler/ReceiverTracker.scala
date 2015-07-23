@@ -246,16 +246,15 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
       false
     } else {
       val name = s"${typ}-${streamId}"
-      val receiverInfo = ReceiverInfo(streamId, name, true, hostPort)
-      receiverTrackingInfos.put(streamId,
-        ReceiverTrackingInfo(
-          streamId,
-          ReceiverState.ACTIVE,
-          scheduledLocations = None,
-          runningLocation = Some(hostPort),
-          name = Some(name),
-          endpoint = Some(receiverEndpoint)))
-      listenerBus.post(StreamingListenerReceiverStarted(receiverInfo))
+      val receiverTrackingInfo = ReceiverTrackingInfo(
+        streamId,
+        ReceiverState.ACTIVE,
+        scheduledLocations = None,
+        runningLocation = Some(hostPort),
+        name = Some(name),
+        endpoint = Some(receiverEndpoint))
+      receiverTrackingInfos.put(streamId, receiverTrackingInfo)
+      listenerBus.post(StreamingListenerReceiverStarted(receiverTrackingInfo.toReceiverInfo))
       logInfo("Registered receiver for stream " + streamId + " from " + senderAddress)
       true
     }
