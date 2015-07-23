@@ -36,9 +36,11 @@ import org.apache.spark.Logging
 /**
  * Shared utility methods for performing Kinesis tests that actually transfer data
  */
-private class KinesisTestUtils(
-    val endpointUrl: String = "https://kinesis.us-west-2.amazonaws.com",
-    _regionName: String = "") extends Logging {
+private class KinesisTestUtils(val endpointUrl: String, _regionName: String) extends Logging {
+
+  def this() {
+    this("https://kinesis.us-west-2.amazonaws.com", "")
+  }
 
   val regionName = if (_regionName.length == 0) {
     RegionUtils.getRegionByEndpoint(endpointUrl).getName()

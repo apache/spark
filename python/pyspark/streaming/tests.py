@@ -36,9 +36,11 @@ else:
     import unittest
 
 from pyspark.context import SparkConf, SparkContext, RDD
+from pyspark.storagelevel import StorageLevel
 from pyspark.streaming.context import StreamingContext
 from pyspark.streaming.kafka import Broker, KafkaUtils, OffsetRange, TopicAndPartition
 from pyspark.streaming.flume import FlumeUtils
+from pyspark.streaming.kinesis import KinesisUtils, InitialPositionInStream
 
 
 class PySparkStreamingTestCase(unittest.TestCase):
@@ -911,7 +913,7 @@ class KinesisStreamTests(PySparkStreamingTestCase):
             return
 
         import random
-        kinesisAppName = "KinesisStreamTests-" + abs(random.randint(0, 10000000))
+        kinesisAppName = ("KinesisStreamTests-%d" % abs(random.randint(0, 10000000)))
         kinesisTestUtilsClz = \
             self.sc._jvm.java.lang.Thread.currentThread().getContextClassLoader() \
                 .loadClass("org.apache.spark.streaming.kinesis.KinesisTestUtils")
