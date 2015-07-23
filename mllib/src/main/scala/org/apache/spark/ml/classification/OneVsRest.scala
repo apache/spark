@@ -47,6 +47,8 @@ private[ml] trait OneVsRestParams extends PredictorParams {
 
   /**
    * param for the base binary classifier that we reduce multiclass classification into.
+   * The base classifier input and output columns are ignored in favor of
+   * the ones specified in [[OneVsRest]].
    * @group param
    */
   val classifier: Param[ClassifierType] = new Param(this, "classifier", "base binary classifier")
