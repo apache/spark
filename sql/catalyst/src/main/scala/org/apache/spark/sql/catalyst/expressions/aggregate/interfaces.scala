@@ -23,18 +23,18 @@ import org.apache.spark.sql.catalyst.expressions.codegen.{GeneratedExpressionCod
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.types._
 
-/** The mode of an [[AggregateFunction1]]. */
+/** The mode of an [[AggregateFunction2]]. */
 private[sql] sealed trait AggregateMode
 
 /**
- * An [[AggregateFunction1]] with [[Partial]] mode is used for partial aggregation.
+ * An [[AggregateFunction2]] with [[Partial]] mode is used for partial aggregation.
  * This function updates the given aggregation buffer with the original input of this
  * function. When it has processed all input rows, the aggregation buffer is returned.
  */
 private[sql] case object Partial extends AggregateMode
 
 /**
- * An [[AggregateFunction1]] with [[PartialMerge]] mode is used to merge aggregation buffers
+ * An [[AggregateFunction2]] with [[PartialMerge]] mode is used to merge aggregation buffers
  * containing intermediate results for this function.
  * This function updates the given aggregation buffer by merging multiple aggregation buffers.
  * When it has processed all input rows, the aggregation buffer is returned.
@@ -42,8 +42,8 @@ private[sql] case object Partial extends AggregateMode
 private[sql] case object PartialMerge extends AggregateMode
 
 /**
- * An [[AggregateFunction1]] with [[PartialMerge]] mode is used to merge aggregation buffers
- * containing intermediate results for this function and the generate final result.
+ * An [[AggregateFunction2]] with [[PartialMerge]] mode is used to merge aggregation buffers
+ * containing intermediate results for this function and then generate final result.
  * This function updates the given aggregation buffer by merging multiple aggregation buffers.
  * When it has processed all input rows, the final result of this function is returned.
  */
@@ -89,12 +89,12 @@ private[sql] case class AggregateExpression2(
   override def nullable: Boolean = aggregateFunction.nullable
 
   override def references: AttributeSet = {
-    val childReferemces = mode match {
+    val childReferences = mode match {
       case Partial | Complete => aggregateFunction.references.toSeq
       case PartialMerge | Final => aggregateFunction.bufferAttributes
     }
 
-    AttributeSet(childReferemces)
+    AttributeSet(childReferences)
   }
 
   override def toString: String = s"(${aggregateFunction}2,mode=$mode,isDistinct=$isDistinct)"
@@ -103,10 +103,8 @@ private[sql] case class AggregateExpression2(
 abstract class AggregateFunction2
   extends Expression with ImplicitCastInputTypes {
 
-  self: Product =>
-
   /** An aggregate function is not foldable. */
-  override def foldable: Boolean = false
+  final override def foldable: Boolean = false
 
   /**
    * The offset of this function's buffer in the underlying buffer shared with other functions.
