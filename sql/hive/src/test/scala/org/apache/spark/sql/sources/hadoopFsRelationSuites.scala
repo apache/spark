@@ -17,9 +17,9 @@
 
 package org.apache.spark.sql.sources
 
-import scala.collection.JavaConversions._
-
 import java.io.File
+
+import scala.collection.JavaConversions._
 
 import com.google.common.io.Files
 import org.apache.hadoop.conf.Configuration
@@ -31,9 +31,11 @@ import org.apache.parquet.hadoop.ParquetOutputCommitter
 import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.sql._
+import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
+
 
 abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils {
   override lazy val sqlContext: SQLContext = TestHive
@@ -132,7 +134,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils {
 
   test("save()/load() - non-partitioned table - ErrorIfExists") {
     withTempDir { file =>
-      intercept[RuntimeException] {
+      intercept[AnalysisException] {
         testDF.write.format(dataSourceName).mode(SaveMode.ErrorIfExists).save(file.getCanonicalPath)
       }
     }
@@ -231,7 +233,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils {
 
   test("save()/load() - partitioned table - ErrorIfExists") {
     withTempDir { file =>
-      intercept[RuntimeException] {
+      intercept[AnalysisException] {
         partitionedTestDF.write
           .format(dataSourceName)
           .mode(SaveMode.ErrorIfExists)
@@ -694,7 +696,7 @@ class ParquetHadoopFsRelationSuite extends HadoopFsRelationTest {
       // This should only complain that the destination directory already exists, rather than file
       // "empty" is not a Parquet file.
       assert {
-        intercept[RuntimeException] {
+        intercept[AnalysisException] {
           df.write.format("parquet").mode(SaveMode.ErrorIfExists).save(path)
         }.getMessage.contains("already exists")
       }

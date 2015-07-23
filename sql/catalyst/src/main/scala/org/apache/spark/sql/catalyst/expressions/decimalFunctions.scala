@@ -54,7 +54,7 @@ case class MakeDecimal(child: Expression, precision: Int, scale: Int) extends Un
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     nullSafeCodeGen(ctx, ev, eval => {
       s"""
-        ${ev.primitive} = (new ${ctx.decimalType}()).setOrNull($eval, $precision, $scale);
+        ${ev.primitive} = (new Decimal()).setOrNull($eval, $precision, $scale);
         ${ev.isNull} = ${ev.primitive} == null;
       """
     })
