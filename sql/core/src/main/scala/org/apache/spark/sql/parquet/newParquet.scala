@@ -346,7 +346,7 @@ private[sql] class ParquetRelation2(
     var schema: StructType = _
 
     // Cached leaves
-    var cachedLeaves: Set[FileStatus] = Set()
+    var cachedLeaves: Set[FileStatus] = null
 
     /**
      * Refreshes `FileStatus`es, footers, partition spec, and table schema.
@@ -355,7 +355,8 @@ private[sql] class ParquetRelation2(
       val currentLeafStatuses = cachedLeafStatuses()
 
       // Check if cachedLeafStatuses is changed or not
-      val leafStatusesChanged = !cachedLeaves.equals(currentLeafStatuses)
+      val leafStatusesChanged = (cachedLeaves == null) ||
+        !cachedLeaves.equals(currentLeafStatuses)
 
       if (leafStatusesChanged) {
         cachedLeaves = currentLeafStatuses.filter { f =>
