@@ -324,7 +324,7 @@ class Analyzer(
             failAnalysis(s"${g.simpleString} cannot have a star in expressions")
           case _ =>
             g.copy(
-              generator = g.generator.copy(children = g.generator.children.flatMap {
+              generator = g.generator.makeCopy(children = g.generator.children.flatMap {
                 case s: Star => s.expand(g.child.output, resolver)
                 case o => o :: Nil
               })

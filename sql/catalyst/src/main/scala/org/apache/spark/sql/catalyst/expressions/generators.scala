@@ -70,7 +70,7 @@ trait Generator extends Expression {
    * Analyzer uses this function to expand a Star if the aggregator
    * function argument has it.
    */
-  def copy(children: Seq[Expression]): Generator
+  def makeCopy(children: Seq[Expression]): Generator
 }
 
 /**
@@ -103,7 +103,7 @@ case class UserDefinedGenerator(
 
   override def toString: String = s"UserDefinedGenerator(${children.mkString(",")})"
 
-  def copy(children: Seq[Expression]): Generator = {
+  override def makeCopy(children: Seq[Expression]): Generator = {
     new UserDefinedGenerator(
       elementTypes = this.elementTypes,
       function = this.function,
@@ -146,6 +146,6 @@ case class Explode(child: Expression) extends UnaryExpression with Generator wit
 
   override def toString: String = s"explode($child)"
 
-  def copy(children: Seq[Expression]): Generator =
+  override def makeCopy(children: Seq[Expression]): Generator =
     new Explode(child)
 }
