@@ -100,8 +100,8 @@ trait ActorHelper extends Logging {
   }
 
   /**
-   * start a new actor-based receiver, spark streaming will asynchronously send the 
-   * corresponding ActorRef object to the caller actor of this API
+   * start a new actor-based receiver, spark streaming will asynchronously send the corresponding
+   * ActorRef object to the caller actor of this API
    * @param props the props object of the receiver actor
    * @param name the name of the actor
    */
@@ -110,8 +110,8 @@ trait ActorHelper extends Logging {
   }
 
   /**
-   * start a new actor-based receiver, spark streaming will asynchronously send the
-   * corresponding ActorRef object to the caller actor of this API
+   * start a new actor-based receiver, spark streaming will asynchronously send the corresponding
+   * ActorRef object to the caller actor of this API
    * @param props the props object of the receiver actor
    */
   def startNewActorReceiver(props: Props) {
@@ -119,9 +119,8 @@ trait ActorHelper extends Logging {
   }
 
   /**
-   * query the statistical information in the current receiver system
-   * spark streaming will asynchronously send result to the caller actor of this API 
-   * return message format: 
+   * query the statistical information in the current receiver system spark streaming will
+   * asynchronously send result to the caller actor of this API return message format:
    * [[org.apache.spark.streaming.receiver.Statistics]]
    */
   def queryStatisticalInfo() {
