@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.GenerateProjection
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
-import org.apache.spark.sql.types.{DecimalType, DataType, DataTypeTestUtils}
+import org.apache.spark.sql.types.{BinaryType, DecimalType, DataType, DataTypeTestUtils}
 
 /**
  * This test suite implements fuzz tests for expression code generation. It uses reflection to
@@ -87,8 +87,9 @@ class ExpressionFuzzingSuite extends SparkFunSuite with Logging {
   }
 
   def getRandomLiteral: Literal = {
-    // For now, filter out DecimalType since casts can lead to OOMs:
-    val allTypes = DataTypeTestUtils.atomicTypes.filterNot(_.isInstanceOf[DecimalType])
+    val allTypes = DataTypeTestUtils.atomicTypes
+      .filterNot(_.isInstanceOf[DecimalType]) // casts can lead to OOM
+      .filterNot(_.isInstanceOf[BinaryType]) // leads to spurious errors in string reverse
     val dataTypesWithGenerators: Map[DataType, () => Any] = allTypes.map { dt =>
       (dt, RandomDataGenerator.forType(dt, nullable = true, seed=None))
     }.filter(_._2.isDefined).toMap.mapValues(_.get)
