@@ -20,7 +20,7 @@ package org.apache.spark.ui.scope
 import scala.collection.mutable
 import scala.collection.mutable.{StringBuilder, ListBuffer}
 
-import org.apache.spark.Logging
+import org.apache.spark.{SparkException, Logging}
 import org.apache.spark.scheduler.StageInfo
 import org.apache.spark.storage.StorageLevel
 
@@ -197,7 +197,8 @@ private[ui] object RDDOperationGraph extends Logging {
     } catch {
       case oom: OutOfMemoryError =>
         logError(s"Failed to create graph for job in $cluster.id. Not enough heap space.")
-        ""
+        throw new SparkException(s"Failed to create graph for job in $cluster.id. " +
+          s"Not enough heap space.")
       case _: Exception =>
         logError(s"Failed to create graph for job in $cluster.id.")
         ""
