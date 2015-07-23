@@ -19,10 +19,12 @@ package org.apache.spark.streaming.scheduler
 
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.time.SpanSugar._
-import org.apache.spark.streaming._
+
 import org.apache.spark.SparkConf
+import org.apache.spark.streaming._
 import org.apache.spark.streaming.receiver._
 import org.apache.spark.streaming.dstream.ReceiverInputDStream
+import org.apache.spark.storage.StorageLevel
 
 /** Testsuite for receiver scheduling */
 class ReceiverTrackerSuite extends TestSuiteBase {
@@ -85,3 +87,18 @@ private class RateLimitInputDStream(@transient ssc_ : StreamingContext)
  *       one on the executor side and we won't be able to read its rate limit.
  */
 private object SingletonDummyReceiver extends DummyReceiver(0)
+
+/**
+ * Dummy receiver implementation
+ */
+private class DummyReceiver(receiverId: Int, host: Option[String] = None)
+  extends Receiver[Int](StorageLevel.MEMORY_ONLY) {
+
+  setReceiverId(receiverId)
+
+  override def onStart(): Unit = {}
+
+  override def onStop(): Unit = {}
+
+  override def preferredLocation: Option[String] = host
+}

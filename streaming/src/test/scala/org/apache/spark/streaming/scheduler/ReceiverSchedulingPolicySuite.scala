@@ -20,8 +20,6 @@ package org.apache.spark.streaming.scheduler
 import scala.collection.mutable
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.storage.StorageLevel
-import org.apache.spark.streaming.receiver.Receiver
 
 class ReceiverSchedulingPolicySuite extends SparkFunSuite {
 
@@ -129,19 +127,4 @@ class ReceiverSchedulingPolicySuite extends SparkFunSuite {
       assert(executors.isEmpty)
     }
   }
-}
-
-/**
- * Dummy receiver implementation
- */
-private class DummyReceiver(receiverId: Int, host: Option[String] = None)
-  extends Receiver[Int](StorageLevel.MEMORY_ONLY) {
-
-  setReceiverId(receiverId)
-
-  override def onStart(): Unit = {}
-
-  override def onStop(): Unit = {}
-
-  override def preferredLocation: Option[String] = host
 }
