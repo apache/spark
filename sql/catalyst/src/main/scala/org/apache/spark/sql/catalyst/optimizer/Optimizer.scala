@@ -31,8 +31,14 @@ import org.apache.spark.sql.types._
 
 abstract class Optimizer extends RuleExecutor[LogicalPlan]
 
-object DefaultOptimizer extends Optimizer {
-  val batches =
+class DefaultOptimizer extends Optimizer {
+
+  /**
+   * Override to provide additional rules for the "Operator Optimizations" batch.
+   */
+  val extendedOperatorOptimizationRules: Seq[Rule[LogicalPlan]] = Nil
+
+  lazy val batches =
     // SubQueries are only needed for analysis and can be removed before execution.
     Batch("Remove SubQueries", FixedPoint(100),
       EliminateSubQueries) ::
@@ -41,26 +47,27 @@ object DefaultOptimizer extends Optimizer {
       RemoveLiteralFromGroupExpressions) ::
     Batch("Operator Optimizations", FixedPoint(100),
       // Operator push down
-      SetOperationPushDown,
-      SamplePushDown,
-      PushPredicateThroughJoin,
-      PushPredicateThroughProject,
-      PushPredicateThroughGenerate,
-      ColumnPruning,
+      SetOperationPushDown ::
+      SamplePushDown ::
+      PushPredicateThroughJoin ::
+      PushPredicateThroughProject ::
+      PushPredicateThroughGenerate ::
+      ColumnPruning ::
       // Operator combine
-      ProjectCollapsing,
-      CombineFilters,
-      CombineLimits,
+      ProjectCollapsing ::
+      CombineFilters ::
+      CombineLimits ::
       // Constant folding
-      NullPropagation,
-      OptimizeIn,
-      ConstantFolding,
-      LikeSimplification,
-      BooleanSimplification,
-      RemovePositive,
-      SimplifyFilters,
-      SimplifyCasts,
-      SimplifyCaseConversionExpressions) ::
+      NullPropagation ::
+      OptimizeIn ::
+      ConstantFolding ::
+      LikeSimplification ::
+      BooleanSimplification ::
+      RemovePositive ::
+      SimplifyFilters ::
+      SimplifyCasts ::
+      SimplifyCaseConversionExpressions ::
+      extendedOperatorOptimizationRules.toList : _*) ::
     Batch("Decimal Optimizations", FixedPoint(100),
       DecimalAggregates) ::
     Batch("LocalRelation", FixedPoint(100),
