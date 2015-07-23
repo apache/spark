@@ -1067,6 +1067,23 @@
             <artifactId>calcite-avatica</artifactId>
           </exclusion>
             -->
+          <!-- come in with calcite -->
+          <exclusion>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-annotations</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-core</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.pentaho</groupId>
+            <artifactId>jpentaho-aggdesigner-algorithm</artifactId>
+          </exclusion>
           <!-- excluded to keep out transitive dependencies -->
           <exclusion>
             <groupId>org.apache.zookeeper</groupId>
