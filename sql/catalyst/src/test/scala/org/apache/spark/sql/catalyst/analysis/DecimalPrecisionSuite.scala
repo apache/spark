@@ -129,9 +129,18 @@ class DecimalPrecisionSuite extends SparkFunSuite with BeforeAndAfter {
     for (expr <- Seq(d1, d2, i, u)) {
       checkType(Add(expr, u), DecimalType.Maximum)
       checkType(Subtract(expr, u), DecimalType.Maximum)
-      checkType(Multiply(expr, u), DecimalType.Maximum)
-      checkType(Divide(expr, u), DecimalType.Maximum)
     }
+
+    checkType(Multiply(d1, u), DecimalType(38, 19))
+    checkType(Multiply(d2, u), DecimalType(38, 20))
+    checkType(Multiply(i, u), DecimalType(38, 18))
+    checkType(Multiply(u, u), DecimalType(38, 36))
+
+    checkType(Divide(u, d1), DecimalType(38, 21))
+    checkType(Divide(u, d2), DecimalType(38, 24))
+    checkType(Divide(u, i), DecimalType(38, 29))
+    checkType(Divide(u, u), DecimalType(38, 38))
+
     checkType(Remainder(d1, u), DecimalType(19, 18))
     checkType(Remainder(d2, u), DecimalType(21, 18))
     checkType(Remainder(i, u), DecimalType(28, 18))
