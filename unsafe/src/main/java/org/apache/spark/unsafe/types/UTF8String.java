@@ -644,7 +644,6 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
     if (numBytes == 0) {
       return UTF8String.fromBytes(new byte[0]);
     }
-    String tmp;
     byte data[] = {'0', '0', '0', '0'};
     char ch;
     int idx = 0;
@@ -714,8 +713,7 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
           continue;
         }
         if (ch - '0' > 0) {
-          tmp = Character.toString(ch);
-          System.arraycopy(tmp.getBytes(), 0, data, j, 1);
+          data[j] = (byte)ch;
           j += 1;
         }
       }
