@@ -319,6 +319,8 @@ class Connection(Base):
                 return hooks.HiveServer2Hook(hiveserver2_conn_id=self.conn_id)
             elif self.conn_type == 'sqlite':
                 return hooks.SqliteHook(sqlite_conn_id=self.conn_id)
+            elif self.conn_type == 'jdbc':
+                return hooks.JdbcHook(conn_id=self.conn_id)
         except:
             return None
 
@@ -440,7 +442,7 @@ class TaskInstance(Base):
         force = "--force" if force else ""
         local = "--local" if local else ""
         task_start_date = \
-            "-s " + task_start_date.isoformat()  if task_start_date else ""
+            "-s " + task_start_date.isoformat() if task_start_date else ""
         raw = "--raw" if raw else ""
         subdir = ""
         if not pickle and self.task.dag and self.task.dag.full_filepath:
@@ -572,6 +574,8 @@ class TaskInstance(Base):
             return False
         elif self.task.end_date and self.execution_date > self.task.end_date:
             return False
+        elif self.state == State.SKIPPED:
+            return False
         elif (
                 self.state in State.runnable() and
                 self.are_dependencies_met(
@@ -659,9 +663,9 @@ class TaskInstance(Base):
                 session
                 .query(
                     func.sum(
-                        case([(TI.state==State.SUCCESS, 1)], else_=0)),
+                        case([(TI.state == State.SUCCESS, 1)], else_=0)),
                     func.sum(
-                        case([(TI.state==State.SKIPPED, 1)], else_=0)),
+                        case([(TI.state == State.SKIPPED, 1)], else_=0)),
                     func.count(TI.task_id),
                 )
                 .filter(
@@ -804,9 +808,11 @@ class TaskInstance(Base):
                     msg = "Executing "
                 msg += "{self.task} on {self.execution_date}"
 
+            context = {}
             try:
                 logging.info(msg.format(self=self))
                 if not mark_success:
+                    context = self.get_template_context()
 
                     task_copy = copy.copy(task)
                     self.task = task_copy
@@ -819,7 +825,6 @@ class TaskInstance(Base):
                     signal.signal(signal.SIGTERM, signal_handler)
 
                     self.render_templates()
-                    context = self.get_template_context()
                     settings.policy(task_copy)
                     task_copy.pre_execute(context=context)
 
@@ -833,7 +838,7 @@ class TaskInstance(Base):
                         task_copy.execute(context=context)
                     task_copy.post_execute(context=context)
             except (Exception, StandardError, KeyboardInterrupt) as e:
-                self.record_failure(e, test_mode)
+                self.handle_failure(e, test_mode, context)
                 raise
 
             # Recording SUCCESS
@@ -845,9 +850,17 @@ class TaskInstance(Base):
                 session.add(Log(State.SUCCESS, self))
                 session.merge(self)
 
+            # Success callback
+            try:
+                if task.on_success_callback:
+                    task.on_success_callback(context)
+            except Exception as e3:
+                logging.error("Failed when executing success callback")
+                logging.exception(e3)
+
         session.commit()
 
-    def record_failure(self, error, test_mode=False):
+    def handle_failure(self, error, test_mode, context):
         logging.exception(error)
         task = self.task
         session = settings.Session()
@@ -869,7 +882,17 @@ class TaskInstance(Base):
         except Exception as e2:
             logging.error(
                 'Failed to send email to: ' + str(task.email))
-            logging.error(str(e2))
+            logging.exception(e2)
+
+        # Handling callbacks pessimistically
+        try:
+            if self.state == State.UP_FOR_RETRY and task.on_retry_callback:
+                task.on_retry_callback(context)
+            if self.state == State.FAILED and task.on_failure_callback:
+                task.on_failure_callback(context)
+        except Exception as e3:
+            logging.error("Failed at executing callback")
+            logging.exception(e3)
 
         if not test_mode:
             session.merge(self)
@@ -911,7 +934,8 @@ class TaskInstance(Base):
             'task': task,
             'task_instance': self,
             'ti': self,
-            'task_instance_key_str': ti_key_str
+            'task_instance_key_str': ti_key_str,
+            'conf': conf,
         }
 
     def render_templates(self):
@@ -932,7 +956,8 @@ class TaskInstance(Base):
                     result = [rt(s, jinja_context) for s in content]
                 elif isinstance(content, dict):
                     result = {
-                        k: rt(content[k], jinja_context) for k in content}
+                        k: rt(v, jinja_context)
+                        for k, v in content.item()}
                 else:
                     raise AirflowException("Type not supported for templating")
                 setattr(task, attr, result)
@@ -1063,6 +1088,17 @@ class BaseOperator(object):
     :param execution_timeout: max time allowed for the execution of
         this task instance, if it goes beyond it will raise and fail.
     :type execution_timeout: datetime.timedelta
+    :param on_failure_callback: a function to be called when a task instance
+        of this task fails. a context dictionary is passed as a single
+        parameter to this function. Context contains references to related
+        objects to the task instance and is documented under the macros
+        section of the API.
+    :type on_failure_callback: callable
+    :param on_retry_callback: much like the ``on_failure_callback`` excepts
+        that it is executed when retries occur.
+    :param on_success_callback: much like the ``on_failure_callback`` excepts
+        that it is executed when the task succeeds.
+    :type on_success_callback: callable
     """
 
     # For derived classes to define which fields will get jinjaified
@@ -1097,6 +1133,9 @@ class BaseOperator(object):
             pool=None,
             sla=None,
             execution_timeout=None,
+            on_failure_callback=None,
+            on_success_callback=None,
+            on_retry_callback=None,
             *args,
             **kwargs):
 
@@ -1117,6 +1156,9 @@ class BaseOperator(object):
         self.pool = pool
         self.sla = sla
         self.execution_timeout = execution_timeout
+        self.on_failure_callback = on_failure_callback
+        self.on_success_callback = on_success_callback
+        self.on_retry_callback = on_retry_callback
         if isinstance(retry_delay, timedelta):
             self.retry_delay = retry_delay
         else:
@@ -1380,10 +1422,12 @@ class BaseOperator(object):
             l.append(item)
 
     def _set_relatives(self, task_or_task_list, upstream=False):
-        if isinstance(task_or_task_list, BaseOperator):
-            task_or_task_list = [task_or_task_list]
-        for task in task_or_task_list:
-            if not isinstance(task_or_task_list, list):
+        try:
+            task_list = list(task_or_task_list)
+        except TypeError:
+            task_list = [task_or_task_list]
+        for task in task_list:
+            if not isinstance(task, BaseOperator):
                 raise AirflowException('Expecting a task')
             if upstream:
                 self.append_only_new(task._downstream_list, self)

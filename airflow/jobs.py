@@ -270,8 +270,14 @@ class SchedulerJob(BaseJob):
         """.format(**locals())
         emails = []
         for t in dag.tasks:
-            if t.email and t.email not in emails:
-                emails.append(t.email)
+            if t.email:
+                if isinstance(t.email, basestring):
+                    l = [t.email]
+                elif isinstance(t.email, (list, tuple)):
+                    l = t.email
+                for email in l:
+                    if email not in emails:
+                        emails.append(email)
         if emails and len(slas):
             utils.send_email(
                 emails,

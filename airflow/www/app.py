@@ -574,6 +574,7 @@ class Airflow(BaseView):
     def chart(self):
         session = settings.Session()
         chart_id = request.args.get('chart_id')
+        embed = request.args.get('embed')
         chart = session.query(models.Chart).filter_by(id=chart_id).all()[0]
         session.expunge_all()
         session.commit()
@@ -593,7 +594,8 @@ class Airflow(BaseView):
             chart=chart,
             title="Airflow - Chart",
             sql=sql,
-            label=chart.label)
+            label=chart.label,
+            embed=embed)
 
     @expose('/dag_stats')
     @login_required
@@ -1590,6 +1592,7 @@ class ConnectionModelView(wwwutils.SuperUserMixin, AirflowModelView):
             ('hive_cli', 'Hive Client Wrapper',),
             ('hive_metastore', 'Hive Metastore Thrift',),
             ('hiveserver2', 'Hive Server 2 Thrift',),
+            ('jdbc', 'Jdbc Connection',),
             ('mysql', 'MySQL',),
             ('postgres', 'Postgres',),
             ('oracle', 'Oracle',),

@@ -24,6 +24,7 @@
   <body>
     {% block page_body %}
     <div class="container">
+    {% block navbar %}
       <nav class="navbar navbar-inverse navbar-fixed-top" role="navigation">
           <div class="container">
             <!-- Brand and toggle get grouped for better mobile display -->
@@ -59,7 +60,7 @@
             </div>
             </div>
       </nav>
-
+      {% endblock %}
       {% block messages %}
       {{ layout.messages() }}
       {% endblock %}
