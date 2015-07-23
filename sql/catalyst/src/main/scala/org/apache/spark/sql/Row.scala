@@ -364,13 +364,33 @@ trait Row extends Serializable {
     false
   }
 
-  protected def canEqual(other: Any) =
-    other.isInstanceOf[Row] && !other.isInstanceOf[InternalRow]
+  /**
+   * Returns true if we can check equality for these 2 rows.
+   * Equality check between external row and internal row is not allowed.
+   * Here we do this check to prevent call `equals` on external row with internal row.
+   */
+  protected def canEqual(other: Row) = {
+    // Note that `Row` is not only the interface of external row but also the parent
+    // of `InternalRow`, so we have to ensure `other` is not a internal row here to prevent
+    // call `equals` on external row with internal row.
+    // `InternalRow` overrides canEqual, and these two canEquals together makes sure that
+    // equality check between external Row and InternalRow will always fail.
+    // In the future, InternalRow should not extend Row. In that case, we can remove these
+    // canEqual methods.
+    !other.isInstanceOf[InternalRow]
+  }
 
   override def equals(o: Any): Boolean = {
-    if (o == null || !canEqual(o)) return false
-
+    if (!o.isInstanceOf[Row]) return false
     val other = o.asInstanceOf[Row]
+
+    if (!canEqual(other)) {
+      throw new UnsupportedOperationException(
+        "cannot check equality between external and internal rows")
+    }
+
+    if (other eq null) return false
+
     if (length != other.length) {
       return false
     }
@@ -383,20 +403,28 @@ trait Row extends Serializable {
       if (!isNullAt(i)) {
         val o1 = get(i)
         val o2 = other.get(i)
-        if (o1.isInstanceOf[Array[Byte]]) {
-          // handle equality of Array[Byte]
-          val b1 = o1.asInstanceOf[Array[Byte]]
-          if (!o2.isInstanceOf[Array[Byte]] ||
-            !java.util.Arrays.equals(b1, o2.asInstanceOf[Array[Byte]])) {
+        o1 match {
+          case b1: Array[Byte] =>
+            if (!o2.isInstanceOf[Array[Byte]] ||
+                !java.util.Arrays.equals(b1, o2.asInstanceOf[Array[Byte]])) {
+              return false
+            }
+          case f1: Float if java.lang.Float.isNaN(f1) =>
+            if (!o2.isInstanceOf[Float] || ! java.lang.Float.isNaN(o2.asInstanceOf[Float])) {
+              return false
+            }
+          case d1: Double if java.lang.Double.isNaN(d1) =>
+            if (!o2.isInstanceOf[Double] || ! java.lang.Double.isNaN(o2.asInstanceOf[Double])) {
+              return false
+            }
+          case _ => if (o1 != o2) {
             return false
           }
-        } else if (o1 != o2) {
-          return false
         }
       }
       i += 1
     }
-    return true
+    true
   }
 
   /* ---------------------- utility methods for Scala ---------------------- */

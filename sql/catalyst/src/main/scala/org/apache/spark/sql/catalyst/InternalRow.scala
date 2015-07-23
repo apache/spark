@@ -27,11 +27,12 @@ import org.apache.spark.unsafe.types.UTF8String
  */
 abstract class InternalRow extends Row {
 
+  def getUTF8String(i: Int): UTF8String = getAs[UTF8String](i)
+
+  def getBinary(i: Int): Array[Byte] = getAs[Array[Byte]](i)
+
   // This is only use for test
-  override def getString(i: Int): String = {
-    val str = getAs[UTF8String](i)
-    if (str != null) str.toString else null
-  }
+  override def getString(i: Int): String = getAs[UTF8String](i).toString
 
   // These expensive API should not be used internally.
   final override def getDecimal(i: Int): java.math.BigDecimal =
@@ -54,7 +55,12 @@ abstract class InternalRow extends Row {
   // A default implementation to change the return type
   override def copy(): InternalRow = this
 
-  protected override def canEqual(other: Any) = other.isInstanceOf[InternalRow]
+  /**
+   * Returns true if we can check equality for these 2 rows.
+   * Equality check between external row and internal row is not allowed.
+   * Here we do this check to prevent call `equals` on internal row with external row.
+   */
+  protected override def canEqual(other: Row) = other.isInstanceOf[InternalRow]
 
   // Custom hashCode function that matches the efficient code generated version.
   override def hashCode: Int = {

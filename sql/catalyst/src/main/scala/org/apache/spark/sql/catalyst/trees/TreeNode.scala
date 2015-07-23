@@ -54,8 +54,8 @@ object CurrentOrigin {
   }
 }
 
-abstract class TreeNode[BaseType <: TreeNode[BaseType]] {
-  self: BaseType with Product =>
+abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
+  self: BaseType =>
 
   val origin: Origin = CurrentOrigin.get
 
