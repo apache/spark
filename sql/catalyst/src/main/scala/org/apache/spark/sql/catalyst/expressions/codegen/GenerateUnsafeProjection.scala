@@ -74,10 +74,6 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
           }"""
     }.mkString("\n          ")
 
-    val mutableStates = ctx.mutableStates.map { case (javaType, variableName, initialValue) =>
-      s"private $javaType $variableName = $initialValue;"
-    }.mkString("\n      ")
-
     val code = s"""
     private $exprType[] expressions;
 
@@ -90,10 +86,11 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
 
       private UnsafeRow target = new UnsafeRow();
       private byte[] buffer = new byte[64];
+      ${declareMutableStates(ctx)}
 
-      $mutableStates
-
-      public SpecificProjection() {}
+      public SpecificProjection() {
+        ${initMutableStates(ctx)}
+      }
 
       // Scala.Function1 need this
       public Object apply(Object row) {
@@ -101,7 +98,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
       }
 
       public UnsafeRow apply(InternalRow i) {
-        ${allExprs}
+        $allExprs
 
         // additionalSize had '+' in the beginning
         int numBytes = $fixedSize $additionalSize;
@@ -109,7 +106,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
           buffer = new byte[numBytes];
         }
         target.pointTo(buffer, org.apache.spark.unsafe.PlatformDependent.BYTE_ARRAY_OFFSET,
-          ${expressions.size}, numBytes, null);
+          ${expressions.size}, numBytes);
         int cursor = $fixedSize;
         $writers
         return target;

@@ -160,7 +160,7 @@ class DataFrameFunctionsSuite extends QueryTest {
   test("misc md5 function") {
     val df = Seq(("ABC", Array[Byte](1, 2, 3, 4, 5, 6))).toDF("a", "b")
     checkAnswer(
-      df.select(md5($"a"), md5("b")),
+      df.select(md5($"a"), md5($"b")),
       Row("902fbdd2b1df0c4f70b4a5d23525e932", "6ac1e56bc78f031059be7be854522c4c"))
 
     checkAnswer(
@@ -171,7 +171,7 @@ class DataFrameFunctionsSuite extends QueryTest {
   test("misc sha1 function") {
     val df = Seq(("ABC", "ABC".getBytes)).toDF("a", "b")
     checkAnswer(
-      df.select(sha1($"a"), sha1("b")),
+      df.select(sha1($"a"), sha1($"b")),
       Row("3c01bdbb26f358bab27f267924aa2c9a03fcfdb8", "3c01bdbb26f358bab27f267924aa2c9a03fcfdb8"))
 
     val dfEmpty = Seq(("", "".getBytes)).toDF("a", "b")
@@ -183,7 +183,7 @@ class DataFrameFunctionsSuite extends QueryTest {
   test("misc sha2 function") {
     val df = Seq(("ABC", Array[Byte](1, 2, 3, 4, 5, 6))).toDF("a", "b")
     checkAnswer(
-      df.select(sha2($"a", 256), sha2("b", 256)),
+      df.select(sha2($"a", 256), sha2($"b", 256)),
       Row("b5d4045c3f466fa91fe2cc6abe79232a1a57cdf104f7a26e716e0a1e2789df78",
         "7192385c3c0605de55bb9476ce1d90748190ecb32a8eed7f5207b30cf6a1fe89"))
 
@@ -200,7 +200,7 @@ class DataFrameFunctionsSuite extends QueryTest {
   test("misc crc32 function") {
     val df = Seq(("ABC", Array[Byte](1, 2, 3, 4, 5, 6))).toDF("a", "b")
     checkAnswer(
-      df.select(crc32($"a"), crc32("b")),
+      df.select(crc32($"a"), crc32($"b")),
       Row(2743272264L, 2180413220L))
 
     checkAnswer(
@@ -267,4 +267,35 @@ class DataFrameFunctionsSuite extends QueryTest {
     )
   }
 
+  test("array size function") {
+    val df = Seq(
+      (Array[Int](1, 2), "x"),
+      (Array[Int](), "y"),
+      (Array[Int](1, 2, 3), "z")
+    ).toDF("a", "b")
+    checkAnswer(
+      df.select(size("a")),
+      Seq(Row(2), Row(0), Row(3))
+    )
+    checkAnswer(
+      df.selectExpr("size(a)"),
+      Seq(Row(2), Row(0), Row(3))
+    )
+  }
+
+  test("map size function") {
+    val df = Seq(
+      (Map[Int, Int](1 -> 1, 2 -> 2), "x"),
+      (Map[Int, Int](), "y"),
+      (Map[Int, Int](1 -> 1, 2 -> 2, 3 -> 3), "z")
+    ).toDF("a", "b")
+    checkAnswer(
+      df.select(size("a")),
+      Seq(Row(2), Row(0), Row(3))
+    )
+    checkAnswer(
+      df.selectExpr("size(a)"),
+      Seq(Row(2), Row(0), Row(3))
+    )
+  }
 }

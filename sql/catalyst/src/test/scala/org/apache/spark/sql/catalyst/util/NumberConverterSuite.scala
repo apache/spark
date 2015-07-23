@@ -17,41 +17,24 @@
 
 package org.apache.spark.sql.catalyst.util
 
-import org.scalatest.Matchers
-
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.util.NumberConverter.convert
+import org.apache.spark.unsafe.types.UTF8String
 
-class ObjectPoolSuite extends SparkFunSuite with Matchers {
+class NumberConverterSuite extends SparkFunSuite {
 
-  test("pool") {
-    val pool = new ObjectPool(1)
-    assert(pool.put(1) === 0)
-    assert(pool.put("hello") === 1)
-    assert(pool.put(false) === 2)
-
-    assert(pool.get(0) === 1)
-    assert(pool.get(1) === "hello")
-    assert(pool.get(2) === false)
-    assert(pool.size() === 3)
-
-    pool.replace(1, "world")
-    assert(pool.get(1) === "world")
-    assert(pool.size() === 3)
+  private[this] def checkConv(n: String, fromBase: Int, toBase: Int, expected: String): Unit = {
+    assert(convert(UTF8String.fromString(n).getBytes, fromBase, toBase) ===
+      UTF8String.fromString(expected))
   }
 
-  test("unique pool") {
-    val pool = new UniqueObjectPool(1)
-    assert(pool.put(1) === 0)
-    assert(pool.put("hello") === 1)
-    assert(pool.put(1) === 0)
-    assert(pool.put("hello") === 1)
-
-    assert(pool.get(0) === 1)
-    assert(pool.get(1) === "hello")
-    assert(pool.size() === 2)
-
-    intercept[UnsupportedOperationException] {
-      pool.replace(1, "world")
-    }
+  test("convert") {
+    checkConv("3", 10, 2, "11")
+    checkConv("-15", 10, -16, "-F")
+    checkConv("-15", 10, 16, "FFFFFFFFFFFFFFF1")
+    checkConv("big", 36, 16, "3A48")
+    checkConv("9223372036854775807", 36, 16, "FFFFFFFFFFFFFFFF")
+    checkConv("11abc", 10, 16, "B")
   }
+
 }
