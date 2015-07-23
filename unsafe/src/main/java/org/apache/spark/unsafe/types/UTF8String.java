@@ -146,20 +146,8 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
     if (until <= start || start >= numBytes) {
       return fromBytes(new byte[0]);
     }
-
-    int i = 0;
-    int c = 0;
-    while (i < numBytes && c < start) {
-      i += numBytesForFirstByte(getByte(i));
-      c += 1;
-    }
-
-    int j = i;
-    while (i < numBytes && c < until) {
-      i += numBytesForFirstByte(getByte(i));
-      c += 1;
-    }
-
+    int j = firstByteIndex(start);
+    int i = firstByteIndex(until);
     byte[] bytes = new byte[i - j];
     copyMemory(base, offset + j, bytes, BYTE_ARRAY_OFFSET, i - j);
     return fromBytes(bytes);
@@ -174,12 +162,7 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
       return fromBytes(new byte[0]);
     }
 
-    int i = 0;
-    int c = 0;
-    while (i < numBytes && c < start) {
-      i += numBytesForFirstByte(getByte(i));
-      c += 1;
-    }
+    int i = firstByteIndex(start);
 
     byte[] bytes = new byte[numBytes - i];
     copyMemory(base, offset + i, bytes, BYTE_ARRAY_OFFSET, numBytes - i);
@@ -351,13 +334,8 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
       return 0;
     }
 
-    // locate to the start position.
-    int i = 0; // position in byte
-    int c = 0; // position in character
-    while (i < numBytes && c < start) {
-      i += numBytesForFirstByte(getByte(i));
-      c += 1;
-    }
+    int i = firstByteIndex(start); // position in byte
+    int c = start; // position in character
 
     do {
       if (i + v.numBytes > numBytes) {
@@ -399,17 +377,27 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
       }
       bytePos--;
     }
-    throw new RuntimeException("Invalid utf8 string");
+    throw new RuntimeException("Invalid UTF8 string");
   }
 
-  private int indexEnd(int startCodePoint) {
-    int i = numBytes -1; // position in byte
-    int c = numChars() - 1; // position in character
-    while (i >=0 && c > startCodePoint) {
-      i = firstOfCurrentCodePoint(i) - 1;
-      c -= 1;
+  // Locate to the start position in byte for a given code point
+  private int firstByteIndex(int codePoint) {
+    int i = 0; // position in byte
+    int c = 0; // position in character
+    while (i < numBytes && c < codePoint) {
+      i += numBytesForFirstByte(getByte(i));
+      c += 1;
+    }
+    if (i > numBytes) {
+      throw new StringIndexOutOfBoundsException(codePoint);
     }
     return i;
+  }
+
+  // Locate to the last position in byte for a given code point
+  private int lastByteIndex(int codePoint) {
+    int i = firstByteIndex(codePoint);
+    return i + numBytesForFirstByte(getByte(i)) - 1;
   }
 
   /**
@@ -431,7 +419,7 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
     if (numBytes == 0) {
       return -1;
     }
-    int fromIndexEnd = indexEnd(startCodePoint);
+    int fromIndexEnd = lastByteIndex(startCodePoint);
     do {
       if (fromIndexEnd - v.numBytes + 1 < 0 ) {
         return -1;
@@ -456,7 +444,6 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
    *
    * @param str  the String to check, may be null
    * @param searchStr  the String to find, may be null
-   * @param searchStrNumChars num of code ponts of the searchStr
    * @param ordinal  the n-th last <code>searchStr</code> to find
    * @return the n-th last index of the search String,
    *  <code>-1</code> if no match or <code>null</code> string input
@@ -464,17 +451,19 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
   public static int lastOrdinalIndexOf(
           UTF8String str,
           UTF8String searchStr,
-          int searchStrNumChars,
           int ordinal) {
-    return doOrdinalIndexOf(str, searchStr, searchStrNumChars, ordinal, true);
+    if (str == null || searchStr == null) {
+      return -1;
+    }
+    return doOrdinalIndexOf(str, searchStr, searchStr.numChars(), ordinal, true);
   }
+
   /**
    * Finds the n-th index within a String, handling <code>null</code>.
    * A <code>null</code> String will return <code>-1</code>
    *
    * @param str  the String to check, may be null
    * @param searchStr  the String to find, may be null
-   * @param searchStrNumChars num of code points of searchStr
    * @param ordinal  the n-th <code>searchStr</code> to find
    * @return the n-th index of the search String,
    *  <code>-1</code> if no match or <code>null</code> string input
@@ -482,9 +471,11 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
   public static int ordinalIndexOf(
           UTF8String str,
           UTF8String searchStr,
-          int searchStrNumChars,
           int ordinal) {
-    return doOrdinalIndexOf(str, searchStr, searchStrNumChars, ordinal, false);
+    if (str == null || searchStr == null) {
+      return -1;
+    }
+    return doOrdinalIndexOf(str, searchStr, searchStr.numChars(), ordinal, false);
   }
 
   private static int doOrdinalIndexOf(
@@ -526,19 +517,22 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
    * right) is returned. substring_index performs a case-sensitive match when searching for delim.
    */
   public static UTF8String subStringIndex(UTF8String str, UTF8String delim, int count) {
+    if (str == null || delim == null) {
+      return null;
+    }
     if (str.numBytes == 0 || delim.numBytes == 0 || count == 0) {
       return UTF8String.EMPTY_UTF8;
     }
     int delimNumChars = delim.numChars();
     if (count > 0) {
-      int idx = ordinalIndexOf(str, delim, delimNumChars, count);
+      int idx = doOrdinalIndexOf(str, delim, delimNumChars, count, false);
       if (idx != -1) {
         return str.substring(0, idx);
       } else {
         return str;
       }
     } else {
-      int idx = lastOrdinalIndexOf(str, delim, delimNumChars, -count);
+      int idx = doOrdinalIndexOf(str, delim, delimNumChars, -count, true);
       if (idx != -1) {
         return str.substring(idx + delimNumChars);
       } else {

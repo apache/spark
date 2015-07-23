@@ -361,7 +361,7 @@ case class StringInstr(str: Expression, substr: Expression)
  * right) is returned. substring_index performs a case-sensitive match when searching for delim.
  */
 case class Substring_index(strExpr: Expression, delimExpr: Expression, countExpr: Expression)
- extends Expression with ImplicitCastInputTypes with CodegenFallback {
+ extends Expression with ImplicitCastInputTypes {
 
   override def dataType: DataType = StringType
   override def inputTypes: Seq[DataType] = Seq(StringType, StringType, IntegerType)
@@ -384,6 +384,30 @@ case class Substring_index(strExpr: Expression, delimExpr: Expression, countExpr
       }
     }
     null
+  }
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    val str = strExpr.gen(ctx)
+    val delim = delimExpr.gen(ctx)
+    val count = countExpr.gen(ctx)
+    val resultCode =
+      s"""org.apache.spark.unsafe.types.UTF8String.subStringIndex(
+         |${str.primitive}, ${delim.primitive}, ${count.primitive})""".stripMargin
+    s"""
+      ${str.code}
+      boolean ${ev.isNull} = true;
+      ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
+      if (!${str.isNull}) {
+        ${delim.code}
+        if (!${delim.isNull}) {
+          ${count.code}
+          if (!${count.isNull}) {
+            ${ev.isNull} = false;
+            ${ev.primitive} = $resultCode;
+          }
+        }
+      }
+    """
   }
 }
 

@@ -1783,7 +1783,6 @@ object functions {
    * right) is returned. substring_index performs a case-sensitive match when searching for delim.
    *
    * @group string_funcs
-   * @since 1.5.0
    */
   def substring_index(str: String, delim: String, count: Int): Column =
     substring_index(Column(str), delim, count)
@@ -1795,7 +1794,6 @@ object functions {
    * right) is returned. substring_index performs a case-sensitive match when searching for delim.
    *
    * @group string_funcs
-   * @since 1.5.0
    */
   def substring_index(str: Column, delim: String, count: Int): Column =
     Substring_index(str.expr, lit(delim).expr, lit(count).expr)
