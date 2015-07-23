@@ -38,7 +38,6 @@ import org.apache.spark.partial.{ApproximateActionListener, ApproximateEvaluator
 import org.apache.spark.rdd.RDD
 import org.apache.spark.rpc.RpcTimeout
 import org.apache.spark.storage._
-import org.apache.spark.unsafe.memory.TaskMemoryManager
 import org.apache.spark.util._
 import org.apache.spark.storage.BlockManagerMessages.BlockManagerHeartbeat
 
@@ -127,10 +126,6 @@ class DAGScheduler(
   // A closure serializer that we reuse.
   // This is only safe because DAGScheduler runs in a single thread.
   private val closureSerializer = SparkEnv.get.closureSerializer.newInstance()
-
-
-  /** If enabled, we may run certain actions like take() and first() locally. */
-  private val localExecutionEnabled = sc.getConf.getBoolean("spark.localExecution.enabled", false)
 
   /** If enabled, FetchFailed will not cause stage retry, in order to surface the problem. */
   private val disallowStageRetryForTest = sc.getConf.getBoolean("spark.test.noStageRetry", false)
@@ -515,7 +510,6 @@ class DAGScheduler(
       func: (TaskContext, Iterator[T]) => U,
       partitions: Seq[Int],
       callSite: CallSite,
-      allowLocal: Boolean,
       resultHandler: (Int, U) => Unit,
       properties: Properties): JobWaiter[U] = {
     // Check to make sure we are not launching a task on a partition that does not exist.
@@ -535,7 +529,7 @@ class DAGScheduler(
     val func2 = func.asInstanceOf[(TaskContext, Iterator[_]) => _]
     val waiter = new JobWaiter(this, jobId, partitions.size, resultHandler)
     eventProcessLoop.post(JobSubmitted(
-      jobId, rdd, func2, partitions.toArray, allowLocal, callSite, waiter,
+      jobId, rdd, func2, partitions.toArray, callSite, waiter,
       SerializationUtils.clone(properties)))
     waiter
   }
@@ -545,11 +539,10 @@ class DAGScheduler(
       func: (TaskContext, Iterator[T]) => U,
       partitions: Seq[Int],
       callSite: CallSite,
-      allowLocal: Boolean,
       resultHandler: (Int, U) => Unit,
       properties: Properties): Unit = {
     val start = System.nanoTime
-    val waiter = submitJob(rdd, func, partitions, callSite, allowLocal, resultHandler, properties)
+    val waiter = submitJob(rdd, func, partitions, callSite, resultHandler, properties)
     waiter.awaitResult() match {
       case JobSucceeded =>
         logInfo("Job %d finished: %s, took %f s".format
@@ -576,8 +569,7 @@ class DAGScheduler(
     val partitions = (0 until rdd.partitions.size).toArray
     val jobId = nextJobId.getAndIncrement()
     eventProcessLoop.post(JobSubmitted(
-      jobId, rdd, func2, partitions, allowLocal = false, callSite, listener,
-      SerializationUtils.clone(properties)))
+      jobId, rdd, func2, partitions, callSite, listener, SerializationUtils.clone(properties)))
     listener.awaitResult()    // Will throw an exception if the job fails
   }
 
@@ -654,74 +646,6 @@ class DAGScheduler(
     }
   }
 
-  /**
-   * Run a job on an RDD locally, assuming it has only a single partition and no dependencies.
-   * We run the operation in a separate thread just in case it takes a bunch of time, so that we
-   * don't block the DAGScheduler event loop or other concurrent jobs.
-   */
-  protected def runLocally(job: ActiveJob) {
-    logInfo("Computing the requested partition locally")
-    new Thread("Local computation of job " + job.jobId) {
-      override def run() {
-        runLocallyWithinThread(job)
-      }
-    }.start()
-  }
-
-  // Broken out for easier testing in DAGSchedulerSuite.
-  protected def runLocallyWithinThread(job: ActiveJob) {
-    var jobResult: JobResult = JobSucceeded
-    try {
-      val rdd = job.finalStage.rdd
-      val split = rdd.partitions(job.partitions(0))
-      val taskMemoryManager = new TaskMemoryManager(env.executorMemoryManager)
-      val taskContext =
-        new TaskContextImpl(
-          job.finalStage.id,
-          job.partitions(0),
-          taskAttemptId = 0,
-          attemptNumber = 0,
-          taskMemoryManager = taskMemoryManager,
-          metricsSystem = env.metricsSystem,
-          runningLocally = true)
-      TaskContext.setTaskContext(taskContext)
-      try {
-        val result = job.func(taskContext, rdd.iterator(split, taskContext))
-        job.listener.taskSucceeded(0, result)
-      } finally {
-        taskContext.markTaskCompleted()
-        TaskContext.unset()
-        // Note: this memory freeing logic is duplicated in Executor.run(); when changing this,
-        // make sure to update both copies.
-        val freedMemory = taskMemoryManager.cleanUpAllAllocatedMemory()
-        if (freedMemory > 0) {
-          if (sc.getConf.getBoolean("spark.unsafe.exceptionOnMemoryLeak", false)) {
-            throw new SparkException(s"Managed memory leak detected; size = $freedMemory bytes")
-          } else {
-            logError(s"Managed memory leak detected; size = $freedMemory bytes")
-          }
-        }
-      }
-    } catch {
-      case e: Exception =>
-        val exception = new SparkDriverExecutionException(e)
-        jobResult = JobFailed(exception)
-        job.listener.jobFailed(exception)
-      case oom: OutOfMemoryError =>
-        val exception = new SparkException("Local job aborted due to out of memory error", oom)
-        jobResult = JobFailed(exception)
-        job.listener.jobFailed(exception)
-    } finally {
-      val s = job.finalStage
-      // clean up data structures that were populated for a local job,
-      // but that won't get cleaned up via the normal paths through
-      // completion events or stage abort
-      stageIdToStage -= s.id
-      jobIdToStageIds -= job.jobId
-      listenerBus.post(SparkListenerJobEnd(job.jobId, clock.getTimeMillis(), jobResult))
-    }
-  }
-
   /** Finds the earliest-created active job that needs the stage */
   // TODO: Probably should actually find among the active jobs that need this
   // stage the one with the highest priority (highest-priority pool, earliest created).
@@ -784,7 +708,6 @@ class DAGScheduler(
       finalRDD: RDD[_],
       func: (TaskContext, Iterator[_]) => _,
       partitions: Array[Int],
-      allowLocal: Boolean,
       callSite: CallSite,
       listener: JobListener,
       properties: Properties) {
@@ -802,29 +725,20 @@ class DAGScheduler(
     if (finalStage != null) {
       val job = new ActiveJob(jobId, finalStage, func, partitions, callSite, listener, properties)
       clearCacheLocs()
-      logInfo("Got job %s (%s) with %d output partitions (allowLocal=%s)".format(
-        job.jobId, callSite.shortForm, partitions.length, allowLocal))
+      logInfo("Got job %s (%s) with %d output partitions".format(
+        job.jobId, callSite.shortForm, partitions.length))
       logInfo("Final stage: " + finalStage + "(" + finalStage.name + ")")
       logInfo("Parents of final stage: " + finalStage.parents)
       logInfo("Missing parents: " + getMissingParentStages(finalStage))
-      val shouldRunLocally =
-        localExecutionEnabled && allowLocal && finalStage.parents.isEmpty && partitions.length == 1
       val jobSubmissionTime = clock.getTimeMillis()
-      if (shouldRunLocally) {
-        // Compute very short actions like first() or take() with no parent stages locally.
-        listenerBus.post(
-          SparkListenerJobStart(job.jobId, jobSubmissionTime, Seq.empty, properties))
-        runLocally(job)
-      } else {
-        jobIdToActiveJob(jobId) = job
-        activeJobs += job
-        finalStage.resultOfJob = Some(job)
-        val stageIds = jobIdToStageIds(jobId).toArray
-        val stageInfos = stageIds.flatMap(id => stageIdToStage.get(id).map(_.latestInfo))
-        listenerBus.post(
-          SparkListenerJobStart(job.jobId, jobSubmissionTime, stageInfos, properties))
-        submitStage(finalStage)
-      }
+      jobIdToActiveJob(jobId) = job
+      activeJobs += job
+      finalStage.resultOfJob = Some(job)
+      val stageIds = jobIdToStageIds(jobId).toArray
+      val stageInfos = stageIds.flatMap(id => stageIdToStage.get(id).map(_.latestInfo))
+      listenerBus.post(
+        SparkListenerJobStart(job.jobId, jobSubmissionTime, stageInfos, properties))
+      submitStage(finalStage)
     }
     submitWaitingStages()
   }
@@ -1486,9 +1400,8 @@ private[scheduler] class DAGSchedulerEventProcessLoop(dagScheduler: DAGScheduler
   }
 
   private def doOnReceive(event: DAGSchedulerEvent): Unit = event match {
-    case JobSubmitted(jobId, rdd, func, partitions, allowLocal, callSite, listener, properties) =>
-      dagScheduler.handleJobSubmitted(jobId, rdd, func, partitions, allowLocal, callSite,
-        listener, properties)
+    case JobSubmitted(jobId, rdd, func, partitions, callSite, listener, properties) =>
+      dagScheduler.handleJobSubmitted(jobId, rdd, func, partitions, callSite, listener, properties)
 
     case StageCancelled(stageId) =>
       dagScheduler.handleStageCancellation(stageId)

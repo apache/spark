@@ -239,6 +239,11 @@ case class GeneratedAggregate(
       StructType(fields)
     }
 
+    val schemaSupportsUnsafe: Boolean = {
+      UnsafeFixedWidthAggregationMap.supportsAggregationBufferSchema(aggregationBufferSchema) &&
+        UnsafeFixedWidthAggregationMap.supportsGroupKeySchema(groupKeySchema)
+    }
+
     child.execute().mapPartitions { iter =>
       // Builds a new custom class for holding the results of aggregation for a group.
       val initialValues = computeFunctions.flatMap(_.initialValues)
@@ -290,13 +295,14 @@ case class GeneratedAggregate(
 
         val resultProjection = resultProjectionBuilder()
         Iterator(resultProjection(buffer))
-      } else if (unsafeEnabled) {
+
+      } else if (unsafeEnabled && schemaSupportsUnsafe) {
         assert(iter.hasNext, "There should be at least one row for this path")
         log.info("Using Unsafe-based aggregator")
         val aggregationMap = new UnsafeFixedWidthAggregationMap(
-          newAggregationBuffer,
-          new UnsafeRowConverter(groupKeySchema),
-          new UnsafeRowConverter(aggregationBufferSchema),
+          newAggregationBuffer(EmptyRow),
+          aggregationBufferSchema,
+          groupKeySchema,
           TaskContext.get.taskMemoryManager(),
           1024 * 16, // initial capacity
           false // disable tracking of performance metrics
@@ -331,6 +337,9 @@ case class GeneratedAggregate(
           }
         }
       } else {
+        if (unsafeEnabled) {
+          log.info("Not using Unsafe-based aggregator because it is not supported for this schema")
+        }
         val buffers = new java.util.HashMap[InternalRow, MutableRow]()
 
         var currentRow: InternalRow = null
