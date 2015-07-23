@@ -69,11 +69,13 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
     sql("DROP TEMPORARY FUNCTION udtf_count2")
   }
 
-  createQueryTest("Test UDTF.close in Lateral Views",
-     """
-       |SELECT key, cc
-       |FROM src LATERAL VIEW udtf_count2(value) dd AS cc
-     """.stripMargin.replaceAll("[\r\n]+", "\n"), false) // false mean we have to keep the temp function in registry
+  createQueryTest(
+    "Test UDTF.close in Lateral Views",
+    """
+      |SELECT key, cc
+      |FROM src LATERAL VIEW udtf_count2(value) dd AS cc
+    """.stripMargin.replaceAll("[\r\n]+", "\n"),
+    false) // false mean we have to keep the temp function in registry
 
   createQueryTest("Test UDTF.close in SELECT",
      "SELECT udtf_count2(a) FROM (SELECT 1 AS a FROM src LIMIT 3) table", false)
