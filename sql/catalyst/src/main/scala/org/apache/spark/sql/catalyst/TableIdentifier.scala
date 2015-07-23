@@ -17,8 +17,11 @@
 
 package org.apache.spark.sql.catalyst
 
+/**
+ * Identifies a `table` in `database`.  If `database` is not defined, the current database is used.
+ */
 private[sql] case class TableIdentifier(table: String, database: Option[String] = None) {
-  def withDatabase(database: String) = this.copy(database = Some(database))
+  def withDatabase(database: String): TableIdentifier = this.copy(database = Some(database))
 
   def toSeq: Seq[String] = database.toSeq :+ table
 

@@ -22,12 +22,11 @@ import java.io.File
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
 
-import org.scalatest.FunSuite
-
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql._
 import org.apache.spark.sql.test.SQLTestUtils
 
-private[sql] trait OrcTest extends SQLTestUtils { this: FunSuite =>
+private[sql] trait OrcTest extends SQLTestUtils { this: SparkFunSuite =>
   lazy val sqlContext = org.apache.spark.sql.hive.test.TestHive
 
   import sqlContext.implicits._

@@ -22,12 +22,11 @@ import java.util.UUID
 
 import scala.util.Try
 
-import org.scalatest.FunSuite
-
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.util.Utils
 
-trait SQLTestUtils { this: FunSuite =>
+trait SQLTestUtils { this: SparkFunSuite =>
   def sqlContext: SQLContext
 
   protected def configuration = sqlContext.sparkContext.hadoopConfiguration
