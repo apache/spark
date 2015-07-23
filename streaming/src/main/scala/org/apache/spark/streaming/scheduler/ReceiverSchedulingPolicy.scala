@@ -29,6 +29,14 @@ private[streaming] class ReceiverSchedulingPolicy {
    * `preferredLocation`s of receivers are not even, we may not be able to schedule them evenly
    * because we have to respect them.
    *
+   * Here is the approach to schedule executors:
+   * <ol>
+   *   <li>First, schedule all the receivers with preferred locations (hosts), evenly among the
+   *       executors running on those host.</li>
+   *   <li>Then, schedule all other receivers evenly among all the executors such that overall
+   *       distribution over all the receivers is even.</li>
+   * </ol>
+   *
    * This method is called when we start to launch receivers at the first time.
    */
   def scheduleReceivers(
@@ -45,7 +53,7 @@ private[streaming] class ReceiverSchedulingPolicy {
     val scheduledExecutors = Array.fill(receivers.length)(new mutable.ArrayBuffer[String])
     val numReceiversOnExecutor = mutable.HashMap[String, Int]()
     // Set the initial value to 0
-    executors.foreach(numReceiversOnExecutor(_) = 0)
+    executors.foreach(e => numReceiversOnExecutor(e) = 0)
 
     // Firstly, we need to respect "preferredLocation". So if a receiver has "preferredLocation",
     // we need to make sure the "preferredLocation" is in the candidate scheduled executor list.

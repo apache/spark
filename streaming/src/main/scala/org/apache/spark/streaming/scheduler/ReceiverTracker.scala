@@ -338,7 +338,7 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
           receiverId,
           ReceiverState.SCHEDULED,
           Some(scheduledExecutors),
-          None)
+          runningExecutor = None)
     }
     receiverTrackingInfos.put(receiverId, newReceiverTrackingInfo)
   }
