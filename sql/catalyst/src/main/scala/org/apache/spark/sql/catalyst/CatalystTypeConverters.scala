@@ -281,7 +281,8 @@ object CatalystTypeConverters {
     }
     override def toScala(catalystValue: UTF8String): String =
       if (catalystValue == null) null else catalystValue.toString
-    override def toScalaImpl(row: InternalRow, column: Int): String = row(column).toString
+    override def toScalaImpl(row: InternalRow, column: Int): String =
+      row.getUTF8String(column).toString
   }
 
   private object DateConverter extends CatalystTypeConverter[Date, Date, Any] {
