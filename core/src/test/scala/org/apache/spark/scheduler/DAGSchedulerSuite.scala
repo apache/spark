@@ -472,11 +472,11 @@ class DAGSchedulerSuite
     assert(results === Map(0 -> 42, 1 -> 43))
     assertDataStructuresEmpty()
   }
-  
+
   test("Multiple consecutive stage failures should lead to stage being aborted.") {
-    // Create a new Listener to confirm that the listenerBus sees the JobEnd message 
+    // Create a new Listener to confirm that the listenerBus sees the JobEnd message
     // when we abort the stage. This message will also be consumed by the EventLoggingListener
-    // so this will propagate up to the user. 
+    // so this will propagate up to the user.
     var ended = false
     var jobResult : JobResult = null
     class EndListener extends SparkListener {
@@ -487,17 +487,17 @@ class DAGSchedulerSuite
     }
 
     sc.listenerBus.addListener(new EndListener())
-    
+
     val shuffleMapRdd = new MyRDD(sc, 2, Nil)
     val shuffleDep = new ShuffleDependency(shuffleMapRdd, null)
     val shuffleId = shuffleDep.shuffleId
     val reduceRdd = new MyRDD(sc, 2, List(shuffleDep))
     submit(reduceRdd, Array(0, 1))
-    
+
     complete(taskSets(0), Seq(
       (Success, makeMapStatus("hostA", 1)),
       (Success, makeMapStatus("hostB", 1))))
-    
+
     for (x <- 1 to Stage.MAX_STAGE_FAILURES) {
       // the 2nd ResultTask failed
       complete(taskSets(1), Seq(
@@ -520,9 +520,9 @@ class DAGSchedulerSuite
 
 
   test("Multiple consecutive Fetch failures in a stage should trigger an abort.") {
-    // Create a new Listener to confirm that the listenerBus sees the JobEnd message 
+    // Create a new Listener to confirm that the listenerBus sees the JobEnd message
     // when we abort the stage. This message will also be consumed by the EventLoggingListener
-    // so this will propagate up to the user. 
+    // so this will propagate up to the user.
     var ended = false
     var jobResult : JobResult = null
     class EndListener extends SparkListener {
@@ -539,7 +539,7 @@ class DAGSchedulerSuite
     val shuffleId = shuffleDep.shuffleId
     val reduceRdd = new MyRDD(sc, 8, List(shuffleDep))
     submit(reduceRdd, Array(0, 1, 2, 3, 4, 5, 6, 7))
-    
+
     complete(taskSets(0), Seq(
       (Success, makeMapStatus("hostA", 1)),
       (Success, makeMapStatus("hostA", 1)),
@@ -569,9 +569,9 @@ class DAGSchedulerSuite
 
   test("Multiple consecutive task failures (not FetchFailures) in a stage should not " +
     "trigger an abort.") {
-    // Create a new Listener to confirm that the listenerBus sees the JobEnd message 
+    // Create a new Listener to confirm that the listenerBus sees the JobEnd message
     // when we abort the stage. This message will also be consumed by the EventLoggingListener
-    // so this will propagate up to the user. 
+    // so this will propagate up to the user.
     var ended = false
     var jobResult : JobResult = null
     class EndListener extends SparkListener {
@@ -601,19 +601,19 @@ class DAGSchedulerSuite
 
     complete(taskSets(1), Seq(
       (Success, 42),
-      (FetchFailed(makeBlockManagerId("hostA"), shuffleId, 0, 0, "ignored"), null),
-      (FetchFailed(makeBlockManagerId("hostA"), shuffleId, 0, 0, "ignored1"), null),
       (ExceptionFailure("fakeExcept", "failA", null, "This is a stack.", None), null),
       (ExceptionFailure("fakeExcept", "failB", null, "This is a stack.", None), null),
       (ExceptionFailure("fakeExcept", "failC", null, "This is a stack.", None), null),
       (ExceptionFailure("fakeExcept", "failD", null, "This is a stack.", None), null),
+      (ExceptionFailure("fakeExcept", "failE", null, "This is a stack.", None), null),
+      (ExceptionFailure("fakeExcept", "failF", null, "This is a stack.", None), null),
       (Success, 43)))
 
     scheduler.resubmitFailedStages()
     assert(scheduler.runningStages.nonEmpty)
     assert(!ended)
   }
-  
+
   test("trivial shuffle with multiple fetch failures") {
     val shuffleMapRdd = new MyRDD(sc, 2, Nil)
     val shuffleDep = new ShuffleDependency(shuffleMapRdd, null)

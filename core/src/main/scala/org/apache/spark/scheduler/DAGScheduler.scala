@@ -1194,16 +1194,16 @@ class DAGScheduler(
       logInfo("%s (%s) finished in %s s".format(stage, stage.name, serviceTime))
       stage.latestInfo.completionTime = Some(clock.getTimeMillis())
 
-      // Clear failure count for this stage, now that it's succeeded. 
-      // We only limit consecutive failures of stage attempts,so that if a stage is 
-      // re-used many times in a long-running job, unrelated failures that are spaced out in time 
+      // Clear failure count for this stage, now that it's succeeded.
+      // We only limit consecutive failures of stage attempts,so that if a stage is
+      // re-used many times in a long-running job, unrelated failures that are spaced out in time
       // don't eventually cause the stage to be aborted."
       stage.clearFailures()
     } else {
       stage.latestInfo.stageFailed(errorMessage.get)
       logInfo("%s (%s) failed in %s s".format(stage, stage.name, serviceTime))
     }
-    
+
     outputCommitCoordinator.stageEnd(stage.id)
     listenerBus.post(SparkListenerStageCompleted(stage.latestInfo))
     runningStages -= stage

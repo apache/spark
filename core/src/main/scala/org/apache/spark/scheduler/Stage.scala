@@ -81,14 +81,14 @@ private[spark] abstract class Stage(
    * of the number of stage failures to prevent endless stage retries.
    */
   private var failedStageCount = 0
-  
+
   private[scheduler] def clearFailures() : Unit = {
     failedStageCount = 0
   }
 
   /**
    * Check whether we should abort the failedStage due to multiple failures.
-   * This method updates the running count of failures for a particular stage and returns 
+   * This method updates the running count of failures for a particular stage and returns
    * true if the number of failures exceeds the allowable number of failures.
    */
   private[scheduler] def failAndShouldAbort(): Boolean = {
@@ -97,7 +97,7 @@ private[spark] abstract class Stage(
     {
       failedStageCount += 1
     }
-    
+
     // Check for multiple FetchFailures in a Stage and for the stage failing repeatedly following
     // resubmissions.
     failedStageCount >= Stage.MAX_STAGE_FAILURES
@@ -120,6 +120,6 @@ private[spark] abstract class Stage(
 }
 
 private[spark] object Stage {
-  // The maximum number of times to retry a stage before aborting 
+  // The maximum number of times to retry a stage before aborting
   private[scheduler] val MAX_STAGE_FAILURES = 4
 }
