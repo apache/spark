@@ -21,6 +21,8 @@ import org.apache.spark.SparkContext
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.execution.TakeOrderedAndProject
+import org.apache.spark.sql.execution.datasources.DataSourceStrategy
 import org.apache.spark.sql.sources.DataSourceStrategy
 
 @Experimental
@@ -39,6 +41,7 @@ class SparkPlanner(val sqlContext: SQLContext) extends SparkStrategies {
         DDLStrategy ::
         TakeOrderedAndProject ::
         HashAggregation ::
+        Aggregation ::
         LeftSemiJoin ::
         HashJoin ::
         InMemoryScans ::

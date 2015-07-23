@@ -83,11 +83,41 @@ abstract class UnsafeProjection extends Projection {
 }
 
 object UnsafeProjection {
+
+  /*
+   * Returns whether UnsafeProjection can support given StructType, Array[DataType] or
+   * Seq[Expression].
+   */
+  def canSupport(schema: StructType): Boolean = canSupport(schema.fields.map(_.dataType))
+  def canSupport(types: Array[DataType]): Boolean = types.forall(UnsafeColumnWriter.canEmbed(_))
+  def canSupport(exprs: Seq[Expression]): Boolean = canSupport(exprs.map(_.dataType).toArray)
+
+  /**
+   * Returns an UnsafeProjection for given StructType.
+   */
   def create(schema: StructType): UnsafeProjection = create(schema.fields.map(_.dataType))
 
-  def create(fields: Seq[DataType]): UnsafeProjection = {
+  /**
+   * Returns an UnsafeProjection for given Array of DataTypes.
+   */
+  def create(fields: Array[DataType]): UnsafeProjection = {
     val exprs = fields.zipWithIndex.map(x => new BoundReference(x._2, x._1, true))
+    create(exprs)
+  }
+
+  /**
+   * Returns an UnsafeProjection for given sequence of Expressions (bounded).
+   */
+  def create(exprs: Seq[Expression]): UnsafeProjection = {
     GenerateUnsafeProjection.generate(exprs)
+  }
+
+  /**
+   * Returns an UnsafeProjection for given sequence of Expressions, which will be bound to
+   * `inputSchema`.
+   */
+  def create(exprs: Seq[Expression], inputSchema: Seq[Attribute]): UnsafeProjection = {
+    create(exprs.map(BindReferences.bindReference(_, inputSchema)))
   }
 }
 
@@ -95,6 +125,8 @@ object UnsafeProjection {
  * A projection that could turn UnsafeRow into GenericInternalRow
  */
 case class FromUnsafeProjection(fields: Seq[DataType]) extends Projection {
+
+  def this(schema: StructType) = this(schema.fields.map(_.dataType))
 
   private[this] val expressions = fields.zipWithIndex.map { case (dt, idx) =>
     new BoundReference(idx, dt, true)

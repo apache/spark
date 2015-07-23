@@ -17,10 +17,14 @@
 
 package org.apache.spark.sql.catalyst.expressions;
 
-import org.apache.spark.sql.catalyst.InternalRow;
+import java.io.IOException;
+import java.io.OutputStream;
+
 import org.apache.spark.sql.catalyst.util.ObjectPool;
 import org.apache.spark.unsafe.PlatformDependent;
+import org.apache.spark.unsafe.array.ByteArrayMethods;
 import org.apache.spark.unsafe.bitset.BitSetMethods;
+import org.apache.spark.unsafe.hash.Murmur3_x86_32;
 import org.apache.spark.unsafe.types.UTF8String;
 
 
@@ -215,6 +219,9 @@ public final class UnsafeRow extends MutableRow {
   public void setDouble(int ordinal, double value) {
     assertIndexIsValid(ordinal);
     setNotNullAt(ordinal);
+    if (Double.isNaN(value)) {
+      value = Double.NaN;
+    }
     PlatformDependent.UNSAFE.putDouble(baseObject, getFieldOffset(ordinal), value);
   }
 
@@ -243,6 +250,9 @@ public final class UnsafeRow extends MutableRow {
   public void setFloat(int ordinal, float value) {
     assertIndexIsValid(ordinal);
     setNotNullAt(ordinal);
+    if (Float.isNaN(value)) {
+      value = Float.NaN;
+    }
     PlatformDependent.UNSAFE.putFloat(baseObject, getFieldOffset(ordinal), value);
   }
 
@@ -345,7 +355,7 @@ public final class UnsafeRow extends MutableRow {
    * This method is only supported on UnsafeRows that do not use ObjectPools.
    */
   @Override
-  public InternalRow copy() {
+  public UnsafeRow copy() {
     if (pool != null) {
       throw new UnsupportedOperationException(
         "Copy is not supported for UnsafeRows that use object pools");
@@ -365,8 +375,81 @@ public final class UnsafeRow extends MutableRow {
     }
   }
 
+  /**
+   * Write this UnsafeRow's underlying bytes to the given OutputStream.
+   *
+   * @param out the stream to write to.
+   * @param writeBuffer a byte array for buffering chunks of off-heap data while writing to the
+   *                    output stream. If this row is backed by an on-heap byte array, then this
+   *                    buffer will not be used and may be null.
+   */
+  public void writeToStream(OutputStream out, byte[] writeBuffer) throws IOException {
+    if (baseObject instanceof byte[]) {
+      int offsetInByteArray = (int) (PlatformDependent.BYTE_ARRAY_OFFSET - baseOffset);
+      out.write((byte[]) baseObject, offsetInByteArray, sizeInBytes);
+    } else {
+      int dataRemaining = sizeInBytes;
+      long rowReadPosition = baseOffset;
+      while (dataRemaining > 0) {
+        int toTransfer = Math.min(writeBuffer.length, dataRemaining);
+        PlatformDependent.copyMemory(
+          baseObject,
+          rowReadPosition,
+          writeBuffer,
+          PlatformDependent.BYTE_ARRAY_OFFSET,
+          toTransfer);
+        out.write(writeBuffer, 0, toTransfer);
+        rowReadPosition += toTransfer;
+        dataRemaining -= toTransfer;
+      }
+    }
+  }
+
+  @Override
+  public int hashCode() {
+    return Murmur3_x86_32.hashUnsafeWords(baseObject, baseOffset, sizeInBytes, 42);
+  }
+
+  @Override
+  public boolean equals(Object other) {
+    if (other instanceof UnsafeRow) {
+      UnsafeRow o = (UnsafeRow) other;
+      return (sizeInBytes == o.sizeInBytes) &&
+        ByteArrayMethods.arrayEquals(baseObject, baseOffset, o.baseObject, o.baseOffset,
+          sizeInBytes);
+    }
+    return false;
+  }
+
+  /**
+   * Returns the underlying bytes for this UnsafeRow.
+   */
+  public byte[] getBytes() {
+    if (baseObject instanceof byte[] && baseOffset == PlatformDependent.BYTE_ARRAY_OFFSET
+        && (((byte[]) baseObject).length == sizeInBytes)) {
+      return (byte[]) baseObject;
+    } else {
+      byte[] bytes = new byte[sizeInBytes];
+      PlatformDependent.copyMemory(baseObject, baseOffset, bytes,
+        PlatformDependent.BYTE_ARRAY_OFFSET, sizeInBytes);
+      return bytes;
+    }
+  }
+
+  // This is for debugging
+  @Override
+  public String toString() {
+    StringBuilder build = new StringBuilder("[");
+    for (int i = 0; i < sizeInBytes; i += 8) {
+      build.append(PlatformDependent.UNSAFE.getLong(baseObject, baseOffset + i));
+      build.append(',');
+    }
+    build.append(']');
+    return build.toString();
+  }
+
   @Override
   public boolean anyNull() {
-    return BitSetMethods.anySet(baseObject, baseOffset, bitSetWidthInBytes);
+    return BitSetMethods.anySet(baseObject, baseOffset, bitSetWidthInBytes / 8);
   }
 }

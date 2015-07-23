@@ -24,15 +24,17 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
 import org.apache.hadoop.mapreduce.{Job, TaskAttemptContext}
 
+import org.apache.spark.{Logging, SparkContext}
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{DataFrame, Row, SaveMode, SQLContext}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.execution.RDDConversions
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateMutableProjection
+import org.apache.spark.sql.execution.RDDConversions
+import org.apache.spark.sql.execution.datasources.{PartitioningUtils, PartitionSpec, Partition}
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql._
 import org.apache.spark.util.SerializableConfiguration
 
 /**
@@ -367,7 +369,9 @@ abstract class OutputWriter {
  */
 @Experimental
 abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[PartitionSpec])
-  extends BaseRelation {
+  extends BaseRelation with Logging {
+
+  logInfo("Constructing HadoopFsRelation")
 
   def this() = this(None)
 
@@ -382,36 +386,40 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
 
     var leafDirToChildrenFiles = mutable.Map.empty[Path, Array[FileStatus]]
 
-    def refresh(): Unit = {
-      // We don't filter files/directories whose name start with "_" except "_temporary" here, as
-      // specific data sources may take advantages over them (e.g. Parquet _metadata and
-      // _common_metadata files). "_temporary" directories are explicitly ignored since failed
-      // tasks/jobs may leave partial/corrupted data files there.
-      def listLeafFilesAndDirs(fs: FileSystem, status: FileStatus): Set[FileStatus] = {
-        if (status.getPath.getName.toLowerCase == "_temporary") {
-          Set.empty
+    private def listLeafFiles(paths: Array[String]): Set[FileStatus] = {
+      if (paths.length >= sqlContext.conf.parallelPartitionDiscoveryThreshold) {
+        HadoopFsRelation.listLeafFilesInParallel(paths, hadoopConf, sqlContext.sparkContext)
+      } else {
+        val statuses = paths.flatMap { path =>
+          val hdfsPath = new Path(path)
+          val fs = hdfsPath.getFileSystem(hadoopConf)
+          val qualified = hdfsPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
+
+          logInfo(s"Listing $qualified on driver")
+          Try(fs.listStatus(qualified)).getOrElse(Array.empty)
+        }.filterNot { status =>
+          val name = status.getPath.getName
+          name.toLowerCase == "_temporary" || name.startsWith(".")
+        }
+
+        val (dirs, files) = statuses.partition(_.isDir)
+
+        if (dirs.isEmpty) {
+          files.toSet
         } else {
-          val (dirs, files) = fs.listStatus(status.getPath).partition(_.isDir)
-          val leafDirs = if (dirs.isEmpty) Set(status) else Set.empty[FileStatus]
-          files.toSet ++ leafDirs ++ dirs.flatMap(dir => listLeafFilesAndDirs(fs, dir))
+          files.toSet ++ listLeafFiles(dirs.map(_.getPath.toString))
         }
       }
+    }
+
+    def refresh(): Unit = {
+      val files = listLeafFiles(paths)
 
       leafFiles.clear()
+      leafDirToChildrenFiles.clear()
 
-      val statuses = paths.flatMap { path =>
-        val hdfsPath = new Path(path)
-        val fs = hdfsPath.getFileSystem(hadoopConf)
-        val qualified = hdfsPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
-        Try(fs.getFileStatus(qualified)).toOption.toArray.flatMap(listLeafFilesAndDirs(fs, _))
-      }.filterNot { status =>
-        // SPARK-8037: Ignores files like ".DS_Store" and other hidden files/directories
-        status.getPath.getName.startsWith(".")
-      }
-
-      val files = statuses.filterNot(_.isDir)
       leafFiles ++= files.map(f => f.getPath -> f).toMap
-      leafDirToChildrenFiles ++= files.groupBy(_.getPath.getParent)
+      leafDirToChildrenFiles ++= files.toArray.groupBy(_.getPath.getParent)
     }
   }
 
@@ -515,7 +523,7 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
     })
   }
 
-  private[sources] final def buildScan(
+  private[sql] final def buildScan(
       requiredColumns: Array[String],
       filters: Array[Filter],
       inputPaths: Array[String],
@@ -665,4 +673,64 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
    * @since 1.4.0
    */
   def prepareJobForWrite(job: Job): OutputWriterFactory
+}
+
+private[sql] object HadoopFsRelation extends Logging {
+  // We don't filter files/directories whose name start with "_" except "_temporary" here, as
+  // specific data sources may take advantages over them (e.g. Parquet _metadata and
+  // _common_metadata files). "_temporary" directories are explicitly ignored since failed
+  // tasks/jobs may leave partial/corrupted data files there.  Files and directories whose name
+  // start with "." are also ignored.
+  def listLeafFiles(fs: FileSystem, status: FileStatus): Array[FileStatus] = {
+    logInfo(s"Listing ${status.getPath}")
+    val name = status.getPath.getName.toLowerCase
+    if (name == "_temporary" || name.startsWith(".")) {
+      Array.empty
+    } else {
+      val (dirs, files) = fs.listStatus(status.getPath).partition(_.isDir)
+      files ++ dirs.flatMap(dir => listLeafFiles(fs, dir))
+    }
+  }
+
+  // `FileStatus` is Writable but not serializable.  What make it worse, somehow it doesn't play
+  // well with `SerializableWritable`.  So there seems to be no way to serialize a `FileStatus`.
+  // Here we use `FakeFileStatus` to extract key components of a `FileStatus` to serialize it from
+  // executor side and reconstruct it on driver side.
+  case class FakeFileStatus(
+      path: String,
+      length: Long,
+      isDir: Boolean,
+      blockReplication: Short,
+      blockSize: Long,
+      modificationTime: Long,
+      accessTime: Long)
+
+  def listLeafFilesInParallel(
+      paths: Array[String],
+      hadoopConf: Configuration,
+      sparkContext: SparkContext): Set[FileStatus] = {
+    logInfo(s"Listing leaf files and directories in parallel under: ${paths.mkString(", ")}")
+
+    val serializableConfiguration = new SerializableConfiguration(hadoopConf)
+    val fakeStatuses = sparkContext.parallelize(paths).flatMap { path =>
+      val hdfsPath = new Path(path)
+      val fs = hdfsPath.getFileSystem(serializableConfiguration.value)
+      val qualified = hdfsPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
+      Try(listLeafFiles(fs, fs.getFileStatus(qualified))).getOrElse(Array.empty)
+    }.map { status =>
+      FakeFileStatus(
+        status.getPath.toString,
+        status.getLen,
+        status.isDir,
+        status.getReplication,
+        status.getBlockSize,
+        status.getModificationTime,
+        status.getAccessTime)
+    }.collect()
+
+    fakeStatuses.map { f =>
+      new FileStatus(
+        f.length, f.isDir, f.blockReplication, f.blockSize, f.modificationTime, new Path(f.path))
+    }.toSet
+  }
 }
