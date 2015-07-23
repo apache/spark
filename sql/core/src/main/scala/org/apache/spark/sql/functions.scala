@@ -764,6 +764,10 @@ object functions {
   /**
    * Parses the comma separated expression strings into the columns they represent, similar to
    * DataFrame.selectExpr
+   * {{{
+   *   // get the number of words of each length
+   *   df.groupBy(expr("length(word)")).count()
+   * }}}
    *
    * @group normal_funcs
    */
