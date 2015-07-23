@@ -69,7 +69,7 @@ class CollectionFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("Array contains") {
     val a0 = Literal.create(Seq(1, 2, 3), ArrayType(IntegerType))
     val a1 = Literal.create(Seq[Int](), ArrayType(IntegerType))
-    val a2 = Literal.create(Seq(null), ArrayType(IntegerType))
+    val a2 = Literal.create(Seq(null), ArrayType(NullType))
 
     checkEvaluation(ArrayContains(a0, Literal(1)), true)
     checkEvaluation(ArrayContains(a0, Literal(0)), false)

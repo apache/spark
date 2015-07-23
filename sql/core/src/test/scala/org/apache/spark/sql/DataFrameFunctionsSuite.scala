@@ -375,5 +375,9 @@ class DataFrameFunctionsSuite extends QueryTest {
       df.select(array_contains(array(lit(2), lit(null)), 1)),
       Seq(Row(false), Row(false), Row(false))
     )
+    checkAnswer(
+      df.select(array_contains(array(lit(2), lit(null)), null)),
+      Seq(Row(false), Row(false), Row(false))
+    )
   }
 }
