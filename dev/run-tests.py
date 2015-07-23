@@ -266,6 +266,7 @@ def get_hadoop_profiles(hadoop_version):
         "hadoop2.0": ["-Phadoop-1", "-Dhadoop.version=2.0.0-mr1-cdh4.1.1"],
         "hadoop2.2": ["-Pyarn", "-Phadoop-2.2"],
         "hadoop2.3": ["-Pyarn", "-Phadoop-2.3", "-Dhadoop.version=2.3.0"],
+        "hadoop2.6": ["-Pyarn", "-Phadoop-2.6", "-Dhadoop.version=2.6.0"],
     }
 
     if hadoop_version in sbt_maven_hadoop_profiles:
@@ -282,7 +283,7 @@ def build_spark_maven(hadoop_version):
     mvn_goals = ["clean", "package", "-DskipTests"]
     profiles_and_goals = build_profiles + mvn_goals
 
-    print("[info] Building Spark (w/Hive 0.13.1) using Maven with these arguments: ",
+    print("[info] Building Spark (w/Hive 1.2.1) using Maven with these arguments: ",
           " ".join(profiles_and_goals))
 
     exec_maven(profiles_and_goals)
@@ -297,14 +298,14 @@ def build_spark_sbt(hadoop_version):
                  "streaming-flume-assembly/assembly"]
     profiles_and_goals = build_profiles + sbt_goals
 
-    print("[info] Building Spark (w/Hive 0.13.1) using SBT with these arguments: ",
+    print("[info] Building Spark (w/Hive 1.2.1) using SBT with these arguments: ",
           " ".join(profiles_and_goals))
 
     exec_sbt(profiles_and_goals)
 
 
 def build_apache_spark(build_tool, hadoop_version):
-    """Will build Spark against Hive v0.13.1 given the passed in build tool (either `sbt` or
+    """Will build Spark against Hive v1.2.1 given the passed in build tool (either `sbt` or
     `maven`). Defaults to using `sbt`."""
 
     set_title_and_block("Building Spark", "BLOCK_BUILD")
