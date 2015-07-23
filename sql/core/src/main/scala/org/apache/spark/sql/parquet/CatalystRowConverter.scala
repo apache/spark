@@ -28,7 +28,7 @@ import org.apache.parquet.io.api.{Binary, Converter, GroupConverter, PrimitiveCo
 import org.apache.parquet.schema.Type.Repetition
 import org.apache.parquet.schema.{GroupType, PrimitiveType, Type}
 
-import org.apache.spark.sql.Row
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
@@ -55,8 +55,8 @@ private[parquet] trait ParentContainerUpdater {
 private[parquet] object NoopUpdater extends ParentContainerUpdater
 
 /**
- * A [[CatalystRowConverter]] is used to convert Parquet "structs" into Spark SQL [[Row]]s.  Since
- * any Parquet record is also a struct, this converter can also be used as root converter.
+ * A [[CatalystRowConverter]] is used to convert Parquet "structs" into Spark SQL [[InternalRow]]s.
+ * Since any Parquet record is also a struct, this converter can also be used as root converter.
  *
  * When used as a root converter, [[NoopUpdater]] should be used since root converters don't have
  * any "parent" container.
@@ -178,7 +178,7 @@ private[parquet] class CatalystRowConverter(
 
       case t: StructType =>
         new CatalystRowConverter(parquetType.asGroupType(), t, new ParentContainerUpdater {
-          override def set(value: Any): Unit = updater.set(value.asInstanceOf[Row].copy())
+          override def set(value: Any): Unit = updater.set(value.asInstanceOf[InternalRow].copy())
         })
 
       case t: UserDefinedType[_] =>

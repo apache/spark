@@ -324,7 +324,7 @@ private[sql] class ParquetRelation2(
             new SqlNewHadoopPartition(id, i, rawSplits(i).asInstanceOf[InputSplit with Writable])
           }
         }
-      }.values.map(_.asInstanceOf[Row])
+      }.values.asInstanceOf[RDD[Row]]  // type erasure hack to pass RDD[InternalRow] as RDD[Row]
     }
   }
 
