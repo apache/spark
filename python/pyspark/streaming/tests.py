@@ -908,7 +908,7 @@ class KinesisStreamTests(PySparkStreamingTestCase):
             "awsAccessKey", "awsSecretKey")
 
     def test_kinesis_stream(self):
-        if os.environ.get('RUN_KINESIS_TESTS') != '1':
+        if os.environ.get('ENABLE_KINESIS_TESTS') != '1':
             print("Skip test_kinesis_stream")
             return
 
