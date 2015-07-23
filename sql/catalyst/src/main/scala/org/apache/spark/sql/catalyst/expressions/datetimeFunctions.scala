@@ -258,3 +258,62 @@ case class DateFormatClass(left: Expression, right: Expression) extends BinaryEx
     })
   }
 }
+
+/**
+ * Returns the last day of the month which the date belongs to.
+ */
+case class LastDay(startDate: Expression) extends UnaryExpression with ImplicitCastInputTypes {
+  override def child: Expression = startDate
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(DateType)
+
+  override def dataType: DataType = DateType
+
+  override def nullSafeEval(date: Any): Any = {
+    val days = date.asInstanceOf[Int]
+    DateTimeUtils.getLastDayOfMonth(days)
+  }
+
+  override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    defineCodeGen(ctx, ev, (sd) => {
+      val dtu = DateTimeUtils.getClass.getCanonicalName
+      s"$dtu.getLastDayOfMonth($sd)"
+    })
+  }
+}
+
+/**
+ * Returns the first date which is later than start_date and named as day_of_week.
+ */
+case class NextDay(left: Expression, right: Expression)
+  extends BinaryExpression with ImplicitCastInputTypes {
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(DateType, StringType)
+
+  override def dataType: DataType = DateType
+
+  override def nullSafeEval(start: Any, dayOfWeek: Any): Any = {
+    val dow = DateTimeUtils.getDayOfWeekFromString(dayOfWeek.asInstanceOf[UTF8String])
+    if (dow == -1) {
+      null
+    } else {
+      val sd = start.asInstanceOf[Int]
+      sd + 1 + ((dow - sd % 7) % 7 + 7) % 7
+    }
+  }
+
+  override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    nullSafeCodeGen(ctx, ev, (sd, dow) => {
+      val dtu = DateTimeUtils.getClass.getCanonicalName
+      val dow = ctx.freshName("dow")
+      s"""
+        int $dow = $dtu.getDayOfWeekFromString($dow)
+        if ($dow == -1) {
+          ${ev.isNull} = true;
+        } else {
+          ${ev.primitive} = $sd + 1 + (($dow - $sd % 7) % 7 + 7) % 7
+        }
+       """
+    })
+  }
+}

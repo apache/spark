@@ -573,4 +573,35 @@ object DateTimeUtils {
       dayInYear - 334
     }
   }
+
+  /**
+   * Returns Day of week from String.
+   */
+  def getDayOfWeekFromString(string: UTF8String): Int = {
+    val dowString = string.toString.toUpperCase
+    dowString match {
+      case "SU" | "SUN" | "SUNDAY" => 2
+      case "MO" | "MON" | "MONDAY" => 3
+      case "TU" | "TUE" | "TUESDAY" => 4
+      case "WE" | "WED" | "WEDNESDAY" => 5
+      case "TH" | "THU" | "THURSDAY" => 6
+      case "FR" | "FRI" | "FRIDAY" => 0
+      case "SA" | "SAT" | "SATURDAY" => 1
+      case _ => -1
+    }
+  }
+
+  /**
+   * Returns last day of the month for the given date. The date is expressed in days
+   * since 1.1.1970.
+   */
+  def getLastDayOfMonth(date: Int): Int = {
+    val dayOfMonth = getDayOfMonth(date)
+    val month = getMonth(date)
+
+    val febDay = if (isLeapYear(getYear(date))) 29 else 28
+    val days = Seq(31, febDay, 31, 30, 31, 30, 31, 31, 30, 31, 30 ,31)
+    date + days(month - 1) - dayOfMonth
+  }
+
 }

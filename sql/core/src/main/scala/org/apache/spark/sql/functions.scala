@@ -2378,6 +2378,13 @@ object functions {
   def hour(columnName: String): Column = hour(Column(columnName))
 
   /**
+   * Returns the last day of the month which the given date belongs to.
+   * @group datetime_funcs
+   * @since 1.5.0
+   */
+  def last_day(e: Column): Column = LastDay(e.expr)
+
+  /**
    * Extracts the minutes as an integer from a given date/timestamp/string.
    * @group datetime_funcs
    * @since 1.5.0
@@ -2390,6 +2397,13 @@ object functions {
    * @since 1.5.0
    */
   def minute(columnName: String): Column = minute(Column(columnName))
+
+  /**
+   * Returns the first date which is later than given date sd and named as dow.
+   * @group datetime_funcs
+   * @since 1.5.0
+   */
+  def next_day(sd: Column, dow: Column): Column = NextDay(sd.expr, dow.expr)
 
   /**
    * Extracts the seconds as an integer from a given date/timestamp/string.
