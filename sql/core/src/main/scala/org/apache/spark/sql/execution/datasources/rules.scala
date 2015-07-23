@@ -15,15 +15,15 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.sources
+package org.apache.spark.sql.execution.datasources
 
-import org.apache.spark.sql.{SaveMode, AnalysisException}
-import org.apache.spark.sql.catalyst.analysis.{EliminateSubQueries, Catalog}
-import org.apache.spark.sql.catalyst.expressions.{Attribute, Cast, Alias}
+import org.apache.spark.sql.{AnalysisException, SaveMode}
+import org.apache.spark.sql.catalyst.analysis.{Catalog, EliminateSubQueries}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Cast}
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.types.DataType
+import org.apache.spark.sql.sources.{BaseRelation, HadoopFsRelation, InsertableRelation}
 
 /**
  * A rule to do pre-insert data type casting and field renaming. Before we insert into
