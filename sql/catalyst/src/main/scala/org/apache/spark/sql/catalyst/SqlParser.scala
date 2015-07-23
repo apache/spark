@@ -271,8 +271,7 @@ class SqlParser extends AbstractSparkSQLParser with DataTypeParser {
       lexical.normalizeKeyword(udfName) match {
         case "sum" => SumDistinct(exprs.head)
         case "count" => CountDistinct(exprs)
-        case name => UnresolvedFunction(name, exprs, isDistinct = true)
-        case _ => throw new AnalysisException(s"function $udfName does not support DISTINCT")
+        case _ => UnresolvedFunction(udfName, exprs, isDistinct = true)
       }
     }
     | APPROXIMATE ~> ident ~ ("(" ~ DISTINCT ~> expression <~ ")") ^^ { case udfName ~ exp =>
