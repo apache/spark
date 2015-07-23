@@ -1,7 +1,7 @@
 from pyhive import presto
 from pyhive.exc import DatabaseError
 
-from airflow.hooks.base_hook import BaseHook
+from airflow.hooks.dbapi_hook import DbApiHook
 
 import logging
 logging.getLogger("pyhive").setLevel(logging.INFO)
@@ -11,7 +11,7 @@ class PrestoException(Exception):
     pass
 
 
-class PrestoHook(BaseHook):
+class PrestoHook(DbApiHook):
     """
     Interact with Presto through PyHive!
 
@@ -20,21 +20,19 @@ class PrestoHook(BaseHook):
     >>> ph.get_records(sql)
     [[340698]]
     """
-    def __init__(self, presto_conn_id='presto_default'):
-        self.presto_conn_id = presto_conn_id
+
+    conn_name_attr = 'presto_conn_id'
+    default_conn_name = 'presto_default'
+
     def get_conn(self):
         """Returns a connection object"""
-        db = self.get_connection(self.presto_conn_id)
+        db = self.get_connection(self.conn_id_name)
         return presto.connect(
             host=db.host,
             port=db.port,
             username=db.login,
             catalog=db.extra_dejson.get('catalog', 'hive'),
             schema=db.schema)
-
-    def get_cursor(self):
-        """Returns a cursor"""
-        return self.get_conn().cursor()
 
     @staticmethod
     def _strip_sql(sql):
@@ -44,28 +42,24 @@ class PrestoHook(BaseHook):
         """
         Get a set of records from Presto
         """
-        cursor = self.get_cursor()
         try:
-            cursor.execute(self._strip_sql(hql), parameters)
-            records = cursor.fetchall()
+            return super(PrestoHook, self).get_records(
+                self._strip_sql(hql), parameters)
         except DatabaseError as e:
             obj = eval(str(e))
             raise PrestoException(obj['message'])
-        return records
 
     def get_first(self, hql, parameters=None):
         """
         Returns only the first row, regardless of how many rows the query
         returns.
         """
-        cursor = self.get_cursor()
         try:
-            cursor.execute(self._strip_sql(hql), parameters)
-            record = cursor.fetchone()
+            return super(PrestoHook, self).get_first(
+                self._strip_sql(hql), parameters)
         except DatabaseError as e:
             obj = eval(str(e))
             raise PrestoException(obj['message'])
-        return record
 
     def get_pandas_df(self, hql, parameters=None):
         """
@@ -91,5 +85,7 @@ class PrestoHook(BaseHook):
         """
         Execute the statement against Presto. Can be used to create views.
         """
-        cursor = self.get_cursor()
-        cursor.execute(self._strip_sql(hql), parameters)
+        return super(PrestoHook, self).run(self._strip_sql(hql), parameters)
+
+    def insert_rows(self):
+        raise NotImplemented()
