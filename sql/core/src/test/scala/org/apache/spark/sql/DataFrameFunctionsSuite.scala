@@ -348,8 +348,8 @@ class DataFrameFunctionsSuite extends QueryTest {
   test("array contains function") {
     val df = Seq(
       (Seq[Int](1, 2), "x"),
-      (Seq[Int](), "y"),
-      (null, "z")
+      (Seq[Int](), "x"),
+      (null, "x")
     ).toDF("a", "b")
     checkAnswer(
       df.select(array_contains(df("a"), 1)),
@@ -369,6 +369,10 @@ class DataFrameFunctionsSuite extends QueryTest {
     )
     checkAnswer(
       df.select(array_contains(lit(null), 1)),
+      Seq(Row(false), Row(false), Row(false))
+    )
+    checkAnswer(
+      df.select(array_contains(array(lit(2), lit(null)), 1)),
       Seq(Row(false), Row(false), Row(false))
     )
   }

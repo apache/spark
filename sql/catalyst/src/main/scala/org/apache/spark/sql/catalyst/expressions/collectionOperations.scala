@@ -120,7 +120,10 @@ case class SortArray(base: Expression, ascendingOrder: Expression)
 case class ArrayContains(left: Expression, right: Expression) extends BinaryExpression with ExpectsInputTypes {
   override def dataType: DataType = BooleanType
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(ArrayType, AnyDataType)
+  override def inputTypes: Seq[AbstractDataType] = left.dataType match {
+    case n @ ArrayType(element, _) => Seq(n, element)
+    case n @ NullType => Seq(TypeCollection(ArrayType, NullType), AnyDataType)
+  }
 
   override def nullable: Boolean = false
 
