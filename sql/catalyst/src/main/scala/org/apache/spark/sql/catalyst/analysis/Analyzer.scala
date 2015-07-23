@@ -19,10 +19,11 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions.aggregate.{Complete, AggregateExpression2, AggregateFunction2}
-import org.apache.spark.sql.catalyst.{SimpleCatalystConf, CatalystConf}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
+import org.apache.spark.sql.catalyst.trees.TreeNodeRef
+import org.apache.spark.sql.catalyst.{SimpleCatalystConf, CatalystConf}
 import org.apache.spark.sql.types._
 import scala.collection.mutable.ArrayBuffer
 
@@ -78,7 +79,9 @@ class Analyzer(
       GlobalAggregates ::
       UnresolvedHavingClauseAttributes ::
       HiveTypeCoercion.typeCoercionRules ++
-      extendedResolutionRules : _*)
+      extendedResolutionRules : _*),
+    Batch("Nondeterministic", Once,
+      PullOutNondeterministic)
   )
 
   /**
@@ -908,6 +911,30 @@ class Analyzer(
         // Finally, generate output columns according to the original projectList.
         val finalProjectList = projectList.map (_.toAttribute)
         Project(finalProjectList, withWindow)
+    }
+  }
+
+  /**
+   * Pulls out nondeterministic expressions from LogicalPlan which is not Project or Filter,
+   * put them into an inner Project and finally project them at the outer Project.
+   */
+  object PullOutNondeterministic extends Rule[LogicalPlan] {
+    override def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+      case p: Project => p
+      case f: Filter => f
+      case p: UnaryNode if p.expressions.exists(!_.deterministic) =>
+        val nondeterministicExprs = p.expressions.filterNot(_.deterministic).map { e =>
+          val ne = e match {
+            case n: NamedExpression => n
+            case _ => Alias(e, "_nondeterministic")()
+          }
+          new TreeNodeRef(e) -> ne
+        }.toMap
+        val newPlan = p.transformExpressions { case e =>
+          nondeterministicExprs.get(new TreeNodeRef(e)).map(_.toAttribute).getOrElse(e)
+        }
+        val newChild = Project(p.child.output ++ nondeterministicExprs.values, p.child)
+        Project(p.output, newPlan.withNewChildren(newChild :: Nil))
     }
   }
 }
