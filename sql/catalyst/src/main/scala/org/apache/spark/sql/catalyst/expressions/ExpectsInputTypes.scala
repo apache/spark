@@ -42,16 +42,21 @@ trait ExpectsInputTypes extends Expression {
   def inputTypes: Seq[AbstractDataType]
 
   override def checkInputDataTypes(): TypeCheckResult = {
-    val mismatches = children.zip(inputTypes).zipWithIndex.collect {
-      case ((child, expected), idx) if !expected.acceptsType(child.dataType) =>
-        s"argument ${idx + 1} requires ${expected.simpleString} type, " +
-          s"however, '${child.prettyString}' is of ${child.dataType.simpleString} type."
-    }
+    if (children.size == inputTypes.size) {
+      val mismatches = children.zip(inputTypes).zipWithIndex.collect {
+        case ((child, expected), idx) if !expected.acceptsType(child.dataType) =>
+          s"argument ${idx + 1} is expected to be of type ${expected.simpleString}, " +
+            s"however, '${child.prettyString}' is of type ${child.dataType.simpleString}."
+      }
 
-    if (mismatches.isEmpty) {
-      TypeCheckResult.TypeCheckSuccess
+      if (mismatches.isEmpty) {
+        TypeCheckResult.TypeCheckSuccess
+      } else {
+        TypeCheckResult.TypeCheckFailure(mismatches.mkString(" "))
+      }
     } else {
-      TypeCheckResult.TypeCheckFailure(mismatches.mkString(" "))
+      TypeCheckResult.TypeCheckFailure(
+        s"Length of children types was ${children.size}, but expected to be ${inputTypes.size}")
     }
   }
 }

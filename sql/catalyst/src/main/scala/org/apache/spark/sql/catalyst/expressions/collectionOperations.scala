@@ -122,9 +122,19 @@ case class ArrayContains(left: Expression, right: Expression)
 
   override def dataType: DataType = BooleanType
 
-  override def inputTypes: Seq[AbstractDataType] = left.dataType match {
-    case n @ ArrayType(element, _) => Seq(n, element)
-    case n @ NullType => Seq(TypeCollection(ArrayType, NullType), AnyDataType)
+  override def inputTypes: Seq[AbstractDataType] = right.dataType match {
+    case NullType => Seq()
+    case _ => left.dataType match {
+      case n @ ArrayType(element, _) => Seq(n, element)
+      case _ => Seq()
+    }
+  }
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    inputTypes.size match {
+      case 0 => TypeCheckResult.TypeCheckFailure("Null typed values cannot be used as arguments")
+      case _ => super.checkInputDataTypes()
+    }
   }
 
   override def nullable: Boolean = false
