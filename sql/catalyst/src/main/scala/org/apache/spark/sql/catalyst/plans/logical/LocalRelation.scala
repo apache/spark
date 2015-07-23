@@ -29,7 +29,7 @@ object LocalRelation {
     new LocalRelation(StructType(output1 +: output).toAttributes)
   }
 
-  def fromExternalRows(output: Seq[Attribute], data: Seq[Row]) = {
+  def fromExternalRows(output: Seq[Attribute], data: Seq[Row]): LocalRelation = {
     val schema = StructType.fromAttributes(output)
     val converter = CatalystTypeConverters.createToCatalystConverter(schema)
     LocalRelation(output, data.map(converter(_).asInstanceOf[InternalRow]))
