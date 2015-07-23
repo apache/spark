@@ -135,9 +135,9 @@ private[sql] case class InMemoryRelation(
             // hard to decipher.
             assert(
               row.numFields == columnBuilders.size,
-              s"""Row column number mismatch, expected ${output.size} columns, but got ${row.numFields}.
-                 |Row content: $row
-               """.stripMargin)
+              s"Row column number mismatch, expected ${output.size} columns, " +
+                s"but got ${row.numFields}." +
+                s"\nRow content: $row")
 
             var i = 0
             while (i < row.numFields) {

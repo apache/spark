@@ -209,8 +209,8 @@ private[parquet] class RowWriteSupport extends WriteSupport[InternalRow] with Lo
   override def write(record: InternalRow): Unit = {
     val attributesSize = attributes.size
     if (attributesSize > record.numFields) {
-      throw new IndexOutOfBoundsException(
-        s"Trying to write more fields than contained in row ($attributesSize > ${record.numFields})")
+      throw new IndexOutOfBoundsException("Trying to write more fields than contained in row " +
+        s"($attributesSize > ${record.numFields})")
     }
 
     var index = 0
@@ -379,8 +379,8 @@ private[parquet] class MutableRowWriteSupport extends RowWriteSupport {
   override def write(record: InternalRow): Unit = {
     val attributesSize = attributes.size
     if (attributesSize > record.numFields) {
-      throw new IndexOutOfBoundsException(
-        s"Trying to write more fields than contained in row ($attributesSize > ${record.numFields})")
+      throw new IndexOutOfBoundsException("Trying to write more fields than contained in row " +
+        s"($attributesSize > ${record.numFields})")
     }
 
     var index = 0
