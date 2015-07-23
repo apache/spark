@@ -805,6 +805,10 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
     assert(Try(q0.count()).isSuccess)
   }
 
+  test("HiveContext.table(dbname.tblname)") {
+    assert(Try(table("default.src")).isSuccess)
+  }
+
   test("DESCRIBE commands") {
     sql(s"CREATE TABLE test_describe_commands1 (key INT, value STRING) PARTITIONED BY (dt STRING)")
 
