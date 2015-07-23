@@ -20,8 +20,8 @@ package org.apache.spark.sql.catalyst.expressions
 import com.clearspring.analytics.stream.cardinality.HyperLogLog
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodeGenContext, GeneratedExpressionCode}
 import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.util.collection.OpenHashSet
@@ -71,8 +71,7 @@ trait PartialAggregate1 extends AggregateExpression1 {
  * A specific implementation of an aggregate function. Used to wrap a generic
  * [[AggregateExpression1]] with an algorithm that will be used to compute one specific result.
  */
-abstract class AggregateFunction1
-  extends LeafExpression with AggregateExpression1 with Serializable {
+abstract class AggregateFunction1 extends LeafExpression with Serializable {
 
   /** Base should return the generic aggregate expression that this function is computing */
   val base: AggregateExpression1
@@ -82,9 +81,9 @@ abstract class AggregateFunction1
 
   def update(input: InternalRow): Unit
 
-  // Do we really need this?
-  override def newInstance(): AggregateFunction1 = {
-    makeCopy(productIterator.map { case a: AnyRef => a }.toArray)
+  override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    throw new UnsupportedOperationException(
+      "AggregateFunction1 should not be used for generated aggregates")
   }
 }
 

@@ -63,10 +63,6 @@ private[sql] case object Complete extends AggregateMode
  */
 private[sql] case object NoOp extends Expression with Unevaluable {
   override def nullable: Boolean = true
-  override def eval(input: InternalRow): Any = {
-    throw new TreeNodeException(
-      this, s"No function to evaluate expression. type: ${this.nodeName}")
-  }
   override def dataType: DataType = NullType
   override def children: Seq[Expression] = Nil
 }
