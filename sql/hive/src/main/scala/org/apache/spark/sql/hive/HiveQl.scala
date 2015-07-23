@@ -81,7 +81,7 @@ private[hive] case class CreateTableAsSelect(
  * @param isLocal whether to write data to local file system.
  * @param desc describe the write property such as file format.
  */
-case class WriteToDirectory(
+private[hive] case class WriteToDirectory(
     path: String,
     child: LogicalPlan,
     isLocal: Boolean,

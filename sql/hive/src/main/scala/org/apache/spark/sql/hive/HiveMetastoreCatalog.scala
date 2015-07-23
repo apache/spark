@@ -502,6 +502,10 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
     }
   }
 
+  /**
+   * Resolve hive.WriteToDirectory node,to set the properties
+   * of columns and columns.types in tableDesc.
+   */
   object WriteToDirs extends Rule[LogicalPlan] with HiveInspectors {
 
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
@@ -519,8 +523,11 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
         tableDesc.getProperties.setProperty("columns", cols.dropRight(1))
         tableDesc.getProperties.setProperty("columns.types", types.dropRight(1))
         WriteToDirectory(path, child, isLocal, tableDesc)
+      case WriteToDirectory(path, child, isLocal, tableDesc) =>
+        execution.WriteToDirectory(path, hive.executePlan(child).executedPlan, isLocal, tableDesc)
     }
   }
+
   /**
    * Casts input data to correct data types according to table definition before inserting into
    * that table.

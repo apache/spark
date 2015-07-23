@@ -27,10 +27,9 @@ import org.apache.hadoop.hive.ql.plan.TableDesc
 import org.apache.hadoop.mapred.JobConf
 
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.{Row, SQLContext}
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.execution.{SparkPlan, UnaryNode}
+import org.apache.spark.sql.execution.{RunnableCommand, SparkPlan}
 import org.apache.spark.sql.hive.HiveShim.{ShimFileSinkDesc => FileSinkDesc}
 import org.apache.spark.sql.hive._
 import org.apache.spark.sql.types.StructType
@@ -44,15 +43,14 @@ case class WriteToDirectory(
    path: String,
    child: SparkPlan,
    isLocal: Boolean,
-   desc: TableDesc) extends UnaryNode with SaveAsHiveFile {
+   desc: TableDesc) extends RunnableCommand with SaveAsHiveFile {
 
-  @transient val hiveContext = sqlContext.asInstanceOf[HiveContext]
-  @transient private lazy val context = new Context(hiveContext.hiveconf)
-  @transient lazy val outputClass = newSerializer(desc).getSerializedClass
+  override def output: Seq[Attribute] = child.output
 
-  def output: Seq[Attribute] = child.output
-
-  protected[sql] lazy val sideEffectResult: Seq[InternalRow] = {
+  def run(sqlContext: SQLContext): Seq[Row] = {
+    @transient val hiveContext = sqlContext.asInstanceOf[HiveContext]
+    @transient lazy val context = new Context(hiveContext.hiveconf)
+    @transient lazy val outputClass = newSerializer(desc).getSerializedClass
     val jobConf = new JobConf(hiveContext.hiveconf)
     val jobConfSer = new SerializableJobConf(jobConf)
     val targetPath = new Path(path)
@@ -110,9 +108,7 @@ case class WriteToDirectory(
       throw new IOException("Unable to write data to " + destPath)
     }
 
-    Seq.empty[InternalRow]
+    Seq.empty[Row]
   }
 
-  override def doExecute(): RDD[InternalRow] =
-    sqlContext.sparkContext.parallelize(sideEffectResult, 1)
 }
