@@ -268,7 +268,7 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
       lastErrorMessage = message, lastError = error, lastErrorTime = lastErrorTime)
     val newReceiverTrackingInfo = receiverTrackingInfos.get(streamId) match {
       case Some(oldInfo) =>
-        oldInfo.copy(errorInfo = Some(errorInfo))
+        oldInfo.copy(state = ReceiverState.INACTIVE, errorInfo = Some(errorInfo))
       case None =>
         logWarning("No prior receiver info")
         ReceiverTrackingInfo(
