@@ -107,7 +107,7 @@ class HiveResolutionSuite extends HiveComparisonTest {
       |INSERT OVERWRITE TABLE t1 SELECT 1 FROM src LIMIT 1;
       |INSERT OVERWRITE TABLE t2 SELECT named_struct("x",1),1 FROM src LIMIT 1;
       |SELECT a.x FROM t1 a JOIN t2 b ON a.x = b.k;
-    """.stripMargin.replaceAll("[\r\n]+", "\n"))
+    """.stripMargin.replaceAll("\r\n", "\n"))
 
   /**
    * Negative examples.  Currently only left here for documentation purposes.
