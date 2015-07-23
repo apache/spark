@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.Column
-
 import scala.language.implicitConversions
 import scala.reflect.runtime.universe.{TypeTag, typeTag}
 
