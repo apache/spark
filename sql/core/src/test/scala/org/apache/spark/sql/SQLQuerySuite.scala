@@ -114,11 +114,11 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll with SQLTestUtils {
   test("SPARK-8668 expr function") {
     checkAnswer(Seq((1, "Bobby G."))
       .toDF("id", "name")
-      .select(expr("length(name)", "abs(id)") : _*), Row(8, 1))
+      .select(expr("length(name)"), expr("abs(id)")), Row(8, 1))
 
     checkAnswer(Seq((1, "building burrito tunnels"), (1, "major projects"))
       .toDF("id", "saying")
-      .groupBy(expr("length(saying)") : _*)
+      .groupBy(expr("length(saying)"))
       .count()
       .orderBy("count"), Row(24, 1) :: Row(14, 1) :: Nil)
   }

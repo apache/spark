@@ -1723,8 +1723,8 @@ object functions {
   /**
    * Parsers the comma separated expression strings into the columns they represent, similar to
    * DataFrame.selectExpr
+   *
+   * @group normal_funcs
    */
-  def expr(expStrs: String*): Seq[Column] = expStrs.map { expr =>
-    Column(new SqlParser().parseExpression(expr))
-  }
+  def expr(expr: String): Column = Column(new SqlParser().parseExpression(expr))
 }
