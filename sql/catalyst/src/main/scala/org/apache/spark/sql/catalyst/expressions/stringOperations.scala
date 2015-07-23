@@ -771,7 +771,6 @@ case class Levenshtein(left: Expression, right: Expression) extends BinaryExpres
   override def inputTypes: Seq[AbstractDataType] = Seq(StringType, StringType)
 
   override def dataType: DataType = IntegerType
-
   protected override def nullSafeEval(leftValue: Any, rightValue: Any): Any =
     leftValue.asInstanceOf[UTF8String].levenshteinDistance(rightValue.asInstanceOf[UTF8String])
 
