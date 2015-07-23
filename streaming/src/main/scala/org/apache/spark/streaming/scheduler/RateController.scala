@@ -21,17 +21,14 @@ import java.util.concurrent.atomic.AtomicLong
 
 import scala.concurrent.{ExecutionContext, Future}
 
-import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.streaming.scheduler.rate.RateEstimator
 import org.apache.spark.util.ThreadUtils
 
 /**
- * :: DeveloperApi ::
  * A StreamingListener that receives batch completion updates, and maintains
  * an estimate of the speed at which this stream should ingest messages,
  * given an estimate computation from a `RateEstimator`
  */
-@DeveloperApi
 private [streaming] abstract class RateController(val streamUID: Int, rateEstimator: RateEstimator)
   extends StreamingListener with Serializable {
 

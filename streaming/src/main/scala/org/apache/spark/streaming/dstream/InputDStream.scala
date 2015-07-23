@@ -21,9 +21,9 @@ import scala.reflect.ClassTag
 
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDDOperationScope
-import org.apache.spark.streaming.{Time, Duration, StreamingContext}
+import org.apache.spark.streaming.{Duration, StreamingContext, Time}
 import org.apache.spark.streaming.scheduler.RateController
-import org.apache.spark.streaming.scheduler.rate.NoopRateEstimator
+import org.apache.spark.streaming.scheduler.rate.RateEstimator
 import org.apache.spark.util.Utils
 
 /**
@@ -49,26 +49,13 @@ abstract class InputDStream[T: ClassTag] (@transient ssc_ : StreamingContext)
   /** This is an unique identifier for the input stream. */
   val id = ssc.getNewInputStreamId()
 
-  /**
-   * A rate estimator configured by the user to compute a dynamic ingestion bound for this stream.
-   * @see `RateEstimator`
-   */
-  protected [streaming] val rateEstimator = newEstimator()
-
-  /**
-   * Return the configured estimator, or `noop` if none was specified.
-   */
-  private def newEstimator() =
-    ssc.conf.get("spark.streaming.RateEstimator", "noop") match {
-      case "noop" => new NoopRateEstimator()
-      case estimator => throw new IllegalArgumentException(s"Unknown rate estimator: $estimator")
-    }
-
-
   // Keep track of the freshest rate for this stream using the rateEstimator
-  protected[streaming] val rateController: RateController = new RateController(id, rateEstimator) {
-    override def publish(rate: Long): Unit = ()
-  }
+  protected[streaming] val rateController: Option[RateController] =
+    RateEstimator.makeEstimator(ssc.conf).map { estimator =>
+      new RateController(id, estimator) {
+        override def publish(rate: Long): Unit = ()
+      }
+    }
 
   /** A human-readable name of this InputDStream */
   private[streaming] def name: String = {

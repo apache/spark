@@ -60,11 +60,12 @@ private class MockRateLimitDStream(@transient ssc: StreamingContext)
     }
   }
 
-  override val rateController: RateController = new RateController(id, ConstantEstimator) {
-    override def publish(rate: Long): Unit = {
-      publishCalls += 1
-    }
-  }
+  override val rateController: Option[RateController] =
+    Some(new RateController(id, ConstantEstimator) {
+      override def publish(rate: Long): Unit = {
+        publishCalls += 1
+      }
+    })
 
   def compute(validTime: Time): Option[RDD[Int]] = {
     val data = Seq(1)

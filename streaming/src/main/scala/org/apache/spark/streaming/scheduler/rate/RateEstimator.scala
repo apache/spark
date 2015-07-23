@@ -17,14 +17,13 @@
 
 package org.apache.spark.streaming.scheduler.rate
 
-import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.SparkConf
+import org.apache.spark.SparkException
 
 /**
- * :: DeveloperApi ::
  * A component that estimates the rate at wich an InputDStream should ingest
  * elements, based on updates at every batch completion.
  */
-@DeveloperApi
 private[streaming] trait RateEstimator extends Serializable {
 
   /**
@@ -44,14 +43,17 @@ private[streaming] trait RateEstimator extends Serializable {
       schedulingDelay: Long): Option[Double]
 }
 
-/**
- * The trivial rate estimator never sends an update
- */
-private[streaming] class NoopRateEstimator extends RateEstimator {
+object RateEstimator {
 
-  def compute(
-      time: Long,
-      elements: Long,
-      processingDelay: Long,
-      schedulingDelay: Long): Option[Double] = None
+  /**
+   * Return a new RateEstimator based on the value of `spark.streaming.RateEstimator`.
+   *
+   * @return None if there is no configured estimator, otherwise an instance of RateEstimator
+   * @throws IllegalArgumentException if there is a configured RateEstimator that doesn't match any
+   *         known estimators.
+   */
+  def makeEstimator(conf: SparkConf): Option[RateEstimator] =
+    conf.getOption("spark.streaming.RateEstimator") map { estimator =>
+      throw new IllegalArgumentException(s"Unkown rate estimator: $estimator")
+    }
 }
