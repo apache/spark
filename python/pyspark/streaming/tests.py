@@ -893,7 +893,7 @@ class FlumePollingStreamTests(PySparkStreamingTestCase):
 
 class KinesisStreamTests(PySparkStreamingTestCase):
 
-    def test_kinesis_stream(self):
+    def test_kinesis_stream_api(self):
         # Don't start the StreamingContext because we cannot test it in Jenkins
         kinesisStream1 = KinesisUtils.createStream(
             self.ssc, "myAppNam", "mySparkStream",
@@ -904,6 +904,49 @@ class KinesisStreamTests(PySparkStreamingTestCase):
             "https://kinesis.us-west-2.amazonaws.com", "us-west-2",
             InitialPositionInStream.LATEST, 2, StorageLevel.MEMORY_AND_DISK_2,
             "awsAccessKey", "awsSecretKey")
+
+    def test_kinesis_stream(self):
+        if os.environ.get('RUN_KINESIS_TESTS') != '1':
+            print("Skip test_kinesis_stream")
+            return
+
+        import random
+        kinesisAppName = "KinesisStreamTests-" + abs(random.randint(0, 10000000))
+        kinesisTestUtilsClz = \
+            self.sc._jvm.java.lang.Thread.currentThread().getContextClassLoader() \
+                .loadClass("org.apache.spark.streaming.kinesis.KinesisTestUtils")
+        kinesisTestUtils = kinesisTestUtilsClz.newInstance()
+        try:
+            kinesisTestUtils.createStream()
+            aWSCredentials = kinesisTestUtils.getAWSCredentials()
+            stream = KinesisUtils.createStream(
+                self.ssc, kinesisAppName, kinesisTestUtils.streamName(),
+                kinesisTestUtils.endpointUrl(), kinesisTestUtils.regionName(),
+                InitialPositionInStream.LATEST, 10, StorageLevel.MEMORY_ONLY,
+                aWSCredentials.getAWSAccessKeyId(), aWSCredentials.getAWSSecretKey())
+
+            outputBuffer = []
+
+            def get_output(_, rdd):
+                for e in rdd.collect():
+                    outputBuffer.append(e)
+
+            stream.foreachRDD(get_output)
+            self.ssc.start()
+
+            testData = [i for i in range(1, 11)]
+            start_time = time.time()
+            while time.time() - start_time < 120:
+                kinesisTestUtils.pushData(testData)
+                if outputBuffer.sort() == testData:
+                    break
+                time.sleep(10)
+            if outputBuffer.sort() != testData:
+                print("timeout after 120 seconds")
+            self.assertEqual(testData, outputBuffer.sort())
+        finally:
+            kinesisTestUtils.deleteStream()
+            kinesisTestUtils.deleteDynamoDBTable(kinesisAppName)
 
 
 def search_kafka_assembly_jar():
@@ -944,18 +987,19 @@ def search_flume_assembly_jar():
 
 def search_kinesis_asl_assembly_jar():
     SPARK_HOME = os.environ["SPARK_HOME"]
-    flume_assembly_dir = os.path.join(SPARK_HOME, "extras/kinesis-asl-assembly")
+    kinesis_asl_assembly_dir = os.path.join(SPARK_HOME, "extras/kinesis-asl-assembly")
     jars = glob.glob(
-        os.path.join(flume_assembly_dir, "target/scala-*/spark-streaming-kinesis-asl-assembly-*.jar"))
+        os.path.join(kinesis_asl_assembly_dir,
+                     "target/scala-*/spark-streaming-kinesis-asl-assembly-*.jar"))
     if not jars:
         raise Exception(
-            ("Failed to find Spark Streaming Kinesis ASL assembly jar in %s. " % flume_assembly_dir) +
-            "You need to build Spark with "
-            "'build/sbt assembly/assembly streaming-kinesis-asl-assembly/assembly' or "
-            "'build/mvn package' before running this test")
+            ("Failed to find Spark Streaming Kinesis ASL assembly jar in %s. " %
+             kinesis_asl_assembly_dir) + "You need to build Spark with "
+            "'build/sbt -Pkinesis-asl assembly/assembly streaming-kinesis-asl-assembly/assembly' "
+            "or 'build/mvn -Pkinesis-asl package' before running this test")
     elif len(jars) > 1:
         raise Exception(("Found multiple Spark Streaming Kinesis ASL assembly JARs in %s; please "
-                         "remove all but one") % flume_assembly_dir)
+                         "remove all but one") % kinesis_asl_assembly_dir)
     else:
         return jars[0]
 

@@ -115,6 +115,13 @@ private class KinesisTestUtils(
     shardIdToSeqNumbers.toMap
   }
 
+  /**
+   * Expose a Python friendly API.
+   */
+  def pushData(testData: java.util.List[Int]): Unit = {
+    pushData(scala.collection.JavaConversions.asScalaBuffer(testData))
+  }
+
   def describeStream(streamNameToDescribe: String = streamName): Option[StreamDescription] = {
     try {
       val describeStreamRequest = new DescribeStreamRequest().withStreamName(streamNameToDescribe)
