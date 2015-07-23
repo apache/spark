@@ -233,6 +233,6 @@ class NonSerializableUserException extends RuntimeException {
 
 class NonDeserializableUserException extends RuntimeException {
   private def readObject(in: ObjectInputStream): Unit = {
-    throw new IOException("Intentional exception during deserialization.");
+    throw new IOException("Intentional exception during deserialization.")
   }
 }
