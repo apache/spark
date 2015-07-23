@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions.codegen
 
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.aggregate.NoOp
 
 import scala.collection.mutable.ArrayBuffer
 
@@ -38,15 +39,17 @@ object GenerateMutableProjection extends CodeGenerator[Seq[Expression], () => Mu
 
   protected def create(expressions: Seq[Expression]): (() => MutableProjection) = {
     val ctx = newCodeGenContext()
-    val projectionCode = expressions.zipWithIndex.map { case (e, i) =>
-      val evaluationCode = e.gen(ctx)
-      evaluationCode.code +
-        s"""
-          if(${evaluationCode.isNull})
-            mutableRow.setNullAt($i);
-          else
-            ${ctx.setColumn("mutableRow", e.dataType, i, evaluationCode.primitive)};
-        """
+    val projectionCode = expressions.zipWithIndex.map {
+      case (NoOp, _) => ""
+      case (e, i) =>
+        val evaluationCode = e.gen(ctx)
+        evaluationCode.code +
+          s"""
+            if(${evaluationCode.isNull})
+              mutableRow.setNullAt($i);
+            else
+              ${ctx.setColumn("mutableRow", e.dataType, i, evaluationCode.primitive)};
+          """
     }
     // collect projections into blocks as function has 64kb codesize limit in JVM
     val projectionBlocks = new ArrayBuffer[String]()
@@ -78,10 +81,6 @@ object GenerateMutableProjection extends CodeGenerator[Seq[Expression], () => Mu
       }
     }
 
-    val mutableStates = ctx.mutableStates.map { case (javaType, variableName, initialValue) =>
-      s"private $javaType $variableName = $initialValue;"
-    }.mkString("\n      ")
-
     val code = s"""
       public Object generate($exprType[] expr) {
         return new SpecificProjection(expr);
@@ -89,13 +88,14 @@ object GenerateMutableProjection extends CodeGenerator[Seq[Expression], () => Mu
 
       class SpecificProjection extends ${classOf[BaseMutableProjection].getName} {
 
-        private $exprType[] expressions = null;
-        private $mutableRowType mutableRow = null;
-        $mutableStates
+        private $exprType[] expressions;
+        private $mutableRowType mutableRow;
+        ${declareMutableStates(ctx)}
 
         public SpecificProjection($exprType[] expr) {
           expressions = expr;
           mutableRow = new $genericMutableRowType(${expressions.size});
+          ${initMutableStates(ctx)}
         }
 
         public ${classOf[BaseMutableProjection].getName} target($mutableRowType row) {

@@ -86,6 +86,9 @@ private[streaming] case object StopAllReceivers extends ReceiverTrackerLocalMess
  */
 private[streaming] case object AllReceiverIds extends ReceiverTrackerLocalMessage
 
+private[streaming] case class UpdateReceiverRateLimit(streamUID: Int, newRate: Long)
+  extends ReceiverTrackerLocalMessage
+
 /**
  * This class manages the execution of the receivers of ReceiverInputDStreams. Instance of
  * this class must be created after all input streams have been added and StreamingContext.start()
@@ -282,6 +285,11 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
     logError(s"Deregistered receiver for stream $streamId: $messageWithError")
   }
 
+  /** Update a receiver's maximum ingestion rate */
+  def sendRateUpdate(streamUID: Int, newRate: Long): Unit = {
+    endpoint.send(UpdateReceiverRateLimit(streamUID, newRate))
+  }
+
   /** Add new blocks for the given stream */
   private def addBlock(receivedBlockInfo: ReceivedBlockInfo): Boolean = {
     receivedBlockTracker.addBlock(receivedBlockInfo)
@@ -420,8 +428,12 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
           getExecutors)
         updateReceiverScheduledLocations(receiver.streamId, scheduledLocations)
         startReceiver(receiver, scheduledLocations)
-      case c @ CleanupOldBlocks(cleanupThreshTime) =>
+      case c: CleanupOldBlocks =>
         receiverTrackingInfos.values.flatMap(_.endpoint).foreach(_.send(c))
+      case UpdateReceiverRateLimit(streamUID, newRate) =>
+        for (info <- receiverTrackingInfos.get(streamUID); eP <- info.endpoint) {
+          eP.send(UpdateRateLimit(newRate))
+        }
       // Remote messages
       case ReportError(streamId, message, error) =>
         reportError(streamId, message, error)

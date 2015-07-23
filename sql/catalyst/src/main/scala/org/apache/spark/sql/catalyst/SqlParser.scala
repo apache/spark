@@ -266,12 +266,12 @@ class SqlParser extends AbstractSparkSQLParser with DataTypeParser {
       }
     }
     | ident ~ ("(" ~> repsep(expression, ",")) <~ ")" ^^
-      { case udfName ~ exprs => UnresolvedFunction(udfName, exprs) }
+      { case udfName ~ exprs => UnresolvedFunction(udfName, exprs, isDistinct = false) }
     | ident ~ ("(" ~ DISTINCT ~> repsep(expression, ",")) <~ ")" ^^ { case udfName ~ exprs =>
       lexical.normalizeKeyword(udfName) match {
         case "sum" => SumDistinct(exprs.head)
         case "count" => CountDistinct(exprs)
-        case _ => throw new AnalysisException(s"function $udfName does not support DISTINCT")
+        case _ => UnresolvedFunction(udfName, exprs, isDistinct = true)
       }
     }
     | APPROXIMATE ~> ident ~ ("(" ~ DISTINCT ~> expression <~ ")") ^^ { case udfName ~ exp =>
