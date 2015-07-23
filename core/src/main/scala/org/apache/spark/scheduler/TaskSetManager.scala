@@ -631,10 +631,11 @@ private[spark] class TaskSetManager(
       task, Success, result.value(), result.accumUpdates, info, result.metrics)
     if (!successful(index)) {
       tasksSuccessful += 1
-      // include the partition here b/c on a retry, the partition is *not* the same as info.id
-      logInfo(("Finished task %s in stage %s (TID %d, partition %d) in %d ms on executor %s (%s) " +
-        "(%d/%d)").format(info.id, taskSet.id, task.partitionId, info.taskId, info.duration,
-          info.executorId, info.host, tasksSuccessful, numTasks))
+      // include the partition here b/c on a partial retry, the partition is *not* necessarily
+      // the same as info.id
+      logInfo(s"Finished task ${info.id} in stage ${taskSet.id} (TID ${info.taskId}}, " +
+        s"partition ${task.partitionId}) in ${info.duration} ms on executor ${info.executorId} " +
+        s"(${info.host}) ($tasksSuccessful/$numTasks)")
       // Mark successful and stop if all the tasks have succeeded.
       successful(index) = true
       if (tasksSuccessful == numTasks) {
