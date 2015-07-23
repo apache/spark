@@ -915,8 +915,8 @@ class Analyzer(
   }
 
   /**
-   * Pulls out nondeterministic expressions from LogicalPlan which is not Project or Filter,
-   * put them into an inner Project and finally project them at the outer Project.
+   * Pulls out nondeterministic expressions from unary LogicalPlan which is not Project or Filter,
+   * put them into an inner Project and finally project them away at the outer Project.
    */
   object PullOutNondeterministic extends Rule[LogicalPlan] {
     override def apply(plan: LogicalPlan): LogicalPlan = plan transform {
