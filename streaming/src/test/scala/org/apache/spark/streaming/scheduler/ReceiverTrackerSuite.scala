@@ -17,11 +17,17 @@
 
 package org.apache.spark.streaming.scheduler
 
+import org.scalatest.concurrent.Eventually._
+import org.scalatest.concurrent.Timeouts
+import org.scalatest.time.SpanSugar._
 import org.apache.spark.streaming._
 import org.apache.spark.SparkConf
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.receiver._
 import org.apache.spark.util.Utils
+import org.apache.spark.streaming.dstream.InputDStream
+import scala.reflect.ClassTag
+import org.apache.spark.streaming.dstream.ReceiverInputDStream
 
 /** Testsuite for receiver scheduling */
 class ReceiverTrackerSuite extends TestSuiteBase {
@@ -72,7 +78,63 @@ class ReceiverTrackerSuite extends TestSuiteBase {
     assert(locations(0).length === 1)
     assert(locations(3).length === 1)
   }
+
+  test("Receiver tracker - propagates rate limit") {
+    object ReceiverStartedWaiter extends StreamingListener {
+      @volatile
+      var started = false
+
+      override def onReceiverStarted(receiverStarted: StreamingListenerReceiverStarted): Unit = {
+        started = true
+      }
+    }
+
+    ssc.addStreamingListener(ReceiverStartedWaiter)
+    ssc.scheduler.listenerBus.start(ssc.sc)
+
+    val newRateLimit = 100L
+    val inputDStream = new RateLimitInputDStream(ssc)
+    val tracker = new ReceiverTracker(ssc)
+    tracker.start()
+
+    // we wait until the Receiver has registered with the tracker,
+    // otherwise our rate update is lost
+    eventually(timeout(5 seconds)) {
+      assert(ReceiverStartedWaiter.started)
+    }
+    tracker.sendRateUpdate(inputDStream.id, newRateLimit)
+    // this is an async message, we need to wait a bit for it to be processed
+    eventually(timeout(3 seconds)) {
+      assert(inputDStream.getCurrentRateLimit.get === newRateLimit)
+    }
+  }
 }
+
+/** An input DStream with a hard-coded receiver that gives access to internals for testing. */
+private class RateLimitInputDStream(@transient ssc_ : StreamingContext)
+  extends ReceiverInputDStream[Int](ssc_) {
+
+  override def getReceiver(): DummyReceiver = SingletonDummyReceiver
+
+  def getCurrentRateLimit: Option[Long] = {
+    invokeExecutorMethod.getCurrentRateLimit
+  }
+
+  private def invokeExecutorMethod: ReceiverSupervisor = {
+    val c = classOf[Receiver[_]]
+    val ex = c.getDeclaredMethod("executor")
+    ex.setAccessible(true)
+    ex.invoke(SingletonDummyReceiver).asInstanceOf[ReceiverSupervisor]
+  }
+}
+
+/**
+ * A Receiver as an object so we can read its rate limit.
+ *
+ * @note It's necessary to be a top-level object, or else serialization would create another
+ *       one on the executor side and we won't be able to read its rate limit.
+ */
+private object SingletonDummyReceiver extends DummyReceiver
 
 /**
  * Dummy receiver implementation

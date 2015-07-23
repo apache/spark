@@ -351,16 +351,16 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("FORMAT") {
-    checkEvaluation(StringFormat(Literal("aa%d%s"), Literal(123), Literal("a")), "aa123a")
-    checkEvaluation(StringFormat(Literal("aa")), "aa", create_row(null))
-    checkEvaluation(StringFormat(Literal("aa%d%s"), Literal(123), Literal("a")), "aa123a")
-    checkEvaluation(StringFormat(Literal("aa%d%s"), 12, "cc"), "aa12cc")
+    checkEvaluation(FormatString(Literal("aa%d%s"), Literal(123), Literal("a")), "aa123a")
+    checkEvaluation(FormatString(Literal("aa")), "aa", create_row(null))
+    checkEvaluation(FormatString(Literal("aa%d%s"), Literal(123), Literal("a")), "aa123a")
+    checkEvaluation(FormatString(Literal("aa%d%s"), 12, "cc"), "aa12cc")
 
-    checkEvaluation(StringFormat(Literal.create(null, StringType), 12, "cc"), null)
+    checkEvaluation(FormatString(Literal.create(null, StringType), 12, "cc"), null)
     checkEvaluation(
-      StringFormat(Literal("aa%d%s"), Literal.create(null, IntegerType), "cc"), "aanullcc")
+      FormatString(Literal("aa%d%s"), Literal.create(null, IntegerType), "cc"), "aanullcc")
     checkEvaluation(
-      StringFormat(Literal("aa%d%s"), 12, Literal.create(null, StringType)), "aa12null")
+      FormatString(Literal("aa%d%s"), 12, Literal.create(null, StringType)), "aa12null")
   }
 
   test("INSTR") {

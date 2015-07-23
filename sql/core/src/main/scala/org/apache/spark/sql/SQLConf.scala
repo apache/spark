@@ -402,6 +402,9 @@ private[spark] object SQLConf {
     defaultValue = Some(true),
     isPublic = false)
 
+  val USE_SQL_AGGREGATE2 = booleanConf("spark.sql.useAggregate2",
+    defaultValue = Some(true), doc = "<TODO>")
+
   val USE_SQL_SERIALIZER2 = booleanConf(
     "spark.sql.useSerializer2",
     defaultValue = Some(true), isPublic = false)
@@ -472,6 +475,8 @@ private[sql] class SQLConf extends Serializable with CatalystConf {
   def caseSensitiveAnalysis: Boolean = getConf(SQLConf.CASE_SENSITIVE)
 
   private[spark] def unsafeEnabled: Boolean = getConf(UNSAFE_ENABLED)
+
+  private[spark] def useSqlAggregate2: Boolean = getConf(USE_SQL_AGGREGATE2)
 
   private[spark] def useSqlSerializer2: Boolean = getConf(USE_SQL_SERIALIZER2)
 
