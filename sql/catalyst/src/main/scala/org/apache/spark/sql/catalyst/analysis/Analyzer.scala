@@ -949,6 +949,24 @@ class Analyzer(
     }
   }
 
+  /**
+   * Removes all still-need-evaluate ordering expressions from sort and use an inner project to
+   * materialize them, finally use a outer project to project them away to keep the result same.
+   * Then we can make sure we only sort by [[AttributeReference]]s.
+   *
+   * As an example,
+   * {{{
+   *   Sort('a, 'b + 1,
+   *     Relation('a, 'b))
+   * }}}
+   * will be turned into:
+   * {{{
+   *   Project('a, 'b,
+   *     Sort('a, '_sortCondition,
+   *       Project('a, 'b, ('b + 1).as("_sortCondition"),
+   *         Relation('a, 'b))))
+   * }}}
+   */
   object RemoveEvaluationFromSort extends Rule[LogicalPlan] {
     override def apply(plan: LogicalPlan): LogicalPlan = plan transform {
       case s @ Sort(ordering, global, child)
@@ -958,13 +976,15 @@ class Analyzer(
 
         val namedExpr = needEval.map(_.child match {
           case n: NamedExpression => n
-          case e => Alias(e, "sortCondition")()
+          case e => Alias(e, "_sortCondition")()
         })
 
         val newOrdering = ref ++ needEval.zip(namedExpr).map { case (order, ne) =>
           order.copy(child = ne.toAttribute)
         }
 
+        // Add still-need-evaluate ordering expressions into inner project and then project
+        // them away after the sort.
         Project(child.output,
           Sort(newOrdering, global,
             Project(child.output ++ namedExpr, child)))
