@@ -442,7 +442,7 @@ class TaskInstance(Base):
         force = "--force" if force else ""
         local = "--local" if local else ""
         task_start_date = \
-            "-s " + task_start_date.isoformat()  if task_start_date else ""
+            "-s " + task_start_date.isoformat() if task_start_date else ""
         raw = "--raw" if raw else ""
         subdir = ""
         if not pickle and self.task.dag and self.task.dag.full_filepath:
@@ -663,9 +663,9 @@ class TaskInstance(Base):
                 session
                 .query(
                     func.sum(
-                        case([(TI.state==State.SUCCESS, 1)], else_=0)),
+                        case([(TI.state == State.SUCCESS, 1)], else_=0)),
                     func.sum(
-                        case([(TI.state==State.SKIPPED, 1)], else_=0)),
+                        case([(TI.state == State.SKIPPED, 1)], else_=0)),
                     func.count(TI.task_id),
                 )
                 .filter(
@@ -934,7 +934,8 @@ class TaskInstance(Base):
             'task': task,
             'task_instance': self,
             'ti': self,
-            'task_instance_key_str': ti_key_str
+            'task_instance_key_str': ti_key_str,
+            'conf': conf,
         }
 
     def render_templates(self):

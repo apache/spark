@@ -93,6 +93,10 @@ Variable                            Description
 ``{{ params }}``                    a reference to the user defined params dictionary
 ``{{ task_instance_key_str }}``     a unique, human readable key to the task instance
                                     formatted ``{dag_id}_{task_id}_{ds}``
+``conf``                            the full configuration object located at
+                                    ``airflow.configuration.conf`` which
+                                    represents the content of your
+                                    ``airflow.cfg``
 =================================   ====================================
 
 Note that you can access the object's attributes and methods with simple
