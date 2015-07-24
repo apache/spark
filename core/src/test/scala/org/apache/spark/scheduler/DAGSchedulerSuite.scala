@@ -503,10 +503,7 @@ class DAGSchedulerSuite
       complete(taskSets(1), Seq(
         (Success, 42),
         (FetchFailed(makeBlockManagerId("hostA"), shuffleId, 0, 0, "ignored"), null)))
-
-      println(s"iteration $x: ${taskSets.size} taskSets")
-      taskSets.zipWithIndex.foreach{ case (ts, idx) => println(s"$idx: $ts")}
-
+      
       scheduler.resubmitFailedStages()
       if (x < Stage.MAX_STAGE_FAILURES) {
         assert(scheduler.runningStages.nonEmpty)
