@@ -258,10 +258,12 @@ class DateFunctionsSuite extends QueryTest {
     val df = Seq((1, t1, d1), (3, t2, d2)).toDF("n", "t", "d")
     checkAnswer(
       df.select(time_add(col("d"), lit(i))),
-      Seq(Row(Timestamp.valueOf("2015-09-30 00:00:02")), Row(Timestamp.valueOf("2016-02-29 00:00:02"))))
+      Seq(Row(Timestamp.valueOf("2015-09-30 00:00:02")),
+        Row(Timestamp.valueOf("2016-02-29 00:00:02"))))
     checkAnswer(
       df.select(time_add(col("t"), lit(i))),
-      Seq(Row(Timestamp.valueOf("2015-10-01 00:00:01")), Row(Timestamp.valueOf("2016-02-29 00:00:02"))))
+      Seq(Row(Timestamp.valueOf("2015-10-01 00:00:01")),
+        Row(Timestamp.valueOf("2016-02-29 00:00:02"))))
     checkAnswer(
       df.select(time_add(col("d"), lit(null))).limit(1), Row(null))
     checkAnswer(
@@ -277,10 +279,12 @@ class DateFunctionsSuite extends QueryTest {
     val df = Seq((1, t1, d1), (3, t2, d2)).toDF("n", "t", "d")
     checkAnswer(
       df.select(time_sub(col("d"), lit(i))),
-      Seq(Row(Timestamp.valueOf("2015-07-29 23:59:58")), Row(Timestamp.valueOf("2015-12-28 23:59:58"))))
+      Seq(Row(Timestamp.valueOf("2015-07-29 23:59:58")),
+        Row(Timestamp.valueOf("2015-12-28 23:59:58"))))
     checkAnswer(
       df.select(time_sub(col("t"), lit(i))),
-      Seq(Row(Timestamp.valueOf("2015-07-31 23:59:59")), Row(Timestamp.valueOf("2015-12-29 00:00:00"))))
+      Seq(Row(Timestamp.valueOf("2015-07-31 23:59:59")),
+        Row(Timestamp.valueOf("2015-12-29 00:00:00"))))
     checkAnswer(
       df.select(time_sub(col("d"), lit(null))).limit(1), Row(null))
     checkAnswer(

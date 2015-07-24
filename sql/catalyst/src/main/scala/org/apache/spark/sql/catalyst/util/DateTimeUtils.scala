@@ -677,7 +677,6 @@ object DateTimeUtils {
       (months1 - months2).toDouble
     } else {
       val timesBetween = (timeInDay1 - timeInDay2).toDouble / (MILLIS_PER_DAY * 1000)
-      println(timesBetween, dayInMonth1, dayInMonth2)
       (microOffset1 - microOffset2) / (31 * MILLIS_PER_DAY * 1000L).toDouble + (
         months1 - months2).toDouble + (dayInMonth1 - dayInMonth2 + timesBetween) / 31.0
     }
