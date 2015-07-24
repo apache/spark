@@ -99,13 +99,14 @@ trait CheckAnalysis {
             aggregateExprs.foreach(checkValidAggregateExpression)
 
           case Sort(orders, _, _) =>
-            def checkValidSortOrder(order: SortOrder): Unit = order.dataType match {
-              case t: AtomicType => // OK
-              case NullType => // OK
-              case t =>
-                failAnalysis(s"Sorting is not supported for columns of type ${t.simpleString}")
+            orders.foreach { order =>
+              order.dataType match {
+                case t: AtomicType => // OK
+                case NullType => // OK
+                case t =>
+                  failAnalysis(s"Sorting is not supported for columns of type ${t.simpleString}")
+              }
             }
-            orders.foreach(checkValidSortOrder)
 
           case _ => // Fallbacks to the following checks
         }
