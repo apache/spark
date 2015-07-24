@@ -109,6 +109,10 @@ trait CheckAnalysis {
                s"but the left table has ${left.output.length} columns and the right has " +
                s"${right.output.length}")
 
+          case Sort(order, _, _) if !order.forall(_.dataType.isInstanceOf[AtomicType]) =>
+            val c = order.filterNot(_.dataType.isInstanceOf[AtomicType]).head
+            failAnalysis(s"Sorting is not supported for columns of type ${c.dataType.simpleString}")
+
           case _ => // Fallbacks to the following checks
         }
 
