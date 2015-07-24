@@ -252,6 +252,10 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) with Logging {
   }
 
   protected[sql] override def parseSql(sql: String): LogicalPlan = {
+    var state = SessionState.get()
+    if (state == null) {
+      SessionState.setCurrentSessionState(tlSession.get().asInstanceOf[SQLSession].sessionState)
+    }
     super.parseSql(substitutor.substitute(hiveconf, sql))
   }
 
@@ -298,10 +302,21 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) with Logging {
         // Can we use fs.getContentSummary in future?
         // Seems fs.getContentSummary returns wrong table size on Jenkins. So we use
         // countFileSize to count the table size.
+        val stagingDir = metadataHive.getConf(HiveConf.ConfVars.STAGINGDIR.varname,
+          HiveConf.ConfVars.STAGINGDIR.defaultStrVal)
+
         def calculateTableSize(fs: FileSystem, path: Path): Long = {
           val fileStatus = fs.getFileStatus(path)
           val size = if (fileStatus.isDir) {
-            fs.listStatus(path).map(status => calculateTableSize(fs, status.getPath)).sum
+            fs.listStatus(path)
+              .map { status =>
+                if (!status.getPath().getName().startsWith(stagingDir)) {
+                  calculateTableSize(fs, status.getPath)
+                } else {
+                  0L
+                }
+              }
+              .sum
           } else {
             fileStatus.getLen
           }
@@ -515,7 +530,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) with Logging {
 
 private[hive] object HiveContext {
   /** The version of hive used internally by Spark SQL. */
-  val hiveExecutionVersion: String = "1.2.0"
+  val hiveExecutionVersion: String = "1.2.1"
 
   val HIVE_METASTORE_VERSION: String = "spark.sql.hive.metastore.version"
   val HIVE_METASTORE_JARS = stringConf("spark.sql.hive.metastore.jars",
@@ -568,17 +583,18 @@ private[hive] object HiveContext {
   /** Constructs a configuration for hive, where the metastore is located in a temp directory. */
   def newTemporaryConfiguration(): Map[String, String] = {
     val tempDir = Utils.createTempDir()
-    val localMetastore = new File(tempDir, "metastore").getAbsolutePath
+    val localMetastore = new File(tempDir, "metastore")
     val propMap: HashMap[String, String] = HashMap()
     // We have to mask all properties in hive-site.xml that relates to metastore data source
     // as we used a local metastore here.
     HiveConf.ConfVars.values().foreach { confvar =>
       if (confvar.varname.contains("datanucleus") || confvar.varname.contains("jdo")) {
-        propMap.put(confvar.varname, confvar.getDefaultValue)
+        propMap.put(confvar.varname, confvar.getDefaultExpr())
       }
     }
-    propMap.put("javax.jdo.option.ConnectionURL",
-      s"jdbc:derby:;databaseName=$localMetastore;create=true")
+    propMap.put(HiveConf.ConfVars.METASTOREWAREHOUSE.varname, localMetastore.toURI.toString)
+    propMap.put(HiveConf.ConfVars.METASTORECONNECTURLKEY.varname,
+      s"jdbc:derby:;databaseName=${localMetastore.getAbsolutePath};create=true")
     propMap.put("datanucleus.rdbms.datastoreAdapterClassName",
       "org.datanucleus.store.rdbms.adapter.DerbyAdapter")
     propMap.toMap

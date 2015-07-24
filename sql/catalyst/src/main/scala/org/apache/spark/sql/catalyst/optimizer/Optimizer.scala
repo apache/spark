@@ -554,25 +554,31 @@ object PushPredicateThroughProject extends Rule[LogicalPlan] with PredicateHelpe
       // Split the condition into small conditions by `And`, so that we can push down part of this
       // condition without nondeterministic expressions.
       val andConditions = splitConjunctivePredicates(condition)
-
-      val (deterministic, nondeterministic) = andConditions.partition(_.collect {
-        case a: Attribute if aliasMap.contains(a) => aliasMap(a)
-      }.forall(_.deterministic))
+      val nondeterministicConditions = andConditions.filter(hasNondeterministic(_, aliasMap))
 
       // If there is no nondeterministic conditions, push down the whole condition.
-      if (nondeterministic.isEmpty) {
+      if (nondeterministicConditions.isEmpty) {
         project.copy(child = Filter(replaceAlias(condition, aliasMap), grandChild))
       } else {
         // If they are all nondeterministic conditions, leave it un-changed.
-        if (deterministic.isEmpty) {
+        if (nondeterministicConditions.length == andConditions.length) {
           filter
         } else {
+          val deterministicConditions = andConditions.filterNot(hasNondeterministic(_, aliasMap))
           // Push down the small conditions without nondeterministic expressions.
-          val pushedCondition = deterministic.map(replaceAlias(_, aliasMap)).reduce(And)
-          Filter(nondeterministic.reduce(And),
+          val pushedCondition = deterministicConditions.map(replaceAlias(_, aliasMap)).reduce(And)
+          Filter(nondeterministicConditions.reduce(And),
             project.copy(child = Filter(pushedCondition, grandChild)))
         }
       }
+  }
+
+  private def hasNondeterministic(
+      condition: Expression,
+      sourceAliases: AttributeMap[Expression]) = {
+    condition.collect {
+      case a: Attribute if sourceAliases.contains(a) => sourceAliases(a)
+    }.exists(!_.deterministic)
   }
 
   // Substitute any attributes that are produced by the child projection, so that we safely

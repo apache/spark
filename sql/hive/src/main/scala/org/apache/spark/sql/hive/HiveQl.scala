@@ -18,6 +18,7 @@
 package org.apache.spark.sql.hive
 
 import java.sql.Date
+import java.util.Locale
 
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.serde.serdeConstants
@@ -80,6 +81,7 @@ private[hive] object HiveQl extends Logging {
     "TOK_ALTERDATABASE_PROPERTIES",
     "TOK_ALTERINDEX_PROPERTIES",
     "TOK_ALTERINDEX_REBUILD",
+    "TOK_ALTERTABLE",
     "TOK_ALTERTABLE_ADDCOLS",
     "TOK_ALTERTABLE_ADDPARTS",
     "TOK_ALTERTABLE_ALTERPARTS",
@@ -248,7 +250,7 @@ private[hive] object HiveQl extends Logging {
      * Otherwise, there will be Null pointer exception,
      * when retrieving properties form HiveConf.
      */
-    val hContext = new Context(hiveConf)
+    val hContext = new Context(SessionState.get().getConf())
     val node = ParseUtils.findRootNonNullToken((new ParseDriver).parse(sql, hContext))
     hContext.clear()
     node
@@ -577,12 +579,7 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
             "TOK_TABLESKEWED", // Skewed by
             "TOK_TABLEROWFORMAT",
             "TOK_TABLESERIALIZER",
-            "TOK_FILEFORMAT_GENERIC", // For file formats not natively supported by Hive.
-            "TOK_TBLSEQUENCEFILE", // Stored as SequenceFile
-            "TOK_TBLTEXTFILE", // Stored as TextFile
-            "TOK_TBLRCFILE", // Stored as RCFile
-            "TOK_TBLORCFILE", // Stored as ORC File
-            "TOK_TBLPARQUETFILE", // Stored as PARQUET
+            "TOK_FILEFORMAT_GENERIC",
             "TOK_TABLEFILEFORMAT", // User-provided InputFormat and OutputFormat
             "TOK_STORAGEHANDLER", // Storage handler
             "TOK_TABLELOCATION",
@@ -706,36 +703,51 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
             tableDesc = tableDesc.copy(serdeProperties = tableDesc.serdeProperties ++ serdeParams)
           }
         case Token("TOK_FILEFORMAT_GENERIC", child :: Nil) =>
-          throw new SemanticException(
-            s"Unrecognized file format in STORED AS clause: ${child.getText}")
+          child.getText().toLowerCase(Locale.ENGLISH) match {
+            case "orc" =>
+              tableDesc = tableDesc.copy(
+                inputFormat = Option("org.apache.hadoop.hive.ql.io.orc.OrcInputFormat"),
+                outputFormat = Option("org.apache.hadoop.hive.ql.io.orc.OrcOutputFormat"))
+              if (tableDesc.serde.isEmpty) {
+                tableDesc = tableDesc.copy(
+                  serde = Option("org.apache.hadoop.hive.ql.io.orc.OrcSerde"))
+              }
 
-        case Token("TOK_TBLRCFILE", Nil) =>
-          tableDesc = tableDesc.copy(
-            inputFormat = Option("org.apache.hadoop.hive.ql.io.RCFileInputFormat"),
-            outputFormat = Option("org.apache.hadoop.hive.ql.io.RCFileOutputFormat"))
-          if (tableDesc.serde.isEmpty) {
-            tableDesc = tableDesc.copy(
-              serde = Option("org.apache.hadoop.hive.serde2.columnar.LazyBinaryColumnarSerDe"))
-          }
+            case "parquet" =>
+              tableDesc = tableDesc.copy(
+                inputFormat =
+                  Option("org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat"),
+                outputFormat =
+                  Option("org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat"))
+              if (tableDesc.serde.isEmpty) {
+                tableDesc = tableDesc.copy(
+                  serde = Option("org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe"))
+              }
 
-        case Token("TOK_TBLORCFILE", Nil) =>
-          tableDesc = tableDesc.copy(
-            inputFormat = Option("org.apache.hadoop.hive.ql.io.orc.OrcInputFormat"),
-            outputFormat = Option("org.apache.hadoop.hive.ql.io.orc.OrcOutputFormat"))
-          if (tableDesc.serde.isEmpty) {
-            tableDesc = tableDesc.copy(
-              serde = Option("org.apache.hadoop.hive.ql.io.orc.OrcSerde"))
-          }
+            case "rcfile" =>
+              tableDesc = tableDesc.copy(
+                inputFormat = Option("org.apache.hadoop.hive.ql.io.RCFileInputFormat"),
+                outputFormat = Option("org.apache.hadoop.hive.ql.io.RCFileOutputFormat"))
+              if (tableDesc.serde.isEmpty) {
+                tableDesc = tableDesc.copy(
+                  serde = Option("org.apache.hadoop.hive.serde2.columnar.LazyBinaryColumnarSerDe"))
+              }
 
-        case Token("TOK_TBLPARQUETFILE", Nil) =>
-          tableDesc = tableDesc.copy(
-            inputFormat =
-              Option("org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat"),
-            outputFormat =
-              Option("org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat"))
-          if (tableDesc.serde.isEmpty) {
-            tableDesc = tableDesc.copy(
-              serde = Option("org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe"))
+            case "textfile" =>
+              tableDesc = tableDesc.copy(
+                inputFormat =
+                  Option("org.apache.hadoop.mapred.TextInputFormat"),
+                outputFormat =
+                  Option("org.apache.hadoop.hive.ql.io.IgnoreKeyTextOutputFormat"))
+
+            case "sequencefile" =>
+              tableDesc = tableDesc.copy(
+                inputFormat = Option("org.apache.hadoop.mapred.SequenceFileInputFormat"),
+                outputFormat = Option("org.apache.hadoop.mapred.SequenceFileOutputFormat"))
+
+            case _ =>
+              throw new SemanticException(
+                s"Unrecognized file format in STORED AS clause: ${child.getText}")
           }
 
         case Token("TOK_TABLESERIALIZER",
@@ -751,7 +763,7 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
 
         case Token("TOK_TABLEPROPERTIES", list :: Nil) =>
           tableDesc = tableDesc.copy(properties = tableDesc.properties ++ getProperties(list))
-        case list @ Token("TOK_TABLEFILEFORMAT", _) =>
+        case list @ Token("TOK_TABLEFILEFORMAT", children) =>
           tableDesc = tableDesc.copy(
             inputFormat =
               Option(BaseSemanticAnalyzer.unescapeSQLString(list.getChild(0).getText)),
@@ -889,7 +901,8 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
                 Token("TOK_TABLEPROPLIST", propsClause) :: Nil) :: Nil) :: Nil =>
                 val serdeProps = propsClause.map {
                   case Token("TOK_TABLEPROPERTY", Token(name, Nil) :: Token(value, Nil) :: Nil) =>
-                    (name, value)
+                    (BaseSemanticAnalyzer.unescapeSQLString(name),
+                      BaseSemanticAnalyzer.unescapeSQLString(value))
                 }
                 (Nil, Some(BaseSemanticAnalyzer.unescapeSQLString(serdeClass)), serdeProps)
 
@@ -1040,7 +1053,7 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
     case Token("TOK_UNION", left :: right :: Nil) => Union(nodeToPlan(left), nodeToPlan(right))
 
     case a: ASTNode =>
-      throw new NotImplementedError(s"No parse rules for:\n ${dumpTree(a).toString} ")
+      throw new NotImplementedError(s"No parse rules for $node:\n ${dumpTree(a).toString} ")
   }
 
   val allJoinTokens = "(TOK_.*JOIN)".r

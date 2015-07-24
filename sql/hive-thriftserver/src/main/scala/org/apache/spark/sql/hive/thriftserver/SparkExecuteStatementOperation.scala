@@ -32,8 +32,7 @@ import org.apache.hive.service.cli._
 import org.apache.hadoop.hive.ql.metadata.Hive
 import org.apache.hadoop.hive.ql.metadata.HiveException
 import org.apache.hadoop.hive.ql.session.SessionState
-import org.apache.hadoop.hive.shims.{Utils, ShimLoader}
-import org.apache.hadoop.security.UserGroupInformation
+import org.apache.hadoop.hive.shims.Utils
 import org.apache.hive.service.cli.operation.ExecuteStatementOperation
 import org.apache.hive.service.cli.session.HiveSession
 

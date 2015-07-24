@@ -54,6 +54,10 @@
       <version>${project.version}</version>
     </dependency>
     <dependency>
+      <groupId>com.google.guava</groupId>
+      <artifactId>guava</artifactId>
+    </dependency>
+    <dependency>
       <groupId>${hive.group}</groupId>
       <artifactId>hive-metastore</artifactId>
     </dependency>
