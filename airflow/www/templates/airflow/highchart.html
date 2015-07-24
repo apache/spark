@@ -41,6 +41,9 @@ body {
     padding: 0px;
     background-color: #fff;
 }
+.navbar {
+  display: none;
+}
 {% endif %}
 </style>
 {% endblock %}
@@ -50,8 +53,6 @@ body {
 {% block body %}
 {{ super() }}
 {% if embed %}
-{% block navbar %}
-{% endblock %}
   <div id="chart_body">
       <img src="{{ url_for('static', filename='loading.gif') }}" width="50px">
   </div>
