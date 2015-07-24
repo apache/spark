@@ -119,8 +119,7 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll with SQLTestUtils {
     checkAnswer(Seq((1, "building burrito tunnels"), (1, "major projects"))
       .toDF("id", "saying")
       .groupBy(expr("length(saying)"))
-      .count()
-      .orderBy("count"), Row(24, 1) :: Row(14, 1) :: Nil)
+      .count(), Row(24, 1) :: Row(14, 1) :: Nil)
   }
 
   test("SQL Dialect Switching to a new SQL parser") {
