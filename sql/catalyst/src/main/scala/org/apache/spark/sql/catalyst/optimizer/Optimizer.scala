@@ -66,8 +66,10 @@ class DefaultOptimizer extends Optimizer {
       RemovePositive ::
       SimplifyFilters ::
       SimplifyCasts ::
-      SimplifyCaseConversionExpressions ::
+      SimplifyCaseConversionExpressions :: // Nil : _*) ::
       extendedOperatorOptimizationRules.toList : _*) ::
+    // Batch("Extended Operator Optimizations", Once,
+    //  extendedOperatorOptimizationRules : _*) ::
     Batch("Decimal Optimizations", FixedPoint(100),
       DecimalAggregates) ::
     Batch("LocalRelation", FixedPoint(100),
@@ -550,8 +552,20 @@ object SimplifyFilters extends Rule[LogicalPlan] {
  * This heuristic is valid assuming the expression evaluation cost is minimal.
  */
 object PushPredicateThroughProject extends Rule[LogicalPlan] with PredicateHelper {
+
+  /** If the condition changes nullability of attributes. */
+  private def preserveNullability(condition: Expression): Boolean = condition match {
+    // The condition is used to change nullability of attributes when
+    //  - expressions of AtLeastNNonNulls are all attributes; and
+    //  - AtLeastNNonNulls is used to make sure that there is no attribute is null.
+    case AtLeastNNonNulls(n, expressions) =>
+      !(expressions.forall(_.isInstanceOf[Attribute]) && n == expressions.length)
+    case other => true
+  }
+
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case filter @ Filter(condition, project @ Project(fields, grandChild)) =>
+    case filter @ Filter(condition, project @ Project(fields, grandChild))
+      if preserveNullability(condition) =>
       // Create a map of Aliases to their values from the child projection.
       // e.g., 'SELECT a + b AS c, d ...' produces Map(c -> a + b).
       val aliasMap = AttributeMap(fields.collect {

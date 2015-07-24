@@ -85,7 +85,26 @@ case class Generate(
 }
 
 case class Filter(condition: Expression, child: LogicalPlan) extends UnaryNode {
-  override def output: Seq[Attribute] = child.output
+  private def shouldChangeNullable(atLeastNNonNulls: AtLeastNNonNulls): Boolean = {
+    val expressions = atLeastNNonNulls.children
+    val n = atLeastNNonNulls.n
+    if (expressions.length != n) {
+      false
+    } else {
+      expressions.forall(_.isInstanceOf[Attribute])
+    }
+  }
+
+  override def output: Seq[Attribute] = condition match {
+    case a: AtLeastNNonNulls if shouldChangeNullable(a) =>
+      val nonNullableAttributes = AttributeSet(a.children.asInstanceOf[Seq[Attribute]])
+      child.output.map {
+        case attr if nonNullableAttributes.contains(attr) =>
+          attr.withNullability(false)
+        case attr => attr
+      }
+    case _ => child.output
+  }
 }
 
 case class Union(left: LogicalPlan, right: LogicalPlan) extends BinaryNode {
