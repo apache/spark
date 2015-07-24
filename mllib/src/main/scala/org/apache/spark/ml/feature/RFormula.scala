@@ -79,17 +79,30 @@ class RFormula(override val uid: String) extends Estimator[RFormulaModel] with R
 
   override def fit(dataset: DataFrame): RFormulaModel = {
     require(parsedFormula.isDefined, "Must call setFormula() first.")
-    val factorLevels = parsedFormula.get.terms.flatMap { term =>
-      dataset.schema(term) match {
+    // StringType terms and terms representing interactions need to be encoded before assembly.
+    // TODO(ekl) add support for feature interactions
+    var encoderStages = Seq[Transformer]()
+    var tempColumns = Seq[String]()
+    val encodedTerms = parsedFormula.terms.map { term =>
+      schema(term) match {
         case column if column.dataType == StringType =>
-          val idxTerm = term + "_idx_" + uid
-          val indexer = new StringIndexer().setInputCol(term).setOutputCol(idxTerm)
-          Some(term -> indexer.fit(dataset))
+          val indexCol = term + "_idx_" + uid
+          val encodedCol = term + "_onehot_" + uid
+          encoderStages :+= new StringIndexer().setInputCol(term).setOutputCol(indexCol)
+          encoderStages :+= new OneHotEncoder().setInputCol(indexCol).setOutputCol(encodedCol)
+          tempColumns :+= indexCol
+          tempColumns :+= encodedCol
+          encodedCol
         case _ =>
-          None
+          term
       }
-    }.toMap
-    copyValues(new RFormulaModel(uid, parsedFormula.get, factorLevels).setParent(this))
+    }
+    encoderStages :+= new VectorAssembler(uid)
+      .setInputCols(encodedTerms.toArray)
+      .setOutputCol($(featuresCol))
+    encoderStages :+= new ColumnPruner(tempColumns.toSet)
+    val pipelineModel = new Pipeline(uid).setStages(encoderStages.toArray).fit(dataset)
+    new RFormulaModel(uid, parsedFormula.get, pipelineModel)
   }
 
   // optimistic schema; does not contain any ML attributes
@@ -116,17 +129,17 @@ class RFormula(override val uid: String) extends Estimator[RFormulaModel] with R
 private[feature] class RFormulaModel(
     override val uid: String,
     parsedFormula: ParsedRFormula,
-    factorLevels: Map[String, StringIndexerModel])
+    pipelineModel: PipelineModel)
   extends Model[RFormulaModel] with RFormulaBase {
 
   override def transform(dataset: DataFrame): DataFrame = {
     checkCanTransform(dataset.schema)
-    transformLabel(featureTransformer(dataset.schema).transform(dataset))
+    transformLabel(pipelineModel.transform(dataset))
   }
 
   override def transformSchema(schema: StructType): StructType = {
     checkCanTransform(schema)
-    val withFeatures = featureTransformer(schema).transformSchema(schema)
+    val withFeatures = pipelineModel.transformSchema(schema)
     if (hasLabelCol(schema)) {
       withFeatures
     } else if (schema.exists(_.name == parsedFormula.label)) {
@@ -143,7 +156,7 @@ private[feature] class RFormulaModel(
   }
 
   override def copy(extra: ParamMap): RFormulaModel = copyValues(
-    new RFormulaModel(uid, parsedFormula, factorLevels))
+    new RFormulaModel(uid, parsedFormula, pipelineModel))
 
   override def toString: String = s"RFormulaModel(${parsedFormula})"
 
@@ -172,48 +185,16 @@ private[feature] class RFormulaModel(
       !columnNames.contains($(labelCol)) || schema($(labelCol)).dataType == DoubleType,
       "Label column already exists and is not of type DoubleType.")
   }
-
-  private def featureTransformer(schema: StructType): Transformer = {
-    // StringType terms and terms representing interactions need to be encoded before assembly.
-    // TODO(ekl) add support for feature interactions
-    var encoderStages = Seq[Transformer]()
-    var tempColumns = Seq[String]()
-    val encodedTerms = parsedFormula.terms.map { term =>
-      schema(term) match {
-        case column if column.dataType == StringType =>
-          val encodedTerm = term + "_onehot_" + uid
-          val indexer = factorLevels(term)
-          val indexCol = indexer.getOrDefault(indexer.outputCol)
-          encoderStages :+= indexer
-          encoderStages :+= new OneHotEncoder()
-            .setInputCol(indexCol)
-            .setOutputCol(encodedTerm)
-          tempColumns :+= encodedTerm
-          tempColumns :+= indexCol
-          encodedTerm
-        case _ =>
-          term
-      }
-    }
-    encoderStages :+= new VectorAssembler(uid)
-      .setInputCols(encodedTerms.toArray)
-      .setOutputCol($(featuresCol))
-    encoderStages :+= new ColumnPruner(tempColumns.toSet)
-    new PipelineModel(uid, encoderStages.toArray)
-  }
 }
 
 /**
  * Utility transformer for removing temporary columns from a DataFrame.
+ * TODO(ekl) make this a public transformer
  */
 private class ColumnPruner(columnsToPrune: Set[String]) extends Transformer {
   override val uid = Identifiable.randomUID("columnPruner")
   override def transform(dataset: DataFrame): DataFrame = {
-    var res: DataFrame = dataset
-    for (column <- columnsToPrune) {
-      res = res.drop(column)
-    }
-    res
+    dataset.select(dataset.columns.filter(!columnsToPrune.contains(_)))
   }
   override def transformSchema(schema: StructType): StructType = {
     StructType(schema.fields.filter(col => !columnsToPrune.contains(col.name)))
