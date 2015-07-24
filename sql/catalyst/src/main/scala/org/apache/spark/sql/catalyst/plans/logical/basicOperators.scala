@@ -128,7 +128,10 @@ case class Join(
 
   // Joins are only resolved if they don't introduce ambiguous expression ids.
   override lazy val resolved: Boolean = {
-    childrenResolved && expressions.forall(_.resolved) && selfJoinResolved
+    childrenResolved &&
+      expressions.forall(_.resolved) &&
+      selfJoinResolved &&
+      condition.forall(_.dataType == BooleanType)
   }
 }
 
