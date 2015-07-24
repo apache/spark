@@ -28,8 +28,6 @@ import org.scalatest.time.SpanSugar._
 import org.apache.spark.streaming._
 import org.apache.spark.streaming.scheduler.rate.RateEstimator
 
-
-
 class RateControllerSuite extends TestSuiteBase {
 
   override def actuallyWait: Boolean = true
@@ -125,7 +123,7 @@ private class MockRateLimitDStream[T: ClassTag](
     })
 }
 
-private class ConstantEstimator(rates: Double*) extends RateEstimator {
+private[streaming] class ConstantEstimator(rates: Double*) extends RateEstimator {
   private var idx: Int = 0
 
   private def nextRate(): Double = {

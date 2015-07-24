@@ -17,14 +17,14 @@
 
 package org.apache.spark.streaming.scheduler
 
+import java.io.ObjectInputStream
 import java.util.concurrent.atomic.AtomicLong
 
 import scala.concurrent.{ExecutionContext, Future}
 
-import org.apache.spark.SparkConf
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.streaming.scheduler.rate.RateEstimator
-import org.apache.spark.util.ThreadUtils
+import org.apache.spark.util.{ThreadUtils, Utils}
 
 /**
  * A StreamingListener that receives batch completion updates, and maintains
@@ -34,14 +34,29 @@ import org.apache.spark.util.ThreadUtils
 private[streaming] abstract class RateController(val streamUID: Int, rateEstimator: RateEstimator)
     extends StreamingListener with Serializable {
 
+  init()
+
   protected def publish(rate: Long): Unit
 
-  // Used to compute & publish the rate update asynchronously
   @transient
-  implicit private val executionContext = ExecutionContext.fromExecutorService(
-    ThreadUtils.newDaemonSingleThreadExecutor("stream-rate-update"))
+  implicit private var executionContext: ExecutionContext = _
 
-  private val rateLimit: AtomicLong = new AtomicLong(-1L)
+  @transient
+  private var rateLimit: AtomicLong = _
+
+  /**
+   * An initialization method called both from the constructor and Serialization code.
+   */
+  private def init() {
+    executionContext = ExecutionContext.fromExecutorService(
+      ThreadUtils.newDaemonSingleThreadExecutor("stream-rate-update"))
+    rateLimit = new AtomicLong(-1L)
+  }
+
+  private def readObject(ois: ObjectInputStream): Unit = Utils.tryOrIOException {
+    ois.defaultReadObject()
+    init()
+  }
 
   /**
    * Compute the new rate limit and publish it asynchronously.

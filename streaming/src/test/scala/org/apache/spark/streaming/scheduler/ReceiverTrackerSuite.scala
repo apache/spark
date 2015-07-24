@@ -118,7 +118,7 @@ class ReceiverTrackerSuite extends TestSuiteBase {
  *       the receiver.
  * @see [[[SingletonDummyReceiver]]].
  */
-private class RateLimitInputDStream(@transient ssc_ : StreamingContext)
+private[streaming] class RateLimitInputDStream(@transient ssc_ : StreamingContext)
   extends ReceiverInputDStream[Int](ssc_) {
 
   override def getReceiver(): DummyReceiver = SingletonDummyReceiver
@@ -143,7 +143,7 @@ private class RateLimitInputDStream(@transient ssc_ : StreamingContext)
  * @note It's necessary to be a top-level object, or else serialization would create another
  *       one on the executor side and we won't be able to read its rate limit.
  */
-private object SingletonDummyReceiver extends DummyReceiver {
+private[streaming] object SingletonDummyReceiver extends DummyReceiver {
 
   /** Reset the object to be usable in another test. */
   def reset(): Unit = {
@@ -154,7 +154,7 @@ private object SingletonDummyReceiver extends DummyReceiver {
 /**
  * Dummy receiver implementation
  */
-private class DummyReceiver(host: Option[String] = None)
+private[streaming] class DummyReceiver(host: Option[String] = None)
   extends Receiver[Int](StorageLevel.MEMORY_ONLY) {
 
   def onStart() {
