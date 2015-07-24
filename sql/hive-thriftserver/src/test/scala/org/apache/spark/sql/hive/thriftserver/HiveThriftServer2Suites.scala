@@ -569,6 +569,10 @@ abstract class HiveThriftServer2Test extends SparkFunSuite with BeforeAndAfterAl
             // This log line appears when the server fails to start and terminates gracefully (e.g.
             // because of port contention).
             serverStarted.tryFailure(new RuntimeException("Failed to start HiveThriftServer2"))
+          } else if (line.contains("Exception in thread \"main\"")) {
+            // The main thread exited after raising an exception, sign of a serious problem
+            serverStarted
+                .tryFailure(new RuntimeException(s"Failed to start HiveThriftServer2: $line"))
           }
         }))
 
