@@ -762,7 +762,7 @@ object functions {
   def bitwiseNOT(e: Column): Column = BitwiseNot(e.expr)
 
   /**
-   * Parses the comma separated expression strings into the columns they represent, similar to
+   * Parses the expression string into the column that it represents, similar to
    * DataFrame.selectExpr
    * {{{
    *   // get the number of words of each length
