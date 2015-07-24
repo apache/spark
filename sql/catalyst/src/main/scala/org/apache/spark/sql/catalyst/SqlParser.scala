@@ -271,8 +271,7 @@ class SqlParser extends AbstractSparkSQLParser with DataTypeParser {
       lexical.normalizeKeyword(udfName) match {
         case "sum" => SumDistinct(exprs.head)
         case "count" => CountDistinct(exprs)
-        case name => UnresolvedFunction(name, exprs, isDistinct = true)
-        case _ => throw new AnalysisException(s"function $udfName does not support DISTINCT")
+        case _ => UnresolvedFunction(udfName, exprs, isDistinct = true)
       }
     }
     | APPROXIMATE ~> ident ~ ("(" ~ DISTINCT ~> expression <~ ")") ^^ { case udfName ~ exp =>
@@ -323,7 +322,10 @@ class SqlParser extends AbstractSparkSQLParser with DataTypeParser {
 
   protected lazy val numericLiteral: Parser[Literal] =
     ( integral  ^^ { case i => Literal(toNarrowestIntegerType(i)) }
-    | sign.? ~ unsignedFloat ^^ { case s ~ f => Literal((s.getOrElse("") + f).toDouble) }
+    | sign.? ~ unsignedFloat ^^ {
+      // TODO(davies): some precisions may loss, we should create decimal literal
+      case s ~ f => Literal(BigDecimal(s.getOrElse("") + f).doubleValue())
+    }
     )
 
   protected lazy val unsignedFloat: Parser[String] =

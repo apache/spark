@@ -21,7 +21,6 @@ import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.errors.attachTree
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodeGenContext, GeneratedExpressionCode}
-import org.apache.spark.sql.catalyst.trees
 import org.apache.spark.sql.types._
 
 /**
@@ -34,7 +33,25 @@ case class BoundReference(ordinal: Int, dataType: DataType, nullable: Boolean)
 
   override def toString: String = s"input[$ordinal, $dataType]"
 
-  override def eval(input: InternalRow): Any = input(ordinal)
+  // Use special getter for primitive types (for UnsafeRow)
+  override def eval(input: InternalRow): Any = {
+    if (input.isNullAt(ordinal)) {
+      null
+    } else {
+      dataType match {
+        case BooleanType => input.getBoolean(ordinal)
+        case ByteType => input.getByte(ordinal)
+        case ShortType => input.getShort(ordinal)
+        case IntegerType | DateType => input.getInt(ordinal)
+        case LongType | TimestampType => input.getLong(ordinal)
+        case FloatType => input.getFloat(ordinal)
+        case DoubleType => input.getDouble(ordinal)
+        case StringType => input.getUTF8String(ordinal)
+        case BinaryType => input.getBinary(ordinal)
+        case _ => input.get(ordinal)
+      }
+    }
+  }
 
   override def name: String = s"i[$ordinal]"
 

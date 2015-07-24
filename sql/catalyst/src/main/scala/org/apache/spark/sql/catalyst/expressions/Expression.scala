@@ -184,10 +184,10 @@ abstract class Expression extends TreeNode[Expression] {
  */
 trait Unevaluable extends Expression {
 
-  override def eval(input: InternalRow = null): Any =
+  final override def eval(input: InternalRow = null): Any =
     throw new UnsupportedOperationException(s"Cannot evaluate expression: $this")
 
-  override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String =
+  final override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String =
     throw new UnsupportedOperationException(s"Cannot evaluate expression: $this")
 }
 

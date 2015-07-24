@@ -123,7 +123,7 @@ class SparkContextSchedulerCreationSuite
   }
 
   test("local-cluster") {
-    createTaskScheduler("local-cluster[3, 14, 512]").backend match {
+    createTaskScheduler("local-cluster[3, 14, 1024]").backend match {
       case s: SparkDeploySchedulerBackend => // OK
       case _ => fail()
     }
