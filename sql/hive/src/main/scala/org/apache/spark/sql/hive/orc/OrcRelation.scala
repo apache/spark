@@ -90,8 +90,6 @@ private[orc] class OrcOutputWriter(
       .asInstanceOf[SettableStructObjectInspector]
   }
 
-  private val allStructFieldRefs = structOI.getAllStructFieldRefs
-
   // `OrcRecordWriter.close()` creates an empty file if no rows are written at all.  We use this
   // flag to decide whether `OrcRecordWriter.close()` needs to be called.
   private var recordWriterInstantiated = false
