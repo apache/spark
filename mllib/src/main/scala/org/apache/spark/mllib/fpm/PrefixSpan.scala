@@ -17,6 +17,8 @@
 
 package org.apache.spark.mllib.fpm
 
+import scala.collection.mutable.ArrayBuffer
+
 import org.apache.spark.Logging
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.rdd.RDD
@@ -81,11 +83,12 @@ class PrefixSpan private (
     if (sequences.getStorageLevel == StorageLevel.NONE) {
       logWarning("Input data is not cached.")
     }
-    val minCount = getMinCount(sequences)
+    val sortedSequences = sortSequences(sequences)
+    val minCount = getMinCount(sortedSequences)
     val lengthOnePatternsAndCounts =
-      getFreqItemAndCounts(minCount, sequences).collect()
+      getFreqItemAndCounts(minCount, sortedSequences).collect()
     val prefixAndProjectedDatabase = getPrefixAndProjectedDatabase(
-      lengthOnePatternsAndCounts.map(_._1), sequences)
+      lengthOnePatternsAndCounts.map(_._1), sortedSequences)
     val groupedProjectedDatabase = prefixAndProjectedDatabase
       .map(x => (x._1.toSeq, x._2))
       .groupByKey()
@@ -96,6 +99,24 @@ class PrefixSpan private (
         lengthOnePatternsAndCounts.map(x => (Array(x._1), x._2)))
     val allPatterns = lengthOnePatternsAndCountsRdd ++ nextPatterns
     allPatterns
+  }
+
+  private def sortSequences(sequences: RDD[Array[Int]]): RDD[Array[Int]] = {
+    sequences.map { sequence =>
+      val sortedArray: ArrayBuffer[Int]  = ArrayBuffer()
+      var currentIndex = -1
+      var nextIndex = 0
+      while (nextIndex != -1) {
+        nextIndex = sequence.indexOf(-1, currentIndex + 1)
+        if (nextIndex != -1) {
+          sortedArray ++= sequence.slice(currentIndex, nextIndex).sorted
+        } else {
+          sortedArray ++= sequence.drop(currentIndex).sorted
+        }
+        currentIndex = nextIndex
+      }
+      sortedArray.toArray
+    }
   }
 
   /**
@@ -116,7 +137,7 @@ class PrefixSpan private (
   private def getFreqItemAndCounts(
       minCount: Long,
       sequences: RDD[Array[Int]]): RDD[(Int, Long)] = {
-    sequences.flatMap(_.distinct.map((_, 1L)))
+    sequences.flatMap(_.filter(_ != -1).distinct.map((_, 1L)))
       .reduceByKey(_ + _)
       .filter(_._2 >= minCount)
   }
@@ -129,15 +150,12 @@ class PrefixSpan private (
    */
   private def getPrefixAndProjectedDatabase(
       frequentPrefixes: Array[Int],
-      sequences: RDD[Array[Int]]): RDD[(Array[Int], Array[Int])] = {
-    val filteredSequences = sequences.map { p =>
-      p.filter (frequentPrefixes.contains(_) )
-    }
-    filteredSequences.flatMap { x =>
-      frequentPrefixes.map { y =>
-        val sub = LocalPrefixSpan.getSuffix(y, x)
-        (Array(y), sub)
-      }.filter(_._2.nonEmpty)
+      sequences: RDD[Array[Int]]): RDD[(Array[Int], (Array[Int], Int))] = {
+    sequences.flatMap { sequence =>
+      frequentPrefixes.map { item =>
+        val sub = LocalPrefixSpan.getSuffix(Array(item), (sequence, 0))
+        (Array(item), sub)
+      }.filter(_._2._1.nonEmpty)
     }
   }
 
@@ -149,10 +167,10 @@ class PrefixSpan private (
    */
   private def getPatternsInLocal(
       minCount: Long,
-      data: RDD[(Array[Int], Array[Array[Int]])]): RDD[(Array[Int], Long)] = {
+      data: RDD[(Array[Int], Array[(Array[Int], Int)])]): RDD[(Array[Int], Long)] = {
     data.flatMap { case (prefix, projDB) =>
       LocalPrefixSpan.run(minCount, maxPatternLength, prefix.toList, projDB)
-        .map { case (pattern: List[Int], count: Long) => (pattern.toArray.reverse, count) }
+        .map { case (pattern: List[Int], count: Long) => (pattern.toArray, count) }
     }
   }
 }
