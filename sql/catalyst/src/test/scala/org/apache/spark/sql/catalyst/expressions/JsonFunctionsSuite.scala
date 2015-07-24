@@ -95,10 +95,7 @@ class JsonFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("$.store.book[*].reader") {
     checkEvaluation(
       GetJsonObject(Literal(json), Literal("$.store.book[*].reader")),
-      // Hive uses a single outer bracket, but this doesn't seem to be consistent with
-      // other JSONPath evaluators... and it's much more complicated to implement
-      // in a streaming fashion. so we'll use a more standard representation
-      """[[{"age":25,"name":"bob"},{"age":26,"name":"jack"}]]""")
+      """[{"age":25,"name":"bob"},{"age":26,"name":"jack"}]""")
   }
 
   test("$.store.basket[0][1]") {

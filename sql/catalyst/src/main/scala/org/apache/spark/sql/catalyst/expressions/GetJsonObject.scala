@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import java.io.ByteArrayOutputStream
+import java.io.{StringWriter, ByteArrayOutputStream}
 
 import com.fasterxml.jackson.core._
 import org.apache.spark.sql.catalyst.InternalRow
@@ -108,6 +108,7 @@ case class GetJsonObject(
   import GetJsonObject._
   import PathInstruction._
   import WriteStyle._
+  import com.fasterxml.jackson.core.JsonToken._
 
   override def eval(input: InternalRow): Any = {
     val json = jsonExpression.eval(input).asInstanceOf[UTF8String]
@@ -176,6 +177,30 @@ case class GetJsonObject(
     }
   }
 
+  // advance to the desired array index, assumes to start at the START_ARRAY token
+  private def arrayIndex(p: JsonParser, f: () => Boolean): Long => Boolean = {
+    case _ if p.getCurrentToken == END_ARRAY =>
+      // terminate, nothing has been written
+      false
+
+    case 0 =>
+      // we've reached the desired index
+      val dirty = f()
+
+      while (p.nextToken() != END_ARRAY) {
+        // advance the token stream to the end of the array
+        p.skipChildren()
+      }
+
+      dirty
+
+    case i if i > 0 =>
+      // skip this token and evaluate the next
+      p.skipChildren()
+      p.nextToken()
+      arrayIndex(p, f)(i - 1)
+  }
+
   /**
    * Evaluate a list of JsonPath instructions, returning a bool that indicates if any leaf nodes
    * have been written to the generator
@@ -185,7 +210,6 @@ case class GetJsonObject(
       g: JsonGenerator,
       style: WriteStyle,
       path: List[PathInstruction]): Boolean = {
-    import com.fasterxml.jackson.core.JsonToken._
     (p.getCurrentToken, path) match {
       case (VALUE_STRING, Nil) if style == RawStyle =>
         // there is no array wildcard or slice parent, emit this string without quotes
@@ -200,7 +224,7 @@ case class GetJsonObject(
         // flatten this array into the parent
         var dirty = false
         while (p.nextToken() != END_ARRAY) {
-          dirty |= evaluatePath(p, g, QuotedStyle, Nil)
+          dirty |= evaluatePath(p, g, style, Nil)
         }
         dirty
 
@@ -221,46 +245,68 @@ case class GetJsonObject(
         }
         dirty
 
-      case (START_ARRAY, Subscript :: Wildcard :: xs) =>
+      case (START_ARRAY, Subscript :: Wildcard :: Subscript :: Wildcard :: xs) =>
         // special handling for the non-structure preserving double wildcard behavior in Hive
-        val (style, tail) = xs match {
-          case Subscript :: Wildcard :: ys => (FlattenStyle, ys)
-          case _ => (QuotedStyle, xs)
-        }
-
         var dirty = false
         g.writeStartArray()
         while (p.nextToken() != END_ARRAY) {
-          // wildcards can have multiple matches, continually update the dirty bit
-          dirty |= evaluatePath(p, g, style, tail)
+          dirty |= evaluatePath(p, g, FlattenStyle, xs)
         }
         g.writeEndArray()
         dirty
 
-      case (START_ARRAY, Subscript :: Index(idx) :: xs) =>
-        def go: Long => Boolean = {
-          case _ if p.getCurrentToken == END_ARRAY =>
-            // terminate, nothing has been written
-            false
-
-          case 0 =>
-            // we've reached the desired index
-            val dirty = evaluatePath(p, g, style, xs)
-            while (p.nextToken() != END_ARRAY) {
-              // advance the token stream to the end of the array
-              p.skipChildren()
-            }
-            dirty
-
-          case i if i > 0 =>
-            // skip this token and evaluate the next
-            p.skipChildren()
-            p.nextToken()
-            go(i - 1)
+      case (START_ARRAY, Subscript :: Wildcard :: xs) if style != QuotedStyle =>
+        // retain Flatten, otherwise use Quoted... cannot use Raw within an array
+        val nextStyle = style match {
+          case RawStyle => QuotedStyle
+          case FlattenStyle => FlattenStyle
+          case QuotedStyle => throw new IllegalStateException()
         }
 
+        // temporarily buffer child matches, the emitted json will need to be
+        // modified slightly if there is only a single element written
+        val buffer = new StringWriter()
+        val flattenGenerator = jsonFactory.createGenerator(buffer)
+        flattenGenerator.writeStartArray()
+
+        var dirty = 0
+        while (p.nextToken() != END_ARRAY) {
+          // track the number of array elements and only emit an outer array if
+          // we've written more than one element, this matches Hive's behavior
+          dirty += (if (evaluatePath(p, flattenGenerator, nextStyle, xs)) 1 else 0)
+        }
+        flattenGenerator.writeEndArray()
+        flattenGenerator.close()
+
+        val buf = buffer.getBuffer
+        if (dirty > 1) {
+          g.writeRawValue(buf.toString)
+        } else if (dirty == 1) {
+          // remove outer array tokens
+          g.writeRawValue(buf.substring(1, buf.length()-1))
+        } // else do not write anything
+
+        dirty > 0
+
+      case (START_ARRAY, Subscript :: Wildcard :: xs) =>
+        var dirty = false
+        g.writeStartArray()
+        while (p.nextToken() != END_ARRAY) {
+          // wildcards can have multiple matches, continually update the dirty count
+          dirty |= evaluatePath(p, g, QuotedStyle, xs)
+        }
+        g.writeEndArray()
+
+        dirty
+
+      case (START_ARRAY, Subscript :: Index(idx) :: (xs@Subscript :: Wildcard :: _)) =>
         p.nextToken()
-        go(idx)
+        // we're going to have 1 or more results, switch to QuotedStyle
+        arrayIndex(p, () => evaluatePath(p, g, QuotedStyle, xs))(idx)
+
+      case (START_ARRAY, Subscript :: Index(idx) :: xs) =>
+        p.nextToken()
+        arrayIndex(p, () => evaluatePath(p, g, style, xs))(idx)
 
       case (FIELD_NAME, Named(name) :: xs) if p.getCurrentName == name =>
         // exact field match
