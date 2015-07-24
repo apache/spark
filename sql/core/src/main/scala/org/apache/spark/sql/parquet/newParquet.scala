@@ -352,20 +352,22 @@ private[sql] class ParquetRelation2(
       leaves: Seq[FileStatus],
       dataStatuses: Seq[FileStatus]): Seq[FileStatus] = {
 
-      // Get the partitions that have summary files
-      val typeInference = sqlContext.conf.partitionColumnTypeInferenceEnabled()
-      val summariesPaths = leaves.map(_.getPath.getParent())
-      val summariesPartitions = PartitioningUtils.parsePartitions(summariesPaths,
-        PartitioningUtils.DEFAULT_PARTITION_NAME, typeInference).partitions.toSet
+      // Get the paths that have summary files
+      val directoriesWithSummaries = leaves.map(_.getPath.getParent.toString).toSet
 
-      dataStatuses.filterNot { d =>
-        val part = PartitioningUtils.parsePartitions(Seq(d.getPath.getParent()),
-          PartitioningUtils.DEFAULT_PARTITION_NAME, typeInference)
-        if (summariesPartitions.size > 0 && part.partitions.length > 0) {
-          summariesPartitions.contains(part.partitions(0))
-        } else {
-          false
+      val typeInference = sqlContext.conf.partitionColumnTypeInferenceEnabled()
+      val dataPaths = dataStatuses.map(_.getPath.getParent)
+      val dataPathsWithoutSummaries = PartitioningUtils.parsePartitions(dataPaths,
+        PartitioningUtils.DEFAULT_PARTITION_NAME, typeInference).partitions
+          .map(_.path).filterNot(p => directoriesWithSummaries.contains(p)).toSet
+
+      if (dataPathsWithoutSummaries.size > 0) {
+        dataStatuses.filter { d =>
+          val path = d.getPath.getParent.toString
+          dataPathsWithoutSummaries.contains(path)
         }
+      } else {
+        dataStatuses
       }
     }
 
