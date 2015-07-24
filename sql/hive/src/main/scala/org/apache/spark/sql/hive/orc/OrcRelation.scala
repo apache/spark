@@ -110,12 +110,28 @@ private[orc] class OrcOutputWriter(
     ).asInstanceOf[RecordWriter[NullWritable, Writable]]
   }
 
+  private def wrapOrcStruct(o: OrcStruct, oi: SettableStructObjectInspector, a: Row): OrcStruct = {
+    val fieldRefs = oi.getAllStructFieldRefs
+    val row = a.asInstanceOf[InternalRow]
+    var i = 0
+    while (i < fieldRefs.length) {
+      oi.setStructFieldData(
+        o,
+        fieldRefs.get(i),
+        wrap(row(i), fieldRefs.get(i).getFieldObjectInspector))
+      i += 1
+    }
+    o
+  }
+
+  val cachedOrcStruct = structOI.create().asInstanceOf[OrcStruct]
+
   override def write(row: Row): Unit = {
-    val orcRow = wrap(row, structOI)
+    wrapOrcStruct(cachedOrcStruct, structOI, row)
 
     recordWriter.write(
       NullWritable.get(),
-      serializer.serialize(orcRow, structOI))
+      serializer.serialize(cachedOrcStruct, structOI))
   }
 
   override def close(): Unit = {
