@@ -98,7 +98,7 @@ sealed trait Matrix extends Serializable {
   /** Map the values of this matrix using a function. Generates a new matrix. Performs the
     * function on only the backing array. For example, an operation such as addition or
     * subtraction will only be performed on the non-zero values in a `SparseMatrix`. */
-  private[mllib] def map(f: Double => Double): Matrix
+  private[spark] def map(f: Double => Double): Matrix
 
   /** Update all the values of this matrix using the function f. Performed in-place on the
     * backing array. For example, an operation such as addition or subtraction will only be
@@ -174,8 +174,8 @@ private[spark] class MatrixUDT extends UserDefinedType[Matrix] {
   override def deserialize(datum: Any): Matrix = {
     datum match {
       case row: InternalRow =>
-        require(row.length == 7,
-          s"MatrixUDT.deserialize given row with length ${row.length} but requires length == 7")
+        require(row.numFields == 7,
+          s"MatrixUDT.deserialize given row with length ${row.numFields} but requires length == 7")
         val tpe = row.getByte(0)
         val numRows = row.getInt(1)
         val numCols = row.getInt(2)
@@ -289,7 +289,7 @@ class DenseMatrix(
 
   override def copy: DenseMatrix = new DenseMatrix(numRows, numCols, values.clone())
 
-  private[mllib] def map(f: Double => Double) = new DenseMatrix(numRows, numCols, values.map(f),
+  private[spark] def map(f: Double => Double) = new DenseMatrix(numRows, numCols, values.map(f),
     isTransposed)
 
   private[mllib] def update(f: Double => Double): DenseMatrix = {
@@ -555,7 +555,7 @@ class SparseMatrix(
     new SparseMatrix(numRows, numCols, colPtrs, rowIndices, values.clone())
   }
 
-  private[mllib] def map(f: Double => Double) =
+  private[spark] def map(f: Double => Double) =
     new SparseMatrix(numRows, numCols, colPtrs, rowIndices, values.map(f), isTransposed)
 
   private[mllib] def update(f: Double => Double): SparseMatrix = {

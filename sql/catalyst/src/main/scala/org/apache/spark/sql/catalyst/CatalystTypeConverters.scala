@@ -24,6 +24,7 @@ import java.util.{Map => JavaMap}
 import javax.annotation.Nullable
 
 import scala.collection.mutable.HashMap
+import scala.language.existentials
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions._
@@ -139,14 +140,14 @@ object CatalystTypeConverters {
   private object IdentityConverter extends CatalystTypeConverter[Any, Any, Any] {
     override def toCatalystImpl(scalaValue: Any): Any = scalaValue
     override def toScala(catalystValue: Any): Any = catalystValue
-    override def toScalaImpl(row: InternalRow, column: Int): Any = row(column)
+    override def toScalaImpl(row: InternalRow, column: Int): Any = row.get(column)
   }
 
   private case class UDTConverter(
       udt: UserDefinedType[_]) extends CatalystTypeConverter[Any, Any, Any] {
     override def toCatalystImpl(scalaValue: Any): Any = udt.serialize(scalaValue)
     override def toScala(catalystValue: Any): Any = udt.deserialize(catalystValue)
-    override def toScalaImpl(row: InternalRow, column: Int): Any = toScala(row(column))
+    override def toScalaImpl(row: InternalRow, column: Int): Any = toScala(row.get(column))
   }
 
   /** Converter for arrays, sequences, and Java iterables. */
@@ -183,7 +184,7 @@ object CatalystTypeConverters {
     }
 
     override def toScalaImpl(row: InternalRow, column: Int): Seq[Any] =
-      toScala(row(column).asInstanceOf[Seq[Any]])
+      toScala(row.get(column).asInstanceOf[Seq[Any]])
   }
 
   private case class MapConverter(
@@ -226,7 +227,7 @@ object CatalystTypeConverters {
     }
 
     override def toScalaImpl(row: InternalRow, column: Int): Map[Any, Any] =
-      toScala(row(column).asInstanceOf[Map[Any, Any]])
+      toScala(row.get(column).asInstanceOf[Map[Any, Any]])
   }
 
   private case class StructConverter(
@@ -259,9 +260,9 @@ object CatalystTypeConverters {
       if (row == null) {
         null
       } else {
-        val ar = new Array[Any](row.size)
+        val ar = new Array[Any](row.numFields)
         var idx = 0
-        while (idx < row.size) {
+        while (idx < row.numFields) {
           ar(idx) = converters(idx).toScala(row, idx)
           idx += 1
         }
@@ -270,7 +271,7 @@ object CatalystTypeConverters {
     }
 
     override def toScalaImpl(row: InternalRow, column: Int): Row =
-      toScala(row(column).asInstanceOf[InternalRow])
+      toScala(row.get(column).asInstanceOf[InternalRow])
   }
 
   private object StringConverter extends CatalystTypeConverter[Any, String, UTF8String] {
@@ -280,7 +281,8 @@ object CatalystTypeConverters {
     }
     override def toScala(catalystValue: UTF8String): String =
       if (catalystValue == null) null else catalystValue.toString
-    override def toScalaImpl(row: InternalRow, column: Int): String = row(column).toString
+    override def toScalaImpl(row: InternalRow, column: Int): String =
+      row.getUTF8String(column).toString
   }
 
   private object DateConverter extends CatalystTypeConverter[Date, Date, Any] {
@@ -400,8 +402,8 @@ object CatalystTypeConverters {
     case d: JavaBigDecimal => BigDecimalConverter.toCatalyst(d)
     case seq: Seq[Any] => seq.map(convertToCatalyst)
     case r: Row => InternalRow(r.toSeq.map(convertToCatalyst): _*)
-    case arr: Array[Any] => arr.toSeq.map(convertToCatalyst).toArray
-    case m: Map[Any, Any] =>
+    case arr: Array[Any] => arr.map(convertToCatalyst)
+    case m: Map[_, _] =>
       m.map { case (k, v) => (convertToCatalyst(k), convertToCatalyst(v)) }.toMap
     case other => other
   }

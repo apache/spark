@@ -62,6 +62,7 @@ public final class Interval implements Serializable {
     if (s == null) {
       return null;
     }
+    s = s.trim();
     Matcher m = p.matcher(s);
     if (!m.matches() || s.equals("interval")) {
       return null;
@@ -84,6 +85,22 @@ public final class Interval implements Serializable {
   public Interval(int months, long microseconds) {
     this.months = months;
     this.microseconds = microseconds;
+  }
+
+  public Interval add(Interval that) {
+    int months = this.months + that.months;
+    long microseconds = this.microseconds + that.microseconds;
+    return new Interval(months, microseconds);
+  }
+
+  public Interval subtract(Interval that) {
+    int months = this.months - that.months;
+    long microseconds = this.microseconds - that.microseconds;
+    return new Interval(months, microseconds);
+  }
+
+  public Interval negate() {
+    return new Interval(-this.months, -this.microseconds);
   }
 
   @Override

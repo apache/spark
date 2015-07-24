@@ -34,7 +34,7 @@ import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hadoop.hive.serde.serdeConstants
 
 import org.apache.spark.Logging
-import org.apache.spark.sql.catalyst.expressions.{Expression, AttributeReference, BinaryComparison}
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types.{StringType, IntegralType}
 
 /**
@@ -312,37 +312,40 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
   override def getAllPartitions(hive: Hive, table: Table): Seq[Partition] =
     getAllPartitionsMethod.invoke(hive, table).asInstanceOf[JSet[Partition]].toSeq
 
-  override def getPartitionsByFilter(
-      hive: Hive,
-      table: Table,
-      predicates: Seq[Expression]): Seq[Partition] = {
+  /**
+   * Converts catalyst expression to the format that Hive's getPartitionsByFilter() expects, i.e.
+   * a string that represents partition predicates like "str_key=\"value\" and int_key=1 ...".
+   *
+   * Unsupported predicates are skipped.
+   */
+  def convertFilters(table: Table, filters: Seq[Expression]): String = {
     // hive varchar is treated as catalyst string, but hive varchar can't be pushed down.
     val varcharKeys = table.getPartitionKeys
       .filter(col => col.getType.startsWith(serdeConstants.VARCHAR_TYPE_NAME))
       .map(col => col.getName).toSet
 
+    filters.collect {
+      case op @ BinaryComparison(a: Attribute, Literal(v, _: IntegralType)) =>
+        s"${a.name} ${op.symbol} $v"
+      case op @ BinaryComparison(Literal(v, _: IntegralType), a: Attribute) =>
+        s"$v ${op.symbol} ${a.name}"
+      case op @ BinaryComparison(a: Attribute, Literal(v, _: StringType))
+          if !varcharKeys.contains(a.name) =>
+        s"""${a.name} ${op.symbol} "$v""""
+      case op @ BinaryComparison(Literal(v, _: StringType), a: Attribute)
+          if !varcharKeys.contains(a.name) =>
+        s""""$v" ${op.symbol} ${a.name}"""
+    }.mkString(" and ")
+  }
+
+  override def getPartitionsByFilter(
+      hive: Hive,
+      table: Table,
+      predicates: Seq[Expression]): Seq[Partition] = {
+
     // Hive getPartitionsByFilter() takes a string that represents partition
     // predicates like "str_key=\"value\" and int_key=1 ..."
-    val filter = predicates.flatMap { expr =>
-      expr match {
-        case op @ BinaryComparison(lhs, rhs) => {
-          lhs match {
-            case AttributeReference(_, _, _, _) => {
-              rhs.dataType match {
-                case _: IntegralType =>
-                  Some(lhs.prettyString + op.symbol + rhs.prettyString)
-                case _: StringType if (!varcharKeys.contains(lhs.prettyString)) =>
-                  Some(lhs.prettyString + op.symbol + "\"" + rhs.prettyString + "\"")
-                case _ => None
-              }
-            }
-            case _ => None
-          }
-        }
-        case _ => None
-      }
-    }.mkString(" and ")
-
+    val filter = convertFilters(table, predicates)
     val partitions =
       if (filter.isEmpty) {
         getAllPartitionsMethod.invoke(hive, table).asInstanceOf[JSet[Partition]]

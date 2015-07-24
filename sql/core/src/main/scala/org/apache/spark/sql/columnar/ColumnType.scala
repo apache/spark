@@ -309,7 +309,7 @@ private[sql] object SHORT extends NativeColumnType(ShortType, 6, 2) {
 
 private[sql] object STRING extends NativeColumnType(StringType, 7, 8) {
   override def actualSize(row: InternalRow, ordinal: Int): Int = {
-    row.getString(ordinal).getBytes("utf-8").length + 4
+    row.getUTF8String(ordinal).numBytes() + 4
   }
 
   override def append(v: UTF8String, buffer: ByteBuffer): Unit = {
@@ -375,7 +375,7 @@ private[sql] object TIMESTAMP extends NativeColumnType(TimestampType, 9, 8) {
 
 private[sql] case class FIXED_DECIMAL(precision: Int, scale: Int)
   extends NativeColumnType(
-    DecimalType(Some(PrecisionInfo(precision, scale))),
+    DecimalType(precision, scale),
     10,
     FIXED_DECIMAL.defaultSize) {
 

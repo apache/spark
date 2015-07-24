@@ -71,7 +71,7 @@ object MapType extends AbstractDataType {
 
   override private[sql] def defaultConcreteType: DataType = apply(NullType, NullType)
 
-  override private[sql] def isSameType(other: DataType): Boolean = {
+  override private[sql] def acceptsType(other: DataType): Boolean = {
     other.isInstanceOf[MapType]
   }
 
