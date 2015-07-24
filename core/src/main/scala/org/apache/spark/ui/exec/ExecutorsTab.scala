@@ -59,7 +59,7 @@ class ExecutorsListener(storageStatusListener: StorageStatusListener) extends Sp
   private var executorIds = Seq[String]()
 
   def storageStatusList: Seq[StorageStatus] = storageStatusListener.storageStatusList
-  
+
   def getExecutorIds: Seq[String] = executorIds
 
   override def onExecutorAdded(executorAdded: SparkListenerExecutorAdded): Unit = synchronized {
