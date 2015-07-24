@@ -98,9 +98,14 @@ trait CheckAnalysis {
 
             aggregateExprs.foreach(checkValidAggregateExpression)
 
-          case Sort(order, _, _) if !order.forall(_.dataType.isInstanceOf[AtomicType]) =>
-            val c = order.filterNot(_.dataType.isInstanceOf[AtomicType]).head
-            failAnalysis(s"Sorting is not supported for columns of type ${c.dataType.simpleString}")
+          case Sort(orders, _, _) =>
+            def checkValidSortOrder(order: SortOrder): Unit = order.dataType match {
+              case t: AtomicType => // OK
+              case NullType => // OK
+              case t =>
+                failAnalysis(s"Sorting is not supported for columns of type ${t.simpleString}")
+            }
+            orders.foreach(checkValidSortOrder)
 
           case _ => // Fallbacks to the following checks
         }
