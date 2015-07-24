@@ -437,8 +437,8 @@ private[sql] class ParquetRelation2(
 
       assert(
         filesToTouch.nonEmpty || maybeDataSchema.isDefined || maybeMetastoreSchema.isDefined,
-          "No predefined schema found, " +
-            s"and no Parquet data files or summary files found under ${paths.mkString(", ")}.")
+        "No predefined schema found, " +
+          s"and no Parquet data files or summary files found under ${paths.mkString(", ")}.")
 
       ParquetRelation2.mergeSchemasInParallel(filesToTouch, sqlContext)
     }
