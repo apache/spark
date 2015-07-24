@@ -345,24 +345,34 @@ private[sql] class ParquetRelation2(
     // Schema of the whole table, including partition columns.
     var schema: StructType = _
 
+    // Cached leaves
+    var cachedLeaves: Set[FileStatus] = null
+
     /**
      * Refreshes `FileStatus`es, footers, partition spec, and table schema.
      */
     def refresh(): Unit = {
-      // Lists `FileStatus`es of all leaf nodes (files) under all base directories.
-      val leaves = cachedLeafStatuses().filter { f =>
-        isSummaryFile(f.getPath) ||
-          !(f.getPath.getName.startsWith("_") || f.getPath.getName.startsWith("."))
-      }.toArray
+      val currentLeafStatuses = cachedLeafStatuses()
 
-      dataStatuses = leaves.filterNot(f => isSummaryFile(f.getPath))
-      metadataStatuses = leaves.filter(_.getPath.getName == ParquetFileWriter.PARQUET_METADATA_FILE)
-      commonMetadataStatuses =
-        leaves.filter(_.getPath.getName == ParquetFileWriter.PARQUET_COMMON_METADATA_FILE)
+      // Check if cachedLeafStatuses is changed or not
+      val leafStatusesChanged = (cachedLeaves == null) ||
+        !cachedLeaves.equals(currentLeafStatuses)
 
-      // If we already get the schema, don't need to re-compute it since the schema merging is
-      // time-consuming.
-      if (dataSchema == null) {
+      if (leafStatusesChanged) {
+        cachedLeaves = currentLeafStatuses.toIterator.toSet
+
+        // Lists `FileStatus`es of all leaf nodes (files) under all base directories.
+        val leaves = currentLeafStatuses.filter { f =>
+          isSummaryFile(f.getPath) ||
+            !(f.getPath.getName.startsWith("_") || f.getPath.getName.startsWith("."))
+        }.toArray
+
+        dataStatuses = leaves.filterNot(f => isSummaryFile(f.getPath))
+        metadataStatuses =
+          leaves.filter(_.getPath.getName == ParquetFileWriter.PARQUET_METADATA_FILE)
+        commonMetadataStatuses =
+          leaves.filter(_.getPath.getName == ParquetFileWriter.PARQUET_COMMON_METADATA_FILE)
+
         dataSchema = {
           val dataSchema0 = maybeDataSchema
             .orElse(readSchema())
