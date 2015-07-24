@@ -207,8 +207,8 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       Substring_index(Literal(""), Literal("."), Literal(-2)), "")
     checkEvaluation(
       Substring_index(Literal.create(null, StringType), Literal("."), Literal(-2)), null)
-    checkEvaluation(
-      Substring_index(Literal("www.apache.org"), Literal.create(null, StringType), Literal(-2)), null)
+    checkEvaluation(Substring_index(
+        Literal("www.apache.org"), Literal.create(null, StringType), Literal(-2)), null)
     // non ascii chars
     // scalastyle:off
     checkEvaluation(
