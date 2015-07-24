@@ -65,7 +65,9 @@ class KinesisBackedBlockRDDSuite extends KinesisFunSuite with BeforeAndAfterAll 
   }
 
   override def afterAll(): Unit = {
-    sc.stop()
+    if (sc != null) {
+      sc.stop()
+    }
   }
 
   testIfEnabled("Basic reading from Kinesis") {
