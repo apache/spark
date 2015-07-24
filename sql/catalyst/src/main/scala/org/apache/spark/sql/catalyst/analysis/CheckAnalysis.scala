@@ -103,6 +103,16 @@ trait CheckAnalysis {
 
             aggregateExprs.foreach(checkValidAggregateExpression)
 
+          case Sort(orders, _, _) =>
+            orders.foreach { order =>
+              order.dataType match {
+                case t: AtomicType => // OK
+                case NullType => // OK
+                case t =>
+                  failAnalysis(s"Sorting is not supported for columns of type ${t.simpleString}")
+              }
+            }
+
           case _ => // Fallbacks to the following checks
         }
 
