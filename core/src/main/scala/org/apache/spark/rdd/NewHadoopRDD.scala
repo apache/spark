@@ -142,7 +142,9 @@ class NewHadoopRDD[K, V](
         if (!finished && !havePair) {
           finished = !reader.nextKeyValue
           if (finished) {
-            // Close reader and release it
+            // Close and release the reader here; close() will also be called when the task
+            // completes, but for tasks that read from many files, it helps to release the
+            // resources early.
             close()
           }
           havePair = !finished
