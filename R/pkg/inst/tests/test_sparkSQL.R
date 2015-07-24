@@ -433,7 +433,6 @@ test_that("collect() support Unicode characters", {
   df <- read.df(sqlContext, jsonPath, "json")
   rdf <- collect(df)
   expect_true(is.data.frame(rdf))
-  expect_equal(rdf$name[1], "안녕하세요")
   expect_equal(rdf$name[1], convertToNative("안녕하세요"))
   expect_equal(rdf$name[2], convertToNative("您好"))
   expect_equal(rdf$name[3], convertToNative("こんにちは"))
@@ -441,7 +440,6 @@ test_that("collect() support Unicode characters", {
 
   df1 <- createDataFrame(sqlContext, rdf)
   expect_equal(collect(where(df1, df1$name == convertToNative("您好")))$name, convertToNative("您好"))
-  expect_equal(collect(where(df1, df1$name == "您好"))$name, "您好")
 })
 
 
