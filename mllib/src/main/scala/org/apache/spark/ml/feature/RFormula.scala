@@ -75,6 +75,12 @@ class RFormula(override val uid: String) extends Estimator[RFormulaModel] with R
   /** @group getParam */
   def getFormula: String = $(formula)
 
+  /** Whether the formula specifies fitting an intercept. */
+  def hasIntercept: Boolean = {
+    require(parsedFormula.isDefined, "Must call setFormula() first.")
+    parsedFormula.get.hasIntercept
+  }
+
   override def fit(dataset: DataFrame): RFormulaModel = {
     require(parsedFormula.isDefined, "Must call setFormula() first.")
     val fittedFormula = parsedFormula.get.fit(dataset.schema)
@@ -101,7 +107,7 @@ class RFormula(override val uid: String) extends Estimator[RFormulaModel] with R
       .setOutputCol($(featuresCol))
     encoderStages :+= new ColumnPruner(tempColumns.toSet)
     val pipelineModel = new Pipeline(uid).setStages(encoderStages.toArray).fit(dataset)
-    copyValues(new RFormulaModel(uid, fittedFormula, pipelineModel))
+    copyValues(new RFormulaModel(uid, fittedFormula, pipelineModel).setParent(this))
   }
 
   // optimistic schema; does not contain any ML attributes

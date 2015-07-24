@@ -61,4 +61,14 @@ class RFormulaParserSuite extends SparkFunSuite {
       .add("c", "string", true, Metadata.empty)
     checkParse("a ~ . - b + . - c", "a", Seq("b"), schema)
   }
+
+  test("parse intercept") {
+    assert(RFormulaParser.parse("a ~ b").hasIntercept)
+    assert(RFormulaParser.parse("a ~ b + 1").hasIntercept)
+    assert(RFormulaParser.parse("a ~ b - 0").hasIntercept)
+    assert(RFormulaParser.parse("a ~ b - 1 + 1").hasIntercept)
+    assert(!RFormulaParser.parse("a ~ b + 0").hasIntercept)
+    assert(!RFormulaParser.parse("a ~ b - 1").hasIntercept)
+    assert(!RFormulaParser.parse("a ~ b + 1 - 1").hasIntercept)
+  }
 }

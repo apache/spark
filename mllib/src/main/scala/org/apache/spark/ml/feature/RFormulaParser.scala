@@ -41,9 +41,23 @@ private[ml] case class ParsedRFormula(label: ColumnRef, terms: Seq[Term]) {
             includedTerms = includedTerms.filter(fromSchema.contains(_))
           case _: Deletion =>
             assert(false, "Recursive deletion of terms")
+          case _: Intercept =>
         }
+      case _: Intercept =>
     }
     FittedRFormula(label.value, includedTerms.distinct)
+  }
+
+  def hasIntercept: Boolean = {
+    var intercept = true
+    terms.foreach {
+      case Intercept(enabled) =>
+        intercept = enabled
+      case Deletion(term @ Intercept(enabled)) =>
+        intercept = !enabled
+      case _ =>
+    }
+    intercept
   }
 }
 
@@ -64,6 +78,9 @@ private[ml] case class Dot() extends Term
 /* R formula reference to a column, e.g. "+ Species" in a formula */
 private[ml] case class ColumnRef(value: String) extends Term
 
+/* R formula intercept toggle, e.g. "+ 0" in a formula */
+private[ml] case class Intercept(enabled: Boolean) extends Term
+
 /* R formula deletion of a variable, e.g. "- Species" in a formula */
 private[ml] case class Deletion(term: Term) extends Term
 
@@ -71,10 +88,13 @@ private[ml] case class Deletion(term: Term) extends Term
  * Limited implementation of R formula parsing. Currently supports: '~', '+', '-', '.'.
  */
 private[ml] object RFormulaParser extends RegexParsers {
+  def intercept: Parser[Intercept] =
+    "([01])".r ^^ { case a => Intercept(a == "1") }
+
   def columnRef: Parser[ColumnRef] =
     "([a-zA-Z]|\\.[a-zA-Z_])[a-zA-Z0-9._]*".r ^^ { case a => ColumnRef(a) }
 
-  def term: Parser[Term] = columnRef | "\\.".r ^^ { case _ => Dot() }
+  def term: Parser[Term] = intercept | columnRef | "\\.".r ^^ { case _ => Dot() }
 
   def terms: Parser[List[Term]] = (term ~ rep("+" ~ term | "-" ~ term)) ^^ {
     case op ~ list => list.foldLeft(List(op)) {
