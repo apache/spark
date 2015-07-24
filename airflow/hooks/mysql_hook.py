@@ -16,7 +16,7 @@ class MySqlHook(DbApiHook):
         """
         Returns a mysql connection object
         """
-        conn = self.get_connection(self.conn_id_name)
+        conn = self.get_connection(self.mysql_conn_id)
         conn = MySQLdb.connect(
             conn.host,
             conn.login,

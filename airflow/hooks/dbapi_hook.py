@@ -26,14 +26,16 @@ class DbApiHook(BaseHook):
     """
     supports_autocommit = False
 
-    def __init__(self, **kwargs):
-        try:
-            self.conn_id_name = kwargs[self.conn_name_attr]
-        except NameError:
+    def __init__(self, *args, **kwargs):
+        if not self.conn_name_attr:
             raise AirflowException("conn_name_attr is not defined")
-        except KeyError:
-            raise AirflowException(
-                self.conn_name_attr + " was not passed in the kwargs")
+        elif len(args) == 1:
+            setattr(self, self.conn_name_attr, args[0])
+        elif self.conn_name_attr not in kwargs:
+            setattr(self, self.conn_name_attr, self.default_conn_name)
+        else:
+            setattr(self, self.conn_name_attr, kwargs[self.conn_name_attr])
+
 
     def get_pandas_df(self, sql, parameters=None):
         '''
