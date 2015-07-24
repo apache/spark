@@ -19,9 +19,10 @@ package org.apache.spark.rpc.netty
 import java.io._
 import java.net.{InetSocketAddress, URI}
 import java.nio.ByteBuffer
-import java.util.{Arrays, Collections, List => JList}
+import java.util.Arrays
 import java.util.concurrent._
 
+import scala.collection.JavaConversions._
 import scala.collection.mutable
 import scala.concurrent.{Future, Promise}
 import scala.reflect.ClassTag
@@ -30,7 +31,7 @@ import scala.util.control.NonFatal
 
 import org.apache.spark.{Logging, SecurityManager, SparkConf}
 import org.apache.spark.network.TransportContext
-import org.apache.spark.network.client.{TransportClientBootstrap, RpcResponseCallback, TransportClient}
+import org.apache.spark.network.client.{RpcResponseCallback, TransportClient}
 import org.apache.spark.network.netty.SparkTransportConf
 import org.apache.spark.network.sasl.{SaslClientBootstrap, SaslServerBootstrap}
 import org.apache.spark.network.server._
@@ -51,11 +52,12 @@ private[netty] class NettyRpcEnv(
     new TransportContext(transportConf, new NettyRpcHandler(dispatcher, this))
 
   private val clientFactory = {
-    val bootstraps: JList[TransportClientBootstrap] =
+    val bootstraps =
       if (securityManager.isAuthenticationEnabled()) {
-        Arrays.asList(new SaslClientBootstrap(transportConf, "", securityManager, true))
+        Seq(new SaslClientBootstrap(transportConf, "", securityManager,
+          securityManager.isSaslEncryptionEnabled()))
       } else {
-        Collections.emptyList[TransportClientBootstrap]()
+        Seq.empty
       }
     transportContext.createClientFactory(bootstraps)
   }
@@ -65,11 +67,11 @@ private[netty] class NettyRpcEnv(
   @volatile private var server: TransportServer = _
 
   def start(port: Int): Unit = {
-    val bootstraps: JList[TransportServerBootstrap] =
+    val bootstraps =
       if (securityManager.isAuthenticationEnabled()) {
-        Arrays.asList(new SaslServerBootstrap(transportConf, securityManager))
+        Seq(new SaslServerBootstrap(transportConf, securityManager))
       } else {
-        Collections.emptyList[TransportServerBootstrap]()
+        Seq.empty
       }
     server = transportContext.createServer(port, bootstraps)
     dispatcher.registerRpcEndpoint(IDVerifier.NAME, new IDVerifier(this, dispatcher))
