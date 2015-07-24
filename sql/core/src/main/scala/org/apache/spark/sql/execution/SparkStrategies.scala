@@ -36,9 +36,8 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
   object LeftSemiJoin extends Strategy with PredicateHelper {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      case ExtractEquiJoinKeys(LeftSemi, leftKeys, rightKeys, condition, left, right)
-        if sqlContext.conf.autoBroadcastJoinThreshold > 0 &&
-          right.statistics.sizeInBytes <= sqlContext.conf.autoBroadcastJoinThreshold =>
+      case ExtractEquiJoinKeys(
+             LeftSemi, leftKeys, rightKeys, condition, left, CanBroadcast(right)) =>
         joins.BroadcastLeftSemiJoinHash(
           leftKeys, rightKeys, planLater(left), planLater(right), condition) :: Nil
       // Find left semi joins where at least some predicates can be evaluated by matching join keys
@@ -91,6 +90,18 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       condition.map(Filter(_, broadcastHashJoin)).getOrElse(broadcastHashJoin) :: Nil
     }
 
+    private[this] def isValidSort(
+        leftKeys: Seq[Expression],
+        rightKeys: Seq[Expression]): Boolean = {
+      leftKeys.zip(rightKeys).forall { keys =>
+        (keys._1.dataType, keys._2.dataType) match {
+          case (l: AtomicType, r: AtomicType) => true
+          case (NullType, NullType) => true
+          case _ => false
+        }
+      }
+    }
+
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case ExtractEquiJoinKeys(Inner, leftKeys, rightKeys, condition, left, CanBroadcast(right)) =>
         makeBroadcastHashJoin(leftKeys, rightKeys, left, right, condition, joins.BuildRight)
@@ -101,7 +112,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       // If the sort merge join option is set, we want to use sort merge join prior to hashjoin
       // for now let's support inner join first, then add outer join
       case ExtractEquiJoinKeys(Inner, leftKeys, rightKeys, condition, left, right)
-        if sqlContext.conf.sortMergeJoinEnabled =>
+        if sqlContext.conf.sortMergeJoinEnabled && isValidSort(leftKeys, rightKeys) =>
         val mergeJoin =
           joins.SortMergeJoin(leftKeys, rightKeys, planLater(left), planLater(right))
         condition.map(Filter(_, mergeJoin)).getOrElse(mergeJoin) :: Nil
@@ -190,12 +201,12 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         sqlContext.conf.codegenEnabled).isDefined
     }
 
-    def canBeCodeGened(aggs: Seq[AggregateExpression1]): Boolean = !aggs.exists {
-      case _: CombineSum | _: Sum | _: Count | _: Max | _: Min |  _: CombineSetsAndCount => false
+    def canBeCodeGened(aggs: Seq[AggregateExpression1]): Boolean = aggs.forall {
+      case _: CombineSum | _: Sum | _: Count | _: Max | _: Min |  _: CombineSetsAndCount => true
       // The generated set implementation is pretty limited ATM.
       case CollectHashSet(exprs) if exprs.size == 1  &&
-           Seq(IntegerType, LongType).contains(exprs.head.dataType) => false
-      case _ => true
+           Seq(IntegerType, LongType).contains(exprs.head.dataType) => true
+      case _ => false
     }
 
     def allAggregates(exprs: Seq[Expression]): Seq[AggregateExpression1] =
