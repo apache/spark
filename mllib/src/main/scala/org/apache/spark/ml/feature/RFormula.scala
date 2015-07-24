@@ -102,7 +102,7 @@ class RFormula(override val uid: String) extends Estimator[RFormulaModel] with R
       .setOutputCol($(featuresCol))
     encoderStages :+= new ColumnPruner(tempColumns.toSet)
     val pipelineModel = new Pipeline(uid).setStages(encoderStages.toArray).fit(dataset)
-    copyValues(new RFormulaModel(uid, parsedFormula.get, pipelineModel))
+    copyValues(new RFormulaModel(uid, parsedFormula.get, pipelineModel).setParent(this))
   }
 
   // optimistic schema; does not contain any ML attributes
@@ -123,8 +123,7 @@ class RFormula(override val uid: String) extends Estimator[RFormulaModel] with R
 /**
  * A fitted RFormula. Fitting is required to determine the factor levels of formula terms.
  * @param parsedFormula a pre-parsed R formula.
- * @param factorLevels the fitted factor to index mappings from the training dataset. These are
- *                     calculated for each term of StringType.
+ * @param pipelineModel the fitted feature model, including factor to index mappings.
  */
 private[feature] class RFormulaModel(
     override val uid: String,
