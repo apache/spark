@@ -321,8 +321,8 @@ case class ShowFunctions(db: Option[String], pattern: Option[String]) extends Ru
         val regex = java.util.regex.Pattern.compile(p)
         sqlContext.functionRegistry.listFunction().filter(regex.matcher(_).matches()).map(Row(_))
       } catch {
-        // probably will failed in the regex that user provided, returns empty row.
-        case _ => Nil
+        // probably will failed in the regex that user provided, then returns empty row.
+        case _: Throwable => Seq.empty[Row]
       }
     case None =>
       sqlContext.functionRegistry.listFunction().map(Row(_))
