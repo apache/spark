@@ -42,6 +42,10 @@ private class KinesisTestUtils(val endpointUrl: String, _regionName: String) ext
     this("https://kinesis.us-west-2.amazonaws.com", "")
   }
 
+  def this(endpointUrl: String) {
+    this(endpointUrl, "")
+  }
+
   val regionName = if (_regionName.length == 0) {
     RegionUtils.getRegionByEndpoint(endpointUrl).getName()
   } else {
