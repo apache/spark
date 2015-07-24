@@ -353,10 +353,18 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   }
 
   /**
-   * Express a preference to the cluster manager for a given total number of executors,
-   * number of locality aware tasks and related locality preferences. This can
-   * result in canceling pending requests or filing additional requests.
-   * @return whether the request is acknowledged.
+   * Update the cluster manager on our scheduling needs. Three bits of information are included
+   * to help it make decisions.
+   * @param numExecutors The total number of executors we'd like to have. The cluster manager
+   *                     shouldn't kill any running executor to reach this number, but,
+   *                     if all existing executors were to die, this is the number of executors
+   *                     we'd want to be allocated.
+   * @param localityAwareTasks The number of tasks in all active stages that have a locality
+   *                           preferences. This includes running, pending, and completed tasks.
+   * @param hostToLocalTaskCount A map of hosts to the number of tasks from all active stages
+   *                             that would like to like to run on that host.
+   *                             This includes running, pending, and completed tasks.
+   * @return whether the request is acknowledged by the cluster manager.
    */
   final override def requestTotalExecutors(
       numExecutors: Int,
