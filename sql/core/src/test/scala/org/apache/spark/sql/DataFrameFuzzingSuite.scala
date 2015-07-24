@@ -48,8 +48,9 @@ class DataFrameFuzzingSuite extends SparkFunSuite {
 
   val m = ru.runtimeMirror(this.getClass.getClassLoader)
 
-  val whitelistedColumnTypes = Set(
+  val whitelistedParameterTypes = Set(
     m.universe.typeOf[DataFrame],
+    m.universe.typeOf[Seq[Column]],
     m.universe.typeOf[Column]
   )
 
@@ -63,7 +64,7 @@ class DataFrameFuzzingSuite extends SparkFunSuite {
       .filterNot(_.isConstructor)
       .filter { m =>
         m.paramss.flatten.forall { p =>
-          whitelistedColumnTypes.exists { t => t =:= p.typeSignature.erasure }
+          whitelistedParameterTypes.exists { t => p.typeSignature <:< t }
         }
       }
       .filterNot(_.name.toString == "drop") // since this can lead to a DataFrame with no columns
@@ -75,10 +76,12 @@ class DataFrameFuzzingSuite extends SparkFunSuite {
     val params = method.paramss.flatten // We don't use multiple parameter lists
     val paramTypes = params.map(_.typeSignature)
     val paramValues = paramTypes.map { t =>
-      if (m.universe.typeOf[DataFrame] =:= t.erasure) {
+      if (t =:= m.universe.typeOf[DataFrame]) {
         randomChoice(Seq(df, generateRandomDataFrame()))
-      } else if (m.universe.typeOf[Column] =:= t.erasure) {
+      } else if (t =:= m.universe.typeOf[Column]) {
         df.col(randomChoice(df.columns))
+      } else if (t <:< m.universe.typeOf[Seq[Column]]) {
+        Seq.fill(Random.nextInt(2) + 1)(df.col(randomChoice(df.columns)))
       } else {
         sys.error("ERROR!")
       }
