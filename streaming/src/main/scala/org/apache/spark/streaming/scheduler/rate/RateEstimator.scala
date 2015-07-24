@@ -52,8 +52,8 @@ object RateEstimator {
    * @throws IllegalArgumentException if there is a configured RateEstimator that doesn't match any
    *         known estimators.
    */
-  def makeEstimator(conf: SparkConf): Option[RateEstimator] =
-    conf.getOption("spark.streaming.RateEstimator") map { estimator =>
+  def create(conf: SparkConf): Option[RateEstimator] =
+    conf.getOption("spark.streaming.backpressure.rateEstimator").map { estimator =>
       throw new IllegalArgumentException(s"Unkown rate estimator: $estimator")
     }
 }

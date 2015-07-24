@@ -21,6 +21,8 @@ import java.util.concurrent.atomic.AtomicLong
 
 import scala.concurrent.{ExecutionContext, Future}
 
+import org.apache.spark.SparkConf
+import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.streaming.scheduler.rate.RateEstimator
 import org.apache.spark.util.ThreadUtils
 
@@ -29,8 +31,8 @@ import org.apache.spark.util.ThreadUtils
  * an estimate of the speed at which this stream should ingest messages,
  * given an estimate computation from a `RateEstimator`
  */
-private [streaming] abstract class RateController(val streamUID: Int, rateEstimator: RateEstimator)
-  extends StreamingListener with Serializable {
+private[streaming] abstract class RateController(val streamUID: Int, rateEstimator: RateEstimator)
+    extends StreamingListener with Serializable {
 
   protected def publish(rate: Long): Unit
 
@@ -46,8 +48,8 @@ private [streaming] abstract class RateController(val streamUID: Int, rateEstima
    */
   private def computeAndPublish(time: Long, elems: Long, workDelay: Long, waitDelay: Long): Unit =
     Future[Unit] {
-      val newSpeed = rateEstimator.compute(time, elems, workDelay, waitDelay)
-      newSpeed foreach { s =>
+      val newRate = rateEstimator.compute(time, elems, workDelay, waitDelay)
+      newRate.foreach { s =>
         rateLimit.set(s.toLong)
         publish(getLatestRate())
       }

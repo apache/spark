@@ -90,6 +90,7 @@ class ReceiverTrackerSuite extends TestSuiteBase {
 
     ssc.addStreamingListener(ReceiverStartedWaiter)
     ssc.scheduler.listenerBus.start(ssc.sc)
+    SingletonDummyReceiver.reset()
 
     val newRateLimit = 100L
     val inputDStream = new RateLimitInputDStream(ssc)
@@ -109,7 +110,14 @@ class ReceiverTrackerSuite extends TestSuiteBase {
   }
 }
 
-/** An input DStream with a hard-coded receiver that gives access to internals for testing. */
+/**
+ * An input DStream with a hard-coded receiver that gives access to internals for testing.
+ *
+ * @note Make sure to call {{{SingletonDummyReceiver.reset()}}} before using this in a test,
+ *       or otherwise you may get {{{NotSerializableException}}} when trying to serialize
+ *       the receiver.
+ * @see [[[SingletonDummyReceiver]]].
+ */
 private class RateLimitInputDStream(@transient ssc_ : StreamingContext)
   extends ReceiverInputDStream[Int](ssc_) {
 

@@ -50,12 +50,7 @@ abstract class InputDStream[T: ClassTag] (@transient ssc_ : StreamingContext)
   val id = ssc.getNewInputStreamId()
 
   // Keep track of the freshest rate for this stream using the rateEstimator
-  protected[streaming] val rateController: Option[RateController] =
-    RateEstimator.makeEstimator(ssc.conf).map { estimator =>
-      new RateController(id, estimator) {
-        override def publish(rate: Long): Unit = ()
-      }
-    }
+  protected[streaming] val rateController: Option[RateController] = None
 
   /** A human-readable name of this InputDStream */
   private[streaming] def name: String = {
