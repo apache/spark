@@ -71,7 +71,7 @@ private[ml] case class Deletion(term: Term) extends Term
  * Limited implementation of R formula parsing. Currently supports: '~', '+', '-', '.'.
  */
 private[ml] object RFormulaParser extends RegexParsers {
-  def columnRef: Parser[ColumnRef] = 
+  def columnRef: Parser[ColumnRef] =
     "([a-zA-Z]|\\.[a-zA-Z_])[a-zA-Z0-9._]*".r ^^ { case a => ColumnRef(a) }
 
   def term: Parser[Term] = columnRef | "\\.".r ^^ { case _ => Dot() }
