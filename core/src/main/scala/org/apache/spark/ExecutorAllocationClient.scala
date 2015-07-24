@@ -25,13 +25,13 @@ private[spark] trait ExecutorAllocationClient {
 
   /**
    * Express a preference to the cluster manager for a given total number of executors,
-   * number of locality aware pending tasks and related locality preferences.
+   * number of locality aware tasks and related locality preferences.
    * This can result in canceling pending requests or filing additional requests.
    * @return whether the request is acknowledged by the cluster manager.
    */
   private[spark] def requestTotalExecutors(
       numExecutors: Int,
-      localityAwarePendingTasks: Int,
+      localityAwareTasks: Int,
       hostToLocalTaskCount: Map[String, Int]): Boolean
 
   /**

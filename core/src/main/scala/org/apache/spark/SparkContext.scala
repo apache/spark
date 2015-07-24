@@ -1383,20 +1383,20 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
 
   /**
    * Express a preference to the cluster manager for a given total number of executors,
-   * number of locality aware pending tasks and related locality preferences.
+   * number of locality aware tasks and related locality preferences.
    * This can result in canceling pending requests or filing additional requests.
    * This is currently only supported in YARN mode. Return whether the request is received.
    */
   private[spark] override def requestTotalExecutors(
       numExecutors: Int,
-      localityAwarePendingTasks: Int,
+      localityAwareTasks: Int,
       hostToLocalTaskCount: scala.collection.immutable.Map[String, Int]
     ): Boolean = {
     assert(supportDynamicAllocation,
       "Requesting executors is currently only supported in YARN and Mesos modes")
     schedulerBackend match {
       case b: CoarseGrainedSchedulerBackend =>
-        b.requestTotalExecutors(numExecutors, localityAwarePendingTasks, hostToLocalTaskCount)
+        b.requestTotalExecutors(numExecutors, localityAwareTasks, hostToLocalTaskCount)
       case _ =>
         logWarning("Requesting executors is only supported in coarse-grained mode")
         false

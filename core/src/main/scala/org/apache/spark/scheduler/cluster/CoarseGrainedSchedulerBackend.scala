@@ -70,7 +70,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   protected var hostToLocalTaskCount: Map[String, Int] = Map.empty
 
   // The number of pending tasks which is locality required
-  protected var localityAwarePendingTasks = 0
+  protected var localityAwareTasks = 0
 
   class DriverEndpoint(override val rpcEnv: RpcEnv, sparkProperties: Seq[(String, String)])
     extends ThreadSafeRpcEndpoint with Logging {
@@ -354,13 +354,13 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
 
   /**
    * Express a preference to the cluster manager for a given total number of executors,
-   * number of locality aware pending tasks and related locality preferences. This can
+   * number of locality aware tasks and related locality preferences. This can
    * result in canceling pending requests or filing additional requests.
    * @return whether the request is acknowledged.
    */
   final override def requestTotalExecutors(
       numExecutors: Int,
-      localityAwarePendingTasks: Int,
+      localityAwareTasks: Int,
       hostToLocalTaskCount: Map[String, Int]
     ): Boolean = synchronized {
     if (numExecutors < 0) {
@@ -369,7 +369,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
           s"$numExecutors from the cluster manager. Please specify a positive number!")
     }
 
-    this.localityAwarePendingTasks = localityAwarePendingTasks
+    this.localityAwareTasks = localityAwareTasks
     this.hostToLocalTaskCount = hostToLocalTaskCount
 
     numPendingExecutors =

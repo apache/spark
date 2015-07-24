@@ -130,12 +130,12 @@ private[yarn] class YarnAllocator(
   // A map to store preferred hostname and possible task numbers running on it.
   private var hostToLocalTaskCounts: Map[String, Int] = Map.empty
 
-  // Locality required pending task number
-  private var numLocalityAwarePendingTasks: Int = 0
+  // Number of tasks that have locality preferences in active stages
+  private var numLocalityAwareTasks: Int = 0
 
   // A container placement strategy based on pending tasks' locality preference
   private[yarn] val containerPlacementStrategy =
-    new LocalityPreferredContainerPlacementStrategy(sparkConf, conf, this)
+    new LocalityPreferredContainerPlacementStrategy(sparkConf, conf, resource)
 
   def getNumExecutorsRunning: Int = numExecutorsRunning
 
@@ -157,17 +157,16 @@ private[yarn] class YarnAllocator(
    * the requested total is smaller than the current number of running executors, no executors will
    * be killed.
    * @param requestedTotal total number of containers requested
-   * @param localityAwarePendingTasks number of locality aware pending tasks to be used as
-   *                                  container placement hint.
+   * @param localityAwareTasks number of locality aware tasks to be used as container placement hint
    * @param hostToLocalTaskCount a map of preferred hostname to possible task counts to be used as
    *                             container placement hint.
    * @return Whether the new requested total is different than the old value.
    */
   def requestTotalExecutorsWithPreferredLocalities(
       requestedTotal: Int,
-      localityAwarePendingTasks: Int,
+      localityAwareTasks: Int,
       hostToLocalTaskCount: Map[String, Int]): Boolean = synchronized {
-    this.numLocalityAwarePendingTasks = localityAwarePendingTasks
+    this.numLocalityAwareTasks = localityAwareTasks
     this.hostToLocalTaskCounts = hostToLocalTaskCount
 
     if (requestedTotal != targetNumExecutors) {
@@ -241,12 +240,17 @@ private[yarn] class YarnAllocator(
     val numPendingAllocate = getNumPendingAllocate
     val missing = targetNumExecutors - numPendingAllocate - numExecutorsRunning
 
+    // TODO. Consider locality preferences of pending container requests.
+    // Since the last time we made container requests, stages have completed and been submitted,
+    // and that the localities at which we requested our pending executors
+    // no longer apply to our current needs. We should consider to remove all outstanding
+    // container requests and add requests anew each time to avoid this.
     if (missing > 0) {
       logInfo(s"Will request $missing executor containers, each with ${resource.getVirtualCores} " +
         s"cores and ${resource.getMemory} MB memory including $memoryOverhead MB overhead")
 
       val containerLocalityPreferences = containerPlacementStrategy.localityOfRequestedContainers(
-        missing, numLocalityAwarePendingTasks, hostToLocalTaskCounts)
+        missing, numLocalityAwareTasks, hostToLocalTaskCounts, allocatedHostToContainersMap)
 
       for (locality <- containerLocalityPreferences) {
         val request = createContainerRequest(resource, locality.nodes, locality.racks)
@@ -272,7 +276,9 @@ private[yarn] class YarnAllocator(
    * Creates a container request, handling the reflection required to use YARN features that were
    * added in recent versions.
    */
-  protected def createContainerRequest(resource: Resource, nodes: Array[String],
+  protected def createContainerRequest(
+      resource: Resource,
+      nodes: Array[String],
       racks: Array[String]): ContainerRequest = {
     nodeLabelConstructor.map { constructor =>
       constructor.newInstance(resource, nodes, racks, RM_REQUEST_PRIORITY, true: java.lang.Boolean,

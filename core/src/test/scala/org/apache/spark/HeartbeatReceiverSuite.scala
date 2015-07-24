@@ -242,7 +242,7 @@ private class FakeSchedulerBackend(
 
   protected override def doRequestTotalExecutors(requestedTotal: Int): Boolean = {
     clusterManagerEndpoint.askWithRetry[Boolean](
-      RequestExecutors(requestedTotal, localityAwarePendingTasks, hostToLocalTaskCount))
+      RequestExecutors(requestedTotal, localityAwareTasks, hostToLocalTaskCount))
   }
 
   protected override def doKillExecutors(executorIds: Seq[String]): Boolean = {

@@ -555,12 +555,12 @@ private[spark] class ApplicationMaster(
     }
 
     override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
-      case RequestExecutors(requestedTotal, localityAwarePendingTasks, hostToLocalTaskCount) =>
+      case RequestExecutors(requestedTotal, localityAwareTasks, hostToLocalTaskCount) =>
         Option(allocator) match {
           case Some(a) =>
             allocatorLock.synchronized {
               if (a.requestTotalExecutorsWithPreferredLocalities(requestedTotal,
-                localityAwarePendingTasks, hostToLocalTaskCount)) {
+                localityAwareTasks, hostToLocalTaskCount)) {
                 allocatorLock.notifyAll()
               }
             }

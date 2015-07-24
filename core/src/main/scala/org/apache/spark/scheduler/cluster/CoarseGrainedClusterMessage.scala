@@ -88,7 +88,7 @@ private[spark] object CoarseGrainedClusterMessages {
   // This includes executors already pending or running
   case class RequestExecutors(
       requestedTotal: Int,
-      localityAwarePendingTasks: Int,
+      localityAwareTasks: Int,
       hostToLocalTaskCount: Map[String, Int])
     extends CoarseGrainedClusterMessage
 

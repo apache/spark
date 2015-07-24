@@ -791,7 +791,7 @@ class DAGScheduler(
     // will be posted, which should always come after a corresponding SparkListenerStageSubmitted
     // event.
     val taskIdToLocations = try {
-      val localities = stage match {
+      stage match {
         case s: ShuffleMapStage =>
           partitionsToCompute.map { id => (id, getPreferredLocs(stage.rdd, id))}.toMap
         case s: ResultStage =>
@@ -801,8 +801,6 @@ class DAGScheduler(
             (id, getPreferredLocs(stage.rdd, p))
           }.toMap
       }
-      stage.makeNewStageAttempt(partitionsToCompute.size, localities.values.toSeq)
-      localities
     } catch {
       case NonFatal(e) =>
         stage.makeNewStageAttempt(partitionsToCompute.size)
@@ -810,6 +808,7 @@ class DAGScheduler(
         runningStages -= stage
         return
     }
+    stage.makeNewStageAttempt(partitionsToCompute.size, taskIdToLocations.values.toSeq)
 
     outputCommitCoordinator.stageStart(stage.id)
     listenerBus.post(SparkListenerStageSubmitted(stage.latestInfo, properties))

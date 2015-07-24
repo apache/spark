@@ -43,12 +43,10 @@ class ContainerPlacementStrategySuite extends SparkFunSuite with Matchers with B
     handler.updateResourceRequests()
     handler.handleAllocatedContainers(Array(createContainer("host1"), createContainer("host2")))
 
-    val nodeLocalities =
-      handler.containerPlacementStrategy.localityOfRequestedContainers(3, 15,
-        Map("host3" -> 15, "host4" -> 15, "host5" -> 10))
-          .map(_.nodes)
+    val localities = handler.containerPlacementStrategy.localityOfRequestedContainers(
+      3, 15, Map("host3" -> 15, "host4" -> 15, "host5" -> 10), handler.allocatedHostToContainersMap)
 
-    assert(nodeLocalities === Array(
+    assert(localities.map(_.nodes) === Array(
       Array("host3", "host4", "host5"),
       Array("host3", "host4", "host5"),
       Array("host3", "host4")))
@@ -67,12 +65,11 @@ class ContainerPlacementStrategySuite extends SparkFunSuite with Matchers with B
       createContainer("host2")
     ))
 
-    val nodeLocalities =
-      handler.containerPlacementStrategy.localityOfRequestedContainers(3, 15,
-        Map("host1" -> 15, "host2" -> 15, "host3" -> 10))
-          .map(_.nodes)
+    val localities = handler.containerPlacementStrategy.localityOfRequestedContainers(
+      3, 15, Map("host1" -> 15, "host2" -> 15, "host3" -> 10), handler.allocatedHostToContainersMap)
 
-    assert(nodeLocalities === Array(null, Array("host2", "host3"), Array("host2", "host3")))
+    assert(localities.map(_.nodes) ===
+      Array(null, Array("host2", "host3"), Array("host2", "host3")))
   }
 
   test("allocate locality preferred containers with limited resource and partially matched " +
@@ -88,12 +85,10 @@ class ContainerPlacementStrategySuite extends SparkFunSuite with Matchers with B
       createContainer("host2")
     ))
 
-    val nodeLocalities =
-      handler.containerPlacementStrategy.localityOfRequestedContainers(1, 15,
-        Map("host1" -> 15, "host2" -> 15, "host3" -> 10))
-          .map(_.nodes)
+    val localities = handler.containerPlacementStrategy.localityOfRequestedContainers(
+      1, 15, Map("host1" -> 15, "host2" -> 15, "host3" -> 10), handler.allocatedHostToContainersMap)
 
-    assert(nodeLocalities === Array(Array("host2", "host3")))
+    assert(localities.map(_.nodes) === Array(Array("host2", "host3")))
   }
 
   test("allocate locality preferred containers with fully matched containers") {
@@ -109,12 +104,10 @@ class ContainerPlacementStrategySuite extends SparkFunSuite with Matchers with B
       createContainer("host3")
     ))
 
-    val nodeLocalities =
-      handler.containerPlacementStrategy.localityOfRequestedContainers(3, 15,
-        Map("host1" -> 15, "host2" -> 15, "host3" -> 10))
-          .map(_.nodes)
+    val localities = handler.containerPlacementStrategy.localityOfRequestedContainers(
+      3, 15, Map("host1" -> 15, "host2" -> 15, "host3" -> 10), handler.allocatedHostToContainersMap)
 
-    assert(nodeLocalities === Array(null, null, null))
+    assert(localities.map(_.nodes) === Array(null, null, null))
   }
 
   test("allocate containers with no locality preference") {
@@ -124,10 +117,9 @@ class ContainerPlacementStrategySuite extends SparkFunSuite with Matchers with B
     handler.updateResourceRequests()
     handler.handleAllocatedContainers(Array(createContainer("host1"), createContainer("host2")))
 
-    val nodeLocalities =
-      handler.containerPlacementStrategy.localityOfRequestedContainers(1, 0, Map.empty)
-        .map(_.nodes)
+    val localities = handler.containerPlacementStrategy.localityOfRequestedContainers(
+      1, 0, Map.empty, handler.allocatedHostToContainersMap)
 
-    assert(nodeLocalities === Array(null))
+    assert(localities.map(_.nodes) === Array(null))
   }
 }

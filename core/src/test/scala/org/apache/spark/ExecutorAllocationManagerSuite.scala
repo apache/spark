@@ -765,9 +765,9 @@ class ExecutorAllocationManagerSuite
     val stageInfo1 = createStageInfo(1, 5, localityPreferences1)
     sc.listenerBus.postToAll(SparkListenerStageSubmitted(stageInfo1))
 
-    val hints1 = listener(manager).executorPlacementHints()
-    assert(hints1._1 === 3)
-    assert(hints1._2 === Map("host1" -> 2, "host2" -> 3, "host3" -> 2, "host4" -> 2))
+    assert(localityAwareTasks(manager) === 3)
+    assert(hostToLocalTaskCount(manager) ===
+      Map("host1" -> 2, "host2" -> 3, "host3" -> 2, "host4" -> 2))
 
     val localityPreferences2 = Seq(
       Seq(TaskLocation("host2"), TaskLocation("host3"), TaskLocation("host5")),
@@ -777,14 +777,14 @@ class ExecutorAllocationManagerSuite
     val stageInfo2 = createStageInfo(2, 3, localityPreferences2)
     sc.listenerBus.postToAll(SparkListenerStageSubmitted(stageInfo2))
 
-    val hints2 = listener(manager).executorPlacementHints()
-    assert(hints2._1 === 5)
-    assert(hints2._2 === Map("host1" -> 2, "host2" -> 4, "host3" -> 4, "host4" -> 3, "host5" -> 2))
+    assert(localityAwareTasks(manager) === 5)
+    assert(hostToLocalTaskCount(manager) ===
+      Map("host1" -> 2, "host2" -> 4, "host3" -> 4, "host4" -> 3, "host5" -> 2))
 
     sc.listenerBus.postToAll(SparkListenerStageCompleted(stageInfo1))
-    val hints3 = listener(manager).executorPlacementHints()
-    assert(hints3._1 === 2)
-    assert(hints3._2 === Map("host2" -> 1, "host3" -> 2, "host4" -> 1, "host5" -> 2))
+    assert(localityAwareTasks(manager) === 2)
+    assert(hostToLocalTaskCount(manager) ===
+      Map("host2" -> 1, "host3" -> 2, "host4" -> 1, "host5" -> 2))
   }
 
   private def createSparkContext(
@@ -856,6 +856,8 @@ private object ExecutorAllocationManagerSuite extends PrivateMethodTester {
   private val _onSchedulerQueueEmpty = PrivateMethod[Unit]('onSchedulerQueueEmpty)
   private val _onExecutorIdle = PrivateMethod[Unit]('onExecutorIdle)
   private val _onExecutorBusy = PrivateMethod[Unit]('onExecutorBusy)
+  private val _localityAwareTasks = PrivateMethod[Int]('localityAwareTasks)
+  private val _hostToLocalTaskCount = PrivateMethod[Map[String, Int]]('hostToLocalTaskCount)
 
   private def numExecutorsToAdd(manager: ExecutorAllocationManager): Int = {
     manager invokePrivate _numExecutorsToAdd()
@@ -927,9 +929,11 @@ private object ExecutorAllocationManagerSuite extends PrivateMethodTester {
     manager invokePrivate _onExecutorBusy(id)
   }
 
-  private def listener(manager: ExecutorAllocationManager
-      ): manager.type#ExecutorAllocationListener = {
-    val _listener = PrivateMethod[manager.type#ExecutorAllocationListener]('listener)
-    manager invokePrivate _listener()
+  private def localityAwareTasks(manager: ExecutorAllocationManager): Int = {
+    manager invokePrivate _localityAwareTasks()
+  }
+
+  private def hostToLocalTaskCount(manager: ExecutorAllocationManager): Map[String, Int] = {
+    manager invokePrivate _hostToLocalTaskCount()
   }
 }
