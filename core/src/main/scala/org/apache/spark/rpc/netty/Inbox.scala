@@ -21,8 +21,8 @@ import java.util.concurrent.ConcurrentLinkedQueue
 
 import scala.util.control.NonFatal
 
-import org.apache.spark.{SparkException, Logging}
-import org.apache.spark.rpc.{ThreadSafeRpcEndpoint, RpcAddress, RpcEndpoint}
+import org.apache.spark.{Logging, SparkException}
+import org.apache.spark.rpc.{RpcAddress, RpcEndpoint, ThreadSafeRpcEndpoint}
 
 private[netty] sealed trait InboxMessage
 
@@ -81,7 +81,7 @@ private[netty] abstract class Inbox(
         try {
           endpoint.onError(e)
         } catch {
-          case NonFatal(e) => logError(s"Ignore error: ${e.getMessage}", e)
+          case NonFatal(e) => logWarning(s"Ignore error", e)
         }
       }
     }

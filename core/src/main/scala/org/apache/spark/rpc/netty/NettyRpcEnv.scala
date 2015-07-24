@@ -19,7 +19,7 @@ package org.apache.spark.rpc.netty
 import java.io._
 import java.net.{InetSocketAddress, URI}
 import java.nio.ByteBuffer
-import java.{util => ju}
+import java.util.{Arrays, Collections, List => JList}
 import java.util.concurrent._
 
 import scala.collection.mutable
@@ -28,6 +28,7 @@ import scala.reflect.ClassTag
 import scala.util.{DynamicVariable, Failure, Success}
 import scala.util.control.NonFatal
 
+import org.apache.spark.{Logging, SecurityManager, SparkConf}
 import org.apache.spark.network.TransportContext
 import org.apache.spark.network.client.{TransportClientBootstrap, RpcResponseCallback, TransportClient}
 import org.apache.spark.network.netty.SparkTransportConf
@@ -36,7 +37,6 @@ import org.apache.spark.network.server._
 import org.apache.spark.rpc._
 import org.apache.spark.serializer.{JavaSerializer, Serializer}
 import org.apache.spark.util.{ThreadUtils, Utils}
-import org.apache.spark.{Logging, SecurityManager, SparkConf}
 
 private[netty] class NettyRpcEnv(
     val conf: SparkConf, serializer: Serializer, host: String, securityManager: SecurityManager)
@@ -51,11 +51,11 @@ private[netty] class NettyRpcEnv(
     new TransportContext(transportConf, new NettyRpcHandler(dispatcher, this))
 
   private val clientFactory = {
-    val bootstraps: ju.List[TransportClientBootstrap] =
+    val bootstraps: JList[TransportClientBootstrap] =
       if (securityManager.isAuthenticationEnabled()) {
-        ju.Arrays.asList(new SaslClientBootstrap(transportConf, "", securityManager, true))
+        Arrays.asList(new SaslClientBootstrap(transportConf, "", securityManager, true))
       } else {
-        ju.Collections.emptyList[TransportClientBootstrap]()
+        Collections.emptyList[TransportClientBootstrap]()
       }
     transportContext.createClientFactory(bootstraps)
   }
@@ -65,11 +65,11 @@ private[netty] class NettyRpcEnv(
   @volatile private var server: TransportServer = _
 
   def start(port: Int): Unit = {
-    val bootstraps: ju.List[TransportServerBootstrap] =
+    val bootstraps: JList[TransportServerBootstrap] =
       if (securityManager.isAuthenticationEnabled()) {
-        ju.Arrays.asList(new SaslServerBootstrap(transportConf, securityManager))
+        Arrays.asList(new SaslServerBootstrap(transportConf, securityManager))
       } else {
-        ju.Collections.emptyList[TransportServerBootstrap]()
+        Collections.emptyList[TransportServerBootstrap]()
       }
     server = transportContext.createServer(port, bootstraps)
     dispatcher.registerRpcEndpoint(IDVerifier.NAME, new IDVerifier(this, dispatcher))
@@ -142,11 +142,10 @@ private[netty] class NettyRpcEnv(
           val reply = response.asInstanceOf[AskResponse]
           if (reply.reply != null && reply.reply.isInstanceOf[RpcFailure]) {
             if (!promise.tryFailure(reply.reply.asInstanceOf[RpcFailure].e)) {
-              logWarning(s"Ignore failure + ${reply.reply}")
+              logWarning(s"Ignore failure: ${reply.reply}")
             }
-          }
-          else if (!promise.trySuccess(reply.reply)) {
-            logWarning(s"Ignore message + ${reply}")
+          } else if (!promise.trySuccess(reply.reply)) {
+            logWarning(s"Ignore message: ${reply}")
           }
         case Failure(e) =>
           if (!promise.tryFailure(e)) {
@@ -167,11 +166,10 @@ private[netty] class NettyRpcEnv(
           val reply = deserialize[AskResponse](response)
           if (reply.reply != null && reply.reply.isInstanceOf[RpcFailure]) {
             if (!promise.tryFailure(reply.reply.asInstanceOf[RpcFailure].e)) {
-              logWarning(s"Ignore failure + ${reply.reply}")
+              logWarning(s"Ignore failure: ${reply.reply}")
             }
-          }
-          else if (!promise.trySuccess(reply.reply)) {
-            logWarning(s"Ignore message + ${reply}")
+          } else if (!promise.trySuccess(reply.reply)) {
+            logWarning(s"Ignore message: ${reply}")
           }
         }
       })
@@ -181,7 +179,7 @@ private[netty] class NettyRpcEnv(
 
   private[netty] def serialize(content: Any): Array[Byte] = {
     val buffer = serializer.newInstance().serialize(content)
-    ju.Arrays.copyOfRange(
+    Arrays.copyOfRange(
       buffer.array(), buffer.arrayOffset + buffer.position, buffer.arrayOffset + buffer.limit)
   }
 

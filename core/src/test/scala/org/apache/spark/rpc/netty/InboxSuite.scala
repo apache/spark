@@ -17,13 +17,13 @@
 
 package org.apache.spark.rpc.netty
 
-import java.util.concurrent.{TimeUnit, CountDownLatch}
+import java.util.concurrent.{CountDownLatch, TimeUnit}
 import java.util.concurrent.atomic.AtomicInteger
 
 import org.mockito.Mockito._
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.rpc.{TestRpcEndpoint, RpcAddress}
+import org.apache.spark.rpc.{RpcAddress, TestRpcEndpoint}
 
 class InboxSuite extends SparkFunSuite {
 

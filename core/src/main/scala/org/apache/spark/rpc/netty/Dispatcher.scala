@@ -50,7 +50,9 @@ private[netty] class Dispatcher(nettyEnv: NettyRpcEnv) extends Logging {
   def registerRpcEndpoint(name: String, endpoint: RpcEndpoint): NettyRpcEndpointRef = {
     val addr = new NettyRpcAddress(nettyEnv.address.host, nettyEnv.address.port, name)
     val endpointRef = new NettyRpcEndpointRef(nettyEnv.conf, addr, nettyEnv)
-    nameToEndpoint.put(name, new RpcEndpointPair(endpoint, endpointRef))
+    if (nameToEndpoint.putIfAbsent(name, new RpcEndpointPair(endpoint, endpointRef)) != null) {
+      throw new IllegalArgumentException(s"There is already an RpcEndpoint called $name")
+    }
     endpointToEndpointRef.put(endpoint, endpointRef)
     val inbox =
       if (endpoint.isInstanceOf[ThreadSafeRpcEndpoint]) {
@@ -91,7 +93,7 @@ private[netty] class Dispatcher(nettyEnv: NettyRpcEnv) extends Logging {
    */
   def broadcastMessage(message: BroadcastMessage): Unit = {
     val iter = endpointToInbox.values().iterator()
-    while(iter.hasNext) {
+    while (iter.hasNext) {
       val inbox = iter.next()
       postMessageToInbox(inbox, message)
     }

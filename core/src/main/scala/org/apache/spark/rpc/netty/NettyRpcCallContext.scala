@@ -17,10 +17,10 @@
 
 package org.apache.spark.rpc.netty
 
+import scala.concurrent.Promise
+
 import org.apache.spark.network.client.RpcResponseCallback
 import org.apache.spark.rpc.{RpcAddress, RpcCallContext}
-
-import scala.concurrent.{Promise, Future}
 
 private[netty] abstract class NettyRpcCallContext(
     endpointRef: NettyRpcEndpointRef,

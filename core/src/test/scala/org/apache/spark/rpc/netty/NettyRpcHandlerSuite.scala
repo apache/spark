@@ -20,11 +20,11 @@ package org.apache.spark.rpc.netty
 import java.net.InetSocketAddress
 
 import io.netty.channel.Channel
-import org.apache.spark.network.client.{TransportResponseHandler, TransportClient}
 import org.mockito.Mockito._
 import org.mockito.Matchers._
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.network.client.{TransportResponseHandler, TransportClient}
 import org.apache.spark.rpc._
 
 class NettyRpcHandlerSuite extends SparkFunSuite {

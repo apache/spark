@@ -16,7 +16,7 @@
  */
 package org.apache.spark.rpc.netty
 
-import org.apache.spark.rpc.{RpcCallContext, RpcEnv, RpcEndpoint}
+import org.apache.spark.rpc.{RpcCallContext, RpcEndpoint, RpcEnv}
 
 /**
  * A message used to ask the remote [[IDVerifier]] if an [[RpcEndpoint]] exists
