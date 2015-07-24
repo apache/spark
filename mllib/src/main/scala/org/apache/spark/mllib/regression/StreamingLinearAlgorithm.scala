@@ -22,7 +22,7 @@ import scala.reflect.ClassTag
 import org.apache.spark.Logging
 import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.api.java.JavaSparkContext.fakeClassTag
-import org.apache.spark.mllib.linalg.Vector
+import org.apache.spark.mllib.linalg.{BLAS, Vector}
 import org.apache.spark.streaming.api.java.{JavaDStream, JavaPairDStream}
 import org.apache.spark.streaming.dstream.DStream
 
@@ -59,10 +59,13 @@ import org.apache.spark.streaming.dstream.DStream
 @DeveloperApi
 abstract class StreamingLinearAlgorithm[
     M <: GeneralizedLinearModel,
-    A <: GeneralizedLinearAlgorithm[M]] extends Logging {
+    A <: GeneralizedLinearAlgorithm[M]]
+  extends StreamingDecay[StreamingLinearAlgorithm[M,A]] with Logging {
 
   /** The model to be updated and used for prediction. */
   protected var model: Option[M]
+
+  protected var previousDataWeight: Double = 0
 
   /** The algorithm to use for updating. */
   protected val algorithm: A
@@ -91,7 +94,20 @@ abstract class StreamingLinearAlgorithm[
     }
     data.foreachRDD { (rdd, time) =>
       if (!rdd.isEmpty) {
-        model = Some(algorithm.run(rdd, model.get.weights))
+        val newModel = algorithm.run(rdd, model.get.weights)
+
+        val numNewDataPoints = rdd.count()
+        val discount = getDiscount(numNewDataPoints)
+
+        val updatedDataWeight = previousDataWeight * discount + numNewDataPoints
+        val lambda = numNewDataPoints / math.max(updatedDataWeight, 1e-16)
+
+        BLAS.scal(lambda, newModel.weights)
+        BLAS.axpy(1-lambda, model.get.weights, newModel.weights)
+
+        previousDataWeight = updatedDataWeight
+        model = Some(newModel)
+
         logInfo(s"Model updated at time ${time.toString}")
         val display = model.get.weights.size match {
           case x if x > 100 => model.get.weights.toArray.take(100).mkString("[", ",", "...")
