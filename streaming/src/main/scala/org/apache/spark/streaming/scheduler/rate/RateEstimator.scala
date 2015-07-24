@@ -19,6 +19,7 @@ package org.apache.spark.streaming.scheduler.rate
 
 import org.apache.spark.SparkConf
 import org.apache.spark.SparkException
+import org.apache.spark.streaming.Duration
 
 /**
  * A component that estimates the rate at wich an InputDStream should ingest
@@ -52,8 +53,11 @@ object RateEstimator {
    * @throws IllegalArgumentException if there is a configured RateEstimator that doesn't match any
    *         known estimators.
    */
-  def create(conf: SparkConf): Option[RateEstimator] =
-    conf.getOption("spark.streaming.backpressure.rateEstimator").map { estimator =>
-      throw new IllegalArgumentException(s"Unkown rate estimator: $estimator")
+  def create(conf: SparkConf, batchInterval: Duration): Option[RateEstimator] =
+    conf.getOption("spark.streaming.backpressure.rateEstimator").map {
+      case "pid" =>
+        new PIDRateEstimator(batchInterval.milliseconds)
+      case estimator =>
+        throw new IllegalArgumentException(s"Unkown rate estimator: $estimator")
     }
 }

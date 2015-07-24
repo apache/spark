@@ -17,33 +17,42 @@
 
 package org.apache.spark.streaming.scheduler.rate
 
-import org.apache.spark.Logging
-
 /**
  * Implements a proportional-integral-derivative (PID) controller which acts on
- * the speed of ingestion of elements into Spark Streaming.
+ * the speed of ingestion of elements into Spark Streaming. A PID controller works
+ * by calculating an '''error''' between a measured output and a desired setpoint. In the
+ * case of Spark Streaming the error is the difference between the measured processing
+ * rate (number of elements/processing delay) and the previous rate.
+ *
+ * @see https://en.wikipedia.org/wiki/PID_controller
  *
  * @param batchDurationMillis the batch duration, in milliseconds
  * @param proportional how much the correction should depend on the current
- *        error,
+ *        error. This term usually provides the bulk of correction. A value too large would
+ *        make the controller overshoot the setpoint, while a small value would make the
+ *        controller too insensitive. The default value is -1.
  * @param integral how much the correction should depend on the accumulation
- *        of past errors,
+ *        of past errors. This term accelerates the movement towards the setpoint, but a large
+ *        value may lead to overshooting. The default value is -0.2.
  * @param derivative how much the correction should depend on a prediction
- *        of future errors, based on current rate of change
+ *        of future errors, based on current rate of change. This term is not used very often,
+ *        as it impacts stability of the system. The default value is 0.
  */
-private[streaming] class PIDRateEstimator(batchIntervalMillis: Long,
+private[streaming] class PIDRateEstimator(
+    batchIntervalMillis: Long,
     proportional: Double = -1D,
     integral: Double = -.2D,
     derivative: Double = 0D)
-  extends RateEstimator with Logging {
+  extends RateEstimator {
 
-  private var init: Boolean = true
-  private var latestTime : Long = -1L
-  private var latestSpeed : Double = -1D
-  private var latestError : Double = -1L
+  private var firstRun: Boolean = true
+  private var latestTime: Long = -1L
+  private var latestRate: Double = -1D
+  private var latestError: Double = -1L
 
-  if (batchIntervalMillis <= 0) logError("Specified batch interval ${batchIntervalMillis} " +
-                                        "in PIDRateEstimator is invalid.")
+  require(
+    batchIntervalMillis > 0,
+    s"Specified batch interval $batchIntervalMillis in PIDRateEstimator is invalid.")
 
   def compute(time: Long, // in milliseconds
       elements: Long,
@@ -61,7 +70,7 @@ private[streaming] class PIDRateEstimator(batchIntervalMillis: Long,
         val processingSpeed = elements.toDouble / processingDelay * 1000
 
         // in elements/second
-        val error = latestSpeed - processingSpeed
+        val error = latestRate - processingSpeed
 
         // in elements/second
         val sumError = schedulingDelay.toDouble * processingSpeed / batchIntervalMillis
@@ -69,24 +78,23 @@ private[streaming] class PIDRateEstimator(batchIntervalMillis: Long,
         // in elements/(second ^ 2)
         val dError = (error - latestError) / delaySinceUpdate
 
-        val newSpeed = (latestSpeed + proportional * error +
-                                      integral * sumError +
-                                      derivative * dError) max 0D
+        val newRate = (latestRate + proportional * error +
+                                    integral * sumError +
+                                    derivative * dError).max(0.0)
         latestTime = time
-        if (init) {
-          latestSpeed = processingSpeed
+        if (firstRun) {
+          latestRate = processingSpeed
           latestError = 0D
-          init = false
+          firstRun = false
 
           None
         } else {
-          latestSpeed = newSpeed
+          latestRate = newRate
           latestError = error
 
-          Some(newSpeed)
+          Some(newRate)
         }
       } else None
     }
   }
-
 }
