@@ -48,7 +48,7 @@ object MovieLensSimilarity {
       numProductBlocks: Int = -1,
       delim: String = "::",
       topk: Int = 50,
-      threshold: Double = 1e-2) extends AbstractParams[Params]
+      threshold: Double = 1e-4) extends AbstractParams[Params]
 
   def main(args: Array[String]) {
     val defaultParams = Params()
@@ -125,8 +125,14 @@ object MovieLensSimilarity {
          * entries are generally between It's okay and Fairly bad.
          * The semantics of 0 in this expanded world of non-positive weights
          * are "the same as never having interacted at all".
+         *
+         * Options:
+         *
+         * Rating(fields(0).toInt, fields(1).toInt, fields(2).toDouble - 2.5)
+         * Rating(fields(0).toInt, fields(1).toInt, fields(2).toDouble)
+         * Rating(fields(0).toInt, fields(1).toInt, 1.0)
          */
-      Rating(fields(0).toInt, fields(1).toInt, fields(2).toDouble - 2.5)
+      Rating(fields(0).toInt, fields(1).toInt, fields(2).toDouble)
     }.cache()
 
     val numRatings = ratings.count()
@@ -151,9 +157,10 @@ object MovieLensSimilarity {
     // Compute similar columns on transpose matrix
     val userFeatures = ratings.map { entry =>
       MatrixEntry(entry.user, entry.product, entry.rating)
-    }.repartition(sc.defaultParallelism).cache()
+    }.repartition(sc.defaultParallelism)
 
     val featureMatrix = new CoordinateMatrix(userFeatures).toRowMatrix()
+
     // Compute similar columns with dimsum sampling
     println(s"Running column similarity with threshold ${params.threshold}")
     val colSimilarities = featureMatrix.columnSimilarities(params.threshold)
@@ -175,6 +182,18 @@ object MovieLensSimilarity {
     println(s"Common entries row: ${rowMAE.count()} col: ${colMAE.count()}")
     println(s"Average absolute error in estimate row: ${rowMAE.mean()} col: ${colMAE.mean()}")
 
+    println(s"Running row similarity with topk ${params.topk}")
+    val rowSimilaritiesTopk = productMatrix.rowSimilarities(topk=params.topk)
+
+    val rowEntriesTopk = rowSimilaritiesTopk.entries.map { case MatrixEntry(i, j, u) =>
+      ((i, j), u)
+    }
+
+    val rowTopkMAE = exactEntries.join(rowEntriesTopk).values.map {
+      case (u, v) => math.abs(u - v)
+    }
+    println(s"Average absolute error in topk row: ${rowTopkMAE.mean()}")
+
     val model = new ALS()
       .setRank(params.rank)
       .setIterations(params.numIterations)
@@ -185,10 +204,11 @@ object MovieLensSimilarity {
       .setProductBlocks(params.numProductBlocks)
       .run(ratings)
 
+    val topk = params.topk
     // Compute similar columns through low rank approximation using ALS
     println(s"Running ALS based row similarities")
 
-    val lowRankedSimilarities = model.similarProducts(params.topk)
+    val lowRankedSimilarities = model.similarProducts(topk)
 
     val labels = rowSimilarities.entries.map { case (entry) =>
       (entry.i, (entry.j, entry.value))
@@ -208,7 +228,7 @@ object MovieLensSimilarity {
       }
 
     val rankingMetrics = new RankingMetrics[Long](predictionAndLabels)
-    println(s"MAP ${rankingMetrics.meanAveragePrecision}")
+    println(s"prec@$topk ${rankingMetrics.precisionAt(topk)}")
 
     sc.stop()
   }

@@ -255,8 +255,6 @@ class IndexedRowMatrix(
     blockedSmall.setName("blockedSmallMatrix")
     blockedBig.setName("blockedBigMatrix")
 
-    blockedBig.cache()
-
     val topkSims = blockedBig.cartesian(blockedSmall).flatMap {
       case ((bigBlockIndex, bigRows), (smallBlockIndex, smallRows)) =>
         val buf = mutable.ArrayBuilder.make[(Long, (Long, Double))]
@@ -277,8 +275,6 @@ class IndexedRowMatrix(
         MatrixEntry(i, sim._1, sim._2)
       }
     }.coalesce(defaultParallelism)
-
-    blockedBig.unpersist()
 
     // Materialize the cartesian RDD
     topkSims.count()
