@@ -15,23 +15,23 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
+package org.apache.spark.sql.fuzzing
 
 import java.io.File
 import java.lang.reflect.Constructor
 
-import scala.util.{Try, Random}
-
-import org.clapper.classutil.ClassFinder
-
-import org.apache.spark.{Logging, SparkFunSuite}
+import org.apache.spark.sql.RandomDataGenerator
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.HiveTypeCoercion
-import org.apache.spark.sql.catalyst.expressions.codegen.GenerateProjection
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.codegen.GenerateProjection
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
-import org.apache.spark.sql.types.{BinaryType, DecimalType, DataType, DataTypeTestUtils}
+import org.apache.spark.sql.types.{BinaryType, DataType, DataTypeTestUtils, DecimalType}
+import org.apache.spark.{Logging, SparkFunSuite}
+import org.clapper.classutil.ClassFinder
+
+import scala.util.{Random, Try}
 
 /**
  * This test suite implements fuzz tests for expression code generation. It uses reflection to
