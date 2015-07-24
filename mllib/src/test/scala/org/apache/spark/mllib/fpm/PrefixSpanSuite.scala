@@ -175,7 +175,8 @@ class PrefixSpanSuite extends SparkFunSuite with MLlibTestSparkContext {
       "f,c,b:2")
     val intExpectedValue = expectedValue4
       .map(_.split(":"))
-      .map(x => (x.apply(0).split(",").flatMap(-1 +: _.toArray.map(coder)).drop(1), x.apply(1).toLong))
+      .map { x =>
+      (x.apply(0).split(",").flatMap(-1 +: _.toArray.map(coder)).drop(1), x.apply(1).toLong) }
     assert(compareResult(intExpectedValue, result4.collect()))
   }
 }

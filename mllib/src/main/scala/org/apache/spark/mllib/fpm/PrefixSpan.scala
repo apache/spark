@@ -103,7 +103,7 @@ class PrefixSpan private (
 
   private def sortSequences(sequences: RDD[Array[Int]]): RDD[Array[Int]] = {
     sequences.map { sequence =>
-      val sortedArray: ArrayBuffer[Int]  = ArrayBuffer()
+      val sortedArray: ArrayBuffer[Int] = ArrayBuffer()
       var currentIndex = -1
       var nextIndex = 0
       while (nextIndex != -1) {

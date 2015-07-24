@@ -65,7 +65,7 @@ private[fpm] object LocalPrefixSpan extends Logging with Serializable {
       if (element.length > 1 && flag == 1) {
         element.take(element.length - 1) ++ originalSequence
       } else if (element.length == 1 && flag == 1) {
-        val firstPosition =  originalSequence.indexOf(-1)
+        val firstPosition = originalSequence.indexOf( -1 )
         if (firstPosition != -1) {
           originalSequence.drop(firstPosition + 1)
         } else {
