@@ -35,3 +35,4 @@ Sphinx-PyPI-upload
 sqlalchemy
 thrift
 jaydebeapi
+pymssql
