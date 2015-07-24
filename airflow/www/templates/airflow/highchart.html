@@ -175,8 +175,8 @@ body {
         }
         if ('warning' in payload)
             warn(payload.warning);
-      }).fail(function() {
-        error( "Ooops. Unhandled error." );
+      }).fail(function(jqxhr, textStatus, err) {
+        error( textStatus + ': ' + err );
       });
     });
     </script>

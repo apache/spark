@@ -339,6 +339,7 @@ class Airflow(BaseView):
         hook = db.get_hook()
         try:
             df = hook.get_pandas_df(wwwutils.limit_sql(sql, CHART_LIMIT))
+            df = df.fillna(0)
         except Exception as e:
             payload['error'] += "SQL execution failed. Details: " + str(e)
 
