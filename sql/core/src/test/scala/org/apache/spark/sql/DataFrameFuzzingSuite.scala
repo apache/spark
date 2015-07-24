@@ -39,7 +39,7 @@ class DataFrameFuzzingSuite extends SparkFunSuite {
     val numColumns = 1 + Random.nextInt(3)
     val schema =
       new StructType((1 to numColumns).map(i => new StructField(s"c$i", randomType())).toArray)
-    val rowGenerator = RandomDataGenerator.forType(schema).get
+    val rowGenerator = RandomDataGenerator.forType(schema, nullable = false).get
     val rows: Seq[Row] = Seq.fill(10)(rowGenerator().asInstanceOf[Row])
     TestSQLContext.createDataFrame(TestSQLContext.sparkContext.parallelize(rows), schema)
   }
