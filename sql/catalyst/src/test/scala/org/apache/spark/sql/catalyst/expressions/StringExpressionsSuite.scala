@@ -318,14 +318,13 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("initcap unit test") {
-    checkEvaluation(InitCap(Literal(null)), null, create_row("s1"))
-    checkEvaluation(InitCap(Literal("")), "", create_row("s2"))
-    checkEvaluation(InitCap(Literal("a b")), "A B", create_row("s3"))
-    checkEvaluation(InitCap(Literal(" a")), " A", create_row("s4"))
-    checkEvaluation(InitCap(Literal("the test")), "The Test", create_row("s5"))
+    checkEvaluation(InitCap(Literal(null)), null, create_row("s0"))
+    checkEvaluation(InitCap(Literal("a b")), "A B", create_row("s1"))
+    checkEvaluation(InitCap(Literal(" a")), " A", create_row("s2"))
+    checkEvaluation(InitCap(Literal("the test")), "The Test", create_row("s3"))
     // scalastyle:off
     // non ascii characters are not allowed in the code, so we disable the scalastyle here.
-    checkEvaluation(InitCap(Literal("世界")), "世界", create_row("s6"))
+    checkEvaluation(InitCap(Literal("世界")), "世界", create_row("s4"))
     // scalastyle:on
   }
 
