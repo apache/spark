@@ -39,6 +39,9 @@ case class LeftSemiJoinBNL(
 
   override def output: Seq[Attribute] = left.output
 
+  override def outputsUnsafeRows: Boolean = streamed.outputsUnsafeRows
+  override def canProcessUnsafeRows: Boolean = true
+
   /** The Streamed Relation */
   override def left: SparkPlan = streamed
 

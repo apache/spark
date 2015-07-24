@@ -179,7 +179,7 @@ private[hive] trait HiveInspectors {
     // writable
     case c: Class[_] if c == classOf[hadoopIo.DoubleWritable] => DoubleType
     case c: Class[_] if c == classOf[hiveIo.DoubleWritable] => DoubleType
-    case c: Class[_] if c == classOf[hiveIo.HiveDecimalWritable] => DecimalType.Unlimited
+    case c: Class[_] if c == classOf[hiveIo.HiveDecimalWritable] => DecimalType.SYSTEM_DEFAULT
     case c: Class[_] if c == classOf[hiveIo.ByteWritable] => ByteType
     case c: Class[_] if c == classOf[hiveIo.ShortWritable] => ShortType
     case c: Class[_] if c == classOf[hiveIo.DateWritable] => DateType
@@ -195,8 +195,8 @@ private[hive] trait HiveInspectors {
     case c: Class[_] if c == classOf[java.lang.String] => StringType
     case c: Class[_] if c == classOf[java.sql.Date] => DateType
     case c: Class[_] if c == classOf[java.sql.Timestamp] => TimestampType
-    case c: Class[_] if c == classOf[HiveDecimal] => DecimalType.Unlimited
-    case c: Class[_] if c == classOf[java.math.BigDecimal] => DecimalType.Unlimited
+    case c: Class[_] if c == classOf[HiveDecimal] => DecimalType.SYSTEM_DEFAULT
+    case c: Class[_] if c == classOf[java.math.BigDecimal] => DecimalType.SYSTEM_DEFAULT
     case c: Class[_] if c == classOf[Array[Byte]] => BinaryType
     case c: Class[_] if c == classOf[java.lang.Short] => ShortType
     case c: Class[_] if c == classOf[java.lang.Integer] => IntegerType
@@ -813,9 +813,6 @@ private[hive] trait HiveInspectors {
 
     private def decimalTypeInfo(decimalType: DecimalType): TypeInfo = decimalType match {
       case DecimalType.Fixed(precision, scale) => new DecimalTypeInfo(precision, scale)
-      case _ => new DecimalTypeInfo(
-        HiveShim.UNLIMITED_DECIMAL_PRECISION,
-        HiveShim.UNLIMITED_DECIMAL_SCALE)
     }
 
     def toTypeInfo: TypeInfo = dt match {

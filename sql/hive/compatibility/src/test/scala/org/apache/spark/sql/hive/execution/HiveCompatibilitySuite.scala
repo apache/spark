@@ -263,9 +263,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "timestamp_2",
     "timestamp_udf",
 
-    // Hive outputs NULL if any concat input has null. We never output null for concat.
-    "udf_concat",
-
     // Unlike Hive, we do support log base in (0, 1.0], therefore disable this
     "udf7"
   )
@@ -856,6 +853,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "udf_case",
     "udf_ceil",
     "udf_ceiling",
+    "udf_concat",
     "udf_concat_insert1",
     "udf_concat_insert2",
     "udf_concat_ws",

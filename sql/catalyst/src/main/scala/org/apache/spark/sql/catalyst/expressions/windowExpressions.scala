@@ -316,3 +316,15 @@ case class WindowExpression(
 
   override def toString: String = s"$windowFunction $windowSpec"
 }
+
+/**
+ * Extractor for making working with frame boundaries easier.
+ */
+object FrameBoundaryExtractor {
+  def unapply(boundary: FrameBoundary): Option[Int] = boundary match {
+    case CurrentRow => Some(0)
+    case ValuePreceding(offset) => Some(-offset)
+    case ValueFollowing(offset) => Some(offset)
+    case _ => None
+  }
+}
