@@ -22,6 +22,7 @@ import java.text.SimpleDateFormat
 import java.util.Calendar
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types.{StringType, TimestampType, DateType}
 
 class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
@@ -247,20 +248,18 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("last_day") {
-    checkResult(LastDay(Literal("2015-07-23")), Date.valueOf("2015-07-31"))
-    checkResult(
-      LastDay(Literal("2015-07-23 00:22:44")), LastDay(Literal(Date.valueOf("2015-07-01"))))
-    checkResult(
-      LastDay(Literal(Timestamp.valueOf("2015-07-23 00:22:44"))), LastDay(Literal("2015-07-01")))
+    checkEvaluation(LastDay(Literal(Date.valueOf("2015-07-23"))), Date.valueOf("2015-07-31"))
   }
 
   test("next_day") {
-    checkResult(NextDay(Literal("2015-07-23"), Literal("Thu")), Date.valueOf("2015-07-30"))
-    checkResult(
-      NextDay(Literal("2015-07-23 00:22:44"), Literal("TU")),
-      NextDay(Literal(Date.valueOf("2015-07-25")), Literal("tuesday")))
-    checkResult(
-      NextDay(Literal(Timestamp.valueOf("2015-07-23 00:22:44")), Literal("Mon")),
-      NextDay(Literal("2015-07-21"), Literal("MONDAY")))
+    checkEvaluation(
+      NextDay(Literal(Date.valueOf("2015-07-23")), Literal("Thu")),
+      DateTimeUtils.fromJavaDate(Date.valueOf("2015-07-30")))
+    checkEvaluation(
+      NextDay(Literal(Date.valueOf("2015-07-23")), Literal("THURSDAY")),
+      DateTimeUtils.fromJavaDate(Date.valueOf("2015-07-30")))
+    checkEvaluation(
+      NextDay(Literal(Date.valueOf("2015-07-23")), Literal("th")),
+      DateTimeUtils.fromJavaDate(Date.valueOf("2015-07-30")))
   }
 }

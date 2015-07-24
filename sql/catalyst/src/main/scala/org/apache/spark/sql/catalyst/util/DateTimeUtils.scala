@@ -600,7 +600,7 @@ object DateTimeUtils {
     val month = getMonth(date)
 
     val febDay = if (isLeapYear(getYear(date))) 29 else 28
-    val days = Seq(31, febDay, 31, 30, 31, 30, 31, 31, 30, 31, 30 ,31)
+    val days = Seq(31, febDay, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31)
     date + days(month - 1) - dayOfMonth
   }
 

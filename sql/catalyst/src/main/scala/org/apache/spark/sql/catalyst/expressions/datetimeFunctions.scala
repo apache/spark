@@ -275,8 +275,8 @@ case class LastDay(startDate: Expression) extends UnaryExpression with ImplicitC
   }
 
   override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
     defineCodeGen(ctx, ev, (sd) => {
-      val dtu = DateTimeUtils.getClass.getCanonicalName
       s"$dtu.getLastDayOfMonth($sd)"
     })
   }
@@ -303,15 +303,15 @@ case class NextDay(left: Expression, right: Expression)
   }
 
   override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    nullSafeCodeGen(ctx, ev, (sd, dow) => {
-      val dtu = DateTimeUtils.getClass.getCanonicalName
+    nullSafeCodeGen(ctx, ev, (sd, dowS) => {
+      val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
       val dow = ctx.freshName("dow")
       s"""
-        int $dow = $dtu.getDayOfWeekFromString($dow)
+        int $dow = $dtu.getDayOfWeekFromString($dowS);
         if ($dow == -1) {
           ${ev.isNull} = true;
         } else {
-          ${ev.primitive} = $sd + 1 + (($dow - $sd % 7) % 7 + 7) % 7
+          ${ev.primitive} = $sd + 1 + (($dow - $sd % 7) % 7 + 7) % 7;
         }
        """
     })
