@@ -173,7 +173,8 @@ class AnalysisSuite extends SparkFunSuite with BeforeAndAfter {
     assert(pl(0).dataType == DoubleType)
     assert(pl(1).dataType == DoubleType)
     assert(pl(2).dataType == DoubleType)
-    assert(pl(3).dataType == DecimalType(38, 29))  // StringType will be promoted into Decimal(38, 18)
+    // StringType will be promoted into Decimal(38, 18)
+    assert(pl(3).dataType == DecimalType(38, 29))
     assert(pl(4).dataType == DoubleType)
   }
 }
