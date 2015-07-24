@@ -345,6 +345,18 @@ abstract class OutputWriter {
 }
 
 /**
+ * This is an internal, private version of [[OutputWriter]] with an writeInternal method that
+ * accepts an [[InternalRow]] rather than an [[Row]]. Data sources that return this must have
+ * the conversion flag set to false.
+ */
+private[sql] abstract class OutputWriterInternal extends OutputWriter {
+
+  override def write(row: Row): Unit = throw new UnsupportedOperationException
+
+  def writeInternal(row: InternalRow): Unit
+}
+
+/**
  * ::Experimental::
  * A [[BaseRelation]] that provides much of the common code required for formats that store their
  * data to an HDFS compatible filesystem.
@@ -592,12 +604,12 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
       BoundReference(dataSchema.fieldIndex(col), field.dataType, field.nullable)
     }.toSeq
 
-    val rdd = buildScan(inputFiles)
-    val converted =
+    val rdd: RDD[Row] = buildScan(inputFiles)
+    val converted: RDD[InternalRow] =
       if (needConversion) {
         RDDConversions.rowToRowRdd(rdd, dataSchema.fields.map(_.dataType))
       } else {
-        rdd.map(_.asInstanceOf[InternalRow])
+        rdd.asInstanceOf[RDD[InternalRow]]
       }
     converted.mapPartitions { rows =>
       val buildProjection = if (codegenEnabled) {
@@ -606,8 +618,8 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
         () => new InterpretedMutableProjection(requiredOutput, dataSchema.toAttributes)
       }
       val mutableProjection = buildProjection()
-      rows.map(r => mutableProjection(r).asInstanceOf[Row])
-    }
+      rows.map(r => mutableProjection(r))
+    }.asInstanceOf[RDD[Row]]
   }
 
   /**
