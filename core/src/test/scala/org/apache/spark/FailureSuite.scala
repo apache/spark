@@ -197,10 +197,8 @@ class FailureSuite extends SparkFunSuite with LocalSparkContext {
 
   test("failure cause stacktrace is sent back to driver if exception is not serializable") {
     sc = new SparkContext("local", "test")
-    val data = sc.makeRDD(1 to 3).map(x => { throw new NonSerializableUserException; (x,
-      x) }).groupByKey(3)
     val thrown = intercept[SparkException] {
-      data.collect()
+      sc.makeRDD(1 to 3).foreach { _ => throw new NonSerializableUserException }
     }
     assert(thrown.getClass === classOf[SparkException])
     assert(thrown.getCause === null)
@@ -210,10 +208,8 @@ class FailureSuite extends SparkFunSuite with LocalSparkContext {
 
   test("failure cause stacktrace is sent back to driver if exception is not deserializable") {
     sc = new SparkContext("local", "test")
-    val data = sc.makeRDD(1 to 3).map(x => { throw new NonDeserializableUserException; (x,
-      x) }).groupByKey(3)
     val thrown = intercept[SparkException] {
-      data.collect()
+      sc.makeRDD(1 to 3).foreach { _ => throw new NonDeserializableUserException }
     }
     assert(thrown.getClass === classOf[SparkException])
     assert(thrown.getCause === null)
