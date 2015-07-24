@@ -45,6 +45,14 @@ private[scheduler] case class JobSubmitted(
     properties: Properties = null)
   extends DAGSchedulerEvent
 
+private[scheduler] case class MapStageSubmitted(
+  jobId: Int,
+  dependency: ShuffleDependency[_, _, _],
+  callSite: CallSite,
+  listener: JobListener,            // TODO: replace this with another class
+  properties: Properties = null)
+  extends DAGSchedulerEvent
+
 private[scheduler] case class StageCancelled(stageId: Int) extends DAGSchedulerEvent
 
 private[scheduler] case class JobCancelled(jobId: Int) extends DAGSchedulerEvent

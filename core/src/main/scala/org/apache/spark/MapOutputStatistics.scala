@@ -15,31 +15,13 @@
  * limitations under the License.
  */
 
-package org.apache.spark.scheduler
+package org.apache.spark
 
-import java.util.Properties
-
-import org.apache.spark.TaskContext
-import org.apache.spark.util.CallSite
+import org.apache.spark.annotation.DeveloperApi
 
 /**
- * Tracks information about an active job in the DAGScheduler.
+ * :: DeveloperApi ::
+ * Hold statistics about the output sizes in a map stage.
  */
-private[spark] class ActiveJob(
-    val jobId: Int,
-    val finalStage: Stage,
-    val func: (TaskContext, Iterator[_]) => _,
-    val partitions: Array[Int],
-    val callSite: CallSite,
-    val listener: JobListener,
-    val properties: Properties) {
-
-  val numPartitions = finalStage match {
-    case r: ResultStage => partitions.length
-    case m: ShuffleMapStage => m.rdd.partitions.size
-  }
-
-  val finished = Array.fill[Boolean](numPartitions)(false)
-
-  var numFinished = 0
-}
+@DeveloperApi
+class MapOutputStatistics(val shuffleId: Int, val bytesByPartitionId: Array[Long])

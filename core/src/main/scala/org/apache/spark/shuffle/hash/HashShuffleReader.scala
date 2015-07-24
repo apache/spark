@@ -33,9 +33,6 @@ private[spark] class HashShuffleReader[K, C](
     mapOutputTracker: MapOutputTracker = SparkEnv.get.mapOutputTracker)
   extends ShuffleReader[K, C] with Logging {
 
-  require(endPartition == startPartition + 1,
-    "Hash shuffle currently only supports fetching one partition")
-
   private val dep = handle.dependency
 
   /** Read the combined key-values for this reduce task */
@@ -44,7 +41,7 @@ private[spark] class HashShuffleReader[K, C](
       context,
       blockManager.shuffleClient,
       blockManager,
-      mapOutputTracker.getMapSizesByExecutorId(handle.shuffleId, startPartition),
+      mapOutputTracker.getMapSizesByExecutorId(handle.shuffleId, startPartition, endPartition),
       // Note: we use getSizeAsMb when no suffix is provided for backwards compatibility
       SparkEnv.get.conf.getSizeAsMb("spark.reducer.maxSizeInFlight", "48m") * 1024 * 1024)
 

@@ -17,6 +17,8 @@
 
 package org.apache.spark.scheduler
 
+import scala.collection.mutable.ArrayBuffer
+
 import org.apache.spark.ShuffleDependency
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.BlockManagerId
@@ -40,6 +42,9 @@ private[spark] class ShuffleMapStage(
   var numAvailableOutputs: Int = 0
 
   def isAvailable: Boolean = numAvailableOutputs == numPartitions
+
+  /** Map-stage jobs that are waiting on this particular stage to finish, if any */
+  var waitingJobs: List[ActiveJob] = Nil
 
   val outputLocs = Array.fill[List[MapStatus]](numPartitions)(Nil)
 

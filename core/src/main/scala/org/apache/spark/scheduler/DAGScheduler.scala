@@ -35,7 +35,7 @@ import org.apache.spark._
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.partial.{ApproximateActionListener, ApproximateEvaluator, PartialResult}
-import org.apache.spark.rdd.RDD
+import org.apache.spark.rdd.{ShuffledRDD2, DynamicJoinedRDD, RDD}
 import org.apache.spark.rpc.RpcTimeout
 import org.apache.spark.storage._
 import org.apache.spark.util._
@@ -500,7 +500,12 @@ class DAGScheduler(
     jobIdToStageIds -= job.jobId
     jobIdToActiveJob -= job.jobId
     activeJobs -= job
-    job.finalStage.resultOfJob = None
+    job.finalStage match {
+      case r: ResultStage =>
+        r.resultOfJob = None
+      case m: ShuffleMapStage =>
+        m.waitingJobs = m.waitingJobs.filter(_ != job)
+    }
   }
 
   /**
@@ -524,6 +529,7 @@ class DAGScheduler(
 
     val jobId = nextJobId.getAndIncrement()
     if (partitions.size == 0) {
+      // Return immediately if the job is running 0 tasks
       return new JobWaiter[U](this, jobId, 0, resultHandler)
     }
 
@@ -573,6 +579,29 @@ class DAGScheduler(
     eventProcessLoop.post(JobSubmitted(
       jobId, rdd, func2, partitions, callSite, listener, SerializationUtils.clone(properties)))
     listener.awaitResult()    // Will throw an exception if the job fails
+  }
+
+  /**
+   * Submit a shuffle map stage and get a JobWaiter object back. The JobWaiter object can be used
+   * to block until the the job finishes executing or can be used to cancel the job.
+   */
+  def submitMapStage[K, V, C](
+      dependency: ShuffleDependency[K, V, C],
+      callSite: CallSite,
+      properties: Properties): JobWaiter[Any] = {
+
+    val rdd = dependency.rdd
+    val jobId = nextJobId.getAndIncrement()
+    if (rdd.partitions.size == 0) {
+      // Return immediately if the job is running 0 tasks
+      return new JobWaiter[Any](this, jobId, 0, (i: Int, r: Any) => {})
+    }
+
+    assert(rdd.partitions.size > 0)
+    val waiter = new JobWaiter(this, jobId, rdd.partitions.size, (i: Int, r: Any) => {})
+    eventProcessLoop.post(MapStageSubmitted(
+      jobId, dependency, callSite, waiter, SerializationUtils.clone(properties)))
+    waiter
   }
 
   /**
@@ -745,7 +774,63 @@ class DAGScheduler(
         SparkListenerJobStart(job.jobId, jobSubmissionTime, stageInfos, properties))
       submitStage(finalStage)
     }
-    submitWaitingStages()
+    submitWaitingStages()   // TODO: Do we need this if finalStage is null?
+  }
+
+  private[scheduler] def handleMapStageSubmitted(jobId: Int,
+      dependency: ShuffleDependency[_, _, _],
+      callSite: CallSite,
+      listener: JobListener,
+      properties: Properties) {
+    // Submitting this map stage might still require the creation of some parent stages, so make
+    // sure that happens.
+    var finalStage: ShuffleMapStage = null
+    try {
+      // New stage creation may throw an exception if, for example, jobs are run on a
+      // HadoopRDD whose underlying HDFS files have been deleted.
+      finalStage = newOrUsedShuffleStage(dependency, jobId)
+    } catch {
+      case e: Exception =>
+        logWarning("Creating new stage failed due to exception - job: " + jobId, e)
+        listener.jobFailed(e)
+        return
+    }
+    if (finalStage != null) {
+      if (finalStage.isAvailable) {
+        // The stage is completely finished already, so tell the listener that all tasks are done
+        for (i <- 0 until finalStage.numPartitions) {
+          listener.taskSucceeded(i, null)
+        }
+      } else {
+        val job = new ActiveJob(jobId, finalStage, null, null, callSite, listener, properties)
+        clearCacheLocs()
+        logInfo("Got map stage job %s (%s) with %d output partitions".format(
+          jobId, callSite.shortForm, dependency.rdd.partitions.size))
+        logInfo("Final stage: " + finalStage + "(" + finalStage.name + ")")
+        logInfo("Parents of final stage: " + finalStage.parents)
+        logInfo("Missing parents: " + getMissingParentStages(finalStage))
+
+        // Mark any finished tasks in the stage as such so the listener knows about them
+        for (i <- 0 until finalStage.numPartitions) {
+          if (finalStage.outputLocs(i).nonEmpty) {
+            job.finished(i) = true
+            job.numFinished += 1
+            listener.taskSucceeded(i, null)
+          }
+        }
+
+        val jobSubmissionTime = clock.getTimeMillis()
+        jobIdToActiveJob(jobId) = job
+        activeJobs += job
+        finalStage.waitingJobs = job :: finalStage.waitingJobs
+        val stageIds = jobIdToStageIds(jobId).toArray
+        val stageInfos = stageIds.flatMap(id => stageIdToStage.get(id).map(_.latestInfo))
+        listenerBus.post(
+          SparkListenerJobStart(job.jobId, jobSubmissionTime, stageInfos, properties))
+        submitStage(finalStage)
+      }
+    }
+    submitWaitingStages()   // TODO: Do we need this if finalStage is null?
   }
 
   /** Submits stage, but first recursively submits any missing parents. */
@@ -1057,6 +1142,21 @@ class DAGScheduler(
               }
 
               // Note: newly runnable stages will be submitted below when we submit waiting stages
+            }
+
+            // Mark the task as finished in any map-stage jobs waiting on this stage
+            for (job <- shuffleStage.waitingJobs) {
+              if (!job.finished(smt.partitionId)) {
+                job.finished(smt.partitionId) = true
+                job.numFinished += 1
+                job.listener.taskSucceeded(smt.partitionId, null)
+                // If the whole job has finished, remove it
+                if (job.numFinished == job.numPartitions) {
+                  cleanupStateForJobAndIndependentStages(job)
+                  listenerBus.post(
+                    SparkListenerJobEnd(job.jobId, clock.getTimeMillis(), JobSucceeded))
+                }
+              }
             }
           }
 
@@ -1444,6 +1544,9 @@ private[scheduler] class DAGSchedulerEventProcessLoop(dagScheduler: DAGScheduler
   private def doOnReceive(event: DAGSchedulerEvent): Unit = event match {
     case JobSubmitted(jobId, rdd, func, partitions, callSite, listener, properties) =>
       dagScheduler.handleJobSubmitted(jobId, rdd, func, partitions, callSite, listener, properties)
+
+    case MapStageSubmitted(jobId, dependency, callSite, listener, properties) =>
+      dagScheduler.handleMapStageSubmitted(jobId, dependency, callSite, listener, properties)
 
     case StageCancelled(stageId) =>
       dagScheduler.handleStageCancellation(stageId)

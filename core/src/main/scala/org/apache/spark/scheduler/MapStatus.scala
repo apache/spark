@@ -32,6 +32,9 @@ private[spark] sealed trait MapStatus {
   /** Location where this task was run. */
   def location: BlockManagerId
 
+  /** Number of map output partitions */
+  def numPartitions: Int
+
   /**
    * Estimated size for the reduce block, in bytes.
    *
@@ -100,6 +103,8 @@ private[spark] class CompressedMapStatus(
     this(loc, uncompressedSizes.map(MapStatus.compressSize))
   }
 
+  override def numPartitions: Int = compressedSizes.length
+
   override def location: BlockManagerId = loc
 
   override def getSizeForBlock(reduceId: Int): Long = {
@@ -132,6 +137,7 @@ private[spark] class CompressedMapStatus(
  */
 private[spark] class HighlyCompressedMapStatus private (
     private[this] var loc: BlockManagerId,
+    private[this] var totalBlocks: Int,
     private[this] var numNonEmptyBlocks: Int,
     private[this] var emptyBlocks: RoaringBitmap,
     private[this] var avgSize: Long)
@@ -141,7 +147,9 @@ private[spark] class HighlyCompressedMapStatus private (
   require(loc == null || avgSize > 0 || numNonEmptyBlocks == 0,
     "Average size can only be zero for map stages that produced no output")
 
-  protected def this() = this(null, -1, null, -1)  // For deserialization only
+  protected def this() = this(null, -1, -1, null, -1)  // For deserialization only
+
+  override def numPartitions: Int = totalBlocks
 
   override def location: BlockManagerId = loc
 
@@ -155,12 +163,14 @@ private[spark] class HighlyCompressedMapStatus private (
 
   override def writeExternal(out: ObjectOutput): Unit = Utils.tryOrIOException {
     loc.writeExternal(out)
+    out.writeInt(totalBlocks)
     emptyBlocks.writeExternal(out)
     out.writeLong(avgSize)
   }
 
   override def readExternal(in: ObjectInput): Unit = Utils.tryOrIOException {
     loc = BlockManagerId(in)
+    totalBlocks = in.readInt()
     emptyBlocks = new RoaringBitmap()
     emptyBlocks.readExternal(in)
     avgSize = in.readLong()
@@ -194,6 +204,6 @@ private[spark] object HighlyCompressedMapStatus {
     } else {
       0
     }
-    new HighlyCompressedMapStatus(loc, numNonEmptyBlocks, emptyBlocks, avgSize)
+    new HighlyCompressedMapStatus(loc, totalNumBlocks, numNonEmptyBlocks, emptyBlocks, avgSize)
   }
 }
