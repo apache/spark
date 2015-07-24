@@ -148,7 +148,7 @@ class InMemoryColumnarQuerySuite extends QueryTest {
     val dataTypes =
       Seq(StringType, BinaryType, NullType, BooleanType,
         ByteType, ShortType, IntegerType, LongType,
-        FloatType, DoubleType, DecimalType.Unlimited, DecimalType(6, 5),
+        FloatType, DoubleType, DecimalType.SYSTEM_DEFAULT, DecimalType(6, 5),
         DateType, TimestampType,
         ArrayType(IntegerType), MapType(StringType, LongType), struct)
     val fields = dataTypes.zipWithIndex.map { case (dataType, index) =>
