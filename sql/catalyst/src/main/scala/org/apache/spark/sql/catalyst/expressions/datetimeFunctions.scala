@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import java.sql.Date
 import java.text.SimpleDateFormat
 import java.util.{Calendar, TimeZone}
 
@@ -27,6 +26,8 @@ import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
+
+import scala.util.Try
 
 /**
  * Returns the current date at the start of query evaluation.
@@ -254,16 +255,114 @@ case class DateFormatClass(left: Expression, right: Expression) extends BinaryEx
 
   override protected def nullSafeEval(timestamp: Any, format: Any): Any = {
     val sdf = new SimpleDateFormat(format.toString)
-    UTF8String.fromString(sdf.format(new Date(timestamp.asInstanceOf[Long] / 1000)))
+    UTF8String.fromString(sdf.format(new java.util.Date(timestamp.asInstanceOf[Long] / 1000)))
   }
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     val sdf = classOf[SimpleDateFormat].getName
     defineCodeGen(ctx, ev, (timestamp, format) => {
       s"""UTF8String.fromString((new $sdf($format.toString()))
-          .format(new java.sql.Date($timestamp / 1000)))"""
+          .format(new java.sql.Timestamp($timestamp / 1000)))"""
     })
   }
+}
+
+/**
+ * Convert time string with given pattern
+ * (see [http://docs.oracle.com/javase/tutorial/i18n/format/simpleDateFormat.html])
+ * to Unix time stamp (in seconds), return null if fail.
+ * If the second parameter is missing, use "yyyy-MM-dd HH:mm:ss".
+ * If no parameters provided, the first parameter will be current_timestamp.
+ * If the first parameter is a Date or Timestamp instead of String, we will ignore the
+ * second parameter.
+ */
+case class UnixTimestamp(nodes: Seq[Expression])
+  extends BinaryExpression with ExpectsInputTypes {
+
+  override def children: Seq[Expression] = left :: right :: Nil
+  override def left: Expression =
+    if (childrenLength == 0) CurrentTimestamp() else nodes.head
+  override def right: Expression =
+    if (childrenLength > 1) nodes(1) else Literal("yyyy-MM-dd HH:mm:ss")
+
+  private lazy val childrenLength = nodes.length
+
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(TypeCollection(StringType, DateType, TimestampType), StringType)
+
+  override def dataType: DataType = LongType
+
+  override def nullSafeEval(time: Any, format: Any): Any = {
+    left.dataType match {
+      case DateType =>
+        DateTimeUtils.daysToMillis(time.asInstanceOf[Int]) / 1000L
+      case TimestampType =>
+        time.asInstanceOf[Long] / 1000000L
+      case StringType =>
+        val formatString = format.asInstanceOf[UTF8String].toString
+        val sdf = new SimpleDateFormat(formatString)
+        Try(sdf.parse(time.asInstanceOf[UTF8String].toString).getTime / 1000L).getOrElse(null)
+    }
+  }
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    left.dataType match {
+      case StringType =>
+        val sdf = classOf[SimpleDateFormat].getName
+        nullSafeCodeGen(ctx, ev, (string, format) => {
+          s"""
+            try {
+              ${ev.primitive} =
+                (new $sdf($format.toString())).parse($string.toString()).getTime() / 1000L;
+            } catch (java.lang.Throwable e) {
+              ${ev.isNull} = true;
+            }
+          """
+        })
+      case TimestampType =>
+        defineCodeGen(ctx, ev, (timestamp, format) => {
+          s"""$timestamp / 1000000L"""
+        })
+      case DateType =>
+        val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
+        defineCodeGen(ctx, ev, (date, format) => {
+          s"""$dtu.daysToMillis($date) / 1000L"""
+        })
+    }
+  }
+}
+
+/**
+ * Converts the number of seconds from unix epoch (1970-01-01 00:00:00 UTC) to a string
+ * representing the timestamp of that moment in the current system time zone in the given
+ * format. If the format is missing, using format like "1970-01-01 00:00:00".
+ */
+case class FromUnixTime(nodes: Seq[Expression])
+  extends BinaryExpression with ImplicitCastInputTypes {
+
+  assert(nodes.length <= 2 && nodes.nonEmpty)
+  override def children: Seq[Expression] = left :: right :: Nil
+  override def left: Expression = nodes.head
+  override def right: Expression =
+    if (nodes.length > 1) nodes(1) else Literal("yyyy-MM-dd HH:mm:ss")
+
+  override def dataType: DataType = StringType
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(LongType, StringType)
+
+  override protected def nullSafeEval(time: Any, format: Any): Any = {
+    val sdf = new SimpleDateFormat(format.toString)
+    UTF8String.fromString(sdf.format(new java.util.Date(time.asInstanceOf[Long] * 1000L)))
+  }
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    val sdf = classOf[SimpleDateFormat].getName
+    defineCodeGen(ctx, ev, (seconds, format) => {
+      s"""UTF8String.fromString((new $sdf($format.toString())).format(
+        new java.sql.Timestamp($seconds * 1000L)))""".stripMargin
+    })
+  }
+
 }
 
 /**

@@ -218,6 +218,7 @@ object FunctionRegistry {
     expression[DayOfMonth]("day"),
     expression[DayOfYear]("dayofyear"),
     expression[DayOfMonth]("dayofmonth"),
+    expression[FromUnixTime]("from_unixtime"),
     expression[Hour]("hour"),
     expression[LastDay]("last_day"),
     expression[Minute]("minute"),
@@ -225,6 +226,7 @@ object FunctionRegistry {
     expression[NextDay]("next_day"),
     expression[Quarter]("quarter"),
     expression[Second]("second"),
+    expression[UnixTimestamp]("unix_timestamp"),
     expression[WeekOfYear]("weekofyear"),
     expression[Year]("year"),
 

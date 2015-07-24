@@ -22,6 +22,7 @@ import java.text.SimpleDateFormat
 import java.util.Calendar
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types.{StringType, TimestampType, DateType}
 
@@ -274,4 +275,38 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       NextDay(Literal(Date.valueOf("2015-07-23")), Literal("th")),
       DateTimeUtils.fromJavaDate(Date.valueOf("2015-07-30")))
   }
+
+  test("from_unixtime") {
+    val sdf1 = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss")
+    val fmt2 = "yyyy-MM-dd HH:mm:ss.SSS"
+    val sdf2 = new SimpleDateFormat(fmt2)
+    checkEvaluation(FromUnixTime(Seq(Literal(0L))), sdf1.format(new Timestamp(0)))
+    checkEvaluation(FromUnixTime(Seq(Literal(1000L))), sdf1.format(new Timestamp(1000000)))
+    checkEvaluation(
+      FromUnixTime(Seq(Literal(-1000L), Literal(fmt2))), sdf2.format(new Timestamp(-1000000)))
+  }
+
+  test("unix_timestamp") {
+    val sdf1 = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss")
+    val fmt2 = "yyyy-MM-dd HH:mm:ss.SSS"
+    val sdf2 = new SimpleDateFormat(fmt2)
+    val fmt3 = "yy-MM-dd"
+    val sdf3 = new SimpleDateFormat(fmt3)
+    val date1 = Date.valueOf("2015-07-24")
+    checkEvaluation(UnixTimestamp(Seq(Literal(sdf1.format(new Timestamp(0))))), 0L)
+    checkEvaluation(UnixTimestamp(Seq(Literal(sdf1.format(new Timestamp(1000000))))), 1000L)
+    checkEvaluation(UnixTimestamp(Seq(Literal(new Timestamp(1000000)))), 1000L)
+    checkEvaluation(
+      UnixTimestamp(Seq(Literal(date1))),
+      DateTimeUtils.daysToMillis(DateTimeUtils.fromJavaDate(date1)) / 1000L)
+    checkEvaluation(
+      UnixTimestamp(Seq(Literal(sdf2.format(new Timestamp(-1000000))), Literal(fmt2))), -1000L)
+    checkEvaluation(UnixTimestamp(
+      Seq(Literal(sdf3.format(Date.valueOf("2015-07-24"))), Literal(fmt3))),
+      DateTimeUtils.daysToMillis(DateTimeUtils.fromJavaDate(Date.valueOf("2015-07-24"))) / 1000L)
+    val t1 = UnixTimestamp(Seq()).eval(InternalRow.empty).asInstanceOf[Long]
+    val t2 = UnixTimestamp(Seq()).eval(InternalRow.empty).asInstanceOf[Long]
+    assert(t2 - t1 <= 1)
+  }
+
 }
