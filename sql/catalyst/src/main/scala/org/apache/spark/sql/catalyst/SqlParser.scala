@@ -414,7 +414,7 @@ class SqlParser extends AbstractSparkSQLParser with DataTypeParser {
     val decimal = BigDecimal(value)
     // follow the behavior in MS SQL Server
     // https://msdn.microsoft.com/en-us/library/ms179899.aspx
-    if (value.contains('E') || value.contains('e)) {
+    if (value.contains('E') || value.contains('e')) {
       decimal.doubleValue()
     } else {
       decimal.underlying()
