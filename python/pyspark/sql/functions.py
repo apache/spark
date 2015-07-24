@@ -375,6 +375,7 @@ def sparkPartitionId():
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.sparkPartitionId())
 
+
 def expr(str):
     """Parses the expression string into the column that it represents
 
@@ -383,6 +384,7 @@ def expr(str):
     """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.expr(str))
+
 
 @ignore_unicode_prefix
 @since(1.4)
