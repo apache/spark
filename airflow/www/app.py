@@ -1623,10 +1623,13 @@ class ConfigurationView(wwwutils.SuperUserMixin, BaseView):
         raw = request.args.get('raw') == "true"
         title = "Airflow Configuration"
         subtitle = configuration.AIRFLOW_CONFIG
-        f = open(configuration.AIRFLOW_CONFIG, 'r')
-        config = f.read()
-
-        f.close()
+        if conf.getboolean("webserver", "expose_config"):
+            with open(configuration.AIRFLOW_CONFIG, 'r') as f:
+                config = f.read()
+        else:
+            config = (
+                "# You Airflow administrator chose not to expose the "
+                "configuration, most likely for security reasons.")
         if raw:
             return Response(
                 response=config,
