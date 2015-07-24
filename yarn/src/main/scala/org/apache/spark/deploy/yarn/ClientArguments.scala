@@ -54,7 +54,8 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
   private val driverCoresKey = "spark.driver.cores"
   private val amCoresKey = "spark.yarn.am.cores"
   private val isDynamicAllocationEnabled =
-    sparkConf.getBoolean("spark.dynamicAllocation.enabled", false)
+    sparkConf.getBoolean("spark.dynamicAllocation.enabled", false) &&
+      (sparkConf.getInt("spark.executor.instances", 0) == 0)
 
   parseArgs(args.toList)
   loadEnvironmentArgs()
