@@ -19,6 +19,8 @@ package org.apache.spark.ml.classification
 
 import java.util.UUID
 
+import org.apache.spark.ml.param.shared.HasRawPredictionCol
+
 import scala.language.existentials
 
 import org.apache.spark.annotation.Experimental
@@ -35,7 +37,7 @@ import org.apache.spark.storage.StorageLevel
 /**
  * Params for [[OneVsRest]].
  */
-private[ml] trait OneVsRestParams extends PredictorParams {
+private[ml] trait OneVsRestParams extends PredictorParams with HasRawPredictionCol {
 
   // scalastyle:off structural.type
   type ClassifierType = Classifier[F, E, M] forSome {
@@ -127,9 +129,15 @@ final class OneVsRestModel private[ml] (
       predictions.maxBy(_._2)._1.toDouble
     }
 
+    // output the index of the classifier with highest confidence as prediction
+    val probabilityUDF = udf { (predictions: Map[Int, Double]) =>
+      predictions.maxBy(_._2)._2.toDouble
+    }
+
     // output label and label metadata as prediction
     aggregatedDataset
       .withColumn($(predictionCol), labelUDF(col(accColName)).as($(predictionCol), labelMetadata))
+      .withColumn($(rawPredictionCol), probabilityUDF(col(accColName)).as($(rawPredictionCol), labelMetadata))
       .drop(accColName)
   }
 

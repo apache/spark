@@ -17,7 +17,10 @@
 
 package org.apache.spark.mllib.regression
 
+import java.lang
+
 import org.apache.spark.SparkContext
+import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.optimization._
 import org.apache.spark.mllib.pmml.PMMLExportable
@@ -37,6 +40,13 @@ class LassoModel (
   extends GeneralizedLinearModel(weights, intercept)
   with RegressionModel with Serializable with Saveable with PMMLExportable {
 
+  override protected def predictPointWithProbability(
+                                       dataMatrix: Vector,
+                                       weightMatrix: Vector,
+                                       intercept: Double) = {
+    throw new Exception("Not implemented for LassoModel")
+  }
+
   override protected def predictPoint(
       dataMatrix: Vector,
       weightMatrix: Vector,
@@ -49,6 +59,13 @@ class LassoModel (
   }
 
   override protected def formatVersion: String = "1.0"
+
+  /**
+   * Predict values for examples stored in a JavaRDD.
+   * @param testData JavaRDD representing data points to be predicted
+   * @return a JavaRDD[java.lang.Double] where each entry contains the corresponding prediction
+   */
+  override def predict(testData: JavaRDD[Vector]): JavaRDD[lang.Double] = super.predict(testData)
 }
 
 object LassoModel extends Loader[LassoModel] {
