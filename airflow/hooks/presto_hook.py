@@ -26,7 +26,7 @@ class PrestoHook(DbApiHook):
 
     def get_conn(self):
         """Returns a connection object"""
-        db = self.get_connection(self.conn_id_name)
+        db = self.get_connection(self.presto_conn_id)
         return presto.connect(
             host=db.host,
             port=db.port,

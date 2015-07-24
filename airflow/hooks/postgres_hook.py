@@ -13,7 +13,7 @@ class PostgresHook(DbApiHook):
     supports_autocommit = True
 
     def get_conn(self):
-        conn = self.get_connection(self.conn_id_name)
+        conn = self.get_connection(self.postgres_conn_id)
         return psycopg2.connect(
             host=conn.host,
             user=conn.login,

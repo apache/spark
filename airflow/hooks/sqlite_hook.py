@@ -17,6 +17,6 @@ class SqliteHook(DbApiHook):
         """
         Returns a sqlite connection object
         """
-        conn = self.get_connection(self.conn_id_name)
+        conn = self.get_connection(self.sqlite_conn_id)
         conn = sqlite3.connect(conn.host)
         return conn
