@@ -156,7 +156,8 @@ object MasterFailureTest extends Logging {
       assert(setupCalled, "Setup was not called in the first call to StreamingContext.getOrCreate")
 
       // Start generating files in the a different thread
-      val fileGeneratingThread = new FileGeneratingThread(input, testDir, batchDuration.milliseconds)
+      val fileGeneratingThread = new FileGeneratingThread(input, testDir,
+        batchDuration.milliseconds)
       fileGeneratingThread.start()
 
       // Run the streams and repeatedly kill it until the last expected output
