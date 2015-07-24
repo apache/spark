@@ -25,13 +25,22 @@ displayTitle: <a href="mllib-guide.html">MLlib</a> - Evaluation Metrics
 \newcommand{\zero}{\mathbf{0}}
 \]`
 
+## Algorithm Metrics
+
+Spark's MLlib comes with a number of machine learning algorithms that can be used to learn from and make predictions
+on data. When applying these algorithms, there is a need to evaluate their performance on certain criteria, depending
+on the application and its requirements. Spark's MLlib also provides a suite of metrics for the purpose of evaluating the
+performance of its algorithms.
+
+Specific machine learning algorithms fall under broader types of machine learning applications like classification, regression,
+clustering, etc. Each of these types have well established metrics for performance evaluation and those metrics that
+are currently available in Spark's MLlib are detailed in this section.
+
 ## Binary Classification
 
-Binary classifiers are used to separate the elements of a given set into two
-separate groups and is a special case of multiclass classification. Most binary
-classification metrics can be generalized to multiclass classification metrics.
-
-### Metrics
+[Binary classifiers](https://en.wikipedia.org/wiki/Binary_classification) are used to separate the elements of a given dataset into one of two possible groups (e.g. fraud
+or not fraud) and is a special case of multiclass classification. Most binary classification metrics can be
+generalized to multiclass classification metrics.
 
 <table class="table">
   <thead>
@@ -39,25 +48,29 @@ classification metrics can be generalized to multiclass classification metrics.
   </thead>
   <tbody>
     <tr>
-      <td>Precision (Postive Predictive Value)</td><td>$PPV=\frac{TP}{TP + FP}$</td>
+      <td>Precision (Postive Predictive Value)</td>
+      <td>$PPV=\frac{TP}{TP + FP}$</td>
     </tr>
     <tr>
-      <td>Recall (True Positive Rate)</td><td>$TPR=\frac{TP}{P}=\frac{TP}{TP + FN}$</td>
+      <td>Recall (True Positive Rate)</td>
+      <td>$TPR=\frac{TP}{P}=\frac{TP}{TP + FN}$</td>
     </tr>
     <tr>
-      <td>F-measure</td><td>$F(\beta) = \left(1 + \beta^2\right)
-                            \cdot \left(\frac{precision \cdot recall}
-                            {\beta^2 \cdot precision + recall}\right)$</td>
+      <td>F-measure</td>
+      <td>$F(\beta) = \left(1 + \beta^2\right) \cdot \left(\frac{PPV \cdot TPR}
+          {\beta^2 \cdot PPV + TPR}\right)$</td>
     </tr>
     <tr>
-      <td>Receiver Operating Characteristic (ROC)</td><td>$FPR(T)=\int^\infty_{T} P_0(T)\,dT\\
-                                                    TPR(T)=\int^\infty_{T} P_1(T)\,dT$</td>
+      <td>Receiver Operating Characteristic (ROC)</td>
+      <td>$FPR(T)=\int^\infty_{T} P_0(T)\,dT \\ TPR(T)=\int^\infty_{T} P_1(T)\,dT$</td>
     </tr>
     <tr>
-      <td>Area Under ROC Curve</td><td>$AUROC=\int^1_{0} \frac{TP}{P} d\left(\frac{FP}{N}\right)$</td>
+      <td>Area Under ROC Curve</td>
+      <td>$AUROC=\int^1_{0} \frac{TP}{P} d\left(\frac{FP}{N}\right)$</td>
     </tr>
     <tr>
-      <td>Area Under Precision-Recall Curve</td><td>$AUPRC=\int^1_{0} \frac{TP}{TP+FP} d\left(\frac{TP}{P}\right)$</td>
+      <td>Area Under Precision-Recall Curve</td>
+      <td>$AUPRC=\int^1_{0} \frac{TP}{TP+FP} d\left(\frac{TP}{P}\right)$</td>
     </tr>
   </tbody>
 </table>
@@ -66,11 +79,10 @@ classification metrics can be generalized to multiclass classification metrics.
 **Examples**
 
 <div class="codetabs">
+The following code snippets illustrate how to load a sample dataset, train a binary classification algorithm on the
+data, and evaluate the performance of the algorithm by several binary evaluation metrics.
 
 <div data-lang="scala" markdown="1">
-The following code snippets illustrate how to load a sample dataset, train a
-binary classification algorithm on the data, and evaluate the performance of
-the algorithm by several binary evaluation metrics.
 
 {% highlight scala %}
 import org.apache.spark.mllib.classification.LogisticRegressionWithLBFGS
@@ -88,8 +100,11 @@ val test = splits(1)
 
 // Run training algorithm to build the model
 val model = new LogisticRegressionWithLBFGS()
-  .setNumClasses(10)
+  .setNumClasses(2)
   .run(training)
+
+// Clear the prediction threshold so the model will return probabilities
+model.clearThreshold
 
 // Compute raw scores on the test set
 val predictionAndLabels = test.map { case LabeledPoint(label, features) =>
@@ -124,8 +139,7 @@ val auPRC = metrics.areaUnderPR
 println("Area under precision-recall curve = " + auPRC)
 
 // Compute thresholds used in ROC and PR curves
-val distinctThresholds = predictionAndLabels.map(_._1).distinct().collect().sortWith(_ > _)
-val thresholds = Array(1.0) ++ distinctThresholds ++ Array(0.0)
+val thresholds = precision.map(_._1)
 
 // ROC Curve
 val roc = metrics.roc
@@ -154,7 +168,6 @@ import org.apache.spark.mllib.util.MLUtils;
 import org.apache.spark.SparkConf;
 import org.apache.spark.SparkContext;
 import java.util.Collections;
-import java.util.Arrays;
 import java.util.List;
 
 public class BinaryClassification {
@@ -171,7 +184,7 @@ public class BinaryClassification {
 
     // Run training algorithm to build the model.
     final LogisticRegressionModel model = new LogisticRegressionWithLBFGS()
-      .setNumClasses(10)
+      .setNumClasses(3)
       .run(training.rdd());
 
     // Compute raw scores on the test set.
@@ -207,18 +220,13 @@ public class BinaryClassification {
     System.out.println("Precision-recall curve: " + prc.toArray());
 
     // Thresholds
-    // TODO: calc thresholds
-    // JavaRDD<Double> distinctThresholds = predictionAndLabels.map(
-    //   new Function<Tuple2<Object, Object>, Double>() {
-    //     public Double call (Tuple2<Object, Object> t) {
-    //       return new Double(t._1().toString());
-    //     }
-    //   }
-    // ).distinct();
-    // // Double[] sortedThresholds = Arrays.sort(distinctThresholds.toArray(), Collections.reverseOrder());
-    // List<Double> srtd = distinctThresholds.toArray();
-    // System.out.println(distinctThresholds.toArray());
-    // System.out.println(srtd.getClass().getName());
+    JavaRDD<Double> thresholds = precision.map(
+      new Function<Tuple2<Object, Object>, Double>() {
+        public Double call (Tuple2<Object, Object> t) {
+          return new Double(t._1().toString());
+        }
+      }
+    );
 
     // ROC Curve
     JavaRDD<Tuple2<Object, Object>> roc = metrics.roc().toJavaRDD();
@@ -231,8 +239,8 @@ public class BinaryClassification {
     System.out.println("Area under ROC = " + metrics.areaUnderROC());
 
     // Save and load model
-    // model.save(sc, "myModelPath");
-    // LogisticRegressionModel sameModel = LogisticRegressionModel.load(sc, "myModelPath");
+    model.save(sc, "myModelPath");
+    LogisticRegressionModel sameModel = LogisticRegressionModel.load(sc, "myModelPath");
   }
 }
 
@@ -281,26 +289,26 @@ print "Area under ROC = %1.2f" % metrics.areaUnderROC
 
 ## Multiclass Classification
 
-A multiclass classification describes a classification problem where there are
-$M \gt 2$ possible labels for each data point (the case where $M=2$ is the
-binary classification problem).
+A [multiclass classification](https://en.wikipedia.org/wiki/Multiclass_classification) describes a classification
+problem where there are $M \gt 2$ possible labels for each data point (the case where $M=2$ is the binary
+classification problem). For example, classifying handwriting samples to the digits 0 to 9, having 10 possible classes.
 
-The label set is given by
+Define the class, or label, set as
 
 $$L = \{\ell_0, \ell_1, \ldots, \ell_{M-1} \} $$
 
-The true output vector $\mathbf{y}$ consists of N elements
+The true output vector $\mathbf{y}$ consists of $N$ elements
 
 $$\mathbf{y}_0, \mathbf{y}_1, \ldots, \mathbf{y}_{N-1} \in L $$
 
-A multiclass prediction algorithm generates a prediction vector $\hat{\mathbf{y}}$ of N elements
+A multiclass prediction algorithm generates a prediction vector $\hat{\mathbf{y}}$ of $N$ elements
 
 $$\hat{\mathbf{y}}_0, \hat{\mathbf{y}}_1, \ldots, \hat{\mathbf{y}}_{N-1} \in L $$
 
-NOTE: The convention $\mathbf{y}^{(\ell)}$ will be used to denote the subset of the elements of $y$ which
-are equal to $\ell$
+For this section, a modified delta function $\hat{\delta}(x)$ will prove useful
 
-TODO: notation needs reviewing
+$$\hat{\delta}(x) = \begin{cases}1 & \text{if $x = 0$}, \\ 0 & \text{otherwise}.\end{cases}$$
+
 <table class="table">
   <thead>
     <tr><th>Metric</th><th>Definition</th></tr>
@@ -309,48 +317,60 @@ TODO: notation needs reviewing
     <tr>
       <td>Confusion Matrix</td>
       <td>
-        $\left( \begin{array}{ccc}
-         \mathbf{y}^{(1)}=\hat{\mathbf{y}}^{(1)} & \ldots & \mathbf{y}^{(1)}=\hat{\mathbf{y}}^{(N)} \\
+        $C_{ij} = \sum_{k=0}^{N-1} \hat{\delta}(\mathbf{y}_k-\ell_i) \cdot \hat{\delta}(\hat{\mathbf{y}}_k - \ell_j) \\ \\
+         \left( \begin{array}{ccc}
+         \sum_{k=0}^{N-1} \hat{\delta}(\mathbf{y}_k-\ell_1) \cdot \hat{\delta}(\hat{\mathbf{y}}_k - \ell_1) & \ldots &
+         \sum_{k=0}^{N-1} \hat{\delta}(\mathbf{y}_k-\ell_1) \cdot \hat{\delta}(\hat{\mathbf{y}}_k - \ell_N) \\
          \vdots & \ddots & \vdots \\
-         \mathbf{y}^{(N)}=\hat{\mathbf{y}}^{(1)} & \ldots & \mathbf{y}^{(N)}=\hat{\mathbf{y}}^{(N)} \end{array} \right)$
+         \sum_{k=0}^{N-1} \hat{\delta}(\mathbf{y}_k-\ell_N) \cdot \hat{\delta}(\hat{\mathbf{y}}_k - \ell_1) & \ldots &
+         \sum_{k=0}^{N-1} \hat{\delta}(\mathbf{y}_k-\ell_N) \cdot \hat{\delta}(\hat{\mathbf{y}}_k - \ell_N)
+         \end{array} \right)$
       </td>
     </tr>
     <tr>
-      <td>Overall Precision</td><td>$precision=\frac{TP}{TP + FP}=
-          \frac{1}{N}\sum_{i=0}^{N-1} \hat{\mathbf{y}}_i=\mathbf{y}_i$</td>
+      <td>Overall Precision</td>
+      <td>$PPV = \frac{TP}{TP + FP} = \frac{1}{N}\sum_{i=0}^{N-1} \hat{\delta}\left(\hat{\mathbf{y}}_i - \mathbf{y}_i\right)$</td>
     </tr>
     <tr>
-      <td>Overall Recall</td><td>$recall=\frac{TP}{TP + FN}=
-          \frac{1}{N}\sum_{i=0}^{N-1} \hat{\mathbf{y}}_i=\mathbf{y}_i$</td>
+      <td>Overall Recall</td>
+      <td>$TPR = \frac{TP}{TP + FN} = \frac{1}{N}\sum_{i=0}^{N-1} \hat{\delta}\left(\hat{\mathbf{y}}_i - \mathbf{y}_i\right)$</td>
     </tr>
     <tr>
-      <td>Overall F-measure</td><td>$F(\beta) = \left(1 + \beta^2\right)
-                            \cdot \left(\frac{precision \cdot recall}
-                            {\beta^2 \cdot precision + recall}\right)$</td>
+      <td>Overall F-measure</td>
+      <td>$F(\beta) = \left(1 + \beta^2\right) \cdot \left(\frac{PPV \cdot TPR}
+          {\beta^2 \cdot PPV + TPR}\right)$</td>
     </tr>
     <tr>
-      <td>Precision by label</td><td>$precision(\ell)=\frac{TP}{TP + FP}=
-          \frac{\sum_{i=0}^{N-1} (\hat{\mathbf{y}}_i=\ell)\:\&\&\:(\mathbf{y}_i=\ell)}
-          {\sum_{i=0}^{N-1} (\hat{\mathbf{y}}_i=\ell)}$</td>
+      <td>Precision by label</td>
+      <td>$PPV(\ell) = \frac{TP}{TP + FP} =
+          \frac{\sum_{i=0}^{N-1} \hat{\delta}(\hat{\mathbf{y}}_i - \ell) \cdot \hat{\delta}(\mathbf{y}_i - \ell)}
+          {\sum_{i=0}^{N-1} \hat{\delta}(\hat{\mathbf{y}}_i - \ell)}$</td>
     </tr>
     <tr>
-      <td>Recall by label</td><td>$recall(\ell)=\frac{TP}{P}=
-          \frac{\sum_{i=0}^{N-1} (\hat{\mathbf{y}}_i=\ell)\:\&\&\:(\mathbf{y}_i=\ell)}
-          {\sum_{i=0}^{N-1} (\mathbf{y}_i=\ell)}$</td>
+      <td>Recall by label</td>
+      <td>$TPR(\ell)=\frac{TP}{P} =
+          \frac{\sum_{i=0}^{N-1} \hat{\delta}(\hat{\mathbf{y}}_i - \ell) \cdot \hat{\delta}(\mathbf{y}_i - \ell)}
+          {\sum_{i=0}^{N-1} \hat{\delta}(\mathbf{y}_i - \ell)}$</td>
     </tr>
     <tr>
-      <td>F-measure by label</td><td>$F(\beta, \ell) = \left(1 + \beta^2\right)
-                            \cdot \left(\frac{precision(\ell) \cdot recall(\ell)}
-                            {\beta^2 \cdot precision(\ell) + recall(\ell)}\right)$</td>
+      <td>F-measure by label</td>
+      <td>$F(\beta, \ell) = \left(1 + \beta^2\right) \cdot \left(\frac{PPV(\ell) \cdot TPR(\ell)}
+          {\beta^2 \cdot PPV(\ell) + TPR(\ell)}\right)$</td>
     </tr>
     <tr>
-      <td>Weighted precision</td><td>$precision_{w}= \frac{1}{N} \sum\nolimits_{\ell \in L} precision(\ell) \cdot \left\|\mathbf{y}^{(\ell)}\right\|_0$</td>
+      <td>Weighted precision</td>
+      <td>$PPV_{w}= \frac{1}{N} \sum\nolimits_{\ell \in L} PPV(\ell)
+          \cdot \sum_{i=0}^{N-1} \hat{\delta}(\mathbf{y}_i-\ell)$</td>
     </tr>
     <tr>
-      <td>Weighted recall</td><td>$recall_{w}= \frac{1}{N} \sum\nolimits_{\ell \in L} recall(\ell) \cdot \left\|\mathbf{y}^{(\ell)}\right\|_0$</td>
+      <td>Weighted recall</td>
+      <td>$TPR_{w}= \frac{1}{N} \sum\nolimits_{\ell \in L} TPR(\ell)
+          \cdot \sum_{i=0}^{N-1} \hat{\delta}(\mathbf{y}_i-\ell)$</td>
     </tr>
     <tr>
-      <td>Weighted F-measure</td><td>$F_{w}(\beta)= \frac{1}{N} \sum\nolimits_{\ell \in L} F(\beta, \ell) \cdot \left\|\mathbf{y}^{(\ell)}\right\|_0$</td>
+      <td>Weighted F-measure</td>
+      <td>$F_{w}(\beta)= \frac{1}{N} \sum\nolimits_{\ell \in L} F(\beta, \ell)
+          \cdot \sum_{i=0}^{N-1} \hat{\delta}(\mathbf{y}_i-\ell)$</td>
     </tr>
   </tbody>
 </table>
@@ -358,11 +378,10 @@ TODO: notation needs reviewing
 **Examples**
 
 <div class="codetabs">
+The following code snippets illustrate how to load a sample dataset, train a multiclass classification algorithm on
+the data, and evaluate the performance of the algorithm by several multiclass classification evaluation metrics.
 
 <div data-lang="scala" markdown="1">
-The following code snippets illustrate how to load a sample dataset, train a
-multiclass classification algorithm on the data, and evaluate the performance of
-the algorithm by several multiclass classification evaluation metrics.
 
 {% highlight scala %}
 import org.apache.spark.mllib.classification.LogisticRegressionWithLBFGS
@@ -393,18 +412,17 @@ val predictionAndLabels = test.map { case LabeledPoint(label, features) =>
 val metrics = new MulticlassMetrics(predictionAndLabels)
 
 // Confusion matrix
+println("Confusion matrix:")
 println(metrics.confusionMatrix)
 
 // Overall Statistics
 val precision = metrics.precision
 val recall = metrics.recall // same as true positive rate
 val f1Score = metrics.fMeasure
-printf("""
-Summary Statistics
-Precision: %1.2f
-Recall: %1.2f
-F1 Score: %1.2f
-""", precision, recall, f1Score)
+println("Summary Statistics")
+printf("Precision = %1.2f\n", precision)
+printf("Recall = %1.2f\n", recall)
+printf("F1 Score = %1.2f\n", f1Score)
 
 // Precision by label
 val labels = metrics.labels
@@ -486,10 +504,10 @@ public class MulticlassClassification {
     System.out.println("F1 Score = " + metrics.fMeasure());
 
     // Stats by labels
-    for (int i = 0; i < metrics.labels().length - 1; i++) {
-        System.out.format("Class %f precision = %f\n", metrics.labels()[i], metrics.precision(metrics.labels()[i]));
-        System.out.format("Class %f recall = %f\n", metrics.labels()[i], metrics.recall(metrics.labels()[i]));
-        System.out.format("Class %f F1 score = %f\n", metrics.labels()[i], metrics.fMeasure(metrics.labels()[i]));
+    for (int i = 0; i < metrics.labels().length; i++) {
+        System.out.format("Class %1.2f precision = %1.2f\n", metrics.labels()[i], metrics.precision(metrics.labels()[i]));
+        System.out.format("Class %1.2f recall = %1.2f\n", metrics.labels()[i], metrics.recall(metrics.labels()[i]));
+        System.out.format("Class %1.2f F1 score = %1.2f\n", metrics.labels()[i], metrics.fMeasure(metrics.labels()[i]));
     }
 
     //Weighted stats
@@ -561,21 +579,26 @@ print "Weighted false positive rate = %1.2f" % metrics.weightedFalsePositiveRate
 
 ## Multilabel Classification
 
-<div>
-A multilabel classification problem involves mapping each document in a set of documents to a set of class labels. Here
-we define a set $D$ of $N$ documents:
-\[
-    D = \left\{d_0, d_1, ..., d_{N-1}\right\}
-\]
-Define $\left\{L_0, L_1, ..., L_{N-1}\right\}$ to be a family of label sets and $\left\{P_0, P_1, ..., P_{N-1}\right\}$ to be a
-family of prediction sets where $L_i$ and $P_i$ are the label set and prediction set, respectively, that correspond to document $d_i$.
+A [multilabel classification](https://en.wikipedia.org/wiki/Multi-label_classification) problem involves mapping
+each sample in a dataset to a set of class labels. In this type of classification problem, the labels are not
+mutually exclusive. For example, when classifying a set of news articles into topics, a single article might be both
+science and politics.
+
+Here we define a set $D$ of $N$ documents
+
+$$D = \left\{d_0, d_1, ..., d_{N-1}\right\}$$
+
+Define $L_0, L_1, ..., L_{N-1}$ to be a family of label sets and $P_0, P_1, ..., P_{N-1}$
+to be a family of prediction sets where $L_i$ and $P_i$ are the label set and prediction set, respectively, that
+correspond to document $d_i$.
 
 The set of all unique labels is given by
-\[
-L = \bigcup_{k=0}^{N-1} L_k
-\]
-</div>
 
+$$L = \bigcup_{k=0}^{N-1} L_k$$
+
+The following definition of indicator function $I_A(x)$ on a set $A$ will be necessary
+
+$$I_A(x) = \begin{cases}1 & \text{if $x \in A$}, \\ 0 & \text{otherwise}.\end{cases}$$
 
 <table class="table">
   <thead>
@@ -596,31 +619,34 @@ L = \bigcup_{k=0}^{N-1} L_k
       </td>
     </tr>
     <tr>
-      <td>Precision by label</td><td>$precision(\ell)=\frac{TP}{TP + FP}=
-          \frac{\sum_{i=0}^{N-1} (\ell \in P_i)\:\&\&\:(\ell \in L_i)}
-          {\sum_{i=0}^{N-1} (\ell \in P_i)}$</td>
+      <td>Precision by label</td><td>$PPV(\ell)=\frac{TP}{TP + FP}=
+          \frac{\sum_{i=0}^{N-1} I_{P_i}(\ell) \cdot I_{L_i}(\ell)}
+          {\sum_{i=0}^{N-1} I_{P_i}(\ell)}$</td>
     </tr>
     <tr>
-      <td>Recall by label</td><td>$recall(\ell)=\frac{TP}{P}=
-          \frac{\sum_{i=0}^{N-1} (\ell \in P_i)\:\&\&\:(\ell \in L_i)}
-          {\sum_{i=0}^{N-1} (\ell \in L_i)}$</td>
+      <td>Recall by label</td><td>$TPR(\ell)=\frac{TP}{P}=
+          \frac{\sum_{i=0}^{N-1} I_{P_i}(\ell) \cdot I_{L_i}(\ell)}
+          {\sum_{i=0}^{N-1} I_{L_i}(\ell)}$</td>
     </tr>
     <tr>
-      <td>F1-measure by label</td><td>$F(\beta, \ell) = 2
-                            \cdot \left(\frac{precision(\ell) \cdot recall(\ell)}
-                            {precision(\ell) + recall(\ell)}\right)$</td>
+      <td>F1-measure by label</td><td>$F1(\ell) = 2
+                            \cdot \left(\frac{PPV(\ell) \cdot TPR(\ell)}
+                            {PPV(\ell) + TPR(\ell)}\right)$</td>
     </tr>
     <tr>
       <td>Hamming Loss</td>
       <td>
-        $\frac{1}{N \cdot \left|L\right|} \sum_{i=0}^{N - 1} \left|L_i\right| + \left|P_i\right| - 2\left|L_i \cap P_i\right|$
+        $\frac{1}{N \cdot \left|L\right|} \sum_{i=0}^{N - 1} \left|L_i\right| + \left|P_i\right| - 2\left|L_i
+          \cap P_i\right|$
       </td>
     </tr>
     <tr>
-      <td>Subset Accuracy</td><td>$\frac{1}{N} \sum_{i=0}^{N-1} L_i=P_i$</td>
+      <td>Subset Accuracy</td>
+      <td>$\frac{1}{N} \sum_{i=0}^{N-1} I_{\{L_i\}}(P_i)$</td>
     </tr>
     <tr>
-      <td>F1 Measure</td><td>$\frac{1}{N} \sum_{i=0}^{N-1} 2 \frac{\left|P_i \cap L_i\right|}{\left|P_i\right| \cdot \left|L_i\right|} $</td>
+      <td>F1 Measure</td>
+      <td>$\frac{1}{N} \sum_{i=0}^{N-1} 2 \frac{\left|P_i \cap L_i\right|}{\left|P_i\right| \cdot \left|L_i\right|}$</td>
     </tr>
     <tr>
       <td>Micro precision</td>
@@ -634,8 +660,11 @@ L = \bigcup_{k=0}^{N-1} L_k
     </tr>
     <tr>
       <td>Micro F1 Measure</td>
-      <td>$2 \cdot \frac{TP}{2 \cdot TP + FP + FN}=2 \cdot \frac{\sum_{i=0}^{N-1} \left|P_i \cap L_i\right|}{2 \cdot \sum_{i=0}^{N-1} \left|P_i \cap L_i\right|
-      + \sum_{i=0}^{N-1} \left|L_i - P_i\right| + \sum_{i=0}^{N-1} \left|P_i - L_i\right|}$</td>
+      <td>
+        $2 \cdot \frac{TP}{2 \cdot TP + FP + FN}=2 \cdot \frac{\sum_{i=0}^{N-1} \left|P_i \cap L_i\right|}{2 \cdot
+        \sum_{i=0}^{N-1} \left|P_i \cap L_i\right| + \sum_{i=0}^{N-1} \left|L_i - P_i\right| + \sum_{i=0}^{N-1}
+        \left|P_i - L_i\right|}$
+      </td>
     </tr>
   </tbody>
 </table>
@@ -643,13 +672,13 @@ L = \bigcup_{k=0}^{N-1} L_k
 **Examples**
 
 <div class="codetabs">
+The following code snippets illustrate how to evaluate the performance of a multilabel classifer.
 
 <div data-lang="scala" markdown="1">
-The following code snippets illustrate how to evaluate the
-performance of a multilabel classifer.
 
 {% highlight scala %}
 import org.apache.spark.mllib.evaluation.MultilabelMetrics
+import org.apache.spark.rdd.RDD;
 
 /**
  * Generate some fake prediction and label data for multilabel classification
@@ -687,10 +716,10 @@ val scoreAndLabels: RDD[(Array[Double], Array[Double])] = sc.parallelize(
 val metrics = new MultilabelMetrics(scoreAndLabels)
 
 // Summary stats
-println("Recall = " + metrics.recall)
-println("Precision = " + metrics.precision)
-println("F1 measure = " + metrics.f1Measure)
-println("Accuracy = " + metrics.accuracy)
+printf("Recall = %1.2f\n", metrics.recall)
+printf("Precision = %1.2f\n", metrics.precision)
+printf("F1 measure = %1.2f\n", metrics.f1Measure)
+printf("Accuracy = %1.2f\n", metrics.accuracy)
 
 // Individual label stats
 metrics.labels.foreach(label => printf("Class %s precision = %1.2f\n", label, metrics.precision(label)))
@@ -698,15 +727,15 @@ metrics.labels.foreach(label => printf("Class %s recall = %1.2f\n", label, metri
 metrics.labels.foreach(label => printf("Class %s F1-score = %1.2f\n", label, metrics.f1Measure(label)))
 
 // Micro stats
-println("Micro recall = " + metrics.microRecall)
-println("Micro precision = " + metrics.microPrecision)
-println("Micro F1 measure = " + metrics.microF1Measure)
+printf("Micro recall = %1.2f\n",  metrics.microRecall)
+printf("Micro precision = %1.2f\n", metrics.microPrecision)
+printf("Micro F1 measure = %1.2f\n", metrics.microF1Measure)
 
 // Hamming loss
-println("Hamming loss = " + metrics.hammingLoss)
+printf("Hamming loss = %1.2f\n", metrics.hammingLoss)
 
 // Subset accuracy
-println("Subset accuracy = " + metrics.subsetAccuracy)
+printf("Subset accuracy = %1.2f\n", metrics.subsetAccuracy)
 
 {% endhighlight %}
 
@@ -721,7 +750,6 @@ import org.apache.spark.api.java.*;
 import org.apache.spark.rdd.RDD;
 import org.apache.spark.mllib.evaluation.MultilabelMetrics;
 import org.apache.spark.SparkConf;
-import org.apache.spark.SparkContext; // TODO: is this needed since using java sc?
 import java.util.Arrays;
 import java.util.List;
 
@@ -868,33 +896,33 @@ print "Subset accuracy = %1.2f" % metrics.subsetAccuracy
 
 ## Ranking Systems
 
-The role of a ranking algorithm (often thought of as a recommender system) is to return to the user a set of
-relevant items or documents based on some training data. The definition of relevance may vary and is usually
-application specific. Ranking system metrics aim to quantify the effectiveness of these rankings or recommendations
-in various contexts. Some metrics compare a set of recommended documents to a ground truth set of relevant documents,
-while other metrics may incorporate numerical ratings explicitly.
+The role of a ranking algorithm (often thought of as a [recommender system](https://en.wikipedia.org/wiki/Recommender_system))
+is to return to the user a set of relevant items or documents based on some training data. The definition of relevance
+may vary and is usually application specific. Ranking system metrics aim to quantify the effectiveness of these
+rankings or recommendations in various contexts. Some metrics compare a set of recommended documents to a ground truth
+set of relevant documents, while other metrics may incorporate numerical ratings explicitly.
 
-<div>
+
 A ranking system usually deals with a set of $M$ users
-\[
-    U = \left\{u_0, u_1, ..., u_{M-1}\right\}
-\]
+
+$$U = \left\{u_0, u_1, ..., u_{M-1}\right\}$$
+
 Each user ($u_i$) having a set of $N$ ground truth relevant documents
-\[
-    D_i = \left\{d_0, d_1, ..., d_{N-1}\right\}
-\]
+
+$$D_i = \left\{d_0, d_1, ..., d_{N-1}\right\}$$
+
 And a list of $Q$ recommended documents, in order of decreasing relevance
-\[
-    R_i = \left[r_0, r_1, ..., r_{Q-1}\right]
-\]
 
-The goal of the ranking system is to produce the most relevant set
-of documents for each user. The relevance of the sets and the
-effectiveness of the algorithms can be measured using the metrics
-listed below.
-</div>
+$$R_i = \left[r_0, r_1, ..., r_{Q-1}\right]$$
 
-TODO: format NDCG cell
+The goal of the ranking system is to produce the most relevant set of documents for each user. The relevance of the
+sets and the effectiveness of the algorithms can be measured using the metrics listed below.
+
+It is necessary to define a function which, provided a recommended document and a set of ground truth relevant
+documents, returns a relevance score for the recommended document.
+
+$$rel_D(r) = \begin{cases}1 & \text{if $r \in D$}, \\ 0 & \text{otherwise}.\end{cases}$$
+
 <table class="table">
   <thead>
     <tr><th>Metric</th><th>Description</th></tr>
@@ -905,24 +933,22 @@ TODO: format NDCG cell
         Precision at k
       </td>
       <td>
-        $precision(k)=\frac{1}{M} \sum_{i=0}^{M-1} {\frac{1}{k} \sum_{j=0}^{k-1} rel(R_i(j), D_i)}$
+        $p(k)=\frac{1}{M} \sum_{i=0}^{M-1} {\frac{1}{k} \sum_{j=0}^{k-1} rel_{D_i}(R_i(j))}$
       </td>
     </tr>
     <tr>
       <td>Mean Average Precision</td>
       <td>
-        $MAP=\frac{1}{M} \sum_{i=0}^{M-1} {\frac{1}{\left|D_i\right|} \sum_{j=0}^{Q-1} \frac{rel(R_i(j), D_i)}{j + 1}}$
+        $MAP=\frac{1}{M} \sum_{i=0}^{M-1} {\frac{1}{\left|D_i\right|} \sum_{j=0}^{Q-1} \frac{rel_{D_i}(R_i(j))}{j + 1}}$
       </td>
     </tr>
     <tr>
       <td>Normalized Discounted Cumulative Gain</td>
       <td>
-        $NDCG(k)=\frac{1}{M} \sum_{i=0}^{M-1} {\frac{1}{IDCG(D_i, k)}\sum_{j=0}^{n-1} \frac{rel(R_i(j), D_i)}{log_2(i+1)}}\\
-        n = min(max(|R_i|,|D_i|),k)\\
-        rel(r, D) = \begin{cases}1 &amp; \text{if $r \in D$}, \\ 0 &amp;
-                \text{otherwise}.\end{cases}\\
-        IDCG(D, k) = \sum_{i=0}^{min(\left|D\right|, k) - 1} \frac{1}{log_2(i+1)}
-        $
+        $NDCG(k)=\frac{1}{M} \sum_{i=0}^{M-1} {\frac{1}{IDCG(D_i, k)}\sum_{j=0}^{n-1} \frac{rel_{D_i}(R_i(j))}{log_2(j+1)}} \\
+        \text{Where} \\
+        \hspace{5 mm} n = \text{min}\left(\text{max}\left(|R_i|,|D_i|\right),k\right) \\
+        \hspace{5 mm} IDCG(D, k) = \sum_{j=0}^{min(\left|D\right|, k) - 1} \frac{1}{log_2(j+1)}$
       </td>
     </tr>
   </tbody>
@@ -931,11 +957,10 @@ TODO: format NDCG cell
 **Examples**
 
 <div class="codetabs">
+The following code snippets illustrate how to load a sample dataset, train an alternating least squares recommendation
+model on the data, and evaluate the performance of the recommender by several ranking metrics.
 
 <div data-lang="scala" markdown="1">
-The following code snippets illustrate how to load a sample dataset, train
-an alternating least squares recommendation model on the data, and evaluate
-the performance of the recommender by several ranking metrics.
 
 {% highlight scala %}
 import org.apache.spark.mllib.evaluation.{RegressionMetrics, RankingMetrics}
@@ -997,7 +1022,7 @@ val relevantDocuments = userMovies.join(userRecommended).map{ case (user, (actua
 val metrics = new RankingMetrics(relevantDocuments)
 
 // Precision at K
-Array(1, 5, 10).foreach{ k =>
+Array(1, 3, 5).foreach{ k =>
   printf("Precision at %d = %1.3f\n", k, metrics.precisionAt(k))
 }
 
@@ -1005,7 +1030,7 @@ Array(1, 5, 10).foreach{ k =>
 printf("Mean average precision = %1.3f\n", metrics.meanAveragePrecision)
 
 // Normalized discounted cumulative gain
-Array(1, 5, 10).foreach{ k =>
+Array(1, 3, 5).foreach{ k =>
   printf("NDCG at %d = %1.3f\n", k, metrics.ndcgAt(k))
 }
 
@@ -1018,8 +1043,10 @@ val predictionsAndLabels = allPredictions.join(allRatings).map{ case ((user, pro
 
 // Get the RMSE using regression metrics
 val regressionMetrics = new RegressionMetrics(predictionsAndLabels)
-printf("RMSE = %1.2f", regressionMetrics.rootMeanSquaredError)
+printf("RMSE = %1.3f\n", regressionMetrics.rootMeanSquaredError)
 
+// R-squared
+printf("R-squared = %1.3f\n", regressionMetrics.r2)
 
 {% endhighlight %}
 
@@ -1028,7 +1055,173 @@ printf("RMSE = %1.2f", regressionMetrics.rootMeanSquaredError)
 <div data-lang="java" markdown="1">
 
 {% highlight java %}
-// TODO
+import scala.Tuple2;
+
+import org.apache.spark.api.java.*;
+import org.apache.spark.rdd.RDD;
+import org.apache.spark.mllib.recommendation.MatrixFactorizationModel;
+import org.apache.spark.SparkConf;
+import org.apache.spark.api.java.function.Function;
+import java.util.*;
+import org.apache.spark.mllib.evaluation.RegressionMetrics;
+import org.apache.spark.mllib.evaluation.RankingMetrics;
+import org.apache.spark.mllib.recommendation.ALS;
+import org.apache.spark.mllib.recommendation.Rating;
+
+/**
+ * MovieLens ratings are on a scale of 1-5:
+ * 5: Must see
+ * 4: Will enjoy
+ * 3: It's okay
+ * 2: Fairly bad
+ * 1: Awful
+ * So we should not recommend a movie if the predicted rating is less than 3.
+ * To map ratings to confidence scores, we use
+ * 5 -> 2.5, 4 -> 1.5, 3 -> 0.5, 2 -> -0.5, 1 -> -1.5. This mappings means unobserved
+ * entries are generally between It's okay and Fairly bad.
+ * The semantics of 0 in this expanded world of non-positive weights
+ * are "the same as never having interacted at all".
+ */
+
+public class Ranking {
+  public static void main(String[] args) {
+    SparkConf conf = new SparkConf().setAppName("Ranking Metrics");
+    JavaSparkContext sc = new JavaSparkContext(conf);
+    String path = "data/mllib/sample_movielens_data.txt";
+    JavaRDD<String> data = sc.textFile(path);
+    JavaRDD<Rating> ratings = data.map(
+      new Function<String, Rating>() {
+        public Rating call(String line) {
+          String[] parts = line.split("::");
+          return new Rating(Integer.parseInt(parts[0]), Integer.parseInt(parts[1]), Double.parseDouble(parts[2]) - 2.5);
+        }
+      }
+    );
+    ratings.cache();
+
+    // Train an ALS model
+    final MatrixFactorizationModel model = ALS.train(JavaRDD.toRDD(ratings), 10, 10, 0.01);
+
+    // Get top 10 recommendations for every user and scale ratings from 0 to 1
+    JavaRDD<Tuple2<Object, Rating[]>> userRecs = model.recommendProductsForUsers(10).toJavaRDD();
+    JavaRDD<Tuple2<Object, Rating[]>> userRecsScaled = userRecs.map(
+      new Function<Tuple2<Object, Rating[]>, Tuple2<Object, Rating[]>>() {
+        public Tuple2<Object, Rating[]> call(Tuple2<Object, Rating[]> t) {
+          Rating[] scaledRatings = new Rating[t._2().length];
+          for (int i = 0; i < scaledRatings.length; i++) {
+            double newRating = Math.max(Math.min(t._2()[i].rating(), 1.0), 0.0);
+            scaledRatings[i] = new Rating(t._2()[i].user(), t._2()[i].product(), newRating);
+          }
+          return new Tuple2<Object, Rating[]>(t._1(), scaledRatings);
+        }
+      }
+    );
+    JavaPairRDD<Object, Rating[]> userRecommended = JavaPairRDD.fromJavaRDD(userRecsScaled);
+
+    // Map ratings to 1 or 0, 1 indicating a movie that should be recommended
+    JavaRDD<Rating> binarizedRatings = ratings.map(
+      new Function<Rating, Rating>() {
+        public Rating call(Rating r) {
+          double binaryRating;
+          if (r.rating() > 0.0) {
+            binaryRating = 1.0;
+          }
+          else {
+            binaryRating = 0.0;
+          }
+          return new Rating(r.user(), r.product(), binaryRating);
+        }
+      }
+    );
+
+    // Group ratings by common user
+    JavaPairRDD<Object, Iterable<Rating>> userMovies = binarizedRatings.groupBy(
+      new Function<Rating, Object>() {
+        public Object call(Rating r) {
+          return r.user();
+        }
+      }
+    );
+
+    // Get true relevant documents from all user ratings
+    JavaPairRDD<Object, List<Integer>> userMoviesList = userMovies.mapValues(
+      new Function<Iterable<Rating>, List<Integer>>() {
+        public List<Integer> call(Iterable<Rating> docs) {
+          List<Integer> products = new ArrayList<Integer>();
+          for (Rating r : docs) {
+            if (r.rating() > 0.0) {
+              products.add(r.product());
+            }
+          }
+          return products;
+        }
+      }
+    );
+
+    // Extract the product id from each recommendation
+    JavaPairRDD<Object, List<Integer>> userRecommendedList = userRecommended.mapValues(
+      new Function<Rating[], List<Integer>>() {
+        public List<Integer> call(Rating[] docs) {
+          List<Integer> products = new ArrayList<Integer>();
+          for (Rating r : docs) {
+            products.add(r.product());
+          }
+          return products;
+        }
+      }
+    );
+    JavaRDD<Tuple2<List<Integer>, List<Integer>>> relevantDocs = userMoviesList.join(userRecommendedList).values();
+
+    // Instantiate the metrics object
+    RankingMetrics metrics = RankingMetrics.of(relevantDocs);
+
+    // Precision and NDCG at k
+    Integer[] kVector = {1, 3, 5};
+    for (Integer k : kVector) {
+      System.out.format("Precision at %d = %1.2f\n", k, metrics.precisionAt(k));
+      System.out.format("NDCG at %d = %1.2f\n", k, metrics.ndcgAt(k));
+    }
+
+    // Mean average precision
+    System.out.format("Mean average precision = %1.3f\n", metrics.meanAveragePrecision());
+
+    // Evaluate the model using numerical ratings and regression metrics
+    JavaRDD<Tuple2<Object, Object>> userProducts = ratings.map(
+      new Function<Rating, Tuple2<Object, Object>>() {
+        public Tuple2<Object, Object> call(Rating r) {
+          return new Tuple2<Object, Object>(r.user(), r.product());
+        }
+      }
+    );
+    JavaPairRDD<Tuple2<Integer, Integer>, Object> predictions = JavaPairRDD.fromJavaRDD(
+      model.predict(JavaRDD.toRDD(userProducts)).toJavaRDD().map(
+        new Function<Rating, Tuple2<Tuple2<Integer, Integer>, Object>>() {
+          public Tuple2<Tuple2<Integer, Integer>, Object> call(Rating r){
+            return new Tuple2<Tuple2<Integer, Integer>, Object>(
+              new Tuple2<Integer, Integer>(r.user(), r.product()), r.rating());
+          }
+        }
+    ));
+    JavaRDD<Tuple2<Object, Object>> ratesAndPreds =
+      JavaPairRDD.fromJavaRDD(ratings.map(
+        new Function<Rating, Tuple2<Tuple2<Integer, Integer>, Object>>() {
+          public Tuple2<Tuple2<Integer, Integer>, Object> call(Rating r){
+            return new Tuple2<Tuple2<Integer, Integer>, Object>(
+              new Tuple2<Integer, Integer>(r.user(), r.product()), r.rating());
+          }
+        }
+    )).join(predictions).values();
+
+    // Create regression metrics object
+    RegressionMetrics regressionMetrics = new RegressionMetrics(ratesAndPreds.rdd());
+
+    // Root mean squared error
+    System.out.format("RMSE = %1.3f\n", regressionMetrics.rootMeanSquaredError());
+
+    // R-squared
+    System.out.format("R-squared = %1.3f\n", regressionMetrics.r2());
+  }
+}
 
 {% endhighlight %}
 
@@ -1037,7 +1230,48 @@ printf("RMSE = %1.2f", regressionMetrics.rootMeanSquaredError)
 <div data-lang="python" markdown="1">
 
 {% highlight python %}
-# TODO
+from pyspark.mllib.recommendation import ALS, Rating
+from pyspark.mllib.evaluation import RegressionMetrics, RankingMetrics
+
+#
+# MovieLens ratings are on a scale of 1-5:
+# 5: Must see
+# 4: Will enjoy
+# 3: It's okay
+# 2: Fairly bad
+# 1: Awful
+# So we should not recommend a movie if the predicted rating is less than 3.
+# To map ratings to confidence scores, we use
+# 5 -> 2.5, 4 -> 1.5, 3 -> 0.5, 2 -> -0.5, 1 -> -1.5. This mappings means unobserved
+# entries are generally between It's okay and Fairly bad.
+# The semantics of 0 in this expanded world of non-positive weights
+# are "the same as never having interacted at all".
+#
+lines = sc.textFile("data/mllib/sample_movielens_data.txt")
+
+def parseLine(line):
+    fields = line.split("::")
+    return Rating(int(fields[0]), int(fields[1]), float(fields[2]) - 2.5)
+ratings = lines.map(lambda r: parseLine(r))
+
+# Train a model on to predict user-product ratings
+model = ALS.train(ratings, 10, 10, 0.01)
+
+# Get predicted ratings on all existing user-product pairs
+testData = ratings.map(lambda p: (p.user, p.product))
+predictions = model.predictAll(testData).map(lambda r: ((r.user, r.product), r.rating))
+
+ratingsTuple = ratings.map(lambda r: ((r.user, r.product), r.rating))
+scoreAndLabels = predictions.join(ratingsTuple).map(lambda tup: tup[1])
+
+# Instantiate regression metrics to compare predicted and actual ratings
+metrics = RegressionMetrics(scoreAndLabels)
+
+# Root mean sqaured error
+print "RMSE = %1.3f" % metrics.rootMeanSquaredError
+
+# R-squared
+print "R-squared = %1.3f" % metrics.r2
 
 {% endhighlight %}
 
@@ -1045,8 +1279,8 @@ printf("RMSE = %1.2f", regressionMetrics.rootMeanSquaredError)
 </div>
 
 ## Regression
-Regression analysis, most commonly formulated as a least-squares minimization, involves
-estimating the relationships among input and output variables. In this context, regression
+[Regression analysis](https://en.wikipedia.org/wiki/Regression_analysis), most commonly formulated as a least-squares
+minimization, involves estimating the relationships among input and output variables. In this context, regression
 metrics refer to a continuous output variable.
 
 <table class="table">
@@ -1055,20 +1289,20 @@ metrics refer to a continuous output variable.
   </thead>
   <tbody>
     <tr>
-      <td>Mean Squared Error (MSE)</td><td>$MSE = \frac{\sum_{i=0}^{N-1} (y_i - \hat{y}_i)^2}{N}$</td>
+      <td>Mean Squared Error (MSE)</td><td>$MSE = \frac{\sum_{i=0}^{N-1} (\mathbf{y}_i - \hat{\mathbf{y}}_i)^2}{N}$</td>
     </tr>
     <tr>
-      <td>Root Mean Squared Error (RMSE)</td><td>$RMSE = \sqrt{\frac{\sum_{i=0}^{N-1} (y_i - \hat{y}_i)^2}{N}}$</td>
+      <td>Root Mean Squared Error (RMSE)</td><td>$RMSE = \sqrt{\frac{\sum_{i=0}^{N-1} (\mathbf{y}_i - \hat{\mathbf{y}}_i)^2}{N}}$</td>
     </tr>
     <tr>
-      <td>Coefficient of Determination $(R^2)$</td><td>$R^2=1 - \frac{MSE}{VAR(\boldsymbol{y}) \cdot (N-1)}=
-        1-\frac{\sum_{i=0}^{N-1} (y_i - \hat{y}_i)^2}{\sum_{i=0}^{N-1}(y_i-\bar{y})^2}$</td>
+      <td>Coefficient of Determination $(R^2)$</td><td>$R^2=1 - \frac{MSE}{VAR(\mathbf{y}) \cdot (N-1)}=
+        1-\frac{\sum_{i=0}^{N-1} (\mathbf{y}_i - \hat{\mathbf{y}}_i)^2}{\sum_{i=0}^{N-1}(\mathbf{y}_i-\bar{\mathbf{y}})^2}$</td>
     </tr>
     <tr>
-      <td>Mean Absoloute Error (MAE)</td><td>$MAE=\sum_{i=0}^{N-1} \left|y_i - \hat{y}_i\right|$</td>
+      <td>Mean Absoloute Error (MAE)</td><td>$MAE=\sum_{i=0}^{N-1} \left|\mathbf{y}_i - \hat{\mathbf{y}}_i\right|$</td>
     </tr>
     <tr>
-      <td>Explained Variance</td><td>$1 - \frac{VAR(\boldsymbol{y} - \boldsymbol{\hat{y}})}{VAR(\boldsymbol{y})}$</td>
+      <td>Explained Variance</td><td>$1 - \frac{VAR(\mathbf{y} - \mathbf{\hat{y}})}{VAR(\mathbf{y})}$</td>
     </tr>
   </tbody>
 </table>
@@ -1076,11 +1310,10 @@ metrics refer to a continuous output variable.
 **Examples**
 
 <div class="codetabs">
+The following code snippets illustrate how to load a sample dataset, train a linear regression algorithm on the data,
+and evaluate the performance of the algorithm by several regression metrics.
 
 <div data-lang="scala" markdown="1">
-The following code snippets illustrate how to load a sample dataset, train a
-linear regression algorithm on the data, and evaluate the performance of
-the algorithm by several regression metrics.
 
 {% highlight scala %}
 import org.apache.spark.mllib.regression.LabeledPoint
@@ -1107,18 +1340,17 @@ val valuesAndPreds = data.map{ point =>
 val metrics = new RegressionMetrics(valuesAndPreds)
 
 // Squared error
-println("MSE = " + metrics.meanSquaredError)
-println("RMSE = " + metrics.rootMeanSquaredError)
+printf("MSE = %1.3f\n", metrics.meanSquaredError)
+printf("RMSE = %1.3f\n", metrics.rootMeanSquaredError)
 
 // R-squared
-println("R-squared = " + metrics.r2)
+printf("R-squared = %1.3f\n", metrics.r2)
 
 // Mean absolute error
-println("MAE = " + metrics.meanAbsoluteError)
+printf("MAE = %1.3f\n", metrics.meanAbsoluteError)
 
 // Explained variance
-println("Explained variance = " + metrics.explainedVariance)
-
+printf("Explained variance = %1.3f\n", metrics.explainedVariance)
 
 {% endhighlight %}
 
@@ -1128,10 +1360,9 @@ println("Explained variance = " + metrics.explainedVariance)
 
 {% highlight java %}
 import scala.Tuple2;
-//TODO: clean up imports
+
 import org.apache.spark.api.java.*;
 import org.apache.spark.api.java.function.Function;
-import org.apache.spark.mllib.linalg.Vector;
 import org.apache.spark.mllib.linalg.Vectors;
 import org.apache.spark.mllib.regression.LabeledPoint;
 import org.apache.spark.mllib.regression.LinearRegressionModel;
@@ -1179,17 +1410,17 @@ public class LinearRegression {
     RegressionMetrics metrics = new RegressionMetrics(valuesAndPreds.rdd());
 
     // Squared error
-    System.out.println("MSE = " + metrics.meanSquaredError());
-    System.out.println("RMSE = " + metrics.rootMeanSquaredError());
+    System.out.format("MSE = %1.3f\n", metrics.meanSquaredError());
+    System.out.format("RMSE = %1.3f\n", metrics.rootMeanSquaredError());
 
     // R-squared
-    System.out.println("R Squared = " + metrics.r2());
+    System.out.format("R Squared = %1.3f\n", metrics.r2());
 
     // Mean absolute error
-    System.out.println("MAE = " + metrics.meanAbsoluteError());
+    System.out.format("MAE = %1.3f\n", metrics.meanAbsoluteError());
 
     // Explained variance
-    System.out.println("Explained Variance = " + metrics.explainedVariance());
+    System.out.format("Explained Variance = %1.3f\n", metrics.explainedVariance());
 
     // Save and load model
     model.save(sc.sc(), "myModelPath");
@@ -1206,6 +1437,7 @@ public class LinearRegression {
 {% highlight python %}
 from pyspark.mllib.regression import LabeledPoint, LinearRegressionWithSGD
 from pyspark.mllib.evaluation import RegressionMetrics
+from pyspark.mllib.linalg import DenseVector
 
 # Load and parse the data
 def parsePoint(line):
@@ -1215,6 +1447,9 @@ def parsePoint(line):
 data = sc.textFile("data/mllib/sample_linear_regression_data.txt")
 parsedData = data.map(parsePoint)
 
+# Build the model
+model = LinearRegressionWithSGD.train(parsedData)
+
 # Get predictions
 valuesAndPreds = parsedData.map(lambda p: (float(model.predict(p.features)), p.label))
 
@@ -1222,17 +1457,17 @@ valuesAndPreds = parsedData.map(lambda p: (float(model.predict(p.features)), p.l
 metrics = RegressionMetrics(valuesAndPreds)
 
 # Squared Error
-print "MSE = %1.2f" % metrics.meanSquaredError
-print "RMSE = %1.2f" % metrics.rootMeanSquaredError
+print "MSE = %1.3f" % metrics.meanSquaredError
+print "RMSE = %1.3f" % metrics.rootMeanSquaredError
 
 # R-squared
-print "R-squared = %1.2f" % metrics.r2
+print "R-squared = %1.3f" % metrics.r2
 
 # Mean absolute error
-print "MAE = %1.2f" % metrics.meanAbsoluteError
+print "MAE = %1.3f" % metrics.meanAbsoluteError
 
 # Explained variance
-print "Explained variance = %1.2f" % metrics.explainedVariance
+print "Explained variance = %1.3f" % metrics.explainedVariance
 
 {% endhighlight %}
 
