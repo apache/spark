@@ -40,3 +40,11 @@ test_that("predictions match with native glm", {
   rVals <- predict(glm(Sepal.Width ~ Sepal.Length + Species, data = iris), iris)
   expect_true(all(abs(rVals - vals) < 1e-6), rVals - vals)
 })
+
+test_that("dot and minus operators vs native glm", {
+  training <- createDataFrame(sqlContext, iris)
+  model <- glm(Sepal_Width ~ . - Species, data = training)
+  vals <- collect(select(predict(model, training), "prediction"))
+  rVals <- predict(glm(Sepal.Width ~ . - Species, data = iris), iris)
+  expect_true(all(abs(rVals - vals) < 1e-6), rVals - vals)
+})

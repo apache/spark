@@ -52,14 +52,23 @@ private[ml] case class ParsedRFormula(label: ColumnRef, terms: Seq[Term]) {
  */
 private[ml] case class FittedRFormula(label: String, terms: Seq[String])
 
-/** R formula terms. */
+/**
+ * R formula terms. See the R formula docs here for more information:
+ * http://stat.ethz.ch/R-manual/R-patched/library/stats/html/formula.html
+ */
 private[ml] sealed trait Term
+
+/* R formula reference to all available columns, e.g. "." in a formula */
 private[ml] case class Dot() extends Term
+
+/* R formula reference to a column, e.g. "+ Species" in a formula */
 private[ml] case class ColumnRef(value: String) extends Term
+
+/* R formula deletion of a variable, e.g. "- Species" in a formula */
 private[ml] case class Deletion(term: Term) extends Term
 
 /**
- * Limited implementation of R formula parsing. Currently supports: '~', '+'.
+ * Limited implementation of R formula parsing. Currently supports: '~', '+', '-', '.'.
  */
 private[ml] object RFormulaParser extends RegexParsers {
   def columnRef: Parser[ColumnRef] = 
@@ -67,9 +76,12 @@ private[ml] object RFormulaParser extends RegexParsers {
 
   def term: Parser[Term] = columnRef | "\\.".r ^^ { case _ => Dot() }
 
-  def terms: Parser[List[Term]] =
-    (term ~ rep("+" ~> term)) ^^ { case a ~ list => a :: list } |
-    (term ~ rep("-" ~> term)) ^^ { case a ~ list => Deletion(a) :: list }
+  def terms: Parser[List[Term]] = (term ~ rep("+" ~ term | "-" ~ term)) ^^ {
+    case op ~ list => list.foldLeft(List(op)) {
+      case (left, "+" ~ right) => left ++ Seq(right)
+      case (left, "-" ~ right) => left ++ Seq(Deletion(right))
+    }
+  }
 
   def formula: Parser[ParsedRFormula] =
     (columnRef ~ "~" ~ terms) ^^ { case r ~ "~" ~ t => ParsedRFormula(r, t) }
