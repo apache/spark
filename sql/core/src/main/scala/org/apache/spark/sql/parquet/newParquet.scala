@@ -354,8 +354,7 @@ private[sql] class ParquetRelation2(
 
       // Get the partitions that have summary files
       val typeInference = sqlContext.conf.partitionColumnTypeInferenceEnabled()
-      val summariesPaths = metadataStatuses.map(_.getPath.getParent()) ++
-        commonMetadataStatuses.map(_.getPath.getParent())
+      val summariesPaths = leaves.map(_.getPath.getParent())
       val summariesPartitions = PartitioningUtils.parsePartitions(summariesPaths,
         PartitioningUtils.DEFAULT_PARTITION_NAME, typeInference).partitions.toSet
 
