@@ -28,6 +28,7 @@ import org.eclipse.paho.client.mqttv3._
 import org.eclipse.paho.client.mqttv3.persist.MqttDefaultFilePersistence
 
 import org.apache.spark.streaming.StreamingContext
+import org.apache.spark.streaming.api.java.JavaStreamingContext
 import org.apache.spark.streaming.scheduler.StreamingListener
 import org.apache.spark.streaming.scheduler.StreamingListenerReceiverStarted
 import org.apache.spark.util.Utils
@@ -114,6 +115,17 @@ private class MQTTTestUtils extends Logging {
   def waitForReceiverToStart(ssc: StreamingContext) : Unit = {
     val latch = new CountDownLatch(1)
     ssc.addStreamingListener(new StreamingListener {
+      override def onReceiverStarted(receiverStarted: StreamingListenerReceiverStarted) {
+        latch.countDown()
+      }
+    })
+
+    assert(latch.await(10, TimeUnit.SECONDS), "Timeout waiting for receiver to start.")
+  }
+
+  def waitForReceiverToStart(jssc: JavaStreamingContext) : Unit = {
+    val latch = new CountDownLatch(1)
+    jssc.addStreamingListener(new StreamingListener {
       override def onReceiverStarted(receiverStarted: StreamingListenerReceiverStarted) {
         latch.countDown()
       }

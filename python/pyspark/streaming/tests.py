@@ -884,6 +884,7 @@ class MQTTStreamTests(PySparkStreamingTestCase):
         sendData = "MQTT demo for spark streaming"
         topic = self._randomTopic()
         result = self._startContext(topic)
+        self._MQTTTestUtils.waitForReceiverToStart(self.ssc._jssc)
         self._publishData(topic, sendData)
         self.wait_for(result, len(sendData))
         self._validateStreamResult(sendData, result)
