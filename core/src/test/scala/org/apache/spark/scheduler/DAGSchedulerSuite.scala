@@ -495,14 +495,17 @@ class DAGSchedulerSuite
     submit(reduceRdd, Array(0, 1))
 
     complete(taskSets(0), Seq(
-      (Success, makeMapStatus("hostA", 1)),
-      (Success, makeMapStatus("hostB", 1))))
+      (Success, makeMapStatus("hostA", 2)),
+      (Success, makeMapStatus("hostB", 2))))
 
     for (x <- 1 to Stage.MAX_STAGE_FAILURES) {
       // the 2nd ResultTask failed
       complete(taskSets(1), Seq(
         (Success, 42),
         (FetchFailed(makeBlockManagerId("hostA"), shuffleId, 0, 0, "ignored"), null)))
+
+      println(s"iteration $x: ${taskSets.size} taskSets")
+      taskSets.zipWithIndex.foreach{ case (ts, idx) => println(s"$idx: $ts")}
 
       scheduler.resubmitFailedStages()
       if (x < Stage.MAX_STAGE_FAILURES) {
@@ -519,7 +522,7 @@ class DAGSchedulerSuite
   }
 
 
-  test("Multiple consecutive Fetch failures in a stage should trigger an abort.") {
+  test("Multiple consecutive Fetch failures in a stage should abort on attempt 4, not on 1.") {
     // Create a new Listener to confirm that the listenerBus sees the JobEnd message
     // when we abort the stage. This message will also be consumed by the EventLoggingListener
     // so this will propagate up to the user.
@@ -534,37 +537,40 @@ class DAGSchedulerSuite
 
     sc.listenerBus.addListener(new EndListener())
 
-    val shuffleMapRdd = new MyRDD(sc, 8, Nil)
+    val shuffleMapRdd = new MyRDD(sc, 6, Nil)
     val shuffleDep = new ShuffleDependency(shuffleMapRdd, null)
     val shuffleId = shuffleDep.shuffleId
-    val reduceRdd = new MyRDD(sc, 8, List(shuffleDep))
-    submit(reduceRdd, Array(0, 1, 2, 3, 4, 5, 6, 7))
+    val reduceRdd = new MyRDD(sc, 6, List(shuffleDep))
+    submit(reduceRdd, Array(0, 1, 2, 3, 4, 5))
 
     complete(taskSets(0), Seq(
-      (Success, makeMapStatus("hostA", 1)),
-      (Success, makeMapStatus("hostA", 1)),
-      (Success, makeMapStatus("hostA", 1)),
-      (Success, makeMapStatus("hostA", 1)),
-      (Success, makeMapStatus("hostA", 1)),
-      (Success, makeMapStatus("hostA", 1)),
-      (Success, makeMapStatus("hostA", 1)),
-      (Success, makeMapStatus("hostB", 1))))
+      (Success, makeMapStatus("hostA", 2)),
+      (Success, makeMapStatus("hostA", 2)),
+      (Success, makeMapStatus("hostA", 2)),
+      (Success, makeMapStatus("hostA", 2)),
+      (Success, makeMapStatus("hostA", 2)),
+      (Success, makeMapStatus("hostB", 2))))
 
-    complete(taskSets(1), Seq(
-      (Success, 42),
-      (FetchFailed(makeBlockManagerId("hostA"), shuffleId, 0, 0, "ignored"), null),
-      (FetchFailed(makeBlockManagerId("hostA"), shuffleId, 0, 0, "ignored1"), null),
-      (FetchFailed(makeBlockManagerId("hostA"), shuffleId, 0, 0, "ignored2"), null),
-      (FetchFailed(makeBlockManagerId("hostA"), shuffleId, 0, 0, "ignored3"), null),
-      (FetchFailed(makeBlockManagerId("hostA"), shuffleId, 0, 0, "ignored4"), null),
-      (FetchFailed(makeBlockManagerId("hostA"), shuffleId, 0, 0, "ignored5"), null),
-      (FetchFailed(makeBlockManagerId("hostA"), shuffleId, 0, 0, "ignored6"), null)))
+    for (x <- 1 to Stage.MAX_STAGE_FAILURES) {
+      complete(taskSets(1), Seq(
+        (Success, 42),
+        (FetchFailed(makeBlockManagerId("hostA"), shuffleId, 0, 0, "ignored"), null),
+        (FetchFailed(makeBlockManagerId("hostA"), shuffleId, 0, 0, "ignored1"), null),
+        (FetchFailed(makeBlockManagerId("hostA"), shuffleId, 0, 0, "ignored2"), null),
+        (FetchFailed(makeBlockManagerId("hostA"), shuffleId, 0, 0, "ignored3"), null),
+        (FetchFailed(makeBlockManagerId("hostA"), shuffleId, 0, 0, "ignored4"), null)))
 
-    scheduler.resubmitFailedStages()
-    assertDataStructuresEmpty()
-    sc.listenerBus.waitUntilEmpty(1000)
-    assert(ended)
-    assert(jobResult.isInstanceOf[JobFailed])
+      if (x < Stage.MAX_STAGE_FAILURES) {
+        assert(scheduler.runningStages.nonEmpty)
+        assert(!ended)
+      } else {
+        // Stage has been aborted and removed from running stages
+        assertDataStructuresEmpty()
+        sc.listenerBus.waitUntilEmpty(1000)
+        assert(ended)
+        assert(jobResult.isInstanceOf[JobFailed])
+      }
+    }
   }
 
   test("Multiple consecutive task failures (not FetchFailures) in a stage should not " +
@@ -582,36 +588,32 @@ class DAGSchedulerSuite
     }
 
     sc.listenerBus.addListener(new EndListener())
-
-    val shuffleMapRdd = new MyRDD(sc, 8, Nil)
+    val shuffleMapRdd = new MyRDD(sc, 6, Nil)
     val shuffleDep = new ShuffleDependency(shuffleMapRdd, null)
     val shuffleId = shuffleDep.shuffleId
-    val reduceRdd = new MyRDD(sc, 8, List(shuffleDep))
-    submit(reduceRdd, Array(0, 1, 2, 3, 4, 5, 6, 7))
+    val reduceRdd = new MyRDD(sc, 6, List(shuffleDep))
+    submit(reduceRdd, Array(0, 1, 2, 3, 4, 5))
 
     complete(taskSets(0), Seq(
-      (Success, makeMapStatus("hostA", 1)),
-      (Success, makeMapStatus("hostA", 1)),
-      (Success, makeMapStatus("hostA", 1)),
-      (Success, makeMapStatus("hostA", 1)),
-      (Success, makeMapStatus("hostA", 1)),
-      (Success, makeMapStatus("hostA", 1)),
-      (Success, makeMapStatus("hostA", 1)),
-      (Success, makeMapStatus("hostB", 1))))
+      (Success, makeMapStatus("hostA", 2)),
+      (Success, makeMapStatus("hostA", 2)),
+      (Success, makeMapStatus("hostA", 2)),
+      (Success, makeMapStatus("hostA", 2)),
+      (Success, makeMapStatus("hostA", 2)),
+      (Success, makeMapStatus("hostB", 2))))
 
-    complete(taskSets(1), Seq(
-      (Success, 42),
-      (ExceptionFailure("fakeExcept", "failA", null, "This is a stack.", None), null),
-      (ExceptionFailure("fakeExcept", "failB", null, "This is a stack.", None), null),
-      (ExceptionFailure("fakeExcept", "failC", null, "This is a stack.", None), null),
-      (ExceptionFailure("fakeExcept", "failD", null, "This is a stack.", None), null),
-      (ExceptionFailure("fakeExcept", "failE", null, "This is a stack.", None), null),
-      (ExceptionFailure("fakeExcept", "failF", null, "This is a stack.", None), null),
-      (Success, 43)))
+    for (x <- 1 to Stage.MAX_STAGE_FAILURES+1) {
+      complete(taskSets(1), Seq(
+        (Success, 42),
+        (ExceptionFailure("fakeExcept", "failA", null, "This is a stack.", None), null),
+        (ExceptionFailure("fakeExcept", "failB", null, "This is a stack.", None), null),
+        (ExceptionFailure("fakeExcept", "failE", null, "This is a stack.", None), null),
+        (ExceptionFailure("fakeExcept", "failF", null, "This is a stack.", None), null),
+        (Success, 43)))
 
-    scheduler.resubmitFailedStages()
-    assert(scheduler.runningStages.nonEmpty)
-    assert(!ended)
+        assert(scheduler.runningStages.nonEmpty)
+        assert(!ended)
+    }
   }
 
   test("trivial shuffle with multiple fetch failures") {
