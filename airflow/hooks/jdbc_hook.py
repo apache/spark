@@ -26,34 +26,35 @@ class JdbcHook(BaseHook):
         a '.sql' extensions.
     """
     def __init__(
-            self, jdbc_url, jdbc_driver_name, jdbc_driver_loc,host=None, login=None,
+            self, jdbc_driver_name = None, jdbc_driver_loc = None,host=None, login=None,
             psw=None, db=None, port=None, extra=None, conn_id=None):
-        self.jdbc_driver_loc = jdbc_driver_loc
-        self.jdbc_driver_name = jdbc_driver_name
 
         if (conn_id is None):
             self.host = host
             self.login = login
             self.psw = psw
-            self.db = db
-            self.port = port
+            #self.db = db
+            #self.port = port
             self.extra = extra
+            self.jdbc_driver_loc = jdbc_driver_loc
+            self.jdbc_driver_name = jdbc_driver_name
         else:
             conn = self.get_connection(conn_id)
             self.host = conn.host
             self.login = conn.login
             self.psw = conn.password
-            self.db = conn.schema
-            self.port = conn.port
+            #self.db = conn.schema
+            #self.port = conn.port
             self.extra = conn.extra
+            self.jdbc_driver_loc = conn.extra_dejson.get('jdbc_drv_path')
+            self.jdbc_driver_name = conn.extra_dejson.get('jdbc_drv_clsname')
 
 
-        self.jdbc_url = jdbc_url.format(self.host, self.port, self.db, self.extra)
+        #self.jdbc_url = jdbc_url.format(self.host, self.port, self.db, self.extra)
 
     def get_conn(self):
-        logging.info("Trying to connect using jdbc url: " + self.jdbc_url)
         conn = jaydebeapi.connect(self.jdbc_driver_name,
-                           [str(self.jdbc_url), str(self.login), str(self.psw)],
+                           [str(self.host), str(self.login), str(self.psw)],
                                   self.jdbc_driver_loc,)
         return conn
 
