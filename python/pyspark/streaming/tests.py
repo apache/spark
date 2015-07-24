@@ -937,15 +937,14 @@ class KinesisStreamTests(PySparkStreamingTestCase):
             self.ssc.start()
 
             testData = [i for i in range(1, 11)]
+            expectedOutput = {str(i) for i in testData}
             start_time = time.time()
             while time.time() - start_time < 120:
                 kinesisTestUtils.pushData(testData)
-                if outputBuffer.sort() == testData:
+                if expectedOutput == set(outputBuffer):
                     break
                 time.sleep(10)
-            if outputBuffer.sort() != testData:
-                print("timeout after 120 seconds")
-            self.assertEqual(testData, outputBuffer.sort())
+            self.assertEqual(expectedOutput, set(outputBuffer))
         except:
             import traceback
             traceback.print_exc()
