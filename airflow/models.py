@@ -135,10 +135,10 @@ class DagBag(object):
             # This failed before in what may have been a git sync
             # race condition
             dttm = datetime.fromtimestamp(os.path.getmtime(filepath))
+            mod_name, file_ext = os.path.splitext(os.path.split(filepath)[-1])
+            mod_name = 'unusual_prefix_' + mod_name
         except:
-            dttm = datetime(2001, 1, 1)
-        mod_name, file_ext = os.path.splitext(os.path.split(filepath)[-1])
-        mod_name = 'unusual_prefix_' + mod_name
+            return
 
         if safe_mode and os.path.isfile(filepath):
             # Skip file if no obvious references to airflow or DAG are found.
