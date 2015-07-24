@@ -236,6 +236,10 @@ private[netty] class ConcurrentInbox(
             endpoint.onDisconnected(remoteAddress)
           case AssociationError(cause, remoteAddress) =>
             endpoint.onNetworkError(cause, remoteAddress)
+          case OnStart =>
+            throw new IllegalStateException("Non-thread-safe RpcEndpoint doesn't support OnStart")
+          case OnStop =>
+            throw new IllegalStateException("Non-thread-safe RpcEndpoint doesn't support OnStop")
         }
       }
       message = messages.poll()
