@@ -276,7 +276,7 @@ class IndexedRowMatrix(
       value.map { sim =>
         MatrixEntry(i, sim._1, sim._2)
       }
-    }.repartition(defaultParallelism)
+    }.coalesce(defaultParallelism)
 
     blockedBig.unpersist()
 
