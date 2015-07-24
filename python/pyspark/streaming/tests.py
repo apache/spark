@@ -946,6 +946,10 @@ class KinesisStreamTests(PySparkStreamingTestCase):
             if outputBuffer.sort() != testData:
                 print("timeout after 120 seconds")
             self.assertEqual(testData, outputBuffer.sort())
+        except:
+            import traceback
+            traceback.print_exc()
+            raise
         finally:
             kinesisTestUtils.deleteStream()
             kinesisTestUtils.deleteDynamoDBTable(kinesisAppName)
