@@ -106,7 +106,8 @@ class YarnClusterSuite extends SparkFunSuite with BeforeAndAfterAll with Matcher
     // Disable the disk utilization check to avoid the test hanging when people's disks are
     // getting full.
     val yarnConf = new YarnConfiguration()
-    yarnConf.set(YarnConfiguration.NM_MAX_PER_DISK_UTILIZATION_PERCENTAGE, "100.0")
+    yarnConf.set("yarn.nodemanager.disk-health-checker.max-disk-utilization-per-disk-percentage",
+      "100.0")
 
     yarnCluster = new MiniYARNCluster(getClass().getName(), 1, 1, 1)
     yarnCluster.init(yarnConf)
