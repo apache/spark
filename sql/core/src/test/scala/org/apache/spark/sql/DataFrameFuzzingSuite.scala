@@ -66,6 +66,7 @@ class DataFrameFuzzingSuite extends SparkFunSuite {
           whitelistedColumnTypes.exists { t => t =:= p.typeSignature.erasure }
         }
       }
+      .filterNot(_.name.toString == "drop") // since this can lead to a DataFrame with no columns
       .toSeq
   }
 
@@ -75,7 +76,7 @@ class DataFrameFuzzingSuite extends SparkFunSuite {
     val paramTypes = params.map(_.typeSignature)
     val paramValues = paramTypes.map { t =>
       if (m.universe.typeOf[DataFrame] =:= t.erasure) {
-        df
+        randomChoice(Seq(df, generateRandomDataFrame()))
       } else if (m.universe.typeOf[Column] =:= t.erasure) {
         df.col(randomChoice(df.columns))
       } else {
@@ -83,6 +84,7 @@ class DataFrameFuzzingSuite extends SparkFunSuite {
       }
     }
     val reflectedMethod: ru.MethodMirror = m.reflect(df).reflectMethod(method)
+    println("Applying method " + reflectedMethod)
     try {
       reflectedMethod.apply(paramValues: _*).asInstanceOf[DataFrame]
     } catch {
@@ -91,9 +93,10 @@ class DataFrameFuzzingSuite extends SparkFunSuite {
     }
   }
 
-  for (_ <- 1 to 1000) {
+  for (_ <- 1 to 10000) {
+    println("-" * 80)
     try {
-      val df2 = applyRandomTransformationToDataFrame(df)
+      val df2 = applyRandomTransformationToDataFrame(applyRandomTransformationToDataFrame(df))
       try {
         df2.collectAsList()
       } catch {
