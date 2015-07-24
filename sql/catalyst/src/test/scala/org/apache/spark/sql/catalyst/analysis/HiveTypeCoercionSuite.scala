@@ -314,7 +314,7 @@ class HiveTypeCoercionSuite extends PlanTest {
     )
   }
 
-  test("WidenTypes for union except and intersect") {
+  test("WidenSetOperationTypes for union except and intersect") {
     def checkOutput(logical: LogicalPlan, expectTypes: Seq[DataType]): Unit = {
       logical.output.zip(expectTypes).foreach { case (attr, dt) =>
         assert(attr.dataType === dt)
@@ -332,7 +332,7 @@ class HiveTypeCoercionSuite extends PlanTest {
       AttributeReference("f", FloatType)(),
       AttributeReference("l", LongType)())
 
-    val wt = HiveTypeCoercion.WidenTypes
+    val wt = HiveTypeCoercion.WidenSetOperationTypes
     val expectedTypes = Seq(StringType, DecimalType.SYSTEM_DEFAULT, FloatType, DoubleType)
 
     val r1 = wt(Union(left, right)).asInstanceOf[Union]
@@ -353,7 +353,7 @@ class HiveTypeCoercionSuite extends PlanTest {
       }
     }
 
-    val dp = HiveTypeCoercion.WidenTypes
+    val dp = HiveTypeCoercion.WidenSetOperationTypes
 
     val left1 = LocalRelation(
       AttributeReference("l", DecimalType(10, 8))())

@@ -19,9 +19,7 @@ package org.apache.spark.sql.catalyst.analysis
 
 import javax.annotation.Nullable
 
-import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.codegen.{GeneratedExpressionCode, CodeGenContext}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.types._
@@ -38,7 +36,7 @@ object HiveTypeCoercion {
   val typeCoercionRules =
     PropagateTypes ::
       InConversion ::
-      WidenTypes ::
+      WidenSetOperationTypes ::
       PromoteStrings ::
       DecimalPrecision ::
       BooleanEquality ::
@@ -175,7 +173,7 @@ object HiveTypeCoercion {
    *
    * This rule is only applied to Union/Except/Intersect
    */
-  object WidenTypes extends Rule[LogicalPlan] {
+  object WidenSetOperationTypes extends Rule[LogicalPlan] {
 
     private[this] def widenOutputTypes(
         planName: String,
@@ -204,9 +202,9 @@ object HiveTypeCoercion {
 
       def castOutput(plan: LogicalPlan): LogicalPlan = {
         val casted = plan.output.zip(castedTypes).map {
-          case (hs, Some(dt)) if dt != hs.dataType =>
-            Alias(Cast(hs, dt), hs.name)()
-          case (hs, _) => hs
+          case (e, Some(dt)) if e.dataType != dt =>
+            Alias(Cast(e, dt), e.name)()
+          case (e, _) => e
         }
         Project(casted, plan)
       }
@@ -351,20 +349,8 @@ object HiveTypeCoercion {
       DecimalType.bounded(range + scale, scale)
     }
 
-    /**
-     * An expression used to wrap the children when promote the precision of DecimalType to avoid
-     * promote multiple times.
-     */
-    case class ChangePrecision(child: Expression) extends UnaryExpression {
-      override def dataType: DataType = child.dataType
-      override def eval(input: InternalRow): Any = child.eval(input)
-      override def gen(ctx: CodeGenContext): GeneratedExpressionCode = child.gen(ctx)
-      override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = ""
-      override def prettyName: String = "change_precision"
-    }
-
-    def changePrecision(e: Expression, dataType: DataType): Expression = {
-      ChangePrecision(Cast(e, dataType))
+    private def changePrecision(e: Expression, dataType: DataType): Expression = {
+      ChangeDecimalPrecision(Cast(e, dataType))
     }
 
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
@@ -374,7 +360,7 @@ object HiveTypeCoercion {
         case e if !e.childrenResolved => e
 
         // Skip nodes who is already promoted
-        case e: BinaryArithmetic if e.left.isInstanceOf[ChangePrecision] => e
+        case e: BinaryArithmetic if e.left.isInstanceOf[ChangeDecimalPrecision] => e
 
         case Add(e1 @ DecimalType.Expression(p1, s1), e2 @ DecimalType.Expression(p2, s2)) =>
           val dt = DecimalType.bounded(max(s1, s2) + max(p1 - s1, p2 - s2) + 1, max(s1, s2))

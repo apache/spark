@@ -203,8 +203,8 @@ private[spark] class VectorUDT extends UserDefinedType[Vector] {
   override def deserialize(datum: Any): Vector = {
     datum match {
       case row: InternalRow =>
-        require(row.length == 4,
-          s"VectorUDT.deserialize given row with length ${row.length} but requires length == 4")
+        require(row.numFields == 4,
+          s"VectorUDT.deserialize given row with length ${row.numFields} but requires length == 4")
         val tpe = row.getByte(0)
         tpe match {
           case 0 =>
