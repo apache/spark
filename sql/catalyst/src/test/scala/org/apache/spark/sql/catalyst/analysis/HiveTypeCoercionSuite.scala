@@ -115,6 +115,14 @@ class HiveTypeCoercionSuite extends PlanTest {
     shouldNotCast(IntegerType, ArrayType)
     shouldNotCast(IntegerType, MapType)
     shouldNotCast(IntegerType, StructType)
+
+    shouldNotCast(IntervalType, StringType)
+
+    // Don't implicitly cast complex types to string.
+    shouldNotCast(ArrayType(StringType), StringType)
+    shouldNotCast(MapType(StringType, StringType), StringType)
+    shouldNotCast(new StructType().add("a1", StringType), StringType)
+    shouldNotCast(MapType(StringType, StringType), StringType)
   }
 
   test("tightest common bound for types") {

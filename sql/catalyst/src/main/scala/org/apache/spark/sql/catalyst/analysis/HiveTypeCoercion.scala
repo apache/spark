@@ -720,7 +720,8 @@ object HiveTypeCoercion {
         case (StringType, DateType) => Cast(e, DateType)
         case (StringType, TimestampType) => Cast(e, TimestampType)
         case (StringType, BinaryType) => Cast(e, BinaryType)
-        case (any, StringType) if any != StringType => Cast(e, StringType)
+        // Cast any atomic type to string.
+        case (any: AtomicType, StringType) if any != StringType => Cast(e, StringType)
 
         // When we reach here, input type is not acceptable for any types in this type collection,
         // try to find the first one we can implicitly cast.
