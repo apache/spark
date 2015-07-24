@@ -1,12 +1,15 @@
 package org.apache.spark.sql
 
+import java.io.File
 import java.lang.reflect.InvocationTargetException
 
+import org.apache.spark.sql.catalyst.analysis.UnresolvedException
 import org.apache.spark.sql.test.TestSQLContext
+import org.apache.spark.util.Utils
 
 import scala.reflect.runtime.{universe => ru}
 
-import scala.util.Random
+import scala.util.{Try, Random}
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.types._
@@ -20,6 +23,8 @@ import scala.util.control.NonFatal
  */
 class DataFrameFuzzingSuite extends SparkFunSuite {
 
+  val tempDir = Utils.createTempDir()
+
   def randomChoice[T](values: Seq[T]): T = {
     values(Random.nextInt(values.length))
   }
@@ -28,20 +33,29 @@ class DataFrameFuzzingSuite extends SparkFunSuite {
     classOf[String] -> (() => Random.nextString(10))
   )
 
-  def generateRandomDataFrame(): DataFrame = {
-    val allTypes = DataTypeTestUtils.atomicTypes
-      .filterNot(_.isInstanceOf[DecimalType]) // casts can lead to OOM
-      .filterNot(_.isInstanceOf[BinaryType]) // leads to spurious errors in string reverse
-    val dataTypesWithGenerators = allTypes.filter { dt =>
+  val allTypes = DataTypeTestUtils.atomicTypes
+    //.filterNot(_.isInstanceOf[DecimalType]) // casts can lead to OOM
+    .filterNot(_.isInstanceOf[BinaryType]) // leads to spurious errors in string reverse
+  val dataTypesWithGenerators = allTypes.filter { dt =>
       RandomDataGenerator.forType(dt, nullable = true, seed = None).isDefined
     }
-    def randomType(): DataType = randomChoice(dataTypesWithGenerators.toSeq)
+  def randomType(): DataType = randomChoice(dataTypesWithGenerators.toSeq)
+
+  def generateRandomSchema(): StructType = {
     val numColumns = 1 + Random.nextInt(3)
-    val schema =
-      new StructType((1 to numColumns).map(i => new StructField(s"c$i", randomType())).toArray)
+    val r = Random.nextString(1)
+    new StructType((1 to numColumns).map(i => new StructField(s"c$i$r", randomType())).toArray)
+  }
+
+  def generateRandomDataFrame(): DataFrame = {
+    val schema = generateRandomSchema()
     val rowGenerator = RandomDataGenerator.forType(schema, nullable = false).get
     val rows: Seq[Row] = Seq.fill(10)(rowGenerator().asInstanceOf[Row])
-    TestSQLContext.createDataFrame(TestSQLContext.sparkContext.parallelize(rows), schema)
+    val df = TestSQLContext.createDataFrame(TestSQLContext.sparkContext.parallelize(rows), schema)
+    val path = new File(tempDir, Random.nextInt(1000000).toString).getAbsolutePath
+    df.write.json(path)
+    TestSQLContext.read.json(path)
+    df
   }
 
   val df = generateRandomDataFrame()
@@ -51,7 +65,9 @@ class DataFrameFuzzingSuite extends SparkFunSuite {
   val whitelistedParameterTypes = Set(
     m.universe.typeOf[DataFrame],
     m.universe.typeOf[Seq[Column]],
-    m.universe.typeOf[Column]
+    m.universe.typeOf[Column],
+    m.universe.typeOf[String],
+    m.universe.typeOf[Seq[String]]
   )
 
   val dataFrameTransformations = {
@@ -68,7 +84,20 @@ class DataFrameFuzzingSuite extends SparkFunSuite {
         }
       }
       .filterNot(_.name.toString == "drop") // since this can lead to a DataFrame with no columns
+      .filterNot(_.name.toString == "describe") // since we cannot run all queries on describe output
+      .filterNot(_.name.toString == "dropDuplicates")
+      .filter(_.name.toString == "join")
       .toSeq
+  }
+
+  def getRandomColumnName(df: DataFrame): String = {
+    randomChoice(df.columns.zip(df.schema).map { case (colName, field) =>
+      field.dataType match {
+        case StructType(fields) =>
+           colName + "." + randomChoice(fields.map(_.name))
+        case _ => colName
+      }
+    })
   }
 
   def applyRandomTransformationToDataFrame(df: DataFrame): DataFrame = {
@@ -77,17 +106,24 @@ class DataFrameFuzzingSuite extends SparkFunSuite {
     val paramTypes = params.map(_.typeSignature)
     val paramValues = paramTypes.map { t =>
       if (t =:= m.universe.typeOf[DataFrame]) {
-        randomChoice(Seq(df, generateRandomDataFrame()))
+        randomChoice(Seq(
+          df,
+          generateRandomDataFrame()
+        )) // ++ Try(applyRandomTransformationToDataFrame(df)).toOption.toSeq)
       } else if (t =:= m.universe.typeOf[Column]) {
-        df.col(randomChoice(df.columns))
+        df.col(getRandomColumnName(df))
+      } else if (t =:= m.universe.typeOf[String]) {
+        getRandomColumnName(df)
       } else if (t <:< m.universe.typeOf[Seq[Column]]) {
-        Seq.fill(Random.nextInt(2) + 1)(df.col(randomChoice(df.columns)))
+        Seq.fill(Random.nextInt(2) + 1)(df.col(getRandomColumnName(df)))
+      } else if (t <:< m.universe.typeOf[Seq[String]]) {
+        Seq.fill(Random.nextInt(2) + 1)(getRandomColumnName(df))
       } else {
         sys.error("ERROR!")
       }
     }
     val reflectedMethod: ru.MethodMirror = m.reflect(df).reflectMethod(method)
-    println("Applying method " + reflectedMethod)
+    println("Applying method " + method + " with values " + paramValues)
     try {
       reflectedMethod.apply(paramValues: _*).asInstanceOf[DataFrame]
     } catch {
@@ -95,6 +131,14 @@ class DataFrameFuzzingSuite extends SparkFunSuite {
         throw e.getCause
     }
   }
+
+  //TestSQLContext.conf.setConf(SQLConf.DATAFRAME_RETAIN_GROUP_COLUMNS, false)
+//  TestSQLContext.conf.setConf(SQLConf.UNSAFE_ENABLED, true)
+  TestSQLContext.conf.setConf(SQLConf.SORTMERGE_JOIN, true)
+  TestSQLContext.conf.setConf(SQLConf.CODEGEN_ENABLED, true)
+
+  TestSQLContext.conf.setConf(SQLConf.SHUFFLE_PARTITIONS, 10)
+
 
   for (_ <- 1 to 10000) {
     println("-" * 80)
@@ -104,14 +148,18 @@ class DataFrameFuzzingSuite extends SparkFunSuite {
         df2.collectAsList()
       } catch {
         case NonFatal(e) =>
-          println(df2.logicalPlan)
           println(df2.queryExecution)
           println(df)
           println(df.collectAsList())
-          throw e
+          throw new Exception(e)
       }
     } catch {
-      case e: AnalysisException => null
+      case e: UnresolvedException[_] =>
+        println("skipped due to unresolved")
+      case e: AnalysisException =>
+        println("Skipped")
+        case e: IllegalArgumentException =>
+          println("Skipped")
     }
   }
 
