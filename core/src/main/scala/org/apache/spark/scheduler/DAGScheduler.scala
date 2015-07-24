@@ -790,6 +790,7 @@ class DAGScheduler(
     // serializable. If tasks are not serializable, a SparkListenerStageCompleted event
     // will be posted, which should always come after a corresponding SparkListenerStageSubmitted
     // event.
+    outputCommitCoordinator.stageStart(stage.id)
     val taskIdToLocations = try {
       stage match {
         case s: ShuffleMapStage =>
@@ -804,13 +805,13 @@ class DAGScheduler(
     } catch {
       case NonFatal(e) =>
         stage.makeNewStageAttempt(partitionsToCompute.size)
+        listenerBus.post(SparkListenerStageSubmitted(stage.latestInfo, properties))
         abortStage(stage, s"Task creation failed: $e\n${e.getStackTraceString}")
         runningStages -= stage
         return
     }
-    stage.makeNewStageAttempt(partitionsToCompute.size, taskIdToLocations.values.toSeq)
 
-    outputCommitCoordinator.stageStart(stage.id)
+    stage.makeNewStageAttempt(partitionsToCompute.size, taskIdToLocations.values.toSeq)
     listenerBus.post(SparkListenerStageSubmitted(stage.latestInfo, properties))
 
     // TODO: Maybe we can keep the taskBinary in Stage to avoid serializing it multiple times.
