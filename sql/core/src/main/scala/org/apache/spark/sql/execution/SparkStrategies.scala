@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution
 import org.apache.spark.sql.{SQLContext, Strategy, execution}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression2}
 import org.apache.spark.sql.catalyst.planning._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.{BroadcastHint, LogicalPlan}
@@ -148,7 +149,8 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
              if canBeCodeGened(
                   allAggregates(partialComputation) ++
                   allAggregates(rewrittenAggregateExpressions)) &&
-               codegenEnabled =>
+               codegenEnabled &&
+               !canBeConvertedToNewAggregation(plan) =>
           execution.GeneratedAggregate(
             partial = false,
             namedGroupingAttributes,
@@ -167,7 +169,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
              rewrittenAggregateExpressions,
              groupingExpressions,
              partialComputation,
-             child) =>
+             child) if !canBeConvertedToNewAggregation(plan) =>
         execution.Aggregate(
           partial = false,
           namedGroupingAttributes,
@@ -181,7 +183,14 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case _ => Nil
     }
 
-    def canBeCodeGened(aggs: Seq[AggregateExpression]): Boolean = !aggs.exists {
+    def canBeConvertedToNewAggregation(plan: LogicalPlan): Boolean = {
+      aggregate.Utils.tryConvert(
+        plan,
+        sqlContext.conf.useSqlAggregate2,
+        sqlContext.conf.codegenEnabled).isDefined
+    }
+
+    def canBeCodeGened(aggs: Seq[AggregateExpression1]): Boolean = !aggs.exists {
       case _: CombineSum | _: Sum | _: Count | _: Max | _: Min |  _: CombineSetsAndCount => false
       // The generated set implementation is pretty limited ATM.
       case CollectHashSet(exprs) if exprs.size == 1  &&
@@ -189,9 +198,73 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case _ => true
     }
 
-    def allAggregates(exprs: Seq[Expression]): Seq[AggregateExpression] =
-      exprs.flatMap(_.collect { case a: AggregateExpression => a })
+    def allAggregates(exprs: Seq[Expression]): Seq[AggregateExpression1] =
+      exprs.flatMap(_.collect { case a: AggregateExpression1 => a })
   }
+
+  /**
+   * Used to plan the aggregate operator for expressions based on the AggregateFunction2 interface.
+   */
+  object Aggregation extends Strategy {
+    def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+      case p: logical.Aggregate =>
+        val converted =
+          aggregate.Utils.tryConvert(
+            p,
+            sqlContext.conf.useSqlAggregate2,
+            sqlContext.conf.codegenEnabled)
+        converted match {
+          case None => Nil // Cannot convert to new aggregation code path.
+          case Some(logical.Aggregate(groupingExpressions, resultExpressions, child)) =>
+            // Extracts all distinct aggregate expressions from the resultExpressions.
+            val aggregateExpressions = resultExpressions.flatMap { expr =>
+              expr.collect {
+                case agg: AggregateExpression2 => agg
+              }
+            }.toSet.toSeq
+            // For those distinct aggregate expressions, we create a map from the
+            // aggregate function to the corresponding attribute of the function.
+            val aggregateFunctionMap = aggregateExpressions.map { agg =>
+              val aggregateFunction = agg.aggregateFunction
+              (aggregateFunction, agg.isDistinct) ->
+                Alias(aggregateFunction, aggregateFunction.toString)().toAttribute
+            }.toMap
+
+            val (functionsWithDistinct, functionsWithoutDistinct) =
+              aggregateExpressions.partition(_.isDistinct)
+            if (functionsWithDistinct.map(_.aggregateFunction.children).distinct.length > 1) {
+              // This is a sanity check. We should not reach here when we have multiple distinct
+              // column sets (aggregate.NewAggregation will not match).
+              sys.error(
+                "Multiple distinct column sets are not supported by the new aggregation" +
+                  "code path.")
+            }
+
+            val aggregateOperator =
+              if (functionsWithDistinct.isEmpty) {
+                aggregate.Utils.planAggregateWithoutDistinct(
+                  groupingExpressions,
+                  aggregateExpressions,
+                  aggregateFunctionMap,
+                  resultExpressions,
+                  planLater(child))
+              } else {
+                aggregate.Utils.planAggregateWithOneDistinct(
+                  groupingExpressions,
+                  functionsWithDistinct,
+                  functionsWithoutDistinct,
+                  aggregateFunctionMap,
+                  resultExpressions,
+                  planLater(child))
+              }
+
+            aggregateOperator
+        }
+
+      case _ => Nil
+    }
+  }
+
 
   object BroadcastNestedLoopJoin extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
@@ -336,8 +409,21 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         execution.Filter(condition, planLater(child)) :: Nil
       case e @ logical.Expand(_, _, _, child) =>
         execution.Expand(e.projections, e.output, planLater(child)) :: Nil
-      case logical.Aggregate(group, agg, child) =>
-        execution.Aggregate(partial = false, group, agg, planLater(child)) :: Nil
+      case a @ logical.Aggregate(group, agg, child) => {
+        val useNewAggregation =
+          aggregate.Utils.tryConvert(
+            a,
+            sqlContext.conf.useSqlAggregate2,
+            sqlContext.conf.codegenEnabled).isDefined
+        if (useNewAggregation) {
+          // If this logical.Aggregate can be planned to use new aggregation code path
+          // (i.e. it can be planned by the Strategy Aggregation), we will not use the old
+          // aggregation code path.
+          Nil
+        } else {
+          execution.Aggregate(partial = false, group, agg, planLater(child)) :: Nil
+        }
+      }
       case logical.Window(projectList, windowExpressions, spec, child) =>
         execution.Window(projectList, windowExpressions, spec, planLater(child)) :: Nil
       case logical.Sample(lb, ub, withReplacement, seed, child) =>

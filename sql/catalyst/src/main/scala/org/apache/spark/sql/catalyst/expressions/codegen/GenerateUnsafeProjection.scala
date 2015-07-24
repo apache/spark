@@ -98,7 +98,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
       }
 
       public UnsafeRow apply(InternalRow i) {
-        ${allExprs}
+        $allExprs
 
         // additionalSize had '+' in the beginning
         int numBytes = $fixedSize $additionalSize;
@@ -106,7 +106,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
           buffer = new byte[numBytes];
         }
         target.pointTo(buffer, org.apache.spark.unsafe.PlatformDependent.BYTE_ARRAY_OFFSET,
-          ${expressions.size}, numBytes, null);
+          ${expressions.size}, numBytes);
         int cursor = $fixedSize;
         $writers
         return target;

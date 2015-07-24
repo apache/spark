@@ -100,7 +100,7 @@ private[sql] case class InsertIntoHadoopFsRelation(
     val pathExists = fs.exists(qualifiedOutputPath)
     val doInsertion = (mode, pathExists) match {
       case (SaveMode.ErrorIfExists, true) =>
-        sys.error(s"path $qualifiedOutputPath already exists.")
+        throw new AnalysisException(s"path $qualifiedOutputPath already exists.")
       case (SaveMode.Overwrite, true) =>
         fs.delete(qualifiedOutputPath, true)
         true
@@ -108,6 +108,8 @@ private[sql] case class InsertIntoHadoopFsRelation(
         true
       case (SaveMode.Ignore, exists) =>
         !exists
+      case (s, exists) =>
+        throw new IllegalStateException(s"unsupported save mode $s ($exists)")
     }
     // If we are appending data to an existing dir.
     val isAppend = pathExists && (mode == SaveMode.Append)
