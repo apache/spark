@@ -240,16 +240,18 @@ class KinesisSequenceRangeIterator(
 
     var startTimeMs = System.currentTimeMillis()
     var retryCount = 0
-    var waitTimeMs = 0
+    var waitTimeMs = MIN_RETRY_WAIT_TIME_MS
     var result: Option[T] = None
     var lastError: Throwable = null
 
     def isTimedOut = (System.currentTimeMillis() - startTimeMs) >= retryTimeoutMs
     def isMaxRetryDone = retryCount >= MAX_RETRIES
 
-
-    while (result == null && !isTimedOut && !isMaxRetryDone) {
-      Thread.sleep(waitTimeMs)
+    while (result.isEmpty && !isTimedOut && !isMaxRetryDone) {
+      if (retryCount > 0) {  // wait only if this is a retry
+        Thread.sleep(waitTimeMs)
+        waitTimeMs *= 2  // if you have waited, then double wait time for next round
+      }
       try {
         result = Some(body)
       } catch {
@@ -263,7 +265,6 @@ class KinesisSequenceRangeIterator(
            }
       }
       retryCount += 1
-      if (waitTimeMs == 0) waitTimeMs = MIN_RETRY_WAIT_TIME_MS else waitTimeMs *= 2
     }
     result.getOrElse {
       if (isTimedOut) {
