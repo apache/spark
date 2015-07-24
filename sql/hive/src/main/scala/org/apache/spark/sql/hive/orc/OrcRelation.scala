@@ -192,7 +192,7 @@ private[sql] class OrcRelation(
       filters: Array[Filter],
       inputPaths: Array[FileStatus]): RDD[Row] = {
     val output = StructType(requiredColumns.map(dataSchema(_))).toAttributes
-    OrcTableScan(output, this, filters, inputPaths).execute().map(_.asInstanceOf[Row])
+    OrcTableScan(output, this, filters, inputPaths).execute().asInstanceOf[RDD[Row]]
   }
 
   override def prepareJobForWrite(job: Job): OutputWriterFactory = {

@@ -266,8 +266,9 @@ private[sql] case class InsertIntoHadoopFsRelation(
           while (iterator.hasNext) {
             val internalRow = iterator.next()
             val partitionPart = partitionProj(internalRow)
+            val dataPart = dataProj(internalRow)
             writerContainer.outputWriterForRow(partitionPart)
-              .asInstanceOf[OutputWriterInternal].writeInternal(internalRow)
+              .asInstanceOf[OutputWriterInternal].writeInternal(dataPart)
           }
         }
 

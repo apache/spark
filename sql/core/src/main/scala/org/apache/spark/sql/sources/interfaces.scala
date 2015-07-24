@@ -604,12 +604,12 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
       BoundReference(dataSchema.fieldIndex(col), field.dataType, field.nullable)
     }.toSeq
 
-    val rdd = buildScan(inputFiles)
-    val converted =
+    val rdd: RDD[Row] = buildScan(inputFiles)
+    val converted: RDD[InternalRow] =
       if (needConversion) {
         RDDConversions.rowToRowRdd(rdd, dataSchema.fields.map(_.dataType))
       } else {
-        rdd.map(_.asInstanceOf[InternalRow])
+        rdd.asInstanceOf[RDD[InternalRow]]
       }
     converted.mapPartitions { rows =>
       val buildProjection = if (codegenEnabled) {
@@ -618,8 +618,8 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
         () => new InterpretedMutableProjection(requiredOutput, dataSchema.toAttributes)
       }
       val mutableProjection = buildProjection()
-      rows.map(r => mutableProjection(r).asInstanceOf[Row])
-    }
+      rows.map(r => mutableProjection(r))
+    }.asInstanceOf[RDD[Row]]
   }
 
   /**
