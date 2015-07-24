@@ -69,9 +69,9 @@ class FPGrowthModel[Item: ClassTag](val freqItemsets: RDD[FreqItemset[Item]])
   override protected def formatVersion: String = "1.0"
 }
 
-object FPGrowthModel extends Loader[FPGrowthModel[FreqItemset]] {
+object FPGrowthModel extends Loader[FPGrowthModel[FreqItemset[Any]]] {
 
-  override def load(sc: SparkContext, path: String): FPGrowthModel[FreqItemset] = {
+  override def load(sc: SparkContext, path: String): FPGrowthModel[FreqItemset[Any]] = {
         FPGrowthModel.SaveLoadV1_0.load(sc, path)
       }
 
@@ -117,7 +117,7 @@ object FPGrowthModel extends Loader[FPGrowthModel[FreqItemset]] {
 
       }
 
-      def load[Item:ClassTag](sc: SparkContext, path: String): FPGrowthModel[Item] = {
+      def load[Item: ClassTag](sc: SparkContext, path: String): FPGrowthModel[Item] = {
         implicit val formats = DefaultFormats
         val sqlContext = new SQLContext(sc)
         val (className, formatVersion, metadata) = Loader.loadMetadata(sc, path)
@@ -125,7 +125,7 @@ object FPGrowthModel extends Loader[FPGrowthModel[FreqItemset]] {
         assert(formatVersion == thisFormatVersion)
         val frequentItemsCount = (metadata \ "frequentItemsCount").extract[Int]
         val itemsRDD = sqlContext.read.parquet(Loader.dataPath(path))
-        Loader.checkSchema[itemCountPair](itemsRDD.schema)
+        Loader.checkSchema[itemCountPair[Any]](itemsRDD.schema)
         val localItems = itemsRDD.map(itemCountPair.apply).collect()
         assert(frequentItemsCount == localItems.size)
         new FPGrowthModel(sc.parallelize(localItems))
