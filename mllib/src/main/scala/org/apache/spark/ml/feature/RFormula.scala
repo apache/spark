@@ -20,7 +20,7 @@ package org.apache.spark.ml.feature
 import scala.util.parsing.combinator.RegexParsers
 
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.ml.{Estimator, Model, Transformer, PipelineModel}
+import org.apache.spark.ml.{Estimator, Model, Transformer, Pipeline, PipelineModel, PipelineStage}
 import org.apache.spark.ml.param.{Param, ParamMap}
 import org.apache.spark.ml.param.shared.{HasFeaturesCol, HasLabelCol}
 import org.apache.spark.ml.util.Identifiable
@@ -81,10 +81,10 @@ class RFormula(override val uid: String) extends Estimator[RFormulaModel] with R
     require(parsedFormula.isDefined, "Must call setFormula() first.")
     // StringType terms and terms representing interactions need to be encoded before assembly.
     // TODO(ekl) add support for feature interactions
-    var encoderStages = Seq[Transformer]()
+    var encoderStages = Seq[PipelineStage]()
     var tempColumns = Seq[String]()
-    val encodedTerms = parsedFormula.terms.map { term =>
-      schema(term) match {
+    val encodedTerms = parsedFormula.get.terms.map { term =>
+      dataset.schema(term) match {
         case column if column.dataType == StringType =>
           val indexCol = term + "_idx_" + uid
           val encodedCol = term + "_onehot_" + uid
@@ -102,7 +102,7 @@ class RFormula(override val uid: String) extends Estimator[RFormulaModel] with R
       .setOutputCol($(featuresCol))
     encoderStages :+= new ColumnPruner(tempColumns.toSet)
     val pipelineModel = new Pipeline(uid).setStages(encoderStages.toArray).fit(dataset)
-    new RFormulaModel(uid, parsedFormula.get, pipelineModel)
+    copyValues(new RFormulaModel(uid, parsedFormula.get, pipelineModel))
   }
 
   // optimistic schema; does not contain any ML attributes
@@ -194,7 +194,8 @@ private[feature] class RFormulaModel(
 private class ColumnPruner(columnsToPrune: Set[String]) extends Transformer {
   override val uid = Identifiable.randomUID("columnPruner")
   override def transform(dataset: DataFrame): DataFrame = {
-    dataset.select(dataset.columns.filter(!columnsToPrune.contains(_)))
+    val columnsToKeep = dataset.columns.filter(!columnsToPrune.contains(_))
+    dataset.select(columnsToKeep.map(dataset.col) : _*)
   }
   override def transformSchema(schema: StructType): StructType = {
     StructType(schema.fields.filter(col => !columnsToPrune.contains(col.name)))
