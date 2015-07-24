@@ -1050,7 +1050,8 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
       // return With plan if there is CTE
       cteRelations.map(With(query, _)).getOrElse(query)
 
-    case Token("TOK_UNION", left :: right :: Nil) => Union(nodeToPlan(left), nodeToPlan(right))
+    // HIVE-9039 renamed TOK_UNION => TOK_UNIONALL while adding TOK_UNIONDISTINCT
+    case Token("TOK_UNIONALL", left :: right :: Nil) => Union(nodeToPlan(left), nodeToPlan(right))
 
     case a: ASTNode =>
       throw new NotImplementedError(s"No parse rules for $node:\n ${dumpTree(a).toString} ")
