@@ -146,8 +146,8 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
     if (until <= start || start >= numBytes) {
       return fromBytes(new byte[0]);
     }
-    int j = firstByteIndex(start);
-    int i = firstByteIndex(until);
+    int j = firstByteIndex(0, 0, start);
+    int i = firstByteIndex(j, start, until);
     byte[] bytes = new byte[i - j];
     copyMemory(base, offset + j, bytes, BYTE_ARRAY_OFFSET, i - j);
     return fromBytes(bytes);
@@ -162,7 +162,7 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
       return fromBytes(new byte[0]);
     }
 
-    int i = firstByteIndex(start);
+    int i = firstByteIndex(0, 0, start);
 
     byte[] bytes = new byte[numBytes - i];
     copyMemory(base, offset + i, bytes, BYTE_ARRAY_OFFSET, numBytes - i);
@@ -334,7 +334,7 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
       return 0;
     }
 
-    int i = firstByteIndex(start); // position in byte
+    int i = firstByteIndex(0, 0, start); // position in byte
     int c = start; // position in character
 
     do {
@@ -353,7 +353,7 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
 
   private enum ByteType {FIRSTBYTE, MIDBYTE, SINGLEBYTECHAR};
 
-  private ByteType checkByteType(Byte b) {
+  private ByteType checkByteType(byte b) {
     int firstTwoBits = (b >>> 6) & 0x03;
     if (firstTwoBits == 3) {
        return ByteType.FIRSTBYTE;
@@ -371,19 +371,19 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
    */
   private int firstOfCurrentCodePoint(int bytePos) {
     while (bytePos >= 0) {
-      if (ByteType.FIRSTBYTE == checkByteType(getByte(bytePos))
-        || ByteType.SINGLEBYTECHAR == checkByteType(getByte(bytePos))) {
+      ByteType byteType = checkByteType(getByte(bytePos));
+      if (ByteType.FIRSTBYTE == byteType || ByteType.SINGLEBYTECHAR == byteType) {
         return bytePos;
       }
       bytePos--;
     }
-    throw new RuntimeException("Invalid UTF8 string");
+    throw new RuntimeException("Invalid UTF8 string: " + toString());
   }
 
   // Locate to the start position in byte for a given code point
-  private int firstByteIndex(int codePoint) {
-    int i = 0; // position in byte
-    int c = 0; // position in character
+  private int firstByteIndex(int startByteIndex, int startPointIndex, int codePoint) {
+    int i = startByteIndex; // position in byte
+    int c = startPointIndex; // position in character
     while (i < numBytes && c < codePoint) {
       i += numBytesForFirstByte(getByte(i));
       c += 1;
@@ -396,7 +396,7 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
 
   // Locate to the last position in byte for a given code point
   private int lastByteIndex(int codePoint) {
-    int i = firstByteIndex(codePoint);
+    int i = firstByteIndex(0, 0, codePoint);
     return i + numBytesForFirstByte(getByte(i)) - 1;
   }
 
@@ -410,31 +410,33 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
    *         or {@code -1} if there is no such occurrence.
    */
   public int lastIndexOf(UTF8String v, int startCodePoint) {
-    return lastIndexOf(v, v.numChars(), startCodePoint);
-  }
-  public int lastIndexOf(UTF8String v, int vNumChars, int startCodePoint) {
+    // Empty string always match
     if (v.numBytes == 0) {
-      return 0;
+      return startCodePoint;
     }
+    return lastIndexOfInByte(v, lastByteIndex(startCodePoint));
+  }
+
+  private int lastIndexOfInByte(UTF8String v, int fromIndexInByte) {
     if (numBytes == 0) {
       return -1;
     }
-    int fromIndexEnd = lastByteIndex(startCodePoint);
     do {
-      if (fromIndexEnd - v.numBytes + 1 < 0 ) {
+      int startByteIndex = fromIndexInByte - v.numBytes + 1;
+      if (startByteIndex < 0 ) {
         return -1;
       }
       if (ByteArrayMethods.arrayEquals(
-          base, offset + fromIndexEnd - v.numBytes + 1, v.base, v.offset, v.numBytes)) {
+              base, offset + startByteIndex, v.base, v.offset, v.numBytes)) {
         int count = 0; // count from right most to the match end in byte.
-        while (fromIndexEnd >= 0) {
+        while (startByteIndex >= 0) {
           count++;
-          fromIndexEnd = firstOfCurrentCodePoint(fromIndexEnd) - 1;
+          startByteIndex = firstOfCurrentCodePoint(startByteIndex) - 1;
         }
-        return count - vNumChars;
+        return count - 1;
       }
-      fromIndexEnd  = firstOfCurrentCodePoint(fromIndexEnd) - 1;
-    } while (fromIndexEnd >= 0);
+      fromIndexInByte  = firstOfCurrentCodePoint(fromIndexInByte) - 1;
+    } while (fromIndexInByte >= 0);
     return -1;
   }
 
@@ -442,66 +444,49 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
    * Finds the n-th last index within a String.
    * This method uses {@link String#lastIndexOf(String)}.</p>
    *
-   * @param str  the String to check, may be null
    * @param searchStr  the String to find, may be null
    * @param ordinal  the n-th last <code>searchStr</code> to find
    * @return the n-th last index of the search String,
    *  <code>-1</code> if no match or <code>null</code> string input
    */
-  public static int lastOrdinalIndexOf(
-          UTF8String str,
+  protected int lastOrdinalIndexOf(
           UTF8String searchStr,
           int ordinal) {
-    if (str == null || searchStr == null) {
-      return -1;
-    }
-    return doOrdinalIndexOf(str, searchStr, searchStr.numChars(), ordinal, true);
+    return doOrdinalIndexOf(searchStr, ordinal, true);
   }
 
   /**
    * Finds the n-th index within a String, handling <code>null</code>.
    * A <code>null</code> String will return <code>-1</code>
    *
-   * @param str  the String to check, may be null
    * @param searchStr  the String to find, may be null
    * @param ordinal  the n-th <code>searchStr</code> to find
    * @return the n-th index of the search String,
    *  <code>-1</code> if no match or <code>null</code> string input
    */
-  public static int ordinalIndexOf(
-          UTF8String str,
+  protected int ordinalIndexOf(
           UTF8String searchStr,
           int ordinal) {
-    if (str == null || searchStr == null) {
-      return -1;
-    }
-    return doOrdinalIndexOf(str, searchStr, searchStr.numChars(), ordinal, false);
+    return doOrdinalIndexOf(searchStr, ordinal, false);
   }
 
-  private static int doOrdinalIndexOf(
-          UTF8String str,
+  private int doOrdinalIndexOf(
           UTF8String searchStr,
-          int searchStrNumChars,
           int ordinal,
           boolean lastIndex) {
-    if (str == null || searchStr == null || ordinal <= 0) {
+    if (ordinal <= 0) {
       return -1;
     }
-    // Only calc numChars when lastIndex == true sicnc the calculation is expensive
-    int strNumChars = 0;
-    if (lastIndex) {
-      strNumChars = str.numChars();
-    }
     if (searchStr.numBytes == 0) {
-      return lastIndex ? strNumChars : 0;
+      return lastIndex ? numChars() : 0;
     }
     int found = 0;
-    int index = lastIndex ? strNumChars : 0;
+    int index = lastIndex ? numBytes : -1;
     do {
       if (lastIndex) {
-        index = str.lastIndexOf(searchStr, searchStrNumChars, index - 1);
+        index = lastIndexOfInByte(searchStr, index - 1);
       } else {
-        index = str.indexOf(searchStr, index + 1);
+        index = indexOf(searchStr, index + 1);
       }
       if (index < 0) {
         return index;
@@ -516,27 +501,26 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
    * returned. If count is negative, every to the right of the final delimiter (counting from the
    * right) is returned. substring_index performs a case-sensitive match when searching for delim.
    */
-  public static UTF8String subStringIndex(UTF8String str, UTF8String delim, int count) {
-    if (str == null || delim == null) {
+  public UTF8String subStringIndex(UTF8String delim, int count) {
+    if (delim == null) {
       return null;
     }
-    if (str.numBytes == 0 || delim.numBytes == 0 || count == 0) {
+    if (delim.numBytes == 0 || count == 0) {
       return UTF8String.EMPTY_UTF8;
     }
-    int delimNumChars = delim.numChars();
     if (count > 0) {
-      int idx = doOrdinalIndexOf(str, delim, delimNumChars, count, false);
+      int idx = ordinalIndexOf(delim, count);
       if (idx != -1) {
-        return str.substring(0, idx);
+        return substring(0, idx);
       } else {
-        return str;
+        return this;
       }
     } else {
-      int idx = doOrdinalIndexOf(str, delim, delimNumChars, -count, true);
+      int idx = lastOrdinalIndexOf(delim, -count);
       if (idx != -1) {
-        return str.substring(idx + delimNumChars);
+        return substring(idx + delim.numChars());
       } else {
-        return str;
+        return this;
       }
     }
   }

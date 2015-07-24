@@ -376,8 +376,7 @@ case class Substring_index(strExpr: Expression, delimExpr: Expression, countExpr
       if (delim != null) {
         val count = countExpr.eval(input)
         if (count != null) {
-          return UTF8String.subStringIndex(
-            str.asInstanceOf[UTF8String],
+          return str.asInstanceOf[UTF8String].subStringIndex(
             delim.asInstanceOf[UTF8String],
             count.asInstanceOf[Int])
         }
@@ -390,9 +389,7 @@ case class Substring_index(strExpr: Expression, delimExpr: Expression, countExpr
     val str = strExpr.gen(ctx)
     val delim = delimExpr.gen(ctx)
     val count = countExpr.gen(ctx)
-    val resultCode =
-      s"""org.apache.spark.unsafe.types.UTF8String.subStringIndex(
-         |${str.primitive}, ${delim.primitive}, ${count.primitive})""".stripMargin
+    val resultCode = s"${str.primitive}.subStringIndex(${delim.primitive}, ${count.primitive})"
     s"""
       ${str.code}
       boolean ${ev.isNull} = true;
