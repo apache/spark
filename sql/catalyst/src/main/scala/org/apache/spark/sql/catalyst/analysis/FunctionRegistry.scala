@@ -148,6 +148,7 @@ object FunctionRegistry {
     expression[Last]("last"),
     expression[Max]("max"),
     expression[Min]("min"),
+    expression[Stddev]("stddev"),
     expression[Sum]("sum"),
 
     // string functions
