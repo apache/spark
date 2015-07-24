@@ -7,7 +7,6 @@ class PostgresHook(DbApiHook):
     '''
     Interact with Postgres.
     '''
-
     conn_name_attr = 'postgres_conn_id'
     default_conn_name = 'postgres_default'
     supports_autocommit = True
