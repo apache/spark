@@ -224,13 +224,13 @@ private[sql] case class EnsureRequirements(sqlContext: SQLContext) extends Rule[
       // compatible.
       // TODO: ASSUMES TRANSITIVITY?
       def compatible: Boolean =
-        !operator.children
+        operator.children
           .map(_.outputPartitioning)
           .sliding(2)
-          .map {
+          .forall {
             case Seq(a) => true
             case Seq(a, b) => a.compatibleWith(b)
-          }.exists(!_)
+          }
 
       // Adds Exchange or Sort operators as required
       def addOperatorsIfNecessary(

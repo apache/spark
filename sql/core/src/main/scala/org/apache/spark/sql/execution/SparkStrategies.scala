@@ -190,12 +190,12 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         sqlContext.conf.codegenEnabled).isDefined
     }
 
-    def canBeCodeGened(aggs: Seq[AggregateExpression1]): Boolean = !aggs.exists {
-      case _: CombineSum | _: Sum | _: Count | _: Max | _: Min |  _: CombineSetsAndCount => false
+    def canBeCodeGened(aggs: Seq[AggregateExpression1]): Boolean = aggs.forall {
+      case _: CombineSum | _: Sum | _: Count | _: Max | _: Min |  _: CombineSetsAndCount => true
       // The generated set implementation is pretty limited ATM.
       case CollectHashSet(exprs) if exprs.size == 1  &&
-           Seq(IntegerType, LongType).contains(exprs.head.dataType) => false
-      case _ => true
+           Seq(IntegerType, LongType).contains(exprs.head.dataType) => true
+      case _ => false
     }
 
     def allAggregates(exprs: Seq[Expression]): Seq[AggregateExpression1] =
