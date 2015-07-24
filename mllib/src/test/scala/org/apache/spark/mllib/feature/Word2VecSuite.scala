@@ -42,7 +42,7 @@ class Word2VecSuite extends SparkFunSuite with MLlibTestSparkContext {
     // and a Word2VecMap give the same values.
     val word2VecMap = model.getVectors
     val newModel = new Word2VecModel(word2VecMap)
-    assert(newModel.getVectors.mapValues(_.toSeq) == word2VecMap.mapValues(_.toSeq))
+    assert(newModel.getVectors.mapValues(_.toSeq) === word2VecMap.mapValues(_.toSeq))
   }
 
   test("Word2VecModel") {

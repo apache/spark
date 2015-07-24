@@ -550,14 +550,13 @@ object Word2VecModel extends Loader[Word2VecModel] {
   }
 
   private def buildWordVectors(model: Map[String, Array[Float]]): Array[Float] = {
-    require(!model.isEmpty, "Word2VecMap should be non-empty")
+    require(model.nonEmpty, "Word2VecMap should be non-empty")
     val (vectorSize, numWords) = (model.head._2.size, model.size)
     val wordList = model.keys.toArray
     val wordVectors = new Array[Float](vectorSize * numWords)
     var i = 0
     while (i < numWords) {
-      val vec = model.get(wordList(i)).get
-      Array.copy(vec, 0, wordVectors, i * vectorSize, vectorSize)
+      Array.copy(model(wordList(i)), 0, wordVectors, i * vectorSize, vectorSize)
       i += 1
     }
     wordVectors
