@@ -10,20 +10,16 @@ class DbApiHook(BaseHook):
     """
     Abstract base class for sql hooks.
     """
-
-    """
-    Override to provide the connection name.
-    """
+    # Override to provide the connection name.
     conn_name_attr = None
-
-    """
-    Override to have a default connection id for a particular dbHook
-    """
+    # Override to have a default connection id for a particular dbHook
     default_conn_name = 'default_conn_id'
-
-    """
-    Override if this db supports autocommit.
-    """
+    # Override if this db supports autocommit.
+    supports_autocommit = False
+    # Override with the object that exposes the connect method
+    connector = None
+    # Whether the db supports a special type of autocmmit
+    # TODO should be changed as a method set_autocommit that can be overriden
     supports_autocommit = False
 
     def __init__(self, *args, **kwargs):
@@ -35,6 +31,15 @@ class DbApiHook(BaseHook):
             setattr(self, self.conn_name_attr, self.default_conn_name)
         else:
             setattr(self, self.conn_name_attr, kwargs[self.conn_name_attr])
+
+    def get_conn(self):
+        """Returns a connection object"""
+        db = self.get_connection(getattr(self, self.conn_name_attr))
+        return self.connector.connect(
+            host=db.host,
+            port=db.port,
+            username=db.login,
+            schema=db.schema)
 
 
     def get_pandas_df(self, sql, parameters=None):
