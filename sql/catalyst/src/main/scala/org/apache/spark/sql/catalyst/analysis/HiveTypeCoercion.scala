@@ -201,7 +201,7 @@ object HiveTypeCoercion {
 
       def castOutput(plan: LogicalPlan): LogicalPlan = {
         val casted = plan.output.zip(castedTypes).map {
-          case (e, Some(dt)) if e.dataType != dt=>
+          case (e, Some(dt)) if e.dataType != dt =>
             Alias(Cast(e, dt), e.name)()
           case (e, _) => e
         }
