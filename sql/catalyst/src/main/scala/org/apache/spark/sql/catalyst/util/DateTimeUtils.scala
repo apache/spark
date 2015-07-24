@@ -662,8 +662,6 @@ object DateTimeUtils {
     val millis2 = time2.asInstanceOf[Long] / 1000L
     val date1 = millisToDays(millis1)
     val date2 = millisToDays(millis2)
-    val microOffset1 = time1 - daysToMillis(date1) * 1000L
-    val microOffset2 = time2 - daysToMillis(date2) * 1000L
     val dayInMonth1 = getDayOfMonth(date1)
     val dayInMonth2 = getDayOfMonth(date2)
     val lastDayMonth1 = getLastDayInMonthOfMonth(date1)
@@ -677,8 +675,7 @@ object DateTimeUtils {
       (months1 - months2).toDouble
     } else {
       val timesBetween = (timeInDay1 - timeInDay2).toDouble / (MILLIS_PER_DAY * 1000)
-      (microOffset1 - microOffset2) / (31 * MILLIS_PER_DAY * 1000L).toDouble + (
-        months1 - months2).toDouble + (dayInMonth1 - dayInMonth2 + timesBetween) / 31.0
+      (months1 - months2).toDouble + (dayInMonth1 - dayInMonth2 + timesBetween) / 31.0
     }
   }
 }
