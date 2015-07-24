@@ -139,7 +139,7 @@
     <hive.version>1.2.1</hive.version>
     <!-- Version used for internal directory structure -->
     <hive.version.short>1.2.1</hive.version.short>
-    <derby.version>10.10.1.1</derby.version>
+    <derby.version>10.11.1.1</derby.version>
     <parquet.version>1.7.0</parquet.version>
     <jblas.version>1.2.4</jblas.version>
     <jetty.version>8.1.14.v20131031</jetty.version>
@@ -1050,20 +1050,10 @@
             <groupId>com.esotericsoftware.kryo</groupId>
             <artifactId>kryo</artifactId>
           </exclusion>
-          <!--
           <exclusion>
             <groupId>org.apache.avro</groupId>
             <artifactId>avro-mapred</artifactId>
           </exclusion>
-          <exclusion>
-            <groupId>org.apache.calcite</groupId>
-            <artifactId>calcite-core</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>org.apache.calcite</groupId>
-            <artifactId>calcite-avatica</artifactId>
-          </exclusion>
-            -->
           <!-- come in with calcite -->
           <exclusion>
             <groupId>com.fasterxml.jackson.core</groupId>
@@ -1100,14 +1090,6 @@
         <version>${hive.version}</version>
         <scope>${hive.deps.scope}</scope>
         <exclusions>
-<!--
-
-          <exclusion>
-            <groupId>org.apache.hive</groupId>
-            <artifactId>hive-shims</artifactId>
-          </exclusion>
-
--->
           <exclusion>
             <groupId>org.apache.hadoop</groupId>
             <artifactId>hadoop-yarn-server-resourcemanager</artifactId>
@@ -1366,6 +1348,8 @@
               <spark.ui.showConsoleProgress>false</spark.ui.showConsoleProgress>
               <spark.driver.allowMultipleContexts>true</spark.driver.allowMultipleContexts>
               <spark.unsafe.exceptionOnMemoryLeak>true</spark.unsafe.exceptionOnMemoryLeak>
+              <!-- Needed by sql/hive tests. -->
+              <test.src.tables>src</test.src.tables>
             </systemProperties>
             <failIfNoTests>false</failIfNoTests>
           </configuration>
@@ -1400,6 +1384,8 @@
               <spark.ui.showConsoleProgress>false</spark.ui.showConsoleProgress>
               <spark.driver.allowMultipleContexts>true</spark.driver.allowMultipleContexts>
               <spark.unsafe.exceptionOnMemoryLeak>true</spark.unsafe.exceptionOnMemoryLeak>
+              <!-- Needed by sql/hive tests. -->
+              <test.src.tables>__not_used__</test.src.tables>
             </systemProperties>
           </configuration>
           <executions>

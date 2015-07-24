@@ -31,6 +31,8 @@ import org.apache.spark.util.Utils
 abstract class ParquetCompatibilityTest extends QueryTest with ParquetTest with BeforeAndAfterAll {
   protected var parquetStore: File = _
 
+  protected def stagingDir: Option[String] = None
+
   override protected def beforeAll(): Unit = {
     parquetStore = Utils.createTempDir(namePrefix = "parquet-compat_")
     parquetStore.delete()
@@ -43,7 +45,10 @@ abstract class ParquetCompatibilityTest extends QueryTest with ParquetTest with 
   def readParquetSchema(path: String): MessageType = {
     val fsPath = new Path(path)
     val fs = fsPath.getFileSystem(configuration)
-    val parquetFiles = fs.listStatus(fsPath).toSeq.filterNot(_.getPath.getName.startsWith("_"))
+    val parquetFiles = fs.listStatus(fsPath).toSeq.filterNot { status =>
+      status.getPath.getName.startsWith("_") ||
+        stagingDir.map(status.getPath.getName.startsWith).getOrElse(false)
+    }
     val footers = ParquetFileReader.readAllFootersInParallel(configuration, parquetFiles, true)
     footers.head.getParquetMetadata.getFileMetaData.getSchema
   }

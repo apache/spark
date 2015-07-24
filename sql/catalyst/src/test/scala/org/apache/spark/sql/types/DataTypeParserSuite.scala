@@ -110,6 +110,11 @@ class DataTypeParserSuite extends SparkFunSuite {
   // Empty struct.
   checkDataType("strUCt<>", StructType(Nil))
 
+  checkDataType(
+    """uniontype<int,bigint,string,double,boolean,array<string>,map<string,string>>""",
+    UnionType(Array(IntegerType, LongType, StringType, DoubleType, BooleanType,
+      ArrayType(StringType), MapType(StringType, StringType))))
+
   unsupported("it is not a data type")
   unsupported("struct<x+y: int, 1.1:timestamp>")
   unsupported("struct<x: int")

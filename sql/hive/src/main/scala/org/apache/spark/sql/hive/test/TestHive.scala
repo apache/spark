@@ -90,7 +90,7 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
   /** Sets up the system initially or after a RESET command */
   protected override def configure(): Map[String, String] =
     temporaryConfig ++ Map(
-      ConfVars.METASTOREWAREHOUSE.varname -> warehousePath.toString,
+      ConfVars.METASTOREWAREHOUSE.varname -> warehousePath.toURI.toString,
       ConfVars.METASTORE_INTEGER_JDO_PUSHDOWN.varname -> "true")
 
   val testTempDir = Utils.createTempDir()
@@ -244,7 +244,6 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
     }),
     TestTable("src_thrift", () => {
       import org.apache.hadoop.hive.serde2.thrift.ThriftDeserializer
-      import org.apache.hadoop.hive.serde2.thrift.test.Complex
       import org.apache.hadoop.mapred.{SequenceFileInputFormat, SequenceFileOutputFormat}
       import org.apache.thrift.protocol.TBinaryProtocol
 
@@ -253,7 +252,7 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
          |CREATE TABLE src_thrift(fake INT)
          |ROW FORMAT SERDE '${classOf[ThriftDeserializer].getName}'
          |WITH SERDEPROPERTIES(
-         |  'serialization.class'='${classOf[Complex].getName}',
+         |  'serialization.class'='org.apache.spark.sql.hive.test.Complex',
          |  'serialization.format'='${classOf[TBinaryProtocol].getName}'
          |)
          |STORED AS

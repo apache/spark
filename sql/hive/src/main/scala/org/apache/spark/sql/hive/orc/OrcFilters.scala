@@ -31,7 +31,6 @@ import org.apache.spark.sql.sources._
  * and cannot be used anymore.
  */
 private[orc] object OrcFilters extends Logging {
-
   def createFilter(expr: Array[Filter]): Option[SearchArgument] = {
     expr.reduceOption(And).flatMap { conjunction =>
       val builder = SearchArgumentFactory.newBuilder()

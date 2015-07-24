@@ -118,17 +118,6 @@ private[hive] object SparkSQLCLIDriver extends Logging {
 
     val remoteMode = isRemoteMode(sessionState)
     // "-h" option has been passed, so connect to Hive thrift server.
-/* TODO
-
-    if (sessionState.getHost != null) {
-      sessionState.connect()
-      if (sessionState.isRemoteMode) {
-        prompt = s"[${sessionState.getHost}:${sessionState.getPort}]" + prompt
-        continuedPrompt = "".padTo(prompt.length, ' ')
-      }
-    }
-
-*/
     if (!remoteMode) {
       // Hadoop-20 and above - we need to augment classpath using hiveconf
       // components.
@@ -281,10 +270,8 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
   override def processCmd(cmd: String): Int = {
     val cmd_trimmed: String = cmd.trim()
     val cmd_lower = cmd_trimmed.toLowerCase(Locale.ENGLISH)
-
     val tokens: Array[String] = cmd_trimmed.split("\\s+")
     val cmd_1: String = cmd_trimmed.substring(tokens(0).length()).trim()
-
     if (cmd_lower.equals("quit") ||
       cmd_lower.equals("exit") ||
       tokens(0).toLowerCase(Locale.ENGLISH).equals("source") ||
