@@ -98,6 +98,7 @@ class DataFrameFuzzingSuite extends SparkFunSuite {
         df2.collectAsList()
       } catch {
         case NonFatal(e) =>
+          println(df2.logicalPlan)
           println(df2.queryExecution)
           println(df)
           println(df.collectAsList())
