@@ -1089,12 +1089,6 @@
         <artifactId>hive-metastore</artifactId>
         <version>${hive.version}</version>
         <scope>${hive.deps.scope}</scope>
-        <exclusions>
-          <exclusion>
-            <groupId>org.apache.hadoop</groupId>
-            <artifactId>hadoop-yarn-server-resourcemanager</artifactId>
-          </exclusion>
-        </exclusions>
       </dependency>
       <dependency>
         <groupId>${hive.group}</groupId>
