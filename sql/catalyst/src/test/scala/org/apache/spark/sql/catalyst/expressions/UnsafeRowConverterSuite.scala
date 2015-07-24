@@ -145,7 +145,7 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers {
       DoubleType,
       StringType,
       BinaryType
-      // DecimalType.Unlimited,
+      // DecimalType.Default,
       // ArrayType(IntegerType)
     )
     val converter = new UnsafeRowConverter(fieldTypes)
