@@ -420,17 +420,16 @@ class Word2Vec extends Serializable with Logging {
 /**
  * :: Experimental ::
  * Word2Vec model
+ * @param wordIndex maps each word to an index, which can retrieve the corresponding
+ *                  vector from wordVectors
+ * @param wordVectors array of length numWords * vectorSize, vector corresponding
+ *                    to the word mapped with index i can be retrieved by the slice
+ *                    (i * vectorSize, i * vectorSize + vectorSize)
  */
 @Experimental
 class Word2VecModel private[mllib] (
     private val wordIndex: Map[String, Int],
     private val wordVectors: Array[Float]) extends Serializable with Saveable {
-
-  // wordIndex: Maps each word to an index, which can retrieve the corresponding
-  //            vector from wordVectors (see below).
-  // wordVectors: Array of length numWords * vectorSize, vector corresponding
-  //              to the word mapped with index i can be retrieved by the slice
-  //              (i * vectorSize, i * vectorSize + vectorSize)
 
   private val numWords = wordIndex.size
   // vectorSize: Dimension of each word's vector.
