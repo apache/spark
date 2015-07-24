@@ -22,6 +22,7 @@ import java.util.List;
 import com.google.common.collect.Lists;
 import io.netty.channel.Channel;
 import io.netty.channel.socket.SocketChannel;
+import io.netty.handler.timeout.ReadTimeoutHandler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -104,6 +105,7 @@ public class TransportContext {
     try {
       TransportChannelHandler channelHandler = createChannelHandler(channel);
       channel.pipeline()
+        .addLast("readTimeoutHandler", new ReadTimeoutHandler(conf.readTimeoutSeconds()))
         .addLast("encoder", encoder)
         .addLast("frameDecoder", NettyUtils.createFrameDecoder())
         .addLast("decoder", decoder)
