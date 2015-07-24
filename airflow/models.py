@@ -204,7 +204,7 @@ class DagBag(object):
 
     def collect_dags(
             self,
-            dag_folder=DAGS_FOLDER,
+            dag_folder=None,
             only_if_updated=True):
         """
         Given a file path or a folder, this file looks for python modules,
@@ -215,6 +215,7 @@ class DagBag(object):
         ignoring files that match any of the regex patterns specified
         in the file.
         """
+        dag_folder = dag_folder or self.dag_folder
         if os.path.isfile(dag_folder):
             self.process_file(dag_folder, only_if_updated=only_if_updated)
         elif os.path.isdir(dag_folder):
