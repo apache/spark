@@ -93,11 +93,11 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
     private[this] def isValidSort(
         leftKeys: Seq[Expression],
         rightKeys: Seq[Expression]): Boolean = {
-      !leftKeys.zip(rightKeys).exists { keys =>
+      leftKeys.zip(rightKeys).forall { keys =>
         (keys._1.dataType, keys._2.dataType) match {
-          case (l: AtomicType, r: AtomicType) => false
-          case (NullType, NullType) => false
-          case _ => true
+          case (l: AtomicType, r: AtomicType) => true
+          case (NullType, NullType) => true
+          case _ => false
         }
       }
     }
