@@ -18,11 +18,11 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.text.DecimalFormat
+import java.util.Arrays
 import java.util.Locale
 import java.util.regex.{MatchResult, Pattern}
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.UnresolvedException
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -672,6 +672,38 @@ case class StringSplit(str: Expression, pattern: Expression)
   override def prettyName: String = "split"
 }
 
+object Substring {
+
+  private def makeIndex(pos: Int, len: Int, inputLen: Int): (Int, Int) = {
+    if (Math.abs(pos) > inputLen) {
+      return (-1, -1)
+    }
+    var start = 0
+    var end = 0
+    if (pos > 0) {
+      start = pos - 1
+    } else if (pos < 0) {
+      start = inputLen + pos
+    } else {
+      start = 0
+    }
+
+    if ((inputLen - start) < len) {
+      end = inputLen
+    } else {
+      end = start + len
+    }
+    (start, end)
+  }
+
+  def subStringBinarySQL(bytes: Array[Byte], pos: Int, len: Int): Array[Byte] = {
+    val (start, end) = makeIndex(pos, len, bytes.length)
+    if (start == -1 || end == -1) {
+      return Array[Byte]()
+    }
+    Arrays.copyOfRange(bytes, start, end)
+  }
+}
 /**
  * A function that takes a substring of its first argument starting at a given position.
  * Defined for String and Binary types.
@@ -686,9 +718,10 @@ case class Substring(str: Expression, pos: Expression, len: Expression)
   override def foldable: Boolean = str.foldable && pos.foldable && len.foldable
   override def nullable: Boolean = str.nullable || pos.nullable || len.nullable
 
-  override def dataType: DataType = StringType
+  override def dataType: DataType = str.dataType
 
-  override def inputTypes: Seq[DataType] = Seq(StringType, IntegerType, IntegerType)
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(TypeCollection(StringType, BinaryType), IntegerType, IntegerType)
 
   override def children: Seq[Expression] = str :: pos :: len :: Nil
 
@@ -699,8 +732,12 @@ case class Substring(str: Expression, pos: Expression, len: Expression)
       if (posEval != null) {
         val lenEval = len.eval(input)
         if (lenEval != null) {
-          stringEval.asInstanceOf[UTF8String]
-            .substringSQL(posEval.asInstanceOf[Int], lenEval.asInstanceOf[Int])
+          str.dataType match {
+            case StringType => stringEval.asInstanceOf[UTF8String]
+              .substringSQL(posEval.asInstanceOf[Int], lenEval.asInstanceOf[Int])
+            case BinaryType => Substring.subStringBinarySQL(stringEval.asInstanceOf[Array[Byte]],
+              posEval.asInstanceOf[Int], lenEval.asInstanceOf[Int])
+          }
         } else {
           null
         }
@@ -719,7 +756,13 @@ case class Substring(str: Expression, pos: Expression, len: Expression)
 
     val start = ctx.freshName("start")
     val end = ctx.freshName("end")
-
+    val resultCode = str.dataType match {
+      case StringType => s"""${ev.primitive} = ${strGen.primitive}
+        |.substringSQL(${posGen.primitive}, ${lenGen.primitive});""".stripMargin
+      case BinaryType =>
+        s"""${ev.primitive} = org.apache.spark.sql.catalyst.expressions.Substring.subStringBinarySQL
+        |(${strGen.primitive}, ${posGen.primitive}, ${lenGen.primitive});""".stripMargin
+    }
     s"""
       ${strGen.code}
       boolean ${ev.isNull} = ${strGen.isNull};
@@ -729,8 +772,7 @@ case class Substring(str: Expression, pos: Expression, len: Expression)
         if (!${posGen.isNull}) {
           ${lenGen.code}
           if (!${lenGen.isNull}) {
-            ${ev.primitive} = ${strGen.primitive}
-              .substringSQL(${posGen.primitive}, ${lenGen.primitive});
+            $resultCode
           } else {
             ${ev.isNull} = true;
           }
