@@ -375,7 +375,7 @@ private[sql] object TIMESTAMP extends NativeColumnType(TimestampType, 9, 8) {
 
 private[sql] case class FIXED_DECIMAL(precision: Int, scale: Int)
   extends NativeColumnType(
-    DecimalType(Some(PrecisionInfo(precision, scale))),
+    DecimalType(precision, scale),
     10,
     FIXED_DECIMAL.defaultSize) {
 

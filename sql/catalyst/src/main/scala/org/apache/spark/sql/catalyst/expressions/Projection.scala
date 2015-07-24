@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.{GenerateUnsafeProjection, GenerateMutableProjection}
 import org.apache.spark.sql.types.{StructType, DataType}
+import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * A [[Projection]] that is calculated by calling the `eval` of each of the specified expressions.
@@ -177,6 +178,14 @@ class JoinedRow extends InternalRow {
 
   override def length: Int = row1.length + row2.length
 
+  override def getUTF8String(i: Int): UTF8String = {
+    if (i < row1.length) row1.getUTF8String(i) else row2.getUTF8String(i - row1.length)
+  }
+
+  override def getBinary(i: Int): Array[Byte] = {
+    if (i < row1.length) row1.getBinary(i) else row2.getBinary(i - row1.length)
+  }
+
   override def get(i: Int): Any =
     if (i < row1.length) row1(i) else row2(i - row1.length)
 
@@ -271,6 +280,14 @@ class JoinedRow2 extends InternalRow {
 
   override def length: Int = row1.length + row2.length
 
+  override def getUTF8String(i: Int): UTF8String = {
+    if (i < row1.length) row1.getUTF8String(i) else row2.getUTF8String(i - row1.length)
+  }
+
+  override def getBinary(i: Int): Array[Byte] = {
+    if (i < row1.length) row1.getBinary(i) else row2.getBinary(i - row1.length)
+  }
+
   override def get(i: Int): Any =
     if (i < row1.length) row1(i) else row2(i - row1.length)
 
@@ -358,6 +375,15 @@ class JoinedRow3 extends InternalRow {
   override def toSeq: Seq[Any] = row1.toSeq ++ row2.toSeq
 
   override def length: Int = row1.length + row2.length
+
+  override def getUTF8String(i: Int): UTF8String = {
+    if (i < row1.length) row1.getUTF8String(i) else row2.getUTF8String(i - row1.length)
+  }
+
+  override def getBinary(i: Int): Array[Byte] = {
+    if (i < row1.length) row1.getBinary(i) else row2.getBinary(i - row1.length)
+  }
+
 
   override def get(i: Int): Any =
     if (i < row1.length) row1(i) else row2(i - row1.length)
@@ -447,6 +473,15 @@ class JoinedRow4 extends InternalRow {
 
   override def length: Int = row1.length + row2.length
 
+  override def getUTF8String(i: Int): UTF8String = {
+    if (i < row1.length) row1.getUTF8String(i) else row2.getUTF8String(i - row1.length)
+  }
+
+  override def getBinary(i: Int): Array[Byte] = {
+    if (i < row1.length) row1.getBinary(i) else row2.getBinary(i - row1.length)
+  }
+
+
   override def get(i: Int): Any =
     if (i < row1.length) row1(i) else row2(i - row1.length)
 
@@ -535,6 +570,15 @@ class JoinedRow5 extends InternalRow {
 
   override def length: Int = row1.length + row2.length
 
+  override def getUTF8String(i: Int): UTF8String = {
+    if (i < row1.length) row1.getUTF8String(i) else row2.getUTF8String(i - row1.length)
+  }
+
+  override def getBinary(i: Int): Array[Byte] = {
+    if (i < row1.length) row1.getBinary(i) else row2.getBinary(i - row1.length)
+  }
+
+
   override def get(i: Int): Any =
     if (i < row1.length) row1(i) else row2(i - row1.length)
 
@@ -622,6 +666,15 @@ class JoinedRow6 extends InternalRow {
   override def toSeq: Seq[Any] = row1.toSeq ++ row2.toSeq
 
   override def length: Int = row1.length + row2.length
+
+  override def getUTF8String(i: Int): UTF8String = {
+    if (i < row1.length) row1.getUTF8String(i) else row2.getUTF8String(i - row1.length)
+  }
+
+  override def getBinary(i: Int): Array[Byte] = {
+    if (i < row1.length) row1.getBinary(i) else row2.getBinary(i - row1.length)
+  }
+
 
   override def get(i: Int): Any =
     if (i < row1.length) row1(i) else row2(i - row1.length)
