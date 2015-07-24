@@ -89,19 +89,31 @@ case class Filter(condition: Expression, child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
 }
 
-case class Union(left: LogicalPlan, right: LogicalPlan) extends BinaryNode {
+abstract class SetOperation(left: LogicalPlan, right: LogicalPlan) extends BinaryNode {
   // TODO: These aren't really the same attributes as nullability etc might change.
-  override def output: Seq[Attribute] = left.output
+  final override def output: Seq[Attribute] = left.output
 
-  override lazy val resolved: Boolean =
+  final override lazy val resolved: Boolean =
     childrenResolved &&
-    left.output.zip(right.output).forall { case (l, r) => l.dataType == r.dataType }
+      left.output.length == right.output.length &&
+      left.output.zip(right.output).forall { case (l, r) => l.dataType == r.dataType }
+}
+
+private[sql] object SetOperation {
+  def unapply(p: SetOperation): Option[(LogicalPlan, LogicalPlan)] = Some((p.left, p.right))
+}
+
+case class Union(left: LogicalPlan, right: LogicalPlan) extends SetOperation(left, right) {
 
   override def statistics: Statistics = {
     val sizeInBytes = left.statistics.sizeInBytes + right.statistics.sizeInBytes
     Statistics(sizeInBytes = sizeInBytes)
   }
 }
+
+case class Intersect(left: LogicalPlan, right: LogicalPlan) extends SetOperation(left, right)
+
+case class Except(left: LogicalPlan, right: LogicalPlan) extends SetOperation(left, right)
 
 case class Join(
   left: LogicalPlan,
@@ -137,15 +149,6 @@ case class Join(
  */
 case class BroadcastHint(child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
-}
-
-
-case class Except(left: LogicalPlan, right: LogicalPlan) extends BinaryNode {
-  override def output: Seq[Attribute] = left.output
-
-  override lazy val resolved: Boolean =
-    childrenResolved &&
-      left.output.zip(right.output).forall { case (l, r) => l.dataType == r.dataType }
 }
 
 case class InsertIntoTable(
@@ -440,10 +443,3 @@ case object OneRowRelation extends LeafNode {
   override def statistics: Statistics = Statistics(sizeInBytes = 1)
 }
 
-case class Intersect(left: LogicalPlan, right: LogicalPlan) extends BinaryNode {
-  override def output: Seq[Attribute] = left.output
-
-  override lazy val resolved: Boolean =
-    childrenResolved &&
-      left.output.zip(right.output).forall { case (l, r) => l.dataType == r.dataType }
-}

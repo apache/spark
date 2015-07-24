@@ -147,6 +147,23 @@ class AnalysisErrorSuite extends SparkFunSuite with BeforeAndAfter {
     UnresolvedTestPlan(),
     "unresolved" :: Nil)
 
+  errorTest(
+    "union with unequal number of columns",
+    testRelation.unionAll(testRelation2),
+    "union" :: "number of columns" :: testRelation2.output.length.toString ::
+      testRelation.output.length.toString :: Nil)
+
+  errorTest(
+    "intersect with unequal number of columns",
+    testRelation.intersect(testRelation2),
+    "intersect" :: "number of columns" :: testRelation2.output.length.toString ::
+      testRelation.output.length.toString :: Nil)
+
+  errorTest(
+    "except with unequal number of columns",
+    testRelation.except(testRelation2),
+    "except" :: "number of columns" :: testRelation2.output.length.toString ::
+      testRelation.output.length.toString :: Nil)
 
   test("SPARK-6452 regression test") {
     // CheckAnalysis should throw AnalysisException when Aggregate contains missing attribute(s)
