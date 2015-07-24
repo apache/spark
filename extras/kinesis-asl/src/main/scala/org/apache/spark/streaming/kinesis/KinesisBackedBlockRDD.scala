@@ -234,6 +234,7 @@ class KinesisSequenceRangeIterator(
     getShardIteratorResult.getShardIterator
   }
 
+  /** Helper method to retry Kinesis API request with exponential backoff and timeouts */
   private def retryOrTimeout[T](message: String)(body: => T): T = {
     import KinesisSequenceRangeIterator._
 
@@ -243,9 +244,11 @@ class KinesisSequenceRangeIterator(
     var result: Option[T] = None
     var lastError: Throwable = null
 
-    def timeSpentMs = System.currentTimeMillis() - startTimeMs
+    def isTimedOut = (System.currentTimeMillis() - startTimeMs) >= retryTimeoutMs
+    def isMaxRetryDone = retryCount >= MAX_RETRIES
 
-    while (result == null && retryCount < MAX_RETRIES && timeSpentMs <= retryTimeoutMs) {
+
+    while (result == null && !isTimedOut && !isMaxRetryDone) {
       Thread.sleep(waitTimeMs)
       try {
         result = Some(body)
@@ -254,17 +257,22 @@ class KinesisSequenceRangeIterator(
           lastError = t
            t match {
              case ptee: ProvisionedThroughputExceededException =>
-               logWarning(s"Exception while $message", ptee)
+               logWarning(s"Error while $message [attempt = ${retryCount + 1}]", ptee)
              case e: Throwable =>
-               throw new SparkException(s"Error $message", e)
+               throw new SparkException(s"Error while $message", e)
            }
-      } finally {
-        retryCount += 1
-        if (waitTimeMs == 0) waitTimeMs = MIN_RETRY_WAIT_TIME_MS else waitTimeMs *= 2
       }
+      retryCount += 1
+      if (waitTimeMs == 0) waitTimeMs = MIN_RETRY_WAIT_TIME_MS else waitTimeMs *= 2
     }
     result.getOrElse {
-      throw new SparkException(s"Timed out while $message, last exception: ", lastError)
+      if (isTimedOut) {
+        throw new SparkException(
+          s"Timed out after $retryTimeoutMs ms while $message, last exception: ", lastError)
+      } else {
+        throw new SparkException(
+          s"Gave up after $retryCount retries while $message, last exception: ", lastError)
+      }
     }
   }
 }
