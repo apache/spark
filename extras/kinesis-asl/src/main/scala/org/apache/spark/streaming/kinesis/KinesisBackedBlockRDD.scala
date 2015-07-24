@@ -171,7 +171,7 @@ class KinesisSequenceRangeIterator(
         val nextRecord: Record = internalIterator.next()
         val byteBuffer = nextRecord.getData()
         nextBytes = new Array[Byte](byteBuffer.remaining())
-        byteBuffer.get(nextBytes )
+        byteBuffer.get(nextBytes)
         lastSeqNumber = nextRecord.getSequenceNumber()
 
         // If the this record's sequence number matches the stopping sequence number, then make sure
