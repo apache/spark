@@ -110,6 +110,18 @@ private[sql] object BinaryArithmetic {
   def unapply(e: BinaryArithmetic): Option[(Expression, Expression)] = Some((e.left, e.right))
 }
 
+/**
+ * An expression used to wrap the children when promote the precision of DecimalType to avoid
+ * promote multiple times.
+ */
+case class ChangeDecimalPrecision(child: Expression) extends UnaryExpression {
+  override def dataType: DataType = child.dataType
+  override def eval(input: InternalRow): Any = child.eval(input)
+  override def gen(ctx: CodeGenContext): GeneratedExpressionCode = child.gen(ctx)
+  override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = ""
+  override def prettyName: String = "change_decimal_precision"
+}
+
 case class Add(left: Expression, right: Expression) extends BinaryArithmetic {
 
   override def inputType: AbstractDataType = TypeCollection.NumericAndInterval
