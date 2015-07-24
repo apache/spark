@@ -599,7 +599,8 @@ class FeedForwardModel private(val layerModels: Array[LayerModel],
   }
 
   override def predict(data: Vector): Vector = {
-    val result = forward(data.toBreeze.toDenseVector.toDenseMatrix.t)
+    val size = data.size
+    val result = forward(new BDM[Double](size, 1, data.toArray))
     Vectors.dense(result.last.toArray)
   }
 }
