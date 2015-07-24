@@ -61,7 +61,7 @@ case class GeneratedAggregate(
       if (groupingExpressions == Nil) {
         AllTuples :: Nil
       } else {
-        ClusteredDistribution(groupingExpressions) :: Nil
+        NullSafeClusteredDistribution(groupingExpressions) :: Nil
       }
     }
 

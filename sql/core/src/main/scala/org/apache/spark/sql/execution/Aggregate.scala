@@ -52,7 +52,7 @@ case class Aggregate(
       if (groupingExpressions == Nil) {
         AllTuples :: Nil
       } else {
-        ClusteredDistribution(groupingExpressions) :: Nil
+        NullSafeClusteredDistribution(groupingExpressions) :: Nil
       }
     }
   }

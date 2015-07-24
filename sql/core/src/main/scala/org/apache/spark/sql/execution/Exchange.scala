@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.errors.attachTree
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.types.IntegerType
 import org.apache.spark.util.MutablePair
 import org.apache.spark.{HashPartitioner, Partitioner, RangePartitioner, SparkEnv}
 
@@ -140,10 +141,13 @@ case class Exchange(newPartitioning: Partitioning, child: SparkPlan) extends Una
     }
   }
 
+  private val advancedSqlOptimizations = child.sqlContext.conf.advancedSqlOptimizations
+
   protected override def doExecute(): RDD[InternalRow] = attachTree(this , "execute") {
     val rdd = child.execute()
     val part: Partitioner = newPartitioning match {
-      case HashPartitioning(expressions, numPartitions) => new HashPartitioner(numPartitions)
+      case NullSafeHashPartitioning(expressions, numPartitions) => new HashPartitioner(numPartitions)
+      case NullUnsafeHashPartitioning(expressions, numPartitions) => new HashPartitioner(numPartitions)
       case RangePartitioning(sortingExpressions, numPartitions) =>
         // Internally, RangePartitioner runs a job on the RDD that samples keys to compute
         // partition bounds. To get accurate samples, we need to copy the mutable keys.
@@ -162,7 +166,24 @@ case class Exchange(newPartitioning: Partitioning, child: SparkPlan) extends Una
       // TODO: Handle BroadcastPartitioning.
     }
     def getPartitionKeyExtractor(): InternalRow => InternalRow = newPartitioning match {
-      case HashPartitioning(expressions, _) => newMutableProjection(expressions, child.output)()
+      case NullSafeHashPartitioning(expressions, _) => newMutableProjection(expressions, child.output)()
+      case NullUnsafeHashPartitioning(expressions, numPartition) if advancedSqlOptimizations =>
+        // For NullUnsafeHashPartitioning, we do not want to send rows having any expression
+        // in `expressions` evaluated as null to the same node.
+        val materalizeExpressions = newMutableProjection(expressions, child.output)()
+        val partitionExpressionSchema = expressions.map { expr =>
+          Alias(expr, "partitionExpr")().toAttribute
+        }
+        val partitionId =
+          If(
+            AtLeastNNonNulls(partitionExpressionSchema.length, partitionExpressionSchema),
+            RowHashCode,
+            Cast(Multiply(new Rand(numPartition), Literal(numPartition.toDouble)), IntegerType))
+        val partitionIdExtractor =
+          newMutableProjection(partitionId :: Nil, partitionExpressionSchema)()
+        (row: InternalRow) => partitionIdExtractor(materalizeExpressions(row))
+      case NullUnsafeHashPartitioning(expressions, numPartition) =>
+        newMutableProjection(expressions, child.output)()
       case RangePartitioning(_, _) | SinglePartition => identity
       case _ => sys.error(s"Exchange not implemented for $newPartitioning")
     }
@@ -276,8 +297,10 @@ private[sql] case class EnsureRequirements(sqlContext: SQLContext) extends Rule[
         val fixedChildren = requirements.zipped.map {
           case (AllTuples, rowOrdering, child) =>
             addOperatorsIfNecessary(SinglePartition, rowOrdering, child)
-          case (ClusteredDistribution(clustering), rowOrdering, child) =>
-            addOperatorsIfNecessary(HashPartitioning(clustering, numPartitions), rowOrdering, child)
+          case (NullSafeClusteredDistribution(clustering), rowOrdering, child) =>
+            addOperatorsIfNecessary(NullSafeHashPartitioning(clustering, numPartitions), rowOrdering, child)
+          case (NullUnsafeClusteredDistribution(clustering), rowOrdering, child) =>
+            addOperatorsIfNecessary(NullUnsafeHashPartitioning(clustering, numPartitions), rowOrdering, child)
           case (OrderedDistribution(ordering), rowOrdering, child) =>
             addOperatorsIfNecessary(RangePartitioning(ordering, numPartitions), rowOrdering, child)
 

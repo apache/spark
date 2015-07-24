@@ -92,7 +92,7 @@ case class Window(
       logWarning("No Partition Defined for Window operation! Moving all data to a single "
         + "partition, this can cause serious performance degradation.")
       AllTuples :: Nil
-    } else ClusteredDistribution(windowSpec.partitionSpec) :: Nil
+    } else NullSafeClusteredDistribution(windowSpec.partitionSpec) :: Nil
   }
 
   override def requiredChildOrdering: Seq[Seq[SortOrder]] =

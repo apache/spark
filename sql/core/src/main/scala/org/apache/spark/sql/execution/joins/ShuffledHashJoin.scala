@@ -21,7 +21,7 @@ import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Expression
-import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, Partitioning}
+import org.apache.spark.sql.catalyst.plans.physical.{Distribution, NullUnsafeClusteredDistribution, NullSafeClusteredDistribution, Partitioning}
 import org.apache.spark.sql.execution.{BinaryNode, SparkPlan}
 
 /**
@@ -40,8 +40,8 @@ case class ShuffledHashJoin(
 
   override def outputPartitioning: Partitioning = left.outputPartitioning
 
-  override def requiredChildDistribution: Seq[ClusteredDistribution] =
-    ClusteredDistribution(leftKeys) :: ClusteredDistribution(rightKeys) :: Nil
+  override def requiredChildDistribution: Seq[Distribution] =
+    NullUnsafeClusteredDistribution(leftKeys) :: NullUnsafeClusteredDistribution(rightKeys) :: Nil
 
   protected override def doExecute(): RDD[InternalRow] = {
     buildPlan.execute().zipPartitions(streamedPlan.execute()) { (buildIter, streamIter) =>
