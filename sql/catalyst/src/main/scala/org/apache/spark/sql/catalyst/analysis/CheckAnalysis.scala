@@ -98,6 +98,10 @@ trait CheckAnalysis {
 
             aggregateExprs.foreach(checkValidAggregateExpression)
 
+          case Sort(order, _, _) if !order.forall(_.dataType.isInstanceOf[AtomicType]) =>
+            val c = order.filterNot(_.dataType.isInstanceOf[AtomicType]).head
+            failAnalysis(s"Sorting is not supported for columns of type ${c.dataType.simpleString}")
+
           case _ => // Fallbacks to the following checks
         }
 
