@@ -23,6 +23,7 @@ import java.sql.Timestamp
 
 import org.apache.spark.sql.catalyst.DefaultParserDialect
 import org.apache.spark.sql.catalyst.errors.DialectException
+import org.apache.spark.sql.execution.aggregate.Aggregate2Sort
 import org.apache.spark.sql.execution.GeneratedAggregate
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.TestData._
@@ -204,6 +205,7 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll with SQLTestUtils {
       var hasGeneratedAgg = false
       df.queryExecution.executedPlan.foreach {
         case generatedAgg: GeneratedAggregate => hasGeneratedAgg = true
+        case newAggregate: Aggregate2Sort => hasGeneratedAgg = true
         case _ =>
       }
       if (!hasGeneratedAgg) {
@@ -285,7 +287,7 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll with SQLTestUtils {
       // Aggregate with Code generation handling all null values
       testCodeGen(
         "SELECT  sum('a'), avg('a'), count(null) FROM testData",
-        Row(0, null, 0) :: Nil)
+        Row(null, null, 0) :: Nil)
     } finally {
       sqlContext.dropTempTable("testData3x")
       sqlContext.setConf(SQLConf.CODEGEN_ENABLED, originalValue)

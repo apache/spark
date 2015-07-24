@@ -409,7 +409,7 @@ private[hive] case class HiveWindowFunction(
 
 private[hive] case class HiveGenericUDAF(
     funcWrapper: HiveFunctionWrapper,
-    children: Seq[Expression]) extends AggregateExpression
+    children: Seq[Expression]) extends AggregateExpression1
   with HiveInspectors {
 
   type UDFType = AbstractGenericUDAFResolver
@@ -441,7 +441,7 @@ private[hive] case class HiveGenericUDAF(
 /** It is used as a wrapper for the hive functions which uses UDAF interface */
 private[hive] case class HiveUDAF(
     funcWrapper: HiveFunctionWrapper,
-    children: Seq[Expression]) extends AggregateExpression
+    children: Seq[Expression]) extends AggregateExpression1
   with HiveInspectors {
 
   type UDFType = UDAF
@@ -550,9 +550,9 @@ private[hive] case class HiveGenericUDTF(
 private[hive] case class HiveUDAFFunction(
     funcWrapper: HiveFunctionWrapper,
     exprs: Seq[Expression],
-    base: AggregateExpression,
+    base: AggregateExpression1,
     isUDAFBridgeRequired: Boolean = false)
-  extends AggregateFunction
+  extends AggregateFunction1
   with HiveInspectors {
 
   def this() = this(null, null, null)

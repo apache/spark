@@ -541,20 +541,44 @@ object SimplifyFilters extends Rule[LogicalPlan] {
  *
  * This heuristic is valid assuming the expression evaluation cost is minimal.
  */
-object PushPredicateThroughProject extends Rule[LogicalPlan] {
+object PushPredicateThroughProject extends Rule[LogicalPlan] with PredicateHelper {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case filter @ Filter(condition, project @ Project(fields, grandChild)) =>
-      val sourceAliases = fields.collect { case a @ Alias(c, _) =>
-        (a.toAttribute: Attribute) -> c
-      }.toMap
-      project.copy(child = filter.copy(
-        replaceAlias(condition, sourceAliases),
-        grandChild))
+      // Create a map of Aliases to their values from the child projection.
+      // e.g., 'SELECT a + b AS c, d ...' produces Map(c -> a + b).
+      val aliasMap = AttributeMap(fields.collect {
+        case a: Alias => (a.toAttribute, a.child)
+      })
+
+      // Split the condition into small conditions by `And`, so that we can push down part of this
+      // condition without nondeterministic expressions.
+      val andConditions = splitConjunctivePredicates(condition)
+
+      val (deterministic, nondeterministic) = andConditions.partition(_.collect {
+        case a: Attribute if aliasMap.contains(a) => aliasMap(a)
+      }.forall(_.deterministic))
+
+      // If there is no nondeterministic conditions, push down the whole condition.
+      if (nondeterministic.isEmpty) {
+        project.copy(child = Filter(replaceAlias(condition, aliasMap), grandChild))
+      } else {
+        // If they are all nondeterministic conditions, leave it un-changed.
+        if (deterministic.isEmpty) {
+          filter
+        } else {
+          // Push down the small conditions without nondeterministic expressions.
+          val pushedCondition = deterministic.map(replaceAlias(_, aliasMap)).reduce(And)
+          Filter(nondeterministic.reduce(And),
+            project.copy(child = Filter(pushedCondition, grandChild)))
+        }
+      }
   }
 
-  private def replaceAlias(condition: Expression, sourceAliases: Map[Attribute, Expression]) = {
-    condition transform {
-      case a: AttributeReference => sourceAliases.getOrElse(a, a)
+  // Substitute any attributes that are produced by the child projection, so that we safely
+  // eliminate it.
+  private def replaceAlias(condition: Expression, sourceAliases: AttributeMap[Expression]) = {
+    condition.transform {
+      case a: Attribute => sourceAliases.getOrElse(a, a)
     }
   }
 }
