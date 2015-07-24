@@ -212,9 +212,9 @@ def clear(args):
     dag = dagbag.dags[args.dag_id]
 
     if args.start_date:
-        args.start_date = datetime.strptime(args.start_date, '%Y-%m-%d')
+        args.start_date = dateutil.parser.parse(args.start_date)
     if args.end_date:
-        args.end_date = datetime.strptime(args.end_date, '%Y-%m-%d')
+        args.end_date = dateutil.parser.parse(args.end_date)
 
     if args.task_regex:
         dag = dag.sub_dag(
