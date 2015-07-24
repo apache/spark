@@ -175,7 +175,8 @@ private[netty] class Dispatcher(nettyEnv: NettyRpcEnv) extends Logging {
     }
   }
 
-  private val parallelism = Runtime.getRuntime.availableProcessors()
+  private val parallelism = nettyEnv.conf.getInt("spark.rpc.netty.dispatcher.parallelism",
+    Runtime.getRuntime.availableProcessors())
 
   private val executor = ThreadUtils.newDaemonFixedThreadPool(parallelism, "dispatcher-event-loop")
   (0 until parallelism) foreach { _ =>
