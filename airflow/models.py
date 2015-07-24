@@ -957,7 +957,7 @@ class TaskInstance(Base):
                 elif isinstance(content, dict):
                     result = {
                         k: rt(v, jinja_context)
-                        for k, v in content.item()}
+                        for k, v in content.items()}
                 else:
                     raise AirflowException("Type not supported for templating")
                 setattr(task, attr, result)
