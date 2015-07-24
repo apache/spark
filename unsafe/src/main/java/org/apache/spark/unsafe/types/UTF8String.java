@@ -144,7 +144,7 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
    */
   public UTF8String substring(final int start, final int until) {
     if (until <= start || start >= numBytes) {
-      return fromBytes(new byte[0]);
+      return UTF8String.EMPTY_UTF8;
     }
     int j = firstByteIndex(0, 0, start);
     int i = firstByteIndex(j, start, until);
@@ -502,9 +502,6 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
    * right) is returned. substring_index performs a case-sensitive match when searching for delim.
    */
   public UTF8String subStringIndex(UTF8String delim, int count) {
-    if (delim == null) {
-      return null;
-    }
     if (delim.numBytes == 0 || count == 0) {
       return UTF8String.EMPTY_UTF8;
     }

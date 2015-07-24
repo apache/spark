@@ -364,6 +364,7 @@ case class Substring_index(strExpr: Expression, delimExpr: Expression, countExpr
  extends Expression with ImplicitCastInputTypes {
 
   override def dataType: DataType = StringType
+  override def foldable: Boolean = strExpr.foldable && delimExpr.foldable && countExpr.foldable
   override def inputTypes: Seq[DataType] = Seq(StringType, StringType, IntegerType)
   override def nullable: Boolean = strExpr.nullable || delimExpr.nullable || countExpr.nullable
   override def children: Seq[Expression] = Seq(strExpr, delimExpr, countExpr)

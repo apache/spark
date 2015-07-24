@@ -321,9 +321,6 @@ public class UTF8StringSuite {
       fromString("www||apache||org").subStringIndex(fromString("||"), 2));
     assertEquals(fromString("apache||org"),
       fromString("www||apache||org").subStringIndex(fromString("||"), -2));
-    // null
-    assertEquals(null,
-      fromString("www.apache.org").subStringIndex(null, -2));
     // non ascii chars
     assertEquals(fromString("大千世界大"),
       fromString("大千世界大千世界").subStringIndex(fromString("千"), 2));
