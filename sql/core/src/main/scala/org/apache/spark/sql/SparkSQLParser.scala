@@ -90,17 +90,23 @@ private[sql] class SparkSQLParser(fallback: String => LogicalPlan) extends Abstr
       case input => SetCommandParser(input)
     }
 
+  // It can be the following patterns:
+  // SHOW FUNCTIONS;
+  // SHOW FUNCTIONS mydb.func1;
+  // SHOW FUNCTIONS func1;
+  // SHOW FUNCTIONS `mydb.a`.`func1.aa`;
   private lazy val show: Parser[LogicalPlan] =
     ( SHOW ~> TABLES ~ (IN ~> ident).? ^^ {
         case _ ~ dbName => ShowTablesCommand(dbName)
       }
-    | SHOW ~> FUNCTIONS ^^ {
-        case _ => ShowFunctions
+    | SHOW ~ FUNCTIONS ~> ((ident <~ ".").? ~ (ident | stringLit)).? ^^ {
+        case Some(f) => ShowFunctions(f._1, Some(f._2))
+        case None => ShowFunctions(None, None)
       }
     )
 
   private lazy val desc: Parser[LogicalPlan] =
-    DESCRIBE ~ FUNCTION ~> EXTENDED.? ~ ident ^^ {
+    DESCRIBE ~ FUNCTION ~> EXTENDED.? ~ (ident | stringLit) ^^ {
       case isExtended ~ functionName => DescribeFunction(functionName, isExtended.isDefined)
     }
 

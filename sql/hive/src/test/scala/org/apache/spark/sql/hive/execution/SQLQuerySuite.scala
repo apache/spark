@@ -142,6 +142,16 @@ class SQLQuerySuite extends QueryTest {
       (FunctionRegistry.builtin.listFunction().toSet[String] ++
         org.apache.hadoop.hive.ql.exec.FunctionRegistry.getFunctionNames).toList.sorted
     checkAnswer(sql("SHOW functions"), allFunctions.map(Row(_)))
+    checkAnswer(sql("SHOW functions abs"), Row("abs"))
+    checkAnswer(sql("SHOW functions 'abs'"), Row("abs"))
+    checkAnswer(sql("SHOW functions abc.abs"), Row("abs"))
+    checkAnswer(sql("SHOW functions `abc`.`abs`"), Row("abs"))
+    checkAnswer(sql("SHOW functions `abc`.`abs`"), Row("abs"))
+    checkAnswer(sql("SHOW functions `~`"), Row("~"))
+    checkAnswer(sql("SHOW functions `a function doens't exist`"), Nil)
+    checkAnswer(sql("SHOW functions `weekofyea.*`"), Row("weekofyear"))
+    // this probably will failed if we add more function with `sha` prefixing.
+    checkAnswer(sql("SHOW functions `sha.*`"), Row("sha") :: Row("sha1") :: Row("sha2") :: Nil)
   }
 
   test("describe functions") {
@@ -164,6 +174,11 @@ class SQLQuerySuite extends QueryTest {
 
     checkExistence(sql("describe functioN abcadf"), true,
       "Function: abcadf is not found.")
+
+    checkExistence(sql("describe functioN  `~`"), true,
+      "Function: ~",
+      "Class: org.apache.hadoop.hive.ql.udf.UDFOPBitNot",
+      "Usage: ~ n - Bitwise not")
   }
 
   test("SPARK-5371: union with null and sum") {

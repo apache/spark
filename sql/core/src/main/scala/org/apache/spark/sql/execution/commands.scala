@@ -305,8 +305,9 @@ case class ShowTablesCommand(databaseName: Option[String]) extends RunnableComma
  * {{{
  *    SHOW FUNCTIONS
  * }}}
+ * TODO currently we are simply ignore the db
  */
-case object ShowFunctions extends RunnableCommand {
+case class ShowFunctions(db: Option[String], pattern: Option[String]) extends RunnableCommand {
   override val output: Seq[Attribute] = {
     val schema = StructType(
       StructField("function", StringType, nullable = false) :: Nil)
@@ -314,8 +315,17 @@ case object ShowFunctions extends RunnableCommand {
     schema.toAttributes
   }
 
-  override def run(sqlContext: SQLContext): Seq[Row] = {
-    sqlContext.functionRegistry.listFunction().map(Row(_))
+  override def run(sqlContext: SQLContext): Seq[Row] = pattern match {
+    case Some(p) =>
+      try {
+        val regex = java.util.regex.Pattern.compile(p)
+        sqlContext.functionRegistry.listFunction().filter(regex.matcher(_).matches()).map(Row(_))
+      } catch {
+        // probably will failed in the regex that user provided, returns empty row.
+        case _ => Nil
+      }
+    case None =>
+      sqlContext.functionRegistry.listFunction().map(Row(_))
   }
 }
 
