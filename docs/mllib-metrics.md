@@ -32,15 +32,15 @@ on data. When applying these algorithms, there is a need to evaluate their perfo
 on the application and its requirements. Spark's MLlib also provides a suite of metrics for the purpose of evaluating the
 performance of its algorithms.
 
-Specific machine learning algorithms fall under broader types of machine learning applications like classification, regression,
-clustering, etc. Each of these types have well established metrics for performance evaluation and those metrics that
-are currently available in Spark's MLlib are detailed in this section.
+Specific machine learning algorithms fall under broader types of machine learning applications like classification,
+regression, clustering, etc. Each of these types have well established metrics for performance evaluation and those
+metrics that are currently available in Spark's MLlib are detailed in this section.
 
 ## Binary Classification
 
-[Binary classifiers](https://en.wikipedia.org/wiki/Binary_classification) are used to separate the elements of a given dataset into one of two possible groups (e.g. fraud
-or not fraud) and is a special case of multiclass classification. Most binary classification metrics can be
-generalized to multiclass classification metrics.
+[Binary classifiers](https://en.wikipedia.org/wiki/Binary_classification) are used to separate the elements of a given
+dataset into one of two possible groups (e.g. fraud or not fraud) and is a special case of multiclass classification.
+Most binary classification metrics can be generalized to multiclass classification metrics.
 
 <table class="table">
   <thead>
@@ -167,8 +167,6 @@ import org.apache.spark.mllib.regression.LabeledPoint;
 import org.apache.spark.mllib.util.MLUtils;
 import org.apache.spark.SparkConf;
 import org.apache.spark.SparkContext;
-import java.util.Collections;
-import java.util.List;
 
 public class BinaryClassification {
   public static void main(String[] args) {
@@ -317,7 +315,7 @@ $$\hat{\delta}(x) = \begin{cases}1 & \text{if $x = 0$}, \\ 0 & \text{otherwise}.
     <tr>
       <td>Confusion Matrix</td>
       <td>
-        $C_{ij} = \sum_{k=0}^{N-1} \hat{\delta}(\mathbf{y}_k-\ell_i) \cdot \hat{\delta}(\hat{\mathbf{y}}_k - \ell_j) \\ \\
+        $C_{ij} = \sum_{k=0}^{N-1} \hat{\delta}(\mathbf{y}_k-\ell_i) \cdot \hat{\delta}(\hat{\mathbf{y}}_k - \ell_j)\\ \\
          \left( \begin{array}{ccc}
          \sum_{k=0}^{N-1} \hat{\delta}(\mathbf{y}_k-\ell_1) \cdot \hat{\delta}(\hat{\mathbf{y}}_k - \ell_1) & \ldots &
          \sum_{k=0}^{N-1} \hat{\delta}(\mathbf{y}_k-\ell_1) \cdot \hat{\delta}(\hat{\mathbf{y}}_k - \ell_N) \\
@@ -329,16 +327,18 @@ $$\hat{\delta}(x) = \begin{cases}1 & \text{if $x = 0$}, \\ 0 & \text{otherwise}.
     </tr>
     <tr>
       <td>Overall Precision</td>
-      <td>$PPV = \frac{TP}{TP + FP} = \frac{1}{N}\sum_{i=0}^{N-1} \hat{\delta}\left(\hat{\mathbf{y}}_i - \mathbf{y}_i\right)$</td>
+      <td>$PPV = \frac{TP}{TP + FP} = \frac{1}{N}\sum_{i=0}^{N-1} \hat{\delta}\left(\hat{\mathbf{y}}_i -
+        \mathbf{y}_i\right)$</td>
     </tr>
     <tr>
       <td>Overall Recall</td>
-      <td>$TPR = \frac{TP}{TP + FN} = \frac{1}{N}\sum_{i=0}^{N-1} \hat{\delta}\left(\hat{\mathbf{y}}_i - \mathbf{y}_i\right)$</td>
+      <td>$TPR = \frac{TP}{TP + FN} = \frac{1}{N}\sum_{i=0}^{N-1} \hat{\delta}\left(\hat{\mathbf{y}}_i -
+        \mathbf{y}_i\right)$</td>
     </tr>
     <tr>
-      <td>Overall F-measure</td>
-      <td>$F(\beta) = \left(1 + \beta^2\right) \cdot \left(\frac{PPV \cdot TPR}
-          {\beta^2 \cdot PPV + TPR}\right)$</td>
+      <td>Overall F1-measure</td>
+      <td>$F1 = 2 \cdot \left(\frac{PPV \cdot TPR}
+          {PPV + TPR}\right)$</td>
     </tr>
     <tr>
       <td>Precision by label</td>
@@ -933,7 +933,7 @@ $$rel_D(r) = \begin{cases}1 & \text{if $r \in D$}, \\ 0 & \text{otherwise}.\end{
         Precision at k
       </td>
       <td>
-        $p(k)=\frac{1}{M} \sum_{i=0}^{M-1} {\frac{1}{k} \sum_{j=0}^{k-1} rel_{D_i}(R_i(j))}$
+        $p(k)=\frac{1}{M} \sum_{i=0}^{M-1} {\frac{1}{k} \sum_{j=0}^{\text{min}(\left|D\right|, k) - 1} rel_{D_i}(R_i(j))}$
       </td>
     </tr>
     <tr>
@@ -945,10 +945,11 @@ $$rel_D(r) = \begin{cases}1 & \text{if $r \in D$}, \\ 0 & \text{otherwise}.\end{
     <tr>
       <td>Normalized Discounted Cumulative Gain</td>
       <td>
-        $NDCG(k)=\frac{1}{M} \sum_{i=0}^{M-1} {\frac{1}{IDCG(D_i, k)}\sum_{j=0}^{n-1} \frac{rel_{D_i}(R_i(j))}{log_2(j+1)}} \\
+        $NDCG(k)=\frac{1}{M} \sum_{i=0}^{M-1} {\frac{1}{IDCG(D_i, k)}\sum_{j=0}^{n-1}
+          \frac{rel_{D_i}(R_i(j))}{\text{ln}(j+1)}} \\
         \text{Where} \\
         \hspace{5 mm} n = \text{min}\left(\text{max}\left(|R_i|,|D_i|\right),k\right) \\
-        \hspace{5 mm} IDCG(D, k) = \sum_{j=0}^{min(\left|D\right|, k) - 1} \frac{1}{log_2(j+1)}$
+        \hspace{5 mm} IDCG(D, k) = \sum_{j=0}^{\text{min}(\left|D\right|, k) - 1} \frac{1}{\text{ln}(j+1)}$
       </td>
     </tr>
   </tbody>
@@ -1289,20 +1290,25 @@ metrics refer to a continuous output variable.
   </thead>
   <tbody>
     <tr>
-      <td>Mean Squared Error (MSE)</td><td>$MSE = \frac{\sum_{i=0}^{N-1} (\mathbf{y}_i - \hat{\mathbf{y}}_i)^2}{N}$</td>
+      <td>Mean Squared Error (MSE)</td>
+      <td>$MSE = \frac{\sum_{i=0}^{N-1} (\mathbf{y}_i - \hat{\mathbf{y}}_i)^2}{N}$</td>
     </tr>
     <tr>
-      <td>Root Mean Squared Error (RMSE)</td><td>$RMSE = \sqrt{\frac{\sum_{i=0}^{N-1} (\mathbf{y}_i - \hat{\mathbf{y}}_i)^2}{N}}$</td>
+      <td>Root Mean Squared Error (RMSE)</td>
+      <td>$RMSE = \sqrt{\frac{\sum_{i=0}^{N-1} (\mathbf{y}_i - \hat{\mathbf{y}}_i)^2}{N}}$</td>
     </tr>
     <tr>
-      <td>Coefficient of Determination $(R^2)$</td><td>$R^2=1 - \frac{MSE}{VAR(\mathbf{y}) \cdot (N-1)}=
-        1-\frac{\sum_{i=0}^{N-1} (\mathbf{y}_i - \hat{\mathbf{y}}_i)^2}{\sum_{i=0}^{N-1}(\mathbf{y}_i-\bar{\mathbf{y}})^2}$</td>
+      <td>Coefficient of Determination $(R^2)$</td>
+      <td>$R^2=1 - \frac{MSE}{\text{VAR}(\mathbf{y}) \cdot (N-1)}=1-\frac{\sum_{i=0}^{N-1}
+        (\mathbf{y}_i - \hat{\mathbf{y}}_i)^2}{\sum_{i=0}^{N-1}(\mathbf{y}_i-\bar{\mathbf{y}})^2}$</td>
     </tr>
     <tr>
-      <td>Mean Absoloute Error (MAE)</td><td>$MAE=\sum_{i=0}^{N-1} \left|\mathbf{y}_i - \hat{\mathbf{y}}_i\right|$</td>
+      <td>Mean Absoloute Error (MAE)</td>
+      <td>$MAE=\sum_{i=0}^{N-1} \left|\mathbf{y}_i - \hat{\mathbf{y}}_i\right|$</td>
     </tr>
     <tr>
-      <td>Explained Variance</td><td>$1 - \frac{VAR(\mathbf{y} - \mathbf{\hat{y}})}{VAR(\mathbf{y})}$</td>
+      <td>Explained Variance</td>
+      <td>$1 - \frac{\text{VAR}(\mathbf{y} - \mathbf{\hat{y}})}{\text{VAR}(\mathbf{y})}$</td>
     </tr>
   </tbody>
 </table>
