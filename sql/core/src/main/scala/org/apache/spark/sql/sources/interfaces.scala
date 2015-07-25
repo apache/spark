@@ -593,6 +593,11 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
    *
    * @since 1.4.0
    */
+  // TODO Tries to eliminate the extra Catalyst-to-Scala conversion when `needConversion` is true
+  //
+  // PR #7626 separated `Row` and `InternalRow` completely.  One of the consequences is that we can
+  // no longer treat an `InternalRow` containing Catalyst values as a `Row`.  Thus we have to
+  // introduce another row value conversion for data sources whose `needConversion` is true.
   def buildScan(requiredColumns: Array[String], inputFiles: Array[FileStatus]): RDD[Row] = {
     // Yeah, to workaround serialization...
     val dataSchema = this.dataSchema
