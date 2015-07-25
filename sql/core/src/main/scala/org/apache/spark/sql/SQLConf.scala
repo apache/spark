@@ -76,6 +76,9 @@ private[spark] object SQLConf {
   // NOTE: This property should be set in Hadoop `Configuration` rather than Spark `SQLConf`
   val OUTPUT_COMMITTER_CLASS = "spark.sql.sources.outputCommitterClass"
 
+  val PARALLEL_PARTITION_DISCOVERY_THRESHOLD =
+    "spark.sql.sources.parallelPartitionDiscovery.threshold"
+
   // Whether to perform eager analysis when constructing a dataframe.
   // Set to false when debugging requires the ability to look at invalid query plans.
   val DATAFRAME_EAGER_ANALYSIS = "spark.sql.eagerAnalysis"
@@ -250,6 +253,9 @@ private[sql] class SQLConf extends Serializable with CatalystConf {
 
   private[spark] def partitionDiscoveryEnabled() =
     getConf(SQLConf.PARTITION_DISCOVERY_ENABLED, "true").toBoolean
+
+  private[spark] def parallelPartitionDiscoveryThreshold: Int =
+    getConf(SQLConf.PARALLEL_PARTITION_DISCOVERY_THRESHOLD, "32").toInt
 
   // Do not use a value larger than 4000 as the default value of this property.
   // See the comments of SCHEMA_STRING_LENGTH_THRESHOLD above for more information.

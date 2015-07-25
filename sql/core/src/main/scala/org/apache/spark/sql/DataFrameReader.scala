@@ -20,17 +20,17 @@ package org.apache.spark.sql
 import java.util.Properties
 
 import org.apache.hadoop.fs.Path
-import org.apache.spark.Partition
 
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.jdbc.{JDBCPartition, JDBCPartitioningInfo, JDBCRelation}
-import org.apache.spark.sql.json.{JsonRDD, JSONRelation}
+import org.apache.spark.sql.json.{JSONRelation, JsonRDD}
 import org.apache.spark.sql.parquet.ParquetRelation2
 import org.apache.spark.sql.sources.{LogicalRelation, ResolvedDataSource}
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.{Logging, Partition}
 
 /**
  * :: Experimental ::
@@ -40,7 +40,7 @@ import org.apache.spark.sql.types.StructType
  * @since 1.4.0
  */
 @Experimental
-class DataFrameReader private[sql](sqlContext: SQLContext) {
+class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
 
   /**
    * Specifies the input data source format.
@@ -260,10 +260,16 @@ class DataFrameReader private[sql](sqlContext: SQLContext) {
     if (paths.isEmpty) {
       sqlContext.emptyDataFrame
     } else {
-      val globbedPaths = paths.map(new Path(_)).flatMap(SparkHadoopUtil.get.globPath).toArray
+      val globbedPaths = paths.flatMap { path =>
+        val hdfsPath = new Path(path)
+        val fs = hdfsPath.getFileSystem(sqlContext.sparkContext.hadoopConfiguration)
+        val qualified = hdfsPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
+        SparkHadoopUtil.get.globPathIfNecessary(qualified)
+      }.toArray
+
       sqlContext.baseRelationToDataFrame(
         new ParquetRelation2(
-          globbedPaths.map(_.toString), None, None, Map.empty[String, String])(sqlContext))
+          globbedPaths.map(_.toString), None, None, extraOptions.toMap)(sqlContext))
     }
   }
 

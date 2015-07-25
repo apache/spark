@@ -246,7 +246,9 @@ private[sql] object ResolvedDataSource {
           val caseInsensitiveOptions = new CaseInsensitiveMap(options)
           val paths = {
             val patternPath = new Path(caseInsensitiveOptions("path"))
-            SparkHadoopUtil.get.globPath(patternPath).map(_.toString).toArray
+            val fs = patternPath.getFileSystem(sqlContext.sparkContext.hadoopConfiguration)
+            val qualifiedPattern = patternPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
+            SparkHadoopUtil.get.globPathIfNecessary(qualifiedPattern).map(_.toString).toArray
           }
 
           val dataSchema =
@@ -271,7 +273,9 @@ private[sql] object ResolvedDataSource {
           val caseInsensitiveOptions = new CaseInsensitiveMap(options)
           val paths = {
             val patternPath = new Path(caseInsensitiveOptions("path"))
-            SparkHadoopUtil.get.globPath(patternPath).map(_.toString).toArray
+            val fs = patternPath.getFileSystem(sqlContext.sparkContext.hadoopConfiguration)
+            val qualifiedPattern = patternPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
+            SparkHadoopUtil.get.globPathIfNecessary(qualifiedPattern).map(_.toString).toArray
           }
           dataSource.createRelation(sqlContext, paths, None, None, caseInsensitiveOptions)
         case dataSource: org.apache.spark.sql.sources.SchemaRelationProvider =>
