@@ -39,6 +39,16 @@ class Word2VecSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(syms(1)._1 == "c")
   }
 
+  test("Word2Vec throws exception when vocabulary is empty") {
+    intercept[IllegalArgumentException] {
+      val sentence = "a b c"
+      val localDoc = Seq(sentence, sentence)
+      val doc = sc.parallelize(localDoc)
+        .map(line => line.split(" ").toSeq)
+      new Word2Vec().setMinCount(10).fit(doc)
+    }
+  }
+
   test("Word2VecModel") {
     val num = 2
     val word2VecMap = Map(
