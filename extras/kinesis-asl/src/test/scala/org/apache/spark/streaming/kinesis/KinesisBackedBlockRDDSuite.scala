@@ -43,7 +43,7 @@ class KinesisBackedBlockRDDSuite extends KinesisFunSuite with BeforeAndAfterAll 
   override def beforeAll(): Unit = {
     runIfTestsEnabled("Prepare KinesisTestUtils") {
       testUtils = new KinesisTestUtils(endpointUrl)
-      testUtils.listStreams()
+      testUtils.deleteStreams()
       testUtils.createStream()
 
       shardIdToDataAndSeqNumbers = testUtils.pushData(testData)

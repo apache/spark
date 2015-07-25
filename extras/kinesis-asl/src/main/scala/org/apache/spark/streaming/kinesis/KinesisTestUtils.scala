@@ -101,6 +101,26 @@ private class KinesisTestUtils(
     // scalastyle:on println
   }
 
+  def deleteStreams(): Unit = {
+    val listStreamsRequest = new ListStreamsRequest()
+    listStreamsRequest.setLimit(100)
+    val listStreamsResult = kinesisClient.listStreams(listStreamsRequest)
+    val streamNames = listStreamsResult.getStreamNames()
+    // scalastyle:off println
+    println(s"${streamNames.size} streams")
+    for (name <- streamNames) {
+      println(s"Find stream $name")
+      if (name.startsWith("KinesisTestUtils-") && describeStream(name).nonEmpty) {
+        println(s"Deleting stream $name")
+        kinesisClient.deleteStream(name)
+        println(s"Deleted stream $name")
+      }
+    }
+    println("Streams after deleting")
+    listStreams()
+    // scalastyle:on println
+  }
+
   /**
    * Push data to Kinesis stream and return a map of
    * shardId -> seq of (data, seq number) pushed to corresponding shard
