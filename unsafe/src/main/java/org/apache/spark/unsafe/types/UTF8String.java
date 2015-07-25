@@ -96,6 +96,21 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
   }
 
   /**
+   * Writes the content of this string into a memory address, identified by an object and an offset.
+   * The target memory address must already been allocated, and have enough space to hold all the
+   * bytes in this string.
+   */
+  public void writeToMemory(Object target, long targetOffset) {
+    PlatformDependent.copyMemory(
+      base,
+      offset,
+      target,
+      targetOffset,
+      numBytes
+    );
+  }
+
+  /**
    * Returns the number of bytes for a code point with the first byte as `b`
    * @param b The first byte of a code point
    */

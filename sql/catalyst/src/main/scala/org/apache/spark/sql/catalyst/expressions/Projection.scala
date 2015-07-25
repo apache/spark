@@ -90,8 +90,10 @@ object UnsafeProjection {
    * Seq[Expression].
    */
   def canSupport(schema: StructType): Boolean = canSupport(schema.fields.map(_.dataType))
-  def canSupport(types: Array[DataType]): Boolean = types.forall(UnsafeColumnWriter.canEmbed(_))
   def canSupport(exprs: Seq[Expression]): Boolean = canSupport(exprs.map(_.dataType).toArray)
+  private def canSupport(types: Array[DataType]): Boolean = {
+    types.forall(GenerateUnsafeProjection.canSupport)
+  }
 
   /**
    * Returns an UnsafeProjection for given StructType.
