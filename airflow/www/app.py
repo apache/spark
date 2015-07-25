@@ -21,7 +21,7 @@ from flask import request
 import sqlalchemy as sqla
 from wtforms import (
     widgets,
-    Form, DateTimeField, SelectField, TextAreaField, PasswordField)
+    Form, DateTimeField, SelectField, TextAreaField, PasswordField, StringField)
 
 from pygments import highlight, lexers
 from pygments.formatters import HtmlFormatter
