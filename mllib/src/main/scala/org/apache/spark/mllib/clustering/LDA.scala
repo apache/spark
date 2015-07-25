@@ -44,6 +44,7 @@ import org.apache.spark.util.Utils
  *
  * @see [[http://en.wikipedia.org/wiki/Latent_Dirichlet_allocation Latent Dirichlet allocation
  *       (Wikipedia)]]
+ * @since 1.3.0
  */
 @Experimental
 class LDA private (
@@ -60,12 +61,15 @@ class LDA private (
 
   /**
    * Number of topics to infer.  I.e., the number of soft cluster centers.
+   *
+   * @since 1.3.0
    */
   def getK: Int = k
 
   /**
    * Number of topics to infer.  I.e., the number of soft cluster centers.
    * (default = 10)
+   * @since 1.3.0
    */
   def setK(k: Int): this.type = {
     require(k > 0, s"LDA k (number of clusters) must be > 0, but was set to $k")
@@ -78,6 +82,7 @@ class LDA private (
    * distributions over topics ("theta").
    *
    * This is the parameter to a symmetric Dirichlet distribution.
+   * @since 1.3.0
    */
   def getDocConcentration: Double = this.docConcentration
 
@@ -100,16 +105,23 @@ class LDA private (
    *     - Value should be >= 0
    *     - default = (1.0 / k), following the implementation from
    *       [[https://github.com/Blei-Lab/onlineldavb]].
+   * @since 1.3.0
    */
   def setDocConcentration(docConcentration: Double): this.type = {
     this.docConcentration = docConcentration
     this
   }
 
-  /** Alias for [[getDocConcentration]] */
+  /**
+   * Alias for [[getDocConcentration]] 
+   * @since 1.3.0
+   */
   def getAlpha: Double = getDocConcentration
 
-  /** Alias for [[setDocConcentration()]] */
+  /**
+   * Alias for [[setDocConcentration()]] 
+   * @since 1.3.0
+   */
   def setAlpha(alpha: Double): this.type = setDocConcentration(alpha)
 
   /**
@@ -120,6 +132,7 @@ class LDA private (
    *
    * Note: The topics' distributions over terms are called "beta" in the original LDA paper
    * by Blei et al., but are called "phi" in many later papers such as Asuncion et al., 2009.
+   * @since 1.3.0
    */
   def getTopicConcentration: Double = this.topicConcentration
 
@@ -144,36 +157,51 @@ class LDA private (
    *     - Value should be >= 0
    *     - default = (1.0 / k), following the implementation from
    *       [[https://github.com/Blei-Lab/onlineldavb]].
+   * @since 1.3.0
    */
   def setTopicConcentration(topicConcentration: Double): this.type = {
     this.topicConcentration = topicConcentration
     this
   }
 
-  /** Alias for [[getTopicConcentration]] */
+  /**
+   * Alias for [[getTopicConcentration]] 
+   * @since 1.3.0
+   */
   def getBeta: Double = getTopicConcentration
 
-  /** Alias for [[setTopicConcentration()]] */
+  /**
+   * Alias for [[setTopicConcentration()]] 
+   * @since 1.3.0
+   */
   def setBeta(beta: Double): this.type = setTopicConcentration(beta)
 
   /**
    * Maximum number of iterations for learning.
+   * @since 1.3.0
    */
   def getMaxIterations: Int = maxIterations
 
   /**
    * Maximum number of iterations for learning.
    * (default = 20)
+   * @since 1.3.0
    */
   def setMaxIterations(maxIterations: Int): this.type = {
     this.maxIterations = maxIterations
     this
   }
 
-  /** Random seed */
+  /**
+   * Random seed 
+   * @since 1.3.0
+   */
   def getSeed: Long = seed
 
-  /** Random seed */
+  /**
+   * Random seed 
+   * @since 1.3.0
+   */
   def setSeed(seed: Long): this.type = {
     this.seed = seed
     this
@@ -181,6 +209,7 @@ class LDA private (
 
   /**
    * Period (in iterations) between checkpoints.
+   * @since 1.3.0
    */
   def getCheckpointInterval: Int = checkpointInterval
 
@@ -191,6 +220,7 @@ class LDA private (
    * [[org.apache.spark.SparkContext]], this setting is ignored.
    *
    * @see [[org.apache.spark.SparkContext#setCheckpointDir]]
+   * @since 1.3.0
    */
   def setCheckpointInterval(checkpointInterval: Int): this.type = {
     this.checkpointInterval = checkpointInterval
@@ -202,6 +232,7 @@ class LDA private (
    * :: DeveloperApi ::
    *
    * LDAOptimizer used to perform the actual calculation
+   * @since 1.4.0
    */
   @DeveloperApi
   def getOptimizer: LDAOptimizer = ldaOptimizer
@@ -210,6 +241,7 @@ class LDA private (
    * :: DeveloperApi ::
    *
    * LDAOptimizer used to perform the actual calculation (default = EMLDAOptimizer)
+   * @since 1.4.0
    */
   @DeveloperApi
   def setOptimizer(optimizer: LDAOptimizer): this.type = {
@@ -220,6 +252,7 @@ class LDA private (
   /**
    * Set the LDAOptimizer used to perform the actual calculation by algorithm name.
    * Currently "em", "online" are supported.
+   * @since 1.4.0
    */
   def setOptimizer(optimizerName: String): this.type = {
     this.ldaOptimizer =
@@ -240,6 +273,7 @@ class LDA private (
    *                   (where the vocabulary size is the length of the vector).
    *                   Document IDs must be unique and >= 0.
    * @return  Inferred LDA model
+   * @since 1.3.0
    */
   def run(documents: RDD[(Long, Vector)]): LDAModel = {
     val state = ldaOptimizer.initialize(documents, this)
@@ -255,7 +289,10 @@ class LDA private (
     state.getLDAModel(iterationTimes)
   }
 
-  /** Java-friendly version of [[run()]] */
+  /**
+   * Java-friendly version of [[run()]] 
+   * @since 1.3.0
+   */
   def run(documents: JavaPairRDD[java.lang.Long, Vector]): LDAModel = {
     run(documents.rdd.asInstanceOf[RDD[(Long, Vector)]])
   }
