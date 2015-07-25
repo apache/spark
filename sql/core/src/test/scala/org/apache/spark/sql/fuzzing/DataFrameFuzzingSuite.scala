@@ -17,8 +17,12 @@
 
 package org.apache.spark.sql.fuzzing
 
-import java.io.File
 import java.lang.reflect.InvocationTargetException
+import java.util.concurrent.atomic.AtomicInteger
+
+import scala.reflect.runtime.{universe => ru}
+import scala.util.Random
+import scala.util.control.NonFatal
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql._
@@ -27,9 +31,75 @@ import org.apache.spark.sql.test.TestSQLContext
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
-import scala.reflect.runtime.{universe => ru}
-import scala.util.Random
-import scala.util.control.NonFatal
+class RandomDataFrameGenerator(seed: Long, sqlContext: SQLContext) {
+
+  private val rand = new Random(seed)
+  private val nextId = new AtomicInteger()
+
+  private def hasRandomDataGenerator(dataType: DataType): Boolean = {
+    RandomDataGenerator.forType(dataType).isDefined
+  }
+
+  def randomChoice[T](values: Seq[T]): T = {
+    values(rand.nextInt(values.length))
+  }
+
+  private val simpleTypes: Set[DataType] = {
+    DataTypeTestUtils.atomicTypes
+      .filter(hasRandomDataGenerator)
+      // Ignore decimal type since it can lead to OOM (see SPARK-9303). TODO: It would be better to
+      // only generate limited precision decimals instead.
+      .filterNot(_.isInstanceOf[DecimalType])
+  }
+
+  private val arrayTypes: Set[DataType] = {
+    DataTypeTestUtils.atomicArrayTypes
+      .filter(hasRandomDataGenerator)
+      // See above comment about DecimalType
+      .filterNot(_.elementType.isInstanceOf[DecimalType]).toSet
+  }
+
+  private def randomStructField(
+      allowComplexTypes: Boolean = false,
+      allowSpacesInColumnName: Boolean = false): StructField = {
+    val name = "c" + nextId.getAndIncrement + (if (allowSpacesInColumnName) " space" else "")
+    val candidateTypes: Seq[DataType] = Seq(
+      simpleTypes,
+      arrayTypes.filter(_ => allowComplexTypes),
+      // This does not allow complex types, limiting the depth of recursion:
+      if (allowComplexTypes) {
+        Set[DataType](randomStructType(numCols = rand.nextInt(2) + 1))
+      } else {
+        Set[DataType]()
+      }
+    ).flatten
+    val dataType = randomChoice(candidateTypes)
+    val nullable = rand.nextBoolean()
+    StructField(name, dataType, nullable)
+  }
+
+  private def randomStructType(
+      numCols: Int,
+      allowComplexTypes: Boolean = false,
+      allowSpacesInColumnNames: Boolean = false): StructType = {
+    StructType(Array.fill(numCols)(randomStructField(allowComplexTypes, allowSpacesInColumnNames)))
+  }
+
+  def randomDataFrame(
+      numCols: Int,
+      numRows: Int,
+      allowComplexTypes: Boolean = false,
+      allowSpacesInColumnNames: Boolean = false): DataFrame = {
+    val schema = randomStructType(numCols, allowComplexTypes, allowSpacesInColumnNames)
+    val rows = sqlContext.sparkContext.parallelize(1 to numRows).mapPartitions { iter =>
+      val rowGenerator = RandomDataGenerator.forType(schema, nullable = false, seed = Some(42)).get
+      iter.map(_ => rowGenerator().asInstanceOf[Row])
+    }
+    sqlContext.createDataFrame(rows, schema)
+  }
+
+}
+
 
 /**
  * This test suite generates random data frames, then applies random sequences of operations to
@@ -40,40 +110,12 @@ class DataFrameFuzzingSuite extends SparkFunSuite {
 
   val tempDir = Utils.createTempDir()
 
+  private val dataGenerator = new RandomDataFrameGenerator(123, TestSQLContext)
+
   def randomChoice[T](values: Seq[T]): T = {
     values(Random.nextInt(values.length))
   }
 
-  val randomValueGenerators: Map[Class[_], () => Any] = Map(
-    classOf[String] -> (() => Random.nextString(10))
-  )
-
-  val allTypes = DataTypeTestUtils.atomicTypes
-    //.filterNot(_.isInstanceOf[DecimalType]) // casts can lead to OOM
-    .filterNot(_.isInstanceOf[BinaryType]) // leads to spurious errors in string reverse
-  val dataTypesWithGenerators = allTypes.filter { dt =>
-      RandomDataGenerator.forType(dt, nullable = true, seed = None).isDefined
-    }
-  def randomType(): DataType = randomChoice(dataTypesWithGenerators.toSeq)
-
-  def generateRandomSchema(): StructType = {
-    val numColumns = 1 + Random.nextInt(3)
-    val r = Random.nextString(1)
-    new StructType((1 to numColumns).map(i => new StructField(s"c$i$r", randomType())).toArray)
-  }
-
-  def generateRandomDataFrame(): DataFrame = {
-    val schema = generateRandomSchema()
-    val rowGenerator = RandomDataGenerator.forType(schema, nullable = false).get
-    val rows: Seq[Row] = Seq.fill(10)(rowGenerator().asInstanceOf[Row])
-    val df = TestSQLContext.createDataFrame(TestSQLContext.sparkContext.parallelize(rows), schema)
-    val path = new File(tempDir, Random.nextInt(1000000).toString).getAbsolutePath
-    df.write.json(path)
-    TestSQLContext.read.json(path)
-    df
-  }
-
-  val df = generateRandomDataFrame()
 
   val m = ru.runtimeMirror(this.getClass.getClassLoader)
 
@@ -101,7 +143,6 @@ class DataFrameFuzzingSuite extends SparkFunSuite {
       .filterNot(_.name.toString == "drop") // since this can lead to a DataFrame with no columns
       .filterNot(_.name.toString == "describe") // since we cannot run all queries on describe output
       .filterNot(_.name.toString == "dropDuplicates")
-      .filter(_.name.toString == "join")
       .toSeq
   }
 
@@ -123,7 +164,7 @@ class DataFrameFuzzingSuite extends SparkFunSuite {
       if (t =:= m.universe.typeOf[DataFrame]) {
         randomChoice(Seq(
           df,
-          generateRandomDataFrame()
+          dataGenerator.randomDataFrame(numCols = Random.nextInt(4) + 1, numRows = 100)
         )) // ++ Try(applyRandomTransformationToDataFrame(df)).toOption.toSeq)
       } else if (t =:= m.universe.typeOf[Column]) {
         df.col(getRandomColumnName(df))
@@ -158,6 +199,7 @@ class DataFrameFuzzingSuite extends SparkFunSuite {
   for (_ <- 1 to 10000) {
     println("-" * 80)
     try {
+      val df = dataGenerator.randomDataFrame(numCols = Random.nextInt(4) + 1, numRows = 20)
       val df2 = applyRandomTransformationToDataFrame(applyRandomTransformationToDataFrame(df))
       try {
         df2.collectAsList()
@@ -173,8 +215,13 @@ class DataFrameFuzzingSuite extends SparkFunSuite {
         println("skipped due to unresolved")
       case e: AnalysisException =>
         println("Skipped")
-        case e: IllegalArgumentException =>
-          println("Skipped")
+      case e: IllegalArgumentException if e.getMessage.contains("number of columns doesn't match") =>
+      case e: IllegalArgumentException if e.getMessage.contains("Unsupported join type") =>
+
+
+      //      case e: IllegalArgumentException =>
+//        println(e)
+//        println("Skipped due to IOE")
     }
   }
 
