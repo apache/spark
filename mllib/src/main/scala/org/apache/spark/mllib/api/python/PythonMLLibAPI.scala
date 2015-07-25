@@ -21,7 +21,7 @@ import java.io.OutputStream
 import java.nio.{ByteBuffer, ByteOrder}
 import java.util.{ArrayList => JArrayList, List => JList, Map => JMap}
 
-import org.apache.spark.mllib.linalg.distributed.{DistributedMatrices, RowMatrix, IndexedRowMatrix, IndexedRow,
+import org.apache.spark.mllib.linalg.distributed.{RowMatrix, IndexedRowMatrix, IndexedRow,
   MatrixEntry, CoordinateMatrix}
 
 import scala.collection.JavaConverters._
@@ -1100,14 +1100,14 @@ private[python] class PythonMLLibAPI extends Serializable {
   }
 
   /**
-   * Wrapper around DistributedMatrices.rowMatrix factory method.
+   * Wrapper around RowMatrix constructor.
    */
   def createRowMatrix(rows: JavaRDD[Vector], numRows: Long, numCols: Int): RowMatrix = {
-    DistributedMatrices.rowMatrix(rows.rdd, numRows, numCols)
+    new RowMatrix(rows.rdd, numRows, numCols)
   }
 
   /**
-   * Wrapper around DistributedMatrices.indexedRowMatrix factory method.
+   * Wrapper around IndexedRowMatrix constructor.
    */
   def createIndexedRowMatrix(rows: DataFrame, numRows: Long, numCols: Int): IndexedRowMatrix = {
     // We use DataFrames for serialization of IndexedRows from Python, so map each Row in the
@@ -1115,11 +1115,23 @@ private[python] class PythonMLLibAPI extends Serializable {
     val indexedRows = rows.map {
       case Row(index: Long, vector: Vector) => IndexedRow(index, vector)
     }
-    DistributedMatrices.indexedRowMatrix(indexedRows, numRows, numCols)
+    new IndexedRowMatrix(indexedRows, numRows, numCols)
   }
 
   /**
-   * Return the rows of an IndexedRowMatrix
+   * Wrapper around CoordinateMatrix constructor.
+   */
+  def createCoordinateMatrix(rows: DataFrame, numRows: Long, numCols: Long): CoordinateMatrix = {
+    // We use DataFrames for serialization of MatrixEntry entries from Python, so map each Row in
+    // the DataFrame back to a MatrixEntry.
+    val entries = rows.map {
+      case Row(i: Long, j: Long, value: Double) => MatrixEntry(i, j, value)
+    }
+    new CoordinateMatrix(entries, numRows, numCols)
+  }
+
+  /**
+   * Return the rows of an IndexedRowMatrix.
    */
   def getIndexedRows(indexedRowMatrix: IndexedRowMatrix): DataFrame = {
     // We use DataFrames for serialization of IndexedRows to Python, so return a DataFrame.
@@ -1128,19 +1140,7 @@ private[python] class PythonMLLibAPI extends Serializable {
   }
 
   /**
-   * Wrapper around DistributedMatrices.coordinateMatrix factory method.
-   */
-  def createCoordinateMatrix(rows: DataFrame, numRows: Long, numCols: Long): CoordinateMatrix = {
-    // We use DataFrames for serialization of MatrixEntry entries from Python, so map each Row in
-    // the DataFrame back to a MatrixEntry.
-    val entries = rows.map {
-      case Row(i: Long, j: Long, value: Double) => MatrixEntry(i, j, value)
-    }
-    DistributedMatrices.coordinateMatrix(entries, numRows, numCols)
-  }
-
-  /**
-   * Return the entries of an CoordinateMatrix
+   * Return the entries of a CoordinateMatrix.
    */
   def getMatrixEntries(coordinateMatrix: CoordinateMatrix): DataFrame = {
     // We use DataFrames for serialization of MatrixEntry entries to Python, so return a DataFrame.
