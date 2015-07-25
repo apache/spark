@@ -303,6 +303,11 @@ public final class UnsafeRow extends MutableRow {
   }
 
   @Override
+  public String getString(int ordinal) {
+    return getUTF8String(ordinal).toString();
+  }
+
+  @Override
   public byte[] getBinary(int ordinal) {
     if (isNullAt(ordinal)) {
       return null;
