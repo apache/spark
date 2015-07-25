@@ -269,7 +269,7 @@ case class GeneratedAggregate(
           namedGroups.map(_._2) ++ computationSchema)
       log.info(s"Result Projection: ${resultExpressions.mkString(",")}")
 
-      val joinedRow = new JoinedRow3
+      val joinedRow = new JoinedRow
 
       if (!iter.hasNext) {
         // This is an empty input, so return early so that we do not allocate data structures

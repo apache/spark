@@ -106,7 +106,7 @@ private[sql] abstract class SortAggregationIterator(
     new GenericMutableRow(size)
   }
 
-  protected val joinedRow = new JoinedRow4
+  protected val joinedRow = new JoinedRow
 
   protected val placeholderExpressions = Seq.fill(initialBufferOffset)(NoOp)
 
