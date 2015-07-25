@@ -36,7 +36,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
 
   /** Returns true iff we support this data type. */
   def canSupport(dataType: DataType): Boolean = dataType match {
-    case _: AtomicType => true
+    case t: AtomicType if !t.isInstanceOf[DecimalType] => true
     case NullType => true
     case _ => false
   }
