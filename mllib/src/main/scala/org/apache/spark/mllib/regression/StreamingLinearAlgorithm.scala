@@ -60,7 +60,7 @@ import org.apache.spark.streaming.dstream.DStream
 abstract class StreamingLinearAlgorithm[
     M <: GeneralizedLinearModel,
     A <: GeneralizedLinearAlgorithm[M]]
-  extends StreamingDecay[StreamingLinearAlgorithm[M,A]] with Logging {
+  extends StreamingDecay with Logging {
 
   /** The model to be updated and used for prediction. */
   protected var model: Option[M]

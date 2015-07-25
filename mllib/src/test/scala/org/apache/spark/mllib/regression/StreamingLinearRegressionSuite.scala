@@ -59,11 +59,11 @@ class StreamingLinearRegressionSuite extends SparkFunSuite with TestSuiteBase {
   test("parameter accuracy") {
     // create model
     val model = new StreamingLinearRegressionWithSGD()
+      .setDecayFactor(0.1)
       .setInitialWeights(Vectors.dense(0.0, 0.0))
       .setStepSize(0.2)
       .setNumIterations(25)
       .setConvergenceTol(0.0001)
-      .setDecayFactor(0.1)
 
     // generate sequence of simulated data
     val numBatches = 10

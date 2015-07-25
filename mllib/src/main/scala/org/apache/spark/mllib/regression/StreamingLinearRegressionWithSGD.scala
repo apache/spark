@@ -45,6 +45,7 @@ class StreamingLinearRegressionWithSGD private[mllib] (
     private var numIterations: Int,
     private var miniBatchFraction: Double)
   extends StreamingLinearAlgorithm[LinearRegressionModel, LinearRegressionWithSGD]
+  with StreamingDecaySetter[StreamingLinearRegressionWithSGD]
   with Serializable {
 
   /**

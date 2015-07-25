@@ -2,14 +2,19 @@ package org.apache.spark.mllib.regression
 
 import org.apache.spark.Logging
 
-trait StreamingDecay[T <: StreamingDecay[T]] extends Logging{
+trait StreamingDecay {
+  def getDiscount(numNewDataPoints: Long): Double
+}
+
+trait StreamingDecaySetter[T <: StreamingDecaySetter[T]] extends Logging {
+  self: T =>
   var decayFactor: Double = 1
   var timeUnit: String = StreamingDecay.BATCHES
 
   /** Set the decay factor directly (for forgetful algorithms). */
   def setDecayFactor(a: Double): T = {
     this.decayFactor = a
-    this.asInstanceOf[T]
+    this
   }
 
   /** Set the half life and time unit ("batches" or "points") for forgetful algorithms. */
@@ -20,7 +25,7 @@ trait StreamingDecay[T <: StreamingDecay[T]] extends Logging{
     this.decayFactor = math.exp(math.log(0.5) / halfLife)
     logInfo("Setting decay factor to: %g ".format (this.decayFactor))
     this.timeUnit = timeUnit
-    this.asInstanceOf[T]
+    this
   }
   
   def getDiscount(numNewDataPoints: Long): Double = timeUnit match {

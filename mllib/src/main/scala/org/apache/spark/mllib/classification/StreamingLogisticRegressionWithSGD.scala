@@ -19,7 +19,7 @@ package org.apache.spark.mllib.classification
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.mllib.linalg.Vector
-import org.apache.spark.mllib.regression.StreamingLinearAlgorithm
+import org.apache.spark.mllib.regression.{StreamingDecaySetter, StreamingLinearAlgorithm}
 
 /**
  * Train or predict a logistic regression model on streaming data. Training uses
@@ -49,6 +49,7 @@ class StreamingLogisticRegressionWithSGD private[mllib] (
     private var miniBatchFraction: Double,
     private var regParam: Double)
   extends StreamingLinearAlgorithm[LogisticRegressionModel, LogisticRegressionWithSGD]
+  with StreamingDecaySetter[StreamingLogisticRegressionWithSGD]
   with Serializable {
 
   /**
