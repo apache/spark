@@ -36,3 +36,4 @@ sqlalchemy
 thrift
 jaydebeapi
 pymssql
+unicodecsv
