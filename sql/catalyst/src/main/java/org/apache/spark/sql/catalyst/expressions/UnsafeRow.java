@@ -231,84 +231,84 @@ public final class UnsafeRow extends MutableRow {
   }
 
   @Override
-  public Object get(int i) {
+  public Object get(int ordinal) {
     throw new UnsupportedOperationException();
   }
 
   @Override
-  public <T> T getAs(int i) {
+  public <T> T getAs(int ordinal) {
     throw new UnsupportedOperationException();
   }
 
   @Override
-  public boolean isNullAt(int i) {
-    assertIndexIsValid(i);
-    return BitSetMethods.isSet(baseObject, baseOffset, i);
+  public boolean isNullAt(int ordinal) {
+    assertIndexIsValid(ordinal);
+    return BitSetMethods.isSet(baseObject, baseOffset, ordinal);
   }
 
   @Override
-  public boolean getBoolean(int i) {
-    assertIndexIsValid(i);
-    return PlatformDependent.UNSAFE.getBoolean(baseObject, getFieldOffset(i));
+  public boolean getBoolean(int ordinal) {
+    assertIndexIsValid(ordinal);
+    return PlatformDependent.UNSAFE.getBoolean(baseObject, getFieldOffset(ordinal));
   }
 
   @Override
-  public byte getByte(int i) {
-    assertIndexIsValid(i);
-    return PlatformDependent.UNSAFE.getByte(baseObject, getFieldOffset(i));
+  public byte getByte(int ordinal) {
+    assertIndexIsValid(ordinal);
+    return PlatformDependent.UNSAFE.getByte(baseObject, getFieldOffset(ordinal));
   }
 
   @Override
-  public short getShort(int i) {
-    assertIndexIsValid(i);
-    return PlatformDependent.UNSAFE.getShort(baseObject, getFieldOffset(i));
+  public short getShort(int ordinal) {
+    assertIndexIsValid(ordinal);
+    return PlatformDependent.UNSAFE.getShort(baseObject, getFieldOffset(ordinal));
   }
 
   @Override
-  public int getInt(int i) {
-    assertIndexIsValid(i);
-    return PlatformDependent.UNSAFE.getInt(baseObject, getFieldOffset(i));
+  public int getInt(int ordinal) {
+    assertIndexIsValid(ordinal);
+    return PlatformDependent.UNSAFE.getInt(baseObject, getFieldOffset(ordinal));
   }
 
   @Override
-  public long getLong(int i) {
-    assertIndexIsValid(i);
-    return PlatformDependent.UNSAFE.getLong(baseObject, getFieldOffset(i));
+  public long getLong(int ordinal) {
+    assertIndexIsValid(ordinal);
+    return PlatformDependent.UNSAFE.getLong(baseObject, getFieldOffset(ordinal));
   }
 
   @Override
-  public float getFloat(int i) {
-    assertIndexIsValid(i);
-    if (isNullAt(i)) {
+  public float getFloat(int ordinal) {
+    assertIndexIsValid(ordinal);
+    if (isNullAt(ordinal)) {
       return Float.NaN;
     } else {
-      return PlatformDependent.UNSAFE.getFloat(baseObject, getFieldOffset(i));
+      return PlatformDependent.UNSAFE.getFloat(baseObject, getFieldOffset(ordinal));
     }
   }
 
   @Override
-  public double getDouble(int i) {
-    assertIndexIsValid(i);
-    if (isNullAt(i)) {
+  public double getDouble(int ordinal) {
+    assertIndexIsValid(ordinal);
+    if (isNullAt(ordinal)) {
       return Float.NaN;
     } else {
-      return PlatformDependent.UNSAFE.getDouble(baseObject, getFieldOffset(i));
+      return PlatformDependent.UNSAFE.getDouble(baseObject, getFieldOffset(ordinal));
     }
   }
 
   @Override
-  public UTF8String getUTF8String(int i) {
-    assertIndexIsValid(i);
-    return isNullAt(i) ? null : UTF8String.fromBytes(getBinary(i));
+  public UTF8String getUTF8String(int ordinal) {
+    assertIndexIsValid(ordinal);
+    return isNullAt(ordinal) ? null : UTF8String.fromBytes(getBinary(ordinal));
   }
 
   @Override
-  public byte[] getBinary(int i) {
-    if (isNullAt(i)) {
+  public byte[] getBinary(int ordinal) {
+    if (isNullAt(ordinal)) {
       return null;
     } else {
-      assertIndexIsValid(i);
-      final long offsetAndSize = getLong(i);
+      assertIndexIsValid(ordinal);
+      final long offsetAndSize = getLong(ordinal);
       final int offset = (int) (offsetAndSize >> 32);
       final int size = (int) (offsetAndSize & ((1L << 32) - 1));
       final byte[] bytes = new byte[size];
@@ -324,17 +324,12 @@ public final class UnsafeRow extends MutableRow {
   }
 
   @Override
-  public String getString(int i) {
-    return getUTF8String(i).toString();
-  }
-
-  @Override
-  public UnsafeRow getStruct(int i, int numFields) {
-    if (isNullAt(i)) {
+  public UnsafeRow getStruct(int ordinal, int numFields) {
+    if (isNullAt(ordinal)) {
       return null;
     } else {
-      assertIndexIsValid(i);
-      final long offsetAndSize = getLong(i);
+      assertIndexIsValid(ordinal);
+      final long offsetAndSize = getLong(ordinal);
       final int offset = (int) (offsetAndSize >> 32);
       final int size = (int) (offsetAndSize & ((1L << 32) - 1));
       final UnsafeRow row = new UnsafeRow();

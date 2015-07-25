@@ -121,7 +121,7 @@ class MutableAggregationBuffer private[sql] (
       throw new IllegalArgumentException(
         s"Could not access ${i}th value in this buffer because it only has $length values.")
     }
-    toScalaConverters(i)(underlyingBuffer(offsets(i)))
+    toScalaConverters(i)(underlyingBuffer.get(offsets(i)))
   }
 
   def update(i: Int, value: Any): Unit = {
@@ -157,7 +157,7 @@ class InputAggregationBuffer private[sql] (
         s"Could not access ${i}th value in this buffer because it only has $length values.")
     }
     // TODO: Use buffer schema to avoid using generic getter.
-    toScalaConverters(i)(underlyingInputBuffer(offsets(i)))
+    toScalaConverters(i)(underlyingInputBuffer.get(offsets(i)))
   }
 
   override def copy(): InputAggregationBuffer = {
