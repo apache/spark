@@ -52,6 +52,21 @@ abstract class InternalRow extends Serializable {
 
   def getDouble(i: Int): Double = getAs[Double](i)
 
+  def getUTF8String(i: Int): UTF8String = getAs[UTF8String](i)
+
+  def getBinary(i: Int): Array[Byte] = getAs[Array[Byte]](i)
+
+  // This is only use for test
+  def getString(i: Int): String = getAs[UTF8String](i).toString
+
+  /**
+   * Returns a struct from ordinal position.
+   *
+   * @param ordinal position to get the struct from.
+   * @param numFields number of fields the struct type has
+   */
+  def getStruct(ordinal: Int, numFields: Int): InternalRow = getAs[InternalRow](ordinal)
+
   override def toString: String = s"[${this.mkString(",")}]"
 
   /**
@@ -144,13 +159,6 @@ abstract class InternalRow extends Serializable {
    * start, end, and separator strings.
    */
   def mkString(start: String, sep: String, end: String): String = toSeq.mkString(start, sep, end)
-
-  def getUTF8String(i: Int): UTF8String = getAs[UTF8String](i)
-
-  def getBinary(i: Int): Array[Byte] = getAs[Array[Byte]](i)
-
-  // This is only use for test
-  def getString(i: Int): String = getAs[UTF8String](i).toString
 
   // Custom hashCode function that matches the efficient code generated version.
   override def hashCode: Int = {
