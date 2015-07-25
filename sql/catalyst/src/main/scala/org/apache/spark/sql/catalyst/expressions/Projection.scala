@@ -225,6 +225,14 @@ class JoinedRow extends InternalRow {
   override def getFloat(i: Int): Float =
     if (i < row1.numFields) row1.getFloat(i) else row2.getFloat(i - row1.numFields)
 
+  override def getStruct(i: Int, numFields: Int): InternalRow = {
+    if (i < row1.numFields) {
+      row1.getStruct(i, numFields)
+    } else {
+      row2.getStruct(i - row1.numFields, numFields)
+    }
+  }
+
   override def copy(): InternalRow = {
     val totalSize = row1.numFields + row2.numFields
     val copiedValues = new Array[Any](totalSize)

@@ -221,6 +221,10 @@ final class SpecificMutableRow(val values: Array[MutableValue]) extends MutableR
 
   override def get(i: Int): Any = values(i).boxed
 
+  override def getStruct(ordinal: Int, numFields: Int): InternalRow = {
+    values(ordinal).boxed.asInstanceOf[InternalRow]
+  }
+
   override def isNullAt(i: Int): Boolean = values(i).isNull
 
   override def copy(): InternalRow = {
@@ -315,9 +319,5 @@ final class SpecificMutableRow(val values: Array[MutableValue]) extends MutableR
 
   override def getByte(i: Int): Byte = {
     values(i).asInstanceOf[MutableByte].value
-  }
-
-  override def getAs[T](i: Int): T = {
-    values(i).boxed.asInstanceOf[T]
   }
 }

@@ -209,11 +209,14 @@ private[spark] class VectorUDT extends UserDefinedType[Vector] {
         tpe match {
           case 0 =>
             val size = row.getInt(1)
-            val indices = row.getAs[Iterable[Int]](2).toArray
-            val values = row.getAs[Iterable[Double]](3).toArray
+            val indices =
+              row.getAs[Seq[Int]](2, ArrayType(IntegerType, containsNull = false)).toArray
+            val values =
+              row.getAs[Seq[Double]](3, ArrayType(DoubleType, containsNull = false)).toArray
             new SparseVector(size, indices, values)
           case 1 =>
-            val values = row.getAs[Iterable[Double]](3).toArray
+            val values =
+              row.getAs[Seq[Double]](3, ArrayType(DoubleType, containsNull = false)).toArray
             new DenseVector(values)
         }
     }

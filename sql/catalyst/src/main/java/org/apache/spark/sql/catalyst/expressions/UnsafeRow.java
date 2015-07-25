@@ -236,11 +236,6 @@ public final class UnsafeRow extends MutableRow {
   }
 
   @Override
-  public <T> T getAs(int ordinal) {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
   public boolean isNullAt(int ordinal) {
     assertIndexIsValid(ordinal);
     return BitSetMethods.isSet(baseObject, baseOffset, ordinal);
