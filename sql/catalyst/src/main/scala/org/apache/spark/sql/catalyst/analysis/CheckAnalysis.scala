@@ -82,6 +82,11 @@ trait CheckAnalysis {
               s"filter expression '${f.condition.prettyString}' " +
                 s"of type ${f.condition.dataType.simpleString} is not a boolean.")
 
+          case j @ Join(_, _, _, Some(condition)) if condition.dataType != BooleanType =>
+            failAnalysis(
+              s"join condition '${condition.prettyString}' " +
+                s"of type ${condition.dataType.simpleString} is not a boolean.")
+
           case Aggregate(groupingExprs, aggregateExprs, child) =>
             def checkValidAggregateExpression(expr: Expression): Unit = expr match {
               case _: AggregateExpression => // OK
@@ -96,6 +101,16 @@ trait CheckAnalysis {
             }
 
             aggregateExprs.foreach(checkValidAggregateExpression)
+
+          case Sort(orders, _, _) =>
+            orders.foreach { order =>
+              order.dataType match {
+                case t: AtomicType => // OK
+                case NullType => // OK
+                case t =>
+                  failAnalysis(s"Sorting is not supported for columns of type ${t.simpleString}")
+              }
+            }
 
           case _ => // Fallbacks to the following checks
         }
@@ -121,8 +136,8 @@ trait CheckAnalysis {
               s"""
                  |Failure when resolving conflicting references in Join:
                  |$plan
-                  |Conflicting attributes: ${conflictingAttributes.mkString(",")}
-                  |""".stripMargin)
+                 |Conflicting attributes: ${conflictingAttributes.mkString(",")}
+                 |""".stripMargin)
 
           case o if !o.resolved =>
             failAnalysis(
@@ -133,7 +148,7 @@ trait CheckAnalysis {
             failAnalysis(
               s"""nondeterministic expressions are only allowed in Project or Filter, found:
                  | ${o.expressions.map(_.prettyString).mkString(",")}
-                  |in operator ${operator.simpleString}
+                 |in operator ${operator.simpleString}
              """.stripMargin)
 
           case _ => // Analysis successful!

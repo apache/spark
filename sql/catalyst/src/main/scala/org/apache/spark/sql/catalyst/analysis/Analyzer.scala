@@ -915,14 +915,18 @@ class Analyzer(
   }
 
   /**
-   * Pulls out nondeterministic expressions from unary LogicalPlan which is not Project or Filter,
+   * Pulls out nondeterministic expressions from LogicalPlan which is not Project or Filter,
    * put them into an inner Project and finally project them away at the outer Project.
    */
   object PullOutNondeterministic extends Rule[LogicalPlan] {
     override def apply(plan: LogicalPlan): LogicalPlan = plan transform {
       case p: Project => p
       case f: Filter => f
-      case p: UnaryNode if p.expressions.exists(!_.deterministic) =>
+
+      // todo: It's hard to write a general rule to pull out nondeterministic expressions
+      // from LogicalPlan, currently we only do it for UnaryNode which has same output
+      // schema with its child.
+      case p: UnaryNode if p.output == p.child.output && p.expressions.exists(!_.deterministic) =>
         val nondeterministicExprs = p.expressions.filterNot(_.deterministic).map { e =>
           val ne = e match {
             case n: NamedExpression => n
