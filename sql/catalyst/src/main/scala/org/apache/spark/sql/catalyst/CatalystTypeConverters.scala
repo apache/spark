@@ -271,7 +271,7 @@ object CatalystTypeConverters {
     }
 
     override def toScalaImpl(row: InternalRow, column: Int): Row =
-      toScala(row.get(column).asInstanceOf[InternalRow])
+      toScala(row.getStruct(column, structType.size))
   }
 
   private object StringConverter extends CatalystTypeConverter[Any, String, UTF8String] {
