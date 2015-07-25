@@ -44,6 +44,7 @@ _operators = {
     'hive_to_druid': ['HiveToDruidTransfer'],
     'jdbc_operator': ['JdbcOperator'],
     'mssql_operator': ['MsSqlOperator'],
+    'mssql_to_hive': ['MsSqlToHiveTransfer'],
 }
 
 _import_module_attrs(globals(), _operators)
