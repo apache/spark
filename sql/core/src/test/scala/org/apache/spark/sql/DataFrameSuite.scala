@@ -841,7 +841,6 @@ class DataFrameSuite extends QueryTest with SQLTestUtils {
     }
   }
 
-<<<<<<< HEAD
   test("SPARK-8608: call `show` on local DataFrame with random columns should return same value") {
     // Make sure we can pass this test for both codegen mode and interpreted mode.
     withSQLConf(SQLConf.CODEGEN_ENABLED.key -> "true") {

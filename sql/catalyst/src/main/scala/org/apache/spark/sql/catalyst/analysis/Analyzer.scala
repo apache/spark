@@ -968,7 +968,22 @@ class Analyzer(
    * }}}
    */
   object RemoveEvaluationFromSort extends Rule[LogicalPlan] {
+    private def hasAlias(expr: Expression) = {
+      expr.find {
+        case a: Alias => true
+        case _ => false
+      }.isDefined
+    }
+
     override def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+      // The ordering expressions have no effect to the output schema of `Sort`,
+      // so `Alias`s in ordering expressions are unnecessary and we should remove them.
+      case s @ Sort(ordering, _, _) if ordering.exists(hasAlias) =>
+        val newOrdering = ordering.map(_.transformUp {
+          case Alias(child, _) => child
+        }.asInstanceOf[SortOrder])
+        s.copy(order = newOrdering)
+
       case s @ Sort(ordering, global, child)
         if s.expressions.forall(_.resolved) && s.childrenResolved && !s.hasNoEvaluation =>
 
