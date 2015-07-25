@@ -211,7 +211,7 @@ final class SpecificMutableRow(val values: Array[MutableValue]) extends MutableR
 
   def this() = this(Seq.empty)
 
-  override def length: Int = values.length
+  override def numFields: Int = values.length
 
   override def toSeq: Seq[Any] = values.map(_.boxed).toSeq
 
@@ -245,7 +245,7 @@ final class SpecificMutableRow(val values: Array[MutableValue]) extends MutableR
   override def setString(ordinal: Int, value: String): Unit =
     update(ordinal, UTF8String.fromString(value))
 
-  override def getString(ordinal: Int): String = apply(ordinal).toString
+  override def getString(ordinal: Int): String = get(ordinal).toString
 
   override def setInt(ordinal: Int, value: Int): Unit = {
     val currentValue = values(ordinal).asInstanceOf[MutableInt]

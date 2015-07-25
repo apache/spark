@@ -176,49 +176,49 @@ class JoinedRow extends InternalRow {
 
   override def toSeq: Seq[Any] = row1.toSeq ++ row2.toSeq
 
-  override def length: Int = row1.length + row2.length
+  override def numFields: Int = row1.numFields + row2.numFields
 
   override def getUTF8String(i: Int): UTF8String = {
-    if (i < row1.length) row1.getUTF8String(i) else row2.getUTF8String(i - row1.length)
+    if (i < row1.numFields) row1.getUTF8String(i) else row2.getUTF8String(i - row1.numFields)
   }
 
   override def getBinary(i: Int): Array[Byte] = {
-    if (i < row1.length) row1.getBinary(i) else row2.getBinary(i - row1.length)
+    if (i < row1.numFields) row1.getBinary(i) else row2.getBinary(i - row1.numFields)
   }
 
   override def get(i: Int): Any =
-    if (i < row1.length) row1(i) else row2(i - row1.length)
+    if (i < row1.numFields) row1.get(i) else row2.get(i - row1.numFields)
 
   override def isNullAt(i: Int): Boolean =
-    if (i < row1.length) row1.isNullAt(i) else row2.isNullAt(i - row1.length)
+    if (i < row1.numFields) row1.isNullAt(i) else row2.isNullAt(i - row1.numFields)
 
   override def getInt(i: Int): Int =
-    if (i < row1.length) row1.getInt(i) else row2.getInt(i - row1.length)
+    if (i < row1.numFields) row1.getInt(i) else row2.getInt(i - row1.numFields)
 
   override def getLong(i: Int): Long =
-    if (i < row1.length) row1.getLong(i) else row2.getLong(i - row1.length)
+    if (i < row1.numFields) row1.getLong(i) else row2.getLong(i - row1.numFields)
 
   override def getDouble(i: Int): Double =
-    if (i < row1.length) row1.getDouble(i) else row2.getDouble(i - row1.length)
+    if (i < row1.numFields) row1.getDouble(i) else row2.getDouble(i - row1.numFields)
 
   override def getBoolean(i: Int): Boolean =
-    if (i < row1.length) row1.getBoolean(i) else row2.getBoolean(i - row1.length)
+    if (i < row1.numFields) row1.getBoolean(i) else row2.getBoolean(i - row1.numFields)
 
   override def getShort(i: Int): Short =
-    if (i < row1.length) row1.getShort(i) else row2.getShort(i - row1.length)
+    if (i < row1.numFields) row1.getShort(i) else row2.getShort(i - row1.numFields)
 
   override def getByte(i: Int): Byte =
-    if (i < row1.length) row1.getByte(i) else row2.getByte(i - row1.length)
+    if (i < row1.numFields) row1.getByte(i) else row2.getByte(i - row1.numFields)
 
   override def getFloat(i: Int): Float =
-    if (i < row1.length) row1.getFloat(i) else row2.getFloat(i - row1.length)
+    if (i < row1.numFields) row1.getFloat(i) else row2.getFloat(i - row1.numFields)
 
   override def copy(): InternalRow = {
-    val totalSize = row1.length + row2.length
+    val totalSize = row1.numFields + row2.numFields
     val copiedValues = new Array[Any](totalSize)
     var i = 0
     while(i < totalSize) {
-      copiedValues(i) = apply(i)
+      copiedValues(i) = get(i)
       i += 1
     }
     new GenericInternalRow(copiedValues)
@@ -278,49 +278,49 @@ class JoinedRow2 extends InternalRow {
 
   override def toSeq: Seq[Any] = row1.toSeq ++ row2.toSeq
 
-  override def length: Int = row1.length + row2.length
+  override def numFields: Int = row1.numFields + row2.numFields
 
   override def getUTF8String(i: Int): UTF8String = {
-    if (i < row1.length) row1.getUTF8String(i) else row2.getUTF8String(i - row1.length)
+    if (i < row1.numFields) row1.getUTF8String(i) else row2.getUTF8String(i - row1.numFields)
   }
 
   override def getBinary(i: Int): Array[Byte] = {
-    if (i < row1.length) row1.getBinary(i) else row2.getBinary(i - row1.length)
+    if (i < row1.numFields) row1.getBinary(i) else row2.getBinary(i - row1.numFields)
   }
 
   override def get(i: Int): Any =
-    if (i < row1.length) row1(i) else row2(i - row1.length)
+    if (i < row1.numFields) row1.get(i) else row2.get(i - row1.numFields)
 
   override def isNullAt(i: Int): Boolean =
-    if (i < row1.length) row1.isNullAt(i) else row2.isNullAt(i - row1.length)
+    if (i < row1.numFields) row1.isNullAt(i) else row2.isNullAt(i - row1.numFields)
 
   override def getInt(i: Int): Int =
-    if (i < row1.length) row1.getInt(i) else row2.getInt(i - row1.length)
+    if (i < row1.numFields) row1.getInt(i) else row2.getInt(i - row1.numFields)
 
   override def getLong(i: Int): Long =
-    if (i < row1.length) row1.getLong(i) else row2.getLong(i - row1.length)
+    if (i < row1.numFields) row1.getLong(i) else row2.getLong(i - row1.numFields)
 
   override def getDouble(i: Int): Double =
-    if (i < row1.length) row1.getDouble(i) else row2.getDouble(i - row1.length)
+    if (i < row1.numFields) row1.getDouble(i) else row2.getDouble(i - row1.numFields)
 
   override def getBoolean(i: Int): Boolean =
-    if (i < row1.length) row1.getBoolean(i) else row2.getBoolean(i - row1.length)
+    if (i < row1.numFields) row1.getBoolean(i) else row2.getBoolean(i - row1.numFields)
 
   override def getShort(i: Int): Short =
-    if (i < row1.length) row1.getShort(i) else row2.getShort(i - row1.length)
+    if (i < row1.numFields) row1.getShort(i) else row2.getShort(i - row1.numFields)
 
   override def getByte(i: Int): Byte =
-    if (i < row1.length) row1.getByte(i) else row2.getByte(i - row1.length)
+    if (i < row1.numFields) row1.getByte(i) else row2.getByte(i - row1.numFields)
 
   override def getFloat(i: Int): Float =
-    if (i < row1.length) row1.getFloat(i) else row2.getFloat(i - row1.length)
+    if (i < row1.numFields) row1.getFloat(i) else row2.getFloat(i - row1.numFields)
 
   override def copy(): InternalRow = {
-    val totalSize = row1.length + row2.length
+    val totalSize = row1.numFields + row2.numFields
     val copiedValues = new Array[Any](totalSize)
     var i = 0
     while(i < totalSize) {
-      copiedValues(i) = apply(i)
+      copiedValues(i) = get(i)
       i += 1
     }
     new GenericInternalRow(copiedValues)
@@ -374,50 +374,50 @@ class JoinedRow3 extends InternalRow {
 
   override def toSeq: Seq[Any] = row1.toSeq ++ row2.toSeq
 
-  override def length: Int = row1.length + row2.length
+  override def numFields: Int = row1.numFields + row2.numFields
 
   override def getUTF8String(i: Int): UTF8String = {
-    if (i < row1.length) row1.getUTF8String(i) else row2.getUTF8String(i - row1.length)
+    if (i < row1.numFields) row1.getUTF8String(i) else row2.getUTF8String(i - row1.numFields)
   }
 
   override def getBinary(i: Int): Array[Byte] = {
-    if (i < row1.length) row1.getBinary(i) else row2.getBinary(i - row1.length)
+    if (i < row1.numFields) row1.getBinary(i) else row2.getBinary(i - row1.numFields)
   }
 
 
   override def get(i: Int): Any =
-    if (i < row1.length) row1(i) else row2(i - row1.length)
+    if (i < row1.numFields) row1.get(i) else row2.get(i - row1.numFields)
 
   override def isNullAt(i: Int): Boolean =
-    if (i < row1.length) row1.isNullAt(i) else row2.isNullAt(i - row1.length)
+    if (i < row1.numFields) row1.isNullAt(i) else row2.isNullAt(i - row1.numFields)
 
   override def getInt(i: Int): Int =
-    if (i < row1.length) row1.getInt(i) else row2.getInt(i - row1.length)
+    if (i < row1.numFields) row1.getInt(i) else row2.getInt(i - row1.numFields)
 
   override def getLong(i: Int): Long =
-    if (i < row1.length) row1.getLong(i) else row2.getLong(i - row1.length)
+    if (i < row1.numFields) row1.getLong(i) else row2.getLong(i - row1.numFields)
 
   override def getDouble(i: Int): Double =
-    if (i < row1.length) row1.getDouble(i) else row2.getDouble(i - row1.length)
+    if (i < row1.numFields) row1.getDouble(i) else row2.getDouble(i - row1.numFields)
 
   override def getBoolean(i: Int): Boolean =
-    if (i < row1.length) row1.getBoolean(i) else row2.getBoolean(i - row1.length)
+    if (i < row1.numFields) row1.getBoolean(i) else row2.getBoolean(i - row1.numFields)
 
   override def getShort(i: Int): Short =
-    if (i < row1.length) row1.getShort(i) else row2.getShort(i - row1.length)
+    if (i < row1.numFields) row1.getShort(i) else row2.getShort(i - row1.numFields)
 
   override def getByte(i: Int): Byte =
-    if (i < row1.length) row1.getByte(i) else row2.getByte(i - row1.length)
+    if (i < row1.numFields) row1.getByte(i) else row2.getByte(i - row1.numFields)
 
   override def getFloat(i: Int): Float =
-    if (i < row1.length) row1.getFloat(i) else row2.getFloat(i - row1.length)
+    if (i < row1.numFields) row1.getFloat(i) else row2.getFloat(i - row1.numFields)
 
   override def copy(): InternalRow = {
-    val totalSize = row1.length + row2.length
+    val totalSize = row1.numFields + row2.numFields
     val copiedValues = new Array[Any](totalSize)
     var i = 0
     while(i < totalSize) {
-      copiedValues(i) = apply(i)
+      copiedValues(i) = get(i)
       i += 1
     }
     new GenericInternalRow(copiedValues)
@@ -471,50 +471,50 @@ class JoinedRow4 extends InternalRow {
 
   override def toSeq: Seq[Any] = row1.toSeq ++ row2.toSeq
 
-  override def length: Int = row1.length + row2.length
+  override def numFields: Int = row1.numFields + row2.numFields
 
   override def getUTF8String(i: Int): UTF8String = {
-    if (i < row1.length) row1.getUTF8String(i) else row2.getUTF8String(i - row1.length)
+    if (i < row1.numFields) row1.getUTF8String(i) else row2.getUTF8String(i - row1.numFields)
   }
 
   override def getBinary(i: Int): Array[Byte] = {
-    if (i < row1.length) row1.getBinary(i) else row2.getBinary(i - row1.length)
+    if (i < row1.numFields) row1.getBinary(i) else row2.getBinary(i - row1.numFields)
   }
 
 
   override def get(i: Int): Any =
-    if (i < row1.length) row1(i) else row2(i - row1.length)
+    if (i < row1.numFields) row1.get(i) else row2.get(i - row1.numFields)
 
   override def isNullAt(i: Int): Boolean =
-    if (i < row1.length) row1.isNullAt(i) else row2.isNullAt(i - row1.length)
+    if (i < row1.numFields) row1.isNullAt(i) else row2.isNullAt(i - row1.numFields)
 
   override def getInt(i: Int): Int =
-    if (i < row1.length) row1.getInt(i) else row2.getInt(i - row1.length)
+    if (i < row1.numFields) row1.getInt(i) else row2.getInt(i - row1.numFields)
 
   override def getLong(i: Int): Long =
-    if (i < row1.length) row1.getLong(i) else row2.getLong(i - row1.length)
+    if (i < row1.numFields) row1.getLong(i) else row2.getLong(i - row1.numFields)
 
   override def getDouble(i: Int): Double =
-    if (i < row1.length) row1.getDouble(i) else row2.getDouble(i - row1.length)
+    if (i < row1.numFields) row1.getDouble(i) else row2.getDouble(i - row1.numFields)
 
   override def getBoolean(i: Int): Boolean =
-    if (i < row1.length) row1.getBoolean(i) else row2.getBoolean(i - row1.length)
+    if (i < row1.numFields) row1.getBoolean(i) else row2.getBoolean(i - row1.numFields)
 
   override def getShort(i: Int): Short =
-    if (i < row1.length) row1.getShort(i) else row2.getShort(i - row1.length)
+    if (i < row1.numFields) row1.getShort(i) else row2.getShort(i - row1.numFields)
 
   override def getByte(i: Int): Byte =
-    if (i < row1.length) row1.getByte(i) else row2.getByte(i - row1.length)
+    if (i < row1.numFields) row1.getByte(i) else row2.getByte(i - row1.numFields)
 
   override def getFloat(i: Int): Float =
-    if (i < row1.length) row1.getFloat(i) else row2.getFloat(i - row1.length)
+    if (i < row1.numFields) row1.getFloat(i) else row2.getFloat(i - row1.numFields)
 
   override def copy(): InternalRow = {
-    val totalSize = row1.length + row2.length
+    val totalSize = row1.numFields + row2.numFields
     val copiedValues = new Array[Any](totalSize)
     var i = 0
     while(i < totalSize) {
-      copiedValues(i) = apply(i)
+      copiedValues(i) = get(i)
       i += 1
     }
     new GenericInternalRow(copiedValues)
@@ -568,50 +568,50 @@ class JoinedRow5 extends InternalRow {
 
   override def toSeq: Seq[Any] = row1.toSeq ++ row2.toSeq
 
-  override def length: Int = row1.length + row2.length
+  override def numFields: Int = row1.numFields + row2.numFields
 
   override def getUTF8String(i: Int): UTF8String = {
-    if (i < row1.length) row1.getUTF8String(i) else row2.getUTF8String(i - row1.length)
+    if (i < row1.numFields) row1.getUTF8String(i) else row2.getUTF8String(i - row1.numFields)
   }
 
   override def getBinary(i: Int): Array[Byte] = {
-    if (i < row1.length) row1.getBinary(i) else row2.getBinary(i - row1.length)
+    if (i < row1.numFields) row1.getBinary(i) else row2.getBinary(i - row1.numFields)
   }
 
 
   override def get(i: Int): Any =
-    if (i < row1.length) row1(i) else row2(i - row1.length)
+    if (i < row1.numFields) row1.get(i) else row2.get(i - row1.numFields)
 
   override def isNullAt(i: Int): Boolean =
-    if (i < row1.length) row1.isNullAt(i) else row2.isNullAt(i - row1.length)
+    if (i < row1.numFields) row1.isNullAt(i) else row2.isNullAt(i - row1.numFields)
 
   override def getInt(i: Int): Int =
-    if (i < row1.length) row1.getInt(i) else row2.getInt(i - row1.length)
+    if (i < row1.numFields) row1.getInt(i) else row2.getInt(i - row1.numFields)
 
   override def getLong(i: Int): Long =
-    if (i < row1.length) row1.getLong(i) else row2.getLong(i - row1.length)
+    if (i < row1.numFields) row1.getLong(i) else row2.getLong(i - row1.numFields)
 
   override def getDouble(i: Int): Double =
-    if (i < row1.length) row1.getDouble(i) else row2.getDouble(i - row1.length)
+    if (i < row1.numFields) row1.getDouble(i) else row2.getDouble(i - row1.numFields)
 
   override def getBoolean(i: Int): Boolean =
-    if (i < row1.length) row1.getBoolean(i) else row2.getBoolean(i - row1.length)
+    if (i < row1.numFields) row1.getBoolean(i) else row2.getBoolean(i - row1.numFields)
 
   override def getShort(i: Int): Short =
-    if (i < row1.length) row1.getShort(i) else row2.getShort(i - row1.length)
+    if (i < row1.numFields) row1.getShort(i) else row2.getShort(i - row1.numFields)
 
   override def getByte(i: Int): Byte =
-    if (i < row1.length) row1.getByte(i) else row2.getByte(i - row1.length)
+    if (i < row1.numFields) row1.getByte(i) else row2.getByte(i - row1.numFields)
 
   override def getFloat(i: Int): Float =
-    if (i < row1.length) row1.getFloat(i) else row2.getFloat(i - row1.length)
+    if (i < row1.numFields) row1.getFloat(i) else row2.getFloat(i - row1.numFields)
 
   override def copy(): InternalRow = {
-    val totalSize = row1.length + row2.length
+    val totalSize = row1.numFields + row2.numFields
     val copiedValues = new Array[Any](totalSize)
     var i = 0
     while(i < totalSize) {
-      copiedValues(i) = apply(i)
+      copiedValues(i) = get(i)
       i += 1
     }
     new GenericInternalRow(copiedValues)
@@ -665,50 +665,50 @@ class JoinedRow6 extends InternalRow {
 
   override def toSeq: Seq[Any] = row1.toSeq ++ row2.toSeq
 
-  override def length: Int = row1.length + row2.length
+  override def numFields: Int = row1.numFields + row2.numFields
 
   override def getUTF8String(i: Int): UTF8String = {
-    if (i < row1.length) row1.getUTF8String(i) else row2.getUTF8String(i - row1.length)
+    if (i < row1.numFields) row1.getUTF8String(i) else row2.getUTF8String(i - row1.numFields)
   }
 
   override def getBinary(i: Int): Array[Byte] = {
-    if (i < row1.length) row1.getBinary(i) else row2.getBinary(i - row1.length)
+    if (i < row1.numFields) row1.getBinary(i) else row2.getBinary(i - row1.numFields)
   }
 
 
   override def get(i: Int): Any =
-    if (i < row1.length) row1(i) else row2(i - row1.length)
+    if (i < row1.numFields) row1.get(i) else row2.get(i - row1.numFields)
 
   override def isNullAt(i: Int): Boolean =
-    if (i < row1.length) row1.isNullAt(i) else row2.isNullAt(i - row1.length)
+    if (i < row1.numFields) row1.isNullAt(i) else row2.isNullAt(i - row1.numFields)
 
   override def getInt(i: Int): Int =
-    if (i < row1.length) row1.getInt(i) else row2.getInt(i - row1.length)
+    if (i < row1.numFields) row1.getInt(i) else row2.getInt(i - row1.numFields)
 
   override def getLong(i: Int): Long =
-    if (i < row1.length) row1.getLong(i) else row2.getLong(i - row1.length)
+    if (i < row1.numFields) row1.getLong(i) else row2.getLong(i - row1.numFields)
 
   override def getDouble(i: Int): Double =
-    if (i < row1.length) row1.getDouble(i) else row2.getDouble(i - row1.length)
+    if (i < row1.numFields) row1.getDouble(i) else row2.getDouble(i - row1.numFields)
 
   override def getBoolean(i: Int): Boolean =
-    if (i < row1.length) row1.getBoolean(i) else row2.getBoolean(i - row1.length)
+    if (i < row1.numFields) row1.getBoolean(i) else row2.getBoolean(i - row1.numFields)
 
   override def getShort(i: Int): Short =
-    if (i < row1.length) row1.getShort(i) else row2.getShort(i - row1.length)
+    if (i < row1.numFields) row1.getShort(i) else row2.getShort(i - row1.numFields)
 
   override def getByte(i: Int): Byte =
-    if (i < row1.length) row1.getByte(i) else row2.getByte(i - row1.length)
+    if (i < row1.numFields) row1.getByte(i) else row2.getByte(i - row1.numFields)
 
   override def getFloat(i: Int): Float =
-    if (i < row1.length) row1.getFloat(i) else row2.getFloat(i - row1.length)
+    if (i < row1.numFields) row1.getFloat(i) else row2.getFloat(i - row1.numFields)
 
   override def copy(): InternalRow = {
-    val totalSize = row1.length + row2.length
+    val totalSize = row1.numFields + row2.numFields
     val copiedValues = new Array[Any](totalSize)
     var i = 0
     while(i < totalSize) {
-      copiedValues(i) = apply(i)
+      copiedValues(i) = get(i)
       i += 1
     }
     new GenericInternalRow(copiedValues)

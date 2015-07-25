@@ -78,6 +78,10 @@ case class DecimalType(precision: Int, scale: Int) extends FractionalType {
 
   override def toString: String = s"DecimalType($precision,$scale)"
 
+  /**
+   * Returns whether this DecimalType is wider than `other`. If yes, it means `other`
+   * can be casted into `this` safely without losing any precision or range.
+   */
   private[sql] def isWiderThan(other: DataType): Boolean = other match {
     case dt: DecimalType =>
       (precision - scale) >= (dt.precision - dt.scale) && scale >= dt.scale
@@ -109,7 +113,7 @@ object DecimalType extends AbstractDataType {
   @deprecated("Does not support unlimited precision, please specify the precision and scale", "1.5")
   val Unlimited: DecimalType = SYSTEM_DEFAULT
 
-  // The decimal types compatible with other numberic types
+  // The decimal types compatible with other numeric types
   private[sql] val ByteDecimal = DecimalType(3, 0)
   private[sql] val ShortDecimal = DecimalType(5, 0)
   private[sql] val IntDecimal = DecimalType(10, 0)

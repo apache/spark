@@ -675,7 +675,7 @@ case class CombineSetsAndSumFunction(
     val inputSetEval = inputSet.eval(input).asInstanceOf[OpenHashSet[Any]]
     val inputIterator = inputSetEval.iterator
     while (inputIterator.hasNext) {
-      seen.add(inputIterator.next)
+      seen.add(inputIterator.next())
     }
   }
 
@@ -685,7 +685,7 @@ case class CombineSetsAndSumFunction(
       null
     } else {
       Cast(Literal(
-        casted.iterator.map(f => f.apply(0)).reduceLeft(
+        casted.iterator.map(f => f.get(0)).reduceLeft(
           base.dataType.asInstanceOf[NumericType].numeric.asInstanceOf[Numeric[Any]].plus)),
         base.dataType).eval(null)
     }

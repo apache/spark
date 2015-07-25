@@ -51,27 +51,9 @@ import static org.apache.spark.sql.types.DataTypes.*;
  */
 public final class UnsafeRow extends MutableRow {
 
-  private Object baseObject;
-  private long baseOffset;
-
-  public Object getBaseObject() { return baseObject; }
-  public long getBaseOffset() { return baseOffset; }
-  public int getSizeInBytes() { return sizeInBytes; }
-
-  /** The number of fields in this row, used for calculating the bitset width (and in assertions) */
-  private int numFields;
-
-  /** The size of this row's backing data, in bytes) */
-  private int sizeInBytes;
-
-  public int length() { return numFields; }
-
-  /** The width of the null tracking bit set, in bytes */
-  private int bitSetWidthInBytes;
-
-  private long getFieldOffset(int ordinal) {
-   return baseOffset + bitSetWidthInBytes + ordinal * 8L;
-  }
+  //////////////////////////////////////////////////////////////////////////////
+  // Static methods
+  //////////////////////////////////////////////////////////////////////////////
 
   public static int calculateBitSetWidthInBytes(int numFields) {
     return ((numFields / 64) + (numFields % 64 == 0 ? 0 : 1)) * 8;
@@ -102,7 +84,7 @@ public final class UnsafeRow extends MutableRow {
           DoubleType,
           DateType,
           TimestampType
-    })));
+        })));
 
     // We support get() on a superset of the types for which we support set():
     final Set<DataType> _readableFieldTypes = new HashSet<>(
@@ -114,11 +96,47 @@ public final class UnsafeRow extends MutableRow {
     readableFieldTypes = Collections.unmodifiableSet(_readableFieldTypes);
   }
 
+  //////////////////////////////////////////////////////////////////////////////
+  // Private fields and methods
+  //////////////////////////////////////////////////////////////////////////////
+
+  private Object baseObject;
+  private long baseOffset;
+
+  /** The number of fields in this row, used for calculating the bitset width (and in assertions) */
+  private int numFields;
+
+  /** The size of this row's backing data, in bytes) */
+  private int sizeInBytes;
+
+  private void setNotNullAt(int i) {
+    assertIndexIsValid(i);
+    BitSetMethods.unset(baseObject, baseOffset, i);
+  }
+
+  /** The width of the null tracking bit set, in bytes */
+  private int bitSetWidthInBytes;
+
+  private long getFieldOffset(int ordinal) {
+    return baseOffset + bitSetWidthInBytes + ordinal * 8L;
+  }
+
+  //////////////////////////////////////////////////////////////////////////////
+  // Public methods
+  //////////////////////////////////////////////////////////////////////////////
+
   /**
    * Construct a new UnsafeRow. The resulting row won't be usable until `pointTo()` has been called,
    * since the value returned by this constructor is equivalent to a null pointer.
    */
   public UnsafeRow() { }
+
+  public Object getBaseObject() { return baseObject; }
+  public long getBaseOffset() { return baseOffset; }
+  public int getSizeInBytes() { return sizeInBytes; }
+
+  @Override
+  public int numFields() { return numFields; }
 
   /**
    * Update this UnsafeRow to point to different backing data.
@@ -129,7 +147,7 @@ public final class UnsafeRow extends MutableRow {
    * @param sizeInBytes the size of this row's backing data, in bytes
    */
   public void pointTo(Object baseObject, long baseOffset, int numFields, int sizeInBytes) {
-    assert numFields >= 0 : "numFields should >= 0";
+    assert numFields >= 0 : "numFields (" + numFields + ") should >= 0";
     this.bitSetWidthInBytes = calculateBitSetWidthInBytes(numFields);
     this.baseObject = baseObject;
     this.baseOffset = baseOffset;
@@ -150,11 +168,6 @@ public final class UnsafeRow extends MutableRow {
     // Since this row does does not currently support updates to variable-length values, we don't
     // have to worry about zeroing out that data.
     PlatformDependent.UNSAFE.putLong(baseObject, getFieldOffset(i), 0);
-  }
-
-  private void setNotNullAt(int i) {
-    assertIndexIsValid(i);
-    BitSetMethods.unset(baseObject, baseOffset, i);
   }
 
   @Override
@@ -218,12 +231,12 @@ public final class UnsafeRow extends MutableRow {
   }
 
   @Override
-  public int size() {
-    return numFields;
+  public Object get(int i) {
+    throw new UnsupportedOperationException();
   }
 
   @Override
-  public Object get(int i) {
+  public <T> T getAs(int i) {
     throw new UnsupportedOperationException();
   }
 
@@ -315,6 +328,21 @@ public final class UnsafeRow extends MutableRow {
     return getUTF8String(i).toString();
   }
 
+  @Override
+  public UnsafeRow getStruct(int i, int numFields) {
+    if (isNullAt(i)) {
+      return null;
+    } else {
+      assertIndexIsValid(i);
+      final long offsetAndSize = getLong(i);
+      final int offset = (int) (offsetAndSize >> 32);
+      final int size = (int) (offsetAndSize & ((1L << 32) - 1));
+      final UnsafeRow row = new UnsafeRow();
+      row.pointTo(baseObject, baseOffset + offset, numFields, size);
+      return row;
+    }
+  }
+
   /**
    * Copies this row, returning a self-contained UnsafeRow that stores its data in an internal
    * byte array rather than referencing data stored in a data page.
@@ -387,7 +415,7 @@ public final class UnsafeRow extends MutableRow {
    */
   public byte[] getBytes() {
     if (baseObject instanceof byte[] && baseOffset == PlatformDependent.BYTE_ARRAY_OFFSET
-        && (((byte[]) baseObject).length == sizeInBytes)) {
+      && (((byte[]) baseObject).length == sizeInBytes)) {
       return (byte[]) baseObject;
     } else {
       byte[] bytes = new byte[sizeInBytes];

@@ -83,6 +83,11 @@ trait CheckAnalysis {
               s"filter expression '${f.condition.prettyString}' " +
                 s"of type ${f.condition.dataType.simpleString} is not a boolean.")
 
+          case j @ Join(_, _, _, Some(condition)) if condition.dataType != BooleanType =>
+            failAnalysis(
+              s"join condition '${condition.prettyString}' " +
+                s"of type ${condition.dataType.simpleString} is not a boolean.")
+
           case Aggregate(groupingExprs, aggregateExprs, child) =>
             def checkValidAggregateExpression(expr: Expression): Unit = expr match {
               case _: AggregateExpression => // OK
@@ -97,6 +102,16 @@ trait CheckAnalysis {
             }
 
             aggregateExprs.foreach(checkValidAggregateExpression)
+
+          case Sort(orders, _, _) =>
+            orders.foreach { order =>
+              order.dataType match {
+                case t: AtomicType => // OK
+                case NullType => // OK
+                case t =>
+                  failAnalysis(s"Sorting is not supported for columns of type ${t.simpleString}")
+              }
+            }
 
           case _ => // Fallbacks to the following checks
         }

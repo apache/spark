@@ -60,7 +60,7 @@ object GeneratePredicate extends CodeGenerator[Expression, (InternalRow) => Bool
         }
       }"""
 
-    logDebug(s"Generated predicate '$predicate':\n$code")
+    logDebug(s"Generated predicate '$predicate':\n${CodeFormatter.format(code)}")
 
     val p = compile(code).generate(ctx.references.toArray).asInstanceOf[Predicate]
     (r: InternalRow) => p.eval(r)

@@ -148,7 +148,7 @@ class InputAggregationBuffer private[sql] (
     toCatalystConverters: Array[Any => Any],
     toScalaConverters: Array[Any => Any],
     bufferOffset: Int,
-    var underlyingInputBuffer: Row)
+    var underlyingInputBuffer: InternalRow)
   extends AggregationBuffer(toCatalystConverters, toScalaConverters, bufferOffset) {
 
   override def get(i: Int): Any = {
@@ -156,6 +156,7 @@ class InputAggregationBuffer private[sql] (
       throw new IllegalArgumentException(
         s"Could not access ${i}th value in this buffer because it only has $length values.")
     }
+    // TODO: Use buffer schema to avoid using generic getter.
     toScalaConverters(i)(underlyingInputBuffer(offsets(i)))
   }
 
