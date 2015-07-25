@@ -298,7 +298,7 @@ case class Window(
         var rowsSize = 0
         override final def hasNext: Boolean = rowIndex < rowsSize || nextRowAvailable
 
-        val join = new JoinedRow6
+        val join = new JoinedRow
         val windowFunctionResult = new GenericMutableRow(unboundExpressions.size)
         override final def next(): InternalRow = {
           // Load the next partition if we need to.
