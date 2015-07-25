@@ -113,6 +113,7 @@ private class KinesisTestUtils(
       if (name.startsWith("KinesisTestUtils-") && describeStream(name).nonEmpty) {
         println(s"Deleting stream $name")
         kinesisClient.deleteStream(name)
+        waitForStreamToBeDeleted(name)
         println(s"Deleted stream $name")
       }
     }
@@ -204,6 +205,18 @@ private class KinesisTestUtils(
       }
     }
     require(false, s"Stream $streamName never became active")
+  }
+
+  private def waitForStreamToBeDeleted(streamNameToWaitFor: String): Unit = {
+    val startTime = System.currentTimeMillis()
+    val endTime = startTime + TimeUnit.SECONDS.toMillis(300)
+    while (System.currentTimeMillis() < endTime) {
+      TimeUnit.SECONDS.sleep(1)
+      if (describeStream(streamNameToWaitFor).isEmpty) {
+        return
+      }
+    }
+    require(false, s"Stream $streamName has not been deleted after 300 seconds")
   }
 }
 
