@@ -43,7 +43,7 @@ trait ExpressionEvalHelper {
     checkEvaluationWithoutCodegen(expression, catalystValue, inputRow)
     checkEvaluationWithGeneratedMutableProjection(expression, catalystValue, inputRow)
     checkEvaluationWithGeneratedProjection(expression, catalystValue, inputRow)
-    if (UnsafeColumnWriter.canEmbed(expression.dataType)) {
+    if (GenerateUnsafeProjection.canSupport(expression.dataType)) {
       checkEvalutionWithUnsafeProjection(expression, catalystValue, inputRow)
     }
     checkEvaluationWithOptimization(expression, catalystValue, inputRow)

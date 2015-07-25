@@ -22,29 +22,22 @@ import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
-import org.apache.spark.sql.catalyst.expressions.{UnsafeRow, UnsafeRowConverter}
+import org.apache.spark.sql.catalyst.expressions.{UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.PlatformDependent
 
 class UnsafeRowSerializerSuite extends SparkFunSuite {
 
   private def toUnsafeRow(row: Row, schema: Array[DataType]): UnsafeRow = {
     val internalRow = CatalystTypeConverters.convertToCatalyst(row).asInstanceOf[InternalRow]
-    val rowConverter = new UnsafeRowConverter(schema)
-    val rowSizeInBytes = rowConverter.getSizeRequirement(internalRow)
-    val byteArray = new Array[Byte](rowSizeInBytes)
-    rowConverter.writeRow(
-      internalRow, byteArray, PlatformDependent.BYTE_ARRAY_OFFSET, rowSizeInBytes)
-    val unsafeRow = new UnsafeRow()
-    unsafeRow.pointTo(byteArray, PlatformDependent.BYTE_ARRAY_OFFSET, row.length, rowSizeInBytes)
-    unsafeRow
+    val converter = UnsafeProjection.create(schema)
+    converter.apply(internalRow)
   }
 
-  ignore("toUnsafeRow() test helper method") {
+  test("toUnsafeRow() test helper method") {
     // This currently doesnt work because the generic getter throws an exception.
     val row = Row("Hello", 123)
     val unsafeRow = toUnsafeRow(row, Array(StringType, IntegerType))
-    assert(row.getString(0) === unsafeRow.get(0).toString)
+    assert(row.getString(0) === unsafeRow.getUTF8String(0).toString)
     assert(row.getInt(1) === unsafeRow.getInt(1))
   }
 
