@@ -158,7 +158,16 @@ def initdb():
         session.add(
             models.Connection(
                 conn_id='http_default', conn_type='http',
-                host='http://www.google.com'))
+                host='http://www.google.com',
+                port=1433))
+        session.commit()
+
+    conn = session.query(C).filter(C.conn_id == 'mssql_default').first()
+    if not conn:
+        session.add(
+            models.Connection(
+                conn_id='mssql_default', conn_type='mssql',
+                host='localhost'))
         session.commit()
 
     # Known event types
