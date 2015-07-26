@@ -532,67 +532,6 @@ private[master] class Master(
   }
 
   /**
-   * Schedule executors to be launched on the workers.
-   * Returns an array containing number of cores assigned to each worker.
-   *
-   * There are two modes of launching executors. The first attempts to spread out an application's
-   * executors on as many workers as possible, while the second does the opposite (i.e. launch them
-   * on as few workers as possible). The former is usually better for data locality purposes and is
-   * the default.
-   *
-   * The number of cores assigned to each executor is configurable. When this is explicitly set,
-   * multiple executors from the same application may be launched on the same worker if the worker
-   * has enough cores and memory. Otherwise, each executor grabs all the cores available on the
-   * worker by default, in which case only one executor may be launched on each worker.
-   *
-   * It is important to allocate coresPerExecutor on each worker at a time (instead of 1 core
-   * at a time). Consider the following example: cluster has 4 workers with 16 cores each.
-   * User requests 3 executors (spark.cores.max = 48, spark.executor.cores = 16). If 1 core is
-   * allocated at a time, 12 cores from each worker would be assigned to each executor.
-   * Since 12 < 16, no executors would launch [SPARK-8881].
-   */
-  private[master] def scheduleExecutorsOnWorkers(
-      app: ApplicationInfo,
-      usableWorkers: Array[WorkerInfo],
-      spreadOutApps: Boolean): Array[Int] = {
-    // If the number of cores per executor is not specified, then we can just schedule
-    // 1 core at a time since we expect a single executor to be launched on each worker
-    val coresPerExecutor = app.desc.coresPerExecutor.getOrElse(1)
-    val memoryPerExecutor = app.desc.memoryPerExecutorMB
-    val numUsable = usableWorkers.length
-    val assignedCores = new Array[Int](numUsable) // Number of cores to give to each worker
-    val assignedMemory = new Array[Int](numUsable) // Amount of memory to give to each worker
-    var coresToAssign = math.min(app.coresLeft, usableWorkers.map(_.coresFree).sum)
-    var freeWorkers = (0 until numUsable).toIndexedSeq
-
-    def canLaunchExecutor(pos: Int): Boolean = {
-      usableWorkers(pos).coresFree - assignedCores(pos) >= coresPerExecutor &&
-      usableWorkers(pos).memoryFree - assignedMemory(pos) >= memoryPerExecutor
-    }
-
-    while (coresToAssign >= coresPerExecutor && freeWorkers.nonEmpty) {
-      freeWorkers = freeWorkers.filter(canLaunchExecutor)
-      freeWorkers.foreach { pos =>
-        var keepScheduling = true
-        while (keepScheduling && canLaunchExecutor(pos) && coresToAssign >= coresPerExecutor) {
-          coresToAssign -= coresPerExecutor
-          assignedCores(pos) += coresPerExecutor
-          assignedMemory(pos) += memoryPerExecutor
-
-          // Spreading out an application means spreading out its executors across as
-          // many workers as possible. If we are not spreading out, then we should keep
-          // scheduling executors on this worker until we use all of its resources.
-          // Otherwise, just move on to the next worker.
-          if (spreadOutApps) {
-            keepScheduling = false
-          }
-        }
-      }
-    }
-    assignedCores
-  }
-
-  /**
    * Schedule and launch executors on workers
    */
   private def startExecutorsOnWorkers(): Unit = {
@@ -605,7 +544,7 @@ private[master] class Master(
         .filter(worker => worker.memoryFree >= app.desc.memoryPerExecutorMB &&
           worker.coresFree >= coresPerExecutor.getOrElse(1))
         .sortBy(_.coresFree).reverse
-      val assignedCores = scheduleExecutorsOnWorkers(app, usableWorkers, spreadOutApps)
+      val assignedCores = Master.scheduleExecutorsOnWorkers(app, usableWorkers, spreadOutApps)
 
       // Now that we've decided how many cores to allocate on each worker, let's allocate them
       for (pos <- 0 until usableWorkers.length if assignedCores(pos) > 0) {
@@ -930,7 +869,7 @@ private[master] class Master(
 
 private[deploy] object Master extends Logging {
   val systemName = "sparkMaster"
-  private val actorName = "Master"
+  val actorName = "Master"
 
   def main(argStrings: Array[String]) {
     SignalLogger.register(log)
@@ -981,5 +920,75 @@ private[deploy] object Master extends Logging {
     val portsRequest = actor.ask(BoundPortsRequest)(timeout)
     val portsResponse = Await.result(portsRequest, timeout).asInstanceOf[BoundPortsResponse]
     (actorSystem, boundPort, portsResponse.webUIPort, portsResponse.restPort)
+  }
+
+
+  /**
+   * Schedule executors to be launched on the workers.
+   * Returns an array containing number of cores assigned to each worker.
+   *
+   * There are two modes of launching executors. The first attempts to spread out an application's
+   * executors on as many workers as possible, while the second does the opposite (i.e. launch them
+   * on as few workers as possible). The former is usually better for data locality purposes and is
+   * the default.
+   *
+   * The number of cores assigned to each executor is configurable. When this is explicitly set,
+   * multiple executors from the same application may be launched on the same worker if the worker
+   * has enough cores and memory. Otherwise, each executor grabs all the cores available on the
+   * worker by default, in which case only one executor may be launched on each worker.
+   *
+   * It is important to allocate coresPerExecutor on each worker at a time (instead of 1 core
+   * at a time). Consider the following example: cluster has 4 workers with 16 cores each.
+   * User requests 3 executors (spark.cores.max = 48, spark.executor.cores = 16). If 1 core is
+   * allocated at a time, 12 cores from each worker would be assigned to each executor.
+   * Since 12 < 16, no executors would launch [SPARK-8881].
+   *
+   * Unfortunately, this must be moved out here into the Master object because Akka allows
+   * neither creating actors outside of Props nor accessing the Master after setting up the
+   * actor system. Otherwise, there is no way to test it.
+   */
+  def scheduleExecutorsOnWorkers(
+      app: ApplicationInfo,
+      usableWorkers: Array[WorkerInfo],
+      spreadOutApps: Boolean): Array[Int] = {
+    // If the number of cores per executor is not specified, then we can just schedule
+    // 1 core at a time since we expect a single executor to be launched on each worker
+    val coresPerExecutor = app.desc.coresPerExecutor.getOrElse(1)
+    val memoryPerExecutor = app.desc.memoryPerExecutorMB
+    val numUsable = usableWorkers.length
+    val assignedCores = new Array[Int](numUsable) // Number of cores to give to each worker
+    val assignedMemory = new Array[Int](numUsable) // Amount of memory to give to each worker
+    var coresToAssign = math.min(app.coresLeft, usableWorkers.map(_.coresFree).sum)
+    var freeWorkers = (0 until numUsable).toIndexedSeq
+
+    def canLaunchExecutor(pos: Int): Boolean = {
+      usableWorkers(pos).coresFree - assignedCores(pos) >= coresPerExecutor &&
+        usableWorkers(pos).memoryFree - assignedMemory(pos) >= memoryPerExecutor
+    }
+
+    while (coresToAssign >= coresPerExecutor && freeWorkers.nonEmpty) {
+      freeWorkers = freeWorkers.filter(canLaunchExecutor)
+      freeWorkers.foreach { pos =>
+        var keepScheduling = true
+        while (keepScheduling && canLaunchExecutor(pos) && coresToAssign >= coresPerExecutor) {
+          coresToAssign -= coresPerExecutor
+          assignedCores(pos) += coresPerExecutor
+          // If cores per executor is not set, we are assigning 1 core at a time
+          // without actually meaning to launch 1 executor for each core assigned
+          if (app.desc.coresPerExecutor.isDefined) {
+            assignedMemory(pos) += memoryPerExecutor
+          }
+
+          // Spreading out an application means spreading out its executors across as
+          // many workers as possible. If we are not spreading out, then we should keep
+          // scheduling executors on this worker until we use all of its resources.
+          // Otherwise, just move on to the next worker.
+          if (spreadOutApps) {
+            keepScheduling = false
+          }
+        }
+      }
+    }
+    assignedCores
   }
 }
