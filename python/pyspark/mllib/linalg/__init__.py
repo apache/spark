@@ -1184,9 +1184,14 @@ class RowMatrix(DistributedMatrix):
 
         :param rows: An RDD of Vectors.
         """
+        if not isinstance(rows, RDD):
+            raise TypeError("rows should be an RDD object, got %s" % type(rows))
+        first = rows.first()
+        if not isinstance(first, Vector):
+            raise TypeError("rows should be an RDD of Vectors, got an RDD of %s" % type(first))
+
         javaRowMatrix = callMLlibFunc("createRowMatrix", rows, long(numRows), int(numCols))
-        jrm = JavaModelWrapper(javaRowMatrix)
-        self._jrm = jrm
+        self._jrm = JavaModelWrapper(javaRowMatrix)
         self.rows = rows
 
     def numRows(self):
@@ -1254,6 +1259,15 @@ class IndexedRowMatrix(DistributedMatrix):
 
         :param rows: An RDD of IndexedRows or (long, Vector) tuples.
         """
+        if not isinstance(rows, RDD):
+            raise TypeError("rows should be an RDD object, got %s" % type(rows))
+        first = rows.first()
+        if not (isinstance(first, IndexedRow) or
+                (isinstance(first, tuple) and len(first) == 2 and
+                 isinstance(first[0], (long, int)) and isinstance(first[1], Vector))):
+            raise TypeError("rows should be an RDD of IndexedRows or (long, Vector) tuples, " \
+                            "got an RDD of %s" % type(first))
+
         # We use DataFrames for serialization of IndexedRows from
         # Python, so first convert the RDD to a DataFrame on this side.
         # This will convert each IndexedRow to a Row containing the
@@ -1262,8 +1276,7 @@ class IndexedRowMatrix(DistributedMatrix):
         # Scala side.
         javaIndexedRowMatrix = callMLlibFunc("createIndexedRowMatrix", rows.toDF(),
                                              long(numRows), int(numCols))
-        jirm = JavaModelWrapper(javaIndexedRowMatrix)
-        self._jirm = jirm
+        self._jirm = JavaModelWrapper(javaIndexedRowMatrix)
         self.rows = rows
 
     def numRows(self):
@@ -1375,6 +1388,24 @@ class CoordinateMatrix(object):
         :param entries: An RDD of MatrixEntry inputs or
                         (long, long, float) tuples.
         """
+        if not isinstance(entries, RDD):
+            raise TypeError("entries should be an RDD object, got %s" % type(entries))
+        first = entries.first()
+        if isinstance(first, MatrixEntry):
+            pass
+        elif (isinstance(first, (tuple, list)) and len(first) == 3 and
+              isinstance(first[0], (long, int)) and
+              isinstance(first[1], (long, int)) and
+              isinstance(first[2], (float, long, int))):
+            # The Java side won't be able to automatically convert a
+            # long to a double for the 3rd tuple value, so map each
+            # tuple to a MatrixEntry, which will do the conversion
+            # on the Python side.
+            entries = entries.map(lambda entry: MatrixEntry(*entry))
+        else:
+            raise TypeError("rows should be an RDD of MatrixEntry entries or " \
+                            "(long, long, float) tuples, got an RDD of %s" % type(first))
+
         # We use DataFrames for serialization of MatrixEntry entries
         # from Python, so first convert the RDD to a DataFrame on this
         # side. This will convert each MatrixEntry to a Row containing
@@ -1383,8 +1414,7 @@ class CoordinateMatrix(object):
         # the Scala side.
         javaCoordinateMatrix = callMLlibFunc("createCoordinateMatrix", entries.toDF(),
                                              long(numRows), long(numCols))
-        jcm = JavaModelWrapper(javaCoordinateMatrix)
-        self._jcm = jcm
+        self._jcm = JavaModelWrapper(javaCoordinateMatrix)
         self.entries = entries
 
     def numRows(self):
@@ -1392,7 +1422,7 @@ class CoordinateMatrix(object):
         Get or compute the number of rows.
 
         >>> entries = sc.parallelize([MatrixEntry(0, 0, 1.2),
-        ...                           MatrixEntry(1, 0, 2.1),
+        ...                           MatrixEntry(1, 0, 2),
         ...                           MatrixEntry(2, 1, 3.7)])
         >>> cm = CoordinateMatrix(entries)
         >>> int(cm.numRows())
