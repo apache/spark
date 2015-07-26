@@ -141,10 +141,13 @@ final class UnsafeExternalRowSorter {
               numFields,
               sortedIterator.getRecordLength());
             if (!hasNext()) {
-              row.copy(); // so that we don't have dangling pointers to freed page
+              UnsafeRow copy = row.copy(); // so that we don't have dangling pointers to freed page
+              row.pointTo(null, 0, 0, 0); // so that we don't keep references to the base object
               cleanupResources();
+              return copy;
+            } else {
+              return row;
             }
-            return row;
           } catch (IOException e) {
             cleanupResources();
             // Scala iterators don't declare any checked exceptions, so we need to use this hack
