@@ -28,7 +28,8 @@ import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.hive.test.TestHive._
 import org.apache.spark.sql.hive.test.TestHive.implicits._
 import org.apache.spark.sql.hive.{HiveContext, HiveQLDialect, MetastoreRelation}
-import org.apache.spark.sql.parquet.ParquetRelation2
+import org.apache.spark.sql.parquet.ParquetRelation
+import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
 
 case class Nested1(f1: Nested2)
@@ -61,7 +62,9 @@ class MyDialect extends DefaultParserDialect
  * Hive to generate them (in contrast to HiveQuerySuite).  Often this is because the query is
  * valid, but Hive currently cannot execute it.
  */
-class SQLQuerySuite extends QueryTest {
+class SQLQuerySuite extends QueryTest with SQLTestUtils {
+  override def sqlContext: SQLContext = TestHive
+
   test("SPARK-6835: udtf in lateral view") {
     val df = Seq((1, 1)).toDF("c1", "c2")
     df.registerTempTable("table1")
@@ -195,17 +198,17 @@ class SQLQuerySuite extends QueryTest {
     def checkRelation(tableName: String, isDataSourceParquet: Boolean): Unit = {
       val relation = EliminateSubQueries(catalog.lookupRelation(Seq(tableName)))
       relation match {
-        case LogicalRelation(r: ParquetRelation2) =>
+        case LogicalRelation(r: ParquetRelation) =>
           if (!isDataSourceParquet) {
             fail(
               s"${classOf[MetastoreRelation].getCanonicalName} is expected, but found " +
-              s"${ParquetRelation2.getClass.getCanonicalName}.")
+              s"${ParquetRelation.getClass.getCanonicalName}.")
           }
 
         case r: MetastoreRelation =>
           if (isDataSourceParquet) {
             fail(
-              s"${ParquetRelation2.getClass.getCanonicalName} is expected, but found " +
+              s"${ParquetRelation.getClass.getCanonicalName} is expected, but found " +
               s"${classOf[MetastoreRelation].getCanonicalName}.")
           }
       }
@@ -350,33 +353,26 @@ class SQLQuerySuite extends QueryTest {
       "serde_p1=p1", "serde_p2=p2", "tbl_p1=p11", "tbl_p2=p22", "MANAGED_TABLE"
     )
 
-    val origUseParquetDataSource = conf.parquetUseDataSourceApi
-    try {
-      setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, false)
-      sql(
-        """CREATE TABLE ctas5
-          | STORED AS parquet AS
-          |   SELECT key, value
-          |   FROM src
-          |   ORDER BY key, value""".stripMargin).collect()
+    sql(
+      """CREATE TABLE ctas5
+        | STORED AS parquet AS
+        |   SELECT key, value
+        |   FROM src
+        |   ORDER BY key, value""".stripMargin).collect()
 
-      checkExistence(sql("DESC EXTENDED ctas5"), true,
-        "name:key", "type:string", "name:value", "ctas5",
-        "org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat",
-        "org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat",
-        "org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe",
-        "MANAGED_TABLE"
-      )
+    checkExistence(sql("DESC EXTENDED ctas5"), true,
+      "name:key", "type:string", "name:value", "ctas5",
+      "org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat",
+      "org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat",
+      "org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe",
+      "MANAGED_TABLE"
+    )
 
-      val default = convertMetastoreParquet
-      // use the Hive SerDe for parquet tables
-      sql("set spark.sql.hive.convertMetastoreParquet = false")
+    // use the Hive SerDe for parquet tables
+    withSQLConf(HiveContext.CONVERT_METASTORE_PARQUET.key -> "false") {
       checkAnswer(
         sql("SELECT key, value FROM ctas5 ORDER BY key, value"),
         sql("SELECT key, value FROM src ORDER BY key, value").collect().toSeq)
-      sql(s"set spark.sql.hive.convertMetastoreParquet = $default")
-    } finally {
-      setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, origUseParquetDataSource)
     }
   }
 

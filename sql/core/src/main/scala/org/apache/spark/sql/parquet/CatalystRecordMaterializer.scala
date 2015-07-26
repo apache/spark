@@ -17,22 +17,25 @@
 
 package org.apache.spark.sql.parquet
 
+import org.apache.parquet.io.api.{GroupConverter, RecordMaterializer}
+import org.apache.parquet.schema.MessageType
+
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.types.StructType
 
-// TODO Removes this while fixing SPARK-8848
-private[sql] object CatalystConverter {
-  // This is mostly Parquet convention (see, e.g., `ConversionPatterns`).
-  // Note that "array" for the array elements is chosen by ParquetAvro.
-  // Using a different value will result in Parquet silently dropping columns.
-  val ARRAY_CONTAINS_NULL_BAG_SCHEMA_NAME = "bag"
-  val ARRAY_ELEMENTS_SCHEMA_NAME = "array"
+/**
+ * A [[RecordMaterializer]] for Catalyst rows.
+ *
+ * @param parquetSchema Parquet schema of the records to be read
+ * @param catalystSchema Catalyst schema of the rows to be constructed
+ */
+private[parquet] class CatalystRecordMaterializer(
+    parquetSchema: MessageType, catalystSchema: StructType)
+  extends RecordMaterializer[InternalRow] {
 
-  val MAP_KEY_SCHEMA_NAME = "key"
-  val MAP_VALUE_SCHEMA_NAME = "value"
-  val MAP_SCHEMA_NAME = "map"
+  private val rootConverter = new CatalystRowConverter(parquetSchema, catalystSchema, NoopUpdater)
 
-  // TODO: consider using Array[T] for arrays to avoid boxing of primitive types
-  type ArrayScalaType[T] = Seq[T]
-  type StructScalaType[T] = InternalRow
-  type MapScalaType[K, V] = Map[K, V]
+  override def getCurrentRecord: InternalRow = rootConverter.currentRow
+
+  override def getRootConverter: GroupConverter = rootConverter
 }
