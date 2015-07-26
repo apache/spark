@@ -559,7 +559,7 @@ private[master] class Master(
    * allocated at a time, 12 cores from each worker would be assigned to each executor.
    * Since 12 < 16, no executors would launch [SPARK-8881].
    */
-  private[master] def scheduleExecutorsOnWorkers(
+  private def scheduleExecutorsOnWorkers(
       app: ApplicationInfo,
       usableWorkers: Array[WorkerInfo],
       spreadOutApps: Boolean): Array[Int] = {
@@ -585,7 +585,11 @@ private[master] class Master(
         while (keepScheduling && canLaunchExecutor(pos) && coresToAssign >= coresPerExecutor) {
           coresToAssign -= coresPerExecutor
           assignedCores(pos) += coresPerExecutor
-          assignedMemory(pos) += memoryPerExecutor
+          // If cores per executor is not set, we are assigning 1 core at a time
+          // without actually meaning to launch 1 executor for each core assigned
+          if (app.desc.coresPerExecutor.isDefined) {
+            assignedMemory(pos) += memoryPerExecutor
+          }
 
           // Spreading out an application means spreading out its executors across as
           // many workers as possible. If we are not spreading out, then we should keep
