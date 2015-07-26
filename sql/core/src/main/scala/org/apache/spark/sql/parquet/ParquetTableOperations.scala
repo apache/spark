@@ -159,7 +159,7 @@ private[sql] case class ParquetTableScan(
 
               // Parquet will leave partitioning columns empty, so we fill them in here.
               var i = 0
-              while (i < requestedPartitionOrdinals.size) {
+              while (i < requestedPartitionOrdinals.length) {
                 row(requestedPartitionOrdinals(i)._2) =
                   partitionRowValues(requestedPartitionOrdinals(i)._1)
                 i += 1
@@ -178,13 +178,13 @@ private[sql] case class ParquetTableScan(
               val row = iter.next()._2.asInstanceOf[InternalRow]
 
               var i = 0
-              while (i < row.size) {
-                mutableRow(i) = row(i)
+              while (i < row.numFields) {
+                mutableRow(i) = row.genericGet(i)
                 i += 1
               }
               // Parquet will leave partitioning columns empty, so we fill them in here.
               i = 0
-              while (i < requestedPartitionOrdinals.size) {
+              while (i < requestedPartitionOrdinals.length) {
                 mutableRow(requestedPartitionOrdinals(i)._2) =
                   partitionRowValues(requestedPartitionOrdinals(i)._1)
                 i += 1

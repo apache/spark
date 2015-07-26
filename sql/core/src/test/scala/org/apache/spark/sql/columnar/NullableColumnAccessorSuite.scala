@@ -75,7 +75,7 @@ class NullableColumnAccessorSuite extends SparkFunSuite {
       (0 until 4).foreach { _ =>
         assert(accessor.hasNext)
         accessor.extractTo(row, 0)
-        assert(row(0) === randomRow(0))
+        assert(row.get(0) === randomRow.get(0))
 
         assert(accessor.hasNext)
         accessor.extractTo(row, 0)

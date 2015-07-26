@@ -197,6 +197,9 @@ final class DataFrameWriter private[sql](df: DataFrame) {
           // the table. But, insertInto with Overwrite requires the schema of data be the same
           // the schema of the table.
           insertInto(tableName)
+
+        case SaveMode.Overwrite =>
+          throw new UnsupportedOperationException("overwrite mode unsupported.")
       }
     } else {
       val cmd =

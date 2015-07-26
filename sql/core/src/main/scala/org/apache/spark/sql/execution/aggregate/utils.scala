@@ -191,10 +191,7 @@ object Utils {
     }
     val groupExpressionMap = namedGroupingExpressions.toMap
     val namedGroupingAttributes = namedGroupingExpressions.map(_._2.toAttribute)
-    val partialAggregateExpressions = aggregateExpressions.map {
-      case AggregateExpression2(aggregateFunction, mode, isDistinct) =>
-        AggregateExpression2(aggregateFunction, Partial, isDistinct)
-    }
+    val partialAggregateExpressions = aggregateExpressions.map(_.copy(mode = Partial))
     val partialAggregateAttributes = partialAggregateExpressions.flatMap { agg =>
       agg.aggregateFunction.bufferAttributes
     }
@@ -208,10 +205,7 @@ object Utils {
         child)
 
     // 2. Create an Aggregate Operator for final aggregations.
-    val finalAggregateExpressions = aggregateExpressions.map {
-      case AggregateExpression2(aggregateFunction, mode, isDistinct) =>
-        AggregateExpression2(aggregateFunction, Final, isDistinct)
-    }
+    val finalAggregateExpressions = aggregateExpressions.map(_.copy(mode = Final))
     val finalAggregateAttributes =
       finalAggregateExpressions.map {
         expr => aggregateFunctionMap(expr.aggregateFunction, expr.isDistinct)
