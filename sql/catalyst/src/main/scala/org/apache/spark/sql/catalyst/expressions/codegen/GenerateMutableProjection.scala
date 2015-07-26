@@ -17,10 +17,10 @@
 
 package org.apache.spark.sql.catalyst.expressions.codegen
 
+import scala.collection.mutable.ArrayBuffer
+
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.NoOp
-
-import scala.collection.mutable.ArrayBuffer
 
 // MutableProjection is not accessible in Java
 abstract class BaseMutableProjection extends MutableProjection
@@ -45,10 +45,11 @@ object GenerateMutableProjection extends CodeGenerator[Seq[Expression], () => Mu
         val evaluationCode = e.gen(ctx)
         evaluationCode.code +
           s"""
-            if(${evaluationCode.isNull})
+            if (${evaluationCode.isNull}) {
               mutableRow.setNullAt($i);
-            else
+            } else {
               ${ctx.setColumn("mutableRow", e.dataType, i, evaluationCode.primitive)};
+            }
           """
     }
     // collect projections into blocks as function has 64kb codesize limit in JVM
@@ -119,7 +120,7 @@ object GenerateMutableProjection extends CodeGenerator[Seq[Expression], () => Mu
       }
     """
 
-    logDebug(s"code for ${expressions.mkString(",")}:\n$code")
+    logDebug(s"code for ${expressions.mkString(",")}:\n${CodeFormatter.format(code)}")
 
     val c = compile(code)
     () => {

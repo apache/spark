@@ -196,7 +196,26 @@ trait Unevaluable extends Expression {
  * An expression that is nondeterministic.
  */
 trait Nondeterministic extends Expression {
-  override def deterministic: Boolean = false
+  final override def deterministic: Boolean = false
+  final override def foldable: Boolean = false
+
+  private[this] var initialized = false
+
+  final def initialize(): Unit = {
+    if (!initialized) {
+      initInternal()
+      initialized = true
+    }
+  }
+
+  protected def initInternal(): Unit
+
+  final override def eval(input: InternalRow = null): Any = {
+    require(initialized, "nondeterministic expression should be initialized before evaluate")
+    evalInternal(input)
+  }
+
+  protected def evalInternal(input: InternalRow): Any
 }
 
 

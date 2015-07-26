@@ -230,7 +230,8 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
     }
     """
 
-    logDebug(s"MutableRow, initExprs: ${expressions.mkString(",")} code:\n${code}")
+    logDebug(s"MutableRow, initExprs: ${expressions.mkString(",")} code:\n" +
+      CodeFormatter.format(code))
 
     compile(code).generate(ctx.references.toArray).asInstanceOf[Projection]
   }

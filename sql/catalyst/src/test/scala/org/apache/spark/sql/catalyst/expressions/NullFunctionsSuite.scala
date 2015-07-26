@@ -92,7 +92,7 @@ class NullFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     val nullOnly = Seq(Literal("x"),
       Literal.create(null, DoubleType),
-      Literal.create(null, DecimalType.Unlimited),
+      Literal.create(null, DecimalType.USER_DEFAULT),
       Literal(Float.MaxValue),
       Literal(false))
 
