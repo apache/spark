@@ -164,6 +164,7 @@ object CatalystTypeConverters {
       scalaValue match {
         case a: Array[_] => a.toSeq.map(elementConverter.toCatalyst)
         case s: Seq[_] => s.map(elementConverter.toCatalyst)
+        case set: Set[_] => set.toSeq.map(elementConverter.toCatalyst)
         case i: JavaIterable[_] =>
           val iter = i.iterator
           var convertedIterable: List[Any] = List()
