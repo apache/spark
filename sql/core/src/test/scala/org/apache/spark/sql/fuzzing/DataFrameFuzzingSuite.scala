@@ -20,6 +20,8 @@ package org.apache.spark.sql.fuzzing
 import java.lang.reflect.InvocationTargetException
 import java.util.concurrent.atomic.AtomicInteger
 
+import org.apache.spark.sql.catalyst.plans.JoinType
+
 import scala.reflect.runtime
 import scala.reflect.runtime.{universe => ru}
 import scala.util.Random
@@ -144,6 +146,7 @@ class DataFrameFuzzingSuite extends SparkFunSuite {
       .filterNot(_.name.toString == "drop") // since this can lead to a DataFrame with no columns
       .filterNot(_.name.toString == "describe") // since we cannot run all queries on describe output
       .filterNot(_.name.toString == "dropDuplicates")
+      .filter(_.name.toString == "join")
       .toSeq
   }
 
@@ -185,20 +188,24 @@ class DataFrameFuzzingSuite extends SparkFunSuite {
       method: ru.MethodSymbol,
       typeConstraint: DataType => Boolean = _ => true): Seq[Any] = {
     val params = method.paramss.flatten // We don't use multiple parameter lists
-    val paramTypes = params.map(_.typeSignature)
     def randColName(): String =
       getRandomColumnName(df, typeConstraint).getOrElse(throw new NoDataGeneratorException)
-    paramTypes.map { t =>
+    params.map { p =>
+      val t = p.typeSignature
       if (t =:= ru.typeOf[DataFrame]) {
         randomChoice(Seq(
           df,
-          tryToExecute(applyRandomTransformationToDataFrame(df)),
+          //tryToExecute(applyRandomTransformationToDataFrame(df)),
           dataGenerator.randomDataFrame(numCols = Random.nextInt(4) + 1, numRows = 100)
         )) // ++ Try(applyRandomTransformationToDataFrame(df)).toOption.toSeq)
       } else if (t =:= ru.typeOf[Column]) {
         df.col(randColName())
       } else if (t =:= ru.typeOf[String]) {
-        randColName()
+        if (p.name == "joinType") {
+          randomChoice(JoinType.supportedJoinTypes)
+        } else {
+          randColName()
+        }
       } else if (t <:< ru.typeOf[Seq[Column]]) {
         Seq.fill(Random.nextInt(2) + 1)(df.col(randColName()))
       } else if (t <:< ru.typeOf[Seq[String]]) {
@@ -229,6 +236,7 @@ class DataFrameFuzzingSuite extends SparkFunSuite {
       } catch {
         case NonFatal(e) =>
           println(s"Encountered error when calling $method with values $paramValues")
+          println(df.queryExecution)
           throw e
       }
     } catch {
@@ -241,7 +249,7 @@ class DataFrameFuzzingSuite extends SparkFunSuite {
 
   def tryToExecute(df: DataFrame): DataFrame = {
     try {
-      df.collectAsList()
+      df.rdd.count()
       df
     } catch {
       case NonFatal(e) =>
@@ -273,9 +281,9 @@ class DataFrameFuzzingSuite extends SparkFunSuite {
     println("-" * 80)
     try {
       val df = dataGenerator.randomDataFrame(
-        numCols = Random.nextInt(4) + 1,
+        numCols = Random.nextInt(2) + 1,
         numRows = 20,
-        allowComplexTypes = true)
+        allowComplexTypes = false)
       val df1 = tryToExecute(applyRandomTransformationToDataFrame(df))
       val df2 = tryToExecute(applyRandomTransformationToDataFrame(df1))
     } catch {
