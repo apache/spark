@@ -379,14 +379,14 @@ A [`RowMatrix`](api/python/pyspark.mllib.html#pyspark.mllib.linalg.RowMatrix) ca
 an `RDD` of Vectors.
 
 {% highlight python %}
-from pyspark.mllib.linalg import DistributedMatrices, Vectors
+from pyspark.mllib.linalg import RowMatrix, Vectors
 
 # Create an RDD of Vectors.
 rows = sc.parallelize([Vectors.dense([1, 2, 3]), Vectors.dense([4, 5, 6]), 
                        Vectors.dense([7, 8, 9]), Vectors.dense([10, 11, 12])])
 
 # Create a RowMatrix from an RDD[Vector].
-mat = DistributedMatrices.rowMatrix(rows)
+mat = RowMatrix(rows)
 
 # Get its size.
 m = mat.numRows()  # 4
@@ -468,7 +468,7 @@ created from an `RDD` of IndexedRows, where
 indices.
 
 {% highlight python %}
-from pyspark.mllib.linalg import Vectors, DistributedMatrices, IndexedRow, IndexedRowMatrix
+from pyspark.mllib.linalg import IndexedRowMatrix, IndexedRow, Vectors
 
 # Create an RDD of indexed rows.
 #   - This can be done explicitly with the IndexedRow class:
@@ -481,7 +481,7 @@ indexedRows = sc.parallelize([(0, Vectors.dense([1, 2, 3])), (1, Vectors.dense([
                               (2, Vectors.dense([7, 8, 9])), (3, Vectors.dense([10, 11, 12]))])
 
 # Create an IndexedRowMatrix from an RDD[IndexedRow].
-mat = DistributedMatrices.indexedRowMatrix(indexedRows)
+mat = IndexedRowMatrix(indexedRows)
 
 # Get its size.
 m = mat.numRows()  # 4
@@ -572,7 +572,7 @@ created from a `RDD` of MatrixEntry entries, where
 `toRowMatrix`, or to an `IndexedRowMatrix` with sparse rows by calling `toIndexedRowMatrix`.
 
 {% highlight python %}
-from pyspark.mllib.linalg import DistributedMatrices, MatrixEntry, CoordinateMatrix
+from pyspark.mllib.linalg import CoordinateMatrix, MatrixEntry
 
 # Create an RDD of coordinate entries.
 #   - This can be done explicitly with the MatrixEntry class:
@@ -581,7 +581,7 @@ entries = sc.parallelize([MatrixEntry(0, 0, 1.2), MatrixEntry(1, 0, 2.1), Matrix
 entries = sc.parallelize([(0, 0, 1.2), (1, 0, 2.1), (2, 1, 3.7)])
 
 # Create an CoordinateMatrix from an RDD[MatrixEntry].
-mat = DistributedMatrices.coordinateMatrix(entries)
+mat = CoordinateMatrix(entries)
 
 # Get its size.
 m = mat.numRows()  # 3
