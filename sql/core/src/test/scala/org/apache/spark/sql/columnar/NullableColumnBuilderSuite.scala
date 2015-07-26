@@ -98,7 +98,8 @@ class NullableColumnBuilderSuite extends SparkFunSuite {
           columnType.extract(buffer)
         }
 
-        assert(actual === randomRow.get(0, columnType.dataType), "Extracted value didn't equal to the original one")
+        assert(actual === randomRow.get(0, columnType.dataType),
+          "Extracted value didn't equal to the original one")
       }
 
       assert(!buffer.hasRemaining)
