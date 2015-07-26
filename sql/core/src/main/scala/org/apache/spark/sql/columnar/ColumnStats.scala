@@ -252,11 +252,13 @@ private[sql] class FixedDecimalColumnStats extends ColumnStats {
     InternalRow(lower, upper, nullCount, count, sizeInBytes)
 }
 
-private[sql] class GenericColumnStats extends ColumnStats {
+private[sql] class GenericColumnStats(dataType: DataType) extends ColumnStats {
+  val columnType = GENERIC(dataType)
+
   override def gatherStats(row: InternalRow, ordinal: Int): Unit = {
     super.gatherStats(row, ordinal)
     if (!row.isNullAt(ordinal)) {
-      sizeInBytes += GENERIC.actualSize(row, ordinal)
+      sizeInBytes += columnType.actualSize(row, ordinal)
     }
   }
 

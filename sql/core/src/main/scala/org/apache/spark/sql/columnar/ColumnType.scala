@@ -31,14 +31,18 @@ import org.apache.spark.unsafe.types.UTF8String
  * An abstract class that represents type of a column. Used to append/extract Java objects into/from
  * the underlying [[ByteBuffer]] of a column.
  *
- * @param typeId A unique ID representing the type.
- * @param defaultSize Default size in bytes for one element of type T (e.g. 4 for `Int`).
- * @tparam T Scala data type for the column.
  * @tparam JvmType Underlying Java type to represent the elements.
  */
-private[sql] sealed abstract class ColumnType[T <: DataType, JvmType](
-    val typeId: Int,
-    val defaultSize: Int) {
+private[sql] sealed abstract class ColumnType[JvmType] {
+
+  // The catalyst data type of this column.
+  def dataType: DataType
+
+  // A unique ID representing the type.
+  def typeId: Int
+
+  // Default size in bytes for one element of type T (e.g. 4 for `Int`).
+  def defaultSize: Int
 
   /**
    * Extracts a value out of the buffer at the buffer's current position.
@@ -90,7 +94,7 @@ private[sql] sealed abstract class ColumnType[T <: DataType, JvmType](
    * boxing/unboxing costs whenever possible.
    */
   def copyField(from: InternalRow, fromOrdinal: Int, to: MutableRow, toOrdinal: Int): Unit = {
-    to(toOrdinal) = from.get(fromOrdinal)
+    to.update(toOrdinal, from.get(fromOrdinal, dataType))
   }
 
   /**
@@ -103,9 +107,9 @@ private[sql] sealed abstract class ColumnType[T <: DataType, JvmType](
 
 private[sql] abstract class NativeColumnType[T <: AtomicType](
     val dataType: T,
-    typeId: Int,
-    defaultSize: Int)
-  extends ColumnType[T, T#InternalType](typeId, defaultSize) {
+    val typeId: Int,
+    val defaultSize: Int)
+  extends ColumnType[T#InternalType] {
 
   /**
    * Scala TypeTag. Can be used to create primitive arrays and hash tables.
@@ -400,10 +404,10 @@ private[sql] object FIXED_DECIMAL {
   val defaultSize = 8
 }
 
-private[sql] sealed abstract class ByteArrayColumnType[T <: DataType](
-    typeId: Int,
-    defaultSize: Int)
-  extends ColumnType[T, Array[Byte]](typeId, defaultSize) {
+private[sql] sealed abstract class ByteArrayColumnType(
+    val typeId: Int,
+    val defaultSize: Int)
+  extends ColumnType[Array[Byte]] {
 
   override def actualSize(row: InternalRow, ordinal: Int): Int = {
     getField(row, ordinal).length + 4
@@ -421,9 +425,12 @@ private[sql] sealed abstract class ByteArrayColumnType[T <: DataType](
   }
 }
 
-private[sql] object BINARY extends ByteArrayColumnType[BinaryType.type](11, 16) {
+private[sql] object BINARY extends ByteArrayColumnType(11, 16) {
+
+  def dataType: DataType = BooleanType
+
   override def setField(row: MutableRow, ordinal: Int, value: Array[Byte]): Unit = {
-    row(ordinal) = value
+    row.update(ordinal, value)
   }
 
   override def getField(row: InternalRow, ordinal: Int): Array[Byte] = {
@@ -434,18 +441,18 @@ private[sql] object BINARY extends ByteArrayColumnType[BinaryType.type](11, 16) 
 // Used to process generic objects (all types other than those listed above). Objects should be
 // serialized first before appending to the column `ByteBuffer`, and is also extracted as serialized
 // byte array.
-private[sql] object GENERIC extends ByteArrayColumnType[DataType](12, 16) {
+private[sql] case class GENERIC(dataType: DataType) extends ByteArrayColumnType(12, 16) {
   override def setField(row: MutableRow, ordinal: Int, value: Array[Byte]): Unit = {
-    row(ordinal) = SparkSqlSerializer.deserialize[Any](value)
+    row.update(ordinal, SparkSqlSerializer.deserialize[Any](value))
   }
 
   override def getField(row: InternalRow, ordinal: Int): Array[Byte] = {
-    SparkSqlSerializer.serialize(row.get(ordinal))
+    SparkSqlSerializer.serialize(row.get(ordinal, dataType))
   }
 }
 
 private[sql] object ColumnType {
-  def apply(dataType: DataType): ColumnType[_, _] = {
+  def apply(dataType: DataType): ColumnType[_] = {
     dataType match {
       case BooleanType => BOOLEAN
       case ByteType => BYTE
@@ -460,7 +467,7 @@ private[sql] object ColumnType {
       case BinaryType => BINARY
       case DecimalType.Fixed(precision, scale) if precision < 19 =>
         FIXED_DECIMAL(precision, scale)
-      case _ => GENERIC
+      case other => GENERIC(other)
     }
   }
 }
