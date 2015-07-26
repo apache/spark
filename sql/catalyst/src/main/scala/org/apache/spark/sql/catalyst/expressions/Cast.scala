@@ -509,8 +509,6 @@ case class Cast(child: Expression, dataType: DataType)
   private[this] def changePrecision(d: String, decimalType: DecimalType,
       evPrim: String, evNull: String): String = {
     decimalType match {
-      case DecimalType.Unlimited =>
-        s"$evPrim = $d;"
       case DecimalType.Fixed(precision, scale) =>
         s"""
           if ($d.changePrecision($precision, $scale)) {
