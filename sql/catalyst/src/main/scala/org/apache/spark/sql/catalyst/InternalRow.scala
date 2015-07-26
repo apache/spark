@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.types.Decimal
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
@@ -29,35 +30,34 @@ abstract class InternalRow extends Serializable {
 
   def numFields: Int
 
-  def get(i: Int): Any
+  def get(ordinal: Int): Any
 
-  // TODO: Remove this.
-  def apply(i: Int): Any = get(i)
+  def getAs[T](ordinal: Int): T = get(ordinal).asInstanceOf[T]
 
-  def getAs[T](i: Int): T = get(i).asInstanceOf[T]
+  def isNullAt(ordinal: Int): Boolean = get(ordinal) == null
 
-  def isNullAt(i: Int): Boolean = get(i) == null
+  def getBoolean(ordinal: Int): Boolean = getAs[Boolean](ordinal)
 
-  def getBoolean(i: Int): Boolean = getAs[Boolean](i)
+  def getByte(ordinal: Int): Byte = getAs[Byte](ordinal)
 
-  def getByte(i: Int): Byte = getAs[Byte](i)
+  def getShort(ordinal: Int): Short = getAs[Short](ordinal)
 
-  def getShort(i: Int): Short = getAs[Short](i)
+  def getInt(ordinal: Int): Int = getAs[Int](ordinal)
 
-  def getInt(i: Int): Int = getAs[Int](i)
+  def getLong(ordinal: Int): Long = getAs[Long](ordinal)
 
-  def getLong(i: Int): Long = getAs[Long](i)
+  def getFloat(ordinal: Int): Float = getAs[Float](ordinal)
 
-  def getFloat(i: Int): Float = getAs[Float](i)
+  def getDouble(ordinal: Int): Double = getAs[Double](ordinal)
 
-  def getDouble(i: Int): Double = getAs[Double](i)
+  def getUTF8String(ordinal: Int): UTF8String = getAs[UTF8String](ordinal)
 
-  def getUTF8String(i: Int): UTF8String = getAs[UTF8String](i)
+  def getBinary(ordinal: Int): Array[Byte] = getAs[Array[Byte]](ordinal)
 
-  def getBinary(i: Int): Array[Byte] = getAs[Array[Byte]](i)
+  def getDecimal(ordinal: Int): Decimal = getAs[Decimal](ordinal)
 
-  // This is only use for test
-  def getString(i: Int): String = getAs[UTF8String](i).toString
+  // This is only use for test and will throw a null pointer exception if the position is null.
+  def getString(ordinal: Int): String = getAs[UTF8String](ordinal).toString
 
   /**
    * Returns a struct from ordinal position.

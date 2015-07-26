@@ -136,7 +136,7 @@ package object debug {
             tupleCount += 1
             var i = 0
             while (i < numColumns) {
-              val value = currentRow(i)
+              val value = currentRow.get(i)
               if (value != null) {
                 columnStats(i).elementTypes += HashSet(value.getClass.getName)
               }

@@ -129,7 +129,7 @@ object EvaluatePython {
       val values = new Array[Any](row.numFields)
       var i = 0
       while (i < row.numFields) {
-        values(i) = toJava(row(i), struct.fields(i).dataType)
+        values(i) = toJava(row.get(i), struct.fields(i).dataType)
         i += 1
       }
       new GenericInternalRowWithSchema(values, struct)
