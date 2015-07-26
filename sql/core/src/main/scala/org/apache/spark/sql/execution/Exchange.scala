@@ -47,7 +47,12 @@ case class Exchange(newPartitioning: Partitioning, child: SparkPlan) extends Una
 
   override def canProcessSafeRows: Boolean = true
 
-  override def canProcessUnsafeRows: Boolean = true
+  override def canProcessUnsafeRows: Boolean = {
+    // Do not use the Unsafe path if we are using a RangePartitioning, since this may lead to
+    // an interpreted RowOrdering being applied to an UnsafeRow, which will lead to
+    // ClassCastExceptions at runtime. This check can be removed after SPARK-9054 is fixed.
+    !newPartitioning.isInstanceOf[RangePartitioning]
+  }
 
   /**
    * Determines whether records must be defensively copied before being sent to the shuffle.
