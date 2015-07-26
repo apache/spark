@@ -69,7 +69,7 @@ abstract class InternalRow extends Serializable {
    * @param ordinal position to get the struct from.
    * @param numFields number of fields the struct type has
    */
-  def getStruct(ordinal: Int, numFields: Int): InternalRow
+  def getStruct(ordinal: Int, numFields: Int): InternalRow = getAs[InternalRow](ordinal, null)
 
   override def toString: String = s"[${this.mkString(",")}]"
 
