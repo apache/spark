@@ -419,7 +419,7 @@ object functions {
    * @since 1.4.0
    */
   def lag(e: Column, offset: Int, defaultValue: Any): Column = {
-    Lag(e.expr, offset, Literal(defaultValue))
+    Lag(e.expr, Literal(offset), Literal(defaultValue))
   }
 
   /**
@@ -475,7 +475,7 @@ object functions {
    * @since 1.4.0
    */
   def lead(e: Column, offset: Int, defaultValue: Any): Column = {
-    Lead(e.expr, offset, Literal(defaultValue))
+    Lead(e.expr, Literal(offset), Literal(defaultValue))
   }
 
   /**

@@ -346,9 +346,11 @@ trait SizeBasedWindowFunction extends WindowFunction2 {
   def withSize(n: MutableLiteral): SizeBasedWindowFunction
 }
 
-abstract class OffsetWindowFunction(child: Expression, offset: Int, default: Expression)
+abstract class OffsetWindowFunction(child: Expression, offset: Expression, default: Expression)
     extends Expression with WindowFunction2 with CodegenFallback {
   self: Product =>
+
+  require(offset.foldable, "Offset must be foldable")
 
   override lazy val resolved =
     child.resolved && default.resolved && child.dataType == default.dataType
@@ -368,32 +370,36 @@ abstract class OffsetWindowFunction(child: Expression, offset: Int, default: Exp
   }
 
   override def toString: String = s"$simpleString($child, $offset, $default)"
+
+  protected val offsetVal = offset.eval().asInstanceOf[Int]
 }
 
-case class Lead(child: Expression, offset: Int, default: Expression)
+case class Lead(child: Expression, offset: Expression, default: Expression)
     extends OffsetWindowFunction(child, offset, default) {
-  def this(child: Expression, offset: Int) =
+  def this() = this(null, null, null)
+  def this(child: Expression, offset: Expression) =
     this(child, offset, Literal.create(null, child.dataType))
 
   def this(child: Expression) =
-    this(child, 1, Literal.create(null, child.dataType))
+    this(child, Literal(1), Literal.create(null, child.dataType))
 
   override val frame = SpecifiedWindowFrame(RowFrame,
-    ValueFollowing(offset),
-    ValueFollowing(offset))
+    ValueFollowing(offsetVal),
+    ValueFollowing(offsetVal))
 }
 
-case class Lag(child: Expression, offset: Int, default: Expression)
+case class Lag(child: Expression, offset: Expression, default: Expression)
     extends OffsetWindowFunction(child, offset, default) {
-  def this(child: Expression, offset: Int) =
+  def this() = this(null, null, null)
+  def this(child: Expression, offset: Expression) =
     this(child, offset, Literal.create(null, child.dataType))
 
   def this(child: Expression) =
-    this(child, 1, Literal.create(null, child.dataType))
+    this(child, Literal(1), Literal.create(null, child.dataType))
 
   override val frame = SpecifiedWindowFrame(RowFrame,
-    ValuePreceding(offset),
-    ValuePreceding(offset))
+    ValuePreceding(offsetVal),
+    ValuePreceding(offsetVal))
 }
 
 abstract class AggregateWindowFunction extends AlgebraicAggregate with WindowFunction2 {
@@ -486,11 +492,11 @@ abstract class RankLike(order: Seq[SortOrder]) extends AggregateWindowFunction {
   protected val updateRank = If(And(orderEquals, rank !== 0), rank, doUpdateRank)
 
   // Implementation for RANK()
-  protected val doUpdateRank: Expression = rowNumber + 1L
+  protected val doUpdateRank: Expression = rowNumber + 1
   override val bufferAttributes = rank +: rowNumber +: orderAttrs
   override val initialValues = Literal(0) +: Literal(0) +: orderInit
   override val updateExpressions = doUpdateRank +: (rowNumber + 1) +: orderExprs
-  override val evaluateExpression: Expression = Cast(rank, LongType)
+  override val evaluateExpression: Expression = Cast(rank, IntegerType)
 
   def withOrder(order: Seq[SortOrder]): RankLike
 }

@@ -264,15 +264,13 @@ case class Window(
         // Track the unbound expressions
         unboundExpressions ++= unboundFrameExpressions
 
-        // Bind the expressions.
+        // Add ordering clause to ranking functions... Move code below to analyser? The dependency
+        // used in the pattern match might be to narrow (only RankLike and its subclasses).
         val functions = unboundFrameExpressions.map { e =>
-          // Perhaps move code below to analyser. The dependency used in the pattern match might
-          // be to narrow (only RankLike and its subclasses).
-          val function = e.windowFunction match {
+          e.windowFunction match {
             case r: RankLike => r.withOrder(windowSpec.orderSpec)
             case f => f
           }
-          BindReferences.bindReference(function, child.output)
         }.toArray
 
         // Create the frame processor factory.
@@ -763,9 +761,9 @@ private[execution] object AggregateProcessor {
           bufferSchema += ref
           initialValues += NewSet(NullType)
           if (children.size > 1) {
-            updateExpressions += CreateStruct(children)
+            updateExpressions += AddItemToSet(CreateStruct(children), ref)
           } else {
-            updateExpressions += children.head
+            updateExpressions += AddItemToSet(children.head, ref)
           }
         }
     }
@@ -785,23 +783,26 @@ private[execution] object AggregateProcessor {
         val ref = distinctExpressionSchemaMap(agg.children)
         evaluateExpressions += ReduceSetAggregate(ref, agg)
       case (agg: AggregateFunction2, false, i) =>
-        aggregates2 += agg
+        val boundAgg = BindReferences.bindReference(agg, inputSchema)
+        aggregates2 += boundAgg
         aggregates2OutputOffsets += i
         agg.bufferOffset = bufferSchema.size
-        bufferSchema ++= agg.bufferAttributes
-        val nops = Seq.fill(agg.bufferAttributes.size)(NoOp)
+        bufferSchema ++= boundAgg.bufferAttributes
+        val nops = Seq.fill(boundAgg.bufferAttributes.size)(NoOp)
         initialValues ++= nops
         updateExpressions ++= nops
         evaluateExpressions += NoOp
       case (agg: AggregateExpression1, false, i) =>
-        aggregates1 += agg
+        aggregates1 += BindReferences.bindReference(agg, inputSchema)
         aggregates1BufferOffsets += bufferSchema.size
         aggregates1OutputOffsets += i
-        // TODO typing
+        // TODO typing - we would need to create UDT for this.
         bufferSchema += AttributeReference("agg", NullType, nullable = false)()
         initialValues += NoOp
         updateExpressions += NoOp
         evaluateExpressions += NoOp
+      case (agg, distinct, i) =>
+        sys.error(s"Unsupported Aggregate $agg[distinct=$distinct, index=$i]")
     }
 
     // Create the projections.
