@@ -192,7 +192,7 @@ class DataFrameFuzzingSuite extends SparkFunSuite {
       if (t =:= ru.typeOf[DataFrame]) {
         randomChoice(Seq(
           df,
-          applyRandomTransformationToDataFrame(df),
+          tryToExecute(applyRandomTransformationToDataFrame(df)),
           dataGenerator.randomDataFrame(numCols = Random.nextInt(4) + 1, numRows = 100)
         )) // ++ Try(applyRandomTransformationToDataFrame(df)).toOption.toSeq)
       } else if (t =:= ru.typeOf[Column]) {
@@ -215,7 +215,7 @@ class DataFrameFuzzingSuite extends SparkFunSuite {
     def callMethod(paramValues: Seq[Any]): DataFrame = {
       try {
         val df2 = reflectedMethod.apply(paramValues: _*).asInstanceOf[DataFrame]
-        println("Applied method " + method + " with values " + paramValues)
+        println(s"Applied method $method with values $paramValues")
         df2
       } catch {
         case e: InvocationTargetException =>
@@ -239,10 +239,20 @@ class DataFrameFuzzingSuite extends SparkFunSuite {
     }
   }
 
+  def tryToExecute(df: DataFrame): DataFrame = {
+    try {
+      df.collectAsList()
+      df
+    } catch {
+      case NonFatal(e) =>
+        println(df.queryExecution)
+        throw new Exception(e)
+    }
+  }
   //TestSQLContext.conf.setConf(SQLConf.DATAFRAME_RETAIN_GROUP_COLUMNS, false)
-  TestSQLContext.conf.setConf(SQLConf.UNSAFE_ENABLED, false)
+  TestSQLContext.conf.setConf(SQLConf.UNSAFE_ENABLED, true)
   TestSQLContext.conf.setConf(SQLConf.SORTMERGE_JOIN, true)
-  TestSQLContext.conf.setConf(SQLConf.CODEGEN_ENABLED, false)
+  TestSQLContext.conf.setConf(SQLConf.CODEGEN_ENABLED, true)
 
   TestSQLContext.conf.setConf(SQLConf.SHUFFLE_PARTITIONS, 10)
 
@@ -266,16 +276,8 @@ class DataFrameFuzzingSuite extends SparkFunSuite {
         numCols = Random.nextInt(4) + 1,
         numRows = 20,
         allowComplexTypes = true)
-      val df2 = applyRandomTransformationToDataFrame(applyRandomTransformationToDataFrame(df))
-      try {
-        df2.collectAsList()
-      } catch {
-        case NonFatal(e) =>
-          println(df2.queryExecution)
-          println(df)
-          println(df.collectAsList())
-          throw new Exception(e)
-      }
+      val df1 = tryToExecute(applyRandomTransformationToDataFrame(df))
+      val df2 = tryToExecute(applyRandomTransformationToDataFrame(df1))
     } catch {
       case e: NoDataGeneratorException =>
         println("skipped due to lack of data generator")
