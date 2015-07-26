@@ -211,7 +211,7 @@ private[sql] class StringColumnStats extends ColumnStats {
   override def gatherStats(row: InternalRow, ordinal: Int): Unit = {
     super.gatherStats(row, ordinal)
     if (!row.isNullAt(ordinal)) {
-      val value = row(ordinal).asInstanceOf[UTF8String]
+      val value = row.getUTF8String(ordinal)
       if (upper == null || value.compareTo(upper) > 0) upper = value
       if (lower == null || value.compareTo(lower) < 0) lower = value
       sizeInBytes += STRING.actualSize(row, ordinal)
@@ -241,7 +241,7 @@ private[sql] class FixedDecimalColumnStats extends ColumnStats {
   override def gatherStats(row: InternalRow, ordinal: Int): Unit = {
     super.gatherStats(row, ordinal)
     if (!row.isNullAt(ordinal)) {
-      val value = row(ordinal).asInstanceOf[Decimal]
+      val value = row.getDecimal(ordinal)
       if (upper == null || value.compareTo(upper) > 0) upper = value
       if (lower == null || value.compareTo(lower) < 0) lower = value
       sizeInBytes += FIXED_DECIMAL.defaultSize

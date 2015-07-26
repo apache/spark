@@ -208,18 +208,18 @@ private[parquet] class RowWriteSupport extends WriteSupport[InternalRow] with Lo
 
   override def write(record: InternalRow): Unit = {
     val attributesSize = attributes.size
-    if (attributesSize > record.size) {
-      throw new IndexOutOfBoundsException(
-        s"Trying to write more fields than contained in row ($attributesSize > ${record.size})")
+    if (attributesSize > record.numFields) {
+      throw new IndexOutOfBoundsException("Trying to write more fields than contained in row " +
+        s"($attributesSize > ${record.numFields})")
     }
 
     var index = 0
     writer.startMessage()
     while(index < attributesSize) {
       // null values indicate optional fields but we do not check currently
-      if (record(index) != null) {
+      if (!record.isNullAt(index)) {
         writer.startField(attributes(index).name, index)
-        writeValue(attributes(index).dataType, record(index))
+        writeValue(attributes(index).dataType, record.get(index, attributes(index).dataType))
         writer.endField(attributes(index).name, index)
       }
       index = index + 1
@@ -261,10 +261,10 @@ private[parquet] class RowWriteSupport extends WriteSupport[InternalRow] with Lo
         case BinaryType => writer.addBinary(
           Binary.fromByteArray(value.asInstanceOf[Array[Byte]]))
         case d: DecimalType =>
-          if (d.precisionInfo == None || d.precisionInfo.get.precision > 18) {
+          if (d.precision > 18) {
             sys.error(s"Unsupported datatype $d, cannot write to consumer")
           }
-          writeDecimal(value.asInstanceOf[Decimal], d.precisionInfo.get.precision)
+          writeDecimal(value.asInstanceOf[Decimal], d.precision)
         case _ => sys.error(s"Do not know how to writer $schema to consumer")
       }
     }
@@ -277,10 +277,10 @@ private[parquet] class RowWriteSupport extends WriteSupport[InternalRow] with Lo
       val fields = schema.fields.toArray
       writer.startGroup()
       var i = 0
-      while(i < fields.size) {
-        if (struct(i) != null) {
+      while(i < fields.length) {
+        if (!struct.isNullAt(i)) {
           writer.startField(fields(i).name, i)
-          writeValue(fields(i).dataType, struct(i))
+          writeValue(fields(i).dataType, struct.get(i, fields(i).dataType))
           writer.endField(fields(i).name, i)
         }
         i = i + 1
@@ -378,16 +378,16 @@ private[parquet] class RowWriteSupport extends WriteSupport[InternalRow] with Lo
 private[parquet] class MutableRowWriteSupport extends RowWriteSupport {
   override def write(record: InternalRow): Unit = {
     val attributesSize = attributes.size
-    if (attributesSize > record.size) {
-      throw new IndexOutOfBoundsException(
-        s"Trying to write more fields than contained in row ($attributesSize > ${record.size})")
+    if (attributesSize > record.numFields) {
+      throw new IndexOutOfBoundsException("Trying to write more fields than contained in row " +
+        s"($attributesSize > ${record.numFields})")
     }
 
     var index = 0
     writer.startMessage()
     while(index < attributesSize) {
       // null values indicate optional fields but we do not check currently
-      if (record(index) != null && record(index) != Nil) {
+      if (!record.isNullAt(index) && !record.isNullAt(index)) {
         writer.startField(attributes(index).name, index)
         consumeType(attributes(index).dataType, record, index)
         writer.endField(attributes(index).name, index)
@@ -410,15 +410,15 @@ private[parquet] class MutableRowWriteSupport extends RowWriteSupport {
       case TimestampType => writeTimestamp(record.getLong(index))
       case FloatType => writer.addFloat(record.getFloat(index))
       case DoubleType => writer.addDouble(record.getDouble(index))
-      case StringType => writer.addBinary(
-        Binary.fromByteArray(record(index).asInstanceOf[UTF8String].getBytes))
-      case BinaryType => writer.addBinary(
-        Binary.fromByteArray(record(index).asInstanceOf[Array[Byte]]))
+      case StringType =>
+        writer.addBinary(Binary.fromByteArray(record.getUTF8String(index).getBytes))
+      case BinaryType =>
+        writer.addBinary(Binary.fromByteArray(record.getBinary(index)))
       case d: DecimalType =>
-        if (d.precisionInfo == None || d.precisionInfo.get.precision > 18) {
+        if (d.precision > 18) {
           sys.error(s"Unsupported datatype $d, cannot write to consumer")
         }
-        writeDecimal(record(index).asInstanceOf[Decimal], d.precisionInfo.get.precision)
+        writeDecimal(record.getDecimal(index), d.precision)
       case _ => sys.error(s"Unsupported datatype $ctype, cannot write to consumer")
     }
   }

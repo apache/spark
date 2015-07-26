@@ -49,13 +49,13 @@ class OrcPartitionDiscoverySuite extends QueryTest with BeforeAndAfterAll {
 
   def makeOrcFile[T <: Product: ClassTag: TypeTag](
       data: Seq[T], path: File): Unit = {
-    data.toDF().write.format("orc").mode("overwrite").save(path.getCanonicalPath)
+    data.toDF().write.mode("overwrite").orc(path.getCanonicalPath)
   }
 
 
   def makeOrcFile[T <: Product: ClassTag: TypeTag](
       df: DataFrame, path: File): Unit = {
-    df.write.format("orc").mode("overwrite").save(path.getCanonicalPath)
+    df.write.mode("overwrite").orc(path.getCanonicalPath)
   }
 
   protected def withTempTable(tableName: String)(f: => Unit): Unit = {
@@ -90,7 +90,7 @@ class OrcPartitionDiscoverySuite extends QueryTest with BeforeAndAfterAll {
           makePartitionDir(base, defaultPartitionName, "pi" -> pi, "ps" -> ps))
       }
 
-      read.format("orc").load(base.getCanonicalPath).registerTempTable("t")
+      read.orc(base.getCanonicalPath).registerTempTable("t")
 
       withTempTable("t") {
         checkAnswer(
@@ -137,7 +137,7 @@ class OrcPartitionDiscoverySuite extends QueryTest with BeforeAndAfterAll {
           makePartitionDir(base, defaultPartitionName, "pi" -> pi, "ps" -> ps))
       }
 
-      read.format("orc").load(base.getCanonicalPath).registerTempTable("t")
+      read.orc(base.getCanonicalPath).registerTempTable("t")
 
       withTempTable("t") {
         checkAnswer(
@@ -187,9 +187,8 @@ class OrcPartitionDiscoverySuite extends QueryTest with BeforeAndAfterAll {
       }
 
       read
-        .format("orc")
         .option(ConfVars.DEFAULTPARTITIONNAME.varname, defaultPartitionName)
-        .load(base.getCanonicalPath)
+        .orc(base.getCanonicalPath)
         .registerTempTable("t")
 
       withTempTable("t") {
@@ -230,9 +229,8 @@ class OrcPartitionDiscoverySuite extends QueryTest with BeforeAndAfterAll {
       }
 
       read
-        .format("orc")
         .option(ConfVars.DEFAULTPARTITIONNAME.varname, defaultPartitionName)
-        .load(base.getCanonicalPath)
+        .orc(base.getCanonicalPath)
         .registerTempTable("t")
 
       withTempTable("t") {

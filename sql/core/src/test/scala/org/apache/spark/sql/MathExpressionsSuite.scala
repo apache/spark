@@ -68,12 +68,7 @@ class MathExpressionsSuite extends QueryTest {
     if (f(-1) === math.log1p(-1)) {
       checkAnswer(
         nnDoubleData.select(c('b)),
-        (1 to 9).map(n => Row(f(n * -0.1))) :+ Row(Double.NegativeInfinity)
-      )
-    } else {
-      checkAnswer(
-        nnDoubleData.select(c('b)),
-        (1 to 10).map(n => Row(null))
+        (1 to 9).map(n => Row(f(n * -0.1))) :+ Row(null)
       )
     }
 
@@ -181,7 +176,6 @@ class MathExpressionsSuite extends QueryTest {
   test("conv") {
     val df = Seq(("333", 10, 2)).toDF("num", "fromBase", "toBase")
     checkAnswer(df.select(conv('num, 10, 16)), Row("14D"))
-    checkAnswer(df.select(conv("num", 10, 16)), Row("14D"))
     checkAnswer(df.select(conv(lit(100), 2, 16)), Row("4"))
     checkAnswer(df.select(conv(lit(3122234455L), 10, 16)), Row("BA198457"))
     checkAnswer(df.selectExpr("conv(num, fromBase, toBase)"), Row("101001101"))
