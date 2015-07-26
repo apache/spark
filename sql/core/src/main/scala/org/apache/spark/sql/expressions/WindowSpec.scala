@@ -139,36 +139,8 @@ class WindowSpec private[sql](
    * Converts this [[WindowSpec]] into a [[Column]] with an aggregate expression.
    */
   private[sql] def withAggregate(aggregate: Column): Column = {
-    val windowExpr = aggregate.expr match {
-      case Average(child) => WindowExpression(
-        UnresolvedWindowFunction("avg", child :: Nil),
-        WindowSpecDefinition(partitionSpec, orderSpec, frame))
-      case Sum(child) => WindowExpression(
-        UnresolvedWindowFunction("sum", child :: Nil),
-        WindowSpecDefinition(partitionSpec, orderSpec, frame))
-      case Count(child) => WindowExpression(
-        UnresolvedWindowFunction("count", child :: Nil),
-        WindowSpecDefinition(partitionSpec, orderSpec, frame))
-      case First(child) => WindowExpression(
-        // TODO this is a hack for Hive UDAF first_value
-        UnresolvedWindowFunction("first_value", child :: Nil),
-        WindowSpecDefinition(partitionSpec, orderSpec, frame))
-      case Last(child) => WindowExpression(
-        // TODO this is a hack for Hive UDAF last_value
-        UnresolvedWindowFunction("last_value", child :: Nil),
-        WindowSpecDefinition(partitionSpec, orderSpec, frame))
-      case Min(child) => WindowExpression(
-        UnresolvedWindowFunction("min", child :: Nil),
-        WindowSpecDefinition(partitionSpec, orderSpec, frame))
-      case Max(child) => WindowExpression(
-        UnresolvedWindowFunction("max", child :: Nil),
-        WindowSpecDefinition(partitionSpec, orderSpec, frame))
-      case wf: WindowFunction => WindowExpression(
-        wf,
-        WindowSpecDefinition(partitionSpec, orderSpec, frame))
-      case x =>
-        throw new UnsupportedOperationException(s"$x is not supported in window operation.")
-    }
+    val windowExpr = WindowExpression(aggregate.expr,
+      WindowSpecDefinition(partitionSpec, orderSpec, frame))
     new Column(windowExpr)
   }
 

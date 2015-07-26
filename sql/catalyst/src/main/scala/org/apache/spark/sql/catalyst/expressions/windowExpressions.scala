@@ -298,7 +298,7 @@ case class UnresolvedWindowFunction(
 }
 
 case class UnresolvedWindowExpression(
-    child: UnresolvedWindowFunction,
+    child: Expression,
     windowSpec: WindowSpecReference) extends UnaryExpression with Unevaluable {
 
   override def dataType: DataType = throw new UnresolvedException(this, "dataType")
@@ -342,11 +342,16 @@ trait WindowFunction2 extends Expression {
   def frame: WindowFrame = UnspecifiedFrame
 }
 
+trait SizeBasedWindowFunction extends WindowFunction2 {
+  def withSize(n: MutableLiteral): SizeBasedWindowFunction
+}
+
 abstract class OffsetWindowFunction(child: Expression, offset: Int, default: Expression)
     extends Expression with WindowFunction2 with CodegenFallback {
   self: Product =>
 
-  override lazy val resolved = child.resolved && default.resolved && child.dataType == default.dataType
+  override lazy val resolved =
+    child.resolved && default.resolved && child.dataType == default.dataType
 
   override def children: Seq[Expression] = child :: default :: Nil
 
@@ -362,7 +367,7 @@ abstract class OffsetWindowFunction(child: Expression, offset: Int, default: Exp
     else default.eval(input)
   }
 
-  override def toString: String = s"${simpleString}($child, $offset, $default)"
+  override def toString: String = s"$simpleString($child, $offset, $default)"
 }
 
 case class Lead(child: Expression, offset: Int, default: Expression)
@@ -392,12 +397,11 @@ case class Lag(child: Expression, offset: Int, default: Expression)
 }
 
 abstract class AggregateWindowFunction extends AlgebraicAggregate with WindowFunction2 {
-  self:Product =>
+  self: Product =>
   override val frame = SpecifiedWindowFrame(RowFrame, UnboundedPreceding, CurrentRow)
   override def dataType: DataType = IntegerType
   override def foldable: Boolean = false
   override def nullable: Boolean = false
-  def withContext(order: Seq[SortOrder], n: MutableLiteral): AggregateWindowFunction = this
   override val mergeExpressions = Nil // TODO how to deal with this?
 }
 
@@ -411,26 +415,27 @@ abstract class RowNumberLike extends AggregateWindowFunction {
   override val updateExpressions: Seq[Expression] = rowNumber + 1 :: Nil
 }
 
-case object RowNumber extends RowNumberLike {
+case class RowNumber() extends RowNumberLike {
   override val evaluateExpression = Cast(rowNumber, IntegerType)
 }
 
 // TODO check if this works in combination with CodeGeneration?
-case class CumeDist(n: MutableLiteral) extends RowNumberLike {
+case class CumeDist(n: MutableLiteral) extends RowNumberLike with SizeBasedWindowFunction {
   def this() = this(MutableLiteral(0, IntegerType))
   override def dataType: DataType = DoubleType
   override def deterministic: Boolean = true
-  override def withContext(order: Seq[SortOrder], n: MutableLiteral): CumeDist = CumeDist(n)
+  override def withSize(n: MutableLiteral): CumeDist = CumeDist(n)
   override val frame = SpecifiedWindowFrame(RangeFrame, UnboundedPreceding, CurrentRow)
   override val evaluateExpression = Cast(rowNumber / n, DoubleType)
 }
 
 // TODO check if this works in combination with CodeGeneration?
 // TODO check logic
-case class NTile(n: MutableLiteral, buckets: Int) extends RowNumberLike {
+case class NTile(n: MutableLiteral, buckets: Int) extends RowNumberLike
+    with SizeBasedWindowFunction {
   require(buckets > 0, "Number of buckets must be > 0")
   def this(buckets: Int) = this(MutableLiteral(0, IntegerType), buckets)
-  override def withContext(order: Seq[SortOrder], n: MutableLiteral): NTile = NTile(n, buckets)
+  override def withSize(n: MutableLiteral): NTile = NTile(n, buckets)
   private val bucket = AttributeReference("bucket", IntegerType)()
   private val bucketThreshold = AttributeReference("bucketThreshold", IntegerType)()
   private val bucketSize = AttributeReference("bucketSize", IntegerType)()
@@ -454,7 +459,7 @@ case class NTile(n: MutableLiteral, buckets: Int) extends RowNumberLike {
 
   override val updateExpressions = Seq(
     rowNumber + 1,
-    bucket +If(rowNumber >= bucketThreshold, 1, 0),
+    bucket + If(rowNumber >= bucketThreshold, 1, 0),
     bucketThreshold +
       If(rowNumber >= bucketThreshold, bucketSize + If(bucket <= bucketsWithPadding, 1, 0), 0),
     bucketSize,
@@ -488,16 +493,17 @@ abstract class RankLike(order: Seq[SortOrder]) extends AggregateWindowFunction {
   override val updateExpressions = doUpdateRank +: (rowNumber + 1) +: orderExprs
   override val evaluateExpression: Expression = Cast(rank, LongType)
 
+  def withOrder(order: Seq[SortOrder]): RankLike
 }
 
 case class Rank(order: Seq[SortOrder]) extends RankLike(order) {
   def this() = this(Nil)
-  override def withContext(order: Seq[SortOrder], n: MutableLiteral): Rank = Rank(order)
+  override def withOrder(order: Seq[SortOrder]): Rank = Rank(order)
 }
 
 case class DenseRank(order: Seq[SortOrder]) extends RankLike(order) {
   def this() = this(Nil)
-  override def withContext(o: Seq[SortOrder], n: MutableLiteral): DenseRank = DenseRank(o)
+  override def withOrder(order: Seq[SortOrder]): DenseRank = DenseRank(order)
   override val bufferAttributes = rank +: orderAttrs
   override val initialValues = Literal(0) +: orderInit
   override val updateExpressions = doUpdateRank +: orderExprs
@@ -505,9 +511,11 @@ case class DenseRank(order: Seq[SortOrder]) extends RankLike(order) {
 }
 
 // TODO check if this works in combination with CodeGeneration?
-case class PercentRank(order: Seq[SortOrder], n: MutableLiteral) extends RankLike(order) {
+case class PercentRank(order: Seq[SortOrder], n: MutableLiteral) extends RankLike(order)
+    with SizeBasedWindowFunction {
   def this() = this(Nil, MutableLiteral(0, IntegerType))
-  override def withContext(o: Seq[SortOrder], n: MutableLiteral): PercentRank = PercentRank(o, n)
+  override def withOrder(order: Seq[SortOrder]): PercentRank = PercentRank(order, n)
+  override def withSize(n: MutableLiteral): PercentRank = PercentRank(order, n)
   override def dataType: DataType = DoubleType
   override val evaluateExpression =
     If(n > 1, Cast((rank - 1) / (n - 1), DoubleType), Literal.create(0.0d, DoubleType))

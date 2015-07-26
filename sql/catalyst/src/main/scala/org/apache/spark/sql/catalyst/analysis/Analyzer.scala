@@ -76,6 +76,7 @@ class Analyzer(
       ResolveGenerate ::
       ResolveFunctions ::
       ResolveAliases ::
+      ResolveWindowFrame ::
       ExtractWindowExpressions ::
       GlobalAggregates ::
       UnresolvedHavingClauseAttributes ::
@@ -557,11 +558,18 @@ class Analyzer(
     }
 
     def containsAggregates(exprs: Seq[Expression]): Boolean = {
-      exprs.foreach(_.foreach {
-        case agg: AggregateExpression => return true
-        case _ =>
-      })
-      false
+      // Collect all Windowed Aggregate Expressions.
+      val blacklist = exprs.flatMap { expr =>
+        expr.collect {
+          case WindowExpression(ae: AggregateExpression, _) => ae
+        }
+      }.toSet
+
+      // Find the first Aggregate Expression that is not Windowed.
+      exprs.exists(_.collectFirst {
+        case ae: AggregateExpression if !blacklist.contains(ae) => ae
+      }.isDefined)
+
     }
   }
 
@@ -763,26 +771,38 @@ class Analyzer(
 
       // Now, we extract regular expressions from expressionsWithWindowFunctions
       // by using extractExpr.
+      val seenWindowAggregates = new ArrayBuffer[AggregateExpression]
       val newExpressionsWithWindowFunctions = expressionsWithWindowFunctions.map {
         _.transform {
           // Extracts children expressions of a WindowFunction (input parameters of
           // a WindowFunction).
           case wf : WindowFunction =>
-            val newChildren = wf.children.map(extractExpr(_))
+            val newChildren = wf.children.map(extractExpr)
+            wf.withNewChildren(newChildren)
+
+          case wf : WindowFunction2 =>
+            val newChildren = wf.children.map(extractExpr)
             wf.withNewChildren(newChildren)
 
           // Extracts expressions from the partition spec and order spec.
           case wsc @ WindowSpecDefinition(partitionSpec, orderSpec, _) =>
-            val newPartitionSpec = partitionSpec.map(extractExpr(_))
+            val newPartitionSpec = partitionSpec.map(extractExpr)
             val newOrderSpec = orderSpec.map { so =>
               val newChild = extractExpr(so.child)
               so.copy(child = newChild)
             }
             wsc.copy(partitionSpec = newPartitionSpec, orderSpec = newOrderSpec)
 
+          // Extract Windowed AggregateExpression
+          case we @ WindowExpression(agg: AggregateExpression, spec: WindowSpecDefinition) =>
+            val newAggChildren = agg.children.map(extractExpr)
+            val newAgg = agg.withNewChildren(newAggChildren)
+            seenWindowAggregates += newAgg
+            WindowExpression(newAgg, spec)
+
           // Extracts AggregateExpression. For example, for SUM(x) - Sum(y) OVER (...),
           // we need to extract SUM(x).
-          case agg: AggregateExpression =>
+          case agg: AggregateExpression if !seenWindowAggregates.contains(agg) =>
             val withName = Alias(agg, s"_w${extractedExprBuffer.length}")()
             extractedExprBuffer += withName
             withName.toAttribute
@@ -955,6 +975,85 @@ class Analyzer(
         }
         val newChild = Project(p.child.output ++ nondeterministicExprs.values, p.child)
         Project(p.output, newPlan.withNewChildren(newChild :: Nil))
+    }
+  }
+
+  /**
+   * Removes all still-need-evaluate ordering expressions from sort and use an inner project to
+   * materialize them, finally use a outer project to project them away to keep the result same.
+   * Then we can make sure we only sort by [[AttributeReference]]s.
+   *
+   * As an example,
+   * {{{
+   *   Sort('a, 'b + 1,
+   *     Relation('a, 'b))
+   * }}}
+   * will be turned into:
+   * {{{
+   *   Project('a, 'b,
+   *     Sort('a, '_sortCondition,
+   *       Project('a, 'b, ('b + 1).as("_sortCondition"),
+   *         Relation('a, 'b))))
+   * }}}
+   */
+  object RemoveEvaluationFromSort extends Rule[LogicalPlan] {
+    private def hasAlias(expr: Expression) = {
+      expr.find {
+        case a: Alias => true
+        case _ => false
+      }.isDefined
+    }
+
+    override def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+      // The ordering expressions have no effect to the output schema of `Sort`,
+      // so `Alias`s in ordering expressions are unnecessary and we should remove them.
+      case s@Sort(ordering, _, _) if ordering.exists(hasAlias) =>
+        val newOrdering = ordering.map(_.transformUp {
+          case Alias(child, _) => child
+        }.asInstanceOf[SortOrder])
+        s.copy(order = newOrdering)
+
+      case s@Sort(ordering, global, child)
+        if s.expressions.forall(_.resolved) && s.childrenResolved && !s.hasNoEvaluation =>
+
+        val (ref, needEval) = ordering.partition(_.child.isInstanceOf[AttributeReference])
+
+        val namedExpr = needEval.map(_.child match {
+          case n: NamedExpression => n
+          case e => Alias(e, "_sortCondition")()
+        })
+
+        val newOrdering = ref ++ needEval.zip(namedExpr).map { case (order, ne) =>
+          order.copy(child = ne.toAttribute)
+        }
+
+        // Add still-need-evaluate ordering expressions into inner project and then project
+        // them away after the sort.
+        Project(child.output,
+          Sort(newOrdering, global,
+            Project(child.output ++ namedExpr, child)))
+    }
+  }
+
+  /*
+   * Check and add proper window frames for all window functions.
+   */
+  object ResolveWindowFrame extends Rule[LogicalPlan] {
+    def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+      case logical: LogicalPlan => logical.transformExpressionsDown {
+        case WindowExpression(wf: WindowFunction2,
+            WindowSpecDefinition(_, _, f: SpecifiedWindowFrame))
+          if wf.frame != UnspecifiedFrame && wf.frame != f =>
+          failAnalysis(s"The frame of the window '$f' does not match the required frame " +
+            s"'${wf.frame}'")
+        case WindowExpression(wf: WindowFunction2,
+            s @ WindowSpecDefinition(_, o, UnspecifiedFrame))
+            if wf.frame != UnspecifiedFrame =>
+          WindowExpression(wf, s.copy(frameSpecification = wf.frame))
+        case we @ WindowExpression(e, s @ WindowSpecDefinition(_, o, UnspecifiedFrame)) =>
+          val frame = SpecifiedWindowFrame.defaultWindowFrame(!o.isEmpty, false)
+          we.copy(windowSpec = s.copy(frameSpecification = frame))
+      }
     }
   }
 }

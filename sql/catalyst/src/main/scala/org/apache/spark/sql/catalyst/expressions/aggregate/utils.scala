@@ -39,64 +39,66 @@ object Utils {
     !hasComplexTypes
   }
 
+  val convertAggregateExpressions: PartialFunction[Expression, Expression] = {
+    case expressions.Average(child) =>
+      aggregate.AggregateExpression2(
+        aggregateFunction = aggregate.Average(child),
+        mode = aggregate.Complete,
+        isDistinct = false)
+
+    case expressions.Count(child) =>
+      aggregate.AggregateExpression2(
+        aggregateFunction = aggregate.Count(child),
+        mode = aggregate.Complete,
+        isDistinct = false)
+
+    // We do not support multiple COUNT DISTINCT columns for now.
+    case expressions.CountDistinct(children) if children.length == 1 =>
+      aggregate.AggregateExpression2(
+        aggregateFunction = aggregate.Count(children.head),
+        mode = aggregate.Complete,
+        isDistinct = true)
+
+    case expressions.First(child) =>
+      aggregate.AggregateExpression2(
+        aggregateFunction = aggregate.First(child),
+        mode = aggregate.Complete,
+        isDistinct = false)
+
+    case expressions.Last(child) =>
+      aggregate.AggregateExpression2(
+        aggregateFunction = aggregate.Last(child),
+        mode = aggregate.Complete,
+        isDistinct = false)
+
+    case expressions.Max(child) =>
+      aggregate.AggregateExpression2(
+        aggregateFunction = aggregate.Max(child),
+        mode = aggregate.Complete,
+        isDistinct = false)
+
+    case expressions.Min(child) =>
+      aggregate.AggregateExpression2(
+        aggregateFunction = aggregate.Min(child),
+        mode = aggregate.Complete,
+        isDistinct = false)
+
+    case expressions.Sum(child) =>
+      aggregate.AggregateExpression2(
+        aggregateFunction = aggregate.Sum(child),
+        mode = aggregate.Complete,
+        isDistinct = false)
+
+    case expressions.SumDistinct(child) =>
+      aggregate.AggregateExpression2(
+        aggregateFunction = aggregate.Sum(child),
+        mode = aggregate.Complete,
+        isDistinct = true)
+  }
   private def doConvert(plan: LogicalPlan): Option[Aggregate] = plan match {
     case p: Aggregate if supportsGroupingKeySchema(p) =>
-      val converted = p.transformExpressionsDown {
-        case expressions.Average(child) =>
-          aggregate.AggregateExpression2(
-            aggregateFunction = aggregate.Average(child),
-            mode = aggregate.Complete,
-            isDistinct = false)
+      val converted = p.transformExpressionsDown(convertAggregateExpressions)
 
-        case expressions.Count(child) =>
-          aggregate.AggregateExpression2(
-            aggregateFunction = aggregate.Count(child),
-            mode = aggregate.Complete,
-            isDistinct = false)
-
-        // We do not support multiple COUNT DISTINCT columns for now.
-        case expressions.CountDistinct(children) if children.length == 1 =>
-          aggregate.AggregateExpression2(
-            aggregateFunction = aggregate.Count(children.head),
-            mode = aggregate.Complete,
-            isDistinct = true)
-
-        case expressions.First(child) =>
-          aggregate.AggregateExpression2(
-            aggregateFunction = aggregate.First(child),
-            mode = aggregate.Complete,
-            isDistinct = false)
-
-        case expressions.Last(child) =>
-          aggregate.AggregateExpression2(
-            aggregateFunction = aggregate.Last(child),
-            mode = aggregate.Complete,
-            isDistinct = false)
-
-        case expressions.Max(child) =>
-          aggregate.AggregateExpression2(
-            aggregateFunction = aggregate.Max(child),
-            mode = aggregate.Complete,
-            isDistinct = false)
-
-        case expressions.Min(child) =>
-          aggregate.AggregateExpression2(
-            aggregateFunction = aggregate.Min(child),
-            mode = aggregate.Complete,
-            isDistinct = false)
-
-        case expressions.Sum(child) =>
-          aggregate.AggregateExpression2(
-            aggregateFunction = aggregate.Sum(child),
-            mode = aggregate.Complete,
-            isDistinct = false)
-
-        case expressions.SumDistinct(child) =>
-          aggregate.AggregateExpression2(
-            aggregateFunction = aggregate.Sum(child),
-            mode = aggregate.Complete,
-            isDistinct = true)
-      }
       // Check if there is any expressions.AggregateExpression1 left.
       // If so, we cannot convert this plan.
       val hasAggregateExpression1 = converted.aggregateExpressions.exists { expr =>
