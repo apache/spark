@@ -89,6 +89,7 @@ object FunctionRegistry {
     expression[CreateStruct]("struct"),
     expression[CreateNamedStruct]("named_struct"),
     expression[Sqrt]("sqrt"),
+    expression[NaNvl]("nanvl"),
 
     // math functions
     expression[Acos]("acos"),
@@ -161,11 +162,14 @@ object FunctionRegistry {
     expression[Lower]("lower"),
     expression[Length]("length"),
     expression[Levenshtein]("levenshtein"),
+    expression[RegExpExtract]("regexp_extract"),
+    expression[RegExpReplace]("regexp_replace"),
     expression[StringInstr]("instr"),
     expression[StringLocate]("locate"),
     expression[StringLPad]("lpad"),
     expression[StringTrimLeft]("ltrim"),
-    expression[StringFormat]("printf"),
+    expression[FormatString]("format_string"),
+    expression[FormatString]("printf"),
     expression[StringRPad]("rpad"),
     expression[StringRepeat]("repeat"),
     expression[StringReverse]("reverse"),
@@ -193,8 +197,10 @@ object FunctionRegistry {
     expression[Quarter]("quarter"),
     expression[Second]("second"),
     expression[WeekOfYear]("weekofyear"),
-    expression[Year]("year")
+    expression[Year]("year"),
 
+    // collection functions
+    expression[Size]("size")
   )
 
   val builtin: FunctionRegistry = {

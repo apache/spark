@@ -15,23 +15,22 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.sources
+package org.apache.spark.sql.execution.datasources
 
 import scala.language.{existentials, implicitConversions}
 import scala.util.matching.Regex
 
 import org.apache.hadoop.fs.Path
-
 import org.apache.spark.Logging
 import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.sql.{AnalysisException, DataFrame, Row, SQLContext, SaveMode}
 import org.apache.spark.sql.catalyst.AbstractSparkSQLParser
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
-import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.RunnableCommand
+import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.{AnalysisException, DataFrame, SQLContext, SaveMode}
 import org.apache.spark.util.Utils
 
 /**
@@ -247,7 +246,9 @@ private[sql] object ResolvedDataSource {
           val caseInsensitiveOptions = new CaseInsensitiveMap(options)
           val paths = {
             val patternPath = new Path(caseInsensitiveOptions("path"))
-            SparkHadoopUtil.get.globPath(patternPath).map(_.toString).toArray
+            val fs = patternPath.getFileSystem(sqlContext.sparkContext.hadoopConfiguration)
+            val qualifiedPattern = patternPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
+            SparkHadoopUtil.get.globPathIfNecessary(qualifiedPattern).map(_.toString).toArray
           }
 
           val dataSchema =
@@ -272,7 +273,9 @@ private[sql] object ResolvedDataSource {
           val caseInsensitiveOptions = new CaseInsensitiveMap(options)
           val paths = {
             val patternPath = new Path(caseInsensitiveOptions("path"))
-            SparkHadoopUtil.get.globPath(patternPath).map(_.toString).toArray
+            val fs = patternPath.getFileSystem(sqlContext.sparkContext.hadoopConfiguration)
+            val qualifiedPattern = patternPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
+            SparkHadoopUtil.get.globPathIfNecessary(qualifiedPattern).map(_.toString).toArray
           }
           dataSource.createRelation(sqlContext, paths, None, None, caseInsensitiveOptions)
         case dataSource: org.apache.spark.sql.sources.SchemaRelationProvider =>
@@ -412,12 +415,12 @@ private[sql] case class CreateTempTableUsing(
     provider: String,
     options: Map[String, String]) extends RunnableCommand {
 
-  def run(sqlContext: SQLContext): Seq[InternalRow] = {
+  def run(sqlContext: SQLContext): Seq[Row] = {
     val resolved = ResolvedDataSource(
       sqlContext, userSpecifiedSchema, Array.empty[String], provider, options)
     sqlContext.registerDataFrameAsTable(
       DataFrame(sqlContext, LogicalRelation(resolved.relation)), tableName)
-    Seq.empty
+    Seq.empty[Row]
   }
 }
 
@@ -429,20 +432,20 @@ private[sql] case class CreateTempTableUsingAsSelect(
     options: Map[String, String],
     query: LogicalPlan) extends RunnableCommand {
 
-  override def run(sqlContext: SQLContext): Seq[InternalRow] = {
+  override def run(sqlContext: SQLContext): Seq[Row] = {
     val df = DataFrame(sqlContext, query)
     val resolved = ResolvedDataSource(sqlContext, provider, partitionColumns, mode, options, df)
     sqlContext.registerDataFrameAsTable(
       DataFrame(sqlContext, LogicalRelation(resolved.relation)), tableName)
 
-    Seq.empty
+    Seq.empty[Row]
   }
 }
 
 private[sql] case class RefreshTable(databaseName: String, tableName: String)
   extends RunnableCommand {
 
-  override def run(sqlContext: SQLContext): Seq[InternalRow] = {
+  override def run(sqlContext: SQLContext): Seq[Row] = {
     // Refresh the given table's metadata first.
     sqlContext.catalog.refreshTable(databaseName, tableName)
 
@@ -461,7 +464,7 @@ private[sql] case class RefreshTable(databaseName: String, tableName: String)
       sqlContext.cacheManager.cacheQuery(df, Some(tableName))
     }
 
-    Seq.empty[InternalRow]
+    Seq.empty[Row]
   }
 }
 

@@ -127,7 +127,10 @@ case class Join(
 
   // Joins are only resolved if they don't introduce ambiguous expression ids.
   override lazy val resolved: Boolean = {
-    childrenResolved && expressions.forall(_.resolved) && selfJoinResolved
+    childrenResolved &&
+      expressions.forall(_.resolved) &&
+      selfJoinResolved &&
+      condition.forall(_.dataType == BooleanType)
   }
 }
 
@@ -375,7 +378,7 @@ case class Limit(limitExpr: Expression, child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
 
   override lazy val statistics: Statistics = {
-    val limit = limitExpr.eval(null).asInstanceOf[Int]
+    val limit = limitExpr.eval().asInstanceOf[Int]
     val sizeInBytes = (limit: Long) * output.map(a => a.dataType.defaultSize).sum
     Statistics(sizeInBytes = sizeInBytes)
   }

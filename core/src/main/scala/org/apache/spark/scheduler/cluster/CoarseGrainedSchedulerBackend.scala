@@ -169,9 +169,12 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
 
     // Make fake resource offers on all executors
     private def makeOffers() {
-      launchTasks(scheduler.resourceOffers(executorDataMap.map { case (id, executorData) =>
+      // Filter out executors under killing
+      val activeExecutors = executorDataMap.filterKeys(!executorsPendingToRemove.contains(_))
+      val workOffers = activeExecutors.map { case (id, executorData) =>
         new WorkerOffer(id, executorData.executorHost, executorData.freeCores)
-      }.toSeq))
+      }.toSeq
+      launchTasks(scheduler.resourceOffers(workOffers))
     }
 
     override def onDisconnected(remoteAddress: RpcAddress): Unit = {
@@ -181,9 +184,13 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
 
     // Make fake resource offers on just one executor
     private def makeOffers(executorId: String) {
-      val executorData = executorDataMap(executorId)
-      launchTasks(scheduler.resourceOffers(
-        Seq(new WorkerOffer(executorId, executorData.executorHost, executorData.freeCores))))
+      // Filter out executors under killing
+      if (!executorsPendingToRemove.contains(executorId)) {
+        val executorData = executorDataMap(executorId)
+        val workOffers = Seq(
+          new WorkerOffer(executorId, executorData.executorHost, executorData.freeCores))
+        launchTasks(scheduler.resourceOffers(workOffers))
+      }
     }
 
     // Launch tasks returned by a set of resource offers

@@ -401,7 +401,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
   }
 
   /**
-   * True if the current expression is NaN or null
+   * True if the current expression is NaN.
    *
    * @group expr_ops
    * @since 1.5.0
@@ -996,7 +996,7 @@ class ColumnName(name: String) extends Column(name) {
    * Creates a new [[StructField]] of type decimal.
    * @since 1.3.0
    */
-  def decimal: StructField = StructField(name, DecimalType.Unlimited)
+  def decimal: StructField = StructField(name, DecimalType.USER_DEFAULT)
 
   /**
    * Creates a new [[StructField]] of type decimal.
