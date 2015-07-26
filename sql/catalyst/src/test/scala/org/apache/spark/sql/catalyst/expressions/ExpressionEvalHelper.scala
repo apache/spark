@@ -65,7 +65,7 @@ trait ExpressionEvalHelper {
 
   protected def evaluate(expression: Expression, inputRow: InternalRow = EmptyRow): Any = {
     expression.foreach {
-      case n: Nondeterministic => n.initialize()
+      case n: Nondeterministic => n.setInitialValues()
       case _ =>
     }
     expression.eval(inputRow)
