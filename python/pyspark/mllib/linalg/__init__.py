@@ -1194,6 +1194,12 @@ class RowMatrix(DistributedMatrix):
         self._jrm = JavaModelWrapper(javaRowMatrix)
         self.rows = rows
 
+    @staticmethod
+    def _from_java(javaRowMatrix):
+        """Create a PySpark RowMatrix from a Java RowMatrix object."""
+        rows = JavaModelWrapper(javaRowMatrix).call("rows")
+        return RowMatrix(rows)
+
     def numRows(self):
         """
         Get or compute the number of rows.
@@ -1265,7 +1271,7 @@ class IndexedRowMatrix(DistributedMatrix):
         if not (isinstance(first, IndexedRow) or
                 (isinstance(first, tuple) and len(first) == 2 and
                  isinstance(first[0], (long, int)) and isinstance(first[1], Vector))):
-            raise TypeError("rows should be an RDD of IndexedRows or (long, Vector) tuples, " \
+            raise TypeError("rows should be an RDD of IndexedRows or (long, Vector) tuples, "
                             "got an RDD of %s" % type(first))
 
         # We use DataFrames for serialization of IndexedRows from
@@ -1278,6 +1284,17 @@ class IndexedRowMatrix(DistributedMatrix):
                                              long(numRows), int(numCols))
         self._jirm = JavaModelWrapper(javaIndexedRowMatrix)
         self.rows = rows
+
+    @staticmethod
+    def _from_java(javaIndexedRowMatrix):
+        """Create a PySpark IndexedRowMatrix from a Java IndexedRowMatrix object."""
+        # We use DataFrames for serialization of IndexedRows from
+        # Java, so we first convert the RDD of rows to a DataFrame
+        # on the Scala/Java side. Then we map each Row in the
+        # DataFrame back to an IndexedRow on this side.
+        rowsDF = callMLlibFunc("getIndexedRows", javaIndexedRowMatrix)
+        rows = rowsDF.map(lambda row: IndexedRow(row[0], row[1]))
+        return IndexedRowMatrix(rows)
 
     def numRows(self):
         """
@@ -1334,9 +1351,7 @@ class IndexedRowMatrix(DistributedMatrix):
         [DenseVector([1.0, 2.0, 3.0]), DenseVector([4.0, 5.0, 6.0])]
         """
         javaRowMatrix = self._jirm.call("toRowMatrix")
-        jrm = JavaModelWrapper(javaRowMatrix)
-        rows = jrm.call("rows")
-        return RowMatrix(rows)
+        return RowMatrix._from_java(javaRowMatrix)
 
     def toCoordinateMatrix(self):
         """
@@ -1349,13 +1364,7 @@ class IndexedRowMatrix(DistributedMatrix):
         [MatrixEntry(0, 0, 1.0), MatrixEntry(0, 1, 0.0), MatrixEntry(6, 0, 0.0)]
         """
         javaCoordinateMatrix = self._jirm.call("toCoordinateMatrix")
-        # We use DataFrames for serialization of MatrixEntry entries
-        # between Python and Java, so we first convert the RDD of
-        # entries to a DataFrame on the Scala/Java side. Then we map
-        # each Row in the DataFrame back to a MatrixEntry on this side.
-        entriesDF = callMLlibFunc("getMatrixEntries", javaCoordinateMatrix)
-        entries = entriesDF.map(lambda row: MatrixEntry(row[0], row[1], row[2]))
-        return CoordinateMatrix(entries)
+        return CoordinateMatrix._from_java(javaCoordinateMatrix)
 
 
 class MatrixEntry(object):
@@ -1403,7 +1412,7 @@ class CoordinateMatrix(object):
             # on the Python side.
             entries = entries.map(lambda entry: MatrixEntry(*entry))
         else:
-            raise TypeError("rows should be an RDD of MatrixEntry entries or " \
+            raise TypeError("rows should be an RDD of MatrixEntry entries or "
                             "(long, long, float) tuples, got an RDD of %s" % type(first))
 
         # We use DataFrames for serialization of MatrixEntry entries
@@ -1416,6 +1425,17 @@ class CoordinateMatrix(object):
                                              long(numRows), long(numCols))
         self._jcm = JavaModelWrapper(javaCoordinateMatrix)
         self.entries = entries
+
+    @staticmethod
+    def _from_java(javaCoordinateMatrix):
+        """Create a PySpark IndexedRowMatrix from a Java IndexedRowMatrix object."""
+        # We use DataFrames for serialization of MatrixEntry entries
+        # from Java, so we first convert the RDD of entries to a
+        # DataFrame on the Scala/Java side. Then we map each Row in
+        # the DataFrame back to a MatrixEntry on this side.
+        entriesDF = callMLlibFunc("getMatrixEntries", javaCoordinateMatrix)
+        entries = entriesDF.map(lambda row: MatrixEntry(row[0], row[1], row[2]))
+        return CoordinateMatrix(entries)
 
     def numRows(self):
         """
@@ -1479,9 +1499,7 @@ class CoordinateMatrix(object):
         5
         """
         javaRowMatrix = self._jcm.call("toRowMatrix")
-        jrm = JavaModelWrapper(javaRowMatrix)
-        rows = jrm.call("rows")
-        return RowMatrix(rows)
+        return RowMatrix._from_java(javaRowMatrix)
 
     def toIndexedRowMatrix(self):
         """
@@ -1504,13 +1522,7 @@ class CoordinateMatrix(object):
         5
         """
         javaIndexedRowMatrix = self._jcm.call("toIndexedRowMatrix")
-        # We use DataFrames for serialization of IndexedRows between
-        # Python and Java, so we first convert the RDD of rows to a
-        # DataFrame on the Scala/Java side. Then we map each Row in the
-        # DataFrame back to an IndexedRow on this side.
-        rowsDF = callMLlibFunc("getIndexedRows", javaIndexedRowMatrix)
-        rows = rowsDF.map(lambda row: IndexedRow(row[0], row[1]))
-        return IndexedRowMatrix(rows)
+        return IndexedRowMatrix._from_java(javaIndexedRowMatrix)
 
 
 def _test():
