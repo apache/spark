@@ -108,7 +108,7 @@ case class GeneratedAggregate(
           Add(
             Coalesce(currentSum :: zero :: Nil),
             Cast(expr, calcType)
-          ) :: currentSum :: zero :: Nil)
+          ) :: currentSum :: Nil)
         val result =
           expr.dataType match {
             case DecimalType.Fixed(_, _) =>
