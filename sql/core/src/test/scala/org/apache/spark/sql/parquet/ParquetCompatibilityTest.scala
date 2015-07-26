@@ -16,6 +16,7 @@
  */
 
 package org.apache.spark.sql.parquet
+
 import java.io.File
 
 import scala.collection.JavaConversions._

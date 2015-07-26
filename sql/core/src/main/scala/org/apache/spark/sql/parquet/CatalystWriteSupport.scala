@@ -151,10 +151,10 @@ private[parquet] class CatalystWriteSupport extends WriteSupport[InternalRow] wi
       case DecimalType.Fixed(precision, _) if precision > 18 =>
         sys.error(s"Unsupported data type $dataType. Decimal precision cannot be greater than 18.")
 
-      case DecimalType.Fixed(precision) =>
+      case DecimalType.Fixed(precision, _) =>
         (row: InternalRow, ordinal: Int) => {
           val decimal = row.getDecimal(ordinal)
-          val numBytes = ParquetTypesConverter.BYTES_FOR_PRECISION(precision)
+          val numBytes = CatalystWriteSupport.BYTES_FOR_PRECISION(precision)
           val unscaledLong = decimal.toUnscaledLong
 
           var i = 0
@@ -303,5 +303,16 @@ private[parquet] object CatalystWriteSupport {
     configuration.set(
       ParquetOutputFormat.WRITER_VERSION,
       ParquetProperties.WriterVersion.PARQUET_1_0.toString)
+  }
+
+  /**
+   * Compute the FIXED_LEN_BYTE_ARRAY length needed to represent a given DECIMAL precision.
+   */
+  private[parquet] val BYTES_FOR_PRECISION = Array.tabulate[Int](38) { precision =>
+    var length = 1
+    while (math.pow(2.0, 8 * length - 1) < math.pow(10.0, precision)) {
+      length += 1
+    }
+    length
   }
 }

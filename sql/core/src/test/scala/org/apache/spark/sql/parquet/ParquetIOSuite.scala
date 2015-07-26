@@ -204,8 +204,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest {
 
   test("compression codec") {
     def compressionCodecFor(path: String): String = {
-      val codecs = ParquetTypesConverter
-        .readMetaData(new Path(path), Some(configuration))
+      val codecs = readMetadata(new Path(path), configuration)
         .getBlocks
         .flatMap(_.getColumns)
         .map(_.getCodec.name())
@@ -277,15 +276,15 @@ class ParquetIOSuite extends QueryTest with ParquetTest {
     withTempPath { file =>
       val path = new Path(file.toURI.toString)
       val fs = FileSystem.getLocal(configuration)
-      val attributes = ScalaReflection.attributesFor[(Int, String)]
-      ParquetTypesConverter.writeMetaData(attributes, path, configuration)
+      val schema = StructType.fromAttributes(ScalaReflection.attributesFor[(Int, String)])
+      writeMetadata(schema, path, configuration)
 
       assert(fs.exists(new Path(path, ParquetFileWriter.PARQUET_COMMON_METADATA_FILE)))
       assert(fs.exists(new Path(path, ParquetFileWriter.PARQUET_METADATA_FILE)))
 
-      val metaData = ParquetTypesConverter.readMetaData(path, Some(configuration))
+      val metaData = readMetadata(path, configuration)
       val actualSchema = metaData.getFileMetaData.getSchema
-      val expectedSchema = ParquetTypesConverter.convertFromAttributes(attributes)
+      val expectedSchema = new CatalystSchemaConverter(configuration).convert(schema)
 
       actualSchema.checkContains(expectedSchema)
       expectedSchema.checkContains(actualSchema)

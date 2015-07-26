@@ -453,7 +453,7 @@ private[parquet] class CatalystSchemaConverter(
             .buildGroup(REPEATED)
             // "array_element" is the name chosen by parquet-hive (1.7.0 and prior version)
             .addField(convertField(StructField("array_element", elementType, nullable)))
-            .named(CatalystConverter.ARRAY_CONTAINS_NULL_BAG_SCHEMA_NAME))
+            .named("bag"))
 
       // Spark 1.4.x and prior versions convert ArrayType with non-nullable elements into a 2-level
       // LIST structure.  This behavior mimics parquet-avro (1.6.0rc3).  Note that this case is
