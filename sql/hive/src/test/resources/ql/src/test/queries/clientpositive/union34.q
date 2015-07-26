@@ -3,7 +3,7 @@ create table src10_2 (key string, value string);
 create table src10_3 (key string, value string);
 create table src10_4 (key string, value string);
 
-from (select * from src limit 10) a
+from (select * from src tablesample (10 rows)) a
 insert overwrite table src10_1 select *
 insert overwrite table src10_2 select *
 insert overwrite table src10_3 select *

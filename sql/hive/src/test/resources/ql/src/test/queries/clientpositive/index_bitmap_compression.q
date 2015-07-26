@@ -1,3 +1,4 @@
+set hive.stats.dbclass=fs;
 SET hive.exec.compress.result=true;
 CREATE INDEX src_index ON TABLE src(key) as 'BITMAP' WITH DEFERRED REBUILD;
 ALTER INDEX src_index ON src REBUILD;

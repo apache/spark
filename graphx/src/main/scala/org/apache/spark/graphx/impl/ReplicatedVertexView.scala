@@ -33,7 +33,7 @@ import org.apache.spark.graphx._
  */
 private[impl]
 class ReplicatedVertexView[VD: ClassTag, ED: ClassTag](
-    var edges: EdgeRDD[ED, VD],
+    var edges: EdgeRDDImpl[ED, VD],
     var hasSrcId: Boolean = false,
     var hasDstId: Boolean = false) {
 
@@ -42,7 +42,7 @@ class ReplicatedVertexView[VD: ClassTag, ED: ClassTag](
    * shipping level.
    */
   def withEdges[VD2: ClassTag, ED2: ClassTag](
-      edges_ : EdgeRDD[ED2, VD2]): ReplicatedVertexView[VD2, ED2] = {
+      edges_ : EdgeRDDImpl[ED2, VD2]): ReplicatedVertexView[VD2, ED2] = {
     new ReplicatedVertexView(edges_, hasSrcId, hasDstId)
   }
 
@@ -50,7 +50,7 @@ class ReplicatedVertexView[VD: ClassTag, ED: ClassTag](
    * Return a new `ReplicatedVertexView` where edges are reversed and shipping levels are swapped to
    * match.
    */
-  def reverse() = {
+  def reverse(): ReplicatedVertexView[VD, ED] = {
     val newEdges = edges.mapEdgePartitions((pid, part) => part.reverse)
     new ReplicatedVertexView(newEdges, hasDstId, hasSrcId)
   }

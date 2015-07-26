@@ -17,99 +17,155 @@
 
 package org.apache.spark.sql.parquet
 
-import org.apache.hadoop.conf.Configuration
+import java.nio.{ByteBuffer, ByteOrder}
+import java.util
+import java.util.{HashMap => JHashMap}
 
-import parquet.column.ParquetProperties
-import parquet.hadoop.ParquetOutputFormat
-import parquet.hadoop.api.ReadSupport.ReadContext
-import parquet.hadoop.api.{ReadSupport, WriteSupport}
-import parquet.io.api._
-import parquet.schema.{MessageType, MessageTypeParser}
+import scala.collection.JavaConversions._
+
+import org.apache.hadoop.conf.Configuration
+import org.apache.parquet.column.ParquetProperties
+import org.apache.parquet.hadoop.ParquetOutputFormat
+import org.apache.parquet.hadoop.api.ReadSupport.ReadContext
+import org.apache.parquet.hadoop.api.{InitContext, ReadSupport, WriteSupport}
+import org.apache.parquet.io.api._
+import org.apache.parquet.schema.MessageType
 
 import org.apache.spark.Logging
-import org.apache.spark.sql.catalyst.expressions.{Attribute, Row}
-import org.apache.spark.sql.catalyst.types._
-import org.apache.spark.sql.execution.SparkSqlSerializer
-import com.google.common.io.BaseEncoding
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
 /**
- * A `parquet.io.api.RecordMaterializer` for Rows.
+ * A [[RecordMaterializer]] for Catalyst rows.
  *
- *@param root The root group converter for the record.
+ * @param parquetSchema Parquet schema of the records to be read
+ * @param catalystSchema Catalyst schema of the rows to be constructed
  */
-private[parquet] class RowRecordMaterializer(root: CatalystConverter)
-  extends RecordMaterializer[Row] {
+private[parquet] class RowRecordMaterializer(parquetSchema: MessageType, catalystSchema: StructType)
+  extends RecordMaterializer[InternalRow] {
 
-  def this(parquetSchema: MessageType, attributes: Seq[Attribute]) =
-    this(CatalystConverter.createRootConverter(parquetSchema, attributes))
+  private val rootConverter = new CatalystRowConverter(parquetSchema, catalystSchema, NoopUpdater)
 
-  override def getCurrentRecord: Row = root.getCurrentRecord
+  override def getCurrentRecord: InternalRow = rootConverter.currentRow
 
-  override def getRootConverter: GroupConverter = root.asInstanceOf[GroupConverter]
+  override def getRootConverter: GroupConverter = rootConverter
 }
 
-/**
- * A `parquet.hadoop.api.ReadSupport` for Row objects.
- */
-private[parquet] class RowReadSupport extends ReadSupport[Row] with Logging {
-
+private[parquet] class RowReadSupport extends ReadSupport[InternalRow] with Logging {
   override def prepareForRead(
       conf: Configuration,
-      stringMap: java.util.Map[String, String],
+      keyValueMetaData: util.Map[String, String],
       fileSchema: MessageType,
-      readContext: ReadContext): RecordMaterializer[Row] = {
-    log.debug(s"preparing for read with Parquet file schema $fileSchema")
-    // Note: this very much imitates AvroParquet
-    val parquetSchema = readContext.getRequestedSchema
-    var schema: Seq[Attribute] = null
+      readContext: ReadContext): RecordMaterializer[InternalRow] = {
+    log.debug(s"Preparing for read Parquet file with message type: $fileSchema")
 
-    if (readContext.getReadSupportMetadata != null) {
-      // first try to find the read schema inside the metadata (can result from projections)
-      if (
-        readContext
-          .getReadSupportMetadata
-          .get(RowReadSupport.SPARK_ROW_REQUESTED_SCHEMA) != null) {
-        schema = ParquetTypesConverter.convertFromString(
-          readContext.getReadSupportMetadata.get(RowReadSupport.SPARK_ROW_REQUESTED_SCHEMA))
-      } else {
-        // if unavailable, try the schema that was read originally from the file or provided
-        // during the creation of the Parquet relation
-        if (readContext.getReadSupportMetadata.get(RowReadSupport.SPARK_METADATA_KEY) != null) {
-          schema = ParquetTypesConverter.convertFromString(
-            readContext.getReadSupportMetadata.get(RowReadSupport.SPARK_METADATA_KEY))
-        }
+    val toCatalyst = new CatalystSchemaConverter(conf)
+    val parquetRequestedSchema = readContext.getRequestedSchema
+
+    val catalystRequestedSchema =
+      Option(readContext.getReadSupportMetadata).map(_.toMap).flatMap { metadata =>
+        metadata
+          // First tries to read requested schema, which may result from projections
+          .get(RowReadSupport.SPARK_ROW_REQUESTED_SCHEMA)
+          // If not available, tries to read Catalyst schema from file metadata.  It's only
+          // available if the target file is written by Spark SQL.
+          .orElse(metadata.get(RowReadSupport.SPARK_METADATA_KEY))
+      }.map(StructType.fromString).getOrElse {
+        logDebug("Catalyst schema not available, falling back to Parquet schema")
+        toCatalyst.convert(parquetRequestedSchema)
       }
-    }
-    // if both unavailable, fall back to deducing the schema from the given Parquet schema
-    if (schema == null)  {
-      log.debug("falling back to Parquet read schema")
-      schema = ParquetTypesConverter.convertToAttributes(parquetSchema)
-    }
-    log.debug(s"list of attributes that will be read: $schema")
-    new RowRecordMaterializer(parquetSchema, schema)
+
+    logDebug(s"Catalyst schema used to read Parquet files: $catalystRequestedSchema")
+    new RowRecordMaterializer(parquetRequestedSchema, catalystRequestedSchema)
   }
 
-  override def init(
-      configuration: Configuration,
-      keyValueMetaData: java.util.Map[String, String],
-      fileSchema: MessageType): ReadContext = {
-    var parquetSchema: MessageType = fileSchema
-    var metadata: java.util.Map[String, String] = new java.util.HashMap[String, String]()
-    val requestedAttributes = RowReadSupport.getRequestedSchema(configuration)
+  override def init(context: InitContext): ReadContext = {
+    val conf = context.getConfiguration
 
-    if (requestedAttributes != null) {
-      parquetSchema = ParquetTypesConverter.convertFromAttributes(requestedAttributes)
-      metadata.put(
-        RowReadSupport.SPARK_ROW_REQUESTED_SCHEMA,
-        ParquetTypesConverter.convertToString(requestedAttributes))
-    }
+    // If the target file was written by Spark SQL, we should be able to find a serialized Catalyst
+    // schema of this file from its the metadata.
+    val maybeRowSchema = Option(conf.get(RowWriteSupport.SPARK_ROW_SCHEMA))
 
-    val origAttributesStr: String = configuration.get(RowWriteSupport.SPARK_ROW_SCHEMA)
-    if (origAttributesStr != null) {
-      metadata.put(RowReadSupport.SPARK_METADATA_KEY, origAttributesStr)
-    }
+    // Optional schema of requested columns, in the form of a string serialized from a Catalyst
+    // `StructType` containing all requested columns.
+    val maybeRequestedSchema = Option(conf.get(RowReadSupport.SPARK_ROW_REQUESTED_SCHEMA))
 
-    return new ReadSupport.ReadContext(parquetSchema, metadata)
+    // Below we construct a Parquet schema containing all requested columns.  This schema tells
+    // Parquet which columns to read.
+    //
+    // If `maybeRequestedSchema` is defined, we assemble an equivalent Parquet schema.  Otherwise,
+    // we have to fallback to the full file schema which contains all columns in the file.
+    // Obviously this may waste IO bandwidth since it may read more columns than requested.
+    //
+    // Two things to note:
+    //
+    // 1. It's possible that some requested columns don't exist in the target Parquet file.  For
+    //    example, in the case of schema merging, the globally merged schema may contain extra
+    //    columns gathered from other Parquet files.  These columns will be simply filled with nulls
+    //    when actually reading the target Parquet file.
+    //
+    // 2. When `maybeRequestedSchema` is available, we can't simply convert the Catalyst schema to
+    //    Parquet schema using `CatalystSchemaConverter`, because the mapping is not unique due to
+    //    non-standard behaviors of some Parquet libraries/tools.  For example, a Parquet file
+    //    containing a single integer array field `f1` may have the following legacy 2-level
+    //    structure:
+    //
+    //      message root {
+    //        optional group f1 (LIST) {
+    //          required INT32 element;
+    //        }
+    //      }
+    //
+    //    while `CatalystSchemaConverter` may generate a standard 3-level structure:
+    //
+    //      message root {
+    //        optional group f1 (LIST) {
+    //          repeated group list {
+    //            required INT32 element;
+    //          }
+    //        }
+    //      }
+    //
+    //    Apparently, we can't use the 2nd schema to read the target Parquet file as they have
+    //    different physical structures.
+    val parquetRequestedSchema =
+      maybeRequestedSchema.fold(context.getFileSchema) { schemaString =>
+        val toParquet = new CatalystSchemaConverter(conf)
+        val fileSchema = context.getFileSchema.asGroupType()
+        val fileFieldNames = fileSchema.getFields.map(_.getName).toSet
+
+        StructType
+          // Deserializes the Catalyst schema of requested columns
+          .fromString(schemaString)
+          .map { field =>
+            if (fileFieldNames.contains(field.name)) {
+              // If the field exists in the target Parquet file, extracts the field type from the
+              // full file schema and makes a single-field Parquet schema
+              new MessageType("root", fileSchema.getType(field.name))
+            } else {
+              // Otherwise, just resorts to `CatalystSchemaConverter`
+              toParquet.convert(StructType(Array(field)))
+            }
+          }
+          // Merges all single-field Parquet schemas to form a complete schema for all requested
+          // columns.  Note that it's possible that no columns are requested at all (e.g., count
+          // some partition column of a partitioned Parquet table). That's why `fold` is used here
+          // and always fallback to an empty Parquet schema.
+          .fold(new MessageType("root")) {
+            _ union _
+          }
+      }
+
+    val metadata =
+      Map.empty[String, String] ++
+        maybeRequestedSchema.map(RowReadSupport.SPARK_ROW_REQUESTED_SCHEMA -> _) ++
+        maybeRowSchema.map(RowWriteSupport.SPARK_ROW_SCHEMA -> _)
+
+    logInfo(s"Going to read Parquet file with these requested columns: $parquetRequestedSchema")
+    new ReadContext(parquetRequestedSchema, metadata)
   }
 }
 
@@ -124,21 +180,25 @@ private[parquet] object RowReadSupport {
 }
 
 /**
- * A `parquet.hadoop.api.WriteSupport` for Row ojects.
+ * A `parquet.hadoop.api.WriteSupport` for Row objects.
  */
-private[parquet] class RowWriteSupport extends WriteSupport[Row] with Logging {
+private[parquet] class RowWriteSupport extends WriteSupport[InternalRow] with Logging {
 
   private[parquet] var writer: RecordConsumer = null
-  private[parquet] var attributes: Seq[Attribute] = null
+  private[parquet] var attributes: Array[Attribute] = null
 
   override def init(configuration: Configuration): WriteSupport.WriteContext = {
-    attributes = if (attributes == null) RowWriteSupport.getSchema(configuration) else attributes
-    
+    val origAttributesStr: String = configuration.get(RowWriteSupport.SPARK_ROW_SCHEMA)
+    val metadata = new JHashMap[String, String]()
+    metadata.put(RowReadSupport.SPARK_METADATA_KEY, origAttributesStr)
+
+    if (attributes == null) {
+      attributes = ParquetTypesConverter.convertFromString(origAttributesStr).toArray
+    }
+
     log.debug(s"write support initialized for requested schema $attributes")
     ParquetRelation.enableLogForwarding()
-    new WriteSupport.WriteContext(
-      ParquetTypesConverter.convertFromAttributes(attributes),
-      new java.util.HashMap[java.lang.String, java.lang.String]())
+    new WriteSupport.WriteContext(ParquetTypesConverter.convertFromAttributes(attributes), metadata)
   }
 
   override def prepareForWrite(recordConsumer: RecordConsumer): Unit = {
@@ -146,19 +206,20 @@ private[parquet] class RowWriteSupport extends WriteSupport[Row] with Logging {
     log.debug(s"preparing for write with schema $attributes")
   }
 
-  override def write(record: Row): Unit = {
-    if (attributes.size > record.size) {
-      throw new IndexOutOfBoundsException(
-        s"Trying to write more fields than contained in row (${attributes.size}>${record.size})")
+  override def write(record: InternalRow): Unit = {
+    val attributesSize = attributes.size
+    if (attributesSize > record.numFields) {
+      throw new IndexOutOfBoundsException("Trying to write more fields than contained in row " +
+        s"($attributesSize > ${record.numFields})")
     }
 
     var index = 0
     writer.startMessage()
-    while(index < attributes.size) {
+    while(index < attributesSize) {
       // null values indicate optional fields but we do not check currently
-      if (record(index) != null && record(index) != Nil) {
+      if (!record.isNullAt(index)) {
         writer.startField(attributes(index).name, index)
-        writeValue(attributes(index).dataType, record(index))
+        writeValue(attributes(index).dataType, record.get(index))
         writer.endField(attributes(index).name, index)
       }
       index = index + 1
@@ -167,37 +228,43 @@ private[parquet] class RowWriteSupport extends WriteSupport[Row] with Logging {
   }
 
   private[parquet] def writeValue(schema: DataType, value: Any): Unit = {
-    if (value != null && value != Nil) {
+    if (value != null) {
       schema match {
-        case t @ ArrayType(_) => writeArray(
+        case t: UserDefinedType[_] => writeValue(t.sqlType, value)
+        case t @ ArrayType(_, _) => writeArray(
           t,
           value.asInstanceOf[CatalystConverter.ArrayScalaType[_]])
-        case t @ MapType(_, _) => writeMap(
+        case t @ MapType(_, _, _) => writeMap(
           t,
           value.asInstanceOf[CatalystConverter.MapScalaType[_, _]])
         case t @ StructType(_) => writeStruct(
           t,
           value.asInstanceOf[CatalystConverter.StructScalaType[_]])
-        case _ => writePrimitive(schema.asInstanceOf[PrimitiveType], value)
+        case _ => writePrimitive(schema.asInstanceOf[AtomicType], value)
       }
     }
   }
 
-  private[parquet] def writePrimitive(schema: PrimitiveType, value: Any): Unit = {
-    if (value != null && value != Nil) {
+  private[parquet] def writePrimitive(schema: DataType, value: Any): Unit = {
+    if (value != null) {
       schema match {
-        case StringType => writer.addBinary(
-          Binary.fromByteArray(
-            value.asInstanceOf[String].getBytes("utf-8")
-          )
-        )
-        case IntegerType => writer.addInteger(value.asInstanceOf[Int])
-        case ShortType => writer.addInteger(value.asInstanceOf[Int])
-        case LongType => writer.addLong(value.asInstanceOf[Long])
-        case ByteType => writer.addInteger(value.asInstanceOf[Int])
-        case DoubleType => writer.addDouble(value.asInstanceOf[Double])
-        case FloatType => writer.addFloat(value.asInstanceOf[Float])
         case BooleanType => writer.addBoolean(value.asInstanceOf[Boolean])
+        case ByteType => writer.addInteger(value.asInstanceOf[Byte])
+        case ShortType => writer.addInteger(value.asInstanceOf[Short])
+        case IntegerType | DateType => writer.addInteger(value.asInstanceOf[Int])
+        case LongType => writer.addLong(value.asInstanceOf[Long])
+        case TimestampType => writeTimestamp(value.asInstanceOf[Long])
+        case FloatType => writer.addFloat(value.asInstanceOf[Float])
+        case DoubleType => writer.addDouble(value.asInstanceOf[Double])
+        case StringType => writer.addBinary(
+          Binary.fromByteArray(value.asInstanceOf[UTF8String].getBytes))
+        case BinaryType => writer.addBinary(
+          Binary.fromByteArray(value.asInstanceOf[Array[Byte]]))
+        case d: DecimalType =>
+          if (d.precision > 18) {
+            sys.error(s"Unsupported datatype $d, cannot write to consumer")
+          }
+          writeDecimal(value.asInstanceOf[Decimal], d.precision)
         case _ => sys.error(s"Do not know how to writer $schema to consumer")
       }
     }
@@ -206,14 +273,14 @@ private[parquet] class RowWriteSupport extends WriteSupport[Row] with Logging {
   private[parquet] def writeStruct(
       schema: StructType,
       struct: CatalystConverter.StructScalaType[_]): Unit = {
-    if (struct != null && struct != Nil) {
+    if (struct != null) {
       val fields = schema.fields.toArray
       writer.startGroup()
       var i = 0
-      while(i < fields.size) {
-        if (struct(i) != null && struct(i) != Nil) {
+      while(i < fields.length) {
+        if (!struct.isNullAt(i)) {
           writer.startField(fields(i).name, i)
-          writeValue(fields(i).dataType, struct(i))
+          writeValue(fields(i).dataType, struct.get(i))
           writer.endField(fields(i).name, i)
         }
         i = i + 1
@@ -222,64 +289,105 @@ private[parquet] class RowWriteSupport extends WriteSupport[Row] with Logging {
     }
   }
 
-  // TODO: support null values, see
-  // https://issues.apache.org/jira/browse/SPARK-1649
   private[parquet] def writeArray(
       schema: ArrayType,
       array: CatalystConverter.ArrayScalaType[_]): Unit = {
     val elementType = schema.elementType
     writer.startGroup()
     if (array.size > 0) {
-      writer.startField(CatalystConverter.ARRAY_ELEMENTS_SCHEMA_NAME, 0)
-      var i = 0
-      while(i < array.size) {
-        writeValue(elementType, array(i))
-        i = i + 1
+      if (schema.containsNull) {
+        writer.startField(CatalystConverter.ARRAY_CONTAINS_NULL_BAG_SCHEMA_NAME, 0)
+        var i = 0
+        while (i < array.size) {
+          writer.startGroup()
+          if (array(i) != null) {
+            writer.startField(CatalystConverter.ARRAY_ELEMENTS_SCHEMA_NAME, 0)
+            writeValue(elementType, array(i))
+            writer.endField(CatalystConverter.ARRAY_ELEMENTS_SCHEMA_NAME, 0)
+          }
+          writer.endGroup()
+          i = i + 1
+        }
+        writer.endField(CatalystConverter.ARRAY_CONTAINS_NULL_BAG_SCHEMA_NAME, 0)
+      } else {
+        writer.startField(CatalystConverter.ARRAY_ELEMENTS_SCHEMA_NAME, 0)
+        var i = 0
+        while (i < array.size) {
+          writeValue(elementType, array(i))
+          i = i + 1
+        }
+        writer.endField(CatalystConverter.ARRAY_ELEMENTS_SCHEMA_NAME, 0)
       }
-      writer.endField(CatalystConverter.ARRAY_ELEMENTS_SCHEMA_NAME, 0)
     }
     writer.endGroup()
   }
 
-  // TODO: support null values, see
-  // https://issues.apache.org/jira/browse/SPARK-1649
   private[parquet] def writeMap(
       schema: MapType,
       map: CatalystConverter.MapScalaType[_, _]): Unit = {
     writer.startGroup()
     if (map.size > 0) {
       writer.startField(CatalystConverter.MAP_SCHEMA_NAME, 0)
-      writer.startGroup()
-      writer.startField(CatalystConverter.MAP_KEY_SCHEMA_NAME, 0)
-      for(key <- map.keys) {
+      for ((key, value) <- map) {
+        writer.startGroup()
+        writer.startField(CatalystConverter.MAP_KEY_SCHEMA_NAME, 0)
         writeValue(schema.keyType, key)
+        writer.endField(CatalystConverter.MAP_KEY_SCHEMA_NAME, 0)
+        if (value != null) {
+          writer.startField(CatalystConverter.MAP_VALUE_SCHEMA_NAME, 1)
+          writeValue(schema.valueType, value)
+          writer.endField(CatalystConverter.MAP_VALUE_SCHEMA_NAME, 1)
+        }
+        writer.endGroup()
       }
-      writer.endField(CatalystConverter.MAP_KEY_SCHEMA_NAME, 0)
-      writer.startField(CatalystConverter.MAP_VALUE_SCHEMA_NAME, 1)
-      for(value <- map.values) {
-        writeValue(schema.valueType, value)
-      }
-      writer.endField(CatalystConverter.MAP_VALUE_SCHEMA_NAME, 1)
-      writer.endGroup()
       writer.endField(CatalystConverter.MAP_SCHEMA_NAME, 0)
     }
     writer.endGroup()
+  }
+
+  // Scratch array used to write decimals as fixed-length binary
+  private[this] val scratchBytes = new Array[Byte](8)
+
+  private[parquet] def writeDecimal(decimal: Decimal, precision: Int): Unit = {
+    val numBytes = ParquetTypesConverter.BYTES_FOR_PRECISION(precision)
+    val unscaledLong = decimal.toUnscaledLong
+    var i = 0
+    var shift = 8 * (numBytes - 1)
+    while (i < numBytes) {
+      scratchBytes(i) = (unscaledLong >> shift).toByte
+      i += 1
+      shift -= 8
+    }
+    writer.addBinary(Binary.fromByteArray(scratchBytes, 0, numBytes))
+  }
+
+  // array used to write Timestamp as Int96 (fixed-length binary)
+  private[this] val int96buf = new Array[Byte](12)
+
+  private[parquet] def writeTimestamp(ts: Long): Unit = {
+    val (julianDay, timeOfDayNanos) = DateTimeUtils.toJulianDay(ts)
+    val buf = ByteBuffer.wrap(int96buf)
+    buf.order(ByteOrder.LITTLE_ENDIAN)
+    buf.putLong(timeOfDayNanos)
+    buf.putInt(julianDay)
+    writer.addBinary(Binary.fromByteArray(int96buf))
   }
 }
 
 // Optimized for non-nested rows
 private[parquet] class MutableRowWriteSupport extends RowWriteSupport {
-  override def write(record: Row): Unit = {
-    if (attributes.size > record.size) {
-      throw new IndexOutOfBoundsException(
-        s"Trying to write more fields than contained in row (${attributes.size}>${record.size})")
+  override def write(record: InternalRow): Unit = {
+    val attributesSize = attributes.size
+    if (attributesSize > record.numFields) {
+      throw new IndexOutOfBoundsException("Trying to write more fields than contained in row " +
+        s"($attributesSize > ${record.numFields})")
     }
 
     var index = 0
     writer.startMessage()
-    while(index < attributes.size) {
+    while(index < attributesSize) {
       // null values indicate optional fields but we do not check currently
-      if (record(index) != null && record(index) != Nil) {
+      if (!record.isNullAt(index) && !record.isNullAt(index)) {
         writer.startField(attributes(index).name, index)
         consumeType(attributes(index).dataType, record, index)
         writer.endField(attributes(index).name, index)
@@ -291,21 +399,26 @@ private[parquet] class MutableRowWriteSupport extends RowWriteSupport {
 
   private def consumeType(
       ctype: DataType,
-      record: Row,
+      record: InternalRow,
       index: Int): Unit = {
     ctype match {
-      case StringType => writer.addBinary(
-        Binary.fromByteArray(
-          record(index).asInstanceOf[String].getBytes("utf-8")
-        )
-      )
-      case IntegerType => writer.addInteger(record.getInt(index))
-      case ShortType => writer.addInteger(record.getShort(index))
-      case LongType => writer.addLong(record.getLong(index))
-      case ByteType => writer.addInteger(record.getByte(index))
-      case DoubleType => writer.addDouble(record.getDouble(index))
-      case FloatType => writer.addFloat(record.getFloat(index))
       case BooleanType => writer.addBoolean(record.getBoolean(index))
+      case ByteType => writer.addInteger(record.getByte(index))
+      case ShortType => writer.addInteger(record.getShort(index))
+      case IntegerType | DateType => writer.addInteger(record.getInt(index))
+      case LongType => writer.addLong(record.getLong(index))
+      case TimestampType => writeTimestamp(record.getLong(index))
+      case FloatType => writer.addFloat(record.getFloat(index))
+      case DoubleType => writer.addDouble(record.getDouble(index))
+      case StringType =>
+        writer.addBinary(Binary.fromByteArray(record.getUTF8String(index).getBytes))
+      case BinaryType =>
+        writer.addBinary(Binary.fromByteArray(record.getBinary(index)))
+      case d: DecimalType =>
+        if (d.precision > 18) {
+          sys.error(s"Unsupported datatype $d, cannot write to consumer")
+        }
+        writeDecimal(record.getDecimal(index), d.precision)
       case _ => sys.error(s"Unsupported datatype $ctype, cannot write to consumer")
     }
   }

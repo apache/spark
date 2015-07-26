@@ -21,9 +21,7 @@ import java.net.{InetSocketAddress, URL}
 import javax.servlet.DispatcherType
 import javax.servlet.http.{HttpServlet, HttpServletRequest, HttpServletResponse}
 
-import scala.annotation.tailrec
 import scala.language.implicitConversions
-import scala.util.{Failure, Success, Try}
 import scala.xml.Node
 
 import org.eclipse.jetty.server.Server
@@ -64,18 +62,32 @@ private[spark] object JettyUtils extends Logging {
       securityMgr: SecurityManager): HttpServlet = {
     new HttpServlet {
       override def doGet(request: HttpServletRequest, response: HttpServletResponse) {
-        if (securityMgr.checkUIViewPermissions(request.getRemoteUser)) {
-          response.setContentType("%s;charset=utf-8".format(servletParams.contentType))
-          response.setStatus(HttpServletResponse.SC_OK)
-          val result = servletParams.responder(request)
-          response.setHeader("Cache-Control", "no-cache, no-store, must-revalidate")
-          response.getWriter.println(servletParams.extractFn(result))
-        } else {
-          response.setStatus(HttpServletResponse.SC_UNAUTHORIZED)
-          response.setHeader("Cache-Control", "no-cache, no-store, must-revalidate")
-          response.sendError(HttpServletResponse.SC_UNAUTHORIZED,
-            "User is not authorized to access this page.")
+        try {
+          if (securityMgr.checkUIViewPermissions(request.getRemoteUser)) {
+            response.setContentType("%s;charset=utf-8".format(servletParams.contentType))
+            response.setStatus(HttpServletResponse.SC_OK)
+            val result = servletParams.responder(request)
+            response.setHeader("Cache-Control", "no-cache, no-store, must-revalidate")
+            // scalastyle:off println
+            response.getWriter.println(servletParams.extractFn(result))
+            // scalastyle:on println
+          } else {
+            response.setStatus(HttpServletResponse.SC_UNAUTHORIZED)
+            response.setHeader("Cache-Control", "no-cache, no-store, must-revalidate")
+            response.sendError(HttpServletResponse.SC_UNAUTHORIZED,
+              "User is not authorized to access this page.")
+          }
+        } catch {
+          case e: IllegalArgumentException =>
+            response.sendError(HttpServletResponse.SC_BAD_REQUEST, e.getMessage)
+          case e: Exception =>
+            logWarning(s"GET ${request.getRequestURI} failed: $e", e)
+            throw e
         }
+      }
+      // SPARK-5983 ensure TRACE is not supported
+      protected override def doTrace(req: HttpServletRequest, res: HttpServletResponse): Unit = {
+        res.sendError(HttpServletResponse.SC_METHOD_NOT_ALLOWED)
       }
     }
   }
@@ -93,7 +105,7 @@ private[spark] object JettyUtils extends Logging {
   def createServletHandler(
       path: String,
       servlet: HttpServlet,
-      basePath: String = ""): ServletContextHandler = {
+      basePath: String): ServletContextHandler = {
     val prefixedPath = attachPrefix(basePath, path)
     val contextHandler = new ServletContextHandler
     val holder = new ServletHolder(servlet)
@@ -107,14 +119,33 @@ private[spark] object JettyUtils extends Logging {
       srcPath: String,
       destPath: String,
       beforeRedirect: HttpServletRequest => Unit = x => (),
-      basePath: String = ""): ServletContextHandler = {
+      basePath: String = "",
+      httpMethods: Set[String] = Set("GET")): ServletContextHandler = {
     val prefixedDestPath = attachPrefix(basePath, destPath)
     val servlet = new HttpServlet {
-      override def doGet(request: HttpServletRequest, response: HttpServletResponse) {
+      override def doGet(request: HttpServletRequest, response: HttpServletResponse): Unit = {
+        if (httpMethods.contains("GET")) {
+          doRequest(request, response)
+        } else {
+          response.sendError(HttpServletResponse.SC_METHOD_NOT_ALLOWED)
+        }
+      }
+      override def doPost(request: HttpServletRequest, response: HttpServletResponse): Unit = {
+        if (httpMethods.contains("POST")) {
+          doRequest(request, response)
+        } else {
+          response.sendError(HttpServletResponse.SC_METHOD_NOT_ALLOWED)
+        }
+      }
+      private def doRequest(request: HttpServletRequest, response: HttpServletResponse): Unit = {
         beforeRedirect(request)
         // Make sure we don't end up with "//" in the middle
         val newUrl = new URL(new URL(request.getRequestURL.toString), prefixedDestPath).toString
         response.sendRedirect(newUrl)
+      }
+      // SPARK-5983 ensure TRACE is not supported
+      protected override def doTrace(req: HttpServletRequest, res: HttpServletResponse): Unit = {
+        res.sendError(HttpServletResponse.SC_METHOD_NOT_ALLOWED)
       }
     }
     createServletHandler(srcPath, servlet, basePath)
@@ -147,15 +178,19 @@ private[spark] object JettyUtils extends Logging {
           val holder : FilterHolder = new FilterHolder()
           holder.setClassName(filter)
           // Get any parameters for each filter
-          val paramName = "spark." + filter + ".params"
-          val params = conf.get(paramName, "").split(',').map(_.trim()).toSet
-          params.foreach {
-            case param : String =>
+          conf.get("spark." + filter + ".params", "").split(',').map(_.trim()).toSet.foreach {
+            param: String =>
               if (!param.isEmpty) {
                 val parts = param.split("=")
                 if (parts.length == 2) holder.setInitParameter(parts(0), parts(1))
              }
           }
+
+          val prefix = s"spark.$filter.param."
+          conf.getAll
+            .filter { case (k, v) => k.length() > prefix.length() && k.startsWith(prefix) }
+            .foreach { case (k, v) => holder.setInitParameter(k.substring(prefix.length()), v) }
+
           val enumDispatcher = java.util.EnumSet.of(DispatcherType.ASYNC, DispatcherType.ERROR,
             DispatcherType.FORWARD, DispatcherType.INCLUDE, DispatcherType.REQUEST)
           handlers.foreach { case(handler) => handler.addFilter(holder, "/*", enumDispatcher) }
@@ -174,40 +209,41 @@ private[spark] object JettyUtils extends Logging {
       hostName: String,
       port: Int,
       handlers: Seq[ServletContextHandler],
-      conf: SparkConf): ServerInfo = {
+      conf: SparkConf,
+      serverName: String = ""): ServerInfo = {
 
-    val collection = new ContextHandlerCollection
-    collection.setHandlers(handlers.toArray)
     addFilters(handlers, conf)
 
-    @tailrec
+    val collection = new ContextHandlerCollection
+    val gzipHandlers = handlers.map { h =>
+      val gzipHandler = new GzipHandler
+      gzipHandler.setHandler(h)
+      gzipHandler
+    }
+    collection.setHandlers(gzipHandlers.toArray)
+
+    // Bind to the given port, or throw a java.net.BindException if the port is occupied
     def connect(currentPort: Int): (Server, Int) = {
       val server = new Server(new InetSocketAddress(hostName, currentPort))
       val pool = new QueuedThreadPool
       pool.setDaemon(true)
       server.setThreadPool(pool)
+      val errorHandler = new ErrorHandler()
+      errorHandler.setShowStacks(true)
+      server.addBean(errorHandler)
       server.setHandler(collection)
-
-      Try {
+      try {
         server.start()
-      } match {
-        case s: Success[_] =>
-          (server, server.getConnectors.head.getLocalPort)
-        case f: Failure[_] =>
-          val nextPort = (currentPort + 1) % 65536
+        (server, server.getConnectors.head.getLocalPort)
+      } catch {
+        case e: Exception =>
           server.stop()
           pool.stop()
-          val msg = s"Failed to create UI on port $currentPort. Trying again on port $nextPort."
-          if (f.toString.contains("Address already in use")) {
-            logWarning(s"$msg - $f")
-          } else {
-            logError(msg, f.exception)
-          }
-          connect(nextPort)
+          throw e
       }
     }
 
-    val (server, boundPort) = connect(port)
+    val (server, boundPort) = Utils.startServiceOnPort[Server](port, connect, conf, serverName)
     ServerInfo(server, boundPort, collection)
   }
 

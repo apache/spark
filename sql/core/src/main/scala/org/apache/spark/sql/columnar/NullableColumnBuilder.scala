@@ -19,7 +19,7 @@ package org.apache.spark.sql.columnar
 
 import java.nio.{ByteBuffer, ByteOrder}
 
-import org.apache.spark.sql.Row
+import org.apache.spark.sql.catalyst.InternalRow
 
 /**
  * A stackable trait used for building byte buffer for a column containing null values.  Memory
@@ -36,11 +36,15 @@ import org.apache.spark.sql.Row
  * }}}
  */
 private[sql] trait NullableColumnBuilder extends ColumnBuilder {
-  private var nulls: ByteBuffer = _
+  protected var nulls: ByteBuffer = _
+  protected var nullCount: Int = _
   private var pos: Int = _
-  private var nullCount: Int = _
 
-  abstract override def initialize(initialSize: Int, columnName: String, useCompression: Boolean) {
+  abstract override def initialize(
+      initialSize: Int,
+      columnName: String,
+      useCompression: Boolean): Unit = {
+
     nulls = ByteBuffer.allocate(1024)
     nulls.order(ByteOrder.nativeOrder())
     pos = 0
@@ -48,7 +52,8 @@ private[sql] trait NullableColumnBuilder extends ColumnBuilder {
     super.initialize(initialSize, columnName, useCompression)
   }
 
-  abstract override def appendFrom(row: Row, ordinal: Int) {
+  abstract override def appendFrom(row: InternalRow, ordinal: Int): Unit = {
+    columnStats.gatherStats(row, ordinal)
     if (row.isNullAt(ordinal)) {
       nulls = ColumnBuilder.ensureFreeSpace(nulls, 4)
       nulls.putInt(pos)
@@ -77,5 +82,10 @@ private[sql] trait NullableColumnBuilder extends ColumnBuilder {
 
     buffer.rewind()
     buffer
+  }
+
+  protected def buildNonNulls(): ByteBuffer = {
+    nulls.limit(nulls.position()).rewind()
+    super.build()
   }
 }

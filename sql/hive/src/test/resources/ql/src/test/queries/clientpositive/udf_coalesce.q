@@ -1,3 +1,5 @@
+set hive.fetch.task.conversion=more;
+
 DESCRIBE FUNCTION coalesce;
 DESCRIBE FUNCTION EXTENDED coalesce;
 
@@ -20,7 +22,7 @@ SELECT COALESCE(1),
        COALESCE(NULL, 2.0, 3.0),
        COALESCE(2.0, NULL, 3.0),
        COALESCE(IF(TRUE, NULL, 0), NULL)
-FROM src LIMIT 1;
+FROM src tablesample (1 rows);
 
 SELECT COALESCE(1),
        COALESCE(1, 2),
@@ -40,7 +42,7 @@ SELECT COALESCE(1),
        COALESCE(NULL, 2.0, 3.0),
        COALESCE(2.0, NULL, 3.0),
        COALESCE(IF(TRUE, NULL, 0), NULL)
-FROM src LIMIT 1;
+FROM src tablesample (1 rows);
 
 EXPLAIN
 SELECT COALESCE(src_thrift.lint[1], 999),

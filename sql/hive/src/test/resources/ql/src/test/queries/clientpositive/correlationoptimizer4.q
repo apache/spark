@@ -1,9 +1,9 @@
 CREATE TABLE T1(key INT, val STRING);
-LOAD DATA LOCAL INPATH '../data/files/T1.txt' INTO TABLE T1;
+LOAD DATA LOCAL INPATH '../../data/files/T1.txt' INTO TABLE T1;
 CREATE TABLE T2(key INT, val STRING);
-LOAD DATA LOCAL INPATH '../data/files/T2.txt' INTO TABLE T2;
+LOAD DATA LOCAL INPATH '../../data/files/T2.txt' INTO TABLE T2;
 CREATE TABLE T3(key INT, val STRING);
-LOAD DATA LOCAL INPATH '../data/files/T1.txt' INTO TABLE T3;
+LOAD DATA LOCAL INPATH '../../data/files/T1.txt' INTO TABLE T3;
 
 set hive.auto.convert.join=false;
 set hive.optimize.correlation=false;

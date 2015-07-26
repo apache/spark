@@ -16,5 +16,5 @@ SELECT src.key, sum(substr(src.value,5))
 FROM src
 GROUP BY src.key;
 
-SELECT dest1.* FROM dest1;
+SELECT dest1.* FROM dest1 ORDER BY key;
 

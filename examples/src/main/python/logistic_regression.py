@@ -22,10 +22,8 @@ to act on batches of input data using efficient matrix operations.
 In practice, one may prefer to use the LogisticRegression algorithm in
 MLlib, as shown in examples/src/main/python/mllib/logistic_regression.py.
 """
+from __future__ import print_function
 
-from collections import namedtuple
-from math import exp
-from os.path import realpath
 import sys
 
 import numpy as np
@@ -42,21 +40,27 @@ D = 10  # Number of dimensions
 def readPointBatch(iterator):
     strs = list(iterator)
     matrix = np.zeros((len(strs), D + 1))
-    for i in xrange(len(strs)):
-        matrix[i] = np.fromstring(strs[i].replace(',', ' '), dtype=np.float32, sep=' ')
+    for i, s in enumerate(strs):
+        matrix[i] = np.fromstring(s.replace(',', ' '), dtype=np.float32, sep=' ')
     return [matrix]
 
 if __name__ == "__main__":
+
     if len(sys.argv) != 3:
-        print >> sys.stderr, "Usage: logistic_regression <file> <iterations>"
+        print("Usage: logistic_regression <file> <iterations>", file=sys.stderr)
         exit(-1)
+
+    print("""WARN: This is a naive implementation of Logistic Regression and is
+      given as an example! Please refer to examples/src/main/python/mllib/logistic_regression.py
+      to see how MLlib's implementation is used.""", file=sys.stderr)
+
     sc = SparkContext(appName="PythonLR")
     points = sc.textFile(sys.argv[1]).mapPartitions(readPointBatch).cache()
     iterations = int(sys.argv[2])
 
     # Initialize w to a random value
     w = 2 * np.random.ranf(size=D) - 1
-    print "Initial w: " + str(w)
+    print("Initial w: " + str(w))
 
     # Compute logistic regression gradient for a matrix of data points
     def gradient(matrix, w):
@@ -70,7 +74,9 @@ if __name__ == "__main__":
         return x
 
     for i in range(iterations):
-        print "On iteration %i" % (i + 1)
+        print("On iteration %i" % (i + 1))
         w -= points.map(lambda m: gradient(m, w)).reduce(add)
 
-    print "Final w: " + str(w)
+    print("Final w: " + str(w))
+
+    sc.stop()

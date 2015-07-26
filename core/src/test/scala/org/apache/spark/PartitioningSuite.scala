@@ -17,15 +17,15 @@
 
 package org.apache.spark
 
+import scala.collection.mutable.ArrayBuffer
 import scala.math.abs
 
-import org.scalatest.{FunSuite, PrivateMethodTester}
+import org.scalatest.PrivateMethodTester
 
-import org.apache.spark.SparkContext._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.StatCounter
 
-class PartitioningSuite extends FunSuite with SharedSparkContext with PrivateMethodTester {
+class PartitioningSuite extends SparkFunSuite with SharedSparkContext with PrivateMethodTester {
 
   test("HashPartitioner equality") {
     val p2 = new HashPartitioner(2)
@@ -52,14 +52,12 @@ class PartitioningSuite extends FunSuite with SharedSparkContext with PrivateMet
 
     assert(p2 === p2)
     assert(p4 === p4)
-    assert(p2 != p4)
-    assert(p4 != p2)
+    assert(p2 === p4)
     assert(p4 === anotherP4)
     assert(anotherP4 === p4)
     assert(descendingP2 === descendingP2)
     assert(descendingP4 === descendingP4)
-    assert(descendingP2 != descendingP4)
-    assert(descendingP4 != descendingP2)
+    assert(descendingP2 === descendingP4)
     assert(p2 != descendingP2)
     assert(p4 != descendingP4)
     assert(descendingP2 != p2)
@@ -89,6 +87,74 @@ class PartitioningSuite extends FunSuite with SharedSparkContext with PrivateMet
         }
       }}
     }
+  }
+
+  test("RangePartitioner for keys that are not Comparable (but with Ordering)") {
+    // Row does not extend Comparable, but has an implicit Ordering defined.
+    implicit object RowOrdering extends Ordering[Item] {
+      override def compare(x: Item, y: Item): Int = x.value - y.value
+    }
+
+    val rdd = sc.parallelize(1 to 4500).map(x => (Item(x), Item(x)))
+    val partitioner = new RangePartitioner(1500, rdd)
+    partitioner.getPartition(Item(100))
+  }
+
+  test("RangPartitioner.sketch") {
+    val rdd = sc.makeRDD(0 until 20, 20).flatMap { i =>
+      val random = new java.util.Random(i)
+      Iterator.fill(i)(random.nextDouble())
+    }.cache()
+    val sampleSizePerPartition = 10
+    val (count, sketched) = RangePartitioner.sketch(rdd, sampleSizePerPartition)
+    assert(count === rdd.count())
+    sketched.foreach { case (idx, n, sample) =>
+      assert(n === idx)
+      assert(sample.size === math.min(n, sampleSizePerPartition))
+    }
+  }
+
+  test("RangePartitioner.determineBounds") {
+    assert(RangePartitioner.determineBounds(ArrayBuffer.empty[(Int, Float)], 10).isEmpty,
+      "Bounds on an empty candidates set should be empty.")
+    val candidates = ArrayBuffer(
+      (0.7, 2.0f), (0.1, 1.0f), (0.4, 1.0f), (0.3, 1.0f), (0.2, 1.0f), (0.5, 1.0f), (1.0, 3.0f))
+    assert(RangePartitioner.determineBounds(candidates, 3) === Array(0.4, 0.7))
+  }
+
+  test("RangePartitioner should run only one job if data is roughly balanced") {
+    val rdd = sc.makeRDD(0 until 20, 20).flatMap { i =>
+      val random = new java.util.Random(i)
+      Iterator.fill(5000 * i)((random.nextDouble() + i, i))
+    }.cache()
+    for (numPartitions <- Seq(10, 20, 40)) {
+      val partitioner = new RangePartitioner(numPartitions, rdd)
+      assert(partitioner.numPartitions === numPartitions)
+      val counts = rdd.keys.map(key => partitioner.getPartition(key)).countByValue().values
+      assert(counts.max < 3.0 * counts.min)
+    }
+  }
+
+  test("RangePartitioner should work well on unbalanced data") {
+    val rdd = sc.makeRDD(0 until 20, 20).flatMap { i =>
+      val random = new java.util.Random(i)
+      Iterator.fill(20 * i * i * i)((random.nextDouble() + i, i))
+    }.cache()
+    for (numPartitions <- Seq(2, 4, 8)) {
+      val partitioner = new RangePartitioner(numPartitions, rdd)
+      assert(partitioner.numPartitions === numPartitions)
+      val counts = rdd.keys.map(key => partitioner.getPartition(key)).countByValue().values
+      assert(counts.max < 3.0 * counts.min)
+    }
+  }
+
+  test("RangePartitioner should return a single partition for empty RDDs") {
+    val empty1 = sc.emptyRDD[(Int, Double)]
+    val partitioner1 = new RangePartitioner(0, empty1)
+    assert(partitioner1.numPartitions === 1)
+    val empty2 = sc.makeRDD(0 until 2, 2).flatMap(i => Seq.empty[(Int, Double)])
+    val partitioner2 = new RangePartitioner(2, empty2)
+    assert(partitioner2.numPartitions === 1)
   }
 
   test("HashPartitioner not equal to RangePartitioner") {
@@ -126,11 +192,13 @@ class PartitioningSuite extends FunSuite with SharedSparkContext with PrivateMet
     assert(grouped2.join(grouped4).partitioner === grouped4.partitioner)
     assert(grouped2.leftOuterJoin(grouped4).partitioner === grouped4.partitioner)
     assert(grouped2.rightOuterJoin(grouped4).partitioner === grouped4.partitioner)
+    assert(grouped2.fullOuterJoin(grouped4).partitioner === grouped4.partitioner)
     assert(grouped2.cogroup(grouped4).partitioner === grouped4.partitioner)
 
     assert(grouped2.join(reduced2).partitioner === grouped2.partitioner)
     assert(grouped2.leftOuterJoin(reduced2).partitioner === grouped2.partitioner)
     assert(grouped2.rightOuterJoin(reduced2).partitioner === grouped2.partitioner)
+    assert(grouped2.fullOuterJoin(reduced2).partitioner === grouped2.partitioner)
     assert(grouped2.cogroup(reduced2).partitioner === grouped2.partitioner)
 
     assert(grouped2.map(_ => 1).partitioner === None)
@@ -144,19 +212,24 @@ class PartitioningSuite extends FunSuite with SharedSparkContext with PrivateMet
     val arrPairs: RDD[(Array[Int], Int)] =
       sc.parallelize(Array(1, 2, 3, 4), 2).map(x => (Array(x), x))
 
-    assert(intercept[SparkException]{ arrs.distinct() }.getMessage.contains("array"))
+    def verify(testFun: => Unit): Unit = {
+      intercept[SparkException](testFun).getMessage.contains("array")
+    }
+
+    verify(arrs.distinct())
     // We can't catch all usages of arrays, since they might occur inside other collections:
     // assert(fails { arrPairs.distinct() })
-    assert(intercept[SparkException]{ arrPairs.partitionBy(new HashPartitioner(2)) }.getMessage.contains("array"))
-    assert(intercept[SparkException]{ arrPairs.join(arrPairs) }.getMessage.contains("array"))
-    assert(intercept[SparkException]{ arrPairs.leftOuterJoin(arrPairs) }.getMessage.contains("array"))
-    assert(intercept[SparkException]{ arrPairs.rightOuterJoin(arrPairs) }.getMessage.contains("array"))
-    assert(intercept[SparkException]{ arrPairs.groupByKey() }.getMessage.contains("array"))
-    assert(intercept[SparkException]{ arrPairs.countByKey() }.getMessage.contains("array"))
-    assert(intercept[SparkException]{ arrPairs.countByKeyApprox(1) }.getMessage.contains("array"))
-    assert(intercept[SparkException]{ arrPairs.cogroup(arrPairs) }.getMessage.contains("array"))
-    assert(intercept[SparkException]{ arrPairs.reduceByKeyLocally(_ + _) }.getMessage.contains("array"))
-    assert(intercept[SparkException]{ arrPairs.reduceByKey(_ + _) }.getMessage.contains("array"))
+    verify(arrPairs.partitionBy(new HashPartitioner(2)))
+    verify(arrPairs.join(arrPairs))
+    verify(arrPairs.leftOuterJoin(arrPairs))
+    verify(arrPairs.rightOuterJoin(arrPairs))
+    verify(arrPairs.fullOuterJoin(arrPairs))
+    verify(arrPairs.groupByKey())
+    verify(arrPairs.countByKey())
+    verify(arrPairs.countByKeyApprox(1))
+    verify(arrPairs.cogroup(arrPairs))
+    verify(arrPairs.reduceByKeyLocally(_ + _))
+    verify(arrPairs.reduceByKey(_ + _))
   }
 
   test("zero-length partitions should be correctly handled") {
@@ -177,3 +250,6 @@ class PartitioningSuite extends FunSuite with SharedSparkContext with PrivateMet
     // Add other tests here for classes that should be able to handle empty partitions correctly
   }
 }
+
+
+private sealed case class Item(value: Int)

@@ -1,7 +1,9 @@
 set hive.input.format=org.apache.hadoop.hive.ql.io.HiveInputFormat;
+
+-- EXCLUDE_OS_WINDOWS
 CREATE TABLE dest1(key INT, value STRING);
 
-ADD FILE src/test/scripts/testgrep;
+ADD FILE ../../ql/src/test/scripts/testgrep;
 
 FROM (
   FROM src

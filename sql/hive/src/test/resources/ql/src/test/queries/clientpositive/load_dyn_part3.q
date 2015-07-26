@@ -14,6 +14,6 @@ insert overwrite table nzhang_part3 partition (ds, hr) select key, value, ds, hr
 
 insert overwrite table nzhang_part3 partition (ds, hr) select key, value, ds, hr from srcpart where ds is not null and hr is not null;
 
-select * from nzhang_part3 where ds is not null and hr is not null;
+select * from nzhang_part3 where ds is not null and hr is not null order by ds, hr, key;
 
 

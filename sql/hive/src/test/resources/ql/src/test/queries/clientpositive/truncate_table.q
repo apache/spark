@@ -1,5 +1,5 @@
 create table src_truncate (key string, value string);
-load data local inpath '../data/files/kv1.txt' into table src_truncate;;
+load data local inpath '../../data/files/kv1.txt' into table src_truncate;;
 
 create table srcpart_truncate (key string, value string) partitioned by (ds string, hr string);
 alter table srcpart_truncate add partition (ds='2008-04-08', hr='11');        
@@ -7,10 +7,10 @@ alter table srcpart_truncate add partition (ds='2008-04-08', hr='12');
 alter table srcpart_truncate add partition (ds='2008-04-09', hr='11');
 alter table srcpart_truncate add partition (ds='2008-04-09', hr='12');
 
-load data local inpath '../data/files/kv1.txt' into table srcpart_truncate partition (ds='2008-04-08', hr='11');
-load data local inpath '../data/files/kv1.txt' into table srcpart_truncate partition (ds='2008-04-08', hr='12');
-load data local inpath '../data/files/kv1.txt' into table srcpart_truncate partition (ds='2008-04-09', hr='11');
-load data local inpath '../data/files/kv1.txt' into table srcpart_truncate partition (ds='2008-04-09', hr='12');
+load data local inpath '../../data/files/kv1.txt' into table srcpart_truncate partition (ds='2008-04-08', hr='11');
+load data local inpath '../../data/files/kv1.txt' into table srcpart_truncate partition (ds='2008-04-08', hr='12');
+load data local inpath '../../data/files/kv1.txt' into table srcpart_truncate partition (ds='2008-04-09', hr='11');
+load data local inpath '../../data/files/kv1.txt' into table srcpart_truncate partition (ds='2008-04-09', hr='12');
 
 set hive.fetch.task.convertion=more;
 

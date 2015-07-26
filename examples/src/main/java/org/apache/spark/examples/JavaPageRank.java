@@ -45,9 +45,20 @@ import java.util.regex.Pattern;
  * URL         neighbor URL
  * ...
  * where URL and their neighbors are separated by space(s).
+ *
+ * This is an example implementation for learning how to use Spark. For more conventional use,
+ * please refer to org.apache.spark.graphx.lib.PageRank
  */
 public final class JavaPageRank {
   private static final Pattern SPACES = Pattern.compile("\\s+");
+
+  static void showWarning() {
+    String warning = "WARN: This is a naive implementation of PageRank " +
+            "and is given as an example! \n" +
+            "Please use the PageRank implementation found in " +
+            "org.apache.spark.graphx.lib.PageRank for more conventional use.";
+    System.err.println(warning);
+  }
 
   private static class Sum implements Function2<Double, Double, Double> {
     @Override
@@ -61,6 +72,8 @@ public final class JavaPageRank {
       System.err.println("Usage: JavaPageRank <file> <number_of_iterations>");
       System.exit(1);
     }
+
+    showWarning();
 
     SparkConf sparkConf = new SparkConf().setAppName("JavaPageRank");
     JavaSparkContext ctx = new JavaSparkContext(sparkConf);
@@ -96,7 +109,7 @@ public final class JavaPageRank {
         .flatMapToPair(new PairFlatMapFunction<Tuple2<Iterable<String>, Double>, String, Double>() {
           @Override
           public Iterable<Tuple2<String, Double>> call(Tuple2<Iterable<String>, Double> s) {
-	    int urlCount = Iterables.size(s._1);
+            int urlCount = Iterables.size(s._1);
             List<Tuple2<String, Double>> results = new ArrayList<Tuple2<String, Double>>();
             for (String n : s._1) {
               results.add(new Tuple2<String, Double>(n, s._2() / urlCount));

@@ -17,12 +17,15 @@
 
 package org.apache.spark.rdd
 
-import org.scalatest.FunSuite
-
 import org.apache.spark._
-import org.apache.spark.SparkContext._
 
-class DoubleRDDSuite extends FunSuite with SharedSparkContext {
+class DoubleRDDSuite extends SparkFunSuite with SharedSparkContext {
+  test("sum") {
+    assert(sc.parallelize(Seq.empty[Double]).sum() === 0.0)
+    assert(sc.parallelize(Seq(1.0)).sum() === 1.0)
+    assert(sc.parallelize(Seq(1.0, 2.0)).sum() === 3.0)
+  }
+
   // Verify tests on the histogram functionality. We test with both evenly
   // and non-evenly spaced buckets as the bucket lookup function changes.
   test("WorksOnEmpty") {
@@ -34,6 +37,9 @@ class DoubleRDDSuite extends FunSuite with SharedSparkContext {
     val expectedHistogramResults = Array(0)
     assert(histogramResults === expectedHistogramResults)
     assert(histogramResults2 === expectedHistogramResults)
+    val emptyRDD: RDD[Double] = sc.emptyRDD
+    assert(emptyRDD.histogram(buckets) === expectedHistogramResults)
+    assert(emptyRDD.histogram(buckets, true) === expectedHistogramResults)
   }
 
   test("WorksWithOutOfRangeWithOneBucket") {
@@ -233,6 +239,12 @@ class DoubleRDDSuite extends FunSuite with SharedSparkContext {
     assert(histogramBuckets === expectedHistogramBuckets)
   }
 
+  test("WorksWithDoubleValuesAtMinMax") {
+    val rdd = sc.parallelize(Seq(1, 1, 1, 2, 3, 3))
+    assert(Array(3, 0, 1, 2) === rdd.map(_.toDouble).histogram(4)._2)
+    assert(Array(3, 1, 2) === rdd.map(_.toDouble).histogram(3)._2)
+  }
+
   test("WorksWithoutBucketsWithMoreRequestedThanElements") {
     // Verify the basic case of one bucket and all elements in that bucket works
     val rdd = sc.parallelize(Seq(1, 2))
@@ -243,6 +255,39 @@ class DoubleRDDSuite extends FunSuite with SharedSparkContext {
       Array(1.0, 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8, 1.9, 2.0)
     assert(histogramResults === expectedHistogramResults)
     assert(histogramBuckets === expectedHistogramBuckets)
+  }
+
+  test("WorksWithoutBucketsForLargerDatasets") {
+    // Verify the case of slightly larger datasets
+    val rdd = sc.parallelize(6 to 99)
+    val (histogramBuckets, histogramResults) = rdd.histogram(8)
+    val expectedHistogramResults =
+      Array(12, 12, 11, 12, 12, 11, 12, 12)
+    val expectedHistogramBuckets =
+      Array(6.0, 17.625, 29.25, 40.875, 52.5, 64.125, 75.75, 87.375, 99.0)
+    assert(histogramResults === expectedHistogramResults)
+    assert(histogramBuckets === expectedHistogramBuckets)
+  }
+
+  test("WorksWithoutBucketsWithNonIntegralBucketEdges") {
+    // Verify the case of buckets with nonintegral edges. See #SPARK-2862.
+    val rdd = sc.parallelize(6 to 99)
+    val (histogramBuckets, histogramResults) = rdd.histogram(9)
+    // Buckets are 6.0, 16.333333333333336, 26.666666666666668, 37.0, 47.333333333333336 ...
+    val expectedHistogramResults =
+      Array(11, 10, 10, 11, 10, 10, 11, 10, 11)
+    assert(histogramResults === expectedHistogramResults)
+    assert(histogramBuckets(0) === 6.0)
+    assert(histogramBuckets(9) === 99.0)
+  }
+
+  test("WorksWithHugeRange") {
+    val rdd = sc.parallelize(Array(0, 1.0e24, 1.0e30))
+    val histogramResults = rdd.histogram(1000000)._2
+    assert(histogramResults(0) === 1)
+    assert(histogramResults(1) === 1)
+    assert(histogramResults.last === 1)
+    assert((2 to histogramResults.length - 2).forall(i => histogramResults(i) == 0))
   }
 
   // Test the failure mode with an invalid RDD

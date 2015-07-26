@@ -1,0 +1,1 @@
+acos(x) - returns the arc cosine of x if -1<=x<=1 or NULL otherwise

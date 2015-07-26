@@ -33,7 +33,11 @@ There are several useful things to note about this architecture:
 2. Spark is agnostic to the underlying cluster manager. As long as it can acquire executor
    processes, and these communicate with each other, it is relatively easy to run it even on a
    cluster manager that also supports other applications (e.g. Mesos/YARN).
-3. Because the driver schedules tasks on the cluster, it should be run close to the worker
+3. The driver program must listen for and accept incoming connections from its executors throughout 
+   its lifetime (e.g., see [spark.driver.port and spark.fileserver.port in the network config 
+   section](configuration.html#networking)). As such, the driver program must be network 
+   addressable from the worker nodes.
+4. Because the driver schedules tasks on the cluster, it should be run close to the worker
    nodes, preferably on the same local area network. If you'd like to send requests to the
    cluster remotely, it's better to open an RPC to the driver and have it submit operations
    from nearby than to run a driver far away from the worker nodes.

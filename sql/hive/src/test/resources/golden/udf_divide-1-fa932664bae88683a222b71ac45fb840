@@ -1,4 +1,0 @@
-a / b - Divide a by b
-Example:
-  > SELECT 3 / 2 FROM src LIMIT 1;
-  1.5

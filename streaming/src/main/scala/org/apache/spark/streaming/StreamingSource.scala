@@ -23,15 +23,23 @@ import org.apache.spark.metrics.source.Source
 import org.apache.spark.streaming.ui.StreamingJobProgressListener
 
 private[streaming] class StreamingSource(ssc: StreamingContext) extends Source {
-  val metricRegistry = new MetricRegistry
-  val sourceName = "%s.StreamingMetrics".format(ssc.sparkContext.appName)
+  override val metricRegistry = new MetricRegistry
+  override val sourceName = "%s.StreamingMetrics".format(ssc.sparkContext.appName)
 
-  val streamingListener = ssc.uiTab.listener
+  private val streamingListener = ssc.progressListener
 
   private def registerGauge[T](name: String, f: StreamingJobProgressListener => T,
-      defaultValue: T) {
+      defaultValue: T): Unit = {
+    registerGaugeWithOption[T](name,
+      (l: StreamingJobProgressListener) => Option(f(streamingListener)), defaultValue)
+  }
+
+  private def registerGaugeWithOption[T](
+      name: String,
+      f: StreamingJobProgressListener => Option[T],
+      defaultValue: T): Unit = {
     metricRegistry.register(MetricRegistry.name("streaming", name), new Gauge[T] {
-      override def getValue: T = Option(f(streamingListener)).getOrElse(defaultValue)
+      override def getValue: T = f(streamingListener).getOrElse(defaultValue)
     })
   }
 
@@ -40,6 +48,12 @@ private[streaming] class StreamingSource(ssc: StreamingContext) extends Source {
 
   // Gauge for number of total completed batches
   registerGauge("totalCompletedBatches", _.numTotalCompletedBatches, 0L)
+
+  // Gauge for number of total received records
+  registerGauge("totalReceivedRecords", _.numTotalReceivedRecords, 0L)
+
+  // Gauge for number of total processed records
+  registerGauge("totalProcessedRecords", _.numTotalProcessedRecords, 0L)
 
   // Gauge for number of unprocessed batches
   registerGauge("unprocessedBatches", _.numUnprocessedBatches, 0L)
@@ -55,19 +69,30 @@ private[streaming] class StreamingSource(ssc: StreamingContext) extends Source {
 
   // Gauge for last completed batch, useful for monitoring the streaming job's running status,
   // displayed data -1 for any abnormal condition.
-  registerGauge("lastCompletedBatch_submissionTime",
-    _.lastCompletedBatch.map(_.submissionTime).getOrElse(-1L), -1L)
-  registerGauge("lastCompletedBatch_processStartTime",
-    _.lastCompletedBatch.flatMap(_.processingStartTime).getOrElse(-1L), -1L)
-  registerGauge("lastCompletedBatch_processEndTime",
-    _.lastCompletedBatch.flatMap(_.processingEndTime).getOrElse(-1L), -1L)
+  registerGaugeWithOption("lastCompletedBatch_submissionTime",
+    _.lastCompletedBatch.map(_.submissionTime), -1L)
+  registerGaugeWithOption("lastCompletedBatch_processingStartTime",
+    _.lastCompletedBatch.flatMap(_.processingStartTime), -1L)
+  registerGaugeWithOption("lastCompletedBatch_processingEndTime",
+    _.lastCompletedBatch.flatMap(_.processingEndTime), -1L)
+
+  // Gauge for last completed batch's delay information.
+  registerGaugeWithOption("lastCompletedBatch_processingDelay",
+    _.lastCompletedBatch.flatMap(_.processingDelay), -1L)
+  registerGaugeWithOption("lastCompletedBatch_schedulingDelay",
+    _.lastCompletedBatch.flatMap(_.schedulingDelay), -1L)
+  registerGaugeWithOption("lastCompletedBatch_totalDelay",
+    _.lastCompletedBatch.flatMap(_.totalDelay), -1L)
 
   // Gauge for last received batch, useful for monitoring the streaming job's running status,
   // displayed data -1 for any abnormal condition.
-  registerGauge("lastReceivedBatch_submissionTime",
-    _.lastCompletedBatch.map(_.submissionTime).getOrElse(-1L), -1L)
-  registerGauge("lastReceivedBatch_processStartTime",
-    _.lastCompletedBatch.flatMap(_.processingStartTime).getOrElse(-1L), -1L)
-  registerGauge("lastReceivedBatch_processEndTime",
-    _.lastCompletedBatch.flatMap(_.processingEndTime).getOrElse(-1L), -1L)
+  registerGaugeWithOption("lastReceivedBatch_submissionTime",
+    _.lastCompletedBatch.map(_.submissionTime), -1L)
+  registerGaugeWithOption("lastReceivedBatch_processingStartTime",
+    _.lastCompletedBatch.flatMap(_.processingStartTime), -1L)
+  registerGaugeWithOption("lastReceivedBatch_processingEndTime",
+    _.lastCompletedBatch.flatMap(_.processingEndTime), -1L)
+
+  // Gauge for last received batch records.
+  registerGauge("lastReceivedBatch_records", _.lastReceivedBatchRecords.values.sum, 0L)
 }

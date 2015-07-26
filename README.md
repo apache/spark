@@ -1,21 +1,32 @@
 # Apache Spark
 
-Lightning-Fast Cluster Computing - <http://spark.apache.org/>
+Spark is a fast and general cluster computing system for Big Data. It provides
+high-level APIs in Scala, Java, and Python, and an optimized engine that
+supports general computation graphs for data analysis. It also supports a
+rich set of higher-level tools including Spark SQL for SQL and DataFrames,
+MLlib for machine learning, GraphX for graph processing,
+and Spark Streaming for stream processing.
+
+<http://spark.apache.org/>
 
 
 ## Online Documentation
 
 You can find the latest Spark documentation, including a programming
-guide, on the project webpage at <http://spark.apache.org/documentation.html>.
+guide, on the [project web page](http://spark.apache.org/documentation.html)
+and [project wiki](https://cwiki.apache.org/confluence/display/SPARK).
 This README file only contains basic setup instructions.
 
 ## Building Spark
 
-Spark is built on Scala 2.10. To build Spark and its example programs, run:
+Spark is built using [Apache Maven](http://maven.apache.org/).
+To build Spark and its example programs, run:
 
-    ./sbt/sbt assembly
+    build/mvn -DskipTests clean package
 
 (You do not need to do this if you downloaded a pre-built package.)
+More detailed documentation is available from the project site, at
+["Building Spark"](http://spark.apache.org/docs/latest/building-spark.html).
 
 ## Interactive Scala Shell
 
@@ -32,7 +43,7 @@ Try the following command, which should return 1000:
 Alternatively, if you prefer Python, you can use the Python shell:
 
     ./bin/pyspark
-    
+
 And run the following command, which should also return 1000:
 
     >>> sc.parallelize(range(1000)).count()
@@ -47,9 +58,9 @@ To run one of them, use `./bin/run-example <class> [params]`. For example:
 will run the Pi example locally.
 
 You can set the MASTER environment variable when running examples to submit
-examples to a cluster. This can be a mesos:// or spark:// URL, 
-"yarn-cluster" or "yarn-client" to run on YARN, and "local" to run 
-locally with one thread, or "local[N]" to run locally with N threads. You 
+examples to a cluster. This can be a mesos:// or spark:// URL,
+"yarn-cluster" or "yarn-client" to run on YARN, and "local" to run
+locally with one thread, or "local[N]" to run locally with N threads. You
 can also use an abbreviated class name if the class is in the `examples`
 package. For instance:
 
@@ -62,66 +73,26 @@ Many of the example programs print usage help if no params are given.
 Testing first requires [building Spark](#building-spark). Once Spark is built, tests
 can be run using:
 
-    ./sbt/sbt test
+    ./dev/run-tests
+
+Please see the guidance on how to
+[run tests for a module, or individual tests](https://cwiki.apache.org/confluence/display/SPARK/Useful+Developer+Tools).
 
 ## A Note About Hadoop Versions
 
 Spark uses the Hadoop core library to talk to HDFS and other Hadoop-supported
 storage systems. Because the protocols have changed in different versions of
 Hadoop, you must build Spark against the same version that your cluster runs.
-You can change the version by setting the `SPARK_HADOOP_VERSION` environment
-when building Spark.
 
-For Apache Hadoop versions 1.x, Cloudera CDH MRv1, and other Hadoop
-versions without YARN, use:
-
-    # Apache Hadoop 1.2.1
-    $ SPARK_HADOOP_VERSION=1.2.1 sbt/sbt assembly
-
-    # Cloudera CDH 4.2.0 with MapReduce v1
-    $ SPARK_HADOOP_VERSION=2.0.0-mr1-cdh4.2.0 sbt/sbt assembly
-
-For Apache Hadoop 2.2.X, 2.1.X, 2.0.X, 0.23.x, Cloudera CDH MRv2, and other Hadoop versions
-with YARN, also set `SPARK_YARN=true`:
-
-    # Apache Hadoop 2.0.5-alpha
-    $ SPARK_HADOOP_VERSION=2.0.5-alpha SPARK_YARN=true sbt/sbt assembly
-
-    # Cloudera CDH 4.2.0 with MapReduce v2
-    $ SPARK_HADOOP_VERSION=2.0.0-cdh4.2.0 SPARK_YARN=true sbt/sbt assembly
-
-    # Apache Hadoop 2.2.X and newer
-    $ SPARK_HADOOP_VERSION=2.2.0 SPARK_YARN=true sbt/sbt assembly
-
-When developing a Spark application, specify the Hadoop version by adding the
-"hadoop-client" artifact to your project's dependencies. For example, if you're
-using Hadoop 1.2.1 and build your application using SBT, add this entry to
-`libraryDependencies`:
-
-    "org.apache.hadoop" % "hadoop-client" % "1.2.1"
-
-If your project is built with Maven, add this to your POM file's `<dependencies>` section:
-
-    <dependency>
-      <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-client</artifactId>
-      <version>1.2.1</version>
-    </dependency>
-
+Please refer to the build documentation at
+["Specifying the Hadoop Version"](http://spark.apache.org/docs/latest/building-spark.html#specifying-the-hadoop-version)
+for detailed guidance on building for a particular distribution of Hadoop, including
+building for particular Hive and Hive Thriftserver distributions. See also
+["Third Party Hadoop Distributions"](http://spark.apache.org/docs/latest/hadoop-third-party-distributions.html)
+for guidance on building a Spark application that works with a particular
+distribution.
 
 ## Configuration
 
 Please refer to the [Configuration guide](http://spark.apache.org/docs/latest/configuration.html)
 in the online documentation for an overview on how to configure Spark.
-
-
-## Contributing to Spark
-
-Contributions via GitHub pull requests are gladly accepted from their original
-author. Along with any pull requests, please state that the contribution is
-your original work and that you license the work to the project under the
-project's open source license. Whether or not you state this explicitly, by
-submitting any copyrighted material via pull request, email, or other means
-you agree to license the material under the project's open source license and
-warrant that you have the legal authority to do so.
-

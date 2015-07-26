@@ -1,3 +1,5 @@
+set hive.fetch.task.conversion=more;
+
 -- cast string floats to integer types
 select
   cast('1' as float),
@@ -27,4 +29,4 @@ select
   cast('127' as tinyint),
   cast('1.0a' as int),
   cast('-1.-1' as int)
-from src limit 1;
+from src tablesample (1 rows);

@@ -4,13 +4,13 @@ USE db1;
 CREATE TABLE table1 (key STRING, value STRING)
 STORED AS TEXTFILE;
 
-LOAD DATA LOCAL INPATH '../data/files/kv1.txt'
+LOAD DATA LOCAL INPATH '../../data/files/kv1.txt'
 OVERWRITE INTO TABLE table1;
 
 CREATE TABLE table2 (key STRING, value STRING)
 STORED AS TEXTFILE;
 
-LOAD DATA LOCAL INPATH '../data/files/kv1.txt'
+LOAD DATA LOCAL INPATH '../../data/files/kv1.txt'
 OVERWRITE INTO TABLE table2;
 
 -- relative reference, no alias

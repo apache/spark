@@ -17,68 +17,7 @@
 # limitations under the License.
 #
 
-# Go to the Spark project root directory
-FWDIR="$(cd `dirname $0`/..; pwd)"
-cd $FWDIR
+FWDIR="$(cd "`dirname $0`"/..; pwd)"
+cd "$FWDIR"
 
-export SPARK_HADOOP_VERSION=2.3.0
-export SPARK_YARN=true
-
-# Remove work directory
-rm -rf ./work
-
-if test -x "$JAVA_HOME/bin/java"; then
-    declare java_cmd="$JAVA_HOME/bin/java"
-else 
-    declare java_cmd=java
-fi
-JAVA_VERSION=$($java_cmd -version 2>&1 | sed 's/java version "\(.*\)\.\(.*\)\..*"/\1\2/; 1q')
-[ "$JAVA_VERSION" -ge 18 ] && echo "" || echo "[Warn] Java 8 tests will not run because JDK version is < 1.8."
-
-# Partial solution for SPARK-1455. Only run Hive tests if there are sql changes.
-if [ -n "$AMPLAB_JENKINS" ]; then
-  git fetch origin master:master
-  diffs=`git diff --dirstat master | awk '{ print $2; }' | grep "^sql/"`
-  if [ -n "$diffs" ]; then
-    echo "Detected changes in SQL. Will run Hive test suite."
-    export _RUN_SQL_TESTS=true # exported for PySpark tests
-  fi
-fi
-
-# Fail fast
-set -e
-set -o pipefail
-
-echo "========================================================================="
-echo "Running Apache RAT checks"
-echo "========================================================================="
-dev/check-license
-
-echo "========================================================================="
-echo "Running Scala style checks"
-echo "========================================================================="
-dev/scalastyle
-
-echo "========================================================================="
-echo "Running Spark unit tests"
-echo "========================================================================="
-# echo "q" is needed because sbt on encountering a build file with failure 
-# (either resolution or compilation) prompts the user for input either q, r, 
-# etc to quit or retry. This echo is there to make it not block.
-if [ -n "$_RUN_SQL_TESTS" ]; then
-  echo -e "q\n" | SPARK_HIVE=true sbt/sbt clean assembly test | \
-    grep -v -e "info.*Resolving" -e "warn.*Merging" -e "info.*Including"
-else
-  echo -e "q\n" | sbt/sbt clean assembly test | \
-    grep -v -e "info.*Resolving" -e "warn.*Merging" -e "info.*Including"
-fi
-
-echo "========================================================================="
-echo "Running PySpark tests"
-echo "========================================================================="
-./python/run-tests
-
-echo "========================================================================="
-echo "Detecting binary incompatibilites with MiMa"
-echo "========================================================================="
-dev/mima
+exec python -u ./dev/run-tests.py "$@"

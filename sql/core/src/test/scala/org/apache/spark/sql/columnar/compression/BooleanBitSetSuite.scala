@@ -17,13 +17,13 @@
 
 package org.apache.spark.sql.columnar.compression
 
-import org.scalatest.FunSuite
-
-import org.apache.spark.sql.Row
-import org.apache.spark.sql.columnar.{BOOLEAN, BooleanColumnStats}
+import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.GenericMutableRow
 import org.apache.spark.sql.columnar.ColumnarTestUtils._
+import org.apache.spark.sql.columnar.{BOOLEAN, NoopColumnStats}
 
-class BooleanBitSetSuite extends FunSuite {
+class BooleanBitSetSuite extends SparkFunSuite {
   import BooleanBitSet._
 
   def skeleton(count: Int) {
@@ -31,9 +31,9 @@ class BooleanBitSetSuite extends FunSuite {
     // Tests encoder
     // -------------
 
-    val builder = TestCompressibleColumnBuilder(new BooleanColumnStats, BOOLEAN, BooleanBitSet)
-    val rows = Seq.fill[Row](count)(makeRandomRow(BOOLEAN))
-    val values = rows.map(_.head)
+    val builder = TestCompressibleColumnBuilder(new NoopColumnStats, BOOLEAN, BooleanBitSet)
+    val rows = Seq.fill[InternalRow](count)(makeRandomRow(BOOLEAN))
+    val values = rows.map(_.get(0))
 
     rows.foreach(builder.appendFrom(_, 0))
     val buffer = builder.build()
@@ -48,18 +48,18 @@ class BooleanBitSetSuite extends FunSuite {
     }
 
     // 4 extra bytes for compression scheme type ID
-    expectResult(headerSize + compressedSize, "Wrong buffer capacity")(buffer.capacity)
+    assertResult(headerSize + compressedSize, "Wrong buffer capacity")(buffer.capacity)
 
     // Skips column header
     buffer.position(headerSize)
-    expectResult(BooleanBitSet.typeId, "Wrong compression scheme ID")(buffer.getInt())
-    expectResult(count, "Wrong element count")(buffer.getInt())
+    assertResult(BooleanBitSet.typeId, "Wrong compression scheme ID")(buffer.getInt())
+    assertResult(count, "Wrong element count")(buffer.getInt())
 
     var word = 0: Long
     for (i <- 0 until count) {
       val bit = i % BITS_PER_LONG
       word = if (bit == 0) buffer.getLong() else word
-      expectResult(values(i), s"Wrong value in compressed buffer, index=$i") {
+      assertResult(values(i), s"Wrong value in compressed buffer, index=$i") {
         (word & ((1: Long) << bit)) != 0
       }
     }
@@ -72,10 +72,14 @@ class BooleanBitSetSuite extends FunSuite {
     buffer.rewind().position(headerSize + 4)
 
     val decoder = BooleanBitSet.decoder(buffer, BOOLEAN)
+    val mutableRow = new GenericMutableRow(1)
     if (values.nonEmpty) {
       values.foreach {
         assert(decoder.hasNext)
-        expectResult(_, "Wrong decoded value")(decoder.next())
+        assertResult(_, "Wrong decoded value") {
+          decoder.next(mutableRow, 0)
+          mutableRow.getBoolean(0)
+        }
       }
     }
     assert(!decoder.hasNext)

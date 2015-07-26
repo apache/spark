@@ -1,3 +1,5 @@
+set hive.fetch.task.conversion=more;
+
 DESCRIBE FUNCTION java_method;
 DESCRIBE FUNCTION EXTENDED java_method;
 
@@ -11,7 +13,7 @@ SELECT java_method("java.lang.String", "valueOf", 1),
        java_method("java.lang.Math", "round", 2.5),
        java_method("java.lang.Math", "exp", 1.0),
        java_method("java.lang.Math", "floor", 1.9)
-FROM src LIMIT 1;
+FROM src tablesample (1 rows);
 
 
 SELECT java_method("java.lang.String", "valueOf", 1),
@@ -21,5 +23,5 @@ SELECT java_method("java.lang.String", "valueOf", 1),
        java_method("java.lang.Math", "round", 2.5),
        java_method("java.lang.Math", "exp", 1.0),
        java_method("java.lang.Math", "floor", 1.9)
-FROM src LIMIT 1;
+FROM src tablesample (1 rows);
 

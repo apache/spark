@@ -127,7 +127,7 @@ create table ab(strct struct<a:int, b:string>)
 row format delimited
   fields terminated by '\t'
   collection items terminated by '\001';
-load data local inpath '../data/files/kv1.txt'
+load data local inpath '../../data/files/kv1.txt'
 overwrite into table ab;
 
 -- Create partitioned table with struct data:

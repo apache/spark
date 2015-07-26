@@ -18,52 +18,77 @@
 package org.apache.spark.sql.parquet
 
 import java.io.IOException
-import java.text.SimpleDateFormat
+import java.text.{NumberFormat, SimpleDateFormat}
+import java.util.concurrent.TimeUnit
 import java.util.Date
 
+import scala.collection.JavaConversions._
+import scala.util.Try
+
+import com.google.common.cache.CacheBuilder
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.Path
+import org.apache.hadoop.fs.{BlockLocation, FileStatus, Path}
 import org.apache.hadoop.mapreduce._
 import org.apache.hadoop.mapreduce.lib.input.{FileInputFormat => NewFileInputFormat}
-import org.apache.hadoop.mapreduce.lib.output.{FileOutputFormat => NewFileOutputFormat, FileOutputCommitter}
+import org.apache.hadoop.mapreduce.lib.output.{FileOutputCommitter, FileOutputFormat => NewFileOutputFormat}
+import org.apache.parquet.hadoop._
+import org.apache.parquet.hadoop.api.ReadSupport
+import org.apache.parquet.hadoop.util.ContextUtil
+import org.apache.parquet.schema.MessageType
 
-import parquet.hadoop.{ParquetRecordReader, ParquetInputFormat, ParquetOutputFormat}
-import parquet.hadoop.api.ReadSupport
-import parquet.hadoop.util.ContextUtil
-import parquet.io.InvalidRecordException
-import parquet.schema.MessageType
-
-import org.apache.spark.{Logging, SerializableWritable, TaskContext}
+import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.mapred.SparkHadoopMapRedUtil
+import org.apache.spark.mapreduce.SparkHadoopMapReduceUtil
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.SQLContext
-import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, Row}
+import org.apache.spark.sql.SQLConf
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, _}
 import org.apache.spark.sql.execution.{LeafNode, SparkPlan, UnaryNode}
+import org.apache.spark.sql.types.StructType
+import org.apache.spark.{Logging, TaskContext}
+import org.apache.spark.util.SerializableConfiguration
 
 /**
+ * :: DeveloperApi ::
  * Parquet table scan operator. Imports the file that backs the given
- * [[org.apache.spark.sql.parquet.ParquetRelation]] as a ``RDD[Row]``.
+ * [[org.apache.spark.sql.parquet.ParquetRelation]] as a ``RDD[InternalRow]``.
  */
-case class ParquetTableScan(
-    // note: output cannot be transient, see
-    // https://issues.apache.org/jira/browse/SPARK-1367
-    output: Seq[Attribute],
+private[sql] case class ParquetTableScan(
+    attributes: Seq[Attribute],
     relation: ParquetRelation,
-    columnPruningPred: Seq[Expression])(
-    @transient val sqlContext: SQLContext)
+    columnPruningPred: Seq[Expression])
   extends LeafNode {
 
-  override def execute(): RDD[Row] = {
+  // The resolution of Parquet attributes is case sensitive, so we resolve the original attributes
+  // by exprId. note: output cannot be transient, see
+  // https://issues.apache.org/jira/browse/SPARK-1367
+  val output = attributes.map(relation.attributeMap)
+
+  // A mapping of ordinals partitionRow -> finalOutput.
+  val requestedPartitionOrdinals = {
+    val partitionAttributeOrdinals = AttributeMap(relation.partitioningAttributes.zipWithIndex)
+
+    attributes.zipWithIndex.flatMap {
+      case (attribute, finalOrdinal) =>
+        partitionAttributeOrdinals.get(attribute).map(_ -> finalOrdinal)
+    }
+  }.toArray
+
+  protected override def doExecute(): RDD[InternalRow] = {
+    import org.apache.parquet.filter2.compat.FilterCompat.FilterPredicateCompat
+
     val sc = sqlContext.sparkContext
     val job = new Job(sc.hadoopConfiguration)
-    ParquetInputFormat.setReadSupportClass(
-      job,
-      classOf[org.apache.spark.sql.parquet.RowReadSupport])
+    ParquetInputFormat.setReadSupportClass(job, classOf[RowReadSupport])
+
     val conf: Configuration = ContextUtil.getConfiguration(job)
-    val fileList = FileSystemHelper.listFiles(relation.path, conf)
-    // add all paths in the directory but skip "hidden" ones such
-    // as "_SUCCESS" and "_metadata"
-    for (path <- fileList if !path.getName.startsWith("_")) {
-      NewFileInputFormat.addInputPath(job, path)
+
+    relation.path.split(",").foreach { curPath =>
+      val qualifiedPath = {
+        val path = new Path(curPath)
+        path.getFileSystem(conf).makeQualified(path)
+      }
+      NewFileInputFormat.addInputPath(job, qualifiedPath)
     }
 
     // Store both requested and original schema in `Configuration`
@@ -78,23 +103,101 @@ case class ParquetTableScan(
     // Note 1: the input format ignores all predicates that cannot be expressed
     // as simple column predicate filters in Parquet. Here we just record
     // the whole pruning predicate.
-    // Note 2: you can disable filter predicate pushdown by setting
-    // "spark.sql.hints.parquetFilterPushdown" to false inside SparkConf.
-    if (columnPruningPred.length > 0 &&
-      sc.conf.getBoolean(ParquetFilters.PARQUET_FILTER_PUSHDOWN_ENABLED, true)) {
-      ParquetFilters.serializeFilterExpressions(columnPruningPred, conf)
+    ParquetFilters
+      .createRecordFilter(columnPruningPred)
+      .map(_.asInstanceOf[FilterPredicateCompat].getFilterPredicate)
+      // Set this in configuration of ParquetInputFormat, needed for RowGroupFiltering
+      .foreach(ParquetInputFormat.setFilterPredicate(conf, _))
+
+    // Tell FilteringParquetRowInputFormat whether it's okay to cache Parquet and FS metadata
+    conf.setBoolean(
+      SQLConf.PARQUET_CACHE_METADATA.key,
+      sqlContext.getConf(SQLConf.PARQUET_CACHE_METADATA, true))
+
+    // Use task side metadata in parquet
+    conf.setBoolean(ParquetInputFormat.TASK_SIDE_METADATA, true)
+
+    val baseRDD =
+      new org.apache.spark.rdd.NewHadoopRDD(
+        sc,
+        classOf[FilteringParquetRowInputFormat],
+        classOf[Void],
+        classOf[InternalRow],
+        conf)
+
+    if (requestedPartitionOrdinals.nonEmpty) {
+      // This check is based on CatalystConverter.createRootConverter.
+      val primitiveRow = output.forall(a => ParquetTypesConverter.isPrimitiveType(a.dataType))
+
+      // Uses temporary variable to avoid the whole `ParquetTableScan` object being captured into
+      // the `mapPartitionsWithInputSplit` closure below.
+      val outputSize = output.size
+
+      baseRDD.mapPartitionsWithInputSplit { case (split, iter) =>
+        val partValue = "([^=]+)=([^=]+)".r
+        val partValues =
+          split.asInstanceOf[org.apache.parquet.hadoop.ParquetInputSplit]
+            .getPath
+            .toString
+            .split("/")
+            .flatMap {
+              case partValue(key, value) => Some(key -> value)
+              case _ => None
+            }.toMap
+
+        // Convert the partitioning attributes into the correct types
+        val partitionRowValues =
+          relation.partitioningAttributes
+            .map(a => Cast(Literal(partValues(a.name)), a.dataType).eval(EmptyRow))
+
+        if (primitiveRow) {
+          new Iterator[InternalRow] {
+            def hasNext: Boolean = iter.hasNext
+            def next(): InternalRow = {
+              // We are using CatalystPrimitiveRowConverter and it returns a SpecificMutableRow.
+              val row = iter.next()._2.asInstanceOf[SpecificMutableRow]
+
+              // Parquet will leave partitioning columns empty, so we fill them in here.
+              var i = 0
+              while (i < requestedPartitionOrdinals.length) {
+                row(requestedPartitionOrdinals(i)._2) =
+                  partitionRowValues(requestedPartitionOrdinals(i)._1)
+                i += 1
+              }
+              row
+            }
+          }
+        } else {
+          // Create a mutable row since we need to fill in values from partition columns.
+          val mutableRow = new GenericMutableRow(outputSize)
+          new Iterator[InternalRow] {
+            def hasNext: Boolean = iter.hasNext
+            def next(): InternalRow = {
+              // We are using CatalystGroupConverter and it returns a GenericRow.
+              // Since GenericRow is not mutable, we just cast it to a Row.
+              val row = iter.next()._2.asInstanceOf[InternalRow]
+
+              var i = 0
+              while (i < row.numFields) {
+                mutableRow(i) = row.get(i)
+                i += 1
+              }
+              // Parquet will leave partitioning columns empty, so we fill them in here.
+              i = 0
+              while (i < requestedPartitionOrdinals.length) {
+                mutableRow(requestedPartitionOrdinals(i)._2) =
+                  partitionRowValues(requestedPartitionOrdinals(i)._1)
+                i += 1
+              }
+              mutableRow
+            }
+          }
+        }
+      }
+    } else {
+      baseRDD.map(_._2)
     }
-
-    sc.newAPIHadoopRDD(
-      conf,
-      classOf[org.apache.spark.sql.parquet.FilteringParquetRowInputFormat],
-      classOf[Void],
-      classOf[Row])
-      .map(_._2)
-      .filter(_ != null) // Parquet's record filters may produce null values
   }
-
-  override def otherCopyArgs = sqlContext :: Nil
 
   /**
    * Applies a (candidate) projection.
@@ -105,10 +208,9 @@ case class ParquetTableScan(
   def pruneColumns(prunedAttributes: Seq[Attribute]): ParquetTableScan = {
     val success = validateProjection(prunedAttributes)
     if (success) {
-      ParquetTableScan(prunedAttributes, relation, columnPruningPred)(sqlContext)
+      ParquetTableScan(prunedAttributes, relation, columnPruningPred)
     } else {
       sys.error("Warning: Could not validate Parquet schema projection in pruneColumns")
-      this
     }
   }
 
@@ -122,18 +224,12 @@ case class ParquetTableScan(
   private def validateProjection(projection: Seq[Attribute]): Boolean = {
     val original: MessageType = relation.parquetSchema
     val candidate: MessageType = ParquetTypesConverter.convertFromAttributes(projection)
-    try {
-      original.checkContains(candidate)
-      true
-    } catch {
-      case e: InvalidRecordException => {
-        false
-      }
-    }
+    Try(original.checkContains(candidate)).isSuccess
   }
 }
 
 /**
+ * :: DeveloperApi ::
  * Operator that acts as a sink for queries on RDDs and can be used to
  * store the output inside a directory of Parquet files. This operator
  * is similar to Hive's INSERT INTO TABLE operation in the sense that
@@ -149,17 +245,17 @@ case class ParquetTableScan(
  * cause unpredicted behaviour and therefore results in a RuntimeException
  * (only detected via filename pattern so will not catch all cases).
  */
-case class InsertIntoParquetTable(
+@DeveloperApi
+private[sql] case class InsertIntoParquetTable(
     relation: ParquetRelation,
     child: SparkPlan,
-    overwrite: Boolean = false)(
-    @transient val sqlContext: SQLContext)
+    overwrite: Boolean = false)
   extends UnaryNode with SparkHadoopMapReduceUtil {
 
   /**
    * Inserts all rows into the Parquet file.
    */
-  override def execute() = {
+  protected override def doExecute(): RDD[InternalRow] = {
     // TODO: currently we do not check whether the "schema"s are compatible
     // That means if one first creates a table and then INSERTs data with
     // and incompatible schema the execution will fail. It would be nice
@@ -172,8 +268,8 @@ case class InsertIntoParquetTable(
     val job = new Job(sqlContext.sparkContext.hadoopConfiguration)
 
     val writeSupport =
-      if (child.output.map(_.dataType).forall(_.isPrimitive)) {
-        logger.debug("Initializing MutableRowWriteSupport")
+      if (child.output.map(_.dataType).forall(ParquetTypesConverter.isPrimitiveType)) {
+        log.debug("Initializing MutableRowWriteSupport")
         classOf[org.apache.spark.sql.parquet.MutableRowWriteSupport]
       } else {
         classOf[org.apache.spark.sql.parquet.RowWriteSupport]
@@ -182,7 +278,10 @@ case class InsertIntoParquetTable(
     ParquetOutputFormat.setWriteSupportClass(job, writeSupport)
 
     val conf = ContextUtil.getConfiguration(job)
-    RowWriteSupport.setSchema(relation.output, conf)
+    // This is a hack. We always set nullable/containsNull/valueContainsNull to true
+    // for the schema of a parquet data.
+    val schema = StructType.fromAttributes(relation.output).asNullable
+    RowWriteSupport.setSchema(schema.toAttributes, conf)
 
     val fspath = new Path(relation.path)
     val fs = fspath.getFileSystem(conf)
@@ -203,9 +302,7 @@ case class InsertIntoParquetTable(
     childRdd
   }
 
-  override def output = child.output
-
-  override def otherCopyArgs = sqlContext :: Nil
+  override def output: Seq[Attribute] = child.output
 
   /**
    * Stores the given Row RDD as a Hadoop file.
@@ -221,15 +318,15 @@ case class InsertIntoParquetTable(
    * @param conf A [[org.apache.hadoop.conf.Configuration]].
    */
   private def saveAsHadoopFile(
-      rdd: RDD[Row],
+      rdd: RDD[InternalRow],
       path: String,
       conf: Configuration) {
     val job = new Job(conf)
     val keyType = classOf[Void]
     job.setOutputKeyClass(keyType)
-    job.setOutputValueClass(classOf[Row])
+    job.setOutputValueClass(classOf[InternalRow])
     NewFileOutputFormat.setOutputPath(job, new Path(path))
-    val wrappedConf = new SerializableWritable(job.getConfiguration)
+    val wrappedConf = new SerializableConfiguration(job.getConfiguration)
     val formatter = new SimpleDateFormat("yyyyMMddHHmm")
     val jobtrackerID = formatter.format(new Date())
     val stageId = sqlContext.sparkContext.newRddId()
@@ -242,25 +339,25 @@ case class InsertIntoParquetTable(
           .findMaxTaskId(NewFileOutputFormat.getOutputPath(job).toString, job.getConfiguration) + 1
       }
 
-    def writeShard(context: TaskContext, iter: Iterator[Row]): Int = {
-      // Hadoop wants a 32-bit task attempt ID, so if ours is bigger than Int.MaxValue, roll it
-      // around by taking a mod. We expect that no task will be attempted 2 billion times.
-      val attemptNumber = (context.attemptId % Int.MaxValue).toInt
+    def writeShard(context: TaskContext, iter: Iterator[InternalRow]): Int = {
       /* "reduce task" <split #> <attempt # = spark task #> */
       val attemptId = newTaskAttemptID(jobtrackerID, stageId, isMap = false, context.partitionId,
-        attemptNumber)
+        context.attemptNumber)
       val hadoopContext = newTaskAttemptContext(wrappedConf.value, attemptId)
       val format = new AppendingParquetOutputFormat(taskIdOffset)
       val committer = format.getOutputCommitter(hadoopContext)
       committer.setupTask(hadoopContext)
       val writer = format.getRecordWriter(hadoopContext)
-      while (iter.hasNext) {
-        val row = iter.next()
-        writer.write(null, row)
+      try {
+        while (iter.hasNext) {
+          val row = iter.next()
+          writer.write(null, row)
+        }
+      } finally {
+        writer.close(hadoopContext)
       }
-      writer.close(hadoopContext)
-      committer.commitTask(hadoopContext)
-      return 1
+      SparkHadoopMapRedUtil.commitTask(committer, hadoopContext, context)
+      1
     }
     val jobFormat = new AppendingParquetOutputFormat(taskIdOffset)
     /* apparently we need a TaskAttemptID to construct an OutputCommitter;
@@ -281,43 +378,80 @@ case class InsertIntoParquetTable(
  * to imported ones.
  */
 private[parquet] class AppendingParquetOutputFormat(offset: Int)
-  extends parquet.hadoop.ParquetOutputFormat[Row] {
+  extends org.apache.parquet.hadoop.ParquetOutputFormat[InternalRow] {
   // override to accept existing directories as valid output directory
   override def checkOutputSpecs(job: JobContext): Unit = {}
+  var committer: OutputCommitter = null
 
   // override to choose output filename so not overwrite existing ones
   override def getDefaultWorkFile(context: TaskAttemptContext, extension: String): Path = {
-    val taskId: TaskID = context.getTaskAttemptID.getTaskID
+    val numfmt = NumberFormat.getInstance()
+    numfmt.setMinimumIntegerDigits(5)
+    numfmt.setGroupingUsed(false)
+
+    val taskId: TaskID = getTaskAttemptID(context).getTaskID
     val partition: Int = taskId.getId
-    val filename = s"part-r-${partition + offset}.parquet"
+    val filename = "part-r-" + numfmt.format(partition + offset) + ".parquet"
     val committer: FileOutputCommitter =
       getOutputCommitter(context).asInstanceOf[FileOutputCommitter]
     new Path(committer.getWorkPath, filename)
   }
+
+  // The TaskAttemptContext is a class in hadoop-1 but is an interface in hadoop-2.
+  // The signatures of the method TaskAttemptContext.getTaskAttemptID for the both versions
+  // are the same, so the method calls are source-compatible but NOT binary-compatible because
+  // the opcode of method call for class is INVOKEVIRTUAL and for interface is INVOKEINTERFACE.
+  private def getTaskAttemptID(context: TaskAttemptContext): TaskAttemptID = {
+    context.getClass.getMethod("getTaskAttemptID").invoke(context).asInstanceOf[TaskAttemptID]
+  }
+
+  // override to create output committer from configuration
+  override def getOutputCommitter(context: TaskAttemptContext): OutputCommitter = {
+    if (committer == null) {
+      val output = getOutputPath(context)
+      val cls = context.getConfiguration.getClass("spark.sql.parquet.output.committer.class",
+        classOf[ParquetOutputCommitter], classOf[ParquetOutputCommitter])
+      val ctor = cls.getDeclaredConstructor(classOf[Path], classOf[TaskAttemptContext])
+      committer = ctor.newInstance(output, context).asInstanceOf[ParquetOutputCommitter]
+    }
+    committer
+  }
+
+  // FileOutputFormat.getOutputPath takes JobConf in hadoop-1 but JobContext in hadoop-2
+  private def getOutputPath(context: TaskAttemptContext): Path = {
+    context.getConfiguration().get("mapred.output.dir") match {
+      case null => null
+      case name => new Path(name)
+    }
+  }
 }
 
+// TODO Removes this class after removing old Parquet support code
 /**
  * We extend ParquetInputFormat in order to have more control over which
  * RecordFilter we want to use.
  */
 private[parquet] class FilteringParquetRowInputFormat
-  extends parquet.hadoop.ParquetInputFormat[Row] with Logging {
+  extends org.apache.parquet.hadoop.ParquetInputFormat[InternalRow] with Logging {
+
   override def createRecordReader(
       inputSplit: InputSplit,
-      taskAttemptContext: TaskAttemptContext): RecordReader[Void, Row] = {
-    val readSupport: ReadSupport[Row] = new RowReadSupport()
+      taskAttemptContext: TaskAttemptContext): RecordReader[Void, InternalRow] = {
 
-    val filterExpressions =
-      ParquetFilters.deserializeFilterExpressions(ContextUtil.getConfiguration(taskAttemptContext))
-    if (filterExpressions.length > 0) {
-      logInfo(s"Pushing down predicates for RecordFilter: ${filterExpressions.mkString(", ")}")
-      new ParquetRecordReader[Row](
+    import org.apache.parquet.filter2.compat.FilterCompat.NoOpFilter
+
+    val readSupport: ReadSupport[InternalRow] = new RowReadSupport()
+
+    val filter = ParquetInputFormat.getFilter(ContextUtil.getConfiguration(taskAttemptContext))
+    if (!filter.isInstanceOf[NoOpFilter]) {
+      new ParquetRecordReader[InternalRow](
         readSupport,
-        ParquetFilters.createRecordFilter(filterExpressions))
+        filter)
     } else {
-      new ParquetRecordReader[Row](readSupport)
+      new ParquetRecordReader[InternalRow](readSupport)
     }
   }
+
 }
 
 private[parquet] object FileSystemHelper {
@@ -333,7 +467,9 @@ private[parquet] object FileSystemHelper {
       throw new IllegalArgumentException(
         s"ParquetTableOperations: path $path does not exist or is not a directory")
     }
-    fs.listStatus(path).map(_.getPath)
+    fs.globStatus(path)
+      .flatMap { status => if (status.isDir) fs.listStatus(status.getPath) else List(status) }
+      .map(_.getPath)
   }
 
     /**
@@ -342,17 +478,15 @@ private[parquet] object FileSystemHelper {
   def findMaxTaskId(pathStr: String, conf: Configuration): Int = {
     val files = FileSystemHelper.listFiles(pathStr, conf)
     // filename pattern is part-r-<int>.parquet
-    val nameP = new scala.util.matching.Regex("""part-r-(\d{1,}).parquet""", "taskid")
+    val nameP = new scala.util.matching.Regex("""part-.-(\d{1,}).*""", "taskid")
     val hiddenFileP = new scala.util.matching.Regex("_.*")
     files.map(_.getName).map {
       case nameP(taskid) => taskid.toInt
       case hiddenFileP() => 0
-      case other: String => {
+      case other: String =>
         sys.error("ERROR: attempting to append to set of Parquet files and found file" +
           s"that does not match name pattern: $other")
-        0
-      }
       case _ => 0
-    }.reduceLeft((a, b) => if (a < b) b else a)
+    }.reduceOption(_ max _).getOrElse(0)
   }
 }

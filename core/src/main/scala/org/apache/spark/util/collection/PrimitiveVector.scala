@@ -36,7 +36,7 @@ class PrimitiveVector[@specialized(Long, Int, Double) V: ClassTag](initialSize: 
     _array(index)
   }
 
-  def +=(value: V) {
+  def +=(value: V): Unit = {
     if (_numElements == _array.length) {
       resize(_array.length * 2)
     }
@@ -50,6 +50,19 @@ class PrimitiveVector[@specialized(Long, Int, Double) V: ClassTag](initialSize: 
 
   def size: Int = _numElements
 
+  def iterator: Iterator[V] = new Iterator[V] {
+    var index = 0
+    override def hasNext: Boolean = index < _numElements
+    override def next(): V = {
+      if (!hasNext) {
+        throw new NoSuchElementException
+      }
+      val value = _array(index)
+      index += 1
+      value
+    }
+  }
+
   /** Gets the underlying array backing this vector. */
   def array: Array[V] = _array
 
@@ -58,12 +71,21 @@ class PrimitiveVector[@specialized(Long, Int, Double) V: ClassTag](initialSize: 
 
   /** Resizes the array, dropping elements if the total length decreases. */
   def resize(newLength: Int): PrimitiveVector[V] = {
-    val newArray = new Array[V](newLength)
-    _array.copyToArray(newArray)
-    _array = newArray
+    _array = copyArrayWithLength(newLength)
     if (newLength < _numElements) {
       _numElements = newLength
     }
     this
+  }
+
+  /** Return a trimmed version of the underlying array. */
+  def toArray: Array[V] = {
+    copyArrayWithLength(size)
+  }
+
+  private def copyArrayWithLength(length: Int): Array[V] = {
+    val copy = new Array[V](length)
+    _array.copyToArray(copy)
+    copy
   }
 }

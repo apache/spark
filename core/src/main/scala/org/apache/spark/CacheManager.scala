@@ -17,7 +17,8 @@
 
 package org.apache.spark
 
-import scala.collection.mutable.{ArrayBuffer, HashSet}
+import scala.collection.mutable
+import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage._
@@ -29,7 +30,7 @@ import org.apache.spark.storage._
 private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
 
   /** Keys of RDD partitions that are being computed/loaded. */
-  private val loading = new HashSet[RDDBlockId]()
+  private val loading = new mutable.HashSet[RDDBlockId]
 
   /** Gets or computes an RDD partition. Used by RDD.iterator() when an RDD is cached. */
   def getOrCompute[T](
@@ -41,10 +42,19 @@ private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
     val key = RDDBlockId(rdd.id, partition.index)
     logDebug(s"Looking for partition $key")
     blockManager.get(key) match {
-      case Some(values) =>
+      case Some(blockResult) =>
         // Partition is already materialized, so just return its values
-        new InterruptibleIterator(context, values.asInstanceOf[Iterator[T]])
+        val existingMetrics = context.taskMetrics
+          .getInputMetricsForReadMethod(blockResult.readMethod)
+        existingMetrics.incBytesRead(blockResult.bytes)
 
+        val iter = blockResult.data.asInstanceOf[Iterator[T]]
+        new InterruptibleIterator[T](context, iter) {
+          override def next(): T = {
+            existingMetrics.incRecordsRead(1)
+            delegate.next()
+          }
+        }
       case None =>
         // Acquire a lock for loading this partition
         // If another thread already holds the lock, wait for it to finish return its results
@@ -59,14 +69,16 @@ private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
           val computedValues = rdd.computeOrReadCheckpoint(partition, context)
 
           // If the task is running locally, do not persist the result
-          if (context.runningLocally) {
+          if (context.isRunningLocally) {
             return computedValues
           }
 
           // Otherwise, cache the values and keep track of any updates in block statuses
           val updatedBlocks = new ArrayBuffer[(BlockId, BlockStatus)]
           val cachedValues = putInBlockManager(key, computedValues, storageLevel, updatedBlocks)
-          context.taskMetrics.updatedBlocks = Some(updatedBlocks)
+          val metrics = context.taskMetrics
+          val lastUpdatedBlocks = metrics.updatedBlocks.getOrElse(Seq[(BlockId, BlockStatus)]())
+          metrics.updatedBlocks = Some(lastUpdatedBlocks ++ updatedBlocks.toSeq)
           new InterruptibleIterator(context, cachedValues)
 
         } finally {
@@ -110,42 +122,70 @@ private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
           logInfo(s"Whoever was loading $id failed; we'll try it ourselves")
           loading.add(id)
         }
-        values.map(_.asInstanceOf[Iterator[T]])
+        values.map(_.data.asInstanceOf[Iterator[T]])
       }
     }
   }
 
   /**
-   * Cache the values of a partition, keeping track of any updates in the storage statuses
-   * of other blocks along the way.
+   * Cache the values of a partition, keeping track of any updates in the storage statuses of
+   * other blocks along the way.
+   *
+   * The effective storage level refers to the level that actually specifies BlockManager put
+   * behavior, not the level originally specified by the user. This is mainly for forcing a
+   * MEMORY_AND_DISK partition to disk if there is not enough room to unroll the partition,
+   * while preserving the the original semantics of the RDD as specified by the application.
    */
   private def putInBlockManager[T](
       key: BlockId,
       values: Iterator[T],
-      storageLevel: StorageLevel,
-      updatedBlocks: ArrayBuffer[(BlockId, BlockStatus)]): Iterator[T] = {
+      level: StorageLevel,
+      updatedBlocks: ArrayBuffer[(BlockId, BlockStatus)],
+      effectiveStorageLevel: Option[StorageLevel] = None): Iterator[T] = {
 
-    if (!storageLevel.useMemory) {
-      /* This RDD is not to be cached in memory, so we can just pass the computed values
-       * as an iterator directly to the BlockManager, rather than first fully unrolling
-       * it in memory. The latter option potentially uses much more memory and risks OOM
-       * exceptions that can be avoided. */
-      updatedBlocks ++= blockManager.put(key, values, storageLevel, tellMaster = true)
+    val putLevel = effectiveStorageLevel.getOrElse(level)
+    if (!putLevel.useMemory) {
+      /*
+       * This RDD is not to be cached in memory, so we can just pass the computed values as an
+       * iterator directly to the BlockManager rather than first fully unrolling it in memory.
+       */
+      updatedBlocks ++=
+        blockManager.putIterator(key, values, level, tellMaster = true, effectiveStorageLevel)
       blockManager.get(key) match {
-        case Some(v) => v.asInstanceOf[Iterator[T]]
+        case Some(v) => v.data.asInstanceOf[Iterator[T]]
         case None =>
           logInfo(s"Failure to store $key")
           throw new BlockException(key, s"Block manager failed to return cached value for $key!")
       }
     } else {
-      /* This RDD is to be cached in memory. In this case we cannot pass the computed values
+      /*
+       * This RDD is to be cached in memory. In this case we cannot pass the computed values
        * to the BlockManager as an iterator and expect to read it back later. This is because
-       * we may end up dropping a partition from memory store before getting it back, e.g.
-       * when the entirety of the RDD does not fit in memory. */
-      val elements = new ArrayBuffer[Any]
-      elements ++= values
-      updatedBlocks ++= blockManager.put(key, elements, storageLevel, tellMaster = true)
-      elements.iterator.asInstanceOf[Iterator[T]]
+       * we may end up dropping a partition from memory store before getting it back.
+       *
+       * In addition, we must be careful to not unroll the entire partition in memory at once.
+       * Otherwise, we may cause an OOM exception if the JVM does not have enough space for this
+       * single partition. Instead, we unroll the values cautiously, potentially aborting and
+       * dropping the partition to disk if applicable.
+       */
+      blockManager.memoryStore.unrollSafely(key, values, updatedBlocks) match {
+        case Left(arr) =>
+          // We have successfully unrolled the entire partition, so cache it in memory
+          updatedBlocks ++=
+            blockManager.putArray(key, arr, level, tellMaster = true, effectiveStorageLevel)
+          arr.iterator.asInstanceOf[Iterator[T]]
+        case Right(it) =>
+          // There is not enough space to cache this partition in memory
+          val returnValues = it.asInstanceOf[Iterator[T]]
+          if (putLevel.useDisk) {
+            logWarning(s"Persisting partition $key to disk instead.")
+            val diskOnlyLevel = StorageLevel(useDisk = true, useMemory = false,
+              useOffHeap = false, deserialized = false, putLevel.replication)
+            putInBlockManager[T](key, returnValues, level, updatedBlocks, Some(diskOnlyLevel))
+          } else {
+            returnValues
+          }
+      }
     }
   }
 

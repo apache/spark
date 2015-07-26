@@ -3,7 +3,7 @@
 --
 
 create table alter5_src ( col1 string ) stored as textfile ;
-load data local inpath '../data/files/test.dat' overwrite into table alter5_src ;
+load data local inpath '../../data/files/test.dat' overwrite into table alter5_src ;
 
 create table alter5 ( col1 string ) partitioned by (dt string);
 
@@ -32,7 +32,7 @@ USE alter5_db;
 SHOW TABLES;
 
 create table alter5_src ( col1 string ) stored as textfile ;
-load data local inpath '../data/files/test.dat' overwrite into table alter5_src ;
+load data local inpath '../../data/files/test.dat' overwrite into table alter5_src ;
 
 create table alter5 ( col1 string ) partitioned by (dt string);
 alter table alter5 add partition (dt='a') location 'parta';

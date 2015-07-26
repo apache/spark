@@ -1,8 +1,8 @@
 CREATE TABLE sourceTable (one string,two string) PARTITIONED BY (ds string,hr string);
 
-load data local inpath '../data/files/kv1.txt' INTO TABLE sourceTable partition(ds='2011-11-11', hr='11');
+load data local inpath '../../data/files/kv1.txt' INTO TABLE sourceTable partition(ds='2011-11-11', hr='11');
 
-load data local inpath '../data/files/kv3.txt' INTO TABLE sourceTable partition(ds='2011-11-11', hr='12');
+load data local inpath '../../data/files/kv3.txt' INTO TABLE sourceTable partition(ds='2011-11-11', hr='12');
 
 CREATE TABLE destinTable (one string,two string) PARTITIONED BY (ds string,hr string);
 

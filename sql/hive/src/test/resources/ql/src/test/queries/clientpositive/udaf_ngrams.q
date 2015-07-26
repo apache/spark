@@ -1,5 +1,5 @@
 CREATE TABLE kafka (contents STRING);
-LOAD DATA LOCAL INPATH '../data/files/text-en.txt' INTO TABLE kafka;
+LOAD DATA LOCAL INPATH '../../data/files/text-en.txt' INTO TABLE kafka;
 set mapred.reduce.tasks=1;
 set hive.exec.reducers.max=1;
 

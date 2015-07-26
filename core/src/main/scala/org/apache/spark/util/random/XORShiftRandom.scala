@@ -70,12 +70,14 @@ private[spark] object XORShiftRandom {
    * @param args takes one argument - the number of random numbers to generate
    */
   def main(args: Array[String]): Unit = {
+    // scalastyle:off println
     if (args.length != 1) {
       println("Benchmark of XORShiftRandom vis-a-vis java.util.Random")
       println("Usage: XORShiftRandom number_of_random_numbers_to_generate")
       System.exit(1)
     }
     println(benchmark(args(0).toInt))
+    // scalastyle:on println
   }
 
   /**
@@ -83,7 +85,7 @@ private[spark] object XORShiftRandom {
    * @return Map of execution times for {@link java.util.Random java.util.Random}
    * and XORShift
    */
-  def benchmark(numIters: Int) = {
+  def benchmark(numIters: Int): Map[String, Long] = {
 
     val seed = 1L
     val million = 1e6.toInt
@@ -96,13 +98,9 @@ private[spark] object XORShiftRandom {
       xorRand.nextInt()
     }
 
-    val iters = timeIt(numIters)(_)
-
     /* Return results as a map instead of just printing to screen
     in case the user wants to do something with them */
-    Map("javaTime" -> iters {javaRand.nextInt()},
-        "xorTime" -> iters {xorRand.nextInt()})
-
+    Map("javaTime" -> timeIt(numIters) { javaRand.nextInt() },
+        "xorTime" -> timeIt(numIters) { xorRand.nextInt() })
   }
-
 }

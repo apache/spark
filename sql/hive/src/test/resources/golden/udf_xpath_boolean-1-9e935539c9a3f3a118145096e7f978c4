@@ -1,6 +1,0 @@
-xpath_boolean(xml, xpath) - Evaluates a boolean xpath expression
-Example:
-  > SELECT xpath_boolean('<a><b>1</b></a>','a/b') FROM src LIMIT 1;
-  true
-  > SELECT xpath_boolean('<a><b>1</b></a>','a/b = 2') FROM src LIMIT 1;
-  false

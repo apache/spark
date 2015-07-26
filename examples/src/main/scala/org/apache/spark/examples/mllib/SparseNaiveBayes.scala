@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples.mllib
 
 import org.apache.log4j.{Level, Logger}
@@ -22,12 +23,12 @@ import scopt.OptionParser
 
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.mllib.classification.NaiveBayes
-import org.apache.spark.mllib.util.{MLUtils, MulticlassLabelParser}
+import org.apache.spark.mllib.util.MLUtils
 
 /**
  * An example naive Bayes app. Run with
  * {{{
- * ./bin/spark-example org.apache.spark.examples.mllib.SparseNaiveBayes [options] <input>
+ * ./bin/run-example org.apache.spark.examples.mllib.SparseNaiveBayes [options] <input>
  * }}}
  * If you use it as a template to create your own app, please use `spark-submit` to submit your app.
  */
@@ -37,7 +38,7 @@ object SparseNaiveBayes {
       input: String = null,
       minPartitions: Int = 0,
       numFeatures: Int = -1,
-      lambda: Double = 1.0)
+      lambda: Double = 1.0) extends AbstractParams[Params]
 
   def main(args: Array[String]) {
     val defaultParams = Params()
@@ -76,7 +77,7 @@ object SparseNaiveBayes {
       if (params.minPartitions > 0) params.minPartitions else sc.defaultMinPartitions
 
     val examples =
-      MLUtils.loadLibSVMFile(sc, params.input, multiclass = true, params.numFeatures, minPartitions)
+      MLUtils.loadLibSVMFile(sc, params.input, params.numFeatures, minPartitions)
     // Cache examples because it will be used in both training and evaluation.
     examples.cache()
 
@@ -100,3 +101,4 @@ object SparseNaiveBayes {
     sc.stop()
   }
 }
+// scalastyle:on println

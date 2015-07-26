@@ -39,16 +39,17 @@ trait Logging {
   // be serialized and used on another machine
   @transient private var log_ : Logger = null
 
+  // Method to get the logger name for this object
+  protected def logName = {
+    // Ignore trailing $'s in the class names for Scala objects
+    this.getClass.getName.stripSuffix("$")
+  }
+
   // Method to get or create the logger for this object
   protected def log: Logger = {
     if (log_ == null) {
       initializeIfNecessary()
-      var className = this.getClass.getName
-      // Ignore trailing $'s in the class names for Scala objects
-      if (className.endsWith("$")) {
-        className = className.substring(0, className.length - 1)
-      }
-      log_ = LoggerFactory.getLogger(className)
+      log_ = LoggerFactory.getLogger(logName)
     }
     log_
   }
@@ -110,23 +111,43 @@ trait Logging {
   }
 
   private def initializeLogging() {
-    // If Log4j is being used, but is not initialized, load a default properties file
-    val binder = StaticLoggerBinder.getSingleton
-    val usingLog4j = binder.getLoggerFactoryClassStr.endsWith("Log4jLoggerFactory")
-    val log4jInitialized = LogManager.getRootLogger.getAllAppenders.hasMoreElements
-    if (!log4jInitialized && usingLog4j) {
-      val defaultLogProps = "org/apache/spark/log4j-defaults.properties"
-      Option(Utils.getSparkClassLoader.getResource(defaultLogProps)) match {
-        case Some(url) =>
-          PropertyConfigurator.configure(url)
-          log.info(s"Using Spark's default log4j profile: $defaultLogProps")
-        case None =>
-          System.err.println(s"Spark was unable to load $defaultLogProps")
+    // Don't use a logger in here, as this is itself occurring during initialization of a logger
+    // If Log4j 1.2 is being used, but is not initialized, load a default properties file
+    val binderClass = StaticLoggerBinder.getSingleton.getLoggerFactoryClassStr
+    // This distinguishes the log4j 1.2 binding, currently
+    // org.slf4j.impl.Log4jLoggerFactory, from the log4j 2.0 binding, currently
+    // org.apache.logging.slf4j.Log4jLoggerFactory
+    val usingLog4j12 = "org.slf4j.impl.Log4jLoggerFactory".equals(binderClass)
+    if (usingLog4j12) {
+      val log4j12Initialized = LogManager.getRootLogger.getAllAppenders.hasMoreElements
+      if (!log4j12Initialized) {
+        // scalastyle:off println
+        if (Utils.isInInterpreter) {
+          val replDefaultLogProps = "org/apache/spark/log4j-defaults-repl.properties"
+          Option(Utils.getSparkClassLoader.getResource(replDefaultLogProps)) match {
+            case Some(url) =>
+              PropertyConfigurator.configure(url)
+              System.err.println(s"Using Spark's repl log4j profile: $replDefaultLogProps")
+              System.err.println("To adjust logging level use sc.setLogLevel(\"INFO\")")
+            case None =>
+              System.err.println(s"Spark was unable to load $replDefaultLogProps")
+          }
+        } else {
+          val defaultLogProps = "org/apache/spark/log4j-defaults.properties"
+          Option(Utils.getSparkClassLoader.getResource(defaultLogProps)) match {
+            case Some(url) =>
+              PropertyConfigurator.configure(url)
+              System.err.println(s"Using Spark's default log4j profile: $defaultLogProps")
+            case None =>
+              System.err.println(s"Spark was unable to load $defaultLogProps")
+          }
+        }
+        // scalastyle:on println
       }
     }
     Logging.initialized = true
 
-    // Force a call into slf4j to initialize it. Avoids this happening from mutliple threads
+    // Force a call into slf4j to initialize it. Avoids this happening from multiple threads
     // and triggering this: http://mailman.qos.ch/pipermail/slf4j-dev/2010-April/002956.html
     log
   }
@@ -138,7 +159,7 @@ private object Logging {
   try {
     // We use reflection here to handle the case where users remove the
     // slf4j-to-jul bridge order to route their logs to JUL.
-    val bridgeClass = Class.forName("org.slf4j.bridge.SLF4JBridgeHandler")
+    val bridgeClass = Utils.classForName("org.slf4j.bridge.SLF4JBridgeHandler")
     bridgeClass.getMethod("removeHandlersForRootLogger").invoke(null)
     val installed = bridgeClass.getMethod("isInstalled").invoke(null).asInstanceOf[Boolean]
     if (!installed) {

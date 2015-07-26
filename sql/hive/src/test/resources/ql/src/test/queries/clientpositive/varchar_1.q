@@ -5,7 +5,7 @@ create table varchar1 (key varchar(10), value varchar(20));
 create table varchar1_1 (key string, value string);
 
 -- load from file
-load data local inpath '../data/files/srcbucket0.txt' overwrite into table varchar1;
+load data local inpath '../../data/files/srcbucket0.txt' overwrite into table varchar1;
 select * from varchar1 order by key, value limit 2;
 
 -- insert overwrite, from same/different length varchar

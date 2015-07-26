@@ -1,3 +1,4 @@
+set hive.stats.dbclass=fs;
 -- With multiple indexes, make sure we choose which to use in a consistent order
 
 CREATE INDEX src_key_index ON TABLE src(key) as 'COMPACT' WITH DEFERRED REBUILD;

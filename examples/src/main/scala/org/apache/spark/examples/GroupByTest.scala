@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples
 
 import java.util.Random
@@ -44,12 +45,13 @@ object GroupByTest {
         arr1(i) = (ranGen.nextInt(Int.MaxValue), byteArr)
       }
       arr1
-    }.cache
+    }.cache()
     // Enforce that everything has been calculated and in cache
-    pairs1.count
+    pairs1.count()
 
-    println(pairs1.groupByKey(numReducers).count)
+    println(pairs1.groupByKey(numReducers).count())
 
     sc.stop()
   }
 }
+// scalastyle:on println

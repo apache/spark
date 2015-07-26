@@ -24,7 +24,10 @@ import org.apache.spark.shuffle._
  * A ShuffleManager using hashing, that creates one output file per reduce partition on each
  * mapper (possibly reusing these across waves of tasks).
  */
-class HashShuffleManager(conf: SparkConf) extends ShuffleManager {
+private[spark] class HashShuffleManager(conf: SparkConf) extends ShuffleManager {
+
+  private val fileShuffleBlockResolver = new FileShuffleBlockResolver(conf)
+
   /* Register a shuffle with the manager and obtain a handle for it to pass to tasks. */
   override def registerShuffle[K, V, C](
       shuffleId: Int,
@@ -49,12 +52,21 @@ class HashShuffleManager(conf: SparkConf) extends ShuffleManager {
   /** Get a writer for a given partition. Called on executors by map tasks. */
   override def getWriter[K, V](handle: ShuffleHandle, mapId: Int, context: TaskContext)
       : ShuffleWriter[K, V] = {
-    new HashShuffleWriter(handle.asInstanceOf[BaseShuffleHandle[K, V, _]], mapId, context)
+    new HashShuffleWriter(
+      shuffleBlockResolver, handle.asInstanceOf[BaseShuffleHandle[K, V, _]], mapId, context)
   }
 
   /** Remove a shuffle's metadata from the ShuffleManager. */
-  override def unregisterShuffle(shuffleId: Int): Unit = {}
+  override def unregisterShuffle(shuffleId: Int): Boolean = {
+    shuffleBlockResolver.removeShuffle(shuffleId)
+  }
+
+  override def shuffleBlockResolver: FileShuffleBlockResolver = {
+    fileShuffleBlockResolver
+  }
 
   /** Shut down this ShuffleManager. */
-  override def stop(): Unit = {}
+  override def stop(): Unit = {
+    shuffleBlockResolver.stop()
+  }
 }

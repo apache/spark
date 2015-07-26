@@ -1,6 +1,6 @@
 CREATE TABLE T1(key STRING, val STRING) STORED AS TEXTFILE;
 
-LOAD DATA LOCAL INPATH '../data/files/T1.txt' INTO TABLE T1;
+LOAD DATA LOCAL INPATH '../../data/files/T1.txt' INTO TABLE T1;
 
 SELECT key, val, GROUPING__ID from T1 group by key, val with cube;
 

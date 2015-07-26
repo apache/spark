@@ -15,10 +15,10 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples.streaming
 
 import org.apache.spark.streaming.{Seconds, StreamingContext}
-import StreamingContext._
 import org.apache.spark.SparkContext._
 import org.apache.spark.streaming.twitter._
 import org.apache.spark.SparkConf
@@ -83,3 +83,4 @@ object TwitterPopularTags {
     ssc.awaitTermination()
   }
 }
+// scalastyle:on println

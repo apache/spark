@@ -17,6 +17,7 @@
 
 package org.apache.spark.streaming.receiver
 
+import java.nio.ByteBuffer
 import java.util.concurrent.atomic.AtomicInteger
 
 import scala.concurrent.duration._
@@ -25,10 +26,10 @@ import scala.reflect.ClassTag
 
 import akka.actor._
 import akka.actor.SupervisorStrategy.{Escalate, Restart}
+
 import org.apache.spark.{Logging, SparkEnv}
-import org.apache.spark.storage.StorageLevel
-import java.nio.ByteBuffer
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.storage.StorageLevel
 
 /**
  * :: DeveloperApi ::
@@ -68,13 +69,13 @@ object ActorSupervisorStrategy {
  *       should be same.
  */
 @DeveloperApi
-trait ActorHelper {
+trait ActorHelper extends Logging{
 
   self: Actor => // to ensure that this can be added to Actor classes only
 
   /** Store an iterator of received data as a data block into Spark's memory. */
   def store[T](iter: Iterator[T]) {
-    println("Storing iterator")
+    logDebug("Storing iterator")
     context.parent ! IteratorData(iter)
   }
 
@@ -84,6 +85,7 @@ trait ActorHelper {
    * that Spark is configured to use.
    */
   def store(bytes: ByteBuffer) {
+    logDebug("Storing Bytes")
     context.parent ! ByteBufferData(bytes)
   }
 
@@ -93,7 +95,7 @@ trait ActorHelper {
    * being pushed into Spark's memory.
    */
   def store[T](item: T) {
-    println("Storing item")
+    logDebug("Storing item")
     context.parent ! SingleItemData(item)
   }
 }
@@ -122,7 +124,7 @@ private[streaming] case class ByteBufferData(bytes: ByteBuffer) extends ActorRec
  * As Actors can also be used to receive data from almost any stream source.
  * A nice set of abstraction(s) for actors as receivers is already provided for
  * a few general cases. It is thus exposed as an API where user may come with
- * his own Actor to run as receiver for Spark Streaming input source.
+ * their own Actor to run as receiver for Spark Streaming input source.
  *
  * This starts a supervisor actor which starts workers and also provides
  * [http://doc.akka.io/docs/akka/snapshot/scala/fault-tolerance.html fault-tolerance].
@@ -148,24 +150,25 @@ private[streaming] class ActorReceiver[T: ClassTag](
   class Supervisor extends Actor {
 
     override val supervisorStrategy = receiverSupervisorStrategy
-    val worker = context.actorOf(props, name)
+    private val worker = context.actorOf(props, name)
     logInfo("Started receiver worker at:" + worker.path)
 
-    val n: AtomicInteger = new AtomicInteger(0)
-    val hiccups: AtomicInteger = new AtomicInteger(0)
+    private val n: AtomicInteger = new AtomicInteger(0)
+    private val hiccups: AtomicInteger = new AtomicInteger(0)
 
-    def receive = {
+    override def receive: PartialFunction[Any, Unit] = {
 
       case IteratorData(iterator) =>
-        println("received iterator")
+        logDebug("received iterator")
         store(iterator.asInstanceOf[Iterator[T]])
 
       case SingleItemData(msg) =>
-        println("received single")
+        logDebug("received single")
         store(msg.asInstanceOf[T])
         n.incrementAndGet
 
       case ByteBufferData(bytes) =>
+        logDebug("received bytes")
         store(bytes)
 
       case props: Props =>
@@ -187,13 +190,12 @@ private[streaming] class ActorReceiver[T: ClassTag](
     }
   }
 
-  def onStart() = {
+  def onStart(): Unit = {
     supervisor
     logInfo("Supervision tree for receivers initialized at:" + supervisor.path)
-
   }
 
-  def onStop() = {
+  def onStop(): Unit = {
     supervisor ! PoisonPill
   }
 }

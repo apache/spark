@@ -17,10 +17,9 @@
 
 package org.apache.spark
 
-import org.scalatest.FunSuite
-
-import org.apache.spark.SparkContext._
 import org.apache.spark.util.NonSerializable
+
+import java.io.NotSerializableException
 
 // Common state shared by FailureSuite-launched tasks. We use a global object
 // for this because any local variables used in the task closures will rightfully
@@ -37,7 +36,7 @@ object FailureSuiteState {
   }
 }
 
-class FailureSuite extends FunSuite with LocalSparkContext {
+class FailureSuite extends SparkFunSuite with LocalSparkContext {
 
   // Run a 3-task map job in which task 1 deterministically fails once, and check
   // whether the job completes successfully and we ran 4 tasks in total.
@@ -56,7 +55,7 @@ class FailureSuite extends FunSuite with LocalSparkContext {
     FailureSuiteState.synchronized {
       assert(FailureSuiteState.tasksRun === 4)
     }
-    assert(results.toList === List(1,4,9))
+    assert(results.toList === List(1, 4, 9))
     FailureSuiteState.clear()
   }
 
@@ -102,7 +101,9 @@ class FailureSuite extends FunSuite with LocalSparkContext {
       results.collect()
     }
     assert(thrown.getClass === classOf[SparkException])
-    assert(thrown.getMessage.contains("NotSerializableException"))
+    assert(thrown.getMessage.contains("serializable") ||
+      thrown.getCause.getClass === classOf[NotSerializableException],
+      "Exception does not contain \"serializable\": " + thrown.getMessage)
 
     FailureSuiteState.clear()
   }
@@ -116,23 +117,53 @@ class FailureSuite extends FunSuite with LocalSparkContext {
       sc.parallelize(1 to 10, 2).map(x => a).count()
     }
     assert(thrown.getClass === classOf[SparkException])
-    assert(thrown.getMessage.contains("NotSerializableException"))
+    assert(thrown.getMessage.contains("NotSerializableException") ||
+      thrown.getCause.getClass === classOf[NotSerializableException])
 
     // Non-serializable closure in an earlier stage
     val thrown1 = intercept[SparkException] {
       sc.parallelize(1 to 10, 2).map(x => (x, a)).partitionBy(new HashPartitioner(3)).count()
     }
     assert(thrown1.getClass === classOf[SparkException])
-    assert(thrown1.getMessage.contains("NotSerializableException"))
+    assert(thrown1.getMessage.contains("NotSerializableException") ||
+      thrown1.getCause.getClass === classOf[NotSerializableException])
 
     // Non-serializable closure in foreach function
     val thrown2 = intercept[SparkException] {
+      // scalastyle:off println
       sc.parallelize(1 to 10, 2).foreach(x => println(a))
+      // scalastyle:on println
     }
     assert(thrown2.getClass === classOf[SparkException])
-    assert(thrown2.getMessage.contains("NotSerializableException"))
+    assert(thrown2.getMessage.contains("NotSerializableException") ||
+      thrown2.getCause.getClass === classOf[NotSerializableException])
 
     FailureSuiteState.clear()
+  }
+
+  test("managed memory leak error should not mask other failures (SPARK-9266") {
+    val conf = new SparkConf().set("spark.unsafe.exceptionOnMemoryLeak", "true")
+    sc = new SparkContext("local[1,1]", "test", conf)
+
+    // If a task leaks memory but fails due to some other cause, then make sure that the original
+    // cause is preserved
+    val thrownDueToTaskFailure = intercept[SparkException] {
+      sc.parallelize(Seq(0)).mapPartitions { iter =>
+        TaskContext.get().taskMemoryManager().allocate(128)
+        throw new Exception("intentional task failure")
+        iter
+      }.count()
+    }
+    assert(thrownDueToTaskFailure.getMessage.contains("intentional task failure"))
+
+    // If the task succeeded but memory was leaked, then the task should fail due to that leak
+    val thrownDueToMemoryLeak = intercept[SparkException] {
+      sc.parallelize(Seq(0)).mapPartitions { iter =>
+        TaskContext.get().taskMemoryManager().allocate(128)
+        iter
+      }.count()
+    }
+    assert(thrownDueToMemoryLeak.getMessage.contains("memory leak"))
   }
 
   // TODO: Need to add tests with shuffle fetch failures.

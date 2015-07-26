@@ -23,7 +23,7 @@ package org.apache.spark.scheduler
  */
 private[spark] class JobWaiter[T](
     dagScheduler: DAGScheduler,
-    jobId: Int,
+    val jobId: Int,
     totalTasks: Int,
     resultHandler: (Int, T) => Unit)
   extends JobListener {
@@ -34,7 +34,7 @@ private[spark] class JobWaiter[T](
   @volatile
   private var _jobFinished = totalTasks == 0
 
-  def jobFinished = _jobFinished
+  def jobFinished: Boolean = _jobFinished
 
   // If the job is finished, this will be its result. In the case of 0 task jobs (e.g. zero
   // partition RDDs), we set the jobResult directly to JobSucceeded.

@@ -1,4 +1,4 @@
-add file ../data/scripts/newline.py;
+add file ../../data/scripts/newline.py;
 set hive.transform.escape.input=true;
 
 create table tmp_tmp(key string, value string) stored as rcfile;
@@ -10,10 +10,10 @@ select * from tmp_tmp ORDER BY key ASC, value ASC;
 
 drop table tmp_tmp;
 
-add file ../data/scripts/escapednewline.py;
-add file ../data/scripts/escapedtab.py;
-add file ../data/scripts/doubleescapedtab.py;
-add file ../data/scripts/escapedcarriagereturn.py;
+add file ../../data/scripts/escapednewline.py;
+add file ../../data/scripts/escapedtab.py;
+add file ../../data/scripts/doubleescapedtab.py;
+add file ../../data/scripts/escapedcarriagereturn.py;
 
 create table tmp_tmp(key string, value string) stored as rcfile;
 insert overwrite table tmp_tmp

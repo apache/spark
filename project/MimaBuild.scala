@@ -15,18 +15,27 @@
  * limitations under the License.
  */
 
+import sbt._
+import sbt.Keys.version
+
 import com.typesafe.tools.mima.core._
 import com.typesafe.tools.mima.core.MissingClassProblem
 import com.typesafe.tools.mima.core.MissingTypesProblem
 import com.typesafe.tools.mima.core.ProblemFilters._
 import com.typesafe.tools.mima.plugin.MimaKeys.{binaryIssueFilters, previousArtifact}
 import com.typesafe.tools.mima.plugin.MimaPlugin.mimaDefaultSettings
-import sbt._
+
 
 object MimaBuild {
 
   def excludeMember(fullName: String) = Seq(
       ProblemFilters.exclude[MissingMethodProblem](fullName),
+      // Sometimes excluded methods have default arguments and
+      // they are translated into public methods/fields($default$) in generated
+      // bytecode. It is not possible to exhaustively list everything.
+      // But this should be okay.
+      ProblemFilters.exclude[MissingMethodProblem](fullName+"$default$2"),
+      ProblemFilters.exclude[MissingMethodProblem](fullName+"$default$1"),
       ProblemFilters.exclude[MissingFieldProblem](fullName),
       ProblemFilters.exclude[IncompatibleResultTypeProblem](fullName),
       ProblemFilters.exclude[IncompatibleMethTypeProblem](fullName),
@@ -53,7 +62,7 @@ object MimaBuild {
     excludePackage("org.apache.spark." + packageName)
   }
 
-  def ignoredABIProblems(base: File) = {
+  def ignoredABIProblems(base: File, currentSparkVersion: String) = {
 
     // Excludes placed here will be used for all Spark versions
     val defaultExcludes = Seq()
@@ -77,11 +86,16 @@ object MimaBuild {
     }
 
     defaultExcludes ++ ignoredClasses.flatMap(excludeClass) ++
-    ignoredMembers.flatMap(excludeMember) ++ MimaExcludes.excludes
+    ignoredMembers.flatMap(excludeMember) ++ MimaExcludes.excludes(currentSparkVersion)
   }
 
-  def mimaSettings(sparkHome: File) = mimaDefaultSettings ++ Seq(
-    previousArtifact := None,
-    binaryIssueFilters ++= ignoredABIProblems(sparkHome)
-  )
+  def mimaSettings(sparkHome: File, projectRef: ProjectRef) = {
+    val organization = "org.apache.spark"
+    val previousSparkVersion = "1.4.0"
+    val fullId = "spark-" + projectRef.project + "_2.10"
+    mimaDefaultSettings ++
+    Seq(previousArtifact := Some(organization % fullId % previousSparkVersion),
+      binaryIssueFilters ++= ignoredABIProblems(sparkHome, version.value))
+  }
+
 }

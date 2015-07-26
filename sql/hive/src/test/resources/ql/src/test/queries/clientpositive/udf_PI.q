@@ -1,14 +1,16 @@
-explain 
-select PI() FROM src LIMIT 1;
+set hive.fetch.task.conversion=more;
 
-select PI() FROM src LIMIT 1;
+explain
+select PI() FROM src tablesample (1 rows);
+
+select PI() FROM src tablesample (1 rows);
 
 DESCRIBE FUNCTION PI;
 DESCRIBE FUNCTION EXTENDED PI;
 explain 
-select PI() FROM src LIMIT 1;
+select PI() FROM src tablesample (1 rows);
 
-select PI() FROM src LIMIT 1;
+select PI() FROM src tablesample (1 rows);
 
 DESCRIBE FUNCTION PI;
 DESCRIBE FUNCTION EXTENDED PI;

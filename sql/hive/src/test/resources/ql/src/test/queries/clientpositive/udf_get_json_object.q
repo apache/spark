@@ -1,9 +1,13 @@
+set hive.fetch.task.conversion=more;
+
 DESCRIBE FUNCTION get_json_object;
 DESCRIBE FUNCTION EXTENDED get_json_object;
 
 CREATE TABLE dest1(c1 STRING) STORED AS TEXTFILE;
 
 FROM src INSERT OVERWRITE TABLE dest1 SELECT '  abc  ' WHERE src.key = 86;
+
+set hive.fetch.task.conversion=more;
 
 EXPLAIN
 SELECT get_json_object(src_json.json, '$.owner') FROM src_json;
@@ -33,7 +37,7 @@ SELECT get_json_object(src_json.json, '$.fb:testid') FROM src_json;
 
 CREATE TABLE dest2(c1 STRING) STORED AS RCFILE;
 
-INSERT OVERWRITE TABLE dest2 SELECT '{"a":"b\nc"}' FROM src LIMIT 1;
+INSERT OVERWRITE TABLE dest2 SELECT '{"a":"b\nc"}' FROM src tablesample (1 rows);
 
 SELECT * FROM dest2;
 

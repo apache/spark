@@ -17,30 +17,37 @@
 
 package org.apache.spark.sql.columnar
 
-import org.scalatest.FunSuite
+import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.types._
 
-import org.apache.spark.sql.catalyst.types._
+class ColumnStatsSuite extends SparkFunSuite {
+  testColumnStats(classOf[BooleanColumnStats], BOOLEAN, InternalRow(true, false, 0))
+  testColumnStats(classOf[ByteColumnStats], BYTE, InternalRow(Byte.MaxValue, Byte.MinValue, 0))
+  testColumnStats(classOf[ShortColumnStats], SHORT, InternalRow(Short.MaxValue, Short.MinValue, 0))
+  testColumnStats(classOf[IntColumnStats], INT, InternalRow(Int.MaxValue, Int.MinValue, 0))
+  testColumnStats(classOf[DateColumnStats], DATE, InternalRow(Int.MaxValue, Int.MinValue, 0))
+  testColumnStats(classOf[LongColumnStats], LONG, InternalRow(Long.MaxValue, Long.MinValue, 0))
+  testColumnStats(classOf[TimestampColumnStats], TIMESTAMP,
+    InternalRow(Long.MaxValue, Long.MinValue, 0))
+  testColumnStats(classOf[FloatColumnStats], FLOAT, InternalRow(Float.MaxValue, Float.MinValue, 0))
+  testColumnStats(classOf[DoubleColumnStats], DOUBLE,
+    InternalRow(Double.MaxValue, Double.MinValue, 0))
+  testColumnStats(classOf[StringColumnStats], STRING, InternalRow(null, null, 0))
+  testColumnStats(classOf[FixedDecimalColumnStats],
+    FIXED_DECIMAL(15, 10), InternalRow(null, null, 0))
 
-class ColumnStatsSuite extends FunSuite {
-  testColumnStats(classOf[BooleanColumnStats], BOOLEAN)
-  testColumnStats(classOf[ByteColumnStats],    BYTE)
-  testColumnStats(classOf[ShortColumnStats],   SHORT)
-  testColumnStats(classOf[IntColumnStats],     INT)
-  testColumnStats(classOf[LongColumnStats],    LONG)
-  testColumnStats(classOf[FloatColumnStats],   FLOAT)
-  testColumnStats(classOf[DoubleColumnStats],  DOUBLE)
-  testColumnStats(classOf[StringColumnStats],  STRING)
-
-  def testColumnStats[T <: NativeType, U <: NativeColumnStats[T]](
+  def testColumnStats[T <: AtomicType, U <: ColumnStats](
       columnStatsClass: Class[U],
-      columnType: NativeColumnType[T]) {
+      columnType: NativeColumnType[T],
+      initialStatistics: InternalRow): Unit = {
 
     val columnStatsName = columnStatsClass.getSimpleName
 
     test(s"$columnStatsName: empty") {
       val columnStats = columnStatsClass.newInstance()
-      expectResult(columnStats.initialBounds, "Wrong initial bounds") {
-        (columnStats.lowerBound, columnStats.upperBound)
+      columnStats.collectedStatistics.toSeq.zip(initialStatistics.toSeq).foreach {
+        case (actual, expected) => assert(actual === expected)
       }
     }
 
@@ -48,14 +55,22 @@ class ColumnStatsSuite extends FunSuite {
       import ColumnarTestUtils._
 
       val columnStats = columnStatsClass.newInstance()
-      val rows = Seq.fill(10)(makeRandomRow(columnType))
+      val rows = Seq.fill(10)(makeRandomRow(columnType)) ++ Seq.fill(10)(makeNullRow(1))
       rows.foreach(columnStats.gatherStats(_, 0))
 
-      val values = rows.map(_.head.asInstanceOf[T#JvmType])
-      val ordering = columnType.dataType.ordering.asInstanceOf[Ordering[T#JvmType]]
+      val values = rows.take(10).map(_.get(0).asInstanceOf[T#InternalType])
+      val ordering = columnType.dataType.ordering.asInstanceOf[Ordering[T#InternalType]]
+      val stats = columnStats.collectedStatistics
 
-      expectResult(values.min(ordering), "Wrong lower bound")(columnStats.lowerBound)
-      expectResult(values.max(ordering), "Wrong upper bound")(columnStats.upperBound)
+      assertResult(values.min(ordering), "Wrong lower bound")(stats.get(0))
+      assertResult(values.max(ordering), "Wrong upper bound")(stats.get(1))
+      assertResult(10, "Wrong null count")(stats.get(2))
+      assertResult(20, "Wrong row count")(stats.get(3))
+      assertResult(stats.get(4), "Wrong size in bytes") {
+        rows.map { row =>
+          if (row.isNullAt(0)) 4 else columnType.actualSize(row, 0)
+        }.sum
+      }
     }
   }
 }

@@ -1,0 +1,247 @@
+#!/usr/bin/env bash
+
+#
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements.  See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License.  You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+# Wrapper script that runs the Spark tests then reports QA results
+# to github via its API.
+# Environment variables are populated by the code here:
+#+ https://github.com/jenkinsci/ghprb-plugin/blob/master/src/main/java/org/jenkinsci/plugins/ghprb/GhprbTrigger.java#L139
+
+# Go to the Spark project root directory
+FWDIR="$(cd `dirname $0`/..; pwd)"
+cd "$FWDIR"
+
+source "$FWDIR/dev/run-tests-codes.sh"
+
+COMMENTS_URL="https://api.github.com/repos/apache/spark/issues/$ghprbPullId/comments"
+PULL_REQUEST_URL="https://github.com/apache/spark/pull/$ghprbPullId"
+
+# Important Environment Variables
+# ---
+# $ghprbActualCommit
+#+  This is the hash of the most recent commit in the PR.
+#+  The merge-base of this and master is the commit from which the PR was branched.
+# $sha1
+#+  If the patch merges cleanly, this is a reference to the merge commit hash
+#+    (e.g. "origin/pr/2606/merge").
+#+  If the patch does not merge cleanly, it is equal to $ghprbActualCommit.
+#+  The merge-base of this and master in the case of a clean merge is the most recent commit
+#+    against master.
+
+COMMIT_URL="https://github.com/apache/spark/commit/${ghprbActualCommit}"
+# GitHub doesn't auto-link short hashes when submitted via the API, unfortunately. :(
+SHORT_COMMIT_HASH="${ghprbActualCommit:0:7}"
+
+# format: http://linux.die.net/man/1/timeout
+# must be less than the timeout configured on Jenkins (currently 180m)
+TESTS_TIMEOUT="175m"
+
+# Array to capture all tests to run on the pull request. These tests are held under the
+#+ dev/tests/ directory.
+#
+# To write a PR test:
+#+  * the file must reside within the dev/tests directory
+#+  * be an executable bash script
+#+  * accept three arguments on the command line, the first being the Github PR long commit
+#+    hash, the second the Github SHA1 hash, and the final the current PR hash
+#+  * and, lastly, return string output to be included in the pr message output that will
+#+    be posted to Github
+PR_TESTS=(
+  "pr_merge_ability"
+  "pr_public_classes"
+# DISABLED (pwendell) "pr_new_dependencies"
+)
+
+function post_message () {
+  local message=$1
+  local data="{\"body\": \"$message\"}"
+  local HTTP_CODE_HEADER="HTTP Response Code: "
+
+  echo "Attempting to post to Github..."
+
+  local curl_output=$(
+    curl `#--dump-header -` \
+      --silent \
+      --user x-oauth-basic:$GITHUB_OAUTH_KEY \
+      --request POST \
+      --data "$data" \
+      --write-out "${HTTP_CODE_HEADER}%{http_code}\n" \
+      --header "Content-Type: application/json" \
+      "$COMMENTS_URL" #> /dev/null #| "$FWDIR/dev/jq" .id #| head -n 8
+  )
+  local curl_status=${PIPESTATUS[0]}
+
+  if [ "$curl_status" -ne 0 ]; then
+      echo "Failed to post message to GitHub." >&2
+      echo " > curl_status: ${curl_status}" >&2
+      echo " > curl_output: ${curl_output}" >&2
+      echo " > data: ${data}" >&2
+      # exit $curl_status
+  fi
+
+  local api_response=$(
+    echo "${curl_output}" \
+    | grep -v -e "^${HTTP_CODE_HEADER}"
+  )
+
+  local http_code=$(
+    echo "${curl_output}" \
+    | grep -e "^${HTTP_CODE_HEADER}" \
+    | sed -r -e "s/^${HTTP_CODE_HEADER}//g"
+  )
+
+  if [ -n "$http_code" ] && [ "$http_code" -ne "201" ]; then
+      echo " > http_code: ${http_code}." >&2
+      echo " > api_response: ${api_response}" >&2
+      echo " > data: ${data}" >&2
+  fi
+
+  if [ "$curl_status" -eq 0 ] && [ "$http_code" -eq "201" ]; then
+    echo " > Post successful."
+  fi
+}
+
+function send_archived_logs () {
+  echo "Archiving unit tests logs..."
+
+  local log_files=$(
+    find .\
+      -name "unit-tests.log" -o\
+      -path "./sql/hive/target/HiveCompatibilitySuite.failed" -o\
+      -path "./sql/hive/target/HiveCompatibilitySuite.hiveFailed" -o\
+      -path "./sql/hive/target/HiveCompatibilitySuite.wrong"
+  )
+
+  if [ -z "$log_files" ]; then
+    echo "> No log files found." >&2
+  else
+    local log_archive="unit-tests-logs.tar.gz"
+    echo "$log_files" | xargs tar czf ${log_archive}
+
+    local jenkins_build_dir=${JENKINS_HOME}/jobs/${JOB_NAME}/builds/${BUILD_NUMBER}
+    local scp_output=$(scp ${log_archive} amp-jenkins-master:${jenkins_build_dir}/${log_archive})
+    local scp_status="$?"
+
+    if [ "$scp_status" -ne 0 ]; then
+      echo "Failed to send archived unit tests logs to Jenkins master." >&2
+      echo "> scp_status: ${scp_status}" >&2
+      echo "> scp_output: ${scp_output}" >&2
+    else
+      echo "> Send successful."
+    fi
+
+    rm -f ${log_archive}
+  fi
+}
+
+# post start message
+{
+  start_message="\
+  [Test build ${BUILD_DISPLAY_NAME} has started](${BUILD_URL}consoleFull) for \
+  PR $ghprbPullId at commit [\`${SHORT_COMMIT_HASH}\`](${COMMIT_URL})."
+
+  post_message "$start_message"
+}
+
+# Environment variable to capture PR test output
+pr_message=""
+# Ensure we save off the current HEAD to revert to
+current_pr_head="`git rev-parse HEAD`"
+
+echo "HEAD:  `git rev-parse HEAD`"
+echo "GHPRB: $ghprbActualCommit"
+echo "SHA1:  $sha1"
+
+# Run pull request tests
+for t in "${PR_TESTS[@]}"; do
+  this_test="${FWDIR}/dev/tests/${t}.sh"
+  # Ensure the test can be found and is a file
+  if [ -f "${this_test}" ]; then
+    echo "Running test: $t"
+    this_mssg="$(bash "${this_test}" "${ghprbActualCommit}" "${sha1}" "${current_pr_head}")"
+    # Check if this is the merge test as we submit that note *before* and *after*
+    # the tests run
+    [ "$t" == "pr_merge_ability" ] && merge_note="${this_mssg}"
+    pr_message="${pr_message}\n${this_mssg}"
+    # Ensure, after each test, that we're back on the current PR
+    git checkout -f "${current_pr_head}" &>/dev/null
+  else
+    echo "Cannot find test ${this_test}."
+  fi
+done
+
+# run tests
+{
+  # Marks this build is a pull request build.
+  export AMP_JENKINS_PRB=true
+  timeout "${TESTS_TIMEOUT}" ./dev/run-tests
+  test_result="$?"
+
+  if [ "$test_result" -eq "124" ]; then
+    fail_message="**[Test build ${BUILD_DISPLAY_NAME} timed out](${BUILD_URL}console)** \
+    for PR $ghprbPullId at commit [\`${SHORT_COMMIT_HASH}\`](${COMMIT_URL}) \
+    after a configured wait of \`${TESTS_TIMEOUT}\`."
+
+    post_message "$fail_message"
+    exit $test_result
+  elif [ "$test_result" -eq "0" ]; then
+    test_result_note=" * This patch **passes all tests**."
+  else
+    if [ "$test_result" -eq "$BLOCK_GENERAL" ]; then
+      failing_test="some tests"
+    elif [ "$test_result" -eq "$BLOCK_RAT" ]; then
+      failing_test="RAT tests"
+    elif [ "$test_result" -eq "$BLOCK_SCALA_STYLE" ]; then
+      failing_test="Scala style tests"
+    elif [ "$test_result" -eq "$BLOCK_PYTHON_STYLE" ]; then
+      failing_test="Python style tests"
+    elif [ "$test_result" -eq "$BLOCK_DOCUMENTATION" ]; then
+      failing_test="to generate documentation"
+    elif [ "$test_result" -eq "$BLOCK_BUILD" ]; then
+      failing_test="to build"
+    elif [ "$test_result" -eq "$BLOCK_MIMA" ]; then
+      failing_test="MiMa tests"
+    elif [ "$test_result" -eq "$BLOCK_SPARK_UNIT_TESTS" ]; then
+      failing_test="Spark unit tests"
+    elif [ "$test_result" -eq "$BLOCK_PYSPARK_UNIT_TESTS" ]; then
+      failing_test="PySpark unit tests"
+    elif [ "$test_result" -eq "$BLOCK_SPARKR_UNIT_TESTS" ]; then
+      failing_test="SparkR unit tests"
+    else
+      failing_test="some tests"
+    fi
+
+    test_result_note=" * This patch **fails $failing_test**."
+  fi
+
+  send_archived_logs
+}
+
+# post end message
+{
+  result_message="\
+  [Test build ${BUILD_DISPLAY_NAME} has finished](${BUILD_URL}console) for \
+  PR $ghprbPullId at commit [\`${SHORT_COMMIT_HASH}\`](${COMMIT_URL})."
+
+  result_message="${result_message}\n${test_result_note}"
+  result_message="${result_message}${pr_message}"
+
+  post_message "$result_message"
+}
+
+exit $test_result

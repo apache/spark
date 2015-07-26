@@ -24,7 +24,7 @@ import scala.collection.Map
 import scala.collection.mutable.HashMap
 import scala.reflect.ClassTag
 
-import cern.jet.stat.Probability
+import org.apache.commons.math3.distribution.NormalDistribution
 
 import org.apache.spark.util.collection.OpenHashMap
 
@@ -32,12 +32,12 @@ import org.apache.spark.util.collection.OpenHashMap
  * An ApproximateEvaluator for counts by key. Returns a map of key to confidence interval.
  */
 private[spark] class GroupedCountEvaluator[T : ClassTag](totalOutputs: Int, confidence: Double)
-  extends ApproximateEvaluator[OpenHashMap[T,Long], Map[T, BoundedDouble]] {
+  extends ApproximateEvaluator[OpenHashMap[T, Long], Map[T, BoundedDouble]] {
 
   var outputsMerged = 0
-  var sums = new OpenHashMap[T,Long]()   // Sum of counts for each key
+  var sums = new OpenHashMap[T, Long]()   // Sum of counts for each key
 
-  override def merge(outputId: Int, taskResult: OpenHashMap[T,Long]) {
+  override def merge(outputId: Int, taskResult: OpenHashMap[T, Long]) {
     outputsMerged += 1
     taskResult.foreach { case (key, value) =>
       sums.changeValue(key, value, _ + value)
@@ -55,7 +55,8 @@ private[spark] class GroupedCountEvaluator[T : ClassTag](totalOutputs: Int, conf
       new HashMap[T, BoundedDouble]
     } else {
       val p = outputsMerged.toDouble / totalOutputs
-      val confFactor = Probability.normalInverse(1 - (1 - confidence) / 2)
+      val confFactor = new NormalDistribution().
+        inverseCumulativeProbability(1 - (1 - confidence) / 2)
       val result = new JHashMap[T, BoundedDouble](sums.size)
       sums.foreach { case (key, sum) =>
         val mean = (sum + 1 - p) / p

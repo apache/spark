@@ -18,7 +18,7 @@ with serdeproperties (
 )
 stored as textfile;
 
-load data local inpath '../data/files/srcbucket0.txt' overwrite into table varchar_serde_regex;
+load data local inpath '../../data/files/srcbucket0.txt' overwrite into table varchar_serde_regex;
 
 select * from varchar_serde_regex limit 5;
 select value, count(*) from varchar_serde_regex group by value limit 5;

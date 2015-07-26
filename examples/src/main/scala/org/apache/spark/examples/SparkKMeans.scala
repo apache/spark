@@ -15,9 +15,8 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples
-
-import java.util.Random
 
 import breeze.linalg.{Vector, DenseVector, squaredDistance}
 
@@ -26,17 +25,17 @@ import org.apache.spark.SparkContext._
 
 /**
  * K-means clustering.
+ *
+ * This is an example implementation for learning how to use Spark. For more conventional use,
+ * please refer to org.apache.spark.mllib.clustering.KMeans
  */
 object SparkKMeans {
-  val R = 1000     // Scaling factor
-  val rand = new Random(42)
 
   def parseVector(line: String): Vector[Double] = {
     DenseVector(line.split(' ').map(_.toDouble))
   }
 
   def closestPoint(p: Vector[Double], centers: Array[Vector[Double]]): Int = {
-    var index = 0
     var bestIndex = 0
     var closest = Double.PositiveInfinity
 
@@ -51,11 +50,23 @@ object SparkKMeans {
     bestIndex
   }
 
+  def showWarning() {
+    System.err.println(
+      """WARN: This is a naive implementation of KMeans Clustering and is given as an example!
+        |Please use the KMeans method found in org.apache.spark.mllib.clustering
+        |for more conventional use.
+      """.stripMargin)
+  }
+
   def main(args: Array[String]) {
+
     if (args.length < 3) {
       System.err.println("Usage: SparkKMeans <file> <k> <convergeDist>")
       System.exit(1)
     }
+
+    showWarning()
+
     val sparkConf = new SparkConf().setAppName("SparkKMeans")
     val sc = new SparkContext(sparkConf)
     val lines = sc.textFile(args(0))
@@ -69,7 +80,7 @@ object SparkKMeans {
     while(tempDist > convergeDist) {
       val closest = data.map (p => (closestPoint(p, kPoints), (p, 1)))
 
-      val pointStats = closest.reduceByKey{case ((x1, y1), (x2, y2)) => (x1 + x2, y1 + y2)}
+      val pointStats = closest.reduceByKey{case ((p1, c1), (p2, c2)) => (p1 + p2, c1 + c2)}
 
       val newPoints = pointStats.map {pair =>
         (pair._1, pair._2._1 * (1.0 / pair._2._2))}.collectAsMap()
@@ -90,3 +101,4 @@ object SparkKMeans {
     sc.stop()
   }
 }
+// scalastyle:on println

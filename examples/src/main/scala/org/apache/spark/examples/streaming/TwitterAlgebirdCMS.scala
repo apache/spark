@@ -15,15 +15,16 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples.streaming
 
 import com.twitter.algebird._
+import com.twitter.algebird.CMSHasherImplicits._
 
 import org.apache.spark.SparkConf
 import org.apache.spark.SparkContext._
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.{Seconds, StreamingContext}
-import org.apache.spark.streaming.StreamingContext._
 import org.apache.spark.streaming.twitter._
 
 // scalastyle:off
@@ -68,7 +69,8 @@ object TwitterAlgebirdCMS {
 
     val users = stream.map(status => status.getUser.getId)
 
-    val cms = new CountMinSketchMonoid(EPS, DELTA, SEED, PERC)
+    // val cms = new CountMinSketchMonoid(EPS, DELTA, SEED, PERC)
+    val cms = TopPctCMS.monoid[Long](EPS, DELTA, SEED, PERC)
     var globalCMS = cms.zero
     val mm = new MapMonoid[Long, Int]()
     var globalExact = Map[Long, Int]()
@@ -112,3 +114,4 @@ object TwitterAlgebirdCMS {
     ssc.awaitTermination()
   }
 }
+// scalastyle:on println

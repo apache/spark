@@ -1,6 +1,7 @@
 assert_true
 case
 coalesce
+current_database
 decode
 e
 encode
@@ -19,6 +20,7 @@ negative
 ntile
 parse_url_tuple
 percentile
+posexplode
 positive
 regexp_replace
 reverse

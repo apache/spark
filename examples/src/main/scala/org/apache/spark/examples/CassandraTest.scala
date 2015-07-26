@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples
 
 import java.nio.ByteBuffer
@@ -126,8 +127,11 @@ object CassandraTest {
       }
     }.saveAsNewAPIHadoopFile("casDemo", classOf[ByteBuffer], classOf[List[Mutation]],
       classOf[ColumnFamilyOutputFormat], job.getConfiguration)
+
+    sc.stop()
   }
 }
+// scalastyle:on println
 
 /*
 create keyspace casDemo;

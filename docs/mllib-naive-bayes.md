@@ -4,23 +4,26 @@ title: Naive Bayes - MLlib
 displayTitle: <a href="mllib-guide.html">MLlib</a> - Naive Bayes
 ---
 
-Naive Bayes is a simple multiclass classification algorithm with the assumption of independence
-between every pair of features. Naive Bayes can be trained very efficiently. Within a single pass to
-the training data, it computes the conditional probability distribution of each feature given label,
-and then it applies Bayes' theorem to compute the conditional probability distribution of label
-given an observation and use it for prediction. For more details, please visit the Wikipedia page
-[Naive Bayes classifier](http://en.wikipedia.org/wiki/Naive_Bayes_classifier).
+[Naive Bayes](http://en.wikipedia.org/wiki/Naive_Bayes_classifier) is a simple
+multiclass classification algorithm with the assumption of independence between
+every pair of features. Naive Bayes can be trained very efficiently. Within a
+single pass to the training data, it computes the conditional probability
+distribution of each feature given label, and then it applies Bayes' theorem to
+compute the conditional probability distribution of label given an observation
+and use it for prediction.
 
-In MLlib, we implemented multinomial naive Bayes, which is typically used for document
-classification. Within that context, each observation is a document, each feature represents a term,
-whose value is the frequency of the term. For its formulation, please visit the Wikipedia page
-[Multinomial Naive Bayes](http://en.wikipedia.org/wiki/Naive_Bayes_classifier#Multinomial_naive_Bayes)
-or the section
-[Naive Bayes text classification](http://nlp.stanford.edu/IR-book/html/htmledition/naive-bayes-text-classification-1.html)
-from the book Introduction to Information
-Retrieval. [Additive smoothing](http://en.wikipedia.org/wiki/Lidstone_smoothing) can be used by
+MLlib supports [multinomial naive
+Bayes](http://en.wikipedia.org/wiki/Naive_Bayes_classifier#Multinomial_naive_Bayes)
+and [Bernoulli naive Bayes](http://nlp.stanford.edu/IR-book/html/htmledition/the-bernoulli-model-1.html).
+These models are typically used for [document classification](http://nlp.stanford.edu/IR-book/html/htmledition/naive-bayes-text-classification-1.html).
+Within that context, each observation is a document and each
+feature represents a term whose value is the frequency of the term (in multinomial naive Bayes) or
+a zero or one indicating whether the term was found in the document (in Bernoulli naive Bayes).
+Feature values must be nonnegative. The model type is selected with an optional parameter
+"multinomial" or "bernoulli" with "multinomial" as the default.
+[Additive smoothing](http://en.wikipedia.org/wiki/Lidstone_smoothing) can be used by
 setting the parameter $\lambda$ (default to $1.0$). For document classification, the input feature
-vectors are usually sparse. Please supply sparse vectors as input to take advantage of
+vectors are usually sparse, and sparse vectors should be supplied as input to take advantage of
 sparsity. Since the training data is only used once, it is not necessary to cache it.
 
 ## Examples
@@ -31,16 +34,16 @@ sparsity. Since the training data is only used once, it is not necessary to cach
 [NaiveBayes](api/scala/index.html#org.apache.spark.mllib.classification.NaiveBayes$) implements
 multinomial naive Bayes. It takes an RDD of
 [LabeledPoint](api/scala/index.html#org.apache.spark.mllib.regression.LabeledPoint) and an optional
-smoothing parameter `lambda` as input, and output a
+smoothing parameter `lambda` as input, an optional model type parameter (default is "multinomial"), and outputs a
 [NaiveBayesModel](api/scala/index.html#org.apache.spark.mllib.classification.NaiveBayesModel), which
 can be used for evaluation and prediction.
 
 {% highlight scala %}
-import org.apache.spark.mllib.classification.NaiveBayes
+import org.apache.spark.mllib.classification.{NaiveBayes, NaiveBayesModel}
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.regression.LabeledPoint
 
-val data = sc.textFile("mllib/data/sample_naive_bayes_data.txt")
+val data = sc.textFile("data/mllib/sample_naive_bayes_data.txt")
 val parsedData = data.map { line =>
   val parts = line.split(',')
   LabeledPoint(parts(0).toDouble, Vectors.dense(parts(1).split(' ').map(_.toDouble)))
@@ -50,11 +53,14 @@ val splits = parsedData.randomSplit(Array(0.6, 0.4), seed = 11L)
 val training = splits(0)
 val test = splits(1)
 
-val model = NaiveBayes.train(training, lambda = 1.0)
-val prediction = model.predict(test.map(_.features))
+val model = NaiveBayes.train(training, lambda = 1.0, modelType = "multinomial")
 
-val predictionAndLabel = prediction.zip(test.map(_.label))
+val predictionAndLabel = test.map(p => (model.predict(p.features), p.label))
 val accuracy = 1.0 * predictionAndLabel.filter(x => x._1 == x._2).count() / test.count()
+
+// Save and load model
+model.save(sc, "myModelPath")
+val sameModel = NaiveBayesModel.load(sc, "myModelPath")
 {% endhighlight %}
 </div>
 
@@ -68,64 +74,76 @@ optionally smoothing parameter `lambda` as input, and output a
 can be used for evaluation and prediction.
 
 {% highlight java %}
+import scala.Tuple2;
+
 import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.function.Function;
+import org.apache.spark.api.java.function.PairFunction;
 import org.apache.spark.mllib.classification.NaiveBayes;
 import org.apache.spark.mllib.classification.NaiveBayesModel;
 import org.apache.spark.mllib.regression.LabeledPoint;
-import scala.Tuple2;
 
 JavaRDD<LabeledPoint> training = ... // training set
 JavaRDD<LabeledPoint> test = ... // test set
 
 final NaiveBayesModel model = NaiveBayes.train(training.rdd(), 1.0);
 
-JavaRDD<Double> prediction =
-  test.map(new Function<LabeledPoint, Double>() {
-    @Override public Double call(LabeledPoint p) {
-      return model.predict(p.features());
+JavaPairRDD<Double, Double> predictionAndLabel = 
+  test.mapToPair(new PairFunction<LabeledPoint, Double, Double>() {
+    @Override public Tuple2<Double, Double> call(LabeledPoint p) {
+      return new Tuple2<Double, Double>(model.predict(p.features()), p.label());
     }
   });
-JavaPairRDD<Double, Double> predictionAndLabel = 
-  prediction.zip(test.map(new Function<LabeledPoint, Double>() {
-    @Override public Double call(LabeledPoint p) {
-      return p.label();
-    }
-  }));
-double accuracy = 1.0 * predictionAndLabel.filter(new Function<Tuple2<Double, Double>, Boolean>() {
+double accuracy = predictionAndLabel.filter(new Function<Tuple2<Double, Double>, Boolean>() {
     @Override public Boolean call(Tuple2<Double, Double> pl) {
-      return pl._1() == pl._2();
+      return pl._1().equals(pl._2());
     }
-  }).count() / test.count();
+  }).count() / (double) test.count();
+
+// Save and load model
+model.save(sc.sc(), "myModelPath");
+NaiveBayesModel sameModel = NaiveBayesModel.load(sc.sc(), "myModelPath");
 {% endhighlight %}
 </div>
 
 <div data-lang="python" markdown="1">
 
-[NaiveBayes](api/python/pyspark.mllib.classification.NaiveBayes-class.html) implements multinomial
+[NaiveBayes](api/python/pyspark.mllib.html#pyspark.mllib.classification.NaiveBayes) implements multinomial
 naive Bayes. It takes an RDD of
-[LabeledPoint](api/python/pyspark.mllib.regression.LabeledPoint-class.html) and an optionally
+[LabeledPoint](api/python/pyspark.mllib.html#pyspark.mllib.regression.LabeledPoint) and an optionally
 smoothing parameter `lambda` as input, and output a
-[NaiveBayesModel](api/python/pyspark.mllib.classification.NaiveBayesModel-class.html), which can be
+[NaiveBayesModel](api/python/pyspark.mllib.html#pyspark.mllib.classification.NaiveBayesModel), which can be
 used for evaluation and prediction.
 
-<!-- TODO: Make Python's example consistent with Scala's and Java's. -->
-{% highlight python %}
-from pyspark.mllib.regression import LabeledPoint
-from pyspark.mllib.classification import NaiveBayes
+Note that the Python API does not yet support model save/load but will in the future.
 
-# an RDD of LabeledPoint
-data = sc.parallelize([
-  LabeledPoint(0.0, [0.0, 0.0])
-  ... # more labeled points
-])
+{% highlight python %}
+from pyspark.mllib.classification import NaiveBayes, NaiveBayesModel
+from pyspark.mllib.linalg import Vectors
+from pyspark.mllib.regression import LabeledPoint
+
+def parseLine(line):
+    parts = line.split(',')
+    label = float(parts[0])
+    features = Vectors.dense([float(x) for x in parts[1].split(' ')])
+    return LabeledPoint(label, features)
+
+data = sc.textFile('data/mllib/sample_naive_bayes_data.txt').map(parseLine)
+
+# Split data aproximately into training (60%) and test (40%)
+training, test = data.randomSplit([0.6, 0.4], seed = 0)
 
 # Train a naive Bayes model.
-model = NaiveBayes.train(data, 1.0)
+model = NaiveBayes.train(training, 1.0)
 
-# Make prediction.
-prediction = model.predict([0.0, 0.0])
+# Make prediction and test accuracy.
+predictionAndLabel = test.map(lambda p : (model.predict(p.features), p.label))
+accuracy = 1.0 * predictionAndLabel.filter(lambda (x, v): x == v).count() / test.count()
+
+# Save and load model
+model.save(sc, "myModelPath")
+sameModel = NaiveBayesModel.load(sc, "myModelPath")
 {% endhighlight %}
 
 </div>

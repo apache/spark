@@ -1,6 +1,0 @@
-weekofyear(date) - Returns the week of the year of the given date. A week is considered to start on a Monday and week 1 is the first week with >3 days.
-Examples:
-  > SELECT weekofyear('2008-02-20') FROM src LIMIT 1;
-  8
-  > SELECT weekofyear('1980-12-31 12:59:59') FROM src LIMIT 1;
-  1

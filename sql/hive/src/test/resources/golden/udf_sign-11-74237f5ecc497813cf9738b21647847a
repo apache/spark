@@ -1,4 +1,0 @@
-sign(x) - returns the sign of x )
-Example:
-   > SELECT sign(40) FROM src LIMIT 1;
-  1

@@ -1,9 +1,9 @@
 create table sc as select * 
-from (select '2011-01-11', '2011-01-11+14:18:26' from src limit 1 
+from (select '2011-01-11', '2011-01-11+14:18:26' from src tablesample (1 rows)
       union all 
-      select '2011-01-11', '2011-01-11+15:18:26' from src limit 1 
+      select '2011-01-11', '2011-01-11+15:18:26' from src tablesample (1 rows)
       union all 
-      select '2011-01-11', '2011-01-11+16:18:26' from src limit 1 ) s;
+      select '2011-01-11', '2011-01-11+16:18:26' from src tablesample (1 rows) ) s;
 
 create table sc_part (key string) partitioned by (ts string) stored as rcfile;
 

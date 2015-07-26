@@ -138,7 +138,7 @@ private[spark] object RollingFileAppender {
   val STRATEGY_DEFAULT = ""
   val INTERVAL_PROPERTY = "spark.executor.logs.rolling.time.interval"
   val INTERVAL_DEFAULT = "daily"
-  val SIZE_PROPERTY = "spark.executor.logs.rolling.size.maxBytes"
+  val SIZE_PROPERTY = "spark.executor.logs.rolling.maxSize"
   val SIZE_DEFAULT = (1024 * 1024).toString
   val RETAINED_FILES_PROPERTY = "spark.executor.logs.rolling.maxRetainedFiles"
   val DEFAULT_BUFFER_SIZE = 8192

@@ -35,7 +35,7 @@ import org.apache.spark.graphx.util.collection.GraphXPrimitiveKeyOpenHashMap
 private[graphx] abstract class VertexPartitionBaseOps
     [VD: ClassTag, Self[X] <: VertexPartitionBase[X] : VertexPartitionBaseOpsConstructor]
     (self: Self[VD])
-    extends Logging {
+  extends Serializable with Logging {
 
   def withIndex(index: VertexIdToIndexMap): Self[VD]
   def withValues[VD2: ClassTag](values: Array[VD2]): Self[VD2]
@@ -86,6 +86,21 @@ private[graphx] abstract class VertexPartitionBaseOps
       i = self.mask.nextSetBit(i + 1)
     }
     this.withMask(newMask)
+  }
+
+  /** Hides the VertexId's that are the same between `this` and `other`. */
+  def minus(other: Self[VD]): Self[VD] = {
+    if (self.index != other.index) {
+      logWarning("Minus operations on two VertexPartitions with different indexes is slow.")
+      minus(createUsingIndex(other.iterator))
+    } else {
+      self.withMask(self.mask.andNot(other.mask))
+    }
+  }
+
+  /** Hides the VertexId's that are the same between `this` and `other`. */
+  def minus(other: Iterator[(VertexId, VD)]): Self[VD] = {
+    minus(createUsingIndex(other))
   }
 
   /**
@@ -238,8 +253,8 @@ private[graphx] abstract class VertexPartitionBaseOps
    * because these methods return a `Self` and this implicit conversion re-wraps that in a
    * `VertexPartitionBaseOps`. This relies on the context bound on `Self`.
    */
-  private implicit def toOps[VD2: ClassTag](
-      partition: Self[VD2]): VertexPartitionBaseOps[VD2, Self] = {
+  private implicit def toOps[VD2: ClassTag](partition: Self[VD2])
+    : VertexPartitionBaseOps[VD2, Self] = {
     implicitly[VertexPartitionBaseOpsConstructor[Self]].toOps(partition)
   }
 }

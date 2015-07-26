@@ -1,1 +1,0 @@
-locate(substr, str[, pos]) - Returns the position of the first occurance of substr in str after position pos

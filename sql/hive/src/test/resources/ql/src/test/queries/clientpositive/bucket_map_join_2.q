@@ -9,8 +9,8 @@ sorted by (key desc, value desc) into 1 BUCKETS stored as textfile;
 create table table2(key string, value string) clustered by (value, key)
 sorted by (value desc, key desc) into 1 BUCKETS stored as textfile;
 
-load data local inpath '../data/files/SortCol1Col2.txt' overwrite into table table1;
-load data local inpath '../data/files/SortCol2Col1.txt' overwrite into table table2;
+load data local inpath '../../data/files/SortCol1Col2.txt' overwrite into table table1;
+load data local inpath '../../data/files/SortCol2Col1.txt' overwrite into table table2;
 
 set hive.optimize.bucketmapjoin = true;
 set hive.optimize.bucketmapjoin.sortedmerge = true;

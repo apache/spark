@@ -17,216 +17,836 @@
 
 package org.apache.spark.sql
 
+import java.beans.Introspector
+import java.util.Properties
+import java.util.concurrent.atomic.AtomicReference
+
+import scala.collection.JavaConversions._
+import scala.collection.immutable
 import scala.language.implicitConversions
 import scala.reflect.runtime.universe.TypeTag
+import scala.util.control.NonFatal
 
-import org.apache.hadoop.conf.Configuration
-
-import org.apache.spark.annotation.{AlphaComponent, DeveloperApi, Experimental}
-import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalyst.analysis._
-import org.apache.spark.sql.catalyst.ScalaReflection
-import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.dsl.ExpressionConversions
-import org.apache.spark.sql.catalyst.types._
-import org.apache.spark.sql.catalyst.optimizer.Optimizer
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.catalyst.rules.RuleExecutor
-import org.apache.spark.sql.columnar.InMemoryRelation
-import org.apache.spark.sql.execution._
-import org.apache.spark.sql.execution.SparkStrategies
-import org.apache.spark.sql.json._
-import org.apache.spark.sql.parquet.ParquetRelation
 import org.apache.spark.SparkContext
+import org.apache.spark.annotation.{DeveloperApi, Experimental}
+import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
+import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.SQLConf.SQLConfEntry
+import org.apache.spark.sql.catalyst.analysis._
+import org.apache.spark.sql.catalyst.errors.DialectException
+import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.optimizer.{DefaultOptimizer, Optimizer}
+import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
+import org.apache.spark.sql.catalyst.rules.RuleExecutor
+import org.apache.spark.sql.catalyst.{InternalRow, ParserDialect, _}
+import org.apache.spark.sql.execution._
+import org.apache.spark.sql.execution.datasources._
+import org.apache.spark.sql.sources.BaseRelation
+import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.util.Utils
 
 /**
- * :: AlphaComponent ::
- * The entry point for running relational queries using Spark.  Allows the creation of [[SchemaRDD]]
- * objects and the execution of SQL queries.
+ * The entry point for working with structured data (rows and columns) in Spark.  Allows the
+ * creation of [[DataFrame]] objects as well as the execution of SQL queries.
  *
- * @groupname userf Spark SQL Functions
+ * @groupname basic Basic Operations
+ * @groupname ddl_ops Persistent Catalog DDL
+ * @groupname cachemgmt Cached Table Management
+ * @groupname genericdata Generic Data Sources
+ * @groupname specificdata Specific Data Sources
+ * @groupname config Configuration
+ * @groupname dataframes Custom DataFrame Creation
  * @groupname Ungrouped Support functions for language integrated queries.
+ *
+ * @since 1.0.0
  */
-@AlphaComponent
 class SQLContext(@transient val sparkContext: SparkContext)
-  extends Logging
-  with SQLConf
-  with ExpressionConversions
+  extends org.apache.spark.Logging
   with Serializable {
 
   self =>
 
+  def this(sparkContext: JavaSparkContext) = this(sparkContext.sc)
+
+  /**
+   * @return Spark SQL configuration
+   */
+  protected[sql] def conf = currentSession().conf
+
+  /**
+   * Set Spark SQL configuration properties.
+   *
+   * @group config
+   * @since 1.0.0
+   */
+  def setConf(props: Properties): Unit = conf.setConf(props)
+
+  /** Set the given Spark SQL configuration property. */
+  private[sql] def setConf[T](entry: SQLConfEntry[T], value: T): Unit = conf.setConf(entry, value)
+
+  /**
+   * Set the given Spark SQL configuration property.
+   *
+   * @group config
+   * @since 1.0.0
+   */
+  def setConf(key: String, value: String): Unit = conf.setConfString(key, value)
+
+  /**
+   * Return the value of Spark SQL configuration property for the given key.
+   *
+   * @group config
+   * @since 1.0.0
+   */
+  def getConf(key: String): String = conf.getConfString(key)
+
+  /**
+   * Return the value of Spark SQL configuration property for the given key. If the key is not set
+   * yet, return `defaultValue` in [[SQLConfEntry]].
+   */
+  private[sql] def getConf[T](entry: SQLConfEntry[T]): T = conf.getConf(entry)
+
+  /**
+   * Return the value of Spark SQL configuration property for the given key. If the key is not set
+   * yet, return `defaultValue`. This is useful when `defaultValue` in SQLConfEntry is not the
+   * desired one.
+   */
+  private[sql] def getConf[T](entry: SQLConfEntry[T], defaultValue: T): T = {
+    conf.getConf(entry, defaultValue)
+  }
+
+  /**
+   * Return the value of Spark SQL configuration property for the given key. If the key is not set
+   * yet, return `defaultValue`.
+   *
+   * @group config
+   * @since 1.0.0
+   */
+  def getConf(key: String, defaultValue: String): String = conf.getConfString(key, defaultValue)
+
+  /**
+   * Return all the configuration properties that have been set (i.e. not the default).
+   * This creates a new copy of the config properties in the form of a Map.
+   *
+   * @group config
+   * @since 1.0.0
+   */
+  def getAllConfs: immutable.Map[String, String] = conf.getAllConfs
+
+  // TODO how to handle the temp table per user session?
   @transient
-  protected[sql] lazy val catalog: Catalog = new SimpleCatalog
+  protected[sql] lazy val catalog: Catalog = new SimpleCatalog(conf)
+
+  // TODO how to handle the temp function per user session?
+  @transient
+  protected[sql] lazy val functionRegistry: FunctionRegistry = FunctionRegistry.builtin
+
   @transient
   protected[sql] lazy val analyzer: Analyzer =
-    new Analyzer(catalog, EmptyFunctionRegistry, caseSensitive = true)
-  @transient
-  protected[sql] val optimizer = Optimizer
-  @transient
-  protected[sql] val parser = new catalyst.SqlParser
+    new Analyzer(catalog, functionRegistry, conf) {
+      override val extendedResolutionRules =
+        ExtractPythonUDFs ::
+        PreInsertCastAndRename ::
+        Nil
 
-  protected[sql] def parseSql(sql: String): LogicalPlan = parser(sql)
+      override val extendedCheckRules = Seq(
+        datasources.PreWriteCheck(catalog)
+      )
+    }
+
+  @transient
+  protected[sql] lazy val optimizer: Optimizer = DefaultOptimizer
+
+  @transient
+  protected[sql] val ddlParser = new DDLParser(sqlParser.parse(_))
+
+  @transient
+  protected[sql] val sqlParser = new SparkSQLParser(getSQLDialect().parse(_))
+
+  protected[sql] def getSQLDialect(): ParserDialect = {
+    try {
+      val clazz = Utils.classForName(dialectClassName)
+      clazz.newInstance().asInstanceOf[ParserDialect]
+    } catch {
+      case NonFatal(e) =>
+        // Since we didn't find the available SQL Dialect, it will fail even for SET command:
+        // SET spark.sql.dialect=sql; Let's reset as default dialect automatically.
+        val dialect = conf.dialect
+        // reset the sql dialect
+        conf.unsetConf(SQLConf.DIALECT)
+        // throw out the exception, and the default sql dialect will take effect for next query.
+        throw new DialectException(
+          s"""Instantiating dialect '$dialect' failed.
+             |Reverting to default dialect '${conf.dialect}'""".stripMargin, e)
+    }
+  }
+
+  protected[sql] def parseSql(sql: String): LogicalPlan = ddlParser.parse(sql, false)
+
   protected[sql] def executeSql(sql: String): this.QueryExecution = executePlan(parseSql(sql))
-  protected[sql] def executePlan(plan: LogicalPlan): this.QueryExecution =
-    new this.QueryExecution { val logical = plan }
+
+  protected[sql] def executePlan(plan: LogicalPlan) = new this.QueryExecution(plan)
+
+  @transient
+  protected[sql] val tlSession = new ThreadLocal[SQLSession]() {
+    override def initialValue: SQLSession = defaultSession
+  }
+
+  @transient
+  protected[sql] val defaultSession = createSession()
+
+  protected[sql] def dialectClassName = if (conf.dialect == "sql") {
+    classOf[DefaultParserDialect].getCanonicalName
+  } else {
+    conf.dialect
+  }
+
+  {
+    // We extract spark sql settings from SparkContext's conf and put them to
+    // Spark SQL's conf.
+    // First, we populate the SQLConf (conf). So, we can make sure that other values using
+    // those settings in their construction can get the correct settings.
+    // For example, metadataHive in HiveContext may need both spark.sql.hive.metastore.version
+    // and spark.sql.hive.metastore.jars to get correctly constructed.
+    val properties = new Properties
+    sparkContext.getConf.getAll.foreach {
+      case (key, value) if key.startsWith("spark.sql") => properties.setProperty(key, value)
+      case _ =>
+    }
+    // We directly put those settings to conf to avoid of calling setConf, which may have
+    // side-effects. For example, in HiveContext, setConf may cause executionHive and metadataHive
+    // get constructed. If we call setConf directly, the constructed metadataHive may have
+    // wrong settings, or the construction may fail.
+    conf.setConf(properties)
+    // After we have populated SQLConf, we call setConf to populate other confs in the subclass
+    // (e.g. hiveconf in HiveContext).
+    properties.foreach {
+      case (key, value) => setConf(key, value)
+    }
+  }
+
+  @transient
+  protected[sql] val cacheManager = new CacheManager(this)
+
+  /**
+   * :: Experimental ::
+   * A collection of methods that are considered experimental, but can be used to hook into
+   * the query planner for advanced functionality.
+   *
+   * @group basic
+   * @since 1.3.0
+   */
+  @Experimental
+  @transient
+  val experimental: ExperimentalMethods = new ExperimentalMethods(this)
+
+  /**
+   * :: Experimental ::
+   * Returns a [[DataFrame]] with no rows or columns.
+   *
+   * @group basic
+   * @since 1.3.0
+   */
+  @Experimental
+  @transient
+  lazy val emptyDataFrame: DataFrame = createDataFrame(sparkContext.emptyRDD[Row], StructType(Nil))
+
+  /**
+   * A collection of methods for registering user-defined functions (UDF).
+   *
+   * The following example registers a Scala closure as UDF:
+   * {{{
+   *   sqlContext.udf.register("myUDF", (arg1: Int, arg2: String) => arg2 + arg1)
+   * }}}
+   *
+   * The following example registers a UDF in Java:
+   * {{{
+   *   sqlContext.udf().register("myUDF",
+   *       new UDF2<Integer, String, String>() {
+   *           @Override
+   *           public String call(Integer arg1, String arg2) {
+   *               return arg2 + arg1;
+   *           }
+   *      }, DataTypes.StringType);
+   * }}}
+   *
+   * Or, to use Java 8 lambda syntax:
+   * {{{
+   *   sqlContext.udf().register("myUDF",
+   *       (Integer arg1, String arg2) -> arg2 + arg1,
+   *       DataTypes.StringType);
+   * }}}
+   *
+   * @group basic
+   * @since 1.3.0
+   * TODO move to SQLSession?
+   */
+  @transient
+  val udf: UDFRegistration = new UDFRegistration(this)
+
+  @transient
+  val udaf: UDAFRegistration = new UDAFRegistration(this)
+
+  /**
+   * Returns true if the table is currently cached in-memory.
+   * @group cachemgmt
+   * @since 1.3.0
+   */
+  def isCached(tableName: String): Boolean = cacheManager.isCached(tableName)
+
+  /**
+   * Caches the specified table in-memory.
+   * @group cachemgmt
+   * @since 1.3.0
+   */
+  def cacheTable(tableName: String): Unit = cacheManager.cacheTable(tableName)
+
+  /**
+   * Removes the specified table from the in-memory cache.
+   * @group cachemgmt
+   * @since 1.3.0
+   */
+  def uncacheTable(tableName: String): Unit = cacheManager.uncacheTable(tableName)
+
+  /**
+   * Removes all cached tables from the in-memory cache.
+   * @since 1.3.0
+   */
+  def clearCache(): Unit = cacheManager.clearCache()
+
+  // scalastyle:off
+  // Disable style checker so "implicits" object can start with lowercase i
+  /**
+   * :: Experimental ::
+   * (Scala-specific) Implicit methods available in Scala for converting
+   * common Scala objects into [[DataFrame]]s.
+   *
+   * {{{
+   *   val sqlContext = new SQLContext(sc)
+   *   import sqlContext.implicits._
+   * }}}
+   *
+   * @group basic
+   * @since 1.3.0
+   */
+  @Experimental
+  object implicits extends Serializable {
+    // scalastyle:on
+
+    /**
+     * Converts $"col name" into an [[Column]].
+     * @since 1.3.0
+     */
+    implicit class StringToColumn(val sc: StringContext) {
+      def $(args: Any*): ColumnName = {
+        new ColumnName(sc.s(args : _*))
+      }
+    }
+
+    /**
+     * An implicit conversion that turns a Scala `Symbol` into a [[Column]].
+     * @since 1.3.0
+     */
+    implicit def symbolToColumn(s: Symbol): ColumnName = new ColumnName(s.name)
+
+    /**
+     * Creates a DataFrame from an RDD of case classes or tuples.
+     * @since 1.3.0
+     */
+    implicit def rddToDataFrameHolder[A <: Product : TypeTag](rdd: RDD[A]): DataFrameHolder = {
+      DataFrameHolder(self.createDataFrame(rdd))
+    }
+
+    /**
+     * Creates a DataFrame from a local Seq of Product.
+     * @since 1.3.0
+     */
+    implicit def localSeqToDataFrameHolder[A <: Product : TypeTag](data: Seq[A]): DataFrameHolder =
+    {
+      DataFrameHolder(self.createDataFrame(data))
+    }
+
+    // Do NOT add more implicit conversions. They are likely to break source compatibility by
+    // making existing implicit conversions ambiguous. In particular, RDD[Double] is dangerous
+    // because of [[DoubleRDDFunctions]].
+
+    /**
+     * Creates a single column DataFrame from an RDD[Int].
+     * @since 1.3.0
+     */
+    implicit def intRddToDataFrameHolder(data: RDD[Int]): DataFrameHolder = {
+      val dataType = IntegerType
+      val rows = data.mapPartitions { iter =>
+        val row = new SpecificMutableRow(dataType :: Nil)
+        iter.map { v =>
+          row.setInt(0, v)
+          row: InternalRow
+        }
+      }
+      DataFrameHolder(
+        self.internalCreateDataFrame(rows, StructType(StructField("_1", dataType) :: Nil)))
+    }
+
+    /**
+     * Creates a single column DataFrame from an RDD[Long].
+     * @since 1.3.0
+     */
+    implicit def longRddToDataFrameHolder(data: RDD[Long]): DataFrameHolder = {
+      val dataType = LongType
+      val rows = data.mapPartitions { iter =>
+        val row = new SpecificMutableRow(dataType :: Nil)
+        iter.map { v =>
+          row.setLong(0, v)
+          row: InternalRow
+        }
+      }
+      DataFrameHolder(
+        self.internalCreateDataFrame(rows, StructType(StructField("_1", dataType) :: Nil)))
+    }
+
+    /**
+     * Creates a single column DataFrame from an RDD[String].
+     * @since 1.3.0
+     */
+    implicit def stringRddToDataFrameHolder(data: RDD[String]): DataFrameHolder = {
+      val dataType = StringType
+      val rows = data.mapPartitions { iter =>
+        val row = new SpecificMutableRow(dataType :: Nil)
+        iter.map { v =>
+          row.update(0, UTF8String.fromString(v))
+          row: InternalRow
+        }
+      }
+      DataFrameHolder(
+        self.internalCreateDataFrame(rows, StructType(StructField("_1", dataType) :: Nil)))
+    }
+  }
+
+  /**
+   * :: Experimental ::
+   * Creates a DataFrame from an RDD of case classes.
+   *
+   * @group dataframes
+   * @since 1.3.0
+   */
+  @Experimental
+  def createDataFrame[A <: Product : TypeTag](rdd: RDD[A]): DataFrame = {
+    SparkPlan.currentContext.set(self)
+    val schema = ScalaReflection.schemaFor[A].dataType.asInstanceOf[StructType]
+    val attributeSeq = schema.toAttributes
+    val rowRDD = RDDConversions.productToRowRdd(rdd, schema.map(_.dataType))
+    DataFrame(self, LogicalRDD(attributeSeq, rowRDD)(self))
+  }
+
+  /**
+   * :: Experimental ::
+   * Creates a DataFrame from a local Seq of Product.
+   *
+   * @group dataframes
+   * @since 1.3.0
+   */
+  @Experimental
+  def createDataFrame[A <: Product : TypeTag](data: Seq[A]): DataFrame = {
+    SparkPlan.currentContext.set(self)
+    val schema = ScalaReflection.schemaFor[A].dataType.asInstanceOf[StructType]
+    val attributeSeq = schema.toAttributes
+    DataFrame(self, LocalRelation.fromProduct(attributeSeq, data))
+  }
+
+  /**
+   * Convert a [[BaseRelation]] created for external data sources into a [[DataFrame]].
+   *
+   * @group dataframes
+   * @since 1.3.0
+   */
+  def baseRelationToDataFrame(baseRelation: BaseRelation): DataFrame = {
+    DataFrame(this, LogicalRelation(baseRelation))
+  }
 
   /**
    * :: DeveloperApi ::
-   * Allows catalyst LogicalPlans to be executed as a SchemaRDD.  Note that the LogicalPlan
-   * interface is considered internal, and thus not guaranteed to be stable.  As a result, using
-   * them directly is not recommended.
-   */
-  @DeveloperApi
-  implicit def logicalPlanToSparkQuery(plan: LogicalPlan): SchemaRDD = new SchemaRDD(this, plan)
-
-  /**
-   * Creates a SchemaRDD from an RDD of case classes.
-   *
-   * @group userf
-   */
-  implicit def createSchemaRDD[A <: Product: TypeTag](rdd: RDD[A]) =
-    new SchemaRDD(this, SparkLogicalPlan(ExistingRdd.fromProductRdd(rdd)))
-
-  /**
-   * Loads a Parquet file, returning the result as a [[SchemaRDD]].
-   *
-   * @group userf
-   */
-  def parquetFile(path: String): SchemaRDD =
-    new SchemaRDD(this, parquet.ParquetRelation(path, Some(sparkContext.hadoopConfiguration)))
-
-  /**
-   * Loads a JSON file (one object per line), returning the result as a [[SchemaRDD]].
-   * It goes through the entire dataset once to determine the schema.
-   *
-   * @group userf
-   */
-  def jsonFile(path: String): SchemaRDD = jsonFile(path, 1.0)
-
-  /**
-   * :: Experimental ::
-   */
-  @Experimental
-  def jsonFile(path: String, samplingRatio: Double): SchemaRDD = {
-    val json = sparkContext.textFile(path)
-    jsonRDD(json, samplingRatio)
-  }
-
-  /**
-   * Loads an RDD[String] storing JSON objects (one object per record), returning the result as a
-   * [[SchemaRDD]].
-   * It goes through the entire dataset once to determine the schema.
-   *
-   * @group userf
-   */
-  def jsonRDD(json: RDD[String]): SchemaRDD = jsonRDD(json, 1.0)
-
-  /**
-   * :: Experimental ::
-   */
-  @Experimental
-  def jsonRDD(json: RDD[String], samplingRatio: Double): SchemaRDD =
-    new SchemaRDD(this, JsonRDD.inferSchema(json, samplingRatio))
-
-  /**
-   * :: Experimental ::
-   * Creates an empty parquet file with the schema of class `A`, which can be registered as a table.
-   * This registered table can be used as the target of future `insertInto` operations.
-   *
+   * Creates a [[DataFrame]] from an [[RDD]] containing [[Row]]s using the given schema.
+   * It is important to make sure that the structure of every [[Row]] of the provided RDD matches
+   * the provided schema. Otherwise, there will be runtime exception.
+   * Example:
    * {{{
-   *   val sqlContext = new SQLContext(...)
-   *   import sqlContext._
+   *  import org.apache.spark.sql._
+   *  import org.apache.spark.sql.types._
+   *  val sqlContext = new org.apache.spark.sql.SQLContext(sc)
    *
-   *   case class Person(name: String, age: Int)
-   *   createParquetFile[Person]("path/to/file.parquet").registerAsTable("people")
-   *   sql("INSERT INTO people SELECT 'michael', 29")
+   *  val schema =
+   *    StructType(
+   *      StructField("name", StringType, false) ::
+   *      StructField("age", IntegerType, true) :: Nil)
+   *
+   *  val people =
+   *    sc.textFile("examples/src/main/resources/people.txt").map(
+   *      _.split(",")).map(p => Row(p(0), p(1).trim.toInt))
+   *  val dataFrame = sqlContext.createDataFrame(people, schema)
+   *  dataFrame.printSchema
+   *  // root
+   *  // |-- name: string (nullable = false)
+   *  // |-- age: integer (nullable = true)
+   *
+   *  dataFrame.registerTempTable("people")
+   *  sqlContext.sql("select name from people").collect.foreach(println)
    * }}}
    *
-   * @tparam A A case class type that describes the desired schema of the parquet file to be
-   *           created.
-   * @param path The path where the directory containing parquet metadata should be created.
-   *             Data inserted into this table will also be stored at this location.
-   * @param allowExisting When false, an exception will be thrown if this directory already exists.
-   * @param conf A Hadoop configuration object that can be used to specify options to the parquet
-   *             output format.
+   * @group dataframes
+   * @since 1.3.0
+   */
+  @DeveloperApi
+  def createDataFrame(rowRDD: RDD[Row], schema: StructType): DataFrame = {
+    createDataFrame(rowRDD, schema, needsConversion = true)
+  }
+
+  /**
+   * Creates a DataFrame from an RDD[Row]. User can specify whether the input rows should be
+   * converted to Catalyst rows.
+   */
+  private[sql]
+  def createDataFrame(rowRDD: RDD[Row], schema: StructType, needsConversion: Boolean) = {
+    // TODO: use MutableProjection when rowRDD is another DataFrame and the applied
+    // schema differs from the existing schema on any field data type.
+    val catalystRows = if (needsConversion) {
+      val converter = CatalystTypeConverters.createToCatalystConverter(schema)
+      rowRDD.map(converter(_).asInstanceOf[InternalRow])
+    } else {
+      rowRDD.map{r: Row => InternalRow.fromSeq(r.toSeq)}
+    }
+    val logicalPlan = LogicalRDD(schema.toAttributes, catalystRows)(self)
+    DataFrame(this, logicalPlan)
+  }
+
+  /**
+   * Creates a DataFrame from an RDD[Row]. User can specify whether the input rows should be
+   * converted to Catalyst rows.
+   */
+  private[sql]
+  def internalCreateDataFrame(catalystRows: RDD[InternalRow], schema: StructType) = {
+    // TODO: use MutableProjection when rowRDD is another DataFrame and the applied
+    // schema differs from the existing schema on any field data type.
+    val logicalPlan = LogicalRDD(schema.toAttributes, catalystRows)(self)
+    DataFrame(this, logicalPlan)
+  }
+
+  /**
+   * :: DeveloperApi ::
+   * Creates a [[DataFrame]] from an [[JavaRDD]] containing [[Row]]s using the given schema.
+   * It is important to make sure that the structure of every [[Row]] of the provided RDD matches
+   * the provided schema. Otherwise, there will be runtime exception.
    *
-   * @group userf
+   * @group dataframes
+   * @since 1.3.0
+   */
+  @DeveloperApi
+  def createDataFrame(rowRDD: JavaRDD[Row], schema: StructType): DataFrame = {
+    createDataFrame(rowRDD.rdd, schema)
+  }
+
+  /**
+   * Applies a schema to an RDD of Java Beans.
+   *
+   * WARNING: Since there is no guaranteed ordering for fields in a Java Bean,
+   *          SELECT * queries will return the columns in an undefined order.
+   * @group dataframes
+   * @since 1.3.0
+   */
+  def createDataFrame(rdd: RDD[_], beanClass: Class[_]): DataFrame = {
+    val attributeSeq = getSchema(beanClass)
+    val className = beanClass.getName
+    val rowRdd = rdd.mapPartitions { iter =>
+      // BeanInfo is not serializable so we must rediscover it remotely for each partition.
+      val localBeanInfo = Introspector.getBeanInfo(Utils.classForName(className))
+      val extractors =
+        localBeanInfo.getPropertyDescriptors.filterNot(_.getName == "class").map(_.getReadMethod)
+      val methodsToConverts = extractors.zip(attributeSeq).map { case (e, attr) =>
+        (e, CatalystTypeConverters.createToCatalystConverter(attr.dataType))
+      }
+      iter.map { row =>
+        new GenericInternalRow(
+          methodsToConverts.map { case (e, convert) => convert(e.invoke(row)) }.toArray[Any]
+        ): InternalRow
+      }
+    }
+    DataFrame(this, LogicalRDD(attributeSeq, rowRdd)(this))
+  }
+
+  /**
+   * Applies a schema to an RDD of Java Beans.
+   *
+   * WARNING: Since there is no guaranteed ordering for fields in a Java Bean,
+   *          SELECT * queries will return the columns in an undefined order.
+   * @group dataframes
+   * @since 1.3.0
+   */
+  def createDataFrame(rdd: JavaRDD[_], beanClass: Class[_]): DataFrame = {
+    createDataFrame(rdd.rdd, beanClass)
+  }
+
+  /**
+   * :: Experimental ::
+   * Returns a [[DataFrameReader]] that can be used to read data in as a [[DataFrame]].
+   * {{{
+   *   sqlContext.read.parquet("/path/to/file.parquet")
+   *   sqlContext.read.schema(schema).json("/path/to/file.json")
+   * }}}
+   *
+   * @group genericdata
+   * @since 1.4.0
    */
   @Experimental
-  def createParquetFile[A <: Product : TypeTag](
+  def read: DataFrameReader = new DataFrameReader(this)
+
+  /**
+   * :: Experimental ::
+   * Creates an external table from the given path and returns the corresponding DataFrame.
+   * It will use the default data source configured by spark.sql.sources.default.
+   *
+   * @group ddl_ops
+   * @since 1.3.0
+   */
+  @Experimental
+  def createExternalTable(tableName: String, path: String): DataFrame = {
+    val dataSourceName = conf.defaultDataSourceName
+    createExternalTable(tableName, path, dataSourceName)
+  }
+
+  /**
+   * :: Experimental ::
+   * Creates an external table from the given path based on a data source
+   * and returns the corresponding DataFrame.
+   *
+   * @group ddl_ops
+   * @since 1.3.0
+   */
+  @Experimental
+  def createExternalTable(
+      tableName: String,
       path: String,
-      allowExisting: Boolean = true,
-      conf: Configuration = new Configuration()): SchemaRDD = {
-    new SchemaRDD(
-      this,
-      ParquetRelation.createEmpty(path, ScalaReflection.attributesFor[A], allowExisting, conf))
+      source: String): DataFrame = {
+    createExternalTable(tableName, source, Map("path" -> path))
   }
 
   /**
-   * Registers the given RDD as a temporary table in the catalog.  Temporary tables exist only
-   * during the lifetime of this instance of SQLContext.
+   * :: Experimental ::
+   * Creates an external table from the given path based on a data source and a set of options.
+   * Then, returns the corresponding DataFrame.
    *
-   * @group userf
+   * @group ddl_ops
+   * @since 1.3.0
    */
-  def registerRDDAsTable(rdd: SchemaRDD, tableName: String): Unit = {
-    val name = tableName
-    val newPlan = rdd.logicalPlan transform {
-      case s @ SparkLogicalPlan(ExistingRdd(_, _), _) => s.copy(tableName = name)
-    }
-    catalog.registerTable(None, tableName, newPlan)
+  @Experimental
+  def createExternalTable(
+      tableName: String,
+      source: String,
+      options: java.util.Map[String, String]): DataFrame = {
+    createExternalTable(tableName, source, options.toMap)
   }
 
   /**
-   * Executes a SQL query using Spark, returning the result as a SchemaRDD.
+   * :: Experimental ::
+   * (Scala-specific)
+   * Creates an external table from the given path based on a data source and a set of options.
+   * Then, returns the corresponding DataFrame.
    *
-   * @group userf
+   * @group ddl_ops
+   * @since 1.3.0
    */
-  def sql(sqlText: String): SchemaRDD = new SchemaRDD(this, parseSql(sqlText))
-
-  /** Returns the specified table as a SchemaRDD */
-  def table(tableName: String): SchemaRDD =
-    new SchemaRDD(this, catalog.lookupRelation(None, tableName))
-
-  /** Caches the specified table in-memory. */
-  def cacheTable(tableName: String): Unit = {
-    val currentTable = table(tableName).queryExecution.analyzed
-    val asInMemoryRelation = currentTable match {
-      case _: InMemoryRelation =>
-        currentTable.logicalPlan
-
-      case _ =>
-        val useCompression =
-          sparkContext.conf.getBoolean("spark.sql.inMemoryColumnarStorage.compressed", false)
-        InMemoryRelation(useCompression, executePlan(currentTable).executedPlan)
-    }
-
-    catalog.registerTable(None, tableName, asInMemoryRelation)
+  @Experimental
+  def createExternalTable(
+      tableName: String,
+      source: String,
+      options: Map[String, String]): DataFrame = {
+    val cmd =
+      CreateTableUsing(
+        tableName,
+        userSpecifiedSchema = None,
+        source,
+        temporary = false,
+        options,
+        allowExisting = false,
+        managedIfNoPath = false)
+    executePlan(cmd).toRdd
+    table(tableName)
   }
 
-  /** Removes the specified table from the in-memory cache. */
-  def uncacheTable(tableName: String): Unit = {
-    table(tableName).queryExecution.analyzed match {
-      // This is kind of a hack to make sure that if this was just an RDD registered as a table,
-      // we reregister the RDD as a table.
-      case inMem @ InMemoryRelation(_, _, e: ExistingRdd) =>
-        inMem.cachedColumnBuffers.unpersist()
-        catalog.unregisterTable(None, tableName)
-        catalog.registerTable(None, tableName, SparkLogicalPlan(e))
-      case inMem: InMemoryRelation =>
-        inMem.cachedColumnBuffers.unpersist()
-        catalog.unregisterTable(None, tableName)
-      case plan => throw new IllegalArgumentException(s"Table $tableName is not cached: $plan")
-    }
+  /**
+   * :: Experimental ::
+   * Create an external table from the given path based on a data source, a schema and
+   * a set of options. Then, returns the corresponding DataFrame.
+   *
+   * @group ddl_ops
+   * @since 1.3.0
+   */
+  @Experimental
+  def createExternalTable(
+      tableName: String,
+      source: String,
+      schema: StructType,
+      options: java.util.Map[String, String]): DataFrame = {
+    createExternalTable(tableName, source, schema, options.toMap)
   }
 
-  /** Returns true if the table is currently cached in-memory. */
-  def isCached(tableName: String): Boolean = {
-    val relation = table(tableName).queryExecution.analyzed
-    relation match {
-      case _: InMemoryRelation => true
-      case _ => false
-    }
+  /**
+   * :: Experimental ::
+   * (Scala-specific)
+   * Create an external table from the given path based on a data source, a schema and
+   * a set of options. Then, returns the corresponding DataFrame.
+   *
+   * @group ddl_ops
+   * @since 1.3.0
+   */
+  @Experimental
+  def createExternalTable(
+      tableName: String,
+      source: String,
+      schema: StructType,
+      options: Map[String, String]): DataFrame = {
+    val cmd =
+      CreateTableUsing(
+        tableName,
+        userSpecifiedSchema = Some(schema),
+        source,
+        temporary = false,
+        options,
+        allowExisting = false,
+        managedIfNoPath = false)
+    executePlan(cmd).toRdd
+    table(tableName)
+  }
+
+  /**
+   * Registers the given [[DataFrame]] as a temporary table in the catalog. Temporary tables exist
+   * only during the lifetime of this instance of SQLContext.
+   */
+  private[sql] def registerDataFrameAsTable(df: DataFrame, tableName: String): Unit = {
+    catalog.registerTable(Seq(tableName), df.logicalPlan)
+  }
+
+  /**
+   * Drops the temporary table with the given table name in the catalog. If the table has been
+   * cached/persisted before, it's also unpersisted.
+   *
+   * @param tableName the name of the table to be unregistered.
+   *
+   * @group basic
+   * @since 1.3.0
+   */
+  def dropTempTable(tableName: String): Unit = {
+    cacheManager.tryUncacheQuery(table(tableName))
+    catalog.unregisterTable(Seq(tableName))
+  }
+
+  /**
+   * :: Experimental ::
+   * Creates a [[DataFrame]] with a single [[LongType]] column named `id`, containing elements
+   * in an range from 0 to `end` (exclusive) with step value 1.
+   *
+   * @since 1.4.1
+   * @group dataframe
+   */
+  @Experimental
+  def range(end: Long): DataFrame = range(0, end)
+
+  /**
+   * :: Experimental ::
+   * Creates a [[DataFrame]] with a single [[LongType]] column named `id`, containing elements
+   * in an range from `start` to `end` (exclusive) with step value 1.
+   *
+   * @since 1.4.0
+   * @group dataframe
+   */
+  @Experimental
+  def range(start: Long, end: Long): DataFrame = {
+    createDataFrame(
+      sparkContext.range(start, end).map(Row(_)),
+      StructType(StructField("id", LongType, nullable = false) :: Nil))
+  }
+
+  /**
+   * :: Experimental ::
+   * Creates a [[DataFrame]] with a single [[LongType]] column named `id`, containing elements
+   * in an range from `start` to `end` (exclusive) with an step value, with partition number
+   * specified.
+   *
+   * @since 1.4.0
+   * @group dataframe
+   */
+  @Experimental
+  def range(start: Long, end: Long, step: Long, numPartitions: Int): DataFrame = {
+    createDataFrame(
+      sparkContext.range(start, end, step, numPartitions).map(Row(_)),
+      StructType(StructField("id", LongType, nullable = false) :: Nil))
+  }
+
+  /**
+   * Executes a SQL query using Spark, returning the result as a [[DataFrame]]. The dialect that is
+   * used for SQL parsing can be configured with 'spark.sql.dialect'.
+   *
+   * @group basic
+   * @since 1.3.0
+   */
+  def sql(sqlText: String): DataFrame = {
+    DataFrame(this, parseSql(sqlText))
+  }
+
+  /**
+   * Returns the specified table as a [[DataFrame]].
+   *
+   * @group ddl_ops
+   * @since 1.3.0
+   */
+  def table(tableName: String): DataFrame =
+    DataFrame(this, catalog.lookupRelation(Seq(tableName)))
+
+  /**
+   * Returns a [[DataFrame]] containing names of existing tables in the current database.
+   * The returned DataFrame has two columns, tableName and isTemporary (a Boolean
+   * indicating if a table is a temporary one or not).
+   *
+   * @group ddl_ops
+   * @since 1.3.0
+   */
+  def tables(): DataFrame = {
+    DataFrame(this, ShowTablesCommand(None))
+  }
+
+  /**
+   * Returns a [[DataFrame]] containing names of existing tables in the given database.
+   * The returned DataFrame has two columns, tableName and isTemporary (a Boolean
+   * indicating if a table is a temporary one or not).
+   *
+   * @group ddl_ops
+   * @since 1.3.0
+   */
+  def tables(databaseName: String): DataFrame = {
+    DataFrame(this, ShowTablesCommand(Some(databaseName)))
+  }
+
+  /**
+   * Returns the names of tables in the current database as an array.
+   *
+   * @group ddl_ops
+   * @since 1.3.0
+   */
+  def tableNames(): Array[String] = {
+    catalog.getTables(None).map {
+      case (tableName, _) => tableName
+    }.toArray
+  }
+
+  /**
+   * Returns the names of tables in the given database as an array.
+   *
+   * @group ddl_ops
+   * @since 1.3.0
+   */
+  def tableNames(databaseName: String): Array[String] = {
+    catalog.getTables(Some(databaseName)).map {
+      case (tableName, _) => tableName
+    }.toArray
   }
 
   protected[sql] class SparkPlanner extends SparkStrategies {
@@ -234,19 +854,26 @@ class SQLContext(@transient val sparkContext: SparkContext)
 
     val sqlContext: SQLContext = self
 
-    def numPartitions = self.numShufflePartitions
+    def codegenEnabled: Boolean = self.conf.codegenEnabled
 
-    val strategies: Seq[Strategy] =
-      CommandStrategy(self) ::
-      TakeOrdered ::
-      PartialAggregation ::
+    def unsafeEnabled: Boolean = self.conf.unsafeEnabled
+
+    def numPartitions: Int = self.conf.numShufflePartitions
+
+    def strategies: Seq[Strategy] =
+      experimental.extraStrategies ++ (
+      DataSourceStrategy ::
+      DDLStrategy ::
+      TakeOrderedAndProject ::
+      HashAggregation ::
+      Aggregation ::
       LeftSemiJoin ::
       HashJoin ::
       InMemoryScans ::
       ParquetOperations ::
       BasicOperators ::
       CartesianProduct ::
-      BroadcastNestedLoopJoin :: Nil
+      BroadcastNestedLoopJoin :: Nil)
 
     /**
      * Used to build table scan operators where complex projection and filtering are done using
@@ -267,9 +894,10 @@ class SQLContext(@transient val sparkContext: SparkContext)
         prunePushedDownFilters: Seq[Expression] => Seq[Expression],
         scanBuilder: Seq[Attribute] => SparkPlan): SparkPlan = {
 
-      val projectSet = projectList.flatMap(_.references).toSet
-      val filterSet = filterPredicates.flatMap(_.references).toSet
-      val filterCondition = prunePushedDownFilters(filterPredicates).reduceLeftOption(And)
+      val projectSet = AttributeSet(projectList.flatMap(_.references))
+      val filterSet = AttributeSet(filterPredicates.flatMap(_.references))
+      val filterCondition =
+        prunePushedDownFilters(filterPredicates).reduceLeftOption(catalyst.expressions.And)
 
       // Right now we still use a projection even if the only evaluation is applying an alias
       // to a column.  Since this is a no-op, it could be avoided. However, using this
@@ -277,7 +905,8 @@ class SQLContext(@transient val sparkContext: SparkContext)
       // TODO: Decouple final output schema from expression evaluation so this copy can be
       // avoided safely.
 
-      if (projectList.toSet == projectSet && filterSet.subsetOf(projectSet)) {
+      if (AttributeSet(projectList.map(_.toAttribute)) == projectSet &&
+          filterSet.subsetOf(projectSet)) {
         // When it is possible to just use column pruning to get the right projection and
         // when the columns of this projection are enough to evaluate all filter conditions,
         // just do a scan followed by a filter, with no extra project.
@@ -294,84 +923,482 @@ class SQLContext(@transient val sparkContext: SparkContext)
   protected[sql] val planner = new SparkPlanner
 
   @transient
-  protected[sql] lazy val emptyResult = sparkContext.parallelize(Seq.empty[Row], 1)
+  protected[sql] lazy val emptyResult = sparkContext.parallelize(Seq.empty[InternalRow], 1)
 
   /**
-   * Prepares a planned SparkPlan for execution by binding references to specific ordinals, and
-   * inserting shuffle operations as needed.
+   * Prepares a planned SparkPlan for execution by inserting shuffle operations and internal
+   * row format conversions as needed.
    */
   @transient
   protected[sql] val prepareForExecution = new RuleExecutor[SparkPlan] {
-    val batches =
-      Batch("Add exchange", Once, AddExchange(self)) ::
-      Batch("Prepare Expressions", Once, new BindReferences[SparkPlan]) :: Nil
+    val batches = Seq(
+      Batch("Add exchange", Once, EnsureRequirements(self)),
+      Batch("Add row converters", Once, EnsureRowFormats)
+    )
+  }
+
+  protected[sql] def openSession(): SQLSession = {
+    detachSession()
+    val session = createSession()
+    tlSession.set(session)
+
+    session
+  }
+
+  protected[sql] def currentSession(): SQLSession = {
+    tlSession.get()
+  }
+
+  protected[sql] def createSession(): SQLSession = {
+    new this.SQLSession()
+  }
+
+  protected[sql] def detachSession(): Unit = {
+    tlSession.remove()
+  }
+
+  protected[sql] def setSession(session: SQLSession): Unit = {
+    detachSession()
+    tlSession.set(session)
+  }
+
+  protected[sql] class SQLSession {
+    // Note that this is a lazy val so we can override the default value in subclasses.
+    protected[sql] lazy val conf: SQLConf = new SQLConf
   }
 
   /**
+   * :: DeveloperApi ::
    * The primary workflow for executing relational queries using Spark.  Designed to allow easy
    * access to the intermediate phases of query execution for developers.
    */
-  protected abstract class QueryExecution {
-    def logical: LogicalPlan
+  @DeveloperApi
+  protected[sql] class QueryExecution(val logical: LogicalPlan) {
+    def assertAnalyzed(): Unit = analyzer.checkAnalysis(analyzed)
 
-    lazy val analyzed = analyzer(logical)
-    lazy val optimizedPlan = optimizer(analyzed)
+    lazy val analyzed: LogicalPlan = analyzer.execute(logical)
+    lazy val withCachedData: LogicalPlan = {
+      assertAnalyzed()
+      cacheManager.useCachedData(analyzed)
+    }
+    lazy val optimizedPlan: LogicalPlan = optimizer.execute(withCachedData)
+
     // TODO: Don't just pick the first one...
-    lazy val sparkPlan = planner(optimizedPlan).next()
+    lazy val sparkPlan: SparkPlan = {
+      SparkPlan.currentContext.set(self)
+      planner.plan(optimizedPlan).next()
+    }
     // executedPlan should not be used to initialize any SparkPlan. It should be
     // only used for execution.
-    lazy val executedPlan: SparkPlan = prepareForExecution(sparkPlan)
+    lazy val executedPlan: SparkPlan = prepareForExecution.execute(sparkPlan)
 
     /** Internal version of the RDD. Avoids copies and has no schema */
-    lazy val toRdd: RDD[Row] = executedPlan.execute()
+    lazy val toRdd: RDD[InternalRow] = executedPlan.execute()
 
     protected def stringOrError[A](f: => A): String =
       try f.toString catch { case e: Throwable => e.toString }
 
-    def simpleString: String = stringOrError(executedPlan)
+    def simpleString: String =
+      s"""== Physical Plan ==
+         |${stringOrError(executedPlan)}
+      """.stripMargin.trim
 
-    override def toString: String =
-      s"""== Logical Plan ==
+    override def toString: String = {
+      def output =
+        analyzed.output.map(o => s"${o.name}: ${o.dataType.simpleString}").mkString(", ")
+
+      // TODO previously will output RDD details by run (${stringOrError(toRdd.toDebugString)})
+      // however, the `toRdd` will cause the real execution, which is not what we want.
+      // We need to think about how to avoid the side effect.
+      s"""== Parsed Logical Plan ==
+         |${stringOrError(logical)}
+         |== Analyzed Logical Plan ==
+         |${stringOrError(output)}
          |${stringOrError(analyzed)}
          |== Optimized Logical Plan ==
          |${stringOrError(optimizedPlan)}
          |== Physical Plan ==
          |${stringOrError(executedPlan)}
+         |Code Generation: ${stringOrError(executedPlan.codegenEnabled)}
+         |== RDD ==
       """.stripMargin.trim
+    }
   }
 
   /**
-   * Peek at the first row of the RDD and infer its schema.
-   * TODO: consolidate this with the type system developed in SPARK-2060.
+   * Parses the data type in our internal string representation. The data type string should
+   * have the same format as the one generated by `toString` in scala.
+   * It is only used by PySpark.
    */
-  private[sql] def inferSchema(rdd: RDD[Map[String, _]]): SchemaRDD = {
-    import scala.collection.JavaConversions._
-    def typeFor(obj: Any): DataType = obj match {
-      case c: java.lang.String => StringType
-      case c: java.lang.Integer => IntegerType
-      case c: java.lang.Long => LongType
-      case c: java.lang.Double => DoubleType
-      case c: java.lang.Boolean => BooleanType
-      case c: java.util.List[_] => ArrayType(typeFor(c.head))
-      case c: java.util.Set[_] => ArrayType(typeFor(c.head))
-      case c: java.util.Map[_, _] =>
-        val (key, value) = c.head
-        MapType(typeFor(key), typeFor(value))
-      case c if c.getClass.isArray =>
-        val elem = c.asInstanceOf[Array[_]].head
-        ArrayType(typeFor(elem))
-      case c => throw new Exception(s"Object of type $c cannot be used")
-    }
-    val schema = rdd.first().map { case (fieldName, obj) =>
-      AttributeReference(fieldName, typeFor(obj), true)()
-    }.toSeq
-
-    val rowRdd = rdd.mapPartitions { iter =>
-      iter.map { map =>
-        new GenericRow(map.values.toArray.asInstanceOf[Array[Any]]): Row
-      }
-    }
-    new SchemaRDD(this, SparkLogicalPlan(ExistingRdd(schema, rowRdd)))
+  protected[sql] def parseDataType(dataTypeString: String): DataType = {
+    DataType.fromJson(dataTypeString)
   }
 
+  /**
+   * Apply a schema defined by the schemaString to an RDD. It is only used by PySpark.
+   */
+  protected[sql] def applySchemaToPythonRDD(
+      rdd: RDD[Array[Any]],
+      schemaString: String): DataFrame = {
+    val schema = parseDataType(schemaString).asInstanceOf[StructType]
+    applySchemaToPythonRDD(rdd, schema)
+  }
+
+  /**
+   * Apply a schema defined by the schema to an RDD. It is only used by PySpark.
+   */
+  protected[sql] def applySchemaToPythonRDD(
+      rdd: RDD[Array[Any]],
+      schema: StructType): DataFrame = {
+
+    val rowRdd = rdd.map(r => EvaluatePython.fromJava(r, schema).asInstanceOf[InternalRow])
+    DataFrame(this, LogicalRDD(schema.toAttributes, rowRdd)(self))
+  }
+
+  /**
+   * Returns a Catalyst Schema for the given java bean class.
+   */
+  protected def getSchema(beanClass: Class[_]): Seq[AttributeReference] = {
+    val (dataType, _) = JavaTypeInference.inferDataType(beanClass)
+    dataType.asInstanceOf[StructType].fields.map { f =>
+      AttributeReference(f.name, f.dataType, f.nullable)()
+    }
+  }
+
+  ////////////////////////////////////////////////////////////////////////////
+  ////////////////////////////////////////////////////////////////////////////
+  // Deprecated methods
+  ////////////////////////////////////////////////////////////////////////////
+  ////////////////////////////////////////////////////////////////////////////
+
+  /**
+   * @deprecated As of 1.3.0, replaced by `createDataFrame()`.
+   */
+  @deprecated("use createDataFrame", "1.3.0")
+  def applySchema(rowRDD: RDD[Row], schema: StructType): DataFrame = {
+    createDataFrame(rowRDD, schema)
+  }
+
+  /**
+   * @deprecated As of 1.3.0, replaced by `createDataFrame()`.
+   */
+  @deprecated("use createDataFrame", "1.3.0")
+  def applySchema(rowRDD: JavaRDD[Row], schema: StructType): DataFrame = {
+    createDataFrame(rowRDD, schema)
+  }
+
+  /**
+   * @deprecated As of 1.3.0, replaced by `createDataFrame()`.
+   */
+  @deprecated("use createDataFrame", "1.3.0")
+  def applySchema(rdd: RDD[_], beanClass: Class[_]): DataFrame = {
+    createDataFrame(rdd, beanClass)
+  }
+
+  /**
+   * @deprecated As of 1.3.0, replaced by `createDataFrame()`.
+   */
+  @deprecated("use createDataFrame", "1.3.0")
+  def applySchema(rdd: JavaRDD[_], beanClass: Class[_]): DataFrame = {
+    createDataFrame(rdd, beanClass)
+  }
+
+  /**
+   * Loads a Parquet file, returning the result as a [[DataFrame]]. This function returns an empty
+   * [[DataFrame]] if no paths are passed in.
+   *
+   * @group specificdata
+   * @deprecated As of 1.4.0, replaced by `read().parquet()`.
+   */
+  @deprecated("Use read.parquet()", "1.4.0")
+  @scala.annotation.varargs
+  def parquetFile(paths: String*): DataFrame = {
+    if (paths.isEmpty) {
+      emptyDataFrame
+    } else if (conf.parquetUseDataSourceApi) {
+      read.parquet(paths : _*)
+    } else {
+      DataFrame(this, parquet.ParquetRelation(
+        paths.mkString(","), Some(sparkContext.hadoopConfiguration), this))
+    }
+  }
+
+  /**
+   * Loads a JSON file (one object per line), returning the result as a [[DataFrame]].
+   * It goes through the entire dataset once to determine the schema.
+   *
+   * @group specificdata
+   * @deprecated As of 1.4.0, replaced by `read().json()`.
+   */
+  @deprecated("Use read.json()", "1.4.0")
+  def jsonFile(path: String): DataFrame = {
+    read.json(path)
+  }
+
+  /**
+   * Loads a JSON file (one object per line) and applies the given schema,
+   * returning the result as a [[DataFrame]].
+   *
+   * @group specificdata
+   * @deprecated As of 1.4.0, replaced by `read().json()`.
+   */
+  @deprecated("Use read.json()", "1.4.0")
+  def jsonFile(path: String, schema: StructType): DataFrame = {
+    read.schema(schema).json(path)
+  }
+
+  /**
+   * @group specificdata
+   * @deprecated As of 1.4.0, replaced by `read().json()`.
+   */
+  @deprecated("Use read.json()", "1.4.0")
+  def jsonFile(path: String, samplingRatio: Double): DataFrame = {
+    read.option("samplingRatio", samplingRatio.toString).json(path)
+  }
+
+  /**
+   * Loads an RDD[String] storing JSON objects (one object per record), returning the result as a
+   * [[DataFrame]].
+   * It goes through the entire dataset once to determine the schema.
+   *
+   * @group specificdata
+   * @deprecated As of 1.4.0, replaced by `read().json()`.
+   */
+  @deprecated("Use read.json()", "1.4.0")
+  def jsonRDD(json: RDD[String]): DataFrame = read.json(json)
+
+  /**
+   * Loads an RDD[String] storing JSON objects (one object per record), returning the result as a
+   * [[DataFrame]].
+   * It goes through the entire dataset once to determine the schema.
+   *
+   * @group specificdata
+   * @deprecated As of 1.4.0, replaced by `read().json()`.
+   */
+  @deprecated("Use read.json()", "1.4.0")
+  def jsonRDD(json: JavaRDD[String]): DataFrame = read.json(json)
+
+  /**
+   * Loads an RDD[String] storing JSON objects (one object per record) and applies the given schema,
+   * returning the result as a [[DataFrame]].
+   *
+   * @group specificdata
+   * @deprecated As of 1.4.0, replaced by `read().json()`.
+   */
+  @deprecated("Use read.json()", "1.4.0")
+  def jsonRDD(json: RDD[String], schema: StructType): DataFrame = {
+    read.schema(schema).json(json)
+  }
+
+  /**
+   * Loads an JavaRDD<String> storing JSON objects (one object per record) and applies the given
+   * schema, returning the result as a [[DataFrame]].
+   *
+   * @group specificdata
+   * @deprecated As of 1.4.0, replaced by `read().json()`.
+   */
+  @deprecated("Use read.json()", "1.4.0")
+  def jsonRDD(json: JavaRDD[String], schema: StructType): DataFrame = {
+    read.schema(schema).json(json)
+  }
+
+  /**
+   * Loads an RDD[String] storing JSON objects (one object per record) inferring the
+   * schema, returning the result as a [[DataFrame]].
+   *
+   * @group specificdata
+   * @deprecated As of 1.4.0, replaced by `read().json()`.
+   */
+  @deprecated("Use read.json()", "1.4.0")
+  def jsonRDD(json: RDD[String], samplingRatio: Double): DataFrame = {
+    read.option("samplingRatio", samplingRatio.toString).json(json)
+  }
+
+  /**
+   * Loads a JavaRDD[String] storing JSON objects (one object per record) inferring the
+   * schema, returning the result as a [[DataFrame]].
+   *
+   * @group specificdata
+   * @deprecated As of 1.4.0, replaced by `read().json()`.
+   */
+  @deprecated("Use read.json()", "1.4.0")
+  def jsonRDD(json: JavaRDD[String], samplingRatio: Double): DataFrame = {
+    read.option("samplingRatio", samplingRatio.toString).json(json)
+  }
+
+  /**
+   * Returns the dataset stored at path as a DataFrame,
+   * using the default data source configured by spark.sql.sources.default.
+   *
+   * @group genericdata
+   * @deprecated As of 1.4.0, replaced by `read().load(path)`.
+   */
+  @deprecated("Use read.load(path)", "1.4.0")
+  def load(path: String): DataFrame = {
+    read.load(path)
+  }
+
+  /**
+   * Returns the dataset stored at path as a DataFrame, using the given data source.
+   *
+   * @group genericdata
+   * @deprecated As of 1.4.0, replaced by `read().format(source).load(path)`.
+   */
+  @deprecated("Use read.format(source).load(path)", "1.4.0")
+  def load(path: String, source: String): DataFrame = {
+    read.format(source).load(path)
+  }
+
+  /**
+   * (Java-specific) Returns the dataset specified by the given data source and
+   * a set of options as a DataFrame.
+   *
+   * @group genericdata
+   * @deprecated As of 1.4.0, replaced by `read().format(source).options(options).load()`.
+   */
+  @deprecated("Use read.format(source).options(options).load()", "1.4.0")
+  def load(source: String, options: java.util.Map[String, String]): DataFrame = {
+    read.options(options).format(source).load()
+  }
+
+  /**
+   * (Scala-specific) Returns the dataset specified by the given data source and
+   * a set of options as a DataFrame.
+   *
+   * @group genericdata
+   * @deprecated As of 1.4.0, replaced by `read().format(source).options(options).load()`.
+   */
+  @deprecated("Use read.format(source).options(options).load()", "1.4.0")
+  def load(source: String, options: Map[String, String]): DataFrame = {
+    read.options(options).format(source).load()
+  }
+
+  /**
+   * (Java-specific) Returns the dataset specified by the given data source and
+   * a set of options as a DataFrame, using the given schema as the schema of the DataFrame.
+   *
+   * @group genericdata
+   * @deprecated As of 1.4.0, replaced by
+   *            `read().format(source).schema(schema).options(options).load()`.
+   */
+  @deprecated("Use read.format(source).schema(schema).options(options).load()", "1.4.0")
+  def load(source: String, schema: StructType, options: java.util.Map[String, String]): DataFrame =
+  {
+    read.format(source).schema(schema).options(options).load()
+  }
+
+  /**
+   * (Scala-specific) Returns the dataset specified by the given data source and
+   * a set of options as a DataFrame, using the given schema as the schema of the DataFrame.
+   *
+   * @group genericdata
+   * @deprecated As of 1.4.0, replaced by
+   *            `read().format(source).schema(schema).options(options).load()`.
+   */
+  @deprecated("Use read.format(source).schema(schema).options(options).load()", "1.4.0")
+  def load(source: String, schema: StructType, options: Map[String, String]): DataFrame = {
+    read.format(source).schema(schema).options(options).load()
+  }
+
+  /**
+   * Construct a [[DataFrame]] representing the database table accessible via JDBC URL
+   * url named table.
+   *
+   * @group specificdata
+   * @deprecated As of 1.4.0, replaced by `read().jdbc()`.
+   */
+  @deprecated("use read.jdbc()", "1.4.0")
+  def jdbc(url: String, table: String): DataFrame = {
+    read.jdbc(url, table, new Properties)
+  }
+
+  /**
+   * Construct a [[DataFrame]] representing the database table accessible via JDBC URL
+   * url named table.  Partitions of the table will be retrieved in parallel based on the parameters
+   * passed to this function.
+   *
+   * @param columnName the name of a column of integral type that will be used for partitioning.
+   * @param lowerBound the minimum value of `columnName` used to decide partition stride
+   * @param upperBound the maximum value of `columnName` used to decide partition stride
+   * @param numPartitions the number of partitions.  the range `minValue`-`maxValue` will be split
+   *                      evenly into this many partitions
+   * @group specificdata
+   * @deprecated As of 1.4.0, replaced by `read().jdbc()`.
+   */
+  @deprecated("use read.jdbc()", "1.4.0")
+  def jdbc(
+      url: String,
+      table: String,
+      columnName: String,
+      lowerBound: Long,
+      upperBound: Long,
+      numPartitions: Int): DataFrame = {
+    read.jdbc(url, table, columnName, lowerBound, upperBound, numPartitions, new Properties)
+  }
+
+  /**
+   * Construct a [[DataFrame]] representing the database table accessible via JDBC URL
+   * url named table. The theParts parameter gives a list expressions
+   * suitable for inclusion in WHERE clauses; each one defines one partition
+   * of the [[DataFrame]].
+   *
+   * @group specificdata
+   * @deprecated As of 1.4.0, replaced by `read().jdbc()`.
+   */
+  @deprecated("use read.jdbc()", "1.4.0")
+  def jdbc(url: String, table: String, theParts: Array[String]): DataFrame = {
+    read.jdbc(url, table, theParts, new Properties)
+  }
+
+  ////////////////////////////////////////////////////////////////////////////
+  ////////////////////////////////////////////////////////////////////////////
+  // End of deprecated methods
+  ////////////////////////////////////////////////////////////////////////////
+  ////////////////////////////////////////////////////////////////////////////
+
+
+  // Register a succesfully instantiatd context to the singleton. This should be at the end of
+  // the class definition so that the singleton is updated only if there is no exception in the
+  // construction of the instance.
+  SQLContext.setLastInstantiatedContext(self)
+}
+
+/**
+ * This SQLContext object contains utility functions to create a singleton SQLContext instance,
+ * or to get the last created SQLContext instance.
+ */
+object SQLContext {
+
+  private val INSTANTIATION_LOCK = new Object()
+
+  /**
+   * Reference to the last created SQLContext.
+   */
+  @transient private val lastInstantiatedContext = new AtomicReference[SQLContext]()
+
+  /**
+   * Get the singleton SQLContext if it exists or create a new one using the given SparkContext.
+   * This function can be used to create a singleton SQLContext object that can be shared across
+   * the JVM.
+   */
+  def getOrCreate(sparkContext: SparkContext): SQLContext = {
+    INSTANTIATION_LOCK.synchronized {
+      if (lastInstantiatedContext.get() == null) {
+        new SQLContext(sparkContext)
+      }
+    }
+    lastInstantiatedContext.get()
+  }
+
+  private[sql] def clearLastInstantiatedContext(): Unit = {
+    INSTANTIATION_LOCK.synchronized {
+      lastInstantiatedContext.set(null)
+    }
+  }
+
+  private[sql] def setLastInstantiatedContext(sqlContext: SQLContext): Unit = {
+    INSTANTIATION_LOCK.synchronized {
+      lastInstantiatedContext.set(sqlContext)
+    }
+  }
 }

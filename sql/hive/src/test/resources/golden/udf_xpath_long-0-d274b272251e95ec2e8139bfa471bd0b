@@ -1,1 +1,0 @@
-xpath_long(xml, xpath) - Returns a long value that matches the xpath expression
