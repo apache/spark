@@ -115,7 +115,7 @@ final class DecisionTreeClassificationModel private[ml] (
     "DecisionTreeClassificationModel given null rootNode, but it requires a non-null rootNode.")
 
   /**
-   * Construct a decision tree classificaton model.
+   * Construct a decision tree classification model.
    * @param rootNode  Root node of tree, with other nodes attached.
    */
   def this(rootNode: Node, numClasses: Int) = {
