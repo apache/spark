@@ -22,6 +22,7 @@ import java.util.concurrent.{CountDownLatch, TimeUnit}
 
 import scala.language.postfixOps
 
+import com.google.common.base.Charsets.UTF_8
 import org.apache.activemq.broker.{BrokerService, TransportConnector}
 import org.apache.commons.lang3.RandomUtils
 import org.eclipse.paho.client.mqttv3._
@@ -46,6 +47,8 @@ private class MQTTTestUtils extends Logging {
   private var broker: BrokerService = _
   private var connector: TransportConnector = _
 
+  private var receiverStartedLatch = new CountDownLatch(1)
+
   def brokerUri: String = {
     s"$brokerHost:$brokerPort"
   }
@@ -69,6 +72,8 @@ private class MQTTTestUtils extends Logging {
       connector.stop()
       connector = null
     }
+    Utils.deleteRecursively(persistenceDir)
+    receiverStartedLatch = null
   }
 
   private def findFreePort(): Int = {
@@ -88,7 +93,7 @@ private class MQTTTestUtils extends Logging {
       client.connect()
       if (client.isConnected) {
         val msgTopic = client.getTopic(topic)
-        val message = new MqttMessage(data.getBytes("utf-8"))
+        val message = new MqttMessage(data.getBytes(UTF_8))
         message.setQos(1)
         message.setRetained(true)
 
@@ -110,27 +115,37 @@ private class MQTTTestUtils extends Logging {
   }
 
   /**
-   * Block until at least one receiver has started or timeout occurs.
+   * Call this one before starting StreamingContext so that we won't miss the
+   * StreamingListenerReceiverStarted event.
    */
-  def waitForReceiverToStart(ssc: StreamingContext) : Unit = {
-    val latch = new CountDownLatch(1)
-    ssc.addStreamingListener(new StreamingListener {
-      override def onReceiverStarted(receiverStarted: StreamingListenerReceiverStarted) {
-        latch.countDown()
-      }
-    })
-
-    assert(latch.await(10, TimeUnit.SECONDS), "Timeout waiting for receiver to start.")
+  def registerStreamingListener(jssc: JavaStreamingContext): Unit = {
+    registerStreamingListener(jssc.ssc)
   }
 
-  def waitForReceiverToStart(jssc: JavaStreamingContext) : Unit = {
-    val latch = new CountDownLatch(1)
-    jssc.addStreamingListener(new StreamingListener {
+  /**
+   * Call this one before starting StreamingContext so that we won't miss the
+   * StreamingListenerReceiverStarted event.
+   */
+  def registerStreamingListener(ssc: StreamingContext): Unit = {
+    ssc.addStreamingListener(new StreamingListener {
       override def onReceiverStarted(receiverStarted: StreamingListenerReceiverStarted) {
-        latch.countDown()
+        receiverStartedLatch.countDown()
       }
     })
+  }
 
-    assert(latch.await(10, TimeUnit.SECONDS), "Timeout waiting for receiver to start.")
+  /**
+   * Block until at least one receiver has started or timeout occurs.
+   */
+  def waitForReceiverToStart(jssc: JavaStreamingContext): Unit = {
+    waitForReceiverToStart(jssc.ssc)
+  }
+
+  /**
+   * Block until at least one receiver has started or timeout occurs.
+   */
+  def waitForReceiverToStart(ssc: StreamingContext): Unit = {
+    assert(
+      receiverStartedLatch.await(10, TimeUnit.SECONDS), "Timeout waiting for receiver to start.")
   }
 }
