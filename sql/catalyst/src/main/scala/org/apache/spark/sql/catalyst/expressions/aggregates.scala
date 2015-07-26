@@ -404,7 +404,7 @@ case class Average(child: Expression) extends UnaryExpression with PartialAggreg
 
         // partialSum already increase the precision by 10
         val castedSum = Cast(Sum(partialSum.toAttribute), partialSum.dataType)
-        val castedCount = Sum(partialCount.toAttribute)
+        val castedCount = Cast(Sum(partialCount.toAttribute), partialSum.dataType)
         SplitEvaluation(
           Cast(Divide(castedSum, castedCount), dataType),
           partialCount :: partialSum :: Nil)
