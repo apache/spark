@@ -64,7 +64,7 @@ private[parquet] class CatalystReadSupport extends ReadSupport[InternalRow] with
 
     // If the target file was written by Spark SQL, we should be able to find a serialized Catalyst
     // schema of this file from its the metadata.
-    val maybeRowSchema = Option(conf.get(RowWriteSupport.SPARK_ROW_SCHEMA))
+    val maybeRowSchema = Option(conf.get(CatalystWriteSupport.SPARK_ROW_SCHEMA))
 
     // Optional schema of requested columns, in the form of a string serialized from a Catalyst
     // `StructType` containing all requested columns.
@@ -139,7 +139,7 @@ private[parquet] class CatalystReadSupport extends ReadSupport[InternalRow] with
     val metadata =
       Map.empty[String, String] ++
         maybeRequestedSchema.map(CatalystReadSupport.SPARK_ROW_REQUESTED_SCHEMA -> _) ++
-        maybeRowSchema.map(RowWriteSupport.SPARK_ROW_SCHEMA -> _)
+        maybeRowSchema.map(CatalystWriteSupport.SPARK_ROW_SCHEMA -> _)
 
     logInfo(s"Going to read Parquet file with these requested columns: $parquetRequestedSchema")
     new ReadContext(parquetRequestedSchema, metadata)
