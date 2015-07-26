@@ -321,7 +321,7 @@ class Connection(Base):
             elif self.conn_type == 'sqlite':
                 return hooks.SqliteHook(sqlite_conn_id=self.conn_id)
             elif self.conn_type == 'jdbc':
-                return hooks.JdbcHook(conn_id=self.conn_id)
+                return hooks.JdbcHook(jdbc_conn_id=self.conn_id)
         except:
             return None
 

@@ -34,19 +34,17 @@ class JdbcOperator(BaseOperator):
 
     @apply_defaults
     def __init__(
-            self, sql, jdbc_driver_name=None, jdbc_driver_loc=None,
-            conn_id='jdbc_default', autocommit=False,
+            self, sql,
+            jdbc_conn_id='jdbc_default', autocommit=False,
             *args, **kwargs):
         super(JdbcOperator, self).__init__(*args, **kwargs)
 
-        self.jdbc_driver_name=jdbc_driver_name
-        self.jdbc_driver_loc=jdbc_driver_loc
         self.sql = sql
-        self.conn_id = conn_id
+        self.jdbc_conn_id = jdbc_conn_id
         self.autocommit = autocommit
 
     def execute(self, context):
         logging.info('Executing: ' + self.sql)
-        self.hook = JdbcHook(conn_id=self.conn_id,jdbc_driver_loc=self.jdbc_driver_loc, jdbc_driver_name=self.jdbc_driver_name)
+        self.hook = JdbcHook(jdbc_conn_id=self.jdbc_conn_id)
         for row in self.hook.get_records(self.sql, self.autocommit):
             logging.info('Result: ' + ','.join(map(str,row)) )
