@@ -17,6 +17,7 @@
 
 package org.apache.spark.util.collection.unsafe.sort;
 
+import com.google.common.primitives.Longs;
 import com.google.common.primitives.UnsignedLongs;
 
 import org.apache.spark.annotation.Private;
@@ -29,6 +30,8 @@ public class PrefixComparators {
 
   public static final StringPrefixComparator STRING = new StringPrefixComparator();
   public static final StringPrefixComparatorDesc STRING_DESC = new StringPrefixComparatorDesc();
+  public static final BinaryPrefixComparator BINARY = new BinaryPrefixComparator();
+  public static final BinaryPrefixComparatorDesc BINARY_DESC = new BinaryPrefixComparatorDesc();
   public static final LongPrefixComparator LONG = new LongPrefixComparator();
   public static final LongPrefixComparatorDesc LONG_DESC = new LongPrefixComparatorDesc();
   public static final DoublePrefixComparator DOUBLE = new DoublePrefixComparator();
@@ -46,6 +49,35 @@ public class PrefixComparators {
   }
 
   public static final class StringPrefixComparatorDesc extends PrefixComparator {
+    @Override
+    public int compare(long bPrefix, long aPrefix) {
+      return UnsignedLongs.compare(aPrefix, bPrefix);
+    }
+  }
+
+  public static final class BinaryPrefixComparator extends PrefixComparator {
+    @Override
+    public int compare(long aPrefix, long bPrefix) {
+      return UnsignedLongs.compare(aPrefix, bPrefix);
+    }
+
+    public long computePrefix(byte[] bytes) {
+      if (bytes == null) {
+        return 0L;
+      } else {
+        byte[] padded = new byte[8];
+        byte[] uBytes = new byte[8];
+        int minLen = Math.min(bytes.length, 8);
+        for (int i = 0; i < minLen; ++i) {
+          uBytes[i] = (byte) ((128 + (int) bytes[i]) & 0xff);
+        }
+        System.arraycopy(uBytes, 0, padded, 0, minLen);
+        return Longs.fromByteArray(padded);
+      }
+    }
+  }
+
+  public static final class BinaryPrefixComparatorDesc extends PrefixComparator {
     @Override
     public int compare(long bPrefix, long aPrefix) {
       return UnsignedLongs.compare(aPrefix, bPrefix);
