@@ -189,13 +189,13 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
         if (i != -1) {
           // If yes, gets column value from partition values.
           (mutableRow: MutableRow, dataRow: InternalRow, ordinal: Int) => {
-            mutableRow(ordinal) = partitionValues.get(i)
+            mutableRow(ordinal) = partitionValues.genericGet(i)
           }
         } else {
           // Otherwise, inherits the value from scanned data.
           val i = nonPartitionColumns.indexOf(name)
           (mutableRow: MutableRow, dataRow: InternalRow, ordinal: Int) => {
-            mutableRow(ordinal) = dataRow.get(i)
+            mutableRow(ordinal) = dataRow.genericGet(i)
           }
         }
       }

@@ -179,7 +179,7 @@ private[sql] case class ParquetTableScan(
 
               var i = 0
               while (i < row.numFields) {
-                mutableRow(i) = row.get(i)
+                mutableRow(i) = row.genericGet(i)
                 i += 1
               }
               // Parquet will leave partitioning columns empty, so we fill them in here.

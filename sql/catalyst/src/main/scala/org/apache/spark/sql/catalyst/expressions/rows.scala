@@ -101,6 +101,10 @@ class GenericInternalRow(protected[sql] val values: Array[Any]) extends Internal
 
   override def get(i: Int): Any = values(i)
 
+  override def getStruct(ordinal: Int, numFields: Int): InternalRow = {
+    values(ordinal).asInstanceOf[InternalRow]
+  }
+
   override def copy(): InternalRow = this
 }
 
@@ -127,6 +131,10 @@ class GenericMutableRow(val values: Array[Any]) extends MutableRow {
   override def numFields: Int = values.length
 
   override def get(i: Int): Any = values(i)
+
+  override def getStruct(ordinal: Int, numFields: Int): InternalRow = {
+    values(ordinal).asInstanceOf[InternalRow]
+  }
 
   override def setNullAt(i: Int): Unit = { values(i) = null}
 

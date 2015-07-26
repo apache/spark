@@ -122,7 +122,7 @@ private[orc] class OrcOutputWriter(
   override def writeInternal(row: InternalRow): Unit = {
     var i = 0
     while (i < row.numFields) {
-      reusableOutputBuffer(i) = wrappers(i)(row.get(i))
+      reusableOutputBuffer(i) = wrappers(i)(row.get(i, dataSchema(i).dataType))
       i += 1
     }
 

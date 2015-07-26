@@ -375,7 +375,7 @@ case class Cast(child: Expression, dataType: DataType)
   }
 
   private[this] def castStruct(from: StructType, to: StructType): Any => Any = {
-    val casts = from.fields.zip(to.fields).map {
+    val castFuncs: Array[(Any) => Any] = from.fields.zip(to.fields).map {
       case (fromField, toField) => cast(fromField.dataType, toField.dataType)
     }
     // TODO: Could be faster?
@@ -383,7 +383,8 @@ case class Cast(child: Expression, dataType: DataType)
     buildCast[InternalRow](_, row => {
       var i = 0
       while (i < row.numFields) {
-        newRow.update(i, if (row.isNullAt(i)) null else casts(i)(row.get(i)))
+        newRow.update(i,
+          if (row.isNullAt(i)) null else castFuncs(i)(row.get(i, from.apply(i).dataType)))
         i += 1
       }
       newRow.copy()

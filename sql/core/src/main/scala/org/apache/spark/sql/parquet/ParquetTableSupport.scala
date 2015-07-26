@@ -219,7 +219,7 @@ private[parquet] class RowWriteSupport extends WriteSupport[InternalRow] with Lo
       // null values indicate optional fields but we do not check currently
       if (!record.isNullAt(index)) {
         writer.startField(attributes(index).name, index)
-        writeValue(attributes(index).dataType, record.get(index))
+        writeValue(attributes(index).dataType, record.get(index, attributes(index).dataType))
         writer.endField(attributes(index).name, index)
       }
       index = index + 1
@@ -280,7 +280,7 @@ private[parquet] class RowWriteSupport extends WriteSupport[InternalRow] with Lo
       while(i < fields.length) {
         if (!struct.isNullAt(i)) {
           writer.startField(fields(i).name, i)
-          writeValue(fields(i).dataType, struct.get(i))
+          writeValue(fields(i).dataType, struct.get(i, fields(i).dataType))
           writer.endField(fields(i).name, i)
         }
         i = i + 1

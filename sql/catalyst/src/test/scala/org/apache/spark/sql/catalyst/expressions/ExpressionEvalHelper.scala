@@ -113,7 +113,7 @@ trait ExpressionEvalHelper {
       GenerateMutableProjection.generate(Alias(expression, s"Optimized($expression)")() :: Nil)(),
       expression)
 
-    val actual = plan(inputRow).get(0)
+    val actual = plan(inputRow).get(0, expression.dataType)
     if (!checkResult(actual, expected)) {
       val input = if (inputRow == EmptyRow) "" else s", input: $inputRow"
       fail(s"Incorrect Evaluation: $expression, actual: $actual, expected: $expected$input")
@@ -194,13 +194,14 @@ trait ExpressionEvalHelper {
     var plan = generateProject(
       GenerateProjection.generate(Alias(expression, s"Optimized($expression)")() :: Nil),
       expression)
-    var actual = plan(inputRow).get(0)
+    var actual = plan(inputRow).get(0, expression.dataType)
     assert(checkResult(actual, expected))
 
     plan = generateProject(
       GenerateUnsafeProjection.generate(Alias(expression, s"Optimized($expression)")() :: Nil),
       expression)
-    actual = FromUnsafeProjection(expression.dataType :: Nil)(plan(inputRow)).get(0)
+    actual = FromUnsafeProjection(expression.dataType :: Nil)(
+      plan(inputRow)).get(0, expression.dataType)
     assert(checkResult(actual, expected))
   }
 }
