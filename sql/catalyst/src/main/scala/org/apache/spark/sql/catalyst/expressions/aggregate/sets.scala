@@ -52,7 +52,7 @@ case class ReduceSetAlgebraic(left: Expression, right: AlgebraicAggregate)
   @transient private[this] lazy val evaluate =
     BindReferences.bindReference(right.evaluateExpression, right.bufferSchema.toAttributes)
 
-  @transient private[this] lazy val joinRow = new JoinedRow4
+  @transient private[this] lazy val joinRow = new JoinedRow
 
   override def eval(input: InternalRow): Any = {
     val result = left.eval(input).asInstanceOf[OpenHashSet[Any]]

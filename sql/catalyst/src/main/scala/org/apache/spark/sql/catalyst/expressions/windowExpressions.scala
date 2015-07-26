@@ -400,7 +400,6 @@ abstract class AggregateWindowFunction extends AlgebraicAggregate with WindowFun
   self: Product =>
   override val frame = SpecifiedWindowFrame(RowFrame, UnboundedPreceding, CurrentRow)
   override def dataType: DataType = IntegerType
-  override def foldable: Boolean = false
   override def nullable: Boolean = false
   override val mergeExpressions = Nil // TODO how to deal with this?
 }
