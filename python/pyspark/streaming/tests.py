@@ -863,31 +863,18 @@ class MQTTStreamTests(PySparkStreamingTestCase):
         self.ssc.start()
         return result
 
-    def _publishData(self, topic, data):
-        start_time = time.time()
-        while True:
-            try:
-                self._MQTTTestUtils.publishData(topic, data)
-                break
-            except:
-                if time.time() - start_time < self.timeout:
-                    time.sleep(0.01)
-                else:
-                    raise
-
-    def _validateStreamResult(self, sendData, result):
-        receiveData = ''.join(result[0])
-        self.assertEqual(sendData, receiveData)
-
     def test_mqtt_stream(self):
         """Test the Python MQTT stream API."""
         sendData = "MQTT demo for spark streaming"
         topic = self._randomTopic()
+        self._MQTTTestUtils.registerStreamingListener(self.ssc._jssc)
         result = self._startContext(topic)
         self._MQTTTestUtils.waitForReceiverToStart(self.ssc._jssc)
-        self._publishData(topic, sendData)
-        self.wait_for(result, len(sendData))
-        self._validateStreamResult(sendData, result)
+        self._MQTTTestUtils.publishData(topic, sendData)
+        self.wait_for(result, 1)
+        # Because "publishData" sends duplicate messages, here we should use > 0
+        self.assertTrue(len(result) > 0)
+        self.assertEqual(sendData, result[0])
 
 
 def search_kafka_assembly_jar():

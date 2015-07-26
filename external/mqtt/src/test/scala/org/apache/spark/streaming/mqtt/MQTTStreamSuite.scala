@@ -20,30 +20,34 @@ package org.apache.spark.streaming.mqtt
 import scala.concurrent.duration._
 import scala.language.postfixOps
 
-import org.scalatest.BeforeAndAfterAll
+import org.scalatest.BeforeAndAfter
 import org.scalatest.concurrent.Eventually
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.{Milliseconds, StreamingContext}
 
-class MQTTStreamSuite extends SparkFunSuite with Eventually with BeforeAndAfterAll {
+class MQTTStreamSuite extends SparkFunSuite with Eventually with BeforeAndAfter {
 
-  private val topic = "topic"
+  private val batchDuration = Milliseconds(500)
+  private val master = "local[2]"
+  private val framework = this.getClass.getSimpleName
+  private val topic = "def"
+
   private var ssc: StreamingContext = _
   private var MQTTTestUtils: MQTTTestUtils = _
 
-  override def beforeAll(): Unit = {
+  before {
+    ssc = new StreamingContext(master, framework, batchDuration)
     MQTTTestUtils = new MQTTTestUtils
     MQTTTestUtils.setup()
   }
 
-  override def afterAll(): Unit = {
+  after {
     if (ssc != null) {
       ssc.stop()
       ssc = null
     }
-
     if (MQTTTestUtils != null) {
       MQTTTestUtils.teardown()
       MQTTTestUtils = null
@@ -51,10 +55,7 @@ class MQTTStreamSuite extends SparkFunSuite with Eventually with BeforeAndAfterA
   }
 
   test("mqtt input stream") {
-    val sparkConf = new SparkConf().setMaster("local[4]").setAppName(this.getClass.getSimpleName)
-    ssc = new StreamingContext(sparkConf, Milliseconds(500))
     val sendMessage = "MQTT demo for spark streaming"
-
     val receiveStream = MQTTUtils.createStream(ssc, "tcp://" + MQTTTestUtils.brokerUri, topic,
       StorageLevel.MEMORY_ONLY)
 
@@ -65,6 +66,9 @@ class MQTTStreamSuite extends SparkFunSuite with Eventually with BeforeAndAfterA
         receiveMessage
       }
     }
+
+    MQTTTestUtils.registerStreamingListener(ssc)
+
     ssc.start()
 
     // wait for the receiver to start before publishing data, or we risk failing
