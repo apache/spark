@@ -20,6 +20,7 @@ package org.apache.spark.sql.fuzzing
 import java.lang.reflect.InvocationTargetException
 import java.util.concurrent.atomic.AtomicInteger
 
+import scala.reflect.runtime
 import scala.reflect.runtime.{universe => ru}
 import scala.util.Random
 import scala.util.control.NonFatal
@@ -127,7 +128,7 @@ class DataFrameFuzzingSuite extends SparkFunSuite {
     m.universe.typeOf[Seq[String]]
   )
 
-  val dataFrameTransformations = {
+  val dataFrameTransformations: Seq[ru.MethodSymbol] = {
     val dfType = m.universe.typeOf[DataFrame]
     dfType.members
       .filter(_.isPublic)
@@ -146,60 +147,125 @@ class DataFrameFuzzingSuite extends SparkFunSuite {
       .toSeq
   }
 
-  def getRandomColumnName(df: DataFrame): String = {
-    randomChoice(df.columns.zip(df.schema).map { case (colName, field) =>
-      field.dataType match {
-        case StructType(fields) =>
-           colName + "." + randomChoice(fields.map(_.name))
-        case _ => colName
+  /**
+   * Build a list of column names and types for the given StructType, taking nesting into account.
+   * For nested struct fields, this will emit both the column for the struct field itself as well as
+   * fields for the nested struct's fields. This process will be performed recursively in order to
+   * handle deeply-nested structs.
+   */
+  def getColumnsAndTypes(struct: StructType): Seq[(String, DataType)] = {
+    struct.flatMap { field =>
+      val nestedFieldInfos: Seq[(String, DataType)] = field.dataType match {
+        case nestedStruct: StructType =>
+          Seq((field.name, field.dataType)) ++ getColumnsAndTypes(nestedStruct).map {
+            case (nestedColName, dataType) => (field.name + "." + nestedColName, dataType)
+          }
+        case _ => Seq.empty
       }
-    })
+      Seq((field.name, field.dataType)) ++ nestedFieldInfos
+    }
   }
 
-  def applyRandomTransformationToDataFrame(df: DataFrame): DataFrame = {
-    val method = randomChoice(dataFrameTransformations)
+  def getRandomColumnName(
+      df: DataFrame,
+      condition: DataType => Boolean = _ => true): Option[String] = {
+    val columnsWithTypes = getColumnsAndTypes(df.schema)
+    val candidateColumns = columnsWithTypes.filter(c => condition(c._2))
+    if (candidateColumns.isEmpty) {
+      None
+    } else {
+      Some(randomChoice(candidateColumns)._1)
+    }
+  }
+
+  class NoDataGeneratorException extends Exception
+
+  def getParamValues(
+      df: DataFrame,
+      method: ru.MethodSymbol,
+      typeConstraint: DataType => Boolean = _ => true): Seq[Any] = {
     val params = method.paramss.flatten // We don't use multiple parameter lists
     val paramTypes = params.map(_.typeSignature)
-    val paramValues = paramTypes.map { t =>
-      if (t =:= m.universe.typeOf[DataFrame]) {
+    def randColName(): String =
+      getRandomColumnName(df, typeConstraint).getOrElse(throw new NoDataGeneratorException)
+    paramTypes.map { t =>
+      if (t =:= ru.typeOf[DataFrame]) {
         randomChoice(Seq(
           df,
+          applyRandomTransformationToDataFrame(df),
           dataGenerator.randomDataFrame(numCols = Random.nextInt(4) + 1, numRows = 100)
         )) // ++ Try(applyRandomTransformationToDataFrame(df)).toOption.toSeq)
-      } else if (t =:= m.universe.typeOf[Column]) {
-        df.col(getRandomColumnName(df))
-      } else if (t =:= m.universe.typeOf[String]) {
-        getRandomColumnName(df)
-      } else if (t <:< m.universe.typeOf[Seq[Column]]) {
-        Seq.fill(Random.nextInt(2) + 1)(df.col(getRandomColumnName(df)))
-      } else if (t <:< m.universe.typeOf[Seq[String]]) {
-        Seq.fill(Random.nextInt(2) + 1)(getRandomColumnName(df))
+      } else if (t =:= ru.typeOf[Column]) {
+        df.col(randColName())
+      } else if (t =:= ru.typeOf[String]) {
+        randColName()
+      } else if (t <:< ru.typeOf[Seq[Column]]) {
+        Seq.fill(Random.nextInt(2) + 1)(df.col(randColName()))
+      } else if (t <:< ru.typeOf[Seq[String]]) {
+        Seq.fill(Random.nextInt(2) + 1)(randColName())
       } else {
         sys.error("ERROR!")
       }
     }
+  }
+
+  def applyRandomTransformationToDataFrame(df: DataFrame): DataFrame = {
+    val method = randomChoice(dataFrameTransformations)
     val reflectedMethod: ru.MethodMirror = m.reflect(df).reflectMethod(method)
-    println("Applying method " + method + " with values " + paramValues)
+    def callMethod(paramValues: Seq[Any]): DataFrame = {
+      try {
+        val df2 = reflectedMethod.apply(paramValues: _*).asInstanceOf[DataFrame]
+        println("Applied method " + method + " with values " + paramValues)
+        df2
+      } catch {
+        case e: InvocationTargetException =>
+          throw e.getCause
+      }
+    }
     try {
-      reflectedMethod.apply(paramValues: _*).asInstanceOf[DataFrame]
+      val paramValues = getParamValues(df, method)
+      try {
+        callMethod(paramValues)
+      } catch {
+        case NonFatal(e) =>
+          println(s"Encountered error when calling $method with values $paramValues")
+          throw e
+      }
     } catch {
-      case e: InvocationTargetException =>
-        throw e.getCause
+      case e: AnalysisException if e.getMessage.contains("is not a boolean") =>
+        callMethod(getParamValues(df, method, _ == BooleanType))
+      case e: AnalysisException if e.getMessage.contains("is not supported for columns of type") =>
+        callMethod(getParamValues(df, method, _.isInstanceOf[AtomicType]))
     }
   }
 
   //TestSQLContext.conf.setConf(SQLConf.DATAFRAME_RETAIN_GROUP_COLUMNS, false)
-//  TestSQLContext.conf.setConf(SQLConf.UNSAFE_ENABLED, true)
+  TestSQLContext.conf.setConf(SQLConf.UNSAFE_ENABLED, false)
   TestSQLContext.conf.setConf(SQLConf.SORTMERGE_JOIN, true)
-  TestSQLContext.conf.setConf(SQLConf.CODEGEN_ENABLED, true)
+  TestSQLContext.conf.setConf(SQLConf.CODEGEN_ENABLED, false)
 
   TestSQLContext.conf.setConf(SQLConf.SHUFFLE_PARTITIONS, 10)
 
+  val ignoredAnalysisExceptionMessages = Seq(
+    "can only be performed on tables with the same number of columns",
+    "number of columns doesn't match",
+    "unsupported join type",
+    "is neither present in the group by, nor is it an aggregate function",
+    "is ambiguous, could be:",
+    "unresolved operator 'Project", //TODO
+    "unresolved operator 'Union", // TODO: disabled to let me find new errors
+    "unresolved operator 'Except", // TODO: disabled to let me find new errors
+    "unresolved operator 'Intersect", // TODO: disabled to let me find new errors
+    "Cannot resolve column name" // TODO: only ignore for join?
+  )
 
-  for (_ <- 1 to 10000) {
+  for (_ <- 1 to 1000) {
     println("-" * 80)
     try {
-      val df = dataGenerator.randomDataFrame(numCols = Random.nextInt(4) + 1, numRows = 20)
+      val df = dataGenerator.randomDataFrame(
+        numCols = Random.nextInt(4) + 1,
+        numRows = 20,
+        allowComplexTypes = true)
       val df2 = applyRandomTransformationToDataFrame(applyRandomTransformationToDataFrame(df))
       try {
         df2.collectAsList()
@@ -211,17 +277,14 @@ class DataFrameFuzzingSuite extends SparkFunSuite {
           throw new Exception(e)
       }
     } catch {
+      case e: NoDataGeneratorException =>
+        println("skipped due to lack of data generator")
       case e: UnresolvedException[_] =>
         println("skipped due to unresolved")
-      case e: AnalysisException =>
-        println("Skipped")
-      case e: IllegalArgumentException if e.getMessage.contains("number of columns doesn't match") =>
-      case e: IllegalArgumentException if e.getMessage.contains("Unsupported join type") =>
-
-
-      //      case e: IllegalArgumentException =>
-//        println(e)
-//        println("Skipped due to IOE")
+      case e: Exception
+        if ignoredAnalysisExceptionMessages.exists {
+          m => e.getMessage.toLowerCase.contains(m.toLowerCase)
+        } => println("Skipped due to expected AnalysisException")
     }
   }
 
