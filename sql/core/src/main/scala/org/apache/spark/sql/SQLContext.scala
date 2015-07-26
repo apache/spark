@@ -799,10 +799,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * @since 1.3.0
    */
   def table(tableName: String): DataFrame = {
-    table(new SqlParser().parseTableIdentifier(tableName))
-  }
-
-  private[sql] def table(tableIdent: TableIdentifier): DataFrame = {
+    val tableIdent = new SqlParser().parseTableIdentifier(tableName)
     DataFrame(this, catalog.lookupRelation(tableIdent.toSeq))
   }
 
