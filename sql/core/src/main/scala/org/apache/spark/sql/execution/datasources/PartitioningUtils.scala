@@ -179,8 +179,7 @@ private[sql] object PartitioningUtils {
    * {{{
    *   NullType ->
    *   IntegerType -> LongType ->
-   *   DoubleType -> DecimalType.Unlimited ->
-   *   StringType
+   *   DoubleType -> StringType
    * }}}
    */
   private[sql] def resolvePartitions(
