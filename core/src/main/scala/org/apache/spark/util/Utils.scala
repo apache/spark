@@ -430,11 +430,11 @@ private[spark] object Utils extends Logging {
       val lockFileName = s"${url.hashCode}${timestamp}_lock"
       val localDir = new File(getLocalDir(conf))
       val lockFile = new File(localDir, lockFileName)
-      val raf = new RandomAccessFile(lockFile, "rw")
+      val lockFileChannel = new RandomAccessFile(lockFile, "rw").getChannel()
       // Only one executor entry.
       // The FileLock is only used to control synchronization for executors download file,
       // it's always safe regardless of lock type (mandatory or advisory).
-      val lock = raf.getChannel().lock()
+      val lock = lockFileChannel.lock()
       val cachedFile = new File(localDir, cachedFileName)
       try {
         if (!cachedFile.exists()) {
@@ -442,6 +442,7 @@ private[spark] object Utils extends Logging {
         }
       } finally {
         lock.release()
+        lockFileChannel.close()
       }
       copyFile(
         url,
