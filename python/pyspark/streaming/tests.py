@@ -937,7 +937,7 @@ class KinesisStreamTests(PySparkStreamingTestCase):
             self.ssc.start()
 
             testData = [i for i in range(1, 11)]
-            expectedOutput = {str(i) for i in testData}
+            expectedOutput = set([str(i) for i in testData])
             start_time = time.time()
             while time.time() - start_time < 120:
                 kinesisTestUtils.pushData(testData)
