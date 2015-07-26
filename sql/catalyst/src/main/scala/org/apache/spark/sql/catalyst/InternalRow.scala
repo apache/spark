@@ -32,6 +32,8 @@ abstract class InternalRow extends Serializable {
 
   def get(ordinal: Int): Any
 
+  def genericGet(ordinal: Int): Any = get(ordinal, null)
+
   def get(ordinal: Int, dataType: DataType): Any = get(ordinal)
 
   def getAs[T](ordinal: Int, dataType: DataType): T = get(ordinal, dataType).asInstanceOf[T]

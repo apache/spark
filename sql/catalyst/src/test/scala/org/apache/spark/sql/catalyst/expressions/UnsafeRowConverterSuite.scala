@@ -183,7 +183,7 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers {
     assert(setToNullAfterCreation.getFloat(6) === rowWithNoNullColumns.getFloat(6))
     assert(setToNullAfterCreation.getDouble(7) === rowWithNoNullColumns.getDouble(7))
     assert(setToNullAfterCreation.getString(8) === rowWithNoNullColumns.getString(8))
-    assert(setToNullAfterCreation.getBinary(9) === rowWithNoNullColumns.get(9))
+    assert(setToNullAfterCreation.getBinary(9) === rowWithNoNullColumns.getBinary(9))
     // assert(setToNullAfterCreation.get(10) === rowWithNoNullColumns.get(10))
     // assert(setToNullAfterCreation.get(11) === rowWithNoNullColumns.get(11))
 
