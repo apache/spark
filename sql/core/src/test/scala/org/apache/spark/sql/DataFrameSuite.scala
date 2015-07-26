@@ -30,7 +30,7 @@ import org.apache.spark.sql.test.{ExamplePointUDT, ExamplePoint, SQLTestUtils}
 class DataFrameSuite extends QueryTest with SQLTestUtils {
   import org.apache.spark.sql.TestData._
 
-  val sqlContext = org.apache.spark.sql.test.TestSQLContext
+  lazy val sqlContext = org.apache.spark.sql.test.TestSQLContext
   import sqlContext.implicits._
 
   test("analysis error should be eagerly reported") {
@@ -587,7 +587,7 @@ class DataFrameSuite extends QueryTest with SQLTestUtils {
     df.rdd.collect()
   }
 
-  test("SPARK-6899") {
+  test("SPARK-6899: type should match when using codegen") {
     withSQLConf(SQLConf.CODEGEN_ENABLED.key -> "true") {
       checkAnswer(
         decimalData.agg(avg('a)),
@@ -822,8 +822,45 @@ class DataFrameSuite extends QueryTest with SQLTestUtils {
   }
 
   test("SPARK-8608: call `show` on local DataFrame with random columns should return same value") {
-    // We will do local projection for LocalRelation, and reuse the same Expression object.
-    val df = (1 to 10).map(Tuple1.apply).toDF().select(rand())
+    // Make sure we can pass this test for both codegen mode and interpreted mode.
+    withSQLConf(SQLConf.CODEGEN_ENABLED.key -> "true") {
+      val df = testData.select(rand(33))
+      assert(df.showString(5) == df.showString(5))
+    }
+
+    withSQLConf(SQLConf.CODEGEN_ENABLED.key -> "false") {
+      val df = testData.select(rand(33))
+      assert(df.showString(5) == df.showString(5))
+    }
+
+    // We will reuse the same Expression object for LocalRelation.
+    val df = (1 to 10).map(Tuple1.apply).toDF().select(rand(33))
     assert(df.showString(5) == df.showString(5))
+  }
+
+  test("SPARK-8609: local DataFrame with random columns should return same value after sort") {
+    // Make sure we can pass this test for both codegen mode and interpreted mode.
+    withSQLConf(SQLConf.CODEGEN_ENABLED.key -> "true") {
+      checkAnswer(testData.sort(rand(33)), testData.sort(rand(33)))
+    }
+
+    withSQLConf(SQLConf.CODEGEN_ENABLED.key -> "false") {
+      checkAnswer(testData.sort(rand(33)), testData.sort(rand(33)))
+    }
+
+    // We will reuse the same Expression object for LocalRelation.
+    val df = (1 to 10).map(Tuple1.apply).toDF()
+    checkAnswer(df.sort(rand(33)), df.sort(rand(33)))
+  }
+
+  test("SPARK-9083: sort with non-deterministic expressions") {
+    import org.apache.spark.util.random.XORShiftRandom
+
+    val seed = 33
+    val df = (1 to 100).map(Tuple1.apply).toDF("i")
+    val random = new XORShiftRandom(seed)
+    val expected = (1 to 100).map(_ -> random.nextDouble()).sortBy(_._2).map(_._1)
+    val actual = df.sort(rand(seed)).collect().map(_.getInt(0))
+    assert(expected === actual)
   }
 }
