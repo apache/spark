@@ -171,18 +171,23 @@ case class Exchange(newPartitioning: Partitioning, child: SparkPlan) extends Una
         // For NullUnsafeHashPartitioning, we do not want to send rows having any expression
         // in `expressions` evaluated as null to the same node.
         val materalizeExpressions = newMutableProjection(expressions, child.output)()
-        val partitionExpressionSchema = expressions.map { expr =>
-          Alias(expr, "partitionExpr")().toAttribute
+        val partitionExpressionSchema = expressions.map {
+          case ne: NamedExpression => ne.toAttribute
+          case expr => Alias(expr, "partitionExpr")().toAttribute
         }
         val partitionId =
           If(
-            AtLeastNNonNulls(partitionExpressionSchema.length, partitionExpressionSchema),
+            Not(AtLeastNNulls(1, partitionExpressionSchema)),
+            // There is no null value in the partition expressions, we can just get the
+            // hashCode of the input row.
             RowHashCode,
             Cast(Multiply(new Rand(numPartition), Literal(numPartition.toDouble)), IntegerType))
         val partitionIdExtractor =
           newMutableProjection(partitionId :: Nil, partitionExpressionSchema)()
         (row: InternalRow) => partitionIdExtractor(materalizeExpressions(row))
       case NullUnsafeHashPartitioning(expressions, numPartition) =>
+        // If spark.sql.advancedOptimization is not enabled, we will just do the same thing
+        // as NullSafeHashPartitioning.
         newMutableProjection(expressions, child.output)()
       case RangePartitioning(_, _) | SinglePartition => identity
       case _ => sys.error(s"Exchange not implemented for $newPartitioning")

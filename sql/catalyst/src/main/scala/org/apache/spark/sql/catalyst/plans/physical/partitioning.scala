@@ -60,8 +60,7 @@ case class NullSafeClusteredDistribution(clustering: Seq[Expression]) extends Di
 
 /**
  * It is basically the same as [[NullSafeClusteredDistribution]] except that
- * for two null values in two rows evaluated by `clustering`,
- * we consider these two nulls are not equal.
+ * it does not require that evaluated rows having any null values to be clustered.
  */
 case class NullUnsafeClusteredDistribution(clustering: Seq[Expression]) extends Distribution {
   require(
@@ -184,6 +183,15 @@ case class NullSafeHashPartitioning(expressions: Seq[Expression], numPartitions:
   override def keyExpressions: Seq[Expression] = expressions
 }
 
+/**
+ * Represents a partitioning where rows are split up across partitions based on the hash
+ * of `expressions`.  All rows where `expressions` evaluate to the same non-null values are
+ * guaranteed to be in the same partition. For `expressions`, if a evaluated row
+ * has any null value, it is not guaranteed to be in the same partition with other
+ * rows having the same values.
+ *
+ * For example, Row(1, null) and Row(1, null) may not be in the same partition.
+ */
 case class NullUnsafeHashPartitioning(expressions: Seq[Expression], numPartitions: Int)
   extends Expression with Partitioning with Unevaluable {
 
@@ -236,6 +244,8 @@ case class RangePartitioning(ordering: Seq[SortOrder], numPartitions: Int)
       val minSize = Seq(requiredOrdering.size, ordering.size).min
       requiredOrdering.take(minSize) == ordering.take(minSize)
     case NullSafeClusteredDistribution(requiredClustering) =>
+      clusteringSet.subsetOf(requiredClustering.toSet)
+    case NullUnsafeClusteredDistribution(requiredClustering) =>
       clusteringSet.subsetOf(requiredClustering.toSet)
     case _ => false
   }

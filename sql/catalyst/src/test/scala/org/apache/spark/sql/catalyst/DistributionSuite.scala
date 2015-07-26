@@ -42,7 +42,7 @@ class DistributionSuite extends SparkFunSuite {
     }
   }
 
-  test("HashPartitioning is the output partitioning") {
+  test("NullSafeHashPartitioning is the output partitioning") {
     // Cases which do not need an exchange between two data properties.
     checkSatisfied(
       NullSafeHashPartitioning(Seq('a, 'b, 'c), 10),
@@ -65,6 +65,21 @@ class DistributionSuite extends SparkFunSuite {
       true)
 
     checkSatisfied(
+      NullSafeHashPartitioning(Seq('a, 'b, 'c), 10),
+      NullUnsafeClusteredDistribution(Seq('a, 'b, 'c)),
+      true)
+
+    checkSatisfied(
+      NullSafeHashPartitioning(Seq('b, 'c), 10),
+      NullUnsafeClusteredDistribution(Seq('a, 'b, 'c)),
+      true)
+
+    checkSatisfied(
+      SinglePartition,
+      NullUnsafeClusteredDistribution(Seq('a, 'b, 'c)),
+      true)
+
+    checkSatisfied(
       SinglePartition,
       OrderedDistribution(Seq('a.asc, 'b.asc, 'c.asc)),
       true)
@@ -78,6 +93,16 @@ class DistributionSuite extends SparkFunSuite {
     checkSatisfied(
       NullSafeHashPartitioning(Seq('a, 'b, 'c), 10),
       NullSafeClusteredDistribution(Seq('d, 'e)),
+      false)
+
+    checkSatisfied(
+      NullSafeHashPartitioning(Seq('a, 'b, 'c), 10),
+      NullUnsafeClusteredDistribution(Seq('b, 'c)),
+      false)
+
+    checkSatisfied(
+      NullSafeHashPartitioning(Seq('a, 'b, 'c), 10),
+      NullUnsafeClusteredDistribution(Seq('d, 'e)),
       false)
 
     checkSatisfied(
@@ -102,6 +127,82 @@ class DistributionSuite extends SparkFunSuite {
       ClusteredDistribution(Seq('b + 1)),
       true)
     */
+  }
+
+
+
+  test("NullUnsafeHashPartitioning is the output partitioning") {
+    // Cases which do not need an exchange between two data properties.
+    checkSatisfied(
+      NullUnsafeHashPartitioning(Seq('a, 'b, 'c), 10),
+      UnspecifiedDistribution,
+      true)
+
+    checkSatisfied(
+      NullUnsafeHashPartitioning(Seq('a, 'b, 'c), 10),
+      NullUnsafeClusteredDistribution(Seq('a, 'b, 'c)),
+      true)
+
+    checkSatisfied(
+      NullUnsafeHashPartitioning(Seq('b, 'c), 10),
+      NullUnsafeClusteredDistribution(Seq('a, 'b, 'c)),
+      true)
+
+    checkSatisfied(
+      SinglePartition,
+      NullUnsafeClusteredDistribution(Seq('a, 'b, 'c)),
+      true)
+
+    checkSatisfied(
+      SinglePartition,
+      OrderedDistribution(Seq('a.asc, 'b.asc, 'c.asc)),
+      true)
+
+    // Cases which need an exchange between two data properties.
+    checkSatisfied(
+      NullUnsafeHashPartitioning(Seq('a, 'b, 'c), 10),
+      NullSafeClusteredDistribution(Seq('a, 'b, 'c)),
+      false)
+
+    checkSatisfied(
+      NullUnsafeHashPartitioning(Seq('b, 'c), 10),
+      NullSafeClusteredDistribution(Seq('a, 'b, 'c)),
+      false)
+
+    checkSatisfied(
+      NullUnsafeHashPartitioning(Seq('a, 'b, 'c), 10),
+      NullSafeClusteredDistribution(Seq('b, 'c)),
+      false)
+
+    checkSatisfied(
+      NullUnsafeHashPartitioning(Seq('a, 'b, 'c), 10),
+      NullSafeClusteredDistribution(Seq('d, 'e)),
+      false)
+
+    checkSatisfied(
+      NullUnsafeHashPartitioning(Seq('a, 'b, 'c), 10),
+      NullUnsafeClusteredDistribution(Seq('b, 'c)),
+      false)
+
+    checkSatisfied(
+      NullUnsafeHashPartitioning(Seq('a, 'b, 'c), 10),
+      NullUnsafeClusteredDistribution(Seq('d, 'e)),
+      false)
+
+    checkSatisfied(
+      NullUnsafeHashPartitioning(Seq('a, 'b, 'c), 10),
+      AllTuples,
+      false)
+
+    checkSatisfied(
+      NullUnsafeHashPartitioning(Seq('a, 'b, 'c), 10),
+      OrderedDistribution(Seq('a.asc, 'b.asc, 'c.asc)),
+      false)
+
+    checkSatisfied(
+      NullUnsafeHashPartitioning(Seq('b, 'c), 10),
+      OrderedDistribution(Seq('a.asc, 'b.asc, 'c.asc)),
+      false)
   }
 
   test("RangePartitioning is the output partitioning") {
@@ -141,6 +242,22 @@ class DistributionSuite extends SparkFunSuite {
       NullSafeClusteredDistribution(Seq('b, 'c, 'a, 'd)),
       true)
 
+    checkSatisfied(
+      RangePartitioning(Seq('a.asc, 'b.asc, 'c.asc), 10),
+      NullUnsafeClusteredDistribution(Seq('a, 'b, 'c)),
+      true)
+
+    checkSatisfied(
+      RangePartitioning(Seq('a.asc, 'b.asc, 'c.asc), 10),
+      NullUnsafeClusteredDistribution(Seq('c, 'b, 'a)),
+      true)
+
+    checkSatisfied(
+      RangePartitioning(Seq('a.asc, 'b.asc, 'c.asc), 10),
+      NullUnsafeClusteredDistribution(Seq('b, 'c, 'a, 'd)),
+      true)
+
+
     // Cases which need an exchange between two data properties.
     // TODO: We can have an optimization to first sort the dataset
     // by a.asc and then sort b, and c in a partition. This optimization
@@ -159,6 +276,16 @@ class DistributionSuite extends SparkFunSuite {
     checkSatisfied(
       RangePartitioning(Seq('a.asc, 'b.asc, 'c.asc), 10),
       NullSafeClusteredDistribution(Seq('a, 'b)),
+      false)
+
+    checkSatisfied(
+      RangePartitioning(Seq('a.asc, 'b.asc, 'c.asc), 10),
+      NullUnsafeClusteredDistribution(Seq('c, 'd)),
+      false)
+
+    checkSatisfied(
+      RangePartitioning(Seq('a.asc, 'b.asc, 'c.asc), 10),
+      NullUnsafeClusteredDistribution(Seq('a, 'b)),
       false)
 
     checkSatisfied(

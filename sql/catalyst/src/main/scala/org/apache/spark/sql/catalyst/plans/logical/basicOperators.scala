@@ -85,18 +85,29 @@ case class Generate(
 }
 
 case class Filter(condition: Expression, child: LogicalPlan) extends UnaryNode {
-  private def shouldChangeNullable(atLeastNNonNulls: AtLeastNNonNulls): Boolean = {
-    val expressions = atLeastNNonNulls.children
-    val n = atLeastNNonNulls.n
-    if (expressions.length != n) {
+  /**
+   * Indicates if `atLeastNNulls` is used to check if atLeastNNulls.children
+   * have at least one null value and atLeastNNulls.children are all attributes.
+   */
+  private def isAtLeastOneNullOutputAttributes(atLeastNNulls: AtLeastNNulls): Boolean = {
+    val expressions = atLeastNNulls.children
+    val n = atLeastNNulls.n
+    if (n != 1) {
+      // AtLeastNNulls is not used to check if atLeastNNulls.children have
+      // at least one null value.
       false
     } else {
+      // AtLeastNNulls is used to check if atLeastNNulls.children have
+      // at least one null value. We need to make sure all atLeastNNulls.children
+      // are attributes.
       expressions.forall(_.isInstanceOf[Attribute])
     }
   }
 
   override def output: Seq[Attribute] = condition match {
-    case a: AtLeastNNonNulls if shouldChangeNullable(a) =>
+    case Not(a: AtLeastNNulls) if isAtLeastOneNullOutputAttributes(a) =>
+      // The condition is used to make sure that there is no null value in
+      // a.children.
       val nonNullableAttributes = AttributeSet(a.children.asInstanceOf[Seq[Attribute]])
       child.output.map {
         case attr if nonNullableAttributes.contains(attr) =>

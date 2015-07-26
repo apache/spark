@@ -66,10 +66,8 @@ class DefaultOptimizer extends Optimizer {
       RemovePositive ::
       SimplifyFilters ::
       SimplifyCasts ::
-      SimplifyCaseConversionExpressions :: // Nil : _*) ::
+      SimplifyCaseConversionExpressions ::
       extendedOperatorOptimizationRules.toList : _*) ::
-    // Batch("Extended Operator Optimizations", Once,
-    //  extendedOperatorOptimizationRules : _*) ::
     Batch("Decimal Optimizations", FixedPoint(100),
       DecimalAggregates) ::
     Batch("LocalRelation", FixedPoint(100),
@@ -231,12 +229,18 @@ object ColumnPruning extends Rule[LogicalPlan] {
   }
 
   /** Applies a projection only when the child is producing unnecessary attributes */
-  private def prunedChild(c: LogicalPlan, allReferences: AttributeSet) =
+  private def prunedChild(c: LogicalPlan, allReferences: AttributeSet) = {
     if ((c.outputSet -- allReferences.filter(c.outputSet.contains)).nonEmpty) {
-      Project(allReferences.filter(c.outputSet.contains).toSeq, c)
+      // We need to preserve the nullability of c's output.
+      // So, we first create a outputMap and if a reference is from the output of
+      // c, we use that output attribute from c.
+      val outputMap = AttributeMap(c.output.map(attr => (attr, attr)))
+      val projectList = allReferences.filter(outputMap.contains).map(outputMap).toSeq
+      Project(projectList, c)
     } else {
       c
     }
+  }
 }
 
 /**
@@ -552,20 +556,8 @@ object SimplifyFilters extends Rule[LogicalPlan] {
  * This heuristic is valid assuming the expression evaluation cost is minimal.
  */
 object PushPredicateThroughProject extends Rule[LogicalPlan] with PredicateHelper {
-
-  /** If the condition changes nullability of attributes. */
-  private def preserveNullability(condition: Expression): Boolean = condition match {
-    // The condition is used to change nullability of attributes when
-    //  - expressions of AtLeastNNonNulls are all attributes; and
-    //  - AtLeastNNonNulls is used to make sure that there is no attribute is null.
-    case AtLeastNNonNulls(n, expressions) =>
-      !(expressions.forall(_.isInstanceOf[Attribute]) && n == expressions.length)
-    case other => true
-  }
-
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case filter @ Filter(condition, project @ Project(fields, grandChild))
-      if preserveNullability(condition) =>
+    case filter @ Filter(condition, project @ Project(fields, grandChild)) =>
       // Create a map of Aliases to their values from the child projection.
       // e.g., 'SELECT a + b AS c, d ...' produces Map(c -> a + b).
       val aliasMap = AttributeMap(fields.collect {
