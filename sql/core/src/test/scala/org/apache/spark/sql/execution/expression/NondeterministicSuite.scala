@@ -27,6 +27,6 @@ class NondeterministicSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("SparkPartitionID") {
-    checkEvaluation(SparkPartitionID, 0)
+    checkEvaluation(SparkPartitionID(), 0)
   }
 }
