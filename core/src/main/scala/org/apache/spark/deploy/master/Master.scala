@@ -472,21 +472,9 @@ private[master] class Master(
     case RequestExecutors(appId, requestedTotal) =>
       context.reply(handleRequestExecutors(appId, requestedTotal))
 
-    case KillExecutors(appId, executorIdsString) =>
-      // All executors IDs should be integers since we launched these executors.
-      // However, the kill interface on the driver side accepts strings, so we need to handle
-      // non-integer executor IDs just to be safe since the user can pass in whatever s/he wants.
-      val executorIds = executorIdsString.flatMap { executorId =>
-        try {
-          Some(executorId.toInt)
-        } catch {
-          case e: NumberFormatException =>
-            logError(s"Application $appId requested to kill an " +
-              s"executor with a non-integer ID: $executorId. Ignoring.")
-            None
-        }
-      }
-      context.reply(handleKillExecutors(appId, executorIds))
+    case KillExecutors(appId, executorIds) =>
+      val formattedExecutorIds = formatExecutorIds(executorIds)
+      context.reply(handleKillExecutors(appId, formattedExecutorIds))
   }
 
   override def onDisconnected(address: RpcAddress): Unit = {
@@ -582,41 +570,40 @@ private[master] class Master(
       app: ApplicationInfo,
       usableWorkers: Array[WorkerInfo],
       spreadOutApps: Boolean): Array[Int] = {
-    // If the number of cores per executor is not specified, then we can just schedule
-    // 1 core at a time since we expect a single executor to be launched on each worker
-    val coresPerExecutor = app.desc.coresPerExecutor.getOrElse(1)
+    val coresPerExecutor = app.desc.coresPerExecutor
+    val minCoresPerExecutor = coresPerExecutor.getOrElse(1)
     val memoryPerExecutor = app.desc.memoryPerExecutorMB
     val numUsable = usableWorkers.length
     val assignedCores = new Array[Int](numUsable) // Number of cores to give to each worker
-    val assignedMemory = new Array[Int](numUsable) // Amount of memory to give to each worker
+    val assignedExecutors = new Array[Int](numUsable) // Number of new executors on each worker
     var coresToAssign = math.min(app.coresLeft, usableWorkers.map(_.coresFree).sum)
-    var freeWorkers = (0 until numUsable).toIndexedSeq
 
-    // If all executors in this application have the same number of cores,
-    // use the executor limit to bound the number of cores to assign.
-    app.desc.coresPerExecutor.foreach { coresPerExecutor =>
-      val maxNewExecutors = app.executorLimit - app.executors.size
-      val maxNewCores = math.min(maxNewExecutors.toLong * coresPerExecutor, Integer.MAX_VALUE)
-      toAssign = math.min(toAssign, maxNewCores.toInt)
-    }
-
+    /** Return whether the specified worker can launch an executor for this app. */
     def canLaunchExecutor(pos: Int): Boolean = {
-      usableWorkers(pos).coresFree - assignedCores(pos) >= coresPerExecutor &&
-      usableWorkers(pos).memoryFree - assignedMemory(pos) >= memoryPerExecutor &&
-      !app.isBlacklisted(usableWorkers(pos).id)
+      val assignedMemory = assignedExecutors(pos) * memoryPerExecutor
+      usableWorkers(pos).memoryFree - assignedMemory >= memoryPerExecutor &&
+      usableWorkers(pos).coresFree - assignedCores(pos) >= minCoresPerExecutor &&
+      coresToAssign >= minCoresPerExecutor &&
+      assignedExecutors.sum + app.executors.size < app.executorLimit
     }
 
-    while (coresToAssign >= coresPerExecutor && freeWorkers.nonEmpty) {
-      freeWorkers = freeWorkers.filter(canLaunchExecutor)
+    // Keep launching executors until no more workers can accommodate
+    // any more, or if we have reached this application's limits
+    var freeWorkers = (0 until numUsable).filter(canLaunchExecutor)
+    while (freeWorkers.nonEmpty) {
       freeWorkers.foreach { pos =>
         var keepScheduling = true
-        while (keepScheduling && canLaunchExecutor(pos) && coresToAssign >= coresPerExecutor) {
-          coresToAssign -= coresPerExecutor
-          assignedCores(pos) += coresPerExecutor
-          // If cores per executor is not set, we are assigning 1 core at a time
-          // without actually meaning to launch 1 executor for each core assigned
-          if (app.desc.coresPerExecutor.isDefined) {
-            assignedMemory(pos) += memoryPerExecutor
+        while (keepScheduling && canLaunchExecutor(pos)) {
+          coresToAssign -= minCoresPerExecutor
+          assignedCores(pos) += minCoresPerExecutor
+
+          // If cores per executor is set, every iteration of this loop schedules one executor.
+          // Otherwise, we are simply assigning 1 core at a time, and each worker should have
+          // at most 1 executor.
+          if (app.oneExecutorPerWorker()) {
+            assignedExecutors(pos) += 1
+          } else {
+            assignedExecutors(pos) = 1
           }
 
           // Spreading out an application means spreading out its executors across as
@@ -628,6 +615,7 @@ private[master] class Master(
           }
         }
       }
+      freeWorkers = freeWorkers.filter(canLaunchExecutor)
     }
     assignedCores
   }
@@ -838,13 +826,6 @@ private[master] class Master(
       case Some(appInfo) =>
         logInfo(s"Application $appId requested to set total executors to $requestedTotal.")
         appInfo.executorLimit = requestedTotal
-
-        // If the application raises the executor limit, then we can launch new executors.
-        // If there are previously blacklisted workers, then we can launch these new executors
-        // by unblacklisting a subset of these workers. For more detail, see `handleKillExecutors`.
-        if (appInfo.desc.coresPerExecutor.isEmpty) {
-          appInfo.removeFromBlacklist(appInfo.numWaitingExecutors)
-        }
         schedule()
         true
       case None =>
@@ -881,39 +862,39 @@ private[master] class Master(
   private def handleKillExecutors(appId: String, executorIds: Seq[Int]): Boolean = {
     idToApp.get(appId) match {
       case Some(appInfo) =>
+        logInfo(s"Application $appId requests to kill executors: " + executorIds.mkString(", "))
         val (known, unknown) = executorIds.partition(appInfo.executors.contains)
-        if (known.nonEmpty) {
-          logInfo(s"Application $appId attempted to kill executors: " + known.mkString(", "))
-          val executorsToKill = known.map { executorId => appInfo.executors(executorId) }
-
-          // Ask the worker to kill the executor and remove state about it
-          executorsToKill.foreach { desc =>
-            killExecutor(desc)
-            appInfo.executors.remove(desc.id)
-          }
-
-          // If cores per executor is not set, then we need to use the blacklist mechanism in
-          // addition to the executor limit. For more detail, see the java doc of this method.
-          if (appInfo.desc.coresPerExecutor.isEmpty) {
-            // There may be executors waiting to be scheduled once space frees up.
-            // If so, leave a few workers unblacklisted to launch these executors.
-            executorsToKill.drop(appInfo.numWaitingExecutors).foreach { desc =>
-              appInfo.blacklistWorker(desc.worker.id)
-            }
-          }
+        known.foreach { executorId =>
+          appInfo.executors.remove(executorId).foreach(killExecutor)
         }
-
-        // Warn against executor IDs we don't know about
         if (unknown.nonEmpty) {
           logWarning(s"Application $appId attempted to kill non-existent executors: "
             + unknown.mkString(", "))
         }
-
         schedule()
         true
       case None =>
         logWarning(s"Unregistered application $appId requested us to kill executors!")
         false
+    }
+  }
+
+  /**
+   * Cast the given executor IDs to integers and filter out the ones that are not.
+   *
+   * All executors IDs should be integers since we launched these executors. However, the
+   * kill interface on the driver side accepts strings, so we need to handle non-integer
+   * executor IDs just to be safe since the user can pass in whatever s/he wants.
+   */
+  private def formatExecutorIds(executorIds: Seq[String]): Seq[Int] = {
+    executorIds.flatMap { executorId =>
+      try {
+        Some(executorId.toInt)
+      } catch {
+        case e: NumberFormatException =>
+          logError(s"Encountered executor with a non-integer ID: $executorId. Ignoring")
+          None
+      }
     }
   }
 

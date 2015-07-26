@@ -47,13 +47,6 @@ private[spark] class ApplicationInfo(
   // by the application will this be set to a finite value.
   @transient var executorLimit: Int = _
 
-  // A set of workers on which this application cannot launch executors.
-  // This is used to handle kill requests when `spark.executor.cores` is NOT set. In this mode,
-  // at most one executor from this application can be run on each worker. When an executor is
-  // killed, its worker is added to the blacklist to avoid having the master immediately schedule
-  // a new executor on the worker.
-  @transient private var blacklistedWorkers: mutable.HashSet[String] = _
-
   @transient private var nextExecutorId: Int = _
 
   init()
@@ -72,7 +65,6 @@ private[spark] class ApplicationInfo(
     nextExecutorId = 0
     removedExecutors = new ArrayBuffer[ExecutorDesc]
     executorLimit = Integer.MAX_VALUE
-    blacklistedWorkers = new mutable.HashSet[String]
   }
 
   private def newExecutorId(useID: Option[Int] = None): Int = {
@@ -110,45 +102,12 @@ private[spark] class ApplicationInfo(
   private[master] def coresLeft: Int = requestedCores - coresGranted
 
   /**
-   * Return the number of executors waiting to be scheduled once space frees up.
+   * Return whether this application should launch at most one executor per worker.
    *
-   * This is only defined if the application explicitly set the executor limit. For instance,
-   * if an application asks for 8 executors but there is only space for 5, then there will be
-   * 3 waiting executors.
+   * This is true if cores per executor is not defined, in which case the executor should
+   * grab all the available cores on the worker instead.
    */
-  private[master] def numWaitingExecutors: Int = {
-    if (executorLimit != Integer.MAX_VALUE) {
-      math.max(0, executorLimit - executors.size)
-    } else {
-      0
-    }
-  }
-
-  /**
-   * Add a worker to the blacklist, called when the executor running on the worker is killed.
-   * This is used only if cores per executor is not set.
-   */
-  private[master] def blacklistWorker(workerId: String): Unit = {
-    blacklistedWorkers += workerId
-  }
-
-  /**
-   * Remove workers from the blacklist, called when the application requests new executors.
-   * This is used only if cores per executor is not set.
-   */
-  private[master] def removeFromBlacklist(numWorkers: Int): Unit = {
-    blacklistedWorkers.take(numWorkers).foreach { workerId =>
-      blacklistedWorkers.remove(workerId)
-    }
-  }
-
-  /**
-   * Return whether the specified worker is blacklisted.
-   * This is used only if cores per executor is not set.
-   */
-  private[master] def isBlacklisted(workerId: String): Boolean = {
-    blacklistedWorkers.contains(workerId)
-  }
+  private[master] def oneExecutorPerWorker(): Boolean = desc.coresPerExecutor.isDefined
 
   private var _retryCount = 0
 
