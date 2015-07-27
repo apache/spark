@@ -21,8 +21,8 @@ import java.util.ArrayList;
 import java.util.List;
 
 import org.apache.spark.sql.Row;
-import org.apache.spark.sql.expressions.aggregate.MutableAggregationBuffer;
-import org.apache.spark.sql.expressions.aggregate.UserDefinedAggregateFunction;
+import org.apache.spark.sql.expressions.MutableAggregationBuffer;
+import org.apache.spark.sql.expressions.UserDefinedAggregateFunction;
 import org.apache.spark.sql.types.DataType;
 import org.apache.spark.sql.types.DataTypes;
 import org.apache.spark.sql.types.StructField;
@@ -104,4 +104,3 @@ public class MyDoubleAvg extends UserDefinedAggregateFunction {
     }
   }
 }
-
