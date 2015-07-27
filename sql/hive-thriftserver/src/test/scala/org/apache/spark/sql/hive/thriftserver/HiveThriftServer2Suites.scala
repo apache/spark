@@ -558,24 +558,23 @@ abstract class HiveThriftServer2Test extends SparkFunSuite with BeforeAndAfterAl
 
     // Ensures that the following "tail" command won't fail.
     logPath.createNewFile()
+    val successLines = Seq(THRIFT_BINARY_SERVICE_LIVE, THRIFT_HTTP_SERVICE_LIVE)
+    val failureLines = Seq("HiveServer2 is stopped", "Exception in thread", "Error:")
     logTailingProcess =
       // Using "-n +0" to make sure all lines in the log file are checked.
       Process(s"/usr/bin/env tail -n +0 -f ${logPath.getCanonicalPath}").run(ProcessLogger(
         (line: String) => {
           diagnosisBuffer += line
-
-          if (line.contains(THRIFT_BINARY_SERVICE_LIVE) ||
-              line.contains(THRIFT_HTTP_SERVICE_LIVE)) {
-            serverStarted.trySuccess(())
-          } else if (line.contains("HiveServer2 is stopped")) {
-            // This log line appears when the server fails to start and terminates gracefully (e.g.
-            // because of port contention).
-            serverStarted.tryFailure(new RuntimeException("Failed to start HiveThriftServer2"))
-          } else if (line.contains("Exception in thread \"main\"")) {
-            // The main thread exited after raising an exception, sign of a serious problem
-            serverStarted
-                .tryFailure(new RuntimeException(s"Failed to start HiveThriftServer2: $line"))
-          }
+          successLines.map(r => {
+            if (line.contains(r)) {
+              serverStarted.trySuccess(())
+            }
+          })
+          failureLines.map(r => {
+            if (line.contains(r)) {
+              serverStarted.tryFailure(new RuntimeException(s"Failed with output '$line'"))
+            }
+          })
         }))
 
     Await.result(serverStarted.future, SERVER_STARTUP_TIMEOUT)
