@@ -50,16 +50,16 @@ case class ShuffledHashOuterJoin(
   override def outputPartitioning: Partitioning = joinType match {
     case LeftOuter =>
       val partitions =
-        Seq(left.outputPartitioning, right.outputPartitioning.withNullSafeSetting(true))
+        Seq(left.outputPartitioning, right.outputPartitioning.withNullSafeSetting(false))
       PartitioningCollection(partitions)
     case RightOuter =>
       val partitions =
-        Seq(right.outputPartitioning, left.outputPartitioning.withNullSafeSetting(true))
+        Seq(right.outputPartitioning, left.outputPartitioning.withNullSafeSetting(false))
       PartitioningCollection(partitions)
     case FullOuter =>
       val partitions =
-        Seq(left.outputPartitioning.withNullSafeSetting(true),
-          right.outputPartitioning.withNullSafeSetting(true))
+        Seq(left.outputPartitioning.withNullSafeSetting(false),
+          right.outputPartitioning.withNullSafeSetting(false))
       PartitioningCollection(partitions)
     case x =>
       throw new IllegalArgumentException(s"HashOuterJoin should not take $x as the JoinType")
