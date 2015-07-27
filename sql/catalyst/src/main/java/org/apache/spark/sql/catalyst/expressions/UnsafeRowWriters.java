@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.expressions;
 import org.apache.spark.unsafe.PlatformDependent;
 import org.apache.spark.unsafe.array.ByteArrayMethods;
 import org.apache.spark.unsafe.types.ByteArray;
+import org.apache.spark.unsafe.types.Interval;
 import org.apache.spark.unsafe.types.UTF8String;
 
 /**
@@ -54,7 +55,7 @@ public class UnsafeRowWriters {
     }
   }
 
-  /** Writer for bianry (byte array) type. */
+  /** Writer for binary (byte array) type. */
   public static class BinaryWriter {
 
     public static int getSize(byte[] input) {
@@ -77,6 +78,22 @@ public class UnsafeRowWriters {
       // Set the fixed length portion.
       target.setLong(ordinal, (((long) cursor) << 32) | ((long) numBytes));
       return ByteArrayMethods.roundNumberOfBytesToNearestWord(numBytes);
+    }
+  }
+
+  /** Writer for interval type. */
+  public static class IntervalWriter {
+
+    public static int write(UnsafeRow target, int ordinal, int cursor, Interval input) {
+      final long offset = target.getBaseOffset() + cursor;
+
+      // Write the months and microseconds fields of Interval to the variable length portion.
+      PlatformDependent.UNSAFE.putLong(target.getBaseObject(), offset, input.months);
+      PlatformDependent.UNSAFE.putLong(target.getBaseObject(), offset + 8, input.microseconds);
+
+      // Set the fixed length portion.
+      target.setLong(ordinal, ((long) cursor) << 32);
+      return 16;
     }
   }
 
