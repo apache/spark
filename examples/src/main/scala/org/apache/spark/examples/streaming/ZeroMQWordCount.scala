@@ -89,7 +89,7 @@ object ZeroMQWordCount {
     def bytesToStringIterator(x: Seq[ByteString]): Iterator[String] = x.map(_.utf8String).iterator
 
     // For this stream, a zeroMQ publisher should be running.
-    val lines = ZeroMQUtils.createStream(
+    val lines = ZeroMQUtils.createStream[String](
       ssc, () => ZeroMQGlobalActorSystem.actorSystem,
       url, Subscribe(topic), bytesToStringIterator _)
     val words = lines.flatMap(_.split(" "))
