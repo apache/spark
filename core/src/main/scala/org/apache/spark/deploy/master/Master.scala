@@ -587,8 +587,8 @@ private[master] class Master(
       assignedExecutors.sum + app.executors.size < app.executorLimit
     }
 
-    // Keep launching executors until no more workers can accommodate
-    // any more, or if we have reached this application's limits
+    // Keep launching executors until no more workers can accommodate any
+    // more executors, or if we have reached this application's limits
     var freeWorkers = (0 until numUsable).filter(canLaunchExecutor)
     while (freeWorkers.nonEmpty) {
       freeWorkers.foreach { pos =>
@@ -598,8 +598,8 @@ private[master] class Master(
           assignedCores(pos) += minCoresPerExecutor
 
           // If cores per executor is set, every iteration of this loop schedules one executor.
-          // Otherwise, we are simply assigning 1 core at a time, and each worker should have
-          // at most 1 executor.
+          // Otherwise, we are simply assigning 1 core at a time, and all of these cores belong
+          // to a single executor (one per worker).
           if (app.oneExecutorPerWorker()) {
             assignedExecutors(pos) += 1
           } else {
@@ -819,6 +819,11 @@ private[master] class Master(
 
   /**
    * Handle a request to set the target number of executors for this application.
+   *
+   * If the executor limit is adjusted upwards, new executors will be launched provided
+   * that there are workers with sufficient resources. If it is adjusted downwards, however,
+   * we do not kill existing executors until we explicitly receive a kill request.
+   *
    * @return whether the application has previously registered with this Master.
    */
   private def handleRequestExecutors(appId: String, requestedTotal: Int): Boolean = {
@@ -837,25 +842,9 @@ private[master] class Master(
   /**
    * Handle a kill request from the given application.
    *
-   * There are two distinct ways of handling kill requests. For applications that explicitly
-   * set `spark.executor.cores`, all executors have exactly N cores. In this mode, we can simply
-   * multiply the application's executor limit by N to determine a cap on the number of cores
-   * to assign to this application.
-   *
-   * The kill mechanism for applications that did not set `spark.executor.cores` is more complex.
-   * In this mode, each executor grabs all the available cores on the worker, so we cannot simply
-   * rely on the executor limit as the executors may not be uniform in the number of cores.
-   * Instead, we use a blacklisting mechanism to enforce kills. When an executor is killed, we
-   * blacklist its worker so that we do not immediately launch a new executor on the worker.
-   * A worker is removed from the blacklist only when a request to add executors is serviced.
-   *
-   * Note that in this case, we may not always want to blacklist the worker. For instance, if we
-   * previously requested 10 new executors but there is only room for 3, then we have 7 executors
-   * waiting to be scheduled once space frees up. In this case, after we kill an executor we do
-   * NOT add its worker to the blacklist because there is a prior request that we need to service.
-   *
-   * Note: this method assumes the executor limit has already been adjusted downwards through
-   * a separate [[RequestExecutors]] message.
+   * This method assumes the executor limit has already been adjusted downwards through
+   * a separate [[RequestExecutors]] message, such that we do not immediately launch new
+   * executors immediately after the old ones are removed.
    *
    * @return whether the application has previously registered with this Master.
    */
@@ -880,11 +869,11 @@ private[master] class Master(
   }
 
   /**
-   * Cast the given executor IDs to integers and filter out the ones that are not.
+   * Cast the given executor IDs to integers and filter out the ones that fail.
    *
-   * All executors IDs should be integers since we launched these executors. However, the
-   * kill interface on the driver side accepts strings, so we need to handle non-integer
-   * executor IDs just to be safe since the user can pass in whatever s/he wants.
+   * All executors IDs should be integers since we launched these executors. However,
+   * the kill interface on the driver side accepts arbitrary strings, so we need to
+   * handle non-integer executor IDs just to be safe.
    */
   private def formatExecutorIds(executorIds: Seq[String]): Seq[Int] = {
     executorIds.flatMap { executorId =>
@@ -899,7 +888,7 @@ private[master] class Master(
   }
 
   /**
-   * Ask the Worker on which the specified executor is launched to kill the executor.
+   * Ask the worker on which the specified executor is launched to kill the executor.
    */
   private def killExecutor(exec: ExecutorDesc): Unit = {
     exec.worker.removeExecutor(exec)

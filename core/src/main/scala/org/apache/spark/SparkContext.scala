@@ -1371,7 +1371,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   /**
    * Express a preference to the cluster manager for a given total number of executors.
    * This can result in canceling pending requests or filing additional requests.
-   * This is currently only supported in YARN mode. Return whether the request is received.
+   * @return whether the request is received.
    */
   private[spark] override def requestTotalExecutors(numExecutors: Int): Boolean = {
     schedulerBackend match {
@@ -1386,7 +1386,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   /**
    * :: DeveloperApi ::
    * Request an additional number of executors from the cluster manager.
-   * This is currently only supported in YARN mode. Return whether the request is received.
+   * @return whether the request is received.
    */
   @DeveloperApi
   override def requestExecutors(numAdditionalExecutors: Int): Boolean = {
@@ -1408,7 +1408,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * through this method with new ones, it should follow up explicitly with a call to
    * {{SparkContext#requestExecutors}}.
    *
-   * This is currently only supported in YARN mode. Return whether the request is received.
+   * @return whether the request is received.
    */
   @DeveloperApi
   override def killExecutors(executorIds: Seq[String]): Boolean = {
@@ -1430,7 +1430,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * through this method with a new one, it should follow up explicitly with a call to
    * {{SparkContext#requestExecutors}}.
    *
-   * This is currently only supported in YARN mode. Return whether the request is received.
+   * @return whether the request is received.
    */
   @DeveloperApi
   override def killExecutor(executorId: String): Boolean = super.killExecutor(executorId)
@@ -1447,7 +1447,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * can steal the window of opportunity and acquire this application's resources in the
    * mean time.
    *
-   * This is currently only supported in YARN mode. Return whether the request is received.
+   * @return whether the request is received.
    */
   private[spark] def killAndReplaceExecutor(executorId: String): Boolean = {
     schedulerBackend match {
