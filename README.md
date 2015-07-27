@@ -28,6 +28,7 @@ if you may.
 * Airbnb [@mistercrunch]
 * Agari [@r39132]
 * Lyft
+* Stripe [@jbalogh]
 * Wooga
 * Yahoo!
 
