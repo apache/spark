@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.hive.execution
 
+import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
+
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.execution.{SparkPlan, SparkPlanTest}
@@ -27,7 +29,7 @@ class ScriptTransformationSuite extends SparkPlanTest {
 
   override def sqlContext: SQLContext = TestHive
 
-  private val ioschema = HiveScriptIOSchema(
+  private val noSerdeIOSchema = HiveScriptIOSchema(
     inputRowFormat = Seq.empty,
     outputRowFormat = Seq.empty,
     inputSerdeClass = None,
@@ -37,7 +39,12 @@ class ScriptTransformationSuite extends SparkPlanTest {
     schemaLess = false
   )
 
-  test("basic test with 'cat' command") {
+  val serdeIOSchema = noSerdeIOSchema.copy(
+    inputSerdeClass = Some(s"'${classOf[LazySimpleSerDe].getCanonicalName}"),
+    outputSerdeClass = Some(s"'${classOf[LazySimpleSerDe].getCanonicalName}")
+  )
+
+  test("cat without SerDe") {
     val rowsDf = Seq("a", "b", "c").map(Tuple1.apply).toDF("a")
     checkAnswer(
       rowsDf,
@@ -46,9 +53,22 @@ class ScriptTransformationSuite extends SparkPlanTest {
         script = "cat",
         output = Seq(AttributeReference("a", StringType)()),
         child = child,
-        ioschema = ioschema
+        ioschema = noSerdeIOSchema
       )(TestHive),
       rowsDf.collect())
   }
 
+  test("cat with LazySimpleSerDe") {
+    val rowsDf = Seq("a", "b", "c").map(Tuple1.apply).toDF("a")
+    checkAnswer(
+      rowsDf,
+      (child: SparkPlan) => new ScriptTransformation(
+        input = Seq(rowsDf.col("a").expr),
+        script = "cat",
+        output = Seq(AttributeReference("a", StringType)()),
+        child = child,
+        ioschema = serdeIOSchema
+      )(TestHive),
+      rowsDf.collect())
+  }
 }

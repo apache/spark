@@ -57,7 +57,7 @@ case class ScriptTransformation(
   override def otherCopyArgs: Seq[HiveContext] = sc :: Nil
 
   protected override def doExecute(): RDD[InternalRow] = {
-    child.execute().mapPartitions { iter =>
+    def processIterator(iter: Iterator[InternalRow]): Iterator[InternalRow] = {
       val cmd = List("/bin/bash", "-c", script)
       val builder = new ProcessBuilder(cmd)
       // We need to start threads connected to the process pipeline:
@@ -196,6 +196,14 @@ case class ScriptTransformation(
       }, "Thread-ScriptTransformation-Feed").start()
 
       iterator
+    }
+
+    child.execute().mapPartitions { iter =>
+      if (iter.hasNext) {
+        processIterator(iter)
+      } else {
+        Iterator.empty
+      }
     }
   }
 }
