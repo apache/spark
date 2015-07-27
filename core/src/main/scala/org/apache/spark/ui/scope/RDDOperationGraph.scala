@@ -20,7 +20,7 @@ package org.apache.spark.ui.scope
 import scala.collection.mutable
 import scala.collection.mutable.{StringBuilder, ListBuffer}
 
-import org.apache.spark.{SparkException, Logging}
+import org.apache.spark.Logging
 import org.apache.spark.scheduler.StageInfo
 import org.apache.spark.storage.StorageLevel
 
