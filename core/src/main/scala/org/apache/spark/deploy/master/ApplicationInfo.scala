@@ -107,7 +107,7 @@ private[spark] class ApplicationInfo(
    * This is true if cores per executor is not defined, in which case the executor should
    * grab all the available cores on the worker instead.
    */
-  private[master] def oneExecutorPerWorker(): Boolean = desc.coresPerExecutor.isDefined
+  private[master] def oneExecutorPerWorker(): Boolean = desc.coresPerExecutor.isEmpty
 
   private var _retryCount = 0
 

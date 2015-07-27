@@ -581,10 +581,19 @@ private[master] class Master(
     /** Return whether the specified worker can launch an executor for this app. */
     def canLaunchExecutor(pos: Int): Boolean = {
       val assignedMemory = assignedExecutors(pos) * memoryPerExecutor
+      val underLimit =
+        if (app.oneExecutorPerWorker() && assignedExecutors(pos) == 1) {
+          // We only have one executor per worker and have already started to assign cores to it,
+          // so assigning more to it does not change the number of executors we'll end up with
+          true
+        } else {
+          // Otherwise, we should launch a new executor only if we do not exceed the limit
+          assignedExecutors.sum + app.executors.size < app.executorLimit
+        }
       usableWorkers(pos).memoryFree - assignedMemory >= memoryPerExecutor &&
       usableWorkers(pos).coresFree - assignedCores(pos) >= minCoresPerExecutor &&
       coresToAssign >= minCoresPerExecutor &&
-      assignedExecutors.sum + app.executors.size < app.executorLimit
+      underLimit
     }
 
     // Keep launching executors until no more workers can accommodate any
@@ -597,13 +606,12 @@ private[master] class Master(
           coresToAssign -= minCoresPerExecutor
           assignedCores(pos) += minCoresPerExecutor
 
-          // If cores per executor is set, every iteration of this loop schedules one executor.
-          // Otherwise, we are simply assigning 1 core at a time, and all of these cores belong
-          // to a single executor (one per worker).
+          // If we are launching one executor per worker, then every iteration assigns 1 core
+          // to the executor. Otherwise, every iteration assigns cores to a new executor.
           if (app.oneExecutorPerWorker()) {
-            assignedExecutors(pos) += 1
-          } else {
             assignedExecutors(pos) = 1
+          } else {
+            assignedExecutors(pos) += 1
           }
 
           // Spreading out an application means spreading out its executors across as
