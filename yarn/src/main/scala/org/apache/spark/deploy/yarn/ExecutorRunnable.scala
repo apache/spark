@@ -87,7 +87,7 @@ class ExecutorRunnable(
       appId, localResources)
 
     logInfo("===============================================================================")
-    logInfo("Yarn executor launch context:")
+    logInfo("YARN executor launch context:")
     logInfo("    env:")
     env.foreach { case (k, v) => logInfo(s"        $k -> $v") }
     logInfo("    command:")
