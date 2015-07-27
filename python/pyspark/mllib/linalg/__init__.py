@@ -1173,10 +1173,11 @@ class DistributedMatrix(object):
 
 class RowMatrix(DistributedMatrix):
     """
+    .. note:: Experimental
+
     Represents a row-oriented distributed Matrix with no meaningful
     row indices.
 
-    .. note:: Experimental
     """
     def __init__(self, rows, numRows=0, numCols=0):
         """
@@ -1239,11 +1240,12 @@ class RowMatrix(DistributedMatrix):
 
 class IndexedRow(object):
     """
+    .. note:: Experimental
+
     Represents a row of an IndexedRowMatrix.
 
     Just a wrapper over a (long, Vector) tuple.
 
-    .. note:: Experimental
     """
     def __init__(self, index, vector):
         self.index = long(index)
@@ -1255,9 +1257,10 @@ class IndexedRow(object):
 
 class IndexedRowMatrix(DistributedMatrix):
     """
+    .. note:: Experimental
+
     Represents a row-oriented distributed Matrix with indexed rows.
 
-    .. note:: Experimental
     """
     def __init__(self, rows, numRows=0, numCols=0):
         """
@@ -1365,11 +1368,12 @@ class IndexedRowMatrix(DistributedMatrix):
 
 class MatrixEntry(object):
     """
+    .. note:: Experimental
+
     Represents an entry of a CoordinateMatrix.
 
     Just a wrapper over a (long, long, float) tuple.
 
-    .. note:: Experimental
     """
     def __init__(self, i, j, value):
         self.i = long(i)
@@ -1382,9 +1386,10 @@ class MatrixEntry(object):
 
 class CoordinateMatrix(object):
     """
+    .. note:: Experimental
+
     Represents a matrix in coordinate format.
 
-    .. note:: Experimental
     """
     def __init__(self, entries, numRows=0, numCols=0):
         """
