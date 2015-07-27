@@ -794,6 +794,9 @@ case class SoundEx(child: Expression) extends UnaryExpression with ExpectsInputT
   override def nullSafeEval(input: Any): Any = {
     input.asInstanceOf[UTF8String].soundex()
   }
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    nullSafeCodeGen(ctx, ev, c => s"${ev.primitive} = $c.soundex();")
+  }
 }
 
 /**

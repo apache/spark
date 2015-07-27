@@ -335,11 +335,12 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(SoundEx(Literal("ZIN")), "Z500", create_row("s1"))
     checkEvaluation(SoundEx(Literal("SU")), "S000", create_row("s2"))
     checkEvaluation(SoundEx(Literal("")), "", create_row("s3"))
-    checkEvaluation(SoundEx(Literal(null)), null, create_row("s4"))
+    checkEvaluation(SoundEx(Literal.create(null, StringType)), null, create_row("s4"))
+
     // scalastyle:off
     // non ascii characters are not allowed in the code, so we disable the scalastyle here.
-    checkEvaluation(SoundEx(Literal("再见")), "再见", create_row("s5"))
-    checkEvaluation(SoundEx(Literal("z再見")), "z再見", create_row("s6"))
+    checkEvaluation(SoundEx(Literal("测试")), "测试", create_row("s5"))
+    checkEvaluation(SoundEx(Literal("z測試")), "z測試", create_row("s6"))
     checkEvaluation(SoundEx(Literal("Tschüss")), "Tschüss", create_row("s7"))
     // scalastyle:on
     checkEvaluation(SoundEx(Literal("zZ")), "z000", create_row("s8"))

@@ -641,6 +641,9 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
    * https://en.wikipedia.org/wiki/Soundex
    */
   public UTF8String soundex() {
+    if(this == null) {
+      return null;
+    }
     if (numBytes == 0) {
       return UTF8String.fromBytes(new byte[0]);
     }
