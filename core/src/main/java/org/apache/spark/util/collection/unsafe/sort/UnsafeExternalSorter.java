@@ -20,6 +20,9 @@ package org.apache.spark.util.collection.unsafe.sort;
 import java.io.IOException;
 import java.util.LinkedList;
 
+import scala.runtime.AbstractFunction0;
+import scala.runtime.BoxedUnit;
+
 import com.google.common.annotations.VisibleForTesting;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -92,6 +95,17 @@ public final class UnsafeExternalSorter {
     // Use getSizeAsKb (not bytes) to maintain backwards compatibility for units
     this.fileBufferSizeBytes = (int) conf.getSizeAsKb("spark.shuffle.file.buffer", "32k") * 1024;
     initializeForWriting();
+
+    // Register a cleanup task with TaskContext to ensure that memory is guaranteed to be freed at
+    // the end of the task. This is necessary to avoid memory leaks in when the downstream operator
+    // does not fully consume the sorter's output (e.g. sort followed by limit).
+    taskContext.addOnCompleteCallback(new AbstractFunction0<BoxedUnit>() {
+      @Override
+      public BoxedUnit apply() {
+        freeMemory();
+        return null;
+      }
+    });
   }
 
   // TODO: metrics tracking + integration with shuffle write metrics
