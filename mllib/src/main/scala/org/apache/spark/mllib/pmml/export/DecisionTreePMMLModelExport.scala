@@ -18,13 +18,12 @@
 package org.apache.spark.mllib.pmml.export
 
 import org.apache.spark.mllib.tree.model.DecisionTreeModel
-import org.dmg.pmml.{DataDictionary, TreeModel}
+import org.dmg.pmml.{Extension, DataDictionary, TreeModel}
 import scala.collection.JavaConverters._
 
 private[mllib] class DecisionTreePMMLModelExport(model: DecisionTreeModel) extends PMMLModelExport {
 
   val ModelName = "decision-tree"
-  var treeModel: TreeModel = _
 
   populateDecisionTreePMMLModel(model)
 
@@ -38,10 +37,9 @@ private[mllib] class DecisionTreePMMLModelExport(model: DecisionTreeModel) exten
       .withDataFields(dataFields.asJava)
       .withNumberOfFields(dataFields.length)
 
-    treeModel = TreeModelUtils.getPMMLTreeFromMLLib(model, ModelName)
+    val treeModel = TreeModelUtils.getPMMLTree(model, ModelName)
 
     pmml.withModels(treeModel)
     pmml.withDataDictionary(dataDictionary)
   }
-
 }

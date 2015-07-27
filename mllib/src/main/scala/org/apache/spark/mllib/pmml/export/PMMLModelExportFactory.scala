@@ -17,6 +17,7 @@
 
 package org.apache.spark.mllib.pmml.export
 
+import org.apache.spark.mllib.tree.model.DecisionTreeModel
 import org.dmg.pmml.RegressionNormalizationMethodType
 
 import org.apache.spark.mllib.classification.LogisticRegressionModel
@@ -55,6 +56,7 @@ private[mllib] object PMMLModelExportFactory {
           throw new IllegalArgumentException(
             "PMML Export not supported for Multinomial Logistic Regression")
         }
+      case decsionTreeModel : DecisionTreeModel => new DecisionTreePMMLModelExport(decsionTreeModel)
       case _ =>
         throw new IllegalArgumentException(
           "PMML Export not supported for model: " + model.getClass.getName)
