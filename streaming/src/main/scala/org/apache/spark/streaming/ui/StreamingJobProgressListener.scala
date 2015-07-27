@@ -192,7 +192,7 @@ private[streaming] class StreamingJobProgressListener(ssc: StreamingContext)
   def receivedEventRateWithBatchTime: Map[Int, Seq[(Long, Double)]] = synchronized {
     val _retainedBatches = retainedBatches
     val latestBatches = _retainedBatches.map { batchUIData =>
-      (batchUIData.batchTime.milliseconds, batchUIData.streamIdToNumRecords)
+      (batchUIData.batchTime.milliseconds, batchUIData.streamIdToInputInfo.mapValues(_.numRecords))
     }
     streamIds.map { streamId =>
       val eventRates = latestBatches.map {
@@ -205,7 +205,8 @@ private[streaming] class StreamingJobProgressListener(ssc: StreamingContext)
   }
 
   def lastReceivedBatchRecords: Map[Int, Long] = synchronized {
-    val lastReceivedBlockInfoOption = lastReceivedBatch.map(_.streamIdToNumRecords)
+    val lastReceivedBlockInfoOption =
+      lastReceivedBatch.map(_.streamIdToInputInfo.mapValues(_.numRecords))
     lastReceivedBlockInfoOption.map { lastReceivedBlockInfo =>
       streamIds.map { streamId =>
         (streamId, lastReceivedBlockInfo.getOrElse(streamId, 0L))

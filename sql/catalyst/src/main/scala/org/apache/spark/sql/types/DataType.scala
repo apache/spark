@@ -17,15 +17,17 @@
 
 package org.apache.spark.sql.types
 
+import scala.util.Try
 import scala.util.parsing.combinator.RegexParsers
 
-import org.json4s._
 import org.json4s.JsonAST.JValue
 import org.json4s.JsonDSL._
+import org.json4s._
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.util.Utils
 
 
 /**
@@ -75,13 +77,16 @@ abstract class DataType extends AbstractDataType {
    */
   private[spark] def asNullable: DataType
 
-  private[sql] override def defaultConcreteType: DataType = this
+  override private[sql] def defaultConcreteType: DataType = this
 
-  private[sql] override def isParentOf(childCandidate: DataType): Boolean = this == childCandidate
+  override private[sql] def acceptsType(other: DataType): Boolean = sameType(other)
 }
 
 
 object DataType {
+  private[sql] def fromString(raw: String): DataType = {
+    Try(DataType.fromJson(raw)).getOrElse(DataType.fromCaseClassString(raw))
+  }
 
   def fromJson(json: String): DataType = parseDataType(parse(json))
 
@@ -101,7 +106,7 @@ object DataType {
   private def nameToType(name: String): DataType = {
     val FIXED_DECIMAL = """decimal\(\s*(\d+)\s*,\s*(\d+)\s*\)""".r
     name match {
-      case "decimal" => DecimalType.Unlimited
+      case "decimal" => DecimalType.USER_DEFAULT
       case FIXED_DECIMAL(precision, scale) => DecimalType(precision.toInt, scale.toInt)
       case other => nonDecimalNameToType(other)
     }
@@ -142,7 +147,7 @@ object DataType {
     ("pyClass", _),
     ("sqlType", _),
     ("type", JString("udt"))) =>
-      Class.forName(udtClass).newInstance().asInstanceOf[UserDefinedType[_]]
+      Utils.classForName(udtClass).newInstance().asInstanceOf[UserDefinedType[_]]
   }
 
   private def parseStructField(json: JValue): StructField = json match {
@@ -172,7 +177,7 @@ object DataType {
         | "BinaryType" ^^^ BinaryType
         | "BooleanType" ^^^ BooleanType
         | "DateType" ^^^ DateType
-        | "DecimalType()" ^^^ DecimalType.Unlimited
+        | "DecimalType()" ^^^ DecimalType.USER_DEFAULT
         | fixedDecimalType
         | "TimestampType" ^^^ TimestampType
         )

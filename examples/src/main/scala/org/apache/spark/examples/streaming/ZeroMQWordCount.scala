@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples.streaming
 
 import scala.language.implicitConversions
@@ -116,3 +117,4 @@ object ZeroMQGlobalActorSystem {
   }
 
 }
+// scalastyle:on println

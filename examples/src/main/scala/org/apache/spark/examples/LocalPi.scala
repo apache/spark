@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples
 
 import scala.math.random
@@ -33,3 +34,4 @@ object LocalPi {
     println("Pi is roughly " + 4 * count / 100000.0)
   }
 }
+// scalastyle:on println

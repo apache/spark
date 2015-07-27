@@ -105,4 +105,6 @@ private[spark] class WorkerInfo(
   def setState(state: WorkerState.Value): Unit = {
     this.state = state
   }
+
+  def isAlive(): Boolean = this.state == WorkerState.ALIVE
 }

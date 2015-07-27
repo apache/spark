@@ -41,7 +41,7 @@ class TimestampType private() extends AtomicType {
   private[sql] val ordering = implicitly[Ordering[InternalType]]
 
   /**
-   * The default size of a value of the TimestampType is 12 bytes.
+   * The default size of a value of the TimestampType is 8 bytes.
    */
   override def defaultSize: Int = 8
 

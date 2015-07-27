@@ -24,10 +24,11 @@ import org.apache.hadoop.hive.serde2.typeinfo.{DecimalTypeInfo, TypeInfoFactory}
 import org.apache.hadoop.hive.serde2.{io => hiveIo}
 import org.apache.hadoop.{io => hadoopIo}
 
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
-import org.apache.spark.sql.types
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.{AnalysisException, types}
 import org.apache.spark.unsafe.types.UTF8String
 
 /* Implicit conversions */
@@ -178,7 +179,7 @@ private[hive] trait HiveInspectors {
     // writable
     case c: Class[_] if c == classOf[hadoopIo.DoubleWritable] => DoubleType
     case c: Class[_] if c == classOf[hiveIo.DoubleWritable] => DoubleType
-    case c: Class[_] if c == classOf[hiveIo.HiveDecimalWritable] => DecimalType.Unlimited
+    case c: Class[_] if c == classOf[hiveIo.HiveDecimalWritable] => DecimalType.SYSTEM_DEFAULT
     case c: Class[_] if c == classOf[hiveIo.ByteWritable] => ByteType
     case c: Class[_] if c == classOf[hiveIo.ShortWritable] => ShortType
     case c: Class[_] if c == classOf[hiveIo.DateWritable] => DateType
@@ -194,8 +195,8 @@ private[hive] trait HiveInspectors {
     case c: Class[_] if c == classOf[java.lang.String] => StringType
     case c: Class[_] if c == classOf[java.sql.Date] => DateType
     case c: Class[_] if c == classOf[java.sql.Timestamp] => TimestampType
-    case c: Class[_] if c == classOf[HiveDecimal] => DecimalType.Unlimited
-    case c: Class[_] if c == classOf[java.math.BigDecimal] => DecimalType.Unlimited
+    case c: Class[_] if c == classOf[HiveDecimal] => DecimalType.SYSTEM_DEFAULT
+    case c: Class[_] if c == classOf[java.math.BigDecimal] => DecimalType.SYSTEM_DEFAULT
     case c: Class[_] if c == classOf[Array[Byte]] => BinaryType
     case c: Class[_] if c == classOf[java.lang.Short] => ShortType
     case c: Class[_] if c == classOf[java.lang.Integer] => IntegerType
@@ -218,6 +219,20 @@ private[hive] trait HiveInspectors {
 
     // Hive seems to return this for struct types?
     case c: Class[_] if c == classOf[java.lang.Object] => NullType
+
+    // java list type unsupported
+    case c: Class[_] if c == classOf[java.util.List[_]] =>
+      throw new AnalysisException(
+        "List type in java is unsupported because " +
+        "JVM type erasure makes spark fail to catch a component type in List<>")
+
+    // java map type unsupported
+    case c: Class[_] if c == classOf[java.util.Map[_, _]] =>
+      throw new AnalysisException(
+        "Map type in java is unsupported because " +
+        "JVM type erasure makes spark fail to catch key and value types in Map<>")
+
+    case c => throw new AnalysisException(s"Unsupported java type $c")
   }
 
   /**
@@ -252,7 +267,7 @@ private[hive] trait HiveInspectors {
         poi.getWritableConstantValue.getHiveDecimal)
     case poi: WritableConstantTimestampObjectInspector =>
       val t = poi.getWritableConstantValue
-      t.getSeconds * 10000000L + t.getNanos / 100L
+      t.getSeconds * 1000000L + t.getNanos / 1000L
     case poi: WritableConstantIntObjectInspector =>
       poi.getWritableConstantValue.get()
     case poi: WritableConstantDoubleObjectInspector =>
@@ -317,7 +332,7 @@ private[hive] trait HiveInspectors {
       case x: DateObjectInspector => DateTimeUtils.fromJavaDate(x.getPrimitiveJavaObject(data))
       case x: TimestampObjectInspector if x.preferWritable() =>
         val t = x.getPrimitiveWritableObject(data)
-        t.getSeconds * 10000000L + t.getNanos / 100
+        t.getSeconds * 1000000L + t.getNanos / 1000L
       case ti: TimestampObjectInspector =>
         DateTimeUtils.fromJavaTimestamp(ti.getPrimitiveJavaObject(data))
       case _ => pi.getPrimitiveJavaObject(data)
@@ -482,7 +497,7 @@ private[hive] trait HiveInspectors {
         x.setStructFieldData(
           result,
           fieldRefs.get(i),
-          wrap(row(i), fieldRefs.get(i).getFieldObjectInspector))
+          wrap(row.get(i), fieldRefs.get(i).getFieldObjectInspector))
         i += 1
       }
 
@@ -493,7 +508,7 @@ private[hive] trait HiveInspectors {
       val result = new java.util.ArrayList[AnyRef](fieldRefs.length)
       var i = 0
       while (i < fieldRefs.length) {
-        result.add(wrap(row(i), fieldRefs.get(i).getFieldObjectInspector))
+        result.add(wrap(row.get(i), fieldRefs.get(i).getFieldObjectInspector))
         i += 1
       }
 
@@ -521,7 +536,7 @@ private[hive] trait HiveInspectors {
       cache: Array[AnyRef]): Array[AnyRef] = {
     var i = 0
     while (i < inspectors.length) {
-      cache(i) = wrap(row(i), inspectors(i))
+      cache(i) = wrap(row.get(i), inspectors(i))
       i += 1
     }
     cache
@@ -798,9 +813,6 @@ private[hive] trait HiveInspectors {
 
     private def decimalTypeInfo(decimalType: DecimalType): TypeInfo = decimalType match {
       case DecimalType.Fixed(precision, scale) => new DecimalTypeInfo(precision, scale)
-      case _ => new DecimalTypeInfo(
-        HiveShim.UNLIMITED_DECIMAL_PRECISION,
-        HiveShim.UNLIMITED_DECIMAL_SCALE)
     }
 
     def toTypeInfo: TypeInfo = dt match {

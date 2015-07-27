@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples.streaming
 
 import scala.collection.mutable.LinkedList
@@ -197,3 +198,4 @@ object GlobalActorSystem {
   }
 
 }
+// scalastyle:on println

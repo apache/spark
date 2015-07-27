@@ -76,7 +76,7 @@ test_that("zipPartitions() on RDDs", {
   expect_equal(actual,
                list(list(1, c(1,2), c(1,2,3)), list(2, c(3,4), c(4,5,6))))
 
-  mockFile = c("Spark is pretty.", "Spark is awesome.")
+  mockFile <- c("Spark is pretty.", "Spark is awesome.")
   fileName <- tempfile(pattern="spark-test", fileext=".tmp")
   writeLines(mockFile, fileName)
 

@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{GenericRow, GenericRowWithSchema}
 import org.apache.spark.sql.types._
 import org.scalatest.{Matchers, FunSpec}
@@ -66,6 +67,21 @@ class RowTest extends FunSpec with Matchers {
         "col2" -> "value2"
       )
       sampleRow.getValuesMap(List("col1", "col2")) shouldBe expected
+    }
+  }
+
+  describe("row equals") {
+    val externalRow = Row(1, 2)
+    val externalRow2 = Row(1, 2)
+    val internalRow = InternalRow(1, 2)
+    val internalRow2 = InternalRow(1, 2)
+
+    it("equality check for external rows") {
+      externalRow shouldEqual externalRow2
+    }
+
+    it("equality check for internal rows") {
+      internalRow shouldEqual internalRow2
     }
   }
 }
