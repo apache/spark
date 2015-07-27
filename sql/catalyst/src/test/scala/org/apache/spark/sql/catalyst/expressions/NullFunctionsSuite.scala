@@ -30,7 +30,7 @@ class NullFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     testFunc(1L, LongType)
     testFunc(1.0F, FloatType)
     testFunc(1.0, DoubleType)
-    testFunc(Decimal(1.5), DecimalType.Unlimited)
+    testFunc(Decimal(1.5), DecimalType(2, 1))
     testFunc(new java.sql.Date(10), DateType)
     testFunc(new java.sql.Timestamp(10), TimestampType)
     testFunc("abcd", StringType)
@@ -92,7 +92,7 @@ class NullFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     val nullOnly = Seq(Literal("x"),
       Literal.create(null, DoubleType),
-      Literal.create(null, DecimalType.Unlimited),
+      Literal.create(null, DecimalType.USER_DEFAULT),
       Literal(Float.MaxValue),
       Literal(false))
 

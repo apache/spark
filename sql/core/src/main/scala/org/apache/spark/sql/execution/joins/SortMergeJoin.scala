@@ -66,7 +66,7 @@ case class SortMergeJoin(
     leftResults.zipPartitions(rightResults) { (leftIter, rightIter) =>
       new Iterator[InternalRow] {
         // Mutable per row objects.
-        private[this] val joinRow = new JoinedRow5
+        private[this] val joinRow = new JoinedRow
         private[this] var leftElement: InternalRow = _
         private[this] var rightElement: InternalRow = _
         private[this] var leftKey: InternalRow = _

@@ -20,8 +20,8 @@ package org.apache.spark.sql.catalyst.expressions
 import com.clearspring.analytics.stream.cardinality.HyperLogLog
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodeGenContext, GeneratedExpressionCode}
 import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.util.collection.OpenHashSet
@@ -71,8 +71,7 @@ trait PartialAggregate1 extends AggregateExpression1 {
  * A specific implementation of an aggregate function. Used to wrap a generic
  * [[AggregateExpression1]] with an algorithm that will be used to compute one specific result.
  */
-abstract class AggregateFunction1
-  extends LeafExpression with AggregateExpression1 with Serializable {
+abstract class AggregateFunction1 extends LeafExpression with Serializable {
 
   /** Base should return the generic aggregate expression that this function is computing */
   val base: AggregateExpression1
@@ -82,9 +81,9 @@ abstract class AggregateFunction1
 
   def update(input: InternalRow): Unit
 
-  // Do we really need this?
-  override def newInstance(): AggregateFunction1 = {
-    makeCopy(productIterator.map { case a: AnyRef => a }.toArray)
+  override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    throw new UnsupportedOperationException(
+      "AggregateFunction1 should not be used for generated aggregates")
   }
 }
 
@@ -391,22 +390,21 @@ case class Average(child: Expression) extends UnaryExpression with PartialAggreg
 
   override def dataType: DataType = child.dataType match {
     case DecimalType.Fixed(precision, scale) =>
-      DecimalType(precision + 4, scale + 4)  // Add 4 digits after decimal point, like Hive
-    case DecimalType.Unlimited =>
-      DecimalType.Unlimited
+      // Add 4 digits after decimal point, like Hive
+      DecimalType.bounded(precision + 4, scale + 4)
     case _ =>
       DoubleType
   }
 
   override def asPartial: SplitEvaluation = {
     child.dataType match {
-      case DecimalType.Fixed(_, _) | DecimalType.Unlimited =>
-        // Turn the child to unlimited decimals for calculation, before going back to fixed
-        val partialSum = Alias(Sum(Cast(child, DecimalType.Unlimited)), "PartialSum")()
+      case DecimalType.Fixed(precision, scale) =>
+        val partialSum = Alias(Sum(child), "PartialSum")()
         val partialCount = Alias(Count(child), "PartialCount")()
 
-        val castedSum = Cast(Sum(partialSum.toAttribute), DecimalType.Unlimited)
-        val castedCount = Cast(Sum(partialCount.toAttribute), DecimalType.Unlimited)
+        // partialSum already increase the precision by 10
+        val castedSum = Cast(Sum(partialSum.toAttribute), partialSum.dataType)
+        val castedCount = Sum(partialCount.toAttribute)
         SplitEvaluation(
           Cast(Divide(castedSum, castedCount), dataType),
           partialCount :: partialSum :: Nil)
@@ -436,8 +434,8 @@ case class AverageFunction(expr: Expression, base: AggregateExpression1)
 
   private val calcType =
     expr.dataType match {
-      case DecimalType.Fixed(_, _) =>
-        DecimalType.Unlimited
+      case DecimalType.Fixed(precision, scale) =>
+        DecimalType.bounded(precision + 10, scale)
       case _ =>
         expr.dataType
     }
@@ -455,10 +453,9 @@ case class AverageFunction(expr: Expression, base: AggregateExpression1)
       null
     } else {
       expr.dataType match {
-        case DecimalType.Fixed(_, _) =>
-          Cast(Divide(
-            Cast(sum, DecimalType.Unlimited),
-            Cast(Literal(count), DecimalType.Unlimited)), dataType).eval(null)
+        case DecimalType.Fixed(precision, scale) =>
+          val dt = DecimalType.bounded(precision + 14, scale + 4)
+          Cast(Divide(Cast(sum, dt), Cast(Literal(count), dt)), dataType).eval(null)
         case _ =>
           Divide(
             Cast(sum, dataType),
@@ -482,9 +479,8 @@ case class Sum(child: Expression) extends UnaryExpression with PartialAggregate1
 
   override def dataType: DataType = child.dataType match {
     case DecimalType.Fixed(precision, scale) =>
-      DecimalType(precision + 10, scale)  // Add 10 digits left of decimal point, like Hive
-    case DecimalType.Unlimited =>
-      DecimalType.Unlimited
+      // Add 10 digits left of decimal point, like Hive
+      DecimalType.bounded(precision + 10, scale)
     case _ =>
       child.dataType
   }
@@ -492,7 +488,7 @@ case class Sum(child: Expression) extends UnaryExpression with PartialAggregate1
   override def asPartial: SplitEvaluation = {
     child.dataType match {
       case DecimalType.Fixed(_, _) =>
-        val partialSum = Alias(Sum(Cast(child, DecimalType.Unlimited)), "PartialSum")()
+        val partialSum = Alias(Sum(child), "PartialSum")()
         SplitEvaluation(
           Cast(CombineSum(partialSum.toAttribute), dataType),
           partialSum :: Nil)
@@ -516,8 +512,8 @@ case class SumFunction(expr: Expression, base: AggregateExpression1) extends Agg
 
   private val calcType =
     expr.dataType match {
-      case DecimalType.Fixed(_, _) =>
-        DecimalType.Unlimited
+      case DecimalType.Fixed(precision, scale) =>
+        DecimalType.bounded(precision + 10, scale)
       case _ =>
         expr.dataType
     }
@@ -573,8 +569,8 @@ case class CombineSumFunction(expr: Expression, base: AggregateExpression1)
 
   private val calcType =
     expr.dataType match {
-      case DecimalType.Fixed(_, _) =>
-        DecimalType.Unlimited
+      case DecimalType.Fixed(precision, scale) =>
+        DecimalType.bounded(precision + 10, scale)
       case _ =>
         expr.dataType
     }
@@ -609,9 +605,8 @@ case class SumDistinct(child: Expression) extends UnaryExpression with PartialAg
   override def nullable: Boolean = true
   override def dataType: DataType = child.dataType match {
     case DecimalType.Fixed(precision, scale) =>
-      DecimalType(precision + 10, scale)  // Add 10 digits left of decimal point, like Hive
-    case DecimalType.Unlimited =>
-      DecimalType.Unlimited
+      // Add 10 digits left of decimal point, like Hive
+      DecimalType.bounded(precision + 10, scale)
     case _ =>
       child.dataType
   }
@@ -680,7 +675,7 @@ case class CombineSetsAndSumFunction(
     val inputSetEval = inputSet.eval(input).asInstanceOf[OpenHashSet[Any]]
     val inputIterator = inputSetEval.iterator
     while (inputIterator.hasNext) {
-      seen.add(inputIterator.next)
+      seen.add(inputIterator.next())
     }
   }
 
@@ -690,7 +685,7 @@ case class CombineSetsAndSumFunction(
       null
     } else {
       Cast(Literal(
-        casted.iterator.map(f => f.apply(0)).reduceLeft(
+        casted.iterator.map(f => f.genericGet(0)).reduceLeft(
           base.dataType.asInstanceOf[NumericType].numeric.asInstanceOf[Numeric[Any]].plus)),
         base.dataType).eval(null)
     }
