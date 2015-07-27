@@ -121,8 +121,9 @@ case class ExceptionFailure(
     this(e, metrics, preserveCause = true)
   }
 
-  def exception = exceptionWrapper.flatMap(
-    (w : ThrowableSerializationWrapper) => Option(w.exception))
+  def exception: Option[Throwable] = exceptionWrapper.flatMap {
+    (w: ThrowableSerializationWrapper) => Option(w.exception)
+  }
 
   override def toErrorString: String =
     if (fullStackTrace == null) {
@@ -148,14 +149,12 @@ case class ExceptionFailure(
 }
 
 /**
- * :: DeveloperApi ::
  * A class for recovering from exceptions when deserializing a Throwable that was
  * thrown in user task code. If the Throwable cannot be deserialized it will be null,
  * but the stacktrace and message will be preserved correctly in SparkException.
  */
-@DeveloperApi
-class ThrowableSerializationWrapper(var exception: Throwable) extends Serializable
-    with Logging {
+private[spark] class ThrowableSerializationWrapper(var exception: Throwable) extends
+    Serializable with Logging {
   private def writeObject(out: ObjectOutputStream): Unit = {
     out.writeObject(exception)
   }
