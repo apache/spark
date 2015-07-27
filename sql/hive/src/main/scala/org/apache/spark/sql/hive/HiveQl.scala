@@ -1337,11 +1337,11 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
     /* Attribute References */
     case Token("TOK_TABLE_OR_COL",
            Token(name, Nil) :: Nil) =>
-      UnresolvedAttribute(cleanIdentifier(name))
+      UnresolvedAttribute.quoted(cleanIdentifier(name))
     case Token(".", qualifier :: Token(attr, Nil) :: Nil) =>
       nodeToExpr(qualifier) match {
-        case UnresolvedAttribute(qualifierName) =>
-          UnresolvedAttribute(qualifierName :+ cleanIdentifier(attr))
+        case UnresolvedAttribute(nameParts) =>
+          UnresolvedAttribute(nameParts :+ cleanIdentifier(attr))
         case other => UnresolvedExtractValue(other, Literal(attr))
       }
 

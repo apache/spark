@@ -938,4 +938,12 @@ class SQLQuerySuite extends QueryTest {
       case None => // OK
     }
   }
+
+  test("SPARK-9371: fix the support for special chars in column names for hive context") {
+    TestHive.read.json(TestHive.sparkContext.makeRDD(
+      """{"a": {"c.b": 1}, "b.$q": [{"a@!.q": 1}], "q.w": {"w.i&": [1]}}""" :: Nil))
+      .registerTempTable("t")
+
+    checkAnswer(sql("SELECT a.`c.b`, `b.$q`[0].`a@!.q`, `q.w`.`w.i&`[0] FROM t"), Row(1, 1, 1))
+  }
 }
