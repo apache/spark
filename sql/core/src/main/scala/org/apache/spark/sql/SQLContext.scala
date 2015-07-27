@@ -144,11 +144,10 @@ class SQLContext(@transient val sparkContext: SparkContext)
   @transient
   protected[sql] lazy val functionRegistry: FunctionRegistry = {
     val reg = FunctionRegistry.builtin
-    val extendedFunctions = List[(String, FunctionBuilder)](
+    val extendedFunctions = List[(String, (ExpressionInfo, FunctionBuilder))](
       FunctionExpression[SparkPartitionID]("spark__partition__id")
     )
-
-    extendedFunctions.foreach { case(name, fun) => reg.registerFunction(name, fun) }
+    extendedFunctions.foreach { case(name, (info, fun)) => reg.registerFunction(name, info, fun) }
     reg
   }
 
@@ -880,7 +879,6 @@ class SQLContext(@transient val sparkContext: SparkContext)
       LeftSemiJoin ::
       HashJoin ::
       InMemoryScans ::
-      ParquetOperations ::
       BasicOperators ::
       CartesianProduct ::
       BroadcastNestedLoopJoin :: Nil)
@@ -1125,11 +1123,8 @@ class SQLContext(@transient val sparkContext: SparkContext)
   def parquetFile(paths: String*): DataFrame = {
     if (paths.isEmpty) {
       emptyDataFrame
-    } else if (conf.parquetUseDataSourceApi) {
-      read.parquet(paths : _*)
     } else {
-      DataFrame(this, parquet.ParquetRelation(
-        paths.mkString(","), Some(sparkContext.hadoopConfiguration), this))
+      read.parquet(paths : _*)
     }
   }
 

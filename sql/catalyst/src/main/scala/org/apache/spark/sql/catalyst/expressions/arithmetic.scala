@@ -65,6 +65,9 @@ case class UnaryPositive(child: Expression) extends UnaryExpression with Expects
 /**
  * A function that get the absolute value of the numeric value.
  */
+@ExpressionDescription(
+  usage = "_FUNC_(expr) - Returns the absolute value of the numeric value",
+  extended = "> SELECT _FUNC_('-1');\n1")
 case class Abs(child: Expression)
   extends UnaryExpression with ExpectsInputTypes with CodegenFallback {
 
