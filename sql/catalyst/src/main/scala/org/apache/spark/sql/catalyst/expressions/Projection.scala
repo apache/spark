@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.aggregate.NoOp
 import org.apache.spark.sql.catalyst.expressions.codegen.{GenerateSafeProjection, GenerateUnsafeProjection}
 import org.apache.spark.sql.types.{DataType, Decimal, StructType, _}
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
@@ -43,7 +44,10 @@ class InterpretedProjection(expressions: Seq[Expression]) extends Projection {
     val outputArray = new Array[Any](exprArray.length)
     var i = 0
     while (i < exprArray.length) {
-      outputArray(i) = exprArray(i).eval(input)
+      exprArray(i) match {
+        case NoOp =>
+        case e => outputArray(i) = e.eval(input)
+      }
       i += 1
     }
     new GenericInternalRow(outputArray)
@@ -79,7 +83,10 @@ case class InterpretedMutableProjection(expressions: Seq[Expression]) extends Mu
   override def apply(input: InternalRow): InternalRow = {
     var i = 0
     while (i < exprArray.length) {
-      mutableRow(i) = exprArray(i).eval(input)
+      exprArray(i) match {
+        case NoOp =>
+        case e => mutableRow(i) = e.eval(input)
+      }
       i += 1
     }
     mutableRow
