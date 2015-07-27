@@ -40,6 +40,8 @@ private[parquet] class CatalystWriteSupport extends WriteSupport[InternalRow] wi
 
   private var schema: StructType = _
 
+  private var rootFieldWriters: Seq[ValueWriter] = _
+
   private var recordConsumer: RecordConsumer = _
 
   private var followParquetFormatSpec: Boolean = _
@@ -53,6 +55,7 @@ private[parquet] class CatalystWriteSupport extends WriteSupport[InternalRow] wi
   override def init(configuration: Configuration): WriteContext = {
     val schemaString = configuration.get(CatalystWriteSupport.SPARK_ROW_SCHEMA)
     schema = StructType.fromString(schemaString)
+    rootFieldWriters = schema.map(_.dataType).map(makeWriter)
 
     assert(configuration.get(SQLConf.PARQUET_FOLLOW_PARQUET_FORMAT_SPEC.key) != null)
     followParquetFormatSpec =
@@ -78,17 +81,17 @@ private[parquet] class CatalystWriteSupport extends WriteSupport[InternalRow] wi
   }
 
   override def write(row: InternalRow): Unit = {
-    consumeMessage(writeFields(row, schema))
+    consumeMessage(writeFields(row, schema, rootFieldWriters))
   }
 
-  private def writeFields(row: InternalRow, schema: StructType): Unit = {
-    val writers = schema.map(_.dataType).map(makeWriter)
+  private def writeFields(
+      row: InternalRow, schema: StructType, fieldWriters: Seq[ValueWriter]): Unit = {
     var i = 0
 
     while (i < row.numFields) {
       if (!row.isNullAt(i)) {
         consumeField(schema(i).name, i) {
-          writers(i).apply(row, i)
+          fieldWriters(i).apply(row, i)
         }
       }
 
@@ -163,9 +166,13 @@ private[parquet] class CatalystWriteSupport extends WriteSupport[InternalRow] wi
           recordConsumer.addBinary(Binary.fromByteArray(decimalBuffer, 0, numBytes))
         }
 
-      case structType @ StructType(fields) =>
+      case structType: StructType =>
+        val fieldWriters = structType.map(_.dataType).map(makeWriter)
         (row: InternalRow, ordinal: Int) =>
-          consumeGroup(writeFields(row.getStruct(ordinal, fields.length), structType))
+          consumeGroup {
+            val struct = row.getStruct(ordinal, structType.length)
+            writeFields(struct, structType, fieldWriters)
+          }
 
       case arrayType: ArrayType if followParquetFormatSpec =>
         makeStandardArrayWriter(arrayType.elementType)
