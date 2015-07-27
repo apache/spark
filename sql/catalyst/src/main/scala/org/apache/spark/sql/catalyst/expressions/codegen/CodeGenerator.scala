@@ -110,7 +110,7 @@ class CodeGenContext {
       case StringType => s"$row.getUTF8String($ordinal)"
       case BinaryType => s"$row.getBinary($ordinal)"
       case t: StructType => s"$row.getStruct($ordinal, ${t.size})"
-      case _ => s"($jt)$row.apply($ordinal)"
+      case _ => s"($jt)$row.get($ordinal)"
     }
   }
 

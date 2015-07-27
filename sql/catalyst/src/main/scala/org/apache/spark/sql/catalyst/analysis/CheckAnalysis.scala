@@ -19,7 +19,6 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression2
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.types._
 
@@ -38,10 +37,10 @@ trait CheckAnalysis {
     throw new AnalysisException(msg)
   }
 
-  def containsMultipleGenerators(exprs: Seq[Expression]): Boolean = {
+  protected def containsMultipleGenerators(exprs: Seq[Expression]): Boolean = {
     exprs.flatMap(_.collect {
-      case e: Generator => true
-    }).nonEmpty
+      case e: Generator => e
+    }).length > 1
   }
 
   def checkAnalysis(plan: LogicalPlan): Unit = {
@@ -137,12 +136,20 @@ trait CheckAnalysis {
               s"""
                  |Failure when resolving conflicting references in Join:
                  |$plan
-                  |Conflicting attributes: ${conflictingAttributes.mkString(",")}
-                  |""".stripMargin)
+                 |Conflicting attributes: ${conflictingAttributes.mkString(",")}
+                 |""".stripMargin)
 
           case o if !o.resolved =>
             failAnalysis(
               s"unresolved operator ${operator.simpleString}")
+
+          case o if o.expressions.exists(!_.deterministic) &&
+            !o.isInstanceOf[Project] && !o.isInstanceOf[Filter] =>
+            failAnalysis(
+              s"""nondeterministic expressions are only allowed in Project or Filter, found:
+                 | ${o.expressions.map(_.prettyString).mkString(",")}
+                 |in operator ${operator.simpleString}
+             """.stripMargin)
 
           case _ => // Analysis successful!
         }

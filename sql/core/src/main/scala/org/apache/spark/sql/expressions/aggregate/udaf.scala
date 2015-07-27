@@ -110,6 +110,7 @@ private[sql] abstract class AggregationBuffer(
  * A Mutable [[Row]] representing an mutable aggregation buffer.
  */
 class MutableAggregationBuffer private[sql] (
+    schema: StructType,
     toCatalystConverters: Array[Any => Any],
     toScalaConverters: Array[Any => Any],
     bufferOffset: Int,
@@ -121,7 +122,7 @@ class MutableAggregationBuffer private[sql] (
       throw new IllegalArgumentException(
         s"Could not access ${i}th value in this buffer because it only has $length values.")
     }
-    toScalaConverters(i)(underlyingBuffer(offsets(i)))
+    toScalaConverters(i)(underlyingBuffer.get(offsets(i), schema(i).dataType))
   }
 
   def update(i: Int, value: Any): Unit = {
@@ -134,6 +135,7 @@ class MutableAggregationBuffer private[sql] (
 
   override def copy(): MutableAggregationBuffer = {
     new MutableAggregationBuffer(
+      schema,
       toCatalystConverters,
       toScalaConverters,
       bufferOffset,
@@ -145,6 +147,7 @@ class MutableAggregationBuffer private[sql] (
  * A [[Row]] representing an immutable aggregation buffer.
  */
 class InputAggregationBuffer private[sql] (
+    schema: StructType,
     toCatalystConverters: Array[Any => Any],
     toScalaConverters: Array[Any => Any],
     bufferOffset: Int,
@@ -157,11 +160,12 @@ class InputAggregationBuffer private[sql] (
         s"Could not access ${i}th value in this buffer because it only has $length values.")
     }
     // TODO: Use buffer schema to avoid using generic getter.
-    toScalaConverters(i)(underlyingInputBuffer(offsets(i)))
+    toScalaConverters(i)(underlyingInputBuffer.get(offsets(i), schema(i).dataType))
   }
 
   override def copy(): InputAggregationBuffer = {
     new InputAggregationBuffer(
+      schema,
       toCatalystConverters,
       toScalaConverters,
       bufferOffset,
@@ -233,6 +237,7 @@ case class ScalaUDAF(
 
   lazy val inputAggregateBuffer: InputAggregationBuffer =
     new InputAggregationBuffer(
+      bufferSchema,
       bufferValuesToCatalystConverters,
       bufferValuesToScalaConverters,
       bufferOffset,
@@ -240,6 +245,7 @@ case class ScalaUDAF(
 
   lazy val mutableAggregateBuffer: MutableAggregationBuffer =
     new MutableAggregationBuffer(
+      bufferSchema,
       bufferValuesToCatalystConverters,
       bufferValuesToScalaConverters,
       bufferOffset,

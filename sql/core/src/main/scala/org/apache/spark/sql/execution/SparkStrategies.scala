@@ -17,19 +17,18 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.sql.{SQLContext, Strategy, execution}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression2}
+import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression2
 import org.apache.spark.sql.catalyst.planning._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.{BroadcastHint, LogicalPlan}
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.columnar.{InMemoryColumnarTableScan, InMemoryRelation}
-import org.apache.spark.sql.execution.{DescribeCommand => RunnableDescribeCommand}
 import org.apache.spark.sql.execution.datasources.{CreateTableUsing, CreateTempTableUsing, DescribeCommand => LogicalDescribeCommand, _}
-import org.apache.spark.sql.parquet._
+import org.apache.spark.sql.execution.{DescribeCommand => RunnableDescribeCommand}
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.{SQLContext, Strategy, execution}
 
 private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   self: SQLContext#SparkPlanner =>
@@ -306,57 +305,6 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
     }
   }
 
-  object ParquetOperations extends Strategy {
-    def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      // TODO: need to support writing to other types of files.  Unify the below code paths.
-      case logical.WriteToFile(path, child) =>
-        val relation =
-          ParquetRelation.create(path, child, sparkContext.hadoopConfiguration, sqlContext)
-        // Note: overwrite=false because otherwise the metadata we just created will be deleted
-        InsertIntoParquetTable(relation, planLater(child), overwrite = false) :: Nil
-      case logical.InsertIntoTable(
-          table: ParquetRelation, partition, child, overwrite, ifNotExists) =>
-        InsertIntoParquetTable(table, planLater(child), overwrite) :: Nil
-      case PhysicalOperation(projectList, filters: Seq[Expression], relation: ParquetRelation) =>
-        val partitionColNames = relation.partitioningAttributes.map(_.name).toSet
-        val filtersToPush = filters.filter { pred =>
-            val referencedColNames = pred.references.map(_.name).toSet
-            referencedColNames.intersect(partitionColNames).isEmpty
-          }
-        val prunePushedDownFilters =
-          if (sqlContext.conf.parquetFilterPushDown) {
-            (predicates: Seq[Expression]) => {
-              // Note: filters cannot be pushed down to Parquet if they contain more complex
-              // expressions than simple "Attribute cmp Literal" comparisons. Here we remove all
-              // filters that have been pushed down. Note that a predicate such as "(A AND B) OR C"
-              // can result in "A OR C" being pushed down. Here we are conservative in the sense
-              // that even if "A" was pushed and we check for "A AND B" we still want to keep
-              // "A AND B" in the higher-level filter, not just "B".
-              predicates.map(p => p -> ParquetFilters.createFilter(p)).collect {
-                case (predicate, None) => predicate
-                // Filter needs to be applied above when it contains partitioning
-                // columns
-                case (predicate, _)
-                  if !predicate.references.map(_.name).toSet.intersect(partitionColNames).isEmpty =>
-                  predicate
-              }
-            }
-          } else {
-            identity[Seq[Expression]] _
-          }
-        pruneFilterProject(
-          projectList,
-          filters,
-          prunePushedDownFilters,
-          ParquetTableScan(
-            _,
-            relation,
-            if (sqlContext.conf.parquetFilterPushDown) filtersToPush else Nil)) :: Nil
-
-      case _ => Nil
-    }
-  }
-
   object InMemoryScans extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case PhysicalOperation(projectList, filters, mem: InMemoryRelation) =>
@@ -479,6 +427,11 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         val resultPlan = self.sqlContext.executePlan(table).executedPlan
         ExecutedCommand(
           RunnableDescribeCommand(resultPlan, describe.output, isExtended)) :: Nil
+
+      case logical.ShowFunctions(db, pattern) => ExecutedCommand(ShowFunctions(db, pattern)) :: Nil
+
+      case logical.DescribeFunction(function, extended) =>
+        ExecutedCommand(DescribeFunction(function, extended)) :: Nil
 
       case _ => Nil
     }

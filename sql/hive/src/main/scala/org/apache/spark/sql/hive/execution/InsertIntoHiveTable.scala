@@ -36,6 +36,7 @@ import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.execution.{UnaryNode, SparkPlan}
 import org.apache.spark.sql.hive.HiveShim.{ShimFileSinkDesc => FileSinkDesc}
 import org.apache.spark.sql.hive._
+import org.apache.spark.sql.types.DataType
 import org.apache.spark.{SparkException, TaskContext}
 
 import scala.collection.JavaConversions._
@@ -96,13 +97,14 @@ case class InsertIntoHiveTable(
       val fieldOIs = standardOI.getAllStructFieldRefs.map(_.getFieldObjectInspector).toArray
       val wrappers = fieldOIs.map(wrapperFor)
       val outputData = new Array[Any](fieldOIs.length)
+      val dataTypes: Array[DataType] = child.output.map(_.dataType).toArray
 
       writerContainer.executorSideSetup(context.stageId, context.partitionId, context.attemptNumber)
 
       iterator.foreach { row =>
         var i = 0
         while (i < fieldOIs.length) {
-          outputData(i) = if (row.isNullAt(i)) null else wrappers(i)(row(i))
+          outputData(i) = if (row.isNullAt(i)) null else wrappers(i)(row.get(i, dataTypes(i)))
           i += 1
         }
 

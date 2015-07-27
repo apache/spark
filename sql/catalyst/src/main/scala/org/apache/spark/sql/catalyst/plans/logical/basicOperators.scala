@@ -18,7 +18,6 @@
 package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression2
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.collection.OpenHashSet
@@ -183,12 +182,6 @@ case class With(child: LogicalPlan, cteRelations: Map[String, Subquery]) extends
 
 case class WithWindowDefinition(
     windowDefinitions: Map[String, WindowSpecDefinition],
-    child: LogicalPlan) extends UnaryNode {
-  override def output: Seq[Attribute] = child.output
-}
-
-case class WriteToFile(
-    path: String,
     child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
 }
@@ -379,7 +372,7 @@ case class Limit(limitExpr: Expression, child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
 
   override lazy val statistics: Statistics = {
-    val limit = limitExpr.eval(null).asInstanceOf[Int]
+    val limit = limitExpr.eval().asInstanceOf[Int]
     val sizeInBytes = (limit: Long) * output.map(a => a.dataType.defaultSize).sum
     Statistics(sizeInBytes = sizeInBytes)
   }

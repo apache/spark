@@ -15,24 +15,24 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.parquet
+package org.apache.spark.unsafe.types;
 
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.unsafe.PlatformDependent;
 
-// TODO Removes this while fixing SPARK-8848
-private[sql] object CatalystConverter {
-  // This is mostly Parquet convention (see, e.g., `ConversionPatterns`).
-  // Note that "array" for the array elements is chosen by ParquetAvro.
-  // Using a different value will result in Parquet silently dropping columns.
-  val ARRAY_CONTAINS_NULL_BAG_SCHEMA_NAME = "bag"
-  val ARRAY_ELEMENTS_SCHEMA_NAME = "array"
+public class ByteArray {
 
-  val MAP_KEY_SCHEMA_NAME = "key"
-  val MAP_VALUE_SCHEMA_NAME = "value"
-  val MAP_SCHEMA_NAME = "map"
-
-  // TODO: consider using Array[T] for arrays to avoid boxing of primitive types
-  type ArrayScalaType[T] = Seq[T]
-  type StructScalaType[T] = InternalRow
-  type MapScalaType[K, V] = Map[K, V]
+  /**
+   * Writes the content of a byte array into a memory address, identified by an object and an
+   * offset. The target memory address must already been allocated, and have enough space to
+   * hold all the bytes in this string.
+   */
+  public static void writeToMemory(byte[] src, Object target, long targetOffset) {
+    PlatformDependent.copyMemory(
+      src,
+      PlatformDependent.BYTE_ARRAY_OFFSET,
+      target,
+      targetOffset,
+      src.length
+    );
+  }
 }

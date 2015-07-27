@@ -170,6 +170,8 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
     execution.PhysicalRDD(projections.map(_.toAttribute), unionedRows)
   }
 
+  // TODO: refactor this thing. It is very complicated because it does projection internally.
+  // We should just put a project on top of this.
   private def mergeWithPartitionValues(
       schema: StructType,
       requiredColumns: Array[String],
@@ -187,13 +189,13 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
         if (i != -1) {
           // If yes, gets column value from partition values.
           (mutableRow: MutableRow, dataRow: InternalRow, ordinal: Int) => {
-            mutableRow(ordinal) = partitionValues(i)
+            mutableRow(ordinal) = partitionValues.genericGet(i)
           }
         } else {
           // Otherwise, inherits the value from scanned data.
           val i = nonPartitionColumns.indexOf(name)
           (mutableRow: MutableRow, dataRow: InternalRow, ordinal: Int) => {
-            mutableRow(ordinal) = dataRow(i)
+            mutableRow(ordinal) = dataRow.genericGet(i)
           }
         }
       }

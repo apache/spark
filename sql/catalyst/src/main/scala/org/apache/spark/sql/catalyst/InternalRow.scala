@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
@@ -29,35 +30,38 @@ abstract class InternalRow extends Serializable {
 
   def numFields: Int
 
-  def get(i: Int): Any
+  def get(ordinal: Int): Any
 
-  // TODO: Remove this.
-  def apply(i: Int): Any = get(i)
+  def genericGet(ordinal: Int): Any = get(ordinal, null)
 
-  def getAs[T](i: Int): T = get(i).asInstanceOf[T]
+  def get(ordinal: Int, dataType: DataType): Any = get(ordinal)
 
-  def isNullAt(i: Int): Boolean = get(i) == null
+  def getAs[T](ordinal: Int, dataType: DataType): T = get(ordinal, dataType).asInstanceOf[T]
 
-  def getBoolean(i: Int): Boolean = getAs[Boolean](i)
+  def isNullAt(ordinal: Int): Boolean = get(ordinal) == null
 
-  def getByte(i: Int): Byte = getAs[Byte](i)
+  def getBoolean(ordinal: Int): Boolean = getAs[Boolean](ordinal, BooleanType)
 
-  def getShort(i: Int): Short = getAs[Short](i)
+  def getByte(ordinal: Int): Byte = getAs[Byte](ordinal, ByteType)
 
-  def getInt(i: Int): Int = getAs[Int](i)
+  def getShort(ordinal: Int): Short = getAs[Short](ordinal, ShortType)
 
-  def getLong(i: Int): Long = getAs[Long](i)
+  def getInt(ordinal: Int): Int = getAs[Int](ordinal, IntegerType)
 
-  def getFloat(i: Int): Float = getAs[Float](i)
+  def getLong(ordinal: Int): Long = getAs[Long](ordinal, LongType)
 
-  def getDouble(i: Int): Double = getAs[Double](i)
+  def getFloat(ordinal: Int): Float = getAs[Float](ordinal, FloatType)
 
-  def getUTF8String(i: Int): UTF8String = getAs[UTF8String](i)
+  def getDouble(ordinal: Int): Double = getAs[Double](ordinal, DoubleType)
 
-  def getBinary(i: Int): Array[Byte] = getAs[Array[Byte]](i)
+  def getUTF8String(ordinal: Int): UTF8String = getAs[UTF8String](ordinal, StringType)
 
-  // This is only use for test
-  def getString(i: Int): String = getAs[UTF8String](i).toString
+  def getBinary(ordinal: Int): Array[Byte] = getAs[Array[Byte]](ordinal, BinaryType)
+
+  def getDecimal(ordinal: Int): Decimal = getAs[Decimal](ordinal, DecimalType.SYSTEM_DEFAULT)
+
+  // This is only use for test and will throw a null pointer exception if the position is null.
+  def getString(ordinal: Int): String = getUTF8String(ordinal).toString
 
   /**
    * Returns a struct from ordinal position.
@@ -65,7 +69,7 @@ abstract class InternalRow extends Serializable {
    * @param ordinal position to get the struct from.
    * @param numFields number of fields the struct type has
    */
-  def getStruct(ordinal: Int, numFields: Int): InternalRow = getAs[InternalRow](ordinal)
+  def getStruct(ordinal: Int, numFields: Int): InternalRow = getAs[InternalRow](ordinal, null)
 
   override def toString: String = s"[${this.mkString(",")}]"
 

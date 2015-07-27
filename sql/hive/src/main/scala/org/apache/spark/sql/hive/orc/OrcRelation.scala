@@ -121,7 +121,9 @@ private[orc] class OrcOutputWriter(
       oi.setStructFieldData(
         o,
         fieldRefs.get(i),
-        wrap(row(i), fieldRefs.get(i).getFieldObjectInspector))
+        wrap(row.get(i, dataSchema(i).dataType),
+          fieldRefs.get(i).getFieldObjectInspector,
+          dataSchema(i).dataType))
       i += 1
     }
     o
