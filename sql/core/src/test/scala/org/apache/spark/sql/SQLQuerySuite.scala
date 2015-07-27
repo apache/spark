@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.scalatest.BeforeAndAfterAll
 
 import java.sql.Timestamp
@@ -56,6 +57,31 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll with SQLTestUtils {
 
     checkAnswer(queryCaseWhen, Row("1.0") :: Nil)
     checkAnswer(queryCoalesce, Row("1") :: Nil)
+  }
+
+  test("show functions") {
+    checkAnswer(sql("SHOW functions"), FunctionRegistry.builtin.listFunction().sorted.map(Row(_)))
+  }
+
+  test("describe functions") {
+    checkExistence(sql("describe function extended upper"), true,
+      "Function: upper",
+      "Class: org.apache.spark.sql.catalyst.expressions.Upper",
+      "Usage: upper(str) - Returns str with all characters changed to uppercase",
+      "Extended Usage:",
+      "> SELECT upper('SparkSql');",
+      "'SPARKSQL'")
+
+    checkExistence(sql("describe functioN Upper"), true,
+      "Function: upper",
+      "Class: org.apache.spark.sql.catalyst.expressions.Upper",
+      "Usage: upper(str) - Returns str with all characters changed to uppercase")
+
+    checkExistence(sql("describe functioN Upper"), false,
+      "Extended Usage")
+
+    checkExistence(sql("describe functioN abcadf"), true,
+      "Function: abcadf is not found.")
   }
 
   test("SPARK-6743: no columns from cache") {

@@ -187,12 +187,6 @@ case class WithWindowDefinition(
   override def output: Seq[Attribute] = child.output
 }
 
-case class WriteToFile(
-    path: String,
-    child: LogicalPlan) extends UnaryNode {
-  override def output: Seq[Attribute] = child.output
-}
-
 /**
  * @param order  The ordering expressions
  * @param global True means global sorting apply for entire data set,
