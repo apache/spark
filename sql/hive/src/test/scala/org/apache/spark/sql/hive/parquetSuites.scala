@@ -482,7 +482,7 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
         |  intField INT,
         |  stringField STRING
         |)
-        |PARTITIONED BY (date string)
+        |PARTITIONED BY (`date` string)
         |ROW FORMAT SERDE 'org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe'
         |STORED AS
         |  INPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat'
@@ -494,7 +494,7 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
     sql(
       """
         |INSERT INTO TABLE test_parquet_partitioned_cache_test
-        |PARTITION (date='2015-04-01')
+        |PARTITION (`date`='2015-04-01')
         |select a, b from jt
       """.stripMargin)
     // Right now, insert into a partitioned Parquet is not supported in data source Parquet.
@@ -503,7 +503,7 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
     sql(
       """
         |INSERT INTO TABLE test_parquet_partitioned_cache_test
-        |PARTITION (date='2015-04-02')
+        |PARTITION (`date`='2015-04-02')
         |select a, b from jt
       """.stripMargin)
     assert(catalog.cachedDataSourceTables.getIfPresent(tableIdentifier) === null)
