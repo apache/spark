@@ -107,8 +107,12 @@ sealed trait Partitioning {
    */
   def compatibleWith(other: Partitioning): Boolean
 
+  def guarantees(other: Partitioning): Boolean
+
   /** Returns the expressions that are used to key the partitioning. */
   def keyExpressions: Seq[Expression]
+
+  def toNullUnsafePartitioning: Partitioning
 }
 
 case class UnknownPartitioning(numPartitions: Int) extends Partitioning {
@@ -122,7 +126,11 @@ case class UnknownPartitioning(numPartitions: Int) extends Partitioning {
     case _ => false
   }
 
+  override def guarantees(other: Partitioning): Boolean = false
+
   override def keyExpressions: Seq[Expression] = Nil
+
+  override def toNullUnsafePartitioning: Partitioning = this
 }
 
 case object SinglePartition extends Partitioning {
@@ -135,7 +143,14 @@ case object SinglePartition extends Partitioning {
     case _ => false
   }
 
+  override def guarantees(other: Partitioning): Boolean = other match {
+    case SinglePartition => true
+    case _ => false
+  }
+
   override def keyExpressions: Seq[Expression] = Nil
+
+  override def toNullUnsafePartitioning: Partitioning = this
 }
 
 case object BroadcastPartitioning extends Partitioning {
@@ -148,7 +163,14 @@ case object BroadcastPartitioning extends Partitioning {
     case _ => false
   }
 
+  override def guarantees(other: Partitioning): Boolean = other match {
+    case BroadcastPartitioning => true
+    case _ => false
+  }
+
   override def keyExpressions: Seq[Expression] = Nil
+
+  override def toNullUnsafePartitioning: Partitioning = this
 }
 
 /**
@@ -163,7 +185,7 @@ case class NullSafeHashPartitioning(expressions: Seq[Expression], numPartitions:
   override def nullable: Boolean = false
   override def dataType: DataType = IntegerType
 
-  private[this] lazy val clusteringSet = expressions.toSet
+  lazy val clusteringSet = expressions.toSet
 
   override def satisfies(required: Distribution): Boolean = required match {
     case UnspecifiedDistribution => true
@@ -180,7 +202,18 @@ case class NullSafeHashPartitioning(expressions: Seq[Expression], numPartitions:
     case _ => false
   }
 
+  override def guarantees(other: Partitioning): Boolean = other match {
+    case o: NullSafeHashPartitioning =>
+      this.clusteringSet == o.clusteringSet && this.numPartitions == o.numPartitions
+    case o: NullUnsafeHashPartitioning =>
+      this.clusteringSet == o.clusteringSet && this.numPartitions == o.numPartitions
+    case _ => false
+  }
+
   override def keyExpressions: Seq[Expression] = expressions
+
+  override def toNullUnsafePartitioning: Partitioning =
+    NullUnsafeHashPartitioning(expressions, numPartitions)
 }
 
 /**
@@ -199,7 +232,7 @@ case class NullUnsafeHashPartitioning(expressions: Seq[Expression], numPartition
   override def nullable: Boolean = false
   override def dataType: DataType = IntegerType
 
-  private[this] lazy val clusteringSet = expressions.toSet
+  lazy val clusteringSet = expressions.toSet
 
   override def satisfies(required: Distribution): Boolean = required match {
     case UnspecifiedDistribution => true
@@ -214,7 +247,15 @@ case class NullUnsafeHashPartitioning(expressions: Seq[Expression], numPartition
     case _ => false
   }
 
+  override def guarantees(other: Partitioning): Boolean = other match {
+    case o: NullUnsafeHashPartitioning =>
+      this.clusteringSet == o.clusteringSet && this.numPartitions == o.numPartitions
+    case _ => false
+  }
+
   override def keyExpressions: Seq[Expression] = expressions
+
+  override def toNullUnsafePartitioning: Partitioning = this
 }
 
 /**
@@ -255,5 +296,12 @@ case class RangePartitioning(ordering: Seq[SortOrder], numPartitions: Int)
     case _ => false
   }
 
+  override def guarantees(other: Partitioning): Boolean = other match {
+    case o: RangePartitioning => this == o
+    case _ => false
+  }
+
   override def keyExpressions: Seq[Expression] = ordering.map(_.child)
+
+  override def toNullUnsafePartitioning: Partitioning = this
 }

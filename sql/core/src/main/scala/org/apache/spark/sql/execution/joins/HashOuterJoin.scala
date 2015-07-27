@@ -38,14 +38,6 @@ trait HashOuterJoin {
   val left: SparkPlan
   val right: SparkPlan
 
-  override def outputPartitioning: Partitioning = joinType match {
-    case LeftOuter => left.outputPartitioning
-    case RightOuter => right.outputPartitioning
-    case FullOuter => UnknownPartitioning(left.outputPartitioning.numPartitions)
-    case x =>
-      throw new IllegalArgumentException(s"HashOuterJoin should not take $x as the JoinType")
-  }
-
   override def output: Seq[Attribute] = {
     joinType match {
       case LeftOuter =>
