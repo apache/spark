@@ -45,6 +45,7 @@ class AkkaStreamSuite extends SparkFunSuite with Eventually with BeforeAndAfter 
       actorSystem.awaitTermination(30.seconds)
       actorSystem = null
     }
+    CachedActorSystem.set(null)
   }
 
   test("actor input stream") {

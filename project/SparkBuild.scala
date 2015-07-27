@@ -201,12 +201,13 @@ object SparkBuild extends PomBuild {
   /* Enable tests settings for all projects except examples, assembly and tools */
   (allProjects ++ optionallyEnabledProjects).foreach(enable(TestSettings.settings))
 
-  (allProjects ++ optionallyEnabledProjects).filterNot { x =>
-    // The unit tests in streamingAkka and streamingZeromq need to serialize
-    // com.typesafe.config.Config. However, we cannot enable sun.io.serialization.extendedDebugInfo
-    // because of https://github.com/typesafehub/config/issues/176
-    // Note: although this issue is resolved in Config 1.3.0, but it only supports Java 8.
-    Seq(streamingAkka, streamingZeromq).contains(x)
+  /* Enable sun.io.serialization.extendedDebugInfo for all projects except streamingAkka */
+  (allProjects ++ optionallyEnabledProjects).filter { x =>
+    // The unit tests in streamingAkka need to serialize com.typesafe.config.Config. However, we
+    // cannot enable sun.io.serialization.extendedDebugInfo because of
+    // https://github.com/typesafehub/config/issues/176
+    // Note: although this issue is already resolved in Config 1.3.0, but it only supports Java 8.
+    x != streamingAkka
   }.foreach(enable(SerializationDebugSettings.settings))
 
   // TODO: remove streamingAkka from this list after 1.5.0

@@ -48,7 +48,7 @@ class ZeroMQStreamSuite extends SparkFunSuite {
       ssc, () => null, publishUrl, subscribe, bytesToObjects,
       StorageLevel.MEMORY_AND_DISK_SER_2, SupervisorStrategy.defaultStrategy)
 
-    // TODO: Actually test data receiving
+    // TODO: Actually test data receiving. A real test needs the native ZeroMQ library
     ssc.stop()
   }
 }
