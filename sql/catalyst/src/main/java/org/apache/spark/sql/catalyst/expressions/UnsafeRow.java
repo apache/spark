@@ -259,6 +259,8 @@ public final class UnsafeRow extends MutableRow {
       return getInt(ordinal);
     } else if (dataType instanceof TimestampType) {
       return getLong(ordinal);
+    } else if (dataType instanceof BinaryType) {
+      return getBinary(ordinal);
     } else if (dataType instanceof StringType) {
       return getUTF8String(ordinal);
     } else if (dataType instanceof StructType) {
