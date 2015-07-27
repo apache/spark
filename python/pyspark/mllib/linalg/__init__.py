@@ -1255,6 +1255,15 @@ class IndexedRow(object):
         return "IndexedRow(%s, %s)" % (self.index, self.vector)
 
 
+def _convert_to_indexed_row(row):
+    if isinstance(row, IndexedRow):
+        return row
+    elif isinstance(row, tuple) and len(row) == 2:
+        return IndexedRow(*row)
+    else:
+        raise TypeError("Cannot convert type %s into IndexedRow" % type(row))
+
+
 class IndexedRowMatrix(DistributedMatrix):
     """
     .. note:: Experimental
@@ -1271,13 +1280,10 @@ class IndexedRowMatrix(DistributedMatrix):
         :param numCols: Number of columns in the matrix.
         """
         if not isinstance(rows, RDD):
-            raise TypeError("rows should be an RDD object, got %s" % type(rows))
-        first = rows.first()
-        if not (isinstance(first, IndexedRow) or
-                (isinstance(first, tuple) and len(first) == 2 and
-                 isinstance(first[0], (long, int)) and isinstance(first[1], Vector))):
             raise TypeError("rows should be an RDD of IndexedRows or (long, Vector) tuples, "
-                            "got an RDD of %s" % type(first))
+                            "got %s" % type(rows))
+        if not isinstance(rows.first(), IndexedRow):
+            rows = rows.map(_convert_to_indexed_row)
 
         # We use DataFrames for serialization of IndexedRows from
         # Python, so first convert the RDD to a DataFrame on this side.
@@ -1384,6 +1390,15 @@ class MatrixEntry(object):
         return "MatrixEntry(%s, %s, %s)" % (self.i, self.j, self.value)
 
 
+def _convert_to_matrix_entry(entry):
+    if isinstance(entry, MatrixEntry):
+        return entry
+    elif isinstance(entry, tuple) and len(entry) == 3:
+        return MatrixEntry(*entry)
+    else:
+        raise TypeError("Cannot convert type %s into MatrixEntry" % type(entry))
+
+
 class CoordinateMatrix(object):
     """
     .. note:: Experimental
@@ -1401,22 +1416,10 @@ class CoordinateMatrix(object):
         :param numCols: Number of columns in the matrix.
         """
         if not isinstance(entries, RDD):
-            raise TypeError("entries should be an RDD object, got %s" % type(entries))
-        first = entries.first()
-        if isinstance(first, MatrixEntry):
-            pass
-        elif (isinstance(first, (tuple, list)) and len(first) == 3 and
-              isinstance(first[0], (long, int)) and
-              isinstance(first[1], (long, int)) and
-              isinstance(first[2], (float, long, int))):
-            # The Java side won't be able to automatically convert a
-            # long to a double for the 3rd tuple value, so map each
-            # tuple to a MatrixEntry, which will do the conversion
-            # on the Python side.
-            entries = entries.map(lambda entry: MatrixEntry(*entry))
-        else:
-            raise TypeError("rows should be an RDD of MatrixEntry entries or "
-                            "(long, long, float) tuples, got an RDD of %s" % type(first))
+            raise TypeError("entries should be an RDD of MatrixEntry entries or "
+                            "(long, long, float) tuples, got %s" % type(entries))
+        if not isinstance(entries.first(), MatrixEntry):
+            entries = entries.map(_convert_to_matrix_entry)
 
         # We use DataFrames for serialization of MatrixEntry entries
         # from Python, so first convert the RDD to a DataFrame on this
