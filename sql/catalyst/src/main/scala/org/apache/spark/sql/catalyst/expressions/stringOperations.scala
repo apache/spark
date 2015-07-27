@@ -175,41 +175,29 @@ case class Like(left: Expression, right: Expression)
     val escapeFunc = StringUtils.getClass.getName.stripSuffix("$") + ".escapeLikeRegex"
     val pattern = ctx.freshName("pattern")
 
-    val leftGen = left.gen(ctx)
-    val rightGen = right.gen(ctx)
-
-    val patternCode =
-      if (right.foldable) {
-        val rVal = right.eval()
-        if (rVal != null) {
-          val regexStr =
-            StringEscapeUtils.escapeJava(escape(rVal.asInstanceOf[UTF8String].toString()))
-          ctx.addMutableState(patternClass, pattern,
-            s"""$pattern = ${patternClass}.compile("$regexStr");""")
-          s"${ev.primitive} = $pattern.matcher(${leftGen.primitive}.toString()).matches();"
+    nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
+      val patternCode =
+        if (right.foldable) {
+          val rVal = right.eval()
+          if (rVal != null) {
+            val regexStr =
+              StringEscapeUtils.escapeJava(escape(rVal.asInstanceOf[UTF8String].toString()))
+            ctx.addMutableState(patternClass, pattern,
+              s"""$pattern = ${patternClass}.compile("$regexStr");""")
+            s"${ev.primitive} = $pattern.matcher(${eval1}.toString()).matches();"
+          } else {
+            ""
+          }
         } else {
-          ""
+          s"""
+            String rightStr = ${eval2}.toString();
+            ${patternClass} $pattern = ${patternClass}.compile($escapeFunc(rightStr));
+            ${ev.primitive} = $pattern.matcher(${eval1}.toString()).matches();
+          """
         }
-      } else {
-        s"""
-          String rightStr = ${rightGen.primitive}.toString();
-          ${patternClass} $pattern = ${patternClass}.compile($escapeFunc(rightStr));
-          ${ev.primitive} = $pattern.matcher(${leftGen.primitive}.toString()).matches();
-        """
-      }
 
-    s"""
-      ${leftGen.code}
-      boolean ${ev.isNull} = ${leftGen.isNull};
-      ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
-      if (!${ev.isNull}) {
-        ${rightGen.code}
-        ${ev.isNull} = ${rightGen.isNull};
-        if (!${ev.isNull}) {
-          $patternCode
-        }
-      }
-    """
+      s"$patternCode"
+    })
   }
 }
 
@@ -225,41 +213,28 @@ case class RLike(left: Expression, right: Expression)
     val patternClass = classOf[Pattern].getName
     val pattern = ctx.freshName("pattern")
 
-    val leftGen = left.gen(ctx)
-    val rightGen = right.gen(ctx)
-
-    val patternCode =
-      if (right.foldable) {
-        val rVal = right.eval()
-        if (rVal != null) {
-          val regexStr =
-            StringEscapeUtils.escapeJava(rVal.asInstanceOf[UTF8String].toString())
-          ctx.addMutableState(patternClass, pattern,
-            s"""$pattern = ${patternClass}.compile("$regexStr");""")
-          s"${ev.primitive} = $pattern.matcher(${leftGen.primitive}.toString()).find(0);"
+    nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
+      val patternCode =
+        if (right.foldable) {
+          val rVal = right.eval()
+          if (rVal != null) {
+            val regexStr =
+              StringEscapeUtils.escapeJava(rVal.asInstanceOf[UTF8String].toString())
+            ctx.addMutableState(patternClass, pattern,
+              s"""$pattern = ${patternClass}.compile("$regexStr");""")
+            s"${ev.primitive} = $pattern.matcher(${eval1}.toString()).find(0);"
+          } else {
+            ""
+          }
         } else {
-          ""
+          s"""
+            String rightStr = ${eval2}.toString();
+            ${patternClass} $pattern = ${patternClass}.compile(rightStr);
+            ${ev.primitive} = $pattern.matcher(${eval1}.toString()).find(0);
+          """
         }
-      } else {
-        s"""
-          String rightStr = ${rightGen.primitive}.toString();
-          ${patternClass} $pattern = ${patternClass}.compile(rightStr);
-          ${ev.primitive} = $pattern.matcher(${leftGen.primitive}.toString()).find(0);
-        """
-      }
-
-    s"""
-      ${leftGen.code}
-      boolean ${ev.isNull} = ${leftGen.isNull};
-      ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
-      if (!${ev.isNull}) {
-        ${rightGen.code}
-        ${ev.isNull} = ${rightGen.isNull};
-        if (!${ev.isNull}) {
-          $patternCode
-        }
-      }
-    """
+      s"$patternCode"
+    })
   }
 }
 
