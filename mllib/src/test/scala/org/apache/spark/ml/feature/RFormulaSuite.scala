@@ -36,13 +36,13 @@ class RFormulaSuite extends SparkFunSuite with MLlibTestSparkContext {
     val resultSchema = model.transformSchema(original.schema)
     val expected = sqlContext.createDataFrame(
       Seq(
-        (0, 1.0, 3.0, Vectors.dense(Array(1.0, 3.0)), 0.0),
-        (2, 2.0, 5.0, Vectors.dense(Array(2.0, 5.0)), 2.0))
+        (0, 1.0, 3.0, Vectors.dense(1.0, 3.0), 0.0),
+        (2, 2.0, 5.0, Vectors.dense(2.0, 5.0), 2.0))
       ).toDF("id", "v1", "v2", "features", "label")
     // TODO(ekl) make schema comparisons ignore metadata, to avoid .toString
     assert(result.schema.toString == resultSchema.toString)
     assert(resultSchema == expected.schema)
-    assert(result.collect().toSeq == expected.collect().toSeq)
+    assert(result.collect() === expected.collect())
   }
 
   test("features column already exists") {
@@ -90,18 +90,19 @@ class RFormulaSuite extends SparkFunSuite with MLlibTestSparkContext {
   test("encodes string terms") {
     val formula = new RFormula().setFormula("id ~ a + b")
     val original = sqlContext.createDataFrame(
-      Seq((1, "foo", 4), (2, "bar", 4), (3, "bar", 5), (4, "baz", 5))).toDF("id", "a", "b")
+      Seq((1, "foo", 4), (2, "bar", 4), (3, "bar", 5), (4, "baz", 5))
+    ).toDF("id", "a", "b")
     val model = formula.fit(original)
     val result = model.transform(original)
     val resultSchema = model.transformSchema(original.schema)
     val expected = sqlContext.createDataFrame(
       Seq(
-        (1, "foo", 4, Vectors.dense(Array(0.0, 1.0, 4.0)), 1.0),
-        (2, "bar", 4, Vectors.dense(Array(1.0, 0.0, 4.0)), 2.0),
-        (3, "bar", 5, Vectors.dense(Array(1.0, 0.0, 5.0)), 3.0),
-        (4, "baz", 5, Vectors.dense(Array(0.0, 0.0, 5.0)), 4.0))
+        (1, "foo", 4, Vectors.dense(0.0, 1.0, 4.0), 1.0),
+        (2, "bar", 4, Vectors.dense(1.0, 0.0, 4.0), 2.0),
+        (3, "bar", 5, Vectors.dense(1.0, 0.0, 5.0), 3.0),
+        (4, "baz", 5, Vectors.dense(0.0, 0.0, 5.0), 4.0))
       ).toDF("id", "a", "b", "features", "label")
     assert(result.schema.toString == resultSchema.toString)
-    assert(result.collect().toSeq == expected.collect().toSeq)
+    assert(result.collect() === expected.collect())
   }
 }
