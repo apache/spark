@@ -1246,6 +1246,8 @@ class IndexedRow(object):
 
     Just a wrapper over a (long, Vector) tuple.
 
+    :param index: The index for the given row, as a long.
+    :param vector: The given row, as a vector.
     """
     def __init__(self, index, vector):
         self.index = long(index)
@@ -1380,6 +1382,9 @@ class MatrixEntry(object):
 
     Just a wrapper over a (long, long, float) tuple.
 
+    :param i: The row index of the matrix as a long.
+    :param j: The column index of the matrix as a long.
+    :param value: The (i, j) entry of the matrix as a float.
     """
     def __init__(self, i, j, value):
         self.i = long(i)
