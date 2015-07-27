@@ -73,8 +73,9 @@ case class NullUnsafeClusteredDistribution(clustering: Seq[Expression]) extends 
 /**
  * Represents data where tuples have been ordered according to the `ordering`
  * [[Expression Expressions]].  This is a strictly stronger guarantee than
- * [[NullSafeClusteredDistribution]] as an ordering will ensure that tuples that share the same value for
- * the ordering expressions are contiguous and will never be split across partitions.
+ * [[NullSafeClusteredDistribution]] as an ordering will ensure that tuples that share the
+ * same value for the ordering expressions are contiguous and will never be split across
+ * partitions.
  */
 case class OrderedDistribution(ordering: Seq[SortOrder]) extends Distribution {
   require(

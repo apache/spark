@@ -144,8 +144,10 @@ case class Exchange(newPartitioning: Partitioning, child: SparkPlan) extends Una
   protected override def doExecute(): RDD[InternalRow] = attachTree(this , "execute") {
     val rdd = child.execute()
     val part: Partitioner = newPartitioning match {
-      case NullSafeHashPartitioning(expressions, numPartitions) => new HashPartitioner(numPartitions)
-      case NullUnsafeHashPartitioning(expressions, numPartitions) => new HashPartitioner(numPartitions)
+      case NullSafeHashPartitioning(expressions, numPartitions) =>
+        new HashPartitioner(numPartitions)
+      case NullUnsafeHashPartitioning(expressions, numPartitions) =>
+        new HashPartitioner(numPartitions)
       case RangePartitioning(sortingExpressions, numPartitions) =>
         // Internally, RangePartitioner runs a job on the RDD that samples keys to compute
         // partition bounds. To get accurate samples, we need to copy the mutable keys.
@@ -228,7 +230,7 @@ private[sql] case class EnsureRequirements(sqlContext: SQLContext) extends Rule[
   // TODO: Determine the number of partitions.
   def numPartitions: Int = sqlContext.conf.numShufflePartitions
 
-  def advancedSqlOptimizations = sqlContext.conf.advancedSqlOptimizations
+  def advancedSqlOptimizations: Boolean = sqlContext.conf.advancedSqlOptimizations
 
   def apply(plan: SparkPlan): SparkPlan = plan.transformUp {
     case operator: SparkPlan =>
