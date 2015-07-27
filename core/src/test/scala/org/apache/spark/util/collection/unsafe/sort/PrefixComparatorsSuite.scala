@@ -47,4 +47,29 @@ class PrefixComparatorsSuite extends SparkFunSuite with PropertyChecks {
     forAll (regressionTests) { (s1: String, s2: String) => testPrefixComparison(s1, s2) }
     forAll { (s1: String, s2: String) => testPrefixComparison(s1, s2) }
   }
+
+  test("float prefix comparator handles NaN properly") {
+    val nan1: Float = java.lang.Float.intBitsToFloat(0x7f800001)
+    val nan2: Float = java.lang.Float.intBitsToFloat(0x7fffffff)
+    assert(nan1.isNaN)
+    assert(nan2.isNaN)
+    val nan1Prefix = PrefixComparators.FLOAT.computePrefix(nan1)
+    val nan2Prefix = PrefixComparators.FLOAT.computePrefix(nan2)
+    assert(nan1Prefix === nan2Prefix)
+    val floatMaxPrefix = PrefixComparators.FLOAT.computePrefix(Float.MaxValue)
+    assert(PrefixComparators.FLOAT.compare(nan1Prefix, floatMaxPrefix) === 1)
+  }
+
+  test("double prefix comparator handles NaNs properly") {
+    val nan1: Double = java.lang.Double.longBitsToDouble(0x7ff0000000000001L)
+    val nan2: Double = java.lang.Double.longBitsToDouble(0x7fffffffffffffffL)
+    assert(nan1.isNaN)
+    assert(nan2.isNaN)
+    val nan1Prefix = PrefixComparators.DOUBLE.computePrefix(nan1)
+    val nan2Prefix = PrefixComparators.DOUBLE.computePrefix(nan2)
+    assert(nan1Prefix === nan2Prefix)
+    val doubleMaxPrefix = PrefixComparators.DOUBLE.computePrefix(Double.MaxValue)
+    assert(PrefixComparators.DOUBLE.compare(nan1Prefix, doubleMaxPrefix) === 1)
+  }
+
 }

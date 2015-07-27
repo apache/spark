@@ -125,7 +125,7 @@ private[hive] class IsolatedClientLoader(
     name.contains("log4j") ||
     name.startsWith("org.apache.spark.") ||
     name.startsWith("scala.") ||
-    name.startsWith("com.google") ||
+    (name.startsWith("com.google") && !name.startsWith("com.google.cloud")) ||
     name.startsWith("java.lang.") ||
     name.startsWith("java.net") ||
     sharedPrefixes.exists(name.startsWith)

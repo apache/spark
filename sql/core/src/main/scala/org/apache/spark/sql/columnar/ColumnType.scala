@@ -90,7 +90,7 @@ private[sql] sealed abstract class ColumnType[T <: DataType, JvmType](
    * boxing/unboxing costs whenever possible.
    */
   def copyField(from: InternalRow, fromOrdinal: Int, to: MutableRow, toOrdinal: Int): Unit = {
-    to(toOrdinal) = from(fromOrdinal)
+    to(toOrdinal) = from.get(fromOrdinal)
   }
 
   /**
@@ -309,7 +309,7 @@ private[sql] object SHORT extends NativeColumnType(ShortType, 6, 2) {
 
 private[sql] object STRING extends NativeColumnType(StringType, 7, 8) {
   override def actualSize(row: InternalRow, ordinal: Int): Int = {
-    row.getString(ordinal).getBytes("utf-8").length + 4
+    row.getUTF8String(ordinal).numBytes() + 4
   }
 
   override def append(v: UTF8String, buffer: ByteBuffer): Unit = {
@@ -329,11 +329,11 @@ private[sql] object STRING extends NativeColumnType(StringType, 7, 8) {
   }
 
   override def getField(row: InternalRow, ordinal: Int): UTF8String = {
-    row(ordinal).asInstanceOf[UTF8String]
+    row.getUTF8String(ordinal)
   }
 
   override def copyField(from: InternalRow, fromOrdinal: Int, to: MutableRow, toOrdinal: Int) {
-    to.update(toOrdinal, from(fromOrdinal))
+    to.update(toOrdinal, from.getUTF8String(fromOrdinal))
   }
 }
 
@@ -347,7 +347,7 @@ private[sql] object DATE extends NativeColumnType(DateType, 8, 4) {
   }
 
   override def getField(row: InternalRow, ordinal: Int): Int = {
-    row(ordinal).asInstanceOf[Int]
+    row.getInt(ordinal)
   }
 
   def setField(row: MutableRow, ordinal: Int, value: Int): Unit = {
@@ -365,7 +365,7 @@ private[sql] object TIMESTAMP extends NativeColumnType(TimestampType, 9, 8) {
   }
 
   override def getField(row: InternalRow, ordinal: Int): Long = {
-    row(ordinal).asInstanceOf[Long]
+    row.getLong(ordinal)
   }
 
   override def setField(row: MutableRow, ordinal: Int, value: Long): Unit = {
@@ -375,7 +375,7 @@ private[sql] object TIMESTAMP extends NativeColumnType(TimestampType, 9, 8) {
 
 private[sql] case class FIXED_DECIMAL(precision: Int, scale: Int)
   extends NativeColumnType(
-    DecimalType(Some(PrecisionInfo(precision, scale))),
+    DecimalType(precision, scale),
     10,
     FIXED_DECIMAL.defaultSize) {
 
@@ -388,7 +388,7 @@ private[sql] case class FIXED_DECIMAL(precision: Int, scale: Int)
   }
 
   override def getField(row: InternalRow, ordinal: Int): Decimal = {
-    row(ordinal).asInstanceOf[Decimal]
+    row.getDecimal(ordinal)
   }
 
   override def setField(row: MutableRow, ordinal: Int, value: Decimal): Unit = {
@@ -427,7 +427,7 @@ private[sql] object BINARY extends ByteArrayColumnType[BinaryType.type](11, 16) 
   }
 
   override def getField(row: InternalRow, ordinal: Int): Array[Byte] = {
-    row(ordinal).asInstanceOf[Array[Byte]]
+    row.getBinary(ordinal)
   }
 }
 
@@ -440,7 +440,7 @@ private[sql] object GENERIC extends ByteArrayColumnType[DataType](12, 16) {
   }
 
   override def getField(row: InternalRow, ordinal: Int): Array[Byte] = {
-    SparkSqlSerializer.serialize(row(ordinal))
+    SparkSqlSerializer.serialize(row.get(ordinal))
   }
 }
 

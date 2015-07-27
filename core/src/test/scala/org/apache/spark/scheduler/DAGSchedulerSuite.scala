@@ -155,9 +155,7 @@ class DAGSchedulerSuite
   }
 
   before {
-    // Enable local execution for this test
-    val conf = new SparkConf().set("spark.localExecution.enabled", "true")
-    sc = new SparkContext("local", "DAGSchedulerSuite", conf)
+    sc = new SparkContext("local", "DAGSchedulerSuite")
     sparkListener.submittedStageInfos.clear()
     sparkListener.successfulStages.clear()
     sparkListener.failedStages.clear()
@@ -174,12 +172,7 @@ class DAGSchedulerSuite
         sc.listenerBus,
         mapOutputTracker,
         blockManagerMaster,
-        sc.env) {
-      override def runLocally(job: ActiveJob) {
-        // don't bother with the thread while unit testing
-        runLocallyWithinThread(job)
-      }
-    }
+        sc.env)
     dagEventProcessLoopTester = new DAGSchedulerEventProcessLoopTester(scheduler)
   }
 
@@ -243,10 +236,9 @@ class DAGSchedulerSuite
       rdd: RDD[_],
       partitions: Array[Int],
       func: (TaskContext, Iterator[_]) => _ = jobComputeFunc,
-      allowLocal: Boolean = false,
       listener: JobListener = jobListener): Int = {
     val jobId = scheduler.nextJobId.getAndIncrement()
-    runEvent(JobSubmitted(jobId, rdd, func, partitions, allowLocal, CallSite("", ""), listener))
+    runEvent(JobSubmitted(jobId, rdd, func, partitions, CallSite("", ""), listener))
     jobId
   }
 
@@ -283,37 +275,6 @@ class DAGSchedulerSuite
     submit(new MyRDD(sc, 1, Nil), Array(0))
     complete(taskSets(0), List((Success, 42)))
     assert(results === Map(0 -> 42))
-    assertDataStructuresEmpty()
-  }
-
-  test("local job") {
-    val rdd = new PairOfIntsRDD(sc, Nil) {
-      override def compute(split: Partition, context: TaskContext): Iterator[(Int, Int)] =
-        Array(42 -> 0).iterator
-      override def getPartitions: Array[Partition] =
-        Array( new Partition { override def index: Int = 0 } )
-      override def getPreferredLocations(split: Partition): List[String] = Nil
-      override def toString: String = "DAGSchedulerSuite Local RDD"
-    }
-    val jobId = scheduler.nextJobId.getAndIncrement()
-    runEvent(
-      JobSubmitted(jobId, rdd, jobComputeFunc, Array(0), true, CallSite("", ""), jobListener))
-    assert(results === Map(0 -> 42))
-    assertDataStructuresEmpty()
-  }
-
-  test("local job oom") {
-    val rdd = new PairOfIntsRDD(sc, Nil) {
-      override def compute(split: Partition, context: TaskContext): Iterator[(Int, Int)] =
-        throw new java.lang.OutOfMemoryError("test local job oom")
-      override def getPartitions = Array( new Partition { override def index = 0 } )
-      override def getPreferredLocations(split: Partition) = Nil
-      override def toString = "DAGSchedulerSuite Local RDD"
-    }
-    val jobId = scheduler.nextJobId.getAndIncrement()
-    runEvent(
-      JobSubmitted(jobId, rdd, jobComputeFunc, Array(0), true, CallSite("", ""), jobListener))
-    assert(results.size == 0)
     assertDataStructuresEmpty()
   }
 
@@ -454,12 +415,7 @@ class DAGSchedulerSuite
       sc.listenerBus,
       mapOutputTracker,
       blockManagerMaster,
-      sc.env) {
-      override def runLocally(job: ActiveJob) {
-        // don't bother with the thread while unit testing
-        runLocallyWithinThread(job)
-      }
-    }
+      sc.env)
     dagEventProcessLoopTester = new DAGSchedulerEventProcessLoopTester(noKillScheduler)
     val jobId = submit(new MyRDD(sc, 1, Nil), Array(0))
     cancel(jobId)
@@ -485,8 +441,8 @@ class DAGSchedulerSuite
     complete(taskSets(0), Seq(
         (Success, makeMapStatus("hostA", 1)),
         (Success, makeMapStatus("hostB", 1))))
-    assert(mapOutputTracker.getServerStatuses(shuffleId, 0).map(_._1) ===
-           Array(makeBlockManagerId("hostA"), makeBlockManagerId("hostB")))
+    assert(mapOutputTracker.getMapSizesByExecutorId(shuffleId, 0).map(_._1).toSet ===
+      HashSet(makeBlockManagerId("hostA"), makeBlockManagerId("hostB")))
     complete(taskSets(1), Seq((Success, 42)))
     assert(results === Map(0 -> 42))
     assertDataStructuresEmpty()
@@ -512,8 +468,8 @@ class DAGSchedulerSuite
     // have the 2nd attempt pass
     complete(taskSets(2), Seq((Success, makeMapStatus("hostA", reduceRdd.partitions.size))))
     // we can see both result blocks now
-    assert(mapOutputTracker.getServerStatuses(shuffleId, 0).map(_._1.host) ===
-      Array("hostA", "hostB"))
+    assert(mapOutputTracker.getMapSizesByExecutorId(shuffleId, 0).map(_._1.host).toSet ===
+      HashSet("hostA", "hostB"))
     complete(taskSets(3), Seq((Success, 43)))
     assert(results === Map(0 -> 42, 1 -> 43))
     assertDataStructuresEmpty()
@@ -529,8 +485,8 @@ class DAGSchedulerSuite
       (Success, makeMapStatus("hostA", reduceRdd.partitions.size)),
       (Success, makeMapStatus("hostB", reduceRdd.partitions.size))))
     // The MapOutputTracker should know about both map output locations.
-    assert(mapOutputTracker.getServerStatuses(shuffleId, 0).map(_._1.host) ===
-      Array("hostA", "hostB"))
+    assert(mapOutputTracker.getMapSizesByExecutorId(shuffleId, 0).map(_._1.host).toSet ===
+      HashSet("hostA", "hostB"))
 
     // The first result task fails, with a fetch failure for the output from the first mapper.
     runEvent(CompletionEvent(
@@ -579,10 +535,10 @@ class DAGSchedulerSuite
       (Success, makeMapStatus("hostA", 2)),
       (Success, makeMapStatus("hostB", 2))))
     // The MapOutputTracker should know about both map output locations.
-    assert(mapOutputTracker.getServerStatuses(shuffleId, 0).map(_._1.host) ===
-      Array("hostA", "hostB"))
-    assert(mapOutputTracker.getServerStatuses(shuffleId, 1).map(_._1.host) ===
-      Array("hostA", "hostB"))
+    assert(mapOutputTracker.getMapSizesByExecutorId(shuffleId, 0).map(_._1.host).toSet ===
+      HashSet("hostA", "hostB"))
+    assert(mapOutputTracker.getMapSizesByExecutorId(shuffleId, 1).map(_._1.host).toSet ===
+      HashSet("hostA", "hostB"))
 
     // The first result task fails, with a fetch failure for the output from the first mapper.
     runEvent(CompletionEvent(
@@ -716,8 +672,8 @@ class DAGSchedulerSuite
     taskSet.tasks(1).epoch = newEpoch
     runEvent(CompletionEvent(taskSet.tasks(1), Success, makeMapStatus("hostA",
       reduceRdd.partitions.size), null, createFakeTaskInfo(), null))
-    assert(mapOutputTracker.getServerStatuses(shuffleId, 0).map(_._1) ===
-           Array(makeBlockManagerId("hostB"), makeBlockManagerId("hostA")))
+    assert(mapOutputTracker.getMapSizesByExecutorId(shuffleId, 0).map(_._1).toSet ===
+           HashSet(makeBlockManagerId("hostB"), makeBlockManagerId("hostA")))
     complete(taskSets(1), Seq((Success, 42), (Success, 43)))
     assert(results === Map(0 -> 42, 1 -> 43))
     assertDataStructuresEmpty()
@@ -894,8 +850,8 @@ class DAGSchedulerSuite
        (Success, makeMapStatus("hostB", 1))))
     // have hostC complete the resubmitted task
     complete(taskSets(1), Seq((Success, makeMapStatus("hostC", 1))))
-    assert(mapOutputTracker.getServerStatuses(shuffleId, 0).map(_._1) ===
-           Array(makeBlockManagerId("hostC"), makeBlockManagerId("hostB")))
+    assert(mapOutputTracker.getMapSizesByExecutorId(shuffleId, 0).map(_._1).toSet ===
+           HashSet(makeBlockManagerId("hostC"), makeBlockManagerId("hostB")))
     complete(taskSets(2), Seq((Success, 42)))
     assert(results === Map(0 -> 42))
     assertDataStructuresEmpty()
@@ -974,40 +930,23 @@ class DAGSchedulerSuite
     // Run this on executors
     sc.parallelize(1 to 10, 2).foreach { item => acc.add(1) }
 
-    // Run this within a local thread
-    sc.parallelize(1 to 10, 2).map { item => acc.add(1) }.take(1)
-
-    // Make sure we can still run local commands as well as cluster commands.
+    // Make sure we can still run commands
     assert(sc.parallelize(1 to 10, 2).count() === 10)
-    assert(sc.parallelize(1 to 10, 2).first() === 1)
   }
 
   test("misbehaved resultHandler should not crash DAGScheduler and SparkContext") {
-    val e1 = intercept[SparkDriverExecutionException] {
-      val rdd = sc.parallelize(1 to 10, 2)
-      sc.runJob[Int, Int](
-        rdd,
-        (context: TaskContext, iter: Iterator[Int]) => iter.size,
-        Seq(0),
-        allowLocal = true,
-        (part: Int, result: Int) => throw new DAGSchedulerSuiteDummyException)
-    }
-    assert(e1.getCause.isInstanceOf[DAGSchedulerSuiteDummyException])
-
-    val e2 = intercept[SparkDriverExecutionException] {
+    val e = intercept[SparkDriverExecutionException] {
       val rdd = sc.parallelize(1 to 10, 2)
       sc.runJob[Int, Int](
         rdd,
         (context: TaskContext, iter: Iterator[Int]) => iter.size,
         Seq(0, 1),
-        allowLocal = false,
         (part: Int, result: Int) => throw new DAGSchedulerSuiteDummyException)
     }
-    assert(e2.getCause.isInstanceOf[DAGSchedulerSuiteDummyException])
+    assert(e.getCause.isInstanceOf[DAGSchedulerSuiteDummyException])
 
-    // Make sure we can still run local commands as well as cluster commands.
+    // Make sure we can still run commands
     assert(sc.parallelize(1 to 10, 2).count() === 10)
-    assert(sc.parallelize(1 to 10, 2).first() === 1)
   }
 
   test("getPartitions exceptions should not crash DAGScheduler and SparkContext (SPARK-8606)") {
@@ -1020,9 +959,8 @@ class DAGSchedulerSuite
       rdd.reduceByKey(_ + _, 1).count()
     }
 
-    // Make sure we can still run local commands as well as cluster commands.
+    // Make sure we can still run commands
     assert(sc.parallelize(1 to 10, 2).count() === 10)
-    assert(sc.parallelize(1 to 10, 2).first() === 1)
   }
 
   test("getPreferredLocations errors should not crash DAGScheduler and SparkContext (SPARK-8606)") {
@@ -1036,9 +974,8 @@ class DAGSchedulerSuite
     }
     assert(e1.getMessage.contains(classOf[DAGSchedulerSuiteDummyException].getName))
 
-    // Make sure we can still run local commands as well as cluster commands.
+    // Make sure we can still run commands
     assert(sc.parallelize(1 to 10, 2).count() === 10)
-    assert(sc.parallelize(1 to 10, 2).first() === 1)
   }
 
   test("accumulator not calculated for resubmitted result stage") {
@@ -1066,8 +1003,8 @@ class DAGSchedulerSuite
     submit(reduceRdd, Array(0))
     complete(taskSets(0), Seq(
         (Success, makeMapStatus("hostA", 1))))
-    assert(mapOutputTracker.getServerStatuses(shuffleId, 0).map(_._1) ===
-           Array(makeBlockManagerId("hostA")))
+    assert(mapOutputTracker.getMapSizesByExecutorId(shuffleId, 0).map(_._1).toSet ===
+           HashSet(makeBlockManagerId("hostA")))
 
     // Reducer should run on the same host that map task ran
     val reduceTaskSet = taskSets(1)
