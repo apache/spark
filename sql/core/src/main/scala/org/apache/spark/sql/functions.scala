@@ -22,7 +22,7 @@ import scala.reflect.runtime.universe.{TypeTag, typeTag}
 import scala.util.Try
 
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.sql.catalyst.ScalaReflection
+import org.apache.spark.sql.catalyst.{SqlParser, ScalaReflection}
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedFunction, Star}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.BroadcastHint
@@ -791,6 +791,18 @@ object functions {
    * @since 1.4.0
    */
   def bitwiseNOT(e: Column): Column = BitwiseNot(e.expr)
+
+  /**
+   * Parses the expression string into the column that it represents, similar to
+   * DataFrame.selectExpr
+   * {{{
+   *   // get the number of words of each length
+   *   df.groupBy(expr("length(word)")).count()
+   * }}}
+   *
+   * @group normal_funcs
+   */
+  def expr(expr: String): Column = Column(new SqlParser().parseExpression(expr))
 
   //////////////////////////////////////////////////////////////////////////////////////////////
   // Math Functions
@@ -2451,5 +2463,4 @@ object functions {
     }
     UnresolvedFunction(udfName, exprs, isDistinct = false)
   }
-
 }

@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.scalatest.BeforeAndAfterAll
 
 import java.sql.Timestamp
@@ -56,6 +57,31 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll with SQLTestUtils {
 
     checkAnswer(queryCaseWhen, Row("1.0") :: Nil)
     checkAnswer(queryCoalesce, Row("1") :: Nil)
+  }
+
+  test("show functions") {
+    checkAnswer(sql("SHOW functions"), FunctionRegistry.builtin.listFunction().sorted.map(Row(_)))
+  }
+
+  test("describe functions") {
+    checkExistence(sql("describe function extended upper"), true,
+      "Function: upper",
+      "Class: org.apache.spark.sql.catalyst.expressions.Upper",
+      "Usage: upper(str) - Returns str with all characters changed to uppercase",
+      "Extended Usage:",
+      "> SELECT upper('SparkSql');",
+      "'SPARKSQL'")
+
+    checkExistence(sql("describe functioN Upper"), true,
+      "Function: upper",
+      "Class: org.apache.spark.sql.catalyst.expressions.Upper",
+      "Usage: upper(str) - Returns str with all characters changed to uppercase")
+
+    checkExistence(sql("describe functioN Upper"), false,
+      "Extended Usage")
+
+    checkExistence(sql("describe functioN abcadf"), true,
+      "Function: abcadf is not found.")
   }
 
   test("SPARK-6743: no columns from cache") {
@@ -110,6 +136,17 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll with SQLTestUtils {
           |GROUP BY x.str
         """.stripMargin),
       Row("1", 1) :: Row("2", 1) :: Row("3", 1) :: Nil)
+  }
+
+  test("SPARK-8668 expr function") {
+    checkAnswer(Seq((1, "Bobby G."))
+      .toDF("id", "name")
+      .select(expr("length(name)"), expr("abs(id)")), Row(8, 1))
+
+    checkAnswer(Seq((1, "building burrito tunnels"), (1, "major projects"))
+      .toDF("id", "saying")
+      .groupBy(expr("length(saying)"))
+      .count(), Row(24, 1) :: Row(14, 1) :: Nil)
   }
 
   test("SQL Dialect Switching to a new SQL parser") {

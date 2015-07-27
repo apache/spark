@@ -20,6 +20,7 @@ package org.apache.spark.mllib.clustering
 import breeze.linalg.{DenseMatrix => BDM}
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.graphx.Edge
 import org.apache.spark.mllib.linalg.{DenseMatrix, Matrix, Vector, Vectors}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
@@ -318,6 +319,20 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext {
       assert(distributedModel.k === sameDistributedModel.k)
       assert(distributedModel.vocabSize === sameDistributedModel.vocabSize)
       assert(distributedModel.iterationTimes === sameDistributedModel.iterationTimes)
+      assert(distributedModel.docConcentration === sameDistributedModel.docConcentration)
+      assert(distributedModel.topicConcentration === sameDistributedModel.topicConcentration)
+      assert(distributedModel.globalTopicTotals === sameDistributedModel.globalTopicTotals)
+
+      val graph = distributedModel.graph
+      val sameGraph = sameDistributedModel.graph
+      assert(graph.vertices.sortByKey().collect() === sameGraph.vertices.sortByKey().collect())
+      val edge = graph.edges.map {
+        case Edge(sid: Long, did: Long, nos: Double) => (sid, did, nos)
+      }.sortBy(x => (x._1, x._2)).collect()
+      val sameEdge = sameGraph.edges.map {
+        case Edge(sid: Long, did: Long, nos: Double) => (sid, did, nos)
+      }.sortBy(x => (x._1, x._2)).collect()
+      assert(edge === sameEdge)
     } finally {
       Utils.deleteRecursively(tempDir1)
       Utils.deleteRecursively(tempDir2)
