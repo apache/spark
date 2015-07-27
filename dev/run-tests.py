@@ -198,8 +198,9 @@ def run_scala_style_checks():
 
 
 def run_python_style_checks():
-    set_title_and_block("Running Python style checks", "BLOCK_PYTHON_STYLE")
-    run_cmd([os.path.join(SPARK_HOME, "dev", "lint-python")])
+    # set_title_and_block("Running Python style checks", "BLOCK_PYTHON_STYLE")
+    # run_cmd([os.path.join(SPARK_HOME, "dev", "lint-python")])
+    pass
 
 
 def build_spark_documentation():
