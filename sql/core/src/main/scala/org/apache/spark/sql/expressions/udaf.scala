@@ -34,7 +34,9 @@ abstract class UserDefinedAggregateFunction extends Serializable {
    * with type of [[DoubleType]] and [[LongType]], the returned [[StructType]] will look like
    *
    * ```
-   *   StructType(Seq(StructField("doubleInput", DoubleType), StructField("longInput", LongType)))
+   *   new StructType()
+   *    .add("doubleInput", DoubleType)
+   *    .add("longInput", LongType)
    * ```
    *
    * The name of a field of this [[StructType]] is only used to identify the corresponding
@@ -49,7 +51,9 @@ abstract class UserDefinedAggregateFunction extends Serializable {
    * the returned [[StructType]] will look like
    *
    * ```
-   *   StructType(Seq(StructField("doubleInput", DoubleType), StructField("longInput", LongType)))
+   *   new StructType()
+   *    .add("doubleInput", DoubleType)
+   *    .add("longInput", LongType)
    * ```
    *
    * The name of a field of this [[StructType]] is only used to identify the corresponding

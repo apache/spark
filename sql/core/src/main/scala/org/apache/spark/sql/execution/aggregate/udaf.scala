@@ -37,7 +37,7 @@ private[sql] class MutableAggregationBufferImpl (
     var underlyingBuffer: MutableRow)
   extends MutableAggregationBuffer {
 
-  private val offsets: Array[Int] = {
+  private[this] val offsets: Array[Int] = {
     val newOffsets = new Array[Int](length)
     var i = 0
     while (i < newOffsets.length) {
@@ -86,7 +86,7 @@ private[sql] class InputAggregationBuffer private[sql] (
     var underlyingInputBuffer: InternalRow)
   extends Row {
 
-  private val offsets: Array[Int] = {
+  private[this] val offsets: Array[Int] = {
     val newOffsets = new Array[Int](length)
     var i = 0
     while (i < newOffsets.length) {
