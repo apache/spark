@@ -1207,8 +1207,8 @@ class RowMatrix(DistributedMatrix):
         """
         Get or compute the number of rows.
 
-        >>> rows = sc.parallelize([Vectors.dense([1, 2, 3]), Vectors.dense([4, 5, 6]),
-        ...                        Vectors.dense([7, 8, 9]), Vectors.dense([10, 11, 12])])
+        >>> rows = sc.parallelize([[1, 2, 3], [4, 5, 6],
+        ...                        [7, 8, 9], [10, 11, 12]])
 
         >>> rm = RowMatrix(rows)
         >>> int(rm.numRows())
@@ -1224,8 +1224,8 @@ class RowMatrix(DistributedMatrix):
         """
         Get or compute the number of cols.
 
-        >>> rows = sc.parallelize([Vectors.dense([1, 2, 3]), Vectors.dense([4, 5, 6]),
-        ...                        Vectors.dense([7, 8, 9]), Vectors.dense([10, 11, 12])])
+        >>> rows = sc.parallelize([[1, 2, 3], [4, 5, 6],
+        ...                        [7, 8, 9], [10, 11, 12]])
 
         >>> rm = RowMatrix(rows)
         >>> int(rm.numCols())
@@ -1313,10 +1313,10 @@ class IndexedRowMatrix(DistributedMatrix):
         """
         Get or compute the number of rows.
 
-        >>> rows = sc.parallelize([IndexedRow(0, Vectors.dense([1, 2, 3])),
-        ...                        IndexedRow(1, Vectors.dense([4, 5, 6])),
-        ...                        IndexedRow(2, Vectors.dense([7, 8, 9])),
-        ...                        IndexedRow(3, Vectors.dense([10, 11, 12]))])
+        >>> rows = sc.parallelize([IndexedRow(0, [1, 2, 3]),
+        ...                        IndexedRow(1, [4, 5, 6]),
+        ...                        IndexedRow(2, [7, 8, 9]),
+        ...                        IndexedRow(3, [10, 11, 12])])
 
         >>> rm = IndexedRowMatrix(rows)
         >>> int(rm.numRows())
@@ -1332,10 +1332,10 @@ class IndexedRowMatrix(DistributedMatrix):
         """
         Get or compute the number of cols.
 
-        >>> rows = sc.parallelize([IndexedRow(0, Vectors.dense([1, 2, 3])),
-        ...                        IndexedRow(1, Vectors.dense([4, 5, 6])),
-        ...                        IndexedRow(2, Vectors.dense([7, 8, 9])),
-        ...                        IndexedRow(3, Vectors.dense([10, 11, 12]))])
+        >>> rows = sc.parallelize([IndexedRow(0, [1, 2, 3]),
+        ...                        IndexedRow(1, [4, 5, 6]),
+        ...                        IndexedRow(2, [7, 8, 9]),
+        ...                        IndexedRow(3, [10, 11, 12])])
 
         >>> rm = IndexedRowMatrix(rows)
         >>> int(rm.numCols())
@@ -1351,8 +1351,8 @@ class IndexedRowMatrix(DistributedMatrix):
         """
         Convert this matrix to a RowMatrix.
 
-        >>> rows = sc.parallelize([IndexedRow(0, Vectors.dense([1, 2, 3])),
-        ...                        IndexedRow(6, Vectors.dense([4, 5, 6]))])
+        >>> rows = sc.parallelize([IndexedRow(0, [1, 2, 3]),
+        ...                        IndexedRow(6, [4, 5, 6])])
         >>> rm = IndexedRowMatrix(rows).toRowMatrix()
         >>> rm.rows.collect()
         [DenseVector([1.0, 2.0, 3.0]), DenseVector([4.0, 5.0, 6.0])]
@@ -1364,8 +1364,8 @@ class IndexedRowMatrix(DistributedMatrix):
         """
         Convert this matrix to a CoordinateMatrix.
 
-        >>> rows = sc.parallelize([IndexedRow(0, Vectors.dense([1, 0])),
-        ...                        IndexedRow(6, Vectors.dense([0, 5]))])
+        >>> rows = sc.parallelize([IndexedRow(0, [1, 0]),
+        ...                        IndexedRow(6, [0, 5])])
         >>> cm = IndexedRowMatrix(rows).toCoordinateMatrix()
         >>> cm.entries.take(3)
         [MatrixEntry(0, 0, 1.0), MatrixEntry(0, 1, 0.0), MatrixEntry(6, 0, 0.0)]
