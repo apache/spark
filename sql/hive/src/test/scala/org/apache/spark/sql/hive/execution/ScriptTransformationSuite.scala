@@ -30,8 +30,8 @@ class ScriptTransformationSuite extends SparkPlanTest {
   private val ioschema = HiveScriptIOSchema(
     inputRowFormat = Seq.empty,
     outputRowFormat = Seq.empty,
-    inputSerdeClass = "",
-    outputSerdeClass = "",
+    inputSerdeClass = None,
+    outputSerdeClass = None,
     inputSerdeProps = Seq.empty,
     outputSerdeProps = Seq.empty,
     schemaLess = false
