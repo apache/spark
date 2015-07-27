@@ -388,7 +388,7 @@ final class OnlineLDAOptimizer extends LDAOptimizer {
   }
 
   override private[clustering] def next(): OnlineLDAOptimizer = {
-    val batch = docs.sample(withReplacement = true, miniBatchFraction, randomGenerator.nextLong())
+    val batch = docs.sample(withReplacement = false, miniBatchFraction, randomGenerator.nextLong())
     if (batch.isEmpty()) return this
     submitMiniBatch(batch)
   }
@@ -423,7 +423,6 @@ final class OnlineLDAOptimizer extends LDAOptimizer {
       }
       Iterator((stat, gammaPart))
     }
-
     val statsSum: BDM[Double] = stats.map(_._1).reduce(_ += _)
     val gammat: BDM[Double] = breeze.linalg.DenseMatrix.vertcat(
       stats.map(_._2).reduce(_ ++ _).map(_.toDenseMatrix): _*)
@@ -475,7 +474,6 @@ final class OnlineLDAOptimizer extends LDAOptimizer {
     if (all((weight * dalpha + alpha) :> 0D)) {
       alpha :+= weight * dalpha
       this.alpha = Vectors.dense(alpha.toArray)
-      println(alpha)
     }
   }
 
