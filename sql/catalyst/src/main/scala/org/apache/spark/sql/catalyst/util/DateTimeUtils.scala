@@ -671,7 +671,7 @@ object DateTimeUtils {
     val timeInDay1 = time1 - daysToMillis(date1) * 1000L
     val timeInDay2 = time2 - daysToMillis(date2) * 1000L
     if (dayInMonth1 == dayInMonth2 || (lastDayMonth1 == dayInMonth1 &&
-      lastDayMonth2 == dayInMonth2) || dayInMonth2 >= lastDayMonth1) {
+      lastDayMonth2 == dayInMonth2)) {
       (months1 - months2).toDouble
     } else {
       val timesBetween = (timeInDay1 - timeInDay2).toDouble / (MILLIS_PER_DAY * 1000)
