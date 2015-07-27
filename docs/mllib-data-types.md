@@ -490,7 +490,7 @@ n = mat.numCols()  # 3
 # Get the rows as an RDD of IndexedRows.
 rowsRDD = mat.rows
 
-# Drop its row indices to form a RowMatrix.
+# Convert to a RowMatrix by dropping the row indices.
 rowMat = mat.toRowMatrix()
 
 # Convert to a CoordinateMatrix.
@@ -566,7 +566,7 @@ IndexedRowMatrix indexedRowMatrix = mat.toIndexedRowMatrix();
 <div data-lang="python" markdown="1">
 
 A [`CoordinateMatrix`](api/python/pyspark.mllib.html#pyspark.mllib.linalg.CoordinateMatrix) can be 
-created from a `RDD` of MatrixEntry entries, where 
+created from an `RDD` of MatrixEntry entries, where 
 [`MatrixEntry`](api/python/pyspark.mllib.html#pyspark.mllib.linalg.MatrixEntry) is a wrapper over 
 `(long, long, float)`.  A `CoordinateMatrix` can be converted to a `RowMatrix` by calling 
 `toRowMatrix`, or to an `IndexedRowMatrix` with sparse rows by calling `toIndexedRowMatrix`.
