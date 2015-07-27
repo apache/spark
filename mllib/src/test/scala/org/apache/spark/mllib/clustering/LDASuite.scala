@@ -310,11 +310,12 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext {
       Vectors.sparse(6, Array(4, 5), Array(1, 1))
     ).zipWithIndex.map { case (wordCounts, docId) => (docId.toLong, wordCounts) }
 
+    val k = 2
     val docs = sc.parallelize(toydata)
     val op = new OnlineLDAOptimizer().setMiniBatchFraction(1).setTau0(1024).setKappa(0.51)
       .setGammaShape(1e10).setOptimzeAlpha(true)
-    val lda = new LDA().setK(2)
-      .setDocConcentration(0.01)
+    val lda = new LDA().setK(k)
+      .setDocConcentration(1D / k)
       .setTopicConcentration(0.01)
       .setMaxIterations(100)
       .setOptimizer(op)
