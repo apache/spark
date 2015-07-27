@@ -124,7 +124,7 @@ final class UnsafeExternalRowSorter {
       return new AbstractScalaRowIterator() {
 
         private final int numFields = schema.length();
-        private final UnsafeRow row = new UnsafeRow();
+        private UnsafeRow row = new UnsafeRow();
 
         @Override
         public boolean hasNext() {
@@ -142,7 +142,7 @@ final class UnsafeExternalRowSorter {
               sortedIterator.getRecordLength());
             if (!hasNext()) {
               UnsafeRow copy = row.copy(); // so that we don't have dangling pointers to freed page
-              row.pointTo(null, 0, 0, 0); // so that we don't keep references to the base object
+              row = null; // so that we don't keep references to the base object
               cleanupResources();
               return copy;
             } else {
