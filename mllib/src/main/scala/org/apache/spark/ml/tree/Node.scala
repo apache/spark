@@ -41,6 +41,9 @@ sealed abstract class Node extends Serializable {
   /** Recursive prediction helper method */
   private[ml] def predict(features: Vector): Double = prediction
 
+  /** Recursive probability prediction helper method */
+  private[ml] def predictProbability(features: Vector): Double
+
   /**
    * Get the number of nodes in tree below this node, including leaf nodes.
    * E.g., if this is a leaf, returns 0.  If both children are leaves, returns 2.
@@ -75,7 +78,8 @@ private[ml] object Node {
     if (oldNode.isLeaf) {
       // TODO: Once the implementation has been moved to this API, then include sufficient
       //       statistics here.
-      new LeafNode(prediction = oldNode.predict.predict, impurity = oldNode.impurity)
+      new LeafNode(prediction = oldNode.predict.predict,
+        prob = oldNode.predict.prob, impurity = oldNode.impurity)
     } else {
       val gain = if (oldNode.stats.nonEmpty) {
         oldNode.stats.get.gain
@@ -99,11 +103,15 @@ private[ml] object Node {
 @DeveloperApi
 final class LeafNode private[ml] (
     override val prediction: Double,
+    val prob: Double,
     override val impurity: Double) extends Node {
 
-  override def toString: String = s"LeafNode(prediction = $prediction, impurity = $impurity)"
+  override def toString: String =
+    s"LeafNode(prediction = $prediction, prob = $prob, impurity = $impurity)"
 
   override private[ml] def predict(features: Vector): Double = prediction
+
+  override private[ml] def predictProbability(features: Vector): Double = prob
 
   override private[tree] def numDescendants: Int = 0
 
@@ -115,8 +123,7 @@ final class LeafNode private[ml] (
   override private[tree] def subtreeDepth: Int = 0
 
   override private[ml] def toOld(id: Int): OldNode = {
-    // NOTE: We do NOT store 'prob' in the new API currently.
-    new OldNode(id, new OldPredict(prediction, prob = 0.0), impurity, isLeaf = true,
+    new OldNode(id, new OldPredict(prediction, prob), impurity, isLeaf = true,
       None, None, None, None)
   }
 }
@@ -150,6 +157,14 @@ final class InternalNode private[ml] (
       leftChild.predict(features)
     } else {
       rightChild.predict(features)
+    }
+  }
+
+  override private[ml] def predictProbability(features: Vector): Double = {
+    if (split.shouldGoLeft(features)) {
+      leftChild.predictProbability(features)
+    } else {
+      rightChild.predictProbability(features)
     }
   }
 
@@ -252,7 +267,7 @@ private[tree] class LearningNode(
       new InternalNode(predictionStats.predict, impurity, stats.get.gain,
         leftChild.get.toNode, rightChild.get.toNode, split.get)
     } else {
-      new LeafNode(predictionStats.predict, impurity)
+      new LeafNode(predictionStats.predict, predictionStats.prob, impurity)
     }
   }
 

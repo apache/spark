@@ -57,7 +57,7 @@ class DecisionTreeClassifierSuite extends SparkFunSuite with MLlibTestSparkConte
 
   test("params") {
     ParamsSuite.checkParams(new DecisionTreeClassifier)
-    val model = new DecisionTreeClassificationModel("dtc", new LeafNode(0.0, 0.0))
+    val model = new DecisionTreeClassificationModel("dtc", new LeafNode(0.0, 0.0, 0.0), 2)
     ParamsSuite.checkParams(model)
   }
 

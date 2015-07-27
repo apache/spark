@@ -180,13 +180,15 @@ private[ml] object RandomForest extends Logging {
     parentUID match {
       case Some(uid) =>
         if (strategy.algo == OldAlgo.Classification) {
-          topNodes.map(rootNode => new DecisionTreeClassificationModel(uid, rootNode.toNode))
+          topNodes.map(rootNode =>
+            new DecisionTreeClassificationModel(uid, rootNode.toNode, strategy.getNumClasses))
         } else {
           topNodes.map(rootNode => new DecisionTreeRegressionModel(uid, rootNode.toNode))
         }
       case None =>
         if (strategy.algo == OldAlgo.Classification) {
-          topNodes.map(rootNode => new DecisionTreeClassificationModel(rootNode.toNode))
+          topNodes.map(rootNode =>
+            new DecisionTreeClassificationModel(rootNode.toNode, strategy.getNumClasses))
         } else {
           topNodes.map(rootNode => new DecisionTreeRegressionModel(rootNode.toNode))
         }
