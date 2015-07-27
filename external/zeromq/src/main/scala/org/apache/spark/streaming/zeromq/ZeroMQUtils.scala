@@ -28,9 +28,9 @@ import org.apache.spark.SparkEnv
 import org.apache.spark.api.java.function.{Function => JFunction}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.StreamingContext
+import org.apache.spark.streaming.akka.{ActorSupervisorStrategy, ActorSystemFactory, AkkaUtils}
 import org.apache.spark.streaming.api.java.{JavaReceiverInputDStream, JavaStreamingContext}
 import org.apache.spark.streaming.dstream.{ReceiverInputDStream}
-import org.apache.spark.streaming.akka.{ActorSystemFactory, ActorSupervisorStrategy, AkkaUtils}
 
 object ZeroMQUtils {
   /**
