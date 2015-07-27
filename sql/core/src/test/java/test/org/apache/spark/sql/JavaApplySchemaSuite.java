@@ -22,7 +22,6 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
-import org.apache.spark.sql.test.TestSQLContext$;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -31,8 +30,14 @@ import org.junit.Test;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.api.java.function.Function;
-import org.apache.spark.sql.*;
-import org.apache.spark.sql.types.*;
+import org.apache.spark.sql.DataFrame;
+import org.apache.spark.sql.Row;
+import org.apache.spark.sql.RowFactory;
+import org.apache.spark.sql.SQLContext;
+import org.apache.spark.sql.test.TestSQLContext$;
+import org.apache.spark.sql.types.DataTypes;
+import org.apache.spark.sql.types.StructField;
+import org.apache.spark.sql.types.StructType;
 
 // The test suite itself is Serializable so that anonymous Function implementations can be
 // serialized, as an alternative to converting these anonymous classes to static inner classes;
@@ -159,7 +164,8 @@ public class JavaApplySchemaSuite implements Serializable {
         "\"bigInteger\":92233720368547758069, \"double\":1.7976931348623157E305, " +
         "\"boolean\":false, \"null\":null}"));
     List<StructField> fields = new ArrayList<StructField>(7);
-    fields.add(DataTypes.createStructField("bigInteger", DataTypes.createDecimalType(), true));
+    fields.add(DataTypes.createStructField("bigInteger", DataTypes.createDecimalType(38, 18),
+      true));
     fields.add(DataTypes.createStructField("boolean", DataTypes.BooleanType, true));
     fields.add(DataTypes.createStructField("double", DataTypes.DoubleType, true));
     fields.add(DataTypes.createStructField("integer", DataTypes.LongType, true));

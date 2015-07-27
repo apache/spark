@@ -105,10 +105,12 @@ class CodeGenContext {
    */
   def getColumn(row: String, dataType: DataType, ordinal: Int): String = {
     val jt = javaType(dataType)
-    if (isPrimitiveType(jt)) {
-      s"$row.get${primitiveTypeName(jt)}($ordinal)"
-    } else {
-      s"($jt)$row.apply($ordinal)"
+    dataType match {
+      case _ if isPrimitiveType(jt) => s"$row.get${primitiveTypeName(jt)}($ordinal)"
+      case StringType => s"$row.getUTF8String($ordinal)"
+      case BinaryType => s"$row.getBinary($ordinal)"
+      case t: StructType => s"$row.getStruct($ordinal, ${t.size})"
+      case _ => s"($jt)$row.get($ordinal)"
     }
   }
 
@@ -248,13 +250,13 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
   protected val mutableRowType: String = classOf[MutableRow].getName
   protected val genericMutableRowType: String = classOf[GenericMutableRow].getName
 
-  protected def declareMutableStates(ctx: CodeGenContext) = {
+  protected def declareMutableStates(ctx: CodeGenContext): String = {
     ctx.mutableStates.map { case (javaType, variableName, _) =>
       s"private $javaType $variableName;"
     }.mkString("\n      ")
   }
 
-  protected def initMutableStates(ctx: CodeGenContext) = {
+  protected def initMutableStates(ctx: CodeGenContext): String = {
     ctx.mutableStates.map(_._3).mkString("\n        ")
   }
 
@@ -297,7 +299,7 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
       evaluator.cook(code)
     } catch {
       case e: Exception =>
-        val msg = s"failed to compile:\n $code"
+        val msg = "failed to compile:\n " + CodeFormatter.format(code)
         logError(msg, e)
         throw new Exception(msg, e)
     }

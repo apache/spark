@@ -48,7 +48,7 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
     3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3,
     4, 4, 4, 4, 4, 4, 4, 4,
     5, 5, 5, 5,
-    6, 6, 6, 6};
+    6, 6};
 
   public static final UTF8String EMPTY_UTF8 = UTF8String.fromString("");
 
@@ -93,6 +93,21 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
     this.base = base;
     this.offset = offset;
     this.numBytes = size;
+  }
+
+  /**
+   * Writes the content of this string into a memory address, identified by an object and an offset.
+   * The target memory address must already been allocated, and have enough space to hold all the
+   * bytes in this string.
+   */
+  public void writeToMemory(Object target, long targetOffset) {
+    PlatformDependent.copyMemory(
+      base,
+      offset,
+      target,
+      targetOffset,
+      numBytes
+    );
   }
 
   /**

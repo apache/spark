@@ -30,6 +30,10 @@ object InterpretedPredicate {
     create(BindReferences.bindReference(expression, inputSchema))
 
   def create(expression: Expression): (InternalRow => Boolean) = {
+    expression.foreach {
+      case n: Nondeterministic => n.initialize()
+      case _ =>
+    }
     (r: InternalRow) => expression.eval(r).asInstanceOf[Boolean]
   }
 }

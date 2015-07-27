@@ -177,7 +177,7 @@ private class KinesisTestUtils(
 
 private[kinesis] object KinesisTestUtils {
 
-  val envVarName = "RUN_KINESIS_TESTS"
+  val envVarName = "ENABLE_KINESIS_TESTS"
 
   val shouldRunTests = sys.env.get(envVarName) == Some("1")
 

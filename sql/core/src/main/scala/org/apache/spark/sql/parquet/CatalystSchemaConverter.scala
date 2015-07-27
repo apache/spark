@@ -439,10 +439,6 @@ private[parquet] class CatalystSchemaConverter(
           .length(minBytesForPrecision(precision))
           .named(field.name)
 
-      case dec @ DecimalType.Unlimited if followParquetFormatSpec =>
-        throw new AnalysisException(
-          s"Data type $dec is not supported. Decimal precision and scale must be specified.")
-
       // ===================================================
       // ArrayType and MapType (for Spark versions <= 1.4.x)
       // ===================================================
@@ -572,6 +568,11 @@ private[parquet] object CatalystSchemaConverter {
       s"""Attribute name "$name" contains invalid character(s) among " ,;{}()\\n\\t=".
          |Please use alias to rename it.
        """.stripMargin.split("\n").mkString(" "))
+  }
+
+  def checkFieldNames(schema: StructType): StructType = {
+    schema.fieldNames.foreach(checkFieldName)
+    schema
   }
 
   def analysisRequire(f: => Boolean, message: String): Unit = {

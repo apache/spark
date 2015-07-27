@@ -69,7 +69,7 @@ class BroadcastSuite extends SparkFunSuite with LocalSparkContext {
     val conf = httpConf.clone
     conf.set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
     conf.set("spark.broadcast.compress", "true")
-    sc = new SparkContext("local-cluster[%d, 1, 512]".format(numSlaves), "test", conf)
+    sc = new SparkContext("local-cluster[%d, 1, 1024]".format(numSlaves), "test", conf)
     val list = List[Int](1, 2, 3, 4)
     val broadcast = sc.broadcast(list)
     val results = sc.parallelize(1 to numSlaves).map(x => (x, broadcast.value.sum))
@@ -97,7 +97,7 @@ class BroadcastSuite extends SparkFunSuite with LocalSparkContext {
     val conf = torrentConf.clone
     conf.set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
     conf.set("spark.broadcast.compress", "true")
-    sc = new SparkContext("local-cluster[%d, 1, 512]".format(numSlaves), "test", conf)
+    sc = new SparkContext("local-cluster[%d, 1, 1024]".format(numSlaves), "test", conf)
     val list = List[Int](1, 2, 3, 4)
     val broadcast = sc.broadcast(list)
     val results = sc.parallelize(1 to numSlaves).map(x => (x, broadcast.value.sum))
@@ -125,7 +125,7 @@ class BroadcastSuite extends SparkFunSuite with LocalSparkContext {
   test("Test Lazy Broadcast variables with TorrentBroadcast") {
     val numSlaves = 2
     val conf = torrentConf.clone
-    sc = new SparkContext("local-cluster[%d, 1, 512]".format(numSlaves), "test", conf)
+    sc = new SparkContext("local-cluster[%d, 1, 1024]".format(numSlaves), "test", conf)
     val rdd = sc.parallelize(1 to numSlaves)
 
     val results = new DummyBroadcastClass(rdd).doSomething()
@@ -308,7 +308,7 @@ class BroadcastSuite extends SparkFunSuite with LocalSparkContext {
 
     sc = if (distributed) {
       val _sc =
-        new SparkContext("local-cluster[%d, 1, 512]".format(numSlaves), "test", broadcastConf)
+        new SparkContext("local-cluster[%d, 1, 1024]".format(numSlaves), "test", broadcastConf)
       // Wait until all salves are up
       _sc.jobProgressListener.waitUntilExecutorsUp(numSlaves, 10000)
       _sc
