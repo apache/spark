@@ -96,19 +96,19 @@ fi
 
 rm "$PEP8_REPORT_PATH"
 
-for to_be_checked in "$PATHS_TO_CHECK"
-do
-    pylint --rcfile="$SPARK_ROOT_DIR/pylintrc" $to_be_checked >> "$PYLINT_REPORT_PATH"
-done
+# for to_be_checked in "$PATHS_TO_CHECK"
+# do
+#     pylint --rcfile="$SPARK_ROOT_DIR/pylintrc" $to_be_checked >> "$PYLINT_REPORT_PATH"
+# done
 
-if [ "${PIPESTATUS[0]}" -ne 0 ]; then
-    lint_status=1
-    echo "Pylint checks failed."
-    cat "$PYLINT_REPORT_PATH"
-else
-    echo "Pylint checks passed."
-fi
+# if [ "${PIPESTATUS[0]}" -ne 0 ]; then
+#     lint_status=1
+#     echo "Pylint checks failed."
+#     cat "$PYLINT_REPORT_PATH"
+# else
+#     echo "Pylint checks passed."
+# fi
 
-rm "$PYLINT_REPORT_PATH"
+# rm "$PYLINT_REPORT_PATH"
 
 exit "$lint_status"
