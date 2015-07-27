@@ -17,7 +17,9 @@
 package org.apache.spark.mllib.fpm
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.mllib.clustering.KMeansModel
 import org.apache.spark.mllib.util.MLlibTestSparkContext
+import org.apache.spark.util.Utils
 
 class FPGrowthSuite extends SparkFunSuite with MLlibTestSparkContext {
 
@@ -274,4 +276,30 @@ class FPGrowthSuite extends SparkFunSuite with MLlibTestSparkContext {
      */
     assert(model1.freqItemsets.count() === 65)
   }
+
+//  test("model save/load") {
+//    val transactions = Seq(
+//      "r z h k p",
+//      "z y x w v u t s",
+//      "s x o n r",
+//      "x z y m t s q e",
+//      "z",
+//      "x z y r q t p")
+//      .map(_.split(" "))
+//    val rdd = sc.parallelize(transactions, 2).cache()
+//
+//    val modelSave = new FPGrowth().setMinSupport(0.3)
+//      .setNumPartitions(4)
+//      .run(rdd)
+//
+//    val tempDir = Utils.createTempDir()
+//    val path = tempDir.toURI.toString
+//    try{
+//      modelSave.save(sc, path)
+//      val loadedModel = FPGrowthModel.load(sc, path)
+//      assert(modelSave.freqItemsets.count() === loadedModel.freqItemsets.count())
+//    } finally {
+//      Utils.deleteRecursively(tempDir)
+//    }
+//    }
 }

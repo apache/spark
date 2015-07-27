@@ -77,12 +77,6 @@ object FPGrowthModel extends Loader[FPGrowthModel[FreqItemset[Any]]] {
 
       private case class itemCountPair[Item](items: Array[Item], freq: Long)
 
-      private object itemCountPair {
-        def apply[Item: ClassTag](r: Row): itemCountPair[Item] = {
-            itemCountPair(r.getAs[Seq[Item]](0).toArray, r.getLong(1))
-        }
-      }
-
     private[fpm]
     object SaveLoadV1_0 {
 
@@ -98,7 +92,6 @@ object FPGrowthModel extends Loader[FPGrowthModel[FreqItemset[Any]]] {
           ("class" -> thisClassName) ~ ("version" -> thisFormatVersion) ~
             ("frequentItemsCount" -> model.freqItemsets.count())))
         sc.parallelize(Seq(metadata), 1).saveAsTextFile(Loader.metadataPath(path))
-
         val sqlType = model.freqItemsets.first().items(0) match {
           case _: java.lang.String => StringType
           case _: java.lang.Integer => IntegerType
@@ -126,9 +119,13 @@ object FPGrowthModel extends Loader[FPGrowthModel[FreqItemset[Any]]] {
         val frequentItemsCount = (metadata \ "frequentItemsCount").extract[Int]
         val itemsRDD = sqlContext.read.parquet(Loader.dataPath(path))
         Loader.checkSchema[itemCountPair[Any]](itemsRDD.schema)
-        val localItems = itemsRDD.map(itemCountPair.apply).collect()
-        assert(frequentItemsCount == localItems.size)
-        new FPGrowthModel(sc.parallelize(localItems))
+        val dataArray = itemsRDD.select("item", "count")
+        val freqRdd = dataArray.map { d =>
+           val itemArray = d.getAs[Seq[Item]](0).toArray
+           val countValue = d.getLong(1)
+           new FreqItemset[Item](itemArray, countValue)
+         }
+        new FPGrowthModel(freqRdd)
       }
     }
   }
