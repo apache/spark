@@ -156,9 +156,9 @@ trait ExpressionEvalHelper {
   }
 
   protected def checkEvalutionWithUnsafeProjection(
-    expression: Expression,
-    expected: Any,
-    inputRow: InternalRow = EmptyRow): Unit = {
+      expression: Expression,
+      expected: Any,
+      inputRow: InternalRow = EmptyRow): Unit = {
 
     val plan = generateProject(
       GenerateUnsafeProjection.generate(Alias(expression, s"Optimized($expression)")() :: Nil),
@@ -184,9 +184,9 @@ trait ExpressionEvalHelper {
   }
 
   protected def checkDoubleEvaluation(
-    expression: => Expression,
-    expected: Spread[Double],
-    inputRow: InternalRow = EmptyRow): Unit = {
+      expression: => Expression,
+      expected: Spread[Double],
+      inputRow: InternalRow = EmptyRow): Unit = {
     checkEvaluationWithoutCodegen(expression, expected)
     checkEvaluationWithGeneratedMutableProjection(expression, expected)
     checkEvaluationWithOptimization(expression, expected)
