@@ -1183,15 +1183,15 @@ class RowMatrix(DistributedMatrix):
         """
         Create a wrapper over a Java RowMatrix.
 
-        :param rows: An RDD of Vectors.
+        :param rows: An RDD of vectors.
         :param numRows: Number of rows in the matrix.
         :param numCols: Number of columns in the matrix.
         """
         if not isinstance(rows, RDD):
-            raise TypeError("rows should be an RDD object, got %s" % type(rows))
+            raise TypeError("rows should be an RDD of vectors, got %s" % type(rows))
         first = rows.first()
         if not isinstance(first, Vector):
-            raise TypeError("rows should be an RDD of Vectors, got an RDD of %s" % type(first))
+            rows = rows.map(_convert_to_vector)
 
         javaRowMatrix = callMLlibFunc("createRowMatrix", rows, long(numRows), int(numCols))
         self._jrm = JavaModelWrapper(javaRowMatrix)
@@ -1244,7 +1244,7 @@ class IndexedRow(object):
 
     Represents a row of an IndexedRowMatrix.
 
-    Just a wrapper over a (long, Vector) tuple.
+    Just a wrapper over a (long, vector) tuple.
 
     :param index: The index for the given row, as a long.
     :param vector: The given row, as a vector.
@@ -1277,12 +1277,12 @@ class IndexedRowMatrix(DistributedMatrix):
         """
         Create a wrapper over a Java IndexedRowMatrix.
 
-        :param rows: An RDD of IndexedRows or (long, Vector) tuples.
+        :param rows: An RDD of IndexedRows or (long, vector) tuples.
         :param numRows: Number of rows in the matrix.
         :param numCols: Number of columns in the matrix.
         """
         if not isinstance(rows, RDD):
-            raise TypeError("rows should be an RDD of IndexedRows or (long, Vector) tuples, "
+            raise TypeError("rows should be an RDD of IndexedRows or (long, vector) tuples, "
                             "got %s" % type(rows))
         if not isinstance(rows.first(), IndexedRow):
             rows = rows.map(_convert_to_indexed_row)
