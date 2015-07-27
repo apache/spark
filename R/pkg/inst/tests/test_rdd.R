@@ -447,7 +447,7 @@ test_that("zipRDD() on RDDs", {
   expect_equal(actual,
                list(list(0, 1000), list(1, 1001), list(2, 1002), list(3, 1003), list(4, 1004)))
 
-  mockFile = c("Spark is pretty.", "Spark is awesome.")
+  mockFile <- c("Spark is pretty.", "Spark is awesome.")
   fileName <- tempfile(pattern="spark-test", fileext=".tmp")
   writeLines(mockFile, fileName)
 
@@ -483,7 +483,7 @@ test_that("cartesian() on RDDs", {
   actual <- collect(cartesian(rdd, emptyRdd))
   expect_equal(actual, list())
 
-  mockFile = c("Spark is pretty.", "Spark is awesome.")
+  mockFile <- c("Spark is pretty.", "Spark is awesome.")
   fileName <- tempfile(pattern="spark-test", fileext=".tmp")
   writeLines(mockFile, fileName)
 

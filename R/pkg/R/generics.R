@@ -59,6 +59,10 @@ setGeneric("count", function(x) { standardGeneric("count") })
 # @export
 setGeneric("countByValue", function(x) { standardGeneric("countByValue") })
 
+# @rdname statfunctions
+# @export
+setGeneric("crosstab", function(x, col1, col2) { standardGeneric("crosstab") })
+
 # @rdname distinct
 # @export
 setGeneric("distinct", function(x, numPartitions = 1) { standardGeneric("distinct") })
@@ -569,6 +573,10 @@ setGeneric("avg", function(x, ...) { standardGeneric("avg") })
 
 #' @rdname column
 #' @export
+setGeneric("between", function(x, bounds) { standardGeneric("between") })
+
+#' @rdname column
+#' @export
 setGeneric("cast", function(x, dataType) { standardGeneric("cast") })
 
 #' @rdname column
@@ -657,3 +665,7 @@ setGeneric("toRadians", function(x) { standardGeneric("toRadians") })
 #' @rdname column
 #' @export
 setGeneric("upper", function(x) { standardGeneric("upper") })
+
+#' @rdname glm
+#' @export
+setGeneric("glm")

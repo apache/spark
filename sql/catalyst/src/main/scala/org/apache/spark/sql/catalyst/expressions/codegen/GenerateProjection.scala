@@ -23,7 +23,7 @@ import org.apache.spark.sql.types._
 /**
  * Java can not access Projection (in package object)
  */
-abstract class BaseProject extends Projection {}
+abstract class BaseProjection extends Projection {}
 
 /**
  * Generates bytecode that produces a new [[InternalRow]] object based on a fixed set of input
@@ -156,79 +156,82 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
       return new SpecificProjection(expr);
     }
 
-    class SpecificProjection extends ${classOf[BaseProject].getName} {
-      private $exprType[] expressions = null;
+    class SpecificProjection extends ${classOf[BaseProjection].getName} {
+      private $exprType[] expressions;
+      ${declareMutableStates(ctx)}
 
       public SpecificProjection($exprType[] expr) {
         expressions = expr;
+        ${initMutableStates(ctx)}
       }
 
       @Override
       public Object apply(Object r) {
-        return new SpecificRow(expressions, (InternalRow) r);
-      }
-    }
-
-    final class SpecificRow extends ${classOf[MutableRow].getName} {
-
-      $columns
-
-      public SpecificRow($exprType[] expressions, InternalRow i) {
-        $initColumns
+        return new SpecificRow((InternalRow) r);
       }
 
-      public int length() { return ${expressions.length};}
-      protected boolean[] nullBits = new boolean[${expressions.length}];
-      public void setNullAt(int i) { nullBits[i] = true; }
-      public boolean isNullAt(int i) { return nullBits[i]; }
+      final class SpecificRow extends ${classOf[MutableRow].getName} {
 
-      public Object get(int i) {
-        if (isNullAt(i)) return null;
-        switch (i) {
-        $getCases
+        $columns
+
+        public SpecificRow(InternalRow i) {
+          $initColumns
         }
-        return null;
-      }
-      public void update(int i, Object value) {
-        if (value == null) {
-          setNullAt(i);
-          return;
-        }
-        nullBits[i] = false;
-        switch (i) {
-        $updateCases
-        }
-      }
-      $specificAccessorFunctions
-      $specificMutatorFunctions
 
-      @Override
-      public int hashCode() {
-        int result = 37;
-        $hashUpdates
-        return result;
-      }
+        public int numFields() { return ${expressions.length};}
+        protected boolean[] nullBits = new boolean[${expressions.length}];
+        public void setNullAt(int i) { nullBits[i] = true; }
+        public boolean isNullAt(int i) { return nullBits[i]; }
 
-      @Override
-      public boolean equals(Object other) {
-        if (other instanceof SpecificRow) {
-          SpecificRow row = (SpecificRow) other;
-          $columnChecks
-          return true;
+        public Object get(int i, ${classOf[DataType].getName} dataType) {
+          if (isNullAt(i)) return null;
+          switch (i) {
+          $getCases
+          }
+          return null;
         }
-        return super.equals(other);
-      }
+        public void update(int i, Object value) {
+          if (value == null) {
+            setNullAt(i);
+            return;
+          }
+          nullBits[i] = false;
+          switch (i) {
+          $updateCases
+          }
+        }
+        $specificAccessorFunctions
+        $specificMutatorFunctions
 
-      @Override
-      public InternalRow copy() {
-        Object[] arr = new Object[${expressions.length}];
-        ${copyColumns}
-        return new ${classOf[GenericInternalRow].getName}(arr);
+        @Override
+        public int hashCode() {
+          int result = 37;
+          $hashUpdates
+          return result;
+        }
+
+        @Override
+        public boolean equals(Object other) {
+          if (other instanceof SpecificRow) {
+            SpecificRow row = (SpecificRow) other;
+            $columnChecks
+            return true;
+          }
+          return super.equals(other);
+        }
+
+        @Override
+        public InternalRow copy() {
+          Object[] arr = new Object[${expressions.length}];
+          ${copyColumns}
+          return new ${classOf[GenericInternalRow].getName}(arr);
+        }
       }
     }
     """
 
-    logDebug(s"MutableRow, initExprs: ${expressions.mkString(",")} code:\n${code}")
+    logDebug(s"MutableRow, initExprs: ${expressions.mkString(",")} code:\n" +
+      CodeFormatter.format(code))
 
     compile(code).generate(ctx.references.toArray).asInstanceOf[Projection]
   }

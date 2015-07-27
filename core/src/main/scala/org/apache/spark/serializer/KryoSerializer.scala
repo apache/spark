@@ -102,6 +102,7 @@ class KryoSerializer(conf: SparkConf)
     kryo.register(classOf[PythonBroadcast], new KryoJavaSerializer())
 
     try {
+      // scalastyle:off classforname
       // Use the default classloader when calling the user registrator.
       Thread.currentThread.setContextClassLoader(classLoader)
       // Register classes given through spark.kryo.classesToRegister.
@@ -111,6 +112,7 @@ class KryoSerializer(conf: SparkConf)
       userRegistrator
         .map(Class.forName(_, true, classLoader).newInstance().asInstanceOf[KryoRegistrator])
         .foreach { reg => reg.registerClasses(kryo) }
+      // scalastyle:on classforname
     } catch {
       case e: Exception =>
         throw new SparkException(s"Failed to register classes with Kryo", e)

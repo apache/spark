@@ -22,11 +22,12 @@ import java.sql._
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.{LocalSparkContext, SparkContext, SparkFunSuite}
+import org.apache.spark.util.Utils
 
 class JdbcRDDSuite extends SparkFunSuite with BeforeAndAfter with LocalSparkContext {
 
   before {
-    Class.forName("org.apache.derby.jdbc.EmbeddedDriver")
+    Utils.classForName("org.apache.derby.jdbc.EmbeddedDriver")
     val conn = DriverManager.getConnection("jdbc:derby:target/JdbcRDDSuiteDb;create=true")
     try {
 

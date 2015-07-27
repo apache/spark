@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off classforname
 package org.apache.spark.tools
 
 import java.io.File
@@ -188,3 +189,4 @@ object GenerateMIMAIgnore {
     classes
   }
 }
+// scalastyle:on classforname

@@ -123,11 +123,14 @@ case class Join(
     }
   }
 
-  private def selfJoinResolved: Boolean = left.outputSet.intersect(right.outputSet).isEmpty
+  def selfJoinResolved: Boolean = left.outputSet.intersect(right.outputSet).isEmpty
 
-  // Joins are only resolved if they don't introduce ambiguious expression ids.
+  // Joins are only resolved if they don't introduce ambiguous expression ids.
   override lazy val resolved: Boolean = {
-    childrenResolved && !expressions.exists(!_.resolved) && selfJoinResolved
+    childrenResolved &&
+      expressions.forall(_.resolved) &&
+      selfJoinResolved &&
+      condition.forall(_.dataType == BooleanType)
   }
 }
 
@@ -141,6 +144,10 @@ case class BroadcastHint(child: LogicalPlan) extends UnaryNode {
 
 case class Except(left: LogicalPlan, right: LogicalPlan) extends BinaryNode {
   override def output: Seq[Attribute] = left.output
+
+  override lazy val resolved: Boolean =
+    childrenResolved &&
+      left.output.zip(right.output).forall { case (l, r) => l.dataType == r.dataType }
 }
 
 case class InsertIntoTable(
@@ -175,12 +182,6 @@ case class With(child: LogicalPlan, cteRelations: Map[String, Subquery]) extends
 
 case class WithWindowDefinition(
     windowDefinitions: Map[String, WindowSpecDefinition],
-    child: LogicalPlan) extends UnaryNode {
-  override def output: Seq[Attribute] = child.output
-}
-
-case class WriteToFile(
-    path: String,
     child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
 }
@@ -298,7 +299,7 @@ case class Expand(
 }
 
 trait GroupingAnalytics extends UnaryNode {
-  self: Product =>
+
   def groupByExprs: Seq[Expression]
   def aggregations: Seq[NamedExpression]
 
@@ -371,7 +372,7 @@ case class Limit(limitExpr: Expression, child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
 
   override lazy val statistics: Statistics = {
-    val limit = limitExpr.eval(null).asInstanceOf[Int]
+    val limit = limitExpr.eval().asInstanceOf[Int]
     val sizeInBytes = (limit: Long) * output.map(a => a.dataType.defaultSize).sum
     Statistics(sizeInBytes = sizeInBytes)
   }
@@ -437,4 +438,8 @@ case object OneRowRelation extends LeafNode {
 
 case class Intersect(left: LogicalPlan, right: LogicalPlan) extends BinaryNode {
   override def output: Seq[Attribute] = left.output
+
+  override lazy val resolved: Boolean =
+    childrenResolved &&
+      left.output.zip(right.output).forall { case (l, r) => l.dataType == r.dataType }
 }

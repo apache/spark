@@ -20,7 +20,9 @@ package org.apache.spark.unsafe.types;
 import javax.annotation.Nonnull;
 import java.io.Serializable;
 import java.io.UnsupportedEncodingException;
+import java.util.Arrays;
 
+import org.apache.spark.unsafe.PlatformDependent;
 import org.apache.spark.unsafe.array.ByteArrayMethods;
 
 import static org.apache.spark.unsafe.PlatformDependent.*;
@@ -46,7 +48,9 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
     3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3,
     4, 4, 4, 4, 4, 4, 4, 4,
     5, 5, 5, 5,
-    6, 6, 6, 6};
+    6, 6};
+
+  public static final UTF8String EMPTY_UTF8 = UTF8String.fromString("");
 
   /**
    * Creates an UTF8String from byte array, which should be encoded in UTF-8.
@@ -76,10 +80,34 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
     }
   }
 
+  /**
+   * Creates an UTF8String that contains `length` spaces.
+   */
+  public static UTF8String blankString(int length) {
+    byte[] spaces = new byte[length];
+    Arrays.fill(spaces, (byte) ' ');
+    return fromBytes(spaces);
+  }
+
   protected UTF8String(Object base, long offset, int size) {
     this.base = base;
     this.offset = offset;
     this.numBytes = size;
+  }
+
+  /**
+   * Writes the content of this string into a memory address, identified by an object and an offset.
+   * The target memory address must already been allocated, and have enough space to hold all the
+   * bytes in this string.
+   */
+  public void writeToMemory(Object target, long targetOffset) {
+    PlatformDependent.copyMemory(
+      base,
+      offset,
+      target,
+      targetOffset,
+      numBytes
+    );
   }
 
   /**
@@ -150,6 +178,18 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
     byte[] bytes = new byte[i - j];
     copyMemory(base, offset + j, bytes, BYTE_ARRAY_OFFSET, i - j);
     return fromBytes(bytes);
+  }
+
+  public UTF8String substringSQL(int pos, int length) {
+    // Information regarding the pos calculation:
+    // Hive and SQL use one-based indexing for SUBSTR arguments but also accept zero and
+    // negative indices for start positions. If a start index i is greater than 0, it
+    // refers to element i-1 in the sequence. If a start index i is less than 0, it refers
+    // to the -ith element before the end of the sequence. If a start index i is 0, it
+    // refers to the first element.
+    int start = (pos > 0) ? pos -1 : ((pos < 0) ? numChars() + pos : 0);
+    int end = (length == Integer.MAX_VALUE) ? Integer.MAX_VALUE : start + length;
+    return substring(start, end);
   }
 
   /**
@@ -322,7 +362,7 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
       }
       i += numBytesForFirstByte(getByte(i));
       c += 1;
-    } while(i < numBytes);
+    } while (i < numBytes);
 
     return -1;
   }
@@ -395,6 +435,94 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
     }
   }
 
+  /**
+   * Concatenates input strings together into a single string. Returns null if any input is null.
+   */
+  public static UTF8String concat(UTF8String... inputs) {
+    // Compute the total length of the result.
+    int totalLength = 0;
+    for (int i = 0; i < inputs.length; i++) {
+      if (inputs[i] != null) {
+        totalLength += inputs[i].numBytes;
+      } else {
+        return null;
+      }
+    }
+
+    // Allocate a new byte array, and copy the inputs one by one into it.
+    final byte[] result = new byte[totalLength];
+    int offset = 0;
+    for (int i = 0; i < inputs.length; i++) {
+      int len = inputs[i].numBytes;
+      PlatformDependent.copyMemory(
+        inputs[i].base, inputs[i].offset,
+        result, PlatformDependent.BYTE_ARRAY_OFFSET + offset,
+        len);
+      offset += len;
+    }
+    return fromBytes(result);
+  }
+
+  /**
+   * Concatenates input strings together into a single string using the separator.
+   * A null input is skipped. For example, concat(",", "a", null, "c") would yield "a,c".
+   */
+  public static UTF8String concatWs(UTF8String separator, UTF8String... inputs) {
+    if (separator == null) {
+      return null;
+    }
+
+    int numInputBytes = 0;  // total number of bytes from the inputs
+    int numInputs = 0;      // number of non-null inputs
+    for (int i = 0; i < inputs.length; i++) {
+      if (inputs[i] != null) {
+        numInputBytes += inputs[i].numBytes;
+        numInputs++;
+      }
+    }
+
+    if (numInputs == 0) {
+      // Return an empty string if there is no input, or all the inputs are null.
+      return fromBytes(new byte[0]);
+    }
+
+    // Allocate a new byte array, and copy the inputs one by one into it.
+    // The size of the new array is the size of all inputs, plus the separators.
+    final byte[] result = new byte[numInputBytes + (numInputs - 1) * separator.numBytes];
+    int offset = 0;
+
+    for (int i = 0, j = 0; i < inputs.length; i++) {
+      if (inputs[i] != null) {
+        int len = inputs[i].numBytes;
+        PlatformDependent.copyMemory(
+          inputs[i].base, inputs[i].offset,
+          result, PlatformDependent.BYTE_ARRAY_OFFSET + offset,
+          len);
+        offset += len;
+
+        j++;
+        // Add separator if this is not the last input.
+        if (j < numInputs) {
+          PlatformDependent.copyMemory(
+            separator.base, separator.offset,
+            result, PlatformDependent.BYTE_ARRAY_OFFSET + offset,
+            separator.numBytes);
+          offset += separator.numBytes;
+        }
+      }
+    }
+    return fromBytes(result);
+  }
+
+  public UTF8String[] split(UTF8String pattern, int limit) {
+    String[] splits = toString().split(pattern.toString(), limit);
+    UTF8String[] res = new UTF8String[splits.length];
+    for (int i = 0; i < res.length; i++) {
+      res[i] = fromString(splits[i]);
+    }
+    return res;
+  }
+
   @Override
   public String toString() {
     try {
@@ -413,7 +541,7 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
   }
 
   @Override
-  public int compareTo(final UTF8String other) {
+  public int compareTo(@Nonnull final UTF8String other) {
     int len = Math.min(numBytes, other.numBytes);
     // TODO: compare 8 bytes as unsigned long
     for (int i = 0; i < len; i ++) {
@@ -434,7 +562,7 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
   public boolean equals(final Object other) {
     if (other instanceof UTF8String) {
       UTF8String o = (UTF8String) other;
-      if (numBytes != o.numBytes){
+      if (numBytes != o.numBytes) {
         return false;
       }
       return ByteArrayMethods.arrayEquals(base, offset, o.base, o.offset, numBytes);
