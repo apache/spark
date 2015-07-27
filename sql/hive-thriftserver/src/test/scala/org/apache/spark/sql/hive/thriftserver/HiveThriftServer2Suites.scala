@@ -509,15 +509,17 @@ abstract class HiveThriftServer2Test extends SparkFunSuite with BeforeAndAfterAl
 
   /**
    * String to scan for when looking for the the thrift binary endpoint running.
-   * This may change across Hive versions.
+   * This can change across Hive versions.
    */
   val THRIFT_BINARY_SERVICE_LIVE = "Starting ThriftBinaryCLIService on port"
 
   /**
    * String to scan for when looking for the the thrift HTTP endpoint running.
-   * This may change across Hive versions.
+   * This can change across Hive versions.
    */
   val THRIFT_HTTP_SERVICE_LIVE = "Started ThriftHttpCLIService in http"
+
+  val SERVER_STARTUP_TIMEOUT = 1.minute
 
   private def startThriftServer(port: Int, attempt: Int) = {
     warehousePath = Utils.createTempDir()
@@ -576,7 +578,7 @@ abstract class HiveThriftServer2Test extends SparkFunSuite with BeforeAndAfterAl
           }
         }))
 
-    Await.result(serverStarted.future, 2.minute)
+    Await.result(serverStarted.future, SERVER_STARTUP_TIMEOUT)
   }
 
   private def stopThriftServer(): Unit = {
