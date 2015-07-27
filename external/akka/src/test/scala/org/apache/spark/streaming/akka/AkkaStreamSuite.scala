@@ -23,19 +23,19 @@ import scala.concurrent.duration._
 
 import akka.actor._
 import com.typesafe.config.ConfigFactory
-import org.scalatest.BeforeAndAfterAll
+import org.scalatest.BeforeAndAfter
 import org.scalatest.concurrent.Eventually
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.streaming.{Milliseconds, StreamingContext}
 
-class AkkaStreamSuite extends SparkFunSuite with Eventually with BeforeAndAfterAll {
+class AkkaStreamSuite extends SparkFunSuite with Eventually with BeforeAndAfter {
 
   private var ssc: StreamingContext = _
 
   private var actorSystem: ActorSystem = _
 
-  override def afterAll(): Unit = {
+  after {
     if (ssc != null) {
       ssc.stop()
       ssc = null
@@ -47,13 +47,11 @@ class AkkaStreamSuite extends SparkFunSuite with Eventually with BeforeAndAfterA
     }
   }
 
-  ignore("actor input stream") {
-    // Because unit tests run with "-Dsun.io.serialization.extendedDebugInfo=true", this test will
-    // fail due to https://github.com/typesafehub/config/issues/176
-    // Setting "sun.io.serialization.extendedDebugInfo" to false at runtime doesn't work because
-    // ObjectOutputStream.extendedDebugInfo is a static field and cannot be changed at runtime.
-    // And the next version of Config is 1.3.0 but it only supports Java 8.
-    // So now just ignore this test.
+  test("actor input stream") {
+    // `Props` contains a reference to com.typesafe.config.Config and will be serialized. However,
+    // because of https://github.com/typesafehub/config/issues/176, this unit test cannot run with
+    // "-Dsun.io.serialization.extendedDebugInfo=true". Therefore,
+    // "sun.io.serialization.extendedDebugInfo" is disabled in SparkBuild.scala for streaming-akka
     val sparkConf = new SparkConf().setMaster("local[4]").setAppName(this.getClass.getSimpleName)
     ssc = new StreamingContext(sparkConf, Milliseconds(500))
 
@@ -74,7 +72,7 @@ class AkkaStreamSuite extends SparkFunSuite with Eventually with BeforeAndAfterA
     }
     ssc.start()
 
-    eventually(timeout(10.seconds), interval(100.milliseconds)) {
+    eventually(timeout(10.seconds), interval(10.milliseconds)) {
       assert((1 to 10).map(_.toString) === result)
     }
   }
@@ -102,7 +100,6 @@ class FeederActor extends Actor {
 
   def receive: Receive = {
     case SubscribeReceiver(receiverActor: ActorRef) =>
-      println(receiverActor)
       (1 to 10).foreach(i => receiverActor ! i.toString())
   }
 }

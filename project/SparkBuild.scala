@@ -201,6 +201,14 @@ object SparkBuild extends PomBuild {
   /* Enable tests settings for all projects except examples, assembly and tools */
   (allProjects ++ optionallyEnabledProjects).foreach(enable(TestSettings.settings))
 
+  (allProjects ++ optionallyEnabledProjects).filterNot { x =>
+    // The unit tests in streamingAkka and streamingZeromq need to serialize
+    // com.typesafe.config.Config. However, we cannot enable sun.io.serialization.extendedDebugInfo
+    // because of https://github.com/typesafehub/config/issues/176
+    // Note: although this issue is resolved in Config 1.3.0, but it only supports Java 8.
+    Seq(streamingAkka, streamingZeromq).contains(x)
+  }.foreach(enable(SerializationDebugSettings.settings))
+
   // TODO: remove streamingAkka from this list after 1.5.0
   allProjects.filterNot(x => Seq(spark, hive, hiveThriftServer, catalyst, repl,
     networkCommon, networkShuffle, networkYarn, unsafe, streamingAkka).contains(x)).foreach {
@@ -545,7 +553,6 @@ object TestSettings {
     javaOptions in Test += "-Dspark.ui.showConsoleProgress=false",
     javaOptions in Test += "-Dspark.driver.allowMultipleContexts=true",
     javaOptions in Test += "-Dspark.unsafe.exceptionOnMemoryLeak=true",
-    javaOptions in Test += "-Dsun.io.serialization.extendedDebugInfo=true",
     javaOptions in Test += "-Dderby.system.durability=test",
     javaOptions in Test ++= System.getProperties.filter(_._1 startsWith "spark")
       .map { case (k,v) => s"-D$k=$v" }.toSeq,
@@ -582,4 +589,12 @@ object TestSettings {
     )
   )
 
+}
+
+object SerializationDebugSettings {
+  import BuildCommons._
+
+  lazy val settings = Seq (
+    javaOptions in Test += "-Dsun.io.serialization.extendedDebugInfo=true"
+  )
 }
