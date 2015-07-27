@@ -198,7 +198,7 @@ class JoinedRow extends InternalRow {
     if (i < row1.numFields) row1.getBinary(i) else row2.getBinary(i - row1.numFields)
   }
 
-  override def get(i: Int): Any =
+  override def get(i: Int, dataType: DataType): Any =
     if (i < row1.numFields) row1.get(i) else row2.get(i - row1.numFields)
 
   override def isNullAt(i: Int): Boolean =

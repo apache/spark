@@ -183,7 +183,7 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
         public void setNullAt(int i) { nullBits[i] = true; }
         public boolean isNullAt(int i) { return nullBits[i]; }
 
-        public Object get(int i) {
+        public Object get(int i, ${classOf[DataType].getName} dataType) {
           if (isNullAt(i)) return null;
           switch (i) {
           $getCases

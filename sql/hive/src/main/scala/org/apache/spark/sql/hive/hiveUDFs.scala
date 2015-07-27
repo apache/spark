@@ -76,8 +76,32 @@ private[hive] class HiveFunctionRegistry(underlying: analysis.FunctionRegistry)
     }
   }
 
-  override def registerFunction(name: String, builder: FunctionBuilder): Unit =
-    underlying.registerFunction(name, builder)
+  override def registerFunction(name: String, info: ExpressionInfo, builder: FunctionBuilder)
+  : Unit = underlying.registerFunction(name, info, builder)
+
+  /* List all of the registered function names. */
+  override def listFunction(): Seq[String] = {
+    val a = FunctionRegistry.getFunctionNames ++ underlying.listFunction()
+    a.toList.sorted
+  }
+
+  /* Get the class of the registered function by specified name. */
+  override def lookupFunction(name: String): Option[ExpressionInfo] = {
+    underlying.lookupFunction(name).orElse(
+    Try {
+      val info = FunctionRegistry.getFunctionInfo(name)
+      val annotation = info.getFunctionClass.getAnnotation(classOf[Description])
+      if (annotation != null) {
+        Some(new ExpressionInfo(
+          info.getFunctionClass.getCanonicalName,
+          annotation.name(),
+          annotation.value(),
+          annotation.extended()))
+      } else {
+        None
+      }
+    }.getOrElse(None))
+  }
 }
 
 private[hive] case class HiveSimpleUDF(funcWrapper: HiveFunctionWrapper, children: Seq[Expression])

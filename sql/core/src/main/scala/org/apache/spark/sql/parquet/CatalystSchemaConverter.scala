@@ -570,6 +570,11 @@ private[parquet] object CatalystSchemaConverter {
        """.stripMargin.split("\n").mkString(" "))
   }
 
+  def checkFieldNames(schema: StructType): StructType = {
+    schema.fieldNames.foreach(checkFieldName)
+    schema
+  }
+
   def analysisRequire(f: => Boolean, message: String): Unit = {
     if (!f) {
       throw new AnalysisException(message)
