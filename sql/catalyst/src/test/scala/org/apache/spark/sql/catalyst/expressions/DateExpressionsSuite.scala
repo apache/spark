@@ -22,7 +22,9 @@ import java.text.SimpleDateFormat
 import java.util.Calendar
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types.{StringType, TimestampType, DateType}
+import org.apache.spark.unsafe.types.Interval
 
 class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
@@ -246,4 +248,57 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
+  test("date_add") {
+    checkEvaluation(
+      DateAdd(Literal(Date.valueOf("2016-02-28")), Literal(1)),
+      DateTimeUtils.fromJavaDate(Date.valueOf("2016-02-29")))
+    checkEvaluation(
+      DateAdd(Literal(Date.valueOf("2016-02-28")), Literal(-365)),
+      DateTimeUtils.fromJavaDate(Date.valueOf("2015-02-28")))
+  }
+
+  test("date_sub") {
+    checkEvaluation(
+      DateSub(Literal(Date.valueOf("2015-01-01")), Literal(1)),
+      DateTimeUtils.fromJavaDate(Date.valueOf("2014-12-31")))
+    checkEvaluation(
+      DateSub(Literal(Date.valueOf("2015-01-01")), Literal(-1)),
+      DateTimeUtils.fromJavaDate(Date.valueOf("2015-01-02")))
+  }
+
+  test("time_add") {
+    checkEvaluation(
+      TimeAdd(Literal(Date.valueOf("2016-01-29")), Literal(new Interval(1, 0))),
+      DateTimeUtils.fromJavaTimestamp(Timestamp.valueOf("2016-02-29 00:00:00")))
+    checkEvaluation(
+      TimeAdd(Literal(Date.valueOf("2016-01-31")), Literal(new Interval(1, 2000000.toLong))),
+      DateTimeUtils.fromJavaTimestamp(Timestamp.valueOf("2016-02-29 00:00:02")))
+  }
+
+  test("time_sub") {
+    checkEvaluation(
+      TimeSub(Literal(Timestamp.valueOf("2016-03-31 10:00:00")), Literal(new Interval(1, 0))),
+      DateTimeUtils.fromJavaTimestamp(Timestamp.valueOf("2016-02-29 10:00:00")))
+    checkEvaluation(
+      TimeSub(
+        Literal(Timestamp.valueOf("2016-03-30 00:00:01")),
+        Literal(new Interval(1, 2000000.toLong))),
+      DateTimeUtils.fromJavaTimestamp(Timestamp.valueOf("2016-02-28 23:59:59")))
+  }
+
+  test("add_months") {
+    checkEvaluation(AddMonths(Literal(Date.valueOf(
+      "2015-01-30")), Literal(1)), DateTimeUtils.fromJavaDate(Date.valueOf("2015-02-28")))
+    checkEvaluation(AddMonths(Literal(Date.valueOf(
+      "2016-03-30")), Literal(-1)), DateTimeUtils.fromJavaDate(Date.valueOf("2016-02-29")))
+  }
+
+  test("months_between") {
+    checkEvaluation(MonthsBetween(Literal(Timestamp.valueOf(
+      "2015-01-30 11:52:00")), Literal(Timestamp.valueOf("2015-01-30 11:50:00"))), 0.0)
+    checkEvaluation(MonthsBetween(Literal(Timestamp.valueOf(
+      "2015-01-31 00:00:00")), Literal(Timestamp.valueOf("2015-03-31 22:00:00"))), -2.0)
+    checkEvaluation(MonthsBetween(Literal(Timestamp.valueOf(
+      "2015-03-31 22:00:00")), Literal(Timestamp.valueOf("2015-02-28 00:00:00"))), 1.0)
+  }
 }

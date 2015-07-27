@@ -1917,6 +1917,14 @@ object functions {
   //////////////////////////////////////////////////////////////////////////////////////////////
 
   /**
+   * Returns the date that is numMonths after startDate.
+   * @group datetime_funcs
+   * @since 1.5.0
+   */
+  def add_months(startDate: Column, numMonths: Column): Column =
+    AddMonths(startDate.expr, numMonths.expr)
+
+  /**
    * Converts a date/timestamp/string to a value of string in the format specified by the date
    * format given by the second argument.
    *
@@ -1947,6 +1955,20 @@ object functions {
    */
   def date_format(dateColumnName: String, format: String): Column =
     date_format(Column(dateColumnName), format)
+
+  /**
+   * Extracts the year as an integer from a given date/timestamp/string.
+   * @group datetime_funcs
+   * @since 1.5.0
+   */
+  def date_add(startdate: Column, days: Column): Column = DateAdd(startdate.expr, days.expr)
+
+  /**
+   * Extracts the year as an integer from a given date/timestamp/string.
+   * @group datetime_funcs
+   * @since 1.5.0
+   */
+  def date_sub(startdate: Column, days: Column): Column = DateSub(startdate.expr, days.expr)
 
   /**
    * Extracts the year as an integer from a given date/timestamp/string.
@@ -2047,6 +2069,13 @@ object functions {
   def minute(columnName: String): Column = minute(Column(columnName))
 
   /**
+   * Returns number of months between dates date1 and date2.
+   * @group datetime_funcs
+   * @since 1.5.0
+   */
+  def months_between(l: Column, r: Column): Column = MonthsBetween(l.expr, r.expr)
+
+  /**
    * Extracts the seconds as an integer from a given date/timestamp/string.
    * @group datetime_funcs
    * @since 1.5.0
@@ -2059,6 +2088,20 @@ object functions {
    * @since 1.5.0
    */
   def second(columnName: String): Column = second(Column(columnName))
+
+  /**
+   * Adds a time and an interval value
+   * @group datetime_funcs
+   * @since 1.5.0
+   */
+  def time_add(l: Column, r: Column): Column = TimeAdd(l.expr, r.expr)
+
+  /**
+   * Subtracts an interval from a time value
+   * @group datetime_funcs
+   * @since 1.5.0
+   */
+  def time_sub(l: Column, r: Column): Column = TimeSub(l.expr, r.expr)
 
   /**
    * Extracts the week number as an integer from a given date/timestamp/string.
