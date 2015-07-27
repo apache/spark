@@ -62,6 +62,10 @@ case class TungstenProject(projectList: Seq[NamedExpression], child: SparkPlan) 
   override def output: Seq[Attribute] = projectList.map(_.toAttribute)
 
   protected override def doExecute(): RDD[InternalRow] = child.execute().mapPartitions { iter =>
+    this.transformAllExpressions {
+      case CreateStruct(children) => CreateStructUnsafe(children)
+      case CreateNamedStruct(children) => CreateNamedStructUnsafe(children)
+    }
     val project = UnsafeProjection.create(projectList, child.output)
     iter.map(project)
   }
