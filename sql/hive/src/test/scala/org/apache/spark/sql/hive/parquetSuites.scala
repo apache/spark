@@ -292,60 +292,63 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
   }
 
   test("MetastoreRelation in InsertIntoTable will be converted") {
-    sql(
-      """
-        |create table test_insert_parquet
-        |(
-        |  intField INT
-        |)
-        |ROW FORMAT SERDE 'org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe'
-        |STORED AS
-        |  INPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat'
-        |  OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat'
-      """.stripMargin)
+    withTable("test_insert_parquet") {
+      sql(
+        """
+          |create table test_insert_parquet
+          |(
+          |  intField INT
+          |)
+          |ROW FORMAT SERDE 'org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe'
+          |STORED AS
+          |  INPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat'
+          |  OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat'
+        """.stripMargin)
 
-    val df = sql("INSERT INTO TABLE test_insert_parquet SELECT a FROM jt")
-    df.queryExecution.executedPlan match {
-      case ExecutedCommand(InsertIntoHadoopFsRelation(_: ParquetRelation, _, _)) => // OK
-      case o => fail("test_insert_parquet should be converted to a " +
-        s"${classOf[ParquetRelation].getCanonicalName} and " +
-        s"${classOf[InsertIntoDataSource].getCanonicalName} is expcted as the SparkPlan. " +
-        s"However, found a ${o.toString} ")
+      val df = sql("INSERT INTO TABLE test_insert_parquet SELECT a FROM jt")
+      df.queryExecution.executedPlan match {
+        case ExecutedCommand(InsertIntoHadoopFsRelation(_: ParquetRelation, _, _)) => // OK
+        case o => fail("test_insert_parquet should be converted to a " +
+          s"${classOf[ParquetRelation].getCanonicalName} and " +
+          s"${classOf[InsertIntoDataSource].getCanonicalName} is expcted as the SparkPlan. " +
+          s"However, found a ${o.toString} ")
+      }
+
+      checkAnswer(
+        sql("SELECT intField FROM test_insert_parquet WHERE test_insert_parquet.intField > 5"),
+        sql("SELECT a FROM jt WHERE jt.a > 5").collect()
+      )
     }
-
-    checkAnswer(
-      sql("SELECT intField FROM test_insert_parquet WHERE test_insert_parquet.intField > 5"),
-      sql("SELECT a FROM jt WHERE jt.a > 5").collect()
-    )
   }
 
   test("MetastoreRelation in InsertIntoHiveTable will be converted") {
-    sql(
-      """
-        |create table test_insert_parquet
-        |(
-        |  int_array array<int>
-        |)
-        |ROW FORMAT SERDE 'org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe'
-        |STORED AS
-        |  INPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat'
-        |  OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat'
-      """.stripMargin)
+    withTable("test_insert_parquet") {
+      sql(
+        """
+          |create table test_insert_parquet
+          |(
+          |  int_array array<int>
+          |)
+          |ROW FORMAT SERDE 'org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe'
+          |STORED AS
+          |  INPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat'
+          |  OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat'
+        """.stripMargin)
 
-    val df = sql("INSERT INTO TABLE test_insert_parquet SELECT a FROM jt_array")
-    df.queryExecution.executedPlan match {
-      case ExecutedCommand(InsertIntoHadoopFsRelation(r: ParquetRelation, _, _)) => // OK
-      case o => fail("test_insert_parquet should be converted to a " +
-        s"${classOf[ParquetRelation].getCanonicalName} and " +
-        s"${classOf[InsertIntoDataSource].getCanonicalName} is expcted as the SparkPlan." +
-        s"However, found a ${o.toString} ")
+      val df = sql("INSERT INTO TABLE test_insert_parquet SELECT a FROM jt_array")
+      df.queryExecution.executedPlan match {
+        case ExecutedCommand(InsertIntoHadoopFsRelation(r: ParquetRelation, _, _)) => // OK
+        case o => fail("test_insert_parquet should be converted to a " +
+          s"${classOf[ParquetRelation].getCanonicalName} and " +
+          s"${classOf[InsertIntoDataSource].getCanonicalName} is expcted as the SparkPlan." +
+          s"However, found a ${o.toString} ")
+      }
+
+      checkAnswer(
+        sql("SELECT int_array FROM test_insert_parquet"),
+        sql("SELECT a FROM jt_array").collect()
+      )
     }
-
-    checkAnswer(
-      sql("SELECT int_array FROM test_insert_parquet"),
-      sql("SELECT a FROM jt_array").collect()
-    )
-
   }
 
   test("SPARK-6450 regression test") {
@@ -383,22 +386,24 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
   }
 
   test("SPARK-7749: non-partitioned metastore Parquet table lookup should use cached relation") {
-    sql(
-      s"""CREATE TABLE nonPartitioned (
-         |  key INT,
-         |  value STRING
-         |)
-         |STORED AS PARQUET
-       """.stripMargin)
+    withTable("nonPartitioned") {
+      sql(
+        s"""CREATE TABLE nonPartitioned (
+           |  key INT,
+           |  value STRING
+           |)
+           |STORED AS PARQUET
+         """.stripMargin)
 
-    // First lookup fills the cache
-    val r1 = collectParquetRelation(table("nonPartitioned"))
-    // Second lookup should reuse the cache
-    val r2 = collectParquetRelation(table("nonPartitioned"))
-    // They should be the same instance
-    assert(r1 eq r2)
+      // First lookup fills the cache
+      val r1 = collectParquetRelation(table("nonPartitioned"))
+      // Second lookup should reuse the cache
+      val r2 = collectParquetRelation(table("nonPartitioned"))
+      // They should be the same instance
+      assert(r1 eq r2)
 
-    sql("DROP TABLE nonPartitioned")
+      sql("DROP TABLE nonPartitioned")
+    }
   }
 
   test("SPARK-7749: partitioned metastore Parquet table lookup should use cached relation") {
