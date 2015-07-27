@@ -183,25 +183,15 @@ private[ui] object RDDOperationGraph extends Logging {
   /** Return the dot representation of a subgraph in an RDDOperationGraph. */
   private def makeDotSubgraph(cluster: RDDOperationCluster, indent: StringBuilder): String = {
     val subgraph = new StringBuilder
-    try {
-      subgraph.append(indent).append(s"subgraph cluster${cluster.id} {\n")
-      subgraph.append(indent).append(s"""  label="${cluster.name}";\n""")
-      cluster.childNodes.foreach { node =>
-        subgraph.append(indent).append(s"  ${makeDotNode(node)};\n")
-      }
-      cluster.childClusters.foreach { cscope =>
-        subgraph.append(makeDotSubgraph(cscope, indent.append("  ")))
-      }
-      subgraph.append(indent).append("}\n")
-      subgraph.toString()
-    } catch {
-      case oom: OutOfMemoryError =>
-        logError(s"Failed to create graph for job in $cluster.id. Not enough heap space.")
-        throw new SparkException(s"Failed to create graph for job in $cluster.id. " +
-          s"Not enough heap space.")
-      case _: Exception =>
-        logError(s"Failed to create graph for job in $cluster.id.")
-        ""
+    subgraph.append(indent).append(s"subgraph cluster${cluster.id} {\n")
+    subgraph.append(indent).append(s"""  label="${cluster.name}";\n""")
+    cluster.childNodes.foreach { node =>
+      subgraph.append(indent).append(s"  ${makeDotNode(node)};\n")
     }
+    cluster.childClusters.foreach { cscope =>
+      subgraph.append(makeDotSubgraph(cscope, indent.append("  ")))
+    }
+    subgraph.append(indent).append("}\n")
+    subgraph.toString()
   }
 }
