@@ -1145,7 +1145,7 @@ private[ui] class TaskPagedTable(
     sortColumn: String,
     desc: Boolean) extends PagedTable[TaskTableRowData]{
 
-  override def tableId: String = ""
+  override def tableId: String = "task-table"
 
   override def tableCssClass: String = "table table-bordered table-condensed table-striped"
 
@@ -1218,7 +1218,7 @@ private[ui] class TaskPagedTable(
         Seq(("Errors", ""))
 
     if (!taskHeadersAndCssClasses.map(_._1).contains(sortColumn)) {
-      new IllegalArgumentException(s"Unknown column: $sortColumn")
+      throw new IllegalArgumentException(s"Unknown column: $sortColumn")
     }
 
     val headerRow: Seq[Node] = {
