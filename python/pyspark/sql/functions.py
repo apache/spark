@@ -1025,7 +1025,7 @@ def array_contains(col, value):
     :param value: value to check for in array
 
     >>> df = sqlContext.createDataFrame([([1, 2, 3],), ([],)], ['data'])
-    >>> df.select(array_contains(df.data, 1)).collect()
+    >>> df.select(array_contains(df.data, 1L)).collect()
     [Row(array_contains(data, 1)=True), Row(array_contains(data, 1)=False)]
     """
     sc = SparkContext._active_spark_context
