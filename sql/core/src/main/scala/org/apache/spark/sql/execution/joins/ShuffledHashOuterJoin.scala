@@ -48,9 +48,19 @@ case class ShuffledHashOuterJoin(
       NullUnsafeClusteredDistribution(rightKeys) :: Nil
 
   override def outputPartitioning: Partitioning = joinType match {
-    case LeftOuter => left.outputPartitioning
-    case RightOuter => right.outputPartitioning
-    case FullOuter => left.outputPartitioning.toNullUnsafePartitioning
+    case LeftOuter =>
+      val partitions =
+        Seq(left.outputPartitioning, right.outputPartitioning.toNullUnsafePartitioning)
+      PartitioningCollection(partitions)
+    case RightOuter =>
+      val partitions =
+        Seq(right.outputPartitioning, left.outputPartitioning.toNullUnsafePartitioning)
+      PartitioningCollection(partitions)
+    case FullOuter =>
+      val partitions =
+        Seq(left.outputPartitioning.toNullUnsafePartitioning,
+          right.outputPartitioning.toNullUnsafePartitioning)
+      PartitioningCollection(partitions)
     case x =>
       throw new IllegalArgumentException(s"HashOuterJoin should not take $x as the JoinType")
   }

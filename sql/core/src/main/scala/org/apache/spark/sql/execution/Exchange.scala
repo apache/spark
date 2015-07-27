@@ -164,7 +164,20 @@ case class Exchange(newPartitioning: Partitioning, child: SparkPlan) extends Una
       // TODO: Handle BroadcastPartitioning.
     }
     def getPartitionKeyExtractor(): InternalRow => InternalRow = newPartitioning match {
-      case NullSafeHashPartitioning(expressions, _) => newMutableProjection(expressions, child.output)()
+      case NullSafeHashPartitioning(expressions, _) =>
+        // Since NullSafeHashPartitioning and NullUnsafeHashPartitioning may be used together
+        // for a join operator. We need to make sure they calculate the partition id with
+        // the same way.
+        val materalizeExpressions = newMutableProjection(expressions, child.output)()
+        val partitionExpressionSchema = expressions.map {
+          case ne: NamedExpression => ne.toAttribute
+          case expr => Alias(expr, "partitionExpr")().toAttribute
+        }
+        val partitionId = RowHashCode
+        val partitionIdExtractor =
+          newMutableProjection(partitionId :: Nil, partitionExpressionSchema)()
+        (row: InternalRow) => partitionIdExtractor(materalizeExpressions(row))
+        // newMutableProjection(expressions, child.output)()
       case NullUnsafeHashPartitioning(expressions, numPartition) =>
         // For NullUnsafeHashPartitioning, we do not want to send rows having any expression
         // in `expressions` evaluated as null to the same node.
@@ -261,7 +274,7 @@ private[sql] case class EnsureRequirements(sqlContext: SQLContext) extends Rule[
           child: SparkPlan): SparkPlan = {
 
         def addShuffleIfNecessary(child: SparkPlan): SparkPlan = {
-          if (child.outputPartitioning.guarantees(partitioning)) {
+          if (!child.outputPartitioning.guarantees(partitioning)) {
             Exchange(partitioning, child)
           } else {
             child

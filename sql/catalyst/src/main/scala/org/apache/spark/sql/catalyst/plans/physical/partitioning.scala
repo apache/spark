@@ -305,3 +305,43 @@ case class RangePartitioning(ordering: Seq[SortOrder], numPartitions: Int)
 
   override def toNullUnsafePartitioning: Partitioning = this
 }
+
+/**
+ * A collection of [[Partitioning]]s.
+ */
+case class PartitioningCollection(partitionings: Seq[Partitioning])
+  extends Expression with Partitioning with Unevaluable {
+
+  require(
+    partitionings.map(_.numPartitions).distinct.length == 1,
+    s"PartitioningCollection requires all of its partitionings have the same numPartitions.")
+
+  override def children: Seq[Expression] = partitionings.collect {
+    case expr: Expression => expr
+  }
+
+  override def nullable: Boolean = false
+
+  override def dataType: DataType = IntegerType
+
+  override val numPartitions = partitionings.map(_.numPartitions).distinct.head
+
+  override def satisfies(required: Distribution): Boolean =
+    partitionings.exists(_.satisfies(required))
+
+  override def compatibleWith(other: Partitioning): Boolean =
+    partitionings.exists(_.compatibleWith(other))
+
+  override def guarantees(other: Partitioning): Boolean =
+    partitionings.exists(_.guarantees(other))
+
+  override def keyExpressions: Seq[Expression] = partitionings.head.keyExpressions
+
+  override def toNullUnsafePartitioning: Partitioning = {
+    PartitioningCollection(partitionings.map(_.toNullUnsafePartitioning))
+  }
+
+  override def toString: String = {
+    partitionings.map(_.toString).mkString("(", " or ", ")")
+  }
+}
