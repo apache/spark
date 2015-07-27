@@ -575,7 +575,7 @@ object DateTimeUtils {
   }
 
   /**
-   * Returns Day of week from String.
+   * Returns Day of week from String. Starting from friday, marked as 0.
    */
   def getDayOfWeekFromString(string: UTF8String): Int = {
     val dowString = string.toString.toUpperCase
@@ -592,16 +592,29 @@ object DateTimeUtils {
   }
 
   /**
+   * Returns the first date which is later than startDate and is of the given dayOfWeek.
+   */
+  def getNextDateForDayOfWeek(startDate: Int, dayOfWeek: Int): Int = {
+    startDate + 1 + ((dayOfWeek - startDate % 7) % 7 + 7) % 7
+  }
+
+  /**
+   * number of days in a non-leap year.
+   */
+  val days = Seq(31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31)
+
+  /**
    * Returns last day of the month for the given date. The date is expressed in days
    * since 1.1.1970.
    */
   def getLastDayOfMonth(date: Int): Int = {
     val dayOfMonth = getDayOfMonth(date)
     val month = getMonth(date)
-
-    val febDay = if (isLeapYear(getYear(date))) 29 else 28
-    val days = Seq(31, febDay, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31)
-    date + days(month - 1) - dayOfMonth
+    if (month == 2 && isLeapYear(getYear(date))) {
+      date + days(month - 1) + 1 - dayOfMonth
+    } else {
+      date + days(month - 1) - dayOfMonth
+    }
   }
 
 }
