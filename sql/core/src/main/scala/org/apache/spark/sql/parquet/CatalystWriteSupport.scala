@@ -217,19 +217,19 @@ private[parquet] class CatalystWriteSupport extends WriteSupport[InternalRow] wi
 
     (row: InternalRow, ordinal: Int) => {
       consumeGroup {
-        consumeField(repeatedGroupName, 0) {
-          val array = row.get(ordinal).asInstanceOf[Seq[_]]
-          var i = 0
-
-          while (i < array.length) {
-            consumeGroup {
-              if (array(i) != null) {
-                mutableRow.update(0, array(i))
-                consumeField(elementFieldName, 0)(elementWriter.apply(mutableRow, 0))
+        val array = row.get(ordinal).asInstanceOf[Seq[_]]
+        if (array.nonEmpty) {
+          consumeField(repeatedGroupName, 0) {
+            var i = 0
+            while (i < array.length) {
+              consumeGroup {
+                if (array(i) != null) {
+                  mutableRow.update(0, array(i))
+                  consumeField(elementFieldName, 0)(elementWriter.apply(mutableRow, 0))
+                }
               }
+              i += 1
             }
-
-            i += 1
           }
         }
       }
@@ -244,14 +244,15 @@ private[parquet] class CatalystWriteSupport extends WriteSupport[InternalRow] wi
 
     (row: InternalRow, ordinal: Int) => {
       consumeGroup {
-        consumeField(repeatedFieldName, 0) {
-          val array = row.get(ordinal).asInstanceOf[Seq[_]]
-          var i = 0
-
-          while (i < array.length) {
-            mutableRow.update(0, array(i))
-            elementWriter.apply(mutableRow, 0)
-            i += 1
+        val array = row.get(ordinal).asInstanceOf[Seq[_]]
+        if (array.nonEmpty) {
+          consumeField(repeatedFieldName, 0) {
+            var i = 0
+            while (i < array.length) {
+              mutableRow.update(0, array(i))
+              elementWriter.apply(mutableRow, 0)
+              i += 1
+            }
           }
         }
       }
@@ -268,15 +269,17 @@ private[parquet] class CatalystWriteSupport extends WriteSupport[InternalRow] wi
 
     (row: InternalRow, ordinal: Int) => {
       consumeGroup {
-        consumeField(repeatedGroupName, 0) {
-          val map = row.get(ordinal).asInstanceOf[Map[_, _]]
-          for ((key, value) <- map) {
-            consumeGroup {
-              mutableRow.update(0, key)
-              consumeField("key", 0)(keyWriter.apply(mutableRow, 0))
-              if (value != null) {
-                mutableRow.update(1, value)
-                consumeField("value", 1)(valueWriter.apply(mutableRow, 1))
+        val map = row.get(ordinal).asInstanceOf[Map[_, _]]
+        if (map.nonEmpty) {
+          consumeField(repeatedGroupName, 0) {
+            for ((key, value) <- map) {
+              consumeGroup {
+                mutableRow.update(0, key)
+                consumeField("key", 0)(keyWriter.apply(mutableRow, 0))
+                if (value != null) {
+                  mutableRow.update(1, value)
+                  consumeField("value", 1)(valueWriter.apply(mutableRow, 1))
+                }
               }
             }
           }
