@@ -363,7 +363,10 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case logical.Sort(sortExprs, global, child) =>
         getSortOperator(sortExprs, global, planLater(child)):: Nil
       case logical.Project(projectList, child) =>
-        if (UnsafeProjection.canSupport(projectList) && UnsafeProjection.canSupport(child.schema)) {
+        // If unsafe mode is enabled and we support these data types in Unsafe, use the
+        // Tungsten project. Otherwise, use the normal project.
+        if (sqlContext.conf.unsafeEnabled &&
+          UnsafeProjection.canSupport(projectList) && UnsafeProjection.canSupport(child.schema)) {
           execution.TungstenProject(projectList, planLater(child)) :: Nil
         } else {
           execution.Project(projectList, planLater(child)) :: Nil

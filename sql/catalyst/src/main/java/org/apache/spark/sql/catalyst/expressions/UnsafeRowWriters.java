@@ -82,13 +82,21 @@ public class UnsafeRowWriters {
     }
   }
 
-  /** Writer for struct type. */
+  /**
+   * Writer for struct type where the struct field is backed by an {@link UnsafeRow}.
+   *
+   * We throw UnsupportedOperationException for inputs that are not backed by {@link UnsafeRow}.
+   * Non-UnsafeRow struct fields are handled directly in
+   * {@link org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection}
+   * by generating the Java code needed to convert them into UnsafeRow.
+   */
   public static class StructWriter {
     public static int getSize(InternalRow input) {
       int numBytes = 0;
       if (input instanceof UnsafeRow) {
         numBytes = ((UnsafeRow) input).getSizeInBytes();
       } else {
+        // This is handled directly in GenerateUnsafeProjection.
         throw new UnsupportedOperationException();
       }
       return ByteArrayMethods.roundNumberOfBytesToNearestWord(numBytes);
@@ -113,6 +121,7 @@ public class UnsafeRowWriters {
         // Set the fixed length portion.
         target.setLong(ordinal, (((long) cursor) << 32) | ((long) numBytes));
       } else {
+        // This is handled directly in GenerateUnsafeProjection.
         throw new UnsupportedOperationException();
       }
       return ByteArrayMethods.roundNumberOfBytesToNearestWord(numBytes);

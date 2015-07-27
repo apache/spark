@@ -33,6 +33,8 @@ class DataFrameSuite extends QueryTest with SQLTestUtils {
   lazy val ctx = org.apache.spark.sql.test.TestSQLContext
   import ctx.implicits._
 
+  ctx.setConf(SQLConf.UNSAFE_ENABLED, true)
+
   def sqlContext: SQLContext = ctx
 
   test("analysis error should be eagerly reported") {
