@@ -1183,6 +1183,8 @@ class RowMatrix(DistributedMatrix):
         Create a wrapper over a Java RowMatrix.
 
         :param rows: An RDD of Vectors.
+        :param numRows Number of rows in the matrix.
+        :param numCols Number of columns in the matrix.
         """
         if not isinstance(rows, RDD):
             raise TypeError("rows should be an RDD object, got %s" % type(rows))
@@ -1264,6 +1266,8 @@ class IndexedRowMatrix(DistributedMatrix):
         Create a wrapper over a Java IndexedRowMatrix.
 
         :param rows: An RDD of IndexedRows or (long, Vector) tuples.
+        :param numRows Number of rows in the matrix.
+        :param numCols Number of columns in the matrix.
         """
         if not isinstance(rows, RDD):
             raise TypeError("rows should be an RDD object, got %s" % type(rows))
@@ -1396,6 +1400,8 @@ class CoordinateMatrix(object):
 
         :param entries: An RDD of MatrixEntry inputs or
                         (long, long, float) tuples.
+        :param numRows Number of rows in the matrix.
+        :param numCols Number of columns in the matrix.
         """
         if not isinstance(entries, RDD):
             raise TypeError("entries should be an RDD object, got %s" % type(entries))
