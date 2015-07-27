@@ -22,6 +22,7 @@ import java.util.Properties
 import javax.annotation.Nullable
 
 import scala.collection.JavaConversions._
+import scala.util.control.NonFatal
 
 import org.apache.hadoop.hive.serde.serdeConstants
 import org.apache.hadoop.hive.serde2.AbstractSerDe
@@ -171,10 +172,11 @@ case class ScriptTransformation(
       // the pipeline / buffer capacity.
       new Thread(new Runnable() {
         override def run(): Unit = {
-          Utils.tryWithSafeFinally {
-            iter
-              .map(outputProjection)
-              .foreach { row =>
+          // We can't use Utils.tryWithSafeFinally here because we also need a `catch` block, so
+          // let's use a variable to record whether the `finally` block was hit due to an exception
+          var threwException: Boolean = true
+          try {
+            iter.map(outputProjection).foreach { row =>
               if (inputSerde == null) {
                 val data = row.mkString("", ioschema.inputRowFormatMap("TOK_TABLEROWFORMATFIELD"),
                   ioschema.inputRowFormatMap("TOK_TABLEROWFORMATLINES")).getBytes("utf-8")
@@ -187,9 +189,25 @@ case class ScriptTransformation(
               }
             }
             outputStream.close()
-          } {
-            if (proc.waitFor() != 0) {
-              logError(stderrBuffer.toString) // log the stderr circular buffer
+            threwException = false
+          } catch {
+            case NonFatal(e) =>
+              // An error occurred while writing input, so kill the child process. According to the
+              // Javadoc this call will not throw an exception:
+              proc.destroy()
+              throw e
+          } finally {
+            try {
+              if (proc.waitFor() != 0) {
+                logError(stderrBuffer.toString) // log the stderr circular buffer
+              }
+            } catch {
+              case NonFatal(exceptionFromFinallyBlock) =>
+                if (!threwException) {
+                  throw exceptionFromFinallyBlock
+                } else {
+                  log.error("Exception in finally block", exceptionFromFinallyBlock)
+                }
             }
           }
         }
@@ -202,6 +220,7 @@ case class ScriptTransformation(
       if (iter.hasNext) {
         processIterator(iter)
       } else {
+        // If the input iterator has no rows then do not launch the external script.
         Iterator.empty
       }
     }
