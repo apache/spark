@@ -23,7 +23,7 @@ import org.apache.spark.annotation.Experimental
 
 /**
  * :: Experimental ::
- * The abstract class for implementing user-defined aggregate function.
+ * The abstract class for implementing user-defined aggregate functions.
  */
 @Experimental
 abstract class UserDefinedAggregateFunction extends Serializable {
@@ -71,7 +71,7 @@ abstract class UserDefinedAggregateFunction extends Serializable {
 
   /**
    *  Initializes the given aggregation buffer. Initial values set by this method should satisfy
-   *  the condition that when merging two buffers with initial values, the new buffer should
+   *  the condition that when merging two buffers with initial values, the new buffer
    *  still store initial values.
    */
   def initialize(buffer: MutableAggregationBuffer): Unit
@@ -79,7 +79,7 @@ abstract class UserDefinedAggregateFunction extends Serializable {
   /** Updates the given aggregation buffer `buffer` with new input data from `input`. */
   def update(buffer: MutableAggregationBuffer, input: Row): Unit
 
-  /** Merges two aggregation buffers and stores the updated buffer values back in `buffer1`. */
+  /** Merges two aggregation buffers and stores the updated buffer values back to `buffer1`. */
   def merge(buffer1: MutableAggregationBuffer, buffer2: Row): Unit
 
   /**
@@ -91,7 +91,7 @@ abstract class UserDefinedAggregateFunction extends Serializable {
 
 /**
  * :: Experimental ::
- * A Mutable [[Row]] representing an mutable aggregation buffer.
+ * A [[Row]] representing an mutable aggregation buffer.
  */
 @Experimental
 trait MutableAggregationBuffer extends Row {
