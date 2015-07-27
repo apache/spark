@@ -17,18 +17,23 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenFallback, GeneratedExpressionCode, CodeGenContext}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
-import org.apache.spark.sql.catalyst.util.TypeUtils
-import org.apache.spark.sql.catalyst.expressions.codegen.{GeneratedExpressionCode, CodeGenContext}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.types._
+import org.apache.spark.util.Utils
+
 
 object InterpretedPredicate {
   def create(expression: Expression, inputSchema: Seq[Attribute]): (InternalRow => Boolean) =
     create(BindReferences.bindReference(expression, inputSchema))
 
   def create(expression: Expression): (InternalRow => Boolean) = {
+    expression.foreach {
+      case n: Nondeterministic => n.initialize()
+      case _ =>
+    }
     (r: InternalRow) => expression.eval(r).asInstanceOf[Boolean]
   }
 }
@@ -38,8 +43,6 @@ object InterpretedPredicate {
  * An [[Expression]] that returns a boolean value.
  */
 trait Predicate extends Expression {
-  self: Product =>
-
   override def dataType: DataType = BooleanType
 }
 
@@ -94,7 +97,7 @@ case class Not(child: Expression)
 /**
  * Evaluates to `true` if `list` contains `value`.
  */
-case class In(value: Expression, list: Seq[Expression]) extends Predicate {
+case class In(value: Expression, list: Seq[Expression]) extends Predicate with CodegenFallback {
   override def children: Seq[Expression] = value +: list
 
   override def nullable: Boolean = true // TODO: Figure out correct nullability semantics of IN.
@@ -112,7 +115,7 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
  * static.
  */
 case class InSet(child: Expression, hset: Set[Any])
-  extends UnaryExpression with Predicate {
+  extends UnaryExpression with Predicate with CodegenFallback {
 
   override def nullable: Boolean = true // TODO: Figure out correct nullability semantics of IN.
   override def toString: String = s"$child INSET ${hset.mkString("(", ",", ")")}"
@@ -121,7 +124,6 @@ case class InSet(child: Expression, hset: Set[Any])
     hset.contains(child.eval(input))
   }
 }
-
 
 case class And(left: Expression, right: Expression) extends BinaryOperator with Predicate {
 
@@ -222,10 +224,11 @@ case class Or(left: Expression, right: Expression) extends BinaryOperator with P
 
 
 abstract class BinaryComparison extends BinaryOperator with Predicate {
-  self: Product =>
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    if (ctx.isPrimitiveType(left.dataType)) {
+    if (ctx.isPrimitiveType(left.dataType)
+        && left.dataType != FloatType
+        && left.dataType != DoubleType) {
       // faster version
       defineCodeGen(ctx, ev, (c1, c2) => s"$c1 $symbol $c2")
     } else {
@@ -257,8 +260,15 @@ case class EqualTo(left: Expression, right: Expression) extends BinaryComparison
   override def symbol: String = "="
 
   protected override def nullSafeEval(input1: Any, input2: Any): Any = {
-    if (left.dataType != BinaryType) input1 == input2
-    else java.util.Arrays.equals(input1.asInstanceOf[Array[Byte]], input2.asInstanceOf[Array[Byte]])
+    if (left.dataType == FloatType) {
+      Utils.nanSafeCompareFloats(input1.asInstanceOf[Float], input2.asInstanceOf[Float]) == 0
+    } else if (left.dataType == DoubleType) {
+      Utils.nanSafeCompareDoubles(input1.asInstanceOf[Double], input2.asInstanceOf[Double]) == 0
+    } else if (left.dataType != BinaryType) {
+      input1 == input2
+    } else {
+      java.util.Arrays.equals(input1.asInstanceOf[Array[Byte]], input2.asInstanceOf[Array[Byte]])
+    }
   }
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
@@ -283,7 +293,11 @@ case class EqualNullSafe(left: Expression, right: Expression) extends BinaryComp
     } else if (input1 == null || input2 == null) {
       false
     } else {
-      if (left.dataType != BinaryType) {
+      if (left.dataType == FloatType) {
+        Utils.nanSafeCompareFloats(input1.asInstanceOf[Float], input2.asInstanceOf[Float]) == 0
+      } else if (left.dataType == DoubleType) {
+        Utils.nanSafeCompareDoubles(input1.asInstanceOf[Double], input2.asInstanceOf[Double]) == 0
+      } else if (left.dataType != BinaryType) {
         input1 == input2
       } else {
         java.util.Arrays.equals(input1.asInstanceOf[Array[Byte]], input2.asInstanceOf[Array[Byte]])

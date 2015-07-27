@@ -19,6 +19,7 @@ package org.apache.spark.sql.parquet
 
 import org.apache.spark.sql.catalyst.InternalRow
 
+// TODO Removes this while fixing SPARK-8848
 private[sql] object CatalystConverter {
   // This is mostly Parquet convention (see, e.g., `ConversionPatterns`).
   // Note that "array" for the array elements is chosen by ParquetAvro.

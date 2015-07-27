@@ -152,6 +152,11 @@ class SparkContext(object):
         self.master = self._conf.get("spark.master")
         self.appName = self._conf.get("spark.app.name")
         self.sparkHome = self._conf.get("spark.home", None)
+
+        # Let YARN know it's a pyspark app, so it distributes needed libraries.
+        if self.master == "yarn-client":
+            self._conf.set("spark.yarn.isPython", "true")
+
         for (k, v) in self._conf.getAll():
             if k.startswith("spark.executorEnv."):
                 varName = k[len("spark.executorEnv."):]
@@ -908,8 +913,7 @@ class SparkContext(object):
         # by runJob() in order to avoid having to pass a Python lambda into
         # SparkContext#runJob.
         mappedRDD = rdd.mapPartitions(partitionFunc)
-        port = self._jvm.PythonRDD.runJob(self._jsc.sc(), mappedRDD._jrdd, partitions,
-                                          allowLocal)
+        port = self._jvm.PythonRDD.runJob(self._jsc.sc(), mappedRDD._jrdd, partitions)
         return list(_load_from_socket(port, mappedRDD._jrdd_deserializer))
 
     def show_profiles(self):

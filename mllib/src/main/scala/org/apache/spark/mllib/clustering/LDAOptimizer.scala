@@ -27,7 +27,7 @@ import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.graphx._
 import org.apache.spark.graphx.impl.GraphImpl
 import org.apache.spark.mllib.impl.PeriodicGraphCheckpointer
-import org.apache.spark.mllib.linalg.{DenseVector, Matrices, SparseVector, Vector}
+import org.apache.spark.mllib.linalg.{DenseVector, Matrices, SparseVector, Vector, Vectors}
 import org.apache.spark.rdd.RDD
 
 /**
@@ -95,8 +95,11 @@ final class EMLDAOptimizer extends LDAOptimizer {
    * Compute bipartite term/doc graph.
    */
   override private[clustering] def initialize(docs: RDD[(Long, Vector)], lda: LDA): LDAOptimizer = {
+    val docConcentration = lda.getDocConcentration(0)
+    require({
+      lda.getDocConcentration.toArray.forall(_ == docConcentration)
+    }, "EMLDAOptimizer currently only supports symmetric document-topic priors")
 
-    val docConcentration = lda.getDocConcentration
     val topicConcentration = lda.getTopicConcentration
     val k = lda.getK
 
@@ -230,10 +233,10 @@ final class OnlineLDAOptimizer extends LDAOptimizer {
   private var vocabSize: Int = 0
 
   /** alias for docConcentration */
-  private var alpha: Double = 0
+  private var alpha: Vector = Vectors.dense(0)
 
   /** (private[clustering] for debugging)  Get docConcentration */
-  private[clustering] def getAlpha: Double = alpha
+  private[clustering] def getAlpha: Vector = alpha
 
   /** alias for topicConcentration */
   private var eta: Double = 0
@@ -344,7 +347,19 @@ final class OnlineLDAOptimizer extends LDAOptimizer {
     this.k = lda.getK
     this.corpusSize = docs.count()
     this.vocabSize = docs.first()._2.size
-    this.alpha = if (lda.getDocConcentration == -1) 1.0 / k else lda.getDocConcentration
+    this.alpha = if (lda.getDocConcentration.size == 1) {
+      if (lda.getDocConcentration(0) == -1) Vectors.dense(Array.fill(k)(1.0 / k))
+      else {
+        require(lda.getDocConcentration(0) >= 0, s"all entries in alpha must be >=0, got: $alpha")
+        Vectors.dense(Array.fill(k)(lda.getDocConcentration(0)))
+      }
+    } else {
+      require(lda.getDocConcentration.size == k, s"alpha must have length k, got: $alpha")
+      lda.getDocConcentration.foreachActive { case (_, x) =>
+        require(x >= 0, s"all entries in alpha must be >= 0, got: $alpha")
+      }
+      lda.getDocConcentration
+    }
     this.eta = if (lda.getTopicConcentration == -1) 1.0 / k else lda.getTopicConcentration
     this.randomGenerator = new Random(lda.getSeed)
 
@@ -371,19 +386,26 @@ final class OnlineLDAOptimizer extends LDAOptimizer {
     iteration += 1
     val k = this.k
     val vocabSize = this.vocabSize
-    val expElogbeta = exp(dirichletExpectation(lambda)).t
+    val Elogbeta = dirichletExpectation(lambda)
+    val expElogbeta = exp(Elogbeta)
     val alpha = this.alpha
+    val alpha = this.alpha.toBreeze
     val gammaShape = this.gammaShape
 
     val stats: RDD[BDM[Double]] = batch.mapPartitions { docs =>
       val stat = BDM.zeros[Double](k, vocabSize)
-      docs.foreach { case (_, termCounts: Vector) =>
-        val ids: List[Int] = termCounts match {
-          case v: DenseVector => (0 until v.size).toList
-          case v: SparseVector => v.indices.toList
+      docs.foreach { doc =>
+        val termCounts = doc._2
+        val (ids: List[Int], cts: Array[Double]) = termCounts match {
+          case v: DenseVector => ((0 until v.size).toList, v.values)
+          case v: SparseVector => (v.indices.toList, v.values)
+          case v => throw new IllegalArgumentException("Online LDA does not support vector type "
+            + v.getClass)
         }
-        val (_, sstats) = topicInference(termCounts, expElogbeta, alpha, gammaShape, k)
-        stat(::, ids) := sstats
+        if (!ids.isEmpty) {
+          val (_, sstats) = topicInference(termCounts, expElogbeta, alpha, gammaShape, k)
+          stat(::, ids) := sstats
+        }
       }
       Iterator(stat)
     }
@@ -444,30 +466,31 @@ object OnlineLDAOptimizer {
   private def topicInference(
       termCounts: Vector,
       expElogbeta: BDM[Double],
-      alpha: Double,
+      alpha: BDV[Double],
       gammaShape: Double,
       k: Int): (BDV[Double], BDM[Double]) = {
     val (ids: List[Int], cts: Array[Double]) = termCounts match {
       case v: DenseVector => ((0 until v.size).toList, v.values)
       case v: SparseVector => (v.indices.toList, v.values)
     }
+
     // Initialize the variational distribution q(theta|gamma) for the mini-batch
     val gammad: BDV[Double] =
-      new Gamma(gammaShape, 1.0 / gammaShape).samplesVector(k)                   // K
+      new Gamma(gammaShape, 1.0 / gammaShape).samplesVector(k) // K
     val expElogthetad: BDV[Double] = exp(digamma(gammad) - digamma(sum(gammad))) // K
-    val expElogbetad = expElogbeta(ids, ::).toDenseMatrix                        // ids * K
+    val expElogbetad: BDM[Double] = expElogbeta(ids, ::).toDenseMatrix // ids * K
 
-    val phinorm: BDV[Double] = expElogbetad * expElogthetad + 1e-100             // ids
+    val phinorm: BDV[Double] = expElogbetad * expElogthetad :+ 1e-100 // ids
     var meanchange = 1D
-    val ctsVector = new BDV[Double](cts)                                         // ids
+    val ctsVector = new BDV[Double](cts) // ids
 
     // Iterate between gamma and phi until convergence
     while (meanchange > 1e-3) {
       val lastgamma = gammad.copy
       //        K                  K * ids               ids
-      gammad := (expElogthetad :* (expElogbetad.t * (ctsVector / phinorm))) + alpha
+      gammad := (expElogthetad :* (expElogbetad.t * (ctsVector :/ phinorm))) :+ alpha
       expElogthetad := exp(digamma(gammad) - digamma(sum(gammad)))
-      phinorm := expElogbetad * expElogthetad + 1e-100
+      phinorm := expElogbetad * expElogthetad :+ 1e-100
       meanchange = sum(abs(gammad - lastgamma)) / k
     }
 
@@ -483,7 +506,7 @@ object OnlineLDAOptimizer {
   private def bound(
       batch: RDD[(Long, Vector)],
       subsampleRatio: Double,
-      alpha: Double,
+      alpha: BDV[Double],
       eta: Double,
       lambda: BDM[Double],
       gammaShape: Double,

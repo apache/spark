@@ -18,10 +18,12 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.{SimpleCatalystConf, CatalystConf}
+import org.apache.spark.sql.catalyst.expressions.aggregate.{Complete, AggregateExpression2, AggregateFunction2}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
+import org.apache.spark.sql.catalyst.trees.TreeNodeRef
+import org.apache.spark.sql.catalyst.{SimpleCatalystConf, CatalystConf}
 import org.apache.spark.sql.types._
 import scala.collection.mutable.ArrayBuffer
 
@@ -77,7 +79,9 @@ class Analyzer(
       GlobalAggregates ::
       UnresolvedHavingClauseAttributes ::
       HiveTypeCoercion.typeCoercionRules ++
-      extendedResolutionRules : _*)
+      extendedResolutionRules : _*),
+    Batch("Nondeterministic", Once,
+      PullOutNondeterministic)
   )
 
   /**
@@ -277,7 +281,7 @@ class Analyzer(
         Project(
           projectList.flatMap {
             case s: Star => s.expand(child.output, resolver)
-            case UnresolvedAlias(f @ UnresolvedFunction(_, args)) if containsStar(args) =>
+            case UnresolvedAlias(f @ UnresolvedFunction(_, args, _)) if containsStar(args) =>
               val expandedArgs = args.flatMap {
                 case s: Star => s.expand(child.output, resolver)
                 case o => o :: Nil
@@ -316,7 +320,7 @@ class Analyzer(
         )
 
       // Special handling for cases when self-join introduce duplicate expression ids.
-      case j @ Join(left, right, _, _) if left.outputSet.intersect(right.outputSet).nonEmpty =>
+      case j @ Join(left, right, _, _) if !j.selfJoinResolved =>
         val conflictingAttributes = left.outputSet.intersect(right.outputSet)
         logDebug(s"Conflicting attributes ${conflictingAttributes.mkString(",")} in $j")
 
@@ -517,9 +521,26 @@ class Analyzer(
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
       case q: LogicalPlan =>
         q transformExpressions {
-          case u @ UnresolvedFunction(name, children) =>
+          case u @ UnresolvedFunction(name, children, isDistinct) =>
             withPosition(u) {
-              registry.lookupFunction(name, children)
+              registry.lookupFunction(name, children) match {
+                // We get an aggregate function built based on AggregateFunction2 interface.
+                // So, we wrap it in AggregateExpression2.
+                case agg2: AggregateFunction2 => AggregateExpression2(agg2, Complete, isDistinct)
+                // Currently, our old aggregate function interface supports SUM(DISTINCT ...)
+                // and COUTN(DISTINCT ...).
+                case sumDistinct: SumDistinct => sumDistinct
+                case countDistinct: CountDistinct => countDistinct
+                // DISTINCT is not meaningful with Max and Min.
+                case max: Max if isDistinct => max
+                case min: Min if isDistinct => min
+                // For other aggregate functions, DISTINCT keyword is not supported for now.
+                // Once we converted to the new code path, we will allow using DISTINCT keyword.
+                case other: AggregateExpression1 if isDistinct =>
+                  failAnalysis(s"$name does not support DISTINCT keyword.")
+                // If it does not have DISTINCT keyword, we will return it as is.
+                case other => other
+              }
             }
         }
     }
@@ -890,6 +911,34 @@ class Analyzer(
         // Finally, generate output columns according to the original projectList.
         val finalProjectList = projectList.map (_.toAttribute)
         Project(finalProjectList, withWindow)
+    }
+  }
+
+  /**
+   * Pulls out nondeterministic expressions from LogicalPlan which is not Project or Filter,
+   * put them into an inner Project and finally project them away at the outer Project.
+   */
+  object PullOutNondeterministic extends Rule[LogicalPlan] {
+    override def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+      case p: Project => p
+      case f: Filter => f
+
+      // todo: It's hard to write a general rule to pull out nondeterministic expressions
+      // from LogicalPlan, currently we only do it for UnaryNode which has same output
+      // schema with its child.
+      case p: UnaryNode if p.output == p.child.output && p.expressions.exists(!_.deterministic) =>
+        val nondeterministicExprs = p.expressions.filterNot(_.deterministic).map { e =>
+          val ne = e match {
+            case n: NamedExpression => n
+            case _ => Alias(e, "_nondeterministic")()
+          }
+          new TreeNodeRef(e) -> ne
+        }.toMap
+        val newPlan = p.transformExpressions { case e =>
+          nondeterministicExprs.get(new TreeNodeRef(e)).map(_.toAttribute).getOrElse(e)
+        }
+        val newChild = Project(p.child.output ++ nondeterministicExprs.values, p.child)
+        Project(p.output, newPlan.withNewChildren(newChild :: Nil))
     }
   }
 }

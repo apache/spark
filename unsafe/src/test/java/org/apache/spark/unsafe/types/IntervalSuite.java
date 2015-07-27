@@ -101,6 +101,44 @@ public class IntervalSuite {
     assertEquals(Interval.fromString(input), null);
   }
 
+  @Test
+  public void addTest() {
+    String input = "interval 3 month 1 hour";
+    String input2 = "interval 2 month 100 hour";
+
+    Interval interval = Interval.fromString(input);
+    Interval interval2 = Interval.fromString(input2);
+
+    assertEquals(interval.add(interval2), new Interval(5, 101 * MICROS_PER_HOUR));
+
+    input = "interval -10 month -81 hour";
+    input2 = "interval 75 month 200 hour";
+
+    interval = Interval.fromString(input);
+    interval2 = Interval.fromString(input2);
+
+    assertEquals(interval.add(interval2), new Interval(65, 119 * MICROS_PER_HOUR));
+  }
+
+  @Test
+  public void subtractTest() {
+    String input = "interval 3 month 1 hour";
+    String input2 = "interval 2 month 100 hour";
+
+    Interval interval = Interval.fromString(input);
+    Interval interval2 = Interval.fromString(input2);
+
+    assertEquals(interval.subtract(interval2), new Interval(1, -99 * MICROS_PER_HOUR));
+
+    input = "interval -10 month -81 hour";
+    input2 = "interval 75 month 200 hour";
+
+    interval = Interval.fromString(input);
+    interval2 = Interval.fromString(input2);
+
+    assertEquals(interval.subtract(interval2), new Interval(-85, -281 * MICROS_PER_HOUR));
+  }
+
   private void testSingleUnit(String unit, int number, int months, long microseconds) {
     String input1 = "interval " + number + " " + unit;
     String input2 = "interval " + number + " " + unit + "s";

@@ -40,7 +40,6 @@ object SparkPlan {
  */
 @DeveloperApi
 abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializable {
-  self: Product =>
 
   /**
    * A handle to the SQL Context that was used to create this plan.   Since many operators need
@@ -80,12 +79,36 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   /** Specifies sort order for each partition requirements on the input data for this operator. */
   def requiredChildOrdering: Seq[Seq[SortOrder]] = Seq.fill(children.size)(Nil)
 
+  /** Specifies whether this operator outputs UnsafeRows */
+  def outputsUnsafeRows: Boolean = false
+
+  /** Specifies whether this operator is capable of processing UnsafeRows */
+  def canProcessUnsafeRows: Boolean = false
+
+  /**
+   * Specifies whether this operator is capable of processing Java-object-based Rows (i.e. rows
+   * that are not UnsafeRows).
+   */
+  def canProcessSafeRows: Boolean = true
+
   /**
    * Returns the result of this query as an RDD[InternalRow] by delegating to doExecute
    * after adding query plan information to created RDDs for visualization.
    * Concrete implementations of SparkPlan should override doExecute instead.
    */
   final def execute(): RDD[InternalRow] = {
+    if (children.nonEmpty) {
+      val hasUnsafeInputs = children.exists(_.outputsUnsafeRows)
+      val hasSafeInputs = children.exists(!_.outputsUnsafeRows)
+      assert(!(hasSafeInputs && hasUnsafeInputs),
+        "Child operators should output rows in the same format")
+      assert(canProcessSafeRows || canProcessUnsafeRows,
+        "Operator must be able to process at least one row format")
+      assert(!hasSafeInputs || canProcessSafeRows,
+        "Operator will receive safe rows as input but cannot process safe rows")
+      assert(!hasUnsafeInputs || canProcessUnsafeRows,
+        "Operator will receive unsafe rows as input but cannot process unsafe rows")
+    }
     RDDOperationScope.withScope(sparkContext, nodeName, false, true) {
       doExecute()
     }
@@ -142,8 +165,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
       val p = partsScanned until math.min(partsScanned + numPartsToTry, totalParts)
       val sc = sqlContext.sparkContext
       val res =
-        sc.runJob(childRDD, (it: Iterator[InternalRow]) => it.take(left).toArray, p,
-          allowLocal = false)
+        sc.runJob(childRDD, (it: Iterator[InternalRow]) => it.take(left).toArray, p)
 
       res.foreach(buf ++= _.take(n - buf.size))
       partsScanned += numPartsToTry
@@ -239,14 +261,10 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
 }
 
 private[sql] trait LeafNode extends SparkPlan {
-  self: Product =>
-
   override def children: Seq[SparkPlan] = Nil
 }
 
 private[sql] trait UnaryNode extends SparkPlan {
-  self: Product =>
-
   def child: SparkPlan
 
   override def children: Seq[SparkPlan] = child :: Nil
@@ -255,8 +273,6 @@ private[sql] trait UnaryNode extends SparkPlan {
 }
 
 private[sql] trait BinaryNode extends SparkPlan {
-  self: Product =>
-
   def left: SparkPlan
   def right: SparkPlan
 
