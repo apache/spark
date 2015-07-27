@@ -71,7 +71,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
         case BinaryType =>
           s" + (${exprs(i).isNull} ? 0 : $BinaryWriter.getSize(${exprs(i).primitive}))"
         case IntervalType =>
-          s" + (${exprs(i).isNull} ? 0 : 16"
+          s" + (${exprs(i).isNull} ? 0 : 16)"
         case _ => ""
       }
     }.mkString("")
