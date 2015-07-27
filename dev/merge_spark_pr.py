@@ -363,7 +363,7 @@ def main():
     global original_head
 
     os.chdir(SPARK_HOME)
-    original_head = run_cmd("git rev-parse HEAD")[:8]
+    original_head = run_cmd("git rev-parse --abbrev-ref HEAD").replace("\n", "")
 
     branches = get_json("%s/branches" % GITHUB_API_BASE)
     branch_names = filter(lambda x: x.startswith("branch-"), [x['name'] for x in branches])
