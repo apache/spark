@@ -144,9 +144,7 @@ case class Exchange(newPartitioning: Partitioning, child: SparkPlan) extends Una
   protected override def doExecute(): RDD[InternalRow] = attachTree(this , "execute") {
     val rdd = child.execute()
     val part: Partitioner = newPartitioning match {
-      case NullSafeHashPartitioning(expressions, numPartitions) =>
-        new HashPartitioner(numPartitions)
-      case NullUnsafeHashPartitioning(expressions, numPartitions) =>
+      case HashPartitioning(expressions, numPartitions, _) =>
         new HashPartitioner(numPartitions)
       case RangePartitioning(sortingExpressions, numPartitions) =>
         // Internally, RangePartitioner runs a job on the RDD that samples keys to compute
@@ -166,7 +164,7 @@ case class Exchange(newPartitioning: Partitioning, child: SparkPlan) extends Una
       // TODO: Handle BroadcastPartitioning.
     }
     def getPartitionKeyExtractor(): InternalRow => InternalRow = newPartitioning match {
-      case NullSafeHashPartitioning(expressions, _) =>
+      case HashPartitioning(expressions, _, true) =>
         // Since NullSafeHashPartitioning and NullUnsafeHashPartitioning may be used together
         // for a join operator. We need to make sure they calculate the partition id with
         // the same way.
@@ -180,7 +178,7 @@ case class Exchange(newPartitioning: Partitioning, child: SparkPlan) extends Una
           newMutableProjection(partitionId :: Nil, partitionExpressionSchema)()
         (row: InternalRow) => partitionIdExtractor(materalizeExpressions(row))
         // newMutableProjection(expressions, child.output)()
-      case NullUnsafeHashPartitioning(expressions, numPartition) =>
+      case HashPartitioning(expressions, numPartition, false) =>
         // For NullUnsafeHashPartitioning, we do not want to send rows having any expression
         // in `expressions` evaluated as null to the same node.
         val materalizeExpressions = newMutableProjection(expressions, child.output)()
@@ -314,21 +312,21 @@ private[sql] case class EnsureRequirements(sqlContext: SQLContext) extends Rule[
           case (AllTuples, rowOrdering, child) =>
             addOperatorsIfNecessary(SinglePartition, rowOrdering, child)
 
-          case (NullSafeClusteredDistribution(clustering), rowOrdering, child) =>
+          case (ClusteredDistribution(clustering, true), rowOrdering, child) =>
             addOperatorsIfNecessary(
-              NullSafeHashPartitioning(clustering, numPartitions),
+              HashPartitioning(clustering, numPartitions),
               rowOrdering,
               child)
 
-          case (NullUnsafeClusteredDistribution(clustering), rowOrdering, child) =>
+          case (ClusteredDistribution(clustering, false), rowOrdering, child) =>
             if (advancedSqlOptimizations) {
               addOperatorsIfNecessary(
-                NullUnsafeHashPartitioning(clustering, numPartitions),
+                HashPartitioning(clustering, numPartitions, false),
                 rowOrdering,
                 child)
             } else {
               addOperatorsIfNecessary(
-                NullSafeHashPartitioning(clustering, numPartitions),
+                HashPartitioning(clustering, numPartitions),
                 rowOrdering,
                 child)
             }

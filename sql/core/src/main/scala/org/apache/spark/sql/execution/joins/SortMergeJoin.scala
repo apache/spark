@@ -44,7 +44,7 @@ case class SortMergeJoin(
     PartitioningCollection(Seq(left.outputPartitioning, right.outputPartitioning))
 
   override def requiredChildDistribution: Seq[Distribution] =
-    NullUnsafeClusteredDistribution(leftKeys) :: NullUnsafeClusteredDistribution(rightKeys) :: Nil
+    ClusteredDistribution(leftKeys) :: ClusteredDistribution(rightKeys) :: Nil
 
   // this is to manually construct an ordering that can be used to compare keys from both sides
   private val keyOrdering: RowOrdering = RowOrdering.forSchema(leftKeys.map(_.dataType))

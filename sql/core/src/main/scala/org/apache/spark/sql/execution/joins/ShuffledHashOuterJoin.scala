@@ -44,22 +44,22 @@ case class ShuffledHashOuterJoin(
   // It is a heuristic. We use NullUnsafeClusteredDistribution to
   // let input rows that will have a match distributed evenly.
   override def requiredChildDistribution: Seq[Distribution] =
-    NullUnsafeClusteredDistribution(leftKeys) ::
-      NullUnsafeClusteredDistribution(rightKeys) :: Nil
+    ClusteredDistribution(leftKeys, nullSafe = false) ::
+      ClusteredDistribution(rightKeys, nullSafe = false) :: Nil
 
   override def outputPartitioning: Partitioning = joinType match {
     case LeftOuter =>
       val partitions =
-        Seq(left.outputPartitioning, right.outputPartitioning.toNullUnsafePartitioning)
+        Seq(left.outputPartitioning, right.outputPartitioning.withNullSafeSetting(true))
       PartitioningCollection(partitions)
     case RightOuter =>
       val partitions =
-        Seq(right.outputPartitioning, left.outputPartitioning.toNullUnsafePartitioning)
+        Seq(right.outputPartitioning, left.outputPartitioning.withNullSafeSetting(true))
       PartitioningCollection(partitions)
     case FullOuter =>
       val partitions =
-        Seq(left.outputPartitioning.toNullUnsafePartitioning,
-          right.outputPartitioning.toNullUnsafePartitioning)
+        Seq(left.outputPartitioning.withNullSafeSetting(true),
+          right.outputPartitioning.withNullSafeSetting(true))
       PartitioningCollection(partitions)
     case x =>
       throw new IllegalArgumentException(s"HashOuterJoin should not take $x as the JoinType")

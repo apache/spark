@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
-import org.apache.spark.sql.catalyst.plans.physical.{AllTuples, NullSafeClusteredDistribution, Distribution, UnspecifiedDistribution}
+import org.apache.spark.sql.catalyst.plans.physical.{AllTuples, ClusteredDistribution, Distribution, UnspecifiedDistribution}
 import org.apache.spark.sql.execution.{SparkPlan, UnaryNode}
 
 case class Aggregate2Sort(
@@ -49,7 +49,7 @@ case class Aggregate2Sort(
   override def requiredChildDistribution: List[Distribution] = {
     requiredChildDistributionExpressions match {
       case Some(exprs) if exprs.length == 0 => AllTuples :: Nil
-      case Some(exprs) if exprs.length > 0 => NullSafeClusteredDistribution(exprs) :: Nil
+      case Some(exprs) if exprs.length > 0 => ClusteredDistribution(exprs) :: Nil
       case None => UnspecifiedDistribution :: Nil
     }
   }
@@ -144,7 +144,7 @@ case class FinalAndCompleteAggregate2Sort(
     if (groupingExpressions.isEmpty) {
       AllTuples :: Nil
     } else {
-      NullSafeClusteredDistribution(groupingExpressions) :: Nil
+      ClusteredDistribution(groupingExpressions) :: Nil
     }
   }
 
