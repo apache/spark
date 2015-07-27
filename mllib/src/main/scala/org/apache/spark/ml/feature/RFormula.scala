@@ -17,6 +17,9 @@
 
 package org.apache.spark.ml.feature
 
+import scala.collection.mutable.ArrayBuffer
+import scala.util.parsing.combinator.RegexParsers
+
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.ml.{Estimator, Model, Transformer, Pipeline, PipelineModel, PipelineStage}
 import org.apache.spark.ml.param.{Param, ParamMap}
@@ -86,26 +89,26 @@ class RFormula(override val uid: String) extends Estimator[RFormulaModel] with R
     val fittedFormula = parsedFormula.get.fit(dataset.schema)
     // StringType terms and terms representing interactions need to be encoded before assembly.
     // TODO(ekl) add support for feature interactions
-    var encoderStages = Seq[PipelineStage]()
-    var tempColumns = Seq[String]()
+    var encoderStages = ArrayBuffer[PipelineStage]()
+    var tempColumns = ArrayBuffer[String]()
     val encodedTerms = fittedFormula.terms.map { term =>
       dataset.schema(term) match {
         case column if column.dataType == StringType =>
           val indexCol = term + "_idx_" + uid
           val encodedCol = term + "_onehot_" + uid
-          encoderStages :+= new StringIndexer().setInputCol(term).setOutputCol(indexCol)
-          encoderStages :+= new OneHotEncoder().setInputCol(indexCol).setOutputCol(encodedCol)
-          tempColumns :+= indexCol
-          tempColumns :+= encodedCol
+          encoderStages += new StringIndexer().setInputCol(term).setOutputCol(indexCol)
+          encoderStages += new OneHotEncoder().setInputCol(indexCol).setOutputCol(encodedCol)
+          tempColumns += indexCol
+          tempColumns += encodedCol
           encodedCol
         case _ =>
           term
       }
     }
-    encoderStages :+= new VectorAssembler(uid)
+    encoderStages += new VectorAssembler(uid)
       .setInputCols(encodedTerms.toArray)
       .setOutputCol($(featuresCol))
-    encoderStages :+= new ColumnPruner(tempColumns.toSet)
+    encoderStages += new ColumnPruner(tempColumns.toSet)
     val pipelineModel = new Pipeline(uid).setStages(encoderStages.toArray).fit(dataset)
     copyValues(new RFormulaModel(uid, fittedFormula, pipelineModel).setParent(this))
   }
@@ -126,11 +129,13 @@ class RFormula(override val uid: String) extends Estimator[RFormulaModel] with R
 }
 
 /**
+ * :: Experimental ::
  * A fitted RFormula. Fitting is required to determine the factor levels of formula terms.
  * @param fittedFormula the fitted R formula.
  * @param pipelineModel the fitted feature model, including factor to index mappings.
  */
-private[feature] class RFormulaModel(
+@Experimental
+class RFormulaModel private[feature](
     override val uid: String,
     fittedFormula: FittedRFormula,
     pipelineModel: PipelineModel)
@@ -197,12 +202,15 @@ private[feature] class RFormulaModel(
  */
 private class ColumnPruner(columnsToPrune: Set[String]) extends Transformer {
   override val uid = Identifiable.randomUID("columnPruner")
+
   override def transform(dataset: DataFrame): DataFrame = {
     val columnsToKeep = dataset.columns.filter(!columnsToPrune.contains(_))
     dataset.select(columnsToKeep.map(dataset.col) : _*)
   }
+
   override def transformSchema(schema: StructType): StructType = {
     StructType(schema.fields.filter(col => !columnsToPrune.contains(col.name)))
   }
+
   override def copy(extra: ParamMap): ColumnPruner = defaultCopy(extra)
 }
