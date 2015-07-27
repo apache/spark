@@ -26,13 +26,13 @@ import org.apache.spark.unsafe.types.UTF8String
 
 class UnsafeRowConcatSuite extends SparkFunSuite {
   test("null bit set") {
-    def fillRow(row: UnsafeRow, nulls: Set[Int]) = {
+    def fillRow(row: UnsafeRow, nulls: Set[Int]): Unit = {
       (0 to row.numFields() -1).foreach { i =>
         if (nulls.contains(i)) row.setNullAt(i) else row.setDouble(i, 0.0)
       }
     }
     def checkResultNulls(left: UnsafeRow, right: UnsafeRow,
-        leftNulls: Set[Int], rightNulls: Set[Int], rowConcat: UnsafeRowConcat) = {
+        leftNulls: Set[Int], rightNulls: Set[Int], rowConcat: UnsafeRowConcat): Unit = {
       fillRow(left, leftNulls)
       fillRow(right, rightNulls)
       val result = rowConcat.concat(left, right)
