@@ -252,7 +252,7 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
          |CREATE TABLE src_thrift(fake INT)
          |ROW FORMAT SERDE '${classOf[ThriftDeserializer].getName}'
          |WITH SERDEPROPERTIES(
-         |  'serialization.class'='org.apache.spark.sql.hive.test.Complex',
+         |  'serialization.class'='org.apache.hadoop.hive.serde2.thrift.test.Complex',
          |  'serialization.format'='${classOf[TBinaryProtocol].getName}'
          |)
          |STORED AS
