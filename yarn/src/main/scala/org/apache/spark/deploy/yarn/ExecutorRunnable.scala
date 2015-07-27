@@ -86,10 +86,15 @@ class ExecutorRunnable(
     val commands = prepareCommand(masterAddress, slaveId, hostname, executorMemory, executorCores,
       appId, localResources)
 
-    logInfo(s"Setting up executor with environment: $env")
-    logInfo("Setting up executor with commands: " + commands)
-    ctx.setCommands(commands)
+    logInfo("===============================================================================")
+    logInfo("Yarn executor launch context:")
+    logInfo("    env:")
+    env.foreach { case (k, v) => logInfo(s"        $k -> $v") }
+    logInfo("    command:")
+    logInfo(s"        ${commands.mkString(" ")}")
+    logInfo("===============================================================================")
 
+    ctx.setCommands(commands)
     ctx.setApplicationACLs(YarnSparkHadoopUtil.getApplicationAclsForYarn(securityMgr))
 
     // If external shuffle service is enabled, register with the Yarn shuffle service already
