@@ -36,7 +36,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
 
 private[parquet] class CatalystWriteSupport extends WriteSupport[InternalRow] with Logging {
-  type ValueConsumer = (InternalRow, Int) => Unit
+  type ValueWriter = (InternalRow, Int) => Unit
 
   private var schema: StructType = _
 
@@ -82,13 +82,13 @@ private[parquet] class CatalystWriteSupport extends WriteSupport[InternalRow] wi
   }
 
   private def writeFields(row: InternalRow, schema: StructType): Unit = {
-    val consumers = schema.map(_.dataType).map(makeConsumer)
+    val writers = schema.map(_.dataType).map(makeWriter)
     var i = 0
 
     while (i < row.numFields) {
       if (!row.isNullAt(i)) {
         consumeField(schema(i).name, i) {
-          consumers(i).apply(row, i)
+          writers(i).apply(row, i)
         }
       }
 
@@ -96,7 +96,7 @@ private[parquet] class CatalystWriteSupport extends WriteSupport[InternalRow] wi
     }
   }
 
-  private def makeConsumer(dataType: DataType): ValueConsumer = {
+  private def makeWriter(dataType: DataType): ValueWriter = {
     dataType match {
       case BooleanType =>
         (row: InternalRow, ordinal: Int) =>
@@ -168,41 +168,44 @@ private[parquet] class CatalystWriteSupport extends WriteSupport[InternalRow] wi
           consumeGroup(writeFields(row.getStruct(ordinal, fields.length), structType))
 
       case arrayType: ArrayType if followParquetFormatSpec =>
-        makeStandardArrayConsumer(arrayType.elementType)
+        makeStandardArrayWriter(arrayType.elementType)
 
       case arrayType: ArrayType if !followParquetFormatSpec =>
-        makeLegacyArrayConsumer(arrayType.elementType, arrayType.containsNull)
+        makeLegacyArrayWriter(arrayType.elementType, arrayType.containsNull)
 
       case mapType: MapType if followParquetFormatSpec =>
-        makeMapConsumer(mapType.keyType, mapType.valueType, "key_value")
+        makeMapWriter(mapType.keyType, mapType.valueType, "key_value")
 
       case mapType: MapType if !followParquetFormatSpec =>
-        makeMapConsumer(mapType.keyType, mapType.valueType, "map")
+        makeMapWriter(mapType.keyType, mapType.valueType, "map")
+
+      case udt: UserDefinedType[_] =>
+        makeWriter(udt.sqlType)
 
       case _ =>
         sys.error(s"Unsupported data type $dataType.")
     }
   }
 
-  private def makeStandardArrayConsumer(elementType: DataType): ValueConsumer = {
-    makeThreeLevelArrayConsumer(elementType, "list", "element")
+  private def makeStandardArrayWriter(elementType: DataType): ValueWriter = {
+    makeThreeLevelArrayWriter(elementType, "list", "element")
   }
 
-  private def makeLegacyArrayConsumer(
+  private def makeLegacyArrayWriter(
       elementType: DataType,
-      containsNull: Boolean): ValueConsumer = {
+      containsNull: Boolean): ValueWriter = {
     if (containsNull) {
-      makeThreeLevelArrayConsumer(elementType, "bag", "array")
+      makeThreeLevelArrayWriter(elementType, "bag", "array")
     } else {
-      makeTwoLevelArrayConsumer(elementType, "array")
+      makeTwoLevelArrayWriter(elementType, "array")
     }
   }
 
-  private def makeThreeLevelArrayConsumer(
+  private def makeThreeLevelArrayWriter(
       elementType: DataType,
       repeatedGroupName: String,
-      elementFieldName: String): ValueConsumer = {
-    val elementConsumer = makeConsumer(elementType)
+      elementFieldName: String): ValueWriter = {
+    val elementWriter = makeWriter(elementType)
     val mutableRow = new SpecificMutableRow(elementType :: Nil)
 
     (row: InternalRow, ordinal: Int) => {
@@ -215,7 +218,7 @@ private[parquet] class CatalystWriteSupport extends WriteSupport[InternalRow] wi
             consumeGroup {
               if (array(i) != null) {
                 mutableRow.update(0, array(i))
-                consumeField(elementFieldName, 0)(elementConsumer.apply(mutableRow, 0))
+                consumeField(elementFieldName, 0)(elementWriter.apply(mutableRow, 0))
               }
             }
 
@@ -226,10 +229,10 @@ private[parquet] class CatalystWriteSupport extends WriteSupport[InternalRow] wi
     }
   }
 
-  private def makeTwoLevelArrayConsumer(
+  private def makeTwoLevelArrayWriter(
       elementType: DataType,
-      repeatedFieldName: String): ValueConsumer = {
-    val elementConsumer = makeConsumer(elementType)
+      repeatedFieldName: String): ValueWriter = {
+    val elementWriter = makeWriter(elementType)
     val mutableRow = new SpecificMutableRow(elementType :: Nil)
 
     (row: InternalRow, ordinal: Int) => {
@@ -240,7 +243,7 @@ private[parquet] class CatalystWriteSupport extends WriteSupport[InternalRow] wi
 
           while (i < array.length) {
             mutableRow.update(0, array(i))
-            elementConsumer.apply(mutableRow, 0)
+            elementWriter.apply(mutableRow, 0)
             i += 1
           }
         }
@@ -248,12 +251,12 @@ private[parquet] class CatalystWriteSupport extends WriteSupport[InternalRow] wi
     }
   }
 
-  private def makeMapConsumer(
+  private def makeMapWriter(
       keyType: DataType,
       valueType: DataType,
-      repeatedGroupName: String): ValueConsumer = {
-    val keyConsumer = makeConsumer(keyType)
-    val valueConsumer = makeConsumer(valueType)
+      repeatedGroupName: String): ValueWriter = {
+    val keyWriter = makeWriter(keyType)
+    val valueWriter = makeWriter(valueType)
     val mutableRow = new SpecificMutableRow(keyType :: valueType :: Nil)
 
     (row: InternalRow, ordinal: Int) => {
@@ -263,10 +266,10 @@ private[parquet] class CatalystWriteSupport extends WriteSupport[InternalRow] wi
           for ((key, value) <- map) {
             consumeGroup {
               mutableRow.update(0, key)
-              consumeField("key", 0)(keyConsumer.apply(mutableRow, 0))
+              consumeField("key", 0)(keyWriter.apply(mutableRow, 0))
               if (value != null) {
                 mutableRow.update(1, value)
-                consumeField("value", 1)(valueConsumer.apply(mutableRow, 1))
+                consumeField("value", 1)(valueWriter.apply(mutableRow, 1))
               }
             }
           }
