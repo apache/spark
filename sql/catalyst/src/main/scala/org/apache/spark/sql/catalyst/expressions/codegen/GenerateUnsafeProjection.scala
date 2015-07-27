@@ -130,9 +130,9 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
   }
 
   /**
-   * Generates the Java code to convert a struct (backed by InternalRow) into UnsafeRow.
+   * Generates the Java code to convert a struct (backed by InternalRow) to UnsafeRow.
    *
-   * This function also handles nested structs by recursively generating the code to
+   * This function also handles nested structs by recursively generating the code to do conversion.
    *
    * @param ctx code generation context
    * @param input the input struct, identified by a [[GeneratedExpressionCode]]
