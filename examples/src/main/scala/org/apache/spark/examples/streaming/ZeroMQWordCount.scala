@@ -57,7 +57,6 @@ object SimpleZeroMQPublisher {
   }
 }
 
-// scalastyle:off
 /**
  * A sample wordcount with ZeroMQStream stream
  *
@@ -75,7 +74,6 @@ object SimpleZeroMQPublisher {
  *    `$ bin/run-example \
  *      org.apache.spark.examples.streaming.ZeroMQWordCount tcp://127.0.1.1:1234 foo`
  */
-// scalastyle:on
 object ZeroMQWordCount {
   def main(args: Array[String]) {
     if (args.length < 2) {

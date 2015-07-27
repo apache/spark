@@ -38,10 +38,10 @@ class ZeroMQStreamSuite extends SparkFunSuite {
     val ssc = new StreamingContext(master, framework, batchDuration)
     val publishUrl = "abc"
     val subscribe = new Subscribe(null.asInstanceOf[ByteString])
-    val bytesToObjects = (bytes: Seq[ByteString]) => null.asInstanceOf[Iterator[String]]
+    val bytesToObjects = (bytes: Seq[ByteString]) => null: Iterator[String]
     // tests the API, does not actually test data receiving
     val test1: ReceiverInputDStream[String] =
-      ZeroMQUtils.createStream(ssc, () => null, publishUrl, subscribe, bytesToObjects)
+      ZeroMQUtils.createStream[String](ssc, () => null, publishUrl, subscribe, bytesToObjects)
     val test2: ReceiverInputDStream[String] = ZeroMQUtils.createStream(
       ssc, () => null, publishUrl, subscribe, bytesToObjects, StorageLevel.MEMORY_AND_DISK_SER_2)
     val test3: ReceiverInputDStream[String] = ZeroMQUtils.createStream(

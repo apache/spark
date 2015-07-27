@@ -24,6 +24,7 @@ import akka.actor.{ActorSystem, Props, SupervisorStrategy}
 import akka.util.ByteString
 import akka.zeromq.Subscribe
 
+import org.apache.spark.SparkEnv
 import org.apache.spark.api.java.function.{Function => JFunction}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.StreamingContext
@@ -34,15 +35,45 @@ import org.apache.spark.streaming.akka.{ActorSystemFactory, ActorSupervisorStrat
 object ZeroMQUtils {
   /**
    * Create an input stream that receives messages pushed by a zeromq publisher.
-   * @param ssc            StreamingContext object
-   * @param publisherUrl   Url of remote zeromq publisher
-   * @param subscribe      Topic to subscribe to
+   * @param ssc StreamingContext object
+   * @param publisherUrl Url of remote zeromq publisher
+   * @param subscribe Topic to subscribe to
    * @param bytesToObjects A zeroMQ stream publishes sequence of frames for each topic
    *                       and each frame has sequence of byte thus it needs the converter
    *                       (which might be deserializer of bytes) to translate from sequence
    *                       of sequence of bytes, where sequence refer to a frame
    *                       and sub sequence refer to its payload.
-   * @param storageLevel   RDD storage level. Defaults to StorageLevel.MEMORY_AND_DISK_SER_2.
+   * @param storageLevel RDD storage level. Defaults to StorageLevel.MEMORY_AND_DISK_SER_2.
+   * @param supervisorStrategy the supervisor strategy (default:
+   *                           ActorSupervisorStrategy.defaultStrategy)
+   */
+  @deprecated("Use createStream with actorSystemCreator instead", "1.5.0")
+  def createStream[T: ClassTag](
+      ssc: StreamingContext,
+      publisherUrl: String,
+      subscribe: Subscribe,
+      bytesToObjects: Seq[ByteString] => Iterator[T],
+      storageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK_SER_2,
+      supervisorStrategy: SupervisorStrategy = ActorSupervisorStrategy.defaultStrategy
+    ): ReceiverInputDStream[T] = {
+    createStream(ssc, () => SparkEnv.get.actorSystem, publisherUrl, subscribe, bytesToObjects,
+      storageLevel, supervisorStrategy)
+  }
+
+  /**
+   * Create an input stream that receives messages pushed by a zeromq publisher.
+   * @param ssc StreamingContext object
+   * @param actorSystemCreator a function to create ActorSystem in executors
+   * @param publisherUrl Url of remote zeromq publisher
+   * @param subscribe Topic to subscribe to
+   * @param bytesToObjects A zeroMQ stream publishes sequence of frames for each topic
+   *                       and each frame has sequence of byte thus it needs the converter
+   *                       (which might be deserializer of bytes) to translate from sequence
+   *                       of sequence of bytes, where sequence refer to a frame
+   *                       and sub sequence refer to its payload.
+   * @param storageLevel RDD storage level. Defaults to StorageLevel.MEMORY_AND_DISK_SER_2.
+   * @param supervisorStrategy the supervisor strategy (default:
+   *                           ActorSupervisorStrategy.defaultStrategy)
    */
   def createStream[T: ClassTag](
       ssc: StreamingContext,
@@ -52,7 +83,7 @@ object ZeroMQUtils {
       bytesToObjects: Seq[ByteString] => Iterator[T],
       storageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK_SER_2,
       supervisorStrategy: SupervisorStrategy = ActorSupervisorStrategy.defaultStrategy
-    ): ReceiverInputDStream[T] = {
+      ): ReceiverInputDStream[T] = {
     val cleanF = ssc.sc.clean(bytesToObjects)
     AkkaUtils.createStream[T](ssc, actorSystemCreator,
       Props(new ZeroMQReceiver(publisherUrl, subscribe, cleanF)),
@@ -61,14 +92,44 @@ object ZeroMQUtils {
 
   /**
    * Create an input stream that receives messages pushed by a zeromq publisher.
-   * @param jssc           JavaStreamingContext object
-   * @param publisherUrl   Url of remote ZeroMQ publisher
-   * @param subscribe      Topic to subscribe to
+   * @param jssc JavaStreamingContext object
+   * @param publisherUrl Url of remote ZeroMQ publisher
+   * @param subscribe Topic to subscribe to
    * @param bytesToObjects A zeroMQ stream publishes sequence of frames for each topic and each
    *                       frame has sequence of byte thus it needs the converter(which might be
    *                       deserializer of bytes) to translate from sequence of sequence of bytes,
    *                       where sequence refer to a frame and sub sequence refer to its payload.
-   * @param storageLevel  Storage level to use for storing the received objects
+   * @param storageLevel Storage level to use for storing the received objects
+   * @param supervisorStrategy the supervisor strategy
+   */
+  @deprecated("Use createStream with actorSystemFactory instead", "1.5.0")
+  def createStream[T](
+      jssc: JavaStreamingContext,
+      publisherUrl: String,
+      subscribe: Subscribe,
+      bytesToObjects: JFunction[Array[Array[Byte]], java.lang.Iterable[T]],
+      storageLevel: StorageLevel,
+      supervisorStrategy: SupervisorStrategy
+      ): JavaReceiverInputDStream[T] = {
+    val actorSystemFactory = new ActorSystemFactory {
+      override def create(): ActorSystem = SparkEnv.get.actorSystem
+    }
+    createStream(jssc, actorSystemFactory, publisherUrl, subscribe, bytesToObjects, storageLevel,
+      supervisorStrategy)
+  }
+
+  /**
+   * Create an input stream that receives messages pushed by a zeromq publisher.
+   * @param jssc JavaStreamingContext object
+   * @param actorSystemFactory an ActorSystemFactory to create ActorSystem in executors
+   * @param publisherUrl Url of remote ZeroMQ publisher
+   * @param subscribe Topic to subscribe to
+   * @param bytesToObjects A zeroMQ stream publishes sequence of frames for each topic and each
+   *                       frame has sequence of byte thus it needs the converter(which might be
+   *                       deserializer of bytes) to translate from sequence of sequence of bytes,
+   *                       where sequence refer to a frame and sub sequence refer to its payload.
+   * @param storageLevel Storage level to use for storing the received objects
+   * @param supervisorStrategy the supervisor strategy
    */
   def createStream[T](
       jssc: JavaStreamingContext,
@@ -97,6 +158,32 @@ object ZeroMQUtils {
    *                       where sequence refer to a frame and sub sequence refer to its payload.
    * @param storageLevel   RDD storage level.
    */
+  @deprecated("Use createStream with actorSystemFactory instead", "1.5.0")
+  def createStream[T](
+      jssc: JavaStreamingContext,
+      publisherUrl: String,
+      subscribe: Subscribe,
+      bytesToObjects: JFunction[Array[Array[Byte]], java.lang.Iterable[T]],
+      storageLevel: StorageLevel
+      ): JavaReceiverInputDStream[T] = {
+    val actorSystemFactory = new ActorSystemFactory {
+      override def create(): ActorSystem = SparkEnv.get.actorSystem
+    }
+    createStream(jssc, actorSystemFactory, publisherUrl, subscribe, bytesToObjects, storageLevel)
+  }
+
+  /**
+   * Create an input stream that receives messages pushed by a zeromq publisher.
+   * @param jssc JavaStreamingContext object
+   * @param actorSystemFactory an ActorSystemFactory to create ActorSystem in executors
+   * @param publisherUrl Url of remote zeromq publisher
+   * @param subscribe Topic to subscribe to
+   * @param bytesToObjects A zeroMQ stream publishes sequence of frames for each topic and each
+   *                       frame has sequence of byte thus it needs the converter(which might be
+   *                       deserializer of bytes) to translate from sequence of sequence of bytes,
+   *                       where sequence refer to a frame and sub sequence refer to its payload.
+   * @param storageLevel RDD storage level.
+   */
   def createStream[T](
       jssc: JavaStreamingContext,
       actorSystemFactory: ActorSystemFactory,
@@ -117,6 +204,31 @@ object ZeroMQUtils {
    * @param jssc           JavaStreamingContext object
    * @param publisherUrl   Url of remote zeromq publisher
    * @param subscribe      Topic to subscribe to
+   * @param bytesToObjects A zeroMQ stream publishes sequence of frames for each topic and each
+   *                       frame has sequence of byte thus it needs the converter(which might
+   *                       be deserializer of bytes) to translate from sequence of sequence of
+   *                       bytes, where sequence refer to a frame and sub sequence refer to its
+   *                       payload.
+   */
+  @deprecated("Use createStream with actorSystemFactory instead", "1.5.0")
+  def createStream[T](
+      jssc: JavaStreamingContext,
+      publisherUrl: String,
+      subscribe: Subscribe,
+      bytesToObjects: JFunction[Array[Array[Byte]], java.lang.Iterable[T]]
+      ): JavaReceiverInputDStream[T] = {
+    val actorSystemFactory = new ActorSystemFactory {
+      override def create(): ActorSystem = SparkEnv.get.actorSystem
+    }
+    createStream(jssc, actorSystemFactory, publisherUrl, subscribe, bytesToObjects)
+  }
+
+  /**
+   * Create an input stream that receives messages pushed by a zeromq publisher.
+   * @param jssc  JavaStreamingContext object
+   * @param actorSystemFactory an ActorSystemFactory to create ActorSystem in executors
+   * @param publisherUrl Url of remote zeromq publisher
+   * @param subscribe Topic to subscribe to
    * @param bytesToObjects A zeroMQ stream publishes sequence of frames for each topic and each
    *                       frame has sequence of byte thus it needs the converter(which might
    *                       be deserializer of bytes) to translate from sequence of sequence of
