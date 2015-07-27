@@ -158,8 +158,7 @@ def initdb():
         session.add(
             models.Connection(
                 conn_id='http_default', conn_type='http',
-                host='http://www.google.com',
-                port=1433))
+                host='http://www.google.com'))
         session.commit()
 
     conn = session.query(C).filter(C.conn_id == 'mssql_default').first()
@@ -167,7 +166,7 @@ def initdb():
         session.add(
             models.Connection(
                 conn_id='mssql_default', conn_type='mssql',
-                host='localhost'))
+                host='localhost', port=1433))
         session.commit()
 
     # Known event types
