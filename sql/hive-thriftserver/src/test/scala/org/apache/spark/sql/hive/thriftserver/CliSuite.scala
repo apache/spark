@@ -23,6 +23,7 @@ import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Promise}
 import scala.sys.process.{Process, ProcessLogger}
+import scala.util.Failure
 
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.scalatest.BeforeAndAfter
@@ -50,7 +51,8 @@ class CliSuite extends SparkFunSuite with BeforeAndAfter with Logging {
 
   def runCliWithin(
       timeout: FiniteDuration,
-      extraArgs: Seq[String] = Seq.empty)(
+      extraArgs: Seq[String] = Seq.empty,
+      errorResponses: Seq[String] = Seq("Error:"))(
       queriesAndExpectedAnswers: (String, String)*): Unit = {
 
     val (queries, expectedAnswers) = queriesAndExpectedAnswers.unzip
@@ -81,6 +83,12 @@ class CliSuite extends SparkFunSuite with BeforeAndAfter with Logging {
         if (next == expectedAnswers.size) {
           foundAllExpectedAnswers.trySuccess(())
         }
+      } else {
+        errorResponses.map( r => {
+          if (line.startsWith(r)) {
+            foundAllExpectedAnswers.tryFailure(
+              new RuntimeException(s"Failed with error line '$line'"))
+          }})
       }
     }
 
@@ -88,8 +96,27 @@ class CliSuite extends SparkFunSuite with BeforeAndAfter with Logging {
     val process = (Process(command, None) #< queryStream).run(
       ProcessLogger(captureOutput("stdout"), captureOutput("stderr")))
 
+    // catch the output value
+    class exitCodeCatcher extends Runnable {
+      var exitValue = 0
+
+      override def run(): Unit = {
+        exitValue = process.exitValue()
+        if (exitValue != 0) {
+          foundAllExpectedAnswers.tryFailure(
+            new RuntimeException(s"Failed with exit code $exitValue"))
+        }
+      }
+    }
+    val codeCatcherThread = new Thread(new exitCodeCatcher())
+    codeCatcherThread.start()
+
     try {
-      Await.result(foundAllExpectedAnswers.future, timeout)
+      Await.ready(foundAllExpectedAnswers.future, timeout)
+      foundAllExpectedAnswers.future.value match {
+        case Some(Failure(t)) => throw t
+        case _ =>
+      }
     } catch { case cause: Throwable =>
       val message =
         s"""
