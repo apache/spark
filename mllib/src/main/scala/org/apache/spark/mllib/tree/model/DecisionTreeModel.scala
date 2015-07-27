@@ -17,6 +17,8 @@
 
 package org.apache.spark.mllib.tree.model
 
+import org.apache.spark.mllib.pmml.PMMLExportable
+
 import scala.collection.mutable
 
 import org.json4s._
@@ -42,7 +44,7 @@ import org.apache.spark.util.Utils
  * @param algo algorithm type -- classification or regression
  */
 @Experimental
-class DecisionTreeModel(val topNode: Node, val algo: Algo) extends Serializable with Saveable {
+class DecisionTreeModel(val topNode: Node, val algo: Algo) extends Serializable with Saveable with PMMLExportable{
 
   /**
    * Predict values for a single data point using the model trained.
