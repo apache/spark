@@ -210,6 +210,8 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
         """
     }.mkString("\n          ")
 
+    // Note that we add a shortcut here for performance: if the input is already an UnsafeRow,
+    // just copy the bytes directly into our buffer space without running any conversion.
     val code = s"""
        |${input.code}
        |if (!${input.isNull}) {
