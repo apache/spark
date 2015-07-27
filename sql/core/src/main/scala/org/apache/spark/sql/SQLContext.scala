@@ -21,9 +21,6 @@ import java.beans.Introspector
 import java.util.Properties
 import java.util.concurrent.atomic.AtomicReference
 
-import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.{expression, FunctionBuilder}
-import org.apache.spark.sql.execution.expressions.SparkPartitionID
-
 import scala.collection.JavaConversions._
 import scala.collection.immutable
 import scala.language.implicitConversions
@@ -34,6 +31,8 @@ import org.apache.spark.SparkContext
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.{expression => FunctionExpression, FunctionBuilder}
+import org.apache.spark.sql.execution.expressions.SparkPartitionID
 import org.apache.spark.sql.SQLConf.SQLConfEntry
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.errors.DialectException
@@ -141,14 +140,14 @@ class SQLContext(@transient val sparkContext: SparkContext)
   @transient
   protected[sql] lazy val catalog: Catalog = new SimpleCatalog(conf)
 
-  protected[sql] val extendedFunctions: Map[String, FunctionBuilder] = Map(
-    expression[SparkPartitionID]("spark__partition__id")
-  )
-
   // TODO how to handle the temp function per user session?
   @transient
   protected[sql] lazy val functionRegistry: FunctionRegistry = {
     val reg = FunctionRegistry.builtin
+    val extendedFunctions = List[(String, FunctionBuilder)](
+      FunctionExpression[SparkPartitionID]("spark__partition__id")
+    )
+
     extendedFunctions.foreach { case(name, fun) => reg.registerFunction(name, fun) }
     reg
   }
