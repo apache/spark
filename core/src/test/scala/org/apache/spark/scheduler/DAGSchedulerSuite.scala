@@ -17,8 +17,6 @@
 
 package org.apache.spark.scheduler
 
-import org.apache.spark.shuffle.MetadataFetchFailedException
-
 import scala.collection.mutable.{ArrayBuffer, HashSet, HashMap, Map}
 import scala.language.reflectiveCalls
 import scala.util.control.NonFatal
@@ -759,18 +757,21 @@ class DAGSchedulerSuite
 
     // check that we have all the map output for stage 0 (it should have been there even before
     // the last round of completions from stage 1, but just to double check it hasn't been messed
-    // up)
-    (0 until 3).foreach { reduceIdx =>
-      val arr = mapOutputTracker.getServerStatuses(0, reduceIdx)
-      assert(arr != null)
-      assert(arr.nonEmpty)
-    }
-
-    // and check we have all the map output for stage 1
-    (0 until 1).foreach { reduceIdx =>
-      val arr = mapOutputTracker.getServerStatuses(1, reduceIdx)
-      assert(arr != null)
-      assert(arr.nonEmpty)
+    // up) and also the newly available stage 1
+    val stageToReduceIdxs = Seq(
+      0 -> (0 until 3),
+      1 -> (0 until 1)
+    )
+    for {
+      (stage, reduceIdxs) <- stageToReduceIdxs
+      reduceIdx <- reduceIdxs
+    } {
+      // this would throw an exception if the map status hadn't been registered
+      val statuses = mapOutputTracker.getMapSizesByExecutorId(stage, reduceIdx)
+      // really we should have already thrown an exception rather than fail either of these
+      // asserts, but just to be extra defensive let's double check the statuses are OK
+      assert(statuses != null)
+      assert(statuses.nonEmpty)
     }
 
     // and check that stage 2 has been submitted
@@ -790,7 +791,7 @@ class DAGSchedulerSuite
    *        |      \       |
    *        |       \      |
    *        |        \     |
-   *   reduceRdd1    reduceRddi2
+   *   reduceRdd1    reduceRdd2
    *
    * We start both shuffleMapRdds and then fail shuffleMapRdd1.  As a result, the job listeners for
    * reduceRdd1 and reduceRdd2 should both be informed that the job failed.  shuffleMapRDD2 should
