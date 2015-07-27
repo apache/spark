@@ -461,6 +461,8 @@ private[sql] class SQLConf extends Serializable with CatalystConf {
 
   private[spark] def verifyPartitionPath: Boolean = getConf(HIVE_VERIFY_PARTITION_PATH)
 
+  private[spark] def metastorePartitionPruning: Boolean = getConf(HIVE_METASTORE_PARTITION_PRUNING)
+
   private[spark] def externalSortEnabled: Boolean = getConf(EXTERNAL_SORT)
 
   private[spark] def sortMergeJoinEnabled: Boolean = getConf(SORTMERGE_JOIN)
