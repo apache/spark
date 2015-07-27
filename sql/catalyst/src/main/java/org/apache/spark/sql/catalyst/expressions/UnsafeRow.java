@@ -255,6 +255,10 @@ public final class UnsafeRow extends MutableRow {
       return getDouble(ordinal);
     } else if (dataType instanceof DecimalType) {
       return getDecimal(ordinal);
+    } else if (dataType instanceof DateType) {
+      return getInt(ordinal);
+    } else if (dataType instanceof TimestampType) {
+      return getLong(ordinal);
     } else if (dataType instanceof StringType) {
       return getUTF8String(ordinal);
     } else if (dataType instanceof StructType) {

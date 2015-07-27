@@ -160,17 +160,20 @@ trait ExpressionEvalHelper {
       expected: Any,
       inputRow: InternalRow = EmptyRow): Unit = {
 
-    val plan = generateProject(
+    val project = generateProject(
       GenerateUnsafeProjection.generate(Alias(expression, s"Optimized($expression)")() :: Nil),
       expression)
+    val out = project(inputRow)
+    val input = if (inputRow == EmptyRow) "" else s", input: $inputRow"
 
-    val unsafeRow = plan(inputRow)
-    // UnsafeRow cannot be compared with GenericInternalRow directly
-    val actual = FromUnsafeProjection(expression.dataType :: Nil)(unsafeRow)
-    val expectedRow = InternalRow(expected)
-    if (actual != expectedRow) {
-      val input = if (inputRow == EmptyRow) "" else s", input: $inputRow"
-      fail(s"Incorrect Evaluation: $expression, actual: $actual, expected: $expectedRow$input")
+    if (expected == null) {
+      if (!out.isNullAt(0)) {
+        val actual = out.get(0, expression.dataType)
+        fail(s"Incorrect Evaluation: $expression, actual: $actual, expected: $expected$input")
+      }
+    } else if (out.get(0, expression.dataType) != expected) {
+      val actual = out.get(0, expression.dataType)
+      fail(s"Incorrect Evaluation: $expression, actual: $actual, expected: $expected$input")
     }
   }
 
@@ -200,8 +203,7 @@ trait ExpressionEvalHelper {
     plan = generateProject(
       GenerateUnsafeProjection.generate(Alias(expression, s"Optimized($expression)")() :: Nil),
       expression)
-    actual = FromUnsafeProjection(expression.dataType :: Nil)(
-      plan(inputRow)).get(0, expression.dataType)
+    actual = plan(inputRow).get(0, expression.dataType)
     assert(checkResult(actual, expected))
   }
 }
