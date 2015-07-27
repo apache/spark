@@ -99,7 +99,7 @@ class GenericInternalRow(protected[sql] val values: Array[Any]) extends Internal
 
   override def numFields: Int = values.length
 
-  override def get(i: Int): Any = values(i)
+  override def get(i: Int, dataType: DataType): Any = values(i)
 
   override def getStruct(ordinal: Int, numFields: Int): InternalRow = {
     values(ordinal).asInstanceOf[InternalRow]
@@ -130,7 +130,7 @@ class GenericMutableRow(val values: Array[Any]) extends MutableRow {
 
   override def numFields: Int = values.length
 
-  override def get(i: Int): Any = values(i)
+  override def get(i: Int, dataType: DataType): Any = values(i)
 
   override def getStruct(ordinal: Int, numFields: Int): InternalRow = {
     values(ordinal).asInstanceOf[InternalRow]
