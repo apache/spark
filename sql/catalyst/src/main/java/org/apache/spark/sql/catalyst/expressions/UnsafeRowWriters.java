@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions;
 
+import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.unsafe.PlatformDependent;
 import org.apache.spark.unsafe.array.ByteArrayMethods;
 import org.apache.spark.unsafe.types.ByteArray;
@@ -81,6 +82,43 @@ public class UnsafeRowWriters {
     }
   }
 
+  /** Writer for struct type. */
+  public static class StructWriter {
+    public static int getSize(InternalRow input) {
+      int numBytes = 0;
+      if (input instanceof UnsafeRow) {
+        numBytes = ((UnsafeRow) input).getSizeInBytes();
+      } else {
+        throw new UnsupportedOperationException();
+      }
+      return ByteArrayMethods.roundNumberOfBytesToNearestWord(numBytes);
+    }
+
+    public static int write(UnsafeRow target, int ordinal, int cursor, InternalRow input) {
+      int numBytes = 0;
+      final long offset = target.getBaseOffset() + cursor;
+      if (input instanceof UnsafeRow) {
+        final UnsafeRow row = (UnsafeRow) input;
+        numBytes = row.getSizeInBytes();
+
+        // zero-out the padding bytes
+        if ((numBytes & 0x07) > 0) {
+          PlatformDependent.UNSAFE.putLong(
+            target.getBaseObject(), offset + ((numBytes >> 3) << 3), 0L);
+        }
+
+        // Write the string to the variable length portion.
+        row.writeToMemory(target.getBaseObject(), offset);
+
+        // Set the fixed length portion.
+        target.setLong(ordinal, (((long) cursor) << 32) | ((long) numBytes));
+      } else {
+        throw new UnsupportedOperationException();
+      }
+      return ByteArrayMethods.roundNumberOfBytesToNearestWord(numBytes);
+    }
+  }
+
   /** Writer for interval type. */
   public static class IntervalWriter {
 
@@ -96,5 +134,4 @@ public class UnsafeRowWriters {
       return 16;
     }
   }
-
 }

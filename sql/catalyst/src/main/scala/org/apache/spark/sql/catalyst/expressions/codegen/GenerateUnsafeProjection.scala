@@ -34,13 +34,114 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
   private val StringWriter = classOf[UnsafeRowWriters.UTF8StringWriter].getName
   private val BinaryWriter = classOf[UnsafeRowWriters.BinaryWriter].getName
   private val IntervalWriter = classOf[UnsafeRowWriters.IntervalWriter].getName
+  private val StructWriter = classOf[UnsafeRowWriters.StructWriter].getName
 
   /** Returns true iff we support this data type. */
   def canSupport(dataType: DataType): Boolean = dataType match {
     case t: AtomicType if !t.isInstanceOf[DecimalType] => true
     case _: IntervalType => true
+    case t: StructType => t.toSeq.forall(field => canSupport(field.dataType))
     case NullType => true
     case _ => false
+  }
+
+  private def createCodeForStruct(
+      ctx: CodeGenContext,
+      input: GeneratedExpressionCode,
+      dataType: StructType): GeneratedExpressionCode = {
+
+    val isNull = input.isNull
+    val primitive = ctx.freshName("structConvert")
+    ctx.addMutableState("UnsafeRow", primitive, s"$primitive = new UnsafeRow();")
+    val bufferTerm = ctx.freshName("buffer")
+    ctx.addMutableState("byte[]", bufferTerm, s"$bufferTerm = new byte[64];")
+    val cursorTerm = ctx.freshName("cursor")
+
+    val exprs: Seq[GeneratedExpressionCode] = dataType.map(_.dataType).zipWithIndex.map {
+      case (dt, i) => dt match {
+      case st: StructType =>
+        val nestedStructEv = GeneratedExpressionCode(
+          code = "",
+          isNull = s"${input.primitive}.isNullAt($i)",
+          primitive = s"${ctx.getColumn(input.primitive, dt, i)}"
+        )
+        createCodeForStruct(ctx, nestedStructEv, st)
+      case _ =>
+        GeneratedExpressionCode(
+          code = "",
+          isNull = s"${input.primitive}.isNullAt($i)",
+          primitive = s"${ctx.getColumn(input.primitive, dt, i)}"
+        )
+      }
+    }
+    val allExprs = exprs.map(_.code).mkString("\n")
+
+    val fixedSize = 8 * exprs.length + UnsafeRow.calculateBitSetWidthInBytes(exprs.length)
+    val additionalSize = dataType.toSeq.map(_.dataType).zip(exprs).map { case (dt, ev) =>
+      dt match {
+        case StringType =>
+          s" + (${ev.isNull} ? 0 : $StringWriter.getSize(${ev.primitive}))"
+        case BinaryType =>
+          s" + (${ev.isNull} ? 0 : $BinaryWriter.getSize(${ev.primitive}))"
+        case _: StructType =>
+          s" + (${ev.isNull} ? 0 : $StructWriter.getSize(${ev.primitive}))"
+        case IntervalType =>
+          s" + (${ev.isNull} ? 0 : 16)"
+        case _ => ""
+      }
+    }.mkString("")
+
+    val writers = dataType.toSeq.map(_.dataType).zip(exprs).zipWithIndex.map { case ((dt, ev), i) =>
+      val update = dt match {
+        case _ if ctx.isPrimitiveType(dt) =>
+          s"${ctx.setColumn(primitive, dt, i, exprs(i).primitive)}"
+        case StringType =>
+          s"$cursorTerm += $StringWriter.write($primitive, $i, $cursorTerm, ${exprs(i).primitive})"
+        case BinaryType =>
+          s"$cursorTerm += $BinaryWriter.write($primitive, $i, $cursorTerm, ${exprs(i).primitive})"
+        case t: StructType =>
+          s"$cursorTerm += $StructWriter.write($primitive, $i, $cursorTerm, ${exprs(i).primitive})"
+        case t: StructType =>
+          s"$cursorTerm += $StructWriter.write($primitive, $i, $cursorTerm, ${exprs(i).primitive})"
+        case NullType => ""
+        case _ =>
+          throw new UnsupportedOperationException(s"Not supported DataType: $dt")
+      }
+      s"""
+          if (${exprs(i).isNull}) {
+            $primitive.setNullAt($i);
+          } else {
+            $update;
+          }
+        """
+    }.mkString("\n          ")
+
+    val code = s"""
+       |${input.code}
+       |if (!${input.isNull}) {
+       |  if (${input.primitive} instanceof UnsafeRow) {
+       |    $primitive = (UnsafeRow) ${input.primitive};
+       |  } else {
+       |    $allExprs
+       |
+       |    int numBytes = $fixedSize $additionalSize;
+       |    if (numBytes > $bufferTerm.length) {
+       |      $bufferTerm = new byte[numBytes];
+       |    }
+       |
+       |    $primitive.pointTo(
+       |      $bufferTerm,
+       |      org.apache.spark.unsafe.PlatformDependent.BYTE_ARRAY_OFFSET,
+       |      ${exprs.size},
+       |      numBytes);
+       |    int $cursorTerm = $fixedSize;
+       |
+       |    $writers
+       |  }
+       |}
+     """.stripMargin
+
+    GeneratedExpressionCode(code, isNull, primitive)
   }
 
   /**
@@ -60,10 +161,17 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
     val cursorTerm = ctx.freshName("cursor")
     val numBytesTerm = ctx.freshName("numBytes")
 
-    val exprs = expressions.map(_.gen(ctx))
+    val exprs = expressions.zipWithIndex.map { case (e, i) =>
+      e.dataType match {
+        case st: StructType =>
+          createCodeForStruct(ctx, e.gen(ctx), st)
+        case _ =>
+          e.gen(ctx)
+      }
+    }
     val allExprs = exprs.map(_.code).mkString("\n")
-    val fixedSize = 8 * exprs.length + UnsafeRow.calculateBitSetWidthInBytes(exprs.length)
 
+    val fixedSize = 8 * exprs.length + UnsafeRow.calculateBitSetWidthInBytes(exprs.length)
     val additionalSize = expressions.zipWithIndex.map { case (e, i) =>
       e.dataType match {
         case StringType =>
@@ -72,6 +180,8 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
           s" + (${exprs(i).isNull} ? 0 : $BinaryWriter.getSize(${exprs(i).primitive}))"
         case IntervalType =>
           s" + (${exprs(i).isNull} ? 0 : 16)"
+        case _: StructType =>
+          s" + (${exprs(i).isNull} ? 0 : $StructWriter.getSize(${exprs(i).primitive}))"
         case _ => ""
       }
     }.mkString("")
@@ -86,6 +196,8 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
           s"$cursorTerm += $BinaryWriter.write($ret, $i, $cursorTerm, ${exprs(i).primitive})"
         case IntervalType =>
           s"$cursorTerm += $IntervalWriter.write($ret, $i, $cursorTerm, ${exprs(i).primitive})"
+        case t: StructType =>
+          s"$cursorTerm += $StructWriter.write($ret, $i, $cursorTerm, ${exprs(i).primitive})"
         case NullType => ""
         case _ =>
           throw new UnsupportedOperationException(s"Not supported DataType: ${e.dataType}")
@@ -110,7 +222,6 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
         ${expressions.size},
         $numBytesTerm);
       int $cursorTerm = $fixedSize;
-
 
       $writers
       boolean ${ev.isNull} = false;

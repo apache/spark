@@ -50,7 +50,7 @@ case class BoundReference(ordinal: Int, dataType: DataType, nullable: Boolean)
         case BinaryType => input.getBinary(ordinal)
         case IntervalType => input.getInterval(ordinal)
         case t: StructType => input.getStruct(ordinal, t.size)
-        case dataType => input.get(ordinal, dataType)
+        case _ => input.get(ordinal, dataType)
       }
     }
   }
