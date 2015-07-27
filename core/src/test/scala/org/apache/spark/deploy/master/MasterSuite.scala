@@ -357,7 +357,7 @@ class MasterSuite extends SparkFunSuite with Matchers with Eventually with Priva
 
   private def makeMaster(conf: SparkConf = new SparkConf): Master = {
     val securityMgr = new SecurityManager(conf)
-    val rpcEnv = RpcEnv.create(Master.SYSTEM_NAME, "localhost", 7077, conf, securityMgr)
+    val rpcEnv = RpcEnv.create(Master.systemName, "localhost", 7077, conf, securityMgr)
     val master = new Master(rpcEnv, rpcEnv.address, 8080, securityMgr, conf)
     master
   }
