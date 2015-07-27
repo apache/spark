@@ -29,7 +29,7 @@ import org.apache.parquet.example.data.{Group, GroupWriter}
 import org.apache.parquet.hadoop.api.WriteSupport
 import org.apache.parquet.hadoop.api.WriteSupport.WriteContext
 import org.apache.parquet.hadoop.metadata.{CompressionCodecName, FileMetaData, ParquetMetadata}
-import org.apache.parquet.hadoop.{Footer, ParquetFileWriter, ParquetOutputCommitter, ParquetWriter}
+import org.apache.parquet.hadoop._
 import org.apache.parquet.io.api.RecordConsumer
 import org.apache.parquet.schema.{MessageType, MessageTypeParser}
 
@@ -203,14 +203,14 @@ class ParquetIOSuite extends QueryTest with ParquetTest {
   }
 
   test("compression codec") {
-    def compressionCodecFor(path: String): String = {
-      val codecs = readMetadata(new Path(path), configuration)
-        .getBlocks
-        .flatMap(_.getColumns)
-        .map(_.getCodec.name())
-        .distinct
+    def compressionCodecFor(path: String, codecName: String): String = {
+      val codecs = for {
+        footer <- readAllFootersWithoutSummaryFiles(new Path(path), configuration)
+        block <- footer.getParquetMetadata.getBlocks
+        column <- block.getColumns
+      } yield column.getCodec.name()
 
-      assert(codecs.size === 1)
+      assert(codecs.distinct === Seq(codecName))
       codecs.head
     }
 
@@ -220,7 +220,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest {
       withSQLConf(SQLConf.PARQUET_COMPRESSION.key -> codec.name()) {
         withParquetFile(data) { path =>
           assertResult(sqlContext.conf.parquetCompressionCodec.toUpperCase) {
-            compressionCodecFor(path)
+            compressionCodecFor(path, codec.name())
           }
         }
       }
@@ -282,9 +282,8 @@ class ParquetIOSuite extends QueryTest with ParquetTest {
       assert(fs.exists(new Path(path, ParquetFileWriter.PARQUET_COMMON_METADATA_FILE)))
       assert(fs.exists(new Path(path, ParquetFileWriter.PARQUET_METADATA_FILE)))
 
-      val metaData = readMetadata(path, configuration)
-      val actualSchema = metaData.getFileMetaData.getSchema
       val expectedSchema = new CatalystSchemaConverter(configuration).convert(schema)
+      val actualSchema = readFooter(path, configuration).getFileMetaData.getSchema
 
       actualSchema.checkContains(expectedSchema)
       expectedSchema.checkContains(actualSchema)

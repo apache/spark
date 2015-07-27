@@ -19,7 +19,7 @@ package org.apache.spark.sql.parquet
 
 import java.io.File
 
-import scala.collection.JavaConverters.{mapAsJavaMapConverter, seqAsJavaListConverter}
+import scala.collection.JavaConverters.{iterableAsScalaIterableConverter, mapAsJavaMapConverter, seqAsJavaListConverter}
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
 
@@ -30,7 +30,6 @@ import org.apache.parquet.hadoop.metadata.{BlockMetaData, FileMetaData, ParquetM
 import org.apache.parquet.hadoop.{Footer, ParquetFileReader, ParquetFileWriter}
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.{DataFrame, SaveMode}
@@ -117,19 +116,16 @@ private[sql] trait ParquetTest extends SQLTestUtils { this: SparkFunSuite =>
     ParquetFileWriter.writeMetadataFile(configuration, path, Seq(footer).asJava)
   }
 
-
-  def readMetadata(path: Path, configuration: Configuration): ParquetMetadata = {
-    val summaryFileNames = Seq(
-      ParquetFileWriter.PARQUET_METADATA_FILE,
-      ParquetFileWriter.PARQUET_COMMON_METADATA_FILE)
-
+  def readAllFootersWithoutSummaryFiles(
+      path: Path, configuration: Configuration): Seq[Footer] = {
     val fs = path.getFileSystem(configuration)
-    val leaves = SparkHadoopUtil.get.listLeafStatuses(fs, path).filter { f =>
-      val name = f.getPath.getName
-      name.startsWith(".") && name.startsWith("_") || summaryFileNames.contains(name)
-    }
+    ParquetFileReader.readAllFootersInParallel(configuration, fs.getFileStatus(path)).asScala.toSeq
+  }
 
+  def readFooter(path: Path, configuration: Configuration): ParquetMetadata = {
     ParquetFileReader.readFooter(
-      configuration, leaves.head, ParquetMetadataConverter.SKIP_ROW_GROUPS)
+      configuration,
+      new Path(path, ParquetFileWriter.PARQUET_METADATA_FILE),
+      ParquetMetadataConverter.NO_FILTER)
   }
 }

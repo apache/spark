@@ -78,13 +78,10 @@ private[parquet] class CatalystWriteSupport extends WriteSupport[InternalRow] wi
   }
 
   override def write(row: InternalRow): Unit = {
-    assert(row.numFields == schema.length)
-    recordConsumer.startMessage()
-    writeFields(row)
-    recordConsumer.endMessage()
+    consumeMessage(writeFields(row, schema))
   }
 
-  private def writeFields(row: InternalRow): Unit = {
+  private def writeFields(row: InternalRow, schema: StructType): Unit = {
     val consumers = schema.map(_.dataType).map(makeConsumer)
     var i = 0
 
@@ -145,9 +142,6 @@ private[parquet] class CatalystWriteSupport extends WriteSupport[InternalRow] wi
         (row: InternalRow, ordinal: Int) =>
           recordConsumer.addBinary(Binary.fromByteArray(row.getBinary(ordinal)))
 
-      case DecimalType.Unlimited =>
-        sys.error(s"Unsupported data type $dataType. Decimal precision must be specified.")
-
       case DecimalType.Fixed(precision, _) if precision > 18 =>
         sys.error(s"Unsupported data type $dataType. Decimal precision cannot be greater than 18.")
 
@@ -169,9 +163,9 @@ private[parquet] class CatalystWriteSupport extends WriteSupport[InternalRow] wi
           recordConsumer.addBinary(Binary.fromByteArray(decimalBuffer, 0, numBytes))
         }
 
-      case StructType(fields) =>
+      case structType @ StructType(fields) =>
         (row: InternalRow, ordinal: Int) =>
-          consumeGroup(writeFields(row.getStruct(ordinal, fields.length)))
+          consumeGroup(writeFields(row.getStruct(ordinal, fields.length), structType))
 
       case arrayType: ArrayType if followParquetFormatSpec =>
         makeStandardArrayConsumer(arrayType.elementType)
@@ -214,7 +208,7 @@ private[parquet] class CatalystWriteSupport extends WriteSupport[InternalRow] wi
     (row: InternalRow, ordinal: Int) => {
       consumeGroup {
         consumeField(repeatedGroupName, 0) {
-          val array = row.get(ordinal).asInstanceOf[Array[_]]
+          val array = row.get(ordinal).asInstanceOf[Seq[_]]
           var i = 0
 
           while (i < array.length) {
@@ -241,7 +235,7 @@ private[parquet] class CatalystWriteSupport extends WriteSupport[InternalRow] wi
     (row: InternalRow, ordinal: Int) => {
       consumeGroup {
         consumeField(repeatedFieldName, 0) {
-          val array = row.get(ordinal).asInstanceOf[Array[_]]
+          val array = row.get(ordinal).asInstanceOf[Seq[_]]
           var i = 0
 
           while (i < array.length) {
@@ -279,6 +273,12 @@ private[parquet] class CatalystWriteSupport extends WriteSupport[InternalRow] wi
         }
       }
     }
+  }
+
+  private def consumeMessage(f: => Unit): Unit = {
+    recordConsumer.startMessage()
+    f
+    recordConsumer.endMessage()
   }
 
   private def consumeGroup(f: => Unit): Unit = {
