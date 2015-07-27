@@ -683,7 +683,7 @@ private[hive] case class MetastoreRelation
   lazy val allPartitions = table.getAllPartitions
 
   def getHiveQlPartitions(predicates: Seq[Expression] = Nil): Seq[Partition] = {
-    val rawPartitions = if(sqlContext.conf.metastorePartitionPruning) {
+    val rawPartitions = if (sqlContext.conf.metastorePartitionPruning) {
       table.getPartitions(predicates)
     } else {
       allPartitions
