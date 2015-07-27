@@ -1208,12 +1208,11 @@ class RowMatrix(DistributedMatrix):
 
         >>> rows = sc.parallelize([Vectors.dense([1, 2, 3]), Vectors.dense([4, 5, 6]),
         ...                        Vectors.dense([7, 8, 9]), Vectors.dense([10, 11, 12])])
+
         >>> rm = RowMatrix(rows)
         >>> int(rm.numRows())
         4
 
-        >>> rows = sc.parallelize([Vectors.dense([1, 2, 3]), Vectors.dense([4, 5, 6]),
-        ...                        Vectors.dense([7, 8, 9]), Vectors.dense([10, 11, 12])])
         >>> rm = RowMatrix(rows, 7, 6)
         >>> int(rm.numRows())
         7
@@ -1226,12 +1225,11 @@ class RowMatrix(DistributedMatrix):
 
         >>> rows = sc.parallelize([Vectors.dense([1, 2, 3]), Vectors.dense([4, 5, 6]),
         ...                        Vectors.dense([7, 8, 9]), Vectors.dense([10, 11, 12])])
+
         >>> rm = RowMatrix(rows)
         >>> int(rm.numCols())
         3
 
-        >>> rows = sc.parallelize([Vectors.dense([1, 2, 3]), Vectors.dense([4, 5, 6]),
-        ...                        Vectors.dense([7, 8, 9]), Vectors.dense([10, 11, 12])])
         >>> rm = RowMatrix(rows, 7, 6)
         >>> int(rm.numCols())
         6
@@ -1308,14 +1306,11 @@ class IndexedRowMatrix(DistributedMatrix):
         ...                        IndexedRow(1, Vectors.dense([4, 5, 6])),
         ...                        IndexedRow(2, Vectors.dense([7, 8, 9])),
         ...                        IndexedRow(3, Vectors.dense([10, 11, 12]))])
+
         >>> rm = IndexedRowMatrix(rows)
         >>> int(rm.numRows())
         4
 
-        >>> rows = sc.parallelize([IndexedRow(0, Vectors.dense([1, 2, 3])),
-        ...                        IndexedRow(1, Vectors.dense([4, 5, 6])),
-        ...                        IndexedRow(2, Vectors.dense([7, 8, 9])),
-        ...                        IndexedRow(3, Vectors.dense([10, 11, 12]))])
         >>> rm = IndexedRowMatrix(rows, 7, 6)
         >>> int(rm.numRows())
         7
@@ -1330,14 +1325,11 @@ class IndexedRowMatrix(DistributedMatrix):
         ...                        IndexedRow(1, Vectors.dense([4, 5, 6])),
         ...                        IndexedRow(2, Vectors.dense([7, 8, 9])),
         ...                        IndexedRow(3, Vectors.dense([10, 11, 12]))])
+
         >>> rm = IndexedRowMatrix(rows)
         >>> int(rm.numCols())
         3
 
-        >>> rows = sc.parallelize([IndexedRow(0, Vectors.dense([1, 2, 3])),
-        ...                        IndexedRow(1, Vectors.dense([4, 5, 6])),
-        ...                        IndexedRow(2, Vectors.dense([7, 8, 9])),
-        ...                        IndexedRow(3, Vectors.dense([10, 11, 12]))])
         >>> rm = IndexedRowMatrix(rows, 7, 6)
         >>> int(rm.numCols())
         6
@@ -1450,13 +1442,11 @@ class CoordinateMatrix(object):
         >>> entries = sc.parallelize([MatrixEntry(0, 0, 1.2),
         ...                           MatrixEntry(1, 0, 2),
         ...                           MatrixEntry(2, 1, 3.7)])
+
         >>> cm = CoordinateMatrix(entries)
         >>> int(cm.numRows())
         3
 
-        >>> entries = sc.parallelize([MatrixEntry(0, 0, 1.2),
-        ...                           MatrixEntry(1, 0, 2.1),
-        ...                           MatrixEntry(2, 1, 3.7)])
         >>> cm = CoordinateMatrix(entries, 7, 6)
         >>> int(cm.numRows())
         7
@@ -1468,15 +1458,13 @@ class CoordinateMatrix(object):
         Get or compute the number of cols.
 
         >>> entries = sc.parallelize([MatrixEntry(0, 0, 1.2),
-        ...                           MatrixEntry(1, 0, 2.1),
+        ...                           MatrixEntry(1, 0, 2),
         ...                           MatrixEntry(2, 1, 3.7)])
+
         >>> cm = CoordinateMatrix(entries)
         >>> int(cm.numCols())
         2
 
-        >>> entries = sc.parallelize([MatrixEntry(0, 0, 1.2),
-        ...                           MatrixEntry(1, 0, 2.1),
-        ...                           MatrixEntry(2, 1, 3.7)])
         >>> cm = CoordinateMatrix(entries, 7, 6)
         >>> int(cm.numCols())
         6
@@ -1487,11 +1475,12 @@ class CoordinateMatrix(object):
         """
         Convert this matrix to a RowMatrix.
 
+        >>> entries = sc.parallelize([MatrixEntry(0, 0, 1.2), MatrixEntry(6, 4, 2.1)])
+
         >>> # This CoordinateMatrix will have 7 effective rows, due to
         >>> # the highest row index being 6, but the ensuing RowMatrix
         >>> # will only have 2 rows since there are only entries on 2
         >>> # unique rows.
-        >>> entries = sc.parallelize([MatrixEntry(0, 0, 1.2), MatrixEntry(6, 4, 2.1)])
         >>> rm = CoordinateMatrix(entries).toRowMatrix()
         >>> int(rm.numRows())
         2
@@ -1499,7 +1488,6 @@ class CoordinateMatrix(object):
         >>> # This CoordinateMatrix will have 5 columns, due to the
         >>> # highest column index being 4, and the ensuing RowMatrix
         >>> # will have 5 columns as well.
-        >>> entries = sc.parallelize([MatrixEntry(0, 0, 1.2), MatrixEntry(6, 4, 2.1)])
         >>> rm = CoordinateMatrix(entries).toRowMatrix()
         >>> int(rm.numCols())
         5
@@ -1511,10 +1499,11 @@ class CoordinateMatrix(object):
         """
         Convert this matrix to an IndexedRowMatrix.
 
+        >>> entries = sc.parallelize([MatrixEntry(0, 0, 1.2), MatrixEntry(6, 4, 2.1)])
+
         >>> # This CoordinateMatrix will have 7 effective rows, due to
         >>> # the highest row index being 6, and the ensuing
         >>> # IndexedRowMatrix will have 7 rows as well.
-        >>> entries = sc.parallelize([MatrixEntry(0, 0, 1.2), MatrixEntry(6, 4, 2.1)])
         >>> irm = CoordinateMatrix(entries).toIndexedRowMatrix()
         >>> int(irm.numRows())
         7
@@ -1522,7 +1511,6 @@ class CoordinateMatrix(object):
         >>> # This CoordinateMatrix will have 5 columns, due to the
         >>> # highest column index being 4, and the ensuing
         >>> # IndexedRowMatrix will have 5 columns as well.
-        >>> entries = sc.parallelize([MatrixEntry(0, 0, 1.2), MatrixEntry(6, 4, 2.1)])
         >>> irm = CoordinateMatrix(entries).toIndexedRowMatrix()
         >>> int(irm.numCols())
         5
