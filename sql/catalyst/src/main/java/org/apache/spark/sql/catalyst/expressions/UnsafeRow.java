@@ -24,7 +24,7 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
 
-import org.apache.spark.sql.types.DataType;
+import org.apache.spark.sql.types.*;
 import org.apache.spark.unsafe.PlatformDependent;
 import org.apache.spark.unsafe.array.ByteArrayMethods;
 import org.apache.spark.unsafe.bitset.BitSetMethods;
@@ -236,6 +236,35 @@ public final class UnsafeRow extends MutableRow {
   }
 
   @Override
+  public Object get(int ordinal, DataType dataType) {
+    if (dataType instanceof NullType) {
+      return null;
+    } else if (dataType instanceof BooleanType) {
+      return getBoolean(ordinal);
+    } else if (dataType instanceof ByteType) {
+      return getByte(ordinal);
+    } else if (dataType instanceof ShortType) {
+      return getShort(ordinal);
+    } else if (dataType instanceof IntegerType) {
+      return getInt(ordinal);
+    } else if (dataType instanceof LongType) {
+      return getLong(ordinal);
+    } else if (dataType instanceof FloatType) {
+      return getFloat(ordinal);
+    } else if (dataType instanceof DoubleType) {
+      return getDouble(ordinal);
+    } else if (dataType instanceof DecimalType) {
+      return getDecimal(ordinal);
+    } else if (dataType instanceof StringType) {
+      return getUTF8String(ordinal);
+    } else if (dataType instanceof StructType) {
+      return getStruct(ordinal, ((StructType) dataType).size());
+    } else {
+      throw new UnsupportedOperationException("Unsupported data type " + dataType.simpleString());
+    }
+  }
+
+  @Override
   public boolean isNullAt(int ordinal) {
     assertIndexIsValid(ordinal);
     return BitSetMethods.isSet(baseObject, baseOffset, ordinal);
@@ -435,5 +464,20 @@ public final class UnsafeRow extends MutableRow {
   @Override
   public boolean anyNull() {
     return BitSetMethods.anySet(baseObject, baseOffset, bitSetWidthInBytes / 8);
+  }
+
+  /**
+   * Writes the content of this row into a memory address, identified by an object and an offset.
+   * The target memory address must already been allocated, and have enough space to hold all the
+   * bytes in this string.
+   */
+  public void writeToMemory(Object target, long targetOffset) {
+    PlatformDependent.copyMemory(
+      baseObject,
+      baseOffset,
+      target,
+      targetOffset,
+      sizeInBytes
+    );
   }
 }
