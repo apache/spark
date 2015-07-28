@@ -36,7 +36,7 @@ import org.apache.spark.network.nio.{GetBlock, GotBlock, PutBlock}
 import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.scheduler.{CompressedMapStatus, HighlyCompressedMapStatus}
 import org.apache.spark.storage._
-import org.apache.spark.util.BoundedPriorityQueue
+import org.apache.spark.util.{BoundedPriorityQueue, SerializableConfiguration, SerializableJobConf}
 import org.apache.spark.util.collection.CompactBuffer
 
 /**
@@ -94,12 +94,15 @@ class KryoSerializer(conf: SparkConf)
     // For results returned by asJavaIterable. See JavaIterableWrapperSerializer.
     kryo.register(JavaIterableWrapperSerializer.wrapperClass, new JavaIterableWrapperSerializer)
 
-    // Allow sending SerializableWritable
+    // Allow sending classes with custom Java serializers
     kryo.register(classOf[SerializableWritable[_]], new KryoJavaSerializer())
+    kryo.register(classOf[SerializableConfiguration], new KryoJavaSerializer())
+    kryo.register(classOf[SerializableJobConf], new KryoJavaSerializer())
     kryo.register(classOf[HttpBroadcast[_]], new KryoJavaSerializer())
     kryo.register(classOf[PythonBroadcast], new KryoJavaSerializer())
 
     try {
+      // scalastyle:off classforname
       // Use the default classloader when calling the user registrator.
       Thread.currentThread.setContextClassLoader(classLoader)
       // Register classes given through spark.kryo.classesToRegister.
@@ -109,6 +112,7 @@ class KryoSerializer(conf: SparkConf)
       userRegistrator
         .map(Class.forName(_, true, classLoader).newInstance().asInstanceOf[KryoRegistrator])
         .foreach { reg => reg.registerClasses(kryo) }
+      // scalastyle:on classforname
     } catch {
       case e: Exception =>
         throw new SparkException(s"Failed to register classes with Kryo", e)

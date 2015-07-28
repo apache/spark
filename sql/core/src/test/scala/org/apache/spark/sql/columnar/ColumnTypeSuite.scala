@@ -32,13 +32,15 @@ import org.apache.spark.unsafe.types.UTF8String
 
 
 class ColumnTypeSuite extends SparkFunSuite with Logging {
-  val DEFAULT_BUFFER_SIZE = 512
+  private val DEFAULT_BUFFER_SIZE = 512
+  private val MAP_GENERIC = GENERIC(MapType(IntegerType, StringType))
 
   test("defaultSize") {
     val checks = Map(
-      INT -> 4, SHORT -> 2, LONG -> 8, BYTE -> 1, DOUBLE -> 8, FLOAT -> 4,
-      FIXED_DECIMAL(15, 10) -> 8, BOOLEAN -> 1, STRING -> 8, DATE -> 4, TIMESTAMP -> 8,
-      BINARY -> 16, GENERIC -> 16)
+      BOOLEAN -> 1, BYTE -> 1, SHORT -> 2, INT -> 4, DATE -> 4,
+      LONG -> 8, TIMESTAMP -> 8, FLOAT -> 4, DOUBLE -> 8,
+      STRING -> 8, BINARY -> 16, FIXED_DECIMAL(15, 10) -> 8,
+      MAP_GENERIC -> 16)
 
     checks.foreach { case (columnType, expectedSize) =>
       assertResult(expectedSize, s"Wrong defaultSize for $columnType") {
@@ -48,8 +50,8 @@ class ColumnTypeSuite extends SparkFunSuite with Logging {
   }
 
   test("actualSize") {
-    def checkActualSize[T <: DataType, JvmType](
-        columnType: ColumnType[T, JvmType],
+    def checkActualSize[JvmType](
+        columnType: ColumnType[JvmType],
         value: JvmType,
         expected: Int): Unit = {
 
@@ -60,27 +62,24 @@ class ColumnTypeSuite extends SparkFunSuite with Logging {
       }
     }
 
-    checkActualSize(INT, Int.MaxValue, 4)
-    checkActualSize(SHORT, Short.MaxValue, 2)
-    checkActualSize(LONG, Long.MaxValue, 8)
-    checkActualSize(BYTE, Byte.MaxValue, 1)
-    checkActualSize(DOUBLE, Double.MaxValue, 8)
-    checkActualSize(FLOAT, Float.MaxValue, 4)
-    checkActualSize(FIXED_DECIMAL(15, 10), Decimal(0, 15, 10), 8)
     checkActualSize(BOOLEAN, true, 1)
+    checkActualSize(BYTE, Byte.MaxValue, 1)
+    checkActualSize(SHORT, Short.MaxValue, 2)
+    checkActualSize(INT, Int.MaxValue, 4)
+    checkActualSize(DATE, Int.MaxValue, 4)
+    checkActualSize(LONG, Long.MaxValue, 8)
+    checkActualSize(TIMESTAMP, Long.MaxValue, 8)
+    checkActualSize(FLOAT, Float.MaxValue, 4)
+    checkActualSize(DOUBLE, Double.MaxValue, 8)
     checkActualSize(STRING, UTF8String.fromString("hello"), 4 + "hello".getBytes("utf-8").length)
-    checkActualSize(DATE, 0, 4)
-    checkActualSize(TIMESTAMP, 0L, 8)
-
-    val binary = Array.fill[Byte](4)(0: Byte)
-    checkActualSize(BINARY, binary, 4 + 4)
+    checkActualSize(BINARY, Array.fill[Byte](4)(0.toByte), 4 + 4)
+    checkActualSize(FIXED_DECIMAL(15, 10), Decimal(0, 15, 10), 8)
 
     val generic = Map(1 -> "a")
-    checkActualSize(GENERIC, SparkSqlSerializer.serialize(generic), 4 + 8)
+    checkActualSize(MAP_GENERIC, SparkSqlSerializer.serialize(generic), 4 + 8)
   }
 
-  testNativeColumnType[BooleanType.type](
-    BOOLEAN,
+  testNativeColumnType(BOOLEAN)(
     (buffer: ByteBuffer, v: Boolean) => {
       buffer.put((if (v) 1 else 0).toByte)
     },
@@ -88,18 +87,23 @@ class ColumnTypeSuite extends SparkFunSuite with Logging {
       buffer.get() == 1
     })
 
-  testNativeColumnType[IntegerType.type](INT, _.putInt(_), _.getInt)
+  testNativeColumnType(BYTE)(_.put(_), _.get)
 
-  testNativeColumnType[ShortType.type](SHORT, _.putShort(_), _.getShort)
+  testNativeColumnType(SHORT)(_.putShort(_), _.getShort)
 
-  testNativeColumnType[LongType.type](LONG, _.putLong(_), _.getLong)
+  testNativeColumnType(INT)(_.putInt(_), _.getInt)
 
-  testNativeColumnType[ByteType.type](BYTE, _.put(_), _.get)
+  testNativeColumnType(DATE)(_.putInt(_), _.getInt)
 
-  testNativeColumnType[DoubleType.type](DOUBLE, _.putDouble(_), _.getDouble)
+  testNativeColumnType(LONG)(_.putLong(_), _.getLong)
 
-  testNativeColumnType[DecimalType](
-    FIXED_DECIMAL(15, 10),
+  testNativeColumnType(TIMESTAMP)(_.putLong(_), _.getLong)
+
+  testNativeColumnType(FLOAT)(_.putFloat(_), _.getFloat)
+
+  testNativeColumnType(DOUBLE)(_.putDouble(_), _.getDouble)
+
+  testNativeColumnType(FIXED_DECIMAL(15, 10))(
     (buffer: ByteBuffer, decimal: Decimal) => {
       buffer.putLong(decimal.toUnscaledLong)
     },
@@ -107,10 +111,8 @@ class ColumnTypeSuite extends SparkFunSuite with Logging {
       Decimal(buffer.getLong(), 15, 10)
     })
 
-  testNativeColumnType[FloatType.type](FLOAT, _.putFloat(_), _.getFloat)
 
-  testNativeColumnType[StringType.type](
-    STRING,
+  testNativeColumnType(STRING)(
     (buffer: ByteBuffer, string: UTF8String) => {
       val bytes = string.getBytes
       buffer.putInt(bytes.length)
@@ -123,7 +125,7 @@ class ColumnTypeSuite extends SparkFunSuite with Logging {
       UTF8String.fromBytes(bytes)
     })
 
-  testColumnType[BinaryType.type, Array[Byte]](
+  testColumnType[Array[Byte]](
     BINARY,
     (buffer: ByteBuffer, bytes: Array[Byte]) => {
       buffer.putInt(bytes.length).put(bytes)
@@ -140,7 +142,7 @@ class ColumnTypeSuite extends SparkFunSuite with Logging {
     val obj = Map(1 -> "spark", 2 -> "sql")
     val serializedObj = SparkSqlSerializer.serialize(obj)
 
-    GENERIC.append(SparkSqlSerializer.serialize(obj), buffer)
+    MAP_GENERIC.append(SparkSqlSerializer.serialize(obj), buffer)
     buffer.rewind()
 
     val length = buffer.getInt()
@@ -157,7 +159,7 @@ class ColumnTypeSuite extends SparkFunSuite with Logging {
 
     assertResult(obj, "Deserialized object didn't equal to the original object") {
       buffer.rewind()
-      SparkSqlSerializer.deserialize(GENERIC.extract(buffer))
+      SparkSqlSerializer.deserialize(MAP_GENERIC.extract(buffer))
     }
   }
 
@@ -170,7 +172,7 @@ class ColumnTypeSuite extends SparkFunSuite with Logging {
     val obj = CustomClass(Int.MaxValue, Long.MaxValue)
     val serializedObj = serializer.serialize(obj).array()
 
-    GENERIC.append(serializer.serialize(obj).array(), buffer)
+    MAP_GENERIC.append(serializer.serialize(obj).array(), buffer)
     buffer.rewind()
 
     val length = buffer.getInt
@@ -192,20 +194,20 @@ class ColumnTypeSuite extends SparkFunSuite with Logging {
 
     assertResult(obj, "Custom deserialized object didn't equal the original object") {
       buffer.rewind()
-      serializer.deserialize(ByteBuffer.wrap(GENERIC.extract(buffer)))
+      serializer.deserialize(ByteBuffer.wrap(MAP_GENERIC.extract(buffer)))
     }
   }
 
   def testNativeColumnType[T <: AtomicType](
-      columnType: NativeColumnType[T],
-      putter: (ByteBuffer, T#InternalType) => Unit,
+      columnType: NativeColumnType[T])
+      (putter: (ByteBuffer, T#InternalType) => Unit,
       getter: (ByteBuffer) => T#InternalType): Unit = {
 
-    testColumnType[T, T#InternalType](columnType, putter, getter)
+    testColumnType[T#InternalType](columnType, putter, getter)
   }
 
-  def testColumnType[T <: DataType, JvmType](
-      columnType: ColumnType[T, JvmType],
+  def testColumnType[JvmType](
+      columnType: ColumnType[JvmType],
       putter: (ByteBuffer, JvmType) => Unit,
       getter: (ByteBuffer) => JvmType): Unit = {
 
@@ -262,7 +264,7 @@ class ColumnTypeSuite extends SparkFunSuite with Logging {
       }
     }
 
-    assertResult(GENERIC) {
+    assertResult(GENERIC(DecimalType(19, 0))) {
       ColumnType(DecimalType(19, 0))
     }
   }

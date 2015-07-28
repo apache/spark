@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples.streaming
 
 import kafka.serializer.StringDecoder
@@ -70,3 +71,4 @@ object DirectKafkaWordCount {
     ssc.awaitTermination()
   }
 }
+// scalastyle:on println

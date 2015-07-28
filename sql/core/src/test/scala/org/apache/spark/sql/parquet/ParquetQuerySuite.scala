@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.parquet
 
-import org.scalatest.BeforeAndAfterAll
+import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.{QueryTest, Row, SQLConf}
@@ -25,7 +25,7 @@ import org.apache.spark.sql.{QueryTest, Row, SQLConf}
 /**
  * A test suite that tests various Parquet queries.
  */
-class ParquetQuerySuiteBase extends QueryTest with ParquetTest {
+class ParquetQuerySuite extends QueryTest with ParquetTest {
   lazy val sqlContext = org.apache.spark.sql.test.TestSQLContext
   import sqlContext.sql
 
@@ -122,28 +122,44 @@ class ParquetQuerySuiteBase extends QueryTest with ParquetTest {
       checkAnswer(df2, df.collect().toSeq)
     }
   }
-}
 
-class ParquetDataSourceOnQuerySuite extends ParquetQuerySuiteBase with BeforeAndAfterAll {
-  private lazy val originalConf = sqlContext.conf.parquetUseDataSourceApi
+  test("Enabling/disabling schema merging") {
+    def testSchemaMerging(expectedColumnNumber: Int): Unit = {
+      withTempDir { dir =>
+        val basePath = dir.getCanonicalPath
+        sqlContext.range(0, 10).toDF("a").write.parquet(new Path(basePath, "foo=1").toString)
+        sqlContext.range(0, 10).toDF("b").write.parquet(new Path(basePath, "foo=2").toString)
+        assert(sqlContext.read.parquet(basePath).columns.length === expectedColumnNumber)
+      }
+    }
 
-  override protected def beforeAll(): Unit = {
-    sqlContext.conf.setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, true)
+    withSQLConf(SQLConf.PARQUET_SCHEMA_MERGING_ENABLED.key -> "true") {
+      testSchemaMerging(3)
+    }
+
+    withSQLConf(SQLConf.PARQUET_SCHEMA_MERGING_ENABLED.key -> "false") {
+      testSchemaMerging(2)
+    }
   }
 
-  override protected def afterAll(): Unit = {
-    sqlContext.setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, originalConf)
-  }
-}
+  test("SPARK-8990 DataFrameReader.parquet() should respect user specified options") {
+    withTempPath { dir =>
+      val basePath = dir.getCanonicalPath
+      sqlContext.range(0, 10).toDF("a").write.parquet(new Path(basePath, "foo=1").toString)
+      sqlContext.range(0, 10).toDF("b").write.parquet(new Path(basePath, "foo=a").toString)
 
-class ParquetDataSourceOffQuerySuite extends ParquetQuerySuiteBase with BeforeAndAfterAll {
-  private lazy val originalConf = sqlContext.conf.parquetUseDataSourceApi
+      // Disables the global SQL option for schema merging
+      withSQLConf(SQLConf.PARQUET_SCHEMA_MERGING_ENABLED.key -> "false") {
+        assertResult(2) {
+          // Disables schema merging via data source option
+          sqlContext.read.option("mergeSchema", "false").parquet(basePath).columns.length
+        }
 
-  override protected def beforeAll(): Unit = {
-    sqlContext.conf.setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, false)
-  }
-
-  override protected def afterAll(): Unit = {
-    sqlContext.setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, originalConf)
+        assertResult(3) {
+          // Enables schema merging via data source option
+          sqlContext.read.option("mergeSchema", "true").parquet(basePath).columns.length
+        }
+      }
+    }
   }
 }

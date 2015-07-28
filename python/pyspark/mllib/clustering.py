@@ -20,21 +20,27 @@ import array as pyarray
 
 if sys.version > '3':
     xrange = range
+    basestring = str
 
 from math import exp, log
 
 from numpy import array, random, tile
 
+from collections import namedtuple
+
 from pyspark import SparkContext
 from pyspark.rdd import RDD, ignore_unicode_prefix
-from pyspark.mllib.common import callMLlibFunc, callJavaFunc, _py2java, _java2py
+from pyspark.mllib.common import JavaModelWrapper, callMLlibFunc, callJavaFunc, _py2java, _java2py
 from pyspark.mllib.linalg import SparseVector, _convert_to_vector, DenseVector
+from pyspark.mllib.regression import LabeledPoint
 from pyspark.mllib.stat.distribution import MultivariateGaussian
-from pyspark.mllib.util import Saveable, Loader, inherit_doc
+from pyspark.mllib.util import Saveable, Loader, inherit_doc, JavaLoader, JavaSaveable
 from pyspark.streaming import DStream
 
 __all__ = ['KMeansModel', 'KMeans', 'GaussianMixtureModel', 'GaussianMixture',
-           'StreamingKMeans', 'StreamingKMeansModel']
+           'PowerIterationClusteringModel', 'PowerIterationClustering',
+           'StreamingKMeans', 'StreamingKMeansModel',
+           'LDA', 'LDAModel']
 
 
 @inherit_doc
@@ -265,11 +271,107 @@ class GaussianMixture(object):
             initialModelWeights = initialModel.weights
             initialModelMu = [initialModel.gaussians[i].mu for i in range(initialModel.k)]
             initialModelSigma = [initialModel.gaussians[i].sigma for i in range(initialModel.k)]
-        weight, mu, sigma = callMLlibFunc("trainGaussianMixture", rdd.map(_convert_to_vector), k,
-                                          convergenceTol, maxIterations, seed, initialModelWeights,
-                                          initialModelMu, initialModelSigma)
+        weight, mu, sigma = callMLlibFunc("trainGaussianMixtureModel", rdd.map(_convert_to_vector),
+                                          k, convergenceTol, maxIterations, seed,
+                                          initialModelWeights, initialModelMu, initialModelSigma)
         mvg_obj = [MultivariateGaussian(mu[i], sigma[i]) for i in range(k)]
         return GaussianMixtureModel(weight, mvg_obj)
+
+
+class PowerIterationClusteringModel(JavaModelWrapper, JavaSaveable, JavaLoader):
+
+    """
+    .. note:: Experimental
+
+    Model produced by [[PowerIterationClustering]].
+
+    >>> data = [(0, 1, 1.0), (0, 2, 1.0), (0, 3, 1.0), (1, 2, 1.0), (1, 3, 1.0),
+    ... (2, 3, 1.0), (3, 4, 0.1), (4, 5, 1.0), (4, 15, 1.0), (5, 6, 1.0),
+    ... (6, 7, 1.0), (7, 8, 1.0), (8, 9, 1.0), (9, 10, 1.0), (10, 11, 1.0),
+    ... (11, 12, 1.0), (12, 13, 1.0), (13, 14, 1.0), (14, 15, 1.0)]
+    >>> rdd = sc.parallelize(data, 2)
+    >>> model = PowerIterationClustering.train(rdd, 2, 100)
+    >>> model.k
+    2
+    >>> result = sorted(model.assignments().collect(), key=lambda x: x.id)
+    >>> result[0].cluster == result[1].cluster == result[2].cluster == result[3].cluster
+    True
+    >>> result[4].cluster == result[5].cluster == result[6].cluster == result[7].cluster
+    True
+    >>> import os, tempfile
+    >>> path = tempfile.mkdtemp()
+    >>> model.save(sc, path)
+    >>> sameModel = PowerIterationClusteringModel.load(sc, path)
+    >>> sameModel.k
+    2
+    >>> result = sorted(model.assignments().collect(), key=lambda x: x.id)
+    >>> result[0].cluster == result[1].cluster == result[2].cluster == result[3].cluster
+    True
+    >>> result[4].cluster == result[5].cluster == result[6].cluster == result[7].cluster
+    True
+    >>> from shutil import rmtree
+    >>> try:
+    ...     rmtree(path)
+    ... except OSError:
+    ...     pass
+    """
+
+    @property
+    def k(self):
+        """
+        Returns the number of clusters.
+        """
+        return self.call("k")
+
+    def assignments(self):
+        """
+        Returns the cluster assignments of this model.
+        """
+        return self.call("getAssignments").map(
+            lambda x: (PowerIterationClustering.Assignment(*x)))
+
+    @classmethod
+    def load(cls, sc, path):
+        model = cls._load_java(sc, path)
+        wrapper = sc._jvm.PowerIterationClusteringModelWrapper(model)
+        return PowerIterationClusteringModel(wrapper)
+
+
+class PowerIterationClustering(object):
+    """
+    .. note:: Experimental
+
+    Power Iteration Clustering (PIC), a scalable graph clustering algorithm
+    developed by [[http://www.icml2010.org/papers/387.pdf Lin and Cohen]].
+    From the abstract: PIC finds a very low-dimensional embedding of a
+    dataset using truncated power iteration on a normalized pair-wise
+    similarity matrix of the data.
+    """
+
+    @classmethod
+    def train(cls, rdd, k, maxIterations=100, initMode="random"):
+        """
+        :param rdd: an RDD of (i, j, s,,ij,,) tuples representing the
+            affinity matrix, which is the matrix A in the PIC paper.
+            The similarity s,,ij,, must be nonnegative.
+            This is a symmetric matrix and hence s,,ij,, = s,,ji,,.
+            For any (i, j) with nonzero similarity, there should be
+            either (i, j, s,,ij,,) or (j, i, s,,ji,,) in the input.
+            Tuples with i = j are ignored, because we assume
+            s,,ij,, = 0.0.
+        :param k: Number of clusters.
+        :param maxIterations: Maximum number of iterations of the
+            PIC algorithm.
+        :param initMode: Initialization mode.
+        """
+        model = callMLlibFunc("trainPowerIterationClusteringModel",
+                              rdd.map(_convert_to_vector), int(k), int(maxIterations), initMode)
+        return PowerIterationClusteringModel(model)
+
+    class Assignment(namedtuple("Assignment", ["id", "cluster"])):
+        """
+        Represents an (id, cluster) tuple.
+        """
 
 
 class StreamingKMeansModel(KMeansModel):
@@ -464,9 +566,112 @@ class StreamingKMeans(object):
         return dstream.mapValues(lambda x: self._model.predict(x))
 
 
+class LDAModel(JavaModelWrapper):
+
+    """ A clustering model derived from the LDA method.
+
+    Latent Dirichlet Allocation (LDA), a topic model designed for text documents.
+    Terminology
+    - "word" = "term": an element of the vocabulary
+    - "token": instance of a term appearing in a document
+    - "topic": multinomial distribution over words representing some concept
+    References:
+    - Original LDA paper (journal version):
+    Blei, Ng, and Jordan.  "Latent Dirichlet Allocation."  JMLR, 2003.
+
+    >>> from pyspark.mllib.linalg import Vectors
+    >>> from numpy.testing import assert_almost_equal, assert_equal
+    >>> data = [
+    ...     [1, Vectors.dense([0.0, 1.0])],
+    ...     [2, SparseVector(2, {0: 1.0})],
+    ... ]
+    >>> rdd =  sc.parallelize(data)
+    >>> model = LDA.train(rdd, k=2)
+    >>> model.vocabSize()
+    2
+    >>> topics = model.topicsMatrix()
+    >>> topics_expect = array([[0.5,  0.5], [0.5, 0.5]])
+    >>> assert_almost_equal(topics, topics_expect, 1)
+
+    >>> import os, tempfile
+    >>> from shutil import rmtree
+    >>> path = tempfile.mkdtemp()
+    >>> model.save(sc, path)
+    >>> sameModel = LDAModel.load(sc, path)
+    >>> assert_equal(sameModel.topicsMatrix(), model.topicsMatrix())
+    >>> sameModel.vocabSize() == model.vocabSize()
+    True
+    >>> try:
+    ...     rmtree(path)
+    ... except OSError:
+    ...     pass
+    """
+
+    def topicsMatrix(self):
+        """Inferred topics, where each topic is represented by a distribution over terms."""
+        return self.call("topicsMatrix").toArray()
+
+    def vocabSize(self):
+        """Vocabulary size (number of terms or terms in the vocabulary)"""
+        return self.call("vocabSize")
+
+    def save(self, sc, path):
+        """Save the LDAModel on to disk.
+
+        :param sc: SparkContext
+        :param path: str, path to where the model needs to be stored.
+        """
+        if not isinstance(sc, SparkContext):
+            raise TypeError("sc should be a SparkContext, got type %s" % type(sc))
+        if not isinstance(path, basestring):
+            raise TypeError("path should be a basestring, got type %s" % type(path))
+        self._java_model.save(sc._jsc.sc(), path)
+
+    @classmethod
+    def load(cls, sc, path):
+        """Load the LDAModel from disk.
+
+        :param sc: SparkContext
+        :param path: str, path to where the model is stored.
+        """
+        if not isinstance(sc, SparkContext):
+            raise TypeError("sc should be a SparkContext, got type %s" % type(sc))
+        if not isinstance(path, basestring):
+            raise TypeError("path should be a basestring, got type %s" % type(path))
+        java_model = sc._jvm.org.apache.spark.mllib.clustering.DistributedLDAModel.load(
+            sc._jsc.sc(), path)
+        return cls(java_model)
+
+
+class LDA(object):
+
+    @classmethod
+    def train(cls, rdd, k=10, maxIterations=20, docConcentration=-1.0,
+              topicConcentration=-1.0, seed=None, checkpointInterval=10, optimizer="em"):
+        """Train a LDA model.
+
+        :param rdd:                 RDD of data points
+        :param k:                   Number of clusters you want
+        :param maxIterations:       Number of iterations. Default to 20
+        :param docConcentration:    Concentration parameter (commonly named "alpha")
+            for the prior placed on documents' distributions over topics ("theta").
+        :param topicConcentration:  Concentration parameter (commonly named "beta" or "eta")
+            for the prior placed on topics' distributions over terms.
+        :param seed:                Random Seed
+        :param checkpointInterval:  Period (in iterations) between checkpoints.
+        :param optimizer:           LDAOptimizer used to perform the actual calculation.
+            Currently "em", "online" are supported. Default to "em".
+        """
+        model = callMLlibFunc("trainLDAModel", rdd, k, maxIterations,
+                              docConcentration, topicConcentration, seed,
+                              checkpointInterval, optimizer)
+        return LDAModel(model)
+
+
 def _test():
     import doctest
-    globs = globals().copy()
+    import pyspark.mllib.clustering
+    globs = pyspark.mllib.clustering.__dict__.copy()
     globs['sc'] = SparkContext('local[4]', 'PythonTest', batchSize=2)
     (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
     globs['sc'].stop()

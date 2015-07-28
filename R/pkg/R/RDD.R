@@ -165,7 +165,6 @@ setMethod("getJRDD", signature(rdd = "PipelinedRDD"),
                                    serializedFuncArr,
                                    rdd@env$prev_serializedMode,
                                    packageNamesArr,
-                                   as.character(.sparkREnv[["libname"]]),
                                    broadcastArr,
                                    callJMethod(prev_jrdd, "classTag"))
             } else {
@@ -175,7 +174,6 @@ setMethod("getJRDD", signature(rdd = "PipelinedRDD"),
                                    rdd@env$prev_serializedMode,
                                    serializedMode,
                                    packageNamesArr,
-                                   as.character(.sparkREnv[["libname"]]),
                                    broadcastArr,
                                    callJMethod(prev_jrdd, "classTag"))
             }

@@ -17,12 +17,13 @@
 
 package org.apache.spark.repl
 
+import java.io.File
+
+import scala.tools.nsc.Settings
+
 import org.apache.spark.util.Utils
 import org.apache.spark._
 import org.apache.spark.sql.SQLContext
-
-import scala.tools.nsc.Settings
-import scala.tools.nsc.interpreter.SparkILoop
 
 object Main extends Logging {
 
@@ -32,7 +33,8 @@ object Main extends Logging {
   val outputDir = Utils.createTempDir(rootDir)
   val s = new Settings()
   s.processArguments(List("-Yrepl-class-based",
-    "-Yrepl-outdir", s"${outputDir.getAbsolutePath}", "-Yrepl-sync"), true)
+    "-Yrepl-outdir", s"${outputDir.getAbsolutePath}",
+    "-classpath", getAddedJars.mkString(File.pathSeparator)), true)
   val classServer = new HttpServer(conf, outputDir, new SecurityManager(conf))
   var sparkContext: SparkContext = _
   var sqlContext: SQLContext = _
@@ -47,7 +49,6 @@ object Main extends Logging {
     classServer.stop()
     Option(sparkContext).map(_.stop)
   }
-
 
   def getAddedJars: Array[String] = {
     val envJars = sys.env.get("ADD_JARS")
@@ -64,9 +65,9 @@ object Main extends Logging {
     val jars = getAddedJars
     val conf = new SparkConf()
       .setMaster(getMaster)
-      .setAppName("Spark shell")
       .setJars(jars)
       .set("spark.repl.class.uri", classServer.uri)
+      .setIfMissing("spark.app.name", "Spark shell")
     logInfo("Spark class server started at " + classServer.uri)
     if (execUri != null) {
       conf.set("spark.executor.uri", execUri)
@@ -84,10 +85,9 @@ object Main extends Logging {
     val loader = Utils.getContextOrSparkClassLoader
     try {
       sqlContext = loader.loadClass(name).getConstructor(classOf[SparkContext])
-        .newInstance(sparkContext).asInstanceOf[SQLContext] 
+        .newInstance(sparkContext).asInstanceOf[SQLContext]
       logInfo("Created sql context (with Hive support)..")
-    }
-    catch {
+    } catch {
       case _: java.lang.ClassNotFoundException | _: java.lang.NoClassDefFoundError =>
         sqlContext = new SQLContext(sparkContext)
         logInfo("Created sql context..")

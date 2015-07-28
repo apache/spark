@@ -33,6 +33,37 @@ class DataTypeSuite extends SparkFunSuite {
     assert(MapType(StringType, IntegerType, true) === map)
   }
 
+  test("construct with add") {
+    val struct = (new StructType)
+      .add("a", IntegerType, true)
+      .add("b", LongType, false)
+      .add("c", StringType, true)
+
+    assert(StructField("b", LongType, false) === struct("b"))
+  }
+
+  test("construct with add from StructField") {
+    // Test creation from StructField type
+    val struct = (new StructType)
+      .add(StructField("a", IntegerType, true))
+      .add(StructField("b", LongType, false))
+      .add(StructField("c", StringType, true))
+
+    assert(StructField("b", LongType, false) === struct("b"))
+  }
+
+  test("construct with String DataType") {
+    // Test creation with DataType as String
+    val struct = (new StructType)
+      .add("a", "int", true)
+      .add("b", "long", false)
+      .add("c", "string", true)
+
+    assert(StructField("a", IntegerType, true) === struct("a"))
+    assert(StructField("b", LongType, false) === struct("b"))
+    assert(StructField("c", StringType, true) === struct("c"))
+  }
+
   test("extract fields from a StructType") {
     val struct = StructType(
       StructField("a", IntegerType, true) ::
@@ -154,7 +185,7 @@ class DataTypeSuite extends SparkFunSuite {
   checkDataTypeJsonRepr(FloatType)
   checkDataTypeJsonRepr(DoubleType)
   checkDataTypeJsonRepr(DecimalType(10, 5))
-  checkDataTypeJsonRepr(DecimalType.Unlimited)
+  checkDataTypeJsonRepr(DecimalType.SYSTEM_DEFAULT)
   checkDataTypeJsonRepr(DateType)
   checkDataTypeJsonRepr(TimestampType)
   checkDataTypeJsonRepr(StringType)
@@ -188,7 +219,7 @@ class DataTypeSuite extends SparkFunSuite {
   checkDefaultSize(FloatType, 4)
   checkDefaultSize(DoubleType, 8)
   checkDefaultSize(DecimalType(10, 5), 4096)
-  checkDefaultSize(DecimalType.Unlimited, 4096)
+  checkDefaultSize(DecimalType.SYSTEM_DEFAULT, 4096)
   checkDefaultSize(DateType, 4)
   checkDefaultSize(TimestampType, 8)
   checkDefaultSize(StringType, 4096)

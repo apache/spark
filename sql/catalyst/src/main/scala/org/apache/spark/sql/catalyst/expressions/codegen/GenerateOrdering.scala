@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.expressions.codegen
 
 import org.apache.spark.Logging
 import org.apache.spark.annotation.Private
-import org.apache.spark.sql.Row
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 
 /**
@@ -33,12 +33,9 @@ class BaseOrdering extends Ordering[InternalRow] {
 }
 
 /**
- * Generates bytecode for an [[Ordering]] of [[Row Rows]] for a given set of
- * [[Expression Expressions]].
+ * Generates bytecode for an [[Ordering]] of rows for a given set of expressions.
  */
-object GenerateOrdering
-    extends CodeGenerator[Seq[SortOrder], Ordering[InternalRow]] with Logging {
-  import scala.reflect.runtime.universe._
+object GenerateOrdering extends CodeGenerator[Seq[SortOrder], Ordering[InternalRow]] with Logging {
 
   protected def canonicalize(in: Seq[SortOrder]): Seq[SortOrder] =
     in.map(ExpressionCanonicalizer.execute(_).asInstanceOf[SortOrder])
@@ -47,45 +44,59 @@ object GenerateOrdering
     in.map(BindReferences.bindReference(_, inputSchema))
 
   protected def create(ordering: Seq[SortOrder]): Ordering[InternalRow] = {
-    val a = newTermName("a")
-    val b = newTermName("b")
     val ctx = newCodeGenContext()
 
-    val comparisons = ordering.zipWithIndex.map { case (order, i) =>
-      val evalA = order.child.gen(ctx)
-      val evalB = order.child.gen(ctx)
+    val comparisons = ordering.map { order =>
+      val eval = order.child.gen(ctx)
       val asc = order.direction == Ascending
+      val isNullA = ctx.freshName("isNullA")
+      val primitiveA = ctx.freshName("primitiveA")
+      val isNullB = ctx.freshName("isNullB")
+      val primitiveB = ctx.freshName("primitiveB")
       s"""
-          i = $a;
-          ${evalA.code}
-          i = $b;
-          ${evalB.code}
-          if (${evalA.isNull} && ${evalB.isNull}) {
+          i = a;
+          boolean $isNullA;
+          ${ctx.javaType(order.child.dataType)} $primitiveA;
+          {
+            ${eval.code}
+            $isNullA = ${eval.isNull};
+            $primitiveA = ${eval.primitive};
+          }
+          i = b;
+          boolean $isNullB;
+          ${ctx.javaType(order.child.dataType)} $primitiveB;
+          {
+            ${eval.code}
+            $isNullB = ${eval.isNull};
+            $primitiveB = ${eval.primitive};
+          }
+          if ($isNullA && $isNullB) {
             // Nothing
-          } else if (${evalA.isNull}) {
+          } else if ($isNullA) {
             return ${if (order.direction == Ascending) "-1" else "1"};
-          } else if (${evalB.isNull}) {
+          } else if ($isNullB) {
             return ${if (order.direction == Ascending) "1" else "-1"};
           } else {
-            int comp = ${ctx.genComp(order.child.dataType, evalA.primitive, evalB.primitive)};
+            int comp = ${ctx.genComp(order.child.dataType, primitiveA, primitiveB)};
             if (comp != 0) {
               return ${if (asc) "comp" else "-comp"};
             }
           }
       """
     }.mkString("\n")
-
     val code = s"""
       public SpecificOrdering generate($exprType[] expr) {
         return new SpecificOrdering(expr);
       }
 
-      class SpecificOrdering extends ${typeOf[BaseOrdering]} {
+      class SpecificOrdering extends ${classOf[BaseOrdering].getName} {
 
-        private $exprType[] expressions = null;
+        private $exprType[] expressions;
+        ${declareMutableStates(ctx)}
 
         public SpecificOrdering($exprType[] expr) {
           expressions = expr;
+          ${initMutableStates(ctx)}
         }
 
         @Override
@@ -96,7 +107,7 @@ object GenerateOrdering
         }
       }"""
 
-    logDebug(s"Generated Ordering: $code")
+    logDebug(s"Generated Ordering: ${CodeFormatter.format(code)}")
 
     compile(code).generate(ctx.references.toArray).asInstanceOf[BaseOrdering]
   }
