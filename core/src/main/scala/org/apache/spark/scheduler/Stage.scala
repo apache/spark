@@ -46,7 +46,7 @@ import scala.collection.mutable.HashSet
  * be updated for each attempt.
  *
  */
-private[spark] abstract class Stage(
+private[scheduler] abstract class Stage(
     val id: Int,
     val rdd: RDD[_],
     val numTasks: Int,
@@ -78,29 +78,33 @@ private[spark] abstract class Stage(
 
   /**
    * Spark is resilient to executors dying by retrying stages on FetchFailures. Here, we keep track
-   * of the number of stage failures to prevent endless stage retries.
+   * of unique stage failures (per stage attempt) triggered by fetch failures to prevent endless
+   * stage retries. Specifically, per stage we wish to only record a failure when the following
+   * holds:
+   *
+   * A) A fetch failure was observed
+   * B) A failure has not yet been registered for this stage attempt. There may be multiple
+   * concurrent failures for a sinlge stage since we may have multiple tasks executing at the same
+   * time, one or many of which may fail. Also, even though there may only be one non-zombie stage
+   * attemp, zombie stages may still have running tasks.
    */
-  private var failedStageCount = 0
+  private val attemptsFailedFromFetch = new HashSet[Int]
 
   private[scheduler] def clearFailures() : Unit = {
-    failedStageCount = 0
+    attemptsFailedFromFetch.clear()
   }
 
   /**
    * Check whether we should abort the failedStage due to multiple failures.
-   * This method updates the running count of failures for a particular stage and returns
+   * This method updates the running set of failures for a particular stage and returns
    * true if the number of failures exceeds the allowable number of failures.
    */
-  private[scheduler] def failAndShouldAbort(): Boolean = {
+  private[scheduler] def failAndShouldAbort(task: Task[_]): Boolean = {
     // We increment the failure count on the first attempt for a particular Stage
-    if (_latestInfo.attemptId == 0)
-    {
-      failedStageCount += 1
-    }
-
+    attemptsFailedFromFetch.add(task.stageAttemptId)
     // Check for multiple FetchFailures in a Stage and for the stage failing repeatedly following
     // resubmissions.
-    failedStageCount >= Stage.MAX_STAGE_FAILURES
+    attemptsFailedFromFetch.size >= Stage.MAX_STAGE_FAILURES
   }
 
   /** Creates a new attempt for this stage by creating a new StageInfo with a new attempt ID. */
