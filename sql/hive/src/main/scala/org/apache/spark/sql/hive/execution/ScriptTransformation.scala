@@ -71,6 +71,36 @@ case class ScriptTransformation(
       val errorStream = proc.getErrorStream
       val reader = new BufferedReader(new InputStreamReader(inputStream))
 
+      // TODO make the 2048 configurable?
+      val stderrBuffer = new CircularBuffer(2048)
+
+      // Consume the error stream from the pipeline, otherwise it will be blocked if
+      // the pipeline is full.
+      new RedirectThread(errorStream, // input stream from the pipeline
+        stderrBuffer,                 // output to a circular buffer
+        "Thread-ScriptTransformation-STDERR-Consumer").start()
+
+      val outputProjection = new InterpretedProjection(input, child.output)
+
+      // This nullability is a performance optimization in order to avoid an Option.foreach() call
+      // inside of a loop
+      @Nullable val (inputSerde, inputSoi) = ioschema.initInputSerDe(input).getOrElse((null, null))
+
+      // Put the write(output to the pipeline) into a single thread
+      // and keep the collector as remain in the main thread.
+      // otherwise it will causes deadlock if the data size greater than
+      // the pipeline / buffer capacity.
+      val writerThread = new ScriptTransformationWriterThread(
+        inputIterator,
+        outputProjection,
+        inputSerde,
+        inputSoi,
+        ioschema,
+        outputStream,
+        proc,
+        stderrBuffer
+      )
+
       // This nullability is a performance optimization in order to avoid an Option.foreach() call
       // inside of a loop
       @Nullable val (outputSerde, outputSoi) = {
@@ -86,12 +116,26 @@ case class ScriptTransformation(
           if (outputSerde == null) {
             if (curLine == null) {
               curLine = reader.readLine()
-              curLine != null
+              if (curLine == null) {
+                if (writerThread.exception.isDefined) {
+                  throw writerThread.exception.get
+                }
+                false
+              } else {
+                true
+              }
             } else {
               true
             }
           } else {
-            !eof
+            if (eof) {
+              if (writerThread.exception.isDefined) {
+                throw writerThread.exception.get
+              }
+              false
+            } else {
+              true
+            }
           }
         }
 
@@ -117,11 +161,11 @@ case class ScriptTransformation(
               }
               i += 1
             })
-            return mutableRow
+            mutableRow
           } catch {
             case e: EOFException =>
               eof = true
-              return null
+              null
           }
         }
 
@@ -153,34 +197,6 @@ case class ScriptTransformation(
         }
       }
 
-      val outputProjection = new InterpretedProjection(input, child.output)
-
-      // TODO make the 2048 configurable?
-      val stderrBuffer = new CircularBuffer(2048)
-      // Consume the error stream from the pipeline, otherwise it will be blocked if
-      // the pipeline is full.
-      new RedirectThread(errorStream, // input stream from the pipeline
-        stderrBuffer,                 // output to a circular buffer
-        "Thread-ScriptTransformation-STDERR-Consumer").start()
-
-      // This nullability is a performance optimization in order to avoid an Option.foreach() call
-      // inside of a loop
-      @Nullable val (inputSerde, inputSoi) = ioschema.initInputSerDe(input).getOrElse((null, null))
-
-      // Put the write(output to the pipeline) into a single thread
-      // and keep the collector as remain in the main thread.
-      // otherwise it will causes deadlock if the data size greater than
-      // the pipeline / buffer capacity.
-      val writerThread = new ScriptTransformationWriterThread(
-        inputIterator,
-        outputProjection,
-        inputSerde,
-        inputSoi,
-        ioschema,
-        outputStream,
-        proc,
-        stderrBuffer
-      )
       writerThread.start()
 
       outputIterator
@@ -210,6 +226,11 @@ private class ScriptTransformationWriterThread(
 
   setDaemon(true)
 
+  @volatile private var _exception: Throwable = null
+
+  /** Contains the exception thrown while writing the parent iterator to the external process. */
+  def exception: Option[Throwable] = Option(_exception)
+
   override def run(): Unit = Utils.logUncaughtExceptions {
     val dataOutputStream = new DataOutputStream(outputStream)
 
@@ -234,6 +255,7 @@ private class ScriptTransformationWriterThread(
       case NonFatal(e) =>
         // An error occurred while writing input, so kill the child process. According to the
         // Javadoc this call will not throw an exception:
+        _exception = e
         proc.destroy()
         throw e
     } finally {

@@ -18,6 +18,7 @@
 package org.apache.spark.sql.hive.execution
 
 import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
+import org.scalatest.exceptions.TestFailedException
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SQLContext
@@ -74,9 +75,26 @@ class ScriptTransformationSuite extends SparkPlanTest {
       rowsDf.collect())
   }
 
-  test("script transformation should not swallow errors from upstream pipelined operators") {
+  test("script transformation should not swallow errors from upstream operators (no serde)") {
     val rowsDf = Seq("a", "b", "c").map(Tuple1.apply).toDF("a")
-    val e = intercept[IllegalArgumentException] {
+    val e = intercept[TestFailedException] {
+      checkAnswer(
+        rowsDf,
+        (child: SparkPlan) => new ScriptTransformation(
+          input = Seq(rowsDf.col("a").expr),
+          script = "cat",
+          output = Seq(AttributeReference("a", StringType)()),
+          child = ExceptionInjectingOperator(child),
+          ioschema = noSerdeIOSchema
+        )(TestHive),
+        rowsDf.collect())
+    }
+    assert(e.getMessage().contains("intentional exception"))
+  }
+
+  test("script transformation should not swallow errors from upstream operators (with serde)") {
+    val rowsDf = Seq("a", "b", "c").map(Tuple1.apply).toDF("a")
+    val e = intercept[TestFailedException] {
       checkAnswer(
         rowsDf,
         (child: SparkPlan) => new ScriptTransformation(
@@ -88,7 +106,7 @@ class ScriptTransformationSuite extends SparkPlanTest {
         )(TestHive),
         rowsDf.collect())
     }
-    assert(e.getMessage === "intentional exception")
+    assert(e.getMessage().contains("intentional exception"))
   }
 }
 
