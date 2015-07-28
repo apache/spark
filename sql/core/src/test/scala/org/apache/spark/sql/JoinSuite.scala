@@ -108,6 +108,18 @@ class JoinSuite extends QueryTest with BeforeAndAfterEach {
     }
   }
 
+  test("SortMergeJoin shouldn't work on unsortable columns") {
+    val SORTMERGEJOIN_ENABLED: Boolean = ctx.conf.sortMergeJoinEnabled
+    try {
+      ctx.conf.setConf(SQLConf.SORTMERGE_JOIN, true)
+      Seq(
+        ("SELECT * FROM arrayData JOIN complexData ON data = a", classOf[ShuffledHashJoin])
+      ).foreach { case (query, joinClass) => assertJoin(query, joinClass) }
+    } finally {
+      ctx.conf.setConf(SQLConf.SORTMERGE_JOIN, SORTMERGEJOIN_ENABLED)
+    }
+  }
+
   test("broadcasted hash join operator selection") {
     ctx.cacheManager.clearCache()
     ctx.sql("CACHE TABLE testData")

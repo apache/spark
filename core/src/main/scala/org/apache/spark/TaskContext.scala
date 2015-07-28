@@ -21,6 +21,7 @@ import java.io.Serializable
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.executor.TaskMetrics
+import org.apache.spark.metrics.source.Source
 import org.apache.spark.unsafe.memory.TaskMemoryManager
 import org.apache.spark.util.TaskCompletionListener
 
@@ -38,7 +39,7 @@ object TaskContext {
    */
   def getPartitionId(): Int = {
     val tc = taskContext.get()
-    if (tc == null) {
+    if (tc eq null) {
       0
     } else {
       tc.partitionId()
@@ -157,7 +158,33 @@ abstract class TaskContext extends Serializable {
   def taskMetrics(): TaskMetrics
 
   /**
+   * ::DeveloperApi::
+   * Returns all metrics sources with the given name which are associated with the instance
+   * which runs the task. For more information see [[org.apache.spark.metrics.MetricsSystem!]].
+   */
+  @DeveloperApi
+  def getMetricsSources(sourceName: String): Seq[Source]
+
+  /**
    * Returns the manager for this task's managed memory.
    */
   private[spark] def taskMemoryManager(): TaskMemoryManager
+
+  /**
+   * Register an accumulator that belongs to this task. Accumulators must call this method when
+   * deserializing in executors.
+   */
+  private[spark] def registerAccumulator(a: Accumulable[_, _]): Unit
+
+  /**
+   * Return the local values of internal accumulators that belong to this task. The key of the Map
+   * is the accumulator id and the value of the Map is the latest accumulator local value.
+   */
+  private[spark] def collectInternalAccumulators(): Map[Long, Any]
+
+  /**
+   * Return the local values of accumulators that belong to this task. The key of the Map is the
+   * accumulator id and the value of the Map is the latest accumulator local value.
+   */
+  private[spark] def collectAccumulators(): Map[Long, Any]
 }

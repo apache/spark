@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.catalyst.plans.PlanTest
 
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, LocalRelation, Project}
+import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.types._
 
@@ -35,15 +35,14 @@ class HiveTypeCoercionSuite extends PlanTest {
 
     shouldCast(NullType, NullType, NullType)
     shouldCast(NullType, IntegerType, IntegerType)
-    shouldCast(NullType, DecimalType, DecimalType.Unlimited)
+    shouldCast(NullType, DecimalType, DecimalType.SYSTEM_DEFAULT)
 
-    // TODO: write the entire implicit cast table out for test cases.
     shouldCast(ByteType, IntegerType, IntegerType)
     shouldCast(IntegerType, IntegerType, IntegerType)
     shouldCast(IntegerType, LongType, LongType)
-    shouldCast(IntegerType, DecimalType, DecimalType.Unlimited)
+    shouldCast(IntegerType, DecimalType, DecimalType(10, 0))
     shouldCast(LongType, IntegerType, IntegerType)
-    shouldCast(LongType, DecimalType, DecimalType.Unlimited)
+    shouldCast(LongType, DecimalType, DecimalType(20, 0))
 
     shouldCast(DateType, TimestampType, TimestampType)
     shouldCast(TimestampType, DateType, DateType)
@@ -72,8 +71,8 @@ class HiveTypeCoercionSuite extends PlanTest {
     shouldCast(IntegerType, TypeCollection(StringType, BinaryType), StringType)
     shouldCast(IntegerType, TypeCollection(BinaryType, StringType), StringType)
 
-    shouldCast(
-      DecimalType.Unlimited, TypeCollection(IntegerType, DecimalType), DecimalType.Unlimited)
+    shouldCast(DecimalType.SYSTEM_DEFAULT,
+      TypeCollection(IntegerType, DecimalType), DecimalType.SYSTEM_DEFAULT)
     shouldCast(DecimalType(10, 2), TypeCollection(IntegerType, DecimalType), DecimalType(10, 2))
     shouldCast(DecimalType(10, 2), TypeCollection(DecimalType, IntegerType), DecimalType(10, 2))
     shouldCast(IntegerType, TypeCollection(DecimalType(10, 2), StringType), DecimalType(10, 2))
@@ -83,9 +82,19 @@ class HiveTypeCoercionSuite extends PlanTest {
 
     // NumericType should not be changed when function accepts any of them.
     Seq(ByteType, ShortType, IntegerType, LongType, FloatType, DoubleType,
-      DecimalType.Unlimited, DecimalType(10, 2)).foreach { tpe =>
+      DecimalType.SYSTEM_DEFAULT, DecimalType(10, 2)).foreach { tpe =>
       shouldCast(tpe, NumericType, tpe)
     }
+
+    shouldCast(
+      ArrayType(StringType, false),
+      TypeCollection(ArrayType(StringType), StringType),
+      ArrayType(StringType, false))
+
+    shouldCast(
+      ArrayType(StringType, true),
+      TypeCollection(ArrayType(StringType), StringType),
+      ArrayType(StringType, true))
   }
 
   test("ineligible implicit type cast") {
@@ -98,14 +107,22 @@ class HiveTypeCoercionSuite extends PlanTest {
     shouldNotCast(IntegerType, TimestampType)
     shouldNotCast(LongType, DateType)
     shouldNotCast(LongType, TimestampType)
-    shouldNotCast(DecimalType.Unlimited, DateType)
-    shouldNotCast(DecimalType.Unlimited, TimestampType)
+    shouldNotCast(DecimalType.SYSTEM_DEFAULT, DateType)
+    shouldNotCast(DecimalType.SYSTEM_DEFAULT, TimestampType)
 
     shouldNotCast(IntegerType, TypeCollection(DateType, TimestampType))
 
     shouldNotCast(IntegerType, ArrayType)
     shouldNotCast(IntegerType, MapType)
     shouldNotCast(IntegerType, StructType)
+
+    shouldNotCast(IntervalType, StringType)
+
+    // Don't implicitly cast complex types to string.
+    shouldNotCast(ArrayType(StringType), StringType)
+    shouldNotCast(MapType(StringType, StringType), StringType)
+    shouldNotCast(new StructType().add("a1", StringType), StringType)
+    shouldNotCast(MapType(StringType, StringType), StringType)
   }
 
   test("tightest common bound for types") {
@@ -151,14 +168,6 @@ class HiveTypeCoercionSuite extends PlanTest {
     widenTest(LongType, FloatType, Some(FloatType))
     widenTest(LongType, DoubleType, Some(DoubleType))
 
-    // Casting up to unlimited-precision decimal
-    widenTest(IntegerType, DecimalType.Unlimited, Some(DecimalType.Unlimited))
-    widenTest(DoubleType, DecimalType.Unlimited, Some(DecimalType.Unlimited))
-    widenTest(DecimalType(3, 2), DecimalType.Unlimited, Some(DecimalType.Unlimited))
-    widenTest(DecimalType.Unlimited, IntegerType, Some(DecimalType.Unlimited))
-    widenTest(DecimalType.Unlimited, DoubleType, Some(DecimalType.Unlimited))
-    widenTest(DecimalType.Unlimited, DecimalType(3, 2), Some(DecimalType.Unlimited))
-
     // No up-casting for fixed-precision decimal (this is handled by arithmetic rules)
     widenTest(DecimalType(2, 1), DecimalType(3, 2), None)
     widenTest(DecimalType(2, 1), DoubleType, None)
@@ -203,7 +212,7 @@ class HiveTypeCoercionSuite extends PlanTest {
 
     ruleTest(HiveTypeCoercion.ImplicitTypeCasts,
       NumericTypeUnaryExpression(Literal.create(null, NullType)),
-      NumericTypeUnaryExpression(Cast(Literal.create(null, NullType), DoubleType)))
+      NumericTypeUnaryExpression(Literal.create(null, DoubleType)))
   }
 
   test("cast NullType for binary operators") {
@@ -215,9 +224,7 @@ class HiveTypeCoercionSuite extends PlanTest {
 
     ruleTest(HiveTypeCoercion.ImplicitTypeCasts,
       NumericTypeBinaryOperator(Literal.create(null, NullType), Literal.create(null, NullType)),
-      NumericTypeBinaryOperator(
-        Cast(Literal.create(null, NullType), DoubleType),
-        Cast(Literal.create(null, NullType), DoubleType)))
+      NumericTypeBinaryOperator(Literal.create(null, DoubleType), Literal.create(null, DoubleType)))
   }
 
   test("coalesce casts") {
@@ -235,9 +242,9 @@ class HiveTypeCoercionSuite extends PlanTest {
         :: Literal(1)
         :: Literal(new java.math.BigDecimal("1000000000000000000000"))
         :: Nil),
-      Coalesce(Cast(Literal(1L), DecimalType())
-        :: Cast(Literal(1), DecimalType())
-        :: Cast(Literal(new java.math.BigDecimal("1000000000000000000000")), DecimalType())
+      Coalesce(Cast(Literal(1L), DecimalType(22, 0))
+        :: Cast(Literal(1), DecimalType(22, 0))
+        :: Cast(Literal(new java.math.BigDecimal("1000000000000000000000")), DecimalType(22, 0))
         :: Nil))
   }
 
@@ -307,6 +314,92 @@ class HiveTypeCoercionSuite extends PlanTest {
     )
   }
 
+  test("WidenSetOperationTypes for union except and intersect") {
+    def checkOutput(logical: LogicalPlan, expectTypes: Seq[DataType]): Unit = {
+      logical.output.zip(expectTypes).foreach { case (attr, dt) =>
+        assert(attr.dataType === dt)
+      }
+    }
+
+    val left = LocalRelation(
+      AttributeReference("i", IntegerType)(),
+      AttributeReference("u", DecimalType.SYSTEM_DEFAULT)(),
+      AttributeReference("b", ByteType)(),
+      AttributeReference("d", DoubleType)())
+    val right = LocalRelation(
+      AttributeReference("s", StringType)(),
+      AttributeReference("d", DecimalType(2, 1))(),
+      AttributeReference("f", FloatType)(),
+      AttributeReference("l", LongType)())
+
+    val wt = HiveTypeCoercion.WidenSetOperationTypes
+    val expectedTypes = Seq(StringType, DecimalType.SYSTEM_DEFAULT, FloatType, DoubleType)
+
+    val r1 = wt(Union(left, right)).asInstanceOf[Union]
+    val r2 = wt(Except(left, right)).asInstanceOf[Except]
+    val r3 = wt(Intersect(left, right)).asInstanceOf[Intersect]
+    checkOutput(r1.left, expectedTypes)
+    checkOutput(r1.right, expectedTypes)
+    checkOutput(r2.left, expectedTypes)
+    checkOutput(r2.right, expectedTypes)
+    checkOutput(r3.left, expectedTypes)
+    checkOutput(r3.right, expectedTypes)
+  }
+
+  test("Transform Decimal precision/scale for union except and intersect") {
+    def checkOutput(logical: LogicalPlan, expectTypes: Seq[DataType]): Unit = {
+      logical.output.zip(expectTypes).foreach { case (attr, dt) =>
+        assert(attr.dataType === dt)
+      }
+    }
+
+    val dp = HiveTypeCoercion.WidenSetOperationTypes
+
+    val left1 = LocalRelation(
+      AttributeReference("l", DecimalType(10, 8))())
+    val right1 = LocalRelation(
+      AttributeReference("r", DecimalType(5, 5))())
+    val expectedType1 = Seq(DecimalType(10, 8))
+
+    val r1 = dp(Union(left1, right1)).asInstanceOf[Union]
+    val r2 = dp(Except(left1, right1)).asInstanceOf[Except]
+    val r3 = dp(Intersect(left1, right1)).asInstanceOf[Intersect]
+
+    checkOutput(r1.left, expectedType1)
+    checkOutput(r1.right, expectedType1)
+    checkOutput(r2.left, expectedType1)
+    checkOutput(r2.right, expectedType1)
+    checkOutput(r3.left, expectedType1)
+    checkOutput(r3.right, expectedType1)
+
+    val plan1 = LocalRelation(AttributeReference("l", DecimalType(10, 5))())
+
+    val rightTypes = Seq(ByteType, ShortType, IntegerType, LongType, FloatType, DoubleType)
+    val expectedTypes = Seq(DecimalType(10, 5), DecimalType(10, 5), DecimalType(15, 5),
+      DecimalType(25, 5), DoubleType, DoubleType)
+
+    rightTypes.zip(expectedTypes).map { case (rType, expectedType) =>
+      val plan2 = LocalRelation(
+        AttributeReference("r", rType)())
+
+      val r1 = dp(Union(plan1, plan2)).asInstanceOf[Union]
+      val r2 = dp(Except(plan1, plan2)).asInstanceOf[Except]
+      val r3 = dp(Intersect(plan1, plan2)).asInstanceOf[Intersect]
+
+      checkOutput(r1.right, Seq(expectedType))
+      checkOutput(r2.right, Seq(expectedType))
+      checkOutput(r3.right, Seq(expectedType))
+
+      val r4 = dp(Union(plan2, plan1)).asInstanceOf[Union]
+      val r5 = dp(Except(plan2, plan1)).asInstanceOf[Except]
+      val r6 = dp(Intersect(plan2, plan1)).asInstanceOf[Intersect]
+
+      checkOutput(r4.left, Seq(expectedType))
+      checkOutput(r5.left, Seq(expectedType))
+      checkOutput(r6.left, Seq(expectedType))
+    }
+  }
+
   /**
    * There are rules that need to not fire before child expressions get resolved.
    * We use this test to make sure those rules do not fire early.
@@ -333,26 +426,26 @@ class HiveTypeCoercionSuite extends PlanTest {
 object HiveTypeCoercionSuite {
 
   case class AnyTypeUnaryExpression(child: Expression)
-    extends UnaryExpression with ExpectsInputTypes {
+    extends UnaryExpression with ExpectsInputTypes with Unevaluable {
     override def inputTypes: Seq[AbstractDataType] = Seq(AnyDataType)
     override def dataType: DataType = NullType
   }
 
   case class NumericTypeUnaryExpression(child: Expression)
-    extends UnaryExpression with ExpectsInputTypes {
+    extends UnaryExpression with ExpectsInputTypes with Unevaluable {
     override def inputTypes: Seq[AbstractDataType] = Seq(NumericType)
     override def dataType: DataType = NullType
   }
 
   case class AnyTypeBinaryOperator(left: Expression, right: Expression)
-    extends BinaryOperator with ExpectsInputTypes {
+    extends BinaryOperator with Unevaluable {
     override def dataType: DataType = NullType
     override def inputType: AbstractDataType = AnyDataType
     override def symbol: String = "anytype"
   }
 
   case class NumericTypeBinaryOperator(left: Expression, right: Expression)
-    extends BinaryOperator with ExpectsInputTypes {
+    extends BinaryOperator with Unevaluable {
     override def dataType: DataType = NullType
     override def inputType: AbstractDataType = NumericType
     override def symbol: String = "numerictype"
