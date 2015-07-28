@@ -32,6 +32,19 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   val d = new Date(sdf.parse("2015-04-08 13:10:15").getTime)
   val ts = new Timestamp(sdf.parse("2013-11-08 13:10:15").getTime)
 
+  test("datetime function current_date") {
+    val d0 = DateTimeUtils.millisToDays(System.currentTimeMillis())
+    val cd = CurrentDate().eval(EmptyRow).asInstanceOf[Int]
+    val d1 = DateTimeUtils.millisToDays(System.currentTimeMillis())
+    assert(d0 <= cd && cd <= d1 && d1 - d0 <= 1)
+  }
+
+  test("datetime function current_timestamp") {
+    val ct = DateTimeUtils.toJavaTimestamp(CurrentTimestamp().eval(EmptyRow).asInstanceOf[Long])
+    val t1 = System.currentTimeMillis()
+    assert(math.abs(t1 - ct.getTime) < 5000)
+  }
+
   test("DayOfYear") {
     val sdfDay = new SimpleDateFormat("D")
     (2002 to 2004).foreach { y =>
