@@ -20,7 +20,6 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.UnresolvedException
 import org.apache.spark.sql.catalyst.expressions.aggregate.AlgebraicAggregate
-import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.types._
 
@@ -343,63 +342,63 @@ trait WindowFunction2 extends Expression {
 }
 
 trait SizeBasedWindowFunction extends WindowFunction2 {
-  def withSize(n: MutableLiteral): SizeBasedWindowFunction
+  def withSize(n: Expression): SizeBasedWindowFunction
 }
 
-abstract class OffsetWindowFunction(child: Expression, offset: Expression, default: Expression)
-    extends Expression with WindowFunction2 with CodegenFallback {
+abstract class OffsetWindowFunction
+    extends Expression with WindowFunction2 with Unevaluable with ImplicitCastInputTypes {
   self: Product =>
+  val input: Expression
+  val default: Expression
+  val offset: Expression
+  val offsetSign: Int
+  def offsetValue: Int = offset.eval().asInstanceOf[Int]
 
-  require(offset.foldable, "Offset must be foldable")
+  override def children: Seq[Expression] = Seq(input, offset, default)
 
-  override lazy val resolved =
-    child.resolved && default.resolved && child.dataType == default.dataType
+  override def foldable: Boolean = input.foldable && (default == null || default.foldable)
 
-  override def children: Seq[Expression] = child :: default :: Nil
+  override def nullable: Boolean = input.nullable && (default == null || default.nullable)
 
-  override def dataType: DataType = child.dataType
-
-  override def foldable: Boolean = child.foldable && default.foldable
-
-  override def nullable: Boolean = child.nullable && default.nullable
-
-  override def eval(input: InternalRow): Any = {
-    val result = child.eval(input)
-    if (result != null) result
-    else default.eval(input)
+  override lazy val frame = {
+    val boundary = ValueFollowing(offsetSign * offsetValue)
+    SpecifiedWindowFrame(RowFrame, boundary, boundary)
   }
 
-  override def toString: String = s"$simpleString($child, $offset, $default)"
+  override def dataType: DataType = input.dataType
 
-  protected val offsetVal = offset.eval().asInstanceOf[Int]
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(AnyDataType, IntegerType, TypeCollection(input.dataType, NullType))
+
+  override def toString: String = s"$prettyName($input, $offset, $default)"
 }
 
-case class Lead(child: Expression, offset: Expression, default: Expression)
-    extends OffsetWindowFunction(child, offset, default) {
-  def this() = this(null, null, null)
-  def this(child: Expression, offset: Expression) =
-    this(child, offset, Literal.create(null, child.dataType))
+case class Lead(input: Expression, offset: Expression, default: Expression)
+    extends OffsetWindowFunction {
 
-  def this(child: Expression) =
-    this(child, Literal(1), Literal.create(null, child.dataType))
+  def this(input: Expression, offset: Expression) =
+    this(input, offset, Literal(null))
 
-  override val frame = SpecifiedWindowFrame(RowFrame,
-    ValueFollowing(offsetVal),
-    ValueFollowing(offsetVal))
+  def this(input: Expression) =
+    this(input, Literal(1), Literal(null))
+
+  def this() = this(Literal(null), Literal(1), Literal(null))
+
+  val offsetSign = 1
 }
 
-case class Lag(child: Expression, offset: Expression, default: Expression)
-    extends OffsetWindowFunction(child, offset, default) {
-  def this() = this(null, null, null)
-  def this(child: Expression, offset: Expression) =
-    this(child, offset, Literal.create(null, child.dataType))
+case class Lag(input: Expression, offset: Expression, default: Expression)
+  extends OffsetWindowFunction {
 
-  def this(child: Expression) =
-    this(child, Literal(1), Literal.create(null, child.dataType))
+  def this(input: Expression, offset: Expression) =
+    this(input, offset, Literal(null))
 
-  override val frame = SpecifiedWindowFrame(RowFrame,
-    ValuePreceding(offsetVal),
-    ValuePreceding(offsetVal))
+  def this(input: Expression) =
+    this(input, Literal(1), Literal(null))
+
+  def this() = this(Literal(null), Literal(1), Literal(null))
+
+  val offsetSign = -1
 }
 
 abstract class AggregateWindowFunction extends AlgebraicAggregate with WindowFunction2 {
@@ -412,7 +411,6 @@ abstract class AggregateWindowFunction extends AlgebraicAggregate with WindowFun
 
 abstract class RowNumberLike extends AggregateWindowFunction {
   override def children: Seq[Expression] = Nil
-  override def deterministic: Boolean = false
   override def inputTypes: Seq[AbstractDataType] = Nil
   protected val rowNumber = AttributeReference("rowNumber", IntegerType)()
   override val bufferAttributes: Seq[AttributeReference] = rowNumber :: Nil
@@ -425,22 +423,23 @@ case class RowNumber() extends RowNumberLike {
 }
 
 // TODO check if this works in combination with CodeGeneration?
-case class CumeDist(n: MutableLiteral) extends RowNumberLike with SizeBasedWindowFunction {
-  def this() = this(MutableLiteral(0, IntegerType))
+case class CumeDist(n: Expression) extends RowNumberLike with SizeBasedWindowFunction {
+  def this() = this(Literal(0))
   override def dataType: DataType = DoubleType
   override def deterministic: Boolean = true
-  override def withSize(n: MutableLiteral): CumeDist = CumeDist(n)
+  override def withSize(n: Expression): CumeDist = CumeDist(n)
   override val frame = SpecifiedWindowFrame(RangeFrame, UnboundedPreceding, CurrentRow)
-  override val evaluateExpression = Cast(rowNumber / n, DoubleType)
+  override val evaluateExpression = Cast(rowNumber, DoubleType) / Cast(n, DoubleType)
 }
 
 // TODO check if this works in combination with CodeGeneration?
 // TODO check logic
-case class NTile(n: MutableLiteral, buckets: Int) extends RowNumberLike
+// Check serialization
+case class NTile(buckets: Expression, n: Expression) extends RowNumberLike
     with SizeBasedWindowFunction {
-  require(buckets > 0, "Number of buckets must be > 0")
-  def this(buckets: Int) = this(MutableLiteral(0, IntegerType), buckets)
-  override def withSize(n: MutableLiteral): NTile = NTile(n, buckets)
+  def this() = this(Literal(1), Literal(0))
+  def this(buckets: Expression) = this(buckets, Literal(0))
+  override def withSize(n: Expression): NTile = NTile(buckets, n)
   private val bucket = AttributeReference("bucket", IntegerType)()
   private val bucketThreshold = AttributeReference("bucketThreshold", IntegerType)()
   private val bucketSize = AttributeReference("bucketSize", IntegerType)()
@@ -464,9 +463,9 @@ case class NTile(n: MutableLiteral, buckets: Int) extends RowNumberLike
 
   override val updateExpressions = Seq(
     rowNumber + 1,
-    bucket + If(rowNumber >= bucketThreshold, 1, 0),
+    bucket + If(rowNumber > bucketThreshold, 1, 0),
     bucketThreshold +
-      If(rowNumber >= bucketThreshold, bucketSize + If(bucket <= bucketsWithPadding, 1, 0), 0),
+      If(rowNumber > bucketThreshold, bucketSize + If(bucket <= bucketsWithPadding, 1, 0), 0),
     bucketSize,
     bucketsWithPadding
   )
@@ -474,54 +473,54 @@ case class NTile(n: MutableLiteral, buckets: Int) extends RowNumberLike
   override val evaluateExpression = bucket
 }
 
-abstract class RankLike(order: Seq[SortOrder]) extends AggregateWindowFunction {
+abstract class RankLike extends AggregateWindowFunction {
   override def children: Seq[Expression] = order
-  override def deterministic: Boolean = true
-  override def inputTypes: Seq[AbstractDataType] = Seq(AnyDataType)
+  override def inputTypes: Seq[AbstractDataType] = children.map(_ => AnyDataType)
 
-  protected val orderExprs = order.map(_.expr)
-
-  protected val orderAttrs = orderExprs.zipWithIndex.map{ case (expr, i) =>
+  val order: Seq[Expression]
+  protected val orderAttrs = order.zipWithIndex.map{ case (expr, i) =>
     AttributeReference(i.toString, expr.dataType)()
   }
 
-  protected val orderEquals = orderExprs.zip(orderAttrs).map(EqualNullSafe.tupled).reduce(And)
-  protected val orderInit = orderExprs.map(e => Literal.create(null, e.dataType))
+  protected val orderEquals =
+    order.zip(orderAttrs).map(EqualNullSafe.tupled).reduceOption(And).getOrElse(Literal(true))
+  protected val orderInit = order.map(e => Literal.create(null, e.dataType))
   protected val rank = AttributeReference("rank", IntegerType)()
   protected val rowNumber = AttributeReference("rowNumber", IntegerType)()
-  protected val updateRank = If(And(orderEquals, rank !== 0), rank, doUpdateRank)
 
   // Implementation for RANK()
-  protected val doUpdateRank: Expression = rowNumber + 1
+  protected def doUpdateRank: Expression = rowNumber + 1
+  protected def updateRank = If(And(orderEquals, rank !== 0), rank, doUpdateRank)
   override val bufferAttributes = rank +: rowNumber +: orderAttrs
   override val initialValues = Literal(0) +: Literal(0) +: orderInit
-  override val updateExpressions = doUpdateRank +: (rowNumber + 1) +: orderExprs
+  override val updateExpressions = updateRank +: (rowNumber + 1) +: order
   override val evaluateExpression: Expression = Cast(rank, IntegerType)
 
-  def withOrder(order: Seq[SortOrder]): RankLike
+  def withOrder(order: Seq[Expression]): RankLike
 }
 
-case class Rank(order: Seq[SortOrder]) extends RankLike(order) {
+case class Rank(order: Seq[Expression]) extends RankLike {
   def this() = this(Nil)
-  override def withOrder(order: Seq[SortOrder]): Rank = Rank(order)
+  override def withOrder(order: Seq[Expression]): Rank = Rank(order)
 }
 
-case class DenseRank(order: Seq[SortOrder]) extends RankLike(order) {
+case class DenseRank(order: Seq[Expression]) extends RankLike {
   def this() = this(Nil)
-  override def withOrder(order: Seq[SortOrder]): DenseRank = DenseRank(order)
+  override def withOrder(order: Seq[Expression]): DenseRank = DenseRank(order)
+  override protected def doUpdateRank = rank + 1
+  override val updateExpressions = updateRank +: order
   override val bufferAttributes = rank +: orderAttrs
   override val initialValues = Literal(0) +: orderInit
-  override val updateExpressions = doUpdateRank +: orderExprs
-  override val doUpdateRank = rank + 1
 }
 
 // TODO check if this works in combination with CodeGeneration?
-case class PercentRank(order: Seq[SortOrder], n: MutableLiteral) extends RankLike(order)
+case class PercentRank(order: Seq[Expression], n: Expression) extends RankLike
     with SizeBasedWindowFunction {
   def this() = this(Nil, MutableLiteral(0, IntegerType))
-  override def withOrder(order: Seq[SortOrder]): PercentRank = PercentRank(order, n)
-  override def withSize(n: MutableLiteral): PercentRank = PercentRank(order, n)
+  override def withOrder(order: Seq[Expression]): PercentRank = PercentRank(order, n)
+  override def withSize(n: Expression): PercentRank = PercentRank(order, n)
   override def dataType: DataType = DoubleType
   override val evaluateExpression =
-    If(n > 1, Cast((rank - 1) / (n - 1), DoubleType), Literal.create(0.0d, DoubleType))
+    If(n > 1, Cast(rank - 1, DoubleType) / Cast(n - 1, DoubleType),
+      Literal.create(0.0d, DoubleType))
 }

@@ -489,7 +489,7 @@ object functions {
    * @since 1.4.0
    */
   def ntile(n: Int): Column = {
-    new NTile(n)
+    new NTile(Literal(n))
   }
 
   /**

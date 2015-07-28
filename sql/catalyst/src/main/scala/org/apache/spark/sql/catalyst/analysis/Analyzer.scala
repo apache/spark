@@ -76,6 +76,7 @@ class Analyzer(
       ResolveGenerate ::
       ResolveFunctions ::
       ResolveAliases ::
+      ResolveWindowOrder ::
       ResolveWindowFrame ::
       ExtractWindowExpressions ::
       GlobalAggregates ::
@@ -526,6 +527,8 @@ class Analyzer(
           case u @ UnresolvedFunction(name, children, isDistinct) =>
             withPosition(u) {
               registry.lookupFunction(name, children) match {
+                // DISTINCT is not meaningful in case of WindowFunctions.
+                case wf: WindowFunction2 => wf
                 // We get an aggregate function built based on AggregateFunction2 interface.
                 // So, we wrap it in AggregateExpression2.
                 case agg2: AggregateFunction2 => AggregateExpression2(agg2, Complete, isDistinct)
@@ -1040,19 +1043,33 @@ class Analyzer(
    */
   object ResolveWindowFrame extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-      case logical: LogicalPlan => logical.transformExpressionsDown {
+      case logical: LogicalPlan => logical transformExpressions {
         case WindowExpression(wf: WindowFunction2,
             WindowSpecDefinition(_, _, f: SpecifiedWindowFrame))
           if wf.frame != UnspecifiedFrame && wf.frame != f =>
-          failAnalysis(s"The frame of the window '$f' does not match the required frame " +
-            s"'${wf.frame}'")
+          failAnalysis(s"Window Frame $f must match the required frame ${wf.frame}")
         case WindowExpression(wf: WindowFunction2,
             s @ WindowSpecDefinition(_, o, UnspecifiedFrame))
             if wf.frame != UnspecifiedFrame =>
           WindowExpression(wf, s.copy(frameSpecification = wf.frame))
         case we @ WindowExpression(e, s @ WindowSpecDefinition(_, o, UnspecifiedFrame)) =>
-          val frame = SpecifiedWindowFrame.defaultWindowFrame(!o.isEmpty, false)
+          val frame = SpecifiedWindowFrame.defaultWindowFrame(!o.isEmpty, true)
           we.copy(windowSpec = s.copy(frameSpecification = frame))
+      }
+    }
+  }
+
+  /**
+   * Check and add order to [[AggregateWindowFunction]]s.
+   */
+  object ResolveWindowOrder extends Rule[LogicalPlan] {
+    def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+      case logical: LogicalPlan => logical transformExpressions {
+        case WindowExpression(agg: AggregateWindowFunction, spec) if spec.orderSpec.isEmpty =>
+          failAnalysis(s"AggregateWindowFunction $agg window specification must be ordered")
+        case WindowExpression(rank: RankLike, spec) if spec.resolved =>
+          val order = spec.orderSpec.map(_.child)
+          WindowExpression(rank.withOrder(order), spec)
       }
     }
   }

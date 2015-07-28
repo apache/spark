@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution
 
 import java.util
 
+import org.apache.spark.Logging
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
@@ -169,7 +170,7 @@ case class Window(
    * @return a frame processor.
    */
   private[this] def createFrameProcessor(
-      frame: WindowFrame,
+      frame: (Char, WindowFrame),
       functions: Array[Expression],
       ordinal: Int,
       result: MutableRow,
@@ -190,33 +191,43 @@ case class Window(
     // Create the frame processor.
     frame match {
       // Offset Frame
-      case SpecifiedWindowFrame(RowFrame, FrameBoundaryExtractor(l), FrameBoundaryExtractor(h))
+      case ('O', SpecifiedWindowFrame(RowFrame,
+          FrameBoundaryExtractor(l),
+          FrameBoundaryExtractor(h)))
           if l == h =>
         new OffsetWindowFunctionFrame(target, functions, child.output, newMutableProjection, l)
 
       // Growing Frame.
-      case SpecifiedWindowFrame(frameType, UnboundedPreceding, FrameBoundaryExtractor(high)) =>
+      case ('A', SpecifiedWindowFrame(frameType,
+          UnboundedPreceding,
+          FrameBoundaryExtractor(high))) =>
         val uBoundOrdering = createBoundOrdering(frameType, high)
         new UnboundedPrecedingWindowFunctionFrame(target, processor, uBoundOrdering)
 
       // Shrinking Frame.
-      case SpecifiedWindowFrame(frameType, FrameBoundaryExtractor(low), UnboundedFollowing) =>
+      case ('A', SpecifiedWindowFrame(frameType,
+          FrameBoundaryExtractor(low),
+          UnboundedFollowing)) =>
         val lBoundOrdering = createBoundOrdering(frameType, low)
         new UnboundedFollowingWindowFunctionFrame(target, processor, lBoundOrdering)
 
       // Moving Frame.
-      case SpecifiedWindowFrame(frameType, FrameBoundaryExtractor(l), FrameBoundaryExtractor(h)) =>
+      case ('A', SpecifiedWindowFrame(frameType,
+          FrameBoundaryExtractor(l),
+          FrameBoundaryExtractor(h))) =>
         val lBoundOrdering = createBoundOrdering(frameType, l)
         val uBoundOrdering = createBoundOrdering(frameType, h)
         new SlidingWindowFunctionFrame(target, processor, lBoundOrdering, uBoundOrdering)
 
       // Entire Partition Frame.
-      case SpecifiedWindowFrame(_, UnboundedPreceding, UnboundedFollowing) =>
+      case ('A', SpecifiedWindowFrame(_,
+          UnboundedPreceding,
+          UnboundedFollowing)) =>
         new UnboundedWindowFunctionFrame(target, processor)
 
       // Error
-      case fr =>
-        sys.error(s"Unsupported Frame $fr for functions: $functions")
+      case (mode, fr) =>
+        sys.error(s"Unsupported Mode $mode Frame $fr for functions: $functions")
     }
   }
 
@@ -242,17 +253,23 @@ case class Window(
 
   protected override def doExecute(): RDD[InternalRow] = {
     // Prepare processing.
-    // Group the window expression by their processing frame.
+    // Collect window expressions.
     val windowExprs = windowExpression.flatMap {
       _.collect {
         case e: WindowExpression => e
       }
     }
 
+    // Group the window expression by their processing frame and mode.
+    val framedWindowExprs = windowExprs.groupBy {
+      case e @ WindowExpression(_: AggregateExpression, spec) => ('A', spec.frameSpecification)
+      case e @ WindowExpression(_: AggregateFunction2, spec) => ('A', spec.frameSpecification)
+      case e @ WindowExpression(_, spec) => ('O', spec.frameSpecification)
+    }
+
     // Create Frame processor factories and order the unbound window expressions by the frame they
     // are processed in; this is the order in which their results will be written to window
     // function result buffer.
-    val framedWindowExprs = windowExprs.groupBy(_.windowSpec.frameSpecification)
     val factories = Array.ofDim[(MutableRow, MutableLiteral) =>
       WindowFunctionFrame](framedWindowExprs.size)
     val unboundExpressions = mutable.Buffer.empty[Expression]
@@ -264,14 +281,8 @@ case class Window(
         // Track the unbound expressions
         unboundExpressions ++= unboundFrameExpressions
 
-        // Add ordering clause to ranking functions... Move code below to analyser? The dependency
-        // used in the pattern match might be to narrow (only RankLike and its subclasses).
-        val functions = unboundFrameExpressions.map { e =>
-          e.windowFunction match {
-            case r: RankLike => r.withOrder(windowSpec.orderSpec)
-            case f => f
-          }
-        }.toArray
+        // Extract functions from frame.
+        val functions = unboundFrameExpressions.map(_.windowFunction).toArray
 
         // Create the frame processor factory.
         factories(index) = (result: MutableRow, size: MutableLiteral) =>
@@ -431,36 +442,59 @@ private[execution] final class OffsetWindowFunctionFrame(
   /** Rows of the partition currently being processed. */
   private[this] var input: CompactBuffer[InternalRow] = null
 
-  /** Index of the row we are currently using for output. */
+  /** Index of the input row currently used for output. */
   private[this] var inputIndex = 0
 
-  /** Check if the output has been explicitly cleared. */
-  private[this] var outputNull = false
+  /** Index of the current output row. */
+  private[this] var outputIndex = 0
 
-  /** Create a */
-  private[this] val projection = newMutableProjection(expressions.toSeq, inputSchema)()
-  projection.target(target)
+  /** Row used when there is no valid input. */
+  private[this] val emptyRow = new GenericInternalRow(inputSchema.size)
+
+  /** Row used to combine the offset and the current row. */
+  private[this] val join = new JoinedRow
+
+  /** Create the projection. */
+  private[this] val projection = {
+    // Create an input schema to bind the default expressions to.
+    val defaultInputSchema = inputSchema.map(_.newInstance()) ++ inputSchema
+
+    // Collect the expressions and bind them.
+    val boundExpressions = expressions.toSeq.map {
+      case e: OffsetWindowFunction =>
+        val boundLeft = BindReferences.bindReference(e.input, inputSchema)
+        if (e.default == null || e.default.foldable && e.default.eval() == null) {
+          // Without default value.
+          boundLeft
+        } else {
+          // With default value.
+          val boundRight = BindReferences.bindReference(e.default, defaultInputSchema)
+          Coalesce(boundLeft :: boundRight :: Nil)
+        }
+      case e =>
+        BindReferences.bindReference(e, inputSchema)
+      }
+
+      // Create the projection.
+      newMutableProjection(boundExpressions, Nil)().target(target)
+  }
 
   override def prepare(rows: CompactBuffer[InternalRow]): Unit = {
     input = rows
     inputIndex = offset
+    outputIndex = 0
   }
 
   override def write(): Unit = {
     val size = input.size
     if (inputIndex >= 0 && inputIndex < size) {
-      projection(input(inputIndex))
-      outputNull = false
+      join(input(inputIndex), input(outputIndex))
+    } else {
+      join(emptyRow, input(outputIndex))
     }
-    else if (!outputNull) {
-      var i = 0
-      while (i < expressions.length) {
-        target.setNullAt(i)
-        i += 1
-      }
-      outputNull = true
-    }
+    projection(join)
     inputIndex += 1
+    outputIndex += 1
   }
 }
 
