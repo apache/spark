@@ -67,13 +67,6 @@ private[sql] abstract class SortAggregationIterator(
     functions
   }
 
-  // All non-algebraic aggregate functions.
-  protected val nonAlgebraicAggregateFunctions: Array[AggregateFunction2] = {
-    aggregateFunctions.collect {
-      case func: AggregateFunction2 if !func.isInstanceOf[AlgebraicAggregate] => func
-    }.toArray
-  }
-
   // Positions of those non-algebraic aggregate functions in aggregateFunctions.
   // For example, we have func1, func2, func3, func4 in aggregateFunctions, and
   // func2 and func3 are non-algebraic aggregate functions.
@@ -90,6 +83,10 @@ private[sql] abstract class SortAggregationIterator(
     }
     positions.toArray
   }
+
+  // All non-algebraic aggregate functions.
+  protected val nonAlgebraicAggregateFunctions: Array[AggregateFunction2] =
+    nonAlgebraicAggregateFunctionPositions.map(aggregateFunctions)
 
   // This is used to project expressions for the grouping expressions.
   protected val groupGenerator =
@@ -109,7 +106,7 @@ private[sql] abstract class SortAggregationIterator(
     new GenericMutableRow(size)
   }
 
-  protected val joinedRow = new JoinedRow4
+  protected val joinedRow = new JoinedRow
 
   protected val placeholderExpressions = Seq.fill(initialBufferOffset)(NoOp)
 
@@ -179,8 +176,6 @@ private[sql] abstract class SortAggregationIterator(
       // For the below compare method, we do not need to make a copy of groupingKey.
       val groupingKey = groupGenerator(currentRow)
       // Check if the current row belongs the current input row.
-      currentGroupingKey.equals(groupingKey)
-
       if (currentGroupingKey == groupingKey) {
         processRow(currentRow)
       } else {
@@ -288,10 +283,7 @@ class PartialSortAggregationIterator(
 
   // This projection is used to update buffer values for all AlgebraicAggregates.
   private val algebraicUpdateProjection = {
-    val bufferSchema = aggregateFunctions.flatMap {
-      case ae: AlgebraicAggregate => ae.bufferAttributes
-      case agg: AggregateFunction2 => agg.bufferAttributes
-    }
+    val bufferSchema = aggregateFunctions.flatMap(_.bufferAttributes)
     val updateExpressions = aggregateFunctions.flatMap {
       case ae: AlgebraicAggregate => ae.updateExpressions
       case agg: AggregateFunction2 => Seq.fill(agg.bufferAttributes.length)(NoOp)
@@ -348,19 +340,14 @@ class PartialMergeSortAggregationIterator(
     inputAttributes,
     inputIter) {
 
-  private val placeholderAttribtues =
+  private val placeholderAttributes =
     Seq.fill(initialBufferOffset)(AttributeReference("placeholder", NullType)())
 
   // This projection is used to merge buffer values for all AlgebraicAggregates.
   private val algebraicMergeProjection = {
     val bufferSchemata =
-      placeholderAttribtues ++ aggregateFunctions.flatMap {
-        case ae: AlgebraicAggregate => ae.bufferAttributes
-        case agg: AggregateFunction2 => agg.bufferAttributes
-      } ++ placeholderAttribtues ++ aggregateFunctions.flatMap {
-        case ae: AlgebraicAggregate => ae.cloneBufferAttributes
-        case agg: AggregateFunction2 => agg.cloneBufferAttributes
-      }
+      placeholderAttributes ++ aggregateFunctions.flatMap(_.bufferAttributes) ++
+        placeholderAttributes ++ aggregateFunctions.flatMap(_.cloneBufferAttributes)
     val mergeExpressions = placeholderExpressions ++ aggregateFunctions.flatMap {
       case ae: AlgebraicAggregate => ae.mergeExpressions
       case agg: AggregateFunction2 => Seq.fill(agg.bufferAttributes.length)(NoOp)
@@ -444,13 +431,8 @@ class FinalSortAggregationIterator(
   // This projection is used to merge buffer values for all AlgebraicAggregates.
   private val algebraicMergeProjection = {
     val bufferSchemata =
-      offsetAttributes ++ aggregateFunctions.flatMap {
-        case ae: AlgebraicAggregate => ae.bufferAttributes
-        case agg: AggregateFunction2 => agg.bufferAttributes
-      } ++ offsetAttributes ++ aggregateFunctions.flatMap {
-        case ae: AlgebraicAggregate => ae.cloneBufferAttributes
-        case agg: AggregateFunction2 => agg.cloneBufferAttributes
-      }
+      offsetAttributes ++ aggregateFunctions.flatMap(_.bufferAttributes) ++
+        offsetAttributes ++ aggregateFunctions.flatMap(_.cloneBufferAttributes)
     val mergeExpressions = placeholderExpressions ++ aggregateFunctions.flatMap {
       case ae: AlgebraicAggregate => ae.mergeExpressions
       case agg: AggregateFunction2 => Seq.fill(agg.bufferAttributes.length)(NoOp)
@@ -462,13 +444,8 @@ class FinalSortAggregationIterator(
   // This projection is used to evaluate all AlgebraicAggregates.
   private val algebraicEvalProjection = {
     val bufferSchemata =
-      offsetAttributes ++ aggregateFunctions.flatMap {
-        case ae: AlgebraicAggregate => ae.bufferAttributes
-        case agg: AggregateFunction2 => agg.bufferAttributes
-      } ++ offsetAttributes ++ aggregateFunctions.flatMap {
-        case ae: AlgebraicAggregate => ae.cloneBufferAttributes
-        case agg: AggregateFunction2 => agg.cloneBufferAttributes
-      }
+      offsetAttributes ++ aggregateFunctions.flatMap(_.bufferAttributes) ++
+        offsetAttributes ++ aggregateFunctions.flatMap(_.cloneBufferAttributes)
     val evalExpressions = aggregateFunctions.map {
       case ae: AlgebraicAggregate => ae.evaluateExpression
       case agg: AggregateFunction2 => NoOp
@@ -599,11 +576,10 @@ class FinalAndCompleteSortAggregationIterator(
   }
 
   // All non-algebraic aggregate functions with mode Final.
-  private val finalNonAlgebraicAggregateFunctions: Array[AggregateFunction2] = {
+  private val finalNonAlgebraicAggregateFunctions: Array[AggregateFunction2] =
     finalAggregateFunctions.collect {
       case func: AggregateFunction2 if !func.isInstanceOf[AlgebraicAggregate] => func
-    }.toArray
-  }
+    }
 
   // All aggregate functions with mode Complete.
   private val completeAggregateFunctions: Array[AggregateFunction2] = {
@@ -617,11 +593,10 @@ class FinalAndCompleteSortAggregationIterator(
   }
 
   // All non-algebraic aggregate functions with mode Complete.
-  private val completeNonAlgebraicAggregateFunctions: Array[AggregateFunction2] = {
+  private val completeNonAlgebraicAggregateFunctions: Array[AggregateFunction2] =
     completeAggregateFunctions.collect {
       case func: AggregateFunction2 if !func.isInstanceOf[AlgebraicAggregate] => func
-    }.toArray
-  }
+    }
 
   // This projection is used to merge buffer values for all AlgebraicAggregates with mode
   // Final.
@@ -633,13 +608,9 @@ class FinalAndCompleteSortAggregationIterator(
     val completeOffsetExpressions = Seq.fill(numCompleteOffsetAttributes)(NoOp)
 
     val bufferSchemata =
-      offsetAttributes ++ finalAggregateFunctions.flatMap {
-        case ae: AlgebraicAggregate => ae.bufferAttributes
-        case agg: AggregateFunction2 => agg.bufferAttributes
-      } ++ completeOffsetAttributes ++ offsetAttributes ++ finalAggregateFunctions.flatMap {
-        case ae: AlgebraicAggregate => ae.cloneBufferAttributes
-        case agg: AggregateFunction2 => agg.cloneBufferAttributes
-      } ++ completeOffsetAttributes
+      offsetAttributes ++ finalAggregateFunctions.flatMap(_.bufferAttributes) ++
+        completeOffsetAttributes ++ offsetAttributes ++
+        finalAggregateFunctions.flatMap(_.cloneBufferAttributes) ++ completeOffsetAttributes
     val mergeExpressions =
       placeholderExpressions ++ finalAggregateFunctions.flatMap {
         case ae: AlgebraicAggregate => ae.mergeExpressions
@@ -658,10 +629,8 @@ class FinalAndCompleteSortAggregationIterator(
     val finalOffsetExpressions = Seq.fill(numFinalOffsetAttributes)(NoOp)
 
     val bufferSchema =
-      offsetAttributes ++ finalOffsetAttributes ++ completeAggregateFunctions.flatMap {
-        case ae: AlgebraicAggregate => ae.bufferAttributes
-        case agg: AggregateFunction2 => agg.bufferAttributes
-      }
+      offsetAttributes ++ finalOffsetAttributes ++
+        completeAggregateFunctions.flatMap(_.bufferAttributes)
     val updateExpressions =
       placeholderExpressions ++ finalOffsetExpressions ++ completeAggregateFunctions.flatMap {
         case ae: AlgebraicAggregate => ae.updateExpressions
@@ -673,13 +642,8 @@ class FinalAndCompleteSortAggregationIterator(
   // This projection is used to evaluate all AlgebraicAggregates.
   private val algebraicEvalProjection = {
     val bufferSchemata =
-      offsetAttributes ++ aggregateFunctions.flatMap {
-        case ae: AlgebraicAggregate => ae.bufferAttributes
-        case agg: AggregateFunction2 => agg.bufferAttributes
-      } ++ offsetAttributes ++ aggregateFunctions.flatMap {
-        case ae: AlgebraicAggregate => ae.cloneBufferAttributes
-        case agg: AggregateFunction2 => agg.cloneBufferAttributes
-      }
+      offsetAttributes ++ aggregateFunctions.flatMap(_.bufferAttributes) ++
+        offsetAttributes ++ aggregateFunctions.flatMap(_.cloneBufferAttributes)
     val evalExpressions = aggregateFunctions.map {
       case ae: AlgebraicAggregate => ae.evaluateExpression
       case agg: AggregateFunction2 => NoOp

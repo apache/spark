@@ -214,6 +214,9 @@ trait String2StringExpression extends ImplicitCastInputTypes {
 /**
  * A function that converts the characters of a string to uppercase.
  */
+@ExpressionDescription(
+  usage = "_FUNC_(str) - Returns str with all characters changed to uppercase",
+  extended = "> SELECT _FUNC_('SparkSql');\n 'SPARKSQL'")
 case class Upper(child: Expression)
   extends UnaryExpression with String2StringExpression {
 
@@ -227,6 +230,9 @@ case class Upper(child: Expression)
 /**
  * A function that converts the characters of a string to lowercase.
  */
+@ExpressionDescription(
+  usage = "_FUNC_(str) - Returns str with all characters changed to lowercase",
+  extended = "> SELECT _FUNC_('SparkSql');\n'sparksql'")
 case class Lower(child: Expression) extends UnaryExpression with String2StringExpression {
 
   override def convert(v: UTF8String): UTF8String = v.toLowerCase
@@ -771,7 +777,6 @@ case class Levenshtein(left: Expression, right: Expression) extends BinaryExpres
   override def inputTypes: Seq[AbstractDataType] = Seq(StringType, StringType)
 
   override def dataType: DataType = IntegerType
-
   protected override def nullSafeEval(leftValue: Any, rightValue: Any): Any =
     leftValue.asInstanceOf[UTF8String].levenshteinDistance(rightValue.asInstanceOf[UTF8String])
 

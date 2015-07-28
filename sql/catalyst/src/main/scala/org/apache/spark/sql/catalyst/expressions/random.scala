@@ -38,9 +38,13 @@ abstract class RDG extends LeafExpression with Nondeterministic {
 
   /**
    * Record ID within each partition. By being transient, the Random Number Generator is
-   * reset every time we serialize and deserialize it.
+   * reset every time we serialize and deserialize and initialize it.
    */
-  @transient protected lazy val rng = new XORShiftRandom(seed + TaskContext.getPartitionId)
+  @transient protected var rng: XORShiftRandom = _
+
+  override protected def initInternal(): Unit = {
+    rng = new XORShiftRandom(seed + TaskContext.getPartitionId)
+  }
 
   override def nullable: Boolean = false
 
@@ -49,7 +53,7 @@ abstract class RDG extends LeafExpression with Nondeterministic {
 
 /** Generate a random column with i.i.d. uniformly distributed values in [0, 1). */
 case class Rand(seed: Long) extends RDG {
-  override def eval(input: InternalRow): Double = rng.nextDouble()
+  override protected def evalInternal(input: InternalRow): Double = rng.nextDouble()
 
   def this() = this(Utils.random.nextLong())
 
@@ -72,7 +76,7 @@ case class Rand(seed: Long) extends RDG {
 
 /** Generate a random column with i.i.d. gaussian random distribution. */
 case class Randn(seed: Long) extends RDG {
-  override def eval(input: InternalRow): Double = rng.nextGaussian()
+  override protected def evalInternal(input: InternalRow): Double = rng.nextGaussian()
 
   def this() = this(Utils.random.nextLong())
 

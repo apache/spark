@@ -17,16 +17,33 @@
 
 package org.apache.spark.ml.feature
 
+import scala.collection.mutable.ArrayBuffer
 import scala.util.parsing.combinator.RegexParsers
 
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.ml.Transformer
+import org.apache.spark.ml.{Estimator, Model, Transformer, Pipeline, PipelineModel, PipelineStage}
 import org.apache.spark.ml.param.{Param, ParamMap}
 import org.apache.spark.ml.param.shared.{HasFeaturesCol, HasLabelCol}
 import org.apache.spark.ml.util.Identifiable
+import org.apache.spark.mllib.linalg.VectorUDT
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
+
+/**
+ * Base trait for [[RFormula]] and [[RFormulaModel]].
+ */
+private[feature] trait RFormulaBase extends HasFeaturesCol with HasLabelCol {
+  /** @group getParam */
+  def setFeaturesCol(value: String): this.type = set(featuresCol, value)
+
+  /** @group getParam */
+  def setLabelCol(value: String): this.type = set(labelCol, value)
+
+  protected def hasLabelCol(schema: StructType): Boolean = {
+    schema.map(_.name).contains($(labelCol))
+  }
+}
 
 /**
  * :: Experimental ::
@@ -35,8 +52,7 @@ import org.apache.spark.sql.types._
  * docs here: http://stat.ethz.ch/R-manual/R-patched/library/stats/html/formula.html
  */
 @Experimental
-class RFormula(override val uid: String)
-  extends Transformer with HasFeaturesCol with HasLabelCol {
+class RFormula(override val uid: String) extends Estimator[RFormulaModel] with RFormulaBase {
 
   def this() = this(Identifiable.randomUID("rFormula"))
 
@@ -62,19 +78,74 @@ class RFormula(override val uid: String)
   /** @group getParam */
   def getFormula: String = $(formula)
 
-  /** @group getParam */
-  def setFeaturesCol(value: String): this.type = set(featuresCol, value)
+  override def fit(dataset: DataFrame): RFormulaModel = {
+    require(parsedFormula.isDefined, "Must call setFormula() first.")
+    // StringType terms and terms representing interactions need to be encoded before assembly.
+    // TODO(ekl) add support for feature interactions
+    var encoderStages = ArrayBuffer[PipelineStage]()
+    var tempColumns = ArrayBuffer[String]()
+    val encodedTerms = parsedFormula.get.terms.map { term =>
+      dataset.schema(term) match {
+        case column if column.dataType == StringType =>
+          val indexCol = term + "_idx_" + uid
+          val encodedCol = term + "_onehot_" + uid
+          encoderStages += new StringIndexer().setInputCol(term).setOutputCol(indexCol)
+          encoderStages += new OneHotEncoder().setInputCol(indexCol).setOutputCol(encodedCol)
+          tempColumns += indexCol
+          tempColumns += encodedCol
+          encodedCol
+        case _ =>
+          term
+      }
+    }
+    encoderStages += new VectorAssembler(uid)
+      .setInputCols(encodedTerms.toArray)
+      .setOutputCol($(featuresCol))
+    encoderStages += new ColumnPruner(tempColumns.toSet)
+    val pipelineModel = new Pipeline(uid).setStages(encoderStages.toArray).fit(dataset)
+    copyValues(new RFormulaModel(uid, parsedFormula.get, pipelineModel).setParent(this))
+  }
 
-  /** @group getParam */
-  def setLabelCol(value: String): this.type = set(labelCol, value)
+  // optimistic schema; does not contain any ML attributes
+  override def transformSchema(schema: StructType): StructType = {
+    if (hasLabelCol(schema)) {
+      StructType(schema.fields :+ StructField($(featuresCol), new VectorUDT, true))
+    } else {
+      StructType(schema.fields :+ StructField($(featuresCol), new VectorUDT, true) :+
+        StructField($(labelCol), DoubleType, true))
+    }
+  }
+
+  override def copy(extra: ParamMap): RFormula = defaultCopy(extra)
+
+  override def toString: String = s"RFormula(${get(formula)})"
+}
+
+/**
+ * :: Experimental ::
+ * A fitted RFormula. Fitting is required to determine the factor levels of formula terms.
+ * @param parsedFormula a pre-parsed R formula.
+ * @param pipelineModel the fitted feature model, including factor to index mappings.
+ */
+@Experimental
+class RFormulaModel private[feature](
+    override val uid: String,
+    parsedFormula: ParsedRFormula,
+    pipelineModel: PipelineModel)
+  extends Model[RFormulaModel] with RFormulaBase {
+
+  override def transform(dataset: DataFrame): DataFrame = {
+    checkCanTransform(dataset.schema)
+    transformLabel(pipelineModel.transform(dataset))
+  }
 
   override def transformSchema(schema: StructType): StructType = {
     checkCanTransform(schema)
-    val withFeatures = transformFeatures.transformSchema(schema)
+    val withFeatures = pipelineModel.transformSchema(schema)
     if (hasLabelCol(schema)) {
       withFeatures
-    } else if (schema.exists(_.name == parsedFormula.get.label)) {
-      val nullable = schema(parsedFormula.get.label).dataType match {
+    } else if (schema.exists(_.name == parsedFormula.label)) {
+      val nullable = schema(parsedFormula.label).dataType match {
         case _: NumericType | BooleanType => false
         case _ => true
       }
@@ -86,24 +157,19 @@ class RFormula(override val uid: String)
     }
   }
 
-  override def transform(dataset: DataFrame): DataFrame = {
-    checkCanTransform(dataset.schema)
-    transformLabel(transformFeatures.transform(dataset))
-  }
+  override def copy(extra: ParamMap): RFormulaModel = copyValues(
+    new RFormulaModel(uid, parsedFormula, pipelineModel))
 
-  override def copy(extra: ParamMap): RFormula = defaultCopy(extra)
-
-  override def toString: String = s"RFormula(${get(formula)})"
+  override def toString: String = s"RFormulaModel(${parsedFormula})"
 
   private def transformLabel(dataset: DataFrame): DataFrame = {
-    val labelName = parsedFormula.get.label
+    val labelName = parsedFormula.label
     if (hasLabelCol(dataset.schema)) {
       dataset
     } else if (dataset.schema.exists(_.name == labelName)) {
       dataset.schema(labelName).dataType match {
         case _: NumericType | BooleanType =>
           dataset.withColumn($(labelCol), dataset(labelName).cast(DoubleType))
-        // TODO(ekl) add support for string-type labels
         case other =>
           throw new IllegalArgumentException("Unsupported type for label: " + other)
       }
@@ -114,25 +180,32 @@ class RFormula(override val uid: String)
     }
   }
 
-  private def transformFeatures: Transformer = {
-    // TODO(ekl) add support for non-numeric features and feature interactions
-    new VectorAssembler(uid)
-      .setInputCols(parsedFormula.get.terms.toArray)
-      .setOutputCol($(featuresCol))
-  }
-
   private def checkCanTransform(schema: StructType) {
-    require(parsedFormula.isDefined, "Must call setFormula() first.")
     val columnNames = schema.map(_.name)
     require(!columnNames.contains($(featuresCol)), "Features column already exists.")
     require(
       !columnNames.contains($(labelCol)) || schema($(labelCol)).dataType == DoubleType,
       "Label column already exists and is not of type DoubleType.")
   }
+}
 
-  private def hasLabelCol(schema: StructType): Boolean = {
-    schema.map(_.name).contains($(labelCol))
+/**
+ * Utility transformer for removing temporary columns from a DataFrame.
+ * TODO(ekl) make this a public transformer
+ */
+private class ColumnPruner(columnsToPrune: Set[String]) extends Transformer {
+  override val uid = Identifiable.randomUID("columnPruner")
+
+  override def transform(dataset: DataFrame): DataFrame = {
+    val columnsToKeep = dataset.columns.filter(!columnsToPrune.contains(_))
+    dataset.select(columnsToKeep.map(dataset.col) : _*)
   }
+
+  override def transformSchema(schema: StructType): StructType = {
+    StructType(schema.fields.filter(col => !columnsToPrune.contains(col.name)))
+  }
+
+  override def copy(extra: ParamMap): ColumnPruner = defaultCopy(extra)
 }
 
 /**
@@ -149,7 +222,7 @@ private[ml] object RFormulaParser extends RegexParsers {
   def expr: Parser[List[String]] = term ~ rep("+" ~> term) ^^ { case a ~ list => a :: list }
 
   def formula: Parser[ParsedRFormula] =
-    (term ~ "~" ~ expr) ^^ { case r ~ "~" ~ t => ParsedRFormula(r, t) }
+    (term ~ "~" ~ expr) ^^ { case r ~ "~" ~ t => ParsedRFormula(r, t.distinct) }
 
   def parse(value: String): ParsedRFormula = parseAll(formula, value) match {
     case Success(result, _) => result

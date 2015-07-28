@@ -23,18 +23,18 @@ import org.apache.spark.sql.catalyst.expressions.codegen.{GeneratedExpressionCod
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.types._
 
-/** The mode of an [[AggregateFunction1]]. */
+/** The mode of an [[AggregateFunction2]]. */
 private[sql] sealed trait AggregateMode
 
 /**
- * An [[AggregateFunction1]] with [[Partial]] mode is used for partial aggregation.
+ * An [[AggregateFunction2]] with [[Partial]] mode is used for partial aggregation.
  * This function updates the given aggregation buffer with the original input of this
  * function. When it has processed all input rows, the aggregation buffer is returned.
  */
 private[sql] case object Partial extends AggregateMode
 
 /**
- * An [[AggregateFunction1]] with [[PartialMerge]] mode is used to merge aggregation buffers
+ * An [[AggregateFunction2]] with [[PartialMerge]] mode is used to merge aggregation buffers
  * containing intermediate results for this function.
  * This function updates the given aggregation buffer by merging multiple aggregation buffers.
  * When it has processed all input rows, the aggregation buffer is returned.
@@ -42,8 +42,8 @@ private[sql] case object Partial extends AggregateMode
 private[sql] case object PartialMerge extends AggregateMode
 
 /**
- * An [[AggregateFunction1]] with [[PartialMerge]] mode is used to merge aggregation buffers
- * containing intermediate results for this function and the generate final result.
+ * An [[AggregateFunction2]] with [[PartialMerge]] mode is used to merge aggregation buffers
+ * containing intermediate results for this function and then generate final result.
  * This function updates the given aggregation buffer by merging multiple aggregation buffers.
  * When it has processed all input rows, the final result of this function is returned.
  */
@@ -63,10 +63,6 @@ private[sql] case object Complete extends AggregateMode
  */
 private[sql] case object NoOp extends Expression with Unevaluable {
   override def nullable: Boolean = true
-  override def eval(input: InternalRow): Any = {
-    throw new TreeNodeException(
-      this, s"No function to evaluate expression. type: ${this.nodeName}")
-  }
   override def dataType: DataType = NullType
   override def children: Seq[Expression] = Nil
 }
@@ -89,12 +85,12 @@ private[sql] case class AggregateExpression2(
   override def nullable: Boolean = aggregateFunction.nullable
 
   override def references: AttributeSet = {
-    val childReferemces = mode match {
+    val childReferences = mode match {
       case Partial | Complete => aggregateFunction.references.toSeq
       case PartialMerge | Final => aggregateFunction.bufferAttributes
     }
 
-    AttributeSet(childReferemces)
+    AttributeSet(childReferences)
   }
 
   override def toString: String = s"(${aggregateFunction}2,mode=$mode,isDistinct=$isDistinct)"
@@ -103,10 +99,8 @@ private[sql] case class AggregateExpression2(
 abstract class AggregateFunction2
   extends Expression with ImplicitCastInputTypes {
 
-  self: Product =>
-
   /** An aggregate function is not foldable. */
-  override def foldable: Boolean = false
+  final override def foldable: Boolean = false
 
   /**
    * The offset of this function's buffer in the underlying buffer shared with other functions.
@@ -151,8 +145,7 @@ abstract class AggregateFunction2
 /**
  * A helper class for aggregate functions that can be implemented in terms of catalyst expressions.
  */
-abstract class AlgebraicAggregate extends AggregateFunction2 with Serializable {
-  self: Product =>
+abstract class AlgebraicAggregate extends AggregateFunction2 with Serializable with Unevaluable {
 
   val initialValues: Seq[Expression]
   val updateExpressions: Seq[Expression]
@@ -188,19 +181,15 @@ abstract class AlgebraicAggregate extends AggregateFunction2 with Serializable {
     }
   }
 
-  override def update(buffer: MutableRow, input: InternalRow): Unit = {
+  override final def update(buffer: MutableRow, input: InternalRow): Unit = {
     throw new UnsupportedOperationException(
       "AlgebraicAggregate's update should not be called directly")
   }
 
-  override def merge(buffer1: MutableRow, buffer2: InternalRow): Unit = {
+  override final def merge(buffer1: MutableRow, buffer2: InternalRow): Unit = {
     throw new UnsupportedOperationException(
       "AlgebraicAggregate's merge should not be called directly")
   }
 
-  override def eval(buffer: InternalRow): Any = {
-    throw new UnsupportedOperationException(
-      "AlgebraicAggregate's eval should not be called directly")
-  }
 }
 
