@@ -184,4 +184,26 @@ class DateFunctionsSuite extends QueryTest {
       Row(15, 15, 15))
   }
 
+  test("function last_day") {
+    val df1 = Seq((1, "2015-07-23"), (2, "2015-07-24")).toDF("i", "d")
+    val df2 = Seq((1, "2015-07-23 00:11:22"), (2, "2015-07-24 11:22:33")).toDF("i", "t")
+    checkAnswer(
+      df1.select(last_day(col("d"))),
+      Seq(Row(Date.valueOf("2015-07-31")), Row(Date.valueOf("2015-07-31"))))
+    checkAnswer(
+      df2.select(last_day(col("t"))),
+      Seq(Row(Date.valueOf("2015-07-31")), Row(Date.valueOf("2015-07-31"))))
+  }
+
+  test("function next_day") {
+    val df1 = Seq(("mon", "2015-07-23"), ("tuesday", "2015-07-20")).toDF("dow", "d")
+    val df2 = Seq(("th", "2015-07-23 00:11:22"), ("xx", "2015-07-24 11:22:33")).toDF("dow", "t")
+    checkAnswer(
+      df1.select(next_day(col("d"), "MONDAY")),
+      Seq(Row(Date.valueOf("2015-07-27")), Row(Date.valueOf("2015-07-27"))))
+    checkAnswer(
+      df2.select(next_day(col("t"), "th")),
+      Seq(Row(Date.valueOf("2015-07-30")), Row(null)))
+  }
+
 }

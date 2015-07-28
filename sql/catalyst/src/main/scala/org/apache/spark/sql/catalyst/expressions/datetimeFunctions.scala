@@ -265,3 +265,75 @@ case class DateFormatClass(left: Expression, right: Expression) extends BinaryEx
     })
   }
 }
+
+/**
+ * Returns the last day of the month which the date belongs to.
+ */
+case class LastDay(startDate: Expression) extends UnaryExpression with ImplicitCastInputTypes {
+  override def child: Expression = startDate
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(DateType)
+
+  override def dataType: DataType = DateType
+
+  override def prettyName: String = "last_day"
+
+  override def nullSafeEval(date: Any): Any = {
+    val days = date.asInstanceOf[Int]
+    DateTimeUtils.getLastDayOfMonth(days)
+  }
+
+  override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
+    defineCodeGen(ctx, ev, (sd) => {
+      s"$dtu.getLastDayOfMonth($sd)"
+    })
+  }
+}
+
+/**
+ * Returns the first date which is later than startDate and named as dayOfWeek.
+ * For example, NextDay(2015-07-27, Sunday) would return 2015-08-02, which is the first
+ * sunday later than 2015-07-27.
+ */
+case class NextDay(startDate: Expression, dayOfWeek: Expression)
+  extends BinaryExpression with ImplicitCastInputTypes {
+
+  override def left: Expression = startDate
+  override def right: Expression = dayOfWeek
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(DateType, StringType)
+
+  override def dataType: DataType = DateType
+
+  override def nullSafeEval(start: Any, dayOfW: Any): Any = {
+    val dow = DateTimeUtils.getDayOfWeekFromString(dayOfW.asInstanceOf[UTF8String])
+    if (dow == -1) {
+      null
+    } else {
+      val sd = start.asInstanceOf[Int]
+      DateTimeUtils.getNextDateForDayOfWeek(sd, dow)
+    }
+  }
+
+  override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    nullSafeCodeGen(ctx, ev, (sd, dowS) => {
+      val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
+      val dow = ctx.freshName("dow")
+      val genDow = if (right.foldable) {
+        val dowVal = DateTimeUtils.getDayOfWeekFromString(
+          dayOfWeek.eval(InternalRow.empty).asInstanceOf[UTF8String])
+        s"int $dow = $dowVal;"
+      } else {
+        s"int $dow = $dtu.getDayOfWeekFromString($dowS);"
+      }
+      genDow + s"""
+        if ($dow == -1) {
+          ${ev.isNull} = true;
+        } else {
+          ${ev.primitive} = $dtu.getNextDateForDayOfWeek($sd, $dow);
+        }
+       """
+    })
+  }
+}
