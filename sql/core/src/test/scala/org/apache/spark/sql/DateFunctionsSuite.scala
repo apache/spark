@@ -203,7 +203,7 @@ class DateFunctionsSuite extends QueryTest {
       Seq(Row(Date.valueOf("2015-07-27")), Row(Date.valueOf("2015-07-27"))))
     checkAnswer(
       df2.select(next_day(col("t"), "th")),
-      Seq(Row(Date.valueOf("2015-07-30")), Row(null)))
+      Seq(Row(Date.valueOf("2015-07-30")), Row(Date.valueOf("2015-07-30"))))
   }
 
 }
