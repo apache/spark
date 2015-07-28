@@ -33,50 +33,24 @@ class JdbcHook(DbApiHook):
     default_conn_name = 'jdbc_default'
     supports_autocommit = True
 
-    def __init__(
-            self, *args, **kwargs):
-
-        super(JdbcHook,self).__init__(*args,**kwargs)
-
-        #conn_id = getattr(self, self.conn_name_attr)
-        #if (conn_id is None):
-        #    self.host = host
-        #    self.login = login
-        #    self.psw = psw
-        #    #self.db = db
-        #    #self.port = port
-        #    self.extra = extra
-        #    self.jdbc_driver_loc = jdbc_driver_loc
-        #   self.jdbc_driver_name = jdbc_driver_name
-        #else:
+    def get_conn(self):
         conn = self.get_connection(getattr(self, self.conn_name_attr))
         self.host = conn.host
         self.login = conn.login
         self.psw = conn.password
-        #self.db = conn.schema
-        #self.port = conn.port
         self.extra = conn.extra
         self.jdbc_driver_loc = conn.extra_dejson.get('jdbc_drv_path')
         self.jdbc_driver_name = conn.extra_dejson.get('jdbc_drv_clsname')
 
-
-        #self.jdbc_url = jdbc_url.format(self.host, self.port, self.db, self.extra)
-
-    def get_conn(self):
         conn = jaydebeapi.connect(self.jdbc_driver_name,
                            [str(self.host), str(self.login), str(self.psw)],
                                   self.jdbc_driver_loc,)
         return conn
 
-    def run(self, sql, autocommit=False, parameters=None):
+    def set_autocommit(self, conn, autocommit):
         """
-        Runs a command
+        Enable or disable autocommit for the given connection
+        :param conn: The connection
+        :return:
         """
-        conn = self.get_conn()
-        if self.supports_autocommit:
-            conn.jconn.autocommit = autocommit
-        cur = conn.cursor()
-        cur.execute(sql)
-        conn.commit()
-        cur.close()
-        conn.close()
+        conn.jconn.autocommit = autocommit
