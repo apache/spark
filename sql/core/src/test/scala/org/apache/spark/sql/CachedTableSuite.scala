@@ -305,12 +305,8 @@ class CachedTableSuite extends QueryTest {
     sql("SELECT key FROM testData LIMIT 10").registerTempTable("t1")
     sql("SELECT key FROM testData LIMIT 5").registerTempTable("t2")
 
-    Accumulators.synchronized {
-      val accsSize = Accumulators.originals.size
-      ctx.cacheTable("t1")
-      ctx.cacheTable("t2")
-      assert((accsSize + 2) == Accumulators.originals.size)
-    }
+    ctx.cacheTable("t1")
+    ctx.cacheTable("t2")
 
     sql("SELECT * FROM t1").count()
     sql("SELECT * FROM t2").count()

@@ -41,9 +41,18 @@ case class Project(projectList: Seq[NamedExpression], child: SparkPlan) extends 
 
   @transient lazy val buildProjection = newMutableProjection(projectList, child.output)
 
-  protected override def doExecute(): RDD[InternalRow] = child.execute().mapPartitions { iter =>
-    val reusableProjection = buildProjection()
-    iter.map(reusableProjection)
+  override lazy val accumulators = Map(
+    "numRows" -> sparkContext.internalAccumulator(0L, "number of rows"))
+
+  protected override def doExecute(): RDD[InternalRow] = {
+    val numRows = accumulator[Long]("numRows")
+    child.execute().mapPartitions { iter =>
+      val reusableProjection = buildProjection()
+      iter.map { row =>
+        numRows += 1
+        reusableProjection(row)
+      }
+    }
   }
 
   override def outputOrdering: Seq[SortOrder] = child.outputOrdering
@@ -81,8 +90,21 @@ case class TungstenProject(projectList: Seq[NamedExpression], child: SparkPlan) 
 case class Filter(condition: Expression, child: SparkPlan) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
 
-  protected override def doExecute(): RDD[InternalRow] = child.execute().mapPartitions { iter =>
-    iter.filter(newPredicate(condition, child.output))
+  override lazy val accumulators = Map(
+    "numInputRows" -> sparkContext.internalAccumulator(0L, "number of input rows"),
+    "numOutputRows" -> sparkContext.internalAccumulator(0L, "number of output rows"))
+
+  protected override def doExecute(): RDD[InternalRow] = {
+    val numInputRows = accumulator[Long]("numInputRows")
+    val numOutputRows = accumulator[Long]("numOutputRows")
+    child.execute().mapPartitions { iter =>
+      iter.filter { row =>
+        numInputRows += 1
+        val r = newPredicate(condition, child.output)(row)
+        if (r) numOutputRows += 1
+        r
+      }
+    }
   }
 
   override def outputOrdering: Seq[SortOrder] = child.outputOrdering

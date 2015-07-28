@@ -25,7 +25,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.physical.{Distribution, Partitioning, UnspecifiedDistribution}
-import org.apache.spark.sql.execution.{BinaryNode, SparkPlan}
+import org.apache.spark.sql.execution.{BinaryNode, SparkPlan, SparkSQLExecution}
 import org.apache.spark.util.ThreadUtils
 
 /**
@@ -58,13 +58,26 @@ case class BroadcastHashJoin(
   override def requiredChildDistribution: Seq[Distribution] =
     UnspecifiedDistribution :: UnspecifiedDistribution :: Nil
 
+  /**
+   * Use lazy so that we won't do broadcast when calling explain but still cache the broadcast value
+   * for the same query.
+   */
   @transient
-  private val broadcastFuture = future {
-    // Note that we use .execute().collect() because we don't want to convert data to Scala types
-    val input: Array[InternalRow] = buildPlan.execute().map(_.copy()).collect()
-    val hashed = HashedRelation(input.iterator, buildSideKeyGenerator, input.size)
-    sparkContext.broadcast(hashed)
-  }(BroadcastHashJoin.broadcastHashJoinExecutionContext)
+  private lazy val broadcastFuture = {
+    // broadcastFuture is used in "doExecute". Therefore we can get the execution id correctly here.
+    val executionId = sparkContext.getLocalProperty(SparkSQLExecution.EXECUTION_ID_KEY)
+    Future {
+      // This will run in another thread. Set the execution id so that we can connect these jobs
+      // with the correct execution.
+      SparkSQLExecution.withExecutionId(sparkContext, executionId) {
+        // Note that we use .execute().collect() because we don't want to convert data to Scala
+        // types
+        val input: Array[InternalRow] = buildPlan.execute().map(_.copy()).collect()
+        val hashed = HashedRelation(input.iterator, buildSideKeyGenerator, input.size)
+        sparkContext.broadcast(hashed)
+      }
+    }(BroadcastHashJoin.broadcastHashJoinExecutionContext)
+  }
 
   protected override def doExecute(): RDD[InternalRow] = {
     val broadcastRelation = Await.result(broadcastFuture, timeout)

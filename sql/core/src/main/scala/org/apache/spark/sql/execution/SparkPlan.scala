@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.Logging
+import org.apache.spark.{Accumulator, Logging}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.{RDD, RDDOperationScope}
 import org.apache.spark.sql.SQLContext
@@ -64,6 +64,17 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
     SparkPlan.currentContext.set(sqlContext)
     super.makeCopy(newArgs)
   }
+
+  /**
+   * Return all accumulators containing metrics of this SparkPlan.
+   */
+  def accumulators: Map[String, Accumulator[_]] = Map.empty
+
+  /**
+   * Return the accumulator according to the name.
+   */
+  def accumulator[T](name: String): Accumulator[T] =
+    accumulators(name).asInstanceOf[Accumulator[T]]
 
   // TODO: Move to `DistributedPlan`
   /** Specifies how data is partitioned across different nodes in the cluster. */

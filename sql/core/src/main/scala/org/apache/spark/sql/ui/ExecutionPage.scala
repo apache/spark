@@ -1,0 +1,154 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package org.apache.spark.sql.ui
+
+import javax.servlet.http.HttpServletRequest
+
+import scala.xml.{Node, Unparsed}
+
+import org.apache.commons.lang3.StringEscapeUtils
+
+import org.apache.spark.Logging
+import org.apache.spark.ui.{UIUtils, WebUIPage}
+
+class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging {
+
+  private val listener = parent.listener
+
+  override def render(request: HttpServletRequest): Seq[Node] = listener.synchronized {
+    val parameterExecutionId = request.getParameter("id")
+    require(parameterExecutionId != null && parameterExecutionId.nonEmpty,
+      "Missing execution id parameter")
+
+    val executionId = parameterExecutionId.toLong
+    val content = listener.getExecution(executionId).map { executionUIData =>
+      val currentTime = System.currentTimeMillis()
+      val duration =
+        executionUIData.completionTime.getOrElse(currentTime) - executionUIData.submissionTime
+
+      val summary =
+        <div>
+          <ul class="unstyled">
+            <li>
+              <strong>Submitted Time: </strong>{UIUtils.formatDate(executionUIData.submissionTime)}
+            </li>
+            <li>
+              <strong>Duration: </strong>{UIUtils.formatDuration(duration)}
+            </li>
+            {if (executionUIData.runningJobs.nonEmpty) {
+              <li>
+                <strong>Running Jobs: </strong>
+                {executionUIData.runningJobs.map { jobId =>
+                <a href={jobURL(jobId)}>{jobId.toString}</a><span>&nbsp;</span>
+              }}
+              </li>
+            }}
+            {if (executionUIData.succeededJobs.nonEmpty) {
+              <li>
+                <strong>Succeeded Jobs: </strong>
+                {executionUIData.succeededJobs.map { jobId =>
+                  <a href={jobURL(jobId)}>{jobId.toString}</a><span>&nbsp;</span>
+                }}
+              </li>
+            }}
+            {if (executionUIData.failedJobs.nonEmpty) {
+              <li>
+                <strong>Failed Jobs: </strong>
+                {executionUIData.failedJobs.map { jobId =>
+                  <a href={jobURL(jobId)}>{jobId.toString}</a><span>&nbsp;</span>
+                }}
+              </li>
+            }}
+            <li>
+              <strong>Detail: </strong><br/>
+              <pre>{executionUIData.physicalPlanDescription}</pre>
+            </li>
+          </ul>
+        </div>
+
+      val metrics = listener.getExecutionMetrics(executionId)
+
+      summary ++
+        planMetricsTable(metrics, executionUIData.physicalPlanGraph) ++
+        planVisualization(metrics, executionUIData.physicalPlanGraph)
+    }.getOrElse {
+      <div>No information to display for Plan {executionId}</div>
+    }
+
+    UIUtils.headerSparkPage(s"Details for Query $executionId", content, parent, Some(5000))
+  }
+
+
+  private def planVisualizationResources: Seq[Node] = {
+    // scalastyle:off
+    <link rel="stylesheet" href={UIUtils.prependBaseUri("/static/sql/spark-sql-viz.css")} type="text/css"/>
+    <script src={UIUtils.prependBaseUri("/static/d3.min.js")}></script>
+    <script src={UIUtils.prependBaseUri("/static/dagre-d3.min.js")}></script>
+    <script src={UIUtils.prependBaseUri("/static/graphlib-dot.min.js")}></script>
+    <script src={UIUtils.prependBaseUri("/static/sql/spark-sql-viz.js")}></script>
+    // scalastyle:on
+  }
+
+  private def planMetricsTable(metrics: Map[Long, Any], graph: SparkPlanGraph): Seq[Node] = {
+    val headers = Seq("Plan", "Metrics")
+
+    def row(node: SparkPlanGraphNode): Seq[Node] = {
+      val metricsHtml =
+        node.metrics.map { metric =>
+          // Show "" by default. We cannot get any accumulator value until the
+          // task sends accumulator updates back at the first time.
+          StringEscapeUtils.escapeHtml4(
+            s"${metric.name}: ${metrics.get(metric.accumulatorId).getOrElse("")}")
+        }
+
+      if (metricsHtml.isEmpty) {
+        // Hide SparkPlans that don't have metrics
+        Nil
+      } else {
+        <tr>
+          <td>{node.name}</td>
+          <td>{Unparsed(metricsHtml.mkString("<br/>"))}</td>
+        </tr>
+      }
+    }
+
+    // Reverse the nodes so that showing the children nodes before the parent node
+    <div>
+      <h4>Metrics</h4>
+      {UIUtils.listingTable(headers, row, graph.nodes.reverse)}
+    </div>
+  }
+
+  private def planVisualization(metrics: Map[Long, Any], graph: SparkPlanGraph): Seq[Node] = {
+    // TODO SPARK-8862 Visualize physical plans
+    // Now just hide it in HTML.
+
+    <div>
+      <div id="plan-viz-graph"></div>
+      <div id="plan-viz-metadata" style="display:none">
+        <div class="dot-file">
+          {graph.makeDotFile}
+        </div>
+      </div>
+      {planVisualizationResources}
+    </div>
+  }
+
+  private def jobURL(jobId: Long): String =
+    "%s/jobs/job?id=%s".format(UIUtils.prependBaseUri(parent.basePath), jobId)
+}

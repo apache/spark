@@ -39,7 +39,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, _}
 import org.apache.spark.sql.catalyst.plans.{Inner, JoinType}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, ScalaReflection, SqlParser}
-import org.apache.spark.sql.execution.{EvaluatePython, ExplainCommand, LogicalRDD}
+import org.apache.spark.sql.execution.{EvaluatePython, ExplainCommand, LogicalRDD, SparkSQLExecution}
 import org.apache.spark.sql.execution.datasources.{CreateTableUsingAsSelect, LogicalRelation}
 import org.apache.spark.sql.json.{JacksonGenerator, JSONRelation}
 import org.apache.spark.sql.sources.HadoopFsRelation
@@ -1356,14 +1356,18 @@ class DataFrame private[sql](
    * @group rdd
    * @since 1.3.0
    */
-  def foreach(f: Row => Unit): Unit = rdd.foreach(f)
+  def foreach(f: Row => Unit): Unit = withNewExecution {
+    rdd.foreach(f)
+  }
 
   /**
    * Applies a function f to each partition of this [[DataFrame]].
    * @group rdd
    * @since 1.3.0
    */
-  def foreachPartition(f: Iterator[Row] => Unit): Unit = rdd.foreachPartition(f)
+  def foreachPartition(f: Iterator[Row] => Unit): Unit = withNewExecution {
+    rdd.foreachPartition(f)
+  }
 
   /**
    * Returns the first `n` rows in the [[DataFrame]].
@@ -1377,14 +1381,18 @@ class DataFrame private[sql](
    * @group action
    * @since 1.3.0
    */
-  def collect(): Array[Row] = queryExecution.executedPlan.executeCollect()
+  def collect(): Array[Row] = withNewExecution {
+    queryExecution.executedPlan.executeCollect()
+  }
 
   /**
    * Returns a Java list that contains all of [[Row]]s in this [[DataFrame]].
    * @group action
    * @since 1.3.0
    */
-  def collectAsList(): java.util.List[Row] = java.util.Arrays.asList(rdd.collect() : _*)
+  def collectAsList(): java.util.List[Row] = withNewExecution {
+    java.util.Arrays.asList(rdd.collect() : _*)
+  }
 
   /**
    * Returns the number of rows in the [[DataFrame]].
@@ -1861,6 +1869,14 @@ class DataFrame private[sql](
   @deprecated("Use write.mode(SaveMode.Append).saveAsTable(tableName)", "1.4.0")
   def insertInto(tableName: String): Unit = {
     write.mode(SaveMode.Append).insertInto(tableName)
+  }
+
+  /**
+   * Wrap a DataFrame action to track all Spark jobs in the body so that we can connect them with
+   * an execution.
+   */
+  private[sql] def withNewExecution[T](body: => T): T = {
+    SparkSQLExecution.withNewExecution(sqlContext, this)(body)
   }
 
   ////////////////////////////////////////////////////////////////////////////
