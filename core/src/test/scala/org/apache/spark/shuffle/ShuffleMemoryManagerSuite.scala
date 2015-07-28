@@ -50,7 +50,7 @@ class ShuffleMemoryManagerSuite extends SparkFunSuite with Timeouts {
     assert(manager.tryToAcquire(300L) === 300L)
     assert(manager.tryToAcquire(300L) === 200L)
 
-    manager.releaseMemoryForThisThread()
+    manager.releaseMemoryForThisTask()
     assert(manager.tryToAcquire(1000L) === 1000L)
     assert(manager.tryToAcquire(100L) === 0L)
   }
@@ -253,7 +253,7 @@ class ShuffleMemoryManagerSuite extends SparkFunSuite with Timeouts {
       // Sleep a bit before releasing our memory; this is hacky but it would be difficult to make
       // sure the other thread blocks for some time otherwise
       Thread.sleep(300)
-      manager.releaseMemoryForThisThread()
+      manager.releaseMemoryForThisTask()
     }
 
     val t2 = startThread("t2") {
