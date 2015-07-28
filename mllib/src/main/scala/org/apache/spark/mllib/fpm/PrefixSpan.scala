@@ -54,6 +54,12 @@ class PrefixSpan private (
   def this() = this(0.1, 10)
 
   /**
+   * Get the minimal support (i.e. the frequency of occurrence before a pattern is considered
+   * frequent).
+   */
+  def getMinSupport(): Double = this.minSupport
+
+  /**
    * Sets the minimal support level (default: `0.1`).
    */
   def setMinSupport(minSupport: Double): this.type = {
@@ -64,9 +70,15 @@ class PrefixSpan private (
   }
 
   /**
+   * Gets the maximal pattern length (i.e. the length of the longest sequential pattern to consider.
+   */
+  def getMaxPatternLength(): Double = this.maxPatternLength
+
+  /**
    * Sets maximal pattern length (default: `10`).
    */
   def setMaxPatternLength(maxPatternLength: Int): this.type = {
+    // TODO: support unbounded pattern length when maxPatternLength = 0
     require(maxPatternLength >= 1,
       "The maximum pattern length value must be greater than 0.")
     this.maxPatternLength = maxPatternLength
