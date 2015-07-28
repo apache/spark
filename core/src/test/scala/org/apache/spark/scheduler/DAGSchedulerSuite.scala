@@ -638,6 +638,74 @@ class DAGSchedulerSuite
 
   }
 
+  /**
+   * In this test we simulate a job failure where a stage may have many tasks, many of which fail.
+   * We want to show that many fetch failures inside a single stage do not trigger an abort on
+   * their own, but only when the stage fails enough times .
+   */
+  test("Multiple task failures in same stage should not abort the stage.") {
+    // Create a new Listener to confirm that the listenerBus sees the JobEnd message
+    // when we abort the stage. This message will also be consumed by the EventLoggingListener
+    // so this will propagate up to the user.
+    var ended = false
+    var jobResult : JobResult = null
+    class EndListener extends SparkListener {
+      override def onJobEnd(jobEnd: SparkListenerJobEnd): Unit = {
+        jobResult = jobEnd.jobResult
+        ended = true
+      }
+    }
+
+    sc.listenerBus.addListener(new EndListener())
+
+    val parts = 8;
+    val shuffleMapRdd = new MyRDD(sc, parts, Nil)
+    val shuffleDep = new ShuffleDependency(shuffleMapRdd, null)
+    val shuffleId = shuffleDep.shuffleId
+    val reduceRdd = new MyRDD(sc, parts, List(shuffleDep))
+    submit(reduceRdd, (0 until parts).toArray)
+
+    val stage0Attempt = taskSets.last
+
+    // Make each task in stage 0 success, then fail all of stage 1
+    val completions = stage0Attempt.tasks.zipWithIndex.map{ case (task, idx) =>
+      (Success, makeMapStatus("host" + ('A' + idx).toChar, parts))
+    }.toSeq
+
+    complete(stage0Attempt, completions)
+
+    val stage1Attempt = taskSets.last
+    val failures = stage0Attempt.tasks.zipWithIndex.map{ case (task, idx) =>
+      (FetchFailed(makeBlockManagerId("hostA"), shuffleId, 0, idx, "ignored"), null)
+    }.toSeq
+
+    // Run Stage 1, this time with all fetchs failing
+    complete(stage1Attempt, failures)
+
+    // Resubmit and confirm that now all is well
+    scheduler.resubmitFailedStages()
+
+    assert(scheduler.runningStages.nonEmpty)
+    assert(!ended)
+
+    // Confirm job finished succesfully
+    val stage0Attempt2 = taskSets.last
+    val completions2 = stage0Attempt2.tasks.zipWithIndex.map{ case (task, idx) =>
+      (Success, makeMapStatus("host" + ('A' + idx).toChar, parts))
+    }.toSeq
+
+    complete(taskSets.last, completions2)
+
+    val stage1Attempt2 = taskSets.last
+    val completions3 = stage1Attempt2.tasks.zipWithIndex.map{ case (task, idx) =>
+      (Success, makeMapStatus("host" + ('A' + idx).toChar, parts))
+    }.toSeq
+
+    complete(taskSets.last, completions3)
+    sc.listenerBus.waitUntilEmpty(1000)
+    assert(!jobResult.isInstanceOf[JobFailed])
+  }
+
   test("trivial shuffle with multiple fetch failures") {
     val shuffleMapRdd = new MyRDD(sc, 2, Nil)
     val shuffleDep = new ShuffleDependency(shuffleMapRdd, null)
