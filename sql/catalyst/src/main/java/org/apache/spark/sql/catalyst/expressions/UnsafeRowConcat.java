@@ -17,7 +17,10 @@
 
 package org.apache.spark.sql.catalyst.expressions;
 
-import org.apache.spark.sql.types.DataType;
+import java.util.ArrayList;
+import java.util.Iterator;
+import java.util.List;
+
 import org.apache.spark.sql.types.StructType;
 import org.apache.spark.unsafe.PlatformDependent;
 import org.apache.spark.unsafe.array.ByteArrayMethods;
@@ -35,6 +38,8 @@ public class UnsafeRowConcat {
   private StructType finalSchema;
   private int numFields;
   private int bitSetWidthInBytes;
+  private List<Integer> leftVarFields;
+  private List<Integer> rightVarFields;
 
   public UnsafeRowConcat(StructType leftSchema, StructType rightSchema) {
     this.leftSchema = leftSchema;
@@ -42,6 +47,18 @@ public class UnsafeRowConcat {
     this.finalSchema = leftSchema.merge(rightSchema);
     this.numFields = finalSchema.length();
     this.bitSetWidthInBytes = UnsafeRow.calculateBitSetWidthInBytes(numFields);
+    this.leftVarFields = getVarLengthFields(leftSchema);
+    this.rightVarFields = getVarLengthFields(rightSchema);
+  }
+
+  private static List<Integer> getVarLengthFields(StructType schema) {
+    List<Integer> fieldsIdx = new ArrayList<Integer>(schema.length());
+    for (int i = 0; i < schema.length(); i ++) {
+      if (!UnsafeRow.settableFieldTypes.contains(schema.apply(i).dataType())) {
+        fieldsIdx.add(i);
+      }
+    }
+    return fieldsIdx;
   }
 
   public UnsafeRow concat(UnsafeRow left, UnsafeRow right) {
@@ -115,46 +132,40 @@ public class UnsafeRowConcat {
     }
 
     // append the left data first
-    for (int i = 0; i < leftSchema.length(); i ++) {
-      DataType dt = leftSchema.apply(i).dataType();
-      if (UnsafeRow.settableFieldTypes.contains(dt)) {
-        // settable fields have fixed length and fits in a word, it's safe to copy the whole word
-        PlatformDependent.UNSAFE.putLong(data, cursor,
-          PlatformDependent.UNSAFE.getLong(lBaseObject, lCursor));
-      } else {
-        long offsetAndSize = PlatformDependent.UNSAFE.getLong(lBaseObject, lCursor);
-        final int preOffset = (int) (offsetAndSize >> 32);
-        final int fieldSize = (int) (offsetAndSize & ((1L << 32) - 1));
-        PlatformDependent.UNSAFE.putLong(
-          data, cursor, (varFieldsOffset << 32) | ((long) fieldSize));
-        PlatformDependent.copyMemory(
-          lBaseObject, lBaseOffset + preOffset, data, baseOffset + varFieldsOffset, fieldSize);
-        varFieldsOffset += ByteArrayMethods.roundNumberOfBytesToNearestWord(fieldSize);
-      }
-      lCursor += 8;
-      cursor += 8;
+    PlatformDependent.copyMemory(lBaseObject, lBaseOffset + lBitSetWidthInBytes,
+      data, cursor, lNumFields * 8);
+    Iterator<Integer> curIter = leftVarFields.iterator();
+    // append var-length fields and fix its index
+    while (curIter.hasNext()) {
+      int fieldIdx = curIter.next();
+      long offsetAndSize = left.getLong(fieldIdx);
+      final int preOffset = (int) (offsetAndSize >> 32);
+      final int fieldSize = (int) (offsetAndSize & ((1L << 32) - 1));
+      PlatformDependent.UNSAFE.putLong(
+        data, cursor + fieldIdx * 8, (varFieldsOffset << 32) | ((long) fieldSize));
+      PlatformDependent.copyMemory(
+        lBaseObject, lBaseOffset + preOffset, data, baseOffset + varFieldsOffset, fieldSize);
+      varFieldsOffset += ByteArrayMethods.roundNumberOfBytesToNearestWord(fieldSize);
     }
+    cursor += lNumFields * 8;
 
     // now comes the right data
-    for (int i = 0; i < rightSchema.length(); i ++) {
-      DataType dt = rightSchema.apply(i).dataType();
-      if (UnsafeRow.settableFieldTypes.contains(dt)) {
-        // settable fields have fixed length and fits in a word, it's safe to copy the whole word
-        PlatformDependent.UNSAFE.putLong(data, cursor,
-            PlatformDependent.UNSAFE.getLong(rBaseObject, rCursor));
-      } else {
-        long offsetAndSize = PlatformDependent.UNSAFE.getLong(rBaseObject, rCursor);
-        final int preOffset = (int) (offsetAndSize >> 32);
-        final int fieldSize = (int) (offsetAndSize & ((1L << 32) - 1));
-        PlatformDependent.UNSAFE.putLong(
-          data, cursor, (varFieldsOffset << 32) | ((long) fieldSize));
-        PlatformDependent.copyMemory(
-          rBaseObject, rBaseOffset + preOffset, data, baseOffset + varFieldsOffset, fieldSize);
-        varFieldsOffset += ByteArrayMethods.roundNumberOfBytesToNearestWord(fieldSize);
-      }
-      rCursor += 8;
-      cursor += 8;
+    PlatformDependent.copyMemory(rBaseObject, rBaseOffset + rBitSetWidthInBytes,
+      data, cursor, rNumFields * 8);
+    curIter = rightVarFields.iterator();
+    // append var-length fields and fix its index
+    while (curIter.hasNext()) {
+      int fieldIdx = curIter.next();
+      long offsetAndSize = right.getLong(fieldIdx);
+      final int preOffset = (int) (offsetAndSize >> 32);
+      final int fieldSize = (int) (offsetAndSize & ((1L << 32) - 1));
+      PlatformDependent.UNSAFE.putLong(
+        data, cursor + fieldIdx * 8, (varFieldsOffset << 32) | ((long) fieldSize));
+      PlatformDependent.copyMemory(
+        rBaseObject, rBaseOffset + preOffset, data, baseOffset + varFieldsOffset, fieldSize);
+      varFieldsOffset += ByteArrayMethods.roundNumberOfBytesToNearestWord(fieldSize);
     }
+    cursor += rNumFields * 8;
 
     UnsafeRow result = new UnsafeRow();
     result.pointTo(data, baseOffset, numFields, size);
