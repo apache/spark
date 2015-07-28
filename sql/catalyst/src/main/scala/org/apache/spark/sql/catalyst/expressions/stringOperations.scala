@@ -1139,7 +1139,7 @@ case class RegExpExtract(subject: Expression, regexp: Expression, idx: Expressio
  * fractional part.
  */
 case class FormatNumber(x: Expression, d: Expression)
-  extends BinaryExpression with ExpectsInputTypes with CodegenFallback {
+  extends BinaryExpression with ExpectsInputTypes {
 
   override def left: Expression = x
   override def right: Expression = d
