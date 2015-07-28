@@ -94,6 +94,8 @@ private[spark] object JsonProtocol {
         logStartToJson(logStart)
       case metricsUpdate: SparkListenerExecutorMetricsUpdate =>
         executorMetricsUpdateToJson(metricsUpdate)
+      case blockUpdated: SparkListenerBlockUpdated =>
+        throw new MatchError(blockUpdated)  // TODO(ekl) implement this
     }
   }
 

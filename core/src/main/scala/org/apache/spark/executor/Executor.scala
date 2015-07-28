@@ -209,18 +209,19 @@ private[spark] class Executor(
 
         // Run the actual task and measure its runtime.
         taskStart = System.currentTimeMillis()
+        var threwException = true
         val (value, accumUpdates) = try {
-          task.run(
+          val res = task.run(
             taskAttemptId = taskId,
             attemptNumber = attemptNumber,
             metricsSystem = env.metricsSystem)
+          threwException = false
+          res
         } finally {
-          // Note: this memory freeing logic is duplicated in DAGScheduler.runLocallyWithinThread;
-          // when changing this, make sure to update both copies.
           val freedMemory = taskMemoryManager.cleanUpAllAllocatedMemory()
           if (freedMemory > 0) {
             val errMsg = s"Managed memory leak detected; size = $freedMemory bytes, TID = $taskId"
-            if (conf.getBoolean("spark.unsafe.exceptionOnMemoryLeak", false)) {
+            if (conf.getBoolean("spark.unsafe.exceptionOnMemoryLeak", false) && !threwException) {
               throw new SparkException(errMsg)
             } else {
               logError(errMsg)

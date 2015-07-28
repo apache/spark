@@ -201,7 +201,7 @@ private[joins] final class UnsafeHashedRelation(
           offset += 8
 
           val row = new UnsafeRow
-          row.pointTo(base, offset, numFields, sizeInBytes, null)
+          row.pointTo(base, offset, numFields, sizeInBytes)
           buffer += row
           offset += sizeInBytes
         }
@@ -243,10 +243,10 @@ private[joins] final class UnsafeHashedRelation(
         // [num of fields] [num of bytes] [row bytes]
         // write the integer in native order, so they can be read by UNSAFE.getInt()
         if (ByteOrder.nativeOrder() == ByteOrder.BIG_ENDIAN) {
-          out.writeInt(values(i).length())
+          out.writeInt(values(i).numFields())
           out.writeInt(values(i).getSizeInBytes)
         } else {
-          out.writeInt(Integer.reverseBytes(values(i).length()))
+          out.writeInt(Integer.reverseBytes(values(i).numFields()))
           out.writeInt(Integer.reverseBytes(values(i).getSizeInBytes))
         }
         out.write(values(i).getBytes)

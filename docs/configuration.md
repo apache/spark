@@ -203,7 +203,7 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.driver.extraClassPath</code></td>
   <td>(none)</td>
   <td>
-    Extra classpath entries to append to the classpath of the driver.
+    Extra classpath entries to prepend to the classpath of the driver.
 
     <br /><em>Note:</em> In client mode, this config must not be set through the <code>SparkConf</code>
     directly in your application, because the driver JVM has already started at that point.
@@ -250,7 +250,7 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.executor.extraClassPath</code></td>
   <td>(none)</td>
   <td>
-    Extra classpath entries to append to the classpath of executors. This exists primarily for 
+    Extra classpath entries to prepend to the classpath of executors. This exists primarily for 
     backwards-compatibility with older versions of Spark. Users typically should not need to set 
     this option.
   </td>
@@ -1046,15 +1046,6 @@ Apart from these, the following properties are also available, and may be useful
     across the cluster (not from each machine). If not set, the default will be
     <code>spark.deploy.defaultCores</code> on Spark's standalone cluster manager, or
     infinite (all available cores) on Mesos.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.localExecution.enabled</code></td>
-  <td>false</td>
-  <td>
-    Enables Spark to run certain jobs, such as first() or take() on the driver, without sending
-    tasks to the cluster. This can make certain jobs execute very quickly, but may require
-    shipping a whole partition of data to the driver.
   </td>
 </tr>
 <tr>
