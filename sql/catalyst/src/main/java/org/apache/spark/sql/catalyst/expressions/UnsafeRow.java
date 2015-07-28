@@ -265,6 +265,8 @@ public final class UnsafeRow extends MutableRow {
       return getBinary(ordinal);
     } else if (dataType instanceof StringType) {
       return getUTF8String(ordinal);
+    } else if (dataType instanceof IntervalType) {
+      return getInterval(ordinal);
     } else if (dataType instanceof StructType) {
       return getStruct(ordinal, ((StructType) dataType).size());
     } else {

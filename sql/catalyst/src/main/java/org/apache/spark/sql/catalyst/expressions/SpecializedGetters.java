@@ -15,18 +15,39 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.expression
+package org.apache.spark.sql.catalyst.expressions;
 
-import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.expressions. ExpressionEvalHelper
-import org.apache.spark.sql.execution.expressions.{SparkPartitionID, MonotonicallyIncreasingID}
+import org.apache.spark.sql.catalyst.InternalRow;
+import org.apache.spark.sql.types.Decimal;
+import org.apache.spark.unsafe.types.Interval;
+import org.apache.spark.unsafe.types.UTF8String;
 
-class NondeterministicSuite extends SparkFunSuite with ExpressionEvalHelper {
-  test("MonotonicallyIncreasingID") {
-    checkEvaluation(MonotonicallyIncreasingID(), 0L)
-  }
+public interface SpecializedGetters {
 
-  test("SparkPartitionID") {
-    checkEvaluation(SparkPartitionID, 0)
-  }
+  boolean isNullAt(int ordinal);
+
+  boolean getBoolean(int ordinal);
+
+  byte getByte(int ordinal);
+
+  short getShort(int ordinal);
+
+  int getInt(int ordinal);
+
+  long getLong(int ordinal);
+
+  float getFloat(int ordinal);
+
+  double getDouble(int ordinal);
+
+  Decimal getDecimal(int ordinal);
+
+  UTF8String getUTF8String(int ordinal);
+
+  byte[] getBinary(int ordinal);
+
+  Interval getInterval(int ordinal);
+
+  InternalRow getStruct(int ordinal, int numFields);
+
 }

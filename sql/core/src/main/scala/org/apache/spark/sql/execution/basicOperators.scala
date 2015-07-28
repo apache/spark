@@ -49,6 +49,31 @@ case class Project(projectList: Seq[NamedExpression], child: SparkPlan) extends 
   override def outputOrdering: Seq[SortOrder] = child.outputOrdering
 }
 
+
+/**
+ * A variant of [[Project]] that returns [[UnsafeRow]]s.
+ */
+case class TungstenProject(projectList: Seq[NamedExpression], child: SparkPlan) extends UnaryNode {
+
+  override def outputsUnsafeRows: Boolean = true
+  override def canProcessUnsafeRows: Boolean = true
+  override def canProcessSafeRows: Boolean = true
+
+  override def output: Seq[Attribute] = projectList.map(_.toAttribute)
+
+  protected override def doExecute(): RDD[InternalRow] = child.execute().mapPartitions { iter =>
+    this.transformAllExpressions {
+      case CreateStruct(children) => CreateStructUnsafe(children)
+      case CreateNamedStruct(children) => CreateNamedStructUnsafe(children)
+    }
+    val project = UnsafeProjection.create(projectList, child.output)
+    iter.map(project)
+  }
+
+  override def outputOrdering: Seq[SortOrder] = child.outputOrdering
+}
+
+
 /**
  * :: DeveloperApi ::
  */
