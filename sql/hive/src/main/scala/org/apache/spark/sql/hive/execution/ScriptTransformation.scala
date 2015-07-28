@@ -346,7 +346,15 @@ case class HiveScriptIOSchema (
     val columnTypesNames = columnTypes.map(_.toTypeInfo.getTypeName()).mkString(",")
 
     var propsMap = serdeProps.map(kv => {
-      (kv._1.split("'")(1), kv._2.split("'")(1))
+      val key = kv._1.split("'")
+      if (key.length < 2) {
+        throw new RuntimeException(s"Unable to split property key ${kv._1}")
+      }
+      val value = kv._2.split("'")
+      if (value.length < 2) {
+        throw new RuntimeException(s"Unable to split property value ${kv._2} (key =${kv._1})")
+      }
+      (key(1), value(1))
     }).toMap + (serdeConstants.LIST_COLUMNS -> columns.mkString(","))
     propsMap = propsMap + (serdeConstants.LIST_COLUMN_TYPES -> columnTypesNames)
 
