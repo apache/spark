@@ -46,7 +46,7 @@ class RateControllerSuite extends TestSuiteBase {
     }
   }
 
-  test("receiver rate controller updates reach receivers") {
+  test("publish rates reach receivers") {
     val ssc = new StreamingContext(conf, batchDuration)
     withStreamingContext(ssc) { ssc =>
       val dstream = new RateLimitInputDStream(ssc) {
@@ -65,7 +65,7 @@ class RateControllerSuite extends TestSuiteBase {
     }
   }
 
-  test("multiple rate controller updates reach receivers") {
+  test("multiple publish rates reach receivers") {
     val ssc = new StreamingContext(conf, batchDuration)
     withStreamingContext(ssc) { ssc =>
       val rates = Seq(100L, 200L, 300L)

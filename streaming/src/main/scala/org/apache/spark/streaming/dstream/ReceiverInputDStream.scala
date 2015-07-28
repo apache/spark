@@ -44,11 +44,13 @@ abstract class ReceiverInputDStream[T: ClassTag](@transient ssc_ : StreamingCont
   /**
    * Asynchronously maintains & sends new rate limits to the receiver through the receiver tracker.
    */
-  override protected[streaming] val rateController: Option[RateController] =
-    if (RateController.isBackPressureEnabled(ssc.conf))
+  override protected[streaming] val rateController: Option[RateController] = {
+    if (RateController.isBackPressureEnabled(ssc.conf)) {
       RateEstimator.create(ssc.conf).map { new ReceiverRateController(id, _) }
-    else
+    } else {
       None
+    }
+  }
 
   /**
    * Gets the receiver object that will be sent to the worker nodes
