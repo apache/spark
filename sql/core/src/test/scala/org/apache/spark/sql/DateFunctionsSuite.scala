@@ -208,7 +208,8 @@ class DateFunctionsSuite extends QueryTest {
 
   test("from_unixtime") {
     val sdf1 = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss")
-    val sdf2 = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS")
+    val fmt2 = "yyyy-MM-dd HH:mm:ss.SSS"
+    val sdf2 = new SimpleDateFormat(fmt2)
     val fmt3 = "yy-MM-dd HH-mm-ss"
     val sdf3 = new SimpleDateFormat(fmt3)
     val df = Seq((1000, "yyyy-MM-dd HH:mm:ss.SSS"), (-1000, "yy-MM-dd HH-mm-ss")).toDF("a", "b")
@@ -216,10 +217,10 @@ class DateFunctionsSuite extends QueryTest {
       df.select(from_unixtime(col("a"))),
       Seq(Row(sdf1.format(new Timestamp(1000000))), Row(sdf1.format(new Timestamp(-1000000)))))
     checkAnswer(
-      df.select(from_unixtime(col("a"), col("b"))),
-      Seq(Row(sdf2.format(new Timestamp(1000000))), Row(sdf3.format(new Timestamp(-1000000)))))
+      df.select(from_unixtime(col("a"), fmt2)),
+      Seq(Row(sdf2.format(new Timestamp(1000000))), Row(sdf2.format(new Timestamp(-1000000)))))
     checkAnswer(
-      df.select(from_unixtime(col("a"), lit(fmt3))),
+      df.select(from_unixtime(col("a"), fmt3)),
       Seq(Row(sdf3.format(new Timestamp(1000000))), Row(sdf3.format(new Timestamp(-1000000)))))
   }
 
@@ -238,9 +239,9 @@ class DateFunctionsSuite extends QueryTest {
       Row(ts1.getTime / 1000L), Row(ts2.getTime / 1000L)))
     checkAnswer(df.select(unix_timestamp(col("ss"))), Seq(
       Row(ts1.getTime / 1000L), Row(ts2.getTime / 1000L)))
-    checkAnswer(df.select(unix_timestamp(col("d"), lit(fmt))), Seq(
+    checkAnswer(df.select(unix_timestamp(col("d"), fmt)), Seq(
       Row(date1.getTime / 1000L), Row(date2.getTime / 1000L)))
-    checkAnswer(df.select(unix_timestamp(col("s"), lit(fmt))), Seq(
+    checkAnswer(df.select(unix_timestamp(col("s"), fmt)), Seq(
       Row(ts1.getTime / 1000L), Row(ts2.getTime / 1000L)))
   }
 

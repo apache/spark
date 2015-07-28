@@ -276,16 +276,16 @@ case class DateFormatClass(left: Expression, right: Expression) extends BinaryEx
  * If the first parameter is a Date or Timestamp instead of String, we will ignore the
  * second parameter.
  */
-case class UnixTimestamp(nodes: Seq[Expression])
+case class UnixTimestamp(left: Expression, right: Expression)
   extends BinaryExpression with ExpectsInputTypes {
 
-  override def children: Seq[Expression] = left :: right :: Nil
-  override def left: Expression =
-    if (childrenLength == 0) CurrentTimestamp() else nodes.head
-  override def right: Expression =
-    if (childrenLength > 1) nodes(1) else Literal("yyyy-MM-dd HH:mm:ss")
+  def this(time: Expression) = {
+    this(time, Literal("yyyy-MM-dd HH:mm:ss"))
+  }
 
-  private lazy val childrenLength = nodes.length
+  def this() = {
+    this(CurrentTimestamp())
+  }
 
   override def inputTypes: Seq[AbstractDataType] =
     Seq(TypeCollection(StringType, DateType, TimestampType), StringType)
@@ -337,14 +337,12 @@ case class UnixTimestamp(nodes: Seq[Expression])
  * representing the timestamp of that moment in the current system time zone in the given
  * format. If the format is missing, using format like "1970-01-01 00:00:00".
  */
-case class FromUnixTime(nodes: Seq[Expression])
+case class FromUnixTime(left: Expression, right: Expression)
   extends BinaryExpression with ImplicitCastInputTypes {
 
-  assert(nodes.length <= 2 && nodes.nonEmpty)
-  override def children: Seq[Expression] = left :: right :: Nil
-  override def left: Expression = nodes.head
-  override def right: Expression =
-    if (nodes.length > 1) nodes(1) else Literal("yyyy-MM-dd HH:mm:ss")
+  def this(unix: Expression) = {
+    this(unix, Literal("yyyy-MM-dd HH:mm:ss"))
+  }
 
   override def dataType: DataType = StringType
 

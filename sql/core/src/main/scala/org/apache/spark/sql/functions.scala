@@ -2096,21 +2096,21 @@ object functions {
    * @group datetime_funcs
    * @since 1.5.0
    */
-  def from_unixtime(ut: Column): Column = FromUnixTime(Seq(ut.expr))
+  def from_unixtime(ut: Column): Column = FromUnixTime(ut.expr, Literal("yyyy-MM-dd HH:mm:ss"))
 
   /**
    * Gets current Unix timestamp in seconds.
    * @group datetime_funcs
    * @since 1.5.0
    */
-  def from_unixtime(ut: Column, f: Column): Column = FromUnixTime(Seq(ut.expr, f.expr))
+  def from_unixtime(ut: Column, f: String): Column = FromUnixTime(ut.expr, Literal(f))
 
   /**
    * Gets current Unix timestamp in seconds.
    * @group datetime_funcs
    * @since 1.5.0
    */
-  def unix_timestamp(): Column = UnixTimestamp(Nil: Seq[Expression])
+  def unix_timestamp(): Column = UnixTimestamp(CurrentTimestamp(), Literal("yyyy-MM-dd HH:mm:ss"))
 
   /**
    * Converts time string in format yyyy-MM-dd HH:mm:ss to Unix timestamp (in seconds),
@@ -2118,7 +2118,7 @@ object functions {
    * @group datetime_funcs
    * @since 1.5.0
    */
-  def unix_timestamp(s: Column): Column = UnixTimestamp(Seq(s.expr))
+  def unix_timestamp(s: Column): Column = UnixTimestamp(s.expr, Literal("yyyy-MM-dd HH:mm:ss"))
 
   /**
    * Convert time string with given pattern
@@ -2127,7 +2127,7 @@ object functions {
    * @group datetime_funcs
    * @since 1.5.0
    */
-  def unix_timestamp(s: Column, p: Column): Column = UnixTimestamp(Seq(s.expr, p.expr))
+  def unix_timestamp(s: Column, p: String): Column = UnixTimestamp(s.expr, Literal(p))
 
   //////////////////////////////////////////////////////////////////////////////////////////////
   // Collection functions

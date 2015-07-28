@@ -24,7 +24,7 @@ import java.util.Calendar
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
-import org.apache.spark.sql.types.{StringType, TimestampType, DateType}
+import org.apache.spark.sql.types._
 
 class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
@@ -280,10 +280,17 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val sdf1 = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss")
     val fmt2 = "yyyy-MM-dd HH:mm:ss.SSS"
     val sdf2 = new SimpleDateFormat(fmt2)
-    checkEvaluation(FromUnixTime(Seq(Literal(0L))), sdf1.format(new Timestamp(0)))
-    checkEvaluation(FromUnixTime(Seq(Literal(1000L))), sdf1.format(new Timestamp(1000000)))
     checkEvaluation(
-      FromUnixTime(Seq(Literal(-1000L), Literal(fmt2))), sdf2.format(new Timestamp(-1000000)))
+      FromUnixTime(Literal(0L), Literal("yyyy-MM-dd HH:mm:ss")), sdf1.format(new Timestamp(0)))
+    checkEvaluation(FromUnixTime(
+      Literal(1000L), Literal("yyyy-MM-dd HH:mm:ss")), sdf1.format(new Timestamp(1000000)))
+    checkEvaluation(
+      FromUnixTime(Literal(-1000L), Literal(fmt2)), sdf2.format(new Timestamp(-1000000)))
+    checkEvaluation(
+      FromUnixTime(Literal.create(null, LongType), Literal.create(null, StringType)), null)
+    checkEvaluation(
+      FromUnixTime(Literal.create(null, LongType), Literal("yyyy-MM-dd HH:mm:ss")), null)
+    checkEvaluation(FromUnixTime(Literal(1000L), Literal.create(null, StringType)), null)
   }
 
   test("unix_timestamp") {
@@ -293,20 +300,30 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val fmt3 = "yy-MM-dd"
     val sdf3 = new SimpleDateFormat(fmt3)
     val date1 = Date.valueOf("2015-07-24")
-    checkEvaluation(UnixTimestamp(Seq(Literal(sdf1.format(new Timestamp(0))))), 0L)
-    checkEvaluation(UnixTimestamp(Seq(Literal(sdf1.format(new Timestamp(1000000))))), 1000L)
-    checkEvaluation(UnixTimestamp(Seq(Literal(new Timestamp(1000000)))), 1000L)
     checkEvaluation(
-      UnixTimestamp(Seq(Literal(date1))),
+      UnixTimestamp(Literal(sdf1.format(new Timestamp(0))), Literal("yyyy-MM-dd HH:mm:ss")), 0L)
+    checkEvaluation(UnixTimestamp(
+      Literal(sdf1.format(new Timestamp(1000000))), Literal("yyyy-MM-dd HH:mm:ss")), 1000L)
+    checkEvaluation(
+      UnixTimestamp(Literal(new Timestamp(1000000)), Literal("yyyy-MM-dd HH:mm:ss")), 1000L)
+    checkEvaluation(
+      UnixTimestamp(Literal(date1), Literal("yyyy-MM-dd HH:mm:ss")),
       DateTimeUtils.daysToMillis(DateTimeUtils.fromJavaDate(date1)) / 1000L)
     checkEvaluation(
-      UnixTimestamp(Seq(Literal(sdf2.format(new Timestamp(-1000000))), Literal(fmt2))), -1000L)
+      UnixTimestamp(Literal(sdf2.format(new Timestamp(-1000000))), Literal(fmt2)), -1000L)
     checkEvaluation(UnixTimestamp(
-      Seq(Literal(sdf3.format(Date.valueOf("2015-07-24"))), Literal(fmt3))),
+      Literal(sdf3.format(Date.valueOf("2015-07-24"))), Literal(fmt3)),
       DateTimeUtils.daysToMillis(DateTimeUtils.fromJavaDate(Date.valueOf("2015-07-24"))) / 1000L)
-    val t1 = UnixTimestamp(Seq()).eval(InternalRow.empty).asInstanceOf[Long]
-    val t2 = UnixTimestamp(Seq()).eval(InternalRow.empty).asInstanceOf[Long]
+    val t1 = UnixTimestamp(
+      CurrentTimestamp(), Literal("yyyy-MM-dd HH:mm:ss")).eval().asInstanceOf[Long]
+    val t2 = UnixTimestamp(
+      CurrentTimestamp(), Literal("yyyy-MM-dd HH:mm:ss")).eval().asInstanceOf[Long]
     assert(t2 - t1 <= 1)
+    checkEvaluation(
+      UnixTimestamp(Literal.create(null, DateType), Literal.create(null, StringType)), null)
+    checkEvaluation(
+      UnixTimestamp(Literal.create(null, DateType), Literal("yyyy-MM-dd HH:mm:ss")), null)
+    checkEvaluation(UnixTimestamp(Literal(date1), Literal.create(null, StringType)), null)
   }
 
 }
