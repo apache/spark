@@ -20,6 +20,7 @@ package org.apache.spark.streaming.kinesis
 import java.nio.ByteBuffer
 import java.util.concurrent.TimeUnit
 
+import scala.collection.JavaConversions._
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.util.{Failure, Random, Success, Try}
@@ -87,6 +88,38 @@ private class KinesisTestUtils(
     waitForStreamToBeActive(_streamName)
     streamCreated = true
     logInfo("Created stream")
+  }
+
+  def listStreams(): Unit = {
+    val listStreamsRequest = new ListStreamsRequest()
+    listStreamsRequest.setLimit(100)
+    val listStreamsResult = kinesisClient.listStreams(listStreamsRequest)
+    val streamNames = listStreamsResult.getStreamNames()
+    // scalastyle:off println
+    println(s"${streamNames.size} streams")
+    streamNames.foreach(println)
+    // scalastyle:on println
+  }
+
+  def deleteStreams(): Unit = {
+    val listStreamsRequest = new ListStreamsRequest()
+    listStreamsRequest.setLimit(100)
+    val listStreamsResult = kinesisClient.listStreams(listStreamsRequest)
+    val streamNames = listStreamsResult.getStreamNames()
+    // scalastyle:off println
+    println(s"${streamNames.size} streams")
+    for (name <- streamNames) {
+      println(s"Find stream $name")
+      if (name.startsWith("KinesisTestUtils-") && describeStream(name).nonEmpty) {
+        println(s"Deleting stream $name")
+        kinesisClient.deleteStream(name)
+        waitForStreamToBeDeleted(name)
+        println(s"Deleted stream $name")
+      }
+    }
+    println("Streams after deleting")
+    listStreams()
+    // scalastyle:on println
   }
 
   /**
@@ -172,6 +205,18 @@ private class KinesisTestUtils(
       }
     }
     require(false, s"Stream $streamName never became active")
+  }
+
+  private def waitForStreamToBeDeleted(streamNameToWaitFor: String): Unit = {
+    val startTime = System.currentTimeMillis()
+    val endTime = startTime + TimeUnit.SECONDS.toMillis(300)
+    while (System.currentTimeMillis() < endTime) {
+      TimeUnit.SECONDS.sleep(1)
+      if (describeStream(streamNameToWaitFor).isEmpty) {
+        return
+      }
+    }
+    require(false, s"Stream $streamName has not been deleted after 300 seconds")
   }
 }
 
