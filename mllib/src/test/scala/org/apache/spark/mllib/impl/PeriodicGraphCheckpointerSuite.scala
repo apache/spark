@@ -30,8 +30,6 @@ class PeriodicGraphCheckpointerSuite extends SparkFunSuite with MLlibTestSparkCo
 
   import PeriodicGraphCheckpointerSuite._
 
-  // TODO: Do I need to call count() on the graphs' RDDs?
-
   test("Persisting") {
     var graphsToCheck = Seq.empty[GraphToCheck]
 
@@ -43,7 +41,7 @@ class PeriodicGraphCheckpointerSuite extends SparkFunSuite with MLlibTestSparkCo
     var iteration = 2
     while (iteration < 9) {
       val graph = createGraph(sc)
-      checkpointer.updateGraph(graph)
+      checkpointer.update(graph)
       graphsToCheck = graphsToCheck :+ GraphToCheck(graph, iteration)
       checkPersistence(graphsToCheck, iteration)
       iteration += 1
@@ -66,7 +64,7 @@ class PeriodicGraphCheckpointerSuite extends SparkFunSuite with MLlibTestSparkCo
     var iteration = 2
     while (iteration < 9) {
       val graph = createGraph(sc)
-      checkpointer.updateGraph(graph)
+      checkpointer.update(graph)
       graph.vertices.count()
       graph.edges.count()
       graphsToCheck = graphsToCheck :+ GraphToCheck(graph, iteration)
@@ -168,7 +166,7 @@ private object PeriodicGraphCheckpointerSuite {
       } else {
         // Graph should never be checkpointed
         assert(!graph.isCheckpointed, "Graph should never have been checkpointed")
-        assert(graph.getCheckpointFiles.length == 0, "Graph should not have any checkpoint files")
+        assert(graph.getCheckpointFiles.isEmpty, "Graph should not have any checkpoint files")
       }
     } catch {
       case e: AssertionError =>

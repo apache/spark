@@ -188,7 +188,7 @@ final class EMLDAOptimizer extends LDAOptimizer {
     // Update the vertex descriptors with the new counts.
     val newGraph = GraphImpl.fromExistingRDDs(docTopicDistributions, graph.edges)
     graph = newGraph
-    graphCheckpointer.updateGraph(newGraph)
+    graphCheckpointer.update(newGraph)
     globalTopicTotals = computeGlobalTopicTotals()
     this
   }
