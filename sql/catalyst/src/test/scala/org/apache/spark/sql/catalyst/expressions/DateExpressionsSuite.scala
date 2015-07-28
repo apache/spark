@@ -264,14 +264,28 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("next_day") {
+    def testNextDay(input: String, dayOfWeek: String, output: String): Unit = {
+      checkEvaluation(
+        NextDay(Literal(Date.valueOf(input)), NonFoldableLiteral(dayOfWeek)),
+        DateTimeUtils.fromJavaDate(Date.valueOf(output)))
+      checkEvaluation(
+        NextDay(Literal(Date.valueOf(input)), Literal(dayOfWeek)),
+        DateTimeUtils.fromJavaDate(Date.valueOf(output)))
+    }
+    testNextDay("2015-07-23", "Mon", "2015-07-27")
+    testNextDay("2015-07-23", "mo", "2015-07-27")
+    testNextDay("2015-07-23", "Tue", "2015-07-28")
+    testNextDay("2015-07-23", "tu", "2015-07-28")
+    testNextDay("2015-07-23", "we", "2015-07-29")
+    testNextDay("2015-07-23", "wed", "2015-07-29")
+    testNextDay("2015-07-23", "Thu", "2015-07-30")
+    testNextDay("2015-07-23", "TH", "2015-07-30")
+    testNextDay("2015-07-23", "Fri", "2015-07-24")
+    testNextDay("2015-07-23", "fr", "2015-07-24")
+
+    checkEvaluation(NextDay(Literal(Date.valueOf("2015-07-23")), Literal("xx")), null)
+    checkEvaluation(NextDay(Literal.create(null, DateType), Literal("xx")), null)
     checkEvaluation(
-      NextDay(Literal(Date.valueOf("2015-07-23")), Literal("Thu")),
-      DateTimeUtils.fromJavaDate(Date.valueOf("2015-07-30")))
-    checkEvaluation(
-      NextDay(Literal(Date.valueOf("2015-07-23")), Literal("THURSDAY")),
-      DateTimeUtils.fromJavaDate(Date.valueOf("2015-07-30")))
-    checkEvaluation(
-      NextDay(Literal(Date.valueOf("2015-07-23")), Literal("th")),
-      DateTimeUtils.fromJavaDate(Date.valueOf("2015-07-30")))
+      NextDay(Literal(Date.valueOf("2015-07-23")), Literal.create(null, StringType)), null)
   }
 }

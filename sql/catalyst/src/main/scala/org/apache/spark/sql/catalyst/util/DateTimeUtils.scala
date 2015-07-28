@@ -575,7 +575,7 @@ object DateTimeUtils {
   }
 
   /**
-   * Returns Day of week from String. Starting from Thursday, marked as 0.
+   * Returns day of week from String. Starting from Thursday, marked as 0.
    * (Because 1970-01-01 is Thursday).
    */
   def getDayOfWeekFromString(string: UTF8String): Int = {
