@@ -408,9 +408,9 @@ class DistributedLDAModel private (
     private[clustering] val globalTopicTotals: LDA.TopicCounts,
     val k: Int,
     val vocabSize: Int,
-    private[clustering] val docConcentration: Vector,
-    private[clustering] val topicConcentration: Double,
-    private[clustering] val gammaShape: Double,
+    protected[clustering] val docConcentration: Vector,
+    protected[clustering] val topicConcentration: Double,
+    protected[clustering] val gammaShape: Double,
     private[spark] val iterationTimes: Array[Double]) extends LDAModel {
 
   import LDA._
