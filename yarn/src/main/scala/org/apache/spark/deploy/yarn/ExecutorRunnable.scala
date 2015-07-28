@@ -86,13 +86,15 @@ class ExecutorRunnable(
     val commands = prepareCommand(masterAddress, slaveId, hostname, executorMemory, executorCores,
       appId, localResources)
 
-    logInfo("===============================================================================")
-    logInfo("YARN executor launch context:")
-    logInfo("    env:")
-    env.foreach { case (k, v) => logInfo(s"        $k -> $v") }
-    logInfo("    command:")
-    logInfo(s"        ${commands.mkString(" ")}")
-    logInfo("===============================================================================")
+    logInfo(s"""
+      |===============================================================================
+      |YARN executor launch context:
+      |  env:
+      |${env.map { case (k, v) => s"    $k -> $v\n" }.mkString}
+      |  command:
+      |    ${commands.mkString(" ")}
+      |===============================================================================
+      """.stripMargin)
 
     ctx.setCommands(commands)
     ctx.setApplicationACLs(YarnSparkHadoopUtil.getApplicationAclsForYarn(securityMgr))
