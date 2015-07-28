@@ -37,12 +37,10 @@ private[sql] case class LocalTableScan(
     rdd
   }
 
-
   override def executeCollect(): Array[Row] = {
     val converter = CatalystTypeConverters.createToScalaConverter(schema)
     rows.map(converter(_).asInstanceOf[Row]).toArray
   }
-
 
   override def executeTake(limit: Int): Array[Row] = {
     val converter = CatalystTypeConverters.createToScalaConverter(schema)

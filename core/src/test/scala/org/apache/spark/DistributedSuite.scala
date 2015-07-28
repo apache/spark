@@ -29,7 +29,7 @@ class NotSerializableExn(val notSer: NotSerializableClass) extends Throwable() {
 
 class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContext {
 
-  val clusterUrl = "local-cluster[2,1,512]"
+  val clusterUrl = "local-cluster[2,1,1024]"
 
   test("task throws not serializable exception") {
     // Ensures that executors do not crash when an exn is not serializable. If executors crash,
@@ -40,7 +40,7 @@ class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContex
     val numSlaves = 3
     val numPartitions = 10
 
-    sc = new SparkContext("local-cluster[%s,1,512]".format(numSlaves), "test")
+    sc = new SparkContext("local-cluster[%s,1,1024]".format(numSlaves), "test")
     val data = sc.parallelize(1 to 100, numPartitions).
       map(x => throw new NotSerializableExn(new NotSerializableClass))
     intercept[SparkException] {
@@ -50,16 +50,16 @@ class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContex
   }
 
   test("local-cluster format") {
-    sc = new SparkContext("local-cluster[2,1,512]", "test")
+    sc = new SparkContext("local-cluster[2,1,1024]", "test")
     assert(sc.parallelize(1 to 2, 2).count() == 2)
     resetSparkContext()
-    sc = new SparkContext("local-cluster[2 , 1 , 512]", "test")
+    sc = new SparkContext("local-cluster[2 , 1 , 1024]", "test")
     assert(sc.parallelize(1 to 2, 2).count() == 2)
     resetSparkContext()
-    sc = new SparkContext("local-cluster[2, 1, 512]", "test")
+    sc = new SparkContext("local-cluster[2, 1, 1024]", "test")
     assert(sc.parallelize(1 to 2, 2).count() == 2)
     resetSparkContext()
-    sc = new SparkContext("local-cluster[ 2, 1, 512 ]", "test")
+    sc = new SparkContext("local-cluster[ 2, 1, 1024 ]", "test")
     assert(sc.parallelize(1 to 2, 2).count() == 2)
     resetSparkContext()
   }
@@ -276,7 +276,7 @@ class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContex
     DistributedSuite.amMaster = true
     // Using more than two nodes so we don't have a symmetric communication pattern and might
     // cache a partially correct list of peers.
-    sc = new SparkContext("local-cluster[3,1,512]", "test")
+    sc = new SparkContext("local-cluster[3,1,1024]", "test")
     for (i <- 1 to 3) {
       val data = sc.parallelize(Seq(true, false, false, false), 4)
       data.persist(StorageLevel.MEMORY_ONLY_2)
@@ -294,7 +294,7 @@ class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContex
 
   test("unpersist RDDs") {
     DistributedSuite.amMaster = true
-    sc = new SparkContext("local-cluster[3,1,512]", "test")
+    sc = new SparkContext("local-cluster[3,1,1024]", "test")
     val data = sc.parallelize(Seq(true, false, false, false), 4)
     data.persist(StorageLevel.MEMORY_ONLY_2)
     data.count

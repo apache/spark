@@ -30,8 +30,9 @@ class BitwiseFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       checkEvaluation(expr, expected)
     }
 
-    check(1.toByte, ~1.toByte)
-    check(1000.toShort, ~1000.toShort)
+    // Need the extra toByte even though IntelliJ thought it's not needed.
+    check(1.toByte, (~1.toByte).toByte)
+    check(1000.toShort, (~1000.toShort).toShort)
     check(1000000, ~1000000)
     check(123456789123L, ~123456789123L)
 
@@ -45,8 +46,9 @@ class BitwiseFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       checkEvaluation(expr, expected)
     }
 
-    check(1.toByte, 2.toByte, 1.toByte & 2.toByte)
-    check(1000.toShort, 2.toShort, 1000.toShort & 2.toShort)
+    // Need the extra toByte even though IntelliJ thought it's not needed.
+    check(1.toByte, 2.toByte, (1.toByte & 2.toByte).toByte)
+    check(1000.toShort, 2.toShort, (1000.toShort & 2.toShort).toShort)
     check(1000000, 4, 1000000 & 4)
     check(123456789123L, 5L, 123456789123L & 5L)
 
@@ -63,8 +65,9 @@ class BitwiseFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       checkEvaluation(expr, expected)
     }
 
-    check(1.toByte, 2.toByte, 1.toByte | 2.toByte)
-    check(1000.toShort, 2.toShort, 1000.toShort | 2.toShort)
+    // Need the extra toByte even though IntelliJ thought it's not needed.
+    check(1.toByte, 2.toByte, (1.toByte | 2.toByte).toByte)
+    check(1000.toShort, 2.toShort, (1000.toShort | 2.toShort).toShort)
     check(1000000, 4, 1000000 | 4)
     check(123456789123L, 5L, 123456789123L | 5L)
 
@@ -81,8 +84,9 @@ class BitwiseFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       checkEvaluation(expr, expected)
     }
 
-    check(1.toByte, 2.toByte, 1.toByte ^ 2.toByte)
-    check(1000.toShort, 2.toShort, 1000.toShort ^ 2.toShort)
+    // Need the extra toByte even though IntelliJ thought it's not needed.
+    check(1.toByte, 2.toByte, (1.toByte ^ 2.toByte).toByte)
+    check(1000.toShort, 2.toShort, (1000.toShort ^ 2.toShort).toShort)
     check(1000000, 4, 1000000 ^ 4)
     check(123456789123L, 5L, 123456789123L ^ 5L)
 

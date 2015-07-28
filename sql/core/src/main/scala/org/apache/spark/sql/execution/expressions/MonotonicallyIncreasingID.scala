@@ -37,17 +37,22 @@ private[sql] case class MonotonicallyIncreasingID() extends LeafExpression with 
 
   /**
    * Record ID within each partition. By being transient, count's value is reset to 0 every time
-   * we serialize and deserialize it.
+   * we serialize and deserialize and initialize it.
    */
-  @transient private[this] var count: Long = 0L
+  @transient private[this] var count: Long = _
 
-  @transient private lazy val partitionMask = TaskContext.getPartitionId().toLong << 33
+  @transient private[this] var partitionMask: Long = _
+
+  override protected def initInternal(): Unit = {
+    count = 0L
+    partitionMask = TaskContext.getPartitionId().toLong << 33
+  }
 
   override def nullable: Boolean = false
 
   override def dataType: DataType = LongType
 
-  override def eval(input: InternalRow): Long = {
+  override protected def evalInternal(input: InternalRow): Long = {
     val currentCount = count
     count += 1
     partitionMask + currentCount

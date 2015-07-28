@@ -214,6 +214,9 @@ trait String2StringExpression extends ImplicitCastInputTypes {
 /**
  * A function that converts the characters of a string to uppercase.
  */
+@ExpressionDescription(
+  usage = "_FUNC_(str) - Returns str with all characters changed to uppercase",
+  extended = "> SELECT _FUNC_('SparkSql');\n 'SPARKSQL'")
 case class Upper(child: Expression)
   extends UnaryExpression with String2StringExpression {
 
@@ -227,6 +230,9 @@ case class Upper(child: Expression)
 /**
  * A function that converts the characters of a string to lowercase.
  */
+@ExpressionDescription(
+  usage = "_FUNC_(str) - Returns str with all characters changed to lowercase",
+  extended = "> SELECT _FUNC_('SparkSql');\n'sparksql'")
 case class Lower(child: Expression) extends UnaryExpression with String2StringExpression {
 
   override def convert(v: UTF8String): UTF8String = v.toLowerCase
@@ -526,29 +532,26 @@ case class StringRPad(str: Expression, len: Expression, pad: Expression)
 /**
  * Returns the input formatted according do printf-style format strings
  */
-case class StringFormat(children: Expression*) extends Expression with ImplicitCastInputTypes {
+case class FormatString(children: Expression*) extends Expression with ImplicitCastInputTypes {
 
-  require(children.nonEmpty, "printf() should take at least 1 argument")
+  require(children.nonEmpty, "format_string() should take at least 1 argument")
 
   override def foldable: Boolean = children.forall(_.foldable)
   override def nullable: Boolean = children(0).nullable
   override def dataType: DataType = StringType
-  private def format: Expression = children(0)
-  private def args: Seq[Expression] = children.tail
 
   override def inputTypes: Seq[AbstractDataType] =
     StringType :: List.fill(children.size - 1)(AnyDataType)
 
-
   override def eval(input: InternalRow): Any = {
-    val pattern = format.eval(input)
+    val pattern = children(0).eval(input)
     if (pattern == null) {
       null
     } else {
       val sb = new StringBuffer()
       val formatter = new java.util.Formatter(sb, Locale.US)
 
-      val arglist = args.map(_.eval(input).asInstanceOf[AnyRef])
+      val arglist = children.tail.map(_.eval(input).asInstanceOf[AnyRef])
       formatter.format(pattern.asInstanceOf[UTF8String].toString, arglist: _*)
 
       UTF8String.fromString(sb.toString)
@@ -591,7 +594,7 @@ case class StringFormat(children: Expression*) extends Expression with ImplicitC
      """
   }
 
-  override def prettyName: String = "printf"
+  override def prettyName: String = "format_string"
 }
 
 /**
@@ -774,7 +777,6 @@ case class Levenshtein(left: Expression, right: Expression) extends BinaryExpres
   override def inputTypes: Seq[AbstractDataType] = Seq(StringType, StringType)
 
   override def dataType: DataType = IntegerType
-
   protected override def nullSafeEval(leftValue: Any, rightValue: Any): Any =
     leftValue.asInstanceOf[UTF8String].levenshteinDistance(rightValue.asInstanceOf[UTF8String])
 
@@ -1137,7 +1139,7 @@ case class RegExpExtract(subject: Expression, regexp: Expression, idx: Expressio
  * fractional part.
  */
 case class FormatNumber(x: Expression, d: Expression)
-  extends BinaryExpression with ExpectsInputTypes with CodegenFallback {
+  extends BinaryExpression with ExpectsInputTypes {
 
   override def left: Expression = x
   override def right: Expression = d
