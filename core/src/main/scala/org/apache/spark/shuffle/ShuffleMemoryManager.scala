@@ -83,7 +83,8 @@ private[spark] class ShuffleMemoryManager(maxMemory: Long) extends Logging {
           taskMemory(taskAttemptId) += toGrant
           return toGrant
         } else {
-          logInfo(s"Thread $taskAttemptId waiting for at least 1/2N of shuffle memory pool to be free")
+          logInfo(
+            s"Thread $taskAttemptId waiting for at least 1/2N of shuffle memory pool to be free")
           wait()
         }
       } else {
