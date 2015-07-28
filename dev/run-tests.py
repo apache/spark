@@ -85,9 +85,9 @@ def identify_changed_files_from_git_commits(patch_sha, target_branch=None, targe
     return [f for f in raw_output.split('\n') if f]
 
 
-def setup_test_environs(environs):
+def setup_test_environ(environ):
     print("[info] Setup the following environment variables for tests: ")
-    for (k, v) in environs.items():
+    for (k, v) in environ.items():
         print("%s=%s" % (k, v))
         os.environ[k] = v
 
@@ -466,10 +466,10 @@ def main():
     # note - the 'root' module doesn't collect environment variables for all modules. Because the
     # environment variables should not be set if a module is not changed, even if running the 'root'
     # module. So here we should use changed_modules rather than test_modules.
-    test_environs = {}
+    test_environ = {}
     for m in changed_modules:
-        test_environs.update(m.environs)
-    setup_test_environs(test_environs)
+        test_environ.update(m.environ)
+    setup_test_environ(test_environ)
 
     test_modules = determine_modules_to_test(changed_modules)
 
