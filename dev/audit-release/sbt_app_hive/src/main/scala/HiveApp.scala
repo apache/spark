@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package main.scala
 
 import scala.collection.mutable.{ListBuffer, Queue}
@@ -55,3 +56,4 @@ object SparkSqlExample {
     sc.stop()
   }
 }
+// scalastyle:on println

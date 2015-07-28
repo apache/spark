@@ -69,14 +69,10 @@ class Param[T](val parent: String, val name: String, val doc: String, val isVali
     }
   }
 
-  /**
-   * Creates a param pair with the given value (for Java).
-   */
+  /** Creates a param pair with the given value (for Java). */
   def w(value: T): ParamPair[T] = this -> value
 
-  /**
-   * Creates a param pair with the given value (for Scala).
-   */
+  /** Creates a param pair with the given value (for Scala). */
   def ->(value: T): ParamPair[T] = ParamPair(this, value)
 
   override final def toString: String = s"${parent}__$name"
@@ -190,6 +186,7 @@ class DoubleParam(parent: String, name: String, doc: String, isValid: Double => 
 
   def this(parent: Identifiable, name: String, doc: String) = this(parent.uid, name, doc)
 
+  /** Creates a param pair with the given value (for Java). */
   override def w(value: Double): ParamPair[Double] = super.w(value)
 }
 
@@ -209,6 +206,7 @@ class IntParam(parent: String, name: String, doc: String, isValid: Int => Boolea
 
   def this(parent: Identifiable, name: String, doc: String) = this(parent.uid, name, doc)
 
+  /** Creates a param pair with the given value (for Java). */
   override def w(value: Int): ParamPair[Int] = super.w(value)
 }
 
@@ -228,6 +226,7 @@ class FloatParam(parent: String, name: String, doc: String, isValid: Float => Bo
 
   def this(parent: Identifiable, name: String, doc: String) = this(parent.uid, name, doc)
 
+  /** Creates a param pair with the given value (for Java). */
   override def w(value: Float): ParamPair[Float] = super.w(value)
 }
 
@@ -247,6 +246,7 @@ class LongParam(parent: String, name: String, doc: String, isValid: Long => Bool
 
   def this(parent: Identifiable, name: String, doc: String) = this(parent.uid, name, doc)
 
+  /** Creates a param pair with the given value (for Java). */
   override def w(value: Long): ParamPair[Long] = super.w(value)
 }
 
@@ -260,6 +260,7 @@ class BooleanParam(parent: String, name: String, doc: String) // No need for isV
 
   def this(parent: Identifiable, name: String, doc: String) = this(parent.uid, name, doc)
 
+  /** Creates a param pair with the given value (for Java). */
   override def w(value: Boolean): ParamPair[Boolean] = super.w(value)
 }
 
@@ -273,8 +274,6 @@ class StringArrayParam(parent: Params, name: String, doc: String, isValid: Array
 
   def this(parent: Params, name: String, doc: String) =
     this(parent, name, doc, ParamValidators.alwaysTrue)
-
-  override def w(value: Array[String]): ParamPair[Array[String]] = super.w(value)
 
   /** Creates a param pair with a [[java.util.List]] of values (for Java and Python). */
   def w(value: java.util.List[String]): ParamPair[Array[String]] = w(value.asScala.toArray)
@@ -291,15 +290,30 @@ class DoubleArrayParam(parent: Params, name: String, doc: String, isValid: Array
   def this(parent: Params, name: String, doc: String) =
     this(parent, name, doc, ParamValidators.alwaysTrue)
 
-  override def w(value: Array[Double]): ParamPair[Array[Double]] = super.w(value)
+  /** Creates a param pair with a [[java.util.List]] of values (for Java and Python). */
+  def w(value: java.util.List[java.lang.Double]): ParamPair[Array[Double]] =
+    w(value.asScala.map(_.asInstanceOf[Double]).toArray)
+}
+
+/**
+ * :: DeveloperApi ::
+ * Specialized version of [[Param[Array[Int]]]] for Java.
+ */
+@DeveloperApi
+class IntArrayParam(parent: Params, name: String, doc: String, isValid: Array[Int] => Boolean)
+  extends Param[Array[Int]](parent, name, doc, isValid) {
+
+  def this(parent: Params, name: String, doc: String) =
+    this(parent, name, doc, ParamValidators.alwaysTrue)
 
   /** Creates a param pair with a [[java.util.List]] of values (for Java and Python). */
-  def w(value: java.util.List[Double]): ParamPair[Array[Double]] = w(value.asScala.toArray)
+  def w(value: java.util.List[java.lang.Integer]): ParamPair[Array[Int]] =
+    w(value.asScala.map(_.asInstanceOf[Int]).toArray)
 }
 
 /**
  * :: Experimental ::
- * A param amd its value.
+ * A param and its value.
  */
 @Experimental
 case class ParamPair[T](param: Param[T], value: T) {
@@ -343,9 +357,7 @@ trait Params extends Identifiable with Serializable {
    * those are checked during schema validation.
    */
   def validateParams(): Unit = {
-    params.filter(isDefined).foreach { param =>
-      param.asInstanceOf[Param[Any]].validate($(param))
-    }
+    // Do nothing by default.  Override to handle Param interactions.
   }
 
   /**
@@ -464,11 +476,14 @@ trait Params extends Identifiable with Serializable {
   /**
    * Sets default values for a list of params.
    *
+   * Note: Java developers should use the single-parameter [[setDefault()]].
+   *       Annotating this with varargs can cause compilation failures due to a Scala compiler bug.
+   *       See SPARK-9268.
+   *
    * @param paramPairs  a list of param pairs that specify params and their default values to set
    *                    respectively. Make sure that the params are initialized before this method
    *                    gets called.
    */
-  @varargs
   protected final def setDefault(paramPairs: ParamPair[_]*): this.type = {
     paramPairs.foreach { p =>
       setDefault(p.param.asInstanceOf[Param[Any]], p.value)
@@ -494,13 +509,20 @@ trait Params extends Identifiable with Serializable {
 
   /**
    * Creates a copy of this instance with the same UID and some extra params.
-   * The default implementation tries to create a new instance with the same UID.
-   * Then it copies the embedded and extra parameters over and returns the new instance.
-   * Subclasses should override this method if the default approach is not sufficient.
+   * Subclasses should implement this method and set the return type properly.
+   *
+   * @see [[defaultCopy()]]
    */
-  def copy(extra: ParamMap): Params = {
+  def copy(extra: ParamMap): Params
+
+  /**
+   * Default implementation of copy with extra params.
+   * It tries to create a new instance with the same UID.
+   * Then it copies the embedded and extra parameters over and returns the new instance.
+   */
+  protected final def defaultCopy[T <: Params](extra: ParamMap): T = {
     val that = this.getClass.getConstructor(classOf[String]).newInstance(uid)
-    copyValues(that, extra)
+    copyValues(that, extra).asInstanceOf[T]
   }
 
   /**

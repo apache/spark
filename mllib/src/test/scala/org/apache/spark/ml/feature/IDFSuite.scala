@@ -18,6 +18,8 @@
 package org.apache.spark.ml.feature
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.ml.param.ParamsSuite
+import org.apache.spark.mllib.feature.{IDFModel => OldIDFModel}
 import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vector, Vectors}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
@@ -36,6 +38,12 @@ class IDFSuite extends SparkFunSuite with MLlibTestSparkContext {
         }
         Vectors.sparse(data.size, res)
     }
+  }
+
+  test("params") {
+    ParamsSuite.checkParams(new IDF)
+    val model = new IDFModel("idf", new OldIDFModel(Vectors.dense(1.0)))
+    ParamsSuite.checkParams(model)
   }
 
   test("compute IDF with default parameter") {

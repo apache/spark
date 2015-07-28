@@ -17,11 +17,9 @@
 
 package org.apache.spark.broadcast
 
-import scala.concurrent.duration._
 import scala.util.Random
 
 import org.scalatest.Assertions
-import org.scalatest.concurrent.Eventually._
 
 import org.apache.spark._
 import org.apache.spark.io.SnappyCompressionCodec
@@ -71,7 +69,7 @@ class BroadcastSuite extends SparkFunSuite with LocalSparkContext {
     val conf = httpConf.clone
     conf.set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
     conf.set("spark.broadcast.compress", "true")
-    sc = new SparkContext("local-cluster[%d, 1, 512]".format(numSlaves), "test", conf)
+    sc = new SparkContext("local-cluster[%d, 1, 1024]".format(numSlaves), "test", conf)
     val list = List[Int](1, 2, 3, 4)
     val broadcast = sc.broadcast(list)
     val results = sc.parallelize(1 to numSlaves).map(x => (x, broadcast.value.sum))
@@ -99,7 +97,7 @@ class BroadcastSuite extends SparkFunSuite with LocalSparkContext {
     val conf = torrentConf.clone
     conf.set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
     conf.set("spark.broadcast.compress", "true")
-    sc = new SparkContext("local-cluster[%d, 1, 512]".format(numSlaves), "test", conf)
+    sc = new SparkContext("local-cluster[%d, 1, 1024]".format(numSlaves), "test", conf)
     val list = List[Int](1, 2, 3, 4)
     val broadcast = sc.broadcast(list)
     val results = sc.parallelize(1 to numSlaves).map(x => (x, broadcast.value.sum))
@@ -127,7 +125,7 @@ class BroadcastSuite extends SparkFunSuite with LocalSparkContext {
   test("Test Lazy Broadcast variables with TorrentBroadcast") {
     val numSlaves = 2
     val conf = torrentConf.clone
-    sc = new SparkContext("local-cluster[%d, 1, 512]".format(numSlaves), "test", conf)
+    sc = new SparkContext("local-cluster[%d, 1, 1024]".format(numSlaves), "test", conf)
     val rdd = sc.parallelize(1 to numSlaves)
 
     val results = new DummyBroadcastClass(rdd).doSomething()
@@ -310,15 +308,9 @@ class BroadcastSuite extends SparkFunSuite with LocalSparkContext {
 
     sc = if (distributed) {
       val _sc =
-        new SparkContext("local-cluster[%d, 1, 512]".format(numSlaves), "test", broadcastConf)
+        new SparkContext("local-cluster[%d, 1, 1024]".format(numSlaves), "test", broadcastConf)
       // Wait until all salves are up
-      eventually(timeout(10.seconds), interval(10.milliseconds)) {
-        _sc.jobProgressListener.synchronized {
-          val numBlockManagers = _sc.jobProgressListener.blockManagerIds.size
-          assert(numBlockManagers == numSlaves + 1,
-            s"Expect ${numSlaves + 1} block managers, but was ${numBlockManagers}")
-        }
-      }
+      _sc.jobProgressListener.waitUntilExecutorsUp(numSlaves, 10000)
       _sc
     } else {
       new SparkContext("local", "test", broadcastConf)

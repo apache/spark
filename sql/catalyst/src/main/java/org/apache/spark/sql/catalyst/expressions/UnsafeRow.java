@@ -17,22 +17,22 @@
 
 package org.apache.spark.sql.catalyst.expressions;
 
-import scala.collection.Map;
-import scala.collection.Seq;
-import scala.collection.mutable.ArraySeq;
+import java.io.IOException;
+import java.io.OutputStream;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.Set;
 
-import javax.annotation.Nullable;
-import java.math.BigDecimal;
-import java.sql.Date;
-import java.util.*;
-
-import org.apache.spark.sql.Row;
-import org.apache.spark.sql.types.DataType;
-import static org.apache.spark.sql.types.DataTypes.*;
-import org.apache.spark.sql.types.StructType;
-import org.apache.spark.sql.types.UTF8String;
+import org.apache.spark.sql.types.*;
 import org.apache.spark.unsafe.PlatformDependent;
+import org.apache.spark.unsafe.array.ByteArrayMethods;
 import org.apache.spark.unsafe.bitset.BitSetMethods;
+import org.apache.spark.unsafe.hash.Murmur3_x86_32;
+import org.apache.spark.unsafe.types.Interval;
+import org.apache.spark.unsafe.types.UTF8String;
+
+import static org.apache.spark.sql.types.DataTypes.*;
 
 /**
  * An Unsafe implementation of Row which is backed by raw memory instead of Java objects.
@@ -45,36 +45,16 @@ import org.apache.spark.unsafe.bitset.BitSetMethods;
  * In the `values` region, we store one 8-byte word per field. For fields that hold fixed-length
  * primitive types, such as long, double, or int, we store the value directly in the word. For
  * fields with non-primitive or variable-length values, we store a relative offset (w.r.t. the
- * base address of the row) that points to the beginning of the variable-length field.
+ * base address of the row) that points to the beginning of the variable-length field, and length
+ * (they are combined into a long).
  *
  * Instances of `UnsafeRow` act as pointers to row data stored in this format.
  */
-public final class UnsafeRow implements MutableRow {
+public final class UnsafeRow extends MutableRow {
 
-  private Object baseObject;
-  private long baseOffset;
-
-  Object getBaseObject() { return baseObject; }
-  long getBaseOffset() { return baseOffset; }
-
-  /** The number of fields in this row, used for calculating the bitset width (and in assertions) */
-  private int numFields;
-
-  /** The width of the null tracking bit set, in bytes */
-  private int bitSetWidthInBytes;
-  /**
-   * This optional schema is required if you want to call generic get() and set() methods on
-   * this UnsafeRow, but is optional if callers will only use type-specific getTYPE() and setTYPE()
-   * methods. This should be removed after the planned InternalRow / Row split; right now, it's only
-   * needed by the generic get() method, which is only called internally by code that accesses
-   * UTF8String-typed columns.
-   */
-  @Nullable
-  private StructType schema;
-
-  private long getFieldOffset(int ordinal) {
-   return baseOffset + bitSetWidthInBytes + ordinal * 8L;
-  }
+  //////////////////////////////////////////////////////////////////////////////
+  // Static methods
+  //////////////////////////////////////////////////////////////////////////////
 
   public static int calculateBitSetWidthInBytes(int numFields) {
     return ((numFields / 64) + (numFields % 64 == 0 ? 0 : 1)) * 8;
@@ -90,9 +70,10 @@ public final class UnsafeRow implements MutableRow {
    */
   public static final Set<DataType> readableFieldTypes;
 
+  // TODO: support DecimalType
   static {
     settableFieldTypes = Collections.unmodifiableSet(
-      new HashSet<DataType>(
+      new HashSet<>(
         Arrays.asList(new DataType[] {
           NullType,
           BooleanType,
@@ -101,17 +82,50 @@ public final class UnsafeRow implements MutableRow {
           IntegerType,
           LongType,
           FloatType,
-          DoubleType
-    })));
+          DoubleType,
+          DateType,
+          TimestampType
+        })));
 
     // We support get() on a superset of the types for which we support set():
-    final Set<DataType> _readableFieldTypes = new HashSet<DataType>(
+    final Set<DataType> _readableFieldTypes = new HashSet<>(
       Arrays.asList(new DataType[]{
-        StringType
+        StringType,
+        BinaryType,
+        IntervalType
       }));
     _readableFieldTypes.addAll(settableFieldTypes);
     readableFieldTypes = Collections.unmodifiableSet(_readableFieldTypes);
   }
+
+  //////////////////////////////////////////////////////////////////////////////
+  // Private fields and methods
+  //////////////////////////////////////////////////////////////////////////////
+
+  private Object baseObject;
+  private long baseOffset;
+
+  /** The number of fields in this row, used for calculating the bitset width (and in assertions) */
+  private int numFields;
+
+  /** The size of this row's backing data, in bytes) */
+  private int sizeInBytes;
+
+  private void setNotNullAt(int i) {
+    assertIndexIsValid(i);
+    BitSetMethods.unset(baseObject, baseOffset, i);
+  }
+
+  /** The width of the null tracking bit set, in bytes */
+  private int bitSetWidthInBytes;
+
+  private long getFieldOffset(int ordinal) {
+    return baseOffset + bitSetWidthInBytes + ordinal * 8L;
+  }
+
+  //////////////////////////////////////////////////////////////////////////////
+  // Public methods
+  //////////////////////////////////////////////////////////////////////////////
 
   /**
    * Construct a new UnsafeRow. The resulting row won't be usable until `pointTo()` has been called,
@@ -119,28 +133,28 @@ public final class UnsafeRow implements MutableRow {
    */
   public UnsafeRow() { }
 
+  public Object getBaseObject() { return baseObject; }
+  public long getBaseOffset() { return baseOffset; }
+  public int getSizeInBytes() { return sizeInBytes; }
+
+  @Override
+  public int numFields() { return numFields; }
+
   /**
    * Update this UnsafeRow to point to different backing data.
    *
    * @param baseObject the base object
    * @param baseOffset the offset within the base object
    * @param numFields the number of fields in this row
-   * @param schema an optional schema; this is necessary if you want to call generic get() or set()
-   *               methods on this row, but is optional if the caller will only use type-specific
-   *               getTYPE() and setTYPE() methods.
+   * @param sizeInBytes the size of this row's backing data, in bytes
    */
-  public void pointTo(
-      Object baseObject,
-      long baseOffset,
-      int numFields,
-      @Nullable StructType schema) {
-    assert numFields >= 0 : "numFields should >= 0";
-    assert schema == null || schema.fields().length == numFields;
+  public void pointTo(Object baseObject, long baseOffset, int numFields, int sizeInBytes) {
+    assert numFields >= 0 : "numFields (" + numFields + ") should >= 0";
     this.bitSetWidthInBytes = calculateBitSetWidthInBytes(numFields);
     this.baseObject = baseObject;
     this.baseOffset = baseOffset;
     this.numFields = numFields;
-    this.schema = schema;
+    this.sizeInBytes = sizeInBytes;
   }
 
   private void assertIndexIsValid(int index) {
@@ -156,11 +170,6 @@ public final class UnsafeRow implements MutableRow {
     // Since this row does does not currently support updates to variable-length values, we don't
     // have to worry about zeroing out that data.
     PlatformDependent.UNSAFE.putLong(baseObject, getFieldOffset(i), 0);
-  }
-
-  private void setNotNullAt(int i) {
-    assertIndexIsValid(i);
-    BitSetMethods.unset(baseObject, baseOffset, i);
   }
 
   @Override
@@ -186,6 +195,9 @@ public final class UnsafeRow implements MutableRow {
   public void setDouble(int ordinal, double value) {
     assertIndexIsValid(ordinal);
     setNotNullAt(ordinal);
+    if (Double.isNaN(value)) {
+      value = Double.NaN;
+    }
     PlatformDependent.UNSAFE.putDouble(baseObject, getFieldOffset(ordinal), value);
   }
 
@@ -214,222 +226,277 @@ public final class UnsafeRow implements MutableRow {
   public void setFloat(int ordinal, float value) {
     assertIndexIsValid(ordinal);
     setNotNullAt(ordinal);
+    if (Float.isNaN(value)) {
+      value = Float.NaN;
+    }
     PlatformDependent.UNSAFE.putFloat(baseObject, getFieldOffset(ordinal), value);
   }
 
   @Override
-  public void setString(int ordinal, String value) {
+  public Object get(int ordinal) {
     throw new UnsupportedOperationException();
   }
 
   @Override
-  public int size() {
-    return numFields;
-  }
-
-  @Override
-  public int length() {
-    return size();
-  }
-
-  @Override
-  public StructType schema() {
-    return schema;
-  }
-
-  @Override
-  public Object apply(int i) {
-    return get(i);
-  }
-
-  @Override
-  public Object get(int i) {
-    assertIndexIsValid(i);
-    assert (schema != null) : "Schema must be defined when calling generic get() method";
-    final DataType dataType = schema.fields()[i].dataType();
-    // UnsafeRow is only designed to be invoked by internal code, which only invokes this generic
-    // get() method when trying to access UTF8String-typed columns. If we refactor the codebase to
-    // separate the internal and external row interfaces, then internal code can fetch strings via
-    // a new getUTF8String() method and we'll be able to remove this method.
-    if (isNullAt(i)) {
+  public Object get(int ordinal, DataType dataType) {
+    if (dataType instanceof NullType) {
       return null;
-    } else if (dataType == StringType) {
-      return getUTF8String(i);
+    } else if (dataType instanceof BooleanType) {
+      return getBoolean(ordinal);
+    } else if (dataType instanceof ByteType) {
+      return getByte(ordinal);
+    } else if (dataType instanceof ShortType) {
+      return getShort(ordinal);
+    } else if (dataType instanceof IntegerType) {
+      return getInt(ordinal);
+    } else if (dataType instanceof LongType) {
+      return getLong(ordinal);
+    } else if (dataType instanceof FloatType) {
+      return getFloat(ordinal);
+    } else if (dataType instanceof DoubleType) {
+      return getDouble(ordinal);
+    } else if (dataType instanceof DecimalType) {
+      return getDecimal(ordinal);
+    } else if (dataType instanceof DateType) {
+      return getInt(ordinal);
+    } else if (dataType instanceof TimestampType) {
+      return getLong(ordinal);
+    } else if (dataType instanceof BinaryType) {
+      return getBinary(ordinal);
+    } else if (dataType instanceof StringType) {
+      return getUTF8String(ordinal);
+    } else if (dataType instanceof IntervalType) {
+      return getInterval(ordinal);
+    } else if (dataType instanceof StructType) {
+      return getStruct(ordinal, ((StructType) dataType).size());
     } else {
-      throw new UnsupportedOperationException();
+      throw new UnsupportedOperationException("Unsupported data type " + dataType.simpleString());
     }
   }
 
   @Override
-  public boolean isNullAt(int i) {
-    assertIndexIsValid(i);
-    return BitSetMethods.isSet(baseObject, baseOffset, i);
+  public boolean isNullAt(int ordinal) {
+    assertIndexIsValid(ordinal);
+    return BitSetMethods.isSet(baseObject, baseOffset, ordinal);
   }
 
   @Override
-  public boolean getBoolean(int i) {
-    assertIndexIsValid(i);
-    return PlatformDependent.UNSAFE.getBoolean(baseObject, getFieldOffset(i));
+  public boolean getBoolean(int ordinal) {
+    assertIndexIsValid(ordinal);
+    return PlatformDependent.UNSAFE.getBoolean(baseObject, getFieldOffset(ordinal));
   }
 
   @Override
-  public byte getByte(int i) {
-    assertIndexIsValid(i);
-    return PlatformDependent.UNSAFE.getByte(baseObject, getFieldOffset(i));
+  public byte getByte(int ordinal) {
+    assertIndexIsValid(ordinal);
+    return PlatformDependent.UNSAFE.getByte(baseObject, getFieldOffset(ordinal));
   }
 
   @Override
-  public short getShort(int i) {
-    assertIndexIsValid(i);
-    return PlatformDependent.UNSAFE.getShort(baseObject, getFieldOffset(i));
+  public short getShort(int ordinal) {
+    assertIndexIsValid(ordinal);
+    return PlatformDependent.UNSAFE.getShort(baseObject, getFieldOffset(ordinal));
   }
 
   @Override
-  public int getInt(int i) {
-    assertIndexIsValid(i);
-    return PlatformDependent.UNSAFE.getInt(baseObject, getFieldOffset(i));
+  public int getInt(int ordinal) {
+    assertIndexIsValid(ordinal);
+    return PlatformDependent.UNSAFE.getInt(baseObject, getFieldOffset(ordinal));
   }
 
   @Override
-  public long getLong(int i) {
-    assertIndexIsValid(i);
-    return PlatformDependent.UNSAFE.getLong(baseObject, getFieldOffset(i));
+  public long getLong(int ordinal) {
+    assertIndexIsValid(ordinal);
+    return PlatformDependent.UNSAFE.getLong(baseObject, getFieldOffset(ordinal));
   }
 
   @Override
-  public float getFloat(int i) {
-    assertIndexIsValid(i);
-    if (isNullAt(i)) {
+  public float getFloat(int ordinal) {
+    assertIndexIsValid(ordinal);
+    if (isNullAt(ordinal)) {
       return Float.NaN;
     } else {
-      return PlatformDependent.UNSAFE.getFloat(baseObject, getFieldOffset(i));
+      return PlatformDependent.UNSAFE.getFloat(baseObject, getFieldOffset(ordinal));
     }
   }
 
   @Override
-  public double getDouble(int i) {
-    assertIndexIsValid(i);
-    if (isNullAt(i)) {
+  public double getDouble(int ordinal) {
+    assertIndexIsValid(ordinal);
+    if (isNullAt(ordinal)) {
       return Float.NaN;
     } else {
-      return PlatformDependent.UNSAFE.getDouble(baseObject, getFieldOffset(i));
+      return PlatformDependent.UNSAFE.getDouble(baseObject, getFieldOffset(ordinal));
     }
   }
 
-  public UTF8String getUTF8String(int i) {
-    assertIndexIsValid(i);
-    final UTF8String str = new UTF8String();
-    final long offsetToStringSize = getLong(i);
-    final int stringSizeInBytes =
-      (int) PlatformDependent.UNSAFE.getLong(baseObject, baseOffset + offsetToStringSize);
-    final byte[] strBytes = new byte[stringSizeInBytes];
+  @Override
+  public UTF8String getUTF8String(int ordinal) {
+    assertIndexIsValid(ordinal);
+    return isNullAt(ordinal) ? null : UTF8String.fromBytes(getBinary(ordinal));
+  }
+
+  @Override
+  public byte[] getBinary(int ordinal) {
+    if (isNullAt(ordinal)) {
+      return null;
+    } else {
+      assertIndexIsValid(ordinal);
+      final long offsetAndSize = getLong(ordinal);
+      final int offset = (int) (offsetAndSize >> 32);
+      final int size = (int) (offsetAndSize & ((1L << 32) - 1));
+      final byte[] bytes = new byte[size];
+      PlatformDependent.copyMemory(
+        baseObject,
+        baseOffset + offset,
+        bytes,
+        PlatformDependent.BYTE_ARRAY_OFFSET,
+        size
+      );
+      return bytes;
+    }
+  }
+
+  @Override
+  public Interval getInterval(int ordinal) {
+    if (isNullAt(ordinal)) {
+      return null;
+    } else {
+      final long offsetAndSize = getLong(ordinal);
+      final int offset = (int) (offsetAndSize >> 32);
+      final int months = (int) PlatformDependent.UNSAFE.getLong(baseObject, baseOffset + offset);
+      final long microseconds =
+        PlatformDependent.UNSAFE.getLong(baseObject, baseOffset + offset + 8);
+      return new Interval(months, microseconds);
+    }
+  }
+
+  @Override
+  public UnsafeRow getStruct(int ordinal, int numFields) {
+    if (isNullAt(ordinal)) {
+      return null;
+    } else {
+      assertIndexIsValid(ordinal);
+      final long offsetAndSize = getLong(ordinal);
+      final int offset = (int) (offsetAndSize >> 32);
+      final int size = (int) (offsetAndSize & ((1L << 32) - 1));
+      final UnsafeRow row = new UnsafeRow();
+      row.pointTo(baseObject, baseOffset + offset, numFields, size);
+      return row;
+    }
+  }
+
+  /**
+   * Copies this row, returning a self-contained UnsafeRow that stores its data in an internal
+   * byte array rather than referencing data stored in a data page.
+   * <p>
+   * This method is only supported on UnsafeRows that do not use ObjectPools.
+   */
+  @Override
+  public UnsafeRow copy() {
+    UnsafeRow rowCopy = new UnsafeRow();
+    final byte[] rowDataCopy = new byte[sizeInBytes];
     PlatformDependent.copyMemory(
       baseObject,
-      baseOffset + offsetToStringSize + 8,  // The `+ 8` is to skip past the size to get the data
-      strBytes,
+      baseOffset,
+      rowDataCopy,
       PlatformDependent.BYTE_ARRAY_OFFSET,
-      stringSizeInBytes
+      sizeInBytes
     );
-    str.set(strBytes);
-    return str;
+    rowCopy.pointTo(rowDataCopy, PlatformDependent.BYTE_ARRAY_OFFSET, numFields, sizeInBytes);
+    return rowCopy;
+  }
+
+  /**
+   * Write this UnsafeRow's underlying bytes to the given OutputStream.
+   *
+   * @param out the stream to write to.
+   * @param writeBuffer a byte array for buffering chunks of off-heap data while writing to the
+   *                    output stream. If this row is backed by an on-heap byte array, then this
+   *                    buffer will not be used and may be null.
+   */
+  public void writeToStream(OutputStream out, byte[] writeBuffer) throws IOException {
+    if (baseObject instanceof byte[]) {
+      int offsetInByteArray = (int) (PlatformDependent.BYTE_ARRAY_OFFSET - baseOffset);
+      out.write((byte[]) baseObject, offsetInByteArray, sizeInBytes);
+    } else {
+      int dataRemaining = sizeInBytes;
+      long rowReadPosition = baseOffset;
+      while (dataRemaining > 0) {
+        int toTransfer = Math.min(writeBuffer.length, dataRemaining);
+        PlatformDependent.copyMemory(
+          baseObject,
+          rowReadPosition,
+          writeBuffer,
+          PlatformDependent.BYTE_ARRAY_OFFSET,
+          toTransfer);
+        out.write(writeBuffer, 0, toTransfer);
+        rowReadPosition += toTransfer;
+        dataRemaining -= toTransfer;
+      }
+    }
   }
 
   @Override
-  public String getString(int i) {
-    return getUTF8String(i).toString();
+  public int hashCode() {
+    return Murmur3_x86_32.hashUnsafeWords(baseObject, baseOffset, sizeInBytes, 42);
   }
 
   @Override
-  public BigDecimal getDecimal(int i) {
-    throw new UnsupportedOperationException();
+  public boolean equals(Object other) {
+    if (other instanceof UnsafeRow) {
+      UnsafeRow o = (UnsafeRow) other;
+      return (sizeInBytes == o.sizeInBytes) &&
+        ByteArrayMethods.arrayEquals(baseObject, baseOffset, o.baseObject, o.baseOffset,
+          sizeInBytes);
+    }
+    return false;
   }
 
-  @Override
-  public Date getDate(int i) {
-    throw new UnsupportedOperationException();
+  /**
+   * Returns the underlying bytes for this UnsafeRow.
+   */
+  public byte[] getBytes() {
+    if (baseObject instanceof byte[] && baseOffset == PlatformDependent.BYTE_ARRAY_OFFSET
+      && (((byte[]) baseObject).length == sizeInBytes)) {
+      return (byte[]) baseObject;
+    } else {
+      byte[] bytes = new byte[sizeInBytes];
+      PlatformDependent.copyMemory(baseObject, baseOffset, bytes,
+        PlatformDependent.BYTE_ARRAY_OFFSET, sizeInBytes);
+      return bytes;
+    }
   }
 
+  // This is for debugging
   @Override
-  public <T> Seq<T> getSeq(int i) {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
-  public <T> List<T> getList(int i) {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
-  public <K, V> Map<K, V> getMap(int i) {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
-  public <T> scala.collection.immutable.Map<String, T> getValuesMap(Seq<String> fieldNames) {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
-  public <K, V> java.util.Map<K, V> getJavaMap(int i) {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
-  public Row getStruct(int i) {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
-  public <T> T getAs(int i) {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
-  public <T> T getAs(String fieldName) {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
-  public int fieldIndex(String name) {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
-  public Row copy() {
-    throw new UnsupportedOperationException();
+  public String toString() {
+    StringBuilder build = new StringBuilder("[");
+    for (int i = 0; i < sizeInBytes; i += 8) {
+      build.append(PlatformDependent.UNSAFE.getLong(baseObject, baseOffset + i));
+      build.append(',');
+    }
+    build.append(']');
+    return build.toString();
   }
 
   @Override
   public boolean anyNull() {
-    return BitSetMethods.anySet(baseObject, baseOffset, bitSetWidthInBytes);
+    return BitSetMethods.anySet(baseObject, baseOffset, bitSetWidthInBytes / 8);
   }
 
-  @Override
-  public Seq<Object> toSeq() {
-    final ArraySeq<Object> values = new ArraySeq<Object>(numFields);
-    for (int fieldNumber = 0; fieldNumber < numFields; fieldNumber++) {
-      values.update(fieldNumber, get(fieldNumber));
-    }
-    return values;
-  }
-
-  @Override
-  public String toString() {
-    return mkString("[", ",", "]");
-  }
-
-  @Override
-  public String mkString() {
-    return toSeq().mkString();
-  }
-
-  @Override
-  public String mkString(String sep) {
-    return toSeq().mkString(sep);
-  }
-
-  @Override
-  public String mkString(String start, String sep, String end) {
-    return toSeq().mkString(start, sep, end);
+  /**
+   * Writes the content of this row into a memory address, identified by an object and an offset.
+   * The target memory address must already been allocated, and have enough space to hold all the
+   * bytes in this string.
+   */
+  public void writeToMemory(Object target, long targetOffset) {
+    PlatformDependent.copyMemory(
+      baseObject,
+      baseOffset,
+      target,
+      targetOffset,
+      sizeInBytes
+    );
   }
 }

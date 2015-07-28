@@ -17,10 +17,9 @@
 
 package org.apache.spark.sql.catalyst.expressions;
 
-import java.util.Arrays;
 import java.util.Iterator;
 
-import org.apache.spark.sql.Row;
+import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.types.StructField;
 import org.apache.spark.sql.types.StructType;
 import org.apache.spark.unsafe.PlatformDependent;
@@ -39,7 +38,7 @@ public final class UnsafeFixedWidthAggregationMap {
    * An empty aggregation buffer, encoded in UnsafeRow format. When inserting a new key into the
    * map, we copy this buffer and use it as the value.
    */
-  private final long[] emptyAggregationBuffer;
+  private final byte[] emptyAggregationBuffer;
 
   private final StructType aggregationBufferSchema;
 
@@ -48,7 +47,7 @@ public final class UnsafeFixedWidthAggregationMap {
   /**
    * Encodes grouping keys as UnsafeRows.
    */
-  private final UnsafeRowConverter groupingKeyToUnsafeRowConverter;
+  private final UnsafeProjection groupingKeyProjection;
 
   /**
    * A hashmap which maps from opaque bytearray keys to bytearray values.
@@ -59,14 +58,6 @@ public final class UnsafeFixedWidthAggregationMap {
    * Re-used pointer to the current aggregation buffer
    */
   private final UnsafeRow currentAggregationBuffer = new UnsafeRow();
-
-  /**
-   * Scratch space that is used when encoding grouping keys into UnsafeRow format.
-   *
-   * By default, this is a 1MB array, but it will grow as necessary in case larger keys are
-   * encountered.
-   */
-  private long[] groupingKeyConversionScratchSpace = new long[1024 / 8];
 
   private final boolean enablePerfMetrics;
 
@@ -107,70 +98,46 @@ public final class UnsafeFixedWidthAggregationMap {
    * @param enablePerfMetrics if true, performance metrics will be recorded (has minor perf impact)
    */
   public UnsafeFixedWidthAggregationMap(
-      Row emptyAggregationBuffer,
+      InternalRow emptyAggregationBuffer,
       StructType aggregationBufferSchema,
       StructType groupingKeySchema,
       TaskMemoryManager memoryManager,
       int initialCapacity,
       boolean enablePerfMetrics) {
-    this.emptyAggregationBuffer =
-      convertToUnsafeRow(emptyAggregationBuffer, aggregationBufferSchema);
     this.aggregationBufferSchema = aggregationBufferSchema;
-    this.groupingKeyToUnsafeRowConverter = new UnsafeRowConverter(groupingKeySchema);
+    this.groupingKeyProjection = UnsafeProjection.create(groupingKeySchema);
     this.groupingKeySchema = groupingKeySchema;
     this.map = new BytesToBytesMap(memoryManager, initialCapacity, enablePerfMetrics);
     this.enablePerfMetrics = enablePerfMetrics;
-  }
 
-  /**
-   * Convert a Java object row into an UnsafeRow, allocating it into a new long array.
-   */
-  private static long[] convertToUnsafeRow(Row javaRow, StructType schema) {
-    final UnsafeRowConverter converter = new UnsafeRowConverter(schema);
-    final long[] unsafeRow = new long[converter.getSizeRequirement(javaRow)];
-    final long writtenLength =
-      converter.writeRow(javaRow, unsafeRow, PlatformDependent.LONG_ARRAY_OFFSET);
-    assert (writtenLength == unsafeRow.length): "Size requirement calculation was wrong!";
-    return unsafeRow;
+    // Initialize the buffer for aggregation value
+    final UnsafeProjection valueProjection = UnsafeProjection.create(aggregationBufferSchema);
+    this.emptyAggregationBuffer = valueProjection.apply(emptyAggregationBuffer).getBytes();
+    assert(this.emptyAggregationBuffer.length == aggregationBufferSchema.length() * 8 +
+      UnsafeRow.calculateBitSetWidthInBytes(aggregationBufferSchema.length()));
   }
 
   /**
    * Return the aggregation buffer for the current group. For efficiency, all calls to this method
    * return the same object.
    */
-  public UnsafeRow getAggregationBuffer(Row groupingKey) {
-    final int groupingKeySize = groupingKeyToUnsafeRowConverter.getSizeRequirement(groupingKey);
-    // Make sure that the buffer is large enough to hold the key. If it's not, grow it:
-    if (groupingKeySize > groupingKeyConversionScratchSpace.length) {
-      // This new array will be initially zero, so there's no need to zero it out here
-      groupingKeyConversionScratchSpace = new long[groupingKeySize];
-    } else {
-      // Zero out the buffer that's used to hold the current row. This is necessary in order
-      // to ensure that rows hash properly, since garbage data from the previous row could
-      // otherwise end up as padding in this row. As a performance optimization, we only zero out
-      // the portion of the buffer that we'll actually write to.
-      Arrays.fill(groupingKeyConversionScratchSpace, 0, groupingKeySize, 0);
-    }
-    final long actualGroupingKeySize = groupingKeyToUnsafeRowConverter.writeRow(
-      groupingKey,
-      groupingKeyConversionScratchSpace,
-      PlatformDependent.LONG_ARRAY_OFFSET);
-    assert (groupingKeySize == actualGroupingKeySize) : "Size requirement calculation was wrong!";
+  public UnsafeRow getAggregationBuffer(InternalRow groupingKey) {
+    final UnsafeRow unsafeGroupingKeyRow = this.groupingKeyProjection.apply(groupingKey);
 
     // Probe our map using the serialized key
     final BytesToBytesMap.Location loc = map.lookup(
-      groupingKeyConversionScratchSpace,
-      PlatformDependent.LONG_ARRAY_OFFSET,
-      groupingKeySize);
+      unsafeGroupingKeyRow.getBaseObject(),
+      unsafeGroupingKeyRow.getBaseOffset(),
+      unsafeGroupingKeyRow.getSizeInBytes());
     if (!loc.isDefined()) {
       // This is the first time that we've seen this grouping key, so we'll insert a copy of the
       // empty aggregation buffer into the map:
       loc.putNewKey(
-        groupingKeyConversionScratchSpace,
-        PlatformDependent.LONG_ARRAY_OFFSET,
-        groupingKeySize,
+        unsafeGroupingKeyRow.getBaseObject(),
+        unsafeGroupingKeyRow.getBaseOffset(),
+        unsafeGroupingKeyRow.getSizeInBytes(),
         emptyAggregationBuffer,
-        PlatformDependent.LONG_ARRAY_OFFSET,
+        PlatformDependent.BYTE_ARRAY_OFFSET,
         emptyAggregationBuffer.length
       );
     }
@@ -181,7 +148,7 @@ public final class UnsafeFixedWidthAggregationMap {
       address.getBaseObject(),
       address.getBaseOffset(),
       aggregationBufferSchema.length(),
-      aggregationBufferSchema
+      loc.getValueLength()
     );
     return currentAggregationBuffer;
   }
@@ -220,13 +187,13 @@ public final class UnsafeFixedWidthAggregationMap {
           keyAddress.getBaseObject(),
           keyAddress.getBaseOffset(),
           groupingKeySchema.length(),
-          groupingKeySchema
+          loc.getKeyLength()
         );
         entry.value.pointTo(
           valueAddress.getBaseObject(),
           valueAddress.getBaseOffset(),
           aggregationBufferSchema.length(),
-          aggregationBufferSchema
+          loc.getValueLength()
         );
         return entry;
       }

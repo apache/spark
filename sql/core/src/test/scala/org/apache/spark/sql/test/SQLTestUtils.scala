@@ -18,18 +18,18 @@
 package org.apache.spark.sql.test
 
 import java.io.File
+import java.util.UUID
 
 import scala.util.Try
 
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.util.Utils
 
-trait SQLTestUtils {
-  val sqlContext: SQLContext
+trait SQLTestUtils { this: SparkFunSuite =>
+  def sqlContext: SQLContext
 
-  import sqlContext.{conf, sparkContext}
-
-  protected def configuration = sparkContext.hadoopConfiguration
+  protected def configuration = sqlContext.sparkContext.hadoopConfiguration
 
   /**
    * Sets all SQL configurations specified in `pairs`, calls `f`, and then restore all SQL
@@ -39,12 +39,12 @@ trait SQLTestUtils {
    */
   protected def withSQLConf(pairs: (String, String)*)(f: => Unit): Unit = {
     val (keys, values) = pairs.unzip
-    val currentValues = keys.map(key => Try(conf.getConf(key)).toOption)
-    (keys, values).zipped.foreach(conf.setConf)
+    val currentValues = keys.map(key => Try(sqlContext.conf.getConfString(key)).toOption)
+    (keys, values).zipped.foreach(sqlContext.conf.setConfString)
     try f finally {
       keys.zip(currentValues).foreach {
-        case (key, Some(value)) => conf.setConf(key, value)
-        case (key, None) => conf.unsetConf(key)
+        case (key, Some(value)) => sqlContext.conf.setConfString(key, value)
+        case (key, None) => sqlContext.conf.unsetConf(key)
       }
     }
   }
@@ -88,5 +88,30 @@ trait SQLTestUtils {
         sqlContext.sql(s"DROP TABLE IF EXISTS $name")
       }
     }
+  }
+
+  /**
+   * Creates a temporary database and switches current database to it before executing `f`.  This
+   * database is dropped after `f` returns.
+   */
+  protected def withTempDatabase(f: String => Unit): Unit = {
+    val dbName = s"db_${UUID.randomUUID().toString.replace('-', '_')}"
+
+    try {
+      sqlContext.sql(s"CREATE DATABASE $dbName")
+    } catch { case cause: Throwable =>
+      fail("Failed to create temporary database", cause)
+    }
+
+    try f(dbName) finally sqlContext.sql(s"DROP DATABASE $dbName CASCADE")
+  }
+
+  /**
+   * Activates database `db` before executing `f`, then switches back to `default` database after
+   * `f` returns.
+   */
+  protected def activateDatabase(db: String)(f: => Unit): Unit = {
+    sqlContext.sql(s"USE $db")
+    try f finally sqlContext.sql(s"USE default")
   }
 }

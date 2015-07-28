@@ -21,12 +21,13 @@ import org.scalatest.Matchers._
 
 import org.apache.spark.sql.execution.Project
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.test.TestSQLContext
-import org.apache.spark.sql.test.TestSQLContext.implicits._
 import org.apache.spark.sql.types._
 
 class ColumnExpressionSuite extends QueryTest {
   import org.apache.spark.sql.TestData._
+
+  private lazy val ctx = org.apache.spark.sql.test.TestSQLContext
+  import ctx.implicits._
 
   test("alias") {
     val df = Seq((1, Seq(1, 2, 3))).toDF("a", "intList")
@@ -184,12 +185,60 @@ class ColumnExpressionSuite extends QueryTest {
     checkAnswer(
       nullStrings.toDF.where($"s".isNull),
       nullStrings.collect().toSeq.filter(r => r.getString(1) eq null))
+
+    checkAnswer(
+      ctx.sql("select isnull(null), isnull(1)"),
+      Row(true, false))
   }
 
   test("isNotNull") {
     checkAnswer(
       nullStrings.toDF.where($"s".isNotNull),
       nullStrings.collect().toSeq.filter(r => r.getString(1) ne null))
+
+    checkAnswer(
+      ctx.sql("select isnotnull(null), isnotnull('a')"),
+      Row(false, true))
+  }
+
+  test("isNaN") {
+    val testData = ctx.createDataFrame(ctx.sparkContext.parallelize(
+      Row(Double.NaN, Float.NaN) ::
+      Row(math.log(-1), math.log(-3).toFloat) ::
+      Row(null, null) ::
+      Row(Double.MaxValue, Float.MinValue):: Nil),
+      StructType(Seq(StructField("a", DoubleType), StructField("b", FloatType))))
+
+    checkAnswer(
+      testData.select($"a".isNaN, $"b".isNaN),
+      Row(true, true) :: Row(true, true) :: Row(false, false) :: Row(false, false) :: Nil)
+
+    checkAnswer(
+      testData.select(isNaN($"a"), isNaN($"b")),
+      Row(true, true) :: Row(true, true) :: Row(false, false) :: Row(false, false) :: Nil)
+
+    checkAnswer(
+      ctx.sql("select isnan(15), isnan('invalid')"),
+      Row(false, false))
+  }
+
+  test("nanvl") {
+    val testData = ctx.createDataFrame(ctx.sparkContext.parallelize(
+      Row(null, 3.0, Double.NaN, Double.PositiveInfinity) :: Nil),
+      StructType(Seq(StructField("a", DoubleType), StructField("b", DoubleType),
+        StructField("c", DoubleType), StructField("d", DoubleType))))
+
+    checkAnswer(
+      testData.select(
+        nanvl($"a", lit(5)), nanvl($"b", lit(10)),
+        nanvl($"c", lit(null).cast(DoubleType)), nanvl($"d", lit(10))),
+      Row(null, 3.0, null, Double.PositiveInfinity)
+    )
+    testData.registerTempTable("t")
+    checkAnswer(
+      ctx.sql("select nanvl(a, 5), nanvl(b, 10), nanvl(c, null), nanvl(d, 10) from t"),
+      Row(null, 3.0, null, Double.PositiveInfinity)
+    )
   }
 
   test("===") {
@@ -213,7 +262,7 @@ class ColumnExpressionSuite extends QueryTest {
   }
 
   test("!==") {
-    val nullData = TestSQLContext.createDataFrame(TestSQLContext.sparkContext.parallelize(
+    val nullData = ctx.createDataFrame(ctx.sparkContext.parallelize(
       Row(1, 1) ::
       Row(1, 2) ::
       Row(1, null) ::
@@ -274,7 +323,7 @@ class ColumnExpressionSuite extends QueryTest {
   }
 
   test("between") {
-    val testData = TestSQLContext.sparkContext.parallelize(
+    val testData = ctx.sparkContext.parallelize(
       (0, 1, 2) ::
       (1, 2, 3) ::
       (2, 1, 0) ::
@@ -287,7 +336,23 @@ class ColumnExpressionSuite extends QueryTest {
     checkAnswer(testData.filter($"a".between($"b", $"c")), expectAnswer)
   }
 
-  val booleanData = TestSQLContext.createDataFrame(TestSQLContext.sparkContext.parallelize(
+  test("in") {
+    val df = Seq((1, "x"), (2, "y"), (3, "z")).toDF("a", "b")
+    checkAnswer(df.filter($"a".in(1, 2)),
+      df.collect().toSeq.filter(r => r.getInt(0) == 1 || r.getInt(0) == 2))
+    checkAnswer(df.filter($"a".in(3, 2)),
+      df.collect().toSeq.filter(r => r.getInt(0) == 3 || r.getInt(0) == 2))
+    checkAnswer(df.filter($"a".in(3, 1)),
+      df.collect().toSeq.filter(r => r.getInt(0) == 3 || r.getInt(0) == 1))
+    checkAnswer(df.filter($"b".in("y", "x")),
+      df.collect().toSeq.filter(r => r.getString(1) == "y" || r.getString(1) == "x"))
+    checkAnswer(df.filter($"b".in("z", "x")),
+      df.collect().toSeq.filter(r => r.getString(1) == "z" || r.getString(1) == "x"))
+    checkAnswer(df.filter($"b".in("z", "y")),
+      df.collect().toSeq.filter(r => r.getString(1) == "z" || r.getString(1) == "y"))
+  }
+
+  val booleanData = ctx.createDataFrame(ctx.sparkContext.parallelize(
     Row(false, false) ::
       Row(false, true) ::
       Row(true, false) ::
@@ -360,23 +425,6 @@ class ColumnExpressionSuite extends QueryTest {
     )
   }
 
-  test("abs") {
-    checkAnswer(
-      testData.select(abs('key)).orderBy('key.asc),
-      (1 to 100).map(n => Row(n))
-    )
-
-    checkAnswer(
-      negativeData.select(abs('key)).orderBy('key.desc),
-      (1 to 100).map(n => Row(n))
-    )
-
-    checkAnswer(
-      testData.select(abs(lit(null))),
-      (1 to 100).map(_ => Row(null))
-    )
-  }
-
   test("upper") {
     checkAnswer(
       lowerCaseData.select(upper('l)),
@@ -392,6 +440,10 @@ class ColumnExpressionSuite extends QueryTest {
       testData.select(upper(lit(null))),
       (1 to 100).map(n => Row(null))
     )
+
+    checkAnswer(
+      ctx.sql("SELECT upper('aB'), ucase('cDe')"),
+      Row("AB", "CDE"))
   }
 
   test("lower") {
@@ -409,11 +461,15 @@ class ColumnExpressionSuite extends QueryTest {
       testData.select(lower(lit(null))),
       (1 to 100).map(n => Row(null))
     )
+
+    checkAnswer(
+      ctx.sql("SELECT lower('aB'), lcase('cDe')"),
+      Row("ab", "cde"))
   }
 
   test("monotonicallyIncreasingId") {
     // Make sure we have 2 partitions, each with 2 records.
-    val df = TestSQLContext.sparkContext.parallelize(1 to 2, 2).mapPartitions { iter =>
+    val df = ctx.sparkContext.parallelize(Seq[Int](), 2).mapPartitions { _ =>
       Iterator(Tuple1(1), Tuple1(2))
     }.toDF("a")
     checkAnswer(
@@ -423,10 +479,13 @@ class ColumnExpressionSuite extends QueryTest {
   }
 
   test("sparkPartitionId") {
-    val df = TestSQLContext.sparkContext.parallelize(1 to 1, 1).map(i => (i, i)).toDF("a", "b")
+    // Make sure we have 2 partitions, each with 2 records.
+    val df = ctx.sparkContext.parallelize(Seq[Int](), 2).mapPartitions { _ =>
+      Iterator(Tuple1(1), Tuple1(2))
+    }.toDF("a")
     checkAnswer(
       df.select(sparkPartitionId()),
-      Row(0)
+      Row(0) :: Row(0) :: Row(1) :: Row(1) :: Nil
     )
   }
 

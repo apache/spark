@@ -33,7 +33,7 @@ class LogUrlsStandaloneSuite extends SparkFunSuite with LocalSparkContext {
   private val WAIT_TIMEOUT_MILLIS = 10000
 
   test("verify that correct log urls get propagated from workers") {
-    sc = new SparkContext("local-cluster[2,1,512]", "test")
+    sc = new SparkContext("local-cluster[2,1,1024]", "test")
 
     val listener = new SaveExecutorInfo
     sc.addSparkListener(listener)
@@ -41,7 +41,7 @@ class LogUrlsStandaloneSuite extends SparkFunSuite with LocalSparkContext {
     // Trigger a job so that executors get added
     sc.parallelize(1 to 100, 4).map(_.toString).count()
 
-    assert(sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS))
+    sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
     listener.addedExecutorInfos.values.foreach { info =>
       assert(info.logUrlMap.nonEmpty)
       // Browse to each URL to check that it's valid
@@ -66,12 +66,12 @@ class LogUrlsStandaloneSuite extends SparkFunSuite with LocalSparkContext {
     }
     val conf = new MySparkConf().set(
       "spark.extraListeners", classOf[SaveExecutorInfo].getName)
-    sc = new SparkContext("local-cluster[2,1,512]", "test", conf)
+    sc = new SparkContext("local-cluster[2,1,1024]", "test", conf)
 
     // Trigger a job so that executors get added
     sc.parallelize(1 to 100, 4).map(_.toString).count()
 
-    assert(sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS))
+    sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
     val listeners = sc.listenerBus.findListenersByClass[SaveExecutorInfo]
     assert(listeners.size === 1)
     val listener = listeners(0)

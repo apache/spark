@@ -28,8 +28,10 @@ import org.apache.hadoop.hive.serde2.objectinspector.primitive.PrimitiveObjectIn
 import org.apache.hadoop.io.LongWritable
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.expressions.{Literal, Row}
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.Row
 
 class HiveInspectorSuite extends SparkFunSuite with HiveInspectors {
   test("Test wrap SettableStructObjectInspector") {
@@ -45,8 +47,12 @@ class HiveInspectorSuite extends SparkFunSuite with HiveInspectors {
       classOf[UDAFPercentile.State],
       ObjectInspectorOptions.JAVA).asInstanceOf[StructObjectInspector]
 
-    val a = unwrap(state, soi).asInstanceOf[Row]
-    val b = wrap(a, soi).asInstanceOf[UDAFPercentile.State]
+    val a = unwrap(state, soi).asInstanceOf[InternalRow]
+
+    val dt = new StructType()
+      .add("counts", MapType(LongType, LongType))
+      .add("percentiles", ArrayType(DoubleType))
+    val b = wrap(a, soi, dt).asInstanceOf[UDAFPercentile.State]
 
     val sfCounts = soi.getStructFieldRef("counts")
     val sfPercentiles = soi.getStructFieldRef("percentiles")
@@ -127,7 +133,7 @@ class HiveInspectorSuite extends SparkFunSuite with HiveInspectors {
     }
   }
 
-  def checkValues(row1: Seq[Any], row2: Row): Unit = {
+  def checkValues(row1: Seq[Any], row2: InternalRow): Unit = {
     row1.zip(row2.toSeq).foreach { case (r1, r2) =>
       checkValue(r1, r2)
     }
@@ -156,44 +162,45 @@ class HiveInspectorSuite extends SparkFunSuite with HiveInspectors {
     val writableOIs = dataTypes.map(toWritableInspector)
     val nullRow = data.map(d => null)
 
-    checkValues(nullRow, nullRow.zip(writableOIs).map {
-      case (d, oi) => unwrap(wrap(d, oi), oi)
+    checkValues(nullRow, nullRow.zip(writableOIs).zip(dataTypes).map {
+      case ((d, oi), dt) => unwrap(wrap(d, oi, dt), oi)
     })
 
     // struct couldn't be constant, sweep it out
     val constantExprs = data.filter(!_.dataType.isInstanceOf[StructType])
+    val constantTypes = constantExprs.map(_.dataType)
     val constantData = constantExprs.map(_.eval())
     val constantNullData = constantData.map(_ => null)
     val constantWritableOIs = constantExprs.map(e => toWritableInspector(e.dataType))
     val constantNullWritableOIs =
       constantExprs.map(e => toInspector(Literal.create(null, e.dataType)))
 
-    checkValues(constantData, constantData.zip(constantWritableOIs).map {
-      case (d, oi) => unwrap(wrap(d, oi), oi)
+    checkValues(constantData, constantData.zip(constantWritableOIs).zip(constantTypes).map {
+      case ((d, oi), dt) => unwrap(wrap(d, oi, dt), oi)
     })
 
-    checkValues(constantNullData, constantData.zip(constantNullWritableOIs).map {
-      case (d, oi) => unwrap(wrap(d, oi), oi)
+    checkValues(constantNullData, constantData.zip(constantNullWritableOIs).zip(constantTypes).map {
+      case ((d, oi), dt) => unwrap(wrap(d, oi, dt), oi)
     })
 
-    checkValues(constantNullData, constantNullData.zip(constantWritableOIs).map {
-      case (d, oi) => unwrap(wrap(d, oi), oi)
+    checkValues(constantNullData, constantNullData.zip(constantWritableOIs).zip(constantTypes).map {
+      case ((d, oi), dt) => unwrap(wrap(d, oi, dt), oi)
     })
   }
 
   test("wrap / unwrap primitive writable object inspector") {
     val writableOIs = dataTypes.map(toWritableInspector)
 
-    checkValues(row, row.zip(writableOIs).map {
-      case (data, oi) => unwrap(wrap(data, oi), oi)
+    checkValues(row, row.zip(writableOIs).zip(dataTypes).map {
+      case ((data, oi), dt) => unwrap(wrap(data, oi, dt), oi)
     })
   }
 
   test("wrap / unwrap primitive java object inspector") {
     val ois = dataTypes.map(toInspector)
 
-    checkValues(row, row.zip(ois).map {
-      case (data, oi) => unwrap(wrap(data, oi), oi)
+    checkValues(row, row.zip(ois).zip(dataTypes).map {
+      case ((data, oi), dt) => unwrap(wrap(data, oi, dt), oi)
     })
   }
 
@@ -201,33 +208,35 @@ class HiveInspectorSuite extends SparkFunSuite with HiveInspectors {
     val dt = StructType(dataTypes.zipWithIndex.map {
       case (t, idx) => StructField(s"c_$idx", t)
     })
-
+    val inspector = toInspector(dt)
     checkValues(row,
-      unwrap(wrap(Row.fromSeq(row), toInspector(dt)), toInspector(dt)).asInstanceOf[Row])
-    checkValue(null, unwrap(wrap(null, toInspector(dt)), toInspector(dt)))
+      unwrap(wrap(InternalRow.fromSeq(row), inspector, dt), inspector).asInstanceOf[InternalRow])
+    checkValue(null, unwrap(wrap(null, toInspector(dt), dt), toInspector(dt)))
   }
 
   test("wrap / unwrap Array Type") {
     val dt = ArrayType(dataTypes(0))
 
     val d = row(0) :: row(0) :: Nil
-    checkValue(d, unwrap(wrap(d, toInspector(dt)), toInspector(dt)))
-    checkValue(null, unwrap(wrap(null, toInspector(dt)), toInspector(dt)))
+    checkValue(d, unwrap(wrap(d, toInspector(dt), dt), toInspector(dt)))
+    checkValue(null, unwrap(wrap(null, toInspector(dt), dt), toInspector(dt)))
     checkValue(d,
-      unwrap(wrap(d, toInspector(Literal.create(d, dt))), toInspector(Literal.create(d, dt))))
+      unwrap(wrap(d, toInspector(Literal.create(d, dt)), dt), toInspector(Literal.create(d, dt))))
     checkValue(d,
-      unwrap(wrap(null, toInspector(Literal.create(d, dt))), toInspector(Literal.create(d, dt))))
+      unwrap(wrap(null, toInspector(Literal.create(d, dt)), dt),
+        toInspector(Literal.create(d, dt))))
   }
 
   test("wrap / unwrap Map Type") {
     val dt = MapType(dataTypes(0), dataTypes(1))
 
     val d = Map(row(0) -> row(1))
-    checkValue(d, unwrap(wrap(d, toInspector(dt)), toInspector(dt)))
-    checkValue(null, unwrap(wrap(null, toInspector(dt)), toInspector(dt)))
+    checkValue(d, unwrap(wrap(d, toInspector(dt), dt), toInspector(dt)))
+    checkValue(null, unwrap(wrap(null, toInspector(dt), dt), toInspector(dt)))
     checkValue(d,
-      unwrap(wrap(d, toInspector(Literal.create(d, dt))), toInspector(Literal.create(d, dt))))
+      unwrap(wrap(d, toInspector(Literal.create(d, dt)), dt), toInspector(Literal.create(d, dt))))
     checkValue(d,
-      unwrap(wrap(null, toInspector(Literal.create(d, dt))), toInspector(Literal.create(d, dt))))
+      unwrap(wrap(null, toInspector(Literal.create(d, dt)), dt),
+        toInspector(Literal.create(d, dt))))
   }
 }

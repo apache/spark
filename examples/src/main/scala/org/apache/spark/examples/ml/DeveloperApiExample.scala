@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples.ml
 
 import org.apache.spark.{SparkConf, SparkContext}
@@ -130,6 +131,8 @@ private class MyLogisticRegression(override val uid: String)
     // Create a model, and return it.
     new MyLogisticRegressionModel(uid, weights).setParent(this)
   }
+
+  override def copy(extra: ParamMap): MyLogisticRegression = defaultCopy(extra)
 }
 
 /**
@@ -179,3 +182,4 @@ private class MyLogisticRegressionModel(
     copyValues(new MyLogisticRegressionModel(uid, weights), extra)
   }
 }
+// scalastyle:on println

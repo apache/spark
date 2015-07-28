@@ -30,8 +30,6 @@ import org.json4s.JsonDSL._
  * @param keyType The data type of map keys.
  * @param valueType The data type of map values.
  * @param valueContainsNull Indicates if map values have `null` values.
- *
- * @group dataType
  */
 case class MapType(
   keyType: DataType,
@@ -69,7 +67,16 @@ case class MapType(
 }
 
 
-object MapType {
+object MapType extends AbstractDataType {
+
+  override private[sql] def defaultConcreteType: DataType = apply(NullType, NullType)
+
+  override private[sql] def acceptsType(other: DataType): Boolean = {
+    other.isInstanceOf[MapType]
+  }
+
+  override private[sql] def simpleString: String = "map"
+
   /**
    * Construct a [[MapType]] object with the given key type and value type.
    * The `valueContainsNull` is true.

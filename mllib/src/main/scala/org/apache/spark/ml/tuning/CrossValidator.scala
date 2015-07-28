@@ -32,38 +32,7 @@ import org.apache.spark.sql.types.StructType
 /**
  * Params for [[CrossValidator]] and [[CrossValidatorModel]].
  */
-private[ml] trait CrossValidatorParams extends Params {
-
-  /**
-   * param for the estimator to be cross-validated
-   * @group param
-   */
-  val estimator: Param[Estimator[_]] = new Param(this, "estimator", "estimator for selection")
-
-  /** @group getParam */
-  def getEstimator: Estimator[_] = $(estimator)
-
-  /**
-   * param for estimator param maps
-   * @group param
-   */
-  val estimatorParamMaps: Param[Array[ParamMap]] =
-    new Param(this, "estimatorParamMaps", "param maps for the estimator")
-
-  /** @group getParam */
-  def getEstimatorParamMaps: Array[ParamMap] = $(estimatorParamMaps)
-
-  /**
-   * param for the evaluator used to select hyper-parameters that maximize the cross-validated
-   * metric
-   * @group param
-   */
-  val evaluator: Param[Evaluator] = new Param(this, "evaluator",
-    "evaluator used to select hyper-parameters that maximize the cross-validated metric")
-
-  /** @group getParam */
-  def getEvaluator: Evaluator = $(evaluator)
-
+private[ml] trait CrossValidatorParams extends ValidatorParams {
   /**
    * Param for number of folds for cross validation.  Must be >= 2.
    * Default: 3
@@ -135,7 +104,7 @@ class CrossValidator(override val uid: String) extends Estimator[CrossValidatorM
     logInfo(s"Best set of parameters:\n${epm(bestIndex)}")
     logInfo(s"Best cross-validation metric: $bestMetric.")
     val bestModel = est.fit(dataset, epm(bestIndex)).asInstanceOf[Model[_]]
-    copyValues(new CrossValidatorModel(uid, bestModel).setParent(this))
+    copyValues(new CrossValidatorModel(uid, bestModel, metrics).setParent(this))
   }
 
   override def transformSchema(schema: StructType): StructType = {
@@ -149,6 +118,17 @@ class CrossValidator(override val uid: String) extends Estimator[CrossValidatorM
       est.copy(paramMap).validateParams()
     }
   }
+
+  override def copy(extra: ParamMap): CrossValidator = {
+    val copied = defaultCopy(extra).asInstanceOf[CrossValidator]
+    if (copied.isDefined(estimator)) {
+      copied.setEstimator(copied.getEstimator.copy(extra))
+    }
+    if (copied.isDefined(evaluator)) {
+      copied.setEvaluator(copied.getEvaluator.copy(extra))
+    }
+    copied
+  }
 }
 
 /**
@@ -158,7 +138,8 @@ class CrossValidator(override val uid: String) extends Estimator[CrossValidatorM
 @Experimental
 class CrossValidatorModel private[ml] (
     override val uid: String,
-    val bestModel: Model[_])
+    val bestModel: Model[_],
+    val avgMetrics: Array[Double])
   extends Model[CrossValidatorModel] with CrossValidatorParams {
 
   override def validateParams(): Unit = {
@@ -175,7 +156,10 @@ class CrossValidatorModel private[ml] (
   }
 
   override def copy(extra: ParamMap): CrossValidatorModel = {
-    val copied = new CrossValidatorModel(uid, bestModel.copy(extra).asInstanceOf[Model[_]])
+    val copied = new CrossValidatorModel(
+      uid,
+      bestModel.copy(extra).asInstanceOf[Model[_]],
+      avgMetrics.clone())
     copyValues(copied, extra)
   }
 }

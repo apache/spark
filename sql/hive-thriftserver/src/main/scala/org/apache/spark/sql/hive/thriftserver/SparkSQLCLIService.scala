@@ -21,8 +21,6 @@ import java.io.IOException
 import java.util.{List => JList}
 import javax.security.auth.login.LoginException
 
-import scala.collection.JavaConversions._
-
 import org.apache.commons.logging.Log
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.shims.ShimLoader
@@ -34,7 +32,8 @@ import org.apache.hive.service.{AbstractService, Service, ServiceException}
 
 import org.apache.spark.sql.hive.HiveContext
 import org.apache.spark.sql.hive.thriftserver.ReflectionUtils._
-import org.apache.spark.util.Utils
+
+import scala.collection.JavaConversions._
 
 private[hive] class SparkSQLCLIService(hiveContext: HiveContext)
   extends CLIService
@@ -52,7 +51,7 @@ private[hive] class SparkSQLCLIService(hiveContext: HiveContext)
       try {
         HiveAuthFactory.loginFromKeytab(hiveConf)
         sparkServiceUGI = ShimLoader.getHadoopShims.getUGIForConf(hiveConf)
-        HiveThriftServerShim.setServerUserName(sparkServiceUGI, this)
+        setSuperField(this, "serviceUGI", sparkServiceUGI)
       } catch {
         case e @ (_: IOException | _: LoginException) =>
           throw new ServiceException("Unable to login to kerberos with given principal/keytab", e)

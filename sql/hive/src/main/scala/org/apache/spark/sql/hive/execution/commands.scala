@@ -17,15 +17,15 @@
 
 package org.apache.spark.sql.hive.execution
 
-import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.analysis.EliminateSubQueries
-import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.sql.sources._
-import org.apache.spark.sql.{SaveMode, DataFrame, SQLContext}
-import org.apache.spark.sql.catalyst.expressions.{Attribute, Row}
+import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution.RunnableCommand
+import org.apache.spark.sql.execution.datasources.{ResolvedDataSource, LogicalRelation}
 import org.apache.spark.sql.hive.HiveContext
+import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
@@ -91,9 +91,15 @@ case class AddJar(path: String) extends RunnableCommand {
     val jarURL = new java.io.File(path).toURL
     val newClassLoader = new java.net.URLClassLoader(Array(jarURL), currentClassLoader)
     Thread.currentThread.setContextClassLoader(newClassLoader)
-    org.apache.hadoop.hive.ql.metadata.Hive.get().getConf().setClassLoader(newClassLoader)
-
-    // Add jar to isolated hive classloader
+    // We need to explicitly set the class loader associated with the conf in executionHive's
+    // state because this class loader will be used as the context class loader of the current
+    // thread to execute any Hive command.
+    // We cannot use `org.apache.hadoop.hive.ql.metadata.Hive.get().getConf()` because Hive.get()
+    // returns the value of a thread local variable and its HiveConf may not be the HiveConf
+    // associated with `executionHive.state` (for example, HiveContext is created in one thread
+    // and then add jar is called from another thread).
+    hiveContext.executionHive.state.getConf.setClassLoader(newClassLoader)
+    // Add jar to isolated hive (metadataHive) class loader.
     hiveContext.runSqlHive(s"ADD JAR $path")
 
     // Add jar to executors
@@ -230,7 +236,7 @@ case class CreateMetastoreDataSourceAsSelect(
     val data = DataFrame(hiveContext, query)
     val df = existingSchema match {
       // If we are inserting into an existing table, just use the existing schema.
-      case Some(schema) => sqlContext.createDataFrame(data.queryExecution.toRdd, schema)
+      case Some(schema) => sqlContext.internalCreateDataFrame(data.queryExecution.toRdd, schema)
       case None => data
     }
 

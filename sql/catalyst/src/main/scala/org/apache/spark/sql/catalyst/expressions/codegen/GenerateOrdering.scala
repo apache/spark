@@ -18,93 +18,97 @@
 package org.apache.spark.sql.catalyst.expressions.codegen
 
 import org.apache.spark.Logging
+import org.apache.spark.annotation.Private
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.types.{BinaryType, StringType, NumericType}
 
 /**
- * Generates bytecode for an [[Ordering]] of [[Row Rows]] for a given set of
- * [[Expression Expressions]].
+ * Inherits some default implementation for Java from `Ordering[Row]`
  */
-object GenerateOrdering extends CodeGenerator[Seq[SortOrder], Ordering[Row]] with Logging {
-  import scala.reflect.runtime.{universe => ru}
-  import scala.reflect.runtime.universe._
+@Private
+class BaseOrdering extends Ordering[InternalRow] {
+  def compare(a: InternalRow, b: InternalRow): Int = {
+    throw new UnsupportedOperationException
+  }
+}
 
- protected def canonicalize(in: Seq[SortOrder]): Seq[SortOrder] =
+/**
+ * Generates bytecode for an [[Ordering]] of rows for a given set of expressions.
+ */
+object GenerateOrdering extends CodeGenerator[Seq[SortOrder], Ordering[InternalRow]] with Logging {
+
+  protected def canonicalize(in: Seq[SortOrder]): Seq[SortOrder] =
     in.map(ExpressionCanonicalizer.execute(_).asInstanceOf[SortOrder])
 
   protected def bind(in: Seq[SortOrder], inputSchema: Seq[Attribute]): Seq[SortOrder] =
     in.map(BindReferences.bindReference(_, inputSchema))
 
-  protected def create(ordering: Seq[SortOrder]): Ordering[Row] = {
-    val a = newTermName("a")
-    val b = newTermName("b")
-    val comparisons = ordering.zipWithIndex.map { case (order, i) =>
-      val evalA = expressionEvaluator(order.child)
-      val evalB = expressionEvaluator(order.child)
+  protected def create(ordering: Seq[SortOrder]): Ordering[InternalRow] = {
+    val ctx = newCodeGenContext()
 
-      val compare = order.child.dataType match {
-        case BinaryType =>
-          q"""
-          val x = ${if (order.direction == Ascending) evalA.primitiveTerm else evalB.primitiveTerm}
-          val y = ${if (order.direction != Ascending) evalB.primitiveTerm else evalA.primitiveTerm}
-          var i = 0
-          while (i < x.length && i < y.length) {
-            val res = x(i).compareTo(y(i))
-            if (res != 0) return res
-            i = i+1
+    val comparisons = ordering.map { order =>
+      val eval = order.child.gen(ctx)
+      val asc = order.direction == Ascending
+      val isNullA = ctx.freshName("isNullA")
+      val primitiveA = ctx.freshName("primitiveA")
+      val isNullB = ctx.freshName("isNullB")
+      val primitiveB = ctx.freshName("primitiveB")
+      s"""
+          i = a;
+          boolean $isNullA;
+          ${ctx.javaType(order.child.dataType)} $primitiveA;
+          {
+            ${eval.code}
+            $isNullA = ${eval.isNull};
+            $primitiveA = ${eval.primitive};
           }
-          return x.length - y.length
-          """
-        case _: NumericType =>
-          q"""
-          val comp = ${evalA.primitiveTerm} - ${evalB.primitiveTerm}
-          if(comp != 0) {
-            return ${if (order.direction == Ascending) q"comp.toInt" else q"-comp.toInt"}
+          i = b;
+          boolean $isNullB;
+          ${ctx.javaType(order.child.dataType)} $primitiveB;
+          {
+            ${eval.code}
+            $isNullB = ${eval.isNull};
+            $primitiveB = ${eval.primitive};
           }
-          """
-        case StringType =>
-          if (order.direction == Ascending) {
-            q"""return ${evalA.primitiveTerm}.compare(${evalB.primitiveTerm})"""
+          if ($isNullA && $isNullB) {
+            // Nothing
+          } else if ($isNullA) {
+            return ${if (order.direction == Ascending) "-1" else "1"};
+          } else if ($isNullB) {
+            return ${if (order.direction == Ascending) "1" else "-1"};
           } else {
-            q"""return ${evalB.primitiveTerm}.compare(${evalA.primitiveTerm})"""
+            int comp = ${ctx.genComp(order.child.dataType, primitiveA, primitiveB)};
+            if (comp != 0) {
+              return ${if (asc) "comp" else "-comp"};
+            }
           }
-      }
-
-      q"""
-        i = $a
-        ..${evalA.code}
-        i = $b
-        ..${evalB.code}
-        if (${evalA.nullTerm} && ${evalB.nullTerm}) {
-          // Nothing
-        } else if (${evalA.nullTerm}) {
-          return ${if (order.direction == Ascending) q"-1" else q"1"}
-        } else if (${evalB.nullTerm}) {
-          return ${if (order.direction == Ascending) q"1" else q"-1"}
-        } else {
-          $compare
-        }
       """
-    }
-
-    val q"class $orderingName extends $orderingType { ..$body }" = reify {
-      class SpecificOrdering extends Ordering[Row] {
-        val o = ordering
+    }.mkString("\n")
+    val code = s"""
+      public SpecificOrdering generate($exprType[] expr) {
+        return new SpecificOrdering(expr);
       }
-    }.tree.children.head
 
-    val code = q"""
-      class $orderingName extends $orderingType {
-        ..$body
-        def compare(a: $rowType, b: $rowType): Int = {
-          var i: $rowType = null // Holds current row being evaluated.
-          ..$comparisons
-          return 0
+      class SpecificOrdering extends ${classOf[BaseOrdering].getName} {
+
+        private $exprType[] expressions;
+        ${declareMutableStates(ctx)}
+
+        public SpecificOrdering($exprType[] expr) {
+          expressions = expr;
+          ${initMutableStates(ctx)}
         }
-      }
-      new $orderingName()
-      """
-    logDebug(s"Generated Ordering: $code")
-    toolBox.eval(code).asInstanceOf[Ordering[Row]]
+
+        @Override
+        public int compare(InternalRow a, InternalRow b) {
+          InternalRow i = null;  // Holds current row being evaluated.
+          $comparisons
+          return 0;
+        }
+      }"""
+
+    logDebug(s"Generated Ordering: ${CodeFormatter.format(code)}")
+
+    compile(code).generate(ctx.references.toArray).asInstanceOf[BaseOrdering]
   }
 }

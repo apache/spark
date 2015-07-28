@@ -18,7 +18,9 @@
 package org.apache.spark.sql.execution.expressions
 
 import org.apache.spark.TaskContext
-import org.apache.spark.sql.catalyst.expressions.{Row, LeafExpression}
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.{Nondeterministic, LeafExpression}
+import org.apache.spark.sql.catalyst.expressions.codegen.{GeneratedExpressionCode, CodeGenContext}
 import org.apache.spark.sql.types.{LongType, DataType}
 
 /**
@@ -31,21 +33,42 @@ import org.apache.spark.sql.types.{LongType, DataType}
  *
  * Since this expression is stateful, it cannot be a case object.
  */
-private[sql] case class MonotonicallyIncreasingID() extends LeafExpression {
+private[sql] case class MonotonicallyIncreasingID() extends LeafExpression with Nondeterministic {
 
   /**
    * Record ID within each partition. By being transient, count's value is reset to 0 every time
-   * we serialize and deserialize it.
+   * we serialize and deserialize and initialize it.
    */
-  @transient private[this] var count: Long = 0L
+  @transient private[this] var count: Long = _
+
+  @transient private[this] var partitionMask: Long = _
+
+  override protected def initInternal(): Unit = {
+    count = 0L
+    partitionMask = TaskContext.getPartitionId().toLong << 33
+  }
 
   override def nullable: Boolean = false
 
   override def dataType: DataType = LongType
 
-  override def eval(input: Row): Long = {
+  override protected def evalInternal(input: InternalRow): Long = {
     val currentCount = count
     count += 1
-    (TaskContext.get().partitionId().toLong << 33) + currentCount
+    partitionMask + currentCount
+  }
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    val countTerm = ctx.freshName("count")
+    val partitionMaskTerm = ctx.freshName("partitionMask")
+    ctx.addMutableState(ctx.JAVA_LONG, countTerm, s"$countTerm = 0L;")
+    ctx.addMutableState(ctx.JAVA_LONG, partitionMaskTerm,
+      s"$partitionMaskTerm = ((long) org.apache.spark.TaskContext.getPartitionId()) << 33;")
+
+    ev.isNull = "false"
+    s"""
+      final ${ctx.javaType(dataType)} ${ev.primitive} = $partitionMaskTerm + $countTerm;
+      $countTerm++;
+    """
   }
 }

@@ -18,18 +18,34 @@
 package org.apache.spark.sql.execution.expressions
 
 import org.apache.spark.TaskContext
-import org.apache.spark.sql.catalyst.expressions.{LeafExpression, Row}
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.{Nondeterministic, LeafExpression}
+import org.apache.spark.sql.catalyst.expressions.codegen.{GeneratedExpressionCode, CodeGenContext}
 import org.apache.spark.sql.types.{IntegerType, DataType}
 
 
 /**
  * Expression that returns the current partition id of the Spark task.
  */
-private[sql] case object SparkPartitionID extends LeafExpression {
+private[sql] case object SparkPartitionID extends LeafExpression with Nondeterministic {
 
   override def nullable: Boolean = false
 
   override def dataType: DataType = IntegerType
 
-  override def eval(input: Row): Int = TaskContext.get().partitionId()
+  @transient private[this] var partitionId: Int = _
+
+  override protected def initInternal(): Unit = {
+    partitionId = TaskContext.getPartitionId()
+  }
+
+  override protected def evalInternal(input: InternalRow): Int = partitionId
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    val idTerm = ctx.freshName("partitionId")
+    ctx.addMutableState(ctx.JAVA_INT, idTerm,
+      s"$idTerm = org.apache.spark.TaskContext.getPartitionId();")
+    ev.isNull = "false"
+    s"final ${ctx.javaType(dataType)} ${ev.primitive} = $idTerm;"
+  }
 }

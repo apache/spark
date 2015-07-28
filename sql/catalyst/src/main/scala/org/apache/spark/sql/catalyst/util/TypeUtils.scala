@@ -21,7 +21,7 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.types._
 
 /**
- * Helper function to check for valid data types
+ * Helper functions to check for valid data types.
  */
 object TypeUtils {
   def checkForNumericExpr(t: DataType, caller: String): TypeCheckResult = {
@@ -29,14 +29,6 @@ object TypeUtils {
       TypeCheckResult.TypeCheckSuccess
     } else {
       TypeCheckResult.TypeCheckFailure(s"$caller accepts numeric types, not $t")
-    }
-  }
-
-  def checkForBitwiseExpr(t: DataType, caller: String): TypeCheckResult = {
-    if (t.isInstanceOf[IntegralType] || t == NullType) {
-      TypeCheckResult.TypeCheckSuccess
-    } else {
-      TypeCheckResult.TypeCheckFailure(s"$caller accepts integral types, not $t")
     }
   }
 
@@ -52,18 +44,33 @@ object TypeUtils {
         }
       case other => TypeCheckResult.TypeCheckFailure(s"$t doesn't support ordering on $caller")
     }
+
+  }
+
+  def checkForSameTypeInputExpr(types: Seq[DataType], caller: String): TypeCheckResult = {
+    if (types.distinct.size > 1) {
+      TypeCheckResult.TypeCheckFailure(
+        s"input to $caller should all be the same type, but it's ${types.mkString("[", ", ", "]")}")
+    } else {
+      TypeCheckResult.TypeCheckSuccess
+    }
   }
 
   def getNumeric(t: DataType): Numeric[Any] =
     t.asInstanceOf[NumericType].numeric.asInstanceOf[Numeric[Any]]
 
-  def getOrdering(t: DataType): Seq[(Ordering[Any], Int)] = {
+  def getOrdering(t: DataType): Ordering[Any] = {
     t match {
-      case i: AtomicType => Seq(i.ordering.asInstanceOf[Ordering[Any]]).zipWithIndex
-      case s: StructType =>
-        val atomicFields = s.fields.filter(_.dataType.isInstanceOf[AtomicType])
-        atomicFields.map(_.dataType.asInstanceOf[AtomicType].ordering.asInstanceOf[Ordering[Any]])
-            .zipWithIndex
+      case i: AtomicType => i.ordering.asInstanceOf[Ordering[Any]]
+      case s: StructType => s.ordering.asInstanceOf[Ordering[Any]]
     }
+  }
+
+  def compareBinary(x: Array[Byte], y: Array[Byte]): Int = {
+    for (i <- 0 until x.length; if i < y.length) {
+      val res = x(i).compareTo(y(i))
+      if (res != 0) return res
+    }
+    x.length - y.length
   }
 }

@@ -16,6 +16,7 @@
  */
 package org.apache.spark.status.api.v1
 
+import java.util.zip.ZipOutputStream
 import javax.servlet.ServletContext
 import javax.ws.rs._
 import javax.ws.rs.core.{Context, Response}
@@ -164,6 +165,18 @@ private[v1] class ApiRootResource extends UIRootFromServletContext {
     }
   }
 
+  @Path("applications/{appId}/logs")
+  def getEventLogs(
+      @PathParam("appId") appId: String): EventLogDownloadResource = {
+    new EventLogDownloadResource(uiRoot, appId, None)
+  }
+
+  @Path("applications/{appId}/{attemptId}/logs")
+  def getEventLogs(
+      @PathParam("appId") appId: String,
+      @PathParam("attemptId") attemptId: String): EventLogDownloadResource = {
+    new EventLogDownloadResource(uiRoot, appId, Some(attemptId))
+  }
 }
 
 private[spark] object ApiRootResource {
@@ -192,6 +205,17 @@ private[spark] object ApiRootResource {
 private[spark] trait UIRoot {
   def getSparkUI(appKey: String): Option[SparkUI]
   def getApplicationInfoList: Iterator[ApplicationInfo]
+
+  /**
+   * Write the event logs for the given app to the [[ZipOutputStream]] instance. If attemptId is
+   * [[None]], event logs for all attempts of this application will be written out.
+   */
+  def writeEventLogs(appId: String, attemptId: Option[String], zipStream: ZipOutputStream): Unit = {
+    Response.serverError()
+      .entity("Event logs are only available through the history server.")
+      .status(Response.Status.SERVICE_UNAVAILABLE)
+      .build()
+  }
 
   /**
    * Get the spark UI with the given appID, and apply a function

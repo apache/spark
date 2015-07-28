@@ -419,7 +419,11 @@ class JavaStreamingContext(val ssc: StreamingContext) extends Closeable {
    * Create an input stream from an queue of RDDs. In each batch,
    * it will process either one or all of the RDDs returned by the queue.
    *
-   * NOTE: changes to the queue after the stream is created will not be recognized.
+   * NOTE:
+   * 1. Changes to the queue after the stream is created will not be recognized.
+   * 2. Arbitrary RDDs can be added to `queueStream`, there is no way to recover data of
+   * those RDDs, so `queueStream` doesn't support checkpointing.
+   *
    * @param queue      Queue of RDDs
    * @tparam T         Type of objects in the RDD
    */
@@ -435,7 +439,11 @@ class JavaStreamingContext(val ssc: StreamingContext) extends Closeable {
    * Create an input stream from an queue of RDDs. In each batch,
    * it will process either one or all of the RDDs returned by the queue.
    *
-   * NOTE: changes to the queue after the stream is created will not be recognized.
+   * NOTE:
+   * 1. Changes to the queue after the stream is created will not be recognized.
+   * 2. Arbitrary RDDs can be added to `queueStream`, there is no way to recover data of
+   * those RDDs, so `queueStream` doesn't support checkpointing.
+   *
    * @param queue      Queue of RDDs
    * @param oneAtATime Whether only one RDD should be consumed from the queue in every interval
    * @tparam T         Type of objects in the RDD
@@ -455,7 +463,11 @@ class JavaStreamingContext(val ssc: StreamingContext) extends Closeable {
    * Create an input stream from an queue of RDDs. In each batch,
    * it will process either one or all of the RDDs returned by the queue.
    *
-   * NOTE: changes to the queue after the stream is created will not be recognized.
+   * NOTE:
+   * 1. Changes to the queue after the stream is created will not be recognized.
+   * 2. Arbitrary RDDs can be added to `queueStream`, there is no way to recover data of
+   * those RDDs, so `queueStream` doesn't support checkpointing.
+   *
    * @param queue      Queue of RDDs
    * @param oneAtATime Whether only one RDD should be consumed from the queue in every interval
    * @param defaultRDD Default RDD is returned by the DStream when the queue is empty

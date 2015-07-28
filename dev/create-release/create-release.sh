@@ -118,17 +118,17 @@ if [[ ! "$@" =~ --skip-publish ]]; then
 
   rm -rf $SPARK_REPO
 
-  build/mvn -DskipTests -Pyarn -Phive \
+  build/mvn -DskipTests -Pyarn -Phive -Prelease\
     -Phive-thriftserver -Phadoop-2.2 -Pspark-ganglia-lgpl -Pkinesis-asl \
     clean install
 
-  ./dev/change-version-to-2.11.sh
+  ./dev/change-scala-version.sh 2.11
   
-  build/mvn -DskipTests -Pyarn -Phive \
+  build/mvn -DskipTests -Pyarn -Phive -Prelease\
     -Dscala-2.11 -Phadoop-2.2 -Pspark-ganglia-lgpl -Pkinesis-asl \
     clean install
 
-  ./dev/change-version-to-2.10.sh
+  ./dev/change-scala-version.sh 2.10
 
   pushd $SPARK_REPO
 
@@ -205,7 +205,7 @@ if [[ ! "$@" =~ --skip-package ]]; then
 
     # TODO There should probably be a flag to make-distribution to allow 2.11 support
     if [[ $FLAGS == *scala-2.11* ]]; then
-      ./dev/change-version-to-2.11.sh
+      ./dev/change-scala-version.sh 2.11
     fi
 
     export ZINC_PORT=$ZINC_PORT
@@ -228,14 +228,14 @@ if [[ ! "$@" =~ --skip-package ]]; then
 
   # We increment the Zinc port each time to avoid OOM's and other craziness if multiple builds
   # share the same Zinc server.
-  make_binary_release "hadoop1" "-Psparkr -Psparkr-docs -Phadoop-1 -Phive -Phive-thriftserver" "3030" &
-  make_binary_release "hadoop1-scala2.11" "-Psparkr -Psparkr-docs -Phadoop-1 -Phive -Dscala-2.11" "3031" &
-  make_binary_release "cdh4" "-Psparkr -Psparkr-docs -Phadoop-1 -Phive -Phive-thriftserver -Dhadoop.version=2.0.0-mr1-cdh4.2.0" "3032" &
-  make_binary_release "hadoop2.3" "-Psparkr -Psparkr-docs  -Phadoop-2.3 -Phive -Phive-thriftserver -Pyarn" "3033" &
-  make_binary_release "hadoop2.4" "-Psparkr -Psparkr-docs -Phadoop-2.4 -Phive -Phive-thriftserver -Pyarn" "3034" &
-  make_binary_release "mapr3" "-Pmapr3 -Psparkr -Psparkr-docs -Phive -Phive-thriftserver" "3035" &
-  make_binary_release "mapr4" "-Pmapr4 -Psparkr -Psparkr-docs -Pyarn -Phive -Phive-thriftserver" "3036" &
-  make_binary_release "hadoop2.4-without-hive" "-Psparkr -Psparkr-docs -Phadoop-2.4 -Pyarn" "3037" &
+  make_binary_release "hadoop1" "-Psparkr -Phadoop-1 -Phive -Phive-thriftserver" "3030" &
+  make_binary_release "hadoop1-scala2.11" "-Psparkr -Phadoop-1 -Phive -Dscala-2.11" "3031" &
+  make_binary_release "cdh4" "-Psparkr -Phadoop-1 -Phive -Phive-thriftserver -Dhadoop.version=2.0.0-mr1-cdh4.2.0" "3032" &
+  make_binary_release "hadoop2.3" "-Psparkr -Phadoop-2.3 -Phive -Phive-thriftserver -Pyarn" "3033" &
+  make_binary_release "hadoop2.4" "-Psparkr -Phadoop-2.4 -Phive -Phive-thriftserver -Pyarn" "3034" &
+  make_binary_release "mapr3" "-Pmapr3 -Psparkr -Phive -Phive-thriftserver" "3035" &
+  make_binary_release "mapr4" "-Pmapr4 -Psparkr -Pyarn -Phive -Phive-thriftserver" "3036" &
+  make_binary_release "hadoop2.4-without-hive" "-Psparkr -Phadoop-2.4 -Pyarn" "3037" &
   wait
   rm -rf spark-$RELEASE_VERSION-bin-*/
 

@@ -132,6 +132,8 @@ final class Word2Vec(override val uid: String) extends Estimator[Word2VecModel] 
   override def transformSchema(schema: StructType): StructType = {
     validateAndTransformSchema(schema)
   }
+
+  override def copy(extra: ParamMap): Word2Vec = defaultCopy(extra)
 }
 
 /**
@@ -179,5 +181,10 @@ class Word2VecModel private[ml] (
 
   override def transformSchema(schema: StructType): StructType = {
     validateAndTransformSchema(schema)
+  }
+
+  override def copy(extra: ParamMap): Word2VecModel = {
+    val copied = new Word2VecModel(uid, wordVectors)
+    copyValues(copied, extra)
   }
 }

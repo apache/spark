@@ -165,4 +165,6 @@ class OneHotEncoder(override val uid: String) extends Transformer
 
     dataset.select(col("*"), encode(col(inputColName).cast(DoubleType)).as(outputColName, metadata))
   }
+
+  override def copy(extra: ParamMap): OneHotEncoder = defaultCopy(extra)
 }

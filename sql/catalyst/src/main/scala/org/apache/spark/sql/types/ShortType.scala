@@ -26,8 +26,6 @@ import org.apache.spark.sql.catalyst.ScalaReflectionLock
 /**
  * :: DeveloperApi ::
  * The data type representing `Short` values. Please use the singleton [[DataTypes.ShortType]].
- *
- * @group dataType
  */
 @DeveloperApi
 class ShortType private() extends IntegralType {

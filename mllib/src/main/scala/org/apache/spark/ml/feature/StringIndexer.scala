@@ -83,11 +83,16 @@ class StringIndexer(override val uid: String) extends Estimator[StringIndexerMod
   override def transformSchema(schema: StructType): StructType = {
     validateAndTransformSchema(schema)
   }
+
+  override def copy(extra: ParamMap): StringIndexer = defaultCopy(extra)
 }
 
 /**
  * :: Experimental ::
  * Model fitted by [[StringIndexer]].
+ * NOTE: During transformation, if the input column does not exist,
+ * [[StringIndexerModel.transform]] would return the input dataset unmodified.
+ * This is a temporary fix for the case when target labels do not exist during prediction.
  */
 @Experimental
 class StringIndexerModel private[ml] (
@@ -112,6 +117,12 @@ class StringIndexerModel private[ml] (
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
   override def transform(dataset: DataFrame): DataFrame = {
+    if (!dataset.schema.fieldNames.contains($(inputCol))) {
+      logInfo(s"Input column ${$(inputCol)} does not exist during transformation. " +
+        "Skip StringIndexerModel.")
+      return dataset
+    }
+
     val indexer = udf { label: String =>
       if (labelToIndex.contains(label)) {
         labelToIndex(label)
@@ -128,6 +139,16 @@ class StringIndexerModel private[ml] (
   }
 
   override def transformSchema(schema: StructType): StructType = {
-    validateAndTransformSchema(schema)
+    if (schema.fieldNames.contains($(inputCol))) {
+      validateAndTransformSchema(schema)
+    } else {
+      // If the input column does not exist during transformation, we skip StringIndexerModel.
+      schema
+    }
+  }
+
+  override def copy(extra: ParamMap): StringIndexerModel = {
+    val copied = new StringIndexerModel(uid, labels)
+    copyValues(copied, extra)
   }
 }
