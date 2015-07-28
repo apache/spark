@@ -15,22 +15,17 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
+package org.apache.spark.sql.catalyst
 
-import org.apache.spark.Logging
-import org.apache.spark.sql.catalyst.expressions.{Expression}
-import org.apache.spark.sql.execution.aggregate.ScalaUDAF
-import org.apache.spark.sql.expressions.UserDefinedAggregateFunction
+/**
+ * Identifies a `table` in `database`.  If `database` is not defined, the current database is used.
+ */
+private[sql] case class TableIdentifier(table: String, database: Option[String] = None) {
+  def withDatabase(database: String): TableIdentifier = this.copy(database = Some(database))
 
-class UDAFRegistration private[sql] (sqlContext: SQLContext) extends Logging {
+  def toSeq: Seq[String] = database.toSeq :+ table
 
-  private val functionRegistry = sqlContext.functionRegistry
+  override def toString: String = toSeq.map("`" + _ + "`").mkString(".")
 
-  def register(
-      name: String,
-      func: UserDefinedAggregateFunction): UserDefinedAggregateFunction = {
-    def builder(children: Seq[Expression]) = ScalaUDAF(children, func)
-    functionRegistry.registerFunction(name, builder)
-    func
-  }
+  def unquotedString: String = toSeq.mkString(".")
 }

@@ -78,8 +78,6 @@ trait ExpressionEvalHelper {
       generator
     } catch {
       case e: Throwable =>
-        val ctx = new CodeGenContext
-        val evaluated = expression.gen(ctx)
         fail(
           s"""
             |Code generation of $expression failed:

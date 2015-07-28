@@ -20,6 +20,7 @@ package org.apache.spark.sql
 import java.util.Properties
 
 import org.apache.spark.annotation.Experimental
+import org.apache.spark.sql.catalyst.{SqlParser, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.plans.logical.InsertIntoTable
 import org.apache.spark.sql.execution.datasources.{CreateTableUsingAsSelect, ResolvedDataSource}
@@ -159,15 +160,19 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    * @since 1.4.0
    */
   def insertInto(tableName: String): Unit = {
-    val partitions =
-      partitioningColumns.map(_.map(col => col -> (None: Option[String])).toMap)
-    val overwrite = (mode == SaveMode.Overwrite)
-    df.sqlContext.executePlan(InsertIntoTable(
-      UnresolvedRelation(Seq(tableName)),
-      partitions.getOrElse(Map.empty[String, Option[String]]),
-      df.logicalPlan,
-      overwrite,
-      ifNotExists = false)).toRdd
+    insertInto(new SqlParser().parseTableIdentifier(tableName))
+  }
+
+  private def insertInto(tableIdent: TableIdentifier): Unit = {
+    val partitions = partitioningColumns.map(_.map(col => col -> (None: Option[String])).toMap)
+    val overwrite = mode == SaveMode.Overwrite
+    df.sqlContext.executePlan(
+      InsertIntoTable(
+        UnresolvedRelation(tableIdent.toSeq),
+        partitions.getOrElse(Map.empty[String, Option[String]]),
+        df.logicalPlan,
+        overwrite,
+        ifNotExists = false)).toRdd
   }
 
   /**
@@ -183,35 +188,37 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    * @since 1.4.0
    */
   def saveAsTable(tableName: String): Unit = {
-    if (df.sqlContext.catalog.tableExists(tableName :: Nil) && mode != SaveMode.Overwrite) {
-      mode match {
-        case SaveMode.Ignore =>
-          // Do nothing
+    saveAsTable(new SqlParser().parseTableIdentifier(tableName))
+  }
 
-        case SaveMode.ErrorIfExists =>
-          throw new AnalysisException(s"Table $tableName already exists.")
+  private def saveAsTable(tableIdent: TableIdentifier): Unit = {
+    val tableExists = df.sqlContext.catalog.tableExists(tableIdent.toSeq)
 
-        case SaveMode.Append =>
-          // If it is Append, we just ask insertInto to handle it. We will not use insertInto
-          // to handle saveAsTable with Overwrite because saveAsTable can change the schema of
-          // the table. But, insertInto with Overwrite requires the schema of data be the same
-          // the schema of the table.
-          insertInto(tableName)
+    (tableExists, mode) match {
+      case (true, SaveMode.Ignore) =>
+        // Do nothing
 
-        case SaveMode.Overwrite =>
-          throw new UnsupportedOperationException("overwrite mode unsupported.")
-      }
-    } else {
-      val cmd =
-        CreateTableUsingAsSelect(
-          tableName,
-          source,
-          temporary = false,
-          partitioningColumns.map(_.toArray).getOrElse(Array.empty[String]),
-          mode,
-          extraOptions.toMap,
-          df.logicalPlan)
-      df.sqlContext.executePlan(cmd).toRdd
+      case (true, SaveMode.ErrorIfExists) =>
+        throw new AnalysisException(s"Table $tableIdent already exists.")
+
+      case (true, SaveMode.Append) =>
+        // If it is Append, we just ask insertInto to handle it. We will not use insertInto
+        // to handle saveAsTable with Overwrite because saveAsTable can change the schema of
+        // the table. But, insertInto with Overwrite requires the schema of data be the same
+        // the schema of the table.
+        insertInto(tableIdent)
+
+      case _ =>
+        val cmd =
+          CreateTableUsingAsSelect(
+            tableIdent.unquotedString,
+            source,
+            temporary = false,
+            partitioningColumns.map(_.toArray).getOrElse(Array.empty[String]),
+            mode,
+            extraOptions.toMap,
+            df.logicalPlan)
+        df.sqlContext.executePlan(cmd).toRdd
     }
   }
 

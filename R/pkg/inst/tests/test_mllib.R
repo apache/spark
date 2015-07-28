@@ -35,8 +35,8 @@ test_that("glm and predict", {
 
 test_that("predictions match with native glm", {
   training <- createDataFrame(sqlContext, iris)
-  model <- glm(Sepal_Width ~ Sepal_Length, data = training)
+  model <- glm(Sepal_Width ~ Sepal_Length + Species, data = training)
   vals <- collect(select(predict(model, training), "prediction"))
-  rVals <- predict(glm(Sepal.Width ~ Sepal.Length, data = iris), iris)
-  expect_true(all(abs(rVals - vals) < 1e-9), rVals - vals)
+  rVals <- predict(glm(Sepal.Width ~ Sepal.Length + Species, data = iris), iris)
+  expect_true(all(abs(rVals - vals) < 1e-6), rVals - vals)
 })

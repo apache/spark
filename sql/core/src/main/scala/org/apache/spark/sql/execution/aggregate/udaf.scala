@@ -15,87 +15,29 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.expressions.aggregate
+package org.apache.spark.sql.execution.aggregate
 
 import org.apache.spark.Logging
-import org.apache.spark.sql.catalyst.expressions.codegen.GenerateMutableProjection
-import org.apache.spark.sql.catalyst.{InternalRow, CatalystTypeConverters}
-import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateFunction2
-import org.apache.spark.sql.types._
 import org.apache.spark.sql.Row
+import org.apache.spark.sql.catalyst.{InternalRow, CatalystTypeConverters}
+import org.apache.spark.sql.catalyst.expressions.codegen.GenerateMutableProjection
+import org.apache.spark.sql.catalyst.expressions.{MutableRow, InterpretedMutableProjection, AttributeReference, Expression}
+import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateFunction2
+import org.apache.spark.sql.expressions.{MutableAggregationBuffer, UserDefinedAggregateFunction}
+import org.apache.spark.sql.types.{Metadata, StructField, StructType, DataType}
 
 /**
- * The abstract class for implementing user-defined aggregate function.
+ * A Mutable [[Row]] representing an mutable aggregation buffer.
  */
-abstract class UserDefinedAggregateFunction extends Serializable {
-
-  /**
-   * A [[StructType]] represents data types of input arguments of this aggregate function.
-   * For example, if a [[UserDefinedAggregateFunction]] expects two input arguments
-   * with type of [[DoubleType]] and [[LongType]], the returned [[StructType]] will look like
-   *
-   * ```
-   *   StructType(Seq(StructField("doubleInput", DoubleType), StructField("longInput", LongType)))
-   * ```
-   *
-   * The name of a field of this [[StructType]] is only used to identify the corresponding
-   * input argument. Users can choose names to identify the input arguments.
-   */
-  def inputSchema: StructType
-
-  /**
-   * A [[StructType]] represents data types of values in the aggregation buffer.
-   * For example, if a [[UserDefinedAggregateFunction]]'s buffer has two values
-   * (i.e. two intermediate values) with type of [[DoubleType]] and [[LongType]],
-   * the returned [[StructType]] will look like
-   *
-   * ```
-   *   StructType(Seq(StructField("doubleInput", DoubleType), StructField("longInput", LongType)))
-   * ```
-   *
-   * The name of a field of this [[StructType]] is only used to identify the corresponding
-   * buffer value. Users can choose names to identify the input arguments.
-   */
-  def bufferSchema: StructType
-
-  /**
-   * The [[DataType]] of the returned value of this [[UserDefinedAggregateFunction]].
-   */
-  def returnDataType: DataType
-
-  /** Indicates if this function is deterministic. */
-  def deterministic: Boolean
-
-  /**
-   *  Initializes the given aggregation buffer. Initial values set by this method should satisfy
-   *  the condition that when merging two buffers with initial values, the new buffer should
-   *  still store initial values.
-   */
-  def initialize(buffer: MutableAggregationBuffer): Unit
-
-  /** Updates the given aggregation buffer `buffer` with new input data from `input`. */
-  def update(buffer: MutableAggregationBuffer, input: Row): Unit
-
-  /** Merges two aggregation buffers and stores the updated buffer values back in `buffer1`. */
-  def merge(buffer1: MutableAggregationBuffer, buffer2: Row): Unit
-
-  /**
-   * Calculates the final result of this [[UserDefinedAggregateFunction]] based on the given
-   * aggregation buffer.
-   */
-  def evaluate(buffer: Row): Any
-}
-
-private[sql] abstract class AggregationBuffer(
+private[sql] class MutableAggregationBufferImpl (
+    schema: StructType,
     toCatalystConverters: Array[Any => Any],
     toScalaConverters: Array[Any => Any],
-    bufferOffset: Int)
-  extends Row {
+    bufferOffset: Int,
+    var underlyingBuffer: MutableRow)
+  extends MutableAggregationBuffer {
 
-  override def length: Int = toCatalystConverters.length
-
-  protected val offsets: Array[Int] = {
+  private[this] val offsets: Array[Int] = {
     val newOffsets = new Array[Int](length)
     var i = 0
     while (i < newOffsets.length) {
@@ -104,18 +46,8 @@ private[sql] abstract class AggregationBuffer(
     }
     newOffsets
   }
-}
 
-/**
- * A Mutable [[Row]] representing an mutable aggregation buffer.
- */
-class MutableAggregationBuffer private[sql] (
-    schema: StructType,
-    toCatalystConverters: Array[Any => Any],
-    toScalaConverters: Array[Any => Any],
-    bufferOffset: Int,
-    var underlyingBuffer: MutableRow)
-  extends AggregationBuffer(toCatalystConverters, toScalaConverters, bufferOffset) {
+  override def length: Int = toCatalystConverters.length
 
   override def get(i: Int): Any = {
     if (i >= length || i < 0) {
@@ -133,8 +65,8 @@ class MutableAggregationBuffer private[sql] (
     underlyingBuffer.update(offsets(i), toCatalystConverters(i)(value))
   }
 
-  override def copy(): MutableAggregationBuffer = {
-    new MutableAggregationBuffer(
+  override def copy(): MutableAggregationBufferImpl = {
+    new MutableAggregationBufferImpl(
       schema,
       toCatalystConverters,
       toScalaConverters,
@@ -146,13 +78,25 @@ class MutableAggregationBuffer private[sql] (
 /**
  * A [[Row]] representing an immutable aggregation buffer.
  */
-class InputAggregationBuffer private[sql] (
+private[sql] class InputAggregationBuffer private[sql] (
     schema: StructType,
     toCatalystConverters: Array[Any => Any],
     toScalaConverters: Array[Any => Any],
     bufferOffset: Int,
     var underlyingInputBuffer: InternalRow)
-  extends AggregationBuffer(toCatalystConverters, toScalaConverters, bufferOffset) {
+  extends Row {
+
+  private[this] val offsets: Array[Int] = {
+    val newOffsets = new Array[Int](length)
+    var i = 0
+    while (i < newOffsets.length) {
+      newOffsets(i) = bufferOffset + i
+      i += 1
+    }
+    newOffsets
+  }
+
+  override def length: Int = toCatalystConverters.length
 
   override def get(i: Int): Any = {
     if (i >= length || i < 0) {
@@ -179,7 +123,7 @@ class InputAggregationBuffer private[sql] (
  * @param children
  * @param udaf
  */
-case class ScalaUDAF(
+private[sql] case class ScalaUDAF(
     children: Seq[Expression],
     udaf: UserDefinedAggregateFunction)
   extends AggregateFunction2 with Logging {
@@ -243,8 +187,8 @@ case class ScalaUDAF(
       bufferOffset,
       null)
 
-  lazy val mutableAggregateBuffer: MutableAggregationBuffer =
-    new MutableAggregationBuffer(
+  lazy val mutableAggregateBuffer: MutableAggregationBufferImpl =
+    new MutableAggregationBufferImpl(
       bufferSchema,
       bufferValuesToCatalystConverters,
       bufferValuesToScalaConverters,

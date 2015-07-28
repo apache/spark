@@ -29,6 +29,7 @@ import org.apache.spark.unsafe.PlatformDependent;
 import org.apache.spark.unsafe.array.ByteArrayMethods;
 import org.apache.spark.unsafe.bitset.BitSetMethods;
 import org.apache.spark.unsafe.hash.Murmur3_x86_32;
+import org.apache.spark.unsafe.types.Interval;
 import org.apache.spark.unsafe.types.UTF8String;
 
 import static org.apache.spark.sql.types.DataTypes.*;
@@ -90,7 +91,8 @@ public final class UnsafeRow extends MutableRow {
     final Set<DataType> _readableFieldTypes = new HashSet<>(
       Arrays.asList(new DataType[]{
         StringType,
-        BinaryType
+        BinaryType,
+        IntervalType
       }));
     _readableFieldTypes.addAll(settableFieldTypes);
     readableFieldTypes = Collections.unmodifiableSet(_readableFieldTypes);
@@ -333,11 +335,6 @@ public final class UnsafeRow extends MutableRow {
   }
 
   @Override
-  public String getString(int ordinal) {
-    return getUTF8String(ordinal).toString();
-  }
-
-  @Override
   public byte[] getBinary(int ordinal) {
     if (isNullAt(ordinal)) {
       return null;
@@ -355,6 +352,20 @@ public final class UnsafeRow extends MutableRow {
         size
       );
       return bytes;
+    }
+  }
+
+  @Override
+  public Interval getInterval(int ordinal) {
+    if (isNullAt(ordinal)) {
+      return null;
+    } else {
+      final long offsetAndSize = getLong(ordinal);
+      final int offset = (int) (offsetAndSize >> 32);
+      final int months = (int) PlatformDependent.UNSAFE.getLong(baseObject, baseOffset + offset);
+      final long microseconds =
+        PlatformDependent.UNSAFE.getLong(baseObject, baseOffset + offset + 8);
+      return new Interval(months, microseconds);
     }
   }
 
