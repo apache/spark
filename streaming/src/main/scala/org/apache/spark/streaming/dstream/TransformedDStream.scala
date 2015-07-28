@@ -32,7 +32,7 @@ class TransformedDStream[U: ClassTag] (
   require(parents.map(_.slideDuration).distinct.size == 1,
     "Some of the DStreams have different slide durations")
 
-  override def dependencies = parents.toList
+  override def dependencies: List[DStream[_]] = parents.toList
 
   override def slideDuration: Duration = parents.head.slideDuration
 

@@ -55,7 +55,6 @@ case class Duration (private val millis: Long) {
 
   def div(that: Duration): Double = this / that
 
-
   def isMultipleOf(that: Duration): Boolean =
     (this.millis % that.millis == 0)
 
@@ -71,7 +70,7 @@ case class Duration (private val millis: Long) {
 
   def milliseconds: Long = millis
 
-  def prettyPrint = Utils.msDurationToString(millis)
+  def prettyPrint: String = Utils.msDurationToString(millis)
 
 }
 
@@ -80,7 +79,7 @@ case class Duration (private val millis: Long) {
  * a given number of milliseconds.
  */
 object Milliseconds {
-  def apply(milliseconds: Long) = new Duration(milliseconds)
+  def apply(milliseconds: Long): Duration = new Duration(milliseconds)
 }
 
 /**
@@ -88,7 +87,7 @@ object Milliseconds {
  * a given number of seconds.
  */
 object Seconds {
-  def apply(seconds: Long) = new Duration(seconds * 1000)
+  def apply(seconds: Long): Duration = new Duration(seconds * 1000)
 }
 
 /**
@@ -96,7 +95,7 @@ object Seconds {
  * a given number of minutes.
  */
 object Minutes {
-  def apply(minutes: Long) = new Duration(minutes * 60000)
+  def apply(minutes: Long): Duration = new Duration(minutes * 60000)
 }
 
 // Java-friendlier versions of the objects above.
@@ -107,16 +106,16 @@ object Durations {
   /**
    * @return [[org.apache.spark.streaming.Duration]] representing given number of milliseconds.
    */
-  def milliseconds(milliseconds: Long) = Milliseconds(milliseconds)
+  def milliseconds(milliseconds: Long): Duration = Milliseconds(milliseconds)
 
   /**
    * @return [[org.apache.spark.streaming.Duration]] representing given number of seconds.
    */
-  def seconds(seconds: Long) = Seconds(seconds)
+  def seconds(seconds: Long): Duration = Seconds(seconds)
 
   /**
    * @return [[org.apache.spark.streaming.Duration]] representing given number of minutes.
    */
-  def minutes(minutes: Long) = Minutes(minutes)
+  def minutes(minutes: Long): Duration = Minutes(minutes)
 
 }

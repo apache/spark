@@ -14,14 +14,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+
+from __future__ import print_function
+
 import os
 import sys
 
-from py4j.java_collections import ListConverter
 from py4j.java_gateway import java_import, JavaObject
 
 from pyspark import RDD, SparkConf
-from pyspark.serializers import UTF8Deserializer, CloudPickleSerializer
+from pyspark.serializers import NoOpSerializer, UTF8Deserializer, CloudPickleSerializer
 from pyspark.context import SparkContext
 from pyspark.storagelevel import StorageLevel
 from pyspark.streaming.dstream import DStream
@@ -157,7 +159,7 @@ class StreamingContext(object):
         try:
             jssc = gw.jvm.JavaStreamingContext(checkpointPath)
         except Exception:
-            print >>sys.stderr, "failed to load StreamingContext from checkpoint"
+            print("failed to load StreamingContext from checkpoint", file=sys.stderr)
             raise
 
         jsc = jssc.sparkContext()
@@ -189,7 +191,16 @@ class StreamingContext(object):
         if timeout is None:
             self._jssc.awaitTermination()
         else:
-            self._jssc.awaitTermination(int(timeout * 1000))
+            self._jssc.awaitTerminationOrTimeout(int(timeout * 1000))
+
+    def awaitTerminationOrTimeout(self, timeout):
+        """
+        Wait for the execution to stop. Return `true` if it's stopped; or
+        throw the reported error during the execution; or `false` if the
+        waiting time elapsed before returning from the method.
+        @param timeout: time to wait in seconds
+        """
+        self._jssc.awaitTerminationOrTimeout(int(timeout * 1000))
 
     def stop(self, stopSparkContext=True, stopGraceFully=False):
         """
@@ -251,6 +262,20 @@ class StreamingContext(object):
         """
         return DStream(self._jssc.textFileStream(directory), self, UTF8Deserializer())
 
+    def binaryRecordsStream(self, directory, recordLength):
+        """
+        Create an input stream that monitors a Hadoop-compatible file system
+        for new files and reads them as flat binary files with records of
+        fixed length. Files must be written to the monitored directory by "moving"
+        them from another location within the same file system.
+        File names starting with . are ignored.
+
+        @param directory:       Directory to load data from
+        @param recordLength:    Length of each record in bytes
+        """
+        return DStream(self._jssc.binaryRecordsStream(directory, recordLength), self,
+                       NoOpSerializer())
+
     def _check_serializers(self, rdds):
         # make sure they have same serializer
         if len(set(rdd._jrdd_deserializer for rdd in rdds)) > 1:
@@ -279,9 +304,7 @@ class StreamingContext(object):
             rdds = [self._sc.parallelize(input) for input in rdds]
         self._check_serializers(rdds)
 
-        jrdds = ListConverter().convert([r._jrdd for r in rdds],
-                                        SparkContext._gateway._gateway_client)
-        queue = self._jvm.PythonDStream.toRDDQueue(jrdds)
+        queue = self._jvm.PythonDStream.toRDDQueue([r._jrdd for r in rdds])
         if default:
             default = default._reserialize(rdds[0]._jrdd_deserializer)
             jdstream = self._jssc.queueStream(queue, oneAtATime, default._jrdd)
@@ -296,8 +319,7 @@ class StreamingContext(object):
         the transform function parameter will be the same as the order
         of corresponding DStreams in the list.
         """
-        jdstreams = ListConverter().convert([d._jdstream for d in dstreams],
-                                            SparkContext._gateway._gateway_client)
+        jdstreams = [d._jdstream for d in dstreams]
         # change the final serializer to sc.serializer
         func = TransformFunction(self._sc,
                                  lambda t, *rdds: transformFunc(rdds).map(lambda x: x),
@@ -320,6 +342,5 @@ class StreamingContext(object):
         if len(set(s._slideDuration for s in dstreams)) > 1:
             raise ValueError("All DStreams should have same slide duration")
         first = dstreams[0]
-        jrest = ListConverter().convert([d._jdstream for d in dstreams[1:]],
-                                        SparkContext._gateway._gateway_client)
+        jrest = [d._jdstream for d in dstreams[1:]]
         return DStream(self._jssc.union(first._jdstream, jrest), self, first._jrdd_deserializer)

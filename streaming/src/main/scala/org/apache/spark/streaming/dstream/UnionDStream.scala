@@ -33,17 +33,17 @@ class UnionDStream[T: ClassTag](parents: Array[DStream[T]])
   require(parents.map(_.slideDuration).distinct.size == 1,
     "Some of the DStreams have different slide durations")
 
-  override def dependencies = parents.toList
+  override def dependencies: List[DStream[_]] = parents.toList
 
   override def slideDuration: Duration = parents.head.slideDuration
 
   override def compute(validTime: Time): Option[RDD[T]] = {
     val rdds = new ArrayBuffer[RDD[T]]()
-    parents.map(_.getOrCompute(validTime)).foreach(_ match {
+    parents.map(_.getOrCompute(validTime)).foreach {
       case Some(rdd) => rdds += rdd
       case None => throw new Exception("Could not generate RDD from a parent for unifying at time "
         + validTime)
-    })
+    }
     if (rdds.size > 0) {
       Some(new UnionRDD(ssc.sc, rdds))
     } else {

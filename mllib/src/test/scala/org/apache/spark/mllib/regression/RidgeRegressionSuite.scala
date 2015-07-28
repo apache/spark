@@ -20,15 +20,22 @@ package org.apache.spark.mllib.regression
 import scala.util.Random
 
 import org.jblas.DoubleMatrix
-import org.scalatest.FunSuite
 
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.util.{LocalClusterSparkContext, LinearDataGenerator,
   MLlibTestSparkContext}
+import org.apache.spark.util.Utils
 
-class RidgeRegressionSuite extends FunSuite with MLlibTestSparkContext {
+private object RidgeRegressionSuite {
 
-  def predictionError(predictions: Seq[Double], input: Seq[LabeledPoint]) = {
+  /** 3 features */
+  val model = new RidgeRegressionModel(weights = Vectors.dense(0.1, 0.2, 0.3), intercept = 0.5)
+}
+
+class RidgeRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
+
+  def predictionError(predictions: Seq[Double], input: Seq[LabeledPoint]): Double = {
     predictions.zip(input).map { case (prediction, expected) =>
       (prediction - expected.label) * (prediction - expected.label)
     }.reduceLeft(_ + _) / predictions.size
@@ -75,9 +82,26 @@ class RidgeRegressionSuite extends FunSuite with MLlibTestSparkContext {
     assert(ridgeErr < linearErr,
       "ridgeError (" + ridgeErr + ") was not less than linearError(" + linearErr + ")")
   }
+
+  test("model save/load") {
+    val model = RidgeRegressionSuite.model
+
+    val tempDir = Utils.createTempDir()
+    val path = tempDir.toURI.toString
+
+    // Save model, load it back, and compare.
+    try {
+      model.save(sc, path)
+      val sameModel = RidgeRegressionModel.load(sc, path)
+      assert(model.weights == sameModel.weights)
+      assert(model.intercept == sameModel.intercept)
+    } finally {
+      Utils.deleteRecursively(tempDir)
+    }
+  }
 }
 
-class RidgeRegressionClusterSuite extends FunSuite with LocalClusterSparkContext {
+class RidgeRegressionClusterSuite extends SparkFunSuite with LocalClusterSparkContext {
 
   test("task size should be small in both training and prediction") {
     val m = 4

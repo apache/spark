@@ -26,7 +26,7 @@ private[nio] case class ConnectionManagerId(host: String, port: Int) {
   Utils.checkHost(host)
   assert (port > 0)
 
-  def toSocketAddress() = new InetSocketAddress(host, port)
+  def toSocketAddress(): InetSocketAddress = new InetSocketAddress(host, port)
 }
 
 

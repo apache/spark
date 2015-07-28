@@ -17,7 +17,6 @@
 
 package org.apache.spark
 
-import org.scalatest.FunSuite
 import org.scalatest.concurrent.Timeouts._
 import org.scalatest.Matchers
 import org.scalatest.time.{Millis, Span}
@@ -28,9 +27,9 @@ class NotSerializableClass
 class NotSerializableExn(val notSer: NotSerializableClass) extends Throwable() {}
 
 
-class DistributedSuite extends FunSuite with Matchers with LocalSparkContext {
+class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContext {
 
-  val clusterUrl = "local-cluster[2,1,512]"
+  val clusterUrl = "local-cluster[2,1,1024]"
 
   test("task throws not serializable exception") {
     // Ensures that executors do not crash when an exn is not serializable. If executors crash,
@@ -41,7 +40,7 @@ class DistributedSuite extends FunSuite with Matchers with LocalSparkContext {
     val numSlaves = 3
     val numPartitions = 10
 
-    sc = new SparkContext("local-cluster[%s,1,512]".format(numSlaves), "test")
+    sc = new SparkContext("local-cluster[%s,1,1024]".format(numSlaves), "test")
     val data = sc.parallelize(1 to 100, numPartitions).
       map(x => throw new NotSerializableExn(new NotSerializableClass))
     intercept[SparkException] {
@@ -51,16 +50,16 @@ class DistributedSuite extends FunSuite with Matchers with LocalSparkContext {
   }
 
   test("local-cluster format") {
-    sc = new SparkContext("local-cluster[2,1,512]", "test")
+    sc = new SparkContext("local-cluster[2,1,1024]", "test")
     assert(sc.parallelize(1 to 2, 2).count() == 2)
     resetSparkContext()
-    sc = new SparkContext("local-cluster[2 , 1 , 512]", "test")
+    sc = new SparkContext("local-cluster[2 , 1 , 1024]", "test")
     assert(sc.parallelize(1 to 2, 2).count() == 2)
     resetSparkContext()
-    sc = new SparkContext("local-cluster[2, 1, 512]", "test")
+    sc = new SparkContext("local-cluster[2, 1, 1024]", "test")
     assert(sc.parallelize(1 to 2, 2).count() == 2)
     resetSparkContext()
-    sc = new SparkContext("local-cluster[ 2, 1, 512 ]", "test")
+    sc = new SparkContext("local-cluster[ 2, 1, 1024 ]", "test")
     assert(sc.parallelize(1 to 2, 2).count() == 2)
     resetSparkContext()
   }
@@ -77,7 +76,7 @@ class DistributedSuite extends FunSuite with Matchers with LocalSparkContext {
   }
 
   test("groupByKey where map output sizes exceed maxMbInFlight") {
-    val conf = new SparkConf().set("spark.reducer.maxMbInFlight", "1")
+    val conf = new SparkConf().set("spark.reducer.maxSizeInFlight", "1m")
     sc = new SparkContext(clusterUrl, "test", conf)
     // This data should be around 20 MB, so even with 4 mappers and 2 reducers, each map output
     // file should be about 2.5 MB
@@ -108,7 +107,9 @@ class DistributedSuite extends FunSuite with Matchers with LocalSparkContext {
     sc = new SparkContext(clusterUrl, "test")
     val accum = sc.accumulator(0)
     val thrown = intercept[SparkException] {
+      // scalastyle:off println
       sc.parallelize(1 to 10, 10).foreach(x => println(x / 0))
+      // scalastyle:on println
     }
     assert(thrown.getClass === classOf[SparkException])
     assert(thrown.getMessage.contains("failed 4 times"))
@@ -275,7 +276,7 @@ class DistributedSuite extends FunSuite with Matchers with LocalSparkContext {
     DistributedSuite.amMaster = true
     // Using more than two nodes so we don't have a symmetric communication pattern and might
     // cache a partially correct list of peers.
-    sc = new SparkContext("local-cluster[3,1,512]", "test")
+    sc = new SparkContext("local-cluster[3,1,1024]", "test")
     for (i <- 1 to 3) {
       val data = sc.parallelize(Seq(true, false, false, false), 4)
       data.persist(StorageLevel.MEMORY_ONLY_2)
@@ -293,7 +294,7 @@ class DistributedSuite extends FunSuite with Matchers with LocalSparkContext {
 
   test("unpersist RDDs") {
     DistributedSuite.amMaster = true
-    sc = new SparkContext("local-cluster[3,1,512]", "test")
+    sc = new SparkContext("local-cluster[3,1,1024]", "test")
     val data = sc.parallelize(Seq(true, false, false, false), 4)
     data.persist(StorageLevel.MEMORY_ONLY_2)
     data.count

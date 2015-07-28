@@ -18,6 +18,8 @@
 package org.apache.spark.sql.execution.joins
 
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.catalyst.plans.{FullOuter, JoinType, LeftOuter, RightOuter}
@@ -42,9 +44,22 @@ case class BroadcastNestedLoopJoin(
     case BuildLeft => (right, left)
   }
 
+  override def outputsUnsafeRows: Boolean = left.outputsUnsafeRows || right.outputsUnsafeRows
+  override def canProcessUnsafeRows: Boolean = true
+
+  @transient private[this] lazy val resultProjection: Projection = {
+    if (outputsUnsafeRows) {
+      UnsafeProjection.create(schema)
+    } else {
+      new Projection {
+        override def apply(r: InternalRow): InternalRow = r
+      }
+    }
+  }
+
   override def outputPartitioning: Partitioning = streamed.outputPartitioning
 
-  override def output = {
+  override def output: Seq[Attribute] = {
     joinType match {
       case LeftOuter =>
         left.output ++ right.output.map(_.withNullability(true))
@@ -58,22 +73,21 @@ case class BroadcastNestedLoopJoin(
   }
 
   @transient private lazy val boundCondition =
-    InterpretedPredicate(
-      condition
-        .map(c => BindReferences.bindReference(c, left.output ++ right.output))
-        .getOrElse(Literal(true)))
+    newPredicate(condition.getOrElse(Literal(true)), left.output ++ right.output)
 
-  override def execute() = {
+  protected override def doExecute(): RDD[InternalRow] = {
     val broadcastedRelation =
-      sparkContext.broadcast(broadcast.execute().map(_.copy()).collect().toIndexedSeq)
+      sparkContext.broadcast(broadcast.execute().map(_.copy())
+        .collect().toIndexedSeq)
 
     /** All rows that either match both-way, or rows from streamed joined with nulls. */
     val matchesOrStreamedRowsWithNulls = streamed.execute().mapPartitions { streamedIter =>
-      val matchedRows = new CompactBuffer[Row]
+      val matchedRows = new CompactBuffer[InternalRow]
       // TODO: Use Spark's BitSet.
       val includedBroadcastTuples =
         new scala.collection.mutable.BitSet(broadcastedRelation.value.size)
       val joinedRow = new JoinedRow
+
       val leftNulls = new GenericMutableRow(left.output.size)
       val rightNulls = new GenericMutableRow(right.output.size)
 
@@ -86,11 +100,11 @@ case class BroadcastNestedLoopJoin(
           val broadcastedRow = broadcastedRelation.value(i)
           buildSide match {
             case BuildRight if boundCondition(joinedRow(streamedRow, broadcastedRow)) =>
-              matchedRows += joinedRow(streamedRow, broadcastedRow).copy()
+              matchedRows += resultProjection(joinedRow(streamedRow, broadcastedRow)).copy()
               streamRowMatched = true
               includedBroadcastTuples += i
             case BuildLeft if boundCondition(joinedRow(broadcastedRow, streamedRow)) =>
-              matchedRows += joinedRow(broadcastedRow, streamedRow).copy()
+              matchedRows += resultProjection(joinedRow(broadcastedRow, streamedRow)).copy()
               streamRowMatched = true
               includedBroadcastTuples += i
             case _ =>
@@ -100,9 +114,9 @@ case class BroadcastNestedLoopJoin(
 
         (streamRowMatched, joinType, buildSide) match {
           case (false, LeftOuter | FullOuter, BuildRight) =>
-            matchedRows += joinedRow(streamedRow, rightNulls).copy()
+            matchedRows += resultProjection(joinedRow(streamedRow, rightNulls)).copy()
           case (false, RightOuter | FullOuter, BuildLeft) =>
-            matchedRows += joinedRow(leftNulls, streamedRow).copy()
+            matchedRows += resultProjection(joinedRow(leftNulls, streamedRow)).copy()
           case _ =>
         }
       }
@@ -110,25 +124,24 @@ case class BroadcastNestedLoopJoin(
     }
 
     val includedBroadcastTuples = matchesOrStreamedRowsWithNulls.map(_._2)
-    val allIncludedBroadcastTuples =
-      if (includedBroadcastTuples.count == 0) {
-        new scala.collection.mutable.BitSet(broadcastedRelation.value.size)
-      } else {
-        includedBroadcastTuples.reduce(_ ++ _)
-      }
+    val allIncludedBroadcastTuples = includedBroadcastTuples.fold(
+      new scala.collection.mutable.BitSet(broadcastedRelation.value.size)
+    )(_ ++ _)
 
     val leftNulls = new GenericMutableRow(left.output.size)
     val rightNulls = new GenericMutableRow(right.output.size)
     /** Rows from broadcasted joined with nulls. */
-    val broadcastRowsWithNulls: Seq[Row] = {
-      val buf: CompactBuffer[Row] = new CompactBuffer()
+    val broadcastRowsWithNulls: Seq[InternalRow] = {
+      val buf: CompactBuffer[InternalRow] = new CompactBuffer()
       var i = 0
       val rel = broadcastedRelation.value
       while (i < rel.length) {
         if (!allIncludedBroadcastTuples.contains(i)) {
           (joinType, buildSide) match {
-            case (RightOuter | FullOuter, BuildRight) => buf += new JoinedRow(leftNulls, rel(i))
-            case (LeftOuter | FullOuter, BuildLeft) => buf += new JoinedRow(rel(i), rightNulls)
+            case (RightOuter | FullOuter, BuildRight) =>
+              buf += resultProjection(new JoinedRow(leftNulls, rel(i)))
+            case (LeftOuter | FullOuter, BuildLeft) =>
+              buf += resultProjection(new JoinedRow(rel(i), rightNulls))
             case _ =>
           }
         }

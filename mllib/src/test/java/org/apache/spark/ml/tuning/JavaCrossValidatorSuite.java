@@ -30,23 +30,22 @@ import org.apache.spark.ml.classification.LogisticRegression;
 import org.apache.spark.ml.evaluation.BinaryClassificationEvaluator;
 import org.apache.spark.ml.param.ParamMap;
 import org.apache.spark.mllib.regression.LabeledPoint;
-import org.apache.spark.sql.api.java.JavaSQLContext;
-import org.apache.spark.sql.api.java.JavaSchemaRDD;
-import static org.apache.spark.mllib.classification.LogisticRegressionSuite
-  .generateLogisticInputAsList;
+import org.apache.spark.sql.DataFrame;
+import org.apache.spark.sql.SQLContext;
+import static org.apache.spark.mllib.classification.LogisticRegressionSuite.generateLogisticInputAsList;
 
 public class JavaCrossValidatorSuite implements Serializable {
 
   private transient JavaSparkContext jsc;
-  private transient JavaSQLContext jsql;
-  private transient JavaSchemaRDD dataset;
+  private transient SQLContext jsql;
+  private transient DataFrame dataset;
 
   @Before
   public void setUp() {
     jsc = new JavaSparkContext("local", "JavaCrossValidatorSuite");
-    jsql = new JavaSQLContext(jsc);
+    jsql = new SQLContext(jsc);
     List<LabeledPoint> points = generateLogisticInputAsList(1.0, 1.0, 100, 42);
-    dataset = jsql.applySchema(jsc.parallelize(points, 2), LabeledPoint.class);
+    dataset = jsql.createDataFrame(jsc.parallelize(points, 2), LabeledPoint.class);
   }
 
   @After
@@ -69,8 +68,8 @@ public class JavaCrossValidatorSuite implements Serializable {
       .setEvaluator(eval)
       .setNumFolds(3);
     CrossValidatorModel cvModel = cv.fit(dataset);
-    ParamMap bestParamMap = cvModel.bestModel().fittingParamMap();
-    Assert.assertEquals(0.001, bestParamMap.apply(lr.regParam()));
-    Assert.assertEquals(10, bestParamMap.apply(lr.maxIter()));
+    LogisticRegression parent = (LogisticRegression) cvModel.bestModel().parent();
+    Assert.assertEquals(0.001, parent.getRegParam(), 0.0);
+    Assert.assertEquals(10, parent.getMaxIter());
   }
 }

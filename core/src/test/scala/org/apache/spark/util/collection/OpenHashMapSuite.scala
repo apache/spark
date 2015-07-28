@@ -19,12 +19,12 @@ package org.apache.spark.util.collection
 
 import scala.collection.mutable.HashSet
 
-import org.scalatest.FunSuite
 import org.scalatest.Matchers
 
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.util.SizeEstimator
 
-class OpenHashMapSuite extends FunSuite with Matchers {
+class OpenHashMapSuite extends SparkFunSuite with Matchers {
 
   test("size for specialized, primitive value (int)") {
     val capacity = 1024
@@ -44,7 +44,7 @@ class OpenHashMapSuite extends FunSuite with Matchers {
     val goodMap3 = new OpenHashMap[String, String](256)
     assert(goodMap3.size === 0)
     intercept[IllegalArgumentException] {
-      new OpenHashMap[String, Int](1 << 30) // Invalid map size: bigger than 2^29
+      new OpenHashMap[String, Int](1 << 30 + 1) // Invalid map size: bigger than 2^30
     }
     intercept[IllegalArgumentException] {
       new OpenHashMap[String, Int](-1)
@@ -175,5 +175,25 @@ class OpenHashMapSuite extends FunSuite with Matchers {
     for (i <- 1 to 100) {
       assert(map(i.toString) === i.toString)
     }
+  }
+
+  test("contains") {
+    val map = new OpenHashMap[String, Int](2)
+    map("a") = 1
+    assert(map.contains("a"))
+    assert(!map.contains("b"))
+    assert(!map.contains(null))
+    map(null) = 0
+    assert(map.contains(null))
+  }
+
+  test("support for more than 12M items") {
+    val cnt = 12000000 // 12M
+    val map = new OpenHashMap[Int, Int](cnt)
+    for (i <- 0 until cnt) {
+      map(i) = 1
+    }
+    val numInvalidValues = map.iterator.count(_._2 == 0)
+    assertResult(0)(numInvalidValues)
   }
 }

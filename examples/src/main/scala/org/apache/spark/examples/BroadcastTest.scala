@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples
 
 import org.apache.spark.{SparkConf, SparkContext}
@@ -29,7 +30,7 @@ object BroadcastTest {
     val blockSize = if (args.length > 3) args(3) else "4096"
 
     val sparkConf = new SparkConf().setAppName("Broadcast Test")
-      .set("spark.broadcast.factory", s"org.apache.spark.broadcast.${bcName}BroaddcastFactory")
+      .set("spark.broadcast.factory", s"org.apache.spark.broadcast.${bcName}BroadcastFactory")
       .set("spark.broadcast.blockSize", blockSize)
     val sc = new SparkContext(sparkConf)
 
@@ -52,3 +53,4 @@ object BroadcastTest {
     sc.stop()
   }
 }
+// scalastyle:on println

@@ -20,7 +20,8 @@ package org.apache.spark.mllib.tree.loss
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.model.TreeEnsembleModel
-import org.apache.spark.rdd.RDD
+import org.apache.spark.mllib.util.MLUtils
+
 
 /**
  * :: DeveloperApi ::
@@ -38,36 +39,17 @@ object LogLoss extends Loss {
    * Method to calculate the loss gradients for the gradient boosting calculation for binary
    * classification
    * The gradient with respect to F(x) is: - 4 y / (1 + exp(2 y F(x)))
-   * @param model Ensemble model
-   * @param point Instance of the training dataset
+   * @param prediction Predicted label.
+   * @param label True label.
    * @return Loss gradient
    */
-  override def gradient(
-      model: TreeEnsembleModel,
-      point: LabeledPoint): Double = {
-    val prediction = model.predict(point.features)
-    - 4.0 * point.label / (1.0 + math.exp(2.0 * point.label * prediction))
+  override def gradient(prediction: Double, label: Double): Double = {
+    - 4.0 * label / (1.0 + math.exp(2.0 * label * prediction))
   }
 
-  /**
-   * Method to calculate loss of the base learner for the gradient boosting calculation.
-   * Note: This method is not used by the gradient boosting algorithm but is useful for debugging
-   * purposes.
-   * @param model Ensemble model
-   * @param data Training dataset: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]].
-   * @return Mean log loss of model on data
-   */
-  override def computeError(model: TreeEnsembleModel, data: RDD[LabeledPoint]): Double = {
-    data.map { case point =>
-      val prediction = model.predict(point.features)
-      val margin = 2.0 * point.label * prediction
-      // The following are equivalent to 2.0 * log(1 + exp(-margin)) but are more numerically
-      // stable.
-      if (margin >= 0) {
-        2.0 * math.log1p(math.exp(-margin))
-      } else {
-        2.0 * (-margin + math.log1p(math.exp(margin)))
-      }
-    }.mean()
+  override private[mllib] def computeError(prediction: Double, label: Double): Double = {
+    val margin = 2.0 * label * prediction
+    // The following is equivalent to 2.0 * log(1 + exp(-margin)) but more numerically stable.
+    2.0 * MLUtils.log1pExp(-margin)
   }
 }

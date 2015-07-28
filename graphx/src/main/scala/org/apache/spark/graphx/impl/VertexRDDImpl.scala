@@ -71,10 +71,20 @@ class VertexRDDImpl[VD] private[graphx] (
     this
   }
 
-  override def checkpoint() = {
+  override def getStorageLevel: StorageLevel = partitionsRDD.getStorageLevel
+
+  override def checkpoint(): Unit = {
     partitionsRDD.checkpoint()
   }
-    
+
+  override def isCheckpointed: Boolean = {
+    firstParent[ShippableVertexPartition[VD]].isCheckpointed
+  }
+
+  override def getCheckpointFile: Option[String] = {
+    partitionsRDD.getCheckpointFile
+  }
+
   /** The number of vertices in the RDD. */
   override def count(): Long = {
     partitionsRDD.map(_.size).reduce(_ + _)
@@ -93,9 +103,44 @@ class VertexRDDImpl[VD] private[graphx] (
   override def mapValues[VD2: ClassTag](f: (VertexId, VD) => VD2): VertexRDD[VD2] =
     this.mapVertexPartitions(_.map(f))
 
+  override def minus(other: RDD[(VertexId, VD)]): VertexRDD[VD] = {
+    minus(this.aggregateUsingIndex(other, (a: VD, b: VD) => a))
+  }
+
+  override def minus (other: VertexRDD[VD]): VertexRDD[VD] = {
+    other match {
+      case other: VertexRDD[_] if this.partitioner == other.partitioner =>
+        this.withPartitionsRDD[VD](
+          partitionsRDD.zipPartitions(
+            other.partitionsRDD, preservesPartitioning = true) {
+            (thisIter, otherIter) =>
+              val thisPart = thisIter.next()
+              val otherPart = otherIter.next()
+              Iterator(thisPart.minus(otherPart))
+          })
+      case _ =>
+        this.withPartitionsRDD[VD](
+          partitionsRDD.zipPartitions(
+            other.partitionBy(this.partitioner.get), preservesPartitioning = true) {
+            (partIter, msgs) => partIter.map(_.minus(msgs))
+          }
+        )
+    }
+  }
+
+  override def diff(other: RDD[(VertexId, VD)]): VertexRDD[VD] = {
+    diff(this.aggregateUsingIndex(other, (a: VD, b: VD) => a))
+  }
+
   override def diff(other: VertexRDD[VD]): VertexRDD[VD] = {
+    val otherPartition = other match {
+      case other: VertexRDD[_] if this.partitioner == other.partitioner =>
+        other.partitionsRDD
+      case _ =>
+        VertexRDD(other.partitionBy(this.partitioner.get)).partitionsRDD
+    }
     val newPartitionsRDD = partitionsRDD.zipPartitions(
-      other.partitionsRDD, preservesPartitioning = true
+      otherPartition, preservesPartitioning = true
     ) { (thisIter, otherIter) =>
       val thisPart = thisIter.next()
       val otherPart = otherIter.next()
@@ -123,7 +168,7 @@ class VertexRDDImpl[VD] private[graphx] (
     // Test if the other vertex is a VertexRDD to choose the optimal join strategy.
     // If the other set is a VertexRDD then we use the much more efficient leftZipJoin
     other match {
-      case other: VertexRDD[_] =>
+      case other: VertexRDD[_] if this.partitioner == other.partitioner =>
         leftZipJoin(other)(f)
       case _ =>
         this.withPartitionsRDD[VD3](
@@ -152,7 +197,7 @@ class VertexRDDImpl[VD] private[graphx] (
     // Test if the other vertex is a VertexRDD to choose the optimal join strategy.
     // If the other set is a VertexRDD then we use the much more efficient innerZipJoin
     other match {
-      case other: VertexRDD[_] =>
+      case other: VertexRDD[_] if this.partitioner == other.partitioner =>
         innerZipJoin(other)(f)
       case _ =>
         this.withPartitionsRDD(

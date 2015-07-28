@@ -17,20 +17,19 @@
 
 package org.apache.spark.sql.catalyst
 
-import org.scalatest.FunSuite
-
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.plans.physical._
 
 /* Implicit conversions */
 import org.apache.spark.sql.catalyst.dsl.expressions._
 
-class DistributionSuite extends FunSuite {
+class DistributionSuite extends SparkFunSuite {
 
   protected def checkSatisfied(
       inputPartitioning: Partitioning,
       requiredDistribution: Distribution,
       satisfied: Boolean) {
-    if (inputPartitioning.satisfies(requiredDistribution) != satisfied)
+    if (inputPartitioning.satisfies(requiredDistribution) != satisfied) {
       fail(
         s"""
         |== Input Partitioning ==
@@ -40,6 +39,7 @@ class DistributionSuite extends FunSuite {
         |== Does input partitioning satisfy required distribution? ==
         |Expected $satisfied got ${inputPartitioning.satisfies(requiredDistribution)}
         """.stripMargin)
+    }
   }
 
   test("HashPartitioning is the output partitioning") {

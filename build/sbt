@@ -125,4 +125,32 @@ loadConfigFile() {
 [[ -f "$etc_sbt_opts_file" ]] && set -- $(loadConfigFile "$etc_sbt_opts_file") "$@"
 [[ -f "$sbt_opts_file" ]] && set -- $(loadConfigFile "$sbt_opts_file") "$@"
 
+exit_status=127
+saved_stty=""
+
+restoreSttySettings() {
+  stty $saved_stty
+  saved_stty=""
+}
+
+onExit() {
+  if [[ "$saved_stty" != "" ]]; then
+    restoreSttySettings
+  fi
+  exit $exit_status
+}
+
+saveSttySettings() {
+  saved_stty=$(stty -g 2>/dev/null)
+  if [[ ! $? ]]; then
+    saved_stty=""
+  fi
+}
+
+saveSttySettings
+trap onExit INT
+
 run "$@"
+
+exit_status=$?
+onExit

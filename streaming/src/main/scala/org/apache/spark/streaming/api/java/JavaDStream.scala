@@ -36,7 +36,7 @@ import org.apache.spark.streaming.dstream.DStream
  * [[org.apache.spark.streaming.api.java.JavaPairDStream]].
  */
 class JavaDStream[T](val dstream: DStream[T])(implicit val classTag: ClassTag[T])
-    extends JavaDStreamLike[T, JavaDStream[T], JavaRDD[T]] {
+    extends AbstractJavaDStreamLike[T, JavaDStream[T], JavaRDD[T]] {
 
   override def wrapRDD(rdd: RDD[T]): JavaRDD[T] = JavaRDD.fromRDD(rdd)
 

@@ -18,20 +18,20 @@
 package org.apache.spark.sql.columnar.compression
 
 import org.apache.spark.sql.catalyst.expressions.MutableRow
-import org.apache.spark.sql.catalyst.types.NativeType
 import org.apache.spark.sql.columnar.{ColumnAccessor, NativeColumnAccessor}
+import org.apache.spark.sql.types.AtomicType
 
-private[sql] trait CompressibleColumnAccessor[T <: NativeType] extends ColumnAccessor {
+private[sql] trait CompressibleColumnAccessor[T <: AtomicType] extends ColumnAccessor {
   this: NativeColumnAccessor[T] =>
 
   private var decoder: Decoder[T] = _
 
-  abstract override protected def initialize() = {
+  abstract override protected def initialize(): Unit = {
     super.initialize()
     decoder = CompressionScheme(underlyingBuffer.getInt()).decoder(buffer, columnType)
   }
 
-  abstract override def hasNext = super.hasNext || decoder.hasNext
+  abstract override def hasNext: Boolean = super.hasNext || decoder.hasNext
 
   override def extractSingle(row: MutableRow, ordinal: Int): Unit = {
     decoder.next(row, ordinal)

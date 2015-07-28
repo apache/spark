@@ -55,5 +55,5 @@ private[sql] trait NullableColumnAccessor extends ColumnAccessor {
     pos += 1
   }
 
-  abstract override def hasNext = seenNulls < nullCount || super.hasNext
+  abstract override def hasNext: Boolean = seenNulls < nullCount || super.hasNext
 }

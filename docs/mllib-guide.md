@@ -1,11 +1,25 @@
 ---
 layout: global
-title: Machine Learning Library (MLlib) Programming Guide
+title: MLlib
+displayTitle: Machine Learning Library (MLlib) Guide
+description: MLlib machine learning library overview for Spark SPARK_VERSION_SHORT
 ---
 
 MLlib is Spark's scalable machine learning library consisting of common learning algorithms and utilities,
 including classification, regression, clustering, collaborative
-filtering, dimensionality reduction, as well as underlying optimization primitives, as outlined below:
+filtering, dimensionality reduction, as well as underlying optimization primitives.
+Guides for individual algorithms are listed below.
+
+The API is divided into 2 parts:
+
+* [The original `spark.mllib` API](mllib-guide.html#mllib-types-algorithms-and-utilities) is the primary API.
+* [The "Pipelines" `spark.ml` API](mllib-guide.html#sparkml-high-level-apis-for-ml-pipelines) is a higher-level API for constructing ML workflows.
+
+We list major functionality from both below, with links to detailed guides.
+
+# MLlib types, algorithms and utilities
+
+This lists functionality included in `spark.mllib`, the main MLlib API.
 
 * [Data types](mllib-data-types.html)
 * [Basic statistics](mllib-statistics.html)
@@ -19,178 +33,88 @@ filtering, dimensionality reduction, as well as underlying optimization primitiv
   * [naive Bayes](mllib-naive-bayes.html)
   * [decision trees](mllib-decision-tree.html)
   * [ensembles of trees](mllib-ensembles.html) (Random Forests and Gradient-Boosted Trees)
+  * [isotonic regression](mllib-isotonic-regression.html)
 * [Collaborative filtering](mllib-collaborative-filtering.html)
   * alternating least squares (ALS)
 * [Clustering](mllib-clustering.html)
-  * k-means
+  * [k-means](mllib-clustering.html#k-means)
+  * [Gaussian mixture](mllib-clustering.html#gaussian-mixture)
+  * [power iteration clustering (PIC)](mllib-clustering.html#power-iteration-clustering-pic)
+  * [latent Dirichlet allocation (LDA)](mllib-clustering.html#latent-dirichlet-allocation-lda)
+  * [streaming k-means](mllib-clustering.html#streaming-k-means)
 * [Dimensionality reduction](mllib-dimensionality-reduction.html)
   * singular value decomposition (SVD)
   * principal component analysis (PCA)
 * [Feature extraction and transformation](mllib-feature-extraction.html)
+* [Frequent pattern mining](mllib-frequent-pattern-mining.html)
+  * FP-growth
 * [Optimization (developer)](mllib-optimization.html)
   * stochastic gradient descent
   * limited-memory BFGS (L-BFGS)
+* [PMML model export](mllib-pmml-model-export.html)
 
 MLlib is under active development.
 The APIs marked `Experimental`/`DeveloperApi` may change in future releases, 
 and the migration guide below will explain all changes between releases.
 
-# spark.ml: The New ML Package
+# spark.ml: high-level APIs for ML pipelines
 
-Spark 1.2 includes a new machine learning package called `spark.ml`, currently an alpha component but potentially a successor to `spark.mllib`.  The `spark.ml` package aims to replace the old APIs with a cleaner, more uniform set of APIs which will help users create full machine learning pipelines.
+Spark 1.2 introduced a new package called `spark.ml`, which aims to provide a uniform set of
+high-level APIs that help users create and tune practical machine learning pipelines.
 
-See the **[spark.ml programming guide](ml-guide.html)** for more information on this package.
+*Graduated from Alpha!*  The Pipelines API is no longer an alpha component, although many elements of it are still `Experimental` or `DeveloperApi`.
 
-Users can use algorithms from either of the two packages, but APIs may differ.  Currently, `spark.ml` offers a subset of the algorithms from `spark.mllib`.
+Note that we will keep supporting and adding features to `spark.mllib` along with the
+development of `spark.ml`.
+Users should be comfortable using `spark.mllib` features and expect more features coming.
+Developers should contribute new algorithms to `spark.mllib` and can optionally contribute
+to `spark.ml`.
 
-Developers should contribute new algorithms to `spark.mllib` and can optionally contribute to `spark.ml`.
-See the `spark.ml` programming guide linked above for more details.
+More detailed guides for `spark.ml` include:
+
+* **[spark.ml programming guide](ml-guide.html)**: overview of the Pipelines API and major concepts
+* [Feature transformers](ml-features.html): Details on transformers supported in the Pipelines API, including a few not in the lower-level `spark.mllib` API
+* [Ensembles](ml-ensembles.html): Details on ensemble learning methods in the Pipelines API
 
 # Dependencies
 
-MLlib uses the linear algebra package [Breeze](http://www.scalanlp.org/),
-which depends on [netlib-java](https://github.com/fommil/netlib-java),
-and [jblas](https://github.com/mikiobraun/jblas). 
-`netlib-java` and `jblas` depend on native Fortran routines.
-You need to install the
-[gfortran runtime library](https://github.com/mikiobraun/jblas/wiki/Missing-Libraries)
-if it is not already present on your nodes.
-MLlib will throw a linking error if it cannot detect these libraries automatically.
-Due to license issues, we do not include `netlib-java`'s native libraries in MLlib's
-dependency set under default settings.
-If no native library is available at runtime, you will see a warning message.
-To use native libraries from `netlib-java`, please build Spark with `-Pnetlib-lgpl` or
-include `com.github.fommil.netlib:all:1.1.2` as a dependency of your project.
-If you want to use optimized BLAS/LAPACK libraries such as
-[OpenBLAS](http://www.openblas.net/), please link its shared libraries to
-`/usr/lib/libblas.so.3` and `/usr/lib/liblapack.so.3`, respectively.
-BLAS/LAPACK libraries on worker nodes should be built without multithreading.
+MLlib uses the linear algebra package
+[Breeze](http://www.scalanlp.org/), which depends on
+[netlib-java](https://github.com/fommil/netlib-java) for optimised
+numerical processing. If natives are not available at runtime, you
+will see a warning message and a pure JVM implementation will be used
+instead.
 
-To use MLlib in Python, you will need [NumPy](http://www.numpy.org) version 1.4 or newer.
+To learn more about the benefits and background of system optimised
+natives, you may wish to watch Sam Halliday's ScalaX talk on
+[High Performance Linear Algebra in Scala](http://fommil.github.io/scalax14/#/)).
+
+Due to licensing issues with runtime proprietary binaries, we do not
+include `netlib-java`'s native proxies by default. To configure
+`netlib-java` / Breeze to use system optimised binaries, include
+`com.github.fommil.netlib:all:1.1.2` (or build Spark with
+`-Pnetlib-lgpl`) as a dependency of your project and read the
+[netlib-java](https://github.com/fommil/netlib-java) documentation for
+your platform's additional installation instructions.
+
+To use MLlib in Python, you will need [NumPy](http://www.numpy.org)
+version 1.4 or newer.
 
 ---
 
 # Migration Guide
 
-## From 1.1 to 1.2
+For the `spark.ml` package, please see the [spark.ml Migration Guide](ml-guide.html#migration-guide).
 
-The only API changes in MLlib v1.2 are in
-[`DecisionTree`](api/scala/index.html#org.apache.spark.mllib.tree.DecisionTree),
-which continues to be an experimental API in MLlib 1.2:
+## From 1.3 to 1.4
 
-1. *(Breaking change)* The Scala API for classification takes a named argument specifying the number
-of classes.  In MLlib v1.1, this argument was called `numClasses` in Python and
-`numClassesForClassification` in Scala.  In MLlib v1.2, the names are both set to `numClasses`.
-This `numClasses` parameter is specified either via
-[`Strategy`](api/scala/index.html#org.apache.spark.mllib.tree.configuration.Strategy)
-or via [`DecisionTree`](api/scala/index.html#org.apache.spark.mllib.tree.DecisionTree)
-static `trainClassifier` and `trainRegressor` methods.
+In the `spark.mllib` package, there were several breaking changes, but all in `DeveloperApi` or `Experimental` APIs:
 
-2. *(Breaking change)* The API for
-[`Node`](api/scala/index.html#org.apache.spark.mllib.tree.model.Node) has changed.
-This should generally not affect user code, unless the user manually constructs decision trees
-(instead of using the `trainClassifier` or `trainRegressor` methods).
-The tree `Node` now includes more information, including the probability of the predicted label
-(for classification).
+* Gradient-Boosted Trees
+    * *(Breaking change)* The signature of the [`Loss.gradient`](api/scala/index.html#org.apache.spark.mllib.tree.loss.Loss) method was changed.  This is only an issues for users who wrote their own losses for GBTs.
+    * *(Breaking change)* The `apply` and `copy` methods for the case class [`BoostingStrategy`](api/scala/index.html#org.apache.spark.mllib.tree.configuration.BoostingStrategy) have been changed because of a modification to the case class fields.  This could be an issue for users who use `BoostingStrategy` to set GBT parameters.
+* *(Breaking change)* The return value of [`LDA.run`](api/scala/index.html#org.apache.spark.mllib.clustering.LDA) has changed.  It now returns an abstract class `LDAModel` instead of the concrete class `DistributedLDAModel`.  The object of type `LDAModel` can still be cast to the appropriate concrete type, which depends on the optimization algorithm.
 
-3. Printing methods' output has changed.  The `toString` (Scala/Java) and `__repr__` (Python) methods used to print the full model; they now print a summary.  For the full model, use `toDebugString`.
+## Previous Spark Versions
 
-Examples in the Spark distribution and examples in the
-[Decision Trees Guide](mllib-decision-tree.html#examples) have been updated accordingly.
-
-## From 1.0 to 1.1
-
-The only API changes in MLlib v1.1 are in
-[`DecisionTree`](api/scala/index.html#org.apache.spark.mllib.tree.DecisionTree),
-which continues to be an experimental API in MLlib 1.1:
-
-1. *(Breaking change)* The meaning of tree depth has been changed by 1 in order to match
-the implementations of trees in
-[scikit-learn](http://scikit-learn.org/stable/modules/classes.html#module-sklearn.tree)
-and in [rpart](http://cran.r-project.org/web/packages/rpart/index.html).
-In MLlib v1.0, a depth-1 tree had 1 leaf node, and a depth-2 tree had 1 root node and 2 leaf nodes.
-In MLlib v1.1, a depth-0 tree has 1 leaf node, and a depth-1 tree has 1 root node and 2 leaf nodes.
-This depth is specified by the `maxDepth` parameter in
-[`Strategy`](api/scala/index.html#org.apache.spark.mllib.tree.configuration.Strategy)
-or via [`DecisionTree`](api/scala/index.html#org.apache.spark.mllib.tree.DecisionTree)
-static `trainClassifier` and `trainRegressor` methods.
-
-2. *(Non-breaking change)* We recommend using the newly added `trainClassifier` and `trainRegressor`
-methods to build a [`DecisionTree`](api/scala/index.html#org.apache.spark.mllib.tree.DecisionTree),
-rather than using the old parameter class `Strategy`.  These new training methods explicitly
-separate classification and regression, and they replace specialized parameter types with
-simple `String` types.
-
-Examples of the new, recommended `trainClassifier` and `trainRegressor` are given in the
-[Decision Trees Guide](mllib-decision-tree.html#examples).
-
-## From 0.9 to 1.0
-
-In MLlib v1.0, we support both dense and sparse input in a unified way, which introduces a few
-breaking changes.  If your data is sparse, please store it in a sparse format instead of dense to
-take advantage of sparsity in both storage and computation. Details are described below.
-
-<div class="codetabs">
-<div data-lang="scala" markdown="1">
-
-We used to represent a feature vector by `Array[Double]`, which is replaced by
-[`Vector`](api/scala/index.html#org.apache.spark.mllib.linalg.Vector) in v1.0. Algorithms that used
-to accept `RDD[Array[Double]]` now take
-`RDD[Vector]`. [`LabeledPoint`](api/scala/index.html#org.apache.spark.mllib.regression.LabeledPoint)
-is now a wrapper of `(Double, Vector)` instead of `(Double, Array[Double])`. Converting
-`Array[Double]` to `Vector` is straightforward:
-
-{% highlight scala %}
-import org.apache.spark.mllib.linalg.{Vector, Vectors}
-
-val array: Array[Double] = ... // a double array
-val vector: Vector = Vectors.dense(array) // a dense vector
-{% endhighlight %}
-
-[`Vectors`](api/scala/index.html#org.apache.spark.mllib.linalg.Vectors$) provides factory methods to create sparse vectors.
-
-*Note*: Scala imports `scala.collection.immutable.Vector` by default, so you have to import `org.apache.spark.mllib.linalg.Vector` explicitly to use MLlib's `Vector`.
-
-</div>
-
-<div data-lang="java" markdown="1">
-
-We used to represent a feature vector by `double[]`, which is replaced by
-[`Vector`](api/java/index.html?org/apache/spark/mllib/linalg/Vector.html) in v1.0. Algorithms that used
-to accept `RDD<double[]>` now take
-`RDD<Vector>`. [`LabeledPoint`](api/java/index.html?org/apache/spark/mllib/regression/LabeledPoint.html)
-is now a wrapper of `(double, Vector)` instead of `(double, double[])`. Converting `double[]` to
-`Vector` is straightforward:
-
-{% highlight java %}
-import org.apache.spark.mllib.linalg.Vector;
-import org.apache.spark.mllib.linalg.Vectors;
-
-double[] array = ... // a double array
-Vector vector = Vectors.dense(array); // a dense vector
-{% endhighlight %}
-
-[`Vectors`](api/scala/index.html#org.apache.spark.mllib.linalg.Vectors$) provides factory methods to
-create sparse vectors.
-
-</div>
-
-<div data-lang="python" markdown="1">
-
-We used to represent a labeled feature vector in a NumPy array, where the first entry corresponds to
-the label and the rest are features.  This representation is replaced by class
-[`LabeledPoint`](api/python/pyspark.mllib.regression.LabeledPoint-class.html), which takes both
-dense and sparse feature vectors.
-
-{% highlight python %}
-from pyspark.mllib.linalg import SparseVector
-from pyspark.mllib.regression import LabeledPoint
-
-# Create a labeled point with a positive label and a dense feature vector.
-pos = LabeledPoint(1.0, [1.0, 0.0, 3.0])
-
-# Create a labeled point with a negative label and a sparse feature vector.
-neg = LabeledPoint(0.0, SparseVector(3, [0, 2], [1.0, 3.0]))
-{% endhighlight %}
-</div>
-</div>
+Earlier migration guides are archived [on this page](mllib-migration-guides.html).

@@ -24,10 +24,13 @@ import collection.mutable.ArrayBuffer
 class ApplicationMasterArguments(val args: Array[String]) {
   var userJar: String = null
   var userClass: String = null
-  var userArgs: Seq[String] = Seq[String]()
+  var primaryPyFile: String = null
+  var primaryRFile: String = null
+  var userArgs: Seq[String] = Nil
   var executorMemory = 1024
   var executorCores = 1
   var numExecutors = DEFAULT_NUMBER_EXECUTORS
+  var propertiesFile: String = null
 
   parseArgs(args.toList)
 
@@ -48,6 +51,14 @@ class ApplicationMasterArguments(val args: Array[String]) {
           userClass = value
           args = tail
 
+        case ("--primary-py-file") :: value :: tail =>
+          primaryPyFile = value
+          args = tail
+
+        case ("--primary-r-file") :: value :: tail =>
+          primaryRFile = value
+          args = tail
+
         case ("--args" | "--arg") :: value :: tail =>
           userArgsBuffer += value
           args = tail
@@ -64,15 +75,27 @@ class ApplicationMasterArguments(val args: Array[String]) {
           executorCores = value
           args = tail
 
+        case ("--properties-file") :: value :: tail =>
+          propertiesFile = value
+          args = tail
+
         case _ =>
           printUsageAndExit(1, args)
       }
+    }
+
+    if (primaryPyFile != null && primaryRFile != null) {
+      // scalastyle:off println
+      System.err.println("Cannot have primary-py-file and primary-r-file at the same time")
+      // scalastyle:on println
+      System.exit(-1)
     }
 
     userArgs = userArgsBuffer.readOnly
   }
 
   def printUsageAndExit(exitCode: Int, unknownParam: Any = null) {
+    // scalastyle:off println
     if (unknownParam != null) {
       System.err.println("Unknown/unsupported param " + unknownParam)
     }
@@ -81,12 +104,17 @@ class ApplicationMasterArguments(val args: Array[String]) {
       |Options:
       |  --jar JAR_PATH       Path to your application's JAR file
       |  --class CLASS_NAME   Name of your application's main class
+      |  --primary-py-file    A main Python file
+      |  --primary-r-file     A main R file
+      |  --py-files PY_FILES  Comma-separated list of .zip, .egg, or .py files to
+      |                       place on the PYTHONPATH for Python apps.
       |  --args ARGS          Arguments to be passed to your application's main class.
       |                       Multiple invocations are possible, each will be passed in order.
       |  --num-executors NUM    Number of executors to start (Default: 2)
       |  --executor-cores NUM   Number of cores for the executors (Default: 1)
       |  --executor-memory MEM  Memory per executor (e.g. 1000M, 2G) (Default: 1G)
       """.stripMargin)
+    // scalastyle:on println
     System.exit(exitCode)
   }
 }

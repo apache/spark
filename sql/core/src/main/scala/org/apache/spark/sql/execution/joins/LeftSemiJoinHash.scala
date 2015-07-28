@@ -18,7 +18,9 @@
 package org.apache.spark.sql.execution.joins
 
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.sql.catalyst.expressions.{Expression, Row}
+import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical.ClusteredDistribution
 import org.apache.spark.sql.execution.{BinaryNode, SparkPlan}
 
@@ -32,36 +34,21 @@ case class LeftSemiJoinHash(
     leftKeys: Seq[Expression],
     rightKeys: Seq[Expression],
     left: SparkPlan,
-    right: SparkPlan) extends BinaryNode with HashJoin {
+    right: SparkPlan,
+    condition: Option[Expression]) extends BinaryNode with HashSemiJoin {
 
-  override val buildSide = BuildRight
-
-  override def requiredChildDistribution =
+  override def requiredChildDistribution: Seq[ClusteredDistribution] =
     ClusteredDistribution(leftKeys) :: ClusteredDistribution(rightKeys) :: Nil
 
-  override def output = left.output
-
-  override def execute() = {
-    buildPlan.execute().zipPartitions(streamedPlan.execute()) { (buildIter, streamIter) =>
-      val hashSet = new java.util.HashSet[Row]()
-      var currentRow: Row = null
-
-      // Create a Hash set of buildKeys
-      while (buildIter.hasNext) {
-        currentRow = buildIter.next()
-        val rowKey = buildSideKeyGenerator(currentRow)
-        if (!rowKey.anyNull) {
-          val keyExists = hashSet.contains(rowKey)
-          if (!keyExists) {
-            hashSet.add(rowKey)
-          }
-        }
+  protected override def doExecute(): RDD[InternalRow] = {
+    right.execute().zipPartitions(left.execute()) { (buildIter, streamIter) =>
+      if (condition.isEmpty) {
+        val hashSet = buildKeyHashSet(buildIter)
+        hashSemiJoin(streamIter, hashSet)
+      } else {
+        val hashRelation = buildHashRelation(buildIter)
+        hashSemiJoin(streamIter, hashRelation)
       }
-
-      val joinKeys = streamSideKeyGenerator()
-      streamIter.filter(current => {
-        !joinKeys(current).anyNull && hashSet.contains(joinKeys.currentValue)
-      })
     }
   }
 }

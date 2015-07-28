@@ -21,6 +21,7 @@ import java.lang.{Boolean => JBoolean, Integer => JInteger}
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.mapreduce.{JobContext, JobID, TaskAttemptContext, TaskAttemptID}
+import org.apache.spark.util.Utils
 
 private[spark]
 trait SparkHadoopMapReduceUtil {
@@ -45,8 +46,8 @@ trait SparkHadoopMapReduceUtil {
       jobId: Int,
       isMap: Boolean,
       taskId: Int,
-      attemptId: Int) = {
-    val klass = Class.forName("org.apache.hadoop.mapreduce.TaskAttemptID")
+      attemptId: Int): TaskAttemptID = {
+    val klass = Utils.classForName("org.apache.hadoop.mapreduce.TaskAttemptID")
     try {
       // First, attempt to use the old-style constructor that takes a boolean isMap
       // (not available in YARN)
@@ -57,10 +58,10 @@ trait SparkHadoopMapReduceUtil {
     } catch {
       case exc: NoSuchMethodException => {
         // If that failed, look for the new constructor that takes a TaskType (not available in 1.x)
-        val taskTypeClass = Class.forName("org.apache.hadoop.mapreduce.TaskType")
+        val taskTypeClass = Utils.classForName("org.apache.hadoop.mapreduce.TaskType")
           .asInstanceOf[Class[Enum[_]]]
         val taskType = taskTypeClass.getMethod("valueOf", classOf[String]).invoke(
-          taskTypeClass, if(isMap) "MAP" else "REDUCE")
+          taskTypeClass, if (isMap) "MAP" else "REDUCE")
         val ctor = klass.getDeclaredConstructor(classOf[String], classOf[Int], taskTypeClass,
           classOf[Int], classOf[Int])
         ctor.newInstance(jtIdentifier, new JInteger(jobId), taskType, new JInteger(taskId),
@@ -71,10 +72,10 @@ trait SparkHadoopMapReduceUtil {
 
   private def firstAvailableClass(first: String, second: String): Class[_] = {
     try {
-      Class.forName(first)
+      Utils.classForName(first)
     } catch {
       case e: ClassNotFoundException =>
-        Class.forName(second)
+        Utils.classForName(second)
     }
   }
 }

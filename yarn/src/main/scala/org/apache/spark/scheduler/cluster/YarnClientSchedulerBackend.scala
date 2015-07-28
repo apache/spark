@@ -22,7 +22,7 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.hadoop.yarn.api.records.{ApplicationId, YarnApplicationState}
 
 import org.apache.spark.{SparkException, Logging, SparkContext}
-import org.apache.spark.deploy.yarn.{Client, ClientArguments}
+import org.apache.spark.deploy.yarn.{Client, ClientArguments, YarnSparkHadoopUtil}
 import org.apache.spark.scheduler.TaskSchedulerImpl
 
 private[spark] class YarnClientSchedulerBackend(
@@ -33,14 +33,13 @@ private[spark] class YarnClientSchedulerBackend(
 
   private var client: Client = null
   private var appId: ApplicationId = null
-  @volatile private var stopping: Boolean = false
+  private var monitorThread: Thread = null
 
   /**
    * Create a Yarn client to submit an application to the ResourceManager.
    * This waits until the application is running.
    */
   override def start() {
-    super.start()
     val driverHost = conf.get("spark.driver.host")
     val driverPort = conf.get("spark.driver.port")
     val hostport = driverHost + ":" + driverPort
@@ -55,8 +54,22 @@ private[spark] class YarnClientSchedulerBackend(
     totalExpectedExecutors = args.numExecutors
     client = new Client(args, conf)
     appId = client.submitApplication()
+
+    // SPARK-8687: Ensure all necessary properties have already been set before
+    // we initialize our driver scheduler backend, which serves these properties
+    // to the executors
+    super.start()
+
     waitForApplication()
-    asyncMonitorApplication()
+
+    // SPARK-8851: In yarn-client mode, the AM still does the credentials refresh. The driver
+    // reads the credentials from HDFS, just like the executors and updates its own credentials
+    // cache.
+    if (conf.contains("spark.yarn.credentials.file")) {
+      YarnSparkHadoopUtil.get.startExecutorDelegationTokenRenewer(conf)
+    }
+    monitorThread = asyncMonitorApplication()
+    monitorThread.start()
   }
 
   /**
@@ -68,8 +81,6 @@ private[spark] class YarnClientSchedulerBackend(
     // List of (target Client argument, environment variable, Spark property)
     val optionTuples =
       List(
-        ("--driver-memory", "SPARK_MASTER_MEMORY", "spark.master.memory"),
-        ("--driver-memory", "SPARK_DRIVER_MEMORY", "spark.driver.memory"),
         ("--num-executors", "SPARK_WORKER_INSTANCES", "spark.executor.instances"),
         ("--num-executors", "SPARK_EXECUTOR_INSTANCES", "spark.executor.instances"),
         ("--executor-memory", "SPARK_WORKER_MEMORY", "spark.executor.memory"),
@@ -77,29 +88,27 @@ private[spark] class YarnClientSchedulerBackend(
         ("--executor-cores", "SPARK_WORKER_CORES", "spark.executor.cores"),
         ("--executor-cores", "SPARK_EXECUTOR_CORES", "spark.executor.cores"),
         ("--queue", "SPARK_YARN_QUEUE", "spark.yarn.queue"),
-        ("--name", "SPARK_YARN_APP_NAME", "spark.app.name")
+        ("--py-files", null, "spark.submit.pyFiles")
       )
     // Warn against the following deprecated environment variables: env var -> suggestion
     val deprecatedEnvVars = Map(
-      "SPARK_MASTER_MEMORY" -> "SPARK_DRIVER_MEMORY or --driver-memory through spark-submit",
       "SPARK_WORKER_INSTANCES" -> "SPARK_WORKER_INSTANCES or --num-executors through spark-submit",
       "SPARK_WORKER_MEMORY" -> "SPARK_EXECUTOR_MEMORY or --executor-memory through spark-submit",
       "SPARK_WORKER_CORES" -> "SPARK_EXECUTOR_CORES or --executor-cores through spark-submit")
-    // Do the same for deprecated properties: property -> suggestion
-    val deprecatedProps = Map("spark.master.memory" -> "--driver-memory through spark-submit")
     optionTuples.foreach { case (optionName, envVar, sparkProp) =>
-      if (System.getenv(envVar) != null) {
+      if (sc.getConf.contains(sparkProp)) {
+        extraArgs += (optionName, sc.getConf.get(sparkProp))
+      } else if (envVar != null && System.getenv(envVar) != null) {
         extraArgs += (optionName, System.getenv(envVar))
         if (deprecatedEnvVars.contains(envVar)) {
           logWarning(s"NOTE: $envVar is deprecated. Use ${deprecatedEnvVars(envVar)} instead.")
         }
-      } else if (sc.getConf.contains(sparkProp)) {
-        extraArgs += (optionName, sc.getConf.get(sparkProp))
-        if (deprecatedProps.contains(sparkProp)) {
-          logWarning(s"NOTE: $sparkProp is deprecated. Use ${deprecatedProps(sparkProp)} instead.")
-        }
       }
     }
+    // The app name is a special case because "spark.app.name" is required of all applications.
+    // As a result, the corresponding "SPARK_YARN_APP_NAME" is already handled preemptively in
+    // SparkSubmitArguments if "spark.app.name" is not explicitly set by the user. (SPARK-5222)
+    sc.getConf.getOption("spark.app.name").foreach(v => extraArgs += ("--name", v))
     extraArgs
   }
 
@@ -127,28 +136,22 @@ private[spark] class YarnClientSchedulerBackend(
    * If the application has exited for any reason, stop the SparkContext.
    * This assumes both `client` and `appId` have already been set.
    */
-  private def asyncMonitorApplication(): Unit = {
+  private def asyncMonitorApplication(): Thread = {
     assert(client != null && appId != null, "Application has not been submitted yet!")
     val t = new Thread {
       override def run() {
-        while (!stopping) {
-          val report = client.getApplicationReport(appId)
-          val state = report.getYarnApplicationState()
-          if (state == YarnApplicationState.FINISHED ||
-            state == YarnApplicationState.KILLED ||
-            state == YarnApplicationState.FAILED) {
-            logError(s"Yarn application has already exited with state $state!")
-            sc.stop()
-            stopping = true
-          }
-          Thread.sleep(1000L)
+        try {
+          val (state, _) = client.monitorApplication(appId, logApplicationReport = false)
+          logError(s"Yarn application has already exited with state $state!")
+          sc.stop()
+        } catch {
+          case e: InterruptedException => logInfo("Interrupting monitor thread")
         }
-        Thread.currentThread().interrupt()
       }
     }
     t.setName("Yarn application state monitor")
     t.setDaemon(true)
-    t.start()
+    t
   }
 
   /**
@@ -156,9 +159,12 @@ private[spark] class YarnClientSchedulerBackend(
    */
   override def stop() {
     assert(client != null, "Attempted to stop this scheduler before starting it!")
-    stopping = true
+    if (monitorThread != null) {
+      monitorThread.interrupt()
+    }
     super.stop()
     client.stop()
+    YarnSparkHadoopUtil.get.stopExecutorDelegationTokenRenewer()
     logInfo("Stopped")
   }
 

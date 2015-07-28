@@ -22,7 +22,6 @@ import breeze.linalg.{DenseVector => BDV}
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vector, Vectors}
-import org.apache.spark.mllib.rdd.RDDFunctions._
 import org.apache.spark.rdd.RDD
 
 /**
@@ -86,20 +85,20 @@ private object IDF {
         df = BDV.zeros(doc.size)
       }
       doc match {
-        case sv: SparseVector =>
-          val nnz = sv.indices.size
+        case SparseVector(size, indices, values) =>
+          val nnz = indices.size
           var k = 0
           while (k < nnz) {
-            if (sv.values(k) > 0) {
-              df(sv.indices(k)) += 1L
+            if (values(k) > 0) {
+              df(indices(k)) += 1L
             }
             k += 1
           }
-        case dv: DenseVector =>
-          val n = dv.size
+        case DenseVector(values) =>
+          val n = values.size
           var j = 0
           while (j < n) {
-            if (dv.values(j) > 0.0) {
+            if (values(j) > 0.0) {
               df(j) += 1L
             }
             j += 1
@@ -145,7 +144,7 @@ private object IDF {
          * Since arrays are initialized to 0 by default,
          * we just omit changing those entries.
          */
-        if(df(j) >= minDocFreq) {
+        if (df(j) >= minDocFreq) {
           inv(j) = math.log((m + 1.0) / (df(j) + 1.0))
         }
         j += 1
@@ -160,7 +159,7 @@ private object IDF {
  * Represents an IDF model that can transform term frequency vectors.
  */
 @Experimental
-class IDFModel private[mllib] (val idf: Vector) extends Serializable {
+class IDFModel private[spark] (val idf: Vector) extends Serializable {
 
   /**
    * Transforms term frequency (TF) vectors to TF-IDF vectors.
@@ -207,20 +206,20 @@ private object IDFModel {
   def transform(idf: Vector, v: Vector): Vector = {
     val n = v.size
     v match {
-      case sv: SparseVector =>
-        val nnz = sv.indices.size
+      case SparseVector(size, indices, values) =>
+        val nnz = indices.size
         val newValues = new Array[Double](nnz)
         var k = 0
         while (k < nnz) {
-          newValues(k) = sv.values(k) * idf(sv.indices(k))
+          newValues(k) = values(k) * idf(indices(k))
           k += 1
         }
-        Vectors.sparse(n, sv.indices, newValues)
-      case dv: DenseVector =>
+        Vectors.sparse(n, indices, newValues)
+      case DenseVector(values) =>
         val newValues = new Array[Double](n)
         var j = 0
         while (j < n) {
-          newValues(j) = dv.values(j) * idf(j)
+          newValues(j) = values(j) * idf(j)
           j += 1
         }
         Vectors.dense(newValues)

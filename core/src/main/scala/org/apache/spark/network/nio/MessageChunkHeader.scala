@@ -50,8 +50,10 @@ private[nio] class MessageChunkHeader(
       flip.asInstanceOf[ByteBuffer]
   }
 
-  override def toString = "" + this.getClass.getSimpleName + ":" + id + " of type " + typ +
+  override def toString: String = {
+    "" + this.getClass.getSimpleName + ":" + id + " of type " + typ +
       " and sizes " + totalSize + " / " + chunkSize + " bytes, securityNeg: " + securityNeg
+  }
 
 }
 

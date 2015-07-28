@@ -69,7 +69,7 @@ private[spark] case class CoalescedRDDPartition(
  * the preferred location of each new partition overlaps with as many preferred locations of its
  * parent partitions
  * @param prev RDD to be coalesced
- * @param maxPartitions number of desired partitions in the coalesced RDD
+ * @param maxPartitions number of desired partitions in the coalesced RDD (must be positive)
  * @param balanceSlack used to trade-off balance and locality. 1.0 is all locality, 0 is all balance
  */
 private[spark] class CoalescedRDD[T: ClassTag](
@@ -77,6 +77,9 @@ private[spark] class CoalescedRDD[T: ClassTag](
     maxPartitions: Int,
     balanceSlack: Double = 0.10)
   extends RDD[T](prev.context, Nil) {  // Nil since we implement getDependencies
+
+  require(maxPartitions > 0 || maxPartitions == prev.partitions.length,
+    s"Number of partitions ($maxPartitions) must be positive.")
 
   override def getPartitions: Array[Partition] = {
     val pc = new PartitionCoalescer(maxPartitions, prev, balanceSlack)
@@ -166,7 +169,7 @@ private class PartitionCoalescer(maxPartitions: Int, prev: RDD[_], balanceSlack:
 
   // determines the tradeoff between load-balancing the partitions sizes and their locality
   // e.g. balanceSlack=0.10 means that it allows up to 10% imbalance in favor of locality
-  val slack = (balanceSlack * prev.partitions.size).toInt
+  val slack = (balanceSlack * prev.partitions.length).toInt
 
   var noLocality = true  // if true if no preferredLocations exists for parent RDD
 
@@ -186,7 +189,7 @@ private class PartitionCoalescer(maxPartitions: Int, prev: RDD[_], balanceSlack:
     override val isEmpty = !it.hasNext
 
     // initializes/resets to start iterating from the beginning
-    def resetIterator() = {
+    def resetIterator(): Iterator[(String, Partition)] = {
       val iterators = (0 to 2).map( x =>
         prev.partitions.iterator.flatMap(p => {
           if (currPrefLocs(p).size > x) Some((currPrefLocs(p)(x), p)) else None
@@ -196,10 +199,10 @@ private class PartitionCoalescer(maxPartitions: Int, prev: RDD[_], balanceSlack:
     }
 
     // hasNext() is false iff there are no preferredLocations for any of the partitions of the RDD
-    def hasNext(): Boolean = { !isEmpty }
+    override def hasNext: Boolean = { !isEmpty }
 
     // return the next preferredLocation of some partition of the RDD
-    def next(): (String, Partition) = {
+    override def next(): (String, Partition) = {
       if (it.hasNext) {
         it.next()
       } else {
@@ -237,7 +240,7 @@ private class PartitionCoalescer(maxPartitions: Int, prev: RDD[_], balanceSlack:
     val rotIt = new LocationIterator(prev)
 
     // deal with empty case, just create targetLen partition groups with no preferred location
-    if (!rotIt.hasNext()) {
+    if (!rotIt.hasNext) {
       (1 to targetLen).foreach(x => groupArr += PartitionGroup())
       return
     }
@@ -310,11 +313,11 @@ private class PartitionCoalescer(maxPartitions: Int, prev: RDD[_], balanceSlack:
   def throwBalls() {
     if (noLocality) {  // no preferredLocations in parent RDD, no randomization needed
       if (maxPartitions > groupArr.size) { // just return prev.partitions
-        for ((p,i) <- prev.partitions.zipWithIndex) {
+        for ((p, i) <- prev.partitions.zipWithIndex) {
           groupArr(i).arr += p
         }
       } else { // no locality available, then simply split partitions based on positions in array
-        for(i <- 0 until maxPartitions) {
+        for (i <- 0 until maxPartitions) {
           val rangeStart = ((i.toLong * prev.partitions.length) / maxPartitions).toInt
           val rangeEnd = (((i.toLong + 1) * prev.partitions.length) / maxPartitions).toInt
           (rangeStart until rangeEnd).foreach{ j => groupArr(i).arr += prev.partitions(j) }
@@ -343,7 +346,7 @@ private class PartitionCoalescer(maxPartitions: Int, prev: RDD[_], balanceSlack:
 
 private case class PartitionGroup(prefLoc: Option[String] = None) {
   var arr = mutable.ArrayBuffer[Partition]()
-  def size = arr.size
+  def size: Int = arr.size
 }
 
 private object PartitionGroup {

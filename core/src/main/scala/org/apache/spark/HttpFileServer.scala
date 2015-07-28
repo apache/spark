@@ -24,6 +24,7 @@ import com.google.common.io.Files
 import org.apache.spark.util.Utils
 
 private[spark] class HttpFileServer(
+    conf: SparkConf,
     securityManager: SecurityManager,
     requestedPort: Int = 0)
   extends Logging {
@@ -35,13 +36,13 @@ private[spark] class HttpFileServer(
   var serverUri : String = null
 
   def initialize() {
-    baseDir = Utils.createTempDir()
+    baseDir = Utils.createTempDir(Utils.getLocalDir(conf), "httpd")
     fileDir = new File(baseDir, "files")
     jarDir = new File(baseDir, "jars")
     fileDir.mkdir()
     jarDir.mkdir()
     logInfo("HTTP File server directory is " + baseDir)
-    httpServer = new HttpServer(baseDir, securityManager, requestedPort, "HTTP file server")
+    httpServer = new HttpServer(conf, baseDir, securityManager, requestedPort, "HTTP file server")
     httpServer.start()
     serverUri = httpServer.uri
     logDebug("HTTP file server started at: " + serverUri)
@@ -49,6 +50,15 @@ private[spark] class HttpFileServer(
 
   def stop() {
     httpServer.stop()
+
+    // If we only stop sc, but the driver process still run as a services then we need to delete
+    // the tmp dir, if not, it will create too many tmp dirs
+    try {
+      Utils.deleteRecursively(baseDir)
+    } catch {
+      case e: Exception =>
+        logWarning(s"Exception while deleting Spark temp dir: ${baseDir.getAbsolutePath}", e)
+    }
   }
 
   def addFile(file: File) : String = {

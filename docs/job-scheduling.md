@@ -14,8 +14,7 @@ runs an independent set of executor processes. The cluster managers that Spark r
 facilities for [scheduling across applications](#scheduling-across-applications). Second,
 _within_ each Spark application, multiple "jobs" (Spark actions) may be running concurrently
 if they were submitted by different threads. This is common if your application is serving requests
-over the network; for example, the [Shark](http://shark.cs.berkeley.edu) server works this way. Spark
-includes a [fair scheduler](#scheduling-within-an-application) to schedule resources within each SparkContext.
+over the network. Spark includes a [fair scheduler](#scheduling-within-an-application) to schedule resources within each SparkContext.
 
 # Scheduling Across Applications
 
@@ -33,7 +32,7 @@ Resource allocation can be configured as follows, based on the cluster type:
 * **Standalone mode:** By default, applications submitted to the standalone mode cluster will run in
   FIFO (first-in-first-out) order, and each application will try to use all available nodes. You can limit
   the number of nodes an application uses by setting the `spark.cores.max` configuration property in it,
-  or change the default for applications that don't set this setting through `spark.deploy.defaultCores`. 
+  or change the default for applications that don't set this setting through `spark.deploy.defaultCores`.
   Finally, in addition to controlling cores, each application's `spark.executor.memory` setting controls
   its memory use.
 * **Mesos:** To use static partitioning on Mesos, set the `spark.mesos.coarse` configuration property to `true`,
@@ -52,8 +51,7 @@ an application to gain back cores on one node when it has work to do. To use thi
 
 Note that none of the modes currently provide memory sharing across applications. If you would like to share
 data this way, we recommend running a single server application that can serve multiple requests by querying
-the same RDDs. For example, the [Shark](http://shark.cs.berkeley.edu) JDBC server works this way for SQL
-queries. In future releases, in-memory storage systems such as [Tachyon](http://tachyon-project.org) will
+the same RDDs. In future releases, in-memory storage systems such as [Tachyon](http://tachyon-project.org) will
 provide another approach to share RDDs.
 
 ## Dynamic Resource Allocation
@@ -77,11 +75,10 @@ scheduling while sharing cluster resources efficiently.
 ### Configuration and Setup
 
 All configurations used by this feature live under the `spark.dynamicAllocation.*` namespace.
-To enable this feature, your application must set `spark.dynamicAllocation.enabled` to `true` and
-provide lower and upper bounds for the number of executors through
-`spark.dynamicAllocation.minExecutors` and `spark.dynamicAllocation.maxExecutors`. Other relevant
-configurations are described on the [configurations page](configuration.html#dynamic-allocation)
-and in the subsequent sections in detail.
+To enable this feature, your application must set `spark.dynamicAllocation.enabled` to `true`.
+Other relevant configurations are described on the
+[configurations page](configuration.html#dynamic-allocation) and in the subsequent sections in
+detail.
 
 Additionally, your application must use an external shuffle service. The purpose of the service is
 to preserve the shuffle files written by executors so the executors can be safely removed (more

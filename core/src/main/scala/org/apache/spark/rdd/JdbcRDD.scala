@@ -17,7 +17,7 @@
 
 package org.apache.spark.rdd
 
-import java.sql.{Connection, ResultSet}
+import java.sql.{PreparedStatement, Connection, ResultSet}
 
 import scala.reflect.ClassTag
 
@@ -28,8 +28,9 @@ import org.apache.spark.util.NextIterator
 import org.apache.spark.{Logging, Partition, SparkContext, TaskContext}
 
 private[spark] class JdbcPartition(idx: Int, val lower: Long, val upper: Long) extends Partition {
-  override def index = idx
+  override def index: Int = idx
 }
+
 // TODO: Expose a jdbcRDD function in SparkContext and mark this as semi-private
 /**
  * An RDD that executes an SQL query on a JDBC connection and reads results.
@@ -62,15 +63,16 @@ class JdbcRDD[T: ClassTag](
 
   override def getPartitions: Array[Partition] = {
     // bounds are inclusive, hence the + 1 here and - 1 on end
-    val length = 1 + upperBound - lowerBound
+    val length = BigInt(1) + upperBound - lowerBound
     (0 until numPartitions).map(i => {
-      val start = lowerBound + ((i * length) / numPartitions).toLong
-      val end = lowerBound + (((i + 1) * length) / numPartitions).toLong - 1
-      new JdbcPartition(i, start, end)
+      val start = lowerBound + ((i * length) / numPartitions)
+      val end = lowerBound + (((i + 1) * length) / numPartitions) - 1
+      new JdbcPartition(i, start.toLong, end.toLong)
     }).toArray
   }
 
-  override def compute(thePart: Partition, context: TaskContext) = new NextIterator[T] {
+  override def compute(thePart: Partition, context: TaskContext): Iterator[T] = new NextIterator[T]
+  {
     context.addTaskCompletionListener{ context => closeIfNeeded() }
     val part = thePart.asInstanceOf[JdbcPartition]
     val conn = getConnection()
@@ -88,7 +90,7 @@ class JdbcRDD[T: ClassTag](
     stmt.setLong(2, part.upper)
     val rs = stmt.executeQuery()
 
-    override def getNext: T = {
+    override def getNext(): T = {
       if (rs.next()) {
         mapRow(rs)
       } else {
@@ -99,21 +101,21 @@ class JdbcRDD[T: ClassTag](
 
     override def close() {
       try {
-        if (null != rs && ! rs.isClosed()) {
+        if (null != rs) {
           rs.close()
         }
       } catch {
         case e: Exception => logWarning("Exception closing resultset", e)
       }
       try {
-        if (null != stmt && ! stmt.isClosed()) {
+        if (null != stmt) {
           stmt.close()
         }
       } catch {
         case e: Exception => logWarning("Exception closing statement", e)
       }
       try {
-        if (null != conn && ! conn.isClosed()) {
+        if (null != conn) {
           conn.close()
         }
         logInfo("closed connection")

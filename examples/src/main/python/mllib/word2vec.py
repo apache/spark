@@ -23,6 +23,7 @@
 # grep -o -E '\w+(\W+\w+){0,15}' text8 > text8_lines
 # This was done so that the example can be run in local mode
 
+from __future__ import print_function
 
 import sys
 
@@ -34,7 +35,7 @@ USAGE = ("bin/spark-submit --driver-memory 4g "
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print USAGE
+        print(USAGE)
         sys.exit("Argument for file not provided")
     file_path = sys.argv[1]
     sc = SparkContext(appName='Word2Vec')
@@ -46,5 +47,5 @@ if __name__ == "__main__":
     synonyms = model.findSynonyms('china', 40)
 
     for word, cosine_distance in synonyms:
-        print "{}: {}".format(word, cosine_distance)
+        print("{}: {}".format(word, cosine_distance))
     sc.stop()

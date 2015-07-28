@@ -15,6 +15,8 @@
 # limitations under the License.
 #
 
+from __future__ import print_function
+
 import sys
 import json
 
@@ -48,14 +50,15 @@ ROW                           COLUMN+CELL
 """
 if __name__ == "__main__":
     if len(sys.argv) != 3:
-        print >> sys.stderr, """
+        print("""
         Usage: hbase_inputformat <host> <table>
 
         Run with example jar:
         ./bin/spark-submit --driver-class-path /path/to/example/jar \
-        /path/to/examples/hbase_inputformat.py <host> <table>
+        /path/to/examples/hbase_inputformat.py <host> <table> [<znode>]
         Assumes you have some data in HBase already, running on <host>, in <table>
-        """
+          optionally, you can specify parent znode for your hbase cluster - <znode>
+        """, file=sys.stderr)
         exit(-1)
 
     host = sys.argv[1]
@@ -65,6 +68,9 @@ if __name__ == "__main__":
     # Other options for configuring scan behavior are available. More information available at
     # https://github.com/apache/hbase/blob/master/hbase-server/src/main/java/org/apache/hadoop/hbase/mapreduce/TableInputFormat.java
     conf = {"hbase.zookeeper.quorum": host, "hbase.mapreduce.inputtable": table}
+    if len(sys.argv) > 3:
+        conf = {"hbase.zookeeper.quorum": host, "zookeeper.znode.parent": sys.argv[3],
+                "hbase.mapreduce.inputtable": table}
     keyConv = "org.apache.spark.examples.pythonconverters.ImmutableBytesWritableToStringConverter"
     valueConv = "org.apache.spark.examples.pythonconverters.HBaseResultToStringConverter"
 
@@ -79,6 +85,6 @@ if __name__ == "__main__":
 
     output = hbase_rdd.collect()
     for (k, v) in output:
-        print (k, v)
+        print((k, v))
 
     sc.stop()

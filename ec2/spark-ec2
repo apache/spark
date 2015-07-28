@@ -20,6 +20,6 @@
 
 # Preserve the user's CWD so that relative paths are passed correctly to 
 #+ the underlying Python script.
-SPARK_EC2_DIR="$(dirname $0)"
+SPARK_EC2_DIR="$(dirname "$0")"
 
 python -Wdefault "${SPARK_EC2_DIR}/spark_ec2.py" "$@"

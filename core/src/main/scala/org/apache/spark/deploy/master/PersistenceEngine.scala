@@ -18,6 +18,7 @@
 package org.apache.spark.deploy.master
 
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.rpc.RpcEnv
 
 import scala.reflect.ClassTag
 
@@ -33,7 +34,7 @@ import scala.reflect.ClassTag
  * The implementation of this trait defines how name-object pairs are stored or retrieved.
  */
 @DeveloperApi
-trait PersistenceEngine {
+abstract class PersistenceEngine {
 
   /**
    * Defines how the object is serialized and persisted. Implementation will
@@ -80,14 +81,17 @@ trait PersistenceEngine {
    * Returns the persisted data sorted by their respective ids (which implies that they're
    * sorted by time of creation).
    */
-  final def readPersistedData(): (Seq[ApplicationInfo], Seq[DriverInfo], Seq[WorkerInfo]) = {
-    (read[ApplicationInfo]("app_"), read[DriverInfo]("driver_"), read[WorkerInfo]("worker_"))
+  final def readPersistedData(
+      rpcEnv: RpcEnv): (Seq[ApplicationInfo], Seq[DriverInfo], Seq[WorkerInfo]) = {
+    rpcEnv.deserialize { () =>
+      (read[ApplicationInfo]("app_"), read[DriverInfo]("driver_"), read[WorkerInfo]("worker_"))
+    }
   }
 
   def close() {}
 }
 
-private[spark] class BlackHolePersistenceEngine extends PersistenceEngine {
+private[master] class BlackHolePersistenceEngine extends PersistenceEngine {
 
   override def persist(name: String, obj: Object): Unit = {}
 

@@ -71,12 +71,21 @@ class PrimitiveVector[@specialized(Long, Int, Double) V: ClassTag](initialSize: 
 
   /** Resizes the array, dropping elements if the total length decreases. */
   def resize(newLength: Int): PrimitiveVector[V] = {
-    val newArray = new Array[V](newLength)
-    _array.copyToArray(newArray)
-    _array = newArray
+    _array = copyArrayWithLength(newLength)
     if (newLength < _numElements) {
       _numElements = newLength
     }
     this
+  }
+
+  /** Return a trimmed version of the underlying array. */
+  def toArray: Array[V] = {
+    copyArrayWithLength(size)
+  }
+
+  private def copyArrayWithLength(length: Int): Array[V] = {
+    val copy = new Array[V](length)
+    _array.copyToArray(copy)
+    copy
   }
 }

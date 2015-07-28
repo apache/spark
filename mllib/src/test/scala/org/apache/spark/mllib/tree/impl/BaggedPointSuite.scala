@@ -17,15 +17,14 @@
 
 package org.apache.spark.mllib.tree.impl
 
-import org.scalatest.FunSuite
-
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.tree.EnsembleTestHelper
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 
 /**
  * Test suite for [[BaggedPoint]].
  */
-class BaggedPointSuite extends FunSuite with MLlibTestSparkContext  {
+class BaggedPointSuite extends SparkFunSuite with MLlibTestSparkContext  {
 
   test("BaggedPoint RDD: without subsampling") {
     val arr = EnsembleTestHelper.generateOrderedLabeledPoints(1, 1000)

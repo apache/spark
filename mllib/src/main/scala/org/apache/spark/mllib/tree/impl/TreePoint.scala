@@ -37,11 +37,11 @@ import org.apache.spark.rdd.RDD
  * @param binnedFeatures  Binned feature values.
  *                        Same length as LabeledPoint.features, but values are bin indices.
  */
-private[tree] class TreePoint(val label: Double, val binnedFeatures: Array[Int])
+private[spark] class TreePoint(val label: Double, val binnedFeatures: Array[Int])
   extends Serializable {
 }
 
-private[tree] object TreePoint {
+private[spark] object TreePoint {
 
   /**
    * Convert an input dataset into its TreePoint representation,
@@ -55,17 +55,15 @@ private[tree] object TreePoint {
       input: RDD[LabeledPoint],
       bins: Array[Array[Bin]],
       metadata: DecisionTreeMetadata): RDD[TreePoint] = {
-    // Construct arrays for featureArity and isUnordered for efficiency in the inner loop.
+    // Construct arrays for featureArity for efficiency in the inner loop.
     val featureArity: Array[Int] = new Array[Int](metadata.numFeatures)
-    val isUnordered: Array[Boolean] = new Array[Boolean](metadata.numFeatures)
     var featureIndex = 0
     while (featureIndex < metadata.numFeatures) {
       featureArity(featureIndex) = metadata.featureArity.getOrElse(featureIndex, 0)
-      isUnordered(featureIndex) = metadata.isUnordered(featureIndex)
       featureIndex += 1
     }
     input.map { x =>
-      TreePoint.labeledPointToTreePoint(x, bins, featureArity, isUnordered)
+      TreePoint.labeledPointToTreePoint(x, bins, featureArity)
     }
   }
 
@@ -74,19 +72,17 @@ private[tree] object TreePoint {
    * @param bins      Bins for features, of size (numFeatures, numBins).
    * @param featureArity  Array indexed by feature, with value 0 for continuous and numCategories
    *                      for categorical features.
-   * @param isUnordered  Array index by feature, with value true for unordered categorical features.
    */
   private def labeledPointToTreePoint(
       labeledPoint: LabeledPoint,
       bins: Array[Array[Bin]],
-      featureArity: Array[Int],
-      isUnordered: Array[Boolean]): TreePoint = {
+      featureArity: Array[Int]): TreePoint = {
     val numFeatures = labeledPoint.features.size
     val arr = new Array[Int](numFeatures)
     var featureIndex = 0
     while (featureIndex < numFeatures) {
       arr(featureIndex) = findBin(featureIndex, labeledPoint, featureArity(featureIndex),
-        isUnordered(featureIndex), bins)
+        bins)
       featureIndex += 1
     }
     new TreePoint(labeledPoint.label, arr)
@@ -96,14 +92,12 @@ private[tree] object TreePoint {
    * Find bin for one (labeledPoint, feature).
    *
    * @param featureArity  0 for continuous features; number of categories for categorical features.
-   * @param isUnorderedFeature  (only applies if feature is categorical)
    * @param bins   Bins for features, of size (numFeatures, numBins).
    */
   private def findBin(
       featureIndex: Int,
       labeledPoint: LabeledPoint,
       featureArity: Int,
-      isUnorderedFeature: Boolean,
       bins: Array[Array[Bin]]): Int = {
 
     /**

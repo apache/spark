@@ -17,19 +17,58 @@
 
 package org.apache.spark.serializer
 
+import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
+
 import scala.collection.mutable
 import scala.reflect.ClassTag
 
 import com.esotericsoftware.kryo.Kryo
-import org.scalatest.FunSuite
 
-import org.apache.spark.{SparkConf, SharedSparkContext}
+import org.apache.spark.{SharedSparkContext, SparkConf, SparkFunSuite}
+import org.apache.spark.scheduler.HighlyCompressedMapStatus
 import org.apache.spark.serializer.KryoTest._
+import org.apache.spark.storage.BlockManagerId
 
-
-class KryoSerializerSuite extends FunSuite with SharedSparkContext {
+class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
   conf.set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
   conf.set("spark.kryo.registrator", classOf[MyRegistrator].getName)
+
+  test("SPARK-7392 configuration limits") {
+    val kryoBufferProperty = "spark.kryoserializer.buffer"
+    val kryoBufferMaxProperty = "spark.kryoserializer.buffer.max"
+
+    def newKryoInstance(
+        conf: SparkConf,
+        bufferSize: String = "64k",
+        maxBufferSize: String = "64m"): SerializerInstance = {
+      val kryoConf = conf.clone()
+      kryoConf.set(kryoBufferProperty, bufferSize)
+      kryoConf.set(kryoBufferMaxProperty, maxBufferSize)
+      new KryoSerializer(kryoConf).newInstance()
+    }
+
+    // test default values
+    newKryoInstance(conf, "64k", "64m")
+    // 2048m = 2097152k
+    // should not throw exception when kryoBufferMaxProperty < kryoBufferProperty
+    newKryoInstance(conf, "2097151k", "64m")
+    // test maximum size with unit of KiB
+    newKryoInstance(conf, "2097151k", "2097151k")
+    // should throw exception with bufferSize out of bound
+    val thrown1 = intercept[IllegalArgumentException](newKryoInstance(conf, "2048m"))
+    assert(thrown1.getMessage.contains(kryoBufferProperty))
+    // should throw exception with maxBufferSize out of bound
+    val thrown2 = intercept[IllegalArgumentException](
+        newKryoInstance(conf, maxBufferSize = "2048m"))
+    assert(thrown2.getMessage.contains(kryoBufferMaxProperty))
+    // should throw exception when both bufferSize and maxBufferSize out of bound
+    // exception should only contain "spark.kryoserializer.buffer"
+    val thrown3 = intercept[IllegalArgumentException](newKryoInstance(conf, "2g", "3g"))
+    assert(thrown3.getMessage.contains(kryoBufferProperty))
+    assert(!thrown3.getMessage.contains(kryoBufferMaxProperty))
+    // test configuration with mb is supported properly
+    newKryoInstance(conf, "8m", "9m")
+  }
 
   test("basic types") {
     val ser = new KryoSerializer(conf).newInstance()
@@ -69,7 +108,7 @@ class KryoSerializerSuite extends FunSuite with SharedSparkContext {
     check((1, 1))
     check((1, 1L))
     check((1L, 1))
-    check((1L,  1L))
+    check((1L, 1L))
     check((1.0, 1))
     check((1, 1.0))
     check((1.0, 1.0))
@@ -105,7 +144,9 @@ class KryoSerializerSuite extends FunSuite with SharedSparkContext {
     check(mutable.HashMap(1 -> "one", 2 -> "two"))
     check(mutable.HashMap("one" -> 1, "two" -> 2))
     check(List(Some(mutable.HashMap(1->1, 2->2)), None, Some(mutable.HashMap(3->4))))
-    check(List(mutable.HashMap("one" -> 1, "two" -> 2),mutable.HashMap(1->"one",2->"two",3->"three")))
+    check(List(
+      mutable.HashMap("one" -> 1, "two" -> 2),
+      mutable.HashMap(1->"one", 2->"two", 3->"three")))
   }
 
   test("ranges") {
@@ -168,7 +209,10 @@ class KryoSerializerSuite extends FunSuite with SharedSparkContext {
 
   test("kryo with collect") {
     val control = 1 :: 2 :: Nil
-    val result = sc.parallelize(control, 2).map(new ClassWithoutNoArgConstructor(_)).collect().map(_.x)
+    val result = sc.parallelize(control, 2)
+      .map(new ClassWithoutNoArgConstructor(_))
+      .collect()
+      .map(_.x)
     assert(control === result.toSeq)
   }
 
@@ -236,14 +280,121 @@ class KryoSerializerSuite extends FunSuite with SharedSparkContext {
 
     // Set a special, broken ClassLoader and make sure we get an exception on deserialization
     ser.setDefaultClassLoader(new ClassLoader() {
-      override def loadClass(name: String) = throw new UnsupportedOperationException
+      override def loadClass(name: String): Class[_] = throw new UnsupportedOperationException
     })
     intercept[UnsupportedOperationException] {
       ser.newInstance().deserialize[ClassLoaderTestingObject](bytes)
     }
   }
+
+  test("registration of HighlyCompressedMapStatus") {
+    val conf = new SparkConf(false)
+    conf.set("spark.kryo.registrationRequired", "true")
+
+    // these cases require knowing the internals of RoaringBitmap a little.  Blocks span 2^16
+    // values, and they use a bitmap (dense) if they have more than 4096 values, and an
+    // array (sparse) if they use less.  So we just create two cases, one sparse and one dense.
+    // and we use a roaring bitmap for the empty blocks, so we trigger the dense case w/ mostly
+    // empty blocks
+
+    val ser = new KryoSerializer(conf).newInstance()
+    val denseBlockSizes = new Array[Long](5000)
+    val sparseBlockSizes = Array[Long](0L, 1L, 0L, 2L)
+    Seq(denseBlockSizes, sparseBlockSizes).foreach { blockSizes =>
+      ser.serialize(HighlyCompressedMapStatus(BlockManagerId("exec-1", "host", 1234), blockSizes))
+    }
+  }
+
+  test("serialization buffer overflow reporting") {
+    import org.apache.spark.SparkException
+    val kryoBufferMaxProperty = "spark.kryoserializer.buffer.max"
+
+    val largeObject = (1 to 1000000).toArray
+
+    val conf = new SparkConf(false)
+    conf.set(kryoBufferMaxProperty, "1")
+
+    val ser = new KryoSerializer(conf).newInstance()
+    val thrown = intercept[SparkException](ser.serialize(largeObject))
+    assert(thrown.getMessage.contains(kryoBufferMaxProperty))
+  }
+
+  test("getAutoReset") {
+    val ser = new KryoSerializer(new SparkConf).newInstance().asInstanceOf[KryoSerializerInstance]
+    assert(ser.getAutoReset)
+    val conf = new SparkConf().set("spark.kryo.registrator",
+      classOf[RegistratorWithoutAutoReset].getName)
+    val ser2 = new KryoSerializer(conf).newInstance().asInstanceOf[KryoSerializerInstance]
+    assert(!ser2.getAutoReset)
+  }
+
+  private def testSerializerInstanceReuse(autoReset: Boolean, referenceTracking: Boolean): Unit = {
+    val conf = new SparkConf(loadDefaults = false)
+      .set("spark.kryo.referenceTracking", referenceTracking.toString)
+    if (!autoReset) {
+      conf.set("spark.kryo.registrator", classOf[RegistratorWithoutAutoReset].getName)
+    }
+    val ser = new KryoSerializer(conf)
+    val serInstance = ser.newInstance().asInstanceOf[KryoSerializerInstance]
+    assert (serInstance.getAutoReset() === autoReset)
+    val obj = ("Hello", "World")
+    def serializeObjects(): Array[Byte] = {
+      val baos = new ByteArrayOutputStream()
+      val serStream = serInstance.serializeStream(baos)
+      serStream.writeObject(obj)
+      serStream.writeObject(obj)
+      serStream.close()
+      baos.toByteArray
+    }
+    val output1: Array[Byte] = serializeObjects()
+    val output2: Array[Byte] = serializeObjects()
+    assert (output1 === output2)
+  }
+
+  // Regression test for SPARK-7766, an issue where disabling auto-reset and enabling
+  // reference-tracking would lead to corrupted output when serializer instances are re-used
+  for (referenceTracking <- Set(true, false); autoReset <- Set(true, false)) {
+    test(s"instance reuse with autoReset = $autoReset, referenceTracking = $referenceTracking") {
+      testSerializerInstanceReuse(autoReset = autoReset, referenceTracking = referenceTracking)
+    }
+  }
 }
 
+class KryoSerializerAutoResetDisabledSuite extends SparkFunSuite with SharedSparkContext {
+  conf.set("spark.serializer", classOf[KryoSerializer].getName)
+  conf.set("spark.kryo.registrator", classOf[RegistratorWithoutAutoReset].getName)
+  conf.set("spark.kryo.referenceTracking", "true")
+  conf.set("spark.shuffle.manager", "sort")
+  conf.set("spark.shuffle.sort.bypassMergeThreshold", "200")
+
+  test("sort-shuffle with bypassMergeSort (SPARK-7873)") {
+    val myObject = ("Hello", "World")
+    assert(sc.parallelize(Seq.fill(100)(myObject)).repartition(2).collect().toSet === Set(myObject))
+  }
+
+  test("calling deserialize() after deserializeStream()") {
+    val serInstance = new KryoSerializer(conf).newInstance().asInstanceOf[KryoSerializerInstance]
+    assert(!serInstance.getAutoReset())
+    val hello = "Hello"
+    val world = "World"
+    // Here, we serialize the same value twice, so the reference-tracking should cause us to store
+    // references to some of these values
+    val helloHello = serInstance.serialize((hello, hello))
+    // Here's a stream which only contains one value
+    val worldWorld: Array[Byte] = {
+      val baos = new ByteArrayOutputStream()
+      val serStream = serInstance.serializeStream(baos)
+      serStream.writeObject(world)
+      serStream.writeObject(world)
+      serStream.close()
+      baos.toByteArray
+    }
+    val deserializationStream = serInstance.deserializeStream(new ByteArrayInputStream(worldWorld))
+    assert(deserializationStream.readValue[Any]() === world)
+    deserializationStream.close()
+    assert(serInstance.deserialize[Any](helloHello) === (hello, hello))
+  }
+}
 
 class ClassLoaderTestingObject
 
@@ -254,14 +405,14 @@ object KryoTest {
 
   class ClassWithNoArgConstructor {
     var x: Int = 0
-    override def equals(other: Any) = other match {
+    override def equals(other: Any): Boolean = other match {
       case c: ClassWithNoArgConstructor => x == c.x
       case _ => false
     }
   }
 
   class ClassWithoutNoArgConstructor(val x: Int) {
-    override def equals(other: Any) = other match {
+    override def equals(other: Any): Boolean = other match {
       case c: ClassWithoutNoArgConstructor => x == c.x
       case _ => false
     }
@@ -273,6 +424,12 @@ object KryoTest {
       k.register(classOf[ClassWithNoArgConstructor])
       k.register(classOf[ClassWithoutNoArgConstructor])
       k.register(classOf[java.util.HashMap[_, _]])
+    }
+  }
+
+  class RegistratorWithoutAutoReset extends KryoRegistrator {
+    override def registerClasses(k: Kryo) {
+      k.setAutoReset(false)
     }
   }
 }

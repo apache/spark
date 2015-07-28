@@ -146,5 +146,5 @@ abstract class Broadcast[T: ClassTag](val id: Long) extends Serializable with Lo
     }
   }
 
-  override def toString = "Broadcast(" + id + ")"
+  override def toString: String = "Broadcast(" + id + ")"
 }

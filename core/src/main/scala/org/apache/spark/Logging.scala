@@ -118,15 +118,31 @@ trait Logging {
     // org.slf4j.impl.Log4jLoggerFactory, from the log4j 2.0 binding, currently
     // org.apache.logging.slf4j.Log4jLoggerFactory
     val usingLog4j12 = "org.slf4j.impl.Log4jLoggerFactory".equals(binderClass)
-    val log4j12Initialized = LogManager.getRootLogger.getAllAppenders.hasMoreElements
-    if (!log4j12Initialized && usingLog4j12) {
-      val defaultLogProps = "org/apache/spark/log4j-defaults.properties"
-      Option(Utils.getSparkClassLoader.getResource(defaultLogProps)) match {
-        case Some(url) =>
-          PropertyConfigurator.configure(url)
-          System.err.println(s"Using Spark's default log4j profile: $defaultLogProps")
-        case None =>
-          System.err.println(s"Spark was unable to load $defaultLogProps")
+    if (usingLog4j12) {
+      val log4j12Initialized = LogManager.getRootLogger.getAllAppenders.hasMoreElements
+      if (!log4j12Initialized) {
+        // scalastyle:off println
+        if (Utils.isInInterpreter) {
+          val replDefaultLogProps = "org/apache/spark/log4j-defaults-repl.properties"
+          Option(Utils.getSparkClassLoader.getResource(replDefaultLogProps)) match {
+            case Some(url) =>
+              PropertyConfigurator.configure(url)
+              System.err.println(s"Using Spark's repl log4j profile: $replDefaultLogProps")
+              System.err.println("To adjust logging level use sc.setLogLevel(\"INFO\")")
+            case None =>
+              System.err.println(s"Spark was unable to load $replDefaultLogProps")
+          }
+        } else {
+          val defaultLogProps = "org/apache/spark/log4j-defaults.properties"
+          Option(Utils.getSparkClassLoader.getResource(defaultLogProps)) match {
+            case Some(url) =>
+              PropertyConfigurator.configure(url)
+              System.err.println(s"Using Spark's default log4j profile: $defaultLogProps")
+            case None =>
+              System.err.println(s"Spark was unable to load $defaultLogProps")
+          }
+        }
+        // scalastyle:on println
       }
     }
     Logging.initialized = true
@@ -143,7 +159,7 @@ private object Logging {
   try {
     // We use reflection here to handle the case where users remove the
     // slf4j-to-jul bridge order to route their logs to JUL.
-    val bridgeClass = Class.forName("org.slf4j.bridge.SLF4JBridgeHandler")
+    val bridgeClass = Utils.classForName("org.slf4j.bridge.SLF4JBridgeHandler")
     bridgeClass.getMethod("removeHandlersForRootLogger").invoke(null)
     val installed = bridgeClass.getMethod("isInstalled").invoke(null).asInstanceOf[Boolean]
     if (!installed) {

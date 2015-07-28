@@ -37,7 +37,7 @@ import org.apache.spark.rdd.RDD
  *                      I.e., the feature takes values in {0, ..., arity - 1}.
  * @param numBins  Number of bins for each feature.
  */
-private[tree] class DecisionTreeMetadata(
+private[spark] class DecisionTreeMetadata(
     val numFeatures: Int,
     val numExamples: Long,
     val numClasses: Int,
@@ -94,7 +94,7 @@ private[tree] class DecisionTreeMetadata(
 
 }
 
-private[tree] object DecisionTreeMetadata extends Logging {
+private[spark] object DecisionTreeMetadata extends Logging {
 
   /**
    * Construct a [[DecisionTreeMetadata]] instance for this dataset and parameters.
@@ -107,7 +107,10 @@ private[tree] object DecisionTreeMetadata extends Logging {
       numTrees: Int,
       featureSubsetStrategy: String): DecisionTreeMetadata = {
 
-    val numFeatures = input.take(1)(0).features.size
+    val numFeatures = input.map(_.features.size).take(1).headOption.getOrElse {
+      throw new IllegalArgumentException(s"DecisionTree requires size of input RDD > 0, " +
+        s"but was given by empty one.")
+    }
     val numExamples = input.count()
     val numClasses = strategy.algo match {
       case Classification => strategy.numClasses
@@ -183,7 +186,7 @@ private[tree] object DecisionTreeMetadata extends Logging {
   }
 
   /**
-   * Version of [[buildMetadata()]] for DecisionTree.
+   * Version of [[DecisionTreeMetadata#buildMetadata]] for DecisionTree.
    */
   def buildMetadata(
       input: RDD[LabeledPoint],

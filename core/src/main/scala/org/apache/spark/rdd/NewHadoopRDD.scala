@@ -25,20 +25,17 @@ import scala.reflect.ClassTag
 import org.apache.hadoop.conf.{Configurable, Configuration}
 import org.apache.hadoop.io.Writable
 import org.apache.hadoop.mapreduce._
-import org.apache.hadoop.mapreduce.lib.input.FileSplit
+import org.apache.hadoop.mapreduce.lib.input.{CombineFileSplit, FileSplit}
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.input.WholeTextFileInputFormat
-import org.apache.spark.InterruptibleIterator
-import org.apache.spark.Logging
-import org.apache.spark.Partition
-import org.apache.spark.SerializableWritable
-import org.apache.spark.{SparkContext, TaskContext}
-import org.apache.spark.executor.{DataReadMethod, InputMetrics}
+import org.apache.spark._
+import org.apache.spark.executor.DataReadMethod
 import org.apache.spark.mapreduce.SparkHadoopMapReduceUtil
 import org.apache.spark.rdd.NewHadoopRDD.NewHadoopMapPartitionsWithSplitRDD
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{SerializableConfiguration, Utils}
 import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.storage.StorageLevel
 
 private[spark] class NewHadoopPartition(
     rddId: Int,
@@ -77,7 +74,7 @@ class NewHadoopRDD[K, V](
   with Logging {
 
   // A Hadoop Configuration can be about 10 KB, which is pretty big, so broadcast it
-  private val confBroadcast = sc.broadcast(new SerializableWritable(conf))
+  private val confBroadcast = sc.broadcast(new SerializableConfiguration(conf))
   // private val serializableConf = new SerializableWritable(conf)
 
   private val jobTrackerId: String = {
@@ -109,18 +106,19 @@ class NewHadoopRDD[K, V](
       logInfo("Input split: " + split.serializableHadoopSplit)
       val conf = confBroadcast.value.value
 
-      val inputMetrics = new InputMetrics(DataReadMethod.Hadoop)
+      val inputMetrics = context.taskMetrics
+        .getInputMetricsForReadMethod(DataReadMethod.Hadoop)
+
       // Find a function that will return the FileSystem bytes read by this thread. Do this before
       // creating RecordReader, because RecordReader's constructor might read some bytes
-      val bytesReadCallback = if (split.serializableHadoopSplit.value.isInstanceOf[FileSplit]) {
-        SparkHadoopUtil.get.getFSBytesReadOnThreadCallback(
-          split.serializableHadoopSplit.value.asInstanceOf[FileSplit].getPath, conf)
-      } else {
-        None
+      val bytesReadCallback = inputMetrics.bytesReadCallback.orElse {
+        split.serializableHadoopSplit.value match {
+          case _: FileSplit | _: CombineFileSplit =>
+            SparkHadoopUtil.get.getFSBytesReadOnThreadCallback()
+          case _ => None
+        }
       }
-      if (bytesReadCallback.isDefined) {
-        context.taskMetrics.inputMetrics = Some(inputMetrics)
-      }
+      inputMetrics.setBytesReadCallback(bytesReadCallback)
 
       val attemptId = newTaskAttemptID(jobTrackerId, id, isMap = true, split.index, 0)
       val hadoopAttemptContext = newTaskAttemptContext(conf, attemptId)
@@ -130,7 +128,7 @@ class NewHadoopRDD[K, V](
           configurable.setConf(conf)
         case _ =>
       }
-      val reader = format.createRecordReader(
+      private var reader = format.createRecordReader(
         split.serializableHadoopSplit.value, hadoopAttemptContext)
       reader.initialize(split.serializableHadoopSplit.value, hadoopAttemptContext)
 
@@ -143,6 +141,12 @@ class NewHadoopRDD[K, V](
       override def hasNext: Boolean = {
         if (!finished && !havePair) {
           finished = !reader.nextKeyValue
+          if (finished) {
+            // Close and release the reader here; close() will also be called when the task
+            // completes, but for tasks that read from many files, it helps to release the
+            // resources early.
+            close()
+          }
           havePair = !finished
         }
         !finished
@@ -153,37 +157,31 @@ class NewHadoopRDD[K, V](
           throw new java.util.NoSuchElementException("End of stream")
         }
         havePair = false
-
-        // Update bytes read metric every few records
-        if (recordsSinceMetricsUpdate == HadoopRDD.RECORDS_BETWEEN_BYTES_READ_METRIC_UPDATES
-            && bytesReadCallback.isDefined) {
-          recordsSinceMetricsUpdate = 0
-          val bytesReadFn = bytesReadCallback.get
-          inputMetrics.bytesRead = bytesReadFn()
-        } else {
-          recordsSinceMetricsUpdate += 1
+        if (!finished) {
+          inputMetrics.incRecordsRead(1)
         }
-
         (reader.getCurrentKey, reader.getCurrentValue)
       }
 
       private def close() {
         try {
-          reader.close()
+          if (reader != null) {
+            // Close reader and release it
+            reader.close()
+            reader = null
 
-          // Update metrics with final amount
-          if (bytesReadCallback.isDefined) {
-            val bytesReadFn = bytesReadCallback.get
-            inputMetrics.bytesRead = bytesReadFn()
-          } else if (split.serializableHadoopSplit.value.isInstanceOf[FileSplit]) {
-            // If we can't get the bytes read from the FS stats, fall back to the split size,
-            // which may be inaccurate.
-            try {
-              inputMetrics.bytesRead = split.serializableHadoopSplit.value.getLength
-              context.taskMetrics.inputMetrics = Some(inputMetrics)
-            } catch {
-              case e: java.io.IOException =>
-                logWarning("Unable to get input size to set InputMetrics for task", e)
+            if (bytesReadCallback.isDefined) {
+              inputMetrics.updateBytesRead()
+            } else if (split.serializableHadoopSplit.value.isInstanceOf[FileSplit] ||
+                       split.serializableHadoopSplit.value.isInstanceOf[CombineFileSplit]) {
+              // If we can't get the bytes read from the FS stats, fall back to the split size,
+              // which may be inaccurate.
+              try {
+                inputMetrics.incBytesRead(split.serializableHadoopSplit.value.getLength)
+              } catch {
+                case e: java.io.IOException =>
+                  logWarning("Unable to get input size to set InputMetrics for task", e)
+              }
             }
           }
         } catch {
@@ -209,7 +207,7 @@ class NewHadoopRDD[K, V](
   override def getPreferredLocations(hsplit: Partition): Seq[String] = {
     val split = hsplit.asInstanceOf[NewHadoopPartition].serializableHadoopSplit.value
     val locs = HadoopRDD.SPLIT_INFO_REFLECTIONS match {
-      case Some(c) => 
+      case Some(c) =>
         try {
           val infos = c.newGetLocationInfo.invoke(split).asInstanceOf[Array[AnyRef]]
           Some(HadoopRDD.convertSplitLocationInfo(infos))
@@ -222,6 +220,16 @@ class NewHadoopRDD[K, V](
     }
     locs.getOrElse(split.getLocations.filter(_ != "localhost"))
   }
+
+  override def persist(storageLevel: StorageLevel): this.type = {
+    if (storageLevel.deserialized) {
+      logWarning("Caching NewHadoopRDDs as deserialized objects usually leads to undesired" +
+        " behavior because Hadoop's RecordReader reuses the same Writable object for all records." +
+        " Use a map transformation to make copies of the records.")
+    }
+    super.persist(storageLevel)
+  }
+
 
   def getConf: Configuration = confBroadcast.value.value
 }
@@ -241,7 +249,7 @@ private[spark] object NewHadoopRDD {
 
     override def getPartitions: Array[Partition] = firstParent[T].partitions
 
-    override def compute(split: Partition, context: TaskContext) = {
+    override def compute(split: Partition, context: TaskContext): Iterator[U] = {
       val partition = split.asInstanceOf[NewHadoopPartition]
       val inputSplit = partition.serializableHadoopSplit.value
       f(inputSplit, firstParent[T].iterator(split, context))

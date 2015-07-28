@@ -26,7 +26,7 @@ import org.apache.spark.shuffle._
  */
 private[spark] class HashShuffleManager(conf: SparkConf) extends ShuffleManager {
 
-  private val fileShuffleBlockManager = new FileShuffleBlockManager(conf)
+  private val fileShuffleBlockResolver = new FileShuffleBlockResolver(conf)
 
   /* Register a shuffle with the manager and obtain a handle for it to pass to tasks. */
   override def registerShuffle[K, V, C](
@@ -53,20 +53,20 @@ private[spark] class HashShuffleManager(conf: SparkConf) extends ShuffleManager 
   override def getWriter[K, V](handle: ShuffleHandle, mapId: Int, context: TaskContext)
       : ShuffleWriter[K, V] = {
     new HashShuffleWriter(
-      shuffleBlockManager, handle.asInstanceOf[BaseShuffleHandle[K, V, _]], mapId, context)
+      shuffleBlockResolver, handle.asInstanceOf[BaseShuffleHandle[K, V, _]], mapId, context)
   }
 
   /** Remove a shuffle's metadata from the ShuffleManager. */
   override def unregisterShuffle(shuffleId: Int): Boolean = {
-    shuffleBlockManager.removeShuffle(shuffleId)
+    shuffleBlockResolver.removeShuffle(shuffleId)
   }
 
-  override def shuffleBlockManager: FileShuffleBlockManager = {
-    fileShuffleBlockManager
+  override def shuffleBlockResolver: FileShuffleBlockResolver = {
+    fileShuffleBlockResolver
   }
 
   /** Shut down this ShuffleManager. */
   override def stop(): Unit = {
-    shuffleBlockManager.stop()
+    shuffleBlockResolver.stop()
   }
 }

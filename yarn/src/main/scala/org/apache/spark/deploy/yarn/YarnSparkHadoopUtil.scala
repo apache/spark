@@ -17,32 +17,35 @@
 
 package org.apache.spark.deploy.yarn
 
-import java.lang.{Boolean => JBoolean}
 import java.io.File
-import java.util.{Collections, Set => JSet}
 import java.util.regex.Matcher
 import java.util.regex.Pattern
-import java.util.concurrent.ConcurrentHashMap
 
 import scala.collection.mutable.HashMap
+import scala.util.Try
 
+import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.Path
 import org.apache.hadoop.io.Text
-import org.apache.hadoop.mapred.JobConf
+import org.apache.hadoop.mapred.{Master, JobConf}
 import org.apache.hadoop.security.Credentials
 import org.apache.hadoop.security.UserGroupInformation
 import org.apache.hadoop.yarn.conf.YarnConfiguration
-import org.apache.hadoop.yarn.api.records.ApplicationAccessType
-import org.apache.hadoop.yarn.util.RackResolver
-import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.yarn.api.ApplicationConstants
+import org.apache.hadoop.yarn.api.ApplicationConstants.Environment
+import org.apache.hadoop.yarn.api.records.{ApplicationAccessType, ContainerId, Priority}
+import org.apache.hadoop.yarn.util.ConverterUtils
 
-import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.{SecurityManager, SparkConf, SparkException}
 import org.apache.spark.util.Utils
 
 /**
  * Contains util methods to interact with Hadoop from spark.
  */
 class YarnSparkHadoopUtil extends SparkHadoopUtil {
+
+  private var tokenRenewer: Option[ExecutorDelegationTokenUpdater] = None
 
   override def transferCredentials(source: UserGroupInformation, dest: UserGroupInformation) {
     dest.addCredentials(source.getCredentials())
@@ -83,14 +86,69 @@ class YarnSparkHadoopUtil extends SparkHadoopUtil {
     if (credentials != null) credentials.getSecretKey(new Text(key)) else null
   }
 
+  /**
+   * Get the list of namenodes the user may access.
+   */
+  def getNameNodesToAccess(sparkConf: SparkConf): Set[Path] = {
+    sparkConf.get("spark.yarn.access.namenodes", "")
+      .split(",")
+      .map(_.trim())
+      .filter(!_.isEmpty)
+      .map(new Path(_))
+      .toSet
+  }
+
+  def getTokenRenewer(conf: Configuration): String = {
+    val delegTokenRenewer = Master.getMasterPrincipal(conf)
+    logDebug("delegation token renewer is: " + delegTokenRenewer)
+    if (delegTokenRenewer == null || delegTokenRenewer.length() == 0) {
+      val errorMessage = "Can't get Master Kerberos principal for use as renewer"
+      logError(errorMessage)
+      throw new SparkException(errorMessage)
+    }
+    delegTokenRenewer
+  }
+
+  /**
+   * Obtains tokens for the namenodes passed in and adds them to the credentials.
+   */
+  def obtainTokensForNamenodes(
+    paths: Set[Path],
+    conf: Configuration,
+    creds: Credentials,
+    renewer: Option[String] = None
+  ): Unit = {
+    if (UserGroupInformation.isSecurityEnabled()) {
+      val delegTokenRenewer = renewer.getOrElse(getTokenRenewer(conf))
+      paths.foreach { dst =>
+        val dstFs = dst.getFileSystem(conf)
+        logInfo("getting token for namenode: " + dst)
+        dstFs.addDelegationTokens(delegTokenRenewer, creds)
+      }
+    }
+  }
+
+  private[spark] override def startExecutorDelegationTokenRenewer(sparkConf: SparkConf): Unit = {
+    tokenRenewer = Some(new ExecutorDelegationTokenUpdater(sparkConf, conf))
+    tokenRenewer.get.updateCredentialsIfRequired()
+  }
+
+  private[spark] override def stopExecutorDelegationTokenRenewer(): Unit = {
+    tokenRenewer.foreach(_.stop())
+  }
+
+  private[spark] def getContainerId: ContainerId = {
+    val containerIdString = System.getenv(ApplicationConstants.Environment.CONTAINER_ID.name())
+    ConverterUtils.toContainerId(containerIdString)
+  }
 }
 
 object YarnSparkHadoopUtil {
-  // Additional memory overhead 
-  // 7% was arrived at experimentally. In the interest of minimizing memory waste while covering
-  // the common cases. Memory overhead tends to grow with container size. 
+  // Additional memory overhead
+  // 10% was arrived at experimentally. In the interest of minimizing memory waste while covering
+  // the common cases. Memory overhead tends to grow with container size.
 
-  val MEMORY_OVERHEAD_FACTOR = 0.07
+  val MEMORY_OVERHEAD_FACTOR = 0.10
   val MEMORY_OVERHEAD_MIN = 384
 
   val ANY_HOST = "*"
@@ -99,20 +157,22 @@ object YarnSparkHadoopUtil {
 
   // All RM requests are issued with same priority : we do not (yet) have any distinction between
   // request types (like map/reduce in hadoop for example)
-  val RM_REQUEST_PRIORITY = 1
+  val RM_REQUEST_PRIORITY = Priority.newInstance(1)
 
-  // Host to rack map - saved from allocation requests. We are expecting this not to change.
-  // Note that it is possible for this to change : and ResourceManager will indicate that to us via
-  // update response to allocate. But we are punting on handling that for now.
-  private val hostToRack = new ConcurrentHashMap[String, String]()
-  private val rackToHostSet = new ConcurrentHashMap[String, JSet[String]]()
-
+  def get: YarnSparkHadoopUtil = {
+    val yarnMode = java.lang.Boolean.valueOf(
+      System.getProperty("SPARK_YARN_MODE", System.getenv("SPARK_YARN_MODE")))
+    if (!yarnMode) {
+      throw new SparkException("YarnSparkHadoopUtil is not available in non-YARN mode!")
+    }
+    SparkHadoopUtil.get.asInstanceOf[YarnSparkHadoopUtil]
+  }
   /**
    * Add a path variable to the given environment map.
    * If the map already contains this key, append the value to the existing value instead.
    */
   def addPathToEnvironment(env: HashMap[String, String], key: String, value: String): Unit = {
-    val newValue = if (env.contains(key)) { env(key) + File.pathSeparator + value } else value
+    val newValue = if (env.contains(key)) { env(key) + getClassPathSeparator  + value } else value
     env.put(key, newValue)
   }
 
@@ -184,37 +244,6 @@ object YarnSparkHadoopUtil {
     }
   }
 
-  def lookupRack(conf: Configuration, host: String): String = {
-    if (!hostToRack.contains(host)) {
-      populateRackInfo(conf, host)
-    }
-    hostToRack.get(host)
-  }
-
-  def populateRackInfo(conf: Configuration, hostname: String) {
-    Utils.checkHost(hostname)
-
-    if (!hostToRack.containsKey(hostname)) {
-      // If there are repeated failures to resolve, all to an ignore list.
-      val rackInfo = RackResolver.resolve(conf, hostname)
-      if (rackInfo != null && rackInfo.getNetworkLocation != null) {
-        val rack = rackInfo.getNetworkLocation
-        hostToRack.put(hostname, rack)
-        if (! rackToHostSet.containsKey(rack)) {
-          rackToHostSet.putIfAbsent(rack,
-            Collections.newSetFromMap(new ConcurrentHashMap[String, JBoolean]()))
-        }
-        rackToHostSet.get(rack).add(hostname)
-
-        // TODO(harvey): Figure out what this comment means...
-        // Since RackResolver caches, we are disabling this for now ...
-      } /* else {
-        // right ? Else we will keep calling rack resolver in case we cant resolve rack info ...
-        hostToRack.put(hostname, null)
-      } */
-    }
-  }
-
   def getApplicationAclsForYarn(securityMgr: SecurityManager)
       : Map[ApplicationAccessType, String] = {
     Map[ApplicationAccessType, String] (
@@ -223,4 +252,31 @@ object YarnSparkHadoopUtil {
     )
   }
 
+  /**
+   * Expand environment variable using Yarn API.
+   * If environment.$$() is implemented, return the result of it.
+   * Otherwise, return the result of environment.$()
+   * Note: $$() is added in Hadoop 2.4.
+   */
+  private lazy val expandMethod =
+    Try(classOf[Environment].getMethod("$$"))
+      .getOrElse(classOf[Environment].getMethod("$"))
+
+  def expandEnvironment(environment: Environment): String =
+    expandMethod.invoke(environment).asInstanceOf[String]
+
+  /**
+   * Get class path separator using Yarn API.
+   * If ApplicationConstants.CLASS_PATH_SEPARATOR is implemented, return it.
+   * Otherwise, return File.pathSeparator
+   * Note: CLASS_PATH_SEPARATOR is added in Hadoop 2.4.
+   */
+  private lazy val classPathSeparatorField =
+    Try(classOf[ApplicationConstants].getField("CLASS_PATH_SEPARATOR"))
+      .getOrElse(classOf[File].getField("pathSeparator"))
+
+  def getClassPathSeparator(): String = {
+    classPathSeparatorField.get(null).asInstanceOf[String]
+  }
 }
+

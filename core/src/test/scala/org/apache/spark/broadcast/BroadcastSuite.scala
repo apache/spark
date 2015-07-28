@@ -19,9 +19,9 @@ package org.apache.spark.broadcast
 
 import scala.util.Random
 
-import org.scalatest.{Assertions, FunSuite}
+import org.scalatest.Assertions
 
-import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkException, SparkEnv}
+import org.apache.spark._
 import org.apache.spark.io.SnappyCompressionCodec
 import org.apache.spark.rdd.RDD
 import org.apache.spark.serializer.JavaSerializer
@@ -33,7 +33,7 @@ class DummyBroadcastClass(rdd: RDD[Int]) extends Serializable {
   val broadcast = rdd.context.broadcast(list)
   val bid = broadcast.id
 
-  def doSomething() = {
+  def doSomething(): Set[(Int, Boolean)] = {
     rdd.map { x =>
       val bm = SparkEnv.get.blockManager
       // Check if broadcast block was fetched
@@ -43,7 +43,7 @@ class DummyBroadcastClass(rdd: RDD[Int]) extends Serializable {
   }
 }
 
-class BroadcastSuite extends FunSuite with LocalSparkContext {
+class BroadcastSuite extends SparkFunSuite with LocalSparkContext {
 
   private val httpConf = broadcastConf("HttpBroadcastFactory")
   private val torrentConf = broadcastConf("TorrentBroadcastFactory")
@@ -69,7 +69,7 @@ class BroadcastSuite extends FunSuite with LocalSparkContext {
     val conf = httpConf.clone
     conf.set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
     conf.set("spark.broadcast.compress", "true")
-    sc = new SparkContext("local-cluster[%d, 1, 512]".format(numSlaves), "test", conf)
+    sc = new SparkContext("local-cluster[%d, 1, 1024]".format(numSlaves), "test", conf)
     val list = List[Int](1, 2, 3, 4)
     val broadcast = sc.broadcast(list)
     val results = sc.parallelize(1 to numSlaves).map(x => (x, broadcast.value.sum))
@@ -97,7 +97,7 @@ class BroadcastSuite extends FunSuite with LocalSparkContext {
     val conf = torrentConf.clone
     conf.set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
     conf.set("spark.broadcast.compress", "true")
-    sc = new SparkContext("local-cluster[%d, 1, 512]".format(numSlaves), "test", conf)
+    sc = new SparkContext("local-cluster[%d, 1, 1024]".format(numSlaves), "test", conf)
     val list = List[Int](1, 2, 3, 4)
     val broadcast = sc.broadcast(list)
     val results = sc.parallelize(1 to numSlaves).map(x => (x, broadcast.value.sum))
@@ -125,7 +125,7 @@ class BroadcastSuite extends FunSuite with LocalSparkContext {
   test("Test Lazy Broadcast variables with TorrentBroadcast") {
     val numSlaves = 2
     val conf = torrentConf.clone
-    sc = new SparkContext("local-cluster[%d, 1, 512]".format(numSlaves), "test", conf)
+    sc = new SparkContext("local-cluster[%d, 1, 1024]".format(numSlaves), "test", conf)
     val rdd = sc.parallelize(1 to numSlaves)
 
     val results = new DummyBroadcastClass(rdd).doSomething()
@@ -168,6 +168,15 @@ class BroadcastSuite extends FunSuite with LocalSparkContext {
   test("Using broadcast after destroy prints callsite") {
     sc = new SparkContext("local", "test")
     testPackage.runCallSiteTest(sc)
+  }
+
+  test("Broadcast variables cannot be created after SparkContext is stopped (SPARK-5065)") {
+    sc = new SparkContext("local", "test")
+    sc.stop()
+    val thrown = intercept[IllegalStateException] {
+      sc.broadcast(Seq(1, 2, 3))
+    }
+    assert(thrown.getMessage.toLowerCase.contains("stopped"))
   }
 
   /**
@@ -275,7 +284,7 @@ class BroadcastSuite extends FunSuite with LocalSparkContext {
       assert(statuses.size === expectedNumBlocks)
     }
 
-    testUnpersistBroadcast(distributed, numSlaves,  torrentConf, afterCreation,
+    testUnpersistBroadcast(distributed, numSlaves, torrentConf, afterCreation,
       afterUsingBroadcast, afterUnpersist, removeFromDriver)
   }
 
@@ -298,7 +307,11 @@ class BroadcastSuite extends FunSuite with LocalSparkContext {
       removeFromDriver: Boolean) {
 
     sc = if (distributed) {
-      new SparkContext("local-cluster[%d, 1, 512]".format(numSlaves), "test", broadcastConf)
+      val _sc =
+        new SparkContext("local-cluster[%d, 1, 1024]".format(numSlaves), "test", broadcastConf)
+      // Wait until all salves are up
+      _sc.jobProgressListener.waitUntilExecutorsUp(numSlaves, 10000)
+      _sc
     } else {
       new SparkContext("local", "test", broadcastConf)
     }
@@ -349,8 +362,7 @@ class BroadcastSuite extends FunSuite with LocalSparkContext {
 package object testPackage extends Assertions {
 
   def runCallSiteTest(sc: SparkContext) {
-    val rdd = sc.makeRDD(Array(1, 2, 3, 4), 2)
-    val broadcast = sc.broadcast(rdd)
+    val broadcast = sc.broadcast(Array(1, 2, 3, 4))
     broadcast.destroy()
     val thrown = intercept[SparkException] { broadcast.value }
     assert(thrown.getMessage.contains("BroadcastSuite.scala"))
