@@ -20,7 +20,7 @@ package org.apache.spark.mllib.pmml.export
 import org.apache.spark.mllib.tree.configuration.Algo._
 import org.apache.spark.mllib.tree.configuration.{Algo, FeatureType}
 import org.apache.spark.mllib.tree.model.{DecisionTreeModel, Node}
-import org.dmg.pmml.{Node => PMMLNode,_}
+import org.dmg.pmml.{Node => PMMLNode, Value => PMMLValue, _}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
@@ -117,12 +117,12 @@ private[mllib] object TreeModelUtils{
   }
 
   private def getPMMLMiningFunctionType(mlLibAlgo: Algo): MiningFunctionType = {
-    mlLibAlgo match{
+    mlLibAlgo match {
       case Algo.Classification => MiningFunctionType.CLASSIFICATION
       case Algo.Regression => MiningFunctionType.REGRESSION
     }
   }
-
+  
   //get PMML datafield from MLLib node
   private def getDataField(mllibNode: Node): Option[DataField] = {
     if (!mllibNode.isLeaf && mllibNode.split.isDefined) {
@@ -218,6 +218,7 @@ private[mllib] object TreeModelUtils{
             .withOpType(a.getOpType)
             .withValues(blist)
         })
+
         case _=>  throw new RuntimeException("Only continuous and catigorical datatypes are supported now.")
       }
       finalDataFields

@@ -18,15 +18,12 @@
 package org.apache.spark.mllib.pmml.export
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.mllib.tree.configuration.Algo._
-import org.apache.spark.mllib.tree.configuration.{FeatureType, Strategy, Algo}
-import org.apache.spark.mllib.tree.impurity.{Gini, Impurities}
-import org.apache.spark.mllib.tree.model.{Split, Predict, Node, DecisionTreeModel}
-import org.apache.spark.mllib.tree.{DecisionTree, DecisionTreeSuite}
-import org.apache.spark.mllib.tree.model.Node
+import org.apache.spark.mllib.tree.configuration.{Algo, FeatureType}
+import org.apache.spark.mllib.tree.model.{DecisionTreeModel, Node, Predict, Split}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.dmg.pmml.CompoundPredicate.BooleanOperator
 import org.dmg.pmml._
+
 import scala.collection.JavaConverters._
 
 class DecisionTreePMMLModelExportSuite extends SparkFunSuite with MLlibTestSparkContext{
