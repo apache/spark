@@ -199,4 +199,23 @@ public class UnsafeExternalSorterSuite {
     }
   }
 
+  @Test
+  public void testFillingPage() throws Exception {
+    final UnsafeExternalSorter sorter = new UnsafeExternalSorter(
+      memoryManager,
+      shuffleMemoryManager,
+      blockManager,
+      taskContext,
+      recordComparator,
+      prefixComparator,
+      1024,
+      new SparkConf());
+
+    byte[] record = new byte[16];
+    while (sorter.getNumberOfAllocatedPages() < 2) {
+      sorter.insertRecord(record, PlatformDependent.BYTE_ARRAY_OFFSET, record.length, 0);
+    }
+    sorter.freeMemory();
+  }
+
 }

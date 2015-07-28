@@ -507,20 +507,14 @@ case class Cast(child: Expression, dataType: DataType)
   }
 
   private[this] def changePrecision(d: String, decimalType: DecimalType,
-      evPrim: String, evNull: String): String = {
-    decimalType match {
-      case DecimalType.Unlimited =>
-        s"$evPrim = $d;"
-      case DecimalType.Fixed(precision, scale) =>
-        s"""
-          if ($d.changePrecision($precision, $scale)) {
-            $evPrim = $d;
-          } else {
-            $evNull = true;
-          }
-        """
-    }
-  }
+      evPrim: String, evNull: String): String =
+    s"""
+      if ($d.changePrecision(${decimalType.precision}, ${decimalType.scale})) {
+        $evPrim = $d;
+      } else {
+        $evNull = true;
+      }
+    """
 
   private[this] def castToDecimalCode(from: DataType, target: DecimalType): CastFunction = {
     from match {
@@ -636,7 +630,7 @@ case class Cast(child: Expression, dataType: DataType)
   private[this] def castToIntervalCode(from: DataType): CastFunction = from match {
     case StringType =>
       (c, evPrim, evNull) =>
-        s"$evPrim = org.apache.spark.unsafe.types.Interval.fromString($c.toString());"
+        s"$evPrim = Interval.fromString($c.toString());"
   }
 
   private[this] def decimalToTimestampCode(d: String): String =

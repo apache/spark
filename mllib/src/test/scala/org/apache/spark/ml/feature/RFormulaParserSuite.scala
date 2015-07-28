@@ -28,6 +28,7 @@ class RFormulaParserSuite extends SparkFunSuite {
 
   test("parse simple formulas") {
     checkParse("y ~ x", "y", Seq("x"))
+    checkParse("y ~ x + x", "y", Seq("x"))
     checkParse("y ~   ._foo  ", "y", Seq("._foo"))
     checkParse("resp ~ A_VAR + B + c123", "resp", Seq("A_VAR", "B", "c123"))
   }
