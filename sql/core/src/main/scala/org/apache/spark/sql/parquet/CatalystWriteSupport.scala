@@ -141,7 +141,9 @@ private[parquet] class CatalystWriteSupport extends WriteSupport[InternalRow] wi
           recordConsumer.addBinary(Binary.fromByteArray(row.getUTF8String(ordinal).getBytes))
 
       case TimestampType =>
+        // TODO Writes `TimestampType` values as `TIMESTAMP_MICROS` once parquet-mr implements it
         (row: InternalRow, ordinal: Int) => {
+          // Actually Spark SQL `TimestampType` only has microsecond precision.
           val (julianDay, timeOfDayNanos) = DateTimeUtils.toJulianDay(row.getLong(ordinal))
           val buf = ByteBuffer.wrap(timestampBuffer)
           buf.order(ByteOrder.LITTLE_ENDIAN).putLong(timeOfDayNanos).putInt(julianDay)
@@ -239,12 +241,12 @@ private[parquet] class CatalystWriteSupport extends WriteSupport[InternalRow] wi
       // Standard mode, writes decimals with precision <= 18 as INT64
       case true if precision <= MAX_PRECISION_FOR_INT64 => int64Writer
 
-      // Legacy mode, writes decimals with precision <= 18 as BINARY
+      // Legacy mode, writes decimals with precision <= 18 as FIXED_LEN_BYTE_ARRAY
       case false if precision <= MAX_PRECISION_FOR_INT64 => binaryWriterUsingUnscaledLong
 
       // All other cases:
-      //  - Standard mode, writes decimals with precision > 18 as BINARY
-      //  - Legacy mode, writes decimals with all precision as BINARY
+      //  - Standard mode, writes decimals with precision > 18 as FIXED_LEN_BYTE_ARRAY
+      //  - Legacy mode, writes decimals with all precision as FIXED_LEN_BYTE_ARRAY
       case _ => binaryWriterUsingUnscaledBytes
     }
   }
