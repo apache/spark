@@ -25,6 +25,7 @@ import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName._
 import org.apache.parquet.schema.Type.Repetition._
 import org.apache.parquet.schema._
 
+import org.apache.spark.sql.parquet.CatalystSchemaConverter.{MAX_PRECISION_FOR_INT32, MAX_PRECISION_FOR_INT64, maxPrecisionForBytes, minBytesForPrecision}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.{AnalysisException, SQLConf}
 
@@ -155,7 +156,7 @@ private[parquet] class CatalystSchemaConverter(
           case INT_16 => ShortType
           case INT_32 | null => IntegerType
           case DATE => DateType
-          case DECIMAL => makeDecimalType(maxPrecisionForBytes(4))
+          case DECIMAL => makeDecimalType(MAX_PRECISION_FOR_INT32)
           case TIME_MILLIS => typeNotImplemented()
           case _ => illegalType()
         }
@@ -163,7 +164,7 @@ private[parquet] class CatalystSchemaConverter(
       case INT64 =>
         originalType match {
           case INT_64 | null => LongType
-          case DECIMAL => makeDecimalType(maxPrecisionForBytes(8))
+          case DECIMAL => makeDecimalType(MAX_PRECISION_FOR_INT64)
           case TIMESTAMP_MILLIS => typeNotImplemented()
           case _ => illegalType()
         }
@@ -396,7 +397,7 @@ private[parquet] class CatalystSchemaConverter(
           .as(DECIMAL)
           .precision(precision)
           .scale(scale)
-          .length(CatalystSchemaConverter.minBytesForPrecision(precision))
+          .length(minBytesForPrecision(precision))
           .named(field.name)
 
       // =====================================
@@ -405,7 +406,7 @@ private[parquet] class CatalystSchemaConverter(
 
       // Uses INT32 for 1 <= precision <= 9
       case DecimalType.Fixed(precision, scale)
-        if precision <= maxPrecisionForBytes(4) && followParquetFormatSpec =>
+          if precision <= MAX_PRECISION_FOR_INT32 && followParquetFormatSpec =>
         Types
           .primitive(INT32, repetition)
           .as(DECIMAL)
@@ -413,9 +414,9 @@ private[parquet] class CatalystSchemaConverter(
           .scale(scale)
           .named(field.name)
 
-      // Uses INT64 for 1 <= precision <= 18
+      // Uses INT64 for 10 <= precision <= 18
       case DecimalType.Fixed(precision, scale)
-        if precision <= maxPrecisionForBytes(8) && followParquetFormatSpec =>
+          if precision <= MAX_PRECISION_FOR_INT64 && followParquetFormatSpec =>
         Types
           .primitive(INT64, repetition)
           .as(DECIMAL)
@@ -430,7 +431,7 @@ private[parquet] class CatalystSchemaConverter(
           .as(DECIMAL)
           .precision(precision)
           .scale(scale)
-          .length(CatalystSchemaConverter.minBytesForPrecision(precision))
+          .length(minBytesForPrecision(precision))
           .named(field.name)
 
       // ===================================================
@@ -534,14 +535,6 @@ private[parquet] class CatalystSchemaConverter(
         throw new AnalysisException(s"Unsupported data type $field.dataType")
     }
   }
-
-  // Max precision of a decimal value stored in `numBytes` bytes
-  private def maxPrecisionForBytes(numBytes: Int): Int = {
-    Math.round(                               // convert double to long
-      Math.floor(Math.log10(                  // number of base-10 digits
-        Math.pow(2, 8 * numBytes - 1) - 1)))  // max value stored in numBytes
-      .asInstanceOf[Int]
-  }
 }
 
 
@@ -566,7 +559,8 @@ private[parquet] object CatalystSchemaConverter {
     }
   }
 
-  private def computeMinBytesForPrecision(precision : Int) : Int = {
+  // The minimum number of bytes needed to store a decimal with a given `precision`.
+  val minBytesForPrecision = Array.tabulate[Int](DecimalType.MAX_PRECISION + 1) { precision =>
     var numBytes = 1
     while (math.pow(2.0, 8 * numBytes - 1) < math.pow(10.0, precision)) {
       numBytes += 1
@@ -574,14 +568,15 @@ private[parquet] object CatalystSchemaConverter {
     numBytes
   }
 
-  private val MIN_BYTES_FOR_PRECISION = Array.tabulate[Int](39)(computeMinBytesForPrecision)
+  val MAX_PRECISION_FOR_INT32 = maxPrecisionForBytes(4)
 
-  // Returns the minimum number of bytes needed to store a decimal with a given `precision`.
-  def minBytesForPrecision(precision : Int) : Int = {
-    if (precision < MIN_BYTES_FOR_PRECISION.length) {
-      MIN_BYTES_FOR_PRECISION(precision)
-    } else {
-      computeMinBytesForPrecision(precision)
-    }
+  val MAX_PRECISION_FOR_INT64 = maxPrecisionForBytes(8)
+
+  // Max precision of a decimal value stored in `numBytes` bytes
+  def maxPrecisionForBytes(numBytes: Int): Int = {
+    Math.round(                               // convert double to long
+      Math.floor(Math.log10(                  // number of base-10 digits
+        Math.pow(2, 8 * numBytes - 1) - 1)))  // max value stored in numBytes
+      .asInstanceOf[Int]
   }
 }

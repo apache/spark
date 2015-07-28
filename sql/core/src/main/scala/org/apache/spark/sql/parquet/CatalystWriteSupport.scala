@@ -18,6 +18,7 @@
 package org.apache.spark.sql.parquet
 
 import java.nio.{ByteBuffer, ByteOrder}
+import java.util
 
 import scala.collection.JavaConverters.mapAsJavaMapConverter
 
@@ -33,24 +34,30 @@ import org.apache.spark.sql.SQLConf
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.SpecificMutableRow
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.parquet.CatalystSchemaConverter.{MAX_PRECISION_FOR_INT32, MAX_PRECISION_FOR_INT64, minBytesForPrecision}
 import org.apache.spark.sql.types._
 
 private[parquet] class CatalystWriteSupport extends WriteSupport[InternalRow] with Logging {
+  // A `ValueWriter` is responsible for writing a field of an `InternalRow` to the record consumer
   type ValueWriter = (InternalRow, Int) => Unit
 
+  // Schema of the `InternalRow`s to be written
   private var schema: StructType = _
 
+  // `ValueWriter`s for all fields of the schema
   private var rootFieldWriters: Seq[ValueWriter] = _
 
+  // The Parquet `RecordConsumer` to which all `InternalRow`s are written
   private var recordConsumer: RecordConsumer = _
 
+  // Whether we should write standard Parquet data conforming to parquet-format spec or not
   private var followParquetFormatSpec: Boolean = _
 
-  // Byte array used to write timestamps as Parquet INT96 values
+  // Reusable byte array used to write timestamps as Parquet INT96 values
   private val timestampBuffer = new Array[Byte](12)
 
-  // Byte array used to write decimal values
-  private val decimalBuffer = new Array[Byte](8)
+  // Reusable byte array used to write decimal values
+  private val decimalBuffer = new Array[Byte](minBytesForPrecision(DecimalType.MAX_PRECISION))
 
   override def init(configuration: Configuration): WriteContext = {
     val schemaString = configuration.get(CatalystWriteSupport.SPARK_ROW_SCHEMA)
@@ -145,26 +152,8 @@ private[parquet] class CatalystWriteSupport extends WriteSupport[InternalRow] wi
         (row: InternalRow, ordinal: Int) =>
           recordConsumer.addBinary(Binary.fromByteArray(row.getBinary(ordinal)))
 
-      case DecimalType.Fixed(precision, _) if precision > 18 =>
-        sys.error(s"Unsupported data type $dataType. Decimal precision cannot be greater than 18.")
-
       case DecimalType.Fixed(precision, _) =>
-        (row: InternalRow, ordinal: Int) => {
-          val decimal = row.getDecimal(ordinal)
-          val numBytes = CatalystWriteSupport.BYTES_FOR_PRECISION(precision)
-          val unscaledLong = decimal.toUnscaledLong
-
-          var i = 0
-          var shift = 8 * (numBytes - 1)
-
-          while (i < numBytes) {
-            decimalBuffer(i) = (unscaledLong >> shift).toByte
-            i += 1
-            shift -= 8
-          }
-
-          recordConsumer.addBinary(Binary.fromByteArray(decimalBuffer, 0, numBytes))
-        }
+        makeDecimalWriter(precision)
 
       case structType: StructType =>
         val fieldWriters = structType.map(_.dataType).map(makeWriter)
@@ -191,6 +180,65 @@ private[parquet] class CatalystWriteSupport extends WriteSupport[InternalRow] wi
 
       case _ =>
         sys.error(s"Unsupported data type $dataType.")
+    }
+  }
+
+  private def makeDecimalWriter(precision: Int): ValueWriter = {
+    assert(
+      precision <= DecimalType.MAX_PRECISION,
+      s"Precision overflow: $precision is greater than ${DecimalType.MAX_PRECISION}")
+
+    val numBytes = minBytesForPrecision(precision)
+
+    val int32Writer =
+      (row: InternalRow, ordinal: Int) =>
+        recordConsumer.addInteger(row.getDecimal(ordinal).toUnscaledLong.toInt)
+
+    val int64Writer =
+      (row: InternalRow, ordinal: Int) =>
+        recordConsumer.addLong(row.getDecimal(ordinal).toUnscaledLong)
+
+    val binaryWriterUsingUnscaledLong =
+      (row: InternalRow, ordinal: Int) => {
+        // This writer converts underlying unscaled Long value to raw bytes using a reusable byte
+        // array to minimize array allocation.
+
+        val unscaled = row.getDecimal(ordinal).toUnscaledLong
+        var i = 0
+        var shift = 8 * (numBytes - 1)
+
+        while (i < numBytes) {
+          decimalBuffer(i) = (unscaled >> shift).toByte
+          i += 1
+          shift -= 8
+        }
+
+        recordConsumer.addBinary(Binary.fromByteArray(decimalBuffer, 0, numBytes))
+      }
+
+    val binaryWriterUsingUnscaledBytes =
+      (row: InternalRow, ordinal: Int) => {
+        val decimal = row.getDecimal(ordinal)
+        val bytes = decimal.toJavaBigDecimal.unscaledValue().toByteArray
+        util.Arrays.fill(decimalBuffer, 0: Byte)
+        System.arraycopy(bytes, 0, decimalBuffer, numBytes - bytes.length, bytes.length)
+        recordConsumer.addBinary(Binary.fromByteArray(decimalBuffer, 0, numBytes))
+      }
+
+    followParquetFormatSpec match {
+      // Standard mode, writes decimals with precision <= 9 as INT32
+      case true if precision <= MAX_PRECISION_FOR_INT32 => int32Writer
+
+      // Standard mode, writes decimals with precision <= 18 as INT64
+      case true if precision <= MAX_PRECISION_FOR_INT64 => int64Writer
+
+      // Legacy mode, writes decimals with precision <= 18 as BINARY
+      case false if precision <= MAX_PRECISION_FOR_INT64 => binaryWriterUsingUnscaledLong
+
+      // All other cases:
+      //  - Standard mode, writes decimals with precision > 18 as BINARY
+      //  - Legacy mode, writes decimals with all precision as BINARY
+      case _ => binaryWriterUsingUnscaledBytes
     }
   }
 

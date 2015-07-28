@@ -264,7 +264,7 @@ private[parquet] class CatalystRowConverter(
       val scale = decimalType.scale
       val bytes = value.getBytes
 
-      if (precision <= 8) {
+      def bytesToUnscaledLong(bytes: Array[Byte]): Long = {
         // Constructs a `Decimal` with an unscaled `Long` value if possible.
         var unscaled = 0L
         var i = 0
@@ -275,11 +275,17 @@ private[parquet] class CatalystRowConverter(
         }
 
         val bits = 8 * bytes.length
-        unscaled = (unscaled << (64 - bits)) >> (64 - bits)
+        (unscaled << (64 - bits)) >> (64 - bits)
+      }
+
+      if (precision <= CatalystSchemaConverter.MAX_PRECISION_FOR_INT64) {
+        // Constructs a `Decimal` with an unscaled `Long` value if possible.
+        val unscaled = bytesToUnscaledLong(bytes)
         Decimal(unscaled, precision, scale)
       } else {
         // Otherwise, resorts to an unscaled `BigInteger` instead.
-        Decimal(new BigDecimal(new BigInteger(bytes), scale), precision, scale)
+        val unscaled = new BigInteger(bytes)
+        Decimal(new BigDecimal(unscaled, scale), precision, scale)
       }
     }
   }
