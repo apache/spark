@@ -557,20 +557,6 @@ class DAGSchedulerSuite
    * aborted.
    */
   test("Failures in different stages should not trigger an overall abort") {
-    // Create a new Listener to confirm that the listenerBus sees the JobEnd message
-    // when we abort the stage. This message will also be consumed by the EventLoggingListener
-    // so this will propagate up to the user.
-    var ended = false
-    var jobResult : JobResult = null
-    class EndListener extends SparkListener {
-      override def onJobEnd(jobEnd: SparkListenerJobEnd): Unit = {
-        jobResult = jobEnd.jobResult
-        ended = true
-      }
-    }
-
-    sc.listenerBus.addListener(new EndListener())
-
     val shuffleMapRdd = new MyRDD(sc, 2, Nil)
     val shuffleDep = new ShuffleDependency(shuffleMapRdd, null)
     val shuffleId = shuffleDep.shuffleId
@@ -635,7 +621,6 @@ class DAGSchedulerSuite
 
     // The first success is from the success we append in stage 1, the second is the one we add here
     assert(results === Map(1 -> 42, 0 -> 42))
-
   }
 
   /**
@@ -704,6 +689,102 @@ class DAGSchedulerSuite
     complete(taskSets.last, completions3)
     sc.listenerBus.waitUntilEmpty(1000)
     assert(!jobResult.isInstanceOf[JobFailed])
+    assert(ended === true)
+  }
+
+  /**
+   * In this test we demonstrate that only consecutive failures trigger a stage abort. In short, a
+   * job may fail multiple times, succeed once in a previously failed stage, then fail again, then
+   * complete both stages successfully without aborting.
+   */
+  test("Abort should only trigger after consecutive stage failures") {
+    // Create a new Listener to confirm that the listenerBus sees the JobEnd message
+    // when we abort the stage. This message will also be consumed by the EventLoggingListener
+    // so this will propagate up to the user.
+    var ended = false
+    var jobResult : JobResult = null
+    class EndListener extends SparkListener {
+      override def onJobEnd(jobEnd: SparkListenerJobEnd): Unit = {
+        jobResult = jobEnd.jobResult
+        ended = true
+      }
+    }
+
+    sc.listenerBus.addListener(new EndListener())
+
+    val shuffleOneRdd = new MyRDD(sc, 2, Nil).cache()
+    val shuffleDepOne = new ShuffleDependency(shuffleOneRdd, null)
+    val shuffleTwoRdd = new MyRDD(sc, 2, List(shuffleDepOne)).cache()
+    val shuffleDepTwo = new ShuffleDependency(shuffleTwoRdd, null)
+    val finalRdd = new MyRDD(sc, 1, List(shuffleDepTwo))
+    submit(finalRdd, Array(0))
+
+    // First, fail stage 0 multiple times after suceeding stage 2 and 1
+    for (attempt <- 1 to Stage.MAX_STAGE_FAILURES-1) {
+      println(s"$attempt: taskSets = $taskSets : ${
+        taskSets.map{_.tasks.mkString(",")}.mkString(";")}")
+
+      // complete stage 2
+      complete(taskSets.last, Seq(
+        (Success, makeMapStatus("hostA", 2)),
+        (Success, makeMapStatus("hostB", 2))))
+
+      // Pretend stage one fails
+      complete(taskSets.last, Seq(
+        (FetchFailed(makeBlockManagerId("hostA"), shuffleDepOne.shuffleId, 0, 0, "ignored"), null)))
+
+      scheduler.resubmitFailedStages()
+      // Now complete stage 0
+      complete(taskSets.last, Seq((Success, 42)))
+      
+      // Confirm we have not yet aborted
+      assert(scheduler.runningStages.nonEmpty)
+      assert(!ended)
+    }
+
+    // Now succeed stage 1 and fail stage 0
+
+    // complete stage 2
+    complete(taskSets.last, Seq(
+      (Success, makeMapStatus("hostA", 2)),
+      (Success, makeMapStatus("hostB", 2))))
+    // complete stage 1
+    complete(taskSets.last, Seq(
+      (Success, makeMapStatus("hostA", 1)),
+      (Success, makeMapStatus("hostB", 1))))
+    // pretend stage 0 failed because hostA went down
+    complete(taskSets.last, Seq(
+      (FetchFailed(makeBlockManagerId("hostA"), shuffleDepTwo.shuffleId, 0, 0, "ignored"), null)))
+
+    scheduler.resubmitFailedStages()
+
+    // Now again, fail stage 1 (up to MAX_FAILURES) but confirm that this doesn't trigger an abort
+    // since we succeeded in between
+    complete(taskSets.last, Seq(
+      (Success, makeMapStatus("hostA", 2)),
+      (Success, makeMapStatus("hostB", 2))))
+
+    // Pretend stage one fails
+    complete(taskSets.last, Seq(
+      (FetchFailed(makeBlockManagerId("hostA"), shuffleDepOne.shuffleId, 0, 0, "ignored"), null)))
+
+    // Drop the uncompleted stage 0
+    taskSets.dropRight(1)
+
+    scheduler.resubmitFailedStages()
+
+    // Confirm we have not yet aborted
+    assert(scheduler.runningStages.nonEmpty)
+    assert(!ended)
+
+    // Next, succeed all and confirm output
+    complete(taskSets.last, Seq(
+      (Success, makeMapStatus("hostA", 2)),
+      (Success, makeMapStatus("hostB", 2))))
+    complete(taskSets.last, Seq((Success, makeMapStatus("hostD", 1))))
+    complete(taskSets.last, Seq((Success, 42)))
+    assert(results === Map(0 -> 42))
+    assertDataStructuresEmpty()
   }
 
   test("trivial shuffle with multiple fetch failures") {
