@@ -51,7 +51,7 @@ class JsonProtocolSuite extends SparkFunSuite with JsonTestUtils {
   }
 
   test("writeExecutorRunner") {
-    val output = JsonProtocol.writeExecutorRunner(createExecutorRunner(1))
+    val output = JsonProtocol.writeExecutorRunner(createExecutorRunner(123))
     assertValidJson(output)
     assertValidDataInJson(output, JsonMethods.parse(JsonConstants.executorRunnerJsonStr))
   }
@@ -78,7 +78,8 @@ class JsonProtocolSuite extends SparkFunSuite with JsonTestUtils {
 
   test("writeWorkerState") {
     val executors = List[ExecutorRunner]()
-    val finishedExecutors = List[ExecutorRunner](createExecutorRunner(1), createExecutorRunner(2))
+    val finishedExecutors = List[ExecutorRunner](createExecutorRunner(123),
+      createExecutorRunner(123))
     val drivers = List(createDriverRunner("driverId"))
     val finishedDrivers = List(createDriverRunner("driverId"), createDriverRunner("driverId"))
     val stateResponse = new WorkerStateResponse("host", 8080, "workerId", executors,
