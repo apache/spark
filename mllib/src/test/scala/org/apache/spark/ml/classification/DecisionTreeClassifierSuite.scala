@@ -57,7 +57,7 @@ class DecisionTreeClassifierSuite extends SparkFunSuite with MLlibTestSparkConte
 
   test("params") {
     ParamsSuite.checkParams(new DecisionTreeClassifier)
-    val model = new DecisionTreeClassificationModel("dtc", new LeafNode(0.0, 0.0), 2)
+    val model = new DecisionTreeClassificationModel("dtc", new LeafNode(0.0, 0.0))
     ParamsSuite.checkParams(model)
   }
 
@@ -273,8 +273,7 @@ private[ml] object DecisionTreeClassifierSuite extends SparkFunSuite {
     val newTree = dt.fit(newData)
     // Use parent from newTree since this is not checked anyways.
     val oldTreeAsNew = DecisionTreeClassificationModel.fromOld(
-      oldTree, newTree.parent.asInstanceOf[DecisionTreeClassifier], categoricalFeatures,
-      numClasses)
+      oldTree, newTree.parent.asInstanceOf[DecisionTreeClassifier], categoricalFeatures)
     TreeTests.checkEqual(oldTreeAsNew, newTree)
   }
 }
