@@ -19,12 +19,11 @@ package org.apache.spark.mllib.random
 
 import scala.math
 
-import org.scalatest.FunSuite
-
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.util.StatCounter
 
 // TODO update tests to use TestingUtils for floating point comparison after PR 1367 is merged
-class RandomDataGeneratorSuite extends FunSuite {
+class RandomDataGeneratorSuite extends SparkFunSuite {
 
   def apiChecks(gen: RandomDataGenerator[Double]) {
     // resetting seed should generate the same sequence of random numbers

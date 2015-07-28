@@ -194,7 +194,7 @@ abstract class RDD[T: ClassTag](
   @transient private var partitions_ : Array[Partition] = null
 
   /** An Option holding our checkpoint RDD, if we are checkpointed */
-  private def checkpointRDD: Option[RDD[T]] = checkpointData.flatMap(_.checkpointRDD)
+  private def checkpointRDD: Option[CheckpointRDD[T]] = checkpointData.flatMap(_.checkpointRDD)
 
   /**
    * Get the list of dependencies of this RDD, taking into account whether the
@@ -434,11 +434,11 @@ abstract class RDD[T: ClassTag](
    * @return A random sub-sample of the RDD without replacement.
    */
   private[spark] def randomSampleWithRange(lb: Double, ub: Double, seed: Long): RDD[T] = {
-    this.mapPartitionsWithIndex { case (index, partition) =>
+    this.mapPartitionsWithIndex( { (index, partition) =>
       val sampler = new BernoulliCellSampler[T](lb, ub)
       sampler.setSeed(seed + index)
       sampler.sample(partition)
-    }
+    }, preservesPartitioning = true)
   }
 
   /**
@@ -454,7 +454,7 @@ abstract class RDD[T: ClassTag](
       withReplacement: Boolean,
       num: Int,
       seed: Long = Utils.random.nextLong): Array[T] = {
-    val numStDev =  10.0
+    val numStDev = 10.0
 
     if (num < 0) {
       throw new IllegalArgumentException("Negative number of elements requested")
@@ -890,10 +890,14 @@ abstract class RDD[T: ClassTag](
    * Return an iterator that contains all of the elements in this RDD.
    *
    * The iterator will consume as much memory as the largest partition in this RDD.
+   *
+   * Note: this results in multiple Spark jobs, and if the input RDD is the result
+   * of a wide transformation (e.g. join with different partitioners), to avoid
+   * recomputing the input RDD should be cached first.
    */
   def toLocalIterator: Iterator[T] = withScope {
     def collectPartition(p: Int): Array[T] = {
-      sc.runJob(this, (iter: Iterator[T]) => iter.toArray, Seq(p), allowLocal = false).head
+      sc.runJob(this, (iter: Iterator[T]) => iter.toArray, Seq(p)).head
     }
     (0 until partitions.length).iterator.flatMap(i => collectPartition(i))
   }
@@ -1078,7 +1082,9 @@ abstract class RDD[T: ClassTag](
       val scale = math.max(math.ceil(math.pow(numPartitions, 1.0 / depth)).toInt, 2)
       // If creating an extra level doesn't help reduce
       // the wall-clock time, we stop tree aggregation.
-      while (numPartitions > scale + numPartitions / scale) {
+
+      // Don't trigger TreeAggregation when it doesn't save wall-clock time
+      while (numPartitions > scale + math.ceil(numPartitions.toDouble / scale)) {
         numPartitions /= scale
         val curNumPartitions = numPartitions
         partiallyAggregated = partiallyAggregated.mapPartitionsWithIndex {
@@ -1138,8 +1144,8 @@ abstract class RDD[T: ClassTag](
     if (elementClassTag.runtimeClass.isArray) {
       throw new SparkException("countByValueApprox() does not support arrays")
     }
-    val countPartition: (TaskContext, Iterator[T]) => OpenHashMap[T,Long] = { (ctx, iter) =>
-      val map = new OpenHashMap[T,Long]
+    val countPartition: (TaskContext, Iterator[T]) => OpenHashMap[T, Long] = { (ctx, iter) =>
+      val map = new OpenHashMap[T, Long]
       iter.foreach {
         t => map.changeValue(t, 1L, _ + 1L)
       }
@@ -1269,7 +1275,7 @@ abstract class RDD[T: ClassTag](
 
         val left = num - buf.size
         val p = partsScanned until math.min(partsScanned + numPartsToTry, totalParts)
-        val res = sc.runJob(this, (it: Iterator[T]) => it.take(left).toArray, p, allowLocal = true)
+        val res = sc.runJob(this, (it: Iterator[T]) => it.take(left).toArray, p)
 
         res.foreach(buf ++= _.take(num - buf.size))
         partsScanned += numPartsToTry
@@ -1447,12 +1453,16 @@ abstract class RDD[T: ClassTag](
    * executed on this RDD. It is strongly recommended that this RDD is persisted in
    * memory, otherwise saving it on a file will require recomputation.
    */
-  def checkpoint() {
+  def checkpoint(): Unit = {
     if (context.checkpointDir.isEmpty) {
       throw new SparkException("Checkpoint directory has not been set in the SparkContext")
     } else if (checkpointData.isEmpty) {
-      checkpointData = Some(new RDDCheckpointData(this))
-      checkpointData.get.markForCheckpoint()
+      // NOTE: we use a global lock here due to complexities downstream with ensuring
+      // children RDD partitions point to the correct parent partitions. In the future
+      // we should revisit this consideration.
+      RDDCheckpointData.synchronized {
+        checkpointData = Some(new RDDCheckpointData(this))
+      }
     }
   }
 
@@ -1493,7 +1503,7 @@ abstract class RDD[T: ClassTag](
   private[spark] var checkpointData: Option[RDDCheckpointData[T]] = None
 
   /** Returns the first parent RDD */
-  protected[spark] def firstParent[U: ClassTag] = {
+  protected[spark] def firstParent[U: ClassTag]: RDD[U] = {
     dependencies.head.rdd.asInstanceOf[RDD[U]]
   }
 
@@ -1585,15 +1595,15 @@ abstract class RDD[T: ClassTag](
         case 0 => Seq.empty
         case 1 =>
           val d = rdd.dependencies.head
-          debugString(d.rdd, prefix, d.isInstanceOf[ShuffleDependency[_,_,_]], true)
+          debugString(d.rdd, prefix, d.isInstanceOf[ShuffleDependency[_, _, _]], true)
         case _ =>
           val frontDeps = rdd.dependencies.take(len - 1)
           val frontDepStrings = frontDeps.flatMap(
-            d => debugString(d.rdd, prefix, d.isInstanceOf[ShuffleDependency[_,_,_]]))
+            d => debugString(d.rdd, prefix, d.isInstanceOf[ShuffleDependency[_, _, _]]))
 
           val lastDep = rdd.dependencies.last
           val lastDepStrings =
-            debugString(lastDep.rdd, prefix, lastDep.isInstanceOf[ShuffleDependency[_,_,_]], true)
+            debugString(lastDep.rdd, prefix, lastDep.isInstanceOf[ShuffleDependency[_, _, _]], true)
 
           (frontDepStrings ++ lastDepStrings)
       }

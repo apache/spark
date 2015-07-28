@@ -17,13 +17,12 @@
 
 package org.apache.spark.mllib.feature
 
-import org.scalatest.FunSuite
-
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.linalg.distributed.RowMatrix
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 
-class PCASuite extends FunSuite with MLlibTestSparkContext {
+class PCASuite extends SparkFunSuite with MLlibTestSparkContext {
 
   private val data = Array(
     Vectors.sparse(5, Seq((1, 1.0), (3, 7.0))),

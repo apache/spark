@@ -54,7 +54,7 @@ import org.apache.spark.SparkConf
 
 <div data-lang="java"  markdown="1">
 
-Spark {{site.SPARK_VERSION}} works with Java 6 and higher. If you are using Java 8, Spark supports
+Spark {{site.SPARK_VERSION}} works with Java 7 and higher. If you are using Java 8, Spark supports
 [lambda expressions](http://docs.oracle.com/javase/tutorial/java/javaOO/lambdaexpressions.html)
 for concisely writing functions, otherwise you can use the classes in the
 [org.apache.spark.api.java.function](api/java/index.html?org/apache/spark/api/java/function/package-summary.html) package.
@@ -1144,9 +1144,11 @@ generate these on the reduce side. When data does not fit in memory Spark will s
 to disk, incurring the additional overhead of disk I/O and increased garbage collection.
 
 Shuffle also generates a large number of intermediate files on disk. As of Spark 1.3, these files
-are not cleaned up from Spark's temporary storage until Spark is stopped, which means that
-long-running Spark jobs may consume available disk space. This is done so the shuffle doesn't need
-to be re-computed if the lineage is re-computed. The temporary storage directory is specified by the
+are preserved until the corresponding RDDs are no longer used and are garbage collected. 
+This is done so the shuffle files don't need to be re-created if the lineage is re-computed. 
+Garbage collection may happen only after a long period time, if the application retains references 
+to these RDDs or if GC does not kick in frequently. This means that long-running Spark jobs may 
+consume a large amount of disk space. The temporary storage directory is specified by the
 `spark.local.dir` configuration parameter when configuring the Spark context.
 
 Shuffle behavior can be tuned by adjusting a variety of configuration parameters. See the
@@ -1214,9 +1216,11 @@ storage levels is:
     Compared to MEMORY_ONLY_SER, OFF_HEAP reduces garbage collection overhead and allows executors
     to be smaller and to share a pool of memory, making it attractive in environments with
     large heaps or multiple concurrent applications. Furthermore, as the RDDs reside in Tachyon,
-    the crash of an executor does not lead to losing the in-memory cache. In this mode, the memory 
+    the crash of an executor does not lead to losing the in-memory cache. In this mode, the memory
     in Tachyon is discardable. Thus, Tachyon does not attempt to reconstruct a block that it evicts
-    from memory.
+    from memory. If you plan to use Tachyon as the off heap store, Spark is compatible with Tachyon
+    out-of-the-box. Please refer to this <a href="http://tachyon-project.org/master/Running-Spark-on-Tachyon.html">page</a>
+    for the suggested version pairings.
   </td>
 </tr>
 </table>

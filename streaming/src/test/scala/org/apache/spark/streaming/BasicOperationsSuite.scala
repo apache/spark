@@ -255,7 +255,7 @@ class BasicOperationsSuite extends TestSuiteBase {
       Seq(  )
     )
     val operation = (s1: DStream[String], s2: DStream[String]) => {
-      s1.map(x => (x,1)).cogroup(s2.map(x => (x, "x"))).mapValues(x => (x._1.toSeq, x._2.toSeq))
+      s1.map(x => (x, 1)).cogroup(s2.map(x => (x, "x"))).mapValues(x => (x._1.toSeq, x._2.toSeq))
     }
     testOperation(inputData1, inputData2, operation, outputData, true)
   }
@@ -427,9 +427,9 @@ class BasicOperationsSuite extends TestSuiteBase {
   test("updateStateByKey - object lifecycle") {
     val inputData =
       Seq(
-        Seq("a","b"),
+        Seq("a", "b"),
         null,
-        Seq("a","c","a"),
+        Seq("a", "c", "a"),
         Seq("c"),
         null,
         null

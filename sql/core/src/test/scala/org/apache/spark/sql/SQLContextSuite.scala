@@ -17,33 +17,32 @@
 
 package org.apache.spark.sql
 
-import org.scalatest.{BeforeAndAfterAll, FunSuite}
+import org.scalatest.BeforeAndAfterAll
 
-import org.apache.spark.sql.test.TestSQLContext
+import org.apache.spark.SparkFunSuite
 
-class SQLContextSuite extends FunSuite with BeforeAndAfterAll {
+class SQLContextSuite extends SparkFunSuite with BeforeAndAfterAll {
 
-  private val testSqlContext = TestSQLContext
-  private val testSparkContext = TestSQLContext.sparkContext
+  private lazy val ctx = org.apache.spark.sql.test.TestSQLContext
 
   override def afterAll(): Unit = {
-    SQLContext.setLastInstantiatedContext(testSqlContext)
+    SQLContext.setLastInstantiatedContext(ctx)
   }
 
   test("getOrCreate instantiates SQLContext") {
     SQLContext.clearLastInstantiatedContext()
-    val sqlContext = SQLContext.getOrCreate(testSparkContext)
+    val sqlContext = SQLContext.getOrCreate(ctx.sparkContext)
     assert(sqlContext != null, "SQLContext.getOrCreate returned null")
-    assert(SQLContext.getOrCreate(testSparkContext).eq(sqlContext),
+    assert(SQLContext.getOrCreate(ctx.sparkContext).eq(sqlContext),
       "SQLContext created by SQLContext.getOrCreate not returned by SQLContext.getOrCreate")
   }
 
   test("getOrCreate gets last explicitly instantiated SQLContext") {
     SQLContext.clearLastInstantiatedContext()
-    val sqlContext = new SQLContext(testSparkContext)
-    assert(SQLContext.getOrCreate(testSparkContext) != null,
+    val sqlContext = new SQLContext(ctx.sparkContext)
+    assert(SQLContext.getOrCreate(ctx.sparkContext) != null,
       "SQLContext.getOrCreate after explicitly created SQLContext returned null")
-    assert(SQLContext.getOrCreate(testSparkContext).eq(sqlContext),
+    assert(SQLContext.getOrCreate(ctx.sparkContext).eq(sqlContext),
       "SQLContext.getOrCreate after explicitly created SQLContext did not return the context")
   }
 }

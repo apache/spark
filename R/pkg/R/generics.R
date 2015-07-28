@@ -20,7 +20,8 @@
 # @rdname aggregateRDD
 # @seealso reduce
 # @export
-setGeneric("aggregateRDD", function(x, zeroValue, seqOp, combOp) { standardGeneric("aggregateRDD") })
+setGeneric("aggregateRDD",
+           function(x, zeroValue, seqOp, combOp) { standardGeneric("aggregateRDD") })
 
 # @rdname cache-methods
 # @export
@@ -57,6 +58,10 @@ setGeneric("count", function(x) { standardGeneric("count") })
 # @rdname countByValue
 # @export
 setGeneric("countByValue", function(x) { standardGeneric("countByValue") })
+
+# @rdname statfunctions
+# @export
+setGeneric("crosstab", function(x, col1, col2) { standardGeneric("crosstab") })
 
 # @rdname distinct
 # @export
@@ -130,7 +135,7 @@ setGeneric("maximum", function(x) { standardGeneric("maximum") })
 # @export
 setGeneric("minimum", function(x) { standardGeneric("minimum") })
 
-# @rdname sumRDD 
+# @rdname sumRDD
 # @export
 setGeneric("sumRDD", function(x) { standardGeneric("sumRDD") })
 
@@ -219,7 +224,7 @@ setGeneric("zipRDD", function(x, other) { standardGeneric("zipRDD") })
 
 # @rdname zipRDD
 # @export
-setGeneric("zipPartitions", function(..., func) { standardGeneric("zipPartitions") }, 
+setGeneric("zipPartitions", function(..., func) { standardGeneric("zipPartitions") },
            signature = "...")
 
 # @rdname zipWithIndex
@@ -364,7 +369,7 @@ setGeneric("subtract",
 
 # @rdname subtractByKey
 # @export
-setGeneric("subtractByKey", 
+setGeneric("subtractByKey",
            function(x, other, numPartitions = 1) {
              standardGeneric("subtractByKey")
            })
@@ -396,6 +401,20 @@ setGeneric("columns", function(x) {standardGeneric("columns") })
 #' @export
 setGeneric("describe", function(x, col, ...) { standardGeneric("describe") })
 
+#' @rdname nafunctions
+#' @export
+setGeneric("dropna",
+           function(x, how = c("any", "all"), minNonNulls = NULL, cols = NULL) {
+             standardGeneric("dropna")
+           })
+
+#' @rdname nafunctions
+#' @export
+setGeneric("na.omit",
+           function(x, how = c("any", "all"), minNonNulls = NULL, cols = NULL) {
+             standardGeneric("na.omit")
+           })
+
 #' @rdname schema
 #' @export
 setGeneric("dtypes", function(x) { standardGeneric("dtypes") })
@@ -407,6 +426,10 @@ setGeneric("explain", function(x, ...) { standardGeneric("explain") })
 #' @rdname except
 #' @export
 setGeneric("except", function(x, y) { standardGeneric("except") })
+
+#' @rdname nafunctions
+#' @export
+setGeneric("fillna", function(x, value, cols = NULL) { standardGeneric("fillna") })
 
 #' @rdname filter
 #' @export
@@ -482,11 +505,11 @@ setGeneric("saveAsTable", function(df, tableName, source, mode, ...) {
 
 #' @rdname write.df
 #' @export
-setGeneric("write.df", function(df, path, source, mode, ...) { standardGeneric("write.df") })
+setGeneric("write.df", function(df, path, ...) { standardGeneric("write.df") })
 
 #' @rdname write.df
 #' @export
-setGeneric("saveDF", function(df, path, source, mode, ...) { standardGeneric("saveDF") })
+setGeneric("saveDF", function(df, path, ...) { standardGeneric("saveDF") })
 
 #' @rdname schema
 #' @export
@@ -547,6 +570,10 @@ setGeneric("asc", function(x) { standardGeneric("asc") })
 #' @rdname column
 #' @export
 setGeneric("avg", function(x, ...) { standardGeneric("avg") })
+
+#' @rdname column
+#' @export
+setGeneric("between", function(x, bounds) { standardGeneric("between") })
 
 #' @rdname column
 #' @export
@@ -639,3 +666,6 @@ setGeneric("toRadians", function(x) { standardGeneric("toRadians") })
 #' @export
 setGeneric("upper", function(x) { standardGeneric("upper") })
 
+#' @rdname glm
+#' @export
+setGeneric("glm")

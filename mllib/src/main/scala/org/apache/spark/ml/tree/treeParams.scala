@@ -17,7 +17,6 @@
 
 package org.apache.spark.ml.tree
 
-import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.ml.PredictorParams
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared.{HasMaxIter, HasSeed}
@@ -26,12 +25,10 @@ import org.apache.spark.mllib.tree.impurity.{Entropy => OldEntropy, Gini => OldG
 import org.apache.spark.mllib.tree.loss.{Loss => OldLoss}
 
 /**
- * :: DeveloperApi ::
  * Parameters for Decision Tree-based algorithms.
  *
  * Note: Marked as private and DeveloperApi since this may be made public in the future.
  */
-@DeveloperApi
 private[ml] trait DecisionTreeParams extends PredictorParams {
 
   /**
@@ -265,12 +262,10 @@ private[ml] object TreeRegressorParams {
 }
 
 /**
- * :: DeveloperApi ::
  * Parameters for Decision Tree-based ensemble algorithms.
  *
  * Note: Marked as private and DeveloperApi since this may be made public in the future.
  */
-@DeveloperApi
 private[ml] trait TreeEnsembleParams extends DecisionTreeParams with HasSeed {
 
   /**
@@ -307,12 +302,10 @@ private[ml] trait TreeEnsembleParams extends DecisionTreeParams with HasSeed {
 }
 
 /**
- * :: DeveloperApi ::
  * Parameters for Random Forest algorithms.
  *
  * Note: Marked as private and DeveloperApi since this may be made public in the future.
  */
-@DeveloperApi
 private[ml] trait RandomForestParams extends TreeEnsembleParams {
 
   /**
@@ -377,12 +370,10 @@ private[ml] object RandomForestParams {
 }
 
 /**
- * :: DeveloperApi ::
  * Parameters for Gradient-Boosted Tree algorithms.
  *
  * Note: Marked as private and DeveloperApi since this may be made public in the future.
  */
-@DeveloperApi
 private[ml] trait GBTParams extends TreeEnsembleParams with HasMaxIter {
 
   /**

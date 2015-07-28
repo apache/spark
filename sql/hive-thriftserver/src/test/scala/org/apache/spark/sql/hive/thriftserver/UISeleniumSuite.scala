@@ -22,12 +22,13 @@ import scala.util.Random
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.openqa.selenium.WebDriver
 import org.openqa.selenium.htmlunit.HtmlUnitDriver
+import org.scalatest.{BeforeAndAfterAll, Matchers}
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.selenium.WebBrowser
 import org.scalatest.time.SpanSugar._
-import org.scalatest.{BeforeAndAfterAll, Matchers}
 
 import org.apache.spark.sql.hive.HiveContext
+import org.apache.spark.ui.SparkUICssErrorHandler
 
 class UISeleniumSuite
   extends HiveThriftJdbcTest
@@ -40,7 +41,9 @@ class UISeleniumSuite
   override def mode: ServerMode.Value = ServerMode.binary
 
   override def beforeAll(): Unit = {
-    webDriver = new HtmlUnitDriver
+    webDriver = new HtmlUnitDriver {
+      getWebClient.setCssErrorHandler(new SparkUICssErrorHandler)
+    }
     super.beforeAll()
   }
 
@@ -73,7 +76,7 @@ class UISeleniumSuite
   }
 
   ignore("thrift server ui test") {
-    withJdbcStatement(statement =>{
+    withJdbcStatement { statement =>
       val baseURL = s"http://localhost:$uiPort"
 
       val queries = Seq(
@@ -84,11 +87,11 @@ class UISeleniumSuite
 
       eventually(timeout(10 seconds), interval(50 milliseconds)) {
         go to baseURL
-        find(cssSelector("""ul li a[href*="ThriftServer"]""")) should not be None
+        find(cssSelector("""ul li a[href*="sql"]""")) should not be None
       }
 
       eventually(timeout(10 seconds), interval(50 milliseconds)) {
-        go to (baseURL + "/ThriftServer")
+        go to (baseURL + "/sql")
         find(id("sessionstat")) should not be None
         find(id("sqlstat")) should not be None
 
@@ -97,6 +100,6 @@ class UISeleniumSuite
           findAll(cssSelector("""ul table tbody tr td""")).map(_.text).toList should contain (line)
         }
       }
-    })
+    }
   }
 }

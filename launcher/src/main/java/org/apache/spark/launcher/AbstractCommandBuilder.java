@@ -136,7 +136,7 @@ abstract class AbstractCommandBuilder {
       }
     }
 
-    cmd.add("-XX:MaxPermSize=128m");
+    cmd.add("-XX:MaxPermSize=256m");
   }
 
   void addOptionString(List<String> cmd, String options) {
@@ -296,6 +296,9 @@ abstract class AbstractCommandBuilder {
       try {
         fd = new FileInputStream(propsFile);
         props.load(new InputStreamReader(fd, "UTF-8"));
+        for (Map.Entry<Object, Object> e : props.entrySet()) {
+          e.setValue(e.getValue().toString().trim());
+        }
       } finally {
         if (fd != null) {
           try {

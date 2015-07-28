@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples
 
 import breeze.linalg.{Vector, DenseVector, squaredDistance}
@@ -100,3 +101,4 @@ object SparkKMeans {
     sc.stop()
   }
 }
+// scalastyle:on println

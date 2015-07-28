@@ -213,9 +213,9 @@ private[spark] object BLAS extends Serializable with Logging {
   def scal(a: Double, x: Vector): Unit = {
     x match {
       case sx: SparseVector =>
-        f2jBLAS.dscal(sx.values.size, a, sx.values, 1)
+        f2jBLAS.dscal(sx.values.length, a, sx.values, 1)
       case dx: DenseVector =>
-        f2jBLAS.dscal(dx.values.size, a, dx.values, 1)
+        f2jBLAS.dscal(dx.values.length, a, dx.values, 1)
       case _ =>
         throw new IllegalArgumentException(s"scal doesn't support vector type ${x.getClass}.")
     }
@@ -228,7 +228,7 @@ private[spark] object BLAS extends Serializable with Logging {
     }
     _nativeBLAS
   }
- 
+
   /**
    * A := alpha * x * x^T^ + A
    * @param alpha a real scalar that will be multiplied to x * x^T^.
@@ -264,7 +264,7 @@ private[spark] object BLAS extends Serializable with Logging {
         j += 1
       }
       i += 1
-    }    
+    }
   }
 
   private def syr(alpha: Double, x: SparseVector, A: DenseMatrix) {
@@ -303,8 +303,8 @@ private[spark] object BLAS extends Serializable with Logging {
       C: DenseMatrix): Unit = {
     require(!C.isTransposed,
       "The matrix C cannot be the product of a transpose() call. C.isTransposed must be false.")
-    if (alpha == 0.0) {
-      logDebug("gemm: alpha is equal to 0. Returning C.")
+    if (alpha == 0.0 && beta == 1.0) {
+      logDebug("gemm: alpha is equal to 0 and beta is equal to 1. Returning C.")
     } else {
       A match {
         case sparse: SparseMatrix => gemm(alpha, sparse, B, beta, C)
@@ -505,7 +505,7 @@ private[spark] object BLAS extends Serializable with Logging {
     nativeBLAS.dgemv(tStrA, mA, nA, alpha, A.values, mA, x.values, 1, beta,
       y.values, 1)
   }
- 
+
   /**
    * y := alpha * A * x + beta * y
    * For `DenseMatrix` A and `SparseVector` x.
@@ -557,7 +557,7 @@ private[spark] object BLAS extends Serializable with Logging {
       }
     }
   }
- 
+
   /**
    * y := alpha * A * x + beta * y
    * For `SparseMatrix` A and `SparseVector` x.

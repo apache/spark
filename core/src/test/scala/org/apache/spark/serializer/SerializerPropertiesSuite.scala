@@ -21,9 +21,9 @@ import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
 
 import scala.util.Random
 
-import org.scalatest.{Assertions, FunSuite}
+import org.scalatest.Assertions
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.serializer.KryoTest.RegistratorWithoutAutoReset
 
 /**
@@ -31,7 +31,7 @@ import org.apache.spark.serializer.KryoTest.RegistratorWithoutAutoReset
  * describe properties of the serialized stream, such as
  * [[Serializer.supportsRelocationOfSerializedObjects]].
  */
-class SerializerPropertiesSuite extends FunSuite {
+class SerializerPropertiesSuite extends SparkFunSuite {
 
   import SerializerPropertiesSuite._
 

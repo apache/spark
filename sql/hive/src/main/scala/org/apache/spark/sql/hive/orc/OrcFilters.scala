@@ -41,10 +41,10 @@ private[orc] object OrcFilters extends Logging {
   private def buildSearchArgument(expression: Filter, builder: Builder): Option[Builder] = {
     def newBuilder = SearchArgument.FACTORY.newBuilder()
 
-    def isSearchableLiteral(value: Any) = value match {
+    def isSearchableLiteral(value: Any): Boolean = value match {
       // These are types recognized by the `SearchArgumentImpl.BuilderImpl.boxLiteral()` method.
-      case _: String | _: Long | _: Double | _: DateWritable | _: HiveDecimal | _: HiveChar |
-           _: HiveVarchar | _: Byte | _: Short | _: Integer | _: Float => true
+      case _: String | _: Long | _: Double | _: Byte | _: Short | _: Integer | _: Float => true
+      case _: DateWritable | _: HiveDecimal | _: HiveChar | _: HiveVarchar => true
       case _ => false
     }
 

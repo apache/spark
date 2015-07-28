@@ -82,6 +82,18 @@ object MLUtils {
           val value = indexAndValue(1).toDouble
           (index, value)
         }.unzip
+
+        // check if indices are one-based and in ascending order
+        var previous = -1
+        var i = 0
+        val indicesLength = indices.length
+        while (i < indicesLength) {
+          val current = indices(i)
+          require(current > previous, "indices should be one-based and in ascending order" )
+          previous = current
+          i += 1
+        }
+
         (label, indices.toArray, values.toArray)
       }
 
@@ -258,14 +270,30 @@ object MLUtils {
    * Returns a new vector with `1.0` (bias) appended to the input vector.
    */
   def appendBias(vector: Vector): Vector = {
-    val vector1 = vector.toBreeze match {
-      case dv: BDV[Double] => BDV.vertcat(dv, new BDV[Double](Array(1.0)))
-      case sv: BSV[Double] => BSV.vertcat(sv, new BSV[Double](Array(0), Array(1.0), 1))
-      case v: Any => throw new IllegalArgumentException("Do not support vector type " + v.getClass)
+    vector match {
+      case dv: DenseVector =>
+        val inputValues = dv.values
+        val inputLength = inputValues.length
+        val outputValues = Array.ofDim[Double](inputLength + 1)
+        System.arraycopy(inputValues, 0, outputValues, 0, inputLength)
+        outputValues(inputLength) = 1.0
+        Vectors.dense(outputValues)
+      case sv: SparseVector =>
+        val inputValues = sv.values
+        val inputIndices = sv.indices
+        val inputValuesLength = inputValues.length
+        val dim = sv.size
+        val outputValues = Array.ofDim[Double](inputValuesLength + 1)
+        val outputIndices = Array.ofDim[Int](inputValuesLength + 1)
+        System.arraycopy(inputValues, 0, outputValues, 0, inputValuesLength)
+        System.arraycopy(inputIndices, 0, outputIndices, 0, inputValuesLength)
+        outputValues(inputValuesLength) = 1.0
+        outputIndices(inputValuesLength) = dim
+        Vectors.sparse(dim + 1, outputIndices, outputValues)
+      case _ => throw new IllegalArgumentException(s"Do not support vector type ${vector.getClass}")
     }
-    Vectors.fromBreeze(vector1)
   }
- 
+
   /**
    * Returns the squared Euclidean distance between two vectors. The following formula will be used
    * if it does not introduce too much numerical error:

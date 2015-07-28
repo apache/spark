@@ -137,7 +137,7 @@ private[spark] object SparkUI {
       jobProgressListener: JobProgressListener,
       securityManager: SecurityManager,
       appName: String,
-      startTime: Long): SparkUI =  {
+      startTime: Long): SparkUI = {
     create(Some(sc), conf, listenerBus, securityManager, appName,
       jobProgressListener = Some(jobProgressListener), startTime = startTime)
   }

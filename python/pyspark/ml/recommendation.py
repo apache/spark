@@ -63,8 +63,15 @@ class ALS(JavaEstimator, HasCheckpointInterval, HasMaxIter, HasPredictionCol, Ha
     indicated user preferences rather than explicit ratings given to
     items.
 
+    >>> df = sqlContext.createDataFrame(
+    ...     [(0, 0, 4.0), (0, 1, 2.0), (1, 1, 3.0), (1, 2, 4.0), (2, 1, 1.0), (2, 2, 5.0)],
+    ...     ["user", "item", "rating"])
     >>> als = ALS(rank=10, maxIter=5)
     >>> model = als.fit(df)
+    >>> model.rank
+    10
+    >>> model.userFactors.orderBy("id").collect()
+    [Row(id=0, features=[...]), Row(id=1, ...), Row(id=2, ...)]
     >>> test = sqlContext.createDataFrame([(0, 2), (1, 0), (2, 0)], ["user", "item"])
     >>> predictions = sorted(model.transform(test).collect(), key=lambda r: r[0])
     >>> predictions[0]
@@ -260,6 +267,27 @@ class ALSModel(JavaModel):
     Model fitted by ALS.
     """
 
+    @property
+    def rank(self):
+        """rank of the matrix factorization model"""
+        return self._call_java("rank")
+
+    @property
+    def userFactors(self):
+        """
+        a DataFrame that stores user factors in two columns: `id` and
+        `features`
+        """
+        return self._call_java("userFactors")
+
+    @property
+    def itemFactors(self):
+        """
+        a DataFrame that stores item factors in two columns: `id` and
+        `features`
+        """
+        return self._call_java("itemFactors")
+
 
 if __name__ == "__main__":
     import doctest
@@ -272,8 +300,6 @@ if __name__ == "__main__":
     sqlContext = SQLContext(sc)
     globs['sc'] = sc
     globs['sqlContext'] = sqlContext
-    globs['df'] = sqlContext.createDataFrame([(0, 0, 4.0), (0, 1, 2.0), (1, 1, 3.0), (1, 2, 4.0),
-                                              (2, 1, 1.0), (2, 2, 5.0)], ["user", "item", "rating"])
     (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
     sc.stop()
     if failure_count:

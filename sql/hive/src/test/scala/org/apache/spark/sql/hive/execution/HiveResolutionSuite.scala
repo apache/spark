@@ -77,7 +77,7 @@ class HiveResolutionSuite extends HiveComparisonTest {
 
   test("case insensitivity with scala reflection") {
     // Test resolution with Scala Reflection
-    sparkContext.parallelize(Data(1, 2, Nested(1,2), Seq(Nested(1,2))) :: Nil)
+    sparkContext.parallelize(Data(1, 2, Nested(1, 2), Seq(Nested(1, 2))) :: Nil)
       .toDF().registerTempTable("caseSensitivityTest")
 
     val query = sql("SELECT a, b, A, B, n.a, n.b, n.A, n.B FROM caseSensitivityTest")
@@ -88,14 +88,14 @@ class HiveResolutionSuite extends HiveComparisonTest {
 
   ignore("case insensitivity with scala reflection joins") {
     // Test resolution with Scala Reflection
-    sparkContext.parallelize(Data(1, 2, Nested(1,2), Seq(Nested(1,2))) :: Nil)
+    sparkContext.parallelize(Data(1, 2, Nested(1, 2), Seq(Nested(1, 2))) :: Nil)
       .toDF().registerTempTable("caseSensitivityTest")
 
     sql("SELECT * FROM casesensitivitytest a JOIN casesensitivitytest b ON a.a = b.a").collect()
   }
 
   test("nested repeated resolution") {
-    sparkContext.parallelize(Data(1, 2, Nested(1,2), Seq(Nested(1,2))) :: Nil)
+    sparkContext.parallelize(Data(1, 2, Nested(1, 2), Seq(Nested(1, 2))) :: Nil)
       .toDF().registerTempTable("nestedRepeatedTest")
     assert(sql("SELECT nestedArray[0].a FROM nestedRepeatedTest").collect().head(0) === 1)
   }

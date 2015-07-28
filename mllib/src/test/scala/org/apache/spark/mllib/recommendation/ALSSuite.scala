@@ -21,9 +21,9 @@ import scala.collection.JavaConversions._
 import scala.math.abs
 import scala.util.Random
 
-import org.scalatest.FunSuite
 import org.jblas.DoubleMatrix
 
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.storage.StorageLevel
 
@@ -84,7 +84,7 @@ object ALSSuite {
 }
 
 
-class ALSSuite extends FunSuite with MLlibTestSparkContext {
+class ALSSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   test("rank-1 matrices") {
     testALS(50, 100, 1, 15, 0.7, 0.3)

@@ -30,7 +30,7 @@ import org.apache.spark.storage.StreamBlockId
 import org.apache.spark.streaming.Time
 import org.apache.spark.streaming.scheduler._
 import org.apache.spark.streaming.util.WriteAheadLogUtils
-import org.apache.spark.util.{RpcUtils, Utils}
+import org.apache.spark.util.RpcUtils
 import org.apache.spark.{Logging, SparkEnv, SparkException}
 
 /**
@@ -45,6 +45,8 @@ private[streaming] class ReceiverSupervisorImpl(
     hadoopConf: Configuration,
     checkpointDirOption: Option[String]
   ) extends ReceiverSupervisor(receiver, env.conf) with Logging {
+
+  private val hostPort = SparkEnv.get.blockManager.blockManagerId.hostPort
 
   private val receivedBlockHandler: ReceivedBlockHandler = {
     if (WriteAheadLogUtils.enableReceiverLog(env.conf)) {
@@ -77,6 +79,9 @@ private[streaming] class ReceiverSupervisorImpl(
         case CleanupOldBlocks(threshTime) =>
           logDebug("Received delete old batch signal")
           cleanupOldBlocks(threshTime)
+        case UpdateRateLimit(eps) =>
+          logInfo(s"Received a new rate limit: $eps.")
+          blockGenerator.updateRate(eps)
       }
     })
 
@@ -97,6 +102,9 @@ private[streaming] class ReceiverSupervisorImpl(
       pushArrayBuffer(arrayBuffer, None, Some(blockId))
     }
   }, streamId, env.conf)
+
+  override private[streaming] def getCurrentRateLimit: Option[Long] =
+    Some(blockGenerator.getCurrentLimit)
 
   /** Push a single record of received data into block generator. */
   def pushSingle(data: Any) {
@@ -137,15 +145,10 @@ private[streaming] class ReceiverSupervisorImpl(
       blockIdOption: Option[StreamBlockId]
     ) {
     val blockId = blockIdOption.getOrElse(nextBlockId)
-    val numRecords = receivedBlock match {
-      case ArrayBufferBlock(arrayBuffer) => arrayBuffer.size
-      case _ => -1
-    }
-
     val time = System.currentTimeMillis
     val blockStoreResult = receivedBlockHandler.storeBlock(blockId, receivedBlock)
     logDebug(s"Pushed block $blockId in ${(System.currentTimeMillis - time)} ms")
-
+    val numRecords = blockStoreResult.numRecords
     val blockInfo = ReceivedBlockInfo(streamId, numRecords, metadataOption, blockStoreResult)
     trackerEndpoint.askWithRetry[Boolean](AddBlock(blockInfo))
     logDebug(s"Reported block $blockId")
@@ -167,9 +170,9 @@ private[streaming] class ReceiverSupervisorImpl(
     env.rpcEnv.stop(endpoint)
   }
 
-  override protected def onReceiverStart() {
+  override protected def onReceiverStart(): Boolean = {
     val msg = RegisterReceiver(
-      streamId, receiver.getClass.getSimpleName, Utils.localHostName(), endpoint)
+      streamId, receiver.getClass.getSimpleName, hostPort, endpoint)
     trackerEndpoint.askWithRetry[Boolean](msg)
   }
 

@@ -79,3 +79,20 @@ object Window {
   }
 
 }
+
+/**
+ * :: Experimental ::
+ * Utility functions for defining window in DataFrames.
+ *
+ * {{{
+ *   // PARTITION BY country ORDER BY date ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+ *   Window.partitionBy("country").orderBy("date").rowsBetween(Long.MinValue, 0)
+ *
+ *   // PARTITION BY country ORDER BY date ROWS BETWEEN 3 PRECEDING AND 3 FOLLOWING
+ *   Window.partitionBy("country").orderBy("date").rowsBetween(-3, 3)
+ * }}}
+ *
+ * @since 1.4.0
+ */
+@Experimental
+class Window private()  // So we can see Window in JavaDoc.

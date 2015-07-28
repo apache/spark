@@ -23,7 +23,6 @@ import scala.collection.mutable.ArrayBuffer
 
 import com.google.common.base.Charsets.UTF_8
 import com.google.common.io.ByteStreams
-import org.scalatest.FunSuite
 import org.scalatest.Matchers
 import org.scalatest.concurrent.Timeouts
 import org.scalatest.time.SpanSugar._
@@ -35,7 +34,12 @@ import org.apache.spark.util.{ResetSystemProperties, Utils}
 
 // Note: this suite mixes in ResetSystemProperties because SparkSubmit.main() sets a bunch
 // of properties that neeed to be cleared after tests.
-class SparkSubmitSuite extends FunSuite with Matchers with ResetSystemProperties with Timeouts {
+class SparkSubmitSuite
+  extends SparkFunSuite
+  with Matchers
+  with ResetSystemProperties
+  with Timeouts {
+
   def beforeAll() {
     System.setProperty("spark.testing", "true")
   }
@@ -47,9 +51,11 @@ class SparkSubmitSuite extends FunSuite with Matchers with ResetSystemProperties
   /** Simple PrintStream that reads data into a buffer */
   private class BufferPrintStream extends PrintStream(noOpOutputStream) {
     var lineBuffer = ArrayBuffer[String]()
+    // scalastyle:off println
     override def println(line: String) {
       lineBuffer += line
     }
+    // scalastyle:on println
   }
 
   /** Returns true if the script exits and the given search string is printed. */
@@ -58,7 +64,7 @@ class SparkSubmitSuite extends FunSuite with Matchers with ResetSystemProperties
     SparkSubmit.printStream = printStream
 
     @volatile var exitedCleanly = false
-    SparkSubmit.exitFn = () => exitedCleanly = true
+    SparkSubmit.exitFn = (_) => exitedCleanly = true
 
     val thread = new Thread {
       override def run() = try {
@@ -77,6 +83,7 @@ class SparkSubmitSuite extends FunSuite with Matchers with ResetSystemProperties
     }
   }
 
+  // scalastyle:off println
   test("prints usage on empty input") {
     testPrematureExit(Array[String](), "Usage: spark-submit")
   }
@@ -239,7 +246,7 @@ class SparkSubmitSuite extends FunSuite with Matchers with ResetSystemProperties
       mainClass should be ("org.apache.spark.deploy.Client")
     }
     classpath should have size 0
-    sysProps should have size 8
+    sysProps should have size 9
     sysProps.keys should contain ("SPARK_SUBMIT")
     sysProps.keys should contain ("spark.master")
     sysProps.keys should contain ("spark.app.name")
@@ -248,6 +255,7 @@ class SparkSubmitSuite extends FunSuite with Matchers with ResetSystemProperties
     sysProps.keys should contain ("spark.driver.cores")
     sysProps.keys should contain ("spark.driver.supervise")
     sysProps.keys should contain ("spark.shuffle.spill")
+    sysProps.keys should contain ("spark.submit.deployMode")
     sysProps("spark.shuffle.spill") should be ("false")
   }
 
@@ -321,7 +329,7 @@ class SparkSubmitSuite extends FunSuite with Matchers with ResetSystemProperties
     runSparkSubmit(args)
   }
 
-  ignore("includes jars passed in through --jars") {
+  test("includes jars passed in through --jars") {
     val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
     val jar1 = TestUtils.createJarWithClasses(Seq("SparkSubmitClassA"))
     val jar2 = TestUtils.createJarWithClasses(Seq("SparkSubmitClassB"))
@@ -329,14 +337,14 @@ class SparkSubmitSuite extends FunSuite with Matchers with ResetSystemProperties
     val args = Seq(
       "--class", JarCreationTest.getClass.getName.stripSuffix("$"),
       "--name", "testApp",
-      "--master", "local-cluster[2,1,512]",
+      "--master", "local-cluster[2,1,1024]",
       "--jars", jarsString,
       unusedJar.toString, "SparkSubmitClassA", "SparkSubmitClassB")
     runSparkSubmit(args)
   }
 
   // SPARK-7287
-  ignore("includes jars passed in through --packages") {
+  test("includes jars passed in through --packages") {
     val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
     val main = MavenCoordinate("my.great.lib", "mylib", "0.1")
     val dep = MavenCoordinate("my.great.dep", "mylib", "0.1")
@@ -344,7 +352,7 @@ class SparkSubmitSuite extends FunSuite with Matchers with ResetSystemProperties
       val args = Seq(
         "--class", JarCreationTest.getClass.getName.stripSuffix("$"),
         "--name", "testApp",
-        "--master", "local-cluster[2,1,512]",
+        "--master", "local-cluster[2,1,1024]",
         "--packages", Seq(main, dep).mkString(","),
         "--repositories", repo,
         "--conf", "spark.ui.enabled=false",
@@ -487,6 +495,7 @@ class SparkSubmitSuite extends FunSuite with Matchers with ResetSystemProperties
       appArgs.executorMemory should be ("2.3g")
     }
   }
+  // scalastyle:on println
 
   // NOTE: This is an expensive operation in terms of time (10 seconds+). Use sparingly.
   private def runSparkSubmit(args: Seq[String]): Unit = {
@@ -495,9 +504,16 @@ class SparkSubmitSuite extends FunSuite with Matchers with ResetSystemProperties
       Seq("./bin/spark-submit") ++ args,
       new File(sparkHome),
       Map("SPARK_TESTING" -> "1", "SPARK_HOME" -> sparkHome))
-    failAfter(60 seconds) { process.waitFor() }
-    // Ensure we still kill the process in case it timed out
-    process.destroy()
+
+    try {
+      val exitCode = failAfter(60 seconds) { process.waitFor() }
+      if (exitCode != 0) {
+        fail(s"Process returned with exit code $exitCode. See the log4j logs for more detail.")
+      }
+    } finally {
+      // Ensure we still kill the process in case it timed out
+      process.destroy()
+    }
   }
 
   private def forConfDir(defaults: Map[String, String]) (f: String => Unit) = {
@@ -525,8 +541,8 @@ object JarCreationTest extends Logging {
     val result = sc.makeRDD(1 to 100, 10).mapPartitions { x =>
       var exception: String = null
       try {
-        Class.forName(args(0), true, Thread.currentThread().getContextClassLoader)
-        Class.forName(args(1), true, Thread.currentThread().getContextClassLoader)
+        Utils.classForName(args(0))
+        Utils.classForName(args(1))
       } catch {
         case t: Throwable =>
           exception = t + "\n" + t.getStackTraceString
@@ -537,6 +553,7 @@ object JarCreationTest extends Logging {
     if (result.nonEmpty) {
       throw new Exception("Could not load user class from jar:\n" + result(0))
     }
+    sc.stop()
   }
 }
 
@@ -562,6 +579,7 @@ object SimpleApplicationTest {
           s"Master had $config=$masterValue but executor had $config=$executorValue")
       }
     }
+    sc.stop()
   }
 }
 

@@ -20,12 +20,13 @@ package org.apache.spark.sql.hive
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hadoop.hive.serde.serdeConstants
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.hive.client.{ManagedTable, HiveColumn, ExternalTable, HiveTable}
-import org.scalatest.{BeforeAndAfterAll, FunSuite}
+import org.scalatest.BeforeAndAfterAll
 
 
-class HiveQlSuite extends FunSuite with BeforeAndAfterAll {
+class HiveQlSuite extends SparkFunSuite with BeforeAndAfterAll {
   override def beforeAll() {
     if (SessionState.get() == null) {
       SessionState.start(new HiveConf())

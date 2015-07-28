@@ -17,12 +17,12 @@
 
 package org.apache.spark.storage
 
-import org.scalatest.FunSuite
+import org.apache.spark.SparkFunSuite
 
 /**
  * Test various functionalities in StorageUtils and StorageStatus.
  */
-class StorageSuite extends FunSuite {
+class StorageSuite extends SparkFunSuite {
   private val memAndDisk = StorageLevel.MEMORY_AND_DISK
 
   // For testing add, update, and remove (for non-RDD blocks)

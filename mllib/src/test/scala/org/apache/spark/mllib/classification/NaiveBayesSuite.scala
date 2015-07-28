@@ -19,14 +19,14 @@ package org.apache.spark.mllib.classification
 
 import scala.util.Random
 
-import breeze.linalg.{DenseMatrix => BDM, DenseVector => BDV, argmax => brzArgmax, sum => brzSum}
+import breeze.linalg.{DenseMatrix => BDM, DenseVector => BDV, Vector => BV}
 import breeze.stats.distributions.{Multinomial => BrzMultinomial}
-import org.scalatest.FunSuite
 
-import org.apache.spark.SparkException
-import org.apache.spark.mllib.linalg.Vectors
+import org.apache.spark.{SparkException, SparkFunSuite}
+import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.util.{LocalClusterSparkContext, MLlibTestSparkContext}
+import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.util.Utils
 
 object NaiveBayesSuite {
@@ -86,7 +86,7 @@ object NaiveBayesSuite {
     pi = Array(0.2, 0.8), theta = Array(Array(0.1, 0.3, 0.6), Array(0.2, 0.4, 0.4)), Multinomial)
 }
 
-class NaiveBayesSuite extends FunSuite with MLlibTestSparkContext {
+class NaiveBayesSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   import NaiveBayes.{Multinomial, Bernoulli}
 
@@ -155,6 +155,29 @@ class NaiveBayesSuite extends FunSuite with MLlibTestSparkContext {
 
     // Test prediction on Array.
     validatePrediction(validationData.map(row => model.predict(row.features)), validationData)
+
+    // Test posteriors
+    validationData.map(_.features).foreach { features =>
+      val predicted = model.predictProbabilities(features).toArray
+      assert(predicted.sum ~== 1.0 relTol 1.0e-10)
+      val expected = expectedMultinomialProbabilities(model, features)
+      expected.zip(predicted).foreach { case (e, p) => assert(e ~== p relTol 1.0e-10) }
+    }
+  }
+
+  /**
+   * @param model Multinomial Naive Bayes model
+   * @param testData input to compute posterior probabilities for
+   * @return posterior class probabilities (in order of labels) for input
+   */
+  private def expectedMultinomialProbabilities(model: NaiveBayesModel, testData: Vector) = {
+    val piVector = new BDV(model.pi)
+    // model.theta is row-major; treat it as col-major representation of transpose, and transpose:
+    val thetaMatrix = new BDM(model.theta(0).length, model.theta.length, model.theta.flatten).t
+    val logClassProbs: BV[Double] = piVector + (thetaMatrix * testData.toBreeze)
+    val classProbs = logClassProbs.toArray.map(math.exp)
+    val classProbsSum = classProbs.sum
+    classProbs.map(_ / classProbsSum)
   }
 
   test("Naive Bayes Bernoulli") {
@@ -163,7 +186,7 @@ class NaiveBayesSuite extends FunSuite with MLlibTestSparkContext {
     val theta = Array(
       Array(0.50, 0.02, 0.02, 0.02, 0.02, 0.02, 0.02, 0.02, 0.02, 0.02, 0.02, 0.40), // label 0
       Array(0.02, 0.70, 0.10, 0.02, 0.02, 0.02, 0.02, 0.02, 0.02, 0.02, 0.02, 0.02), // label 1
-      Array(0.02, 0.02, 0.60, 0.02,  0.02, 0.02, 0.02, 0.02, 0.02, 0.02, 0.02, 0.30)  // label 2
+      Array(0.02, 0.02, 0.60, 0.02, 0.02, 0.02, 0.02, 0.02, 0.02, 0.02, 0.02, 0.30)  // label 2
     ).map(_.map(math.log))
 
     val testData = NaiveBayesSuite.generateNaiveBayesInput(
@@ -183,6 +206,33 @@ class NaiveBayesSuite extends FunSuite with MLlibTestSparkContext {
 
     // Test prediction on Array.
     validatePrediction(validationData.map(row => model.predict(row.features)), validationData)
+
+    // Test posteriors
+    validationData.map(_.features).foreach { features =>
+      val predicted = model.predictProbabilities(features).toArray
+      assert(predicted.sum ~== 1.0 relTol 1.0e-10)
+      val expected = expectedBernoulliProbabilities(model, features)
+      expected.zip(predicted).foreach { case (e, p) => assert(e ~== p relTol 1.0e-10) }
+    }
+  }
+
+  /**
+   * @param model Bernoulli Naive Bayes model
+   * @param testData input to compute posterior probabilities for
+   * @return posterior class probabilities (in order of labels) for input
+   */
+  private def expectedBernoulliProbabilities(model: NaiveBayesModel, testData: Vector) = {
+    val piVector = new BDV(model.pi)
+    val thetaMatrix = new BDM(model.theta(0).length, model.theta.length, model.theta.flatten).t
+    val negThetaMatrix = new BDM(model.theta(0).length, model.theta.length,
+      model.theta.flatten.map(v => math.log(1.0 - math.exp(v)))).t
+    val testBreeze = testData.toBreeze
+    val negTestBreeze = new BDV(Array.fill(testBreeze.size)(1.0)) - testBreeze
+    val piTheta: BV[Double] = piVector + (thetaMatrix * testBreeze)
+    val logClassProbs: BV[Double] = piTheta + (negThetaMatrix * negTestBreeze)
+    val classProbs = logClassProbs.toArray.map(math.exp)
+    val classProbsSum = classProbs.sum
+    classProbs.map(_ / classProbsSum)
   }
 
   test("detect negative values") {
@@ -286,7 +336,7 @@ class NaiveBayesSuite extends FunSuite with MLlibTestSparkContext {
   }
 }
 
-class NaiveBayesClusterSuite extends FunSuite with LocalClusterSparkContext {
+class NaiveBayesClusterSuite extends SparkFunSuite with LocalClusterSparkContext {
 
   test("task size should be small in both training and prediction") {
     val m = 10

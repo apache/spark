@@ -17,10 +17,9 @@
 
 package org.apache.spark.serializer
 
-import org.apache.spark.SparkConf
-import org.scalatest.FunSuite
+import org.apache.spark.{SparkConf, SparkFunSuite}
 
-class JavaSerializerSuite extends FunSuite {
+class JavaSerializerSuite extends SparkFunSuite {
   test("JavaSerializer instances are serializable") {
     val serializer = new JavaSerializer(new SparkConf())
     val instance = serializer.newInstance()

@@ -20,9 +20,10 @@ package org.apache.spark.sql.execution.stat
 import scala.collection.mutable.{Map => MutableMap}
 
 import org.apache.spark.Logging
-import org.apache.spark.sql.{Column, DataFrame, Row}
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
-import org.apache.spark.sql.types.{ArrayType, StructField, StructType}
+import org.apache.spark.sql.types.{DataType, ArrayType, StructField, StructType}
+import org.apache.spark.sql.{Column, DataFrame}
 
 private[sql] object FrequentItems extends Logging {
 
@@ -62,7 +63,7 @@ private[sql] object FrequentItems extends Logging {
   }
 
   /**
-   * Finding frequent items for columns, possibly with false positives. Using the 
+   * Finding frequent items for columns, possibly with false positives. Using the
    * frequent element count algorithm described in
    * [[http://dx.doi.org/10.1145/762471.762473, proposed by Karp, Schenker, and Papadimitriou]].
    * The `support` should be greater than 1e-4.
@@ -75,7 +76,7 @@ private[sql] object FrequentItems extends Logging {
    * @return A Local DataFrame with the Array of frequent items for each column.
    */
   private[sql] def singlePassFreqItems(
-      df: DataFrame, 
+      df: DataFrame,
       cols: Seq[String],
       support: Double): DataFrame = {
     require(support >= 1e-4, s"support ($support) must be greater than 1e-4.")
@@ -84,17 +85,17 @@ private[sql] object FrequentItems extends Logging {
     val sizeOfMap = (1 / support).toInt
     val countMaps = Seq.tabulate(numCols)(i => new FreqItemCounter(sizeOfMap))
     val originalSchema = df.schema
-    val colInfo = cols.map { name =>
+    val colInfo: Array[(String, DataType)] = cols.map { name =>
       val index = originalSchema.fieldIndex(name)
       (name, originalSchema.fields(index).dataType)
-    }
-    
-    val freqItems = df.select(cols.map(Column(_)):_*).rdd.aggregate(countMaps)(
+    }.toArray
+
+    val freqItems = df.select(cols.map(Column(_)) : _*).queryExecution.toRdd.aggregate(countMaps)(
       seqOp = (counts, row) => {
         var i = 0
         while (i < numCols) {
           val thisMap = counts(i)
-          val key = row.get(i)
+          val key = row.get(i, colInfo(i)._2)
           thisMap.add(key, 1L)
           i += 1
         }
@@ -110,7 +111,7 @@ private[sql] object FrequentItems extends Logging {
       }
     )
     val justItems = freqItems.map(m => m.baseMap.keys.toSeq)
-    val resultRow = Row(justItems:_*)
+    val resultRow = InternalRow(justItems : _*)
     // append frequent Items to the column name for easy debugging
     val outputCols = colInfo.map { v =>
       StructField(v._1 + "_freqItems", ArrayType(v._2, false))

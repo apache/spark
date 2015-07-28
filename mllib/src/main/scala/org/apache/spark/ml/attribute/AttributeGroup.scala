@@ -19,10 +19,12 @@ package org.apache.spark.ml.attribute
 
 import scala.collection.mutable.ArrayBuffer
 
+import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.mllib.linalg.VectorUDT
 import org.apache.spark.sql.types.{Metadata, MetadataBuilder, StructField}
 
 /**
+ * :: DeveloperApi ::
  * Attributes that describe a vector ML column.
  *
  * @param name name of the attribute group (the ML column name)
@@ -31,6 +33,7 @@ import org.apache.spark.sql.types.{Metadata, MetadataBuilder, StructField}
  * @param attrs optional array of attributes. Attribute will be copied with their corresponding
  *              indices in the array.
  */
+@DeveloperApi
 class AttributeGroup private (
     val name: String,
     val numAttributes: Option[Int],
@@ -182,7 +185,11 @@ class AttributeGroup private (
   }
 }
 
-/** Factory methods to create attribute groups. */
+/**
+ * :: DeveloperApi ::
+ * Factory methods to create attribute groups.
+ */
+@DeveloperApi
 object AttributeGroup {
 
   import AttributeKeys._

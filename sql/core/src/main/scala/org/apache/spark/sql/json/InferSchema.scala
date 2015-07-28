@@ -43,7 +43,7 @@ private[sql] object InferSchema {
     }
 
     // perform schema inference on each row and merge afterwards
-    schemaData.mapPartitions { iter =>
+    val rootType = schemaData.mapPartitions { iter =>
       val factory = new JsonFactory()
       iter.map { row =>
         try {
@@ -55,8 +55,13 @@ private[sql] object InferSchema {
             StructType(Seq(StructField(columnNameOfCorruptRecords, StringType)))
         }
       }
-    }.treeAggregate[DataType](StructType(Seq()))(compatibleRootType, compatibleRootType) match {
-      case st: StructType => nullTypeToStringType(st)
+    }.treeAggregate[DataType](StructType(Seq()))(compatibleRootType, compatibleRootType)
+
+    canonicalizeType(rootType) match {
+      case Some(st: StructType) => st
+      case _ =>
+        // canonicalizeType erases all empty structs, including the only one we want to keep
+        StructType(Seq())
     }
   }
 
@@ -108,7 +113,7 @@ private[sql] object InferSchema {
           case INT | LONG => LongType
           // Since we do not have a data type backed by BigInteger,
           // when we see a Java BigInteger, we use DecimalType.
-          case BIG_INTEGER | BIG_DECIMAL => DecimalType.Unlimited
+          case BIG_INTEGER | BIG_DECIMAL => DecimalType.SYSTEM_DEFAULT
           case FLOAT | DOUBLE => DoubleType
         }
 
@@ -116,22 +121,35 @@ private[sql] object InferSchema {
     }
   }
 
-  private def nullTypeToStringType(struct: StructType): StructType = {
-    val fields = struct.fields.map {
-      case StructField(fieldName, dataType, nullable, _) =>
-        val newType = dataType match {
-          case NullType => StringType
-          case ArrayType(NullType, containsNull) => ArrayType(StringType, containsNull)
-          case ArrayType(struct: StructType, containsNull) =>
-            ArrayType(nullTypeToStringType(struct), containsNull)
-          case struct: StructType =>nullTypeToStringType(struct)
-          case other: DataType => other
-        }
+  /**
+   * Convert NullType to StringType and remove StructTypes with no fields
+   */
+  private def canonicalizeType: DataType => Option[DataType] = {
+    case at@ArrayType(elementType, _) =>
+      for {
+        canonicalType <- canonicalizeType(elementType)
+      } yield {
+        at.copy(canonicalType)
+      }
 
-        StructField(fieldName, newType, nullable)
-    }
+    case StructType(fields) =>
+      val canonicalFields = for {
+        field <- fields
+        if field.name.nonEmpty
+        canonicalType <- canonicalizeType(field.dataType)
+      } yield {
+        field.copy(dataType = canonicalType)
+      }
 
-    StructType(fields)
+      if (canonicalFields.nonEmpty) {
+        Some(StructType(canonicalFields))
+      } else {
+        // per SPARK-8093: empty structs should be deleted
+        None
+      }
+
+    case NullType => Some(StringType)
+    case other => Some(other)
   }
 
   /**
@@ -147,11 +165,16 @@ private[sql] object InferSchema {
    * Returns the most general data type for two given data types.
    */
   private[json] def compatibleType(t1: DataType, t2: DataType): DataType = {
-    HiveTypeCoercion.findTightestCommonType(t1, t2).getOrElse {
+    HiveTypeCoercion.findTightestCommonTypeOfTwo(t1, t2).getOrElse {
       // t1 or t2 is a StructType, ArrayType, or an unexpected type.
       (t1, t2) match {
-        case (other: DataType, NullType) => other
-        case (NullType, other: DataType) => other
+        // Double support larger range than fixed decimal, DecimalType.Maximum should be enough
+        // in most case, also have better precision.
+        case (DoubleType, t: DecimalType) =>
+          if (t == DecimalType.SYSTEM_DEFAULT) t else DoubleType
+        case (t: DecimalType, DoubleType) =>
+          if (t == DecimalType.SYSTEM_DEFAULT) t else DoubleType
+
         case (StructType(fields1), StructType(fields2)) =>
           val newFields = (fields1 ++ fields2).groupBy(field => field.name).map {
             case (name, fieldTypes) =>

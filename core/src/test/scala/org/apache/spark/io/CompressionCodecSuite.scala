@@ -20,11 +20,10 @@ package org.apache.spark.io
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
 
 import com.google.common.io.ByteStreams
-import org.scalatest.FunSuite
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{SparkConf, SparkFunSuite}
 
-class CompressionCodecSuite extends FunSuite {
+class CompressionCodecSuite extends SparkFunSuite {
   val conf = new SparkConf(false)
 
   def testCodec(codec: CompressionCodec) {

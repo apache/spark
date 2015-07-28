@@ -156,6 +156,11 @@ class MyJavaLogisticRegression
     // Create a model, and return it.
     return new MyJavaLogisticRegressionModel(uid(), weights).setParent(this);
   }
+
+  @Override
+  public MyJavaLogisticRegression copy(ParamMap extra) {
+    return defaultCopy(extra);
+  }
 }
 
 /**

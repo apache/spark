@@ -93,7 +93,7 @@ private[ui] class StageTableBase(
     }
 
     val nameLinkUri = s"$basePathUri/stages/stage?id=${s.stageId}&attempt=${s.attemptId}"
-    val nameLink = <a href={nameLinkUri}>{s.name}</a>
+    val nameLink = <a href={nameLinkUri} class="name-link">{s.name}</a>
 
     val cachedRddInfos = s.rddInfos.filter(_.numCachedPartitions > 0)
     val details = if (s.details.nonEmpty) {

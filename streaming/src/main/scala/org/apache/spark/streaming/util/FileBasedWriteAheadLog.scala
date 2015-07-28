@@ -200,7 +200,7 @@ private[streaming] class FileBasedWriteAheadLog(
   /** Initialize the log directory or recover existing logs inside the directory */
   private def initializeOrRecover(): Unit = synchronized {
     val logDirectoryPath = new Path(logDirectory)
-    val fileSystem =  HdfsUtils.getFileSystemForPath(logDirectoryPath, hadoopConf)
+    val fileSystem = HdfsUtils.getFileSystemForPath(logDirectoryPath, hadoopConf)
 
     if (fileSystem.exists(logDirectoryPath) && fileSystem.getFileStatus(logDirectoryPath).isDir) {
       val logFileInfo = logFilesTologInfo(fileSystem.listStatus(logDirectoryPath).map { _.getPath })

@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.joins
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.execution.{BinaryNode, SparkPlan}
@@ -38,6 +39,9 @@ case class LeftSemiJoinBNL(
 
   override def output: Seq[Attribute] = left.output
 
+  override def outputsUnsafeRows: Boolean = streamed.outputsUnsafeRows
+  override def canProcessUnsafeRows: Boolean = true
+
   /** The Streamed Relation */
   override def left: SparkPlan = streamed
 
@@ -47,7 +51,7 @@ case class LeftSemiJoinBNL(
   @transient private lazy val boundCondition =
     newPredicate(condition.getOrElse(Literal(true)), left.output ++ right.output)
 
-  protected override def doExecute(): RDD[Row] = {
+  protected override def doExecute(): RDD[InternalRow] = {
     val broadcastedRelation =
       sparkContext.broadcast(broadcast.execute().map(_.copy()).collect().toIndexedSeq)
 

@@ -18,11 +18,12 @@
 # Utility functions to deserialize objects from Java.
 
 # Type mapping from Java to R
-# 
+#
 # void -> NULL
 # Int -> integer
 # String -> character
 # Boolean -> logical
+# Float -> double
 # Double -> double
 # Long -> double
 # Array[Byte] -> raw
@@ -101,11 +102,11 @@ readList <- function(con) {
 
 readRaw <- function(con) {
   dataLen <- readInt(con)
-  data <- readBin(con, raw(), as.integer(dataLen), endian = "big")
+  readBin(con, raw(), as.integer(dataLen), endian = "big")
 }
 
 readRawLen <- function(con, dataLen) {
-  data <- readBin(con, raw(), as.integer(dataLen), endian = "big")
+  readBin(con, raw(), as.integer(dataLen), endian = "big")
 }
 
 readDeserialize <- function(con) {

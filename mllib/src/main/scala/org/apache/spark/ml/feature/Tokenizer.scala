@@ -17,19 +17,19 @@
 
 package org.apache.spark.ml.feature
 
-import org.apache.spark.annotation.AlphaComponent
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.ml.UnaryTransformer
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.util.Identifiable
 import org.apache.spark.sql.types.{ArrayType, DataType, StringType}
 
 /**
- * :: AlphaComponent ::
+ * :: Experimental ::
  * A tokenizer that converts the input string to lowercase and then splits it by white spaces.
  *
  * @see [[RegexTokenizer]]
  */
-@AlphaComponent
+@Experimental
 class Tokenizer(override val uid: String) extends UnaryTransformer[String, Seq[String], Tokenizer] {
 
   def this() = this(Identifiable.randomUID("tok"))
@@ -42,17 +42,19 @@ class Tokenizer(override val uid: String) extends UnaryTransformer[String, Seq[S
     require(inputType == StringType, s"Input type must be string type but got $inputType.")
   }
 
-  override protected def outputDataType: DataType = new ArrayType(StringType, false)
+  override protected def outputDataType: DataType = new ArrayType(StringType, true)
+
+  override def copy(extra: ParamMap): Tokenizer = defaultCopy(extra)
 }
 
 /**
- * :: AlphaComponent ::
+ * :: Experimental ::
  * A regex based tokenizer that extracts tokens either by using the provided regex pattern to split
  * the text (default) or repeatedly matching the regex (if `gaps` is true).
  * Optional parameters also allow filtering tokens using a minimal length.
  * It returns an array of strings that can be empty.
  */
-@AlphaComponent
+@Experimental
 class RegexTokenizer(override val uid: String)
   extends UnaryTransformer[String, Seq[String], RegexTokenizer] {
 
@@ -111,5 +113,7 @@ class RegexTokenizer(override val uid: String)
     require(inputType == StringType, s"Input type must be string type but got $inputType.")
   }
 
-  override protected def outputDataType: DataType = new ArrayType(StringType, false)
+  override protected def outputDataType: DataType = new ArrayType(StringType, true)
+
+  override def copy(extra: ParamMap): RegexTokenizer = defaultCopy(extra)
 }

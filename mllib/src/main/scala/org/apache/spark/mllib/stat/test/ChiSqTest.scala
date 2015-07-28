@@ -196,7 +196,7 @@ private[stat] object ChiSqTest extends Logging {
    * Pearson's independence test on the input contingency matrix.
    * TODO: optimize for SparseMatrix when it becomes supported.
    */
-  def chiSquaredMatrix(counts: Matrix, methodName:String = PEARSON.name): ChiSqTestResult = {
+  def chiSquaredMatrix(counts: Matrix, methodName: String = PEARSON.name): ChiSqTestResult = {
     val method = methodFromString(methodName)
     val numRows = counts.numRows
     val numCols = counts.numCols

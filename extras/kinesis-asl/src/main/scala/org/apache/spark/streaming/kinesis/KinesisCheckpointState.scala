@@ -23,20 +23,20 @@ import org.apache.spark.util.{Clock, ManualClock, SystemClock}
 /**
  * This is a helper class for managing checkpoint clocks.
  *
- * @param checkpointInterval 
+ * @param checkpointInterval
  * @param currentClock.  Default to current SystemClock if none is passed in (mocking purposes)
  */
 private[kinesis] class KinesisCheckpointState(
-    checkpointInterval: Duration, 
+    checkpointInterval: Duration,
     currentClock: Clock = new SystemClock())
   extends Logging {
-  
+
   /* Initialize the checkpoint clock using the given currentClock + checkpointInterval millis */
   val checkpointClock = new ManualClock()
   checkpointClock.setTime(currentClock.getTimeMillis() + checkpointInterval.milliseconds)
 
   /**
-   * Check if it's time to checkpoint based on the current time and the derived time 
+   * Check if it's time to checkpoint based on the current time and the derived time
    *   for the next checkpoint
    *
    * @return true if it's time to checkpoint

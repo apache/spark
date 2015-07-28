@@ -17,7 +17,7 @@
 
 package org.apache.spark.ml.feature
 
-import org.apache.spark.annotation.AlphaComponent
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.ml.Transformer
 import org.apache.spark.ml.attribute.BinaryAttribute
 import org.apache.spark.ml.param._
@@ -28,10 +28,10 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{DoubleType, StructType}
 
 /**
- * :: AlphaComponent ::
+ * :: Experimental ::
  * Binarize a column of continuous features given a threshold.
  */
-@AlphaComponent
+@Experimental
 final class Binarizer(override val uid: String)
   extends Transformer with HasInputCol with HasOutputCol {
 
@@ -83,4 +83,6 @@ final class Binarizer(override val uid: String)
     val outputFields = inputFields :+ attr.toStructField()
     StructType(outputFields)
   }
+
+  override def copy(extra: ParamMap): Binarizer = defaultCopy(extra)
 }

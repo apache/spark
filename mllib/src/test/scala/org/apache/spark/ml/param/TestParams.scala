@@ -38,7 +38,5 @@ class TestParams(override val uid: String) extends Params with HasMaxIter with H
     require(isDefined(inputCol))
   }
 
-  override def copy(extra: ParamMap): TestParams = {
-    super.copy(extra).asInstanceOf[TestParams]
-  }
+  override def copy(extra: ParamMap): TestParams = defaultCopy(extra)
 }

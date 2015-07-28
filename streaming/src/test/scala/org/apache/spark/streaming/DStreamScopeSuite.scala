@@ -17,9 +17,9 @@
 
 package org.apache.spark.streaming
 
-import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll, FunSuite}
+import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll}
 
-import org.apache.spark.SparkContext
+import org.apache.spark.{SparkContext, SparkFunSuite}
 import org.apache.spark.rdd.RDDOperationScope
 import org.apache.spark.streaming.dstream.DStream
 import org.apache.spark.streaming.ui.UIUtils
@@ -27,7 +27,7 @@ import org.apache.spark.streaming.ui.UIUtils
 /**
  * Tests whether scope information is passed from DStream operations to RDDs correctly.
  */
-class DStreamScopeSuite extends FunSuite with BeforeAndAfter with BeforeAndAfterAll {
+class DStreamScopeSuite extends SparkFunSuite with BeforeAndAfter with BeforeAndAfterAll {
   private var ssc: StreamingContext = null
   private val batchDuration: Duration = Seconds(1)
 

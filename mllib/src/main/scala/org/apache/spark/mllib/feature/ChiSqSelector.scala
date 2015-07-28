@@ -108,7 +108,7 @@ class ChiSqSelectorModel (val selectedFeatures: Array[Int]) extends VectorTransf
  *                       (ordered by statistic value descending)
  */
 @Experimental
-class ChiSqSelector (val numTopFeatures: Int) {
+class ChiSqSelector (val numTopFeatures: Int) extends Serializable {
 
   /**
    * Returns a ChiSquared feature selector.

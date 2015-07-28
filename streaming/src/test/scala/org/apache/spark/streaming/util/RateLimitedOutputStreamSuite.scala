@@ -20,9 +20,9 @@ package org.apache.spark.streaming.util
 import java.io.ByteArrayOutputStream
 import java.util.concurrent.TimeUnit._
 
-import org.scalatest.FunSuite
+import org.apache.spark.SparkFunSuite
 
-class RateLimitedOutputStreamSuite extends FunSuite {
+class RateLimitedOutputStreamSuite extends SparkFunSuite {
 
   private def benchmark[U](f: => U): Long = {
     val start = System.nanoTime

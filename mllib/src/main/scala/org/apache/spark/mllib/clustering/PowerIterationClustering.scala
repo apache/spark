@@ -121,7 +121,7 @@ class PowerIterationClustering private[clustering] (
   import org.apache.spark.mllib.clustering.PowerIterationClustering._
 
   /** Constructs a PIC instance with default parameters: {k: 2, maxIterations: 100,
-   *  initMode: "random"}. 
+   *  initMode: "random"}.
    */
   def this() = this(k = 2, maxIterations = 100, initMode = "random")
 
@@ -151,6 +151,27 @@ class PowerIterationClustering private[clustering] (
       case _ => throw new IllegalArgumentException("Invalid initialization mode: " + mode)
     }
     this
+  }
+
+  /**
+   * Run the PIC algorithm on Graph.
+   *
+   * @param graph an affinity matrix represented as graph, which is the matrix A in the PIC paper.
+   *              The similarity s,,ij,, represented as the edge between vertices (i, j) must
+   *              be nonnegative. This is a symmetric matrix and hence s,,ij,, = s,,ji,,. For
+   *              any (i, j) with nonzero similarity, there should be either (i, j, s,,ij,,)
+   *              or (j, i, s,,ji,,) in the input. Tuples with i = j are ignored, because we
+   *              assume s,,ij,, = 0.0.
+   *
+   * @return a [[PowerIterationClusteringModel]] that contains the clustering result
+   */
+  def run(graph: Graph[Double, Double]): PowerIterationClusteringModel = {
+    val w = normalize(graph)
+    val w0 = initMode match {
+      case "random" => randomInit(w)
+      case "degree" => initDegreeVector(w)
+    }
+    pic(w0)
   }
 
   /**
@@ -213,6 +234,31 @@ object PowerIterationClustering extends Logging {
   case class Assignment(id: Long, cluster: Int)
 
   /**
+   * Normalizes the affinity graph (A) and returns the normalized affinity matrix (W).
+   */
+  private[clustering]
+  def normalize(graph: Graph[Double, Double]): Graph[Double, Double] = {
+    val vD = graph.aggregateMessages[Double](
+      sendMsg = ctx => {
+        val i = ctx.srcId
+        val j = ctx.dstId
+        val s = ctx.attr
+        if (s < 0.0) {
+          throw new SparkException("Similarity must be nonnegative but found s($i, $j) = $s.")
+        }
+        if (s > 0.0) {
+          ctx.sendToSrc(s)
+        }
+      },
+      mergeMsg = _ + _,
+      TripletFields.EdgeOnly)
+    GraphImpl.fromExistingRDDs(vD, graph.edges)
+      .mapTriplets(
+        e => e.attr / math.max(e.srcAttr, MLUtils.EPSILON),
+        TripletFields.Src)
+  }
+
+  /**
    * Normalizes the affinity matrix (A) by row sums and returns the normalized affinity matrix (W).
    */
   private[clustering]
@@ -243,7 +289,7 @@ object PowerIterationClustering extends Logging {
 
   /**
    * Generates random vertex properties (v0) to start power iteration.
-   * 
+   *
    * @param g a graph representing the normalized affinity matrix (W)
    * @return a graph with edges representing W and vertices representing a random vector
    *         with unit 1-norm
@@ -266,7 +312,7 @@ object PowerIterationClustering extends Logging {
    * Generates the degree vector as the vertex properties (v0) to start power iteration.
    * It is not exactly the node degrees but just the normalized sum similarities. Call it
    * as degree vector because it is used in the PIC paper.
-   * 
+   *
    * @param g a graph representing the normalized affinity matrix (W)
    * @return a graph with edges representing W and vertices representing the degree vector
    */
@@ -276,7 +322,7 @@ object PowerIterationClustering extends Logging {
     val v0 = g.vertices.mapValues(_ / sum)
     GraphImpl.fromExistingRDDs(VertexRDD(v0), g.edges)
   }
- 
+
   /**
    * Runs power iteration.
    * @param g input graph with edges representing the normalized affinity matrix (W) and vertices

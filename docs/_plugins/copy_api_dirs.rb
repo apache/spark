@@ -63,6 +63,51 @@ if not (ENV['SKIP_API'] == '1')
 
     puts "cp -r " + source + "/. " + dest
     cp_r(source + "/.", dest)
+
+    # Begin updating JavaDoc files for badge post-processing
+    puts "Updating JavaDoc files for badge post-processing"
+    js_script_start = '<script defer="defer" type="text/javascript" src="'
+    js_script_end = '.js"></script>'
+
+    javadoc_files = Dir["./" + dest + "/**/*.html"]
+    javadoc_files.each do |javadoc_file|
+      # Determine file depths to reference js files
+      slash_count = javadoc_file.count "/"
+      i = 3
+      path_to_js_file = ""
+      while (i < slash_count) do
+        path_to_js_file = path_to_js_file + "../"
+        i += 1
+      end
+
+      # Create script elements to reference js files
+      javadoc_jquery_script = js_script_start + path_to_js_file + "lib/jquery" + js_script_end;
+      javadoc_api_docs_script = js_script_start + path_to_js_file + "lib/api-javadocs" + js_script_end;
+      javadoc_script_elements = javadoc_jquery_script + javadoc_api_docs_script
+
+      # Add script elements to JavaDoc files
+      javadoc_file_content = File.open(javadoc_file, "r") { |f| f.read }
+      javadoc_file_content = javadoc_file_content.sub("</body>", javadoc_script_elements + "</body>")
+      File.open(javadoc_file, "w") { |f| f.puts(javadoc_file_content) }
+
+    end
+    # End updating JavaDoc files for badge post-processing
+
+    puts "Copying jquery.js from Scala API to Java API for page post-processing of badges"
+    jquery_src_file = "./api/scala/lib/jquery.js"
+    jquery_dest_file = "./api/java/lib/jquery.js"
+    mkdir_p("./api/java/lib")
+    cp(jquery_src_file, jquery_dest_file)
+
+    puts "Copying api_javadocs.js to Java API for page post-processing of badges"
+    api_javadocs_src_file = "./js/api-javadocs.js"
+    api_javadocs_dest_file = "./api/java/lib/api-javadocs.js"
+    cp(api_javadocs_src_file, api_javadocs_dest_file)
+
+    puts "Appending content of api-javadocs.css to JavaDoc stylesheet.css for badge styles"
+    css = File.readlines("./css/api-javadocs.css")
+    css_file = dest + "/stylesheet.css"
+    File.open(css_file, 'a') { |f| f.write("\n" + css.join()) }
   end
 
   # Build Sphinx docs for Python

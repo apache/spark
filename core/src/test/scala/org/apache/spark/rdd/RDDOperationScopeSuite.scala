@@ -17,14 +17,14 @@
 
 package org.apache.spark.rdd
 
-import org.scalatest.{BeforeAndAfter, FunSuite}
+import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.{TaskContext, Partition, SparkContext}
+import org.apache.spark.{Partition, SparkContext, SparkFunSuite, TaskContext}
 
 /**
  * Tests whether scopes are passed from the RDD operation to the RDDs correctly.
  */
-class RDDOperationScopeSuite extends FunSuite with BeforeAndAfter {
+class RDDOperationScopeSuite extends SparkFunSuite with BeforeAndAfter {
   private var sc: SparkContext = null
   private val scope1 = new RDDOperationScope("scope1")
   private val scope2 = new RDDOperationScope("scope2", Some(scope1))

@@ -20,10 +20,9 @@ package org.apache.spark.scheduler.cluster
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.hadoop.yarn.api.records.{ApplicationId, YarnApplicationState}
-import org.apache.hadoop.yarn.exceptions.ApplicationNotFoundException
 
 import org.apache.spark.{SparkException, Logging, SparkContext}
-import org.apache.spark.deploy.yarn.{Client, ClientArguments}
+import org.apache.spark.deploy.yarn.{Client, ClientArguments, YarnSparkHadoopUtil}
 import org.apache.spark.scheduler.TaskSchedulerImpl
 
 private[spark] class YarnClientSchedulerBackend(
@@ -41,7 +40,6 @@ private[spark] class YarnClientSchedulerBackend(
    * This waits until the application is running.
    */
   override def start() {
-    super.start()
     val driverHost = conf.get("spark.driver.host")
     val driverPort = conf.get("spark.driver.port")
     val hostport = driverHost + ":" + driverPort
@@ -56,7 +54,20 @@ private[spark] class YarnClientSchedulerBackend(
     totalExpectedExecutors = args.numExecutors
     client = new Client(args, conf)
     appId = client.submitApplication()
+
+    // SPARK-8687: Ensure all necessary properties have already been set before
+    // we initialize our driver scheduler backend, which serves these properties
+    // to the executors
+    super.start()
+
     waitForApplication()
+
+    // SPARK-8851: In yarn-client mode, the AM still does the credentials refresh. The driver
+    // reads the credentials from HDFS, just like the executors and updates its own credentials
+    // cache.
+    if (conf.contains("spark.yarn.credentials.file")) {
+      YarnSparkHadoopUtil.get.startExecutorDelegationTokenRenewer(conf)
+    }
     monitorThread = asyncMonitorApplication()
     monitorThread.start()
   }
@@ -76,7 +87,8 @@ private[spark] class YarnClientSchedulerBackend(
         ("--executor-memory", "SPARK_EXECUTOR_MEMORY", "spark.executor.memory"),
         ("--executor-cores", "SPARK_WORKER_CORES", "spark.executor.cores"),
         ("--executor-cores", "SPARK_EXECUTOR_CORES", "spark.executor.cores"),
-        ("--queue", "SPARK_YARN_QUEUE", "spark.yarn.queue")
+        ("--queue", "SPARK_YARN_QUEUE", "spark.yarn.queue"),
+        ("--py-files", null, "spark.submit.pyFiles")
       )
     // Warn against the following deprecated environment variables: env var -> suggestion
     val deprecatedEnvVars = Map(
@@ -86,7 +98,7 @@ private[spark] class YarnClientSchedulerBackend(
     optionTuples.foreach { case (optionName, envVar, sparkProp) =>
       if (sc.getConf.contains(sparkProp)) {
         extraArgs += (optionName, sc.getConf.get(sparkProp))
-      } else if (System.getenv(envVar) != null) {
+      } else if (envVar != null && System.getenv(envVar) != null) {
         extraArgs += (optionName, System.getenv(envVar))
         if (deprecatedEnvVars.contains(envVar)) {
           logWarning(s"NOTE: $envVar is deprecated. Use ${deprecatedEnvVars(envVar)} instead.")
@@ -147,9 +159,12 @@ private[spark] class YarnClientSchedulerBackend(
    */
   override def stop() {
     assert(client != null, "Attempted to stop this scheduler before starting it!")
-    monitorThread.interrupt()
+    if (monitorThread != null) {
+      monitorThread.interrupt()
+    }
     super.stop()
     client.stop()
+    YarnSparkHadoopUtil.get.stopExecutorDelegationTokenRenewer()
     logInfo("Stopped")
   }
 
