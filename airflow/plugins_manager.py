@@ -53,7 +53,7 @@ for root, dirs, files in os.walk(plugins_folder):
                     obj.validate()
                     plugins.append(obj)
 
-        except Exception() as e:
+        except Exception as e:
             logging.exception(e)
             logging.error('Failed to import plugin ' + filepath)
 
