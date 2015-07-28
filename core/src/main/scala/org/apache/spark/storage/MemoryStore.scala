@@ -484,7 +484,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
   }
 
   private def currentTaskAttemptId(): Long = {
-    Option(TaskContext.get()).map(_.taskAttemptId()).getOrElse(-1)
+    Option(TaskContext.get()).map(_.taskAttemptId()).getOrElse(-1L)
   }
 
   /**
