@@ -32,7 +32,7 @@ class LauncherBackendSuite extends SparkFunSuite with Matchers {
 
   private val tests = Seq(
     "local" -> "local",
-    "standalone/client" -> "local-cluster[1,1,512]")
+    "standalone/client" -> "local-cluster[1,1,1024]")
 
   tests.foreach { case (name, master) =>
     test(s"$name: launcher handle") {
