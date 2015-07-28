@@ -19,9 +19,11 @@ package org.apache.spark.sql.hive.execution
 
 import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
 
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SQLContext
-import org.apache.spark.sql.catalyst.expressions.AttributeReference
-import org.apache.spark.sql.execution.{SparkPlan, SparkPlanTest}
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
+import org.apache.spark.sql.execution.{UnaryNode, SparkPlan, SparkPlanTest}
 import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.types.StringType
 
@@ -71,4 +73,31 @@ class ScriptTransformationSuite extends SparkPlanTest {
       )(TestHive),
       rowsDf.collect())
   }
+
+  test("script transformation should not swallow errors from upstream pipelined operators") {
+    val rowsDf = Seq("a", "b", "c").map(Tuple1.apply).toDF("a")
+    val e = intercept[Exception] {
+      checkAnswer(
+        rowsDf,
+        (child: SparkPlan) => new ScriptTransformation(
+          input = Seq(rowsDf.col("a").expr),
+          script = "cat",
+          output = Seq(AttributeReference("a", StringType)()),
+          child = ExceptionInjectingOperator(child),
+          ioschema = serdeIOSchema
+        )(TestHive),
+        rowsDf.collect())
+    }
+    assert(e.getMessage === "intentional exception")
+  }
+}
+
+private case class ExceptionInjectingOperator(child: SparkPlan) extends UnaryNode {
+  override protected def doExecute(): RDD[InternalRow] = {
+    child.execute().map { x =>
+      Thread.sleep(1000) // This sleep gives the external process time to start.
+      throw new Exception("intentional exception")
+    }
+  }
+  override def output: Seq[Attribute] = child.output
 }
