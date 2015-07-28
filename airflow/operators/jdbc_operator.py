@@ -35,20 +35,15 @@ class JdbcOperator(BaseOperator):
     @apply_defaults
     def __init__(
             self, sql,
-            jdbc_url, jdbc_driver_name, jdbc_driver_loc,
-            conn_id='jdbc_default', autocommit=False,
+            jdbc_conn_id='jdbc_default', autocommit=False,
             *args, **kwargs):
         super(JdbcOperator, self).__init__(*args, **kwargs)
 
-        self.jdbc_url=jdbc_url
-        self.jdbc_driver_name=jdbc_driver_name
-        self.jdbc_driver_loc=jdbc_driver_loc
         self.sql = sql
-        self.conn_id = conn_id
+        self.jdbc_conn_id = jdbc_conn_id
         self.autocommit = autocommit
 
     def execute(self, context):
         logging.info('Executing: ' + self.sql)
-        self.hook = JdbcHook(conn_id=self.conn_id,jdbc_driver_loc=self.jdbc_driver_loc, jdbc_driver_name=self.jdbc_driver_name,jdbc_url=self.jdbc_url)
-        for row in self.hook.get_records(self.sql, self.autocommit):
-            logging.info('Result: ' + ','.join(map(str,row)) )
+        self.hook = JdbcHook(jdbc_conn_id=self.jdbc_conn_id)
+        self.hook.run(self.sql, self.autocommit)

@@ -1,0 +1,6 @@
+{% extends 'airflow/model_create.html' %}
+
+{% block tail %}
+  {{ super() }}
+    <script src="{{ url_for('static', filename='jdbc.js') }}"></script>
+{% endblock %}
