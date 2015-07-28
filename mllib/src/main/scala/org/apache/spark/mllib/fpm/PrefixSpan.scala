@@ -58,7 +58,7 @@ class PrefixSpan private (
    */
   def setMinSupport(minSupport: Double): this.type = {
     require(minSupport >= 0 && minSupport <= 1,
-      "The minimum support value must be between 0 and 1, including 0 and 1.")
+      "The minimum support value must be in [0, 1].")
     this.minSupport = minSupport
     this
   }
@@ -126,23 +126,17 @@ class PrefixSpan private (
   private def splitPrefixSuffixPairs(
       prefixSuffixPairs: RDD[(ArrayBuffer[Int], Array[Int])]):
   (RDD[(ArrayBuffer[Int], Array[Int])], RDD[(ArrayBuffer[Int], Array[Int])]) = {
-    val suffixSizeMap = prefixSuffixPairs
-      .map(x => (x._1, x._2.length))
-      .reduceByKey(_ + _)
-      .map(x => (x._2 <= maxProjectedDBSizeBeforeLocalProcessing, Set(x._1)))
-      .reduceByKey(_ ++ _)
-      .collect
-      .toMap
-    val small = if (suffixSizeMap.contains(true)) {
-      prefixSuffixPairs.filter(x => suffixSizeMap(true).contains(x._1))
-    } else {
-      prefixSuffixPairs.filter(x => false)
-    }
-    val large = if (suffixSizeMap.contains(false)) {
-      prefixSuffixPairs.filter(x => suffixSizeMap(false).contains(x._1))
-    } else {
-      prefixSuffixPairs.filter(x => false)
-    }
+    val prefixToSuffixSize = prefixSuffixPairs
+      .aggregateByKey(0)(
+        seqOp = { case (count, suffix) => count + suffix.length },
+        combOp = { _ + _ })
+    val smallPrefixes = prefixToSuffixSize
+      .filter(_._2 <= maxProjectedDBSizeBeforeLocalProcessing)
+      .map(_._1)
+      .collect()
+      .toSet
+    val small = prefixSuffixPairs.filter { case (prefix, _) => smallPrefixes.contains(prefix) }
+    val large = prefixSuffixPairs.filter { case (prefix, _) => !smallPrefixes.contains(prefix) }
     (small, large)
   }
 
