@@ -27,7 +27,7 @@ import org.apache.spark.sql.types.{IntegerType, DataType}
 /**
  * Expression that returns the current partition id of the Spark task.
  */
-private[sql] case object SparkPartitionID extends LeafExpression with Nondeterministic {
+private[sql] case class SparkPartitionID() extends LeafExpression with Nondeterministic {
 
   override def nullable: Boolean = false
 

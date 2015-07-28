@@ -630,7 +630,7 @@ case class Cast(child: Expression, dataType: DataType)
   private[this] def castToIntervalCode(from: DataType): CastFunction = from match {
     case StringType =>
       (c, evPrim, evNull) =>
-        s"$evPrim = org.apache.spark.unsafe.types.Interval.fromString($c.toString());"
+        s"$evPrim = Interval.fromString($c.toString());"
   }
 
   private[this] def decimalToTimestampCode(d: String): String =

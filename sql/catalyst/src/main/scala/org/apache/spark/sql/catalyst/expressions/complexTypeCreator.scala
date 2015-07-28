@@ -104,17 +104,18 @@ case class CreateStruct(children: Seq[Expression]) extends Expression {
       children.zipWithIndex.map { case (e, i) =>
         val eval = e.gen(ctx)
         eval.code + s"""
-        if (${eval.isNull}) {
-          ${ev.primitive}.update($i, null);
-        } else {
-          ${ev.primitive}.update($i, ${eval.primitive});
-        }
-       """
+          if (${eval.isNull}) {
+            ${ev.primitive}.update($i, null);
+          } else {
+            ${ev.primitive}.update($i, ${eval.primitive});
+          }
+         """
       }.mkString("\n")
   }
 
   override def prettyName: String = "struct"
 }
+
 
 /**
  * Creates a struct with the given field names and values
@@ -168,14 +169,83 @@ case class CreateNamedStruct(children: Seq[Expression]) extends Expression {
       valExprs.zipWithIndex.map { case (e, i) =>
         val eval = e.gen(ctx)
         eval.code + s"""
-        if (${eval.isNull}) {
-          ${ev.primitive}.update($i, null);
-        } else {
-          ${ev.primitive}.update($i, ${eval.primitive});
-        }
-       """
+          if (${eval.isNull}) {
+            ${ev.primitive}.update($i, null);
+          } else {
+            ${ev.primitive}.update($i, ${eval.primitive});
+          }
+         """
       }.mkString("\n")
   }
 
   override def prettyName: String = "named_struct"
+}
+
+/**
+ * Returns a Row containing the evaluation of all children expressions. This is a variant that
+ * returns UnsafeRow directly. The unsafe projection operator replaces [[CreateStruct]] with
+ * this expression automatically at runtime.
+ */
+case class CreateStructUnsafe(children: Seq[Expression]) extends Expression {
+
+  override def foldable: Boolean = children.forall(_.foldable)
+
+  override lazy val resolved: Boolean = childrenResolved
+
+  override lazy val dataType: StructType = {
+    val fields = children.zipWithIndex.map { case (child, idx) =>
+      child match {
+        case ne: NamedExpression =>
+          StructField(ne.name, ne.dataType, ne.nullable, ne.metadata)
+        case _ =>
+          StructField(s"col${idx + 1}", child.dataType, child.nullable, Metadata.empty)
+      }
+    }
+    StructType(fields)
+  }
+
+  override def nullable: Boolean = false
+
+  override def eval(input: InternalRow): Any = throw new UnsupportedOperationException
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    GenerateUnsafeProjection.createCode(ctx, ev, children)
+  }
+
+  override def prettyName: String = "struct_unsafe"
+}
+
+
+/**
+ * Creates a struct with the given field names and values. This is a variant that returns
+ * UnsafeRow directly. The unsafe projection operator replaces [[CreateStruct]] with
+ * this expression automatically at runtime.
+ *
+ * @param children Seq(name1, val1, name2, val2, ...)
+ */
+case class CreateNamedStructUnsafe(children: Seq[Expression]) extends Expression {
+
+  private lazy val (nameExprs, valExprs) =
+    children.grouped(2).map { case Seq(name, value) => (name, value) }.toList.unzip
+
+  private lazy val names = nameExprs.map(_.eval(EmptyRow).toString)
+
+  override lazy val dataType: StructType = {
+    val fields = names.zip(valExprs).map { case (name, valExpr) =>
+      StructField(name, valExpr.dataType, valExpr.nullable, Metadata.empty)
+    }
+    StructType(fields)
+  }
+
+  override def foldable: Boolean = valExprs.forall(_.foldable)
+
+  override def nullable: Boolean = false
+
+  override def eval(input: InternalRow): Any = throw new UnsupportedOperationException
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    GenerateUnsafeProjection.createCode(ctx, ev, valExprs)
+  }
+
+  override def prettyName: String = "named_struct_unsafe"
 }

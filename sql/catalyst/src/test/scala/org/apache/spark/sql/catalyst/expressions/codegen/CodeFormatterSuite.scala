@@ -73,4 +73,34 @@ class CodeFormatterSuite extends SparkFunSuite {
       |}
     """.stripMargin
   }
+
+  testCase("if else on the same line") {
+    """
+      |class A {
+      | if (c) {duh;} else {boo;}
+      |}
+    """.stripMargin
+  }{
+    """
+      |class A {
+      |  if (c) {duh;} else {boo;}
+      |}
+    """.stripMargin
+  }
+
+  testCase("function calls") {
+    """
+      |foo(
+      |a,
+      |b,
+      |c)
+    """.stripMargin
+  }{
+    """
+      |foo(
+      |  a,
+      |  b,
+      |  c)
+    """.stripMargin
+  }
 }

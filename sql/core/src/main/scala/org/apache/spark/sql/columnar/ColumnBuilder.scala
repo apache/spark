@@ -46,9 +46,9 @@ private[sql] trait ColumnBuilder {
   def build(): ByteBuffer
 }
 
-private[sql] class BasicColumnBuilder[T <: DataType, JvmType](
+private[sql] class BasicColumnBuilder[JvmType](
     val columnStats: ColumnStats,
-    val columnType: ColumnType[T, JvmType])
+    val columnType: ColumnType[JvmType])
   extends ColumnBuilder {
 
   protected var columnName: String = _
@@ -78,16 +78,16 @@ private[sql] class BasicColumnBuilder[T <: DataType, JvmType](
   }
 }
 
-private[sql] abstract class ComplexColumnBuilder[T <: DataType, JvmType](
+private[sql] abstract class ComplexColumnBuilder[JvmType](
     columnStats: ColumnStats,
-    columnType: ColumnType[T, JvmType])
-  extends BasicColumnBuilder[T, JvmType](columnStats, columnType)
+    columnType: ColumnType[JvmType])
+  extends BasicColumnBuilder[JvmType](columnStats, columnType)
   with NullableColumnBuilder
 
 private[sql] abstract class NativeColumnBuilder[T <: AtomicType](
     override val columnStats: ColumnStats,
     override val columnType: NativeColumnType[T])
-  extends BasicColumnBuilder[T, T#InternalType](columnStats, columnType)
+  extends BasicColumnBuilder[T#InternalType](columnStats, columnType)
   with NullableColumnBuilder
   with AllCompressionSchemes
   with CompressibleColumnBuilder[T]
@@ -118,8 +118,8 @@ private[sql] class FixedDecimalColumnBuilder(
     FIXED_DECIMAL(precision, scale))
 
 // TODO (lian) Add support for array, struct and map
-private[sql] class GenericColumnBuilder
-  extends ComplexColumnBuilder(new GenericColumnStats, GENERIC)
+private[sql] class GenericColumnBuilder(dataType: DataType)
+  extends ComplexColumnBuilder(new GenericColumnStats(dataType), GENERIC(dataType))
 
 private[sql] class DateColumnBuilder extends NativeColumnBuilder(new DateColumnStats, DATE)
 
@@ -164,7 +164,7 @@ private[sql] object ColumnBuilder {
       case BinaryType => new BinaryColumnBuilder
       case DecimalType.Fixed(precision, scale) if precision < 19 =>
         new FixedDecimalColumnBuilder(precision, scale)
-      case _ => new GenericColumnBuilder
+      case other => new GenericColumnBuilder(other)
     }
 
     builder.initialize(initialSize, columnName, useCompression)

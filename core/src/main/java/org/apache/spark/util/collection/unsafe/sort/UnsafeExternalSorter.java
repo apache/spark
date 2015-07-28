@@ -150,6 +150,11 @@ public final class UnsafeExternalSorter {
     return sorter.getMemoryUsage() + (allocatedPages.size() * (long) PAGE_SIZE);
   }
 
+  @VisibleForTesting
+  public int getNumberOfAllocatedPages() {
+    return allocatedPages.size();
+  }
+
   public long freeMemory() {
     long memoryFreed = 0;
     for (MemoryBlock block : allocatedPages) {
@@ -257,7 +262,7 @@ public final class UnsafeExternalSorter {
       currentPagePosition,
       lengthInBytes);
     currentPagePosition += lengthInBytes;
-
+    freeSpaceInCurrentPage -= totalSpaceRequired;
     sorter.insertRecord(recordAddress, prefix);
   }
 

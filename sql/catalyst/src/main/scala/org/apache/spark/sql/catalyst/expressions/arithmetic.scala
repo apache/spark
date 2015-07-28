@@ -65,8 +65,10 @@ case class UnaryPositive(child: Expression) extends UnaryExpression with Expects
 /**
  * A function that get the absolute value of the numeric value.
  */
-case class Abs(child: Expression)
-  extends UnaryExpression with ExpectsInputTypes with CodegenFallback {
+@ExpressionDescription(
+  usage = "_FUNC_(expr) - Returns the absolute value of the numeric value",
+  extended = "> SELECT _FUNC_('-1');\n1")
+case class Abs(child: Expression) extends UnaryExpression with ExpectsInputTypes {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(NumericType)
 
