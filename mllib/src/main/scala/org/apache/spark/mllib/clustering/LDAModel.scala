@@ -248,8 +248,8 @@ class LocalLDAModel private[clustering] (
   // TODO: calcualte logPerplexity over training set online during training, reusing gammad instead
   // of performing variational inference again in [[bound()]]
   def logPerplexity(
-    batch: RDD[(Long, Vector)],
-    totalDocs: Long): Double = {
+      batch: RDD[(Long, Vector)],
+      totalDocs: Long): Double = {
     val corpusWords = batch
       .flatMap { case (_, termCounts) => termCounts.toArray }
       .reduce(_ + _)
@@ -274,14 +274,14 @@ class LocalLDAModel private[clustering] (
    *  E_q[log p(bath)] - E_q[log q(batch)]
    */
   private def bound(
-    batch: RDD[(Long, Vector)],
-    subsampleRatio: Double,
-    alpha: Vector,
-    eta: Double,
-    lambda: BDM[Double],
-    gammaShape: Double,
-    k: Int,
-    vocabSize: Long): Double = {
+      batch: RDD[(Long, Vector)],
+      subsampleRatio: Double,
+      alpha: Vector,
+      eta: Double,
+      lambda: BDM[Double],
+      gammaShape: Double,
+      k: Int,
+      vocabSize: Long): Double = {
     val brzAlpha = alpha.toBreeze.toDenseVector
     // transpose because dirichletExpectation normalizes by row and we need to normalize
     // by topic (columns of lambda)
@@ -407,21 +407,21 @@ object LocalLDAModel extends Loader[LocalLDAModel] {
  */
 @Experimental
 class DistributedLDAModel private (
-  private[clustering] val graph: Graph[LDA.TopicCounts, LDA.TokenCount],
-  private[clustering] val globalTopicTotals: LDA.TopicCounts,
-  val k: Int,
-  val vocabSize: Int,
-  protected[clustering] val docConcentration: Vector,
-  protected[clustering] val topicConcentration: Double,
-  protected val gammaShape: Double,
-  private[spark] val iterationTimes: Array[Double]) extends LDAModel {
+    private[clustering] val graph: Graph[LDA.TopicCounts, LDA.TokenCount],
+    private[clustering] val globalTopicTotals: LDA.TopicCounts,
+    val k: Int,
+    val vocabSize: Int,
+    protected[clustering] val docConcentration: Vector,
+    protected[clustering] val topicConcentration: Double,
+    protected val gammaShape: Double,
+    private[spark] val iterationTimes: Array[Double]) extends LDAModel {
 
   import LDA._
 
   private[clustering] def this(
-    state: EMLDAOptimizer,
-    iterationTimes: Array[Double],
-    gammaShape: Double) = {
+      state: EMLDAOptimizer,
+      iterationTimes: Array[Double],
+      gammaShape: Double) = {
     this(
       state.graph,
       state.globalTopicTotals,
@@ -613,16 +613,16 @@ object DistributedLDAModel extends Loader[DistributedLDAModel] {
     case class EdgeData(srcId: Long, dstId: Long, tokenCounts: Double)
 
     def save(
-      sc: SparkContext,
-      path: String,
-      graph: Graph[LDA.TopicCounts, LDA.TokenCount],
-      globalTopicTotals: LDA.TopicCounts,
-      k: Int,
-      vocabSize: Int,
-      docConcentration: Vector,
-      topicConcentration: Double,
-      iterationTimes: Array[Double],
-      gammaShape: Double): Unit = {
+        sc: SparkContext,
+        path: String,
+        graph: Graph[LDA.TopicCounts, LDA.TokenCount],
+        globalTopicTotals: LDA.TopicCounts,
+        k: Int,
+        vocabSize: Int,
+        docConcentration: Vector,
+        topicConcentration: Double,
+        iterationTimes: Array[Double],
+        gammaShape: Double): Unit = {
       val sqlContext = SQLContext.getOrCreate(sc)
       import sqlContext.implicits._
 
@@ -651,13 +651,13 @@ object DistributedLDAModel extends Loader[DistributedLDAModel] {
     }
 
     def load(
-      sc: SparkContext,
-      path: String,
-      vocabSize: Int,
-      docConcentration: Vector,
-      topicConcentration: Double,
-      iterationTimes: Array[Double],
-      gammaShape: Double): DistributedLDAModel = {
+        sc: SparkContext,
+        path: String,
+        vocabSize: Int,
+        docConcentration: Vector,
+        topicConcentration: Double,
+        iterationTimes: Array[Double],
+        gammaShape: Double): DistributedLDAModel = {
       val dataPath = new Path(Loader.dataPath(path), "globalTopicTotals").toUri.toString
       val vertexDataPath = new Path(Loader.dataPath(path), "topicCounts").toUri.toString
       val edgeDataPath = new Path(Loader.dataPath(path), "tokenCounts").toUri.toString
