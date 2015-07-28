@@ -20,6 +20,7 @@ package org.apache.spark.sql.hive.execution
 import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
 import org.scalatest.exceptions.TestFailedException
 
+import org.apache.spark.TaskContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.InternalRow
@@ -113,6 +114,7 @@ class ScriptTransformationSuite extends SparkPlanTest {
 private case class ExceptionInjectingOperator(child: SparkPlan) extends UnaryNode {
   override protected def doExecute(): RDD[InternalRow] = {
     child.execute().map { x =>
+      assert(TaskContext.get() != null) // Make sure that TaskContext is defined.
       Thread.sleep(1000) // This sleep gives the external process time to start.
       throw new IllegalArgumentException("intentional exception")
     }

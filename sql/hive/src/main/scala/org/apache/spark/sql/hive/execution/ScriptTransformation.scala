@@ -28,7 +28,7 @@ import org.apache.hadoop.hive.serde.serdeConstants
 import org.apache.hadoop.hive.serde2.AbstractSerDe
 import org.apache.hadoop.hive.serde2.objectinspector._
 
-import org.apache.spark.Logging
+import org.apache.spark.{TaskContext, Logging}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
@@ -98,7 +98,8 @@ case class ScriptTransformation(
         ioschema,
         outputStream,
         proc,
-        stderrBuffer
+        stderrBuffer,
+        TaskContext.get()
       )
 
       // This nullability is a performance optimization in order to avoid an Option.foreach() call
@@ -221,7 +222,8 @@ private class ScriptTransformationWriterThread(
     ioschema: HiveScriptIOSchema,
     outputStream: OutputStream,
     proc: Process,
-    stderrBuffer: CircularBuffer
+    stderrBuffer: CircularBuffer,
+    taskContext: TaskContext
   ) extends Thread("Thread-ScriptTransformation-Feed") with Logging {
 
   setDaemon(true)
@@ -232,6 +234,8 @@ private class ScriptTransformationWriterThread(
   def exception: Option[Throwable] = Option(_exception)
 
   override def run(): Unit = Utils.logUncaughtExceptions {
+    TaskContext.setTaskContext(taskContext)
+
     val dataOutputStream = new DataOutputStream(outputStream)
 
     // We can't use Utils.tryWithSafeFinally here because we also need a `catch` block, so
