@@ -219,7 +219,8 @@ abstract class InternalRow extends Serializable with SpecializedGetters {
             case l: Long => l.compare(other.get(i).asInstanceOf[Long])
             case f: Float => f.compare(other.get(i).asInstanceOf[Float])
             case d: Double => d.compare(other.get(i).asInstanceOf[Double])
-            case a: Array[Byte] => TypeUtils.compareBinary(a, other.get(i).asInstanceOf[Array[Byte]])
+            case a: Array[Byte] =>
+              TypeUtils.compareBinary(a, other.get(i).asInstanceOf[Array[Byte]])
             case u: UTF8String => u.compare(other.get(i).asInstanceOf[UTF8String])
             case d: Decimal => d.compare(other.get(i).asInstanceOf[Decimal])
           }
