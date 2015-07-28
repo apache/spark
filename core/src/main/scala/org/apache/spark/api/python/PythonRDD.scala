@@ -20,6 +20,7 @@ package org.apache.spark.api.python
 import java.io._
 import java.net._
 import java.util.{Collections, ArrayList => JArrayList, List => JList, Map => JMap}
+import javax.annotation.Nullable
 
 import scala.collection.JavaConversions._
 import scala.collection.mutable
@@ -104,8 +105,8 @@ private[spark] class PythonRDD(
       }
 
       private def read(): Array[Byte] = {
-        if (writerThread.exception.isDefined) {
-          throw writerThread.exception.get
+        if (writerThread.exception != null) {
+          throw writerThread.exception
         }
         try {
           stream.readInt() match {
@@ -135,8 +136,7 @@ private[spark] class PythonRDD(
               val exLength = stream.readInt()
               val obj = new Array[Byte](exLength)
               stream.readFully(obj)
-              throw new PythonException(new String(obj, UTF_8),
-                writerThread.exception.getOrElse(null))
+              throw new PythonException(new String(obj, UTF_8), writerThread.exception)
             case SpecialLengths.END_OF_DATA_SECTION =>
               // We've finished the data section of the output, but we can still
               // read some accumulator updates:
@@ -166,10 +166,10 @@ private[spark] class PythonRDD(
             logDebug("Exception thrown after context is stopped", e)
             null  // exit silently
 
-          case e: Exception if writerThread.exception.isDefined =>
+          case e: Exception if writerThread.exception != null =>
             logError("Python worker exited unexpectedly (crashed)", e)
-            logError("This may have been caused by a prior exception:", writerThread.exception.get)
-            throw writerThread.exception.get
+            logError("This may have been caused by a prior exception:", writerThread.exception)
+            throw writerThread.exception
 
           case eof: EOFException =>
             throw new SparkException("Python worker exited unexpectedly (crashed)", eof)
@@ -196,8 +196,11 @@ private[spark] class PythonRDD(
 
     setDaemon(true)
 
-    /** Contains the exception thrown while writing the parent iterator to the Python process. */
-    def exception: Option[Exception] = Option(_exception)
+    /**
+     * Contains the exception thrown while writing the parent iterator to the Python process, or
+     * `null` if no exception was thrown.
+     */
+    @Nullable def exception: Exception = _exception
 
     /** Terminates the writer thread, ignoring any exceptions that may occur due to cleanup. */
     def shutdownOnTaskCompletion() {
@@ -216,7 +219,7 @@ private[spark] class PythonRDD(
         // sparkFilesDir
         PythonRDD.writeUTF(SparkFiles.getRootDirectory, dataOut)
         // Python includes (*.zip and *.egg files)
-        dataOut.writeInt(pythonIncludes.length)
+        dataOut.writeInt(pythonIncludes.size())
         for (include <- pythonIncludes) {
           PythonRDD.writeUTF(include, dataOut)
         }
@@ -421,7 +424,9 @@ private[spark] object PythonRDD extends Logging {
         throw new SparkException("Unexpected element type " + other.getClass)
     }
 
-    iter.foreach(write)
+    while (iter.hasNext) {
+      write(iter.next())
+    }
   }
 
   /**
