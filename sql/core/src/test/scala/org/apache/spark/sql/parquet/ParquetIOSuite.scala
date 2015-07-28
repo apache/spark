@@ -101,7 +101,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest {
     def makeDecimalRDD(decimal: DecimalType): DataFrame =
       sqlContext.sparkContext
         .parallelize(0 to 1000)
-        .map(i => Tuple1(i / 100.0))
+        .map(i => Tuple1((i - 500) / 100.0))
         .toDF()
         // Parquet doesn't allow column names with spaces, have to add an alias here
         .select($"_1" cast decimal as "dec")

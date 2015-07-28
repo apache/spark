@@ -220,9 +220,16 @@ private[parquet] class CatalystWriteSupport extends WriteSupport[InternalRow] wi
       (row: InternalRow, ordinal: Int) => {
         val decimal = row.getDecimal(ordinal)
         val bytes = decimal.toJavaBigDecimal.unscaledValue().toByteArray
-        util.Arrays.fill(decimalBuffer, 0: Byte)
-        System.arraycopy(bytes, 0, decimalBuffer, numBytes - bytes.length, bytes.length)
-        recordConsumer.addBinary(Binary.fromByteArray(decimalBuffer, 0, numBytes))
+        val binary = if (bytes.length == numBytes) {
+          bytes
+        } else {
+          val signByte = if (bytes.head < 0) -1: Byte else 0: Byte
+          util.Arrays.fill(decimalBuffer, 0, numBytes - bytes.length, signByte)
+          System.arraycopy(bytes, 0, decimalBuffer, numBytes - bytes.length, bytes.length)
+          decimalBuffer
+        }
+
+        recordConsumer.addBinary(Binary.fromByteArray(binary, 0, numBytes))
       }
 
     followParquetFormatSpec match {
