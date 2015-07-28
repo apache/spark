@@ -33,9 +33,13 @@ private[sql] case object SparkPartitionID extends LeafExpression with Nondetermi
 
   override def dataType: DataType = IntegerType
 
-  @transient private lazy val partitionId = TaskContext.getPartitionId()
+  @transient private[this] var partitionId: Int = _
 
-  override def eval(input: InternalRow): Int = partitionId
+  override protected def initInternal(): Unit = {
+    partitionId = TaskContext.getPartitionId()
+  }
+
+  override protected def evalInternal(input: InternalRow): Int = partitionId
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     val idTerm = ctx.freshName("partitionId")

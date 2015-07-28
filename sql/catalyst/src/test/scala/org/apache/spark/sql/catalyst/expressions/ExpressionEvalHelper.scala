@@ -43,7 +43,7 @@ trait ExpressionEvalHelper {
     checkEvaluationWithoutCodegen(expression, catalystValue, inputRow)
     checkEvaluationWithGeneratedMutableProjection(expression, catalystValue, inputRow)
     checkEvaluationWithGeneratedProjection(expression, catalystValue, inputRow)
-    if (UnsafeColumnWriter.canEmbed(expression.dataType)) {
+    if (GenerateUnsafeProjection.canSupport(expression.dataType)) {
       checkEvalutionWithUnsafeProjection(expression, catalystValue, inputRow)
     }
     checkEvaluationWithOptimization(expression, catalystValue, inputRow)
@@ -64,6 +64,10 @@ trait ExpressionEvalHelper {
   }
 
   protected def evaluate(expression: Expression, inputRow: InternalRow = EmptyRow): Any = {
+    expression.foreach {
+      case n: Nondeterministic => n.initialize()
+      case _ =>
+    }
     expression.eval(inputRow)
   }
 
@@ -74,8 +78,6 @@ trait ExpressionEvalHelper {
       generator
     } catch {
       case e: Throwable =>
-        val ctx = new CodeGenContext
-        val evaluated = expression.gen(ctx)
         fail(
           s"""
             |Code generation of $expression failed:
@@ -109,7 +111,7 @@ trait ExpressionEvalHelper {
       GenerateMutableProjection.generate(Alias(expression, s"Optimized($expression)")() :: Nil)(),
       expression)
 
-    val actual = plan(inputRow).get(0)
+    val actual = plan(inputRow).get(0, expression.dataType)
     if (!checkResult(actual, expected)) {
       val input = if (inputRow == EmptyRow) "" else s", input: $inputRow"
       fail(s"Incorrect Evaluation: $expression, actual: $actual, expected: $expected$input")
@@ -190,13 +192,14 @@ trait ExpressionEvalHelper {
     var plan = generateProject(
       GenerateProjection.generate(Alias(expression, s"Optimized($expression)")() :: Nil),
       expression)
-    var actual = plan(inputRow).get(0)
+    var actual = plan(inputRow).get(0, expression.dataType)
     assert(checkResult(actual, expected))
 
     plan = generateProject(
       GenerateUnsafeProjection.generate(Alias(expression, s"Optimized($expression)")() :: Nil),
       expression)
-    actual = FromUnsafeProjection(expression.dataType :: Nil)(plan(inputRow)).get(0)
+    actual = FromUnsafeProjection(expression.dataType :: Nil)(
+      plan(inputRow)).get(0, expression.dataType)
     assert(checkResult(actual, expected))
   }
 }

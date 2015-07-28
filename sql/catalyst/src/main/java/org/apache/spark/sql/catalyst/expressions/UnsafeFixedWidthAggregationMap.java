@@ -47,7 +47,7 @@ public final class UnsafeFixedWidthAggregationMap {
   /**
    * Encodes grouping keys as UnsafeRows.
    */
-  private final UnsafeRowConverter groupingKeyToUnsafeRowConverter;
+  private final UnsafeProjection groupingKeyProjection;
 
   /**
    * A hashmap which maps from opaque bytearray keys to bytearray values.
@@ -58,14 +58,6 @@ public final class UnsafeFixedWidthAggregationMap {
    * Re-used pointer to the current aggregation buffer
    */
   private final UnsafeRow currentAggregationBuffer = new UnsafeRow();
-
-  /**
-   * Scratch space that is used when encoding grouping keys into UnsafeRow format.
-   *
-   * By default, this is a 8 kb array, but it will grow as necessary in case larger keys are
-   * encountered.
-   */
-  private byte[] groupingKeyConversionScratchSpace = new byte[1024 * 8];
 
   private final boolean enablePerfMetrics;
 
@@ -112,26 +104,17 @@ public final class UnsafeFixedWidthAggregationMap {
       TaskMemoryManager memoryManager,
       int initialCapacity,
       boolean enablePerfMetrics) {
-    this.emptyAggregationBuffer =
-      convertToUnsafeRow(emptyAggregationBuffer, aggregationBufferSchema);
     this.aggregationBufferSchema = aggregationBufferSchema;
-    this.groupingKeyToUnsafeRowConverter = new UnsafeRowConverter(groupingKeySchema);
+    this.groupingKeyProjection = UnsafeProjection.create(groupingKeySchema);
     this.groupingKeySchema = groupingKeySchema;
     this.map = new BytesToBytesMap(memoryManager, initialCapacity, enablePerfMetrics);
     this.enablePerfMetrics = enablePerfMetrics;
-  }
 
-  /**
-   * Convert a Java object row into an UnsafeRow, allocating it into a new byte array.
-   */
-  private static byte[] convertToUnsafeRow(InternalRow javaRow, StructType schema) {
-    final UnsafeRowConverter converter = new UnsafeRowConverter(schema);
-    final int size = converter.getSizeRequirement(javaRow);
-    final byte[] unsafeRow = new byte[size];
-    final int writtenLength =
-      converter.writeRow(javaRow, unsafeRow, PlatformDependent.BYTE_ARRAY_OFFSET, size);
-    assert (writtenLength == unsafeRow.length): "Size requirement calculation was wrong!";
-    return unsafeRow;
+    // Initialize the buffer for aggregation value
+    final UnsafeProjection valueProjection = UnsafeProjection.create(aggregationBufferSchema);
+    this.emptyAggregationBuffer = valueProjection.apply(emptyAggregationBuffer).getBytes();
+    assert(this.emptyAggregationBuffer.length == aggregationBufferSchema.length() * 8 +
+      UnsafeRow.calculateBitSetWidthInBytes(aggregationBufferSchema.length()));
   }
 
   /**
@@ -139,30 +122,20 @@ public final class UnsafeFixedWidthAggregationMap {
    * return the same object.
    */
   public UnsafeRow getAggregationBuffer(InternalRow groupingKey) {
-    final int groupingKeySize = groupingKeyToUnsafeRowConverter.getSizeRequirement(groupingKey);
-    // Make sure that the buffer is large enough to hold the key. If it's not, grow it:
-    if (groupingKeySize > groupingKeyConversionScratchSpace.length) {
-      groupingKeyConversionScratchSpace = new byte[groupingKeySize];
-    }
-    final int actualGroupingKeySize = groupingKeyToUnsafeRowConverter.writeRow(
-      groupingKey,
-      groupingKeyConversionScratchSpace,
-      PlatformDependent.BYTE_ARRAY_OFFSET,
-      groupingKeySize);
-    assert (groupingKeySize == actualGroupingKeySize) : "Size requirement calculation was wrong!";
+    final UnsafeRow unsafeGroupingKeyRow = this.groupingKeyProjection.apply(groupingKey);
 
     // Probe our map using the serialized key
     final BytesToBytesMap.Location loc = map.lookup(
-      groupingKeyConversionScratchSpace,
-      PlatformDependent.BYTE_ARRAY_OFFSET,
-      groupingKeySize);
+      unsafeGroupingKeyRow.getBaseObject(),
+      unsafeGroupingKeyRow.getBaseOffset(),
+      unsafeGroupingKeyRow.getSizeInBytes());
     if (!loc.isDefined()) {
       // This is the first time that we've seen this grouping key, so we'll insert a copy of the
       // empty aggregation buffer into the map:
       loc.putNewKey(
-        groupingKeyConversionScratchSpace,
-        PlatformDependent.BYTE_ARRAY_OFFSET,
-        groupingKeySize,
+        unsafeGroupingKeyRow.getBaseObject(),
+        unsafeGroupingKeyRow.getBaseOffset(),
+        unsafeGroupingKeyRow.getSizeInBytes(),
         emptyAggregationBuffer,
         PlatformDependent.BYTE_ARRAY_OFFSET,
         emptyAggregationBuffer.length
