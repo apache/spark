@@ -232,7 +232,7 @@ class ExternalShuffleSuite extends SparkFunSuite with BeforeAndAfterAll with Mat
   }
 
   private def checkResult(result: File, expected: String): Unit = {
-    var resultString = Files.toString(result, UTF_8)
+    val resultString = Files.toString(result, UTF_8)
     resultString should be (expected)
   }
 

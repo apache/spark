@@ -174,7 +174,7 @@ class YarnClusterSuite extends SparkFunSuite with BeforeAndAfterAll with Matcher
   }
 
   private def testBasicYarnApp(clientMode: Boolean): Unit = {
-    var result = File.createTempFile("result", null, tempDir)
+    val result = File.createTempFile("result", null, tempDir)
     runSpark(clientMode, mainClassName(YarnClusterDriver.getClass),
       appArgs = Seq(result.getAbsolutePath()))
     checkResult(result)
@@ -299,7 +299,7 @@ class YarnClusterSuite extends SparkFunSuite with BeforeAndAfterAll with Matcher
   }
 
   private def checkResult(result: File, expected: String): Unit = {
-    var resultString = Files.toString(result, UTF_8)
+    val resultString = Files.toString(result, UTF_8)
     resultString should be (expected)
   }
 
