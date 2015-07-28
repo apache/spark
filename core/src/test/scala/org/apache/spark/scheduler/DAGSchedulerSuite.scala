@@ -721,9 +721,6 @@ class DAGSchedulerSuite
 
     // First, fail stage 0 multiple times after suceeding stage 2 and 1
     for (attempt <- 1 to Stage.MAX_STAGE_FAILURES-1) {
-      println(s"$attempt: taskSets = $taskSets : ${
-        taskSets.map{_.tasks.mkString(",")}.mkString(";")}")
-
       // complete stage 2
       complete(taskSets.last, Seq(
         (Success, makeMapStatus("hostA", 2)),
@@ -733,10 +730,12 @@ class DAGSchedulerSuite
       complete(taskSets.last, Seq(
         (FetchFailed(makeBlockManagerId("hostA"), shuffleDepOne.shuffleId, 0, 0, "ignored"), null)))
 
+      complete(taskSets.last, Seq(
+        (FetchFailed(makeBlockManagerId("hostA"), shuffleDepTwo.shuffleId, 0, 0, "ignored"), null)))
+
       scheduler.resubmitFailedStages()
       // Now complete stage 0
-      complete(taskSets.last, Seq((Success, 42)))
-      
+
       // Confirm we have not yet aborted
       assert(scheduler.runningStages.nonEmpty)
       assert(!ended)
