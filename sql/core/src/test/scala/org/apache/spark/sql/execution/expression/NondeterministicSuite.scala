@@ -23,7 +23,7 @@ import org.apache.spark.sql.execution.expressions.{SparkPartitionID, Monotonical
 
 class NondeterministicSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("MonotonicallyIncreasingID") {
-    checkEvaluation(MonotonicallyIncreasingID(), 0)
+    checkEvaluation(MonotonicallyIncreasingID(), 0L)
   }
 
   test("SparkPartitionID") {

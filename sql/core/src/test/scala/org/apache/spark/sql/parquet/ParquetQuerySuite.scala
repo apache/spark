@@ -18,7 +18,6 @@
 package org.apache.spark.sql.parquet
 
 import org.apache.hadoop.fs.Path
-import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.{QueryTest, Row, SQLConf}
@@ -26,7 +25,7 @@ import org.apache.spark.sql.{QueryTest, Row, SQLConf}
 /**
  * A test suite that tests various Parquet queries.
  */
-class ParquetQuerySuiteBase extends QueryTest with ParquetTest {
+class ParquetQuerySuite extends QueryTest with ParquetTest {
   lazy val sqlContext = org.apache.spark.sql.test.TestSQLContext
   import sqlContext.sql
 
@@ -162,29 +161,5 @@ class ParquetQuerySuiteBase extends QueryTest with ParquetTest {
         }
       }
     }
-  }
-}
-
-class ParquetDataSourceOnQuerySuite extends ParquetQuerySuiteBase with BeforeAndAfterAll {
-  private lazy val originalConf = sqlContext.conf.parquetUseDataSourceApi
-
-  override protected def beforeAll(): Unit = {
-    sqlContext.conf.setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, true)
-  }
-
-  override protected def afterAll(): Unit = {
-    sqlContext.setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, originalConf)
-  }
-}
-
-class ParquetDataSourceOffQuerySuite extends ParquetQuerySuiteBase with BeforeAndAfterAll {
-  private lazy val originalConf = sqlContext.conf.parquetUseDataSourceApi
-
-  override protected def beforeAll(): Unit = {
-    sqlContext.conf.setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, false)
-  }
-
-  override protected def afterAll(): Unit = {
-    sqlContext.setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, originalConf)
   }
 }

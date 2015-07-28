@@ -46,8 +46,11 @@ __all__ = [
     'monotonicallyIncreasingId',
     'rand',
     'randn',
+    'regexp_extract',
+    'regexp_replace',
     'sha1',
     'sha2',
+    'size',
     'sparkPartitionId',
     'struct',
     'udf',
@@ -345,6 +348,34 @@ def levenshtein(left, right):
 
 @ignore_unicode_prefix
 @since(1.5)
+def regexp_extract(str, pattern, idx):
+    """Extract a specific(idx) group identified by a java regex, from the specified string column.
+
+    >>> df = sqlContext.createDataFrame([('100-200',)], ['str'])
+    >>> df.select(regexp_extract('str', '(\d+)-(\d+)', 1).alias('d')).collect()
+    [Row(d=u'100')]
+    """
+    sc = SparkContext._active_spark_context
+    jc = sc._jvm.functions.regexp_extract(_to_java_column(str), pattern, idx)
+    return Column(jc)
+
+
+@ignore_unicode_prefix
+@since(1.5)
+def regexp_replace(str, pattern, replacement):
+    """Replace all substrings of the specified string value that match regexp with rep.
+
+    >>> df = sqlContext.createDataFrame([('100-200',)], ['str'])
+    >>> df.select(regexp_replace('str', '(\\d+)', '##').alias('d')).collect()
+    [Row(d=u'##-##')]
+    """
+    sc = SparkContext._active_spark_context
+    jc = sc._jvm.functions.regexp_replace(_to_java_column(str), pattern, replacement)
+    return Column(jc)
+
+
+@ignore_unicode_prefix
+@since(1.5)
 def md5(col):
     """Calculates the MD5 digest and returns the value as a 32 character hex string.
 
@@ -508,6 +539,16 @@ def sparkPartitionId():
     """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.sparkPartitionId())
+
+
+def expr(str):
+    """Parses the expression string into the column that it represents
+
+    >>> df.select(expr("length(name)")).collect()
+    [Row('length(name)=5), Row('length(name)=3)]
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.expr(str))
 
 
 @ignore_unicode_prefix
@@ -795,29 +836,44 @@ def weekofyear(col):
     return Column(sc._jvm.functions.weekofyear(col))
 
 
+@since(1.5)
+def size(col):
+    """
+    Collection function: returns the length of the array or map stored in the column.
+    :param col: name of column or expression
+
+    >>> df = sqlContext.createDataFrame([([1, 2, 3],),([1],),([],)], ['data'])
+    >>> df.select(size(df.data)).collect()
+    [Row(size(data)=3), Row(size(data)=1), Row(size(data)=0)]
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.size(_to_java_column(col)))
+
+
 class UserDefinedFunction(object):
     """
     User defined function in Python
 
     .. versionadded:: 1.3
     """
-    def __init__(self, func, returnType):
+    def __init__(self, func, returnType, name=None):
         self.func = func
         self.returnType = returnType
         self._broadcast = None
-        self._judf = self._create_judf()
+        self._judf = self._create_judf(name)
 
-    def _create_judf(self):
-        f = self.func  # put it in closure `func`
-        func = lambda _, it: map(lambda x: f(*x), it)
+    def _create_judf(self, name):
+        f, returnType = self.func, self.returnType  # put them in closure `func`
+        func = lambda _, it: map(lambda x: returnType.toInternal(f(*x)), it)
         ser = AutoBatchedSerializer(PickleSerializer())
         command = (func, None, ser, ser)
         sc = SparkContext._active_spark_context
         pickled_command, broadcast_vars, env, includes = _prepare_for_python_RDD(sc, command, self)
         ssql_ctx = sc._jvm.SQLContext(sc._jsc.sc())
         jdt = ssql_ctx.parseDataType(self.returnType.json())
-        fname = f.__name__ if hasattr(f, '__name__') else f.__class__.__name__
-        judf = sc._jvm.UserDefinedPythonFunction(fname, bytearray(pickled_command), env, includes,
+        if name is None:
+            name = f.__name__ if hasattr(f, '__name__') else f.__class__.__name__
+        judf = sc._jvm.UserDefinedPythonFunction(name, bytearray(pickled_command), env, includes,
                                                  sc.pythonExec, sc.pythonVer, broadcast_vars,
                                                  sc._javaAccumulator, jdt)
         return judf

@@ -178,12 +178,12 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
           $initColumns
         }
 
-        public int length() { return ${expressions.length};}
+        public int numFields() { return ${expressions.length};}
         protected boolean[] nullBits = new boolean[${expressions.length}];
         public void setNullAt(int i) { nullBits[i] = true; }
         public boolean isNullAt(int i) { return nullBits[i]; }
 
-        public Object get(int i) {
+        public Object get(int i, ${classOf[DataType].getName} dataType) {
           if (isNullAt(i)) return null;
           switch (i) {
           $getCases
@@ -230,7 +230,8 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
     }
     """
 
-    logDebug(s"MutableRow, initExprs: ${expressions.mkString(",")} code:\n${code}")
+    logDebug(s"MutableRow, initExprs: ${expressions.mkString(",")} code:\n" +
+      CodeFormatter.format(code))
 
     compile(code).generate(ctx.references.toArray).asInstanceOf[Projection]
   }

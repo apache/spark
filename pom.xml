@@ -573,7 +573,7 @@
       <dependency>
         <groupId>io.netty</groupId>
         <artifactId>netty-all</artifactId>
-        <version>4.0.28.Final</version>
+        <version>4.0.29.Final</version>
       </dependency>
       <dependency>
         <groupId>org.apache.derby</groupId>
@@ -614,7 +614,7 @@
            15.0, which causes runtime incompatibility issues. -->
       <dependency>
         <groupId>com.fasterxml.jackson.module</groupId>
-        <artifactId>jackson-module-scala_2.10</artifactId>
+        <artifactId>jackson-module-scala_${scala.binary.version}</artifactId>
         <version>${fasterxml.jackson.version}</version>
         <exclusions>
           <exclusion>
