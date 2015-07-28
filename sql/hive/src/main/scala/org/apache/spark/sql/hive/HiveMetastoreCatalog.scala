@@ -678,8 +678,18 @@ private[hive] case class MetastoreRelation
     }
   )
 
+  // When metastore partition pruning is turned off, we cache the list of all partitions to
+  // mimic the behavior of Spark < 1.5
+  lazy val allPartitions = table.getAllPartitions
+
   def getHiveQlPartitions(predicates: Seq[Expression] = Nil): Seq[Partition] = {
-    table.getPartitions(predicates).map { p =>
+    val rawPartitions = if (sqlContext.conf.metastorePartitionPruning) {
+      table.getPartitions(predicates)
+    } else {
+      allPartitions
+    }
+
+    rawPartitions.map { p =>
       val tPartition = new org.apache.hadoop.hive.metastore.api.Partition
       tPartition.setDbName(databaseName)
       tPartition.setTableName(tableName)
