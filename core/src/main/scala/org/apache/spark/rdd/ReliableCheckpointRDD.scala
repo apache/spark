@@ -40,6 +40,9 @@ private[spark] class ReliableCheckpointRDD[T: ClassTag](
   @transient private val fs = new Path(checkpointPath).getFileSystem(hadoopConf)
   private val broadcastedConf = sc.broadcast(new SerializableConfiguration(hadoopConf))
 
+  // Fail fast if checkpoint directory does not exist
+  require(fs.exists(checkpointPath), s"Checkpoint directory does not exist: $checkpointPath")
+
   /**
    * Return the path of the checkpoint directory this RDD reads data from.
    */
@@ -143,7 +146,7 @@ private[spark] object ReliableCheckpointRDD extends Logging {
         logInfo(s"Deleting tempOutputPath $tempOutputPath")
         fs.delete(tempOutputPath, false)
         throw new IOException("Checkpoint failed: failed to save output of task: " +
-          s"${ctx.attemptNumber()} and final output path does not exist")
+          s"${ctx.attemptNumber()} and final output path does not exist: $finalOutputPath")
       } else {
         // Some other copy of this task must've finished before us and renamed it
         logInfo(s"Final output path $finalOutputPath already exists; not overwriting it")
@@ -170,25 +173,6 @@ private[spark] object ReliableCheckpointRDD extends Logging {
     context.addTaskCompletionListener(context => deserializeStream.close())
 
     deserializeStream.asIterator.asInstanceOf[Iterator[T]]
-  }
-
-  // Test whether CheckpointRDD generate expected number of partitions despite
-  // each split file having multiple blocks. This needs to be run on a
-  // cluster (mesos or standalone) using HDFS.
-  def main(args: Array[String]) {
-    val Array(cluster, hdfsPath) = args
-    val sc = new SparkContext(cluster, "CheckpointRDD Test")
-    val rdd = sc.makeRDD(1 to 10, 10).flatMap(x => 1 to 10000)
-    val path = new Path(hdfsPath, "temp")
-    val conf = SparkHadoopUtil.get.newConfiguration(new SparkConf())
-    val fs = path.getFileSystem(conf)
-    val broadcastedConf = sc.broadcast(new SerializableConfiguration(conf))
-    sc.runJob(
-      rdd, ReliableCheckpointRDD.writeCheckpointFile[Int](path.toString, broadcastedConf, 1024) _)
-    val cpRDD = new ReliableCheckpointRDD[Int](sc, path.toString)
-    assert(cpRDD.partitions.length == rdd.partitions.length, "Number of partitions is not the same")
-    assert(cpRDD.collect().toList == rdd.collect().toList, "Data of partitions not the same")
-    fs.delete(path, true)
   }
 
 }

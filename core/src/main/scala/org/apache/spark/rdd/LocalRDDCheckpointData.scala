@@ -26,7 +26,7 @@ import org.apache.spark.storage.{RDDBlockId, StorageLevel}
  * An implementation of checkpointing implemented on top of Spark's caching layer.
  *
  * Local checkpointing trades off fault tolerance for performance by skipping the expensive
- * step of replicating the checkpointed data in a reliable storage. Instead, checkpoint data
+ * step of saving the RDD data to a reliable and fault-tolerant storage. Instead, the data
  * is written to the local, ephemeral block storage that lives in each executor. This is useful
  * for use cases where RDDs build up long lineages that need to be truncated often (e.g. GraphX).
  */

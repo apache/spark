@@ -1473,16 +1473,14 @@ abstract class RDD[T: ClassTag](
    * executed on this RDD. It is strongly recommended that this RDD is persisted in
    * memory, otherwise saving it on a file will require recomputation.
    */
-  def checkpoint(): Unit = {
+  def checkpoint(): Unit = RDDCheckpointData.synchronized {
+    // NOTE: we use a global lock here due to complexities downstream with ensuring
+    // children RDD partitions point to the correct parent partitions. In the future
+    // we should revisit this consideration.
     if (context.checkpointDir.isEmpty) {
       throw new SparkException("Checkpoint directory has not been set in the SparkContext")
     } else if (checkpointData.isEmpty) {
-      // NOTE: we use a global lock here due to complexities downstream with ensuring
-      // children RDD partitions point to the correct parent partitions. In the future
-      // we should revisit this consideration.
-      RDDCheckpointData.synchronized {
-        checkpointData = Some(new ReliableRDDCheckpointData(this))
-      }
+      checkpointData = Some(new ReliableRDDCheckpointData(this))
     }
   }
 
@@ -1493,17 +1491,16 @@ abstract class RDD[T: ClassTag](
    * step of replicating the materialized data in a reliable distributed file system. This is
    * useful for RDDs with long lineages that need to be truncated periodically (e.g. GraphX).
    *
-   * Local checkpointing sacrifices fault-tolerance for performance. In particular,
-   * checkpointed data is written to ephemeral local storage (memory or disk) instead of
-   * to a reliable distributed storage. The effect is that if an executor fails during the
-   * computation, the checkpointed data may no longer be accessible, causing an irrecoverable
-   * job failure.
+   * Local checkpointing sacrifices fault-tolerance for performance. In particular, checkpointed
+   * data is written to ephemeral local storage in the executors instead of to a reliable,
+   * fault-tolerant storage. The effect is that if an executor fails during the computation,
+   * the checkpointed data may no longer be accessible, causing an irrecoverable job failure.
    *
    * This is NOT safe to use with dynamic allocation, which removes executors along
    * with their cached blocks. If you must use both features, you are advised to set
    * `spark.dynamicAllocation.cachedExecutorIdleTimeout` to a high value.
    *
-   * The checkpoint directory set through `SparkContext#setCheckpointDir` is not read.
+   * The checkpoint directory set through `SparkContext#setCheckpointDir` is not used.
    */
   def localCheckpoint(): this.type = RDDCheckpointData.synchronized {
     if (conf.getBoolean("spark.dynamicAllocation.enabled", false) &&
