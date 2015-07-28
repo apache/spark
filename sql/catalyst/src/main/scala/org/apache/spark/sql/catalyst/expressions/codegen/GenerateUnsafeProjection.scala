@@ -18,8 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions.codegen
 
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.types.{NullType, BinaryType, StringType}
-
+import org.apache.spark.sql.types._
 
 /**
  * Generates a [[Projection]] that returns an [[UnsafeRow]].
@@ -32,6 +31,92 @@ import org.apache.spark.sql.types.{NullType, BinaryType, StringType}
  */
 object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafeProjection] {
 
+  private val StringWriter = classOf[UnsafeRowWriters.UTF8StringWriter].getName
+  private val BinaryWriter = classOf[UnsafeRowWriters.BinaryWriter].getName
+  private val IntervalWriter = classOf[UnsafeRowWriters.IntervalWriter].getName
+
+  /** Returns true iff we support this data type. */
+  def canSupport(dataType: DataType): Boolean = dataType match {
+    case t: AtomicType if !t.isInstanceOf[DecimalType] => true
+    case _: IntervalType => true
+    case NullType => true
+    case _ => false
+  }
+
+  /**
+   * Generates the code to create an [[UnsafeRow]] object based on the input expressions.
+   * @param ctx context for code generation
+   * @param ev specifies the name of the variable for the output [[UnsafeRow]] object
+   * @param expressions input expressions
+   * @return generated code to put the expression output into an [[UnsafeRow]]
+   */
+  def createCode(ctx: CodeGenContext, ev: GeneratedExpressionCode, expressions: Seq[Expression])
+    : String = {
+
+    val ret = ev.primitive
+    ctx.addMutableState("UnsafeRow", ret, s"$ret = new UnsafeRow();")
+    val bufferTerm = ctx.freshName("buffer")
+    ctx.addMutableState("byte[]", bufferTerm, s"$bufferTerm = new byte[64];")
+    val cursorTerm = ctx.freshName("cursor")
+    val numBytesTerm = ctx.freshName("numBytes")
+
+    val exprs = expressions.map(_.gen(ctx))
+    val allExprs = exprs.map(_.code).mkString("\n")
+    val fixedSize = 8 * exprs.length + UnsafeRow.calculateBitSetWidthInBytes(exprs.length)
+
+    val additionalSize = expressions.zipWithIndex.map { case (e, i) =>
+      e.dataType match {
+        case StringType =>
+          s" + (${exprs(i).isNull} ? 0 : $StringWriter.getSize(${exprs(i).primitive}))"
+        case BinaryType =>
+          s" + (${exprs(i).isNull} ? 0 : $BinaryWriter.getSize(${exprs(i).primitive}))"
+        case IntervalType =>
+          s" + (${exprs(i).isNull} ? 0 : 16)"
+        case _ => ""
+      }
+    }.mkString("")
+
+    val writers = expressions.zipWithIndex.map { case (e, i) =>
+      val update = e.dataType match {
+        case dt if ctx.isPrimitiveType(dt) =>
+          s"${ctx.setColumn(ret, dt, i, exprs(i).primitive)}"
+        case StringType =>
+          s"$cursorTerm += $StringWriter.write($ret, $i, $cursorTerm, ${exprs(i).primitive})"
+        case BinaryType =>
+          s"$cursorTerm += $BinaryWriter.write($ret, $i, $cursorTerm, ${exprs(i).primitive})"
+        case IntervalType =>
+          s"$cursorTerm += $IntervalWriter.write($ret, $i, $cursorTerm, ${exprs(i).primitive})"
+        case NullType => ""
+        case _ =>
+          throw new UnsupportedOperationException(s"Not supported DataType: ${e.dataType}")
+      }
+      s"""if (${exprs(i).isNull}) {
+            $ret.setNullAt($i);
+          } else {
+            $update;
+          }"""
+    }.mkString("\n          ")
+
+    s"""
+      $allExprs
+      int $numBytesTerm = $fixedSize $additionalSize;
+      if ($numBytesTerm > $bufferTerm.length) {
+        $bufferTerm = new byte[$numBytesTerm];
+      }
+
+      $ret.pointTo(
+        $bufferTerm,
+        org.apache.spark.unsafe.PlatformDependent.BYTE_ARRAY_OFFSET,
+        ${expressions.size},
+        $numBytesTerm);
+      int $cursorTerm = $fixedSize;
+
+
+      $writers
+      boolean ${ev.isNull} = false;
+     """
+  }
+
   protected def canonicalize(in: Seq[Expression]): Seq[Expression] =
     in.map(ExpressionCanonicalizer.execute)
 
@@ -40,79 +125,39 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
 
   protected def create(expressions: Seq[Expression]): UnsafeProjection = {
     val ctx = newCodeGenContext()
-    val exprs = expressions.map(_.gen(ctx))
-    val allExprs = exprs.map(_.code).mkString("\n")
-    val fixedSize = 8 * exprs.length + UnsafeRow.calculateBitSetWidthInBytes(exprs.length)
-    val stringWriter = "org.apache.spark.sql.catalyst.expressions.StringUnsafeColumnWriter"
-    val binaryWriter = "org.apache.spark.sql.catalyst.expressions.BinaryUnsafeColumnWriter"
-    val additionalSize = expressions.zipWithIndex.map { case (e, i) =>
-      e.dataType match {
-        case StringType =>
-          s" + (${exprs(i).isNull} ? 0 : $stringWriter.getSize(${exprs(i).primitive}))"
-        case BinaryType =>
-          s" + (${exprs(i).isNull} ? 0 : $binaryWriter.getSize(${exprs(i).primitive}))"
-        case _ => ""
-      }
-    }.mkString("")
 
-    val writers = expressions.zipWithIndex.map { case (e, i) =>
-      val update = e.dataType match {
-        case dt if ctx.isPrimitiveType(dt) =>
-          s"${ctx.setColumn("target", dt, i, exprs(i).primitive)}"
-        case StringType =>
-          s"cursor += $stringWriter.write(target, ${exprs(i).primitive}, $i, cursor)"
-        case BinaryType =>
-          s"cursor += $binaryWriter.write(target, ${exprs(i).primitive}, $i, cursor)"
-        case NullType => ""
-        case _ =>
-          throw new UnsupportedOperationException(s"Not supported DataType: ${e.dataType}")
-      }
-      s"""if (${exprs(i).isNull}) {
-            target.setNullAt($i);
-          } else {
-            $update;
-          }"""
-    }.mkString("\n          ")
+    val isNull = ctx.freshName("retIsNull")
+    val primitive = ctx.freshName("retValue")
+    val eval = GeneratedExpressionCode("", isNull, primitive)
+    eval.code = createCode(ctx, eval, expressions)
 
     val code = s"""
-    private $exprType[] expressions;
+      private $exprType[] expressions;
 
-    public Object generate($exprType[] expr) {
-      this.expressions = expr;
-      return new SpecificProjection();
-    }
-
-    class SpecificProjection extends ${classOf[UnsafeProjection].getName} {
-
-      private UnsafeRow target = new UnsafeRow();
-      private byte[] buffer = new byte[64];
-      ${declareMutableStates(ctx)}
-
-      public SpecificProjection() {
-        ${initMutableStates(ctx)}
+      public Object generate($exprType[] expr) {
+        this.expressions = expr;
+        return new SpecificProjection();
       }
 
-      // Scala.Function1 need this
-      public Object apply(Object row) {
-        return apply((InternalRow) row);
-      }
+      class SpecificProjection extends ${classOf[UnsafeProjection].getName} {
 
-      public UnsafeRow apply(InternalRow i) {
-        $allExprs
+        ${declareMutableStates(ctx)}
 
-        // additionalSize had '+' in the beginning
-        int numBytes = $fixedSize $additionalSize;
-        if (numBytes > buffer.length) {
-          buffer = new byte[numBytes];
+        public SpecificProjection() {
+          ${initMutableStates(ctx)}
         }
-        target.pointTo(buffer, org.apache.spark.unsafe.PlatformDependent.BYTE_ARRAY_OFFSET,
-          ${expressions.size}, numBytes);
-        int cursor = $fixedSize;
-        $writers
-        return target;
+
+        // Scala.Function1 need this
+        public Object apply(Object row) {
+          return apply((InternalRow) row);
+        }
+
+        public UnsafeRow apply(InternalRow i) {
+          ${eval.code}
+          return ${eval.primitive};
+        }
       }
-    }
-    """
+      """
 
     logDebug(s"code for ${expressions.mkString(",")}:\n$code")
 

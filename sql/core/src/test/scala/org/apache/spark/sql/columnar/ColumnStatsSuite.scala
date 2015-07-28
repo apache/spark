@@ -58,15 +58,15 @@ class ColumnStatsSuite extends SparkFunSuite {
       val rows = Seq.fill(10)(makeRandomRow(columnType)) ++ Seq.fill(10)(makeNullRow(1))
       rows.foreach(columnStats.gatherStats(_, 0))
 
-      val values = rows.take(10).map(_(0).asInstanceOf[T#InternalType])
+      val values = rows.take(10).map(_.get(0, columnType.dataType).asInstanceOf[T#InternalType])
       val ordering = columnType.dataType.ordering.asInstanceOf[Ordering[T#InternalType]]
       val stats = columnStats.collectedStatistics
 
-      assertResult(values.min(ordering), "Wrong lower bound")(stats(0))
-      assertResult(values.max(ordering), "Wrong upper bound")(stats(1))
-      assertResult(10, "Wrong null count")(stats(2))
-      assertResult(20, "Wrong row count")(stats(3))
-      assertResult(stats(4), "Wrong size in bytes") {
+      assertResult(values.min(ordering), "Wrong lower bound")(stats.genericGet(0))
+      assertResult(values.max(ordering), "Wrong upper bound")(stats.genericGet(1))
+      assertResult(10, "Wrong null count")(stats.genericGet(2))
+      assertResult(20, "Wrong row count")(stats.genericGet(3))
+      assertResult(stats.genericGet(4), "Wrong size in bytes") {
         rows.map { row =>
           if (row.isNullAt(0)) 4 else columnType.actualSize(row, 0)
         }.sum

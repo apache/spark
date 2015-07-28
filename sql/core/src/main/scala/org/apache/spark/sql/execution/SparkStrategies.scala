@@ -17,28 +17,26 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.sql.{SQLContext, Strategy, execution}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression2}
+import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression2
 import org.apache.spark.sql.catalyst.planning._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.{BroadcastHint, LogicalPlan}
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.columnar.{InMemoryColumnarTableScan, InMemoryRelation}
-import org.apache.spark.sql.execution.{DescribeCommand => RunnableDescribeCommand}
 import org.apache.spark.sql.execution.datasources.{CreateTableUsing, CreateTempTableUsing, DescribeCommand => LogicalDescribeCommand, _}
-import org.apache.spark.sql.parquet._
+import org.apache.spark.sql.execution.{DescribeCommand => RunnableDescribeCommand}
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.{SQLContext, Strategy, execution}
 
 private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   self: SQLContext#SparkPlanner =>
 
   object LeftSemiJoin extends Strategy with PredicateHelper {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      case ExtractEquiJoinKeys(LeftSemi, leftKeys, rightKeys, condition, left, right)
-        if sqlContext.conf.autoBroadcastJoinThreshold > 0 &&
-          right.statistics.sizeInBytes <= sqlContext.conf.autoBroadcastJoinThreshold =>
+      case ExtractEquiJoinKeys(
+             LeftSemi, leftKeys, rightKeys, condition, left, CanBroadcast(right)) =>
         joins.BroadcastLeftSemiJoinHash(
           leftKeys, rightKeys, planLater(left), planLater(right), condition) :: Nil
       // Find left semi joins where at least some predicates can be evaluated by matching join keys
@@ -91,6 +89,18 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       condition.map(Filter(_, broadcastHashJoin)).getOrElse(broadcastHashJoin) :: Nil
     }
 
+    private[this] def isValidSort(
+        leftKeys: Seq[Expression],
+        rightKeys: Seq[Expression]): Boolean = {
+      leftKeys.zip(rightKeys).forall { keys =>
+        (keys._1.dataType, keys._2.dataType) match {
+          case (l: AtomicType, r: AtomicType) => true
+          case (NullType, NullType) => true
+          case _ => false
+        }
+      }
+    }
+
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case ExtractEquiJoinKeys(Inner, leftKeys, rightKeys, condition, left, CanBroadcast(right)) =>
         makeBroadcastHashJoin(leftKeys, rightKeys, left, right, condition, joins.BuildRight)
@@ -101,7 +111,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       // If the sort merge join option is set, we want to use sort merge join prior to hashjoin
       // for now let's support inner join first, then add outer join
       case ExtractEquiJoinKeys(Inner, leftKeys, rightKeys, condition, left, right)
-        if sqlContext.conf.sortMergeJoinEnabled =>
+        if sqlContext.conf.sortMergeJoinEnabled && isValidSort(leftKeys, rightKeys) =>
         val mergeJoin =
           joins.SortMergeJoin(leftKeys, rightKeys, planLater(left), planLater(right))
         condition.map(Filter(_, mergeJoin)).getOrElse(mergeJoin) :: Nil
@@ -190,12 +200,12 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         sqlContext.conf.codegenEnabled).isDefined
     }
 
-    def canBeCodeGened(aggs: Seq[AggregateExpression1]): Boolean = !aggs.exists {
-      case _: CombineSum | _: Sum | _: Count | _: Max | _: Min |  _: CombineSetsAndCount => false
+    def canBeCodeGened(aggs: Seq[AggregateExpression1]): Boolean = aggs.forall {
+      case _: CombineSum | _: Sum | _: Count | _: Max | _: Min |  _: CombineSetsAndCount => true
       // The generated set implementation is pretty limited ATM.
       case CollectHashSet(exprs) if exprs.size == 1  &&
-           Seq(IntegerType, LongType).contains(exprs.head.dataType) => false
-      case _ => true
+           Seq(IntegerType, LongType).contains(exprs.head.dataType) => true
+      case _ => false
     }
 
     def allAggregates(exprs: Seq[Expression]): Seq[AggregateExpression1] =
@@ -302,57 +312,6 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
              IntegerLiteral(limit),
              logical.Project(projectList, logical.Sort(order, true, child))) =>
         execution.TakeOrderedAndProject(limit, order, Some(projectList), planLater(child)) :: Nil
-      case _ => Nil
-    }
-  }
-
-  object ParquetOperations extends Strategy {
-    def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      // TODO: need to support writing to other types of files.  Unify the below code paths.
-      case logical.WriteToFile(path, child) =>
-        val relation =
-          ParquetRelation.create(path, child, sparkContext.hadoopConfiguration, sqlContext)
-        // Note: overwrite=false because otherwise the metadata we just created will be deleted
-        InsertIntoParquetTable(relation, planLater(child), overwrite = false) :: Nil
-      case logical.InsertIntoTable(
-          table: ParquetRelation, partition, child, overwrite, ifNotExists) =>
-        InsertIntoParquetTable(table, planLater(child), overwrite) :: Nil
-      case PhysicalOperation(projectList, filters: Seq[Expression], relation: ParquetRelation) =>
-        val partitionColNames = relation.partitioningAttributes.map(_.name).toSet
-        val filtersToPush = filters.filter { pred =>
-            val referencedColNames = pred.references.map(_.name).toSet
-            referencedColNames.intersect(partitionColNames).isEmpty
-          }
-        val prunePushedDownFilters =
-          if (sqlContext.conf.parquetFilterPushDown) {
-            (predicates: Seq[Expression]) => {
-              // Note: filters cannot be pushed down to Parquet if they contain more complex
-              // expressions than simple "Attribute cmp Literal" comparisons. Here we remove all
-              // filters that have been pushed down. Note that a predicate such as "(A AND B) OR C"
-              // can result in "A OR C" being pushed down. Here we are conservative in the sense
-              // that even if "A" was pushed and we check for "A AND B" we still want to keep
-              // "A AND B" in the higher-level filter, not just "B".
-              predicates.map(p => p -> ParquetFilters.createFilter(p)).collect {
-                case (predicate, None) => predicate
-                // Filter needs to be applied above when it contains partitioning
-                // columns
-                case (predicate, _)
-                  if !predicate.references.map(_.name).toSet.intersect(partitionColNames).isEmpty =>
-                  predicate
-              }
-            }
-          } else {
-            identity[Seq[Expression]] _
-          }
-        pruneFilterProject(
-          projectList,
-          filters,
-          prunePushedDownFilters,
-          ParquetTableScan(
-            _,
-            relation,
-            if (sqlContext.conf.parquetFilterPushDown) filtersToPush else Nil)) :: Nil
-
       case _ => Nil
     }
   }
@@ -479,6 +438,11 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         val resultPlan = self.sqlContext.executePlan(table).executedPlan
         ExecutedCommand(
           RunnableDescribeCommand(resultPlan, describe.output, isExtended)) :: Nil
+
+      case logical.ShowFunctions(db, pattern) => ExecutedCommand(ShowFunctions(db, pattern)) :: Nil
+
+      case logical.DescribeFunction(function, extended) =>
+        ExecutedCommand(DescribeFunction(function, extended)) :: Nil
 
       case _ => Nil
     }

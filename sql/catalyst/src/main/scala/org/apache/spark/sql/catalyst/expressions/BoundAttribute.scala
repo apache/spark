@@ -48,7 +48,9 @@ case class BoundReference(ordinal: Int, dataType: DataType, nullable: Boolean)
         case DoubleType => input.getDouble(ordinal)
         case StringType => input.getUTF8String(ordinal)
         case BinaryType => input.getBinary(ordinal)
-        case _ => input.get(ordinal)
+        case IntervalType => input.getInterval(ordinal)
+        case t: StructType => input.getStruct(ordinal, t.size)
+        case dataType => input.get(ordinal, dataType)
       }
     }
   }
