@@ -17,13 +17,13 @@
 
 package org.apache.spark.deploy.worker
 
+import org.scalatest.Matchers
+
 import org.apache.spark.deploy.DeployMessages.{DriverStateChanged, ExecutorStateChanged}
 import org.apache.spark.deploy.master.DriverState
 import org.apache.spark.rpc.{RpcAddress, RpcEnv}
 import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.{ExecutorState, Command}
-
-import org.scalatest.Matchers
 
 class WorkerSuite extends SparkFunSuite with Matchers {
 
@@ -68,11 +68,11 @@ class WorkerSuite extends SparkFunSuite with Matchers {
     val rpcEnv = RpcEnv.create("test", "localhost", 12345, conf, new SecurityManager(conf))
     val worker = new Worker(rpcEnv, 50000, 20, 1234 * 5, Array.fill(1)(RpcAddress("1.2.3.4", 1234)),
       "sparkWorker1", "Worker", "/tmp", conf, new SecurityManager(conf))
-    //initialize worker
+    // initialize workers
     for (i <- 0 until 5) {
       worker.executors += s"app1/$i" -> createExecutorRunner(i)
     }
-    //initialize ExecutorStateChanged Message
+    // initialize ExecutorStateChanged Message
     worker.handleExecutorStateChanged(
       ExecutorStateChanged("app1", 0, ExecutorState.EXITED, None, None))
     assert(worker.finishedExecutors.size === 1)
@@ -81,6 +81,9 @@ class WorkerSuite extends SparkFunSuite with Matchers {
       worker.handleExecutorStateChanged(
         ExecutorStateChanged("app1", i, ExecutorState.EXITED, None, None))
       assert(worker.finishedExecutors.size === 2)
+      if (i > 1) {
+        assert(!worker.finishedExecutors.contains(s"app1/${i - 2}"))
+      }
       assert(worker.executors.size === 4 - i)
     }
   }
@@ -91,11 +94,11 @@ class WorkerSuite extends SparkFunSuite with Matchers {
     val rpcEnv = RpcEnv.create("test", "localhost", 12345, conf, new SecurityManager(conf))
     val worker = new Worker(rpcEnv, 50000, 20, 1234 * 5, Array.fill(1)(RpcAddress("1.2.3.4", 1234)),
       "sparkWorker1", "Worker", "/tmp", conf, new SecurityManager(conf))
-    //initialize worker
+    // initialize workers
     for (i <- 0 until 50) {
       worker.executors += s"app1/$i" -> createExecutorRunner(i)
     }
-    //initialize ExecutorStateChanged Message
+    // initialize ExecutorStateChanged Message
     worker.handleExecutorStateChanged(
       ExecutorStateChanged("app1", 0, ExecutorState.EXITED, None, None))
     assert(worker.finishedExecutors.size === 1)
@@ -110,6 +113,11 @@ class WorkerSuite extends SparkFunSuite with Matchers {
       }
       worker.handleExecutorStateChanged(
         ExecutorStateChanged("app1", i, ExecutorState.EXITED, None, None))
+      if (expectedValue == 28) {
+        for (j <- i - 30 until i - 27) {
+          assert(!worker.finishedExecutors.contains(s"app1/$j"))
+        }
+      }
       assert(worker.executors.size === 49 - i)
       assert(worker.finishedExecutors.size === expectedValue)
     }
@@ -121,18 +129,21 @@ class WorkerSuite extends SparkFunSuite with Matchers {
     val rpcEnv = RpcEnv.create("test", "localhost", 12345, conf, new SecurityManager(conf))
     val worker = new Worker(rpcEnv, 50000, 20, 1234 * 5, Array.fill(1)(RpcAddress("1.2.3.4", 1234)),
       "sparkWorker1", "Worker", "/tmp", conf, new SecurityManager(conf))
-    //initialize worker
+    // initialize workers
     for (i <- 0 until 5) {
       val driverId = s"driverId-$i"
       worker.drivers += driverId -> createDriverRunner(driverId)
     }
-    //initialize ExecutorStateChanged Message
+    // initialize DriverStateChanged Message
     worker.handleDriverStateChanged(DriverStateChanged("driverId-0", DriverState.FINISHED, None))
     assert(worker.drivers.size === 4)
     assert(worker.finishedDrivers.size === 1)
     for (i <- 1 until 5) {
       val driverId = s"driverId-$i"
       worker.handleDriverStateChanged(DriverStateChanged(driverId, DriverState.FINISHED, None))
+      if (i > 1) {
+        assert(!worker.finishedDrivers.contains(s"driverId-${i - 2}"))
+      }
       assert(worker.drivers.size === 4 - i)
       assert(worker.finishedDrivers.size === 2)
     }
@@ -144,12 +155,12 @@ class WorkerSuite extends SparkFunSuite with Matchers {
     val rpcEnv = RpcEnv.create("test", "localhost", 12345, conf, new SecurityManager(conf))
     val worker = new Worker(rpcEnv, 50000, 20, 1234 * 5, Array.fill(1)(RpcAddress("1.2.3.4", 1234)),
       "sparkWorker1", "Worker", "/tmp", conf, new SecurityManager(conf))
-    //initialize worker
+    // initialize workers
     for (i <- 0 until 50) {
       val driverId = s"driverId-$i"
       worker.drivers += driverId -> createDriverRunner(driverId)
     }
-    //initialize ExecutorStateChanged Message
+    // initialize DriverStateChanged Message
     worker.handleDriverStateChanged(DriverStateChanged("driverId-0", DriverState.FINISHED, None))
     assert(worker.finishedDrivers.size === 1)
     assert(worker.drivers.size === 49)
@@ -163,6 +174,11 @@ class WorkerSuite extends SparkFunSuite with Matchers {
       }
       val driverId = s"driverId-$i"
       worker.handleDriverStateChanged(DriverStateChanged(driverId, DriverState.FINISHED, None))
+      if (expectedValue == 28) {
+        for (j <- i - 30 until i - 27) {
+          assert(!worker.finishedDrivers.contains(s"driverId-$j"))
+        }
+      }
       assert(worker.drivers.size === 49 - i)
       assert(worker.finishedDrivers.size === expectedValue)
     }

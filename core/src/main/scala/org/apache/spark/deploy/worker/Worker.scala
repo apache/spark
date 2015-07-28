@@ -25,7 +25,7 @@ import java.util.concurrent._
 import java.util.concurrent.{Future => JFuture, ScheduledFuture => JScheduledFuture}
 
 import scala.collection.JavaConversions._
-import scala.collection.mutable.{HashMap, HashSet}
+import scala.collection.mutable.{HashMap, HashSet, LinkedHashMap}
 import scala.concurrent.ExecutionContext
 import scala.util.Random
 import scala.util.control.NonFatal
@@ -115,10 +115,10 @@ private[worker] class Worker(
     }
 
   var workDir: File = null
-  val finishedExecutors = new HashMap[String, ExecutorRunner]
+  val finishedExecutors = new LinkedHashMap[String, ExecutorRunner]
   val drivers = new HashMap[String, DriverRunner]
   val executors = new HashMap[String, ExecutorRunner]
-  val finishedDrivers = new HashMap[String, DriverRunner]
+  val finishedDrivers = new LinkedHashMap[String, DriverRunner]
   val appDirectories = new HashMap[String, Seq[String]]
   val finishedApps = new HashSet[String]
 

@@ -24,7 +24,7 @@ import org.apache.spark.deploy.master.{ApplicationInfo, DriverInfo, WorkerInfo}
 import org.apache.spark.deploy.worker.{DriverRunner, ExecutorRunner}
 import org.apache.spark.{SecurityManager, SparkConf}
 
-object DeployTestUtils {
+private[deploy] object DeployTestUtils {
   def createAppDesc(): ApplicationDescription = {
     val cmd = new Command("mainClass", List("arg1", "arg2"), Map(), Seq(), Seq(), Seq())
     new ApplicationDescription("name", Some(4), 1234, cmd, "appUiUrl")
