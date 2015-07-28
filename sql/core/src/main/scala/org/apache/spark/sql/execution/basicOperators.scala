@@ -17,16 +17,16 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.sql.types.StructType
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.{RDD, ShuffledRDD}
 import org.apache.spark.shuffle.sort.SortShuffleManager
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.plans.physical._
+import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.collection.ExternalSorter
 import org.apache.spark.util.collection.unsafe.sort.PrefixComparator
 import org.apache.spark.util.{CompletionIterator, MutablePair}
@@ -56,11 +56,8 @@ case class Project(projectList: Seq[NamedExpression], child: SparkPlan) extends 
 case class Filter(condition: Expression, child: SparkPlan) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
 
-  @transient lazy val conditionEvaluator: (InternalRow) => Boolean =
-    newPredicate(condition, child.output)
-
   protected override def doExecute(): RDD[InternalRow] = child.execute().mapPartitions { iter =>
-    iter.filter(conditionEvaluator)
+    iter.filter(newPredicate(condition, child.output))
   }
 
   override def outputOrdering: Seq[SortOrder] = child.outputOrdering

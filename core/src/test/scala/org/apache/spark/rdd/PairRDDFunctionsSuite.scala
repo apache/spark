@@ -282,6 +282,29 @@ class PairRDDFunctionsSuite extends SparkFunSuite with SharedSparkContext {
     ))
   }
 
+  // See SPARK-9326
+  test("cogroup with empty RDD") {
+    import scala.reflect.classTag
+    val intPairCT = classTag[(Int, Int)]
+
+    val rdd1 = sc.parallelize(Array((1, 1), (1, 2), (2, 1), (3, 1)))
+    val rdd2 = sc.emptyRDD[(Int, Int)](intPairCT)
+
+    val joined = rdd1.cogroup(rdd2).collect()
+    assert(joined.size > 0)
+  }
+
+  // See SPARK-9326
+  test("cogroup with groupByed RDD having 0 partitions") {
+    import scala.reflect.classTag
+    val intCT = classTag[Int]
+
+    val rdd1 = sc.parallelize(Array((1, 1), (1, 2), (2, 1), (3, 1)))
+    val rdd2 = sc.emptyRDD[Int](intCT).groupBy((x) => 5)
+    val joined = rdd1.cogroup(rdd2).collect()
+    assert(joined.size > 0)
+  }
+
   test("rightOuterJoin") {
     val rdd1 = sc.parallelize(Array((1, 1), (1, 2), (2, 1), (3, 1)))
     val rdd2 = sc.parallelize(Array((1, 'x'), (2, 'y'), (2, 'z'), (4, 'w')))

@@ -15,15 +15,21 @@
 # limitations under the License.
 #
 
+argv <- commandArgs(TRUE)
+SPARK_ROOT_DIR <- as.character(argv[1])
+
 # Installs lintr from Github.
 # NOTE: The CRAN's version is too old to adapt to our rules.
 if ("lintr" %in% row.names(installed.packages())  == FALSE) {
   devtools::install_github("jimhester/lintr")
 }
-library(lintr)
 
-argv <- commandArgs(TRUE)
-SPARK_ROOT_DIR <- as.character(argv[1])
+library(lintr)
+library(methods)
+library(testthat)
+if (! library(SparkR, lib.loc = file.path(SPARK_ROOT_DIR, "R", "lib"), logical.return = TRUE)) {
+  stop("You should install SparkR in a local directory with `R/install-dev.sh`.")
+}
 
 path.to.package <- file.path(SPARK_ROOT_DIR, "R", "pkg")
 lint_package(path.to.package, cache = FALSE)
