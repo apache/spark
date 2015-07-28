@@ -227,6 +227,7 @@ final class EMLDAOptimizer extends LDAOptimizer {
  */
 @DeveloperApi
 final class OnlineLDAOptimizer extends LDAOptimizer {
+
   // LDA common parameters
   private var k: Int = 0
   private var corpusSize: Long = 0

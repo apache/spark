@@ -407,12 +407,12 @@ object LocalLDAModel extends Loader[LocalLDAModel] {
  */
 @Experimental
 class DistributedLDAModel private (
-  private val graph: Graph[LDA.TopicCounts, LDA.TokenCount],
-  private val globalTopicTotals: LDA.TopicCounts,
+  private[clustering] val graph: Graph[LDA.TopicCounts, LDA.TokenCount],
+  private[clustering] val globalTopicTotals: LDA.TopicCounts,
   val k: Int,
   val vocabSize: Int,
-  protected val docConcentration: Vector,
-  protected val topicConcentration: Double,
+  protected[clustering] val docConcentration: Vector,
+  protected[clustering] val topicConcentration: Double,
   protected val gammaShape: Double,
   private[spark] val iterationTimes: Array[Double]) extends LDAModel {
 
