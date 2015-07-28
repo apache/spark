@@ -7,10 +7,16 @@ in their PYTHONPATH. airflow_login should be based off the
 __version__ = "1.2.0"
 
 import logging
+import os
+import sys
 from airflow.configuration import conf
 from airflow.models import DAG
 from flask.ext.admin import BaseView
 
+
+DAGS_FOLDER = os.path.expanduser(conf.get('core', 'DAGS_FOLDER'))
+if DAGS_FOLDER not in sys.path:
+    sys.path.append(DAGS_FOLDER)
 
 from airflow import default_login as login
 if conf.getboolean('webserver', 'AUTHENTICATE'):
