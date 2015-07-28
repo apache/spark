@@ -105,6 +105,7 @@ class ExecutorRunnable(
           // Authentication is not enabled, so just provide dummy metadata
           ByteBuffer.allocate(0)
         }
+      //throw an exception here, and things just hang
       ctx.setServiceData(Map[String, ByteBuffer]("spark_shuffle" -> secretBytes))
     }
 

@@ -151,8 +151,8 @@ class ExternalShuffleSuite extends SparkFunSuite with BeforeAndAfterAll with Mat
       false,
       mainClassName(ExternalShuffleDriver.getClass),
       appArgs = Seq(result.getAbsolutePath()),
-      extraConf = Map()
-//      extraConf = Map("spark.shuffle.service.enabled" -> "true")
+//      extraConf = Map()
+      extraConf = Map("spark.shuffle.service.enabled" -> "true")
     )
     checkResult(result)
   }
