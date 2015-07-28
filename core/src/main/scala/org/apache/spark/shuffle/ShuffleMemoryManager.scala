@@ -40,7 +40,7 @@ private[spark] class ShuffleMemoryManager(maxMemory: Long) extends Logging {
 
   def this(conf: SparkConf) = this(ShuffleMemoryManager.getMaxMemory(conf))
 
-  private def currenttaskAttemptId(): Long = {
+  private def currentTaskAttemptId(): Long = {
     Option(TaskContext.get()).map(_.taskAttemptId()).getOrElse(-1L)
   }
 
@@ -52,7 +52,7 @@ private[spark] class ShuffleMemoryManager(maxMemory: Long) extends Logging {
    * happen if the number of tasks increases but an older task had a lot of memory already.
    */
   def tryToAcquire(numBytes: Long): Long = synchronized {
-    val taskAttemptId = currenttaskAttemptId()
+    val taskAttemptId = currentTaskAttemptId()
     assert(numBytes > 0, "invalid number of bytes requested: " + numBytes)
 
     // Add this task to the taskMemory map just so we can keep an accurate count of the number
@@ -98,7 +98,7 @@ private[spark] class ShuffleMemoryManager(maxMemory: Long) extends Logging {
 
   /** Release numBytes bytes for the current task. */
   def release(numBytes: Long): Unit = synchronized {
-    val taskAttemptId = currenttaskAttemptId()
+    val taskAttemptId = currentTaskAttemptId()
     val curMem = taskMemory.getOrElse(taskAttemptId, 0L)
     if (curMem < numBytes) {
       throw new SparkException(
@@ -110,7 +110,7 @@ private[spark] class ShuffleMemoryManager(maxMemory: Long) extends Logging {
 
   /** Release all memory for the current task and mark it as inactive (e.g. when a task ends). */
   def releaseMemoryForThisTask(): Unit = synchronized {
-    val taskAttemptId = currenttaskAttemptId()
+    val taskAttemptId = currentTaskAttemptId()
     taskMemory.remove(taskAttemptId)
     notifyAll()  // Notify waiters who locked "this" in tryToAcquire that memory has been freed
   }
