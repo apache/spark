@@ -177,32 +177,10 @@ case class CollectHashSet(expressions: Seq[Expression]) extends AggregateExpress
   override def newInstance(): CollectHashSetFunction =
     new CollectHashSetFunction(expressions, this)
 }
-<<<<<<< HEAD
 case class CollectHashSetFunction(
                                    @transient expr: Seq[Expression],
                                    @transient base: AggregateExpression1)
   extends AggregateFunction1 {
-=======
-
-case class Last(child: Expression) extends PartialAggregate with trees.UnaryNode[Expression] {
-  override def references = child.references
-  override def nullable = true
-  override def dataType = child.dataType
-  override def toString = s"LAST($child)"
-
-  override def asPartial: SplitEvaluation = {
-    val partialLast = Alias(Last(child), "PartialLast")()
-    SplitEvaluation(
-      Last(partialLast.toAttribute),
-      partialLast :: Nil)
-  }
-  override def newInstance() = new LastFunction(child, this)
-}
-
-case class AverageFunction(expr: Expression, base: AggregateExpression)
-  extends AggregateFunction {
-
->>>>>>> 114dd57... add 'Last' component
   def this() = this(null, null) // Required for serialization.
   val seen = new OpenHashSet[Any]()
   @transient
@@ -557,16 +535,4 @@ case class LastFunction(expr: Expression, base: AggregateExpression1) extends Ag
   override def eval(input: InternalRow): Any = {
     if (result != null) expr.eval(result.asInstanceOf[InternalRow]) else null
   }
-}
-
-case class LastFunction(expr: Expression, base: AggregateExpression) extends AggregateFunction {
-  def this() = this(null, null) // Required for serialization.
-
-  var result: Any = null
-
-  override def update(input: Row): Unit = {
-    result = input
-  }
-
-  override def eval(input: Row): Any = if (result != null) expr.eval(result.asInstanceOf[Row]) else null
 }

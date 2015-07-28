@@ -1,22 +1,20 @@
 /*
- * Licensed to the Apache Software Foundation (ASF) under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The ASF licenses this file to You under the Apache License, Version 2.0
- * (the "License"); you may not use this file except in compliance with
- * the License.  You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
+* Licensed to the Apache Software Foundation (ASF) under one or more
+* contributor license agreements. See the NOTICE file distributed with
+* this work for additional information regarding copyright ownership.
+* The ASF licenses this file to You under the Apache License, Version 2.0
+* (the "License"); you may not use this file except in compliance with
+* the License. You may obtain a copy of the License at
+*
+* http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing, software
+* distributed under the License is distributed on an "AS IS" BASIS,
+* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+* See the License for the specific language governing permissions and
+* limitations under the License.
+*/
 package org.apache.spark.sql.execution
-
 import org.apache.spark.TaskContext
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
@@ -25,13 +23,11 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.trees._
 import org.apache.spark.sql.types._
-
 case class AggregateEvaluation(
-    schema: Seq[Attribute],
-    initialValues: Seq[Expression],
-    update: Seq[Expression],
-    result: Expression)
-
+                                schema: Seq[Attribute],
+                                initialValues: Seq[Expression],
+                                update: Seq[Expression],
+                                result: Expression)
 /**
  * :: DeveloperApi ::
  * Alternate version of aggregation that leverages projection and thus code generation.
@@ -39,7 +35,7 @@ case class AggregateEvaluation(
  * itself. Currently only used for simple aggregations like SUM, COUNT, or AVERAGE are supported.
  *
  * @param partial if true then aggregation is done partially on local data without shuffling to
- *                ensure all values where `groupingExpressions` are equal are present.
+ * ensure all values where `groupingExpressions` are equal are present.
  * @param groupingExpressions expressions that are evaluated to determine grouping.
  * @param aggregateExpressions expressions that are computed for each group.
  * @param unsafeEnabled whether to allow Unsafe-based aggregation buffers to be used.
@@ -47,13 +43,12 @@ case class AggregateEvaluation(
  */
 @DeveloperApi
 case class GeneratedAggregate(
-    partial: Boolean,
-    groupingExpressions: Seq[Expression],
-    aggregateExpressions: Seq[NamedExpression],
-    unsafeEnabled: Boolean,
-    child: SparkPlan)
+                               partial: Boolean,
+                               groupingExpressions: Seq[Expression],
+                               aggregateExpressions: Seq[NamedExpression],
+                               unsafeEnabled: Boolean,
+                               child: SparkPlan)
   extends UnaryNode {
-
   override def requiredChildDistribution: Seq[Distribution] =
     if (partial) {
       UnspecifiedDistribution :: Nil
@@ -64,14 +59,11 @@ case class GeneratedAggregate(
         ClusteredDistribution(groupingExpressions) :: Nil
       }
     }
-
   override def output: Seq[Attribute] = aggregateExpressions.map(_.toAttribute)
-
   protected override def doExecute(): RDD[InternalRow] = {
     val aggregatesToCompute = aggregateExpressions.flatMap { a =>
       a.collect { case agg: AggregateExpression1 => agg}
     }
-
     // If you add any new function support, please add tests in org.apache.spark.sql.SQLQuerySuite
     // (in test "aggregation with codegen").
     val computeFunctions = aggregatesToCompute.map {
@@ -86,9 +78,7 @@ case class GeneratedAggregate(
         val initialValue = Literal(0L)
         val updateFunction = If(IsNotNull(toCount), Add(currentCount, Literal(1L)), currentCount)
         val result = currentCount
-
         AggregateEvaluation(currentCount :: Nil, initialValue :: Nil, updateFunction :: Nil, result)
-
       case s @ Sum(expr) =>
         val calcType =
           expr.dataType match {
@@ -97,10 +87,8 @@ case class GeneratedAggregate(
             case _ =>
               expr.dataType
           }
-
         val currentSum = AttributeReference("currentSum", calcType, nullable = true)()
         val initialValue = Literal.create(null, calcType)
-
         // Coalesce avoids double calculation...
         // but really, common sub expression elimination would be better....
         val zero = Cast(Literal(0), calcType)
@@ -115,71 +103,57 @@ case class GeneratedAggregate(
               Cast(currentSum, s.dataType)
             case _ => currentSum
           }
-
         AggregateEvaluation(currentSum :: Nil, initialValue :: Nil, updateFunction :: Nil, result)
-
       case m @ Max(expr) =>
         val currentMax = AttributeReference("currentMax", expr.dataType, nullable = true)()
         val initialValue = Literal.create(null, expr.dataType)
         val updateMax = MaxOf(currentMax, expr)
-
         AggregateEvaluation(
           currentMax :: Nil,
           initialValue :: Nil,
           updateMax :: Nil,
           currentMax)
-
       case m @ Min(expr) =>
         val currentMin = AttributeReference("currentMin", expr.dataType, nullable = true)()
         val initialValue = Literal.create(null, expr.dataType)
         val updateMin = MinOf(currentMin, expr)
-
         AggregateEvaluation(
           currentMin :: Nil,
           initialValue :: Nil,
           updateMin :: Nil,
           currentMin)
-
       case CollectHashSet(Seq(expr)) =>
         val set =
           AttributeReference("hashSet", new OpenHashSetUDT(expr.dataType), nullable = false)()
         val initialValue = NewSet(expr.dataType)
         val addToSet = AddItemToSet(expr, set)
-
         AggregateEvaluation(
           set :: Nil,
           initialValue :: Nil,
           addToSet :: Nil,
           set)
-
       case CombineSetsAndCount(inputSet) =>
         val elementType = inputSet.dataType.asInstanceOf[OpenHashSetUDT].elementType
         val set =
           AttributeReference("hashSet", new OpenHashSetUDT(elementType), nullable = false)()
         val initialValue = NewSet(elementType)
         val collectSets = CombineSets(set, inputSet)
-
         AggregateEvaluation(
           set :: Nil,
           initialValue :: Nil,
           collectSets :: Nil,
           CountSet(set))
-
       case o => sys.error(s"$o can't be codegened.")
     }
-
     val computationSchema = computeFunctions.flatMap(_.schema)
-
     val resultMap: Map[TreeNodeRef, Expression] =
       aggregatesToCompute.zip(computeFunctions).map {
         case (agg, func) => new TreeNodeRef(agg) -> func.result
       }.toMap
-
     val namedGroups = groupingExpressions.zipWithIndex.map {
       case (ne: NamedExpression, _) => (ne, ne.toAttribute)
       case (e, i) => (e, Alias(e, s"GroupingExpr$i")().toAttribute)
     }
-
     // The set of expressions that produce the final output given the aggregation buffer and the
     // grouping expressions.
     val resultExpressions = aggregateExpressions.map(_.transform {
@@ -189,9 +163,7 @@ case class GeneratedAggregate(
           case (expr, attr) if expr semanticEquals e => attr
         }.getOrElse(e)
     })
-
     val aggregationBufferSchema: StructType = StructType.fromAttributes(computationSchema)
-
     val groupKeySchema: StructType = {
       val fields = groupingExpressions.zipWithIndex.map { case (expr, idx) =>
         // This is a dummy field name
@@ -199,22 +171,18 @@ case class GeneratedAggregate(
       }
       StructType(fields)
     }
-
     val schemaSupportsUnsafe: Boolean = {
       UnsafeFixedWidthAggregationMap.supportsAggregationBufferSchema(aggregationBufferSchema) &&
         UnsafeFixedWidthAggregationMap.supportsGroupKeySchema(groupKeySchema)
     }
-
     child.execute().mapPartitions { iter =>
       // Builds a new custom class for holding the results of aggregation for a group.
       val initialValues = computeFunctions.flatMap(_.initialValues)
       val newAggregationBuffer = newProjection(initialValues, child.output)
       log.info(s"Initial values: ${initialValues.mkString(",")}")
-
       // A projection that computes the group given an input tuple.
       val groupProjection = newProjection(groupingExpressions, child.output)
       log.info(s"Grouping Projection: ${groupingExpressions.mkString(",")}")
-
       // A projection that is used to update the aggregate values for a group given a new tuple.
       // This projection should be targeted at the current values for the group and then applied
       // to a joined row of the current values with the new input row.
@@ -222,16 +190,13 @@ case class GeneratedAggregate(
       val updateSchema = computeFunctions.flatMap(_.schema) ++ child.output
       val updateProjection = newMutableProjection(updateExpressions, updateSchema)()
       log.info(s"Update Expressions: ${updateExpressions.mkString(",")}")
-
       // A projection that produces the final result, given a computation.
       val resultProjectionBuilder =
         newMutableProjection(
           resultExpressions,
           namedGroups.map(_._2) ++ computationSchema)
       log.info(s"Result Projection: ${resultExpressions.mkString(",")}")
-
       val joinedRow = new JoinedRow
-
       if (!iter.hasNext) {
         // This is an empty input, so return early so that we do not allocate data structures
         // that won't be cleaned up (see SPARK-8357).
@@ -248,15 +213,12 @@ case class GeneratedAggregate(
         val buffer = newAggregationBuffer(EmptyRow).asInstanceOf[MutableRow]
         var currentRow: InternalRow = null
         updateProjection.target(buffer)
-
         while (iter.hasNext) {
           currentRow = iter.next()
           updateProjection(joinedRow(buffer, currentRow))
         }
-
         val resultProjection = resultProjectionBuilder()
         Iterator(resultProjection(buffer))
-
       } else if (unsafeEnabled && schemaSupportsUnsafe) {
         assert(iter.hasNext, "There should be at least one row for this path")
         log.info("Using Unsafe-based aggregator")
@@ -268,20 +230,16 @@ case class GeneratedAggregate(
           1024 * 16, // initial capacity
           false // disable tracking of performance metrics
         )
-
         while (iter.hasNext) {
           val currentRow: InternalRow = iter.next()
           val groupKey: InternalRow = groupProjection(currentRow)
           val aggregationBuffer = aggregationMap.getAggregationBuffer(groupKey)
           updateProjection.target(aggregationBuffer)(joinedRow(aggregationBuffer, currentRow))
         }
-
         new Iterator[InternalRow] {
           private[this] val mapIterator = aggregationMap.iterator()
           private[this] val resultProjection = resultProjectionBuilder()
-
           def hasNext: Boolean = mapIterator.hasNext
-
           def next(): InternalRow = {
             val entry = mapIterator.next()
             val result = resultProjection(joinedRow(entry.key, entry.value))
@@ -302,7 +260,6 @@ case class GeneratedAggregate(
           log.info("Not using Unsafe-based aggregator because it is not supported for this schema")
         }
         val buffers = new java.util.HashMap[InternalRow, MutableRow]()
-
         var currentRow: InternalRow = null
         while (iter.hasNext) {
           currentRow = iter.next()
@@ -316,13 +273,10 @@ case class GeneratedAggregate(
           // values.
           updateProjection.target(currentBuffer)(joinedRow(currentBuffer, currentRow))
         }
-
         new Iterator[InternalRow] {
           private[this] val resultIterator = buffers.entrySet.iterator()
           private[this] val resultProjection = resultProjectionBuilder()
-
           def hasNext: Boolean = resultIterator.hasNext
-
           def next(): InternalRow = {
             val currentGroup = resultIterator.next()
             resultProjection(joinedRow(currentGroup.getKey, currentGroup.getValue))
