@@ -96,14 +96,11 @@ private[scheduler] abstract class Stage(
 
   /**
    * Check whether we should abort the failedStage due to multiple failures.
-   * This method updates the running set of failures for a particular stage and returns
+   * This method updates the running set of failed stage attempts and returns
    * true if the number of failures exceeds the allowable number of failures.
    */
   private[scheduler] def failAndShouldAbort(task: Task[_]): Boolean = {
-    // We increment the failure count on the first attempt for a particular Stage
     attemptsFailedFromFetch.add(task.stageAttemptId)
-    // Check for multiple FetchFailures in a Stage and for the stage failing repeatedly following
-    // resubmissions.
     attemptsFailedFromFetch.size >= Stage.MAX_STAGE_FAILURES
   }
 
