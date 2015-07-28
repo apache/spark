@@ -78,13 +78,20 @@ class RFormula(override val uid: String) extends Estimator[RFormulaModel] with R
   /** @group getParam */
   def getFormula: String = $(formula)
 
+  /** Whether the formula specifies fitting an intercept. */
+  private[ml] def hasIntercept: Boolean = {
+    require(parsedFormula.isDefined, "Must call setFormula() first.")
+    parsedFormula.get.hasIntercept
+  }
+
   override def fit(dataset: DataFrame): RFormulaModel = {
     require(parsedFormula.isDefined, "Must call setFormula() first.")
+    val resolvedFormula = parsedFormula.get.resolve(dataset.schema)
     // StringType terms and terms representing interactions need to be encoded before assembly.
     // TODO(ekl) add support for feature interactions
-    var encoderStages = ArrayBuffer[PipelineStage]()
-    var tempColumns = ArrayBuffer[String]()
-    val encodedTerms = parsedFormula.get.terms.map { term =>
+    val encoderStages = ArrayBuffer[PipelineStage]()
+    val tempColumns = ArrayBuffer[String]()
+    val encodedTerms = resolvedFormula.terms.map { term =>
       dataset.schema(term) match {
         case column if column.dataType == StringType =>
           val indexCol = term + "_idx_" + uid
@@ -103,7 +110,7 @@ class RFormula(override val uid: String) extends Estimator[RFormulaModel] with R
       .setOutputCol($(featuresCol))
     encoderStages += new ColumnPruner(tempColumns.toSet)
     val pipelineModel = new Pipeline(uid).setStages(encoderStages.toArray).fit(dataset)
-    copyValues(new RFormulaModel(uid, parsedFormula.get, pipelineModel).setParent(this))
+    copyValues(new RFormulaModel(uid, resolvedFormula, pipelineModel).setParent(this))
   }
 
   // optimistic schema; does not contain any ML attributes
@@ -124,13 +131,13 @@ class RFormula(override val uid: String) extends Estimator[RFormulaModel] with R
 /**
  * :: Experimental ::
  * A fitted RFormula. Fitting is required to determine the factor levels of formula terms.
- * @param parsedFormula a pre-parsed R formula.
+ * @param resolvedFormula the fitted R formula.
  * @param pipelineModel the fitted feature model, including factor to index mappings.
  */
 @Experimental
 class RFormulaModel private[feature](
     override val uid: String,
-    parsedFormula: ParsedRFormula,
+    resolvedFormula: ResolvedRFormula,
     pipelineModel: PipelineModel)
   extends Model[RFormulaModel] with RFormulaBase {
 
@@ -144,8 +151,8 @@ class RFormulaModel private[feature](
     val withFeatures = pipelineModel.transformSchema(schema)
     if (hasLabelCol(schema)) {
       withFeatures
-    } else if (schema.exists(_.name == parsedFormula.label)) {
-      val nullable = schema(parsedFormula.label).dataType match {
+    } else if (schema.exists(_.name == resolvedFormula.label)) {
+      val nullable = schema(resolvedFormula.label).dataType match {
         case _: NumericType | BooleanType => false
         case _ => true
       }
@@ -158,12 +165,12 @@ class RFormulaModel private[feature](
   }
 
   override def copy(extra: ParamMap): RFormulaModel = copyValues(
-    new RFormulaModel(uid, parsedFormula, pipelineModel))
+    new RFormulaModel(uid, resolvedFormula, pipelineModel))
 
-  override def toString: String = s"RFormulaModel(${parsedFormula})"
+  override def toString: String = s"RFormulaModel(${resolvedFormula})"
 
   private def transformLabel(dataset: DataFrame): DataFrame = {
-    val labelName = parsedFormula.label
+    val labelName = resolvedFormula.label
     if (hasLabelCol(dataset.schema)) {
       dataset
     } else if (dataset.schema.exists(_.name == labelName)) {
@@ -206,27 +213,4 @@ private class ColumnPruner(columnsToPrune: Set[String]) extends Transformer {
   }
 
   override def copy(extra: ParamMap): ColumnPruner = defaultCopy(extra)
-}
-
-/**
- * Represents a parsed R formula.
- */
-private[ml] case class ParsedRFormula(label: String, terms: Seq[String])
-
-/**
- * Limited implementation of R formula parsing. Currently supports: '~', '+'.
- */
-private[ml] object RFormulaParser extends RegexParsers {
-  def term: Parser[String] = "([a-zA-Z]|\\.[a-zA-Z_])[a-zA-Z0-9._]*".r
-
-  def expr: Parser[List[String]] = term ~ rep("+" ~> term) ^^ { case a ~ list => a :: list }
-
-  def formula: Parser[ParsedRFormula] =
-    (term ~ "~" ~ expr) ^^ { case r ~ "~" ~ t => ParsedRFormula(r, t.distinct) }
-
-  def parse(value: String): ParsedRFormula = parseAll(formula, value) match {
-    case Success(result, _) => result
-    case failure: NoSuccess => throw new IllegalArgumentException(
-      "Could not parse formula: " + value)
-  }
 }
