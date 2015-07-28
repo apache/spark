@@ -104,60 +104,6 @@ trait ActorHelper extends Logging{
 
 /**
  * :: DeveloperApi ::
- * A helper class for your Actor to gain access to
- * the API for pushing received data into Spark Streaming for being processed.
- *
- * Find more details at: http://spark.apache.org/docs/latest/streaming-custom-receivers.html
- *
- * @example {{{
- *  class MyActor extends UntypedActor {
- *
- *  private final JavaActorHelper helper = new JavaActorHelper(this);
- *
- *    public void onReceive(Object msg) throws Exception {
- *      helper.store(msg);
- *    }
- *
- *  }
- *
- *  // Can be used with an actorStream as follows
- *  AkkaUtils.createStream(
- *    jssc, actorSystemFactory, Props.create(new MyActor()), "MyActorReceiver");
- *
- * }}}
- *
- * @note Since Actor may exist outside the spark framework, It is thus user's responsibility
- *       to ensure the type safety, i.e parametrized type of push block and InputDStream
- *       should be same.
- */
-@DeveloperApi
-class JavaActorHelper(actor: Actor) {
-  /** Store an iterator of received data as a data block into Spark's memory. */
-  def store[T](iter: java.util.Iterator[T]) {
-    actor.context.parent ! IteratorData(iter)
-  }
-
-  /**
-   * Store the bytes of received data as a data block into Spark's memory. Note
-   * that the data in the ByteBuffer must be serialized using the same serializer
-   * that Spark is configured to use.
-   */
-  def store(bytes: ByteBuffer) {
-    actor.context.parent ! ByteBufferData(bytes)
-  }
-
-  /**
-   * Store a single item of received data to Spark's memory.
-   * These single items will be aggregated together into data blocks before
-   * being pushed into Spark's memory.
-   */
-  def store[T](item: T) {
-    actor.context.parent ! SingleItemData(item)
-  }
-}
-
-/**
- * :: DeveloperApi ::
  * Statistics for querying the supervisor about state of workers. Used in
  * conjunction with `StreamingContext.actorStream` and
  * [[org.apache.spark.streaming.akka.ActorHelper]].
