@@ -34,65 +34,70 @@ class RateControllerSuite extends TestSuiteBase {
 
   test("rate controller publishes updates") {
     val ssc = new StreamingContext(conf, batchDuration)
-    val dstream = new MockRateLimitDStream(ssc, Seq(Seq(1)), 1)
-    val output = new TestOutputStreamWithPartitions(dstream)
-    output.register()
-    runStreams(ssc, 1, 1)
+    withStreamingContext(ssc) { ssc =>
+      val dstream = new MockRateLimitDStream(ssc, Seq(Seq(1)), 1)
+      val output = new TestOutputStreamWithPartitions(dstream)
+      output.register()
+      runStreams(ssc, 1, 1)
 
-    eventually(timeout(2.seconds)) {
-      assert(dstream.publishCalls === 1)
+      eventually(timeout(2.seconds)) {
+        assert(dstream.publishCalls === 1)
+      }
     }
   }
 
   test("receiver rate controller updates reach receivers") {
     val ssc = new StreamingContext(conf, batchDuration)
+    withStreamingContext(ssc) { ssc =>
+      val dstream = new RateLimitInputDStream(ssc) {
+        override val rateController =
+          Some(new ReceiverRateController(id, new ConstantEstimator(200.0)))
+      }
+      SingletonDummyReceiver.reset()
 
-    val dstream = new RateLimitInputDStream(ssc) {
-      override val rateController =
-        Some(new ReceiverRateController(id, new ConstantEstimator(200.0)))
-    }
-    SingletonDummyReceiver.reset()
+      val output = new TestOutputStreamWithPartitions(dstream)
+      output.register()
+      runStreams(ssc, 2, 2)
 
-    val output = new TestOutputStreamWithPartitions(dstream)
-    output.register()
-    runStreams(ssc, 2, 2)
-
-    eventually(timeout(5.seconds)) {
-      assert(dstream.getCurrentRateLimit === Some(200))
+      eventually(timeout(5.seconds)) {
+        assert(dstream.getCurrentRateLimit === Some(200))
+      }
     }
   }
 
   test("multiple rate controller updates reach receivers") {
     val ssc = new StreamingContext(conf, batchDuration)
-    val rates = Seq(100L, 200L, 300L)
+    withStreamingContext(ssc) { ssc =>
+      val rates = Seq(100L, 200L, 300L)
 
-    val dstream = new RateLimitInputDStream(ssc) {
-      override val rateController =
-        Some(new ReceiverRateController(id, new ConstantEstimator(rates.map(_.toDouble): _*)))
-    }
-    SingletonDummyReceiver.reset()
-
-    val output = new TestOutputStreamWithPartitions(dstream)
-    output.register()
-
-    val observedRates = mutable.HashSet.empty[Long]
-
-    @volatile var done = false
-    runInBackground {
-      while (!done) {
-        try {
-          dstream.getCurrentRateLimit.foreach(observedRates += _)
-        } catch {
-          case NonFatal(_) => () // don't stop if the executor wasn't installed yet
-        }
-        Thread.sleep(20)
+      val dstream = new RateLimitInputDStream(ssc) {
+        override val rateController =
+          Some(new ReceiverRateController(id, new ConstantEstimator(rates.map(_.toDouble): _*)))
       }
-    }
-    runStreams(ssc, 4, 4)
-    done = true
+      SingletonDummyReceiver.reset()
 
-    // Long.MaxValue (essentially, no rate limit) is the initial rate limit for any Receiver
-    observedRates should contain theSameElementsAs (rates :+ Long.MaxValue)
+      val output = new TestOutputStreamWithPartitions(dstream)
+      output.register()
+
+      val observedRates = mutable.HashSet.empty[Long]
+
+      @volatile var done = false
+      runInBackground {
+        while (!done) {
+          try {
+            dstream.getCurrentRateLimit.foreach(observedRates += _)
+          } catch {
+            case NonFatal(_) => () // don't stop if the executor wasn't installed yet
+          }
+          Thread.sleep(20)
+        }
+      }
+      runStreams(ssc, 4, 4)
+      done = true
+
+      // Long.MaxValue (essentially, no rate limit) is the initial rate limit for any Receiver
+      observedRates should contain theSameElementsAs (rates :+ Long.MaxValue)
+    }
   }
 
   private def runInBackground(f: => Unit): Unit = {
