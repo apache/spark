@@ -47,7 +47,7 @@ public class UnsafeRowWriters {
           target.getBaseObject(), offset + ((numBytes >> 3) << 3), 0L);
       }
 
-      // Write the string to the variable length portion.
+      // Write the bytes to the variable length portion.
       input.writeToMemory(target.getBaseObject(), offset);
 
       // Set the fixed length portion.
@@ -73,7 +73,7 @@ public class UnsafeRowWriters {
           target.getBaseObject(), offset + ((numBytes >> 3) << 3), 0L);
       }
 
-      // Write the string to the variable length portion.
+      // Write the bytes to the variable length portion.
       ByteArray.writeToMemory(input, target.getBaseObject(), offset);
 
       // Set the fixed length portion.
@@ -115,7 +115,7 @@ public class UnsafeRowWriters {
             target.getBaseObject(), offset + ((numBytes >> 3) << 3), 0L);
         }
 
-        // Write the string to the variable length portion.
+        // Write the bytes to the variable length portion.
         row.writeToMemory(target.getBaseObject(), offset);
 
         // Set the fixed length portion.
