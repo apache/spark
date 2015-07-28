@@ -51,6 +51,8 @@ Operator API
         HiveToMySqlTransfer,
         SimpleHttpOperator,
         HttpSensor,
+        MsSqlOperator,
+        MsSqlToHiveTransfer,
         MySqlOperator,
         MySqlToHiveTransfer,
         PostgresOperator,
@@ -134,7 +136,7 @@ Hooks
 -----
 .. automodule:: airflow.hooks
     :show-inheritance:
-    :members: MySqlHook, PostgresHook, PrestoHook, HiveCliHook, HiveServer2Hook, HiveMetastoreHook, HttpHook, S3Hook, SqliteHook
+    :members: MsSqlHook, MySqlHook, PostgresHook, PrestoHook, HiveCliHook, HiveServer2Hook, HiveMetastoreHook, HttpHook, S3Hook, SqliteHook
 
 Executors
 ---------
