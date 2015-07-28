@@ -19,7 +19,8 @@ package org.apache.spark.ml.feature
 
 import scala.util.parsing.combinator.RegexParsers
 
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.mllib.linalg.VectorUDT
+import org.apache.spark.sql.types._
 
 /**
  * Represents a parsed R formula.
@@ -33,7 +34,7 @@ private[ml] case class ParsedRFormula(label: ColumnRef, terms: Seq[Term]) {
     var includedTerms = Seq[String]()
     terms.foreach {
       case Dot =>
-        includedTerms ++= schema.map(_.name).filter(_ != label.value)
+        includedTerms ++= simpleTypes(schema).filter(_ != label.value)
       case ColumnRef(value) =>
         includedTerms :+= value
       case Deletion(term: Term) =>
@@ -42,7 +43,7 @@ private[ml] case class ParsedRFormula(label: ColumnRef, terms: Seq[Term]) {
             includedTerms = includedTerms.filter(_ != value)
           case Dot =>
             // e.g. "- .", which removes all first-order terms
-            val fromSchema = schema.map(_.name)
+            val fromSchema = simpleTypes(schema)
             includedTerms = includedTerms.filter(fromSchema.contains(_))
           case _: Deletion =>
             assert(false, "Deletion terms cannot be nested")
@@ -64,6 +65,14 @@ private[ml] case class ParsedRFormula(label: ColumnRef, terms: Seq[Term]) {
       case _ =>
     }
     intercept
+  }
+
+  // the dot operator excludes complex column types
+  private def simpleTypes(schema: StructType): Seq[String] = {
+    schema.fields.filter(_.dataType match {
+      case _: NumericType | StringType | BooleanType | _: VectorUDT => true
+      case _ => false
+    }).map(_.name)
   }
 }
 

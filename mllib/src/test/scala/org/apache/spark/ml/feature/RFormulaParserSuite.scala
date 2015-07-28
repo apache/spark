@@ -62,6 +62,14 @@ class RFormulaParserSuite extends SparkFunSuite {
     checkParse("a ~ . - b + . - c", "a", Seq("b"), schema)
   }
 
+  test("dot ignores complex column types") {
+    val schema = (new StructType)
+      .add("a", "int", true)
+      .add("b", "tinyint", false)
+      .add("c", "map<string, string>", true)
+    checkParse("a ~ .", "a", Seq("b"), schema)
+  }
+
   test("parse intercept") {
     assert(RFormulaParser.parse("a ~ b").hasIntercept)
     assert(RFormulaParser.parse("a ~ b + 1").hasIntercept)
