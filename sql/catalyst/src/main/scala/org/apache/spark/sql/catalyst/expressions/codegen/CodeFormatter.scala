@@ -35,7 +35,7 @@ private class CodeFormatter {
 
   private def addLine(line: String): Unit = {
     val indentChange =
-      line.count(c => "({[".indexOf(c) >= 0) - line.count(c => ")}]".indexOf(c) >= 0)
+      line.count(c => "({".indexOf(c) >= 0) - line.count(c => ")}".indexOf(c) >= 0)
     val newIndentLevel = math.max(0, indentLevel + indentChange)
     // Lines starting with '}' should be de-indented even if they contain '{' after;
     // in addition, lines ending with ':' are typically labels
