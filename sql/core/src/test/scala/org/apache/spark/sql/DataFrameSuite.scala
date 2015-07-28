@@ -494,21 +494,21 @@ class DataFrameSuite extends QueryTest with SQLTestUtils {
     checkAnswer(df.select(df("key")), testData.select('key).collect().toSeq)
   }
 
-  test("sourcePaths") {
+  test("inputFiles") {
     val fakeRelation1 = new ParquetRelation(Array("/my/path", "/my/other/path"),
       Some(testData.schema), None, Map.empty)(sqlContext)
     val df1 = DataFrame(sqlContext, LogicalRelation(fakeRelation1))
-    assert(df1.sourcePaths.toSet == fakeRelation1.paths.toSet)
+    assert(df1.inputFiles.toSet == fakeRelation1.paths.toSet)
 
     val fakeRelation2 = new JSONRelation("/json/path", 1, Some(testData.schema), sqlContext)
     val df2 = DataFrame(sqlContext, LogicalRelation(fakeRelation2))
-    assert(df2.sourcePaths.toSet == fakeRelation2.path.toSet)
+    assert(df2.inputFiles.toSet == fakeRelation2.path.toSet)
 
     val unionDF = df1.unionAll(df2)
-    assert(unionDF.sourcePaths.toSet == fakeRelation1.paths.toSet ++ fakeRelation2.path)
+    assert(unionDF.inputFiles.toSet == fakeRelation1.paths.toSet ++ fakeRelation2.path)
 
     val filtered = df1.filter("false").unionAll(df2.intersect(df2))
-    assert(filtered.sourcePaths.toSet == fakeRelation1.paths.toSet ++ fakeRelation2.path)
+    assert(filtered.inputFiles.toSet == fakeRelation1.paths.toSet ++ fakeRelation2.path)
   }
 
   ignore("show") {

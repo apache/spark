@@ -1550,16 +1550,16 @@ class DataFrame private[sql](
   /**
    * Returns a best-effort snapshot of the files that compose this DataFrame. This method simply
    * asks each constituent BaseRelation for its respective files and takes the union of all results.
-   * Depending on the source relations, this may not find all input paths. Duplicates are removed.
+   * Depending on the source relations, this may not find all input files. Duplicates are removed.
    */
-  def sourcePaths: Array[String] = {
-    val paths: Seq[String] = logicalPlan.collect {
+  def inputFiles: Array[String] = {
+    val files: Seq[String] = logicalPlan.collect {
       case LogicalRelation(fsBasedRelation: HadoopFsRelation) =>
         fsBasedRelation.paths.toSeq
       case LogicalRelation(jsonRelation: JSONRelation) =>
         jsonRelation.path.toSeq
     }.flatten
-    paths.toSet.toArray
+    files.toSet.toArray
   }
 
   ////////////////////////////////////////////////////////////////////////////
