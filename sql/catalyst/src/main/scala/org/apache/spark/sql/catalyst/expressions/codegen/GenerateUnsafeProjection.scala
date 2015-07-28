@@ -153,14 +153,14 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
           val nestedStructEv = GeneratedExpressionCode(
             code = "",
             isNull = s"${input.primitive}.isNullAt($i)",
-            primitive = s"${ctx.getColumn(input.primitive, dt, i)}"
+            primitive = s"${ctx.getValue(input.primitive, dt, i.toString)}"
           )
           createCodeForStruct(ctx, nestedStructEv, st)
         case _ =>
           GeneratedExpressionCode(
             code = "",
             isNull = s"${input.primitive}.isNullAt($i)",
-            primitive = s"${ctx.getColumn(input.primitive, dt, i)}"
+            primitive = s"${ctx.getValue(input.primitive, dt, i.toString)}"
           )
         }
     }

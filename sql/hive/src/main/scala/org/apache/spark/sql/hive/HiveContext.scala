@@ -43,6 +43,7 @@ import org.apache.spark.sql.SQLConf.SQLConfEntry._
 import org.apache.spark.sql.catalyst.{TableIdentifier, ParserDialect}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.expressions.ArrayData
 import org.apache.spark.sql.execution.{ExecutedCommand, ExtractPythonUDFs, SetCommand}
 import org.apache.spark.sql.execution.datasources.{PreWriteCheck, PreInsertCastAndRename, DataSourceStrategy}
 import org.apache.spark.sql.hive.client._
@@ -591,8 +592,8 @@ private[hive] object HiveContext {
       struct.toSeq.zip(fields).map {
         case (v, t) => s""""${t.name}":${toHiveStructString(v, t.dataType)}"""
       }.mkString("{", ",", "}")
-    case (seq: Seq[_], ArrayType(typ, _)) =>
-      seq.map(v => (v, typ)).map(toHiveStructString).mkString("[", ",", "]")
+    case (array: ArrayData, ArrayType(typ, _)) =>
+      array.toArray().map(v => (v, typ)).map(toHiveStructString).mkString("[", ",", "]")
     case (map: Map[_, _], MapType(kType, vType, _)) =>
       map.map {
         case (key, value) =>
@@ -614,8 +615,8 @@ private[hive] object HiveContext {
       struct.toSeq.zip(fields).map {
         case (v, t) => s""""${t.name}":${toHiveStructString(v, t.dataType)}"""
       }.mkString("{", ",", "}")
-    case (seq: Seq[_], ArrayType(typ, _)) =>
-      seq.map(v => (v, typ)).map(toHiveStructString).mkString("[", ",", "]")
+    case (array: ArrayData, ArrayType(typ, _)) =>
+      array.toArray().map(v => (v, typ)).map(toHiveStructString).mkString("[", ",", "]")
     case (map: Map[_, _], MapType(kType, vType, _)) =>
       map.map {
         case (key, value) =>

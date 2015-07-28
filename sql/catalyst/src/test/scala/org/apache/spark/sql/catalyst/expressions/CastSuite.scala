@@ -21,6 +21,7 @@ import java.sql.{Timestamp, Date}
 import java.util.{TimeZone, Calendar}
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
@@ -730,13 +731,10 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("complex casting") {
     val complex = Literal.create(
-      InternalRow(
-        Seq(UTF8String.fromString("123"), UTF8String.fromString("abc"), UTF8String.fromString("")),
-        Map(
-          UTF8String.fromString("a") -> UTF8String.fromString("123"),
-          UTF8String.fromString("b") -> UTF8String.fromString("abc"),
-          UTF8String.fromString("c") -> UTF8String.fromString("")),
-        InternalRow(0)),
+      Row(
+        Seq("123", "abc", ""),
+        Map("a" ->"123", "b" -> "abc", "c" -> ""),
+        Row(0)),
       StructType(Seq(
         StructField("a",
           ArrayType(StringType, containsNull = false), nullable = true),
@@ -756,13 +754,10 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
           StructField("l", LongType, nullable = true)))))))
 
     assert(ret.resolved === true)
-    checkEvaluation(ret, InternalRow(
+    checkEvaluation(ret, Row(
       Seq(123, null, null),
-      Map(
-        UTF8String.fromString("a") -> true,
-        UTF8String.fromString("b") -> true,
-        UTF8String.fromString("c") -> false),
-      InternalRow(0L)))
+      Map("a" -> true, "b" -> true, "c" -> false),
+      Row(0L)))
   }
 
   test("case between string and interval") {

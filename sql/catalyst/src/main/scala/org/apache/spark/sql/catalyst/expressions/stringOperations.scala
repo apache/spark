@@ -92,7 +92,7 @@ case class ConcatWs(children: Seq[Expression])
     val flatInputs = children.flatMap { child =>
       child.eval(input) match {
         case s: UTF8String => Iterator(s)
-        case arr: Seq[_] => arr.asInstanceOf[Seq[UTF8String]]
+        case arr: ArrayData => arr.toArray().map(_.asInstanceOf[UTF8String])
         case null => Iterator(null.asInstanceOf[UTF8String])
       }
     }
@@ -105,7 +105,7 @@ case class ConcatWs(children: Seq[Expression])
       val evals = children.map(_.gen(ctx))
 
       val inputs = evals.map { eval =>
-        s"${eval.isNull} ? (UTF8String)null : ${eval.primitive}"
+        s"${eval.isNull} ? (UTF8String) null : ${eval.primitive}"
       }.mkString(", ")
 
       evals.map(_.code).mkString("\n") + s"""
@@ -665,13 +665,15 @@ case class StringSplit(str: Expression, pattern: Expression)
   override def inputTypes: Seq[DataType] = Seq(StringType, StringType)
 
   override def nullSafeEval(string: Any, regex: Any): Any = {
-    string.asInstanceOf[UTF8String].split(regex.asInstanceOf[UTF8String], -1).toSeq
+    val strings = string.asInstanceOf[UTF8String].split(regex.asInstanceOf[UTF8String], -1)
+    new GenericArrayData(strings.asInstanceOf[Array[Any]])
   }
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    val arrayClass = classOf[GenericArrayData].getName
     nullSafeCodeGen(ctx, ev, (str, pattern) =>
-      s"""${ev.primitive} = scala.collection.JavaConversions.asScalaBuffer(
-            java.util.Arrays.asList($str.split($pattern, -1)));""")
+      // Array in java is covariant, so we don't need to cast UTF8String[] to Object[].
+      s"""${ev.primitive} = new $arrayClass($str.split($pattern, -1));""")
   }
 
   override def prettyName: String = "split"

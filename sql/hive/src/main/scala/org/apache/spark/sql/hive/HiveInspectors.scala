@@ -520,7 +520,7 @@ private[hive] trait HiveInspectors {
     case x: ListObjectInspector =>
       val list = new java.util.ArrayList[Object]
       val tpe = dataType.asInstanceOf[ArrayType].elementType
-      a.asInstanceOf[Seq[_]].foreach {
+      a.asInstanceOf[ArrayData].toArray().foreach {
         v => list.add(wrap(v, x.getListElementObjectInspector, tpe))
       }
       list
@@ -634,7 +634,8 @@ private[hive] trait HiveInspectors {
         ObjectInspectorFactory.getStandardConstantListObjectInspector(listObjectInspector, null)
       } else {
         val list = new java.util.ArrayList[Object]()
-        value.asInstanceOf[Seq[_]].foreach(v => list.add(wrap(v, listObjectInspector, dt)))
+        value.asInstanceOf[ArrayData].toArray()
+          .foreach(v => list.add(wrap(v, listObjectInspector, dt)))
         ObjectInspectorFactory.getStandardConstantListObjectInspector(listObjectInspector, list)
       }
     case Literal(value, MapType(keyType, valueType, _)) =>
