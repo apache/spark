@@ -21,6 +21,7 @@ import breeze.linalg.{DenseMatrix => BDM}
 
 /**
  * Represents a distributively stored matrix backed by one or more RDDs.
+ * @since 1.0.0
  */
 trait DistributedMatrix extends Serializable {
 

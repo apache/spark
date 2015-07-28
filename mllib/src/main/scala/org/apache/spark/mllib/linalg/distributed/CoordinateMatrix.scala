@@ -29,6 +29,7 @@ import org.apache.spark.mllib.linalg.{Matrix, SparseMatrix, Vectors}
  * @param i row index
  * @param j column index
  * @param value value of the entry
+ * @since 1.0.0
  */
 @Experimental
 case class MatrixEntry(i: Long, j: Long, value: Double)
@@ -42,6 +43,7 @@ case class MatrixEntry(i: Long, j: Long, value: Double)
  *              be determined by the max row index plus one.
  * @param nCols number of columns. A non-positive value means unknown, and then the number of
  *              columns will be determined by the max column index plus one.
+ * @since 1.0.0
  */
 @Experimental
 class CoordinateMatrix(
@@ -49,10 +51,14 @@ class CoordinateMatrix(
     private var nRows: Long,
     private var nCols: Long) extends DistributedMatrix {
 
-  /** Alternative constructor leaving matrix dimensions to be determined automatically. */
+  /** Alternative constructor leaving matrix dimensions to be determined automatically.
+    * @since 1.0.0
+    * */
   def this(entries: RDD[MatrixEntry]) = this(entries, 0L, 0L)
 
-  /** Gets or computes the number of columns. */
+  /** Gets or computes the number of columns.
+    * @since 1.0.0
+    * */
   override def numCols(): Long = {
     if (nCols <= 0L) {
       computeSize()
@@ -60,7 +66,9 @@ class CoordinateMatrix(
     nCols
   }
 
-  /** Gets or computes the number of rows. */
+  /** Gets or computes the number of rows.
+    * @since 1.0.0
+    * */
   override def numRows(): Long = {
     if (nRows <= 0L) {
       computeSize()
@@ -68,12 +76,16 @@ class CoordinateMatrix(
     nRows
   }
 
-  /** Transposes this CoordinateMatrix. */
+  /** Transposes this CoordinateMatrix.
+    * @since 1.3.0
+    * */
   def transpose(): CoordinateMatrix = {
     new CoordinateMatrix(entries.map(x => MatrixEntry(x.j, x.i, x.value)), numCols(), numRows())
   }
 
-  /** Converts to IndexedRowMatrix. The number of columns must be within the integer range. */
+  /** Converts to IndexedRowMatrix. The number of columns must be within the integer range.
+    * @since 1.0.0
+    * */
   def toIndexedRowMatrix(): IndexedRowMatrix = {
     val nl = numCols()
     if (nl > Int.MaxValue) {
@@ -92,12 +104,15 @@ class CoordinateMatrix(
   /**
    * Converts to RowMatrix, dropping row indices after grouping by row index.
    * The number of columns must be within the integer range.
+   * @since 1.0.0
    */
   def toRowMatrix(): RowMatrix = {
     toIndexedRowMatrix().toRowMatrix()
   }
 
-  /** Converts to BlockMatrix. Creates blocks of [[SparseMatrix]] with size 1024 x 1024. */
+  /** Converts to BlockMatrix. Creates blocks of [[SparseMatrix]] with size 1024 x 1024.
+    * @since 1.3.0
+    * */
   def toBlockMatrix(): BlockMatrix = {
     toBlockMatrix(1024, 1024)
   }
@@ -109,6 +124,7 @@ class CoordinateMatrix(
    * @param colsPerBlock The number of columns of each block. The blocks at the right edge may have
    *                     a smaller value. Must be an integer value greater than 0.
    * @return a [[BlockMatrix]]
+   * @since 1.3.0
    */
   def toBlockMatrix(rowsPerBlock: Int, colsPerBlock: Int): BlockMatrix = {
     require(rowsPerBlock > 0,

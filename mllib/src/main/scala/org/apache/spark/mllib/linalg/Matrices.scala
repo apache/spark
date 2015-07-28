@@ -30,6 +30,7 @@ import org.apache.spark.sql.types._
 
 /**
  * Trait for a local matrix.
+ * @since 1.2.0
  */
 @SQLUserDefinedType(udt = classOf[MatrixUDT])
 sealed trait Matrix extends Serializable {
@@ -40,10 +41,14 @@ sealed trait Matrix extends Serializable {
   /** Number of columns. */
   def numCols: Int
 
-  /** Flag that keeps track whether the matrix is transposed or not. False by default. */
+  /** Flag that keeps track whether the matrix is transposed or not. False by default.
+    * @since 1.3.0
+    */
   val isTransposed: Boolean = false
 
-  /** Converts to a dense array in column major. */
+  /** Converts to a dense array in column major.
+    * @since 1.2.0
+    */
   def toArray: Array[Double] = {
     val newArray = new Array[Double](numRows * numCols)
     foreachActive { (i, j, v) =>
@@ -70,29 +75,39 @@ sealed trait Matrix extends Serializable {
   /** Transpose the Matrix. Returns a new `Matrix` instance sharing the same underlying data. */
   def transpose: Matrix
 
-  /** Convenience method for `Matrix`-`DenseMatrix` multiplication. */
+  /** Convenience method for `Matrix`-`DenseMatrix` multiplication.
+    * @since 1.2.0
+    */
   def multiply(y: DenseMatrix): DenseMatrix = {
     val C: DenseMatrix = DenseMatrix.zeros(numRows, y.numCols)
     BLAS.gemm(1.0, this, y, 0.0, C)
     C
   }
 
-  /** Convenience method for `Matrix`-`DenseVector` multiplication. For binary compatibility. */
+  /** Convenience method for `Matrix`-`DenseVector` multiplication. For binary compatibility.
+    * @since 1.2.0
+    */
   def multiply(y: DenseVector): DenseVector = {
     multiply(y.asInstanceOf[Vector])
   }
 
-  /** Convenience method for `Matrix`-`Vector` multiplication. */
+  /** Convenience method for `Matrix`-`Vector` multiplication.
+    * @since 1.4.0
+    */
   def multiply(y: Vector): DenseVector = {
     val output = new DenseVector(new Array[Double](numRows))
     BLAS.gemv(1.0, this, y, 0.0, output)
     output
   }
 
-  /** A human readable representation of the matrix */
+  /** A human readable representation of the matrix
+    * @since 1.0.0
+    */
   override def toString: String = toBreeze.toString()
 
-  /** A human readable representation of the matrix with maximum lines and width */
+  /** A human readable representation of the matrix with maximum lines and width
+    * @since 1.4.0
+    */
   def toString(maxLines: Int, maxLineWidth: Int): String = toBreeze.toString(maxLines, maxLineWidth)
 
   /** Map the values of this matrix using a function. Generates a new matrix. Performs the
@@ -229,6 +244,7 @@ private[spark] class MatrixUDT extends UserDefinedType[Matrix] {
  * @param values matrix entries in column major if not transposed or in row major otherwise
  * @param isTransposed whether the matrix is transposed. If true, `values` stores the matrix in
  *                     row major.
+ * @since 1.0.0
  */
 @SQLUserDefinedType(udt = classOf[MatrixUDT])
 class DenseMatrix(
@@ -254,16 +270,23 @@ class DenseMatrix(
    * @param numRows number of rows
    * @param numCols number of columns
    * @param values matrix entries in column major
+   * @since 1.3.0
    */
   def this(numRows: Int, numCols: Int, values: Array[Double]) =
     this(numRows, numCols, values, false)
 
+  /**
+   * @since 1.4.0
+   */
   override def equals(o: Any): Boolean = o match {
     case m: DenseMatrix =>
       m.numRows == numRows && m.numCols == numCols && Arrays.equals(toArray, m.toArray)
     case _ => false
   }
 
+  /**
+   * @since 1.4.0
+   */
   override def hashCode: Int = {
     com.google.common.base.Objects.hashCode(numRows : Integer, numCols: Integer, toArray)
   }
@@ -279,6 +302,9 @@ class DenseMatrix(
 
   private[mllib] def apply(i: Int): Double = values(i)
 
+  /**
+   * @since 1.3.0
+   */
   override def apply(i: Int, j: Int): Double = values(index(i, j))
 
   private[mllib] def index(i: Int, j: Int): Int = {
@@ -289,6 +315,9 @@ class DenseMatrix(
     values(index(i, j)) = v
   }
 
+  /**
+   * @since 1.4.0
+   */
   override def copy: DenseMatrix = new DenseMatrix(numRows, numCols, values.clone())
 
   private[spark] def map(f: Double => Double) = new DenseMatrix(numRows, numCols, values.map(f),
@@ -304,6 +333,9 @@ class DenseMatrix(
     this
   }
 
+  /**
+   * @since 1.3.0
+   */
   override def transpose: DenseMatrix = new DenseMatrix(numCols, numRows, values, !isTransposed)
 
   private[spark] override def foreachActive(f: (Int, Int, Double) => Unit): Unit = {
@@ -341,6 +373,7 @@ class DenseMatrix(
   /**
    * Generate a `SparseMatrix` from the given `DenseMatrix`. The new matrix will have isTransposed
    * set to false.
+   * @since 1.3.0
    */
   def toSparse: SparseMatrix = {
     val spVals: MArrayBuilder[Double] = new MArrayBuilder.ofDouble
@@ -368,6 +401,7 @@ class DenseMatrix(
 
 /**
  * Factory methods for [[org.apache.spark.mllib.linalg.DenseMatrix]].
+ * @since 1.3.0
  */
 object DenseMatrix {
 
@@ -376,6 +410,7 @@ object DenseMatrix {
    * @param numRows number of rows of the matrix
    * @param numCols number of columns of the matrix
    * @return `DenseMatrix` with size `numRows` x `numCols` and values of zeros
+   * @since 1.2.0
    */
   def zeros(numRows: Int, numCols: Int): DenseMatrix = {
     require(numRows.toLong * numCols <= Int.MaxValue,
@@ -388,6 +423,7 @@ object DenseMatrix {
    * @param numRows number of rows of the matrix
    * @param numCols number of columns of the matrix
    * @return `DenseMatrix` with size `numRows` x `numCols` and values of ones
+   * @since 1.2.0
    */
   def ones(numRows: Int, numCols: Int): DenseMatrix = {
     require(numRows.toLong * numCols <= Int.MaxValue,
@@ -399,6 +435,7 @@ object DenseMatrix {
    * Generate an Identity Matrix in `DenseMatrix` format.
    * @param n number of rows and columns of the matrix
    * @return `DenseMatrix` with size `n` x `n` and values of ones on the diagonal
+   * @since 1.2.0
    */
   def eye(n: Int): DenseMatrix = {
     val identity = DenseMatrix.zeros(n, n)
@@ -416,6 +453,7 @@ object DenseMatrix {
    * @param numCols number of columns of the matrix
    * @param rng a random number generator
    * @return `DenseMatrix` with size `numRows` x `numCols` and values in U(0, 1)
+   * @since 1.2.0
    */
   def rand(numRows: Int, numCols: Int, rng: Random): DenseMatrix = {
     require(numRows.toLong * numCols <= Int.MaxValue,
@@ -429,6 +467,7 @@ object DenseMatrix {
    * @param numCols number of columns of the matrix
    * @param rng a random number generator
    * @return `DenseMatrix` with size `numRows` x `numCols` and values in N(0, 1)
+   * @since 1.2.0
    */
   def randn(numRows: Int, numCols: Int, rng: Random): DenseMatrix = {
     require(numRows.toLong * numCols <= Int.MaxValue,
@@ -441,6 +480,7 @@ object DenseMatrix {
    * @param vector a `Vector` that will form the values on the diagonal of the matrix
    * @return Square `DenseMatrix` with size `values.length` x `values.length` and `values`
    *         on the diagonal
+   * @since 1.2.0
    */
   def diag(vector: Vector): DenseMatrix = {
     val n = vector.size
@@ -476,6 +516,7 @@ object DenseMatrix {
  * @param isTransposed whether the matrix is transposed. If true, the matrix can be considered
  *                     Compressed Sparse Row (CSR) format, where `colPtrs` behaves as rowPtrs,
  *                     and `rowIndices` behave as colIndices, and `values` are stored in row major.
+ * @since 1.2.0
  */
 @SQLUserDefinedType(udt = classOf[MatrixUDT])
 class SparseMatrix(
@@ -513,6 +554,7 @@ class SparseMatrix(
    * @param rowIndices the row index of the entry. They must be in strictly increasing
    *                   order for each column
    * @param values non-zero matrix entries in column major
+   * @since 1.3.0
    */
   def this(
       numRows: Int,
@@ -530,6 +572,9 @@ class SparseMatrix(
      }
   }
 
+  /**
+   * @since 1.3.0
+   */
   override def apply(i: Int, j: Int): Double = {
     val ind = index(i, j)
     if (ind < 0) 0.0 else values(ind)
@@ -553,6 +598,9 @@ class SparseMatrix(
     }
   }
 
+  /**
+   * @since 1.4.0
+   */
   override def copy: SparseMatrix = {
     new SparseMatrix(numRows, numCols, colPtrs, rowIndices, values.clone())
   }
@@ -570,6 +618,9 @@ class SparseMatrix(
     this
   }
 
+  /**
+   * @since 1.3.0
+   */
   override def transpose: SparseMatrix =
     new SparseMatrix(numCols, numRows, colPtrs, rowIndices, values, !isTransposed)
 
@@ -603,6 +654,7 @@ class SparseMatrix(
   /**
    * Generate a `DenseMatrix` from the given `SparseMatrix`. The new matrix will have isTransposed
    * set to false.
+   * @since 1.3.0
    */
   def toDense: DenseMatrix = {
     new DenseMatrix(numRows, numCols, toArray)
@@ -616,6 +668,7 @@ class SparseMatrix(
 
 /**
  * Factory methods for [[org.apache.spark.mllib.linalg.SparseMatrix]].
+ * @since 1.3.0
  */
 object SparseMatrix {
 
@@ -627,6 +680,7 @@ object SparseMatrix {
    * @param numCols number of columns of the matrix
    * @param entries Array of (i, j, value) tuples
    * @return The corresponding `SparseMatrix`
+   * @since 1.3.0
    */
   def fromCOO(numRows: Int, numCols: Int, entries: Iterable[(Int, Int, Double)]): SparseMatrix = {
     val sortedEntries = entries.toSeq.sortBy(v => (v._2, v._1))
@@ -675,6 +729,7 @@ object SparseMatrix {
    * Generate an Identity Matrix in `SparseMatrix` format.
    * @param n number of rows and columns of the matrix
    * @return `SparseMatrix` with size `n` x `n` and values of ones on the diagonal
+   * @since 1.3.0
    */
   def speye(n: Int): SparseMatrix = {
     new SparseMatrix(n, n, (0 to n).toArray, (0 until n).toArray, Array.fill(n)(1.0))
@@ -744,6 +799,7 @@ object SparseMatrix {
    * @param density the desired density for the matrix
    * @param rng a random number generator
    * @return `SparseMatrix` with size `numRows` x `numCols` and values in U(0, 1)
+   * @since 1.3.0
    */
   def sprand(numRows: Int, numCols: Int, density: Double, rng: Random): SparseMatrix = {
     val mat = genRandMatrix(numRows, numCols, density, rng)
@@ -757,6 +813,7 @@ object SparseMatrix {
    * @param density the desired density for the matrix
    * @param rng a random number generator
    * @return `SparseMatrix` with size `numRows` x `numCols` and values in N(0, 1)
+   * @since 1.3.0
    */
   def sprandn(numRows: Int, numCols: Int, density: Double, rng: Random): SparseMatrix = {
     val mat = genRandMatrix(numRows, numCols, density, rng)
@@ -768,6 +825,7 @@ object SparseMatrix {
    * @param vector a `Vector` that will form the values on the diagonal of the matrix
    * @return Square `SparseMatrix` with size `values.length` x `values.length` and non-zero
    *         `values` on the diagonal
+   * @since 1.3.0
    */
   def spdiag(vector: Vector): SparseMatrix = {
     val n = vector.size
@@ -784,6 +842,7 @@ object SparseMatrix {
 
 /**
  * Factory methods for [[org.apache.spark.mllib.linalg.Matrix]].
+ * @since 1.0.0
  */
 object Matrices {
 
@@ -793,6 +852,7 @@ object Matrices {
    * @param numRows number of rows
    * @param numCols number of columns
    * @param values matrix entries in column major
+   * @since 1.0.0
    */
   def dense(numRows: Int, numCols: Int, values: Array[Double]): Matrix = {
     new DenseMatrix(numRows, numCols, values)
@@ -806,6 +866,7 @@ object Matrices {
    * @param colPtrs the index corresponding to the start of a new column
    * @param rowIndices the row index of the entry
    * @param values non-zero matrix entries in column major
+   * @since 1.2.0
    */
   def sparse(
      numRows: Int,
@@ -839,6 +900,7 @@ object Matrices {
    * @param numRows number of rows of the matrix
    * @param numCols number of columns of the matrix
    * @return `Matrix` with size `numRows` x `numCols` and values of zeros
+   * @since 1.3.0
    */
   def zeros(numRows: Int, numCols: Int): Matrix = DenseMatrix.zeros(numRows, numCols)
 
@@ -847,6 +909,7 @@ object Matrices {
    * @param numRows number of rows of the matrix
    * @param numCols number of columns of the matrix
    * @return `Matrix` with size `numRows` x `numCols` and values of ones
+   * @since 1.3.0
    */
   def ones(numRows: Int, numCols: Int): Matrix = DenseMatrix.ones(numRows, numCols)
 
@@ -854,6 +917,7 @@ object Matrices {
    * Generate a dense Identity Matrix in `Matrix` format.
    * @param n number of rows and columns of the matrix
    * @return `Matrix` with size `n` x `n` and values of ones on the diagonal
+   * @since 1.3.0
    */
   def eye(n: Int): Matrix = DenseMatrix.eye(n)
 
@@ -861,6 +925,7 @@ object Matrices {
    * Generate a sparse Identity Matrix in `Matrix` format.
    * @param n number of rows and columns of the matrix
    * @return `Matrix` with size `n` x `n` and values of ones on the diagonal
+   * @since 1.3.0
    */
   def speye(n: Int): Matrix = SparseMatrix.speye(n)
 
@@ -870,6 +935,7 @@ object Matrices {
    * @param numCols number of columns of the matrix
    * @param rng a random number generator
    * @return `Matrix` with size `numRows` x `numCols` and values in U(0, 1)
+   * @since 1.2.0
    */
   def rand(numRows: Int, numCols: Int, rng: Random): Matrix =
     DenseMatrix.rand(numRows, numCols, rng)
@@ -881,6 +947,7 @@ object Matrices {
    * @param density the desired density for the matrix
    * @param rng a random number generator
    * @return `Matrix` with size `numRows` x `numCols` and values in U(0, 1)
+   * @since 1.3.0
    */
   def sprand(numRows: Int, numCols: Int, density: Double, rng: Random): Matrix =
     SparseMatrix.sprand(numRows, numCols, density, rng)
@@ -891,6 +958,7 @@ object Matrices {
    * @param numCols number of columns of the matrix
    * @param rng a random number generator
    * @return `Matrix` with size `numRows` x `numCols` and values in N(0, 1)
+   * @since 1.2.0
    */
   def randn(numRows: Int, numCols: Int, rng: Random): Matrix =
     DenseMatrix.randn(numRows, numCols, rng)
@@ -902,6 +970,7 @@ object Matrices {
    * @param density the desired density for the matrix
    * @param rng a random number generator
    * @return `Matrix` with size `numRows` x `numCols` and values in N(0, 1)
+   * @since 1.3.0
    */
   def sprandn(numRows: Int, numCols: Int, density: Double, rng: Random): Matrix =
     SparseMatrix.sprandn(numRows, numCols, density, rng)
@@ -911,6 +980,7 @@ object Matrices {
    * @param vector a `Vector` that will form the values on the diagonal of the matrix
    * @return Square `Matrix` with size `values.length` x `values.length` and `values`
    *         on the diagonal
+   * @since 1.3.0
    */
   def diag(vector: Vector): Matrix = DenseMatrix.diag(vector)
 
@@ -920,6 +990,7 @@ object Matrices {
    * a sparse matrix. If the Array is empty, an empty `DenseMatrix` will be returned.
    * @param matrices array of matrices
    * @return a single `Matrix` composed of the matrices that were horizontally concatenated
+   * @since 1.3.0
    */
   def horzcat(matrices: Array[Matrix]): Matrix = {
     if (matrices.isEmpty) {
@@ -978,6 +1049,7 @@ object Matrices {
    * a sparse matrix. If the Array is empty, an empty `DenseMatrix` will be returned.
    * @param matrices array of matrices
    * @return a single `Matrix` composed of the matrices that were vertically concatenated
+   * @since 1.3.0
    */
   def vertcat(matrices: Array[Matrix]): Matrix = {
     if (matrices.isEmpty) {
