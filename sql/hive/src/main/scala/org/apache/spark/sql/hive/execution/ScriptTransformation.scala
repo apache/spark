@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.hive.execution
 
-import java.io.{BufferedReader, DataInputStream, DataOutputStream, EOFException, InputStreamReader}
+import java.io._
 import java.util.Properties
 import javax.annotation.Nullable
 
@@ -28,6 +28,7 @@ import org.apache.hadoop.hive.serde.serdeConstants
 import org.apache.hadoop.hive.serde2.AbstractSerDe
 import org.apache.hadoop.hive.serde2.objectinspector._
 
+import org.apache.spark.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
@@ -152,10 +153,6 @@ case class ScriptTransformation(
         }
       }
 
-      // This nullability is a performance optimization in order to avoid an Option.foreach() call
-      // inside of a loop
-      @Nullable val (inputSerde, inputSoi) = ioschema.initInputSerDe(input).getOrElse((null, null))
-      val dataOutputStream = new DataOutputStream(outputStream)
       val outputProjection = new InterpretedProjection(input, child.output)
 
       // TODO make the 2048 configurable?
@@ -166,52 +163,25 @@ case class ScriptTransformation(
         stderrBuffer,                 // output to a circular buffer
         "Thread-ScriptTransformation-STDERR-Consumer").start()
 
+      // This nullability is a performance optimization in order to avoid an Option.foreach() call
+      // inside of a loop
+      @Nullable val (inputSerde, inputSoi) = ioschema.initInputSerDe(input).getOrElse((null, null))
+
       // Put the write(output to the pipeline) into a single thread
       // and keep the collector as remain in the main thread.
       // otherwise it will causes deadlock if the data size greater than
       // the pipeline / buffer capacity.
-      new Thread(new Runnable() {
-        override def run(): Unit = {
-          // We can't use Utils.tryWithSafeFinally here because we also need a `catch` block, so
-          // let's use a variable to record whether the `finally` block was hit due to an exception
-          var threwException: Boolean = true
-          try {
-            iter.map(outputProjection).foreach { row =>
-              if (inputSerde == null) {
-                val data = row.mkString("", ioschema.inputRowFormatMap("TOK_TABLEROWFORMATFIELD"),
-                  ioschema.inputRowFormatMap("TOK_TABLEROWFORMATLINES")).getBytes("utf-8")
-
-                outputStream.write(data)
-              } else {
-                val writable = inputSerde.serialize(
-                  row.asInstanceOf[GenericInternalRow].values, inputSoi)
-                prepareWritable(writable).write(dataOutputStream)
-              }
-            }
-            outputStream.close()
-            threwException = false
-          } catch {
-            case NonFatal(e) =>
-              // An error occurred while writing input, so kill the child process. According to the
-              // Javadoc this call will not throw an exception:
-              proc.destroy()
-              throw e
-          } finally {
-            try {
-              if (proc.waitFor() != 0) {
-                logError(stderrBuffer.toString) // log the stderr circular buffer
-              }
-            } catch {
-              case NonFatal(exceptionFromFinallyBlock) =>
-                if (!threwException) {
-                  throw exceptionFromFinallyBlock
-                } else {
-                  log.error("Exception in finally block", exceptionFromFinallyBlock)
-                }
-            }
-          }
-        }
-      }, "Thread-ScriptTransformation-Feed").start()
+      val writerThread = new ScriptTransformationWriterThread(
+        iter,
+        outputProjection,
+        inputSerde,
+        inputSoi,
+        ioschema,
+        outputStream,
+        proc,
+        stderrBuffer
+      )
+      writerThread.start()
 
       iterator
     }
@@ -222,6 +192,62 @@ case class ScriptTransformation(
       } else {
         // If the input iterator has no rows then do not launch the external script.
         Iterator.empty
+      }
+    }
+  }
+}
+
+private class ScriptTransformationWriterThread(
+    iter: Iterator[InternalRow],
+    outputProjection: Projection,
+    @Nullable inputSerde: AbstractSerDe,
+    @Nullable inputSoi: ObjectInspector,
+    ioschema: HiveScriptIOSchema,
+    outputStream: OutputStream,
+    proc: Process,
+    stderrBuffer: CircularBuffer
+  ) extends Thread("Thread-ScriptTransformation-Feed") with Logging {
+
+  setDaemon(true)
+
+  override def run(): Unit = Utils.logUncaughtExceptions {
+    val dataOutputStream = new DataOutputStream(outputStream)
+
+    // We can't use Utils.tryWithSafeFinally here because we also need a `catch` block, so
+    // let's use a variable to record whether the `finally` block was hit due to an exception
+    var threwException: Boolean = true
+    try {
+      iter.map(outputProjection).foreach { row =>
+        if (inputSerde == null) {
+          val data = row.mkString("", ioschema.inputRowFormatMap("TOK_TABLEROWFORMATFIELD"),
+            ioschema.inputRowFormatMap("TOK_TABLEROWFORMATLINES")).getBytes("utf-8")
+          outputStream.write(data)
+        } else {
+          val writable = inputSerde.serialize(
+            row.asInstanceOf[GenericInternalRow].values, inputSoi)
+          prepareWritable(writable).write(dataOutputStream)
+        }
+      }
+      outputStream.close()
+      threwException = false
+    } catch {
+      case NonFatal(e) =>
+        // An error occurred while writing input, so kill the child process. According to the
+        // Javadoc this call will not throw an exception:
+        proc.destroy()
+        throw e
+    } finally {
+      try {
+        if (proc.waitFor() != 0) {
+          logError(stderrBuffer.toString) // log the stderr circular buffer
+        }
+      } catch {
+        case NonFatal(exceptionFromFinallyBlock) =>
+          if (!threwException) {
+            throw exceptionFromFinallyBlock
+          } else {
+            log.error("Exception in finally block", exceptionFromFinallyBlock)
+          }
       }
     }
   }

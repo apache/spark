@@ -41,7 +41,7 @@ class ScriptTransformationSuite extends SparkPlanTest {
     schemaLess = false
   )
 
-  val serdeIOSchema = noSerdeIOSchema.copy(
+  private val serdeIOSchema = noSerdeIOSchema.copy(
     inputSerdeClass = Some(s"'${classOf[LazySimpleSerDe].getCanonicalName}"),
     outputSerdeClass = Some(s"'${classOf[LazySimpleSerDe].getCanonicalName}")
   )
@@ -76,7 +76,7 @@ class ScriptTransformationSuite extends SparkPlanTest {
 
   test("script transformation should not swallow errors from upstream pipelined operators") {
     val rowsDf = Seq("a", "b", "c").map(Tuple1.apply).toDF("a")
-    val e = intercept[Exception] {
+    val e = intercept[IllegalArgumentException] {
       checkAnswer(
         rowsDf,
         (child: SparkPlan) => new ScriptTransformation(
@@ -96,7 +96,7 @@ private case class ExceptionInjectingOperator(child: SparkPlan) extends UnaryNod
   override protected def doExecute(): RDD[InternalRow] = {
     child.execute().map { x =>
       Thread.sleep(1000) // This sleep gives the external process time to start.
-      throw new Exception("intentional exception")
+      throw new IllegalArgumentException("intentional exception")
     }
   }
   override def output: Seq[Attribute] = child.output
