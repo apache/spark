@@ -89,8 +89,8 @@ class RFormula(override val uid: String) extends Estimator[RFormulaModel] with R
     val fittedFormula = parsedFormula.get.fit(dataset.schema)
     // StringType terms and terms representing interactions need to be encoded before assembly.
     // TODO(ekl) add support for feature interactions
-    var encoderStages = ArrayBuffer[PipelineStage]()
-    var tempColumns = ArrayBuffer[String]()
+    val encoderStages = ArrayBuffer[PipelineStage]()
+    val tempColumns = ArrayBuffer[String]()
     val encodedTerms = fittedFormula.terms.map { term =>
       dataset.schema(term) match {
         case column if column.dataType == StringType =>
