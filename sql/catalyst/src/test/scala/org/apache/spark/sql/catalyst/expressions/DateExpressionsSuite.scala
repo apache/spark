@@ -303,4 +303,35 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(
       NextDay(Literal(Date.valueOf("2015-07-23")), Literal.create(null, StringType)), null)
   }
+
+  test("datetime function current_date") {
+    val d0 = DateTimeUtils.millisToDays(System.currentTimeMillis())
+    val cd = CurrentDate().eval(EmptyRow).asInstanceOf[Int]
+    val d1 = DateTimeUtils.millisToDays(System.currentTimeMillis())
+    assert(d0 <= cd && cd <= d1 && d1 - d0 <= 1)
+  }
+
+  test("datetime function current_timestamp") {
+    val ct = DateTimeUtils.toJavaTimestamp(CurrentTimestamp().eval(EmptyRow).asInstanceOf[Long])
+    val t1 = System.currentTimeMillis()
+    assert(math.abs(t1 - ct.getTime) < 5000)
+  }
+
+  test("function to_date") {
+    checkEvaluation(
+      ToDate(Literal(Date.valueOf("2015-07-22"))),
+      DateTimeUtils.fromJavaDate(Date.valueOf("2015-07-22")))
+  }
+
+  test("function trunc") {
+    checkEvaluation(EqualTo(
+      Trunc(Literal(Date.valueOf("2015-07-22")), Literal("YYYY")),
+      Trunc(Literal(Date.valueOf("2015-01-01")), Literal("YEAR"))), true)
+
+    checkEvaluation(EqualTo(
+      Trunc(Literal(Date.valueOf("2015-07-22")), Literal("MONTH")),
+      Trunc(Literal(Date.valueOf("2015-07-01")), Literal("mm"))), true)
+
+    checkEvaluation(Trunc(Literal(Date.valueOf("2015-07-22")), Literal("DD")), null)
+  }
 }

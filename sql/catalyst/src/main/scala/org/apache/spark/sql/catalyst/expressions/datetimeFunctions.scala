@@ -273,6 +273,24 @@ case class LastDay(startDate: Expression) extends UnaryExpression with ImplicitC
 }
 
 /**
+ * Returns the date part of a timestamp string.
+ */
+case class ToDate(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(DateType)
+
+  override def dataType: DataType = DateType
+
+  override def eval(input: InternalRow): Any = {
+    child.eval(input)
+  }
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    defineCodeGen(ctx, ev, (time) => time)
+  }
+}
+
+/**
  * Returns the first date which is later than startDate and named as dayOfWeek.
  * For example, NextDay(2015-07-27, Sunday) would return 2015-08-02, which is the first
  * Sunday later than 2015-07-27.
@@ -283,6 +301,7 @@ case class NextDay(startDate: Expression, dayOfWeek: Expression)
   extends BinaryExpression with ImplicitCastInputTypes {
 
   override def left: Expression = startDate
+
   override def right: Expression = dayOfWeek
 
   override def inputTypes: Seq[AbstractDataType] = Seq(DateType, StringType)
@@ -329,4 +348,50 @@ case class NextDay(startDate: Expression, dayOfWeek: Expression)
   }
 
   override def prettyName: String = "next_day"
+}
+
+/**
+ * Returns date truncated to the unit specified by the format.
+ */
+case class Trunc(date: Expression, format: Expression)
+  extends BinaryExpression with ImplicitCastInputTypes {
+  override def left: Expression = date
+  override def right: Expression = format
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(DateType, StringType)
+  override def dataType: DataType = DateType
+
+  override def nullSafeEval(d: Any, fmt: Any): Any = {
+    val minItem = DateTimeUtils.getFmt(fmt.asInstanceOf[UTF8String])
+    if (minItem == -1) {
+      // unknown format
+      null
+    } else {
+      val days = d.asInstanceOf[Int]
+      if (minItem == Calendar.YEAR) {
+        days - DateTimeUtils.getDayInYear(days) + 1
+      } else {
+        // trunc to MONTH
+        days - DateTimeUtils.getDayOfMonth(days) + 1
+      }
+    }
+  }
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    nullSafeCodeGen(ctx, ev, (dateVal, fmt) => {
+      val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
+      val form = ctx.freshName("form")
+      s"""
+        int $form = $dtu.getFmt($fmt);
+        if ($form == ${Calendar.YEAR}) {
+          ${ev.primitive} = $dateVal - $dtu.getDayInYear($dateVal) + 1;
+        } else if ($form == ${Calendar.MONTH}) {
+          ${ev.primitive} = $dateVal - $dtu.getDayInYear($dateVal) + 1;
+        } else {
+          ${ev.isNull} = true;
+        }
+      """
+    })
+  }
+
 }
