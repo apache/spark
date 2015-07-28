@@ -450,6 +450,15 @@ private[classification] class MultiClassSummarizer extends Serializable {
 }
 
 @Experimental
+/**
+ * :: Experimental ::
+ * Logistic regression training results.
+ * @param predictions dataframe outputted by the model's `transform` method.
+ * @param probabilityCol field in "predictions" which gives the calibrated probability of
+ *                       each sample as a vector.
+ * @param labelCol field in "predictions" which gives the true label of each sample.
+ * @param objectiveHistory objective function (scaled loss + regularization) at each iteration.
+ */
 class LogisticRegressionTrainingSummary private[classification] (
     predictions: DataFrame,
     probabilityCol: String,
@@ -463,14 +472,25 @@ class LogisticRegressionTrainingSummary private[classification] (
 }
 
 @Experimental
+/**
+ * :: Experimental ::
+ * Logistic regression results for a given model.
+ * @param predictions dataframe outputted by the model's `transform` method.
+ * @param probabilityCol field in "predictions" which gives the calibrated probability of
+ *                       each sample.
+ * @param labelCol field in "predictions" which gives the true label of each sample.
+ */
 class LogisticRegressionSummary private[classification] (
   @transient val predictions: DataFrame,
   val probabilityCol: String,
   val labelCol: String) extends Serializable {
 
+  private val sqlContext = predictions.sqlContext
+  import sqlContext.implicits._
+
   /** Returns a BinaryClassificationMetrics object.
   */
-  @transient val metrics = new BinaryClassificationMetrics(
+  @transient private val metrics = new BinaryClassificationMetrics(
     predictions.select(probabilityCol, labelCol).map {
       case Row(score: Vector, label: Double) => (score(1), label)
     }
@@ -483,17 +503,12 @@ class LogisticRegressionSummary private[classification] (
    * Every possible probability obtained in transforming the dataset are used
    * as thresholds used in calculating the FPR and TPR.
    */
-  @transient val roc: DataFrame = {
-    val distributedRoc = metrics.roc()
-    val sqlContext = SQLContext.getOrCreate(distributedRoc.sparkContext)
-    import sqlContext.implicits._
-    distributedRoc.toDF("FalsePositiveRate", "TruePositiveRate")
-  }
+  def roc(): DataFrame = metrics.roc().toDF("FalsePositiveRate", "TruePositiveRate")
 
   /**
    * Computes the area under the receiver operating characteristic (ROC) curve.
    */
-  val areaUnderROC: Double = metrics.areaUnderROC()
+  def areaUnderROC(): Double = metrics.areaUnderROC()
 
   /**
    * Returns the precision-recall curve, which is an Dataframe containing
@@ -501,45 +516,29 @@ class LogisticRegressionSummary private[classification] (
    * Every possible probability obtained in transforming the dataset are used
    * as thresholds used in calculating the precision and recall.
    */
-  @transient val pr: DataFrame = {
-    val distributedPr = metrics.pr()
-    val sqlContext = SQLContext.getOrCreate(distributedPr.sparkContext)
-    import sqlContext.implicits._
-    distributedPr.toDF("recall", "precision")
-  }
+  def pr(): DataFrame = metrics.pr().toDF("recall", "precision")
 
   /** Returns a dataframe with two fields (threshold, F-Measure) curve with beta = 1.0.
    * Every possible probability obtained in transforming the dataset are used
    * as thresholds used in calculating the F-measure.
    */
-  @transient val fMeasureByThreshold: DataFrame = {
-    val distributedFMeasure = metrics.fMeasureByThreshold()
-    val sqlContext = SQLContext.getOrCreate(distributedFMeasure.sparkContext)
-    import sqlContext.implicits._
-    distributedFMeasure.toDF("threshold", "F-Measure")
+  def fMeasureByThreshold(): DataFrame = {
+    metrics.fMeasureByThreshold().toDF("threshold", "F-Measure")
   }
 
   /** Returns a dataframe with two fields (threshold, precision) curve.
    * Every possible probability obtained in transforming the dataset are used
    * as thresholds used in calculating the precision.
    */
-  @transient val precisionByThreshold: DataFrame = {
-    val distributedPrecision = metrics.precisionByThreshold()
-    val sqlContext = SQLContext.getOrCreate(distributedPrecision.sparkContext)
-    import sqlContext.implicits._
-    distributedPrecision.toDF("threshold", "precision")
+  def precisionByThreshold(): DataFrame = {
+    metrics.precisionByThreshold().toDF("threshold", "precision")
   }
 
   /** Returns a dataframe with two fields (threshold, recall) curve.
    * Every possible probability obtained in transforming the dataset are used
    * as thresholds used in calculating the recall.
    */
-  @transient val recallByThreshold: DataFrame = {
-    val distributedRecall = metrics.recallByThreshold()
-    val sqlContext = SQLContext.getOrCreate(distributedRecall.sparkContext)
-    import sqlContext.implicits._
-    distributedRecall.toDF("threshold", "recall")
-  }
+  def recallByThreshold(): DataFrame = metrics.recallByThreshold().toDF("threshold", "recall")
 }
 
 /**

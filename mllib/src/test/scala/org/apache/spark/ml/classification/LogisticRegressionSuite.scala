@@ -699,7 +699,7 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
     val weightsR = Vectors.dense(0.0, 0.0, 0.0, 0.0)
 
     assert(model1.intercept ~== interceptR relTol 1E-5)
-    assert(model1.weights ~= weightsR absTol 1E-6)
+    assert(model1.weights ~== weightsR absTol 1E-6)
   }
 
   test("evaluate on test set") {
@@ -712,12 +712,14 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
     val summary = model.summary
 
     val sameSummary = model.evaluate(dataset)
-    assert(summary.areaUnderROC === sameSummary.areaUnderROC)
-    assert(summary.roc.collect() === sameSummary.roc.collect())
-    assert(summary.pr.collect() === sameSummary.pr.collect())
-    assert(summary.fMeasureByThreshold.collect() === sameSummary.fMeasureByThreshold.collect())
-    assert(summary.recallByThreshold.collect() === sameSummary.recallByThreshold.collect())
-    assert(summary.precisionByThreshold.collect() === sameSummary.precisionByThreshold.collect())
+    assert(summary.areaUnderROC() === sameSummary.areaUnderROC())
+    assert(summary.roc().collect() === sameSummary.roc.collect())
+    assert(summary.pr().collect() === sameSummary.pr.collect())
+    assert(
+      summary.fMeasureByThreshold().collect() === sameSummary.fMeasureByThreshold().collect())
+    assert(summary.recallByThreshold().collect() === sameSummary.recallByThreshold().collect())
+    assert(
+      summary.precisionByThreshold().collect() === sameSummary.precisionByThreshold().collect())
   }
 
   test("statistics on training data") {
