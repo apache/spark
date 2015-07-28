@@ -267,7 +267,7 @@ private[spark] class PythonRDD(
         // Release memory used by this thread for shuffles
         env.shuffleMemoryManager.releaseMemoryForThisThread()
         // Release memory used by this thread for unrolling blocks
-        env.blockManager.memoryStore.releaseUnrollMemoryForThisThread()
+        env.blockManager.memoryStore.releaseUnrollMemoryForThisTask()
       }
     }
   }
