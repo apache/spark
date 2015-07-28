@@ -131,7 +131,7 @@ class PrunedScanSuite extends DataSourceTest {
             queryExecution)
       }
 
-      if (rawOutput.size != expectedColumns.size) {
+      if (rawOutput.numFields != expectedColumns.size) {
         fail(s"Wrong output row. Got $rawOutput\n$queryExecution")
       }
     }

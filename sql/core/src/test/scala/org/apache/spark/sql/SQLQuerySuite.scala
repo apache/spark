@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.scalatest.BeforeAndAfterAll
 
 import java.sql.Timestamp
@@ -56,6 +57,31 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll with SQLTestUtils {
 
     checkAnswer(queryCaseWhen, Row("1.0") :: Nil)
     checkAnswer(queryCoalesce, Row("1") :: Nil)
+  }
+
+  test("show functions") {
+    checkAnswer(sql("SHOW functions"), FunctionRegistry.builtin.listFunction().sorted.map(Row(_)))
+  }
+
+  test("describe functions") {
+    checkExistence(sql("describe function extended upper"), true,
+      "Function: upper",
+      "Class: org.apache.spark.sql.catalyst.expressions.Upper",
+      "Usage: upper(str) - Returns str with all characters changed to uppercase",
+      "Extended Usage:",
+      "> SELECT upper('SparkSql');",
+      "'SPARKSQL'")
+
+    checkExistence(sql("describe functioN Upper"), true,
+      "Function: upper",
+      "Class: org.apache.spark.sql.catalyst.expressions.Upper",
+      "Usage: upper(str) - Returns str with all characters changed to uppercase")
+
+    checkExistence(sql("describe functioN Upper"), false,
+      "Extended Usage")
+
+    checkExistence(sql("describe functioN abcadf"), true,
+      "Function: abcadf is not found.")
   }
 
   test("SPARK-6743: no columns from cache") {
@@ -110,6 +136,17 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll with SQLTestUtils {
           |GROUP BY x.str
         """.stripMargin),
       Row("1", 1) :: Row("2", 1) :: Row("3", 1) :: Nil)
+  }
+
+  test("SPARK-8668 expr function") {
+    checkAnswer(Seq((1, "Bobby G."))
+      .toDF("id", "name")
+      .select(expr("length(name)"), expr("abs(id)")), Row(8, 1))
+
+    checkAnswer(Seq((1, "building burrito tunnels"), (1, "major projects"))
+      .toDF("id", "saying")
+      .groupBy(expr("length(saying)"))
+      .count(), Row(24, 1) :: Row(14, 1) :: Nil)
   }
 
   test("SQL Dialect Switching to a new SQL parser") {
@@ -188,6 +225,37 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll with SQLTestUtils {
     checkAnswer(
       sql("select * from d where d.a in (1,2)"),
       Seq(Row("1"), Row("2")))
+  }
+
+  test("SPARK-8828 sum should return null if all input values are null") {
+    withSQLConf(SQLConf.USE_SQL_AGGREGATE2.key -> "true") {
+      withSQLConf(SQLConf.CODEGEN_ENABLED.key -> "true") {
+        checkAnswer(
+          sql("select sum(a), avg(a) from allNulls"),
+          Seq(Row(null, null))
+        )
+      }
+      withSQLConf(SQLConf.CODEGEN_ENABLED.key -> "false") {
+        checkAnswer(
+          sql("select sum(a), avg(a) from allNulls"),
+          Seq(Row(null, null))
+        )
+      }
+    }
+    withSQLConf(SQLConf.USE_SQL_AGGREGATE2.key -> "false") {
+      withSQLConf(SQLConf.CODEGEN_ENABLED.key -> "true") {
+        checkAnswer(
+          sql("select sum(a), avg(a) from allNulls"),
+          Seq(Row(null, null))
+        )
+      }
+      withSQLConf(SQLConf.CODEGEN_ENABLED.key -> "false") {
+        checkAnswer(
+          sql("select sum(a), avg(a) from allNulls"),
+          Seq(Row(null, null))
+        )
+      }
+    }
   }
 
   test("aggregation with codegen") {
@@ -426,12 +494,29 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll with SQLTestUtils {
   }
 
   test("literal in agg grouping expressions") {
-    checkAnswer(
-      sql("SELECT a, count(1) FROM testData2 GROUP BY a, 1"),
-      Seq(Row(1, 2), Row(2, 2), Row(3, 2)))
-    checkAnswer(
-      sql("SELECT a, count(2) FROM testData2 GROUP BY a, 2"),
-      Seq(Row(1, 2), Row(2, 2), Row(3, 2)))
+    def literalInAggTest(): Unit = {
+      checkAnswer(
+        sql("SELECT a, count(1) FROM testData2 GROUP BY a, 1"),
+        Seq(Row(1, 2), Row(2, 2), Row(3, 2)))
+      checkAnswer(
+        sql("SELECT a, count(2) FROM testData2 GROUP BY a, 2"),
+        Seq(Row(1, 2), Row(2, 2), Row(3, 2)))
+
+      checkAnswer(
+        sql("SELECT a, 1, sum(b) FROM testData2 GROUP BY a, 1"),
+        sql("SELECT a, 1, sum(b) FROM testData2 GROUP BY a"))
+      checkAnswer(
+        sql("SELECT a, 1, sum(b) FROM testData2 GROUP BY a, 1 + 2"),
+        sql("SELECT a, 1, sum(b) FROM testData2 GROUP BY a"))
+      checkAnswer(
+        sql("SELECT 1, 2, sum(b) FROM testData2 GROUP BY 1, 2"),
+        sql("SELECT 1, 2, sum(b) FROM testData2"))
+    }
+
+    literalInAggTest()
+    withSQLConf(SQLConf.USE_SQL_AGGREGATE2.key -> "false") {
+      literalInAggTest()
+    }
   }
 
   test("aggregates with nulls") {
