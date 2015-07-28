@@ -20,3 +20,7 @@ Python package for local and distributed linear algebra in mllib.
 """
 
 from pyspark.mllib.linalg.local import *
+
+__all__ = ['Vector', 'DenseVector', 'SparseVector', 'Vectors',
+           'Matrix', 'DenseMatrix', 'SparseMatrix', 'Matrices',
+           '_convert_to_vector']
