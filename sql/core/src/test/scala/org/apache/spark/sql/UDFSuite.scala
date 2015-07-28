@@ -51,10 +51,10 @@ class UDFSuite extends QueryTest {
     df.selectExpr("count(distinct a)")
   }
 
-  test("SPARK-8003 spark__partition__id") {
+  test("SPARK-8003 spark_partition_id") {
     val df = Seq((1, "Tearing down the walls that divide us")).toDF("id", "saying")
     df.registerTempTable("tmp_table")
-    checkAnswer(ctx.sql("select spark__partition__id() from tmp_table").toDF(), Row(0))
+    checkAnswer(ctx.sql("select spark_partition_id() from tmp_table").toDF(), Row(0))
     ctx.dropTempTable("tmp_table")
   }
 

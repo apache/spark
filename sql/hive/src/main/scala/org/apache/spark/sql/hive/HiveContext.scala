@@ -38,9 +38,6 @@ import org.apache.spark.Logging
 import org.apache.spark.SparkContext
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.{expression => FunctionExpression, FunctionBuilder}
-import org.apache.spark.sql.catalyst.expressions.ExpressionInfo
-import org.apache.spark.sql.execution.expressions.SparkPartitionID
 import org.apache.spark.sql.SQLConf.SQLConfEntry
 import org.apache.spark.sql.SQLConf.SQLConfEntry._
 import org.apache.spark.sql.catalyst.{TableIdentifier, ParserDialect}
@@ -375,14 +372,8 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) with Logging {
 
   // Note that HiveUDFs will be overridden by functions registered in this context.
   @transient
-  override protected[sql] lazy val functionRegistry: FunctionRegistry = {
-    val reg = new HiveFunctionRegistry(FunctionRegistry.builtin)
-    val extendedFunctions = List[(String, (ExpressionInfo, FunctionBuilder))](
-      FunctionExpression[SparkPartitionID]("spark__partition__id")
-    )
-    extendedFunctions.foreach { case(name, (info, fun)) => reg.registerFunction(name, info, fun) }
-    reg
-  }
+  override protected[sql] lazy val functionRegistry: FunctionRegistry =
+    new HiveFunctionRegistry(FunctionRegistry.builtin)
 
   /* An analyzer that uses the Hive metastore. */
   @transient
