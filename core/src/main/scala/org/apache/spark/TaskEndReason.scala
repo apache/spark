@@ -104,7 +104,7 @@ case class ExceptionFailure(
     stackTrace: Array[StackTraceElement],
     fullStackTrace: String,
     metrics: Option[TaskMetrics],
-    exceptionWrapper: Option[ThrowableSerializationWrapper])
+    private val exceptionWrapper: Option[ThrowableSerializationWrapper])
   extends TaskFailedReason {
 
   /**
