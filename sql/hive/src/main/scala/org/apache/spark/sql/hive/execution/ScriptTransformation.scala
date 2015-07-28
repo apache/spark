@@ -59,7 +59,7 @@ case class ScriptTransformation(
   override def otherCopyArgs: Seq[HiveContext] = sc :: Nil
 
   protected override def doExecute(): RDD[InternalRow] = {
-    def processIterator(iter: Iterator[InternalRow]): Iterator[InternalRow] = {
+    def processIterator(inputIterator: Iterator[InternalRow]): Iterator[InternalRow] = {
       val cmd = List("/bin/bash", "-c", script)
       val builder = new ProcessBuilder(cmd)
       // We need to start threads connected to the process pipeline:
@@ -77,7 +77,7 @@ case class ScriptTransformation(
         ioschema.initOutputSerDe(output).getOrElse((null, null))
       }
 
-      val iterator: Iterator[InternalRow] = new Iterator[InternalRow] with HiveInspectors {
+      val outputIterator: Iterator[InternalRow] = new Iterator[InternalRow] with HiveInspectors {
         var cacheRow: InternalRow = null
         var curLine: String = null
         var eof: Boolean = false
@@ -172,7 +172,7 @@ case class ScriptTransformation(
       // otherwise it will causes deadlock if the data size greater than
       // the pipeline / buffer capacity.
       val writerThread = new ScriptTransformationWriterThread(
-        iter,
+        inputIterator,
         outputProjection,
         inputSerde,
         inputSoi,
@@ -183,7 +183,7 @@ case class ScriptTransformation(
       )
       writerThread.start()
 
-      iterator
+      outputIterator
     }
 
     child.execute().mapPartitions { iter =>
