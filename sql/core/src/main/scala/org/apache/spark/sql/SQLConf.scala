@@ -399,7 +399,7 @@ private[spark] object SQLConf {
     isPublic = false)
 
   val USE_SQL_AGGREGATE2 = booleanConf("spark.sql.useAggregate2",
-    defaultValue = Some(false), doc = "<TODO>")
+    defaultValue = Some(true), doc = "<TODO>")
 
   val USE_SQL_SERIALIZER2 = booleanConf(
     "spark.sql.useSerializer2",
