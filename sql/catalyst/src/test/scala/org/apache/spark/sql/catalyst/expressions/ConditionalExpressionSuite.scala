@@ -60,7 +60,7 @@ class ConditionalExpressionSuite extends SparkFunSuite with ExpressionEvalHelper
 
     testIf(_.toFloat, FloatType)
     testIf(_.toDouble, DoubleType)
-    testIf(Decimal(_), DecimalType.Unlimited)
+    testIf(Decimal(_), DecimalType.USER_DEFAULT)
 
     testIf(identity, DateType)
     testIf(_.toLong, TimestampType)

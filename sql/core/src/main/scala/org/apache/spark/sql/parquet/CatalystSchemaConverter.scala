@@ -387,23 +387,17 @@ private[parquet] class CatalystSchemaConverter(
       // =====================================
 
       // Spark 1.4.x and prior versions only support decimals with a maximum precision of 18 and
-      // always store decimals in fixed-length byte arrays.
-      case DecimalType.Fixed(precision, scale)
-        if precision <= maxPrecisionForBytes(8) && !followParquetFormatSpec =>
+      // always store decimals in fixed-length byte arrays.  To keep compatibility with these older
+      // versions, here we convert decimals with all precisions to `FIXED_LEN_BYTE_ARRAY` annotated
+      // by `DECIMAL`.
+      case DecimalType.Fixed(precision, scale) if !followParquetFormatSpec =>
         Types
           .primitive(FIXED_LEN_BYTE_ARRAY, repetition)
           .as(DECIMAL)
           .precision(precision)
           .scale(scale)
-          .length(minBytesForPrecision(precision))
+          .length(CatalystSchemaConverter.minBytesForPrecision(precision))
           .named(field.name)
-
-      case dec @ DecimalType() if !followParquetFormatSpec =>
-        throw new AnalysisException(
-          s"Data type $dec is not supported. " +
-            s"When ${SQLConf.PARQUET_FOLLOW_PARQUET_FORMAT_SPEC.key} is set to false," +
-            "decimal precision and scale must be specified, " +
-            "and precision must be less than or equal to 18.")
 
       // =====================================
       // Decimals (follow Parquet format spec)
@@ -436,12 +430,8 @@ private[parquet] class CatalystSchemaConverter(
           .as(DECIMAL)
           .precision(precision)
           .scale(scale)
-          .length(minBytesForPrecision(precision))
+          .length(CatalystSchemaConverter.minBytesForPrecision(precision))
           .named(field.name)
-
-      case dec @ DecimalType.Unlimited if followParquetFormatSpec =>
-        throw new AnalysisException(
-          s"Data type $dec is not supported. Decimal precision and scale must be specified.")
 
       // ===================================================
       // ArrayType and MapType (for Spark versions <= 1.4.x)
@@ -552,15 +542,6 @@ private[parquet] class CatalystSchemaConverter(
         Math.pow(2, 8 * numBytes - 1) - 1)))  // max value stored in numBytes
       .asInstanceOf[Int]
   }
-
-  // Min byte counts needed to store decimals with various precisions
-  private val minBytesForPrecision: Array[Int] = Array.tabulate(38) { precision =>
-    var numBytes = 1
-    while (math.pow(2.0, 8 * numBytes - 1) < math.pow(10.0, precision)) {
-      numBytes += 1
-    }
-    numBytes
-  }
 }
 
 
@@ -574,9 +555,33 @@ private[parquet] object CatalystSchemaConverter {
        """.stripMargin.split("\n").mkString(" "))
   }
 
+  def checkFieldNames(schema: StructType): StructType = {
+    schema.fieldNames.foreach(checkFieldName)
+    schema
+  }
+
   def analysisRequire(f: => Boolean, message: String): Unit = {
     if (!f) {
       throw new AnalysisException(message)
+    }
+  }
+
+  private def computeMinBytesForPrecision(precision : Int) : Int = {
+    var numBytes = 1
+    while (math.pow(2.0, 8 * numBytes - 1) < math.pow(10.0, precision)) {
+      numBytes += 1
+    }
+    numBytes
+  }
+
+  private val MIN_BYTES_FOR_PRECISION = Array.tabulate[Int](39)(computeMinBytesForPrecision)
+
+  // Returns the minimum number of bytes needed to store a decimal with a given `precision`.
+  def minBytesForPrecision(precision : Int) : Int = {
+    if (precision < MIN_BYTES_FOR_PRECISION.length) {
+      MIN_BYTES_FOR_PRECISION(precision)
+    } else {
+      computeMinBytesForPrecision(precision)
     }
   }
 }
