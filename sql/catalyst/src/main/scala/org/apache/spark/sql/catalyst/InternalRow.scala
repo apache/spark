@@ -26,7 +26,7 @@ import org.apache.spark.unsafe.types.{Interval, UTF8String}
  * An abstract class for row used internal in Spark SQL, which only contain the columns as
  * internal types.
  */
-abstract class InternalRow extends Serializable {
+abstract class InternalRow extends Serializable with SpecializedGetters {
 
   def numFields: Int
 
