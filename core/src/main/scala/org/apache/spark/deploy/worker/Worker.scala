@@ -126,9 +126,7 @@ private[worker] class Worker(
     WorkerWebUI.DEFAULT_RETAINED_EXECUTORS)
   val retainedDrivers = conf.getInt("spark.worker.ui.retainedDrivers",
     WorkerWebUI.DEFAULT_RETAINED_DRIVERS)
-  val retainedApplications = conf.getInt("spark.worker.ui.retainedApplications",
-    WorkerWebUI.DEFAULT_RETAINED_APPLICATIONS)
-
+  
   // The shuffle service is not actually started unless configured.
   private val shuffleService = new ExternalShuffleService(conf, securityMgr)
 
