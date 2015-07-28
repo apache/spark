@@ -44,8 +44,8 @@ class ScriptTransformationSuite extends SparkPlanTest {
   )
 
   private val serdeIOSchema = noSerdeIOSchema.copy(
-    inputSerdeClass = Some(s"'${classOf[LazySimpleSerDe].getCanonicalName}"),
-    outputSerdeClass = Some(s"'${classOf[LazySimpleSerDe].getCanonicalName}")
+    inputSerdeClass = Some(classOf[LazySimpleSerDe].getCanonicalName),
+    outputSerdeClass = Some(classOf[LazySimpleSerDe].getCanonicalName)
   )
 
   test("cat without SerDe") {
