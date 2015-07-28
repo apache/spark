@@ -50,21 +50,6 @@ private[feature] trait StringIndexerBase extends Params with HasInputCol with Ha
     StructType(outputFields)
   }
 
-  /** Transform the schema for the inverse transformation */
-  protected def invertSchema(schema: StructType): StructType = {
-    val inputColName = $(inputCol)
-    val inputDataType = schema(inputColName).dataType
-    require(inputDataType.isInstanceOf[NumericType],
-      s"The input column $inputColName must be a numeric type, " +
-        s"but got $inputDataType.")
-    val inputFields = schema.fields
-    val outputColName = $(outputCol)
-    require(inputFields.forall(_.name != outputColName),
-      s"Output column $outputColName already exists.")
-    val attr = NominalAttribute.defaultAttr.withName($(outputCol))
-    val outputFields = inputFields :+ attr.toStructField()
-    StructType(outputFields)
-  }
 }
 
 /**
@@ -168,22 +153,41 @@ class StringIndexerModel private[ml] (
     copyValues(copied, extra)
   }
 
-  /**
-   * Return a model to perform the inverse transformation.
-   * Note: by default we keep the original columns during this transformation
-   * so the invert should only be needed if you do something beyond simply
-   * applying the original transformation.
-   */
-  def invert(): StringIndexerInvertModel = {
-    new StringIndexerInvertModel(uid, labels)
-      .setInputCol(getOutputCol)
-      .setOutputCol(getInputCol)
+}
+
+/**
+ * Base trait for [[StringIndexerInverse]] and [[StringIndexerInverseModel]].
+ */
+private[feature] trait StringIndexerInverseBase extends Params with HasInputCol with HasOutputCol {
+  /** Transform the schema for the inverse transformation */
+  protected def invertSchema(schema: StructType): StructType = {
+    val inputColName = $(inputCol)
+    val inputDataType = schema(inputColName).dataType
+    require(inputDataType.isInstanceOf[NumericType],
+      s"The input column $inputColName must be a numeric type, " +
+        s"but got $inputDataType.")
+    val inputFields = schema.fields
+    val outputColName = $(outputCol)
+    require(inputFields.forall(_.name != outputColName),
+      s"Output column $outputColName already exists.")
+    val attr = NominalAttribute.defaultAttr.withName($(outputCol))
+    val outputFields = inputFields :+ attr.toStructField()
+    StructType(outputFields)
   }
 }
 
-class StringIndexerInvertModel private[ml] (
-    override val uid: String,
-    labels: Array[String]) extends Model[StringIndexerInvertModel] with StringIndexerBase {
+/**
+ * :: Experimental ::
+ * Return a model to perform the inverse transformation to the [[StringIndexer]].
+ * Note: By default we keep the original columns during this transformation, so the inverse
+ * should only be used on new columns such as predicted labels.
+ */
+@Experimental
+class StringIndexerInverse(override val uid: String) extends Estimator[StringIndexerInverseModel]
+  with StringIndexerInverseBase {
+
+
+  def this() = this(Identifiable.randomUID("strIdx"))
 
   /** @group setParam */
   def setInputCol(value: String): this.type = set(inputCol, value)
@@ -191,6 +195,30 @@ class StringIndexerInvertModel private[ml] (
   /** @group setParam */
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
+  // TODO: handle unseen labels
+
+  override def fit(dataset: DataFrame): StringIndexerModel = {
+    new StringIndexerInverseModel(uid, labels)
+      .setInputCol(getOutputCol)
+      .setOutputCol(outputCol)
+      .setParent(this)
+  }
+
+  override def transformSchema(schema: StructType): StructType = {
+    validateAndTransformSchema(schema)
+  }
+
+  override def copy(extra: ParamMap): StringIndexer = defaultCopy(extra)
+}
+
+class StringIndexerInverseModel private[ml] (
+  override val uid: String) extends Model[StringIndexerInverseModel] with StringIndexerBase {
+
+  /** @group setParam */
+  def setInputCol(value: String): this.type = set(inputCol, value)
+
+  /** @group setParam */
+  def setOutputCol(value: String): this.type = set(outputCol, value)
 
   private val indexToLabel: OpenHashMap[Double, String] = {
     val n = labels.length
@@ -222,8 +250,8 @@ class StringIndexerInvertModel private[ml] (
       indexer(dataset($(inputCol)).cast(StringType)).as(outputColName, metadata))
   }
 
-  override def copy(extra: ParamMap): StringIndexerInvertModel = {
-    val copied = new StringIndexerInvertModel(uid, labels)
+  override def copy(extra: ParamMap): StringIndexerInverseModel = {
+    val copied = new StringIndexerInverseModel(uid, labels)
     copyValues(copied, extra)
   }
 
