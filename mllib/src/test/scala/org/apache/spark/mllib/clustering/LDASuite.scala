@@ -17,7 +17,7 @@
 
 package org.apache.spark.mllib.clustering
 
-import breeze.linalg.{DenseMatrix => BDM}
+import breeze.linalg.{DenseMatrix => BDM, max, argmax}
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.graphx.Edge
@@ -233,6 +233,51 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext {
       val smalls = topic.filter(t => t._2 < 0.1).map(_._2)
       assert(smalls.length == 3 && smalls.sum < 0.2)
     }
+  }
+
+  test("LocalLDAModel logPerplexity") {
+    val k = 2
+    val vocabSize = 6
+    val alpha = 0.01
+    val eta = 0.01
+    val gammaShape = 100
+    val topics = new DenseMatrix(numRows = vocabSize, numCols = k, values = Array(
+      1.86738052, 1.94056535, 1.89981687, 0.0833265, 0.07405918, 0.07940597,
+      0.15081551, 0.08637973, 0.12428538, 1.9474897, 1.94615165, 1.95204124))
+
+    def toydata: Array[(Long, Vector)] = Array(
+      Vectors.sparse(6, Array(0, 1), Array(1, 1)),
+      Vectors.sparse(6, Array(1, 2), Array(1, 1)),
+      Vectors.sparse(6, Array(0, 2), Array(1, 1)),
+      Vectors.sparse(6, Array(3, 4), Array(1, 1)),
+      Vectors.sparse(6, Array(3, 5), Array(1, 1)),
+      Vectors.sparse(6, Array(4, 5), Array(1, 1))
+    ).zipWithIndex.map { case (wordCounts, docId) => (docId.toLong, wordCounts) }
+    val docs = sc.parallelize(toydata)
+
+
+    val ldaModel: LocalLDAModel = new LocalLDAModel(
+      topics, Vectors.dense(Array.fill(k)(alpha)), eta, gammaShape)
+
+    /* Verify results using gensim:
+       import numpy as np
+       from gensim import models
+       corpus = [
+          [(0, 1.0), (1, 1.0)],
+          [(1, 1.0), (2, 1.0)],
+          [(0, 1.0), (2, 1.0)],
+          [(3, 1.0), (4, 1.0)],
+          [(3, 1.0), (5, 1.0)],
+          [(4, 1.0), (5, 1.0)]]
+       np.random.seed(2345)
+       lda = models.ldamodel.LdaModel(
+          corpus=corpus, alpha=0.01, eta=0.01, num_topics=2, update_every=0, passes=100,
+          decay=0.51, offset=1024)
+       print(lda.log_perplexity(corpus))
+       > -3.69051285096
+     */
+
+    assert(ldaModel.logPerplexity(docs, docs.count()) ~== -3.690D relTol 1E-3D)
   }
 
   test("OnlineLDAOptimizer with asymmetric prior") {
