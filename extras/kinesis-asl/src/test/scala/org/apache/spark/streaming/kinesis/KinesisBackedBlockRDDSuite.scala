@@ -23,7 +23,7 @@ import org.apache.spark.storage.{BlockId, BlockManager, StorageLevel, StreamBloc
 import org.apache.spark.{SparkConf, SparkContext, SparkException, SparkFunSuite}
 
 class KinesisBackedBlockRDDSuite extends KinesisFunSuite with BeforeAndAfterAll {
-
+  // Trigger Kinesis tests
   private val regionId = "us-east-1"
   private val endpointUrl = "https://kinesis.us-east-1.amazonaws.com"
   private val testData = 1 to 8
