@@ -19,7 +19,6 @@ class DbApiHook(BaseHook):
     # Override with the object that exposes the connect method
     connector = None
     # Whether the db supports a special type of autocmmit
-    # TODO should be changed as a method set_autocommit that can be overriden
     supports_autocommit = False
 
     def __init__(self, *args, **kwargs):
@@ -82,12 +81,15 @@ class DbApiHook(BaseHook):
         """
         conn = self.get_conn()
         if self.supports_autocommit:
-            conn.autocommit = autocommit
+           self.set_autocommit(conn,autocommit)
         cur = conn.cursor()
         cur.execute(sql)
         conn.commit()
         cur.close()
         conn.close()
+
+    def set_autocommit(self, conn, autocommit):
+        conn.autocommit = autocommit
 
     def get_cursor(self):
         """Returns a cursor"""
