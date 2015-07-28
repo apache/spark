@@ -119,20 +119,20 @@ class StreamingJobProgressListenerSuite extends TestSuiteBase with Matchers {
     listener.numTotalReceivedRecords should be (600)
 
     // onReceiverStarted
-    val receiverInfoStarted = ReceiverInfo(0, "test", null, true, "localhost")
+    val receiverInfoStarted = ReceiverInfo(0, "test", true, "localhost")
     listener.onReceiverStarted(StreamingListenerReceiverStarted(receiverInfoStarted))
     listener.receiverInfo(0) should be (Some(receiverInfoStarted))
     listener.receiverInfo(1) should be (None)
 
     // onReceiverError
-    val receiverInfoError = ReceiverInfo(1, "test", null, true, "localhost")
+    val receiverInfoError = ReceiverInfo(1, "test", true, "localhost")
     listener.onReceiverError(StreamingListenerReceiverError(receiverInfoError))
     listener.receiverInfo(0) should be (Some(receiverInfoStarted))
     listener.receiverInfo(1) should be (Some(receiverInfoError))
     listener.receiverInfo(2) should be (None)
 
     // onReceiverStopped
-    val receiverInfoStopped = ReceiverInfo(2, "test", null, true, "localhost")
+    val receiverInfoStopped = ReceiverInfo(2, "test", true, "localhost")
     listener.onReceiverStopped(StreamingListenerReceiverStopped(receiverInfoStopped))
     listener.receiverInfo(0) should be (Some(receiverInfoStarted))
     listener.receiverInfo(1) should be (Some(receiverInfoError))

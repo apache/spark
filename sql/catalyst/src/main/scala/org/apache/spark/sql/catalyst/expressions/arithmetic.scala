@@ -18,14 +18,15 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodeGenContext, GeneratedExpressionCode}
+import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.Interval
 
 
 case class UnaryMinus(child: Expression) extends UnaryExpression with ExpectsInputTypes {
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(NumericType)
+  override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection.NumericAndInterval)
 
   override def dataType: DataType = child.dataType
 
@@ -36,15 +37,22 @@ case class UnaryMinus(child: Expression) extends UnaryExpression with ExpectsInp
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = dataType match {
     case dt: DecimalType => defineCodeGen(ctx, ev, c => s"$c.unary_$$minus()")
     case dt: NumericType => defineCodeGen(ctx, ev, c => s"(${ctx.javaType(dt)})(-($c))")
+    case dt: IntervalType => defineCodeGen(ctx, ev, c => s"$c.negate()")
   }
 
-  protected override def nullSafeEval(input: Any): Any = numeric.negate(input)
+  protected override def nullSafeEval(input: Any): Any = {
+    if (dataType.isInstanceOf[IntervalType]) {
+      input.asInstanceOf[Interval].negate()
+    } else {
+      numeric.negate(input)
+    }
+  }
 }
 
 case class UnaryPositive(child: Expression) extends UnaryExpression with ExpectsInputTypes {
   override def prettyName: String = "positive"
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(NumericType)
+  override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection.NumericAndInterval)
 
   override def dataType: DataType = child.dataType
 
@@ -57,6 +65,9 @@ case class UnaryPositive(child: Expression) extends UnaryExpression with Expects
 /**
  * A function that get the absolute value of the numeric value.
  */
+@ExpressionDescription(
+  usage = "_FUNC_(expr) - Returns the absolute value of the numeric value",
+  extended = "> SELECT _FUNC_('-1');\n1")
 case class Abs(child: Expression) extends UnaryExpression with ExpectsInputTypes {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(NumericType)
@@ -65,13 +76,21 @@ case class Abs(child: Expression) extends UnaryExpression with ExpectsInputTypes
 
   private lazy val numeric = TypeUtils.getNumeric(dataType)
 
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = dataType match {
+    case dt: DecimalType =>
+      defineCodeGen(ctx, ev, c => s"$c.abs()")
+    case dt: NumericType =>
+      defineCodeGen(ctx, ev, c => s"(${ctx.javaType(dt)})(java.lang.Math.abs($c))")
+  }
+
   protected override def nullSafeEval(input: Any): Any = numeric.abs(input)
 }
 
 abstract class BinaryArithmetic extends BinaryOperator {
-  self: Product =>
 
   override def dataType: DataType = left.dataType
+
+  override lazy val resolved = childrenResolved && checkInputDataTypes().isSuccess
 
   /** Name of the function for this expression on a [[Decimal]] type. */
   def decimalMethod: String =
@@ -95,32 +114,60 @@ private[sql] object BinaryArithmetic {
 
 case class Add(left: Expression, right: Expression) extends BinaryArithmetic {
 
-  override def inputType: AbstractDataType = NumericType
+  override def inputType: AbstractDataType = TypeCollection.NumericAndInterval
 
   override def symbol: String = "+"
-  override def decimalMethod: String = "$plus"
-
-  override lazy val resolved =
-    childrenResolved && checkInputDataTypes().isSuccess && !DecimalType.isFixed(dataType)
 
   private lazy val numeric = TypeUtils.getNumeric(dataType)
 
-  protected override def nullSafeEval(input1: Any, input2: Any): Any = numeric.plus(input1, input2)
+  protected override def nullSafeEval(input1: Any, input2: Any): Any = {
+    if (dataType.isInstanceOf[IntervalType]) {
+      input1.asInstanceOf[Interval].add(input2.asInstanceOf[Interval])
+    } else {
+      numeric.plus(input1, input2)
+    }
+  }
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = dataType match {
+    case dt: DecimalType =>
+      defineCodeGen(ctx, ev, (eval1, eval2) => s"$eval1.$$plus($eval2)")
+    case ByteType | ShortType =>
+      defineCodeGen(ctx, ev,
+        (eval1, eval2) => s"(${ctx.javaType(dataType)})($eval1 $symbol $eval2)")
+    case IntervalType =>
+      defineCodeGen(ctx, ev, (eval1, eval2) => s"$eval1.add($eval2)")
+    case _ =>
+      defineCodeGen(ctx, ev, (eval1, eval2) => s"$eval1 $symbol $eval2")
+  }
 }
 
 case class Subtract(left: Expression, right: Expression) extends BinaryArithmetic {
 
-  override def inputType: AbstractDataType = NumericType
+  override def inputType: AbstractDataType = TypeCollection.NumericAndInterval
 
   override def symbol: String = "-"
-  override def decimalMethod: String = "$minus"
-
-  override lazy val resolved =
-    childrenResolved && checkInputDataTypes().isSuccess && !DecimalType.isFixed(dataType)
 
   private lazy val numeric = TypeUtils.getNumeric(dataType)
 
-  protected override def nullSafeEval(input1: Any, input2: Any): Any = numeric.minus(input1, input2)
+  protected override def nullSafeEval(input1: Any, input2: Any): Any = {
+    if (dataType.isInstanceOf[IntervalType]) {
+      input1.asInstanceOf[Interval].subtract(input2.asInstanceOf[Interval])
+    } else {
+      numeric.minus(input1, input2)
+    }
+  }
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = dataType match {
+    case dt: DecimalType =>
+      defineCodeGen(ctx, ev, (eval1, eval2) => s"$eval1.$$minus($eval2)")
+    case ByteType | ShortType =>
+      defineCodeGen(ctx, ev,
+        (eval1, eval2) => s"(${ctx.javaType(dataType)})($eval1 $symbol $eval2)")
+    case IntervalType =>
+      defineCodeGen(ctx, ev, (eval1, eval2) => s"$eval1.subtract($eval2)")
+    case _ =>
+      defineCodeGen(ctx, ev, (eval1, eval2) => s"$eval1 $symbol $eval2")
+  }
 }
 
 case class Multiply(left: Expression, right: Expression) extends BinaryArithmetic {
@@ -129,9 +176,6 @@ case class Multiply(left: Expression, right: Expression) extends BinaryArithmeti
 
   override def symbol: String = "*"
   override def decimalMethod: String = "$times"
-
-  override lazy val resolved =
-    childrenResolved && checkInputDataTypes().isSuccess && !DecimalType.isFixed(dataType)
 
   private lazy val numeric = TypeUtils.getNumeric(dataType)
 
@@ -145,9 +189,6 @@ case class Divide(left: Expression, right: Expression) extends BinaryArithmetic 
   override def symbol: String = "/"
   override def decimalMethod: String = "$div"
   override def nullable: Boolean = true
-
-  override lazy val resolved =
-    childrenResolved && checkInputDataTypes().isSuccess && !DecimalType.isFixed(dataType)
 
   private lazy val div: (Any, Any) => Any = dataType match {
     case ft: FractionalType => ft.fractional.asInstanceOf[Fractional[Any]].div
@@ -210,9 +251,6 @@ case class Remainder(left: Expression, right: Expression) extends BinaryArithmet
   override def symbol: String = "%"
   override def decimalMethod: String = "remainder"
   override def nullable: Boolean = true
-
-  override lazy val resolved =
-    childrenResolved && checkInputDataTypes().isSuccess && !DecimalType.isFixed(dataType)
 
   private lazy val integral = dataType match {
     case i: IntegralType => i.integral.asInstanceOf[Integral[Any]]
@@ -320,7 +358,6 @@ case class MaxOf(left: Expression, right: Expression) extends BinaryArithmetic {
   }
 
   override def symbol: String = "max"
-  override def prettyName: String = symbol
 }
 
 case class MinOf(left: Expression, right: Expression) extends BinaryArithmetic {
@@ -375,7 +412,6 @@ case class MinOf(left: Expression, right: Expression) extends BinaryArithmetic {
   }
 
   override def symbol: String = "min"
-  override def prettyName: String = symbol
 }
 
 case class Pmod(left: Expression, right: Expression) extends BinaryArithmetic {

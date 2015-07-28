@@ -57,9 +57,9 @@ test_that("infer types", {
   expect_equal(infer_type(as.Date("2015-03-11")), "date")
   expect_equal(infer_type(as.POSIXlt("2015-03-11 12:13:04.043")), "timestamp")
   expect_equal(infer_type(c(1L, 2L)),
-               list(type = 'array', elementType = "integer", containsNull = TRUE))
+               list(type = "array", elementType = "integer", containsNull = TRUE))
   expect_equal(infer_type(list(1L, 2L)),
-               list(type = 'array', elementType = "integer", containsNull = TRUE))
+               list(type = "array", elementType = "integer", containsNull = TRUE))
   testStruct <- infer_type(list(a = 1L, b = "2"))
   expect_equal(class(testStruct), "structType")
   checkStructField(testStruct$fields()[[1]], "a", "IntegerType", TRUE)
@@ -638,6 +638,18 @@ test_that("column functions", {
   c7 <- floor(c) + log(c) + log10(c) + log1p(c) + rint(c)
   c8 <- sign(c) + sin(c) + sinh(c) + tan(c) + tanh(c)
   c9 <- toDegrees(c) + toRadians(c)
+
+  df <- jsonFile(sqlContext, jsonPath)
+  df2 <- select(df, between(df$age, c(20, 30)), between(df$age, c(10, 20)))
+  expect_equal(collect(df2)[[2, 1]], TRUE)
+  expect_equal(collect(df2)[[2, 2]], FALSE)
+  expect_equal(collect(df2)[[3, 1]], FALSE)
+  expect_equal(collect(df2)[[3, 2]], TRUE)
+
+  df3 <- select(df, between(df$name, c("Apache", "Spark")))
+  expect_equal(collect(df3)[[1, 1]], TRUE)
+  expect_equal(collect(df3)[[2, 1]], FALSE)
+  expect_equal(collect(df3)[[3, 1]], TRUE)
 })
 
 test_that("column binary mathfunctions", {
@@ -973,6 +985,19 @@ test_that("fillna() on a DataFrame", {
   expected$name[is.na(expected$name)] <- "unknown"
   actual <- collect(fillna(df, list("age" = 50, "height" = 50.6, "name" = "unknown")))
   expect_identical(expected, actual)
+})
+
+test_that("crosstab() on a DataFrame", {
+  rdd <- lapply(parallelize(sc, 0:3), function(x) {
+    list(paste0("a", x %% 3), paste0("b", x %% 2))
+  })
+  df <- toDF(rdd, list("a", "b"))
+  ct <- crosstab(df, "a", "b")
+  ordered <- ct[order(ct$a_b),]
+  row.names(ordered) <- NULL
+  expected <- data.frame("a_b" = c("a0", "a1", "a2"), "b0" = c(1, 0, 1), "b1" = c(1, 1, 0),
+                         stringsAsFactors = FALSE, row.names = NULL)
+  expect_identical(expected, ordered)
 })
 
 unlink(parquetPath)

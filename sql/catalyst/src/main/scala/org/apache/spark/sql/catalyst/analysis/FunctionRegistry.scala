@@ -30,25 +30,43 @@ import org.apache.spark.sql.catalyst.util.StringKeyHashMap
 /** A catalog for looking up user defined functions, used by an [[Analyzer]]. */
 trait FunctionRegistry {
 
-  def registerFunction(name: String, builder: FunctionBuilder): Unit
+  final def registerFunction(name: String, builder: FunctionBuilder): Unit = {
+    registerFunction(name, new ExpressionInfo(builder.getClass.getCanonicalName, name), builder)
+  }
+
+  def registerFunction(name: String, info: ExpressionInfo, builder: FunctionBuilder): Unit
 
   @throws[AnalysisException]("If function does not exist")
   def lookupFunction(name: String, children: Seq[Expression]): Expression
+
+  /* List all of the registered function names. */
+  def listFunction(): Seq[String]
+
+  /* Get the class of the registered function by specified name. */
+  def lookupFunction(name: String): Option[ExpressionInfo]
 }
 
 class SimpleFunctionRegistry extends FunctionRegistry {
 
-  private val functionBuilders = StringKeyHashMap[FunctionBuilder](caseSensitive = false)
+  private val functionBuilders =
+    StringKeyHashMap[(ExpressionInfo, FunctionBuilder)](caseSensitive = false)
 
-  override def registerFunction(name: String, builder: FunctionBuilder): Unit = {
-    functionBuilders.put(name, builder)
+  override def registerFunction(name: String, info: ExpressionInfo, builder: FunctionBuilder)
+  : Unit = {
+    functionBuilders.put(name, (info, builder))
   }
 
   override def lookupFunction(name: String, children: Seq[Expression]): Expression = {
-    val func = functionBuilders.get(name).getOrElse {
+    val func = functionBuilders.get(name).map(_._2).getOrElse {
       throw new AnalysisException(s"undefined function $name")
     }
     func(children)
+  }
+
+  override def listFunction(): Seq[String] = functionBuilders.iterator.map(_._1).toList.sorted
+
+  override def lookupFunction(name: String): Option[ExpressionInfo] = {
+    functionBuilders.get(name).map(_._1)
   }
 }
 
@@ -57,11 +75,20 @@ class SimpleFunctionRegistry extends FunctionRegistry {
  * functions are already filled in and the analyzer needs only to resolve attribute references.
  */
 object EmptyFunctionRegistry extends FunctionRegistry {
-  override def registerFunction(name: String, builder: FunctionBuilder): Unit = {
+  override def registerFunction(name: String, info: ExpressionInfo, builder: FunctionBuilder)
+  : Unit = {
     throw new UnsupportedOperationException
   }
 
   override def lookupFunction(name: String, children: Seq[Expression]): Expression = {
+    throw new UnsupportedOperationException
+  }
+
+  override def listFunction(): Seq[String] = {
+    throw new UnsupportedOperationException
+  }
+
+  override def lookupFunction(name: String): Option[ExpressionInfo] = {
     throw new UnsupportedOperationException
   }
 }
@@ -71,7 +98,7 @@ object FunctionRegistry {
 
   type FunctionBuilder = Seq[Expression] => Expression
 
-  val expressions: Map[String, FunctionBuilder] = Map(
+  val expressions: Map[String, (ExpressionInfo, FunctionBuilder)] = Map(
     // misc non-aggregate functions
     expression[Abs]("abs"),
     expression[CreateArray]("array"),
@@ -79,6 +106,7 @@ object FunctionRegistry {
     expression[Explode]("explode"),
     expression[Greatest]("greatest"),
     expression[If]("if"),
+    expression[IsNaN]("isnan"),
     expression[IsNull]("isnull"),
     expression[IsNotNull]("isnotnull"),
     expression[Least]("least"),
@@ -88,6 +116,7 @@ object FunctionRegistry {
     expression[CreateStruct]("struct"),
     expression[CreateNamedStruct]("named_struct"),
     expression[Sqrt]("sqrt"),
+    expression[NaNvl]("nanvl"),
 
     // math functions
     expression[Acos]("acos"),
@@ -99,6 +128,7 @@ object FunctionRegistry {
     expression[Ceil]("ceil"),
     expression[Ceil]("ceiling"),
     expression[Cos]("cos"),
+    expression[Conv]("conv"),
     expression[EulerNumber]("e"),
     expression[Exp]("exp"),
     expression[Expm1]("expm1"),
@@ -110,9 +140,9 @@ object FunctionRegistry {
     expression[Log]("ln"),
     expression[Log10]("log10"),
     expression[Log1p]("log1p"),
+    expression[Log2]("log2"),
     expression[UnaryMinus]("negative"),
     expression[Pi]("pi"),
-    expression[Log2]("log2"),
     expression[Pow]("pow"),
     expression[Pow]("power"),
     expression[Pmod]("pmod"),
@@ -150,17 +180,23 @@ object FunctionRegistry {
     // string functions
     expression[Ascii]("ascii"),
     expression[Base64]("base64"),
+    expression[Concat]("concat"),
+    expression[ConcatWs]("concat_ws"),
     expression[Encode]("encode"),
     expression[Decode]("decode"),
-    expression[StringInstr]("instr"),
+    expression[FormatNumber]("format_number"),
     expression[Lower]("lcase"),
     expression[Lower]("lower"),
-    expression[StringLength]("length"),
+    expression[Length]("length"),
     expression[Levenshtein]("levenshtein"),
+    expression[RegExpExtract]("regexp_extract"),
+    expression[RegExpReplace]("regexp_replace"),
+    expression[StringInstr]("instr"),
     expression[StringLocate]("locate"),
     expression[StringLPad]("lpad"),
     expression[StringTrimLeft]("ltrim"),
-    expression[StringFormat]("printf"),
+    expression[FormatString]("format_string"),
+    expression[FormatString]("printf"),
     expression[StringRPad]("rpad"),
     expression[StringRepeat]("repeat"),
     expression[StringReverse]("reverse"),
@@ -177,25 +213,44 @@ object FunctionRegistry {
 
     // datetime functions
     expression[CurrentDate]("current_date"),
-    expression[CurrentTimestamp]("current_timestamp")
+    expression[CurrentTimestamp]("current_timestamp"),
+    expression[DateFormatClass]("date_format"),
+    expression[DayOfMonth]("day"),
+    expression[DayOfYear]("dayofyear"),
+    expression[DayOfMonth]("dayofmonth"),
+    expression[Hour]("hour"),
+    expression[LastDay]("last_day"),
+    expression[Minute]("minute"),
+    expression[Month]("month"),
+    expression[NextDay]("next_day"),
+    expression[Quarter]("quarter"),
+    expression[Second]("second"),
+    expression[WeekOfYear]("weekofyear"),
+    expression[Year]("year"),
+
+    // collection functions
+    expression[Size]("size")
   )
 
   val builtin: FunctionRegistry = {
     val fr = new SimpleFunctionRegistry
-    expressions.foreach { case (name, builder) => fr.registerFunction(name, builder) }
+    expressions.foreach { case (name, (info, builder)) => fr.registerFunction(name, info, builder) }
     fr
   }
 
   /** See usage above. */
   private def expression[T <: Expression](name: String)
-      (implicit tag: ClassTag[T]): (String, FunctionBuilder) = {
+      (implicit tag: ClassTag[T]): (String, (ExpressionInfo, FunctionBuilder)) = {
 
     // See if we can find a constructor that accepts Seq[Expression]
     val varargCtor = Try(tag.runtimeClass.getDeclaredConstructor(classOf[Seq[_]])).toOption
     val builder = (expressions: Seq[Expression]) => {
       if (varargCtor.isDefined) {
         // If there is an apply method that accepts Seq[Expression], use that one.
-        varargCtor.get.newInstance(expressions).asInstanceOf[Expression]
+        Try(varargCtor.get.newInstance(expressions).asInstanceOf[Expression]) match {
+          case Success(e) => e
+          case Failure(e) => throw new AnalysisException(e.getMessage)
+        }
       } else {
         // Otherwise, find an ctor method that matches the number of arguments, and use that.
         val params = Seq.fill(expressions.size)(classOf[Expression])
@@ -205,9 +260,21 @@ object FunctionRegistry {
           case Failure(e) =>
             throw new AnalysisException(s"Invalid number of arguments for function $name")
         }
-        f.newInstance(expressions : _*).asInstanceOf[Expression]
+        Try(f.newInstance(expressions : _*).asInstanceOf[Expression]) match {
+          case Success(e) => e
+          case Failure(e) => throw new AnalysisException(e.getMessage)
+        }
       }
     }
-    (name, builder)
+
+    val clazz = tag.runtimeClass
+    val df = clazz.getAnnotation(classOf[ExpressionDescription])
+    if (df != null) {
+      (name,
+        (new ExpressionInfo(clazz.getCanonicalName, name, df.usage(), df.extended()),
+        builder))
+    } else {
+      (name, (new ExpressionInfo(clazz.getCanonicalName, name), builder))
+    }
   }
 }

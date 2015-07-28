@@ -97,9 +97,11 @@ class LinearRegressionModelBase(LinearModel):
 
     def predict(self, x):
         """
-        Predict the value of the dependent variable given a vector x
-        containing values for the independent variables.
+        Predict the value of the dependent variable given a vector or
+        an RDD of vectors containing values for the independent variables.
         """
+        if isinstance(x, RDD):
+            return x.map(self.predict)
         x = _convert_to_vector(x)
         return self.weights.dot(x) + self.intercept
 
@@ -123,6 +125,8 @@ class LinearRegressionModel(LinearRegressionModelBase):
     >>> abs(lrm.predict(np.array([1.0])) - 1) < 0.5
     True
     >>> abs(lrm.predict(SparseVector(1, {0: 1.0})) - 1) < 0.5
+    True
+    >>> abs(lrm.predict(sc.parallelize([[1.0]])).collect()[0] - 1) < 0.5
     True
     >>> import os, tempfile
     >>> path = tempfile.mkdtemp()
@@ -267,6 +271,8 @@ class LassoModel(LinearRegressionModelBase):
     True
     >>> abs(lrm.predict(SparseVector(1, {0: 1.0})) - 1) < 0.5
     True
+    >>> abs(lrm.predict(sc.parallelize([[1.0]])).collect()[0] - 1) < 0.5
+    True
     >>> import os, tempfile
     >>> path = tempfile.mkdtemp()
     >>> lrm.save(sc, path)
@@ -381,6 +387,8 @@ class RidgeRegressionModel(LinearRegressionModelBase):
     >>> abs(lrm.predict(np.array([1.0])) - 1) < 0.5
     True
     >>> abs(lrm.predict(SparseVector(1, {0: 1.0})) - 1) < 0.5
+    True
+    >>> abs(lrm.predict(sc.parallelize([[1.0]])).collect()[0] - 1) < 0.5
     True
     >>> import os, tempfile
     >>> path = tempfile.mkdtemp()
