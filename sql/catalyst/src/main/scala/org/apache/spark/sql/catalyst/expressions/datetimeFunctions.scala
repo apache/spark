@@ -276,8 +276,6 @@ case class LastDay(startDate: Expression) extends UnaryExpression with ImplicitC
 
   override def dataType: DataType = DateType
 
-  override def prettyName: String = "last_day"
-
   override def nullSafeEval(date: Any): Any = {
     val days = date.asInstanceOf[Int]
     DateTimeUtils.getLastDayOfMonth(days)
@@ -289,12 +287,16 @@ case class LastDay(startDate: Expression) extends UnaryExpression with ImplicitC
       s"$dtu.getLastDayOfMonth($sd)"
     })
   }
+
+  override def prettyName: String = "last_day"
 }
 
 /**
  * Returns the first date which is later than startDate and named as dayOfWeek.
  * For example, NextDay(2015-07-27, Sunday) would return 2015-08-02, which is the first
- * sunday later than 2015-07-27.
+ * Sunday later than 2015-07-27.
+ *
+ * Allowed "dayOfWeek" is defined in [[DateTimeUtils.getDayOfWeekFromString]].
  */
 case class NextDay(startDate: Expression, dayOfWeek: Expression)
   extends BinaryExpression with ImplicitCastInputTypes {
@@ -318,22 +320,32 @@ case class NextDay(startDate: Expression, dayOfWeek: Expression)
 
   override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     nullSafeCodeGen(ctx, ev, (sd, dowS) => {
-      val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
-      val dow = ctx.freshName("dow")
-      val genDow = if (right.foldable) {
-        val dowVal = DateTimeUtils.getDayOfWeekFromString(
-          dayOfWeek.eval(InternalRow.empty).asInstanceOf[UTF8String])
-        s"int $dow = $dowVal;"
-      } else {
-        s"int $dow = $dtu.getDayOfWeekFromString($dowS);"
-      }
-      genDow + s"""
-        if ($dow == -1) {
-          ${ev.isNull} = true;
+      val dateTimeUtilClass = DateTimeUtils.getClass.getName.stripSuffix("$")
+      val dayOfWeekTerm = ctx.freshName("dayOfWeek")
+      if (dayOfWeek.foldable) {
+        val input = dayOfWeek.eval().asInstanceOf[UTF8String]
+        if ((input eq null) || DateTimeUtils.getDayOfWeekFromString(input) == -1) {
+          s"""
+             |${ev.isNull} = true;
+           """.stripMargin
         } else {
-          ${ev.primitive} = $dtu.getNextDateForDayOfWeek($sd, $dow);
+          val dayOfWeekValue = DateTimeUtils.getDayOfWeekFromString(input)
+          s"""
+             |${ev.primitive} = $dateTimeUtilClass.getNextDateForDayOfWeek($sd, $dayOfWeekValue);
+           """.stripMargin
         }
-       """
+      } else {
+        s"""
+           |int $dayOfWeekTerm = $dateTimeUtilClass.getDayOfWeekFromString($dowS);
+           |if ($dayOfWeekTerm == -1) {
+           |  ${ev.isNull} = true;
+           |} else {
+           |  ${ev.primitive} = $dateTimeUtilClass.getNextDateForDayOfWeek($sd, $dayOfWeekTerm);
+           |}
+         """.stripMargin
+      }
     })
   }
+
+  override def prettyName: String = "next_day"
 }

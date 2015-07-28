@@ -82,6 +82,7 @@ trait ExpressionEvalHelper {
           s"""
             |Code generation of $expression failed:
             |$e
+            |${e.getStackTraceString}
           """.stripMargin)
     }
   }

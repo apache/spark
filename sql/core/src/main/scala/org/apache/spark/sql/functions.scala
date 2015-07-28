@@ -2033,7 +2033,10 @@ object functions {
   def hour(columnName: String): Column = hour(Column(columnName))
 
   /**
-   * Returns the last day of the month which the given date belongs to.
+   * Given a date column, returns the last day of the month which the given date belongs to.
+   * For example, input "2015-07-27" returns "2015-07-31" since July 31 is the last day of the
+   * month in July 2015.
+   *
    * @group datetime_funcs
    * @since 1.5.0
    */
@@ -2054,14 +2057,19 @@ object functions {
   def minute(columnName: String): Column = minute(Column(columnName))
 
   /**
-   * Returns the first date which is later than given date sd and named as dow.
-   * For example, `next_day('2015-07-27', "Sunday")` would return 2015-08-02, which is the
-   * first Sunday later than 2015-07-27. The parameter dayOfWeek could be 2-letter, 3-letter,
-   * or full name of the day of the week (e.g. Mo, tue, FRIDAY).
+   * Given a date column, returns the first date which is later than the value of the date column
+   * that is on the specified day of the week.
+   *
+   * For example, `next_day('2015-07-27', "Sunday")` returns 2015-08-02 because that is the first
+   * Sunday after 2015-07-27.
+   *
+   * Day of the week parameter is case insensitive, and accepts:
+   * "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun".
+   *
    * @group datetime_funcs
    * @since 1.5.0
    */
-  def next_day(sd: Column, dayOfWeek: String): Column = NextDay(sd.expr, lit(dayOfWeek).expr)
+  def next_day(date: Column, dayOfWeek: String): Column = NextDay(date.expr, lit(dayOfWeek).expr)
 
   /**
    * Extracts the seconds as an integer from a given date/timestamp/string.
