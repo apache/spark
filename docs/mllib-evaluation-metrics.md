@@ -48,18 +48,17 @@ Most binary classification metrics can be generalized to multiclass classificati
 
 #### Threshold Tuning
 
-It is important to understand that, in most classification models, the output of the model is actually a probability or
-set of probabilities, which are then converted to predictions. In the binary case, the model outputs a probability for
-each class: $P(Y=1|X)$ and $P(Y=0|X)$. However, there may be some cases where the model might need to be tuned so that
-it only predicts a class when the probability is very high (e.g. only block a credit card transaction if the model
-predicts fraud with >90% probability). Therefore, there is a prediction *threshold* which determines what the predicted
-class will be based on the probabilities that the model outputs.
+It is import to understand that many classification models actually output a "score" (often times a probability) for
+each class, where a higher score indicates higher likelihood. In the binary case, the model may output a probability for
+each class: $P(Y=1|X)$ and $P(Y=0|X)$. Instead of simply taking the higher probability, there may be some cases where
+the model might need to be tuned so that it only predicts a class when the probability is very high (e.g. only block a
+credit card transaction if the model predicts fraud with >90% probability). Therefore, there is a prediction *threshold*
+which determines what the predicted class will be based on the probabilities that the model outputs.
 
-Tuning the prediction threshold will change the precision and
-recall of the model and is an important part of model optimization. In order to visualize how precision, recall,
-and other metrics change as a function of the threshold it is common practice to plot competing metrics against one
-another, parameterized by threshold. A P-R curve plots (precision, recall) points for different threshold values,
-while a [receiver operating characteristic](https://en.wikipedia.org/wiki/Receiver_operating_characteristic), or ROC,
+Tuning the prediction threshold will change the precision and recall of the model and is an important part of model
+optimization. In order to visualize how precision, recall, and other metrics change as a function of the threshold it is
+common practice to plot competing metrics against one another, parameterized by threshold. A P-R curve plots (precision,
+recall) points for different threshold values, while a [receiver operating characteristic](https://en.wikipedia.org/wiki/Receiver_operating_characteristic), or ROC,
 curve plots (recall, false positive rate) points.
 
 **Available Metrics**
@@ -204,7 +203,7 @@ public class BinaryClassification {
 
     // Run training algorithm to build the model.
     final LogisticRegressionModel model = new LogisticRegressionWithLBFGS()
-      .setNumClasses(3)
+      .setNumClasses(2)
       .run(training.rdd());
 
     // Compute raw scores on the test set.
@@ -932,8 +931,9 @@ $$rel_D(r) = \begin{cases}1 & \text{if $r \in D$}, \\ 0 & \text{otherwise}.\end{
         $p(k)=\frac{1}{M} \sum_{i=0}^{M-1} {\frac{1}{k} \sum_{j=0}^{\text{min}(\left|D\right|, k) - 1} rel_{D_i}(R_i(j))}$
       </td>
       <td>
-        <a href="https://en.wikipedia.org/wiki/Information_retrieval#Precision_at_K">Precision at k</a> is a measure of how many of the first k recommended documents are in the set of true relevant
-        documents averaged across all users. In this metric, the order of the recommendations is not taken into account.
+        <a href="https://en.wikipedia.org/wiki/Information_retrieval#Precision_at_K">Precision at k</a> is a measure of
+         how many of the first k recommended documents are in the set of true relevant documents averaged across all
+         users. In this metric, the order of the recommendations is not taken into account.
       </td>
     </tr>
     <tr>
@@ -942,7 +942,8 @@ $$rel_D(r) = \begin{cases}1 & \text{if $r \in D$}, \\ 0 & \text{otherwise}.\end{
         $MAP=\frac{1}{M} \sum_{i=0}^{M-1} {\frac{1}{\left|D_i\right|} \sum_{j=0}^{Q-1} \frac{rel_{D_i}(R_i(j))}{j + 1}}$
       </td>
       <td>
-        <a href="https://en.wikipedia.org/wiki/Information_retrieval#Mean_average_precision">MAP</a> is a measure of how many of the recommended documents are in the set of true relevant documents, where the
+        <a href="https://en.wikipedia.org/wiki/Information_retrieval#Mean_average_precision">MAP</a> is a measure of how
+         many of the recommended documents are in the set of true relevant documents, where the
         order of the recommendations is taken into account (i.e. penalty for highly relevant documents is higher).
       </td>
     </tr>
@@ -956,9 +957,10 @@ $$rel_D(r) = \begin{cases}1 & \text{if $r \in D$}, \\ 0 & \text{otherwise}.\end{
         \hspace{5 mm} IDCG(D, k) = \sum_{j=0}^{\text{min}(\left|D\right|, k) - 1} \frac{1}{\text{ln}(j+1)}$
       </td>
       <td>
-        <a href="https://en.wikipedia.org/wiki/Information_retrieval#Discounted_cumulative_gain">NDCG at k</a> is a measure of how many of the first k recommended documents are in the set of true relevant
-        documents averaged across all users. In contrast to precision at k, this metric takes into account the order of
-        the recommendations (documents are assumed to be in order of decreasing relevance).
+        <a href="https://en.wikipedia.org/wiki/Information_retrieval#Discounted_cumulative_gain">NDCG at k</a> is a
+        measure of how many of the first k recommended documents are in the set of true relevant documents averaged
+        across all users. In contrast to precision at k, this metric takes into account the order of the recommendations
+        (documents are assumed to be in order of decreasing relevance).
       </td>
     </tr>
   </tbody>
@@ -1272,9 +1274,8 @@ print "R-squared = %1.3f" % metrics.r2
 
 ## Regression Model Evaluation
 
-[Regression analysis](https://en.wikipedia.org/wiki/Regression_analysis), most commonly formulated as a least-squares
-minimization, involves estimating the relationships among input and output variables. In this context, regression
-metrics refer to a continuous output variable.
+[Regression analysis](https://en.wikipedia.org/wiki/Regression_analysis) is used when predicting a continuous output
+variable from a number of independent variables.
 
 **Available Metrics**
 
@@ -1292,13 +1293,13 @@ metrics refer to a continuous output variable.
       <td>$RMSE = \sqrt{\frac{\sum_{i=0}^{N-1} (\mathbf{y}_i - \hat{\mathbf{y}}_i)^2}{N}}$</td>
     </tr>
     <tr>
+      <td>Mean Absoloute Error (MAE)</td>
+      <td>$MAE=\sum_{i=0}^{N-1} \left|\mathbf{y}_i - \hat{\mathbf{y}}_i\right|$</td>
+    </tr>
+    <tr>
       <td>Coefficient of Determination $(R^2)$</td>
       <td>$R^2=1 - \frac{MSE}{\text{VAR}(\mathbf{y}) \cdot (N-1)}=1-\frac{\sum_{i=0}^{N-1}
         (\mathbf{y}_i - \hat{\mathbf{y}}_i)^2}{\sum_{i=0}^{N-1}(\mathbf{y}_i-\bar{\mathbf{y}})^2}$</td>
-    </tr>
-    <tr>
-      <td>Mean Absoloute Error (MAE)</td>
-      <td>$MAE=\sum_{i=0}^{N-1} \left|\mathbf{y}_i - \hat{\mathbf{y}}_i\right|$</td>
     </tr>
     <tr>
       <td>Explained Variance</td>
