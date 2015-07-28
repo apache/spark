@@ -26,9 +26,9 @@ class RFormulaParserSuite extends SparkFunSuite {
       label: String,
       terms: Seq[String],
       schema: StructType = null) {
-    val parsed = RFormulaParser.parse(formula).fit(schema)
-    assert(parsed.label == label)
-    assert(parsed.terms == terms)
+    val resolved = RFormulaParser.parse(formula).resolve(schema)
+    assert(resolved.label == label)
+    assert(resolved.terms == terms)
   }
 
   test("parse simple formulas") {
@@ -40,25 +40,25 @@ class RFormulaParserSuite extends SparkFunSuite {
 
   test("parse dot") {
     val schema = (new StructType)
-      .add("a", "int", true, Metadata.empty)
-      .add("b", "long", false, Metadata.empty)
-      .add("c", "string", true, Metadata.empty)
+      .add("a", "int", true)
+      .add("b", "long", false)
+      .add("c", "string", true)
     checkParse("a ~ .", "a", Seq("b", "c"), schema)
   }
 
   test("parse deletion") {
     val schema = (new StructType)
-      .add("a", "int", true, Metadata.empty)
-      .add("b", "long", false, Metadata.empty)
-      .add("c", "string", true, Metadata.empty)
+      .add("a", "int", true)
+      .add("b", "long", false)
+      .add("c", "string", true)
     checkParse("a ~ c - b", "a", Seq("c"), schema)
   }
 
   test("parse additions and deletions in order") {
     val schema = (new StructType)
-      .add("a", "int", true, Metadata.empty)
-      .add("b", "long", false, Metadata.empty)
-      .add("c", "string", true, Metadata.empty)
+      .add("a", "int", true)
+      .add("b", "long", false)
+      .add("c", "string", true)
     checkParse("a ~ . - b + . - c", "a", Seq("b"), schema)
   }
 

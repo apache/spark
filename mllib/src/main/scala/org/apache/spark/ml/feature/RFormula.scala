@@ -79,19 +79,19 @@ class RFormula(override val uid: String) extends Estimator[RFormulaModel] with R
   def getFormula: String = $(formula)
 
   /** Whether the formula specifies fitting an intercept. */
-  def hasIntercept: Boolean = {
+  private[ml] def hasIntercept: Boolean = {
     require(parsedFormula.isDefined, "Must call setFormula() first.")
     parsedFormula.get.hasIntercept
   }
 
   override def fit(dataset: DataFrame): RFormulaModel = {
     require(parsedFormula.isDefined, "Must call setFormula() first.")
-    val fittedFormula = parsedFormula.get.fit(dataset.schema)
+    val resolvedFormula = parsedFormula.get.resolve(dataset.schema)
     // StringType terms and terms representing interactions need to be encoded before assembly.
     // TODO(ekl) add support for feature interactions
     val encoderStages = ArrayBuffer[PipelineStage]()
     val tempColumns = ArrayBuffer[String]()
-    val encodedTerms = fittedFormula.terms.map { term =>
+    val encodedTerms = resolvedFormula.terms.map { term =>
       dataset.schema(term) match {
         case column if column.dataType == StringType =>
           val indexCol = term + "_idx_" + uid
@@ -110,7 +110,7 @@ class RFormula(override val uid: String) extends Estimator[RFormulaModel] with R
       .setOutputCol($(featuresCol))
     encoderStages += new ColumnPruner(tempColumns.toSet)
     val pipelineModel = new Pipeline(uid).setStages(encoderStages.toArray).fit(dataset)
-    copyValues(new RFormulaModel(uid, fittedFormula, pipelineModel).setParent(this))
+    copyValues(new RFormulaModel(uid, resolvedFormula, pipelineModel).setParent(this))
   }
 
   // optimistic schema; does not contain any ML attributes
@@ -131,13 +131,13 @@ class RFormula(override val uid: String) extends Estimator[RFormulaModel] with R
 /**
  * :: Experimental ::
  * A fitted RFormula. Fitting is required to determine the factor levels of formula terms.
- * @param fittedFormula the fitted R formula.
+ * @param resolvedFormula the fitted R formula.
  * @param pipelineModel the fitted feature model, including factor to index mappings.
  */
 @Experimental
 class RFormulaModel private[feature](
     override val uid: String,
-    fittedFormula: FittedRFormula,
+    resolvedFormula: ResolvedRFormula,
     pipelineModel: PipelineModel)
   extends Model[RFormulaModel] with RFormulaBase {
 
@@ -151,8 +151,8 @@ class RFormulaModel private[feature](
     val withFeatures = pipelineModel.transformSchema(schema)
     if (hasLabelCol(schema)) {
       withFeatures
-    } else if (schema.exists(_.name == fittedFormula.label)) {
-      val nullable = schema(fittedFormula.label).dataType match {
+    } else if (schema.exists(_.name == resolvedFormula.label)) {
+      val nullable = schema(resolvedFormula.label).dataType match {
         case _: NumericType | BooleanType => false
         case _ => true
       }
@@ -165,12 +165,12 @@ class RFormulaModel private[feature](
   }
 
   override def copy(extra: ParamMap): RFormulaModel = copyValues(
-    new RFormulaModel(uid, fittedFormula, pipelineModel))
+    new RFormulaModel(uid, resolvedFormula, pipelineModel))
 
-  override def toString: String = s"RFormulaModel(${fittedFormula})"
+  override def toString: String = s"RFormulaModel(${resolvedFormula})"
 
   private def transformLabel(dataset: DataFrame): DataFrame = {
-    val labelName = fittedFormula.label
+    val labelName = resolvedFormula.label
     if (hasLabelCol(dataset.schema)) {
       dataset
     } else if (dataset.schema.exists(_.name == labelName)) {
