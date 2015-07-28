@@ -69,7 +69,7 @@ private[spark] case class CoalescedRDDPartition(
  * the preferred location of each new partition overlaps with as many preferred locations of its
  * parent partitions
  * @param prev RDD to be coalesced
- * @param maxPartitions number of desired partitions in the coalesced RDD
+ * @param maxPartitions number of desired partitions in the coalesced RDD (must be positive)
  * @param balanceSlack used to trade-off balance and locality. 1.0 is all locality, 0 is all balance
  */
 private[spark] class CoalescedRDD[T: ClassTag](
@@ -77,6 +77,9 @@ private[spark] class CoalescedRDD[T: ClassTag](
     maxPartitions: Int,
     balanceSlack: Double = 0.10)
   extends RDD[T](prev.context, Nil) {  // Nil since we implement getDependencies
+
+  require(maxPartitions > 0 || maxPartitions == prev.partitions.length,
+    s"Number of partitions ($maxPartitions) must be positive.")
 
   override def getPartitions: Array[Partition] = {
     val pc = new PartitionCoalescer(maxPartitions, prev, balanceSlack)

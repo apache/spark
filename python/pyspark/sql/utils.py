@@ -24,6 +24,12 @@ class AnalysisException(Exception):
     """
 
 
+class IllegalArgumentException(Exception):
+    """
+    Passed an illegal or inappropriate argument.
+    """
+
+
 def capture_sql_exception(f):
     def deco(*a, **kw):
         try:
@@ -32,6 +38,8 @@ def capture_sql_exception(f):
             s = e.java_exception.toString()
             if s.startswith('org.apache.spark.sql.AnalysisException: '):
                 raise AnalysisException(s.split(': ', 1)[1])
+            if s.startswith('java.lang.IllegalArgumentException: '):
+                raise IllegalArgumentException(s.split(': ', 1)[1])
             raise
     return deco
 

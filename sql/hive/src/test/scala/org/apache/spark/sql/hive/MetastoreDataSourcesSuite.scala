@@ -21,18 +21,18 @@ import java.io.File
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.scalatest.BeforeAndAfterAll
-
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapred.InvalidInputException
+import org.scalatest.BeforeAndAfterAll
 
+import org.apache.spark.Logging
 import org.apache.spark.sql._
+import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.hive.client.{HiveTable, ManagedTable}
 import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.hive.test.TestHive._
 import org.apache.spark.sql.hive.test.TestHive.implicits._
-import org.apache.spark.sql.parquet.ParquetRelation2
-import org.apache.spark.sql.sources.LogicalRelation
+import org.apache.spark.sql.parquet.ParquetRelation
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
@@ -40,7 +40,8 @@ import org.apache.spark.util.Utils
 /**
  * Tests for persisting tables created though the data sources API into the metastore.
  */
-class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with BeforeAndAfterAll {
+class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with BeforeAndAfterAll
+  with Logging {
   override val sqlContext = TestHive
 
   var jsonFilePath: String = _
@@ -415,7 +416,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with BeforeA
            |)
          """.stripMargin)
 
-      sql("DROP TABLE jsonTable").collect().foreach(println)
+      sql("DROP TABLE jsonTable").collect().foreach(i => logInfo(i.toString))
     }
   }
 
@@ -562,10 +563,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with BeforeA
   }
 
   test("scan a parquet table created through a CTAS statement") {
-    withSQLConf(
-      HiveContext.CONVERT_METASTORE_PARQUET.key -> "true",
-      SQLConf.PARQUET_USE_DATA_SOURCE_API.key -> "true") {
-
+    withSQLConf(HiveContext.CONVERT_METASTORE_PARQUET.key -> "true") {
       withTempTable("jt") {
         (1 to 10).map(i => i -> s"str$i").toDF("a", "b").registerTempTable("jt")
 
@@ -580,9 +578,9 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with BeforeA
             Row(3) :: Row(4) :: Nil)
 
           table("test_parquet_ctas").queryExecution.optimizedPlan match {
-            case LogicalRelation(p: ParquetRelation2) => // OK
+            case LogicalRelation(p: ParquetRelation) => // OK
             case _ =>
-              fail(s"test_parquet_ctas should have be converted to ${classOf[ParquetRelation2]}")
+              fail(s"test_parquet_ctas should have be converted to ${classOf[ParquetRelation]}")
           }
         }
       }
