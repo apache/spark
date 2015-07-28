@@ -575,33 +575,35 @@ object DateTimeUtils {
   }
 
   /**
-   * Returns Day of week from String. Starting from friday, marked as 0.
+   * Returns Day of week from String. Starting from Thursday, marked as 0.
+   * (Because 1970-01-01 is Thursday).
    */
   def getDayOfWeekFromString(string: UTF8String): Int = {
     val dowString = string.toString.toUpperCase
     dowString match {
-      case "SU" | "SUN" | "SUNDAY" => 2
-      case "MO" | "MON" | "MONDAY" => 3
-      case "TU" | "TUE" | "TUESDAY" => 4
-      case "WE" | "WED" | "WEDNESDAY" => 5
-      case "TH" | "THU" | "THURSDAY" => 6
-      case "FR" | "FRI" | "FRIDAY" => 0
-      case "SA" | "SAT" | "SATURDAY" => 1
+      case "SU" | "SUN" | "SUNDAY" => 3
+      case "MO" | "MON" | "MONDAY" => 4
+      case "TU" | "TUE" | "TUESDAY" => 5
+      case "WE" | "WED" | "WEDNESDAY" => 6
+      case "TH" | "THU" | "THURSDAY" => 0
+      case "FR" | "FRI" | "FRIDAY" => 1
+      case "SA" | "SAT" | "SATURDAY" => 2
       case _ => -1
     }
   }
 
   /**
    * Returns the first date which is later than startDate and is of the given dayOfWeek.
+   * dayOfWeek is an integer ranges in [0, 6], and 0 is Thu, 1 is Fri, etc,.
    */
   def getNextDateForDayOfWeek(startDate: Int, dayOfWeek: Int): Int = {
-    startDate + 1 + ((dayOfWeek - startDate % 7) % 7 + 7) % 7
+    startDate + 1 + ((dayOfWeek - 1 - startDate) % 7 + 7) % 7
   }
 
   /**
    * number of days in a non-leap year.
    */
-  val days = Seq(31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31)
+  private[this] val days = Seq(31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31)
 
   /**
    * Returns last day of the month for the given date. The date is expressed in days
