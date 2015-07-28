@@ -329,7 +329,6 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
         s"${a.name} ${op.symbol} $v"
       case op @ BinaryComparison(Literal(v, _: IntegralType), a: Attribute) =>
         s"$v ${op.symbol} ${a.name}"
-
       case op @ BinaryComparison(a: Attribute, Literal(v, _: StringType))
           if !varcharKeys.contains(a.name) =>
         s"""${a.name} ${op.symbol} "$v""""

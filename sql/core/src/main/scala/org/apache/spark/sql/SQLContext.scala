@@ -39,8 +39,9 @@ import org.apache.spark.sql.catalyst.optimizer.{DefaultOptimizer, Optimizer}
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.catalyst.{InternalRow, ParserDialect, _}
-import org.apache.spark.sql.execution.{Filter, _}
-import org.apache.spark.sql.sources._
+import org.apache.spark.sql.execution._
+import org.apache.spark.sql.execution.datasources._
+import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
@@ -146,11 +147,11 @@ class SQLContext(@transient val sparkContext: SparkContext)
     new Analyzer(catalog, functionRegistry, conf) {
       override val extendedResolutionRules =
         ExtractPythonUDFs ::
-        sources.PreInsertCastAndRename ::
+        PreInsertCastAndRename ::
         Nil
 
       override val extendedCheckRules = Seq(
-        sources.PreWriteCheck(catalog)
+        datasources.PreWriteCheck(catalog)
       )
     }
 
@@ -283,6 +284,9 @@ class SQLContext(@transient val sparkContext: SparkContext)
    */
   @transient
   val udf: UDFRegistration = new UDFRegistration(this)
+
+  @transient
+  val udaf: UDAFRegistration = new UDAFRegistration(this)
 
   /**
    * Returns true if the table is currently cached in-memory.
@@ -554,8 +558,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
     val className = beanClass.getName
     val rowRdd = rdd.mapPartitions { iter =>
       // BeanInfo is not serializable so we must rediscover it remotely for each partition.
-      val localBeanInfo = Introspector.getBeanInfo(
-        Class.forName(className, true, Utils.getContextOrSparkClassLoader))
+      val localBeanInfo = Introspector.getBeanInfo(Utils.classForName(className))
       val extractors =
         localBeanInfo.getPropertyDescriptors.filterNot(_.getName == "class").map(_.getReadMethod)
       val methodsToConverts = extractors.zip(attributeSeq).map { case (e, attr) =>
@@ -795,8 +798,10 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * @group ddl_ops
    * @since 1.3.0
    */
-  def table(tableName: String): DataFrame =
-    DataFrame(this, catalog.lookupRelation(Seq(tableName)))
+  def table(tableName: String): DataFrame = {
+    val tableIdent = new SqlParser().parseTableIdentifier(tableName)
+    DataFrame(this, catalog.lookupRelation(tableIdent.toSeq))
+  }
 
   /**
    * Returns a [[DataFrame]] containing names of existing tables in the current database.
@@ -863,10 +868,10 @@ class SQLContext(@transient val sparkContext: SparkContext)
       DDLStrategy ::
       TakeOrderedAndProject ::
       HashAggregation ::
+      Aggregation ::
       LeftSemiJoin ::
       HashJoin ::
       InMemoryScans ::
-      ParquetOperations ::
       BasicOperators ::
       CartesianProduct ::
       BroadcastNestedLoopJoin :: Nil)
@@ -922,12 +927,15 @@ class SQLContext(@transient val sparkContext: SparkContext)
   protected[sql] lazy val emptyResult = sparkContext.parallelize(Seq.empty[InternalRow], 1)
 
   /**
-   * Prepares a planned SparkPlan for execution by inserting shuffle operations as needed.
+   * Prepares a planned SparkPlan for execution by inserting shuffle operations and internal
+   * row format conversions as needed.
    */
   @transient
   protected[sql] val prepareForExecution = new RuleExecutor[SparkPlan] {
-    val batches =
-      Batch("Add exchange", Once, EnsureRequirements(self)) :: Nil
+    val batches = Seq(
+      Batch("Add exchange", Once, EnsureRequirements(self)),
+      Batch("Add row converters", Once, EnsureRowFormats)
+    )
   }
 
   protected[sql] def openSession(): SQLSession = {
@@ -1108,11 +1116,8 @@ class SQLContext(@transient val sparkContext: SparkContext)
   def parquetFile(paths: String*): DataFrame = {
     if (paths.isEmpty) {
       emptyDataFrame
-    } else if (conf.parquetUseDataSourceApi) {
-      read.parquet(paths : _*)
     } else {
-      DataFrame(this, parquet.ParquetRelation(
-        paths.mkString(","), Some(sparkContext.hadoopConfiguration), this))
+      read.parquet(paths : _*)
     }
   }
 

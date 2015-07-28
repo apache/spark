@@ -1314,7 +1314,7 @@ setMethod("except",
 #' write.df(df, "myfile", "parquet", "overwrite")
 #' }
 setMethod("write.df",
-          signature(df = "DataFrame", path = 'character'),
+          signature(df = "DataFrame", path = "character"),
           function(df, path, source = NULL, mode = "append", ...){
             if (is.null(source)) {
               sqlContext <- get(".sparkRSQLsc", envir = .sparkREnv)
@@ -1328,7 +1328,7 @@ setMethod("write.df",
             jmode <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "saveMode", mode)
             options <- varargsToEnv(...)
             if (!is.null(path)) {
-                options[['path']] = path
+                options[["path"]] <- path
             }
             callJMethod(df@sdf, "save", source, jmode, options)
           })
@@ -1337,7 +1337,7 @@ setMethod("write.df",
 #' @aliases saveDF
 #' @export
 setMethod("saveDF",
-          signature(df = "DataFrame", path = 'character'),
+          signature(df = "DataFrame", path = "character"),
           function(df, path, source = NULL, mode = "append", ...){
             write.df(df, path, source, mode, ...)
           })
@@ -1375,8 +1375,8 @@ setMethod("saveDF",
 #' saveAsTable(df, "myfile")
 #' }
 setMethod("saveAsTable",
-          signature(df = "DataFrame", tableName = 'character', source = 'character',
-                    mode = 'character'),
+          signature(df = "DataFrame", tableName = "character", source = "character",
+                    mode = "character"),
           function(df, tableName, source = NULL, mode="append", ...){
             if (is.null(source)) {
               sqlContext <- get(".sparkRSQLsc", envir = .sparkREnv)
@@ -1553,4 +1553,32 @@ setMethod("fillna",
               callJMethod(naFunctions, "fill", value, listToSeq(as.list(cols)))
             }
             dataFrame(sdf)
+          })
+
+#' crosstab
+#'
+#' Computes a pair-wise frequency table of the given columns. Also known as a contingency
+#' table. The number of distinct values for each column should be less than 1e4. At most 1e6
+#' non-zero pair frequencies will be returned.
+#'
+#' @param col1 name of the first column. Distinct items will make the first item of each row.
+#' @param col2 name of the second column. Distinct items will make the column names of the output.
+#' @return a local R data.frame representing the contingency table. The first column of each row
+#'         will be the distinct values of `col1` and the column names will be the distinct values
+#'         of `col2`. The name of the first column will be `$col1_$col2`. Pairs that have no
+#'         occurrences will have zero as their counts.
+#'
+#' @rdname statfunctions
+#' @export
+#' @examples
+#' \dontrun{
+#' df <- jsonFile(sqlCtx, "/path/to/file.json")
+#' ct = crosstab(df, "title", "gender")
+#' }
+setMethod("crosstab",
+          signature(x = "DataFrame", col1 = "character", col2 = "character"),
+          function(x, col1, col2) {
+            statFunctions <- callJMethod(x@sdf, "stat")
+            sct <- callJMethod(statFunctions, "crosstab", col1, col2)
+            collect(dataFrame(sct))
           })

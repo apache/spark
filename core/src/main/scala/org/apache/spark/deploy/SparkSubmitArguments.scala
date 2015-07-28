@@ -576,7 +576,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
       System.setSecurityManager(sm)
 
       try {
-        Class.forName(mainClass).getMethod("main", classOf[Array[String]])
+        Utils.classForName(mainClass).getMethod("main", classOf[Array[String]])
           .invoke(null, Array(HELP))
       } catch {
         case e: InvocationTargetException =>

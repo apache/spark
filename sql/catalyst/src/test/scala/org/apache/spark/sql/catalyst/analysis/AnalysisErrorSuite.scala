@@ -23,16 +23,17 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.types._
-import org.apache.spark.sql.catalyst.{InternalRow, SimpleCatalystConf}
+import org.apache.spark.sql.catalyst.plans.Inner
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
+import org.apache.spark.sql.types._
 
 case class TestFunction(
     children: Seq[Expression],
-    inputTypes: Seq[AbstractDataType]) extends Expression with ExpectsInputTypes {
+    inputTypes: Seq[AbstractDataType])
+  extends Expression with ImplicitCastInputTypes with Unevaluable {
   override def nullable: Boolean = true
-  override def eval(input: InternalRow): Any = throw new UnsupportedOperationException
   override def dataType: DataType = StringType
 }
 
@@ -113,9 +114,19 @@ class AnalysisErrorSuite extends SparkFunSuite with BeforeAndAfter {
     "cannot cast" :: Literal(1).dataType.simpleString :: BinaryType.simpleString :: Nil)
 
   errorTest(
+    "sorting by unsupported column types",
+    listRelation.orderBy('list.asc),
+    "sorting" :: "type" :: "array<int>" :: Nil)
+
+  errorTest(
     "non-boolean filters",
     testRelation.where(Literal(1)),
     "filter" :: "'1'" :: "not a boolean" :: Literal(1).dataType.simpleString :: Nil)
+
+  errorTest(
+    "non-boolean join conditions",
+    testRelation.join(testRelation, condition = Some(Literal(1))),
+    "condition" :: "'1'" :: "not a boolean" :: Literal(1).dataType.simpleString :: Nil)
 
   errorTest(
     "missing group by",
@@ -163,5 +174,14 @@ class AnalysisErrorSuite extends SparkFunSuite with BeforeAndAfter {
     }.getMessage
 
     assert(message.contains("resolved attribute(s) a#1 missing from a#2"))
+  }
+
+  test("error test for self-join") {
+    val join = Join(testRelation, testRelation, Inner, None)
+    val error = intercept[AnalysisException] {
+      SimpleAnalyzer.checkAnalysis(join)
+    }
+    error.message.contains("Failure when resolving conflicting references in Join")
+    error.message.contains("Conflicting attributes")
   }
 }

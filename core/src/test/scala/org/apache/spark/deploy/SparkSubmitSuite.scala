@@ -337,7 +337,7 @@ class SparkSubmitSuite
     val args = Seq(
       "--class", JarCreationTest.getClass.getName.stripSuffix("$"),
       "--name", "testApp",
-      "--master", "local-cluster[2,1,512]",
+      "--master", "local-cluster[2,1,1024]",
       "--jars", jarsString,
       unusedJar.toString, "SparkSubmitClassA", "SparkSubmitClassB")
     runSparkSubmit(args)
@@ -352,7 +352,7 @@ class SparkSubmitSuite
       val args = Seq(
         "--class", JarCreationTest.getClass.getName.stripSuffix("$"),
         "--name", "testApp",
-        "--master", "local-cluster[2,1,512]",
+        "--master", "local-cluster[2,1,1024]",
         "--packages", Seq(main, dep).mkString(","),
         "--repositories", repo,
         "--conf", "spark.ui.enabled=false",
@@ -541,8 +541,8 @@ object JarCreationTest extends Logging {
     val result = sc.makeRDD(1 to 100, 10).mapPartitions { x =>
       var exception: String = null
       try {
-        Class.forName(args(0), true, Thread.currentThread().getContextClassLoader)
-        Class.forName(args(1), true, Thread.currentThread().getContextClassLoader)
+        Utils.classForName(args(0))
+        Utils.classForName(args(1))
       } catch {
         case t: Throwable =>
           exception = t + "\n" + t.getStackTraceString
