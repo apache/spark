@@ -603,7 +603,7 @@ object DateTimeUtils {
   /**
    * number of days in a non-leap year.
    */
-  private[this] val days = Seq(31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31)
+  private[this] val daysInNormalYear = Array(31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31)
 
   /**
    * Returns last day of the month for the given date. The date is expressed in days
@@ -613,9 +613,9 @@ object DateTimeUtils {
     val dayOfMonth = getDayOfMonth(date)
     val month = getMonth(date)
     if (month == 2 && isLeapYear(getYear(date))) {
-      date + days(month - 1) + 1 - dayOfMonth
+      date + daysInNormalYear(month - 1) + 1 - dayOfMonth
     } else {
-      date + days(month - 1) - dayOfMonth
+      date + daysInNormalYear(month - 1) - dayOfMonth
     }
   }
 
