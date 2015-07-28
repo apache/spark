@@ -122,6 +122,13 @@ private[worker] class Worker(
   val appDirectories = new HashMap[String, Seq[String]]
   val finishedApps = new HashSet[String]
 
+  val retainedExecutors = conf.getInt("spark.worker.ui.retainedExecutors",
+    WorkerWebUI.DEFAULT_RETAINED_EXECUTORS)
+  val retainedDrivers = conf.getInt("spark.worker.ui.retainedDrivers",
+    WorkerWebUI.DEFAULT_RETAINED_DRIVERS)
+  val retainedApplications = conf.getInt("spark.worker.ui.retainedApplications",
+    WorkerWebUI.DEFAULT_RETAINED_APPLICATIONS)
+
   // The shuffle service is not actually started unless configured.
   private val shuffleService = new ExternalShuffleService(conf, securityMgr)
 
@@ -471,6 +478,7 @@ private[worker] class Worker(
               exitStatus.map(" exitStatus " + _).getOrElse(""))
             executors -= fullId
             finishedExecutors(fullId) = executor
+            trimFinishedExecutorsIfNecessary()
             coresUsed -= executor.cores
             memoryUsed -= executor.memory
           case None =>
@@ -539,6 +547,7 @@ private[worker] class Worker(
       sendToMaster(driverStageChanged)
       val driver = drivers.remove(driverId).get
       finishedDrivers(driverId) = driver
+      trimFinishedDriversIfNecessary()
       memoryUsed -= driver.driverDesc.mem
       coresUsed -= driver.driverDesc.cores
     }
@@ -614,6 +623,22 @@ private[worker] class Worker(
     webUi.stop()
     metricsSystem.stop()
   }
+
+  private def trimFinishedExecutorsIfNecessary(): Unit = {
+    if (finishedExecutors.size > retainedExecutors) {
+      finishedExecutors.take(math.max(finishedExecutors.size / 10, 1)).foreach{
+        case (executorId, _) => finishedExecutors.remove(executorId)}
+    }
+  }
+
+  private def trimFinishedDriversIfNecessary(): Unit = {
+    if (finishedDrivers.size > retainedDrivers) {
+      finishedDrivers.take(math.max(finishedDrivers.size / 10, 1)).foreach {
+        case (driverId, _) => finishedDrivers.remove(driverId)
+      }
+    }
+  }
+
 }
 
 private[deploy] object Worker extends Logging {
@@ -669,5 +694,4 @@ private[deploy] object Worker extends Logging {
       cmd
     }
   }
-
 }
