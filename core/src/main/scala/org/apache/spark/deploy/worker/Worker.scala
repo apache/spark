@@ -588,8 +588,9 @@ private[worker] class Worker(
 
   private def trimFinishedExecutorsIfNecessary(): Unit = {
     if (finishedExecutors.size > retainedExecutors) {
-      finishedExecutors.take(math.max(finishedExecutors.size / 10, 1)).foreach{
-        case (executorId, _) => finishedExecutors.remove(executorId)}
+      finishedExecutors.take(math.max(finishedExecutors.size / 10, 1)).foreach {
+        case (executorId, _) => finishedExecutors.remove(executorId)
+      }
     }
   }
 
