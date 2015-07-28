@@ -43,8 +43,9 @@ case class Project(projectList: Seq[NamedExpression], child: SparkPlan) extends 
 
   protected override def doExecute(): RDD[InternalRow] = child.execute().mapPartitions { iter =>
     val reusableProjection = buildProjection()
+    val numTuplesAccumulator = accumulators("numTuples").asInstanceOf[Accumulator[Long]]
     iter.map { row =>
-      accumulators("numTuples").asInstanceOf[Accumulator[Long]] += 1
+      numTuplesAccumulator += 1
       reusableProjection(row)
     }
   }

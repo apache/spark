@@ -1234,7 +1234,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * driver can access the accumulator's `value`.
    */
   def accumulator[T](initialValue: T, name: String)(implicit param: AccumulatorParam[T])
-  : Accumulator[T] = {
+    : Accumulator[T] = {
     val acc = new Accumulator(initialValue, param, Some(name))
     cleaner.foreach(_.registerAccumulatorForCleanup(acc))
     acc
@@ -1249,7 +1249,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * @tparam T type that can be added to the accumulator, must be thread safe
    */
   private[spark] def internalAccumulator[T](initialValue: T, name: String)(
-    implicit param: AccumulatorParam[T]): Accumulator[T] = {
+      implicit param: AccumulatorParam[T]): Accumulator[T] = {
     val acc = new Accumulator(initialValue, param, Some(name), true)
     cleaner.foreach(_.registerAccumulatorForCleanup(acc))
     acc

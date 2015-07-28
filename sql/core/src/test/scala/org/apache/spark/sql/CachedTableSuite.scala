@@ -307,9 +307,10 @@ class CachedTableSuite extends QueryTest {
 
     Accumulators.synchronized {
       val accsSize = Accumulators.originals.size
+      println(accsSize)
       ctx.cacheTable("t1")
       ctx.cacheTable("t2")
-      assert((accsSize + 2) == Accumulators.originals.size)
+      assert((accsSize + 2*4) === Accumulators.originals.size)
     }
 
     sql("SELECT * FROM t1").count()
@@ -319,9 +320,10 @@ class CachedTableSuite extends QueryTest {
 
     Accumulators.synchronized {
       val accsSize = Accumulators.originals.size
+      println(accsSize)
       ctx.uncacheTable("t1")
       ctx.uncacheTable("t2")
-      assert((accsSize - 2) == Accumulators.originals.size)
+      assert((accsSize - 2) === Accumulators.originals.size)
     }
   }
 }
