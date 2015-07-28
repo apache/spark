@@ -30,7 +30,7 @@ DAGs.
 .. automodule:: airflow.operators
     :show-inheritance:
     :members:
-        BaseOperator,
+        BaseOperator
 
 
 Operator API

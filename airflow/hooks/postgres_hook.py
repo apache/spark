@@ -16,6 +16,6 @@ class PostgresHook(DbApiHook):
         return psycopg2.connect(
             host=conn.host,
             user=conn.login,
-            password=conn.psw,
-            dbname=conn.db,
+            password=conn.password,
+            dbname=conn.schema,
             port=conn.port)
