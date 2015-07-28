@@ -17,11 +17,9 @@
 
 package org.apache.spark.mllib.clustering
 
-import breeze.linalg.{DenseVector => BDV, DenseMatrix => BDM, sum, normalize}
-import breeze.numerics.{lgamma, digamma, exp}
-
+import breeze.linalg.{DenseMatrix => BDM, DenseVector => BDV, normalize, sum}
+import breeze.numerics.{exp, lgamma}
 import org.apache.hadoop.fs.Path
-
 import org.json4s.DefaultFormats
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
@@ -29,13 +27,12 @@ import org.json4s.jackson.JsonMethods._
 import org.apache.spark.SparkContext
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.java.JavaPairRDD
-import org.apache.spark.graphx.{VertexId, Edge, EdgeContext, Graph}
-import org.apache.spark.mllib.linalg.{Vectors, Vector, Matrices, Matrix, DenseVector}
-import org.apache.spark.mllib.util.{Saveable, Loader}
+import org.apache.spark.graphx.{Edge, EdgeContext, Graph, VertexId}
+import org.apache.spark.mllib.linalg.{Matrices, Matrix, Vector, Vectors}
+import org.apache.spark.mllib.util.{Loader, Saveable}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{SQLContext, Row}
+import org.apache.spark.sql.{Row, SQLContext}
 import org.apache.spark.util.BoundedPriorityQueue
-
 
 /**
  * :: Experimental ::
@@ -411,9 +408,9 @@ class DistributedLDAModel private (
     private[clustering] val globalTopicTotals: LDA.TopicCounts,
     val k: Int,
     val vocabSize: Int,
-    protected[clustering] val docConcentration: Vector,
-    protected[clustering] val topicConcentration: Double,
-    protected val gammaShape: Double,
+    private[clustering] val docConcentration: Vector,
+    private[clustering] val topicConcentration: Double,
+    private[clustering] val gammaShape: Double,
     private[spark] val iterationTimes: Array[Double]) extends LDAModel {
 
   import LDA._
