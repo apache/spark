@@ -627,11 +627,10 @@ class RowMatrix(
   }
 }
 
-@Experimental
-
 /**
  * @since 1.0.0
  */
+@Experimental
 object RowMatrix {
 
   /**
