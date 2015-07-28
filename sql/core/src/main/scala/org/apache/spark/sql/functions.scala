@@ -741,7 +741,7 @@ object functions {
    * @group normal_funcs
    * @since 1.4.0
    */
-  def sparkPartitionId(): Column = execution.expressions.SparkPartitionID
+  def sparkPartitionId(): Column = execution.expressions.SparkPartitionID()
 
   /**
    * Computes the square root of the specified float value.
