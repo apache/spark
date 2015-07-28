@@ -338,10 +338,7 @@ class Airflow(BaseView):
         pd.set_option('display.max_colwidth', 100)
         hook = db.get_hook()
         try:
-            if db.conn_type == 'mssql':
-                df = hook.get_pandas_df(wwwutils.top_sql(sql, CHART_LIMIT))
-            else:
-                df = hook.get_pandas_df(wwwutils.limit_sql(sql, CHART_LIMIT))
+            df = hook.get_pandas_df(wwwutils.limit_sql(sql, CHART_LIMIT, conn_type=db.conn_type))
             df = df.fillna(0)
         except Exception as e:
             payload['error'] += "SQL execution failed. Details: " + str(e)
@@ -1402,10 +1399,7 @@ class QueryView(wwwutils.DataProfilingMixin, BaseView):
             db = [db for db in dbs if db.conn_id == conn_id_str][0]
             hook = db.get_hook()
             try:
-                if db.conn_type == 'mssql':
-                    df = hook.get_pandas_df(wwwutils.top_sql(sql, QUERY_LIMIT))
-                else:
-                    df = hook.get_pandas_df(wwwutils.limit_sql(sql, QUERY_LIMIT))
+                df = hook.get_pandas_df(wwwutils.limit_sql(sql, QUERY_LIMIT, conn_type=db.conn_type))
                 # df = hook.get_pandas_df(sql)
                 has_data = len(df) > 0
                 df = df.fillna('')
