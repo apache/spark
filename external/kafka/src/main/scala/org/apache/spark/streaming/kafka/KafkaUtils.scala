@@ -24,6 +24,7 @@ import java.util.{List => JList, Map => JMap, Set => JSet}
 import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
 
+import com.google.common.base.Charsets.UTF_8
 import kafka.common.TopicAndPartition
 import kafka.message.MessageAndMetadata
 import kafka.serializer.{DefaultDecoder, Decoder, StringDecoder}
@@ -598,10 +599,7 @@ private[kafka] class KafkaUtilsPythonHelper {
         Map(kafkaParams.asScala.toSeq: _*),
         offsetRanges.toArray(new Array[OffsetRange](offsetRanges.size())),
         Map(leaders.asScala.toSeq: _*),
-        messageHandler).mapPartitions { iter =>
-      initialize()
-      new SerDeUtil.AutoBatchedPickler(iter)
-    }
+        messageHandler).mapPartitions { iter => picklerIterator(iter) }
   }
 
   def createDirectStream(
@@ -638,10 +636,7 @@ private[kafka] class KafkaUtilsPythonHelper {
         jssc.ssc,
         Map(kafkaParams.asScala.toSeq: _*),
         Map(currentFromOffsets.toSeq: _*),
-        messageHandler).mapPartitions { iter =>
-      initialize()
-      new SerDeUtil.AutoBatchedPickler(iter)
-    }
+        messageHandler).mapPartitions { iter => picklerIterator(iter) }
     new JavaDStream(stream)
   }
 
@@ -679,8 +674,12 @@ private object KafkaUtilsPythonHelper {
       }
     }
   }
-  // will not called in Executor automatically
+
   initialize()
+
+  def picklerIterator(iter: Iterator[Any]): Iterator[Array[Byte]] = {
+    new SerDeUtil.AutoBatchedPickler(iter)
+  }
 
   case class PythonMessageAndMetadata(
       topic: String,
@@ -700,7 +699,7 @@ private object KafkaUtilsPythonHelper {
     def pickle(obj: Object, out: OutputStream, pickler: Pickler) {
       if (obj == this) {
         out.write(Opcodes.GLOBAL)
-        out.write(s"$module\nKafkaMessageAndMetadata\n".getBytes("utf-8"))
+        out.write(s"$module\nKafkaMessageAndMetadata\n".getBytes(UTF_8))
       } else {
         pickler.save(this)
         val msgAndMetaData = obj.asInstanceOf[PythonMessageAndMetadata]

@@ -41,7 +41,7 @@ def default_message_handler(s):
     Function for translating each message and metadata into the desired type
 
     :param s: A KafkaMessageAndMetadata object includes message and metadata
-    :return: Object of any desired type
+    :return: A tuple of Kafka key and message
     """
     return s and (s.key, s.message)
 
@@ -143,8 +143,8 @@ class KafkaUtils(object):
             raise e
 
         def func(m):
-            m.set_key_decoder(keyDecoder)
-            m.set_value_decoder(valueDecoder)
+            m._set_key_decoder(keyDecoder)
+            m._set_value_decoder(valueDecoder)
             return messageHandler(m)
 
         ser = AutoBatchedSerializer(PickleSerializer())
@@ -190,8 +190,8 @@ class KafkaUtils(object):
             raise e
 
         def func(m):
-            m.set_key_decoder(keyDecoder)
-            m.set_value_decoder(valueDecoder)
+            m._set_key_decoder(keyDecoder)
+            m._set_value_decoder(valueDecoder)
             return messageHandler(m)
 
         rdd = RDD(jrdd, sc).map(func)
@@ -395,10 +395,20 @@ class KafkaMessageAndMetadata(object):
     """
 
     def __init__(self, topic, partition, offset, key, message):
+        """
+        Python wrapper of Kafka MessageAndMetadata
+        :param topic: topic name of this Kafka message
+        :param partition: partition id of this Kafka message
+        :param offset: Offset of this Kafka message in the specific partition
+        :param key: key payload of this Kafka message, can be null if this Kafka message has no key
+                    specified, the return data is undecoded bytearry.
+        :param message: actual message payload of this Kafka message, the return data is
+                        undecoded bytearray.
+        """
         self.topic = topic
         self.partition = partition
         self.offset = offset
-        self._rawkey = key
+        self._rawKey = key
         self._rawMessage = message
         self._keyDecoder = utf8_decoder
         self._valueDecoder = utf8_decoder
@@ -412,17 +422,17 @@ class KafkaMessageAndMetadata(object):
 
     def __reduce__(self):
         return (KafkaMessageAndMetadata,
-                (self.topic, self.partition, self.offset, self._rawkey, self._rawMessage))
+                (self.topic, self.partition, self.offset, self._rawKey, self._rawMessage))
 
-    def set_key_decoder(self, decoder):
+    def _set_key_decoder(self, decoder):
         self._keyDecoder = decoder
 
-    def set_value_decoder(self, decoder):
+    def _set_value_decoder(self, decoder):
         self._valueDecoder = decoder
 
     @property
     def key(self):
-        return self._keyDecoder(self._rawkey)
+        return self._keyDecoder(self._rawKey)
 
     @property
     def message(self):
