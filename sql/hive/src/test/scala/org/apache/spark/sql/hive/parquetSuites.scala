@@ -210,6 +210,7 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
   }
 
   test("insert into an empty parquet table") {
+    dropTables("test_insert_parquet")
     sql(
       """
         |create table test_insert_parquet
@@ -401,8 +402,6 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
       val r2 = collectParquetRelation(table("nonPartitioned"))
       // They should be the same instance
       assert(r1 eq r2)
-
-      sql("DROP TABLE nonPartitioned")
     }
   }
 
