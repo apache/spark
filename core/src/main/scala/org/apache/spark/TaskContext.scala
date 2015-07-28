@@ -65,7 +65,7 @@ object TaskContext {
    * Internal use only.
    */
   private[spark] def empty(): TaskContext = {
-    new TaskContextImpl(0, 0, 0, 0, null, false)
+    new TaskContextImpl(0, 0, 0, 0, null, null)
   }
 }
 

@@ -37,11 +37,12 @@ private[spark] class ReliableCheckpointRDD[T: ClassTag](
   extends CheckpointRDD[T](sc) {
 
   @transient private val hadoopConf = sc.hadoopConfiguration
-  @transient private val fs = new Path(checkpointPath).getFileSystem(hadoopConf)
+  @transient private val cpath = new Path(checkpointPath)
+  @transient private val fs = cpath.getFileSystem(hadoopConf)
   private val broadcastedConf = sc.broadcast(new SerializableConfiguration(hadoopConf))
 
   // Fail fast if checkpoint directory does not exist
-  require(fs.exists(checkpointPath), s"Checkpoint directory does not exist: $checkpointPath")
+  require(fs.exists(cpath), s"Checkpoint directory does not exist: $checkpointPath")
 
   /**
    * Return the path of the checkpoint directory this RDD reads data from.
@@ -56,25 +57,18 @@ private[spark] class ReliableCheckpointRDD[T: ClassTag](
    * checkpoint files are fully preserved in a reliable storage across application lifespans.
    */
   protected override def getPartitions: Array[Partition] = {
-    val cpath = new Path(checkpointPath)
-    val numPartitions =
-      // listStatus can throw exception if path does not exist.
-      if (fs.exists(cpath)) {
-        val inputFiles = fs.listStatus(cpath)
-          .map(_.getPath)
-          .filter(_.getName.startsWith("part-"))
-          .sortBy(_.toString)
-        // Fail fast if input files are invalid
-        inputFiles.zipWithIndex.foreach { case (path, i) =>
-          if (!path.toString.endsWith(ReliableCheckpointRDD.checkpointFileName(i))) {
-            throw new SparkException(s"Invalid checkpoint file: $path")
-          }
-        }
-        inputFiles.length
-      } else {
-        0
+    // listStatus can throw exception if path does not exist.
+    val inputFiles = fs.listStatus(cpath)
+      .map(_.getPath)
+      .filter(_.getName.startsWith("part-"))
+      .sortBy(_.toString)
+    // Fail fast if input files are invalid
+    inputFiles.zipWithIndex.foreach { case (path, i) =>
+      if (!path.toString.endsWith(ReliableCheckpointRDD.checkpointFileName(i))) {
+        throw new SparkException(s"Invalid checkpoint file: $path")
       }
-    Array.tabulate(numPartitions)(i => new CheckpointRDDPartition(i))
+    }
+    Array.tabulate(inputFiles.length)(i => new CheckpointRDDPartition(i))
   }
 
   /**
