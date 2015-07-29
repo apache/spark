@@ -339,24 +339,21 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext {
     }
   }
 
-  test("Running EM LDA Optimizer with Empty Docs") {
+  test("EMLDAOptimizer with empty docs") {
     val vocabSize = 6
 
-    def emptyDocs: Array[(Long, Vector)] = Array(
-      Vectors.sparse(vocabSize, Array(), Array()),
-      Vectors.sparse(vocabSize, Array(), Array()),
-      Vectors.sparse(vocabSize, Array(), Array()),
-      Vectors.sparse(vocabSize, Array(), Array()),
-      Vectors.sparse(vocabSize, Array(), Array()),
-      Vectors.sparse(vocabSize, Array(), Array())
-    ).zipWithIndex.map { case (wordCounts, docId) => (docId.toLong, wordCounts) }
+    val emptyDocsArray = Array.fill(6)(Vectors.sparse(vocabSize, Array.empty, Array.empty))
+    val emptyDocs: Array[(Long, Vector)] = emptyDocsArray
+      .zipWithIndex.map { case (wordCounts, docId) =>
+      (docId.toLong, wordCounts)
+    }
 
-    val distributedEmptyDocs = sc.parallelize(emptyDocs)
+    val distributedEmptyDocs = sc.parallelize(emptyDocs, 2)
 
     val op = new EMLDAOptimizer()
 
     val lda = new LDA()
-    lda.setK(3)
+      .setK(3)
       .setMaxIterations(5)
       .setSeed(12345)
       .setOptimizer(op)
@@ -365,24 +362,21 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(model.vocabSize === vocabSize)
   }
 
-  test("Running Online LDA Optimizer with Empty Docs") {
+  test("OnlineLDAOptimizer with empty docs") {
     val vocabSize = 6
 
-    def emptyDocs: Array[(Long, Vector)] = Array(
-      Vectors.sparse(vocabSize, Array(), Array()),
-      Vectors.sparse(vocabSize, Array(), Array()),
-      Vectors.sparse(vocabSize, Array(), Array()),
-      Vectors.sparse(vocabSize, Array(), Array()),
-      Vectors.sparse(vocabSize, Array(), Array()),
-      Vectors.sparse(vocabSize, Array(), Array())
-    ).zipWithIndex.map { case (wordCounts, docId) => (docId.toLong, wordCounts) }
+    val emptyDocsArray = Array.fill(6)(Vectors.sparse(vocabSize, Array.empty, Array.empty))
+    val emptyDocs: Array[(Long, Vector)] = emptyDocsArray
+      .zipWithIndex.map { case (wordCounts, docId) =>
+      (docId.toLong, wordCounts)
+    }
 
-    val distributedEmptyDocs = sc.parallelize(emptyDocs)
+    val distributedEmptyDocs = sc.parallelize(emptyDocs, 2)
 
     val op = new OnlineLDAOptimizer()
 
     val lda = new LDA()
-    lda.setK(3)
+      .setK(3)
       .setMaxIterations(5)
       .setSeed(12345)
       .setOptimizer(op)
