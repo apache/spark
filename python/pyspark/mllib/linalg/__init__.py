@@ -1178,15 +1178,18 @@ class RowMatrix(DistributedMatrix):
     Represents a row-oriented distributed Matrix with no meaningful
     row indices.
 
+    :param rows: An RDD of vectors.
+    :param numRows: Number of rows in the matrix. A non-positive
+                    value means unknown, at which point the number
+                    of rows will be determined by the number of
+                    records in the `rows` RDD.
+    :param numCols: Number of columns in the matrix. A non-positive
+                    value means unknown, at which point the number
+                    of columns will be determined by the size of
+                    the first row.
     """
     def __init__(self, rows, numRows=0, numCols=0):
-        """
-        Create a wrapper over a Java RowMatrix.
-
-        :param rows: An RDD of vectors.
-        :param numRows: Number of rows in the matrix.
-        :param numCols: Number of columns in the matrix.
-        """
+        """Create a wrapper over a Java RowMatrix."""
         if not isinstance(rows, RDD):
             raise TypeError("rows should be an RDD of vectors, got %s" % type(rows))
         rows = rows.map(_convert_to_vector)
@@ -1244,8 +1247,8 @@ class IndexedRow(object):
 
     Just a wrapper over a (long, vector) tuple.
 
-    :param index: The index for the given row, as a long.
-    :param vector: The given row, as a vector.
+    :param index: The index for the given row.
+    :param vector: The row in the matrix at the given index.
     """
     def __init__(self, index, vector):
         self.index = long(index)
@@ -1270,15 +1273,18 @@ class IndexedRowMatrix(DistributedMatrix):
 
     Represents a row-oriented distributed Matrix with indexed rows.
 
+    :param rows: An RDD of IndexedRows or (long, vector) tuples.
+    :param numRows: Number of rows in the matrix. A non-positive
+                    value means unknown, at which point the number
+                    of rows will be determined by the max row
+                    index plus one.
+    :param numCols: Number of columns in the matrix. A non-positive
+                    value means unknown, at which point the number
+                    of columns will be determined by the size of
+                    the first row.
     """
     def __init__(self, rows, numRows=0, numCols=0):
-        """
-        Create a wrapper over a Java IndexedRowMatrix.
-
-        :param rows: An RDD of IndexedRows or (long, vector) tuples.
-        :param numRows: Number of rows in the matrix.
-        :param numCols: Number of columns in the matrix.
-        """
+        """Create a wrapper over a Java IndexedRowMatrix."""
         if not isinstance(rows, RDD):
             raise TypeError("rows should be an RDD of IndexedRows or (long, vector) tuples, "
                             "got %s" % type(rows))
@@ -1379,9 +1385,9 @@ class MatrixEntry(object):
 
     Just a wrapper over a (long, long, float) tuple.
 
-    :param i: The row index of the matrix as a long.
-    :param j: The column index of the matrix as a long.
-    :param value: The (i, j) entry of the matrix as a float.
+    :param i: The row index of the matrix.
+    :param j: The column index of the matrix.
+    :param value: The (i, j)th entry of the matrix, as a float.
     """
     def __init__(self, i, j, value):
         self.i = long(i)
@@ -1407,16 +1413,19 @@ class CoordinateMatrix(object):
 
     Represents a matrix in coordinate format.
 
+    :param entries: An RDD of MatrixEntry inputs or
+                    (long, long, float) tuples.
+    :param numRows: Number of rows in the matrix. A non-positive
+                    value means unknown, at which point the number
+                    of rows will be determined by the max row
+                    index plus one.
+    :param numCols: Number of columns in the matrix. A non-positive
+                    value means unknown, at which point the number
+                    of columns will be determined by the max row
+                    index plus one.
     """
     def __init__(self, entries, numRows=0, numCols=0):
-        """
-        Create a wrapper over a Java CoordinateMatrix.
-
-        :param entries: An RDD of MatrixEntry inputs or
-                        (long, long, float) tuples.
-        :param numRows: Number of rows in the matrix.
-        :param numCols: Number of columns in the matrix.
-        """
+        """Create a wrapper over a Java CoordinateMatrix."""
         if not isinstance(entries, RDD):
             raise TypeError("entries should be an RDD of MatrixEntry entries or "
                             "(long, long, float) tuples, got %s" % type(entries))
