@@ -728,6 +728,9 @@ def _make_skel_func(code, closures, base_globals = None):
 
 
 def _load_class(cls, d):
+    """
+    Loads additional properties into class `cls`.
+    """
     for k, v in d.items():
         if isinstance(k, tuple):
             typ, k = k

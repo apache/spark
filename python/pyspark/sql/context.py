@@ -278,6 +278,9 @@ class SQLContext(object):
         return self.createDataFrame(rdd, schema)
 
     def _createFromRDD(self, rdd, schema, samplingRatio):
+        """
+        Create an RDD for DataFrame from an existing RDD, returns the RDD and schema.
+        """
         if schema is None or isinstance(schema, (list, tuple)):
             struct = self._inferSchema(rdd, samplingRatio)
             converter = _create_converter(struct)
@@ -295,13 +298,17 @@ class SQLContext(object):
                 _verify_type(row, schema)
 
         else:
-            raise TypeError("schema should be StructType or list or None")
+            raise TypeError("schema should be StructType or list or None, but got: %s" % schema)
 
         # convert python objects to sql data
         rdd = rdd.map(schema.toInternal)
         return rdd, schema
 
     def _createFromLocal(self, data, schema):
+        """
+        Create an RDD for DataFrame from an list or pandas.DataFrame, returns
+        the RDD and schema.
+        """
         if has_pandas and isinstance(data, pandas.DataFrame):
             if schema is None:
                 schema = [str(x) for x in data.columns]
@@ -324,7 +331,7 @@ class SQLContext(object):
                 _verify_type(row, schema)
 
         else:
-            raise TypeError("schema should be StructType or list or None")
+            raise TypeError("schema should be StructType or list or None, but got: %s" % schema)
 
         # convert python objects to sql data
         data = [schema.toInternal(row) for row in data]

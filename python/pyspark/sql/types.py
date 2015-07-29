@@ -585,7 +585,8 @@ class UserDefinedType(DataType):
     @classmethod
     def scalaUDT(cls):
         """
-        The class name of the paired Scala UDT.
+        The class name of the paired Scala UDT (could be '', if there
+        is no corresponding one).
         """
         return ''
 
@@ -678,7 +679,7 @@ def _parse_datatype_json_string(json_string):
     ...     assert datatype == pickled
     ...     scala_datatype = sqlContext._ssql_ctx.parseDataType(datatype.json())
     ...     python_datatype = _parse_datatype_json_string(scala_datatype.json())
-    ...     assert datatype == python_datatype, str(datatype) + str(python_datatype)
+    ...     assert datatype == python_datatype
     >>> for cls in _all_atomic_types.values():
     ...     check_datatype(cls())
 
