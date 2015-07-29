@@ -448,18 +448,33 @@ public final class BytesToBytesMap {
       if (size == MAX_CAPACITY) {
         throw new IllegalStateException("BytesToBytesMap has reached maximum capacity");
       }
+
+      size++;
+      bitset.set(pos);
+
       // Here, we'll copy the data into our data pages. Because we only store a relative offset from
       // the key address instead of storing the absolute address of the value, the key and value
       // must be stored in the same memory page.
       // (8 byte key length) (key) (8 byte value length) (value)
       final long requiredSize = 8 + keyLengthBytes + 8 + valueLengthBytes;
-      assert (requiredSize <= pageSizeBytes - 8); // Reserve 8 bytes for the end-of-page marker.
-      size++;
-      bitset.set(pos);
 
-      // If there's not enough space in the current page, allocate a new page (8 bytes are reserved
-      // for the end-of-page marker).
-      if (currentDataPage == null || pageSizeBytes - 8 - pageCursor < requiredSize) {
+      // --- Figure out where to insert the new record ---------------------------------------------
+
+      final MemoryBlock dataPage;
+      final Object dataPageBaseObject;
+      final long dataPageInsertOffset;
+      boolean useOverflowPage = requiredSize > pageSizeBytes - 8;
+      if (useOverflowPage) {
+        // The record is larger than the page size, so allocate a special overflow page just to hold
+        // that record.
+        MemoryBlock overflowPage = memoryManager.allocatePage(requiredSize + 8);
+        dataPages.add(overflowPage);
+        dataPage = overflowPage;
+        dataPageBaseObject = overflowPage.getBaseObject();
+        dataPageInsertOffset = overflowPage.getBaseOffset();
+      } else if (currentDataPage == null || pageSizeBytes - 8 - pageCursor < requiredSize) {
+        // The record can fit in a data page, but either we have not allocated any pages yet or
+        // the current page does not have enough space.
         if (currentDataPage != null) {
           // There wasn't enough space in the current page, so write an end-of-page marker:
           final Object pageBaseObject = currentDataPage.getBaseObject();
@@ -470,31 +485,52 @@ public final class BytesToBytesMap {
         dataPages.add(newPage);
         pageCursor = 0;
         currentDataPage = newPage;
+        dataPage = currentDataPage;
+        dataPageBaseObject = currentDataPage.getBaseObject();
+        dataPageInsertOffset = currentDataPage.getBaseOffset();
+      } else {
+        // There is enough space in the current data page.
+        dataPage = currentDataPage;
+        dataPageBaseObject = currentDataPage.getBaseObject();
+        dataPageInsertOffset = currentDataPage.getBaseOffset() + pageCursor;
       }
 
+      // --- Append the key and value data to the current data page --------------------------------
+
+      long insertCursor = dataPageInsertOffset;
+
       // Compute all of our offsets up-front:
-      final Object pageBaseObject = currentDataPage.getBaseObject();
-      final long pageBaseOffset = currentDataPage.getBaseOffset();
-      final long keySizeOffsetInPage = pageBaseOffset + pageCursor;
-      pageCursor += 8; // word used to store the key size
-      final long keyDataOffsetInPage = pageBaseOffset + pageCursor;
-      pageCursor += keyLengthBytes;
-      final long valueSizeOffsetInPage = pageBaseOffset + pageCursor;
-      pageCursor += 8; // word used to store the value size
-      final long valueDataOffsetInPage = pageBaseOffset + pageCursor;
-      pageCursor += valueLengthBytes;
+      final long keySizeOffsetInPage = insertCursor;
+      insertCursor += 8; // word used to store the key size
+      final long keyDataOffsetInPage = insertCursor;
+      insertCursor += keyLengthBytes;
+      final long valueSizeOffsetInPage = insertCursor;
+      insertCursor += 8; // word used to store the value size
+      final long valueDataOffsetInPage = insertCursor;
+      insertCursor += valueLengthBytes; // word used to store the value size
 
       // Copy the key
-      PlatformDependent.UNSAFE.putLong(pageBaseObject, keySizeOffsetInPage, keyLengthBytes);
+      PlatformDependent.UNSAFE.putLong(dataPageBaseObject, keySizeOffsetInPage, keyLengthBytes);
       PlatformDependent.copyMemory(
-        keyBaseObject, keyBaseOffset, pageBaseObject, keyDataOffsetInPage, keyLengthBytes);
+        keyBaseObject, keyBaseOffset, dataPageBaseObject, keyDataOffsetInPage, keyLengthBytes);
       // Copy the value
-      PlatformDependent.UNSAFE.putLong(pageBaseObject, valueSizeOffsetInPage, valueLengthBytes);
-      PlatformDependent.copyMemory(
-        valueBaseObject, valueBaseOffset, pageBaseObject, valueDataOffsetInPage, valueLengthBytes);
+      PlatformDependent.UNSAFE.putLong(dataPageBaseObject, valueSizeOffsetInPage, valueLengthBytes);
+      PlatformDependent.copyMemory(valueBaseObject, valueBaseOffset, dataPageBaseObject,
+        valueDataOffsetInPage, valueLengthBytes);
 
+      // --- Update bookeeping data structures -----------------------------------------------------
+
+      if (useOverflowPage) {
+        // Store the end-of-page marker at the end of the data page
+        PlatformDependent.UNSAFE.putLong(dataPageBaseObject, insertCursor, END_OF_PAGE_MARKER);
+      } else {
+        pageCursor += requiredSize;
+      }
+
+      size++;
+      bitset.set(pos);
       final long storedKeyAddress = memoryManager.encodePageNumberAndOffset(
-        currentDataPage, keySizeOffsetInPage);
+        dataPage, keySizeOffsetInPage);
       longArray.set(pos * 2, storedKeyAddress);
       longArray.set(pos * 2 + 1, keyHashcode);
       updateAddressesAndSizes(storedKeyAddress);
