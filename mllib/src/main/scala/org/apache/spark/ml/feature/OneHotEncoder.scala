@@ -56,8 +56,18 @@ class OneHotEncoder(override val uid: String) extends Transformer
     new BooleanParam(this, "dropLast", "whether to drop the last category")
   setDefault(dropLast -> true)
 
+  /**
+   * Param for the output attr prefix. If not specified, a prefix will be automatically generated.
+   * @group param
+   */
+  final val outputAttrPrefix: Param[String] =
+    new Param(this, "outputAttrPrefix", "override the default output attribute prefix")
+
   /** @group setParam */
   def setDropLast(value: Boolean): this.type = set(dropLast, value)
+
+  /** @group setParam */
+  def setOutputAttrPrefix(value: String): this.type = set(outputAttrPrefix, value)
 
   /** @group setParam */
   def setInputCol(value: String): this.type = set(inputCol, value)
@@ -66,7 +76,6 @@ class OneHotEncoder(override val uid: String) extends Transformer
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
   override def transformSchema(schema: StructType): StructType = {
-    val is = "_is_"
     val inputColName = $(inputCol)
     val outputColName = $(outputCol)
 
@@ -79,17 +88,17 @@ class OneHotEncoder(override val uid: String) extends Transformer
     val outputAttrNames: Option[Array[String]] = inputAttr match {
       case nominal: NominalAttribute =>
         if (nominal.values.isDefined) {
-          nominal.values.map(_.map(v => inputColName + is + v))
+          nominal.values.map(_.map(toOutputAttrName))
         } else if (nominal.numValues.isDefined) {
-          nominal.numValues.map(n => Array.tabulate(n)(i => inputColName + is + i))
+          nominal.numValues.map(n => Array.tabulate(n)(toOutputAttrName))
         } else {
           None
         }
       case binary: BinaryAttribute =>
         if (binary.values.isDefined) {
-          binary.values.map(_.map(v => inputColName + is + v))
+          binary.values.map(_.map(toOutputAttrName))
         } else {
-          Some(Array.tabulate(2)(i => inputColName + is + i))
+          Some(Array.tabulate(2)(toOutputAttrName))
         }
       case _: NumericAttribute =>
         throw new RuntimeException(
@@ -123,7 +132,6 @@ class OneHotEncoder(override val uid: String) extends Transformer
 
   override def transform(dataset: DataFrame): DataFrame = {
     // schema transformation
-    val is = "_is_"
     val inputColName = $(inputCol)
     val outputColName = $(outputCol)
     val shouldDropLast = $(dropLast)
@@ -142,7 +150,7 @@ class OneHotEncoder(override val uid: String) extends Transformer
             math.max(m0, m1)
           }
         ).toInt + 1
-      val outputAttrNames = Array.tabulate(numAttrs)(i => inputColName + is + i)
+      val outputAttrNames = Array.tabulate(numAttrs)(toOutputAttrName)
       val filtered = if (shouldDropLast) outputAttrNames.dropRight(1) else outputAttrNames
       val outputAttrs: Array[Attribute] =
         filtered.map(name => BinaryAttribute.defaultAttr.withName(name))
@@ -167,4 +175,14 @@ class OneHotEncoder(override val uid: String) extends Transformer
   }
 
   override def copy(extra: ParamMap): OneHotEncoder = defaultCopy(extra)
+
+  private def toOutputAttrName(index: Int): String = toOutputAttrName(index.toString)
+
+  private def toOutputAttrName(value: String): String = {
+    if (isDefined(outputAttrPrefix)) {
+      $(outputAttrPrefix) + value.toString
+    } else {
+      $(inputCol) + "_is_" + value.toString
+    }
+  }
 }

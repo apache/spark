@@ -17,7 +17,7 @@
 
 package org.apache.spark.ml.feature
 
-import scala.collection.mutable.ArrayBuffer
+import scala.collection.mutable.{ArrayBuffer, Set => MutableSet}
 import scala.util.parsing.combinator.RegexParsers
 
 import org.apache.spark.annotation.Experimental
@@ -89,8 +89,13 @@ class RFormula(override val uid: String) extends Estimator[RFormulaModel] with R
         case column if column.dataType == StringType =>
           val indexCol = term + "_idx_" + uid
           val encodedCol = term + "_onehot_" + uid
-          encoderStages += new StringIndexer().setInputCol(term).setOutputCol(indexCol)
-          encoderStages += new OneHotEncoder().setInputCol(indexCol).setOutputCol(encodedCol)
+          encoderStages += new StringIndexer()
+            .setInputCol(term)
+            .setOutputCol(indexCol)
+          encoderStages += new OneHotEncoder()
+            .setInputCol(indexCol)
+            .setOutputCol(encodedCol)
+            .setOutputAttrPrefix(term + ".")
           tempColumns += indexCol
           tempColumns += encodedCol
           encodedCol
@@ -101,6 +106,7 @@ class RFormula(override val uid: String) extends Estimator[RFormulaModel] with R
     encoderStages += new VectorAssembler(uid)
       .setInputCols(encodedTerms.toArray)
       .setOutputCol($(featuresCol))
+      .setRewriteAttributeNames(false)  // already unique by construction
     encoderStages += new ColumnPruner(tempColumns.toSet)
     val pipelineModel = new Pipeline(uid).setStages(encoderStages.toArray).fit(dataset)
     copyValues(new RFormulaModel(uid, parsedFormula.get, pipelineModel).setParent(this))
