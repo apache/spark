@@ -167,8 +167,9 @@ class StringIndexerModel private[ml] (
 
 /**
  * :: Experimental ::
- * Transform a provided column back to the original input types using the metadata on the
- * labelsCol. Note: By default we keep the original columns during this transformation,
+ * Transform a provided column back to the original input types using either the metadata
+ * on the input column, or if provided using the labels supplied by the user.
+ * Note: By default we keep the original columns during this transformation,
  * so the inverse should only be used on new columns such as predicted labels.
  */
 @Experimental
