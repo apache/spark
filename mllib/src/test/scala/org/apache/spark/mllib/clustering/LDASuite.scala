@@ -117,6 +117,28 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext {
     // Check: log probabilities
     assert(model.logLikelihood < 0.0)
     assert(model.logPrior < 0.0)
+
+    // Check: topDocumentsPerTopic
+    // Compare it with top documents per topic derived from topicDistributions
+    val topDocsByTopicDistributions = { n: Int =>
+      Range(0, k).map { topic =>
+        val (doc, docWeights) = topicDistributions.sortBy(-_._2(topic)).take(n).unzip
+        (doc.map(_.toInt).toArray, docWeights.map(_(topic)).toArray)
+      }.toArray
+    }
+
+    // Top 3 documents per topic
+    model.topDocumentsPerTopic(3).zip(topDocsByTopicDistributions(3)).foreach {case (t1, t2) =>
+      assert(t1._1 === t2._1)
+      assert(t1._2 === t2._2)
+    }
+
+    // All documents per topic
+    val q = tinyCorpus.length
+    model.topDocumentsPerTopic(q).zip(topDocsByTopicDistributions(q)).foreach {case (t1, t2) =>
+      assert(t1._1 === t2._1)
+      assert(t1._2 === t2._2)
+    }
   }
 
   test("vertex indexing") {
