@@ -587,22 +587,22 @@ object DateTimeUtils {
   private def firstDayOfMonth(absoluteMonth: Int): Int = {
     val absoluteYear = absoluteMonth / 12
     var monthInYear = absoluteMonth - absoluteYear * 12
-    var days = getDaysFromYears(absoluteYear)
+    var date = getDateFromYear(absoluteYear)
     if (monthInYear >= 2 && isLeapYear(absoluteYear + YearZero)) {
-      days += 1
+      date += 1
     }
     while (monthInYear > 0) {
-      days += monthDays(monthInYear - 1)
+      date += monthDays(monthInYear - 1)
       monthInYear -= 1
     }
-    days
+    date
   }
 
   /**
    * Returns the date value for January 1 of the given year.
    * The year is expressed in years since year zero (17999 BC), starting from 0.
    */
-  private def getDaysFromYears(absoluteYear: Int): Int = {
+  private def getDateFromYear(absoluteYear: Int): Int = {
     val absoluteDays = (absoluteYear * 365 + absoluteYear / 400 - absoluteYear / 100
       + absoluteYear / 4)
     absoluteDays - toYearZero
@@ -681,7 +681,13 @@ object DateTimeUtils {
 
   /**
    * Returns number of months between time1 and time2. time1 and time2 are expressed in
-   * microseconds since 1.1.1970
+   * microseconds since 1.1.1970.
+   *
+   * If time1 and time2 having the same day of month, or both are the last day of month,
+   * it returns an integer (time under a day will be ignored).
+   *
+   * Otherwise, the difference is calculated based on 31 days per month, and rounding to
+   * 8 digits.
    */
   def monthsBetween(time1: Long, time2: Long): Double = {
     val millis1 = time1 / 1000L

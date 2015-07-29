@@ -640,20 +640,23 @@ object HiveTypeCoercion {
   }
 
   /**
-   * Turns Add/Subtract of DateType/TimestampType and IntervalType to TimeAdd/TimeSub
+   * Turns Add/Subtract of DateType/TimestampType/StringType and CalendarIntervalType
+   * to TimeAdd/TimeSub
    */
   object DateTimeOperations extends Rule[LogicalPlan] {
+
+    private val acceptedTypes = Seq(DateType, TimestampType, StringType)
+
     def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
 
-      case Add(left, right) if left.dataType == IntervalType =>
-        Add(right, left) // switch the order
-
-      case Add(left, right) if right.dataType == IntervalType =>
-        Cast(TimeAdd(Cast(left, TimestampType), right), left.dataType)
-      case Subtract(left, right) if right.dataType == IntervalType =>
-        Cast(TimeSub(Cast(left, TimestampType), right), left.dataType)
+      case Add(l @ CalendarIntervalType(), r) if acceptedTypes.contains(r.dataType) =>
+        Cast(TimeAdd(r, l), r.dataType)
+      case Add(l, r @ CalendarIntervalType()) if acceptedTypes.contains(l.dataType) =>
+        Cast(TimeAdd(l, r), l.dataType)
+      case Subtract(l, r @ CalendarIntervalType()) if acceptedTypes.contains(l.dataType) =>
+        Cast(TimeSub(l, r), l.dataType)
     }
   }
 

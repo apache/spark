@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.{Interval, UTF8String}
+import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 /**
  * Returns the current date at the start of query evaluation.
@@ -382,18 +382,18 @@ case class NextDay(startDate: Expression, dayOfWeek: Expression)
  * Adds an interval to timestamp.
  */
 case class TimeAdd(start: Expression, interval: Expression)
-  extends BinaryExpression with ExpectsInputTypes {
+  extends BinaryExpression with ImplicitCastInputTypes {
 
   override def left: Expression = start
   override def right: Expression = interval
 
   override def toString: String = s"$left + $right"
-  override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType, IntervalType)
+  override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType, CalendarIntervalType)
 
   override def dataType: DataType = TimestampType
 
   override def nullSafeEval(start: Any, interval: Any): Any = {
-    val itvl = interval.asInstanceOf[Interval]
+    val itvl = interval.asInstanceOf[CalendarInterval]
     DateTimeUtils.timestampAddInterval(
       start.asInstanceOf[Long], itvl.months, itvl.microseconds)
   }
@@ -410,18 +410,18 @@ case class TimeAdd(start: Expression, interval: Expression)
  * Subtracts an interval from timestamp.
  */
 case class TimeSub(start: Expression, interval: Expression)
-  extends BinaryExpression with ExpectsInputTypes {
+  extends BinaryExpression with ImplicitCastInputTypes {
 
   override def left: Expression = start
   override def right: Expression = interval
 
   override def toString: String = s"$left - $right"
-  override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType, IntervalType)
+  override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType, CalendarIntervalType)
 
   override def dataType: DataType = TimestampType
 
   override def nullSafeEval(start: Any, interval: Any): Any = {
-    val itvl = interval.asInstanceOf[Interval]
+    val itvl = interval.asInstanceOf[CalendarInterval]
     DateTimeUtils.timestampAddInterval(
       start.asInstanceOf[Long], 0 - itvl.months, 0 - itvl.microseconds)
   }

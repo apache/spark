@@ -882,7 +882,7 @@ def months_between(date1, date2):
 
     >>> df = sqlContext.createDataFrame([('1997-02-28 10:30:00', '1996-10-30')], ['t', 'd'])
     >>> df.select(months_between(df.t, df.d).alias('months')).collect()
-    [Row(months=3.94959677)]
+    [Row(months=3.9495967...)]
     """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.months_between(_to_java_column(date1), _to_java_column(date2)))

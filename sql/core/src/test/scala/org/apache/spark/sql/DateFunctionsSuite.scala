@@ -22,7 +22,7 @@ import java.text.SimpleDateFormat
 
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.functions._
-import org.apache.spark.unsafe.types.Interval
+import org.apache.spark.unsafe.types.CalendarInterval
 
 class DateFunctionsSuite extends QueryTest {
   private lazy val ctx = org.apache.spark.sql.test.TestSQLContext
@@ -272,7 +272,7 @@ class DateFunctionsSuite extends QueryTest {
     val t2 = Timestamp.valueOf("2015-12-31 00:00:00")
     val d1 = Date.valueOf("2015-07-31")
     val d2 = Date.valueOf("2015-12-31")
-    val i = new Interval(2, 2000000L)
+    val i = new CalendarInterval(2, 2000000L)
     val df = Seq((1, t1, d1), (3, t2, d2)).toDF("n", "t", "d")
     checkAnswer(
       df.selectExpr(s"d + $i"),
@@ -288,7 +288,7 @@ class DateFunctionsSuite extends QueryTest {
     val t2 = Timestamp.valueOf("2016-02-29 00:00:02")
     val d1 = Date.valueOf("2015-09-30")
     val d2 = Date.valueOf("2016-02-29")
-    val i = new Interval(2, 2000000L)
+    val i = new CalendarInterval(2, 2000000L)
     val df = Seq((1, t1, d1), (3, t2, d2)).toDF("n", "t", "d")
     checkAnswer(
       df.selectExpr(s"d - $i"),
