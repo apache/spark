@@ -159,7 +159,7 @@ final class RandomForestClassificationModel private[ml] (
     // Ignore the weights since all are 1.0 for now.
     val votes = mutable.Map.empty[Int, Double]
     _trees.view.foreach { tree =>
-      val prediction = tree.rootNode.predict(features).toInt
+      val prediction = tree.rootNode.predictImpl(features).prediction.toInt
       votes(prediction) = votes.getOrElse(prediction, 0.0) + 1.0 // 1.0 = weight
     }
     votes.maxBy(_._2)._1

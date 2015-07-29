@@ -121,14 +121,17 @@ final class DecisionTreeClassificationModel private[ml] (
     this(Identifiable.randomUID("dtc"), rootNode, numClasses)
 
   override protected def predict(features: Vector): Double = {
-    rootNode.predict(features)
+    rootNode.predictImpl(features).impurityStats.predict
   }
 
   override protected def predictRaw(features: Vector): Vector = {
-    Vectors.dense(rootNode.predictProbability(features))
+    Vectors.dense(rootNode.predictImpl(features).impurityStats.stats)
   }
 
-  override protected def raw2probabilityInPlace(rawPrediction: Vector): Vector = rawPrediction
+  override protected def raw2probabilityInPlace(rawPrediction: Vector): Vector = {
+    val sum = rawPrediction.toArray.sum
+    Vectors.dense(rawPrediction.toArray.map(_ / sum))
+  }
 
   override def copy(extra: ParamMap): DecisionTreeClassificationModel = {
     copyValues(new DecisionTreeClassificationModel(uid, rootNode, numClasses), extra)
@@ -156,6 +159,6 @@ private[ml] object DecisionTreeClassificationModel {
         s" DecisionTreeClassificationModel (new API).  Algo is: ${oldModel.algo}")
     val rootNode = Node.fromOld(oldModel.topNode, categoricalFeatures)
     val uid = if (parent != null) parent.uid else Identifiable.randomUID("dtc")
-    new DecisionTreeClassificationModel(uid, rootNode, 2)
+    new DecisionTreeClassificationModel(uid, rootNode, -1)
   }
 }
