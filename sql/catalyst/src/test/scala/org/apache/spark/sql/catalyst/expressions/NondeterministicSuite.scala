@@ -15,11 +15,9 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.expression
+package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.expressions. ExpressionEvalHelper
-import org.apache.spark.sql.execution.expressions.{SparkPartitionID, MonotonicallyIncreasingID}
 
 class NondeterministicSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("MonotonicallyIncreasingID") {
@@ -27,6 +25,6 @@ class NondeterministicSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("SparkPartitionID") {
-    checkEvaluation(SparkPartitionID, 0)
+    checkEvaluation(SparkPartitionID(), 0)
   }
 }

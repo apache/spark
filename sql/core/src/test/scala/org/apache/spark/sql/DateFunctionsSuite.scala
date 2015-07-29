@@ -38,7 +38,8 @@ class DateFunctionsSuite extends QueryTest {
     assert(d0 <= d1 && d1 <= d2 && d2 <= d3 && d3 - d0 <= 1)
   }
 
-  test("function current_timestamp") {
+  // This is a bad test. SPARK-9196 will fix it and re-enable it.
+  ignore("function current_timestamp") {
     val df1 = Seq((1, 2), (3, 1)).toDF("a", "b")
     checkAnswer(df1.select(countDistinct(current_timestamp())), Row(1))
     // Execution in one query should return the same value

@@ -634,7 +634,7 @@ object functions {
    * @group normal_funcs
    * @since 1.4.0
    */
-  def monotonicallyIncreasingId(): Column = execution.expressions.MonotonicallyIncreasingID()
+  def monotonicallyIncreasingId(): Column = MonotonicallyIncreasingID()
 
   /**
    * Return an alternative value `r` if `l` is NaN.
@@ -741,7 +741,7 @@ object functions {
    * @group normal_funcs
    * @since 1.4.0
    */
-  def sparkPartitionId(): Column = execution.expressions.SparkPartitionID
+  def sparkPartitionId(): Column = SparkPartitionID()
 
   /**
    * Computes the square root of the specified float value.

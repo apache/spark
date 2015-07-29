@@ -17,13 +17,14 @@
 
 package org.apache.spark.sql.hive
 
-import org.apache.spark.sql.QueryTest
+import org.apache.spark.sql.{Row, QueryTest}
 
 case class FunctionResult(f1: String, f2: String)
 
 class UDFSuite extends QueryTest {
 
   private lazy val ctx = org.apache.spark.sql.hive.test.TestHive
+  import ctx.implicits._
 
   test("UDF case insensitive") {
     ctx.udf.register("random0", () => { Math.random() })
@@ -32,5 +33,11 @@ class UDFSuite extends QueryTest {
     assert(ctx.sql("SELECT RANDOM0() FROM src LIMIT 1").head().getDouble(0) >= 0.0)
     assert(ctx.sql("SELECT RANDOm1() FROM src LIMIT 1").head().getDouble(0) >= 0.0)
     assert(ctx.sql("SELECT strlenscala('test', 1) FROM src LIMIT 1").head().getInt(0) === 5)
+  }
+
+  test("SPARK-8003 spark_partition_id") {
+    val df = Seq((1, "Two Fiiiiive")).toDF("id", "saying")
+    ctx.registerDataFrameAsTable(df, "test_table")
+    checkAnswer(ctx.sql("select spark_partition_id() from test_table LIMIT 1").toDF(), Row(0))
   }
 }

@@ -31,7 +31,7 @@ class ReceiverTrackerSuite extends TestSuiteBase {
   val sparkConf = new SparkConf().setMaster("local[8]").setAppName("test")
   val ssc = new StreamingContext(sparkConf, Milliseconds(100))
 
-  test("Receiver tracker - propagates rate limit") {
+  ignore("Receiver tracker - propagates rate limit") {
     object ReceiverStartedWaiter extends StreamingListener {
       @volatile
       var started = false
