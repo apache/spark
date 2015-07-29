@@ -1212,11 +1212,11 @@ class RowMatrix(DistributedMatrix):
         ...                        [7, 8, 9], [10, 11, 12]])
 
         >>> rm = RowMatrix(rows)
-        >>> int(rm.numRows())
+        >>> print(rm.numRows())
         4
 
         >>> rm = RowMatrix(rows, 7, 6)
-        >>> int(rm.numRows())
+        >>> print(rm.numRows())
         7
         """
         return self._jrm.call("numRows")
@@ -1229,11 +1229,11 @@ class RowMatrix(DistributedMatrix):
         ...                        [7, 8, 9], [10, 11, 12]])
 
         >>> rm = RowMatrix(rows)
-        >>> int(rm.numCols())
+        >>> print(rm.numCols())
         3
 
         >>> rm = RowMatrix(rows, 7, 6)
-        >>> int(rm.numCols())
+        >>> print(rm.numCols())
         6
         """
         return self._jrm.call("numCols")
@@ -1322,11 +1322,11 @@ class IndexedRowMatrix(DistributedMatrix):
         ...                        IndexedRow(3, [10, 11, 12])])
 
         >>> rm = IndexedRowMatrix(rows)
-        >>> int(rm.numRows())
+        >>> print(rm.numRows())
         4
 
         >>> rm = IndexedRowMatrix(rows, 7, 6)
-        >>> int(rm.numRows())
+        >>> print(rm.numRows())
         7
         """
         return self._jirm.call("numRows")
@@ -1341,11 +1341,11 @@ class IndexedRowMatrix(DistributedMatrix):
         ...                        IndexedRow(3, [10, 11, 12])])
 
         >>> rm = IndexedRowMatrix(rows)
-        >>> int(rm.numCols())
+        >>> print(rm.numCols())
         3
 
         >>> rm = IndexedRowMatrix(rows, 7, 6)
-        >>> int(rm.numCols())
+        >>> print(rm.numCols())
         6
         """
         return self._jirm.call("numCols")
@@ -1462,11 +1462,11 @@ class CoordinateMatrix(object):
         ...                           MatrixEntry(2, 1, 3.7)])
 
         >>> cm = CoordinateMatrix(entries)
-        >>> int(cm.numRows())
+        >>> print(cm.numRows())
         3
 
         >>> cm = CoordinateMatrix(entries, 7, 6)
-        >>> int(cm.numRows())
+        >>> print(cm.numRows())
         7
         """
         return self._jcm.call("numRows")
@@ -1480,11 +1480,11 @@ class CoordinateMatrix(object):
         ...                           MatrixEntry(2, 1, 3.7)])
 
         >>> cm = CoordinateMatrix(entries)
-        >>> int(cm.numCols())
+        >>> print(cm.numCols())
         2
 
         >>> cm = CoordinateMatrix(entries, 7, 6)
-        >>> int(cm.numCols())
+        >>> print(cm.numCols())
         6
         """
         return self._jcm.call("numCols")
@@ -1500,14 +1500,14 @@ class CoordinateMatrix(object):
         >>> # will only have 2 rows since there are only entries on 2
         >>> # unique rows.
         >>> rm = CoordinateMatrix(entries).toRowMatrix()
-        >>> int(rm.numRows())
+        >>> print(rm.numRows())
         2
 
         >>> # This CoordinateMatrix will have 5 columns, due to the
         >>> # highest column index being 4, and the ensuing RowMatrix
         >>> # will have 5 columns as well.
         >>> rm = CoordinateMatrix(entries).toRowMatrix()
-        >>> int(rm.numCols())
+        >>> print(rm.numCols())
         5
         """
         javaRowMatrix = self._jcm.call("toRowMatrix")
@@ -1523,14 +1523,14 @@ class CoordinateMatrix(object):
         >>> # the highest row index being 6, and the ensuing
         >>> # IndexedRowMatrix will have 7 rows as well.
         >>> irm = CoordinateMatrix(entries).toIndexedRowMatrix()
-        >>> int(irm.numRows())
+        >>> print(irm.numRows())
         7
 
         >>> # This CoordinateMatrix will have 5 columns, due to the
         >>> # highest column index being 4, and the ensuing
         >>> # IndexedRowMatrix will have 5 columns as well.
         >>> irm = CoordinateMatrix(entries).toIndexedRowMatrix()
-        >>> int(irm.numCols())
+        >>> print(irm.numCols())
         5
         """
         javaIndexedRowMatrix = self._jcm.call("toIndexedRowMatrix")
