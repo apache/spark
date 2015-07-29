@@ -44,7 +44,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
   // Ensure only one thread is putting, and if necessary, dropping blocks at any given time
   private val accountingLock = new Object
 
-  // A mapping from taskAttemptId ID to amount of memory used for unrolling a block (in bytes)
+  // A mapping from taskAttemptId to amount of memory used for unrolling a block (in bytes)
   // All accesses of this map are assumed to have manually synchronized on `accountingLock`
   private val unrollMemoryMap = mutable.HashMap[Long, Long]()
   // Same as `unrollMemoryMap`, but for pending unroll memory as defined below.
@@ -484,6 +484,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
   }
 
   private def currentTaskAttemptId(): Long = {
+    // In case this is called on the driver, return an invalid task attempt id.
     Option(TaskContext.get()).map(_.taskAttemptId()).getOrElse(-1L)
   }
 

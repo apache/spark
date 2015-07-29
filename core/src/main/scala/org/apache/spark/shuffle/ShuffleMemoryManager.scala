@@ -41,6 +41,7 @@ private[spark] class ShuffleMemoryManager(maxMemory: Long) extends Logging {
   def this(conf: SparkConf) = this(ShuffleMemoryManager.getMaxMemory(conf))
 
   private def currentTaskAttemptId(): Long = {
+    // In case this is called on the driver, return an invalid task attempt id.
     Option(TaskContext.get()).map(_.taskAttemptId()).getOrElse(-1L)
   }
 
