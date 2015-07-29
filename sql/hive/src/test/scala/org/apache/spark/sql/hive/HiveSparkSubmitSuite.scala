@@ -104,17 +104,20 @@ class HiveSparkSubmitSuite
     try {
       val exitCode = failAfter(180 seconds) { process.exitValue() }
       if (exitCode != 0) {
+        // include logs in output. Note that logging is async and may not have completed
+        // at the time this exception is raised
+        Thread.sleep(1000)
         val historyLog = history.mkString("\n")
         fail(s"$commandLine returned with exit code $exitCode." +
-            s" See the logs for more detail." +
+            s" See the log4j logs for more detail." +
             s"\n$historyLog")
       }
     } catch {
       case to: TestFailedDueToTimeoutException =>
         val historyLog = history.mkString("\n")
-        fail(s"$commandLine timed out" +
-            s" See the logs for more detail." +
-            s"\n$historyLog")
+        fail(s"Timeout of $commandLine" +
+            s" See the log4j logs for more detail." +
+            s"\n$historyLog", to)
         case t: Throwable => throw t
     } finally {
       // Ensure we still kill the process in case it timed out
