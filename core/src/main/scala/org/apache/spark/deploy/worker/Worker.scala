@@ -627,7 +627,7 @@ private[worker] class Worker(
   }
 
   private[worker] def handleExecutorStateChanged(executorStateChanged: ExecutorStateChanged):
-      Unit = {
+    Unit = {
     sendToMaster(executorStateChanged)
     val state = executorStateChanged.state
     if (ExecutorState.isFinished(state)) {
