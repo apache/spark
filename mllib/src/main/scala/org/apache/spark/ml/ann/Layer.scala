@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.mllib.ann
+package org.apache.spark.ml.ann
 
 import breeze.linalg.{*, DenseMatrix => BDM, DenseVector => BDV, Vector => BV, axpy => brzAxpy,
 sum => Bsum}
@@ -741,12 +741,12 @@ private[ann] class ANNUpdater extends Updater {
 }
 
 /**
- * Llib-style trainer class that trains a network given the data and topology
+ * MLlib-style trainer class that trains a network given the data and topology
  * @param topology topology of ANN
  * @param inputSize input size
  * @param outputSize output size
  */
-class FeedForwardTrainer (topology: Topology, val inputSize: Int,
+private[ml] class FeedForwardTrainer (topology: Topology, val inputSize: Int,
                           val outputSize: Int) extends Serializable {
 
   // TODO: what if we need to pass random seed?

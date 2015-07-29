@@ -17,14 +17,12 @@
 
 package org.apache.spark.ml.classification
 
-import breeze.linalg.{argmax => Bargmax}
-
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.ml.param.shared.{HasTol, HasMaxIter, HasSeed}
 import org.apache.spark.ml.{PredictorParams, PredictionModel, Predictor}
 import org.apache.spark.ml.param.{IntParam, ParamValidators, IntArrayParam, ParamMap}
 import org.apache.spark.ml.util.Identifiable
-import org.apache.spark.mllib.ann.{FeedForwardTrainer, FeedForwardTopology}
+import org.apache.spark.ml.ann.{FeedForwardTrainer, FeedForwardTopology}
 import org.apache.spark.mllib.linalg.{Vectors, Vector}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.sql.DataFrame
@@ -87,7 +85,6 @@ with HasSeed with HasMaxIter with HasTol {
 
   setDefault(maxIter -> 100, tol -> 1e-4, layers -> Array(1, 1), blockSize -> 1)
 }
-
 
 /** Label to vector converter. */
 private object LabelConverter {
