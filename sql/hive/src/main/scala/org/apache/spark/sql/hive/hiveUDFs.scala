@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.hive
 
+import org.apache.spark.sql.catalyst.expressions.aggregate._
+
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.JavaConversions._
 import scala.util.Try
@@ -632,3 +634,123 @@ private[hive] case class HiveUDAFFunction(
   }
 }
 
+private[hive] case class HiveUdaf2(
+    funcWrapper: HiveFunctionWrapper,
+    children: Seq[Expression],
+    isUDAF: Boolean) extends AggregateFunction2 with HiveInspectors {
+  type UDFType = AbstractGenericUDAFResolver
+
+  protected def createEvaluator = resolver.getEvaluator(
+    new SimpleGenericUDAFParameterInfo(inspectors, false, false))
+
+  // Hive UDAF evaluator
+  @transient
+  lazy val evaluator = createEvaluator
+
+  @transient
+  protected lazy val resolver: AbstractGenericUDAFResolver = if (isUDAF) {
+    // if it's UDAF, we need the UDAF bridge
+    new GenericUDAFBridge(funcWrapper.createFunction())
+  } else {
+    funcWrapper.createFunction()
+  }
+
+  // Output data object inspector, associated with the result of Hive UDAF.
+  @transient
+  lazy val objectInspector = createEvaluator.init(GenericUDAFEvaluator.Mode.COMPLETE, inspectors)
+
+  // Partial Evaluator of Hive UDAF, which will be used when converting the Hive Aggregate Buffer
+  // to Hive Object, right before the shuffling start.
+  @transient
+  lazy val partialEvaluator = createEvaluator
+
+  // The Aggregation Buffer Inspector, associated with the partial result of Hive UDAF.
+  @transient
+  lazy val bufferObjectInspector = {
+    createEvaluator.init(GenericUDAFEvaluator.Mode.PARTIAL1, inspectors)
+  }
+
+  // Input arguments object inspectors
+  @transient
+  lazy val inspectors = children.map(toInspector).toArray
+
+  override def toString: String =
+    s"$nodeName#${funcWrapper.functionClassName}(${children.mkString(",")})"
+
+  // Aggregation Buffer Data Type, We assume only 1 element for the Hive Aggregation Buffer
+  // It will be StructType if more than 1 element (Actually will be StructSettableObjectInspector)
+  @transient
+  lazy val bufferDataType = inspectorToDataType(bufferObjectInspector)
+  override def bufferAttributes: Seq[AttributeReference] =
+    AttributeReference("soi", bufferDataType)() :: Nil
+
+  // Output data type
+  override def dataType: DataType = inspectorToDataType(objectInspector)
+
+  override def initialize(m: AggregateMode, buffer: MutableRow): Unit = {
+    m match {
+      case Final => evaluator.init(GenericUDAFEvaluator.Mode.FINAL, Array(bufferObjectInspector))
+      case Complete => evaluator.init(GenericUDAFEvaluator.Mode.COMPLETE, inspectors)
+      case Partial => evaluator.init(GenericUDAFEvaluator.Mode.PARTIAL1, inspectors)
+      case x => throw new IllegalArgumentException(s"We don't support $x yet.")
+    }
+
+    partialEvaluator.init(GenericUDAFEvaluator.Mode.PARTIAL1, inspectors)
+
+    val hiveBuffer = evaluator.getNewAggregationBuffer
+      .asInstanceOf[GenericUDAFEvaluator.AbstractAggregationBuffer]
+    evaluator.reset(hiveBuffer)
+    buffer(mutableBufferOffset) = hiveBuffer
+  }
+
+  // for storing the the value of the children expression
+  private val arguments = new Array[AnyRef](children.length)
+
+  @inline
+  private def toHiveBuffer(buffer: InternalRow): GenericUDAFEvaluator.AbstractAggregationBuffer = {
+    buffer.get(mutableBufferOffset).asInstanceOf[GenericUDAFEvaluator.AbstractAggregationBuffer]
+  }
+
+  override def update(buffer: MutableRow, input: InternalRow): Unit = {
+    var i = 0
+    while (i < arguments.length) {
+      arguments(i) = wrap(children(i).eval(input), inspectors(i), children(i).dataType)
+      i += 1
+    }
+
+    // This is a hack way, to put the Hive Aggregate Buffer into the buffer row.
+    evaluator.iterate(toHiveBuffer(buffer), arguments)
+  }
+
+  override def merge(buffer1: MutableRow, buffer2: InternalRow): Unit = {
+    // Merge 2 buffers, the buffer can be either HiveAggregateBuffer or Spark SQL AggrBuffer
+    val hiveBuffer = buffer2.get(inputBufferOffset) match {
+      case aggr: GenericUDAFEvaluator.AbstractAggregationBuffer =>
+        partialEvaluator.terminatePartial(aggr)
+      case other => wrap(other, bufferObjectInspector, bufferDataType)
+    }
+    // This will update the Hive Aggregate Buffer directly.
+    evaluator.merge(toHiveBuffer(buffer1), hiveBuffer)
+  }
+
+  // This is called before the shuffling
+  // Hive Aggregate Buffer => Spark SQL AggrBuffer (Row-based)
+  override def terminatePartial(buffer: MutableRow): Unit = {
+    // convert the Hive Aggregate Buffer to hive object, which can be accessed via
+    // Hive ObjectInspector
+    val hiveObj = evaluator.terminatePartial(toHiveBuffer(buffer))
+    buffer(mutableBufferOffset) = unwrap(hiveObj, bufferObjectInspector)
+  }
+
+  // Output the final result by feeding the aggregation buffer
+  override def eval(input: InternalRow): Any = {
+    unwrap(evaluator.terminate(toHiveBuffer(input)), objectInspector)
+  }
+
+  override lazy val cloneBufferAttributes: Seq[Attribute] = bufferAttributes.map(_.newInstance())
+
+  // TODO Hive UDAF will do the casting internally, and shouldn't be a `ImplicitCastInputTypes`.
+  override def inputTypes: Seq[AbstractDataType] = children.map(_.dataType)
+
+  override def nullable: Boolean = true
+}

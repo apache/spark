@@ -28,7 +28,7 @@ import org.apache.spark.sql.types.{StructType, MapType, ArrayType}
 /**
  * Utility functions used by the query planner to convert our plan to new aggregation code path.
  */
-object Utils {
+class AggregateUtils {
   // Right now, we do not support complex types in the grouping key schema.
   private def supportsGroupingKeySchema(aggregate: Aggregate): Boolean = {
     val hasComplexTypes = aggregate.groupingExpressions.map(_.dataType).exists {
@@ -41,7 +41,12 @@ object Utils {
     !hasComplexTypes
   }
 
-  private def tryConvert(plan: LogicalPlan): Option[Aggregate] = plan match {
+  /**
+   * Substitute the expression, subclasses can add more substitution rule inside.
+   */
+  protected[sql] def substitute(expr: Expression): Expression = expr
+
+  private[sql] def tryConvert(plan: LogicalPlan): Option[Aggregate] = plan match {
     case p: Aggregate if supportsGroupingKeySchema(p) =>
       val converted = p.transformExpressionsDown {
         case expressions.Average(child) =>
@@ -98,6 +103,8 @@ object Utils {
             aggregateFunction = aggregate.Sum(child),
             mode = aggregate.Complete,
             isDistinct = true)
+
+        case other => substitute(other) // subclass can override the function `subsitute`
       }
       // Check if there is any expressions.AggregateExpression1 left.
       // If so, we cannot convert this plan.

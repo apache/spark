@@ -129,7 +129,7 @@ abstract class AggregateFunction2
   var inputBufferOffset: Int = 0
 
   /** The schema of the aggregation buffer. */
-  def bufferSchema: StructType
+  def bufferSchema: StructType = StructType.fromAttributes(bufferAttributes)
 
   /** Attributes of fields in bufferSchema. */
   def bufferAttributes: Seq[AttributeReference]
@@ -142,7 +142,7 @@ abstract class AggregateFunction2
    * It will use bufferOffset to find the starting point of
    * its buffer in the given `buffer` shared with other functions.
    */
-  def initialize(buffer: MutableRow): Unit
+  def initialize(m: AggregateMode, buffer: MutableRow): Unit
 
   /**
    * Updates its aggregation buffer located in `buffer` based on the given `input`.
@@ -150,6 +150,14 @@ abstract class AggregateFunction2
    * shared with other functions.
    */
   def update(buffer: MutableRow, input: InternalRow): Unit
+
+  /**
+   * Semantically we don't need this, however, we need it when integrate with Hive
+   * UDAF(GenericUDAF), it will called right before the shuffle in Partial aggregation.
+   *
+   * NOTE: It requires do nothing by default, ONLY HiveUDAF will overwrite this function.
+   */
+  def terminatePartial(buffer: MutableRow): Unit = {}
 
   /**
    * Updates its aggregation buffer located in `buffer1` by combining intermediate results
@@ -191,10 +199,7 @@ abstract class AlgebraicAggregate extends AggregateFunction2 with Serializable w
     def right: AttributeReference = cloneBufferAttributes(bufferAttributes.indexOf(a))
   }
 
-  /** An AlgebraicAggregate's bufferSchema is derived from bufferAttributes. */
-  override def bufferSchema: StructType = StructType.fromAttributes(bufferAttributes)
-
-  override def initialize(buffer: MutableRow): Unit = {
+  override def initialize(mode: AggregateMode, buffer: MutableRow): Unit = {
     var i = 0
     while (i < bufferAttributes.size) {
       buffer(i + mutableBufferOffset) = initialValues(i).eval()

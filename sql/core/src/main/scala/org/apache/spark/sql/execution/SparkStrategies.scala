@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.{BroadcastHint, LogicalPlan}
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.columnar.{InMemoryColumnarTableScan, InMemoryRelation}
+import org.apache.spark.sql.execution.aggregate.AggregateUtils
 import org.apache.spark.sql.execution.datasources.{CreateTableUsing, CreateTempTableUsing, DescribeCommand => LogicalDescribeCommand, _}
 import org.apache.spark.sql.execution.{DescribeCommand => RunnableDescribeCommand}
 import org.apache.spark.sql.types._
@@ -194,7 +195,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
     }
 
     def canBeConvertedToNewAggregation(plan: LogicalPlan): Boolean = {
-      aggregate.Utils.tryConvert(
+      aggregateUtils.tryConvert(
         plan,
         sqlContext.conf.useSqlAggregate2,
         sqlContext.conf.codegenEnabled).isDefined
@@ -219,7 +220,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case p: logical.Aggregate =>
         val converted =
-          aggregate.Utils.tryConvert(
+          aggregateUtils.tryConvert(
             p,
             sqlContext.conf.useSqlAggregate2,
             sqlContext.conf.codegenEnabled)
@@ -252,14 +253,14 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
             val aggregateOperator =
               if (functionsWithDistinct.isEmpty) {
-                aggregate.Utils.planAggregateWithoutDistinct(
+                aggregateUtils.planAggregateWithoutDistinct(
                   groupingExpressions,
                   aggregateExpressions,
                   aggregateFunctionMap,
                   resultExpressions,
                   planLater(child))
               } else {
-                aggregate.Utils.planAggregateWithOneDistinct(
+                aggregateUtils.planAggregateWithOneDistinct(
                   groupingExpressions,
                   functionsWithDistinct,
                   functionsWithoutDistinct,
@@ -378,7 +379,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         execution.Expand(e.projections, e.output, planLater(child)) :: Nil
       case a @ logical.Aggregate(group, agg, child) => {
         val useNewAggregation =
-          aggregate.Utils.tryConvert(
+          aggregateUtils.tryConvert(
             a,
             sqlContext.conf.useSqlAggregate2,
             sqlContext.conf.codegenEnabled).isDefined

@@ -37,6 +37,11 @@ private[sql] abstract class SortAggregationIterator(
   extends Iterator[InternalRow] {
 
   ///////////////////////////////////////////////////////////////////////////
+  // Aggregate Mode
+  ///////////////////////////////////////////////////////////////////////////
+  protected def mode: AggregateMode
+
+  ///////////////////////////////////////////////////////////////////////////
   // Static fields for this iterator
   ///////////////////////////////////////////////////////////////////////////
 
@@ -142,7 +147,7 @@ private[sql] abstract class SortAggregationIterator(
     algebraicInitialProjection(EmptyRow)
     var i = 0
     while (i < nonAlgebraicAggregateFunctions.length) {
-      nonAlgebraicAggregateFunctions(i).initialize(buffer)
+      nonAlgebraicAggregateFunctions(i).initialize(mode, buffer)
       i += 1
     }
   }
@@ -258,6 +263,8 @@ class PartialSortAggregationIterator(
     inputAttributes,
     inputIter) {
 
+  override protected def mode: AggregateMode = Partial
+
   // This projection is used to update buffer values for all AlgebraicAggregates.
   private val algebraicUpdateProjection = {
     val bufferSchema = aggregateFunctions.flatMap(_.bufferAttributes)
@@ -282,6 +289,11 @@ class PartialSortAggregationIterator(
   }
 
   override protected def generateOutput(): InternalRow = {
+    var i = 0
+    while (i < nonAlgebraicAggregateFunctions.length) {
+      nonAlgebraicAggregateFunctions(i).terminatePartial(buffer)
+      i += 1
+    }
     // We just output the grouping expressions and the underlying buffer.
     joinedRow(currentGroupingKey, buffer).copy()
   }
@@ -313,6 +325,8 @@ class PartialMergeSortAggregationIterator(
     inputAttributes,
     inputIter) {
 
+  override protected def mode: AggregateMode = Partial
+
   // This projection is used to merge buffer values for all AlgebraicAggregates.
   private val algebraicMergeProjection = {
     val mergeInputSchema =
@@ -341,6 +355,11 @@ class PartialMergeSortAggregationIterator(
   }
 
   override protected def generateOutput(): InternalRow = {
+    var i = 0
+    while (i < nonAlgebraicAggregateFunctions.length) {
+      nonAlgebraicAggregateFunctions(i).terminatePartial(buffer)
+      i += 1
+    }
     // We output grouping expressions and aggregation buffers.
     joinedRow(currentGroupingKey, buffer).copy()
   }
@@ -372,6 +391,8 @@ class FinalSortAggregationIterator(
     newMutableProjection,
     inputAttributes,
     inputIter) {
+
+  override protected def mode: AggregateMode = Final
 
   // The result of aggregate functions.
   private val aggregateResult: MutableRow = new GenericMutableRow(aggregateAttributes.length)
@@ -499,6 +520,8 @@ class FinalAndCompleteSortAggregationIterator(
     newMutableProjection,
     inputAttributes,
     inputIter) {
+
+  override protected def mode: AggregateMode = Final
 
   // The result of aggregate functions.
   private val aggregateResult: MutableRow =
