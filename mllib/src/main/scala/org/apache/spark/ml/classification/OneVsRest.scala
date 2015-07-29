@@ -71,9 +71,9 @@ private[ml] trait OneVsRestParams extends PredictorParams with HasRawPredictionC
  */
 @Experimental
 final class OneVsRestModel private[ml] (
-                                         override val uid: String,
-                                         labelMetadata: Metadata,
-                                         val models: Array[_ <: ClassificationModel[_, _]])
+    override val uid: String,
+    labelMetadata: Metadata,
+    val models: Array[_ <: ClassificationModel[_, _]])
   extends Model[OneVsRestModel] with OneVsRestParams {
 
   override def transformSchema(schema: StructType): StructType = {
