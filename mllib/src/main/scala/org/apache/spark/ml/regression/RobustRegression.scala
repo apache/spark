@@ -594,9 +594,9 @@ private class HuberCostFun(
     var regVal = 0.0
     if(diff < -k){
       regVal = -k * diff - 0.5 * pow(k, 2)
-    }else if(diff >= -k && diff <= k){
+    } else if (diff >= -k && diff <= k){
       regVal = 0.5 * norm * norm
-    }else {
+    } else {
       regVal = k * diff - 0.5 * pow(k, 2)
     }
 
