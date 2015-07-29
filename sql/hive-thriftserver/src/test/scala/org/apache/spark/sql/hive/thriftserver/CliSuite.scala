@@ -49,6 +49,17 @@ class CliSuite extends SparkFunSuite with BeforeAndAfter with Logging {
       metastorePath.delete()
   }
 
+  /**
+   * Run a CLI operation and expect all the queries and expected answers to be returned.
+   * @param timeout maximum time for the commands to complete
+   * @param extraArgs any extra arguments
+   * @param errorResponses a sequence of strings whose presence in the stdout of the forked process
+   *                       is taken as an immediate error condition. That is: if a line beginning
+   *                       with one of these strings is found, fail the test immediately.
+   *                       The default value is `Seq("Error:")`
+   *
+   * @param queriesAndExpectedAnswers one or more tupes of query + answer
+   */
   def runCliWithin(
       timeout: FiniteDuration,
       extraArgs: Seq[String] = Seq.empty,
@@ -84,7 +95,7 @@ class CliSuite extends SparkFunSuite with BeforeAndAfter with Logging {
           foundAllExpectedAnswers.trySuccess(())
         }
       } else {
-        errorResponses.map( r => {
+        errorResponses.foreach( r => {
           if (line.startsWith(r)) {
             foundAllExpectedAnswers.tryFailure(
               new RuntimeException(s"Failed with error line '$line'"))

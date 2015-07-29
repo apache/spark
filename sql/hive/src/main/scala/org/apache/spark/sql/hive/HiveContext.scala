@@ -535,16 +535,18 @@ private[hive] object HiveContext {
   val HIVE_METASTORE_VERSION: String = "spark.sql.hive.metastore.version"
   val HIVE_METASTORE_JARS = stringConf("spark.sql.hive.metastore.jars",
     defaultValue = Some("builtin"),
-    doc = s"Location of the jars that should be used to instantiate the HiveMetastoreClient. This" +
-      s" property can be one of three options: " +
-      "1. \"builtin\"" +
-       s" Use Hive ${hiveExecutionVersion}, which is bundled with the Spark assembly jar when " +
-      s"<code>-Phive</code> is enabled. When this option is chosen, " +
-      s"spark.sql.hive.metastore.version must be either <code>${hiveExecutionVersion}</code>" +
-        s" or not defined. " +
-      "2. \"maven\" Use Hive jars of specified version downloaded from Maven repositories." +
-      "3. A classpath in the standard format for both Hive and Hadoop.")
-
+    doc = s"""
+      | Location of the jars that should be used to instantiate the HiveMetastoreClient.
+      | This property can be one of three options: "
+      | 1. "builtin"
+      |   Use Hive ${hiveExecutionVersion}, which is bundled with the Spark assembly jar when
+      |   <code>-Phive</code> is enabled. When this option is chosen,
+      |   <code>spark.sql.hive.metastore.version</code> must be either
+      |   <code>${hiveExecutionVersion}</code> or not defined.
+      | 2. "maven"
+      |   Use Hive jars of specified version downloaded from Maven repositories.
+      | 3. A classpath in the standard format for both Hive and Hadoop.
+    """.stripMargin)
   val CONVERT_METASTORE_PARQUET = booleanConf("spark.sql.hive.convertMetastoreParquet",
     defaultValue = Some(true),
     doc = "When set to false, Spark SQL will use the Hive SerDe for parquet tables instead of " +

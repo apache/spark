@@ -31,6 +31,12 @@ import org.apache.spark.util.Utils
 abstract class ParquetCompatibilityTest extends QueryTest with ParquetTest with BeforeAndAfterAll {
   protected var parquetStore: File = _
 
+  /**
+   * Optional path to a staging subdirectory which may be created during query processing
+   * (Hive does this).
+   * Parquet files under this directory will be ignored in [[readParquetSchema()]]
+   * @return an optional staging directory to ignore when scanning for parquet files.
+   */
   protected def stagingDir: Option[String] = None
 
   override protected def beforeAll(): Unit = {

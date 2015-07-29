@@ -28,6 +28,10 @@ class ParquetHiveCompatibilitySuite extends ParquetCompatibilityTest {
 
   override val sqlContext: SQLContext = TestHive
 
+  /**
+   * Set the staging directory (and hence path to ignore Parquet files under)
+   * to that set by [[HiveConf.ConfVars.STAGINGDIR]].
+   */
   override val stagingDir: Option[String] =
     Some(new HiveConf().getVar(HiveConf.ConfVars.STAGINGDIR))
 
