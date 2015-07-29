@@ -108,7 +108,7 @@ class CodeGenContext {
       case _ if isPrimitiveType(jt) => s"$row.get${primitiveTypeName(jt)}($ordinal)"
       case StringType => s"$row.getUTF8String($ordinal)"
       case BinaryType => s"$row.getBinary($ordinal)"
-      case IntervalType => s"$row.getInterval($ordinal)"
+      case CalendarIntervalType => s"$row.getInterval($ordinal)"
       case t: StructType => s"$row.getStruct($ordinal, ${t.size})"
       case _ => s"($jt)$row.get($ordinal)"
     }
@@ -150,7 +150,7 @@ class CodeGenContext {
     case dt: DecimalType => "Decimal"
     case BinaryType => "byte[]"
     case StringType => "UTF8String"
-    case IntervalType => "Interval"
+    case CalendarIntervalType => "CalendarInterval"
     case _: StructType => "InternalRow"
     case _: ArrayType => s"scala.collection.Seq"
     case _: MapType => s"scala.collection.Map"
@@ -293,7 +293,7 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
       classOf[UnsafeRow].getName,
       classOf[UTF8String].getName,
       classOf[Decimal].getName,
-      classOf[Interval].getName
+      classOf[CalendarInterval].getName
     ))
     evaluator.setExtendedClass(classOf[GeneratedClass])
     try {
