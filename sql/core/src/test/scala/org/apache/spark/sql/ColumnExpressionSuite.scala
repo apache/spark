@@ -17,17 +17,20 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.sql.test.SQLTestUtils
 import org.scalatest.Matchers._
 
 import org.apache.spark.sql.execution.Project
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 
-class ColumnExpressionSuite extends QueryTest {
+class ColumnExpressionSuite extends QueryTest with SQLTestUtils {
   import org.apache.spark.sql.TestData._
 
   private lazy val ctx = org.apache.spark.sql.test.TestSQLContext
   import ctx.implicits._
+
+  override def sqlContext(): SQLContext = ctx
 
   test("alias") {
     val df = Seq((1, Seq(1, 2, 3))).toDF("a", "intList")
@@ -487,6 +490,16 @@ class ColumnExpressionSuite extends QueryTest {
       df.select(sparkPartitionId()),
       Row(0) :: Row(0) :: Row(1) :: Row(1) :: Nil
     )
+  }
+
+  test("InputFileName") {
+    withTempPath { dir =>
+      val data = sqlContext.sparkContext.parallelize(0 to 1000).toDF("id")
+      data.write.parquet(dir.getCanonicalPath)
+      val answer = sqlContext.read.parquet(dir.getCanonicalPath).select(inputFileName())
+        .head.getString(0)
+      assert(answer.contains(dir.getCanonicalPath))
+    }
   }
 
   test("lift alias out of cast") {

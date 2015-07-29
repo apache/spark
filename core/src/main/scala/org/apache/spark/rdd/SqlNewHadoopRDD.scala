@@ -15,12 +15,11 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution
+package org.apache.spark.rdd
 
 import java.text.SimpleDateFormat
 import java.util.Date
 
-import org.apache.spark.{Partition => SparkPartition, _}
 import org.apache.hadoop.conf.{Configurable, Configuration}
 import org.apache.hadoop.io.Writable
 import org.apache.hadoop.mapreduce._
@@ -31,16 +30,16 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.executor.DataReadMethod
 import org.apache.spark.mapreduce.SparkHadoopMapReduceUtil
 import org.apache.spark.rdd.NewHadoopRDD.NewHadoopMapPartitionsWithSplitRDD
-import org.apache.spark.rdd.{HadoopRDD, RDD}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.{SerializableConfiguration, Utils}
+import org.apache.spark.{Partition => SparkPartition, _}
 
 import scala.reflect.ClassTag
 
 private[spark] class SqlNewHadoopPartition(
     rddId: Int,
     val index: Int,
-    @transient rawSplit: InputSplit with Writable)
+    @transient val rawSplit: InputSplit with Writable)
   extends SparkPartition {
 
   val serializableHadoopSplit = new SerializableWritable(rawSplit)
@@ -62,7 +61,7 @@ private[spark] class SqlNewHadoopPartition(
  * changes based on [[org.apache.spark.rdd.HadoopRDD]]. In future, this functionality will be
  * folded into core.
  */
-private[sql] class SqlNewHadoopRDD[K, V](
+private[spark] class SqlNewHadoopRDD[K, V](
     @transient sc : SparkContext,
     broadcastedConf: Broadcast[SerializableConfiguration],
     @transient initDriverSideJobFuncOpt: Option[Job => Unit],
@@ -128,6 +127,12 @@ private[sql] class SqlNewHadoopRDD[K, V](
       val inputMetrics = context.taskMetrics
         .getInputMetricsForReadMethod(DataReadMethod.Hadoop)
 
+      // Sets the thread local variable for the file's name
+      split.serializableHadoopSplit.value match {
+        case fs: FileSplit => SqlNewHadoopRDD.setInputFileName(fs.getPath.toString)
+        case _ =>
+      }
+
       // Find a function that will return the FileSystem bytes read by this thread. Do this before
       // creating RecordReader, because RecordReader's constructor might read some bytes
       val bytesReadCallback = inputMetrics.bytesReadCallback.orElse {
@@ -187,6 +192,8 @@ private[sql] class SqlNewHadoopRDD[K, V](
           if (reader != null) {
             reader.close()
             reader = null
+
+            SqlNewHadoopRDD.unsetInputFileName()
 
             if (bytesReadCallback.isDefined) {
               inputMetrics.updateBytesRead()
@@ -250,6 +257,18 @@ private[sql] class SqlNewHadoopRDD[K, V](
 }
 
 private[spark] object SqlNewHadoopRDD {
+
+  private[this] val inputFileName: ThreadLocal[String] = new ThreadLocal[String]
+
+  def getInputFileName(): String = inputFileName.get()
+
+  private[spark] def setInputFileName(file: String) = inputFileName.set(file)
+
+  /**
+   * Unset the thread local input file name. Internal to Spark.
+   */
+  protected[spark] def unsetInputFileName(): Unit = inputFileName.remove()
+
   /**
    * Analogous to [[org.apache.spark.rdd.MapPartitionsRDD]], but passes in an InputSplit to
    * the given function rather than the index of the partition.
