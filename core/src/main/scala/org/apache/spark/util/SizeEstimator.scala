@@ -217,10 +217,10 @@ object SizeEstimator extends Logging {
     var arrSize: Long = alignSize(objectSize + INT_SIZE)
 
     if (elementClass.isPrimitive) {
-      arrSize += alignSize(length * primitiveSize(elementClass))
+      arrSize += alignSize(length.toLong * primitiveSize(elementClass))
       state.size += arrSize
     } else {
-      arrSize += alignSize(length * pointerSize)
+      arrSize += alignSize(length.toLong * pointerSize)
       state.size += arrSize
 
       if (length <= ARRAY_SIZE_FOR_SAMPLING) {
