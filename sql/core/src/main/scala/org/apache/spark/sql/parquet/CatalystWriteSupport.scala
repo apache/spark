@@ -157,28 +157,28 @@ private[parquet] class CatalystWriteSupport extends WriteSupport[InternalRow] wi
       case DecimalType.Fixed(precision, _) =>
         makeDecimalWriter(precision)
 
-      case structType: StructType =>
-        val fieldWriters = structType.map(_.dataType).map(makeWriter)
+      case t: StructType =>
+        val fieldWriters = t.map(_.dataType).map(makeWriter)
         (row: InternalRow, ordinal: Int) =>
-          consumeGroup {
-            val struct = row.getStruct(ordinal, structType.length)
-            writeFields(struct, structType, fieldWriters)
-          }
+          consumeGroup(writeFields(row.getStruct(ordinal, t.length), t, fieldWriters))
 
-      case arrayType: ArrayType if followParquetFormatSpec =>
-        makeStandardArrayWriter(arrayType.elementType)
+      case ArrayType(elementType, _) if followParquetFormatSpec =>
+        makeThreeLevelArrayWriter(elementType, "list", "element")
 
-      case arrayType: ArrayType if !followParquetFormatSpec =>
-        makeLegacyArrayWriter(arrayType.elementType, arrayType.containsNull)
+      case ArrayType(elementType, true) if !followParquetFormatSpec =>
+        makeThreeLevelArrayWriter(elementType, "bag", "array")
 
-      case mapType: MapType if followParquetFormatSpec =>
-        makeMapWriter(mapType.keyType, mapType.valueType, "key_value")
+      case ArrayType(elementType, false) if !followParquetFormatSpec =>
+        makeTwoLevelArrayWriter(elementType, "array")
 
-      case mapType: MapType if !followParquetFormatSpec =>
-        makeMapWriter(mapType.keyType, mapType.valueType, "map")
+      case t: MapType if followParquetFormatSpec =>
+        makeMapWriter(t, "key_value")
 
-      case udt: UserDefinedType[_] =>
-        makeWriter(udt.sqlType)
+      case t: MapType if !followParquetFormatSpec =>
+        makeMapWriter(t, "map")
+
+      case t: UserDefinedType[_] =>
+        makeWriter(t.sqlType)
 
       case _ =>
         sys.error(s"Unsupported data type $dataType.")
@@ -202,9 +202,9 @@ private[parquet] class CatalystWriteSupport extends WriteSupport[InternalRow] wi
 
     val binaryWriterUsingUnscaledLong =
       (row: InternalRow, ordinal: Int) => {
-        // This writer converts underlying unscaled Long value to raw bytes using a reusable byte
-        // array to minimize array allocation.
-
+        // When the precision is low enough (<= 18) to squeeze the decimal value into a `Long`, we
+        // can build a fixed-length byte array with length `numBytes` using the unscaled `Long`
+        // value and the `decimalBuffer` for better performance.
         val unscaled = row.getDecimal(ordinal).toUnscaledLong
         var i = 0
         var shift = 8 * (numBytes - 1)
@@ -220,18 +220,22 @@ private[parquet] class CatalystWriteSupport extends WriteSupport[InternalRow] wi
 
     val binaryWriterUsingUnscaledBytes =
       (row: InternalRow, ordinal: Int) => {
-        val decimal = row.getDecimal(ordinal)
-        val bytes = decimal.toJavaBigDecimal.unscaledValue().toByteArray
-        val binary = if (bytes.length == numBytes) {
+        val bytes = row.getDecimal(ordinal).toJavaBigDecimal.unscaledValue().toByteArray
+        val fixedLengthBytes = if (bytes.length == numBytes) {
+          // If the length of the underlying byte array of the unscaled `BigInteger` happens to be
+          // `numBytes`, just reuse it, so that we don't bother copying it to `decimalBuffer`.
           bytes
         } else {
+          // Otherwise, the length must be less than `numBytes`.  In this case we copy contents of
+          // the underlying bytes with enough sign bytes to `decimalBuffer` to form the result
+          // fixed-length byte array.
           val signByte = if (bytes.head < 0) -1: Byte else 0: Byte
           util.Arrays.fill(decimalBuffer, 0, numBytes - bytes.length, signByte)
           System.arraycopy(bytes, 0, decimalBuffer, numBytes - bytes.length, bytes.length)
           decimalBuffer
         }
 
-        recordConsumer.addBinary(Binary.fromByteArray(binary, 0, numBytes))
+        recordConsumer.addBinary(Binary.fromByteArray(fixedLengthBytes, 0, numBytes))
       }
 
     followParquetFormatSpec match {
@@ -251,30 +255,14 @@ private[parquet] class CatalystWriteSupport extends WriteSupport[InternalRow] wi
     }
   }
 
-  private def makeStandardArrayWriter(elementType: DataType): ValueWriter = {
-    makeThreeLevelArrayWriter(elementType, "list", "element")
-  }
-
-  private def makeLegacyArrayWriter(
-      elementType: DataType,
-      containsNull: Boolean): ValueWriter = {
-    if (containsNull) {
-      makeThreeLevelArrayWriter(elementType, "bag", "array")
-    } else {
-      makeTwoLevelArrayWriter(elementType, "array")
-    }
-  }
-
   private def makeThreeLevelArrayWriter(
-      elementType: DataType,
-      repeatedGroupName: String,
-      elementFieldName: String): ValueWriter = {
+      elementType: DataType, repeatedGroupName: String, elementFieldName: String): ValueWriter = {
     val elementWriter = makeWriter(elementType)
     val mutableRow = new SpecificMutableRow(elementType :: Nil)
 
     (row: InternalRow, ordinal: Int) => {
       consumeGroup {
-        val array = row.get(ordinal).asInstanceOf[Seq[_]]
+        val array = row.genericGet(ordinal).asInstanceOf[Seq[_]]
         if (array.nonEmpty) {
           consumeField(repeatedGroupName, 0) {
             var i = 0
@@ -294,14 +282,13 @@ private[parquet] class CatalystWriteSupport extends WriteSupport[InternalRow] wi
   }
 
   private def makeTwoLevelArrayWriter(
-      elementType: DataType,
-      repeatedFieldName: String): ValueWriter = {
+      elementType: DataType, repeatedFieldName: String): ValueWriter = {
     val elementWriter = makeWriter(elementType)
     val mutableRow = new SpecificMutableRow(elementType :: Nil)
 
     (row: InternalRow, ordinal: Int) => {
       consumeGroup {
-        val array = row.get(ordinal).asInstanceOf[Seq[_]]
+        val array = row.genericGet(ordinal).asInstanceOf[Seq[_]]
         if (array.nonEmpty) {
           consumeField(repeatedFieldName, 0) {
             var i = 0
@@ -316,17 +303,14 @@ private[parquet] class CatalystWriteSupport extends WriteSupport[InternalRow] wi
     }
   }
 
-  private def makeMapWriter(
-      keyType: DataType,
-      valueType: DataType,
-      repeatedGroupName: String): ValueWriter = {
-    val keyWriter = makeWriter(keyType)
-    val valueWriter = makeWriter(valueType)
-    val mutableRow = new SpecificMutableRow(keyType :: valueType :: Nil)
+  private def makeMapWriter(mapType: MapType, repeatedGroupName: String): ValueWriter = {
+    val keyWriter = makeWriter(mapType.keyType)
+    val valueWriter = makeWriter(mapType.valueType)
+    val mutableRow = new SpecificMutableRow(mapType.keyType :: mapType.valueType :: Nil)
 
     (row: InternalRow, ordinal: Int) => {
       consumeGroup {
-        val map = row.get(ordinal).asInstanceOf[Map[_, _]]
+        val map = row.get(ordinal, mapType).asInstanceOf[Map[_, _]]
         if (map.nonEmpty) {
           consumeField(repeatedGroupName, 0) {
             for ((key, value) <- map) {
