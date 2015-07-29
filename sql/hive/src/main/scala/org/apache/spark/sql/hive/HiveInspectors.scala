@@ -52,9 +52,8 @@ import scala.collection.JavaConversions._
  *     java.sql.Timestamp
  *  Complex Types =>
  *    Map: scala.collection.immutable.Map
- *    List: scala.collection.immutable.Seq
- *    Struct:
- *           [[org.apache.spark.sql.catalyst.InternalRow]]
+ *    List: [[org.apache.spark.sql.types.ArrayData]]
+ *    Struct: [[org.apache.spark.sql.catalyst.InternalRow]]
  *    Union: NOT SUPPORTED YET
  *  The Complex types plays as a container, which can hold arbitrary data types.
  *
@@ -297,7 +296,10 @@ private[hive] trait HiveInspectors {
       }.toMap
     case li: StandardConstantListObjectInspector =>
       // take the value from the list inspector object, rather than the input data
-      li.getWritableConstantValue.map(unwrap(_, li.getListElementObjectInspector)).toSeq
+      val values = li.getWritableConstantValue
+        .map(unwrap(_, li.getListElementObjectInspector))
+        .toArray
+      new GenericArrayData(values)
     // if the value is null, we don't care about the object inspector type
     case _ if data == null => null
     case poi: VoidObjectInspector => null // always be null for void object inspector
@@ -339,7 +341,10 @@ private[hive] trait HiveInspectors {
     }
     case li: ListObjectInspector =>
       Option(li.getList(data))
-        .map(_.map(unwrap(_, li.getListElementObjectInspector)).toSeq)
+        .map { l =>
+          val values = l.map(unwrap(_, li.getListElementObjectInspector)).toArray
+          new GenericArrayData(values)
+        }
         .orNull
     case mi: MapObjectInspector =>
       Option(mi.getMap(data)).map(
@@ -391,7 +396,13 @@ private[hive] trait HiveInspectors {
 
     case loi: ListObjectInspector =>
       val wrapper = wrapperFor(loi.getListElementObjectInspector)
-      (o: Any) => if (o != null) seqAsJavaList(o.asInstanceOf[Seq[_]].map(wrapper)) else null
+      (o: Any) => {
+        if (o != null) {
+          seqAsJavaList(o.asInstanceOf[ArrayData].toArray().map(wrapper))
+        } else {
+          null
+        }
+      }
 
     case moi: MapObjectInspector =>
       // The Predef.Map is scala.collection.immutable.Map.

@@ -591,8 +591,8 @@ private[hive] object HiveContext {
       struct.toSeq.zip(fields).map {
         case (v, t) => s""""${t.name}":${toHiveStructString(v, t.dataType)}"""
       }.mkString("{", ",", "}")
-    case (array: ArrayData, ArrayType(typ, _)) =>
-      array.toArray().map(v => (v, typ)).map(toHiveStructString).mkString("[", ",", "]")
+    case (seq: Seq[_], ArrayType(typ, _)) =>
+      seq.map(v => (v, typ)).map(toHiveStructString).mkString("[", ",", "]")
     case (map: Map[_, _], MapType(kType, vType, _)) =>
       map.map {
         case (key, value) =>
@@ -614,8 +614,8 @@ private[hive] object HiveContext {
       struct.toSeq.zip(fields).map {
         case (v, t) => s""""${t.name}":${toHiveStructString(v, t.dataType)}"""
       }.mkString("{", ",", "}")
-    case (array: ArrayData, ArrayType(typ, _)) =>
-      array.toArray().map(v => (v, typ)).map(toHiveStructString).mkString("[", ",", "]")
+    case (seq: Seq[_], ArrayType(typ, _)) =>
+      seq.map(v => (v, typ)).map(toHiveStructString).mkString("[", ",", "]")
     case (map: Map[_, _], MapType(kType, vType, _)) =>
       map.map {
         case (key, value) =>
