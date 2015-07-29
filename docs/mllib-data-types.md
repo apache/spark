@@ -376,23 +376,22 @@ long n = mat.numCols();
 <div data-lang="python" markdown="1">
 
 A [`RowMatrix`](api/python/pyspark.mllib.html#pyspark.mllib.linalg.RowMatrix) can be created from 
-an `RDD` of Vectors.
+an `RDD` of vectors.
 
 {% highlight python %}
-from pyspark.mllib.linalg import RowMatrix, Vectors
+from pyspark.mllib.linalg import RowMatrix
 
-# Create an RDD of Vectors.
-rows = sc.parallelize([Vectors.dense([1, 2, 3]), Vectors.dense([4, 5, 6]), 
-                       Vectors.dense([7, 8, 9]), Vectors.dense([10, 11, 12])])
+# Create an RDD of vectors.
+rows = sc.parallelize([[1, 2, 3], [4, 5, 6], [7, 8, 9], [10, 11, 12]])
 
-# Create a RowMatrix from an RDD[Vector].
+# Create a RowMatrix from an RDD of vectors.
 mat = RowMatrix(rows)
 
 # Get its size.
 m = mat.numRows()  # 4
 n = mat.numCols()  # 3
 
-# Get the rows as an RDD of Vectors again.
+# Get the rows as an RDD of vectors again.
 rowsRDD = mat.rows
 {% endhighlight %}
 </div>
@@ -462,25 +461,25 @@ RowMatrix rowMat = mat.toRowMatrix();
 <div data-lang="python" markdown="1">
 
 An [`IndexedRowMatrix`](api/python/pyspark.mllib.html#pyspark.mllib.linalg.IndexedRowMatrix) can be
-created from an `RDD` of IndexedRows, where 
+created from an `RDD` of `IndexedRow`s, where 
 [`IndexedRow`](api/python/pyspark.mllib.html#pyspark.mllib.linalg.IndexedRow) is a wrapper over 
-`(long, Vector)`.  An `IndexedRowMatrix` can be converted to a `RowMatrix` by dropping its row 
+`(long, vector)`.  An `IndexedRowMatrix` can be converted to a `RowMatrix` by dropping its row 
 indices.
 
 {% highlight python %}
-from pyspark.mllib.linalg import IndexedRowMatrix, IndexedRow, Vectors
+from pyspark.mllib.linalg import IndexedRowMatrix, IndexedRow
 
 # Create an RDD of indexed rows.
 #   - This can be done explicitly with the IndexedRow class:
-indexedRows = sc.parallelize([IndexedRow(0, Vectors.dense([1, 2, 3])), 
-                              IndexedRow(1, Vectors.dense([4, 5, 6])), 
-                              IndexedRow(2, Vectors.dense([7, 8, 9])), 
-                              IndexedRow(3, Vectors.dense([10, 11, 12]))])
-#   - or by using (long, Vector) tuples:
-indexedRows = sc.parallelize([(0, Vectors.dense([1, 2, 3])), (1, Vectors.dense([4, 5, 6])), 
-                              (2, Vectors.dense([7, 8, 9])), (3, Vectors.dense([10, 11, 12]))])
+indexedRows = sc.parallelize([IndexedRow(0, [1, 2, 3]), 
+                              IndexedRow(1, [4, 5, 6]), 
+                              IndexedRow(2, [7, 8, 9]), 
+                              IndexedRow(3, [10, 11, 12])])
+#   - or by using (long, vector) tuples:
+indexedRows = sc.parallelize([(0, [1, 2, 3]), (1, [4, 5, 6]), 
+                              (2, [7, 8, 9]), (3, [10, 11, 12])])
 
-# Create an IndexedRowMatrix from an RDD[IndexedRow].
+# Create an IndexedRowMatrix from an RDD of IndexedRows.
 mat = IndexedRowMatrix(indexedRows)
 
 # Get its size.
@@ -566,7 +565,7 @@ IndexedRowMatrix indexedRowMatrix = mat.toIndexedRowMatrix();
 <div data-lang="python" markdown="1">
 
 A [`CoordinateMatrix`](api/python/pyspark.mllib.html#pyspark.mllib.linalg.CoordinateMatrix) can be 
-created from an `RDD` of MatrixEntry entries, where 
+created from an `RDD` of `MatrixEntry` entries, where 
 [`MatrixEntry`](api/python/pyspark.mllib.html#pyspark.mllib.linalg.MatrixEntry) is a wrapper over 
 `(long, long, float)`.  A `CoordinateMatrix` can be converted to a `RowMatrix` by calling 
 `toRowMatrix`, or to an `IndexedRowMatrix` with sparse rows by calling `toIndexedRowMatrix`.
@@ -580,14 +579,14 @@ entries = sc.parallelize([MatrixEntry(0, 0, 1.2), MatrixEntry(1, 0, 2.1), Matrix
 #   - or using (long, long, float) tuples:
 entries = sc.parallelize([(0, 0, 1.2), (1, 0, 2.1), (2, 1, 3.7)])
 
-# Create an CoordinateMatrix from an RDD[MatrixEntry].
+# Create an CoordinateMatrix from an RDD of MatrixEntries.
 mat = CoordinateMatrix(entries)
 
 # Get its size.
 m = mat.numRows()  # 3
 n = mat.numCols()  # 2
 
-# Get the entries as an RDD of MatrixEntry.
+# Get the entries as an RDD of MatrixEntries.
 entriesRDD = mat.entries
 
 # Convert to a RowMatrix.

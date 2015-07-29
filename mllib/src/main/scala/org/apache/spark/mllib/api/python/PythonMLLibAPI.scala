@@ -1110,8 +1110,8 @@ private[python] class PythonMLLibAPI extends Serializable {
    * Wrapper around IndexedRowMatrix constructor.
    */
   def createIndexedRowMatrix(rows: DataFrame, numRows: Long, numCols: Int): IndexedRowMatrix = {
-    // We use DataFrames for serialization of IndexedRows from Python, so map each Row in the
-    // DataFrame back to an IndexedRow.
+    // We use DataFrames for serialization of IndexedRows from Python,
+    // so map each Row in the DataFrame back to an IndexedRow.
     val indexedRows = rows.map {
       case Row(index: Long, vector: Vector) => IndexedRow(index, vector)
     }
@@ -1122,8 +1122,8 @@ private[python] class PythonMLLibAPI extends Serializable {
    * Wrapper around CoordinateMatrix constructor.
    */
   def createCoordinateMatrix(rows: DataFrame, numRows: Long, numCols: Long): CoordinateMatrix = {
-    // We use DataFrames for serialization of MatrixEntry entries from Python, so map each Row in
-    // the DataFrame back to a MatrixEntry.
+    // We use DataFrames for serialization of MatrixEntry entries from
+    // Python, so map each Row in the DataFrame back to a MatrixEntry.
     val entries = rows.map {
       case Row(i: Long, j: Long, value: Double) => MatrixEntry(i, j, value)
     }
@@ -1134,7 +1134,8 @@ private[python] class PythonMLLibAPI extends Serializable {
    * Return the rows of an IndexedRowMatrix.
    */
   def getIndexedRows(indexedRowMatrix: IndexedRowMatrix): DataFrame = {
-    // We use DataFrames for serialization of IndexedRows to Python, so return a DataFrame.
+    // We use DataFrames for serialization of IndexedRows to Python,
+    // so return a DataFrame.
     val sqlContext = SQLContext.getOrCreate(SparkContext.getOrCreate())
     sqlContext.createDataFrame(indexedRowMatrix.rows)
   }
@@ -1143,7 +1144,8 @@ private[python] class PythonMLLibAPI extends Serializable {
    * Return the entries of a CoordinateMatrix.
    */
   def getMatrixEntries(coordinateMatrix: CoordinateMatrix): DataFrame = {
-    // We use DataFrames for serialization of MatrixEntry entries to Python, so return a DataFrame.
+    // We use DataFrames for serialization of MatrixEntry entries to
+    // Python, so return a DataFrame.
     val sqlContext = SQLContext.getOrCreate(SparkContext.getOrCreate())
     sqlContext.createDataFrame(coordinateMatrix.entries)
   }

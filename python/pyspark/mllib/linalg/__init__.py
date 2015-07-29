@@ -1444,7 +1444,7 @@ class CoordinateMatrix(DistributedMatrix):
 
     @staticmethod
     def _from_java(javaCoordinateMatrix):
-        """Create a PySpark IndexedRowMatrix from a Java IndexedRowMatrix object."""
+        """Create a PySpark CoordinateMatrix from a Java CoordinateMatrix object."""
         # We use DataFrames for serialization of MatrixEntry entries
         # from Java, so we first convert the RDD of entries to a
         # DataFrame on the Scala/Java side. Then we map each Row in
