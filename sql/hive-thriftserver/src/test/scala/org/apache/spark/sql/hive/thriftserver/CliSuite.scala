@@ -112,13 +112,22 @@ class CliSuite extends SparkFunSuite with BeforeAndAfter with Logging {
       var exitValue = 0
 
       override def run(): Unit = {
-        exitValue = process.exitValue()
+        try {
+          exitValue = process.exitValue()
+        } catch {
+          case rte: RuntimeException =>
+            // ignored as it will get triggered when the process gets destroyed
+            logDebug("Ignoring exception while waiting for exit code", rte)
+        }
         if (exitValue != 0) {
+          // process exited: fail fast
           foundAllExpectedAnswers.tryFailure(
             new RuntimeException(s"Failed with exit code $exitValue"))
         }
       }
     }
+    // spin off the code catche thread. No attempt is made to kill this
+    // as it will exit once the launched process terminates.
     val codeCatcherThread = new Thread(new exitCodeCatcher())
     codeCatcherThread.start()
 
