@@ -18,9 +18,13 @@
 package org.apache.spark.mllib.pmml.export
 
 import org.apache.spark.mllib.tree.model.DecisionTreeModel
-import org.dmg.pmml.{Extension, DataDictionary, TreeModel}
+import org.dmg.pmml.DataDictionary
+
 import scala.collection.JavaConverters._
 
+/**
+ * PMML Model Export for DecisionTreeModel class
+ */
 private[mllib] class DecisionTreePMMLModelExport(model: DecisionTreeModel) extends PMMLModelExport {
 
   val ModelName = "decision-tree"
