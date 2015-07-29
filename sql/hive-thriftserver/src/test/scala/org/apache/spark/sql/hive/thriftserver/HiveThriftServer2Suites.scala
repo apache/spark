@@ -565,12 +565,12 @@ abstract class HiveThriftServer2Test extends SparkFunSuite with BeforeAndAfterAl
       Process(s"/usr/bin/env tail -n +0 -f ${logPath.getCanonicalPath}").run(ProcessLogger(
         (line: String) => {
           diagnosisBuffer += line
-          successLines.map(r => {
+          successLines.foreach(r => {
             if (line.contains(r)) {
               serverStarted.trySuccess(())
             }
           })
-          failureLines.map(r => {
+          failureLines.foreach(r => {
             if (line.contains(r)) {
               serverStarted.tryFailure(new RuntimeException(s"Failed with output '$line'"))
             }

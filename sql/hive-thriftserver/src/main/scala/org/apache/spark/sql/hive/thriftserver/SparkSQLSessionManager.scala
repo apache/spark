@@ -61,8 +61,8 @@ private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2, hiveContext:
       withImpersonation: Boolean,
       delegationToken: String): SessionHandle = {
     hiveContext.openSession()
-    val sessionHandle = super
-        .openSession(protocol, username, passwd, ipAddress, sessionConf, withImpersonation,
+    val sessionHandle =
+      super.openSession(protocol, username, passwd, ipAddress, sessionConf, withImpersonation,
           delegationToken)
     val session = super.getSession(sessionHandle)
     HiveThriftServer2.listener.onSessionCreated(
