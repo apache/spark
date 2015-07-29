@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions;
 
 import org.apache.spark.sql.catalyst.InternalRow;
+import org.apache.spark.sql.types.Decimal;
 import org.apache.spark.unsafe.PlatformDependent;
 import org.apache.spark.unsafe.array.ByteArrayMethods;
 import org.apache.spark.unsafe.types.ByteArray;
@@ -137,6 +138,24 @@ public class UnsafeRowWriters {
       // Write the months and microseconds fields of Interval to the variable length portion.
       PlatformDependent.UNSAFE.putLong(target.getBaseObject(), offset, input.months);
       PlatformDependent.UNSAFE.putLong(target.getBaseObject(), offset + 8, input.microseconds);
+
+      // Set the fixed length portion.
+      target.setLong(ordinal, ((long) cursor) << 32);
+      return 16;
+    }
+  }
+
+  /** Writer for decimal type. */
+  public static class DecimalWriter {
+
+    public static int write(UnsafeRow target, int ordinal, int cursor, Decimal input) {
+      final long offset = target.getBaseOffset() + cursor;
+
+      // Write the unscaled long, precision and scale fields of Decimal to
+      // the variable length portion.
+      PlatformDependent.UNSAFE.putLong(target.getBaseObject(), offset, input.toUnscaledLong());
+      PlatformDependent.UNSAFE.putInt(target.getBaseObject(), offset + 8, input.precision());
+      PlatformDependent.UNSAFE.putInt(target.getBaseObject(), offset + 12, input.scale());
 
       // Set the fixed length portion.
       target.setLong(ordinal, ((long) cursor) << 32);

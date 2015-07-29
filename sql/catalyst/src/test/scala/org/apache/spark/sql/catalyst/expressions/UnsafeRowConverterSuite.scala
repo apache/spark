@@ -82,8 +82,9 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers {
     assert(unsafeRow.getBinary(2) === "World".getBytes)
   }
 
-  test("basic conversion with primitive, string, date and timestamp types") {
-    val fieldTypes: Array[DataType] = Array(LongType, StringType, DateType, TimestampType)
+  test("basic conversion with primitive, string, date, timestamp and decimal types") {
+    val fieldTypes: Array[DataType] = Array(LongType, StringType, DateType, TimestampType,
+      DecimalType())
     val converter = UnsafeProjection.create(fieldTypes)
 
     val row = new SpecificMutableRow(fieldTypes)
@@ -91,10 +92,11 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers {
     row.setString(1, "Hello")
     row.update(2, DateTimeUtils.fromJavaDate(Date.valueOf("1970-01-01")))
     row.update(3, DateTimeUtils.fromJavaTimestamp(Timestamp.valueOf("2015-05-08 08:10:25")))
+    row.update(4, Decimal(1234, 10, 2))
 
     val unsafeRow: UnsafeRow = converter.apply(row)
-    assert(unsafeRow.getSizeInBytes === 8 + (8 * 4) +
-      ByteArrayMethods.roundNumberOfBytesToNearestWord("Hello".getBytes.length))
+    assert(unsafeRow.getSizeInBytes === 8 + (8 * 5) +
+      ByteArrayMethods.roundNumberOfBytesToNearestWord("Hello".getBytes.length) + 16)
 
     assert(unsafeRow.getLong(0) === 0)
     assert(unsafeRow.getString(1) === "Hello")
@@ -103,6 +105,7 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers {
     // Timestamp is represented as Long in unsafeRow
     DateTimeUtils.toJavaTimestamp(unsafeRow.getLong(3)) should be
     (Timestamp.valueOf("2015-05-08 08:10:25"))
+    assert(unsafeRow.getDecimal(4) === Decimal(1234, 10, 2))
 
     unsafeRow.setInt(2, DateTimeUtils.fromJavaDate(Date.valueOf("2015-06-22")))
     assert(DateTimeUtils.toJavaDate(unsafeRow.getInt(2)) === Date.valueOf("2015-06-22"))
