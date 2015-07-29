@@ -34,6 +34,8 @@ private[sql] class MyDenseVector(val data: Array[Double]) extends Serializable {
   override def equals(other: Any): Boolean = other match {
     case v: MyDenseVector =>
       java.util.Arrays.equals(this.data, v.data)
+    case a: Array[Double] =>
+      java.util.Arrays.equals(this.data, a)
     case _ => false
   }
 }
@@ -58,6 +60,8 @@ private[sql] class MyDenseVectorUDT extends UserDefinedType[MyDenseVector] {
     datum match {
       case data: Seq[_] =>
         new MyDenseVector(data.asInstanceOf[Seq[Double]].toArray)
+      case data: MyDenseVector =>
+        data
     }
   }
 
@@ -137,5 +141,25 @@ class UserDefinedTypeSuite extends QueryTest {
 
     val actual = openHashSetUDT.deserialize(openHashSetUDT.serialize(set))
     assert(actual.iterator.toSet === set.iterator.toSet)
+  }
+
+  test("UDTs with JSON") {
+    val data = Seq(
+      "{\"id\":1,\"vec\":[1.1,2.2,3.3,4.4]}",
+      "{\"id\":2,\"vec\":[2.25,4.5,8.75]}"
+    )
+    val schema = StructType(Seq(
+      StructField("id", IntegerType, false),
+      StructField("vec", new MyDenseVectorUDT, false)
+    ))
+
+    val stringRDD = ctx.sparkContext.parallelize(data)
+    val jsonRDD = ctx.read.schema(schema).json(stringRDD)
+    checkAnswer(
+      jsonRDD,
+      Row(1, new MyDenseVector(Array(1.1, 2.2, 3.3, 4.4))) ::
+        Row(2, new MyDenseVector(Array(2.25, 4.5, 8.75))) ::
+        Nil
+    )
   }
 }
