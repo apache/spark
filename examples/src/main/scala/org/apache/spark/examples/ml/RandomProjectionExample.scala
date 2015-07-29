@@ -137,6 +137,7 @@ object RandomProjectionExample {
     val metrics = new BinaryClassificationMetrics(scoreAndLabel)
 
     // how 'good' is the model?
+    // scalastyle:off println
     println(s"aucROC: ${metrics.areaUnderROC()}")
   }
 

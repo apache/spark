@@ -28,7 +28,7 @@ import org.apache.spark.{SparkConf, SparkContext}
  *
  * Run with
  * {{{
- * bin/run-example ml.RandomProjectionExample
+ * bin/run-example mllib.RandomProjectionExample
  * }}}
  */
 object RandomProjectionExample {
@@ -43,7 +43,9 @@ object RandomProjectionExample {
     val rp = new RandomProjection(newDimension)
     val randomMatrix = rp.computeRPMatrix(sc, response.dimension).transpose
     val reduced = randomMatrix.multiply(response.data.transpose).transpose
+    // scalastyle:off println
     println(reduced.numRows())
+    // scalastyle:off println
     println(reduced.numCols())
   }
 }
