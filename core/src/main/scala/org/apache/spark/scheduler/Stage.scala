@@ -96,7 +96,7 @@ private[scheduler] abstract class Stage(
 
   /**
    * Check whether we should abort the failedStage due to multiple consecutive fetch failures.
-   * 
+   *
    * This method updates the running set of failed stage attempts and returns
    * true if the number of failures exceeds the allowable number of failures.
    */
