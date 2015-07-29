@@ -277,6 +277,8 @@ case class LastDay(startDate: Expression) extends UnaryExpression with ImplicitC
  */
 case class ToDate(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
 
+  // Implicit casting of spark will accept string in both date and timestamp format, as
+  // well as TimestampType.
   override def inputTypes: Seq[AbstractDataType] = Seq(DateType)
 
   override def dataType: DataType = DateType
@@ -361,37 +363,76 @@ case class Trunc(date: Expression, format: Expression)
   override def inputTypes: Seq[AbstractDataType] = Seq(DateType, StringType)
   override def dataType: DataType = DateType
 
-  override def nullSafeEval(d: Any, fmt: Any): Any = {
-    val minItem = DateTimeUtils.getFmt(fmt.asInstanceOf[UTF8String])
-    if (minItem == -1) {
-      // unknown format
-      null
-    } else {
-      val days = d.asInstanceOf[Int]
-      if (minItem == Calendar.YEAR) {
-        days - DateTimeUtils.getDayInYear(days) + 1
+  lazy val constFmt = format.eval().asInstanceOf[UTF8String]
+
+  override def eval(input: InternalRow): Any = {
+    if (format.foldable) {
+      val minItem = DateTimeUtils.getFmt(constFmt)
+      if (minItem == -1) {
+        // unknown format
+        null
       } else {
-        // trunc to MONTH
-        days - DateTimeUtils.getDayOfMonth(days) + 1
+        val d = date.eval(input)
+        if (d == null) {
+          null
+        } else {
+          DateTimeUtils.dateTrunc(d.asInstanceOf[Int], minItem)
+        }
+      }
+    } else {
+      val fmt = format.eval(input).asInstanceOf[UTF8String]
+      val d = date.eval(input)
+      if (d == null) {
+        null
+      } else {
+        val minItem = DateTimeUtils.getFmt(fmt)
+        if (minItem == -1) {
+          // unknown format
+          null
+        } else {
+          DateTimeUtils.dateTrunc(d.asInstanceOf[Int], minItem)
+        }
       }
     }
   }
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    nullSafeCodeGen(ctx, ev, (dateVal, fmt) => {
-      val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
-      val form = ctx.freshName("form")
-      s"""
-        int $form = $dtu.getFmt($fmt);
-        if ($form == ${Calendar.YEAR}) {
-          ${ev.primitive} = $dateVal - $dtu.getDayInYear($dateVal) + 1;
-        } else if ($form == ${Calendar.MONTH}) {
-          ${ev.primitive} = $dateVal - $dtu.getDayInYear($dateVal) + 1;
-        } else {
-          ${ev.isNull} = true;
-        }
-      """
-    })
+    val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
+    if (date.foldable) {
+      val d = date.gen(ctx)
+      val minItem = DateTimeUtils.getFmt(constFmt)
+      if (d == null || minItem == -1) {
+        s"""
+          boolean ${ev.isNull} = true;
+          ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
+        """
+      } else {
+        s"""
+          ${d.code}
+          boolean ${ev.isNull} = ${d.isNull};
+          ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
+          if (!${ev.isNull}) {
+            if ($minItem == -1) {
+              ${ev.isNull} = true;
+            } else {
+              ${ev.primitive} = $dtu.dateTrunc(${d.primitive}, $minItem);
+            }
+          }
+        """
+      }
+    } else {
+      nullSafeCodeGen(ctx, ev, (dateVal, fmt) => {
+        val form = ctx.freshName("form")
+        s"""
+          int $form = $dtu.getFmt($fmt);
+          if ($form == -1) {
+            ${ev.isNull} = true;
+          } else {
+            ${ev.primitive} = $dtu.dateTrunc($dateVal, $form);
+          }
+        """
+      })
+    }
   }
 
 }

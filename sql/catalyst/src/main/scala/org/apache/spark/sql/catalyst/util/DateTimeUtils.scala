@@ -642,15 +642,33 @@ object DateTimeUtils {
   }
 
   /**
-   * Returns the truncate level, could be [[Calendar.MONTH]]/[[Calendar.YEAR]]/-1
+   * Returns the trunc date from original date and trunc level.
+   * Trunc level should be generated using `this.getFmt()`.
+   */
+  def dateTrunc(d: Int, minItem: Int): Int = {
+    if (minItem == 2) {
+      // trunc to year
+      d - DateTimeUtils.getDayInYear(d) + 1
+    } else {
+      // trunc to MONTH
+      d - DateTimeUtils.getDayOfMonth(d) + 1
+    }
+  }
+
+  /**
+   * Returns the truncate level, could be 1 for month, 2 for year, -1 for invalid/null
    * -1 means unsupported truncate level.
    */
   def getFmt(string: UTF8String): Int = {
-    val fmtString = string.toString.toUpperCase
-    fmtString match {
-      case "MON" | "MONTH" | "MM" => Calendar.MONTH
-      case "YEAR"| "YYYY" | "YY" => Calendar.YEAR
-      case _ => -1
+    if (string == null) {
+      -1
+    } else {
+      val fmtString = string.toString.toUpperCase
+      fmtString match {
+        case "MON" | "MONTH" | "MM" => 1
+        case "YEAR" | "YYYY" | "YY" => 2
+        case _ => -1
+      }
     }
   }
 }
