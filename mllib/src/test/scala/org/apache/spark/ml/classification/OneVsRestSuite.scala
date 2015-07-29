@@ -31,7 +31,6 @@ import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.types.Metadata
-import org.apache.spark.sql.Row
 
 class OneVsRestSuite extends SparkFunSuite with MLlibTestSparkContext {
 
@@ -111,7 +110,8 @@ class OneVsRestSuite extends SparkFunSuite with MLlibTestSparkContext {
     val ovr = new OneVsRest()
       .setClassifier(logReg)
     val output = ovr.fit(dataset).transform(dataset)
-    assert(output.schema.fieldNames.toSet === Set("label", "features", "prediction", "rawPrediction"))
+    assert(output.schema.fieldNames.toSet === Set("label", "features", "prediction",
+      "rawPrediction"))
   }
 
   test("OneVsRest.copy and OneVsRestModel.copy") {

@@ -19,20 +19,19 @@ package org.apache.spark.ml.classification
 
 import java.util.UUID
 
-import org.apache.spark.ml.param.shared.HasRawPredictionCol
-
-import scala.language.existentials
-
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.ml._
 import org.apache.spark.ml.attribute._
+import org.apache.spark.ml.param.shared.HasRawPredictionCol
 import org.apache.spark.ml.param.{Param, ParamMap}
 import org.apache.spark.ml.util.{Identifiable, MetadataUtils}
 import org.apache.spark.mllib.linalg.Vector
-import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.storage.StorageLevel
+
+import scala.language.existentials
 
 /**
  * Params for [[OneVsRest]].
@@ -72,9 +71,9 @@ private[ml] trait OneVsRestParams extends PredictorParams with HasRawPredictionC
  */
 @Experimental
 final class OneVsRestModel private[ml] (
-    override val uid: String,
-    labelMetadata: Metadata,
-    val models: Array[_ <: ClassificationModel[_, _]])
+                                         override val uid: String,
+                                         labelMetadata: Metadata,
+                                         val models: Array[_ <: ClassificationModel[_, _]])
   extends Model[OneVsRestModel] with OneVsRestParams {
 
   override def transformSchema(schema: StructType): StructType = {
@@ -137,8 +136,8 @@ final class OneVsRestModel private[ml] (
     // output label and label metadata as prediction
     aggregatedDataset
       .withColumn($(predictionCol), labelUDF(col(accColName)).as($(predictionCol), labelMetadata))
-      .withColumn($(rawPredictionCol), probabilityUDF(col(accColName)).as($(rawPredictionCol), labelMetadata))
-      .drop(accColName)
+      .withColumn($(rawPredictionCol), probabilityUDF(col(accColName)).as($(rawPredictionCol),
+      labelMetadata)).drop(accColName)
   }
 
   override def copy(extra: ParamMap): OneVsRestModel = {
