@@ -75,8 +75,7 @@ public class JavaKMeansExample {
 
     // Loads data
     JavaRDD<Row> points = jsc.textFile(inputFile).map(new ParsePoint());
-    StructField[] fields = new StructField[1];
-    fields[0] = new StructField("features", new VectorUDT(), false, Metadata.empty());
+    StructField[] fields = {new StructField("features", new VectorUDT(), false, Metadata.empty())};
     StructType schema = new StructType(fields);
     DataFrame dataset = sqlContext.createDataFrame(points, schema);
 
