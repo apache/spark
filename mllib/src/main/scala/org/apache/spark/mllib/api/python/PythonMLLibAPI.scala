@@ -364,7 +364,7 @@ private[python] class PythonMLLibAPI extends Serializable {
       seed: java.lang.Long,
       initialModelWeights: java.util.ArrayList[Double],
       initialModelMu: java.util.ArrayList[Vector],
-      initialModelSigma: java.util.ArrayList[Matrix]): JList[Object] = {
+      initialModelSigma: java.util.ArrayList[Matrix]): GaussianMixtureModelWrapper = {
     val gmmAlg = new GaussianMixture()
       .setK(k)
       .setConvergenceTol(convergenceTol)
@@ -382,16 +382,7 @@ private[python] class PythonMLLibAPI extends Serializable {
     if (seed != null) gmmAlg.setSeed(seed)
 
     try {
-      val model = gmmAlg.run(data.rdd.persist(StorageLevel.MEMORY_AND_DISK))
-      var wt = ArrayBuffer.empty[Double]
-      var mu = ArrayBuffer.empty[Vector]
-      var sigma = ArrayBuffer.empty[Matrix]
-      for (i <- 0 until model.k) {
-          wt += model.weights(i)
-          mu += model.gaussians(i).mu
-          sigma += model.gaussians(i).sigma
-      }
-      List(Vectors.dense(wt.toArray), mu.toArray, sigma.toArray).map(_.asInstanceOf[Object]).asJava
+      new GaussianMixtureModelWrapper(gmmAlg.run(data.rdd.persist(StorageLevel.MEMORY_AND_DISK)))
     } finally {
       data.rdd.unpersist(blocking = false)
     }

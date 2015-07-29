@@ -158,7 +158,7 @@ class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       GenerateMutableProjection.generate(Alias(expression, s"Optimized($expression)")() :: Nil)(),
       expression)
 
-    val actual = plan(inputRow).apply(0)
+    val actual = plan(inputRow).get(0, expression.dataType)
     if (!actual.asInstanceOf[Double].isNaN) {
       fail(s"Incorrect Evaluation: $expression, actual: $actual, expected: NaN")
     }

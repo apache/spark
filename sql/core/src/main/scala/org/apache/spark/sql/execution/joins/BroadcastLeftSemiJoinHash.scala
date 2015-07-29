@@ -37,18 +37,17 @@ case class BroadcastLeftSemiJoinHash(
     condition: Option[Expression]) extends BinaryNode with HashSemiJoin {
 
   protected override def doExecute(): RDD[InternalRow] = {
-    val buildIter = right.execute().map(_.copy()).collect().toIterator
+    val input = right.execute().map(_.copy()).collect()
 
     if (condition.isEmpty) {
-      // rowKey may be not serializable (from codegen)
-      val hashSet = buildKeyHashSet(buildIter, copy = true)
+      val hashSet = buildKeyHashSet(input.toIterator)
       val broadcastedRelation = sparkContext.broadcast(hashSet)
 
       left.execute().mapPartitions { streamIter =>
         hashSemiJoin(streamIter, broadcastedRelation.value)
       }
     } else {
-      val hashRelation = HashedRelation(buildIter, rightKeyGenerator)
+      val hashRelation = HashedRelation(input.toIterator, rightKeyGenerator, input.size)
       val broadcastedRelation = sparkContext.broadcast(hashRelation)
 
       left.execute().mapPartitions { streamIter =>

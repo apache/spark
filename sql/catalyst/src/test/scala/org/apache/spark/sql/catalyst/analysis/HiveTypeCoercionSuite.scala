@@ -35,14 +35,14 @@ class HiveTypeCoercionSuite extends PlanTest {
 
     shouldCast(NullType, NullType, NullType)
     shouldCast(NullType, IntegerType, IntegerType)
-    shouldCast(NullType, DecimalType, DecimalType.Unlimited)
+    shouldCast(NullType, DecimalType, DecimalType.SYSTEM_DEFAULT)
 
     shouldCast(ByteType, IntegerType, IntegerType)
     shouldCast(IntegerType, IntegerType, IntegerType)
     shouldCast(IntegerType, LongType, LongType)
-    shouldCast(IntegerType, DecimalType, DecimalType.Unlimited)
+    shouldCast(IntegerType, DecimalType, DecimalType(10, 0))
     shouldCast(LongType, IntegerType, IntegerType)
-    shouldCast(LongType, DecimalType, DecimalType.Unlimited)
+    shouldCast(LongType, DecimalType, DecimalType(20, 0))
 
     shouldCast(DateType, TimestampType, TimestampType)
     shouldCast(TimestampType, DateType, DateType)
@@ -71,8 +71,8 @@ class HiveTypeCoercionSuite extends PlanTest {
     shouldCast(IntegerType, TypeCollection(StringType, BinaryType), StringType)
     shouldCast(IntegerType, TypeCollection(BinaryType, StringType), StringType)
 
-    shouldCast(
-      DecimalType.Unlimited, TypeCollection(IntegerType, DecimalType), DecimalType.Unlimited)
+    shouldCast(DecimalType.SYSTEM_DEFAULT,
+      TypeCollection(IntegerType, DecimalType), DecimalType.SYSTEM_DEFAULT)
     shouldCast(DecimalType(10, 2), TypeCollection(IntegerType, DecimalType), DecimalType(10, 2))
     shouldCast(DecimalType(10, 2), TypeCollection(DecimalType, IntegerType), DecimalType(10, 2))
     shouldCast(IntegerType, TypeCollection(DecimalType(10, 2), StringType), DecimalType(10, 2))
@@ -82,7 +82,7 @@ class HiveTypeCoercionSuite extends PlanTest {
 
     // NumericType should not be changed when function accepts any of them.
     Seq(ByteType, ShortType, IntegerType, LongType, FloatType, DoubleType,
-      DecimalType.Unlimited, DecimalType(10, 2)).foreach { tpe =>
+      DecimalType.SYSTEM_DEFAULT, DecimalType(10, 2)).foreach { tpe =>
       shouldCast(tpe, NumericType, tpe)
     }
 
@@ -107,14 +107,22 @@ class HiveTypeCoercionSuite extends PlanTest {
     shouldNotCast(IntegerType, TimestampType)
     shouldNotCast(LongType, DateType)
     shouldNotCast(LongType, TimestampType)
-    shouldNotCast(DecimalType.Unlimited, DateType)
-    shouldNotCast(DecimalType.Unlimited, TimestampType)
+    shouldNotCast(DecimalType.SYSTEM_DEFAULT, DateType)
+    shouldNotCast(DecimalType.SYSTEM_DEFAULT, TimestampType)
 
     shouldNotCast(IntegerType, TypeCollection(DateType, TimestampType))
 
     shouldNotCast(IntegerType, ArrayType)
     shouldNotCast(IntegerType, MapType)
     shouldNotCast(IntegerType, StructType)
+
+    shouldNotCast(IntervalType, StringType)
+
+    // Don't implicitly cast complex types to string.
+    shouldNotCast(ArrayType(StringType), StringType)
+    shouldNotCast(MapType(StringType, StringType), StringType)
+    shouldNotCast(new StructType().add("a1", StringType), StringType)
+    shouldNotCast(MapType(StringType, StringType), StringType)
   }
 
   test("tightest common bound for types") {
@@ -159,14 +167,6 @@ class HiveTypeCoercionSuite extends PlanTest {
     widenTest(IntegerType, DoubleType, Some(DoubleType))
     widenTest(LongType, FloatType, Some(FloatType))
     widenTest(LongType, DoubleType, Some(DoubleType))
-
-    // Casting up to unlimited-precision decimal
-    widenTest(IntegerType, DecimalType.Unlimited, Some(DecimalType.Unlimited))
-    widenTest(DoubleType, DecimalType.Unlimited, Some(DecimalType.Unlimited))
-    widenTest(DecimalType(3, 2), DecimalType.Unlimited, Some(DecimalType.Unlimited))
-    widenTest(DecimalType.Unlimited, IntegerType, Some(DecimalType.Unlimited))
-    widenTest(DecimalType.Unlimited, DoubleType, Some(DecimalType.Unlimited))
-    widenTest(DecimalType.Unlimited, DecimalType(3, 2), Some(DecimalType.Unlimited))
 
     // No up-casting for fixed-precision decimal (this is handled by arithmetic rules)
     widenTest(DecimalType(2, 1), DecimalType(3, 2), None)
@@ -242,9 +242,9 @@ class HiveTypeCoercionSuite extends PlanTest {
         :: Literal(1)
         :: Literal(new java.math.BigDecimal("1000000000000000000000"))
         :: Nil),
-      Coalesce(Cast(Literal(1L), DecimalType())
-        :: Cast(Literal(1), DecimalType())
-        :: Cast(Literal(new java.math.BigDecimal("1000000000000000000000")), DecimalType())
+      Coalesce(Cast(Literal(1L), DecimalType(22, 0))
+        :: Cast(Literal(1), DecimalType(22, 0))
+        :: Cast(Literal(new java.math.BigDecimal("1000000000000000000000")), DecimalType(22, 0))
         :: Nil))
   }
 
@@ -314,7 +314,7 @@ class HiveTypeCoercionSuite extends PlanTest {
     )
   }
 
-  test("WidenTypes for union except and intersect") {
+  test("WidenSetOperationTypes for union except and intersect") {
     def checkOutput(logical: LogicalPlan, expectTypes: Seq[DataType]): Unit = {
       logical.output.zip(expectTypes).foreach { case (attr, dt) =>
         assert(attr.dataType === dt)
@@ -323,7 +323,7 @@ class HiveTypeCoercionSuite extends PlanTest {
 
     val left = LocalRelation(
       AttributeReference("i", IntegerType)(),
-      AttributeReference("u", DecimalType.Unlimited)(),
+      AttributeReference("u", DecimalType.SYSTEM_DEFAULT)(),
       AttributeReference("b", ByteType)(),
       AttributeReference("d", DoubleType)())
     val right = LocalRelation(
@@ -332,8 +332,8 @@ class HiveTypeCoercionSuite extends PlanTest {
       AttributeReference("f", FloatType)(),
       AttributeReference("l", LongType)())
 
-    val wt = HiveTypeCoercion.WidenTypes
-    val expectedTypes = Seq(StringType, DecimalType.Unlimited, FloatType, DoubleType)
+    val wt = HiveTypeCoercion.WidenSetOperationTypes
+    val expectedTypes = Seq(StringType, DecimalType.SYSTEM_DEFAULT, FloatType, DoubleType)
 
     val r1 = wt(Union(left, right)).asInstanceOf[Union]
     val r2 = wt(Except(left, right)).asInstanceOf[Except]
@@ -353,13 +353,13 @@ class HiveTypeCoercionSuite extends PlanTest {
       }
     }
 
-    val dp = HiveTypeCoercion.DecimalPrecision
+    val dp = HiveTypeCoercion.WidenSetOperationTypes
 
     val left1 = LocalRelation(
       AttributeReference("l", DecimalType(10, 8))())
     val right1 = LocalRelation(
       AttributeReference("r", DecimalType(5, 5))())
-    val expectedType1 = Seq(DecimalType(math.max(8, 5) + math.max(10 - 8, 5 - 5), math.max(8, 5)))
+    val expectedType1 = Seq(DecimalType(10, 8))
 
     val r1 = dp(Union(left1, right1)).asInstanceOf[Union]
     val r2 = dp(Except(left1, right1)).asInstanceOf[Except]
@@ -372,12 +372,11 @@ class HiveTypeCoercionSuite extends PlanTest {
     checkOutput(r3.left, expectedType1)
     checkOutput(r3.right, expectedType1)
 
-    val plan1 = LocalRelation(
-      AttributeReference("l", DecimalType(10, 10))())
+    val plan1 = LocalRelation(AttributeReference("l", DecimalType(10, 5))())
 
     val rightTypes = Seq(ByteType, ShortType, IntegerType, LongType, FloatType, DoubleType)
-    val expectedTypes = Seq(DecimalType(3, 0), DecimalType(5, 0), DecimalType(10, 0),
-      DecimalType(20, 0), DecimalType(7, 7), DecimalType(15, 15))
+    val expectedTypes = Seq(DecimalType(10, 5), DecimalType(10, 5), DecimalType(15, 5),
+      DecimalType(25, 5), DoubleType, DoubleType)
 
     rightTypes.zip(expectedTypes).map { case (rType, expectedType) =>
       val plan2 = LocalRelation(
