@@ -534,7 +534,7 @@ object FeedForwardTopology {
  * @param layerModels models of layers
  * @param topology topology of the network
  */
-class FeedForwardModel private(val layerModels: Array[LayerModel],
+private[spark] class FeedForwardModel private(val layerModels: Array[LayerModel],
                        val topology: FeedForwardTopology) extends TopologyModel {
   override def forward(data: BDM[Double]): Array[BDM[Double]] = {
     val outputs = new Array[BDM[Double]](layerModels.length)

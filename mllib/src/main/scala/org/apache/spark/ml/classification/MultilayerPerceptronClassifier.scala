@@ -20,22 +20,78 @@ package org.apache.spark.ml.classification
 import breeze.linalg.{argmax => Bargmax}
 
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.ml.{PredictionModel, Predictor}
-import org.apache.spark.ml.param.ParamMap
+import org.apache.spark.ml.param.shared.{HasTol, HasMaxIter, HasSeed}
+import org.apache.spark.ml.{PredictorParams, PredictionModel, Predictor}
+import org.apache.spark.ml.param.{IntParam, ParamValidators, IntArrayParam, ParamMap}
 import org.apache.spark.ml.util.Identifiable
-import org.apache.spark.ml.regression.MultilayerPerceptronParams
 import org.apache.spark.mllib.ann.{FeedForwardTrainer, FeedForwardTopology}
 import org.apache.spark.mllib.linalg.{Vectors, Vector}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.sql.DataFrame
 
-/**
- * :: Experimental ::
- * Label to vector converter.
- */
-@Experimental
-private object LabelConverter {
+/** Params for Multilayer Perceptron. */
+private[ml] trait MultilayerPerceptronParams extends PredictorParams
+with HasSeed with HasMaxIter with HasTol {
+  /**
+   * Layer sizes including input size and output size.
+   * @group param
+   */
+  final val layers: IntArrayParam = new IntArrayParam(this, "layers",
+    "Sizes of layers from input layer to output layer" +
+      " E.g., Array(780, 100, 10) means 780 inputs, " +
+      "one hidden layer with 100 neurons and output layer of 10 neurons.",
+    // TODO: how to check ALSO that all elements are greater than 0?
+    ParamValidators.lengthGt(1)
+  )
 
+  /** @group setParam */
+  def setLayers(value: Array[Int]): this.type = set(layers, value)
+
+  /** @group getParam */
+  final def getLayers: Array[Int] = $(layers)
+
+  /**
+   * Block size for stacking input data in matrices. Speeds up the computations.
+   * Cannot be more than the size of the dataset.
+   * @group expertParam
+   */
+  final val blockSize: IntParam = new IntParam(this, "blockSize",
+    "Block size for stacking input data in matrices.", ParamValidators.gt(0))
+
+  /** @group setParam */
+  def setBlockSize(value: Int): this.type = set(blockSize, value)
+
+  /** @group getParam */
+  final def getBlockSize: Int = $(blockSize)
+
+  /**
+   * Set the maximum number of iterations.
+   * Default is 100.
+   * @group setParam
+   */
+  def setMaxIter(value: Int): this.type = set(maxIter, value)
+
+  /**
+   * Set the convergence tolerance of iterations.
+   * Smaller value will lead to higher accuracy with the cost of more iterations.
+   * Default is 1E-4.
+   * @group setParam
+   */
+  def setTol(value: Double): this.type = set(tol, value)
+
+  /**
+   * Set the seed for weights initialization.
+   * @group setParam
+   */
+  def setSeed(value: Long): this.type = set(seed, value)
+
+  setDefault(maxIter -> 100, tol -> 1e-4, layers -> Array(1, 1), blockSize -> 1)
+}
+
+
+/** Label to vector converter. */
+private object LabelConverter {
+  // TODO: Use OneHotEncoder instead
   /**
    * Encodes a label as a vector.
    * Returns a vector of given length with zeroes at all positions
@@ -59,7 +115,7 @@ private object LabelConverter {
    * @return  label
    */
   def apply(output: Vector): Double = {
-    Bargmax(output.toBreeze.toDenseVector).toDouble
+    output.argmax.toDouble
   }
 }
 
@@ -72,13 +128,13 @@ private object LabelConverter {
  *
  */
 @Experimental
-class MultilayerPerceptronClassifier (override val uid: String)
+class MultilayerPerceptronClassifier(override val uid: String)
   extends Predictor[Vector, MultilayerPerceptronClassifier, MultilayerPerceptronClassifierModel]
   with MultilayerPerceptronParams {
 
-  override def copy(extra: ParamMap): MultilayerPerceptronClassifier = defaultCopy(extra)
-
   def this() = this(Identifiable.randomUID("mlpc"))
+
+  override def copy(extra: ParamMap): MultilayerPerceptronClassifier = defaultCopy(extra)
 
   /**
    * Train a model using the given dataset and parameters.
@@ -106,11 +162,16 @@ class MultilayerPerceptronClassifier (override val uid: String)
  * :: Experimental ::
  * Classifier model based on the Multilayer Perceptron.
  * Each layer has sigmoid activation function, output layer has softmax.
+ * @param uid uid
+ * @param layers array of layer sizes including input and output layers
+ * @param weights vector of initial weights for the model
+ * @return prediction model
  */
 @Experimental
-class MultilayerPerceptronClassifierModel private[ml] (override val uid: String,
-                                                      layers: Array[Int],
-                                                      weights: Vector)
+class MultilayerPerceptronClassifierModel private[ml](
+    override val uid: String,
+    layers: Array[Int],
+    weights: Vector)
   extends PredictionModel[Vector, MultilayerPerceptronClassifierModel]
   with Serializable {
 

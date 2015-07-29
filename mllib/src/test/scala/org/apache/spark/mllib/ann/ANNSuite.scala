@@ -23,6 +23,7 @@ import org.apache.spark.mllib.util.MLlibTestSparkContext
 
 class ANNSuite extends SparkFunSuite with MLlibTestSparkContext {
 
+  // TODO: test for weights comparison with Weka MLP
   test("ANN with Sigmoid learns XOR function with LBFGS optimizer") {
     val inputs = Array[Array[Double]](
       Array[Double](0, 0),

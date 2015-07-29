@@ -166,6 +166,20 @@ object ParamValidators {
   def inArray[T](allowed: java.util.List[T]): T => Boolean = { (value: T) =>
     allowed.contains(value)
   }
+
+  /** Private method for checking array types and converting to Array. */
+  private def getArray[T](value: T): Array[_] = value match {
+    case x: Array[_] => x
+    case _ =>
+      // The type should be checked before this is ever called.
+      throw new IllegalArgumentException("Array Param validation failed because" +
+        s" of unexpected input type: ${value.getClass}")
+  }
+
+  /** Check that the array length is greater than lowerBound. */
+  def lengthGt[T](lowerBound: Double): T => Boolean = { (value: T) =>
+    getArray(value).length > lowerBound
+  }
 }
 
 // specialize primitive-typed params because Java doesn't recognize scala.Double, scala.Int, ...
