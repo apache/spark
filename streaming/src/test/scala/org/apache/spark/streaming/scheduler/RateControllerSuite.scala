@@ -30,18 +30,17 @@ import org.apache.spark.streaming.scheduler.rate.RateEstimator
 
 class RateControllerSuite extends TestSuiteBase {
 
-  override def actuallyWait: Boolean = true
+  override def useManualClock: Boolean = false
 
   test("rate controller publishes updates") {
     val ssc = new StreamingContext(conf, batchDuration)
     withStreamingContext(ssc) { ssc =>
-      val dstream = new MockRateLimitDStream(ssc, Seq(Seq(1)), 1)
-      val output = new TestOutputStreamWithPartitions(dstream)
-      output.register()
-      runStreams(ssc, 1, 1)
+      val dstream = new RateLimitInputDStream(ssc)
+      dstream.register()
+      ssc.start()
 
-      eventually(timeout(2.seconds)) {
-        assert(dstream.publishCalls === 1)
+      eventually(timeout(10.seconds)) {
+        assert(dstream.publishCalls > 0)
       }
     }
   }
@@ -53,13 +52,11 @@ class RateControllerSuite extends TestSuiteBase {
         override val rateController =
           Some(new ReceiverRateController(id, new ConstantEstimator(200.0)))
       }
-      SingletonDummyReceiver.reset()
+      dstream.register()
+      SingletonTestRateReceiver.reset()
+      ssc.start()
 
-      val output = new TestOutputStreamWithPartitions(dstream)
-      output.register()
-      runStreams(ssc, 2, 2)
-
-      eventually(timeout(5.seconds)) {
+      eventually(timeout(10.seconds)) {
         assert(dstream.getCurrentRateLimit === Some(200))
       }
     }
@@ -74,58 +71,19 @@ class RateControllerSuite extends TestSuiteBase {
         override val rateController =
           Some(new ReceiverRateController(id, new ConstantEstimator(rates.map(_.toDouble): _*)))
       }
-      SingletonDummyReceiver.reset()
-
-      val output = new TestOutputStreamWithPartitions(dstream)
-      output.register()
+      SingletonTestRateReceiver.reset()
+      dstream.register()
 
       val observedRates = mutable.HashSet.empty[Long]
+      ssc.start()
 
-      @volatile var done = false
-      runInBackground {
-        while (!done) {
-          try {
-            dstream.getCurrentRateLimit.foreach(observedRates += _)
-          } catch {
-            case NonFatal(_) => () // don't stop if the executor wasn't installed yet
-          }
-          Thread.sleep(20)
-        }
+      eventually(timeout(20.seconds)) {
+        dstream.getCurrentRateLimit.foreach(observedRates += _)
+        // Long.MaxValue (essentially, no rate limit) is the initial rate limit for any Receiver
+        observedRates should contain theSameElementsAs (rates :+ Long.MaxValue)
       }
-      runStreams(ssc, 4, 4)
-      done = true
-
-      // Long.MaxValue (essentially, no rate limit) is the initial rate limit for any Receiver
-      observedRates should contain theSameElementsAs (rates :+ Long.MaxValue)
     }
   }
-
-  private def runInBackground(f: => Unit): Unit = {
-    new Thread {
-      override def run(): Unit = {
-        f
-      }
-    }.start()
-  }
-}
-
-/**
- * An InputDStream that counts how often its rate controller `publish` method was called.
- */
-private class MockRateLimitDStream[T: ClassTag](
-    @transient ssc: StreamingContext,
-    input: Seq[Seq[T]],
-    numPartitions: Int) extends TestInputStream[T](ssc, input, numPartitions) {
-
-  @volatile
-  var publishCalls = 0
-
-  override val rateController: Option[RateController] =
-    Some(new RateController(id, new ConstantEstimator(100.0)) {
-      override def publish(rate: Long): Unit = {
-        publishCalls += 1
-      }
-    })
 }
 
 private[streaming] class ConstantEstimator(rates: Double*) extends RateEstimator {

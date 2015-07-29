@@ -33,7 +33,7 @@ import org.scalatest.concurrent.Eventually._
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.streaming.dstream.{DStream, FileInputDStream}
-import org.apache.spark.streaming.scheduler.{RateLimitInputDStream, ConstantEstimator, SingletonDummyReceiver}
+import org.apache.spark.streaming.scheduler.{RateLimitInputDStream, ConstantEstimator, SingletonTestRateReceiver}
 import org.apache.spark.util.{Clock, ManualClock, Utils}
 
 /**
@@ -401,13 +401,13 @@ class CheckpointSuite extends TestSuiteBase {
       override val rateController =
         Some(new ReceiverRateController(id, new ConstantEstimator(200.0)))
     }
-    SingletonDummyReceiver.reset()
+    SingletonTestRateReceiver.reset()
 
     val output = new TestOutputStreamWithPartitions(dstream.checkpoint(batchDuration * 2))
     output.register()
     runStreams(ssc, 5, 5)
 
-    SingletonDummyReceiver.reset()
+    SingletonTestRateReceiver.reset()
     ssc = new StreamingContext(checkpointDir)
     ssc.start()
     val outputNew = advanceTimeWithRealDelay(ssc, 2)

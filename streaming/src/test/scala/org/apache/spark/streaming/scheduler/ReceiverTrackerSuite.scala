@@ -43,7 +43,7 @@ class ReceiverTrackerSuite extends TestSuiteBase {
 
     ssc.addStreamingListener(ReceiverStartedWaiter)
     ssc.scheduler.listenerBus.start(ssc.sc)
-    SingletonDummyReceiver.reset()
+    SingletonTestRateReceiver.reset()
 
     val newRateLimit = 100L
     val inputDStream = new RateLimitInputDStream(ssc)
@@ -74,17 +74,28 @@ class ReceiverTrackerSuite extends TestSuiteBase {
 private[streaming] class RateLimitInputDStream(@transient ssc_ : StreamingContext)
   extends ReceiverInputDStream[Int](ssc_) {
 
-  override def getReceiver(): DummyReceiver = SingletonDummyReceiver
+  override def getReceiver(): RateTestReceiver = SingletonTestRateReceiver
 
   def getCurrentRateLimit: Option[Long] = {
     invokeExecutorMethod.getCurrentRateLimit
+  }
+
+  @volatile
+  var publishCalls = 0
+
+  override val rateController: Option[RateController] = {
+    Some(new RateController(id, new ConstantEstimator(100.0)) {
+      override def publish(rate: Long): Unit = {
+        publishCalls += 1
+      }
+    })
   }
 
   private def invokeExecutorMethod: ReceiverSupervisor = {
     val c = classOf[Receiver[_]]
     val ex = c.getDeclaredMethod("executor")
     ex.setAccessible(true)
-    ex.invoke(SingletonDummyReceiver).asInstanceOf[ReceiverSupervisor]
+    ex.invoke(SingletonTestRateReceiver).asInstanceOf[ReceiverSupervisor]
   }
 }
 
@@ -96,7 +107,7 @@ private[streaming] class RateLimitInputDStream(@transient ssc_ : StreamingContex
  * @note It's necessary to be a top-level object, or else serialization would create another
  *       one on the executor side and we won't be able to read its rate limit.
  */
-private[streaming] object SingletonDummyReceiver extends DummyReceiver(0) {
+private[streaming] object SingletonTestRateReceiver extends RateTestReceiver(0) {
 
   /** Reset the object to be usable in another test. */
   def reset(): Unit = {
@@ -107,7 +118,7 @@ private[streaming] object SingletonDummyReceiver extends DummyReceiver(0) {
 /**
  * Dummy receiver implementation
  */
-private[streaming] class DummyReceiver(receiverId: Int, host: Option[String] = None)
+private[streaming] class RateTestReceiver(receiverId: Int, host: Option[String] = None)
   extends Receiver[Int](StorageLevel.MEMORY_ONLY) {
 
   setReceiverId(receiverId)
