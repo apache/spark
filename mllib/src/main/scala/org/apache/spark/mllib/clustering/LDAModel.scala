@@ -235,7 +235,7 @@ class LocalLDAModel private[clustering] (
    * Perplexity on a test corpus is calculated as:
    *    perplexity(documents) = exp( -log p(documents) / numWords )
    * where p is the LDA model. It is upper bounded by the variational distribution using:
-   *    perplexity(documents) <= exp( -(E_q[log p(documents] - E_q[log q(documents)]) / numWords }
+   *    perplexity(documents) <= exp( -(E_q[log p(documents)] - E_q[log q(documents)]) / numWords )
    */
   def logPerplexity(documents: RDD[(Long, Vector)]): Double = {
     val numDocs = documents.count()
@@ -253,7 +253,7 @@ class LocalLDAModel private[clustering] (
 
   /**
    * Estimate the variational bound of documents from `documents`:
-   *    log p(documents) >= E_q[log p(documents)] - E_q[log q(documents)])
+   *    log p(documents) >= E_q[log p(documents)] - E_q[log q(documents)]
    * This bound is derived by decomposing the LDA model to:
    *    log p(documents) = E_q[log p(documents)] - E_q[log q(documents)] + D(q|p)
    * and noting that the KL-divergence D(q|p) >= 0. See Equation (16) in original Online LDA paper.
