@@ -456,7 +456,7 @@ class SQLTests(ReusedPySparkTestCase):
         check_datatype(structtype_with_udt)
         p = PythonOnlyPoint(1.0, 2.0)
         self.assertEqual(_infer_type(p), PythonOnlyUDT())
-        _verify_type(ExamplePoint(1.0, 2.0), PythonOnlyUDT())
+        _verify_type(PythonOnlyPoint(1.0, 2.0), PythonOnlyUDT())
         self.assertRaises(ValueError, lambda: _verify_type([1.0, 2.0], PythonOnlyUDT()))
 
     def test_infer_schema_with_udt(self):
@@ -514,13 +514,21 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertEqual(PythonOnlyPoint(2.0, 3.0), df.select(udf2(df.point)).first()[0])
 
     def test_parquet_with_udt(self):
+        from pyspark.sql.tests import ExamplePoint, ExamplePointUDT
         row = Row(label=1.0, point=ExamplePoint(1.0, 2.0))
         df0 = self.sqlCtx.createDataFrame([row])
         output_dir = os.path.join(self.tempdir.name, "labeled_point")
-        df0.saveAsParquetFile(output_dir)
+        df0.write.parquet(output_dir)
         df1 = self.sqlCtx.parquetFile(output_dir)
         point = df1.head().point
         self.assertEquals(point, ExamplePoint(1.0, 2.0))
+
+        row = Row(label=1.0, point=PythonOnlyPoint(1.0, 2.0))
+        df0 = self.sqlCtx.createDataFrame([row])
+        df0.write.parquet(output_dir, mode='overwrite')
+        df1 = self.sqlCtx.parquetFile(output_dir)
+        point = df1.head().point
+        self.assertEquals(point, PythonOnlyPoint(1.0, 2.0))
 
     def test_column_operators(self):
         ci = self.df.key
