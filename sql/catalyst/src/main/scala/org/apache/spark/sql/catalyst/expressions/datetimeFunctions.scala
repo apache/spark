@@ -262,7 +262,7 @@ case class DateFormatClass(left: Expression, right: Expression) extends BinaryEx
     val sdf = classOf[SimpleDateFormat].getName
     defineCodeGen(ctx, ev, (timestamp, format) => {
       s"""UTF8String.fromString((new $sdf($format.toString()))
-          .format(new java.sql.Timestamp($timestamp / 1000)))"""
+          .format(new java.util.Date($timestamp / 1000)))"""
     })
   }
 }
