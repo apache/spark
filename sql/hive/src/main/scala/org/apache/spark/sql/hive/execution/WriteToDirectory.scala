@@ -94,6 +94,7 @@ case class WriteToDirectory(
       hiveContext.sparkContext,
       child.execute(),
       StructType.fromAttributes(output),
+      child.output.map(_.dataType).toArray,
       outputClass,
       fileSinkConf,
       jobConfSer,

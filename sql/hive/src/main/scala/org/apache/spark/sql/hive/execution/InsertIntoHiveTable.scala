@@ -124,6 +124,7 @@ case class InsertIntoHiveTable(
       sc.sparkContext,
       child.execute(),
       table.schema,
+      child.output.map(_.dataType).toArray,
       outputClass,
       fileSinkConf,
       jobConfSer,

@@ -29,6 +29,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.util.SerializableJobConf
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.DataType
 import org.apache.spark.sql.hive.HiveShim.{ShimFileSinkDesc => FileSinkDesc}
 import org.apache.spark.{Logging, SparkContext, TaskContext}
 
@@ -46,6 +47,7 @@ private[hive] trait SaveAsHiveFile extends HiveInspectors with Logging {
       sparkContext: SparkContext,
       rdd: RDD[InternalRow],
       schema: StructType,
+      dataTypes: Array[DataType],
       valueClass: Class[_],
       fileSinkConf: FileSinkDesc,
       conf: SerializableJobConf,
@@ -84,7 +86,7 @@ private[hive] trait SaveAsHiveFile extends HiveInspectors with Logging {
       iterator.foreach { row =>
         var i = 0
         while (i < fieldOIs.length) {
-          outputData(i) = if (row.isNullAt(i)) null else wrappers(i)(row(i))
+          outputData(i) = if (row.isNullAt(i)) null else wrappers(i)(row.get(i, dataTypes(i)))
           i += 1
         }
 
