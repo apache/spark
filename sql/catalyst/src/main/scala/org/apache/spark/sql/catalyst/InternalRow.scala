@@ -76,7 +76,7 @@ abstract class InternalRow extends Serializable with SpecializedGetters {
   override def getStruct(ordinal: Int, numFields: Int): InternalRow =
     getAs[InternalRow](ordinal, null)
 
-  override def getArray(ordinal: Int, elementType: DataType): ArrayData = getAs(ordinal, null)
+  override def getArray(ordinal: Int): ArrayData = getAs(ordinal, null)
 
   override def toString: String = s"[${this.mkString(",")}]"
 

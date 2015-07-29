@@ -187,7 +187,7 @@ object CatalystTypeConverters {
     }
 
     override def toScalaImpl(row: InternalRow, column: Int): Seq[Any] =
-      toScala(row.getArray(column, elementType))
+      toScala(row.getArray(column))
   }
 
   private case class MapConverter(

@@ -110,9 +110,7 @@ class CodeGenContext {
       case BinaryType => s"$getter.getBinary($ordinal)"
       case CalendarIntervalType => s"$getter.getInterval($ordinal)"
       case t: StructType => s"$getter.getStruct($ordinal, ${t.size})"
-      case a: ArrayType =>
-        val typeString = '"' + a.elementType.json.replace("\"", "\\\"") + '"'
-        s"$getter.getArray($ordinal, org.apache.spark.sql.types.DataType.fromJson($typeString))"
+      case a: ArrayType => s"$getter.getArray($ordinal)"
       case _ => s"($jt)$getter.get($ordinal)" // todo: remove generic getter.
     }
   }

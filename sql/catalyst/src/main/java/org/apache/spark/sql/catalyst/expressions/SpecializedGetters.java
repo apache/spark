@@ -52,5 +52,5 @@ public interface SpecializedGetters {
 
   InternalRow getStruct(int ordinal, int numFields);
 
-  ArrayData getArray(int ordinal, DataType elementType);
+  ArrayData getArray(int ordinal);
 }

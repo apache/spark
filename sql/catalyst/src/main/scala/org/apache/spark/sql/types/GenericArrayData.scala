@@ -53,7 +53,7 @@ class GenericArrayData(array: Array[Any]) extends ArrayData {
 
   override def getStruct(ordinal: Int, numFields: Int): InternalRow = getAs(ordinal)
 
-  override def getArray(ordinal: Int, elementType: DataType): ArrayData = getAs(ordinal)
+  override def getArray(ordinal: Int): ArrayData = getAs(ordinal)
 
   override def numElements(): Int = array.length
 }
