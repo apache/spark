@@ -56,8 +56,7 @@ public class JavaKMeansExample {
         point[i] = Double.parseDouble(tok[i]);
       }
       Vector[] points = {Vectors.dense(point)};
-      Row row = new GenericRow(points);
-      return row;
+      return new GenericRow(points);
     }
   }
 
