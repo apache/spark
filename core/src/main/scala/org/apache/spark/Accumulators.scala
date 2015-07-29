@@ -376,7 +376,7 @@ private[spark] object InternalAccumulator {
       // Execution memory refers to the memory used by internal data structures created
       // during shuffles, aggregations and joins. The value of this accumulator should be
       // approximately the sum of the peak sizes across all such data structures created
-      // in this task.
+      // in this task. For SQL jobs, this only tracks all unsafe operators and ExternalSort.
       new Accumulator(
         0L, AccumulatorParam.LongAccumulatorParam, Some(PEAK_EXECUTION_MEMORY), internal = true))
   }
