@@ -1643,8 +1643,10 @@ class DataFrame private[sql](
    * an RDD out to a parquet file, and then register that file as a table.  This "table" can then
    * be the target of an `insertInto`.
    *
-   * Also note that while this function can persist the table metadata into Hive's metastore,
-   * if spark.sql.hive.writeDataSourceSchema=true in configuration.
+   * This function always persists table metadata into Hive's metastore. But the table is
+   * not accessible from Hive unless the underlying data source is either Parquet or ORC.
+   * And we can disable that by setting spark.sql.hive.writeDataSourceSchema to false.
+   *
    * @group output
    * @deprecated As of 1.4.0, replaced by `write().saveAsTable(tableName)`.
    */
@@ -1662,8 +1664,10 @@ class DataFrame private[sql](
    * an RDD out to a parquet file, and then register that file as a table.  This "table" can then
    * be the target of an `insertInto`.
    *
-   * Also note that while this function can persist the table metadata into Hive's metastore,
-   * if spark.sql.hive.writeDataSourceSchema=true in configuration.
+   * This function always persists table metadata into Hive's metastore. But the table is
+   * not accessible from Hive unless the underlying data source is either Parquet or ORC.
+   * And we can disable that by setting spark.sql.hive.writeDataSourceSchema to false.
+   *
    * @group output
    * @deprecated As of 1.4.0, replaced by `write().mode(mode).saveAsTable(tableName)`.
    */
@@ -1682,8 +1686,10 @@ class DataFrame private[sql](
    * an RDD out to a parquet file, and then register that file as a table.  This "table" can then
    * be the target of an `insertInto`.
    *
-   * Also note that while this function can persist the table metadata into Hive's metastore,
-   * if spark.sql.hive.writeDataSourceSchema=true in configuration.
+   * This function always persists table metadata into Hive's metastore. But the table is
+   * not accessible from Hive unless the underlying data source is either Parquet or ORC.
+   * And we can disable that by setting spark.sql.hive.writeDataSourceSchema to false.
+   *
    * @group output
    * @deprecated As of 1.4.0, replaced by `write().format(source).saveAsTable(tableName)`.
    */
@@ -1702,8 +1708,10 @@ class DataFrame private[sql](
    * an RDD out to a parquet file, and then register that file as a table.  This "table" can then
    * be the target of an `insertInto`.
    *
-   * Also note that while this function can persist the table metadata into Hive's metastore,
-   * if spark.sql.hive.writeDataSourceSchema=true in configuration.
+   * This function always persists table metadata into Hive's metastore. But the table is
+   * not accessible from Hive unless the underlying data source is either Parquet or ORC.
+   * And we can disable that by setting spark.sql.hive.writeDataSourceSchema to false.
+   *
    * @group output
    * @deprecated As of 1.4.0, replaced by `write().mode(mode).saveAsTable(tableName)`.
    */
@@ -1721,8 +1729,10 @@ class DataFrame private[sql](
    * an RDD out to a parquet file, and then register that file as a table.  This "table" can then
    * be the target of an `insertInto`.
    *
-   * Also note that while this function can persist the table metadata into Hive's metastore,
-   * if spark.sql.hive.writeDataSourceSchema=true in configuration.
+   * This function always persists table metadata into Hive's metastore. But the table is
+   * not accessible from Hive unless the underlying data source is either Parquet or ORC.
+   * And we can disable that by setting spark.sql.hive.writeDataSourceSchema to false.
+   *
    * @group output
    * @deprecated As of 1.4.0, replaced by
    *            `write().format(source).mode(mode).options(options).saveAsTable(tableName)`.
@@ -1747,8 +1757,10 @@ class DataFrame private[sql](
    * an RDD out to a parquet file, and then register that file as a table.  This "table" can then
    * be the target of an `insertInto`.
    *
-   * Also note that while this function can persist the table metadata into Hive's metastore,
-   * if spark.sql.hive.writeDataSourceSchema=true in configuration.
+   * This function always persists table metadata into Hive's metastore. But the table is
+   * not accessible from Hive unless the underlying data source is either Parquet or ORC.
+   * And we can disable that by setting spark.sql.hive.writeDataSourceSchema to false.
+   *
    * @group output
    * @deprecated As of 1.4.0, replaced by
    *            `write().format(source).mode(mode).options(options).saveAsTable(tableName)`.
