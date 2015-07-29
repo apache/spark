@@ -1407,7 +1407,7 @@ def _convert_to_matrix_entry(entry):
         raise TypeError("Cannot convert type %s into MatrixEntry" % type(entry))
 
 
-class CoordinateMatrix(object):
+class CoordinateMatrix(DistributedMatrix):
     """
     .. note:: Experimental
 
