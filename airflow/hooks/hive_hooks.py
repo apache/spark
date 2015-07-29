@@ -47,6 +47,7 @@ class HiveCliHook(BaseHook):
         True
         """
         conn = self.conn
+        schema = schema or conn.schema
         if schema:
             hql = "USE {schema};\n{hql}".format(**locals())
 
