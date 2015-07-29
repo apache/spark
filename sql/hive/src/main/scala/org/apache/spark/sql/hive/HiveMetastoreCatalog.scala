@@ -23,6 +23,7 @@ import com.google.common.base.Objects
 import com.google.common.cache.{CacheBuilder, CacheLoader, LoadingCache}
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.common.StatsSetupConst
+import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.metastore.Warehouse
 import org.apache.hadoop.hive.metastore.api.FieldSchema
 import org.apache.hadoop.hive.ql.metadata._
@@ -40,8 +41,69 @@ import org.apache.spark.sql.execution.datasources
 import org.apache.spark.sql.execution.datasources.{CreateTableUsingAsSelect, LogicalRelation, Partition => ParquetPartition, PartitionSpec, ResolvedDataSource}
 import org.apache.spark.sql.hive.client._
 import org.apache.spark.sql.parquet.ParquetRelation
+import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.{AnalysisException, SQLContext, SaveMode}
+
+private[hive] case class HiveSerDe(
+    inputFormat: Option[String] = None,
+    outputFormat: Option[String] = None,
+    serde: Option[String] = None)
+
+private[hive] object HiveSerDe {
+  /**
+   * Get the Hive SerDe information from the data source abbreviation string or classname.
+   *
+   * @param source Currently the source abbreviation can be one of the following:
+   *               SequenceFile, RCFile, ORC, PARQUET, and case insensitive.
+   * @param hiveConf Hive Conf
+   * @param returnDefaultFormat Will the default format returns if no assocated data source found.
+   *   The default input/output format is:
+   *     InputFormat:  org.apache.hadoop.mapred.TextInputFormat
+   *     OutputFormat: org.apache.hadoop.hive.ql.io.IgnoreKeyTextOutputFormat
+   * @return HiveSerDe associated with the specified source
+   */
+  def sourceToSerDe(source: String, hiveConf: HiveConf, returnDefaultFormat: Boolean)
+  : Option[HiveSerDe] = {
+    val serde = if ("SequenceFile".equalsIgnoreCase(source)) {
+      HiveSerDe(
+        inputFormat = Option("org.apache.hadoop.mapred.SequenceFileInputFormat"),
+        outputFormat = Option("org.apache.hadoop.mapred.SequenceFileOutputFormat"))
+    } else if ("RCFile".equalsIgnoreCase(source)) {
+      HiveSerDe(
+        inputFormat = Option("org.apache.hadoop.hive.ql.io.RCFileInputFormat"),
+        outputFormat = Option("org.apache.hadoop.hive.ql.io.RCFileOutputFormat"),
+        serde = Option(hiveConf.getVar(HiveConf.ConfVars.HIVEDEFAULTRCFILESERDE)))
+    } else if ("ORC".equalsIgnoreCase(source) ||
+               "org.apache.spark.sql.hive.orc.DefaultSource" == source) {
+      HiveSerDe(
+        inputFormat = Option("org.apache.hadoop.hive.ql.io.orc.OrcInputFormat"),
+        outputFormat = Option("org.apache.hadoop.hive.ql.io.orc.OrcOutputFormat"),
+        serde = Option("org.apache.hadoop.hive.ql.io.orc.OrcSerde"))
+    } else if ("PARQUET".equalsIgnoreCase(source) ||
+               "org.apache.spark.sql.parquet.DefaultSource" == source) {
+      HiveSerDe(
+        inputFormat =
+          Option("org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat"),
+        outputFormat =
+          Option("org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat"),
+        serde =
+          Option("org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe"))
+    } else if (returnDefaultFormat) {
+      // return default file format
+      HiveSerDe(
+        inputFormat =
+          Option("org.apache.hadoop.mapred.TextInputFormat"),
+        outputFormat =
+          Option("org.apache.hadoop.hive.ql.io.IgnoreKeyTextOutputFormat"))
+    } else {
+      // TODO we probably need to provide SerDe for the built-in format, like json.
+      null
+    }
+
+    Option(serde)
+  }
+}
 
 private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: HiveContext)
   extends Catalog with Logging {
@@ -210,15 +272,64 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
       ManagedTable
     }
 
-    client.createTable(
-      HiveTable(
-        specifiedDatabase = Option(dbName),
-        name = tblName,
-        schema = Seq.empty,
-        partitionColumns = metastorePartitionColumns,
-        tableType = tableType,
-        properties = tableProperties.toMap,
-        serdeProperties = options))
+    val hiveTable = HiveSerDe.sourceToSerDe(provider, hive.hiveconf, false) match {
+      case Some(hiveSerDe) if conf.writeSchemaToHiveMetastore =>
+        // get the schema from the data source
+        val ds = ResolvedDataSource(hive, userSpecifiedSchema, partitionColumns, provider, options)
+        ds.relation match {
+          case fs: HadoopFsRelation if fs.paths.length == 1 =>
+            def schemaToHiveColumn(schema: StructType): Seq[HiveColumn] = {
+              schema.map( field => HiveColumn(
+                name = field.name,
+                hiveType = HiveMetastoreTypes.toMetastoreType(field.dataType),
+                comment = "")
+              )
+            }
+            // get the partition columns
+            val parts = schemaToHiveColumn(fs.partitionColumns)
+            val partSet = parts.toSet
+            // remove the partition columns from the relation schema
+            val columns = schemaToHiveColumn(ds.relation.schema).filterNot(partSet.contains)
+
+            HiveTable(
+              specifiedDatabase = Option(dbName),
+              name = tblName,
+              schema = columns,
+              partitionColumns = parts,
+              tableType = tableType,
+              properties = tableProperties.toMap,
+              serdeProperties = options,
+              location = Some(fs.paths.head),
+              viewText = None, // TODO We need to place the SQL string here.
+              inputFormat = hiveSerDe.inputFormat,
+              outputFormat = hiveSerDe.outputFormat,
+              serde = hiveSerDe.serde)
+          case fs: HadoopFsRelation =>
+            throw new AnalysisException(
+              """Only a single location support for HadoopFSRelation when write the metadata
+                |into the Hive Metastore, set spark.sql.hive.writeDataSourceSchema=false
+                |for not conform to Hive""".stripMargin)
+          case _ =>
+            throw new AnalysisException(
+              """Unable to write the Non HadoopFSRelation DataSource meta data
+                |into the Hive Metastore, set spark.sql.hive.writeDataSourceSchema=false
+                |for not conform to Hive""".stripMargin)
+        }
+      case other =>
+        if (other.isEmpty) {
+          logWarning(s"Unable to find the SerDe info for $provider")
+        }
+        HiveTable(
+          specifiedDatabase = Option(dbName),
+          name = tblName,
+          schema = Seq.empty,
+          partitionColumns = metastorePartitionColumns,
+          tableType = tableType,
+          properties = tableProperties.toMap,
+          serdeProperties = options)
+    }
+
+    client.createTable(hiveTable)
   }
 
   def hiveDefaultTableFilePath(tableName: String): String = {
