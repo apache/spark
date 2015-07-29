@@ -154,11 +154,18 @@ class StringIndexerModel private[ml] (
     copyValues(copied, extra)
   }
 
+  def invert(inputCol: String, outputCol: String) = {
+    new StringIndexerInverseTransformer()
+      .setInputCol(inputCol)
+      .setOutputCol(outputCol)
+  }
 }
 
 class StringIndexerInverseTransformer private[ml] (
   override val uid: String) extends Transformer
     with HasInputCol with HasOutputCol {
+
+  def this() = this(Identifiable.randomUID("strIdxInv"))
 
   /** @group setParam */
   def setInputCol(value: String): this.type = set(inputCol, value)
