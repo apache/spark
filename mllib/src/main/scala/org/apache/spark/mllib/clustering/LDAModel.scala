@@ -202,18 +202,6 @@ class LocalLDAModel private[clustering] (
     override protected val topicConcentration: Double,
     override protected val gammaShape: Double) extends LDAModel with Serializable {
 
-  /**
-   * Backwards compatibility constructor, assumes symmetric docConcentration=1/numTopics,
-   * topicConcentration=1, gammaShape=100. This is probably NOT what you want (instead you should
-   * set the parameters explicitly in constructor)
-   * @deprecated Provide alpha, eta, and gammaShape in constructor.
-   */
-  @deprecated(
-    "Provide docConcentration, topicConcentration, and gammaShape in constructor", "1.5.0")
-  def this(topics: Matrix) {
-    this(topics, Vectors.dense(Array.fill(topics.numRows)(1.0 / topics.numRows)), 1D, 100D)
-  }
-
   override def k: Int = topics.numCols
 
   override def vocabSize: Int = topics.numRows
@@ -373,7 +361,11 @@ object LocalLDAModel extends Loader[LocalLDAModel] {
       topics.foreach { case Row(vec: Vector, ind: Int) =>
         brzTopics(::, ind) := vec.toBreeze
       }
-      new LocalLDAModel(Matrices.fromBreeze(brzTopics))
+      val topicsMat = Matrices.fromBreeze(brzTopics)
+
+      // TODO: initialize with docConcentration, topicConcentration, and gammaShape after SPARK-9940
+      new LocalLDAModel(topicsMat,
+        Vectors.dense(Array.fill(topicsMat.numRows)(1.0 / topicsMat.numRows)), 1D, 100D)
     }
   }
 

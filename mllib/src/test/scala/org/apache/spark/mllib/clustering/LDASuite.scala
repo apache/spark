@@ -31,7 +31,8 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext {
   import LDASuite._
 
   test("LocalLDAModel") {
-    val model = new LocalLDAModel(tinyTopics)
+    val model = new LocalLDAModel(tinyTopics,
+      Vectors.dense(Array.fill(tinyTopics.numRows)(1.0 / tinyTopics.numRows)), 1D, 100D)
 
     // Check: basic parameters
     assert(model.k === tinyK)
@@ -332,7 +333,8 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext {
 
   test("model save/load") {
     // Test for LocalLDAModel.
-    val localModel = new LocalLDAModel(tinyTopics)
+    val localModel = new LocalLDAModel(tinyTopics,
+      Vectors.dense(Array.fill(tinyTopics.numRows)(1.0 / tinyTopics.numRows)), 1D, 100D)
     val tempDir1 = Utils.createTempDir()
     val path1 = tempDir1.toURI.toString
 

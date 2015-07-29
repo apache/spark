@@ -396,7 +396,6 @@ final class OnlineLDAOptimizer extends LDAOptimizer {
 
       val stat = BDM.zeros[Double](k, vocabSize)
       var gammaPart = List[BDV[Double]]()
-//      val gammaPart = BDM.zeros[Double](nonEmptyDocs.length, k)
       nonEmptyDocs.zipWithIndex.foreach { case ((_, termCounts: Vector), idx: Int) =>
         val ids: List[Int] = termCounts match {
           case v: DenseVector => (0 until v.size).toList
@@ -406,7 +405,6 @@ final class OnlineLDAOptimizer extends LDAOptimizer {
           termCounts, expElogbeta, alpha, gammaShape, k)
         stat(::, ids) := stat(::, ids).toDenseMatrix + sstats
         gammaPart = gammad :: gammaPart
-//        gammaPart(::, idx) := gammad
       }
       Iterator((stat, gammaPart))
     }
@@ -461,7 +459,7 @@ final class OnlineLDAOptimizer extends LDAOptimizer {
 private[clustering] object OnlineLDAOptimizer {
   /**
    * Uses variational inference to infer the topic distribution `gammad` given the term counts
-   * for a document.
+   * for a document. `termCounts` must be non-empty, otherwise Breeze will throw a BLAS error.
    *
    * An optimization (Lee, Seung: Algorithms for non-negative matrix factorization, NIPS 2001)
    * avoids explicit computation of variational parameter `phi`.
