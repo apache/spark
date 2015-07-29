@@ -1162,7 +1162,6 @@ def _convert_to_matrix_block_tuple(block):
         blockColIndex = int(block[0][1])
         subMatrix = block[1]
         return ((blockRowIndex, blockColIndex), subMatrix)
-        # return MatrixBlock(blockRowIndex, blockColIndex, subMatrix)
     else:
         raise TypeError("Cannot convert type %s into a sub-matrix block tuple" % type(block))
 
