@@ -573,4 +573,50 @@ object DateTimeUtils {
       dayInYear - 334
     }
   }
+
+  /**
+   * Returns day of week from String. Starting from Thursday, marked as 0.
+   * (Because 1970-01-01 is Thursday).
+   */
+  def getDayOfWeekFromString(string: UTF8String): Int = {
+    val dowString = string.toString.toUpperCase
+    dowString match {
+      case "SU" | "SUN" | "SUNDAY" => 3
+      case "MO" | "MON" | "MONDAY" => 4
+      case "TU" | "TUE" | "TUESDAY" => 5
+      case "WE" | "WED" | "WEDNESDAY" => 6
+      case "TH" | "THU" | "THURSDAY" => 0
+      case "FR" | "FRI" | "FRIDAY" => 1
+      case "SA" | "SAT" | "SATURDAY" => 2
+      case _ => -1
+    }
+  }
+
+  /**
+   * Returns the first date which is later than startDate and is of the given dayOfWeek.
+   * dayOfWeek is an integer ranges in [0, 6], and 0 is Thu, 1 is Fri, etc,.
+   */
+  def getNextDateForDayOfWeek(startDate: Int, dayOfWeek: Int): Int = {
+    startDate + 1 + ((dayOfWeek - 1 - startDate) % 7 + 7) % 7
+  }
+
+  /**
+   * number of days in a non-leap year.
+   */
+  private[this] val daysInNormalYear = Array(31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31)
+
+  /**
+   * Returns last day of the month for the given date. The date is expressed in days
+   * since 1.1.1970.
+   */
+  def getLastDayOfMonth(date: Int): Int = {
+    val dayOfMonth = getDayOfMonth(date)
+    val month = getMonth(date)
+    if (month == 2 && isLeapYear(getYear(date))) {
+      date + daysInNormalYear(month - 1) + 1 - dayOfMonth
+    } else {
+      date + daysInNormalYear(month - 1) - dayOfMonth
+    }
+  }
+
 }

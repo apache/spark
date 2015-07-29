@@ -23,7 +23,10 @@ import scala.language.postfixOps
 import scala.util.Random
 
 import org.apache.spark.sql.catalyst.plans.logical.OneRowRelation
+import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.json.JSONRelation
+import org.apache.spark.sql.parquet.ParquetRelation
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.test.{ExamplePointUDT, ExamplePoint, SQLTestUtils}
 
@@ -489,6 +492,23 @@ class DataFrameSuite extends QueryTest with SQLTestUtils {
   test("apply on query results (SPARK-5462)") {
     val df = testData.sqlContext.sql("select key from testData")
     checkAnswer(df.select(df("key")), testData.select('key).collect().toSeq)
+  }
+
+  test("inputFiles") {
+    val fakeRelation1 = new ParquetRelation(Array("/my/path", "/my/other/path"),
+      Some(testData.schema), None, Map.empty)(sqlContext)
+    val df1 = DataFrame(sqlContext, LogicalRelation(fakeRelation1))
+    assert(df1.inputFiles.toSet == fakeRelation1.paths.toSet)
+
+    val fakeRelation2 = new JSONRelation("/json/path", 1, Some(testData.schema), sqlContext)
+    val df2 = DataFrame(sqlContext, LogicalRelation(fakeRelation2))
+    assert(df2.inputFiles.toSet == fakeRelation2.path.toSet)
+
+    val unionDF = df1.unionAll(df2)
+    assert(unionDF.inputFiles.toSet == fakeRelation1.paths.toSet ++ fakeRelation2.path)
+
+    val filtered = df1.filter("false").unionAll(df2.intersect(df2))
+    assert(filtered.inputFiles.toSet == fakeRelation1.paths.toSet ++ fakeRelation2.path)
   }
 
   ignore("show") {

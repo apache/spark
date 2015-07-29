@@ -227,6 +227,37 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll with SQLTestUtils {
       Seq(Row("1"), Row("2")))
   }
 
+  test("SPARK-8828 sum should return null if all input values are null") {
+    withSQLConf(SQLConf.USE_SQL_AGGREGATE2.key -> "true") {
+      withSQLConf(SQLConf.CODEGEN_ENABLED.key -> "true") {
+        checkAnswer(
+          sql("select sum(a), avg(a) from allNulls"),
+          Seq(Row(null, null))
+        )
+      }
+      withSQLConf(SQLConf.CODEGEN_ENABLED.key -> "false") {
+        checkAnswer(
+          sql("select sum(a), avg(a) from allNulls"),
+          Seq(Row(null, null))
+        )
+      }
+    }
+    withSQLConf(SQLConf.USE_SQL_AGGREGATE2.key -> "false") {
+      withSQLConf(SQLConf.CODEGEN_ENABLED.key -> "true") {
+        checkAnswer(
+          sql("select sum(a), avg(a) from allNulls"),
+          Seq(Row(null, null))
+        )
+      }
+      withSQLConf(SQLConf.CODEGEN_ENABLED.key -> "false") {
+        checkAnswer(
+          sql("select sum(a), avg(a) from allNulls"),
+          Seq(Row(null, null))
+        )
+      }
+    }
+  }
+
   test("aggregation with codegen") {
     val originalValue = sqlContext.conf.codegenEnabled
     sqlContext.setConf(SQLConf.CODEGEN_ENABLED, true)

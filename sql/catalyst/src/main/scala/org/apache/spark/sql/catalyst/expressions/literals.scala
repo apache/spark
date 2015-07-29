@@ -118,7 +118,7 @@ case class Literal protected (value: Any, dataType: DataType)
             super.genCode(ctx, ev)
           } else {
             ev.isNull = "false"
-            ev.primitive = s"${value}"
+            ev.primitive = s"${value}D"
             ""
           }
         case ByteType | ShortType =>

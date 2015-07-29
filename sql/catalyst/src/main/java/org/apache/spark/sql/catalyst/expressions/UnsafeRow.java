@@ -239,7 +239,7 @@ public final class UnsafeRow extends MutableRow {
 
   @Override
   public Object get(int ordinal, DataType dataType) {
-    if (dataType instanceof NullType) {
+    if (isNullAt(ordinal) || dataType instanceof NullType) {
       return null;
     } else if (dataType instanceof BooleanType) {
       return getBoolean(ordinal);
@@ -265,6 +265,8 @@ public final class UnsafeRow extends MutableRow {
       return getBinary(ordinal);
     } else if (dataType instanceof StringType) {
       return getUTF8String(ordinal);
+    } else if (dataType instanceof IntervalType) {
+      return getInterval(ordinal);
     } else if (dataType instanceof StructType) {
       return getStruct(ordinal, ((StructType) dataType).size());
     } else {
@@ -311,21 +313,13 @@ public final class UnsafeRow extends MutableRow {
   @Override
   public float getFloat(int ordinal) {
     assertIndexIsValid(ordinal);
-    if (isNullAt(ordinal)) {
-      return Float.NaN;
-    } else {
-      return PlatformDependent.UNSAFE.getFloat(baseObject, getFieldOffset(ordinal));
-    }
+    return PlatformDependent.UNSAFE.getFloat(baseObject, getFieldOffset(ordinal));
   }
 
   @Override
   public double getDouble(int ordinal) {
     assertIndexIsValid(ordinal);
-    if (isNullAt(ordinal)) {
-      return Float.NaN;
-    } else {
-      return PlatformDependent.UNSAFE.getDouble(baseObject, getFieldOffset(ordinal));
-    }
+    return PlatformDependent.UNSAFE.getDouble(baseObject, getFieldOffset(ordinal));
   }
 
   @Override
