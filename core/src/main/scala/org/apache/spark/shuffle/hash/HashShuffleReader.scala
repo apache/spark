@@ -103,7 +103,7 @@ private[spark] class HashShuffleReader[K, C](
         context.taskMetrics().incMemoryBytesSpilled(sorter.memoryBytesSpilled)
         context.taskMetrics().incDiskBytesSpilled(sorter.diskBytesSpilled)
         context.internalMetricsToAccumulators(
-          TaskContextAccumulator.PEAK_EXECUTION_MEMORY).add(sorter.peakMemoryUsed)
+          InternalAccumulator.PEAK_EXECUTION_MEMORY).add(sorter.peakMemoryUsed)
         sorter.iterator
       case None =>
         aggregatedIter

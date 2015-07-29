@@ -152,8 +152,13 @@ class Accumulable[R, T] private[spark] (
     in.defaultReadObject()
     value_ = zero
     deserialized = true
+    // If a user defined accumulator is used in a task closure, automatically register it with
+    // the TaskContext when we deserialize it. Note that internal accumulators are deserialized
+    // before the TaskContext is created so we must register them ourselves separately.
     val taskContext = TaskContext.get()
-    taskContext.registerAccumulator(this)
+    if (taskContext != null) {
+      taskContext.registerAccumulator(this)
+    }
   }
 
   override def toString: String = if (value_ == null) "null" else value_.toString
@@ -248,10 +253,20 @@ GrowableAccumulableParam[R <% Growable[T] with TraversableOnce[T] with Serializa
  * @param param helper object defining how to add elements of type `T`
  * @tparam T result type
  */
-class Accumulator[T](@transient initialValue: T, param: AccumulatorParam[T], name: Option[String])
-  extends Accumulable[T, T](initialValue, param, name) {
+class Accumulator[T] private[spark] (
+    @transient initialValue: T,
+    param: AccumulatorParam[T],
+    name: Option[String],
+    internal: Boolean)
+  extends Accumulable[T, T](initialValue, param, name, internal) {
 
-  def this(initialValue: T, param: AccumulatorParam[T]) = this(initialValue, param, None)
+  def this(initialValue: T, param: AccumulatorParam[T], name: Option[String]) = {
+    this(initialValue, param, name, false)
+  }
+
+  def this(initialValue: T, param: AccumulatorParam[T]) = {
+    this(initialValue, param, None, false)
+  }
 }
 
 /**
@@ -344,4 +359,25 @@ private[spark] object Accumulators extends Logging {
   def stringifyPartialValue(partialValue: Any): String = "%s".format(partialValue)
 
   def stringifyValue(value: Any): String = "%s".format(value)
+}
+
+private[spark] object InternalAccumulator {
+  val PEAK_EXECUTION_MEMORY = "peakExecutionMemory"
+
+  /**
+   * Accumulators for tracking internal metrics.
+   *
+   * These accumulators are created with the stage such that all tasks in the stage will
+   * add to the same set of accumulators. We do this to report the distribution of accumulator
+   * values across all tasks within each stage.
+   */
+  def create(): Seq[Accumulator[Long]] = {
+    Seq(
+      // Execution memory refers to the memory used by internal data structures created
+      // during shuffles, aggregations and joins. The value of this accumulator should be
+      // approximately the sum of the peak sizes across all such data structures created
+      // in this task.
+      new Accumulator(
+        0L, AccumulatorParam.LongAccumulatorParam, Some(PEAK_EXECUTION_MEMORY), internal = true))
+  }
 }

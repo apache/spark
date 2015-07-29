@@ -30,7 +30,7 @@ import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.collection.ExternalSorter
 import org.apache.spark.util.collection.unsafe.sort.PrefixComparator
 import org.apache.spark.util.{CompletionIterator, MutablePair}
-import org.apache.spark.{HashPartitioner, SparkEnv, TaskContext, TaskContextAccumulator}
+import org.apache.spark.{HashPartitioner, InternalAccumulator, SparkEnv, TaskContext}
 
 /**
  * :: DeveloperApi ::
@@ -273,7 +273,7 @@ case class ExternalSort(
       context.taskMetrics().incDiskBytesSpilled(sorter.diskBytesSpilled)
       context.taskMetrics().incMemoryBytesSpilled(sorter.memoryBytesSpilled)
       context.internalMetricsToAccumulators(
-        TaskContextAccumulator.PEAK_EXECUTION_MEMORY).add(sorter.peakMemoryUsed)
+        InternalAccumulator.PEAK_EXECUTION_MEMORY).add(sorter.peakMemoryUsed)
       val baseIterator = sorter.iterator.map(_._1)
       // TODO(marmbrus): The complex type signature below thwarts inference for no reason.
       CompletionIterator[InternalRow, Iterator[InternalRow]](baseIterator, sorter.stop())
@@ -340,7 +340,7 @@ case class UnsafeExternalSort(
       // Update task metrics
       val taskContext = TaskContext.get()
       taskContext.internalMetricsToAccumulators(
-        TaskContextAccumulator.PEAK_EXECUTION_MEMORY).add(sorter.getPeakMemoryUsage)
+        InternalAccumulator.PEAK_EXECUTION_MEMORY).add(sorter.getPeakMemoryUsage)
 
       sortedIterator
     }

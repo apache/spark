@@ -95,7 +95,7 @@ case class Aggregator[K, V, C] (
       c.taskMetrics().incMemoryBytesSpilled(map.memoryBytesSpilled)
       c.taskMetrics().incDiskBytesSpilled(map.diskBytesSpilled)
       c.internalMetricsToAccumulators(
-        TaskContextAccumulator.PEAK_EXECUTION_MEMORY).add(map.peakMemoryUsed)
+        InternalAccumulator.PEAK_EXECUTION_MEMORY).add(map.peakMemoryUsed)
     }
   }
 }

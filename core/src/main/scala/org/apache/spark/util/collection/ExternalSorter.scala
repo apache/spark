@@ -697,7 +697,7 @@ private[spark] class ExternalSorter[K, V, C](
     context.taskMetrics().incMemoryBytesSpilled(memoryBytesSpilled)
     context.taskMetrics().incDiskBytesSpilled(diskBytesSpilled)
     context.internalMetricsToAccumulators(
-      TaskContextAccumulator.PEAK_EXECUTION_MEMORY).add(peakMemoryUsed)
+      InternalAccumulator.PEAK_EXECUTION_MEMORY).add(peakMemoryUsed)
 
     lengths
   }

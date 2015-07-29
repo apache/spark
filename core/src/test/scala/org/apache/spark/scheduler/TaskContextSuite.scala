@@ -66,7 +66,7 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
   }
 
   test("all TaskCompletionListeners should be called even if some fail") {
-    val context = new TaskContextImpl(0, 0, 0, 0, null, null)
+    val context = new TaskContextImpl(0, 0, 0, 0, null, null, null)
     val listener = mock(classOf[TaskCompletionListener])
     context.addTaskCompletionListener(_ => throw new Exception("blah"))
     context.addTaskCompletionListener(listener)

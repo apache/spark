@@ -171,7 +171,7 @@ class CoGroupedRDD[K](@transient var rdds: Seq[RDD[_ <: Product2[K, _]]], part: 
       context.taskMetrics().incMemoryBytesSpilled(map.memoryBytesSpilled)
       context.taskMetrics().incDiskBytesSpilled(map.diskBytesSpilled)
       context.internalMetricsToAccumulators(
-        TaskContextAccumulator.PEAK_EXECUTION_MEMORY).add(map.peakMemoryUsed)
+        InternalAccumulator.PEAK_EXECUTION_MEMORY).add(map.peakMemoryUsed)
       new InterruptibleIterator(context,
         map.iterator.asInstanceOf[Iterator[(K, Array[Iterable[_]])]])
     }

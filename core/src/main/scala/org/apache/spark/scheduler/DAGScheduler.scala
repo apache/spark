@@ -773,14 +773,24 @@ class DAGScheduler(
     stage.pendingTasks.clear()
 
     // First figure out the indexes of partition ids to compute.
-    val partitionsToCompute: Seq[Int] = {
+    val (allPartitions: Seq[Int], partitionsToCompute: Seq[Int]) = {
       stage match {
         case stage: ShuffleMapStage =>
-          (0 until stage.numPartitions).filter(id => stage.outputLocs(id).isEmpty)
+          val allPartitions = 0 until stage.numPartitions
+          val filteredPartitions = allPartitions.filter(id => stage.outputLocs(id).isEmpty)
+          (allPartitions, filteredPartitions)
         case stage: ResultStage =>
           val job = stage.resultOfJob.get
-          (0 until job.numPartitions).filter(id => !job.finished(id))
+          val allPartitions = 0 until job.numPartitions
+          val filteredPartitions = allPartitions.filter(id => !job.finished(id))
+          (allPartitions, filteredPartitions)
       }
+    }
+
+    // Reset internal accumulators only if this stage is not partially submitted
+    // Otherwise, we may override existing accumulator values from some tasks
+    if (allPartitions == partitionsToCompute) {
+      stage.resetInternalAccumulators()
     }
 
     val properties = jobIdToActiveJob.get(stage.firstJobId).map(_.properties).orNull
@@ -852,7 +862,8 @@ class DAGScheduler(
           partitionsToCompute.map { id =>
             val locs = taskIdToLocations(id)
             val part = stage.rdd.partitions(id)
-            new ShuffleMapTask(stage.id, stage.latestInfo.attemptId, taskBinary, part, locs)
+            new ShuffleMapTask(stage.id, stage.latestInfo.attemptId,
+              taskBinary, part, locs, stage.internalAccumulators)
           }
 
         case stage: ResultStage =>
@@ -861,7 +872,8 @@ class DAGScheduler(
             val p: Int = job.partitions(id)
             val part = stage.rdd.partitions(p)
             val locs = taskIdToLocations(id)
-            new ResultTask(stage.id, stage.latestInfo.attemptId, taskBinary, part, locs, id)
+            new ResultTask(stage.id, stage.latestInfo.attemptId,
+              taskBinary, part, locs, id, stage.internalAccumulators)
           }
       }
     } catch {
