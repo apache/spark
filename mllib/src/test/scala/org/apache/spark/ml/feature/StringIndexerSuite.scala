@@ -48,9 +48,9 @@ class StringIndexerSuite extends SparkFunSuite with MLlibTestSparkContext {
     val expected = Set((0, 0.0), (1, 2.0), (2, 1.0), (3, 0.0), (4, 0.0), (5, 1.0))
     assert(output === expected)
     // convert reverse our transform
-    val reversed = indexer.invert("labelIndex", "label")
-      .transform(transformed.select("id", "labelIndex"))
-      .select("id", "label")
+    val reversed = indexer.invert("labelIndex", "label2")
+      .transform(transformed)
+      .select("id", "label2")
     assert(df.collect().map(r => (r.getInt(0), r.getString(1))).toSet ===
       reversed.collect().map(r => (r.getInt(0), r.getString(1))).toSet)
   }

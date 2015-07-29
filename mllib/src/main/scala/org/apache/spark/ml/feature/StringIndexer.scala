@@ -20,7 +20,7 @@ package org.apache.spark.ml.feature
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.ml.{Estimator, Model}
-import org.apache.spark.ml.attribute.NominalAttribute
+import org.apache.spark.ml.attribute.{Attribute, NominalAttribute}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.Transformer
@@ -190,10 +190,14 @@ class StringIndexerInverseTransformer private[ml] (
   }
 
   override def transform(dataset: DataFrame): DataFrame = {
-    val indexToLabel = MetadataUtils.getCategoricalFeatures(dataset.schema($(inputCol))).map(_.swap)
+    val inputColSchema = dataset.schema($(inputCol))
+    val attr = Attribute.fromStructField(inputColSchema)
+      .asInstanceOf[NominalAttribute]
+    val values = attr.values.get
     val indexer = udf { index: Double =>
-      if (indexToLabel.contains(index.toInt)) {
-        indexToLabel(index.toInt)
+      val idx = index.toInt
+      if (0 <= idx && idx <= values.size) {
+        values(idx)
       } else {
         throw new SparkException(s"Unseen index: $index ??")
       }
