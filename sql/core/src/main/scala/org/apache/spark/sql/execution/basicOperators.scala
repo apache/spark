@@ -335,7 +335,14 @@ case class UnsafeExternalSort(
       if (testSpillFrequency > 0) {
         sorter.setTestSpillFrequency(testSpillFrequency)
       }
-      sorter.sort(iterator)
+      val sortedIterator = sorter.sort(iterator)
+
+      // Update task metrics
+      val taskContext = TaskContext.get()
+      taskContext.internalMetricsToAccumulators(
+        TaskContextAccumulator.PEAK_EXECUTION_MEMORY).add(sorter.getPeakMemoryUsage)
+
+      sortedIterator
     }
     child.execute().mapPartitions(doSort, preservesPartitioning = true)
   }

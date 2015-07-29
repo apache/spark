@@ -183,7 +183,7 @@ abstract class TaskContext extends Serializable {
   /**
    * Accumulators for tracking internal metrics indexed by the name.
    */
-  private[spark] val internalMetricsToAccumulators: Map[String, Accumulable[Long, Long]] = {
+  private[spark] lazy val internalMetricsToAccumulators: Map[String, Accumulable[Long, Long]] = {
     import AccumulatorParam._
     import TaskContextAccumulator._
     val accumulators = Seq(

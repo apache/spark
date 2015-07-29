@@ -108,6 +108,11 @@ final class UnsafeExternalRowSorter {
     sorter.spill();
   }
 
+  /** The peak memory used so far in bytes. */
+  public long getPeakMemoryUsage() {
+    return sorter.getPeakMemoryUsage();
+  }
+
   private void cleanupResources() {
     sorter.freeMemory();
   }

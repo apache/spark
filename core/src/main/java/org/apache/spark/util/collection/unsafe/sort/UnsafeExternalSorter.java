@@ -70,6 +70,7 @@ public final class UnsafeExternalSorter {
   private MemoryBlock currentPage = null;
   private long currentPagePosition = -1;
   private long freeSpaceInCurrentPage = 0;
+  private long peakMemoryUsed = 0;
 
   private final LinkedList<UnsafeSorterSpillWriter> spillWriters = new LinkedList<>();
 
@@ -147,7 +148,16 @@ public final class UnsafeExternalSorter {
   }
 
   private long getMemoryUsage() {
-    return sorter.getMemoryUsage() + (allocatedPages.size() * (long) PAGE_SIZE);
+    long mem = sorter.getMemoryUsage() + (allocatedPages.size() * (long) PAGE_SIZE);
+    if (mem > peakMemoryUsed) {
+      peakMemoryUsed = mem;
+    }
+    return mem;
+  }
+
+  /** The peak memory used so far in bytes. */
+  public long getPeakMemoryUsage() {
+    return peakMemoryUsed;
   }
 
   @VisibleForTesting
