@@ -368,7 +368,7 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll with SQLTestUtils {
       Row(1))
     checkAnswer(
       sql("SELECT COALESCE(null, 1, 1.5)"),
-      Row(1.toDouble))
+      Row(BigDecimal(1)))
     checkAnswer(
       sql("SELECT COALESCE(null, null, null)"),
       Row(null))
@@ -1234,19 +1234,19 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll with SQLTestUtils {
 
   test("Floating point number format") {
     checkAnswer(
-      sql("SELECT 0.3"), Row(0.3)
+      sql("SELECT 0.3"), Row(BigDecimal(0.3).underlying())
     )
 
     checkAnswer(
-      sql("SELECT -0.8"), Row(-0.8)
+      sql("SELECT -0.8"), Row(BigDecimal(-0.8).underlying())
     )
 
     checkAnswer(
-      sql("SELECT .5"), Row(0.5)
+      sql("SELECT .5"), Row(BigDecimal(0.5))
     )
 
     checkAnswer(
-      sql("SELECT -.18"), Row(-0.18)
+      sql("SELECT -.18"), Row(BigDecimal(-0.18))
     )
   }
 
@@ -1279,11 +1279,11 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll with SQLTestUtils {
     )
 
     checkAnswer(
-      sql("SELECT -5.2"), Row(-5.2)
+      sql("SELECT -5.2"), Row(BigDecimal(-5.2))
     )
 
     checkAnswer(
-      sql("SELECT +6.8"), Row(6.8)
+      sql("SELECT +6.8"), Row(BigDecimal(6.8))
     )
 
     checkAnswer(
