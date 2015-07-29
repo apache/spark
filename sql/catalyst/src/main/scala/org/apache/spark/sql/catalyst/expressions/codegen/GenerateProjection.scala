@@ -159,6 +159,7 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
     class SpecificProjection extends ${classOf[BaseProjection].getName} {
       private $exprType[] expressions;
       ${declareMutableStates(ctx)}
+      ${declareAddedFunctions(ctx)}
 
       public SpecificProjection($exprType[] expr) {
         expressions = expr;

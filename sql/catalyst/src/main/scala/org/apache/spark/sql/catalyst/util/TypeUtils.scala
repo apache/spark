@@ -37,7 +37,7 @@ object TypeUtils {
       case i: AtomicType => TypeCheckResult.TypeCheckSuccess
       case n: NullType => TypeCheckResult.TypeCheckSuccess
       case s: StructType =>
-        if (s.fields.exists(_.dataType.isInstanceOf[AtomicType])) {
+        if (s.supportOrdering(s)) {
           TypeCheckResult.TypeCheckSuccess
         } else {
           TypeCheckResult.TypeCheckFailure(s"Fields in $s do not support ordering")

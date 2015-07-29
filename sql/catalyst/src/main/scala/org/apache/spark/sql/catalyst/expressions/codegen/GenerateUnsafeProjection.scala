@@ -266,6 +266,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
       class SpecificProjection extends ${classOf[UnsafeProjection].getName} {
 
         ${declareMutableStates(ctx)}
+        ${declareAddedFunctions(ctx)}
 
         public SpecificProjection() {
           ${initMutableStates(ctx)}

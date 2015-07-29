@@ -166,6 +166,10 @@ class RowOrdering(ordering: Seq[SortOrder]) extends Ordering[InternalRow] {
             n.ordering.asInstanceOf[Ordering[Any]].compare(left, right)
           case n: AtomicType if order.direction == Descending =>
             n.ordering.asInstanceOf[Ordering[Any]].reverse.compare(left, right)
+          case s: StructType if order.direction == Ascending =>
+            s.ordering.asInstanceOf[Ordering[Any]].compare(left, right)
+          case s: StructType if order.direction == Descending =>
+            s.ordering.asInstanceOf[Ordering[Any]].reverse.compare(left, right)
           case other => sys.error(s"Type $other does not support ordered operations")
         }
         if (comparison != 0) return comparison

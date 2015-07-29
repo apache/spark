@@ -24,8 +24,7 @@ import org.json4s.JsonDSL._
 
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.sql.Row
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Attribute}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Attribute, RowOrdering}
 
 
 /**
@@ -302,26 +301,16 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
     StructType(newFields)
   }
 
-  private[sql] val ordering = StructTypeOrdering.getOrdering(this)
-}
+  private[sql] val ordering = RowOrdering.forSchema(this.fields.map(_.dataType))
 
-object StructTypeOrdering {
-  def getOrdering(s: StructType): Ordering[Row] = {
-    val atomicFields = s.fields.filter(_.dataType.isInstanceOf[AtomicType])
-    val orderings = atomicFields.map { f =>
-      f.dataType.asInstanceOf[AtomicType].ordering.asInstanceOf[Ordering[Any]]
-    }.zipWithIndex
-
-    new Ordering[Row] {
-      def compare(a: Row, b: Row): Int = {
-        orderings.foreach { ord =>
-          val idx = ord._2
-          val cmp = ord._1.compare(a(idx), b(idx))
-          if (cmp != 0) {
-            return cmp
-          }
-        }
-        return 0
+  private[sql] def supportOrdering(s: StructType): Boolean = {
+    s.fields.forall { f =>
+      if (f.dataType.isInstanceOf[AtomicType]) {
+        true
+      } else if (f.dataType.isInstanceOf[StructType]) {
+        supportOrdering(f.dataType.asInstanceOf[StructType])
+      } else {
+        false
       }
     }
   }

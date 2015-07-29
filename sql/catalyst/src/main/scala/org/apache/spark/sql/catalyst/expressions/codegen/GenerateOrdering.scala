@@ -43,9 +43,7 @@ object GenerateOrdering extends CodeGenerator[Seq[SortOrder], Ordering[InternalR
   protected def bind(in: Seq[SortOrder], inputSchema: Seq[Attribute]): Seq[SortOrder] =
     in.map(BindReferences.bindReference(_, inputSchema))
 
-  protected def create(ordering: Seq[SortOrder]): Ordering[InternalRow] = {
-    val ctx = newCodeGenContext()
-
+  def genComparisons(ordering: Seq[SortOrder], ctx: CodeGenContext): String = {
     val comparisons = ordering.map { order =>
       val eval = order.child.gen(ctx)
       val asc = order.direction == Ascending
@@ -84,6 +82,12 @@ object GenerateOrdering extends CodeGenerator[Seq[SortOrder], Ordering[InternalR
           }
       """
     }.mkString("\n")
+    comparisons
+  }
+
+  protected def create(ordering: Seq[SortOrder]): Ordering[InternalRow] = {
+    val ctx = newCodeGenContext()
+    val comparisons = genComparisons(ordering, ctx)
     val code = s"""
       public SpecificOrdering generate($exprType[] expr) {
         return new SpecificOrdering(expr);
@@ -93,6 +97,7 @@ object GenerateOrdering extends CodeGenerator[Seq[SortOrder], Ordering[InternalR
 
         private $exprType[] expressions;
         ${declareMutableStates(ctx)}
+        ${declareAddedFunctions(ctx)}
 
         public SpecificOrdering($exprType[] expr) {
           expressions = expr;
@@ -106,7 +111,6 @@ object GenerateOrdering extends CodeGenerator[Seq[SortOrder], Ordering[InternalR
           return 0;
         }
       }"""
-
     logDebug(s"Generated Ordering: ${CodeFormatter.format(code)}")
 
     compile(code).generate(ctx.references.toArray).asInstanceOf[BaseOrdering]
