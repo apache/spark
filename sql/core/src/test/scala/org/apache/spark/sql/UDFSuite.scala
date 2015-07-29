@@ -63,11 +63,12 @@ class UDFSuite extends QueryTest with SQLTestUtils {
 
   test("SPARK-8005 input_file_name") {
     withTempPath { dir =>
-      val data = ctx.sparkContext.parallelize(0 to 1000).toDF("id")
+      val data = ctx.sparkContext.parallelize(0 to 10, 2).toDF("id")
       data.write.parquet(dir.getCanonicalPath)
       ctx.read.parquet(dir.getCanonicalPath).registerTempTable("test_table")
       val answer = ctx.sql("select input_file_name() from test_table").head().getString(0)
       assert(answer.contains(dir.getCanonicalPath))
+      assert(ctx.sql("select input_file_name() from test_table").distinct().collect().length >= 2)
       ctx.dropTempTable("test_table")
     }
   }
