@@ -36,7 +36,7 @@ import scala.language.existentials
 /**
  * Params for [[OneVsRest]].
  */
-private[ml] trait OneVsRestParams extends PredictorParams with HasRawPredictionCol {
+private[ml] trait OneVsRestParams extends ClassifierParams {
 
   // scalastyle:off structural.type
   type ClassifierType = Classifier[F, E, M] forSome {
@@ -71,9 +71,9 @@ private[ml] trait OneVsRestParams extends PredictorParams with HasRawPredictionC
  */
 @Experimental
 final class OneVsRestModel private[ml] (
-                                         override val uid: String,
-                                         labelMetadata: Metadata,
-                                         val models: Array[_ <: ClassificationModel[_, _]])
+    override val uid: String,
+    labelMetadata: Metadata,
+    val models: Array[_ <: ClassificationModel[_, _]])
   extends Model[OneVsRestModel] with OneVsRestParams {
 
   override def transformSchema(schema: StructType): StructType = {
@@ -133,7 +133,7 @@ final class OneVsRestModel private[ml] (
       predictions.maxBy(_._2)._2.toDouble
     }
 
-    // output label and label metadata as prediction
+    // output label, confidence factor and label metadata as prediction
     aggregatedDataset
       .withColumn($(predictionCol), labelUDF(col(accColName)).as($(predictionCol), labelMetadata))
       .withColumn($(rawPredictionCol), probabilityUDF(col(accColName)).as($(rawPredictionCol),
@@ -227,4 +227,5 @@ final class OneVsRest(override val uid: String)
     }
     copied
   }
+  
 }
