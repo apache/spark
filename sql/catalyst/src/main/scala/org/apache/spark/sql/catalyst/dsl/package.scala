@@ -263,29 +263,29 @@ package object dsl {
           case e => Alias(e, e.toString)()
         }
         Aggregate(groupingExprs, aliasedExprs, logicalPlan)
+      }
+
+      def subquery(alias: Symbol): LogicalPlan = Subquery(alias.name, logicalPlan)
+
+      def except(otherPlan: LogicalPlan): LogicalPlan = Except(logicalPlan, otherPlan)
+
+      def intersect(otherPlan: LogicalPlan): LogicalPlan = Intersect(logicalPlan, otherPlan)
+
+      def unionAll(otherPlan: LogicalPlan): LogicalPlan = Union(logicalPlan, otherPlan)
+
+      // TODO specify the output column names
+      def generate(
+        generator: Generator,
+        join: Boolean = false,
+        outer: Boolean = false,
+        alias: Option[String] = None): LogicalPlan =
+        Generate(generator, join = join, outer = outer, alias, Nil, logicalPlan)
+
+      def insertInto(tableName: String, overwrite: Boolean = false): LogicalPlan =
+        InsertIntoTable(
+          analysis.UnresolvedRelation(Seq(tableName)), Map.empty, logicalPlan, overwrite, false)
+
+      def analyze: LogicalPlan = EliminateSubQueries(analysis.SimpleAnalyzer.execute(logicalPlan))
     }
-
-    def subquery(alias: Symbol): LogicalPlan = Subquery(alias.name, logicalPlan)
-
-    def except(otherPlan: LogicalPlan): LogicalPlan = Except(logicalPlan, otherPlan)
-
-    def intersect(otherPlan: LogicalPlan): LogicalPlan = Intersect(logicalPlan, otherPlan)
-
-    def unionAll(otherPlan: LogicalPlan): LogicalPlan = Union(logicalPlan, otherPlan)
-
-    // TODO specify the output column names
-    def generate(
-      generator: Generator,
-      join: Boolean = false,
-      outer: Boolean = false,
-      alias: Option[String] = None): LogicalPlan =
-      Generate(generator, join = join, outer = outer, alias, Nil, logicalPlan)
-
-    def insertInto(tableName: String, overwrite: Boolean = false): LogicalPlan =
-      InsertIntoTable(
-        analysis.UnresolvedRelation(Seq(tableName)), Map.empty, logicalPlan, overwrite, false)
-
-    def analyze: LogicalPlan = EliminateSubQueries(analysis.SimpleAnalyzer.execute(logicalPlan))
-  }
   }
 }

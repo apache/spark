@@ -200,8 +200,8 @@ case class CountDistinct(expressions: Seq[Expression]) extends PartialAggregate1
 }
 
 case class CountDistinctFunction(
-          @transient expr: Seq[Expression],
-          @transient base: AggregateExpression1)
+    @transient expr: Seq[Expression],
+    @transient base: AggregateExpression1)
   extends AggregateFunction1 {
 
   def this() = this(null, null) // Required for serialization.
@@ -233,8 +233,8 @@ case class CollectHashSet(expressions: Seq[Expression]) extends AggregateExpress
 }
 
 case class CollectHashSetFunction(
-          @transient expr: Seq[Expression],
-          @transient base: AggregateExpression1)
+    @transient expr: Seq[Expression],
+    @transient base: AggregateExpression1)
   extends AggregateFunction1 {
 
   def this() = this(null, null) // Required for serialization.
