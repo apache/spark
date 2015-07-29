@@ -23,6 +23,7 @@ import java.util.LinkedHashMap
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
+import org.apache.spark.TaskContext
 import org.apache.spark.util.{SizeEstimator, Utils}
 import org.apache.spark.util.collection.SizeTrackingVector
 
@@ -43,11 +44,11 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
   // Ensure only one thread is putting, and if necessary, dropping blocks at any given time
   private val accountingLock = new Object
 
-  // A mapping from thread ID to amount of memory used for unrolling a block (in bytes)
+  // A mapping from taskAttemptId to amount of memory used for unrolling a block (in bytes)
   // All accesses of this map are assumed to have manually synchronized on `accountingLock`
   private val unrollMemoryMap = mutable.HashMap[Long, Long]()
   // Same as `unrollMemoryMap`, but for pending unroll memory as defined below.
-  // Pending unroll memory refers to the intermediate memory occupied by a thread
+  // Pending unroll memory refers to the intermediate memory occupied by a task
   // after the unroll but before the actual putting of the block in the cache.
   // This chunk of memory is expected to be released *as soon as* we finish
   // caching the corresponding block as opposed to until after the task finishes.
@@ -250,21 +251,21 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
     var elementsUnrolled = 0
     // Whether there is still enough memory for us to continue unrolling this block
     var keepUnrolling = true
-    // Initial per-thread memory to request for unrolling blocks (bytes). Exposed for testing.
+    // Initial per-task memory to request for unrolling blocks (bytes). Exposed for testing.
     val initialMemoryThreshold = unrollMemoryThreshold
     // How often to check whether we need to request more memory
     val memoryCheckPeriod = 16
-    // Memory currently reserved by this thread for this particular unrolling operation
+    // Memory currently reserved by this task for this particular unrolling operation
     var memoryThreshold = initialMemoryThreshold
     // Memory to request as a multiple of current vector size
     val memoryGrowthFactor = 1.5
-    // Previous unroll memory held by this thread, for releasing later (only at the very end)
-    val previousMemoryReserved = currentUnrollMemoryForThisThread
+    // Previous unroll memory held by this task, for releasing later (only at the very end)
+    val previousMemoryReserved = currentUnrollMemoryForThisTask
     // Underlying vector for unrolling the block
     var vector = new SizeTrackingVector[Any]
 
     // Request enough memory to begin unrolling
-    keepUnrolling = reserveUnrollMemoryForThisThread(initialMemoryThreshold)
+    keepUnrolling = reserveUnrollMemoryForThisTask(initialMemoryThreshold)
 
     if (!keepUnrolling) {
       logWarning(s"Failed to reserve initial memory threshold of " +
@@ -283,7 +284,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
             // Hold the accounting lock, in case another thread concurrently puts a block that
             // takes up the unrolling space we just ensured here
             accountingLock.synchronized {
-              if (!reserveUnrollMemoryForThisThread(amountToRequest)) {
+              if (!reserveUnrollMemoryForThisTask(amountToRequest)) {
                 // If the first request is not granted, try again after ensuring free space
                 // If there is still not enough space, give up and drop the partition
                 val spaceToEnsure = maxUnrollMemory - currentUnrollMemory
@@ -291,7 +292,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
                   val result = ensureFreeSpace(blockId, spaceToEnsure)
                   droppedBlocks ++= result.droppedBlocks
                 }
-                keepUnrolling = reserveUnrollMemoryForThisThread(amountToRequest)
+                keepUnrolling = reserveUnrollMemoryForThisTask(amountToRequest)
               }
             }
             // New threshold is currentSize * memoryGrowthFactor
@@ -317,9 +318,9 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
       // later when the task finishes.
       if (keepUnrolling) {
         accountingLock.synchronized {
-          val amountToRelease = currentUnrollMemoryForThisThread - previousMemoryReserved
-          releaseUnrollMemoryForThisThread(amountToRelease)
-          reservePendingUnrollMemoryForThisThread(amountToRelease)
+          val amountToRelease = currentUnrollMemoryForThisTask - previousMemoryReserved
+          releaseUnrollMemoryForThisTask(amountToRelease)
+          reservePendingUnrollMemoryForThisTask(amountToRelease)
         }
       }
     }
@@ -397,7 +398,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
         droppedBlockStatus.foreach { status => droppedBlocks += ((blockId, status)) }
       }
       // Release the unroll memory used because we no longer need the underlying Array
-      releasePendingUnrollMemoryForThisThread()
+      releasePendingUnrollMemoryForThisTask()
     }
     ResultWithDroppedBlocks(putSuccess, droppedBlocks)
   }
@@ -427,9 +428,9 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
 
     // Take into account the amount of memory currently occupied by unrolling blocks
     // and minus the pending unroll memory for that block on current thread.
-    val threadId = Thread.currentThread().getId
+    val taskAttemptId = currentTaskAttemptId()
     val actualFreeMemory = freeMemory - currentUnrollMemory +
-      pendingUnrollMemoryMap.getOrElse(threadId, 0L)
+      pendingUnrollMemoryMap.getOrElse(taskAttemptId, 0L)
 
     if (actualFreeMemory < space) {
       val rddToAdd = getRddId(blockIdToAdd)
@@ -455,7 +456,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
         logInfo(s"${selectedBlocks.size} blocks selected for dropping")
         for (blockId <- selectedBlocks) {
           val entry = entries.synchronized { entries.get(blockId) }
-          // This should never be null as only one thread should be dropping
+          // This should never be null as only one task should be dropping
           // blocks and removing entries. However the check is still here for
           // future safety.
           if (entry != null) {
@@ -482,79 +483,85 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
     entries.synchronized { entries.containsKey(blockId) }
   }
 
+  private def currentTaskAttemptId(): Long = {
+    // In case this is called on the driver, return an invalid task attempt id.
+    Option(TaskContext.get()).map(_.taskAttemptId()).getOrElse(-1L)
+  }
+
   /**
-   * Reserve additional memory for unrolling blocks used by this thread.
+   * Reserve additional memory for unrolling blocks used by this task.
    * Return whether the request is granted.
    */
-  def reserveUnrollMemoryForThisThread(memory: Long): Boolean = {
+  def reserveUnrollMemoryForThisTask(memory: Long): Boolean = {
     accountingLock.synchronized {
       val granted = freeMemory > currentUnrollMemory + memory
       if (granted) {
-        val threadId = Thread.currentThread().getId
-        unrollMemoryMap(threadId) = unrollMemoryMap.getOrElse(threadId, 0L) + memory
+        val taskAttemptId = currentTaskAttemptId()
+        unrollMemoryMap(taskAttemptId) = unrollMemoryMap.getOrElse(taskAttemptId, 0L) + memory
       }
       granted
     }
   }
 
   /**
-   * Release memory used by this thread for unrolling blocks.
-   * If the amount is not specified, remove the current thread's allocation altogether.
+   * Release memory used by this task for unrolling blocks.
+   * If the amount is not specified, remove the current task's allocation altogether.
    */
-  def releaseUnrollMemoryForThisThread(memory: Long = -1L): Unit = {
-    val threadId = Thread.currentThread().getId
+  def releaseUnrollMemoryForThisTask(memory: Long = -1L): Unit = {
+    val taskAttemptId = currentTaskAttemptId()
     accountingLock.synchronized {
       if (memory < 0) {
-        unrollMemoryMap.remove(threadId)
+        unrollMemoryMap.remove(taskAttemptId)
       } else {
-        unrollMemoryMap(threadId) = unrollMemoryMap.getOrElse(threadId, memory) - memory
-        // If this thread claims no more unroll memory, release it completely
-        if (unrollMemoryMap(threadId) <= 0) {
-          unrollMemoryMap.remove(threadId)
+        unrollMemoryMap(taskAttemptId) = unrollMemoryMap.getOrElse(taskAttemptId, memory) - memory
+        // If this task claims no more unroll memory, release it completely
+        if (unrollMemoryMap(taskAttemptId) <= 0) {
+          unrollMemoryMap.remove(taskAttemptId)
         }
       }
     }
   }
 
   /**
-   * Reserve the unroll memory of current unroll successful block used by this thread
+   * Reserve the unroll memory of current unroll successful block used by this task
    * until actually put the block into memory entry.
    */
-  def reservePendingUnrollMemoryForThisThread(memory: Long): Unit = {
-    val threadId = Thread.currentThread().getId
+  def reservePendingUnrollMemoryForThisTask(memory: Long): Unit = {
+    val taskAttemptId = currentTaskAttemptId()
     accountingLock.synchronized {
-       pendingUnrollMemoryMap(threadId) = pendingUnrollMemoryMap.getOrElse(threadId, 0L) + memory
+       pendingUnrollMemoryMap(taskAttemptId) =
+         pendingUnrollMemoryMap.getOrElse(taskAttemptId, 0L) + memory
     }
   }
 
   /**
-   * Release pending unroll memory of current unroll successful block used by this thread
+   * Release pending unroll memory of current unroll successful block used by this task
    */
-  def releasePendingUnrollMemoryForThisThread(): Unit = {
-    val threadId = Thread.currentThread().getId
+  def releasePendingUnrollMemoryForThisTask(): Unit = {
+    val taskAttemptId = currentTaskAttemptId()
     accountingLock.synchronized {
-      pendingUnrollMemoryMap.remove(threadId)
+      pendingUnrollMemoryMap.remove(taskAttemptId)
     }
   }
 
   /**
-   * Return the amount of memory currently occupied for unrolling blocks across all threads.
+   * Return the amount of memory currently occupied for unrolling blocks across all tasks.
    */
   def currentUnrollMemory: Long = accountingLock.synchronized {
     unrollMemoryMap.values.sum + pendingUnrollMemoryMap.values.sum
   }
 
   /**
-   * Return the amount of memory currently occupied for unrolling blocks by this thread.
+   * Return the amount of memory currently occupied for unrolling blocks by this task.
    */
-  def currentUnrollMemoryForThisThread: Long = accountingLock.synchronized {
-    unrollMemoryMap.getOrElse(Thread.currentThread().getId, 0L)
+  def currentUnrollMemoryForThisTask: Long = accountingLock.synchronized {
+    unrollMemoryMap.getOrElse(currentTaskAttemptId(), 0L)
   }
 
   /**
-   * Return the number of threads currently unrolling blocks.
+   * Return the number of tasks currently unrolling blocks.
    */
-  def numThreadsUnrolling: Int = accountingLock.synchronized { unrollMemoryMap.keys.size }
+  def numTasksUnrolling: Int = accountingLock.synchronized { unrollMemoryMap.keys.size }
 
   /**
    * Log information about current memory usage.
@@ -566,7 +573,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
     logInfo(
       s"Memory use = ${Utils.bytesToString(blocksMemory)} (blocks) + " +
       s"${Utils.bytesToString(unrollMemory)} (scratch space shared across " +
-      s"$numThreadsUnrolling thread(s)) = ${Utils.bytesToString(totalMemory)}. " +
+      s"$numTasksUnrolling tasks(s)) = ${Utils.bytesToString(totalMemory)}. " +
       s"Storage limit = ${Utils.bytesToString(maxMemory)}."
     )
   }

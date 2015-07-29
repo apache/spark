@@ -32,8 +32,14 @@ private[r] object SparkRWrappers {
       alpha: Double): PipelineModel = {
     val formula = new RFormula().setFormula(value)
     val estimator = family match {
-      case "gaussian" => new LinearRegression().setRegParam(lambda).setElasticNetParam(alpha)
-      case "binomial" => new LogisticRegression().setRegParam(lambda).setElasticNetParam(alpha)
+      case "gaussian" => new LinearRegression()
+        .setRegParam(lambda)
+        .setElasticNetParam(alpha)
+        .setFitIntercept(formula.hasIntercept)
+      case "binomial" => new LogisticRegression()
+        .setRegParam(lambda)
+        .setElasticNetParam(alpha)
+        .setFitIntercept(formula.hasIntercept)
     }
     val pipeline = new Pipeline().setStages(Array(formula, estimator))
     pipeline.fit(df)

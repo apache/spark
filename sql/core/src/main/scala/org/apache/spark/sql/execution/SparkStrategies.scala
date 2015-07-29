@@ -339,7 +339,8 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
      *               if necessary.
      */
     def getSortOperator(sortExprs: Seq[SortOrder], global: Boolean, child: SparkPlan): SparkPlan = {
-      if (sqlContext.conf.unsafeEnabled && UnsafeExternalSort.supportsSchema(child.schema)) {
+      if (sqlContext.conf.unsafeEnabled && sqlContext.conf.codegenEnabled &&
+        UnsafeExternalSort.supportsSchema(child.schema)) {
         execution.UnsafeExternalSort(sortExprs, global, child)
       } else if (sqlContext.conf.externalSortEnabled) {
         execution.ExternalSort(sortExprs, global, child)

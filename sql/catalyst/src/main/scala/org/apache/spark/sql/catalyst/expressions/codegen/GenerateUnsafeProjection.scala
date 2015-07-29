@@ -62,14 +62,10 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
     val cursor = ctx.freshName("cursor")
     val numBytes = ctx.freshName("numBytes")
 
-    val exprs = expressions.zipWithIndex.map { case (e, i) =>
-      e.dataType match {
-        case st: StructType =>
-          createCodeForStruct(ctx, e.gen(ctx), st)
-        case _ =>
-          e.gen(ctx)
-      }
-    }
+    val exprs = expressions.map { e => e.dataType match {
+      case st: StructType => createCodeForStruct(ctx, e.gen(ctx), st)
+      case _ => e.gen(ctx)
+    }}
     val allExprs = exprs.map(_.code).mkString("\n")
 
     val fixedSize = 8 * exprs.length + UnsafeRow.calculateBitSetWidthInBytes(exprs.length)
@@ -153,20 +149,20 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
 
     val exprs: Seq[GeneratedExpressionCode] = schema.map(_.dataType).zipWithIndex.map {
       case (dt, i) => dt match {
-      case st: StructType =>
-        val nestedStructEv = GeneratedExpressionCode(
-          code = "",
-          isNull = s"${input.primitive}.isNullAt($i)",
-          primitive = s"${ctx.getColumn(input.primitive, dt, i)}"
-        )
-        createCodeForStruct(ctx, nestedStructEv, st)
-      case _ =>
-        GeneratedExpressionCode(
-          code = "",
-          isNull = s"${input.primitive}.isNullAt($i)",
-          primitive = s"${ctx.getColumn(input.primitive, dt, i)}"
-        )
-      }
+        case st: StructType =>
+          val nestedStructEv = GeneratedExpressionCode(
+            code = "",
+            isNull = s"${input.primitive}.isNullAt($i)",
+            primitive = s"${ctx.getColumn(input.primitive, dt, i)}"
+          )
+          createCodeForStruct(ctx, nestedStructEv, st)
+        case _ =>
+          GeneratedExpressionCode(
+            code = "",
+            isNull = s"${input.primitive}.isNullAt($i)",
+            primitive = s"${ctx.getColumn(input.primitive, dt, i)}"
+          )
+        }
     }
     val allExprs = exprs.map(_.code).mkString("\n")
 

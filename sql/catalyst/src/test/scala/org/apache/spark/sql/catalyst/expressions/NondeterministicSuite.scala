@@ -18,20 +18,13 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
 
-class DatetimeFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
-  test("datetime function current_date") {
-    val d0 = DateTimeUtils.millisToDays(System.currentTimeMillis())
-    val cd = CurrentDate().eval(EmptyRow).asInstanceOf[Int]
-    val d1 = DateTimeUtils.millisToDays(System.currentTimeMillis())
-    assert(d0 <= cd && cd <= d1 && d1 - d0 <= 1)
+class NondeterministicSuite extends SparkFunSuite with ExpressionEvalHelper {
+  test("MonotonicallyIncreasingID") {
+    checkEvaluation(MonotonicallyIncreasingID(), 0L)
   }
 
-  test("datetime function current_timestamp") {
-    val ct = DateTimeUtils.toJavaTimestamp(CurrentTimestamp().eval(EmptyRow).asInstanceOf[Long])
-    val t1 = System.currentTimeMillis()
-    assert(math.abs(t1 - ct.getTime) < 5000)
+  test("SparkPartitionID") {
+    checkEvaluation(SparkPartitionID(), 0)
   }
-
 }
