@@ -22,7 +22,7 @@ import org.apache.spark.sql.types.Decimal;
 import org.apache.spark.unsafe.PlatformDependent;
 import org.apache.spark.unsafe.array.ByteArrayMethods;
 import org.apache.spark.unsafe.types.ByteArray;
-import org.apache.spark.unsafe.types.Interval;
+import org.apache.spark.unsafe.types.CalendarInterval;
 import org.apache.spark.unsafe.types.UTF8String;
 
 /**
@@ -173,7 +173,7 @@ public class UnsafeRowWriters {
   /** Writer for interval type. */
   public static class IntervalWriter {
 
-    public static int write(UnsafeRow target, int ordinal, int cursor, Interval input) {
+    public static int write(UnsafeRow target, int ordinal, int cursor, CalendarInterval input) {
       final long offset = target.getBaseOffset() + cursor;
 
       // Write the months and microseconds fields of Interval to the variable length portion.

@@ -15,11 +15,10 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.expressions
+package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.TaskContext
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Nondeterministic, LeafExpression}
 import org.apache.spark.sql.catalyst.expressions.codegen.{GeneratedExpressionCode, CodeGenContext}
 import org.apache.spark.sql.types.{LongType, DataType}
 

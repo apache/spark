@@ -41,7 +41,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
   /** Returns true iff we support this data type. */
   def canSupport(dataType: DataType): Boolean = dataType match {
     case t: AtomicType if !t.isInstanceOf[DecimalType] => true
-    case _: IntervalType => true
+    case _: CalendarIntervalType => true
     case t: StructType => t.toSeq.forall(field => canSupport(field.dataType))
     case NullType => true
     case t: DecimalType => true
@@ -55,14 +55,14 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
       s" + (${ev.isNull} ? 0 : $StringWriter.getSize(${ev.primitive}))"
     case BinaryType =>
       s" + (${ev.isNull} ? 0 : $BinaryWriter.getSize(${ev.primitive}))"
-    case IntervalType =>
+    case CalendarIntervalType =>
       s" + (${ev.isNull} ? 0 : 16)"
     case _: StructType =>
       s" + (${ev.isNull} ? 0 : $StructWriter.getSize(${ev.primitive}))"
     case _ => ""
   }
 
-  def genWriter(
+  def genUpdate(
       ctx: CodeGenContext,
       dt: DataType,
       ev: GeneratedExpressionCode,
@@ -93,7 +93,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
       s"$cursor += $StringWriter.write($primitive, $i, $cursor, ${ev.primitive})"
     case BinaryType =>
       s"$cursor += $BinaryWriter.write($primitive, $i, $cursor, ${ev.primitive})"
-    case IntervalType =>
+    case CalendarIntervalType =>
       s"$cursor += $IntervalWriter.write($primitive, $i, $cursor, ${ev.primitive})"
     case t: StructType =>
       s"$cursor += $StructWriter.write($primitive, $i, $cursor, ${ev.primitive})"
@@ -131,7 +131,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
     }.mkString("")
 
     val writers = expressions.zipWithIndex.map { case (e, i) =>
-      val update = genWriter(ctx, e.dataType, exprs(i), ret, i, cursor)
+      val update = genUpdate(ctx, e.dataType, exprs(i), ret, i, cursor)
       s"""if (${exprs(i).isNull}) {
             $ret.setNullAt($i);
           } else {
@@ -205,7 +205,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
     }.mkString("")
 
     val writers = schema.toSeq.map(_.dataType).zip(exprs).zipWithIndex.map { case ((dt, ev), i) =>
-      val update = genWriter(ctx, dt, ev, primitive, i, cursor)
+      val update = genUpdate(ctx, dt, ev, primitive, i, cursor)
       s"""
           if (${exprs(i).isNull}) {
             $primitive.setNullAt($i);

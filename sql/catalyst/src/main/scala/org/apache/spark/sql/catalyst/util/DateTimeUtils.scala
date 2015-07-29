@@ -601,22 +601,43 @@ object DateTimeUtils {
   }
 
   /**
-   * number of days in a non-leap year.
-   */
-  private[this] val daysInNormalYear = Array(31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31)
-
-  /**
    * Returns last day of the month for the given date. The date is expressed in days
    * since 1.1.1970.
    */
   def getLastDayOfMonth(date: Int): Int = {
-    val dayOfMonth = getDayOfMonth(date)
-    val month = getMonth(date)
-    if (month == 2 && isLeapYear(getYear(date))) {
-      date + daysInNormalYear(month - 1) + 1 - dayOfMonth
-    } else {
-      date + daysInNormalYear(month - 1) - dayOfMonth
+    var (year, dayInYear) = getYearAndDayInYear(date)
+    if (isLeapYear(year)) {
+      if (dayInYear > 31 && dayInYear <= 60) {
+        return date + (60 - dayInYear)
+      } else if (dayInYear > 60) {
+        dayInYear = dayInYear - 1
+      }
     }
+    val lastDayOfMonthInYear = if (dayInYear <= 31) {
+      31
+    } else if (dayInYear <= 59) {
+      59
+    } else if (dayInYear <= 90) {
+      90
+    } else if (dayInYear <= 120) {
+      120
+    } else if (dayInYear <= 151) {
+      151
+    } else if (dayInYear <= 181) {
+      181
+    } else if (dayInYear <= 212) {
+      212
+    } else if (dayInYear <= 243) {
+      243
+    } else if (dayInYear <= 273) {
+      273
+    } else if (dayInYear <= 304) {
+      304
+    } else if (dayInYear <= 334) {
+      334
+    } else {
+      365
+    }
+    date + (lastDayOfMonthInYear - dayInYear)
   }
-
 }

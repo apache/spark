@@ -31,7 +31,7 @@ object InterpretedPredicate {
 
   def create(expression: Expression): (InternalRow => Boolean) = {
     expression.foreach {
-      case n: Nondeterministic => n.initialize()
+      case n: Nondeterministic => n.setInitialValues()
       case _ =>
     }
     (r: InternalRow) => expression.eval(r).asInstanceOf[Boolean]

@@ -116,7 +116,7 @@ class HiveTypeCoercionSuite extends PlanTest {
     shouldNotCast(IntegerType, MapType)
     shouldNotCast(IntegerType, StructType)
 
-    shouldNotCast(IntervalType, StringType)
+    shouldNotCast(CalendarIntervalType, StringType)
 
     // Don't implicitly cast complex types to string.
     shouldNotCast(ArrayType(StringType), StringType)

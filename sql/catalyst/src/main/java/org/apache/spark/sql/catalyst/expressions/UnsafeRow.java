@@ -31,7 +31,7 @@ import org.apache.spark.unsafe.PlatformDependent;
 import org.apache.spark.unsafe.array.ByteArrayMethods;
 import org.apache.spark.unsafe.bitset.BitSetMethods;
 import org.apache.spark.unsafe.hash.Murmur3_x86_32;
-import org.apache.spark.unsafe.types.Interval;
+import org.apache.spark.unsafe.types.CalendarInterval;
 import org.apache.spark.unsafe.types.UTF8String;
 
 import static org.apache.spark.sql.types.DataTypes.*;
@@ -240,7 +240,7 @@ public final class UnsafeRow extends MutableRow {
 
   @Override
   public Object get(int ordinal, DataType dataType) {
-    if (dataType instanceof NullType) {
+    if (isNullAt(ordinal) || dataType instanceof NullType) {
       return null;
     } else if (dataType instanceof BooleanType) {
       return getBoolean(ordinal);
@@ -267,7 +267,7 @@ public final class UnsafeRow extends MutableRow {
       return getBinary(ordinal);
     } else if (dataType instanceof StringType) {
       return getUTF8String(ordinal);
-    } else if (dataType instanceof IntervalType) {
+    } else if (dataType instanceof CalendarIntervalType) {
       return getInterval(ordinal);
     } else if (dataType instanceof StructType) {
       return getStruct(ordinal, ((StructType) dataType).size());
@@ -315,21 +315,13 @@ public final class UnsafeRow extends MutableRow {
   @Override
   public float getFloat(int ordinal) {
     assertIndexIsValid(ordinal);
-    if (isNullAt(ordinal)) {
-      return Float.NaN;
-    } else {
-      return PlatformDependent.UNSAFE.getFloat(baseObject, getFieldOffset(ordinal));
-    }
+    return PlatformDependent.UNSAFE.getFloat(baseObject, getFieldOffset(ordinal));
   }
 
   @Override
   public double getDouble(int ordinal) {
     assertIndexIsValid(ordinal);
-    if (isNullAt(ordinal)) {
-      return Float.NaN;
-    } else {
-      return PlatformDependent.UNSAFE.getDouble(baseObject, getFieldOffset(ordinal));
-    }
+    return PlatformDependent.UNSAFE.getDouble(baseObject, getFieldOffset(ordinal));
   }
 
   @Override
@@ -376,7 +368,7 @@ public final class UnsafeRow extends MutableRow {
   }
 
   @Override
-  public Interval getInterval(int ordinal) {
+  public CalendarInterval getInterval(int ordinal) {
     if (isNullAt(ordinal)) {
       return null;
     } else {
@@ -385,7 +377,7 @@ public final class UnsafeRow extends MutableRow {
       final int months = (int) PlatformDependent.UNSAFE.getLong(baseObject, baseOffset + offset);
       final long microseconds =
         PlatformDependent.UNSAFE.getLong(baseObject, baseOffset + offset + 8);
-      return new Interval(months, microseconds);
+      return new CalendarInterval(months, microseconds);
     }
   }
 

@@ -322,7 +322,7 @@ private[spark] object SQLConf {
       " memory.")
 
   val SORTMERGE_JOIN = booleanConf("spark.sql.planner.sortMergeJoin",
-    defaultValue = Some(false),
+    defaultValue = Some(true),
     doc = "When true, use sort merge join (as opposed to hash join) by default for large joins.")
 
   // This is only used for the thriftserver

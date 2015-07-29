@@ -23,7 +23,7 @@ import java.nio.ByteBuffer
 import scala.collection.mutable.HashMap
 
 import org.apache.spark.metrics.MetricsSystem
-import org.apache.spark.{TaskContextImpl, TaskContext}
+import org.apache.spark.{SparkEnv, TaskContextImpl, TaskContext}
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.serializer.SerializerInstance
 import org.apache.spark.unsafe.memory.TaskMemoryManager
@@ -86,7 +86,18 @@ private[spark] abstract class Task[T](
       (runTask(context), context.collectAccumulators())
     } finally {
       context.markTaskCompleted()
-      TaskContext.unset()
+      try {
+        Utils.tryLogNonFatalError {
+          // Release memory used by this thread for shuffles
+          SparkEnv.get.shuffleMemoryManager.releaseMemoryForThisTask()
+        }
+        Utils.tryLogNonFatalError {
+          // Release memory used by this thread for unrolling blocks
+          SparkEnv.get.blockManager.memoryStore.releaseUnrollMemoryForThisTask()
+        }
+      } finally {
+        TaskContext.unset()
+      }
     }
   }
 
