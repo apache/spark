@@ -38,15 +38,18 @@ import org.apache.spark.util.Utils
 class CliSuite extends SparkFunSuite with BeforeAndAfter with Logging {
   val warehousePath = Utils.createTempDir()
   val metastorePath = Utils.createTempDir()
+  val scratchDirPath = Utils.createTempDir()
 
   before {
-      warehousePath.delete()
-      metastorePath.delete()
+    warehousePath.delete()
+    metastorePath.delete()
+    scratchDirPath.delete()
   }
 
   after {
-      warehousePath.delete()
-      metastorePath.delete()
+    warehousePath.delete()
+    metastorePath.delete()
+    scratchDirPath.delete()
   }
 
   /**
@@ -67,14 +70,14 @@ class CliSuite extends SparkFunSuite with BeforeAndAfter with Logging {
       queriesAndExpectedAnswers: (String, String)*): Unit = {
 
     val (queries, expectedAnswers) = queriesAndExpectedAnswers.unzip
-    val cliScript = "../../bin/spark-sql".split("/").mkString(File.separator)
-
     val command = {
+      val cliScript = "../../bin/spark-sql".split("/").mkString(File.separator)
       val jdbcUrl = s"jdbc:derby:;databaseName=$metastorePath;create=true"
       s"""$cliScript
          |  --master local
          |  --hiveconf ${ConfVars.METASTORECONNECTURLKEY}=$jdbcUrl
          |  --hiveconf ${ConfVars.METASTOREWAREHOUSE}=$warehousePath
+         |  --hiveconf ${ConfVars.SCRATCHDIR}=$scratchDirPath
        """.stripMargin.split("\\s+").toSeq ++ extraArgs
     }
 
