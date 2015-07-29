@@ -38,13 +38,6 @@ class RidgeRegressionModel (
   extends GeneralizedLinearModel(weights, intercept)
   with RegressionModel with Serializable with Saveable with PMMLExportable {
 
-  override protected def predictPointWithProbability(
-                                                      dataMatrix: Vector,
-                                                      weightMatrix: Vector,
-                                                      intercept: Double) = {
-    throw new Exception("Not implemented for RidgeRegressionModel")
-  }
-
   override protected def predictPoint(
       dataMatrix: Vector,
       weightMatrix: Vector,

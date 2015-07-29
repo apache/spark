@@ -49,15 +49,6 @@ abstract class GeneralizedLinearModel(val weights: Vector, val intercept: Double
   protected def predictPoint(dataMatrix: Vector, weightMatrix: Vector, intercept: Double): Double
 
   /**
-   * Predict the result along with probability given a data point and the weights learned.
-   *
-   * @param dataMatrix Row vector containing the features for this data point
-   * @param weightMatrix Column vector containing the weights of the model
-   * @param intercept Intercept of the model.
-   */
-  protected def predictPointWithProbability(dataMatrix: Vector, weightMatrix: Vector, intercept: Double): (Double, Double)
-
-  /**
    * Predict values for the given data set using the model trained.
    *
    * @param testData RDD representing data points to be predicted
@@ -83,16 +74,6 @@ abstract class GeneralizedLinearModel(val weights: Vector, val intercept: Double
    */
   def predict(testData: Vector): Double = {
     predictPoint(testData, weights, intercept)
-  }
-
-  /**
-   * Predict values for a single data point using the model trained.
-   *
-   * @param testData array representing a single data point
-   * @return Double prediction from the trained model
-   */
-  def predictWithProbability(testData: Vector): (Double, Double) = {
-    predictPointWithProbability(testData, weights, intercept)
   }
 
   /**

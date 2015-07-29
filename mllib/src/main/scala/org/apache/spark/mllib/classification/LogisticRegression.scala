@@ -114,51 +114,6 @@ class LogisticRegressionModel (
     this
   }
 
-  override protected def predictPointWithProbability(
-                                                      dataMatrix: Vector,
-                                                      weightMatrix: Vector,
-                                                      intercept: Double) = {
-    require(dataMatrix.size == numFeatures)
-
-    // If dataMatrix and weightMatrix have the same dimension, it's binary logistic regression.
-    if (numClasses == 2) {
-      val margin = dot(weightMatrix, dataMatrix) + intercept
-      val score = 1.0 / (1.0 + math.exp(-margin))
-      (threshold match {
-        case Some(t) => if (score > t) 1.0 else 0.0
-        case None => score
-      }, score)
-    } else {
-      /**
-       * Compute and find the one with maximum margins. If the maxMargin is negative, then the
-       * prediction result will be the first class.
-       *
-       * PS, if you want to compute the probabilities for each outcome instead of the outcome
-       * with maximum probability, remember to subtract the maxMargin from margins if maxMargin
-       * is positive to prevent overflow.
-       */
-      var bestClass = 0
-      var maxMargin = 0.0
-      val withBias = dataMatrix.size + 1 == dataWithBiasSize
-      (0 until numClasses - 1).foreach { i =>
-        var margin = 0.0
-        dataMatrix.foreachActive { (index, value) =>
-          if (value != 0.0) margin += value * weightsArray((i * dataWithBiasSize) + index)
-        }
-        // Intercept is required to be added into margin.
-        if (withBias) {
-          margin += weightsArray((i * dataWithBiasSize) + dataMatrix.size)
-        }
-        if (margin > maxMargin) {
-          maxMargin = margin
-          bestClass = i + 1
-        }
-      }
-      val score = 1.0 / (1.0 + math.exp(-maxMargin))
-      (bestClass.toDouble, score)
-    }
-  }
-
   override protected def predictPoint(
       dataMatrix: Vector,
       weightMatrix: Vector,

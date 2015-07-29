@@ -73,13 +73,6 @@ class SVMModel (
     this
   }
 
-  override protected def predictPointWithProbability(
-                                                      dataMatrix: Vector,
-                                                      weightMatrix: Vector,
-                                                      intercept: Double) = {
-    throw new Exception("Not implemented for SVMModel")
-  }
-
   override protected def predictPoint(
       dataMatrix: Vector,
       weightMatrix: Vector,
