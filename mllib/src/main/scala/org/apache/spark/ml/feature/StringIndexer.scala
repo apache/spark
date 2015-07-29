@@ -159,9 +159,10 @@ class StringIndexerModel private[ml] (
    * should only be used on new columns such as predicted labels.
    */
   def invert(inputCol: String, outputCol: String): StringIndexerInverse = {
-    new StringIndexerInverse(Some(labels))
+    new StringIndexerInverse()
       .setInputCol(inputCol)
       .setOutputCol(outputCol)
+      .setLabels(labels)
   }
 }
 
@@ -174,18 +175,20 @@ class StringIndexerModel private[ml] (
  */
 @Experimental
 class StringIndexerInverse private[ml] (
-  override val uid: String,
-  val labels: Option[Array[String]]) extends Transformer
-    with HasInputCol with HasOutputCol {
+  override val uid: String) extends Transformer
+    with HasInputCol with HasOutputCol with HasLabels {
 
   def this(labels: Option[Array[String]] = None) =
-    this(Identifiable.randomUID("strIdxInv"), labels)
+    this(Identifiable.randomUID("strIdxInv"))
 
   /** @group setParam */
   def setInputCol(value: String): this.type = set(inputCol, value)
 
   /** @group setParam */
   def setOutputCol(value: String): this.type = set(outputCol, value)
+
+  /** @group setParam */
+  def setLabels(value: Array[String]): this.type = set(labels, value)
 
   /** Transform the schema for the inverse transformation */
   override def transformSchema(schema: StructType): StructType = {
@@ -205,7 +208,7 @@ class StringIndexerInverse private[ml] (
 
   override def transform(dataset: DataFrame): DataFrame = {
     val inputColSchema = dataset.schema($(inputCol))
-    val values = labels.getOrElse{
+    val values = Option($(labels)).getOrElse{
       Attribute.fromStructField(inputColSchema)
         .asInstanceOf[NominalAttribute].values.get
     }
@@ -223,7 +226,7 @@ class StringIndexerInverse private[ml] (
   }
 
   override def copy(extra: ParamMap): StringIndexerInverse = {
-    val copied = new StringIndexerInverse(uid, labels)
+    val copied = new StringIndexerInverse(uid)
     copyValues(copied, extra)
   }
 
