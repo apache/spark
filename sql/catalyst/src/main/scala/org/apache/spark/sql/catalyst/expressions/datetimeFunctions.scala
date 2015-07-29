@@ -292,12 +292,20 @@ case class UnixTimestamp(left: Expression, right: Expression)
 
   override def dataType: DataType = LongType
 
+  lazy val constFormat: String = right.eval().asInstanceOf[UTF8String].toString
   override def nullSafeEval(time: Any, format: Any): Any = {
     left.dataType match {
       case DateType =>
         DateTimeUtils.daysToMillis(time.asInstanceOf[Int]) / 1000L
       case TimestampType =>
         time.asInstanceOf[Long] / 1000000L
+      case StringType if right.foldable =>
+        if (constFormat != null) {
+          val sdf = new SimpleDateFormat(constFormat)
+          Try(sdf.parse(time.asInstanceOf[UTF8String].toString).getTime / 1000L).getOrElse(null)
+        } else {
+          null
+        }
       case StringType =>
         val formatString = format.asInstanceOf[UTF8String].toString
         val sdf = new SimpleDateFormat(formatString)
