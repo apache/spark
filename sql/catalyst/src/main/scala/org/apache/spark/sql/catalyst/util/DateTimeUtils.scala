@@ -601,19 +601,19 @@ object DateTimeUtils {
   }
 
   /**
-   * Returns the number of days till the month end.
-   * if the `date` itself is the last day of a month, just return 0.
+   * Returns last day of the month for the given date. The date is expressed in days
+   * since 1.1.1970.
    */
-  private[this] def daysToMonthEnd(date: Int): Int = {
+  def getLastDayOfMonth(date: Int): Int = {
     var (year, dayInYear) = getYearAndDayInYear(date)
     if (isLeapYear(year)) {
       if (dayInYear > 31 && dayInYear <= 60) {
-        return 60 - dayInYear
+        return date + (60 - dayInYear)
       } else if (dayInYear > 60) {
         dayInYear = dayInYear - 1
       }
     }
-    val lastDayOfMonth = if (dayInYear <= 31) {
+    val lastDayOfMonthInYear = if (dayInYear <= 31) {
       31
     } else if (dayInYear <= 59) {
       59
@@ -638,14 +638,6 @@ object DateTimeUtils {
     } else {
       365
     }
-    lastDayOfMonth - dayInYear
-  }
-
-  /**
-   * Returns last day of the month for the given date. The date is expressed in days
-   * since 1.1.1970.
-   */
-  def getLastDayOfMonth(date: Int): Int = {
-    date + daysToMonthEnd(date)
+    date + (lastDayOfMonthInYear - dayInYear)
   }
 }
