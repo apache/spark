@@ -183,9 +183,9 @@ abstract class TaskContext extends Serializable {
   /**
    * Accumulators for tracking internal metrics indexed by the name.
    */
-  private[spark] val internalMetricsToAccumulators: Map[String, Accumulable[_, _]] = {
+  private[spark] val internalMetricsToAccumulators: Map[String, Accumulable[Long, Long]] = {
     import AccumulatorParam._
-    import TaskContextAccumulatorNames._
+    import TaskContextAccumulator._
     val accumulators = Seq(
       // Execution memory refers to the memory used by internal data structures created
       // during shuffles, aggregations and joins. The value of this accumulator should be
@@ -200,6 +200,6 @@ abstract class TaskContext extends Serializable {
 /**
  * A collection of internal accumulator names used in [[TaskContext]].
  */
-private[spark] object TaskContextAccumulatorNames {
+private[spark] object TaskContextAccumulator {
   val PEAK_EXECUTION_MEMORY = "peakExecutionMemory"
 }

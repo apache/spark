@@ -152,6 +152,9 @@ private[spark] class ExternalSorter[K, V, C](
   private var _diskBytesSpilled = 0L
   def diskBytesSpilled: Long = _diskBytesSpilled
 
+  // Peak size of the in-memory data structure observed so far
+  private var _peakMemoryUsed: Long = 0L
+  def peakMemoryUsed: Long = _peakMemoryUsed
 
   // A comparator for keys K that orders them within a partition to allow aggregation or sorting.
   // Can be a partial ordering by hash code if a total ordering is not provided through by the
@@ -224,14 +227,21 @@ private[spark] class ExternalSorter[K, V, C](
       return
     }
 
+    var estimatedSize = 0L
     if (usingMap) {
-      if (maybeSpill(map, map.estimateSize())) {
+      estimatedSize = map.estimateSize()
+      if (maybeSpill(map, estimatedSize)) {
         map = new PartitionedAppendOnlyMap[K, C]
       }
     } else {
-      if (maybeSpill(buffer, buffer.estimateSize())) {
-        buffer = newBuffer()
+      estimatedSize = buffer.estimateSize()
+      if (maybeSpill(buffer, estimatedSize)) {
+        buffer = new PartitionedAppendOnlyMap[K, C]
       }
+    }
+
+    if (estimatedSize > _peakMemoryUsed) {
+      _peakMemoryUsed = estimatedSize
     }
   }
 
@@ -684,8 +694,10 @@ private[spark] class ExternalSorter[K, V, C](
       }
     }
 
-    context.taskMetrics.incMemoryBytesSpilled(memoryBytesSpilled)
-    context.taskMetrics.incDiskBytesSpilled(diskBytesSpilled)
+    context.taskMetrics().incMemoryBytesSpilled(memoryBytesSpilled)
+    context.taskMetrics().incDiskBytesSpilled(diskBytesSpilled)
+    context.internalMetricsToAccumulators(
+      TaskContextAccumulator.PEAK_EXECUTION_MEMORY).add(peakMemoryUsed)
 
     lengths
   }

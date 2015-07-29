@@ -30,7 +30,7 @@ import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.collection.ExternalSorter
 import org.apache.spark.util.collection.unsafe.sort.PrefixComparator
 import org.apache.spark.util.{CompletionIterator, MutablePair}
-import org.apache.spark.{HashPartitioner, SparkEnv}
+import org.apache.spark.{HashPartitioner, SparkEnv, TaskContext, TaskContextAccumulator}
 
 /**
  * :: DeveloperApi ::
@@ -268,6 +268,12 @@ case class ExternalSort(
       val ordering = newOrdering(sortOrder, child.output)
       val sorter = new ExternalSorter[InternalRow, Null, InternalRow](ordering = Some(ordering))
       sorter.insertAll(iterator.map(r => (r.copy, null)))
+      // Update task metrics
+      val context = TaskContext.get()
+      context.taskMetrics().incDiskBytesSpilled(sorter.diskBytesSpilled)
+      context.taskMetrics().incMemoryBytesSpilled(sorter.memoryBytesSpilled)
+      context.internalMetricsToAccumulators(
+        TaskContextAccumulator.PEAK_EXECUTION_MEMORY).add(sorter.peakMemoryUsed)
       val baseIterator = sorter.iterator.map(_._1)
       // TODO(marmbrus): The complex type signature below thwarts inference for no reason.
       CompletionIterator[InternalRow, Iterator[InternalRow]](baseIterator, sorter.stop())
