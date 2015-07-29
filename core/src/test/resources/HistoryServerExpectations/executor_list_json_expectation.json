@@ -13,5 +13,6 @@
   "totalShuffleRead" : 0,
   "totalShuffleWrite" : 13180,
   "maxMemory" : 278302556,
-  "executorLogs" : { }
+  "executorLogs" : { },
+  "isRemoved": false
 } ]

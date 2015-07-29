@@ -87,7 +87,7 @@ class StorageStatusListener extends SparkListener {
   override def onBlockManagerRemoved(blockManagerRemoved: SparkListenerBlockManagerRemoved) {
     synchronized {
       val executorId = blockManagerRemoved.blockManagerId.executorId
-      executorIdToStorageStatus.remove(executorId)
+      executorIdToStorageStatus(executorId).markAsRemoved
     }
   }
 

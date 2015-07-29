@@ -151,6 +151,10 @@ object MimaExcludes {
             ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.sources.PartitionSpec$"),
             ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.sources.DescribeCommand"),
             ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.sources.DDLException")
+          ) ++ Seq(
+            // SPARK-8100 Make able to refer lost executor info in Spark UI
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.status.api.v1.ExecutorSummary.this")
           )
 
         case v if v.startsWith("1.4") =>
