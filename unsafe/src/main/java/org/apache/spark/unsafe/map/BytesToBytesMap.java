@@ -330,7 +330,7 @@ public final class BytesToBytesMap {
         keyMemoryLocation.setObjAndOffset(page, position);
         position += keyLength;
         valueLength = (int) PlatformDependent.UNSAFE.getLong(page, position);
-        position += 8; // word used to store the key size
+        position += 8; // word used to store the value size
         valueMemoryLocation.setObjAndOffset(page, position);
     }
 

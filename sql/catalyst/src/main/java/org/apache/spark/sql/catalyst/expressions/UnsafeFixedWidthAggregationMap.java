@@ -206,6 +206,13 @@ public final class UnsafeFixedWidthAggregationMap {
   }
 
   /**
+   * The memory used by this map's managed structures in bytes.
+   */
+  public long getMemoryUsage() {
+    return map.getTotalMemoryConsumption();
+  }
+
+  /**
    * Free the unsafe memory associated with this map.
    */
   public void free() {

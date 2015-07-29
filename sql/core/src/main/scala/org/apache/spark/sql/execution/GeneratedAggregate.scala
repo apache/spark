@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.TaskContext
+import org.apache.spark.{InternalAccumulator, TaskContext}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
@@ -260,11 +260,12 @@ case class GeneratedAggregate(
       } else if (unsafeEnabled && schemaSupportsUnsafe) {
         assert(iter.hasNext, "There should be at least one row for this path")
         log.info("Using Unsafe-based aggregator")
+        val taskContext = TaskContext.get()
         val aggregationMap = new UnsafeFixedWidthAggregationMap(
           newAggregationBuffer(EmptyRow),
           aggregationBufferSchema,
           groupKeySchema,
-          TaskContext.get.taskMemoryManager(),
+          taskContext.taskMemoryManager(),
           1024 * 16, // initial capacity
           false // disable tracking of performance metrics
         )
@@ -290,7 +291,10 @@ case class GeneratedAggregate(
             } else {
               // This is the last element in the iterator, so let's free the buffer. Before we do,
               // though, we need to make a defensive copy of the result so that we don't return an
-              // object that might contain dangling pointers to the freed memory
+              // object that might contain dangling pointers to the freed memory. Also record the
+              // memory used in the process.
+              taskContext.internalMetricsToAccumulators(
+                InternalAccumulator.PEAK_EXECUTION_MEMORY).add(aggregationMap.getMemoryUsage)
               val resultCopy = result.copy()
               aggregationMap.free()
               resultCopy
