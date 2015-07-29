@@ -38,18 +38,24 @@ class DataProfilingMixin(object):
         )
 
 
-def limit_sql(sql, limit):
+def limit_sql(sql, limit, conn_type):
     sql = sql.strip()
     sql = sql.rstrip(';')
     if sql.lower().startswith("select"):
-        sql = """\
-        SELECT * FROM (
-        {sql}
-        ) qry
-        LIMIT {limit}
-        """.format(**locals())
+        if conn_type in ['mssql']:
+            sql = """\
+            SELECT TOP {limit} * FROM (
+            {sql}
+            ) qry
+            """.format(**locals())
+        else:
+            sql = """\
+            SELECT * FROM (
+            {sql}
+            ) qry
+            LIMIT {limit}
+            """.format(**locals())
     return sql
-
 
 def gzipped(f):
     '''

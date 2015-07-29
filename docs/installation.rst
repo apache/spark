@@ -23,6 +23,9 @@ Here's the list of the subpackages and what they enable:
 +-------------+------------------------------------+---------------------------------------+
 | subpackage  |     install command                | enables                               |
 +=============+====================================+=======================================+
+|  mssql      |  ``pip install airflow[mssql]``    | Microsoft SQQL operators and hook,    |
+|             |                                    | support as an Airflow backend         |
++-------------+------------------------------------+---------------------------------------+
 |  mysql      |  ``pip install airflow[mysql]``    | MySQL operators and hook, support as  |
 |             |                                    | an Airflow backend                    |
 +-------------+------------------------------------+---------------------------------------+

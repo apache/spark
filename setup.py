@@ -21,8 +21,9 @@ samba = ['pysmbclient>=0.1.3']
 druid = ['pydruid>=0.2.1']
 s3 = ['boto>=2.36.0']
 jdbc = ['jaydebeapi>=0.2.0']
+mssql = ['pymssql>=2.1.1', 'unicodecsv>=0.13.0']
 
-all_dbs = postgres + mysql + hive
+all_dbs = postgres + mysql + hive + mssql
 devel = all_dbs + doc + samba + s3 + ['nose']
 
 setup(
@@ -67,6 +68,7 @@ setup(
         'samba': samba,
         'druid': druid,
         'jdbc': jdbc,
+        'mssql': mssql,
     },
     author='Maxime Beauchemin',
     author_email='maximebeauchemin@gmail.com',
