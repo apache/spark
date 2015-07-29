@@ -240,8 +240,8 @@ class LocalLDAModel private[clustering] (
   def logPerplexity(documents: RDD[(Long, Vector)]): Double = {
     val numDocs = documents.count()
     val corpusWords = documents
-      .flatMap { case (_, termCounts) => termCounts.toArray }
-      .reduce(_ + _)
+      .map { case (_, termCounts) => termCounts.toArray.sum }
+      .sum()
     val subsampleRatio = numDocs.toDouble / documents.count()
     val batchVariationalBound = bound(documents, subsampleRatio, docConcentration,
       topicConcentration, topicsMatrix.toBreeze.toDenseMatrix, gammaShape, k, vocabSize)
@@ -281,7 +281,7 @@ class LocalLDAModel private[clustering] (
     // by topic (columns of lambda)
     val Elogbeta = LDAUtils.dirichletExpectation(lambda.t).t
 
-    var score = documents.map { case (id: Long, termCounts: Vector) =>
+    var score = documents.filter(_._2.numActives > 0).map { case (id: Long, termCounts: Vector) =>
       var docScore = 0.0D
       val (gammad: BDV[Double], _) = OnlineLDAOptimizer.variationalTopicInference(
         termCounts, exp(Elogbeta), brzAlpha, gammaShape, k)
