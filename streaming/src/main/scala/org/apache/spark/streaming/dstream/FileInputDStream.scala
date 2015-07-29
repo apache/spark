@@ -87,9 +87,8 @@ class FileInputDStream[K, V, F <: NewInputFormat[K, V]](
    * files are visible within this window, then the file will get selected in the next batch.
    */
   private val minRememberDurationS =
-    Seconds(
-          ssc.conf.getTimeAsSeconds("spark.streaming.fileStream.minRememberDuration",
-           ssc.conf.get("spark.streaming.minRememberDuration", "60s")))
+    Seconds(ssc.conf.getTimeAsSeconds("spark.streaming.fileStream.minRememberDuration",
+    ssc.conf.get("spark.streaming.minRememberDuration", "60s")))
 
   // This is a def so that it works during checkpoint recovery:
   private def clock = ssc.scheduler.clock
