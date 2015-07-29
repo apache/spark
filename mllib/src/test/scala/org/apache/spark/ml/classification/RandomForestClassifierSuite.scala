@@ -173,5 +173,13 @@ private object RandomForestClassifierSuite {
     assert(newModel.hasParent)
     assert(!newModel.trees.head.asInstanceOf[DecisionTreeClassificationModel].hasParent)
     assert(newModel.numClasses == numClasses)
+    val results = newModel.transform(newData)
+    results.select("rawPrediction", "prediction").collect().foreach {
+      case Row(raw: Vector, prediction: Double) => {
+        assert(raw.size == numClasses)
+        val predFromRaw = raw.toArray.zipWithIndex.maxBy(_._1)._2
+        assert(predFromRaw == prediction)
+      }
+    }
   }
 }
