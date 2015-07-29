@@ -230,35 +230,29 @@ class LocalLDAModel private[clustering] (
   // override def topicDistributions(documents: RDD[(Long, Vector)]): RDD[(Long, Vector)] = ???
 
   /**
-   * Calculate and return log variational bound on perplexity using the provided `documents` of
-   * documents as a test corpus.
-   * Perplexity on a test corpus is calculated as:
-   *    perplexity(documents) = exp( -log p(documents) / numWords )
-   * where p is the LDA model. It is upper bounded by the variational distribution using:
-   *    perplexity(documents) <= exp( -(E_q[log p(documents)] - E_q[log q(documents)]) / numWords )
+   * Calculate the log variational bound on perplexity. See Equation (16) in original Online
+   * LDA paper.
+   * @param documents test corpus to use for calculating perplexity
+   * @return the log perplexity per word
    */
   def logPerplexity(documents: RDD[(Long, Vector)]): Double = {
-    val numDocs = documents.count()
     val corpusWords = documents
       .map { case (_, termCounts) => termCounts.toArray.sum }
       .sum()
-    val subsampleRatio = numDocs.toDouble / documents.count()
-    val batchVariationalBound = bound(documents, subsampleRatio, docConcentration,
+    val batchVariationalBound = bound(documents, docConcentration,
       topicConcentration, topicsMatrix.toBreeze.toDenseMatrix, gammaShape, k, vocabSize)
-    val perWordBound = batchVariationalBound / (subsampleRatio * corpusWords)
+    val perWordBound = batchVariationalBound / corpusWords
 
     perWordBound
   }
 
-
   /**
-   * Estimate the variational bound of documents from `documents`:
+   * Estimate the variational likelihood bound of from `documents`:
    *    log p(documents) >= E_q[log p(documents)] - E_q[log q(documents)]
    * This bound is derived by decomposing the LDA model to:
    *    log p(documents) = E_q[log p(documents)] - E_q[log q(documents)] + D(q|p)
    * and noting that the KL-divergence D(q|p) >= 0. See Equation (16) in original Online LDA paper.
    * @param documents a subset of the test corpus
-   * @param subsampleRatio ratio of entire corpus represented in `documents`
    * @param alpha document-topic Dirichlet prior parameters
    * @param eta topic-word Dirichlet prior parameters
    * @param lambda parameters for variational q(beta | lambda) topic-word distributions
@@ -269,7 +263,6 @@ class LocalLDAModel private[clustering] (
    */
   private def bound(
       documents: RDD[(Long, Vector)],
-      subsampleRatio: Double,
       alpha: Vector,
       eta: Double,
       lambda: BDM[Double],
@@ -298,9 +291,6 @@ class LocalLDAModel private[clustering] (
 
       docScore
     }.sum()
-
-    // compensate likelihood for when `corpus` above is only a sample of the whole corpus
-    score *= subsampleRatio
 
     // E[log p(beta | eta) - log q (beta | lambda)]; assumes eta is a scalar
     score += sum((eta - lambda) :* Elogbeta)
