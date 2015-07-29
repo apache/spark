@@ -268,9 +268,10 @@ case class DateFormatClass(left: Expression, right: Expression) extends BinaryEx
 }
 
 /**
- * Convert time string with given pattern
+ * Converts time string with given pattern
  * (see [http://docs.oracle.com/javase/tutorial/i18n/format/simpleDateFormat.html])
- * to Unix time stamp (in seconds), return null if fail.
+ * to Unix time stamp (in seconds), returns null if fail.
+ * Note that hive Language Manual says it returns 0 if fail, but in fact it returns null.
  * If the second parameter is missing, use "yyyy-MM-dd HH:mm:ss".
  * If no parameters provided, the first parameter will be current_timestamp.
  * If the first parameter is a Date or Timestamp instead of String, we will ignore the
@@ -396,6 +397,7 @@ case class UnixTimestamp(timeExp: Expression, format: Expression)
  * Converts the number of seconds from unix epoch (1970-01-01 00:00:00 UTC) to a string
  * representing the timestamp of that moment in the current system time zone in the given
  * format. If the format is missing, using format like "1970-01-01 00:00:00".
+ * Note that hive Language Manual says it returns 0 if fail, but in fact it returns null.
  */
 case class FromUnixTime(sec: Expression, format: Expression)
   extends BinaryExpression with ImplicitCastInputTypes {
