@@ -68,12 +68,7 @@ class MathExpressionsSuite extends QueryTest {
     if (f(-1) === math.log1p(-1)) {
       checkAnswer(
         nnDoubleData.select(c('b)),
-        (1 to 9).map(n => Row(f(n * -0.1))) :+ Row(Double.NegativeInfinity)
-      )
-    } else {
-      checkAnswer(
-        nnDoubleData.select(c('b)),
-        (1 to 10).map(n => Row(null))
+        (1 to 9).map(n => Row(f(n * -0.1))) :+ Row(null)
       )
     }
 
@@ -178,6 +173,18 @@ class MathExpressionsSuite extends QueryTest {
       Row(0.0, 1.0, 2.0))
   }
 
+  test("conv") {
+    val df = Seq(("333", 10, 2)).toDF("num", "fromBase", "toBase")
+    checkAnswer(df.select(conv('num, 10, 16)), Row("14D"))
+    checkAnswer(df.select(conv(lit(100), 2, 16)), Row("4"))
+    checkAnswer(df.select(conv(lit(3122234455L), 10, 16)), Row("BA198457"))
+    checkAnswer(df.selectExpr("conv(num, fromBase, toBase)"), Row("101001101"))
+    checkAnswer(df.selectExpr("""conv("100", 2, 10)"""), Row("4"))
+    checkAnswer(df.selectExpr("""conv("-10", 16, -10)"""), Row("-16"))
+    checkAnswer(
+      df.selectExpr("""conv("9223372036854775807", 36, -16)"""), Row("-1")) // for overflow
+  }
+
   test("floor") {
     testOneToOneMathFunction(floor, math.floor)
   }
@@ -209,7 +216,8 @@ class MathExpressionsSuite extends QueryTest {
     checkAnswer(
       ctx.sql(s"SELECT round($pi, -3), round($pi, -2), round($pi, -1), " +
         s"round($pi, 0), round($pi, 1), round($pi, 2), round($pi, 3)"),
-      Seq(Row(0.0, 0.0, 0.0, 3.0, 3.1, 3.14, 3.142))
+      Seq(Row(BigDecimal("0E3"), BigDecimal("0E2"), BigDecimal("0E1"), BigDecimal(3),
+        BigDecimal("3.1"), BigDecimal("3.14"), BigDecimal("3.142")))
     )
   }
 

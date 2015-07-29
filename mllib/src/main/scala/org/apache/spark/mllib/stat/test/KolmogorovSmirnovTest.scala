@@ -20,7 +20,7 @@ package org.apache.spark.mllib.stat.test
 import scala.annotation.varargs
 
 import org.apache.commons.math3.distribution.{NormalDistribution, RealDistribution}
-import org.apache.commons.math3.stat.inference.KolmogorovSmirnovTest
+import org.apache.commons.math3.stat.inference.{KolmogorovSmirnovTest => CommonMathKolmogorovSmirnovTest}
 
 import org.apache.spark.Logging
 import org.apache.spark.rdd.RDD
@@ -187,7 +187,7 @@ private[stat] object KolmogorovSmirnovTest extends Logging {
   }
 
   private def evalOneSampleP(ksStat: Double, n: Long): KolmogorovSmirnovTestResult = {
-    val pval = 1 - new KolmogorovSmirnovTest().cdf(ksStat, n.toInt)
+    val pval = 1 - new CommonMathKolmogorovSmirnovTest().cdf(ksStat, n.toInt)
     new KolmogorovSmirnovTestResult(pval, ksStat, NullHypothesis.OneSampleTwoSided.toString)
   }
 }

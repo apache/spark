@@ -21,6 +21,7 @@ import java.io.File
 import java.util.{Set => JavaSet}
 
 import org.apache.hadoop.hive.conf.HiveConf
+import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hadoop.hive.ql.exec.FunctionRegistry
 import org.apache.hadoop.hive.ql.io.avro.{AvroContainerInputFormat, AvroContainerOutputFormat}
 import org.apache.hadoop.hive.ql.metadata.Table
@@ -87,7 +88,9 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
 
   /** Sets up the system initially or after a RESET command */
   protected override def configure(): Map[String, String] =
-    temporaryConfig ++ Map("hive.metastore.warehouse.dir" -> warehousePath.toString)
+    temporaryConfig ++ Map(
+      ConfVars.METASTOREWAREHOUSE.varname -> warehousePath.toString,
+      ConfVars.METASTORE_INTEGER_JDO_PUSHDOWN.varname -> "true")
 
   val testTempDir = Utils.createTempDir()
 

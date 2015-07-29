@@ -62,7 +62,7 @@ case class BroadcastHashJoin(
   private val broadcastFuture = future {
     // Note that we use .execute().collect() because we don't want to convert data to Scala types
     val input: Array[InternalRow] = buildPlan.execute().map(_.copy()).collect()
-    val hashed = HashedRelation(input.iterator, buildSideKeyGenerator, input.length)
+    val hashed = HashedRelation(input.iterator, buildSideKeyGenerator, input.size)
     sparkContext.broadcast(hashed)
   }(BroadcastHashJoin.broadcastHashJoinExecutionContext)
 

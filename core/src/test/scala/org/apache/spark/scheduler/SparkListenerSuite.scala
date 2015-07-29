@@ -188,7 +188,7 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
     sc.addSparkListener(listener)
     val rdd1 = sc.parallelize(1 to 100, 4)
     val rdd2 = rdd1.map(_.toString)
-    sc.runJob(rdd2, (items: Iterator[String]) => items.size, Seq(0, 1), true)
+    sc.runJob(rdd2, (items: Iterator[String]) => items.size, Seq(0, 1))
 
     sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
 

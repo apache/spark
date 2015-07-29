@@ -133,7 +133,6 @@
                 </goals>
                 <configuration>
                   <sources>
-                    <source>src/test/scala</source>
                     <source>compatibility/src/test/scala</source>
                   </sources>
                 </configuration>
