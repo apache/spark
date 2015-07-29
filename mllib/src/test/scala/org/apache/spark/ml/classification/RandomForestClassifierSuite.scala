@@ -172,5 +172,6 @@ private object RandomForestClassifierSuite {
     TreeTests.checkEqual(oldModelAsNew, newModel)
     assert(newModel.hasParent)
     assert(!newModel.trees.head.asInstanceOf[DecisionTreeClassificationModel].hasParent)
+    assert(newModel.numClasses == numClasses)
   }
 }

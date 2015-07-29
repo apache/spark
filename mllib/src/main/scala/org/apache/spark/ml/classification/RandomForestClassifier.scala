@@ -96,8 +96,7 @@ final class RandomForestClassifier(override val uid: String)
     val strategy =
       super.getOldStrategy(categoricalFeatures, numClasses, OldAlgo.Classification, getOldImpurity)
     val trees =
-      RandomForest.run(oldDataset, strategy, getNumTrees, getFeatureSubsetStrategy, getSeed,
-        numClasses = Some(numClasses))
+      RandomForest.run(oldDataset, strategy, getNumTrees, getFeatureSubsetStrategy, getSeed)
         .map(_.asInstanceOf[DecisionTreeClassificationModel])
     new RandomForestClassificationModel(trees, numClasses)
   }
