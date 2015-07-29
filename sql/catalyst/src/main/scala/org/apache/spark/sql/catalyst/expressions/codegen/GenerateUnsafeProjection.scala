@@ -256,18 +256,18 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
     eval.code = createCode(ctx, eval, expressions)
 
     val code = s"""
-      private $exprType[] expressions;
-
-      public Object generate($exprType[] expr) {
-        this.expressions = expr;
-        return new SpecificProjection();
+      public Object generate($exprType[] exprs) {
+        return new SpecificProjection(exprs);
       }
 
       class SpecificProjection extends ${classOf[UnsafeProjection].getName} {
 
+        private $exprType[] expressions;
+
         ${declareMutableStates(ctx)}
 
-        public SpecificProjection() {
+        public SpecificProjection($exprType[] expressions) {
+          this.expressions = expressions;
           ${initMutableStates(ctx)}
         }
 
