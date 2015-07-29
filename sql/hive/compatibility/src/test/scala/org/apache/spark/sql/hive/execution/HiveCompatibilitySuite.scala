@@ -876,6 +876,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "udf_floor",
     "udf_format_number",
     "udf_from_unixtime",
+    "udf_get_json_object",
     "udf_greaterthan",
     "udf_greaterthanorequal",
     "udf_hash",

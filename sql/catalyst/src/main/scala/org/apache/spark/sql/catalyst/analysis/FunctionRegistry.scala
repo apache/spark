@@ -178,6 +178,7 @@ object FunctionRegistry {
     expression[Encode]("encode"),
     expression[Decode]("decode"),
     expression[FormatNumber]("format_number"),
+    expression[GetJsonObject]("get_json_object"),
     expression[Lower]("lcase"),
     expression[Lower]("lower"),
     expression[Length]("length"),
