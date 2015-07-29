@@ -569,8 +569,10 @@ def length(col):
 def format_number(col, d):
     """Formats the number X to a format like '#,###,###.##', rounded to d decimal places,
        and returns the result as a string.
+
     :param col: the column name of the numeric value to be formatted
     :param d: the N decimal places
+
     >>> sqlContext.createDataFrame([(5,)], ['a']).select(format_number('a', 4).alias('v')).collect()
     [Row(v=u'5.0000')]
     """
@@ -907,6 +909,7 @@ def size(col):
 def sort_array(col, asc=True):
     """
     Collection function: sorts the input array for the given column in ascending order.
+
     :param col: name of column or expression
 
     >>> df = sqlContext.createDataFrame([([2, 1, 3],),([1],),([],)], ['data'])
