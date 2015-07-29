@@ -1189,9 +1189,7 @@ class RowMatrix(DistributedMatrix):
         """
         if not isinstance(rows, RDD):
             raise TypeError("rows should be an RDD of vectors, got %s" % type(rows))
-        first = rows.first()
-        if not isinstance(first, Vector):
-            rows = rows.map(_convert_to_vector)
+        rows = rows.map(_convert_to_vector)
 
         javaRowMatrix = callMLlibFunc("createRowMatrix", rows, long(numRows), int(numCols))
         self._jrm = JavaModelWrapper(javaRowMatrix)
@@ -1284,8 +1282,7 @@ class IndexedRowMatrix(DistributedMatrix):
         if not isinstance(rows, RDD):
             raise TypeError("rows should be an RDD of IndexedRows or (long, vector) tuples, "
                             "got %s" % type(rows))
-        if not isinstance(rows.first(), IndexedRow):
-            rows = rows.map(_convert_to_indexed_row)
+        rows = rows.map(_convert_to_indexed_row)
 
         # We use DataFrames for serialization of IndexedRows from
         # Python, so first convert the RDD to a DataFrame on this side.
@@ -1423,8 +1420,7 @@ class CoordinateMatrix(object):
         if not isinstance(entries, RDD):
             raise TypeError("entries should be an RDD of MatrixEntry entries or "
                             "(long, long, float) tuples, got %s" % type(entries))
-        if not isinstance(entries.first(), MatrixEntry):
-            entries = entries.map(_convert_to_matrix_entry)
+        entries = entries.map(_convert_to_matrix_entry)
 
         # We use DataFrames for serialization of MatrixEntry entries
         # from Python, so first convert the RDD to a DataFrame on this
