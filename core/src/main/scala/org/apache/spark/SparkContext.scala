@@ -1685,44 +1685,65 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       logInfo("SparkContext already stopped.")
       return
     }
-    try {
-      if (_shutdownHookRef != null) {
-        Utils.removeShutdownHook(_shutdownHookRef)
-      }
-  
+    if (_shutdownHookRef != null) {
+      Utils.removeShutdownHook(_shutdownHookRef)
+    }
+
+    Utils.tryLogNonFatalError {
       postApplicationEnd()
+    }
+    Utils.tryLogNonFatalError {
       _ui.foreach(_.stop())
-      if (env != null) {
+    }
+    if (env != null) {
+      Utils.tryLogNonFatalError {
         env.metricsSystem.report()
       }
-      if (metadataCleaner != null) {
+    }
+    if (metadataCleaner != null) {
+      Utils.tryLogNonFatalError {
         metadataCleaner.cancel()
       }
+    }
+    Utils.tryLogNonFatalError {
       _cleaner.foreach(_.stop())
+    }
+    Utils.tryLogNonFatalError {
       _executorAllocationManager.foreach(_.stop())
-      if (_dagScheduler != null) {
+    }
+    if (_dagScheduler != null) {
+      Utils.tryLogNonFatalError {
         _dagScheduler.stop()
         _dagScheduler = null
       }
-      if (_listenerBusStarted) {
+    }
+    if (_listenerBusStarted) {
+      Utils.tryLogNonFatalError {
         listenerBus.stop()
         _listenerBusStarted = false
       }
+    }
+    Utils.tryLogNonFatalError {
       _eventLogger.foreach(_.stop())
-      if (env != null && _heartbeatReceiver != null) {
+    }
+    if (env != null && _heartbeatReceiver != null) {
+      Utils.tryLogNonFatalError {
         env.rpcEnv.stop(_heartbeatReceiver)
       }
+    }
+    Utils.tryLogNonFatalError {
       _progressBar.foreach(_.stop())
-      _taskScheduler = null
-      // TODO: Cache.stop()?
-      if (_env != null) {
+    }
+    _taskScheduler = null
+    // TODO: Cache.stop()?
+    if (_env != null) {
+      Utils.tryLogNonFatalError {
         _env.stop()
         SparkEnv.set(null)
       }
-    } finally {
-      SparkContext.clearActiveContext()
-      logInfo("Successfully stopped SparkContext")
     }
+    SparkContext.clearActiveContext()
+    logInfo("Successfully stopped SparkContext")
   }
 
 
