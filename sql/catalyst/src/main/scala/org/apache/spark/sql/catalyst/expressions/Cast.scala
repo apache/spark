@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.{Interval, UTF8String}
+import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 import scala.collection.mutable
 
@@ -55,7 +55,7 @@ object Cast {
 
     case (_, DateType) => true
 
-    case (StringType, IntervalType) => true
+    case (StringType, CalendarIntervalType) => true
 
     case (StringType, _: NumericType) => true
     case (BooleanType, _: NumericType) => true
@@ -225,7 +225,7 @@ case class Cast(child: Expression, dataType: DataType)
   // IntervalConverter
   private[this] def castToInterval(from: DataType): Any => Any = from match {
     case StringType =>
-      buildCast[UTF8String](_, s => Interval.fromString(s.toString))
+      buildCast[UTF8String](_, s => CalendarInterval.fromString(s.toString))
     case _ => _ => null
   }
 
@@ -300,12 +300,7 @@ case class Cast(child: Expression, dataType: DataType)
    * NOTE: this modifies `value` in-place, so don't call it on external data.
    */
   private[this] def changePrecision(value: Decimal, decimalType: DecimalType): Decimal = {
-    decimalType match {
-      case DecimalType.Unlimited =>
-        value
-      case DecimalType.Fixed(precision, scale) =>
-        if (value.changePrecision(precision, scale)) value else null
-    }
+    if (value.changePrecision(decimalType.precision, decimalType.scale)) value else null
   }
 
   private[this] def castToDecimal(from: DataType, target: DecimalType): Any => Any = from match {
@@ -380,15 +375,16 @@ case class Cast(child: Expression, dataType: DataType)
   }
 
   private[this] def castStruct(from: StructType, to: StructType): Any => Any = {
-    val casts = from.fields.zip(to.fields).map {
+    val castFuncs: Array[(Any) => Any] = from.fields.zip(to.fields).map {
       case (fromField, toField) => cast(fromField.dataType, toField.dataType)
     }
     // TODO: Could be faster?
     val newRow = new GenericMutableRow(from.fields.length)
     buildCast[InternalRow](_, row => {
       var i = 0
-      while (i < row.length) {
-        newRow.update(i, if (row.isNullAt(i)) null else casts(i)(row(i)))
+      while (i < row.numFields) {
+        newRow.update(i,
+          if (row.isNullAt(i)) null else castFuncs(i)(row.get(i, from.apply(i).dataType)))
         i += 1
       }
       newRow.copy()
@@ -402,7 +398,7 @@ case class Cast(child: Expression, dataType: DataType)
     case DateType => castToDate(from)
     case decimal: DecimalType => castToDecimal(from, decimal)
     case TimestampType => castToTimestamp(from)
-    case IntervalType => castToInterval(from)
+    case CalendarIntervalType => castToInterval(from)
     case BooleanType => castToBoolean(from)
     case ByteType => castToByte(from)
     case ShortType => castToShort(from)
@@ -442,7 +438,7 @@ case class Cast(child: Expression, dataType: DataType)
     case DateType => castToDateCode(from, ctx)
     case decimal: DecimalType => castToDecimalCode(from, decimal)
     case TimestampType => castToTimestampCode(from, ctx)
-    case IntervalType => castToIntervalCode(from)
+    case CalendarIntervalType => castToIntervalCode(from)
     case BooleanType => castToBooleanCode(from)
     case ByteType => castToByteCode(from)
     case ShortType => castToShortCode(from)
@@ -511,20 +507,14 @@ case class Cast(child: Expression, dataType: DataType)
   }
 
   private[this] def changePrecision(d: String, decimalType: DecimalType,
-      evPrim: String, evNull: String): String = {
-    decimalType match {
-      case DecimalType.Unlimited =>
-        s"$evPrim = $d;"
-      case DecimalType.Fixed(precision, scale) =>
-        s"""
-          if ($d.changePrecision($precision, $scale)) {
-            $evPrim = $d;
-          } else {
-            $evNull = true;
-          }
-        """
-    }
-  }
+      evPrim: String, evNull: String): String =
+    s"""
+      if ($d.changePrecision(${decimalType.precision}, ${decimalType.scale})) {
+        $evPrim = $d;
+      } else {
+        $evNull = true;
+      }
+    """
 
   private[this] def castToDecimalCode(from: DataType, target: DecimalType): CastFunction = {
     from match {
@@ -640,7 +630,7 @@ case class Cast(child: Expression, dataType: DataType)
   private[this] def castToIntervalCode(from: DataType): CastFunction = from match {
     case StringType =>
       (c, evPrim, evNull) =>
-        s"$evPrim = org.apache.spark.unsafe.types.Interval.fromString($c.toString());"
+        s"$evPrim = CalendarInterval.fromString($c.toString());"
   }
 
   private[this] def decimalToTimestampCode(d: String): String =

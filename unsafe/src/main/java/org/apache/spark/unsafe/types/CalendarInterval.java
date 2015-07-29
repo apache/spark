@@ -24,7 +24,7 @@ import java.util.regex.Pattern;
 /**
  * The internal representation of interval type.
  */
-public final class Interval implements Serializable {
+public final class CalendarInterval implements Serializable {
   public static final long MICROS_PER_MILLI = 1000L;
   public static final long MICROS_PER_SECOND = MICROS_PER_MILLI * 1000;
   public static final long MICROS_PER_MINUTE = MICROS_PER_SECOND * 60;
@@ -58,7 +58,7 @@ public final class Interval implements Serializable {
     }
   }
 
-  public static Interval fromString(String s) {
+  public static CalendarInterval fromString(String s) {
     if (s == null) {
       return null;
     }
@@ -75,40 +75,40 @@ public final class Interval implements Serializable {
       microseconds += toLong(m.group(7)) * MICROS_PER_SECOND;
       microseconds += toLong(m.group(8)) * MICROS_PER_MILLI;
       microseconds += toLong(m.group(9));
-      return new Interval((int) months, microseconds);
+      return new CalendarInterval((int) months, microseconds);
     }
   }
 
   public final int months;
   public final long microseconds;
 
-  public Interval(int months, long microseconds) {
+  public CalendarInterval(int months, long microseconds) {
     this.months = months;
     this.microseconds = microseconds;
   }
 
-  public Interval add(Interval that) {
+  public CalendarInterval add(CalendarInterval that) {
     int months = this.months + that.months;
     long microseconds = this.microseconds + that.microseconds;
-    return new Interval(months, microseconds);
+    return new CalendarInterval(months, microseconds);
   }
 
-  public Interval subtract(Interval that) {
+  public CalendarInterval subtract(CalendarInterval that) {
     int months = this.months - that.months;
     long microseconds = this.microseconds - that.microseconds;
-    return new Interval(months, microseconds);
+    return new CalendarInterval(months, microseconds);
   }
 
-  public Interval negate() {
-    return new Interval(-this.months, -this.microseconds);
+  public CalendarInterval negate() {
+    return new CalendarInterval(-this.months, -this.microseconds);
   }
 
   @Override
   public boolean equals(Object other) {
     if (this == other) return true;
-    if (other == null || !(other instanceof Interval)) return false;
+    if (other == null || !(other instanceof CalendarInterval)) return false;
 
-    Interval o = (Interval) other;
+    CalendarInterval o = (CalendarInterval) other;
     return this.months == o.months && this.microseconds == o.microseconds;
   }
 

@@ -110,7 +110,7 @@ case class GetStructField(child: Expression, field: StructField, ordinal: Int)
   override def toString: String = s"$child.${field.name}"
 
   protected override def nullSafeEval(input: Any): Any =
-    input.asInstanceOf[InternalRow](ordinal)
+    input.asInstanceOf[InternalRow].get(ordinal, field.dataType)
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     nullSafeCodeGen(ctx, ev, eval => {
@@ -142,7 +142,7 @@ case class GetArrayStructFields(
 
   protected override def nullSafeEval(input: Any): Any = {
     input.asInstanceOf[Seq[InternalRow]].map { row =>
-      if (row == null) null else row(ordinal)
+      if (row == null) null else row.get(ordinal, field.dataType)
     }
   }
 

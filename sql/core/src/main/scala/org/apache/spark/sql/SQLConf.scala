@@ -273,16 +273,8 @@ private[spark] object SQLConf {
       "uncompressed, snappy, gzip, lzo.")
 
   val PARQUET_FILTER_PUSHDOWN_ENABLED = booleanConf("spark.sql.parquet.filterPushdown",
-    defaultValue = Some(false),
-    doc = "Turn on Parquet filter pushdown optimization. This feature is turned off by default " +
-      "because of a known bug in Parquet 1.6.0rc3 " +
-      "(PARQUET-136, https://issues.apache.org/jira/browse/PARQUET-136). However, " +
-      "if your table doesn't contain any nullable string or binary columns, it's still safe to " +
-      "turn this feature on.")
-
-  val PARQUET_USE_DATA_SOURCE_API = booleanConf("spark.sql.parquet.useDataSourceApi",
     defaultValue = Some(true),
-    doc = "<TODO>")
+    doc = "Enables Parquet filter push-down optimization when set to true.")
 
   val PARQUET_FOLLOW_PARQUET_FORMAT_SPEC = booleanConf(
     key = "spark.sql.parquet.followParquetFormatSpec",
@@ -309,6 +301,11 @@ private[spark] object SQLConf {
     defaultValue = Some(true),
     doc = "<TODO>")
 
+  val HIVE_METASTORE_PARTITION_PRUNING = booleanConf("spark.sql.hive.metastorePartitionPruning",
+    defaultValue = Some(false),
+    doc = "When true, some predicates will be pushed down into the Hive metastore so that " +
+          "unmatching partitions can be eliminated earlier.")
+
   val COLUMN_NAME_OF_CORRUPT_RECORD = stringConf("spark.sql.columnNameOfCorruptRecord",
     defaultValue = Some("_corrupt_record"),
     doc = "<TODO>")
@@ -325,7 +322,7 @@ private[spark] object SQLConf {
       " memory.")
 
   val SORTMERGE_JOIN = booleanConf("spark.sql.planner.sortMergeJoin",
-    defaultValue = Some(false),
+    defaultValue = Some(true),
     doc = "When true, use sort merge join (as opposed to hash join) by default for large joins.")
 
   // This is only used for the thriftserver
@@ -460,11 +457,11 @@ private[sql] class SQLConf extends Serializable with CatalystConf {
 
   private[spark] def parquetFilterPushDown: Boolean = getConf(PARQUET_FILTER_PUSHDOWN_ENABLED)
 
-  private[spark] def parquetUseDataSourceApi: Boolean = getConf(PARQUET_USE_DATA_SOURCE_API)
-
   private[spark] def orcFilterPushDown: Boolean = getConf(ORC_FILTER_PUSHDOWN_ENABLED)
 
   private[spark] def verifyPartitionPath: Boolean = getConf(HIVE_VERIFY_PARTITION_PATH)
+
+  private[spark] def metastorePartitionPruning: Boolean = getConf(HIVE_METASTORE_PARTITION_PRUNING)
 
   private[spark] def externalSortEnabled: Boolean = getConf(EXTERNAL_SORT)
 

@@ -15,18 +15,17 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.expression
+package org.apache.spark.sql.catalyst
 
-import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.expressions. ExpressionEvalHelper
-import org.apache.spark.sql.execution.expressions.{SparkPartitionID, MonotonicallyIncreasingID}
+/**
+ * Identifies a `table` in `database`.  If `database` is not defined, the current database is used.
+ */
+private[sql] case class TableIdentifier(table: String, database: Option[String] = None) {
+  def withDatabase(database: String): TableIdentifier = this.copy(database = Some(database))
 
-class NondeterministicSuite extends SparkFunSuite with ExpressionEvalHelper {
-  test("MonotonicallyIncreasingID") {
-    checkEvaluation(MonotonicallyIncreasingID(), 0)
-  }
+  def toSeq: Seq[String] = database.toSeq :+ table
 
-  test("SparkPartitionID") {
-    checkEvaluation(SparkPartitionID, 0)
-  }
+  override def toString: String = toSeq.map("`" + _ + "`").mkString(".")
+
+  def unquotedString: String = toSeq.mkString(".")
 }

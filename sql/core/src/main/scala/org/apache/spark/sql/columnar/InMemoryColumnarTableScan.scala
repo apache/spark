@@ -134,13 +134,13 @@ private[sql] case class InMemoryRelation(
             // may result malformed rows, causing ArrayIndexOutOfBoundsException, which is somewhat
             // hard to decipher.
             assert(
-              row.size == columnBuilders.size,
-              s"""Row column number mismatch, expected ${output.size} columns, but got ${row.size}.
-                 |Row content: $row
-               """.stripMargin)
+              row.numFields == columnBuilders.size,
+              s"Row column number mismatch, expected ${output.size} columns, " +
+                s"but got ${row.numFields}." +
+                s"\nRow content: $row")
 
             var i = 0
-            while (i < row.length) {
+            while (i < row.numFields) {
               columnBuilders(i).appendFrom(row, i)
               i += 1
             }
@@ -304,7 +304,7 @@ private[sql] case class InMemoryColumnarTableScan(
 
           // Extract rows via column accessors
           new Iterator[InternalRow] {
-            private[this] val rowLen = nextRow.length
+            private[this] val rowLen = nextRow.numFields
             override def next(): InternalRow = {
               var i = 0
               while (i < rowLen) {

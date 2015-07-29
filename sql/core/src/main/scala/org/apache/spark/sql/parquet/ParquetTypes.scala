@@ -53,15 +53,6 @@ private[parquet] object ParquetTypesConverter extends Logging {
     length
   }
 
-  def convertToAttributes(
-      parquetSchema: MessageType,
-      isBinaryAsString: Boolean,
-      isInt96AsTimestamp: Boolean): Seq[Attribute] = {
-    val converter = new CatalystSchemaConverter(
-      isBinaryAsString, isInt96AsTimestamp, followParquetFormatSpec = false)
-    converter.convert(parquetSchema).toAttributes
-  }
-
   def convertFromAttributes(attributes: Seq[Attribute]): MessageType = {
     val converter = new CatalystSchemaConverter()
     converter.convert(StructType.fromAttributes(attributes))
@@ -103,7 +94,7 @@ private[parquet] object ParquetTypesConverter extends Logging {
     }
     val extraMetadata = new java.util.HashMap[String, String]()
     extraMetadata.put(
-      RowReadSupport.SPARK_METADATA_KEY,
+      CatalystReadSupport.SPARK_METADATA_KEY,
       ParquetTypesConverter.convertToString(attributes))
     // TODO: add extra data, e.g., table name, date, etc.?
 
@@ -164,36 +155,5 @@ private[parquet] object ParquetTypesConverter extends Logging {
       .map(ParquetFileReader.readFooter(conf, _, ParquetMetadataConverter.NO_FILTER))
       .getOrElse(
         throw new IllegalArgumentException(s"Could not find Parquet metadata at path $path"))
-  }
-
-  /**
-   * Reads in Parquet Metadata from the given path and tries to extract the schema
-   * (Catalyst attributes) from the application-specific key-value map. If this
-   * is empty it falls back to converting from the Parquet file schema which
-   * may lead to an upcast of types (e.g., {byte, short} to int).
-   *
-   * @param origPath The path at which we expect one (or more) Parquet files.
-   * @param conf The Hadoop configuration to use.
-   * @return A list of attributes that make up the schema.
-   */
-  def readSchemaFromFile(
-      origPath: Path,
-      conf: Option[Configuration],
-      isBinaryAsString: Boolean,
-      isInt96AsTimestamp: Boolean): Seq[Attribute] = {
-    val keyValueMetadata: java.util.Map[String, String] =
-      readMetaData(origPath, conf)
-        .getFileMetaData
-        .getKeyValueMetaData
-    if (keyValueMetadata.get(RowReadSupport.SPARK_METADATA_KEY) != null) {
-      convertFromString(keyValueMetadata.get(RowReadSupport.SPARK_METADATA_KEY))
-    } else {
-      val attributes = convertToAttributes(
-        readMetaData(origPath, conf).getFileMetaData.getSchema,
-        isBinaryAsString,
-        isInt96AsTimestamp)
-      log.info(s"Falling back to schema conversion from Parquet types; result: $attributes")
-      attributes
-    }
   }
 }
