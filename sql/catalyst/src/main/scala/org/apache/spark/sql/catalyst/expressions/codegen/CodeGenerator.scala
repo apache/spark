@@ -106,6 +106,7 @@ class CodeGenContext {
     val jt = javaType(dataType)
     dataType match {
       case _ if isPrimitiveType(jt) => s"$row.get${primitiveTypeName(jt)}($ordinal)"
+      case t: DecimalType => s"$row.getDecimal($ordinal, ${t.precision}, ${t.scale})"
       case StringType => s"$row.getUTF8String($ordinal)"
       case BinaryType => s"$row.getBinary($ordinal)"
       case IntervalType => s"$row.getInterval($ordinal)"
@@ -119,10 +120,10 @@ class CodeGenContext {
    */
   def setColumn(row: String, dataType: DataType, ordinal: Int, value: String): String = {
     val jt = javaType(dataType)
-    if (isPrimitiveType(jt)) {
-      s"$row.set${primitiveTypeName(jt)}($ordinal, $value)"
-    } else {
-      s"$row.update($ordinal, $value)"
+    dataType match {
+      case _ if isPrimitiveType(jt) => s"$row.set${primitiveTypeName(jt)}($ordinal, $value)"
+      case t: DecimalType => s"$row.setDecimal($ordinal, $value, ${t.precision})"
+      case _ => s"$row.update($ordinal, $value)"
     }
   }
 

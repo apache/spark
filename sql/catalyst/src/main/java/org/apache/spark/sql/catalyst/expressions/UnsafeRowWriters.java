@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions;
 
 import org.apache.spark.sql.catalyst.InternalRow;
+import org.apache.spark.sql.types.Decimal;
 import org.apache.spark.unsafe.PlatformDependent;
 import org.apache.spark.unsafe.array.ByteArrayMethods;
 import org.apache.spark.unsafe.types.ByteArray;
@@ -29,6 +30,47 @@ import org.apache.spark.unsafe.types.UTF8String;
  * used by {@link org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection}.
  */
 public class UnsafeRowWriters {
+
+  /** Writer for Decimal with precision under 18. */
+  public static class CompactDecimalWriter {
+
+    public static int getSize(Decimal input) {
+      return 0;
+    }
+
+    public static int write(UnsafeRow target, int ordinal, int cursor, Decimal input) {
+      target.setLong(ordinal, input.toUnscaledLong());
+      return 0;
+    }
+  }
+
+  /** Writer for Decimal with precision larger than 18. */
+  public static class DecimalWriter {
+
+    public static int getSize(Decimal input) {
+      // bounded size
+      return 16;
+    }
+
+    public static int write(UnsafeRow target, int ordinal, int cursor, Decimal input) {
+      final long offset = target.getBaseOffset() + cursor;
+      final byte[] bytes = input.toJavaBigDecimal().unscaledValue().toByteArray();
+      final int numBytes = bytes.length;
+      assert(numBytes <= 16);
+
+      // zero-out the bytes
+      PlatformDependent.UNSAFE.putLong(target.getBaseObject(), offset, 0L);
+      PlatformDependent.UNSAFE.putLong(target.getBaseObject(), offset + 8, 0L);
+
+      // Write the bytes to the variable length portion.
+      PlatformDependent.copyMemory(bytes, PlatformDependent.BYTE_ARRAY_OFFSET,
+        target.getBaseObject(), offset, numBytes);
+
+      // Set the fixed length portion.
+      target.setLong(ordinal, (((long) cursor) << 32) | ((long) numBytes));
+      return 16;
+    }
+  }
 
   /** Writer for UTF8String. */
   public static class UTF8StringWriter {

@@ -293,8 +293,8 @@ private[parquet] class MutableRowWriteSupport extends RowWriteSupport {
         writer.addBinary(Binary.fromByteArray(record.getUTF8String(index).getBytes))
       case BinaryType =>
         writer.addBinary(Binary.fromByteArray(record.getBinary(index)))
-      case DecimalType.Fixed(precision, _) =>
-        writeDecimal(record.getDecimal(index), precision)
+      case DecimalType.Fixed(precision, scale) =>
+        writeDecimal(record.getDecimal(index, precision, scale), precision)
       case _ => sys.error(s"Unsupported datatype $ctype, cannot write to consumer")
     }
   }
