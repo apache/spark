@@ -439,12 +439,14 @@ private[parquet] class CatalystSchemaConverter(
       // ===================================================
 
       // Spark 1.4.x and prior versions convert ArrayType with nullable elements into a 3-level
-      // LIST structure.  This behavior mimics parquet-hive (1.6.0rc3).  Note that this case is
-      // covered by the backwards-compatibility rules implemented in `isElementType()`.
+      // LIST structure.  This behavior is somewhat a hybrid of parquet-hive and parquet-avro
+      // (1.6.0rc3): the 3-level structure is similar to parquet-hive while the 3rd level anonymous
+      // field name "array" is from parquet-avro. Note that this case is covered by the backwards-
+      // compatibility rules implemented in `isElementType()`.
       case ArrayType(elementType, nullable @ true) if !followParquetFormatSpec =>
         // <list-repetition> group <name> (LIST) {
         //   optional group bag {
-        //     repeated <element-type> element;
+        //     repeated <element-type> array;
         //   }
         // }
         ConversionPatterns.listType(
@@ -452,8 +454,8 @@ private[parquet] class CatalystSchemaConverter(
           field.name,
           Types
             .buildGroup(REPEATED)
-            // "array_element" is the name chosen by parquet-hive (1.7.0 and prior version)
-            .addField(convertField(StructField("array_element", elementType, nullable)))
+            // "array" is the name chosen by Spark SQL 1.4.0 and prior versions
+            .addField(convertField(StructField("array", elementType, nullable)))
             .named("bag"))
 
       // Spark 1.4.x and prior versions convert ArrayType with non-nullable elements into a 2-level
@@ -461,7 +463,7 @@ private[parquet] class CatalystSchemaConverter(
       // covered by the backwards-compatibility rules implemented in `isElementType()`.
       case ArrayType(elementType, nullable @ false) if !followParquetFormatSpec =>
         // <list-repetition> group <name> (LIST) {
-        //   repeated <element-type> element;
+        //   repeated <element-type> array;
         // }
         ConversionPatterns.listType(
           repetition,
