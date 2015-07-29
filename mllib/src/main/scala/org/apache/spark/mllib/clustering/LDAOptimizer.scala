@@ -392,19 +392,21 @@ final class OnlineLDAOptimizer extends LDAOptimizer {
     val gammaShape = this.gammaShape
 
     val stats: RDD[(BDM[Double], List[BDV[Double]])] = batch.mapPartitions { docs =>
+      val nonEmptyDocs = docs.filter(_._2.numActives > 0)
+
       val stat = BDM.zeros[Double](k, vocabSize)
       var gammaPart = List[BDV[Double]]()
-      docs.foreach { case (_, termCounts: Vector) =>
+//      val gammaPart = BDM.zeros[Double](nonEmptyDocs.length, k)
+      nonEmptyDocs.zipWithIndex.foreach { case ((_, termCounts: Vector), idx: Int) =>
         val ids: List[Int] = termCounts match {
           case v: DenseVector => (0 until v.size).toList
           case v: SparseVector => v.indices.toList
         }
-        if (!ids.isEmpty) {
-          val (gammad, sstats) = OnlineLDAOptimizer.variationalTopicInference(
-            termCounts, expElogbeta, alpha, gammaShape, k)
-          stat(::, ids) := sstats
-          gammaPart = gammad :: gammaPart
-        }
+        val (gammad, sstats) = OnlineLDAOptimizer.variationalTopicInference(
+          termCounts, expElogbeta, alpha, gammaShape, k)
+        stat(::, ids) := stat(::, ids).toDenseMatrix + sstats
+        gammaPart = gammad :: gammaPart
+//        gammaPart(::, idx) := gammad
       }
       Iterator((stat, gammaPart))
     }
