@@ -297,6 +297,28 @@ class LocalLDAModel private[clustering] (
     score
   }
 
+  /**
+   * Predicts the topic mixture distribution ("gamma") for a document.
+   */
+  def topicDistribution(documents: RDD[(Long, Vector)]): RDD[(Long, Vector)] = {
+    // Double transpose because dirichletExpectation normalizes by row and we need to normalize
+    // by topic (columns of lambda)
+    val expElogbeta = exp(LDAUtils.dirichletExpectation(topicsMatrix.toBreeze.toDenseMatrix.t).t)
+    val topicConcentrationBrz = this.docConcentration.toBreeze
+    val gammaShape = this.gammaShape
+    val k = this.k
+
+    documents.map { doc =>
+      val (gamma, _) = OnlineLDAOptimizer.variationalTopicInference(
+        doc._2,
+        expElogbeta,
+        topicConcentrationBrz,
+        gammaShape,
+        k)
+      (doc._1, Vectors.dense((gamma / sum(gamma)).toArray))
+    }
+  }
+
 }
 
 
