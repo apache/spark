@@ -1000,6 +1000,11 @@ test_that("crosstab() on a DataFrame", {
   expect_identical(expected, ordered)
 })
 
+test_that("SQL error message is returned from JVM", {
+  retError <- tryCatch(sql(sqlContext, "select * from blah"), error = function(e) e)
+  expect_equal(grepl("Table Not Found: blah", retError), TRUE)
+})
+
 unlink(parquetPath)
 unlink(jsonPath)
 unlink(jsonPathNa)
