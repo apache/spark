@@ -360,8 +360,8 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext {
       assert(samelocalModel.topicsMatrix === localModel.topicsMatrix)
       assert(samelocalModel.k === localModel.k)
       assert(samelocalModel.vocabSize === localModel.vocabSize)
-      assert(samelocalModel.getDocConcentration === localModel.getDocConcentration)
-      assert(samelocalModel.getTopicConcentration === localModel.getTopicConcentration)
+      assert(samelocalModel.docConcentration === localModel.docConcentration)
+      assert(samelocalModel.topicConcentration === localModel.topicConcentration)
       assert(samelocalModel.gammaShape === localModel.gammaShape)
 
       val sameDistributedModel = DistributedLDAModel.load(sc, path2)
