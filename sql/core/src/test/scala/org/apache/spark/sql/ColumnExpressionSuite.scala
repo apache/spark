@@ -17,12 +17,12 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.test.SQLTestUtils
 import org.scalatest.Matchers._
 
 import org.apache.spark.sql.execution.Project
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.test.SQLTestUtils
 
 class ColumnExpressionSuite extends QueryTest with SQLTestUtils {
   import org.apache.spark.sql.TestData._

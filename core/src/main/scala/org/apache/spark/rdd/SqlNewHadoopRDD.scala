@@ -29,17 +29,18 @@ import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.executor.DataReadMethod
 import org.apache.spark.mapreduce.SparkHadoopMapReduceUtil
+import org.apache.spark.{Partition => SparkPartition, _}
 import org.apache.spark.rdd.NewHadoopRDD.NewHadoopMapPartitionsWithSplitRDD
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.{SerializableConfiguration, Utils}
-import org.apache.spark.{Partition => SparkPartition, _}
+
 
 import scala.reflect.ClassTag
 
 private[spark] class SqlNewHadoopPartition(
     rddId: Int,
     val index: Int,
-    @transient val rawSplit: InputSplit with Writable)
+    @transient rawSplit: InputSplit with Writable)
   extends SparkPartition {
 
   val serializableHadoopSplit = new SerializableWritable(rawSplit)
@@ -258,16 +259,17 @@ private[spark] class SqlNewHadoopRDD[K, V](
 
 private[spark] object SqlNewHadoopRDD {
 
+  /**
+   * The thread variable for the name of the current file being read. This is used by
+   * the InputFileName function
+   */
   private[this] val inputFileName: ThreadLocal[String] = new ThreadLocal[String]
 
-  def getInputFileName(): String = inputFileName.get()
+  private[spark] def getInputFileName(): String = inputFileName.get()
 
   private[spark] def setInputFileName(file: String) = inputFileName.set(file)
 
-  /**
-   * Unset the thread local input file name. Internal to Spark.
-   */
-  protected[spark] def unsetInputFileName(): Unit = inputFileName.remove()
+  private[spark] def unsetInputFileName(): Unit = inputFileName.remove()
 
   /**
    * Analogous to [[org.apache.spark.rdd.MapPartitionsRDD]], but passes in an InputSplit to
