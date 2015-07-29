@@ -44,32 +44,34 @@
       <artifactId>guava</artifactId>
     </dependency>
     <dependency>
+      <groupId>com.esotericsoftware.kryo</groupId>
+      <artifactId>kryo</artifactId>
+      <version>${kryo.version}</version>
+<!--      <classifier>shaded</classifier>-->
+    </dependency>
+    <dependency>
+      <groupId>com.esotericsoftware.reflectasm</groupId>
+      <artifactId>reflectasm</artifactId>
+      <version>1.07</version>
+      <classifier>shaded</classifier>
+    </dependency>
+    <dependency>
+      <groupId>com.esotericsoftware.minlog</groupId>
+      <artifactId>minlog</artifactId>
+      <version>1.2</version>
+    </dependency>
+    <dependency>
+      <groupId>org.objenesis</groupId>
+      <artifactId>objenesis</artifactId>
+      <version>1.2</version>
+    </dependency>
+    <dependency>
       <groupId>com.twitter</groupId>
       <artifactId>chill_${scala.binary.version}</artifactId>
-      <exclusions>
-        <exclusion>
-          <groupId>org.ow2.asm</groupId>
-          <artifactId>asm</artifactId>
-        </exclusion>
-        <exclusion>
-          <groupId>org.ow2.asm</groupId>
-          <artifactId>asm-commons</artifactId>
-        </exclusion>
-      </exclusions>
     </dependency>
     <dependency>
       <groupId>com.twitter</groupId>
       <artifactId>chill-java</artifactId>
-      <exclusions>
-        <exclusion>
-          <groupId>org.ow2.asm</groupId>
-          <artifactId>asm</artifactId>
-        </exclusion>
-        <exclusion>
-          <groupId>org.ow2.asm</groupId>
-          <artifactId>asm-commons</artifactId>
-        </exclusion>
-      </exclusions>
     </dependency>
     <dependency>
       <groupId>org.apache.hadoop</groupId>
