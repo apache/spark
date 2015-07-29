@@ -153,12 +153,22 @@ class AnalysisSuite extends AnalysisTest {
     assert(pl(4).dataType == DoubleType)
   }
 
-  test("pull out nondeterministic expressions from unary LogicalPlan") {
+  test("pull out nondeterministic expressions from RepartitionByExpression") {
     val plan = RepartitionByExpression(Seq(Rand(33)), testRelation)
     val projected = Alias(Rand(33), "_nondeterministic")()
     val expected =
       Project(testRelation.output,
         RepartitionByExpression(Seq(projected.toAttribute),
+          Project(testRelation.output :+ projected, testRelation)))
+    checkAnalysis(plan, expected)
+  }
+
+  test("pull out nondeterministic expressions from Sort") {
+    val plan = Sort(Seq(SortOrder(Rand(33), Ascending)), false, testRelation)
+    val projected = Alias(Rand(33), "_nondeterministic")()
+    val expected =
+      Project(testRelation.output,
+        Sort(Seq(SortOrder(projected.toAttribute, Ascending)), false,
           Project(testRelation.output :+ projected, testRelation)))
     checkAnalysis(plan, expected)
   }

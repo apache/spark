@@ -201,11 +201,9 @@ trait Nondeterministic extends Expression {
 
   private[this] var initialized = false
 
-  final def initialize(): Unit = {
-    if (!initialized) {
-      initInternal()
-      initialized = true
-    }
+  final def setInitialValues(): Unit = {
+    initInternal()
+    initialized = true
   }
 
   protected def initInternal(): Unit
