@@ -75,7 +75,13 @@ class PairwiseDistancesSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   case class SumDistances(original: Double, reduced: Double, error: Double)
 
-  def evaluatePairwiseDistances(dataset: BlockMatrix, intrinsicDimension: Int = 5) = {
+  /**
+   *
+   * @param dataset
+   * @param intrinsicDimension
+   * @return
+   */
+  private def evaluatePairwiseDistances(dataset: BlockMatrix, intrinsicDimension: Int = 5) = {
 
     val distancesOriginal = PairwiseDistances.calculatePairwiseDistances(dataset)
 
@@ -83,18 +89,17 @@ class PairwiseDistancesSuite extends SparkFunSuite with MLlibTestSparkContext {
     val reduced = dataset.multiply(rp.computeRPMatrix(sc, dataset.numCols().toInt))
     val distancesReduced = PairwiseDistances.calculatePairwiseDistances(reduced)
 
-
-    val accumulateDistances = distancesOriginal.zip(distancesReduced).foldLeft(SumDistances(0, 0, 0))((counter, item) => {
-      // make sure,
-      require(item._1._1 == item._2._1, s"error. '${item._1._1}' must be equal to '${item._2._1}'")
-      val origDistances = item._1._2
-      val reducedDistances = item._2._2
-
-      //error must be positive
-      val error = if (origDistances > reducedDistances) origDistances - reducedDistances else reducedDistances - origDistances
-      //println(s"#${item._1._1} -> orig distance: $origDistances, reduced distances: $reducedDistances, error: $error")
-      //println(s"orig sum of ${item._1._1} = ${counter.original + origDistances}")
-
+    // compare the reductions
+    val zipped = distancesOriginal.zip(distancesReduced)
+    val accumulateDistances = zipped.foldLeft(SumDistances(0, 0, 0))((counter, item) => {
+      require(item._1.key == item._2.key, s"'${item._1.key}' must be equal to '${item._2.key}'")
+      val origDistances = item._1.similarity
+      val reducedDistances = item._2.similarity
+      val error = if (origDistances > reducedDistances) {
+        origDistances - reducedDistances
+      } else {
+        reducedDistances - origDistances
+      }
       SumDistances(
         counter.original + origDistances,
         counter.reduced + reducedDistances,

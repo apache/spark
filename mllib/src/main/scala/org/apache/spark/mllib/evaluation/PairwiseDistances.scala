@@ -27,7 +27,13 @@ import org.apache.spark.mllib.util.MLUtils
  */
 object PairwiseDistances {
 
-  def euclidean(a: Vector, b: Vector ) = {
+  /**
+   * calculate the eucliden distnaces
+   * @param a
+   * @param b
+   * @return
+   */
+  def euclidean(a: Vector, b: Vector ): Double = {
     val res = a.toArray.zip(b.toArray).foldLeft(0.0)( (a: Double, b: (Double, Double)) => {
       a + Math.pow(b._1 - b._2, 2)
     })
@@ -41,7 +47,7 @@ object PairwiseDistances {
    * @param matrix
    * @return
    */
-  def calculatePairwiseDistances(matrix: BlockMatrix) = {
+  def calculatePairwiseDistances(matrix: BlockMatrix): Array[DistanceWithKey] = {
     val rows = matrix.toIndexedRowMatrix().rows.collect()
     val sortedRows = rows.sortBy(_.index)
     val pairwiseDistances = sortedRows.map { rowA =>
@@ -50,19 +56,19 @@ object PairwiseDistances {
       }
       distances
     }
-    pairwiseDistances.flatten.sortBy(_._1)
+    pairwiseDistances.flatten.sortBy(_.key)
   }
 
   /**
    * compute the distance and provide a key for each comparison
    * to be able to sort the output if required
-   * @param rowA
-   * @param rowB
-   * @return
+   * @param key
+   * @param similarity
    */
-  def computeDistance(rowA: IndexedRow, rowB: IndexedRow) = {
+  case class DistanceWithKey(key: Int, similarity: Double)
+  def computeDistance(rowA: IndexedRow, rowB: IndexedRow): DistanceWithKey = {
     val sortKey = s"${rowA.index}${rowB.index}".toInt
     val dist = euclidean(rowA.vector, rowB.vector)
-    (sortKey, Math.abs(dist))
+    DistanceWithKey(sortKey, Math.abs(dist))
   }
 }
