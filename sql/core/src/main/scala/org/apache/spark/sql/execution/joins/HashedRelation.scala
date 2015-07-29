@@ -260,7 +260,7 @@ private[joins] final class UnsafeHashedRelation(
     val nKeys = in.readInt()
     // This is used in Broadcast, shared by multiple tasks, so we use on-heap memory
     val memoryManager = new TaskMemoryManager(new ExecutorMemoryManager(MemoryAllocator.HEAP))
-    val pageSizeBytes = SparkEnv.get.conf.getLong("spark.unsafe.pageSizeBytes", 67108864L)
+    val pageSizeBytes = SparkEnv.get.conf.getSizeAsBytes("spark.buffer.pageSize", "64m")
     binaryMap = new BytesToBytesMap(
       memoryManager,
       nKeys * 2, // reduce hash collision

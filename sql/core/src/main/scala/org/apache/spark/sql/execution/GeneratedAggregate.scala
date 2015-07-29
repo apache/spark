@@ -260,7 +260,7 @@ case class GeneratedAggregate(
       } else if (unsafeEnabled && schemaSupportsUnsafe) {
         assert(iter.hasNext, "There should be at least one row for this path")
         log.info("Using Unsafe-based aggregator")
-        val pageSizeBytes = SparkEnv.get.conf.getLong("spark.unsafe.pageSizeBytes", 67108864L)
+        val pageSizeBytes = SparkEnv.get.conf.getSizeAsBytes("spark.buffer.pageSize", "64m")
         val aggregationMap = new UnsafeFixedWidthAggregationMap(
           newAggregationBuffer(EmptyRow),
           aggregationBufferSchema,
