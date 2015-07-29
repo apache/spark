@@ -58,7 +58,7 @@ class BisectingKMeansSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(model.node.getParent === None)
     assert(model.node.getChildren.head.getParent.get === model.node)
     assert(model.node.getChildren.apply(1).getParent.get === model.node)
-    assert(model.getClusters.forall(_.getParent != None))
+    assert(model.getClusters.forall(_.getParent.isDefined))
   }
 
   test("run with too many cluster size than the records") {
