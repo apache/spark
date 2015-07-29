@@ -161,13 +161,6 @@ object FunctionRegistry {
     expression[ToDegrees]("degrees"),
     expression[ToRadians]("radians"),
 
-    // misc functions
-    expression[Md5]("md5"),
-    expression[Sha2]("sha2"),
-    expression[Sha1]("sha1"),
-    expression[Sha1]("sha"),
-    expression[Crc32]("crc32"),
-
     // aggregate functions
     expression[Average]("avg"),
     expression[Count]("count"),
@@ -229,7 +222,15 @@ object FunctionRegistry {
     expression[Year]("year"),
 
     // collection functions
-    expression[Size]("size")
+    expression[Size]("size"),
+
+    // misc functions
+    expression[Crc32]("crc32"),
+    expression[Md5]("md5"),
+    expression[Sha1]("sha"),
+    expression[Sha1]("sha1"),
+    expression[Sha2]("sha2"),
+    expression[SparkPartitionID]("spark_partition_id")
   )
 
   val builtin: FunctionRegistry = {

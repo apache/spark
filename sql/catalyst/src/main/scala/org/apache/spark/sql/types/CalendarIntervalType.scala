@@ -15,9 +15,26 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution
+package org.apache.spark.sql.types
+
+import org.apache.spark.annotation.DeveloperApi
+
 
 /**
- * Package containing expressions that are specific to Spark runtime.
+ * :: DeveloperApi ::
+ * The data type representing calendar time intervals. The calendar time interval is stored
+ * internally in two components: number of months the number of microseconds.
+ *
+ * Note that calendar intervals are not comparable.
+ *
+ * Please use the singleton [[DataTypes.CalendarIntervalType]].
  */
-package object expressions
+@DeveloperApi
+class CalendarIntervalType private() extends DataType {
+
+  override def defaultSize: Int = 16
+
+  private[spark] override def asNullable: CalendarIntervalType = this
+}
+
+case object CalendarIntervalType extends CalendarIntervalType
