@@ -53,6 +53,13 @@ class StringIndexerSuite extends SparkFunSuite with MLlibTestSparkContext {
       .select("id", "label2")
     assert(df.collect().map(r => (r.getInt(0), r.getString(1))).toSet ===
       reversed.collect().map(r => (r.getInt(0), r.getString(1))).toSet)
+    // Check invert using only metadata
+    val inverse2 = new StringIndexerInverse()
+      .setInputCol("labelIndex")
+      .setOutputCol("label2")
+    val reversed2 = inverse2.transform(transformed).select("id", "label2")
+    assert(df.collect().map(r => (r.getInt(0), r.getString(1))).toSet ===
+      reversed2.collect().map(r => (r.getInt(0), r.getString(1))).toSet)
   }
 
   test("StringIndexer with a numeric input column") {
