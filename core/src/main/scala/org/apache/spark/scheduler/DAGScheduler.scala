@@ -1066,8 +1066,8 @@ class DAGScheduler(
 
           if (disallowStageRetryForTest) {
             abortStage(failedStage, "Fetch failure will not retry stage due to testing config")
-          } else if (failedStage.failAndShouldAbort(task)) {
-            abortStage(failedStage, s"Stage ${failedStage.name} " +
+          } else if (failedStage.failedOnFetchAndShouldAbort(task.stageAttemptId)) {
+            abortStage(failedStage, s"$failedStage (${failedStage.name}) " +
               s"has failed the maximum allowable number of times: ${Stage.MAX_STAGE_FAILURES}. " +
               s"Most recent failure reason: ${failureMessage}")
           } else if (failedStages.isEmpty) {

@@ -558,7 +558,7 @@ class DAGSchedulerSuite
 
   /**
    * In this test we simulate a job failure where there are two failures in two different stages.
-   * Specifically, stage0 fails twice, and then stage1 twice. In total, the job has had four
+   * Specifically, stage1 fails twice, and then stage2 twice. In total, the job has had four
    * failures overall but not four failures for a particular stage, and as such should not be
    * aborted.
    */
@@ -624,20 +624,18 @@ class DAGSchedulerSuite
     checkStageId(1, 4, stage1Attempt4)
     complete(stage1Attempt4, makeCompletions(stage1Attempt4, 1))
 
-    println(taskSets.mkString(","))
-
     val stage2Attempt = taskSets.last
     checkStageId(2, Stage.MAX_STAGE_FAILURES/2, stage2Attempt)
     complete(stage2Attempt, Seq((Success, 42)))
 
-    // The first success is from the success we append in stage 1, the second is the one we add here
     assert(results === Map(0 -> 42))
+    assertDataStructuresEmpty()
   }
 
   /**
    * In this test we simulate a job failure where a stage may have many tasks, many of which fail.
-   * We want to show that many fetch failures inside a single stage do not trigger an abort on
-   * their own, but only when the stage fails enough times.
+   * We want to show that many fetch failures inside a single stage attempt do not trigger an abort
+   * on their own, but only when there are enough failing stage attempts.
    */
   test("Multiple task failures in same stage should not abort the stage.") {
     setupStageAbortTest(sc)
@@ -660,7 +658,7 @@ class DAGSchedulerSuite
       (FetchFailed(makeBlockManagerId("hostA"), shuffleId, 0, idx, "ignored"), null)
     }.toSeq
 
-    // Run Stage 1 with all fetchs failing
+    // Run Stage 1 with all fetches failing
     complete(stage1Attempt0, failures)
 
     // Resubmit and confirm that now all is well
@@ -681,6 +679,7 @@ class DAGSchedulerSuite
     sc.listenerBus.waitUntilEmpty(1000)
     assert(ended === true)
     assert(results === (0 until parts).map{idx => idx -> 42}.toMap)
+    assertDataStructuresEmpty()
   }
 
   /**
@@ -766,9 +765,8 @@ class DAGSchedulerSuite
       ) ++ stage1Successes
     )
 
-    Thread.sleep(500)
     scheduler.resubmitFailedStages()
-    Thread.sleep(500)
+
     // Confirm we have not yet aborted
     assert(scheduler.runningStages.nonEmpty)
     assert(!ended)
