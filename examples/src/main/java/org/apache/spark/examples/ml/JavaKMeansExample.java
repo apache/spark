@@ -46,11 +46,11 @@ import org.apache.spark.sql.types.StructType;
 public class JavaKMeansExample {
 
   private static class ParsePoint implements Function<String, Row> {
-    private static Pattern separater = Pattern.compile(" ");
+    final private static Pattern separator = Pattern.compile(" ");
 
     @Override
     public Row call(String line) {
-      String[] tok = separater.split(line);
+      String[] tok = separator.split(line);
       double[] point = new double[tok.length];
       for (int i = 0; i < tok.length; ++i) {
         point[i] = Double.parseDouble(tok[i]);
