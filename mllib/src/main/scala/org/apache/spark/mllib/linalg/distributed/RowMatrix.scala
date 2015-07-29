@@ -22,7 +22,7 @@ import java.util.Arrays
 import scala.collection.mutable.ListBuffer
 
 import breeze.linalg.{DenseMatrix => BDM, DenseVector => BDV, SparseVector => BSV, axpy => brzAxpy,
-  svd => brzSvd}
+  svd => brzSvd, MatrixSingularException, inv}
 import breeze.numerics.{sqrt => brzSqrt}
 import com.github.fommil.netlib.BLAS.{getInstance => blas}
 
@@ -498,62 +498,47 @@ class RowMatrix(
   }
 
   /**
-   * Compute QR decomposition for rowMatrix. The implementation is designed to optimize the QR
-   * decomposition (factorizations) for the RowMatrix of a tall and skinny shape, yet it applies
-   * to RowMatrix in general.
-   *
+   * Compute QR decomposition for [[RowMatrix]]. The implementation is designed to optimize the QR
+   * decomposition (factorization) for the [[RowMatrix]] of a tall and skinny shape.
    * Reference:
-   *  Austin R. Benson, David F. Gleich, James Demmel. "Direct QR factorizations for tall-and
-   *  -skinny matrices in MapReduce architectures", 2013 IEEE International Conference on Big Data
-   * @param computeQ: whether to computeQ, which is quite expensive.
-   * @return the decomposition result as (Option[Q], R), where Q is a RowMatrix and R is Matrix.
+   *  Paul G. Constantine, David F. Gleich. "Tall and skinny QR factorizations in MapReduce
+   *  architectures"  ([[http://dx.doi.org/10.1145/1996092.1996103]])
+   *
+   * @param computeQ: whether to computeQ
+   * @return QRDecomposition(Q, R), Q = null if computeQ = false.
    */
-  def TSQR(computeQ: Boolean = false): (Option[RowMatrix], Matrix) = {
+  def tallSkinnyQR(computeQ: Boolean = false): QRDecomposition[RowMatrix, Matrix] = {
     val col = numCols().toInt
-
     // split rows horizontally into smaller matrices, and compute QR for each of them
-    val blockQRs = rows.mapPartitions(rowsIterator =>{
-      val partRows = rowsIterator.toArray
-      val rowCount = partRows.size
-      var bdm = BDM.zeros[Double](partRows.size, col)
+    val blockQRs = rows.glom().map{ partRows =>
+      val bdm = BDM.zeros[Double](partRows.length, col)
       var i = 0
-      partRows.foreach(row =>{
+      partRows.foreach{ row =>
         bdm(i, ::) := row.toBreeze.t
         i += 1
-      })
+      }
+      breeze.linalg.qr.reduced(bdm).r
+    }.cache()
 
-      val blockQR = breeze.linalg.qr.reduced(bdm)
-      Iterator((blockQR.r, blockQR.q))
-    }).cache
-
-    // combine the R part from previous results horizontally into a tall matrix
-    val blockRsRdd = blockQRs.map(_._1).collect()
-    val CombinedR = blockRsRdd.reduceLeft((r1, r2) => BDM.vertcat(r1, r2))
-
-    val CombinedRDecomposition = breeze.linalg.qr.reduced(CombinedR)
-    val finalR = Matrices.fromBreeze(CombinedRDecomposition.r.toDenseMatrix)
-
-    val finalQ = if(computeQ){
-      val blockQ = blockQRs.map(_._2)
-      val rightPartQ = CombinedRDecomposition.q
-      val rightQArray = (0 until blockQ.count().toInt)
-        .map(i => rightPartQ(i * col until (i + 1) * col, ::))
-        .toArray
-      val rightQrdd = blockQ.context.parallelize(rightQArray)
-
-      val qProducts = blockQ.zip(rightQrdd).map(m => m._1 * m._2)
-      val newRows = qProducts.flatMap(m => {
-        val row = m.rows
-        (0 until row).map(i =>{
-          val bv = m(i, ::).t
-          Vectors.fromBreeze(bv)
-        })
-      })
-      Some(new RowMatrix(newRows))
+    // combine the R part from previous results vertically into a tall matrix
+    val combinedR = blockQRs.treeReduce((r1, r2) => BDM.vertcat(r1, r2))
+    val breezeR = breeze.linalg.qr.reduced(combinedR).r.toDenseMatrix
+    val finalR = Matrices.fromBreeze(breezeR)
+    val finalQ = if (computeQ) {
+      try {
+        val invR = inv(breezeR)
+        this.multiply(Matrices.fromBreeze(invR))
+      }
+      catch {
+        case err: MatrixSingularException =>
+          logWarning("R is not invertible and return Q as null")
+          null
+      }
     }
-    else None
-
-    (finalQ, finalR)
+    else {
+      null
+    }
+    QRDecomposition(finalQ, finalR)
   }
 
   /**
