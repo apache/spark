@@ -92,7 +92,8 @@ public final class UnsafeRow extends MutableRow {
       Arrays.asList(new DataType[]{
         StringType,
         BinaryType,
-        IntervalType
+        IntervalType,
+        new DecimalType()
       }));
     _readableFieldTypes.addAll(settableFieldTypes);
     readableFieldTypes = Collections.unmodifiableSet(_readableFieldTypes);
@@ -360,6 +361,21 @@ public final class UnsafeRow extends MutableRow {
       final long microseconds =
         PlatformDependent.UNSAFE.getLong(baseObject, baseOffset + offset + 8);
       return new Interval(months, microseconds);
+    }
+  }
+
+  @Override
+  public Decimal getDecimal(int ordinal) {
+    if (isNullAt(ordinal)) {
+      return null;
+    } else {
+      final long offsetAndSize = getLong(ordinal);
+      final int offset = (int) (offsetAndSize >> 32);
+      final long unscaled = PlatformDependent.UNSAFE.getLong(baseObject, baseOffset + offset);
+      final int precision = PlatformDependent.UNSAFE.getInt(baseObject, baseOffset + offset + 8);
+      final int scale = PlatformDependent.UNSAFE.getInt(baseObject, baseOffset + offset + 12);
+
+      return new Decimal().set(unscaled, precision, scale);
     }
   }
 

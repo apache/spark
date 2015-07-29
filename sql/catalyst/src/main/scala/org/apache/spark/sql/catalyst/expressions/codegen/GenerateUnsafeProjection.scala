@@ -34,11 +34,12 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
   private val StringWriter = classOf[UnsafeRowWriters.UTF8StringWriter].getName
   private val BinaryWriter = classOf[UnsafeRowWriters.BinaryWriter].getName
   private val IntervalWriter = classOf[UnsafeRowWriters.IntervalWriter].getName
+  private val DecimalWriter = classOf[UnsafeRowWriters.DecimalWriter].getName
   private val StructWriter = classOf[UnsafeRowWriters.StructWriter].getName
 
   /** Returns true iff we support this data type. */
   def canSupport(dataType: DataType): Boolean = dataType match {
-    case t: AtomicType if !t.isInstanceOf[DecimalType] => true
+    case t: AtomicType => true
     case _: IntervalType => true
     case t: StructType => t.toSeq.forall(field => canSupport(field.dataType))
     case NullType => true
@@ -77,6 +78,8 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
           s" + (${exprs(i).isNull} ? 0 : $BinaryWriter.getSize(${exprs(i).primitive}))"
         case IntervalType =>
           s" + (${exprs(i).isNull} ? 0 : 16)"
+        case dt: DecimalType =>
+          s" + (${exprs(i).isNull} ? 0 : 16)"
         case _: StructType =>
           s" + (${exprs(i).isNull} ? 0 : $StructWriter.getSize(${exprs(i).primitive}))"
         case _ => ""
@@ -93,6 +96,8 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
           s"$cursor += $BinaryWriter.write($ret, $i, $cursor, ${exprs(i).primitive})"
         case IntervalType =>
           s"$cursor += $IntervalWriter.write($ret, $i, $cursor, ${exprs(i).primitive})"
+        case dt: DecimalType =>
+          s"$cursor += $DecimalWriter.write($ret, $i, $cursor, ${exprs(i).primitive})"
         case t: StructType =>
           s"$cursor += $StructWriter.write($ret, $i, $cursor, ${exprs(i).primitive})"
         case NullType => ""
