@@ -218,7 +218,7 @@ class AttributeSuite extends SparkFunSuite {
     // Attribute.fromStructField should accept any NumericType, not just DoubleType
     val longFldWithMeta = new StructField("x", LongType, false, metadata)
     assert(Attribute.fromStructField(longFldWithMeta).isNumeric)
-    val decimalFldWithMeta = new StructField("x", DecimalType(None), false, metadata)
+    val decimalFldWithMeta = new StructField("x", DecimalType(38, 18), false, metadata)
     assert(Attribute.fromStructField(decimalFldWithMeta).isNumeric)
   }
 }

@@ -22,7 +22,8 @@ import java.nio.ByteBuffer
 
 import scala.collection.mutable.HashMap
 
-import org.apache.spark.{TaskContextImpl, TaskContext}
+import org.apache.spark.metrics.MetricsSystem
+import org.apache.spark.{SparkEnv, TaskContextImpl, TaskContext}
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.serializer.SerializerInstance
 import org.apache.spark.unsafe.memory.TaskMemoryManager
@@ -43,7 +44,10 @@ import org.apache.spark.util.Utils
  * @param stageId id of the stage this task belongs to
  * @param partitionId index of the number in the RDD
  */
-private[spark] abstract class Task[T](val stageId: Int, var partitionId: Int) extends Serializable {
+private[spark] abstract class Task[T](
+    val stageId: Int,
+    val stageAttemptId: Int,
+    var partitionId: Int) extends Serializable {
 
   /**
    * The key of the Map is the accumulator id and the value of the Map is the latest accumulator
@@ -58,13 +62,18 @@ private[spark] abstract class Task[T](val stageId: Int, var partitionId: Int) ex
    * @param attemptNumber how many times this task has been attempted (0 for the first attempt)
    * @return the result of the task along with updates of Accumulators.
    */
-  final def run(taskAttemptId: Long, attemptNumber: Int): (T, AccumulatorUpdates) = {
+  final def run(
+    taskAttemptId: Long,
+    attemptNumber: Int,
+    metricsSystem: MetricsSystem)
+  : (T, AccumulatorUpdates) = {
     context = new TaskContextImpl(
       stageId = stageId,
       partitionId = partitionId,
       taskAttemptId = taskAttemptId,
       attemptNumber = attemptNumber,
       taskMemoryManager = taskMemoryManager,
+      metricsSystem = metricsSystem,
       runningLocally = false)
     TaskContext.setTaskContext(context)
     context.taskMetrics.setHostname(Utils.localHostName())
@@ -77,7 +86,18 @@ private[spark] abstract class Task[T](val stageId: Int, var partitionId: Int) ex
       (runTask(context), context.collectAccumulators())
     } finally {
       context.markTaskCompleted()
-      TaskContext.unset()
+      try {
+        Utils.tryLogNonFatalError {
+          // Release memory used by this thread for shuffles
+          SparkEnv.get.shuffleMemoryManager.releaseMemoryForThisTask()
+        }
+        Utils.tryLogNonFatalError {
+          // Release memory used by this thread for unrolling blocks
+          SparkEnv.get.blockManager.memoryStore.releaseUnrollMemoryForThisTask()
+        }
+      } finally {
+        TaskContext.unset()
+      }
     }
   }
 

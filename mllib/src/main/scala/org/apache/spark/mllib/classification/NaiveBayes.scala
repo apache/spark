@@ -444,6 +444,7 @@ object NaiveBayes {
    *
    * @param input RDD of `(label, array of features)` pairs.  Every vector should be a frequency
    *              vector or a count vector.
+   * @since 0.9.0
    */
   def train(input: RDD[LabeledPoint]): NaiveBayesModel = {
     new NaiveBayes().run(input)
@@ -459,6 +460,7 @@ object NaiveBayes {
    * @param input RDD of `(label, array of features)` pairs.  Every vector should be a frequency
    *              vector or a count vector.
    * @param lambda The smoothing parameter
+   * @since 0.9.0
    */
   def train(input: RDD[LabeledPoint], lambda: Double): NaiveBayesModel = {
     new NaiveBayes(lambda, Multinomial).run(input)
@@ -481,6 +483,7 @@ object NaiveBayes {
    *
    * @param modelType The type of NB model to fit from the enumeration NaiveBayesModels, can be
    *              multinomial or bernoulli
+   * @since 0.9.0
    */
   def train(input: RDD[LabeledPoint], lambda: Double, modelType: String): NaiveBayesModel = {
     require(supportedModelTypes.contains(modelType),

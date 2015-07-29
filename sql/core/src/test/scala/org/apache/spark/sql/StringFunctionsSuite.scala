@@ -52,14 +52,38 @@ class StringFunctionsSuite extends QueryTest {
 
   test("string Levenshtein distance") {
     val df = Seq(("kitten", "sitting"), ("frog", "fog")).toDF("l", "r")
-    checkAnswer(df.select(levenshtein("l", "r")), Seq(Row(3), Row(1)))
+    checkAnswer(df.select(levenshtein($"l", $"r")), Seq(Row(3), Row(1)))
     checkAnswer(df.selectExpr("levenshtein(l, r)"), Seq(Row(3), Row(1)))
+  }
+
+  test("string regex_replace / regex_extract") {
+    val df = Seq(
+      ("100-200", "(\\d+)-(\\d+)", "300"),
+      ("100-200", "(\\d+)-(\\d+)", "400"),
+      ("100-200", "(\\d+)", "400")).toDF("a", "b", "c")
+
+    checkAnswer(
+      df.select(
+        regexp_replace($"a", "(\\d+)", "num"),
+        regexp_extract($"a", "(\\d+)-(\\d+)", 1)),
+      Row("num-num", "100") :: Row("num-num", "100") :: Row("num-num", "100") :: Nil)
+
+    // for testing the mutable state of the expression in code gen.
+    // This is a hack way to enable the codegen, thus the codegen is enable by default,
+    // it will still use the interpretProjection if projection followed by a LocalRelation,
+    // hence we add a filter operator.
+    // See the optimizer rule `ConvertToLocalRelation`
+    checkAnswer(
+      df.filter("isnotnull(a)").selectExpr(
+        "regexp_replace(a, b, c)",
+        "regexp_extract(a, b, 1)"),
+      Row("300", "100") :: Row("400", "100") :: Row("400-400", "100") :: Nil)
   }
 
   test("string ascii function") {
     val df = Seq(("abc", "")).toDF("a", "b")
     checkAnswer(
-      df.select(ascii($"a"), ascii("b")),
+      df.select(ascii($"a"), ascii($"b")),
       Row(97, 0))
 
     checkAnswer(
@@ -71,8 +95,8 @@ class StringFunctionsSuite extends QueryTest {
     val bytes = Array[Byte](1, 2, 3, 4)
     val df = Seq((bytes, "AQIDBA==")).toDF("a", "b")
     checkAnswer(
-      df.select(base64("a"), base64($"a"), unbase64("b"), unbase64($"b")),
-      Row("AQIDBA==", "AQIDBA==", bytes, bytes))
+      df.select(base64($"a"), unbase64($"b")),
+      Row("AQIDBA==", bytes))
 
     checkAnswer(
       df.selectExpr("base64(a)", "unbase64(b)"),
@@ -85,12 +109,8 @@ class StringFunctionsSuite extends QueryTest {
     // non ascii characters are not allowed in the code, so we disable the scalastyle here.
     val df = Seq(("大千世界", "utf-8", bytes)).toDF("a", "b", "c")
     checkAnswer(
-      df.select(
-        encode($"a", "utf-8"),
-        encode("a", "utf-8"),
-        decode($"c", "utf-8"),
-        decode("c", "utf-8")),
-      Row(bytes, bytes, "大千世界", "大千世界"))
+      df.select(encode($"a", "utf-8"), decode($"c", "utf-8")),
+      Row(bytes, "大千世界"))
 
     checkAnswer(
       df.selectExpr("encode(a, 'utf-8')", "decode(c, 'utf-8')"),
@@ -114,8 +134,8 @@ class StringFunctionsSuite extends QueryTest {
     val df = Seq(("aa%d%s", 123, "cc")).toDF("a", "b", "c")
 
     checkAnswer(
-      df.select(formatString($"a", $"b", $"c"), formatString("aa%d%s", "b", "c")),
-      Row("aa123cc", "aa123cc"))
+      df.select(format_string("aa%d%s", $"b", $"c")),
+      Row("aa123cc"))
 
     checkAnswer(
       df.selectExpr("printf(a, b, c)"),
@@ -126,8 +146,8 @@ class StringFunctionsSuite extends QueryTest {
     val df = Seq(("aaads", "aa", "zz")).toDF("a", "b", "c")
 
     checkAnswer(
-      df.select(instr($"a", $"b"), instr("a", "b")),
-      Row(1, 1))
+      df.select(instr($"a", "aa")),
+      Row(1))
 
     checkAnswer(
       df.selectExpr("instr(a, b)"),
@@ -138,10 +158,8 @@ class StringFunctionsSuite extends QueryTest {
     val df = Seq(("aaads", "aa", "zz", 1)).toDF("a", "b", "c", "d")
 
     checkAnswer(
-      df.select(
-        locate($"b", $"a"), locate("b", "a"), locate($"b", $"a", 1),
-        locate("b", "a", 1), locate($"b", $"a", $"d"), locate("b", "a", "d")),
-      Row(1, 1, 2, 2, 2, 2))
+      df.select(locate("aa", $"a"), locate("aa", $"a", 1)),
+      Row(1, 2))
 
     checkAnswer(
       df.selectExpr("locate(b, a)", "locate(b, a, d)"),
@@ -152,10 +170,8 @@ class StringFunctionsSuite extends QueryTest {
     val df = Seq(("hi", 5, "??")).toDF("a", "b", "c")
 
     checkAnswer(
-      df.select(
-        lpad($"a", $"b", $"c"), rpad("a", "b", "c"),
-        lpad($"a", 1, $"c"), rpad("a", 1, "c")),
-      Row("???hi", "hi???", "h", "h"))
+      df.select(lpad($"a", 1, "c"), lpad($"a", 5, "??"), rpad($"a", 1, "c"), rpad($"a", 5, "??")),
+      Row("h", "???hi", "h", "hi???"))
 
     checkAnswer(
       df.selectExpr("lpad(a, b, c)", "rpad(a, b, c)", "lpad(a, 1, c)", "rpad(a, 1, c)"),
@@ -166,9 +182,8 @@ class StringFunctionsSuite extends QueryTest {
     val df = Seq(("hi", 2)).toDF("a", "b")
 
     checkAnswer(
-      df.select(
-        repeat($"a", 2), repeat("a", 2), repeat($"a", $"b"), repeat("a", "b")),
-      Row("hihi", "hihi", "hihi", "hihi"))
+      df.select(repeat($"a", 2)),
+      Row("hihi"))
 
     checkAnswer(
       df.selectExpr("repeat(a, 2)", "repeat(a, b)"),
@@ -179,7 +194,7 @@ class StringFunctionsSuite extends QueryTest {
     val df = Seq(("hi", "hhhi")).toDF("a", "b")
 
     checkAnswer(
-      df.select(reverse($"a"), reverse("b")),
+      df.select(reverse($"a"), reverse($"b")),
       Row("ih", "ihhh"))
 
     checkAnswer(
@@ -191,10 +206,6 @@ class StringFunctionsSuite extends QueryTest {
     val df = Seq((2, 3)).toDF("a", "b")
 
     checkAnswer(
-      df.select(space($"a"), space("b")),
-      Row("  ", "   "))
-
-    checkAnswer(
       df.selectExpr("space(b)"),
       Row("   "))
   }
@@ -203,10 +214,8 @@ class StringFunctionsSuite extends QueryTest {
     val df = Seq(("aa2bb3cc", "[1-9]+")).toDF("a", "b")
 
     checkAnswer(
-      df.select(
-        split($"a", "[1-9]+"),
-        split("a", "[1-9]+")),
-      Row(Seq("aa", "bb", "cc"), Seq("aa", "bb", "cc")))
+      df.select(split($"a", "[1-9]+")),
+      Row(Seq("aa", "bb", "cc")))
 
     checkAnswer(
       df.selectExpr("split(a, '[1-9]+')"),
@@ -216,8 +225,8 @@ class StringFunctionsSuite extends QueryTest {
   test("string / binary length function") {
     val df = Seq(("123", Array[Byte](1, 2, 3, 4), 123)).toDF("a", "b", "c")
     checkAnswer(
-      df.select(length($"a"), length("a"), length($"b"), length("b")),
-      Row(3, 3, 4, 4))
+      df.select(length($"a"), length($"b")),
+      Row(3, 4))
 
     checkAnswer(
       df.selectExpr("length(a)", "length(b)"),
@@ -247,10 +256,8 @@ class StringFunctionsSuite extends QueryTest {
           "h") // decimal 7.128381
 
     checkAnswer(
-      df.select(
-        format_number($"f", 4),
-        format_number("f", 4)),
-      Row("5.0000", "5.0000"))
+      df.select(format_number($"f", 4)),
+      Row("5.0000"))
 
     checkAnswer(
       df.selectExpr("format_number(b, e)"), // convert the 1st argument to integer
@@ -291,5 +298,15 @@ class StringFunctionsSuite extends QueryTest {
         df.selectExpr("format_number(e, g)"), // decimal type of the 2nd argument is unacceptable
         Row("5.0000"))
     }
+
+    // for testing the mutable state of the expression in code gen.
+    // This is a hack way to enable the codegen, thus the codegen is enable by default,
+    // it will still use the interpretProjection if projection follows by a LocalRelation,
+    // hence we add a filter operator.
+    // See the optimizer rule `ConvertToLocalRelation`
+    val df2 = Seq((5L, 4), (4L, 3), (3L, 2)).toDF("a", "b")
+    checkAnswer(
+      df2.filter("b>0").selectExpr("format_number(a, b)"),
+      Row("5.0000") :: Row("4.000") :: Row("3.00") :: Nil)
   }
 }

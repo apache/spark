@@ -121,9 +121,7 @@ case class Hour(child: Expression) extends UnaryExpression with ImplicitCastInpu
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
-    defineCodeGen(ctx, ev, (c) =>
-      s"""$dtu.getHours($c)"""
-    )
+    defineCodeGen(ctx, ev, c => s"$dtu.getHours($c)")
   }
 }
 
@@ -139,9 +137,7 @@ case class Minute(child: Expression) extends UnaryExpression with ImplicitCastIn
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
-    defineCodeGen(ctx, ev, (c) =>
-      s"""$dtu.getMinutes($c)"""
-    )
+    defineCodeGen(ctx, ev, c => s"$dtu.getMinutes($c)")
   }
 }
 
@@ -157,9 +153,7 @@ case class Second(child: Expression) extends UnaryExpression with ImplicitCastIn
 
   override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
-    defineCodeGen(ctx, ev, (c) =>
-      s"""$dtu.getSeconds($c)"""
-    )
+    defineCodeGen(ctx, ev, c => s"$dtu.getSeconds($c)")
   }
 }
 
@@ -175,9 +169,7 @@ case class DayOfYear(child: Expression) extends UnaryExpression with ImplicitCas
 
   override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
-    defineCodeGen(ctx, ev, (c) =>
-      s"""$dtu.getDayInYear($c)"""
-    )
+    defineCodeGen(ctx, ev, c => s"$dtu.getDayInYear($c)")
   }
 }
 
@@ -194,9 +186,7 @@ case class Year(child: Expression) extends UnaryExpression with ImplicitCastInpu
 
   override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
-    defineCodeGen(ctx, ev, c =>
-      s"""$dtu.getYear($c)"""
-    )
+    defineCodeGen(ctx, ev, c => s"$dtu.getYear($c)")
   }
 }
 
@@ -212,9 +202,7 @@ case class Quarter(child: Expression) extends UnaryExpression with ImplicitCastI
 
   override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
-    defineCodeGen(ctx, ev, (c) =>
-      s"""$dtu.getQuarter($c)"""
-    )
+    defineCodeGen(ctx, ev, c => s"$dtu.getQuarter($c)")
   }
 }
 
@@ -230,9 +218,7 @@ case class Month(child: Expression) extends UnaryExpression with ImplicitCastInp
 
   override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
-    defineCodeGen(ctx, ev, (c) =>
-      s"""$dtu.getMonth($c)"""
-    )
+    defineCodeGen(ctx, ev, c => s"$dtu.getMonth($c)")
   }
 }
 
@@ -248,9 +234,7 @@ case class DayOfMonth(child: Expression) extends UnaryExpression with ImplicitCa
 
   override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
-    defineCodeGen(ctx, ev, (c) =>
-      s"""$dtu.getDayOfMonth($c)"""
-    )
+    defineCodeGen(ctx, ev, c => s"$dtu.getDayOfMonth($c)")
   }
 }
 
@@ -260,22 +244,29 @@ case class WeekOfYear(child: Expression) extends UnaryExpression with ImplicitCa
 
   override def dataType: DataType = IntegerType
 
-  override protected def nullSafeEval(date: Any): Any = {
+  @transient private lazy val c = {
     val c = Calendar.getInstance(TimeZone.getTimeZone("UTC"))
     c.setFirstDayOfWeek(Calendar.MONDAY)
     c.setMinimalDaysInFirstWeek(4)
+    c
+  }
+
+  override protected def nullSafeEval(date: Any): Any = {
     c.setTimeInMillis(date.asInstanceOf[Int] * 1000L * 3600L * 24L)
     c.get(Calendar.WEEK_OF_YEAR)
   }
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    nullSafeCodeGen(ctx, ev, (time) => {
+    nullSafeCodeGen(ctx, ev, time => {
       val cal = classOf[Calendar].getName
       val c = ctx.freshName("cal")
+      ctx.addMutableState(cal, c,
+        s"""
+          $c = $cal.getInstance(java.util.TimeZone.getTimeZone("UTC"));
+          $c.setFirstDayOfWeek($cal.MONDAY);
+          $c.setMinimalDaysInFirstWeek(4);
+         """)
       s"""
-        $cal $c = $cal.getInstance(java.util.TimeZone.getTimeZone("UTC"));
-        $c.setFirstDayOfWeek($cal.MONDAY);
-        $c.setMinimalDaysInFirstWeek(4);
         $c.setTimeInMillis($time * 1000L * 3600L * 24L);
         ${ev.primitive} = $c.get($cal.WEEK_OF_YEAR);
       """
@@ -290,8 +281,6 @@ case class DateFormatClass(left: Expression, right: Expression) extends BinaryEx
 
   override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType, StringType)
 
-  override def prettyName: String = "date_format"
-
   override protected def nullSafeEval(timestamp: Any, format: Any): Any = {
     val sdf = new SimpleDateFormat(format.toString)
     UTF8String.fromString(sdf.format(new Date(timestamp.asInstanceOf[Long] / 1000)))
@@ -304,6 +293,89 @@ case class DateFormatClass(left: Expression, right: Expression) extends BinaryEx
           .format(new java.sql.Date($timestamp / 1000)))"""
     })
   }
+
+  override def prettyName: String = "date_format"
+}
+
+/**
+ * Returns the last day of the month which the date belongs to.
+ */
+case class LastDay(startDate: Expression) extends UnaryExpression with ImplicitCastInputTypes {
+  override def child: Expression = startDate
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(DateType)
+
+  override def dataType: DataType = DateType
+
+  override def nullSafeEval(date: Any): Any = {
+    DateTimeUtils.getLastDayOfMonth(date.asInstanceOf[Int])
+  }
+
+  override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
+    defineCodeGen(ctx, ev, sd => s"$dtu.getLastDayOfMonth($sd)")
+  }
+
+  override def prettyName: String = "last_day"
+}
+
+/**
+ * Returns the first date which is later than startDate and named as dayOfWeek.
+ * For example, NextDay(2015-07-27, Sunday) would return 2015-08-02, which is the first
+ * Sunday later than 2015-07-27.
+ *
+ * Allowed "dayOfWeek" is defined in [[DateTimeUtils.getDayOfWeekFromString]].
+ */
+case class NextDay(startDate: Expression, dayOfWeek: Expression)
+  extends BinaryExpression with ImplicitCastInputTypes {
+
+  override def left: Expression = startDate
+  override def right: Expression = dayOfWeek
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(DateType, StringType)
+
+  override def dataType: DataType = DateType
+
+  override def nullSafeEval(start: Any, dayOfW: Any): Any = {
+    val dow = DateTimeUtils.getDayOfWeekFromString(dayOfW.asInstanceOf[UTF8String])
+    if (dow == -1) {
+      null
+    } else {
+      val sd = start.asInstanceOf[Int]
+      DateTimeUtils.getNextDateForDayOfWeek(sd, dow)
+    }
+  }
+
+  override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    nullSafeCodeGen(ctx, ev, (sd, dowS) => {
+      val dateTimeUtilClass = DateTimeUtils.getClass.getName.stripSuffix("$")
+      val dayOfWeekTerm = ctx.freshName("dayOfWeek")
+      if (dayOfWeek.foldable) {
+        val input = dayOfWeek.eval().asInstanceOf[UTF8String]
+        if ((input eq null) || DateTimeUtils.getDayOfWeekFromString(input) == -1) {
+          s"""
+             |${ev.isNull} = true;
+           """.stripMargin
+        } else {
+          val dayOfWeekValue = DateTimeUtils.getDayOfWeekFromString(input)
+          s"""
+             |${ev.primitive} = $dateTimeUtilClass.getNextDateForDayOfWeek($sd, $dayOfWeekValue);
+           """.stripMargin
+        }
+      } else {
+        s"""
+           |int $dayOfWeekTerm = $dateTimeUtilClass.getDayOfWeekFromString($dowS);
+           |if ($dayOfWeekTerm == -1) {
+           |  ${ev.isNull} = true;
+           |} else {
+           |  ${ev.primitive} = $dateTimeUtilClass.getNextDateForDayOfWeek($sd, $dayOfWeekTerm);
+           |}
+         """.stripMargin
+      }
+    })
+  }
+
+  override def prettyName: String = "next_day"
 }
 
 /**
