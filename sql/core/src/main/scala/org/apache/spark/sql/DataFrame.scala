@@ -919,6 +919,41 @@ class DataFrame private[sql](
   }
 
   /**
+   * (Scala-specific) Pivots a column of the current [[DataFrame]] and preform the specified
+   * aggregation.
+   * {{{
+   *   // Compute the sum of earnings for each year by course with each course as a separate column.
+   *   df.pivot(Seq($"year"), $"course", Seq("dotNET", "Java"), sum($"earnings"))
+   * }}}
+   * @param groupBy Columns to group by.
+   * @param pivotColumn Column to pivot
+   * @param pivotValues Values of pivotColumn that will be translated to columns in the output data
+   *                    frame.
+   * @param aggregate Aggregate expression to preform for each combination of groupBy and
+   *                  pivotValues.
+   * @group dfops
+   * @since 1.5.0
+   */
+  def pivot(
+      groupBy: Seq[Column],
+      pivotColumn: Column,
+      pivotValues: Seq[String],
+      aggregate: Column): DataFrame = {
+
+    val aliasedGroupBy = groupBy.map(_.expr).map {
+      // Wrap UnresolvedAttribute with UnresolvedAlias, as when we resolve UnresolvedAttribute, we
+      // will remove intermediate Alias for ExtractValue chain, and we need to alias it again to
+      // make it a NamedExpression.
+      case u: UnresolvedAttribute => UnresolvedAlias(u)
+      case expr: NamedExpression => expr
+      case expr: Expression => Alias(expr, expr.prettyString)()
+    }
+
+    new DataFrame(sqlContext,
+      Pivot(aliasedGroupBy, pivotColumn.expr, pivotValues, aggregate.expr, this.logicalPlan))
+  }
+
+  /**
    * (Scala-specific) Aggregates on the entire [[DataFrame]] without groups.
    * {{{
    *   // df.agg(...) is a shorthand for df.groupBy().agg(...)

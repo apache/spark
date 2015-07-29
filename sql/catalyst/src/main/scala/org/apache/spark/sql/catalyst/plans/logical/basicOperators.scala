@@ -373,6 +373,16 @@ case class Rollup(
     this.copy(aggregations = aggs)
 }
 
+case class Pivot(
+    groupByExprs: Seq[NamedExpression],
+    pivotColumn: Expression,
+    pivotValues: Seq[String],
+    aggregate: Expression,
+    child: LogicalPlan) extends UnaryNode {
+  override def output: Seq[Attribute] =
+    groupByExprs.map(_.toAttribute) ++ pivotValues.map(AttributeReference(_, aggregate.dataType)())
+}
+
 case class Limit(limitExpr: Expression, child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
 

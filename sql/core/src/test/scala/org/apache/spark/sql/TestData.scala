@@ -194,4 +194,13 @@ object TestData {
         :: ComplexData(Map("2" -> 2), TestData(2, "2"), Seq(2), false)
         :: Nil).toDF()
   complexData.registerTempTable("complexData")
+
+  case class CourseSales(course: String, year: Int, earnings: Double)
+  val courseSales = TestSQLContext.sparkContext.parallelize(
+    CourseSales("dotNET", 2012, 10000) ::
+    CourseSales("Java", 2012, 20000) ::
+    CourseSales("dotNET", 2012, 5000) ::
+    CourseSales("dotNET", 2013, 48000) ::
+    CourseSales("Java", 2013, 30000) :: Nil).toDF()
+  courseSales.registerTempTable("courseSales")
 }

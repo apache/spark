@@ -72,6 +72,7 @@ class Analyzer(
       ResolveRelations ::
       ResolveReferences ::
       ResolveGroupingAnalytics ::
+      ResolvePivot ::
       ResolveSortReferences ::
       ResolveGenerate ::
       ResolveFunctions ::
@@ -166,6 +167,10 @@ class Analyzer(
         if g.child.resolved && g.aggregations.exists(_.isInstanceOf[UnresolvedAlias]) =>
         g.withNewAggs(assignAliases(g.aggregations))
 
+      case Pivot(groupByExprs, pivotColumn, pivotValues, aggregate, child)
+        if child.resolved && groupByExprs.exists(_.isInstanceOf[UnresolvedAlias]) =>
+        Pivot(assignAliases(groupByExprs), pivotColumn, pivotValues, aggregate, child)
+
       case Project(projectList, child)
         if child.resolved && projectList.exists(_.isInstanceOf[UnresolvedAlias]) =>
         Project(assignAliases(projectList), child)
@@ -246,6 +251,27 @@ class Analyzer(
           newGroupByExprs :+ VirtualColumn.groupingIdAttribute,
           aggregation,
           Expand(x.bitmasks, newGroupByExprs, gid, child))
+    }
+  }
+
+  object ResolvePivot extends Rule[LogicalPlan] {
+    def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+      case p: Pivot if !p.childrenResolved => p
+      case Pivot(groupByExprs, pivotColumn, pivotValues, aggregate, child) => aggregate match {
+        case u: UnaryExpression if u.isInstanceOf[AggregateExpression] =>
+          val pivotAggregates = pivotValues.map { value =>
+            val filteredAggregate = u.withNewChildren(Seq(
+              If(EqualTo(pivotColumn, Literal(value)), u.child, Literal(null))
+            ))
+            Alias(filteredAggregate, value)()
+          }
+          val newGroupByExprs = groupByExprs.map {
+            case UnresolvedAlias(e) => e
+            case e => e
+          }
+          Aggregate(newGroupByExprs, groupByExprs ++ pivotAggregates, child)
+        case unknown => throw new AnalysisException(s"$unknown is not an aggregate expression")
+      }
     }
   }
 
@@ -924,6 +950,7 @@ class Analyzer(
     override def apply(plan: LogicalPlan): LogicalPlan = plan transform {
       case p: Project => p
       case f: Filter => f
+      case p: Pivot => p
 
       // todo: It's hard to write a general rule to pull out nondeterministic expressions
       // from LogicalPlan, currently we only do it for UnaryNode which has same output
