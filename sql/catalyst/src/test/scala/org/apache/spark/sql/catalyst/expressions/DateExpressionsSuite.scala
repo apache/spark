@@ -48,56 +48,8 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("DayOfYear") {
     val sdfDay = new SimpleDateFormat("D")
-    (2002 to 2004).foreach { y =>
-      (0 to 11).foreach { m =>
-        (0 to 5).foreach { i =>
-          val c = Calendar.getInstance()
-          c.set(y, m, 28, 0, 0, 0)
-          c.add(Calendar.DATE, i)
-          checkEvaluation(DayOfYear(Literal(new Date(c.getTimeInMillis))),
-            sdfDay.format(c.getTime).toInt)
-        }
-      }
-    }
-
     (1998 to 2002).foreach { y =>
-      (0 to 11).foreach { m =>
-        (0 to 5).foreach { i =>
-          val c = Calendar.getInstance()
-          c.set(y, m, 28, 0, 0, 0)
-          c.add(Calendar.DATE, i)
-          checkEvaluation(DayOfYear(Literal(new Date(c.getTimeInMillis))),
-            sdfDay.format(c.getTime).toInt)
-        }
-      }
-    }
-
-    (1969 to 1970).foreach { y =>
-      (0 to 11).foreach { m =>
-        (0 to 5).foreach { i =>
-          val c = Calendar.getInstance()
-          c.set(y, m, 28, 0, 0, 0)
-          c.add(Calendar.DATE, i)
-          checkEvaluation(DayOfYear(Literal(new Date(c.getTimeInMillis))),
-            sdfDay.format(c.getTime).toInt)
-        }
-      }
-    }
-
-    (2402 to 2404).foreach { y =>
-      (0 to 11).foreach { m =>
-        (0 to 5).foreach { i =>
-          val c = Calendar.getInstance()
-          c.set(y, m, 28, 0, 0, 0)
-          c.add(Calendar.DATE, i)
-          checkEvaluation(DayOfYear(Literal(new Date(c.getTimeInMillis))),
-            sdfDay.format(c.getTime).toInt)
-        }
-      }
-    }
-
-    (2398 to 2402).foreach { y =>
-      (0 to 11).foreach { m =>
+      (0 to 3).foreach { m =>
         (0 to 5).foreach { i =>
           val c = Calendar.getInstance()
           c.set(y, m, 28, 0, 0, 0)
@@ -117,7 +69,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Year(Cast(Literal(ts), DateType)), 2013)
 
     val c = Calendar.getInstance()
-    (2000 to 2010).foreach { y =>
+    (2000 to 2002).foreach { y =>
       (0 to 11 by 11).foreach { m =>
         c.set(y, m, 28)
         (0 to 5 * 24).foreach { i =>
@@ -155,20 +107,8 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Month(Cast(Literal(ts), DateType)), 11)
 
     (2003 to 2004).foreach { y =>
-      (0 to 11).foreach { m =>
-        (0 to 5 * 24).foreach { i =>
-          val c = Calendar.getInstance()
-          c.set(y, m, 28, 0, 0, 0)
-          c.add(Calendar.HOUR_OF_DAY, i)
-          checkEvaluation(Month(Literal(new Date(c.getTimeInMillis))),
-            c.get(Calendar.MONTH) + 1)
-        }
-      }
-    }
-
-    (1999 to 2000).foreach { y =>
-      (0 to 11).foreach { m =>
-        (0 to 5 * 24).foreach { i =>
+      (0 to 3).foreach { m =>
+        (0 to 2 * 24).foreach { i =>
           val c = Calendar.getInstance()
           c.set(y, m, 28, 0, 0, 0)
           c.add(Calendar.HOUR_OF_DAY, i)
@@ -282,11 +222,8 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("time_add") {
     checkEvaluation(
-      TimeAdd(Literal(Date.valueOf("2016-01-29")), Literal(new Interval(1, 0))),
-      DateTimeUtils.fromJavaTimestamp(Timestamp.valueOf("2016-02-29 00:00:00")))
-    checkEvaluation(
-      TimeAdd(Literal(Date.valueOf("2016-01-31")), Literal(new Interval(1, 2000000.toLong))),
-      DateTimeUtils.fromJavaTimestamp(Timestamp.valueOf("2016-02-29 00:00:02")))
+      TimeAdd(Literal(Timestamp.valueOf("2016-01-29 10:00:00")), Literal(new Interval(1, 123000L))),
+      DateTimeUtils.fromJavaTimestamp(Timestamp.valueOf("2016-02-29 10:00:00.123")))
   }
 
   test("time_sub") {
@@ -308,6 +245,8 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("months_between") {
+    checkEvaluation(MonthsBetween(Literal(Timestamp.valueOf(
+      "1997-02-28 10:30:00")), Literal(Timestamp.valueOf("1996-10-30 00:00:00"))), 3.94959677)
     checkEvaluation(MonthsBetween(Literal(Timestamp.valueOf(
       "2015-01-30 11:52:00")), Literal(Timestamp.valueOf("2015-01-30 11:50:00"))), 0.0)
     checkEvaluation(MonthsBetween(Literal(Timestamp.valueOf(

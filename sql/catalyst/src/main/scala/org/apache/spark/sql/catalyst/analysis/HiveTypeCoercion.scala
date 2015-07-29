@@ -47,6 +47,7 @@ object HiveTypeCoercion {
       Division ::
       PropagateTypes ::
       ImplicitTypeCasts ::
+      DateTimeOperations ::
       Nil
 
   // See https://cwiki.apache.org/confluence/display/Hive/LanguageManual+Types.
@@ -635,6 +636,24 @@ object HiveTypeCoercion {
       // In the optimizer, we should short-circuit this directly into false value.
       case If(pred, left, right) if pred.dataType == NullType =>
         If(Literal.create(null, BooleanType), left, right)
+    }
+  }
+
+  /**
+   * Turns Add/Subtract of DateType/TimestampType and IntervalType to TimeAdd/TimeSub
+   */
+  object DateTimeOperations extends Rule[LogicalPlan] {
+    def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
+      // Skip nodes who's children have not been resolved yet.
+      case e if !e.childrenResolved => e
+
+      case Add(left, right) if left.dataType == IntervalType =>
+        Add(right, left) // switch the order
+
+      case Add(left, right) if right.dataType == IntervalType =>
+        Cast(TimeAdd(Cast(left, TimestampType), right), left.dataType)
+      case Subtract(left, right) if right.dataType == IntervalType =>
+        Cast(TimeSub(Cast(left, TimestampType), right), left.dataType)
     }
   }
 

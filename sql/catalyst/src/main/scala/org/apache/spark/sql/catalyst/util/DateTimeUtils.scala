@@ -45,6 +45,7 @@ object DateTimeUtils {
   final val to2001 = -11323
 
   // this is year -17999, calculation: 50 * daysIn400Year
+  final val YearZero = -17999
   final val toYearZero = to2001 + 7304850
 
   @transient lazy val defaultTimeZone = TimeZone.getDefault
@@ -575,82 +576,107 @@ object DateTimeUtils {
   }
 
   /**
-   * Returns the date value for the first day of the given month.
-   * The month is expressed in months since 1.1.1970, starting from 0.
+   * The number of days for each month (not leap year)
    */
-  def getDaysFromMonths(months: Int): Int = {
-    val yearSinceEpoch = if (months < 0) months / 12 - 1 else months / 12
-    val monthInYearFromZero = months - yearSinceEpoch * 12
-    val daysFromYears = getDaysFromYears(yearSinceEpoch)
-    val febDays = if (isLeapYear(1970 + yearSinceEpoch)) 29 else 28
-    val daysForMonths = Seq(31, febDays, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31)
-    daysForMonths.slice(0, monthInYearFromZero).sum + daysFromYears
+  private val monthDays = Array(31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31)
+
+  /**
+   * Returns the date value for the first day of the given month.
+   * The month is expressed in months since year zero (17999 BC), starting from 0.
+   */
+  private def firstDayOfMonth(absoluteMonth: Int): Int = {
+    val absoluteYear = absoluteMonth / 12
+    var monthInYear = absoluteMonth - absoluteYear * 12
+    var days = getDaysFromYears(absoluteYear)
+    if (monthInYear >= 2 && isLeapYear(absoluteYear + YearZero)) {
+      days += 1
+    }
+    while (monthInYear > 0) {
+      days += monthDays(monthInYear - 1)
+      monthInYear -= 1
+    }
+    days
   }
 
   /**
    * Returns the date value for January 1 of the given year.
-   * The year is expressed in years since 1.1.1970, starting from 0.
+   * The year is expressed in years since year zero (17999 BC), starting from 0.
    */
-  def getDaysFromYears(years: Int): Int = {
-    val remainYear = (years % 400 + 400) % 400
-    val cycles = (years - remainYear) / 400
-    val numLeaps = if (remainYear < 130) {
-      remainYear / 4
-    } else if (remainYear < 230) {
-      remainYear / 4 - 1
-    } else if (remainYear < 330) {
-      remainYear / 4 - 2
-    } else {
-      remainYear / 4 - 3
-    }
-    cycles * (365 * 400 + 397) + remainYear * 365 + numLeaps
+  private def getDaysFromYears(absoluteYear: Int): Int = {
+    val absoluteDays = (absoluteYear * 365 + absoluteYear / 400 - absoluteYear / 100
+      + absoluteYear / 4)
+    absoluteDays - toYearZero
   }
 
   /**
    * Add date and year-month interval.
    * Returns a date value, expressed in days since 1.1.1970.
    */
-  def dateAddYearMonthInterval(days: Int, months: Int): Int = {
-    val currentMonth = (getYear(days) - 1970) * 12 + getMonth(days) - 1 + months
-    val currentMonthInYear = if (currentMonth < 0) {
-      ((currentMonth % 12) + 12) % 12
-    } else {
-      currentMonth % 12
-    }
-    val currentYear = if (currentMonth < 0) (currentMonth / 12) - 1 else currentMonth / 12
-    val febDays = if (isLeapYear(1970 + currentYear)) 29 else 28
-    val daysForMonths = Seq(31, febDays, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31)
-    getDaysFromMonths(currentMonth) + math.min(
-      getDayOfMonth(days), daysForMonths(currentMonthInYear)) - 1
-  }
+  def dateAddMonths(days: Int, months: Int): Int = {
+    val absoluteMonth = (getYear(days) - YearZero) * 12 + getMonth(days) - 1 + months
+    val currentMonthInYear = absoluteMonth % 12
+    val currentYear = absoluteMonth / 12
+    val leapDay = if (currentMonthInYear == 1 && isLeapYear(currentYear + YearZero)) 1 else 0
+    val lastDayOfMonth = monthDays(currentMonthInYear) + leapDay
 
-  /**
-   * Add date and full interval.
-   * Returns a timestamp value, expressed in microseconds since 1.1.1970 00:00:00.
-   */
-  def dateAddFullInterval(days: Int, months: Int, microseconds: Long): Long = {
-    daysToMillis(dateAddYearMonthInterval(days, months)) * 1000L + microseconds
+    val dayOfMonth = getDayOfMonth(days)
+    val currentDayInMonth = if (getDayOfMonth(days + 1) == 1 || dayOfMonth >= lastDayOfMonth) {
+      // last day of the month
+      lastDayOfMonth
+    } else {
+      dayOfMonth
+    }
+    firstDayOfMonth(absoluteMonth) + currentDayInMonth - 1
   }
 
   /**
    * Add timestamp and full interval.
    * Returns a timestamp value, expressed in microseconds since 1.1.1970 00:00:00.
    */
-  def timestampAddFullInterval(micros: Long, months: Int, microseconds: Long): Long = {
-    val days = millisToDays(micros / 1000L)
-    dateAddFullInterval(days, months, microseconds) + micros - daysToMillis(days) * 1000L
+  def timestampAddInterval(start: Long, months: Int, microseconds: Long): Long = {
+    val days = millisToDays(start / 1000L)
+    val newDays = dateAddMonths(days, months)
+    daysToMillis(newDays) * 1000L + start - daysToMillis(days) * 1000L + microseconds
   }
 
   /**
    * Returns the last dayInMonth in the month it belongs to. The date is expressed
    * in days since 1.1.1970. the return value starts from 1.
    */
-  def getLastDayInMonthOfMonth(date: Int): Int = {
-    val month = getMonth(date)
-
-    val febDay = if (isLeapYear(getYear(date))) 29 else 28
-    val days = Seq(31, febDay, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31)
-    days(month - 1)
+  private def getLastDayInMonthOfMonth(date: Int): Int = {
+    var (year, dayInYear) = getYearAndDayInYear(date)
+    if (isLeapYear(year)) {
+      if (dayInYear > 31 && dayInYear <= 60) {
+        return 29
+      } else if (dayInYear > 60) {
+        dayInYear = dayInYear - 1
+      }
+    }
+    if (dayInYear <= 31) {
+      31
+    } else if (dayInYear <= 59) {
+      28
+    } else if (dayInYear <= 90) {
+      31
+    } else if (dayInYear <= 120) {
+      30
+    } else if (dayInYear <= 151) {
+      31
+    } else if (dayInYear <= 181) {
+      30
+    } else if (dayInYear <= 212) {
+      31
+    } else if (dayInYear <= 243) {
+      31
+    } else if (dayInYear <= 273) {
+      30
+    } else if (dayInYear <= 304) {
+      31
+    } else if (dayInYear <= 334) {
+      30
+    } else {
+      31
+    }
   }
 
   /**
@@ -658,25 +684,27 @@ object DateTimeUtils {
    * microseconds since 1.1.1970
    */
   def monthsBetween(time1: Long, time2: Long): Double = {
-    val millis1 = time1.asInstanceOf[Long] / 1000L
-    val millis2 = time2.asInstanceOf[Long] / 1000L
+    val millis1 = time1 / 1000L
+    val millis2 = time2 / 1000L
     val date1 = millisToDays(millis1)
     val date2 = millisToDays(millis2)
+    // TODO(davies): get year, month, dayOfMonth from single function
     val dayInMonth1 = getDayOfMonth(date1)
     val dayInMonth2 = getDayOfMonth(date2)
-    val lastDayMonth1 = getLastDayInMonthOfMonth(date1)
-    val lastDayMonth2 = getLastDayInMonthOfMonth(date2)
-    val months1 = getYear(date1) * 12 + getMonth(date1) - 1
-    val months2 = getYear(date2) * 12 + getMonth(date2) - 1
-    val timeInDay1 = time1 - daysToMillis(date1) * 1000L
-    val timeInDay2 = time2 - daysToMillis(date2) * 1000L
-    if (dayInMonth1 == dayInMonth2 || (lastDayMonth1 == dayInMonth1 &&
-      lastDayMonth2 == dayInMonth2)) {
-      (months1 - months2).toDouble
-    } else {
-      val timesBetween = (timeInDay1 - timeInDay2).toDouble / (MILLIS_PER_DAY * 1000)
-      (months1 - months2).toDouble + (dayInMonth1 - dayInMonth2 + timesBetween) / 31.0
+    val months1 = getYear(date1) * 12 + getMonth(date1)
+    val months2 = getYear(date2) * 12 + getMonth(date2)
+
+    if (dayInMonth1 == dayInMonth2 || (dayInMonth1 == getLastDayInMonthOfMonth(date1)
+      && dayInMonth2 == getLastDayInMonthOfMonth(date2))) {
+      return (months1 - months2).toDouble
     }
+    // milliseconds is enough for 8 digits precision on the right side
+    val timeInDay1 = millis1 - daysToMillis(date1)
+    val timeInDay2 = millis2 - daysToMillis(date2)
+    val timesBetween = (timeInDay1 - timeInDay2).toDouble / MILLIS_PER_DAY
+    val diff = (months1 - months2).toDouble + (dayInMonth1 - dayInMonth2 + timesBetween) / 31.0
+    // rounding to 8 digits
+    math.round(diff * 1e8) / 1e8
   }
 
   /*

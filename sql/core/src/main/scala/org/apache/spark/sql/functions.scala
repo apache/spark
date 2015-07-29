@@ -1921,8 +1921,8 @@ object functions {
    * @group datetime_funcs
    * @since 1.5.0
    */
-  def add_months(startDate: Column, numMonths: Column): Column =
-    AddMonths(startDate.expr, numMonths.expr)
+  def add_months(startDate: Column, numMonths: Int): Column =
+    AddMonths(startDate.expr, Literal(numMonths))
 
   /**
    * Converts a date/timestamp/string to a value of string in the format specified by the date
@@ -1957,18 +1957,18 @@ object functions {
     date_format(Column(dateColumnName), format)
 
   /**
-   * Extracts the year as an integer from a given date/timestamp/string.
+   * Returns the date that is `days` days after `start`
    * @group datetime_funcs
    * @since 1.5.0
    */
-  def date_add(startdate: Column, days: Column): Column = DateAdd(startdate.expr, days.expr)
+  def date_add(start: Column, days: Int): Column = DateAdd(start.expr, Literal(days))
 
   /**
-   * Extracts the year as an integer from a given date/timestamp/string.
+   * Returns the date that is `days` days before `start`
    * @group datetime_funcs
    * @since 1.5.0
    */
-  def date_sub(startdate: Column, days: Column): Column = DateSub(startdate.expr, days.expr)
+  def date_sub(start: Column, days: Int): Column = DateSub(start.expr, Literal(days))
 
   /**
    * Extracts the year as an integer from a given date/timestamp/string.
@@ -2079,11 +2079,11 @@ object functions {
   def minute(columnName: String): Column = minute(Column(columnName))
 
   /*
-   * Returns number of months between dates date1 and date2.
+   * Returns number of months between dates `date1` and `date2`.
    * @group datetime_funcs
    * @since 1.5.0
    */
-  def months_between(l: Column, r: Column): Column = MonthsBetween(l.expr, r.expr)
+  def months_between(date1: Column, date2: Column): Column = MonthsBetween(date1.expr, date2.expr)
 
   /**
    * Given a date column, returns the first date which is later than the value of the date column
@@ -2113,20 +2113,6 @@ object functions {
    * @since 1.5.0
    */
   def second(columnName: String): Column = second(Column(columnName))
-
-  /**
-   * Adds a time and an interval value
-   * @group datetime_funcs
-   * @since 1.5.0
-   */
-  def time_add(l: Column, r: Column): Column = TimeAdd(l.expr, r.expr)
-
-  /**
-   * Subtracts an interval from a time value
-   * @group datetime_funcs
-   * @since 1.5.0
-   */
-  def time_sub(l: Column, r: Column): Column = TimeSub(l.expr, r.expr)
 
   /**
    * Extracts the week number as an integer from a given date/timestamp/string.

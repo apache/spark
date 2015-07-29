@@ -379,101 +379,82 @@ case class NextDay(startDate: Expression, dayOfWeek: Expression)
 }
 
 /**
- * Time Adds Interval.
+ * Adds an interval to timestamp.
  */
-case class TimeAdd(left: Expression, right: Expression)
+case class TimeAdd(start: Expression, interval: Expression)
   extends BinaryExpression with ExpectsInputTypes {
 
+  override def left: Expression = start
+  override def right: Expression = interval
+
   override def toString: String = s"$left + $right"
-  override def inputTypes: Seq[AbstractDataType] =
-    Seq(TypeCollection(DateType, TimestampType), IntervalType)
+  override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType, IntervalType)
 
   override def dataType: DataType = TimestampType
 
   override def nullSafeEval(start: Any, interval: Any): Any = {
     val itvl = interval.asInstanceOf[Interval]
-    left.dataType match {
-      case DateType =>
-        DateTimeUtils.dateAddFullInterval(
-          start.asInstanceOf[Int], itvl.months, itvl.microseconds)
-      case TimestampType =>
-        DateTimeUtils.timestampAddFullInterval(
-          start.asInstanceOf[Long], itvl.months, itvl.microseconds)
-    }
+    DateTimeUtils.timestampAddInterval(
+      start.asInstanceOf[Long], itvl.months, itvl.microseconds)
   }
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
-    left.dataType match {
-      case DateType =>
-        defineCodeGen(ctx, ev, (sd, i) => {
-          s"""$dtu.dateAddFullInterval($sd, $i.months, $i.microseconds)"""
-        })
-      case TimestampType => // TimestampType
-        defineCodeGen(ctx, ev, (sd, i) => {
-          s"""$dtu.timestampAddFullInterval($sd, $i.months, $i.microseconds)"""
-        })
-    }
+    defineCodeGen(ctx, ev, (sd, i) => {
+      s"""$dtu.timestampAddInterval($sd, $i.months, $i.microseconds)"""
+    })
   }
 }
 
 /**
- * Time Subtracts Interval.
+ * Subtracts an interval from timestamp.
  */
-case class TimeSub(left: Expression, right: Expression)
+case class TimeSub(start: Expression, interval: Expression)
   extends BinaryExpression with ExpectsInputTypes {
 
+  override def left: Expression = start
+  override def right: Expression = interval
+
   override def toString: String = s"$left - $right"
-  override def inputTypes: Seq[AbstractDataType] =
-    Seq(TypeCollection(DateType, TimestampType), IntervalType)
+  override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType, IntervalType)
 
   override def dataType: DataType = TimestampType
 
   override def nullSafeEval(start: Any, interval: Any): Any = {
     val itvl = interval.asInstanceOf[Interval]
-    left.dataType match {
-      case DateType =>
-        DateTimeUtils.dateAddFullInterval(
-          start.asInstanceOf[Int], 0 - itvl.months, 0 - itvl.microseconds)
-      case TimestampType =>
-        DateTimeUtils.timestampAddFullInterval(
-          start.asInstanceOf[Long], 0 - itvl.months, 0 - itvl.microseconds)
-    }
+    DateTimeUtils.timestampAddInterval(
+      start.asInstanceOf[Long], 0 - itvl.months, 0 - itvl.microseconds)
   }
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
-    left.dataType match {
-      case DateType =>
-        defineCodeGen(ctx, ev, (sd, i) => {
-          s"""$dtu.dateAddFullInterval($sd, 0 - $i.months, 0 - $i.microseconds)"""
-        })
-      case TimestampType => // TimestampType
-        defineCodeGen(ctx, ev, (sd, i) => {
-          s"""$dtu.timestampAddFullInterval($sd, 0 - $i.months, 0 - $i.microseconds)"""
-        })
-    }
+    defineCodeGen(ctx, ev, (sd, i) => {
+      s"""$dtu.timestampAddInterval($sd, 0 - $i.months, 0 - $i.microseconds)"""
+    })
   }
 }
 
 /**
  * Returns the date that is num_months after start_date.
  */
-case class AddMonths(left: Expression, right: Expression)
+case class AddMonths(startDate: Expression, numMonths: Expression)
   extends BinaryExpression with ImplicitCastInputTypes {
+
+  override def left: Expression = startDate
+  override def right: Expression = numMonths
 
   override def inputTypes: Seq[AbstractDataType] = Seq(DateType, IntegerType)
 
   override def dataType: DataType = DateType
 
   override def nullSafeEval(start: Any, months: Any): Any = {
-    DateTimeUtils.dateAddYearMonthInterval(start.asInstanceOf[Int], months.asInstanceOf[Int])
+    DateTimeUtils.dateAddMonths(start.asInstanceOf[Int], months.asInstanceOf[Int])
   }
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
     defineCodeGen(ctx, ev, (sd, m) => {
-      s"""$dtu.dateAddYearMonthInterval($sd, $m)"""
+      s"""$dtu.dateAddMonths($sd, $m)"""
     })
   }
 }
@@ -481,8 +462,11 @@ case class AddMonths(left: Expression, right: Expression)
 /**
  * Returns number of months between dates date1 and date2.
  */
-case class MonthsBetween(left: Expression, right: Expression)
+case class MonthsBetween(date1: Expression, date2: Expression)
   extends BinaryExpression with ImplicitCastInputTypes {
+
+  override def left: Expression = date1
+  override def right: Expression = date2
 
   override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType, TimestampType)
 

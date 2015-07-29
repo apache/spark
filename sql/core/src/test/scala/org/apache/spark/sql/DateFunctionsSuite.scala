@@ -216,28 +216,24 @@ class DateFunctionsSuite extends QueryTest {
     val s2 = "2015-06-02"
     val d1 = Date.valueOf(s1)
     val d2 = Date.valueOf(s2)
-    val df = Seq((1, t1, d1, s1, st1), (3, t2, d2, s2, st2)).toDF("n", "t", "d", "s", "ss")
+    val df = Seq((t1, d1, s1, st1), (t2, d2, s2, st2)).toDF("t", "d", "s", "ss")
     checkAnswer(
-      df.select(date_add(col("d"), col("n"))),
-      Seq(Row(Date.valueOf("2015-06-02")), Row(Date.valueOf("2015-06-05"))))
+      df.select(date_add(col("d"), 1)),
+      Seq(Row(Date.valueOf("2015-06-02")), Row(Date.valueOf("2015-06-03"))))
     checkAnswer(
-      df.select(date_add(col("t"), col("n"))),
-      Seq(Row(Date.valueOf("2015-06-02")), Row(Date.valueOf("2015-06-05"))))
+      df.select(date_add(col("t"), 3)),
+      Seq(Row(Date.valueOf("2015-06-04")), Row(Date.valueOf("2015-06-05"))))
     checkAnswer(
-      df.select(date_add(col("s"), col("n"))),
-      Seq(Row(Date.valueOf("2015-06-02")), Row(Date.valueOf("2015-06-05"))))
+      df.select(date_add(col("s"), 5)),
+      Seq(Row(Date.valueOf("2015-06-06")), Row(Date.valueOf("2015-06-07"))))
     checkAnswer(
-      df.select(date_add(col("ss"), col("n"))),
-      Seq(Row(Date.valueOf("2015-06-02")), Row(Date.valueOf("2015-06-05"))))
-    checkAnswer(
-      df.select(date_add(column("d"), lit(null))).limit(1), Row(null))
-    checkAnswer(
-      df.select(date_add(column("t"), lit(null))).limit(1), Row(null))
+      df.select(date_add(col("ss"), 7)),
+      Seq(Row(Date.valueOf("2015-06-08")), Row(Date.valueOf("2015-06-09"))))
 
-    checkAnswer(df.selectExpr("DATE_ADD(null, n)"), Seq(Row(null), Row(null)))
+    checkAnswer(df.selectExpr("DATE_ADD(null, 1)"), Seq(Row(null), Row(null)))
     checkAnswer(
-      df.selectExpr("""DATE_ADD(d, n)"""),
-      Seq(Row(Date.valueOf("2015-06-02")), Row(Date.valueOf("2015-06-05"))))
+      df.selectExpr("""DATE_ADD(d, 1)"""),
+      Seq(Row(Date.valueOf("2015-06-02")), Row(Date.valueOf("2015-06-03"))))
   }
 
   test("function date_sub") {
@@ -249,26 +245,26 @@ class DateFunctionsSuite extends QueryTest {
     val s2 = "2015-06-02"
     val d1 = Date.valueOf(s1)
     val d2 = Date.valueOf(s2)
-    val df = Seq((1, t1, d1, s1, st1), (3, t2, d2, s2, st2)).toDF("n", "t", "d", "s", "ss")
+    val df = Seq((t1, d1, s1, st1), (t2, d2, s2, st2)).toDF("t", "d", "s", "ss")
     checkAnswer(
-      df.select(date_sub(col("d"), col("n"))),
-      Seq(Row(Date.valueOf("2015-05-31")), Row(Date.valueOf("2015-05-30"))))
+      df.select(date_sub(col("d"), 1)),
+      Seq(Row(Date.valueOf("2015-05-31")), Row(Date.valueOf("2015-06-01"))))
     checkAnswer(
-      df.select(date_sub(col("t"), col("n"))),
-      Seq(Row(Date.valueOf("2015-05-31")), Row(Date.valueOf("2015-05-30"))))
+      df.select(date_sub(col("t"), 1)),
+      Seq(Row(Date.valueOf("2015-05-31")), Row(Date.valueOf("2015-06-01"))))
     checkAnswer(
-      df.select(date_sub(col("s"), col("n"))),
-      Seq(Row(Date.valueOf("2015-05-31")), Row(Date.valueOf("2015-05-30"))))
+      df.select(date_sub(col("s"), 1)),
+      Seq(Row(Date.valueOf("2015-05-31")), Row(Date.valueOf("2015-06-01"))))
     checkAnswer(
-      df.select(date_sub(col("ss"), col("n"))),
-      Seq(Row(Date.valueOf("2015-05-31")), Row(Date.valueOf("2015-05-30"))))
+      df.select(date_sub(col("ss"), 1)),
+      Seq(Row(Date.valueOf("2015-05-31")), Row(Date.valueOf("2015-06-01"))))
     checkAnswer(
-      df.select(date_sub(lit(null), column("n"))).limit(1), Row(null))
+      df.select(date_sub(lit(null), 1)).limit(1), Row(null))
 
     checkAnswer(df.selectExpr("""DATE_SUB(d, null)"""), Seq(Row(null), Row(null)))
     checkAnswer(
-      df.selectExpr("""DATE_SUB(d, n)"""),
-      Seq(Row(Date.valueOf("2015-05-31")), Row(Date.valueOf("2015-05-30"))))
+      df.selectExpr("""DATE_SUB(d, 1)"""),
+      Seq(Row(Date.valueOf("2015-05-31")), Row(Date.valueOf("2015-06-01"))))
   }
 
   test("time_add") {
@@ -279,17 +275,12 @@ class DateFunctionsSuite extends QueryTest {
     val i = new Interval(2, 2000000L)
     val df = Seq((1, t1, d1), (3, t2, d2)).toDF("n", "t", "d")
     checkAnswer(
-      df.select(time_add(col("d"), lit(i))),
-      Seq(Row(Timestamp.valueOf("2015-09-30 00:00:02")),
-        Row(Timestamp.valueOf("2016-02-29 00:00:02"))))
+      df.selectExpr(s"d + $i"),
+      Seq(Row(Date.valueOf("2015-09-30")), Row(Date.valueOf("2016-02-29"))))
     checkAnswer(
-      df.select(time_add(col("t"), lit(i))),
+      df.selectExpr(s"t + $i"),
       Seq(Row(Timestamp.valueOf("2015-10-01 00:00:01")),
         Row(Timestamp.valueOf("2016-02-29 00:00:02"))))
-    checkAnswer(
-      df.select(time_add(col("d"), lit(null))).limit(1), Row(null))
-    checkAnswer(
-      df.select(time_add(col("t"), lit(null))).limit(1), Row(null))
   }
 
   test("time_sub") {
@@ -300,29 +291,24 @@ class DateFunctionsSuite extends QueryTest {
     val i = new Interval(2, 2000000L)
     val df = Seq((1, t1, d1), (3, t2, d2)).toDF("n", "t", "d")
     checkAnswer(
-      df.select(time_sub(col("d"), lit(i))),
-      Seq(Row(Timestamp.valueOf("2015-07-29 23:59:58")),
-        Row(Timestamp.valueOf("2015-12-28 23:59:58"))))
+      df.selectExpr(s"d - $i"),
+      Seq(Row(Date.valueOf("2015-07-30")), Row(Date.valueOf("2015-12-30"))))
     checkAnswer(
-      df.select(time_sub(col("t"), lit(i))),
+      df.selectExpr(s"t - $i"),
       Seq(Row(Timestamp.valueOf("2015-07-31 23:59:59")),
-        Row(Timestamp.valueOf("2015-12-29 00:00:00"))))
-    checkAnswer(
-      df.select(time_sub(col("d"), lit(null))).limit(1), Row(null))
-    checkAnswer(
-      df.select(time_sub(col("t"), lit(null))).limit(1), Row(null))
+        Row(Timestamp.valueOf("2015-12-31 00:00:00"))))
   }
 
   test("function add_months") {
-    val d1 = Date.valueOf("2015-07-31")
-    val d2 = Date.valueOf("2015-07-31")
+    val d1 = Date.valueOf("2015-08-31")
+    val d2 = Date.valueOf("2015-02-28")
     val df = Seq((1, d1), (2, d2)).toDF("n", "d")
     checkAnswer(
-      df.select(add_months(col("d"), col("n"))),
-      Seq(Row(Date.valueOf("2015-08-31")), Row(Date.valueOf("2015-09-30"))))
+      df.select(add_months(col("d"), 1)),
+      Seq(Row(Date.valueOf("2015-09-30")), Row(Date.valueOf("2015-03-31"))))
     checkAnswer(
-      df.selectExpr("add_months(d, n)"),
-      Seq(Row(Date.valueOf("2015-08-31")), Row(Date.valueOf("2015-09-30"))))
+      df.selectExpr("add_months(d, -1)"),
+      Seq(Row(Date.valueOf("2015-07-31")), Row(Date.valueOf("2015-01-31"))))
   }
 
   test("function months_between") {
