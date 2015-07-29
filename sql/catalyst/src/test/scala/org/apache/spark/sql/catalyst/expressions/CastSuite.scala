@@ -48,19 +48,16 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("null cast") {
-    val numericTypes = Seq(IntegerType, ShortType, ByteType, LongType,
-      FloatType, DoubleType, DecimalType.USER_DEFAULT)
-    val allTypes = numericTypes ++
-      Seq(DateType, BooleanType, TimestampType, StringType, BinaryType)
+    import DataTypeTestUtils._
 
     // follow [[org.apache.spark.sql.catalyst.expressions.Cast.canCast]] logic
     // to ensure we test every possible cast situation here
-    allTypes.zip(allTypes).foreach { case (from, to) =>
+    atomicTypes.zip(atomicTypes).foreach { case (from, to) =>
       checkNullCast(from, to)
     }
 
-    allTypes.foreach(dt => checkNullCast(NullType, dt))
-    allTypes.foreach(dt => checkNullCast(dt, StringType))
+    atomicTypes.foreach(dt => checkNullCast(NullType, dt))
+    atomicTypes.foreach(dt => checkNullCast(dt, StringType))
     checkNullCast(StringType, BinaryType)
     checkNullCast(StringType, BooleanType)
     checkNullCast(DateType, BooleanType)
@@ -72,7 +69,7 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkNullCast(DateType, TimestampType)
     numericTypes.foreach(dt => checkNullCast(dt, TimestampType))
 
-    allTypes.foreach(dt => checkNullCast(dt, DateType))
+    atomicTypes.foreach(dt => checkNullCast(dt, DateType))
 
     checkNullCast(StringType, IntervalType)
     numericTypes.foreach(dt => checkNullCast(StringType, dt))
