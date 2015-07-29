@@ -355,9 +355,9 @@ abstract class BinaryExpression extends Expression {
    * @param f accepts two variable names and returns Java code to compute the output.
    */
   protected def defineCodeGen(
-    ctx: CodeGenContext,
-    ev: GeneratedExpressionCode,
-    f: (String, String) => String): String = {
+      ctx: CodeGenContext,
+      ev: GeneratedExpressionCode,
+      f: (String, String) => String): String = {
     nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
       s"${ev.primitive} = ${f(eval1, eval2)};"
     })
@@ -372,9 +372,9 @@ abstract class BinaryExpression extends Expression {
    *          and returns Java code to compute the output.
    */
   protected def nullSafeCodeGen(
-    ctx: CodeGenContext,
-    ev: GeneratedExpressionCode,
-    f: (String, String) => String): String = {
+      ctx: CodeGenContext,
+      ev: GeneratedExpressionCode,
+      f: (String, String) => String): String = {
     val eval1 = left.gen(ctx)
     val eval2 = right.gen(ctx)
     val resultCode = f(eval1.primitive, eval2.primitive)

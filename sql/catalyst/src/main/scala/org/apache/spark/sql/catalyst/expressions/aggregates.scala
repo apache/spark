@@ -404,7 +404,7 @@ case class Average(child: Expression) extends UnaryExpression with PartialAggreg
 
         // partialSum already increase the precision by 10
         val castedSum = Cast(Sum(partialSum.toAttribute), partialSum.dataType)
-        val castedCount = Sum(partialCount.toAttribute)
+        val castedCount = Cast(Sum(partialCount.toAttribute), partialSum.dataType)
         SplitEvaluation(
           Cast(Divide(castedSum, castedCount), dataType),
           partialCount :: partialSum :: Nil)
@@ -490,13 +490,13 @@ case class Sum(child: Expression) extends UnaryExpression with PartialAggregate1
       case DecimalType.Fixed(_, _) =>
         val partialSum = Alias(Sum(child), "PartialSum")()
         SplitEvaluation(
-          Cast(CombineSum(partialSum.toAttribute), dataType),
+          Cast(Sum(partialSum.toAttribute), dataType),
           partialSum :: Nil)
 
       case _ =>
         val partialSum = Alias(Sum(child), "PartialSum")()
         SplitEvaluation(
-          CombineSum(partialSum.toAttribute),
+          Sum(partialSum.toAttribute),
           partialSum :: Nil)
     }
   }
@@ -522,72 +522,10 @@ case class SumFunction(expr: Expression, base: AggregateExpression1) extends Agg
 
   private val sum = MutableLiteral(null, calcType)
 
-  private val addFunction =
-    Coalesce(Seq(Add(Coalesce(Seq(sum, zero)), Cast(expr, calcType)), sum, zero))
+  private val addFunction = Coalesce(Seq(Add(Coalesce(Seq(sum, zero)), Cast(expr, calcType)), sum))
 
   override def update(input: InternalRow): Unit = {
     sum.update(addFunction, input)
-  }
-
-  override def eval(input: InternalRow): Any = {
-    expr.dataType match {
-      case DecimalType.Fixed(_, _) =>
-        Cast(sum, dataType).eval(null)
-      case _ => sum.eval(null)
-    }
-  }
-}
-
-/**
- * Sum should satisfy 3 cases:
- * 1) sum of all null values = zero
- * 2) sum for table column with no data = null
- * 3) sum of column with null and not null values = sum of not null values
- * Require separate CombineSum Expression and function as it has to distinguish "No data" case
- * versus "data equals null" case, while aggregating results and at each partial expression.i.e.,
- * Combining    PartitionLevel   InputData
- *                           <-- null
- * Zero     <-- Zero         <-- null
- *
- *          <-- null         <-- no data
- * null     <-- null         <-- no data
- */
-case class CombineSum(child: Expression) extends AggregateExpression1 {
-  def this() = this(null)
-
-  override def children: Seq[Expression] = child :: Nil
-  override def nullable: Boolean = true
-  override def dataType: DataType = child.dataType
-  override def toString: String = s"CombineSum($child)"
-  override def newInstance(): CombineSumFunction = new CombineSumFunction(child, this)
-}
-
-case class CombineSumFunction(expr: Expression, base: AggregateExpression1)
-  extends AggregateFunction1 {
-
-  def this() = this(null, null) // Required for serialization.
-
-  private val calcType =
-    expr.dataType match {
-      case DecimalType.Fixed(precision, scale) =>
-        DecimalType.bounded(precision + 10, scale)
-      case _ =>
-        expr.dataType
-    }
-
-  private val zero = Cast(Literal(0), calcType)
-
-  private val sum = MutableLiteral(null, calcType)
-
-  private val addFunction =
-    Coalesce(Seq(Add(Coalesce(Seq(sum, zero)), Cast(expr, calcType)), sum, zero))
-
-  override def update(input: InternalRow): Unit = {
-    val result = expr.eval(input)
-    // partial sum result can be null only when no input rows present
-    if(result != null) {
-      sum.update(addFunction, input)
-    }
   }
 
   override def eval(input: InternalRow): Any = {

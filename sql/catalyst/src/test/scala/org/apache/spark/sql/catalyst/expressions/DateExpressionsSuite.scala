@@ -22,6 +22,7 @@ import java.text.SimpleDateFormat
 import java.util.Calendar
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types.{StringType, TimestampType, DateType}
 
 class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
@@ -30,6 +31,19 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   val sdfDate = new SimpleDateFormat("yyyy-MM-dd")
   val d = new Date(sdf.parse("2015-04-08 13:10:15").getTime)
   val ts = new Timestamp(sdf.parse("2013-11-08 13:10:15").getTime)
+
+  test("datetime function current_date") {
+    val d0 = DateTimeUtils.millisToDays(System.currentTimeMillis())
+    val cd = CurrentDate().eval(EmptyRow).asInstanceOf[Int]
+    val d1 = DateTimeUtils.millisToDays(System.currentTimeMillis())
+    assert(d0 <= cd && cd <= d1 && d1 - d0 <= 1)
+  }
+
+  test("datetime function current_timestamp") {
+    val ct = DateTimeUtils.toJavaTimestamp(CurrentTimestamp().eval(EmptyRow).asInstanceOf[Long])
+    val t1 = System.currentTimeMillis()
+    assert(math.abs(t1 - ct.getTime) < 5000)
+  }
 
   test("DayOfYear") {
     val sdfDay = new SimpleDateFormat("D")
@@ -246,4 +260,45 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
+  test("last_day") {
+    checkEvaluation(LastDay(Literal(Date.valueOf("2015-02-28"))), Date.valueOf("2015-02-28"))
+    checkEvaluation(LastDay(Literal(Date.valueOf("2015-03-27"))), Date.valueOf("2015-03-31"))
+    checkEvaluation(LastDay(Literal(Date.valueOf("2015-04-26"))), Date.valueOf("2015-04-30"))
+    checkEvaluation(LastDay(Literal(Date.valueOf("2015-05-25"))), Date.valueOf("2015-05-31"))
+    checkEvaluation(LastDay(Literal(Date.valueOf("2015-06-24"))), Date.valueOf("2015-06-30"))
+    checkEvaluation(LastDay(Literal(Date.valueOf("2015-07-23"))), Date.valueOf("2015-07-31"))
+    checkEvaluation(LastDay(Literal(Date.valueOf("2015-08-01"))), Date.valueOf("2015-08-31"))
+    checkEvaluation(LastDay(Literal(Date.valueOf("2015-09-02"))), Date.valueOf("2015-09-30"))
+    checkEvaluation(LastDay(Literal(Date.valueOf("2015-10-03"))), Date.valueOf("2015-10-31"))
+    checkEvaluation(LastDay(Literal(Date.valueOf("2015-11-04"))), Date.valueOf("2015-11-30"))
+    checkEvaluation(LastDay(Literal(Date.valueOf("2015-12-05"))), Date.valueOf("2015-12-31"))
+    checkEvaluation(LastDay(Literal(Date.valueOf("2016-01-06"))), Date.valueOf("2016-01-31"))
+    checkEvaluation(LastDay(Literal(Date.valueOf("2016-02-07"))), Date.valueOf("2016-02-29"))
+  }
+
+  test("next_day") {
+    def testNextDay(input: String, dayOfWeek: String, output: String): Unit = {
+      checkEvaluation(
+        NextDay(Literal(Date.valueOf(input)), NonFoldableLiteral(dayOfWeek)),
+        DateTimeUtils.fromJavaDate(Date.valueOf(output)))
+      checkEvaluation(
+        NextDay(Literal(Date.valueOf(input)), Literal(dayOfWeek)),
+        DateTimeUtils.fromJavaDate(Date.valueOf(output)))
+    }
+    testNextDay("2015-07-23", "Mon", "2015-07-27")
+    testNextDay("2015-07-23", "mo", "2015-07-27")
+    testNextDay("2015-07-23", "Tue", "2015-07-28")
+    testNextDay("2015-07-23", "tu", "2015-07-28")
+    testNextDay("2015-07-23", "we", "2015-07-29")
+    testNextDay("2015-07-23", "wed", "2015-07-29")
+    testNextDay("2015-07-23", "Thu", "2015-07-30")
+    testNextDay("2015-07-23", "TH", "2015-07-30")
+    testNextDay("2015-07-23", "Fri", "2015-07-24")
+    testNextDay("2015-07-23", "fr", "2015-07-24")
+
+    checkEvaluation(NextDay(Literal(Date.valueOf("2015-07-23")), Literal("xx")), null)
+    checkEvaluation(NextDay(Literal.create(null, DateType), Literal("xx")), null)
+    checkEvaluation(
+      NextDay(Literal(Date.valueOf("2015-07-23")), Literal.create(null, StringType)), null)
+  }
 }
