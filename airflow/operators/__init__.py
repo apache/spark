@@ -4,6 +4,15 @@ abstracting the underlying modules
 '''
 from airflow.utils import import_module_attrs as _import_module_attrs
 
+# These need to be integrated first as other operators depend on them
+_import_module_attrs(globals(), {
+    'check_operator': [
+        'CheckOperator',
+        'ValueCheckOperator',
+        'IntervalCheckOperator',
+    ],
+})
+
 _operators = {
     'bash_operator': ['BashOperator'],
     'python_operator': ['PythonOperator', 'BranchPythonOperator'],
@@ -12,11 +21,6 @@ _operators = {
         'PrestoCheckOperator',
         'PrestoValueCheckOperator',
         'PrestoIntervalCheckOperator',
-    ],
-    'check_operator': [
-        'CheckOperator',
-        'ValueCheckOperator',
-        'IntervalCheckOperator',
     ],
     'dummy_operator': ['DummyOperator'],
     'email_operator': ['EmailOperator'],
