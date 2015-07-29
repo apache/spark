@@ -55,14 +55,35 @@ private[deploy] object DeployTestUtils {
   }
 
   def createExecutorRunner(execId: Int): ExecutorRunner = {
-    new ExecutorRunner("appId", execId, createAppDesc(), 4, 1234, null, "workerId", "host", 123,
-      "publicAddress", new File("sparkHome"), new File("workDir"), "akka://worker",
-      new SparkConf, Seq("localDir"), ExecutorState.RUNNING)
+    new ExecutorRunner(
+      "appId",
+      execId,
+      createAppDesc(),
+      4,
+      1234,
+      null,
+      "workerId",
+      "host",
+      123,
+      "publicAddress",
+      new File("sparkHome"),
+      new File("workDir"),
+      "akka://worker",
+      new SparkConf,
+      Seq("localDir"),
+      ExecutorState.RUNNING)
   }
 
   def createDriverRunner(driverId: String): DriverRunner = {
     val conf = new SparkConf()
-    new DriverRunner(conf, driverId, new File("workDir"), new File("sparkHome"),
-      createDriverDesc(), null, "akka://worker", new SecurityManager(conf))
+    new DriverRunner(
+      conf,
+      driverId,
+      new File("workDir"),
+      new File("sparkHome"),
+      createDriverDesc(),
+      null,
+      "akka://worker",
+      new SecurityManager(conf))
   }
 }

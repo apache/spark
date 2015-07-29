@@ -21,9 +21,9 @@ import org.scalatest.Matchers
 
 import org.apache.spark.deploy.DeployMessages.{DriverStateChanged, ExecutorStateChanged}
 import org.apache.spark.deploy.master.DriverState
+import org.apache.spark.deploy.{Command, ExecutorState}
 import org.apache.spark.rpc.{RpcAddress, RpcEnv}
 import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
-import org.apache.spark.deploy.{ExecutorState, Command}
 
 class WorkerSuite extends SparkFunSuite with Matchers {
 
