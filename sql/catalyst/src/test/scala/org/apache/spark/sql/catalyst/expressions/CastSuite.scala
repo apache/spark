@@ -24,6 +24,7 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * Test suite for data type casting expression [[Cast]].
@@ -185,7 +186,7 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkCast(1, 1.0)
     checkCast(123, "123")
 
-    checkEvaluation(cast(123, DecimalType.Unlimited), Decimal(123))
+    checkEvaluation(cast(123, DecimalType.USER_DEFAULT), Decimal(123))
     checkEvaluation(cast(123, DecimalType(3, 0)), Decimal(123))
     checkEvaluation(cast(123, DecimalType(3, 1)), null)
     checkEvaluation(cast(123, DecimalType(2, 0)), null)
@@ -203,7 +204,7 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkCast(1L, 1.0)
     checkCast(123L, "123")
 
-    checkEvaluation(cast(123L, DecimalType.Unlimited), Decimal(123))
+    checkEvaluation(cast(123L, DecimalType.USER_DEFAULT), Decimal(123))
     checkEvaluation(cast(123L, DecimalType(3, 0)), Decimal(123))
     checkEvaluation(cast(123L, DecimalType(3, 1)), Decimal(123.0))
 
@@ -225,7 +226,7 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(cast(cast(1000, TimestampType), LongType), 1.toLong)
     checkEvaluation(cast(cast(-1200, TimestampType), LongType), -2.toLong)
 
-    checkEvaluation(cast(123, DecimalType.Unlimited), Decimal(123))
+    checkEvaluation(cast(123, DecimalType.USER_DEFAULT), Decimal(123))
     checkEvaluation(cast(123, DecimalType(3, 0)), Decimal(123))
     checkEvaluation(cast(123, DecimalType(3, 1)), null)
     checkEvaluation(cast(123, DecimalType(2, 0)), null)
@@ -267,7 +268,7 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(cast("abcdef", IntegerType).nullable === true)
     assert(cast("abcdef", ShortType).nullable === true)
     assert(cast("abcdef", ByteType).nullable === true)
-    assert(cast("abcdef", DecimalType.Unlimited).nullable === true)
+    assert(cast("abcdef", DecimalType.USER_DEFAULT).nullable === true)
     assert(cast("abcdef", DecimalType(4, 2)).nullable === true)
     assert(cast("abcdef", DoubleType).nullable === true)
     assert(cast("abcdef", FloatType).nullable === true)
@@ -291,9 +292,9 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
       c.getTimeInMillis * 1000)
 
     checkEvaluation(cast("abdef", StringType), "abdef")
-    checkEvaluation(cast("abdef", DecimalType.Unlimited), null)
+    checkEvaluation(cast("abdef", DecimalType.USER_DEFAULT), null)
     checkEvaluation(cast("abdef", TimestampType), null)
-    checkEvaluation(cast("12.65", DecimalType.Unlimited), Decimal(12.65))
+    checkEvaluation(cast("12.65", DecimalType.SYSTEM_DEFAULT), Decimal(12.65))
 
     checkEvaluation(cast(cast(sd, DateType), StringType), sd)
     checkEvaluation(cast(cast(d, StringType), DateType), 0)
@@ -311,20 +312,20 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
       5.toLong)
     checkEvaluation(
       cast(cast(cast(cast(cast(cast("5", ByteType), TimestampType),
-        DecimalType.Unlimited), LongType), StringType), ShortType),
+        DecimalType.SYSTEM_DEFAULT), LongType), StringType), ShortType),
       0.toShort)
     checkEvaluation(
       cast(cast(cast(cast(cast(cast("5", TimestampType), ByteType),
-        DecimalType.Unlimited), LongType), StringType), ShortType),
+        DecimalType.SYSTEM_DEFAULT), LongType), StringType), ShortType),
       null)
-    checkEvaluation(cast(cast(cast(cast(cast(cast("5", DecimalType.Unlimited),
+    checkEvaluation(cast(cast(cast(cast(cast(cast("5", DecimalType.SYSTEM_DEFAULT),
       ByteType), TimestampType), LongType), StringType), ShortType),
       0.toShort)
 
     checkEvaluation(cast("23", DoubleType), 23d)
     checkEvaluation(cast("23", IntegerType), 23)
     checkEvaluation(cast("23", FloatType), 23f)
-    checkEvaluation(cast("23", DecimalType.Unlimited), Decimal(23))
+    checkEvaluation(cast("23", DecimalType.USER_DEFAULT), Decimal(23))
     checkEvaluation(cast("23", ByteType), 23.toByte)
     checkEvaluation(cast("23", ShortType), 23.toShort)
     checkEvaluation(cast("2012-12-11", DoubleType), null)
@@ -338,7 +339,7 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Add(Literal(23d), cast(true, DoubleType)), 24d)
     checkEvaluation(Add(Literal(23), cast(true, IntegerType)), 24)
     checkEvaluation(Add(Literal(23f), cast(true, FloatType)), 24f)
-    checkEvaluation(Add(Literal(Decimal(23)), cast(true, DecimalType.Unlimited)), Decimal(24))
+    checkEvaluation(Add(Literal(Decimal(23)), cast(true, DecimalType.USER_DEFAULT)), Decimal(24))
     checkEvaluation(Add(Literal(23.toByte), cast(true, ByteType)), 24.toByte)
     checkEvaluation(Add(Literal(23.toShort), cast(true, ShortType)), 24.toShort)
   }
@@ -362,10 +363,10 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
     // - Values that would overflow the target precision should turn into null
     // - Because of this, casts to fixed-precision decimals should be nullable
 
-    assert(cast(123, DecimalType.Unlimited).nullable === false)
-    assert(cast(10.03f, DecimalType.Unlimited).nullable === true)
-    assert(cast(10.03, DecimalType.Unlimited).nullable === true)
-    assert(cast(Decimal(10.03), DecimalType.Unlimited).nullable === false)
+    assert(cast(123, DecimalType.USER_DEFAULT).nullable === true)
+    assert(cast(10.03f, DecimalType.SYSTEM_DEFAULT).nullable === true)
+    assert(cast(10.03, DecimalType.SYSTEM_DEFAULT).nullable === true)
+    assert(cast(Decimal(10.03), DecimalType.SYSTEM_DEFAULT).nullable === true)
 
     assert(cast(123, DecimalType(2, 1)).nullable === true)
     assert(cast(10.03f, DecimalType(2, 1)).nullable === true)
@@ -373,7 +374,7 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(cast(Decimal(10.03), DecimalType(2, 1)).nullable === true)
 
 
-    checkEvaluation(cast(10.03, DecimalType.Unlimited), Decimal(10.03))
+    checkEvaluation(cast(10.03, DecimalType.SYSTEM_DEFAULT), Decimal(10.03))
     checkEvaluation(cast(10.03, DecimalType(4, 2)), Decimal(10.03))
     checkEvaluation(cast(10.03, DecimalType(3, 1)), Decimal(10.0))
     checkEvaluation(cast(10.03, DecimalType(2, 0)), Decimal(10))
@@ -383,7 +384,7 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(cast(Decimal(10.03), DecimalType(3, 1)), Decimal(10.0))
     checkEvaluation(cast(Decimal(10.03), DecimalType(3, 2)), null)
 
-    checkEvaluation(cast(10.05, DecimalType.Unlimited), Decimal(10.05))
+    checkEvaluation(cast(10.05, DecimalType.SYSTEM_DEFAULT), Decimal(10.05))
     checkEvaluation(cast(10.05, DecimalType(4, 2)), Decimal(10.05))
     checkEvaluation(cast(10.05, DecimalType(3, 1)), Decimal(10.1))
     checkEvaluation(cast(10.05, DecimalType(2, 0)), Decimal(10))
@@ -409,10 +410,10 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(cast(Decimal(-9.95), DecimalType(3, 1)), Decimal(-10.0))
     checkEvaluation(cast(Decimal(-9.95), DecimalType(1, 0)), null)
 
-    checkEvaluation(cast(Double.NaN, DecimalType.Unlimited), null)
-    checkEvaluation(cast(1.0 / 0.0, DecimalType.Unlimited), null)
-    checkEvaluation(cast(Float.NaN, DecimalType.Unlimited), null)
-    checkEvaluation(cast(1.0f / 0.0f, DecimalType.Unlimited), null)
+    checkEvaluation(cast(Double.NaN, DecimalType.SYSTEM_DEFAULT), null)
+    checkEvaluation(cast(1.0 / 0.0, DecimalType.SYSTEM_DEFAULT), null)
+    checkEvaluation(cast(Float.NaN, DecimalType.SYSTEM_DEFAULT), null)
+    checkEvaluation(cast(1.0f / 0.0f, DecimalType.SYSTEM_DEFAULT), null)
 
     checkEvaluation(cast(Double.NaN, DecimalType(2, 1)), null)
     checkEvaluation(cast(1.0 / 0.0, DecimalType(2, 1)), null)
@@ -427,7 +428,7 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(cast(d, LongType), null)
     checkEvaluation(cast(d, FloatType), null)
     checkEvaluation(cast(d, DoubleType), null)
-    checkEvaluation(cast(d, DecimalType.Unlimited), null)
+    checkEvaluation(cast(d, DecimalType.SYSTEM_DEFAULT), null)
     checkEvaluation(cast(d, DecimalType(10, 2)), null)
     checkEvaluation(cast(d, StringType), "1970-01-01")
     checkEvaluation(cast(cast(d, TimestampType), StringType), "1970-01-01 00:00:00")
@@ -454,7 +455,7 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
       cast(cast(millis.toDouble / 1000, TimestampType), DoubleType),
       millis.toDouble / 1000)
     checkEvaluation(
-      cast(cast(Decimal(1), TimestampType), DecimalType.Unlimited),
+      cast(cast(Decimal(1), TimestampType), DecimalType.SYSTEM_DEFAULT),
       Decimal(1))
 
     // A test for higher precision than millis
@@ -580,14 +581,21 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("cast from struct") {
     val struct = Literal.create(
-      InternalRow("123", "abc", "", null),
+      InternalRow(
+        UTF8String.fromString("123"),
+        UTF8String.fromString("abc"),
+        UTF8String.fromString(""),
+        null),
       StructType(Seq(
         StructField("a", StringType, nullable = true),
         StructField("b", StringType, nullable = true),
         StructField("c", StringType, nullable = true),
         StructField("d", StringType, nullable = true))))
     val struct_notNull = Literal.create(
-      InternalRow("123", "abc", ""),
+      InternalRow(
+        UTF8String.fromString("123"),
+        UTF8String.fromString("abc"),
+        UTF8String.fromString("")),
       StructType(Seq(
         StructField("a", StringType, nullable = false),
         StructField("b", StringType, nullable = false),
@@ -676,8 +684,11 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("complex casting") {
     val complex = Literal.create(
       InternalRow(
-        Seq("123", "abc", ""),
-        Map("a" -> "123", "b" -> "abc", "c" -> ""),
+        Seq(UTF8String.fromString("123"), UTF8String.fromString("abc"), UTF8String.fromString("")),
+        Map(
+          UTF8String.fromString("a") -> UTF8String.fromString("123"),
+          UTF8String.fromString("b") -> UTF8String.fromString("abc"),
+          UTF8String.fromString("c") -> UTF8String.fromString("")),
         InternalRow(0)),
       StructType(Seq(
         StructField("a",
@@ -700,7 +711,10 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(ret.resolved === true)
     checkEvaluation(ret, InternalRow(
       Seq(123, null, null),
-      Map("a" -> true, "b" -> true, "c" -> false),
+      Map(
+        UTF8String.fromString("a") -> true,
+        UTF8String.fromString("b") -> true,
+        UTF8String.fromString("c") -> false),
       InternalRow(0L)))
   }
 

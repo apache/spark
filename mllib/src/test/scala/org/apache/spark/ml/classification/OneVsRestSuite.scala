@@ -19,6 +19,7 @@ package org.apache.spark.ml.classification
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.attribute.NominalAttribute
+import org.apache.spark.ml.feature.StringIndexer
 import org.apache.spark.ml.param.{ParamMap, ParamsSuite}
 import org.apache.spark.ml.util.MetadataUtils
 import org.apache.spark.mllib.classification.LogisticRegressionWithLBFGS
@@ -102,6 +103,29 @@ class OneVsRestSuite extends SparkFunSuite with MLlibTestSparkContext {
     val features = dataset("features").as("features")
     val datasetWithLabelMetadata = dataset.select(labelWithMetadata, features)
     ova.fit(datasetWithLabelMetadata)
+  }
+
+  test("SPARK-8092: ensure label features and prediction cols are configurable") {
+    val labelIndexer = new StringIndexer()
+      .setInputCol("label")
+      .setOutputCol("indexed")
+
+    val indexedDataset = labelIndexer
+      .fit(dataset)
+      .transform(dataset)
+      .drop("label")
+      .withColumnRenamed("features", "f")
+
+    val ova = new OneVsRest()
+    ova.setClassifier(new LogisticRegression())
+      .setLabelCol(labelIndexer.getOutputCol)
+      .setFeaturesCol("f")
+      .setPredictionCol("p")
+
+    val ovaModel = ova.fit(indexedDataset)
+    val transformedDataset = ovaModel.transform(indexedDataset)
+    val outputFields = transformedDataset.schema.fieldNames.toSet
+    assert(outputFields.contains("p"))
   }
 
   test("SPARK-8049: OneVsRest shouldn't output temp columns") {

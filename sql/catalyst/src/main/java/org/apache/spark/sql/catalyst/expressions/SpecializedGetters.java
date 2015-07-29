@@ -15,23 +15,39 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst.expressions
+package org.apache.spark.sql.catalyst.expressions;
 
-import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.catalyst.InternalRow;
+import org.apache.spark.sql.types.Decimal;
+import org.apache.spark.unsafe.types.Interval;
+import org.apache.spark.unsafe.types.UTF8String;
 
-class DatetimeFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
-  test("datetime function current_date") {
-    val d0 = DateTimeUtils.millisToDays(System.currentTimeMillis())
-    val cd = CurrentDate().eval(EmptyRow).asInstanceOf[Int]
-    val d1 = DateTimeUtils.millisToDays(System.currentTimeMillis())
-    assert(d0 <= cd && cd <= d1 && d1 - d0 <= 1)
-  }
+public interface SpecializedGetters {
 
-  test("datetime function current_timestamp") {
-    val ct = DateTimeUtils.toJavaTimestamp(CurrentTimestamp().eval(EmptyRow).asInstanceOf[Long])
-    val t1 = System.currentTimeMillis()
-    assert(math.abs(t1 - ct.getTime) < 5000)
-  }
+  boolean isNullAt(int ordinal);
+
+  boolean getBoolean(int ordinal);
+
+  byte getByte(int ordinal);
+
+  short getShort(int ordinal);
+
+  int getInt(int ordinal);
+
+  long getLong(int ordinal);
+
+  float getFloat(int ordinal);
+
+  double getDouble(int ordinal);
+
+  Decimal getDecimal(int ordinal);
+
+  UTF8String getUTF8String(int ordinal);
+
+  byte[] getBinary(int ordinal);
+
+  Interval getInterval(int ordinal);
+
+  InternalRow getStruct(int ordinal, int numFields);
 
 }

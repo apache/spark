@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.UnresolvedExtractValue
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
 
 class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
@@ -150,12 +151,14 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("CreateNamedStruct with literal field") {
     val row = InternalRow(1, 2, 3)
     val c1 = 'a.int.at(0)
-    checkEvaluation(CreateNamedStruct(Seq("a", c1, "b", "y")), InternalRow(1, "y"), row)
+    checkEvaluation(CreateNamedStruct(Seq("a", c1, "b", "y")),
+      InternalRow(1, UTF8String.fromString("y")), row)
   }
 
   test("CreateNamedStruct from all literal fields") {
     checkEvaluation(
-      CreateNamedStruct(Seq("a", "x", "b", 2.0)), InternalRow("x", 2.0), InternalRow.empty)
+      CreateNamedStruct(Seq("a", "x", "b", 2.0)),
+      InternalRow(UTF8String.fromString("x"), 2.0), InternalRow.empty)
   }
 
   test("test dsl for complex type") {

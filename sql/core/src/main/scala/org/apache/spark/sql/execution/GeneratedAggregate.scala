@@ -21,9 +21,9 @@ import org.apache.spark.TaskContext
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.trees._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical._
+import org.apache.spark.sql.catalyst.trees._
 import org.apache.spark.sql.types._
 
 case class AggregateEvaluation(
@@ -92,8 +92,8 @@ case class GeneratedAggregate(
       case s @ Sum(expr) =>
         val calcType =
           expr.dataType match {
-            case DecimalType.Fixed(_, _) =>
-              DecimalType.Unlimited
+            case DecimalType.Fixed(p, s) =>
+              DecimalType.bounded(p + 10, s)
             case _ =>
               expr.dataType
           }
@@ -108,50 +108,11 @@ case class GeneratedAggregate(
           Add(
             Coalesce(currentSum :: zero :: Nil),
             Cast(expr, calcType)
-          ) :: currentSum :: zero :: Nil)
+          ) :: currentSum :: Nil)
         val result =
           expr.dataType match {
             case DecimalType.Fixed(_, _) =>
               Cast(currentSum, s.dataType)
-            case _ => currentSum
-          }
-
-        AggregateEvaluation(currentSum :: Nil, initialValue :: Nil, updateFunction :: Nil, result)
-
-      case cs @ CombineSum(expr) =>
-        val calcType =
-          expr.dataType match {
-            case DecimalType.Fixed(_, _) =>
-              DecimalType.Unlimited
-            case _ =>
-              expr.dataType
-          }
-
-        val currentSum = AttributeReference("currentSum", calcType, nullable = true)()
-        val initialValue = Literal.create(null, calcType)
-
-        // Coalesce avoids double calculation...
-        // but really, common sub expression elimination would be better....
-        val zero = Cast(Literal(0), calcType)
-        // If we're evaluating UnscaledValue(x), we can do Count on x directly, since its
-        // UnscaledValue will be null if and only if x is null; helps with Average on decimals
-        val actualExpr = expr match {
-          case UnscaledValue(e) => e
-          case _ => expr
-        }
-        // partial sum result can be null only when no input rows present
-        val updateFunction = If(
-          IsNotNull(actualExpr),
-          Coalesce(
-            Add(
-              Coalesce(currentSum :: zero :: Nil),
-              Cast(expr, calcType)) :: currentSum :: zero :: Nil),
-          currentSum)
-
-        val result =
-          expr.dataType match {
-            case DecimalType.Fixed(_, _) =>
-              Cast(currentSum, cs.dataType)
             case _ => currentSum
           }
 
@@ -239,6 +200,11 @@ case class GeneratedAggregate(
       StructType(fields)
     }
 
+    val schemaSupportsUnsafe: Boolean = {
+      UnsafeFixedWidthAggregationMap.supportsAggregationBufferSchema(aggregationBufferSchema) &&
+        UnsafeFixedWidthAggregationMap.supportsGroupKeySchema(groupKeySchema)
+    }
+
     child.execute().mapPartitions { iter =>
       // Builds a new custom class for holding the results of aggregation for a group.
       val initialValues = computeFunctions.flatMap(_.initialValues)
@@ -264,7 +230,7 @@ case class GeneratedAggregate(
           namedGroups.map(_._2) ++ computationSchema)
       log.info(s"Result Projection: ${resultExpressions.mkString(",")}")
 
-      val joinedRow = new JoinedRow3
+      val joinedRow = new JoinedRow
 
       if (!iter.hasNext) {
         // This is an empty input, so return early so that we do not allocate data structures
@@ -290,13 +256,14 @@ case class GeneratedAggregate(
 
         val resultProjection = resultProjectionBuilder()
         Iterator(resultProjection(buffer))
-      } else if (unsafeEnabled) {
+
+      } else if (unsafeEnabled && schemaSupportsUnsafe) {
         assert(iter.hasNext, "There should be at least one row for this path")
         log.info("Using Unsafe-based aggregator")
         val aggregationMap = new UnsafeFixedWidthAggregationMap(
-          newAggregationBuffer,
-          new UnsafeRowConverter(groupKeySchema),
-          new UnsafeRowConverter(aggregationBufferSchema),
+          newAggregationBuffer(EmptyRow),
+          aggregationBufferSchema,
+          groupKeySchema,
           TaskContext.get.taskMemoryManager(),
           1024 * 16, // initial capacity
           false // disable tracking of performance metrics
@@ -331,6 +298,9 @@ case class GeneratedAggregate(
           }
         }
       } else {
+        if (unsafeEnabled) {
+          log.info("Not using Unsafe-based aggregator because it is not supported for this schema")
+        }
         val buffers = new java.util.HashMap[InternalRow, MutableRow]()
 
         var currentRow: InternalRow = null

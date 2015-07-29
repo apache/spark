@@ -25,7 +25,6 @@ import scala.reflect.ClassTag
 
 import org.apache.spark.Logging
 import org.apache.spark.serializer._
-import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{MutableRow, SpecificMutableRow}
 import org.apache.spark.sql.types._
@@ -53,7 +52,7 @@ private[sql] class Serializer2SerializationStream(
   private val writeRowFunc = SparkSqlSerializer2.createSerializationFunction(rowSchema, rowOut)
 
   override def writeObject[T: ClassTag](t: T): SerializationStream = {
-    val kv = t.asInstanceOf[Product2[Row, Row]]
+    val kv = t.asInstanceOf[Product2[InternalRow, InternalRow]]
     writeKey(kv._1)
     writeValue(kv._2)
 
@@ -66,7 +65,7 @@ private[sql] class Serializer2SerializationStream(
   }
 
   override def writeValue[T: ClassTag](t: T): SerializationStream = {
-    writeRowFunc(t.asInstanceOf[Row])
+    writeRowFunc(t.asInstanceOf[InternalRow])
     this
   }
 
@@ -205,8 +204,9 @@ private[sql] object SparkSqlSerializer2 {
   /**
    * The util function to create the serialization function based on the given schema.
    */
-  def createSerializationFunction(schema: Array[DataType], out: DataOutputStream): Row => Unit = {
-    (row: Row) =>
+  def createSerializationFunction(schema: Array[DataType], out: DataOutputStream)
+    : InternalRow => Unit = {
+    (row: InternalRow) =>
       // If the schema is null, the returned function does nothing when it get called.
       if (schema != null) {
         var i = 0
@@ -278,7 +278,7 @@ private[sql] object SparkSqlSerializer2 {
                 out.writeByte(NULL)
               } else {
                 out.writeByte(NOT_NULL)
-                val bytes = row.getAs[UTF8String](i).getBytes
+                val bytes = row.getUTF8String(i).getBytes
                 out.writeInt(bytes.length)
                 out.write(bytes)
               }
@@ -288,7 +288,7 @@ private[sql] object SparkSqlSerializer2 {
                 out.writeByte(NULL)
               } else {
                 out.writeByte(NOT_NULL)
-                val bytes = row.getAs[Array[Byte]](i)
+                val bytes = row.getBinary(i)
                 out.writeInt(bytes.length)
                 out.write(bytes)
               }
@@ -298,7 +298,7 @@ private[sql] object SparkSqlSerializer2 {
                 out.writeByte(NULL)
               } else {
                 out.writeByte(NOT_NULL)
-                val value = row.apply(i).asInstanceOf[Decimal]
+                val value = row.getDecimal(i)
                 val javaBigDecimal = value.toJavaBigDecimal
                 // First, write out the unscaled value.
                 val bytes: Array[Byte] = javaBigDecimal.unscaledValue().toByteArray
