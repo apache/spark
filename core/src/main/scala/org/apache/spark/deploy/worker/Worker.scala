@@ -587,6 +587,8 @@ private[worker] class Worker(
   }
 
   private def trimFinishedExecutorsIfNecessary(): Unit = {
+    // do not need to protect with locks since both WorkerPage and Restful server get data through
+    // thread-safe RpcEndPoint
     if (finishedExecutors.size > retainedExecutors) {
       finishedExecutors.take(math.max(finishedExecutors.size / 10, 1)).foreach {
         case (executorId, _) => finishedExecutors.remove(executorId)
@@ -595,6 +597,8 @@ private[worker] class Worker(
   }
 
   private def trimFinishedDriversIfNecessary(): Unit = {
+    // do not need to protect with locks since both WorkerPage and Restful server get data through
+    // thread-safe RpcEndPoint
     if (finishedDrivers.size > retainedDrivers) {
       finishedDrivers.take(math.max(finishedDrivers.size / 10, 1)).foreach {
         case (driverId, _) => finishedDrivers.remove(driverId)
