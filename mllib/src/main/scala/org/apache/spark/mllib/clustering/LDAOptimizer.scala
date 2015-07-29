@@ -436,18 +436,6 @@ final class OnlineLDAOptimizer extends LDAOptimizer {
   }
 
   /**
-   * Update lambda based on the batch submitted. batchSize can be different for each iteration.
-   */
-  private[clustering] def update(stat: BDM[Double], iter: Int, batchSize: Int): Unit = {
-    // weight of the mini-batch.
-    val weight = math.pow(getTau0 + iter, -getKappa)
-
-    // Update lambda based on documents.
-    lambda := lambda * (1 - weight) +
-      (stat * (corpusSize.toDouble / batchSize.toDouble) + eta) * weight
-  }
-
-  /**
    * Get a random matrix to initialize lambda
    */
   private def getGammaMatrix(row: Int, col: Int): BDM[Double] = {
@@ -457,7 +445,6 @@ final class OnlineLDAOptimizer extends LDAOptimizer {
     val temp = gammaRandomGenerator.sample(row * col).toArray
     new BDM[Double](col, row, temp).t
   }
-
 
   override private[clustering] def getLDAModel(iterationTimes: Array[Double]): LDAModel = {
     new LocalLDAModel(Matrices.fromBreeze(lambda).transpose, alpha, eta, gammaShape)
@@ -469,14 +456,14 @@ final class OnlineLDAOptimizer extends LDAOptimizer {
  * Serializable companion object containing helper methods and shared code for
  * [[OnlineLDAOptimizer]] and [[LocalLDAModel]].
  */
-object OnlineLDAOptimizer {
+private[clustering] object OnlineLDAOptimizer {
   /**
    * Uses variational inference to infer the topic distribution `gammad` given the term counts
    * for a document.
    *
    * An optimization (Lee, Seung: Algorithms for non-negative matrix factorization, NIPS 2001)
    * avoids explicit computation of variational parameter `phi`.
-   * @see http://citeseerx.ist.psu.edu/viewdoc/summary?doi=10.1.1.31.7566
+   * @see [[http://citeseerx.ist.psu.edu/viewdoc/summary?doi=10.1.1.31.7566]]
    */
   private[clustering] def variationalTopicInference(
       termCounts: Vector,
@@ -487,8 +474,6 @@ object OnlineLDAOptimizer {
     val (ids: List[Int], cts: Array[Double]) = termCounts match {
       case v: DenseVector => ((0 until v.size).toList, v.values)
       case v: SparseVector => (v.indices.toList, v.values)
-      case v => throw new IllegalArgumentException("Online LDA does not support vector type "
-        + v.getClass)
     }
     // Initialize the variational distribution q(theta|gamma) for the mini-batch
     val gammad: BDV[Double] =
@@ -496,7 +481,7 @@ object OnlineLDAOptimizer {
     val expElogthetad: BDV[Double] = exp(LDAUtils.dirichletExpectation(gammad))  // K
     val expElogbetad = expElogbeta(ids, ::).toDenseMatrix                        // ids * K
 
-    val phinorm: BDV[Double] = expElogbetad * expElogthetad + 1e-100             // ids
+    val phinorm: BDV[Double] = expElogbetad * expElogthetad :+ 1e-100            // ids
     var meanchange = 1D
     val ctsVector = new BDV[Double](cts)                                         // ids
 
@@ -504,27 +489,13 @@ object OnlineLDAOptimizer {
     while (meanchange > 1e-3) {
       val lastgamma = gammad.copy
       //        K                  K * ids               ids
-      gammad := (expElogthetad :* (expElogbetad.t * (ctsVector / phinorm))) + alpha
+      gammad := (expElogthetad :* (expElogbetad.t * (ctsVector :/ phinorm))) :+ alpha
       expElogthetad := exp(LDAUtils.dirichletExpectation(gammad))
-      phinorm := expElogbetad * expElogthetad + 1e-100
+      phinorm := expElogbetad * expElogthetad :+ 1e-100
       meanchange = sum(abs(gammad - lastgamma)) / k
     }
 
-    val sstatsd = expElogthetad.asDenseMatrix.t * (ctsVector / phinorm).asDenseMatrix
+    val sstatsd = expElogthetad.asDenseMatrix.t * (ctsVector :/ phinorm).asDenseMatrix
     (gammad, sstatsd)
-  }
-
-  private[clustering] def variationalTopicInference(
-      termCounts: Vector,
-      expElogbeta: BDM[Double],
-      alpha: Vector,
-      gammaShape: Double,
-      k: Int): (BDV[Double], BDM[Double]) = {
-    OnlineLDAOptimizer.variationalTopicInference(
-      termCounts,
-      expElogbeta,
-      alpha.toBreeze,
-      gammaShape,
-      k)
   }
 }

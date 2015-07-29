@@ -76,7 +76,10 @@ abstract class LDAModel private[clustering] extends Saveable {
    */
   def getTopicConcentration: Double = this.topicConcentration
 
-  /** Shape parameter for random initialization of gamma. */
+  /**
+  * Shape parameter for random initialization of variational parameter gamma.
+  * Used for variational inference for perplexity and other test-time computations.
+  */
   protected def gammaShape: Double
 
   /**
@@ -194,10 +197,10 @@ abstract class LDAModel private[clustering] extends Saveable {
  */
 @Experimental
 class LocalLDAModel private[clustering] (
-    private val topics: Matrix,
-    protected val docConcentration: Vector,
-    protected val topicConcentration: Double,
-    protected val gammaShape: Double) extends LDAModel with Serializable {
+    val topics: Matrix,
+    override protected val docConcentration: Vector,
+    override protected val topicConcentration: Double,
+    override protected val gammaShape: Double) extends LDAModel with Serializable {
 
   /**
    * Backwards compatibility constructor, assumes symmetric docConcentration=1/numTopics,
@@ -239,27 +242,21 @@ class LocalLDAModel private[clustering] (
   // override def topicDistributions(documents: RDD[(Long, Vector)]): RDD[(Long, Vector)] = ???
 
   /**
-   * Calculate and return per-word likelihood bound, using the `batch` of
-   * documents as evaluation corpus.
+   * Calculate and return log variational bound on perplexity using the provided `documents` of
+   * documents as a test corpus.
+   * Perplexity on a test corpus is calculated as:
+   *    perplexity(documents) = exp( -log p(documents) / numWords )
+   * where p is the LDA model. It is upper bounded by the variational distribution using:
+   *    perplexity(documents) <= exp( -(E_q[log p(documents] - E_q[log q(documents)]) / numWords }
    */
-  // TODO: calcualte logPerplexity over training set online during training, reusing gammad instead
-  // of performing variational inference again in [[bound()]]
-  def logPerplexity(
-      batch: RDD[(Long, Vector)],
-      totalDocs: Long): Double = {
-    val corpusWords = batch
+  def logPerplexity(documents: RDD[(Long, Vector)]): Double = {
+    val numDocs = documents.count()
+    val corpusWords = documents
       .flatMap { case (_, termCounts) => termCounts.toArray }
       .reduce(_ + _)
-    val subsampleRatio = totalDocs.toDouble / batch.count()
-    val batchVariationalBound = bound(
-      batch,
-      subsampleRatio,
-      docConcentration,
-      topicConcentration,
-      topicsMatrix.toBreeze.toDenseMatrix,
-      gammaShape,
-      k,
-      vocabSize)
+    val subsampleRatio = numDocs.toDouble / documents.count()
+    val batchVariationalBound = bound(documents, subsampleRatio, docConcentration,
+      topicConcentration, topicsMatrix.toBreeze.toDenseMatrix, gammaShape, k, vocabSize)
     val perWordBound = batchVariationalBound / (subsampleRatio * corpusWords)
 
     perWordBound
@@ -267,11 +264,23 @@ class LocalLDAModel private[clustering] (
 
 
   /**
-   *  Estimate the variational bound of documents from `batch`:
-   *  E_q[log p(bath)] - E_q[log q(batch)]
+   * Estimate the variational bound of documents from `documents`:
+   *    log p(documents) >= E_q[log p(documents)] - E_q[log q(documents)])
+   * This bound is derived by decomposing the LDA model to:
+   *    log p(documents) = E_q[log p(documents)] - E_q[log q(documents)] + D(q|p)
+   * and noting that the KL-divergence D(q|p) >= 0. See Equation (16) in original Online LDA paper.
+   * @param documents a subset of the test corpus
+   * @param subsampleRatio ratio of entire corpus represented in `documents`
+   * @param alpha document-topic Dirichlet prior parameters
+   * @param eta topic-word Dirichlet prior parameters
+   * @param lambda parameters for variational q(beta | lambda) topic-word distributions
+   * @param gammaShape shape parameter for random initialization of variational q(theta | gamma)
+   *                   topic mixture distributions
+   * @param k number of topics
+   * @param vocabSize number of unique terms in the entire test corpus
    */
   private def bound(
-      batch: RDD[(Long, Vector)],
+      documents: RDD[(Long, Vector)],
       subsampleRatio: Double,
       alpha: Vector,
       eta: Double,
@@ -284,15 +293,15 @@ class LocalLDAModel private[clustering] (
     // by topic (columns of lambda)
     val Elogbeta = LDAUtils.dirichletExpectation(lambda.t).t
 
-    var score = batch.map { case (id: Long, termCounts: Vector) =>
+    var score = documents.map { case (id: Long, termCounts: Vector) =>
       var docScore = 0.0D
       val (gammad: BDV[Double], _) = OnlineLDAOptimizer.variationalTopicInference(
         termCounts, exp(Elogbeta), brzAlpha, gammaShape, k)
       val Elogthetad: BDV[Double] = LDAUtils.dirichletExpectation(gammad)
 
       // E[log p(doc | theta, beta)]
-      termCounts.foreachActive { case (id, count) =>
-        docScore += LDAUtils.logSumExp(Elogthetad + Elogbeta(id, ::).t)
+      termCounts.foreachActive { case (idx, count) =>
+        docScore += LDAUtils.logSumExp(Elogthetad + Elogbeta(idx, ::).t)
       }
       // E[log p(theta | alpha) - log q(theta | gamma)]; assumes alpha is a vector
       docScore += sum((brzAlpha - gammad) :* Elogthetad)
@@ -419,15 +428,9 @@ class DistributedLDAModel private (
       state: EMLDAOptimizer,
       iterationTimes: Array[Double],
       gammaShape: Double) = {
-    this(
-      state.graph,
-      state.globalTopicTotals,
-      state.k,
-      state.vocabSize,
-      Vectors.dense(Array.fill(state.k)(state.docConcentration)),
-      state.topicConcentration,
-      gammaShape,
-      iterationTimes)
+    this(state.graph, state.globalTopicTotals, state.k, state.vocabSize,
+      Vectors.dense(Array.fill(state.k)(state.docConcentration)), state.topicConcentration,
+      gammaShape, iterationTimes)
   }
 
   /**
@@ -435,10 +438,7 @@ class DistributedLDAModel private (
    * The local model stores the inferred topics but not the topic distributions for training
    * documents.
    */
-  def toLocal: LocalLDAModel = new LocalLDAModel(
-    topicsMatrix,
-    docConcentration,
-    topicConcentration,
+  def toLocal: LocalLDAModel = new LocalLDAModel(topicsMatrix, docConcentration, topicConcentration,
     gammaShape)
 
   /**
@@ -697,14 +697,8 @@ object DistributedLDAModel extends Loader[DistributedLDAModel] {
 
     val model = (loadedClassName, loadedVersion) match {
       case (className, "1.0") if className == classNameV1_0 => {
-        DistributedLDAModel.SaveLoadV1_0.load(
-          sc,
-          path,
-          vocabSize,
-          docConcentration,
-          topicConcentration,
-          iterationTimes.toArray,
-          gammaShape)
+        DistributedLDAModel.SaveLoadV1_0.load(sc, path, vocabSize, docConcentration,
+          topicConcentration, iterationTimes.toArray, gammaShape)
       }
       case _ => throw new Exception(
         s"DistributedLDAModel.load did not recognize model with (className, format version):" +

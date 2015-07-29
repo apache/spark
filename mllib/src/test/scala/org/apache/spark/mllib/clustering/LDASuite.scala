@@ -277,7 +277,7 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext {
        > -3.69051285096
      */
 
-    assert(ldaModel.logPerplexity(docs, docs.count()) ~== -3.690D relTol 1E-3D)
+    assert(ldaModel.logPerplexity(docs) ~== -3.690D relTol 1E-3D)
   }
 
   test("OnlineLDAOptimizer with asymmetric prior") {
