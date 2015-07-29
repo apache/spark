@@ -17,15 +17,12 @@
 
 package org.apache.spark.sql.execution
 
-import java.util
-
-import org.apache.spark.Logging
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.physical._
-import org.apache.spark.sql.types.{StructType, NullType, IntegerType}
+import org.apache.spark.sql.types.{DataType, NullType, IntegerType}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.collection.CompactBuffer
 import scala.collection.mutable
@@ -462,21 +459,21 @@ private[execution] final class OffsetWindowFunctionFrame(
     // Collect the expressions and bind them.
     val boundExpressions = expressions.toSeq.map {
       case e: OffsetWindowFunction =>
-        val boundLeft = BindReferences.bindReference(e.input, inputSchema)
+        val input = BindReferences.bindReference(e.input, inputSchema)
         if (e.default == null || e.default.foldable && e.default.eval() == null) {
           // Without default value.
-          boundLeft
+          input
         } else {
           // With default value.
-          val boundRight = BindReferences.bindReference(e.default, defaultInputSchema)
-          Coalesce(boundLeft :: boundRight :: Nil)
+          val default = BindReferences.bindReference(e.default, defaultInputSchema)
+          Coalesce(input :: default :: Nil)
         }
       case e =>
         BindReferences.bindReference(e, inputSchema)
-      }
+    }
 
-      // Create the projection.
-      newMutableProjection(boundExpressions, Nil)().target(target)
+    // Create the projection.
+    newMutableProjection(boundExpressions, Nil)().target(target)
   }
 
   override def prepare(rows: CompactBuffer[InternalRow]): Unit = {
@@ -524,9 +521,6 @@ private[execution] final class SlidingWindowFunctionFrame(
     * current output row. */
   private[this] var inputLowIndex = 0
 
-  /** Buffer used for storing prepared input for the window functions. */
-  private[this] val buffer = new util.ArrayDeque[InternalRow]
-
   /** Index of the row we are currently writing. */
   private[this] var outputIndex = 0
 
@@ -536,7 +530,6 @@ private[execution] final class SlidingWindowFunctionFrame(
     inputHighIndex = 0
     inputLowIndex = 0
     outputIndex = 0
-    buffer.clear()
   }
 
   /** Write the frame columns for the current row to the given target row. */
@@ -547,7 +540,6 @@ private[execution] final class SlidingWindowFunctionFrame(
     // the output row upper bound.
     while (inputHighIndex < input.size &&
         ubound.compare(input, inputHighIndex, outputIndex) <= 0) {
-      buffer.offer(input(inputHighIndex))
       inputHighIndex += 1
       bufferUpdated = true
     }
@@ -556,18 +548,14 @@ private[execution] final class SlidingWindowFunctionFrame(
     // the output row lower bound.
     while (inputLowIndex < inputHighIndex &&
         lbound.compare(input, inputLowIndex, outputIndex) < 0) {
-      buffer.pop()
       inputLowIndex += 1
       bufferUpdated = true
     }
 
     // Only recalculate and update when the buffer changes.
     if (bufferUpdated) {
-      val iterator = buffer.iterator()
       val status = processor.initialize
-      while (iterator.hasNext) {
-        processor.update(status, iterator.next())
-      }
+      processor.update(status, input, inputLowIndex, inputHighIndex)
       processor.evaluate(target, status)
     }
 
@@ -597,10 +585,7 @@ private[execution] final class UnboundedWindowFunctionFrame(
   /** Prepare the frame for calculating a new partition. Process all rows eagerly. */
   override def prepare(rows: CompactBuffer[InternalRow]): Unit = {
     status = processor.initialize
-    val iterator = rows.iterator
-    while (iterator.hasNext) {
-      processor.update(status, iterator.next())
-    }
+    processor.update(status, rows, 0, rows.size)
   }
 
   /** Write the frame columns for the current row to the given target row. */
@@ -723,13 +708,8 @@ private[execution] final class UnboundedFollowingWindowFunctionFrame(
 
     // Only recalculate and update when the buffer changes.
     if (bufferUpdated) {
-      var i = inputIndex
-      val size = input.size
       val status = processor.initialize
-      while (i < size) {
-        processor.update(status, input(i))
-        i += 1
-      }
+      processor.update(status, input, inputIndex, input.size)
       processor.evaluate(target, status)
     }
 
@@ -898,7 +878,28 @@ private[execution] final class AggregateProcessor(
     }
     i = 0
     while (i < aggregates1Size) {
-      buffer.getAs[AggregateFunction1](aggregates1BufferOffsets(i)).update(input)
+      buffer.getAs[AggregateFunction1](aggregates1BufferOffsets(i), null).update(input)
+      i += 1
+    }
+  }
+
+  /** Bulk update the given buffer. */
+  def update(buffer: MutableRow, input: CompactBuffer[InternalRow], begin: Int, end: Int): Unit = {
+    updateProjection.target(buffer)
+    var i = begin
+    while (i < end) {
+      val row = input(i)
+      updateProjection(join(buffer, row))
+      var j = 0
+      while (j < aggregates2Size) {
+        aggregates2(j).update(buffer, row)
+        j += 1
+      }
+      j = 0
+      while (j < aggregates1Size) {
+        buffer.getAs[AggregateFunction1](aggregates1BufferOffsets(j), null).update(row)
+        j += 1
+      }
       i += 1
     }
   }
@@ -914,7 +915,8 @@ private[execution] final class AggregateProcessor(
     }
     i = 0
     while (i < aggregates1Size) {
-      val value = buffer.getAs[AggregateFunction1](aggregates1BufferOffsets(i)).eval(EmptyRow)
+      val function = buffer.getAs[AggregateFunction1](aggregates1BufferOffsets(i), null)
+      val value = function.eval(EmptyRow)
       target.update(aggregates1OutputOffsets(i), value)
       i += 1
     }
@@ -925,6 +927,6 @@ private[execution] final class OffsetMutableRow(offset: Int, delegate: MutableRo
     extends MutableRow {
   def setNullAt(i: Int): Unit = delegate.setNullAt(i + offset)
   def update(i: Int, value: Any): Unit = delegate.update(i + offset, value)
-  def get(i: Int): Any = delegate.get(i + offset)
+  def get(i: Int, dataType: DataType): Any = delegate.get(i + offset, dataType)
   def numFields: Int = delegate.numFields - offset
 }
