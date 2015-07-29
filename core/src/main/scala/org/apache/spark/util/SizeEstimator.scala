@@ -336,7 +336,7 @@ object SizeEstimator extends Logging {
     // hg.openjdk.java.net/jdk8/jdk8/hotspot/file/tip/src/share/vm/classfile/classFileParser.cpp
     var alignedSize = shellSize
     for (size <- fieldSizes if sizeCount(size) > 0) {
-      val count = sizeCount(size)
+      val count = sizeCount(size).toLong
       // If there are internal gaps, smaller field can fit in.
       alignedSize = math.max(alignedSize, alignSizeUp(shellSize, size) + size * count)
       shellSize += size * count
