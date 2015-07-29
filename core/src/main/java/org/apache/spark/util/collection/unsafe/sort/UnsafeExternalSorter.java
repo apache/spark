@@ -151,6 +151,7 @@ public final class UnsafeExternalSorter {
     }
     return sorter.getMemoryUsage() + totalPageSize;
   }
+
   @VisibleForTesting
   public int getNumberOfAllocatedPages() {
     return allocatedPages.size();

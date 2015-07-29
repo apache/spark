@@ -111,7 +111,6 @@ public final class BytesToBytesMap {
 
   private final double loadFactor;
 
-
   /**
    * The size of the data pages that hold key and value data. Map entries cannot span multiple
    * pages, so this limits the maximum entry size.
