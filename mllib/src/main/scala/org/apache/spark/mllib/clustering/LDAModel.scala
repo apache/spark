@@ -404,7 +404,7 @@ object LocalLDAModel extends Loader[LocalLDAModel] {
  * than the [[LocalLDAModel]].
  */
 @Experimental
-class DistributedLDAModel private (
+class DistributedLDAModel private[clustering] (
     private[clustering] val graph: Graph[LDA.TopicCounts, LDA.TokenCount],
     private[clustering] val globalTopicTotals: LDA.TopicCounts,
     val k: Int,
@@ -415,15 +415,6 @@ class DistributedLDAModel private (
     private[spark] val iterationTimes: Array[Double]) extends LDAModel {
 
   import LDA._
-
-  private[clustering] def this(
-      state: EMLDAOptimizer,
-      iterationTimes: Array[Double],
-      gammaShape: Double) = {
-    this(state.graph, state.globalTopicTotals, state.k, state.vocabSize,
-      Vectors.dense(Array.fill(state.k)(state.docConcentration)), state.topicConcentration,
-      gammaShape, iterationTimes)
-  }
 
   /**
    * Convert model to a local model.
