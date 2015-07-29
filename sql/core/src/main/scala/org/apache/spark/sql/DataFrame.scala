@@ -1651,7 +1651,7 @@ class DataFrame private[sql](
    * be the target of an `insertInto`.
    *
    * Also note that while this function can persist the table metadata into Hive's metastore,
-   * the table will NOT be accessible from Hive, until SPARK-7550 is resolved.
+   * if spark.sql.hive.writeDataSourceSchema=true in configuration.
    * @group output
    * @deprecated As of 1.4.0, replaced by `write().saveAsTable(tableName)`.
    */
@@ -1670,7 +1670,7 @@ class DataFrame private[sql](
    * be the target of an `insertInto`.
    *
    * Also note that while this function can persist the table metadata into Hive's metastore,
-   * the table will NOT be accessible from Hive, until SPARK-7550 is resolved.
+   * if spark.sql.hive.writeDataSourceSchema=true in configuration.
    * @group output
    * @deprecated As of 1.4.0, replaced by `write().mode(mode).saveAsTable(tableName)`.
    */
@@ -1690,7 +1690,7 @@ class DataFrame private[sql](
    * be the target of an `insertInto`.
    *
    * Also note that while this function can persist the table metadata into Hive's metastore,
-   * the table will NOT be accessible from Hive, until SPARK-7550 is resolved.
+   * if spark.sql.hive.writeDataSourceSchema=true in configuration.
    * @group output
    * @deprecated As of 1.4.0, replaced by `write().format(source).saveAsTable(tableName)`.
    */
@@ -1710,7 +1710,7 @@ class DataFrame private[sql](
    * be the target of an `insertInto`.
    *
    * Also note that while this function can persist the table metadata into Hive's metastore,
-   * the table will NOT be accessible from Hive, until SPARK-7550 is resolved.
+   * if spark.sql.hive.writeDataSourceSchema=true in configuration.
    * @group output
    * @deprecated As of 1.4.0, replaced by `write().mode(mode).saveAsTable(tableName)`.
    */
@@ -1729,7 +1729,7 @@ class DataFrame private[sql](
    * be the target of an `insertInto`.
    *
    * Also note that while this function can persist the table metadata into Hive's metastore,
-   * the table will NOT be accessible from Hive, until SPARK-7550 is resolved.
+   * if spark.sql.hive.writeDataSourceSchema=true in configuration.
    * @group output
    * @deprecated As of 1.4.0, replaced by
    *            `write().format(source).mode(mode).options(options).saveAsTable(tableName)`.
@@ -1755,7 +1755,7 @@ class DataFrame private[sql](
    * be the target of an `insertInto`.
    *
    * Also note that while this function can persist the table metadata into Hive's metastore,
-   * the table will NOT be accessible from Hive, until SPARK-7550 is resolved.
+   * if spark.sql.hive.writeDataSourceSchema=true in configuration.
    * @group output
    * @deprecated As of 1.4.0, replaced by
    *            `write().format(source).mode(mode).options(options).saveAsTable(tableName)`.
