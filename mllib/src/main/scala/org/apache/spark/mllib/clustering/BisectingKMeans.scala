@@ -21,9 +21,9 @@ import scala.collection.{mutable, Map}
 
 import breeze.linalg.{SparseVector => BSV, Vector => BV, norm => breezeNorm, any => breezeAny}
 
+import org.apache.spark.{Logging, SparkException}
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.{Logging, SparkException}
 
 
 object BisectingKMeans extends Logging {

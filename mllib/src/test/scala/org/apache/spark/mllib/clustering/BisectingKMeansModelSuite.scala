@@ -17,10 +17,11 @@
 
 package org.apache.spark.mllib.clustering
 
+import org.scalatest.BeforeAndAfterEach
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.util.MLlibTestSparkContext
-import org.scalatest.BeforeAndAfterEach
 
 class BisectingKMeansModelSuite
     extends SparkFunSuite with MLlibTestSparkContext with BeforeAndAfterEach {
