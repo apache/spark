@@ -24,6 +24,7 @@ import scala.collection.mutable.ArrayBuffer
 import scala.collection.JavaConversions._
 import scala.util.Try
 
+import org.apache.spark.SparkUserAppException
 import org.apache.spark.api.python.PythonUtils
 import org.apache.spark.util.{RedirectThread, Utils}
 
@@ -68,7 +69,10 @@ object PythonRunner {
 
     new RedirectThread(process.getInputStream, System.out, "redirect output").start()
 
-    System.exit(process.waitFor())
+    val exitCode = process.waitFor()
+    if (exitCode != 0) {
+      throw new SparkUserAppException(exitCode)
+    }
   }
 
   /**
