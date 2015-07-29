@@ -332,8 +332,7 @@ class SqlParser extends AbstractSparkSQLParser with DataTypeParser {
   protected lazy val numericLiteral: Parser[Literal] =
     ( integral  ^^ { case i => Literal(toNarrowestIntegerType(i)) }
     | sign.? ~ unsignedFloat ^^ {
-      // TODO(davies): some precisions may loss, we should create decimal literal
-      case s ~ f => Literal(BigDecimal(s.getOrElse("") + f).doubleValue())
+      case s ~ f => Literal(toDecimalOrDouble(s.getOrElse("") + f))
     }
     )
 
@@ -417,6 +416,17 @@ class SqlParser extends AbstractSparkSQLParser with DataTypeParser {
       case v if bigIntValue.isValidInt => v.toIntExact
       case v if bigIntValue.isValidLong => v.toLongExact
       case v => v.underlying()
+    }
+  }
+
+  private def toDecimalOrDouble(value: String): Any = {
+    val decimal = BigDecimal(value)
+    // follow the behavior in MS SQL Server
+    // https://msdn.microsoft.com/en-us/library/ms179899.aspx
+    if (value.contains('E') || value.contains('e')) {
+      decimal.doubleValue()
+    } else {
+      decimal.underlying()
     }
   }
 
