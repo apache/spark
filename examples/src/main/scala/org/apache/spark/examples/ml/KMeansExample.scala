@@ -52,9 +52,8 @@ object KMeansExample {
     import org.apache.spark.mllib.linalg.VectorUDT
 
     // Loads data
-    val rowRDD = sc.textFile(input).filter(l => l != "")
-      .map(_.split(" ").map(v => java.lang.Double.parseDouble(v)))
-      .map(v => Vectors.dense(v)).map(Row(_))
+    val rowRDD = sc.textFile(input).filter(_.nonEmpty)
+      .map(_.split(" ").map(_.toDouble)).map(Vectors.dense).map(Row(_))
     val schema = StructType(Array(StructField(FEATURES_COL, new VectorUDT, false)))
     val dataset = sqlContext.createDataFrame(rowRDD, schema)
 
