@@ -333,7 +333,7 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext {
       (1, 0.99504), (1, 0.99504))
 
     expectedPredictions.zip(
-      ldaModel.topicDistribution(docs).map { case (_, topics) =>
+      ldaModel.topicDistributions(docs).map { case (_, topics) =>
         // convert results to expectedPredictions format, which only has highest probability topic
         val topicsBz = topics.toBreeze.toDenseVector
         (argmax(topicsBz), max(topicsBz))

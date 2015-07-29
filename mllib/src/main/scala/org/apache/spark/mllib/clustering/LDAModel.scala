@@ -221,9 +221,6 @@ class LocalLDAModel private[clustering] (
   // TODO
   // override def logLikelihood(documents: RDD[(Long, Vector)]): Double = ???
 
-  // TODO:
-  // override def topicDistributions(documents: RDD[(Long, Vector)]): RDD[(Long, Vector)] = ???
-
   /**
    * Calculate the log variational bound on perplexity. See Equation (16) in original Online
    * LDA paper.
@@ -300,7 +297,8 @@ class LocalLDAModel private[clustering] (
   /**
    * Predicts the topic mixture distribution ("gamma") for a document.
    */
-  def topicDistribution(documents: RDD[(Long, Vector)]): RDD[(Long, Vector)] = {
+  // TODO: declare in LDAModel and override once implemented in DistributedLDAModel
+  def topicDistributions(documents: RDD[(Long, Vector)]): RDD[(Long, Vector)] = {
     // Double transpose because dirichletExpectation normalizes by row and we need to normalize
     // by topic (columns of lambda)
     val expElogbeta = exp(LDAUtils.dirichletExpectation(topicsMatrix.toBreeze.toDenseMatrix.t).t)
