@@ -24,6 +24,7 @@ import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.api.java.function.Function;
 import org.apache.spark.ml.clustering.KMeansModel;
+import org.apache.spark.ml.clustering.KMeans;
 import org.apache.spark.mllib.linalg.Vector;
 import org.apache.spark.mllib.linalg.VectorUDT;
 import org.apache.spark.mllib.linalg.Vectors;
@@ -80,7 +81,7 @@ public class JavaKMeansExample {
     DataFrame dataset = sqlContext.createDataFrame(points, schema);
 
     // Trains a k-means model
-    org.apache.spark.ml.clustering.KMeans kmeans = new org.apache.spark.ml.clustering.KMeans()
+    KMeans kmeans = new KMeans()
       .setK(k);
     KMeansModel model = kmeans.fit(dataset);
 
