@@ -491,7 +491,7 @@ abstract class HiveThriftServer2Test extends SparkFunSuite with BeforeAndAfterAl
         new File(s"$tempLog4jConf/log4j.properties"),
         UTF_8)
 
-      tempLog4jConf + File.pathSeparator + sys.props("java.class.path")
+      tempLog4jConf // + File.pathSeparator + sys.props("java.class.path")
     }
 
     s"""$startScript
@@ -617,7 +617,7 @@ abstract class HiveThriftServer2Test extends SparkFunSuite with BeforeAndAfterAl
     diagnosisBuffer.clear()
 
     // Retries up to 3 times with different port numbers if the server fails to start
-    (1 to 3).foldLeft(Try(startThriftServer(listeningPort, 0))) { case (started, attempt) =>
+    (1 to 1).foldLeft(Try(startThriftServer(listeningPort, 0))) { case (started, attempt) =>
       started.orElse {
         listeningPort += 1
         stopThriftServer()
