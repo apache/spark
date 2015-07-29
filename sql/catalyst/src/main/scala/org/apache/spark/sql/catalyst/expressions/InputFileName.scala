@@ -23,25 +23,27 @@ import org.apache.spark.sql.catalyst.expressions.codegen.{GeneratedExpressionCod
 import org.apache.spark.sql.types.{DataType, StringType}
 import org.apache.spark.unsafe.types.UTF8String
 
-private[sql] case class InputFileName() extends LeafExpression with Nondeterministic {
+/**
+ * Expression that returns the name of the current file being read in using [[SqlNewHadoopRDD]]
+ */
+case class InputFileName() extends LeafExpression with Nondeterministic {
 
   override def nullable: Boolean = true
 
   override def dataType: DataType = StringType
 
-  @transient private[this] var fileName: UTF8String = _
+  override val prettyName = "INPUT_FILE_NAME"
 
-  override protected def initInternal(): Unit = {
-    fileName = UTF8String.fromString(SqlNewHadoopRDD.getInputFileName())
+  override protected def initInternal(): Unit = {}
+
+  override protected def evalInternal(input: InternalRow): UTF8String = {
+    SqlNewHadoopRDD.getInputFileName()
   }
-
-  override protected def evalInternal(input: InternalRow): UTF8String = fileName
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     val nameTerm = ctx.freshName("fileName")
     ctx.addMutableState(ctx.javaType(StringType), nameTerm,
-      s"""$nameTerm = UTF8String.fromString(
-         |org.apache.spark.rdd.SqlNewHadoopRDD.getInputFileName());""".stripMargin)
+      s"$nameTerm = org.apache.spark.rdd.SqlNewHadoopRDD.getInputFileName();")
     ev.isNull = "false"
     s"final ${ctx.javaType(dataType)} ${ev.primitive} = $nameTerm;"
   }

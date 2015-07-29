@@ -20,6 +20,8 @@ package org.apache.spark.rdd
 import java.text.SimpleDateFormat
 import java.util.Date
 
+import scala.reflect.ClassTag
+
 import org.apache.hadoop.conf.{Configurable, Configuration}
 import org.apache.hadoop.io.Writable
 import org.apache.hadoop.mapreduce._
@@ -29,13 +31,12 @@ import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.executor.DataReadMethod
 import org.apache.spark.mapreduce.SparkHadoopMapReduceUtil
+import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.{Partition => SparkPartition, _}
 import org.apache.spark.rdd.NewHadoopRDD.NewHadoopMapPartitionsWithSplitRDD
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.{SerializableConfiguration, Utils}
 
-
-import scala.reflect.ClassTag
 
 private[spark] class SqlNewHadoopPartition(
     rddId: Int,
@@ -131,7 +132,7 @@ private[spark] class SqlNewHadoopRDD[K, V](
       // Sets the thread local variable for the file's name
       split.serializableHadoopSplit.value match {
         case fs: FileSplit => SqlNewHadoopRDD.setInputFileName(fs.getPath.toString)
-        case _ =>
+        case _ => SqlNewHadoopRDD.unsetInputFileName()
       }
 
       // Find a function that will return the FileSystem bytes read by this thread. Do this before
@@ -261,13 +262,13 @@ private[spark] object SqlNewHadoopRDD {
 
   /**
    * The thread variable for the name of the current file being read. This is used by
-   * the InputFileName function
+   * the InputFileName function in Spark SQL.
    */
-  private[this] val inputFileName: ThreadLocal[String] = new ThreadLocal[String]
+  private[this] val inputFileName: ThreadLocal[UTF8String] = new ThreadLocal[UTF8String]
 
-  private[spark] def getInputFileName(): String = inputFileName.get()
+  def getInputFileName(): UTF8String = inputFileName.get()
 
-  private[spark] def setInputFileName(file: String) = inputFileName.set(file)
+  private[spark] def setInputFileName(file: String) = inputFileName.set(UTF8String.fromString(file))
 
   private[spark] def unsetInputFileName(): Unit = inputFileName.remove()
 

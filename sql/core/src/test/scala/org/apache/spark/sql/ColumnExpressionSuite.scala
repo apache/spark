@@ -494,7 +494,7 @@ class ColumnExpressionSuite extends QueryTest with SQLTestUtils {
 
   test("InputFileName") {
     withTempPath { dir =>
-      val data = sqlContext.sparkContext.parallelize(0 to 1000).toDF("id")
+      val data = sqlContext.sparkContext.parallelize(0 to 10).toDF("id")
       data.write.parquet(dir.getCanonicalPath)
       val answer = sqlContext.read.parquet(dir.getCanonicalPath).select(inputFileName())
         .head.getString(0)
