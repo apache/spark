@@ -1685,41 +1685,44 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       logInfo("SparkContext already stopped.")
       return
     }
-    if (_shutdownHookRef != null) {
-      Utils.removeShutdownHook(_shutdownHookRef)
+    try {
+      if (_shutdownHookRef != null) {
+        Utils.removeShutdownHook(_shutdownHookRef)
+      }
+  
+      postApplicationEnd()
+      _ui.foreach(_.stop())
+      if (env != null) {
+        env.metricsSystem.report()
+      }
+      if (metadataCleaner != null) {
+        metadataCleaner.cancel()
+      }
+      _cleaner.foreach(_.stop())
+      _executorAllocationManager.foreach(_.stop())
+      if (_dagScheduler != null) {
+        _dagScheduler.stop()
+        _dagScheduler = null
+      }
+      if (_listenerBusStarted) {
+        listenerBus.stop()
+        _listenerBusStarted = false
+      }
+      _eventLogger.foreach(_.stop())
+      if (env != null && _heartbeatReceiver != null) {
+        env.rpcEnv.stop(_heartbeatReceiver)
+      }
+      _progressBar.foreach(_.stop())
+      _taskScheduler = null
+      // TODO: Cache.stop()?
+      if (_env != null) {
+        _env.stop()
+        SparkEnv.set(null)
+      }
+    } finally {
+      SparkContext.clearActiveContext()
+      logInfo("Successfully stopped SparkContext")
     }
-
-    postApplicationEnd()
-    _ui.foreach(_.stop())
-    if (env != null) {
-      env.metricsSystem.report()
-    }
-    if (metadataCleaner != null) {
-      metadataCleaner.cancel()
-    }
-    _cleaner.foreach(_.stop())
-    _executorAllocationManager.foreach(_.stop())
-    if (_dagScheduler != null) {
-      _dagScheduler.stop()
-      _dagScheduler = null
-    }
-    if (_listenerBusStarted) {
-      listenerBus.stop()
-      _listenerBusStarted = false
-    }
-    _eventLogger.foreach(_.stop())
-    if (env != null && _heartbeatReceiver != null) {
-      env.rpcEnv.stop(_heartbeatReceiver)
-    }
-    _progressBar.foreach(_.stop())
-    _taskScheduler = null
-    // TODO: Cache.stop()?
-    if (_env != null) {
-      _env.stop()
-      SparkEnv.set(null)
-    }
-    SparkContext.clearActiveContext()
-    logInfo("Successfully stopped SparkContext")
   }
 
 
