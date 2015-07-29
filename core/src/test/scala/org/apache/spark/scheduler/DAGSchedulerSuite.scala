@@ -690,9 +690,6 @@ class DAGSchedulerSuite
     submit(finalRdd, Array(0))
 
     for (attempt <- 0 until Stage.MAX_STAGE_FAILURES-1) {
-      println(s"attempt = $attempt")
-      println(taskSets.mkString(","))
-
       // Make each task in stage 0 success
       val stage0Attempt = taskSets.last
       checkStageId(0, attempt, stage0Attempt)
@@ -703,7 +700,7 @@ class DAGSchedulerSuite
       // Now we should have a new taskSet, for a new attempt of stage 1.
       // We will have one fetch failure for this task set
       val stage1Attempt = taskSets.last
-      checkStageId(1, attempt, stage0Attempt)
+      checkStageId(1, attempt, stage1Attempt)
 
       val stage1Successes =
         stage1Attempt.tasks.tail.map { _ => (Success, makeMapStatus("hostB", 1))}
@@ -767,6 +764,11 @@ class DAGSchedulerSuite
     assert(!ended)
 
     // Next, succeed all and confirm output
+    // Rerun stage 0
+    val stage0Attempt5 = taskSets.last
+    checkStageId(0, 5, stage0Attempt5)
+    complete(stage0Attempt5, makeCompletions(stage0Attempt5, 2))
+
     val stage1Attempt5 = taskSets.last
     checkStageId(1, 5, stage1Attempt5)
     complete(stage1Attempt5, makeCompletions(stage1Attempt5, 1))
