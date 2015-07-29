@@ -479,10 +479,29 @@ class DAGSchedulerSuite
     assert(stageAttempt.stageAttemptId == attempt)
   }
 
-  def makeCompletions(stageAttempt: TaskSet): Seq[(Success.type, MapStatus)] = {
+  def makeCompletions(stageAttempt: TaskSet, reduceParts: Int): Seq[(Success.type, MapStatus)] = {
     stageAttempt.tasks.zipWithIndex.map { case (task, idx) =>
-      (Success, makeMapStatus("host" + ('A' + idx).toChar, stageAttempt.tasks.size))
+      (Success, makeMapStatus("host" + ('A' + idx).toChar, reduceParts))
     }.toSeq
+  }
+
+  def setupStageAbortTest(sc: SparkContext) {
+    sc.listenerBus.addListener(new EndListener())
+    ended = false
+    jobResult = null
+  }
+
+  // Create a new Listener to confirm that the listenerBus sees the JobEnd message
+  // when we abort the stage. This message will also be consumed by the EventLoggingListener
+  // so this will propagate up to the user.
+  var ended = false
+  var jobResult : JobResult = null
+
+  class EndListener extends SparkListener {
+    override def onJobEnd(jobEnd: SparkListenerJobEnd): Unit = {
+      jobResult = jobEnd.jobResult
+      ended = true
+    }
   }
 
   /**
@@ -491,19 +510,7 @@ class DAGSchedulerSuite
    * trigger an overall stage abort to avoid endless retries.
    */
   test("Multiple consecutive stage failures should lead to task being aborted.") {
-    // Create a new Listener to confirm that the listenerBus sees the JobEnd message
-    // when we abort the stage. This message will also be consumed by the EventLoggingListener
-    // so this will propagate up to the user.
-    var ended = false
-    var jobResult : JobResult = null
-    class EndListener extends SparkListener {
-      override def onJobEnd(jobEnd: SparkListenerJobEnd): Unit = {
-        jobResult = jobEnd.jobResult
-        ended = true
-      }
-    }
-
-    sc.listenerBus.addListener(new EndListener())
+    setupStageAbortTest(sc)
 
     val shuffleMapRdd = new MyRDD(sc, 2, Nil)
     val shuffleDep = new ShuffleDependency(shuffleMapRdd, null)
@@ -514,15 +521,10 @@ class DAGSchedulerSuite
     for (attempt <- 0 until Stage.MAX_STAGE_FAILURES) {
       // Complete all the tasks for the current attempt of stage 0 successfully
       val stage0Attempt = taskSets.last
-
-      // Confirm  that this is the next attempt for stage 0
       checkStageId(0, attempt, stage0Attempt)
 
-      // Make each task in stage 0 success
-      val completions = makeCompletions(stage0Attempt)
-
       // Run stage 0
-      complete(stage0Attempt, completions)
+      complete(stage0Attempt, makeCompletions(stage0Attempt, 2))
 
       // Now we should have a new taskSet, for a new attempt of stage 1.
       // We will have one fetch failure for this task set
@@ -561,6 +563,8 @@ class DAGSchedulerSuite
    * aborted.
    */
   test("Failures in different stages should not trigger an overall abort") {
+    setupStageAbortTest(sc)
+
     val shuffleMapRdd = new MyRDD(sc, 2, Nil)
     val shuffleDep = new ShuffleDependency(shuffleMapRdd, null)
     val shuffleId = shuffleDep.shuffleId
@@ -572,16 +576,11 @@ class DAGSchedulerSuite
     for (attempt <- 0 until Stage.MAX_STAGE_FAILURES) {
       // Complete all the tasks for the current attempt of stage 0 successfully
       val stage0Attempt = taskSets.last
-
-      // Confirm  that this is the next attempt for stage 0
       checkStageId(0, attempt, stage0Attempt)
 
       if (attempt < Stage.MAX_STAGE_FAILURES/2) {
-        // Make each task in stage 0 success
-        val completions = makeCompletions(stage0Attempt)
-
         // Run stage 0
-        complete(stage0Attempt, completions)
+        complete(stage0Attempt, makeCompletions(stage0Attempt, 2))
 
         // Now we should have a new taskSet, for a new attempt of stage 1.
         // We will have one fetch failure for this task set
@@ -597,7 +596,6 @@ class DAGSchedulerSuite
         )
       } else {
         val stage0Successes = stage0Attempt.tasks.tail.map { _ => (Success, 42)}
-
         // Run stage 0 and fail
         complete(stage0Attempt,
           Seq((FetchFailed(makeBlockManagerId("hostA"), shuffleId, 0, 0, "ignored"), null))
@@ -610,10 +608,11 @@ class DAGSchedulerSuite
       scheduler.resubmitFailedStages()
     }
 
-    val stage0Attempt = taskSets.last
-    val completions = stage0Attempt.tasks.zipWithIndex.map{ case (task, idx) =>
+    val stage0Attempt4 = taskSets.last
+    val completions = stage0Attempt4.tasks.zipWithIndex.map{ case (task, idx) =>
       (Success, makeMapStatus("host" + ('A' + idx).toChar, 2))
     }.toSeq
+    checkStageId(0, 4, stage0Attempt4)
 
     // Complete first task
     complete(taskSets.last, completions)
@@ -631,19 +630,7 @@ class DAGSchedulerSuite
    * their own, but only when the stage fails enough times.
    */
   test("Multiple task failures in same stage should not abort the stage.") {
-    // Create a new Listener to confirm that the listenerBus sees the JobEnd message
-    // when we abort the stage. This message will also be consumed by the EventLoggingListener
-    // so this will propagate up to the user.
-    var ended = false
-    var jobResult : JobResult = null
-    class EndListener extends SparkListener {
-      override def onJobEnd(jobEnd: SparkListenerJobEnd): Unit = {
-        jobResult = jobEnd.jobResult
-        ended = true
-      }
-    }
-
-    sc.listenerBus.addListener(new EndListener())
+    setupStageAbortTest(sc)
 
     val parts = 8
     val shuffleMapRdd = new MyRDD(sc, parts, Nil)
@@ -652,19 +639,19 @@ class DAGSchedulerSuite
     val reduceRdd = new MyRDD(sc, parts, List(shuffleDep))
     submit(reduceRdd, (0 until parts).toArray)
 
-    val stage0Attempt = taskSets.last
-
+    val stage0Attempt0 = taskSets.last
+    checkStageId(0, 0, stage0Attempt0)
     // Make each task in stage 0 success, then fail all of stage 1
-    val completions = makeCompletions(stage0Attempt)
-    complete(stage0Attempt, completions)
+    complete(stage0Attempt0, makeCompletions(stage0Attempt0, parts))
 
-    val stage1Attempt = taskSets.last
-    val failures = stage1Attempt.tasks.zipWithIndex.map{ case (task, idx) =>
+    val stage1Attempt0 = taskSets.last
+    checkStageId(1, 0, stage1Attempt0)
+    val failures = stage1Attempt0.tasks.zipWithIndex.map{ case (task, idx) =>
       (FetchFailed(makeBlockManagerId("hostA"), shuffleId, 0, idx, "ignored"), null)
     }.toSeq
 
-    // Run Stage 1, this time with all fetchs failing
-    complete(stage1Attempt, failures)
+    // Run Stage 1 with all fetchs failing
+    complete(stage1Attempt0, failures)
 
     // Resubmit and confirm that now all is well
     scheduler.resubmitFailedStages()
@@ -673,13 +660,17 @@ class DAGSchedulerSuite
     assert(!ended)
 
     // Confirm job finished succesfully
-    val stage1Attempt2 = taskSets.last
-    val completions_1_2 = stage1Attempt2.tasks.zipWithIndex.map(_ => (Success, 42)).toSeq
+    val stage0Attempt1 = taskSets.last
+    checkStageId(0, 1, stage0Attempt1)
+    complete(stage0Attempt1, makeCompletions(stage0Attempt1, 8))
 
-    complete(stage1Attempt2, completions_1_2)
+    val stage1Attempt1 = taskSets.last
+    checkStageId(1, 1, stage1Attempt1)
+    complete(stage1Attempt1, stage1Attempt1.tasks.zipWithIndex.map(_ => (Success, 42)).toSeq)
+
     sc.listenerBus.waitUntilEmpty(1000)
     assert(ended === true)
-    assert(results === Map(1 -> 42))
+    assert(results === (0 until parts).map{idx => idx -> 42}.toMap)
   }
 
   /**
@@ -689,19 +680,7 @@ class DAGSchedulerSuite
    * but that doesn't matter, since they have successes in the middle.
    */
   test("Abort should only trigger after consecutive stage failures") {
-    // Create a new Listener to confirm that the listenerBus sees the JobEnd message
-    // when we abort the stage. This message will also be consumed by the EventLoggingListener
-    // so this will propagate up to the user.
-    var ended = false
-    var jobResult : JobResult = null
-    class EndListener extends SparkListener {
-      override def onJobEnd(jobEnd: SparkListenerJobEnd): Unit = {
-        jobResult = jobEnd.jobResult
-        ended = true
-      }
-    }
-
-    sc.listenerBus.addListener(new EndListener())
+    setupStageAbortTest(sc)
 
     val shuffleOneRdd = new MyRDD(sc, 2, Nil).cache()
     val shuffleDepOne = new ShuffleDependency(shuffleOneRdd, null)
@@ -716,15 +695,16 @@ class DAGSchedulerSuite
 
       // Make each task in stage 0 success
       val stage0Attempt = taskSets.last
-
-      val completions = makeCompletions(stage0Attempt);
+      checkStageId(0, attempt, stage0Attempt)
 
       // Run stage 0
-      complete(stage0Attempt, completions)
+      complete(stage0Attempt, makeCompletions(stage0Attempt, 2))
 
       // Now we should have a new taskSet, for a new attempt of stage 1.
       // We will have one fetch failure for this task set
       val stage1Attempt = taskSets.last
+      checkStageId(1, attempt, stage0Attempt)
+
       val stage1Successes =
         stage1Attempt.tasks.tail.map { _ => (Success, makeMapStatus("hostB", 1))}
 
@@ -742,27 +722,38 @@ class DAGSchedulerSuite
       assert(!ended)
     }
 
-    // Now succeed stage 1 and fail stage 2
-    val stage1attempt4 = taskSets.last
-    val completions_1_4 = makeCompletions(stage1attempt4)
+    // Rerun stage 0
+    val stage0Attempt3 = taskSets.last
+    checkStageId(0, 3, stage0Attempt3)
+    complete(stage0Attempt3, makeCompletions(stage0Attempt3, 2))
 
+    // Now succeed stage 1 and fail stage 2
+    val stage1Attempt3 = taskSets.last
+    checkStageId(1, 3, stage1Attempt3)
     // Succeed 1
-    complete(stage1attempt4, completions_1_4)
+    complete(stage1Attempt3, makeCompletions(stage1Attempt3, 1))
 
     // Fail stage 2
-    complete(taskSets.last, Seq(
+    val stage2Attempt0 = taskSets.last
+    checkStageId(2, 0, stage2Attempt0)
+    complete(stage2Attempt0, Seq(
       (FetchFailed(makeBlockManagerId("hostA"), shuffleDepTwo.shuffleId, 0, 0, "ignored"), null)))
 
     scheduler.resubmitFailedStages()
+    // Rerun stage 0
+    val stage0Attempt4 = taskSets.last
+    checkStageId(0, 4, stage0Attempt4)
+    complete(stage0Attempt4, makeCompletions(stage0Attempt4, 2))
 
     // Now again, fail stage 1 (up to MAX_FAILURES) but confirm that this doesn't trigger an abort
     // since we succeeded in between
-    val stage1attempt5 = taskSets.last
+    val stage1attempt4 = taskSets.last
+    checkStageId(1, 4, stage1attempt4)
     val stage1Successes =
-      stage1attempt5.tasks.tail.map { _ => (Success, makeMapStatus("hostB", 1))}
+      stage1attempt4.tasks.tail.map { _ => (Success, makeMapStatus("hostB", 1))}
 
     // Run Stage 1, this time with a task failure
-    complete(stage1attempt5,
+    complete(stage1attempt4,
       Seq(
         (FetchFailed(makeBlockManagerId("hostA"), shuffleDepOne.shuffleId, 0, 0, "ignored"), null)
       ) ++ stage1Successes
@@ -776,17 +767,18 @@ class DAGSchedulerSuite
     assert(!ended)
 
     // Next, succeed all and confirm output
-    val stage1Attempt6 = taskSets.last
-    val completions_1_6 = makeCompletions(stage1Attempt6)
-    complete(stage1Attempt6, completions_1_6)
+    val stage1Attempt5 = taskSets.last
+    checkStageId(1, 5, stage1Attempt5)
+    complete(stage1Attempt5, makeCompletions(stage1Attempt5, 1))
 
-    val stage2Attempt2 = taskSets.last
-    complete(stage2Attempt2, Seq((Success, 42)))
+    val stage2Attempt1 = taskSets.last
+    checkStageId(2, 1, stage2Attempt1)
+    complete(stage2Attempt1, Seq((Success, 42)))
 
     assertDataStructuresEmpty()
     sc.listenerBus.waitUntilEmpty(1000)
     assert(ended === true)
-    assert(results === Map(2 -> 42))
+    assert(results === Map(0 -> 42))
   }
 
   test("trivial shuffle with multiple fetch failures") {
