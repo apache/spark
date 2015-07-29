@@ -83,16 +83,10 @@ private[sql] trait DataTypeParser extends StandardTokenParsers {
     }) |
     ("(?i)struct".r ~ "<>" ^^^ StructType(Nil))
 
-  protected lazy val unionType: Parser[DataType] =
-    "(?i)uniontype".r ~> "<" ~> repsep(dataType, ",") <~ ">" ^^ {
-      case types => UnionType(types)
-    }
-
   protected lazy val dataType: Parser[DataType] =
     arrayType |
     mapType |
     structType |
-    unionType |
     primitiveType
 
   def toDataType(dataTypeString: String): DataType = synchronized {
