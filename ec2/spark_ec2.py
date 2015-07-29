@@ -297,6 +297,10 @@ def parse_args():
         "--copy-aws-credentials", action="store_true", default=False,
         help="Add AWS credentials to hadoop configuration to allow Spark to access S3")
     parser.add_option(
+        "--custom-aws-credentials", type="string", default="",
+        help="Add custom AWS credentials to hadoop configuration to allow Spark to access S3 with " +
+        "different AWS credentialsn.Required format: AWS_ACCESS_KEY_ID,AWS_SECRET_ACCESS_KEY")
+    parser.add_option(
         "--subnet-id", default=None,
         help="VPC subnet to launch instances in")
     parser.add_option(
@@ -1066,7 +1070,11 @@ def deploy_files(conn, root_dir, opts, master_nodes, slave_nodes, modules):
         "spark_master_opts": opts.master_opts
     }
 
-    if opts.copy_aws_credentials:
+    if opts.custom_aws_credentials is not "":
+        aws_access_key_id, aws_secret_access_key = opts.custom_aws_credentials.split(",")
+        template_vars["aws_access_key_id"] = aws_access_key_id
+        template_vars["aws_secret_access_key"] = aws_secret_access_key
+    elif opts.copy_aws_credentials:
         template_vars["aws_access_key_id"] = conn.aws_access_key_id
         template_vars["aws_secret_access_key"] = conn.aws_secret_access_key
     else:
