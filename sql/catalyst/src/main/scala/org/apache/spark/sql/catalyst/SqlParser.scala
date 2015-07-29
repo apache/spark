@@ -189,10 +189,10 @@ class SqlParser extends AbstractSparkSQLParser with DataTypeParser {
 
   protected lazy val joinType: Parser[JoinType] =
     ( INNER           ^^^ Inner
-    | LEFT  ~ SEMI     ^^^ LeftSemi
-    | LEFT  ~ OUTER.?  ^^^ LeftOuter
+    | LEFT  ~ SEMI    ^^^ LeftSemi
+    | LEFT  ~ OUTER.? ^^^ LeftOuter
     | RIGHT ~ OUTER.? ^^^ RightOuter
-    | FULL  ~ OUTER.?  ^^^ FullOuter
+    | FULL  ~ OUTER.? ^^^ FullOuter
     )
 
   protected lazy val sortType: Parser[LogicalPlan => LogicalPlan] =
@@ -222,9 +222,9 @@ class SqlParser extends AbstractSparkSQLParser with DataTypeParser {
 
   protected lazy val comparisonExpression: Parser[Expression] =
     ( termExpression ~ ("="  ~> termExpression) ^^ { case e1 ~ e2 => EqualTo(e1, e2) }
-    | termExpression ~ ("<"  ~> termExpression)  ^^ { case e1 ~ e2 => LessThan(e1, e2) }
+    | termExpression ~ ("<"  ~> termExpression) ^^ { case e1 ~ e2 => LessThan(e1, e2) }
     | termExpression ~ ("<=" ~> termExpression) ^^ { case e1 ~ e2 => LessThanOrEqual(e1, e2) }
-    | termExpression ~ (">"  ~> termExpression)  ^^ { case e1 ~ e2 => GreaterThan(e1, e2) }
+    | termExpression ~ (">"  ~> termExpression) ^^ { case e1 ~ e2 => GreaterThan(e1, e2) }
     | termExpression ~ (">=" ~> termExpression) ^^ { case e1 ~ e2 => GreaterThanOrEqual(e1, e2) }
     | termExpression ~ ("!=" ~> termExpression) ^^ { case e1 ~ e2 => Not(EqualTo(e1, e2)) }
     | termExpression ~ ("<>" ~> termExpression) ^^ { case e1 ~ e2 => Not(EqualTo(e1, e2)) }

@@ -161,17 +161,17 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
                   allAggregates(rewrittenAggregateExpressions)) &&
                codegenEnabled &&
                !canBeConvertedToNewAggregation(plan) =>
-        execution.GeneratedAggregate(
-          partial = false,
-          namedGroupingAttributes,
-          rewrittenAggregateExpressions,
-          unsafeEnabled,
           execution.GeneratedAggregate(
-            partial = true,
-            groupingExpressions,
-            partialComputation,
+            partial = false,
+            namedGroupingAttributes,
+            rewrittenAggregateExpressions,
             unsafeEnabled,
-            planLater(child))) :: Nil
+            execution.GeneratedAggregate(
+              partial = true,
+              groupingExpressions,
+              partialComputation,
+              unsafeEnabled,
+              planLater(child))) :: Nil
 
       // Cases where some aggregate can not be codegened
       case PartialAggregation(
