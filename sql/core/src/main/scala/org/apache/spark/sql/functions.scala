@@ -2092,14 +2092,18 @@ object functions {
   def weekofyear(columnName: String): Column = weekofyear(Column(columnName))
 
   /**
-   * Gets current Unix timestamp in seconds.
+   * Converts the number of seconds from unix epoch (1970-01-01 00:00:00 UTC) to a string
+   * representing the timestamp of that moment in the current system time zone in the given
+   * format.
    * @group datetime_funcs
    * @since 1.5.0
    */
   def from_unixtime(ut: Column): Column = FromUnixTime(ut.expr, Literal("yyyy-MM-dd HH:mm:ss"))
 
   /**
-   * Gets current Unix timestamp in seconds.
+   * Converts the number of seconds from unix epoch (1970-01-01 00:00:00 UTC) to a string
+   * representing the timestamp of that moment in the current system time zone in the given
+   * format.
    * @group datetime_funcs
    * @since 1.5.0
    */

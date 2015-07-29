@@ -222,6 +222,15 @@ class DateFunctionsSuite extends QueryTest {
     checkAnswer(
       df.select(from_unixtime(col("a"), fmt3)),
       Seq(Row(sdf3.format(new Timestamp(1000000))), Row(sdf3.format(new Timestamp(-1000000)))))
+    checkAnswer(
+      df.selectExpr("from_unixtime(a)"),
+      Seq(Row(sdf1.format(new Timestamp(1000000))), Row(sdf1.format(new Timestamp(-1000000)))))
+    checkAnswer(
+      df.selectExpr(s"from_unixtime(a, '$fmt2')"),
+      Seq(Row(sdf2.format(new Timestamp(1000000))), Row(sdf2.format(new Timestamp(-1000000)))))
+    checkAnswer(
+      df.selectExpr(s"from_unixtime(a, '$fmt3')"),
+      Seq(Row(sdf3.format(new Timestamp(1000000))), Row(sdf3.format(new Timestamp(-1000000)))))
   }
 
   test("unix_timestamp") {
@@ -242,6 +251,14 @@ class DateFunctionsSuite extends QueryTest {
     checkAnswer(df.select(unix_timestamp(col("d"), fmt)), Seq(
       Row(date1.getTime / 1000L), Row(date2.getTime / 1000L)))
     checkAnswer(df.select(unix_timestamp(col("s"), fmt)), Seq(
+      Row(ts1.getTime / 1000L), Row(ts2.getTime / 1000L)))
+    checkAnswer(df.selectExpr("unix_timestamp(ts)"), Seq(
+      Row(ts1.getTime / 1000L), Row(ts2.getTime / 1000L)))
+    checkAnswer(df.selectExpr("unix_timestamp(ss)"), Seq(
+      Row(ts1.getTime / 1000L), Row(ts2.getTime / 1000L)))
+    checkAnswer(df.selectExpr(s"unix_timestamp(d, '$fmt')"), Seq(
+      Row(date1.getTime / 1000L), Row(date2.getTime / 1000L)))
+    checkAnswer(df.selectExpr(s"unix_timestamp(s, '$fmt')"), Seq(
       Row(ts1.getTime / 1000L), Row(ts2.getTime / 1000L)))
   }
 

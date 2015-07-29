@@ -291,6 +291,8 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(
       FromUnixTime(Literal.create(null, LongType), Literal("yyyy-MM-dd HH:mm:ss")), null)
     checkEvaluation(FromUnixTime(Literal(1000L), Literal.create(null, StringType)), null)
+    checkEvaluation(
+      FromUnixTime(Literal(0L), Literal("not a valid format")), null)
   }
 
   test("unix_timestamp") {
@@ -323,7 +325,10 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       UnixTimestamp(Literal.create(null, DateType), Literal.create(null, StringType)), null)
     checkEvaluation(
       UnixTimestamp(Literal.create(null, DateType), Literal("yyyy-MM-dd HH:mm:ss")), null)
-    checkEvaluation(UnixTimestamp(Literal(date1), Literal.create(null, StringType)), null)
+    checkEvaluation(UnixTimestamp(
+      Literal(date1), Literal.create(null, StringType)), date1.getTime / 1000L)
+    checkEvaluation(
+      UnixTimestamp(Literal("2015-07-24"), Literal("not a valid format")), null)
   }
 
 }
