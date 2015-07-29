@@ -565,42 +565,49 @@ class DAGSchedulerSuite
   test("Failures in different stages should not trigger an overall abort") {
     setupStageAbortTest(sc)
 
-    val shuffleMapRdd = new MyRDD(sc, 2, Nil)
-    val shuffleDep = new ShuffleDependency(shuffleMapRdd, null)
-    val shuffleId = shuffleDep.shuffleId
-    val reduceRdd = new MyRDD(sc, 2, List(shuffleDep))
-    submit(reduceRdd, Array(0, 1))
+    val shuffleOneRdd = new MyRDD(sc, 2, Nil).cache()
+    val shuffleDepOne = new ShuffleDependency(shuffleOneRdd, null)
+    val shuffleTwoRdd = new MyRDD(sc, 2, List(shuffleDepOne)).cache()
+    val shuffleDepTwo = new ShuffleDependency(shuffleTwoRdd, null)
+    val finalRdd = new MyRDD(sc, 1, List(shuffleDepTwo))
+    submit(finalRdd, Array(0))
 
     // In the first two iterations, Stage 0 succeeds and stage 1 fails. In the next two iterations,
-    // stage 0 fails.
+    // stage 2 fails.
     for (attempt <- 0 until Stage.MAX_STAGE_FAILURES) {
       // Complete all the tasks for the current attempt of stage 0 successfully
       val stage0Attempt = taskSets.last
       checkStageId(0, attempt, stage0Attempt)
+      // Run stage 0
+      complete(stage0Attempt, makeCompletions(stage0Attempt, 2))
 
       if (attempt < Stage.MAX_STAGE_FAILURES/2) {
-        // Run stage 0
-        complete(stage0Attempt, makeCompletions(stage0Attempt, 2))
-
         // Now we should have a new taskSet, for a new attempt of stage 1.
         // We will have one fetch failure for this task set
         val stage1Attempt = taskSets.last
         checkStageId(1, attempt, stage1Attempt)
 
-        val stage1Successes = stage1Attempt.tasks.tail.map { _ => (Success, 42)}
+        val stage1Successes =
+          stage1Attempt.tasks.tail.map { _ => (Success, makeMapStatus("hostB", 1))}
 
         // Run Stage 1, this time with a task failure
         complete(stage1Attempt,
-          Seq((FetchFailed(makeBlockManagerId("hostA"), shuffleId, 0, 0, "ignored"), null))
-            ++ stage1Successes
+          Seq((FetchFailed(makeBlockManagerId("hostA"),
+              shuffleDepOne.shuffleId, 0, 0, "ignored"), null)
+          ) ++ stage1Successes
         )
       } else {
-        val stage0Successes = stage0Attempt.tasks.tail.map { _ => (Success, 42)}
-        // Run stage 0 and fail
-        complete(stage0Attempt,
-          Seq((FetchFailed(makeBlockManagerId("hostA"), shuffleId, 0, 0, "ignored"), null))
-            ++ stage0Successes
-        )
+        // Run stage 1
+        val stage1Attempt = taskSets.last
+        checkStageId(1, attempt, stage1Attempt)
+        complete(stage1Attempt, makeCompletions(stage1Attempt, 1))
+
+        // Fail stage 2
+        val stage2Attempt = taskSets.last
+        checkStageId(2, attempt-Stage.MAX_STAGE_FAILURES/2, stage2Attempt)
+        complete(stage2Attempt, Seq(
+          (FetchFailed(makeBlockManagerId("hostA"),
+            shuffleDepTwo.shuffleId, 0, 0, "ignored"), null)))
       }
 
       // this will (potentially) trigger a resubmission of stage 0, since we've lost some of its
@@ -608,20 +615,23 @@ class DAGSchedulerSuite
       scheduler.resubmitFailedStages()
     }
 
+    // Complete all three stages succesfully
     val stage0Attempt4 = taskSets.last
-    val completions = stage0Attempt4.tasks.zipWithIndex.map{ case (task, idx) =>
-      (Success, makeMapStatus("host" + ('A' + idx).toChar, 2))
-    }.toSeq
     checkStageId(0, 4, stage0Attempt4)
+    complete(stage0Attempt4, makeCompletions(stage0Attempt4, 2))
 
-    // Complete first task
-    complete(taskSets.last, completions)
+    val stage1Attempt4 = taskSets.last
+    checkStageId(1, 4, stage1Attempt4)
+    complete(stage1Attempt4, makeCompletions(stage1Attempt4, 1))
 
-    // Complete second task
-    complete(taskSets.last, Seq((Success, 42)))
+    println(taskSets.mkString(","))
+
+    val stage2Attempt = taskSets.last
+    checkStageId(2, Stage.MAX_STAGE_FAILURES/2, stage2Attempt)
+    complete(stage2Attempt, Seq((Success, 42)))
 
     // The first success is from the success we append in stage 1, the second is the one we add here
-    assert(results === Map(1 -> 42, 0 -> 42))
+    assert(results === Map(0 -> 42))
   }
 
   /**
