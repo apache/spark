@@ -64,7 +64,7 @@ public class TaskMemoryManager {
    * size is limited by the maximum amount of data that can be stored in a  long[] array, which is
    * (2^32 - 1) * 8 bytes (or 16 gigabytes). Therefore, we cap this at 16 gigabytes.
    */
-  public static final long MAXIMUM_PAGE_SIZE_BYTES = (2^32 - 1) * 8L;
+  public static final long MAXIMUM_PAGE_SIZE_BYTES = ((1L << 31) - 1) * 8L;
 
   /** Bit mask for the lower 51 bits of a long. */
   private static final long MASK_LONG_LOWER_51_BITS = 0x7FFFFFFFFFFFFL;
