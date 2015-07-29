@@ -281,9 +281,23 @@ class DataFrameFunctionsSuite extends QueryTest {
         Row(null, null))
     )
     checkAnswer(
+      df.select(sort_array($"a", false), sort_array($"b", false)),
+      Seq(
+        Row(Seq(3, 2, 1), Seq("c", "b", "a")),
+        Row(Seq[Int](), Seq[String]()),
+        Row(null, null))
+    )
+    checkAnswer(
       df.selectExpr("sort_array(a)", "sort_array(b)"),
       Seq(
         Row(Seq(1, 2, 3), Seq("a", "b", "c")),
+        Row(Seq[Int](), Seq[String]()),
+        Row(null, null))
+    )
+    checkAnswer(
+      df.selectExpr("sort_array(a, true)", "sort_array(b, false)"),
+      Seq(
+        Row(Seq(1, 2, 3), Seq("c", "b", "a")),
         Row(Seq[Int](), Seq[String]()),
         Row(null, null))
     )
@@ -291,8 +305,13 @@ class DataFrameFunctionsSuite extends QueryTest {
     val df2 = Seq((Array[Array[Int]](Array(2)), "x")).toDF("a", "b")
     assert(intercept[AnalysisException] {
       df2.selectExpr("sort_array(a)").collect()
-    }.getMessage().contains("Type ArrayType(ArrayType(IntegerType,false),true) " +
-      "is not supported for ordering operations"))
+    }.getMessage().contains("Type ArrayType(IntegerType,false) is not the AtomicType, " +
+      "we can not perform the ordering operations"))
+
+    val df3 = Seq(("xxx", "x")).toDF("a", "b")
+    assert(intercept[AnalysisException] {
+      df3.selectExpr("sort_array(a)").collect()
+    }.getMessage().contains("ArrayType(AtomicType) is expected, but we got StringType"))
   }
 
   test("array size function") {

@@ -2200,8 +2200,16 @@ object functions {
    * @group collection_funcs
    * @since 1.5.0
    */
-  def sort_array(e: Column): Column = SortArray(e.expr)
+  def sort_array(e: Column): Column = sort_array(e, true)
 
+  /**
+   * Sorts the input array for the given column in ascending / descending order,
+   * according to the natural ordering of the array elements.
+   *
+   * @group collection_funcs
+   * @since 1.5.0
+   */
+  def sort_array(e: Column, asc: Boolean): Column = SortArray(e.expr, lit(asc).expr)
 
   //////////////////////////////////////////////////////////////////////////////////////////////
   //////////////////////////////////////////////////////////////////////////////////////////////

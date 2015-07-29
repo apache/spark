@@ -904,17 +904,19 @@ def size(col):
 
 
 @since(1.5)
-def sort_array(col):
+def sort_array(col, asc=True):
     """
     Collection function: sorts the input array for the given column in ascending order.
     :param col: name of column or expression
 
     >>> df = sqlContext.createDataFrame([([2, 1, 3],),([1],),([],)], ['data'])
-    >>> df.select(sort_array(df.data)).collect()
-    [Row(sort_array(data)=[1, 2, 3]), Row(sort_array(data)=[1]), Row(sort_array(data)=[])]
-    """
+    >>> df.select(sort_array(df.data).alias('r')).collect()
+    [Row(r=[1, 2, 3]), Row(r=[1]), Row(r=[])]
+    >>> df.select(sort_array(df.data, asc=False).alias('r')).collect()
+    [Row(r=[3, 2, 1]), Row(r=[1]), Row(r=[])]
+     """
     sc = SparkContext._active_spark_context
-    return Column(sc._jvm.functions.sort_array(_to_java_column(col)))
+    return Column(sc._jvm.functions.sort_array(_to_java_column(col), asc))
 
 
 class UserDefinedFunction(object):

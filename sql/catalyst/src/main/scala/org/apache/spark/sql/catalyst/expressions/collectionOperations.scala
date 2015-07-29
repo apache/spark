@@ -42,24 +42,30 @@ case class Size(child: Expression) extends UnaryExpression with ExpectsInputType
 }
 
 /**
- * Sorts the input array in ascending order according to the natural ordering of
+ * Sorts the input array in ascending / descending order according to the natural ordering of
  * the array elements and returns it.
  */
-case class SortArray(child: Expression)
-  extends UnaryExpression with ExpectsInputTypes with CodegenFallback {
+case class SortArray(base: Expression, ascendingOrder: Expression)
+  extends BinaryExpression with ExpectsInputTypes with CodegenFallback {
 
-  override def dataType: DataType = child.dataType
-  override def inputTypes: Seq[AbstractDataType] = Seq(ArrayType)
+  def this(e: Expression) = this(e, Literal(true))
 
-  override def checkInputDataTypes(): TypeCheckResult = child.dataType match {
+  override def left: Expression = base
+  override def right: Expression = ascendingOrder
+  override def dataType: DataType = base.dataType
+  override def inputTypes: Seq[AbstractDataType] = Seq(ArrayType, BooleanType)
+
+  override def checkInputDataTypes(): TypeCheckResult = base.dataType match {
     case _ @ ArrayType(n: AtomicType, _) => TypeCheckResult.TypeCheckSuccess
-    case other => TypeCheckResult.TypeCheckFailure(
-                    s"Type $other is not supported for ordering operations")
+    case _ @ ArrayType(n, _) => TypeCheckResult.TypeCheckFailure(
+                    s"Type $n is not the AtomicType, we can not perform the ordering operations")
+    case other =>
+      TypeCheckResult.TypeCheckFailure(s"ArrayType(AtomicType) is expected, but we got $other")
   }
 
   @transient
   private lazy val lt: (Any, Any) => Boolean = {
-    val ordering = child.dataType match {
+    val ordering = base.dataType match {
       case _ @ ArrayType(n: AtomicType, _) => n.ordering.asInstanceOf[Ordering[Any]]
     }
 
@@ -76,8 +82,27 @@ case class SortArray(child: Expression)
     }
   }
 
-  override def nullSafeEval(value: Any): Seq[Any] = {
-    value.asInstanceOf[Seq[Any]].sortWith(lt)
+  @transient
+  private lazy val gt: (Any, Any) => Boolean = {
+    val ordering = base.dataType match {
+      case _ @ ArrayType(n: AtomicType, _) => n.ordering.asInstanceOf[Ordering[Any]]
+    }
+
+    (left, right) => {
+      if (left == null && right == null) {
+        true
+      } else if (left == null) {
+        false
+      } else if (right == null) {
+        true
+      } else {
+        ordering.compare(left, right) > 0
+      }
+    }
+  }
+
+  override def nullSafeEval(array: Any, ascending: Any): Seq[Any] = {
+    array.asInstanceOf[Seq[Any]].sortWith(if (ascending.asInstanceOf[Boolean]) lt else gt)
   }
 
   override def prettyName: String = "sort_array"
