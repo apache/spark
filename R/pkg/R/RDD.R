@@ -85,7 +85,9 @@ setMethod("initialize", "PipelinedRDD", function(.Object, prev, func, jrdd_val) 
 
   isPipelinable <- function(rdd) {
     e <- rdd@env
-    ! (e$isCached || e$isCheckpointed)
+    # nolint start
+    !(e$isCached || e$isCheckpointed)
+    # nolint end
   }
 
   if (!inherits(prev, "PipelinedRDD") || !isPipelinable(prev)) {
