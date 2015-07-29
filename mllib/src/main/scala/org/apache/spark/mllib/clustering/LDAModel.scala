@@ -51,19 +51,13 @@ abstract class LDAModel private[clustering] extends Saveable {
   /** Vocabulary size (number of terms or terms in the vocabulary) */
   def vocabSize: Int
 
-  /** Dirichlet parameters for document-topic distribution. */
-  protected def docConcentration: Vector
-
   /**
    * Concentration parameter (commonly named "alpha") for the prior placed on documents'
    * distributions over topics ("theta").
    *
    * This is the parameter to a Dirichlet distribution.
    */
-  def getDocConcentration: Vector = this.docConcentration
-
-  /** Dirichlet parameters for topic-word distribution. */
-  protected def topicConcentration: Double
+  def docConcentration: Vector
 
   /**
    * Concentration parameter (commonly named "beta" or "eta") for the prior placed on topics'
@@ -74,7 +68,7 @@ abstract class LDAModel private[clustering] extends Saveable {
    * Note: The topics' distributions over terms are called "beta" in the original LDA paper
    * by Blei et al., but are called "phi" in many later papers such as Asuncion et al., 2009.
    */
-  def getTopicConcentration: Double = this.topicConcentration
+  def topicConcentration: Double
 
   /**
   * Shape parameter for random initialization of variational parameter gamma.
@@ -198,9 +192,9 @@ abstract class LDAModel private[clustering] extends Saveable {
 @Experimental
 class LocalLDAModel private[clustering] (
     val topics: Matrix,
-    override protected val docConcentration: Vector,
-    override protected val topicConcentration: Double,
-    override protected val gammaShape: Double) extends LDAModel with Serializable {
+    override val docConcentration: Vector,
+    override val topicConcentration: Double,
+    override protected[clustering] val gammaShape: Double) extends LDAModel with Serializable {
 
   override def k: Int = topics.numCols
 
@@ -399,9 +393,9 @@ class DistributedLDAModel private[clustering] (
     private[clustering] val globalTopicTotals: LDA.TopicCounts,
     val k: Int,
     val vocabSize: Int,
-    protected[clustering] val docConcentration: Vector,
-    protected[clustering] val topicConcentration: Double,
-    protected[clustering] val gammaShape: Double,
+    override val docConcentration: Vector,
+    override val topicConcentration: Double,
+    override protected[clustering] val gammaShape: Double,
     private[spark] val iterationTimes: Array[Double]) extends LDAModel {
 
   import LDA._
