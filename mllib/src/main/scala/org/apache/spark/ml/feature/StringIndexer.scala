@@ -154,7 +154,7 @@ class StringIndexerModel private[ml] (
     copyValues(copied, extra)
   }
 
-  def invert(inputCol: String, outputCol: String) = {
+  def invert(inputCol: String, outputCol: String): StringIndexerInverseTransformer = {
     new StringIndexerInverseTransformer()
       .setInputCol(inputCol)
       .setOutputCol(outputCol)
