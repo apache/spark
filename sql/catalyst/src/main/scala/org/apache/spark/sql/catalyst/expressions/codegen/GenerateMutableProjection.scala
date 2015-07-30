@@ -122,6 +122,11 @@ object GenerateMutableProjection extends CodeGenerator[Seq[Expression], () => Mu
 
     logDebug(s"code for ${expressions.mkString(",")}:\n${CodeFormatter.format(code)}")
 
+    ctx.references.foreach {
+      case n: Nondeterministic => n.setInitialValues()
+      case _ =>
+    }
+
     val c = compile(code)
     () => {
       c.generate(ctx.references.toArray).asInstanceOf[MutableProjection]
