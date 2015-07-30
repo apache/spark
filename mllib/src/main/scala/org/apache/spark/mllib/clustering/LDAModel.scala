@@ -307,7 +307,7 @@ object LocalLDAModel extends Loader[LocalLDAModel] {
 
     val thisFormatVersion = "1.0"
 
-    val classNameV1_0 = "org.apache.spark.mllib.clustering.LocalLDAModel"
+    val thisClassName = "org.apache.spark.mllib.clustering.LocalLDAModel"
 
     // Store the distribution of terms of each topic and the column index in topicsMatrix
     // as a Row in data.
@@ -325,7 +325,7 @@ object LocalLDAModel extends Loader[LocalLDAModel] {
 
       val k = topicsMatrix.numCols
       val metadata = compact(render
-        (("class" -> classNameV1_0) ~ ("version" -> thisFormatVersion) ~
+        (("class" -> thisClassName) ~ ("version" -> thisFormatVersion) ~
           ("k" -> k) ~ ("vocabSize" -> topicsMatrix.numRows) ~
           ("docConcentration" -> docConcentration.toArray.toSeq) ~
           ("topicConcentration" -> topicConcentration) ~
@@ -374,7 +374,7 @@ object LocalLDAModel extends Loader[LocalLDAModel] {
       Vectors.dense((metadata \ "docConcentration").extract[Seq[Double]].toArray)
     val topicConcentration = (metadata \ "topicConcentration").extract[Double]
     val gammaShape = (metadata \ "gammaShape").extract[Double]
-    val classNameV1_0 = SaveLoadV1_0.classNameV1_0
+    val classNameV1_0 = SaveLoadV1_0.thisClassName
 
     val model = (loadedClassName, loadedVersion) match {
       case (className, "1.0") if className == classNameV1_0 =>
@@ -581,7 +581,7 @@ object DistributedLDAModel extends Loader[DistributedLDAModel] {
 
     val thisFormatVersion = "1.0"
 
-    val classNameV1_0 = "org.apache.spark.mllib.clustering.DistributedLDAModel"
+    val thisClassName = "org.apache.spark.mllib.clustering.DistributedLDAModel"
 
     // Store globalTopicTotals as a Vector.
     case class Data(globalTopicTotals: Vector)
@@ -607,7 +607,7 @@ object DistributedLDAModel extends Loader[DistributedLDAModel] {
       import sqlContext.implicits._
 
       val metadata = compact(render
-        (("class" -> classNameV1_0) ~ ("version" -> thisFormatVersion) ~
+        (("class" -> thisClassName) ~ ("version" -> thisFormatVersion) ~
           ("k" -> k) ~ ("vocabSize" -> vocabSize) ~
           ("docConcentration" -> docConcentration.toArray.toSeq) ~
           ("topicConcentration" -> topicConcentration) ~
@@ -676,7 +676,7 @@ object DistributedLDAModel extends Loader[DistributedLDAModel] {
     val topicConcentration = (metadata \ "topicConcentration").extract[Double]
     val iterationTimes = (metadata \ "iterationTimes").extract[Seq[Double]]
     val gammaShape = (metadata \ "gammaShape").extract[Double]
-    val classNameV1_0 = SaveLoadV1_0.classNameV1_0
+    val classNameV1_0 = SaveLoadV1_0.thisClassName
 
     val model = (loadedClassName, loadedVersion) match {
       case (className, "1.0") if className == classNameV1_0 => {
