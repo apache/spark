@@ -30,7 +30,11 @@ import org.apache.spark.sql.test.TestSQLContext
 class FilterNullsInJoinKeySuite extends PlanTest {
 
   // We add predicate pushdown rules at here to make sure we do not
-  // create redundant
+  // create redundant Filter operators. Also, because the attribute ordering of
+  // the Project operator added by ColumnPruning may be not deterministic
+  // (the ordering may depend on the testing environment),
+  // we first construct the plan with expected Filter operators and then
+  // run the optimizer to add the the Project for column pruning.
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =
       Batch("Subqueries", Once,
@@ -65,7 +69,6 @@ class FilterNullsInJoinKeySuite extends PlanTest {
     val correctLeft =
       leftRelation
         .where(!(AtLeastNNulls(1, 'a.expr :: Nil)))
-        .select('a, 'b, 'd)
 
     val correctRight =
       rightRelation.where(!(AtLeastNNulls(1, 'e.expr :: 'f.expr :: Nil)))
@@ -74,9 +77,8 @@ class FilterNullsInJoinKeySuite extends PlanTest {
       correctLeft
         .join(correctRight, Inner, Some(joinCondition))
         .select('a, 'f, 'd, 'h)
-        .analyze
 
-    comparePlans(optimized, correctAnswer)
+    comparePlans(optimized, Optimize.execute(correctAnswer.analyze))
   }
 
   test("inner join (partially optimized)") {
@@ -96,12 +98,10 @@ class FilterNullsInJoinKeySuite extends PlanTest {
 
     val correctAnswer =
       leftRelation
-        .select('a, 'b, 'd)
         .join(correctRight, Inner, Some(joinCondition))
         .select('a, 'f, 'd, 'h)
-        .analyze
 
-    comparePlans(optimized, correctAnswer)
+    comparePlans(optimized, Optimize.execute(correctAnswer.analyze))
   }
 
   test("inner join (not optimized)") {
@@ -113,13 +113,12 @@ class FilterNullsInJoinKeySuite extends PlanTest {
     nonOptimizedJoinConditions.foreach { joinCondition =>
       val joinedPlan =
         leftRelation
-          .select('a, 'c, 'd)
           .join(rightRelation.select('f, 'g, 'h), Inner, joinCondition)
           .select('a, 'c, 'f, 'd, 'h, 'g)
 
       val optimized = Optimize.execute(joinedPlan.analyze)
 
-      comparePlans(optimized, joinedPlan.analyze)
+      comparePlans(optimized, Optimize.execute(joinedPlan.analyze))
     }
   }
 
@@ -140,12 +139,10 @@ class FilterNullsInJoinKeySuite extends PlanTest {
 
     val correctAnswer =
       leftRelation
-        .select('a, 'b, 'd)
         .join(correctRight, LeftOuter, Some(joinCondition))
         .select('a, 'f, 'd, 'h)
-        .analyze
 
-    comparePlans(optimized, correctAnswer)
+    comparePlans(optimized, Optimize.execute(correctAnswer.analyze))
   }
 
   test("right outer join") {
@@ -163,15 +160,14 @@ class FilterNullsInJoinKeySuite extends PlanTest {
     val correctLeft =
       leftRelation
         .where(!(AtLeastNNulls(1, 'a.expr :: Nil)))
-        .select('a, 'b, 'd)
 
     val correctAnswer =
       correctLeft
         .join(rightRelation, RightOuter, Some(joinCondition))
         .select('a, 'f, 'd, 'h)
-        .analyze
 
-    comparePlans(optimized, correctAnswer)
+
+    comparePlans(optimized, Optimize.execute(correctAnswer.analyze))
   }
 
   test("full outer join") {
@@ -180,14 +176,13 @@ class FilterNullsInJoinKeySuite extends PlanTest {
 
     val joinedPlan =
       leftRelation
-        .select('a, 'b, 'd)
         .join(rightRelation, FullOuter, Some(joinCondition))
         .select('a, 'f, 'd, 'h)
 
     // FilterNullsInJoinKey does not fire for a full outer join.
     val optimized = Optimize.execute(joinedPlan.analyze)
 
-    comparePlans(optimized, joinedPlan.analyze)
+    comparePlans(optimized, Optimize.execute(joinedPlan.analyze))
   }
 
   test("left semi join") {
@@ -205,7 +200,6 @@ class FilterNullsInJoinKeySuite extends PlanTest {
     val correctLeft =
       leftRelation
         .where(!(AtLeastNNulls(1, 'a.expr :: Nil)))
-        .select('a, 'b, 'd)
 
     val correctRight =
       rightRelation.where(!(AtLeastNNulls(1, 'e.expr :: 'f.expr :: Nil)))
@@ -214,8 +208,7 @@ class FilterNullsInJoinKeySuite extends PlanTest {
       correctLeft
         .join(correctRight, LeftSemi, Some(joinCondition))
         .select('a, 'd)
-        .analyze
 
-    comparePlans(optimized, correctAnswer)
+    comparePlans(optimized, Optimize.execute(correctAnswer.analyze))
   }
 }
