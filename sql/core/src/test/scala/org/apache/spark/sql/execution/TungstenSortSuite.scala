@@ -58,7 +58,7 @@ class TungstenSortSuite extends SparkPlanTest with BeforeAndAfterAll {
 
   // Test sorting on different data types
   for (
-    dataType <- DataTypeTestUtils.atomicTypes.filter(_ != StringType) ++ Set(NullType)
+    dataType <- DataTypeTestUtils.atomicTypes ++ Set(NullType)
     if !dataType.isInstanceOf[DecimalType]; // We don't have an unsafe representation for decimals
     nullable <- Seq(true, false);
     sortOrder <- Seq('a.asc :: Nil, 'a.desc :: Nil);

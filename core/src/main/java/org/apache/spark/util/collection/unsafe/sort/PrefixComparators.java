@@ -47,7 +47,7 @@ public class PrefixComparators {
 
   public static final class StringPrefixComparatorDesc extends PrefixComparator {
     @Override
-    public int compare(long aPrefix, long bPrefix) {
+    public int compare(long bPrefix, long aPrefix) {
       return UnsignedLongs.compare(aPrefix, bPrefix);
     }
   }
