@@ -219,7 +219,7 @@ final class SpecificMutableRow(val values: Array[MutableValue]) extends MutableR
     values(i).isNull = true
   }
 
-  override def get(i: Int): Any = values(i).boxed
+  override def get(i: Int, dataType: DataType): Any = values(i).boxed
 
   override def getStruct(ordinal: Int, numFields: Int): InternalRow = {
     values(ordinal).boxed.asInstanceOf[InternalRow]

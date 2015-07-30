@@ -406,13 +406,15 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils {
         |   FROM src
         |   ORDER BY key, value""".stripMargin).collect()
 
-    checkExistence(sql("DESC EXTENDED ctas5"), true,
-      "name:key", "type:string", "name:value", "ctas5",
-      "org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat",
-      "org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat",
-      "org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe",
-      "MANAGED_TABLE"
-    )
+    withSQLConf(HiveContext.CONVERT_METASTORE_PARQUET.key -> "false") {
+      checkExistence(sql("DESC EXTENDED ctas5"), true,
+        "name:key", "type:string", "name:value", "ctas5",
+        "org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat",
+        "org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat",
+        "org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe",
+        "MANAGED_TABLE"
+      )
+    }
 
     // use the Hive SerDe for parquet tables
     withSQLConf(HiveContext.CONVERT_METASTORE_PARQUET.key -> "false") {
@@ -1066,5 +1068,13 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils {
       Row(1, "2014") :: Row(2, "2015") :: Nil
     )
     TestHive.dropTempTable("test_SPARK8588")
+  }
+
+  test("SPARK-9371: fix the support for special chars in column names for hive context") {
+    TestHive.read.json(TestHive.sparkContext.makeRDD(
+      """{"a": {"c.b": 1}, "b.$q": [{"a@!.q": 1}], "q.w": {"w.i&": [1]}}""" :: Nil))
+      .registerTempTable("t")
+
+    checkAnswer(sql("SELECT a.`c.b`, `b.$q`[0].`a@!.q`, `q.w`.`w.i&`[0] FROM t"), Row(1, 1, 1))
   }
 }

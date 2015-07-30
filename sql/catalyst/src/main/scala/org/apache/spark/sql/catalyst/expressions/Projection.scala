@@ -32,7 +32,7 @@ class InterpretedProjection(expressions: Seq[Expression]) extends Projection {
     this(expressions.map(BindReferences.bindReference(_, inputSchema)))
 
   expressions.foreach(_.foreach {
-    case n: Nondeterministic => n.initialize()
+    case n: Nondeterministic => n.setInitialValues()
     case _ =>
   })
 
@@ -63,7 +63,7 @@ case class InterpretedMutableProjection(expressions: Seq[Expression]) extends Mu
     this(expressions.map(BindReferences.bindReference(_, inputSchema)))
 
   expressions.foreach(_.foreach {
-    case n: Nondeterministic => n.initialize()
+    case n: Nondeterministic => n.setInitialValues()
     case _ =>
   })
 
@@ -198,7 +198,7 @@ class JoinedRow extends InternalRow {
     if (i < row1.numFields) row1.getBinary(i) else row2.getBinary(i - row1.numFields)
   }
 
-  override def get(i: Int): Any =
+  override def get(i: Int, dataType: DataType): Any =
     if (i < row1.numFields) row1.get(i) else row2.get(i - row1.numFields)
 
   override def isNullAt(i: Int): Boolean =

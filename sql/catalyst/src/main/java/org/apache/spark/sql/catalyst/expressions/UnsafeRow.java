@@ -24,11 +24,12 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
 
-import org.apache.spark.sql.types.DataType;
+import org.apache.spark.sql.types.*;
 import org.apache.spark.unsafe.PlatformDependent;
 import org.apache.spark.unsafe.array.ByteArrayMethods;
 import org.apache.spark.unsafe.bitset.BitSetMethods;
 import org.apache.spark.unsafe.hash.Murmur3_x86_32;
+import org.apache.spark.unsafe.types.CalendarInterval;
 import org.apache.spark.unsafe.types.UTF8String;
 
 import static org.apache.spark.sql.types.DataTypes.*;
@@ -90,7 +91,8 @@ public final class UnsafeRow extends MutableRow {
     final Set<DataType> _readableFieldTypes = new HashSet<>(
       Arrays.asList(new DataType[]{
         StringType,
-        BinaryType
+        BinaryType,
+        CalendarIntervalType
       }));
     _readableFieldTypes.addAll(settableFieldTypes);
     readableFieldTypes = Collections.unmodifiableSet(_readableFieldTypes);
@@ -236,6 +238,43 @@ public final class UnsafeRow extends MutableRow {
   }
 
   @Override
+  public Object get(int ordinal, DataType dataType) {
+    if (isNullAt(ordinal) || dataType instanceof NullType) {
+      return null;
+    } else if (dataType instanceof BooleanType) {
+      return getBoolean(ordinal);
+    } else if (dataType instanceof ByteType) {
+      return getByte(ordinal);
+    } else if (dataType instanceof ShortType) {
+      return getShort(ordinal);
+    } else if (dataType instanceof IntegerType) {
+      return getInt(ordinal);
+    } else if (dataType instanceof LongType) {
+      return getLong(ordinal);
+    } else if (dataType instanceof FloatType) {
+      return getFloat(ordinal);
+    } else if (dataType instanceof DoubleType) {
+      return getDouble(ordinal);
+    } else if (dataType instanceof DecimalType) {
+      return getDecimal(ordinal);
+    } else if (dataType instanceof DateType) {
+      return getInt(ordinal);
+    } else if (dataType instanceof TimestampType) {
+      return getLong(ordinal);
+    } else if (dataType instanceof BinaryType) {
+      return getBinary(ordinal);
+    } else if (dataType instanceof StringType) {
+      return getUTF8String(ordinal);
+    } else if (dataType instanceof CalendarIntervalType) {
+      return getInterval(ordinal);
+    } else if (dataType instanceof StructType) {
+      return getStruct(ordinal, ((StructType) dataType).size());
+    } else {
+      throw new UnsupportedOperationException("Unsupported data type " + dataType.simpleString());
+    }
+  }
+
+  @Override
   public boolean isNullAt(int ordinal) {
     assertIndexIsValid(ordinal);
     return BitSetMethods.isSet(baseObject, baseOffset, ordinal);
@@ -274,32 +313,19 @@ public final class UnsafeRow extends MutableRow {
   @Override
   public float getFloat(int ordinal) {
     assertIndexIsValid(ordinal);
-    if (isNullAt(ordinal)) {
-      return Float.NaN;
-    } else {
-      return PlatformDependent.UNSAFE.getFloat(baseObject, getFieldOffset(ordinal));
-    }
+    return PlatformDependent.UNSAFE.getFloat(baseObject, getFieldOffset(ordinal));
   }
 
   @Override
   public double getDouble(int ordinal) {
     assertIndexIsValid(ordinal);
-    if (isNullAt(ordinal)) {
-      return Float.NaN;
-    } else {
-      return PlatformDependent.UNSAFE.getDouble(baseObject, getFieldOffset(ordinal));
-    }
+    return PlatformDependent.UNSAFE.getDouble(baseObject, getFieldOffset(ordinal));
   }
 
   @Override
   public UTF8String getUTF8String(int ordinal) {
     assertIndexIsValid(ordinal);
     return isNullAt(ordinal) ? null : UTF8String.fromBytes(getBinary(ordinal));
-  }
-
-  @Override
-  public String getString(int ordinal) {
-    return getUTF8String(ordinal).toString();
   }
 
   @Override
@@ -320,6 +346,20 @@ public final class UnsafeRow extends MutableRow {
         size
       );
       return bytes;
+    }
+  }
+
+  @Override
+  public CalendarInterval getInterval(int ordinal) {
+    if (isNullAt(ordinal)) {
+      return null;
+    } else {
+      final long offsetAndSize = getLong(ordinal);
+      final int offset = (int) (offsetAndSize >> 32);
+      final int months = (int) PlatformDependent.UNSAFE.getLong(baseObject, baseOffset + offset);
+      final long microseconds =
+        PlatformDependent.UNSAFE.getLong(baseObject, baseOffset + offset + 8);
+      return new CalendarInterval(months, microseconds);
     }
   }
 
@@ -435,5 +475,20 @@ public final class UnsafeRow extends MutableRow {
   @Override
   public boolean anyNull() {
     return BitSetMethods.anySet(baseObject, baseOffset, bitSetWidthInBytes / 8);
+  }
+
+  /**
+   * Writes the content of this row into a memory address, identified by an object and an offset.
+   * The target memory address must already been allocated, and have enough space to hold all the
+   * bytes in this string.
+   */
+  public void writeToMemory(Object target, long targetOffset) {
+    PlatformDependent.copyMemory(
+      baseObject,
+      baseOffset,
+      target,
+      targetOffset,
+      sizeInBytes
+    );
   }
 }

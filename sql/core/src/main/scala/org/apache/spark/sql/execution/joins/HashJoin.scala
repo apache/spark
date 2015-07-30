@@ -20,7 +20,6 @@ package org.apache.spark.sql.execution.joins
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.SparkPlan
-import org.apache.spark.util.collection.CompactBuffer
 
 
 trait HashJoin {
@@ -44,16 +43,24 @@ trait HashJoin {
 
   override def output: Seq[Attribute] = left.output ++ right.output
 
-  protected[this] def supportUnsafe: Boolean = {
+  protected[this] def isUnsafeMode: Boolean = {
     (self.codegenEnabled && UnsafeProjection.canSupport(buildKeys)
       && UnsafeProjection.canSupport(self.schema))
   }
 
-  override def outputsUnsafeRows: Boolean = supportUnsafe
-  override def canProcessUnsafeRows: Boolean = supportUnsafe
+  override def outputsUnsafeRows: Boolean = isUnsafeMode
+  override def canProcessUnsafeRows: Boolean = isUnsafeMode
+  override def canProcessSafeRows: Boolean = !isUnsafeMode
+
+  @transient protected lazy val buildSideKeyGenerator: Projection =
+    if (isUnsafeMode) {
+      UnsafeProjection.create(buildKeys, buildPlan.output)
+    } else {
+      newMutableProjection(buildKeys, buildPlan.output)()
+    }
 
   @transient protected lazy val streamSideKeyGenerator: Projection =
-    if (supportUnsafe) {
+    if (isUnsafeMode) {
       UnsafeProjection.create(streamedKeys, streamedPlan.output)
     } else {
       newMutableProjection(streamedKeys, streamedPlan.output)()
@@ -65,18 +72,16 @@ trait HashJoin {
   {
     new Iterator[InternalRow] {
       private[this] var currentStreamedRow: InternalRow = _
-      private[this] var currentHashMatches: CompactBuffer[InternalRow] = _
+      private[this] var currentHashMatches: Seq[InternalRow] = _
       private[this] var currentMatchPosition: Int = -1
 
       // Mutable per row objects.
       private[this] val joinRow = new JoinedRow
-      private[this] val resultProjection: Projection = {
-        if (supportUnsafe) {
+      private[this] val resultProjection: (InternalRow) => InternalRow = {
+        if (isUnsafeMode) {
           UnsafeProjection.create(self.schema)
         } else {
-          new Projection {
-            override def apply(r: InternalRow): InternalRow = r
-          }
+          identity[InternalRow]
         }
       }
 
@@ -120,14 +125,6 @@ trait HashJoin {
           true
         }
       }
-    }
-  }
-
-  protected[this] def buildHashRelation(buildIter: Iterator[InternalRow]): HashedRelation = {
-    if (supportUnsafe) {
-      UnsafeHashedRelation(buildIter, buildKeys, buildPlan)
-    } else {
-      HashedRelation(buildIter, newProjection(buildKeys, buildPlan.output))
     }
   }
 }
