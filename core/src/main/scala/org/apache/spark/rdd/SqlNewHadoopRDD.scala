@@ -264,7 +264,9 @@ private[spark] object SqlNewHadoopRDD {
    * The thread variable for the name of the current file being read. This is used by
    * the InputFileName function in Spark SQL.
    */
-  private[this] val inputFileName: ThreadLocal[UTF8String] = new ThreadLocal[UTF8String]
+  private[this] val inputFileName: ThreadLocal[UTF8String] = new ThreadLocal[UTF8String] {
+    override protected def initialValue(): UTF8String = UTF8String.fromString("")
+  }
 
   def getInputFileName(): UTF8String = inputFileName.get()
 

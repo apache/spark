@@ -29,6 +29,6 @@ class NondeterministicSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("InputFileName") {
-    checkEvaluation(InputFileName(), null)
+    checkEvaluation(InputFileName(), "")
   }
 }

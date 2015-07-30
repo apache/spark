@@ -499,6 +499,8 @@ class ColumnExpressionSuite extends QueryTest with SQLTestUtils {
       val answer = sqlContext.read.parquet(dir.getCanonicalPath).select(inputFileName())
         .head.getString(0)
       assert(answer.contains(dir.getCanonicalPath))
+
+      checkAnswer(data.select(inputFileName()).limit(1), Row(""))
     }
   }
 
