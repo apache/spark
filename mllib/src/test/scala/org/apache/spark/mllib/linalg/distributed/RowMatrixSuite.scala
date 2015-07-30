@@ -249,6 +249,10 @@ class RowMatrixSuite extends SparkFunSuite with MLlibTestSparkContext {
       assert(closeToZero(abs(expected.q) - abs(calcQ.toBreeze())))
       assert(closeToZero(abs(expected.r) - abs(calcR.toBreeze.asInstanceOf[BDM[Double]])))
       assert(closeToZero(calcQ.multiply(calcR).toBreeze - mat.toBreeze()))
+      // Decomposition without computing Q
+      val rOnly = mat.tallSkinnyQR(computeQ = false)
+      assert(rOnly.Q == null)
+      assert(closeToZero(abs(expected.r) - abs(rOnly.R.toBreeze.asInstanceOf[BDM[Double]])))
     }
   }
 }

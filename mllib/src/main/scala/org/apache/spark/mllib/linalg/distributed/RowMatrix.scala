@@ -510,32 +510,33 @@ class RowMatrix(
   def tallSkinnyQR(computeQ: Boolean = false): QRDecomposition[RowMatrix, Matrix] = {
     val col = numCols().toInt
     // split rows horizontally into smaller matrices, and compute QR for each of them
-    val blockQRs = rows.glom().map{ partRows =>
+    val blockQRs = rows.glom().map { partRows =>
       val bdm = BDM.zeros[Double](partRows.length, col)
       var i = 0
-      partRows.foreach{ row =>
+      partRows.foreach { row =>
         bdm(i, ::) := row.toBreeze.t
         i += 1
       }
       breeze.linalg.qr.reduced(bdm).r
-    }.cache()
+    }
 
     // combine the R part from previous results vertically into a tall matrix
-    val combinedR = blockQRs.treeReduce((r1, r2) => BDM.vertcat(r1, r2))
+    val combinedR = blockQRs.treeReduce{ (r1, r2) =>
+      val partialR = BDM.vertcat(r1, r2)
+      breeze.linalg.qr.reduced(partialR).r
+    }
     val breezeR = breeze.linalg.qr.reduced(combinedR).r.toDenseMatrix
     val finalR = Matrices.fromBreeze(breezeR)
     val finalQ = if (computeQ) {
       try {
         val invR = inv(breezeR)
         this.multiply(Matrices.fromBreeze(invR))
-      }
-      catch {
+      } catch {
         case err: MatrixSingularException =>
           logWarning("R is not invertible and return Q as null")
           null
       }
-    }
-    else {
+    } else {
       null
     }
     QRDecomposition(finalQ, finalR)
