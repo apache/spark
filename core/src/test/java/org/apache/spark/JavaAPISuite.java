@@ -1007,13 +1007,12 @@ public class JavaAPISuite implements Serializable {
     Assert.assertEquals(1, rdd.first().intValue());
   }
 
-// TODO: uncomment me and figure out how to use TaskContext.empty() in Java
-//  @Test
-//  public void iterator() {
-//    JavaRDD<Integer> rdd = sc.parallelize(Arrays.asList(1, 2, 3, 4, 5), 2);
-//    TaskContext context = TaskContext.empty();
-//    Assert.assertEquals(1, rdd.iterator(rdd.partitions().get(0), context).next().intValue());
-//  }
+  @Test
+  public void iterator() {
+    JavaRDD<Integer> rdd = sc.parallelize(Arrays.asList(1, 2, 3, 4, 5), 2);
+    TaskContext context = TaskContext.empty();
+    Assert.assertEquals(1, rdd.iterator(rdd.partitions().get(0), context).next().intValue());
+  }
 
   @Test
   public void glom() {

@@ -62,18 +62,13 @@ object TaskContext {
 
   /**
    * An empty task context that does not represent an actual task.
-   * Default arguments are not provided so this can be used in Java.
+   * This is intended for internal testing use only.
    */
-  private[spark] def empty(): TaskContextImpl = {
+  // Unfortunately, this must be fully public for Java tests to access it
+  def empty(): TaskContextImpl = {
     new TaskContextImpl(0, 0, 0, 0, null, null, Seq.empty)
   }
 
-  /**
-   * An empty task context that does not represent an actual task.
-   */
-  private[spark] def empty(runningLocally: Boolean, taskMetrics: TaskMetrics): TaskContextImpl = {
-    new TaskContextImpl(0, 0, 0, 0, null, null, Seq.empty, runningLocally, taskMetrics)
-  }
 }
 
 
