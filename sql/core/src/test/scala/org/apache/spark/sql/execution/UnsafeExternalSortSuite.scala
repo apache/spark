@@ -39,7 +39,7 @@ class UnsafeExternalSortSuite extends SparkPlanTest with BeforeAndAfterAll {
   test("sort followed by limit") {
     checkThatPlansAgree(
       (1 to 100).map(v => Tuple1(v)).toDF("a"),
-      (child: SparkPlan) => Limit(10, TungstenSort('a.asc :: Nil, true, child)),
+      (child: SparkPlan) => Limit(10, UnsafeExternalSort('a.asc :: Nil, true, child)),
       (child: SparkPlan) => Limit(10, Sort('a.asc :: Nil, global = true, child)),
       sortAnswers = false
     )
@@ -50,7 +50,7 @@ class UnsafeExternalSortSuite extends SparkPlanTest with BeforeAndAfterAll {
     val stringLength = 1024 * 1024 * 2
     checkThatPlansAgree(
       Seq(Tuple1("a" * stringLength), Tuple1("b" * stringLength)).toDF("a").repartition(1),
-      TungstenSort(sortOrder, global = true, _: SparkPlan, testSpillFrequency = 1),
+      UnsafeExternalSort(sortOrder, global = true, _: SparkPlan, testSpillFrequency = 1),
       Sort(sortOrder, global = true, _: SparkPlan),
       sortAnswers = false
     )
@@ -70,11 +70,11 @@ class UnsafeExternalSortSuite extends SparkPlanTest with BeforeAndAfterAll {
         TestSQLContext.sparkContext.parallelize(Random.shuffle(inputData).map(v => Row(v))),
         StructType(StructField("a", dataType, nullable = true) :: Nil)
       )
-      assert(TungstenSort.supportsSchema(inputDf.schema))
+      assert(UnsafeExternalSort.supportsSchema(inputDf.schema))
       checkThatPlansAgree(
         inputDf,
         plan => ConvertToSafe(
-          TungstenSort(sortOrder, global = true, plan: SparkPlan, testSpillFrequency = 23)),
+          UnsafeExternalSort(sortOrder, global = true, plan: SparkPlan, testSpillFrequency = 23)),
         Sort(sortOrder, global = true, _: SparkPlan),
         sortAnswers = false
       )

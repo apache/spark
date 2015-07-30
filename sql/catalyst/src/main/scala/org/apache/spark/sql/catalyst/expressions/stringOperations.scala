@@ -22,7 +22,6 @@ import java.util.Locale
 import java.util.regex.{MatchResult, Pattern}
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.UnresolvedException
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -52,7 +51,7 @@ case class Concat(children: Seq[Expression]) extends Expression with ImplicitCas
   override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     val evals = children.map(_.gen(ctx))
     val inputs = evals.map { eval =>
-      s"${eval.isNull} ? (UTF8String)null : ${eval.primitive}"
+      s"${eval.isNull} ? null : ${eval.primitive}"
     }.mkString(", ")
     evals.map(_.code).mkString("\n") + s"""
       boolean ${ev.isNull} = false;
@@ -1008,7 +1007,7 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
 
     s"""
       ${evalSubject.code}
-      boolean ${ev.isNull} = ${evalSubject.isNull};
+      boolean ${ev.isNull} = true;
       ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
       if (!${evalSubject.isNull}) {
         ${evalRegexp.code}
@@ -1103,9 +1102,9 @@ case class RegExpExtract(subject: Expression, regexp: Expression, idx: Expressio
     val evalIdx = idx.gen(ctx)
 
     s"""
-      ${ctx.javaType(dataType)} ${ev.primitive} = null;
-      boolean ${ev.isNull} = true;
       ${evalSubject.code}
+      ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
+      boolean ${ev.isNull} = true;
       if (!${evalSubject.isNull}) {
         ${evalRegexp.code}
         if (!${evalRegexp.isNull}) {
@@ -1117,7 +1116,7 @@ case class RegExpExtract(subject: Expression, regexp: Expression, idx: Expressio
               ${termPattern} = ${classNamePattern}.compile(${termLastRegex}.toString());
             }
             ${classOf[java.util.regex.Matcher].getCanonicalName} m =
-                                   ${termPattern}.matcher(${evalSubject.primitive}.toString());
+              ${termPattern}.matcher(${evalSubject.primitive}.toString());
             if (m.find()) {
               ${classOf[java.util.regex.MatchResult].getCanonicalName} mr = m.toMatchResult();
               ${ev.primitive} = ${classNameUTF8String}.fromString(mr.group(${evalIdx.primitive}));

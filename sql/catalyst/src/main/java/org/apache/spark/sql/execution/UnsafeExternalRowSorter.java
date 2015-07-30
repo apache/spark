@@ -121,7 +121,7 @@ final class UnsafeExternalRowSorter {
         // here in order to prevent memory leaks.
         cleanupResources();
       }
-      return new AbstractScalaRowIterator<InternalRow>() {
+      return new AbstractScalaRowIterator() {
 
         private final int numFields = schema.length();
         private UnsafeRow row = new UnsafeRow();
