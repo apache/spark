@@ -147,11 +147,11 @@ class LinearRegression(override val uid: String)
 
       val model = new LinearRegressionModel(uid, weights, intercept)
       val trainingSummary = new LinearRegressionTrainingSummary(
-        model.transform(dataset).select($(predictionCol), $(labelCol)),
+        model.transform(dataset),
         $(predictionCol),
         $(labelCol),
-        Array(0D),
-        dataset.schema($(featuresCol)))
+        $(featuresCol),
+        Array(0D))
       return copyValues(model.setSummary(trainingSummary))
     }
 
@@ -223,11 +223,11 @@ class LinearRegression(override val uid: String)
 
     val model = copyValues(new LinearRegressionModel(uid, weights, intercept))
     val trainingSummary = new LinearRegressionTrainingSummary(
-      model.transform(dataset).select($(predictionCol), $(labelCol)),
+      model.transform(dataset),
       $(predictionCol),
       $(labelCol),
-      objectiveHistory,
-      dataset.schema($(featuresCol)))
+      $(featuresCol),
+      objectiveHistory)
     model.setSummary(trainingSummary)
   }
 
@@ -303,8 +303,8 @@ class LinearRegressionTrainingSummary private[regression] (
     predictions: DataFrame,
     predictionCol: String,
     labelCol: String,
-    val objectiveHistory: Array[Double],
-    val featuresCol: StructField)
+    val featuresCol: String,
+    val objectiveHistory: Array[Double])
   extends LinearRegressionSummary(predictions, predictionCol, labelCol) {
 
   /** Number of training iterations until termination */

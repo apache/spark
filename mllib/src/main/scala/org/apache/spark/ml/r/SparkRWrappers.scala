@@ -52,18 +52,19 @@ private[r] object SparkRWrappers {
         Array(m.intercept) ++ m.weights.toArray
       case _: LogisticRegressionModel =>
         throw new UnsupportedOperationException(
-          "No weights available for LogisticRegressionModel")
+          "No weights available for LogisticRegressionModel")  // SPARK-9492
     }
   }
 
   def getModelFeatures(model: PipelineModel): Array[String] = {
     model.stages.last match {
       case m: LinearRegressionModel =>
-        val attrs = AttributeGroup.fromStructField(m.summary.featuresCol)
+        val attrs = AttributeGroup.fromStructField(
+          m.summary.predictions.schema(m.summary.featuresCol))
         Array("(Intercept)") ++ attrs.attributes.get.map(_.name.get)
       case _: LogisticRegressionModel =>
         throw new UnsupportedOperationException(
-          "No features names available for LogisticRegressionModel")
+          "No features names available for LogisticRegressionModel")  // SPARK-9492
     }
   }
 }

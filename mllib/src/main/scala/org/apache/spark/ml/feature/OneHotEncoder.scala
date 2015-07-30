@@ -78,17 +78,17 @@ class OneHotEncoder(override val uid: String) extends Transformer
     val outputAttrNames: Option[Array[String]] = inputAttr match {
       case nominal: NominalAttribute =>
         if (nominal.values.isDefined) {
-          nominal.values.map(_.map(toOutputAttrName))
+          nominal.values
         } else if (nominal.numValues.isDefined) {
-          nominal.numValues.map(n => Array.tabulate(n)(toOutputAttrName))
+          nominal.numValues.map(n => Array.tabulate(n)(_.toString))
         } else {
           None
         }
       case binary: BinaryAttribute =>
         if (binary.values.isDefined) {
-          binary.values.map(_.map(toOutputAttrName))
+          binary.values
         } else {
-          Some(Array.tabulate(2)(toOutputAttrName))
+          Some(Array.tabulate(2)(_.toString))
         }
       case _: NumericAttribute =>
         throw new RuntimeException(
@@ -140,7 +140,7 @@ class OneHotEncoder(override val uid: String) extends Transformer
             math.max(m0, m1)
           }
         ).toInt + 1
-      val outputAttrNames = Array.tabulate(numAttrs)(toOutputAttrName)
+      val outputAttrNames = Array.tabulate(numAttrs)(_.toString)
       val filtered = if (shouldDropLast) outputAttrNames.dropRight(1) else outputAttrNames
       val outputAttrs: Array[Attribute] =
         filtered.map(name => BinaryAttribute.defaultAttr.withName(name))
@@ -165,10 +165,4 @@ class OneHotEncoder(override val uid: String) extends Transformer
   }
 
   override def copy(extra: ParamMap): OneHotEncoder = defaultCopy(extra)
-
-  private def toOutputAttrName(index: Int): String = toOutputAttrName(index.toString)
-
-  private def toOutputAttrName(value: String): String = {
-    value.toString
-  }
 }
