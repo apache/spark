@@ -96,7 +96,7 @@ class RPackageUtilsSuite extends SparkFunSuite with BeforeAndAfterEach {
       val individualJars = jars.split(",")
       val output = lineBuffer.mkString("\n")
       individualJars.foreach { jarFile =>
-        assert(output.contains(s"WARN: $jarFile"))
+        assert(output.contains(s"$jarFile"))
       }
     }
   }
@@ -109,7 +109,8 @@ class RPackageUtilsSuite extends SparkFunSuite with BeforeAndAfterEach {
       attr.put(new Name("Spark-HasRPackage"), "true")
       val jar = IvyTestUtils.packJar(new File(new URI(repo)), dep1, Nil,
         useIvyLayout = false, withR = false, Some(manifest))
-      RPackageUtils.checkAndBuildRPackage(jar.getAbsolutePath, new BufferPrintStream, true)
+      RPackageUtils.checkAndBuildRPackage(jar.getAbsolutePath, new BufferPrintStream, 
+        verbose = true)
       val output = lineBuffer.mkString("\n")
       assert(output.contains(RPackageUtils.RJarDoc))
     }

@@ -18,15 +18,18 @@
 package org.apache.spark.deploy
 
 import java.io.{FileOutputStream, PrintStream, File}
-import java.net.URI
 import java.util.jar.JarFile
+import java.util.logging.Level
 
 import com.google.common.io.Files
+
+import org.apache.spark.Logging
+import org.apache.spark.api.r.RUtils
 import org.apache.spark.util.{RedirectThread, Utils}
 
 import scala.collection.JavaConversions._
 
-private[deploy] object RPackageUtils {
+private[spark] object RPackageUtils extends Logging {
 
   /** The key in the MANIFEST.mf that we look for, in case a jar contains R code. */
   private final val hasRPackage = "Spark-HasRPackage"
@@ -74,13 +77,12 @@ private[deploy] object RPackageUtils {
    * Multiple runs don't cause problems.
    */
   private def rPackageBuilder(dir: File, printStream: PrintStream, verbose: Boolean): Boolean = {
-    val sparkHome = sys.env.get("SPARK_HOME").orElse(sys.props.get("spark.test.home")).orNull
-    if (sparkHome == null) throw new IllegalArgumentException("SPARK_HOME not set!")
-    val pathToSparkR = Seq(sparkHome, "R", "lib").mkString(File.separator)
+    // this code should be always running on the driver.
+    val pathToSparkR = RUtils.sparkRPackagePath(isDriver = true)
     val pathToPkg = Seq(dir, "R", "pkg").mkString(File.separator)
     val installCmd = baseInstallCmd ++ Seq(pathToSparkR, pathToPkg)
     if (verbose) {
-      printStream.println(s"Building R package with the command: $installCmd")
+      print(s"Building R package with the command: $installCmd", printStream)
     }
     try {
       val builder = new ProcessBuilder(installCmd)
@@ -92,7 +94,7 @@ private[deploy] object RPackageUtils {
       process.waitFor() == 0
     } catch {
       case e: Throwable =>
-        printStream.println(e.getMessage + "\n" + e.getStackTrace)
+        print("Failed to build R package.", printStream, Level.SEVERE, e)
         false
     }
   }
@@ -111,7 +113,7 @@ private[deploy] object RPackageUtils {
         if (entry.isDirectory) {
           val dir = new File(tempDir, entryPath)
           if (verbose) {
-            printStream.println(s"Creating directory: $dir")
+            print(s"Creating directory: $dir", printStream)
           }
           dir.mkdirs
         } else {
@@ -120,7 +122,7 @@ private[deploy] object RPackageUtils {
           Files.createParentDirs(outPath)
           val outStream = new FileOutputStream(outPath)
           if (verbose) {
-            printStream.println(s"Extracting $entry to $outPath")
+            print(s"Extracting $entry to $outPath", printStream)
           }
           Utils.copyStream(inStream, outStream, closeStreams = true)
         }
@@ -132,32 +134,53 @@ private[deploy] object RPackageUtils {
   /**
    * Extracts the files under /R in the jar to a temporary directory for building.
    */
-  private[deploy] def checkAndBuildRPackage(
+  private[spark] def checkAndBuildRPackage(
       jars: String,
-      printStream: PrintStream,
-      verbose: Boolean): Unit = {
+      printStream: PrintStream = null,
+      verbose: Boolean = false): Unit = {
     jars.split(",").foreach { jarPath =>
       val file = new File(jarPath)
       if (file.exists()) {
         val jar = new JarFile(file)
         if (checkManifestForR(jar)) {
-          printStream.println(s"$file contains R source code. Now installing package.")
+          print(s"$file contains R source code. Now installing package.", printStream, Level.INFO)
           val rSource = extractRFolder(jar, printStream, verbose)
           try {
             if (!rPackageBuilder(rSource, printStream, verbose)) {
-              printStream.println(s"ERROR: Failed to build R package in $file.")
-              printStream.println(RJarDoc)
+              print(s"ERROR: Failed to build R package in $file.", printStream)
+              print(RJarDoc, printStream)
             }
           } finally {
             rSource.delete() // clean up
           }
         } else {
           if (verbose) {
-            printStream.println(s"$file doesn't contain R source code, skipping...")
+            print(s"$file doesn't contain R source code, skipping...", printStream)
           }
         }
       } else {
-        printStream.println(s"WARN: $file resolved as dependency, but not found.")
+        print(s"WARN: $file resolved as dependency, but not found.", printStream, Level.WARNING)
+      }
+    }
+  }
+
+  /** Internal method for logging. We log to a printStream in tests, for debugging purposes. */
+  private def print(
+      msg: String,
+      printStream: PrintStream,
+      level: Level = Level.FINE,
+      e: Throwable = null): Unit = {
+    if (printStream != null) {
+      printStream.println(msg)
+      if (e != null) {
+        e.printStackTrace(printStream)
+      }
+    } else {
+      level match {
+        case Level.INFO => logInfo(msg)
+        case Level.WARNING => logWarning(msg)
+        case Level.SEVERE => logError(msg, e)
+        case _ => logDebug(msg)
       }
     }
   }

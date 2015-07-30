@@ -292,11 +292,6 @@ object SparkSubmit {
         }
       }
     }
-    // install any R packages that may have been passed through --jars or --packages.
-    // Spark Packages may contain R source code inside the jar.
-    if (args.isR && args.isNonEmptyArg(args.jars)) {
-      RPackageUtils.checkAndBuildRPackage(args.jars, printStream, args.verbose)
-    }
 
     // Require all python files to be local, so we can add them to the PYTHONPATH
     // In YARN cluster mode, python files are distributed as regular files, which can be non-local
