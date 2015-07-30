@@ -431,7 +431,7 @@ private[hive] case class HiveWindowFunction(
       // if pivotResult is true, we will get a Seq having the same size with the size
       // of the window frame. At here, we will return the result at the position of
       // index in the output buffer.
-      outputBuffer.asInstanceOf[Seq[Any]].get(index)
+      outputBuffer.asInstanceOf[ArrayData].get(index)
     }
   }
 
