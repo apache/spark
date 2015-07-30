@@ -7,9 +7,6 @@ displayTitle: <a href="mllib-guide.html">MLlib</a> - Evaluation Metrics
 * Table of contents
 {:toc}
 
-
-## Algorithm Metrics
-
 Spark's MLlib comes with a number of machine learning algorithms that can be used to learn from and make predictions
 on data. When these algorithms are applied to build machine learning models, there is a need to evaluate the performance
 of the model on some criteria, which depends on the application and its requirements. Spark's MLlib also provides a
@@ -19,17 +16,17 @@ Specific machine learning algorithms fall under broader types of machine learnin
 regression, clustering, etc. Each of these types have well established metrics for performance evaluation and those
 metrics that are currently available in Spark's MLlib are detailed in this section.
 
-## Classification Model Evaluation
+## Classification model evaluation
 
 While there are many different types of classification algorithms, the evaluation of classification models all share
 similar principles. In a [supervised classification problem](https://en.wikipedia.org/wiki/Statistical_classification),
 there exists a true output and a model-generated predicted output for each data point. For this reason, the results for
 each data point can be assigned to one of four categories:
 
-* True Positive (TP) - class predicted by model and class in true output
-* True Negative (TN) - class not predicted by model and class not in true output
-* False Positive (FP) - class predicted by model and class not in true output
-* False Negative (FN) - class not predicted by model and class in true output
+* True Positive (TP) - label is positive and prediction is also positive
+* True Negative (TN) - label is negative and prediction is also negative
+* False Positive (FP) - label is negative but prediction is positive
+* False Negative (FN) - label is positive but prediction is negative
 
 These four numbers are the building blocks for most classifier evaluation metrics. A fundamental point when considering
 classifier evaluation is that pure accuracy (i.e. was the prediction correct or incorrect) is not generally a good metric. The
@@ -40,13 +37,13 @@ that predicts _not fraud_, regardless of input, will be 95% accurate. For this r
 account the *type* of error. In most applications there is some desired balance between precision and recall, which can
 be captured by combining the two into a single metric, called the [F-measure](https://en.wikipedia.org/wiki/F1_score).
 
-### Binary Classification
+### Binary classification
 
 [Binary classifiers](https://en.wikipedia.org/wiki/Binary_classification) are used to separate the elements of a given
 dataset into one of two possible groups (e.g. fraud or not fraud) and is a special case of multiclass classification.
 Most binary classification metrics can be generalized to multiclass classification metrics.
 
-#### Threshold Tuning
+#### Threshold tuning
 
 It is import to understand that many classification models actually output a "score" (often times a probability) for
 each class, where a higher score indicates higher likelihood. In the binary case, the model may output a probability for
@@ -58,10 +55,11 @@ which determines what the predicted class will be based on the probabilities tha
 Tuning the prediction threshold will change the precision and recall of the model and is an important part of model
 optimization. In order to visualize how precision, recall, and other metrics change as a function of the threshold it is
 common practice to plot competing metrics against one another, parameterized by threshold. A P-R curve plots (precision,
-recall) points for different threshold values, while a [receiver operating characteristic](https://en.wikipedia.org/wiki/Receiver_operating_characteristic), or ROC,
-curve plots (recall, false positive rate) points.
+recall) points for different threshold values, while a
+[receiver operating characteristic](https://en.wikipedia.org/wiki/Receiver_operating_characteristic), or ROC, curve
+plots (recall, false positive rate) points.
 
-**Available Metrics**
+**Available metrics**
 
 <table class="table">
   <thead>
@@ -115,9 +113,8 @@ import org.apache.spark.mllib.util.MLUtils
 val data = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_binary_classification_data.txt")
 
 // Split data into training (60%) and test (40%)
-val splits = data.randomSplit(Array(0.6, 0.4), seed = 11L)
-val training = splits(0).cache()
-val test = splits(1)
+val Array(training, test) = data.randomSplit(Array(0.6, 0.4), seed = 11L)
+training.cache()
 
 // Run training algorithm to build the model
 val model = new LogisticRegressionWithLBFGS()
@@ -138,22 +135,30 @@ val metrics = new BinaryClassificationMetrics(predictionAndLabels)
 
 // Precision by threshold
 val precision = metrics.precisionByThreshold
-precision.foreach(x => printf("Threshold: %1.2f, Precision: %1.2f\n", x._1, x._2))
+precision.foreach { case (t, p) =>
+    println(s"Threshold: $t, Precision: $p")
+}
 
 // Recall by threshold
 val recall = metrics.precisionByThreshold
-recall.foreach(x => printf("Threshold: %1.2f, Recall: %1.2f\n", x._1, x._2))
+recall.foreach { case (t, r) =>
+    println(s"Threshold: $t, Recall: $r")
+}
 
 // Precision-Recall Curve
 val PRC = metrics.pr
 
 // F-measure
 val f1Score = metrics.fMeasureByThreshold
-f1Score.foreach(x => printf("Threshold: %1.2f, F-score: %1.2f, Beta = 1\n", x._1, x._2))
+f1Score.foreach { case (t, f) =>
+    println(s"Threshold: $t, F-score: $f, Beta = 1")
+}
 
 val beta = 0.5
 val fScore = metrics.fMeasureByThreshold(beta)
-fScore.foreach(x => printf("Threshold: %1.2f, F-score: %1.2f, Beta = 0.5\n", x._1, x._2))
+f1Score.foreach { case (t, f) =>
+    println(s"Threshold: $t, F-score: $f, Beta = 0.5")
+}
 
 // AUPRC
 val auPRC = metrics.areaUnderPR
@@ -205,6 +210,9 @@ public class BinaryClassification {
     final LogisticRegressionModel model = new LogisticRegressionWithLBFGS()
       .setNumClasses(2)
       .run(training.rdd());
+
+    // Clear the prediction threshold so the model will return probabilities
+    model.clearThreshold();
 
     // Compute raw scores on the test set.
     JavaRDD<Tuple2<Object, Object>> predictionAndLabels = test.map(
@@ -281,9 +289,8 @@ from pyspark.mllib.util import MLUtils
 data = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_binary_classification_data.txt")
 
 # Split data into training (60%) and test (40%)
-splits = data.randomSplit([0.6, 0.4], seed = 11L)
-training = splits[0].cache()
-test = splits[1]
+training, test = data.randomSplit([0.6, 0.4], seed = 11L)
+training.cache()
 
 # Run training algorithm to build the model
 model = LogisticRegressionWithLBFGS.train(training)
@@ -295,10 +302,10 @@ predictionAndLabels = test.map(lambda lp: (float(model.predict(lp.features)), lp
 metrics = BinaryClassificationMetrics(predictionAndLabels)
 
 # Area under precision-recall curve
-print "Area under PR = %1.2f" % metrics.areaUnderPR
+print "Area under PR = %s" % metrics.areaUnderPR
 
 # Area under ROC curve
-print "Area under ROC = %1.2f" % metrics.areaUnderROC
+print "Area under ROC = %s" % metrics.areaUnderROC
 
 {% endhighlight %}
 
@@ -306,11 +313,19 @@ print "Area under ROC = %1.2f" % metrics.areaUnderROC
 </div>
 
 
-### Multiclass Classification
+### Multiclass classification
 
 A [multiclass classification](https://en.wikipedia.org/wiki/Multiclass_classification) describes a classification
 problem where there are $M \gt 2$ possible labels for each data point (the case where $M=2$ is the binary
 classification problem). For example, classifying handwriting samples to the digits 0 to 9, having 10 possible classes.
+
+For multiclass metrics, the notion of positives and negatives is slightly different. Predictions and labels can still
+be positive or negative, but they must be considered under the context of a particular class. Each label and prediction
+take on the value of one of the multiple classes and so they are said to be positive for their particular class and negative
+for all other classes. So, a true positive occurs whenever the prediction and the label match, while a true negative
+occurs when neither the prediction nor the label take on the value of a given class. By this convention, there can be
+multiple true negatives for a given data sample. The extension of false negatives and false positives from the former
+definitions of positive and negative labels is straightforward.
 
 #### Label based metrics
 
@@ -320,7 +335,7 @@ labels -  the number of times any class was predicted correctly (true positives)
 points. Precision by label considers only one class, and measures the number of time a specific label was predicted
 correctly normalized by the number of times that label appears in the output.
 
-**Available Metrics**
+**Available metrics**
 
 Define the class, or label, set as
 
@@ -424,9 +439,8 @@ import org.apache.spark.mllib.util.MLUtils
 val data = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_multiclass_classification_data.txt")
 
 // Split data into training (60%) and test (40%)
-val splits = data.randomSplit(Array(0.6, 0.4), seed = 11L)
-val training = splits(0).cache()
-val test = splits(1)
+val Array(training, test) = data.randomSplit(Array(0.6, 0.4), seed = 11L)
+training.cache()
 
 // Run training algorithm to build the model
 val model = new LogisticRegressionWithLBFGS()
@@ -451,28 +465,36 @@ val precision = metrics.precision
 val recall = metrics.recall // same as true positive rate
 val f1Score = metrics.fMeasure
 println("Summary Statistics")
-printf("Precision = %1.2f\n", precision)
-printf("Recall = %1.2f\n", recall)
-printf("F1 Score = %1.2f\n", f1Score)
+println(s"Precision = $precision")
+println(s"Recall = $recall")
+println(s"F1 Score = $f1Score")
 
 // Precision by label
 val labels = metrics.labels
-labels.foreach(l => printf("Precision(%s): %1.2f\n", l, metrics.precision(l)))
+labels.foreach { l =>
+    println(s"Precision($l) = " + metrics.precision(l))
+}
 
 // Recall by label
-labels.foreach(l => printf("Recall(%s): %1.2f\n", l, metrics.recall(l)))
+labels.foreach { l =>
+    println(s"Recall($l) = " + metrics.recall(l))
+}
 
 // False positive rate by label
-labels.foreach(l => printf("FPR(%s): %1.2f\n", l, metrics.falsePositiveRate(l)))
+labels.foreach { l =>
+    println(s"FPR($l) = " + metrics.falsePositiveRate(l))
+}
 
 // F-measure by label
-labels.foreach(l => printf("F1 Score(%s): %1.2f\n", l, metrics.fMeasure(l)))
+labels.foreach { l =>
+    println(s"F1-Score($l) = " + metrics.fMeasure(l))
+}
 
 // Weighted stats
-printf("Weighted precision: %1.2f\n", metrics.weightedPrecision)
-printf("Weighted recall: %1.2f\n", metrics.weightedRecall)
-printf("Weighted F1 score: %1.2f\n", metrics.weightedFMeasure)
-printf("Weighted false positive rate: %1.2f\n", metrics.weightedFalsePositiveRate)
+println(s"Weighted precision: ${metrics.weightedPrecision}")
+println(s"Weighted recall: ${metrics.weightedRecall}")
+println(s"Weighted F1 score: ${metrics.weightedFMeasure}")
+println(s"Weighted false positive rate: ${metrics.weightedFalsePositiveRate}")
 
 {% endhighlight %}
 
@@ -536,16 +558,16 @@ public class MulticlassClassification {
 
     // Stats by labels
     for (int i = 0; i < metrics.labels().length; i++) {
-        System.out.format("Class %1.2f precision = %1.2f\n", metrics.labels()[i], metrics.precision(metrics.labels()[i]));
-        System.out.format("Class %1.2f recall = %1.2f\n", metrics.labels()[i], metrics.recall(metrics.labels()[i]));
-        System.out.format("Class %1.2f F1 score = %1.2f\n", metrics.labels()[i], metrics.fMeasure(metrics.labels()[i]));
+        System.out.format("Class %f precision = %f\n", metrics.labels()[i], metrics.precision(metrics.labels()[i]));
+        System.out.format("Class %f recall = %f\n", metrics.labels()[i], metrics.recall(metrics.labels()[i]));
+        System.out.format("Class %f F1 score = %f\n", metrics.labels()[i], metrics.fMeasure(metrics.labels()[i]));
     }
 
     //Weighted stats
-    System.out.format("Weighted precision = %1.2f\n", metrics.weightedPrecision());
-    System.out.format("Weighted recall = %1.2f\n", metrics.weightedRecall());
-    System.out.format("Weighted F1 score = %1.2f\n", metrics.weightedFMeasure());
-    System.out.format("Weighted false positive rate = %1.2f\n", metrics.weightedFalsePositiveRate());
+    System.out.format("Weighted precision = %f\n", metrics.weightedPrecision());
+    System.out.format("Weighted recall = %f\n", metrics.weightedRecall());
+    System.out.format("Weighted F1 score = %f\n", metrics.weightedFMeasure());
+    System.out.format("Weighted false positive rate = %f\n", metrics.weightedFalsePositiveRate());
 
     // Save and load model
     model.save(sc, "myModelPath");
@@ -568,9 +590,8 @@ from pyspark.mllib.evaluation import MulticlassMetrics
 data = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_multiclass_classification_data.txt")
 
 # Split data into training (60%) and test (40%)
-splits = data.randomSplit([0.6, 0.4], seed = 11L)
-training = splits[0].cache()
-test = splits[1]
+training, test = data.randomSplit([0.6, 0.4], seed = 11L)
+training.cache()
 
 # Run training algorithm to build the model
 model = LogisticRegressionWithLBFGS.train(training, numClasses=3)
@@ -586,29 +607,29 @@ precision = metrics.precision()
 recall = metrics.recall()
 f1Score = metrics.fMeasure()
 print "Summary Stats"
-print "Precision = %1.2f" % precision
-print "Recall = %1.2f" % recall
-print "F1 Score = %1.2f" % f1Score
+print "Precision = %s" % precision
+print "Recall = %s" % recall
+print "F1 Score = %s" % f1Score
 
 # Statistics by class
 labels = data.map(lambda lp: lp.label).distinct().collect()
 for label in sorted(labels):
-    print "Class %s precision = %1.2f" % (label, metrics.precision(label))
-    print "Class %s recall = %1.2f" % (label, metrics.recall(label))
-    print "Class %s F1 Measure = %1.2f" % (label, metrics.fMeasure(label, beta=1.0))
+    print "Class %s precision = %s" % (label, metrics.precision(label))
+    print "Class %s recall = %s" % (label, metrics.recall(label))
+    print "Class %s F1 Measure = %s" % (label, metrics.fMeasure(label, beta=1.0))
 
 # Weighted stats
-print "Weighted recall = %1.2f" % metrics.weightedRecall
-print "Weighted precision = %1.2f" % metrics.weightedPrecision
-print "Weighted F(1) Score = %1.2f" % metrics.weightedFMeasure()
-print "Weighted F(0.5) Score = %1.2f" % metrics.weightedFMeasure(beta=0.5)
-print "Weighted false positive rate = %1.2f" % metrics.weightedFalsePositiveRate
+print "Weighted recall = %s" % metrics.weightedRecall
+print "Weighted precision = %s" % metrics.weightedPrecision
+print "Weighted F(1) Score = %s" % metrics.weightedFMeasure()
+print "Weighted F(0.5) Score = %s" % metrics.weightedFMeasure(beta=0.5)
+print "Weighted false positive rate = %s" % metrics.weightedFalsePositiveRate
 {% endhighlight %}
 
 </div>
 </div>
 
-### Multilabel Classification
+### Multilabel classification
 
 A [multilabel classification](https://en.wikipedia.org/wiki/Multi-label_classification) problem involves mapping
 each sample in a dataset to a set of class labels. In this type of classification problem, the labels are not
@@ -617,10 +638,10 @@ science and politics.
 
 Because the labels are not mutually exclusive, the predictions and true labels are now vectors of label *sets*, rather
 than vectors of labels. Multilabel metrics, therefore, extend the fundamental ideas of precision, recall, etc. to
-operations on sets. For example, a true positive is now when a label exists in the predicted label set and the label
-exists in the true output set for a specific data point.
+operations on sets. For example, a true positive for a given class now occurs when that class exists in the predicted
+set and it exists in the true label set, for a specific data point.
 
-**Available Metrics**
+**Available metrics**
 
 Here we define a set $D$ of $N$ documents
 
@@ -755,26 +776,26 @@ val scoreAndLabels: RDD[(Array[Double], Array[Double])] = sc.parallelize(
 val metrics = new MultilabelMetrics(scoreAndLabels)
 
 // Summary stats
-printf("Recall = %1.2f\n", metrics.recall)
-printf("Precision = %1.2f\n", metrics.precision)
-printf("F1 measure = %1.2f\n", metrics.f1Measure)
-printf("Accuracy = %1.2f\n", metrics.accuracy)
+println(s"Recall = ${metrics.recall}")
+println(s"Precision = ${metrics.precision}")
+println(s"F1 measure = ${metrics.f1Measure}")
+println(s"Accuracy = ${metrics.accuracy}")
 
 // Individual label stats
-metrics.labels.foreach(label => printf("Class %s precision = %1.2f\n", label, metrics.precision(label)))
-metrics.labels.foreach(label => printf("Class %s recall = %1.2f\n", label, metrics.recall(label)))
-metrics.labels.foreach(label => printf("Class %s F1-score = %1.2f\n", label, metrics.f1Measure(label)))
+metrics.labels.foreach(label => println(s"Class $label precision = ${metrics.precision(label)}"))
+metrics.labels.foreach(label => println(s"Class $label recall = ${metrics.recall(label)}"))
+metrics.labels.foreach(label => println(s"Class $label F1-score = ${metrics.f1Measure(label)}"))
 
 // Micro stats
-printf("Micro recall = %1.2f\n",  metrics.microRecall)
-printf("Micro precision = %1.2f\n", metrics.microPrecision)
-printf("Micro F1 measure = %1.2f\n", metrics.microF1Measure)
+println(s"Micro recall = ${metrics.microRecall}")
+println(s"Micro precision = ${metrics.microPrecision}")
+println(s"Micro F1 measure = ${metrics.microF1Measure}")
 
 // Hamming loss
-printf("Hamming loss = %1.2f\n", metrics.hammingLoss)
+println(s"Hamming loss = ${metrics.hammingLoss}")
 
 // Subset accuracy
-printf("Subset accuracy = %1.2f\n", metrics.subsetAccuracy)
+println(s"Subset accuracy = ${metrics.subsetAccuracy}")
 
 {% endhighlight %}
 
@@ -812,28 +833,28 @@ public class MultilabelClassification {
     MultilabelMetrics metrics = new MultilabelMetrics(scoreAndLabels.rdd());
 
     // Summary stats
-    System.out.format("Recall = %1.2f\n", metrics.recall());
-    System.out.format("Precision = %1.2f\n", metrics.precision());
-    System.out.format("F1 measure = %1.2f\n", metrics.f1Measure());
-    System.out.format("Accuracy = %1.2f\n", metrics.accuracy());
+    System.out.format("Recall = %f\n", metrics.recall());
+    System.out.format("Precision = %f\n", metrics.precision());
+    System.out.format("F1 measure = %f\n", metrics.f1Measure());
+    System.out.format("Accuracy = %f\n", metrics.accuracy());
 
     // Stats by labels
     for (int i = 0; i < metrics.labels().length - 1; i++) {
-        System.out.format("Class %1.1f precision = %1.2f\n", metrics.labels()[i], metrics.precision(metrics.labels()[i]));
-        System.out.format("Class %1.1f recall = %1.2f\n", metrics.labels()[i], metrics.recall(metrics.labels()[i]));
-        System.out.format("Class %1.1f F1 score = %1.2f\n", metrics.labels()[i], metrics.f1Measure(metrics.labels()[i]));
+        System.out.format("Class %1.1f precision = %f\n", metrics.labels()[i], metrics.precision(metrics.labels()[i]));
+        System.out.format("Class %1.1f recall = %f\n", metrics.labels()[i], metrics.recall(metrics.labels()[i]));
+        System.out.format("Class %1.1f F1 score = %f\n", metrics.labels()[i], metrics.f1Measure(metrics.labels()[i]));
     }
 
     // Micro stats
-    System.out.format("Micro recall = %1.2f\n", metrics.microRecall());
-    System.out.format("Micro precision = %1.2f\n", metrics.microPrecision());
-    System.out.format("Micro F1 measure = %1.2f\n", metrics.microF1Measure());
+    System.out.format("Micro recall = %f\n", metrics.microRecall());
+    System.out.format("Micro precision = %f\n", metrics.microPrecision());
+    System.out.format("Micro F1 measure = %f\n", metrics.microF1Measure());
 
     // Hamming loss
-    System.out.format("Hamming loss = %1.2f\n", metrics.hammingLoss());
+    System.out.format("Hamming loss = %f\n", metrics.hammingLoss());
 
     // Subset accuracy
-    System.out.format("Subset accuracy = %1.2f\n", metrics.subsetAccuracy());
+    System.out.format("Subset accuracy = %f\n", metrics.subsetAccuracy());
 
   }
 }
@@ -860,35 +881,35 @@ scoreAndLabels = sc.parallelize([
 metrics = MultilabelMetrics(scoreAndLabels)
 
 # Summary stats
-print "Recall = %1.2f" % metrics.recall()
-print "Precision = %1.2f" % metrics.precision()
-print "F1 measure = %1.2f" % metrics.f1Measure()
-print "Accuracy = %1.2f" % metrics.accuracy
+print "Recall = %s" % metrics.recall()
+print "Precision = %s" % metrics.precision()
+print "F1 measure = %s" % metrics.f1Measure()
+print "Accuracy = %s" % metrics.accuracy
 
 # Individual label stats
 labels = scoreAndLabels.flatMap(lambda x: x[1]).distinct().collect()
 for label in labels:
-    print "Class %s precision = %1.2f" % (label, metrics.precision(label))
-    print "Class %s recall = %1.2f" % (label, metrics.recall(label))
-    print "Class %s F1 Measure = %1.2f" % (label, metrics.f1Measure(label))
+    print "Class %s precision = %s" % (label, metrics.precision(label))
+    print "Class %s recall = %s" % (label, metrics.recall(label))
+    print "Class %s F1 Measure = %s" % (label, metrics.f1Measure(label))
 
 # Micro stats
-print "Micro precision = %1.2f" % metrics.microPrecision
-print "Micro recall = %1.2f" % metrics.microRecall
-print "Micro F1 measure = %1.2f" % metrics.microF1Measure
+print "Micro precision = %s" % metrics.microPrecision
+print "Micro recall = %s" % metrics.microRecall
+print "Micro F1 measure = %s" % metrics.microF1Measure
 
 # Hamming loss
-print "Hamming loss = %1.2f" % metrics.hammingLoss
+print "Hamming loss = %s" % metrics.hammingLoss
 
 # Subset accuracy
-print "Subset accuracy = %1.2f" % metrics.subsetAccuracy
+print "Subset accuracy = %s" % metrics.subsetAccuracy
 
 {% endhighlight %}
 
 </div>
 </div>
 
-### Ranking Systems
+### Ranking systems
 
 The role of a ranking algorithm (often thought of as a [recommender system](https://en.wikipedia.org/wiki/Recommender_system))
 is to return to the user a set of relevant items or documents based on some training data. The definition of relevance
@@ -896,7 +917,7 @@ may vary and is usually application specific. Ranking system metrics aim to quan
 rankings or recommendations in various contexts. Some metrics compare a set of recommended documents to a ground truth
 set of relevant documents, while other metrics may incorporate numerical ratings explicitly.
 
-**Available Metrics**
+**Available metrics**
 
 A ranking system usually deals with a set of $M$ users
 
@@ -1044,15 +1065,15 @@ val metrics = new RankingMetrics(relevantDocuments)
 
 // Precision at K
 Array(1, 3, 5).foreach{ k =>
-  printf("Precision at %d = %1.3f\n", k, metrics.precisionAt(k))
+  println(s"Precision at $k = ${metrics.precisionAt(k)}")
 }
 
 // Mean average precision
-printf("Mean average precision = %1.3f\n", metrics.meanAveragePrecision)
+println(s"Mean average precision = ${metrics.meanAveragePrecision}")
 
 // Normalized discounted cumulative gain
 Array(1, 3, 5).foreach{ k =>
-  printf("NDCG at %d = %1.3f\n", k, metrics.ndcgAt(k))
+  println(s"NDCG at $k = ${metrics.ndcgAt(k)}")
 }
 
 // Get predictions for each data point
@@ -1064,10 +1085,10 @@ val predictionsAndLabels = allPredictions.join(allRatings).map{ case ((user, pro
 
 // Get the RMSE using regression metrics
 val regressionMetrics = new RegressionMetrics(predictionsAndLabels)
-printf("RMSE = %1.3f\n", regressionMetrics.rootMeanSquaredError)
+println(s"RMSE = ${regressionMetrics.rootMeanSquaredError}")
 
 // R-squared
-printf("R-squared = %1.3f\n", regressionMetrics.r2)
+println(s"R-squared = ${regressionMetrics.r2}")
 
 {% endhighlight %}
 
@@ -1185,12 +1206,12 @@ public class Ranking {
     // Precision and NDCG at k
     Integer[] kVector = {1, 3, 5};
     for (Integer k : kVector) {
-      System.out.format("Precision at %d = %1.2f\n", k, metrics.precisionAt(k));
-      System.out.format("NDCG at %d = %1.2f\n", k, metrics.ndcgAt(k));
+      System.out.format("Precision at %d = %f\n", k, metrics.precisionAt(k));
+      System.out.format("NDCG at %d = %f\n", k, metrics.ndcgAt(k));
     }
 
     // Mean average precision
-    System.out.format("Mean average precision = %1.3f\n", metrics.meanAveragePrecision());
+    System.out.format("Mean average precision = %f\n", metrics.meanAveragePrecision());
 
     // Evaluate the model using numerical ratings and regression metrics
     JavaRDD<Tuple2<Object, Object>> userProducts = ratings.map(
@@ -1223,10 +1244,10 @@ public class Ranking {
     RegressionMetrics regressionMetrics = new RegressionMetrics(ratesAndPreds.rdd());
 
     // Root mean squared error
-    System.out.format("RMSE = %1.3f\n", regressionMetrics.rootMeanSquaredError());
+    System.out.format("RMSE = %f\n", regressionMetrics.rootMeanSquaredError());
 
     // R-squared
-    System.out.format("R-squared = %1.3f\n", regressionMetrics.r2());
+    System.out.format("R-squared = %f\n", regressionMetrics.r2());
   }
 }
 
@@ -1262,22 +1283,22 @@ scoreAndLabels = predictions.join(ratingsTuple).map(lambda tup: tup[1])
 metrics = RegressionMetrics(scoreAndLabels)
 
 # Root mean sqaured error
-print "RMSE = %1.3f" % metrics.rootMeanSquaredError
+print "RMSE = %s" % metrics.rootMeanSquaredError
 
 # R-squared
-print "R-squared = %1.3f" % metrics.r2
+print "R-squared = %s" % metrics.r2
 
 {% endhighlight %}
 
 </div>
 </div>
 
-## Regression Model Evaluation
+## Regression model evaluation
 
 [Regression analysis](https://en.wikipedia.org/wiki/Regression_analysis) is used when predicting a continuous output
 variable from a number of independent variables.
 
-**Available Metrics**
+**Available metrics**
 
 <table class="table">
   <thead>
@@ -1341,17 +1362,17 @@ val valuesAndPreds = data.map{ point =>
 val metrics = new RegressionMetrics(valuesAndPreds)
 
 // Squared error
-printf("MSE = %1.3f\n", metrics.meanSquaredError)
-printf("RMSE = %1.3f\n", metrics.rootMeanSquaredError)
+println(s"MSE = ${metrics.meanSquaredError}")
+println(s"RMSE = ${metrics.rootMeanSquaredError}")
 
 // R-squared
-printf("R-squared = %1.3f\n", metrics.r2)
+println(s"R-squared = ${metrics.r2}")
 
 // Mean absolute error
-printf("MAE = %1.3f\n", metrics.meanAbsoluteError)
+println(s"MAE = ${metrics.meanAbsoluteError}")
 
 // Explained variance
-printf("Explained variance = %1.3f\n", metrics.explainedVariance)
+println(s"Explained variance = ${metrics.explainedVariance}")
 
 {% endhighlight %}
 
@@ -1411,17 +1432,17 @@ public class LinearRegression {
     RegressionMetrics metrics = new RegressionMetrics(valuesAndPreds.rdd());
 
     // Squared error
-    System.out.format("MSE = %1.3f\n", metrics.meanSquaredError());
-    System.out.format("RMSE = %1.3f\n", metrics.rootMeanSquaredError());
+    System.out.format("MSE = %f\n", metrics.meanSquaredError());
+    System.out.format("RMSE = %f\n", metrics.rootMeanSquaredError());
 
     // R-squared
-    System.out.format("R Squared = %1.3f\n", metrics.r2());
+    System.out.format("R Squared = %f\n", metrics.r2());
 
     // Mean absolute error
-    System.out.format("MAE = %1.3f\n", metrics.meanAbsoluteError());
+    System.out.format("MAE = %f\n", metrics.meanAbsoluteError());
 
     // Explained variance
-    System.out.format("Explained Variance = %1.3f\n", metrics.explainedVariance());
+    System.out.format("Explained Variance = %f\n", metrics.explainedVariance());
 
     // Save and load model
     model.save(sc.sc(), "myModelPath");
@@ -1458,17 +1479,17 @@ valuesAndPreds = parsedData.map(lambda p: (float(model.predict(p.features)), p.l
 metrics = RegressionMetrics(valuesAndPreds)
 
 # Squared Error
-print "MSE = %1.3f" % metrics.meanSquaredError
-print "RMSE = %1.3f" % metrics.rootMeanSquaredError
+print "MSE = %s" % metrics.meanSquaredError
+print "RMSE = %s" % metrics.rootMeanSquaredError
 
 # R-squared
-print "R-squared = %1.3f" % metrics.r2
+print "R-squared = %s" % metrics.r2
 
 # Mean absolute error
-print "MAE = %1.3f" % metrics.meanAbsoluteError
+print "MAE = %s" % metrics.meanAbsoluteError
 
 # Explained variance
-print "Explained variance = %1.3f" % metrics.explainedVariance
+print "Explained variance = %s" % metrics.explainedVariance
 
 {% endhighlight %}
 
