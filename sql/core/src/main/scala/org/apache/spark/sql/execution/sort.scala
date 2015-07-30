@@ -83,7 +83,7 @@ case class ExternalSort(
       context.taskMetrics().incDiskBytesSpilled(sorter.diskBytesSpilled)
       context.taskMetrics().incMemoryBytesSpilled(sorter.memoryBytesSpilled)
       context.internalMetricsToAccumulators(
-        InternalAccumulator.PEAK_EXECUTION_MEMORY).add(sorter.peakMemoryUsed)
+        InternalAccumulator.PEAK_EXECUTION_MEMORY).add(sorter.peakMemoryUsedBytes)
       // TODO(marmbrus): The complex type signature below thwarts inference for no reason.
       CompletionIterator[InternalRow, Iterator[InternalRow]](baseIterator, sorter.stop())
     }, preservesPartitioning = true)

@@ -98,9 +98,9 @@ class ExternalAppendOnlyMap[K, V, C](
   // Write metrics for current spill
   private var curWriteMetrics: ShuffleWriteMetrics = _
 
-  // Peak size of the in-memory map observed so far
-  private var _peakMemoryUsed: Long = 0L
-  def peakMemoryUsed: Long = _peakMemoryUsed
+  // Peak size of the in-memory map observed so far, in bytes
+  private var _peakMemoryUsedBytes: Long = 0L
+  def peakMemoryUsedBytes: Long = _peakMemoryUsedBytes
 
   private val keyComparator = new HashComparator[K]
   private val ser = serializer.newInstance()
@@ -132,8 +132,8 @@ class ExternalAppendOnlyMap[K, V, C](
     while (entries.hasNext) {
       curEntry = entries.next()
       val estimatedSize = currentMap.estimateSize()
-      if (estimatedSize > _peakMemoryUsed) {
-        _peakMemoryUsed = estimatedSize
+      if (estimatedSize > _peakMemoryUsedBytes) {
+        _peakMemoryUsedBytes = estimatedSize
       }
       if (maybeSpill(currentMap, estimatedSize)) {
         currentMap = new SizeTrackingAppendOnlyMap[K, C]

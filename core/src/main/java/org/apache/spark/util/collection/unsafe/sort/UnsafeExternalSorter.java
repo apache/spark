@@ -20,6 +20,9 @@ package org.apache.spark.util.collection.unsafe.sort;
 import java.io.IOException;
 import java.util.LinkedList;
 
+import scala.runtime.AbstractFunction0;
+import scala.runtime.BoxedUnit;
+
 import com.google.common.annotations.VisibleForTesting;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -67,7 +70,7 @@ public final class UnsafeExternalSorter {
   private MemoryBlock currentPage = null;
   private long currentPagePosition = -1;
   private long freeSpaceInCurrentPage = 0;
-  private long peakMemoryUsed = 0;
+  private long peakMemoryUsedBytes = 0;
 
   private final LinkedList<UnsafeSorterSpillWriter> spillWriters = new LinkedList<>();
 
@@ -87,10 +90,22 @@ public final class UnsafeExternalSorter {
     this.recordComparator = recordComparator;
     this.prefixComparator = prefixComparator;
     this.initialSize = initialSize;
+    this.peakMemoryUsedBytes = initialSize;
     // Use getSizeAsKb (not bytes) to maintain backwards compatibility for units
     this.fileBufferSizeBytes = (int) conf.getSizeAsKb("spark.shuffle.file.buffer", "32k") * 1024;
     this.pageSizeBytes = conf.getSizeAsBytes("spark.buffer.pageSize", "64m");
     initializeForWriting();
+
+    // Register a cleanup task with TaskContext to ensure that memory is guaranteed to be freed at
+    // the end of the task. This is necessary to avoid memory leaks in when the downstream operator
+    // does not fully consume the sorter's output (e.g. sort followed by limit).
+    taskContext.addOnCompleteCallback(new AbstractFunction0<BoxedUnit>() {
+      @Override
+      public BoxedUnit apply() {
+        freeMemory();
+        return null;
+      }
+    });
   }
 
   // TODO: metrics tracking + integration with shuffle write metrics
@@ -120,9 +135,13 @@ public final class UnsafeExternalSorter {
   public void spill() throws IOException {
     logger.info("Thread {} spilling sort data of {} to disk ({} {} so far)",
       Thread.currentThread().getId(),
+      // We must call this here to ensure we update the peak memory usage before each spill
       Utils.bytesToString(getMemoryUsage()),
       spillWriters.size(),
       spillWriters.size() > 1 ? " times" : " time");
+
+    // Update peak memory used before spilling each map
+    updatePeakMemoryUsed();
 
     final UnsafeSorterSpillWriter spillWriter =
       new UnsafeSorterSpillWriter(blockManager, fileBufferSizeBytes, writeMetrics,
@@ -150,16 +169,22 @@ public final class UnsafeExternalSorter {
     for (MemoryBlock page : allocatedPages) {
       totalPageSize += page.size();
     }
-    long mem = sorter.getMemoryUsage() + totalPageSize;
-    if (mem > peakMemoryUsed) {
-      peakMemoryUsed = mem;
-    }
-    return mem;
+    return sorter.getMemoryUsage() + totalPageSize;
   }
 
-  /** The peak memory used so far in bytes. */
-  public long getPeakMemoryUsage() {
-    return peakMemoryUsed;
+  private void updatePeakMemoryUsed() {
+    long mem = getMemoryUsage();
+    if (mem > peakMemoryUsedBytes) {
+      peakMemoryUsedBytes = mem;
+    }
+  }
+
+  /**
+   * Return the peak memory used so far, in bytes.
+   */
+  public long getPeakMemoryUsedBytes() {
+    updatePeakMemoryUsed();
+    return peakMemoryUsedBytes;
   }
 
   @VisibleForTesting

@@ -86,8 +86,8 @@ final class UnsafeShuffleExternalSorter {
 
   private final LinkedList<SpillInfo> spills = new LinkedList<SpillInfo>();
 
-  // Peak memory used by this sorter, set immediately before each spill
-  private long peakMemoryUsage;
+  /** Peak memory used by this sorter so far, in bytes. **/
+  private long peakMemoryUsedBytes;
 
   // These variables are reset after spilling:
   private UnsafeShuffleInMemorySorter sorter;
@@ -109,7 +109,7 @@ final class UnsafeShuffleExternalSorter {
     this.blockManager = blockManager;
     this.taskContext = taskContext;
     this.initialSize = initialSize;
-    this.peakMemoryUsage = initialSize;
+    this.peakMemoryUsedBytes = initialSize;
     this.numPartitions = numPartitions;
     // Use getSizeAsKb (not bytes) to maintain backwards compatibility if no units are provided
     this.fileBufferSizeBytes = (int) conf.getSizeAsKb("spark.shuffle.file.buffer", "32k") * 1024;
@@ -262,16 +262,14 @@ final class UnsafeShuffleExternalSorter {
    */
   @VisibleForTesting
   void spill() throws IOException {
-    long memoryUsage = getMemoryUsage();
-    if (memoryUsage > peakMemoryUsage) {
-      peakMemoryUsage = memoryUsage;
-    }
-
     logger.info("Thread {} spilling sort data of {} to disk ({} {} so far)",
       Thread.currentThread().getId(),
-      Utils.bytesToString(memoryUsage),
+      Utils.bytesToString(getMemoryUsage()),
       spills.size(),
       spills.size() > 1 ? " times" : " time");
+
+    // Update peak memory used before each spill
+    updatePeakMemoryUsed();
 
     writeSortedFile(false);
     final long sorterMemoryUsage = sorter.getMemoryUsage();
@@ -291,11 +289,19 @@ final class UnsafeShuffleExternalSorter {
     return sorter.getMemoryUsage() + totalPageSize;
   }
 
+  private void updatePeakMemoryUsed() {
+    long mem = getMemoryUsage();
+    if (mem > peakMemoryUsedBytes) {
+      peakMemoryUsedBytes = mem;
+    }
+  }
+
   /**
-   * Return the peak memory used by this sorter.
+   * Return the peak memory used so far, in bytes.
    */
-  long getPeakMemoryUsage() {
-    return peakMemoryUsage;
+  long getPeakMemoryUsedBytes() {
+    updatePeakMemoryUsed();
+    return peakMemoryUsedBytes;
   }
 
   private long freeMemory() {

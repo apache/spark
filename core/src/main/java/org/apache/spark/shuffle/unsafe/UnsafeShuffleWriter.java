@@ -20,6 +20,7 @@ package org.apache.spark.shuffle.unsafe;
 import java.io.*;
 import java.nio.channels.FileChannel;
 import java.util.Iterator;
+import java.util.Map;
 import javax.annotation.Nullable;
 
 import scala.Option;
@@ -135,10 +136,10 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
   }
 
   /**
-   * Return the peak memory used by this writer.
+   * Return the peak memory used so far, in bytes.
    */
-  public long getPeakMemoryUsage() {
-    return sorter.getPeakMemoryUsage();
+  public long getPeakMemoryUsedBytes() {
+    return sorter.getPeakMemoryUsedBytes();
   }
 
   /**
@@ -438,6 +439,11 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
   @Override
   public Option<MapStatus> stop(boolean success) {
     try {
+      // Update internal metrics
+      TaskContext context = TaskContext.get();
+      JavaConversions.asJavaMap(context.internalMetricsToAccumulators())
+        .get(InternalAccumulator.PEAK_EXECUTION_MEMORY()).add(getPeakMemoryUsedBytes());
+
       if (stopping) {
         return Option.apply(null);
       } else {

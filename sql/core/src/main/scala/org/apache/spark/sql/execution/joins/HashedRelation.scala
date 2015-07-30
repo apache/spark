@@ -181,7 +181,7 @@ private[joins] final class UnsafeHashedRelation(
   private[joins] def this() = this(null)  // Needed for serialization
 
   // Use BytesToBytesMap in executor for better performance (it's created when deserialization)
-  // This is used in broadcast joins and in distributed mode only
+  // This is used in broadcast joins and distributed mode only
   @transient private[this] var binaryMap: BytesToBytesMap = _
 
   /**

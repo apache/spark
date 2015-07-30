@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.joins
 import scala.concurrent._
 import scala.concurrent.duration._
 
+import org.apache.spark.{InternalAccumulator, TaskContext}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
@@ -28,7 +29,6 @@ import org.apache.spark.sql.catalyst.plans.physical.{Distribution, UnspecifiedDi
 import org.apache.spark.sql.catalyst.plans.{JoinType, LeftOuter, RightOuter}
 import org.apache.spark.sql.execution.{BinaryNode, SparkPlan}
 import org.apache.spark.util.ThreadUtils
-import org.apache.spark.{InternalAccumulator, TaskContext}
 
 /**
  * :: DeveloperApi ::
