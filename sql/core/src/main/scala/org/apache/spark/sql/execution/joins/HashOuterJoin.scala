@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.joins
 import java.util.{HashMap => JavaHashMap}
 
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, UnknownPartitioning}
 import org.apache.spark.sql.catalyst.plans.{FullOuter, JoinType, LeftOuter, RightOuter}
@@ -64,8 +65,7 @@ override def outputPartitioning: Partitioning = joinType match {
   @transient private[this] lazy val leftNullRow = new GenericInternalRow(left.output.length)
   @transient private[this] lazy val rightNullRow = new GenericInternalRow(right.output.length)
   @transient private[this] lazy val boundCondition =
-    condition.map(
-      newPredicate(_, left.output ++ right.output)).getOrElse((row: InternalRow) => true)
+    newPredicate(condition.getOrElse(Literal(true)), left.output ++ right.output)
 
   // TODO we need to rewrite all of the iterators with our own implementation instead of the Scala
   // iterator for performance purpose.
@@ -170,7 +170,7 @@ override def outputPartitioning: Partitioning = joinType match {
       var existingMatchList = hashTable.get(rowKey)
       if (existingMatchList == null) {
         existingMatchList = new CompactBuffer[InternalRow]()
-        hashTable.put(rowKey, existingMatchList)
+        hashTable.put(rowKey.copy(), existingMatchList)
       }
 
       existingMatchList += currentRow.copy()

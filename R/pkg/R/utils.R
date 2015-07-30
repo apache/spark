@@ -41,8 +41,8 @@ convertJListToRList <- function(jList, flatten, logicalUpperBound = NULL,
               if (isInstanceOf(obj, "scala.Tuple2")) {
                 # JavaPairRDD[Array[Byte], Array[Byte]].
 
-                keyBytes = callJMethod(obj, "_1")
-                valBytes = callJMethod(obj, "_2")
+                keyBytes <- callJMethod(obj, "_1")
+                valBytes <- callJMethod(obj, "_2")
                 res <- list(unserialize(keyBytes),
                   unserialize(valBytes))
               } else {

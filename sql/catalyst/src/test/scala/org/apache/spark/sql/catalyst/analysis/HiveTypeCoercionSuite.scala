@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.catalyst.plans.PlanTest
 
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, LocalRelation, Project}
+import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.types._
 
@@ -77,6 +77,15 @@ class HiveTypeCoercionSuite extends PlanTest {
     shouldCast(DecimalType(10, 2), TypeCollection(IntegerType, DecimalType), DecimalType(10, 2))
     shouldCast(DecimalType(10, 2), TypeCollection(DecimalType, IntegerType), DecimalType(10, 2))
     shouldCast(IntegerType, TypeCollection(DecimalType(10, 2), StringType), DecimalType(10, 2))
+
+    shouldCast(StringType, NumericType, DoubleType)
+    shouldCast(StringType, TypeCollection(NumericType, BinaryType), DoubleType)
+
+    // NumericType should not be changed when function accepts any of them.
+    Seq(ByteType, ShortType, IntegerType, LongType, FloatType, DoubleType,
+      DecimalType.Unlimited, DecimalType(10, 2)).foreach { tpe =>
+      shouldCast(tpe, NumericType, tpe)
+    }
   }
 
   test("ineligible implicit type cast") {
@@ -185,6 +194,30 @@ class HiveTypeCoercionSuite extends PlanTest {
       Project(Seq(Alias(transformed, "a")()), testRelation))
   }
 
+  test("cast NullType for expresions that implement ExpectsInputTypes") {
+    import HiveTypeCoercionSuite._
+
+    ruleTest(HiveTypeCoercion.ImplicitTypeCasts,
+      AnyTypeUnaryExpression(Literal.create(null, NullType)),
+      AnyTypeUnaryExpression(Literal.create(null, NullType)))
+
+    ruleTest(HiveTypeCoercion.ImplicitTypeCasts,
+      NumericTypeUnaryExpression(Literal.create(null, NullType)),
+      NumericTypeUnaryExpression(Literal.create(null, DoubleType)))
+  }
+
+  test("cast NullType for binary operators") {
+    import HiveTypeCoercionSuite._
+
+    ruleTest(HiveTypeCoercion.ImplicitTypeCasts,
+      AnyTypeBinaryOperator(Literal.create(null, NullType), Literal.create(null, NullType)),
+      AnyTypeBinaryOperator(Literal.create(null, NullType), Literal.create(null, NullType)))
+
+    ruleTest(HiveTypeCoercion.ImplicitTypeCasts,
+      NumericTypeBinaryOperator(Literal.create(null, NullType), Literal.create(null, NullType)),
+      NumericTypeBinaryOperator(Literal.create(null, DoubleType), Literal.create(null, DoubleType)))
+  }
+
   test("coalesce casts") {
     ruleTest(HiveTypeCoercion.FunctionArgumentConversion,
       Coalesce(Literal(1.0)
@@ -272,6 +305,38 @@ class HiveTypeCoercionSuite extends PlanTest {
     )
   }
 
+  test("WidenTypes for union except and intersect") {
+    def checkOutput(logical: LogicalPlan, expectTypes: Seq[DataType]): Unit = {
+      logical.output.zip(expectTypes).foreach { case (attr, dt) =>
+        assert(attr.dataType === dt)
+      }
+    }
+
+    val left = LocalRelation(
+      AttributeReference("i", IntegerType)(),
+      AttributeReference("u", DecimalType.Unlimited)(),
+      AttributeReference("b", ByteType)(),
+      AttributeReference("d", DoubleType)())
+    val right = LocalRelation(
+      AttributeReference("s", StringType)(),
+      AttributeReference("d", DecimalType(2, 1))(),
+      AttributeReference("f", FloatType)(),
+      AttributeReference("l", LongType)())
+
+    val wt = HiveTypeCoercion.WidenTypes
+    val expectedTypes = Seq(StringType, DecimalType.Unlimited, FloatType, DoubleType)
+
+    val r1 = wt(Union(left, right)).asInstanceOf[Union]
+    val r2 = wt(Except(left, right)).asInstanceOf[Except]
+    val r3 = wt(Intersect(left, right)).asInstanceOf[Intersect]
+    checkOutput(r1.left, expectedTypes)
+    checkOutput(r1.right, expectedTypes)
+    checkOutput(r2.left, expectedTypes)
+    checkOutput(r2.right, expectedTypes)
+    checkOutput(r3.left, expectedTypes)
+    checkOutput(r3.right, expectedTypes)
+  }
+
   /**
    * There are rules that need to not fire before child expressions get resolved.
    * We use this test to make sure those rules do not fire early.
@@ -291,5 +356,35 @@ class HiveTypeCoercionSuite extends PlanTest {
       In(Literal("a"), Seq(Literal(1), Literal("b"))),
       In(Literal("a"), Seq(Cast(Literal(1), StringType), Cast(Literal("b"), StringType)))
     )
+  }
+}
+
+
+object HiveTypeCoercionSuite {
+
+  case class AnyTypeUnaryExpression(child: Expression)
+    extends UnaryExpression with ExpectsInputTypes with Unevaluable {
+    override def inputTypes: Seq[AbstractDataType] = Seq(AnyDataType)
+    override def dataType: DataType = NullType
+  }
+
+  case class NumericTypeUnaryExpression(child: Expression)
+    extends UnaryExpression with ExpectsInputTypes with Unevaluable {
+    override def inputTypes: Seq[AbstractDataType] = Seq(NumericType)
+    override def dataType: DataType = NullType
+  }
+
+  case class AnyTypeBinaryOperator(left: Expression, right: Expression)
+    extends BinaryOperator with Unevaluable {
+    override def dataType: DataType = NullType
+    override def inputType: AbstractDataType = AnyDataType
+    override def symbol: String = "anytype"
+  }
+
+  case class NumericTypeBinaryOperator(left: Expression, right: Expression)
+    extends BinaryOperator with Unevaluable {
+    override def dataType: DataType = NullType
+    override def inputType: AbstractDataType = NumericType
+    override def symbol: String = "numerictype"
   }
 }

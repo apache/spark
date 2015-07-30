@@ -18,63 +18,77 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.types._
 
 
 class BitwiseFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
-  test("Bitwise operations") {
-    val row = create_row(1, 2, 3, null)
-    val c1 = 'a.int.at(0)
-    val c2 = 'a.int.at(1)
-    val c3 = 'a.int.at(2)
-    val c4 = 'a.int.at(3)
+  test("BitwiseNOT") {
+    def check(input: Any, expected: Any): Unit = {
+      val expr = BitwiseNot(Literal(input))
+      assert(expr.dataType === Literal(input).dataType)
+      checkEvaluation(expr, expected)
+    }
 
-    checkEvaluation(BitwiseAnd(c1, c4), null, row)
-    checkEvaluation(BitwiseAnd(c1, c2), 0, row)
-    checkEvaluation(BitwiseAnd(c1, Literal.create(null, IntegerType)), null, row)
-    checkEvaluation(
-      BitwiseAnd(Literal.create(null, IntegerType), Literal.create(null, IntegerType)), null, row)
+    check(1.toByte, ~1.toByte)
+    check(1000.toShort, ~1000.toShort)
+    check(1000000, ~1000000)
+    check(123456789123L, ~123456789123L)
 
-    checkEvaluation(BitwiseOr(c1, c4), null, row)
-    checkEvaluation(BitwiseOr(c1, c2), 3, row)
-    checkEvaluation(BitwiseOr(c1, Literal.create(null, IntegerType)), null, row)
-    checkEvaluation(
-      BitwiseOr(Literal.create(null, IntegerType), Literal.create(null, IntegerType)), null, row)
-
-    checkEvaluation(BitwiseXor(c1, c4), null, row)
-    checkEvaluation(BitwiseXor(c1, c2), 3, row)
-    checkEvaluation(BitwiseXor(c1, Literal.create(null, IntegerType)), null, row)
-    checkEvaluation(
-      BitwiseXor(Literal.create(null, IntegerType), Literal.create(null, IntegerType)), null, row)
-
-    checkEvaluation(BitwiseNot(c4), null, row)
-    checkEvaluation(BitwiseNot(c1), -2, row)
-    checkEvaluation(BitwiseNot(Literal.create(null, IntegerType)), null, row)
-
-    checkEvaluation(c1 & c2, 0, row)
-    checkEvaluation(c1 | c2, 3, row)
-    checkEvaluation(c1 ^ c2, 3, row)
-    checkEvaluation(~c1, -2, row)
+    checkEvaluation(BitwiseNot(Literal.create(null, IntegerType)), null)
   }
 
-  test("unary BitwiseNOT") {
-    checkEvaluation(BitwiseNot(1), -2)
-    assert(BitwiseNot(1).dataType === IntegerType)
-    assert(BitwiseNot(1).eval(EmptyRow).isInstanceOf[Int])
+  test("BitwiseAnd") {
+    def check(input1: Any, input2: Any, expected: Any): Unit = {
+      val expr = BitwiseAnd(Literal(input1), Literal(input2))
+      assert(expr.dataType === Literal(input1).dataType)
+      checkEvaluation(expr, expected)
+    }
 
-    checkEvaluation(BitwiseNot(1.toLong), -2.toLong)
-    assert(BitwiseNot(1.toLong).dataType === LongType)
-    assert(BitwiseNot(1.toLong).eval(EmptyRow).isInstanceOf[Long])
+    check(1.toByte, 2.toByte, 1.toByte & 2.toByte)
+    check(1000.toShort, 2.toShort, 1000.toShort & 2.toShort)
+    check(1000000, 4, 1000000 & 4)
+    check(123456789123L, 5L, 123456789123L & 5L)
 
-    checkEvaluation(BitwiseNot(1.toShort), -2.toShort)
-    assert(BitwiseNot(1.toShort).dataType === ShortType)
-    assert(BitwiseNot(1.toShort).eval(EmptyRow).isInstanceOf[Short])
-
-    checkEvaluation(BitwiseNot(1.toByte), -2.toByte)
-    assert(BitwiseNot(1.toByte).dataType === ByteType)
-    assert(BitwiseNot(1.toByte).eval(EmptyRow).isInstanceOf[Byte])
+    val nullLit = Literal.create(null, IntegerType)
+    checkEvaluation(BitwiseAnd(nullLit, Literal(1)), null)
+    checkEvaluation(BitwiseAnd(Literal(1), nullLit), null)
+    checkEvaluation(BitwiseAnd(nullLit, nullLit), null)
   }
 
+  test("BitwiseOr") {
+    def check(input1: Any, input2: Any, expected: Any): Unit = {
+      val expr = BitwiseOr(Literal(input1), Literal(input2))
+      assert(expr.dataType === Literal(input1).dataType)
+      checkEvaluation(expr, expected)
+    }
+
+    check(1.toByte, 2.toByte, 1.toByte | 2.toByte)
+    check(1000.toShort, 2.toShort, 1000.toShort | 2.toShort)
+    check(1000000, 4, 1000000 | 4)
+    check(123456789123L, 5L, 123456789123L | 5L)
+
+    val nullLit = Literal.create(null, IntegerType)
+    checkEvaluation(BitwiseOr(nullLit, Literal(1)), null)
+    checkEvaluation(BitwiseOr(Literal(1), nullLit), null)
+    checkEvaluation(BitwiseOr(nullLit, nullLit), null)
+  }
+
+  test("BitwiseXor") {
+    def check(input1: Any, input2: Any, expected: Any): Unit = {
+      val expr = BitwiseXor(Literal(input1), Literal(input2))
+      assert(expr.dataType === Literal(input1).dataType)
+      checkEvaluation(expr, expected)
+    }
+
+    check(1.toByte, 2.toByte, 1.toByte ^ 2.toByte)
+    check(1000.toShort, 2.toShort, 1000.toShort ^ 2.toShort)
+    check(1000000, 4, 1000000 ^ 4)
+    check(123456789123L, 5L, 123456789123L ^ 5L)
+
+    val nullLit = Literal.create(null, IntegerType)
+    checkEvaluation(BitwiseXor(nullLit, Literal(1)), null)
+    checkEvaluation(BitwiseXor(Literal(1), nullLit), null)
+    checkEvaluation(BitwiseXor(nullLit, nullLit), null)
+  }
 }

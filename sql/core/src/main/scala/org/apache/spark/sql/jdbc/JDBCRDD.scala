@@ -23,7 +23,8 @@ import java.util.Properties
 import org.apache.commons.lang3.StringUtils
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalyst.expressions.{InternalRow, SpecificMutableRow}
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.SpecificMutableRow
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._

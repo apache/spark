@@ -39,6 +39,8 @@ class SparkCommandLine(args: List[String], override val settings: Settings)
   }
 
   def this(args: List[String]) {
+    // scalastyle:off println
     this(args, str => Console.println("Error: " + str))
+    // scalastyle:on println
   }
 }

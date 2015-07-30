@@ -39,6 +39,8 @@ __all__ = [
     'coalesce',
     'countDistinct',
     'explode',
+    'format_number',
+    'length',
     'log2',
     'md5',
     'monotonicallyIncreasingId',
@@ -47,7 +49,6 @@ __all__ = [
     'sha1',
     'sha2',
     'sparkPartitionId',
-    'strlen',
     'struct',
     'udf',
     'when']
@@ -506,14 +507,28 @@ def sparkPartitionId():
 
 @ignore_unicode_prefix
 @since(1.5)
-def strlen(col):
-    """Calculates the length of a string expression.
+def length(col):
+    """Calculates the length of a string or binary expression.
 
-    >>> sqlContext.createDataFrame([('ABC',)], ['a']).select(strlen('a').alias('length')).collect()
+    >>> sqlContext.createDataFrame([('ABC',)], ['a']).select(length('a').alias('length')).collect()
     [Row(length=3)]
     """
     sc = SparkContext._active_spark_context
-    return Column(sc._jvm.functions.strlen(_to_java_column(col)))
+    return Column(sc._jvm.functions.length(_to_java_column(col)))
+
+
+@ignore_unicode_prefix
+@since(1.5)
+def format_number(col, d):
+    """Formats the number X to a format like '#,###,###.##', rounded to d decimal places,
+       and returns the result as a string.
+    :param col: the column name of the numeric value to be formatted
+    :param d: the N decimal places
+    >>> sqlContext.createDataFrame([(5,)], ['a']).select(format_number('a', 4).alias('v')).collect()
+    [Row(v=u'5.0000')]
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.format_number(_to_java_column(col), d))
 
 
 @ignore_unicode_prefix

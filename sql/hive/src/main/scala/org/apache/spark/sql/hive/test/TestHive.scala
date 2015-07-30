@@ -53,9 +53,10 @@ object TestHive
       "TestSQLContext",
       new SparkConf()
         .set("spark.sql.test", "")
-        .set(
-          "spark.sql.hive.metastore.barrierPrefixes",
-          "org.apache.spark.sql.hive.execution.PairSerDe")))
+        .set("spark.sql.hive.metastore.barrierPrefixes",
+          "org.apache.spark.sql.hive.execution.PairSerDe")
+        // SPARK-8910
+        .set("spark.ui.enabled", "false")))
 
 /**
  * A locally running test instance of Spark's Hive execution engine.

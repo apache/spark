@@ -24,6 +24,7 @@ import org.apache.spark.shuffle.hash.HashShuffleManager
 import org.apache.spark.shuffle.sort.SortShuffleManager
 import org.apache.spark.shuffle.unsafe.UnsafeShuffleManager
 import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.errors.attachTree
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical._
@@ -34,20 +35,12 @@ import org.apache.spark.{HashPartitioner, Partitioner, RangePartitioner, SparkEn
 
 /**
  * :: DeveloperApi ::
- * Performs a shuffle that will result in the desired `newPartitioning`.  Optionally sorts each
- * resulting partition based on expressions from the partition key.  It is invalid to construct an
- * exchange operator with a `newOrdering` that cannot be calculated using the partitioning key.
+ * Performs a shuffle that will result in the desired `newPartitioning`.
  */
 @DeveloperApi
-case class Exchange(
-    newPartitioning: Partitioning,
-    newOrdering: Seq[SortOrder],
-    child: SparkPlan)
-  extends UnaryNode {
+case class Exchange(newPartitioning: Partitioning, child: SparkPlan) extends UnaryNode {
 
   override def outputPartitioning: Partitioning = newPartitioning
-
-  override def outputOrdering: Seq[SortOrder] = newOrdering
 
   override def output: Seq[Attribute] = child.output
 
@@ -278,26 +271,24 @@ private[sql] case class EnsureRequirements(sqlContext: SQLContext) extends Rule[
           partitioning: Partitioning,
           rowOrdering: Seq[SortOrder],
           child: SparkPlan): SparkPlan = {
-        val needSort = rowOrdering.nonEmpty && child.outputOrdering != rowOrdering
-        val needsShuffle = child.outputPartitioning != partitioning
 
-        val withShuffle = if (needsShuffle) {
-          Exchange(partitioning, Nil, child)
-        } else {
-          child
-        }
-
-        val withSort = if (needSort) {
-          if (sqlContext.conf.externalSortEnabled) {
-            ExternalSort(rowOrdering, global = false, withShuffle)
+        def addShuffleIfNecessary(child: SparkPlan): SparkPlan = {
+          if (child.outputPartitioning != partitioning) {
+            Exchange(partitioning, child)
           } else {
-            Sort(rowOrdering, global = false, withShuffle)
+            child
           }
-        } else {
-          withShuffle
         }
 
-        withSort
+        def addSortIfNecessary(child: SparkPlan): SparkPlan = {
+          if (rowOrdering.nonEmpty && child.outputOrdering != rowOrdering) {
+            sqlContext.planner.BasicOperators.getSortOperator(rowOrdering, global = false, child)
+          } else {
+            child
+          }
+        }
+
+        addSortIfNecessary(addShuffleIfNecessary(child))
       }
 
       if (meetsRequirements && compatible && !needsAnySort) {
@@ -320,11 +311,7 @@ private[sql] case class EnsureRequirements(sqlContext: SQLContext) extends Rule[
           case (UnspecifiedDistribution, Seq(), child) =>
             child
           case (UnspecifiedDistribution, rowOrdering, child) =>
-            if (sqlContext.conf.externalSortEnabled) {
-              ExternalSort(rowOrdering, global = false, child)
-            } else {
-              Sort(rowOrdering, global = false, child)
-            }
+            sqlContext.planner.BasicOperators.getSortOperator(rowOrdering, global = false, child)
 
           case (dist, ordering, _) =>
             sys.error(s"Don't know how to ensure $dist with ordering $ordering")

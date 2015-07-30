@@ -20,7 +20,8 @@ package org.apache.spark.sql.execution.joins
 import java.io.{ObjectInput, ObjectOutput, Externalizable}
 import java.util.{HashMap => JavaHashMap}
 
-import org.apache.spark.sql.catalyst.expressions.{Projection, InternalRow}
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.Projection
 import org.apache.spark.sql.execution.SparkSqlSerializer
 import org.apache.spark.util.collection.CompactBuffer
 
@@ -124,7 +125,7 @@ private[joins] object HashedRelation {
         val existingMatchList = hashTable.get(rowKey)
         val matchList = if (existingMatchList == null) {
           val newMatchList = new CompactBuffer[InternalRow]()
-          hashTable.put(rowKey, newMatchList)
+          hashTable.put(rowKey.copy(), newMatchList)
           newMatchList
         } else {
           keyIsUnique = false

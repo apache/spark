@@ -18,13 +18,11 @@
 package org.apache.spark.sql.parquet
 
 import java.io.IOException
-import java.lang.{Long => JLong}
 import java.text.{NumberFormat, SimpleDateFormat}
-import java.util.concurrent.{Callable, TimeUnit}
-import java.util.{Date, List => JList}
+import java.util.concurrent.TimeUnit
+import java.util.Date
 
 import scala.collection.JavaConversions._
-import scala.collection.mutable
 import scala.util.Try
 
 import com.google.common.cache.CacheBuilder
@@ -34,11 +32,8 @@ import org.apache.hadoop.mapreduce._
 import org.apache.hadoop.mapreduce.lib.input.{FileInputFormat => NewFileInputFormat}
 import org.apache.hadoop.mapreduce.lib.output.{FileOutputCommitter, FileOutputFormat => NewFileOutputFormat}
 import org.apache.parquet.hadoop._
-import org.apache.parquet.hadoop.api.ReadSupport.ReadContext
-import org.apache.parquet.hadoop.api.{InitContext, ReadSupport}
-import org.apache.parquet.hadoop.metadata.GlobalMetaData
+import org.apache.parquet.hadoop.api.ReadSupport
 import org.apache.parquet.hadoop.util.ContextUtil
-import org.apache.parquet.io.ParquetDecodingException
 import org.apache.parquet.schema.MessageType
 
 import org.apache.spark.annotation.DeveloperApi
@@ -46,7 +41,8 @@ import org.apache.spark.mapred.SparkHadoopMapRedUtil
 import org.apache.spark.mapreduce.SparkHadoopMapReduceUtil
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SQLConf
-import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, InternalRow, _}
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, _}
 import org.apache.spark.sql.execution.{LeafNode, SparkPlan, UnaryNode}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.{Logging, TaskContext}

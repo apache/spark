@@ -17,15 +17,18 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodeGenContext, GeneratedExpressionCode}
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
 
 /**
  * Returns the current date at the start of query evaluation.
  * All calls of current_date within the same query return the same value.
+ *
+ * There is no code generation since this expression should get constant folded by the optimizer.
  */
-case class CurrentDate() extends LeafExpression {
+case class CurrentDate() extends LeafExpression with CodegenFallback {
   override def foldable: Boolean = true
   override def nullable: Boolean = false
 
@@ -39,14 +42,16 @@ case class CurrentDate() extends LeafExpression {
 /**
  * Returns the current timestamp at the start of query evaluation.
  * All calls of current_timestamp within the same query return the same value.
+ *
+ * There is no code generation since this expression should get constant folded by the optimizer.
  */
-case class CurrentTimestamp() extends LeafExpression {
+case class CurrentTimestamp() extends LeafExpression with CodegenFallback {
   override def foldable: Boolean = true
   override def nullable: Boolean = false
 
   override def dataType: DataType = TimestampType
 
   override def eval(input: InternalRow): Any = {
-    System.currentTimeMillis() * 10000L
+    System.currentTimeMillis() * 1000L
   }
 }

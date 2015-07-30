@@ -70,12 +70,14 @@ private[spark] object XORShiftRandom {
    * @param args takes one argument - the number of random numbers to generate
    */
   def main(args: Array[String]): Unit = {
+    // scalastyle:off println
     if (args.length != 1) {
       println("Benchmark of XORShiftRandom vis-a-vis java.util.Random")
       println("Usage: XORShiftRandom number_of_random_numbers_to_generate")
       System.exit(1)
     }
     println(benchmark(args(0).toInt))
+    // scalastyle:on println
   }
 
   /**
