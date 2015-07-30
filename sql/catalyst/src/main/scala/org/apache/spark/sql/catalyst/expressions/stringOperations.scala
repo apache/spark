@@ -1007,7 +1007,7 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
 
     s"""
       ${evalSubject.code}
-      boolean ${ev.isNull} = ${evalSubject.isNull};
+      boolean ${ev.isNull} = true;
       ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
       if (!${evalSubject.isNull}) {
         ${evalRegexp.code}
@@ -1034,11 +1034,7 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
             m.appendTail(${termResult});
             ${ev.primitive} = ${classNameUTF8String}.fromString(${termResult}.toString());
             ${ev.isNull} = false;
-          } else {
-            ${ev.isNull} = true;
           }
-        } else {
-          ${ev.isNull} = true;
         }
       }
     """
@@ -1108,7 +1104,7 @@ case class RegExpExtract(subject: Expression, regexp: Expression, idx: Expressio
     s"""
       ${evalSubject.code}
       ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
-      boolean ${ev.isNull} = ${evalSubject.isNull};
+      boolean ${ev.isNull} = true;
       if (!${evalSubject.isNull}) {
         ${evalRegexp.code}
         if (!${evalRegexp.isNull}) {
@@ -1129,11 +1125,7 @@ case class RegExpExtract(subject: Expression, regexp: Expression, idx: Expressio
               ${ev.primitive} = ${classNameUTF8String}.EMPTY_UTF8;
               ${ev.isNull} = false;
             }
-          } else {
-            ${ev.isNull} = true;
           }
-        } else {
-          ${ev.isNull} = true;
         }
       }
     """
