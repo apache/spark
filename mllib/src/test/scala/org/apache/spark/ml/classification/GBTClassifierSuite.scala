@@ -92,6 +92,7 @@ class GBTClassifierSuite extends SparkFunSuite with MLlibTestSparkContext {
       .setCheckpointInterval(2)
     val model = gbt.fit(df)
 
+    sc.checkpointDir = None
     Utils.deleteRecursively(tempDir)
   }
 

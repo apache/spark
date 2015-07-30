@@ -215,6 +215,7 @@ class GradientBoostedTreesSuite extends SparkFunSuite with MLlibTestSparkContext
 
     val gbt = GradientBoostedTrees.train(rdd, boostingStrategy)
 
+    sc.checkpointDir = None
     Utils.deleteRecursively(tempDir)
   }
 
