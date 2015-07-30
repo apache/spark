@@ -146,11 +146,16 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
     // If size is between 0 and 4 (inclusive), assume data is 4-byte aligned under the hood and
     // use a getInt to fetch the prefix.
     // If size is greater than 4, assume we have at least 8 bytes of data to fetch.
+    // After getting the data, we use a mask to mask out data that is not part of the string.
     long p;
-    if (numBytes > 4) {
+    if (numBytes > 8) {
       p = PlatformDependent.UNSAFE.getLong(base, offset);
+    } else  if (numBytes > 4) {
+      p = PlatformDependent.UNSAFE.getLong(base, offset);
+      p = p & ((1L << numBytes * 8) - 1);
     } else if (numBytes > 0) {
       p = (long) PlatformDependent.UNSAFE.getInt(base, offset);
+      p = p & ((1L << numBytes * 8) - 1);
     } else {
       p = 0;
     }
