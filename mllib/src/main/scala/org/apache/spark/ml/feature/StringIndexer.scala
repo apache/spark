@@ -178,7 +178,7 @@ class StringIndexerInverse private[ml] (
   override val uid: String) extends Transformer
     with HasInputCol with HasOutputCol {
 
-  def this(labels: Option[Array[String]] = None) =
+  def this() =
     this(Identifiable.randomUID("strIdxInv"))
 
   /** @group setParam */
@@ -187,7 +187,10 @@ class StringIndexerInverse private[ml] (
   /** @group setParam */
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
-  /** @group setParam */
+  /** @group setParam
+   * Optional labels to be provided by the user, if not supplied column
+   * metadata is read for labels.
+   */
   def setLabels(value: Array[String]): this.type = set(labels, value)
 
   /**
