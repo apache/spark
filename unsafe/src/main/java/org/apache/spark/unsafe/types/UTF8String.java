@@ -141,7 +141,19 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
    * Returns a 64-bit integer that can be used as the prefix used in sorting.
    */
   public long getPrefix() {
-    long p = PlatformDependent.UNSAFE.getLong(base, offset);
+    // Since JVMs are either 4-byte aligned or 8-byte aligned, we check the size of the string.
+    // If size is 0, just return 0.
+    // If size is between 0 and 4 (inclusive), assume data is 4-byte aligned under the hood and
+    // use a getInt to fetch the prefix.
+    // If size is greater than 4, assume we have at least 8 bytes of data to fetch.
+    long p;
+    if (numBytes > 4) {
+      p = PlatformDependent.UNSAFE.getLong(base, offset);
+    } else if (numBytes > 0) {
+      p = (long) PlatformDependent.UNSAFE.getInt(base, offset);
+    } else {
+      p = 0;
+    }
     p = java.lang.Long.reverseBytes(p);
     return p;
   }
