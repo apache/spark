@@ -50,24 +50,25 @@ case class ShuffledHashOuterJoin(
       // TODO this probably can be replaced by external sort (sort merged join?)
       joinType match {
         case LeftOuter =>
-          val rightHashTable = buildHashTable(rightIter, newProjection(rightKeys, right.output))
-          val keyGenerator = newProjection(leftKeys, left.output)
+          val hashed = HashedRelation(rightIter, buildKeyGenerator)
+          val keyGenerator = streamedKeyGenerator
           leftIter.flatMap( currentRow => {
             val rowKey = keyGenerator(currentRow)
             joinedRow.withLeft(currentRow)
-            leftOuterIterator(rowKey, joinedRow, rightHashTable.getOrElse(rowKey, EMPTY_LIST))
+            leftOuterIterator(rowKey, joinedRow, hashed.get(rowKey))
           })
 
         case RightOuter =>
-          val leftHashTable = buildHashTable(leftIter, newProjection(leftKeys, left.output))
-          val keyGenerator = newProjection(rightKeys, right.output)
+          val hashed = HashedRelation(leftIter, buildKeyGenerator)
+          val keyGenerator = streamedKeyGenerator
           rightIter.flatMap ( currentRow => {
             val rowKey = keyGenerator(currentRow)
             joinedRow.withRight(currentRow)
-            rightOuterIterator(rowKey, leftHashTable.getOrElse(rowKey, EMPTY_LIST), joinedRow)
+            rightOuterIterator(rowKey, hashed.get(rowKey), joinedRow)
           })
 
         case FullOuter =>
+          // TODO(davies): use UnsafeRow
           val leftHashTable = buildHashTable(leftIter, newProjection(leftKeys, left.output))
           val rightHashTable = buildHashTable(rightIter, newProjection(rightKeys, right.output))
           (leftHashTable.keySet ++ rightHashTable.keySet).iterator.flatMap { key =>

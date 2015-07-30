@@ -24,7 +24,7 @@ from pyspark.mllib.common import inherit_doc
 __all__ = ['Binarizer', 'HashingTF', 'IDF', 'IDFModel', 'NGram', 'Normalizer', 'OneHotEncoder',
            'PolynomialExpansion', 'RegexTokenizer', 'StandardScaler', 'StandardScalerModel',
            'StringIndexer', 'StringIndexerModel', 'Tokenizer', 'VectorAssembler', 'VectorIndexer',
-           'Word2Vec', 'Word2VecModel']
+           'Word2Vec', 'Word2VecModel', 'PCA', 'PCAModel']
 
 
 @inherit_doc
@@ -525,7 +525,7 @@ class RegexTokenizer(JavaTransformer, HasInputCol, HasOutputCol):
     """
     A regex based tokenizer that extracts tokens either by using the
     provided regex pattern (in Java dialect) to split the text
-    (default) or repeatedly matching the regex (if gaps is true).
+    (default) or repeatedly matching the regex (if gaps is false).
     Optional parameters also allow filtering tokens using a minimal
     length.
     It returns an array of strings that can be empty.
@@ -1045,6 +1045,68 @@ class Word2Vec(JavaEstimator, HasStepSize, HasMaxIter, HasSeed, HasInputCol, Has
 class Word2VecModel(JavaModel):
     """
     Model fitted by Word2Vec.
+    """
+
+
+@inherit_doc
+class PCA(JavaEstimator, HasInputCol, HasOutputCol):
+    """
+    PCA trains a model to project vectors to a low-dimensional space using PCA.
+
+    >>> from pyspark.mllib.linalg import Vectors
+    >>> data = [(Vectors.sparse(5, [(1, 1.0), (3, 7.0)]),),
+    ...     (Vectors.dense([2.0, 0.0, 3.0, 4.0, 5.0]),),
+    ...     (Vectors.dense([4.0, 0.0, 0.0, 6.0, 7.0]),)]
+    >>> df = sqlContext.createDataFrame(data,["features"])
+    >>> pca = PCA(k=2, inputCol="features", outputCol="pca_features")
+    >>> model = pca.fit(df)
+    >>> model.transform(df).collect()[0].pca_features
+    DenseVector([1.648..., -4.013...])
+    """
+
+    # a placeholder to make it appear in the generated doc
+    k = Param(Params._dummy(), "k", "the number of principal components")
+
+    @keyword_only
+    def __init__(self, k=None, inputCol=None, outputCol=None):
+        """
+        __init__(self, k=None, inputCol=None, outputCol=None)
+        """
+        super(PCA, self).__init__()
+        self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.PCA", self.uid)
+        self.k = Param(self, "k", "the number of principal components")
+        kwargs = self.__init__._input_kwargs
+        self.setParams(**kwargs)
+
+    @keyword_only
+    def setParams(self, k=None, inputCol=None, outputCol=None):
+        """
+        setParams(self, k=None, inputCol=None, outputCol=None)
+        Set params for this PCA.
+        """
+        kwargs = self.setParams._input_kwargs
+        return self._set(**kwargs)
+
+    def setK(self, value):
+        """
+        Sets the value of :py:attr:`k`.
+        """
+        self._paramMap[self.k] = value
+        return self
+
+    def getK(self):
+        """
+        Gets the value of k or its default value.
+        """
+        return self.getOrDefault(self.k)
+
+    def _create_model(self, java_model):
+        return PCAModel(java_model)
+
+
+class PCAModel(JavaModel):
+    """
+    Model fitted by PCA.
     """
 
 

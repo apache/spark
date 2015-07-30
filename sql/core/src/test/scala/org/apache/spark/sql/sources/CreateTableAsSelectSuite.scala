@@ -22,6 +22,7 @@ import java.io.{File, IOException}
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.execution.datasources.DDLException
 import org.apache.spark.util.Utils
 
 class CreateTableAsSelectSuite extends DataSourceTest with BeforeAndAfterAll {

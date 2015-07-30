@@ -417,7 +417,7 @@ object ServerMode extends Enumeration {
 }
 
 abstract class HiveThriftJdbcTest extends HiveThriftServer2Test {
-  Class.forName(classOf[HiveDriver].getCanonicalName)
+  Utils.classForName(classOf[HiveDriver].getCanonicalName)
 
   private def jdbcUri = if (mode == ServerMode.http) {
     s"""jdbc:hive2://localhost:$serverPort/

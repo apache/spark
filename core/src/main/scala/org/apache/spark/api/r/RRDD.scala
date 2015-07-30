@@ -39,7 +39,6 @@ private abstract class BaseRRDD[T: ClassTag, U: ClassTag](
     deserializer: String,
     serializer: String,
     packageNames: Array[Byte],
-    rLibDir: String,
     broadcastVars: Array[Broadcast[Object]])
   extends RDD[U](parent) with Logging {
   protected var dataStream: DataInputStream = _
@@ -60,7 +59,7 @@ private abstract class BaseRRDD[T: ClassTag, U: ClassTag](
 
     // The stdout/stderr is shared by multiple tasks, because we use one daemon
     // to launch child process as worker.
-    val errThread = RRDD.createRWorker(rLibDir, listenPort)
+    val errThread = RRDD.createRWorker(listenPort)
 
     // We use two sockets to separate input and output, then it's easy to manage
     // the lifecycle of them to avoid deadlock.
@@ -113,6 +112,7 @@ private abstract class BaseRRDD[T: ClassTag, U: ClassTag](
     partition: Int): Unit = {
 
     val env = SparkEnv.get
+    val taskContext = TaskContext.get()
     val bufferSize = System.getProperty("spark.buffer.size", "65536").toInt
     val stream = new BufferedOutputStream(output, bufferSize)
 
@@ -120,6 +120,7 @@ private abstract class BaseRRDD[T: ClassTag, U: ClassTag](
       override def run(): Unit = {
         try {
           SparkEnv.set(env)
+          TaskContext.setTaskContext(taskContext)
           val dataOut = new DataOutputStream(stream)
           dataOut.writeInt(partition)
 
@@ -235,11 +236,10 @@ private class PairwiseRRDD[T: ClassTag](
     hashFunc: Array[Byte],
     deserializer: String,
     packageNames: Array[Byte],
-    rLibDir: String,
     broadcastVars: Array[Object])
   extends BaseRRDD[T, (Int, Array[Byte])](
     parent, numPartitions, hashFunc, deserializer,
-    SerializationFormats.BYTE, packageNames, rLibDir,
+    SerializationFormats.BYTE, packageNames,
     broadcastVars.map(x => x.asInstanceOf[Broadcast[Object]])) {
 
   override protected def readData(length: Int): (Int, Array[Byte]) = {
@@ -266,10 +266,9 @@ private class RRDD[T: ClassTag](
     deserializer: String,
     serializer: String,
     packageNames: Array[Byte],
-    rLibDir: String,
     broadcastVars: Array[Object])
   extends BaseRRDD[T, Array[Byte]](
-    parent, -1, func, deserializer, serializer, packageNames, rLibDir,
+    parent, -1, func, deserializer, serializer, packageNames,
     broadcastVars.map(x => x.asInstanceOf[Broadcast[Object]])) {
 
   override protected def readData(length: Int): Array[Byte] = {
@@ -293,10 +292,9 @@ private class StringRRDD[T: ClassTag](
     func: Array[Byte],
     deserializer: String,
     packageNames: Array[Byte],
-    rLibDir: String,
     broadcastVars: Array[Object])
   extends BaseRRDD[T, String](
-    parent, -1, func, deserializer, SerializationFormats.STRING, packageNames, rLibDir,
+    parent, -1, func, deserializer, SerializationFormats.STRING, packageNames,
     broadcastVars.map(x => x.asInstanceOf[Broadcast[Object]])) {
 
   override protected def readData(length: Int): String = {
@@ -392,9 +390,10 @@ private[r] object RRDD {
     thread
   }
 
-  private def createRProcess(rLibDir: String, port: Int, script: String): BufferedStreamThread = {
+  private def createRProcess(port: Int, script: String): BufferedStreamThread = {
     val rCommand = SparkEnv.get.conf.get("spark.sparkr.r.command", "Rscript")
     val rOptions = "--vanilla"
+    val rLibDir = RUtils.sparkRPackagePath(isDriver = false)
     val rExecScript = rLibDir + "/SparkR/worker/" + script
     val pb = new ProcessBuilder(List(rCommand, rOptions, rExecScript))
     // Unset the R_TESTS environment variable for workers.
@@ -413,7 +412,7 @@ private[r] object RRDD {
   /**
    * ProcessBuilder used to launch worker R processes.
    */
-  def createRWorker(rLibDir: String, port: Int): BufferedStreamThread = {
+  def createRWorker(port: Int): BufferedStreamThread = {
     val useDaemon = SparkEnv.get.conf.getBoolean("spark.sparkr.use.daemon", true)
     if (!Utils.isWindows && useDaemon) {
       synchronized {
@@ -421,7 +420,7 @@ private[r] object RRDD {
           // we expect one connections
           val serverSocket = new ServerSocket(0, 1, InetAddress.getByName("localhost"))
           val daemonPort = serverSocket.getLocalPort
-          errThread = createRProcess(rLibDir, daemonPort, "daemon.R")
+          errThread = createRProcess(daemonPort, "daemon.R")
           // the socket used to send out the input of task
           serverSocket.setSoTimeout(10000)
           val sock = serverSocket.accept()
@@ -443,7 +442,7 @@ private[r] object RRDD {
         errThread
       }
     } else {
-      createRProcess(rLibDir, port, "worker.R")
+      createRProcess(port, "worker.R")
     }
   }
 

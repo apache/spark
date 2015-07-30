@@ -31,6 +31,8 @@ import org.apache.spark.rdd.RDD
  *
  * Generates association rules from a [[RDD[FreqItemset[Item]]]. This method only generates
  * association rules which have a single item as the consequent.
+ *
+ * @since 1.5.0
  */
 @Experimental
 class AssociationRules private[fpm] (
@@ -38,11 +40,15 @@ class AssociationRules private[fpm] (
 
   /**
    * Constructs a default instance with default parameters {minConfidence = 0.8}.
+   *
+   * @since 1.5.0
    */
   def this() = this(0.8)
 
   /**
    * Sets the minimal confidence (default: `0.8`).
+   *
+   * @since 1.5.0
    */
   def setMinConfidence(minConfidence: Double): this.type = {
     require(minConfidence >= 0.0 && minConfidence <= 1.0)
@@ -54,6 +60,8 @@ class AssociationRules private[fpm] (
    * Computes the association rules with confidence above [[minConfidence]].
    * @param freqItemsets frequent itemset model obtained from [[FPGrowth]]
    * @return a [[Set[Rule[Item]]] containing the assocation rules.
+   *
+   * @since 1.5.0
    */
   def run[Item: ClassTag](freqItemsets: RDD[FreqItemset[Item]]): RDD[Rule[Item]] = {
     // For candidate rule X => Y, generate (X, (Y, freq(X union Y)))
@@ -90,6 +98,8 @@ object AssociationRules {
    * @param antecedent hypotheses of the rule
    * @param consequent conclusion of the rule
    * @tparam Item item type
+   *
+   * @since 1.5.0
    */
   @Experimental
   class Rule[Item] private[fpm] (

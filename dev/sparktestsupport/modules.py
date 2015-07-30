@@ -29,7 +29,7 @@ class Module(object):
     changed.
     """
 
-    def __init__(self, name, dependencies, source_file_regexes, build_profile_flags=(),
+    def __init__(self, name, dependencies, source_file_regexes, build_profile_flags=(), environ={},
                  sbt_test_goals=(), python_test_goals=(), blacklisted_python_implementations=(),
                  should_run_r_tests=False):
         """
@@ -43,6 +43,8 @@ class Module(object):
             filename strings.
         :param build_profile_flags: A set of profile flags that should be passed to Maven or SBT in
             order to build and test this module (e.g. '-PprofileName').
+        :param environ: A dict of environment variables that should be set when files in this
+            module are changed.
         :param sbt_test_goals: A set of SBT test goals for testing this module.
         :param python_test_goals: A set of Python test goals for testing this module.
         :param blacklisted_python_implementations: A set of Python implementations that are not
@@ -55,6 +57,7 @@ class Module(object):
         self.source_file_prefixes = source_file_regexes
         self.sbt_test_goals = sbt_test_goals
         self.build_profile_flags = build_profile_flags
+        self.environ = environ
         self.python_test_goals = python_test_goals
         self.blacklisted_python_implementations = blacklisted_python_implementations
         self.should_run_r_tests = should_run_r_tests
@@ -126,15 +129,22 @@ streaming = Module(
 )
 
 
+# Don't set the dependencies because changes in other modules should not trigger Kinesis tests.
+# Kinesis tests depends on external Amazon kinesis service. We should run these tests only when
+# files in streaming_kinesis_asl are changed, so that if Kinesis experiences an outage, we don't
+# fail other PRs.
 streaming_kinesis_asl = Module(
     name="kinesis-asl",
-    dependencies=[streaming],
+    dependencies=[],
     source_file_regexes=[
         "extras/kinesis-asl/",
     ],
     build_profile_flags=[
         "-Pkinesis-asl",
     ],
+    environ={
+        "ENABLE_KINESIS_TESTS": "1"
+    },
     sbt_test_goals=[
         "kinesis-asl/test",
     ]
@@ -338,6 +348,7 @@ pyspark_ml = Module(
     python_test_goals=[
         "pyspark.ml.feature",
         "pyspark.ml.classification",
+        "pyspark.ml.clustering",
         "pyspark.ml.recommendation",
         "pyspark.ml.regression",
         "pyspark.ml.tuning",

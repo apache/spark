@@ -24,7 +24,7 @@ import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.{InternalRow, CatalystTypeConverters}
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
+import org.apache.spark.sql.catalyst.expressions.{ExpressionDescription, Expression, Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.types._
@@ -35,8 +35,6 @@ import org.apache.spark.sql.{DataFrame, Row, SQLConf, SQLContext}
  * wrapped in `ExecutedCommand` during execution.
  */
 private[sql] trait RunnableCommand extends LogicalPlan with logical.Command {
-  self: Product =>
-
   override def output: Seq[Attribute] = Seq.empty
   override def children: Seq[LogicalPlan] = Seq.empty
   def run(sqlContext: SQLContext): Seq[Row]
@@ -298,5 +296,80 @@ case class ShowTablesCommand(databaseName: Option[String]) extends RunnableComma
     }
 
     rows
+  }
+}
+
+/**
+ * A command for users to list all of the registered functions.
+ * The syntax of using this command in SQL is:
+ * {{{
+ *    SHOW FUNCTIONS
+ * }}}
+ * TODO currently we are simply ignore the db
+ */
+case class ShowFunctions(db: Option[String], pattern: Option[String]) extends RunnableCommand {
+  override val output: Seq[Attribute] = {
+    val schema = StructType(
+      StructField("function", StringType, nullable = false) :: Nil)
+
+    schema.toAttributes
+  }
+
+  override def run(sqlContext: SQLContext): Seq[Row] = pattern match {
+    case Some(p) =>
+      try {
+        val regex = java.util.regex.Pattern.compile(p)
+        sqlContext.functionRegistry.listFunction().filter(regex.matcher(_).matches()).map(Row(_))
+      } catch {
+        // probably will failed in the regex that user provided, then returns empty row.
+        case _: Throwable => Seq.empty[Row]
+      }
+    case None =>
+      sqlContext.functionRegistry.listFunction().map(Row(_))
+  }
+}
+
+/**
+ * A command for users to get the usage of a registered function.
+ * The syntax of using this command in SQL is
+ * {{{
+ *   DESCRIBE FUNCTION [EXTENDED] upper;
+ * }}}
+ */
+case class DescribeFunction(
+    functionName: String,
+    isExtended: Boolean) extends RunnableCommand {
+
+  override val output: Seq[Attribute] = {
+    val schema = StructType(
+      StructField("function_desc", StringType, nullable = false) :: Nil)
+
+    schema.toAttributes
+  }
+
+  private def replaceFunctionName(usage: String, functionName: String): String = {
+    if (usage == null) {
+      "To be added."
+    } else {
+      usage.replaceAll("_FUNC_", functionName)
+    }
+  }
+
+  override def run(sqlContext: SQLContext): Seq[Row] = {
+    sqlContext.functionRegistry.lookupFunction(functionName) match {
+      case Some(info) =>
+        val result =
+          Row(s"Function: ${info.getName}") ::
+          Row(s"Class: ${info.getClassName}") ::
+          Row(s"Usage: ${replaceFunctionName(info.getUsage(), info.getName)}") :: Nil
+
+        if (isExtended) {
+          result :+ Row(s"Extended Usage:\n${replaceFunctionName(info.getExtended, info.getName)}")
+        } else {
+          result
+        }
+
+      case None => Seq(Row(s"Function: $functionName is not found."))
+    }
   }
 }
