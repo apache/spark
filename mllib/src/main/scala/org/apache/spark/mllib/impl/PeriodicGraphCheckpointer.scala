@@ -17,6 +17,7 @@
 
 package org.apache.spark.mllib.impl
 
+import org.apache.spark.SparkContext
 import org.apache.spark.graphx.Graph
 import org.apache.spark.storage.StorageLevel
 
@@ -47,7 +48,7 @@ import org.apache.spark.storage.StorageLevel
  * Example usage:
  * {{{
  *  val (graph1, graph2, graph3, ...) = ...
- *  val cp = new PeriodicGraphCheckpointer(graph1, dir, 2)
+ *  val cp = new PeriodicGraphCheckpointer(2, sc)
  *  graph1.vertices.count(); graph1.edges.count()
  *  // persisted: graph1
  *  cp.updateGraph(graph2)
@@ -68,7 +69,6 @@ import org.apache.spark.storage.StorageLevel
  *  // checkpointed: graph4
  * }}}
  *
- * @param initGraph  Initial graph
  * @param checkpointInterval Graphs will be checkpointed at this interval
  * @tparam VD  Vertex descriptor type
  * @tparam ED  Edge descriptor type
@@ -76,10 +76,9 @@ import org.apache.spark.storage.StorageLevel
  * TODO: Move this out of MLlib?
  */
 private[mllib] class PeriodicGraphCheckpointer[VD, ED](
-    initGraph: Graph[VD, ED],
-    checkpointInterval: Int)
-  extends PeriodicCheckpointer[Graph[VD, ED]](initGraph, checkpointInterval,
-    initGraph.vertices.sparkContext) {
+    checkpointInterval: Int,
+    sc: SparkContext)
+  extends PeriodicCheckpointer[Graph[VD, ED]](checkpointInterval, sc) {
 
   override def checkpoint(data: Graph[VD, ED]): Unit = data.checkpoint()
 

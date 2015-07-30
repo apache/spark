@@ -51,37 +51,11 @@ import org.apache.spark.storage.StorageLevel
  *  - This class removes checkpoint files once later Datasets have been checkpointed.
  *    However, references to the older Datasets will still return isCheckpointed = true.
  *
- * Example usage:
- * {{{
- *  val (data1, data2, data3, ...) = ...
- *  val cp = new PeriodicCheckpointer(data1, dir, 2)
- *  data1.count();
- *  // persisted: data1
- *  cp.update(data2)
- *  data2.count();
- *  // persisted: data1, data2
- *  // checkpointed: data2
- *  cp.update(data3)
- *  data3.count();
- *  // persisted: data1, data2, data3
- *  // checkpointed: data2
- *  cp.update(data4)
- *  data4.count();
- *  // persisted: data2, data3, data4
- *  // checkpointed: data4
- *  cp.update(data5)
- *  data5.count();
- *  // persisted: data3, data4, data5
- *  // checkpointed: data4
- * }}}
- *
- * @param currentData Initial Dataset
  * @param checkpointInterval  Datasets will be checkpointed at this interval
  * @param sc  SparkContext for the Datasets given to this checkpointer
  * @tparam T  Dataset type, such as RDD[Double]
  */
 private[mllib] abstract class PeriodicCheckpointer[T](
-    var currentData: T,
     val checkpointInterval: Int,
     val sc: SparkContext) extends Logging {
 
@@ -94,10 +68,8 @@ private[mllib] abstract class PeriodicCheckpointer[T](
   /** Number of times [[update()]] has been called */
   private var updateCount = 0
 
-  update(currentData)
-
   /**
-   * Update [[currentData]] with a new Dataset. Handle persistence and checkpointing as needed.
+   * Update with a new Dataset. Handle persistence and checkpointing as needed.
    * Since this handles persistence and checkpointing, this should be called before the Dataset
    * has been materialized.
    *
@@ -124,15 +96,13 @@ private[mllib] abstract class PeriodicCheckpointer[T](
       var canDelete = true
       while (checkpointQueue.size > 1 && canDelete) {
         // Delete the oldest checkpoint only if the next checkpoint exists.
-        if (isCheckpointed(checkpointQueue.get(1).get)) {
+        if (isCheckpointed(checkpointQueue.head)) {
           removeCheckpointFile()
         } else {
           canDelete = false
         }
       }
     }
-
-    currentData = newData
   }
 
   /** Checkpoint the Dataset */

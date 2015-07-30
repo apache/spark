@@ -17,6 +17,7 @@
 
 package org.apache.spark.mllib.impl
 
+import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 
@@ -47,7 +48,7 @@ import org.apache.spark.storage.StorageLevel
  * Example usage:
  * {{{
  *  val (rdd1, rdd2, rdd3, ...) = ...
- *  val cp = new PeriodicRDDCheckpointer(rdd1, dir, 2)
+ *  val cp = new PeriodicRDDCheckpointer(2, sc)
  *  rdd1.count();
  *  // persisted: rdd1
  *  cp.update(rdd2)
@@ -68,16 +69,15 @@ import org.apache.spark.storage.StorageLevel
  *  // checkpointed: rdd4
  * }}}
  *
- * @param initRDD  Initial RDD
  * @param checkpointInterval  RDDs will be checkpointed at this interval
  * @tparam T  RDD element type
  *
  * TODO: Move this out of MLlib?
  */
 private[mllib] class PeriodicRDDCheckpointer[T](
-    initRDD: RDD[T],
-    checkpointInterval: Int)
-  extends PeriodicCheckpointer[RDD[T]](initRDD, checkpointInterval, initRDD.sparkContext) {
+    checkpointInterval: Int,
+    sc: SparkContext)
+  extends PeriodicCheckpointer[RDD[T]](checkpointInterval, sc) {
 
   override def checkpoint(data: RDD[T]): Unit = data.checkpoint()
 
