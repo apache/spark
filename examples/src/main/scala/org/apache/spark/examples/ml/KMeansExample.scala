@@ -18,7 +18,7 @@
 package org.apache.spark.examples.ml
 
 import org.apache.spark.{SparkContext, SparkConf}
-import org.apache.spark.mllib.linalg.Vectors
+import org.apache.spark.mllib.linalg.{VectorUDT, Vectors}
 import org.apache.spark.ml.clustering.KMeans
 import org.apache.spark.sql.{Row, SQLContext}
 import org.apache.spark.sql.types.{StructField, StructType}
@@ -49,7 +49,6 @@ object KMeansExample {
     val conf = new SparkConf().setAppName(s"${this.getClass.getSimpleName}")
     val sc = new SparkContext(conf)
     val sqlContext = new SQLContext(sc)
-    import org.apache.spark.mllib.linalg.VectorUDT
 
     // Loads data
     val rowRDD = sc.textFile(input).filter(_.nonEmpty)
