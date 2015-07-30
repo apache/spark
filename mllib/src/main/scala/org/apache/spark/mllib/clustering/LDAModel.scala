@@ -217,8 +217,16 @@ class LocalLDAModel private[clustering] (
     LocalLDAModel.SaveLoadV1_0.save(sc, path, topicsMatrix, docConcentration, topicConcentration,
       gammaShape)
   }
-  // TODO
-  // override def logLikelihood(documents: RDD[(Long, Vector)]): Double = ???
+
+  // TODO: declare in LDAModel and override once implemented in DistributedLDAModel
+  /**
+   * Calculates an upper bound on the log likelihood of the entire corpus.
+   * @param documents test corpus to use for calculating log likelihood
+   * @return variational upper bound on the log likelihood of the entire corpus
+   */
+  def logLikelihood(documents: RDD[(Long, Vector)]): Double = bound(documents,
+    docConcentration, topicConcentration, topicsMatrix.toBreeze.toDenseMatrix, gammaShape, k,
+    vocabSize)
 
   /**
    * Calculate the log variational bound on perplexity. See Equation (16) in original Online
@@ -230,9 +238,7 @@ class LocalLDAModel private[clustering] (
     val corpusWords = documents
       .map { case (_, termCounts) => termCounts.toArray.sum }
       .sum()
-    val batchVariationalBound = bound(documents, docConcentration,
-      topicConcentration, topicsMatrix.toBreeze.toDenseMatrix, gammaShape, k, vocabSize)
-    val perWordBound = batchVariationalBound / corpusWords
+    val perWordBound = logLikelihood(documents) / corpusWords
 
     perWordBound
   }
