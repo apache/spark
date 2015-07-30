@@ -87,10 +87,14 @@ private[spark] abstract class Task[T](
     } finally {
       context.markTaskCompleted()
       try {
-        // Release memory used by this thread for shuffles
-        SparkEnv.get.shuffleMemoryManager.releaseMemoryForThisTask()
-        // Release memory used by this thread for unrolling blocks
-        SparkEnv.get.blockManager.memoryStore.releaseUnrollMemoryForThisTask()
+        Utils.tryLogNonFatalError {
+          // Release memory used by this thread for shuffles
+          SparkEnv.get.shuffleMemoryManager.releaseMemoryForThisTask()
+        }
+        Utils.tryLogNonFatalError {
+          // Release memory used by this thread for unrolling blocks
+          SparkEnv.get.blockManager.memoryStore.releaseUnrollMemoryForThisTask()
+        }
       } finally {
         TaskContext.unset()
       }

@@ -72,8 +72,10 @@ case class Aggregate2Sort(
   protected override def doExecute(): RDD[InternalRow] = attachTree(this, "execute") {
     child.execute().mapPartitions { iter =>
       if (aggregateExpressions.length == 0) {
-        new GroupingIterator(
+        new FinalSortAggregationIterator(
           groupingExpressions,
+          Nil,
+          Nil,
           resultExpressions,
           newMutableProjection,
           child.output,

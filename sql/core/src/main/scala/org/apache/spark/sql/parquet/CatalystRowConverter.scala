@@ -325,7 +325,7 @@ private[parquet] class CatalystRowConverter(
 
     override def getConverter(fieldIndex: Int): Converter = elementConverter
 
-    override def end(): Unit = updater.set(currentArray)
+    override def end(): Unit = updater.set(new GenericArrayData(currentArray.toArray))
 
     // NOTE: We can't reuse the mutable `ArrayBuffer` here and must instantiate a new buffer for the
     // next value.  `Row.copy()` only copies row cells, it doesn't do deep copy to objects stored

@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.TaskContext
+import org.apache.spark.{SparkEnv, TaskContext}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
@@ -260,12 +260,14 @@ case class GeneratedAggregate(
       } else if (unsafeEnabled && schemaSupportsUnsafe) {
         assert(iter.hasNext, "There should be at least one row for this path")
         log.info("Using Unsafe-based aggregator")
+        val pageSizeBytes = SparkEnv.get.conf.getSizeAsBytes("spark.buffer.pageSize", "64m")
         val aggregationMap = new UnsafeFixedWidthAggregationMap(
           newAggregationBuffer(EmptyRow),
           aggregationBufferSchema,
           groupKeySchema,
           TaskContext.get.taskMemoryManager(),
           1024 * 16, // initial capacity
+          pageSizeBytes,
           false // disable tracking of performance metrics
         )
 

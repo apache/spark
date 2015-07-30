@@ -312,7 +312,8 @@ object NullPropagation extends Rule[LogicalPlan] {
       case e @ GetMapValue(Literal(null, _), _) => Literal.create(null, e.dataType)
       case e @ GetMapValue(_, Literal(null, _)) => Literal.create(null, e.dataType)
       case e @ GetStructField(Literal(null, _), _, _) => Literal.create(null, e.dataType)
-      case e @ GetArrayStructFields(Literal(null, _), _, _, _) => Literal.create(null, e.dataType)
+      case e @ GetArrayStructFields(Literal(null, _), _, _, _, _) =>
+        Literal.create(null, e.dataType)
       case e @ EqualNullSafe(Literal(null, _), r) => IsNull(r)
       case e @ EqualNullSafe(l, Literal(null, _)) => IsNull(l)
       case e @ Count(expr) if !expr.nullable => Count(Literal(1))

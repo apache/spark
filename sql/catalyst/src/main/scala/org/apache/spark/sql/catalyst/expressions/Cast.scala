@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.{Interval, UTF8String}
+import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 import scala.collection.mutable
 
@@ -55,7 +55,7 @@ object Cast {
 
     case (_, DateType) => true
 
-    case (StringType, IntervalType) => true
+    case (StringType, CalendarIntervalType) => true
 
     case (StringType, _: NumericType) => true
     case (BooleanType, _: NumericType) => true
@@ -225,7 +225,7 @@ case class Cast(child: Expression, dataType: DataType)
   // IntervalConverter
   private[this] def castToInterval(from: DataType): Any => Any = from match {
     case StringType =>
-      buildCast[UTF8String](_, s => Interval.fromString(s.toString))
+      buildCast[UTF8String](_, s => CalendarInterval.fromString(s.toString))
     case _ => _ => null
   }
 
@@ -363,7 +363,21 @@ case class Cast(child: Expression, dataType: DataType)
 
   private[this] def castArray(from: ArrayType, to: ArrayType): Any => Any = {
     val elementCast = cast(from.elementType, to.elementType)
-    buildCast[Seq[Any]](_, _.map(v => if (v == null) null else elementCast(v)))
+    // TODO: Could be faster?
+    buildCast[ArrayData](_, array => {
+      val length = array.numElements()
+      val values = new Array[Any](length)
+      var i = 0
+      while (i < length) {
+        if (array.isNullAt(i)) {
+          values(i) = null
+        } else {
+          values(i) = elementCast(array.get(i))
+        }
+        i += 1
+      }
+      new GenericArrayData(values)
+    })
   }
 
   private[this] def castMap(from: MapType, to: MapType): Any => Any = {
@@ -398,7 +412,7 @@ case class Cast(child: Expression, dataType: DataType)
     case DateType => castToDate(from)
     case decimal: DecimalType => castToDecimal(from, decimal)
     case TimestampType => castToTimestamp(from)
-    case IntervalType => castToInterval(from)
+    case CalendarIntervalType => castToInterval(from)
     case BooleanType => castToBoolean(from)
     case ByteType => castToByte(from)
     case ShortType => castToShort(from)
@@ -438,7 +452,7 @@ case class Cast(child: Expression, dataType: DataType)
     case DateType => castToDateCode(from, ctx)
     case decimal: DecimalType => castToDecimalCode(from, decimal)
     case TimestampType => castToTimestampCode(from, ctx)
-    case IntervalType => castToIntervalCode(from)
+    case CalendarIntervalType => castToIntervalCode(from)
     case BooleanType => castToBooleanCode(from)
     case ByteType => castToByteCode(from)
     case ShortType => castToShortCode(from)
@@ -599,7 +613,7 @@ case class Cast(child: Expression, dataType: DataType)
           }
          """
     case BooleanType =>
-      (c, evPrim, evNull) => s"$evPrim = $c ? 1L : 0;"
+      (c, evPrim, evNull) => s"$evPrim = $c ? 1L : 0L;"
     case _: IntegralType =>
       (c, evPrim, evNull) => s"$evPrim = ${longToTimeStampCode(c)};"
     case DateType =>
@@ -630,7 +644,7 @@ case class Cast(child: Expression, dataType: DataType)
   private[this] def castToIntervalCode(from: DataType): CastFunction = from match {
     case StringType =>
       (c, evPrim, evNull) =>
-        s"$evPrim = Interval.fromString($c.toString());"
+        s"$evPrim = CalendarInterval.fromString($c.toString());"
   }
 
   private[this] def decimalToTimestampCode(d: String): String =
@@ -665,7 +679,7 @@ case class Cast(child: Expression, dataType: DataType)
           }
         """
     case BooleanType =>
-      (c, evPrim, evNull) => s"$evPrim = $c ? 1 : 0;"
+      (c, evPrim, evNull) => s"$evPrim = $c ? (byte) 1 : (byte) 0;"
     case DateType =>
       (c, evPrim, evNull) => s"$evNull = true;"
     case TimestampType =>
@@ -687,7 +701,7 @@ case class Cast(child: Expression, dataType: DataType)
           }
         """
     case BooleanType =>
-      (c, evPrim, evNull) => s"$evPrim = $c ? 1 : 0;"
+      (c, evPrim, evNull) => s"$evPrim = $c ? (short) 1 : (short) 0;"
     case DateType =>
       (c, evPrim, evNull) => s"$evNull = true;"
     case TimestampType =>
@@ -731,7 +745,7 @@ case class Cast(child: Expression, dataType: DataType)
           }
         """
     case BooleanType =>
-      (c, evPrim, evNull) => s"$evPrim = $c ? 1 : 0;"
+      (c, evPrim, evNull) => s"$evPrim = $c ? 1L : 0L;"
     case DateType =>
       (c, evPrim, evNull) => s"$evNull = true;"
     case TimestampType =>
@@ -753,7 +767,7 @@ case class Cast(child: Expression, dataType: DataType)
           }
         """
     case BooleanType =>
-      (c, evPrim, evNull) => s"$evPrim = $c ? 1 : 0;"
+      (c, evPrim, evNull) => s"$evPrim = $c ? 1.0f : 0.0f;"
     case DateType =>
       (c, evPrim, evNull) => s"$evNull = true;"
     case TimestampType =>
@@ -775,7 +789,7 @@ case class Cast(child: Expression, dataType: DataType)
           }
         """
     case BooleanType =>
-      (c, evPrim, evNull) => s"$evPrim = $c ? 1 : 0;"
+      (c, evPrim, evNull) => s"$evPrim = $c ? 1.0d : 0.0d;"
     case DateType =>
       (c, evPrim, evNull) => s"$evNull = true;"
     case TimestampType =>
@@ -789,37 +803,36 @@ case class Cast(child: Expression, dataType: DataType)
   private[this] def castArrayCode(
       from: ArrayType, to: ArrayType, ctx: CodeGenContext): CastFunction = {
     val elementCast = nullSafeCastFunction(from.elementType, to.elementType, ctx)
-
-    val arraySeqClass = classOf[mutable.ArraySeq[Any]].getName
+    val arrayClass = classOf[GenericArrayData].getName
     val fromElementNull = ctx.freshName("feNull")
     val fromElementPrim = ctx.freshName("fePrim")
     val toElementNull = ctx.freshName("teNull")
     val toElementPrim = ctx.freshName("tePrim")
     val size = ctx.freshName("n")
     val j = ctx.freshName("j")
-    val result = ctx.freshName("result")
+    val values = ctx.freshName("values")
 
     (c, evPrim, evNull) =>
       s"""
-        final int $size = $c.size();
-        final $arraySeqClass<Object> $result = new $arraySeqClass<Object>($size);
+        final int $size = $c.numElements();
+        final Object[] $values = new Object[$size];
         for (int $j = 0; $j < $size; $j ++) {
-          if ($c.apply($j) == null) {
-            $result.update($j, null);
+          if ($c.isNullAt($j)) {
+            $values[$j] = null;
           } else {
             boolean $fromElementNull = false;
             ${ctx.javaType(from.elementType)} $fromElementPrim =
-              (${ctx.boxedType(from.elementType)}) $c.apply($j);
+              ${ctx.getValue(c, from.elementType, j)};
             ${castCode(ctx, fromElementPrim,
               fromElementNull, toElementPrim, toElementNull, to.elementType, elementCast)}
             if ($toElementNull) {
-              $result.update($j, null);
+              $values[$j] = null;
             } else {
-              $result.update($j, $toElementPrim);
+              $values[$j] = $toElementPrim;
             }
           }
         }
-        $evPrim = $result;
+        $evPrim = new $arrayClass($values);
       """
   }
 
@@ -891,7 +904,7 @@ case class Cast(child: Expression, dataType: DataType)
           $result.setNullAt($i);
         } else {
           $fromType $fromFieldPrim =
-            ${ctx.getColumn(tmpRow, from.fields(i).dataType, i)};
+            ${ctx.getValue(tmpRow, from.fields(i).dataType, i.toString)};
           ${castCode(ctx, fromFieldPrim,
             fromFieldNull, toFieldPrim, toFieldNull, to.fields(i).dataType, cast)}
           if ($toFieldNull) {

@@ -15,23 +15,20 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.types
+package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.SparkFunSuite
 
+class NondeterministicSuite extends SparkFunSuite with ExpressionEvalHelper {
+  test("MonotonicallyIncreasingID") {
+    checkEvaluation(MonotonicallyIncreasingID(), 0L)
+  }
 
-/**
- * :: DeveloperApi ::
- * The data type representing time intervals.
- *
- * Please use the singleton [[DataTypes.IntervalType]].
- */
-@DeveloperApi
-class IntervalType private() extends DataType {
+  test("SparkPartitionID") {
+    checkEvaluation(SparkPartitionID(), 0)
+  }
 
-  override def defaultSize: Int = 4096
-
-  private[spark] override def asNullable: IntervalType = this
+  test("InputFileName") {
+    checkEvaluation(InputFileName(), "")
+  }
 }
-
-case object IntervalType extends IntervalType
