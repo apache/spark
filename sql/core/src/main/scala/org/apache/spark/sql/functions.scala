@@ -744,6 +744,15 @@ object functions {
   def sparkPartitionId(): Column = SparkPartitionID()
 
   /**
+   * The file name of the current Spark task
+   *
+   * Note that this is indeterministic becuase it depends on what is currently being read in.
+   *
+   * @group normal_funcs
+   */
+  def inputFileName(): Column = InputFileName()
+
+  /**
    * Computes the square root of the specified float value.
    *
    * @group math_funcs
