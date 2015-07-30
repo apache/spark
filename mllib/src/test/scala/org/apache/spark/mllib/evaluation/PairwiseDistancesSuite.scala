@@ -31,7 +31,10 @@ class PairwiseDistancesSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   test("compute the pairwise distances accordingly") {
     // build the test matrix
-    val values = 1 until 11
+
+    val testMatrixSize = 100
+
+    val values = 0 until testMatrixSize
     val data = values.flatMap(x => {
       values.map { y =>
         MatrixEntry(x, y, x)
@@ -40,7 +43,7 @@ class PairwiseDistancesSuite extends SparkFunSuite with MLlibTestSparkContext {
 
     // make the matrix distributed
     val rdd = sc.parallelize(data)
-    val coordMat: CoordinateMatrix = new CoordinateMatrix(rdd, 11, 11)
+    val coordMat: CoordinateMatrix = new CoordinateMatrix(rdd, testMatrixSize, testMatrixSize)
     val matA: BlockMatrix = coordMat.toBlockMatrix().cache()
 
     val origDimension = matA.numCols().toInt
@@ -49,11 +52,11 @@ class PairwiseDistancesSuite extends SparkFunSuite with MLlibTestSparkContext {
     println(s"dataset rows: $origRows")
     println(s"dataset dimension: $origDimension")
     matA.validate()
-    val fold = 0 until 2
+    val fold = 0 until 5
     val dimensions = 5 until 16
 
     // lets print the results for further processing (graphs)
-    val path = s"${new File(".").getCanonicalPath()}/../../../results_pairwise_spark.csv"
+    val path = s"${new File(".").getCanonicalPath()}/../../../results_pairwise_spark_$testMatrixSize.csv"
     val pw = new PrintWriter(new File(path))
 
     // the label of the columns
@@ -64,17 +67,15 @@ class PairwiseDistancesSuite extends SparkFunSuite with MLlibTestSparkContext {
       }
       val meanError = error.map(_.error).sum / error.length
       val origDistance = error.map(_.original).sum / error.length
+
       val reducedDistance = error.map(_.reduced).sum / error.length
       pw.write(s"$dimension,$origDistance,$reducedDistance,$meanError\r\n")
     }
-
     pw.close
-
     assert(true == true)
   }
 
   case class SumDistances(original: Double, reduced: Double, error: Double)
-
   /**
    *
    * @param dataset
@@ -93,18 +94,22 @@ class PairwiseDistancesSuite extends SparkFunSuite with MLlibTestSparkContext {
     val zipped = distancesOriginal.zip(distancesReduced)
     val accumulateDistances = zipped.foldLeft(SumDistances(0, 0, 0))((counter, item) => {
       require(item._1.key == item._2.key, s"'${item._1.key}' must be equal to '${item._2.key}'")
-      val origDistances = item._1.similarity
-      val reducedDistances = item._2.similarity
-      val error = if (origDistances > reducedDistances) {
-        origDistances - reducedDistances
+      val origDistance = item._1.similarity
+      val reducedDistance = item._2.similarity
+      val error = if (origDistance > reducedDistance) {
+        origDistance - reducedDistance
       } else {
-        reducedDistances - origDistances
+        reducedDistance - origDistance
       }
+      //println(s"#${item._1.key} orig: $origDistance")
       SumDistances(
-        counter.original + origDistances,
-        counter.reduced + reducedDistances,
+        counter.original + origDistance,
+        counter.reduced + reducedDistance,
         counter.error + error)
     })
-    accumulateDistances
+    SumDistances(
+      accumulateDistances.original / zipped.length,
+      accumulateDistances.reduced / zipped.length,
+      accumulateDistances.error / zipped.length)
   }
 }
