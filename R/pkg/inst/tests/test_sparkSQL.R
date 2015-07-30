@@ -115,7 +115,8 @@ test_that("create DataFrame from RDD", {
   df <- jsonFile(sqlContext, jsonPathNa)
   hiveCtx <- tryCatch({
     newJObject("org.apache.spark.sql.hive.test.TestHiveContext", ssc)
-  }, error = function(err) {
+  },
+  error = function(err) {
     skip("Hive is not build with SparkSQL, skipped")
   })
   sql(hiveCtx, "CREATE TABLE people (name string, age double, height float)")
@@ -609,7 +610,8 @@ test_that("write.df() as parquet file", {
 test_that("test HiveContext", {
   hiveCtx <- tryCatch({
     newJObject("org.apache.spark.sql.hive.test.TestHiveContext", ssc)
-  }, error = function(err) {
+  },
+  error = function(err) {
     skip("Hive is not build with SparkSQL, skipped")
   })
   df <- createExternalTable(hiveCtx, "json", jsonPath, "json")

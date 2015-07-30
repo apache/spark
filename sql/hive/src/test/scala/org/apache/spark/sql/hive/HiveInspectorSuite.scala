@@ -217,7 +217,7 @@ class HiveInspectorSuite extends SparkFunSuite with HiveInspectors {
   test("wrap / unwrap Array Type") {
     val dt = ArrayType(dataTypes(0))
 
-    val d = row(0) :: row(0) :: Nil
+    val d = new GenericArrayData(Array(row(0), row(0)))
     checkValue(d, unwrap(wrap(d, toInspector(dt), dt), toInspector(dt)))
     checkValue(null, unwrap(wrap(null, toInspector(dt), dt), toInspector(dt)))
     checkValue(d,

@@ -100,17 +100,18 @@ class CodeGenContext {
   }
 
   /**
-   * Returns the code to access a column in Row for a given DataType.
+   * Returns the code to access a value in `SpecializedGetters` for a given DataType.
    */
-  def getColumn(row: String, dataType: DataType, ordinal: Int): String = {
+  def getValue(getter: String, dataType: DataType, ordinal: String): String = {
     val jt = javaType(dataType)
     dataType match {
-      case _ if isPrimitiveType(jt) => s"$row.get${primitiveTypeName(jt)}($ordinal)"
-      case StringType => s"$row.getUTF8String($ordinal)"
-      case BinaryType => s"$row.getBinary($ordinal)"
-      case IntervalType => s"$row.getInterval($ordinal)"
-      case t: StructType => s"$row.getStruct($ordinal, ${t.size})"
-      case _ => s"($jt)$row.get($ordinal)"
+      case _ if isPrimitiveType(jt) => s"$getter.get${primitiveTypeName(jt)}($ordinal)"
+      case StringType => s"$getter.getUTF8String($ordinal)"
+      case BinaryType => s"$getter.getBinary($ordinal)"
+      case CalendarIntervalType => s"$getter.getInterval($ordinal)"
+      case t: StructType => s"$getter.getStruct($ordinal, ${t.size})"
+      case a: ArrayType => s"$getter.getArray($ordinal)"
+      case _ => s"($jt)$getter.get($ordinal)" // todo: remove generic getter.
     }
   }
 
@@ -150,10 +151,10 @@ class CodeGenContext {
     case dt: DecimalType => "Decimal"
     case BinaryType => "byte[]"
     case StringType => "UTF8String"
-    case IntervalType => "Interval"
+    case CalendarIntervalType => "CalendarInterval"
     case _: StructType => "InternalRow"
-    case _: ArrayType => s"scala.collection.Seq"
-    case _: MapType => s"scala.collection.Map"
+    case _: ArrayType => "ArrayData"
+    case _: MapType => "scala.collection.Map"
     case dt: OpenHashSetUDT if dt.elementType == IntegerType => classOf[IntegerHashSet].getName
     case dt: OpenHashSetUDT if dt.elementType == LongType => classOf[LongHashSet].getName
     case _ => "Object"
@@ -214,7 +215,9 @@ class CodeGenContext {
     case dt: DataType if isPrimitiveType(dt) => s"($c1 > $c2 ? 1 : $c1 < $c2 ? -1 : 0)"
     case BinaryType => s"org.apache.spark.sql.catalyst.util.TypeUtils.compareBinary($c1, $c2)"
     case NullType => "0"
-    case other => s"$c1.compare($c2)"
+    case other if other.isInstanceOf[AtomicType] => s"$c1.compare($c2)"
+    case _ => throw new IllegalArgumentException(
+      "cannot generate compare code for un-comparable type")
   }
 
   /**
@@ -293,7 +296,8 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
       classOf[UnsafeRow].getName,
       classOf[UTF8String].getName,
       classOf[Decimal].getName,
-      classOf[Interval].getName
+      classOf[CalendarInterval].getName,
+      classOf[ArrayData].getName
     ))
     evaluator.setExtendedClass(classOf[GeneratedClass])
     try {

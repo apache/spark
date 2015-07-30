@@ -22,6 +22,7 @@ import datetime
 import calendar
 import json
 import re
+import base64
 from array import array
 
 if sys.version >= "3":
@@ -30,6 +31,8 @@ if sys.version >= "3":
 
 from py4j.protocol import register_input_converter
 from py4j.java_gateway import JavaClass
+
+from pyspark.serializers import CloudPickleSerializer
 
 __all__ = [
     "DataType", "NullType", "StringType", "BinaryType", "BooleanType", "DateType",
@@ -458,7 +461,7 @@ class StructType(DataType):
             self.names = [f.name for f in fields]
             assert all(isinstance(f, StructField) for f in fields),\
                 "fields should be a list of StructField"
-        self._needSerializeFields = None
+        self._needSerializeAnyField = any(f.needConversion() for f in self.fields)
 
     def add(self, field, data_type=None, nullable=True, metadata=None):
         """
@@ -501,6 +504,7 @@ class StructType(DataType):
                 data_type_f = data_type
             self.fields.append(StructField(field, data_type_f, nullable, metadata))
             self.names.append(field)
+        self._needSerializeAnyField = any(f.needConversion() for f in self.fields)
         return self
 
     def simpleString(self):
@@ -526,12 +530,9 @@ class StructType(DataType):
         if obj is None:
             return
 
-        if self._needSerializeFields is None:
-            self._needSerializeFields = any(f.needConversion() for f in self.fields)
-
-        if self._needSerializeFields:
+        if self._needSerializeAnyField:
             if isinstance(obj, dict):
-                return tuple(f.toInternal(obj.get(n)) for n, f in zip(names, self.fields))
+                return tuple(f.toInternal(obj.get(n)) for n, f in zip(self.names, self.fields))
             elif isinstance(obj, (tuple, list)):
                 return tuple(f.toInternal(v) for f, v in zip(self.fields, obj))
             else:
@@ -550,7 +551,10 @@ class StructType(DataType):
         if isinstance(obj, Row):
             # it's already converted by pickler
             return obj
-        values = [f.dataType.fromInternal(v) for f, v in zip(self.fields, obj)]
+        if self._needSerializeAnyField:
+            values = [f.fromInternal(v) for f, v in zip(self.fields, obj)]
+        else:
+            values = obj
         return _create_row(self.names, values)
 
 
@@ -581,9 +585,10 @@ class UserDefinedType(DataType):
     @classmethod
     def scalaUDT(cls):
         """
-        The class name of the paired Scala UDT.
+        The class name of the paired Scala UDT (could be '', if there
+        is no corresponding one).
         """
-        raise NotImplementedError("UDT must have a paired Scala UDT.")
+        return ''
 
     def needConversion(self):
         return True
@@ -622,22 +627,37 @@ class UserDefinedType(DataType):
         return json.dumps(self.jsonValue(), separators=(',', ':'), sort_keys=True)
 
     def jsonValue(self):
-        schema = {
-            "type": "udt",
-            "class": self.scalaUDT(),
-            "pyClass": "%s.%s" % (self.module(), type(self).__name__),
-            "sqlType": self.sqlType().jsonValue()
-        }
+        if self.scalaUDT():
+            assert self.module() != '__main__', 'UDT in __main__ cannot work with ScalaUDT'
+            schema = {
+                "type": "udt",
+                "class": self.scalaUDT(),
+                "pyClass": "%s.%s" % (self.module(), type(self).__name__),
+                "sqlType": self.sqlType().jsonValue()
+            }
+        else:
+            ser = CloudPickleSerializer()
+            b = ser.dumps(type(self))
+            schema = {
+                "type": "udt",
+                "pyClass": "%s.%s" % (self.module(), type(self).__name__),
+                "serializedClass": base64.b64encode(b).decode('utf8'),
+                "sqlType": self.sqlType().jsonValue()
+            }
         return schema
 
     @classmethod
     def fromJson(cls, json):
-        pyUDT = json["pyClass"]
+        pyUDT = str(json["pyClass"])
         split = pyUDT.rfind(".")
         pyModule = pyUDT[:split]
         pyClass = pyUDT[split+1:]
         m = __import__(pyModule, globals(), locals(), [pyClass])
-        UDT = getattr(m, pyClass)
+        if not hasattr(m, pyClass):
+            s = base64.b64decode(json['serializedClass'].encode('utf-8'))
+            UDT = CloudPickleSerializer().loads(s)
+        else:
+            UDT = getattr(m, pyClass)
         return UDT()
 
     def __eq__(self, other):
@@ -696,11 +716,6 @@ def _parse_datatype_json_string(json_string):
     >>> complex_maptype = MapType(complex_structtype,
     ...                           complex_arraytype, False)
     >>> check_datatype(complex_maptype)
-
-    >>> check_datatype(ExamplePointUDT())
-    >>> structtype_with_udt = StructType([StructField("label", DoubleType(), False),
-    ...                                   StructField("point", ExamplePointUDT(), False)])
-    >>> check_datatype(structtype_with_udt)
     """
     return _parse_datatype_json_value(json.loads(json_string))
 
@@ -752,10 +767,6 @@ if sys.version < "3":
 
 def _infer_type(obj):
     """Infer the DataType from obj
-
-    >>> p = ExamplePoint(1.0, 2.0)
-    >>> _infer_type(p)
-    ExamplePointUDT
     """
     if obj is None:
         return NullType()
@@ -1090,11 +1101,6 @@ def _verify_type(obj, dataType):
     Traceback (most recent call last):
         ...
     ValueError:...
-    >>> _verify_type(ExamplePoint(1.0, 2.0), ExamplePointUDT())
-    >>> _verify_type([1.0, 2.0], ExamplePointUDT()) # doctest: +IGNORE_EXCEPTION_DETAIL
-    Traceback (most recent call last):
-        ...
-    ValueError:...
     """
     # all objects are nullable
     if obj is None:
@@ -1259,18 +1265,12 @@ register_input_converter(DateConverter())
 def _test():
     import doctest
     from pyspark.context import SparkContext
-    # let doctest run in pyspark.sql.types, so DataTypes can be picklable
-    import pyspark.sql.types
-    from pyspark.sql import Row, SQLContext
-    from pyspark.sql.tests import ExamplePoint, ExamplePointUDT
-    globs = pyspark.sql.types.__dict__.copy()
+    from pyspark.sql import SQLContext
+    globs = globals()
     sc = SparkContext('local[4]', 'PythonTest')
     globs['sc'] = sc
     globs['sqlContext'] = SQLContext(sc)
-    globs['ExamplePoint'] = ExamplePoint
-    globs['ExamplePointUDT'] = ExamplePointUDT
-    (failure_count, test_count) = doctest.testmod(
-        pyspark.sql.types, globs=globs, optionflags=doctest.ELLIPSIS)
+    (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
     globs['sc'].stop()
     if failure_count:
         exit(-1)

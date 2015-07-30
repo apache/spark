@@ -211,6 +211,7 @@ object FunctionRegistry {
     expression[DayOfMonth]("day"),
     expression[DayOfYear]("dayofyear"),
     expression[DayOfMonth]("dayofmonth"),
+    expression[FromUnixTime]("from_unixtime"),
     expression[Hour]("hour"),
     expression[LastDay]("last_day"),
     expression[Minute]("minute"),
@@ -218,6 +219,7 @@ object FunctionRegistry {
     expression[NextDay]("next_day"),
     expression[Quarter]("quarter"),
     expression[Second]("second"),
+    expression[UnixTimestamp]("unix_timestamp"),
     expression[WeekOfYear]("weekofyear"),
     expression[Year]("year"),
 
@@ -230,7 +232,8 @@ object FunctionRegistry {
     expression[Sha1]("sha"),
     expression[Sha1]("sha1"),
     expression[Sha2]("sha2"),
-    expression[SparkPartitionID]("spark_partition_id")
+    expression[SparkPartitionID]("spark_partition_id"),
+    expression[InputFileName]("input_file_name")
   )
 
   val builtin: FunctionRegistry = {

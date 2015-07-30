@@ -228,4 +228,60 @@ class DateFunctionsSuite extends QueryTest {
       Seq(Row(Date.valueOf("2015-07-30")), Row(Date.valueOf("2015-07-30"))))
   }
 
+  test("from_unixtime") {
+    val sdf1 = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss")
+    val fmt2 = "yyyy-MM-dd HH:mm:ss.SSS"
+    val sdf2 = new SimpleDateFormat(fmt2)
+    val fmt3 = "yy-MM-dd HH-mm-ss"
+    val sdf3 = new SimpleDateFormat(fmt3)
+    val df = Seq((1000, "yyyy-MM-dd HH:mm:ss.SSS"), (-1000, "yy-MM-dd HH-mm-ss")).toDF("a", "b")
+    checkAnswer(
+      df.select(from_unixtime(col("a"))),
+      Seq(Row(sdf1.format(new Timestamp(1000000))), Row(sdf1.format(new Timestamp(-1000000)))))
+    checkAnswer(
+      df.select(from_unixtime(col("a"), fmt2)),
+      Seq(Row(sdf2.format(new Timestamp(1000000))), Row(sdf2.format(new Timestamp(-1000000)))))
+    checkAnswer(
+      df.select(from_unixtime(col("a"), fmt3)),
+      Seq(Row(sdf3.format(new Timestamp(1000000))), Row(sdf3.format(new Timestamp(-1000000)))))
+    checkAnswer(
+      df.selectExpr("from_unixtime(a)"),
+      Seq(Row(sdf1.format(new Timestamp(1000000))), Row(sdf1.format(new Timestamp(-1000000)))))
+    checkAnswer(
+      df.selectExpr(s"from_unixtime(a, '$fmt2')"),
+      Seq(Row(sdf2.format(new Timestamp(1000000))), Row(sdf2.format(new Timestamp(-1000000)))))
+    checkAnswer(
+      df.selectExpr(s"from_unixtime(a, '$fmt3')"),
+      Seq(Row(sdf3.format(new Timestamp(1000000))), Row(sdf3.format(new Timestamp(-1000000)))))
+  }
+
+  test("unix_timestamp") {
+    val date1 = Date.valueOf("2015-07-24")
+    val date2 = Date.valueOf("2015-07-25")
+    val ts1 = Timestamp.valueOf("2015-07-24 10:00:00.3")
+    val ts2 = Timestamp.valueOf("2015-07-25 02:02:02.2")
+    val s1 = "2015/07/24 10:00:00.5"
+    val s2 = "2015/07/25 02:02:02.6"
+    val ss1 = "2015-07-24 10:00:00"
+    val ss2 = "2015-07-25 02:02:02"
+    val fmt = "yyyy/MM/dd HH:mm:ss.S"
+    val df = Seq((date1, ts1, s1, ss1), (date2, ts2, s2, ss2)).toDF("d", "ts", "s", "ss")
+    checkAnswer(df.select(unix_timestamp(col("ts"))), Seq(
+      Row(ts1.getTime / 1000L), Row(ts2.getTime / 1000L)))
+    checkAnswer(df.select(unix_timestamp(col("ss"))), Seq(
+      Row(ts1.getTime / 1000L), Row(ts2.getTime / 1000L)))
+    checkAnswer(df.select(unix_timestamp(col("d"), fmt)), Seq(
+      Row(date1.getTime / 1000L), Row(date2.getTime / 1000L)))
+    checkAnswer(df.select(unix_timestamp(col("s"), fmt)), Seq(
+      Row(ts1.getTime / 1000L), Row(ts2.getTime / 1000L)))
+    checkAnswer(df.selectExpr("unix_timestamp(ts)"), Seq(
+      Row(ts1.getTime / 1000L), Row(ts2.getTime / 1000L)))
+    checkAnswer(df.selectExpr("unix_timestamp(ss)"), Seq(
+      Row(ts1.getTime / 1000L), Row(ts2.getTime / 1000L)))
+    checkAnswer(df.selectExpr(s"unix_timestamp(d, '$fmt')"), Seq(
+      Row(date1.getTime / 1000L), Row(date2.getTime / 1000L)))
+    checkAnswer(df.selectExpr(s"unix_timestamp(s, '$fmt')"), Seq(
+      Row(ts1.getTime / 1000L), Row(ts2.getTime / 1000L)))
+  }
+
 }

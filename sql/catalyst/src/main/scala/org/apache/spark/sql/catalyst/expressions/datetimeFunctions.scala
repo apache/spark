@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import java.sql.Date
 import java.text.SimpleDateFormat
 import java.util.{Calendar, TimeZone}
 
@@ -27,6 +26,8 @@ import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
+
+import scala.util.Try
 
 /**
  * Returns the current date at the start of query evaluation.
@@ -236,18 +237,230 @@ case class DateFormatClass(left: Expression, right: Expression) extends BinaryEx
 
   override protected def nullSafeEval(timestamp: Any, format: Any): Any = {
     val sdf = new SimpleDateFormat(format.toString)
-    UTF8String.fromString(sdf.format(new Date(timestamp.asInstanceOf[Long] / 1000)))
+    UTF8String.fromString(sdf.format(new java.util.Date(timestamp.asInstanceOf[Long] / 1000)))
   }
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     val sdf = classOf[SimpleDateFormat].getName
     defineCodeGen(ctx, ev, (timestamp, format) => {
       s"""UTF8String.fromString((new $sdf($format.toString()))
-          .format(new java.sql.Date($timestamp / 1000)))"""
+          .format(new java.util.Date($timestamp / 1000)))"""
     })
   }
 
   override def prettyName: String = "date_format"
+}
+
+/**
+ * Converts time string with given pattern
+ * (see [http://docs.oracle.com/javase/tutorial/i18n/format/simpleDateFormat.html])
+ * to Unix time stamp (in seconds), returns null if fail.
+ * Note that hive Language Manual says it returns 0 if fail, but in fact it returns null.
+ * If the second parameter is missing, use "yyyy-MM-dd HH:mm:ss".
+ * If no parameters provided, the first parameter will be current_timestamp.
+ * If the first parameter is a Date or Timestamp instead of String, we will ignore the
+ * second parameter.
+ */
+case class UnixTimestamp(timeExp: Expression, format: Expression)
+  extends BinaryExpression with ExpectsInputTypes {
+
+  override def left: Expression = timeExp
+  override def right: Expression = format
+
+  def this(time: Expression) = {
+    this(time, Literal("yyyy-MM-dd HH:mm:ss"))
+  }
+
+  def this() = {
+    this(CurrentTimestamp())
+  }
+
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(TypeCollection(StringType, DateType, TimestampType), StringType)
+
+  override def dataType: DataType = LongType
+
+  private lazy val constFormat: UTF8String = right.eval().asInstanceOf[UTF8String]
+
+  override def eval(input: InternalRow): Any = {
+    val t = left.eval(input)
+    if (t == null) {
+      null
+    } else {
+      left.dataType match {
+        case DateType =>
+          DateTimeUtils.daysToMillis(t.asInstanceOf[Int]) / 1000L
+        case TimestampType =>
+          t.asInstanceOf[Long] / 1000000L
+        case StringType if right.foldable =>
+          if (constFormat != null) {
+            Try(new SimpleDateFormat(constFormat.toString).parse(
+              t.asInstanceOf[UTF8String].toString).getTime / 1000L).getOrElse(null)
+          } else {
+            null
+          }
+        case StringType =>
+          val f = format.eval(input)
+          if (f == null) {
+            null
+          } else {
+            val formatString = f.asInstanceOf[UTF8String].toString
+            Try(new SimpleDateFormat(formatString).parse(
+              t.asInstanceOf[UTF8String].toString).getTime / 1000L).getOrElse(null)
+          }
+      }
+    }
+  }
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    left.dataType match {
+      case StringType if right.foldable =>
+        val sdf = classOf[SimpleDateFormat].getName
+        val fString = if (constFormat == null) null else constFormat.toString
+        val formatter = ctx.freshName("formatter")
+        if (fString == null) {
+          s"""
+            boolean ${ev.isNull} = true;
+            ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
+          """
+        } else {
+          val eval1 = left.gen(ctx)
+          s"""
+            ${eval1.code}
+            boolean ${ev.isNull} = ${eval1.isNull};
+            ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
+            if (!${ev.isNull}) {
+              try {
+                $sdf $formatter = new $sdf("$fString");
+                ${ev.primitive} =
+                  $formatter.parse(${eval1.primitive}.toString()).getTime() / 1000L;
+              } catch (java.lang.Throwable e) {
+                ${ev.isNull} = true;
+              }
+            }
+          """
+        }
+      case StringType =>
+        val sdf = classOf[SimpleDateFormat].getName
+        nullSafeCodeGen(ctx, ev, (string, format) => {
+          s"""
+            try {
+              ${ev.primitive} =
+                (new $sdf($format.toString())).parse($string.toString()).getTime() / 1000L;
+            } catch (java.lang.Throwable e) {
+              ${ev.isNull} = true;
+            }
+          """
+        })
+      case TimestampType =>
+        val eval1 = left.gen(ctx)
+        s"""
+          ${eval1.code}
+          boolean ${ev.isNull} = ${eval1.isNull};
+          ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
+          if (!${ev.isNull}) {
+            ${ev.primitive} = ${eval1.primitive} / 1000000L;
+          }
+        """
+      case DateType =>
+        val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
+        val eval1 = left.gen(ctx)
+        s"""
+          ${eval1.code}
+          boolean ${ev.isNull} = ${eval1.isNull};
+          ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
+          if (!${ev.isNull}) {
+            ${ev.primitive} = $dtu.daysToMillis(${eval1.primitive}) / 1000L;
+          }
+        """
+    }
+  }
+}
+
+/**
+ * Converts the number of seconds from unix epoch (1970-01-01 00:00:00 UTC) to a string
+ * representing the timestamp of that moment in the current system time zone in the given
+ * format. If the format is missing, using format like "1970-01-01 00:00:00".
+ * Note that hive Language Manual says it returns 0 if fail, but in fact it returns null.
+ */
+case class FromUnixTime(sec: Expression, format: Expression)
+  extends BinaryExpression with ImplicitCastInputTypes {
+
+  override def left: Expression = sec
+  override def right: Expression = format
+
+  def this(unix: Expression) = {
+    this(unix, Literal("yyyy-MM-dd HH:mm:ss"))
+  }
+
+  override def dataType: DataType = StringType
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(LongType, StringType)
+
+  private lazy val constFormat: UTF8String = right.eval().asInstanceOf[UTF8String]
+
+  override def eval(input: InternalRow): Any = {
+    val time = left.eval(input)
+    if (time == null) {
+      null
+    } else {
+      if (format.foldable) {
+        if (constFormat == null) {
+          null
+        } else {
+          Try(UTF8String.fromString(new SimpleDateFormat(constFormat.toString).format(
+            new java.util.Date(time.asInstanceOf[Long] * 1000L)))).getOrElse(null)
+        }
+      } else {
+        val f = format.eval(input)
+        if (f == null) {
+          null
+        } else {
+          Try(UTF8String.fromString(new SimpleDateFormat(
+            f.asInstanceOf[UTF8String].toString).format(new java.util.Date(
+              time.asInstanceOf[Long] * 1000L)))).getOrElse(null)
+        }
+      }
+    }
+  }
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    val sdf = classOf[SimpleDateFormat].getName
+    if (format.foldable) {
+      if (constFormat == null) {
+        s"""
+          boolean ${ev.isNull} = true;
+          ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
+        """
+      } else {
+        val t = left.gen(ctx)
+        s"""
+          ${t.code}
+          boolean ${ev.isNull} = ${t.isNull};
+          ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
+          if (!${ev.isNull}) {
+            try {
+              ${ev.primitive} = UTF8String.fromString(new $sdf("${constFormat.toString}").format(
+                new java.util.Date(${t.primitive} * 1000L)));
+            } catch (java.lang.Throwable e) {
+              ${ev.isNull} = true;
+            }
+          }
+        """
+      }
+    } else {
+      nullSafeCodeGen(ctx, ev, (seconds, f) => {
+        s"""
+        try {
+          ${ev.primitive} = UTF8String.fromString((new $sdf($f.toString())).format(
+            new java.util.Date($seconds * 1000L)));
+        } catch (java.lang.Throwable e) {
+          ${ev.isNull} = true;
+        }""".stripMargin
+      })
+    }
+  }
+
 }
 
 /**

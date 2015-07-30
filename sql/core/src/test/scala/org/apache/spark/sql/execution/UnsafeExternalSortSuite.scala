@@ -36,31 +36,13 @@ class UnsafeExternalSortSuite extends SparkPlanTest with BeforeAndAfterAll {
     TestSQLContext.conf.setConf(SQLConf.CODEGEN_ENABLED, SQLConf.CODEGEN_ENABLED.defaultValue.get)
   }
 
-  ignore("sort followed by limit should not leak memory") {
-    // TODO: this test is going to fail until we implement a proper iterator interface
-    // with a close() method.
-    TestSQLContext.sparkContext.conf.set("spark.unsafe.exceptionOnMemoryLeak", "false")
+  test("sort followed by limit") {
     checkThatPlansAgree(
       (1 to 100).map(v => Tuple1(v)).toDF("a"),
       (child: SparkPlan) => Limit(10, UnsafeExternalSort('a.asc :: Nil, true, child)),
       (child: SparkPlan) => Limit(10, Sort('a.asc :: Nil, global = true, child)),
       sortAnswers = false
     )
-  }
-
-  test("sort followed by limit") {
-    TestSQLContext.sparkContext.conf.set("spark.unsafe.exceptionOnMemoryLeak", "false")
-    try {
-      checkThatPlansAgree(
-        (1 to 100).map(v => Tuple1(v)).toDF("a"),
-        (child: SparkPlan) => Limit(10, UnsafeExternalSort('a.asc :: Nil, true, child)),
-        (child: SparkPlan) => Limit(10, Sort('a.asc :: Nil, global = true, child)),
-        sortAnswers = false
-      )
-    } finally {
-      TestSQLContext.sparkContext.conf.set("spark.unsafe.exceptionOnMemoryLeak", "false")
-
-    }
   }
 
   test("sorting does not crash for large inputs") {
