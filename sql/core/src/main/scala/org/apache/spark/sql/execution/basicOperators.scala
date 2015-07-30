@@ -22,15 +22,15 @@ import org.apache.spark.rdd.{RDD, ShuffledRDD}
 import org.apache.spark.shuffle.sort.SortShuffleManager
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical._
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.collection.ExternalSorter
 import org.apache.spark.util.collection.unsafe.sort.PrefixComparator
 import org.apache.spark.util.{CompletionIterator, MutablePair}
-import org.apache.spark.{HashPartitioner, SparkEnv}
+import org.apache.spark.{Accumulator, HashPartitioner, SparkEnv}
 
 /**
  * :: DeveloperApi ::
@@ -43,7 +43,11 @@ case class Project(projectList: Seq[NamedExpression], child: SparkPlan) extends 
 
   protected override def doExecute(): RDD[InternalRow] = child.execute().mapPartitions { iter =>
     val reusableProjection = buildProjection()
-    iter.map(reusableProjection)
+    val numTuplesAccumulator = accumulators("numTuples").asInstanceOf[Accumulator[Long]]
+    iter.map { row =>
+      numTuplesAccumulator += 1
+      reusableProjection(row)
+    }
   }
 
   override def outputOrdering: Seq[SortOrder] = child.outputOrdering

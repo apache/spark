@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.Logging
+import org.apache.spark.{Accumulator, Logging}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.{RDD, RDDOperationScope}
 import org.apache.spark.sql.SQLContext
@@ -50,6 +50,9 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   protected[spark] final val sqlContext = SparkPlan.currentContext.get()
 
   protected def sparkContext = sqlContext.sparkContext
+
+  protected val metricToAccumulator = Map(
+    "numTuples" -> sparkContext.internalAccumulator(0L, "number of tuples"))
 
   // sqlContext will be null when we are being deserialized on the slaves.  In this instance
   // the value of codegenEnabled will be set by the desserializer after the constructor has run.
@@ -90,6 +93,12 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
    * that are not UnsafeRows).
    */
   def canProcessSafeRows: Boolean = true
+
+  /**
+   * Returns accumulators for metrics. The key of the Map is the metric's name and the value is the
+   * current value of the metric.
+   */
+  def accumulators: Map[String, Accumulator[_]] = metricToAccumulator
 
   /**
    * Returns the result of this query as an RDD[InternalRow] by delegating to doExecute
