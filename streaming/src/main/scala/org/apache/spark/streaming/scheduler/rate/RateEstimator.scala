@@ -49,14 +49,20 @@ object RateEstimator {
   /**
    * Return a new RateEstimator based on the value of `spark.streaming.RateEstimator`.
    *
-   * @return None if there is no configured estimator, otherwise an instance of RateEstimator
+   * The only known estimator right now is `pid`.
+   *
+   * @return An instance of RateEstimator
    * @throws IllegalArgumentException if there is a configured RateEstimator that doesn't match any
    *         known estimators.
    */
-  def create(conf: SparkConf, batchInterval: Duration): Option[RateEstimator] =
-    conf.getOption("spark.streaming.backpressure.rateEstimator").map {
+  def create(conf: SparkConf, batchInterval: Duration): RateEstimator =
+    conf.get("spark.streaming.backpressure.rateEstimator", "pid") match {
       case "pid" =>
-        new PIDRateEstimator(batchInterval.milliseconds)
+        val proportional = conf.getDouble("spark.streraming.backpressure.pid.proportional", -1.0)
+        val integral = conf.getDouble("spark.streraming.backpressure.pid.integral", -0.2)
+        val derived = conf.getDouble("spark.streraming.backpressure.pid.derived", 0.0)
+        new PIDRateEstimator(batchInterval.milliseconds, proportional, integral, derived)
+
       case estimator =>
         throw new IllegalArgumentException(s"Unkown rate estimator: $estimator")
     }

@@ -46,8 +46,7 @@ abstract class ReceiverInputDStream[T: ClassTag](@transient ssc_ : StreamingCont
    */
   override protected[streaming] val rateController: Option[RateController] = {
     if (RateController.isBackPressureEnabled(ssc.conf)) {
-      RateEstimator.create(ssc.conf, ssc.graph.batchDuration)
-                   .map { new ReceiverRateController(id, _) }
+      Some(new ReceiverRateController(id, RateEstimator.create(ssc.conf, ssc.graph.batchDuration)))
     } else {
       None
     }
