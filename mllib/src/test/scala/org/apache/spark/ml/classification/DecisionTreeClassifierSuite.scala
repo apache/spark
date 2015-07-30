@@ -301,9 +301,6 @@ private[ml] object DecisionTreeClassifierSuite extends SparkFunSuite {
     // Use parent from newTree since this is not checked anyways.
     val oldTreeAsNew = DecisionTreeClassificationModel.fromOld(
       oldTree, newTree.parent.asInstanceOf[DecisionTreeClassifier], categoricalFeatures)
-//    println(oldTree.topNode.impurity)
-//    println(newTree.rootNode.impurity)
-//    println(oldTreeAsNew.rootNode.impurity)
     TreeTests.checkEqual(oldTreeAsNew, newTree)
   }
 }

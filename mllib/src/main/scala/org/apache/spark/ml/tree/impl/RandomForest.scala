@@ -31,7 +31,7 @@ import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo, Strategy => O
 import org.apache.spark.mllib.tree.impl.{BaggedPoint, DTStatsAggregator, DecisionTreeMetadata,
   TimeTracker}
 import org.apache.spark.mllib.tree.impurity.ImpurityCalculator
-import org.apache.spark.mllib.tree.model.{InformationGainStats, Predict, InformationGainAndImpurityStats}
+import org.apache.spark.mllib.tree.model.ImpurityStats
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.random.{SamplingUtils, XORShiftRandom}
@@ -553,9 +553,9 @@ private[ml] object RandomForest extends Logging {
         }
 
         // find best split for each node
-        val (split: Split, stats: InformationGainAndImpurityStats, impurityStats: ImpurityCalculator) =
+        val (split: Split, stats: ImpurityStats) =
           binsToBestSplit(aggStats, splits, featuresForNode, nodes(nodeIndex))
-        (nodeIndex, (split, stats, impurityStats))
+        (nodeIndex, (split, stats))
     }.collectAsMap()
 
     timer.stop("chooseSplits")
@@ -572,19 +572,15 @@ private[ml] object RandomForest extends Logging {
         val nodeIndex = node.id
         val nodeInfo = treeToNodeToIndexInfo(treeIndex)(nodeIndex)
         val aggNodeIndex = nodeInfo.nodeIndexInGroup
-        val (split: Split, stats: InformationGainAndImpurityStats, impurityStats: ImpurityCalculator) =
+        val (split: Split, stats: ImpurityStats) =
           nodeToBestSplits(aggNodeIndex)
         logDebug("best split = " + split)
-
-//        println(stats.impurity + "   " + impurityStats.calculate())
 
         // Extract info for this node.  Create children if not leaf.
         val isLeaf =
           (stats.gain <= 0) || (LearningNode.indexToLevel(nodeIndex) == metadata.maxDepth)
-        node.impurityStats = Some(impurityStats)
         node.isLeaf = isLeaf
         node.stats = Some(stats)
-        node.impurity = stats.impurity
         logDebug("Node = " + node)
 
         if (!isLeaf) {
@@ -593,13 +589,9 @@ private[ml] object RandomForest extends Logging {
           val leftChildIsLeaf = childIsLeaf || (stats.leftImpurityCalculator.calculate() == 0.0)
           val rightChildIsLeaf = childIsLeaf || (stats.rightImpurityCalculator.calculate() == 0.0)
           node.leftChild = Some(LearningNode(LearningNode.leftChildIndex(nodeIndex),
-            stats.leftImpurity, leftChildIsLeaf,
-            InformationGainAndImpurityStats.getInvalidInformationGainAndImpurityStats(stats.leftImpurityCalculator),
-            stats.leftImpurityCalculator))
+            leftChildIsLeaf, ImpurityStats.getEmptyImpurityStats(stats.leftImpurityCalculator)))
           node.rightChild = Some(LearningNode(LearningNode.rightChildIndex(nodeIndex),
-            stats.rightImpurity, rightChildIsLeaf,
-            InformationGainAndImpurityStats.getInvalidInformationGainAndImpurityStats(stats.rightImpurityCalculator),
-            stats.rightImpurityCalculator))
+            rightChildIsLeaf, ImpurityStats.getEmptyImpurityStats(stats.rightImpurityCalculator)))
 
           if (nodeIdCache.nonEmpty) {
             val nodeIndexUpdater = NodeIndexUpdater(
@@ -630,55 +622,10 @@ private[ml] object RandomForest extends Logging {
     }
   }
 
-  /**
-   * Calculate the information gain for a given (feature, split) based upon left/right aggregates.
-   * @param leftImpurityCalculator left node aggregates for this (feature, split)
-   * @param rightImpurityCalculator right node aggregate for this (feature, split)
-   * @return information gain and statistics for split
-   */
-  private def calculateGainForSplit(
+  private def calculateImpurityStats(
       leftImpurityCalculator: ImpurityCalculator,
       rightImpurityCalculator: ImpurityCalculator,
-      metadata: DecisionTreeMetadata,
-      impurity: Double): InformationGainStats = {
-    val leftCount = leftImpurityCalculator.count
-    val rightCount = rightImpurityCalculator.count
-
-    // If left child or right child doesn't satisfy minimum instances per node,
-    // then this split is invalid, return invalid information gain stats.
-    if ((leftCount < metadata.minInstancesPerNode) ||
-      (rightCount < metadata.minInstancesPerNode)) {
-      return InformationGainStats.invalidInformationGainStats
-    }
-
-    val totalCount = leftCount + rightCount
-
-    val leftImpurity = leftImpurityCalculator.calculate() // Note: This equals 0 if count = 0
-    val rightImpurity = rightImpurityCalculator.calculate()
-
-    val leftWeight = leftCount / totalCount.toDouble
-    val rightWeight = rightCount / totalCount.toDouble
-
-    val gain = impurity - leftWeight * leftImpurity - rightWeight * rightImpurity
-
-    // if information gain doesn't satisfy minimum information gain,
-    // then this split is invalid, return invalid information gain stats.
-    if (gain < metadata.minInfoGain) {
-      return InformationGainStats.invalidInformationGainStats
-    }
-
-    // calculate left and right predict
-    val leftPredict = calculatePredict(leftImpurityCalculator)
-    val rightPredict = calculatePredict(rightImpurityCalculator)
-
-    new InformationGainStats(gain, impurity, leftImpurity, rightImpurity,
-      leftPredict, rightPredict)
-  }
-
-  private def calculateGainAndImpurityStats(
-      leftImpurityCalculator: ImpurityCalculator,
-      rightImpurityCalculator: ImpurityCalculator,
-      metadata: DecisionTreeMetadata): InformationGainAndImpurityStats = {
+      metadata: DecisionTreeMetadata): ImpurityStats = {
     val leftCount = leftImpurityCalculator.count
     val rightCount = rightImpurityCalculator.count
 
@@ -690,7 +637,7 @@ private[ml] object RandomForest extends Logging {
     // then this split is invalid, return invalid information gain stats.
     if ((leftCount < metadata.minInstancesPerNode) ||
       (rightCount < metadata.minInstancesPerNode)) {
-      return InformationGainAndImpurityStats.getInvalidInformationGainAndImpurityStats(parentImpurityCalculator)
+      return ImpurityStats.getInvalidImpurityStats(parentImpurityCalculator)
     }
 
     val leftImpurity = leftImpurityCalculator.calculate() // Note: This equals 0 if count = 0
@@ -704,42 +651,11 @@ private[ml] object RandomForest extends Logging {
     // if information gain doesn't satisfy minimum information gain,
     // then this split is invalid, return invalid information gain stats.
     if (gain < metadata.minInfoGain) {
-      return InformationGainAndImpurityStats.getInvalidInformationGainAndImpurityStats(parentImpurityCalculator)
+      return ImpurityStats.getInvalidImpurityStats(parentImpurityCalculator)
     }
 
-    new InformationGainAndImpurityStats(gain, impurity, parentImpurityCalculator, leftImpurityCalculator, rightImpurityCalculator)
-  }
-
-  private def calculatePredict(impurityCalculator: ImpurityCalculator): Predict = {
-    val predict = impurityCalculator.predict
-    val prob = impurityCalculator.prob(predict)
-    new Predict(predict, prob)
-  }
-
-  /**
-   * Calculate predict value for current node, given stats of any split.
-   * Note that this function is called only once for each node.
-   * @param leftImpurityCalculator left node aggregates for a split
-   * @param rightImpurityCalculator right node aggregates for a split
-   * @return predict value and impurity for current node
-   */
-  private def calculatePredictImpurity(
-      leftImpurityCalculator: ImpurityCalculator,
-      rightImpurityCalculator: ImpurityCalculator): (Predict, Double) = {
-    val parentNodeAgg = leftImpurityCalculator.copy
-    parentNodeAgg.add(rightImpurityCalculator)
-    val predict = calculatePredict(parentNodeAgg)
-    val impurity = parentNodeAgg.calculate()
-
-    (predict, impurity)
-  }
-
-  private def getParentImpurityCalculator(
-      leftImpurityCalculator: ImpurityCalculator,
-      rightImpurityCalculator: ImpurityCalculator): ImpurityCalculator = {
-    val parentNodeAgg = leftImpurityCalculator.copy
-    val stats = parentNodeAgg.add(rightImpurityCalculator)
-    stats
+    new ImpurityStats(gain, impurity, parentImpurityCalculator,
+      leftImpurityCalculator, rightImpurityCalculator)
   }
 
   /**
@@ -751,17 +667,11 @@ private[ml] object RandomForest extends Logging {
       binAggregates: DTStatsAggregator,
       splits: Array[Array[Split]],
       featuresForNode: Option[Array[Int]],
-      node: LearningNode): (Split, InformationGainAndImpurityStats, ImpurityCalculator) = {
+      node: LearningNode): (Split, ImpurityStats) = {
 
-    // Calculate prediction and impurity if current node is top node
+    // Calculate InformationGainAndImpurityStats if current node is top node
     val level = LearningNode.indexToLevel(node.id)
-    var impurityStats: Option[ImpurityCalculator] = if (level == 0) {
-      None
-    } else {
-      Some(node.impurityStats.orNull)
-    }
-
-    var gainAndImpurityStats: Option[InformationGainAndImpurityStats] = if (level ==0) {
+    var gainAndImpurityStats: Option[ImpurityStats] = if (level ==0) {
       None
     } else {
       node.stats
@@ -793,8 +703,8 @@ private[ml] object RandomForest extends Logging {
               val rightChildStats =
                 binAggregates.getImpurityCalculator(nodeFeatureOffset, numSplits)
               rightChildStats.subtract(leftChildStats)
-              impurityStats = Some(getParentImpurityCalculator(leftChildStats, rightChildStats))
-              gainAndImpurityStats = Some(calculateGainAndImpurityStats(leftChildStats, rightChildStats, binAggregates.metadata))
+              gainAndImpurityStats = Some(calculateImpurityStats(
+                leftChildStats, rightChildStats, binAggregates.metadata))
               (splitIdx, gainAndImpurityStats)
             }.maxBy(_._2.get.gain)
           (splits(featureIndex)(bestFeatureSplitIndex), bestFeatureGainStats)
@@ -807,8 +717,8 @@ private[ml] object RandomForest extends Logging {
               val leftChildStats = binAggregates.getImpurityCalculator(leftChildOffset, splitIndex)
               val rightChildStats =
                 binAggregates.getImpurityCalculator(rightChildOffset, splitIndex)
-              impurityStats = Some(getParentImpurityCalculator(leftChildStats, rightChildStats))
-              gainAndImpurityStats = Some(calculateGainAndImpurityStats(leftChildStats, rightChildStats, binAggregates.metadata))
+              gainAndImpurityStats = Some(calculateImpurityStats(
+                leftChildStats, rightChildStats, binAggregates.metadata))
               (splitIndex, gainAndImpurityStats)
             }.maxBy(_._2.get.gain)
           (splits(featureIndex)(bestFeatureSplitIndex), bestFeatureGainStats)
@@ -880,8 +790,8 @@ private[ml] object RandomForest extends Logging {
               val rightChildStats =
                 binAggregates.getImpurityCalculator(nodeFeatureOffset, lastCategory)
               rightChildStats.subtract(leftChildStats)
-              impurityStats = Some(getParentImpurityCalculator(leftChildStats, rightChildStats))
-              gainAndImpurityStats = Some(calculateGainAndImpurityStats(leftChildStats, rightChildStats, binAggregates.metadata))
+              gainAndImpurityStats = Some(calculateImpurityStats(
+                leftChildStats, rightChildStats, binAggregates.metadata))
               (splitIndex, gainAndImpurityStats)
             }.maxBy(_._2.get.gain)
           val categoriesForSplit =
@@ -892,7 +802,7 @@ private[ml] object RandomForest extends Logging {
         }
       }.maxBy(_._2.get.gain)
 
-    (bestSplit, bestSplitStats.get, impurityStats.get)
+    (bestSplit, bestSplitStats.get)
   }
 
   /**

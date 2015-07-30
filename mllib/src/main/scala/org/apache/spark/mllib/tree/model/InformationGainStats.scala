@@ -78,7 +78,7 @@ private[spark] object InformationGainStats {
     new Predict(0.0, 0.0), new Predict(0.0, 0.0))
 }
 
-class InformationGainAndImpurityStats(
+class ImpurityStats(
     val gain: Double,
     val impurity: Double,
     val impurityCalculator: ImpurityCalculator,
@@ -95,7 +95,7 @@ class InformationGainAndImpurityStats(
   def rightImpurity: Double = rightImpurityCalculator.calculate()
 
   override def equals(o: Any): Boolean = o match {
-    case other: InformationGainAndImpurityStats =>
+    case other: ImpurityStats =>
       gain == other.gain &&
       impurityCalculator == other.impurityCalculator &&
       leftImpurityCalculator == other.leftImpurityCalculator &&
@@ -112,22 +112,17 @@ class InformationGainAndImpurityStats(
       rightImpurityCalculator
     )
   }
-
-  def toInformationGainStats: InformationGainStats = {
-    val impurity = impurityCalculator.calculate()
-    val leftImpurity = leftImpurityCalculator.calculate()
-    val rightImpurity = rightImpurityCalculator.calculate()
-    val leftPredict = new Predict(leftImpurityCalculator.predict, leftImpurityCalculator.prob(leftImpurityCalculator.predict))
-    val rightPredict = new Predict(rightImpurityCalculator.predict, rightImpurityCalculator.prob(rightImpurityCalculator.predict))
-    new InformationGainStats(gain,impurity, leftImpurity, rightImpurity, leftPredict, rightPredict)
-  }
 }
 
-private[spark] object InformationGainAndImpurityStats {
-  val invalidInformationGainAndImpurityStats = new InformationGainAndImpurityStats(Double.MinValue, -1.0,
-    new InvalidCalculator(Array(0.0)),  new InvalidCalculator(Array(0.0)), new InvalidCalculator(Array(0.0)))
-  def getInvalidInformationGainAndImpurityStats(impurityCalculator: ImpurityCalculator): InformationGainAndImpurityStats = {
-    new InformationGainAndImpurityStats(Double.MinValue, -1.0,
+private[spark] object ImpurityStats {
+
+  def getInvalidImpurityStats(impurityCalculator: ImpurityCalculator): ImpurityStats = {
+    new ImpurityStats(Double.MinValue, -1.0,
       impurityCalculator, new InvalidCalculator(Array(0.0)), new InvalidCalculator(Array(0.0)))
+  }
+
+  def getEmptyImpurityStats(impurityCalculator: ImpurityCalculator): ImpurityStats = {
+    new ImpurityStats(Double.NaN, impurityCalculator.calculate(),
+      impurityCalculator, null, null)
   }
 }
