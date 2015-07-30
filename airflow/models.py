@@ -1574,12 +1574,18 @@ class DAG(object):
 
     @property
     def filepath(self):
+        """
+        File location of where the dag object is instantiated
+        """
         fn = self.full_filepath.replace(DAGS_FOLDER + '/', '')
         fn = fn.replace(os.path.dirname(__file__) + '/', '')
         return fn
 
     @property
     def folder(self):
+        """
+        Folder location of where the dag object is instantiated
+        """
         return os.path.dirname(self.full_filepath)
 
     @property
@@ -1588,6 +1594,9 @@ class DAG(object):
 
     @property
     def latest_execution_date(self):
+        """
+        Returns the latest date for which at least one task instance exists
+        """
         TI = TaskInstance
         session = settings.Session()
         execution_date = session.query(func.max(TI.execution_date)).filter(
@@ -1600,6 +1609,9 @@ class DAG(object):
 
     @property
     def subdags(self):
+        """
+        Returns a list of the subdag objects associated to this DAG
+        """
         # Late import to prevent circular imports
         from airflow.operators import SubDagOperator
         l = []
