@@ -937,7 +937,7 @@ private[spark] object SparkSubmitUtils {
         // are supplied to spark-submit
         val alternateIvyCache = ivyPath.getOrElse("")
         val packagesDirectory: File =
-          if (alternateIvyCache.trim.isEmpty) {
+          if (alternateIvyCache == null || alternateIvyCache.trim.isEmpty) {
             new File(ivySettings.getDefaultIvyUserDir, "jars")
           } else {
             ivySettings.setDefaultIvyUserDir(new File(alternateIvyCache))
