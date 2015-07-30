@@ -90,7 +90,6 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext {
       Vectors.sparse(tinyVocabSize, terms, termWeights)
     }.sortBy(_.toString)
     topicSummary.zip(localTopicSummary).foreach { case (topics, topicsLocal) =>
-      println(topics, topicsLocal)
       assert(topics ~== topicsLocal absTol 0.01)
     }
 
