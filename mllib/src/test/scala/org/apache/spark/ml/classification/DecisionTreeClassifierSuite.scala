@@ -21,12 +21,13 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.impl.TreeTests
 import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.tree.LeafNode
-import org.apache.spark.mllib.linalg.Vectors
+import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.{DecisionTree => OldDecisionTree, DecisionTreeSuite => OldDecisionTreeSuite}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.Row
 
 class DecisionTreeClassifierSuite extends SparkFunSuite with MLlibTestSparkContext {
 
@@ -231,6 +232,32 @@ class DecisionTreeClassifierSuite extends SparkFunSuite with MLlibTestSparkConte
     compareAPIs(rdd, dt, categoricalFeatures = Map.empty[Int, Int], numClasses)
   }
 
+  test("predictRaw") {
+    val rdd = continuousDataPointsForMulticlassRDD
+    val dt = new DecisionTreeClassifier()
+      .setImpurity("Gini")
+      .setMaxDepth(4)
+      .setMaxBins(100)
+    val categoricalFeatures = Map(0 -> 3)
+    val numClasses = 3
+
+    val newData: DataFrame = TreeTests.setMetadata(rdd, categoricalFeatures, numClasses)
+    val newTree = dt.fit(newData)
+
+//    println(newTree.toDebugString)
+//    newTree.transform(newData).select(newTree.getRawPredictionCol).show(false)
+
+    val predictions = newTree.transform(newData)
+      .select(newTree.getPredictionCol, newTree.getRawPredictionCol)
+      .collect()
+
+//    predictions.foreach(println)
+    predictions.foreach { case Row(pred: Double, rawPred: Vector) =>
+      assert(pred === rawPred.argmax,
+        s"Expected prediction $pred but calculated ${rawPred.argmax} from rawPrediction.")
+    }
+  }
+
   /////////////////////////////////////////////////////////////////////////////
   // Tests of model save/load
   /////////////////////////////////////////////////////////////////////////////
@@ -274,6 +301,9 @@ private[ml] object DecisionTreeClassifierSuite extends SparkFunSuite {
     // Use parent from newTree since this is not checked anyways.
     val oldTreeAsNew = DecisionTreeClassificationModel.fromOld(
       oldTree, newTree.parent.asInstanceOf[DecisionTreeClassifier], categoricalFeatures)
+//    println(oldTree.topNode.impurity)
+//    println(newTree.rootNode.impurity)
+//    println(oldTreeAsNew.rootNode.impurity)
     TreeTests.checkEqual(oldTreeAsNew, newTree)
   }
 }

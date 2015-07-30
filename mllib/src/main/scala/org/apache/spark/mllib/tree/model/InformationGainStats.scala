@@ -18,6 +18,7 @@
 package org.apache.spark.mllib.tree.model
 
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.mllib.tree.impurity.{InvalidCalculator, ImpurityCalculator}
 
 /**
  * :: DeveloperApi ::
@@ -75,4 +76,55 @@ private[spark] object InformationGainStats {
    */
   val invalidInformationGainStats = new InformationGainStats(Double.MinValue, -1.0, -1.0, -1.0,
     new Predict(0.0, 0.0), new Predict(0.0, 0.0))
+}
+
+class InformationGainAndImpurityStats(
+    val gain: Double,
+    val impurityCalculator: ImpurityCalculator,
+    val leftImpurityCalculator: ImpurityCalculator,
+    val rightImpurityCalculator: ImpurityCalculator) extends Serializable {
+
+  override def toString: String = {
+    s"gain = $gain, impurity = $impurity, left impurity = $leftImpurity, " +
+      s"right impurity = $rightImpurity"
+  }
+
+  def impurity: Double = impurityCalculator.calculate()
+
+  def leftImpurity: Double = leftImpurityCalculator.calculate()
+
+  def rightImpurity: Double = rightImpurityCalculator.calculate()
+
+  override def equals(o: Any): Boolean = o match {
+    case other: InformationGainAndImpurityStats =>
+      gain == other.gain &&
+      impurityCalculator == other.impurityCalculator &&
+      leftImpurityCalculator == other.leftImpurityCalculator &&
+      rightImpurityCalculator == other.rightImpurityCalculator
+
+    case _ => false
+  }
+
+  override def hashCode: Int = {
+    com.google.common.base.Objects.hashCode(
+      gain: java.lang.Double,
+      impurityCalculator,
+      leftImpurityCalculator,
+      rightImpurityCalculator
+    )
+  }
+
+  def toInformationGainStats: InformationGainStats = {
+    val impurity = impurityCalculator.calculate()
+    val leftImpurity = leftImpurityCalculator.calculate()
+    val rightImpurity = rightImpurityCalculator.calculate()
+    val leftPredict = new Predict(leftImpurityCalculator.predict, leftImpurityCalculator.prob(leftImpurityCalculator.predict))
+    val rightPredict = new Predict(rightImpurityCalculator.predict, rightImpurityCalculator.prob(rightImpurityCalculator.predict))
+    new InformationGainStats(gain,impurity, leftImpurity, rightImpurity, leftPredict, rightPredict)
+  }
+}
+
+private[spark] object InformationGainAndImpurityStats {
+  val invalidInformationGainAndImpurityStats = new InformationGainAndImpurityStats(Double.MinValue,
+    new InvalidCalculator(Array(0.0)),  new InvalidCalculator(Array(0.0)), new InvalidCalculator(Array(0.0)))
 }

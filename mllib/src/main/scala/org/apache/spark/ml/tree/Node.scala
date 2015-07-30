@@ -81,10 +81,13 @@ private[ml] object Node {
    */
   def fromOld(oldNode: OldNode, categoricalFeatures: Map[Int, Int]): Node = {
     if (oldNode.isLeaf) {
+//      println("aaaaa   " + oldNode.predict.predict + "   " + oldNode.impurity)
       // TODO: Once the implementation has been moved to this API, then include sufficient
       //       statistics here.
-      new LeafNode(prediction = oldNode.predict.predict, impurity = oldNode.impurity, impurityStats = null)
+      new LeafNode(prediction = oldNode.predict.predict,
+        impurity = oldNode.impurity, impurityStats = null)
     } else {
+//      println("bbbb   " + oldNode.predict.predict + "   " + oldNode.impurity)
       val gain = if (oldNode.stats.nonEmpty) {
         oldNode.stats.get.gain
       } else {
@@ -113,7 +116,10 @@ final class LeafNode private[ml] (
   override def toString: String =
     s"LeafNode(prediction = $prediction, impurity = $impurity)"
 
-  override private[ml] def predictImpl(features: Vector): LeafNode = this
+  override private[ml] def predictImpl(features: Vector): LeafNode = {
+    //println("leaf node")
+    this
+  }
 
   override private[tree] def numDescendants: Int = 0
 
@@ -156,6 +162,7 @@ final class InternalNode private[ml] (
   }
 
   override private[ml] def predictImpl(features: Vector): LeafNode = {
+    //println("internal node")
     if (split.shouldGoLeft(features)) {
       leftChild.predictImpl(features)
     } else {
@@ -257,6 +264,11 @@ private[tree] class LearningNode(
    * Convert this [[LearningNode]] to a regular [[Node]], and recurse on any children.
    */
   def toNode: Node = {
+    if (impurityStats == None) {
+      println("&&&&&&&&&&&&  " + id.toString)
+      println(isLeaf.toString)
+      println(impurity.toString)
+    }
     if (leftChild.nonEmpty) {
       assert(rightChild.nonEmpty && split.nonEmpty && stats.nonEmpty,
         "Unknown error during Decision Tree learning.  Could not convert LearningNode to Node.")
@@ -276,8 +288,9 @@ private[tree] object LearningNode {
       id: Int,
       predictionStats: OldPredict,
       impurity: Double,
-      isLeaf: Boolean): LearningNode = {
-    new LearningNode(id, predictionStats, impurity, None, None, None, false, None, None)
+      isLeaf: Boolean,
+      impurityCalculator: ImpurityCalculator): LearningNode = {
+    new LearningNode(id, predictionStats, impurity, None, None, None, false, None, Some(impurityCalculator))
   }
 
   /** Create an empty node with the given node index.  Values must be set later on. */

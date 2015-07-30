@@ -176,3 +176,11 @@ private[spark] abstract class ImpurityCalculator(val stats: Array[Double]) exten
   }
 
 }
+
+private[spark] class InvalidCalculator(stats: Array[Double]) extends ImpurityCalculator(stats) {
+  def calculate(): Double = -1.0
+  def predict: Double = 0.0
+  override def prob(label: Double): Double = 0.0
+  def count: Long = 0L
+  def copy: InvalidCalculator = new InvalidCalculator(stats.clone())
+}
