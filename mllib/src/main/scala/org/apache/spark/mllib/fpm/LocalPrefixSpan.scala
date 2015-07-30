@@ -25,7 +25,7 @@ import org.apache.spark.Logging
  * Calculate all patterns of a projected database in local.
  */
 private[fpm] object LocalPrefixSpan extends Logging with Serializable {
-
+  import PrefixSpan._
   /**
    * Calculate all patterns of a projected database.
    * @param minCount minimum count
@@ -43,7 +43,9 @@ private[fpm] object LocalPrefixSpan extends Logging with Serializable {
       database: Iterable[Array[Int]]): Iterator[(List[Int], Long)] = {
     if (prefixes.length == maxPatternLength || database.isEmpty) return Iterator.empty
     val frequentItemAndCounts = getFreqItemAndCounts(minCount, database)
-    val filteredDatabase = database.map(x => x.filter(frequentItemAndCounts.contains))
+    val filteredDatabase = database.map { suffix =>
+      suffix.filter(item => item == DELIMITER || frequentItemAndCounts.contains(item))
+    }
     frequentItemAndCounts.iterator.flatMap { case (item, count) =>
       val newPrefixes = item :: prefixes
       val newProjected = project(filteredDatabase, item)
@@ -63,7 +65,8 @@ private[fpm] object LocalPrefixSpan extends Logging with Serializable {
     if (index == -1) {
       Array()
     } else {
-      sequence.drop(index + 1)
+      // drop until we get to the next delimiter (or end of sequence)
+      sequence.drop(index).dropWhile(_ != DELIMITER).drop(1)
     }
   }
 
@@ -89,6 +92,6 @@ private[fpm] object LocalPrefixSpan extends Logging with Serializable {
         counts(item) += 1L
       }
     }
-    counts.filter(_._2 >= minCount)
+    counts.filter { case (item, count) => (count >= minCount) && (item != DELIMITER) }
   }
 }

@@ -44,6 +44,7 @@ import org.apache.spark.storage.StorageLevel
 class PrefixSpan private (
     private var minSupport: Double,
     private var maxPatternLength: Int) extends Logging with Serializable {
+  import PrefixSpan._
 
   /**
    * The maximum number of items allowed in a projected database before local processing. If a
@@ -90,12 +91,14 @@ class PrefixSpan private (
 
   /**
    * Find the complete set of sequential patterns in the input sequences.
-   * @param sequences input data set, contains a set of sequences,
-   *                  a sequence is an ordered list of elements.
+   * @param sequences a dataset of sequences. Items in a sequence are represented by non-negative
+   *                  integers and delimited by [[DELIMITER]]. Non-temporal sequences
+   *                  are supported by placing more than one item between delimiters.
    * @return a set of sequential pattern pairs,
    *         the key of pair is pattern (a list of elements),
    *         the value of pair is the pattern's count.
    */
+  // TODO: generalize to arbitrary item-types and use mapping to Ints for internal algorithm
   def run(sequences: RDD[Array[Int]]): RDD[(Array[Int], Long)] = {
     val sc = sequences.sparkContext
 
@@ -110,14 +113,14 @@ class PrefixSpan private (
     val freqItemCounts = sequences
       .flatMap(seq => seq.distinct.map(item => (item, 1L)))
       .reduceByKey(_ + _)
-      .filter(_._2 >= minCount)
+      .filter { case (item, count) => (count >= minCount) && (item != DELIMITER) }
       .collect()
 
     // Pairs of (length 1 prefix, suffix consisting of frequent items)
     val itemSuffixPairs = {
       val freqItems = freqItemCounts.map(_._1).toSet
       sequences.flatMap { seq =>
-        val filteredSeq = seq.filter(freqItems.contains(_))
+        val filteredSeq = seq.filter(item => item == DELIMITER || freqItems.contains(item))
         freqItems.flatMap { item =>
           val candidateSuffix = LocalPrefixSpan.getSuffix(item, filteredSeq)
           candidateSuffix match {
@@ -127,7 +130,6 @@ class PrefixSpan private (
         }
       }
     }
-
     // Accumulator for the computed results to be returned, initialized to the frequent items (i.e.
     // frequent length-one prefixes)
     var resultsAccumulator = freqItemCounts.map(x => (List(x._1), x._2))
@@ -197,7 +199,7 @@ class PrefixSpan private (
     val prefixItemPairAndCounts = prefixSuffixPairs
       .flatMap { case (prefix, suffix) => suffix.distinct.map(y => ((prefix, y), 1L)) }
       .reduceByKey(_ + _)
-      .filter(_._2 >= minCount)
+      .filter { case (item, count) => (count >= minCount) && (item != DELIMITER) }
 
     // Map from prefix to set of possible next items from suffix
     val prefixToNextItems = prefixItemPairAndCounts
@@ -246,4 +248,8 @@ class PrefixSpan private (
         }
     }
   }
+}
+
+object PrefixSpan {
+  val DELIMITER = -1
 }
