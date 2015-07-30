@@ -504,7 +504,7 @@ class RowMatrix(
    *  Paul G. Constantine, David F. Gleich. "Tall and skinny QR factorizations in MapReduce
    *  architectures"  ([[http://dx.doi.org/10.1145/1996092.1996103]])
    *
-   * @param computeQ: whether to computeQ
+   * @param computeQ whether to computeQ
    * @return QRDecomposition(Q, R), Q = null if computeQ = false.
    */
   def tallSkinnyQR(computeQ: Boolean = false): QRDecomposition[RowMatrix, Matrix] = {
@@ -522,14 +522,13 @@ class RowMatrix(
 
     // combine the R part from previous results vertically into a tall matrix
     val combinedR = blockQRs.treeReduce{ (r1, r2) =>
-      val partialR = BDM.vertcat(r1, r2)
-      breeze.linalg.qr.reduced(partialR).r
+      val stackedR = BDM.vertcat(r1, r2)
+      breeze.linalg.qr.reduced(stackedR).r
     }
-    val breezeR = breeze.linalg.qr.reduced(combinedR).r.toDenseMatrix
-    val finalR = Matrices.fromBreeze(breezeR)
+    val finalR = Matrices.fromBreeze(combinedR.toDenseMatrix)
     val finalQ = if (computeQ) {
       try {
-        val invR = inv(breezeR)
+        val invR = inv(combinedR)
         this.multiply(Matrices.fromBreeze(invR))
       } catch {
         case err: MatrixSingularException =>
