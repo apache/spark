@@ -19,6 +19,8 @@ package org.apache.spark.sql.execution.datasources
 
 import java.util.ServiceLoader
 
+import scala.collection.Iterator
+import scala.collection.JavaConversions._
 import scala.language.{existentials, implicitConversions}
 import scala.util.matching.Regex
 
@@ -197,18 +199,15 @@ private[sql] object ResolvedDataSource extends Logging {
   /** Given a provider name, look up the data source class definition. */
   def lookupDataSource(provider: String): Class[_] = {
     val loader = Utils.getContextOrSparkClassLoader
-
     val sl = ServiceLoader.load(classOf[DataSourceProvider], loader)
 
-    val itr = sl.iterator()
-    while (itr.hasNext) {
-      val service = itr.next()
-      if (service.format() == provider) {
-        return service.getClass
-      }
+    sl.iterator().filter(_.format() == provider).toList match {
+      case Nil => logInfo(s"provider: $provider is not registered in the service loader")
+      case head :: Nil => return head.getClass
+      case sources => sys.error(s"Multiple sources found for $provider, " +
+        s"(${sources.map(_.getClass.getName).mkString(", ")}, " +
+        "please specify the fully qualified class name")
     }
-
-    logInfo(s"could not find registered data source for $provider")
 
     try {
       loader.loadClass(provider)
