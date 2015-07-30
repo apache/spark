@@ -185,13 +185,13 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
   def sampleBy[T](col: String, fractions: Map[T, Double], seed: Long): DataFrame = {
     require(fractions.values.forall(p => p >= 0.0 && p <= 1.0),
       s"Fractions must be in [0, 1], but got $fractions.")
-    import org.apache.spark.sql.functions.rand
+    import org.apache.spark.sql.functions.{rand, udf}
     val c = Column(col)
     val r = rand(seed).as("rand_" + ju.UUID.randomUUID().toString.take(8))
-    val expr = fractions.toSeq.map { case (k, v) =>
-      (c === k) && (r < v)
-    }.reduce(_ || _) || false
-    df.filter(expr)
+    val f = udf { (stratum: Any, x: Double) =>
+      x < fractions.getOrElse(stratum.asInstanceOf[T], 0.0)
+    }
+    df.filter(f(c, r))
   }
 
   /**

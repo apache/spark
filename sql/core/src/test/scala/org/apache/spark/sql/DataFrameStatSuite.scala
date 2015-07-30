@@ -136,6 +136,6 @@ class DataFrameStatSuite extends QueryTest {
     val sampled = df.stat.sampleBy("key", Map(0 -> 0.1, 1 -> 0.2), 0L)
     checkAnswer(
       sampled.groupBy("key").count().orderBy("key"),
-      Seq(Row(0, 4), Row(1, 9)))
+      Seq(Row(0, 5), Row(1, 7)))
   }
 }
