@@ -144,7 +144,7 @@ case class Exchange(newPartitioning: Partitioning, child: SparkPlan) extends Una
   protected override def doExecute(): RDD[InternalRow] = attachTree(this , "execute") {
     val rdd = child.execute()
     val part: Partitioner = newPartitioning match {
-      case HashPartitioning(expressions, numPartitions, _) =>
+      case HashPartitioning(expressions, numPartitions) =>
         new HashPartitioner(numPartitions)
       case RangePartitioning(sortingExpressions, numPartitions) =>
         // Internally, RangePartitioner runs a job on the RDD that samples keys to compute
@@ -164,38 +164,7 @@ case class Exchange(newPartitioning: Partitioning, child: SparkPlan) extends Una
       // TODO: Handle BroadcastPartitioning.
     }
     def getPartitionKeyExtractor(): InternalRow => InternalRow = newPartitioning match {
-      case HashPartitioning(expressions, _, true) =>
-        // Since NullSafeHashPartitioning and NullUnsafeHashPartitioning may be used together
-        // for a join operator. We need to make sure they calculate the partition id with
-        // the same way.
-        val materalizeExpressions = newMutableProjection(expressions, child.output)()
-        val partitionExpressionSchema = expressions.map {
-          case ne: NamedExpression => ne.toAttribute
-          case expr => Alias(expr, "partitionExpr")().toAttribute
-        }
-        val partitionId = RowHashCode
-        val partitionIdExtractor =
-          newMutableProjection(partitionId :: Nil, partitionExpressionSchema)()
-        (row: InternalRow) => partitionIdExtractor(materalizeExpressions(row))
-        // newMutableProjection(expressions, child.output)()
-      case HashPartitioning(expressions, numPartition, false) =>
-        // For NullUnsafeHashPartitioning, we do not want to send rows having any expression
-        // in `expressions` evaluated as null to the same node.
-        val materalizeExpressions = newMutableProjection(expressions, child.output)()
-        val partitionExpressionSchema = expressions.map {
-          case ne: NamedExpression => ne.toAttribute
-          case expr => Alias(expr, "partitionExpr")().toAttribute
-        }
-        val partitionId =
-          If(
-            Not(AtLeastNNulls(1, partitionExpressionSchema)),
-            // There is no null value in the partition expressions, we can just get the
-            // hashCode of the input row.
-            RowHashCode,
-            Cast(Multiply(new Rand(numPartition), Literal(numPartition.toDouble)), IntegerType))
-        val partitionIdExtractor =
-          newMutableProjection(partitionId :: Nil, partitionExpressionSchema)()
-        (row: InternalRow) => partitionIdExtractor(materalizeExpressions(row))
+      case HashPartitioning(expressions, _) => newMutableProjection(expressions, child.output)()
       case RangePartitioning(_, _) | SinglePartition => identity
       case _ => sys.error(s"Exchange not implemented for $newPartitioning")
     }
@@ -227,8 +196,6 @@ case class Exchange(newPartitioning: Partitioning, child: SparkPlan) extends Una
 private[sql] case class EnsureRequirements(sqlContext: SQLContext) extends Rule[SparkPlan] {
   // TODO: Determine the number of partitions.
   def numPartitions: Int = sqlContext.conf.numShufflePartitions
-
-  def advancedSqlOptimizations: Boolean = sqlContext.conf.advancedSqlOptimizations
 
   def apply(plan: SparkPlan): SparkPlan = plan.transformUp {
     case operator: SparkPlan =>
@@ -312,24 +279,11 @@ private[sql] case class EnsureRequirements(sqlContext: SQLContext) extends Rule[
           case (AllTuples, rowOrdering, child) =>
             addOperatorsIfNecessary(SinglePartition, rowOrdering, child)
 
-          case (ClusteredDistribution(clustering, true), rowOrdering, child) =>
+          case (ClusteredDistribution(clustering), rowOrdering, child) =>
             addOperatorsIfNecessary(
               HashPartitioning(clustering, numPartitions),
               rowOrdering,
               child)
-
-          case (ClusteredDistribution(clustering, false), rowOrdering, child) =>
-            if (advancedSqlOptimizations) {
-              addOperatorsIfNecessary(
-                HashPartitioning(clustering, numPartitions, false),
-                rowOrdering,
-                child)
-            } else {
-              addOperatorsIfNecessary(
-                HashPartitioning(clustering, numPartitions),
-                rowOrdering,
-                child)
-            }
 
           case (OrderedDistribution(ordering), rowOrdering, child) =>
             addOperatorsIfNecessary(RangePartitioning(ordering, numPartitions), rowOrdering, child)

@@ -31,14 +31,8 @@ import org.apache.spark.sql.types._
 
 abstract class Optimizer extends RuleExecutor[LogicalPlan]
 
-class DefaultOptimizer extends Optimizer {
-
-  /**
-   * Override to provide additional rules for the "Operator Optimizations" batch.
-   */
-  val extendedOperatorOptimizationRules: Seq[Rule[LogicalPlan]] = Nil
-
-  lazy val batches =
+object DefaultOptimizer extends Optimizer {
+  val batches =
     // SubQueries are only needed for analysis and can be removed before execution.
     Batch("Remove SubQueries", FixedPoint(100),
       EliminateSubQueries) ::
@@ -47,27 +41,26 @@ class DefaultOptimizer extends Optimizer {
       RemoveLiteralFromGroupExpressions) ::
     Batch("Operator Optimizations", FixedPoint(100),
       // Operator push down
-      SetOperationPushDown ::
-      SamplePushDown ::
-      PushPredicateThroughJoin ::
-      PushPredicateThroughProject ::
-      PushPredicateThroughGenerate ::
-      ColumnPruning ::
+      SetOperationPushDown,
+      SamplePushDown,
+      PushPredicateThroughJoin,
+      PushPredicateThroughProject,
+      PushPredicateThroughGenerate,
+      ColumnPruning,
       // Operator combine
-      ProjectCollapsing ::
-      CombineFilters ::
-      CombineLimits ::
+      ProjectCollapsing,
+      CombineFilters,
+      CombineLimits,
       // Constant folding
-      NullPropagation ::
-      OptimizeIn ::
-      ConstantFolding ::
-      LikeSimplification ::
-      BooleanSimplification ::
-      RemovePositive ::
-      SimplifyFilters ::
-      SimplifyCasts ::
-      SimplifyCaseConversionExpressions ::
-      extendedOperatorOptimizationRules.toList : _*) ::
+      NullPropagation,
+      OptimizeIn,
+      ConstantFolding,
+      LikeSimplification,
+      BooleanSimplification,
+      RemovePositive,
+      SimplifyFilters,
+      SimplifyCasts,
+      SimplifyCaseConversionExpressions) ::
     Batch("Decimal Optimizations", FixedPoint(100),
       DecimalAggregates) ::
     Batch("LocalRelation", FixedPoint(100),
@@ -229,18 +222,12 @@ object ColumnPruning extends Rule[LogicalPlan] {
   }
 
   /** Applies a projection only when the child is producing unnecessary attributes */
-  private def prunedChild(c: LogicalPlan, allReferences: AttributeSet) = {
+  private def prunedChild(c: LogicalPlan, allReferences: AttributeSet) =
     if ((c.outputSet -- allReferences.filter(c.outputSet.contains)).nonEmpty) {
-      // We need to preserve the nullability of c's output.
-      // So, we first create a outputMap and if a reference is from the output of
-      // c, we use that output attribute from c.
-      val outputMap = AttributeMap(c.output.map(attr => (attr, attr)))
-      val projectList = allReferences.filter(outputMap.contains).map(outputMap).toSeq
-      Project(projectList, c)
+      Project(allReferences.filter(c.outputSet.contains).toSeq, c)
     } else {
       c
     }
-  }
 }
 
 /**

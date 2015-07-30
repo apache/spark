@@ -41,7 +41,6 @@ import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.catalyst.{InternalRow, ParserDialect, _}
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.datasources._
-import org.apache.spark.sql.optimizer.FilterNullsInJoinKey
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -157,9 +156,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
     }
 
   @transient
-  protected[sql] lazy val optimizer: Optimizer = new DefaultOptimizer {
-    override val extendedOperatorOptimizationRules = FilterNullsInJoinKey(self) :: Nil
-  }
+  protected[sql] lazy val optimizer: Optimizer = DefaultOptimizer
 
   @transient
   protected[sql] val ddlParser = new DDLParser(sqlParser.parse(_))

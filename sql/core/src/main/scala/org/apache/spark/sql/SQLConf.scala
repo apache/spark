@@ -322,7 +322,7 @@ private[spark] object SQLConf {
       " memory.")
 
   val SORTMERGE_JOIN = booleanConf("spark.sql.planner.sortMergeJoin",
-    defaultValue = Some(true),
+    defaultValue = Some(false),
     doc = "When true, use sort merge join (as opposed to hash join) by default for large joins.")
 
   // This is only used for the thriftserver
@@ -406,10 +406,6 @@ private[spark] object SQLConf {
     "spark.sql.useSerializer2",
     defaultValue = Some(true), isPublic = false)
 
-  val ADVANCED_SQL_OPTIMIZATION = booleanConf(
-    "spark.sql.advancedOptimization",
-    defaultValue = Some(true), isPublic = false)
-
   object Deprecated {
     val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"
   }
@@ -480,8 +476,6 @@ private[sql] class SQLConf extends Serializable with CatalystConf {
   private[spark] def useSqlAggregate2: Boolean = getConf(USE_SQL_AGGREGATE2)
 
   private[spark] def useSqlSerializer2: Boolean = getConf(USE_SQL_SERIALIZER2)
-
-  private[spark] def advancedSqlOptimizations: Boolean = getConf(ADVANCED_SQL_OPTIMIZATION)
 
   private[spark] def autoBroadcastJoinThreshold: Int = getConf(AUTO_BROADCASTJOIN_THRESHOLD)
 
