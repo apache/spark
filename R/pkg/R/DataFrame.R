@@ -580,7 +580,7 @@ setMethod("ncol",
             length(columns(x))
           })
 
-#' Returns the dimentions (number for rows and columns) of a DataFrame
+#' Returns the dimentions (number of rows and columns) of a DataFrame
 #' @param x a SparkSQL DataFrame
 #'
 #' @rdname dim
@@ -1296,23 +1296,18 @@ setMethod("unionAll",
             dataFrame(unioned)
           })
 
-setGeneric("rbind", signature = "...")
-
-rbind.SparkDataFrames <- function(x, ..., deparse.level = 1) {
-  allargs <- list(...)
-  if (nargs() == 3) {
-    unionAll(x, ...)
-  } else {
-    unionAll(x, Recall(..., deparse.level = 1))
-  }
-}
-
 #' @rdname rbind
 #' @aliases unionAll
-setMethod("rbind",
-          signature(... = "DataFrame"),
-          rbind.SparkDataFrames
-          )
+  setMethod("rbind",
+            signature(... = "DataFrame"),
+            function(x, ..., deparse.level = 1) {
+              allargs <- list(...)
+              if (nargs() == 3) {
+                unionAll(x, ...)
+              } else {
+                unionAll(x, Recall(..., deparse.level = 1))
+              }
+            })
 
 #' Intersect
 #'
