@@ -223,7 +223,11 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
     // Signal the receivers to delete old block data
     if (WriteAheadLogUtils.enableReceiverLog(ssc.conf)) {
       logInfo(s"Cleanup old received batch data: $cleanupThreshTime")
-      endpoint.send(CleanupOldBlocks(cleanupThreshTime))
+      synchronized {
+        if (isTrackerStarted) {
+          endpoint.send(CleanupOldBlocks(cleanupThreshTime))
+        }
+      }
     }
   }
 
