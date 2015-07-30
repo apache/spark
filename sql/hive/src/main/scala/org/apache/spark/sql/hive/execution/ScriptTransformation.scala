@@ -108,7 +108,6 @@ case class ScriptTransformation(
       val reader = new BufferedReader(new InputStreamReader(inputStream))
       val outputIterator: Iterator[InternalRow] = new Iterator[InternalRow] with HiveInspectors {
         var curLine: String = null
-        var cacheRow: InternalRow = null
         val scriptOutputStream = new DataInputStream(inputStream)
         var scriptOutputWritable: Writable = null
         val reusedWritableObject: Writable = if (null != outputSerde) {
