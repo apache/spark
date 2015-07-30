@@ -754,7 +754,7 @@ test_that("filter() on a DataFrame", {
   expect_equal(count(filtered6), 2)
 })
 
-test_that("join() on a DataFrame", {
+test_that("join() and merge() on a DataFrame", {
   df <- jsonFile(sqlContext, jsonPath)
 
   mockLines2 <- c("{\"name\":\"Michael\", \"test\": \"yes\"}",
@@ -783,6 +783,12 @@ test_that("join() on a DataFrame", {
   expect_equal(names(joined4), c("newAge", "name", "test"))
   expect_equal(count(joined4), 4)
   expect_equal(collect(orderBy(joined4, joined4$name))$newAge[3], 24)
+
+  merged <- select(merge(df, df2, df$name == df2$name, "outer"),
+                    alias(df$age + 5, "newAge"), df$name, df2$test)
+  expect_equal(names(merged), c("newAge", "name", "test"))
+  expect_equal(count(merged), 4)
+  expect_equal(collect(orderBy(merged, joined4$name))$newAge[3], 24)
 })
 
 test_that("toJSON() returns an RDD of the correct values", {
