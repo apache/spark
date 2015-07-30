@@ -98,7 +98,8 @@ object DataType {
 
   private val nonDecimalNameToType = {
     Seq(NullType, DateType, TimestampType, BinaryType,
-      IntegerType, BooleanType, LongType, DoubleType, FloatType, ShortType, ByteType, StringType)
+      IntegerType, BooleanType, LongType, DoubleType, FloatType, ShortType, ByteType, StringType,
+      CalendarIntervalType)
       .map(t => t.typeName -> t).toMap
   }
 
@@ -189,6 +190,7 @@ object DataType {
         | "DecimalType()" ^^^ DecimalType.USER_DEFAULT
         | fixedDecimalType
         | "TimestampType" ^^^ TimestampType
+        | "CalendarIntervalType" ^^^ CalendarIntervalType
         )
 
     protected lazy val fixedDecimalType: Parser[DataType] =

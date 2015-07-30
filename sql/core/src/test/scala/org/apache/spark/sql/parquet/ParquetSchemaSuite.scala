@@ -913,4 +913,12 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       |  optional fixed_len_byte_array(8) f1 (DECIMAL(18, 3));
       |}
     """.stripMargin)
+
+  testSchema(
+    "CalendarInterval",
+    StructType(Seq(StructField("f1", CalendarIntervalType))),
+    """message root {
+      |  optional fixed_len_byte_array(12) f1 (INTERVAL);
+      |}
+    """.stripMargin)
 }

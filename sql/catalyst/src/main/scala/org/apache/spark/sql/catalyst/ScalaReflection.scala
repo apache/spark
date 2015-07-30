@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst
 
-import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 import org.apache.spark.util.Utils
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
@@ -135,6 +135,7 @@ trait ScalaReflection {
       case t if t <:< localTypeOf[java.math.BigDecimal] =>
         Schema(DecimalType.SYSTEM_DEFAULT, nullable = true)
       case t if t <:< localTypeOf[Decimal] => Schema(DecimalType.SYSTEM_DEFAULT, nullable = true)
+      case t if t <:< localTypeOf[CalendarInterval] => Schema(CalendarIntervalType, nullable = true)
       case t if t <:< localTypeOf[java.lang.Integer] => Schema(IntegerType, nullable = true)
       case t if t <:< localTypeOf[java.lang.Long] => Schema(LongType, nullable = true)
       case t if t <:< localTypeOf[java.lang.Double] => Schema(DoubleType, nullable = true)
@@ -169,6 +170,7 @@ trait ScalaReflection {
     case obj: java.sql.Date => DateType
     case obj: java.math.BigDecimal => DecimalType.SYSTEM_DEFAULT
     case obj: Decimal => DecimalType.SYSTEM_DEFAULT
+    case obj: CalendarInterval => CalendarIntervalType
     case obj: java.sql.Timestamp => TimestampType
     case null => NullType
     // For other cases, there is no obvious mapping from the type of the given object to a
