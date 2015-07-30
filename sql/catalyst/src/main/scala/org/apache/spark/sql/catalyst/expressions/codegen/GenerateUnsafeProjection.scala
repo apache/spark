@@ -62,44 +62,44 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
     case _ => ""
   }
 
-  def genUpdate(
+  def genFieldWriter(
       ctx: CodeGenContext,
-      dt: DataType,
+      fieldType: DataType,
       ev: GeneratedExpressionCode,
       primitive: String,
-      i: Int,
-      cursor: String): String = dt match {
-    case _ if ctx.isPrimitiveType(dt) =>
-      s"${ctx.setColumn(primitive, dt, i, ev.primitive)}"
+      index: Int,
+      cursor: String): String = fieldType match {
+    case _ if ctx.isPrimitiveType(fieldType) =>
+      s"${ctx.setColumn(primitive, fieldType, index, ev.primitive)}"
     case t: DecimalType if t.precision <= Decimal.MAX_LONG_DIGITS =>
       s"""
        // make sure Decimal object has the same scale as DecimalType
        if (${ev.primitive}.changePrecision(${t.precision}, ${t.scale})) {
-         $CompactDecimalWriter.write($primitive, $i, $cursor, ${ev.primitive});
+         $CompactDecimalWriter.write($primitive, $index, $cursor, ${ev.primitive});
        } else {
-         $primitive.setNullAt($i);
+         $primitive.setNullAt($index);
        }
        """
     case t: DecimalType if t.precision > Decimal.MAX_LONG_DIGITS =>
       s"""
        // make sure Decimal object has the same scale as DecimalType
        if (${ev.primitive}.changePrecision(${t.precision}, ${t.scale})) {
-         $cursor += $DecimalWriter.write($primitive, $i, $cursor, ${ev.primitive});
+         $cursor += $DecimalWriter.write($primitive, $index, $cursor, ${ev.primitive});
        } else {
-         $primitive.setNullAt($i);
+         $primitive.setNullAt($index);
        }
        """
     case StringType =>
-      s"$cursor += $StringWriter.write($primitive, $i, $cursor, ${ev.primitive})"
+      s"$cursor += $StringWriter.write($primitive, $index, $cursor, ${ev.primitive})"
     case BinaryType =>
-      s"$cursor += $BinaryWriter.write($primitive, $i, $cursor, ${ev.primitive})"
+      s"$cursor += $BinaryWriter.write($primitive, $index, $cursor, ${ev.primitive})"
     case CalendarIntervalType =>
-      s"$cursor += $IntervalWriter.write($primitive, $i, $cursor, ${ev.primitive})"
+      s"$cursor += $IntervalWriter.write($primitive, $index, $cursor, ${ev.primitive})"
     case t: StructType =>
-      s"$cursor += $StructWriter.write($primitive, $i, $cursor, ${ev.primitive})"
+      s"$cursor += $StructWriter.write($primitive, $index, $cursor, ${ev.primitive})"
     case NullType => ""
     case _ =>
-      throw new UnsupportedOperationException(s"Not supported DataType: $dt")
+      throw new UnsupportedOperationException(s"Not supported DataType: $fieldType")
   }
 
   /**
@@ -131,7 +131,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
     }.mkString("")
 
     val writers = expressions.zipWithIndex.map { case (e, i) =>
-      val update = genUpdate(ctx, e.dataType, exprs(i), ret, i, cursor)
+      val update = genFieldWriter(ctx, e.dataType, exprs(i), ret, i, cursor)
       s"""if (${exprs(i).isNull}) {
             $ret.setNullAt($i);
           } else {
@@ -205,7 +205,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
     }.mkString("")
 
     val writers = schema.toSeq.map(_.dataType).zip(exprs).zipWithIndex.map { case ((dt, ev), i) =>
-      val update = genUpdate(ctx, dt, ev, primitive, i, cursor)
+      val update = genFieldWriter(ctx, dt, ev, primitive, i, cursor)
       s"""
           if (${exprs(i).isNull}) {
             $primitive.setNullAt($i);

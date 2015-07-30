@@ -221,6 +221,7 @@ public final class UnsafeRow extends MutableRow {
 
   @Override
   public void setDecimal(int ordinal, Decimal value, int precision) {
+    assertIndexIsValid(ordinal);
     if (value == null) {
       setNullAt(ordinal);
     } else {
@@ -326,10 +327,10 @@ public final class UnsafeRow extends MutableRow {
 
   @Override
   public Decimal getDecimal(int ordinal, int precision, int scale) {
+    assertIndexIsValid(ordinal);
     if (isNullAt(ordinal)) {
       return null;
     }
-    assertIndexIsValid(ordinal);
     if (precision <= Decimal.MAX_LONG_DIGITS()) {
       return Decimal.apply(getLong(ordinal), precision, scale);
     } else {
