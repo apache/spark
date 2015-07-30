@@ -19,7 +19,7 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{BoundReference, SortOrder}
+import org.apache.spark.sql.catalyst.expressions.SortOrder
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.collection.unsafe.sort.{PrefixComparators, PrefixComparator}
@@ -39,54 +39,57 @@ object SortPrefixUtils {
     sortOrder.dataType match {
       case StringType => PrefixComparators.STRING
       case BooleanType | ByteType | ShortType | IntegerType | LongType => PrefixComparators.INTEGRAL
-      case FloatType | DoubleType => PrefixComparators.DOUBLE
+      case FloatType => PrefixComparators.FLOAT
+      case DoubleType => PrefixComparators.DOUBLE
       case _ => NoOpPrefixComparator
     }
   }
 
   def getPrefixComputer(sortOrder: SortOrder): InternalRow => Long = {
-    val bound = sortOrder.child.asInstanceOf[BoundReference]
-    val pos = bound.ordinal
     sortOrder.dataType match {
-      case StringType =>
-        (row: InternalRow) => {
-          PrefixComparators.STRING.computePrefix(row.getUTF8String(pos))
-        }
+      case StringType => (row: InternalRow) => {
+        PrefixComparators.STRING.computePrefix(sortOrder.child.eval(row).asInstanceOf[UTF8String])
+      }
       case BooleanType =>
         (row: InternalRow) => {
-          if (row.isNullAt(pos)) PrefixComparators.INTEGRAL.NULL_PREFIX
-          else if (row.getBoolean(pos)) 1
+          val exprVal = sortOrder.child.eval(row)
+          if (exprVal == null) PrefixComparators.INTEGRAL.NULL_PREFIX
+          else if (sortOrder.child.eval(row).asInstanceOf[Boolean]) 1
           else 0
         }
       case ByteType =>
         (row: InternalRow) => {
-          if (row.isNullAt(pos)) PrefixComparators.INTEGRAL.NULL_PREFIX else row.getByte(pos)
+          val exprVal = sortOrder.child.eval(row)
+          if (exprVal == null) PrefixComparators.INTEGRAL.NULL_PREFIX
+          else sortOrder.child.eval(row).asInstanceOf[Byte]
         }
       case ShortType =>
         (row: InternalRow) => {
-          if (row.isNullAt(pos)) PrefixComparators.INTEGRAL.NULL_PREFIX else row.getShort(pos)
+          val exprVal = sortOrder.child.eval(row)
+          if (exprVal == null) PrefixComparators.INTEGRAL.NULL_PREFIX
+          else sortOrder.child.eval(row).asInstanceOf[Short]
         }
       case IntegerType =>
         (row: InternalRow) => {
-          if (row.isNullAt(pos)) PrefixComparators.INTEGRAL.NULL_PREFIX else row.getInt(pos)
+          val exprVal = sortOrder.child.eval(row)
+          if (exprVal == null) PrefixComparators.INTEGRAL.NULL_PREFIX
+          else sortOrder.child.eval(row).asInstanceOf[Int]
         }
       case LongType =>
         (row: InternalRow) => {
-          if (row.isNullAt(pos)) PrefixComparators.INTEGRAL.NULL_PREFIX else row.getLong(pos)
+          val exprVal = sortOrder.child.eval(row)
+          if (exprVal == null) PrefixComparators.INTEGRAL.NULL_PREFIX
+          else sortOrder.child.eval(row).asInstanceOf[Long]
         }
       case FloatType => (row: InternalRow) => {
-        if (row.isNullAt(pos)) {
-          PrefixComparators.DOUBLE.NULL_PREFIX
-        } else {
-          PrefixComparators.DOUBLE.computePrefix(row.getFloat(pos).toDouble)
-        }
+        val exprVal = sortOrder.child.eval(row)
+        if (exprVal == null) PrefixComparators.FLOAT.NULL_PREFIX
+        else PrefixComparators.FLOAT.computePrefix(sortOrder.child.eval(row).asInstanceOf[Float])
       }
       case DoubleType => (row: InternalRow) => {
-        if (row.isNullAt(pos)) {
-          PrefixComparators.DOUBLE.NULL_PREFIX
-        } else {
-          PrefixComparators.DOUBLE.computePrefix(row.getDouble(pos))
-        }
+        val exprVal = sortOrder.child.eval(row)
+        if (exprVal == null) PrefixComparators.DOUBLE.NULL_PREFIX
+        else PrefixComparators.DOUBLE.computePrefix(sortOrder.child.eval(row).asInstanceOf[Double])
       }
       case _ => (row: InternalRow) => 0L
     }

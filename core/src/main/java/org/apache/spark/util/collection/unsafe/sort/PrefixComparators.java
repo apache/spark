@@ -29,6 +29,7 @@ public class PrefixComparators {
 
   public static final StringPrefixComparator STRING = new StringPrefixComparator();
   public static final IntegralPrefixComparator INTEGRAL = new IntegralPrefixComparator();
+  public static final FloatPrefixComparator FLOAT = new FloatPrefixComparator();
   public static final DoublePrefixComparator DOUBLE = new DoublePrefixComparator();
 
   public static final class StringPrefixComparator extends PrefixComparator {
@@ -52,6 +53,21 @@ public class PrefixComparators {
     }
 
     public final long NULL_PREFIX = Long.MIN_VALUE;
+  }
+
+  public static final class FloatPrefixComparator extends PrefixComparator {
+    @Override
+    public int compare(long aPrefix, long bPrefix) {
+      float a = Float.intBitsToFloat((int) aPrefix);
+      float b = Float.intBitsToFloat((int) bPrefix);
+      return Utils.nanSafeCompareFloats(a, b);
+    }
+
+    public long computePrefix(float value) {
+      return Float.floatToIntBits(value) & 0xffffffffL;
+    }
+
+    public final long NULL_PREFIX = computePrefix(Float.NEGATIVE_INFINITY);
   }
 
   public static final class DoublePrefixComparator extends PrefixComparator {
