@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions;
 
 import org.apache.spark.sql.catalyst.InternalRow;
+import org.apache.spark.sql.types.ArrayData;
 import org.apache.spark.sql.types.Decimal;
 import org.apache.spark.unsafe.types.CalendarInterval;
 import org.apache.spark.unsafe.types.UTF8String;
@@ -50,4 +51,5 @@ public interface SpecializedGetters {
 
   InternalRow getStruct(int ordinal, int numFields);
 
+  ArrayData getArray(int ordinal);
 }

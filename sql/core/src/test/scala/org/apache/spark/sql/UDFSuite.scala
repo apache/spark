@@ -17,13 +17,16 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.sql.test.SQLTestUtils
 
 case class FunctionResult(f1: String, f2: String)
 
-class UDFSuite extends QueryTest {
+class UDFSuite extends QueryTest with SQLTestUtils {
 
   private lazy val ctx = org.apache.spark.sql.test.TestSQLContext
   import ctx.implicits._
+
+  override def sqlContext(): SQLContext = ctx
 
   test("built-in fixed arity expressions") {
     val df = ctx.emptyDataFrame
@@ -56,6 +59,18 @@ class UDFSuite extends QueryTest {
     df.registerTempTable("tmp_table")
     checkAnswer(ctx.sql("select spark_partition_id() from tmp_table").toDF(), Row(0))
     ctx.dropTempTable("tmp_table")
+  }
+
+  test("SPARK-8005 input_file_name") {
+    withTempPath { dir =>
+      val data = ctx.sparkContext.parallelize(0 to 10, 2).toDF("id")
+      data.write.parquet(dir.getCanonicalPath)
+      ctx.read.parquet(dir.getCanonicalPath).registerTempTable("test_table")
+      val answer = ctx.sql("select input_file_name() from test_table").head().getString(0)
+      assert(answer.contains(dir.getCanonicalPath))
+      assert(ctx.sql("select input_file_name() from test_table").distinct().collect().length >= 2)
+      ctx.dropTempTable("test_table")
+    }
   }
 
   test("error reporting for incorrect number of arguments") {
