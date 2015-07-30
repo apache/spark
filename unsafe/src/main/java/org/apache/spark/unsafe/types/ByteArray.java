@@ -15,9 +15,24 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution
+package org.apache.spark.unsafe.types;
 
-/**
- * Package containing expressions that are specific to Spark runtime.
- */
-package object expressions
+import org.apache.spark.unsafe.PlatformDependent;
+
+public class ByteArray {
+
+  /**
+   * Writes the content of a byte array into a memory address, identified by an object and an
+   * offset. The target memory address must already been allocated, and have enough space to
+   * hold all the bytes in this string.
+   */
+  public static void writeToMemory(byte[] src, Object target, long targetOffset) {
+    PlatformDependent.copyMemory(
+      src,
+      PlatformDependent.BYTE_ARRAY_OFFSET,
+      target,
+      targetOffset,
+      src.length
+    );
+  }
+}

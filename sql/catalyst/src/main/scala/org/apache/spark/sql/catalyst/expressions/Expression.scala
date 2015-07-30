@@ -196,7 +196,24 @@ trait Unevaluable extends Expression {
  * An expression that is nondeterministic.
  */
 trait Nondeterministic extends Expression {
-  override def deterministic: Boolean = false
+  final override def deterministic: Boolean = false
+  final override def foldable: Boolean = false
+
+  private[this] var initialized = false
+
+  final def setInitialValues(): Unit = {
+    initInternal()
+    initialized = true
+  }
+
+  protected def initInternal(): Unit
+
+  final override def eval(input: InternalRow = null): Any = {
+    require(initialized, "nondeterministic expression should be initialized before evaluate")
+    evalInternal(input)
+  }
+
+  protected def evalInternal(input: InternalRow): Any
 }
 
 
@@ -336,9 +353,9 @@ abstract class BinaryExpression extends Expression {
    * @param f accepts two variable names and returns Java code to compute the output.
    */
   protected def defineCodeGen(
-    ctx: CodeGenContext,
-    ev: GeneratedExpressionCode,
-    f: (String, String) => String): String = {
+      ctx: CodeGenContext,
+      ev: GeneratedExpressionCode,
+      f: (String, String) => String): String = {
     nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
       s"${ev.primitive} = ${f(eval1, eval2)};"
     })
@@ -353,9 +370,9 @@ abstract class BinaryExpression extends Expression {
    *          and returns Java code to compute the output.
    */
   protected def nullSafeCodeGen(
-    ctx: CodeGenContext,
-    ev: GeneratedExpressionCode,
-    f: (String, String) => String): String = {
+      ctx: CodeGenContext,
+      ev: GeneratedExpressionCode,
+      f: (String, String) => String): String = {
     val eval1 = left.gen(ctx)
     val eval2 = right.gen(ctx)
     val resultCode = f(eval1.primitive, eval2.primitive)

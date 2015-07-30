@@ -422,14 +422,14 @@ class JsonSuite extends QueryTest with TestJsonData {
       Row(-89) :: Row(21474836370L) :: Row(21474836470L) :: Nil
     )
 
-    // Widening to DoubleType
+    // Widening to DecimalType
     checkAnswer(
       sql("select num_num_2 + 1.3 from jsonTable where num_num_2 > 1.1"),
-      Row(21474836472.2) ::
-        Row(92233720368547758071.3) :: Nil
+      Row(BigDecimal("21474836472.2")) ::
+        Row(BigDecimal("92233720368547758071.3")) :: Nil
     )
 
-    // Widening to DoubleType
+    // Widening to Double
     checkAnswer(
       sql("select num_num_3 + 1.2 from jsonTable where num_num_3 > 1.1"),
       Row(101.2) :: Row(21474836471.2) :: Nil
@@ -438,13 +438,13 @@ class JsonSuite extends QueryTest with TestJsonData {
     // Number and String conflict: resolve the type as number in this query.
     checkAnswer(
       sql("select num_str + 1.2 from jsonTable where num_str > 14"),
-      Row(92233720368547758071.2)
+      Row(BigDecimal("92233720368547758071.2"))
     )
 
     // Number and String conflict: resolve the type as number in this query.
     checkAnswer(
       sql("select num_str + 1.2 from jsonTable where num_str >= 92233720368547758060"),
-      Row(new java.math.BigDecimal("92233720368547758071.2").doubleValue)
+      Row(new java.math.BigDecimal("92233720368547758071.2"))
     )
 
     // String and Boolean conflict: resolve the type as string.
@@ -503,7 +503,7 @@ class JsonSuite extends QueryTest with TestJsonData {
     // Number and String conflict: resolve the type as number in this query.
     checkAnswer(
       sql("select num_str + 1.2 from jsonTable where num_str > 13"),
-      Row(14.3) :: Row(92233720368547758071.2) :: Nil
+      Row(BigDecimal("14.3")) :: Row(BigDecimal("92233720368547758071.2")) :: Nil
     )
   }
 

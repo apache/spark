@@ -17,9 +17,10 @@
 
 package org.apache.spark.mllib.clustering
 
-import breeze.linalg.{DenseMatrix => BDM}
+import breeze.linalg.{DenseMatrix => BDM, max, argmax}
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.graphx.Edge
 import org.apache.spark.mllib.linalg.{DenseMatrix, Matrix, Vector, Vectors}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
@@ -30,7 +31,8 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext {
   import LDASuite._
 
   test("LocalLDAModel") {
-    val model = new LocalLDAModel(tinyTopics)
+    val model = new LocalLDAModel(tinyTopics,
+      Vectors.dense(Array.fill(tinyTopics.numRows)(1.0 / tinyTopics.numRows)), 1D, 100D)
 
     // Check: basic parameters
     assert(model.k === tinyK)
@@ -234,6 +236,51 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext {
     }
   }
 
+  test("LocalLDAModel logPerplexity") {
+    val k = 2
+    val vocabSize = 6
+    val alpha = 0.01
+    val eta = 0.01
+    val gammaShape = 100
+    val topics = new DenseMatrix(numRows = vocabSize, numCols = k, values = Array(
+      1.86738052, 1.94056535, 1.89981687, 0.0833265, 0.07405918, 0.07940597,
+      0.15081551, 0.08637973, 0.12428538, 1.9474897, 1.94615165, 1.95204124))
+
+    def toydata: Array[(Long, Vector)] = Array(
+      Vectors.sparse(6, Array(0, 1), Array(1, 1)),
+      Vectors.sparse(6, Array(1, 2), Array(1, 1)),
+      Vectors.sparse(6, Array(0, 2), Array(1, 1)),
+      Vectors.sparse(6, Array(3, 4), Array(1, 1)),
+      Vectors.sparse(6, Array(3, 5), Array(1, 1)),
+      Vectors.sparse(6, Array(4, 5), Array(1, 1))
+    ).zipWithIndex.map { case (wordCounts, docId) => (docId.toLong, wordCounts) }
+    val docs = sc.parallelize(toydata)
+
+
+    val ldaModel: LocalLDAModel = new LocalLDAModel(
+      topics, Vectors.dense(Array.fill(k)(alpha)), eta, gammaShape)
+
+    /* Verify results using gensim:
+       import numpy as np
+       from gensim import models
+       corpus = [
+          [(0, 1.0), (1, 1.0)],
+          [(1, 1.0), (2, 1.0)],
+          [(0, 1.0), (2, 1.0)],
+          [(3, 1.0), (4, 1.0)],
+          [(3, 1.0), (5, 1.0)],
+          [(4, 1.0), (5, 1.0)]]
+       np.random.seed(2345)
+       lda = models.ldamodel.LdaModel(
+          corpus=corpus, alpha=0.01, eta=0.01, num_topics=2, update_every=0, passes=100,
+          decay=0.51, offset=1024)
+       print(lda.log_perplexity(corpus))
+       > -3.69051285096
+     */
+
+    assert(ldaModel.logPerplexity(docs) ~== -3.690D relTol 1E-3D)
+  }
+
   test("OnlineLDAOptimizer with asymmetric prior") {
     def toydata: Array[(Long, Vector)] = Array(
       Vectors.sparse(6, Array(0, 1), Array(1, 1)),
@@ -286,7 +333,8 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext {
 
   test("model save/load") {
     // Test for LocalLDAModel.
-    val localModel = new LocalLDAModel(tinyTopics)
+    val localModel = new LocalLDAModel(tinyTopics,
+      Vectors.dense(Array.fill(tinyTopics.numRows)(0.01)), 0.5D, 10D)
     val tempDir1 = Utils.createTempDir()
     val path1 = tempDir1.toURI.toString
 
@@ -312,12 +360,30 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext {
       assert(samelocalModel.topicsMatrix === localModel.topicsMatrix)
       assert(samelocalModel.k === localModel.k)
       assert(samelocalModel.vocabSize === localModel.vocabSize)
+      assert(samelocalModel.docConcentration === localModel.docConcentration)
+      assert(samelocalModel.topicConcentration === localModel.topicConcentration)
+      assert(samelocalModel.gammaShape === localModel.gammaShape)
 
       val sameDistributedModel = DistributedLDAModel.load(sc, path2)
       assert(distributedModel.topicsMatrix === sameDistributedModel.topicsMatrix)
       assert(distributedModel.k === sameDistributedModel.k)
       assert(distributedModel.vocabSize === sameDistributedModel.vocabSize)
       assert(distributedModel.iterationTimes === sameDistributedModel.iterationTimes)
+      assert(distributedModel.docConcentration === sameDistributedModel.docConcentration)
+      assert(distributedModel.topicConcentration === sameDistributedModel.topicConcentration)
+      assert(distributedModel.gammaShape === sameDistributedModel.gammaShape)
+      assert(distributedModel.globalTopicTotals === sameDistributedModel.globalTopicTotals)
+
+      val graph = distributedModel.graph
+      val sameGraph = sameDistributedModel.graph
+      assert(graph.vertices.sortByKey().collect() === sameGraph.vertices.sortByKey().collect())
+      val edge = graph.edges.map {
+        case Edge(sid: Long, did: Long, nos: Double) => (sid, did, nos)
+      }.sortBy(x => (x._1, x._2)).collect()
+      val sameEdge = sameGraph.edges.map {
+        case Edge(sid: Long, did: Long, nos: Double) => (sid, did, nos)
+      }.sortBy(x => (x._1, x._2)).collect()
+      assert(edge === sameEdge)
     } finally {
       Utils.deleteRecursively(tempDir1)
       Utils.deleteRecursively(tempDir2)

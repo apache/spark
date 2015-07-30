@@ -15,12 +15,13 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution
+package org.apache.spark.rdd
 
 import java.text.SimpleDateFormat
 import java.util.Date
 
-import org.apache.spark.{Partition => SparkPartition, _}
+import scala.reflect.ClassTag
+
 import org.apache.hadoop.conf.{Configurable, Configuration}
 import org.apache.hadoop.io.Writable
 import org.apache.hadoop.mapreduce._
@@ -30,12 +31,12 @@ import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.executor.DataReadMethod
 import org.apache.spark.mapreduce.SparkHadoopMapReduceUtil
+import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.{Partition => SparkPartition, _}
 import org.apache.spark.rdd.NewHadoopRDD.NewHadoopMapPartitionsWithSplitRDD
-import org.apache.spark.rdd.{HadoopRDD, RDD}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.{SerializableConfiguration, Utils}
 
-import scala.reflect.ClassTag
 
 private[spark] class SqlNewHadoopPartition(
     rddId: Int,
@@ -62,7 +63,7 @@ private[spark] class SqlNewHadoopPartition(
  * changes based on [[org.apache.spark.rdd.HadoopRDD]]. In future, this functionality will be
  * folded into core.
  */
-private[sql] class SqlNewHadoopRDD[K, V](
+private[spark] class SqlNewHadoopRDD[K, V](
     @transient sc : SparkContext,
     broadcastedConf: Broadcast[SerializableConfiguration],
     @transient initDriverSideJobFuncOpt: Option[Job => Unit],
@@ -128,6 +129,12 @@ private[sql] class SqlNewHadoopRDD[K, V](
       val inputMetrics = context.taskMetrics
         .getInputMetricsForReadMethod(DataReadMethod.Hadoop)
 
+      // Sets the thread local variable for the file's name
+      split.serializableHadoopSplit.value match {
+        case fs: FileSplit => SqlNewHadoopRDD.setInputFileName(fs.getPath.toString)
+        case _ => SqlNewHadoopRDD.unsetInputFileName()
+      }
+
       // Find a function that will return the FileSystem bytes read by this thread. Do this before
       // creating RecordReader, because RecordReader's constructor might read some bytes
       val bytesReadCallback = inputMetrics.bytesReadCallback.orElse {
@@ -147,7 +154,7 @@ private[sql] class SqlNewHadoopRDD[K, V](
           configurable.setConf(conf)
         case _ =>
       }
-      val reader = format.createRecordReader(
+      private var reader = format.createRecordReader(
         split.serializableHadoopSplit.value, hadoopAttemptContext)
       reader.initialize(split.serializableHadoopSplit.value, hadoopAttemptContext)
 
@@ -160,6 +167,12 @@ private[sql] class SqlNewHadoopRDD[K, V](
       override def hasNext: Boolean = {
         if (!finished && !havePair) {
           finished = !reader.nextKeyValue
+          if (finished) {
+            // Close and release the reader here; close() will also be called when the task
+            // completes, but for tasks that read from many files, it helps to release the
+            // resources early.
+            close()
+          }
           havePair = !finished
         }
         !finished
@@ -178,18 +191,24 @@ private[sql] class SqlNewHadoopRDD[K, V](
 
       private def close() {
         try {
-          reader.close()
-          if (bytesReadCallback.isDefined) {
-            inputMetrics.updateBytesRead()
-          } else if (split.serializableHadoopSplit.value.isInstanceOf[FileSplit] ||
-                     split.serializableHadoopSplit.value.isInstanceOf[CombineFileSplit]) {
-            // If we can't get the bytes read from the FS stats, fall back to the split size,
-            // which may be inaccurate.
-            try {
-              inputMetrics.incBytesRead(split.serializableHadoopSplit.value.getLength)
-            } catch {
-              case e: java.io.IOException =>
-                logWarning("Unable to get input size to set InputMetrics for task", e)
+          if (reader != null) {
+            reader.close()
+            reader = null
+
+            SqlNewHadoopRDD.unsetInputFileName()
+
+            if (bytesReadCallback.isDefined) {
+              inputMetrics.updateBytesRead()
+            } else if (split.serializableHadoopSplit.value.isInstanceOf[FileSplit] ||
+                       split.serializableHadoopSplit.value.isInstanceOf[CombineFileSplit]) {
+              // If we can't get the bytes read from the FS stats, fall back to the split size,
+              // which may be inaccurate.
+              try {
+                inputMetrics.incBytesRead(split.serializableHadoopSplit.value.getLength)
+              } catch {
+                case e: java.io.IOException =>
+                  logWarning("Unable to get input size to set InputMetrics for task", e)
+              }
             }
           }
         } catch {
@@ -240,6 +259,21 @@ private[sql] class SqlNewHadoopRDD[K, V](
 }
 
 private[spark] object SqlNewHadoopRDD {
+
+  /**
+   * The thread variable for the name of the current file being read. This is used by
+   * the InputFileName function in Spark SQL.
+   */
+  private[this] val inputFileName: ThreadLocal[UTF8String] = new ThreadLocal[UTF8String] {
+    override protected def initialValue(): UTF8String = UTF8String.fromString("")
+  }
+
+  def getInputFileName(): UTF8String = inputFileName.get()
+
+  private[spark] def setInputFileName(file: String) = inputFileName.set(UTF8String.fromString(file))
+
+  private[spark] def unsetInputFileName(): Unit = inputFileName.remove()
+
   /**
    * Analogous to [[org.apache.spark.rdd.MapPartitionsRDD]], but passes in an InputSplit to
    * the given function rather than the index of the partition.

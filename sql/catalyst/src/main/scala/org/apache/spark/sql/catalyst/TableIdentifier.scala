@@ -15,23 +15,17 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.types
-
-import org.apache.spark.annotation.DeveloperApi
-
+package org.apache.spark.sql.catalyst
 
 /**
- * :: DeveloperApi ::
- * The data type representing time intervals.
- *
- * Please use the singleton [[DataTypes.IntervalType]].
+ * Identifies a `table` in `database`.  If `database` is not defined, the current database is used.
  */
-@DeveloperApi
-class IntervalType private() extends DataType {
+private[sql] case class TableIdentifier(table: String, database: Option[String] = None) {
+  def withDatabase(database: String): TableIdentifier = this.copy(database = Some(database))
 
-  override def defaultSize: Int = 4096
+  def toSeq: Seq[String] = database.toSeq :+ table
 
-  private[spark] override def asNullable: IntervalType = this
+  override def toString: String = toSeq.map("`" + _ + "`").mkString(".")
+
+  def unquotedString: String = toSeq.mkString(".")
 }
-
-case object IntervalType extends IntervalType
