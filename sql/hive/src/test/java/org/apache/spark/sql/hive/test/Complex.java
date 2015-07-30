@@ -24,28 +24,21 @@ import org.apache.thrift.scheme.StandardScheme;
 import org.apache.hadoop.hive.serde2.thrift.test.IntString;
 import org.apache.thrift.scheme.TupleScheme;
 import org.apache.thrift.protocol.TTupleProtocol;
-import org.apache.thrift.protocol.TProtocolException;
 import org.apache.thrift.EncodingUtils;
-import org.apache.thrift.TException;
 import java.util.List;
 import java.util.ArrayList;
 import java.util.Map;
 import java.util.HashMap;
 import java.util.EnumMap;
-import java.util.Set;
-import java.util.HashSet;
 import java.util.EnumSet;
 import java.util.Collections;
 import java.util.BitSet;
-import java.nio.ByteBuffer;
-import java.util.Arrays;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /**
  * This is a fork of Hive 0.13's org/apache/hadoop/hive/serde2/thrift/test/Complex.java, which
  * does not contain union fields that are not supported by Spark SQL.
  */
+@SuppressWarnings("ALL")
 public class Complex implements org.apache.thrift.TBase<Complex, Complex._Fields>, java.io.Serializable, Cloneable {
   private static final org.apache.thrift.protocol.TStruct STRUCT_DESC = new org.apache.thrift.protocol.TStruct("Complex");
 
@@ -307,7 +300,7 @@ public class Complex implements org.apache.thrift.TBase<Complex, Complex._Fields
 
   public void addToLint(int elem) {
     if (this.lint == null) {
-      this.lint = new ArrayList<Integer>();
+      this.lint = new ArrayList<>();
     }
     this.lint.add(elem);
   }
@@ -383,7 +376,7 @@ public class Complex implements org.apache.thrift.TBase<Complex, Complex._Fields
 
   public void addToLintString(IntString elem) {
     if (this.lintString == null) {
-      this.lintString = new ArrayList<IntString>();
+      this.lintString = new ArrayList<>();
     }
     this.lintString.add(elem);
   }
