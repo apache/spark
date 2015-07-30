@@ -202,8 +202,8 @@ setMethod("partitionBy",
 
             packageNamesArr <- serialize(.sparkREnv$.packages,
                                          connection = NULL)
-            broadcastArr <- lapply(ls(.broadcastNames), function(name) {
-                                   get(name, .broadcastNames) })
+            broadcastArr <- lapply(ls(.broadcastNames),
+                                   function(name) { get(name, .broadcastNames) })
             jrdd <- getJRDD(x)
 
             # We create a PairwiseRRDD that extends RDD[(Int, Array[Byte])],
