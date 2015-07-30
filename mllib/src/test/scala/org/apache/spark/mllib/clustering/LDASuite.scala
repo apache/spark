@@ -303,7 +303,6 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext {
     ).zipWithIndex.map { case (wordCounts, docId) => (docId.toLong, wordCounts) }
     val docs = sc.parallelize(toydata)
 
-
     val ldaModel: LocalLDAModel = new LocalLDAModel(
       topics, Vectors.dense(Array.fill(k)(alpha)), eta, gammaShape)
 
