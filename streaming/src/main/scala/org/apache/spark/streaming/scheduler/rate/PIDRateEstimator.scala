@@ -72,14 +72,23 @@ private[streaming] class PIDRateEstimator(
         // in elements/second
         val error = latestRate - processingRate
 
-        // in elements/second
-        val sumError = schedulingDelay.toDouble * processingRate / batchIntervalMillis
+        // The error integral, based on schedulingDelay as an indicator for accumulated errors
+        // a scheduling delay s corresponds to s * processingRate overflowing elements. Those
+        // are elements that couldn't be processed in previous batches, leading to this delay.
+        // We assume the processingRate didn't change too much.
+        // from the number of overflowing elements we can calculate the rate at which they would be
+        // processed by dividing it by the batch interval. This rate is our "historical" error,
+        // or integral part, since if we subtracted this rate from the previous "calculated rate",
+        // there wouldn't have been any overflowing elements, and the scheduling delay would have
+        // been zero.
+        // (in elements/second)
+        val historicalError = schedulingDelay.toDouble * processingRate / batchIntervalMillis
 
         // in elements/(second ^ 2)
         val dError = (error - latestError) / delaySinceUpdate
 
         val newRate = (latestRate + proportional * error +
-                                    integral * sumError +
+                                    integral * historicalError +
                                     derivative * dError).max(0.0)
         latestTime = time
         if (firstRun) {
