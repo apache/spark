@@ -449,9 +449,6 @@ public final class BytesToBytesMap {
         throw new IllegalStateException("BytesToBytesMap has reached maximum capacity");
       }
 
-      size++;
-      bitset.set(pos);
-
       // Here, we'll copy the data into our data pages. Because we only store a relative offset from
       // the key address instead of storing the absolute address of the value, the key and value
       // must be stored in the same memory page.
