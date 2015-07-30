@@ -220,13 +220,13 @@ class MulticlassClassificationEvaluator(JavaEvaluator, HasLabelCol, HasPredictio
     """
     Evaluator for Multiclass Classification, which expects two input
     columns: prediction and label.
-    >>> scoreAndLabels = [(-28.98343821, -27.0), (20.21491975, 21.5),
-    ...   (-25.98418959, -22.0), (30.69731842, 33.0), (74.69283752, 71.0)]
+    >>> scoreAndLabels = [(0.0, 0.0), (0.0, 1.0), (0.0, 0.0),
+    ...     (1.0, 0.0), (1.0, 1.0), (1.0, 1.0), (1.0, 1.0), (2.0, 2.0), (2.0, 0.0)]
     >>> dataset = sqlContext.createDataFrame(scoreAndLabels, ["raw", "label"])
     ...
     >>> evaluator = MulticlassClassificationEvaluator(predictionCol="raw")
     >>> evaluator.evaluate(dataset)
-    2.842...
+    0.66...
     """
     # a placeholder to make it appear in the generated doc
     metricName = Param(Params._dummy(), "metricName", "metric name in evaluation (f1)")
