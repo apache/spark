@@ -80,13 +80,13 @@ private[ml] object Node {
    */
   def fromOld(oldNode: OldNode, categoricalFeatures: Map[Int, Int]): Node = {
     if (oldNode.isLeaf) {
-      println("aaaaa   " + oldNode.predict.predict + "   " + oldNode.impurity)
+//      println("aaaaa   " + oldNode.predict.predict + "   " + oldNode.impurity)
       // TODO: Once the implementation has been moved to this API, then include sufficient
       //       statistics here.
       new LeafNode(prediction = oldNode.predict.predict,
         impurity = oldNode.impurity, impurityStats = null)
     } else {
-      println("bbbb   " + oldNode.predict.predict + "   " + oldNode.impurity)
+//      println("bbbb   " + oldNode.predict.predict + "   " + oldNode.impurity)
       val gain = if (oldNode.stats.nonEmpty) {
         oldNode.stats.get.gain
       } else {
@@ -263,12 +263,14 @@ private[tree] class LearningNode(
    */
   def toNode: Node = {
     if (leftChild.nonEmpty) {
+      //println(stats.get.impurityCalculator.predict + " <----> " + impurityStats.get.predict)
       assert(rightChild.nonEmpty && split.nonEmpty && stats.nonEmpty,
         "Unknown error during Decision Tree learning.  Could not convert LearningNode to Node.")
-      new InternalNode(impurityStats.get.predict, impurity, stats.get.gain,
+      new InternalNode(stats.get.impurityCalculator.predict, impurity, stats.get.gain,
         leftChild.get.toNode, rightChild.get.toNode, split.get, impurityStats.orNull)
     } else {
-      new LeafNode(impurityStats.get.predict, impurity, impurityStats.orNull)
+      //println(stats.get.impurityCalculator.predict + " <====> " + impurityStats.get.predict)
+      new LeafNode(stats.get.impurityCalculator.predict, impurity, impurityStats.orNull)
     }
   }
 
@@ -281,8 +283,9 @@ private[tree] object LearningNode {
       id: Int,
       impurity: Double,
       isLeaf: Boolean,
+      stats: InformationGainAndImpurityStats,
       impurityCalculator: ImpurityCalculator): LearningNode = {
-    new LearningNode(id, impurity, None, None, None, false, None, Some(impurityCalculator))
+    new LearningNode(id, impurity, None, None, None, false, Some(stats), Some(impurityCalculator))
   }
 
   /** Create an empty node with the given node index.  Values must be set later on. */

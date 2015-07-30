@@ -80,6 +80,7 @@ private[spark] object InformationGainStats {
 
 class InformationGainAndImpurityStats(
     val gain: Double,
+    val impurity: Double,
     val impurityCalculator: ImpurityCalculator,
     val leftImpurityCalculator: ImpurityCalculator,
     val rightImpurityCalculator: ImpurityCalculator) extends Serializable {
@@ -88,8 +89,6 @@ class InformationGainAndImpurityStats(
     s"gain = $gain, impurity = $impurity, left impurity = $leftImpurity, " +
       s"right impurity = $rightImpurity"
   }
-
-  def impurity: Double = impurityCalculator.calculate()
 
   def leftImpurity: Double = leftImpurityCalculator.calculate()
 
@@ -125,6 +124,10 @@ class InformationGainAndImpurityStats(
 }
 
 private[spark] object InformationGainAndImpurityStats {
-  val invalidInformationGainAndImpurityStats = new InformationGainAndImpurityStats(Double.MinValue,
+  val invalidInformationGainAndImpurityStats = new InformationGainAndImpurityStats(Double.MinValue, -1.0,
     new InvalidCalculator(Array(0.0)),  new InvalidCalculator(Array(0.0)), new InvalidCalculator(Array(0.0)))
+  def getInvalidInformationGainAndImpurityStats(impurityCalculator: ImpurityCalculator): InformationGainAndImpurityStats = {
+    new InformationGainAndImpurityStats(Double.MinValue, -1.0,
+      impurityCalculator, new InvalidCalculator(Array(0.0)), new InvalidCalculator(Array(0.0)))
+  }
 }
