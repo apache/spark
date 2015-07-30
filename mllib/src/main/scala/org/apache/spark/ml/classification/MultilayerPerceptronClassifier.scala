@@ -49,12 +49,17 @@ private[ml] trait MultilayerPerceptronParams extends PredictorParams
   final def getLayers: Array[Int] = $(layers)
 
   /**
-   * Block size for stacking input data in matrices. Speeds up the computations.
-   * Cannot be more than the size of the dataset.
+   * Block size for stacking input data in matrices to speed up the computation.
+   * Data is stacked within partitions. If block size is more than remaining data in
+   * a partition then it is adjusted to the size of this data.
+   * Recommended size is between 10 and 1000.
    * @group expertParam
    */
   final val blockSize: IntParam = new IntParam(this, "blockSize",
-    "Block size for stacking input data in matrices.", ParamValidators.gt(0))
+    "Block size for stacking input data in matrices. Data is stacked within partitions." +
+      " If block size is more than remaining data in a partition then " +
+      "it is adjusted to the size of this data. Recommended size is between 10 and 1000",
+    ParamValidators.gt(0))
 
   /** @group setParam */
   def setBlockSize(value: Int): this.type = set(blockSize, value)
@@ -83,7 +88,7 @@ private[ml] trait MultilayerPerceptronParams extends PredictorParams
    */
   def setSeed(value: Long): this.type = set(seed, value)
 
-  setDefault(maxIter -> 100, tol -> 1e-4, layers -> Array(1, 1), blockSize -> 1)
+  setDefault(maxIter -> 100, tol -> 1e-4, layers -> Array(1, 1), blockSize -> 100)
 }
 
 /** Label to vector converter. */

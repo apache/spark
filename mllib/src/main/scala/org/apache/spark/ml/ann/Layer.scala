@@ -688,9 +688,10 @@ private[ann] class ANNGradient(topology: Topology, dataStacker: DataStacker) ext
 }
 
 /**
- * Class that stacks the training samples RDD[(Vector, Vector)] in one vector allowing them to pass
- * through Optimizer/Gradient interfaces and thus allowing batch computations.
- * Can unstack the training samples into matrices.
+ * Stacks pairs of training samples (input, output) in one vector allowing them to pass
+ * through Optimizer/Gradient interfaces. If stackSize is more than one, makes blocks
+ * or matrices of inputs and outputs and then stack them in one vector.
+ * This can be used for further batch computations after unstacking.
  * @param stackSize stack size
  * @param inputSize size of the input vectors
  * @param outputSize size of the output vectors
@@ -775,7 +776,7 @@ private[ml] class FeedForwardTrainer(
 
   // TODO: what if we need to pass random seed?
   private var _weights = topology.getInstance(11L).weights()
-  private var _stackSize = 1
+  private var _stackSize = 100
   private var dataStacker = new DataStacker(_stackSize, inputSize, outputSize)
   private var _gradient: Gradient = new ANNGradient(topology, dataStacker)
   private var _updater: Updater = new ANNUpdater()
