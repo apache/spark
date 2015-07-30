@@ -130,6 +130,13 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
   }
 
   /**
+   * Return the peak memory used by this writer.
+   */
+  public long getPeakMemoryUsage() {
+    return sorter.getPeakMemoryUsage();
+  }
+
+  /**
    * This convenience method should only be called in test code.
    */
   @VisibleForTesting
@@ -139,7 +146,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
 
   @Override
   public void write(scala.collection.Iterator<Product2<K, V>> records) throws IOException {
-    // Keep track of success so we know if we ecountered an exception
+    // Keep track of success so we know if we encountered an exception
     // We do this rather than a standard try/catch/re-throw to handle
     // generic throwables.
     boolean success = false;

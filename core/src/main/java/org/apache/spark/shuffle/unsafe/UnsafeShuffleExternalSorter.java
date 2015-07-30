@@ -86,6 +86,9 @@ final class UnsafeShuffleExternalSorter {
 
   private final LinkedList<SpillInfo> spills = new LinkedList<SpillInfo>();
 
+  // Peak memory used by this sorter, set immediately before each spill
+  private long peakMemoryUsage;
+
   // These variables are reset after spilling:
   private UnsafeShuffleInMemorySorter sorter;
   private MemoryBlock currentPage = null;
@@ -106,6 +109,7 @@ final class UnsafeShuffleExternalSorter {
     this.blockManager = blockManager;
     this.taskContext = taskContext;
     this.initialSize = initialSize;
+    this.peakMemoryUsage = initialSize;
     this.numPartitions = numPartitions;
     // Use getSizeAsKb (not bytes) to maintain backwards compatibility if no units are provided
     this.fileBufferSizeBytes = (int) conf.getSizeAsKb("spark.shuffle.file.buffer", "32k") * 1024;
@@ -255,9 +259,14 @@ final class UnsafeShuffleExternalSorter {
    */
   @VisibleForTesting
   void spill() throws IOException {
+    long memoryUsage = getMemoryUsage();
+    if (memoryUsage > peakMemoryUsage) {
+      peakMemoryUsage = memoryUsage;
+    }
+
     logger.info("Thread {} spilling sort data of {} to disk ({} {} so far)",
       Thread.currentThread().getId(),
-      Utils.bytesToString(getMemoryUsage()),
+      Utils.bytesToString(memoryUsage),
       spills.size(),
       spills.size() > 1 ? " times" : " time");
 
@@ -273,6 +282,13 @@ final class UnsafeShuffleExternalSorter {
 
   private long getMemoryUsage() {
     return sorter.getMemoryUsage() + (allocatedPages.size() * (long) PAGE_SIZE);
+  }
+
+  /**
+   * Return the peak memory used by this sorter.
+   */
+  long getPeakMemoryUsage() {
+    return peakMemoryUsage;
   }
 
   private long freeMemory() {
