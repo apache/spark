@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.expressions.codegen
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Nondeterministic, UnsafeProjection, LeafExpression}
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types.{BooleanType, DataType}
 
 /**
@@ -28,25 +28,26 @@ import org.apache.spark.sql.types.{BooleanType, DataType}
 class CodegenExpressionCachingSuite extends SparkFunSuite {
 
   test("GenerateUnsafeProjection should initialize expressions") {
-    val expr = NondeterministicExpression()
+    // Use an Add to wrap two of them together in case we only initialize the top level expressions.
+    val expr = And(NondeterministicExpression(), NondeterministicExpression())
     val instance = UnsafeProjection.create(Seq(expr))
     assert(instance.apply(null).getBoolean(0) === false)
   }
 
   test("GenerateProjection should initialize expressions") {
-    val expr = NondeterministicExpression()
+    val expr = And(NondeterministicExpression(), NondeterministicExpression())
     val instance = GenerateProjection.generate(Seq(expr))
     assert(instance.apply(null).getBoolean(0) === false)
   }
 
   test("GenerateMutableProjection should initialize expressions") {
-    val expr = NondeterministicExpression()
+    val expr = And(NondeterministicExpression(), NondeterministicExpression())
     val instance = GenerateMutableProjection.generate(Seq(expr))()
     assert(instance.apply(null).getBoolean(0) === false)
   }
 
   test("GeneratePredicate should initialize expressions") {
-    val expr = NondeterministicExpression()
+    val expr = And(NondeterministicExpression(), NondeterministicExpression())
     val instance = GeneratePredicate.generate(expr)
     assert(instance.apply(null) === false)
   }
@@ -106,7 +107,7 @@ class CodegenExpressionCachingSuite extends SparkFunSuite {
  */
 case class NondeterministicExpression()
   extends LeafExpression with Nondeterministic with CodegenFallback {
-  override protected def initInternal(): Unit = {}
+  override protected def initInternal(): Unit = { println ("initeed!!!")}
   override protected def evalInternal(input: InternalRow): Any = false
   override def nullable: Boolean = false
   override def dataType: DataType = BooleanType
