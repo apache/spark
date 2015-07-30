@@ -1,5 +1,6 @@
 package org.apache.spark.unsafe.types
 
+import org.scalacheck.{Arbitrary, Gen}
 import org.scalatest.prop.GeneratorDrivenPropertyChecks
 import org.scalatest.{FunSuite, Matchers}
 
@@ -59,8 +60,74 @@ class UTF8StringPropertyChecks extends FunSuite with GeneratorDrivenPropertyChec
 
   test("substring") {
     forAll { (s: String) =>
-      assert(s.substring(0, 0) === toUTF8(s).substring(0, 0).toString)
-      assert(s.substring(0, s.length) === toUTF8(s).substring(0, s.length).toString)
+      for (start <- 0 to s.length; end <- 0 to s.length) {
+        withClue(s"start=$start, end=$end") {
+          assert(s.substring(start, end) === toUTF8(s).substring(start, end).toString)
+        }
+      }
     }
   }
+
+  // TODO: substringSQL
+
+  test("contains") {
+    forAll { (s: String) =>
+      for (start <- 0 to s.length; end <- 0 to s.length) {
+        val substring = s.substring(start, end)
+        withClue(s"substring=$substring") {
+          assert(s.contains(substring) === toUTF8(s).contains(toUTF8(substring)))
+        }
+      }
+    }
+  }
+
+  val whitespaceChar: Gen[Char] = Gen.choose(0x00, 0x20).map(_.toChar)
+  val whitespaceString: Gen[String] = Gen.listOf(whitespaceChar).map(_.mkString)
+  val randomString: Gen[String] = Arbitrary.arbString.arbitrary
+
+  test("trim, trimLeft, trimRight") {
+    forAll(
+        whitespaceString,
+        randomString,
+        whitespaceString
+    ) { (start: String, middle: String, end: String) =>
+      val s = start + middle + end
+      assert(s.trim() === toUTF8(s).trim().toString)
+      assert(s.stripMargin === toUTF8(s).trimLeft().toString)
+      assert(s.reverse.stripMargin.reverse === toUTF8(s).trimRight().toString)
+    }
+  }
+
+  test("reverse") {
+    forAll() { (s: String) =>
+      assert(s.reverse === toUTF8(s).reverse.toString)
+    }
+  }
+
+  // TODO: repeat
+  // TODO: indexOf
+  // TODO: lpad
+  // TODO: rpad
+
+  test("concat") {
+    forAll() { (inputs: Seq[String]) =>
+      // TODO: test case where at least one of the inputs is null
+      assert(inputs.mkString === UTF8String.concat(inputs.map(toUTF8): _*).toString)
+    }
+  }
+
+  test("concatWs") {
+    forAll() { (sep: String, inputs: Seq[String]) =>
+      // TODO: handle case where at least one of the inputs is null
+      assert(
+        inputs.mkString(sep) === UTF8String.concatWs(toUTF8(sep), inputs.map(toUTF8): _*).toString)
+    }
+  }
+
+  // TODO: split
+
+  // TODO: levenshteinDistance that tests against StringUtils' implementation
+
+  // TODO: equals(), hashCode(), and compare()
+
 }
