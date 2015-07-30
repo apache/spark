@@ -366,7 +366,7 @@ case class StringInstr(str: Expression, substr: Expression)
  * in given string after position pos.
  */
 case class StringLocate(substr: Expression, str: Expression, start: Expression)
-  extends Expression with ImplicitCastInputTypes with CodegenFallback {
+  extends Expression with ImplicitCastInputTypes {
 
   def this(substr: Expression, str: Expression) = {
     this(substr, str, Literal(0))
@@ -398,6 +398,31 @@ case class StringLocate(substr: Expression, str: Expression, start: Expression)
         }
       }
     }
+  }
+
+  override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    val substrGen = substr.gen(ctx)
+    val strGen = str.gen(ctx)
+    val startGen = start.gen(ctx)
+    s"""
+      int ${ev.primitive} = 0;
+      boolean ${ev.isNull} = false;
+      ${startGen.code};
+      if (!${startGen.isNull}) {
+        ${substrGen.code};
+        if (!${substrGen.isNull}) {
+          ${strGen.code};
+          if (!${strGen.isNull}) {
+            ${ev.primitive} = ${strGen.primitive}.indexOf(${substrGen.primitive},
+              ${startGen.primitive}) + 1;
+          } else {
+            ${ev.isNull} = true;;
+          }
+        } else {
+          ${ev.isNull} = true;;
+        }
+      }
+     """
   }
 
   override def prettyName: String = "locate"
