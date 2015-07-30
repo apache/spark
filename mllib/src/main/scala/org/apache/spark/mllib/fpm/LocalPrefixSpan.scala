@@ -41,13 +41,15 @@ private[fpm] object LocalPrefixSpan extends Logging with Serializable {
       maxPatternLength: Int,
       prefixes: List[Int],
       database: Iterable[Array[Int]]): Iterator[(List[Int], Long)] = {
-    if (prefixes.length == maxPatternLength || database.isEmpty) return Iterator.empty
+    if (prefixes.count(_ == DELIMITER) == maxPatternLength || database.isEmpty) {
+      return Iterator.empty
+    }
     val frequentItemAndCounts = getFreqItemAndCounts(minCount, database)
     val filteredDatabase = database.map { suffix =>
       suffix.filter(item => item == DELIMITER || frequentItemAndCounts.contains(item))
     }
     frequentItemAndCounts.iterator.flatMap { case (item, count) =>
-      val newPrefixes = item :: prefixes
+      val newPrefixes = DELIMITER :: item :: prefixes
       val newProjected = project(filteredDatabase, item)
       Iterator.single((newPrefixes, count)) ++
         run(minCount, maxPatternLength, newPrefixes, newProjected)
@@ -65,7 +67,7 @@ private[fpm] object LocalPrefixSpan extends Logging with Serializable {
     if (index == -1) {
       Array()
     } else {
-      // drop until we get to the next delimiter (or end of sequence)
+      // in case index is inside an itemset, drop until we get to the next delimiter (or end of seq)
       sequence.drop(index).dropWhile(_ != DELIMITER).drop(1)
     }
   }

@@ -91,9 +91,8 @@ class PrefixSpan private (
 
   /**
    * Find the complete set of sequential patterns in the input sequences.
-   * @param sequences a dataset of sequences. Items in a sequence are represented by non-negative
-   *                  integers and delimited by [[DELIMITER]]. Non-temporal sequences
-   *                  are supported by placing more than one item between delimiters.
+   * @param sequences ordered sequences of itemsets. Items are represented by non-negative integers.
+   *                  Each itemset has one or more items and is delimited by [[DELIMITER]].
    * @return a set of sequential pattern pairs,
    *         the key of pair is pattern (a list of elements),
    *         the value of pair is the pattern's count.
@@ -124,7 +123,7 @@ class PrefixSpan private (
         freqItems.flatMap { item =>
           val candidateSuffix = LocalPrefixSpan.getSuffix(item, filteredSeq)
           candidateSuffix match {
-            case suffix if !suffix.isEmpty => Some((List(item), suffix))
+            case suffix if !suffix.isEmpty => Some((List(DELIMITER, item), suffix))
             case _ => None
           }
         }
@@ -132,14 +131,15 @@ class PrefixSpan private (
     }
     // Accumulator for the computed results to be returned, initialized to the frequent items (i.e.
     // frequent length-one prefixes)
-    var resultsAccumulator = freqItemCounts.map(x => (List(x._1), x._2))
+    var resultsAccumulator = freqItemCounts.map(x => (List(DELIMITER, x._1), x._2))
 
     // Remaining work to be locally and distributively processed respectfully
     var (pairsForLocal, pairsForDistributed) = partitionByProjDBSize(itemSuffixPairs)
 
     // Continue processing until no pairs for distributed processing remain (i.e. all prefixes have
-    // projected database sizes <= `maxLocalProjDBSize`)
-    while (pairsForDistributed.count() != 0) {
+    // projected database sizes <= `maxLocalProjDBSize`) or `maxPatternLength` is reached
+    var patternLength = 1
+    while (pairsForDistributed.count() != 0 || patternLength < maxPatternLength) {
       val (nextPatternAndCounts, nextPrefixSuffixPairs) =
         extendPrefixes(minCount, pairsForDistributed)
       pairsForDistributed.unpersist()
@@ -148,6 +148,7 @@ class PrefixSpan private (
       pairsForDistributed.persist(StorageLevel.MEMORY_AND_DISK)
       pairsForLocal ++= smallerPairsPart
       resultsAccumulator ++= nextPatternAndCounts.collect()
+      patternLength += 1 // pattern length grows one per iteration
     }
 
     // Process the small projected databases locally
@@ -155,7 +156,7 @@ class PrefixSpan private (
       minCount, sc.parallelize(pairsForLocal, 1).groupByKey())
 
     (sc.parallelize(resultsAccumulator, 1) ++ remainingResults)
-      .map { case (pattern, count) => (pattern.toArray, count) }
+      .map { case (pattern, count) => (pattern.reverse.toArray, count) }
   }
 
 
@@ -209,10 +210,9 @@ class PrefixSpan private (
       .collect()
       .toMap
 
-
     // Frequent patterns with length N+1 and their corresponding counts
     val extendedPrefixAndCounts = prefixItemPairAndCounts
-      .map { case ((prefix, item), count) => (item :: prefix, count) }
+      .map { case ((prefix, item), count) => (DELIMITER :: item :: prefix, count) }
 
     // Remaining work, all prefixes will have length N+1
     val extendedPrefixAndSuffix = prefixSuffixPairs
@@ -222,7 +222,7 @@ class PrefixSpan private (
         val filteredSuffix = suffix.filter(frequentNextItems.contains(_))
         frequentNextItems.flatMap { item =>
           LocalPrefixSpan.getSuffix(item, filteredSuffix) match {
-            case suffix if !suffix.isEmpty => Some(item :: prefix, suffix)
+            case suffix if !suffix.isEmpty => Some(DELIMITER :: item :: prefix, suffix)
             case _ => None
           }
         }
@@ -242,9 +242,9 @@ class PrefixSpan private (
       data: RDD[(List[Int], Iterable[Array[Int]])]): RDD[(List[Int], Long)] = {
     data.flatMap {
       case (prefix, projDB) =>
-        LocalPrefixSpan.run(minCount, maxPatternLength, prefix.toList.reverse, projDB)
+        LocalPrefixSpan.run(minCount, maxPatternLength, prefix.toList, projDB)
           .map { case (pattern: List[Int], count: Long) =>
-          (pattern.reverse, count)
+          (pattern, count)
         }
     }
   }

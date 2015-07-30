@@ -68,7 +68,7 @@ class PrefixSpanSuite extends SparkFunSuite with MLlibTestSparkContext {
       (Array(4), 4L),
       (Array(4, 5), 2L),
       (Array(5), 3L)
-    )
+    ).map { case (seq, count) => (insertDelimiter(seq), count) }
     compareResults(expectedValue1, result1.collect())
 
     prefixspan.setMinSupport(0.5).setMaxPatternLength(50)
@@ -79,7 +79,7 @@ class PrefixSpanSuite extends SparkFunSuite with MLlibTestSparkContext {
       (Array(3, 4), 3L),
       (Array(4), 4L),
       (Array(5), 3L)
-    )
+    ).map { case (seq, count) => (insertDelimiter(seq), count) }
     compareResults(expectedValue2, result2.collect())
 
     prefixspan.setMinSupport(0.33).setMaxPatternLength(2)
@@ -99,15 +99,92 @@ class PrefixSpanSuite extends SparkFunSuite with MLlibTestSparkContext {
       (Array(4), 4L),
       (Array(4, 5), 2L),
       (Array(5), 3L)
-    )
+    ).map { case (seq, count) => (insertDelimiter(seq), count) }
     compareResults(expectedValue3, result3.collect())
   }
 
+  test("PrefixSpan non-temporal sequences") {
+    val sequences = Array(
+      "a,abc,ac,d,cf",
+      "ad,c,bc,ae",
+      "ef,ab,df,c,b",
+      "e,g,af,c,b,c")
+    val coder = Array('a', 'b', 'c', 'd', 'e', 'f', 'g').zip(Array(1, 2, 3, 4, 5, 6, 7)).toMap
+    val intSequences = sequences.map(_.split(",").flatMap(-1 +: _.toArray.map(coder)).drop(1))
+    val data = sc.parallelize(intSequences, 2).cache()
+    val prefixspan = new PrefixSpan()
+      .setMinSupport(0.5)
+      .setMaxPatternLength(5)
+
+    val results = prefixspan.run(data)
+    val expectedValue4 = Array(
+      "a:4",
+      "b:4",
+      "c:4",
+      "d:3",
+      "e:3",
+      "f:3",
+      "a,a:2",
+      "a,b:4",
+      "a,bc:2",
+      "a,bc,a:2",
+      "a,b,a:2",
+      "a,b,c:2",
+      "ab:2",
+      "ab,c:2",
+      "ab,d:2",
+      "ab,d,c:2",
+      "ab,f:2",
+      "a,c:4",
+      "a,c,a:2",
+      "a,c,b:3",
+      "a,c,c:3",
+      "a,d:2",
+      "a,d,c:2",
+      "a,f:2",
+      "b,a:2",
+      "b,c:3",
+      "bc:2",
+      "bc,a:2",
+      "b,d:2",
+      "b,d,c:2",
+      "b,f:2",
+      "c,a:2",
+      "c,b:3",
+      "c,c:3",
+      "d,b:2",
+      "d,c:3",
+      "d,c,b:2",
+      "e,a:2",
+      "e,a,b:2",
+      "e,a,c:2",
+      "e,a,c,b:2",
+      "e,b:2",
+      "e,b,c:2",
+      "e,c:2",
+      "e,c,b:2",
+      "e,f:2",
+      "e,f,b:2",
+      "e,f,c:2",
+      "e,f,c,b:2",
+      "f,b:2",
+      "f,b,c:2",
+      "f,c:2",
+      "f,c,b:2")
+    val intExpectedValue = expectedValue4
+      .map(_.split(":"))
+      .map { x => (x(0).split(",").flatMap(-1 +: _.toArray.map(coder)), x(1).toLong) }
+    compareResults(intExpectedValue, results.collect())
+  }
+
   private def compareResults(
-    expectedValue: Array[(Array[Int], Long)],
-    actualValue: Array[(Array[Int], Long)]): Unit = {
-    assert(expectedValue.map(x => (x._1.toSeq, x._2)).toSet ===
-      actualValue.map(x => (x._1.toSeq, x._2)).toSet)
+      expectedValue: Array[(Array[Int], Long)],
+      actualValue: Array[(Array[Int], Long)]): Unit = {
+    val expectedSet = expectedValue.map(x => (x._1.toSeq, x._2)).toSet
+    val actualSet = actualValue.map(x => (x._1.toSeq, x._2)).toSet
+    println(s"missing expected:\n${expectedSet.diff(actualSet)}")
+    println(s"extra actual:\n${actualSet.diff(expectedSet)}")
+    assert(expectedSet === actualSet)
   }
 
   private def insertDelimiter(sequence: Array[Int]): Array[Int] = {
