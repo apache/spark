@@ -17,74 +17,115 @@
 
 package org.apache.spark.streaming.scheduler
 
-import org.apache.spark.streaming._
+import org.scalatest.concurrent.Eventually._
+import org.scalatest.time.SpanSugar._
+
 import org.apache.spark.SparkConf
-import org.apache.spark.storage.StorageLevel
+import org.apache.spark.streaming._
 import org.apache.spark.streaming.receiver._
-import org.apache.spark.util.Utils
+import org.apache.spark.streaming.dstream.ReceiverInputDStream
+import org.apache.spark.storage.StorageLevel
 
 /** Testsuite for receiver scheduling */
 class ReceiverTrackerSuite extends TestSuiteBase {
   val sparkConf = new SparkConf().setMaster("local[8]").setAppName("test")
   val ssc = new StreamingContext(sparkConf, Milliseconds(100))
-  val tracker = new ReceiverTracker(ssc)
-  val launcher = new tracker.ReceiverLauncher()
-  val executors: List[String] = List("0", "1", "2", "3")
 
-  test("receiver scheduling - all or none have preferred location") {
+  ignore("Receiver tracker - propagates rate limit") {
+    object ReceiverStartedWaiter extends StreamingListener {
+      @volatile
+      var started = false
 
-    def parse(s: String): Array[Array[String]] = {
-      val outerSplit = s.split("\\|")
-      val loc = new Array[Array[String]](outerSplit.length)
-      var i = 0
-      for (i <- 0 until outerSplit.length) {
-        loc(i) = outerSplit(i).split("\\,")
+      override def onReceiverStarted(receiverStarted: StreamingListenerReceiverStarted): Unit = {
+        started = true
       }
-      loc
     }
 
-    def testScheduler(numReceivers: Int, preferredLocation: Boolean, allocation: String) {
-      val receivers =
-        if (preferredLocation) {
-          Array.tabulate(numReceivers)(i => new DummyReceiver(host =
-            Some(((i + 1) % executors.length).toString)))
-        } else {
-          Array.tabulate(numReceivers)(_ => new DummyReceiver)
-        }
-      val locations = launcher.scheduleReceivers(receivers, executors)
-      val expectedLocations = parse(allocation)
-      assert(locations.deep === expectedLocations.deep)
-    }
+    ssc.addStreamingListener(ReceiverStartedWaiter)
+    ssc.scheduler.listenerBus.start(ssc.sc)
+    SingletonTestRateReceiver.reset()
 
-    testScheduler(numReceivers = 5, preferredLocation = false, allocation = "0|1|2|3|0")
-    testScheduler(numReceivers = 3, preferredLocation = false, allocation = "0,3|1|2")
-    testScheduler(numReceivers = 4, preferredLocation = true, allocation = "1|2|3|0")
+    val newRateLimit = 100L
+    val inputDStream = new RateLimitInputDStream(ssc)
+    val tracker = new ReceiverTracker(ssc)
+    tracker.start()
+
+    // we wait until the Receiver has registered with the tracker,
+    // otherwise our rate update is lost
+    eventually(timeout(5 seconds)) {
+      assert(ReceiverStartedWaiter.started)
+    }
+    tracker.sendRateUpdate(inputDStream.id, newRateLimit)
+    // this is an async message, we need to wait a bit for it to be processed
+    eventually(timeout(3 seconds)) {
+      assert(inputDStream.getCurrentRateLimit.get === newRateLimit)
+    }
+  }
+}
+
+/**
+ * An input DStream with a hard-coded receiver that gives access to internals for testing.
+ *
+ * @note Make sure to call {{{SingletonDummyReceiver.reset()}}} before using this in a test,
+ *       or otherwise you may get {{{NotSerializableException}}} when trying to serialize
+ *       the receiver.
+ * @see [[[SingletonDummyReceiver]]].
+ */
+private[streaming] class RateLimitInputDStream(@transient ssc_ : StreamingContext)
+  extends ReceiverInputDStream[Int](ssc_) {
+
+  override def getReceiver(): RateTestReceiver = SingletonTestRateReceiver
+
+  def getCurrentRateLimit: Option[Long] = {
+    invokeExecutorMethod.getCurrentRateLimit
   }
 
-  test("receiver scheduling - some have preferred location") {
-    val numReceivers = 4;
-    val receivers: Seq[Receiver[_]] = Seq(new DummyReceiver(host = Some("1")),
-      new DummyReceiver, new DummyReceiver, new DummyReceiver)
-    val locations = launcher.scheduleReceivers(receivers, executors)
-    assert(locations(0)(0) === "1")
-    assert(locations(1)(0) === "0")
-    assert(locations(2)(0) === "1")
-    assert(locations(0).length === 1)
-    assert(locations(3).length === 1)
+  @volatile
+  var publishCalls = 0
+
+  override val rateController: Option[RateController] = {
+    Some(new RateController(id, new ConstantEstimator(100.0)) {
+      override def publish(rate: Long): Unit = {
+        publishCalls += 1
+      }
+    })
+  }
+
+  private def invokeExecutorMethod: ReceiverSupervisor = {
+    val c = classOf[Receiver[_]]
+    val ex = c.getDeclaredMethod("executor")
+    ex.setAccessible(true)
+    ex.invoke(SingletonTestRateReceiver).asInstanceOf[ReceiverSupervisor]
+  }
+}
+
+/**
+ * A Receiver as an object so we can read its rate limit. Make sure to call `reset()` when
+ * reusing this receiver, otherwise a non-null `executor_` field will prevent it from being
+ * serialized when receivers are installed on executors.
+ *
+ * @note It's necessary to be a top-level object, or else serialization would create another
+ *       one on the executor side and we won't be able to read its rate limit.
+ */
+private[streaming] object SingletonTestRateReceiver extends RateTestReceiver(0) {
+
+  /** Reset the object to be usable in another test. */
+  def reset(): Unit = {
+    executor_ = null
   }
 }
 
 /**
  * Dummy receiver implementation
  */
-private class DummyReceiver(host: Option[String] = None)
+private[streaming] class RateTestReceiver(receiverId: Int, host: Option[String] = None)
   extends Receiver[Int](StorageLevel.MEMORY_ONLY) {
 
-  def onStart() {
-  }
+  setReceiverId(receiverId)
 
-  def onStop() {
-  }
+  override def onStart(): Unit = {}
+
+  override def onStop(): Unit = {}
 
   override def preferredLocation: Option[String] = host
 }

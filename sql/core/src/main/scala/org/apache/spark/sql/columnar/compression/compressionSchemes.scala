@@ -32,7 +32,7 @@ import org.apache.spark.util.Utils
 private[sql] case object PassThrough extends CompressionScheme {
   override val typeId = 0
 
-  override def supports(columnType: ColumnType[_, _]): Boolean = true
+  override def supports(columnType: ColumnType[_]): Boolean = true
 
   override def encoder[T <: AtomicType](columnType: NativeColumnType[T]): Encoder[T] = {
     new this.Encoder[T](columnType)
@@ -78,7 +78,7 @@ private[sql] case object RunLengthEncoding extends CompressionScheme {
     new this.Decoder(buffer, columnType)
   }
 
-  override def supports(columnType: ColumnType[_, _]): Boolean = columnType match {
+  override def supports(columnType: ColumnType[_]): Boolean = columnType match {
     case INT | LONG | SHORT | BYTE | STRING | BOOLEAN => true
     case _ => false
   }
@@ -128,7 +128,7 @@ private[sql] case object RunLengthEncoding extends CompressionScheme {
         while (from.hasRemaining) {
           columnType.extract(from, value, 0)
 
-          if (value(0) == currentValue(0)) {
+          if (value.get(0, columnType.dataType) == currentValue.get(0, columnType.dataType)) {
             currentRun += 1
           } else {
             // Writes current run
@@ -189,7 +189,7 @@ private[sql] case object DictionaryEncoding extends CompressionScheme {
     new this.Encoder[T](columnType)
   }
 
-  override def supports(columnType: ColumnType[_, _]): Boolean = columnType match {
+  override def supports(columnType: ColumnType[_]): Boolean = columnType match {
     case INT | LONG | STRING => true
     case _ => false
   }
@@ -304,7 +304,7 @@ private[sql] case object BooleanBitSet extends CompressionScheme {
     (new this.Encoder).asInstanceOf[compression.Encoder[T]]
   }
 
-  override def supports(columnType: ColumnType[_, _]): Boolean = columnType == BOOLEAN
+  override def supports(columnType: ColumnType[_]): Boolean = columnType == BOOLEAN
 
   class Encoder extends compression.Encoder[BooleanType.type] {
     private var _uncompressedSize = 0
@@ -392,7 +392,7 @@ private[sql] case object IntDelta extends CompressionScheme {
     (new Encoder).asInstanceOf[compression.Encoder[T]]
   }
 
-  override def supports(columnType: ColumnType[_, _]): Boolean = columnType == INT
+  override def supports(columnType: ColumnType[_]): Boolean = columnType == INT
 
   class Encoder extends compression.Encoder[IntegerType.type] {
     protected var _compressedSize: Int = 0
@@ -472,7 +472,7 @@ private[sql] case object LongDelta extends CompressionScheme {
     (new Encoder).asInstanceOf[compression.Encoder[T]]
   }
 
-  override def supports(columnType: ColumnType[_, _]): Boolean = columnType == LONG
+  override def supports(columnType: ColumnType[_]): Boolean = columnType == LONG
 
   class Encoder extends compression.Encoder[LongType.type] {
     protected var _compressedSize: Int = 0

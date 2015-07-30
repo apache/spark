@@ -48,7 +48,7 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
     3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3,
     4, 4, 4, 4, 4, 4, 4, 4,
     5, 5, 5, 5,
-    6, 6, 6, 6};
+    6, 6};
 
   public static final UTF8String EMPTY_UTF8 = UTF8String.fromString("");
 
@@ -96,6 +96,21 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
   }
 
   /**
+   * Writes the content of this string into a memory address, identified by an object and an offset.
+   * The target memory address must already been allocated, and have enough space to hold all the
+   * bytes in this string.
+   */
+  public void writeToMemory(Object target, long targetOffset) {
+    PlatformDependent.copyMemory(
+      base,
+      offset,
+      target,
+      targetOffset,
+      numBytes
+    );
+  }
+
+  /**
    * Returns the number of bytes for a code point with the first byte as `b`
    * @param b The first byte of a code point
    */
@@ -120,6 +135,15 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
       len += 1;
     }
     return len;
+  }
+
+  /**
+   * Returns a 64-bit integer that can be used as the prefix used in sorting.
+   */
+  public long getPrefix() {
+    long p = PlatformDependent.UNSAFE.getLong(base, offset);
+    p = java.lang.Long.reverseBytes(p);
+    return p;
   }
 
   /**
@@ -285,13 +309,13 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
   }
 
   public UTF8String reverse() {
-    byte[] bytes = getBytes();
-    byte[] result = new byte[bytes.length];
+    byte[] result = new byte[this.numBytes];
 
     int i = 0; // position in byte
     while (i < numBytes) {
       int len = numBytesForFirstByte(getByte(i));
-      System.arraycopy(bytes, i, result, result.length - i - len, len);
+      copyMemory(this.base, this.offset + i, result,
+              BYTE_ARRAY_OFFSET + result.length - i - len, len);
 
       i += len;
     }
@@ -301,11 +325,11 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
 
   public UTF8String repeat(int times) {
     if (times <=0) {
-      return fromBytes(new byte[0]);
+      return EMPTY_UTF8;
     }
 
     byte[] newBytes = new byte[numBytes * times];
-    System.arraycopy(getBytes(), 0, newBytes, 0, numBytes);
+    copyMemory(this.base, this.offset, newBytes, BYTE_ARRAY_OFFSET, numBytes);
 
     int copied = 1;
     while (copied < times) {
@@ -370,16 +394,15 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
       UTF8String remain = pad.substring(0, spaces - padChars * count);
 
       byte[] data = new byte[this.numBytes + pad.numBytes * count + remain.numBytes];
-      System.arraycopy(getBytes(), 0, data, 0, this.numBytes);
+      copyMemory(this.base, this.offset, data, BYTE_ARRAY_OFFSET, this.numBytes);
       int offset = this.numBytes;
       int idx = 0;
-      byte[] padBytes = pad.getBytes();
       while (idx < count) {
-        System.arraycopy(padBytes, 0, data, offset, pad.numBytes);
+        copyMemory(pad.base, pad.offset, data, BYTE_ARRAY_OFFSET + offset, pad.numBytes);
         ++idx;
         offset += pad.numBytes;
       }
-      System.arraycopy(remain.getBytes(), 0, data, offset, remain.numBytes);
+      copyMemory(remain.base, remain.offset, data, BYTE_ARRAY_OFFSET + offset, remain.numBytes);
 
       return UTF8String.fromBytes(data);
     }
@@ -406,15 +429,14 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
 
       int offset = 0;
       int idx = 0;
-      byte[] padBytes = pad.getBytes();
       while (idx < count) {
-        System.arraycopy(padBytes, 0, data, offset, pad.numBytes);
+        copyMemory(pad.base, pad.offset, data, BYTE_ARRAY_OFFSET + offset, pad.numBytes);
         ++idx;
         offset += pad.numBytes;
       }
-      System.arraycopy(remain.getBytes(), 0, data, offset, remain.numBytes);
+      copyMemory(remain.base, remain.offset, data, BYTE_ARRAY_OFFSET + offset, remain.numBytes);
       offset += remain.numBytes;
-      System.arraycopy(getBytes(), 0, data, offset, numBytes());
+      copyMemory(this.base, this.offset, data, BYTE_ARRAY_OFFSET + offset, numBytes());
 
       return UTF8String.fromBytes(data);
     }
@@ -439,9 +461,9 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
     int offset = 0;
     for (int i = 0; i < inputs.length; i++) {
       int len = inputs[i].numBytes;
-      PlatformDependent.copyMemory(
+      copyMemory(
         inputs[i].base, inputs[i].offset,
-        result, PlatformDependent.BYTE_ARRAY_OFFSET + offset,
+        result, BYTE_ARRAY_OFFSET + offset,
         len);
       offset += len;
     }
@@ -479,7 +501,7 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
     for (int i = 0, j = 0; i < inputs.length; i++) {
       if (inputs[i] != null) {
         int len = inputs[i].numBytes;
-        PlatformDependent.copyMemory(
+        copyMemory(
           inputs[i].base, inputs[i].offset,
           result, PlatformDependent.BYTE_ARRAY_OFFSET + offset,
           len);
@@ -488,7 +510,7 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
         j++;
         // Add separator if this is not the last input.
         if (j < numInputs) {
-          PlatformDependent.copyMemory(
+          copyMemory(
             separator.base, separator.offset,
             result, PlatformDependent.BYTE_ARRAY_OFFSET + offset,
             separator.numBytes);

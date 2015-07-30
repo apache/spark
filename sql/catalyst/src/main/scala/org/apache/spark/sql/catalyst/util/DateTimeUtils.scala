@@ -573,4 +573,71 @@ object DateTimeUtils {
       dayInYear - 334
     }
   }
+
+  /**
+   * Returns day of week from String. Starting from Thursday, marked as 0.
+   * (Because 1970-01-01 is Thursday).
+   */
+  def getDayOfWeekFromString(string: UTF8String): Int = {
+    val dowString = string.toString.toUpperCase
+    dowString match {
+      case "SU" | "SUN" | "SUNDAY" => 3
+      case "MO" | "MON" | "MONDAY" => 4
+      case "TU" | "TUE" | "TUESDAY" => 5
+      case "WE" | "WED" | "WEDNESDAY" => 6
+      case "TH" | "THU" | "THURSDAY" => 0
+      case "FR" | "FRI" | "FRIDAY" => 1
+      case "SA" | "SAT" | "SATURDAY" => 2
+      case _ => -1
+    }
+  }
+
+  /**
+   * Returns the first date which is later than startDate and is of the given dayOfWeek.
+   * dayOfWeek is an integer ranges in [0, 6], and 0 is Thu, 1 is Fri, etc,.
+   */
+  def getNextDateForDayOfWeek(startDate: Int, dayOfWeek: Int): Int = {
+    startDate + 1 + ((dayOfWeek - 1 - startDate) % 7 + 7) % 7
+  }
+
+  /**
+   * Returns last day of the month for the given date. The date is expressed in days
+   * since 1.1.1970.
+   */
+  def getLastDayOfMonth(date: Int): Int = {
+    var (year, dayInYear) = getYearAndDayInYear(date)
+    if (isLeapYear(year)) {
+      if (dayInYear > 31 && dayInYear <= 60) {
+        return date + (60 - dayInYear)
+      } else if (dayInYear > 60) {
+        dayInYear = dayInYear - 1
+      }
+    }
+    val lastDayOfMonthInYear = if (dayInYear <= 31) {
+      31
+    } else if (dayInYear <= 59) {
+      59
+    } else if (dayInYear <= 90) {
+      90
+    } else if (dayInYear <= 120) {
+      120
+    } else if (dayInYear <= 151) {
+      151
+    } else if (dayInYear <= 181) {
+      181
+    } else if (dayInYear <= 212) {
+      212
+    } else if (dayInYear <= 243) {
+      243
+    } else if (dayInYear <= 273) {
+      273
+    } else if (dayInYear <= 304) {
+      304
+    } else if (dayInYear <= 334) {
+      334
+    } else {
+      365
+    }
+    date + (lastDayOfMonthInYear - dayInYear)
+  }
 }

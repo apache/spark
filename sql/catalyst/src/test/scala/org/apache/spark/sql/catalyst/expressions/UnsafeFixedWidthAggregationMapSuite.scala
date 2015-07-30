@@ -24,9 +24,8 @@ import org.scalatest.{BeforeAndAfterEach, Matchers}
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.codegen.GenerateProjection
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.memory.{ExecutorMemoryManager, MemoryAllocator, TaskMemoryManager}
+import org.apache.spark.unsafe.memory.{ExecutorMemoryManager, TaskMemoryManager, MemoryAllocator}
 import org.apache.spark.unsafe.types.UTF8String
 
 
@@ -35,11 +34,12 @@ class UnsafeFixedWidthAggregationMapSuite
   with Matchers
   with BeforeAndAfterEach {
 
+  import UnsafeFixedWidthAggregationMap._
+
   private val groupKeySchema = StructType(StructField("product", StringType) :: Nil)
   private val aggBufferSchema = StructType(StructField("salePrice", IntegerType) :: Nil)
-  private def emptyProjection: Projection =
-    GenerateProjection.generate(Seq(Literal(0)), Seq(AttributeReference("price", IntegerType)()))
   private def emptyAggregationBuffer: InternalRow = InternalRow(0)
+  private val PAGE_SIZE_BYTES: Long = 1L << 26; // 64 megabytes
 
   private var memoryManager: TaskMemoryManager = null
 
@@ -54,13 +54,24 @@ class UnsafeFixedWidthAggregationMapSuite
     }
   }
 
+  test("supported schemas") {
+    assert(!supportsAggregationBufferSchema(StructType(StructField("x", StringType) :: Nil)))
+    assert(supportsGroupKeySchema(StructType(StructField("x", StringType) :: Nil)))
+
+    assert(
+      !supportsAggregationBufferSchema(StructType(StructField("x", ArrayType(IntegerType)) :: Nil)))
+    assert(
+      !supportsGroupKeySchema(StructType(StructField("x", ArrayType(IntegerType)) :: Nil)))
+  }
+
   test("empty map") {
     val map = new UnsafeFixedWidthAggregationMap(
-      emptyProjection,
-      new UnsafeRowConverter(groupKeySchema),
-      new UnsafeRowConverter(aggBufferSchema),
+      emptyAggregationBuffer,
+      aggBufferSchema,
+      groupKeySchema,
       memoryManager,
-      1024, // initial capacity
+      1024, // initial capacity,
+      PAGE_SIZE_BYTES,
       false // disable perf metrics
     )
     assert(!map.iterator().hasNext)
@@ -69,11 +80,12 @@ class UnsafeFixedWidthAggregationMapSuite
 
   test("updating values for a single key") {
     val map = new UnsafeFixedWidthAggregationMap(
-      emptyProjection,
-      new UnsafeRowConverter(groupKeySchema),
-      new UnsafeRowConverter(aggBufferSchema),
+      emptyAggregationBuffer,
+      aggBufferSchema,
+      groupKeySchema,
       memoryManager,
       1024, // initial capacity
+      PAGE_SIZE_BYTES,
       false // disable perf metrics
     )
     val groupKey = InternalRow(UTF8String.fromString("cats"))
@@ -95,11 +107,12 @@ class UnsafeFixedWidthAggregationMapSuite
 
   test("inserting large random keys") {
     val map = new UnsafeFixedWidthAggregationMap(
-      emptyProjection,
-      new UnsafeRowConverter(groupKeySchema),
-      new UnsafeRowConverter(aggBufferSchema),
+      emptyAggregationBuffer,
+      aggBufferSchema,
+      groupKeySchema,
       memoryManager,
       128, // initial capacity
+      PAGE_SIZE_BYTES,
       false // disable perf metrics
     )
     val rand = new Random(42)
@@ -112,34 +125,6 @@ class UnsafeFixedWidthAggregationMapSuite
     }.toSet
     seenKeys.size should be (groupKeys.size)
     seenKeys should be (groupKeys)
-
-    map.free()
-  }
-
-  test("with decimal in the key and values") {
-    val groupKeySchema = StructType(StructField("price", DecimalType(10, 0)) :: Nil)
-    val aggBufferSchema = StructType(StructField("amount", DecimalType.Unlimited) :: Nil)
-    val emptyProjection = GenerateProjection.generate(Seq(Literal(Decimal(0))),
-      Seq(AttributeReference("price", DecimalType.Unlimited)()))
-    val map = new UnsafeFixedWidthAggregationMap(
-      emptyProjection,
-      new UnsafeRowConverter(groupKeySchema),
-      new UnsafeRowConverter(aggBufferSchema),
-      memoryManager,
-      1, // initial capacity
-      false // disable perf metrics
-    )
-
-    (0 until 100).foreach { i =>
-      val groupKey = InternalRow(Decimal(i % 10))
-      val row = map.getAggregationBuffer(groupKey)
-      row.update(0, Decimal(i))
-    }
-    val seenKeys: Set[Int] = map.iterator().asScala.map { entry =>
-      entry.key.getAs[Decimal](0).toInt
-    }.toSet
-    seenKeys.size should be (10)
-    seenKeys should be ((0 until 10).toSet)
 
     map.free()
   }
