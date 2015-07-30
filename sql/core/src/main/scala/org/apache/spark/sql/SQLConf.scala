@@ -251,7 +251,8 @@ private[spark] object SQLConf {
     defaultValue = Some(false),
     doc = "When true, we make assumption that all part-files of Parquet are consistent with " +
           "summary files and we will ignore them when merging schema. Otherwise, if this is " +
-          "false, which is the default, we will merge all part-files.")
+          "false, which is the default, we will merge all part-files. This should be considered " +
+          "as expert-only option, and shouldn't be enabled before knowing what it means exactly.")
 
   val PARQUET_BINARY_AS_STRING = booleanConf("spark.sql.parquet.binaryAsString",
     defaultValue = Some(false),

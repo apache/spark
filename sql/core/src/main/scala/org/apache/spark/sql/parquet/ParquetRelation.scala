@@ -333,28 +333,6 @@ private[sql] class ParquetRelation(
     }
   }
 
-  def filterDataStatusesWithoutSummaries(
-      leaves: Seq[FileStatus],
-      dataStatuses: Seq[FileStatus]): Seq[FileStatus] = {
-    // Get the paths that have summary files
-    val directoriesWithSummaries = leaves.map(_.getPath.getParent.toString).toSet
-
-    val typeInference = sqlContext.conf.partitionColumnTypeInferenceEnabled()
-    val dataPaths = dataStatuses.map(_.getPath.getParent)
-    val dataPathsWithoutSummaries = PartitioningUtils.parsePartitions(dataPaths,
-      PartitioningUtils.DEFAULT_PARTITION_NAME, typeInference).partitions
-        .map(_.path).filterNot(p => directoriesWithSummaries.contains(p)).toSet
-
-    if (dataPathsWithoutSummaries.size > 0) {
-      dataStatuses.filter { d =>
-        val path = d.getPath.getParent.toString
-        dataPathsWithoutSummaries.contains(path)
-      }
-    } else {
-      dataStatuses
-    }
-  }
-
   private class MetadataCache {
     // `FileStatus` objects of all "_metadata" files.
     private var metadataStatuses: Array[FileStatus] = _
@@ -450,23 +428,14 @@ private[sql] class ParquetRelation(
 
           // If mergeRespectSummaries config is true, we assume that all part-files are the same for
           // their schema with summary files, so we ignore them when merging schema.
-          // If the config is false, which is the default setting, we merge all part-files.
-
-          // mergeRespectSummaries is useful when dealing with partitioned tables, where each
-          // partition directory contains its own summary files.
+          // If the config is disabled, which is the default setting, we merge all part-files.
           // In this mode, we only need to merge schemas contained in all those summary files.
-          // For non-partitioned tables, or the partition directories that don't contain
-          // summary files, we still merge their part-files because it is possible their schemas
-          // are different with other summary files.
-          // You should enable this configuration only if you are very sure that all partition
-          // directories contain the summary files with consistent schema with its part-files.
+          // You should enable this configuration only if you are very sure that for the parquet
+          // part-files to read there are corresponding summary files containing correct schema.
 
           val needMerged: Seq[FileStatus] =
             if (mergeRespectSummaries) {
-              // If we want to merge parquet schema and only respect summary files,
-              // we still need to merge these part-files without summaries files.
-              filterDataStatusesWithoutSummaries(metadataStatuses ++
-                commonMetadataStatuses, dataStatuses)
+              Seq()
             } else {
               dataStatuses
             }
