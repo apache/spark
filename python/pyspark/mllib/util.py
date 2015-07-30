@@ -21,7 +21,9 @@ import warnings
 
 if sys.version > '3':
     xrange = range
+    basestring = str
 
+from pyspark import SparkContext
 from pyspark.mllib.common import callMLlibFunc, inherit_doc
 from pyspark.mllib.linalg import Vectors, SparseVector, _convert_to_vector
 
@@ -169,6 +171,28 @@ class MLUtils(object):
         minPartitions = minPartitions or min(sc.defaultParallelism, 2)
         return callMLlibFunc("loadLabeledPoints", sc, path, minPartitions)
 
+    @staticmethod
+    def appendBias(data):
+        """
+        Returns a new vector with `1.0` (bias) appended to
+        the end of the input vector.
+        """
+        vec = _convert_to_vector(data)
+        if isinstance(vec, SparseVector):
+            newIndices = np.append(vec.indices, len(vec))
+            newValues = np.append(vec.values, 1.0)
+            return SparseVector(len(vec) + 1, newIndices, newValues)
+        else:
+            return _convert_to_vector(np.append(vec.toArray(), 1.0))
+
+    @staticmethod
+    def loadVectors(sc, path):
+        """
+        Loads vectors saved using `RDD[Vector].saveAsTextFile`
+        with the default number of partitions.
+        """
+        return callMLlibFunc("loadVectors", sc, path)
+
 
 class Saveable(object):
     """
@@ -201,6 +225,10 @@ class JavaSaveable(Saveable):
     """
 
     def save(self, sc, path):
+        if not isinstance(sc, SparkContext):
+            raise TypeError("sc should be a SparkContext, got type %s" % type(sc))
+        if not isinstance(path, basestring):
+            raise TypeError("path should be a basestring, got type %s" % type(path))
         self._java_model.save(sc._jsc.sc(), path)
 
 

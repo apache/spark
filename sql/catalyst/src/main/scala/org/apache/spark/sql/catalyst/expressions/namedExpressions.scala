@@ -17,11 +17,9 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.sql.catalyst
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
-import org.apache.spark.sql.catalyst.errors.TreeNodeException
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodeGenContext, GeneratedExpressionCode}
-import org.apache.spark.sql.catalyst.trees
+import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.types._
 
 object NamedExpression {
@@ -37,8 +35,13 @@ object NamedExpression {
  */
 case class ExprId(id: Long)
 
-abstract class NamedExpression extends Expression {
-  self: Product =>
+/**
+ * An [[Expression]] that is named.
+ */
+trait NamedExpression extends Expression {
+
+  /** We should never fold named expressions in order to not remove the alias. */
+  override def foldable: Boolean = false
 
   def name: String
   def exprId: ExprId
@@ -78,8 +81,7 @@ abstract class NamedExpression extends Expression {
     }
 }
 
-abstract class Attribute extends NamedExpression {
-  self: Product =>
+abstract class Attribute extends LeafExpression with NamedExpression {
 
   override def references: AttributeSet = AttributeSet(this)
 
@@ -110,16 +112,17 @@ case class Alias(child: Expression, name: String)(
     val exprId: ExprId = NamedExpression.newExprId,
     val qualifiers: Seq[String] = Nil,
     val explicitMetadata: Option[Metadata] = None)
-  extends NamedExpression with trees.UnaryNode[Expression] {
+  extends UnaryExpression with NamedExpression {
 
   // Alias(Generator, xx) need to be transformed into Generate(generator, ...)
-  override lazy val resolved = childrenResolved && !child.isInstanceOf[Generator]
+  override lazy val resolved =
+    childrenResolved && checkInputDataTypes().isSuccess && !child.isInstanceOf[Generator]
 
   override def eval(input: InternalRow): Any = child.eval(input)
 
-  override def isThreadSafe: Boolean = child.isThreadSafe
-
+  /** Just a simple passthrough for code generation. */
   override def gen(ctx: CodeGenContext): GeneratedExpressionCode = child.gen(ctx)
+  override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = ""
 
   override def dataType: DataType = child.dataType
   override def nullable: Boolean = child.nullable
@@ -173,7 +176,8 @@ case class AttributeReference(
     nullable: Boolean = true,
     override val metadata: Metadata = Metadata.empty)(
     val exprId: ExprId = NamedExpression.newExprId,
-    val qualifiers: Seq[String] = Nil) extends Attribute with trees.LeafNode[Expression] {
+    val qualifiers: Seq[String] = Nil)
+  extends Attribute with Unevaluable {
 
   /**
    * Returns true iff the expression id is the same for both attributes.
@@ -232,10 +236,6 @@ case class AttributeReference(
     }
   }
 
-  // Unresolved attributes are transient at compile time and don't get evaluated during execution.
-  override def eval(input: InternalRow = null): Any =
-    throw new TreeNodeException(this, s"No function to evaluate expression. type: ${this.nodeName}")
-
   override def toString: String = s"$name#${exprId.id}$typeSuffix"
 }
 
@@ -243,7 +243,7 @@ case class AttributeReference(
  * A place holder used when printing expressions without debugging information such as the
  * expression id or the unresolved indicator.
  */
-case class PrettyAttribute(name: String) extends Attribute with trees.LeafNode[Expression] {
+case class PrettyAttribute(name: String) extends Attribute with Unevaluable {
 
   override def toString: String = name
 
@@ -255,7 +255,6 @@ case class PrettyAttribute(name: String) extends Attribute with trees.LeafNode[E
   override def withName(newName: String): Attribute = throw new UnsupportedOperationException
   override def qualifiers: Seq[String] = throw new UnsupportedOperationException
   override def exprId: ExprId = throw new UnsupportedOperationException
-  override def eval(input: InternalRow): Any = throw new UnsupportedOperationException
   override def nullable: Boolean = throw new UnsupportedOperationException
   override def dataType: DataType = NullType
 }

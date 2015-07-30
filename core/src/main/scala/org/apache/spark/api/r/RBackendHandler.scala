@@ -20,12 +20,14 @@ package org.apache.spark.api.r
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, DataOutputStream}
 
 import scala.collection.mutable.HashMap
+import scala.language.existentials
 
 import io.netty.channel.ChannelHandler.Sharable
 import io.netty.channel.{ChannelHandlerContext, SimpleChannelInboundHandler}
 
 import org.apache.spark.Logging
 import org.apache.spark.api.r.SerDe._
+import org.apache.spark.util.Utils
 
 /**
  * Handler for RBackend
@@ -98,7 +100,7 @@ private[r] class RBackendHandler(server: RBackend)
     var obj: Object = null
     try {
       val cls = if (isStatic) {
-        Class.forName(objId)
+        Utils.classForName(objId)
       } else {
         JVMObjectTracker.get(objId) match {
           case None => throw new IllegalArgumentException("Object not found " + objId)

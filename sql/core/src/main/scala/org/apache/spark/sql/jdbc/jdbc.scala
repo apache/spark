@@ -58,13 +58,12 @@ package object jdbc {
      * are used.
      */
     def savePartition(
-        url: String,
+        getConnection: () => Connection,
         table: String,
         iterator: Iterator[Row],
         rddSchema: StructType,
-        nullTypes: Array[Int],
-        properties: Properties): Iterator[Byte] = {
-      val conn = DriverManager.getConnection(url, properties)
+        nullTypes: Array[Int]): Iterator[Byte] = {
+      val conn = getConnection()
       var committed = false
       try {
         conn.setAutoCommit(false) // Everything in the same db transaction.
@@ -90,8 +89,7 @@ package object jdbc {
                   case BinaryType => stmt.setBytes(i + 1, row.getAs[Array[Byte]](i))
                   case TimestampType => stmt.setTimestamp(i + 1, row.getAs[java.sql.Timestamp](i))
                   case DateType => stmt.setDate(i + 1, row.getAs[java.sql.Date](i))
-                  case DecimalType.Unlimited => stmt.setBigDecimal(i + 1,
-                      row.getAs[java.math.BigDecimal](i))
+                  case t: DecimalType => stmt.setBigDecimal(i + 1, row.getDecimal(i))
                   case _ => throw new IllegalArgumentException(
                       s"Can't translate non-null value for field $i")
                 }
@@ -146,7 +144,7 @@ package object jdbc {
             case BinaryType => "BLOB"
             case TimestampType => "TIMESTAMP"
             case DateType => "DATE"
-            case DecimalType.Unlimited => "DECIMAL(40,20)"
+            case t: DecimalType => s"DECIMAL(${t.precision}},${t.scale}})"
             case _ => throw new IllegalArgumentException(s"Don't know how to save $field to JDBC")
           })
         val nullable = if (field.nullable) "" else "NOT NULL"
@@ -178,15 +176,17 @@ package object jdbc {
             case BinaryType => java.sql.Types.BLOB
             case TimestampType => java.sql.Types.TIMESTAMP
             case DateType => java.sql.Types.DATE
-            case DecimalType.Unlimited => java.sql.Types.DECIMAL
+            case t: DecimalType => java.sql.Types.DECIMAL
             case _ => throw new IllegalArgumentException(
               s"Can't translate null value for field $field")
           })
       }
 
       val rddSchema = df.schema
+      val driver: String = DriverRegistry.getDriverClassName(url)
+      val getConnection: () => Connection = JDBCRDD.getConnector(driver, url, properties)
       df.foreachPartition { iterator =>
-        JDBCWriteDetails.savePartition(url, table, iterator, rddSchema, nullTypes, properties)
+        JDBCWriteDetails.savePartition(getConnection, table, iterator, rddSchema, nullTypes)
       }
     }
 

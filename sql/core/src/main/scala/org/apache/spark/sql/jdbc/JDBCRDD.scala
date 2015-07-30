@@ -23,7 +23,8 @@ import java.util.Properties
 import org.apache.commons.lang3.StringUtils
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalyst.expressions.{InternalRow, SpecificMutableRow}
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.SpecificMutableRow
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
@@ -65,8 +66,8 @@ private[sql] object JDBCRDD extends Logging {
       case java.sql.Types.DATALINK      => null
       case java.sql.Types.DATE          => DateType
       case java.sql.Types.DECIMAL
-        if precision != 0 || scale != 0 => DecimalType(precision, scale)
-      case java.sql.Types.DECIMAL       => DecimalType.Unlimited
+        if precision != 0 || scale != 0 => DecimalType.bounded(precision, scale)
+      case java.sql.Types.DECIMAL       => DecimalType.SYSTEM_DEFAULT
       case java.sql.Types.DISTINCT      => null
       case java.sql.Types.DOUBLE        => DoubleType
       case java.sql.Types.FLOAT         => FloatType
@@ -79,8 +80,8 @@ private[sql] object JDBCRDD extends Logging {
       case java.sql.Types.NCLOB         => StringType
       case java.sql.Types.NULL          => null
       case java.sql.Types.NUMERIC
-        if precision != 0 || scale != 0 => DecimalType(precision, scale)
-      case java.sql.Types.NUMERIC       => DecimalType.Unlimited
+        if precision != 0 || scale != 0 => DecimalType.bounded(precision, scale)
+      case java.sql.Types.NUMERIC       => DecimalType.SYSTEM_DEFAULT
       case java.sql.Types.NVARCHAR      => StringType
       case java.sql.Types.OTHER         => null
       case java.sql.Types.REAL          => DoubleType
@@ -313,7 +314,7 @@ private[sql] class JDBCRDD(
   abstract class JDBCConversion
   case object BooleanConversion extends JDBCConversion
   case object DateConversion extends JDBCConversion
-  case class  DecimalConversion(precisionInfo: Option[(Int, Int)]) extends JDBCConversion
+  case class  DecimalConversion(precision: Int, scale: Int) extends JDBCConversion
   case object DoubleConversion extends JDBCConversion
   case object FloatConversion extends JDBCConversion
   case object IntegerConversion extends JDBCConversion
@@ -330,8 +331,7 @@ private[sql] class JDBCRDD(
     schema.fields.map(sf => sf.dataType match {
       case BooleanType => BooleanConversion
       case DateType => DateConversion
-      case DecimalType.Unlimited => DecimalConversion(None)
-      case DecimalType.Fixed(d) => DecimalConversion(Some(d))
+      case DecimalType.Fixed(p, s) => DecimalConversion(p, s)
       case DoubleType => DoubleConversion
       case FloatType => FloatConversion
       case IntegerType => IntegerConversion
@@ -398,26 +398,19 @@ private[sql] class JDBCRDD(
             // DecimalType(12, 2). Thus, after saving the dataframe into parquet file and then
             // retrieve it, you will get wrong result 199.99.
             // So it is needed to set precision and scale for Decimal based on JDBC metadata.
-            case DecimalConversion(Some((p, s))) =>
+            case DecimalConversion(p, s) =>
               val decimalVal = rs.getBigDecimal(pos)
               if (decimalVal == null) {
                 mutableRow.update(i, null)
               } else {
                 mutableRow.update(i, Decimal(decimalVal, p, s))
               }
-            case DecimalConversion(None) =>
-              val decimalVal = rs.getBigDecimal(pos)
-              if (decimalVal == null) {
-                mutableRow.update(i, null)
-              } else {
-                mutableRow.update(i, Decimal(decimalVal))
-              }
             case DoubleConversion => mutableRow.setDouble(i, rs.getDouble(pos))
             case FloatConversion => mutableRow.setFloat(i, rs.getFloat(pos))
             case IntegerConversion => mutableRow.setInt(i, rs.getInt(pos))
             case LongConversion => mutableRow.setLong(i, rs.getLong(pos))
             // TODO(davies): use getBytes for better performance, if the encoding is UTF-8
-            case StringConversion => mutableRow.setString(i, rs.getString(pos))
+            case StringConversion => mutableRow.update(i, UTF8String.fromString(rs.getString(pos)))
             case TimestampConversion =>
               val t = rs.getTimestamp(pos)
               if (t != null) {

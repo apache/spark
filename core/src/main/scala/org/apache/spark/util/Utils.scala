@@ -80,6 +80,12 @@ private[spark] object Utils extends Logging {
    */
   val TEMP_DIR_SHUTDOWN_PRIORITY = 25
 
+  /**
+   * Define a default value for driver memory here since this value is referenced across the code
+   * base and nearly all files already use Utils.scala
+   */
+  val DEFAULT_DRIVER_MEM_MB = JavaUtils.DEFAULT_DRIVER_MEM_MB.toInt
+
   private val MAX_DIR_CREATION_ATTEMPTS: Int = 10
   @volatile private var localRootDirs: Array[String] = null
 
@@ -107,8 +113,11 @@ private[spark] object Utils extends Logging {
   def deserialize[T](bytes: Array[Byte], loader: ClassLoader): T = {
     val bis = new ByteArrayInputStream(bytes)
     val ois = new ObjectInputStream(bis) {
-      override def resolveClass(desc: ObjectStreamClass): Class[_] =
+      override def resolveClass(desc: ObjectStreamClass): Class[_] = {
+        // scalastyle:off classforname
         Class.forName(desc.getName, false, loader)
+        // scalastyle:on classforname
+      }
     }
     ois.readObject.asInstanceOf[T]
   }
@@ -171,12 +180,16 @@ private[spark] object Utils extends Logging {
 
   /** Determines whether the provided class is loadable in the current thread. */
   def classIsLoadable(clazz: String): Boolean = {
+    // scalastyle:off classforname
     Try { Class.forName(clazz, false, getContextOrSparkClassLoader) }.isSuccess
+    // scalastyle:on classforname
   }
 
+  // scalastyle:off classforname
   /** Preferred alternative to Class.forName(className) */
   def classForName(className: String): Class[_] = {
     Class.forName(className, true, getContextOrSparkClassLoader)
+    // scalastyle:on classforname
   }
 
   /**
@@ -430,11 +443,11 @@ private[spark] object Utils extends Logging {
       val lockFileName = s"${url.hashCode}${timestamp}_lock"
       val localDir = new File(getLocalDir(conf))
       val lockFile = new File(localDir, lockFileName)
-      val raf = new RandomAccessFile(lockFile, "rw")
+      val lockFileChannel = new RandomAccessFile(lockFile, "rw").getChannel()
       // Only one executor entry.
       // The FileLock is only used to control synchronization for executors download file,
       // it's always safe regardless of lock type (mandatory or advisory).
-      val lock = raf.getChannel().lock()
+      val lock = lockFileChannel.lock()
       val cachedFile = new File(localDir, cachedFileName)
       try {
         if (!cachedFile.exists()) {
@@ -442,6 +455,7 @@ private[spark] object Utils extends Logging {
         }
       } finally {
         lock.release()
+        lockFileChannel.close()
       }
       copyFile(
         url,
@@ -727,7 +741,12 @@ private[spark] object Utils extends Logging {
     localRootDirs
   }
 
-  private def getOrCreateLocalRootDirsImpl(conf: SparkConf): Array[String] = {
+  /**
+   * Return the configured local directories where Spark can write files. This
+   * method does not create any directories on its own, it only encapsulates the
+   * logic of locating the local directories according to deployment mode.
+   */
+  def getConfiguredLocalDirs(conf: SparkConf): Array[String] = {
     if (isRunningInYarnContainer(conf)) {
       // If we are in yarn mode, systems can have different disk layouts so we must set it
       // to what Yarn on this system said was available. Note this assumes that Yarn has
@@ -743,25 +762,27 @@ private[spark] object Utils extends Logging {
       Option(conf.getenv("SPARK_LOCAL_DIRS"))
         .getOrElse(conf.get("spark.local.dir", System.getProperty("java.io.tmpdir")))
         .split(",")
-        .flatMap { root =>
-          try {
-            val rootDir = new File(root)
-            if (rootDir.exists || rootDir.mkdirs()) {
-              val dir = createTempDir(root)
-              chmod700(dir)
-              Some(dir.getAbsolutePath)
-            } else {
-              logError(s"Failed to create dir in $root. Ignoring this directory.")
-              None
-            }
-          } catch {
-            case e: IOException =>
-            logError(s"Failed to create local root dir in $root. Ignoring this directory.")
-            None
-          }
-        }
-        .toArray
     }
+  }
+
+  private def getOrCreateLocalRootDirsImpl(conf: SparkConf): Array[String] = {
+    getConfiguredLocalDirs(conf).flatMap { root =>
+      try {
+        val rootDir = new File(root)
+        if (rootDir.exists || rootDir.mkdirs()) {
+          val dir = createTempDir(root)
+          chmod700(dir)
+          Some(dir.getAbsolutePath)
+        } else {
+          logError(s"Failed to create dir in $root. Ignoring this directory.")
+          None
+        }
+      } catch {
+        case e: IOException =>
+          logError(s"Failed to create local root dir in $root. Ignoring this directory.")
+          None
+      }
+    }.toArray
   }
 
   /** Get the Yarn approved local directories. */
@@ -1566,6 +1587,34 @@ private[spark] object Utils extends Logging {
     hashAbs
   }
 
+  /**
+   * NaN-safe version of [[java.lang.Double.compare()]] which allows NaN values to be compared
+   * according to semantics where NaN == NaN and NaN > any non-NaN double.
+   */
+  def nanSafeCompareDoubles(x: Double, y: Double): Int = {
+    val xIsNan: Boolean = java.lang.Double.isNaN(x)
+    val yIsNan: Boolean = java.lang.Double.isNaN(y)
+    if ((xIsNan && yIsNan) || (x == y)) 0
+    else if (xIsNan) 1
+    else if (yIsNan) -1
+    else if (x > y) 1
+    else -1
+  }
+
+  /**
+   * NaN-safe version of [[java.lang.Float.compare()]] which allows NaN values to be compared
+   * according to semantics where NaN == NaN and NaN > any non-NaN float.
+   */
+  def nanSafeCompareFloats(x: Float, y: Float): Int = {
+    val xIsNan: Boolean = java.lang.Float.isNaN(x)
+    val yIsNan: Boolean = java.lang.Float.isNaN(y)
+    if ((xIsNan && yIsNan) || (x == y)) 0
+    else if (xIsNan) 1
+    else if (yIsNan) -1
+    else if (x > y) 1
+    else -1
+  }
+
   /** Returns the system properties map that is thread-safe to iterator over. It gets the
     * properties which have been set explicitly, as well as those for which only a default value
     * has been defined. */
@@ -2253,7 +2302,7 @@ private [util] class SparkShutdownHookManager {
     val hookTask = new Runnable() {
       override def run(): Unit = runAll()
     }
-    Try(Class.forName("org.apache.hadoop.util.ShutdownHookManager")) match {
+    Try(Utils.classForName("org.apache.hadoop.util.ShutdownHookManager")) match {
       case Success(shmClass) =>
         val fsPriority = classOf[FileSystem].getField("SHUTDOWN_HOOK_PRIORITY").get()
           .asInstanceOf[Int]
@@ -2331,5 +2380,38 @@ private[spark] class RedirectThread(
         }
       }
     }
+  }
+}
+
+/**
+ * An [[OutputStream]] that will store the last 10 kilobytes (by default) written to it
+ * in a circular buffer. The current contents of the buffer can be accessed using
+ * the toString method.
+ */
+private[spark] class CircularBuffer(sizeInBytes: Int = 10240) extends java.io.OutputStream {
+  var pos: Int = 0
+  var buffer = new Array[Int](sizeInBytes)
+
+  def write(i: Int): Unit = {
+    buffer(pos) = i
+    pos = (pos + 1) % buffer.length
+  }
+
+  override def toString: String = {
+    val (end, start) = buffer.splitAt(pos)
+    val input = new java.io.InputStream {
+      val iterator = (start ++ end).iterator
+
+      def read(): Int = if (iterator.hasNext) iterator.next() else -1
+    }
+    val reader = new BufferedReader(new InputStreamReader(input))
+    val stringBuilder = new StringBuilder
+    var line = reader.readLine()
+    while (line != null) {
+      stringBuilder.append(line)
+      stringBuilder.append("\n")
+      line = reader.readLine()
+    }
+    stringBuilder.toString()
   }
 }

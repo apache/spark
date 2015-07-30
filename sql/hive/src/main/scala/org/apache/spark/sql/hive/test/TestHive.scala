@@ -21,6 +21,7 @@ import java.io.File
 import java.util.{Set => JavaSet}
 
 import org.apache.hadoop.hive.conf.HiveConf
+import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hadoop.hive.ql.exec.FunctionRegistry
 import org.apache.hadoop.hive.ql.io.avro.{AvroContainerInputFormat, AvroContainerOutputFormat}
 import org.apache.hadoop.hive.ql.metadata.Table
@@ -53,9 +54,11 @@ object TestHive
       "TestSQLContext",
       new SparkConf()
         .set("spark.sql.test", "")
-        .set(
-          "spark.sql.hive.metastore.barrierPrefixes",
-          "org.apache.spark.sql.hive.execution.PairSerDe")))
+        .set("spark.sql.hive.metastore.barrierPrefixes",
+          "org.apache.spark.sql.hive.execution.PairSerDe")
+        .set("spark.buffer.pageSize", "4m")
+        // SPARK-8910
+        .set("spark.ui.enabled", "false")))
 
 /**
  * A locally running test instance of Spark's Hive execution engine.
@@ -86,7 +89,9 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
 
   /** Sets up the system initially or after a RESET command */
   protected override def configure(): Map[String, String] =
-    temporaryConfig ++ Map("hive.metastore.warehouse.dir" -> warehousePath.toString)
+    temporaryConfig ++ Map(
+      ConfVars.METASTOREWAREHOUSE.varname -> warehousePath.toString,
+      ConfVars.METASTORE_INTEGER_JDO_PUSHDOWN.varname -> "true")
 
   val testTempDir = Utils.createTempDir()
 
@@ -391,7 +396,7 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
    * Records the UDFs present when the server starts, so we can delete ones that are created by
    * tests.
    */
-  protected val originalUdfs: JavaSet[String] = FunctionRegistry.getFunctionNames
+  protected val originalUDFs: JavaSet[String] = FunctionRegistry.getFunctionNames
 
   /**
    * Resets the test instance by deleting any tables that have been created.
@@ -410,7 +415,7 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
       catalog.client.reset()
       catalog.unregisterAllTables()
 
-      FunctionRegistry.getFunctionNames.filterNot(originalUdfs.contains(_)).foreach { udfName =>
+      FunctionRegistry.getFunctionNames.filterNot(originalUDFs.contains(_)).foreach { udfName =>
         FunctionRegistry.unregisterTemporaryUDF(udfName)
       }
 

@@ -64,7 +64,7 @@ class JobCancellationSuite extends SparkFunSuite with Matchers with BeforeAndAft
 
   test("cluster mode, FIFO scheduler") {
     val conf = new SparkConf().set("spark.scheduler.mode", "FIFO")
-    sc = new SparkContext("local-cluster[2,1,512]", "test", conf)
+    sc = new SparkContext("local-cluster[2,1,1024]", "test", conf)
     testCount()
     testTake()
     // Make sure we can still launch tasks.
@@ -75,7 +75,7 @@ class JobCancellationSuite extends SparkFunSuite with Matchers with BeforeAndAft
     val conf = new SparkConf().set("spark.scheduler.mode", "FAIR")
     val xmlPath = getClass.getClassLoader.getResource("fairscheduler.xml").getFile()
     conf.set("spark.scheduler.allocation.file", xmlPath)
-    sc = new SparkContext("local-cluster[2,1,512]", "test", conf)
+    sc = new SparkContext("local-cluster[2,1,1024]", "test", conf)
     testCount()
     testTake()
     // Make sure we can still launch tasks.

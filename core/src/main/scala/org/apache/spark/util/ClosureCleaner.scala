@@ -49,45 +49,28 @@ private[spark] object ClosureCleaner extends Logging {
     cls.getName.contains("$anonfun$")
   }
 
-  // Get a list of the classes of the outer objects of a given closure object, obj;
+  // Get a list of the outer objects and their classes of a given closure object, obj;
   // the outer objects are defined as any closures that obj is nested within, plus
   // possibly the class that the outermost closure is in, if any. We stop searching
   // for outer objects beyond that because cloning the user's object is probably
   // not a good idea (whereas we can clone closure objects just fine since we
   // understand how all their fields are used).
-  private def getOuterClasses(obj: AnyRef): List[Class[_]] = {
+  private def getOuterClassesAndObjects(obj: AnyRef): (List[Class[_]], List[AnyRef]) = {
     for (f <- obj.getClass.getDeclaredFields if f.getName == "$outer") {
       f.setAccessible(true)
       val outer = f.get(obj)
       // The outer pointer may be null if we have cleaned this closure before
       if (outer != null) {
         if (isClosure(f.getType)) {
-          return f.getType :: getOuterClasses(outer)
+          val recurRet = getOuterClassesAndObjects(outer)
+          return (f.getType :: recurRet._1, outer :: recurRet._2)
         } else {
-          return f.getType :: Nil // Stop at the first $outer that is not a closure
+          return (f.getType :: Nil, outer :: Nil) // Stop at the first $outer that is not a closure
         }
       }
     }
-    Nil
+    (Nil, Nil)
   }
-
-  // Get a list of the outer objects for a given closure object.
-  private def getOuterObjects(obj: AnyRef): List[AnyRef] = {
-    for (f <- obj.getClass.getDeclaredFields if f.getName == "$outer") {
-      f.setAccessible(true)
-      val outer = f.get(obj)
-      // The outer pointer may be null if we have cleaned this closure before
-      if (outer != null) {
-        if (isClosure(f.getType)) {
-          return outer :: getOuterObjects(outer)
-        } else {
-          return outer :: Nil // Stop at the first $outer that is not a closure
-        }
-      }
-    }
-    Nil
-  }
-
   /**
    * Return a list of classes that represent closures enclosed in the given closure object.
    */
@@ -205,8 +188,7 @@ private[spark] object ClosureCleaner extends Logging {
 
     // A list of enclosing objects and their respective classes, from innermost to outermost
     // An outer object at a given index is of type outer class at the same index
-    val outerClasses = getOuterClasses(func)
-    val outerObjects = getOuterObjects(func)
+    val (outerClasses, outerObjects) = getOuterClassesAndObjects(func)
 
     // For logging purposes only
     val declaredFields = func.getClass.getDeclaredFields
@@ -448,10 +430,12 @@ private class InnerClosureFinder(output: Set[Class[_]]) extends ClassVisitor(ASM
         if (op == INVOKESPECIAL && name == "<init>" && argTypes.length > 0
             && argTypes(0).toString.startsWith("L") // is it an object?
             && argTypes(0).getInternalName == myName) {
+          // scalastyle:off classforname
           output += Class.forName(
               owner.replace('/', '.'),
               false,
               Thread.currentThread.getContextClassLoader)
+          // scalastyle:on classforname
         }
       }
     }

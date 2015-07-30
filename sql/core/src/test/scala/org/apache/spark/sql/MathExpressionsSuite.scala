@@ -20,7 +20,6 @@ package org.apache.spark.sql
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.functions.{log => logarithm}
 
-
 private object MathExpressionsTestData {
   case class DoubleData(a: java.lang.Double, b: java.lang.Double)
   case class NullDoubles(a: java.lang.Double)
@@ -69,12 +68,7 @@ class MathExpressionsSuite extends QueryTest {
     if (f(-1) === math.log1p(-1)) {
       checkAnswer(
         nnDoubleData.select(c('b)),
-        (1 to 9).map(n => Row(f(n * -0.1))) :+ Row(Double.NegativeInfinity)
-      )
-    } else {
-      checkAnswer(
-        nnDoubleData.select(c('b)),
-        (1 to 10).map(n => Row(null))
+        (1 to 9).map(n => Row(f(n * -0.1))) :+ Row(null)
       )
     }
 
@@ -179,12 +173,52 @@ class MathExpressionsSuite extends QueryTest {
       Row(0.0, 1.0, 2.0))
   }
 
+  test("conv") {
+    val df = Seq(("333", 10, 2)).toDF("num", "fromBase", "toBase")
+    checkAnswer(df.select(conv('num, 10, 16)), Row("14D"))
+    checkAnswer(df.select(conv(lit(100), 2, 16)), Row("4"))
+    checkAnswer(df.select(conv(lit(3122234455L), 10, 16)), Row("BA198457"))
+    checkAnswer(df.selectExpr("conv(num, fromBase, toBase)"), Row("101001101"))
+    checkAnswer(df.selectExpr("""conv("100", 2, 10)"""), Row("4"))
+    checkAnswer(df.selectExpr("""conv("-10", 16, -10)"""), Row("-16"))
+    checkAnswer(
+      df.selectExpr("""conv("9223372036854775807", 36, -16)"""), Row("-1")) // for overflow
+  }
+
   test("floor") {
     testOneToOneMathFunction(floor, math.floor)
   }
 
+  test("factorial") {
+    val df = (0 to 5).map(i => (i, i)).toDF("a", "b")
+    checkAnswer(
+      df.select(factorial('a)),
+      Seq(Row(1), Row(1), Row(2), Row(6), Row(24), Row(120))
+    )
+    checkAnswer(
+      df.selectExpr("factorial(a)"),
+      Seq(Row(1), Row(1), Row(2), Row(6), Row(24), Row(120))
+    )
+  }
+
   test("rint") {
     testOneToOneMathFunction(rint, math.rint)
+  }
+
+  test("round") {
+    val df = Seq(5, 55, 555).map(Tuple1(_)).toDF("a")
+    checkAnswer(
+      df.select(round('a), round('a, -1), round('a, -2)),
+      Seq(Row(5, 10, 0), Row(55, 60, 100), Row(555, 560, 600))
+    )
+
+    val pi = 3.1415
+    checkAnswer(
+      ctx.sql(s"SELECT round($pi, -3), round($pi, -2), round($pi, -1), " +
+        s"round($pi, 0), round($pi, 1), round($pi, 2), round($pi, 3)"),
+      Seq(Row(BigDecimal("0E3"), BigDecimal("0E2"), BigDecimal("0E1"), BigDecimal(3),
+        BigDecimal("3.1"), BigDecimal("3.14"), BigDecimal("3.142")))
+    )
   }
 
   test("exp") {
@@ -212,6 +246,29 @@ class MathExpressionsSuite extends QueryTest {
     )
   }
 
+  test("hex") {
+    val data = Seq((28, -28, 100800200404L, "hello")).toDF("a", "b", "c", "d")
+    checkAnswer(data.select(hex('a)), Seq(Row("1C")))
+    checkAnswer(data.select(hex('b)), Seq(Row("FFFFFFFFFFFFFFE4")))
+    checkAnswer(data.select(hex('c)), Seq(Row("177828FED4")))
+    checkAnswer(data.select(hex('d)), Seq(Row("68656C6C6F")))
+    checkAnswer(data.selectExpr("hex(a)"), Seq(Row("1C")))
+    checkAnswer(data.selectExpr("hex(b)"), Seq(Row("FFFFFFFFFFFFFFE4")))
+    checkAnswer(data.selectExpr("hex(c)"), Seq(Row("177828FED4")))
+    checkAnswer(data.selectExpr("hex(d)"), Seq(Row("68656C6C6F")))
+    checkAnswer(data.selectExpr("hex(cast(d as binary))"), Seq(Row("68656C6C6F")))
+  }
+
+  test("unhex") {
+    val data = Seq(("1C", "737472696E67")).toDF("a", "b")
+    checkAnswer(data.select(unhex('a)), Row(Array[Byte](28.toByte)))
+    checkAnswer(data.select(unhex('b)), Row("string".getBytes))
+    checkAnswer(data.selectExpr("unhex(a)"), Row(Array[Byte](28.toByte)))
+    checkAnswer(data.selectExpr("unhex(b)"), Row("string".getBytes))
+    checkAnswer(data.selectExpr("""unhex("##")"""), Row(null))
+    checkAnswer(data.selectExpr("""unhex("G123")"""), Row(null))
+  }
+
   test("hypot") {
     testTwoToOneMathFunction(hypot, hypot, math.hypot)
   }
@@ -234,6 +291,57 @@ class MathExpressionsSuite extends QueryTest {
 
   test("log1p") {
     testOneToOneNonNegativeMathFunction(log1p, math.log1p)
+  }
+
+  test("shift left") {
+    val df = Seq[(Long, Integer, Short, Byte, Integer, Integer)]((21, 21, 21, 21, 21, null))
+      .toDF("a", "b", "c", "d", "e", "f")
+
+    checkAnswer(
+      df.select(
+        shiftLeft('a, 1), shiftLeft('b, 1), shiftLeft('c, 1), shiftLeft('d, 1),
+        shiftLeft('f, 1)),
+        Row(42.toLong, 42, 42.toShort, 42.toByte, null))
+
+    checkAnswer(
+      df.selectExpr(
+        "shiftLeft(a, 1)", "shiftLeft(b, 1)", "shiftLeft(b, 1)", "shiftLeft(d, 1)",
+        "shiftLeft(f, 1)"),
+      Row(42.toLong, 42, 42.toShort, 42.toByte, null))
+  }
+
+  test("shift right") {
+    val df = Seq[(Long, Integer, Short, Byte, Integer, Integer)]((42, 42, 42, 42, 42, null))
+      .toDF("a", "b", "c", "d", "e", "f")
+
+    checkAnswer(
+      df.select(
+        shiftRight('a, 1), shiftRight('b, 1), shiftRight('c, 1), shiftRight('d, 1),
+        shiftRight('f, 1)),
+      Row(21.toLong, 21, 21.toShort, 21.toByte, null))
+
+    checkAnswer(
+      df.selectExpr(
+        "shiftRight(a, 1)", "shiftRight(b, 1)", "shiftRight(c, 1)", "shiftRight(d, 1)",
+        "shiftRight(f, 1)"),
+      Row(21.toLong, 21, 21.toShort, 21.toByte, null))
+  }
+
+  test("shift right unsigned") {
+    val df = Seq[(Long, Integer, Short, Byte, Integer, Integer)]((-42, 42, 42, 42, 42, null))
+      .toDF("a", "b", "c", "d", "e", "f")
+
+    checkAnswer(
+      df.select(
+        shiftRightUnsigned('a, 1), shiftRightUnsigned('b, 1), shiftRightUnsigned('c, 1),
+        shiftRightUnsigned('d, 1), shiftRightUnsigned('f, 1)),
+      Row(9223372036854775787L, 21, 21.toShort, 21.toByte, null))
+
+    checkAnswer(
+      df.selectExpr(
+        "shiftRightUnsigned(a, 1)", "shiftRightUnsigned(b, 1)", "shiftRightUnsigned(c, 1)",
+        "shiftRightUnsigned(d, 1)", "shiftRightUnsigned(f, 1)"),
+      Row(9223372036854775787L, 21, 21.toShort, 21.toByte, null))
   }
 
   test("binary log") {
@@ -290,6 +398,5 @@ class MathExpressionsSuite extends QueryTest {
     val df = Seq((1, -1, "abc")).toDF("a", "b", "c")
     checkAnswer(df.selectExpr("positive(a)"), Row(1))
     checkAnswer(df.selectExpr("positive(b)"), Row(-1))
-    checkAnswer(df.selectExpr("positive(c)"), Row("abc"))
   }
 }

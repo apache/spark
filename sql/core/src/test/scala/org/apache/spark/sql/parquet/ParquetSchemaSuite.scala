@@ -24,26 +24,109 @@ import org.apache.parquet.schema.MessageTypeParser
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.ScalaReflection
+import org.apache.spark.sql.test.TestSQLContext
 import org.apache.spark.sql.types._
 
-class ParquetSchemaSuite extends SparkFunSuite with ParquetTest {
-  lazy val sqlContext = org.apache.spark.sql.test.TestSQLContext
+abstract class ParquetSchemaTest extends SparkFunSuite with ParquetTest {
+  val sqlContext = TestSQLContext
 
   /**
    * Checks whether the reflected Parquet message type for product type `T` conforms `messageType`.
    */
-  private def testSchema[T <: Product: ClassTag: TypeTag](
-      testName: String, messageType: String, isThriftDerived: Boolean = false): Unit = {
-    test(testName) {
-      val actual = ParquetTypesConverter.convertFromAttributes(
-        ScalaReflection.attributesFor[T], isThriftDerived)
-      val expected = MessageTypeParser.parseMessageType(messageType)
+  protected def testSchemaInference[T <: Product: ClassTag: TypeTag](
+      testName: String,
+      messageType: String,
+      binaryAsString: Boolean = true,
+      int96AsTimestamp: Boolean = true,
+      followParquetFormatSpec: Boolean = false,
+      isThriftDerived: Boolean = false): Unit = {
+    testSchema(
+      testName,
+      StructType.fromAttributes(ScalaReflection.attributesFor[T]),
+      messageType,
+      binaryAsString,
+      int96AsTimestamp,
+      followParquetFormatSpec,
+      isThriftDerived)
+  }
+
+  protected def testParquetToCatalyst(
+      testName: String,
+      sqlSchema: StructType,
+      parquetSchema: String,
+      binaryAsString: Boolean = true,
+      int96AsTimestamp: Boolean = true,
+      followParquetFormatSpec: Boolean = false,
+      isThriftDerived: Boolean = false): Unit = {
+    val converter = new CatalystSchemaConverter(
+      assumeBinaryIsString = binaryAsString,
+      assumeInt96IsTimestamp = int96AsTimestamp,
+      followParquetFormatSpec = followParquetFormatSpec)
+
+    test(s"sql <= parquet: $testName") {
+      val actual = converter.convert(MessageTypeParser.parseMessageType(parquetSchema))
+      val expected = sqlSchema
+      assert(
+        actual === expected,
+        s"""Schema mismatch.
+           |Expected schema: ${expected.json}
+           |Actual schema:   ${actual.json}
+         """.stripMargin)
+    }
+  }
+
+  protected def testCatalystToParquet(
+      testName: String,
+      sqlSchema: StructType,
+      parquetSchema: String,
+      binaryAsString: Boolean = true,
+      int96AsTimestamp: Boolean = true,
+      followParquetFormatSpec: Boolean = false,
+      isThriftDerived: Boolean = false): Unit = {
+    val converter = new CatalystSchemaConverter(
+      assumeBinaryIsString = binaryAsString,
+      assumeInt96IsTimestamp = int96AsTimestamp,
+      followParquetFormatSpec = followParquetFormatSpec)
+
+    test(s"sql => parquet: $testName") {
+      val actual = converter.convert(sqlSchema)
+      val expected = MessageTypeParser.parseMessageType(parquetSchema)
       actual.checkContains(expected)
       expected.checkContains(actual)
     }
   }
 
-  testSchema[(Boolean, Int, Long, Float, Double, Array[Byte])](
+  protected def testSchema(
+      testName: String,
+      sqlSchema: StructType,
+      parquetSchema: String,
+      binaryAsString: Boolean = true,
+      int96AsTimestamp: Boolean = true,
+      followParquetFormatSpec: Boolean = false,
+      isThriftDerived: Boolean = false): Unit = {
+
+    testCatalystToParquet(
+      testName,
+      sqlSchema,
+      parquetSchema,
+      binaryAsString,
+      int96AsTimestamp,
+      followParquetFormatSpec,
+      isThriftDerived)
+
+    testParquetToCatalyst(
+      testName,
+      sqlSchema,
+      parquetSchema,
+      binaryAsString,
+      int96AsTimestamp,
+      followParquetFormatSpec,
+      isThriftDerived)
+  }
+}
+
+class ParquetSchemaInferenceSuite extends ParquetSchemaTest {
+  testSchemaInference[(Boolean, Int, Long, Float, Double, Array[Byte])](
     "basic types",
     """
       |message root {
@@ -54,9 +137,10 @@ class ParquetSchemaSuite extends SparkFunSuite with ParquetTest {
       |  required double  _5;
       |  optional binary  _6;
       |}
-    """.stripMargin)
+    """.stripMargin,
+    binaryAsString = false)
 
-  testSchema[(Byte, Short, Int, Long, java.sql.Date)](
+  testSchemaInference[(Byte, Short, Int, Long, java.sql.Date)](
     "logical integral types",
     """
       |message root {
@@ -68,17 +152,25 @@ class ParquetSchemaSuite extends SparkFunSuite with ParquetTest {
       |}
     """.stripMargin)
 
-  // Currently String is the only supported logical binary type.
-  testSchema[Tuple1[String]](
-    "binary logical types",
+  testSchemaInference[Tuple1[String]](
+    "string",
     """
       |message root {
       |  optional binary _1 (UTF8);
       |}
+    """.stripMargin,
+    binaryAsString = true)
+
+  testSchemaInference[Tuple1[String]](
+    "binary enum as string",
+    """
+      |message root {
+      |  optional binary _1 (ENUM);
+      |}
     """.stripMargin)
 
-  testSchema[Tuple1[Seq[Int]]](
-    "array",
+  testSchemaInference[Tuple1[Seq[Int]]](
+    "non-nullable array - non-standard",
     """
       |message root {
       |  optional group _1 (LIST) {
@@ -87,8 +179,60 @@ class ParquetSchemaSuite extends SparkFunSuite with ParquetTest {
       |}
     """.stripMargin)
 
-  testSchema[Tuple1[Map[Int, String]]](
-    "map",
+  testSchemaInference[Tuple1[Seq[Int]]](
+    "non-nullable array - standard",
+    """
+      |message root {
+      |  optional group _1 (LIST) {
+      |    repeated group list {
+      |      required int32 element;
+      |    }
+      |  }
+      |}
+    """.stripMargin,
+    followParquetFormatSpec = true)
+
+  testSchemaInference[Tuple1[Seq[Integer]]](
+    "nullable array - non-standard",
+    """
+      |message root {
+      |  optional group _1 (LIST) {
+      |    repeated group bag {
+      |      optional int32 array_element;
+      |    }
+      |  }
+      |}
+    """.stripMargin)
+
+  testSchemaInference[Tuple1[Seq[Integer]]](
+    "nullable array - standard",
+    """
+      |message root {
+      |  optional group _1 (LIST) {
+      |    repeated group list {
+      |      optional int32 element;
+      |    }
+      |  }
+      |}
+    """.stripMargin,
+    followParquetFormatSpec = true)
+
+  testSchemaInference[Tuple1[Map[Int, String]]](
+    "map - standard",
+    """
+      |message root {
+      |  optional group _1 (MAP) {
+      |    repeated group key_value {
+      |      required int32 key;
+      |      optional binary value (UTF8);
+      |    }
+      |  }
+      |}
+    """.stripMargin,
+    followParquetFormatSpec = true)
+
+  testSchemaInference[Tuple1[Map[Int, String]]](
+    "map - non-standard",
     """
       |message root {
       |  optional group _1 (MAP) {
@@ -100,7 +244,7 @@ class ParquetSchemaSuite extends SparkFunSuite with ParquetTest {
       |}
     """.stripMargin)
 
-  testSchema[Tuple1[Pair[Int, String]]](
+  testSchemaInference[Tuple1[Pair[Int, String]]](
     "struct",
     """
       |message root {
@@ -109,20 +253,21 @@ class ParquetSchemaSuite extends SparkFunSuite with ParquetTest {
       |    optional binary _2 (UTF8);
       |  }
       |}
-    """.stripMargin)
+    """.stripMargin,
+    followParquetFormatSpec = true)
 
-  testSchema[Tuple1[Map[Int, (String, Seq[(Int, Double)])]]](
-    "deeply nested type",
+  testSchemaInference[Tuple1[Map[Int, (String, Seq[(Int, Double)])]]](
+    "deeply nested type - non-standard",
     """
       |message root {
-      |  optional group _1 (MAP) {
-      |    repeated group map (MAP_KEY_VALUE) {
+      |  optional group _1 (MAP_KEY_VALUE) {
+      |    repeated group map {
       |      required int32 key;
       |      optional group value {
       |        optional binary _1 (UTF8);
       |        optional group _2 (LIST) {
       |          repeated group bag {
-      |            optional group array {
+      |            optional group array_element {
       |              required int32 _1;
       |              required double _2;
       |            }
@@ -134,43 +279,76 @@ class ParquetSchemaSuite extends SparkFunSuite with ParquetTest {
       |}
     """.stripMargin)
 
-  testSchema[(Option[Int], Map[Int, Option[Double]])](
+  testSchemaInference[Tuple1[Map[Int, (String, Seq[(Int, Double)])]]](
+    "deeply nested type - standard",
+    """
+      |message root {
+      |  optional group _1 (MAP) {
+      |    repeated group key_value {
+      |      required int32 key;
+      |      optional group value {
+      |        optional binary _1 (UTF8);
+      |        optional group _2 (LIST) {
+      |          repeated group list {
+      |            optional group element {
+      |              required int32 _1;
+      |              required double _2;
+      |            }
+      |          }
+      |        }
+      |      }
+      |    }
+      |  }
+      |}
+    """.stripMargin,
+    followParquetFormatSpec = true)
+
+  testSchemaInference[(Option[Int], Map[Int, Option[Double]])](
     "optional types",
     """
       |message root {
       |  optional int32 _1;
       |  optional group _2 (MAP) {
-      |    repeated group map (MAP_KEY_VALUE) {
+      |    repeated group key_value {
       |      required int32 key;
       |      optional double value;
       |    }
       |  }
       |}
-    """.stripMargin)
+    """.stripMargin,
+    followParquetFormatSpec = true)
 
-  // Test for SPARK-4520 -- ensure that thrift generated parquet schema is generated
-  // as expected from attributes
-  testSchema[(Array[Byte], Array[Byte], Array[Byte], Seq[Int], Map[Array[Byte], Seq[Int]])](
-    "thrift generated parquet schema",
-    """
-      |message root {
-      |  optional binary _1 (UTF8);
-      |  optional binary _2 (UTF8);
-      |  optional binary _3 (UTF8);
-      |  optional group _4 (LIST) {
-      |    repeated int32 _4_tuple;
-      |  }
-      |  optional group _5 (MAP) {
-      |    repeated group map (MAP_KEY_VALUE) {
-      |      required binary key (UTF8);
-      |      optional group value (LIST) {
-      |        repeated int32 value_tuple;
-      |      }
-      |    }
-      |  }
-      |}
-    """.stripMargin, isThriftDerived = true)
+  // Parquet files generated by parquet-thrift are already handled by the schema converter, but
+  // let's leave this test here until both read path and write path are all updated.
+  ignore("thrift generated parquet schema") {
+    // Test for SPARK-4520 -- ensure that thrift generated parquet schema is generated
+    // as expected from attributes
+    testSchemaInference[(
+      Array[Byte], Array[Byte], Array[Byte], Seq[Int], Map[Array[Byte], Seq[Int]])](
+      "thrift generated parquet schema",
+      """
+        |message root {
+        |  optional binary _1 (UTF8);
+        |  optional binary _2 (UTF8);
+        |  optional binary _3 (UTF8);
+        |  optional group _4 (LIST) {
+        |    repeated int32 _4_tuple;
+        |  }
+        |  optional group _5 (MAP) {
+        |    repeated group map (MAP_KEY_VALUE) {
+        |      required binary key (UTF8);
+        |      optional group value (LIST) {
+        |        repeated int32 value_tuple;
+        |      }
+        |    }
+        |  }
+        |}
+      """.stripMargin,
+      isThriftDerived = true)
+  }
+}
 
+class ParquetSchemaSuite extends ParquetSchemaTest {
   test("DataType string parser compatibility") {
     // This is the generated string from previous versions of the Spark SQL, using the following:
     // val schema = StructType(List(
@@ -180,10 +358,7 @@ class ParquetSchemaSuite extends SparkFunSuite with ParquetTest {
       "StructType(List(StructField(c1,IntegerType,false), StructField(c2,BinaryType,true)))"
 
     // scalastyle:off
-    val jsonString =
-      """
-        |{"type":"struct","fields":[{"name":"c1","type":"integer","nullable":false,"metadata":{}},{"name":"c2","type":"binary","nullable":true,"metadata":{}}]}
-      """.stripMargin
+    val jsonString = """{"type":"struct","fields":[{"name":"c1","type":"integer","nullable":false,"metadata":{}},{"name":"c2","type":"binary","nullable":true,"metadata":{}}]}"""
     // scalastyle:on
 
     val fromCaseClassString = ParquetTypesConverter.convertFromString(caseClassString)
@@ -203,7 +378,7 @@ class ParquetSchemaSuite extends SparkFunSuite with ParquetTest {
         StructField("lowerCase", StringType),
         StructField("UPPERCase", DoubleType, nullable = false)))) {
 
-      ParquetRelation2.mergeMetastoreParquetSchema(
+      ParquetRelation.mergeMetastoreParquetSchema(
         StructType(Seq(
           StructField("lowercase", StringType),
           StructField("uppercase", DoubleType, nullable = false))),
@@ -218,7 +393,7 @@ class ParquetSchemaSuite extends SparkFunSuite with ParquetTest {
       StructType(Seq(
         StructField("UPPERCase", DoubleType, nullable = false)))) {
 
-      ParquetRelation2.mergeMetastoreParquetSchema(
+      ParquetRelation.mergeMetastoreParquetSchema(
         StructType(Seq(
           StructField("uppercase", DoubleType, nullable = false))),
 
@@ -229,7 +404,7 @@ class ParquetSchemaSuite extends SparkFunSuite with ParquetTest {
 
     // Metastore schema contains additional non-nullable fields.
     assert(intercept[Throwable] {
-      ParquetRelation2.mergeMetastoreParquetSchema(
+      ParquetRelation.mergeMetastoreParquetSchema(
         StructType(Seq(
           StructField("uppercase", DoubleType, nullable = false),
           StructField("lowerCase", BinaryType, nullable = false))),
@@ -240,7 +415,7 @@ class ParquetSchemaSuite extends SparkFunSuite with ParquetTest {
 
     // Conflicting non-nullable field names
     intercept[Throwable] {
-      ParquetRelation2.mergeMetastoreParquetSchema(
+      ParquetRelation.mergeMetastoreParquetSchema(
         StructType(Seq(StructField("lower", StringType, nullable = false))),
         StructType(Seq(StructField("lowerCase", BinaryType))))
     }
@@ -254,7 +429,7 @@ class ParquetSchemaSuite extends SparkFunSuite with ParquetTest {
         StructField("firstField", StringType, nullable = true),
         StructField("secondField", StringType, nullable = true),
         StructField("thirdfield", StringType, nullable = true)))) {
-      ParquetRelation2.mergeMetastoreParquetSchema(
+      ParquetRelation.mergeMetastoreParquetSchema(
         StructType(Seq(
           StructField("firstfield", StringType, nullable = true),
           StructField("secondfield", StringType, nullable = true),
@@ -267,7 +442,7 @@ class ParquetSchemaSuite extends SparkFunSuite with ParquetTest {
     // Merge should fail if the Metastore contains any additional fields that are not
     // nullable.
     assert(intercept[Throwable] {
-      ParquetRelation2.mergeMetastoreParquetSchema(
+      ParquetRelation.mergeMetastoreParquetSchema(
         StructType(Seq(
           StructField("firstfield", StringType, nullable = true),
           StructField("secondfield", StringType, nullable = true),
@@ -277,4 +452,465 @@ class ParquetSchemaSuite extends SparkFunSuite with ParquetTest {
           StructField("secondField", StringType, nullable = true))))
     }.getMessage.contains("detected conflicting schemas"))
   }
+
+  // =======================================================
+  // Tests for converting Parquet LIST to Catalyst ArrayType
+  // =======================================================
+
+  testParquetToCatalyst(
+    "Backwards-compatibility: LIST with nullable element type - 1 - standard",
+    StructType(Seq(
+      StructField(
+        "f1",
+        ArrayType(IntegerType, containsNull = true),
+        nullable = true))),
+    """message root {
+      |  optional group f1 (LIST) {
+      |    repeated group list {
+      |      optional int32 element;
+      |    }
+      |  }
+      |}
+    """.stripMargin)
+
+  testParquetToCatalyst(
+    "Backwards-compatibility: LIST with nullable element type - 2",
+    StructType(Seq(
+      StructField(
+        "f1",
+        ArrayType(IntegerType, containsNull = true),
+        nullable = true))),
+    """message root {
+      |  optional group f1 (LIST) {
+      |    repeated group element {
+      |      optional int32 num;
+      |    }
+      |  }
+      |}
+    """.stripMargin)
+
+  testParquetToCatalyst(
+    "Backwards-compatibility: LIST with non-nullable element type - 1 - standard",
+    StructType(Seq(
+      StructField("f1", ArrayType(IntegerType, containsNull = false), nullable = true))),
+    """message root {
+      |  optional group f1 (LIST) {
+      |    repeated group list {
+      |      required int32 element;
+      |    }
+      |  }
+      |}
+    """.stripMargin)
+
+  testParquetToCatalyst(
+    "Backwards-compatibility: LIST with non-nullable element type - 2",
+    StructType(Seq(
+      StructField("f1", ArrayType(IntegerType, containsNull = false), nullable = true))),
+    """message root {
+      |  optional group f1 (LIST) {
+      |    repeated group element {
+      |      required int32 num;
+      |    }
+      |  }
+      |}
+    """.stripMargin)
+
+  testParquetToCatalyst(
+    "Backwards-compatibility: LIST with non-nullable element type - 3",
+    StructType(Seq(
+      StructField("f1", ArrayType(IntegerType, containsNull = false), nullable = true))),
+    """message root {
+      |  optional group f1 (LIST) {
+      |    repeated int32 element;
+      |  }
+      |}
+    """.stripMargin)
+
+  testParquetToCatalyst(
+    "Backwards-compatibility: LIST with non-nullable element type - 4",
+    StructType(Seq(
+      StructField(
+        "f1",
+        ArrayType(
+          StructType(Seq(
+            StructField("str", StringType, nullable = false),
+            StructField("num", IntegerType, nullable = false))),
+          containsNull = false),
+        nullable = true))),
+    """message root {
+      |  optional group f1 (LIST) {
+      |    repeated group element {
+      |      required binary str (UTF8);
+      |      required int32 num;
+      |    }
+      |  }
+      |}
+    """.stripMargin)
+
+  testParquetToCatalyst(
+    "Backwards-compatibility: LIST with non-nullable element type - 5 - parquet-avro style",
+    StructType(Seq(
+      StructField(
+        "f1",
+        ArrayType(
+          StructType(Seq(
+            StructField("str", StringType, nullable = false))),
+          containsNull = false),
+        nullable = true))),
+    """message root {
+      |  optional group f1 (LIST) {
+      |    repeated group array {
+      |      required binary str (UTF8);
+      |    }
+      |  }
+      |}
+    """.stripMargin)
+
+  testParquetToCatalyst(
+    "Backwards-compatibility: LIST with non-nullable element type - 6 - parquet-thrift style",
+    StructType(Seq(
+      StructField(
+        "f1",
+        ArrayType(
+          StructType(Seq(
+            StructField("str", StringType, nullable = false))),
+          containsNull = false),
+        nullable = true))),
+    """message root {
+      |  optional group f1 (LIST) {
+      |    repeated group f1_tuple {
+      |      required binary str (UTF8);
+      |    }
+      |  }
+      |}
+    """.stripMargin)
+
+  // =======================================================
+  // Tests for converting Catalyst ArrayType to Parquet LIST
+  // =======================================================
+
+  testCatalystToParquet(
+    "Backwards-compatibility: LIST with nullable element type - 1 - standard",
+    StructType(Seq(
+      StructField(
+        "f1",
+        ArrayType(IntegerType, containsNull = true),
+        nullable = true))),
+    """message root {
+      |  optional group f1 (LIST) {
+      |    repeated group list {
+      |      optional int32 element;
+      |    }
+      |  }
+      |}
+    """.stripMargin,
+    followParquetFormatSpec = true)
+
+  testCatalystToParquet(
+    "Backwards-compatibility: LIST with nullable element type - 2 - prior to 1.4.x",
+    StructType(Seq(
+      StructField(
+        "f1",
+        ArrayType(IntegerType, containsNull = true),
+        nullable = true))),
+    """message root {
+      |  optional group f1 (LIST) {
+      |    repeated group bag {
+      |      optional int32 array_element;
+      |    }
+      |  }
+      |}
+    """.stripMargin)
+
+  testCatalystToParquet(
+    "Backwards-compatibility: LIST with non-nullable element type - 1 - standard",
+    StructType(Seq(
+      StructField(
+        "f1",
+        ArrayType(IntegerType, containsNull = false),
+        nullable = true))),
+    """message root {
+      |  optional group f1 (LIST) {
+      |    repeated group list {
+      |      required int32 element;
+      |    }
+      |  }
+      |}
+    """.stripMargin,
+    followParquetFormatSpec = true)
+
+  testCatalystToParquet(
+    "Backwards-compatibility: LIST with non-nullable element type - 2 - prior to 1.4.x",
+    StructType(Seq(
+      StructField(
+        "f1",
+        ArrayType(IntegerType, containsNull = false),
+        nullable = true))),
+    """message root {
+      |  optional group f1 (LIST) {
+      |    repeated int32 array;
+      |  }
+      |}
+    """.stripMargin)
+
+  // ====================================================
+  // Tests for converting Parquet Map to Catalyst MapType
+  // ====================================================
+
+  testParquetToCatalyst(
+    "Backwards-compatibility: MAP with non-nullable value type - 1 - standard",
+    StructType(Seq(
+      StructField(
+        "f1",
+        MapType(IntegerType, StringType, valueContainsNull = false),
+        nullable = true))),
+    """message root {
+      |  optional group f1 (MAP) {
+      |    repeated group key_value {
+      |      required int32 key;
+      |      required binary value (UTF8);
+      |    }
+      |  }
+      |}
+    """.stripMargin)
+
+  testParquetToCatalyst(
+    "Backwards-compatibility: MAP with non-nullable value type - 2",
+    StructType(Seq(
+      StructField(
+        "f1",
+        MapType(IntegerType, StringType, valueContainsNull = false),
+        nullable = true))),
+    """message root {
+      |  optional group f1 (MAP_KEY_VALUE) {
+      |    repeated group map {
+      |      required int32 num;
+      |      required binary str (UTF8);
+      |    }
+      |  }
+      |}
+    """.stripMargin)
+
+  testParquetToCatalyst(
+    "Backwards-compatibility: MAP with non-nullable value type - 3 - prior to 1.4.x",
+    StructType(Seq(
+      StructField(
+        "f1",
+        MapType(IntegerType, StringType, valueContainsNull = false),
+        nullable = true))),
+    """message root {
+      |  optional group f1 (MAP) {
+      |    repeated group map (MAP_KEY_VALUE) {
+      |      required int32 key;
+      |      required binary value (UTF8);
+      |    }
+      |  }
+      |}
+    """.stripMargin)
+
+  testParquetToCatalyst(
+    "Backwards-compatibility: MAP with nullable value type - 1 - standard",
+    StructType(Seq(
+      StructField(
+        "f1",
+        MapType(IntegerType, StringType, valueContainsNull = true),
+        nullable = true))),
+    """message root {
+      |  optional group f1 (MAP) {
+      |    repeated group key_value {
+      |      required int32 key;
+      |      optional binary value (UTF8);
+      |    }
+      |  }
+      |}
+    """.stripMargin)
+
+  testParquetToCatalyst(
+    "Backwards-compatibility: MAP with nullable value type - 2",
+    StructType(Seq(
+      StructField(
+        "f1",
+        MapType(IntegerType, StringType, valueContainsNull = true),
+        nullable = true))),
+    """message root {
+      |  optional group f1 (MAP_KEY_VALUE) {
+      |    repeated group map {
+      |      required int32 num;
+      |      optional binary str (UTF8);
+      |    }
+      |  }
+      |}
+    """.stripMargin)
+
+  testParquetToCatalyst(
+    "Backwards-compatibility: MAP with nullable value type - 3 - parquet-avro style",
+    StructType(Seq(
+      StructField(
+        "f1",
+        MapType(IntegerType, StringType, valueContainsNull = true),
+        nullable = true))),
+    """message root {
+      |  optional group f1 (MAP) {
+      |    repeated group map (MAP_KEY_VALUE) {
+      |      required int32 key;
+      |      optional binary value (UTF8);
+      |    }
+      |  }
+      |}
+    """.stripMargin)
+
+  // ====================================================
+  // Tests for converting Catalyst MapType to Parquet Map
+  // ====================================================
+
+  testCatalystToParquet(
+    "Backwards-compatibility: MAP with non-nullable value type - 1 - standard",
+    StructType(Seq(
+      StructField(
+        "f1",
+        MapType(IntegerType, StringType, valueContainsNull = false),
+        nullable = true))),
+    """message root {
+      |  optional group f1 (MAP) {
+      |    repeated group key_value {
+      |      required int32 key;
+      |      required binary value (UTF8);
+      |    }
+      |  }
+      |}
+    """.stripMargin,
+    followParquetFormatSpec = true)
+
+  testCatalystToParquet(
+    "Backwards-compatibility: MAP with non-nullable value type - 2 - prior to 1.4.x",
+    StructType(Seq(
+      StructField(
+        "f1",
+        MapType(IntegerType, StringType, valueContainsNull = false),
+        nullable = true))),
+    """message root {
+      |  optional group f1 (MAP) {
+      |    repeated group map (MAP_KEY_VALUE) {
+      |      required int32 key;
+      |      required binary value (UTF8);
+      |    }
+      |  }
+      |}
+    """.stripMargin)
+
+  testCatalystToParquet(
+    "Backwards-compatibility: MAP with nullable value type - 1 - standard",
+    StructType(Seq(
+      StructField(
+        "f1",
+        MapType(IntegerType, StringType, valueContainsNull = true),
+        nullable = true))),
+    """message root {
+      |  optional group f1 (MAP) {
+      |    repeated group key_value {
+      |      required int32 key;
+      |      optional binary value (UTF8);
+      |    }
+      |  }
+      |}
+    """.stripMargin,
+    followParquetFormatSpec = true)
+
+  testCatalystToParquet(
+    "Backwards-compatibility: MAP with nullable value type - 3 - prior to 1.4.x",
+    StructType(Seq(
+      StructField(
+        "f1",
+        MapType(IntegerType, StringType, valueContainsNull = true),
+        nullable = true))),
+    """message root {
+      |  optional group f1 (MAP) {
+      |    repeated group map (MAP_KEY_VALUE) {
+      |      required int32 key;
+      |      optional binary value (UTF8);
+      |    }
+      |  }
+      |}
+    """.stripMargin)
+
+  // =================================
+  // Tests for conversion for decimals
+  // =================================
+
+  testSchema(
+    "DECIMAL(1, 0) - standard",
+    StructType(Seq(StructField("f1", DecimalType(1, 0)))),
+    """message root {
+      |  optional int32 f1 (DECIMAL(1, 0));
+      |}
+    """.stripMargin,
+    followParquetFormatSpec = true)
+
+  testSchema(
+    "DECIMAL(8, 3) - standard",
+    StructType(Seq(StructField("f1", DecimalType(8, 3)))),
+    """message root {
+      |  optional int32 f1 (DECIMAL(8, 3));
+      |}
+    """.stripMargin,
+    followParquetFormatSpec = true)
+
+  testSchema(
+    "DECIMAL(9, 3) - standard",
+    StructType(Seq(StructField("f1", DecimalType(9, 3)))),
+    """message root {
+      |  optional int32 f1 (DECIMAL(9, 3));
+      |}
+    """.stripMargin,
+    followParquetFormatSpec = true)
+
+  testSchema(
+    "DECIMAL(18, 3) - standard",
+    StructType(Seq(StructField("f1", DecimalType(18, 3)))),
+    """message root {
+      |  optional int64 f1 (DECIMAL(18, 3));
+      |}
+    """.stripMargin,
+    followParquetFormatSpec = true)
+
+  testSchema(
+    "DECIMAL(19, 3) - standard",
+    StructType(Seq(StructField("f1", DecimalType(19, 3)))),
+    """message root {
+      |  optional fixed_len_byte_array(9) f1 (DECIMAL(19, 3));
+      |}
+    """.stripMargin,
+    followParquetFormatSpec = true)
+
+  testSchema(
+    "DECIMAL(1, 0) - prior to 1.4.x",
+    StructType(Seq(StructField("f1", DecimalType(1, 0)))),
+    """message root {
+      |  optional fixed_len_byte_array(1) f1 (DECIMAL(1, 0));
+      |}
+    """.stripMargin)
+
+  testSchema(
+    "DECIMAL(8, 3) - prior to 1.4.x",
+    StructType(Seq(StructField("f1", DecimalType(8, 3)))),
+    """message root {
+      |  optional fixed_len_byte_array(4) f1 (DECIMAL(8, 3));
+      |}
+    """.stripMargin)
+
+  testSchema(
+    "DECIMAL(9, 3) - prior to 1.4.x",
+    StructType(Seq(StructField("f1", DecimalType(9, 3)))),
+    """message root {
+      |  optional fixed_len_byte_array(5) f1 (DECIMAL(9, 3));
+      |}
+    """.stripMargin)
+
+  testSchema(
+    "DECIMAL(18, 3) - prior to 1.4.x",
+    StructType(Seq(StructField("f1", DecimalType(18, 3)))),
+    """message root {
+      |  optional fixed_len_byte_array(8) f1 (DECIMAL(18, 3));
+      |}
+    """.stripMargin)
 }
