@@ -20,7 +20,7 @@ package org.apache.spark.sql.optimizer
 import org.apache.spark.sql.catalyst.analysis.EliminateSubQueries
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.dsl.expressions._
-import org.apache.spark.sql.catalyst.expressions.AtLeastNNulls
+import org.apache.spark.sql.catalyst.expressions.{Not, AtLeastNNulls}
 import org.apache.spark.sql.catalyst.optimizer._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LocalRelation, LogicalPlan}
@@ -80,6 +80,27 @@ class FilterNullsInJoinKeySuite extends PlanTest {
         .select('a, 'f, 'd, 'h)
 
     comparePlans(optimized, Optimize.execute(correctAnswer.analyze))
+  }
+
+  test("make sure we do not keep adding filters") {
+    val thirdRelation = LocalRelation('i.int, 'j.int, 'k.int, 'l.int)
+    val joinedPlan =
+      leftRelation
+        .join(rightRelation, Inner, Some('a === 'e))
+        .join(thirdRelation, Inner, Some('b === 'i && 'a === 'j))
+
+    val optimized = Optimize.execute(joinedPlan.analyze)
+    val conditions = optimized.collect {
+      case Filter(condition @ Not(AtLeastNNulls(1, exprs)), _) => exprs
+    }
+
+    // Make sure that we have three Not(AtLeastNNulls(1, exprs)) for those three tables.
+    assert(conditions.length === 3)
+
+    // Make sure attribtues are indded a, b, e, i, and j.
+    assert(
+      conditions.flatMap(exprs => exprs).toSet ===
+        joinedPlan.select('a, 'b, 'e, 'i, 'j).analyze.output.toSet)
   }
 
   test("inner join (partially optimized)") {
