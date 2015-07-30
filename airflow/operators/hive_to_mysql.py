@@ -27,7 +27,7 @@ class HiveToMySqlTransfer(BaseOperator):
     :type mysql_preoperator: str
     """
 
-    template_fields = ('sql', 'mysql_table')
+    template_fields = ('sql', 'mysql_table', 'mysql_preoperator')
     template_ext = ('.sql',)
     ui_color = '#a0e08c'
 
