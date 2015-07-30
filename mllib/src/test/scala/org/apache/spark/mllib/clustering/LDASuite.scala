@@ -83,21 +83,15 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(model.topicsMatrix === localModel.topicsMatrix)
 
     // Check: topic summaries
-    //  The odd decimal formatting and sorting is a hack to do a robust comparison.
-    val roundedTopicSummary = model.describeTopics().map { case (terms, termWeights) =>
-      // cut values to 3 digits after the decimal place
-      terms.zip(termWeights).map { case (term, weight) =>
-        ("%.3f".format(weight).toDouble, term.toInt)
-      }
-    }.sortBy(_.mkString(""))
-    val roundedLocalTopicSummary = localModel.describeTopics().map { case (terms, termWeights) =>
-      // cut values to 3 digits after the decimal place
-      terms.zip(termWeights).map { case (term, weight) =>
-        ("%.3f".format(weight).toDouble, term.toInt)
-      }
-    }.sortBy(_.mkString(""))
-    roundedTopicSummary.zip(roundedLocalTopicSummary).foreach { case (t1, t2) =>
-      assert(t1 === t2)
+    val topicSummary = model.describeTopics().map { case (terms, termWeights) =>
+      Vectors.sparse(tinyVocabSize, terms, termWeights)
+    }.sortBy(_.toString)
+    val localTopicSummary = localModel.describeTopics().map { case (terms, termWeights) =>
+      Vectors.sparse(tinyVocabSize, terms, termWeights)
+    }.sortBy(_.toString)
+    topicSummary.zip(localTopicSummary).foreach { case (topics, topicsLocal) =>
+      println(topics, topicsLocal)
+      assert(topics ~== topicsLocal absTol 0.01)
     }
 
     // Check: per-doc topic distributions
