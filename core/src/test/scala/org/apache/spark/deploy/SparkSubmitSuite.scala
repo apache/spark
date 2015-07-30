@@ -19,6 +19,8 @@ package org.apache.spark.deploy
 
 import java.io._
 
+import org.apache.spark.api.r.RUtils
+
 import scala.collection.mutable.ArrayBuffer
 
 import com.google.common.base.Charsets.UTF_8
@@ -363,6 +365,7 @@ class SparkSubmitSuite
   }
 
   test("correctly builds R packages included in a jar with --packages") {
+    assume(RUtils.isRInstalled, "R isn't installed on this machine.")
     val main = MavenCoordinate("my.great.lib", "mylib", "0.1")
     val sparkHome = sys.props.getOrElse("spark.test.home", fail("spark.test.home is not set!"))
     val rScriptDir =

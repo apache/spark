@@ -23,6 +23,7 @@ import java.util.jar.Attributes.Name
 import java.util.jar.{JarFile, Manifest}
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.api.r.RUtils
 import org.apache.spark.deploy.SparkSubmitUtils.MavenCoordinate
 import org.scalatest.BeforeAndAfterEach
 
@@ -71,6 +72,7 @@ class RPackageUtilsSuite extends SparkFunSuite with BeforeAndAfterEach {
   }
 
   test("build an R package from a jar end to end") {
+    assume(RUtils.isRInstalled, "R isn't installed on this machine.")
     val deps = Seq(dep1, dep2).mkString(",")
     IvyTestUtils.withRepository(main, Some(deps), None, withR = true) { repo =>
       val jars = Seq(main, dep1, dep2).map { c =>
@@ -87,6 +89,7 @@ class RPackageUtilsSuite extends SparkFunSuite with BeforeAndAfterEach {
   }
 
   test("jars that don't exist are skipped and print warning") {
+    assume(RUtils.isRInstalled, "R isn't installed on this machine.")
     val deps = Seq(dep1, dep2).mkString(",")
     IvyTestUtils.withRepository(main, Some(deps), None, withR = true) { repo =>
       val jars = Seq(main, dep1, dep2).map { c =>
@@ -102,6 +105,7 @@ class RPackageUtilsSuite extends SparkFunSuite with BeforeAndAfterEach {
   }
 
   test("faulty R package shows documentation") {
+    assume(RUtils.isRInstalled, "R isn't installed on this machine.")
     IvyTestUtils.withRepository(main, None, None) { repo =>
       val manifest = new Manifest
       val attr = manifest.getMainAttributes
@@ -109,7 +113,7 @@ class RPackageUtilsSuite extends SparkFunSuite with BeforeAndAfterEach {
       attr.put(new Name("Spark-HasRPackage"), "true")
       val jar = IvyTestUtils.packJar(new File(new URI(repo)), dep1, Nil,
         useIvyLayout = false, withR = false, Some(manifest))
-      RPackageUtils.checkAndBuildRPackage(jar.getAbsolutePath, new BufferPrintStream, 
+      RPackageUtils.checkAndBuildRPackage(jar.getAbsolutePath, new BufferPrintStream,
         verbose = true)
       val output = lineBuffer.mkString("\n")
       assert(output.contains(RPackageUtils.RJarDoc))
