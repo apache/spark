@@ -187,7 +187,7 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
       s"Fractions must be in [0, 1], but got $fractions.")
     import org.apache.spark.sql.functions.{rand, udf}
     val c = Column(col)
-    val r = rand(seed).as("rand_" + ju.UUID.randomUUID().toString.take(8))
+    val r = rand(seed)
     val f = udf { (stratum: Any, x: Double) =>
       x < fractions.getOrElse(stratum.asInstanceOf[T], 0.0)
     }
