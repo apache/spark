@@ -228,24 +228,6 @@ class DateFunctionsSuite extends QueryTest {
       Seq(Row(Date.valueOf("2015-07-30")), Row(Date.valueOf("2015-07-30"))))
   }
 
-  test("function current_date") {
-    val df = Seq((1, 2), (3, 1)).toDF("a", "b")
-    val d0 = DateTimeUtils.millisToDays(System.currentTimeMillis())
-    val d1 = DateTimeUtils.fromJavaDate(df.select(current_date()).collect().head.getDate(0))
-    val d2 = DateTimeUtils.fromJavaDate(
-      ctx.sql("""SELECT CURRENT_DATE()""").collect().head.getDate(0))
-    val d3 = DateTimeUtils.millisToDays(System.currentTimeMillis())
-    assert(d0 <= d1 && d1 <= d2 && d2 <= d3 && d3 - d0 <= 1)
-  }
-
-  test("function current_timestamp") {
-    val df = Seq((1, 2), (3, 1)).toDF("a", "b")
-    checkAnswer(df.select(countDistinct(current_timestamp())), Row(1))
-    // TODO SPARK-9196: Execution in one query should return the same value
-    assert(math.abs(ctx.sql("""SELECT CURRENT_TIMESTAMP()""").collect().head.getTimestamp(
-      0).getTime - System.currentTimeMillis()) < 5000)
-  }
-
   test("function to_date") {
     val d1 = Date.valueOf("2015-07-22")
     val d2 = Date.valueOf("2015-07-01")
