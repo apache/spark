@@ -50,11 +50,14 @@ class HiveToMySqlTransfer(BaseOperator):
     def execute(self, context):
         hive = HiveServer2Hook(hiveserver2_conn_id=self.hiveserver2_conn_id)
         logging.info("Extracting data from Hive")
+        logging.info(self.sql)
         results = hive.get_records(self.sql)
 
         mysql = MySqlHook(mysql_conn_id=self.mysql_conn_id)
         if self.mysql_preoperator:
             logging.info("Running MySQL preoperator")
+            logging.info(self.mysql_preoperator)
             mysql.run(self.mysql_preoperator)
+
         logging.info("Inserting rows into MySQL")
         mysql.insert_rows(table=self.mysql_table, rows=results)
