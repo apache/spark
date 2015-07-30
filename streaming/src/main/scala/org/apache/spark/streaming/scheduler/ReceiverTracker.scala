@@ -289,8 +289,10 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
   }
 
   /** Update a receiver's maximum ingestion rate */
-  def sendRateUpdate(streamUID: Int, newRate: Long): Unit = {
-    endpoint.send(UpdateReceiverRateLimit(streamUID, newRate))
+  def sendRateUpdate(streamUID: Int, newRate: Long): Unit = synchronized {
+    if (isTrackerStarted) {
+      endpoint.send(UpdateReceiverRateLimit(streamUID, newRate))
+    }
   }
 
   /** Add new blocks for the given stream */
