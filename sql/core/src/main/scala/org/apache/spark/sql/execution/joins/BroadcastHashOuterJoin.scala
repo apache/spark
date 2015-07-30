@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.plans.physical.{Distribution, UnspecifiedDi
 import org.apache.spark.sql.catalyst.plans.{JoinType, LeftOuter, RightOuter}
 import org.apache.spark.sql.execution.{BinaryNode, SparkPlan}
 import org.apache.spark.util.ThreadUtils
+import org.apache.spark.{InternalAccumulator, TaskContext}
 
 /**
  * :: DeveloperApi ::
@@ -72,6 +73,14 @@ case class BroadcastHashOuterJoin(
       val joinedRow = new JoinedRow()
       val hashTable = broadcastRelation.value
       val keyGenerator = streamedKeyGenerator
+
+      // Track memory used in unsafe hashed relations
+      hashTable match {
+        case unsafe: UnsafeHashedRelation =>
+          TaskContext.get().internalMetricsToAccumulators(
+            InternalAccumulator.PEAK_EXECUTION_MEMORY).add(unsafe.getUnsafeSize)
+        case _ =>
+      }
 
       joinType match {
         case LeftOuter =>
