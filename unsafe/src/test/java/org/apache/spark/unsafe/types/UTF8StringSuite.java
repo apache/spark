@@ -64,7 +64,18 @@ public class UTF8StringSuite {
   }
 
   @Test
+  public void prefix() {
+    assertTrue(fromString("a").getPrefix() - fromString("b").getPrefix() < 0);
+    assertTrue(fromString("ab").getPrefix() - fromString("b").getPrefix() < 0);
+    assertTrue(
+      fromString("abbbbbbbbbbbasdf").getPrefix() - fromString("bbbbbbbbbbbbasdf").getPrefix() < 0);
+    assertTrue(fromString("").getPrefix() - fromString("a").getPrefix() < 0);
+    assertTrue(fromString("你好").getPrefix() - fromString("世界").getPrefix() > 0);
+  }
+
+  @Test
   public void compareTo() {
+    assertTrue(fromString("").compareTo(fromString("a")) < 0);
     assertTrue(fromString("abc").compareTo(fromString("ABC")) > 0);
     assertTrue(fromString("abc0").compareTo(fromString("abc")) > 0);
     assertTrue(fromString("abcabcabc").compareTo(fromString("abcabcabc")) == 0);
