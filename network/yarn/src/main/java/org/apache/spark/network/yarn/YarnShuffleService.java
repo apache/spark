@@ -17,12 +17,13 @@
 
 package org.apache.spark.network.yarn;
 
+import java.io.File;
+import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.List;
 
 import com.google.common.collect.Lists;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.yarn.api.records.ApplicationId;
 import org.apache.hadoop.yarn.api.records.ContainerId;
 import org.apache.hadoop.yarn.server.api.AuxiliaryService;
 import org.apache.hadoop.yarn.server.api.ApplicationInitializationContext;
@@ -35,7 +36,6 @@ import org.slf4j.LoggerFactory;
 import org.apache.spark.network.TransportContext;
 import org.apache.spark.network.sasl.SaslServerBootstrap;
 import org.apache.spark.network.sasl.ShuffleSecretManager;
-import org.apache.spark.network.server.RpcHandler;
 import org.apache.spark.network.server.TransportServer;
 import org.apache.spark.network.server.TransportServerBootstrap;
 import org.apache.spark.network.shuffle.ExternalShuffleBlockHandler;
@@ -81,6 +81,8 @@ public class YarnShuffleService extends AuxiliaryService {
   // Handles registering executors and opening shuffle blocks
   private ExternalShuffleBlockHandler blockHandler;
 
+  private File registeredExecutorFile;
+
   public YarnShuffleService() {
     super("spark_shuffle");
     logger.info("Initializing YARN shuffle service for Spark");
@@ -100,11 +102,19 @@ public class YarnShuffleService extends AuxiliaryService {
    */
   @Override
   protected void serviceInit(Configuration conf) {
+
+    registeredExecutorFile =
+      findRegisteredExecutorFile(conf.get("yarn.nodemanager.local-dirs").split(","));
+
     TransportConf transportConf = new TransportConf(new HadoopConfigProvider(conf));
     // If authentication is enabled, set up the shuffle server to use a
     // special RPC handler that filters out unauthenticated fetch requests
     boolean authEnabled = conf.getBoolean(SPARK_AUTHENTICATE_KEY, DEFAULT_SPARK_AUTHENTICATE);
-    blockHandler = new ExternalShuffleBlockHandler(transportConf);
+    try {
+      blockHandler = new ExternalShuffleBlockHandler(transportConf, registeredExecutorFile);
+    } catch (Exception e) {
+      logger.error("Failed to initial external shuffle service", e);
+    }
 
     List<TransportServerBootstrap> bootstraps = Lists.newArrayList();
     if (authEnabled) {
@@ -118,7 +128,8 @@ public class YarnShuffleService extends AuxiliaryService {
     shuffleServer = transportContext.createServer(port, bootstraps);
     String authEnabledString = authEnabled ? "enabled" : "not enabled";
     logger.info("Started YARN shuffle service for Spark on port {}. " +
-      "Authentication is {}.", port, authEnabledString);
+      "Authentication is {}.  Registered executor file is {}", port, authEnabledString,
+      registeredExecutorFile);
   }
 
   @Override
@@ -159,6 +170,16 @@ public class YarnShuffleService extends AuxiliaryService {
   public void stopContainer(ContainerTerminationContext context) {
     ContainerId containerId = context.getContainerId();
     logger.info("Stopping container {}", containerId);
+  }
+
+  private File findRegisteredExecutorFile(String[] localDirs) {
+    for (String dir: localDirs) {
+      File f = new File(dir, "registeredExecutors.bin");
+      if (f.exists()) {
+        return f;
+      }
+    }
+    return new File(localDirs[0], "registeredExecutors.bin");
   }
 
   /**

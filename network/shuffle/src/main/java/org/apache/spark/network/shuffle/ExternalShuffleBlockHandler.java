@@ -17,6 +17,8 @@
 
 package org.apache.spark.network.shuffle;
 
+import java.io.File;
+import java.io.IOException;
 import java.util.List;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -49,8 +51,10 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
   private final ExternalShuffleBlockResolver blockManager;
   private final OneForOneStreamManager streamManager;
 
-  public ExternalShuffleBlockHandler(TransportConf conf) {
-    this(new OneForOneStreamManager(), new ExternalShuffleBlockResolver(conf));
+  public ExternalShuffleBlockHandler(TransportConf conf, File registeredExecutorFile)
+      throws IOException, ClassNotFoundException {
+    this(new OneForOneStreamManager(),
+      new ExternalShuffleBlockResolver(conf, registeredExecutorFile));
   }
 
   /** Enables mocking out the StreamManager and BlockManager. */

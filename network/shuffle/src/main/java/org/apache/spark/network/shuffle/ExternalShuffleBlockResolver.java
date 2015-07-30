@@ -17,10 +17,7 @@
 
 package org.apache.spark.network.shuffle;
 
-import java.io.DataInputStream;
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.IOException;
+import java.io.*;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.concurrent.ConcurrentMap;
@@ -60,18 +57,26 @@ public class ExternalShuffleBlockResolver {
 
   private final TransportConf conf;
 
-  public ExternalShuffleBlockResolver(TransportConf conf) {
-    this(conf, Executors.newSingleThreadExecutor(
+  private final File registeredExecutorFile;
+
+  public ExternalShuffleBlockResolver(TransportConf conf, File registeredExecutorFile)
+      throws IOException, ClassNotFoundException {
+    this(conf, registeredExecutorFile, Executors.newSingleThreadExecutor(
         // Add `spark` prefix because it will run in NM in Yarn mode.
         NettyUtils.createThreadFactory("spark-shuffle-directory-cleaner")));
   }
 
   // Allows tests to have more control over when directories are cleaned up.
   @VisibleForTesting
-  ExternalShuffleBlockResolver(TransportConf conf, Executor directoryCleaner) {
+  ExternalShuffleBlockResolver(
+      TransportConf conf,
+      File registeredExecutorFile,
+      Executor directoryCleaner) throws IOException, ClassNotFoundException {
     this.conf = conf;
+    this.registeredExecutorFile = registeredExecutorFile;
     this.executors = Maps.newConcurrentMap();
     this.directoryCleaner = directoryCleaner;
+    reloadRegisteredExecutors();
   }
 
   /** Registers a new Executor with all the configuration we need to find its shuffle files. */
@@ -81,7 +86,14 @@ public class ExternalShuffleBlockResolver {
       ExecutorShuffleInfo executorInfo) {
     AppExecId fullId = new AppExecId(appId, execId);
     logger.info("Registered executor {} with {}", fullId, executorInfo);
-    executors.put(fullId, executorInfo);
+    synchronized (executors) {
+      executors.put(fullId, executorInfo);
+      try {
+        saveRegisteredExecutors();
+      } catch (Exception e) {
+        logger.error("Error saving registered executors", e);
+      }
+    }
   }
 
   /**
@@ -221,7 +233,7 @@ public class ExternalShuffleBlockResolver {
   }
 
   /** Simply encodes an executor's full ID, which is appId + execId. */
-  private static class AppExecId {
+  private static class AppExecId implements Serializable {
     final String appId;
     final String execId;
 
@@ -250,6 +262,39 @@ public class ExternalShuffleBlockResolver {
         .add("appId", appId)
         .add("execId", execId)
         .toString();
+    }
+  }
+
+  private void reloadRegisteredExecutors() throws IOException, ClassNotFoundException {
+    if (registeredExecutorFile != null && registeredExecutorFile.exists()) {
+      ObjectInputStream in = new ObjectInputStream(new FileInputStream(registeredExecutorFile));
+      int nExecutors = in.readInt();
+      logger.info("Reloading executors from {}", registeredExecutorFile);
+      for (int i = 0; i < nExecutors; i++) {
+        AppExecId appExecId = (AppExecId) in.readObject();
+        ExecutorShuffleInfo shuffleInfo = (ExecutorShuffleInfo) in.readObject();
+        logger.info("Reregistering executor {} with {}", appExecId, shuffleInfo);
+        executors.put(appExecId, shuffleInfo);
+      }
+      in.close();
+    } else {
+      logger.info("No executor info to reload");
+    }
+  }
+
+  private void saveRegisteredExecutors() throws IOException {
+    if (registeredExecutorFile != null) {
+      logger.info("Saving registered executors to {}", registeredExecutorFile);
+      ObjectOutputStream out = new ObjectOutputStream(new FileOutputStream(registeredExecutorFile));
+      // synchronize so we can write out the size :(
+      synchronized (executors) {
+        out.writeInt(executors.size());
+        for (Map.Entry<AppExecId, ExecutorShuffleInfo> e: executors.entrySet()) {
+          out.writeObject(e.getKey());
+          out.writeObject(e.getValue());
+        }
+      }
+      out.close();
     }
   }
 }
