@@ -39,7 +39,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
   /** Returns true iff we support this data type. */
   def canSupport(dataType: DataType): Boolean = dataType match {
     case t: AtomicType if !t.isInstanceOf[DecimalType] => true
-    case _: IntervalType => true
+    case _: CalendarIntervalType => true
     case t: StructType => t.toSeq.forall(field => canSupport(field.dataType))
     case NullType => true
     case _ => false
@@ -75,7 +75,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
           s" + (${exprs(i).isNull} ? 0 : $StringWriter.getSize(${exprs(i).primitive}))"
         case BinaryType =>
           s" + (${exprs(i).isNull} ? 0 : $BinaryWriter.getSize(${exprs(i).primitive}))"
-        case IntervalType =>
+        case CalendarIntervalType =>
           s" + (${exprs(i).isNull} ? 0 : 16)"
         case _: StructType =>
           s" + (${exprs(i).isNull} ? 0 : $StructWriter.getSize(${exprs(i).primitive}))"
@@ -91,7 +91,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
           s"$cursor += $StringWriter.write($ret, $i, $cursor, ${exprs(i).primitive})"
         case BinaryType =>
           s"$cursor += $BinaryWriter.write($ret, $i, $cursor, ${exprs(i).primitive})"
-        case IntervalType =>
+        case CalendarIntervalType =>
           s"$cursor += $IntervalWriter.write($ret, $i, $cursor, ${exprs(i).primitive})"
         case t: StructType =>
           s"$cursor += $StructWriter.write($ret, $i, $cursor, ${exprs(i).primitive})"
@@ -153,14 +153,14 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
           val nestedStructEv = GeneratedExpressionCode(
             code = "",
             isNull = s"${input.primitive}.isNullAt($i)",
-            primitive = s"${ctx.getColumn(input.primitive, dt, i)}"
+            primitive = s"${ctx.getValue(input.primitive, dt, i.toString)}"
           )
           createCodeForStruct(ctx, nestedStructEv, st)
         case _ =>
           GeneratedExpressionCode(
             code = "",
             isNull = s"${input.primitive}.isNullAt($i)",
-            primitive = s"${ctx.getColumn(input.primitive, dt, i)}"
+            primitive = s"${ctx.getValue(input.primitive, dt, i.toString)}"
           )
         }
     }
@@ -173,7 +173,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
           s" + (${ev.isNull} ? 0 : $StringWriter.getSize(${ev.primitive}))"
         case BinaryType =>
           s" + (${ev.isNull} ? 0 : $BinaryWriter.getSize(${ev.primitive}))"
-        case IntervalType =>
+        case CalendarIntervalType =>
           s" + (${ev.isNull} ? 0 : 16)"
         case _: StructType =>
           s" + (${ev.isNull} ? 0 : $StructWriter.getSize(${ev.primitive}))"
@@ -189,7 +189,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
           s"$cursor += $StringWriter.write($primitive, $i, $cursor, ${exprs(i).primitive})"
         case BinaryType =>
           s"$cursor += $BinaryWriter.write($primitive, $i, $cursor, ${exprs(i).primitive})"
-        case IntervalType =>
+        case CalendarIntervalType =>
           s"$cursor += $IntervalWriter.write($primitive, $i, $cursor, ${exprs(i).primitive})"
         case t: StructType =>
           s"$cursor += $StructWriter.write($primitive, $i, $cursor, ${exprs(i).primitive})"
@@ -256,18 +256,18 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
     eval.code = createCode(ctx, eval, expressions)
 
     val code = s"""
-      private $exprType[] expressions;
-
-      public Object generate($exprType[] expr) {
-        this.expressions = expr;
-        return new SpecificProjection();
+      public Object generate($exprType[] exprs) {
+        return new SpecificProjection(exprs);
       }
 
       class SpecificProjection extends ${classOf[UnsafeProjection].getName} {
 
+        private $exprType[] expressions;
+
         ${declareMutableStates(ctx)}
 
-        public SpecificProjection() {
+        public SpecificProjection($exprType[] expressions) {
+          this.expressions = expressions;
           ${initMutableStates(ctx)}
         }
 
