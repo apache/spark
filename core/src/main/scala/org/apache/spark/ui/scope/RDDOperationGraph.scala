@@ -181,7 +181,9 @@ private[ui] object RDDOperationGraph extends Logging {
   }
 
   /** Return the dot representation of a subgraph in an RDDOperationGraph. */
-  private def makeDotSubgraph(cluster: RDDOperationCluster, indent: StringBuilder): String = {
+  private def makeDotSubgraph(
+    cluster: RDDOperationCluster,
+    indent: StringBuilder): StringBuilder = {
     val subgraph = new StringBuilder
     subgraph.append(indent).append(s"subgraph cluster${cluster.id} {\n")
     subgraph.append(indent).append(s"""  label="${cluster.name}";\n""")
@@ -192,6 +194,6 @@ private[ui] object RDDOperationGraph extends Logging {
       subgraph.append(makeDotSubgraph(cscope, indent.append("  ")))
     }
     subgraph.append(indent).append("}\n")
-    subgraph.toString()
+    subgraph
   }
 }
