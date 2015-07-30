@@ -71,7 +71,7 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     atomicTypes.foreach(dt => checkNullCast(dt, DateType))
 
-    checkNullCast(StringType, IntervalType)
+    checkNullCast(StringType, CalendarIntervalType)
     numericTypes.foreach(dt => checkNullCast(StringType, dt))
     numericTypes.foreach(dt => checkNullCast(BooleanType, dt))
     numericTypes.foreach(dt => checkNullCast(DateType, dt))
