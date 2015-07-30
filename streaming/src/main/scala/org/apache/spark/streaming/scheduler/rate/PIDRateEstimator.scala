@@ -20,7 +20,7 @@ package org.apache.spark.streaming.scheduler.rate
 /**
  * Implements a proportional-integral-derivative (PID) controller which acts on
  * the speed of ingestion of elements into Spark Streaming. A PID controller works
- * by calculating an '''error''' between a measured output and a desired setpoint. In the
+ * by calculating an '''error''' between a measured output and a desired value. In the
  * case of Spark Streaming the error is the difference between the measured processing
  * rate (number of elements/processing delay) and the previous rate.
  *
@@ -58,7 +58,7 @@ private[streaming] class PIDRateEstimator(
       elements: Long,
       processingDelay: Long, // in milliseconds
       schedulingDelay: Long // in milliseconds
-      ): Option[Double] = {
+    ): Option[Double] = {
 
     this.synchronized {
       if (time > latestTime && processingDelay > 0 && batchIntervalMillis > 0) {
@@ -67,13 +67,13 @@ private[streaming] class PIDRateEstimator(
         val delaySinceUpdate = (time - latestTime).toDouble / 1000
 
         // in elements/second
-        val processingSpeed = elements.toDouble / processingDelay * 1000
+        val processingRate = elements.toDouble / processingDelay * 1000
 
         // in elements/second
-        val error = latestRate - processingSpeed
+        val error = latestRate - processingRate
 
         // in elements/second
-        val sumError = schedulingDelay.toDouble * processingSpeed / batchIntervalMillis
+        val sumError = schedulingDelay.toDouble * processingRate / batchIntervalMillis
 
         // in elements/(second ^ 2)
         val dError = (error - latestError) / delaySinceUpdate
@@ -83,7 +83,7 @@ private[streaming] class PIDRateEstimator(
                                     derivative * dError).max(0.0)
         latestTime = time
         if (firstRun) {
-          latestRate = processingSpeed
+          latestRate = processingRate
           latestError = 0D
           firstRun = false
 
