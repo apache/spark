@@ -58,7 +58,7 @@ class NaiveBayesSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(nb.getLabelCol === "label")
     assert(nb.getFeaturesCol === "features")
     assert(nb.getPredictionCol === "prediction")
-    assert(nb.getLambda === 1.0)
+    assert(nb.getSmoothing === 1.0)
     assert(nb.getModelType === "multinomial")
   }
 
@@ -75,7 +75,7 @@ class NaiveBayesSuite extends SparkFunSuite with MLlibTestSparkContext {
 
     val testDataset = sqlContext.createDataFrame(generateNaiveBayesInput(
       piArray, thetaArray, nPoints, 42, "multinomial"))
-    val nb = new NaiveBayes().setLambda(1.0).setModelType("multinomial")
+    val nb = new NaiveBayes().setSmoothing(1.0).setModelType("multinomial")
     val model = nb.fit(testDataset)
 
     validateModelFit(pi, theta, model)
@@ -101,7 +101,7 @@ class NaiveBayesSuite extends SparkFunSuite with MLlibTestSparkContext {
 
     val testDataset = sqlContext.createDataFrame(generateNaiveBayesInput(
       piArray, thetaArray, nPoints, 45, "bernoulli"))
-    val nb = new NaiveBayes().setLambda(1.0).setModelType("bernoulli")
+    val nb = new NaiveBayes().setSmoothing(1.0).setModelType("bernoulli")
     val model = nb.fit(testDataset)
 
     validateModelFit(pi, theta, model)

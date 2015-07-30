@@ -584,11 +584,11 @@ class NaiveBayes(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol):
 
     >>> from pyspark.sql import Row
     >>> from pyspark.mllib.linalg import Vectors
-    >>> df = sc.parallelize([
+    >>> df = sqlContext.createDataFrame([
     ...     Row(label=0.0, features=Vectors.dense([0.0, 0.0])),
     ...     Row(label=0.0, features=Vectors.dense([0.0, 1.0])),
-    ...     Row(label=1.0, features=Vectors.dense([1.0, 0.0]))]).toDF()
-    >>> nb = NaiveBayes(lambda_=1.0, modelType="multinomial")
+    ...     Row(label=1.0, features=Vectors.dense([1.0, 0.0]))])
+    >>> nb = NaiveBayes(smoothing=1.0, modelType="multinomial")
     >>> model = nb.fit(df)
     >>> model.pi
     DenseVector([-0.51..., -0.91...])
@@ -603,34 +603,38 @@ class NaiveBayes(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol):
     """
 
     # a placeholder to make it appear in the generated doc
-    lambda_ = Param(Params._dummy(), "lambda_", "The smoothing parameter, should be >= 0.")
+    smoothing = Param(Params._dummy(), "smoothing", "The smoothing parameter, should be >= 0, " +
+                    "default is 1.0")
     modelType = Param(Params._dummy(), "modelType", "The model type which is a string " +
                       "(case-sensitive). Supported options: multinomial (default) and bernoulli.")
 
     @keyword_only
     def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
-                 lambda_=1.0, modelType="multinomial"):
+                 smoothing=1.0, modelType="multinomial"):
         """
         __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
-                 lambda_=1.0, modelType="multinomial")
+                 smoothing=1.0, modelType="multinomial")
         """
         super(NaiveBayes, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.classification.NaiveBayes", self.uid)
         #: param for the smoothing parameter.
-        self.lambda_ = Param(self, "lambda_", "")
+        self.smoothing = Param(self, "smoothing", "The smoothing parameter, should be >= 0, " +
+                             "default is 1.0")
         #: param for the model type.
-        self.modelType = Param(self, "modelType", "")
-        self._setDefault(lambda_=1.0, modelType="multinomial")
+        self.modelType = Param(self, "modelType", "The model type which is a string " +
+                               "(case-sensitive). Supported options: multinomial (default) " +
+                               "and bernoulli.")
+        self._setDefault(smoothing=1.0, modelType="multinomial")
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
 
     @keyword_only
     def setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction",
-                  lambda_=1.0, modelType="multinomial"):
+                  smoothing=1.0, modelType="multinomial"):
         """
         setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction",
-                  lambda_=1.0, modelType="multinomial")
+                  smoothing=1.0, modelType="multinomial")
         Sets params for Naive Bayes.
         """
         kwargs = self.setParams._input_kwargs
@@ -641,16 +645,16 @@ class NaiveBayes(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol):
 
     def setLambda(self, value):
         """
-        Sets the value of :py:attr:`lambda_`.
+        Sets the value of :py:attr:`smoothing`.
         """
-        self._paramMap[self.lambda_] = value
+        self._paramMap[self.smoothing] = value
         return self
 
     def getLambda(self):
         """
-        Gets the value of lambda_ or its default value.
+        Gets the value of smoothing or its default value.
         """
-        return self.getOrDefault(self.lambda_)
+        return self.getOrDefault(self.smoothing)
 
     def setModelType(self, value):
         """
