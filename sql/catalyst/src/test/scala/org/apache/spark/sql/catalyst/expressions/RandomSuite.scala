@@ -21,7 +21,6 @@ import org.scalatest.Matchers._
 
 import org.apache.spark.SparkFunSuite
 
-
 class RandomSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("random") {

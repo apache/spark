@@ -599,7 +599,7 @@ case class Cast(child: Expression, dataType: DataType)
           }
          """
     case BooleanType =>
-      (c, evPrim, evNull) => s"$evPrim = $c ? 1L : 0;"
+      (c, evPrim, evNull) => s"$evPrim = $c ? 1L : 0L;"
     case _: IntegralType =>
       (c, evPrim, evNull) => s"$evPrim = ${longToTimeStampCode(c)};"
     case DateType =>
@@ -665,7 +665,7 @@ case class Cast(child: Expression, dataType: DataType)
           }
         """
     case BooleanType =>
-      (c, evPrim, evNull) => s"$evPrim = $c ? 1 : 0;"
+      (c, evPrim, evNull) => s"$evPrim = $c ? (byte) 1 : (byte) 0;"
     case DateType =>
       (c, evPrim, evNull) => s"$evNull = true;"
     case TimestampType =>
@@ -687,7 +687,7 @@ case class Cast(child: Expression, dataType: DataType)
           }
         """
     case BooleanType =>
-      (c, evPrim, evNull) => s"$evPrim = $c ? 1 : 0;"
+      (c, evPrim, evNull) => s"$evPrim = $c ? (short) 1 : (short) 0;"
     case DateType =>
       (c, evPrim, evNull) => s"$evNull = true;"
     case TimestampType =>
@@ -731,7 +731,7 @@ case class Cast(child: Expression, dataType: DataType)
           }
         """
     case BooleanType =>
-      (c, evPrim, evNull) => s"$evPrim = $c ? 1 : 0;"
+      (c, evPrim, evNull) => s"$evPrim = $c ? 1L : 0L;"
     case DateType =>
       (c, evPrim, evNull) => s"$evNull = true;"
     case TimestampType =>
@@ -753,7 +753,7 @@ case class Cast(child: Expression, dataType: DataType)
           }
         """
     case BooleanType =>
-      (c, evPrim, evNull) => s"$evPrim = $c ? 1 : 0;"
+      (c, evPrim, evNull) => s"$evPrim = $c ? 1.0f : 0.0f;"
     case DateType =>
       (c, evPrim, evNull) => s"$evNull = true;"
     case TimestampType =>
@@ -775,7 +775,7 @@ case class Cast(child: Expression, dataType: DataType)
           }
         """
     case BooleanType =>
-      (c, evPrim, evNull) => s"$evPrim = $c ? 1 : 0;"
+      (c, evPrim, evNull) => s"$evPrim = $c ? 1.0d : 0.0d;"
     case DateType =>
       (c, evPrim, evNull) => s"$evNull = true;"
     case TimestampType =>
