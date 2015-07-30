@@ -34,6 +34,8 @@ private[sql] case class SparkPartitionID() extends LeafExpression with Nondeterm
 
   @transient private[this] var partitionId: Int = _
 
+  override val prettyName = "SPARK_PARTITION_ID"
+
   override protected def initInternal(): Unit = {
     partitionId = TaskContext.getPartitionId()
   }

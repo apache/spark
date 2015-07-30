@@ -17,9 +17,7 @@
 
 package org.apache.spark.util.collection.unsafe.sort;
 
-import com.google.common.base.Charsets;
-import com.google.common.primitives.Longs;
-import com.google.common.primitives.UnsignedBytes;
+import com.google.common.primitives.UnsignedLongs;
 
 import org.apache.spark.annotation.Private;
 import org.apache.spark.unsafe.types.UTF8String;
@@ -37,32 +35,11 @@ public class PrefixComparators {
   public static final class StringPrefixComparator extends PrefixComparator {
     @Override
     public int compare(long aPrefix, long bPrefix) {
-      // TODO: can done more efficiently
-      byte[] a = Longs.toByteArray(aPrefix);
-      byte[] b = Longs.toByteArray(bPrefix);
-      for (int i = 0; i < 8; i++) {
-        int c = UnsignedBytes.compare(a[i], b[i]);
-        if (c != 0) return c;
-      }
-      return 0;
-    }
-
-    public long computePrefix(byte[] bytes) {
-      if (bytes == null) {
-        return 0L;
-      } else {
-        byte[] padded = new byte[8];
-        System.arraycopy(bytes, 0, padded, 0, Math.min(bytes.length, 8));
-        return Longs.fromByteArray(padded);
-      }
-    }
-
-    public long computePrefix(String value) {
-      return value == null ? 0L : computePrefix(value.getBytes(Charsets.UTF_8));
+      return UnsignedLongs.compare(aPrefix, bPrefix);
     }
 
     public long computePrefix(UTF8String value) {
-      return value == null ? 0L : computePrefix(value.getBytes());
+      return value == null ? 0L : value.getPrefix();
     }
   }
 
