@@ -295,7 +295,10 @@ class LocalLDAModel private[clustering] (
   }
 
   /**
-   * Predicts the topic mixture distribution ("gamma") for a document.
+   * Predicts the topic mixture distribution ("gamma") for a document. Returns a vector of zeros for
+   * an empty document.
+   * @param documents documents to predict topic mixture distributions for
+   * @return topic mixture distributions for each document
    */
   // TODO: declare in LDAModel and override once implemented in DistributedLDAModel
   def topicDistributions(documents: RDD[(Long, Vector)]): RDD[(Long, Vector)] = {
@@ -307,13 +310,14 @@ class LocalLDAModel private[clustering] (
     val k = this.k
 
     documents.map { doc =>
+      if (doc._2.size == 0) (doc._1, Vectors.zeros(k))
       val (gamma, _) = OnlineLDAOptimizer.variationalTopicInference(
         doc._2,
         expElogbeta,
         topicConcentrationBrz,
         gammaShape,
         k)
-      (doc._1, Vectors.dense((gamma / sum(gamma)).toArray))
+      (doc._1, Vectors.dense(normalize(gamma, 1.0).toArray))
     }
   }
 
