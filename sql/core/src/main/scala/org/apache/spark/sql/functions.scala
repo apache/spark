@@ -2110,6 +2110,48 @@ object functions {
    */
   def weekofyear(columnName: String): Column = weekofyear(Column(columnName))
 
+  /**
+   * Converts the number of seconds from unix epoch (1970-01-01 00:00:00 UTC) to a string
+   * representing the timestamp of that moment in the current system time zone in the given
+   * format.
+   * @group datetime_funcs
+   * @since 1.5.0
+   */
+  def from_unixtime(ut: Column): Column = FromUnixTime(ut.expr, Literal("yyyy-MM-dd HH:mm:ss"))
+
+  /**
+   * Converts the number of seconds from unix epoch (1970-01-01 00:00:00 UTC) to a string
+   * representing the timestamp of that moment in the current system time zone in the given
+   * format.
+   * @group datetime_funcs
+   * @since 1.5.0
+   */
+  def from_unixtime(ut: Column, f: String): Column = FromUnixTime(ut.expr, Literal(f))
+
+  /**
+   * Gets current Unix timestamp in seconds.
+   * @group datetime_funcs
+   * @since 1.5.0
+   */
+  def unix_timestamp(): Column = UnixTimestamp(CurrentTimestamp(), Literal("yyyy-MM-dd HH:mm:ss"))
+
+  /**
+   * Converts time string in format yyyy-MM-dd HH:mm:ss to Unix timestamp (in seconds),
+   * using the default timezone and the default locale, return null if fail.
+   * @group datetime_funcs
+   * @since 1.5.0
+   */
+  def unix_timestamp(s: Column): Column = UnixTimestamp(s.expr, Literal("yyyy-MM-dd HH:mm:ss"))
+
+  /**
+   * Convert time string with given pattern
+   * (see [http://docs.oracle.com/javase/tutorial/i18n/format/simpleDateFormat.html])
+   * to Unix time stamp (in seconds), return null if fail.
+   * @group datetime_funcs
+   * @since 1.5.0
+   */
+  def unix_timestamp(s: Column, p: String): Column = UnixTimestamp(s.expr, Literal(p))
+
   //////////////////////////////////////////////////////////////////////////////////////////////
   // Collection functions
   //////////////////////////////////////////////////////////////////////////////////////////////
