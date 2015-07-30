@@ -142,8 +142,8 @@ final class EMLDAOptimizer extends LDAOptimizer {
     this.k = k
     this.vocabSize = docs.take(1).head._2.size
     this.checkpointInterval = lda.getCheckpointInterval
-    this.graphCheckpointer = new
-      PeriodicGraphCheckpointer[TopicCounts, TokenCount](graph, checkpointInterval)
+    this.graphCheckpointer = new PeriodicGraphCheckpointer[TopicCounts, TokenCount](
+      checkpointInterval, graph.vertices.sparkContext)
     this.globalTopicTotals = computeGlobalTopicTotals()
     this
   }
