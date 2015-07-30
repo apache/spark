@@ -114,8 +114,32 @@ case class ConcatWs(children: Seq[Expression])
         boolean ${ev.isNull} = ${ev.primitive} == null;
       """
     } else {
-      // Contains a mix of strings and array<string>s. Fall back to interpreted mode for now.
-      super.genCode(ctx, ev)
+      val list = ctx.freshName("list")
+      val array = ctx.freshName("array")
+      val sep = children.head.gen(ctx)
+      val argsCode = children.tail.map(x => {
+        val gen = x.gen(ctx)
+        if (x.dataType == StringType) {
+          s"""
+            ${gen.code}
+            $list.add(${gen.primitive});
+            """
+        } else {
+          s"""
+            ${gen.code}
+            $list.addAll(scala.collection.JavaConversions.asJavaCollection(${gen.primitive}));
+           """
+        }
+      }).foldLeft("")((a, b) => a + "\n" + b)
+      s"""
+         ${sep.code}
+         java.util.ArrayList<UTF8String> $list = new java.util.ArrayList<UTF8String>();
+         $argsCode
+         UTF8String[] $array = new UTF8String[$list.size()];
+         $list.toArray($array);
+         UTF8String ${ev.primitive} = UTF8String.concatWs(${sep.primitive}, $array);
+         boolean ${ev.isNull} = ${ev.primitive} == null;
+       """
     }
   }
 }
