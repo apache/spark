@@ -407,19 +407,19 @@ case class StringLocate(substr: Expression, str: Expression, start: Expression)
     s"""
       int ${ev.primitive} = 0;
       boolean ${ev.isNull} = false;
-      ${startGen.code};
+      ${startGen.code}
       if (!${startGen.isNull}) {
-        ${substrGen.code};
+        ${substrGen.code}
         if (!${substrGen.isNull}) {
-          ${strGen.code};
+          ${strGen.code}
           if (!${strGen.isNull}) {
             ${ev.primitive} = ${strGen.primitive}.indexOf(${substrGen.primitive},
               ${startGen.primitive}) + 1;
           } else {
-            ${ev.isNull} = true;;
+            ${ev.isNull} = true;
           }
         } else {
-          ${ev.isNull} = true;;
+          ${ev.isNull} = true;
         }
       }
      """
