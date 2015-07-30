@@ -21,7 +21,6 @@ import java.security.{MessageDigest, NoSuchAlgorithmException}
 import java.util.zip.CRC32
 
 import org.apache.commons.codec.digest.DigestUtils
-import org.apache.spark.sql.catalyst.InternalRow
 
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.types._
@@ -159,24 +158,5 @@ case class Crc32(child: Expression) extends UnaryExpression with ImplicitCastInp
         ${ev.primitive} = checksum.getValue();
       """
     })
-  }
-}
-
-/** An expression that returns the hashCode of the input row. */
-case object RowHashCode extends LeafExpression {
-  override def dataType: DataType = IntegerType
-
-  /** hashCode will never be null. */
-  override def nullable: Boolean = false
-
-  override def eval(input: InternalRow): Any = {
-    input.hashCode
-  }
-
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    s"""
-        boolean ${ev.isNull} = false;
-        ${ctx.javaType(dataType)} ${ev.primitive} = i.hashCode();
-    """
   }
 }
