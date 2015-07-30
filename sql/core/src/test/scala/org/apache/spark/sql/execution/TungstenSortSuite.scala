@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.test.TestSQLContext
 import org.apache.spark.sql.types._
 
-class UnsafeExternalSortSuite extends SparkPlanTest with BeforeAndAfterAll {
+class TungstenSortSuite extends SparkPlanTest with BeforeAndAfterAll {
 
   override def beforeAll(): Unit = {
     TestSQLContext.conf.setConf(SQLConf.CODEGEN_ENABLED, true)
