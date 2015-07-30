@@ -296,7 +296,7 @@ case class UnixTimestamp(timeExp: Expression, format: Expression)
 
   override def dataType: DataType = LongType
 
-  lazy val constFormat: UTF8String = right.eval().asInstanceOf[UTF8String]
+  private lazy val constFormat: UTF8String = right.eval().asInstanceOf[UTF8String]
 
   override def eval(input: InternalRow): Any = {
     val t = left.eval(input)
@@ -413,7 +413,7 @@ case class FromUnixTime(sec: Expression, format: Expression)
 
   override def inputTypes: Seq[AbstractDataType] = Seq(LongType, StringType)
 
-  lazy val constFormat: UTF8String = right.eval().asInstanceOf[UTF8String]
+  private lazy val constFormat: UTF8String = right.eval().asInstanceOf[UTF8String]
 
   override def eval(input: InternalRow): Any = {
     val time = left.eval(input)
@@ -457,7 +457,7 @@ case class FromUnixTime(sec: Expression, format: Expression)
           if (!${ev.isNull}) {
             try {
               ${ev.primitive} = UTF8String.fromString(new $sdf("${constFormat.toString}").format(
-                new java.sql.Timestamp(${t.primitive} * 1000L)));
+                new java.util.Date(${t.primitive} * 1000L)));
             } catch (java.lang.Throwable e) {
               ${ev.isNull} = true;
             }
