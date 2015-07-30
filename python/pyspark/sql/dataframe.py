@@ -461,9 +461,10 @@ class DataFrame(object):
         +---+-----+
         |key|count|
         +---+-----+
-        |  0|    5|
+        |  0|    3|
         |  1|    8|
         +---+-----+
+
         """
         if not isinstance(col, str):
             raise ValueError("col must be a string, but got %r" % type(col))
