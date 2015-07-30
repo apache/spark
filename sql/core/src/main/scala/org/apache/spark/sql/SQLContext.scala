@@ -21,6 +21,8 @@ import java.beans.Introspector
 import java.util.Properties
 import java.util.concurrent.atomic.AtomicReference
 
+import org.apache.spark.sql.execution.aggregate.AggregateUtils
+
 import scala.collection.JavaConversions._
 import scala.collection.immutable
 import scala.language.implicitConversions
@@ -852,6 +854,9 @@ class SQLContext(@transient val sparkContext: SparkContext)
   }
 
   protected[sql] class SparkPlanner extends SparkStrategies {
+    @transient
+    val aggregateUtils: AggregateUtils = new AggregateUtils()
+
     val sparkContext: SparkContext = self.sparkContext
 
     val sqlContext: SQLContext = self

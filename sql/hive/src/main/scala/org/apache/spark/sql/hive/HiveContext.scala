@@ -21,6 +21,9 @@ import java.io.File
 import java.net.{URL, URLClassLoader}
 import java.sql.Timestamp
 
+import org.apache.spark.sql.catalyst.expressions.{aggregate, Expression}
+import org.apache.spark.sql.execution.aggregate.AggregateUtils
+
 import scala.collection.JavaConversions._
 import scala.collection.mutable.HashMap
 import scala.language.implicitConversions
@@ -437,6 +440,23 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) with Logging {
 
   @transient
   private val hivePlanner = new SparkPlanner with HiveStrategies {
+    @transient
+    override val aggregateUtils: AggregateUtils = new AggregateUtils() {
+      protected[sql] override def substitute(expr: Expression): Expression = expr match {
+        case HiveGenericUDAF(wrapper, children) =>
+          aggregate.AggregateExpression2(
+            aggregateFunction = HiveUdaf2(wrapper, children, false),
+            mode = aggregate.Complete,
+            isDistinct = false) // TODO currently we don't support distinct for Hive UDAF
+        case HiveUDAF(wrapper, children) =>
+          aggregate.AggregateExpression2(
+            aggregateFunction = HiveUdaf2(wrapper, children, true),
+            mode = aggregate.Complete,
+            isDistinct = false) // TODO currently we don't support distinct for Hive UDAF
+        case other => super.substitute(other)
+      }
+    }
+
     val hiveContext = self
 
     override def strategies: Seq[Strategy] = experimental.extraStrategies ++ Seq(
