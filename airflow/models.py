@@ -14,7 +14,7 @@ import sys
 
 from sqlalchemy import (
     Column, Integer, String, DateTime, Text, Boolean, ForeignKey, PickleType,
-    Index,)
+    Index, BigInteger)
 from sqlalchemy import case, func, or_
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.dialects.mysql import LONGTEXT
@@ -359,7 +359,7 @@ class DagPickle(Base):
     id = Column(Integer, primary_key=True)
     pickle = Column(PickleType(pickler=dill))
     created_dttm = Column(DateTime, default=func.now())
-    pickle_hash = Column(Integer)
+    pickle_hash = Column(BigInteger)
 
     __tablename__ = "dag_pickle"
 
