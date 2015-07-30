@@ -73,7 +73,7 @@ private[r] class RBackendHandler(server: RBackend)
           }
         case _ =>
           dos.writeInt(-1)
-          writeString(dos, "Unknown error")
+          writeString(dos, s"Error: unknown method $methodName")
       }
     } else {
       handleMethodCall(isStatic, objId, methodName, numArgs, dis, dos)
@@ -153,7 +153,7 @@ private[r] class RBackendHandler(server: RBackend)
         writeInt(dos, -1)
         // Writing the error message of the cause for the exception. This will be returned
         // to user in the R process.
-        writeString(dos, e.getCause.getMessage)
+        writeString(dos, Utils.exceptionString(e.getCause))
     }
   }
 
