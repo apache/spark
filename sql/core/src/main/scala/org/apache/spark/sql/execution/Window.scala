@@ -885,21 +885,9 @@ private[execution] final class AggregateProcessor(
 
   /** Bulk update the given buffer. */
   def update(buffer: MutableRow, input: CompactBuffer[InternalRow], begin: Int, end: Int): Unit = {
-    updateProjection.target(buffer)
     var i = begin
     while (i < end) {
-      val row = input(i)
-      updateProjection(join(buffer, row))
-      var j = 0
-      while (j < aggregates2Size) {
-        aggregates2(j).update(buffer, row)
-        j += 1
-      }
-      j = 0
-      while (j < aggregates1Size) {
-        buffer.getAs[AggregateFunction1](aggregates1BufferOffsets(j), null).update(row)
-        j += 1
-      }
+      update(buffer, input(i))
       i += 1
     }
   }
