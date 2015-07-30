@@ -20,7 +20,7 @@ package org.apache.spark.ui.scope
 import scala.collection.mutable
 import scala.collection.mutable.{StringBuilder, ListBuffer}
 
-import org.apache.spark.Logging
+import org.apache.spark.{SparkException, Logging}
 import org.apache.spark.scheduler.StageInfo
 import org.apache.spark.storage.StorageLevel
 
@@ -176,8 +176,8 @@ private[ui] object RDDOperationGraph extends Logging {
   }
 
   /** Return the dot representation of a node in an RDDOperationGraph. */
-  private def makeDotNode(node: RDDOperationNode): String = {
-    s"""${node.id} [label="${node.name} [${node.id}]"]"""
+  private def makeDotNode(node: RDDOperationNode): StringBuilder = {
+    new StringBuilder(s"""${node.id} [label="${node.name} [${node.id}]"]""")
   }
 
   /** Return the dot representation of a subgraph in an RDDOperationGraph. */
@@ -185,15 +185,21 @@ private[ui] object RDDOperationGraph extends Logging {
     cluster: RDDOperationCluster,
     indent: StringBuilder): StringBuilder = {
     val subgraph = new StringBuilder
-    subgraph.append(indent).append(s"subgraph cluster${cluster.id} {\n")
-    subgraph.append(indent).append(s"""  label="${cluster.name}";\n""")
-    cluster.childNodes.foreach { node =>
-      subgraph.append(indent).append(s"  ${makeDotNode(node)};\n")
+    try {
+      subgraph.append(indent).append(s"subgraph cluster${cluster.id} {\n")
+      subgraph.append(indent).append( s"""  label="${cluster.name}";\n""")
+      cluster.childNodes.foreach { node =>
+        subgraph.append(indent).append(makeDotNode(node)).append("\n")
+      }
+      cluster.childClusters.foreach { cscope =>
+        subgraph.append(makeDotSubgraph(cscope, indent.append("  ")))
+      }
+      subgraph.append(indent).append("}\n")
+    } catch {
+      case oom: OutOfMemoryError =>
+        throw new SparkException(s"Failed to create graph for job in $cluster.id. " +
+        s"Not enough heap space.Increase thread stack size(-Xss) on your cluster.")
     }
-    cluster.childClusters.foreach { cscope =>
-      subgraph.append(makeDotSubgraph(cscope, indent.append("  ")))
-    }
-    subgraph.append(indent).append("}\n")
     subgraph
   }
 }
