@@ -334,7 +334,7 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext {
   test("model save/load") {
     // Test for LocalLDAModel.
     val localModel = new LocalLDAModel(tinyTopics,
-      Vectors.dense(Array.fill(tinyTopics.numRows)(1.0 / tinyTopics.numRows)), 1D, 100D)
+      Vectors.dense(Array.fill(tinyTopics.numRows)(0.01)), 0.5D, 10D)
     val tempDir1 = Utils.createTempDir()
     val path1 = tempDir1.toURI.toString
 
@@ -360,6 +360,9 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext {
       assert(samelocalModel.topicsMatrix === localModel.topicsMatrix)
       assert(samelocalModel.k === localModel.k)
       assert(samelocalModel.vocabSize === localModel.vocabSize)
+      assert(samelocalModel.docConcentration === localModel.docConcentration)
+      assert(samelocalModel.topicConcentration === localModel.topicConcentration)
+      assert(samelocalModel.gammaShape === localModel.gammaShape)
 
       val sameDistributedModel = DistributedLDAModel.load(sc, path2)
       assert(distributedModel.topicsMatrix === sameDistributedModel.topicsMatrix)
@@ -368,6 +371,7 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext {
       assert(distributedModel.iterationTimes === sameDistributedModel.iterationTimes)
       assert(distributedModel.docConcentration === sameDistributedModel.docConcentration)
       assert(distributedModel.topicConcentration === sameDistributedModel.topicConcentration)
+      assert(distributedModel.gammaShape === sameDistributedModel.gammaShape)
       assert(distributedModel.globalTopicTotals === sameDistributedModel.globalTopicTotals)
 
       val graph = distributedModel.graph
@@ -384,6 +388,46 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext {
       Utils.deleteRecursively(tempDir1)
       Utils.deleteRecursively(tempDir2)
     }
+  }
+
+  test("EMLDAOptimizer with empty docs") {
+    val vocabSize = 6
+    val emptyDocsArray = Array.fill(6)(Vectors.sparse(vocabSize, Array.empty, Array.empty))
+    val emptyDocs = emptyDocsArray
+      .zipWithIndex.map { case (wordCounts, docId) =>
+        (docId.toLong, wordCounts)
+    }
+    val distributedEmptyDocs = sc.parallelize(emptyDocs, 2)
+
+    val op = new EMLDAOptimizer()
+    val lda = new LDA()
+      .setK(3)
+      .setMaxIterations(5)
+      .setSeed(12345)
+      .setOptimizer(op)
+
+    val model = lda.run(distributedEmptyDocs)
+    assert(model.vocabSize === vocabSize)
+  }
+
+  test("OnlineLDAOptimizer with empty docs") {
+    val vocabSize = 6
+    val emptyDocsArray = Array.fill(6)(Vectors.sparse(vocabSize, Array.empty, Array.empty))
+    val emptyDocs = emptyDocsArray
+      .zipWithIndex.map { case (wordCounts, docId) =>
+        (docId.toLong, wordCounts)
+    }
+    val distributedEmptyDocs = sc.parallelize(emptyDocs, 2)
+
+    val op = new OnlineLDAOptimizer()
+    val lda = new LDA()
+      .setK(3)
+      .setMaxIterations(5)
+      .setSeed(12345)
+      .setOptimizer(op)
+
+    val model = lda.run(distributedEmptyDocs)
+    assert(model.vocabSize === vocabSize)
   }
 
 }
