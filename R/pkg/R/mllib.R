@@ -27,7 +27,7 @@ setClass("PipelineModel", representation(model = "jobj"))
 #' Fits a generalized linear model, similarly to R's glm(). Also see the glmnet package.
 #'
 #' @param formula A symbolic description of the model to be fitted. Currently only a few formula
-#'                operators are supported, including '~' and '+'.
+#'                operators are supported, including '~', '+', '-', and '.'.
 #' @param data DataFrame for training
 #' @param family Error distribution. "gaussian" -> linear regression, "binomial" -> logistic reg.
 #' @param lambda Regularization parameter

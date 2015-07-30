@@ -23,16 +23,16 @@ import org.apache.spark.sql.SQLConf
 import org.apache.spark.sql.hive.test.TestHive
 
 /**
- * Runs the test cases that are included in the hive distribution with sort merge join is true.
+ * Runs the test cases that are included in the hive distribution with hash joins.
  */
-class SortMergeCompatibilitySuite extends HiveCompatibilitySuite {
+class HashJoinCompatibilitySuite extends HiveCompatibilitySuite {
   override def beforeAll() {
     super.beforeAll()
-    TestHive.setConf(SQLConf.SORTMERGE_JOIN, true)
+    TestHive.setConf(SQLConf.SORTMERGE_JOIN, false)
   }
 
   override def afterAll() {
-    TestHive.setConf(SQLConf.SORTMERGE_JOIN, false)
+    TestHive.setConf(SQLConf.SORTMERGE_JOIN, true)
     super.afterAll()
   }
 

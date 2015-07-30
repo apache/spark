@@ -15,23 +15,26 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst.expressions
+package org.apache.spark.sql.types
 
-import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.annotation.DeveloperApi
 
-class DatetimeFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
-  test("datetime function current_date") {
-    val d0 = DateTimeUtils.millisToDays(System.currentTimeMillis())
-    val cd = CurrentDate().eval(EmptyRow).asInstanceOf[Int]
-    val d1 = DateTimeUtils.millisToDays(System.currentTimeMillis())
-    assert(d0 <= cd && cd <= d1 && d1 - d0 <= 1)
-  }
 
-  test("datetime function current_timestamp") {
-    val ct = DateTimeUtils.toJavaTimestamp(CurrentTimestamp().eval(EmptyRow).asInstanceOf[Long])
-    val t1 = System.currentTimeMillis()
-    assert(math.abs(t1 - ct.getTime) < 5000)
-  }
+/**
+ * :: DeveloperApi ::
+ * The data type representing calendar time intervals. The calendar time interval is stored
+ * internally in two components: number of months the number of microseconds.
+ *
+ * Note that calendar intervals are not comparable.
+ *
+ * Please use the singleton [[DataTypes.CalendarIntervalType]].
+ */
+@DeveloperApi
+class CalendarIntervalType private() extends DataType {
 
+  override def defaultSize: Int = 16
+
+  private[spark] override def asNullable: CalendarIntervalType = this
 }
+
+case object CalendarIntervalType extends CalendarIntervalType

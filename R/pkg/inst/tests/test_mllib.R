@@ -41,6 +41,14 @@ test_that("predictions match with native glm", {
   expect_true(all(abs(rVals - vals) < 1e-6), rVals - vals)
 })
 
+test_that("dot minus and intercept vs native glm", {
+  training <- createDataFrame(sqlContext, iris)
+  model <- glm(Sepal_Width ~ . - Species + 0, data = training)
+  vals <- collect(select(predict(model, training), "prediction"))
+  rVals <- predict(glm(Sepal.Width ~ . - Species + 0, data = iris), iris)
+  expect_true(all(abs(rVals - vals) < 1e-6), rVals - vals)
+})
+
 test_that("summary coefficients match with native glm", {
   training <- createDataFrame(sqlContext, iris)
   coefs <- summary(glm(Sepal_Width ~ Sepal_Length + Species, data = training))$coefficients

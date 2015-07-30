@@ -59,7 +59,7 @@ class KinesisStreamSuite extends KinesisFunSuite
     }
   }
 
-  ignore("KinesisUtils API") {
+  test("KinesisUtils API") {
     ssc = new StreamingContext(sc, Seconds(1))
     // Tests the API, does not actually test data receiving
     val kinesisStream1 = KinesisUtils.createStream(ssc, "mySparkStream",
@@ -83,7 +83,7 @@ class KinesisStreamSuite extends KinesisFunSuite
    * you must have AWS credentials available through the default AWS provider chain,
    * and you have to set the system environment variable RUN_KINESIS_TESTS=1 .
    */
-  ignore("basic operation") {
+  testIfEnabled("basic operation") {
     val kinesisTestUtils = new KinesisTestUtils()
     try {
       kinesisTestUtils.createStream()
