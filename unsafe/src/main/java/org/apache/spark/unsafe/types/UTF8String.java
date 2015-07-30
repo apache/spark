@@ -138,6 +138,15 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
   }
 
   /**
+   * Returns a 64-bit integer that can be used as the prefix used in sorting.
+   */
+  public long getPrefix() {
+    long p = PlatformDependent.UNSAFE.getLong(base, offset);
+    p = java.lang.Long.reverseBytes(p);
+    return p;
+  }
+
+  /**
    * Returns the underline bytes, will be a copy of it if it's part of another array.
    */
   public byte[] getBytes() {
