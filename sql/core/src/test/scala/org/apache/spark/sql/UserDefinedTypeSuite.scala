@@ -34,8 +34,6 @@ private[sql] class MyDenseVector(val data: Array[Double]) extends Serializable {
   override def equals(other: Any): Boolean = other match {
     case v: MyDenseVector =>
       java.util.Arrays.equals(this.data, v.data)
-    case a: Array[Double] =>
-      java.util.Arrays.equals(this.data, a)
     case _ => false
   }
 }
