@@ -34,6 +34,8 @@ private[sql] class DefaultSource
   with SchemaRelationProvider
   with CreatableRelationProvider {
 
+  override def format(): String = "json"
+
   private def checkPath(parameters: Map[String, String]): String = {
     parameters.getOrElse("path", sys.error("'path' must be specified for json data."))
   }

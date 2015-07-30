@@ -24,6 +24,9 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.types._
 
 class PrunedScanSource extends RelationProvider {
+
+  override def format(): String = "test format"
+
   override def createRelation(
       sqlContext: SQLContext,
       parameters: Map[String, String]): BaseRelation = {

@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.datasources
 
+import java.util.ServiceLoader
+
 import scala.language.{existentials, implicitConversions}
 import scala.util.matching.Regex
 
@@ -190,22 +192,23 @@ private[sql] class DDLParser(
     }
 }
 
-private[sql] object ResolvedDataSource {
-
-  private val builtinSources = Map(
-    "jdbc" -> "org.apache.spark.sql.jdbc.DefaultSource",
-    "json" -> "org.apache.spark.sql.json.DefaultSource",
-    "parquet" -> "org.apache.spark.sql.parquet.DefaultSource",
-    "orc" -> "org.apache.spark.sql.hive.orc.DefaultSource"
-  )
+private[sql] object ResolvedDataSource extends Logging {
 
   /** Given a provider name, look up the data source class definition. */
   def lookupDataSource(provider: String): Class[_] = {
     val loader = Utils.getContextOrSparkClassLoader
 
-    if (builtinSources.contains(provider)) {
-      return loader.loadClass(builtinSources(provider))
+    val sl = ServiceLoader.load(classOf[DataSourceProvider], loader)
+
+    val itr = sl.iterator()
+    while (itr.hasNext) {
+      val service = itr.next()
+      if (service.format() == provider) {
+        return service.getClass
+      }
     }
+
+    logInfo(s"could not find registered data source for $provider")
 
     try {
       loader.loadClass(provider)

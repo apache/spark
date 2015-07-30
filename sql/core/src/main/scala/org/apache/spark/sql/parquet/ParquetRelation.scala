@@ -51,6 +51,9 @@ import org.apache.spark.util.{SerializableConfiguration, Utils}
 
 
 private[sql] class DefaultSource extends HadoopFsRelationProvider {
+
+  override def format(): String = "parquet"
+
   override def createRelation(
       sqlContext: SQLContext,
       paths: Array[String],
