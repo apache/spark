@@ -48,7 +48,6 @@ final class UnsafeExternalRowSorter {
   private long numRowsInserted = 0;
 
   private final StructType schema;
-  private final UnsafeProjection unsafeProjection;
   private final PrefixComputer prefixComputer;
   private final UnsafeExternalSorter sorter;
 
@@ -62,7 +61,6 @@ final class UnsafeExternalRowSorter {
       PrefixComparator prefixComparator,
       PrefixComputer prefixComputer) throws IOException {
     this.schema = schema;
-    this.unsafeProjection = UnsafeProjection.create(schema);
     this.prefixComputer = prefixComputer;
     final SparkEnv sparkEnv = SparkEnv.get();
     final TaskContext taskContext = TaskContext.get();
@@ -88,13 +86,12 @@ final class UnsafeExternalRowSorter {
   }
 
   @VisibleForTesting
-  void insertRow(InternalRow row) throws IOException {
-    UnsafeRow unsafeRow = unsafeProjection.apply(row);
+  void insertRow(UnsafeRow row) throws IOException {
     final long prefix = prefixComputer.computePrefix(row);
     sorter.insertRecord(
-      unsafeRow.getBaseObject(),
-      unsafeRow.getBaseOffset(),
-      unsafeRow.getSizeInBytes(),
+      row.getBaseObject(),
+      row.getBaseOffset(),
+      row.getSizeInBytes(),
       prefix
     );
     numRowsInserted++;
@@ -165,10 +162,10 @@ final class UnsafeExternalRowSorter {
 
 
   public Iterator<InternalRow> sort(Iterator<InternalRow> inputIterator) throws IOException {
-      while (inputIterator.hasNext()) {
-        insertRow(inputIterator.next());
-      }
-      return sort();
+    while (inputIterator.hasNext()) {
+      insertRow((UnsafeRow) inputIterator.next());
+    }
+    return sort();
   }
 
   /**

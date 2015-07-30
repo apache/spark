@@ -104,6 +104,10 @@ case class UnsafeExternalSort(
     testSpillFrequency: Int = 0)
   extends UnaryNode {
 
+  override def outputsUnsafeRows: Boolean = true
+  override def canProcessUnsafeRows: Boolean = true
+  override def canProcessSafeRows: Boolean = false
+
   private[this] val schema: StructType = child.schema
 
   override def requiredChildDistribution: Seq[Distribution] =
@@ -144,8 +148,6 @@ case class UnsafeExternalSort(
   override def output: Seq[Attribute] = child.output
 
   override def outputOrdering: Seq[SortOrder] = sortOrder
-
-  override def outputsUnsafeRows: Boolean = true
 }
 
 @DeveloperApi
