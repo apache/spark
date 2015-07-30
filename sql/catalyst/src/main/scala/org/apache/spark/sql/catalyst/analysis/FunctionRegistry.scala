@@ -205,9 +205,12 @@ object FunctionRegistry {
     expression[Upper]("upper"),
 
     // datetime functions
+    expression[AddMonths]("add_months"),
     expression[CurrentDate]("current_date"),
     expression[CurrentTimestamp]("current_timestamp"),
+    expression[DateAdd]("date_add"),
     expression[DateFormatClass]("date_format"),
+    expression[DateSub]("date_sub"),
     expression[DayOfMonth]("day"),
     expression[DayOfYear]("dayofyear"),
     expression[DayOfMonth]("dayofmonth"),
@@ -216,6 +219,7 @@ object FunctionRegistry {
     expression[LastDay]("last_day"),
     expression[Minute]("minute"),
     expression[Month]("month"),
+    expression[MonthsBetween]("months_between"),
     expression[NextDay]("next_day"),
     expression[Quarter]("quarter"),
     expression[Second]("second"),

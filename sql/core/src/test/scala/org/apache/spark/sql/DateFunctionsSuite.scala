@@ -22,6 +22,7 @@ import java.text.SimpleDateFormat
 
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.functions._
+import org.apache.spark.unsafe.types.CalendarInterval
 
 class DateFunctionsSuite extends QueryTest {
   private lazy val ctx = org.apache.spark.sql.test.TestSQLContext
@@ -204,6 +205,122 @@ class DateFunctionsSuite extends QueryTest {
     checkAnswer(
       df.selectExpr("weekofyear(a)", "weekofyear(b)", "weekofyear(c)"),
       Row(15, 15, 15))
+  }
+
+  test("function date_add") {
+    val st1 = "2015-06-01 12:34:56"
+    val st2 = "2015-06-02 12:34:56"
+    val t1 = Timestamp.valueOf(st1)
+    val t2 = Timestamp.valueOf(st2)
+    val s1 = "2015-06-01"
+    val s2 = "2015-06-02"
+    val d1 = Date.valueOf(s1)
+    val d2 = Date.valueOf(s2)
+    val df = Seq((t1, d1, s1, st1), (t2, d2, s2, st2)).toDF("t", "d", "s", "ss")
+    checkAnswer(
+      df.select(date_add(col("d"), 1)),
+      Seq(Row(Date.valueOf("2015-06-02")), Row(Date.valueOf("2015-06-03"))))
+    checkAnswer(
+      df.select(date_add(col("t"), 3)),
+      Seq(Row(Date.valueOf("2015-06-04")), Row(Date.valueOf("2015-06-05"))))
+    checkAnswer(
+      df.select(date_add(col("s"), 5)),
+      Seq(Row(Date.valueOf("2015-06-06")), Row(Date.valueOf("2015-06-07"))))
+    checkAnswer(
+      df.select(date_add(col("ss"), 7)),
+      Seq(Row(Date.valueOf("2015-06-08")), Row(Date.valueOf("2015-06-09"))))
+
+    checkAnswer(df.selectExpr("DATE_ADD(null, 1)"), Seq(Row(null), Row(null)))
+    checkAnswer(
+      df.selectExpr("""DATE_ADD(d, 1)"""),
+      Seq(Row(Date.valueOf("2015-06-02")), Row(Date.valueOf("2015-06-03"))))
+  }
+
+  test("function date_sub") {
+    val st1 = "2015-06-01 12:34:56"
+    val st2 = "2015-06-02 12:34:56"
+    val t1 = Timestamp.valueOf(st1)
+    val t2 = Timestamp.valueOf(st2)
+    val s1 = "2015-06-01"
+    val s2 = "2015-06-02"
+    val d1 = Date.valueOf(s1)
+    val d2 = Date.valueOf(s2)
+    val df = Seq((t1, d1, s1, st1), (t2, d2, s2, st2)).toDF("t", "d", "s", "ss")
+    checkAnswer(
+      df.select(date_sub(col("d"), 1)),
+      Seq(Row(Date.valueOf("2015-05-31")), Row(Date.valueOf("2015-06-01"))))
+    checkAnswer(
+      df.select(date_sub(col("t"), 1)),
+      Seq(Row(Date.valueOf("2015-05-31")), Row(Date.valueOf("2015-06-01"))))
+    checkAnswer(
+      df.select(date_sub(col("s"), 1)),
+      Seq(Row(Date.valueOf("2015-05-31")), Row(Date.valueOf("2015-06-01"))))
+    checkAnswer(
+      df.select(date_sub(col("ss"), 1)),
+      Seq(Row(Date.valueOf("2015-05-31")), Row(Date.valueOf("2015-06-01"))))
+    checkAnswer(
+      df.select(date_sub(lit(null), 1)).limit(1), Row(null))
+
+    checkAnswer(df.selectExpr("""DATE_SUB(d, null)"""), Seq(Row(null), Row(null)))
+    checkAnswer(
+      df.selectExpr("""DATE_SUB(d, 1)"""),
+      Seq(Row(Date.valueOf("2015-05-31")), Row(Date.valueOf("2015-06-01"))))
+  }
+
+  test("time_add") {
+    val t1 = Timestamp.valueOf("2015-07-31 23:59:59")
+    val t2 = Timestamp.valueOf("2015-12-31 00:00:00")
+    val d1 = Date.valueOf("2015-07-31")
+    val d2 = Date.valueOf("2015-12-31")
+    val i = new CalendarInterval(2, 2000000L)
+    val df = Seq((1, t1, d1), (3, t2, d2)).toDF("n", "t", "d")
+    checkAnswer(
+      df.selectExpr(s"d + $i"),
+      Seq(Row(Date.valueOf("2015-09-30")), Row(Date.valueOf("2016-02-29"))))
+    checkAnswer(
+      df.selectExpr(s"t + $i"),
+      Seq(Row(Timestamp.valueOf("2015-10-01 00:00:01")),
+        Row(Timestamp.valueOf("2016-02-29 00:00:02"))))
+  }
+
+  test("time_sub") {
+    val t1 = Timestamp.valueOf("2015-10-01 00:00:01")
+    val t2 = Timestamp.valueOf("2016-02-29 00:00:02")
+    val d1 = Date.valueOf("2015-09-30")
+    val d2 = Date.valueOf("2016-02-29")
+    val i = new CalendarInterval(2, 2000000L)
+    val df = Seq((1, t1, d1), (3, t2, d2)).toDF("n", "t", "d")
+    checkAnswer(
+      df.selectExpr(s"d - $i"),
+      Seq(Row(Date.valueOf("2015-07-30")), Row(Date.valueOf("2015-12-30"))))
+    checkAnswer(
+      df.selectExpr(s"t - $i"),
+      Seq(Row(Timestamp.valueOf("2015-07-31 23:59:59")),
+        Row(Timestamp.valueOf("2015-12-31 00:00:00"))))
+  }
+
+  test("function add_months") {
+    val d1 = Date.valueOf("2015-08-31")
+    val d2 = Date.valueOf("2015-02-28")
+    val df = Seq((1, d1), (2, d2)).toDF("n", "d")
+    checkAnswer(
+      df.select(add_months(col("d"), 1)),
+      Seq(Row(Date.valueOf("2015-09-30")), Row(Date.valueOf("2015-03-31"))))
+    checkAnswer(
+      df.selectExpr("add_months(d, -1)"),
+      Seq(Row(Date.valueOf("2015-07-31")), Row(Date.valueOf("2015-01-31"))))
+  }
+
+  test("function months_between") {
+    val d1 = Date.valueOf("2015-07-31")
+    val d2 = Date.valueOf("2015-02-16")
+    val t1 = Timestamp.valueOf("2014-09-30 23:30:00")
+    val t2 = Timestamp.valueOf("2015-09-16 12:00:00")
+    val s1 = "2014-09-15 11:30:00"
+    val s2 = "2015-10-01 00:00:00"
+    val df = Seq((t1, d1, s1), (t2, d2, s2)).toDF("t", "d", "s")
+    checkAnswer(df.select(months_between(col("t"), col("d"))), Seq(Row(-10.0), Row(7.0)))
+    checkAnswer(df.selectExpr("months_between(t, s)"), Seq(Row(0.5), Row(-0.5)))
   }
 
   test("function last_day") {
