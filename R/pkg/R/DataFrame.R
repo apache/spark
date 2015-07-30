@@ -255,6 +255,16 @@ setMethod("names",
             columns(x)
           })
 
+#' @rdname columns
+setMethod("names<-",
+          signature(x = "DataFrame"),
+          function(x, value) {
+            if (!is.null(value)) {
+              sdf <- callJMethod(x@sdf, "toDF", listToSeq(as.list(value)))
+              dataFrame(sdf)
+            }
+          })
+
 #' Register Temporary Table
 #'
 #' Registers a DataFrame as a Temporary Table in the SQLContext
@@ -473,6 +483,14 @@ setMethod("distinct",
             dataFrame(sdf)
           })
 
+#' @rdname unique
+#' @aliases unique
+setMethod("unique",
+          signature(x = "DataFrame"),
+          function(x) {
+            distinct(x)
+          })
+
 #' Sample
 #'
 #' Return a sampled subset of this DataFrame using a random seed.
@@ -532,6 +550,53 @@ setMethod("count",
           signature(x = "DataFrame"),
           function(x) {
             callJMethod(x@sdf, "count")
+          })
+
+#' @rdname nrow
+#' @aliases count
+setMethod("nrow",
+          signature(x = "DataFrame"),
+          function(x) {
+            count(x)
+          })
+
+#' Returns the number of columns in a DataFrame
+#'
+#' @param x a SparkSQL DataFrame
+#'
+#' @rdname ncol
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' sqlContext <- sparkRSQL.init(sc)
+#' path <- "path/to/file.json"
+#' df <- jsonFile(sqlContext, path)
+#' ncol(df)
+#' }
+setMethod("ncol",
+          signature(x = "DataFrame"),
+          function(x) {
+            length(columns(x))
+          })
+
+#' Returns the dimentions (number for rows and columns) of a DataFrame
+#' @param x a SparkSQL DataFrame
+#'
+#' @rdname dim
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' sqlContext <- sparkRSQL.init(sc)
+#' path <- "path/to/file.json"
+#' df <- jsonFile(sqlContext, path)
+#' dim(df)
+#' }
+setMethod("dim",
+          signature(x = "DataFrame"),
+          function(x) {
+            c(count(x), ncol(x))
           })
 
 #' Collects all the elements of a Spark DataFrame and coerces them into an R data.frame.
@@ -1230,6 +1295,24 @@ setMethod("unionAll",
             unioned <- callJMethod(x@sdf, "unionAll", y@sdf)
             dataFrame(unioned)
           })
+
+setGeneric("rbind", signature = "...")
+
+rbind.SparkDataFrames <- function(x, ..., deparse.level = 1) {
+  allargs <- list(...)
+  if (nargs() == 3) {
+    unionAll(x, ...)
+  } else {
+    unionAll(x, Recall(..., deparse.level = 1))
+  }
+}
+
+#' @rdname rbind
+#' @aliases unionAll
+setMethod("rbind",
+          signature(... = "DataFrame"),
+          rbind.SparkDataFrames
+          )
 
 #' Intersect
 #'
