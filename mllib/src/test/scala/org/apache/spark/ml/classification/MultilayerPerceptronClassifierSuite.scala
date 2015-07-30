@@ -48,6 +48,7 @@ class MultilayerPerceptronClassifierSuite extends SparkFunSuite with MLlibTestSp
       assert(p == l) }
   }
 
+  // TODO: implement a more rigorous test
   test("3 class classification with 2 hidden layers") {
     val nPoints = 1000
 

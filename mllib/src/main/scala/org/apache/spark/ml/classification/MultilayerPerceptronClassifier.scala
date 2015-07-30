@@ -29,7 +29,7 @@ import org.apache.spark.sql.DataFrame
 
 /** Params for Multilayer Perceptron. */
 private[ml] trait MultilayerPerceptronParams extends PredictorParams
-with HasSeed with HasMaxIter with HasTol {
+  with HasSeed with HasMaxIter with HasTol {
   /**
    * Layer sizes including input size and output size.
    * @group param
@@ -39,7 +39,7 @@ with HasSeed with HasMaxIter with HasTol {
       " E.g., Array(780, 100, 10) means 780 inputs, " +
       "one hidden layer with 100 neurons and output layer of 10 neurons.",
     // TODO: how to check ALSO that all elements are greater than 0?
-    ParamValidators.lengthGt(1)
+    ParamValidators.arrayLengthGt(1)
   )
 
   /** @group setParam */
@@ -94,12 +94,12 @@ private object LabelConverter {
    * Returns a vector of given length with zeroes at all positions
    * and value 1.0 at the position that corresponds to the label.
    *
-   * @param labeledPoint  labeled point
+   * @param labeledPoint labeled point
    * @param labelCount total number of labels
-   * @return  vector encoding of a label
+   * @return pair of features and vector encoding of a label
    */
-  def apply(labeledPoint: LabeledPoint, labelCount: Int): (Vector, Vector) = {
-    val output = Array.fill(labelCount){0.0}
+  def encodeLabeledPoint(labeledPoint: LabeledPoint, labelCount: Int): (Vector, Vector) = {
+    val output = Array.fill(labelCount)(0.0)
     output(labeledPoint.label.toInt) = 1.0
     (labeledPoint.features, Vectors.dense(output))
   }
@@ -108,10 +108,10 @@ private object LabelConverter {
    * Converts a vector to a label.
    * Returns the position of the maximal element of a vector.
    *
-   * @param output  label encoded with a vector
-   * @return  label
+   * @param output label encoded with a vector
+   * @return label
    */
-  def apply(output: Vector): Double = {
+  def decodeLabel(output: Vector): Double = {
     output.argmax.toDouble
   }
 }
@@ -138,14 +138,14 @@ class MultilayerPerceptronClassifier(override val uid: String)
    * Developers can implement this instead of [[fit()]] to avoid dealing with schema validation
    * and copying parameters into the model.
    *
-   * @param dataset  Training dataset
-   * @return  Fitted model
+   * @param dataset Training dataset
+   * @return Fitted model
    */
   override protected def train(dataset: DataFrame): MultilayerPerceptronClassifierModel = {
-    val labels = getLayers.last.toInt
+    val myLayers = $(layers)
+    val labels = myLayers.last
     val lpData = extractLabeledPoints(dataset)
-    val data = lpData.map(lp => LabelConverter(lp, labels))
-    val myLayers = getLayers.map(_.toInt)
+    val data = lpData.map(lp => LabelConverter.encodeLabeledPoint(lp, labels))
     val topology = FeedForwardTopology.multiLayerPerceptron(myLayers, true)
     val FeedForwardTrainer = new FeedForwardTrainer(topology, myLayers(0), myLayers.last)
     FeedForwardTrainer.LBFGSOptimizer.setConvergenceTol(getTol).setNumIterations(getMaxIter)
@@ -179,7 +179,7 @@ class MultilayerPerceptronClassifierModel private[ml](
    * This internal method is used to implement [[transform()]] and output [[predictionCol]].
    */
   override protected def predict(features: Vector): Double = {
-    LabelConverter(mlpModel.predict(features))
+    LabelConverter.decodeLabel(mlpModel.predict(features))
   }
 
   override def copy(extra: ParamMap): MultilayerPerceptronClassifierModel = {

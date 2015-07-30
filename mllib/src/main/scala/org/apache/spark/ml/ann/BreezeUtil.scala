@@ -23,8 +23,9 @@ import com.github.fommil.netlib.BLAS.{getInstance => NativeBLAS}
 /**
  * In-place DGEMM and DGEMV for Breeze
  */
-object BreezeUtil {
+private[ann] object BreezeUtil {
 
+  // TODO: switch to MLlib BLAS interface
   private def transposeString(a: BDM[Double]): String = if (a.isTranspose) "T" else "N"
 
   /**
@@ -40,12 +41,9 @@ object BreezeUtil {
     require(a.cols == b.rows, "A & B Dimension mismatch!")
     require(a.rows == c.rows, "A & C Dimension mismatch!")
     require(b.cols == c.cols, "A & C Dimension mismatch!")
-    if(a.rows == 0 || b.rows == 0 || a.cols == 0 || b.cols == 0) {
-    } else {
-      NativeBLAS.dgemm(transposeString(a), transposeString(b), c.rows, c.cols, a.cols,
-        alpha, a.data, a.offset, a.majorStride, b.data, b.offset, b.majorStride,
-        beta, c.data, c.offset, c.rows)
-    }
+    NativeBLAS.dgemm(transposeString(a), transposeString(b), c.rows, c.cols, a.cols,
+      alpha, a.data, a.offset, a.majorStride, b.data, b.offset, b.majorStride,
+      beta, c.data, c.offset, c.rows)
   }
 
   /**
@@ -57,9 +55,7 @@ object BreezeUtil {
    * @param y y
    */
   def dgemv(alpha: Double, a: BDM[Double], x: BDV[Double], beta: Double, y: BDV[Double]): Unit = {
-
     require(a.cols == x.length, "A & b Dimension mismatch!")
-
     NativeBLAS.dgemv(transposeString(a), a.rows, a.cols,
       alpha, a.data, a.offset, a.majorStride, x.data, x.offset, x.stride,
       beta, y.data, y.offset, y.stride)
