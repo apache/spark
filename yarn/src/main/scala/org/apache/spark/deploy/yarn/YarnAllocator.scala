@@ -28,6 +28,7 @@ import scala.collection.JavaConverters._
 import com.google.common.util.concurrent.ThreadFactoryBuilder
 
 import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.yarn.api.protocolrecords.AllocateResponse
 import org.apache.hadoop.yarn.api.records._
 import org.apache.hadoop.yarn.client.api.AMRMClient
 import org.apache.hadoop.yarn.client.api.AMRMClient.ContainerRequest
@@ -107,6 +108,9 @@ private[yarn] class YarnAllocator(
   private var numUnexpectedContainerRelease = 0L
   private val containerIdToExecutorId = new HashMap[ContainerId, String]
 
+  // A set to store all the executor ids which will possibly be preempted
+  private val preemptionExecutors = new HashSet[String]()
+
   // Executor memory in MB.
   protected val executorMemory = args.executorMemory
   // Additional memory overhead.
@@ -165,6 +169,11 @@ private[yarn] class YarnAllocator(
    */
   def getNumPendingAllocate: Int = getNumPendingAtLocation(ANY_HOST)
 
+  /** A set of preemption executors */
+  def getPreemptionExecutors: Set[String] = synchronized {
+    preemptionExecutors.toSet
+  }
+
   /**
    * Number of container requests at the given location that have not yet been fulfilled.
    */
@@ -211,6 +220,22 @@ private[yarn] class YarnAllocator(
     }
   }
 
+  def updateResources(): Unit = synchronized {
+    // Update the container requests
+    updateResourceRequests()
+
+    val progressIndicator = 0.1F
+    // Poll the ResourceManager. This doubles as a heartbeat if there are no pending container
+    // requests.
+    val allocateResponse = amClient.allocate(progressIndicator)
+
+    // Handle allocated containers and completed containers
+    allocateResources(allocateResponse)
+
+    // Handle preempted containers
+    preemptResources(allocateResponse)
+  }
+
   /**
    * Request resources such that, if YARN gives us all we ask for, we'll have a number of containers
    * equal to maxExecutors.
@@ -219,13 +244,7 @@ private[yarn] class YarnAllocator(
    *
    * This must be synchronized because variables read in this method are mutated by other methods.
    */
-  def allocateResources(): Unit = synchronized {
-    updateResourceRequests()
-
-    val progressIndicator = 0.1f
-    // Poll the ResourceManager. This doubles as a heartbeat if there are no pending container
-    // requests.
-    val allocateResponse = amClient.allocate(progressIndicator)
+  def allocateResources(allocateResponse: AllocateResponse): Unit = {
 
     val allocatedContainers = allocateResponse.getAllocatedContainers()
 
@@ -245,6 +264,33 @@ private[yarn] class YarnAllocator(
       processCompletedContainers(completedContainers.asScala)
       logDebug("Finished processing %d completed containers. Current running executor count: %d."
         .format(completedContainers.size, numExecutorsRunning))
+    }
+  }
+
+  /** Get a list of preemption containers through AM-RM heartbeat. */
+  private def preemptResources(allocateResponse: AllocateResponse): Unit = {
+    val preemptMessageOpt = Option(allocateResponse.getPreemptionMessage)
+    val strictContractOpt = preemptMessageOpt.map(p => Option(p.getStrictContract)).flatten
+    val contractOpt = preemptMessageOpt.map(p => Option(p.getContract)).flatten
+
+    // We need to forget all the already preempted executors at this time,
+    // because preemption information will be changed time to time.
+    preemptionExecutors.clear()
+
+    contractOpt.foreach { c =>
+      val preemptContainers = c.getContainers
+      preemptContainers.foreach { c =>
+        logInfo(s"Container id: ${c.getId} will potentially be preempted")
+        containerIdToExecutorId.get(c.getId).foreach(e => preemptionExecutors += e)
+      }
+    }
+
+    strictContractOpt.foreach { sc =>
+      val strictPreemptedContainers = sc.getContainers
+      strictPreemptedContainers.foreach { c =>
+        logInfo(s"Container id: ${c.getId} will potentially be strictly preempted")
+        containerIdToExecutorId.get(c.getId).foreach(e => preemptionExecutors += e)
+      }
     }
   }
 

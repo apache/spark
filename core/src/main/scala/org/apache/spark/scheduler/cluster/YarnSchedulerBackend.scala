@@ -17,7 +17,7 @@
 
 package org.apache.spark.scheduler.cluster
 
-import scala.collection.mutable.ArrayBuffer
+import scala.collection.mutable.{ArrayBuffer, HashSet}
 import scala.concurrent.{Future, ExecutionContext}
 
 import org.apache.spark.{Logging, SparkContext}
@@ -51,6 +51,10 @@ private[spark] abstract class YarnSchedulerBackend(
 
   private implicit val askTimeout = RpcUtils.askRpcTimeout(sc.conf)
 
+  // Executor IDs which will be preempted by cluster manager, this variable reflects cluster
+  // manager's preference at that time, will be changed time to time.
+  private val preemptionExecutorIDs = new HashSet[String]
+
   /**
    * Request executors from the ApplicationMaster by specifying the total number desired.
    * This includes executors already pending or running.
@@ -69,6 +73,14 @@ private[spark] abstract class YarnSchedulerBackend(
 
   override def sufficientResourcesRegistered(): Boolean = {
     totalRegisteredExecutors.get() >= totalExpectedExecutors * minRegisteredRatio
+  }
+
+  /**
+   * Executor IDs which will possibly be preempted by cluster manager.
+   * @return A set of executor IDs
+   */
+  override def preemptionExecutors: Set[String] = synchronized {
+    preemptionExecutorIDs.toSet
   }
 
   /**
@@ -176,6 +188,16 @@ private[spark] abstract class YarnSchedulerBackend(
 
       case RemoveExecutor(executorId, reason) =>
         removeExecutor(executorId, reason)
+
+      case PreemptionExecutors(executorIds) =>
+        if (!executorIds.isEmpty) {
+          logInfo(s"Executor ID: ${executorIds.mkString(" ")} will possibly be preempted")
+        }
+
+        synchronized {
+          preemptionExecutorIDs.clear()
+          preemptionExecutorIDs ++= executorIds
+        }
     }
 
 
