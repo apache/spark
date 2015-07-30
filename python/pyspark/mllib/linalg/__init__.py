@@ -1209,7 +1209,54 @@ class BlockMatrix(object):
                                         int(rowsPerBlock), int(colsPerBlock),
                                         long(numRows), long(numCols))
         self._jbm = JavaModelWrapper(javaBlockMatrix)
-        self.blocks = blocks
+        self._blocks = blocks
+        self._rowsPerBlock = rowsPerBlock
+        self._colsPerBlock = colsPerBlock
+
+    @property
+    def blocks(self):
+        """
+        The RDD of sub-matrix blocks
+        ((blockRowIndex, blockColIndex), sub-matrix) that form this
+        distributed matrix.
+        """
+        return self._blocks
+
+    @property
+    def rowsPerBlock(self):
+        """Number of rows that make up each block."""
+        return self._rowsPerBlock
+
+    @property
+    def colsPerBlock(self):
+        """Number of columns that make up each block."""
+        return self._colsPerBlock
+
+    @property
+    def numRowBlocks(self):
+        """
+        Number of rows of blocks in the BlockMatrix.
+
+        >>> blocks = sc.parallelize([((0, 0), Matrices.dense(3, 2, [1, 2, 3, 4, 5, 6])),
+        ...                          ((1, 0), Matrices.dense(3, 2, [7, 8, 9, 10, 11, 12]))])
+        >>> bm = BlockMatrix(blocks, 3, 2)
+        >>> print(bm.numRowBlocks)
+        2
+        """
+        return self._jbm.call("numRowBlocks")
+
+    @property
+    def numColBlocks(self):
+        """
+        Number of columns of blocks in the BlockMatrix.
+
+        >>> blocks = sc.parallelize([((0, 0), Matrices.dense(3, 2, [1, 2, 3, 4, 5, 6])),
+        ...                          ((1, 0), Matrices.dense(3, 2, [7, 8, 9, 10, 11, 12]))])
+        >>> bm = BlockMatrix(blocks, 3, 2)
+        >>> print(bm.numColBlocks)
+        1
+        """
+        return self._jbm.call("numColBlocks")
 
     def numRows(self):
         """
