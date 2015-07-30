@@ -229,7 +229,7 @@ private[spark] object SQLConf {
       " a specific query.")
 
   val UNSAFE_ENABLED = booleanConf("spark.sql.unsafe.enabled",
-    defaultValue = Some(true),
+    defaultValue = Some(false),
     doc = "When true, use the new optimized Tungsten physical execution backend.")
 
   val DIALECT = stringConf(
