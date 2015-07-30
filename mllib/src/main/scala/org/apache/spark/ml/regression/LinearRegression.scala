@@ -36,6 +36,7 @@ import org.apache.spark.mllib.stat.MultivariateOnlineSummarizer
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.functions.{col, udf}
+import org.apache.spark.sql.types.StructField
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.StatCounter
 
@@ -149,7 +150,8 @@ class LinearRegression(override val uid: String)
         model.transform(dataset).select($(predictionCol), $(labelCol)),
         $(predictionCol),
         $(labelCol),
-        Array(0D))
+        Array(0D),
+        dataset.schema($(featuresCol)))
       return copyValues(model.setSummary(trainingSummary))
     }
 
@@ -224,7 +226,8 @@ class LinearRegression(override val uid: String)
       model.transform(dataset).select($(predictionCol), $(labelCol)),
       $(predictionCol),
       $(labelCol),
-      objectiveHistory)
+      objectiveHistory,
+      dataset.schema($(featuresCol)))
     model.setSummary(trainingSummary)
   }
 
@@ -300,7 +303,8 @@ class LinearRegressionTrainingSummary private[regression] (
     predictions: DataFrame,
     predictionCol: String,
     labelCol: String,
-    val objectiveHistory: Array[Double])
+    val objectiveHistory: Array[Double],
+    val featuresCol: StructField)
   extends LinearRegressionSummary(predictions, predictionCol, labelCol) {
 
   /** Number of training iterations until termination */

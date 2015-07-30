@@ -71,3 +71,27 @@ setMethod("predict", signature(object = "PipelineModel"),
           function(object, newData) {
             return(dataFrame(callJMethod(object@model, "transform", newData@sdf)))
           })
+
+#' Get statistics on a model.
+#'
+#' Returns statistics on a model produced by glm(), similarly to R's summary().
+#'
+#' @param model A fitted MLlib model
+#' @return data.frame containing model statistics
+#' @rdname glm
+#' @export
+#' @examples
+#'\dontrun{
+#' model <- glm(y ~ x, trainingData)
+#' summary(model)
+#'}
+setMethod("summary", signature(object = "PipelineModel"),
+          function(object) {
+            features <- callJStatic("org.apache.spark.ml.api.r.SparkRWrappers",
+                                   "getModelFeatures", object@model)
+            weights <- callJStatic("org.apache.spark.ml.api.r.SparkRWrappers",
+                                   "getModelWeights", object@model)
+            stats <- data.frame(unlist(features), unlist(weights))
+            names(stats) <- c("features", "coefficients")
+            return(stats)
+          })

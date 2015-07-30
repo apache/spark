@@ -40,3 +40,10 @@ test_that("predictions match with native glm", {
   rVals <- predict(glm(Sepal.Width ~ Sepal.Length + Species, data = iris), iris)
   expect_true(all(abs(rVals - vals) < 1e-6), rVals - vals)
 })
+
+test_that("summary coefficients match with native glm", {
+  training <- createDataFrame(sqlContext, iris)
+  coefs <- summary(glm(Sepal_Width ~ Sepal_Length + Species, data = training))$coefficients
+  rCoefs <- as.vector(coef(glm(Sepal.Width ~ Sepal.Length + Species, data = iris)))
+  expect_true(all(abs(rCoefs - coefs) < 1e-6), rCoefs - coefs)
+})
