@@ -105,13 +105,13 @@ case class SortMergeJoin(
 
     streamResults.zipPartitions(bufferResults) ( (streamedIter, bufferedIter) => {
       // standard null rows
-      val streamedNullRow = new GenericRow(streamedPlan.output.length)
-      val bufferedNullRow = new GenericRow(bufferedPlan.output.length)
+      val streamedNullRow = InternalRow.fromSeq(Seq.fill(bufferedPlan.output.length)(null))
+      val bufferedNullRow = InternalRow.fromSeq(Seq.fill(bufferedPlan.output.length)(null))
       new Iterator[InternalRow] {
         // An ordering that can be used to compare keys from both sides.
         private[this] val keyOrdering = newNaturalAscendingOrdering(leftKeys.map(_.dataType))
         // Mutable per row objects.
-        private[this] val joinRow = new JoinedRow5
+        private[this] val joinRow = new JoinedRow
         private[this] var streamedElement: InternalRow = _
         private[this] var bufferedElement: InternalRow = _
         private[this] var streamedKey: InternalRow = _
