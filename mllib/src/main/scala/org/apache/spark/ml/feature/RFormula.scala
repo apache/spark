@@ -17,7 +17,7 @@
 
 package org.apache.spark.ml.feature
 
-import scala.collection.mutable.{ArrayBuffer, Set => MutableSet}
+import scala.collection.mutable.ArrayBuffer
 import scala.util.parsing.combinator.RegexParsers
 
 import org.apache.spark.annotation.Experimental
@@ -113,7 +113,7 @@ class RFormula(override val uid: String) extends Estimator[RFormulaModel] with R
     encoderStages += new VectorAssembler(uid)
       .setInputCols(encodedTerms.toArray)
       .setOutputCol($(featuresCol))
-      .setRewriteAttributeNames(false)  // already unique by construction
+      .setRewriteAttributeNames(false)  // they are already unique by construction
     encoderStages += new ColumnPruner(tempColumns.toSet)
     val pipelineModel = new Pipeline(uid).setStages(encoderStages.toArray).fit(dataset)
     copyValues(new RFormulaModel(uid, resolvedFormula, pipelineModel).setParent(this))
