@@ -66,6 +66,19 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
   }
 
   /**
+   * Creates an UTF8String from byte array, which should be encoded in UTF-8.
+   *
+   * Note: `bytes` will be hold by returned UTF8String.
+   */
+  public static UTF8String fromBytes(byte[] bytes, int offset, int numBytes) {
+    if (bytes != null) {
+      return new UTF8String(bytes, BYTE_ARRAY_OFFSET + offset, numBytes);
+    } else {
+      return null;
+    }
+  }
+
+  /**
    * Creates an UTF8String from String.
    */
   public static UTF8String fromString(String str) {
@@ -89,10 +102,10 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
     return fromBytes(spaces);
   }
 
-  protected UTF8String(Object base, long offset, int size) {
+  protected UTF8String(Object base, long offset, int numBytes) {
     this.base = base;
     this.offset = offset;
-    this.numBytes = size;
+    this.numBytes = numBytes;
   }
 
   /**
@@ -148,7 +161,7 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
     // If size is greater than 4, assume we have at least 8 bytes of data to fetch.
     // After getting the data, we use a mask to mask out data that is not part of the string.
     long p;
-    if (numBytes > 8) {
+    if (numBytes >= 8) {
       p = PlatformDependent.UNSAFE.getLong(base, offset);
     } else  if (numBytes > 4) {
       p = PlatformDependent.UNSAFE.getLong(base, offset);
