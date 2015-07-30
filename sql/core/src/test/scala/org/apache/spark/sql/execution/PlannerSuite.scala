@@ -157,4 +157,42 @@ class PlannerSuite extends SparkFunSuite {
     val planned = planner.TakeOrderedAndProject(query)
     assert(planned.head.isInstanceOf[execution.TakeOrderedAndProject])
   }
+
+  test("PartitioningCollection") {
+    // First, we disable broadcast join.
+    val origThreshold = conf.autoBroadcastJoinThreshold
+    setConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD, 0)
+
+    testData.registerTempTable("normal")
+    testData.limit(10).registerTempTable("small")
+    testData.limit(3).registerTempTable("tiny")
+    var numExchanges = sql(
+      """
+        |SELECT *
+        |FROM
+        |  normal JOIN small ON (normal.key = small.key)
+        |  JOIN tiny ON (small.key = tiny.key)
+      """.stripMargin).queryExecution.executedPlan.collect {
+      case exchange: Exchange => exchange
+    }.length
+
+    assert(numExchanges === 3)
+
+    numExchanges = sql(
+      """
+        |SELECT *
+        |FROM
+        |  normal JOIN small ON (normal.key = small.key)
+        |  JOIN tiny ON (normal.key = tiny.key)
+      """.stripMargin).queryExecution.executedPlan.collect {
+      case exchange: Exchange => exchange
+    }.length
+
+    assert(numExchanges === 3)
+
+    setConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD, origThreshold)
+    dropTempTable("normal")
+    dropTempTable("small")
+    dropTempTable("tiny")
+  }
 }
