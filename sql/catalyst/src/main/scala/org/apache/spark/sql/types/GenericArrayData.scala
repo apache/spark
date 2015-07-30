@@ -18,7 +18,7 @@
 package org.apache.spark.sql.types
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.unsafe.types.{UTF8String, Interval}
+import org.apache.spark.unsafe.types.{UTF8String, CalendarInterval}
 
 class GenericArrayData(array: Array[Any]) extends ArrayData {
   private def getAs[T](ordinal: Int) = get(ordinal).asInstanceOf[T]
@@ -49,7 +49,7 @@ class GenericArrayData(array: Array[Any]) extends ArrayData {
 
   override def getBinary(ordinal: Int): Array[Byte] = getAs(ordinal)
 
-  override def getInterval(ordinal: Int): Interval = getAs(ordinal)
+  override def getInterval(ordinal: Int): CalendarInterval = getAs(ordinal)
 
   override def getStruct(ordinal: Int, numFields: Int): InternalRow = getAs(ordinal)
 

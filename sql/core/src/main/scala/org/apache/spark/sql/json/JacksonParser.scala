@@ -173,10 +173,10 @@ private[sql] object JacksonParser {
   private def convertArray(
       factory: JsonFactory,
       parser: JsonParser,
-      schema: DataType): ArrayData = {
+      elementType: DataType): ArrayData = {
     val values = scala.collection.mutable.ArrayBuffer.empty[Any]
     while (nextUntil(parser, JsonToken.END_ARRAY)) {
-      values += convertField(factory, parser, schema)
+      values += convertField(factory, parser, elementType)
     }
 
     new GenericArrayData(values.toArray)
