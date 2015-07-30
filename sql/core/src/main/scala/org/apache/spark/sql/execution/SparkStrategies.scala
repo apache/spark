@@ -201,7 +201,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
     }
 
     def canBeCodeGened(aggs: Seq[AggregateExpression1]): Boolean = aggs.forall {
-      case _: CombineSum | _: Sum | _: Count | _: Max | _: Min |  _: CombineSetsAndCount => true
+      case _: Sum | _: Count | _: Max | _: Min |  _: CombineSetsAndCount => true
       // The generated set implementation is pretty limited ATM.
       case CollectHashSet(exprs) if exprs.size == 1  &&
            Seq(IntegerType, LongType).contains(exprs.head.dataType) => true
@@ -339,7 +339,8 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
      *               if necessary.
      */
     def getSortOperator(sortExprs: Seq[SortOrder], global: Boolean, child: SparkPlan): SparkPlan = {
-      if (sqlContext.conf.unsafeEnabled && UnsafeExternalSort.supportsSchema(child.schema)) {
+      if (sqlContext.conf.unsafeEnabled && sqlContext.conf.codegenEnabled &&
+        UnsafeExternalSort.supportsSchema(child.schema)) {
         execution.UnsafeExternalSort(sortExprs, global, child)
       } else if (sqlContext.conf.externalSortEnabled) {
         execution.ExternalSort(sortExprs, global, child)
@@ -363,7 +364,14 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case logical.Sort(sortExprs, global, child) =>
         getSortOperator(sortExprs, global, planLater(child)):: Nil
       case logical.Project(projectList, child) =>
-        execution.Project(projectList, planLater(child)) :: Nil
+        // If unsafe mode is enabled and we support these data types in Unsafe, use the
+        // Tungsten project. Otherwise, use the normal project.
+        if (sqlContext.conf.unsafeEnabled &&
+          UnsafeProjection.canSupport(projectList) && UnsafeProjection.canSupport(child.schema)) {
+          execution.TungstenProject(projectList, planLater(child)) :: Nil
+        } else {
+          execution.Project(projectList, planLater(child)) :: Nil
+        }
       case logical.Filter(condition, child) =>
         execution.Filter(condition, planLater(child)) :: Nil
       case e @ logical.Expand(_, _, _, child) =>

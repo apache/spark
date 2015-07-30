@@ -777,7 +777,6 @@ case class Levenshtein(left: Expression, right: Expression) extends BinaryExpres
   override def inputTypes: Seq[AbstractDataType] = Seq(StringType, StringType)
 
   override def dataType: DataType = IntegerType
-
   protected override def nullSafeEval(leftValue: Any, rightValue: Any): Any =
     leftValue.asInstanceOf[UTF8String].levenshteinDistance(rightValue.asInstanceOf[UTF8String])
 
@@ -1140,7 +1139,7 @@ case class RegExpExtract(subject: Expression, regexp: Expression, idx: Expressio
  * fractional part.
  */
 case class FormatNumber(x: Expression, d: Expression)
-  extends BinaryExpression with ExpectsInputTypes with CodegenFallback {
+  extends BinaryExpression with ExpectsInputTypes {
 
   override def left: Expression = x
   override def right: Expression = d

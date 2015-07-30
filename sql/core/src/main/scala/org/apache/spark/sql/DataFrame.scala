@@ -40,8 +40,9 @@ import org.apache.spark.sql.catalyst.plans.logical.{Filter, _}
 import org.apache.spark.sql.catalyst.plans.{Inner, JoinType}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, ScalaReflection, SqlParser}
 import org.apache.spark.sql.execution.{EvaluatePython, ExplainCommand, LogicalRDD}
-import org.apache.spark.sql.execution.datasources.CreateTableUsingAsSelect
-import org.apache.spark.sql.json.JacksonGenerator
+import org.apache.spark.sql.execution.datasources.{CreateTableUsingAsSelect, LogicalRelation}
+import org.apache.spark.sql.json.{JacksonGenerator, JSONRelation}
+import org.apache.spark.sql.sources.HadoopFsRelation
 import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.Utils
@@ -1544,6 +1545,21 @@ class DataFrame private[sql](
         }
       }
     }
+  }
+
+  /**
+   * Returns a best-effort snapshot of the files that compose this DataFrame. This method simply
+   * asks each constituent BaseRelation for its respective files and takes the union of all results.
+   * Depending on the source relations, this may not find all input files. Duplicates are removed.
+   */
+  def inputFiles: Array[String] = {
+    val files: Seq[String] = logicalPlan.collect {
+      case LogicalRelation(fsBasedRelation: HadoopFsRelation) =>
+        fsBasedRelation.paths.toSeq
+      case LogicalRelation(jsonRelation: JSONRelation) =>
+        jsonRelation.path.toSeq
+    }.flatten
+    files.toSet.toArray
   }
 
   ////////////////////////////////////////////////////////////////////////////

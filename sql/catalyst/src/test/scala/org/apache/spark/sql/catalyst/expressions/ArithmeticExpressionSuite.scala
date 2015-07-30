@@ -170,6 +170,6 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
     checkEvaluation(Pmod(-7, 3), 2)
     checkEvaluation(Pmod(7.2D, 4.1D), 3.1000000000000005)
     checkEvaluation(Pmod(Decimal(0.7), Decimal(0.2)), Decimal(0.1))
-    checkEvaluation(Pmod(2L, Long.MaxValue), 2)
+    checkEvaluation(Pmod(2L, Long.MaxValue), 2L)
   }
 }

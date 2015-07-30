@@ -15,23 +15,39 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.types
+package org.apache.spark.sql.catalyst.expressions;
 
-import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.sql.catalyst.InternalRow;
+import org.apache.spark.sql.types.Decimal;
+import org.apache.spark.unsafe.types.CalendarInterval;
+import org.apache.spark.unsafe.types.UTF8String;
 
+public interface SpecializedGetters {
 
-/**
- * :: DeveloperApi ::
- * The data type representing time intervals.
- *
- * Please use the singleton [[DataTypes.IntervalType]].
- */
-@DeveloperApi
-class IntervalType private() extends DataType {
+  boolean isNullAt(int ordinal);
 
-  override def defaultSize: Int = 4096
+  boolean getBoolean(int ordinal);
 
-  private[spark] override def asNullable: IntervalType = this
+  byte getByte(int ordinal);
+
+  short getShort(int ordinal);
+
+  int getInt(int ordinal);
+
+  long getLong(int ordinal);
+
+  float getFloat(int ordinal);
+
+  double getDouble(int ordinal);
+
+  Decimal getDecimal(int ordinal);
+
+  UTF8String getUTF8String(int ordinal);
+
+  byte[] getBinary(int ordinal);
+
+  CalendarInterval getInterval(int ordinal);
+
+  InternalRow getStruct(int ordinal, int numFields);
+
 }
-
-case object IntervalType extends IntervalType
