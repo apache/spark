@@ -26,6 +26,7 @@ import scala.xml.{Elem, Node, Unparsed}
 
 import org.apache.commons.lang3.StringEscapeUtils
 
+import org.apache.spark.{InternalAccumulator, SparkConf}
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.scheduler.{AccumulableInfo, TaskInfo}
 import org.apache.spark.ui._
@@ -116,8 +117,11 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
       val tasks = stageData.taskData.values.toSeq.sortBy(_.taskInfo.launchTime)
 
       val numCompleted = tasks.count(_.taskInfo.finished)
-      val accumulables = progressListener.stageIdToData((stageId, stageAttemptId)).accumulables
-      val hasAccumulators = accumulables.size > 0
+      val (internalAccumulables, externalAccumulables) =
+        progressListener.stageIdToData((stageId, stageAttemptId))
+          .accumulables
+          .partition { case (_, acc) => acc.internal }
+      val hasAccumulators = externalAccumulables.size > 0
 
       val summary =
         <div>
@@ -241,11 +245,12 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
       val accumulableTable = UIUtils.listingTable(
         accumulableHeaders,
         accumulableRow,
-        accumulables.values.toSeq)
+        externalAccumulables.values.toSeq)
 
       val currentTime = System.currentTimeMillis()
       val (taskTable, taskTableHTML) = try {
         val _taskTable = new TaskPagedTable(
+          parent.conf,
           UIUtils.prependBaseUri(parent.basePath) +
             s"/stages/stage?id=${stageId}&attempt=${stageAttemptId}",
           tasks,
@@ -499,7 +504,7 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
       val executorTable = new ExecutorTable(stageId, stageAttemptId, parent)
 
       val maybeAccumulableTable: Seq[Node] =
-        if (accumulables.size > 0) { <h4>Accumulators</h4> ++ accumulableTable } else Seq()
+        if (hasAccumulators) { <h4>Accumulators</h4> ++ accumulableTable } else Seq()
 
       val content =
         summary ++
@@ -750,29 +755,30 @@ private[ui] case class TaskTableRowBytesSpilledData(
  * Contains all data that needs for sorting and generating HTML. Using this one rather than
  * TaskUIData to avoid creating duplicate contents during sorting the data.
  */
-private[ui] case class TaskTableRowData(
-    index: Int,
-    taskId: Long,
-    attempt: Int,
-    speculative: Boolean,
-    status: String,
-    taskLocality: String,
-    executorIdAndHost: String,
-    launchTime: Long,
-    duration: Long,
-    formatDuration: String,
-    schedulerDelay: Long,
-    taskDeserializationTime: Long,
-    gcTime: Long,
-    serializationTime: Long,
-    gettingResultTime: Long,
-    accumulators: Option[String], // HTML
-    input: Option[TaskTableRowInputData],
-    output: Option[TaskTableRowOutputData],
-    shuffleRead: Option[TaskTableRowShuffleReadData],
-    shuffleWrite: Option[TaskTableRowShuffleWriteData],
-    bytesSpilled: Option[TaskTableRowBytesSpilledData],
-    error: String)
+private[ui] class TaskTableRowData(
+    val index: Int,
+    val taskId: Long,
+    val attempt: Int,
+    val speculative: Boolean,
+    val status: String,
+    val taskLocality: String,
+    val executorIdAndHost: String,
+    val launchTime: Long,
+    val duration: Long,
+    val formatDuration: String,
+    val schedulerDelay: Long,
+    val taskDeserializationTime: Long,
+    val gcTime: Long,
+    val serializationTime: Long,
+    val gettingResultTime: Long,
+    val peakMemoryUsed: Long,
+    val accumulators: Option[String], // HTML
+    val input: Option[TaskTableRowInputData],
+    val output: Option[TaskTableRowOutputData],
+    val shuffleRead: Option[TaskTableRowShuffleReadData],
+    val shuffleWrite: Option[TaskTableRowShuffleWriteData],
+    val bytesSpilled: Option[TaskTableRowBytesSpilledData],
+    val error: String)
 
 private[ui] class TaskDataSource(
     tasks: Seq[TaskUIData],
@@ -816,10 +822,16 @@ private[ui] class TaskDataSource(
     val serializationTime = metrics.map(_.resultSerializationTime).getOrElse(0L)
     val gettingResultTime = getGettingResultTime(info, currentTime)
 
-    val maybeAccumulators = info.accumulables
-    val accumulatorsReadable = maybeAccumulators.map { acc =>
+    val (taskInternalAccumulables, taskExternalAccumulables) =
+      info.accumulables.partition(_.internal)
+    val externalAccumulableReadable = taskExternalAccumulables.map { acc =>
       StringEscapeUtils.escapeHtml4(s"${acc.name}: ${acc.update.get}")
     }
+
+    val peakMemoryUsed = taskInternalAccumulables
+      .find { acc => acc.name == InternalAccumulator.PEAK_EXECUTION_MEMORY }
+      .map { acc => acc.value.toLong }
+      .getOrElse(0L)
 
     val maybeInput = metrics.flatMap(_.inputMetrics)
     val inputSortable = maybeInput.map(_.bytesRead).getOrElse(0L)
@@ -923,7 +935,7 @@ private[ui] class TaskDataSource(
         None
       }
 
-    TaskTableRowData(
+    new TaskTableRowData(
       info.index,
       info.taskId,
       info.attempt,
@@ -939,7 +951,8 @@ private[ui] class TaskDataSource(
       gcTime,
       serializationTime,
       gettingResultTime,
-      if (hasAccumulators) Some(accumulatorsReadable.mkString("<br/>")) else None,
+      peakMemoryUsed,
+      if (hasAccumulators) Some(externalAccumulableReadable.mkString("<br/>")) else None,
       input,
       output,
       shuffleRead,
@@ -1132,6 +1145,7 @@ private[ui] class TaskDataSource(
 }
 
 private[ui] class TaskPagedTable(
+    conf: SparkConf,
     basePath: String,
     data: Seq[TaskUIData],
     hasAccumulators: Boolean,
@@ -1143,7 +1157,11 @@ private[ui] class TaskPagedTable(
     currentTime: Long,
     pageSize: Int,
     sortColumn: String,
-    desc: Boolean) extends PagedTable[TaskTableRowData]{
+    desc: Boolean) extends PagedTable[TaskTableRowData] {
+
+  // We only track peak memory used for unsafe operations
+  private val displayPeakMemoryUsage =
+    conf.getOption("spark.sql.unsafe.enabled").exists(_.toBoolean)
 
   override def tableId: String = ""
 
@@ -1195,6 +1213,13 @@ private[ui] class TaskPagedTable(
         ("GC Time", ""),
         ("Result Serialization Time", TaskDetailsClassNames.RESULT_SERIALIZATION_TIME),
         ("Getting Result Time", TaskDetailsClassNames.GETTING_RESULT_TIME)) ++
+        {
+          if (displayPeakMemoryUsage) {
+            Seq(("Peak Execution Memory", TaskDetailsClassNames.PEAK_EXECUTION_MEMORY))
+          } else {
+            Nil
+          }
+        } ++
         {if (hasAccumulators) Seq(("Accumulators", "")) else Nil} ++
         {if (hasInput) Seq(("Input Size / Records", "")) else Nil} ++
         {if (hasOutput) Seq(("Output Size / Records", "")) else Nil} ++
@@ -1271,6 +1296,13 @@ private[ui] class TaskPagedTable(
       <td class={TaskDetailsClassNames.GETTING_RESULT_TIME}>
         {UIUtils.formatDuration(task.gettingResultTime)}
       </td>
+      {if (displayPeakMemoryUsage) {
+        <td class={TaskDetailsClassNames.PEAK_EXECUTION_MEMORY}>
+          {Utils.bytesToString(task.peakMemoryUsed)}
+        </td>
+      } else {
+        Nil
+      }}
       {if (task.accumulators.nonEmpty) {
         <td>{Unparsed(task.accumulators.get)}</td>
       }}

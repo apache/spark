@@ -76,6 +76,7 @@ private[spark] class ShuffleMapTask(
         case unsafe: UnsafeShuffleWriter[_, _] =>
           context.internalMetricsToAccumulators(
             InternalAccumulator.PEAK_EXECUTION_MEMORY).add(unsafe.getPeakMemoryUsage)
+        case _ =>
       }
       writer.stop(success = true).get
     } catch {

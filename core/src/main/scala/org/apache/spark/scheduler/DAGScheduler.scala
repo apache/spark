@@ -930,9 +930,10 @@ class DAGScheduler(
             val name = acc.name.get
             val stringPartialValue = Accumulators.stringifyPartialValue(partialValue)
             val stringValue = Accumulators.stringifyValue(acc.value)
-            stage.latestInfo.accumulables(id) = AccumulableInfo(id, name, stringValue)
+            stage.latestInfo.accumulables(id) =
+              new AccumulableInfo(id, name, None, stringValue, acc.isInternal)
             event.taskInfo.accumulables +=
-              AccumulableInfo(id, name, Some(stringPartialValue), stringValue)
+              new AccumulableInfo(id, name, Some(stringPartialValue), stringValue, acc.isInternal)
           }
         }
       } catch {
