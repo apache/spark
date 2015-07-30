@@ -376,18 +376,15 @@ class DistributedLDAModel private (
   def topDocumentsPerTopic(maxDocumentsPerTopic: Int): Array[(Array[Int], Array[Double])] = {
     val numTopics = k
     val topicsInQueues: Array[BoundedPriorityQueue[(Double, Int)]] =
-      graph.vertices.filter(isDocumentVertex)
-        .mapPartitions { docVertices =>
+      topicDistributions.mapPartitions { docVertices =>
         // For this partition, collect the most common docs for each topic in queues:
         //  queues(topic) = queue of (doc weight, doc index).
-        // Weights are N_{kj} / N_j.
         val queues =
           Array.fill(numTopics)(new BoundedPriorityQueue[(Double, Int)](maxDocumentsPerTopic))
-        for ((docId, n_kj) <- docVertices) {
+        for ((docId, docWeight) <- docVertices) {
           var topic = 0
-          val n_j = brzSum(n_kj)
           while (topic < numTopics) {
-            queues(topic) += (n_kj(topic) / n_j -> docId.toInt)
+            queues(topic) += (docWeight(topic) -> docId.toInt)
             topic += 1
           }
         }
