@@ -345,20 +345,7 @@ case class HiveScriptIOSchema (
 
     val columnTypesNames = columnTypes.map(_.toTypeInfo.getTypeName()).mkString(",")
 
-    def extract(in: String) = {
-      if(in.contains("'")) {
-        val contents = in.split("'")
-        if (contents.length < 2) {
-          throw new RuntimeException(s"Unable to extract value of entry ${in}")
-        }
-        contents(1)
-      } else {
-        in
-      }
-    }
-    var propsMap = serdeProps.map(kv => {
-      (extract(kv._1), extract(kv._2))
-    }).toMap + (serdeConstants.LIST_COLUMNS -> columns.mkString(","))
+    var propsMap = serdeProps.toMap + (serdeConstants.LIST_COLUMNS -> columns.mkString(","))
     propsMap = propsMap + (serdeConstants.LIST_COLUMN_TYPES -> columnTypesNames)
 
     val properties = new Properties()
