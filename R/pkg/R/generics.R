@@ -531,6 +531,10 @@ setGeneric("showDF", function(x,...) { standardGeneric("showDF") })
 #' @export
 setGeneric("summarize", function(x,...) { standardGeneric("summarize") })
 
+#' rdname summary
+#' @export
+setGeneric("summary", function(x, ...) { standardGeneric("summary") })
+
 # @rdname tojson
 # @export
 setGeneric("toJSON", function(x) { standardGeneric("toJSON") })

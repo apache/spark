@@ -1430,6 +1430,15 @@ setMethod("describe",
             dataFrame(sdf)
           })
 
+#' @rdname summary.DataFrame
+#' @aliases describe
+setMethod("summary",
+          signature(x = "DataFrame"),
+          function(x) {
+            describe(x)
+          })
+
+
 #' dropna
 #'
 #' Returns a new DataFrame omitting rows with null values.
