@@ -26,5 +26,5 @@ import scala.Tuple2;
  * key-value pairs are represented as scala.Tuple2 objects.
  */
 public interface PairFlatMapFunction<T, K, V> extends Serializable {
-  public Iterable<Tuple2<K, V>> call(T t) throws Exception;
+  Iterable<Tuple2<K, V>> call(T t) throws Exception;
 }
