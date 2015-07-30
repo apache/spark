@@ -136,13 +136,13 @@ object EvaluatePython {
 
     case (a: ArrayData, array: ArrayType) =>
       val length = a.numElements()
-      val values = new Array[Any](length)
+      val values = new java.util.ArrayList[Any](length)
       var i = 0
       while (i < length) {
         if (a.isNullAt(i)) {
-          values(i) = null
+          values.add(null)
         } else {
-          toJava(a.get(i), array.elementType)
+          values.add(toJava(a.get(i), array.elementType))
         }
         i += 1
       }
