@@ -879,7 +879,7 @@ test_that("parquetFile works with multiple input paths", {
   expect_equal(count(parquetDF), count(df)*2)
 })
 
-test_that("describe() on a DataFrame", {
+test_that("describe() and summarize() on a DataFrame", {
   df <- jsonFile(sqlContext, jsonPath)
   stats <- describe(df, "age")
   expect_equal(collect(stats)[1, "summary"], "count")
@@ -888,6 +888,10 @@ test_that("describe() on a DataFrame", {
   stats <- describe(df)
   expect_equal(collect(stats)[4, "name"], "Andy")
   expect_equal(collect(stats)[5, "age"], "30")
+
+  stats2 <- summary(df)
+  expect_equal(collect(stats2)[4, "name"], "Andy")
+  expect_equal(collect(stats2)[5, "age"], "30")
 })
 
 test_that("dropna() on a DataFrame", {
