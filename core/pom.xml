@@ -44,28 +44,6 @@
       <artifactId>guava</artifactId>
     </dependency>
     <dependency>
-      <groupId>com.esotericsoftware.kryo</groupId>
-      <artifactId>kryo</artifactId>
-      <version>${kryo.version}</version>
-<!--      <classifier>shaded</classifier>-->
-    </dependency>
-    <dependency>
-      <groupId>com.esotericsoftware.reflectasm</groupId>
-      <artifactId>reflectasm</artifactId>
-      <version>1.07</version>
-      <classifier>shaded</classifier>
-    </dependency>
-    <dependency>
-      <groupId>com.esotericsoftware.minlog</groupId>
-      <artifactId>minlog</artifactId>
-      <version>1.2</version>
-    </dependency>
-    <dependency>
-      <groupId>org.objenesis</groupId>
-      <artifactId>objenesis</artifactId>
-      <version>1.2</version>
-    </dependency>
-    <dependency>
       <groupId>com.twitter</groupId>
       <artifactId>chill_${scala.binary.version}</artifactId>
     </dependency>
