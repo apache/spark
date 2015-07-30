@@ -1301,7 +1301,6 @@ setMethod("unionAll",
   setMethod("rbind",
             signature(... = "DataFrame"),
             function(x, ..., deparse.level = 1) {
-              allargs <- list(...)
               if (nargs() == 3) {
                 unionAll(x, ...)
               } else {
