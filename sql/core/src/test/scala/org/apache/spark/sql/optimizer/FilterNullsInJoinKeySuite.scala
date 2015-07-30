@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{Filter, LocalRelation, Logic
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.test.TestSQLContext
 
+/** This is the test suite for FilterNullsInJoinKey optimziation rule. */
 class FilterNullsInJoinKeySuite extends PlanTest {
 
   // We add predicate pushdown rules at here to make sure we do not
@@ -40,7 +41,7 @@ class FilterNullsInJoinKeySuite extends PlanTest {
       Batch("Subqueries", Once,
         EliminateSubQueries) ::
       Batch("Operator Optimizations", FixedPoint(100),
-        FilterNullsInJoinKey(TestSQLContext),
+        FilterNullsInJoinKey(TestSQLContext), // This is the rule we test in this suite.
         CombineFilters,
         PushPredicateThroughProject,
         BooleanSimplification,
