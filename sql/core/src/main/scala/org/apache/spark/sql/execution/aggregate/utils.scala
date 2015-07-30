@@ -292,8 +292,8 @@ object Utils {
         AggregateExpression2(aggregateFunction, PartialMerge, false)
     }
     val partialMergeAggregateAttributes =
-      partialMergeAggregateExpressions.map {
-        expr => aggregateFunctionMap(expr.aggregateFunction, expr.isDistinct)
+      partialMergeAggregateExpressions.flatMap { agg =>
+        agg.aggregateFunction.bufferAttributes
       }
     val partialMergeAggregate =
       Aggregate2Sort(

@@ -184,7 +184,7 @@ private[sql] case class ScalaUDAF(
       bufferSchema,
       bufferValuesToCatalystConverters,
       bufferValuesToScalaConverters,
-      bufferOffset,
+      inputBufferOffset,
       null)
 
   lazy val mutableAggregateBuffer: MutableAggregationBufferImpl =
@@ -192,9 +192,16 @@ private[sql] case class ScalaUDAF(
       bufferSchema,
       bufferValuesToCatalystConverters,
       bufferValuesToScalaConverters,
-      bufferOffset,
+      mutableBufferOffset,
       null)
 
+  lazy val evalAggregateBuffer: InputAggregationBuffer =
+    new InputAggregationBuffer(
+      bufferSchema,
+      bufferValuesToCatalystConverters,
+      bufferValuesToScalaConverters,
+      mutableBufferOffset,
+      null)
 
   override def initialize(buffer: MutableRow): Unit = {
     mutableAggregateBuffer.underlyingBuffer = buffer
@@ -217,10 +224,10 @@ private[sql] case class ScalaUDAF(
     udaf.merge(mutableAggregateBuffer, inputAggregateBuffer)
   }
 
-  override def eval(buffer: InternalRow = null): Any = {
-    inputAggregateBuffer.underlyingInputBuffer = buffer
+  override def eval(buffer: InternalRow): Any = {
+    evalAggregateBuffer.underlyingInputBuffer = buffer
 
-    udaf.evaluate(inputAggregateBuffer)
+    udaf.evaluate(evalAggregateBuffer)
   }
 
   override def toString: String = {

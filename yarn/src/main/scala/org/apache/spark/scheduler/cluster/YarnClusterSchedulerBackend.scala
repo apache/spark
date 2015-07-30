@@ -19,6 +19,8 @@ package org.apache.spark.scheduler.cluster
 
 import java.net.NetworkInterface
 
+import org.apache.hadoop.yarn.api.ApplicationConstants.Environment
+
 import scala.collection.JavaConverters._
 
 import org.apache.hadoop.yarn.api.records.NodeState
@@ -64,68 +66,29 @@ private[spark] class YarnClusterSchedulerBackend(
     }
 
   override def getDriverLogUrls: Option[Map[String, String]] = {
-    var yarnClientOpt: Option[YarnClient] = None
     var driverLogs: Option[Map[String, String]] = None
     try {
       val yarnConf = new YarnConfiguration(sc.hadoopConfiguration)
       val containerId = YarnSparkHadoopUtil.get.getContainerId
-      yarnClientOpt = Some(YarnClient.createYarnClient())
-      yarnClientOpt.foreach { yarnClient =>
-        yarnClient.init(yarnConf)
-        yarnClient.start()
 
-        // For newer versions of YARN, we can find the HTTP address for a given node by getting a
-        // container report for a given container. But container reports came only in Hadoop 2.4,
-        // so we basically have to get the node reports for all nodes and find the one which runs
-        // this container. For that we have to compare the node's host against the current host.
-        // Since the host can have multiple addresses, we need to compare against all of them to
-        // find out if one matches.
-
-        // Get all the addresses of this node.
-        val addresses =
-          NetworkInterface.getNetworkInterfaces.asScala
-            .flatMap(_.getInetAddresses.asScala)
-            .toSeq
-
-        // Find a node report that matches one of the addresses
-        val nodeReport =
-          yarnClient.getNodeReports(NodeState.RUNNING).asScala.find { x =>
-            val host = x.getNodeId.getHost
-            addresses.exists { address =>
-              address.getHostAddress == host ||
-                address.getHostName == host ||
-                address.getCanonicalHostName == host
-            }
-          }
-
-        // Now that we have found the report for the Node Manager that the AM is running on, we
-        // can get the base HTTP address for the Node manager from the report.
-        // The format used for the logs for each container is well-known and can be constructed
-        // using the NM's HTTP address and the container ID.
-        // The NM may be running several containers, but we can build the URL for the AM using
-        // the AM's container ID, which we already know.
-        nodeReport.foreach { report =>
-          val httpAddress = report.getHttpAddress
-          // lookup appropriate http scheme for container log urls
-          val yarnHttpPolicy = yarnConf.get(
-            YarnConfiguration.YARN_HTTP_POLICY_KEY,
-            YarnConfiguration.YARN_HTTP_POLICY_DEFAULT
-          )
-          val user = Utils.getCurrentUserName()
-          val httpScheme = if (yarnHttpPolicy == "HTTPS_ONLY") "https://" else "http://"
-          val baseUrl = s"$httpScheme$httpAddress/node/containerlogs/$containerId/$user"
-          logDebug(s"Base URL for logs: $baseUrl")
-          driverLogs = Some(Map(
-            "stderr" -> s"$baseUrl/stderr?start=-4096",
-            "stdout" -> s"$baseUrl/stdout?start=-4096"))
-        }
-      }
+      val httpAddress = System.getenv(Environment.NM_HOST.name()) +
+        ":" + System.getenv(Environment.NM_HTTP_PORT.name())
+      // lookup appropriate http scheme for container log urls
+      val yarnHttpPolicy = yarnConf.get(
+        YarnConfiguration.YARN_HTTP_POLICY_KEY,
+        YarnConfiguration.YARN_HTTP_POLICY_DEFAULT
+      )
+      val user = Utils.getCurrentUserName()
+      val httpScheme = if (yarnHttpPolicy == "HTTPS_ONLY") "https://" else "http://"
+      val baseUrl = s"$httpScheme$httpAddress/node/containerlogs/$containerId/$user"
+      logDebug(s"Base URL for logs: $baseUrl")
+      driverLogs = Some(Map(
+        "stderr" -> s"$baseUrl/stderr?start=-4096",
+        "stdout" -> s"$baseUrl/stdout?start=-4096"))
     } catch {
       case e: Exception =>
-        logInfo("Node Report API is not available in the version of YARN being used, so AM" +
+        logInfo("Error while building AM log links, so AM" +
           " logs link will not appear in application UI", e)
-    } finally {
-      yarnClientOpt.foreach(_.close())
     }
     driverLogs
   }

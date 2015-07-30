@@ -58,21 +58,21 @@ export "PYTHONPATH=$SPARK_ROOT_DIR/dev/pylint"
 export "PYLINT_HOME=$PYTHONPATH"
 export "PATH=$PYTHONPATH:$PATH"
 
-if [ ! -d "$PYLINT_HOME" ]; then
-    mkdir "$PYLINT_HOME"
-    # Redirect the annoying pylint installation output.
-    easy_install -d "$PYLINT_HOME" pylint==1.4.4 &>> "$PYLINT_INSTALL_INFO"
-    easy_install_status="$?"
-
-    if [ "$easy_install_status" -ne 0 ]; then
-        echo "Unable to install pylint locally in \"$PYTHONPATH\"."
-        cat "$PYLINT_INSTALL_INFO"
-        exit "$easy_install_status"
-    fi
-
-    rm "$PYLINT_INSTALL_INFO"
-
-fi
+# if [ ! -d "$PYLINT_HOME" ]; then
+#     mkdir "$PYLINT_HOME"
+#     # Redirect the annoying pylint installation output.
+#     easy_install -d "$PYLINT_HOME" pylint==1.4.4 &>> "$PYLINT_INSTALL_INFO"
+#     easy_install_status="$?"
+#
+#     if [ "$easy_install_status" -ne 0 ]; then
+#         echo "Unable to install pylint locally in \"$PYTHONPATH\"."
+#         cat "$PYLINT_INSTALL_INFO"
+#         exit "$easy_install_status"
+#     fi
+#
+#     rm "$PYLINT_INSTALL_INFO"
+#
+# fi
 
 # There is no need to write this output to a file
 #+ first, but we do so so that the check status can

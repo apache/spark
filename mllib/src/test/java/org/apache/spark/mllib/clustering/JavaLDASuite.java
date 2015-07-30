@@ -19,6 +19,7 @@ package org.apache.spark.mllib.clustering;
 
 import java.io.Serializable;
 import java.util.ArrayList;
+import java.util.Arrays;
 
 import scala.Tuple2;
 
@@ -59,7 +60,10 @@ public class JavaLDASuite implements Serializable {
 
   @Test
   public void localLDAModel() {
-    LocalLDAModel model = new LocalLDAModel(LDASuite$.MODULE$.tinyTopics());
+    Matrix topics = LDASuite$.MODULE$.tinyTopics();
+    double[] topicConcentration = new double[topics.numRows()];
+    Arrays.fill(topicConcentration, 1.0D / topics.numRows());
+    LocalLDAModel model = new LocalLDAModel(topics, Vectors.dense(topicConcentration), 1D, 100D);
 
     // Check: basic parameters
     assertEquals(model.k(), tinyK);

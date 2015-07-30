@@ -15,9 +15,16 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution
+package org.apache.spark.sql.catalyst.expressions
 
-/**
- * Package containing expressions that are specific to Spark runtime.
- */
-package object expressions
+import org.apache.spark.SparkFunSuite
+
+class NondeterministicSuite extends SparkFunSuite with ExpressionEvalHelper {
+  test("MonotonicallyIncreasingID") {
+    checkEvaluation(MonotonicallyIncreasingID(), 0L)
+  }
+
+  test("SparkPartitionID") {
+    checkEvaluation(SparkPartitionID(), 0)
+  }
+}

@@ -32,7 +32,7 @@ class InterpretedProjection(expressions: Seq[Expression]) extends Projection {
     this(expressions.map(BindReferences.bindReference(_, inputSchema)))
 
   expressions.foreach(_.foreach {
-    case n: Nondeterministic => n.initialize()
+    case n: Nondeterministic => n.setInitialValues()
     case _ =>
   })
 
@@ -63,7 +63,7 @@ case class InterpretedMutableProjection(expressions: Seq[Expression]) extends Mu
     this(expressions.map(BindReferences.bindReference(_, inputSchema)))
 
   expressions.foreach(_.foreach {
-    case n: Nondeterministic => n.initialize()
+    case n: Nondeterministic => n.setInitialValues()
     case _ =>
   })
 
