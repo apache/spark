@@ -161,16 +161,18 @@ class NaiveBayesModel private[ml] (
   override protected def predictRaw(features: Vector): Vector = {
     $(modelType) match {
       case Multinomial =>
-        posteriorProbabilities(multinomialCalculation(features))
+        multinomialCalculation(features)
       case Bernoulli =>
-        posteriorProbabilities(bernoulliCalculation(features))
+        bernoulliCalculation(features)
       case _ =>
         // This should never happen.
         throw new UnknownError(s"Invalid modelType: ${$(modelType)}.")
     }
   }
 
-  override protected def raw2probabilityInPlace(rawPrediction: Vector): Vector = rawPrediction
+  override protected def raw2probabilityInPlace(rawPrediction: Vector): Vector = {
+    posteriorProbabilities(rawPrediction.toDense)
+  }
 
   override def copy(extra: ParamMap): NaiveBayesModel = {
     copyValues(new NaiveBayesModel(uid, pi, theta).setParent(this.parent), extra)
