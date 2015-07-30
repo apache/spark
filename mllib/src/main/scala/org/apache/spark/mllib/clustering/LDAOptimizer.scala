@@ -394,7 +394,7 @@ final class OnlineLDAOptimizer extends LDAOptimizer {
     val gammaShape = this.gammaShape
 
     val stats: RDD[(BDM[Double], List[BDV[Double]])] = batch.mapPartitions { docs =>
-      val nonEmptyDocs = docs.filter(_._2.numActives > 0)
+      val nonEmptyDocs = docs.filter(_._2.numNonzeros > 0)
 
       val stat = BDM.zeros[Double](k, vocabSize)
       var gammaPart = List[BDV[Double]]()
@@ -461,7 +461,8 @@ final class OnlineLDAOptimizer extends LDAOptimizer {
 private[clustering] object OnlineLDAOptimizer {
   /**
    * Uses variational inference to infer the topic distribution `gammad` given the term counts
-   * for a document. `termCounts` must be non-empty, otherwise Breeze will throw a BLAS error.
+   * for a document. `termCounts` must contain at least one non-zero entry, otherwise Breeze will
+   * throw a BLAS error.
    *
    * An optimization (Lee, Seung: Algorithms for non-negative matrix factorization, NIPS 2001)
    * avoids explicit computation of variational parameter `phi`.
