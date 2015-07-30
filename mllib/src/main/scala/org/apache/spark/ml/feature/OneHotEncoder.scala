@@ -56,18 +56,8 @@ class OneHotEncoder(override val uid: String) extends Transformer
     new BooleanParam(this, "dropLast", "whether to drop the last category")
   setDefault(dropLast -> true)
 
-  /**
-   * Param for the output attr prefix. If not specified, a prefix will be automatically generated.
-   * @group param
-   */
-  final val outputAttrPrefix: Param[String] =
-    new Param(this, "outputAttrPrefix", "override the default output attribute prefix")
-
   /** @group setParam */
   def setDropLast(value: Boolean): this.type = set(dropLast, value)
-
-  /** @group setParam */
-  def setOutputAttrPrefix(value: String): this.type = set(outputAttrPrefix, value)
 
   /** @group setParam */
   def setInputCol(value: String): this.type = set(inputCol, value)
@@ -179,10 +169,6 @@ class OneHotEncoder(override val uid: String) extends Transformer
   private def toOutputAttrName(index: Int): String = toOutputAttrName(index.toString)
 
   private def toOutputAttrName(value: String): String = {
-    if (isDefined(outputAttrPrefix)) {
-      $(outputAttrPrefix) + value.toString
-    } else {
-      $(inputCol) + "_is_" + value.toString
-    }
+    value.toString
   }
 }

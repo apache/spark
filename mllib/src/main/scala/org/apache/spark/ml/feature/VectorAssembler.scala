@@ -24,7 +24,6 @@ import org.apache.spark.annotation.Experimental
 import org.apache.spark.ml.Transformer
 import org.apache.spark.ml.attribute.{Attribute, AttributeGroup, NumericAttribute, UnresolvedAttribute}
 import org.apache.spark.ml.param.ParamMap
-import org.apache.spark.ml.param.BooleanParam
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util.Identifiable
 import org.apache.spark.mllib.linalg.{Vector, VectorUDT, Vectors}
@@ -41,17 +40,6 @@ class VectorAssembler(override val uid: String)
   extends Transformer with HasInputCols with HasOutputCol {
 
   def this() = this(Identifiable.randomUID("vecAssembler"))
-
-  /**
-   * Whether to rewrite vector attribute names.
-   * @group param
-   */
-  final val rewriteAttributeNames: BooleanParam =
-    new BooleanParam(this, "rewriteAttributeNames", "whether to rewrite vector attribute names")
-  setDefault(rewriteAttributeNames -> true)
-
-  /** @group setParam */
-  def setRewriteAttributeNames(value: Boolean): this.type = set(rewriteAttributeNames, value)
 
   /** @group setParam */
   def setInputCols(value: Array[String]): this.type = set(inputCols, value)
@@ -83,7 +71,7 @@ class VectorAssembler(override val uid: String)
           if (group.attributes.isDefined) {
             // If attributes are defined, copy them with updated names.
             group.attributes.get.map { attr =>
-              if (attr.name.isDefined && $(rewriteAttributeNames)) {
+              if (attr.name.isDefined) {
                 // TODO: Define a rigorous naming scheme.
                 attr.withName(c + "_" + attr.name.get)
               } else {

@@ -72,12 +72,13 @@ setMethod("predict", signature(object = "PipelineModel"),
             return(dataFrame(callJMethod(object@model, "transform", newData@sdf)))
           })
 
-#' Get statistics on a model.
+#' Get the summary of a model
 #'
-#' Returns statistics on a model produced by glm(), similarly to R's summary().
+#' Returns the summary of a model produced by glm(), similarly to R's summary().
 #'
 #' @param model A fitted MLlib model
-#' @return data.frame containing model statistics
+#' @return a list with a 'coefficient' component, which is the matrix of coefficients. See
+#'         summary.glm for more information.
 #' @rdname glm
 #' @export
 #' @examples
@@ -91,7 +92,8 @@ setMethod("summary", signature(object = "PipelineModel"),
                                    "getModelFeatures", object@model)
             weights <- callJStatic("org.apache.spark.ml.api.r.SparkRWrappers",
                                    "getModelWeights", object@model)
-            stats <- data.frame(unlist(features), unlist(weights))
-            names(stats) <- c("features", "coefficients")
-            return(stats)
+            coefficients <- as.matrix(unlist(weights))
+            colnames(coefficients) <- c("Estimate")
+            rownames(coefficients) <- unlist(features)
+            return(list(coefficients = coefficients))
           })

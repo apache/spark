@@ -17,7 +17,7 @@
 
 package org.apache.spark.ml.feature
 
-import scala.collection.mutable.ArrayBuffer
+import scala.collection.mutable.{ArrayBuffer, Set => MutableSet}
 import scala.util.parsing.combinator.RegexParsers
 
 import org.apache.spark.annotation.Experimental
@@ -91,18 +91,22 @@ class RFormula(override val uid: String) extends Estimator[RFormulaModel] with R
     // TODO(ekl) add support for feature interactions
     val encoderStages = ArrayBuffer[PipelineStage]()
     val tempColumns = ArrayBuffer[String]()
+    val takenNames = MutableSet(dataset.columns: _*)
     val encodedTerms = resolvedFormula.terms.map { term =>
       dataset.schema(term) match {
         case column if column.dataType == StringType =>
           val indexCol = term + "_idx_" + uid
-          val encodedCol = term + "_onehot_" + uid
-          encoderStages += new StringIndexer()
-            .setInputCol(term)
-            .setOutputCol(indexCol)
-          encoderStages += new OneHotEncoder()
-            .setInputCol(indexCol)
-            .setOutputCol(encodedCol)
-            .setOutputAttrPrefix(term + ".")
+          val encodedCol = {
+            var tmp = term
+            while (takenNames.contains(tmp)) {
+              tmp += "_"
+            }
+            tmp
+          }
+          takenNames.add(indexCol)
+          takenNames.add(encodedCol)
+          encoderStages += new StringIndexer().setInputCol(term).setOutputCol(indexCol)
+          encoderStages += new OneHotEncoder().setInputCol(indexCol).setOutputCol(encodedCol)
           tempColumns += indexCol
           tempColumns += encodedCol
           encodedCol
@@ -113,7 +117,6 @@ class RFormula(override val uid: String) extends Estimator[RFormulaModel] with R
     encoderStages += new VectorAssembler(uid)
       .setInputCols(encodedTerms.toArray)
       .setOutputCol($(featuresCol))
-      .setRewriteAttributeNames(false)  // they are already unique by construction
     encoderStages += new ColumnPruner(tempColumns.toSet)
     val pipelineModel = new Pipeline(uid).setStages(encoderStages.toArray).fit(dataset)
     copyValues(new RFormulaModel(uid, resolvedFormula, pipelineModel).setParent(this))

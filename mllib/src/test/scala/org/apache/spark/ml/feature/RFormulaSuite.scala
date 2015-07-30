@@ -118,8 +118,8 @@ class RFormulaSuite extends SparkFunSuite with MLlibTestSparkContext {
     val expectedAttrs = new AttributeGroup(
       "features",
       Array(
-        new BinaryAttribute(Some("a.bar"), Some(1)),
-        new BinaryAttribute(Some("a.foo"), Some(2)),
+        new BinaryAttribute(Some("a__bar"), Some(1)),
+        new BinaryAttribute(Some("a__foo"), Some(2)),
         new NumericAttribute(Some("b"), Some(3))))
     assert(attrs === expectedAttrs)
   }

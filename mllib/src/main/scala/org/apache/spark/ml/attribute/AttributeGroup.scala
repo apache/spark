@@ -165,11 +165,6 @@ class AttributeGroup private (
   /** Converts to a StructField. */
   def toStructField(): StructField = toStructField(Metadata.empty)
 
-  override def toString: String = {
-    s"""AttributeGroup(name = $name, numAttributes = $numAttributes, """ +
-      s"""attrs = ${attrs.map(_.map(_.toString).mkString(", "))})"""
-  }
-
   override def equals(other: Any): Boolean = {
     other match {
       case o: AttributeGroup =>
