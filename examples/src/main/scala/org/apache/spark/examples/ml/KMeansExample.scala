@@ -39,7 +39,7 @@ object KMeansExample {
     if (args.length != 2) {
       // scalastyle:off println
       System.err.println("Usage: ml.KMeansExample <file> <k>")
-      // scalastyle:of println
+      // scalastyle:on println
       System.exit(1)
     }
     val input = args(0)
