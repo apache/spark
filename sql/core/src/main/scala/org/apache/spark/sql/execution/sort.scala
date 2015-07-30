@@ -97,7 +97,7 @@ case class ExternalSort(
  * @param testSpillFrequency Method for configuring periodic spilling in unit tests. If set, will
  *                           spill every `frequency` records.
  */
-case class UnsafeExternalSort(
+case class TungstenSort(
     sortOrder: Seq[SortOrder],
     global: Boolean,
     child: SparkPlan,
@@ -110,7 +110,6 @@ case class UnsafeExternalSort(
     if (global) OrderedDistribution(sortOrder) :: Nil else UnspecifiedDistribution :: Nil
 
   protected override def doExecute(): RDD[InternalRow] = attachTree(this, "sort") {
-    assert(codegenEnabled, "UnsafeExternalSort requires code generation to be enabled")
     def doSort(iterator: Iterator[InternalRow]): Iterator[InternalRow] = {
       val ordering = newOrdering(sortOrder, child.output)
       val boundSortExpression = BindReferences.bindReference(sortOrder.head, child.output)
@@ -149,7 +148,7 @@ case class UnsafeExternalSort(
 }
 
 @DeveloperApi
-object UnsafeExternalSort {
+object TungstenSort {
   /**
    * Return true if UnsafeExternalSort can sort rows with the given schema, false otherwise.
    */
