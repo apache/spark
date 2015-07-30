@@ -68,6 +68,8 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
   // if we find that it's okay.
   private val MAX_TIMELINE_TASKS = parent.conf.getInt("spark.ui.timeline.tasks.maximum", 1000)
 
+  private val displayPeakExecutionMemory =
+    parent.conf.getOption("spark.sql.unsafe.enabled").exists(_.toBoolean)
 
   def render(request: HttpServletRequest): Seq[Node] = {
     progressListener.synchronized {
@@ -225,6 +227,15 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
                   <span class="additional-metric-title">Getting Result Time</span>
                 </span>
               </li>
+              {if (displayPeakExecutionMemory) {
+                <li>
+                  <span data-toggle="tooltip"
+                        title={ToolTips.PEAK_EXECUTION_MEMORY} data-placement="right">
+                    <input type="checkbox" name={TaskDetailsClassNames.PEAK_EXECUTION_MEMORY}/>
+                    <span class="additional-metric-title">Peak Execution Memory</span>
+                  </span>
+                </li>
+              }}
             </ul>
           </div>
         </div>
@@ -306,6 +317,10 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
             }
           }
 
+          def getFormattedSizeQuantiles(data: Seq[Double]): Seq[Elem] = {
+            getDistributionQuantiles(data).map(d => <td>{Utils.bytesToString(d.toLong)}</td>)
+          }
+
           val deserializationTimes = validTasks.map { case TaskUIData(_, metrics, _) =>
             metrics.get.executorDeserializeTime.toDouble
           }
@@ -354,6 +369,23 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
               </span>
             </td> +:
             getFormattedTimeQuantiles(gettingResultTimes)
+
+          val peakExecutionMemory = validTasks.map { case TaskUIData(info, _, _) =>
+            info.accumulables
+              .find { acc => acc.name == InternalAccumulator.PEAK_EXECUTION_MEMORY }
+              .map { acc => acc.value.toLong }
+              .getOrElse(0L)
+              .toDouble
+          }
+          val peakExecutionMemoryQuantiles = {
+            <td>
+              <span data-toggle="tooltip"
+                    title={ToolTips.PEAK_EXECUTION_MEMORY} data-placement="right">
+                Peak Execution Memory
+              </span>
+            </td> +: getFormattedSizeQuantiles(peakExecutionMemory)
+          }
+
           // The scheduler delay includes the network delay to send the task to the worker
           // machine and to send back the result (but not the time to fetch the task result,
           // if it needed to be fetched from the block manager on the worker).
@@ -364,10 +396,6 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
             title={ToolTips.SCHEDULER_DELAY} data-placement="right">Scheduler Delay</span></td>
           val schedulerDelayQuantiles = schedulerDelayTitle +:
             getFormattedTimeQuantiles(schedulerDelays)
-
-          def getFormattedSizeQuantiles(data: Seq[Double]): Seq[Elem] =
-            getDistributionQuantiles(data).map(d => <td>{Utils.bytesToString(d.toLong)}</td>)
-
           def getFormattedSizeQuantilesWithRecords(data: Seq[Double], records: Seq[Double])
             : Seq[Elem] = {
             val recordDist = getDistributionQuantiles(records).iterator
@@ -471,6 +499,13 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
               {serializationQuantiles}
             </tr>,
             <tr class={TaskDetailsClassNames.GETTING_RESULT_TIME}>{gettingResultQuantiles}</tr>,
+            if (displayPeakExecutionMemory) {
+              <tr class={TaskDetailsClassNames.PEAK_EXECUTION_MEMORY}>
+                {peakExecutionMemoryQuantiles}
+              </tr>
+            } else {
+              Nil
+            },
             if (stageData.hasInput) <tr>{inputQuantiles}</tr> else Nil,
             if (stageData.hasOutput) <tr>{outputQuantiles}</tr> else Nil,
             if (stageData.hasShuffleRead) {
@@ -1019,6 +1054,10 @@ private[ui] class TaskDataSource(
         override def compare(x: TaskTableRowData, y: TaskTableRowData): Int =
           Ordering.Long.compare(x.gettingResultTime, y.gettingResultTime)
       }
+      case "Peak Execution Memory" => new Ordering[TaskTableRowData] {
+        override def compare(x: TaskTableRowData, y: TaskTableRowData): Int =
+          Ordering.Long.compare(x.peakMemoryUsed, y.peakMemoryUsed)
+      }
       case "Accumulators" =>
         if (hasAccumulators) {
           new Ordering[TaskTableRowData] {
@@ -1300,8 +1339,6 @@ private[ui] class TaskPagedTable(
         <td class={TaskDetailsClassNames.PEAK_EXECUTION_MEMORY}>
           {Utils.bytesToString(task.peakMemoryUsed)}
         </td>
-      } else {
-        Nil
       }}
       {if (task.accumulators.nonEmpty) {
         <td>{Unparsed(task.accumulators.get)}</td>
