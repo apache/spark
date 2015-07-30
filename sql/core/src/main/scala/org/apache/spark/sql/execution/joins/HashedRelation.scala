@@ -21,6 +21,7 @@ import java.io.{Externalizable, ObjectInput, ObjectOutput}
 import java.nio.ByteOrder
 import java.util.{HashMap => JavaHashMap}
 
+import org.apache.spark.{SparkEnv, TaskContext}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.SparkSqlSerializer
@@ -278,7 +279,11 @@ private[joins] final class UnsafeHashedRelation(
     val nKeys = in.readInt()
     // This is used in Broadcast, shared by multiple tasks, so we use on-heap memory
     val memoryManager = new TaskMemoryManager(new ExecutorMemoryManager(MemoryAllocator.HEAP))
-    binaryMap = new BytesToBytesMap(memoryManager, nKeys * 2) // reduce hash collision
+    val pageSizeBytes = SparkEnv.get.conf.getSizeAsBytes("spark.buffer.pageSize", "64m")
+    binaryMap = new BytesToBytesMap(
+      memoryManager,
+      nKeys * 2, // reduce hash collision
+      pageSizeBytes)
 
     var i = 0
     var keyBuffer = new Array[Byte](1024)

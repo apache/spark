@@ -129,6 +129,11 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     open();
   }
 
+  @VisibleForTesting
+  public int maxRecordSizeBytes() {
+    return sorter.maxRecordSizeBytes;
+  }
+
   /**
    * Return the peak memory used by this writer.
    */
