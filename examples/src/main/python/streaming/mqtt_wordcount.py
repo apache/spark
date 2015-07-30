@@ -18,13 +18,14 @@
 """
  A sample wordcount with MqttStream stream
  Usage: mqtt_wordcount.py <broker url> <topic>
- To work with Mqtt, Mqtt Message broker/server required.
- Mosquitto (http://mosquitto.org/) is an open source Mqtt Broker
- In ubuntu mosquitto can be installed using the command  `$ sudo apt-get install mosquitto`
- Run Mqtt publisher as
-  `$ bin/run-example \
-       org.apache.spark.examples.streaming.MQTTPublisher tcp://localhost:1883 foo`
- and then run the example as
+
+ To run this in your local machine, you need to setup a MQTT broker and publisher first,
+ Mosquitto is one of the open source MQTT Brokers, see
+ http://mosquitto.org/
+ Eclipse paho project provides number of clients and utilities for working with MQTT, see
+ http://www.eclipse.org/paho/#getting-started
+
+ and then run the example
     `$ bin/spark-submit --jars external/mqtt-assembly/target/scala-*/\
       spark-streaming-mqtt-assembly-*.jar examples/src/main/python/streaming/mqtt_wordcount.py \
       tcp://localhost:1883 foo`
