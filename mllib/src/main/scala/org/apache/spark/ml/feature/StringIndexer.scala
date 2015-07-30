@@ -176,7 +176,7 @@ class StringIndexerModel private[ml] (
 @Experimental
 class StringIndexerInverse private[ml] (
   override val uid: String) extends Transformer
-    with HasInputCol with HasOutputCol with HasLabels {
+    with HasInputCol with HasOutputCol {
 
   def this(labels: Option[Array[String]] = None) =
     this(Identifiable.randomUID("strIdxInv"))
@@ -189,6 +189,17 @@ class StringIndexerInverse private[ml] (
 
   /** @group setParam */
   def setLabels(value: Array[String]): this.type = set(labels, value)
+
+  /**
+   * Param for array of labels.
+   * @group param
+   */
+  final val labels: StringArrayParam = new StringArrayParam(this, "labels", "array of labels")
+
+  setDefault(labels, null)
+
+  /** @group getParam */
+  final def getLabels: Array[String] = $(labels)
 
   /** Transform the schema for the inverse transformation */
   override def transformSchema(schema: StructType): StructType = {

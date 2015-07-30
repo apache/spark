@@ -88,23 +88,6 @@ private[ml] trait HasLabelCol extends Params {
 }
 
 /**
- * Trait for shared param labels (default: null).
- */
-private[ml] trait HasLabels extends Params {
-
-  /**
-   * Param for array of labels.
-   * @group param
-   */
-  final val labels: StringArrayParam = new StringArrayParam(this, "labels", "array of labels")
-
-  setDefault(labels, null)
-
-  /** @group getParam */
-  final def getLabels: Array[String] = $(labels)
-}
-
-/**
  * Trait for shared param predictionCol (default: "prediction").
  */
 private[ml] trait HasPredictionCol extends Params {

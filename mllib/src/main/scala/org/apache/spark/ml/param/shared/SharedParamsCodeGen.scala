@@ -37,7 +37,6 @@ private[shared] object SharedParamsCodeGen {
         isValid = "ParamValidators.gtEq(0)"),
       ParamDesc[String]("featuresCol", "features column name", Some("\"features\"")),
       ParamDesc[String]("labelCol", "label column name", Some("\"label\"")),
-      ParamDesc[Array[String]]("labels", "array of labels", Some("null")),
       ParamDesc[String]("predictionCol", "prediction column name", Some("\"prediction\"")),
       ParamDesc[String]("rawPredictionCol", "raw prediction (a.k.a. confidence) column name",
         Some("\"rawPrediction\"")),
