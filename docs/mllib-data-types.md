@@ -661,4 +661,33 @@ matA.validate();
 BlockMatrix ata = matA.transpose().multiply(matA);
 {% endhighlight %}
 </div>
+
+
+<div data-lang="python" markdown="1">
+
+A [`BlockMatrix`](api/python/pyspark.mllib.html#pyspark.mllib.linalg.BlockMatrix) can be created
+from an `RDD` of sub-matrix blocks, where a sub-matrix block is a 
+`((blockRowIndex, blockColIndex), sub-matrix)` tuple.
+
+{% highlight python %}
+from pyspark.mllib.linalg import BlockMatrix, Matrices
+
+# Create an RDD of sub-matrix blocks.
+blocks = sc.parallelize([((0, 0), Matrices.dense(3, 2, [1, 2, 3, 4, 5, 6])), 
+                         ((1, 0), Matrices.dense(3, 2, [7, 8, 9, 10, 11, 12]))])
+
+# Create a BlockMatrix from an RDD of sub-matrix blocks.
+mat = BlockMatrix(blocks, 3, 2)
+
+# Get its size.
+m = mat.numRows() # 6
+n = mat.numCols() # 2
+
+# Get the blocks as an RDD of sub-matrix blocks.
+blocksRDD = mat.blocks
+
+# Convert to a LocalMatrix.
+localMat = mat.toLocalMatrix()
+{% endhighlight %}
+</div>
 </div>
