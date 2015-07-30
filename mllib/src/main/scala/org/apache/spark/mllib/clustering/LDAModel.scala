@@ -232,7 +232,6 @@ class LocalLDAModel private[clustering] (
       .sum()
     val batchVariationalBound = bound(documents, docConcentration,
       topicConcentration, topicsMatrix.toBreeze.toDenseMatrix, gammaShape, k, vocabSize)
-    println(s"bound: $batchVariationalBound")
     val perWordBound = batchVariationalBound / corpusWords
 
     perWordBound
