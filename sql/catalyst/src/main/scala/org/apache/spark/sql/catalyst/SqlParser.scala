@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.Interval
+import org.apache.spark.unsafe.types.CalendarInterval
 
 /**
  * A very simple SQL parser.  Based loosely on:
@@ -44,6 +44,15 @@ class SqlParser extends AbstractSparkSQLParser with DataTypeParser {
     initLexical
     phrase(projection)(new lexical.Scanner(input)) match {
       case Success(plan, _) => plan
+      case failureOrError => sys.error(failureOrError.toString)
+    }
+  }
+
+  def parseTableIdentifier(input: String): TableIdentifier = {
+    // Initialize the Keywords.
+    initLexical
+    phrase(tableIdentifier)(new lexical.Scanner(input)) match {
+      case Success(ident, _) => ident
       case failureOrError => sys.error(failureOrError.toString)
     }
   }
@@ -266,12 +275,12 @@ class SqlParser extends AbstractSparkSQLParser with DataTypeParser {
       }
     }
     | ident ~ ("(" ~> repsep(expression, ",")) <~ ")" ^^
-      { case udfName ~ exprs => UnresolvedFunction(udfName, exprs) }
+      { case udfName ~ exprs => UnresolvedFunction(udfName, exprs, isDistinct = false) }
     | ident ~ ("(" ~ DISTINCT ~> repsep(expression, ",")) <~ ")" ^^ { case udfName ~ exprs =>
       lexical.normalizeKeyword(udfName) match {
         case "sum" => SumDistinct(exprs.head)
         case "count" => CountDistinct(exprs)
-        case _ => throw new AnalysisException(s"function $udfName does not support DISTINCT")
+        case _ => UnresolvedFunction(udfName, exprs, isDistinct = true)
       }
     }
     | APPROXIMATE ~> ident ~ ("(" ~ DISTINCT ~> expression <~ ")") ^^ { case udfName ~ exp =>
@@ -322,7 +331,9 @@ class SqlParser extends AbstractSparkSQLParser with DataTypeParser {
 
   protected lazy val numericLiteral: Parser[Literal] =
     ( integral  ^^ { case i => Literal(toNarrowestIntegerType(i)) }
-    | sign.? ~ unsignedFloat ^^ { case s ~ f => Literal((s.getOrElse("") + f).toDouble) }
+    | sign.? ~ unsignedFloat ^^ {
+      case s ~ f => Literal(toDecimalOrDouble(s.getOrElse("") + f))
+    }
     )
 
   protected lazy val unsignedFloat: Parser[String] =
@@ -354,32 +365,32 @@ class SqlParser extends AbstractSparkSQLParser with DataTypeParser {
 
   protected lazy val millisecond: Parser[Long] =
     integral <~ intervalUnit("millisecond") ^^ {
-      case num => num.toLong * Interval.MICROS_PER_MILLI
+      case num => num.toLong * CalendarInterval.MICROS_PER_MILLI
     }
 
   protected lazy val second: Parser[Long] =
     integral <~ intervalUnit("second") ^^ {
-      case num => num.toLong * Interval.MICROS_PER_SECOND
+      case num => num.toLong * CalendarInterval.MICROS_PER_SECOND
     }
 
   protected lazy val minute: Parser[Long] =
     integral <~ intervalUnit("minute") ^^ {
-      case num => num.toLong * Interval.MICROS_PER_MINUTE
+      case num => num.toLong * CalendarInterval.MICROS_PER_MINUTE
     }
 
   protected lazy val hour: Parser[Long] =
     integral <~ intervalUnit("hour") ^^ {
-      case num => num.toLong * Interval.MICROS_PER_HOUR
+      case num => num.toLong * CalendarInterval.MICROS_PER_HOUR
     }
 
   protected lazy val day: Parser[Long] =
     integral <~ intervalUnit("day") ^^ {
-      case num => num.toLong * Interval.MICROS_PER_DAY
+      case num => num.toLong * CalendarInterval.MICROS_PER_DAY
     }
 
   protected lazy val week: Parser[Long] =
     integral <~ intervalUnit("week") ^^ {
-      case num => num.toLong * Interval.MICROS_PER_WEEK
+      case num => num.toLong * CalendarInterval.MICROS_PER_WEEK
     }
 
   protected lazy val intervalLiteral: Parser[Literal] =
@@ -395,7 +406,7 @@ class SqlParser extends AbstractSparkSQLParser with DataTypeParser {
           val months = Seq(year, month).map(_.getOrElse(0)).sum
           val microseconds = Seq(week, day, hour, minute, second, millisecond, microsecond)
             .map(_.getOrElse(0L)).sum
-          Literal.create(new Interval(months, microseconds), IntervalType)
+          Literal.create(new CalendarInterval(months, microseconds), CalendarIntervalType)
       }
 
   private def toNarrowestIntegerType(value: String): Any = {
@@ -405,6 +416,17 @@ class SqlParser extends AbstractSparkSQLParser with DataTypeParser {
       case v if bigIntValue.isValidInt => v.toIntExact
       case v if bigIntValue.isValidLong => v.toLongExact
       case v => v.underlying()
+    }
+  }
+
+  private def toDecimalOrDouble(value: String): Any = {
+    val decimal = BigDecimal(value)
+    // follow the behavior in MS SQL Server
+    // https://msdn.microsoft.com/en-us/library/ms179899.aspx
+    if (value.contains('E') || value.contains('e')) {
+      decimal.doubleValue()
+    } else {
+      decimal.underlying()
     }
   }
 
@@ -440,5 +462,10 @@ class SqlParser extends AbstractSparkSQLParser with DataTypeParser {
   protected lazy val dotExpressionHeader: Parser[Expression] =
     (ident <~ ".") ~ ident ~ rep("." ~> ident) ^^ {
       case i1 ~ i2 ~ rest => UnresolvedAttribute(Seq(i1, i2) ++ rest)
+    }
+
+  protected lazy val tableIdentifier: Parser[TableIdentifier] =
+    (ident <~ ".").? ~ ident ^^ {
+      case maybeDbName ~ tableName => TableIdentifier(tableName, maybeDbName)
     }
 }

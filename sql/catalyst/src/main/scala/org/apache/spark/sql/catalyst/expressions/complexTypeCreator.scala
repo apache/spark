@@ -17,16 +17,20 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import org.apache.spark.unsafe.types.UTF8String
+
+import scala.collection.mutable
+
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
-import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
+import org.apache.spark.sql.catalyst.expressions.codegen.{GenerateUnsafeProjection, GeneratedExpressionCode, CodeGenContext}
 import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.types._
 
 /**
  * Returns an Array containing the evaluation of all children expressions.
  */
-case class CreateArray(children: Seq[Expression]) extends Expression with CodegenFallback {
+case class CreateArray(children: Seq[Expression]) extends Expression {
 
   override def foldable: Boolean = children.forall(_.foldable)
 
@@ -45,14 +49,31 @@ case class CreateArray(children: Seq[Expression]) extends Expression with Codege
     children.map(_.eval(input))
   }
 
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    val arraySeqClass = classOf[mutable.ArraySeq[Any]].getName
+    s"""
+      boolean ${ev.isNull} = false;
+      $arraySeqClass<Object> ${ev.primitive} = new $arraySeqClass<Object>(${children.size});
+    """ +
+      children.zipWithIndex.map { case (e, i) =>
+        val eval = e.gen(ctx)
+        eval.code + s"""
+          if (${eval.isNull}) {
+            ${ev.primitive}.update($i, null);
+          } else {
+            ${ev.primitive}.update($i, ${eval.primitive});
+          }
+         """
+      }.mkString("\n")
+  }
+
   override def prettyName: String = "array"
 }
 
 /**
  * Returns a Row containing the evaluation of all children expressions.
- * TODO: [[CreateStruct]] does not support codegen.
  */
-case class CreateStruct(children: Seq[Expression]) extends Expression with CodegenFallback {
+case class CreateStruct(children: Seq[Expression]) extends Expression {
 
   override def foldable: Boolean = children.forall(_.foldable)
 
@@ -76,15 +97,137 @@ case class CreateStruct(children: Seq[Expression]) extends Expression with Codeg
     InternalRow(children.map(_.eval(input)): _*)
   }
 
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    val rowClass = classOf[GenericMutableRow].getName
+    s"""
+      boolean ${ev.isNull} = false;
+      final $rowClass ${ev.primitive} = new $rowClass(${children.size});
+    """ +
+      children.zipWithIndex.map { case (e, i) =>
+        val eval = e.gen(ctx)
+        eval.code + s"""
+          if (${eval.isNull}) {
+            ${ev.primitive}.update($i, null);
+          } else {
+            ${ev.primitive}.update($i, ${eval.primitive});
+          }
+         """
+      }.mkString("\n")
+  }
+
   override def prettyName: String = "struct"
 }
+
 
 /**
  * Creates a struct with the given field names and values
  *
  * @param children Seq(name1, val1, name2, val2, ...)
  */
-case class CreateNamedStruct(children: Seq[Expression]) extends Expression with CodegenFallback {
+case class CreateNamedStruct(children: Seq[Expression]) extends Expression {
+
+  private lazy val (nameExprs, valExprs) =
+    children.grouped(2).map { case Seq(name, value) => (name, value) }.toList.unzip
+
+  private lazy val names = nameExprs.map(_.eval(EmptyRow))
+
+  override lazy val dataType: StructType = {
+    val fields = names.zip(valExprs).map { case (name, valExpr) =>
+      StructField(name.asInstanceOf[UTF8String].toString,
+        valExpr.dataType, valExpr.nullable, Metadata.empty)
+    }
+    StructType(fields)
+  }
+
+  override def foldable: Boolean = valExprs.forall(_.foldable)
+
+  override def nullable: Boolean = false
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    if (children.size % 2 != 0) {
+      TypeCheckResult.TypeCheckFailure(s"$prettyName expects an even number of arguments.")
+    } else {
+      val invalidNames = nameExprs.filterNot(e => e.foldable && e.dataType == StringType)
+      if (invalidNames.nonEmpty) {
+        TypeCheckResult.TypeCheckFailure(
+          s"Only foldable StringType expressions are allowed to appear at odd position , got :" +
+            s" ${invalidNames.mkString(",")}")
+      } else if (names.forall(_ != null)){
+        TypeCheckResult.TypeCheckSuccess
+      } else {
+        TypeCheckResult.TypeCheckFailure("Field name should not be null")
+      }
+    }
+  }
+
+  override def eval(input: InternalRow): Any = {
+    InternalRow(valExprs.map(_.eval(input)): _*)
+  }
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    val rowClass = classOf[GenericMutableRow].getName
+    s"""
+      boolean ${ev.isNull} = false;
+      final $rowClass ${ev.primitive} = new $rowClass(${valExprs.size});
+    """ +
+      valExprs.zipWithIndex.map { case (e, i) =>
+        val eval = e.gen(ctx)
+        eval.code + s"""
+          if (${eval.isNull}) {
+            ${ev.primitive}.update($i, null);
+          } else {
+            ${ev.primitive}.update($i, ${eval.primitive});
+          }
+         """
+      }.mkString("\n")
+  }
+
+  override def prettyName: String = "named_struct"
+}
+
+/**
+ * Returns a Row containing the evaluation of all children expressions. This is a variant that
+ * returns UnsafeRow directly. The unsafe projection operator replaces [[CreateStruct]] with
+ * this expression automatically at runtime.
+ */
+case class CreateStructUnsafe(children: Seq[Expression]) extends Expression {
+
+  override def foldable: Boolean = children.forall(_.foldable)
+
+  override lazy val resolved: Boolean = childrenResolved
+
+  override lazy val dataType: StructType = {
+    val fields = children.zipWithIndex.map { case (child, idx) =>
+      child match {
+        case ne: NamedExpression =>
+          StructField(ne.name, ne.dataType, ne.nullable, ne.metadata)
+        case _ =>
+          StructField(s"col${idx + 1}", child.dataType, child.nullable, Metadata.empty)
+      }
+    }
+    StructType(fields)
+  }
+
+  override def nullable: Boolean = false
+
+  override def eval(input: InternalRow): Any = throw new UnsupportedOperationException
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    GenerateUnsafeProjection.createCode(ctx, ev, children)
+  }
+
+  override def prettyName: String = "struct_unsafe"
+}
+
+
+/**
+ * Creates a struct with the given field names and values. This is a variant that returns
+ * UnsafeRow directly. The unsafe projection operator replaces [[CreateStruct]] with
+ * this expression automatically at runtime.
+ *
+ * @param children Seq(name1, val1, name2, val2, ...)
+ */
+case class CreateNamedStructUnsafe(children: Seq[Expression]) extends Expression {
 
   private lazy val (nameExprs, valExprs) =
     children.grouped(2).map { case Seq(name, value) => (name, value) }.toList.unzip
@@ -102,25 +245,11 @@ case class CreateNamedStruct(children: Seq[Expression]) extends Expression with 
 
   override def nullable: Boolean = false
 
-  override def checkInputDataTypes(): TypeCheckResult = {
-    if (children.size % 2 != 0) {
-      TypeCheckResult.TypeCheckFailure(s"$prettyName expects an even number of arguments.")
-    } else {
-      val invalidNames =
-        nameExprs.filterNot(e => e.foldable && e.dataType == StringType && !nullable)
-      if (invalidNames.nonEmpty) {
-        TypeCheckResult.TypeCheckFailure(
-          s"Odd position only allow foldable and not-null StringType expressions, got :" +
-            s" ${invalidNames.mkString(",")}")
-      } else {
-        TypeCheckResult.TypeCheckSuccess
-      }
-    }
+  override def eval(input: InternalRow): Any = throw new UnsupportedOperationException
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    GenerateUnsafeProjection.createCode(ctx, ev, valExprs)
   }
 
-  override def eval(input: InternalRow): Any = {
-    InternalRow(valExprs.map(_.eval(input)): _*)
-  }
-
-  override def prettyName: String = "named_struct"
+  override def prettyName: String = "named_struct_unsafe"
 }

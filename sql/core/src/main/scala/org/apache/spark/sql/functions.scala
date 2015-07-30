@@ -22,7 +22,7 @@ import scala.reflect.runtime.universe.{TypeTag, typeTag}
 import scala.util.Try
 
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.sql.catalyst.ScalaReflection
+import org.apache.spark.sql.catalyst.{SqlParser, ScalaReflection}
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedFunction, Star}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.BroadcastHint
@@ -634,7 +634,7 @@ object functions {
    * @group normal_funcs
    * @since 1.4.0
    */
-  def monotonicallyIncreasingId(): Column = execution.expressions.MonotonicallyIncreasingID()
+  def monotonicallyIncreasingId(): Column = MonotonicallyIncreasingID()
 
   /**
    * Return an alternative value `r` if `l` is NaN.
@@ -741,7 +741,16 @@ object functions {
    * @group normal_funcs
    * @since 1.4.0
    */
-  def sparkPartitionId(): Column = execution.expressions.SparkPartitionID
+  def sparkPartitionId(): Column = SparkPartitionID()
+
+  /**
+   * The file name of the current Spark task
+   *
+   * Note that this is indeterministic becuase it depends on what is currently being read in.
+   *
+   * @group normal_funcs
+   */
+  def inputFileName(): Column = InputFileName()
 
   /**
    * Computes the square root of the specified float value.
@@ -791,6 +800,18 @@ object functions {
    * @since 1.4.0
    */
   def bitwiseNOT(e: Column): Column = BitwiseNot(e.expr)
+
+  /**
+   * Parses the expression string into the column that it represents, similar to
+   * DataFrame.selectExpr
+   * {{{
+   *   // get the number of words of each length
+   *   df.groupBy(expr("length(word)")).count()
+   * }}}
+   *
+   * @group normal_funcs
+   */
+  def expr(expr: String): Column = Column(new SqlParser().parseExpression(expr))
 
   //////////////////////////////////////////////////////////////////////////////////////////////
   // Math Functions
@@ -1411,7 +1432,8 @@ object functions {
   def round(columnName: String): Column = round(Column(columnName), 0)
 
   /**
-   * Returns the value of `e` rounded to `scale` decimal places.
+   * Round the value of `e` to `scale` decimal places if `scale` >= 0
+   * or at integral part when `scale` < 0.
    *
    * @group math_funcs
    * @since 1.5.0
@@ -1419,7 +1441,8 @@ object functions {
   def round(e: Column, scale: Int): Column = Round(e.expr, Literal(scale))
 
   /**
-   * Returns the value of the given column rounded to `scale` decimal places.
+   * Round the value of the given column to `scale` decimal places if `scale` >= 0
+   * or at integral part when `scale` < 0.
    *
    * @group math_funcs
    * @since 1.5.0
@@ -1742,15 +1765,14 @@ object functions {
   def rtrim(e: Column): Column = StringTrimRight(e.expr)
 
   /**
-   * Format strings in printf-style.
-   * NOTE: `format` is the string value of the formatter, not column name.
+   * Formats the arguments in printf-style and returns the result as a string column.
    *
    * @group string_funcs
    * @since 1.5.0
    */
   @scala.annotation.varargs
-  def formatString(format: String, arguNames: String*): Column = {
-    StringFormat(lit(format).expr +: arguNames.map(Column(_).expr): _*)
+  def format_string(format: String, arguments: Column*): Column = {
+    FormatString((lit(format) +: arguments).map(_.expr): _*)
   }
 
   /**
@@ -2022,6 +2044,16 @@ object functions {
   def hour(columnName: String): Column = hour(Column(columnName))
 
   /**
+   * Given a date column, returns the last day of the month which the given date belongs to.
+   * For example, input "2015-07-27" returns "2015-07-31" since July 31 is the last day of the
+   * month in July 2015.
+   *
+   * @group datetime_funcs
+   * @since 1.5.0
+   */
+  def last_day(e: Column): Column = LastDay(e.expr)
+
+  /**
    * Extracts the minutes as an integer from a given date/timestamp/string.
    * @group datetime_funcs
    * @since 1.5.0
@@ -2034,6 +2066,21 @@ object functions {
    * @since 1.5.0
    */
   def minute(columnName: String): Column = minute(Column(columnName))
+
+  /**
+   * Given a date column, returns the first date which is later than the value of the date column
+   * that is on the specified day of the week.
+   *
+   * For example, `next_day('2015-07-27', "Sunday")` returns 2015-08-02 because that is the first
+   * Sunday after 2015-07-27.
+   *
+   * Day of the week parameter is case insensitive, and accepts:
+   * "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun".
+   *
+   * @group datetime_funcs
+   * @since 1.5.0
+   */
+  def next_day(date: Column, dayOfWeek: String): Column = NextDay(date.expr, lit(dayOfWeek).expr)
 
   /**
    * Extracts the seconds as an integer from a given date/timestamp/string.
@@ -2421,7 +2468,7 @@ object functions {
    * @since 1.5.0
    */
   def callUDF(udfName: String, cols: Column*): Column = {
-    UnresolvedFunction(udfName, cols.map(_.expr))
+    UnresolvedFunction(udfName, cols.map(_.expr), isDistinct = false)
   }
 
   /**
@@ -2450,7 +2497,6 @@ object functions {
       exprs(i) = cols(i).expr
       i += 1
     }
-    UnresolvedFunction(udfName, exprs)
+    UnresolvedFunction(udfName, exprs, isDistinct = false)
   }
-
 }

@@ -337,7 +337,7 @@ class SparkSubmitSuite
     val args = Seq(
       "--class", JarCreationTest.getClass.getName.stripSuffix("$"),
       "--name", "testApp",
-      "--master", "local-cluster[2,1,512]",
+      "--master", "local-cluster[2,1,1024]",
       "--jars", jarsString,
       unusedJar.toString, "SparkSubmitClassA", "SparkSubmitClassB")
     runSparkSubmit(args)
@@ -352,8 +352,8 @@ class SparkSubmitSuite
       val args = Seq(
         "--class", JarCreationTest.getClass.getName.stripSuffix("$"),
         "--name", "testApp",
-        "--master", "local-cluster[2,1,512]",
-        "--packages", main.toString,
+        "--master", "local-cluster[2,1,1024]",
+        "--packages", Seq(main, dep).mkString(","),
         "--repositories", repo,
         "--conf", "spark.ui.enabled=false",
         unusedJar.toString,
@@ -371,7 +371,7 @@ class SparkSubmitSuite
     IvyTestUtils.withRepository(main, None, None, withR = true) { repo =>
       val args = Seq(
         "--name", "testApp",
-        "--master", "local-cluster[2,1,512]",
+        "--master", "local-cluster[2,1,1024]",
         "--packages", main.toString,
         "--repositories", repo,
         "--conf", "spark.ui.enabled=false",

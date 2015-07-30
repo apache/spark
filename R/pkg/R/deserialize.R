@@ -102,11 +102,11 @@ readList <- function(con) {
 
 readRaw <- function(con) {
   dataLen <- readInt(con)
-  data <- readBin(con, raw(), as.integer(dataLen), endian = "big")
+  readBin(con, raw(), as.integer(dataLen), endian = "big")
 }
 
 readRawLen <- function(con, dataLen) {
-  data <- readBin(con, raw(), as.integer(dataLen), endian = "big")
+  readBin(con, raw(), as.integer(dataLen), endian = "big")
 }
 
 readDeserialize <- function(con) {

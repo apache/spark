@@ -30,7 +30,7 @@ import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming._
 import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
 
-class KinesisStreamSuite extends SparkFunSuite with KinesisSuiteHelper
+class KinesisStreamSuite extends KinesisFunSuite
   with Eventually with BeforeAndAfter with BeforeAndAfterAll {
 
   // This is the name that KCL uses to save metadata to DynamoDB
@@ -83,7 +83,7 @@ class KinesisStreamSuite extends SparkFunSuite with KinesisSuiteHelper
    * you must have AWS credentials available through the default AWS provider chain,
    * and you have to set the system environment variable RUN_KINESIS_TESTS=1 .
    */
-  testOrIgnore("basic operation") {
+  testIfEnabled("basic operation") {
     val kinesisTestUtils = new KinesisTestUtils()
     try {
       kinesisTestUtils.createStream()

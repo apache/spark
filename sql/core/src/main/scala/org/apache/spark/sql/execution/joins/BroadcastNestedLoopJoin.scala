@@ -44,6 +44,17 @@ case class BroadcastNestedLoopJoin(
     case BuildLeft => (right, left)
   }
 
+  override def outputsUnsafeRows: Boolean = left.outputsUnsafeRows || right.outputsUnsafeRows
+  override def canProcessUnsafeRows: Boolean = true
+
+  @transient private[this] lazy val resultProjection: InternalRow => InternalRow = {
+    if (outputsUnsafeRows) {
+      UnsafeProjection.create(schema)
+    } else {
+      identity[InternalRow]
+    }
+  }
+
   override def outputPartitioning: Partitioning = streamed.outputPartitioning
 
   override def output: Seq[Attribute] = {
@@ -74,6 +85,7 @@ case class BroadcastNestedLoopJoin(
       val includedBroadcastTuples =
         new scala.collection.mutable.BitSet(broadcastedRelation.value.size)
       val joinedRow = new JoinedRow
+
       val leftNulls = new GenericMutableRow(left.output.size)
       val rightNulls = new GenericMutableRow(right.output.size)
 
@@ -82,15 +94,14 @@ case class BroadcastNestedLoopJoin(
         var streamRowMatched = false
 
         while (i < broadcastedRelation.value.size) {
-          // TODO: One bitset per partition instead of per row.
           val broadcastedRow = broadcastedRelation.value(i)
           buildSide match {
             case BuildRight if boundCondition(joinedRow(streamedRow, broadcastedRow)) =>
-              matchedRows += joinedRow(streamedRow, broadcastedRow).copy()
+              matchedRows += resultProjection(joinedRow(streamedRow, broadcastedRow)).copy()
               streamRowMatched = true
               includedBroadcastTuples += i
             case BuildLeft if boundCondition(joinedRow(broadcastedRow, streamedRow)) =>
-              matchedRows += joinedRow(broadcastedRow, streamedRow).copy()
+              matchedRows += resultProjection(joinedRow(broadcastedRow, streamedRow)).copy()
               streamRowMatched = true
               includedBroadcastTuples += i
             case _ =>
@@ -100,9 +111,9 @@ case class BroadcastNestedLoopJoin(
 
         (streamRowMatched, joinType, buildSide) match {
           case (false, LeftOuter | FullOuter, BuildRight) =>
-            matchedRows += joinedRow(streamedRow, rightNulls).copy()
+            matchedRows += resultProjection(joinedRow(streamedRow, rightNulls)).copy()
           case (false, RightOuter | FullOuter, BuildLeft) =>
-            matchedRows += joinedRow(leftNulls, streamedRow).copy()
+            matchedRows += resultProjection(joinedRow(leftNulls, streamedRow)).copy()
           case _ =>
         }
       }
@@ -110,12 +121,9 @@ case class BroadcastNestedLoopJoin(
     }
 
     val includedBroadcastTuples = matchesOrStreamedRowsWithNulls.map(_._2)
-    val allIncludedBroadcastTuples =
-      if (includedBroadcastTuples.count == 0) {
-        new scala.collection.mutable.BitSet(broadcastedRelation.value.size)
-      } else {
-        includedBroadcastTuples.reduce(_ ++ _)
-      }
+    val allIncludedBroadcastTuples = includedBroadcastTuples.fold(
+      new scala.collection.mutable.BitSet(broadcastedRelation.value.size)
+    )(_ ++ _)
 
     val leftNulls = new GenericMutableRow(left.output.size)
     val rightNulls = new GenericMutableRow(right.output.size)
@@ -124,15 +132,26 @@ case class BroadcastNestedLoopJoin(
       val buf: CompactBuffer[InternalRow] = new CompactBuffer()
       var i = 0
       val rel = broadcastedRelation.value
-      while (i < rel.length) {
-        if (!allIncludedBroadcastTuples.contains(i)) {
-          (joinType, buildSide) match {
-            case (RightOuter | FullOuter, BuildRight) => buf += new JoinedRow(leftNulls, rel(i))
-            case (LeftOuter | FullOuter, BuildLeft) => buf += new JoinedRow(rel(i), rightNulls)
-            case _ =>
+      (joinType, buildSide) match {
+        case (RightOuter | FullOuter, BuildRight) =>
+          val joinedRow = new JoinedRow
+          joinedRow.withLeft(leftNulls)
+          while (i < rel.length) {
+            if (!allIncludedBroadcastTuples.contains(i)) {
+              buf += resultProjection(joinedRow.withRight(rel(i))).copy()
+            }
+            i += 1
           }
-        }
-        i += 1
+        case (LeftOuter | FullOuter, BuildLeft) =>
+          val joinedRow = new JoinedRow
+          joinedRow.withRight(rightNulls)
+          while (i < rel.length) {
+            if (!allIncludedBroadcastTuples.contains(i)) {
+              buf += resultProjection(joinedRow.withLeft(rel(i))).copy()
+            }
+            i += 1
+          }
+        case _ =>
       }
       buf.toSeq
     }
