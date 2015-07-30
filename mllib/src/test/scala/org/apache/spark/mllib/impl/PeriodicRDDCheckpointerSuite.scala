@@ -35,6 +35,7 @@ class PeriodicRDDCheckpointerSuite extends SparkFunSuite with MLlibTestSparkCont
 
     val rdd1 = createRDD(sc)
     val checkpointer = new PeriodicRDDCheckpointer[Double](10, rdd1.sparkContext)
+    checkpointer.update(rdd1)
     rddsToCheck = rddsToCheck :+ RDDToCheck(rdd1, 1)
     checkPersistence(rddsToCheck, 1)
 
@@ -56,6 +57,7 @@ class PeriodicRDDCheckpointerSuite extends SparkFunSuite with MLlibTestSparkCont
     sc.setCheckpointDir(path)
     val rdd1 = createRDD(sc)
     val checkpointer = new PeriodicRDDCheckpointer[Double](checkpointInterval, rdd1.sparkContext)
+    checkpointer.update(rdd1)
     rdd1.count()
     rddsToCheck = rddsToCheck :+ RDDToCheck(rdd1, 1)
     checkCheckpoint(rddsToCheck, 1, checkpointInterval)

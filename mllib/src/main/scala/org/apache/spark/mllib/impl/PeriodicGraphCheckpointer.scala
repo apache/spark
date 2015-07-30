@@ -80,17 +80,19 @@ private[mllib] class PeriodicGraphCheckpointer[VD, ED](
     sc: SparkContext)
   extends PeriodicCheckpointer[Graph[VD, ED]](checkpointInterval, sc) {
 
-  override def checkpoint(data: Graph[VD, ED]): Unit = data.checkpoint()
+  override protected def checkpoint(data: Graph[VD, ED]): Unit = data.checkpoint()
 
-  override def isCheckpointed(data: Graph[VD, ED]): Boolean = data.isCheckpointed
+  override protected def isCheckpointed(data: Graph[VD, ED]): Boolean = data.isCheckpointed
 
-  override def persist(data: Graph[VD, ED]): Unit = {
+  override protected def persist(data: Graph[VD, ED]): Unit = {
     if (data.vertices.getStorageLevel == StorageLevel.NONE) {
       data.persist()
     }
   }
 
-  override def unpersist(data: Graph[VD, ED]): Unit = data.unpersist(blocking = false)
+  override protected def unpersist(data: Graph[VD, ED]): Unit = data.unpersist(blocking = false)
 
-  override def getCheckpointFiles(data: Graph[VD, ED]): Iterable[String] = data.getCheckpointFiles
+  override protected def getCheckpointFiles(data: Graph[VD, ED]): Iterable[String] = {
+    data.getCheckpointFiles
+  }
 }

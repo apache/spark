@@ -79,19 +79,19 @@ private[mllib] class PeriodicRDDCheckpointer[T](
     sc: SparkContext)
   extends PeriodicCheckpointer[RDD[T]](checkpointInterval, sc) {
 
-  override def checkpoint(data: RDD[T]): Unit = data.checkpoint()
+  override protected def checkpoint(data: RDD[T]): Unit = data.checkpoint()
 
-  override def isCheckpointed(data: RDD[T]): Boolean = data.isCheckpointed
+  override protected def isCheckpointed(data: RDD[T]): Boolean = data.isCheckpointed
 
-  override def persist(data: RDD[T]): Unit = {
+  override protected def persist(data: RDD[T]): Unit = {
     if (data.getStorageLevel == StorageLevel.NONE) {
       data.persist()
     }
   }
 
-  override def unpersist(data: RDD[T]): Unit = data.unpersist(blocking = false)
+  override protected def unpersist(data: RDD[T]): Unit = data.unpersist(blocking = false)
 
-  override def getCheckpointFiles(data: RDD[T]): Iterable[String] = {
+  override protected def getCheckpointFiles(data: RDD[T]): Iterable[String] = {
     data.getCheckpointFile.map(x => x)
   }
 }

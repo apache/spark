@@ -106,22 +106,22 @@ private[mllib] abstract class PeriodicCheckpointer[T](
   }
 
   /** Checkpoint the Dataset */
-  def checkpoint(data: T): Unit
+  protected def checkpoint(data: T): Unit
 
   /** Return true iff the Dataset is checkpointed */
-  def isCheckpointed(data: T): Boolean
+  protected def isCheckpointed(data: T): Boolean
 
   /**
    * Persist the Dataset.
    * Note: This should handle checking the current [[StorageLevel]] of the Dataset.
    */
-  def persist(data: T): Unit
+  protected def persist(data: T): Unit
 
   /** Unpersist the Dataset */
-  def unpersist(data: T): Unit
+  protected def unpersist(data: T): Unit
 
   /** Get list of checkpoint files for this given Dataset */
-  def getCheckpointFiles(data: T): Iterable[String]
+  protected def getCheckpointFiles(data: T): Iterable[String]
 
   /**
    * Call this at the end to delete any remaining checkpoint files.
