@@ -48,7 +48,9 @@ class RPackageUtilsSuite extends SparkFunSuite with BeforeAndAfterEach {
 
   /** Simple PrintStream that reads data into a buffer */
   private class BufferPrintStream extends PrintStream(noOpOutputStream) {
+    // scalastyle:off println
     override def println(line: String) {
+    // scalastyle:on println
       lineBuffer += line
     }
   }

@@ -171,7 +171,9 @@ private[spark] object RPackageUtils extends Logging {
       level: Level = Level.FINE,
       e: Throwable = null): Unit = {
     if (printStream != null) {
+      // scalastyle:off println
       printStream.println(msg)
+      // scalastyle:on println
       if (e != null) {
         e.printStackTrace(printStream)
       }
