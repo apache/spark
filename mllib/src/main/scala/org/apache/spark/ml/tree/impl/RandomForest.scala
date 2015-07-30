@@ -579,11 +579,10 @@ private[ml] object RandomForest extends Logging {
         // Extract info for this node.  Create children if not leaf.
         val isLeaf =
           (stats.gain <= 0) || (LearningNode.indexToLevel(nodeIndex) == metadata.maxDepth)
-        node.impurityStats = Some(stats.impurityCalculator)
-        node.predictionStats = new Predict(impurityStats.predict, 0.0)
+        node.impurityStats = Some(impurityStats)
         node.isLeaf = isLeaf
         val oldStats = stats.toInformationGainStats
-        node.stats = Some(oldStats)
+        node.stats = Some(stats)
         node.impurity = oldStats.impurity
         logDebug("Node = " + node)
 
@@ -593,9 +592,9 @@ private[ml] object RandomForest extends Logging {
           val leftChildIsLeaf = childIsLeaf || (stats.leftImpurityCalculator.calculate() == 0.0)
           val rightChildIsLeaf = childIsLeaf || (stats.rightImpurityCalculator.calculate() == 0.0)
           node.leftChild = Some(LearningNode(LearningNode.leftChildIndex(nodeIndex),
-            oldStats.leftPredict, oldStats.leftImpurity, leftChildIsLeaf, stats.leftImpurityCalculator))
+            oldStats.leftImpurity, leftChildIsLeaf, stats.leftImpurityCalculator))
           node.rightChild = Some(LearningNode(LearningNode.rightChildIndex(nodeIndex),
-            oldStats.rightPredict, oldStats.rightImpurity, rightChildIsLeaf, stats.rightImpurityCalculator))
+            oldStats.rightImpurity, rightChildIsLeaf, stats.rightImpurityCalculator))
 
           if (nodeIdCache.nonEmpty) {
             val nodeIndexUpdater = NodeIndexUpdater(

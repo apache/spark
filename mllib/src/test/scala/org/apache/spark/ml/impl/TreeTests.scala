@@ -96,8 +96,8 @@ private[ml] object TreeTests extends SparkFunSuite {
    *       make mistakes such as creating loops of Nodes.
    */
   private def checkEqual(a: Node, b: Node): Unit = {
-//    println(a.impurity + " ----  " + b.impurity)
-//    println(a.prediction + " ====  " + b.prediction)
+    println(a.impurity + " ----  " + b.impurity)
+    println(a.prediction + " ====  " + b.prediction)
     assert(a.prediction === b.prediction)
     assert(a.impurity === b.impurity)
     (a, b) match {

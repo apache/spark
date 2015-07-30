@@ -20,8 +20,7 @@ package org.apache.spark.ml.tree
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.tree.impurity.ImpurityCalculator
-import org.apache.spark.mllib.tree.model.{InformationGainStats => OldInformationGainStats,
-  Node => OldNode, Predict => OldPredict}
+import org.apache.spark.mllib.tree.model.{InformationGainStats => OldInformationGainStats, Node => OldNode, Predict => OldPredict, InformationGainAndImpurityStats}
 
 /**
  * :: DeveloperApi ::
@@ -81,13 +80,13 @@ private[ml] object Node {
    */
   def fromOld(oldNode: OldNode, categoricalFeatures: Map[Int, Int]): Node = {
     if (oldNode.isLeaf) {
-//      println("aaaaa   " + oldNode.predict.predict + "   " + oldNode.impurity)
+      println("aaaaa   " + oldNode.predict.predict + "   " + oldNode.impurity)
       // TODO: Once the implementation has been moved to this API, then include sufficient
       //       statistics here.
       new LeafNode(prediction = oldNode.predict.predict,
         impurity = oldNode.impurity, impurityStats = null)
     } else {
-//      println("bbbb   " + oldNode.predict.predict + "   " + oldNode.impurity)
+      println("bbbb   " + oldNode.predict.predict + "   " + oldNode.impurity)
       val gain = if (oldNode.stats.nonEmpty) {
         oldNode.stats.get.gain
       } else {
@@ -251,31 +250,25 @@ private object InternalNode {
  */
 private[tree] class LearningNode(
     var id: Int,
-    var predictionStats: OldPredict,
     var impurity: Double,
     var leftChild: Option[LearningNode],
     var rightChild: Option[LearningNode],
     var split: Option[Split],
     var isLeaf: Boolean,
-    var stats: Option[OldInformationGainStats],
+    var stats: Option[InformationGainAndImpurityStats],
     var impurityStats: Option[ImpurityCalculator]) extends Serializable {
 
   /**
    * Convert this [[LearningNode]] to a regular [[Node]], and recurse on any children.
    */
   def toNode: Node = {
-    if (impurityStats == None) {
-      println("&&&&&&&&&&&&  " + id.toString)
-      println(isLeaf.toString)
-      println(impurity.toString)
-    }
     if (leftChild.nonEmpty) {
       assert(rightChild.nonEmpty && split.nonEmpty && stats.nonEmpty,
         "Unknown error during Decision Tree learning.  Could not convert LearningNode to Node.")
-      new InternalNode(predictionStats.predict, impurity, stats.get.gain,
+      new InternalNode(impurityStats.get.predict, impurity, stats.get.gain,
         leftChild.get.toNode, rightChild.get.toNode, split.get, impurityStats.orNull)
     } else {
-      new LeafNode(predictionStats.predict, impurity, impurityStats.orNull)
+      new LeafNode(impurityStats.get.predict, impurity, impurityStats.orNull)
     }
   }
 
@@ -286,17 +279,15 @@ private[tree] object LearningNode {
   /** Create a node with some of its fields set. */
   def apply(
       id: Int,
-      predictionStats: OldPredict,
       impurity: Double,
       isLeaf: Boolean,
       impurityCalculator: ImpurityCalculator): LearningNode = {
-    new LearningNode(id, predictionStats, impurity, None, None, None, false, None, Some(impurityCalculator))
+    new LearningNode(id, impurity, None, None, None, false, None, Some(impurityCalculator))
   }
 
   /** Create an empty node with the given node index.  Values must be set later on. */
   def emptyNode(nodeIndex: Int): LearningNode = {
-    new LearningNode(nodeIndex, new OldPredict(Double.NaN, Double.NaN), Double.NaN,
-      None, None, None, false, None, None)
+    new LearningNode(nodeIndex, Double.NaN, None, None, None, false, None, None)
   }
 
   // The below indexing methods were copied from spark.mllib.tree.model.Node
