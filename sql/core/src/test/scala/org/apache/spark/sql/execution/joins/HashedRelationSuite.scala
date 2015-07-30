@@ -33,7 +33,7 @@ class HashedRelationSuite extends SparkFunSuite {
     override def apply(row: InternalRow): InternalRow = row
   }
 
-  test("GeneralHashedRelation") {
+  ignore("GeneralHashedRelation") {
     val data = Array(InternalRow(0), InternalRow(1), InternalRow(2), InternalRow(2))
     val hashed = HashedRelation(data.iterator, keyProjection)
     assert(hashed.isInstanceOf[GeneralHashedRelation])
@@ -47,7 +47,7 @@ class HashedRelationSuite extends SparkFunSuite {
     assert(hashed.get(data(2)) === data2)
   }
 
-  test("UniqueKeyHashedRelation") {
+  ignore("UniqueKeyHashedRelation") {
     val data = Array(InternalRow(0), InternalRow(1), InternalRow(2))
     val hashed = HashedRelation(data.iterator, keyProjection)
     assert(hashed.isInstanceOf[UniqueKeyHashedRelation])
@@ -64,7 +64,7 @@ class HashedRelationSuite extends SparkFunSuite {
     assert(uniqHashed.getValue(InternalRow(10)) === null)
   }
 
-  test("UnsafeHashedRelation") {
+  ignore("UnsafeHashedRelation") {
     val schema = StructType(StructField("a", IntegerType, true) :: Nil)
     val data = Array(InternalRow(0), InternalRow(1), InternalRow(2), InternalRow(2))
     val toUnsafe = UnsafeProjection.create(schema)

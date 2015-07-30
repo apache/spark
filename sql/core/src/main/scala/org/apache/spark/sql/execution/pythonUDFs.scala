@@ -267,7 +267,6 @@ object EvaluatePython {
           pickler.save(row.values(i))
           i += 1
         }
-        row.values.foreach(pickler.save)
         out.write(Opcodes.TUPLE)
         out.write(Opcodes.REDUCE)
       }

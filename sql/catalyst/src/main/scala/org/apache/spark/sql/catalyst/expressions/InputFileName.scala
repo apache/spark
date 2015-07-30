@@ -17,36 +17,33 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.TaskContext
+import org.apache.spark.rdd.SqlNewHadoopRDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.{GeneratedExpressionCode, CodeGenContext}
-import org.apache.spark.sql.types.{IntegerType, DataType}
-
+import org.apache.spark.sql.types.{DataType, StringType}
+import org.apache.spark.unsafe.types.UTF8String
 
 /**
- * Expression that returns the current partition id of the Spark task.
+ * Expression that returns the name of the current file being read in using [[SqlNewHadoopRDD]]
  */
-private[sql] case class SparkPartitionID() extends LeafExpression with Nondeterministic {
+case class InputFileName() extends LeafExpression with Nondeterministic {
 
-  override def nullable: Boolean = false
+  override def nullable: Boolean = true
 
-  override def dataType: DataType = IntegerType
+  override def dataType: DataType = StringType
 
-  @transient private[this] var partitionId: Int = _
+  override val prettyName = "INPUT_FILE_NAME"
 
-  override val prettyName = "SPARK_PARTITION_ID"
+  override protected def initInternal(): Unit = {}
 
-  override protected def initInternal(): Unit = {
-    partitionId = TaskContext.getPartitionId()
+  override protected def evalInternal(input: InternalRow): UTF8String = {
+    SqlNewHadoopRDD.getInputFileName()
   }
-
-  override protected def evalInternal(input: InternalRow): Int = partitionId
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    val idTerm = ctx.freshName("partitionId")
-    ctx.addMutableState(ctx.JAVA_INT, idTerm,
-      s"$idTerm = org.apache.spark.TaskContext.getPartitionId();")
     ev.isNull = "false"
-    s"final ${ctx.javaType(dataType)} ${ev.primitive} = $idTerm;"
+    s"final ${ctx.javaType(dataType)} ${ev.primitive} = " +
+      "org.apache.spark.rdd.SqlNewHadoopRDD.getInputFileName();"
   }
+
 }

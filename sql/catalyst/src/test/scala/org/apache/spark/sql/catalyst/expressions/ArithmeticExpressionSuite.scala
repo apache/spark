@@ -116,9 +116,12 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
 
   test("Abs") {
     testNumericDataTypes { convert =>
+      val input = Literal(convert(1))
+      val dataType = input.dataType
       checkEvaluation(Abs(Literal(convert(0))), convert(0))
       checkEvaluation(Abs(Literal(convert(1))), convert(1))
       checkEvaluation(Abs(Literal(convert(-1))), convert(1))
+      checkEvaluation(Abs(Literal.create(null, dataType)), null)
     }
   }
 

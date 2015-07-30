@@ -167,10 +167,13 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite {
       CreateNamedStruct(Seq("a", "b", 2.0)), "even number of arguments")
     assertError(
       CreateNamedStruct(Seq(1, "a", "b", 2.0)),
-        "Odd position only allow foldable and not-null StringType expressions")
+        "Only foldable StringType expressions are allowed to appear at odd position")
     assertError(
       CreateNamedStruct(Seq('a.string.at(0), "a", "b", 2.0)),
-        "Odd position only allow foldable and not-null StringType expressions")
+        "Only foldable StringType expressions are allowed to appear at odd position")
+    assertError(
+      CreateNamedStruct(Seq(Literal.create(null, StringType), "a")),
+        "Field name should not be null")
   }
 
   test("check types for ROUND") {
