@@ -218,6 +218,8 @@ object FunctionRegistry {
     expression[NextDay]("next_day"),
     expression[Quarter]("quarter"),
     expression[Second]("second"),
+    expression[ToDate]("to_date"),
+    expression[Trunc]("trunc"),
     expression[WeekOfYear]("weekofyear"),
     expression[Year]("year"),
 

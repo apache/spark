@@ -303,4 +303,22 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(
       NextDay(Literal(Date.valueOf("2015-07-23")), Literal.create(null, StringType)), null)
   }
+
+  test("function to_date") {
+    checkEvaluation(
+      ToDate(Literal(Date.valueOf("2015-07-22"))),
+      DateTimeUtils.fromJavaDate(Date.valueOf("2015-07-22")))
+  }
+
+  test("function trunc") {
+    checkEvaluation(EqualTo(
+      Trunc(Literal(Date.valueOf("2015-07-22")), Literal("YYYY")),
+      Trunc(Literal(Date.valueOf("2015-01-01")), Literal("YEAR"))), true)
+
+    checkEvaluation(EqualTo(
+      Trunc(Literal(Date.valueOf("2015-07-22")), Literal("MONTH")),
+      Trunc(Literal(Date.valueOf("2015-07-01")), Literal("mm"))), true)
+
+    checkEvaluation(Trunc(Literal(Date.valueOf("2015-07-22")), Literal("DD")), null)
+  }
 }

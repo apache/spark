@@ -1025,22 +1025,6 @@ object functions {
   def cosh(columnName: String): Column = cosh(Column(columnName))
 
   /**
-   * Returns the current date.
-   *
-   * @group datetime_funcs
-   * @since 1.5.0
-   */
-  def current_date(): Column = CurrentDate()
-
-  /**
-   * Returns the current timestamp.
-   *
-   * @group datetime_funcs
-   * @since 1.5.0
-   */
-  def current_timestamp(): Column = CurrentTimestamp()
-
-  /**
    * Computes the exponential of the given value.
    *
    * @group math_funcs
@@ -1928,6 +1912,22 @@ object functions {
   //////////////////////////////////////////////////////////////////////////////////////////////
 
   /**
+   * Returns the current date.
+   *
+   * @group datetime_funcs
+   * @since 1.5.0
+   */
+  def current_date(): Column = CurrentDate()
+
+  /**
+   * Returns the current timestamp.
+   *
+   * @group datetime_funcs
+   * @since 1.5.0
+   */
+  def current_timestamp(): Column = CurrentTimestamp()
+
+  /**
    * Converts a date/timestamp/string to a value of string in the format specified by the date
    * format given by the second argument.
    *
@@ -2109,6 +2109,22 @@ object functions {
    * @since 1.5.0
    */
   def weekofyear(columnName: String): Column = weekofyear(Column(columnName))
+
+  /**
+   * Returns date truncated to the unit specified by the format.
+   *
+   * @group datetime_funcs
+   * @since 1.5.0
+   */
+  def to_date(e: Column): Column = ToDate(e.expr)
+
+  /**
+   * Returns date truncated to the unit specified by the format.
+   *
+   * @group datetime_funcs
+   * @since 1.5.0
+   */
+  def trunc(date: Column, format: Column): Column = Trunc(date.expr, format.expr)
 
   //////////////////////////////////////////////////////////////////////////////////////////////
   // Collection functions
