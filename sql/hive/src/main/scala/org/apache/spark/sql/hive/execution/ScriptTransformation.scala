@@ -247,7 +247,7 @@ private class ScriptTransformationWriterThread(
         } else {
           val writable = inputSerde.serialize(
             row.asInstanceOf[GenericInternalRow].values, inputSoi)
-          prepareWritable(writable).write(dataOutputStream)
+          prepareWritable(writable, ioschema.outputSerdeProps).write(dataOutputStream)
         }
       }
       outputStream.close()
