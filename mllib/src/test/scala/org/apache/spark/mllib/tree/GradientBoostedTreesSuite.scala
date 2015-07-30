@@ -204,7 +204,6 @@ class GradientBoostedTreesSuite extends SparkFunSuite with MLlibTestSparkContext
   test("Checkpointing") {
     val tempDir = Utils.createTempDir()
     val path = tempDir.toURI.toString
-    val checkpointInterval = 2
     sc.setCheckpointDir(path)
 
     val rdd = sc.parallelize(GradientBoostedTreesSuite.data, 2)
