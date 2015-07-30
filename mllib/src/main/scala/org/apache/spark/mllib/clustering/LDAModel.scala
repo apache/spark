@@ -266,7 +266,7 @@ class LocalLDAModel private[clustering] (
     // by topic (columns of lambda)
     val Elogbeta = LDAUtils.dirichletExpectation(lambda.t).t
 
-    var score = documents.filter(_._2.numActives > 0).map { case (id: Long, termCounts: Vector) =>
+    var score = documents.filter(_._2.numNonzeros > 0).map { case (id: Long, termCounts: Vector) =>
       var docScore = 0.0D
       val (gammad: BDV[Double], _) = OnlineLDAOptimizer.variationalTopicInference(
         termCounts, exp(Elogbeta), brzAlpha, gammaShape, k)
@@ -310,7 +310,7 @@ class LocalLDAModel private[clustering] (
     val k = this.k
 
     documents.map { doc =>
-      if (doc._2.size == 0) (doc._1, Vectors.zeros(k))
+      if (doc._2.numNonzeros == 0) (doc._1, Vectors.zeros(k))
       val (gamma, _) = OnlineLDAOptimizer.variationalTopicInference(
         doc._2,
         expElogbeta,
