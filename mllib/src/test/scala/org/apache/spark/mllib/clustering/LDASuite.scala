@@ -197,10 +197,12 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext {
 
     // verify the result, Note this generate the identical result as
     // [[https://github.com/Blei-Lab/onlineldavb]]
-    val topic1 = op.getLambda(0, ::).inner.toArray.map("%.4f".format(_)).mkString(", ")
-    val topic2 = op.getLambda(1, ::).inner.toArray.map("%.4f".format(_)).mkString(", ")
-    assert("1.1101, 1.2076, 1.3050, 0.8899, 0.7924, 0.6950" == topic1)
-    assert("0.8899, 0.7924, 0.6950, 1.1101, 1.2076, 1.3050" == topic2)
+    val topic1: Vector = Vectors.fromBreeze(op.getLambda(0, ::).t)
+    val topic2: Vector = Vectors.fromBreeze(op.getLambda(1, ::).t)
+    val expectedTopic1 = Vectors.dense(1.1101, 1.2076, 1.3050, 0.8899, 0.7924, 0.6950)
+    val expectedTopic2 = Vectors.dense(0.8899, 0.7924, 0.6950, 1.1101, 1.2076, 1.3050)
+    assert(topic1 ~== expectedTopic1 absTol 0.01)
+    assert(topic2 ~== expectedTopic2 absTol 0.01)
   }
 
   test("OnlineLDAOptimizer with toy data") {
