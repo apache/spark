@@ -363,6 +363,18 @@ private[spark] object Accumulators extends Logging {
 
 private[spark] object InternalAccumulator {
   val PEAK_EXECUTION_MEMORY = "peakExecutionMemory"
+  val TEST_ACCUMULATOR = "testAccumulator"
+
+  // For testing only.
+  // This needs to be a def since we don't want to reuse the same accumulator across stages.
+  private def maybeTestAccumulator: Option[Accumulator[Long]] = {
+    if (sys.props.contains("spark.testing")) {
+      Some(new Accumulator(
+        0L, AccumulatorParam.LongAccumulatorParam, Some(TEST_ACCUMULATOR), internal = true))
+    } else {
+      None
+    }
+  }
 
   /**
    * Accumulators for tracking internal metrics.
@@ -378,6 +390,7 @@ private[spark] object InternalAccumulator {
       // approximately the sum of the peak sizes across all such data structures created
       // in this task. For SQL jobs, this only tracks all unsafe operators and ExternalSort.
       new Accumulator(
-        0L, AccumulatorParam.LongAccumulatorParam, Some(PEAK_EXECUTION_MEMORY), internal = true))
+        0L, AccumulatorParam.LongAccumulatorParam, Some(PEAK_EXECUTION_MEMORY), internal = true)
+    ) ++ maybeTestAccumulator.toSeq
   }
 }
