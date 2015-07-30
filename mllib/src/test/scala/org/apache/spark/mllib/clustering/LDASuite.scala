@@ -341,17 +341,14 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext {
 
   test("EMLDAOptimizer with empty docs") {
     val vocabSize = 6
-
     val emptyDocsArray = Array.fill(6)(Vectors.sparse(vocabSize, Array.empty, Array.empty))
-    val emptyDocs: Array[(Long, Vector)] = emptyDocsArray
+    val emptyDocs = emptyDocsArray
       .zipWithIndex.map { case (wordCounts, docId) =>
-      (docId.toLong, wordCounts)
+        (docId.toLong, wordCounts)
     }
-
     val distributedEmptyDocs = sc.parallelize(emptyDocs, 2)
 
     val op = new EMLDAOptimizer()
-
     val lda = new LDA()
       .setK(3)
       .setMaxIterations(5)
@@ -364,17 +361,14 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext {
 
   test("OnlineLDAOptimizer with empty docs") {
     val vocabSize = 6
-
     val emptyDocsArray = Array.fill(6)(Vectors.sparse(vocabSize, Array.empty, Array.empty))
-    val emptyDocs: Array[(Long, Vector)] = emptyDocsArray
+    val emptyDocs = emptyDocsArray
       .zipWithIndex.map { case (wordCounts, docId) =>
-      (docId.toLong, wordCounts)
+        (docId.toLong, wordCounts)
     }
-
     val distributedEmptyDocs = sc.parallelize(emptyDocs, 2)
 
     val op = new OnlineLDAOptimizer()
-
     val lda = new LDA()
       .setK(3)
       .setMaxIterations(5)
