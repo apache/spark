@@ -1714,8 +1714,8 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     if (_dagScheduler != null) {
       Utils.tryLogNonFatalError {
         _dagScheduler.stop()
-        _dagScheduler = null
       }
+      _dagScheduler = null
     }
     if (_listenerBusStarted) {
       Utils.tryLogNonFatalError {
@@ -1739,8 +1739,8 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     if (_env != null) {
       Utils.tryLogNonFatalError {
         _env.stop()
-        SparkEnv.set(null)
       }
+      SparkEnv.set(null)
     }
     SparkContext.clearActiveContext()
     logInfo("Successfully stopped SparkContext")
