@@ -237,8 +237,6 @@ class StringIndexerInverse private[ml] (
   }
 
   override def copy(extra: ParamMap): StringIndexerInverse = {
-    val copied = new StringIndexerInverse(uid)
-    copyValues(copied, extra)
+    defaultCopy(extra)
   }
-
 }
