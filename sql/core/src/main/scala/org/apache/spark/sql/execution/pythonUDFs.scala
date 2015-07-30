@@ -134,8 +134,19 @@ object EvaluatePython {
       }
       new GenericInternalRowWithSchema(values, struct)
 
-    case (seq: Seq[Any], array: ArrayType) =>
-      seq.map(x => toJava(x, array.elementType)).asJava
+    case (a: ArrayData, array: ArrayType) =>
+      val length = a.numElements()
+      val values = new java.util.ArrayList[Any](length)
+      var i = 0
+      while (i < length) {
+        if (a.isNullAt(i)) {
+          values.add(null)
+        } else {
+          values.add(toJava(a.get(i), array.elementType))
+        }
+        i += 1
+      }
+      values
 
     case (obj: Map[_, _], mt: MapType) => obj.map {
       case (k, v) => (toJava(k, mt.keyType), toJava(v, mt.valueType))
@@ -190,10 +201,10 @@ object EvaluatePython {
     case (c, BinaryType) if c.getClass.isArray && c.getClass.getComponentType.getName == "byte" => c
 
     case (c: java.util.List[_], ArrayType(elementType, _)) =>
-      c.map { e => fromJava(e, elementType)}.toSeq
+      new GenericArrayData(c.map { e => fromJava(e, elementType)}.toArray)
 
     case (c, ArrayType(elementType, _)) if c.getClass.isArray =>
-      c.asInstanceOf[Array[_]].map(e => fromJava(e, elementType)).toSeq
+      new GenericArrayData(c.asInstanceOf[Array[_]].map(e => fromJava(e, elementType)))
 
     case (c: java.util.Map[_, _], MapType(keyType, valueType, _)) => c.map {
       case (key, value) => (fromJava(key, keyType), fromJava(value, valueType))
@@ -267,7 +278,6 @@ object EvaluatePython {
           pickler.save(row.values(i))
           i += 1
         }
-        row.values.foreach(pickler.save)
         out.write(Opcodes.TUPLE)
         out.write(Opcodes.REDUCE)
       }

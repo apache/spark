@@ -14,28 +14,36 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodeGenContext, GeneratedExpressionCode}
-import org.apache.spark.sql.types._
+import org.apache.spark.rdd.SqlNewHadoopRDD
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.codegen.{GeneratedExpressionCode, CodeGenContext}
+import org.apache.spark.sql.types.{DataType, StringType}
+import org.apache.spark.unsafe.types.UTF8String
 
 /**
- * Given an array or map, returns its size.
+ * Expression that returns the name of the current file being read in using [[SqlNewHadoopRDD]]
  */
-case class Size(child: Expression) extends UnaryExpression with ExpectsInputTypes {
-  override def dataType: DataType = IntegerType
-  override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection(ArrayType, MapType))
+case class InputFileName() extends LeafExpression with Nondeterministic {
 
-  override def nullSafeEval(value: Any): Int = child.dataType match {
-    case _: ArrayType => value.asInstanceOf[ArrayData].numElements()
-    case _: MapType => value.asInstanceOf[Map[Any, Any]].size
+  override def nullable: Boolean = true
+
+  override def dataType: DataType = StringType
+
+  override val prettyName = "INPUT_FILE_NAME"
+
+  override protected def initInternal(): Unit = {}
+
+  override protected def evalInternal(input: InternalRow): UTF8String = {
+    SqlNewHadoopRDD.getInputFileName()
   }
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    val sizeCall = child.dataType match {
-      case _: ArrayType => "numElements()"
-      case _: MapType => "size()"
-    }
-    nullSafeCodeGen(ctx, ev, c => s"${ev.primitive} = ($c).$sizeCall;")
+    ev.isNull = "false"
+    s"final ${ctx.javaType(dataType)} ${ev.primitive} = " +
+      "org.apache.spark.rdd.SqlNewHadoopRDD.getInputFileName();"
   }
+
 }

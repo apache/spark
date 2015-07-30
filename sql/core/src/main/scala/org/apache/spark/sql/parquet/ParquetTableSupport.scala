@@ -146,15 +146,15 @@ private[parquet] class RowWriteSupport extends WriteSupport[InternalRow] with Lo
       array: CatalystConverter.ArrayScalaType[_]): Unit = {
     val elementType = schema.elementType
     writer.startGroup()
-    if (array.size > 0) {
+    if (array.numElements() > 0) {
       if (schema.containsNull) {
         writer.startField(CatalystConverter.ARRAY_CONTAINS_NULL_BAG_SCHEMA_NAME, 0)
         var i = 0
-        while (i < array.size) {
+        while (i < array.numElements()) {
           writer.startGroup()
-          if (array(i) != null) {
+          if (!array.isNullAt(i)) {
             writer.startField(CatalystConverter.ARRAY_ELEMENTS_SCHEMA_NAME, 0)
-            writeValue(elementType, array(i))
+            writeValue(elementType, array.get(i))
             writer.endField(CatalystConverter.ARRAY_ELEMENTS_SCHEMA_NAME, 0)
           }
           writer.endGroup()
@@ -164,8 +164,8 @@ private[parquet] class RowWriteSupport extends WriteSupport[InternalRow] with Lo
       } else {
         writer.startField(CatalystConverter.ARRAY_ELEMENTS_SCHEMA_NAME, 0)
         var i = 0
-        while (i < array.size) {
-          writeValue(elementType, array(i))
+        while (i < array.numElements()) {
+          writeValue(elementType, array.get(i))
           i = i + 1
         }
         writer.endField(CatalystConverter.ARRAY_ELEMENTS_SCHEMA_NAME, 0)

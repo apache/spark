@@ -30,7 +30,6 @@ import org.junit.*;
 
 import scala.collection.JavaConversions;
 import scala.collection.Seq;
-import scala.collection.mutable.Buffer;
 
 import java.io.Serializable;
 import java.util.Arrays;
@@ -168,10 +167,10 @@ public class JavaDataFrameSuite {
     for (int i = 0; i < result.length(); i++) {
       Assert.assertEquals(bean.getB()[i], result.apply(i));
     }
-    Buffer<Integer> outputBuffer = (Buffer<Integer>) first.getJavaMap(2).get("hello");
+    Seq<Integer> outputBuffer = (Seq<Integer>) first.getJavaMap(2).get("hello");
     Assert.assertArrayEquals(
       bean.getC().get("hello"),
-      Ints.toArray(JavaConversions.bufferAsJavaList(outputBuffer)));
+      Ints.toArray(JavaConversions.seqAsJavaList(outputBuffer)));
     Seq<String> d = first.getAs(3);
     Assert.assertEquals(bean.getD().size(), d.length());
     for (int i = 0; i < d.length(); i++) {
