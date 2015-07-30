@@ -1196,7 +1196,12 @@ class RowMatrix(DistributedMatrix):
 
         javaRowMatrix = callMLlibFunc("createRowMatrix", rows, long(numRows), int(numCols))
         self._jrm = JavaModelWrapper(javaRowMatrix)
-        self.rows = rows
+        self._rows = rows
+
+    @property
+    def rows(self):
+        """Rows of the RowMatrix stored as an RDD of vectors."""
+        return self._rows
 
     @staticmethod
     def _from_java(javaRowMatrix):
@@ -1299,7 +1304,14 @@ class IndexedRowMatrix(DistributedMatrix):
         javaIndexedRowMatrix = callMLlibFunc("createIndexedRowMatrix", rows.toDF(),
                                              long(numRows), int(numCols))
         self._jirm = JavaModelWrapper(javaIndexedRowMatrix)
-        self.rows = rows
+        self._rows = rows
+
+    @property
+    def rows(self):
+        """
+        Rows of the IndexedRowMatrix stored as an RDD of IndexedRows.
+        """
+        return self._rows
 
     @staticmethod
     def _from_java(javaIndexedRowMatrix):
@@ -1440,7 +1452,14 @@ class CoordinateMatrix(DistributedMatrix):
         javaCoordinateMatrix = callMLlibFunc("createCoordinateMatrix", entries.toDF(),
                                              long(numRows), long(numCols))
         self._jcm = JavaModelWrapper(javaCoordinateMatrix)
-        self.entries = entries
+        self._entries = entries
+
+    @property
+    def entries(self):
+        """
+        Entries of the CoordinateMatrix stored as an RDD of MatrixEntries.
+        """
+        return self._entries
 
     @staticmethod
     def _from_java(javaCoordinateMatrix):
