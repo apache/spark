@@ -493,7 +493,6 @@ private[spark] class ApplicationMaster(
    */
   private def startUserApplication(): Thread = {
     logInfo("Starting the user application in a separate Thread")
-    System.setProperty("spark.executor.instances", args.numExecutors.toString)
 
     val classpath = Client.getUserClasspath(sparkConf)
     val urls = classpath.map { entry =>

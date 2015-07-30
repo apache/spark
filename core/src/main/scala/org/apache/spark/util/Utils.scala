@@ -2286,6 +2286,17 @@ private[spark] object Utils extends Logging {
     isInDirectory(parent, child.getParentFile)
   }
 
+  /**
+   * Return whether dynamic allocation is enabled in the system conf
+   * Dynamic allocation and explicitly setting the number of executors are inherently
+   * incompatible. In environments where dynamic allocation is turned on by default,
+   * the latter should override the former (SPARK-9092).
+   */
+  def isDynamicAllocationEnabled(conf: SparkConf): Boolean = {
+    return conf.contains("spark.dynamicAllocation.enabled") &&
+      !conf.contains("spark.executor.instances")
+  }
+
 }
 
 private [util] class SparkShutdownHookManager {

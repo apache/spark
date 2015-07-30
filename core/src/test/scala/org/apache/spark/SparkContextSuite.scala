@@ -285,11 +285,12 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext {
     }
   }
 
-  test("No exception when both num-executors and dynamic allocation set") {
+  test("No exception when both num-executors and dynamic allocation set.") {
     noException should be thrownBy {
       sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local")
         .set("spark.dynamicAllocation.enabled", "true").set("spark.executor.instances", "6"))
-      assert(sc.executorAllocationManager === None)
+      assert(sc.executorAllocationManager.isEmpty)
+      assert(sc.getConf.get("spark.executor.instances").toInt == 6)
     }
   }
 }
