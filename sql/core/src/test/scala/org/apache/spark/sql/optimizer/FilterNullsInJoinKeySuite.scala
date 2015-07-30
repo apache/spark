@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{Filter, LocalRelation, Logic
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.test.TestSQLContext
 
-/** This is the test suite for FilterNullsInJoinKey optimziation rule. */
+/** This is the test suite for FilterNullsInJoinKey optimization rule. */
 class FilterNullsInJoinKeySuite extends PlanTest {
 
   // We add predicate pushdown rules at here to make sure we do not

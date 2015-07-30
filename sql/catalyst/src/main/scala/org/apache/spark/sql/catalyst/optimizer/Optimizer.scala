@@ -532,7 +532,8 @@ object CombineFilters extends Rule[LogicalPlan] {
     case Filter(Not(AtLeastNNulls(1, e1)), Filter(Not(AtLeastNNulls(1, e2)), grandChild)) =>
       // If we are combining two expressions Not(AtLeastNNulls(1, e1)) and
       // Not(AtLeastNNulls(1, e2))
-      // (this is used to make sure there is no null in the result of e1 and e2), we can
+      // (this is used to make sure there is no null in the result of e1 and e2 and
+      // they are added by FilterNullsInJoinKey optimziation rule), we can
       // just create a Not(AtLeastNNulls(1, (e1 ++ e2).distinct)).
       Filter(Not(AtLeastNNulls(1, (e1 ++ e2).distinct)), grandChild)
     case ff @ Filter(fc, nf @ Filter(nc, grandChild)) => Filter(And(nc, fc), grandChild)
