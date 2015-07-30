@@ -203,17 +203,20 @@ private[spark] class VectorUDT extends UserDefinedType[Vector] {
   override def deserialize(datum: Any): Vector = {
     datum match {
       case row: InternalRow =>
-        require(row.length == 4,
-          s"VectorUDT.deserialize given row with length ${row.length} but requires length == 4")
+        require(row.numFields == 4,
+          s"VectorUDT.deserialize given row with length ${row.numFields} but requires length == 4")
         val tpe = row.getByte(0)
         tpe match {
           case 0 =>
             val size = row.getInt(1)
-            val indices = row.getAs[Iterable[Int]](2).toArray
-            val values = row.getAs[Iterable[Double]](3).toArray
+            val indices =
+              row.getAs[Seq[Int]](2, ArrayType(IntegerType, containsNull = false)).toArray
+            val values =
+              row.getAs[Seq[Double]](3, ArrayType(DoubleType, containsNull = false)).toArray
             new SparseVector(size, indices, values)
           case 1 =>
-            val values = row.getAs[Iterable[Double]](3).toArray
+            val values =
+              row.getAs[Seq[Double]](3, ArrayType(DoubleType, containsNull = false)).toArray
             new DenseVector(values)
         }
     }

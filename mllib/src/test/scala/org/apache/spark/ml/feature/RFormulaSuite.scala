@@ -31,72 +31,78 @@ class RFormulaSuite extends SparkFunSuite with MLlibTestSparkContext {
     val formula = new RFormula().setFormula("id ~ v1 + v2")
     val original = sqlContext.createDataFrame(
       Seq((0, 1.0, 3.0), (2, 2.0, 5.0))).toDF("id", "v1", "v2")
-    val result = formula.transform(original)
-    val resultSchema = formula.transformSchema(original.schema)
+    val model = formula.fit(original)
+    val result = model.transform(original)
+    val resultSchema = model.transformSchema(original.schema)
     val expected = sqlContext.createDataFrame(
       Seq(
-        (0, 1.0, 3.0, Vectors.dense(Array(1.0, 3.0)), 0.0),
-        (2, 2.0, 5.0, Vectors.dense(Array(2.0, 5.0)), 2.0))
+        (0, 1.0, 3.0, Vectors.dense(1.0, 3.0), 0.0),
+        (2, 2.0, 5.0, Vectors.dense(2.0, 5.0), 2.0))
       ).toDF("id", "v1", "v2", "features", "label")
     // TODO(ekl) make schema comparisons ignore metadata, to avoid .toString
     assert(result.schema.toString == resultSchema.toString)
     assert(resultSchema == expected.schema)
-    assert(result.collect().toSeq == expected.collect().toSeq)
+    assert(result.collect() === expected.collect())
   }
 
   test("features column already exists") {
     val formula = new RFormula().setFormula("y ~ x").setFeaturesCol("x")
     val original = sqlContext.createDataFrame(Seq((0, 1.0), (2, 2.0))).toDF("x", "y")
     intercept[IllegalArgumentException] {
-      formula.transformSchema(original.schema)
+      formula.fit(original)
     }
     intercept[IllegalArgumentException] {
-      formula.transform(original)
+      formula.fit(original)
     }
   }
 
   test("label column already exists") {
     val formula = new RFormula().setFormula("y ~ x").setLabelCol("y")
     val original = sqlContext.createDataFrame(Seq((0, 1.0), (2, 2.0))).toDF("x", "y")
-    val resultSchema = formula.transformSchema(original.schema)
+    val model = formula.fit(original)
+    val resultSchema = model.transformSchema(original.schema)
     assert(resultSchema.length == 3)
-    assert(resultSchema.toString == formula.transform(original).schema.toString)
+    assert(resultSchema.toString == model.transform(original).schema.toString)
   }
 
   test("label column already exists but is not double type") {
     val formula = new RFormula().setFormula("y ~ x").setLabelCol("y")
     val original = sqlContext.createDataFrame(Seq((0, 1), (2, 2))).toDF("x", "y")
+    val model = formula.fit(original)
     intercept[IllegalArgumentException] {
-      formula.transformSchema(original.schema)
+      model.transformSchema(original.schema)
     }
     intercept[IllegalArgumentException] {
-      formula.transform(original)
+      model.transform(original)
     }
   }
 
   test("allow missing label column for test datasets") {
     val formula = new RFormula().setFormula("y ~ x").setLabelCol("label")
     val original = sqlContext.createDataFrame(Seq((0, 1.0), (2, 2.0))).toDF("x", "_not_y")
-    val resultSchema = formula.transformSchema(original.schema)
+    val model = formula.fit(original)
+    val resultSchema = model.transformSchema(original.schema)
     assert(resultSchema.length == 3)
     assert(!resultSchema.exists(_.name == "label"))
-    assert(resultSchema.toString == formula.transform(original).schema.toString)
+    assert(resultSchema.toString == model.transform(original).schema.toString)
   }
 
-// TODO(ekl) enable after we implement string label support
-//  test("transform string label") {
-//    val formula = new RFormula().setFormula("name ~ id")
-//    val original = sqlContext.createDataFrame(
-//      Seq((1, "foo"), (2, "bar"), (3, "bar"))).toDF("id", "name")
-//    val result = formula.transform(original)
-//    val resultSchema = formula.transformSchema(original.schema)
-//    val expected = sqlContext.createDataFrame(
-//      Seq(
-//        (1, "foo", Vectors.dense(Array(1.0)), 1.0),
-//        (2, "bar", Vectors.dense(Array(2.0)), 0.0),
-//        (3, "bar", Vectors.dense(Array(3.0)), 0.0))
-//      ).toDF("id", "name", "features", "label")
-//    assert(result.schema.toString == resultSchema.toString)
-//    assert(result.collect().toSeq == expected.collect().toSeq)
-//  }
+  test("encodes string terms") {
+    val formula = new RFormula().setFormula("id ~ a + b")
+    val original = sqlContext.createDataFrame(
+      Seq((1, "foo", 4), (2, "bar", 4), (3, "bar", 5), (4, "baz", 5))
+    ).toDF("id", "a", "b")
+    val model = formula.fit(original)
+    val result = model.transform(original)
+    val resultSchema = model.transformSchema(original.schema)
+    val expected = sqlContext.createDataFrame(
+      Seq(
+        (1, "foo", 4, Vectors.dense(0.0, 1.0, 4.0), 1.0),
+        (2, "bar", 4, Vectors.dense(1.0, 0.0, 4.0), 2.0),
+        (3, "bar", 5, Vectors.dense(1.0, 0.0, 5.0), 3.0),
+        (4, "baz", 5, Vectors.dense(0.0, 0.0, 5.0), 4.0))
+      ).toDF("id", "a", "b", "features", "label")
+    assert(result.schema.toString == resultSchema.toString)
+    assert(result.collect() === expected.collect())
+  }
 }

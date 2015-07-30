@@ -17,22 +17,29 @@
 
 package org.apache.spark.util.collection.unsafe.sort
 
+import com.google.common.primitives.UnsignedBytes
 import org.scalatest.prop.PropertyChecks
-
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.unsafe.types.UTF8String
 
 class PrefixComparatorsSuite extends SparkFunSuite with PropertyChecks {
 
   test("String prefix comparator") {
 
     def testPrefixComparison(s1: String, s2: String): Unit = {
-      val s1Prefix = PrefixComparators.STRING.computePrefix(s1)
-      val s2Prefix = PrefixComparators.STRING.computePrefix(s2)
+      val utf8string1 = UTF8String.fromString(s1)
+      val utf8string2 = UTF8String.fromString(s2)
+      val s1Prefix = PrefixComparators.STRING.computePrefix(utf8string1)
+      val s2Prefix = PrefixComparators.STRING.computePrefix(utf8string2)
       val prefixComparisonResult = PrefixComparators.STRING.compare(s1Prefix, s2Prefix)
+
+      val cmp = UnsignedBytes.lexicographicalComparator().compare(
+        utf8string1.getBytes.take(8), utf8string2.getBytes.take(8))
+
       assert(
-        (prefixComparisonResult == 0) ||
-        (prefixComparisonResult < 0 && s1 < s2) ||
-        (prefixComparisonResult > 0 && s1 > s2))
+        (prefixComparisonResult == 0 && cmp == 0) ||
+        (prefixComparisonResult < 0 && s1.compareTo(s2) < 0) ||
+        (prefixComparisonResult > 0 && s1.compareTo(s2) > 0))
     }
 
     // scalastyle:off

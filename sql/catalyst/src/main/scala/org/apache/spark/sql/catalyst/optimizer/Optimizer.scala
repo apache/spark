@@ -36,8 +36,9 @@ object DefaultOptimizer extends Optimizer {
     // SubQueries are only needed for analysis and can be removed before execution.
     Batch("Remove SubQueries", FixedPoint(100),
       EliminateSubQueries) ::
-    Batch("Distinct", FixedPoint(100),
-      ReplaceDistinctWithAggregate) ::
+    Batch("Aggregate", FixedPoint(100),
+      ReplaceDistinctWithAggregate,
+      RemoveLiteralFromGroupExpressions) ::
     Batch("Operator Optimizations", FixedPoint(100),
       // Operator push down
       SetOperationPushDown,
@@ -553,31 +554,25 @@ object PushPredicateThroughProject extends Rule[LogicalPlan] with PredicateHelpe
       // Split the condition into small conditions by `And`, so that we can push down part of this
       // condition without nondeterministic expressions.
       val andConditions = splitConjunctivePredicates(condition)
-      val nondeterministicConditions = andConditions.filter(hasNondeterministic(_, aliasMap))
+
+      val (deterministic, nondeterministic) = andConditions.partition(_.collect {
+        case a: Attribute if aliasMap.contains(a) => aliasMap(a)
+      }.forall(_.deterministic))
 
       // If there is no nondeterministic conditions, push down the whole condition.
-      if (nondeterministicConditions.isEmpty) {
+      if (nondeterministic.isEmpty) {
         project.copy(child = Filter(replaceAlias(condition, aliasMap), grandChild))
       } else {
         // If they are all nondeterministic conditions, leave it un-changed.
-        if (nondeterministicConditions.length == andConditions.length) {
+        if (deterministic.isEmpty) {
           filter
         } else {
-          val deterministicConditions = andConditions.filterNot(hasNondeterministic(_, aliasMap))
           // Push down the small conditions without nondeterministic expressions.
-          val pushedCondition = deterministicConditions.map(replaceAlias(_, aliasMap)).reduce(And)
-          Filter(nondeterministicConditions.reduce(And),
+          val pushedCondition = deterministic.map(replaceAlias(_, aliasMap)).reduce(And)
+          Filter(nondeterministic.reduce(And),
             project.copy(child = Filter(pushedCondition, grandChild)))
         }
       }
-  }
-
-  private def hasNondeterministic(
-      condition: Expression,
-      sourceAliases: AttributeMap[Expression]) = {
-    condition.collect {
-      case a: Attribute if sourceAliases.contains(a) => sourceAliases(a)
-    }.exists(!_.deterministic)
   }
 
   // Substitute any attributes that are produced by the child projection, so that we safely
@@ -803,5 +798,17 @@ object ConvertToLocalRelation extends Rule[LogicalPlan] {
 object ReplaceDistinctWithAggregate extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case Distinct(child) => Aggregate(child.output, child.output, child)
+  }
+}
+
+/**
+ * Removes literals from group expressions in [[Aggregate]], as they have no effect to the result
+ * but only makes the grouping key bigger.
+ */
+object RemoveLiteralFromGroupExpressions extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case a @ Aggregate(grouping, _, _) =>
+      val newGrouping = grouping.filter(!_.foldable)
+      a.copy(groupingExpressions = newGrouping)
   }
 }
