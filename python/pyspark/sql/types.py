@@ -531,7 +531,7 @@ class StructType(DataType):
 
         if self._needSerializeFields:
             if isinstance(obj, dict):
-                return tuple(f.toInternal(obj.get(n)) for n, f in zip(names, self.fields))
+                return tuple(f.toInternal(obj.get(n)) for n, f in zip(self.names, self.fields))
             elif isinstance(obj, (tuple, list)):
                 return tuple(f.toInternal(v) for f, v in zip(self.fields, obj))
             else:
