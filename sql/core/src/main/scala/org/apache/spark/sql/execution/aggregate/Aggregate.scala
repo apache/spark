@@ -108,7 +108,10 @@ case class Aggregate(
 
   protected override def doExecute(): RDD[InternalRow] = attachTree(this, "execute") {
     child.execute().mapPartitions { iter =>
-      if (iter.hasNext && useHybridIterator && groupingExpressions.nonEmpty) {
+      // Because the constructor of an aggregation iterator will read at least the first row,
+      // we need to get the value of iter.hasNext first.
+      val hasInput = iter.hasNext
+      if (hasInput && useHybridIterator && groupingExpressions.nonEmpty) {
         new UnsafeHybridAggregationIterator(
           groupingExpressions,
           nonCompleteAggregateExpressions,
@@ -123,7 +126,7 @@ case class Aggregate(
           child.output,
           iter)
       } else {
-        if (!iter.hasNext && groupingExpressions.nonEmpty) {
+        if (!hasInput && groupingExpressions.nonEmpty) {
           // This is a grouped aggregate and the input iterator is empty,
           // so return an empty iterator.
           Iterator[InternalRow]()
@@ -141,7 +144,7 @@ case class Aggregate(
             newOrdering,
             child.output,
             iter)
-          if (!iter.hasNext && groupingExpressions.isEmpty) {
+          if (!hasInput && groupingExpressions.isEmpty) {
             // There is no input and there is no grouping expressions.
             // We need to output a single row as the output.
             Iterator[InternalRow](outputIter.generateResultForEmptyInput())
