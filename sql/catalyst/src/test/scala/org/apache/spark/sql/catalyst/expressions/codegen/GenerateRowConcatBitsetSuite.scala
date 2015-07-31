@@ -84,8 +84,7 @@ class GenerateRowConcatBitsetSuite extends SparkFunSuite {
     for (i <- 1 until 20) {
       val numFields1 = Random.nextInt(1000)
       val numFields2 = Random.nextInt(1000)
-      info(s"num fields: $numFields1 and $numFields2")
-      testBitsets(numFields1, numFields2)
+      testBitsetsOnce(numFields1, numFields2)
     }
   }
 
@@ -104,6 +103,7 @@ class GenerateRowConcatBitsetSuite extends SparkFunSuite {
   }
 
   private def testBitsetsOnce(numFields1: Int, numFields2: Int): Unit = {
+    info(s"num fields: $numFields1 and $numFields2")
     val schema1 = StructType(Seq.tabulate(numFields1) { i => StructField(s"a_$i", IntegerType) })
     val schema2 = StructType(Seq.tabulate(numFields2) { i => StructField(s"b_$i", IntegerType) })
 
