@@ -21,15 +21,20 @@
   </formats>
   <includeBaseDirectory>false</includeBaseDirectory>
 
+  <fileSets>
+    <fileSet>
+      <directory>${project.build.directory}/scala-${scala.binary.version}/test-classes</directory>
+      <outputDirectory>/</outputDirectory>
+    </fileSet>
+  </fileSets>
+
   <dependencySets>
     <dependencySet>
       <useTransitiveDependencies>true</useTransitiveDependencies>
       <scope>test</scope>
-      <useProjectArtifact>false</useProjectArtifact>
       <unpack>true</unpack>
       <excludes>
         <exclude>org.apache.hadoop:*:jar</exclude>
-        <exclude>org.apache.spark:*:jar</exclude>
         <exclude>org.apache.zookeeper:*:jar</exclude>
         <exclude>org.apache.avro:*:jar</exclude>
       </excludes>
