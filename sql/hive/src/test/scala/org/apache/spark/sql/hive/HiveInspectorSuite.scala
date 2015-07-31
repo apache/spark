@@ -230,7 +230,7 @@ class HiveInspectorSuite extends SparkFunSuite with HiveInspectors {
   test("wrap / unwrap Map Type") {
     val dt = MapType(dataTypes(0), dataTypes(1))
 
-    val d = Map(row(0) -> row(1))
+    val d = ArrayBasedMapData(Array(row(0)), Array(row(1)))
     checkValue(d, unwrap(wrap(d, toInspector(dt), dt), toInspector(dt)))
     checkValue(null, unwrap(wrap(null, toInspector(dt), dt), toInspector(dt)))
     checkValue(d,

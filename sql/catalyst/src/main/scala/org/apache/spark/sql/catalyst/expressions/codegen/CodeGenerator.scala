@@ -112,8 +112,10 @@ class CodeGenContext {
       case BinaryType => s"$getter.getBinary($ordinal)"
       case CalendarIntervalType => s"$getter.getInterval($ordinal)"
       case t: StructType => s"$getter.getStruct($ordinal, ${t.size})"
-      case a: ArrayType => s"$getter.getArray($ordinal)"
-      case _ => s"($jt)$getter.get($ordinal)" // todo: remove generic getter.
+      case _: ArrayType => s"$getter.getArray($ordinal)"
+      case _: MapType => s"$getter.getMap($ordinal)"
+      case NullType => "null"
+      case _ => s"($jt)$getter.genericGet($ordinal)" // todo: remove generic getter.
     }
   }
 
@@ -156,7 +158,7 @@ class CodeGenContext {
     case CalendarIntervalType => "CalendarInterval"
     case _: StructType => "InternalRow"
     case _: ArrayType => "ArrayData"
-    case _: MapType => "scala.collection.Map"
+    case _: MapType => "MapData"
     case dt: OpenHashSetUDT if dt.elementType == IntegerType => classOf[IntegerHashSet].getName
     case dt: OpenHashSetUDT if dt.elementType == LongType => classOf[LongHashSet].getName
     case _ => "Object"
@@ -300,7 +302,8 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
       classOf[UTF8String].getName,
       classOf[Decimal].getName,
       classOf[CalendarInterval].getName,
-      classOf[ArrayData].getName
+      classOf[ArrayData].getName,
+      classOf[MapData].getName
     ))
     evaluator.setExtendedClass(classOf[GeneratedClass])
     try {
