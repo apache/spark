@@ -224,3 +224,11 @@ span.additional-metric-title {
 a.expandbutton {
   cursor: pointer;
 }
+
+.executor_thread {
+  background: #C7BCCD;
+}
+
+.non-executor_thread {
+  background: #F8EEF0;
+}

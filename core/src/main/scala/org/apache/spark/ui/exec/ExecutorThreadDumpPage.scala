@@ -49,7 +49,7 @@ private[ui] class ExecutorThreadDumpPage(parent: ExecutorsTab) extends WebUIPage
     val maybeThreadDump = sc.get.getExecutorThreadDump(executorId)
 
     val content = maybeThreadDump.map { threadDump =>
-      val dumpRows = threadDump.sortWith{
+      val dumpRows = threadDump.sortWith {
         case (threadTrace1, threadTrace2) => {
           val v1 = if (threadTrace1.threadName.contains("Executor task launch")) 1 else 0
           val v2 = if (threadTrace2.threadName.contains("Executor task launch")) 1 else 0
@@ -61,16 +61,15 @@ private[ui] class ExecutorThreadDumpPage(parent: ExecutorsTab) extends WebUIPage
         }
       }.map { thread =>
         val threadName = thread.threadName
-        val styleString = "background:" + {
+        val className = "accordion-toggle " + {
           if (threadName.contains("Executor task launch")) {
-            "#C7BCCD"
+            "executor_thread"
           } else {
-           "#F8EEF0"
+            "non-executor_thread"
           }
         }
         <div class="accordion-group">
-          <div class="accordion-heading" onclick="$(this).next().toggleClass('hidden')"
-               style={styleString}>
+          <div class={className} onclick="$(this).next().toggleClass('hidden')">
             <a class="accordion-toggle">
               Thread {thread.threadId}: {thread.threadName} ({thread.threadState})
             </a>
