@@ -16,6 +16,8 @@
  */
 package org.apache.spark.sql.catalyst.expressions
 
+import java.util.Comparator
+
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenFallback, CodeGenContext, GeneratedExpressionCode}
 import org.apache.spark.sql.types._
@@ -64,45 +66,53 @@ case class SortArray(base: Expression, ascendingOrder: Expression)
   }
 
   @transient
-  private lazy val lt: (Any, Any) => Boolean = {
+  private lazy val lt = {
     val ordering = base.dataType match {
       case _ @ ArrayType(n: AtomicType, _) => n.ordering.asInstanceOf[Ordering[Any]]
     }
 
-    (left, right) => {
-      if (left == null && right == null) {
-        false
-      } else if (left == null) {
-        true
-      } else if (right == null) {
-        false
-      } else {
-        ordering.compare(left, right) < 0
+    new Comparator[Any]() {
+      override def compare(o1: Any, o2: Any): Int = {
+        if (o1 == null && o2 == null) {
+          0
+        } else if (o1 == null) {
+          -1
+        } else if (o2 == null) {
+          1
+        } else {
+          ordering.compare(o1, o2)
+        }
       }
     }
   }
 
   @transient
-  private lazy val gt: (Any, Any) => Boolean = {
+  private lazy val gt = {
     val ordering = base.dataType match {
       case _ @ ArrayType(n: AtomicType, _) => n.ordering.asInstanceOf[Ordering[Any]]
     }
 
-    (left, right) => {
-      if (left == null && right == null) {
-        true
-      } else if (left == null) {
-        false
-      } else if (right == null) {
-        true
-      } else {
-        ordering.compare(left, right) > 0
+    new Comparator[Any]() {
+      override def compare(o1: Any, o2: Any): Int = {
+        if (o1 == null && o2 == null) {
+          0
+        } else if (o1 == null) {
+          1
+        } else if (o2 == null) {
+          -1
+        } else {
+          -ordering.compare(o1, o2)
+        }
       }
     }
   }
 
-  override def nullSafeEval(array: Any, ascending: Any): Seq[Any] = {
-    array.asInstanceOf[Seq[Any]].sortWith(if (ascending.asInstanceOf[Boolean]) lt else gt)
+  override def nullSafeEval(array: Any, ascending: Any): Any = {
+    val data = array.asInstanceOf[ArrayData].toArray().asInstanceOf[Array[AnyRef]]
+    java.util.Arrays.sort(
+      data,
+      if (ascending.asInstanceOf[Boolean]) lt else gt)
+    new GenericArrayData(data.asInstanceOf[Array[Any]])
   }
 
   override def prettyName: String = "sort_array"
