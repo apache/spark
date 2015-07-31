@@ -17,8 +17,6 @@
 
 package org.apache.spark.mllib.fpm
 
-import scala.collection.mutable.ArrayBuffer
-
 import org.apache.spark.Logging
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.rdd.RDD
@@ -50,7 +48,7 @@ class PrefixSpan private (
    * projected database exceeds this size, another iteration of distributed PrefixSpan is run.
    */
   // TODO: make configurable with a better default value, 10000 may be too small
-  private val maxLocalProjDBSize: Long = 10000
+  private val maxLocalProjDBSize: Long = 32000000L
 
   /**
    * Constructs a default instance with default parameters
@@ -108,20 +106,20 @@ class PrefixSpan private (
 
     // (Frequent items -> number of occurrences, all items here satisfy the `minSupport` threshold
     val freqItemCounts = sequences
-      .flatMap(seq => seq.distinct.map(item => (item, 1L)))
+      .flatMap(seq => seq.distinct.filter(_ != -1).map(item => (item, 1L)))
       .reduceByKey(_ + _)
       .filter(_._2 >= minCount)
       .collect()
 
     // Pairs of (length 1 prefix, suffix consisting of frequent items)
-    val itemSuffixPairs = {
+    val prefixSuffixPairs = {
       val freqItems = freqItemCounts.map(_._1).toSet
       sequences.flatMap { seq =>
-        val filteredSeq = seq.filter(freqItems.contains(_))
+        val filteredSeq = seq.filter(item => freqItems.contains(item) || item == -1)
         freqItems.flatMap { item =>
-          val candidateSuffix = LocalPrefixSpan.getSuffix(item, filteredSeq)
+          val candidateSuffix = LocalPrefixSpan.getSuffix(List(item), filteredSeq)._2
           candidateSuffix match {
-            case suffix if !suffix.isEmpty => Some((List(item), suffix))
+            case suffix if suffix.nonEmpty => Some((List(item), suffix))
             case _ => None
           }
         }
@@ -133,11 +131,13 @@ class PrefixSpan private (
     var resultsAccumulator = freqItemCounts.map(x => (List(x._1), x._2))
 
     // Remaining work to be locally and distributively processed respectfully
-    var (pairsForLocal, pairsForDistributed) = partitionByProjDBSize(itemSuffixPairs)
+    var (pairsForLocal, pairsForDistributed) = partitionByProjDBSize(prefixSuffixPairs)
 
     // Continue processing until no pairs for distributed processing remain (i.e. all prefixes have
     // projected database sizes <= `maxLocalProjDBSize`)
-    while (pairsForDistributed.count() != 0) {
+    var patternLength = 1
+    while (pairsForDistributed.count() != 0 && patternLength < maxPatternLength) {
+      patternLength += 1
       val (nextPatternAndCounts, nextPrefixSuffixPairs) =
         extendPrefixes(minCount, pairsForDistributed)
       pairsForDistributed.unpersist()
@@ -153,7 +153,7 @@ class PrefixSpan private (
       minCount, sc.parallelize(pairsForLocal, 1).groupByKey())
 
     (sc.parallelize(resultsAccumulator, 1) ++ remainingResults)
-      .map { case (pattern, count) => (pattern.toArray, count) }
+      .map { case (pattern, count) => (pattern.reverse.toArray, count) }
   }
 
 
@@ -195,36 +195,41 @@ class PrefixSpan private (
     // (length N prefix, item from suffix) pairs and their corresponding number of occurrences
     // Every (prefix :+ suffix) is guaranteed to have support exceeding `minSupport`
     val prefixItemPairAndCounts = prefixSuffixPairs
-      .flatMap { case (prefix, suffix) => suffix.distinct.map(y => ((prefix, y), 1L)) }
+      .flatMap { case (prefix, suffix) =>
+      suffix.distinct.filter(item => item != -1 && item != -3).map(y => ((prefix, y), 1L)) }
       .reduceByKey(_ + _)
       .filter(_._2 >= minCount)
 
-    // Map from prefix to set of possible next items from suffix
-    val prefixToNextItems = prefixItemPairAndCounts
+   // Map from prefix to set of possible next prefix from suffix
+    val prefixToNextPrefixes = prefixItemPairAndCounts
       .keys
       .groupByKey()
-      .mapValues(_.toSet)
+      .map { case (prefix, items) =>
+      (prefix, items.flatMap(item => Array(item :: (-1 :: prefix), item :: prefix)).toSet) }
       .collect()
       .toMap
 
-
-    // Frequent patterns with length N+1 and their corresponding counts
-    val extendedPrefixAndCounts = prefixItemPairAndCounts
-      .map { case ((prefix, item), count) => (item :: prefix, count) }
-
     // Remaining work, all prefixes will have length N+1
-    val extendedPrefixAndSuffix = prefixSuffixPairs
-      .filter(x => prefixToNextItems.contains(x._1))
+    val extendedPrefixAndSuffixWithFlags = prefixSuffixPairs
       .flatMap { case (prefix, suffix) =>
-        val frequentNextItems = prefixToNextItems(prefix)
-        val filteredSuffix = suffix.filter(frequentNextItems.contains(_))
-        frequentNextItems.flatMap { item =>
-          LocalPrefixSpan.getSuffix(item, filteredSuffix) match {
-            case suffix if !suffix.isEmpty => Some(item :: prefix, suffix)
-            case _ => None
+        if (prefixToNextPrefixes.contains(prefix)) {
+          val frequentNextPrefixes = prefixToNextPrefixes(prefix)
+          frequentNextPrefixes.map { nextPrefix =>
+            val suffixWithFlag = LocalPrefixSpan.getSuffix(nextPrefix, suffix)
+            (nextPrefix, if (suffixWithFlag._1) 1L else 0L, suffixWithFlag._2)
           }
+        } else {
+          None
         }
-      }
+      }.persist(StorageLevel.MEMORY_AND_DISK)
+    val extendedPrefixAndCounts = extendedPrefixAndSuffixWithFlags
+      .map(x => (x._1, x._2))
+      .reduceByKey(_ + _)
+      .filter(_._2 >= minCount)
+    val extendedPrefixAndSuffix = extendedPrefixAndSuffixWithFlags
+      .map(x => (x._1, x._3))
+      .filter(_._2.nonEmpty)
+    extendedPrefixAndSuffixWithFlags.unpersist()
 
     (extendedPrefixAndCounts, extendedPrefixAndSuffix)
   }
@@ -240,9 +245,9 @@ class PrefixSpan private (
       data: RDD[(List[Int], Iterable[Array[Int]])]): RDD[(List[Int], Long)] = {
     data.flatMap {
       case (prefix, projDB) =>
-        LocalPrefixSpan.run(minCount, maxPatternLength, prefix.toList.reverse, projDB)
+        LocalPrefixSpan.run(minCount, maxPatternLength, prefix, projDB)
           .map { case (pattern: List[Int], count: Long) =>
-          (pattern.reverse, count)
+          (pattern, count)
         }
     }
   }
