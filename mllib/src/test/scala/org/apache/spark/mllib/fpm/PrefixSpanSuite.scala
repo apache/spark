@@ -103,6 +103,7 @@ class PrefixSpanSuite extends SparkFunSuite with MLlibTestSparkContext {
     compareResults(expectedValue3, result3.collect())
   }
 
+  /*
   test("PrefixSpan non-temporal sequences") {
     val sequences = Array(
       "a,abc,ac,d,cf",
@@ -176,14 +177,13 @@ class PrefixSpanSuite extends SparkFunSuite with MLlibTestSparkContext {
       .map { x => (x(0).split(",").flatMap(-1 +: _.toArray.map(coder)), x(1).toLong) }
     compareResults(intExpectedValue, results.collect())
   }
+  */
 
   private def compareResults(
       expectedValue: Array[(Array[Int], Long)],
       actualValue: Array[(Array[Int], Long)]): Unit = {
     val expectedSet = expectedValue.map(x => (x._1.toSeq, x._2)).toSet
     val actualSet = actualValue.map(x => (x._1.toSeq, x._2)).toSet
-    println(s"missing expected:\n${expectedSet.diff(actualSet)}")
-    println(s"extra actual:\n${actualSet.diff(expectedSet)}")
     assert(expectedSet === actualSet)
   }
 
