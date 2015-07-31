@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.unsafe.map;
+package org.apache.spark.util.collection.unsafe.map;
 
 import java.lang.Exception;
 import java.nio.ByteBuffer;

@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.unsafe.hash;
+package org.apache.spark.util.collection.unsafe.map;
 
 import java.util.HashSet;
 import java.util.Random;

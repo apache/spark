@@ -21,9 +21,10 @@ import org.scalatest.BeforeAndAfterAll
 
 import java.sql.Timestamp
 
+import org.apache.spark.SparkEnv
 import org.apache.spark.sql.catalyst.DefaultParserDialect
 import org.apache.spark.sql.catalyst.errors.DialectException
-import org.apache.spark.sql.execution.aggregate.Aggregate2Sort
+import org.apache.spark.sql.execution.aggregate.{Aggregate2Hybrid, Aggregate2Sort}
 import org.apache.spark.sql.execution.GeneratedAggregate
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.TestData._
@@ -302,6 +303,105 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll with SQLTestUtils {
     } finally {
       sqlContext.dropTempTable("testData3x")
       sqlContext.setConf(SQLConf.CODEGEN_ENABLED, originalValue)
+    }
+  }
+
+  test("aggregation with hybridAggregate") {
+    val originalValue = sqlContext.conf.codegenEnabled
+    sqlContext.setConf(SQLConf.CODEGEN_ENABLED, true)
+    val originalUseAggregate2 = sqlContext.conf.useSqlAggregate2
+    sqlContext.setConf(SQLConf.USE_SQL_AGGREGATE2, true)
+    val originalUseHybridAggregate = sqlContext.conf.useHybridAggregate
+    sqlContext.setConf(SQLConf.USE_HYBRID_AGGREGATE, true)
+    SparkEnv.get.conf.set("spark.test.aggregate.spillFrequency","10")
+    // Prepare a table that we can group some rows.
+    sqlContext.table("testData")
+      .unionAll(sqlContext.table("testData"))
+      .unionAll(sqlContext.table("testData"))
+      .registerTempTable("testData3x")
+
+    def testHybridAggregate(sqlText: String, expectedResults: Seq[Row]): Unit = {
+      val df = sql(sqlText)
+      // First, check if we have GeneratedAggregate.
+      var hasAggregate2Hybrid = false
+      df.queryExecution.executedPlan.foreach {
+        case newAggregate: Aggregate2Hybrid => hasAggregate2Hybrid = true
+        case _ =>
+      }
+      if (!hasAggregate2Hybrid) {
+        fail(
+          s"""
+             |Codegen is enabled, but query $sqlText does not have Aggregate2Hybrid in the plan.
+             |${df.queryExecution.simpleString}
+           """.stripMargin)
+      }
+      // Then, check results.
+      checkAnswer(df, expectedResults)
+    }
+
+    try {
+      // COUNT
+      testHybridAggregate(
+        "SELECT key, count(value) FROM testData3x GROUP BY key",
+        (1 to 100).map(i => Row(i, 3)))
+      testHybridAggregate(
+        "SELECT count(key) FROM testData3x",
+        Row(300) :: Nil)
+      // SUM
+      testHybridAggregate(
+        "SELECT value, sum(key) FROM testData3x GROUP BY value",
+        (1 to 100).map(i => Row(i.toString, 3 * i)))
+      testHybridAggregate(
+        "SELECT sum(key), SUM(CAST(key as Double)) FROM testData3x",
+        Row(5050 * 3, 5050 * 3.0) :: Nil)
+      // AVERAGE
+      testHybridAggregate(
+        "SELECT value, avg(key) FROM testData3x GROUP BY value",
+        (1 to 100).map(i => Row(i.toString, i)))
+      testHybridAggregate(
+        "SELECT avg(key) FROM testData3x",
+        Row(50.5) :: Nil)
+      // MAX
+      testHybridAggregate(
+        "SELECT value, max(key) FROM testData3x GROUP BY value",
+        (1 to 100).map(i => Row(i.toString, i)))
+      testHybridAggregate(
+        "SELECT max(key) FROM testData3x",
+        Row(100) :: Nil)
+      // MIN
+      testHybridAggregate(
+        "SELECT value, min(key) FROM testData3x GROUP BY value",
+        (1 to 100).map(i => Row(i.toString, i)))
+      testHybridAggregate(
+        "SELECT min(key) FROM testData3x",
+        Row(1) :: Nil)
+      // Some combinations.
+      testHybridAggregate(
+        """
+          |SELECT
+          |  value,
+          |  sum(key),
+          |  max(key),
+          |  min(key),
+          |  avg(key),
+          |  count(key)
+          |FROM testData3x
+          |GROUP BY value
+        """.stripMargin,
+        (1 to 100).map(i => Row(i.toString, i*3, i, i, i, 3)))
+      testHybridAggregate(
+        "SELECT max(key), min(key), avg(key), count(key) FROM testData3x",
+        Row(100, 1, 50.5, 300) :: Nil)
+      // Aggregate with Code generation handling all null values
+      testHybridAggregate(
+        "SELECT  sum('a'), avg('a'), count(null) FROM testData",
+        Row(null, null, 0) :: Nil)
+    } finally {
+      sqlContext.dropTempTable("testData3x")
+      sqlContext.setConf(SQLConf.CODEGEN_ENABLED, originalValue)
+      sqlContext.setConf(SQLConf.USE_SQL_AGGREGATE2, originalUseAggregate2)
+      sqlContext.setConf(SQLConf.USE_HYBRID_AGGREGATE, originalUseHybridAggregate)
+      SparkEnv.get.conf.set("spark.test.aggregate.spillFrequency","0")
     }
   }
 

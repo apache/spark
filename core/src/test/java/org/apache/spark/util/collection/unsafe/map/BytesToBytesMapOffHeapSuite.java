@@ -15,15 +15,15 @@
  * limitations under the License.
  */
 
-package org.apache.spark.unsafe.map;
+package org.apache.spark.util.collection.unsafe.map;
 
 import org.apache.spark.unsafe.memory.MemoryAllocator;
 
-public class BytesToBytesMapOnHeapSuite extends AbstractBytesToBytesMapSuite {
+public class BytesToBytesMapOffHeapSuite extends AbstractBytesToBytesMapSuite {
 
   @Override
   protected MemoryAllocator getMemoryAllocator() {
-    return MemoryAllocator.HEAP;
+    return MemoryAllocator.UNSAFE;
   }
 
 }

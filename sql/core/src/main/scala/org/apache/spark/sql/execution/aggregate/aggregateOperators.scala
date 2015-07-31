@@ -117,6 +117,70 @@ case class Aggregate2Sort(
   }
 }
 
+case class Aggregate2Hybrid(
+    requiredChildDistributionExpressions: Option[Seq[Expression]],
+    groupingExpressions: Seq[NamedExpression],
+    aggregateExpressions: Seq[AggregateExpression2],
+    aggregateAttributes: Seq[Attribute],
+    resultExpressions: Seq[NamedExpression],
+    child: SparkPlan)
+  extends UnaryNode {
+
+  override def canProcessUnsafeRows: Boolean = true
+
+  override def references: AttributeSet = {
+    val referencesInResults =
+      AttributeSet(resultExpressions.flatMap(_.references)) -- AttributeSet(aggregateAttributes)
+
+    AttributeSet(
+      groupingExpressions.flatMap(_.references) ++
+        aggregateExpressions.flatMap(_.references) ++
+        referencesInResults)
+  }
+
+  override def requiredChildDistribution: List[Distribution] = {
+    requiredChildDistributionExpressions match {
+      case Some(exprs) if exprs.length == 0 => AllTuples :: Nil
+      case Some(exprs) if exprs.length > 0 => ClusteredDistribution(exprs) :: Nil
+      case None => UnspecifiedDistribution :: Nil
+    }
+  }
+
+  override def output: Seq[Attribute] = resultExpressions.map(_.toAttribute)
+
+  protected override def doExecute(): RDD[InternalRow] = attachTree(this, "execute") {
+    child.execute().mapPartitions { iter =>
+      assert(aggregateExpressions.length > 0, "Use Aggregate2Sort when no aggregate function")
+      val aggregationIterator: Iterator[InternalRow] = {
+        aggregateExpressions.map(_.mode).distinct.toList match {
+          case Partial :: Nil =>
+            new HybridPartialAggregationIterator(
+              groupingExpressions,
+              aggregateExpressions,
+              newMutableProjection,
+              child.output,
+              iter).iterator
+          case Final :: Nil =>
+            new HybridFinalAggregationIterator(
+              groupingExpressions,
+              aggregateExpressions,
+              aggregateAttributes,
+              resultExpressions,
+              newMutableProjection,
+              child.output,
+              iter).iterator
+          case other =>
+            sys.error(
+              s"Could not evaluate ${aggregateExpressions} because we do not support evaluate " +
+                s"modes $other in this operator.")
+        }
+      }
+
+      aggregationIterator
+    }
+  }
+}
+
 case class FinalAndCompleteAggregate2Sort(
     previousGroupingExpressions: Seq[NamedExpression],
     groupingExpressions: Seq[NamedExpression],

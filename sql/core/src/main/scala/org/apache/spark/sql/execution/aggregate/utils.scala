@@ -114,7 +114,7 @@ object Utils {
         expr.collect {
           case agg: AggregateExpression2 => agg
         }
-      }.toSet.toSeq
+      }
       val functionsWithDistinct = aggregateExpressions.filter(_.isDistinct)
       val hasMultipleDistinctColumnSets =
         if (functionsWithDistinct.map(_.aggregateFunction.children).distinct.length > 1) {
@@ -178,6 +178,7 @@ object Utils {
       aggregateExpressions: Seq[AggregateExpression2],
       aggregateFunctionMap: Map[(AggregateFunction2, Boolean), Attribute],
       resultExpressions: Seq[NamedExpression],
+      useHybridAggregate: Boolean,
       child: SparkPlan): Seq[SparkPlan] = {
     // 1. Create an Aggregate Operator for partial aggregations.
     val namedGroupingExpressions = groupingExpressions.map {
@@ -195,7 +196,20 @@ object Utils {
     val partialAggregateAttributes = partialAggregateExpressions.flatMap { agg =>
       agg.aggregateFunction.bufferAttributes
     }
-    val partialAggregate =
+
+    var useHybridAggregateNew = useHybridAggregate
+    if (aggregateExpressions.length == 0) {
+      useHybridAggregateNew = false
+    }
+    val partialAggregate = if (useHybridAggregateNew) {
+      Aggregate2Hybrid(
+        None: Option[Seq[Expression]],
+        namedGroupingExpressions.map(_._2),
+        partialAggregateExpressions,
+        partialAggregateAttributes,
+        namedGroupingAttributes ++ partialAggregateAttributes,
+        child)
+    } else {
       Aggregate2Sort(
         None: Option[Seq[Expression]],
         namedGroupingExpressions.map(_._2),
@@ -203,6 +217,7 @@ object Utils {
         partialAggregateAttributes,
         namedGroupingAttributes ++ partialAggregateAttributes,
         child)
+    }
 
     // 2. Create an Aggregate Operator for final aggregations.
     val finalAggregateExpressions = aggregateExpressions.map(_.copy(mode = Final))
@@ -222,13 +237,23 @@ object Utils {
           }.getOrElse(expression)
       }.asInstanceOf[NamedExpression]
     }
-    val finalAggregate = Aggregate2Sort(
-      Some(namedGroupingAttributes),
-      namedGroupingAttributes,
-      finalAggregateExpressions,
-      finalAggregateAttributes,
-      rewrittenResultExpressions,
-      partialAggregate)
+    val finalAggregate = if (useHybridAggregateNew) {
+      Aggregate2Hybrid(
+        Some(namedGroupingAttributes),
+        namedGroupingAttributes,
+        finalAggregateExpressions,
+        finalAggregateAttributes,
+        rewrittenResultExpressions,
+        partialAggregate)
+    } else {
+      Aggregate2Sort(
+        Some(namedGroupingAttributes),
+        namedGroupingAttributes,
+        finalAggregateExpressions,
+        finalAggregateAttributes,
+        rewrittenResultExpressions,
+        partialAggregate)
+    }
 
     finalAggregate :: Nil
   }

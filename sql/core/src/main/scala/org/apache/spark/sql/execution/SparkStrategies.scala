@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution
 import org.apache.spark.sql.{SQLContext, Strategy, execution}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression2}
+import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression2
 import org.apache.spark.sql.catalyst.planning._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.{BroadcastHint, LogicalPlan}
@@ -221,7 +221,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
               expr.collect {
                 case agg: AggregateExpression2 => agg
               }
-            }.toSet.toSeq
+            }
             // For those distinct aggregate expressions, we create a map from the
             // aggregate function to the corresponding attribute of the function.
             val aggregateFunctionMap = aggregateExpressions.map { agg =>
@@ -247,6 +247,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
                   aggregateExpressions,
                   aggregateFunctionMap,
                   resultExpressions,
+                  sqlContext.conf.useHybridAggregate,
                   planLater(child))
               } else {
                 aggregate.Utils.planAggregateWithOneDistinct(
