@@ -38,8 +38,8 @@ private[mllib] class DecisionTreePMMLModelExport(model: DecisionTreeModel) exten
     val dataFields = TreeModelUtils.getDataFieldsForTree(model)
 
     val dataDictionary = new DataDictionary()
-      .withDataFields(dataFields.asJava)
-      .withNumberOfFields(dataFields.length)
+        .withDataFields(dataFields.asJava)
+        .withNumberOfFields(dataFields.length)
 
     val treeModel = TreeModelUtils.getPMMLTree(model, ModelName)
 

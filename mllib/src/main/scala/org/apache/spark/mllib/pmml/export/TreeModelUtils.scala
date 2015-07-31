@@ -21,11 +21,12 @@ import org.apache.spark.mllib.tree.configuration.Algo._
 import org.apache.spark.mllib.tree.configuration.{Algo, FeatureType}
 import org.apache.spark.mllib.tree.model.{DecisionTreeModel, Node}
 import org.dmg.pmml.{Node => PMMLNode, _}
+
 import scala.annotation.tailrec
 import scala.collection.JavaConverters._
 import scala.collection.mutable.MutableList
 
-private[mllib] object TreeModelUtils{
+private[mllib] object TreeModelUtils {
 
 
   def getPMMLTree(mllibTreeModel: DecisionTreeModel, modelName: String): TreeModel = {
@@ -33,21 +34,19 @@ private[mllib] object TreeModelUtils{
     val miningFunctionType = getPMMLMiningFunctionType(mllibTreeModel.algo)
 
     val miningSchema = new MiningSchema()
-      .withMiningFields(getMiningFieldsForTree(mllibTreeModel).asJava)
+        .withMiningFields(getMiningFieldsForTree(mllibTreeModel).asJava)
 
     val treeModel = new org.dmg.pmml.TreeModel()
-      .withModelName(modelName)
-      .withFunctionName(miningFunctionType)
-      .withNode(buildStub(mllibTreeModel.topNode))
-      .withMiningSchema(miningSchema)
+        .withModelName(modelName)
+        .withFunctionName(miningFunctionType)
+        .withNode(buildStub(mllibTreeModel.topNode))
+        .withMiningSchema(miningSchema)
 
     treeModel
 
   }
 
-  /**
-   * build a pmml tree stub given the root mllib node
-   */
+  /** Build a pmml tree stub given the root mllib node. */
   private def buildStub(rootNode: Node): PMMLNode = {
     // get rootPMML node for the MLLib node
     val rootPMMLNode = createNode(rootNode)
@@ -68,17 +67,15 @@ private[mllib] object TreeModelUtils{
     rootPMMLNode
   }
 
-  /**
-   * get pmml Predicate for a given mlLib tree node
-   */
-  private def getPredicate(node : Node): Option[Predicate] ={
+  /** Get pmml Predicate for a given mlLib tree node. */
+  private def getPredicate(node: Node): Option[Predicate] = {
     // compound predicate if classification and categories list length > 0
 
-    if(node.split.isDefined){
+    if (node.split.isDefined) {
       val split = node.split.get
       val featureType = split.featureType
-      val fieldName = FieldName.create("field_" +split.feature.toString)
-      featureType match{
+      val fieldName = FieldName.create("field_" + split.feature.toString)
+      featureType match {
         case FeatureType.Continuous => {
           val value = split.threshold.toString
           Some(new SimplePredicate(fieldName, SimplePredicate.Operator.LESS_OR_EQUAL).withValue(value))
@@ -89,11 +86,11 @@ private[mllib] object TreeModelUtils{
               for (category <- split.categories)
                 yield
                 new SimplePredicate(fieldName, SimplePredicate.Operator.EQUAL)
-                  .withValue(category.toString)
+                    .withValue(category.toString)
 
             val compoundPredicate = new CompoundPredicate()
-              .withBooleanOperator(CompoundPredicate.BooleanOperator.OR)
-              .withPredicates(predicates.asJava)
+                .withBooleanOperator(CompoundPredicate.BooleanOperator.OR)
+                .withPredicates(predicates.asJava)
 
             Some(compoundPredicate)
 
@@ -103,28 +100,24 @@ private[mllib] object TreeModelUtils{
           }
         }
       }
-    }else
+    } else
       None
   }
 
-  /**
-   * create equivalent PMML node for given mlLib node
-   */
+  /** Create equivalent PMML node for given mlLib node. */
   private def createNode(mlLibNode: Node): PMMLNode = {
     val node = new PMMLNode()
-      .withId(mlLibNode.id.toString)
-      .withScore(mlLibNode.predict.predict.toString)
+        .withId(mlLibNode.id.toString)
+        .withScore(mlLibNode.predict.predict.toString)
 
     val predicate = getPredicate(mlLibNode)
-    if(predicate.isDefined)
+    if (predicate.isDefined)
       node.withPredicate(predicate.get)
 
     node
   }
 
-  /**
-   * get PMML mining function type for given mlLib Algo
-   */
+  /** Get PMML mining function type for given mlLib Algo. */
   private def getPMMLMiningFunctionType(mlLibAlgo: Algo): MiningFunctionType = {
     mlLibAlgo match {
       case Algo.Classification => MiningFunctionType.CLASSIFICATION
@@ -132,20 +125,18 @@ private[mllib] object TreeModelUtils{
     }
   }
 
-  /**
-   * get PMML datafield based on the mllib split feature
-   */
+  /** Get PMML datafield based on the mllib split feature. */
   private def getDataField(mllibNode: Node): Option[DataField] = {
     if (!mllibNode.isLeaf && mllibNode.split.isDefined) {
       val split = mllibNode.split.get
       val dataField = new DataField()
-        .withName(FieldName.create("field_" +split.feature.toString))
-        .withDataType(DataType.fromValue(split.threshold.getClass.getSimpleName.toLowerCase))
-        .withOpType(OpType.fromValue(split.featureType.toString.toLowerCase))
+          .withName(FieldName.create("field_" + split.feature.toString))
+          .withDataType(DataType.fromValue(split.threshold.getClass.getSimpleName.toLowerCase))
+          .withOpType(OpType.fromValue(split.featureType.toString.toLowerCase))
 
-      split.featureType match{
+      split.featureType match {
         case FeatureType.Continuous => dataField.withOpType(OpType.CONTINUOUS)
-        case FeatureType.Categorical =>{
+        case FeatureType.Categorical => {
           dataField.withOpType(OpType.CATEGORICAL)
           val categories = split.categories.map(category => new org.dmg.pmml.Value(category.toString)).asJava
           dataField.withValues(categories)
@@ -157,25 +148,21 @@ private[mllib] object TreeModelUtils{
       None
   }
 
-  /**
-   * get PMML Mining field based on Mllib node split feature
-   */
+  /** Get PMML Mining field based on Mllib node split feature. */
   private def getMiningField(mllibNode: Node): Option[MiningField] = {
     if (!mllibNode.isLeaf && mllibNode.split.isDefined) {
       val split = mllibNode.split.get
 
       val miningField = new MiningField()
-        .withName(FieldName.create("field_" +split.feature.toString))
-        .withUsageType(FieldUsageType.ACTIVE)
+          .withName(FieldName.create("field_" + split.feature.toString))
+          .withUsageType(FieldUsageType.ACTIVE)
 
       Some(miningField)
     } else
       None
   }
 
-  /**
-   * get distinct PMML mining fields list for a given mlLib decision tree model
-   */
+  /** Get distinct PMML mining fields list for a given mlLib decision tree model. */
   def getMiningFieldsForTree(treeModel: DecisionTreeModel): List[MiningField] = {
 
     @tailrec
@@ -197,26 +184,27 @@ private[mllib] object TreeModelUtils{
     }
 
     val miningFields = getMiningFieldsForTreeRec(List(treeModel.topNode), List[MiningField]())
-    val distinctFields = miningFields.groupBy(dField => dField.getName.getValue).map{case (name, fields) => fields(0)}
+    // the miningfields collected from the different nodes could have duplicate. get the distinct fields.
+    val distinctFields = miningFields
+        .groupBy(dField => dField.getName.getValue)
+        .map { case (name, fields) => fields(0) }
 
     distinctFields.toList
   }
 
-  /**
-   * get distince PMML datafields list for a given mlllib decision tree model
-   */
+  /** Get distince PMML datafields list for a given mlllib decision tree model. */
   def getDataFieldsForTree(treeModel: DecisionTreeModel): List[DataField] = {
 
     @tailrec
     def getDataFieldsForTreeRec(nodeList: List[Node], dataFlds: List[DataField]): List[DataField] = {
-      nodeList match{
+      nodeList match {
         case Nil => dataFlds
-        case nd :: ls if(nd.isLeaf) => dataFlds
-        case nd :: ls if(! nd.isLeaf && nd.split.isDefined) => {
+        case nd :: ls if (nd.isLeaf) => dataFlds
+        case nd :: ls if (!nd.isLeaf && nd.split.isDefined) => {
           val ndList = MutableList[Node]()
-          if(nd.leftNode.isDefined)
+          if (nd.leftNode.isDefined)
             ndList += nd.leftNode.get
-          if(nd.rightNode.isDefined)
+          if (nd.rightNode.isDefined)
             ndList += nd.rightNode.get
 
           getDataFieldsForTreeRec(ndList.toList, dataFlds :+ getDataField(nd).get)
@@ -227,27 +215,28 @@ private[mllib] object TreeModelUtils{
     val dataFields = getDataFieldsForTreeRec(List(treeModel.topNode), List[DataField]())
 
     //There could be duplicate fields in the datafields collected above if 2 splits use the same features
-    val distinctFields = dataFields.groupBy(dataField => dataField.getName.getValue).map{
-      case ( fieldName, dataFieldsArr) => {
+    val distinctFields = dataFields.groupBy(dataField => dataField.getName.getValue).map {
+      case (fieldName, dataFieldsArr) => {
 
         val dataField: DataField = dataFieldsArr.head.getOpType match {
-            // in case of continuous optype/feature type get one data field out of the duplicates
+          // in case of continuous optype/feature type get one data field out of the duplicates
           case OpType.CONTINUOUS => dataFieldsArr.head
-            // in case of categorical feature type, different splits might use the same feature but different or same categories
-            // so need to collect distinct values for the categories too
+          // for categorical feature type, different splits might use the same feature but different or same categories
+          // so need to collect distinct values for the categories too
           case OpType.CATEGORICAL => dataFieldsArr.toList.reduce((a, b) => {
             val values = (a.getValues.asScala.toList ++ b.getValues.asScala.toList).groupBy(v => v.getValue)
             val distinctValues = values.map { case (string, valueList) => valueList(0) }.toList.asJava
 
             new DataField().withName(a.getName)
-              .withOpType(a.getOpType)
-              .withValues(distinctValues)
+                .withOpType(a.getOpType)
+                .withValues(distinctValues)
           })
 
           case _ => throw new RuntimeException("Only continuous and catigorical datatypes are supported now.")
         }
         dataField
-      }}
+      }
+    }
 
     distinctFields.toList
   }

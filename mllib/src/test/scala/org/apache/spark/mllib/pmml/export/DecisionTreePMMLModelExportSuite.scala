@@ -27,15 +27,16 @@ import org.scalatest.PrivateMethodTester
 
 import scala.collection.JavaConverters._
 
-class DecisionTreePMMLModelExportSuite extends SparkFunSuite with MLlibTestSparkContext with PrivateMethodTester{
+class DecisionTreePMMLModelExportSuite extends SparkFunSuite with MLlibTestSparkContext with PrivateMethodTester {
 
-  test("PMML export should work as expected for DecisionTree model with regressor"){
+  test("PMML export should work as expected for DecisionTree model with regressor") {
 
     // instantiate a MLLib DecisionTreeModel with Regression and with 3 nodes with continuous feature type
-    val mlLeftNode = new Node(2, new Predict(0.5, 0.5),0.2,true,None,None,None,None)
-    val mlRightNode = new Node(3, new Predict(1.0, 0.5),0.2,true,None,None,None,None)
-    val split = new Split(100,10.00,FeatureType.Continuous,Nil)
-    val mlTopNode = new Node(1,new Predict(0.0,0.1),0.2, false, Some(split),Some(mlLeftNode),Some(mlRightNode),None)
+    val mlLeftNode = new Node(2, new Predict(0.5, 0.5), 0.2, true, None, None, None, None)
+    val mlRightNode = new Node(3, new Predict(1.0, 0.5), 0.2, true, None, None, None, None)
+    val split = new Split(100, 10.00, FeatureType.Continuous, Nil)
+    val mlTopNode = new Node(1, new Predict(0.0, 0.1), 0.2, false,
+      Some(split), Some(mlLeftNode), Some(mlRightNode), None)
 
     val decisionTreeModel = new DecisionTreeModel(mlTopNode, Algo.Regression)
 
@@ -43,10 +44,11 @@ class DecisionTreePMMLModelExportSuite extends SparkFunSuite with MLlibTestSpark
     val pmmlExporterForDT = PMMLModelExportFactory.createPMMLModelExport(decisionTreeModel)
     assert(pmmlExporterForDT.isInstanceOf[DecisionTreePMMLModelExport])
 
-    // get the pmmlwrapper object for DT and verify the inner model is of type TreeModel and basic fields are populated as expected
+    // get the pmmlwrapper object for DT and verify the inner model is of type TreeModel
+    // and basic fields are populated as expected
     val pmmlWrapperForDT = pmmlExporterForDT.getPmml
     assert(pmmlWrapperForDT.getHeader.getDescription == "decision tree")
-    assert(! pmmlWrapperForDT.getModels.isEmpty)
+    assert(!pmmlWrapperForDT.getModels.isEmpty)
     assert(pmmlWrapperForDT.getModels.size() == 1)
     val pmmlModelForDT = pmmlWrapperForDT.getModels.get(0)
     assert(pmmlModelForDT.isInstanceOf[TreeModel])
@@ -99,16 +101,18 @@ class DecisionTreePMMLModelExportSuite extends SparkFunSuite with MLlibTestSpark
 
   }
 
-  test("PMML export should work as expected for DecisionTree model with classifier"){
+  test("PMML export should work as expected for DecisionTree model with classifier") {
 
     // instantiate MLLIb DecisionTreeModel with Classification algo ,5 nodes, 2 levels
-    val mlLeftNode_L2 = new Node(4, new Predict(1.0, 0.5),0.2,true,None,None,None,None)
-    val mlRightNode_L2 = new Node(5, new Predict(2.0, 0.5),0.2,true,None,None,None,None)
-    val splitForL2 = new Split(100,10.00,FeatureType.Categorical,List(1,4))
-    val mlLeftNode_L1 = new Node(2, new Predict(3.0, 0.5),0.2,false,Some(splitForL2),Some(mlLeftNode_L2),Some(mlRightNode_L2),None)
-    val mlRightNode_L1 = new Node(3, new Predict(4.0, 0.5),0.2,true,None,None,None,None)
-    val split = new Split(200,10.00,FeatureType.Categorical,List(10,20))
-    val mlTopNode = new Node(1,new Predict(5.0,0.1),0.2, false, Some(split),Some(mlLeftNode_L1),Some(mlRightNode_L1),None)
+    val mlLeftNode_L2 = new Node(4, new Predict(1.0, 0.5), 0.2, true, None, None, None, None)
+    val mlRightNode_L2 = new Node(5, new Predict(2.0, 0.5), 0.2, true, None, None, None, None)
+    val splitForL2 = new Split(100, 10.00, FeatureType.Categorical, List(1, 4))
+    val mlLeftNode_L1 = new Node(2, new Predict(3.0, 0.5), 0.2, false,
+      Some(splitForL2), Some(mlLeftNode_L2), Some(mlRightNode_L2), None)
+    val mlRightNode_L1 = new Node(3, new Predict(4.0, 0.5), 0.2, true, None, None, None, None)
+    val split = new Split(200, 10.00, FeatureType.Categorical, List(10, 20))
+    val mlTopNode = new Node(1, new Predict(5.0, 0.1), 0.2, false, Some(split),
+      Some(mlLeftNode_L1), Some(mlRightNode_L1), None)
     val decisionTreeModel = new DecisionTreeModel(mlTopNode, Algo.Classification)
 
 
@@ -116,10 +120,11 @@ class DecisionTreePMMLModelExportSuite extends SparkFunSuite with MLlibTestSpark
     val pmmlExporterForDT = PMMLModelExportFactory.createPMMLModelExport(decisionTreeModel)
     assert(pmmlExporterForDT.isInstanceOf[DecisionTreePMMLModelExport])
 
-    // get the pmmlwrapper object for DT and verify the inner model is of type TreeModel and basic fields are populated as expected
+    // get the pmmlwrapper object for DT and verify the inner model is of type TreeModel
+    // and basic fields are populated as expected
     val pmmlWrapperForDT = pmmlExporterForDT.getPmml
     assert(pmmlWrapperForDT.getHeader.getDescription == "decision tree")
-    assert(! pmmlWrapperForDT.getModels.isEmpty)
+    assert(!pmmlWrapperForDT.getModels.isEmpty)
     assert(pmmlWrapperForDT.getModels.size() == 1)
 
     // validate the inner tree model fields are populated as expected
@@ -189,7 +194,7 @@ class DecisionTreePMMLModelExportSuite extends SparkFunSuite with MLlibTestSpark
     // validate level 2 left node is populated as expected
     val pmmlLeftNode_L2 = pmmlLeftNode_L1.getNodes.get(0)
     assert(pmmlLeftNode_L2 != null)
-    assert(! pmmlLeftNode_L2.hasNodes)
+    assert(!pmmlLeftNode_L2.hasNodes)
     assert(pmmlLeftNode_L2.getId === "4")
     assert(pmmlLeftNode_L2.getScore == "1.0")
 
@@ -238,22 +243,26 @@ class DecisionTreePMMLModelExportSuite extends SparkFunSuite with MLlibTestSpark
     val mlLeftNode_L3 = new Node(6, new Predict(1.0, 0.5), 0.2, true, None, None, None, None)
     val mlRightNode_L3 = new Node(7, new Predict(2.0, 0.5), 0.2, true, None, None, None, None)
     val splitForL3 = new Split(100, 10.00, FeatureType.Continuous, Nil)
-    val mlLeftNode_L2 = new Node(4, new Predict(3.0, 0.5), 0.2, false, Some(splitForL3), Some(mlLeftNode_L3), Some(mlRightNode_L3), None)
+    val mlLeftNode_L2 = new Node(4, new Predict(3.0, 0.5), 0.2, false, Some(splitForL3),
+      Some(mlLeftNode_L3), Some(mlRightNode_L3), None)
     val mlRightNode_L2 = new Node(5, new Predict(4.0, 0.5), 0.2, true, None, None, None, None)
 
     val splitForL2 = new Split(100, 4.00, FeatureType.Continuous, Nil)
-    val mlLeftNode_L1 = new Node(2, new Predict(3.0, 0.5), 0.2, false, Some(splitForL2), Some(mlLeftNode_L2), Some(mlRightNode_L3), None)
+    val mlLeftNode_L1 = new Node(2, new Predict(3.0, 0.5), 0.2, false,
+      Some(splitForL2), Some(mlLeftNode_L2), Some(mlRightNode_L3), None)
     val mlRightNode_L1 = new Node(3, new Predict(4.0, 0.5), 0.2, true, None, None, None, None)
 
     val split1 = new Split(200, 10.00, FeatureType.Categorical, List(10))
-    val mlTopNode = new Node(1, new Predict(5.0, 0.1), 0.2, false, Some(split1), Some(mlLeftNode_L1), Some(mlRightNode_L1), None)
+    val mlTopNode = new Node(1, new Predict(5.0, 0.1), 0.2, false, Some(split1),
+      Some(mlLeftNode_L1), Some(mlRightNode_L1), None)
     val decisionTreeModel = new DecisionTreeModel(mlTopNode, Algo.Regression)
 
     // get the pmml exporter for the DT and verify its the right exporter
     val pmmlExporterForDT = PMMLModelExportFactory.createPMMLModelExport(decisionTreeModel)
     assert(pmmlExporterForDT.isInstanceOf[DecisionTreePMMLModelExport])
 
-    // get the pmmlwrapper object for DT and verify the inner model is of type TreeModel and basic fields are populated as expected
+    // get the pmmlwrapper object for DT and verify the inner model is of type TreeModel
+    // and basic fields are populated as expected
     val pmmlWrapperForDT = pmmlExporterForDT.getPmml
     // validate the inner tree model fields are populated as expected
     val pmmlModelForDT = pmmlWrapperForDT.getModels.get(0)
@@ -285,9 +294,9 @@ class DecisionTreePMMLModelExportSuite extends SparkFunSuite with MLlibTestSpark
     assert(sortedValues2(0).getValue == "10.0")
   }
 
-  test("TreeModelUtils getPredicate should return simple predicate for node with split with continuous feature type"){
-    val split = new Split(100,10.0,FeatureType.Continuous,Nil)
-    val treeNode = new Node(1, new Predict(0.5, 0.5),0.2,true,Some(split),None,None,None)
+  test("TreeModelUtils getPredicate should return simple predicate for node with split with continuous feature type") {
+    val split = new Split(100, 10.0, FeatureType.Continuous, Nil)
+    val treeNode = new Node(1, new Predict(0.5, 0.5), 0.2, true, Some(split), None, None, None)
     val privateMethodProxy = PrivateMethod[Option[Predicate]]('getPredicate)
     val predicate = TreeModelUtils invokePrivate privateMethodProxy(treeNode)
     assert(predicate.isDefined)
@@ -297,9 +306,9 @@ class DecisionTreePMMLModelExportSuite extends SparkFunSuite with MLlibTestSpark
     assert(predicate.get.asInstanceOf[SimplePredicate].getValue == "10.0")
   }
 
-  test("TreeModelUtils getPredicate should work as expected for node with split with catogorical feature"){
-    val split1 = new Split(100,10.0,FeatureType.Categorical,List(1))
-    val treeNode1 = new Node(1, new Predict(0.5, 0.5),0.2,true,Some(split1),None,None,None)
+  test("TreeModelUtils getPredicate should work as expected for node with split with catogorical feature") {
+    val split1 = new Split(100, 10.0, FeatureType.Categorical, List(1))
+    val treeNode1 = new Node(1, new Predict(0.5, 0.5), 0.2, true, Some(split1), None, None, None)
     val privateMethodProxy = PrivateMethod[Option[Predicate]]('getPredicate)
     val predicate1 = TreeModelUtils invokePrivate privateMethodProxy(treeNode1)
     assert(predicate1.isDefined)
@@ -308,8 +317,8 @@ class DecisionTreePMMLModelExportSuite extends SparkFunSuite with MLlibTestSpark
     assert(predicate1.get.asInstanceOf[SimplePredicate].getOperator == SimplePredicate.Operator.EQUAL)
     assert(predicate1.get.asInstanceOf[SimplePredicate].getValue == "1.0")
 
-    val split2 = new Split(100,10.0,FeatureType.Categorical,List(1,2))
-    val treeNode2 = new Node(1, new Predict(0.5, 0.5),0.2,true,Some(split2),None,None,None)
+    val split2 = new Split(100, 10.0, FeatureType.Categorical, List(1, 2))
+    val treeNode2 = new Node(1, new Predict(0.5, 0.5), 0.2, true, Some(split2), None, None, None)
     val predicate2 = TreeModelUtils invokePrivate privateMethodProxy(treeNode2)
     assert(predicate2.isDefined && predicate2.get.isInstanceOf[CompoundPredicate])
     val cPredicate2 = predicate2.get.asInstanceOf[CompoundPredicate]
@@ -328,11 +337,11 @@ class DecisionTreePMMLModelExportSuite extends SparkFunSuite with MLlibTestSpark
     assert(predicatesList2.get(1).asInstanceOf[SimplePredicate].getOperator == SimplePredicate.Operator.EQUAL)
   }
 
-  test("TreeModelUtils getPredicate returns None if split not defined for node"){
-    val treeNode1 = new Node(1, new Predict(0.5, 0.5),0.2,true,None,None,None,None)
+  test("TreeModelUtils getPredicate returns None if split not defined for node") {
+    val treeNode1 = new Node(1, new Predict(0.5, 0.5), 0.2, true, None, None, None, None)
     val privateMethodProxy = PrivateMethod[Option[Predicate]]('getPredicate)
     val predicate1 = TreeModelUtils invokePrivate privateMethodProxy(treeNode1)
-    assert(! predicate1.isDefined)
+    assert(!predicate1.isDefined)
   }
 }
 
