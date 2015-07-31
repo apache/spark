@@ -205,9 +205,10 @@ class StringIndexerInverse private[ml] (
     "array of labels, if not provided metadata from inputCol is used instead.")
   setDefault(labels, Array.empty[String])
 
-  /** @group getParam
+  /**
    * Optional labels to be provided by the user, if not supplied column
    * metadata is read for labels.
+   * @group getParam
    */
   final def getLabels: Array[String] = $(labels)
 
