@@ -121,7 +121,7 @@ final class DecisionTreeClassificationModel private[ml] (
     this(Identifiable.randomUID("dtc"), rootNode, numClasses)
 
   override protected def predict(features: Vector): Double = {
-    rootNode.predictImpl(features).impurityStats.predict
+    rootNode.predictImpl(features).prediction
   }
 
   override protected def predictRaw(features: Vector): Vector = {

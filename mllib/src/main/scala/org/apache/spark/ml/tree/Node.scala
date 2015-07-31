@@ -126,7 +126,7 @@ final class LeafNode private[ml] (
   override private[tree] def subtreeDepth: Int = 0
 
   override private[ml] def toOld(id: Int): OldNode = {
-    new OldNode(id, new OldPredict(prediction, prob = 0.0), impurity, isLeaf = true,
+    new OldNode(id, new OldPredict(prediction, prob = impurityStats.prob(prediction)), impurity, isLeaf = true,
       None, None, None, None)
   }
 }
@@ -183,9 +183,8 @@ final class InternalNode private[ml] (
   override private[ml] def toOld(id: Int): OldNode = {
     assert(id.toLong * 2 < Int.MaxValue, "Decision Tree could not be converted from new to old API"
       + " since the old API does not support deep trees.")
-    // NOTE: We do NOT store 'prob' in the new API currently.
-    new OldNode(id, new OldPredict(prediction, prob = 0.0), impurity, isLeaf = false,
-      Some(split.toOld), Some(leftChild.toOld(OldNode.leftChildIndex(id))),
+    new OldNode(id, new OldPredict(prediction, prob = impurityStats.prob(prediction)), impurity,
+      isLeaf = false, Some(split.toOld), Some(leftChild.toOld(OldNode.leftChildIndex(id))),
       Some(rightChild.toOld(OldNode.rightChildIndex(id))),
       Some(new OldInformationGainStats(gain, impurity, leftChild.impurity, rightChild.impurity,
         new OldPredict(leftChild.prediction, prob = 0.0),
@@ -245,20 +244,26 @@ private[tree] class LearningNode(
     var rightChild: Option[LearningNode],
     var split: Option[Split],
     var isLeaf: Boolean,
-    var stats: Option[ImpurityStats]) extends Serializable {
+    var stats: ImpurityStats) extends Serializable {
 
   /**
    * Convert this [[LearningNode]] to a regular [[Node]], and recurse on any children.
    */
   def toNode: Node = {
     if (leftChild.nonEmpty) {
-      assert(rightChild.nonEmpty && split.nonEmpty && stats.nonEmpty,
+      assert(rightChild.nonEmpty && split.nonEmpty && stats != null,
         "Unknown error during Decision Tree learning.  Could not convert LearningNode to Node.")
-      new InternalNode(stats.get.impurityCalculator.predict, stats.get.impurity, stats.get.gain,
-        leftChild.get.toNode, rightChild.get.toNode, split.get, stats.get.impurityCalculator)
+      new InternalNode(stats.impurityCalculator.predict, stats.impurity, stats.gain,
+        leftChild.get.toNode, rightChild.get.toNode, split.get, stats.impurityCalculator)
     } else {
-      new LeafNode(stats.get.impurityCalculator.predict, stats.get.impurity,
-        stats.get.impurityCalculator)
+      if (stats.valid) {
+        new LeafNode(stats.impurityCalculator.predict, stats.impurity,
+          stats.impurityCalculator)
+      } else {
+        // Here we want to keep same behavior with the old mllib.DecisionTreeModel
+        new LeafNode(stats.impurityCalculator.predict, -1.0, stats.impurityCalculator)
+      }
+
     }
   }
 
@@ -271,12 +276,12 @@ private[tree] object LearningNode {
       id: Int,
       isLeaf: Boolean,
       stats: ImpurityStats): LearningNode = {
-    new LearningNode(id, None, None, None, false, Some(stats))
+    new LearningNode(id, None, None, None, false, stats)
   }
 
   /** Create an empty node with the given node index.  Values must be set later on. */
   def emptyNode(nodeIndex: Int): LearningNode = {
-    new LearningNode(nodeIndex, None, None, None, false, None)
+    new LearningNode(nodeIndex, None, None, None, false, null)
   }
 
   // The below indexing methods were copied from spark.mllib.tree.model.Node
