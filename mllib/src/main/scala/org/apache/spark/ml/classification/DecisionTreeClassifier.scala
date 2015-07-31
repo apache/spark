@@ -135,7 +135,7 @@ final class DecisionTreeClassificationModel private[ml] (
         val size = dv.size
         val sum = dv.values.sum
         while (i < size) {
-          dv.values(i) = dv.values(i) / sum
+          dv.values(i) = if (sum != 0) dv.values(i) / sum else 0.0
           i += 1
         }
         dv
