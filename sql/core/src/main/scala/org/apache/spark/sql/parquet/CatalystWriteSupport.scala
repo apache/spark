@@ -263,14 +263,14 @@ private[parquet] class CatalystWriteSupport extends WriteSupport[InternalRow] wi
 
     (row: InternalRow, ordinal: Int) => {
       consumeGroup {
-        val array = row.genericGet(ordinal).asInstanceOf[Seq[_]]
-        if (array.nonEmpty) {
+        val array = row.getArray(ordinal)
+        if (array.numElements() > 0) {
           consumeField(repeatedGroupName, 0) {
             var i = 0
-            while (i < array.length) {
+            while (i < array.numElements()) {
               consumeGroup {
-                if (array(i) != null) {
-                  mutableRow.update(0, array(i))
+                if (!array.isNullAt(i)) {
+                  mutableRow.update(0, array.get(i))
                   consumeField(elementFieldName, 0)(elementWriter.apply(mutableRow, 0))
                 }
               }
@@ -289,12 +289,12 @@ private[parquet] class CatalystWriteSupport extends WriteSupport[InternalRow] wi
 
     (row: InternalRow, ordinal: Int) => {
       consumeGroup {
-        val array = row.genericGet(ordinal).asInstanceOf[Seq[_]]
-        if (array.nonEmpty) {
+        val array = row.getArray(ordinal)
+        if (array.numElements() > 0) {
           consumeField(repeatedFieldName, 0) {
             var i = 0
-            while (i < array.length) {
-              mutableRow.update(0, array(i))
+            while (i < array.numElements()) {
+              mutableRow.update(0, array.get(i))
               elementWriter.apply(mutableRow, 0)
               i += 1
             }
