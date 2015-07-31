@@ -828,7 +828,7 @@ using this syntax.
 
 {% highlight scala %}
 val df = sqlContext.read.format("json").load("examples/src/main/resources/people.json")
-df.select("name", "age").write.format("json").save("namesAndAges.json")
+df.select("name", "age").write.format("parquet").save("namesAndAges.parquet")
 {% endhighlight %}
 
 </div>
@@ -1332,13 +1332,8 @@ Configuration of Parquet can be done using the `setConf` method on `SQLContext` 
 </tr>
 <tr>
   <td><code>spark.sql.parquet.filterPushdown</code></td>
-  <td>false</td>
-  <td>
-    Turn on Parquet filter pushdown optimization. This feature is turned off by default because of a known
-    bug in Parquet 1.6.0rc3 (<a href="https://issues.apache.org/jira/browse/PARQUET-136">PARQUET-136</a>).
-    However, if your table doesn't contain any nullable string or binary columns, it's still safe to turn
-    this feature on.
-  </td>
+  <td>true</td>
+  <td>Enables Parquet filter push-down optimization when set to true.</td>
 </tr>
 <tr>
   <td><code>spark.sql.hive.convertMetastoreParquet</code></td>
@@ -1637,7 +1632,7 @@ sql(sqlContext, "CREATE TABLE IF NOT EXISTS src (key INT, value STRING)")
 sql(sqlContext, "LOAD DATA LOCAL INPATH 'examples/src/main/resources/kv1.txt' INTO TABLE src")
 
 # Queries can be expressed in HiveQL.
-results = sqlContext.sql("FROM src SELECT key, value").collect()
+results <- collect(sql(sqlContext, "FROM src SELECT key, value"))
 
 {% endhighlight %}
 
@@ -1798,7 +1793,7 @@ DataFrame jdbcDF = sqlContext.read().format("jdbc"). options(options).load();
 
 {% highlight python %}
 
-df = sqlContext.read.format('jdbc').options(url = 'jdbc:postgresql:dbserver', dbtable='schema.tablename').load()
+df = sqlContext.read.format('jdbc').options(url='jdbc:postgresql:dbserver', dbtable='schema.tablename').load()
 
 {% endhighlight %}
 

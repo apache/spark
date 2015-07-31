@@ -24,6 +24,7 @@ import scala.collection.Map
 import com.fasterxml.jackson.core._
 
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.json.JacksonUtils.nextUntil
@@ -66,10 +67,10 @@ private[sql] object JacksonParser {
         DateTimeUtils.millisToDays(DateTimeUtils.stringToTime(parser.getText).getTime)
 
       case (VALUE_STRING, TimestampType) =>
-        DateTimeUtils.stringToTime(parser.getText).getTime * 10000L
+        DateTimeUtils.stringToTime(parser.getText).getTime * 1000L
 
       case (VALUE_NUMBER_INT, TimestampType) =>
-        parser.getLongValue * 10000L
+        parser.getLongValue * 1000L
 
       case (_, StringType) =>
         val writer = new ByteArrayOutputStream()
@@ -109,8 +110,13 @@ private[sql] object JacksonParser {
       case (START_OBJECT, st: StructType) =>
         convertObject(factory, parser, st)
 
+      case (START_ARRAY, st: StructType) =>
+        // SPARK-3308: support reading top level JSON arrays and take every element
+        // in such an array as a row
+        convertArray(factory, parser, st)
+
       case (START_ARRAY, ArrayType(st, _)) =>
-        convertList(factory, parser, st)
+        convertArray(factory, parser, st)
 
       case (START_OBJECT, ArrayType(st, _)) =>
         // the business end of SPARK-3308:
@@ -164,16 +170,16 @@ private[sql] object JacksonParser {
     builder.result()
   }
 
-  private def convertList(
+  private def convertArray(
       factory: JsonFactory,
       parser: JsonParser,
-      schema: DataType): Seq[Any] = {
-    val builder = Seq.newBuilder[Any]
+      elementType: DataType): ArrayData = {
+    val values = scala.collection.mutable.ArrayBuffer.empty[Any]
     while (nextUntil(parser, JsonToken.END_ARRAY)) {
-      builder += convertField(factory, parser, schema)
+      values += convertField(factory, parser, elementType)
     }
 
-    builder.result()
+    new GenericArrayData(values.toArray)
   }
 
   private def parseJson(
@@ -200,12 +206,15 @@ private[sql] object JacksonParser {
           val parser = factory.createParser(record)
           parser.nextToken()
 
-          // to support both object and arrays (see SPARK-3308) we'll start
-          // by converting the StructType schema to an ArrayType and let
-          // convertField wrap an object into a single value array when necessary.
-          convertField(factory, parser, ArrayType(schema)) match {
+          convertField(factory, parser, schema) match {
             case null => failedRecord(record)
-            case list: Seq[InternalRow @unchecked] => list
+            case row: InternalRow => row :: Nil
+            case array: ArrayData =>
+              if (array.numElements() == 0) {
+                Nil
+              } else {
+                array.toArray().map(_.asInstanceOf[InternalRow])
+              }
             case _ =>
               sys.error(
                 s"Failed to parse record $record. Please make sure that each line of the file " +

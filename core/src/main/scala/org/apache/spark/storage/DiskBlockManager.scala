@@ -124,10 +124,16 @@ private[spark] class DiskBlockManager(blockManager: BlockManager, conf: SparkCon
     (blockId, getFile(blockId))
   }
 
+  /**
+   * Create local directories for storing block data. These directories are
+   * located inside configured local directories and won't
+   * be deleted on JVM exit when using the external shuffle service.
+   */
   private def createLocalDirs(conf: SparkConf): Array[File] = {
-    Utils.getOrCreateLocalRootDirs(conf).flatMap { rootDir =>
+    Utils.getConfiguredLocalDirs(conf).flatMap { rootDir =>
       try {
         val localDir = Utils.createDirectory(rootDir, "blockmgr")
+        Utils.chmod700(localDir)
         logInfo(s"Created local directory at $localDir")
         Some(localDir)
       } catch {

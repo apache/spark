@@ -20,7 +20,8 @@
 # @rdname aggregateRDD
 # @seealso reduce
 # @export
-setGeneric("aggregateRDD", function(x, zeroValue, seqOp, combOp) { standardGeneric("aggregateRDD") })
+setGeneric("aggregateRDD",
+           function(x, zeroValue, seqOp, combOp) { standardGeneric("aggregateRDD") })
 
 # @rdname cache-methods
 # @export
@@ -57,6 +58,10 @@ setGeneric("count", function(x) { standardGeneric("count") })
 # @rdname countByValue
 # @export
 setGeneric("countByValue", function(x) { standardGeneric("countByValue") })
+
+# @rdname statfunctions
+# @export
+setGeneric("crosstab", function(x, col1, col2) { standardGeneric("crosstab") })
 
 # @rdname distinct
 # @export
@@ -249,8 +254,10 @@ setGeneric("flatMapValues", function(X, FUN) { standardGeneric("flatMapValues") 
 
 # @rdname intersection
 # @export
-setGeneric("intersection", function(x, other, numPartitions = 1) {
-  standardGeneric("intersection") })
+setGeneric("intersection",
+           function(x, other, numPartitions = 1) {
+             standardGeneric("intersection")
+           })
 
 # @rdname keys
 # @export
@@ -484,9 +491,7 @@ setGeneric("sample",
 #' @rdname sample
 #' @export
 setGeneric("sample_frac",
-           function(x, withReplacement, fraction, seed) {
-             standardGeneric("sample_frac")
-           })
+           function(x, withReplacement, fraction, seed) { standardGeneric("sample_frac") })
 
 #' @rdname saveAsParquetFile
 #' @export
@@ -548,8 +553,8 @@ setGeneric("withColumn", function(x, colName, col) { standardGeneric("withColumn
 
 #' @rdname withColumnRenamed
 #' @export
-setGeneric("withColumnRenamed", function(x, existingCol, newCol) {
-  standardGeneric("withColumnRenamed") })
+setGeneric("withColumnRenamed",
+           function(x, existingCol, newCol) { standardGeneric("withColumnRenamed") })
 
 
 ###################### Column Methods ##########################
@@ -565,6 +570,10 @@ setGeneric("asc", function(x) { standardGeneric("asc") })
 #' @rdname column
 #' @export
 setGeneric("avg", function(x, ...) { standardGeneric("avg") })
+
+#' @rdname column
+#' @export
+setGeneric("between", function(x, bounds) { standardGeneric("between") })
 
 #' @rdname column
 #' @export
@@ -656,3 +665,7 @@ setGeneric("toRadians", function(x) { standardGeneric("toRadians") })
 #' @rdname column
 #' @export
 setGeneric("upper", function(x) { standardGeneric("upper") })
+
+#' @rdname glm
+#' @export
+setGeneric("glm")

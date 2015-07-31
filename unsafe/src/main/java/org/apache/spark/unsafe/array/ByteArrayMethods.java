@@ -17,7 +17,7 @@
 
 package org.apache.spark.unsafe.array;
 
-import org.apache.spark.unsafe.PlatformDependent;
+import static org.apache.spark.unsafe.PlatformDependent.*;
 
 public class ByteArrayMethods {
 
@@ -35,21 +35,27 @@ public class ByteArrayMethods {
   }
 
   /**
-   * Optimized byte array equality check for 8-byte-word-aligned byte arrays.
+   * Optimized byte array equality check for byte arrays.
    * @return true if the arrays are equal, false otherwise
    */
-  public static boolean wordAlignedArrayEquals(
-      Object leftBaseObject,
-      long leftBaseOffset,
-      Object rightBaseObject,
-      long rightBaseOffset,
-      long arrayLengthInBytes) {
-    for (int i = 0; i < arrayLengthInBytes; i += 8) {
-      final long left =
-        PlatformDependent.UNSAFE.getLong(leftBaseObject, leftBaseOffset + i);
-      final long right =
-        PlatformDependent.UNSAFE.getLong(rightBaseObject, rightBaseOffset + i);
-      if (left != right) return false;
+  public static boolean arrayEquals(
+      Object leftBase,
+      long leftOffset,
+      Object rightBase,
+      long rightOffset,
+      final long length) {
+    int i = 0;
+    while (i <= length - 8) {
+      if (UNSAFE.getLong(leftBase, leftOffset + i) != UNSAFE.getLong(rightBase, rightOffset + i)) {
+        return false;
+      }
+      i += 8;
+    }
+    while (i < length) {
+      if (UNSAFE.getByte(leftBase, leftOffset + i) != UNSAFE.getByte(rightBase, rightOffset + i)) {
+        return false;
+      }
+      i += 1;
     }
     return true;
   }

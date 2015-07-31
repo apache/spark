@@ -17,22 +17,38 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, UnresolvedAttribute}
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodeGenContext, GeneratedExpressionCode}
-import org.apache.spark.sql.catalyst.trees
+import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.types._
 
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// This file defines the basic expression abstract classes in Catalyst.
+////////////////////////////////////////////////////////////////////////////////////////////////////
 
 /**
+ * An expression in Catalyst.
+ *
  * If an expression wants to be exposed in the function registry (so users can call it with
  * "name(arguments...)", the concrete implementation must be a case class whose constructor
- * arguments are all Expressions types.
+ * arguments are all Expressions types. See [[Substring]] for an example.
  *
- * See [[Substring]] for an example.
+ * There are a few important traits:
+ *
+ * - [[Nondeterministic]]: an expression that is not deterministic.
+ * - [[Unevaluable]]: an expression that is not supposed to be evaluated.
+ * - [[CodegenFallback]]: an expression that does not have code gen implemented and falls back to
+ *                        interpreted mode.
+ *
+ * - [[LeafExpression]]: an expression that has no child.
+ * - [[UnaryExpression]]: an expression that has one child.
+ * - [[BinaryExpression]]: an expression that has two children.
+ * - [[BinaryOperator]]: a special case of [[BinaryExpression]] that requires two children to have
+ *                       the same output data type.
+ *
  */
 abstract class Expression extends TreeNode[Expression] {
-  self: Product =>
 
   /**
    * Returns true when an expression is a candidate for static evaluation before the query is
@@ -48,10 +64,18 @@ abstract class Expression extends TreeNode[Expression] {
   def foldable: Boolean = false
 
   /**
-   * Returns true when the current expression always return the same result for fixed input values.
+   * Returns true when the current expression always return the same result for fixed inputs from
+   * children.
+   *
+   * Note that this means that an expression should be considered as non-deterministic if:
+   * - if it relies on some mutable internal state, or
+   * - if it relies on some implicit input that is not part of the children expression list.
+   * - if it has non-deterministic child or children.
+   *
+   * An example would be `SparkPartitionID` that relies on the partition id returned by TaskContext.
+   * By default leaf expressions are deterministic as Nil.forall(_.deterministic) returns true.
    */
-  // TODO: Need to define explicit input values vs implicit input values.
-  def deterministic: Boolean = true
+  def deterministic: Boolean = children.forall(_.deterministic)
 
   def nullable: Boolean
 
@@ -72,7 +96,8 @@ abstract class Expression extends TreeNode[Expression] {
     val primitive = ctx.freshName("primitive")
     val ve = GeneratedExpressionCode("", isNull, primitive)
     ve.code = genCode(ctx, ve)
-    ve
+    // Add `this` in the comment.
+    ve.copy(s"/* $this */\n" + ve.code)
   }
 
   /**
@@ -84,19 +109,7 @@ abstract class Expression extends TreeNode[Expression] {
    * @param ev an [[GeneratedExpressionCode]] with unique terms.
    * @return Java source code
    */
-  protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    ctx.references += this
-    val objectTerm = ctx.freshName("obj")
-    s"""
-      /* expression: ${this} */
-      Object $objectTerm = expressions[${ctx.references.size - 1}].eval(i);
-      boolean ${ev.isNull} = $objectTerm == null;
-      ${ctx.javaType(this.dataType)} ${ev.primitive} = ${ctx.defaultValue(this.dataType)};
-      if (!${ev.isNull}) {
-        ${ev.primitive} = (${ctx.boxedType(this.dataType)}) $objectTerm;
-      }
-    """
-  }
+  protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String
 
   /**
    * Returns `true` if this expression and all its children have been resolved to a specific schema
@@ -166,10 +179,50 @@ abstract class Expression extends TreeNode[Expression] {
 
 
 /**
+ * An expression that cannot be evaluated. Some expressions don't live past analysis or optimization
+ * time (e.g. Star). This trait is used by those expressions.
+ */
+trait Unevaluable extends Expression {
+
+  final override def eval(input: InternalRow = null): Any =
+    throw new UnsupportedOperationException(s"Cannot evaluate expression: $this")
+
+  final override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String =
+    throw new UnsupportedOperationException(s"Cannot evaluate expression: $this")
+}
+
+
+/**
+ * An expression that is nondeterministic.
+ */
+trait Nondeterministic extends Expression {
+  final override def deterministic: Boolean = false
+  final override def foldable: Boolean = false
+
+  private[this] var initialized = false
+
+  final def setInitialValues(): Unit = {
+    initInternal()
+    initialized = true
+  }
+
+  protected def initInternal(): Unit
+
+  final override def eval(input: InternalRow = null): Any = {
+    require(initialized, "nondeterministic expression should be initialized before evaluate")
+    evalInternal(input)
+  }
+
+  protected def evalInternal(input: InternalRow): Any
+}
+
+
+/**
  * A leaf expression, i.e. one without any child expressions.
  */
-abstract class LeafExpression extends Expression with trees.LeafNode[Expression] {
-  self: Product =>
+abstract class LeafExpression extends Expression {
+
+  def children: Seq[Expression] = Nil
 }
 
 
@@ -177,11 +230,35 @@ abstract class LeafExpression extends Expression with trees.LeafNode[Expression]
  * An expression with one input and one output. The output is by default evaluated to null
  * if the input is evaluated to null.
  */
-abstract class UnaryExpression extends Expression with trees.UnaryNode[Expression] {
-  self: Product =>
+abstract class UnaryExpression extends Expression {
+
+  def child: Expression
+
+  override def children: Seq[Expression] = child :: Nil
 
   override def foldable: Boolean = child.foldable
   override def nullable: Boolean = child.nullable
+
+  /**
+   * Default behavior of evaluation according to the default nullability of UnaryExpression.
+   * If subclass of UnaryExpression override nullable, probably should also override this.
+   */
+  override def eval(input: InternalRow): Any = {
+    val value = child.eval(input)
+    if (value == null) {
+      null
+    } else {
+      nullSafeEval(value)
+    }
+  }
+
+  /**
+   * Called by default [[eval]] implementation.  If subclass of UnaryExpression keep the default
+   * nullability, they can override this method to save null-check code.  If we need full control
+   * of evaluation process, we should override [[eval]].
+   */
+  protected def nullSafeEval(input: Any): Any =
+    sys.error(s"UnaryExpressions must override either eval or nullSafeEval")
 
   /**
    * Called by unary expressions to generate a code block that returns null if its parent returns
@@ -198,21 +275,24 @@ abstract class UnaryExpression extends Expression with trees.UnaryNode[Expressio
       ctx: CodeGenContext,
       ev: GeneratedExpressionCode,
       f: String => String): String = {
-    nullSafeCodeGen(ctx, ev, (result, eval) => {
-      s"$result = ${f(eval)};"
+    nullSafeCodeGen(ctx, ev, eval => {
+      s"${ev.primitive} = ${f(eval)};"
     })
   }
 
   /**
    * Called by unary expressions to generate a code block that returns null if its parent returns
    * null, and if not not null, use `f` to generate the expression.
+   *
+   * @param f function that accepts the non-null evaluation result name of child and returns Java
+   *          code to compute the output.
    */
   protected def nullSafeCodeGen(
       ctx: CodeGenContext,
       ev: GeneratedExpressionCode,
-      f: (String, String) => String): String = {
+      f: String => String): String = {
     val eval = child.gen(ctx)
-    val resultCode = f(ev.primitive, eval.primitive)
+    val resultCode = f(eval.primitive)
     eval.code + s"""
       boolean ${ev.isNull} = ${eval.isNull};
       ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
@@ -228,12 +308,42 @@ abstract class UnaryExpression extends Expression with trees.UnaryNode[Expressio
  * An expression with two inputs and one output. The output is by default evaluated to null
  * if any input is evaluated to null.
  */
-abstract class BinaryExpression extends Expression with trees.BinaryNode[Expression] {
-  self: Product =>
+abstract class BinaryExpression extends Expression {
+
+  def left: Expression
+  def right: Expression
+
+  override def children: Seq[Expression] = Seq(left, right)
 
   override def foldable: Boolean = left.foldable && right.foldable
 
   override def nullable: Boolean = left.nullable || right.nullable
+
+  /**
+   * Default behavior of evaluation according to the default nullability of BinaryExpression.
+   * If subclass of BinaryExpression override nullable, probably should also override this.
+   */
+  override def eval(input: InternalRow): Any = {
+    val value1 = left.eval(input)
+    if (value1 == null) {
+      null
+    } else {
+      val value2 = right.eval(input)
+      if (value2 == null) {
+        null
+      } else {
+        nullSafeEval(value1, value2)
+      }
+    }
+  }
+
+  /**
+   * Called by default [[eval]] implementation.  If subclass of BinaryExpression keep the default
+   * nullability, they can override this method to save null-check code.  If we need full control
+   * of evaluation process, we should override [[eval]].
+   */
+  protected def nullSafeEval(input1: Any, input2: Any): Any =
+    sys.error(s"BinaryExpressions must override either eval or nullSafeEval")
 
   /**
    * Short hand for generating binary evaluation code.
@@ -243,11 +353,11 @@ abstract class BinaryExpression extends Expression with trees.BinaryNode[Express
    * @param f accepts two variable names and returns Java code to compute the output.
    */
   protected def defineCodeGen(
-    ctx: CodeGenContext,
-    ev: GeneratedExpressionCode,
-    f: (String, String) => String): String = {
-    nullSafeCodeGen(ctx, ev, (result, eval1, eval2) => {
-      s"$result = ${f(eval1, eval2)};"
+      ctx: CodeGenContext,
+      ev: GeneratedExpressionCode,
+      f: (String, String) => String): String = {
+    nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
+      s"${ev.primitive} = ${f(eval1, eval2)};"
     })
   }
 
@@ -255,14 +365,17 @@ abstract class BinaryExpression extends Expression with trees.BinaryNode[Express
    * Short hand for generating binary evaluation code.
    * If either of the sub-expressions is null, the result of this computation
    * is assumed to be null.
+   *
+   * @param f function that accepts the 2 non-null evaluation result names of children
+   *          and returns Java code to compute the output.
    */
   protected def nullSafeCodeGen(
-    ctx: CodeGenContext,
-    ev: GeneratedExpressionCode,
-    f: (String, String, String) => String): String = {
+      ctx: CodeGenContext,
+      ev: GeneratedExpressionCode,
+      f: (String, String) => String): String = {
     val eval1 = left.gen(ctx)
     val eval2 = right.gen(ctx)
-    val resultCode = f(ev.primitive, eval1.primitive, eval2.primitive)
+    val resultCode = f(eval1.primitive, eval2.primitive)
     s"""
       ${eval1.code}
       boolean ${ev.isNull} = ${eval1.isNull};
@@ -281,15 +394,38 @@ abstract class BinaryExpression extends Expression with trees.BinaryNode[Express
 
 
 /**
- * An expression that has two inputs that are expected to the be same type. If the two inputs have
- * different types, the analyzer will find the tightest common type and do the proper type casting.
+ * A [[BinaryExpression]] that is an operator, with two properties:
+ *
+ * 1. The string representation is "x symbol y", rather than "funcName(x, y)".
+ * 2. Two inputs are expected to the be same type. If the two inputs have different types,
+ *    the analyzer will find the tightest common type and do the proper type casting.
  */
-abstract class BinaryOperator extends BinaryExpression {
-  self: Product =>
+abstract class BinaryOperator extends BinaryExpression with ExpectsInputTypes {
+
+  /**
+   * Expected input type from both left/right child expressions, similar to the
+   * [[ImplicitCastInputTypes]] trait.
+   */
+  def inputType: AbstractDataType
 
   def symbol: String
 
   override def toString: String = s"($left $symbol $right)"
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(inputType, inputType)
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    // First check whether left and right have the same type, then check if the type is acceptable.
+    if (left.dataType != right.dataType) {
+      TypeCheckResult.TypeCheckFailure(s"differing types in '$prettyString' " +
+        s"(${left.dataType.simpleString} and ${right.dataType.simpleString}).")
+    } else if (!inputType.acceptsType(left.dataType)) {
+      TypeCheckResult.TypeCheckFailure(s"'$prettyString' accepts ${inputType.simpleString} type," +
+        s" not ${left.dataType.simpleString}")
+    } else {
+      TypeCheckResult.TypeCheckSuccess
+    }
+  }
 }
 
 

@@ -20,7 +20,7 @@ context("the textFile() function")
 # JavaSparkContext handle
 sc <- sparkR.init()
 
-mockFile = c("Spark is pretty.", "Spark is awesome.")
+mockFile <- c("Spark is pretty.", "Spark is awesome.")
 
 test_that("textFile() on a local file returns an RDD", {
   fileName <- tempfile(pattern="spark-test", fileext=".tmp")

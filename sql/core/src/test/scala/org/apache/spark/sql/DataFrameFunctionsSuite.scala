@@ -160,7 +160,7 @@ class DataFrameFunctionsSuite extends QueryTest {
   test("misc md5 function") {
     val df = Seq(("ABC", Array[Byte](1, 2, 3, 4, 5, 6))).toDF("a", "b")
     checkAnswer(
-      df.select(md5($"a"), md5("b")),
+      df.select(md5($"a"), md5($"b")),
       Row("902fbdd2b1df0c4f70b4a5d23525e932", "6ac1e56bc78f031059be7be854522c4c"))
 
     checkAnswer(
@@ -171,7 +171,7 @@ class DataFrameFunctionsSuite extends QueryTest {
   test("misc sha1 function") {
     val df = Seq(("ABC", "ABC".getBytes)).toDF("a", "b")
     checkAnswer(
-      df.select(sha1($"a"), sha1("b")),
+      df.select(sha1($"a"), sha1($"b")),
       Row("3c01bdbb26f358bab27f267924aa2c9a03fcfdb8", "3c01bdbb26f358bab27f267924aa2c9a03fcfdb8"))
 
     val dfEmpty = Seq(("", "".getBytes)).toDF("a", "b")
@@ -183,7 +183,7 @@ class DataFrameFunctionsSuite extends QueryTest {
   test("misc sha2 function") {
     val df = Seq(("ABC", Array[Byte](1, 2, 3, 4, 5, 6))).toDF("a", "b")
     checkAnswer(
-      df.select(sha2($"a", 256), sha2("b", 256)),
+      df.select(sha2($"a", 256), sha2($"b", 256)),
       Row("b5d4045c3f466fa91fe2cc6abe79232a1a57cdf104f7a26e716e0a1e2789df78",
         "7192385c3c0605de55bb9476ce1d90748190ecb32a8eed7f5207b30cf6a1fe89"))
 
@@ -200,7 +200,7 @@ class DataFrameFunctionsSuite extends QueryTest {
   test("misc crc32 function") {
     val df = Seq(("ABC", Array[Byte](1, 2, 3, 4, 5, 6))).toDF("a", "b")
     checkAnswer(
-      df.select(crc32($"a"), crc32("b")),
+      df.select(crc32($"a"), crc32($"b")),
       Row(2743272264L, 2180413220L))
 
     checkAnswer(
@@ -208,59 +208,94 @@ class DataFrameFunctionsSuite extends QueryTest {
       Row(2743272264L, 2180413220L))
   }
 
-  test("string length function") {
+  test("conditional function: least") {
     checkAnswer(
-      nullStrings.select(strlen($"s"), strlen("s")),
-      nullStrings.collect().toSeq.map { r =>
-        val v = r.getString(1)
-        val l = if (v == null) null else v.length
-        Row(l, l)
-      })
-
+      testData2.select(least(lit(-1), lit(0), col("a"), col("b"))).limit(1),
+      Row(-1)
+    )
     checkAnswer(
-      nullStrings.selectExpr("length(s)"),
-      nullStrings.collect().toSeq.map { r =>
-        val v = r.getString(1)
-        val l = if (v == null) null else v.length
-        Row(l)
-      })
+      ctx.sql("SELECT least(a, 2) as l from testData2 order by l"),
+      Seq(Row(1), Row(1), Row(2), Row(2), Row(2), Row(2))
+    )
   }
 
-  test("string ascii function") {
-    val df = Seq(("abc", "")).toDF("a", "b")
+  test("conditional function: greatest") {
     checkAnswer(
-      df.select(ascii($"a"), ascii("b")),
-      Row(97, 0))
-
+      testData2.select(greatest(lit(2), lit(3), col("a"), col("b"))).limit(1),
+      Row(3)
+    )
     checkAnswer(
-      df.selectExpr("ascii(a)", "ascii(b)"),
-      Row(97, 0))
+      ctx.sql("SELECT greatest(a, 2) as g from testData2 order by g"),
+      Seq(Row(2), Row(2), Row(2), Row(2), Row(3), Row(3))
+    )
   }
 
-  test("string base64/unbase64 function") {
-    val bytes = Array[Byte](1, 2, 3, 4)
-    val df = Seq((bytes, "AQIDBA==")).toDF("a", "b")
+  test("pmod") {
+    val intData = Seq((7, 3), (-7, 3)).toDF("a", "b")
     checkAnswer(
-      df.select(base64("a"), base64($"a"), unbase64("b"), unbase64($"b")),
-      Row("AQIDBA==", "AQIDBA==", bytes, bytes))
-
+      intData.select(pmod('a, 'b)),
+      Seq(Row(1), Row(2))
+    )
     checkAnswer(
-      df.selectExpr("base64(a)", "unbase64(b)"),
-      Row("AQIDBA==", bytes))
+      intData.select(pmod('a, lit(3))),
+      Seq(Row(1), Row(2))
+    )
+    checkAnswer(
+      intData.select(pmod(lit(-7), 'b)),
+      Seq(Row(2), Row(2))
+    )
+    checkAnswer(
+      intData.selectExpr("pmod(a, b)"),
+      Seq(Row(1), Row(2))
+    )
+    checkAnswer(
+      intData.selectExpr("pmod(a, 3)"),
+      Seq(Row(1), Row(2))
+    )
+    checkAnswer(
+      intData.selectExpr("pmod(-7, b)"),
+      Seq(Row(2), Row(2))
+    )
+    val doubleData = Seq((7.2, 4.1)).toDF("a", "b")
+    checkAnswer(
+      doubleData.select(pmod('a, 'b)),
+      Seq(Row(3.1000000000000005)) // same as hive
+    )
+    checkAnswer(
+      doubleData.select(pmod(lit(2), lit(Int.MaxValue))),
+      Seq(Row(2))
+    )
   }
 
-  test("string encode/decode function") {
-    val bytes = Array[Byte](-27, -92, -89, -27, -115, -125, -28, -72, -106, -25, -107, -116)
-    // scalastyle:off  
-    // non ascii characters are not allowed in the code, so we disable the scalastyle here.
-    val df = Seq(("大千世界", "utf-8", bytes)).toDF("a", "b", "c")
+  test("array size function") {
+    val df = Seq(
+      (Array[Int](1, 2), "x"),
+      (Array[Int](), "y"),
+      (Array[Int](1, 2, 3), "z")
+    ).toDF("a", "b")
     checkAnswer(
-      df.select(encode($"a", $"b"), encode("a", "b"), decode($"c", $"b"), decode("c", "b")),
-      Row(bytes, bytes, "大千世界", "大千世界"))
+      df.select(size("a")),
+      Seq(Row(2), Row(0), Row(3))
+    )
+    checkAnswer(
+      df.selectExpr("size(a)"),
+      Seq(Row(2), Row(0), Row(3))
+    )
+  }
 
+  test("map size function") {
+    val df = Seq(
+      (Map[Int, Int](1 -> 1, 2 -> 2), "x"),
+      (Map[Int, Int](), "y"),
+      (Map[Int, Int](1 -> 1, 2 -> 2, 3 -> 3), "z")
+    ).toDF("a", "b")
     checkAnswer(
-      df.selectExpr("encode(a, b)", "decode(c, b)"),
-      Row(bytes, "大千世界"))
-    // scalastyle:on
+      df.select(size("a")),
+      Seq(Row(2), Row(0), Row(3))
+    )
+    checkAnswer(
+      df.selectExpr("size(a)"),
+      Seq(Row(2), Row(0), Row(3))
+    )
   }
 }
