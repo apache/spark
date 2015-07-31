@@ -269,6 +269,8 @@
       <name>Staging Repo for Hive 1.2.1 (Spark Version)</name>
       <url>https://oss.sonatype.org/content/repositories/orgspark-project-1112</url>
       <releases>
+        <enabled>true</enabled>
+      </releases>
     </repository>
     <repository>
       <id>mapr-repo</id>
