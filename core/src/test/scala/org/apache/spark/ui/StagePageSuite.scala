@@ -67,7 +67,8 @@ class StagePageSuite extends SparkFunSuite with LocalSparkContext {
     jobListener.onStageSubmitted(SparkListenerStageSubmitted(stageInfo))
     jobListener.onTaskStart(SparkListenerTaskStart(0, 0, taskInfo))
     taskInfo.markSuccessful()
-    jobListener.onTaskEnd(SparkListenerTaskEnd(0, 0, "result", Success, taskInfo, TaskMetrics.empty))
+    jobListener.onTaskEnd(
+      SparkListenerTaskEnd(0, 0, "result", Success, taskInfo, TaskMetrics.empty))
     jobListener.onStageCompleted(SparkListenerStageCompleted(stageInfo))
     page.render(request)
   }
