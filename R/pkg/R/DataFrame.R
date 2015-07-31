@@ -1533,7 +1533,11 @@ setMethod("describe",
             dataFrame(sdf)
           })
 
-#' @rdname summary.DataFrame
+#' @title Summary
+#'
+#' @description Computes statistics for numeric columns of the DataFrame
+#'
+#' @rdname summary
 #' @aliases describe
 setMethod("summary",
           signature(x = "DataFrame"),
