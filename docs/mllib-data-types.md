@@ -375,11 +375,11 @@ long n = mat.numCols();
 
 <div data-lang="python" markdown="1">
 
-A [`RowMatrix`](api/python/pyspark.mllib.html#pyspark.mllib.linalg.RowMatrix) can be created from 
-an `RDD` of vectors.
+A [`RowMatrix`](api/python/pyspark.mllib.html#pyspark.mllib.linalg.distributed.RowMatrix) can be 
+created from an `RDD` of vectors.
 
 {% highlight python %}
-from pyspark.mllib.linalg import RowMatrix
+from pyspark.mllib.linalg.distributed import RowMatrix
 
 # Create an RDD of vectors.
 rows = sc.parallelize([[1, 2, 3], [4, 5, 6], [7, 8, 9], [10, 11, 12]])
@@ -460,14 +460,14 @@ RowMatrix rowMat = mat.toRowMatrix();
 
 <div data-lang="python" markdown="1">
 
-An [`IndexedRowMatrix`](api/python/pyspark.mllib.html#pyspark.mllib.linalg.IndexedRowMatrix) can be
-created from an `RDD` of `IndexedRow`s, where 
-[`IndexedRow`](api/python/pyspark.mllib.html#pyspark.mllib.linalg.IndexedRow) is a wrapper over 
-`(long, vector)`.  An `IndexedRowMatrix` can be converted to a `RowMatrix` by dropping its row 
-indices.
+An [`IndexedRowMatrix`](api/python/pyspark.mllib.html#pyspark.mllib.linalg.distributed.IndexedRowMatrix)
+can be created from an `RDD` of `IndexedRow`s, where 
+[`IndexedRow`](api/python/pyspark.mllib.html#pyspark.mllib.linalg.distributed.IndexedRow) is a 
+wrapper over `(long, vector)`.  An `IndexedRowMatrix` can be converted to a `RowMatrix` by dropping
+its row indices.
 
 {% highlight python %}
-from pyspark.mllib.linalg import IndexedRowMatrix, IndexedRow
+from pyspark.mllib.linalg.distributed import IndexedRow, IndexedRowMatrix
 
 # Create an RDD of indexed rows.
 #   - This can be done explicitly with the IndexedRow class:
@@ -564,14 +564,14 @@ IndexedRowMatrix indexedRowMatrix = mat.toIndexedRowMatrix();
 
 <div data-lang="python" markdown="1">
 
-A [`CoordinateMatrix`](api/python/pyspark.mllib.html#pyspark.mllib.linalg.CoordinateMatrix) can be 
-created from an `RDD` of `MatrixEntry` entries, where 
-[`MatrixEntry`](api/python/pyspark.mllib.html#pyspark.mllib.linalg.MatrixEntry) is a wrapper over 
-`(long, long, float)`.  A `CoordinateMatrix` can be converted to a `RowMatrix` by calling 
-`toRowMatrix`, or to an `IndexedRowMatrix` with sparse rows by calling `toIndexedRowMatrix`.
+A [`CoordinateMatrix`](api/python/pyspark.mllib.html#pyspark.mllib.linalg.distributed.CoordinateMatrix)
+can be created from an `RDD` of `MatrixEntry` entries, where 
+[`MatrixEntry`](api/python/pyspark.mllib.html#pyspark.mllib.linalg.distributed.MatrixEntry) is a 
+wrapper over `(long, long, float)`.  A `CoordinateMatrix` can be converted to a `RowMatrix` by 
+calling `toRowMatrix`, or to an `IndexedRowMatrix` with sparse rows by calling `toIndexedRowMatrix`.
 
 {% highlight python %}
-from pyspark.mllib.linalg import CoordinateMatrix, MatrixEntry
+from pyspark.mllib.linalg.distributed import CoordinateMatrix, MatrixEntry
 
 # Create an RDD of coordinate entries.
 #   - This can be done explicitly with the MatrixEntry class:
