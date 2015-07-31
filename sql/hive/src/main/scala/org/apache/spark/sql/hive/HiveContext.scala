@@ -183,12 +183,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) with Logging {
   @transient
   protected[hive] lazy val metadataHive: ClientInterface = {
     val metaVersion = IsolatedClientLoader.hiveVersion(hiveMetastoreVersion)
-
-    // We instantiate a HiveConf here to read in the hive-site.xml file and then pass the options
-    // into the isolated client loader
-    val metadataConf = new HiveConf()
-    // `configure` goes second to override other settings.
-    val allConfig = metadataConf.iterator.map(e => e.getKey -> e.getValue).toMap ++ configure
+    val allConfig = configure
 
     val isolatedLoader = if (hiveMetastoreJars == "builtin") {
       if (hiveExecutionVersion != hiveMetastoreVersion) {
