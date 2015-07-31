@@ -2017,8 +2017,8 @@ private[spark] object Utils extends Logging {
       conf: SparkConf,
       serviceName: String = ""): (T, Int) = {
 
-    require(startPort == 0 || (1024 <= startPort && startPort < 65536),
-      "startPort should be between 1024 and 65535 (inclusive), or 0 for a random free port.")
+    require(startPort == 0 || (1 <= startPort && startPort < 65536),
+      "startPort should be between 1 and 65535 (inclusive), or 0 for a random free port.")
 
     val serviceString = if (serviceName.isEmpty) "" else s" '$serviceName'"
     val maxRetries = portMaxRetries(conf)
