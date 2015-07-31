@@ -26,11 +26,13 @@ import scala.collection.mutable.ArrayBuffer
 import com.google.common.io.Files
 import org.apache.hadoop.fs.Path
 
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Literal
-import org.apache.spark.sql.sources.PartitioningUtils._
-import org.apache.spark.sql.sources.{LogicalRelation, Partition, PartitionSpec}
+import org.apache.spark.sql.execution.datasources.{LogicalRelation, PartitionSpec, Partition, PartitioningUtils}
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.{Column, QueryTest, Row, SQLContext}
+import org.apache.spark.sql._
+import org.apache.spark.unsafe.types.UTF8String
+import PartitioningUtils._
 
 // The data where the partitioning key exists only in the directory structure.
 case class ParquetData(intField: Int, stringField: String)
@@ -114,7 +116,8 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest {
         StructType(Seq(
           StructField("a", IntegerType),
           StructField("b", StringType))),
-        Seq(Partition(Row(10, "hello"), "hdfs://host:9000/path/a=10/b=hello"))))
+        Seq(Partition(InternalRow(10, UTF8String.fromString("hello")),
+          "hdfs://host:9000/path/a=10/b=hello"))))
 
     check(Seq(
       "hdfs://host:9000/path/a=10/b=20",
@@ -124,8 +127,10 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest {
           StructField("a", DoubleType),
           StructField("b", StringType))),
         Seq(
-          Partition(Row(10, "20"), "hdfs://host:9000/path/a=10/b=20"),
-          Partition(Row(10.5, "hello"), "hdfs://host:9000/path/a=10.5/b=hello"))))
+          Partition(InternalRow(10, UTF8String.fromString("20")),
+            "hdfs://host:9000/path/a=10/b=20"),
+          Partition(InternalRow(10.5, UTF8String.fromString("hello")),
+            "hdfs://host:9000/path/a=10.5/b=hello"))))
 
     check(Seq(
       "hdfs://host:9000/path/_temporary",
@@ -143,8 +148,10 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest {
           StructField("a", DoubleType),
           StructField("b", StringType))),
         Seq(
-          Partition(Row(10, "20"), "hdfs://host:9000/path/a=10/b=20"),
-          Partition(Row(10.5, "hello"), "hdfs://host:9000/path/a=10.5/b=hello"))))
+          Partition(InternalRow(10, UTF8String.fromString("20")),
+            "hdfs://host:9000/path/a=10/b=20"),
+          Partition(InternalRow(10.5, UTF8String.fromString("hello")),
+            "hdfs://host:9000/path/a=10.5/b=hello"))))
 
     check(Seq(
       s"hdfs://host:9000/path/a=10/b=20",
@@ -154,8 +161,10 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest {
           StructField("a", IntegerType),
           StructField("b", StringType))),
         Seq(
-          Partition(Row(10, "20"), s"hdfs://host:9000/path/a=10/b=20"),
-          Partition(Row(null, "hello"), s"hdfs://host:9000/path/a=$defaultPartitionName/b=hello"))))
+          Partition(InternalRow(10, UTF8String.fromString("20")),
+            s"hdfs://host:9000/path/a=10/b=20"),
+          Partition(InternalRow(null, UTF8String.fromString("hello")),
+            s"hdfs://host:9000/path/a=$defaultPartitionName/b=hello"))))
 
     check(Seq(
       s"hdfs://host:9000/path/a=10/b=$defaultPartitionName",
@@ -165,8 +174,9 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest {
           StructField("a", DoubleType),
           StructField("b", StringType))),
         Seq(
-          Partition(Row(10, null), s"hdfs://host:9000/path/a=10/b=$defaultPartitionName"),
-          Partition(Row(10.5, null), s"hdfs://host:9000/path/a=10.5/b=$defaultPartitionName"))))
+          Partition(InternalRow(10, null), s"hdfs://host:9000/path/a=10/b=$defaultPartitionName"),
+          Partition(InternalRow(10.5, null),
+            s"hdfs://host:9000/path/a=10.5/b=$defaultPartitionName"))))
 
     check(Seq(
       s"hdfs://host:9000/path1",
@@ -185,7 +195,8 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest {
         StructType(Seq(
           StructField("a", StringType),
           StructField("b", StringType))),
-        Seq(Partition(Row("10", "hello"), "hdfs://host:9000/path/a=10/b=hello"))))
+        Seq(Partition(InternalRow(UTF8String.fromString("10"), UTF8String.fromString("hello")),
+          "hdfs://host:9000/path/a=10/b=hello"))))
 
     check(Seq(
       "hdfs://host:9000/path/a=10/b=20",
@@ -195,8 +206,10 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest {
           StructField("a", StringType),
           StructField("b", StringType))),
         Seq(
-          Partition(Row("10", "20"), "hdfs://host:9000/path/a=10/b=20"),
-          Partition(Row("10.5", "hello"), "hdfs://host:9000/path/a=10.5/b=hello"))))
+          Partition(InternalRow(UTF8String.fromString("10"), UTF8String.fromString("20")),
+            "hdfs://host:9000/path/a=10/b=20"),
+          Partition(InternalRow(UTF8String.fromString("10.5"), UTF8String.fromString("hello")),
+            "hdfs://host:9000/path/a=10.5/b=hello"))))
 
     check(Seq(
       "hdfs://host:9000/path/_temporary",
@@ -214,8 +227,10 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest {
           StructField("a", StringType),
           StructField("b", StringType))),
         Seq(
-          Partition(Row("10", "20"), "hdfs://host:9000/path/a=10/b=20"),
-          Partition(Row("10.5", "hello"), "hdfs://host:9000/path/a=10.5/b=hello"))))
+          Partition(InternalRow(UTF8String.fromString("10"), UTF8String.fromString("20")),
+            "hdfs://host:9000/path/a=10/b=20"),
+          Partition(InternalRow(UTF8String.fromString("10.5"), UTF8String.fromString("hello")),
+            "hdfs://host:9000/path/a=10.5/b=hello"))))
 
     check(Seq(
       s"hdfs://host:9000/path/a=10/b=20",
@@ -225,8 +240,10 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest {
           StructField("a", StringType),
           StructField("b", StringType))),
         Seq(
-          Partition(Row("10", "20"), s"hdfs://host:9000/path/a=10/b=20"),
-          Partition(Row(null, "hello"), s"hdfs://host:9000/path/a=$defaultPartitionName/b=hello"))))
+          Partition(InternalRow(UTF8String.fromString("10"), UTF8String.fromString("20")),
+            s"hdfs://host:9000/path/a=10/b=20"),
+          Partition(InternalRow(null, UTF8String.fromString("hello")),
+            s"hdfs://host:9000/path/a=$defaultPartitionName/b=hello"))))
 
     check(Seq(
       s"hdfs://host:9000/path/a=10/b=$defaultPartitionName",
@@ -236,8 +253,10 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest {
           StructField("a", StringType),
           StructField("b", StringType))),
         Seq(
-          Partition(Row("10", null), s"hdfs://host:9000/path/a=10/b=$defaultPartitionName"),
-          Partition(Row("10.5", null), s"hdfs://host:9000/path/a=10.5/b=$defaultPartitionName"))))
+          Partition(InternalRow(UTF8String.fromString("10"), null),
+            s"hdfs://host:9000/path/a=10/b=$defaultPartitionName"),
+          Partition(InternalRow(UTF8String.fromString("10.5"), null),
+            s"hdfs://host:9000/path/a=10.5/b=$defaultPartitionName"))))
 
     check(Seq(
       s"hdfs://host:9000/path1",
@@ -428,7 +447,12 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest {
         (1 to 10).map(i => (i, i.toString)).toDF("intField", "stringField"),
         makePartitionDir(base, defaultPartitionName, "pi" -> 2))
 
-      sqlContext.read.format("parquet").load(base.getCanonicalPath).registerTempTable("t")
+      sqlContext
+        .read
+        .option("mergeSchema", "true")
+        .format("parquet")
+        .load(base.getCanonicalPath)
+        .registerTempTable("t")
 
       withTempTable("t") {
         checkAnswer(
@@ -443,7 +467,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest {
       (1 to 10).map(i => (i, i.toString)).toDF("a", "b").write.parquet(dir.getCanonicalPath)
       val queryExecution = sqlContext.read.parquet(dir.getCanonicalPath).queryExecution
       queryExecution.analyzed.collectFirst {
-        case LogicalRelation(relation: ParquetRelation2) =>
+        case LogicalRelation(relation: ParquetRelation) =>
           assert(relation.partitionSpec === PartitionSpec.emptySpec)
       }.getOrElse {
         fail(s"Expecting a ParquetRelation2, but got:\n$queryExecution")
@@ -485,7 +509,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest {
         FloatType,
         DoubleType,
         DecimalType(10, 5),
-        DecimalType.Unlimited,
+        DecimalType.SYSTEM_DEFAULT,
         DateType,
         TimestampType,
         StringType)
@@ -517,6 +541,62 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest {
       Files.createParentDirs(new File(s"${dir.getCanonicalPath}/b=1/c=1/.foo/bar"))
 
       checkAnswer(sqlContext.read.format("parquet").load(dir.getCanonicalPath), df)
+    }
+  }
+
+  test("listConflictingPartitionColumns") {
+    def makeExpectedMessage(colNameLists: Seq[String], paths: Seq[String]): String = {
+      val conflictingColNameLists = colNameLists.zipWithIndex.map { case (list, index) =>
+        s"\tPartition column name list #$index: $list"
+      }.mkString("\n", "\n", "\n")
+
+      // scalastyle:off
+      s"""Conflicting partition column names detected:
+         |$conflictingColNameLists
+         |For partitioned table directories, data files should only live in leaf directories.
+         |And directories at the same level should have the same partition column name.
+         |Please check the following directories for unexpected files or inconsistent partition column names:
+         |${paths.map("\t" + _).mkString("\n", "\n", "")}
+       """.stripMargin.trim
+      // scalastyle:on
+    }
+
+    assert(
+      listConflictingPartitionColumns(
+        Seq(
+          (new Path("file:/tmp/foo/a=1"), PartitionValues(Seq("a"), Seq(Literal(1)))),
+          (new Path("file:/tmp/foo/b=1"), PartitionValues(Seq("b"), Seq(Literal(1)))))).trim ===
+        makeExpectedMessage(Seq("a", "b"), Seq("file:/tmp/foo/a=1", "file:/tmp/foo/b=1")))
+
+    assert(
+      listConflictingPartitionColumns(
+        Seq(
+          (new Path("file:/tmp/foo/a=1/_temporary"), PartitionValues(Seq("a"), Seq(Literal(1)))),
+          (new Path("file:/tmp/foo/a=1"), PartitionValues(Seq("a"), Seq(Literal(1)))))).trim ===
+        makeExpectedMessage(
+          Seq("a"),
+          Seq("file:/tmp/foo/a=1/_temporary", "file:/tmp/foo/a=1")))
+
+    assert(
+      listConflictingPartitionColumns(
+        Seq(
+          (new Path("file:/tmp/foo/a=1"),
+            PartitionValues(Seq("a"), Seq(Literal(1)))),
+          (new Path("file:/tmp/foo/a=1/b=foo"),
+            PartitionValues(Seq("a", "b"), Seq(Literal(1), Literal("foo")))))).trim ===
+        makeExpectedMessage(
+          Seq("a", "a, b"),
+          Seq("file:/tmp/foo/a=1", "file:/tmp/foo/a=1/b=foo")))
+  }
+
+  test("Parallel partition discovery") {
+    withTempPath { dir =>
+      withSQLConf(SQLConf.PARALLEL_PARTITION_DISCOVERY_THRESHOLD.key -> "1") {
+        val path = dir.getCanonicalPath
+        val df = sqlContext.range(5).select('id as 'a, 'id as 'b, 'id as 'c).coalesce(1)
+        df.write.partitionBy("b", "c").parquet(path)
+        checkAnswer(sqlContext.read.parquet(path), df)
+      }
     }
   }
 }

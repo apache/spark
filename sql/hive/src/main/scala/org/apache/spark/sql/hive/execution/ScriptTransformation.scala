@@ -17,16 +17,20 @@
 
 package org.apache.spark.sql.hive.execution
 
-import java.io.{BufferedReader, DataInputStream, DataOutputStream, EOFException, InputStreamReader}
+import java.io._
 import java.util.Properties
+import javax.annotation.Nullable
 
 import scala.collection.JavaConversions._
+import scala.util.control.NonFatal
 
 import org.apache.hadoop.hive.serde.serdeConstants
 import org.apache.hadoop.hive.serde2.AbstractSerDe
 import org.apache.hadoop.hive.serde2.objectinspector._
 
+import org.apache.spark.{TaskContext, Logging}
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.ScriptInputOutputSchema
@@ -34,7 +38,7 @@ import org.apache.spark.sql.execution._
 import org.apache.spark.sql.hive.HiveShim._
 import org.apache.spark.sql.hive.{HiveContext, HiveInspectors}
 import org.apache.spark.sql.types.DataType
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{CircularBuffer, RedirectThread, Utils}
 
 /**
  * Transforms the input by forking and running the specified script.
@@ -54,19 +58,55 @@ case class ScriptTransformation(
 
   override def otherCopyArgs: Seq[HiveContext] = sc :: Nil
 
-  protected override def doExecute(): RDD[Row] = {
-    child.execute().mapPartitions { iter =>
+  protected override def doExecute(): RDD[InternalRow] = {
+    def processIterator(inputIterator: Iterator[InternalRow]): Iterator[InternalRow] = {
       val cmd = List("/bin/bash", "-c", script)
       val builder = new ProcessBuilder(cmd)
+
       val proc = builder.start()
       val inputStream = proc.getInputStream
       val outputStream = proc.getOutputStream
+      val errorStream = proc.getErrorStream
+
+      // In order to avoid deadlocks, we need to consume the error output of the child process.
+      // To avoid issues caused by large error output, we use a circular buffer to limit the amount
+      // of error output that we retain. See SPARK-7862 for more discussion of the deadlock / hang
+      // that motivates this.
+      val stderrBuffer = new CircularBuffer(2048)
+      new RedirectThread(
+        errorStream,
+        stderrBuffer,
+        "Thread-ScriptTransformation-STDERR-Consumer").start()
+
+      val outputProjection = new InterpretedProjection(input, child.output)
+
+      // This nullability is a performance optimization in order to avoid an Option.foreach() call
+      // inside of a loop
+      @Nullable val (inputSerde, inputSoi) = ioschema.initInputSerDe(input).getOrElse((null, null))
+
+      // This new thread will consume the ScriptTransformation's input rows and write them to the
+      // external process. That process's output will be read by this current thread.
+      val writerThread = new ScriptTransformationWriterThread(
+        inputIterator,
+        outputProjection,
+        inputSerde,
+        inputSoi,
+        ioschema,
+        outputStream,
+        proc,
+        stderrBuffer,
+        TaskContext.get()
+      )
+
+      // This nullability is a performance optimization in order to avoid an Option.foreach() call
+      // inside of a loop
+      @Nullable val (outputSerde, outputSoi) = {
+        ioschema.initOutputSerDe(output).getOrElse((null, null))
+      }
+
       val reader = new BufferedReader(new InputStreamReader(inputStream))
-
-      val (outputSerde, outputSoi) = ioschema.initOutputSerDe(output)
-
-      val iterator: Iterator[Row] = new Iterator[Row] with HiveInspectors {
-        var cacheRow: Row = null
+      val outputIterator: Iterator[InternalRow] = new Iterator[InternalRow] with HiveInspectors {
+        var cacheRow: InternalRow = null
         var curLine: String = null
         var eof: Boolean = false
 
@@ -74,16 +114,30 @@ case class ScriptTransformation(
           if (outputSerde == null) {
             if (curLine == null) {
               curLine = reader.readLine()
-              curLine != null
+              if (curLine == null) {
+                if (writerThread.exception.isDefined) {
+                  throw writerThread.exception.get
+                }
+                false
+              } else {
+                true
+              }
             } else {
               true
             }
           } else {
-            !eof
+            if (eof) {
+              if (writerThread.exception.isDefined) {
+                throw writerThread.exception.get
+              }
+              false
+            } else {
+              true
+            }
           }
         }
 
-        def deserialize(): Row = {
+        def deserialize(): InternalRow = {
           if (cacheRow != null) return cacheRow
 
           val mutableRow = new SpecificMutableRow(output.map(_.dataType))
@@ -105,15 +159,15 @@ case class ScriptTransformation(
               }
               i += 1
             })
-            return mutableRow
+            mutableRow
           } catch {
             case e: EOFException =>
               eof = true
-              return null
+              null
           }
         }
 
-        override def next(): Row = {
+        override def next(): InternalRow = {
           if (!hasNext) {
             throw new NoSuchElementException
           }
@@ -122,13 +176,13 @@ case class ScriptTransformation(
             val prevLine = curLine
             curLine = reader.readLine()
             if (!ioschema.schemaLess) {
-              new GenericRow(CatalystTypeConverters.convertToCatalyst(
-                prevLine.split(ioschema.outputRowFormatMap("TOK_TABLEROWFORMATFIELD")))
-                .asInstanceOf[Array[Any]])
+              new GenericInternalRow(
+                prevLine.split(ioschema.outputRowFormatMap("TOK_TABLEROWFORMATFIELD"))
+                  .map(CatalystTypeConverters.convertToCatalyst))
             } else {
-              new GenericRow(CatalystTypeConverters.convertToCatalyst(
-                prevLine.split(ioschema.outputRowFormatMap("TOK_TABLEROWFORMATFIELD"), 2))
-                .asInstanceOf[Array[Any]])
+              new GenericInternalRow(
+                prevLine.split(ioschema.outputRowFormatMap("TOK_TABLEROWFORMATFIELD"), 2)
+                  .map(CatalystTypeConverters.convertToCatalyst))
             }
           } else {
             val ret = deserialize()
@@ -141,34 +195,83 @@ case class ScriptTransformation(
         }
       }
 
-      val (inputSerde, inputSoi) = ioschema.initInputSerDe(input)
-      val dataOutputStream = new DataOutputStream(outputStream)
-      val outputProjection = new InterpretedProjection(input, child.output)
+      writerThread.start()
 
-      // Put the write(output to the pipeline) into a single thread
-      // and keep the collector as remain in the main thread.
-      // otherwise it will causes deadlock if the data size greater than
-      // the pipeline / buffer capacity.
-      new Thread(new Runnable() {
-        override def run(): Unit = {
-          iter
-            .map(outputProjection)
-            .foreach { row =>
-            if (inputSerde == null) {
-              val data = row.mkString("", ioschema.inputRowFormatMap("TOK_TABLEROWFORMATFIELD"),
-                ioschema.inputRowFormatMap("TOK_TABLEROWFORMATLINES")).getBytes("utf-8")
+      outputIterator
+    }
 
-              outputStream.write(data)
-            } else {
-              val writable = inputSerde.serialize(row.asInstanceOf[GenericRow].values, inputSoi)
-              prepareWritable(writable).write(dataOutputStream)
-            }
-          }
-          outputStream.close()
+    child.execute().mapPartitions { iter =>
+      if (iter.hasNext) {
+        processIterator(iter)
+      } else {
+        // If the input iterator has no rows then do not launch the external script.
+        Iterator.empty
+      }
+    }
+  }
+}
+
+private class ScriptTransformationWriterThread(
+    iter: Iterator[InternalRow],
+    outputProjection: Projection,
+    @Nullable inputSerde: AbstractSerDe,
+    @Nullable inputSoi: ObjectInspector,
+    ioschema: HiveScriptIOSchema,
+    outputStream: OutputStream,
+    proc: Process,
+    stderrBuffer: CircularBuffer,
+    taskContext: TaskContext
+  ) extends Thread("Thread-ScriptTransformation-Feed") with Logging {
+
+  setDaemon(true)
+
+  @volatile private var _exception: Throwable = null
+
+  /** Contains the exception thrown while writing the parent iterator to the external process. */
+  def exception: Option[Throwable] = Option(_exception)
+
+  override def run(): Unit = Utils.logUncaughtExceptions {
+    TaskContext.setTaskContext(taskContext)
+
+    val dataOutputStream = new DataOutputStream(outputStream)
+
+    // We can't use Utils.tryWithSafeFinally here because we also need a `catch` block, so
+    // let's use a variable to record whether the `finally` block was hit due to an exception
+    var threwException: Boolean = true
+    try {
+      iter.map(outputProjection).foreach { row =>
+        if (inputSerde == null) {
+          val data = row.mkString("", ioschema.inputRowFormatMap("TOK_TABLEROWFORMATFIELD"),
+            ioschema.inputRowFormatMap("TOK_TABLEROWFORMATLINES")).getBytes("utf-8")
+          outputStream.write(data)
+        } else {
+          val writable = inputSerde.serialize(
+            row.asInstanceOf[GenericInternalRow].values, inputSoi)
+          prepareWritable(writable).write(dataOutputStream)
         }
-      }).start()
-
-      iterator
+      }
+      outputStream.close()
+      threwException = false
+    } catch {
+      case NonFatal(e) =>
+        // An error occurred while writing input, so kill the child process. According to the
+        // Javadoc this call will not throw an exception:
+        _exception = e
+        proc.destroy()
+        throw e
+    } finally {
+      try {
+        if (proc.waitFor() != 0) {
+          logError(stderrBuffer.toString) // log the stderr circular buffer
+        }
+      } catch {
+        case NonFatal(exceptionFromFinallyBlock) =>
+          if (!threwException) {
+            throw exceptionFromFinallyBlock
+          } else {
+            log.error("Exception in finally block", exceptionFromFinallyBlock)
+          }
+      }
     }
   }
 }
@@ -180,33 +283,43 @@ private[hive]
 case class HiveScriptIOSchema (
     inputRowFormat: Seq[(String, String)],
     outputRowFormat: Seq[(String, String)],
-    inputSerdeClass: String,
-    outputSerdeClass: String,
+    inputSerdeClass: Option[String],
+    outputSerdeClass: Option[String],
     inputSerdeProps: Seq[(String, String)],
     outputSerdeProps: Seq[(String, String)],
     schemaLess: Boolean) extends ScriptInputOutputSchema with HiveInspectors {
 
-  val defaultFormat = Map(("TOK_TABLEROWFORMATFIELD", "\t"),
-                          ("TOK_TABLEROWFORMATLINES", "\n"))
+  private val defaultFormat = Map(
+    ("TOK_TABLEROWFORMATFIELD", "\t"),
+    ("TOK_TABLEROWFORMATLINES", "\n")
+  )
 
   val inputRowFormatMap = inputRowFormat.toMap.withDefault((k) => defaultFormat(k))
   val outputRowFormatMap = outputRowFormat.toMap.withDefault((k) => defaultFormat(k))
 
 
-  def initInputSerDe(input: Seq[Expression]): (AbstractSerDe, ObjectInspector) = {
-    val (columns, columnTypes) = parseAttrs(input)
-    val serde = initSerDe(inputSerdeClass, columns, columnTypes, inputSerdeProps)
-    (serde, initInputSoi(serde, columns, columnTypes))
+  def initInputSerDe(input: Seq[Expression]): Option[(AbstractSerDe, ObjectInspector)] = {
+    inputSerdeClass.map { serdeClass =>
+      val (columns, columnTypes) = parseAttrs(input)
+      val serde = initSerDe(serdeClass, columns, columnTypes, inputSerdeProps)
+      val fieldObjectInspectors = columnTypes.map(toInspector)
+      val objectInspector = ObjectInspectorFactory
+        .getStandardStructObjectInspector(columns, fieldObjectInspectors)
+        .asInstanceOf[ObjectInspector]
+      (serde, objectInspector)
+    }
   }
 
-  def initOutputSerDe(output: Seq[Attribute]): (AbstractSerDe, StructObjectInspector) = {
-    val (columns, columnTypes) = parseAttrs(output)
-    val serde = initSerDe(outputSerdeClass, columns, columnTypes, outputSerdeProps)
-    (serde, initOutputputSoi(serde))
+  def initOutputSerDe(output: Seq[Attribute]): Option[(AbstractSerDe, StructObjectInspector)] = {
+    outputSerdeClass.map { serdeClass =>
+      val (columns, columnTypes) = parseAttrs(output)
+      val serde = initSerDe(serdeClass, columns, columnTypes, outputSerdeProps)
+      val structObjectInspector = serde.getObjectInspector().asInstanceOf[StructObjectInspector]
+      (serde, structObjectInspector)
+    }
   }
 
-  def parseAttrs(attrs: Seq[Expression]): (Seq[String], Seq[DataType]) = {
-
+  private def parseAttrs(attrs: Seq[Expression]): (Seq[String], Seq[DataType]) = {
     val columns = attrs.map {
       case aref: AttributeReference => aref.name
       case e: NamedExpression => e.name
@@ -222,51 +335,25 @@ case class HiveScriptIOSchema (
     (columns, columnTypes)
   }
 
-  def initSerDe(serdeClassName: String, columns: Seq[String],
-    columnTypes: Seq[DataType], serdeProps: Seq[(String, String)]): AbstractSerDe = {
+  private def initSerDe(
+      serdeClassName: String,
+      columns: Seq[String],
+      columnTypes: Seq[DataType],
+      serdeProps: Seq[(String, String)]): AbstractSerDe = {
 
-    val serde: AbstractSerDe = if (serdeClassName != "") {
-      val trimed_class = serdeClassName.split("'")(1)
-      Utils.classForName(trimed_class)
-        .newInstance.asInstanceOf[AbstractSerDe]
-    } else {
-      null
-    }
+    val serde = Utils.classForName(serdeClassName).newInstance.asInstanceOf[AbstractSerDe]
 
-    if (serde != null) {
-      val columnTypesNames = columnTypes.map(_.toTypeInfo.getTypeName()).mkString(",")
+    val columnTypesNames = columnTypes.map(_.toTypeInfo.getTypeName()).mkString(",")
 
-      var propsMap = serdeProps.map(kv => {
-        (kv._1.split("'")(1), kv._2.split("'")(1))
-      }).toMap + (serdeConstants.LIST_COLUMNS -> columns.mkString(","))
-      propsMap = propsMap + (serdeConstants.LIST_COLUMN_TYPES -> columnTypesNames)
+    var propsMap = serdeProps.map(kv => {
+      (kv._1.split("'")(1), kv._2.split("'")(1))
+    }).toMap + (serdeConstants.LIST_COLUMNS -> columns.mkString(","))
+    propsMap = propsMap + (serdeConstants.LIST_COLUMN_TYPES -> columnTypesNames)
 
-      val properties = new Properties()
-      properties.putAll(propsMap)
-      serde.initialize(null, properties)
-    }
+    val properties = new Properties()
+    properties.putAll(propsMap)
+    serde.initialize(null, properties)
 
     serde
-  }
-
-  def initInputSoi(inputSerde: AbstractSerDe, columns: Seq[String], columnTypes: Seq[DataType])
-    : ObjectInspector = {
-
-    if (inputSerde != null) {
-      val fieldObjectInspectors = columnTypes.map(toInspector(_))
-      ObjectInspectorFactory
-        .getStandardStructObjectInspector(columns, fieldObjectInspectors)
-        .asInstanceOf[ObjectInspector]
-    } else {
-      null
-    }
-  }
-
-  def initOutputputSoi(outputSerde: AbstractSerDe): StructObjectInspector = {
-    if (outputSerde != null) {
-      outputSerde.getObjectInspector().asInstanceOf[StructObjectInspector]
-    } else {
-      null
-    }
   }
 }

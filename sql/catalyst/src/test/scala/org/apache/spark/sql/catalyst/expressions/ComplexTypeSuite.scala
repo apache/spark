@@ -18,52 +18,65 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.UnresolvedExtractValue
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
 
 class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
 
-  test("CreateStruct") {
-    val row = Row(1, 2, 3)
-    val c1 = 'a.int.at(0).as("a")
-    val c3 = 'c.int.at(2).as("c")
-    checkEvaluation(CreateStruct(Seq(c1, c3)), Row(1, 3), row)
+  /**
+   * Runs through the testFunc for all integral data types.
+   *
+   * @param testFunc a test function that accepts a conversion function to convert an integer
+   *                 into another data type.
+   */
+  private def testIntegralDataTypes(testFunc: (Int => Any) => Unit): Unit = {
+    testFunc(_.toByte)
+    testFunc(_.toShort)
+    testFunc(identity)
+    testFunc(_.toLong)
   }
 
-  test("complex type") {
-    val row = create_row(
-      "^Ba*n",                                // 0
-      null.asInstanceOf[UTF8String],          // 1
-      create_row("aa", "bb"),                 // 2
-      Map("aa"->"bb"),                        // 3
-      Seq("aa", "bb")                         // 4
-    )
+  test("GetArrayItem") {
+    val typeA = ArrayType(StringType)
+    val array = Literal.create(Seq("a", "b"), typeA)
+    testIntegralDataTypes { convert =>
+      checkEvaluation(GetArrayItem(array, Literal(convert(1))), "b")
+    }
+    val nullArray = Literal.create(null, typeA)
+    val nullInt = Literal.create(null, IntegerType)
+    checkEvaluation(GetArrayItem(nullArray, Literal(1)), null)
+    checkEvaluation(GetArrayItem(array, nullInt), null)
+    checkEvaluation(GetArrayItem(nullArray, nullInt), null)
 
-    val typeS = StructType(
-      StructField("a", StringType, true) :: StructField("b", StringType, true) :: Nil
-    )
-    val typeMap = MapType(StringType, StringType)
-    val typeArray = ArrayType(StringType)
+    val nestedArray = Literal.create(Seq(Seq(1)), ArrayType(ArrayType(IntegerType)))
+    checkEvaluation(GetArrayItem(nestedArray, Literal(0)), Seq(1))
+  }
 
-    checkEvaluation(GetMapValue(BoundReference(3, typeMap, true),
-      Literal("aa")), "bb", row)
-    checkEvaluation(GetMapValue(Literal.create(null, typeMap), Literal("aa")), null, row)
-    checkEvaluation(
-      GetMapValue(Literal.create(null, typeMap), Literal.create(null, StringType)), null, row)
-    checkEvaluation(GetMapValue(BoundReference(3, typeMap, true),
-      Literal.create(null, StringType)), null, row)
+  test("GetMapValue") {
+    val typeM = MapType(StringType, StringType)
+    val map = Literal.create(Map("a" -> "b"), typeM)
+    val nullMap = Literal.create(null, typeM)
+    val nullString = Literal.create(null, StringType)
 
-    checkEvaluation(GetArrayItem(BoundReference(4, typeArray, true),
-      Literal(1)), "bb", row)
-    checkEvaluation(GetArrayItem(Literal.create(null, typeArray), Literal(1)), null, row)
-    checkEvaluation(
-      GetArrayItem(Literal.create(null, typeArray), Literal.create(null, IntegerType)), null, row)
-    checkEvaluation(GetArrayItem(BoundReference(4, typeArray, true),
-      Literal.create(null, IntegerType)), null, row)
+    checkEvaluation(GetMapValue(map, Literal("a")), "b")
+    checkEvaluation(GetMapValue(map, nullString), null)
+    checkEvaluation(GetMapValue(nullMap, nullString), null)
+    checkEvaluation(GetMapValue(map, nullString), null)
 
-    def getStructField(expr: Expression, fieldName: String): ExtractValue = {
+    val nestedMap = Literal.create(Map("a" -> Map("b" -> "c")), MapType(StringType, typeM))
+    checkEvaluation(GetMapValue(nestedMap, Literal("a")), Map("b" -> "c"))
+  }
+
+  test("GetStructField") {
+    val typeS = StructType(StructField("a", IntegerType) :: Nil)
+    val struct = Literal.create(create_row(1), typeS)
+    val nullStruct = Literal.create(null, typeS)
+
+    def getStructField(expr: Expression, fieldName: String): GetStructField = {
       expr.dataType match {
         case StructType(fields) =>
           val field = fields.find(_.name == fieldName).get
@@ -71,28 +84,89 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
       }
     }
 
-    def quickResolve(u: UnresolvedExtractValue): ExtractValue = {
+    checkEvaluation(getStructField(struct, "a"), 1)
+    checkEvaluation(getStructField(nullStruct, "a"), null)
+
+    val nestedStruct = Literal.create(create_row(create_row(1)),
+      StructType(StructField("a", typeS) :: Nil))
+    checkEvaluation(getStructField(nestedStruct, "a"), create_row(1))
+
+    val typeS_fieldNotNullable = StructType(StructField("a", IntegerType, false) :: Nil)
+    val struct_fieldNotNullable = Literal.create(create_row(1), typeS_fieldNotNullable)
+    val nullStruct_fieldNotNullable = Literal.create(null, typeS_fieldNotNullable)
+
+    assert(getStructField(struct_fieldNotNullable, "a").nullable === false)
+    assert(getStructField(struct, "a").nullable === true)
+    assert(getStructField(nullStruct_fieldNotNullable, "a").nullable === true)
+    assert(getStructField(nullStruct, "a").nullable === true)
+  }
+
+  test("GetArrayStructFields") {
+    val typeAS = ArrayType(StructType(StructField("a", IntegerType) :: Nil))
+    val arrayStruct = Literal.create(Seq(create_row(1)), typeAS)
+    val nullArrayStruct = Literal.create(null, typeAS)
+
+    def getArrayStructFields(expr: Expression, fieldName: String): GetArrayStructFields = {
+      expr.dataType match {
+        case ArrayType(StructType(fields), containsNull) =>
+          val field = fields.find(_.name == fieldName).get
+          GetArrayStructFields(expr, field, fields.indexOf(field), fields.length, containsNull)
+      }
+    }
+
+    checkEvaluation(getArrayStructFields(arrayStruct, "a"), Seq(1))
+    checkEvaluation(getArrayStructFields(nullArrayStruct, "a"), null)
+  }
+
+  test("CreateArray") {
+    val intSeq = Seq(5, 10, 15, 20, 25)
+    val longSeq = intSeq.map(_.toLong)
+    val strSeq = intSeq.map(_.toString)
+    checkEvaluation(CreateArray(intSeq.map(Literal(_))), intSeq, EmptyRow)
+    checkEvaluation(CreateArray(longSeq.map(Literal(_))), longSeq, EmptyRow)
+    checkEvaluation(CreateArray(strSeq.map(Literal(_))), strSeq, EmptyRow)
+
+    val intWithNull = intSeq.map(Literal(_)) :+ Literal.create(null, IntegerType)
+    val longWithNull = longSeq.map(Literal(_)) :+ Literal.create(null, LongType)
+    val strWithNull = strSeq.map(Literal(_)) :+ Literal.create(null, StringType)
+    checkEvaluation(CreateArray(intWithNull), intSeq :+ null, EmptyRow)
+    checkEvaluation(CreateArray(longWithNull), longSeq :+ null, EmptyRow)
+    checkEvaluation(CreateArray(strWithNull), strSeq :+ null, EmptyRow)
+    checkEvaluation(CreateArray(Literal.create(null, IntegerType) :: Nil), null :: Nil)
+  }
+
+  test("CreateStruct") {
+    val row = create_row(1, 2, 3)
+    val c1 = 'a.int.at(0)
+    val c3 = 'c.int.at(2)
+    checkEvaluation(CreateStruct(Seq(c1, c3)), create_row(1, 3), row)
+    checkEvaluation(CreateStruct(Literal.create(null, LongType) :: Nil), create_row(null))
+  }
+
+  test("CreateNamedStruct") {
+    val row = create_row(1, 2, 3)
+    val c1 = 'a.int.at(0)
+    val c3 = 'c.int.at(2)
+    checkEvaluation(CreateNamedStruct(Seq("a", c1, "b", c3)), create_row(1, 3), row)
+    checkEvaluation(CreateNamedStruct(Seq("a", c1, "b", "y")),
+      create_row(1, UTF8String.fromString("y")), row)
+    checkEvaluation(CreateNamedStruct(Seq("a", "x", "b", 2.0)),
+      create_row(UTF8String.fromString("x"), 2.0))
+    checkEvaluation(CreateNamedStruct(Seq("a", Literal.create(null, IntegerType))),
+      create_row(null))
+  }
+
+  test("test dsl for complex type") {
+    def quickResolve(u: UnresolvedExtractValue): Expression = {
       ExtractValue(u.child, u.extraction, _ == _)
     }
 
-    checkEvaluation(getStructField(BoundReference(2, typeS, nullable = true), "a"), "aa", row)
-    checkEvaluation(getStructField(Literal.create(null, typeS), "a"), null, row)
-
-    val typeS_notNullable = StructType(
-      StructField("a", StringType, nullable = false)
-        :: StructField("b", StringType, nullable = false) :: Nil
-    )
-
-    assert(getStructField(BoundReference(2, typeS, nullable = true), "a").nullable === true)
-    assert(getStructField(BoundReference(2, typeS_notNullable, nullable = false), "a").nullable
-      === false)
-
-    assert(getStructField(Literal.create(null, typeS), "a").nullable === true)
-    assert(getStructField(Literal.create(null, typeS_notNullable), "a").nullable === true)
-
-    checkEvaluation(quickResolve('c.map(typeMap).at(3).getItem("aa")), "bb", row)
-    checkEvaluation(quickResolve('c.array(typeArray.elementType).at(4).getItem(1)), "bb", row)
-    checkEvaluation(quickResolve('c.struct(typeS).at(2).getField("a")), "aa", row)
+    checkEvaluation(quickResolve('c.map(MapType(StringType, StringType)).at(0).getItem("a")),
+      "b", create_row(Map("a" -> "b")))
+    checkEvaluation(quickResolve('c.array(StringType).at(0).getItem(1)),
+      "b", create_row(Seq("a", "b")))
+    checkEvaluation(quickResolve('c.struct(StructField("a", IntegerType)).at(0).getField("a")),
+      1, create_row(create_row(1)))
   }
 
   test("error message of ExtractValue") {

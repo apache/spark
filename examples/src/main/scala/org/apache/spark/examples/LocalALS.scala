@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples
 
 import org.apache.commons.math3.linear._
@@ -142,3 +143,4 @@ object LocalALS {
     new Array2DRowRealMatrix(Array.fill(rows, cols)(math.random))
 
 }
+// scalastyle:on println

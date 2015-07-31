@@ -396,6 +396,11 @@ class Column(object):
         jc = self._jc.over(window._jspec)
         return Column(jc)
 
+    def __nonzero__(self):
+        raise ValueError("Cannot convert column into bool: please use '&' for 'and', '|' for 'or', "
+                         "'~' for 'not' when building DataFrame boolean expressions.")
+    __bool__ = __nonzero__
+
     def __repr__(self):
         return 'Column<%s>' % self._jc.toString().encode('utf8')
 

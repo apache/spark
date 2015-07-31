@@ -213,9 +213,9 @@ private[spark] object BLAS extends Serializable with Logging {
   def scal(a: Double, x: Vector): Unit = {
     x match {
       case sx: SparseVector =>
-        f2jBLAS.dscal(sx.values.size, a, sx.values, 1)
+        f2jBLAS.dscal(sx.values.length, a, sx.values, 1)
       case dx: DenseVector =>
-        f2jBLAS.dscal(dx.values.size, a, dx.values, 1)
+        f2jBLAS.dscal(dx.values.length, a, dx.values, 1)
       case _ =>
         throw new IllegalArgumentException(s"scal doesn't support vector type ${x.getClass}.")
     }
@@ -303,8 +303,8 @@ private[spark] object BLAS extends Serializable with Logging {
       C: DenseMatrix): Unit = {
     require(!C.isTransposed,
       "The matrix C cannot be the product of a transpose() call. C.isTransposed must be false.")
-    if (alpha == 0.0) {
-      logDebug("gemm: alpha is equal to 0. Returning C.")
+    if (alpha == 0.0 && beta == 1.0) {
+      logDebug("gemm: alpha is equal to 0 and beta is equal to 1. Returning C.")
     } else {
       A match {
         case sparse: SparseMatrix => gemm(alpha, sparse, B, beta, C)

@@ -17,7 +17,7 @@
 
 package org.apache.spark.deploy.master
 
-import akka.serialization.Serialization
+import java.nio.ByteBuffer
 
 import scala.collection.JavaConversions._
 import scala.reflect.ClassTag
@@ -27,9 +27,10 @@ import org.apache.zookeeper.CreateMode
 
 import org.apache.spark.{Logging, SparkConf}
 import org.apache.spark.deploy.SparkCuratorUtil
+import org.apache.spark.serializer.Serializer
 
 
-private[master] class ZooKeeperPersistenceEngine(conf: SparkConf, val serialization: Serialization)
+private[master] class ZooKeeperPersistenceEngine(conf: SparkConf, val serializer: Serializer)
   extends PersistenceEngine
   with Logging {
 
@@ -57,17 +58,16 @@ private[master] class ZooKeeperPersistenceEngine(conf: SparkConf, val serializat
   }
 
   private def serializeIntoFile(path: String, value: AnyRef) {
-    val serializer = serialization.findSerializerFor(value)
-    val serialized = serializer.toBinary(value)
-    zk.create().withMode(CreateMode.PERSISTENT).forPath(path, serialized)
+    val serialized = serializer.newInstance().serialize(value)
+    val bytes = new Array[Byte](serialized.remaining())
+    serialized.get(bytes)
+    zk.create().withMode(CreateMode.PERSISTENT).forPath(path, bytes)
   }
 
   private def deserializeFromFile[T](filename: String)(implicit m: ClassTag[T]): Option[T] = {
     val fileData = zk.getData().forPath(WORKING_DIR + "/" + filename)
-    val clazz = m.runtimeClass.asInstanceOf[Class[T]]
-    val serializer = serialization.serializerFor(clazz)
     try {
-      Some(serializer.fromBinary(fileData).asInstanceOf[T])
+      Some(serializer.newInstance().deserialize[T](ByteBuffer.wrap(fileData)))
     } catch {
       case e: Exception => {
         logWarning("Exception while reading persisted file, deleting", e)

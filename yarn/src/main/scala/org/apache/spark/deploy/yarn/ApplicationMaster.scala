@@ -32,7 +32,7 @@ import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.spark.rpc._
 import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkContext, SparkEnv}
 import org.apache.spark.SparkException
-import org.apache.spark.deploy.{PythonRunner, SparkHadoopUtil}
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.history.HistoryServer
 import org.apache.spark.scheduler.cluster.{CoarseGrainedSchedulerBackend, YarnSchedulerBackend}
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
@@ -45,6 +45,14 @@ private[spark] class ApplicationMaster(
     args: ApplicationMasterArguments,
     client: YarnRMClient)
   extends Logging {
+
+  // Load the properties file with the Spark configuration and set entries as system properties,
+  // so that user code run inside the AM also has access to them.
+  if (args.propertiesFile != null) {
+    Utils.getPropertiesFromFile(args.propertiesFile).foreach { case (k, v) =>
+      sys.props(k) = v
+    }
+  }
 
   // TODO: Currently, task to container is computed once (TaskSetManager) - which need not be
   // optimal as more containers are available. Might need to handle this better.
@@ -221,7 +229,11 @@ private[spark] class ApplicationMaster(
     sparkContextRef.compareAndSet(sc, null)
   }
 
-  private def registerAM(_rpcEnv: RpcEnv, uiAddress: String, securityMgr: SecurityManager) = {
+  private def registerAM(
+      _rpcEnv: RpcEnv,
+      driverRef: RpcEndpointRef,
+      uiAddress: String,
+      securityMgr: SecurityManager) = {
     val sc = sparkContextRef.get()
 
     val appId = client.getAttemptId().getApplicationId().toString()
@@ -238,6 +250,7 @@ private[spark] class ApplicationMaster(
         RpcAddress(_sparkConf.get("spark.driver.host"), _sparkConf.get("spark.driver.port").toInt),
         CoarseGrainedSchedulerBackend.ENDPOINT_NAME)
     allocator = client.register(driverUrl,
+      driverRef,
       yarnConf,
       _sparkConf,
       if (sc != null) sc.preferredNodeLocationData else Map(),
@@ -254,17 +267,20 @@ private[spark] class ApplicationMaster(
    *
    * In cluster mode, the AM and the driver belong to same process
    * so the AMEndpoint need not monitor lifecycle of the driver.
+   *
+   * @return A reference to the driver's RPC endpoint.
    */
   private def runAMEndpoint(
       host: String,
       port: String,
-      isClusterMode: Boolean): Unit = {
+      isClusterMode: Boolean): RpcEndpointRef = {
     val driverEndpoint = rpcEnv.setupEndpointRef(
       SparkEnv.driverActorSystemName,
       RpcAddress(host, port.toInt),
       YarnSchedulerBackend.ENDPOINT_NAME)
     amEndpoint =
       rpcEnv.setupEndpoint("YarnAM", new AMEndpoint(rpcEnv, driverEndpoint, isClusterMode))
+    driverEndpoint
   }
 
   private def runDriver(securityMgr: SecurityManager): Unit = {
@@ -282,11 +298,11 @@ private[spark] class ApplicationMaster(
         "Timed out waiting for SparkContext.")
     } else {
       rpcEnv = sc.env.rpcEnv
-      runAMEndpoint(
+      val driverRef = runAMEndpoint(
         sc.getConf.get("spark.driver.host"),
         sc.getConf.get("spark.driver.port"),
         isClusterMode = true)
-      registerAM(rpcEnv, sc.ui.map(_.appUIAddress).getOrElse(""), securityMgr)
+      registerAM(rpcEnv, driverRef, sc.ui.map(_.appUIAddress).getOrElse(""), securityMgr)
       userClassThread.join()
     }
   }
@@ -294,9 +310,9 @@ private[spark] class ApplicationMaster(
   private def runExecutorLauncher(securityMgr: SecurityManager): Unit = {
     val port = sparkConf.getInt("spark.yarn.am.port", 0)
     rpcEnv = RpcEnv.create("sparkYarnAM", Utils.localHostName, port, sparkConf, securityMgr)
-    waitForSparkDriver()
+    val driverRef = waitForSparkDriver()
     addAmIpFilter()
-    registerAM(rpcEnv, sparkConf.get("spark.driver.appUIAddress", ""), securityMgr)
+    registerAM(rpcEnv, driverRef, sparkConf.get("spark.driver.appUIAddress", ""), securityMgr)
 
     // In client mode the actor will stop the reporter thread.
     reporterThread.join()
@@ -420,7 +436,7 @@ private[spark] class ApplicationMaster(
     }
   }
 
-  private def waitForSparkDriver(): Unit = {
+  private def waitForSparkDriver(): RpcEndpointRef = {
     logInfo("Waiting for Spark driver to be reachable.")
     var driverUp = false
     val hostport = args.userArgs(0)
@@ -490,9 +506,11 @@ private[spark] class ApplicationMaster(
         new MutableURLClassLoader(urls, Utils.getContextOrSparkClassLoader)
       }
 
+    var userArgs = args.userArgs
     if (args.primaryPyFile != null && args.primaryPyFile.endsWith(".py")) {
-      System.setProperty("spark.submit.pyFiles",
-        PythonRunner.formatPaths(args.pyFiles).mkString(","))
+      // When running pyspark, the app is run using PythonRunner. The second argument is the list
+      // of files to add to PYTHONPATH, which Client.scala already handles, so it's empty.
+      userArgs = Seq(args.primaryPyFile, "") ++ userArgs
     }
     if (args.primaryRFile != null && args.primaryRFile.endsWith(".R")) {
       // TODO(davies): add R dependencies here
@@ -503,9 +521,7 @@ private[spark] class ApplicationMaster(
     val userThread = new Thread {
       override def run() {
         try {
-          val mainArgs = new Array[String](args.userArgs.size)
-          args.userArgs.copyToArray(mainArgs, 0, args.userArgs.size)
-          mainMethod.invoke(null, mainArgs)
+          mainMethod.invoke(null, userArgs.toArray)
           finish(FinalApplicationStatus.SUCCEEDED, ApplicationMaster.EXIT_SUCCESS)
           logDebug("Done running users class")
         } catch {
@@ -547,11 +563,12 @@ private[spark] class ApplicationMaster(
     }
 
     override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
-      case RequestExecutors(requestedTotal) =>
+      case RequestExecutors(requestedTotal, localityAwareTasks, hostToLocalTaskCount) =>
         Option(allocator) match {
           case Some(a) =>
             allocatorLock.synchronized {
-              if (a.requestTotalExecutors(requestedTotal)) {
+              if (a.requestTotalExecutorsWithPreferredLocalities(requestedTotal,
+                localityAwareTasks, hostToLocalTaskCount)) {
                 allocatorLock.notifyAll()
               }
             }

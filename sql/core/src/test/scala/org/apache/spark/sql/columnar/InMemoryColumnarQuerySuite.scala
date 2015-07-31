@@ -20,9 +20,8 @@ package org.apache.spark.sql.columnar
 import java.sql.{Date, Timestamp}
 
 import org.apache.spark.sql.TestData._
-import org.apache.spark.sql.catalyst.expressions.Row
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.{QueryTest, TestData}
+import org.apache.spark.sql.{QueryTest, Row, TestData}
 import org.apache.spark.storage.StorageLevel.MEMORY_ONLY
 
 class InMemoryColumnarQuerySuite extends QueryTest {
@@ -92,15 +91,18 @@ class InMemoryColumnarQuerySuite extends QueryTest {
   }
 
   test("SPARK-2729 regression: timestamp data type") {
+    val timestamps = (0 to 3).map(i => Tuple1(new Timestamp(i))).toDF("time")
+    timestamps.registerTempTable("timestamps")
+
     checkAnswer(
       sql("SELECT time FROM timestamps"),
-      timestamps.collect().toSeq.map(Row.fromTuple))
+      timestamps.collect().toSeq)
 
     ctx.cacheTable("timestamps")
 
     checkAnswer(
       sql("SELECT time FROM timestamps"),
-      timestamps.collect().toSeq.map(Row.fromTuple))
+      timestamps.collect().toSeq)
   }
 
   test("SPARK-3320 regression: batched column buffer building should work with empty partitions") {
@@ -146,7 +148,7 @@ class InMemoryColumnarQuerySuite extends QueryTest {
     val dataTypes =
       Seq(StringType, BinaryType, NullType, BooleanType,
         ByteType, ShortType, IntegerType, LongType,
-        FloatType, DoubleType, DecimalType.Unlimited, DecimalType(6, 5),
+        FloatType, DoubleType, DecimalType.SYSTEM_DEFAULT, DecimalType(6, 5),
         DateType, TimestampType,
         ArrayType(IntegerType), MapType(StringType, LongType), struct)
     val fields = dataTypes.zipWithIndex.map { case (dataType, index) =>

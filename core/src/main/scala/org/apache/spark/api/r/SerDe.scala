@@ -18,7 +18,7 @@
 package org.apache.spark.api.r
 
 import java.io.{DataInputStream, DataOutputStream}
-import java.sql.{Date, Time}
+import java.sql.{Timestamp, Date, Time}
 
 import scala.collection.JavaConversions._
 
@@ -107,9 +107,12 @@ private[spark] object SerDe {
     Date.valueOf(readString(in))
   }
 
-  def readTime(in: DataInputStream): Time = {
-    val t = in.readDouble()
-    new Time((t * 1000L).toLong)
+  def readTime(in: DataInputStream): Timestamp = {
+    val seconds = in.readDouble()
+    val sec = Math.floor(seconds).toLong
+    val t = new Timestamp(sec * 1000L)
+    t.setNanos(((seconds - sec) * 1e9).toInt)
+    t
   }
 
   def readBytesArr(in: DataInputStream): Array[Array[Byte]] = {
@@ -176,6 +179,7 @@ private[spark] object SerDe {
   // Int -> integer
   // String -> character
   // Boolean -> logical
+  // Float -> double
   // Double -> double
   // Long -> double
   // Array[Byte] -> raw
@@ -212,6 +216,9 @@ private[spark] object SerDe {
         case "long" | "java.lang.Long" =>
           writeType(dos, "double")
           writeDouble(dos, value.asInstanceOf[Long].toDouble)
+        case "float" | "java.lang.Float" =>
+          writeType(dos, "double")
+          writeDouble(dos, value.asInstanceOf[Float].toDouble)
         case "double" | "java.lang.Double" =>
           writeType(dos, "double")
           writeDouble(dos, value.asInstanceOf[Double])
@@ -227,6 +234,9 @@ private[spark] object SerDe {
         case "java.sql.Time" =>
           writeType(dos, "time")
           writeTime(dos, value.asInstanceOf[Time])
+        case "java.sql.Timestamp" =>
+          writeType(dos, "time")
+          writeTime(dos, value.asInstanceOf[Timestamp])
         case "[B" =>
           writeType(dos, "raw")
           writeBytes(dos, value.asInstanceOf[Array[Byte]])
@@ -289,6 +299,9 @@ private[spark] object SerDe {
     out.writeDouble(value.getTime.toDouble / 1000.0)
   }
 
+  def writeTime(out: DataOutputStream, value: Timestamp): Unit = {
+    out.writeDouble((value.getTime / 1000).toDouble + value.getNanos.toDouble / 1e9)
+  }
 
   // NOTE: Only works for ASCII right now
   def writeString(out: DataOutputStream, value: String): Unit = {

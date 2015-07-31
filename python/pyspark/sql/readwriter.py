@@ -73,6 +73,13 @@ class DataFrameReader(object):
         self._jreader = self._jreader.schema(jschema)
         return self
 
+    @since(1.5)
+    def option(self, key, value):
+        """Adds an input option for the underlying data source.
+        """
+        self._jreader = self._jreader.option(key, value)
+        return self
+
     @since(1.4)
     def options(self, **options):
         """Adds input options for the underlying data source.
@@ -139,14 +146,28 @@ class DataFrameReader(object):
         return self._df(self._jreader.table(tableName))
 
     @since(1.4)
-    def parquet(self, *path):
+    def parquet(self, *paths):
         """Loads a Parquet file, returning the result as a :class:`DataFrame`.
 
         >>> df = sqlContext.read.parquet('python/test_support/sql/parquet_partitioned')
         >>> df.dtypes
         [('name', 'string'), ('year', 'int'), ('month', 'int'), ('day', 'int')]
         """
-        return self._df(self._jreader.parquet(_to_seq(self._sqlContext._sc, path)))
+        return self._df(self._jreader.parquet(_to_seq(self._sqlContext._sc, paths)))
+
+    @since(1.5)
+    def orc(self, path):
+        """
+        Loads an ORC file, returning the result as a :class:`DataFrame`.
+
+        ::Note: Currently ORC support is only available together with
+        :class:`HiveContext`.
+
+        >>> df = hiveContext.read.orc('python/test_support/sql/orc_partitioned')
+        >>> df.dtypes
+        [('a', 'bigint'), ('b', 'int'), ('c', 'int')]
+        """
+        return self._df(self._jreader.orc(path))
 
     @since(1.4)
     def jdbc(self, url, table, column=None, lowerBound=None, upperBound=None, numPartitions=None,
@@ -218,7 +239,10 @@ class DataFrameWriter(object):
 
         >>> df.write.mode('append').parquet(os.path.join(tempfile.mkdtemp(), 'data'))
         """
-        self._jwrite = self._jwrite.mode(saveMode)
+        # At the JVM side, the default value of mode is already set to "error".
+        # So, if the given saveMode is None, we will not call JVM-side's mode method.
+        if saveMode is not None:
+            self._jwrite = self._jwrite.mode(saveMode)
         return self
 
     @since(1.4)
@@ -230,6 +254,13 @@ class DataFrameWriter(object):
         >>> df.write.format('json').save(os.path.join(tempfile.mkdtemp(), 'data'))
         """
         self._jwrite = self._jwrite.format(source)
+        return self
+
+    @since(1.5)
+    def option(self, key, value):
+        """Adds an output option for the underlying data source.
+        """
+        self._jwrite = self._jwrite.option(key, value)
         return self
 
     @since(1.4)
@@ -257,7 +288,7 @@ class DataFrameWriter(object):
         return self
 
     @since(1.4)
-    def save(self, path=None, format=None, mode="error", **options):
+    def save(self, path=None, format=None, mode=None, partitionBy=None, **options):
         """Saves the contents of the :class:`DataFrame` to a data source.
 
         The data source is specified by the ``format`` and a set of ``options``.
@@ -272,11 +303,14 @@ class DataFrameWriter(object):
             * ``overwrite``: Overwrite existing data.
             * ``ignore``: Silently ignore this operation if data already exists.
             * ``error`` (default case): Throw an exception if data already exists.
+        :param partitionBy: names of partitioning columns
         :param options: all other string options
 
         >>> df.write.mode('append').parquet(os.path.join(tempfile.mkdtemp(), 'data'))
         """
         self.mode(mode).options(**options)
+        if partitionBy is not None:
+            self.partitionBy(partitionBy)
         if format is not None:
             self.format(format)
         if path is None:
@@ -296,7 +330,7 @@ class DataFrameWriter(object):
         self._jwrite.mode("overwrite" if overwrite else "append").insertInto(tableName)
 
     @since(1.4)
-    def saveAsTable(self, name, format=None, mode="error", **options):
+    def saveAsTable(self, name, format=None, mode=None, partitionBy=None, **options):
         """Saves the content of the :class:`DataFrame` as the specified table.
 
         In the case the table already exists, behavior of this function depends on the
@@ -312,15 +346,18 @@ class DataFrameWriter(object):
         :param name: the table name
         :param format: the format used to save
         :param mode: one of `append`, `overwrite`, `error`, `ignore` (default: error)
+        :param partitionBy: names of partitioning columns
         :param options: all other string options
         """
         self.mode(mode).options(**options)
+        if partitionBy is not None:
+            self.partitionBy(partitionBy)
         if format is not None:
             self.format(format)
         self._jwrite.saveAsTable(name)
 
     @since(1.4)
-    def json(self, path, mode="error"):
+    def json(self, path, mode=None):
         """Saves the content of the :class:`DataFrame` in JSON format at the specified path.
 
         :param path: the path in any Hadoop supported file system
@@ -333,10 +370,10 @@ class DataFrameWriter(object):
 
         >>> df.write.json(os.path.join(tempfile.mkdtemp(), 'data'))
         """
-        self._jwrite.mode(mode).json(path)
+        self.mode(mode)._jwrite.json(path)
 
     @since(1.4)
-    def parquet(self, path, mode="error"):
+    def parquet(self, path, mode=None, partitionBy=None):
         """Saves the content of the :class:`DataFrame` in Parquet format at the specified path.
 
         :param path: the path in any Hadoop supported file system
@@ -346,13 +383,40 @@ class DataFrameWriter(object):
             * ``overwrite``: Overwrite existing data.
             * ``ignore``: Silently ignore this operation if data already exists.
             * ``error`` (default case): Throw an exception if data already exists.
+        :param partitionBy: names of partitioning columns
 
         >>> df.write.parquet(os.path.join(tempfile.mkdtemp(), 'data'))
         """
-        self._jwrite.mode(mode).parquet(path)
+        self.mode(mode)
+        if partitionBy is not None:
+            self.partitionBy(partitionBy)
+        self._jwrite.parquet(path)
+
+    def orc(self, path, mode=None, partitionBy=None):
+        """Saves the content of the :class:`DataFrame` in ORC format at the specified path.
+
+        ::Note: Currently ORC support is only available together with
+        :class:`HiveContext`.
+
+        :param path: the path in any Hadoop supported file system
+        :param mode: specifies the behavior of the save operation when data already exists.
+
+            * ``append``: Append contents of this :class:`DataFrame` to existing data.
+            * ``overwrite``: Overwrite existing data.
+            * ``ignore``: Silently ignore this operation if data already exists.
+            * ``error`` (default case): Throw an exception if data already exists.
+        :param partitionBy: names of partitioning columns
+
+        >>> orc_df = hiveContext.read.orc('python/test_support/sql/orc_partitioned')
+        >>> orc_df.write.orc(os.path.join(tempfile.mkdtemp(), 'data'))
+        """
+        self.mode(mode)
+        if partitionBy is not None:
+            self.partitionBy(partitionBy)
+        self._jwrite.orc(path)
 
     @since(1.4)
-    def jdbc(self, url, table, mode="error", properties={}):
+    def jdbc(self, url, table, mode=None, properties={}):
         """Saves the content of the :class:`DataFrame` to a external database table via JDBC.
 
         .. note:: Don't create too many partitions in parallel on a large cluster;\
@@ -381,7 +445,7 @@ def _test():
     import os
     import tempfile
     from pyspark.context import SparkContext
-    from pyspark.sql import Row, SQLContext
+    from pyspark.sql import Row, SQLContext, HiveContext
     import pyspark.sql.readwriter
 
     os.chdir(os.environ["SPARK_HOME"])
@@ -393,6 +457,7 @@ def _test():
     globs['os'] = os
     globs['sc'] = sc
     globs['sqlContext'] = SQLContext(sc)
+    globs['hiveContext'] = HiveContext(sc)
     globs['df'] = globs['sqlContext'].read.parquet('python/test_support/sql/parquet_partitioned')
 
     (failure_count, test_count) = doctest.testmod(

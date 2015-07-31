@@ -10,6 +10,16 @@ export("sparkR.init")
 export("sparkR.stop")
 export("print.jobj")
 
+# MLlib integration
+exportMethods("glm",
+              "predict",
+              "summary")
+
+# Job group lifecycle management methods
+export("setJobGroup",
+       "clearJobGroup",
+       "cancelJobGroup")
+
 exportClasses("DataFrame")
 
 exportMethods("arrange",
@@ -17,6 +27,7 @@ exportMethods("arrange",
               "collect",
               "columns",
               "count",
+              "crosstab",
               "describe",
               "distinct",
               "dropna",
@@ -72,6 +83,7 @@ exportMethods("abs",
               "atan",
               "atan2",
               "avg",
+              "between",
               "cast",
               "cbrt",
               "ceiling",

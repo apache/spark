@@ -17,54 +17,52 @@
 
 package org.apache.spark.sql.catalyst.expressions.codegen
 
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 
 /**
  * Interface for generated predicate
  */
 abstract class Predicate {
-  def eval(r: Row): Boolean
+  def eval(r: InternalRow): Boolean
 }
 
 /**
- * Generates bytecode that evaluates a boolean [[Expression]] on a given input [[Row]].
+ * Generates bytecode that evaluates a boolean [[Expression]] on a given input [[InternalRow]].
  */
-object GeneratePredicate extends CodeGenerator[Expression, (Row) => Boolean] {
+object GeneratePredicate extends CodeGenerator[Expression, (InternalRow) => Boolean] {
 
   protected def canonicalize(in: Expression): Expression = ExpressionCanonicalizer.execute(in)
 
   protected def bind(in: Expression, inputSchema: Seq[Attribute]): Expression =
     BindReferences.bindReference(in, inputSchema)
 
-  protected def create(predicate: Expression): ((Row) => Boolean) = {
+  protected def create(predicate: Expression): ((InternalRow) => Boolean) = {
     val ctx = newCodeGenContext()
     val eval = predicate.gen(ctx)
     val code = s"""
-      import org.apache.spark.sql.Row;
-
       public SpecificPredicate generate($exprType[] expr) {
         return new SpecificPredicate(expr);
       }
 
       class SpecificPredicate extends ${classOf[Predicate].getName} {
         private final $exprType[] expressions;
+        ${declareMutableStates(ctx)}
         public SpecificPredicate($exprType[] expr) {
           expressions = expr;
+          ${initMutableStates(ctx)}
         }
 
         @Override
-        public boolean eval(Row i) {
+        public boolean eval(InternalRow i) {
           ${eval.code}
           return !${eval.isNull} && ${eval.primitive};
         }
       }"""
 
-    logDebug(s"Generated predicate '$predicate':\n$code")
+    logDebug(s"Generated predicate '$predicate':\n${CodeFormatter.format(code)}")
 
-    val c = compile(code)
-    // fetch the only one method `generate(Expression[])`
-    val m = c.getDeclaredMethods()(0)
-    val p = m.invoke(c.newInstance(), ctx.references.toArray).asInstanceOf[Predicate]
-    (r: Row) => p.eval(r)
+    val p = compile(code).generate(ctx.references.toArray).asInstanceOf[Predicate]
+    (r: InternalRow) => p.eval(r)
   }
 }

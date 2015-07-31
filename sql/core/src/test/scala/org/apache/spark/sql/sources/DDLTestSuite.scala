@@ -19,7 +19,9 @@ package org.apache.spark.sql.sources
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
 class DDLScanSource extends RelationProvider {
   override def createRelation(
@@ -42,7 +44,7 @@ case class SimpleDDLScan(from: Int, to: Int, table: String)(@transient val sqlCo
       StructField("doubleType", DoubleType, nullable = false),
       StructField("bigintType", LongType, nullable = false),
       StructField("tinyintType", ByteType, nullable = false),
-      StructField("decimalType", DecimalType.Unlimited, nullable = false),
+      StructField("decimalType", DecimalType.USER_DEFAULT, nullable = false),
       StructField("fixedDecimalType", DecimalType(5, 1), nullable = false),
       StructField("binaryType", BinaryType, nullable = false),
       StructField("booleanType", BooleanType, nullable = false),
@@ -56,9 +58,13 @@ case class SimpleDDLScan(from: Int, to: Int, table: String)(@transient val sqlCo
       )
     ))
 
+  override def needConversion: Boolean = false
 
   override def buildScan(): RDD[Row] = {
-    sqlContext.sparkContext.parallelize(from to to).map(e => Row(s"people$e", e * 2))
+    // Rely on a type erasure hack to pass RDD[InternalRow] back as RDD[Row]
+    sqlContext.sparkContext.parallelize(from to to).map { e =>
+      InternalRow(UTF8String.fromString(s"people$e"), e * 2)
+    }.asInstanceOf[RDD[Row]]
   }
 }
 

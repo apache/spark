@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples.ml
 
 import scala.collection.mutable
@@ -145,9 +146,9 @@ object LogisticRegressionExample {
     val elapsedTime = (System.nanoTime() - startTime) / 1e9
     println(s"Training time: $elapsedTime seconds")
 
-    val lirModel = pipelineModel.stages.last.asInstanceOf[LogisticRegressionModel]
+    val lorModel = pipelineModel.stages.last.asInstanceOf[LogisticRegressionModel]
     // Print the weights and intercept for logistic regression.
-    println(s"Weights: ${lirModel.weights} Intercept: ${lirModel.intercept}")
+    println(s"Weights: ${lorModel.weights} Intercept: ${lorModel.intercept}")
 
     println("Training data results:")
     DecisionTreeExample.evaluateClassificationModel(pipelineModel, training, "indexedLabel")
@@ -157,3 +158,4 @@ object LogisticRegressionExample {
     sc.stop()
   }
 }
+// scalastyle:on println

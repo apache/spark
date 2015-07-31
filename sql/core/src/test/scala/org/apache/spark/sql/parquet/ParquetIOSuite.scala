@@ -32,14 +32,12 @@ import org.apache.parquet.hadoop.metadata.{CompressionCodecName, FileMetaData, P
 import org.apache.parquet.hadoop.{Footer, ParquetFileWriter, ParquetOutputCommitter, ParquetWriter}
 import org.apache.parquet.io.api.RecordConsumer
 import org.apache.parquet.schema.{MessageType, MessageTypeParser}
-import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.SparkException
+import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.ScalaReflection
-import org.apache.spark.sql.catalyst.expressions.Row
-import org.apache.spark.sql.catalyst.util.DateUtils
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.{DataFrame, QueryTest, SQLConf, SaveMode}
 
 // Write support class for nested groups: ParquetWriter initializes GroupWriteSupport
 // with an empty configuration (it is after all not intended to be used in this way?)
@@ -64,7 +62,7 @@ private[parquet] class TestGroupWriteSupport(schema: MessageType) extends WriteS
 /**
  * A test suite that tests basic Parquet I/O.
  */
-class ParquetIOSuiteBase extends QueryTest with ParquetTest {
+class ParquetIOSuite extends QueryTest with ParquetTest {
   lazy val sqlContext = org.apache.spark.sql.test.TestSQLContext
   import sqlContext.implicits._
 
@@ -95,12 +93,11 @@ class ParquetIOSuiteBase extends QueryTest with ParquetTest {
     val data = (1 to 4).map(i => Tuple1(i.toString))
     // Property spark.sql.parquet.binaryAsString shouldn't affect Parquet files written by Spark SQL
     // as we store Spark SQL schema in the extra metadata.
-    withSQLConf(SQLConf.PARQUET_BINARY_AS_STRING -> "false")(checkParquetFile(data))
-    withSQLConf(SQLConf.PARQUET_BINARY_AS_STRING -> "true")(checkParquetFile(data))
+    withSQLConf(SQLConf.PARQUET_BINARY_AS_STRING.key -> "false")(checkParquetFile(data))
+    withSQLConf(SQLConf.PARQUET_BINARY_AS_STRING.key -> "true")(checkParquetFile(data))
   }
 
   test("fixed-length decimals") {
-
     def makeDecimalRDD(decimal: DecimalType): DataFrame =
       sqlContext.sparkContext
         .parallelize(0 to 1000)
@@ -109,27 +106,11 @@ class ParquetIOSuiteBase extends QueryTest with ParquetTest {
         // Parquet doesn't allow column names with spaces, have to add an alias here
         .select($"_1" cast decimal as "dec")
 
-    for ((precision, scale) <- Seq((5, 2), (1, 0), (1, 1), (18, 10), (18, 17))) {
+    for ((precision, scale) <- Seq((5, 2), (1, 0), (1, 1), (18, 10), (18, 17), (19, 0), (38, 37))) {
       withTempPath { dir =>
         val data = makeDecimalRDD(DecimalType(precision, scale))
         data.write.parquet(dir.getCanonicalPath)
         checkAnswer(sqlContext.read.parquet(dir.getCanonicalPath), data.collect().toSeq)
-      }
-    }
-
-    // Decimals with precision above 18 are not yet supported
-    intercept[Throwable] {
-      withTempPath { dir =>
-        makeDecimalRDD(DecimalType(19, 10)).write.parquet(dir.getCanonicalPath)
-        sqlContext.read.parquet(dir.getCanonicalPath).collect()
-      }
-    }
-
-    // Unlimited-length decimals are not yet supported
-    intercept[Throwable] {
-      withTempPath { dir =>
-        makeDecimalRDD(DecimalType.Unlimited).write.parquet(dir.getCanonicalPath)
-        sqlContext.read.parquet(dir.getCanonicalPath).collect()
       }
     }
   }
@@ -138,7 +119,7 @@ class ParquetIOSuiteBase extends QueryTest with ParquetTest {
     def makeDateRDD(): DataFrame =
       sqlContext.sparkContext
         .parallelize(0 to 1000)
-        .map(i => Tuple1(DateUtils.toJavaDate(i)))
+        .map(i => Tuple1(DateTimeUtils.toJavaDate(i)))
         .toDF()
         .select($"_1")
 
@@ -156,6 +137,11 @@ class ParquetIOSuiteBase extends QueryTest with ParquetTest {
 
   test("array") {
     val data = (1 to 4).map(i => Tuple1(Seq(i, i + 1)))
+    checkParquetFile(data)
+  }
+
+  test("array and double") {
+    val data = (1 to 4).map(i => (i.toDouble, Seq(i.toDouble, (i + 1).toDouble)))
     checkParquetFile(data)
   }
 
@@ -232,7 +218,7 @@ class ParquetIOSuiteBase extends QueryTest with ParquetTest {
     val data = (0 until 10).map(i => (i, i.toString))
 
     def checkCompressionCodec(codec: CompressionCodecName): Unit = {
-      withSQLConf(SQLConf.PARQUET_COMPRESSION -> codec.name()) {
+      withSQLConf(SQLConf.PARQUET_COMPRESSION.key -> codec.name()) {
         withParquetFile(data) { path =>
           assertResult(sqlContext.conf.parquetCompressionCodec.toUpperCase) {
             compressionCodecFor(path)
@@ -362,7 +348,7 @@ class ParquetIOSuiteBase extends QueryTest with ParquetTest {
       """.stripMargin)
 
     withTempPath { location =>
-      val extraMetadata = Map(RowReadSupport.SPARK_METADATA_KEY -> sparkSchema.toString)
+      val extraMetadata = Map(CatalystReadSupport.SPARK_METADATA_KEY -> sparkSchema.toString)
       val fileMetadata = new FileMetaData(parquetSchema, extraMetadata, "Spark")
       val path = new Path(location.getCanonicalPath)
 
@@ -409,7 +395,7 @@ class ParquetIOSuiteBase extends QueryTest with ParquetTest {
       val clonedConf = new Configuration(configuration)
 
       configuration.set(
-        SQLConf.OUTPUT_COMMITTER_CLASS, classOf[ParquetOutputCommitter].getCanonicalName)
+        SQLConf.OUTPUT_COMMITTER_CLASS.key, classOf[ParquetOutputCommitter].getCanonicalName)
 
       configuration.set(
         "spark.sql.parquet.output.committer.class",
@@ -427,26 +413,6 @@ class ParquetIOSuiteBase extends QueryTest with ParquetTest {
       }
     }
   }
-}
-
-class BogusParquetOutputCommitter(outputPath: Path, context: TaskAttemptContext)
-  extends ParquetOutputCommitter(outputPath, context) {
-
-  override def commitJob(jobContext: JobContext): Unit = {
-    sys.error("Intentional exception for testing purposes")
-  }
-}
-
-class ParquetDataSourceOnIOSuite extends ParquetIOSuiteBase with BeforeAndAfterAll {
-  private lazy val originalConf = sqlContext.conf.parquetUseDataSourceApi
-
-  override protected def beforeAll(): Unit = {
-    sqlContext.conf.setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, "true")
-  }
-
-  override protected def afterAll(): Unit = {
-    sqlContext.setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, originalConf.toString)
-  }
 
   test("SPARK-6330 regression test") {
     // In 1.3.0, save to fs other than file: without configuring core-site.xml would get:
@@ -461,14 +427,10 @@ class ParquetDataSourceOnIOSuite extends ParquetIOSuiteBase with BeforeAndAfterA
   }
 }
 
-class ParquetDataSourceOffIOSuite extends ParquetIOSuiteBase with BeforeAndAfterAll {
-  private lazy val originalConf = sqlContext.conf.parquetUseDataSourceApi
+class BogusParquetOutputCommitter(outputPath: Path, context: TaskAttemptContext)
+  extends ParquetOutputCommitter(outputPath, context) {
 
-  override protected def beforeAll(): Unit = {
-    sqlContext.conf.setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, "false")
-  }
-
-  override protected def afterAll(): Unit = {
-    sqlContext.setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, originalConf.toString)
+  override def commitJob(jobContext: JobContext): Unit = {
+    sys.error("Intentional exception for testing purposes")
   }
 }

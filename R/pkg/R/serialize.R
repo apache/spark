@@ -140,8 +140,8 @@ writeType <- function(con, class) {
                  jobj = "j",
                  environment = "e",
                  Date = "D",
-                 POSIXlt = 't',
-                 POSIXct = 't',
+                 POSIXlt = "t",
+                 POSIXct = "t",
                  stop(paste("Unsupported type for serialization", class)))
   writeBin(charToRaw(type), con)
 }
@@ -175,7 +175,7 @@ writeGenericList <- function(con, list) {
     writeObject(con, elem)
   }
 }
-  
+
 # Used to pass in hash maps required on Java side.
 writeEnv <- function(con, env) {
   len <- length(env)

@@ -66,9 +66,7 @@ abstract class PipelineStage extends Params with Logging {
     outputSchema
   }
 
-  override def copy(extra: ParamMap): PipelineStage = {
-    super.copy(extra).asInstanceOf[PipelineStage]
-  }
+  override def copy(extra: ParamMap): PipelineStage
 }
 
 /**
@@ -97,6 +95,8 @@ class Pipeline(override val uid: String) extends Estimator[PipelineModel] {
   /** @group setParam */
   def setStages(value: Array[PipelineStage]): this.type = { set(stages, value); this }
 
+  // Below, we clone stages so that modifications to the list of stages will not change
+  // the Param value in the Pipeline.
   /** @group getParam */
   def getStages: Array[PipelineStage] = $(stages).clone()
 
@@ -198,6 +198,6 @@ class PipelineModel private[ml] (
   }
 
   override def copy(extra: ParamMap): PipelineModel = {
-    new PipelineModel(uid, stages)
+    new PipelineModel(uid, stages.map(_.copy(extra)))
   }
 }
