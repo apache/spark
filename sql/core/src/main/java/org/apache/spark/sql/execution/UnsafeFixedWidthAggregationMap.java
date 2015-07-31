@@ -155,6 +155,16 @@ public final class UnsafeFixedWidthAggregationMap {
     return currentAggregationBuffer;
   }
 
+  public boolean contains(InternalRow groupingKey) {
+    final UnsafeRow unsafeGroupingKeyRow = this.groupingKeyProjection.apply(groupingKey);
+    // Probe our map using the serialized key
+    final BytesToBytesMap.Location loc = map.lookup(
+      unsafeGroupingKeyRow.getBaseObject(),
+      unsafeGroupingKeyRow.getBaseOffset(),
+      unsafeGroupingKeyRow.getSizeInBytes());
+    return loc.isDefined();
+  }
+
   /**
    * Returns an iterator over the keys and values in this map.
    *

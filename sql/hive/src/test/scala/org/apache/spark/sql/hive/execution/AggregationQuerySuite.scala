@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.hive.execution
 
-import org.apache.spark.sql.execution.aggregate.Aggregate2Sort
+import org.apache.spark.sql.execution.aggregate
 import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
@@ -454,54 +454,54 @@ class AggregationQuerySuite extends QueryTest with SQLTestUtils with BeforeAndAf
   }
 
   test("error handling") {
-    sqlContext.sql(s"set spark.sql.useAggregate2=false")
-    var errorMessage = intercept[AnalysisException] {
-      sqlContext.sql(
+    withSQLConf("spark.sql.useAggregate2" -> "false") {
+      val errorMessage = intercept[AnalysisException] {
+        sqlContext.sql(
+          """
+            |SELECT
+            |  key,
+            |  sum(value + 1.5 * key),
+            |  mydoublesum(value),
+            |  mydoubleavg(value)
+            |FROM agg1
+            |GROUP BY key
+          """.stripMargin).collect()
+      }.getMessage
+      assert(errorMessage.contains("implemented based on the new Aggregate Function interface"))
+    }
+
+    // TODO: once we support Hive UDAF in the new interface,
+    // we can remove the following two tests.
+    withSQLConf("spark.sql.useAggregate2" -> "true") {
+      val errorMessage = intercept[AnalysisException] {
+        sqlContext.sql(
+          """
+            |SELECT
+            |  key,
+            |  mydoublesum(value + 1.5 * key),
+            |  stddev_samp(value)
+            |FROM agg1
+            |GROUP BY key
+          """.stripMargin).collect()
+      }.getMessage
+      assert(errorMessage.contains("implemented based on the new Aggregate Function interface"))
+
+      // This will fall back to the old aggregate
+      val newAggregateOperators = sqlContext.sql(
         """
           |SELECT
           |  key,
           |  sum(value + 1.5 * key),
-          |  mydoublesum(value),
-          |  mydoubleavg(value)
-          |FROM agg1
-          |GROUP BY key
-        """.stripMargin).collect()
-    }.getMessage
-    assert(errorMessage.contains("implemented based on the new Aggregate Function interface"))
-
-    // TODO: once we support Hive UDAF in the new interface,
-    // we can remove the following two tests.
-    sqlContext.sql(s"set spark.sql.useAggregate2=true")
-    errorMessage = intercept[AnalysisException] {
-      sqlContext.sql(
-        """
-          |SELECT
-          |  key,
-          |  mydoublesum(value + 1.5 * key),
           |  stddev_samp(value)
           |FROM agg1
           |GROUP BY key
-        """.stripMargin).collect()
-    }.getMessage
-    assert(errorMessage.contains("implemented based on the new Aggregate Function interface"))
-
-    // This will fall back to the old aggregate
-    val newAggregateOperators = sqlContext.sql(
-      """
-        |SELECT
-        |  key,
-        |  sum(value + 1.5 * key),
-        |  stddev_samp(value)
-        |FROM agg1
-        |GROUP BY key
-      """.stripMargin).queryExecution.executedPlan.collect {
-      case agg: Aggregate2Sort => agg
+        """.stripMargin).queryExecution.executedPlan.collect {
+        case agg: aggregate.Aggregate => agg
+      }
+      val message =
+        "We should fallback to the old aggregation code path if " +
+          "there is any aggregate function that cannot be converted to the new interface."
+      assert(newAggregateOperators.isEmpty, message)
     }
-    val message =
-      "We should fallback to the old aggregation code path if there is any aggregate function " +
-        "that cannot be converted to the new interface."
-    assert(newAggregateOperators.isEmpty, message)
-
-    sqlContext.sql(s"set spark.sql.useAggregate2=true")
   }
 }

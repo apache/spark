@@ -150,4 +150,33 @@ object TungstenSort {
   def supportsSchema(schema: StructType): Boolean = {
     UnsafeExternalRowSorter.supportsSchema(schema)
   }
+
+  def doSort(
+      iterator: Iterator[InternalRow],
+      sortOrder: Seq[SortOrder],
+      newOrdering: (Seq[SortOrder], Seq[Attribute]) => Ordering[InternalRow],
+      inputAttributes: Seq[Attribute],
+      testSpillFrequency: Int = 0): Iterator[InternalRow] = {
+    val ordering = newOrdering(sortOrder, inputAttributes)
+
+    val boundSortExpression = BindReferences.bindReference(sortOrder.head, inputAttributes)
+    val prefixComparator = SortPrefixUtils.getPrefixComparator(boundSortExpression)
+
+    val prefixProjection = UnsafeProjection.create(Seq(SortPrefix(boundSortExpression)))
+    val prefixComputer = new UnsafeExternalRowSorter.PrefixComputer {
+      override def computePrefix(row: InternalRow): Long = {
+        prefixProjection.apply(row).getLong(0)
+      }
+    }
+    val sorter =
+      new UnsafeExternalRowSorter(
+        StructType.fromAttributes(inputAttributes),
+        ordering,
+        prefixComparator,
+        prefixComputer)
+    if (testSpillFrequency > 0) {
+      sorter.setTestSpillFrequency(testSpillFrequency)
+    }
+    sorter.sort(iterator.asInstanceOf[Iterator[UnsafeRow]])
+  }
 }
