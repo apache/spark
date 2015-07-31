@@ -94,6 +94,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
   versions.foreach { version =>
     test(s"$version: create client") {
       client = null
+      System.gc() // Hack to avoid SEGV on some JVM versions.
       client = IsolatedClientLoader.forVersion(version, buildConf(), ivyPath).client
     }
 

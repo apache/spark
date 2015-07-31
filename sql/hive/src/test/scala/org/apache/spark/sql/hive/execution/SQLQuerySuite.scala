@@ -67,6 +67,25 @@ class MyDialect extends DefaultParserDialect
 class SQLQuerySuite extends QueryTest with SQLTestUtils {
   override def sqlContext: SQLContext = TestHive
 
+  test("UDTF") {
+    sql(s"ADD JAR ${TestHive.getHiveFile("TestUDTF.jar").getCanonicalPath()}")
+    // The function source code can be found at:
+    // https://cwiki.apache.org/confluence/display/Hive/DeveloperGuide+UDTF
+    sql(
+      """
+        |CREATE TEMPORARY FUNCTION udtf_count2
+        |AS 'org.apache.spark.sql.hive.execution.GenericUDTFCount2'
+      """.stripMargin)
+
+    checkAnswer(
+      sql("SELECT key, cc FROM src LATERAL VIEW udtf_count2(value) dd AS cc"),
+      Row(97, 500) :: Row(97, 500) :: Nil)
+
+    checkAnswer(
+      sql("SELECT udtf_count2(a) FROM (SELECT 1 AS a FROM src LIMIT 3) t"),
+      Row(3) :: Row(3) :: Nil)
+  }
+
   test("SPARK-6835: udtf in lateral view") {
     val df = Seq((1, 1)).toDF("c1", "c2")
     df.registerTempTable("table1")

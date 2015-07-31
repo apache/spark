@@ -29,6 +29,7 @@ import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.hive.common.StatsSetupConst
 import org.apache.hadoop.hive.common.`type`.HiveDecimal
 import org.apache.hadoop.hive.conf.HiveConf
+import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hadoop.hive.ql.metadata.Table
 import org.apache.hadoop.hive.ql.parse.VariableSubstitution
 import org.apache.hadoop.hive.ql.session.SessionState
@@ -163,6 +164,16 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) with Logging {
       initClassLoader = Utils.getContextOrSparkClassLoader)
   }
   SessionState.setCurrentSessionState(executionHive.state)
+
+  /**
+   * Overrides default Hive configurations to avoid breaking changes to Spark SQL users.
+   *  - allow SQL11 keywords to be used as identifiers
+   */
+  private[sql] def defaultOverides() = {
+    setConf(ConfVars.HIVE_SUPPORT_SQL11_RESERVED_KEYWORDS.varname, "false")
+  }
+
+  defaultOverides()
 
   /**
    * The copy of the Hive client that is used to retrieve metadata from the Hive MetaStore.
