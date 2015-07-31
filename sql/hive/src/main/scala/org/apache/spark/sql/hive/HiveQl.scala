@@ -874,15 +874,15 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
             }
 
             def matchSerDe(clause: Seq[ASTNode])
-              : (Seq[(String, String)], String, Seq[(String, String)]) = clause match {
+              : (Seq[(String, String)], Option[String], Seq[(String, String)]) = clause match {
               case Token("TOK_SERDEPROPS", propsClause) :: Nil =>
                 val rowFormat = propsClause.map {
                   case Token(name, Token(value, Nil) :: Nil) => (name, value)
                 }
-                (rowFormat, "", Nil)
+                (rowFormat, None, Nil)
 
               case Token("TOK_SERDENAME", Token(serdeClass, Nil) :: Nil) :: Nil =>
-                (Nil, serdeClass, Nil)
+                (Nil, Some(BaseSemanticAnalyzer.unescapeSQLString(serdeClass)), Nil)
 
               case Token("TOK_SERDENAME", Token(serdeClass, Nil) ::
                 Token("TOK_TABLEPROPERTIES",
@@ -891,9 +891,9 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
                   case Token("TOK_TABLEPROPERTY", Token(name, Nil) :: Token(value, Nil) :: Nil) =>
                     (name, value)
                 }
-                (Nil, serdeClass, serdeProps)
+                (Nil, Some(BaseSemanticAnalyzer.unescapeSQLString(serdeClass)), serdeProps)
 
-              case Nil => (Nil, "", Nil)
+              case Nil => (Nil, None, Nil)
             }
 
             val (inRowFormat, inSerdeClass, inSerdeProps) = matchSerDe(inputSerdeClause)

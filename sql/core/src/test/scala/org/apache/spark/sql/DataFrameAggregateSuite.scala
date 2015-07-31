@@ -19,7 +19,7 @@ package org.apache.spark.sql
 
 import org.apache.spark.sql.TestData._
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.types.DecimalType
+import org.apache.spark.sql.types.{BinaryType, DecimalType}
 
 
 class DataFrameAggregateSuite extends QueryTest {
@@ -191,4 +191,13 @@ class DataFrameAggregateSuite extends QueryTest {
       Row(null))
   }
 
+  test("aggregation can't work on binary type") {
+    val df = Seq(1, 1, 2, 2).map(i => Tuple1(i.toString)).toDF("c").select($"c" cast BinaryType)
+    intercept[AnalysisException] {
+      df.groupBy("c").agg(count("*"))
+    }
+    intercept[AnalysisException] {
+      df.distinct
+    }
+  }
 }

@@ -274,9 +274,9 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
     val metastoreSchema = StructType.fromAttributes(metastoreRelation.output)
     val mergeSchema = hive.convertMetastoreParquetWithSchemaMerging
 
-    // NOTE: Instead of passing Metastore schema directly to `ParquetRelation2`, we have to
+    // NOTE: Instead of passing Metastore schema directly to `ParquetRelation`, we have to
     // serialize the Metastore schema to JSON and pass it as a data source option because of the
-    // evil case insensitivity issue, which is reconciled within `ParquetRelation2`.
+    // evil case insensitivity issue, which is reconciled within `ParquetRelation`.
     val parquetOptions = Map(
       ParquetRelation.METASTORE_SCHEMA -> metastoreSchema.json,
       ParquetRelation.MERGE_SCHEMA -> mergeSchema.toString)
@@ -290,7 +290,7 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
         partitionSpecInMetastore: Option[PartitionSpec]): Option[LogicalRelation] = {
       cachedDataSourceTables.getIfPresent(tableIdentifier) match {
         case null => None // Cache miss
-        case logical@LogicalRelation(parquetRelation: ParquetRelation) =>
+        case logical @ LogicalRelation(parquetRelation: ParquetRelation) =>
           // If we have the same paths, same schema, and same partition spec,
           // we will use the cached Parquet Relation.
           val useCached =
@@ -678,8 +678,18 @@ private[hive] case class MetastoreRelation
     }
   )
 
+  // When metastore partition pruning is turned off, we cache the list of all partitions to
+  // mimic the behavior of Spark < 1.5
+  lazy val allPartitions = table.getAllPartitions
+
   def getHiveQlPartitions(predicates: Seq[Expression] = Nil): Seq[Partition] = {
-    table.getPartitions(predicates).map { p =>
+    val rawPartitions = if (sqlContext.conf.metastorePartitionPruning) {
+      table.getPartitions(predicates)
+    } else {
+      allPartitions
+    }
+
+    rawPartitions.map { p =>
       val tPartition = new org.apache.hadoop.hive.metastore.api.Partition
       tPartition.setDbName(databaseName)
       tPartition.setTableName(tableName)

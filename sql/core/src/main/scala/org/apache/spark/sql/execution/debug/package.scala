@@ -158,8 +158,8 @@ package object debug {
 
       case (row: InternalRow, StructType(fields)) =>
         row.toSeq.zip(fields.map(_.dataType)).foreach { case(d, t) => typeCheck(d, t) }
-      case (s: Seq[_], ArrayType(elemType, _)) =>
-        s.foreach(typeCheck(_, elemType))
+      case (a: ArrayData, ArrayType(elemType, _)) =>
+        a.toArray().foreach(typeCheck(_, elemType))
       case (m: Map[_, _], MapType(keyType, valueType, _)) =>
         m.keys.foreach(typeCheck(_, keyType))
         m.values.foreach(typeCheck(_, valueType))
