@@ -1214,10 +1214,7 @@
           </exclusion>
         </exclusions>
       </dependency>
-      <!--
-       IMPORTANT: Ivy seems to pick up the non-core version of the exclusions;
-       keep this entry in sync with the one below
-      -->
+
       <dependency>
         <groupId>${hive.group}</groupId>
         <artifactId>hive-exec</artifactId>
@@ -1313,105 +1310,6 @@
           </exclusion>
         </exclusions>
       </dependency>
-
-      <!--
-      IMPORTANT: keep in sync with the entry above so that Ivy and Maven are consistent.
-      -->
-      <dependency>
-        <groupId>${hive.group}</groupId>
-        <artifactId>hive-exec</artifactId>
-        <version>${hive.version}</version>
-        <scope>${hive.deps.scope}</scope>
-        <exclusions>
-
-          <!-- pull this in when needed; the explicit definition culls the surplis-->
-          <exclusion>
-            <groupId>${hive.group}</groupId>
-            <artifactId>hive-metastore</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>${hive.group}</groupId>
-            <artifactId>hive-shims</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>${hive.group}</groupId>
-            <artifactId>hive-ant</artifactId>
-          </exclusion>
-
-          <!-- excluded dependencies & transitive.
-           Some may be needed to be explicitly included-->
-          <exclusion>
-            <groupId>ant</groupId>
-            <artifactId>ant</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>org.apache.ant</groupId>
-            <artifactId>ant</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>com.esotericsoftware.kryo</groupId>
-            <artifactId>kryo</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>commons-codec</groupId>
-            <artifactId>commons-codec</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>commons-httpclient</groupId>
-            <artifactId>commons-httpclient</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>org.apache.avro</groupId>
-            <artifactId>avro-mapred</artifactId>
-          </exclusion>
-          <!--  this is needed and must be explicitly included later-->
-          <exclusion>
-            <groupId>org.apache.calcite</groupId>
-            <artifactId>calcite-core</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>org.apache.curator</groupId>
-            <artifactId>apache-curator</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>org.apache.curator</groupId>
-            <artifactId>curator-client</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>org.apache.curator</groupId>
-            <artifactId>curator-framework</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>org.apache.thrift</groupId>
-            <artifactId>libthrift</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>org.apache.thrift</groupId>
-            <artifactId>libfb303</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>org.apache.zookeeper</groupId>
-            <artifactId>zookeeper</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>org.slf4j</groupId>
-            <artifactId>slf4j-api</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>org.slf4j</groupId>
-            <artifactId>slf4j-log4j12</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>log4j</groupId>
-            <artifactId>log4j</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>commons-logging</groupId>
-            <artifactId>commons-logging</artifactId>
-          </exclusion>
-        </exclusions>
-      </dependency>
-
       <dependency>
         <groupId>${hive.group}</groupId>
         <artifactId>hive-jdbc</artifactId>
