@@ -463,7 +463,7 @@ setGeneric("limit", function(x, num) {standardGeneric("limit") })
 
 #' rdname merge
 #' @export
-setGeneric("merge", function(x, ...) { standardGeneric("merge") })
+setGeneric("merge", function(x, y, ...) { standardGeneric("merge") })
 
 #' @rdname withColumn
 #' @export

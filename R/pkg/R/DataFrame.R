@@ -1283,7 +1283,7 @@ setMethod("join",
 #' aliases join
 setMethod("merge",
           signature(x = "DataFrame", y = "DataFrame"),
-          function(x, y, joinExpr = NULL, joinType = NULL) {
+          function(x, y, joinExpr = NULL, joinType = NULL, ...) {
             join(x, y, joinExpr, joinType)
           })
 
