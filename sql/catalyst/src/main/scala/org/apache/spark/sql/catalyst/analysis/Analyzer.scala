@@ -853,8 +853,13 @@ class Analyzer(
       while (i < groupedWindowExpressions.size) {
         val ((partitionSpec, orderSpec), windowExpressions) = groupedWindowExpressions(i)
         // Set currentChild to the newly created Window operator.
-        currentChild = Window(currentChild.output, windowExpressions,
-          partitionSpec, orderSpec, currentChild)
+        currentChild =
+          Window(
+            currentChild.output,
+            windowExpressions,
+            partitionSpec,
+            orderSpec,
+            currentChild)
 
         // Move to next Window Spec.
         i += 1
