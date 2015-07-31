@@ -90,7 +90,6 @@ public final class UnsafeExternalSorter {
     this.recordComparator = recordComparator;
     this.prefixComparator = prefixComparator;
     this.initialSize = initialSize;
-    this.peakMemoryUsedBytes = initialSize;
     // Use getSizeAsKb (not bytes) to maintain backwards compatibility for units
     this.fileBufferSizeBytes = (int) conf.getSizeAsKb("spark.shuffle.file.buffer", "32k") * 1024;
     this.pageSizeBytes = conf.getSizeAsBytes("spark.buffer.pageSize", "64m");

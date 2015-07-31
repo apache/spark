@@ -218,4 +218,47 @@ public class UnsafeExternalSorterSuite {
     sorter.freeMemory();
   }
 
+  @Test
+  public void testPeakMemoryUsed() throws Exception {
+    final long recordLengthBytes = 8;
+    final long pageSizeBytes = 256;
+    final long numRecordsPerPage = pageSizeBytes / recordLengthBytes;
+    final SparkConf conf = new SparkConf().set("spark.buffer.pageSize", pageSizeBytes + "b");
+    final UnsafeExternalSorter sorter = new UnsafeExternalSorter(
+      memoryManager,
+      shuffleMemoryManager,
+      blockManager,
+      taskContext,
+      recordComparator,
+      prefixComparator,
+      1024,
+      conf);
+
+    // Peak memory should be monotonically increasing. More specifically, every time
+    // we allocate a new page it should increase by exactly the size of the page.
+    long previousPeakMemory = sorter.getPeakMemoryUsedBytes();
+    long newPeakMemory;
+    for (int i = 0; i < numRecordsPerPage * 10; i++) {
+      insertNumber(sorter, i);
+      newPeakMemory = sorter.getPeakMemoryUsedBytes();
+      if (i % numRecordsPerPage == 0) {
+        // We allocated a new page for this record, so peak memory should change
+        assertEquals(previousPeakMemory + pageSizeBytes, newPeakMemory);
+      } else {
+        assertEquals(previousPeakMemory, newPeakMemory);
+      }
+      previousPeakMemory = newPeakMemory;
+    }
+
+    // Spilling should not change peak memory
+    sorter.spill();
+    newPeakMemory = sorter.getPeakMemoryUsedBytes();
+    assertEquals(previousPeakMemory, newPeakMemory);
+    for (int i = 0; i < numRecordsPerPage; i++) {
+      insertNumber(sorter, i);
+    }
+    newPeakMemory = sorter.getPeakMemoryUsedBytes();
+    assertEquals(previousPeakMemory, newPeakMemory);
+  }
+
 }

@@ -22,6 +22,7 @@ import org.scalatest.BeforeAndAfterAll
 
 import java.sql.Timestamp
 
+import org.apache.spark.AccumulatorSuite
 import org.apache.spark.sql.catalyst.DefaultParserDialect
 import org.apache.spark.sql.catalyst.errors.DialectException
 import org.apache.spark.sql.execution.aggregate.Aggregate2Sort
@@ -258,6 +259,25 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll with SQLTestUtils {
     }
   }
 
+  private def testCodeGen(sqlText: String, expectedResults: Seq[Row]): Unit = {
+    val df = sql(sqlText)
+    // First, check if we have GeneratedAggregate.
+    var hasGeneratedAgg = false
+    df.queryExecution.executedPlan.foreach {
+      case _: GeneratedAggregate | _: Aggregate2Sort => hasGeneratedAgg = true
+      case _ =>
+    }
+    if (!hasGeneratedAgg) {
+      fail(
+        s"""
+           |Codegen is enabled, but query $sqlText does not have GeneratedAggregate in the plan.
+           |${df.queryExecution.simpleString}
+         """.stripMargin)
+    }
+    // Then, check results.
+    checkAnswer(df, expectedResults)
+  }
+
   test("aggregation with codegen") {
     val originalValue = sqlContext.conf.codegenEnabled
     sqlContext.setConf(SQLConf.CODEGEN_ENABLED, true)
@@ -266,26 +286,6 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll with SQLTestUtils {
       .unionAll(sqlContext.table("testData"))
       .unionAll(sqlContext.table("testData"))
       .registerTempTable("testData3x")
-
-    def testCodeGen(sqlText: String, expectedResults: Seq[Row]): Unit = {
-      val df = sql(sqlText)
-      // First, check if we have GeneratedAggregate.
-      var hasGeneratedAgg = false
-      df.queryExecution.executedPlan.foreach {
-        case generatedAgg: GeneratedAggregate => hasGeneratedAgg = true
-        case newAggregate: Aggregate2Sort => hasGeneratedAgg = true
-        case _ =>
-      }
-      if (!hasGeneratedAgg) {
-        fail(
-          s"""
-             |Codegen is enabled, but query $sqlText does not have GeneratedAggregate in the plan.
-             |${df.queryExecution.simpleString}
-           """.stripMargin)
-      }
-      // Then, check results.
-      checkAnswer(df, expectedResults)
-    }
 
     try {
       // Just to group rows.
@@ -1618,4 +1618,33 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll with SQLTestUtils {
     checkAnswer(df.select(-df("i")),
       Row(new CalendarInterval(-(12 * 3 - 3), -(7L * MICROS_PER_WEEK + 123))))
   }
+
+  test("aggregation with codegen updates peak execution memory") {
+    val originalValue = sqlContext.conf.codegenEnabled
+    val sc = sqlContext.sparkContext
+    sqlContext.setConf(SQLConf.CODEGEN_ENABLED, true)
+    try {
+      AccumulatorSuite.verifyPeakExecutionMemorySet(sc, "aggregation with codegen") {
+        testCodeGen(
+          "SELECT key, count(value) FROM testData GROUP BY key",
+          (1 to 100).map(i => Row(i, 1)))
+      }
+    } finally {
+      sqlContext.setConf(SQLConf.CODEGEN_ENABLED, originalValue)
+    }
+  }
+
+  test("external sorting updates peak execution memory") {
+    val originalValue = sqlContext.conf.externalSortEnabled
+    val sc = sqlContext.sparkContext
+    sqlContext.setConf(SQLConf.EXTERNAL_SORT, true)
+    try {
+      AccumulatorSuite.verifyPeakExecutionMemorySet(sc, "external sort") {
+        sortTest()
+      }
+    } finally {
+      sqlContext.setConf(SQLConf.EXTERNAL_SORT, originalValue)
+    }
+  }
+
 }

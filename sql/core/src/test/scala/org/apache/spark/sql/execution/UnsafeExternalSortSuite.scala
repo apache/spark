@@ -21,6 +21,7 @@ import scala.util.Random
 
 import org.scalatest.BeforeAndAfterAll
 
+import org.apache.spark.AccumulatorSuite
 import org.apache.spark.sql.{RandomDataGenerator, Row, SQLConf}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.test.TestSQLContext
@@ -59,7 +60,6 @@ class UnsafeExternalSortSuite extends SparkPlanTest with BeforeAndAfterAll {
       )
     } finally {
       TestSQLContext.sparkContext.conf.set("spark.unsafe.exceptionOnMemoryLeak", "false")
-
     }
   }
 
@@ -72,6 +72,22 @@ class UnsafeExternalSortSuite extends SparkPlanTest with BeforeAndAfterAll {
       Sort(sortOrder, global = true, _: SparkPlan),
       sortAnswers = false
     )
+  }
+
+  test("sorting updates peak execution memory") {
+    val sc = TestSQLContext.sparkContext
+    sc.conf.set("spark.unsafe.exceptionOnMemoryLeak", "false")
+    try {
+      AccumulatorSuite.verifyPeakExecutionMemorySet(sc, "unsafe external sort") {
+        checkThatPlansAgree(
+          (1 to 100).map(v => Tuple1(v)).toDF("a"),
+          (child: SparkPlan) => UnsafeExternalSort('a.asc :: Nil, true, child),
+          (child: SparkPlan) => Sort('a.asc :: Nil, global = true, child),
+          sortAnswers = false)
+      }
+    } finally {
+      sc.conf.set("spark.unsafe.exceptionOnMemoryLeak", "false")
+    }
   }
 
   // Test sorting on different data types

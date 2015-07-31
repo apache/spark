@@ -301,6 +301,30 @@ class AccumulatorSuite extends SparkFunSuite with Matchers with LocalSparkContex
 
 }
 
+private[spark] object AccumulatorSuite {
+
+  /**
+   * Run one or more Spark jobs and verify that the peak execution memory accumulator
+   * is updated afterwards.
+   */
+  def verifyPeakExecutionMemorySet(
+      sc: SparkContext,
+      testName: String)(testBody: => Unit): Unit = {
+    val listener = new SaveInfoListener
+    sc.addSparkListener(listener)
+    testBody
+    // Verify that peak execution memory is updated
+    val accum = listener.getCompletedStageInfos
+      .flatMap(_.accumulables.values)
+      .find(_.name == InternalAccumulator.PEAK_EXECUTION_MEMORY)
+      .getOrElse {
+        throw new TestFailedException(
+          s"peak execution memory accumulator not set in '$testName'", 0)
+      }
+    assert(accum.value.toLong > 0)
+  }
+}
+
 /**
  * A simple listener that keeps track of the TaskInfos and StageInfos of all completed jobs.
  */
