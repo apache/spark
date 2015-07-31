@@ -236,7 +236,7 @@ private[spark] class ExternalSorter[K, V, C](
     } else {
       estimatedSize = buffer.estimateSize()
       if (maybeSpill(buffer, estimatedSize)) {
-        buffer = new PartitionedAppendOnlyMap[K, C]
+        buffer = newBuffer()
       }
     }
 
