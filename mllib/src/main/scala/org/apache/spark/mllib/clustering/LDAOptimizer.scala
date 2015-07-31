@@ -464,9 +464,8 @@ final class OnlineLDAOptimizer extends LDAOptimizer {
 
   /**
    * Update alpha based on `gammat`, the inferred topic distributions for documents in the
-   * current mini-batch.
-   * Uses Newton's method,
-   * @see Huang: Maximum Likelihood Estimation of Dirichlet Distribution Parameters
+   * current mini-batch. Uses Newton-Rhapson method.
+   * @see Section 3.3, Huang: Maximum Likelihood Estimation of Dirichlet Distribution Parameters
    *      (http://jonathan-huang.org/research/dirichlet/dirichlet.pdf)
    */
   private def updateAlpha(gammat: BDM[Double]): Unit = {
@@ -478,7 +477,6 @@ final class OnlineLDAOptimizer extends LDAOptimizer {
 
     val c = N * trigamma(sum(alpha))
     val q = -N * trigamma(alpha)
-
     val b = sum(gradf / q) / (1D / c + sum(1D / q))
 
     val dalpha = -(gradf - b) / q
@@ -490,13 +488,13 @@ final class OnlineLDAOptimizer extends LDAOptimizer {
   }
 
 
-  /** Calculates learning rate rho, which decays as a function of [[iteration]] */
+  /** Calculate learning rate rho for the current [[iteration]]. */
   private def rho(): Double = {
     math.pow(getTau0 + this.iteration, -getKappa)
   }
 
   /**
-   * Get a random matrix to initialize lambda
+   * Get a random matrix to initialize lambda.
    */
   private def getGammaMatrix(row: Int, col: Int): BDM[Double] = {
     val randBasis = new RandBasis(new org.apache.commons.math3.random.MersenneTwister(
