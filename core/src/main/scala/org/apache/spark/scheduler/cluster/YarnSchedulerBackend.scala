@@ -46,21 +46,22 @@ private[spark] abstract class YarnSchedulerBackend(
   private val yarnSchedulerEndpoint = rpcEnv.setupEndpoint(
     YarnSchedulerBackend.ENDPOINT_NAME, new YarnSchedulerEndpoint(rpcEnv))
 
-  private implicit val askTimeout = RpcUtils.askTimeout(sc.conf)
+  private implicit val askTimeout = RpcUtils.askRpcTimeout(sc.conf)
 
   /**
    * Request executors from the ApplicationMaster by specifying the total number desired.
    * This includes executors already pending or running.
    */
   override def doRequestTotalExecutors(requestedTotal: Int): Boolean = {
-    yarnSchedulerEndpoint.askWithReply[Boolean](RequestExecutors(requestedTotal))
+    yarnSchedulerEndpoint.askWithRetry[Boolean](
+      RequestExecutors(requestedTotal, localityAwareTasks, hostToLocalTaskCount))
   }
 
   /**
    * Request that the ApplicationMaster kill the specified executors.
    */
   override def doKillExecutors(executorIds: Seq[String]): Boolean = {
-    yarnSchedulerEndpoint.askWithReply[Boolean](KillExecutors(executorIds))
+    yarnSchedulerEndpoint.askWithRetry[Boolean](KillExecutors(executorIds))
   }
 
   override def sufficientResourcesRegistered(): Boolean = {
@@ -108,6 +109,8 @@ private[spark] abstract class YarnSchedulerBackend(
       case AddWebUIFilter(filterName, filterParams, proxyBase) =>
         addWebUIFilter(filterName, filterParams, proxyBase)
 
+      case RemoveExecutor(executorId, reason) =>
+        removeExecutor(executorId, reason)
     }
 
     override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
@@ -115,7 +118,7 @@ private[spark] abstract class YarnSchedulerBackend(
         amEndpoint match {
           case Some(am) =>
             Future {
-              context.reply(am.askWithReply[Boolean](r))
+              context.reply(am.askWithRetry[Boolean](r))
             } onFailure {
               case NonFatal(e) =>
                 logError(s"Sending $r to AM was unsuccessful", e)
@@ -130,7 +133,7 @@ private[spark] abstract class YarnSchedulerBackend(
         amEndpoint match {
           case Some(am) =>
             Future {
-              context.reply(am.askWithReply[Boolean](k))
+              context.reply(am.askWithRetry[Boolean](k))
             } onFailure {
               case NonFatal(e) =>
                 logError(s"Sending $k to AM was unsuccessful", e)
@@ -149,7 +152,7 @@ private[spark] abstract class YarnSchedulerBackend(
       }
     }
 
-    override def onStop(): Unit ={
+    override def onStop(): Unit = {
       askAmThreadPool.shutdownNow()
     }
   }

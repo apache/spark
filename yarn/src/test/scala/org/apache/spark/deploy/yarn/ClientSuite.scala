@@ -33,12 +33,12 @@ import org.apache.hadoop.yarn.api.records._
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.mockito.Matchers._
 import org.mockito.Mockito._
-import org.scalatest.{BeforeAndAfterAll, FunSuite, Matchers}
+import org.scalatest.{BeforeAndAfterAll, Matchers}
 
-import org.apache.spark.{SparkException, SparkConf}
+import org.apache.spark.{SparkConf, SparkException, SparkFunSuite}
 import org.apache.spark.util.Utils
 
-class ClientSuite extends FunSuite with Matchers with BeforeAndAfterAll {
+class ClientSuite extends SparkFunSuite with Matchers with BeforeAndAfterAll {
 
   override def beforeAll(): Unit = {
     System.setProperty("SPARK_YARN_MODE", "true")
@@ -113,7 +113,7 @@ class ClientSuite extends FunSuite with Matchers with BeforeAndAfterAll {
         Environment.PWD.$()
       }
     cp should contain(pwdVar)
-    cp should contain (s"$pwdVar${Path.SEPARATOR}${Client.LOCALIZED_HADOOP_CONF_DIR}")
+    cp should contain (s"$pwdVar${Path.SEPARATOR}${Client.LOCALIZED_CONF_DIR}")
     cp should not contain (Client.SPARK_JAR)
     cp should not contain (Client.APP_JAR)
   }
@@ -129,7 +129,7 @@ class ClientSuite extends FunSuite with Matchers with BeforeAndAfterAll {
 
     val tempDir = Utils.createTempDir()
     try {
-      client.prepareLocalResources(tempDir.getAbsolutePath())
+      client.prepareLocalResources(tempDir.getAbsolutePath(), Nil)
       sparkConf.getOption(Client.CONF_SPARK_USER_JAR) should be (Some(USER))
 
       // The non-local path should be propagated by name only, since it will end up in the app's
@@ -151,55 +151,23 @@ class ClientSuite extends FunSuite with Matchers with BeforeAndAfterAll {
     }
   }
 
-  test("check access nns empty") {
+  test("Cluster path translation") {
+    val conf = new Configuration()
     val sparkConf = new SparkConf()
-    sparkConf.set("spark.yarn.access.namenodes", "")
-    val nns = Client.getNameNodesToAccess(sparkConf)
-    nns should be(Set())
-  }
+      .set(Client.CONF_SPARK_JAR, "local:/localPath/spark.jar")
+      .set("spark.yarn.config.gatewayPath", "/localPath")
+      .set("spark.yarn.config.replacementPath", "/remotePath")
 
-  test("check access nns unset") {
-    val sparkConf = new SparkConf()
-    val nns = Client.getNameNodesToAccess(sparkConf)
-    nns should be(Set())
-  }
+    Client.getClusterPath(sparkConf, "/localPath") should be ("/remotePath")
+    Client.getClusterPath(sparkConf, "/localPath/1:/localPath/2") should be (
+      "/remotePath/1:/remotePath/2")
 
-  test("check access nns") {
-    val sparkConf = new SparkConf()
-    sparkConf.set("spark.yarn.access.namenodes", "hdfs://nn1:8032")
-    val nns = Client.getNameNodesToAccess(sparkConf)
-    nns should be(Set(new Path("hdfs://nn1:8032")))
-  }
-
-  test("check access nns space") {
-    val sparkConf = new SparkConf()
-    sparkConf.set("spark.yarn.access.namenodes", "hdfs://nn1:8032, ")
-    val nns = Client.getNameNodesToAccess(sparkConf)
-    nns should be(Set(new Path("hdfs://nn1:8032")))
-  }
-
-  test("check access two nns") {
-    val sparkConf = new SparkConf()
-    sparkConf.set("spark.yarn.access.namenodes", "hdfs://nn1:8032,hdfs://nn2:8032")
-    val nns = Client.getNameNodesToAccess(sparkConf)
-    nns should be(Set(new Path("hdfs://nn1:8032"), new Path("hdfs://nn2:8032")))
-  }
-
-  test("check token renewer") {
-    val hadoopConf = new Configuration()
-    hadoopConf.set("yarn.resourcemanager.address", "myrm:8033")
-    hadoopConf.set("yarn.resourcemanager.principal", "yarn/myrm:8032@SPARKTEST.COM")
-    val renewer = Client.getTokenRenewer(hadoopConf)
-    renewer should be ("yarn/myrm:8032@SPARKTEST.COM")
-  }
-
-  test("check token renewer default") {
-    val hadoopConf = new Configuration()
-    val caught =
-      intercept[SparkException] {
-        Client.getTokenRenewer(hadoopConf)
-      }
-    assert(caught.getMessage === "Can't get Master Kerberos principal for use as renewer")
+    val env = new MutableHashMap[String, String]()
+    Client.populateClasspath(null, conf, sparkConf, env, false,
+      extraClassPath = Some("/localPath/my1.jar"))
+    val cp = classpath(env)
+    cp should contain ("/remotePath/spark.jar")
+    cp should contain ("/remotePath/my1.jar")
   }
 
   object Fixtures {
@@ -254,7 +222,7 @@ class ClientSuite extends FunSuite with Matchers with BeforeAndAfterAll {
   def getFieldValue2[A: ClassTag, A1: ClassTag, B](
         clazz: Class[_],
         field: String,
-        defaults: => B)(mapTo:  A => B)(mapTo1: A1 => B): B = {
+        defaults: => B)(mapTo: A => B)(mapTo1: A1 => B): B = {
     Try(clazz.getField(field)).map(_.get(null)).map {
       case v: A => mapTo(v)
       case v1: A1 => mapTo1(v1)

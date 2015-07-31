@@ -17,25 +17,39 @@
 
 package org.apache.spark.shuffle
 
-import org.scalatest.FunSuite
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.atomic.AtomicInteger
+
+import org.mockito.Mockito._
 import org.scalatest.concurrent.Timeouts
 import org.scalatest.time.SpanSugar._
-import java.util.concurrent.atomic.AtomicBoolean
-import java.util.concurrent.CountDownLatch
 
-class ShuffleMemoryManagerSuite extends FunSuite with Timeouts {
+import org.apache.spark.{SparkFunSuite, TaskContext}
+
+class ShuffleMemoryManagerSuite extends SparkFunSuite with Timeouts {
+
+  val nextTaskAttemptId = new AtomicInteger()
+
   /** Launch a thread with the given body block and return it. */
   private def startThread(name: String)(body: => Unit): Thread = {
     val thread = new Thread("ShuffleMemorySuite " + name) {
       override def run() {
-        body
+        try {
+          val taskAttemptId = nextTaskAttemptId.getAndIncrement
+          val mockTaskContext = mock(classOf[TaskContext], RETURNS_SMART_NULLS)
+          when(mockTaskContext.taskAttemptId()).thenReturn(taskAttemptId)
+          TaskContext.setTaskContext(mockTaskContext)
+          body
+        } finally {
+          TaskContext.unset()
+        }
       }
     }
     thread.start()
     thread
   }
 
-  test("single thread requesting memory") {
+  test("single task requesting memory") {
     val manager = new ShuffleMemoryManager(1000L)
 
     assert(manager.tryToAcquire(100L) === 100L)
@@ -49,7 +63,7 @@ class ShuffleMemoryManagerSuite extends FunSuite with Timeouts {
     assert(manager.tryToAcquire(300L) === 300L)
     assert(manager.tryToAcquire(300L) === 200L)
 
-    manager.releaseMemoryForThisThread()
+    manager.releaseMemoryForThisTask()
     assert(manager.tryToAcquire(1000L) === 1000L)
     assert(manager.tryToAcquire(100L) === 0L)
   }
@@ -106,8 +120,8 @@ class ShuffleMemoryManagerSuite extends FunSuite with Timeouts {
   }
 
 
-  test("threads cannot grow past 1 / N") {
-    // Two threads request 250 bytes first, wait for each other to get it, and then request
+  test("tasks cannot grow past 1 / N") {
+    // Two tasks request 250 bytes first, wait for each other to get it, and then request
     // 500 more; we should only grant 250 bytes to each of them on this second request
 
     val manager = new ShuffleMemoryManager(1000L)
@@ -157,7 +171,7 @@ class ShuffleMemoryManagerSuite extends FunSuite with Timeouts {
     assert(state.t2Result2 === 250L)
   }
 
-  test("threads can block to get at least 1 / 2N memory") {
+  test("tasks can block to get at least 1 / 2N memory") {
     // t1 grabs 1000 bytes and then waits until t2 is ready to make a request. It sleeps
     // for a bit and releases 250 bytes, which should then be granted to t2. Further requests
     // by t2 will return false right away because it now has 1 / 2N of the memory.
@@ -223,7 +237,7 @@ class ShuffleMemoryManagerSuite extends FunSuite with Timeouts {
     }
   }
 
-  test("releaseMemoryForThisThread") {
+  test("releaseMemoryForThisTask") {
     // t1 grabs 1000 bytes and then waits until t2 is ready to make a request. It sleeps
     // for a bit and releases all its memory. t2 should now be able to grab all the memory.
 
@@ -250,9 +264,9 @@ class ShuffleMemoryManagerSuite extends FunSuite with Timeouts {
         }
       }
       // Sleep a bit before releasing our memory; this is hacky but it would be difficult to make
-      // sure the other thread blocks for some time otherwise
+      // sure the other task blocks for some time otherwise
       Thread.sleep(300)
-      manager.releaseMemoryForThisThread()
+      manager.releaseMemoryForThisTask()
     }
 
     val t2 = startThread("t2") {
@@ -281,7 +295,7 @@ class ShuffleMemoryManagerSuite extends FunSuite with Timeouts {
       t2.join()
     }
 
-    // Both threads should've been able to acquire their memory; the second one will have waited
+    // Both tasks should've been able to acquire their memory; the second one will have waited
     // until the first one acquired 1000 bytes and then released all of it
     state.synchronized {
       assert(state.t1Result === 1000L, "t1 could not allocate memory")
@@ -292,7 +306,7 @@ class ShuffleMemoryManagerSuite extends FunSuite with Timeouts {
     }
   }
 
-  test("threads should not be granted a negative size") {
+  test("tasks should not be granted a negative size") {
     val manager = new ShuffleMemoryManager(1000L)
     manager.tryToAcquire(700L)
 

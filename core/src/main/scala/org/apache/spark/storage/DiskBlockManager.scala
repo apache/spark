@@ -55,7 +55,7 @@ private[spark] class DiskBlockManager(blockManager: BlockManager, conf: SparkCon
 
   /** Looks up a file by hashing it into one of our local subdirectories. */
   // This method should be kept in sync with
-  // org.apache.spark.network.shuffle.StandaloneShuffleBlockManager#getFile().
+  // org.apache.spark.network.shuffle.ExternalShuffleBlockResolver#getFile().
   def getFile(filename: String): File = {
     // Figure out which local directory it hashes to, and which subdirectory in that
     val hash = Utils.nonNegativeHash(filename)
@@ -124,10 +124,16 @@ private[spark] class DiskBlockManager(blockManager: BlockManager, conf: SparkCon
     (blockId, getFile(blockId))
   }
 
+  /**
+   * Create local directories for storing block data. These directories are
+   * located inside configured local directories and won't
+   * be deleted on JVM exit when using the external shuffle service.
+   */
   private def createLocalDirs(conf: SparkConf): Array[File] = {
-    Utils.getOrCreateLocalRootDirs(conf).flatMap { rootDir =>
+    Utils.getConfiguredLocalDirs(conf).flatMap { rootDir =>
       try {
         val localDir = Utils.createDirectory(rootDir, "blockmgr")
+        Utils.chmod700(localDir)
         logInfo(s"Created local directory at $localDir")
         Some(localDir)
       } catch {
@@ -139,8 +145,8 @@ private[spark] class DiskBlockManager(blockManager: BlockManager, conf: SparkCon
   }
 
   private def addShutdownHook(): AnyRef = {
-    Utils.addShutdownHook { () =>
-      logDebug("Shutdown hook called")
+    Utils.addShutdownHook(Utils.TEMP_DIR_SHUTDOWN_PRIORITY + 1) { () =>
+      logInfo("Shutdown hook called")
       DiskBlockManager.this.doStop()
     }
   }
@@ -148,7 +154,12 @@ private[spark] class DiskBlockManager(blockManager: BlockManager, conf: SparkCon
   /** Cleanup local dirs and stop shuffle sender. */
   private[spark] def stop() {
     // Remove the shutdown hook.  It causes memory leaks if we leave it around.
-    Utils.removeShutdownHook(shutdownHook)
+    try {
+      Utils.removeShutdownHook(shutdownHook)
+    } catch {
+      case e: Exception =>
+        logError(s"Exception while removing shutdown hook.", e)
+    }
     doStop()
   }
 

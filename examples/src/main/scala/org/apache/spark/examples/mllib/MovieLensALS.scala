@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples.mllib
 
 import scala.collection.mutable
@@ -100,7 +101,7 @@ object MovieLensALS {
     val conf = new SparkConf().setAppName(s"MovieLensALS with $params")
     if (params.kryo) {
       conf.registerKryoClasses(Array(classOf[mutable.BitSet], classOf[Rating]))
-        .set("spark.kryoserializer.buffer.mb", "8")
+        .set("spark.kryoserializer.buffer", "8m")
     }
     val sc = new SparkContext(conf)
 
@@ -189,3 +190,4 @@ object MovieLensALS {
     math.sqrt(predictionsAndRatings.map(x => (x._1 - x._2) * (x._1 - x._2)).mean())
   }
 }
+// scalastyle:on println

@@ -19,9 +19,9 @@ package org.apache.spark.api.python
 
 import java.io.{ByteArrayOutputStream, DataOutputStream}
 
-import org.scalatest.FunSuite
+import org.apache.spark.SparkFunSuite
 
-class PythonRDDSuite extends FunSuite {
+class PythonRDDSuite extends SparkFunSuite {
 
   test("Writing large strings to the worker") {
     val input: List[String] = List("a"*100000)

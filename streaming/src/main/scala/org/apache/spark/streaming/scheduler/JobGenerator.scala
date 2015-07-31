@@ -22,7 +22,7 @@ import scala.util.{Failure, Success, Try}
 import org.apache.spark.{SparkEnv, Logging}
 import org.apache.spark.streaming.{Checkpoint, CheckpointWriter, Time}
 import org.apache.spark.streaming.util.RecurringTimer
-import org.apache.spark.util.{Clock, EventLoop, ManualClock}
+import org.apache.spark.util.{Utils, Clock, EventLoop, ManualClock}
 
 /** Event classes for JobGenerator */
 private[scheduler] sealed trait JobGeneratorEvent
@@ -47,11 +47,11 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
     val clockClass = ssc.sc.conf.get(
       "spark.streaming.clock", "org.apache.spark.util.SystemClock")
     try {
-      Class.forName(clockClass).newInstance().asInstanceOf[Clock]
+      Utils.classForName(clockClass).newInstance().asInstanceOf[Clock]
     } catch {
       case e: ClassNotFoundException if clockClass.startsWith("org.apache.spark.streaming") =>
         val newClockClass = clockClass.replace("org.apache.spark.streaming", "org.apache.spark")
-        Class.forName(newClockClass).newInstance().asInstanceOf[Clock]
+        Utils.classForName(newClockClass).newInstance().asInstanceOf[Clock]
     }
   }
 
@@ -243,9 +243,8 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
       graph.generateJobs(time) // generate jobs using allocated block
     } match {
       case Success(jobs) =>
-        val receivedBlockInfos =
-          jobScheduler.receiverTracker.getBlocksOfBatch(time).mapValues { _.toArray }
-        jobScheduler.submitJobSet(JobSet(time, jobs, receivedBlockInfos))
+        val streamIdToInputInfos = jobScheduler.inputInfoTracker.getInfo(time)
+        jobScheduler.submitJobSet(JobSet(time, jobs, streamIdToInputInfos))
       case Failure(e) =>
         jobScheduler.reportError("Error generating jobs for time " + time, e)
     }
@@ -266,6 +265,7 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
       // checkpointing of this batch to complete.
       val maxRememberDuration = graph.getMaxInputStreamRememberDuration()
       jobScheduler.receiverTracker.cleanupOldBlocksAndBatches(time - maxRememberDuration)
+      jobScheduler.inputInfoTracker.cleanup(time - maxRememberDuration)
       markBatchFullyProcessed(time)
     }
   }
@@ -278,6 +278,7 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
     // been saved to checkpoints, so its safe to delete block metadata and data WAL files
     val maxRememberDuration = graph.getMaxInputStreamRememberDuration()
     jobScheduler.receiverTracker.cleanupOldBlocksAndBatches(time - maxRememberDuration)
+    jobScheduler.inputInfoTracker.cleanup(time - maxRememberDuration)
     markBatchFullyProcessed(time)
   }
 

@@ -67,6 +67,10 @@ class QueryTest extends PlanTest {
     checkAnswer(df, Seq(expectedAnswer))
   }
 
+  protected def checkAnswer(df: DataFrame, expectedAnswer: DataFrame): Unit = {
+    checkAnswer(df, expectedAnswer.collect())
+  }
+
   def sqlTest(sqlString: String, expectedAnswer: Seq[Row])(implicit sqlContext: SQLContext) {
     test(sqlString) {
       checkAnswer(sqlContext.sql(sqlString), expectedAnswer)
@@ -132,11 +136,7 @@ object QueryTest {
       val errorMessage =
         s"""
         |Results do not match for query:
-        |${df.logicalPlan}
-        |== Analyzed Plan ==
-        |${df.queryExecution.analyzed}
-        |== Physical Plan ==
-        |${df.queryExecution.executedPlan}
+        |${df.queryExecution}
         |== Results ==
         |${sideBySide(
           s"== Correct Answer - ${expectedAnswer.size} ==" +:

@@ -38,7 +38,8 @@ class ChiSqSelectorModel (val selectedFeatures: Array[Int]) extends VectorTransf
 
   protected def isSorted(array: Array[Int]): Boolean = {
     var i = 1
-    while (i < array.length) {
+    val len = array.length
+    while (i < len) {
       if (array(i) < array(i-1)) return false
       i += 1
     }
@@ -107,7 +108,7 @@ class ChiSqSelectorModel (val selectedFeatures: Array[Int]) extends VectorTransf
  *                       (ordered by statistic value descending)
  */
 @Experimental
-class ChiSqSelector (val numTopFeatures: Int) {
+class ChiSqSelector (val numTopFeatures: Int) extends Serializable {
 
   /**
    * Returns a ChiSquared feature selector.

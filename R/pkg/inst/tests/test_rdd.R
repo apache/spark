@@ -33,9 +33,9 @@ test_that("get number of partitions in RDD", {
 })
 
 test_that("first on RDD", {
-  expect_true(first(rdd) == 1)
+  expect_equal(first(rdd), 1)
   newrdd <- lapply(rdd, function(x) x + 1)
-  expect_true(first(newrdd) == 2)
+  expect_equal(first(newrdd), 2)
 })
 
 test_that("count and length on RDD", {
@@ -105,8 +105,8 @@ test_that("several transformations on RDD (a benchmark on PipelinedRDD)", {
   rdd2 <- rdd
   for (i in 1:12)
     rdd2 <- lapplyPartitionsWithIndex(
-              rdd2, function(split, part) {
-                part <- as.list(unlist(part) * split + i)
+              rdd2, function(partIndex, part) {
+                part <- as.list(unlist(part) * partIndex + i)
               })
   rdd2 <- lapply(rdd2, function(x) x + x)
   actual <- collect(rdd2)
@@ -121,8 +121,8 @@ test_that("PipelinedRDD support actions: cache(), persist(), unpersist(), checkp
   # PipelinedRDD
   rdd2 <- lapplyPartitionsWithIndex(
             rdd2,
-            function(split, part) {
-              part <- as.list(unlist(part) * split)
+            function(partIndex, part) {
+              part <- as.list(unlist(part) * partIndex)
             })
 
   cache(rdd2)
@@ -174,13 +174,13 @@ test_that("lapply with dependency", {
 })
 
 test_that("lapplyPartitionsWithIndex on RDDs", {
-  func <- function(splitIndex, part) { list(splitIndex, Reduce("+", part)) }
+  func <- function(partIndex, part) { list(partIndex, Reduce("+", part)) }
   actual <- collect(lapplyPartitionsWithIndex(rdd, func), flatten = FALSE)
   expect_equal(actual, list(list(0, 15), list(1, 40)))
 
   pairsRDD <- parallelize(sc, list(list(1, 2), list(3, 4), list(4, 8)), 1L)
   partitionByParity <- function(key) { if (key %% 2 == 1) 0 else 1 }
-  mkTup <- function(splitIndex, part) { list(splitIndex, part) }
+  mkTup <- function(partIndex, part) { list(partIndex, part) }
   actual <- collect(lapplyPartitionsWithIndex(
                       partitionBy(pairsRDD, 2L, partitionByParity),
                       mkTup),
@@ -447,7 +447,7 @@ test_that("zipRDD() on RDDs", {
   expect_equal(actual,
                list(list(0, 1000), list(1, 1001), list(2, 1002), list(3, 1003), list(4, 1004)))
 
-  mockFile = c("Spark is pretty.", "Spark is awesome.")
+  mockFile <- c("Spark is pretty.", "Spark is awesome.")
   fileName <- tempfile(pattern="spark-test", fileext=".tmp")
   writeLines(mockFile, fileName)
 
@@ -477,16 +477,16 @@ test_that("cartesian() on RDDs", {
                  list(1, 1), list(1, 2), list(1, 3),
                  list(2, 1), list(2, 2), list(2, 3),
                  list(3, 1), list(3, 2), list(3, 3)))
-  
+
   # test case where one RDD is empty
   emptyRdd <- parallelize(sc, list())
   actual <- collect(cartesian(rdd, emptyRdd))
   expect_equal(actual, list())
 
-  mockFile = c("Spark is pretty.", "Spark is awesome.")
+  mockFile <- c("Spark is pretty.", "Spark is awesome.")
   fileName <- tempfile(pattern="spark-test", fileext=".tmp")
   writeLines(mockFile, fileName)
-  
+
   rdd <- textFile(sc, fileName)
   actual <- collect(cartesian(rdd, rdd))
   expected <- list(
@@ -495,7 +495,7 @@ test_that("cartesian() on RDDs", {
     list("Spark is pretty.", "Spark is pretty."),
     list("Spark is pretty.", "Spark is awesome."))
   expect_equal(sortKeyValueList(actual), expected)
-  
+
   rdd1 <- parallelize(sc, 0:1)
   actual <- collect(cartesian(rdd1, rdd))
   expect_equal(sortKeyValueList(actual),
@@ -504,11 +504,11 @@ test_that("cartesian() on RDDs", {
                  list(0, "Spark is awesome."),
                  list(1, "Spark is pretty."),
                  list(1, "Spark is awesome.")))
-  
+
   rdd1 <- map(rdd, function(x) { x })
   actual <- collect(cartesian(rdd, rdd1))
   expect_equal(sortKeyValueList(actual), expected)
-  
+
   unlink(fileName)
 })
 
@@ -669,13 +669,15 @@ test_that("fullOuterJoin() on pairwise RDDs", {
   rdd1 <- parallelize(sc, list(list(1,2), list(1,3), list(3,3)))
   rdd2 <- parallelize(sc, list(list(1,1), list(2,4)))
   actual <- collect(fullOuterJoin(rdd1, rdd2, 2L))
-  expected <- list(list(1, list(2, 1)), list(1, list(3, 1)), list(2, list(NULL, 4)), list(3, list(3, NULL)))
+  expected <- list(list(1, list(2, 1)), list(1, list(3, 1)),
+                   list(2, list(NULL, 4)), list(3, list(3, NULL)))
   expect_equal(sortKeyValueList(actual), sortKeyValueList(expected))
 
   rdd1 <- parallelize(sc, list(list("a",2), list("a",3), list("c", 1)))
   rdd2 <- parallelize(sc, list(list("a",1), list("b",4)))
   actual <- collect(fullOuterJoin(rdd1, rdd2, 2L))
-  expected <- list(list("b", list(NULL, 4)), list("a", list(2, 1)), list("a", list(3, 1)), list("c", list(1, NULL)))
+  expected <- list(list("b", list(NULL, 4)), list("a", list(2, 1)),
+                   list("a", list(3, 1)), list("c", list(1, NULL)))
   expect_equal(sortKeyValueList(actual),
                sortKeyValueList(expected))
 
@@ -683,13 +685,15 @@ test_that("fullOuterJoin() on pairwise RDDs", {
   rdd2 <- parallelize(sc, list(list(3,3), list(4,4)))
   actual <- collect(fullOuterJoin(rdd1, rdd2, 2L))
   expect_equal(sortKeyValueList(actual),
-               sortKeyValueList(list(list(1, list(1, NULL)), list(2, list(2, NULL)), list(3, list(NULL, 3)), list(4, list(NULL, 4)))))
+               sortKeyValueList(list(list(1, list(1, NULL)), list(2, list(2, NULL)),
+                                     list(3, list(NULL, 3)), list(4, list(NULL, 4)))))
 
   rdd1 <- parallelize(sc, list(list("a",1), list("b",2)))
   rdd2 <- parallelize(sc, list(list("c",3), list("d",4)))
   actual <- collect(fullOuterJoin(rdd1, rdd2, 2L))
   expect_equal(sortKeyValueList(actual),
-               sortKeyValueList(list(list("a", list(1, NULL)), list("b", list(2, NULL)), list("d", list(NULL, 4)), list("c", list(NULL, 3)))))
+               sortKeyValueList(list(list("a", list(1, NULL)), list("b", list(2, NULL)),
+                                     list("d", list(NULL, 4)), list("c", list(NULL, 3)))))
 })
 
 test_that("sortByKey() on pairwise RDDs", {
@@ -757,6 +761,11 @@ test_that("collectAsMap() on a pairwise RDD", {
   rdd <- parallelize(sc, list(list(1, "a"), list(2, "b")))
   vals <- collectAsMap(rdd)
   expect_equal(vals, list(`1` = "a", `2` = "b"))
+})
+
+test_that("show()", {
+  rdd <- parallelize(sc, list(1:10))
+  expect_output(show(rdd), "ParallelCollectionRDD\\[\\d+\\] at parallelize at RRDD\\.scala:\\d+")
 })
 
 test_that("sampleByKey() on pairwise RDDs", {

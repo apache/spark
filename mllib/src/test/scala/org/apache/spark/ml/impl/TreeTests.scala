@@ -19,18 +19,16 @@ package org.apache.spark.ml.impl
 
 import scala.collection.JavaConverters._
 
-import org.scalatest.FunSuite
-
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.ml.attribute.{AttributeGroup, NominalAttribute, NumericAttribute}
-import org.apache.spark.ml.impl.tree._
-import org.apache.spark.ml.tree.{DecisionTreeModel, InternalNode, LeafNode, Node}
+import org.apache.spark.ml.tree._
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{SQLContext, DataFrame}
 
 
-private[ml] object TreeTests extends FunSuite {
+private[ml] object TreeTests extends SparkFunSuite {
 
   /**
    * Convert the given data to a DataFrame, and set the features and label metadata.
@@ -111,22 +109,19 @@ private[ml] object TreeTests extends FunSuite {
     }
   }
 
-  // TODO: Reinstate after adding ensembles
   /**
    * Check if the two models are exactly the same.
    * If the models are not equal, this throws an exception.
    */
-  /*
   def checkEqual(a: TreeEnsembleModel, b: TreeEnsembleModel): Unit = {
     try {
-      a.getTrees.zip(b.getTrees).foreach { case (treeA, treeB) =>
+      a.trees.zip(b.trees).foreach { case (treeA, treeB) =>
         TreeTests.checkEqual(treeA, treeB)
       }
-      assert(a.getTreeWeights === b.getTreeWeights)
+      assert(a.treeWeights === b.treeWeights)
     } catch {
       case ex: Exception => throw new AssertionError(
         "checkEqual failed since the two tree ensembles were not identical")
     }
   }
-  */
 }

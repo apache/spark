@@ -29,9 +29,7 @@ class Predict(
     val predict: Double,
     val prob: Double = 0.0) extends Serializable {
 
-  override def toString: String = {
-    "predict = %f, prob = %f".format(predict, prob)
-  }
+  override def toString: String = s"$predict (prob = $prob)"
 
   override def equals(other: Any): Boolean = {
     other match {

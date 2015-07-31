@@ -33,6 +33,7 @@ guaranteed to find a globally optimal solution, and when run multiple times on
 a given dataset, the algorithm returns the best clustering result).
 * *initializationSteps* determines the number of steps in the k-means\|\| algorithm.
 * *epsilon* determines the distance threshold within which we consider k-means to have converged.
+* *initialModel* is an optional set of cluster centers used for initialization. If this parameter is supplied, only one run is performed.
 
 **Examples**
 
@@ -47,7 +48,7 @@ Set Sum of Squared Error (WSSSE). You can reduce this error measure by increasin
 optimal *k* is usually one where there is an "elbow" in the WSSSE graph.
 
 {% highlight scala %}
-import org.apache.spark.mllib.clustering.KMeans
+import org.apache.spark.mllib.clustering.{KMeans, KMeansModel}
 import org.apache.spark.mllib.linalg.Vectors
 
 // Load and parse the data
@@ -62,6 +63,10 @@ val clusters = KMeans.train(parsedData, numClusters, numIterations)
 // Evaluate clustering by computing Within Set Sum of Squared Errors
 val WSSSE = clusters.computeCost(parsedData)
 println("Within Set Sum of Squared Errors = " + WSSSE)
+
+// Save and load model
+clusters.save(sc, "myModelPath")
+val sameModel = KMeansModel.load(sc, "myModelPath")
 {% endhighlight %}
 </div>
 
@@ -110,6 +115,10 @@ public class KMeansExample {
     // Evaluate clustering by computing Within Set Sum of Squared Errors
     double WSSSE = clusters.computeCost(parsedData.rdd());
     System.out.println("Within Set Sum of Squared Errors = " + WSSSE);
+
+    // Save and load model
+    clusters.save(sc.sc(), "myModelPath");
+    KMeansModel sameModel = KMeansModel.load(sc.sc(), "myModelPath");
   }
 }
 {% endhighlight %}
@@ -124,7 +133,7 @@ Within Set Sum of Squared Error (WSSSE). You can reduce this error measure by in
 fact the optimal *k* is usually one where there is an "elbow" in the WSSSE graph.
 
 {% highlight python %}
-from pyspark.mllib.clustering import KMeans
+from pyspark.mllib.clustering import KMeans, KMeansModel
 from numpy import array
 from math import sqrt
 
@@ -143,6 +152,10 @@ def error(point):
 
 WSSSE = parsedData.map(lambda point: error(point)).reduce(lambda x, y: x + y)
 print("Within Set Sum of Squared Error = " + str(WSSSE))
+
+# Save and load model
+clusters.save(sc, "myModelPath")
+sameModel = KMeansModel.load(sc, "myModelPath")
 {% endhighlight %}
 </div>
 
@@ -237,11 +250,11 @@ public class GaussianMixtureExample {
     GaussianMixtureModel gmm = new GaussianMixture().setK(2).run(parsedData.rdd());
 
     // Save and load GaussianMixtureModel
-    gmm.save(sc, "myGMMModel")
-    GaussianMixtureModel sameModel = GaussianMixtureModel.load(sc, "myGMMModel")
+    gmm.save(sc.sc(), "myGMMModel");
+    GaussianMixtureModel sameModel = GaussianMixtureModel.load(sc.sc(), "myGMMModel");
     // Output the parameters of the mixture model
     for(int j=0; j<gmm.k(); j++) {
-        System.out.println("weight=%f\nmu=%s\nsigma=\n%s\n",
+        System.out.printf("weight=%f\nmu=%s\nsigma=\n%s\n",
             gmm.weights()[j], gmm.gaussians()[j].mu(), gmm.gaussians()[j].sigma());
     }
   }
@@ -312,19 +325,29 @@ Calling `PowerIterationClustering.run` returns a
 which contains the computed clustering assignments.
 
 {% highlight scala %}
-import org.apache.spark.mllib.clustering.PowerIterationClustering
+import org.apache.spark.mllib.clustering.{PowerIterationClustering, PowerIterationClusteringModel}
 import org.apache.spark.mllib.linalg.Vectors
 
-val similarities: RDD[(Long, Long, Double)] = ...
+// Load and parse the data
+val data = sc.textFile("data/mllib/pic_data.txt")
+val similarities = data.map { line =>
+  val parts = line.split(' ')
+  (parts(0).toLong, parts(1).toLong, parts(2).toDouble)
+}
 
-val pic = new PowerIteartionClustering()
-  .setK(3)
-  .setMaxIterations(20)
+// Cluster the data into two classes using PowerIterationClustering
+val pic = new PowerIterationClustering()
+  .setK(2)
+  .setMaxIterations(10)
 val model = pic.run(similarities)
 
 model.assignments.foreach { a =>
   println(s"${a.id} -> ${a.cluster}")
 }
+
+// Save and load model
+model.save(sc, "myModelPath")
+val sameModel = PowerIterationClusteringModel.load(sc, "myModelPath")
 {% endhighlight %}
 
 A full example that produces the experiment described in the PIC paper can be found under
@@ -347,11 +370,22 @@ import scala.Tuple2;
 import scala.Tuple3;
 
 import org.apache.spark.api.java.JavaRDD;
+import org.apache.spark.api.java.function.Function;
 import org.apache.spark.mllib.clustering.PowerIterationClustering;
 import org.apache.spark.mllib.clustering.PowerIterationClusteringModel;
 
-JavaRDD<Tuple3<Long, Long, Double>> similarities = ...
+// Load and parse the data
+JavaRDD<String> data = sc.textFile("data/mllib/pic_data.txt");
+JavaRDD<Tuple3<Long, Long, Double>> similarities = data.map(
+  new Function<String, Tuple3<Long, Long, Double>>() {
+    public Tuple3<Long, Long, Double> call(String line) {
+      String[] parts = line.split(" ");
+      return new Tuple3<>(new Long(parts[0]), new Long(parts[1]), new Double(parts[2]));
+    }
+  }
+);
 
+// Cluster the data into two classes using PowerIterationClustering
 PowerIterationClustering pic = new PowerIterationClustering()
   .setK(2)
   .setMaxIterations(10);
@@ -360,6 +394,39 @@ PowerIterationClusteringModel model = pic.run(similarities);
 for (PowerIterationClustering.Assignment a: model.assignments().toJavaRDD().collect()) {
   System.out.println(a.id() + " -> " + a.cluster());
 }
+
+// Save and load model
+model.save(sc.sc(), "myModelPath");
+PowerIterationClusteringModel sameModel = PowerIterationClusteringModel.load(sc.sc(), "myModelPath");
+{% endhighlight %}
+</div>
+
+<div data-lang="python" markdown="1">
+
+[`PowerIterationClustering`](api/python/pyspark.mllib.html#pyspark.mllib.clustering.PowerIterationClustering)
+implements the PIC algorithm.
+It takes an `RDD` of `(srcId: Long, dstId: Long, similarity: Double)` tuples representing the
+affinity matrix.
+Calling `PowerIterationClustering.run` returns a
+[`PowerIterationClusteringModel`](api/python/pyspark.mllib.html#pyspark.mllib.clustering.PowerIterationClustering),
+which contains the computed clustering assignments.
+
+{% highlight python %}
+from __future__ import print_function
+from pyspark.mllib.clustering import PowerIterationClustering, PowerIterationClusteringModel
+
+# Load and parse the data
+data = sc.textFile("data/mllib/pic_data.txt")
+similarities = data.map(lambda line: tuple([float(x) for x in line.split(' ')]))
+
+# Cluster the data into two classes using PowerIterationClustering
+model = PowerIterationClustering.train(similarities, 2, 10)
+
+model.assignments().foreach(lambda x: print(str(x.id) + " -> " + str(x.cluster)))
+
+# Save and load model
+model.save(sc, "myModelPath")
+sameModel = PowerIterationClusteringModel.load(sc, "myModelPath")
 {% endhighlight %}
 </div>
 
@@ -377,11 +444,11 @@ LDA can be thought of as a clustering algorithm as follows:
  on a statistical model of how text documents are generated.
 
 LDA takes in a collection of documents as vectors of word counts.
-It learns clustering using [expectation-maximization](http://en.wikipedia.org/wiki/Expectation%E2%80%93maximization_algorithm)
-on the likelihood function. After fitting on the documents, LDA provides:
+It supports different inference algorithms via `setOptimizer` function. EMLDAOptimizer learns clustering using [expectation-maximization](http://en.wikipedia.org/wiki/Expectation%E2%80%93maximization_algorithm)
+on the likelihood function and yields comprehensive results, while OnlineLDAOptimizer uses iterative mini-batch sampling for [online variational inference](https://www.cs.princeton.edu/~blei/papers/HoffmanBleiBach2010b.pdf) and is generally memory friendly. After fitting on the documents, LDA provides:
 
 * Topics: Inferred topics, each of which is a probability distribution over terms (words).
-* Topic distributions for documents: For each document in the training set, LDA gives a probability distribution over topics.
+* Topic distributions for documents: For each non empty document in the training set, LDA gives a probability distribution over topics. (EM only). Note that for empty documents, we don't create the topic distributions. (EM only)
 
 LDA takes the following parameters:
 
@@ -405,7 +472,7 @@ to the algorithm. We then output the topics, represented as probability distribu
 <div data-lang="scala" markdown="1">
 
 {% highlight scala %}
-import org.apache.spark.mllib.clustering.LDA
+import org.apache.spark.mllib.clustering.{LDA, DistributedLDAModel}
 import org.apache.spark.mllib.linalg.Vectors
 
 // Load and parse the data
@@ -425,6 +492,11 @@ for (topic <- Range(0, 3)) {
   for (word <- Range(0, ldaModel.vocabSize)) { print(" " + topics(word, topic)); }
   println()
 }
+
+// Save and load model.
+ldaModel.save(sc, "myLDAModel")
+val sameModel = DistributedLDAModel.load(sc, "myLDAModel")
+
 {% endhighlight %}
 </div>
 
@@ -484,6 +556,9 @@ public class JavaLDAExample {
       }
       System.out.println();
     }
+
+    ldaModel.save(sc.sc(), "myLDAModel");
+    DistributedLDAModel sameModel = DistributedLDAModel.load(sc.sc(), "myLDAModel");
   }
 }
 {% endhighlight %}
@@ -573,6 +648,50 @@ ssc.start()
 ssc.awaitTermination()
 
 {% endhighlight %}
+</div>
+
+<div data-lang="python" markdown="1">
+First we import the neccessary classes.
+
+{% highlight python %}
+from pyspark.mllib.linalg import Vectors
+from pyspark.mllib.regression import LabeledPoint
+from pyspark.mllib.clustering import StreamingKMeans
+{% endhighlight %}
+
+Then we make an input stream of vectors for training, as well as a stream of labeled data
+points for testing. We assume a StreamingContext `ssc` has been created, see
+[Spark Streaming Programming Guide](streaming-programming-guide.html#initializing) for more info.
+
+{% highlight python %}
+def parse(lp):
+    label = float(lp[lp.find('(') + 1: lp.find(',')])
+    vec = Vectors.dense(lp[lp.find('[') + 1: lp.find(']')].split(','))
+    return LabeledPoint(label, vec)
+
+trainingData = ssc.textFileStream("/training/data/dir").map(Vectors.parse)
+testData = ssc.textFileStream("/testing/data/dir").map(parse)
+{% endhighlight %}
+
+We create a model with random clusters and specify the number of clusters to find
+
+{% highlight python %}
+model = StreamingKMeans(k=2, decayFactor=1.0).setRandomCenters(3, 1.0, 0)
+{% endhighlight %}
+
+Now register the streams for training and testing and start the job, printing
+the predicted cluster assignments on new data points as they arrive.
+
+{% highlight python %}
+model.trainOn(trainingData)
+print(model.predictOnValues(testData.map(lambda lp: (lp.label, lp.features))))
+
+ssc.start()
+ssc.awaitTermination()
+{% endhighlight %}
+</div>
+
+</div>
 
 As you add new text files with data the cluster centers will update. Each training
 point should be formatted as `[x1, x2, x3]`, and each test data point
@@ -580,7 +699,3 @@ should be formatted as `(y, [x1, x2, x3])`, where `y` is some useful label or id
 (e.g. a true category assignment). Anytime a text file is placed in `/training/data/dir`
 the model will update. Anytime a text file is placed in `/testing/data/dir`
 you will see predictions. With new data, the cluster centers will change!
-
-</div>
-
-</div>

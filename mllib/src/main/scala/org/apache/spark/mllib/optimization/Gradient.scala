@@ -37,7 +37,11 @@ abstract class Gradient extends Serializable {
    *
    * @return (gradient: Vector, loss: Double)
    */
-  def compute(data: Vector, label: Double, weights: Vector): (Vector, Double)
+  def compute(data: Vector, label: Double, weights: Vector): (Vector, Double) = {
+    val gradient = Vectors.zeros(weights.size)
+    val loss = compute(data, label, weights, gradient)
+    (gradient, loss)
+  }
 
   /**
    * Compute the gradient and loss given the features of a single data point,

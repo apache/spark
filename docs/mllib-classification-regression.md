@@ -20,7 +20,7 @@ the supported algorithms for each type of problem.
       <td>Binary Classification</td><td>linear SVMs, logistic regression, decision trees, random forests, gradient-boosted trees, naive Bayes</td>
     </tr>
     <tr>
-      <td>Multiclass Classification</td><td>decision trees, random forests, naive Bayes</td>
+      <td>Multiclass Classification</td><td>logistic regression, decision trees, random forests, naive Bayes</td>
     </tr>
     <tr>
       <td>Regression</td><td>linear least squares, Lasso, ridge regression, decision trees, random forests, gradient-boosted trees, isotonic regression</td>
@@ -31,7 +31,7 @@ the supported algorithms for each type of problem.
 More details for these methods can be found here:
 
 * [Linear models](mllib-linear-methods.html)
-  * [binary classification (SVMs, logistic regression)](mllib-linear-methods.html#binary-classification)
+  * [classification (SVMs, logistic regression)](mllib-linear-methods.html#classification)
   * [linear regression (least squares, Lasso, ridge)](mllib-linear-methods.html#linear-least-squares-lasso-and-ridge-regression)
 * [Decision trees](mllib-decision-tree.html)
 * [Ensembles of decision trees](mllib-ensembles.html)

@@ -17,12 +17,12 @@
 
 package org.apache.spark.mllib.util
 
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.linalg.Vectors
-import org.scalatest.FunSuite
 import org.apache.spark.mllib.util.TestingUtils._
 import org.scalatest.exceptions.TestFailedException
 
-class TestingUtilsSuite extends FunSuite {
+class TestingUtilsSuite extends SparkFunSuite {
 
   test("Comparing doubles using relative error.") {
 

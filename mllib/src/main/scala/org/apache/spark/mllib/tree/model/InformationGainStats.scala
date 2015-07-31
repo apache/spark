@@ -39,8 +39,8 @@ class InformationGainStats(
     val rightPredict: Predict) extends Serializable {
 
   override def toString: String = {
-    "gain = %f, impurity = %f, left impurity = %f, right impurity = %f"
-      .format(gain, impurity, leftImpurity, rightImpurity)
+    s"gain = $gain, impurity = $impurity, left impurity = $leftImpurity, " +
+      s"right impurity = $rightImpurity"
   }
 
   override def equals(o: Any): Boolean = o match {
@@ -67,7 +67,7 @@ class InformationGainStats(
 }
 
 
-private[tree] object InformationGainStats {
+private[spark] object InformationGainStats {
   /**
    * An [[org.apache.spark.mllib.tree.model.InformationGainStats]] object to
    * denote that current split doesn't satisfies minimum info gain or

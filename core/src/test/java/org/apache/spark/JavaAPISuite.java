@@ -157,11 +157,11 @@ public class JavaAPISuite implements Serializable {
   public void randomSplit() {
     List<Integer> ints = Arrays.asList(1, 2, 3, 4, 5, 6, 7, 8, 9, 10);
     JavaRDD<Integer> rdd = sc.parallelize(ints);
-    JavaRDD<Integer>[] splits = rdd.randomSplit(new double[] { 0.4, 0.6, 1.0 }, 11);
+    JavaRDD<Integer>[] splits = rdd.randomSplit(new double[] { 0.4, 0.6, 1.0 }, 31);
     Assert.assertEquals(3, splits.length);
-    Assert.assertEquals(2, splits[0].count());
-    Assert.assertEquals(3, splits[1].count());
-    Assert.assertEquals(5, splits[2].count());
+    Assert.assertEquals(1, splits[0].count());
+    Assert.assertEquals(2, splits[1].count());
+    Assert.assertEquals(7, splits[2].count());
   }
 
   @Test
@@ -212,6 +212,8 @@ public class JavaAPISuite implements Serializable {
 
     JavaPairRDD<Integer, Integer> repartitioned =
         rdd.repartitionAndSortWithinPartitions(partitioner);
+    Assert.assertTrue(repartitioned.partitioner().isPresent());
+    Assert.assertEquals(repartitioned.partitioner().get(), partitioner);
     List<List<Tuple2<Integer, Integer>>> partitions = repartitioned.glom().collect();
     Assert.assertEquals(partitions.get(0), Arrays.asList(new Tuple2<Integer, Integer>(0, 5),
         new Tuple2<Integer, Integer>(0, 8), new Tuple2<Integer, Integer>(2, 6)));
@@ -1009,7 +1011,7 @@ public class JavaAPISuite implements Serializable {
   @Test
   public void iterator() {
     JavaRDD<Integer> rdd = sc.parallelize(Arrays.asList(1, 2, 3, 4, 5), 2);
-    TaskContext context = new TaskContextImpl(0, 0, 0L, 0, false, new TaskMetrics());
+    TaskContext context = new TaskContextImpl(0, 0, 0L, 0, null, null, false, new TaskMetrics());
     Assert.assertEquals(1, rdd.iterator(rdd.partitions().get(0), context).next().intValue());
   }
 
@@ -1781,7 +1783,7 @@ public class JavaAPISuite implements Serializable {
     // Stop the context created in setUp() and start a local-cluster one, to force usage of the
     // assembly.
     sc.stop();
-    JavaSparkContext localCluster = new JavaSparkContext("local-cluster[1,1,512]", "JavaAPISuite");
+    JavaSparkContext localCluster = new JavaSparkContext("local-cluster[1,1,1024]", "JavaAPISuite");
     try {
       JavaRDD<Integer> rdd1 = localCluster.parallelize(Arrays.asList(1, 2, null), 3);
       JavaRDD<Optional<Integer>> rdd2 = rdd1.map(

@@ -101,7 +101,7 @@ private[stat] object PearsonCorrelation extends Correlation with Logging {
     Matrices.fromBreeze(cov)
   }
 
-  private def closeToZero(value: Double, threshhold: Double = 1e-12): Boolean = {
-    math.abs(value) <= threshhold
+  private def closeToZero(value: Double, threshold: Double = 1e-12): Boolean = {
+    math.abs(value) <= threshold
   }
 }

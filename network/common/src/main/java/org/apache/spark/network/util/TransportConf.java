@@ -17,6 +17,8 @@
 
 package org.apache.spark.network.util;
 
+import com.google.common.primitives.Ints;
+
 /**
  * A central location that tracks all the settings we expose to users.
  */
@@ -112,4 +114,20 @@ public class TransportConf {
   public int portMaxRetries() {
     return conf.getInt("spark.port.maxRetries", 16);
   }
+
+  /**
+   * Maximum number of bytes to be encrypted at a time when SASL encryption is enabled.
+   */
+  public int maxSaslEncryptedBlockSize() {
+    return Ints.checkedCast(JavaUtils.byteStringAsBytes(
+      conf.get("spark.network.sasl.maxEncryptedBlockSize", "64k")));
+  }
+
+  /**
+   * Whether the server should enforce encryption on SASL-authenticated connections.
+   */
+  public boolean saslServerAlwaysEncrypt() {
+    return conf.getBoolean("spark.network.sasl.serverAlwaysEncrypt", false);
+  }
+
 }

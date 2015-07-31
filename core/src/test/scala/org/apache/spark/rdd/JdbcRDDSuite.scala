@@ -19,14 +19,15 @@ package org.apache.spark.rdd
 
 import java.sql._
 
-import org.scalatest.{BeforeAndAfter, FunSuite}
+import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.{LocalSparkContext, SparkContext}
+import org.apache.spark.{LocalSparkContext, SparkContext, SparkFunSuite}
+import org.apache.spark.util.Utils
 
-class JdbcRDDSuite extends FunSuite with BeforeAndAfter with LocalSparkContext {
+class JdbcRDDSuite extends SparkFunSuite with BeforeAndAfter with LocalSparkContext {
 
   before {
-    Class.forName("org.apache.derby.jdbc.EmbeddedDriver")
+    Utils.classForName("org.apache.derby.jdbc.EmbeddedDriver")
     val conn = DriverManager.getConnection("jdbc:derby:target/JdbcRDDSuiteDb;create=true")
     try {
 
@@ -82,7 +83,7 @@ class JdbcRDDSuite extends FunSuite with BeforeAndAfter with LocalSparkContext {
     assert(rdd.count === 100)
     assert(rdd.reduce(_ + _) === 10100)
   }
-  
+
   test("large id overflow") {
     sc = new SparkContext("local", "test")
     val rdd = new JdbcRDD(

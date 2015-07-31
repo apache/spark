@@ -70,6 +70,7 @@ trait JavaTestBase extends TestSuiteBase {
       ssc: JavaStreamingContext, numBatches: Int, numExpectedOutput: Int): JList[JList[V]] = {
     implicit val cm: ClassTag[V] =
       implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[V]]
+    ssc.getState()
     val res = runStreams[V](ssc.ssc, numBatches, numExpectedOutput)
     val out = new ArrayList[JList[V]]()
     res.map(entry => out.append(new ArrayList[V](entry)))

@@ -21,14 +21,14 @@ import java.io._
 import java.util.concurrent.ConcurrentHashMap
 import java.util.zip.{GZIPInputStream, GZIPOutputStream}
 
-import scala.collection.mutable.{HashSet, Map}
+import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Map}
 import scala.collection.JavaConversions._
 import scala.reflect.ClassTag
 
 import org.apache.spark.rpc.{RpcEndpointRef, RpcEnv, RpcCallContext, RpcEndpoint}
 import org.apache.spark.scheduler.MapStatus
 import org.apache.spark.shuffle.MetadataFetchFailedException
-import org.apache.spark.storage.BlockManagerId
+import org.apache.spark.storage.{BlockId, BlockManagerId, ShuffleBlockId}
 import org.apache.spark.util._
 
 private[spark] sealed trait MapOutputTrackerMessage
@@ -106,7 +106,7 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
    */
   protected def askTracker[T: ClassTag](message: Any): T = {
     try {
-      trackerEndpoint.askWithReply[T](message)
+      trackerEndpoint.askWithRetry[T](message)
     } catch {
       case e: Exception =>
         logError("Error communicating with MapOutputTracker", e)
@@ -124,10 +124,18 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
   }
 
   /**
-   * Called from executors to get the server URIs and output sizes of the map outputs of
-   * a given shuffle.
+   * Called from executors to get the server URIs and output sizes for each shuffle block that
+   * needs to be read from a given reduce task.
+   *
+   * @return A sequence of 2-item tuples, where the first item in the tuple is a BlockManagerId,
+   *         and the second item is a sequence of (shuffle block id, shuffle block size) tuples
+   *         describing the shuffle blocks that are stored at that block manager.
    */
-  def getServerStatuses(shuffleId: Int, reduceId: Int): Array[(BlockManagerId, Long)] = {
+  def getMapSizesByExecutorId(shuffleId: Int, reduceId: Int)
+  : Seq[(BlockManagerId, Seq[(BlockId, Long)])] = {
+    logDebug(s"Fetching outputs for shuffle $shuffleId, reduce $reduceId")
+    val startTime = System.currentTimeMillis
+
     val statuses = mapStatuses.get(shuffleId).orNull
     if (statuses == null) {
       logInfo("Don't have map outputs for shuffle " + shuffleId + ", fetching them")
@@ -167,6 +175,9 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
           }
         }
       }
+      logDebug(s"Fetching map output location for shuffle $shuffleId, reduce $reduceId took " +
+        s"${System.currentTimeMillis - startTime} ms")
+
       if (fetchedStatuses != null) {
         fetchedStatuses.synchronized {
           return MapOutputTracker.convertMapStatuses(shuffleId, reduceId, fetchedStatuses)
@@ -284,6 +295,53 @@ private[spark] class MapOutputTrackerMaster(conf: SparkConf)
     cachedSerializedStatuses.contains(shuffleId) || mapStatuses.contains(shuffleId)
   }
 
+  /**
+   * Return a list of locations that each have fraction of map output greater than the specified
+   * threshold.
+   *
+   * @param shuffleId id of the shuffle
+   * @param reducerId id of the reduce task
+   * @param numReducers total number of reducers in the shuffle
+   * @param fractionThreshold fraction of total map output size that a location must have
+   *                          for it to be considered large.
+   *
+   * This method is not thread-safe.
+   */
+  def getLocationsWithLargestOutputs(
+      shuffleId: Int,
+      reducerId: Int,
+      numReducers: Int,
+      fractionThreshold: Double)
+    : Option[Array[BlockManagerId]] = {
+
+    if (mapStatuses.contains(shuffleId)) {
+      val statuses = mapStatuses(shuffleId)
+      if (statuses.nonEmpty) {
+        // HashMap to add up sizes of all blocks at the same location
+        val locs = new HashMap[BlockManagerId, Long]
+        var totalOutputSize = 0L
+        var mapIdx = 0
+        while (mapIdx < statuses.length) {
+          val status = statuses(mapIdx)
+          val blockSize = status.getSizeForBlock(reducerId)
+          if (blockSize > 0) {
+            locs(status.location) = locs.getOrElse(status.location, 0L) + blockSize
+            totalOutputSize += blockSize
+          }
+          mapIdx = mapIdx + 1
+        }
+        val topLocs = locs.filter { case (loc, size) =>
+          size.toDouble / totalOutputSize >= fractionThreshold
+        }
+        // Return if we have any locations which satisfy the required threshold
+        if (topLocs.nonEmpty) {
+          return Some(topLocs.map(_._1).toArray)
+        }
+      }
+    }
+    None
+  }
+
   def incrementEpoch() {
     epochLock.synchronized {
       epoch += 1
@@ -367,26 +425,45 @@ private[spark] object MapOutputTracker extends Logging {
   // Opposite of serializeMapStatuses.
   def deserializeMapStatuses(bytes: Array[Byte]): Array[MapStatus] = {
     val objIn = new ObjectInputStream(new GZIPInputStream(new ByteArrayInputStream(bytes)))
-    objIn.readObject().asInstanceOf[Array[MapStatus]]
+    Utils.tryWithSafeFinally {
+      objIn.readObject().asInstanceOf[Array[MapStatus]]
+    } {
+      objIn.close()
+    }
   }
 
-  // Convert an array of MapStatuses to locations and sizes for a given reduce ID. If
-  // any of the statuses is null (indicating a missing location due to a failed mapper),
-  // throw a FetchFailedException.
+  /**
+   * Converts an array of MapStatuses for a given reduce ID to a sequence that, for each block
+   * manager ID, lists the shuffle block ids and corresponding shuffle block sizes stored at that
+   * block manager.
+   *
+   * If any of the statuses is null (indicating a missing location due to a failed mapper),
+   * throws a FetchFailedException.
+   *
+   * @param shuffleId Identifier for the shuffle
+   * @param reduceId Identifier for the reduce task
+   * @param statuses List of map statuses, indexed by map ID.
+   * @return A sequence of 2-item tuples, where the first item in the tuple is a BlockManagerId,
+   *         and the second item is a sequence of (shuffle block id, shuffle block size) tuples
+   *         describing the shuffle blocks that are stored at that block manager.
+   */
   private def convertMapStatuses(
       shuffleId: Int,
       reduceId: Int,
-      statuses: Array[MapStatus]): Array[(BlockManagerId, Long)] = {
+      statuses: Array[MapStatus]): Seq[(BlockManagerId, Seq[(BlockId, Long)])] = {
     assert (statuses != null)
-    statuses.map {
-      status =>
-        if (status == null) {
-          logError("Missing an output location for shuffle " + shuffleId)
-          throw new MetadataFetchFailedException(
-            shuffleId, reduceId, "Missing an output location for shuffle " + shuffleId)
-        } else {
-          (status.location, status.getSizeForBlock(reduceId))
-        }
+    val splitsByAddress = new HashMap[BlockManagerId, ArrayBuffer[(BlockId, Long)]]
+    for ((status, mapId) <- statuses.zipWithIndex) {
+      if (status == null) {
+        val errorMessage = s"Missing an output location for shuffle $shuffleId"
+        logError(errorMessage)
+        throw new MetadataFetchFailedException(shuffleId, reduceId, errorMessage)
+      } else {
+        splitsByAddress.getOrElseUpdate(status.location, ArrayBuffer()) +=
+          ((ShuffleBlockId(shuffleId, mapId, reduceId), status.getSizeForBlock(reduceId)))
+      }
     }
+
+    splitsByAddress.toSeq
   }
 }

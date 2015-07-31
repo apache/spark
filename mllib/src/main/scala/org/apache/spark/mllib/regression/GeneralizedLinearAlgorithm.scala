@@ -195,11 +195,11 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
      */
     val initialWeights = {
       if (numOfLinearPredictor == 1) {
-        Vectors.dense(new Array[Double](numFeatures))
+        Vectors.zeros(numFeatures)
       } else if (addIntercept) {
-        Vectors.dense(new Array[Double]((numFeatures + 1) * numOfLinearPredictor))
+        Vectors.zeros((numFeatures + 1) * numOfLinearPredictor)
       } else {
-        Vectors.dense(new Array[Double](numFeatures * numOfLinearPredictor))
+        Vectors.zeros(numFeatures * numOfLinearPredictor)
       }
     }
     run(input, initialWeights)
@@ -225,7 +225,7 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
       throw new SparkException("Input validation failed.")
     }
 
-    /*
+    /**
      * Scaling columns to unit variance as a heuristic to reduce the condition number:
      *
      * During the optimization process, the convergence (rate) depends on the condition number of

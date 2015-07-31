@@ -121,10 +121,23 @@ def _parse_memory(s):
 
 
 def _load_from_socket(port, serializer):
-    sock = socket.socket()
-    sock.settimeout(3)
+    sock = None
+    # Support for both IPv4 and IPv6.
+    # On most of IPv6-ready systems, IPv6 will take precedence.
+    for res in socket.getaddrinfo("localhost", port, socket.AF_UNSPEC, socket.SOCK_STREAM):
+        af, socktype, proto, canonname, sa = res
+        sock = socket.socket(af, socktype, proto)
+        try:
+            sock.settimeout(3)
+            sock.connect(sa)
+        except socket.error:
+            sock.close()
+            sock = None
+            continue
+        break
+    if not sock:
+        raise Exception("could not open socket")
     try:
-        sock.connect(("localhost", port))
         rf = sock.makefile("rb", 65536)
         for item in serializer.load_stream(rf):
             yield item
@@ -687,12 +700,14 @@ class RDD(object):
         return self.map(lambda x: (f(x), x)).groupByKey(numPartitions)
 
     @ignore_unicode_prefix
-    def pipe(self, command, env={}):
+    def pipe(self, command, env={}, checkCode=False):
         """
         Return an RDD created by piping elements to a forked external process.
 
         >>> sc.parallelize(['1', '2', '', '3']).pipe('cat').collect()
         [u'1', u'2', u'', u'3']
+
+        :param checkCode: whether or not to check the return value of the shell command.
         """
         def func(iterator):
             pipe = Popen(
@@ -704,7 +719,17 @@ class RDD(object):
                     out.write(s.encode('utf-8'))
                 out.close()
             Thread(target=pipe_objs, args=[pipe.stdin]).start()
-            return (x.rstrip(b'\n').decode('utf-8') for x in iter(pipe.stdout.readline, b''))
+
+            def check_return_code():
+                pipe.wait()
+                if checkCode and pipe.returncode:
+                    raise Exception("Pipe function `%s' exited "
+                                    "with error code %d" % (command, pipe.returncode))
+                else:
+                    for i in range(0):
+                        yield i
+            return (x.rstrip(b'\n').decode('utf-8') for x in
+                    chain(iter(pipe.stdout.readline, b''), check_return_code()))
         return self.mapPartitions(func)
 
     def foreach(self, f):
@@ -813,12 +838,20 @@ class RDD(object):
     def fold(self, zeroValue, op):
         """
         Aggregate the elements of each partition, and then the results for all
-        the partitions, using a given associative function and a neutral "zero
-        value."
+        the partitions, using a given associative and commutative function and
+        a neutral "zero value."
 
         The function C{op(t1, t2)} is allowed to modify C{t1} and return it
         as its result value to avoid object allocation; however, it should not
         modify C{t2}.
+
+        This behaves somewhat differently from fold operations implemented
+        for non-distributed collections in functional languages like Scala.
+        This fold operation may be applied to partitions individually, and then
+        fold those results into the final result, rather than apply the fold
+        to each element sequentially in some defined ordering. For functions
+        that are not commutative, the result may differ from that of a fold
+        applied to a non-distributed collection.
 
         >>> from operator import add
         >>> sc.parallelize([1, 2, 3, 4, 5]).fold(0, add)
@@ -829,6 +862,9 @@ class RDD(object):
             for obj in iterator:
                 acc = op(obj, acc)
             yield acc
+        # collecting result of mapPartitions here ensures that the copy of
+        # zeroValue provided to each partition is unique from the one provided
+        # to the final reduce call
         vals = self.mapPartitions(func).collect()
         return reduce(op, vals, zeroValue)
 
@@ -858,8 +894,11 @@ class RDD(object):
             for obj in iterator:
                 acc = seqOp(acc, obj)
             yield acc
-
-        return self.mapPartitions(func).fold(zeroValue, combOp)
+        # collecting result of mapPartitions here ensures that the copy of
+        # zeroValue provided to each partition is unique from the one provided
+        # to the final reduce call
+        vals = self.mapPartitions(func).collect()
+        return reduce(combOp, vals, zeroValue)
 
     def treeAggregate(self, zeroValue, seqOp, combOp, depth=2):
         """
@@ -952,7 +991,7 @@ class RDD(object):
         >>> sc.parallelize([1.0, 2.0, 3.0]).sum()
         6.0
         """
-        return self.mapPartitions(lambda x: [sum(x)]).reduce(operator.add)
+        return self.mapPartitions(lambda x: [sum(x)]).fold(0, operator.add)
 
     def count(self):
         """
@@ -1254,7 +1293,7 @@ class RDD(object):
                     taken += 1
 
             p = range(partsScanned, min(partsScanned + numPartsToTry, totalParts))
-            res = self.context.runJob(self, takeUpToNumLeft, p, True)
+            res = self.context.runJob(self, takeUpToNumLeft, p)
 
             items += res
             partsScanned += numPartsToTry
@@ -2154,7 +2193,7 @@ class RDD(object):
         values = self.filter(lambda kv: kv[0] == key).values()
 
         if self.partitioner is not None:
-            return self.ctx.runJob(values, lambda x: x, [self.partitioner(key)], False)
+            return self.ctx.runJob(values, lambda x: x, [self.partitioner(key)])
 
         return values.collect()
 
@@ -2190,7 +2229,7 @@ class RDD(object):
 
         >>> rdd = sc.parallelize(range(1000), 10)
         >>> r = sum(range(1000))
-        >>> (rdd.sumApprox(1000) - r) / r < 0.05
+        >>> abs(rdd.sumApprox(1000) - r) / r < 0.05
         True
         """
         jrdd = self.mapPartitions(lambda it: [float(sum(it))])._to_java_object_rdd()
@@ -2207,7 +2246,7 @@ class RDD(object):
 
         >>> rdd = sc.parallelize(range(1000), 10)
         >>> r = sum(range(1000)) / 1000.0
-        >>> (rdd.meanApprox(1000) - r) / r < 0.05
+        >>> abs(rdd.meanApprox(1000) - r) / r < 0.05
         True
         """
         jrdd = self.map(float)._to_java_object_rdd()
@@ -2239,8 +2278,6 @@ class RDD(object):
         """
         if relativeSD < 0.000017:
             raise ValueError("relativeSD should be greater than 0.000017")
-        if relativeSD > 0.37:
-            raise ValueError("relativeSD should be smaller than 0.37")
         # the hash space in Java is 2^32
         hashRDD = self.map(lambda x: portable_hash(x) & 0xFFFFFFFF)
         return hashRDD._to_java_object_rdd().countApproxDistinct(relativeSD)
@@ -2262,7 +2299,7 @@ class RDD(object):
 def _prepare_for_python_RDD(sc, command, obj=None):
     # the serialized command will be compressed by broadcast
     ser = CloudPickleSerializer()
-    pickled_command = ser.dumps((command, sys.version_info[:2]))
+    pickled_command = ser.dumps(command)
     if len(pickled_command) > (1 << 20):  # 1M
         # The broadcast will have same life cycle as created PythonRDD
         broadcast = sc.broadcast(pickled_command)
@@ -2346,7 +2383,7 @@ class PipelinedRDD(RDD):
         python_rdd = self.ctx._jvm.PythonRDD(self._prev_jrdd.rdd(),
                                              bytearray(pickled_cmd),
                                              env, includes, self.preservesPartitioning,
-                                             self.ctx.pythonExec,
+                                             self.ctx.pythonExec, self.ctx.pythonVer,
                                              bvars, self.ctx._javaAccumulator)
         self._jrdd_val = python_rdd.asJavaRDD()
 

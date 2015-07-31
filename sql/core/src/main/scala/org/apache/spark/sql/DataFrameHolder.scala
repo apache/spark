@@ -19,6 +19,8 @@ package org.apache.spark.sql
 
 /**
  * A container for a [[DataFrame]], used for implicit conversions.
+ *
+ * @since 1.3.0
  */
 private[sql] case class DataFrameHolder(df: DataFrame) {
 
@@ -26,5 +28,5 @@ private[sql] case class DataFrameHolder(df: DataFrame) {
   // `rdd.toDF("1")` as invoking this toDF and then apply on the returned DataFrame.
   def toDF(): DataFrame = df
 
-  def toDF(colNames: String*): DataFrame = df.toDF(colNames :_*)
+  def toDF(colNames: String*): DataFrame = df.toDF(colNames : _*)
 }

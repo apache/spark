@@ -22,6 +22,9 @@ import io.netty.buffer.ByteBuf;
 
 import org.apache.spark.network.protocol.Encoders;
 
+// Needed by ScalaDoc. See SPARK-7726
+import static org.apache.spark.network.shuffle.protocol.BlockTransferMessage.Type;
+
 /**
  * Initial registration message between an executor and its local shuffle server.
  * Returns nothing (empty bye array).

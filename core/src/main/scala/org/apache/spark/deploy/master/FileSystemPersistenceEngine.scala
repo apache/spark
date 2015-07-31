@@ -21,9 +21,8 @@ import java.io._
 
 import scala.reflect.ClassTag
 
-import akka.serialization.Serialization
-
 import org.apache.spark.Logging
+import org.apache.spark.serializer.{DeserializationStream, SerializationStream, Serializer}
 import org.apache.spark.util.Utils
 
 
@@ -32,11 +31,11 @@ import org.apache.spark.util.Utils
  * Files are deleted when applications and workers are removed.
  *
  * @param dir Directory to store files. Created if non-existent (but not recursively).
- * @param serialization Used to serialize our objects.
+ * @param serializer Used to serialize our objects.
  */
 private[master] class FileSystemPersistenceEngine(
     val dir: String,
-    val serialization: Serialization)
+    val serializer: Serializer)
   extends PersistenceEngine with Logging {
 
   new File(dir).mkdir()
@@ -57,27 +56,31 @@ private[master] class FileSystemPersistenceEngine(
   private def serializeIntoFile(file: File, value: AnyRef) {
     val created = file.createNewFile()
     if (!created) { throw new IllegalStateException("Could not create file: " + file) }
-    val serializer = serialization.findSerializerFor(value)
-    val serialized = serializer.toBinary(value)
-    val out = new FileOutputStream(file)
+    val fileOut = new FileOutputStream(file)
+    var out: SerializationStream = null
     Utils.tryWithSafeFinally {
-      out.write(serialized)
+      out = serializer.newInstance().serializeStream(fileOut)
+      out.writeObject(value)
     } {
-      out.close()
+      fileOut.close()
+      if (out != null) {
+        out.close()
+      }
     }
   }
 
   private def deserializeFromFile[T](file: File)(implicit m: ClassTag[T]): T = {
-    val fileData = new Array[Byte](file.length().asInstanceOf[Int])
-    val dis = new DataInputStream(new FileInputStream(file))
+    val fileIn = new FileInputStream(file)
+    var in: DeserializationStream = null
     try {
-      dis.readFully(fileData)
+      in = serializer.newInstance().deserializeStream(fileIn)
+      in.readObject[T]()
     } finally {
-      dis.close()
+      fileIn.close()
+      if (in != null) {
+        in.close()
+      }
     }
-    val clazz = m.runtimeClass.asInstanceOf[Class[T]]
-    val serializer = serialization.serializerFor(clazz)
-    serializer.fromBinary(fileData).asInstanceOf[T]
   }
 
 }

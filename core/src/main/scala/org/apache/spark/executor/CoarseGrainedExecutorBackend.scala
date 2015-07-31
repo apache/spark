@@ -20,6 +20,8 @@ package org.apache.spark.executor
 import java.net.URL
 import java.nio.ByteBuffer
 
+import org.apache.hadoop.conf.Configuration
+
 import scala.collection.mutable
 import scala.util.{Failure, Success}
 
@@ -31,7 +33,7 @@ import org.apache.spark.deploy.worker.WorkerWatcher
 import org.apache.spark.scheduler.TaskDescription
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
 import org.apache.spark.serializer.SerializerInstance
-import org.apache.spark.util.{SignalLogger, Utils}
+import org.apache.spark.util.{ThreadUtils, SignalLogger, Utils}
 
 private[spark] class CoarseGrainedExecutorBackend(
     override val rpcEnv: RpcEnv,
@@ -53,18 +55,22 @@ private[spark] class CoarseGrainedExecutorBackend(
   private[this] val ser: SerializerInstance = env.closureSerializer.newInstance()
 
   override def onStart() {
-    import scala.concurrent.ExecutionContext.Implicits.global
     logInfo("Connecting to driver: " + driverUrl)
     rpcEnv.asyncSetupEndpointRefByURI(driverUrl).flatMap { ref =>
+      // This is a very fast action so we can use "ThreadUtils.sameThread"
       driver = Some(ref)
-      ref.sendWithReply[RegisteredExecutor.type](
+      ref.ask[RegisteredExecutor.type](
         RegisterExecutor(executorId, self, hostPort, cores, extractLogUrls))
-    } onComplete {
+    }(ThreadUtils.sameThread).onComplete {
+      // This is a very fast action so we can use "ThreadUtils.sameThread"
       case Success(msg) => Utils.tryLogNonFatalError {
         Option(self).foreach(_.send(msg)) // msg must be RegisteredExecutor
       }
-      case Failure(e) => logError(s"Cannot register with driver: $driverUrl", e)
-    }
+      case Failure(e) => {
+        logError(s"Cannot register with driver: $driverUrl", e)
+        System.exit(1)
+      }
+    }(ThreadUtils.sameThread)
   }
 
   def extractLogUrls: Map[String, String] = {
@@ -154,7 +160,7 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
         executorConf,
         new SecurityManager(executorConf))
       val driver = fetcher.setupEndpointRefByURI(driverUrl)
-      val props = driver.askWithReply[Seq[(String, String)]](RetrieveSparkProps) ++
+      val props = driver.askWithRetry[Seq[(String, String)]](RetrieveSparkProps) ++
         Seq[(String, String)](("spark.app.id", appId))
       fetcher.shutdown()
 
@@ -168,6 +174,12 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
           driverConf.set(key, value)
         }
       }
+      if (driverConf.contains("spark.yarn.credentials.file")) {
+        logInfo("Will periodically update credentials from: " +
+          driverConf.get("spark.yarn.credentials.file"))
+        SparkHadoopUtil.get.startExecutorDelegationTokenRenewer(driverConf)
+      }
+
       val env = SparkEnv.createExecutorEnv(
         driverConf, executorId, hostname, port, cores, isLocal = false)
 
@@ -183,6 +195,7 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
         env.rpcEnv.setupEndpoint("WorkerWatcher", new WorkerWatcher(env.rpcEnv, url))
       }
       env.rpcEnv.awaitTermination()
+      SparkHadoopUtil.get.stopExecutorDelegationTokenRenewer()
     }
   }
 
@@ -222,7 +235,9 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
           argv = tail
         case Nil =>
         case tail =>
+          // scalastyle:off println
           System.err.println(s"Unrecognized options: ${tail.mkString(" ")}")
+          // scalastyle:on println
           printUsageAndExit()
       }
     }
@@ -236,6 +251,7 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
   }
 
   private def printUsageAndExit() = {
+    // scalastyle:off println
     System.err.println(
       """
       |"Usage: CoarseGrainedExecutorBackend [options]
@@ -249,6 +265,7 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
       |   --worker-url <workerUrl>
       |   --user-class-path <url>
       |""".stripMargin)
+    // scalastyle:on println
     System.exit(1)
   }
 

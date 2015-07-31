@@ -67,7 +67,7 @@ public class JavaSaveLoadSuite {
       jsonObjects.add("{\"a\":" + i + ", \"b\":\"str" + i + "\"}");
     }
     JavaRDD<String> rdd = sc.parallelize(jsonObjects);
-    df = sqlContext.jsonRDD(rdd);
+    df = sqlContext.read().json(rdd);
     df.registerTempTable("jsonTable");
   }
 
@@ -75,10 +75,8 @@ public class JavaSaveLoadSuite {
   public void saveAndLoad() {
     Map<String, String> options = new HashMap<String, String>();
     options.put("path", path.toString());
-    df.save("org.apache.spark.sql.json", SaveMode.ErrorIfExists, options);
-
-    DataFrame loadedDF = sqlContext.load("org.apache.spark.sql.json", options);
-
+    df.write().mode(SaveMode.ErrorIfExists).format("json").options(options).save();
+    DataFrame loadedDF = sqlContext.read().format("json").options(options).load();
     checkAnswer(loadedDF, df.collectAsList());
   }
 
@@ -86,12 +84,12 @@ public class JavaSaveLoadSuite {
   public void saveAndLoadWithSchema() {
     Map<String, String> options = new HashMap<String, String>();
     options.put("path", path.toString());
-    df.save("org.apache.spark.sql.json", SaveMode.ErrorIfExists, options);
+    df.write().format("json").mode(SaveMode.ErrorIfExists).options(options).save();
 
     List<StructField> fields = new ArrayList<StructField>();
     fields.add(DataTypes.createStructField("b", DataTypes.StringType, true));
     StructType schema = DataTypes.createStructType(fields);
-    DataFrame loadedDF = sqlContext.load("org.apache.spark.sql.json", schema, options);
+    DataFrame loadedDF = sqlContext.read().format("json").schema(schema).options(options).load();
 
     checkAnswer(loadedDF, sqlContext.sql("SELECT b FROM jsonTable").collectAsList());
   }

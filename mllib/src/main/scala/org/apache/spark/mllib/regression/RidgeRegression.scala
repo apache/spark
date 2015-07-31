@@ -20,6 +20,7 @@ package org.apache.spark.mllib.regression
 import org.apache.spark.SparkContext
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.optimization._
+import org.apache.spark.mllib.pmml.PMMLExportable
 import org.apache.spark.mllib.regression.impl.GLMRegressionModel
 import org.apache.spark.mllib.util.{Loader, Saveable}
 import org.apache.spark.rdd.RDD
@@ -35,7 +36,7 @@ class RidgeRegressionModel (
     override val weights: Vector,
     override val intercept: Double)
   extends GeneralizedLinearModel(weights, intercept)
-  with RegressionModel with Serializable with Saveable {
+  with RegressionModel with Serializable with Saveable with PMMLExportable {
 
   override protected def predictPoint(
       dataMatrix: Vector,
@@ -72,7 +73,7 @@ object RidgeRegressionModel extends Loader[RidgeRegressionModel] {
 
 /**
  * Train a regression model with L2-regularization using Stochastic Gradient Descent.
- * This solves the l1-regularized least squares regression formulation
+ * This solves the l2-regularized least squares regression formulation
  *          f(weights) = 1/2n ||A weights-y||^2^  + regParam/2 ||weights||^2^
  * Here the data matrix has n rows, and the input RDD holds the set of rows of A, each with
  * its corresponding right hand side label y.

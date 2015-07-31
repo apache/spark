@@ -19,26 +19,28 @@ package org.apache.spark.sql.hive.execution
 
 import java.util
 
-import scala.collection.JavaConversions._
-
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hadoop.hive.metastore.MetaStoreUtils
-import org.apache.hadoop.hive.ql.metadata.Hive
 import org.apache.hadoop.hive.ql.plan.TableDesc
 import org.apache.hadoop.hive.ql.{Context, ErrorMsg}
 import org.apache.hadoop.hive.serde2.Serializer
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorUtils.ObjectInspectorCopyOption
 import org.apache.hadoop.hive.serde2.objectinspector._
-import org.apache.hadoop.mapred.{FileOutputCommitter, FileOutputFormat, JobConf}
+import org.apache.hadoop.mapred.{FileOutputFormat, JobConf}
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalyst.expressions.{Attribute, Row}
+import org.apache.spark.sql.Row
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.execution.{UnaryNode, SparkPlan}
+import org.apache.spark.sql.hive.HiveShim.{ShimFileSinkDesc => FileSinkDesc}
 import org.apache.spark.sql.hive._
-import org.apache.spark.sql.hive.{ ShimFileSinkDesc => FileSinkDesc}
-import org.apache.spark.sql.hive.HiveShim._
-import org.apache.spark.{SerializableWritable, SparkException, TaskContext}
+import org.apache.spark.sql.types.DataType
+import org.apache.spark.{SparkException, TaskContext}
+
+import scala.collection.JavaConversions._
+import org.apache.spark.util.SerializableJobConf
 
 private[hive]
 case class InsertIntoHiveTable(
@@ -62,10 +64,10 @@ case class InsertIntoHiveTable(
   def output: Seq[Attribute] = child.output
 
   def saveAsHiveFile(
-      rdd: RDD[Row],
+      rdd: RDD[InternalRow],
       valueClass: Class[_],
       fileSinkConf: FileSinkDesc,
-      conf: SerializableWritable[JobConf],
+      conf: SerializableJobConf,
       writerContainer: SparkHiveWriterContainer): Unit = {
     assert(valueClass != null, "Output value class not set")
     conf.value.setOutputValueClass(valueClass)
@@ -84,7 +86,7 @@ case class InsertIntoHiveTable(
     writerContainer.commitJob()
 
     // Note that this function is executed on executor side
-    def writeToFile(context: TaskContext, iterator: Iterator[Row]): Unit = {
+    def writeToFile(context: TaskContext, iterator: Iterator[InternalRow]): Unit = {
       val serializer = newSerializer(fileSinkConf.getTableInfo)
       val standardOI = ObjectInspectorUtils
         .getStandardObjectInspector(
@@ -95,18 +97,19 @@ case class InsertIntoHiveTable(
       val fieldOIs = standardOI.getAllStructFieldRefs.map(_.getFieldObjectInspector).toArray
       val wrappers = fieldOIs.map(wrapperFor)
       val outputData = new Array[Any](fieldOIs.length)
+      val dataTypes: Array[DataType] = child.output.map(_.dataType).toArray
 
       writerContainer.executorSideSetup(context.stageId, context.partitionId, context.attemptNumber)
 
       iterator.foreach { row =>
         var i = 0
         while (i < fieldOIs.length) {
-          outputData(i) = if (row.isNullAt(i)) null else wrappers(i)(row(i))
+          outputData(i) = if (row.isNullAt(i)) null else wrappers(i)(row.get(i, dataTypes(i)))
           i += 1
         }
 
         writerContainer
-          .getLocalFileWriter(row)
+          .getLocalFileWriter(row, table.schema)
           .write(serializer.serialize(outputData, standardOI))
       }
 
@@ -126,7 +129,7 @@ case class InsertIntoHiveTable(
     // instances within the closure, since Serializer is not serializable while TableDesc is.
     val tableDesc = table.tableDesc
     val tableLocation = table.hiveQlTable.getDataLocation
-    val tmpLocation = HiveShim.getExternalTmpPath(hiveContext, tableLocation)
+    val tmpLocation = hiveContext.getExternalTmpPath(tableLocation.toUri)
     val fileSinkConf = new FileSinkDesc(tmpLocation.toString, tableDesc, false)
     val isCompressed = sc.hiveconf.getBoolean(
       ConfVars.COMPRESSRESULT.varname, ConfVars.COMPRESSRESULT.defaultBoolVal)
@@ -173,7 +176,7 @@ case class InsertIntoHiveTable(
     }
 
     val jobConf = new JobConf(sc.hiveconf)
-    val jobConfSer = new SerializableWritable(jobConf)
+    val jobConfSer = new SerializableJobConf(jobConf)
 
     val writerContainer = if (numDynamicPartitions > 0) {
       val dynamicPartColNames = partitionColumnNames.takeRight(numDynamicPartitions)
@@ -194,15 +197,11 @@ case class InsertIntoHiveTable(
     if (partition.nonEmpty) {
 
       // loadPartition call orders directories created on the iteration order of the this map
-      val orderedPartitionSpec = new util.LinkedHashMap[String,String]()
-      table.hiveQlTable.getPartCols().foreach{
-        entry=>
-          orderedPartitionSpec.put(entry.getName,partitionSpec.get(entry.getName).getOrElse(""))
+      val orderedPartitionSpec = new util.LinkedHashMap[String, String]()
+      table.hiveQlTable.getPartCols().foreach { entry =>
+        orderedPartitionSpec.put(entry.getName, partitionSpec.get(entry.getName).getOrElse(""))
       }
-      val partVals = MetaStoreUtils.getPvals(table.hiveQlTable.getPartCols, partitionSpec)
-      catalog.synchronized {
-        catalog.client.validatePartitionNameCharacters(partVals)
-      }
+
       // inheritTableSpecs is set to true. It should be set to false for a IMPORT query
       // which is currently considered as a Hive native command.
       val inheritTableSpecs = true
@@ -211,7 +210,7 @@ case class InsertIntoHiveTable(
       if (numDynamicPartitions > 0) {
         catalog.synchronized {
           catalog.client.loadDynamicPartitions(
-            outputPath,
+            outputPath.toString,
             qualifiedTableName,
             orderedPartitionSpec,
             overwrite,
@@ -224,31 +223,28 @@ case class InsertIntoHiveTable(
         // ifNotExists is only valid with static partition, refer to
         // https://cwiki.apache.org/confluence/display/Hive/LanguageManual+DML#LanguageManualDML-InsertingdataintoHiveTablesfromqueries
         // scalastyle:on
-        val oldPart = catalog.synchronized {
-          catalog.client.getPartition(
-            catalog.client.getTable(qualifiedTableName), partitionSpec, false)
-        }
-        if (oldPart == null || !ifNotExists) {
-          catalog.synchronized {
+        val oldPart =
+          catalog.client.getPartitionOption(
+            catalog.client.getTable(table.databaseName, table.tableName),
+            partitionSpec)
+
+        if (oldPart.isEmpty || !ifNotExists) {
             catalog.client.loadPartition(
-              outputPath,
+              outputPath.toString,
               qualifiedTableName,
               orderedPartitionSpec,
               overwrite,
               holdDDLTime,
               inheritTableSpecs,
               isSkewedStoreAsSubdir)
-          }
         }
       }
     } else {
-      catalog.synchronized {
-        catalog.client.loadTable(
-          outputPath,
-          qualifiedTableName,
-          overwrite,
-          holdDDLTime)
-      }
+      catalog.client.loadTable(
+        outputPath.toString, // TODO: URI
+        qualifiedTableName,
+        overwrite,
+        holdDDLTime)
     }
 
     // Invalidate the cache.
@@ -263,5 +259,7 @@ case class InsertIntoHiveTable(
 
   override def executeCollect(): Array[Row] = sideEffectResult.toArray
 
-  override def execute(): RDD[Row] = sqlContext.sparkContext.parallelize(sideEffectResult, 1)
+  protected override def doExecute(): RDD[InternalRow] = {
+    sqlContext.sparkContext.parallelize(sideEffectResult.asInstanceOf[Seq[InternalRow]], 1)
+  }
 }

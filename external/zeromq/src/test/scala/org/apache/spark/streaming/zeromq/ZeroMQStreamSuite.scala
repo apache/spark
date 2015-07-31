@@ -20,13 +20,13 @@ package org.apache.spark.streaming.zeromq
 import akka.actor.SupervisorStrategy
 import akka.util.ByteString
 import akka.zeromq.Subscribe
-import org.scalatest.FunSuite
 
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.{Seconds, StreamingContext}
 import org.apache.spark.streaming.dstream.ReceiverInputDStream
 
-class ZeroMQStreamSuite extends FunSuite {
+class ZeroMQStreamSuite extends SparkFunSuite {
 
   val batchDuration = Seconds(1)
 

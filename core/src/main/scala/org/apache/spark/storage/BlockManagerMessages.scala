@@ -42,7 +42,6 @@ private[spark] object BlockManagerMessages {
   case class RemoveBroadcast(broadcastId: Long, removeFromDriver: Boolean = true)
     extends ToBlockManagerSlave
 
-
   //////////////////////////////////////////////////////////////////////////////////
   // Messages from slaves to the master.
   //////////////////////////////////////////////////////////////////////////////////
@@ -60,7 +59,7 @@ private[spark] object BlockManagerMessages {
       var storageLevel: StorageLevel,
       var memSize: Long,
       var diskSize: Long,
-      var tachyonSize: Long)
+      var externalBlockStoreSize: Long)
     extends ToBlockManagerMaster
     with Externalizable {
 
@@ -72,7 +71,7 @@ private[spark] object BlockManagerMessages {
       storageLevel.writeExternal(out)
       out.writeLong(memSize)
       out.writeLong(diskSize)
-      out.writeLong(tachyonSize)
+      out.writeLong(externalBlockStoreSize)
     }
 
     override def readExternal(in: ObjectInput): Unit = Utils.tryOrIOException {
@@ -81,7 +80,7 @@ private[spark] object BlockManagerMessages {
       storageLevel = StorageLevel(in)
       memSize = in.readLong()
       diskSize = in.readLong()
-      tachyonSize = in.readLong()
+      externalBlockStoreSize = in.readLong()
     }
   }
 
@@ -108,4 +107,6 @@ private[spark] object BlockManagerMessages {
     extends ToBlockManagerMaster
 
   case class BlockManagerHeartbeat(blockManagerId: BlockManagerId) extends ToBlockManagerMaster
+
+  case class HasCachedBlocks(executorId: String) extends ToBlockManagerMaster
 }

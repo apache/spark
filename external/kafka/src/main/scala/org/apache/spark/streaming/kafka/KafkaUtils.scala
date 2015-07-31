@@ -21,6 +21,7 @@ import java.lang.{Integer => JInt}
 import java.lang.{Long => JLong}
 import java.util.{Map => JMap}
 import java.util.{Set => JSet}
+import java.util.{List => JList}
 
 import scala.reflect.ClassTag
 import scala.collection.JavaConversions._
@@ -30,6 +31,7 @@ import kafka.message.MessageAndMetadata
 import kafka.serializer.{DefaultDecoder, Decoder, StringDecoder}
 
 import org.apache.spark.api.java.function.{Function => JFunction}
+import org.apache.spark.streaming.util.WriteAheadLogUtils
 import org.apache.spark.{SparkContext, SparkException}
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.rdd.RDD
@@ -79,7 +81,7 @@ object KafkaUtils {
       topics: Map[String, Int],
       storageLevel: StorageLevel
     ): ReceiverInputDStream[(K, V)] = {
-    val walEnabled = ssc.conf.getBoolean("spark.streaming.receiver.writeAheadLog.enable", false)
+    val walEnabled = WriteAheadLogUtils.enableReceiverLog(ssc.conf)
     new KafkaInputDStream[K, V, U, T](ssc, kafkaParams, topics, walEnabled, storageLevel)
   }
 
@@ -156,15 +158,31 @@ object KafkaUtils {
 
   /** get leaders for the given offset ranges, or throw an exception */
   private def leadersForRanges(
-      kafkaParams: Map[String, String],
+      kc: KafkaCluster,
       offsetRanges: Array[OffsetRange]): Map[TopicAndPartition, (String, Int)] = {
-    val kc = new KafkaCluster(kafkaParams)
     val topics = offsetRanges.map(o => TopicAndPartition(o.topic, o.partition)).toSet
-    val leaders = kc.findLeaders(topics).fold(
-      errs => throw new SparkException(errs.mkString("\n")),
-      ok => ok
-    )
-    leaders
+    val leaders = kc.findLeaders(topics)
+    KafkaCluster.checkErrors(leaders)
+  }
+
+  /** Make sure offsets are available in kafka, or throw an exception */
+  private def checkOffsets(
+      kc: KafkaCluster,
+      offsetRanges: Array[OffsetRange]): Unit = {
+    val topics = offsetRanges.map(_.topicAndPartition).toSet
+    val result = for {
+      low <- kc.getEarliestLeaderOffsets(topics).right
+      high <- kc.getLatestLeaderOffsets(topics).right
+    } yield {
+      offsetRanges.filterNot { o =>
+        low(o.topicAndPartition).offset <= o.fromOffset &&
+        o.untilOffset <= high(o.topicAndPartition).offset
+      }
+    }
+    val badRanges = KafkaCluster.checkErrors(result)
+    if (!badRanges.isEmpty) {
+      throw new SparkException("Offsets not available on leader: " + badRanges.mkString(","))
+    }
   }
 
   /**
@@ -187,9 +205,11 @@ object KafkaUtils {
       sc: SparkContext,
       kafkaParams: Map[String, String],
       offsetRanges: Array[OffsetRange]
-    ): RDD[(K, V)] = {
+    ): RDD[(K, V)] = sc.withScope {
     val messageHandler = (mmd: MessageAndMetadata[K, V]) => (mmd.key, mmd.message)
-    val leaders = leadersForRanges(kafkaParams, offsetRanges)
+    val kc = new KafkaCluster(kafkaParams)
+    val leaders = leadersForRanges(kc, offsetRanges)
+    checkOffsets(kc, offsetRanges)
     new KafkaRDD[K, V, KD, VD, (K, V)](sc, kafkaParams, offsetRanges, leaders, messageHandler)
   }
 
@@ -222,18 +242,20 @@ object KafkaUtils {
       offsetRanges: Array[OffsetRange],
       leaders: Map[TopicAndPartition, Broker],
       messageHandler: MessageAndMetadata[K, V] => R
-    ): RDD[R] = {
+    ): RDD[R] = sc.withScope {
+    val kc = new KafkaCluster(kafkaParams)
     val leaderMap = if (leaders.isEmpty) {
-      leadersForRanges(kafkaParams, offsetRanges)
+      leadersForRanges(kc, offsetRanges)
     } else {
       // This could be avoided by refactoring KafkaRDD.leaders and KafkaCluster to use Broker
       leaders.map {
         case (tp: TopicAndPartition, Broker(host, port)) => (tp, (host, port))
       }.toMap
     }
-    new KafkaRDD[K, V, KD, VD, R](sc, kafkaParams, offsetRanges, leaderMap, messageHandler)
+    val cleanedHandler = sc.clean(messageHandler)
+    checkOffsets(kc, offsetRanges)
+    new KafkaRDD[K, V, KD, VD, R](sc, kafkaParams, offsetRanges, leaderMap, cleanedHandler)
   }
-
 
   /**
    * Create a RDD from Kafka using offset ranges for each topic and partition.
@@ -255,7 +277,7 @@ object KafkaUtils {
       valueDecoderClass: Class[VD],
       kafkaParams: JMap[String, String],
       offsetRanges: Array[OffsetRange]
-    ): JavaPairRDD[K, V] = {
+    ): JavaPairRDD[K, V] = jsc.sc.withScope {
     implicit val keyCmt: ClassTag[K] = ClassTag(keyClass)
     implicit val valueCmt: ClassTag[V] = ClassTag(valueClass)
     implicit val keyDecoderCmt: ClassTag[KD] = ClassTag(keyDecoderClass)
@@ -293,7 +315,7 @@ object KafkaUtils {
       offsetRanges: Array[OffsetRange],
       leaders: JMap[TopicAndPartition, Broker],
       messageHandler: JFunction[MessageAndMetadata[K, V], R]
-    ): JavaRDD[R] = {
+    ): JavaRDD[R] = jsc.sc.withScope {
     implicit val keyCmt: ClassTag[K] = ClassTag(keyClass)
     implicit val valueCmt: ClassTag[V] = ClassTag(valueClass)
     implicit val keyDecoderCmt: ClassTag[KD] = ClassTag(keyDecoderClass)
@@ -313,7 +335,7 @@ object KafkaUtils {
    * Points to note:
    *  - No receivers: This stream does not use any receiver. It directly queries Kafka
    *  - Offsets: This does not use Zookeeper to store offsets. The consumed offsets are tracked
-   *    by the stream itself. For interoperability with Kafka monitoring tools that depend on 
+   *    by the stream itself. For interoperability with Kafka monitoring tools that depend on
    *    Zookeeper, you have to update Kafka/Zookeeper yourself from the streaming application.
    *    You can access the offsets used in each batch from the generated RDDs (see
    *    [[org.apache.spark.streaming.kafka.HasOffsetRanges]]).
@@ -347,8 +369,9 @@ object KafkaUtils {
       fromOffsets: Map[TopicAndPartition, Long],
       messageHandler: MessageAndMetadata[K, V] => R
   ): InputDStream[R] = {
+    val cleanedHandler = ssc.sc.clean(messageHandler)
     new DirectKafkaInputDStream[K, V, KD, VD, R](
-      ssc, kafkaParams, fromOffsets, messageHandler)
+      ssc, kafkaParams, fromOffsets, cleanedHandler)
   }
 
   /**
@@ -360,7 +383,7 @@ object KafkaUtils {
    * Points to note:
    *  - No receivers: This stream does not use any receiver. It directly queries Kafka
    *  - Offsets: This does not use Zookeeper to store offsets. The consumed offsets are tracked
-   *    by the stream itself. For interoperability with Kafka monitoring tools that depend on 
+   *    by the stream itself. For interoperability with Kafka monitoring tools that depend on
    *    Zookeeper, you have to update Kafka/Zookeeper yourself from the streaming application.
    *    You can access the offsets used in each batch from the generated RDDs (see
    *    [[org.apache.spark.streaming.kafka.HasOffsetRanges]]).
@@ -396,7 +419,7 @@ object KafkaUtils {
     val kc = new KafkaCluster(kafkaParams)
     val reset = kafkaParams.get("auto.offset.reset").map(_.toLowerCase)
 
-    (for {
+    val result = for {
       topicPartitions <- kc.getPartitions(topics).right
       leaderOffsets <- (if (reset == Some("smallest")) {
         kc.getEarliestLeaderOffsets(topicPartitions)
@@ -409,10 +432,8 @@ object KafkaUtils {
       }
       new DirectKafkaInputDStream[K, V, KD, VD, (K, V)](
         ssc, kafkaParams, fromOffsets, messageHandler)
-    }).fold(
-      errs => throw new SparkException(errs.mkString("\n")),
-      ok => ok
-    )
+    }
+    KafkaCluster.checkErrors(result)
   }
 
   /**
@@ -424,7 +445,7 @@ object KafkaUtils {
    * Points to note:
    *  - No receivers: This stream does not use any receiver. It directly queries Kafka
    *  - Offsets: This does not use Zookeeper to store offsets. The consumed offsets are tracked
-   *    by the stream itself. For interoperability with Kafka monitoring tools that depend on 
+   *    by the stream itself. For interoperability with Kafka monitoring tools that depend on
    *    Zookeeper, you have to update Kafka/Zookeeper yourself from the streaming application.
    *    You can access the offsets used in each batch from the generated RDDs (see
    *    [[org.apache.spark.streaming.kafka.HasOffsetRanges]]).
@@ -468,11 +489,12 @@ object KafkaUtils {
     implicit val keyDecoderCmt: ClassTag[KD] = ClassTag(keyDecoderClass)
     implicit val valueDecoderCmt: ClassTag[VD] = ClassTag(valueDecoderClass)
     implicit val recordCmt: ClassTag[R] = ClassTag(recordClass)
+    val cleanedHandler = jssc.sparkContext.clean(messageHandler.call _)
     createDirectStream[K, V, KD, VD, R](
       jssc.ssc,
       Map(kafkaParams.toSeq: _*),
       Map(fromOffsets.mapValues { _.longValue() }.toSeq: _*),
-      messageHandler.call _
+      cleanedHandler
     )
   }
 
@@ -485,7 +507,7 @@ object KafkaUtils {
    * Points to note:
    *  - No receivers: This stream does not use any receiver. It directly queries Kafka
    *  - Offsets: This does not use Zookeeper to store offsets. The consumed offsets are tracked
-   *    by the stream itself. For interoperability with Kafka monitoring tools that depend on 
+   *    by the stream itself. For interoperability with Kafka monitoring tools that depend on
    *    Zookeeper, you have to update Kafka/Zookeeper yourself from the streaming application.
    *    You can access the offsets used in each batch from the generated RDDs (see
    *    [[org.apache.spark.streaming.kafka.HasOffsetRanges]]).
@@ -557,5 +579,108 @@ private class KafkaUtilsPythonHelper {
       kafkaParams,
       topics,
       storageLevel)
+  }
+
+  def createRDD(
+      jsc: JavaSparkContext,
+      kafkaParams: JMap[String, String],
+      offsetRanges: JList[OffsetRange],
+      leaders: JMap[TopicAndPartition, Broker]): JavaPairRDD[Array[Byte], Array[Byte]] = {
+    val messageHandler = new JFunction[MessageAndMetadata[Array[Byte], Array[Byte]],
+      (Array[Byte], Array[Byte])] {
+      def call(t1: MessageAndMetadata[Array[Byte], Array[Byte]]): (Array[Byte], Array[Byte]) =
+        (t1.key(), t1.message())
+    }
+
+    val jrdd = KafkaUtils.createRDD[
+      Array[Byte],
+      Array[Byte],
+      DefaultDecoder,
+      DefaultDecoder,
+      (Array[Byte], Array[Byte])](
+        jsc,
+        classOf[Array[Byte]],
+        classOf[Array[Byte]],
+        classOf[DefaultDecoder],
+        classOf[DefaultDecoder],
+        classOf[(Array[Byte], Array[Byte])],
+        kafkaParams,
+        offsetRanges.toArray(new Array[OffsetRange](offsetRanges.size())),
+        leaders,
+        messageHandler
+      )
+    new JavaPairRDD(jrdd.rdd)
+  }
+
+  def createDirectStream(
+      jssc: JavaStreamingContext,
+      kafkaParams: JMap[String, String],
+      topics: JSet[String],
+      fromOffsets: JMap[TopicAndPartition, JLong]
+    ): JavaPairInputDStream[Array[Byte], Array[Byte]] = {
+
+    if (!fromOffsets.isEmpty) {
+      import scala.collection.JavaConversions._
+      val topicsFromOffsets = fromOffsets.keySet().map(_.topic)
+      if (topicsFromOffsets != topics.toSet) {
+        throw new IllegalStateException(s"The specified topics: ${topics.toSet.mkString(" ")} " +
+          s"do not equal to the topic from offsets: ${topicsFromOffsets.mkString(" ")}")
+      }
+    }
+
+    if (fromOffsets.isEmpty) {
+      KafkaUtils.createDirectStream[Array[Byte], Array[Byte], DefaultDecoder, DefaultDecoder](
+        jssc,
+        classOf[Array[Byte]],
+        classOf[Array[Byte]],
+        classOf[DefaultDecoder],
+        classOf[DefaultDecoder],
+        kafkaParams,
+        topics)
+    } else {
+      val messageHandler = new JFunction[MessageAndMetadata[Array[Byte], Array[Byte]],
+        (Array[Byte], Array[Byte])] {
+        def call(t1: MessageAndMetadata[Array[Byte], Array[Byte]]): (Array[Byte], Array[Byte]) =
+          (t1.key(), t1.message())
+      }
+
+      val jstream = KafkaUtils.createDirectStream[
+        Array[Byte],
+        Array[Byte],
+        DefaultDecoder,
+        DefaultDecoder,
+        (Array[Byte], Array[Byte])](
+          jssc,
+          classOf[Array[Byte]],
+          classOf[Array[Byte]],
+          classOf[DefaultDecoder],
+          classOf[DefaultDecoder],
+          classOf[(Array[Byte], Array[Byte])],
+          kafkaParams,
+          fromOffsets,
+          messageHandler)
+      new JavaPairInputDStream(jstream.inputDStream)
+    }
+  }
+
+  def createOffsetRange(topic: String, partition: JInt, fromOffset: JLong, untilOffset: JLong
+    ): OffsetRange = OffsetRange.create(topic, partition, fromOffset, untilOffset)
+
+  def createTopicAndPartition(topic: String, partition: JInt): TopicAndPartition =
+    TopicAndPartition(topic, partition)
+
+  def createBroker(host: String, port: JInt): Broker = Broker(host, port)
+
+  def offsetRangesOfKafkaRDD(rdd: RDD[_]): JList[OffsetRange] = {
+    val parentRDDs = rdd.getNarrowAncestors
+    val kafkaRDDs = parentRDDs.filter(rdd => rdd.isInstanceOf[KafkaRDD[_, _, _, _, _]])
+
+    require(
+      kafkaRDDs.length == 1,
+      "Cannot get offset ranges, as there may be multiple Kafka RDDs or no Kafka RDD associated" +
+        "with this RDD, please call this method only on a Kafka RDD.")
+
+    val kafkaRDD = kafkaRDDs.head.asInstanceOf[KafkaRDD[_, _, _, _, _]]
+    kafkaRDD.offsetRanges.toSeq
   }
 }

@@ -61,6 +61,7 @@ class SparkSubmitOptionParser {
   // Options that do not take arguments.
   protected final String HELP = "--help";
   protected final String SUPERVISE = "--supervise";
+  protected final String USAGE_ERROR = "--usage-error";
   protected final String VERBOSE = "--verbose";
   protected final String VERSION = "--version";
 
@@ -69,8 +70,10 @@ class SparkSubmitOptionParser {
   // YARN-only options.
   protected final String ARCHIVES = "--archives";
   protected final String EXECUTOR_CORES = "--executor-cores";
-  protected final String QUEUE = "--queue";
+  protected final String KEYTAB = "--keytab";
   protected final String NUM_EXECUTORS = "--num-executors";
+  protected final String PRINCIPAL = "--principal";
+  protected final String QUEUE = "--queue";
 
   /**
    * This is the canonical list of spark-submit options. Each entry in the array contains the
@@ -96,11 +99,13 @@ class SparkSubmitOptionParser {
     { EXECUTOR_MEMORY },
     { FILES },
     { JARS },
+    { KEYTAB },
     { KILL_SUBMISSION },
     { MASTER },
     { NAME },
     { NUM_EXECUTORS },
     { PACKAGES },
+    { PRINCIPAL },
     { PROPERTIES_FILE },
     { PROXY_USER },
     { PY_FILES },
@@ -116,6 +121,7 @@ class SparkSubmitOptionParser {
   final String[][] switches = {
     { HELP, "-h" },
     { SUPERVISE },
+    { USAGE_ERROR },
     { VERBOSE, "-v" },
     { VERSION },
   };

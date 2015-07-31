@@ -15,12 +15,14 @@
 # limitations under the License.
 #
 
+import glob
 import os
 import sys
 from itertools import chain
 import time
 import operator
 import tempfile
+import random
 import struct
 from functools import reduce
 
@@ -35,13 +37,14 @@ else:
 
 from pyspark.context import SparkConf, SparkContext, RDD
 from pyspark.streaming.context import StreamingContext
-from pyspark.streaming.kafka import KafkaUtils
+from pyspark.streaming.kafka import Broker, KafkaUtils, OffsetRange, TopicAndPartition
+from pyspark.streaming.flume import FlumeUtils
 
 
 class PySparkStreamingTestCase(unittest.TestCase):
 
-    timeout = 4  # seconds
-    duration = .2
+    timeout = 10  # seconds
+    duration = .5
 
     @classmethod
     def setUpClass(cls):
@@ -378,13 +381,13 @@ class BasicOperationTests(PySparkStreamingTestCase):
 
 class WindowFunctionTests(PySparkStreamingTestCase):
 
-    timeout = 5
+    timeout = 15
 
     def test_window(self):
         input = [range(1), range(2), range(3), range(4), range(5)]
 
         def func(dstream):
-            return dstream.window(.6, .2).count()
+            return dstream.window(1.5, .5).count()
 
         expected = [[1], [3], [6], [9], [12], [9], [5]]
         self._test_func(input, func, expected)
@@ -393,7 +396,7 @@ class WindowFunctionTests(PySparkStreamingTestCase):
         input = [range(1), range(2), range(3), range(4), range(5)]
 
         def func(dstream):
-            return dstream.countByWindow(.6, .2)
+            return dstream.countByWindow(1.5, .5)
 
         expected = [[1], [3], [6], [9], [12], [9], [5]]
         self._test_func(input, func, expected)
@@ -402,7 +405,7 @@ class WindowFunctionTests(PySparkStreamingTestCase):
         input = [range(1), range(2), range(3), range(4), range(5), range(6)]
 
         def func(dstream):
-            return dstream.countByWindow(1, .2)
+            return dstream.countByWindow(2.5, .5)
 
         expected = [[1], [3], [6], [10], [15], [20], [18], [15], [11], [6]]
         self._test_func(input, func, expected)
@@ -411,7 +414,7 @@ class WindowFunctionTests(PySparkStreamingTestCase):
         input = [range(1), range(2), range(3), range(4), range(5), range(6)]
 
         def func(dstream):
-            return dstream.countByValueAndWindow(1, .2)
+            return dstream.countByValueAndWindow(2.5, .5)
 
         expected = [[1], [2], [3], [4], [5], [6], [6], [6], [6], [6]]
         self._test_func(input, func, expected)
@@ -420,7 +423,7 @@ class WindowFunctionTests(PySparkStreamingTestCase):
         input = [[('a', i)] for i in range(5)]
 
         def func(dstream):
-            return dstream.groupByKeyAndWindow(.6, .2).mapValues(list)
+            return dstream.groupByKeyAndWindow(1.5, .5).mapValues(list)
 
         expected = [[('a', [0])], [('a', [0, 1])], [('a', [0, 1, 2])], [('a', [1, 2, 3])],
                     [('a', [2, 3, 4])], [('a', [3, 4])], [('a', [4])]]
@@ -590,9 +593,26 @@ class KafkaStreamTests(PySparkStreamingTestCase):
 
         super(KafkaStreamTests, self).tearDown()
 
+    def _randomTopic(self):
+        return "topic-%d" % random.randint(0, 10000)
+
+    def _validateStreamResult(self, sendData, stream):
+        result = {}
+        for i in chain.from_iterable(self._collect(stream.map(lambda x: x[1]),
+                                                   sum(sendData.values()))):
+            result[i] = result.get(i, 0) + 1
+
+        self.assertEqual(sendData, result)
+
+    def _validateRddResult(self, sendData, rdd):
+        result = {}
+        for i in rdd.map(lambda x: x[1]).collect():
+            result[i] = result.get(i, 0) + 1
+        self.assertEqual(sendData, result)
+
     def test_kafka_stream(self):
         """Test the Python Kafka stream API."""
-        topic = "topic1"
+        topic = self._randomTopic()
         sendData = {"a": 3, "b": 5, "c": 10}
 
         self._kafkaTestUtils.createTopic(topic)
@@ -601,13 +621,315 @@ class KafkaStreamTests(PySparkStreamingTestCase):
         stream = KafkaUtils.createStream(self.ssc, self._kafkaTestUtils.zkAddress(),
                                          "test-streaming-consumer", {topic: 1},
                                          {"auto.offset.reset": "smallest"})
+        self._validateStreamResult(sendData, stream)
 
-        result = {}
-        for i in chain.from_iterable(self._collect(stream.map(lambda x: x[1]),
-                                                   sum(sendData.values()))):
-            result[i] = result.get(i, 0) + 1
+    def test_kafka_direct_stream(self):
+        """Test the Python direct Kafka stream API."""
+        topic = self._randomTopic()
+        sendData = {"a": 1, "b": 2, "c": 3}
+        kafkaParams = {"metadata.broker.list": self._kafkaTestUtils.brokerAddress(),
+                       "auto.offset.reset": "smallest"}
 
-        self.assertEqual(sendData, result)
+        self._kafkaTestUtils.createTopic(topic)
+        self._kafkaTestUtils.sendMessages(topic, sendData)
+
+        stream = KafkaUtils.createDirectStream(self.ssc, [topic], kafkaParams)
+        self._validateStreamResult(sendData, stream)
+
+    @unittest.skipIf(sys.version >= "3", "long type not support")
+    def test_kafka_direct_stream_from_offset(self):
+        """Test the Python direct Kafka stream API with start offset specified."""
+        topic = self._randomTopic()
+        sendData = {"a": 1, "b": 2, "c": 3}
+        fromOffsets = {TopicAndPartition(topic, 0): long(0)}
+        kafkaParams = {"metadata.broker.list": self._kafkaTestUtils.brokerAddress()}
+
+        self._kafkaTestUtils.createTopic(topic)
+        self._kafkaTestUtils.sendMessages(topic, sendData)
+
+        stream = KafkaUtils.createDirectStream(self.ssc, [topic], kafkaParams, fromOffsets)
+        self._validateStreamResult(sendData, stream)
+
+    @unittest.skipIf(sys.version >= "3", "long type not support")
+    def test_kafka_rdd(self):
+        """Test the Python direct Kafka RDD API."""
+        topic = self._randomTopic()
+        sendData = {"a": 1, "b": 2}
+        offsetRanges = [OffsetRange(topic, 0, long(0), long(sum(sendData.values())))]
+        kafkaParams = {"metadata.broker.list": self._kafkaTestUtils.brokerAddress()}
+
+        self._kafkaTestUtils.createTopic(topic)
+        self._kafkaTestUtils.sendMessages(topic, sendData)
+        rdd = KafkaUtils.createRDD(self.sc, kafkaParams, offsetRanges)
+        self._validateRddResult(sendData, rdd)
+
+    @unittest.skipIf(sys.version >= "3", "long type not support")
+    def test_kafka_rdd_with_leaders(self):
+        """Test the Python direct Kafka RDD API with leaders."""
+        topic = self._randomTopic()
+        sendData = {"a": 1, "b": 2, "c": 3}
+        offsetRanges = [OffsetRange(topic, 0, long(0), long(sum(sendData.values())))]
+        kafkaParams = {"metadata.broker.list": self._kafkaTestUtils.brokerAddress()}
+        address = self._kafkaTestUtils.brokerAddress().split(":")
+        leaders = {TopicAndPartition(topic, 0): Broker(address[0], int(address[1]))}
+
+        self._kafkaTestUtils.createTopic(topic)
+        self._kafkaTestUtils.sendMessages(topic, sendData)
+        rdd = KafkaUtils.createRDD(self.sc, kafkaParams, offsetRanges, leaders)
+        self._validateRddResult(sendData, rdd)
+
+    @unittest.skipIf(sys.version >= "3", "long type not support")
+    def test_kafka_rdd_get_offsetRanges(self):
+        """Test Python direct Kafka RDD get OffsetRanges."""
+        topic = self._randomTopic()
+        sendData = {"a": 3, "b": 4, "c": 5}
+        offsetRanges = [OffsetRange(topic, 0, long(0), long(sum(sendData.values())))]
+        kafkaParams = {"metadata.broker.list": self._kafkaTestUtils.brokerAddress()}
+
+        self._kafkaTestUtils.createTopic(topic)
+        self._kafkaTestUtils.sendMessages(topic, sendData)
+        rdd = KafkaUtils.createRDD(self.sc, kafkaParams, offsetRanges)
+        self.assertEqual(offsetRanges, rdd.offsetRanges())
+
+    @unittest.skipIf(sys.version >= "3", "long type not support")
+    def test_kafka_direct_stream_foreach_get_offsetRanges(self):
+        """Test the Python direct Kafka stream foreachRDD get offsetRanges."""
+        topic = self._randomTopic()
+        sendData = {"a": 1, "b": 2, "c": 3}
+        kafkaParams = {"metadata.broker.list": self._kafkaTestUtils.brokerAddress(),
+                       "auto.offset.reset": "smallest"}
+
+        self._kafkaTestUtils.createTopic(topic)
+        self._kafkaTestUtils.sendMessages(topic, sendData)
+
+        stream = KafkaUtils.createDirectStream(self.ssc, [topic], kafkaParams)
+
+        offsetRanges = []
+
+        def getOffsetRanges(_, rdd):
+            for o in rdd.offsetRanges():
+                offsetRanges.append(o)
+
+        stream.foreachRDD(getOffsetRanges)
+        self.ssc.start()
+        self.wait_for(offsetRanges, 1)
+
+        self.assertEqual(offsetRanges, [OffsetRange(topic, 0, long(0), long(6))])
+
+    @unittest.skipIf(sys.version >= "3", "long type not support")
+    def test_kafka_direct_stream_transform_get_offsetRanges(self):
+        """Test the Python direct Kafka stream transform get offsetRanges."""
+        topic = self._randomTopic()
+        sendData = {"a": 1, "b": 2, "c": 3}
+        kafkaParams = {"metadata.broker.list": self._kafkaTestUtils.brokerAddress(),
+                       "auto.offset.reset": "smallest"}
+
+        self._kafkaTestUtils.createTopic(topic)
+        self._kafkaTestUtils.sendMessages(topic, sendData)
+
+        stream = KafkaUtils.createDirectStream(self.ssc, [topic], kafkaParams)
+
+        offsetRanges = []
+
+        def transformWithOffsetRanges(rdd):
+            for o in rdd.offsetRanges():
+                offsetRanges.append(o)
+            return rdd
+
+        stream.transform(transformWithOffsetRanges).foreachRDD(lambda rdd: rdd.count())
+        self.ssc.start()
+        self.wait_for(offsetRanges, 1)
+
+        self.assertEqual(offsetRanges, [OffsetRange(topic, 0, long(0), long(6))])
+
+
+class FlumeStreamTests(PySparkStreamingTestCase):
+    timeout = 20  # seconds
+    duration = 1
+
+    def setUp(self):
+        super(FlumeStreamTests, self).setUp()
+
+        utilsClz = self.ssc._jvm.java.lang.Thread.currentThread().getContextClassLoader() \
+            .loadClass("org.apache.spark.streaming.flume.FlumeTestUtils")
+        self._utils = utilsClz.newInstance()
+
+    def tearDown(self):
+        if self._utils is not None:
+            self._utils.close()
+            self._utils = None
+
+        super(FlumeStreamTests, self).tearDown()
+
+    def _startContext(self, n, compressed):
+        # Start the StreamingContext and also collect the result
+        dstream = FlumeUtils.createStream(self.ssc, "localhost", self._utils.getTestPort(),
+                                          enableDecompression=compressed)
+        result = []
+
+        def get_output(_, rdd):
+            for event in rdd.collect():
+                if len(result) < n:
+                    result.append(event)
+        dstream.foreachRDD(get_output)
+        self.ssc.start()
+        return result
+
+    def _validateResult(self, input, result):
+        # Validate both the header and the body
+        header = {"test": "header"}
+        self.assertEqual(len(input), len(result))
+        for i in range(0, len(input)):
+            self.assertEqual(header, result[i][0])
+            self.assertEqual(input[i], result[i][1])
+
+    def _writeInput(self, input, compressed):
+        # Try to write input to the receiver until success or timeout
+        start_time = time.time()
+        while True:
+            try:
+                self._utils.writeInput(input, compressed)
+                break
+            except:
+                if time.time() - start_time < self.timeout:
+                    time.sleep(0.01)
+                else:
+                    raise
+
+    def test_flume_stream(self):
+        input = [str(i) for i in range(1, 101)]
+        result = self._startContext(len(input), False)
+        self._writeInput(input, False)
+        self.wait_for(result, len(input))
+        self._validateResult(input, result)
+
+    def test_compressed_flume_stream(self):
+        input = [str(i) for i in range(1, 101)]
+        result = self._startContext(len(input), True)
+        self._writeInput(input, True)
+        self.wait_for(result, len(input))
+        self._validateResult(input, result)
+
+
+class FlumePollingStreamTests(PySparkStreamingTestCase):
+    timeout = 20  # seconds
+    duration = 1
+    maxAttempts = 5
+
+    def setUp(self):
+        utilsClz = \
+            self.sc._jvm.java.lang.Thread.currentThread().getContextClassLoader() \
+                .loadClass("org.apache.spark.streaming.flume.PollingFlumeTestUtils")
+        self._utils = utilsClz.newInstance()
+
+    def tearDown(self):
+        if self._utils is not None:
+            self._utils.close()
+            self._utils = None
+
+    def _writeAndVerify(self, ports):
+        # Set up the streaming context and input streams
+        ssc = StreamingContext(self.sc, self.duration)
+        try:
+            addresses = [("localhost", port) for port in ports]
+            dstream = FlumeUtils.createPollingStream(
+                ssc,
+                addresses,
+                maxBatchSize=self._utils.eventsPerBatch(),
+                parallelism=5)
+            outputBuffer = []
+
+            def get_output(_, rdd):
+                for e in rdd.collect():
+                    outputBuffer.append(e)
+
+            dstream.foreachRDD(get_output)
+            ssc.start()
+            self._utils.sendDatAndEnsureAllDataHasBeenReceived()
+
+            self.wait_for(outputBuffer, self._utils.getTotalEvents())
+            outputHeaders = [event[0] for event in outputBuffer]
+            outputBodies = [event[1] for event in outputBuffer]
+            self._utils.assertOutput(outputHeaders, outputBodies)
+        finally:
+            ssc.stop(False)
+
+    def _testMultipleTimes(self, f):
+        attempt = 0
+        while True:
+            try:
+                f()
+                break
+            except:
+                attempt += 1
+                if attempt >= self.maxAttempts:
+                    raise
+                else:
+                    import traceback
+                    traceback.print_exc()
+
+    def _testFlumePolling(self):
+        try:
+            port = self._utils.startSingleSink()
+            self._writeAndVerify([port])
+            self._utils.assertChannelsAreEmpty()
+        finally:
+            self._utils.close()
+
+    def _testFlumePollingMultipleHosts(self):
+        try:
+            port = self._utils.startSingleSink()
+            self._writeAndVerify([port])
+            self._utils.assertChannelsAreEmpty()
+        finally:
+            self._utils.close()
+
+    def test_flume_polling(self):
+        self._testMultipleTimes(self._testFlumePolling)
+
+    def test_flume_polling_multiple_hosts(self):
+        self._testMultipleTimes(self._testFlumePollingMultipleHosts)
+
+
+def search_kafka_assembly_jar():
+    SPARK_HOME = os.environ["SPARK_HOME"]
+    kafka_assembly_dir = os.path.join(SPARK_HOME, "external/kafka-assembly")
+    jars = glob.glob(
+        os.path.join(kafka_assembly_dir, "target/scala-*/spark-streaming-kafka-assembly-*.jar"))
+    if not jars:
+        raise Exception(
+            ("Failed to find Spark Streaming kafka assembly jar in %s. " % kafka_assembly_dir) +
+            "You need to build Spark with "
+            "'build/sbt assembly/assembly streaming-kafka-assembly/assembly' or "
+            "'build/mvn package' before running this test")
+    elif len(jars) > 1:
+        raise Exception(("Found multiple Spark Streaming Kafka assembly JARs in %s; please "
+                         "remove all but one") % kafka_assembly_dir)
+    else:
+        return jars[0]
+
+
+def search_flume_assembly_jar():
+    SPARK_HOME = os.environ["SPARK_HOME"]
+    flume_assembly_dir = os.path.join(SPARK_HOME, "external/flume-assembly")
+    jars = glob.glob(
+        os.path.join(flume_assembly_dir, "target/scala-*/spark-streaming-flume-assembly-*.jar"))
+    if not jars:
+        raise Exception(
+            ("Failed to find Spark Streaming Flume assembly jar in %s. " % flume_assembly_dir) +
+            "You need to build Spark with "
+            "'build/sbt assembly/assembly streaming-flume-assembly/assembly' or "
+            "'build/mvn package' before running this test")
+    elif len(jars) > 1:
+        raise Exception(("Found multiple Spark Streaming Flume assembly JARs in %s; please "
+                         "remove all but one") % flume_assembly_dir)
+    else:
+        return jars[0]
 
 if __name__ == "__main__":
+    kafka_assembly_jar = search_kafka_assembly_jar()
+    flume_assembly_jar = search_flume_assembly_jar()
+    jars = "%s,%s" % (kafka_assembly_jar, flume_assembly_jar)
+
+    os.environ["PYSPARK_SUBMIT_ARGS"] = "--jars %s pyspark-shell" % jars
     unittest.main()

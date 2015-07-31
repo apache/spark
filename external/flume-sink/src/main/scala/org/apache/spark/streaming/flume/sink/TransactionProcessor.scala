@@ -143,7 +143,7 @@ private class TransactionProcessor(val channel: Channel, val seqNum: String,
           eventBatch.setErrorMsg(msg)
         } else {
           // At this point, the events are available, so fill them into the event batch
-          eventBatch = new EventBatch("",seqNum, events)
+          eventBatch = new EventBatch("", seqNum, events)
         }
       })
     } catch {
