@@ -202,41 +202,6 @@ private[sql] case class EnsureRequirements(sqlContext: SQLContext) extends Rule[
 
   def apply(plan: SparkPlan): SparkPlan = plan.transformUp {
     case operator: SparkPlan =>
-      // True iff every child's outputPartitioning satisfies the corresponding
-      // required data distribution.
-      def meetsRequirements: Boolean =
-        operator.requiredChildDistribution.zip(operator.children).forall {
-          case (required, child) =>
-            val valid = child.outputPartitioning.satisfies(required)
-            logDebug(
-              s"${if (valid) "Valid" else "Invalid"} distribution," +
-                s"required: $required current: ${child.outputPartitioning}")
-            valid
-        }
-
-      // True iff any of the children are incorrectly sorted.
-      def needsAnySort: Boolean =
-        operator.requiredChildOrdering.zip(operator.children).exists {
-          case (required, child) => required.nonEmpty && required != child.outputOrdering
-        }
-
-      // True iff outputPartitionings of children are compatible with each other.
-      // It is possible that every child satisfies its required data distribution
-      // but two children have incompatible outputPartitionings. For example,
-      // A dataset is range partitioned by "a.asc" (RangePartitioning) and another
-      // dataset is hash partitioned by "a" (HashPartitioning). Tuples in these two
-      // datasets are both clustered by "a", but these two outputPartitionings are not
-      // compatible.
-      // TODO: ASSUMES TRANSITIVITY?
-      def compatible: Boolean =
-        operator.children
-          .map(_.outputPartitioning)
-          .sliding(2)
-          .forall {
-            case Seq(a) => true
-            case Seq(a, b) => a.compatibleWith(b)
-          }
-
       // Adds Exchange or Sort operators as required
       def addOperatorsIfNecessary(
           partitioning: Partitioning,
@@ -269,33 +234,26 @@ private[sql] case class EnsureRequirements(sqlContext: SQLContext) extends Rule[
         addSortIfNecessary(addShuffleIfNecessary(child))
       }
 
-      if (meetsRequirements && compatible && !needsAnySort) {
-        operator
-      } else {
-        // At least one child does not satisfies its required data distribution or
-        // at least one child's outputPartitioning is not compatible with another child's
-        // outputPartitioning. In this case, we need to add Exchange operators.
-        val requirements =
-          (operator.requiredChildDistribution, operator.requiredChildOrdering, operator.children)
+      val requirements =
+        (operator.requiredChildDistribution, operator.requiredChildOrdering, operator.children)
 
-        val fixedChildren = requirements.zipped.map {
-          case (AllTuples, rowOrdering, child) =>
-            addOperatorsIfNecessary(SinglePartition, rowOrdering, child)
-          case (ClusteredDistribution(clustering), rowOrdering, child) =>
-            addOperatorsIfNecessary(HashPartitioning(clustering, numPartitions), rowOrdering, child)
-          case (OrderedDistribution(ordering), rowOrdering, child) =>
-            addOperatorsIfNecessary(RangePartitioning(ordering, numPartitions), rowOrdering, child)
+      val fixedChildren = requirements.zipped.map {
+        case (AllTuples, rowOrdering, child) =>
+          addOperatorsIfNecessary(SinglePartition, rowOrdering, child)
+        case (ClusteredDistribution(clustering), rowOrdering, child) =>
+          addOperatorsIfNecessary(HashPartitioning(clustering, numPartitions), rowOrdering, child)
+        case (OrderedDistribution(ordering), rowOrdering, child) =>
+          addOperatorsIfNecessary(RangePartitioning(ordering, numPartitions), rowOrdering, child)
 
-          case (UnspecifiedDistribution, Seq(), child) =>
-            child
-          case (UnspecifiedDistribution, rowOrdering, child) =>
-            sqlContext.planner.BasicOperators.getSortOperator(rowOrdering, global = false, child)
+        case (UnspecifiedDistribution, Seq(), child) =>
+          child
+        case (UnspecifiedDistribution, rowOrdering, child) =>
+          sqlContext.planner.BasicOperators.getSortOperator(rowOrdering, global = false, child)
 
-          case (dist, ordering, _) =>
-            sys.error(s"Don't know how to ensure $dist with ordering $ordering")
-        }
-
-        operator.withNewChildren(fixedChildren)
+        case (dist, ordering, _) =>
+          sys.error(s"Don't know how to ensure $dist with ordering $ordering")
       }
+
+      operator.withNewChildren(fixedChildren)
   }
 }

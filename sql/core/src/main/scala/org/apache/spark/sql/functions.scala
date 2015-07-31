@@ -2181,6 +2181,25 @@ object functions {
    */
   def unix_timestamp(s: Column, p: String): Column = UnixTimestamp(s.expr, Literal(p))
 
+  /*
+   * Converts the column into DateType.
+   *
+   * @group datetime_funcs
+   * @since 1.5.0
+   */
+  def to_date(e: Column): Column = ToDate(e.expr)
+
+  /**
+   * Returns date truncated to the unit specified by the format.
+   *
+   * @param format: 'year', 'yyyy', 'yy' for truncate by year,
+   *               or 'month', 'mon', 'mm' for truncate by month
+   *
+   * @group datetime_funcs
+   * @since 1.5.0
+   */
+  def trunc(date: Column, format: String): Column = TruncDate(date.expr, Literal(format))
+
   //////////////////////////////////////////////////////////////////////////////////////////////
   // Collection functions
   //////////////////////////////////////////////////////////////////////////////////////////////

@@ -229,7 +229,7 @@ private[joins] final class UnsafeHashedRelation(
       // write all the values as single byte array
       var totalSize = 0L
       var i = 0
-      while (i < values.size) {
+      while (i < values.length) {
         totalSize += values(i).getSizeInBytes + 4 + 4
         i += 1
       }
@@ -240,7 +240,7 @@ private[joins] final class UnsafeHashedRelation(
       out.writeInt(totalSize.toInt)
       out.write(key.getBytes)
       i = 0
-      while (i < values.size) {
+      while (i < values.length) {
         // [num of fields] [num of bytes] [row bytes]
         // write the integer in native order, so they can be read by UNSAFE.getInt()
         if (ByteOrder.nativeOrder() == ByteOrder.BIG_ENDIAN) {

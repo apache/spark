@@ -35,6 +35,8 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
   private val BinaryWriter = classOf[UnsafeRowWriters.BinaryWriter].getName
   private val IntervalWriter = classOf[UnsafeRowWriters.IntervalWriter].getName
   private val StructWriter = classOf[UnsafeRowWriters.StructWriter].getName
+  private val CompactDecimalWriter = classOf[UnsafeRowWriters.CompactDecimalWriter].getName
+  private val DecimalWriter = classOf[UnsafeRowWriters.DecimalWriter].getName
 
   /** Returns true iff we support this data type. */
   def canSupport(dataType: DataType): Boolean = dataType match {
@@ -42,7 +44,62 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
     case _: CalendarIntervalType => true
     case t: StructType => t.toSeq.forall(field => canSupport(field.dataType))
     case NullType => true
+    case t: DecimalType => true
     case _ => false
+  }
+
+  def genAdditionalSize(dt: DataType, ev: GeneratedExpressionCode): String = dt match {
+    case t: DecimalType if t.precision > Decimal.MAX_LONG_DIGITS =>
+      s" + (${ev.isNull} ? 0 : $DecimalWriter.getSize(${ev.primitive}))"
+    case StringType =>
+      s" + (${ev.isNull} ? 0 : $StringWriter.getSize(${ev.primitive}))"
+    case BinaryType =>
+      s" + (${ev.isNull} ? 0 : $BinaryWriter.getSize(${ev.primitive}))"
+    case CalendarIntervalType =>
+      s" + (${ev.isNull} ? 0 : 16)"
+    case _: StructType =>
+      s" + (${ev.isNull} ? 0 : $StructWriter.getSize(${ev.primitive}))"
+    case _ => ""
+  }
+
+  def genFieldWriter(
+      ctx: CodeGenContext,
+      fieldType: DataType,
+      ev: GeneratedExpressionCode,
+      primitive: String,
+      index: Int,
+      cursor: String): String = fieldType match {
+    case _ if ctx.isPrimitiveType(fieldType) =>
+      s"${ctx.setColumn(primitive, fieldType, index, ev.primitive)}"
+    case t: DecimalType if t.precision <= Decimal.MAX_LONG_DIGITS =>
+      s"""
+       // make sure Decimal object has the same scale as DecimalType
+       if (${ev.primitive}.changePrecision(${t.precision}, ${t.scale})) {
+         $CompactDecimalWriter.write($primitive, $index, $cursor, ${ev.primitive});
+       } else {
+         $primitive.setNullAt($index);
+       }
+       """
+    case t: DecimalType if t.precision > Decimal.MAX_LONG_DIGITS =>
+      s"""
+       // make sure Decimal object has the same scale as DecimalType
+       if (${ev.primitive}.changePrecision(${t.precision}, ${t.scale})) {
+         $cursor += $DecimalWriter.write($primitive, $index, $cursor, ${ev.primitive});
+       } else {
+         $primitive.setNullAt($index);
+       }
+       """
+    case StringType =>
+      s"$cursor += $StringWriter.write($primitive, $index, $cursor, ${ev.primitive})"
+    case BinaryType =>
+      s"$cursor += $BinaryWriter.write($primitive, $index, $cursor, ${ev.primitive})"
+    case CalendarIntervalType =>
+      s"$cursor += $IntervalWriter.write($primitive, $index, $cursor, ${ev.primitive})"
+    case t: StructType =>
+      s"$cursor += $StructWriter.write($primitive, $index, $cursor, ${ev.primitive})"
+    case NullType => ""
+    case _ =>
+      throw new UnsupportedOperationException(s"Not supported DataType: $fieldType")
   }
 
   /**
@@ -69,36 +126,12 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
     val allExprs = exprs.map(_.code).mkString("\n")
 
     val fixedSize = 8 * exprs.length + UnsafeRow.calculateBitSetWidthInBytes(exprs.length)
-    val additionalSize = expressions.zipWithIndex.map { case (e, i) =>
-      e.dataType match {
-        case StringType =>
-          s" + (${exprs(i).isNull} ? 0 : $StringWriter.getSize(${exprs(i).primitive}))"
-        case BinaryType =>
-          s" + (${exprs(i).isNull} ? 0 : $BinaryWriter.getSize(${exprs(i).primitive}))"
-        case CalendarIntervalType =>
-          s" + (${exprs(i).isNull} ? 0 : 16)"
-        case _: StructType =>
-          s" + (${exprs(i).isNull} ? 0 : $StructWriter.getSize(${exprs(i).primitive}))"
-        case _ => ""
-      }
+    val additionalSize = expressions.zipWithIndex.map {
+      case (e, i) => genAdditionalSize(e.dataType, exprs(i))
     }.mkString("")
 
     val writers = expressions.zipWithIndex.map { case (e, i) =>
-      val update = e.dataType match {
-        case dt if ctx.isPrimitiveType(dt) =>
-          s"${ctx.setColumn(ret, dt, i, exprs(i).primitive)}"
-        case StringType =>
-          s"$cursor += $StringWriter.write($ret, $i, $cursor, ${exprs(i).primitive})"
-        case BinaryType =>
-          s"$cursor += $BinaryWriter.write($ret, $i, $cursor, ${exprs(i).primitive})"
-        case CalendarIntervalType =>
-          s"$cursor += $IntervalWriter.write($ret, $i, $cursor, ${exprs(i).primitive})"
-        case t: StructType =>
-          s"$cursor += $StructWriter.write($ret, $i, $cursor, ${exprs(i).primitive})"
-        case NullType => ""
-        case _ =>
-          throw new UnsupportedOperationException(s"Not supported DataType: ${e.dataType}")
-      }
+      val update = genFieldWriter(ctx, e.dataType, exprs(i), ret, i, cursor)
       s"""if (${exprs(i).isNull}) {
             $ret.setNullAt($i);
           } else {
@@ -168,35 +201,11 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
 
     val fixedSize = 8 * exprs.length + UnsafeRow.calculateBitSetWidthInBytes(exprs.length)
     val additionalSize = schema.toSeq.map(_.dataType).zip(exprs).map { case (dt, ev) =>
-      dt match {
-        case StringType =>
-          s" + (${ev.isNull} ? 0 : $StringWriter.getSize(${ev.primitive}))"
-        case BinaryType =>
-          s" + (${ev.isNull} ? 0 : $BinaryWriter.getSize(${ev.primitive}))"
-        case CalendarIntervalType =>
-          s" + (${ev.isNull} ? 0 : 16)"
-        case _: StructType =>
-          s" + (${ev.isNull} ? 0 : $StructWriter.getSize(${ev.primitive}))"
-        case _ => ""
-      }
+      genAdditionalSize(dt, ev)
     }.mkString("")
 
     val writers = schema.toSeq.map(_.dataType).zip(exprs).zipWithIndex.map { case ((dt, ev), i) =>
-      val update = dt match {
-        case _ if ctx.isPrimitiveType(dt) =>
-          s"${ctx.setColumn(primitive, dt, i, exprs(i).primitive)}"
-        case StringType =>
-          s"$cursor += $StringWriter.write($primitive, $i, $cursor, ${exprs(i).primitive})"
-        case BinaryType =>
-          s"$cursor += $BinaryWriter.write($primitive, $i, $cursor, ${exprs(i).primitive})"
-        case CalendarIntervalType =>
-          s"$cursor += $IntervalWriter.write($primitive, $i, $cursor, ${exprs(i).primitive})"
-        case t: StructType =>
-          s"$cursor += $StructWriter.write($primitive, $i, $cursor, ${exprs(i).primitive})"
-        case NullType => ""
-        case _ =>
-          throw new UnsupportedOperationException(s"Not supported DataType: $dt")
-      }
+      val update = genFieldWriter(ctx, dt, ev, primitive, i, cursor)
       s"""
           if (${exprs(i).isNull}) {
             $primitive.setNullAt($i);

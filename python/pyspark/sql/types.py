@@ -648,7 +648,7 @@ class UserDefinedType(DataType):
 
     @classmethod
     def fromJson(cls, json):
-        pyUDT = str(json["pyClass"])
+        pyUDT = str(json["pyClass"])  # convert unicode to str
         split = pyUDT.rfind(".")
         pyModule = pyUDT[:split]
         pyClass = pyUDT[split+1:]
