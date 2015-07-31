@@ -643,14 +643,14 @@ class NaiveBayes(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol):
     def _create_model(self, java_model):
         return NaiveBayesModel(java_model)
 
-    def setLambda(self, value):
+    def setSmoothing(self, value):
         """
         Sets the value of :py:attr:`smoothing`.
         """
         self._paramMap[self.smoothing] = value
         return self
 
-    def getLambda(self):
+    def getSmoothing(self):
         """
         Gets the value of smoothing or its default value.
         """
