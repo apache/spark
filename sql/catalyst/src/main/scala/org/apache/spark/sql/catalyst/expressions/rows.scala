@@ -40,17 +40,6 @@ abstract class MutableRow extends InternalRow {
   def setFloat(i: Int, value: Float): Unit = { update(i, value) }
   def setDouble(i: Int, value: Double): Unit = { update(i, value) }
   def setDecimal(i: Int, value: Decimal, precision: Int) { update(i, value) }
-
-  override def copy(): InternalRow = {
-    val n = numFields
-    val arr = new Array[Any](n)
-    var i = 0
-    while (i < n) {
-      arr(i) = genericGet(i)
-      i += 1
-    }
-    new GenericInternalRow(arr)
-  }
 }
 
 /**

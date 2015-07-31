@@ -115,7 +115,7 @@ class CodeGenContext {
       case _: ArrayType => s"$getter.getArray($ordinal)"
       case _: MapType => s"$getter.getMap($ordinal)"
       case NullType => "null"
-      case _ => s"($jt)$getter.genericGet($ordinal)" // todo: remove generic getter.
+      case _ => s"($jt)$getter.get($ordinal, null)"
     }
   }
 
