@@ -69,11 +69,13 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
     sql("DROP TEMPORARY FUNCTION udtf_count2")
   }
 
-  createQueryTest("Test UDTF.close in Lateral Views",
-     """
-       |SELECT key, cc
-       |FROM src LATERAL VIEW udtf_count2(value) dd AS cc
-     """.stripMargin, false) // false mean we have to keep the temp function in registry
+  createQueryTest(
+    "Test UDTF.close in Lateral Views",
+    """
+      |SELECT key, cc
+      |FROM src LATERAL VIEW udtf_count2(value) dd AS cc
+    """.stripMargin.replaceAll("\r\n", "\n"),
+    false) // false mean we have to keep the temp function in registry
 
   createQueryTest("Test UDTF.close in SELECT",
      "SELECT udtf_count2(a) FROM (SELECT 1 AS a FROM src LIMIT 3) table", false)
@@ -88,7 +90,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
   createQueryTest("SPARK-8976 Wrong Result for Rollup #1",
     """
       SELECT count(*) AS cnt, key % 5,GROUPING__ID FROM src group by key%5 WITH ROLLUP
-    """.stripMargin)
+    """.stripMargin.replaceAll("\r\n", "\n"))
 
   createQueryTest("SPARK-8976 Wrong Result for Rollup #2",
     """
@@ -99,7 +101,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
         GROUPING__ID as k3
       FROM src group by key%5, key-5
       WITH ROLLUP ORDER BY cnt, k1, k2, k3 LIMIT 10
-    """.stripMargin)
+    """.stripMargin.replaceAll("\r\n", "\n"))
 
   createQueryTest("SPARK-8976 Wrong Result for Rollup #3",
     """
@@ -110,12 +112,12 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
         GROUPING__ID as k3
       FROM (SELECT key, key%2, key - 5 FROM src) t group by key%5, key-5
       WITH ROLLUP ORDER BY cnt, k1, k2, k3 LIMIT 10
-    """.stripMargin)
+    """.stripMargin.replaceAll("\r\n", "\n"))
 
   createQueryTest("SPARK-8976 Wrong Result for CUBE #1",
     """
       SELECT count(*) AS cnt, key % 5,GROUPING__ID FROM src group by key%5 WITH CUBE
-    """.stripMargin)
+    """.stripMargin.replaceAll("\r\n", "\n"))
 
   createQueryTest("SPARK-8976 Wrong Result for CUBE #2",
     """
@@ -126,7 +128,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
         GROUPING__ID as k3
       FROM (SELECT key, key%2, key - 5 FROM src) t group by key%5, key-5
       WITH CUBE ORDER BY cnt, k1, k2, k3 LIMIT 10
-    """.stripMargin)
+    """.stripMargin.replaceAll("\r\n", "\n"))
 
   createQueryTest("SPARK-8976 Wrong Result for GroupingSet",
     """
@@ -137,7 +139,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
         GROUPING__ID as k3
       FROM (SELECT key, key%2, key - 5 FROM src) t group by key%5, key-5
       GROUPING SETS (key%5, key-5) ORDER BY cnt, k1, k2, k3 LIMIT 10
-    """.stripMargin)
+    """.stripMargin.replaceAll("\r\n", "\n"))
 
   createQueryTest("insert table with generator with column name",
     """
@@ -145,7 +147,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
       |  INSERT OVERWRITE TABLE gen_tmp
       |    SELECT explode(array(1,2,3)) AS val FROM src LIMIT 3;
       |  SELECT key FROM gen_tmp ORDER BY key ASC;
-    """.stripMargin)
+    """.stripMargin.replaceAll("\r\n", "\n"))
 
   createQueryTest("insert table with generator with multiple column names",
     """
@@ -153,7 +155,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
       |  INSERT OVERWRITE TABLE gen_tmp
       |    SELECT explode(map(key, value)) as (k1, k2) FROM src LIMIT 3;
       |  SELECT key, value FROM gen_tmp ORDER BY key, value ASC;
-    """.stripMargin)
+    """.stripMargin.replaceAll("\r\n", "\n"))
 
   createQueryTest("insert table with generator without column name",
     """
@@ -161,7 +163,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
       |  INSERT OVERWRITE TABLE gen_tmp
       |    SELECT explode(array(1,2,3)) FROM src LIMIT 3;
       |  SELECT key FROM gen_tmp ORDER BY key ASC;
-    """.stripMargin)
+    """.stripMargin.replaceAll("\r\n", "\n"))
 
   test("multiple generators in projection") {
     intercept[AnalysisException] {
@@ -179,7 +181,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
       |  SELECT 1 AS a FROM src LIMIT 1 UNION ALL
       |  SELECT 2 AS a FROM src LIMIT 1) table
       |WHERE !(a>1)
-    """.stripMargin)
+    """.stripMargin.replaceAll("\r\n", "\n"))
 
   createQueryTest("constant object inspector for generic udf",
     """SELECT named_struct(
@@ -187,7 +189,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
       repeat(lower("AA"), 3), "11",
       lower(repeat("AA", 3)), "12",
       printf("bb%d", 12), "13",
-      repeat(printf("s%d", 14), 2), "14") FROM src LIMIT 1""")
+      repeat(printf("s%d", 14), 2), "14") FROM src LIMIT 1""".replaceAll("\r\n", "\n"))
 
   createQueryTest("NaN to Decimal",
     "SELECT CAST(CAST('NaN' AS DOUBLE) AS DECIMAL(1,1)) FROM src LIMIT 1")
@@ -218,7 +220,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
       |IF(TRUE, CAST(NULL AS TIMESTAMP), CAST(1 AS TIMESTAMP)) AS COL22,
       |IF(FALSE, CAST(NULL AS DECIMAL), CAST(1 AS DECIMAL)) AS COL23,
       |IF(TRUE, CAST(NULL AS DECIMAL), CAST(1 AS DECIMAL)) AS COL24
-      |FROM src LIMIT 1""".stripMargin)
+      |FROM src LIMIT 1""".stripMargin.replaceAll("\r\n", "\n"))
 
   createQueryTest("constant array",
   """
@@ -227,34 +229,34 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
     |    array("hadoop distributed file system",
     |          "enterprise databases", "hadoop map-reduce")))
     |FROM src LIMIT 1;
-  """.stripMargin)
+  """.stripMargin.replaceAll("\r\n", "\n"))
 
   createQueryTest("count distinct 0 values",
     """
       |SELECT COUNT(DISTINCT a) FROM (
       |  SELECT 'a' AS a FROM src LIMIT 0) table
-    """.stripMargin)
+    """.stripMargin.replaceAll("\r\n", "\n"))
 
   createQueryTest("count distinct 1 value strings",
     """
       |SELECT COUNT(DISTINCT a) FROM (
       |  SELECT 'a' AS a FROM src LIMIT 1 UNION ALL
       |  SELECT 'b' AS a FROM src LIMIT 1) table
-    """.stripMargin)
+    """.stripMargin.replaceAll("\r\n", "\n"))
 
   createQueryTest("count distinct 1 value",
     """
       |SELECT COUNT(DISTINCT a) FROM (
       |  SELECT 1 AS a FROM src LIMIT 1 UNION ALL
       |  SELECT 1 AS a FROM src LIMIT 1) table
-    """.stripMargin)
+    """.stripMargin.replaceAll("\r\n", "\n"))
 
   createQueryTest("count distinct 2 values",
     """
       |SELECT COUNT(DISTINCT a) FROM (
       |  SELECT 1 AS a FROM src LIMIT 1 UNION ALL
       |  SELECT 2 AS a FROM src LIMIT 1) table
-    """.stripMargin)
+    """.stripMargin.replaceAll("\r\n", "\n"))
 
   createQueryTest("count distinct 2 values including null",
     """
@@ -262,7 +264,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
       |  SELECT 1 AS a FROM src LIMIT 1 UNION ALL
       |  SELECT 1 AS a FROM src LIMIT 1 UNION ALL
       |  SELECT null AS a FROM src LIMIT 1) table
-    """.stripMargin)
+    """.stripMargin.replaceAll("\r\n", "\n"))
 
   createQueryTest("count distinct 1 value + null",
   """
@@ -270,21 +272,21 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
     |  SELECT 1 AS a FROM src LIMIT 1 UNION ALL
     |  SELECT 1 AS a FROM src LIMIT 1 UNION ALL
     |  SELECT null AS a FROM src LIMIT 1) table
-  """.stripMargin)
+  """.stripMargin.replaceAll("\r\n", "\n"))
 
   createQueryTest("count distinct 1 value long",
     """
       |SELECT COUNT(DISTINCT a) FROM (
       |  SELECT 1L AS a FROM src LIMIT 1 UNION ALL
       |  SELECT 1L AS a FROM src LIMIT 1) table
-    """.stripMargin)
+    """.stripMargin.replaceAll("\r\n", "\n"))
 
   createQueryTest("count distinct 2 values long",
     """
       |SELECT COUNT(DISTINCT a) FROM (
       |  SELECT 1L AS a FROM src LIMIT 1 UNION ALL
       |  SELECT 2L AS a FROM src LIMIT 1) table
-    """.stripMargin)
+    """.stripMargin.replaceAll("\r\n", "\n"))
 
   createQueryTest("count distinct 1 value + null long",
     """
@@ -292,7 +294,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
       |  SELECT 1L AS a FROM src LIMIT 1 UNION ALL
       |  SELECT 1L AS a FROM src LIMIT 1 UNION ALL
       |  SELECT null AS a FROM src LIMIT 1) table
-    """.stripMargin)
+    """.stripMargin.replaceAll("\r\n", "\n"))
 
   createQueryTest("null case",
     "SELECT case when(true) then 1 else null end FROM src LIMIT 1")
@@ -322,7 +324,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
       |  2 = true, 2L = true, 2Y = true, true = 2, true = 2L, true = 2Y,
       |  2 = false, 2L = false, 2Y = false, false = 2, false = 2L, false = 2Y
       |FROM src LIMIT 1
-    """.stripMargin)
+    """.stripMargin.replaceAll("\r\n", "\n"))
 
   test("CREATE TABLE AS runs once") {
     sql("CREATE TABLE foo AS SELECT 1 FROM src LIMIT 1").collect()
@@ -368,7 +370,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
     """
       | SELECT DATEDIFF(CAST(value AS timestamp), CAST('2002-03-21 00:00:00' AS timestamp))
       | FROM src LIMIT 1
-    """.stripMargin)
+    """.stripMargin.replaceAll("\r\n", "\n"))
 
   createQueryTest("Date comparison test 1",
     """
@@ -376,7 +378,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
       | CAST(CAST('1970-01-01 22:00:00' AS timestamp) AS date) ==
       | CAST(CAST('1970-01-01 23:00:00' AS timestamp) AS date)
       | FROM src LIMIT 1
-    """.stripMargin)
+    """.stripMargin.replaceAll("\r\n", "\n"))
 
   createQueryTest("Simple Average",
     "SELECT AVG(key) FROM src")
@@ -419,7 +421,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
     """
       |CREATE TABLE createdtable AS SELECT * FROM src;
       |SELECT * FROM createdtable
-    """.stripMargin)
+    """.stripMargin.replaceAll("\r\n", "\n"))
 
   createQueryTest("create table as with db name",
     """
@@ -427,7 +429,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
       |CREATE TABLE testdb.createdtable AS SELECT * FROM default.src;
       |SELECT * FROM testdb.createdtable;
       |DROP DATABASE IF EXISTS testdb CASCADE
-    """.stripMargin)
+    """.stripMargin.replaceAll("\r\n", "\n"))
 
   createQueryTest("create table as with db name within backticks",
     """
@@ -435,7 +437,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
       |CREATE TABLE `testdb`.`createdtable` AS SELECT * FROM default.src;
       |SELECT * FROM testdb.createdtable;
       |DROP DATABASE IF EXISTS testdb CASCADE
-    """.stripMargin)
+    """.stripMargin.replaceAll("\r\n", "\n"))
 
   createQueryTest("insert table with db name",
     """
@@ -444,7 +446,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
       |INSERT INTO TABLE testdb.createdtable SELECT * FROM default.src;
       |SELECT * FROM testdb.createdtable;
       |DROP DATABASE IF EXISTS testdb CASCADE
-    """.stripMargin)
+    """.stripMargin.replaceAll("\r\n", "\n"))
 
   createQueryTest("insert into and insert overwrite",
     """
@@ -454,7 +456,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
       |SELECT * FROM createdtable;
       |INSERT OVERWRITE TABLE createdtable SELECT * FROM src WHERE key = 86;
       |SELECT * FROM createdtable;
-    """.stripMargin)
+    """.stripMargin.replaceAll("\r\n", "\n"))
 
   test("SPARK-7270: consider dynamic partition when comparing table output") {
     sql(s"CREATE TABLE test_partition (a STRING) PARTITIONED BY (b BIGINT, c STRING)")
@@ -482,7 +484,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
     """
       |SELECT TRANSFORM (key, value) USING 'cat' FROM src;
       |SELECT TRANSFORM (*) USING 'cat' FROM src;
-    """.stripMargin)
+    """.stripMargin.replaceAll("\r\n", "\n"))
 
   val delimiter = "'\t'"
 
@@ -490,19 +492,19 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
     s"""
       |SELECT TRANSFORM (key) ROW FORMAT DELIMITED FIELDS TERMINATED BY ${delimiter}
       |USING 'cat' AS (tKey) ROW FORMAT DELIMITED FIELDS TERMINATED BY ${delimiter} FROM src;
-    """.stripMargin.replaceAll("\n", " "))
+    """.stripMargin.replaceAll("(\r\n)|\n", " "))
 
   createQueryTest("transform with custom field delimiter2",
     s"""
       |SELECT TRANSFORM (key, value) ROW FORMAT DELIMITED FIELDS TERMINATED BY ${delimiter}
       |USING 'cat' ROW FORMAT DELIMITED FIELDS TERMINATED BY ${delimiter} FROM src;
-    """.stripMargin.replaceAll("\n", " "))
+    """.stripMargin.replaceAll("(\r\n)|\n", " "))
 
   createQueryTest("transform with custom field delimiter3",
     s"""
       |SELECT TRANSFORM (*) ROW FORMAT DELIMITED FIELDS TERMINATED BY ${delimiter}
       |USING 'cat' ROW FORMAT DELIMITED FIELDS TERMINATED BY ${delimiter} FROM src;
-    """.stripMargin.replaceAll("\n", " "))
+    """.stripMargin.replaceAll("(\r\n)|\n", " "))
 
   createQueryTest("transform with SerDe",
     """
@@ -510,7 +512,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
       |'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
       |USING 'cat' AS (tKey, tValue) ROW FORMAT SERDE
       |'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe' FROM src;
-    """.stripMargin.replaceAll("\n", " "))
+    """.stripMargin.replaceAll("(\r\n)|\n", " "))
 
   test("transform with SerDe2") {
 
@@ -529,7 +531,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
         |('avro.schema.literal'='{"namespace": "testing.hive.avro.serde","name":
         |"src","type": "record","fields": [{"name":"key","type":"int"}]}')
         |FROM small_src
-      """.stripMargin.replaceAll("\n", " ")).collect().head
+      """.stripMargin).collect().head
 
     assert(expected(0) === res(0))
   }
@@ -541,7 +543,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
       |('serialization.last.column.takes.rest'='true') USING 'cat' AS (tKey, tValue)
       |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
       |WITH SERDEPROPERTIES ('serialization.last.column.takes.rest'='true') FROM src;
-    """.stripMargin.replaceAll("\n", " "))
+    """.stripMargin.replaceAll("(\r\n)|\n", " "))
 
   createQueryTest("transform with SerDe4",
     """
@@ -550,7 +552,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
       |('serialization.last.column.takes.rest'='true') USING 'cat' ROW FORMAT SERDE
       |'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe' WITH SERDEPROPERTIES
       |('serialization.last.column.takes.rest'='true') FROM src;
-    """.stripMargin.replaceAll("\n", " "))
+    """.stripMargin.replaceAll("(\r\n)|\n", " "))
 
   createQueryTest("LIKE",
     "SELECT * FROM src WHERE value LIKE '%1%'")
@@ -579,7 +581,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
       |FROM src
       |insert overwrite table src_lv1 SELECT key, D.* lateral view explode(array(key+3, key+4)) D as CX
       |insert overwrite table src_lv2 SELECT key, D.* lateral view explode(array(key+3, key+4)) D as CX
-    """.stripMargin)
+    """.stripMargin.replaceAll("\r\n", "\n"))
   // scalastyle:on
 
   createQueryTest("lateral view5",
@@ -662,13 +664,13 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
     """with q1 as (select * from src where key= 5),
       |q2 as (select * from src s2 where key = 4)
       |select value from q1 union all select value from q2
-    """.stripMargin)
+    """.stripMargin.replaceAll("\r\n", "\n"))
 
   createQueryTest("CTE feature #3",
     """with q1 as (select key from src)
       |from q1
       |select * where key = 4
-    """.stripMargin)
+    """.stripMargin.replaceAll("\r\n", "\n"))
 
   test("predicates contains an empty AttributeSet() references") {
     sql(
@@ -964,7 +966,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
       |SELECT 1, NULL, NULL FROM src WHERE key=150;
       |
       |DROP TABLE IF EXISTS dynamic_part_table;
-    """.stripMargin)
+    """.stripMargin.replaceAll("\r\n", "\n"))
 
   ignore("Dynamic partition folder layout") {
     sql("DROP TABLE IF EXISTS dynamic_part_table")

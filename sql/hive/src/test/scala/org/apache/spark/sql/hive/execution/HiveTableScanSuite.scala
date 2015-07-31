@@ -45,7 +45,7 @@ class HiveTableScanSuite extends HiveComparisonTest {
       |SELECT 200,200 LIMIT 1;
       |
       |SELECT * from part_scan_test;
-    """.stripMargin)
+    """.stripMargin.replaceAll("\r\n", "\n"))
 
   // In unit test, kv1.txt is a small file and will be loaded as table src
   // Since the small file will be considered as a single split, we assume
@@ -53,7 +53,7 @@ class HiveTableScanSuite extends HiveComparisonTest {
   createQueryTest("file_split_for_small_table",
     """
       |SELECT key, value FROM src SORT BY key, value
-    """.stripMargin)
+    """.stripMargin.replaceAll("\r\n", "\n"))
 
   test("Spark-4041: lowercase issue") {
     TestHive.sql("CREATE TABLE tb (KEY INT, VALUE STRING) STORED AS ORC")
