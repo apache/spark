@@ -127,8 +127,8 @@ class RandomForestRegressorSuite extends SparkFunSuite with MLlibTestSparkContex
     val df: DataFrame = TreeTests.setMetadata(data, categoricalFeatures, numClasses = 0)
 
     val result =  {
-      val (idx, importance) = newRF.fit(df).featureImportances.unzip
-      Vectors.sparse(5, idx.toArray, importance.toArray)
+      val importance = newRF.fit(df).featureImportances.toArray
+      Vectors.dense(importance.sortBy(_._1).map(_._2))
     }
     val expected = Vectors.dense(0.304583, 0.111389, 0.33, 0.119167, 0.044861)
 
