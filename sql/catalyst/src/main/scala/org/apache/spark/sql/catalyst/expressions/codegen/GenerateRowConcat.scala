@@ -161,7 +161,7 @@ object GenerateRowConcat extends CodeGenerator[(StructType, StructType), UnsafeR
 
     // --------------------- copy variable length portion from row 2 ----------------------- //
     val copyVariableLengthRow2 = s"""
-       |// Copy fixed length data for row2
+       |// Copy variable length data for row2
        |long numBytesBitsetAndFixedRow2 = ${(bitset2Words + schema2.size) * 8};
        |long numBytesVariableRow2 = row2.getSizeInBytes() - numBytesBitsetAndFixedRow2;
        |PlatformDependent.copyMemory(
@@ -181,14 +181,14 @@ object GenerateRowConcat extends CodeGenerator[(StructType, StructType), UnsafeR
         // 32 and increment that amount in place.
         val shift =
           if (i < schema1.size) {
-            (outputBitsetWords - bitset1Words + schema2.size) * 8
+            s"${(outputBitsetWords - bitset1Words + schema2.size) * 8}L"
           } else {
-            (outputBitsetWords - bitset2Words + schema1.size) * 8
+            s"${(outputBitsetWords - bitset2Words + schema1.size) * 8}L + numBytesVariableRow1"
           }
         val cursor = offset + outputBitsetWords * 8 + i * 8
         s"""
            |PlatformDependent.UNSAFE.putLong(buf, $cursor,
-           |  PlatformDependent.UNSAFE.getLong(buf, $cursor) + (${shift}L << 32));
+           |  PlatformDependent.UNSAFE.getLong(buf, $cursor) + ($shift << 32));
          """.stripMargin
       }
     }.mkString
@@ -233,6 +233,7 @@ object GenerateRowConcat extends CodeGenerator[(StructType, StructType), UnsafeR
      """.stripMargin
 
     logDebug(s"code for GenerateRowConcat($schema1, $schema2):\n${CodeFormatter.format(code)}")
+    // println(CodeFormatter.format(code))
 
     val c = compile(code)
     c.generate(Array.empty).asInstanceOf[UnsafeRowConcat]
