@@ -95,6 +95,13 @@ class StringFunctionsSuite extends QueryTest {
       Row("AQIDBA==", bytes))
   }
 
+  test("string / binary substring function") {
+    val df = Seq(("1世3", Array[Byte](1, 2, 3, 4))).toDF("a", "b")
+    checkAnswer(df.select(substring($"a", 1, 2)), Row("1世"))
+    checkAnswer(df.select(substring($"b", 2, 2)), Row(Array[Byte](2,3)))
+    checkAnswer(df.selectExpr("substring(a, 1, 2)"), Row("1世"))
+  }
+
   test("string encode/decode function") {
     val bytes = Array[Byte](-27, -92, -89, -27, -115, -125, -28, -72, -106, -25, -107, -116)
     // scalastyle:off
