@@ -231,16 +231,17 @@ class CodeGenContext {
         case(dt, index) => new SortOrder(BoundReference(index, dt, nullable = true), Ascending)
       }
       val comparisons = GenerateOrdering.genComparisons(ordering, this)
+      val funId = curId.getAndIncrement
       val funcCode: String =
         s"""
-          public int compareStruct(InternalRow a, InternalRow b) {
+          public int compareStruct${funId}(InternalRow a, InternalRow b) {
             InternalRow i = null;
             $comparisons
             return 0;
           }
         """
-      addNewFunction("compareStruct", funcCode)
-      s"this.compareStruct($c1, $c2)"
+      addNewFunction(s"compareStruct${funId}", funcCode)
+      s"this.compareStruct${funId}($c1, $c2)"
     case other if other.isInstanceOf[AtomicType] => s"$c1.compare($c2)"
     case _ => throw new IllegalArgumentException(
       "cannot generate compare code for un-comparable type")
