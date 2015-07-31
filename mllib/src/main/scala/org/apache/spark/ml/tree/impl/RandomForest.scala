@@ -34,6 +34,7 @@ import org.apache.spark.mllib.tree.impurity.ImpurityCalculator
 import org.apache.spark.mllib.tree.model.ImpurityStats
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.util.collection.OpenHashMap
 import org.apache.spark.util.random.{SamplingUtils, XORShiftRandom}
 
 
@@ -1110,6 +1111,79 @@ private[ml] object RandomForest extends Logging {
       metadata.numClasses * totalBins
     } else {
       3 * totalBins
+    }
+  }
+
+  /**
+   * Given a Random Forest model, compute the importance of each feature.
+   * This generalizes the idea of "Gini" importance to other losses,
+   * following the explanation of Gini importance from "Random Forests" documentation
+   * by Leo Breiman and Adele Cutler, and following the implementation from scikit-learn.
+   *
+   * This feature importance is calculated as follows:
+   *  - Average over trees:
+   *     - importance(feature j) = sum (over nodes which split on feature j) of the gain,
+   *       where gain is scaled by the number of instances passing through node
+   *     - Normalize importances for tree based on total number of training instances used
+   *       to build tree.
+   *  - Normalize feature importance vector to sum to 1.
+   *
+   * Note: This should not be used with Gradient-Boosted Trees.  It only makes sense for
+   *       independently trained trees.
+   * Note: This is returned as a Map since models do not store the number of features.
+   *       That should be corrected in the future.
+   * @param trees  Unweighted forest of trees
+   * @return  Feature importance values.  Returned as map from feature index to importance.
+   */
+  private[ml] def featureImportances(trees: Array[DecisionTreeModel]): Map[Int, Double] = {
+    val totalImportances = new OpenHashMap[Int, Double]()
+    trees.foreach { tree =>
+      // Aggregate feature importance vector for this tree
+      val importances = new OpenHashMap[Int, Double]()
+      computeFeatureImportance(tree.rootNode, importances)
+      // Normalize importance vector for this tree, and add it to total.
+      val treeNorm = tree.rootNode.impurityStats.count
+      if (treeNorm != 0) {
+        importances.foreach { case (idx, impt) =>
+          val normImpt = impt / treeNorm
+          totalImportances.changeValue(idx, normImpt, _ + normImpt)
+        }
+      }
+    }
+    // Normalize importances
+    normalizeMapValues(totalImportances)
+    totalImportances.toMap
+  }
+
+  /**
+   * Recursive method for computing feature importances for one tree.
+   * This walks down the tree, adding to the importance of 1 feature at each node.
+   * @param node  Current node in recursion
+   * @param importances  Aggregate feature importances, modified by this method
+   */
+  private def computeFeatureImportance(node: Node, importances: OpenHashMap[Int, Double]): Unit = {
+    node match {
+      case n: InternalNode =>
+        val feature = n.split.featureIndex
+        val scaledGain = n.gain * n.impurityStats.count
+        importances.changeValue(feature, scaledGain, _ + scaledGain)
+        computeFeatureImportance(n.leftChild, importances)
+        computeFeatureImportance(n.rightChild, importances)
+      case n: LeafNode =>
+        // do nothing
+    }
+  }
+
+  /**
+   * Normalize the values of this map to sum to 1, in place.
+   * If all values are 0, this method does nothing.
+   * @param map  Map with non-negative values.
+   */
+  private def normalizeMapValues(map: OpenHashMap[Int, Double]): Unit = {
+    val total = map.map(_._2).sum
+    if (total != 0) {
+      val keys = map.iterator.map(_._1).toArray
+      keys.foreach { key => map.changeValue(key, 0.0, _ / total) }
     }
   }
 
