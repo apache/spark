@@ -1332,13 +1332,8 @@ Configuration of Parquet can be done using the `setConf` method on `SQLContext` 
 </tr>
 <tr>
   <td><code>spark.sql.parquet.filterPushdown</code></td>
-  <td>false</td>
-  <td>
-    Turn on Parquet filter pushdown optimization. This feature is turned off by default because of a known
-    bug in Parquet 1.6.0rc3 (<a href="https://issues.apache.org/jira/browse/PARQUET-136">PARQUET-136</a>).
-    However, if your table doesn't contain any nullable string or binary columns, it's still safe to turn
-    this feature on.
-  </td>
+  <td>true</td>
+  <td>Enables Parquet filter push-down optimization when set to true.</td>
 </tr>
 <tr>
   <td><code>spark.sql.hive.convertMetastoreParquet</code></td>

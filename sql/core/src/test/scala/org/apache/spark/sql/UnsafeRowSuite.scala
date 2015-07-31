@@ -22,7 +22,7 @@ import java.io.ByteArrayOutputStream
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{UnsafeRow, UnsafeProjection}
-import org.apache.spark.sql.types.{DataType, IntegerType, StringType}
+import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.PlatformDependent
 import org.apache.spark.unsafe.memory.MemoryAllocator
 import org.apache.spark.unsafe.types.UTF8String
@@ -66,5 +66,20 @@ class UnsafeRowSuite extends SparkFunSuite {
     }
 
     assert(bytesFromArrayBackedRow === bytesFromOffheapRow)
+  }
+
+  test("calling getDouble() and getFloat() on null columns") {
+    val row = InternalRow.apply(null, null)
+    val unsafeRow = UnsafeProjection.create(Array[DataType](FloatType, DoubleType)).apply(row)
+    assert(unsafeRow.getFloat(0) === row.getFloat(0))
+    assert(unsafeRow.getDouble(1) === row.getDouble(1))
+  }
+
+  test("calling get(ordinal, datatype) on null columns") {
+    val row = InternalRow.apply(null)
+    val unsafeRow = UnsafeProjection.create(Array[DataType](NullType)).apply(row)
+    for (dataType <- DataTypeTestUtils.atomicTypes) {
+      assert(unsafeRow.get(0, dataType) === null)
+    }
   }
 }

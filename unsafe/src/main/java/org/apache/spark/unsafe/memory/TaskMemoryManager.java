@@ -58,8 +58,13 @@ public class TaskMemoryManager {
   /** The number of entries in the page table. */
   private static final int PAGE_TABLE_SIZE = 1 << PAGE_NUMBER_BITS;
 
-  /** Maximum supported data page size */
-  private static final long MAXIMUM_PAGE_SIZE = (1L << OFFSET_BITS);
+  /**
+   * Maximum supported data page size (in bytes). In principle, the maximum addressable page size is
+   * (1L << OFFSET_BITS) bytes, which is 2+ petabytes. However, the on-heap allocator's maximum page
+   * size is limited by the maximum amount of data that can be stored in a  long[] array, which is
+   * (2^32 - 1) * 8 bytes (or 16 gigabytes). Therefore, we cap this at 16 gigabytes.
+   */
+  public static final long MAXIMUM_PAGE_SIZE_BYTES = ((1L << 31) - 1) * 8L;
 
   /** Bit mask for the lower 51 bits of a long. */
   private static final long MASK_LONG_LOWER_51_BITS = 0x7FFFFFFFFFFFFL;
@@ -110,9 +115,9 @@ public class TaskMemoryManager {
    * intended for allocating large blocks of memory that will be shared between operators.
    */
   public MemoryBlock allocatePage(long size) {
-    if (size > MAXIMUM_PAGE_SIZE) {
+    if (size > MAXIMUM_PAGE_SIZE_BYTES) {
       throw new IllegalArgumentException(
-        "Cannot allocate a page with more than " + MAXIMUM_PAGE_SIZE + " bytes");
+        "Cannot allocate a page with more than " + MAXIMUM_PAGE_SIZE_BYTES + " bytes");
     }
 
     final int pageNumber;

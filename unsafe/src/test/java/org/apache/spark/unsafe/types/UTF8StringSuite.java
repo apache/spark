@@ -64,7 +64,26 @@ public class UTF8StringSuite {
   }
 
   @Test
+  public void prefix() {
+    assertTrue(fromString("a").getPrefix() - fromString("b").getPrefix() < 0);
+    assertTrue(fromString("ab").getPrefix() - fromString("b").getPrefix() < 0);
+    assertTrue(
+      fromString("abbbbbbbbbbbasdf").getPrefix() - fromString("bbbbbbbbbbbbasdf").getPrefix() < 0);
+    assertTrue(fromString("").getPrefix() - fromString("a").getPrefix() < 0);
+    assertTrue(fromString("你好").getPrefix() - fromString("世界").getPrefix() > 0);
+
+    byte[] buf1 = {1, 2, 3, 4, 5, 6, 7, 8, 9};
+    byte[] buf2 = {1, 2, 3};
+    UTF8String str1 = UTF8String.fromBytes(buf1, 0, 3);
+    UTF8String str2 = UTF8String.fromBytes(buf1, 0, 8);
+    UTF8String str3 = UTF8String.fromBytes(buf2);
+    assertTrue(str1.getPrefix() - str2.getPrefix() < 0);
+    assertEquals(str1.getPrefix(), str3.getPrefix());
+  }
+
+  @Test
   public void compareTo() {
+    assertTrue(fromString("").compareTo(fromString("a")) < 0);
     assertTrue(fromString("abc").compareTo(fromString("ABC")) > 0);
     assertTrue(fromString("abc0").compareTo(fromString("abc")) > 0);
     assertTrue(fromString("abcabcabc").compareTo(fromString("abcabcabc")) == 0);

@@ -79,7 +79,6 @@ class CodeGenContext {
     mutableStates += ((javaType, variableName, initCode))
   }
 
-  final val intervalType: String = classOf[Interval].getName
   final val JAVA_BOOLEAN = "boolean"
   final val JAVA_BYTE = "byte"
   final val JAVA_SHORT = "short"
@@ -101,15 +100,19 @@ class CodeGenContext {
   }
 
   /**
-   * Returns the code to access a column in Row for a given DataType.
+   * Returns the code to access a value in `SpecializedGetters` for a given DataType.
    */
-  def getColumn(row: String, dataType: DataType, ordinal: Int): String = {
+  def getValue(getter: String, dataType: DataType, ordinal: String): String = {
     val jt = javaType(dataType)
     dataType match {
-      case _ if isPrimitiveType(jt) => s"$row.get${primitiveTypeName(jt)}($ordinal)"
-      case StringType => s"$row.getUTF8String($ordinal)"
-      case BinaryType => s"$row.getBinary($ordinal)"
-      case _ => s"($jt)$row.apply($ordinal)"
+      case _ if isPrimitiveType(jt) => s"$getter.get${primitiveTypeName(jt)}($ordinal)"
+      case t: DecimalType => s"$getter.getDecimal($ordinal, ${t.precision}, ${t.scale})"
+      case StringType => s"$getter.getUTF8String($ordinal)"
+      case BinaryType => s"$getter.getBinary($ordinal)"
+      case CalendarIntervalType => s"$getter.getInterval($ordinal)"
+      case t: StructType => s"$getter.getStruct($ordinal, ${t.size})"
+      case a: ArrayType => s"$getter.getArray($ordinal)"
+      case _ => s"($jt)$getter.get($ordinal)" // todo: remove generic getter.
     }
   }
 
@@ -118,10 +121,10 @@ class CodeGenContext {
    */
   def setColumn(row: String, dataType: DataType, ordinal: Int, value: String): String = {
     val jt = javaType(dataType)
-    if (isPrimitiveType(jt)) {
-      s"$row.set${primitiveTypeName(jt)}($ordinal, $value)"
-    } else {
-      s"$row.update($ordinal, $value)"
+    dataType match {
+      case _ if isPrimitiveType(jt) => s"$row.set${primitiveTypeName(jt)}($ordinal, $value)"
+      case t: DecimalType => s"$row.setDecimal($ordinal, $value, ${t.precision})"
+      case _ => s"$row.update($ordinal, $value)"
     }
   }
 
@@ -149,10 +152,10 @@ class CodeGenContext {
     case dt: DecimalType => "Decimal"
     case BinaryType => "byte[]"
     case StringType => "UTF8String"
-    case IntervalType => intervalType
+    case CalendarIntervalType => "CalendarInterval"
     case _: StructType => "InternalRow"
-    case _: ArrayType => s"scala.collection.Seq"
-    case _: MapType => s"scala.collection.Map"
+    case _: ArrayType => "ArrayData"
+    case _: MapType => "scala.collection.Map"
     case dt: OpenHashSetUDT if dt.elementType == IntegerType => classOf[IntegerHashSet].getName
     case dt: OpenHashSetUDT if dt.elementType == LongType => classOf[LongHashSet].getName
     case _ => "Object"
@@ -213,7 +216,9 @@ class CodeGenContext {
     case dt: DataType if isPrimitiveType(dt) => s"($c1 > $c2 ? 1 : $c1 < $c2 ? -1 : 0)"
     case BinaryType => s"org.apache.spark.sql.catalyst.util.TypeUtils.compareBinary($c1, $c2)"
     case NullType => "0"
-    case other => s"$c1.compare($c2)"
+    case other if other.isInstanceOf[AtomicType] => s"$c1.compare($c2)"
+    case _ => throw new IllegalArgumentException(
+      "cannot generate compare code for un-comparable type")
   }
 
   /**
@@ -249,13 +254,13 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
   protected val mutableRowType: String = classOf[MutableRow].getName
   protected val genericMutableRowType: String = classOf[GenericMutableRow].getName
 
-  protected def declareMutableStates(ctx: CodeGenContext) = {
+  protected def declareMutableStates(ctx: CodeGenContext): String = {
     ctx.mutableStates.map { case (javaType, variableName, _) =>
       s"private $javaType $variableName;"
     }.mkString("\n      ")
   }
 
-  protected def initMutableStates(ctx: CodeGenContext) = {
+  protected def initMutableStates(ctx: CodeGenContext): String = {
     ctx.mutableStates.map(_._3).mkString("\n        ")
   }
 
@@ -291,14 +296,16 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
       classOf[InternalRow].getName,
       classOf[UnsafeRow].getName,
       classOf[UTF8String].getName,
-      classOf[Decimal].getName
+      classOf[Decimal].getName,
+      classOf[CalendarInterval].getName,
+      classOf[ArrayData].getName
     ))
     evaluator.setExtendedClass(classOf[GeneratedClass])
     try {
       evaluator.cook(code)
     } catch {
       case e: Exception =>
-        val msg = s"failed to compile:\n $code"
+        val msg = s"failed to compile: $e\n" + CodeFormatter.format(code)
         logError(msg, e)
         throw new Exception(msg, e)
     }

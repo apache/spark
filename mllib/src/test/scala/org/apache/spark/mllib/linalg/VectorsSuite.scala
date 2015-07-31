@@ -57,6 +57,21 @@ class VectorsSuite extends SparkFunSuite with Logging {
     assert(vec.values === values)
   }
 
+  test("sparse vector construction with mismatched indices/values array") {
+    intercept[IllegalArgumentException] {
+      Vectors.sparse(4, Array(1, 2, 3), Array(3.0, 5.0, 7.0, 9.0))
+    }
+    intercept[IllegalArgumentException] {
+      Vectors.sparse(4, Array(1, 2, 3), Array(3.0, 5.0))
+    }
+  }
+
+  test("sparse vector construction with too many indices vs size") {
+    intercept[IllegalArgumentException] {
+      Vectors.sparse(3, Array(1, 2, 3, 4), Array(3.0, 5.0, 7.0, 9.0))
+    }
+  }
+
   test("dense to array") {
     val vec = Vectors.dense(arr).asInstanceOf[DenseVector]
     assert(vec.toArray.eq(arr))

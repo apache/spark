@@ -39,6 +39,7 @@ class UnsafeFixedWidthAggregationMapSuite
   private val groupKeySchema = StructType(StructField("product", StringType) :: Nil)
   private val aggBufferSchema = StructType(StructField("salePrice", IntegerType) :: Nil)
   private def emptyAggregationBuffer: InternalRow = InternalRow(0)
+  private val PAGE_SIZE_BYTES: Long = 1L << 26; // 64 megabytes
 
   private var memoryManager: TaskMemoryManager = null
 
@@ -54,13 +55,13 @@ class UnsafeFixedWidthAggregationMapSuite
   }
 
   test("supported schemas") {
+    assert(supportsAggregationBufferSchema(
+      StructType(StructField("x", DecimalType.USER_DEFAULT) :: Nil)))
+    assert(!supportsAggregationBufferSchema(
+      StructType(StructField("x", DecimalType.SYSTEM_DEFAULT) :: Nil)))
     assert(!supportsAggregationBufferSchema(StructType(StructField("x", StringType) :: Nil)))
-    assert(supportsGroupKeySchema(StructType(StructField("x", StringType) :: Nil)))
-
     assert(
       !supportsAggregationBufferSchema(StructType(StructField("x", ArrayType(IntegerType)) :: Nil)))
-    assert(
-      !supportsGroupKeySchema(StructType(StructField("x", ArrayType(IntegerType)) :: Nil)))
   }
 
   test("empty map") {
@@ -69,7 +70,8 @@ class UnsafeFixedWidthAggregationMapSuite
       aggBufferSchema,
       groupKeySchema,
       memoryManager,
-      1024, // initial capacity
+      1024, // initial capacity,
+      PAGE_SIZE_BYTES,
       false // disable perf metrics
     )
     assert(!map.iterator().hasNext)
@@ -83,6 +85,7 @@ class UnsafeFixedWidthAggregationMapSuite
       groupKeySchema,
       memoryManager,
       1024, // initial capacity
+      PAGE_SIZE_BYTES,
       false // disable perf metrics
     )
     val groupKey = InternalRow(UTF8String.fromString("cats"))
@@ -109,6 +112,7 @@ class UnsafeFixedWidthAggregationMapSuite
       groupKeySchema,
       memoryManager,
       128, // initial capacity
+      PAGE_SIZE_BYTES,
       false // disable perf metrics
     )
     val rand = new Random(42)
@@ -121,6 +125,8 @@ class UnsafeFixedWidthAggregationMapSuite
     }.toSet
     seenKeys.size should be (groupKeys.size)
     seenKeys should be (groupKeys)
+
+    map.free()
   }
 
 }
