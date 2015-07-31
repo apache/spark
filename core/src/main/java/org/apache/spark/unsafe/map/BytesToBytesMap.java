@@ -25,6 +25,7 @@ import java.util.List;
 
 import com.google.common.annotations.VisibleForTesting;
 
+import org.apache.spark.shuffle.ShuffleMemoryManager;
 import org.apache.spark.unsafe.*;
 import org.apache.spark.unsafe.array.ByteArrayMethods;
 import org.apache.spark.unsafe.array.LongArray;
@@ -54,7 +55,9 @@ public final class BytesToBytesMap {
    */
   private static final int END_OF_PAGE_MARKER = -1;
 
-  private final TaskMemoryManager memoryManager;
+  private final TaskMemoryManager taskMemoryManager;
+
+  private final ShuffleMemoryManager shuffleMemoryManager;
 
   /**
    * A linked list for tracking all allocated data pages so that we can free all of our memory.
@@ -150,12 +153,14 @@ public final class BytesToBytesMap {
   private long numHashCollisions = 0;
 
   public BytesToBytesMap(
-      TaskMemoryManager memoryManager,
+      TaskMemoryManager taskMemoryManager,
+      ShuffleMemoryManager shuffleMemoryManager,
       int initialCapacity,
       double loadFactor,
       long pageSizeBytes,
       boolean enablePerfMetrics) {
-    this.memoryManager = memoryManager;
+    this.taskMemoryManager = taskMemoryManager;
+    this.shuffleMemoryManager = shuffleMemoryManager;
     this.loadFactor = loadFactor;
     this.loc = new Location();
     this.pageSizeBytes = pageSizeBytes;
@@ -175,18 +180,26 @@ public final class BytesToBytesMap {
   }
 
   public BytesToBytesMap(
-      TaskMemoryManager memoryManager,
+      TaskMemoryManager taskMemoryManager,
+      ShuffleMemoryManager shuffleMemoryManager,
       int initialCapacity,
       long pageSizeBytes) {
-    this(memoryManager, initialCapacity, 0.70, pageSizeBytes, false);
+    this(taskMemoryManager, shuffleMemoryManager, initialCapacity, 0.70, pageSizeBytes, false);
   }
 
   public BytesToBytesMap(
-      TaskMemoryManager memoryManager,
+      TaskMemoryManager taskMemoryManager,
+      ShuffleMemoryManager shuffleMemoryManager,
       int initialCapacity,
       long pageSizeBytes,
       boolean enablePerfMetrics) {
-    this(memoryManager, initialCapacity, 0.70, pageSizeBytes, enablePerfMetrics);
+    this(
+      taskMemoryManager,
+      shuffleMemoryManager,
+      initialCapacity,
+      0.70,
+      pageSizeBytes,
+      enablePerfMetrics);
   }
 
   /**
@@ -330,7 +343,8 @@ public final class BytesToBytesMap {
 
     private void updateAddressesAndSizes(long fullKeyAddress) {
       updateAddressesAndSizes(
-        memoryManager.getPage(fullKeyAddress), memoryManager.getOffsetInPage(fullKeyAddress));
+        taskMemoryManager.getPage(fullKeyAddress),
+        taskMemoryManager.getOffsetInPage(fullKeyAddress));
     }
 
     private void updateAddressesAndSizes(Object page, long keyOffsetInPage) {
@@ -464,7 +478,7 @@ public final class BytesToBytesMap {
       if (useOverflowPage) {
         // The record is larger than the page size, so allocate a special overflow page just to hold
         // that record.
-        MemoryBlock overflowPage = memoryManager.allocatePage(requiredSize + 8);
+        MemoryBlock overflowPage = taskMemoryManager.allocatePage(requiredSize + 8);
         dataPages.add(overflowPage);
         dataPage = overflowPage;
         dataPageBaseObject = overflowPage.getBaseObject();
@@ -478,7 +492,7 @@ public final class BytesToBytesMap {
           final long lengthOffsetInPage = currentDataPage.getBaseOffset() + pageCursor;
           PlatformDependent.UNSAFE.putLong(pageBaseObject, lengthOffsetInPage, END_OF_PAGE_MARKER);
         }
-        MemoryBlock newPage = memoryManager.allocatePage(pageSizeBytes);
+        MemoryBlock newPage = taskMemoryManager.allocatePage(pageSizeBytes);
         dataPages.add(newPage);
         pageCursor = 0;
         currentDataPage = newPage;
@@ -526,7 +540,7 @@ public final class BytesToBytesMap {
 
       numElements++;
       bitset.set(pos);
-      final long storedKeyAddress = memoryManager.encodePageNumberAndOffset(
+      final long storedKeyAddress = taskMemoryManager.encodePageNumberAndOffset(
         dataPage, keySizeOffsetInPage);
       longArray.set(pos * 2, storedKeyAddress);
       longArray.set(pos * 2 + 1, keyHashcode);
@@ -549,7 +563,7 @@ public final class BytesToBytesMap {
     // The capacity needs to be divisible by 64 so that our bit set can be sized properly
     capacity = Math.max((int) Math.min(MAX_CAPACITY, nextPowerOf2(capacity)), 64);
     assert (capacity <= MAX_CAPACITY);
-    longArray = new LongArray(memoryManager.allocate(capacity * 8L * 2));
+    longArray = new LongArray(taskMemoryManager.allocate(capacity * 8L * 2));
     bitset = new BitSet(MemoryBlock.fromLongArray(new long[capacity / 64]));
 
     this.growthThreshold = (int) (capacity * loadFactor);
@@ -564,7 +578,7 @@ public final class BytesToBytesMap {
    */
   public void free() {
     if (longArray != null) {
-      memoryManager.free(longArray.memoryBlock());
+      taskMemoryManager.free(longArray.memoryBlock());
       longArray = null;
     }
     if (bitset != null) {
@@ -573,7 +587,7 @@ public final class BytesToBytesMap {
     }
     Iterator<MemoryBlock> dataPagesIterator = dataPages.iterator();
     while (dataPagesIterator.hasNext()) {
-      memoryManager.freePage(dataPagesIterator.next());
+      taskMemoryManager.freePage(dataPagesIterator.next());
       dataPagesIterator.remove();
     }
     assert(dataPages.isEmpty());
@@ -662,7 +676,7 @@ public final class BytesToBytesMap {
     }
 
     // Deallocate the old data structures.
-    memoryManager.free(oldLongArray.memoryBlock());
+    taskMemoryManager.free(oldLongArray.memoryBlock());
     if (enablePerfMetrics) {
       timeSpentResizingNs += System.nanoTime() - resizeStartTime;
     }

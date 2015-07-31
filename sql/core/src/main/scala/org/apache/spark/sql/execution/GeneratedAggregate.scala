@@ -266,6 +266,7 @@ case class GeneratedAggregate(
           aggregationBufferSchema,
           groupKeySchema,
           TaskContext.get.taskMemoryManager(),
+          SparkEnv.get.shuffleMemoryManager,
           1024 * 16, // initial capacity
           pageSizeBytes,
           false // disable tracking of performance metrics
