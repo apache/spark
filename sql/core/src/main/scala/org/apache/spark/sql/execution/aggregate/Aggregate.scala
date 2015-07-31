@@ -142,8 +142,9 @@ case class Aggregate(
             child.output,
             iter)
           if (!iter.hasNext && groupingExpressions.isEmpty) {
+            // There is no input and there is no grouping expressions.
+            // We need to output a single row as the output.
             Iterator[InternalRow](outputIter.generateResultForEmptyInput())
-            // outputIter
           } else {
             outputIter
           }

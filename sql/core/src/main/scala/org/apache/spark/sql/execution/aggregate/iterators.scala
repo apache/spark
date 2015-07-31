@@ -27,18 +27,18 @@ import org.apache.spark.sql.execution.TungstenSort
 import org.apache.spark.sql.types.StructType
 
 abstract class AggregationIterator(
-  groupingExpressions: Seq[NamedExpression],
-  nonCompleteAggregateExpressions: Seq[AggregateExpression2],
-  nonCompleteAggregateAttributes: Seq[Attribute],
-  completeAggregateExpressions: Seq[AggregateExpression2],
-  completeAggregateAttributes: Seq[Attribute],
-  initialInputBufferOffset: Int,
-  resultExpressions: Seq[NamedExpression],
-  newMutableProjection: (Seq[Expression], Seq[Attribute]) => (() => MutableProjection),
-  newProjection: (Seq[Expression], Seq[Attribute]) => Projection,
-  newOrdering: (Seq[SortOrder], Seq[Attribute]) => Ordering[InternalRow],
-  inputAttributes: Seq[Attribute],
-  inputIter: Iterator[InternalRow])
+    groupingExpressions: Seq[NamedExpression],
+    nonCompleteAggregateExpressions: Seq[AggregateExpression2],
+    nonCompleteAggregateAttributes: Seq[Attribute],
+    completeAggregateExpressions: Seq[AggregateExpression2],
+    completeAggregateAttributes: Seq[Attribute],
+    initialInputBufferOffset: Int,
+    resultExpressions: Seq[NamedExpression],
+    newMutableProjection: (Seq[Expression], Seq[Attribute]) => (() => MutableProjection),
+    newProjection: (Seq[Expression], Seq[Attribute]) => Projection,
+    newOrdering: (Seq[SortOrder], Seq[Attribute]) => Ordering[InternalRow],
+    inputAttributes: Seq[Attribute],
+    inputIter: Iterator[InternalRow])
   extends Iterator[InternalRow] with Logging {
 
   ///////////////////////////////////////////////////////////////////////////
@@ -440,6 +440,8 @@ abstract class AggregationIterator(
  * A simple set built on top of the [[UnsafeFixedWidthAggregationMap]] to store
  * grouping keys.
  */
+// TODO: Once we can spill the sorted UnsafeFixedWidthAggregationMap in
+// UnsafeHybridAggregationIterator to disk. We can remove it.
 class GroupingKeySet(groupingExpressions: Seq[NamedExpression]) {
 
   private[this] val map = new UnsafeFixedWidthAggregationMap(
@@ -603,10 +605,13 @@ class UnsafeHybridAggregationIterator(
    * the Hash Aggregation Map exceeds a certain threshold. It returns
    * true when we have switched to the sort-based aggregation.
    */
+  // TODO: This is really just a placeholder. When we fall back to sort-based
+  // aggregation. We should sort the map entries and spill the map to disk
+  // then merge the spilled sorted map iterator with the sort-based input iterator.
   private def fallBackToSortBasedIfNecessary(): Boolean = {
     if (buffers.getTotalMemoryConsumption > 1 * 1024 * 1024 && inputIter.hasNext) {
       sortedInputHasNewGroup = true
-      logInfo("fall back to sort based aggregation.")
+      logInfo("falling back to sort based aggregation.")
       // If we need to fallback to the sort based aggregation,
       // we first redirect inputIter to the sorter.
       val sortOrder = groupingExpressions.map(SortOrder(_, Ascending))
@@ -614,7 +619,10 @@ class UnsafeHybridAggregationIterator(
       val convertToUnsafe = UnsafeProjection.create(inputAttributes.map(_.dataType).toArray)
       sortBasedInputIter =
         TungstenSort.doSort(
-          inputIter.map(convertToUnsafe), sortOrder, newOrdering, inputAttributes)
+          inputIter.map(convertToUnsafe),
+          sortOrder,
+          newOrdering,
+          inputAttributes)
       // Then, we need do setup work to process the incoming group.
       firstRowInNextGroup = sortBasedInputIter.next().copy()
       nextGroupingKey = groupGenerator(firstRowInNextGroup).copy()
@@ -625,6 +633,7 @@ class UnsafeHybridAggregationIterator(
     }
   }
 
+  /** Starts to read input rows and falls back to sort-based aggregation if necessary. */
   private def initialize(): Unit = {
     while (inputIter.hasNext && !isSortBased) {
       val currentRow = inputIter.next()

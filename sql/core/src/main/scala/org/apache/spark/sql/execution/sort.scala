@@ -151,6 +151,7 @@ object TungstenSort {
     UnsafeExternalRowSorter.supportsSchema(schema)
   }
 
+  // TODO: Remove it if we do not need to call it from UnsafeHybridAggregationIterator.
   def doSort(
       iterator: Iterator[InternalRow],
       sortOrder: Seq[SortOrder],
