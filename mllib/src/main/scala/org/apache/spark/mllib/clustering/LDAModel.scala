@@ -17,7 +17,7 @@
 
 package org.apache.spark.mllib.clustering
 
-import breeze.linalg.{DenseMatrix => BDM, DenseVector => BDV, normalize, sum}
+import breeze.linalg.{DenseMatrix => BDM, DenseVector => BDV, argtopk, normalize, sum}
 import breeze.numerics.{exp, lgamma}
 import org.apache.hadoop.fs.Path
 import org.json4s.DefaultFormats
@@ -589,6 +589,23 @@ class DistributedLDAModel private[clustering] (
   /** Java-friendly version of [[topicDistributions]] */
   def javaTopicDistributions: JavaPairRDD[java.lang.Long, Vector] = {
     JavaPairRDD.fromRDD(topicDistributions.asInstanceOf[RDD[(java.lang.Long, Vector)]])
+  }
+
+  /**
+   * For each document, return the top k weighted topics for that document and their weights.
+   * @return RDD of (doc ID, topic indices, topic weights)
+   */
+  def topTopicsPerDocument(k: Int): RDD[(Long, Array[Int], Array[Double])] = {
+    graph.vertices.filter(LDA.isDocumentVertex).map { case (docID, topicCounts) =>
+      val topIndices = argtopk(topicCounts, k)
+      val sumCounts = sum(topicCounts)
+      val weights = if (sumCounts != 0) {
+        topicCounts(topIndices) / sumCounts
+      } else {
+        topicCounts(topIndices)
+      }
+      (docID.toLong, topIndices.toArray, weights.toArray)
+    }
   }
 
   // TODO:

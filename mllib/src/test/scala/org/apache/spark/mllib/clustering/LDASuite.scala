@@ -17,7 +17,7 @@
 
 package org.apache.spark.mllib.clustering
 
-import breeze.linalg.{DenseMatrix => BDM, max, argmax}
+import breeze.linalg.{DenseMatrix => BDM, argtopk, max, argmax}
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.graphx.Edge
@@ -106,6 +106,17 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext {
     topicDistributions.foreach { case (docId, topicDistribution) =>
       assert(topicDistribution.size === tinyK)
       assert(topicDistribution.toArray.sum ~== 1.0 absTol 1e-5)
+    }
+
+    val top2TopicsPerDoc = model.topTopicsPerDocument(2).map(t => (t._1, (t._2, t._3)))
+    model.topicDistributions.join(top2TopicsPerDoc).collect().foreach {
+      case (docId, (topicDistribution, (indices, weights))) =>
+        assert(indices.length == 2)
+        assert(weights.length == 2)
+        val bdvTopicDist = topicDistribution.toBreeze
+        val top2Indices = argtopk(bdvTopicDist, 2)
+        assert(top2Indices.toArray === indices)
+        assert(bdvTopicDist(top2Indices).toArray === weights)
     }
 
     // Check: log probabilities
