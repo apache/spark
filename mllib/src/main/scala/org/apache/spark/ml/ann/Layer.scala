@@ -776,7 +776,7 @@ private[ml] class FeedForwardTrainer(
 
   // TODO: what if we need to pass random seed?
   private var _weights = topology.getInstance(11L).weights()
-  private var _stackSize = 100
+  private var _stackSize = 128
   private var dataStacker = new DataStacker(_stackSize, inputSize, outputSize)
   private var _gradient: Gradient = new ANNGradient(topology, dataStacker)
   private var _updater: Updater = new ANNUpdater()

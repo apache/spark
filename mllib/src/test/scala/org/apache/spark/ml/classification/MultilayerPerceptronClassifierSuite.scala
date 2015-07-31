@@ -45,7 +45,8 @@ class MultilayerPerceptronClassifierSuite extends SparkFunSuite with MLlibTestSp
     val result = model.transform(dataFrame)
     val predictionAndLabels = result.select("prediction", "label").collect()
     predictionAndLabels.foreach { case Row(p: Double, l: Double) =>
-      assert(p == l) }
+      assert(p == l)
+    }
   }
 
   // TODO: implement a more rigorous test

@@ -20,12 +20,14 @@ package org.apache.spark.ml.ann
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.util.MLlibTestSparkContext
+import org.apache.spark.mllib.util.TestingUtils._
+
 
 class ANNSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   // TODO: test for weights comparison with Weka MLP
   test("ANN with Sigmoid learns XOR function with LBFGS optimizer") {
-    val inputs = Array[Array[Double]](
+    val inputs = Array(
       Array(0.0, 0.0),
       Array(0.0, 1.0),
       Array(1.0, 0.0),
@@ -33,7 +35,7 @@ class ANNSuite extends SparkFunSuite with MLlibTestSparkContext {
     )
     val outputs = Array(0.0, 1.0, 1.0, 0.0)
     val data = inputs.zip(outputs).map { case (features, label) =>
-      (Vectors.dense(features), Vectors.dense(Array(label)))
+      (Vectors.dense(features), Vectors.dense(label))
     }
     val rddData = sc.parallelize(data, 1)
     val hiddenLayersTopology = Array(5)
@@ -48,17 +50,19 @@ class ANNSuite extends SparkFunSuite with MLlibTestSparkContext {
     val predictionAndLabels = rddData.map { case (input, label) =>
       (model.predict(input)(0), label(0))
     }.collect()
-    assert(predictionAndLabels.forall { case (p, l) => (math.round(p) - l) == 0})
+    predictionAndLabels.foreach { case (p, l) =>
+      assert(math.round(p) === l)
+    }
   }
 
   test("ANN with SoftMax learns XOR function with 2-bit output and batch GD optimizer") {
-    val inputs = Array[Array[Double]](
+    val inputs = Array(
       Array(0.0, 0.0),
       Array(0.0, 1.0),
       Array(1.0, 0.0),
       Array(1.0, 1.0)
     )
-    val outputs = Array[Array[Double]](
+    val outputs = Array(
       Array(1.0, 0.0),
       Array(0.0, 1.0),
       Array(0.0, 1.0),
@@ -78,8 +82,10 @@ class ANNSuite extends SparkFunSuite with MLlibTestSparkContext {
     trainer.setWeights(initialWeights)
     val model = trainer.train(rddData)
     val predictionAndLabels = rddData.map { case (input, label) =>
-      (model.predict(input).toArray.map(math.round(_)), label.toArray)
+      (model.predict(input), label)
     }.collect()
-    assert(predictionAndLabels.forall { case (p, l) => p.deep == l.deep})
+    predictionAndLabels.foreach { case (p, l) =>
+      assert(p ~== l absTol 0.5)
+    }
   }
 }

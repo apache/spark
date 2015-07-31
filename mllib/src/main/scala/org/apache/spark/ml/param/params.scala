@@ -168,15 +168,8 @@ object ParamValidators {
   }
 
   /** Check that the array length is greater than lowerBound. */
-  def arrayLengthGt[T](lowerBound: Double): T => Boolean = { (value: T) =>
-    val array: Array[_] = value match {
-      case x: Array[_] => x
-      case _ =>
-        // The type should be checked before this is ever called.
-        throw new IllegalArgumentException("Array Param validation failed because" +
-          s" of unexpected input type: ${value.getClass}")
-    }
-    array.length > lowerBound
+  def arrayLengthGt[T](lowerBound: Double): Array[T] => Boolean = { (value: Array[T]) =>
+    value.length > lowerBound
   }
 }
 

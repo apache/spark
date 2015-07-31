@@ -88,7 +88,7 @@ private[ml] trait MultilayerPerceptronParams extends PredictorParams
    */
   def setSeed(value: Long): this.type = set(seed, value)
 
-  setDefault(maxIter -> 100, tol -> 1e-4, layers -> Array(1, 1), blockSize -> 100)
+  setDefault(maxIter -> 100, tol -> 1e-4, layers -> Array(1, 1), blockSize -> 128)
 }
 
 /** Label to vector converter. */
@@ -153,8 +153,8 @@ class MultilayerPerceptronClassifier(override val uid: String)
     val data = lpData.map(lp => LabelConverter.encodeLabeledPoint(lp, labels))
     val topology = FeedForwardTopology.multiLayerPerceptron(myLayers, true)
     val FeedForwardTrainer = new FeedForwardTrainer(topology, myLayers(0), myLayers.last)
-    FeedForwardTrainer.LBFGSOptimizer.setConvergenceTol(getTol).setNumIterations(getMaxIter)
-    FeedForwardTrainer.setStackSize(getBlockSize)
+    FeedForwardTrainer.LBFGSOptimizer.setConvergenceTol($(tol)).setNumIterations($(maxIter))
+    FeedForwardTrainer.setStackSize($(blockSize))
     val mlpModel = FeedForwardTrainer.train(data)
     new MultilayerPerceptronClassifierModel(uid, myLayers, mlpModel.weights())
   }
@@ -166,11 +166,11 @@ class MultilayerPerceptronClassifier(override val uid: String)
  * Each layer has sigmoid activation function, output layer has softmax.
  * @param uid uid
  * @param layers array of layer sizes including input and output layers
- * @param weights vector of initial weights for the model
+ * @param weights vector of initial weights for the model that consists of the weights of layers
  * @return prediction model
  */
 @Experimental
-class MultilayerPerceptronClassifierModel private[ml](
+class MultilayerPerceptronClassifierModel private[ml] (
     override val uid: String,
     layers: Array[Int],
     weights: Vector)
