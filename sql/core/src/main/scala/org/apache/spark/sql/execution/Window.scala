@@ -825,10 +825,12 @@ private[execution] object AggregateProcessor {
     val evaluateProjection = newMutableProjection(evaluateExpressions, bufferSchema)()
 
     // (EXPERI)-MENTAL
-    //val boundUpdateExpressions = BindReferences.bindJoinReferences(
-    //  updateExpressions, bufferSchema, inputSchema)
-    val updateProjection = newMutableProjection(updateExpressions, bufferSchema ++ inputSchema)()
-    val join = new JRow(bufferSchema.size, bufferSchema.size + inputSchema.size)
+    val boundUpdateExpressions = BindReferences.bindJoinReferences(
+      updateExpressions, bufferSchema, inputSchema)
+    //val updateProjection = newMutableProjection(updateExpressions, bufferSchema ++ inputSchema)()
+    val updateProjection = newMutableProjection(boundUpdateExpressions, Nil)()
+    val join = new JoinedRow
+    //val join = new JRow(bufferSchema.size, bufferSchema.size + inputSchema.size)
 
     // Create the processor
     new AggregateProcessor(bufferSchema.toArray, initialProjection, updateProjection,
@@ -852,7 +854,7 @@ private[execution] final class AggregateProcessor(
     private[this] val aggregates1: Array[AggregateExpression1],
     private[this] val aggregates1BufferOffsets: Array[Int],
     private[this] val aggregates1OutputOffsets: Array[Int],
-    private[this] val join: JRow) {
+    private[this] val join: JoinedRow) {
 
   //private[this] val join = new JoinedRow
   private[this] val bufferDataTypes = bufferSchema.toSeq.map(_.dataType)
@@ -928,21 +930,24 @@ private[execution] final class OffsetMutableRow(offset: Int, delegate: MutableRo
 }
 
 
-final class JRow(leftNumFields: Int, totalNumFields: Int) extends InternalRow {
-/*
-  private[this] val mapping = Array.tabulate(totalNumFields) { n =>
-    if (n < leftNumFields) 0
-    else 1
-  }
-  private[this] val ordinals = Array.tabulate(totalNumFields) { n =>
-    if (n < leftNumFields) n
-    else n - leftNumFields
-  }*/
-  // Get the sign and flip the bit.
-  private[this] def row(i:Int) = (((i - leftNumFields) & -0x80000000) >>> 31) ^ 1
+final class JRow(private[this] val numLeftFields: Int, val numFields: Int) extends InternalRow {
 
-  //
-  private[this] def ordinal(i:Int, row: Int) = i - row * leftNumFields
+  /**
+   * Determine the index of the which row maps to the given ordinal. This method has been
+   * implemented using bitwise operations in order to prevent expensive branching.
+   *
+   * The key idea here is that the given ordinal is subtracted by the number of fields in the left
+   * row, and we then use the sign of that calculation to determine the index of the row.
+   *
+   * @param i ordinal to find the row for.
+   * @return index of the row that belongs to the given ordinal.
+   */
+  @inline
+  private[this] def row(i:Int) = (((i - numLeftFields) & -0x80000000) >>> 31) ^ 1
+
+  /** Determine the row ordinal given the row index and the input ordinal. */
+  @inline
+  private[this] def ordinal(i:Int, row: Int) = i - row * numLeftFields
 
   private[this] val rows = new Array[InternalRow](2)
 
@@ -966,8 +971,6 @@ final class JRow(leftNumFields: Int, totalNumFields: Int) extends InternalRow {
   }
 
   override def toSeq: Seq[Any] = rows.flatMap(_.toSeq)
-
-  override def numFields: Int = totalNumFields
 
   override def getUTF8String(i: Int): UTF8String = {
     val r = row(i)
@@ -1035,9 +1038,9 @@ final class JRow(leftNumFields: Int, totalNumFields: Int) extends InternalRow {
   }
 
   override def copy(): InternalRow = {
-    val copiedValues = new Array[Any](totalNumFields)
+    val copiedValues = new Array[Any](numFields)
     var i = 0
-    while (i < totalNumFields) {
+    while (i < numFields) {
       copiedValues(i) = get(i)
       i += 1
     }
