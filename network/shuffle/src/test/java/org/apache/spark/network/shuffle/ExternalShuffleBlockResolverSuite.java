@@ -59,8 +59,8 @@ public class ExternalShuffleBlockResolverSuite {
   }
 
   @Test
-  public void testBadRequests() {
-    ExternalShuffleBlockResolver resolver = new ExternalShuffleBlockResolver(conf);
+  public void testBadRequests() throws IOException, ClassNotFoundException {
+    ExternalShuffleBlockResolver resolver = new ExternalShuffleBlockResolver(conf, null);
     // Unregistered executor
     try {
       resolver.getBlockData("app0", "exec1", "shuffle_1_1_0");
@@ -90,8 +90,8 @@ public class ExternalShuffleBlockResolverSuite {
   }
 
   @Test
-  public void testSortShuffleBlocks() throws IOException {
-    ExternalShuffleBlockResolver resolver = new ExternalShuffleBlockResolver(conf);
+  public void testSortShuffleBlocks() throws IOException, ClassNotFoundException {
+    ExternalShuffleBlockResolver resolver = new ExternalShuffleBlockResolver(conf, null);
     resolver.registerExecutor("app0", "exec0",
       dataContext.createExecutorInfo("org.apache.spark.shuffle.sort.SortShuffleManager"));
 
@@ -109,8 +109,8 @@ public class ExternalShuffleBlockResolverSuite {
   }
 
   @Test
-  public void testHashShuffleBlocks() throws IOException {
-    ExternalShuffleBlockResolver resolver = new ExternalShuffleBlockResolver(conf);
+  public void testHashShuffleBlocks() throws IOException, ClassNotFoundException {
+    ExternalShuffleBlockResolver resolver = new ExternalShuffleBlockResolver(conf, null);
     resolver.registerExecutor("app0", "exec0",
       dataContext.createExecutorInfo("org.apache.spark.shuffle.hash.HashShuffleManager"));
 
