@@ -18,6 +18,7 @@
 package org.apache.spark.unsafe.types;
 
 import java.io.UnsupportedEncodingException;
+import java.util.Arrays;
 
 import org.junit.Test;
 
@@ -55,7 +56,34 @@ public class UTF8StringSuite {
   }
 
   @Test
+  public void emptyStringTest() {
+    assertEquals(fromString(""), EMPTY_UTF8);
+    assertEquals(fromBytes(new byte[0]), EMPTY_UTF8);
+    assertEquals(0, EMPTY_UTF8.numChars());
+    assertEquals(0, EMPTY_UTF8.numBytes());
+  }
+
+  @Test
+  public void prefix() {
+    assertTrue(fromString("a").getPrefix() - fromString("b").getPrefix() < 0);
+    assertTrue(fromString("ab").getPrefix() - fromString("b").getPrefix() < 0);
+    assertTrue(
+      fromString("abbbbbbbbbbbasdf").getPrefix() - fromString("bbbbbbbbbbbbasdf").getPrefix() < 0);
+    assertTrue(fromString("").getPrefix() - fromString("a").getPrefix() < 0);
+    assertTrue(fromString("你好").getPrefix() - fromString("世界").getPrefix() > 0);
+
+    byte[] buf1 = {1, 2, 3, 4, 5, 6, 7, 8, 9};
+    byte[] buf2 = {1, 2, 3};
+    UTF8String str1 = UTF8String.fromBytes(buf1, 0, 3);
+    UTF8String str2 = UTF8String.fromBytes(buf1, 0, 8);
+    UTF8String str3 = UTF8String.fromBytes(buf2);
+    assertTrue(str1.getPrefix() - str2.getPrefix() < 0);
+    assertEquals(str1.getPrefix(), str3.getPrefix());
+  }
+
+  @Test
   public void compareTo() {
+    assertTrue(fromString("").compareTo(fromString("a")) < 0);
     assertTrue(fromString("abc").compareTo(fromString("ABC")) > 0);
     assertTrue(fromString("abc0").compareTo(fromString("abc")) > 0);
     assertTrue(fromString("abcabcabc").compareTo(fromString("abcabcabc")) == 0);
@@ -87,8 +115,56 @@ public class UTF8StringSuite {
   }
 
   @Test
+  public void concatTest() {
+    assertEquals(EMPTY_UTF8, concat());
+    assertEquals(null, concat((UTF8String) null));
+    assertEquals(EMPTY_UTF8, concat(EMPTY_UTF8));
+    assertEquals(fromString("ab"), concat(fromString("ab")));
+    assertEquals(fromString("ab"), concat(fromString("a"), fromString("b")));
+    assertEquals(fromString("abc"), concat(fromString("a"), fromString("b"), fromString("c")));
+    assertEquals(null, concat(fromString("a"), null, fromString("c")));
+    assertEquals(null, concat(fromString("a"), null, null));
+    assertEquals(null, concat(null, null, null));
+    assertEquals(fromString("数据砖头"), concat(fromString("数据"), fromString("砖头")));
+  }
+
+  @Test
+  public void concatWsTest() {
+    // Returns null if the separator is null
+    assertEquals(null, concatWs(null, (UTF8String)null));
+    assertEquals(null, concatWs(null, fromString("a")));
+
+    // If separator is null, concatWs should skip all null inputs and never return null.
+    UTF8String sep = fromString("哈哈");
+    assertEquals(
+      EMPTY_UTF8,
+      concatWs(sep, EMPTY_UTF8));
+    assertEquals(
+      fromString("ab"),
+      concatWs(sep, fromString("ab")));
+    assertEquals(
+      fromString("a哈哈b"),
+      concatWs(sep, fromString("a"), fromString("b")));
+    assertEquals(
+      fromString("a哈哈b哈哈c"),
+      concatWs(sep, fromString("a"), fromString("b"), fromString("c")));
+    assertEquals(
+      fromString("a哈哈c"),
+      concatWs(sep, fromString("a"), null, fromString("c")));
+    assertEquals(
+      fromString("a"),
+      concatWs(sep, fromString("a"), null, null));
+    assertEquals(
+      EMPTY_UTF8,
+      concatWs(sep, null, null, null));
+    assertEquals(
+      fromString("数据哈哈砖头"),
+      concatWs(sep, fromString("数据"), fromString("砖头")));
+  }
+
+  @Test
   public void contains() {
-    assertTrue(fromString("").contains(fromString("")));
+    assertTrue(EMPTY_UTF8.contains(EMPTY_UTF8));
     assertTrue(fromString("hello").contains(fromString("ello")));
     assertFalse(fromString("hello").contains(fromString("vello")));
     assertFalse(fromString("hello").contains(fromString("hellooo")));
@@ -99,7 +175,7 @@ public class UTF8StringSuite {
 
   @Test
   public void startsWith() {
-    assertTrue(fromString("").startsWith(fromString("")));
+    assertTrue(EMPTY_UTF8.startsWith(EMPTY_UTF8));
     assertTrue(fromString("hello").startsWith(fromString("hell")));
     assertFalse(fromString("hello").startsWith(fromString("ell")));
     assertFalse(fromString("hello").startsWith(fromString("hellooo")));
@@ -110,7 +186,7 @@ public class UTF8StringSuite {
 
   @Test
   public void endsWith() {
-    assertTrue(fromString("").endsWith(fromString("")));
+    assertTrue(EMPTY_UTF8.endsWith(EMPTY_UTF8));
     assertTrue(fromString("hello").endsWith(fromString("ello")));
     assertFalse(fromString("hello").endsWith(fromString("ellov")));
     assertFalse(fromString("hello").endsWith(fromString("hhhello")));
@@ -121,7 +197,7 @@ public class UTF8StringSuite {
 
   @Test
   public void substring() {
-    assertEquals(fromString(""), fromString("hello").substring(0, 0));
+    assertEquals(EMPTY_UTF8, fromString("hello").substring(0, 0));
     assertEquals(fromString("el"), fromString("hello").substring(1, 3));
     assertEquals(fromString("数"), fromString("数据砖头").substring(0, 1));
     assertEquals(fromString("据砖"), fromString("数据砖头").substring(1, 3));
@@ -135,9 +211,9 @@ public class UTF8StringSuite {
     assertEquals(fromString("hello "), fromString("  hello ").trimLeft());
     assertEquals(fromString("  hello"), fromString("  hello ").trimRight());
 
-    assertEquals(fromString(""), fromString("  ").trim());
-    assertEquals(fromString(""), fromString("  ").trimLeft());
-    assertEquals(fromString(""), fromString("  ").trimRight());
+    assertEquals(EMPTY_UTF8, fromString("  ").trim());
+    assertEquals(EMPTY_UTF8, fromString("  ").trimLeft());
+    assertEquals(EMPTY_UTF8, fromString("  ").trimRight());
 
     assertEquals(fromString("数据砖头"), fromString("  数据砖头 ").trim());
     assertEquals(fromString("数据砖头 "), fromString("  数据砖头 ").trimLeft());
@@ -150,9 +226,9 @@ public class UTF8StringSuite {
 
   @Test
   public void indexOf() {
-    assertEquals(0, fromString("").indexOf(fromString(""), 0));
-    assertEquals(-1, fromString("").indexOf(fromString("l"), 0));
-    assertEquals(0, fromString("hello").indexOf(fromString(""), 0));
+    assertEquals(0, EMPTY_UTF8.indexOf(EMPTY_UTF8, 0));
+    assertEquals(-1, EMPTY_UTF8.indexOf(fromString("l"), 0));
+    assertEquals(0, fromString("hello").indexOf(EMPTY_UTF8, 0));
     assertEquals(2, fromString("hello").indexOf(fromString("l"), 0));
     assertEquals(3, fromString("hello").indexOf(fromString("l"), 3));
     assertEquals(-1, fromString("hello").indexOf(fromString("a"), 0));
@@ -167,7 +243,7 @@ public class UTF8StringSuite {
   @Test
   public void reverse() {
     assertEquals(fromString("olleh"), fromString("hello").reverse());
-    assertEquals(fromString(""), fromString("").reverse());
+    assertEquals(EMPTY_UTF8, EMPTY_UTF8.reverse());
     assertEquals(fromString("者行孙"), fromString("孙行者").reverse());
     assertEquals(fromString("者行孙 olleh"), fromString("hello 孙行者").reverse());
   }
@@ -176,7 +252,7 @@ public class UTF8StringSuite {
   public void repeat() {
     assertEquals(fromString("数d数d数d数d数d"), fromString("数d").repeat(5));
     assertEquals(fromString("数d"), fromString("数d").repeat(1));
-    assertEquals(fromString(""), fromString("数d").repeat(-1));
+    assertEquals(EMPTY_UTF8, fromString("数d").repeat(-1));
   }
 
   @Test
@@ -186,14 +262,14 @@ public class UTF8StringSuite {
     assertEquals(fromString("?hello"), fromString("hello").lpad(6, fromString("????")));
     assertEquals(fromString("???????hello"), fromString("hello").lpad(12, fromString("????")));
     assertEquals(fromString("?????hello"), fromString("hello").lpad(10, fromString("?????")));
-    assertEquals(fromString("???????"), fromString("").lpad(7, fromString("?????")));
+    assertEquals(fromString("???????"), EMPTY_UTF8.lpad(7, fromString("?????")));
 
     assertEquals(fromString("hel"), fromString("hello").rpad(3, fromString("????")));
     assertEquals(fromString("hello"), fromString("hello").rpad(5, fromString("????")));
     assertEquals(fromString("hello?"), fromString("hello").rpad(6, fromString("????")));
     assertEquals(fromString("hello???????"), fromString("hello").rpad(12, fromString("????")));
     assertEquals(fromString("hello?????"), fromString("hello").rpad(10, fromString("?????")));
-    assertEquals(fromString("???????"), fromString("").rpad(7, fromString("?????")));
+    assertEquals(fromString("???????"), EMPTY_UTF8.rpad(7, fromString("?????")));
 
 
     assertEquals(fromString("数据砖"), fromString("数据砖头").lpad(3, fromString("????")));
@@ -201,37 +277,68 @@ public class UTF8StringSuite {
     assertEquals(fromString("??数据砖头"), fromString("数据砖头").lpad(6, fromString("????")));
     assertEquals(fromString("孙行数据砖头"), fromString("数据砖头").lpad(6, fromString("孙行者")));
     assertEquals(fromString("孙行者数据砖头"), fromString("数据砖头").lpad(7, fromString("孙行者")));
-    assertEquals(fromString("孙行者孙行者孙行数据砖头"), fromString("数据砖头").lpad(12, fromString("孙行者")));
+    assertEquals(
+      fromString("孙行者孙行者孙行数据砖头"),
+      fromString("数据砖头").lpad(12, fromString("孙行者")));
 
     assertEquals(fromString("数据砖"), fromString("数据砖头").rpad(3, fromString("????")));
     assertEquals(fromString("数据砖头?"), fromString("数据砖头").rpad(5, fromString("????")));
     assertEquals(fromString("数据砖头??"), fromString("数据砖头").rpad(6, fromString("????")));
     assertEquals(fromString("数据砖头孙行"), fromString("数据砖头").rpad(6, fromString("孙行者")));
     assertEquals(fromString("数据砖头孙行者"), fromString("数据砖头").rpad(7, fromString("孙行者")));
-    assertEquals(fromString("数据砖头孙行者孙行者孙行"), fromString("数据砖头").rpad(12, fromString("孙行者")));
+    assertEquals(
+      fromString("数据砖头孙行者孙行者孙行"),
+      fromString("数据砖头").rpad(12, fromString("孙行者")));
+  }
+
+  @Test
+  public void substringSQL() {
+    UTF8String e = fromString("example");
+    assertEquals(e.substringSQL(0, 2), fromString("ex"));
+    assertEquals(e.substringSQL(1, 2), fromString("ex"));
+    assertEquals(e.substringSQL(0, 7), fromString("example"));
+    assertEquals(e.substringSQL(1, 2), fromString("ex"));
+    assertEquals(e.substringSQL(0, 100), fromString("example"));
+    assertEquals(e.substringSQL(1, 100), fromString("example"));
+    assertEquals(e.substringSQL(2, 2), fromString("xa"));
+    assertEquals(e.substringSQL(1, 6), fromString("exampl"));
+    assertEquals(e.substringSQL(2, 100), fromString("xample"));
+    assertEquals(e.substringSQL(0, 0), fromString(""));
+    assertEquals(e.substringSQL(100, 4), EMPTY_UTF8);
+    assertEquals(e.substringSQL(0, Integer.MAX_VALUE), fromString("example"));
+    assertEquals(e.substringSQL(1, Integer.MAX_VALUE), fromString("example"));
+    assertEquals(e.substringSQL(2, Integer.MAX_VALUE), fromString("xample"));
+  }
+
+  @Test
+  public void split() {
+    assertTrue(Arrays.equals(fromString("ab,def,ghi").split(fromString(","), -1),
+      new UTF8String[]{fromString("ab"), fromString("def"), fromString("ghi")}));
+    assertTrue(Arrays.equals(fromString("ab,def,ghi").split(fromString(","), 2),
+      new UTF8String[]{fromString("ab"), fromString("def,ghi")}));
+    assertTrue(Arrays.equals(fromString("ab,def,ghi").split(fromString(","), 2),
+      new UTF8String[]{fromString("ab"), fromString("def,ghi")}));
   }
   
   @Test
   public void levenshteinDistance() {
-    assertEquals(
-        UTF8String.fromString("").levenshteinDistance(UTF8String.fromString("")), 0);
-    assertEquals(
-        UTF8String.fromString("").levenshteinDistance(UTF8String.fromString("a")), 1);
-    assertEquals(
-        UTF8String.fromString("aaapppp").levenshteinDistance(UTF8String.fromString("")), 7);
-    assertEquals(
-        UTF8String.fromString("frog").levenshteinDistance(UTF8String.fromString("fog")), 1);
-    assertEquals(
-        UTF8String.fromString("fly").levenshteinDistance(UTF8String.fromString("ant")),3);
-    assertEquals(
-        UTF8String.fromString("elephant").levenshteinDistance(UTF8String.fromString("hippo")), 7);
-    assertEquals(
-        UTF8String.fromString("hippo").levenshteinDistance(UTF8String.fromString("elephant")), 7);
-    assertEquals(
-        UTF8String.fromString("hippo").levenshteinDistance(UTF8String.fromString("zzzzzzzz")), 8);
-    assertEquals(
-        UTF8String.fromString("hello").levenshteinDistance(UTF8String.fromString("hallo")),1);
-    assertEquals(
-        UTF8String.fromString("世界千世").levenshteinDistance(UTF8String.fromString("千a世b")),4);
+    assertEquals(EMPTY_UTF8.levenshteinDistance(EMPTY_UTF8), 0);
+    assertEquals(EMPTY_UTF8.levenshteinDistance(fromString("a")), 1);
+    assertEquals(fromString("aaapppp").levenshteinDistance(EMPTY_UTF8), 7);
+    assertEquals(fromString("frog").levenshteinDistance(fromString("fog")), 1);
+    assertEquals(fromString("fly").levenshteinDistance(fromString("ant")),3);
+    assertEquals(fromString("elephant").levenshteinDistance(fromString("hippo")), 7);
+    assertEquals(fromString("hippo").levenshteinDistance(fromString("elephant")), 7);
+    assertEquals(fromString("hippo").levenshteinDistance(fromString("zzzzzzzz")), 8);
+    assertEquals(fromString("hello").levenshteinDistance(fromString("hallo")),1);
+    assertEquals(fromString("世界千世").levenshteinDistance(fromString("千a世b")),4);
+  }
+
+  @Test
+  public void createBlankString() {
+    assertEquals(fromString(" "), blankString(1));
+    assertEquals(fromString("  "), blankString(2));
+    assertEquals(fromString("   "), blankString(3));
+    assertEquals(fromString(""), blankString(0));
   }
 }

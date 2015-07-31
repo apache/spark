@@ -17,58 +17,49 @@
 
 package org.apache.spark.mllib.fpm
 
+import scala.collection.mutable
+
 import org.apache.spark.Logging
-import org.apache.spark.annotation.Experimental
 
 /**
- *
- * :: Experimental ::
- *
  * Calculate all patterns of a projected database in local.
  */
-@Experimental
 private[fpm] object LocalPrefixSpan extends Logging with Serializable {
 
   /**
    * Calculate all patterns of a projected database.
    * @param minCount minimum count
    * @param maxPatternLength maximum pattern length
-   * @param prefix prefix
-   * @param projectedDatabase the projected dabase
+   * @param prefixes prefixes in reversed order
+   * @param database the projected database
    * @return a set of sequential pattern pairs,
-   *         the key of pair is sequential pattern (a list of items),
+   *         the key of pair is sequential pattern (a list of items in reversed order),
    *         the value of pair is the pattern's count.
    */
   def run(
       minCount: Long,
       maxPatternLength: Int,
-      prefix: Array[Int],
-      projectedDatabase: Array[Array[Int]]): Array[(Array[Int], Long)] = {
-    val frequentPrefixAndCounts = getFreqItemAndCounts(minCount, projectedDatabase)
-    val frequentPatternAndCounts = frequentPrefixAndCounts
-      .map(x => (prefix ++ Array(x._1), x._2))
-    val prefixProjectedDatabases = getPatternAndProjectedDatabase(
-      prefix, frequentPrefixAndCounts.map(_._1), projectedDatabase)
-
-    val continueProcess = prefixProjectedDatabases.nonEmpty && prefix.length + 1 < maxPatternLength
-    if (continueProcess) {
-      val nextPatterns = prefixProjectedDatabases
-        .map(x => run(minCount, maxPatternLength, x._1, x._2))
-        .reduce(_ ++ _)
-      frequentPatternAndCounts ++ nextPatterns
-    } else {
-      frequentPatternAndCounts
+      prefixes: List[Int],
+      database: Iterable[Array[Int]]): Iterator[(List[Int], Long)] = {
+    if (prefixes.length == maxPatternLength || database.isEmpty) return Iterator.empty
+    val frequentItemAndCounts = getFreqItemAndCounts(minCount, database)
+    val filteredDatabase = database.map(x => x.filter(frequentItemAndCounts.contains))
+    frequentItemAndCounts.iterator.flatMap { case (item, count) =>
+      val newPrefixes = item :: prefixes
+      val newProjected = project(filteredDatabase, item)
+      Iterator.single((newPrefixes, count)) ++
+        run(minCount, maxPatternLength, newPrefixes, newProjected)
     }
   }
 
   /**
-   * calculate suffix sequence following a prefix in a sequence
-   * @param prefix prefix
-   * @param sequence sequence
+   * Calculate suffix sequence immediately after the first occurrence of an item.
+   * @param item item to get suffix after
+   * @param sequence sequence to extract suffix from
    * @return suffix sequence
    */
-  def getSuffix(prefix: Int, sequence: Array[Int]): Array[Int] = {
-    val index = sequence.indexOf(prefix)
+  def getSuffix(item: Int, sequence: Array[Int]): Array[Int] = {
+    val index = sequence.indexOf(item)
     if (index == -1) {
       Array()
     } else {
@@ -76,38 +67,28 @@ private[fpm] object LocalPrefixSpan extends Logging with Serializable {
     }
   }
 
-  /**
-   * Generates frequent items by filtering the input data using minimal count level.
-   * @param minCount the absolute minimum count
-   * @param sequences sequences data
-   * @return array of item and count pair
-   */
-  private def getFreqItemAndCounts(
-      minCount: Long,
-      sequences: Array[Array[Int]]): Array[(Int, Long)] = {
-    sequences.flatMap(_.distinct)
-      .groupBy(x => x)
-      .mapValues(_.length.toLong)
-      .filter(_._2 >= minCount)
-      .toArray
+  def project(database: Iterable[Array[Int]], prefix: Int): Iterable[Array[Int]] = {
+    database
+      .map(getSuffix(prefix, _))
+      .filter(_.nonEmpty)
   }
 
   /**
-   * Get the frequent prefixes' projected database.
-   * @param prePrefix the frequent prefixes' prefix
-   * @param frequentPrefixes frequent prefixes
-   * @param sequences sequences data
-   * @return prefixes and projected database
+   * Generates frequent items by filtering the input data using minimal count level.
+   * @param minCount the minimum count for an item to be frequent
+   * @param database database of sequences
+   * @return freq item to count map
    */
-  private def getPatternAndProjectedDatabase(
-      prePrefix: Array[Int],
-      frequentPrefixes: Array[Int],
-      sequences: Array[Array[Int]]): Array[(Array[Int], Array[Array[Int]])] = {
-    val filteredProjectedDatabase = sequences
-      .map(x => x.filter(frequentPrefixes.contains(_)))
-    frequentPrefixes.map { x =>
-      val sub = filteredProjectedDatabase.map(y => getSuffix(x, y)).filter(_.nonEmpty)
-      (prePrefix ++ Array(x), sub)
-    }.filter(x => x._2.nonEmpty)
+  private def getFreqItemAndCounts(
+      minCount: Long,
+      database: Iterable[Array[Int]]): mutable.Map[Int, Long] = {
+    // TODO: use PrimitiveKeyOpenHashMap
+    val counts = mutable.Map[Int, Long]().withDefaultValue(0L)
+    database.foreach { sequence =>
+      sequence.distinct.foreach { item =>
+        counts(item) += 1L
+      }
+    }
+    counts.filter(_._2 >= minCount)
   }
 }

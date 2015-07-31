@@ -22,7 +22,8 @@
 connExists <- function(env) {
   tryCatch({
     exists(".sparkRCon", envir = env) && isOpen(env[[".sparkRCon"]])
-  }, error = function(err) {
+  },
+  error = function(err) {
     return(FALSE)
   })
 }
@@ -104,16 +105,13 @@ sparkR.init <- function(
     return(get(".sparkRjsc", envir = .sparkREnv))
   }
 
-  sparkMem <- Sys.getenv("SPARK_MEM", "1024m")
   jars <- suppressWarnings(normalizePath(as.character(sparkJars)))
 
   # Classpath separator is ";" on Windows
   # URI needs four /// as from http://stackoverflow.com/a/18522792
   if (.Platform$OS.type == "unix") {
-    collapseChar <- ":"
     uriSep <- "//"
   } else {
-    collapseChar <- ";"
     uriSep <- "////"
   }
 
@@ -140,7 +138,7 @@ sparkR.init <- function(
     if (!file.exists(path)) {
       stop("JVM is not ready after 10 seconds")
     }
-    f <- file(path, open='rb')
+    f <- file(path, open="rb")
     backendPort <- readInt(f)
     monitorPort <- readInt(f)
     close(f)
@@ -156,7 +154,8 @@ sparkR.init <- function(
   .sparkREnv$backendPort <- backendPort
   tryCatch({
     connectBackend("localhost", backendPort)
-  }, error = function(err) {
+  },
+  error = function(err) {
     stop("Failed to connect JVM\n")
   })
 
@@ -267,7 +266,8 @@ sparkRHive.init <- function(jsc = NULL) {
   ssc <- callJMethod(sc, "sc")
   hiveCtx <- tryCatch({
     newJObject("org.apache.spark.sql.hive.HiveContext", ssc)
-  }, error = function(err) {
+  },
+  error = function(err) {
     stop("Spark SQL is not built with Hive support")
   })
 

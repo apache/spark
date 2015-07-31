@@ -1079,8 +1079,10 @@ import org.apache.spark.annotation.DeveloperApi
       throw new EvalException("Failed to load '" + path + "': " + ex.getMessage, ex)
 
     private def load(path: String): Class[_] = {
+      // scalastyle:off classforname
       try Class.forName(path, true, classLoader)
       catch { case ex: Throwable => evalError(path, unwrap(ex)) }
+      // scalastyle:on classforname
     }
 
     lazy val evalClass = load(evalPath)

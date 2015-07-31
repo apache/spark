@@ -20,16 +20,16 @@ package org.apache.spark.unsafe.types;
 import org.junit.Test;
 
 import static junit.framework.Assert.*;
-import static org.apache.spark.unsafe.types.Interval.*;
+import static org.apache.spark.unsafe.types.CalendarInterval.*;
 
 public class IntervalSuite {
 
   @Test
   public void equalsTest() {
-    Interval i1 = new Interval(3, 123);
-    Interval i2 = new Interval(3, 321);
-    Interval i3 = new Interval(1, 123);
-    Interval i4 = new Interval(3, 123);
+    CalendarInterval i1 = new CalendarInterval(3, 123);
+    CalendarInterval i2 = new CalendarInterval(3, 321);
+    CalendarInterval i3 = new CalendarInterval(1, 123);
+    CalendarInterval i4 = new CalendarInterval(3, 123);
 
     assertNotSame(i1, i2);
     assertNotSame(i1, i3);
@@ -39,21 +39,21 @@ public class IntervalSuite {
 
   @Test
   public void toStringTest() {
-    Interval i;
+    CalendarInterval i;
 
-    i = new Interval(34, 0);
+    i = new CalendarInterval(34, 0);
     assertEquals(i.toString(), "interval 2 years 10 months");
 
-    i = new Interval(-34, 0);
+    i = new CalendarInterval(-34, 0);
     assertEquals(i.toString(), "interval -2 years -10 months");
 
-    i = new Interval(0, 3 * MICROS_PER_WEEK + 13 * MICROS_PER_HOUR + 123);
+    i = new CalendarInterval(0, 3 * MICROS_PER_WEEK + 13 * MICROS_PER_HOUR + 123);
     assertEquals(i.toString(), "interval 3 weeks 13 hours 123 microseconds");
 
-    i = new Interval(0, -3 * MICROS_PER_WEEK - 13 * MICROS_PER_HOUR - 123);
+    i = new CalendarInterval(0, -3 * MICROS_PER_WEEK - 13 * MICROS_PER_HOUR - 123);
     assertEquals(i.toString(), "interval -3 weeks -13 hours -123 microseconds");
 
-    i = new Interval(34, 3 * MICROS_PER_WEEK + 13 * MICROS_PER_HOUR + 123);
+    i = new CalendarInterval(34, 3 * MICROS_PER_WEEK + 13 * MICROS_PER_HOUR + 123);
     assertEquals(i.toString(), "interval 2 years 10 months 3 weeks 13 hours 123 microseconds");
   }
 
@@ -72,34 +72,78 @@ public class IntervalSuite {
     String input;
 
     input = "interval   -5  years  23   month";
-    Interval result = new Interval(-5 * 12 + 23, 0);
-    assertEquals(Interval.fromString(input), result);
+    CalendarInterval result = new CalendarInterval(-5 * 12 + 23, 0);
+    assertEquals(CalendarInterval.fromString(input), result);
+
+    input = "interval   -5  years  23   month   ";
+    assertEquals(CalendarInterval.fromString(input), result);
+
+    input = "  interval   -5  years  23   month   ";
+    assertEquals(CalendarInterval.fromString(input), result);
 
     // Error cases
     input = "interval   3month 1 hour";
-    assertEquals(Interval.fromString(input), null);
+    assertEquals(CalendarInterval.fromString(input), null);
 
     input = "interval 3 moth 1 hour";
-    assertEquals(Interval.fromString(input), null);
+    assertEquals(CalendarInterval.fromString(input), null);
 
     input = "interval";
-    assertEquals(Interval.fromString(input), null);
+    assertEquals(CalendarInterval.fromString(input), null);
 
     input = "int";
-    assertEquals(Interval.fromString(input), null);
+    assertEquals(CalendarInterval.fromString(input), null);
 
     input = "";
-    assertEquals(Interval.fromString(input), null);
+    assertEquals(CalendarInterval.fromString(input), null);
 
     input = null;
-    assertEquals(Interval.fromString(input), null);
+    assertEquals(CalendarInterval.fromString(input), null);
+  }
+
+  @Test
+  public void addTest() {
+    String input = "interval 3 month 1 hour";
+    String input2 = "interval 2 month 100 hour";
+
+    CalendarInterval interval = CalendarInterval.fromString(input);
+    CalendarInterval interval2 = CalendarInterval.fromString(input2);
+
+    assertEquals(interval.add(interval2), new CalendarInterval(5, 101 * MICROS_PER_HOUR));
+
+    input = "interval -10 month -81 hour";
+    input2 = "interval 75 month 200 hour";
+
+    interval = CalendarInterval.fromString(input);
+    interval2 = CalendarInterval.fromString(input2);
+
+    assertEquals(interval.add(interval2), new CalendarInterval(65, 119 * MICROS_PER_HOUR));
+  }
+
+  @Test
+  public void subtractTest() {
+    String input = "interval 3 month 1 hour";
+    String input2 = "interval 2 month 100 hour";
+
+    CalendarInterval interval = CalendarInterval.fromString(input);
+    CalendarInterval interval2 = CalendarInterval.fromString(input2);
+
+    assertEquals(interval.subtract(interval2), new CalendarInterval(1, -99 * MICROS_PER_HOUR));
+
+    input = "interval -10 month -81 hour";
+    input2 = "interval 75 month 200 hour";
+
+    interval = CalendarInterval.fromString(input);
+    interval2 = CalendarInterval.fromString(input2);
+
+    assertEquals(interval.subtract(interval2), new CalendarInterval(-85, -281 * MICROS_PER_HOUR));
   }
 
   private void testSingleUnit(String unit, int number, int months, long microseconds) {
     String input1 = "interval " + number + " " + unit;
     String input2 = "interval " + number + " " + unit + "s";
-    Interval result = new Interval(months, microseconds);
-    assertEquals(Interval.fromString(input1), result);
-    assertEquals(Interval.fromString(input2), result);
+    CalendarInterval result = new CalendarInterval(months, microseconds);
+    assertEquals(CalendarInterval.fromString(input1), result);
+    assertEquals(CalendarInterval.fromString(input2), result);
   }
 }

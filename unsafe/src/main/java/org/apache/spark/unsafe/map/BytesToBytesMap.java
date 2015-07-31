@@ -75,12 +75,6 @@ public final class BytesToBytesMap {
   private long pageCursor = 0;
 
   /**
-   * The size of the data pages that hold key and value data. Map entries cannot span multiple
-   * pages, so this limits the maximum entry size.
-   */
-  private static final long PAGE_SIZE_BYTES = 1L << 26; // 64 megabytes
-
-  /**
    * The maximum number of keys that BytesToBytesMap supports. The hash table has to be
    * power-of-2-sized and its backing Java array can contain at most (1 << 30) elements, since
    * that's the largest power-of-2 that's less than Integer.MAX_VALUE. We need two long array
@@ -118,6 +112,12 @@ public final class BytesToBytesMap {
   private final double loadFactor;
 
   /**
+   * The size of the data pages that hold key and value data. Map entries cannot span multiple
+   * pages, so this limits the maximum entry size.
+   */
+  private final long pageSizeBytes;
+
+  /**
    * Number of keys defined in the map.
    */
   private int size;
@@ -153,10 +153,12 @@ public final class BytesToBytesMap {
       TaskMemoryManager memoryManager,
       int initialCapacity,
       double loadFactor,
+      long pageSizeBytes,
       boolean enablePerfMetrics) {
     this.memoryManager = memoryManager;
     this.loadFactor = loadFactor;
     this.loc = new Location();
+    this.pageSizeBytes = pageSizeBytes;
     this.enablePerfMetrics = enablePerfMetrics;
     if (initialCapacity <= 0) {
       throw new IllegalArgumentException("Initial capacity must be greater than 0");
@@ -165,18 +167,26 @@ public final class BytesToBytesMap {
       throw new IllegalArgumentException(
         "Initial capacity " + initialCapacity + " exceeds maximum capacity of " + MAX_CAPACITY);
     }
+    if (pageSizeBytes > TaskMemoryManager.MAXIMUM_PAGE_SIZE_BYTES) {
+      throw new IllegalArgumentException("Page size " + pageSizeBytes + " cannot exceed " +
+        TaskMemoryManager.MAXIMUM_PAGE_SIZE_BYTES);
+    }
     allocate(initialCapacity);
-  }
-
-  public BytesToBytesMap(TaskMemoryManager memoryManager, int initialCapacity) {
-    this(memoryManager, initialCapacity, 0.70, false);
   }
 
   public BytesToBytesMap(
       TaskMemoryManager memoryManager,
       int initialCapacity,
+      long pageSizeBytes) {
+    this(memoryManager, initialCapacity, 0.70, pageSizeBytes, false);
+  }
+
+  public BytesToBytesMap(
+      TaskMemoryManager memoryManager,
+      int initialCapacity,
+      long pageSizeBytes,
       boolean enablePerfMetrics) {
-    this(memoryManager, initialCapacity, 0.70, enablePerfMetrics);
+    this(memoryManager, initialCapacity, 0.70, pageSizeBytes, enablePerfMetrics);
   }
 
   /**
@@ -404,14 +414,17 @@ public final class BytesToBytesMap {
      * at the value address.
      * <p>
      * It is only valid to call this method immediately after calling `lookup()` using the same key.
+     * </p>
      * <p>
      * The key and value must be word-aligned (that is, their sizes must multiples of 8).
+     * </p>
      * <p>
      * After calling this method, calls to `get[Key|Value]Address()` and `get[Key|Value]Length`
      * will return information on the data stored by this `putNewKey` call.
+     * </p>
      * <p>
      * As an example usage, here's the proper way to store a new key:
-     * <p>
+     * </p>
      * <pre>
      *   Location loc = map.lookup(keyBaseObject, keyBaseOffset, keyLengthInBytes);
      *   if (!loc.isDefined()) {
@@ -420,6 +433,7 @@ public final class BytesToBytesMap {
      * </pre>
      * <p>
      * Unspecified behavior if the key is not defined.
+     * </p>
      */
     public void putNewKey(
         Object keyBaseObject,
@@ -439,20 +453,20 @@ public final class BytesToBytesMap {
       // must be stored in the same memory page.
       // (8 byte key length) (key) (8 byte value length) (value)
       final long requiredSize = 8 + keyLengthBytes + 8 + valueLengthBytes;
-      assert (requiredSize <= PAGE_SIZE_BYTES - 8); // Reserve 8 bytes for the end-of-page marker.
+      assert (requiredSize <= pageSizeBytes - 8); // Reserve 8 bytes for the end-of-page marker.
       size++;
       bitset.set(pos);
 
       // If there's not enough space in the current page, allocate a new page (8 bytes are reserved
       // for the end-of-page marker).
-      if (currentDataPage == null || PAGE_SIZE_BYTES - 8 - pageCursor < requiredSize) {
+      if (currentDataPage == null || pageSizeBytes - 8 - pageCursor < requiredSize) {
         if (currentDataPage != null) {
           // There wasn't enough space in the current page, so write an end-of-page marker:
           final Object pageBaseObject = currentDataPage.getBaseObject();
           final long lengthOffsetInPage = currentDataPage.getBaseOffset() + pageCursor;
           PlatformDependent.UNSAFE.putLong(pageBaseObject, lengthOffsetInPage, END_OF_PAGE_MARKER);
         }
-        MemoryBlock newPage = memoryManager.allocatePage(PAGE_SIZE_BYTES);
+        MemoryBlock newPage = memoryManager.allocatePage(pageSizeBytes);
         dataPages.add(newPage);
         pageCursor = 0;
         currentDataPage = newPage;
@@ -534,10 +548,11 @@ public final class BytesToBytesMap {
 
   /** Returns the total amount of memory, in bytes, consumed by this map's managed structures. */
   public long getTotalMemoryConsumption() {
-    return (
-      dataPages.size() * PAGE_SIZE_BYTES +
-      bitset.memoryBlock().size() +
-      longArray.memoryBlock().size());
+    long totalDataPagesSize = 0L;
+    for (MemoryBlock dataPage : dataPages) {
+      totalDataPagesSize += dataPage.size();
+    }
+    return totalDataPagesSize + bitset.memoryBlock().size() + longArray.memoryBlock().size();
   }
 
   /**
