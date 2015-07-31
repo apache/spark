@@ -86,14 +86,6 @@ sealed trait Partitioning {
    */
   def satisfies(required: Distribution): Boolean
 
-  /**
-   * Returns true iff all distribution guarantees made by this partitioning can also be made
-   * for the `other` specified partitioning.
-   * For example, two [[HashPartitioning HashPartitioning]]s are
-   * only compatible if the `numPartitions` of them is the same.
-   */
-  def compatibleWith(other: Partitioning): Boolean
-
   /** Returns the expressions that are used to key the partitioning. */
   def keyExpressions: Seq[Expression]
 }
@@ -101,11 +93,6 @@ sealed trait Partitioning {
 case class UnknownPartitioning(numPartitions: Int) extends Partitioning {
   override def satisfies(required: Distribution): Boolean = required match {
     case UnspecifiedDistribution => true
-    case _ => false
-  }
-
-  override def compatibleWith(other: Partitioning): Boolean = other match {
-    case UnknownPartitioning(_) => true
     case _ => false
   }
 
@@ -117,11 +104,6 @@ case object SinglePartition extends Partitioning {
 
   override def satisfies(required: Distribution): Boolean = true
 
-  override def compatibleWith(other: Partitioning): Boolean = other match {
-    case SinglePartition => true
-    case _ => false
-  }
-
   override def keyExpressions: Seq[Expression] = Nil
 }
 
@@ -129,11 +111,6 @@ case object BroadcastPartitioning extends Partitioning {
   val numPartitions = 1
 
   override def satisfies(required: Distribution): Boolean = true
-
-  override def compatibleWith(other: Partitioning): Boolean = other match {
-    case SinglePartition => true
-    case _ => false
-  }
 
   override def keyExpressions: Seq[Expression] = Nil
 }
@@ -156,12 +133,6 @@ case class HashPartitioning(expressions: Seq[Expression], numPartitions: Int)
     case UnspecifiedDistribution => true
     case ClusteredDistribution(requiredClustering) =>
       clusteringSet.subsetOf(requiredClustering.toSet)
-    case _ => false
-  }
-
-  override def compatibleWith(other: Partitioning): Boolean = other match {
-    case BroadcastPartitioning => true
-    case h: HashPartitioning if h == this => true
     case _ => false
   }
 
@@ -196,12 +167,6 @@ case class RangePartitioning(ordering: Seq[SortOrder], numPartitions: Int)
       requiredOrdering.take(minSize) == ordering.take(minSize)
     case ClusteredDistribution(requiredClustering) =>
       clusteringSet.subsetOf(requiredClustering.toSet)
-    case _ => false
-  }
-
-  override def compatibleWith(other: Partitioning): Boolean = other match {
-    case BroadcastPartitioning => true
-    case r: RangePartitioning if r == this => true
     case _ => false
   }
 
