@@ -59,6 +59,10 @@ setGeneric("count", function(x) { standardGeneric("count") })
 # @export
 setGeneric("countByValue", function(x) { standardGeneric("countByValue") })
 
+# @rdname statfunctions
+# @export
+setGeneric("crosstab", function(x, col1, col2) { standardGeneric("crosstab") })
+
 # @rdname distinct
 # @export
 setGeneric("distinct", function(x, numPartitions = 1) { standardGeneric("distinct") })
@@ -250,8 +254,10 @@ setGeneric("flatMapValues", function(X, FUN) { standardGeneric("flatMapValues") 
 
 # @rdname intersection
 # @export
-setGeneric("intersection", function(x, other, numPartitions = 1) {
-  standardGeneric("intersection") })
+setGeneric("intersection",
+           function(x, other, numPartitions = 1) {
+             standardGeneric("intersection")
+           })
 
 # @rdname keys
 # @export
@@ -485,9 +491,7 @@ setGeneric("sample",
 #' @rdname sample
 #' @export
 setGeneric("sample_frac",
-           function(x, withReplacement, fraction, seed) {
-             standardGeneric("sample_frac")
-           })
+           function(x, withReplacement, fraction, seed) { standardGeneric("sample_frac") })
 
 #' @rdname saveAsParquetFile
 #' @export
@@ -549,8 +553,8 @@ setGeneric("withColumn", function(x, colName, col) { standardGeneric("withColumn
 
 #' @rdname withColumnRenamed
 #' @export
-setGeneric("withColumnRenamed", function(x, existingCol, newCol) {
-  standardGeneric("withColumnRenamed") })
+setGeneric("withColumnRenamed",
+           function(x, existingCol, newCol) { standardGeneric("withColumnRenamed") })
 
 
 ###################### Column Methods ##########################
@@ -665,3 +669,7 @@ setGeneric("upper", function(x) { standardGeneric("upper") })
 #' @rdname glm
 #' @export
 setGeneric("glm")
+
+#' @rdname rbind
+#' @export
+setGeneric("rbind", signature = "...")

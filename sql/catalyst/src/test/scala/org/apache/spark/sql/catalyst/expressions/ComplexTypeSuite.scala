@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.UnresolvedExtractValue
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
 
 class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
@@ -109,7 +110,7 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
       expr.dataType match {
         case ArrayType(StructType(fields), containsNull) =>
           val field = fields.find(_.name == fieldName).get
-          GetArrayStructFields(expr, field, fields.indexOf(field), containsNull)
+          GetArrayStructFields(expr, field, fields.indexOf(field), fields.length, containsNull)
       }
     }
 
@@ -117,29 +118,42 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(getArrayStructFields(nullArrayStruct, "a"), null)
   }
 
+  test("CreateArray") {
+    val intSeq = Seq(5, 10, 15, 20, 25)
+    val longSeq = intSeq.map(_.toLong)
+    val strSeq = intSeq.map(_.toString)
+    checkEvaluation(CreateArray(intSeq.map(Literal(_))), intSeq, EmptyRow)
+    checkEvaluation(CreateArray(longSeq.map(Literal(_))), longSeq, EmptyRow)
+    checkEvaluation(CreateArray(strSeq.map(Literal(_))), strSeq, EmptyRow)
+
+    val intWithNull = intSeq.map(Literal(_)) :+ Literal.create(null, IntegerType)
+    val longWithNull = longSeq.map(Literal(_)) :+ Literal.create(null, LongType)
+    val strWithNull = strSeq.map(Literal(_)) :+ Literal.create(null, StringType)
+    checkEvaluation(CreateArray(intWithNull), intSeq :+ null, EmptyRow)
+    checkEvaluation(CreateArray(longWithNull), longSeq :+ null, EmptyRow)
+    checkEvaluation(CreateArray(strWithNull), strSeq :+ null, EmptyRow)
+    checkEvaluation(CreateArray(Literal.create(null, IntegerType) :: Nil), null :: Nil)
+  }
+
   test("CreateStruct") {
     val row = create_row(1, 2, 3)
     val c1 = 'a.int.at(0)
     val c3 = 'c.int.at(2)
     checkEvaluation(CreateStruct(Seq(c1, c3)), create_row(1, 3), row)
+    checkEvaluation(CreateStruct(Literal.create(null, LongType) :: Nil), create_row(null))
   }
 
   test("CreateNamedStruct") {
-    val row = InternalRow(1, 2, 3)
+    val row = create_row(1, 2, 3)
     val c1 = 'a.int.at(0)
     val c3 = 'c.int.at(2)
-    checkEvaluation(CreateNamedStruct(Seq("a", c1, "b", c3)), InternalRow(1, 3), row)
-  }
-
-  test("CreateNamedStruct with literal field") {
-    val row = InternalRow(1, 2, 3)
-    val c1 = 'a.int.at(0)
-    checkEvaluation(CreateNamedStruct(Seq("a", c1, "b", "y")), InternalRow(1, "y"), row)
-  }
-
-  test("CreateNamedStruct from all literal fields") {
-    checkEvaluation(
-      CreateNamedStruct(Seq("a", "x", "b", 2.0)), InternalRow("x", 2.0), InternalRow.empty)
+    checkEvaluation(CreateNamedStruct(Seq("a", c1, "b", c3)), create_row(1, 3), row)
+    checkEvaluation(CreateNamedStruct(Seq("a", c1, "b", "y")),
+      create_row(1, UTF8String.fromString("y")), row)
+    checkEvaluation(CreateNamedStruct(Seq("a", "x", "b", 2.0)),
+      create_row(UTF8String.fromString("x"), 2.0))
+    checkEvaluation(CreateNamedStruct(Seq("a", Literal.create(null, IntegerType))),
+      create_row(null))
   }
 
   test("test dsl for complex type") {

@@ -216,7 +216,8 @@ class MathExpressionsSuite extends QueryTest {
     checkAnswer(
       ctx.sql(s"SELECT round($pi, -3), round($pi, -2), round($pi, -1), " +
         s"round($pi, 0), round($pi, 1), round($pi, 2), round($pi, 3)"),
-      Seq(Row(0.0, 0.0, 0.0, 3.0, 3.1, 3.14, 3.142))
+      Seq(Row(BigDecimal("0E3"), BigDecimal("0E2"), BigDecimal("0E1"), BigDecimal(3),
+        BigDecimal("3.1"), BigDecimal("3.14"), BigDecimal("3.142")))
     )
   }
 

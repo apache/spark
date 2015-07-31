@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql.execution.joins
 
+import scala.concurrent._
+import scala.concurrent.duration._
+
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
@@ -25,10 +28,6 @@ import org.apache.spark.sql.catalyst.plans.physical.{Distribution, UnspecifiedDi
 import org.apache.spark.sql.catalyst.plans.{JoinType, LeftOuter, RightOuter}
 import org.apache.spark.sql.execution.{BinaryNode, SparkPlan}
 import org.apache.spark.util.ThreadUtils
-
-import scala.collection.JavaConversions._
-import scala.concurrent._
-import scala.concurrent.duration._
 
 /**
  * :: DeveloperApi ::
@@ -58,28 +57,11 @@ case class BroadcastHashOuterJoin(
   override def requiredChildDistribution: Seq[Distribution] =
     UnspecifiedDistribution :: UnspecifiedDistribution :: Nil
 
-  private[this] lazy val (buildPlan, streamedPlan) = joinType match {
-    case RightOuter => (left, right)
-    case LeftOuter => (right, left)
-    case x =>
-      throw new IllegalArgumentException(
-        s"BroadcastHashOuterJoin should not take $x as the JoinType")
-  }
-
-  private[this] lazy val (buildKeys, streamedKeys) = joinType match {
-    case RightOuter => (leftKeys, rightKeys)
-    case LeftOuter => (rightKeys, leftKeys)
-    case x =>
-      throw new IllegalArgumentException(
-        s"BroadcastHashOuterJoin should not take $x as the JoinType")
-  }
-
   @transient
   private val broadcastFuture = future {
     // Note that we use .execute().collect() because we don't want to convert data to Scala types
     val input: Array[InternalRow] = buildPlan.execute().map(_.copy()).collect()
-    // buildHashTable uses code-generated rows as keys, which are not serializable
-    val hashed = buildHashTable(input.iterator, newProjection(buildKeys, buildPlan.output))
+    val hashed = HashedRelation(input.iterator, buildKeyGenerator, input.size)
     sparkContext.broadcast(hashed)
   }(BroadcastHashOuterJoin.broadcastHashOuterJoinExecutionContext)
 
@@ -89,21 +71,21 @@ case class BroadcastHashOuterJoin(
     streamedPlan.execute().mapPartitions { streamedIter =>
       val joinedRow = new JoinedRow()
       val hashTable = broadcastRelation.value
-      val keyGenerator = newProjection(streamedKeys, streamedPlan.output)
+      val keyGenerator = streamedKeyGenerator
 
       joinType match {
         case LeftOuter =>
           streamedIter.flatMap(currentRow => {
             val rowKey = keyGenerator(currentRow)
             joinedRow.withLeft(currentRow)
-            leftOuterIterator(rowKey, joinedRow, hashTable.getOrElse(rowKey, EMPTY_LIST))
+            leftOuterIterator(rowKey, joinedRow, hashTable.get(rowKey))
           })
 
         case RightOuter =>
           streamedIter.flatMap(currentRow => {
             val rowKey = keyGenerator(currentRow)
             joinedRow.withRight(currentRow)
-            rightOuterIterator(rowKey, hashTable.getOrElse(rowKey, EMPTY_LIST), joinedRow)
+            rightOuterIterator(rowKey, hashTable.get(rowKey), joinedRow)
           })
 
         case x =>

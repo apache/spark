@@ -20,6 +20,9 @@ package org.apache.spark.util.collection.unsafe.sort;
 import java.io.IOException;
 import java.util.LinkedList;
 
+import scala.runtime.AbstractFunction0;
+import scala.runtime.BoxedUnit;
+
 import com.google.common.annotations.VisibleForTesting;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -41,10 +44,7 @@ public final class UnsafeExternalSorter {
 
   private final Logger logger = LoggerFactory.getLogger(UnsafeExternalSorter.class);
 
-  private static final int PAGE_SIZE = 1 << 27;  // 128 megabytes
-  @VisibleForTesting
-  static final int MAX_RECORD_SIZE = PAGE_SIZE - 4;
-
+  private final long pageSizeBytes;
   private final PrefixComparator prefixComparator;
   private final RecordComparator recordComparator;
   private final int initialSize;
@@ -91,7 +91,19 @@ public final class UnsafeExternalSorter {
     this.initialSize = initialSize;
     // Use getSizeAsKb (not bytes) to maintain backwards compatibility for units
     this.fileBufferSizeBytes = (int) conf.getSizeAsKb("spark.shuffle.file.buffer", "32k") * 1024;
+    this.pageSizeBytes = conf.getSizeAsBytes("spark.buffer.pageSize", "64m");
     initializeForWriting();
+
+    // Register a cleanup task with TaskContext to ensure that memory is guaranteed to be freed at
+    // the end of the task. This is necessary to avoid memory leaks in when the downstream operator
+    // does not fully consume the sorter's output (e.g. sort followed by limit).
+    taskContext.addOnCompleteCallback(new AbstractFunction0<BoxedUnit>() {
+      @Override
+      public BoxedUnit apply() {
+        freeMemory();
+        return null;
+      }
+    });
   }
 
   // TODO: metrics tracking + integration with shuffle write metrics
@@ -147,7 +159,16 @@ public final class UnsafeExternalSorter {
   }
 
   private long getMemoryUsage() {
-    return sorter.getMemoryUsage() + (allocatedPages.size() * (long) PAGE_SIZE);
+    long totalPageSize = 0;
+    for (MemoryBlock page : allocatedPages) {
+      totalPageSize += page.size();
+    }
+    return sorter.getMemoryUsage() + totalPageSize;
+  }
+
+  @VisibleForTesting
+  public int getNumberOfAllocatedPages() {
+    return allocatedPages.size();
   }
 
   public long freeMemory() {
@@ -209,23 +230,23 @@ public final class UnsafeExternalSorter {
       // TODO: we should track metrics on the amount of space wasted when we roll over to a new page
       // without using the free space at the end of the current page. We should also do this for
       // BytesToBytesMap.
-      if (requiredSpace > PAGE_SIZE) {
+      if (requiredSpace > pageSizeBytes) {
         throw new IOException("Required space " + requiredSpace + " is greater than page size (" +
-          PAGE_SIZE + ")");
+          pageSizeBytes + ")");
       } else {
-        final long memoryAcquired = shuffleMemoryManager.tryToAcquire(PAGE_SIZE);
-        if (memoryAcquired < PAGE_SIZE) {
+        final long memoryAcquired = shuffleMemoryManager.tryToAcquire(pageSizeBytes);
+        if (memoryAcquired < pageSizeBytes) {
           shuffleMemoryManager.release(memoryAcquired);
           spill();
-          final long memoryAcquiredAfterSpilling = shuffleMemoryManager.tryToAcquire(PAGE_SIZE);
-          if (memoryAcquiredAfterSpilling != PAGE_SIZE) {
+          final long memoryAcquiredAfterSpilling = shuffleMemoryManager.tryToAcquire(pageSizeBytes);
+          if (memoryAcquiredAfterSpilling != pageSizeBytes) {
             shuffleMemoryManager.release(memoryAcquiredAfterSpilling);
-            throw new IOException("Unable to acquire " + PAGE_SIZE + " bytes of memory");
+            throw new IOException("Unable to acquire " + pageSizeBytes + " bytes of memory");
           }
         }
-        currentPage = memoryManager.allocatePage(PAGE_SIZE);
+        currentPage = memoryManager.allocatePage(pageSizeBytes);
         currentPagePosition = currentPage.getBaseOffset();
-        freeSpaceInCurrentPage = PAGE_SIZE;
+        freeSpaceInCurrentPage = pageSizeBytes;
         allocatedPages.add(currentPage);
       }
     }
@@ -257,7 +278,7 @@ public final class UnsafeExternalSorter {
       currentPagePosition,
       lengthInBytes);
     currentPagePosition += lengthInBytes;
-
+    freeSpaceInCurrentPage -= totalSpaceRequired;
     sorter.insertRecord(recordAddress, prefix);
   }
 

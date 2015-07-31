@@ -34,6 +34,7 @@ import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat}
 
 import org.apache.spark._
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.input.FixedLengthBinaryInputFormat
 import org.apache.spark.rdd.{RDD, RDDOperationScope}
 import org.apache.spark.serializer.SerializationDebugger
@@ -110,7 +111,7 @@ class StreamingContext private[streaming] (
    * Recreate a StreamingContext from a checkpoint file.
    * @param path Path to the directory that was specified as the checkpoint directory
    */
-  def this(path: String) = this(path, new Configuration)
+  def this(path: String) = this(path, SparkHadoopUtil.get.conf)
 
   /**
    * Recreate a StreamingContext from a checkpoint file using an existing SparkContext.
@@ -803,7 +804,7 @@ object StreamingContext extends Logging {
   def getActiveOrCreate(
       checkpointPath: String,
       creatingFunc: () => StreamingContext,
-      hadoopConf: Configuration = new Configuration(),
+      hadoopConf: Configuration = SparkHadoopUtil.get.conf,
       createOnError: Boolean = false
     ): StreamingContext = {
     ACTIVATION_LOCK.synchronized {
@@ -828,7 +829,7 @@ object StreamingContext extends Logging {
   def getOrCreate(
       checkpointPath: String,
       creatingFunc: () => StreamingContext,
-      hadoopConf: Configuration = new Configuration(),
+      hadoopConf: Configuration = SparkHadoopUtil.get.conf,
       createOnError: Boolean = false
     ): StreamingContext = {
     val checkpointOption = CheckpointReader.read(
