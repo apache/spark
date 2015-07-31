@@ -23,6 +23,7 @@ import java.util.Arrays;
 import org.junit.Test;
 
 import static junit.framework.Assert.*;
+
 import static org.apache.spark.unsafe.types.UTF8String.*;
 
 public class UTF8StringSuite {
