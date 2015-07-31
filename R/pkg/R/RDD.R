@@ -1264,12 +1264,12 @@ setMethod("pipeRDD",
           signature(x = "RDD", command = "character"),
           function(x, command, env = list()) {
             func <- function(part) {
-              trim.trailing.func <- function(x) {
+              trim_trailing_func <- function(x) {
                 sub("[\r\n]*$", "", toString(x))
               }
-              input <- unlist(lapply(part, trim.trailing.func))
+              input <- unlist(lapply(part, trim_trailing_func))
               res <- system2(command, stdout = TRUE, input = input, env = env)
-              lapply(res, trim.trailing.func)
+              lapply(res, trim_trailing_func)
             }
             lapplyPartition(x, func)
           })

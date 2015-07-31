@@ -160,9 +160,6 @@
     <fasterxml.jackson.version>2.4.4</fasterxml.jackson.version>
     <snappy.version>1.1.1.7</snappy.version>
     <netlib.java.version>1.1.2</netlib.java.version>
-    <!-- For maven shade plugin (see SPARK-8819) -->
-    <create.dependency.reduced.pom>false</create.dependency.reduced.pom>
-
     <test.java.home>${java.home}</test.java.home>
 
     <!--
@@ -1376,7 +1373,12 @@
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-assembly-plugin</artifactId>
-          <version>2.5.3</version>
+          <version>2.5.5</version>
+        </plugin>
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-shade-plugin</artifactId>
+          <version>2.4.1</version>
         </plugin>
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
@@ -1470,11 +1472,8 @@
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-shade-plugin</artifactId>
-        <version>2.3</version>
         <configuration>
           <shadedArtifactAttached>false</shadedArtifactAttached>
-          <!-- Work around MSHADE-148. See SPARK-8819. -->
-          <createDependencyReducedPom>${create.dependency.reduced.pom}</createDependencyReducedPom>
           <artifactSet>
             <includes>
               <!-- At a minimum we must include this to force effective pom generation -->
@@ -1833,26 +1832,6 @@
       <properties>
         <scala.version>2.11.7</scala.version>
         <scala.binary.version>2.11</scala.binary.version>
-      </properties>
-    </profile>
-
-    <profile>
-      <!--
-          Use this profile only for making Spark releases. Note that due to SPARK-8819,
-          you must use maven version 3.2.x or before to avoid running into MSHADE-148.
-      -->
-      <id>release</id>
-      <properties>
-        <!--
-            The maven shade plugin has a bug where enabling the `createDependencyReducedPom`
-            property causes maven to go into an infinite loop (MSHADE-148). This is only an
-            issue for the Spark build if the maven version is 3.3.x or newer (SPARK-8819).
-
-            However, since disabling this property has the side effect of not resolving
-            variables in the released pom files (SPARK-8781), we need to enable this during
-            releases.
-        -->
-        <create.dependency.reduced.pom>true</create.dependency.reduced.pom>
       </properties>
     </profile>
 
