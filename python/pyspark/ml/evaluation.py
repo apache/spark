@@ -234,7 +234,8 @@ class MulticlassClassificationEvaluator(JavaEvaluator, HasLabelCol, HasPredictio
     """
     # a placeholder to make it appear in the generated doc
     metricName = Param(Params._dummy(), "metricName",
-        "metric name in evaluation (f1|precision|recall|weightedPrecision|weightedRecall)")
+                       "metric name in evaluation "
+                       "(f1|precision|recall|weightedPrecision|weightedRecall)")
 
     @keyword_only
     def __init__(self, predictionCol="prediction", labelCol="label",
