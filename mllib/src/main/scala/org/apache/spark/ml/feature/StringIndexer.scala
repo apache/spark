@@ -201,7 +201,8 @@ class StringIndexerInverse private[ml] (
    * metadata is read for labels.
    * @group param
    */
-  final val labels: StringArrayParam = new StringArrayParam(this, "labels", "array of labels")
+  final val labels: StringArrayParam = new StringArrayParam(this, "labels",
+    "array of labels, if not provided metadata from inputCol is used instead.")
   setDefault(labels, Array.empty[String])
 
   /** @group getParam
