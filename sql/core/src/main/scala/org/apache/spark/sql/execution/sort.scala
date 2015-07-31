@@ -17,11 +17,10 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.plans.physical.{Distribution, OrderedDistribution, UnspecifiedDistribution}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.CompletionIterator
@@ -33,16 +32,14 @@ import org.apache.spark.util.collection.ExternalSorterNoAgg
 
 
 /**
-* :: DeveloperApi ::
 * Performs a sort on-heap.
 * @param global when true performs a global sort of all partitions by shuffling the data first
 *               if necessary.
 */
-@DeveloperApi
 case class Sort(
-  sortOrder: Seq[SortOrder],
-  global: Boolean,
-  child: SparkPlan)
+    sortOrder: Seq[SortOrder],
+    global: Boolean,
+    child: SparkPlan)
   extends UnaryNode {
   override def requiredChildDistribution: Seq[Distribution] =
     if (global) OrderedDistribution(sortOrder) :: Nil else UnspecifiedDistribution :: Nil
@@ -60,16 +57,14 @@ case class Sort(
 }
 
 /**
- * :: DeveloperApi ::
  * Performs a sort, spilling to disk as needed.
  * @param global when true performs a global sort of all partitions by shuffling the data first
  *               if necessary.
  */
-@DeveloperApi
 case class ExternalSort(
-  sortOrder: Seq[SortOrder],
-  global: Boolean,
-  child: SparkPlan)
+    sortOrder: Seq[SortOrder],
+    global: Boolean,
+    child: SparkPlan)
   extends UnaryNode {
 
   override def requiredChildDistribution: Seq[Distribution] =

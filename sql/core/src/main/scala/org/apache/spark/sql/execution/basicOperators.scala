@@ -22,14 +22,10 @@ import org.apache.spark.rdd.{RDD, ShuffledRDD}
 import org.apache.spark.shuffle.sort.SortShuffleManager
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
-import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.types.StructType
-import org.apache.spark.util.collection.ExternalSorterNoAgg
-import org.apache.spark.util.collection.unsafe.sort.PrefixComparator
-import org.apache.spark.util.{CompletionIterator, MutablePair}
+import org.apache.spark.util.MutablePair
 import org.apache.spark.{HashPartitioner, SparkEnv}
 
 /**
@@ -233,7 +229,6 @@ case class Repartition(numPartitions: Int, shuffle: Boolean, child: SparkPlan)
     child.execute().map(_.copy()).coalesce(numPartitions, shuffle)
   }
 }
-
 
 /**
  * :: DeveloperApi ::
