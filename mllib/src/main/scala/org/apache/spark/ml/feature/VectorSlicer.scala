@@ -17,54 +17,58 @@
 
 package org.apache.spark.ml.feature
 
-import org.apache.spark.annotation.AlphaComponent
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.ml.Transformer
 import org.apache.spark.ml.attribute.AttributeGroup
-import org.apache.spark.ml.param.{Param, ParamMap}
 import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol}
-import org.apache.spark.ml.util.SchemaUtils
+import org.apache.spark.ml.param.{IntArrayParam, ParamMap, StringArrayParam}
+import org.apache.spark.ml.util.{Identifiable, SchemaUtils}
 import org.apache.spark.mllib.linalg._
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.StructType
 
 /**
- * :: AlphaComponent ::
+ * :: Experimental ::
  * Given either indices or names, it takes a vector column and output a vector column with the
  * specified subset of features. Note that the vector column should contain ML [[Attribute]].
  */
-@AlphaComponent
-final class VectorSlicer extends Transformer with HasInputCol with HasOutputCol {
+@Experimental
+final class VectorSlicer(override val uid: String)
+  extends Transformer with HasInputCol with HasOutputCol {
 
-  /** Type of feature selector, either an array of int (indices), or an array of string (names). */
-  private type FeatureSelector = Either[Array[Int], Array[String]]
+  def this() = this(Identifiable.randomUID("vectorSlicer"))
 
   /**
-   * Param for selecting features from a single vector.
-   * @group Param
+   * An array of indices to select features from a vector column.
+   * @group param
    */
-  val selectedFeatures = new Param[FeatureSelector](this, "selectedFeatures", "")
-  setDefault(selectedFeatures -> Left(Array.empty[Int]))
+  val selectedIndices = new IntArrayParam(this, "selectedIndices",
+    "An array of indices to select features from a vector column",
+    (x: Array[Int]) => if (x.isEmpty) true else x.min >= 0)
+
+  setDefault(selectedIndices -> Array.empty[Int])
 
   /** @group getParam */
-  def getSelectedFeatures: FeatureSelector = getOrDefault(selectedFeatures)
+  def getSelectedIndices: Array[Int] = getOrDefault(selectedIndices)
 
   /** @group setParam */
-  private def setSelectedFeatures(value: FeatureSelector): this.type = set(selectedFeatures, value)
+  def setSelectedIndices(value: Array[Int]): this.type = set(selectedIndices, value)
+
+  /**
+   * An array of feature names to select features from a vector column.
+   * @group param
+   */
+  val selectedNames = new StringArrayParam(this, "selectedNames",
+    "An array of feature names to select features from a vector column")
+
+  setDefault(selectedNames -> Array.empty[String])
+
+  /** @group getParam */
+  def getSelectedNames: Array[String] = getOrDefault(selectedNames)
 
   /** @group setParam */
-  def setSelectedFeatures(value: Array[String]): this.type = setSelectedFeatures(Right(value))
-
-  /** @group setParam */
-  def setSelectedFeatures(first: String, others: String*): this.type =
-    setSelectedFeatures((Seq(first) ++ others).toArray)
-
-  /** @group setParam */
-  def setSelectedFeatures(value: Array[Int]): this.type = setSelectedFeatures(Left(value))
-
-  /** @group setParam */
-  def setSelectedFeatures(first: Int, others: Int*): this.type =
-    setSelectedFeatures((Seq(first) ++ others).toArray)
+  def setSelectedNames(value: Array[String]) = set(selectedNames, value)
 
   /** @group setParam */
   def setInputCol(value: String): this.type = set(inputCol, value)
@@ -87,44 +91,63 @@ final class VectorSlicer extends Transformer with HasInputCol with HasOutputCol 
       indices.size, features.indices.zip(features.values).filter(x => indices.contains(x._1)))
   }
 
-  override def transform(dataset: DataFrame, paramMap: ParamMap): DataFrame = {
-    transformSchema(dataset.schema, paramMap, logging = true)
-    val map = extractParamMap(paramMap)
-    val selectedIndices = map(selectedFeatures) match {
-      case Left(indices) => indices
-      case Right(names) =>
-        val inputAttr = AttributeGroup.fromStructField(dataset.schema(map(inputCol)))
-        names.map(name => inputAttr.getAttr(name).index.get)
-    }
-    val selectedIndexSet = selectedIndices.toSet
-    val slicer = udf { vec: Vector =>
-      vec match {
-        case features: DenseVector => selectColumns(selectedIndices, features)
-        case features: SparseVector => selectColumns(selectedIndexSet, features)
-      }
-    }
-    dataset.withColumn(map(outputCol), slicer(dataset(map(inputCol))))
+  private def getFeatureIndicesFromNames(inputAttr: AttributeGroup): Array[Int] = {
+    $(selectedNames).map(name => inputAttr.getAttr(name).index.get)
   }
 
-  override def transformSchema(schema: StructType, paramMap: ParamMap): StructType = {
-    val map = extractParamMap(paramMap)
-    SchemaUtils.checkColumnType(schema, map(inputCol), new VectorUDT)
-    val inputAttr = AttributeGroup.fromStructField(schema(map(inputCol)))
-    val selectedAttrs = map(selectedFeatures) match {
-      case Left(indices) =>
-        assert(indices.max < inputAttr.size, "Selected feature index exceeds length of vector.")
-        indices.map(index => inputAttr.getAttr(index))
-      case Right(names) =>
-        names.foreach { name =>
-          assert(inputAttr.hasAttr(name), "Selected feature does not belong in the vector.")
-        }
-        names.map(name => inputAttr.getAttr(name))
+  private def merge(xs: List[Int], ys: List[Int]): List[Int] = {
+    (xs, ys) match {
+      case (Nil, ys) => ys
+      case (xs, Nil) => xs
+      case (x :: xs1, y :: ys1) =>
+        if (x < y) x :: merge(xs1, ys)
+        else y :: merge(xs, ys1)
     }
-    if (schema.fieldNames.contains(map(outputCol))) {
-      throw new IllegalArgumentException(s"Output column ${map(outputCol)} already exists.")
+  }
+
+  /**
+   * Union feature indices from user specified indices and indices that transformed from user
+   * specified feature names. After the union process, indices are sorted ASC and any potential
+   * duplicates are removed.
+   */
+  private def unionFeatureIndices(first: Array[Int], second: Array[Int]): Array[Int] = {
+    merge(first.sorted.toList, second.sorted.toList).distinct.toArray
+  }
+
+  override def transform(dataset: DataFrame): DataFrame = {
+    transformSchema(dataset.schema)
+
+    val indices = $(selectedIndices)
+    val slicer = udf { vec: Vector =>
+      vec match {
+        case features: DenseVector => selectColumns(indices, features)
+        case features: SparseVector => selectColumns(indices.toSet, features)
+      }
     }
-    val outputAttr = new AttributeGroup(map(outputCol), selectedAttrs)
+    dataset.withColumn($(outputCol), slicer(dataset($(inputCol))))
+  }
+
+  override def transformSchema(schema: StructType): StructType = {
+    SchemaUtils.checkColumnType(schema, $(inputCol), new VectorUDT)
+    val inputAttr = AttributeGroup.fromStructField(schema($(inputCol)))
+    $(selectedNames).foreach { name =>
+      assert(inputAttr.hasAttr(name), s"Selected feature $name does not belong in the vector.")
+    }
+   assert($(selectedIndices).max < inputAttr.size, s"Selected index out of bound.")
+
+    val featureIndicesFromNames = getFeatureIndicesFromNames(inputAttr)
+    val unionIndices = unionFeatureIndices($(selectedIndices), featureIndicesFromNames)
+    set(selectedIndices, unionIndices)
+
+    val selectedAttrs = unionIndices.map(index => inputAttr.getAttr(index))
+
+    if (schema.fieldNames.contains($(outputCol))) {
+      throw new IllegalArgumentException(s"Output column ${$(outputCol)} already exists.")
+    }
+    val outputAttr = new AttributeGroup($(outputCol), selectedAttrs)
     val outputFields = schema.fields :+ outputAttr.toStructField()
     StructType(outputFields)
   }
+
+  override def copy(extra: ParamMap): VectorSlicer = defaultCopy(extra)
 }

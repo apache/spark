@@ -73,14 +73,20 @@ class VectorSlicerSuite extends FunSuite with MLlibTestSparkContext {
 
     val vectorSlicer = new VectorSlicer().setInputCol("features")
 
-    vectorSlicer.setOutputCol("expectedViaIndices").setSelectedFeatures(1, 4)
-      .transform(df).select("expectedViaIndices", "result").collect().foreach {
+    vectorSlicer
+      .setOutputCol("expected1")
+      .setSelectedIndices(Array(1, 4))
+      .setSelectedNames(Array("fifth"))
+      .transform(df).select("expected1", "result").collect().foreach {
         case Row(vec1: Vector, vec2: Vector) =>
           assert(vec1 ~== vec2 absTol 1e-5)
       }
 
-    vectorSlicer.setOutputCol("expectedViaNames").setSelectedFeatures("second", "fifth")
-      .transform(df).select("expectedViaNames", "result").collect().foreach {
+    vectorSlicer
+      .setOutputCol("expected2")
+      .setSelectedNames(Array("fifth"))
+      .setSelectedIndices(Array(1))
+      .transform(df).select("expected2", "result").collect().foreach {
         case Row(vec1: Vector, vec2: Vector) =>
           assert(vec1 ~== vec2 absTol 1e-5)
       }
