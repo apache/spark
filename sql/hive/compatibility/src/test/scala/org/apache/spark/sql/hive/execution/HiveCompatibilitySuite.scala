@@ -285,6 +285,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     // Parser changes in Hive 1.2
     "input25",
     "input26",
+    "parenthesis_star_by",
 
     // Uses invalid table name
     "innerjoin",
