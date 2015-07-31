@@ -38,11 +38,11 @@ private[ml] trait NaiveBayesParams extends PredictorParams {
    * (default = 1.0).
    * @group param
    */
-  final val lambda: DoubleParam = new DoubleParam(this, "lambda", "The smoothing parameter.",
+  final val smoothing: DoubleParam = new DoubleParam(this, "smoothing", "The smoothing parameter.",
     ParamValidators.gtEq(0))
 
   /** @group getParam */
-  final def getLambda: Double = $(lambda)
+  final def getSmoothing: Double = $(smoothing)
 
   /**
    * The model type which is a string (case-sensitive).
@@ -79,8 +79,8 @@ class NaiveBayes(override val uid: String)
    * Default is 1.0.
    * @group setParam
    */
-  def setLambda(value: Double): this.type = set(lambda, value)
-  setDefault(lambda -> 1.0)
+  def setSmoothing(value: Double): this.type = set(smoothing, value)
+  setDefault(smoothing -> 1.0)
 
   /**
    * Set the model type using a string (case-sensitive).
@@ -92,7 +92,7 @@ class NaiveBayes(override val uid: String)
 
   override protected def train(dataset: DataFrame): NaiveBayesModel = {
     val oldDataset: RDD[LabeledPoint] = extractLabeledPoints(dataset)
-    val oldModel = OldNaiveBayes.train(oldDataset, $(lambda), $(modelType))
+    val oldModel = OldNaiveBayes.train(oldDataset, $(smoothing), $(modelType))
     NaiveBayesModel.fromOld(oldModel, this)
   }
 

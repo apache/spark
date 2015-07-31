@@ -25,7 +25,8 @@ from pyspark.mllib.common import inherit_doc
 
 __all__ = ['LogisticRegression', 'LogisticRegressionModel', 'DecisionTreeClassifier',
            'DecisionTreeClassificationModel', 'GBTClassifier', 'GBTClassificationModel',
-           'RandomForestClassifier', 'RandomForestClassificationModel']
+           'RandomForestClassifier', 'RandomForestClassificationModel', 'NaiveBayes',
+           'NaiveBayesModel']
 
 
 @inherit_doc
@@ -574,6 +575,119 @@ class GBTClassificationModel(TreeEnsembleModels):
     """
     Model fitted by GBTClassifier.
     """
+
+
+@inherit_doc
+class NaiveBayes(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol):
+    """
+    Naive Bayes Classifiers.
+
+    >>> from pyspark.sql import Row
+    >>> from pyspark.mllib.linalg import Vectors
+    >>> df = sqlContext.createDataFrame([
+    ...     Row(label=0.0, features=Vectors.dense([0.0, 0.0])),
+    ...     Row(label=0.0, features=Vectors.dense([0.0, 1.0])),
+    ...     Row(label=1.0, features=Vectors.dense([1.0, 0.0]))])
+    >>> nb = NaiveBayes(smoothing=1.0, modelType="multinomial")
+    >>> model = nb.fit(df)
+    >>> model.pi
+    DenseVector([-0.51..., -0.91...])
+    >>> model.theta
+    DenseMatrix(2, 2, [-1.09..., -0.40..., -0.40..., -1.09...], 1)
+    >>> test0 = sc.parallelize([Row(features=Vectors.dense([1.0, 0.0]))]).toDF()
+    >>> model.transform(test0).head().prediction
+    1.0
+    >>> test1 = sc.parallelize([Row(features=Vectors.sparse(2, [0], [1.0]))]).toDF()
+    >>> model.transform(test1).head().prediction
+    1.0
+    """
+
+    # a placeholder to make it appear in the generated doc
+    smoothing = Param(Params._dummy(), "smoothing", "The smoothing parameter, should be >= 0, " +
+                      "default is 1.0")
+    modelType = Param(Params._dummy(), "modelType", "The model type which is a string " +
+                      "(case-sensitive). Supported options: multinomial (default) and bernoulli.")
+
+    @keyword_only
+    def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
+                 smoothing=1.0, modelType="multinomial"):
+        """
+        __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
+                 smoothing=1.0, modelType="multinomial")
+        """
+        super(NaiveBayes, self).__init__()
+        self._java_obj = self._new_java_obj(
+            "org.apache.spark.ml.classification.NaiveBayes", self.uid)
+        #: param for the smoothing parameter.
+        self.smoothing = Param(self, "smoothing", "The smoothing parameter, should be >= 0, " +
+                               "default is 1.0")
+        #: param for the model type.
+        self.modelType = Param(self, "modelType", "The model type which is a string " +
+                               "(case-sensitive). Supported options: multinomial (default) " +
+                               "and bernoulli.")
+        self._setDefault(smoothing=1.0, modelType="multinomial")
+        kwargs = self.__init__._input_kwargs
+        self.setParams(**kwargs)
+
+    @keyword_only
+    def setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction",
+                  smoothing=1.0, modelType="multinomial"):
+        """
+        setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction",
+                  smoothing=1.0, modelType="multinomial")
+        Sets params for Naive Bayes.
+        """
+        kwargs = self.setParams._input_kwargs
+        return self._set(**kwargs)
+
+    def _create_model(self, java_model):
+        return NaiveBayesModel(java_model)
+
+    def setSmoothing(self, value):
+        """
+        Sets the value of :py:attr:`smoothing`.
+        """
+        self._paramMap[self.smoothing] = value
+        return self
+
+    def getSmoothing(self):
+        """
+        Gets the value of smoothing or its default value.
+        """
+        return self.getOrDefault(self.smoothing)
+
+    def setModelType(self, value):
+        """
+        Sets the value of :py:attr:`modelType`.
+        """
+        self._paramMap[self.modelType] = value
+        return self
+
+    def getModelType(self):
+        """
+        Gets the value of modelType or its default value.
+        """
+        return self.getOrDefault(self.modelType)
+
+
+class NaiveBayesModel(JavaModel):
+    """
+    Model fitted by NaiveBayes.
+    """
+
+    @property
+    def pi(self):
+        """
+        log of class priors.
+        """
+        return self._call_java("pi")
+
+    @property
+    def theta(self):
+        """
+        log of class conditional probabilities.
+        """
+        return self._call_java("theta")
 
 
 if __name__ == "__main__":
