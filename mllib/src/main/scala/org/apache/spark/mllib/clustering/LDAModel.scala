@@ -364,13 +364,12 @@ class DistributedLDAModel private (
   /**
    * Return the top documents for each topic
    *
-   * This limits the number of documents per topic.
    * This is approximate; it may not return exactly the top-weighted documents for each topic.
    * To get a more precise set of top documents, increase maxDocumentsPerTopic.
    *
    * @param maxDocumentsPerTopic  Maximum number of documents to collect for each topic.
    * @return  Array over topics.  Each element represent as a pair of matching arrays:
-   *          (indices for the documents, weights of the topic in these documents).
+   *          (IDs for the documents, weights of the topic in these documents).
    *          For each topic, documents are sorted in order of decreasing topic weights.
    */
   def topDocumentsPerTopic(maxDocumentsPerTopic: Int): Array[(Array[Long], Array[Double])] = {
@@ -378,7 +377,7 @@ class DistributedLDAModel private (
     val topicsInQueues: Array[BoundedPriorityQueue[(Double, Long)]] =
       topicDistributions.mapPartitions { docVertices =>
         // For this partition, collect the most common docs for each topic in queues:
-        //  queues(topic) = queue of (doc topic, doc index).
+        //  queues(topic) = queue of (doc topic, doc ID).
         val queues =
           Array.fill(numTopics)(new BoundedPriorityQueue[(Double, Long)](maxDocumentsPerTopic))
         for ((docId, docTopics) <- docVertices) {
