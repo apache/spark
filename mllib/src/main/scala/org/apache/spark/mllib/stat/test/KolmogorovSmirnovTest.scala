@@ -206,12 +206,11 @@ private[stat] object KolmogorovSmirnovTest extends Logging {
     // identifier for sample 1, needed after co-sort
     val isSample1 = true
     // combine identified samples
-    val unionedData = data1.map(x => (x, isSample1)) ++ data2.map(x => (x, !isSample1))
-    // co-sort and operate on each partition
-    val localData = unionedData.sortBy { case (v, id) => v }.mapPartitions { part =>
-      // local extrema
-      searchTwoSampleCandidates(part, n1, n2)
-    }.collect()
+    val unionedData = data1.map((_, isSample1)).union(data2.map((_, !isSample1)))
+    // co-sort and operate on each partition, returning local extrema to the driver
+    val localData = unionedData.sortByKey().mapPartitions(
+      searchTwoSampleCandidates(_, n1, n2)
+    ).collect()
     // result: global extreme
     val ksStat = searchTwoSampleStatistic(localData, n1 * n2)
     evalTwoSampleP(ksStat, n1.toInt, n2.toInt)
@@ -244,7 +243,7 @@ private[stat] object KolmogorovSmirnovTest extends Logging {
     case class ExtremaAndIndices(min: Double, max: Double, ix1: Int, ix2: Int)
     val initAcc = ExtremaAndIndices(Double.MaxValue, Double.MinValue, 0, 0)
     // traverse the data in the partition and calculate distances and counts
-    val pResults = partData.foldLeft(initAcc) { case (acc: ExtremaAndIndices, (v, isSample1)) =>
+    val pResults = partData.foldLeft(initAcc) { case (acc, (v, isSample1)) =>
       val (add1, add2) = if (isSample1) (1, 0) else (0, 1)
       val cdf1 = (acc.ix1 + add1) / n1
       val cdf2 = (acc.ix2 + add2) / n2
@@ -288,7 +287,7 @@ private[stat] object KolmogorovSmirnovTest extends Logging {
   }
 
   private def evalTwoSampleP(ksStat: Double, n: Int, m: Int): KolmogorovSmirnovTestResult = {
-    val pval = new KolmogorovSmirnovTest().approximateP(ksStat, n, m)
+    val pval = new CommonMathKolmogorovSmirnovTest().approximateP(ksStat, n, m)
     new KolmogorovSmirnovTestResult(pval, ksStat, NullHypothesis.TwoSampleTwoSided.toString)
   }
 }

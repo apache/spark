@@ -21,7 +21,7 @@ import java.util.Random
 
 import org.apache.commons.math3.distribution.{ExponentialDistribution,
   NormalDistribution, UniformRealDistribution}
-import org.apache.commons.math3.stat.inference.KolmogorovSmirnovTest
+import org.apache.commons.math3.stat.inference.{KolmogorovSmirnovTest => CommonMathKolmogorovSmirnovTest}
 
 import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.mllib.linalg.{DenseVector, Matrices, Vectors}
@@ -177,7 +177,7 @@ class HypothesisTestSuite extends SparkFunSuite with MLlibTestSparkContext {
     val sampledUnif = sc.parallelize(unifDist.sample(n), 10)
 
     // Use a apache math commons local KS test to verify calculations
-    val ksTest = new KolmogorovSmirnovTest()
+    val ksTest = new CommonMathKolmogorovSmirnovTest()
     val pThreshold = 0.05
 
     // Comparing a standard normal sample to a standard normal distribution
@@ -275,7 +275,7 @@ class HypothesisTestSuite extends SparkFunSuite with MLlibTestSparkContext {
     val sampledExpP = sc.parallelize(sampledExpL, 10)
 
     // Use apache math commons local KS test to verify calculations
-    val ksTest = new KolmogorovSmirnovTest()
+    val ksTest = new CommonMathKolmogorovSmirnovTest()
     val pThreshold = 0.05
 
     // Comparing 2 samples from same standard normal distribution
@@ -390,7 +390,7 @@ class HypothesisTestSuite extends SparkFunSuite with MLlibTestSparkContext {
     val nonOverlap2P = sc.parallelize(nonOverlap2L, 20)
 
     // Use apache math commons local KS test to verify calculations
-    val ksTest = new KolmogorovSmirnovTest()
+    val ksTest = new CommonMathKolmogorovSmirnovTest()
     val pThreshold = 0.05
 
     val result4 = Statistics.kolmogorovSmirnovTest2Sample(nonOverlap1P, nonOverlap2P)
