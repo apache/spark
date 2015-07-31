@@ -22,6 +22,7 @@ import org.scalatest.BeforeAndAfterEach
 import org.apache.spark.sql.TestData._
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.execution.joins._
+import org.apache.spark.sql.types.BinaryType
 
 
 class JoinSuite extends QueryTest with BeforeAndAfterEach {
@@ -79,9 +80,9 @@ class JoinSuite extends QueryTest with BeforeAndAfterEach {
       ("SELECT * FROM testData FULL OUTER JOIN testData2 WHERE key = 2", classOf[CartesianProduct]),
       ("SELECT * FROM testData JOIN testData2 WHERE key > a", classOf[CartesianProduct]),
       ("SELECT * FROM testData FULL OUTER JOIN testData2 WHERE key > a", classOf[CartesianProduct]),
-      ("SELECT * FROM testData JOIN testData2 ON key = a", classOf[ShuffledHashJoin]),
-      ("SELECT * FROM testData JOIN testData2 ON key = a and key = 2", classOf[ShuffledHashJoin]),
-      ("SELECT * FROM testData JOIN testData2 ON key = a where key = 2", classOf[ShuffledHashJoin]),
+      ("SELECT * FROM testData JOIN testData2 ON key = a", classOf[SortMergeJoin]),
+      ("SELECT * FROM testData JOIN testData2 ON key = a and key = 2", classOf[SortMergeJoin]),
+      ("SELECT * FROM testData JOIN testData2 ON key = a where key = 2", classOf[SortMergeJoin]),
       ("SELECT * FROM testData LEFT JOIN testData2 ON key = a", classOf[ShuffledHashOuterJoin]),
       ("SELECT * FROM testData RIGHT JOIN testData2 ON key = a where key = 2",
         classOf[ShuffledHashOuterJoin]),
@@ -488,5 +489,13 @@ class JoinSuite extends QueryTest with BeforeAndAfterEach {
         Row(3, 1) ::
         Row(3, 2) :: Nil)
 
+  }
+
+  test("Join can't work on binary type") {
+    val left = Seq(1, 1, 2, 2).map(i => Tuple1(i.toString)).toDF("c").select($"c" cast BinaryType)
+    val right = Seq(1, 1, 2, 2).map(i => Tuple1(i.toString)).toDF("d").select($"d" cast BinaryType)
+    intercept[AnalysisException] {
+      left.join(right, ($"left.N" === $"right.N"), "full")
+    }
   }
 }

@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.aggregate.Utils
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.collection.OpenHashSet
@@ -33,7 +34,7 @@ case class Project(projectList: Seq[NamedExpression], child: LogicalPlan) extend
       }.nonEmpty
     )
 
-    !expressions.exists(!_.resolved) && childrenResolved && !hasSpecialExpressions
+    expressions.forall(_.resolved) && childrenResolved && !hasSpecialExpressions
   }
 }
 
@@ -67,7 +68,7 @@ case class Generate(
     generator.resolved &&
       childrenResolved &&
       generator.elementTypes.length == generatorOutput.length &&
-      !generatorOutput.exists(!_.resolved)
+      generatorOutput.forall(_.resolved)
   }
 
   // we don't want the gOutput to be taken as part of the expressions
@@ -187,7 +188,7 @@ case class WithWindowDefinition(
 }
 
 /**
- * @param order  The ordering expressions
+ * @param order  The ordering expressions, should all be [[AttributeReference]]
  * @param global True means global sorting apply for entire data set,
  *               False means sorting only apply within the partition.
  * @param child  Child logical plan
@@ -197,6 +198,11 @@ case class Sort(
     global: Boolean,
     child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
+
+  def hasNoEvaluation: Boolean = order.forall(_.child.isInstanceOf[AttributeReference])
+
+  override lazy val resolved: Boolean =
+    expressions.forall(_.resolved) && childrenResolved && hasNoEvaluation
 }
 
 case class Aggregate(
@@ -211,8 +217,10 @@ case class Aggregate(
       }.nonEmpty
     )
 
-    !expressions.exists(!_.resolved) && childrenResolved && !hasWindowExpressions
+    expressions.forall(_.resolved) && childrenResolved && !hasWindowExpressions
   }
+
+  lazy val newAggregation: Option[Aggregate] = Utils.tryConvert(this)
 
   override def output: Seq[Attribute] = aggregateExpressions.map(_.toAttribute)
 }
@@ -220,7 +228,8 @@ case class Aggregate(
 case class Window(
     projectList: Seq[Attribute],
     windowExpressions: Seq[NamedExpression],
-    windowSpec: WindowSpecDefinition,
+    partitionSpec: Seq[Expression],
+    orderSpec: Seq[SortOrder],
     child: LogicalPlan) extends UnaryNode {
 
   override def output: Seq[Attribute] =

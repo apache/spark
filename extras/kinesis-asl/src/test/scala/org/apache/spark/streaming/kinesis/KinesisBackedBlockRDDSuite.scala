@@ -17,10 +17,10 @@
 
 package org.apache.spark.streaming.kinesis
 
-import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll}
+import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.storage.{BlockId, BlockManager, StorageLevel, StreamBlockId}
-import org.apache.spark.{SparkConf, SparkContext, SparkException, SparkFunSuite}
+import org.apache.spark.{SparkConf, SparkContext, SparkException}
 
 class KinesisBackedBlockRDDSuite extends KinesisFunSuite with BeforeAndAfterAll {
 
@@ -65,6 +65,9 @@ class KinesisBackedBlockRDDSuite extends KinesisFunSuite with BeforeAndAfterAll 
   }
 
   override def afterAll(): Unit = {
+    if (testUtils != null) {
+      testUtils.deleteStream()
+    }
     if (sc != null) {
       sc.stop()
     }

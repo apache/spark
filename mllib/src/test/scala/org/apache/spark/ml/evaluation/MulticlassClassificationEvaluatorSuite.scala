@@ -15,9 +15,14 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution
+package org.apache.spark.ml.evaluation
 
-/**
- * Package containing expressions that are specific to Spark runtime.
- */
-package object expressions
+import org.apache.spark.SparkFunSuite
+import org.apache.spark.ml.param.ParamsSuite
+
+class MulticlassClassificationEvaluatorSuite extends SparkFunSuite {
+
+  test("params") {
+    ParamsSuite.checkParams(new MulticlassClassificationEvaluator)
+  }
+}

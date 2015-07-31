@@ -161,13 +161,6 @@ object FunctionRegistry {
     expression[ToDegrees]("degrees"),
     expression[ToRadians]("radians"),
 
-    // misc functions
-    expression[Md5]("md5"),
-    expression[Sha2]("sha2"),
-    expression[Sha1]("sha1"),
-    expression[Sha1]("sha"),
-    expression[Crc32]("crc32"),
-
     // aggregate functions
     expression[Average]("avg"),
     expression[Count]("count"),
@@ -212,22 +205,41 @@ object FunctionRegistry {
     expression[Upper]("upper"),
 
     // datetime functions
+    expression[AddMonths]("add_months"),
     expression[CurrentDate]("current_date"),
     expression[CurrentTimestamp]("current_timestamp"),
+    expression[DateAdd]("date_add"),
     expression[DateFormatClass]("date_format"),
+    expression[DateSub]("date_sub"),
     expression[DayOfMonth]("day"),
     expression[DayOfYear]("dayofyear"),
     expression[DayOfMonth]("dayofmonth"),
+    expression[FromUnixTime]("from_unixtime"),
     expression[Hour]("hour"),
-    expression[Month]("month"),
+    expression[LastDay]("last_day"),
     expression[Minute]("minute"),
+    expression[Month]("month"),
+    expression[MonthsBetween]("months_between"),
+    expression[NextDay]("next_day"),
     expression[Quarter]("quarter"),
     expression[Second]("second"),
+    expression[ToDate]("to_date"),
+    expression[TruncDate]("trunc"),
+    expression[UnixTimestamp]("unix_timestamp"),
     expression[WeekOfYear]("weekofyear"),
     expression[Year]("year"),
 
     // collection functions
-    expression[Size]("size")
+    expression[Size]("size"),
+
+    // misc functions
+    expression[Crc32]("crc32"),
+    expression[Md5]("md5"),
+    expression[Sha1]("sha"),
+    expression[Sha1]("sha1"),
+    expression[Sha2]("sha2"),
+    expression[SparkPartitionID]("spark_partition_id"),
+    expression[InputFileName]("input_file_name")
   )
 
   val builtin: FunctionRegistry = {
@@ -237,7 +249,7 @@ object FunctionRegistry {
   }
 
   /** See usage above. */
-  private def expression[T <: Expression](name: String)
+  def expression[T <: Expression](name: String)
       (implicit tag: ClassTag[T]): (String, (ExpressionInfo, FunctionBuilder)) = {
 
     // See if we can find a constructor that accepts Seq[Expression]

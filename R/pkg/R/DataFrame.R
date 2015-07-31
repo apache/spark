@@ -1322,9 +1322,11 @@ setMethod("write.df",
                                     "org.apache.spark.sql.parquet")
             }
             allModes <- c("append", "overwrite", "error", "ignore")
+            # nolint start
             if (!(mode %in% allModes)) {
               stop('mode should be one of "append", "overwrite", "error", "ignore"')
             }
+            # nolint end
             jmode <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "saveMode", mode)
             options <- varargsToEnv(...)
             if (!is.null(path)) {
@@ -1384,9 +1386,11 @@ setMethod("saveAsTable",
                                     "org.apache.spark.sql.parquet")
             }
             allModes <- c("append", "overwrite", "error", "ignore")
+            # nolint start
             if (!(mode %in% allModes)) {
               stop('mode should be one of "append", "overwrite", "error", "ignore"')
             }
+            # nolint end
             jmode <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "saveMode", mode)
             options <- varargsToEnv(...)
             callJMethod(df@sdf, "saveAsTable", tableName, source, jmode, options)

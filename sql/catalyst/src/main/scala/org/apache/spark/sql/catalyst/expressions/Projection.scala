@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.{GenerateUnsafeProjection, GenerateMutableProjection}
-import org.apache.spark.sql.types.{StructType, DataType}
+import org.apache.spark.sql.types.{Decimal, StructType, DataType}
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
@@ -32,7 +32,7 @@ class InterpretedProjection(expressions: Seq[Expression]) extends Projection {
     this(expressions.map(BindReferences.bindReference(_, inputSchema)))
 
   expressions.foreach(_.foreach {
-    case n: Nondeterministic => n.initialize()
+    case n: Nondeterministic => n.setInitialValues()
     case _ =>
   })
 
@@ -63,7 +63,7 @@ case class InterpretedMutableProjection(expressions: Seq[Expression]) extends Mu
     this(expressions.map(BindReferences.bindReference(_, inputSchema)))
 
   expressions.foreach(_.foreach {
-    case n: Nondeterministic => n.initialize()
+    case n: Nondeterministic => n.setInitialValues()
     case _ =>
   })
 
@@ -224,6 +224,11 @@ class JoinedRow extends InternalRow {
 
   override def getFloat(i: Int): Float =
     if (i < row1.numFields) row1.getFloat(i) else row2.getFloat(i - row1.numFields)
+
+  override def getDecimal(i: Int, precision: Int, scale: Int): Decimal = {
+    if (i < row1.numFields) row1.getDecimal(i, precision, scale)
+    else row2.getDecimal(i - row1.numFields, precision, scale)
+  }
 
   override def getStruct(i: Int, numFields: Int): InternalRow = {
     if (i < row1.numFields) {
