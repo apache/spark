@@ -67,7 +67,7 @@ class KinesisBackedBlockRDDPartition(
 private[kinesis]
 class KinesisBackedBlockRDD(
     sc: SparkContext,
-    regionId: String,
+    regionName: String,
     endpointUrl: String,
     @transient blockIds: Array[BlockId],
     @transient arrayOfseqNumberRanges: Array[SequenceNumberRanges],
@@ -104,7 +104,7 @@ class KinesisBackedBlockRDD(
       }
       partition.seqNumberRanges.ranges.iterator.flatMap { range =>
         new KinesisSequenceRangeIterator(
-          credenentials, endpointUrl, regionId, range, retryTimeoutMs)
+          credenentials, endpointUrl, regionName, range, retryTimeoutMs)
       }
     }
     if (partition.isBlockIdValid) {

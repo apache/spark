@@ -18,19 +18,16 @@ package org.apache.spark.streaming.kinesis
 
 import java.util.List
 
-import scala.collection.JavaConversions.asScalaBuffer
+import scala.collection.JavaConversions.asScalaIterator
 import scala.util.Random
+import scala.util.control.NonFatal
 
-import org.apache.spark.Logging
-
-import com.amazonaws.services.kinesis.clientlibrary.exceptions.InvalidStateException
-import com.amazonaws.services.kinesis.clientlibrary.exceptions.KinesisClientLibDependencyException
-import com.amazonaws.services.kinesis.clientlibrary.exceptions.ShutdownException
-import com.amazonaws.services.kinesis.clientlibrary.exceptions.ThrottlingException
-import com.amazonaws.services.kinesis.clientlibrary.interfaces.IRecordProcessor
-import com.amazonaws.services.kinesis.clientlibrary.interfaces.IRecordProcessorCheckpointer
+import com.amazonaws.services.kinesis.clientlibrary.exceptions.{InvalidStateException, KinesisClientLibDependencyException, ShutdownException, ThrottlingException}
+import com.amazonaws.services.kinesis.clientlibrary.interfaces.{IRecordProcessor, IRecordProcessorCheckpointer}
 import com.amazonaws.services.kinesis.clientlibrary.types.ShutdownReason
 import com.amazonaws.services.kinesis.model.Record
+
+import org.apache.spark.Logging
 
 /**
  * Kinesis-specific implementation of the Kinesis Client Library (KCL) IRecordProcessor.
@@ -50,7 +47,11 @@ private[kinesis] class KinesisRecordProcessor(
     workerId: String,
     checkpointState: KinesisCheckpointState) extends IRecordProcessor with Logging {
 
+  private val streamName = receiver.streamName
+  private val blockGenerator = receiver.blockGenerator
+
   // shardId to be populated during initialize()
+  @volatile
   private var shardId: String = _
 
   /**
@@ -75,21 +76,13 @@ private[kinesis] class KinesisRecordProcessor(
   override def processRecords(batch: List[Record], checkpointer: IRecordProcessorCheckpointer) {
     if (!receiver.isStopped()) {
       try {
-        /*
-         * Notes:
-         * 1) If we try to store the raw ByteBuffer from record.getData(), the Spark Streaming
-         *    Receiver.store(ByteBuffer) attempts to deserialize the ByteBuffer using the
-         *    internally-configured Spark serializer (kryo, etc).
-         * 2) This is not desirable, so we instead store a raw Array[Byte] and decouple
-         *    ourselves from Spark's internal serialization strategy.
-         * 3) For performance, the BlockGenerator is asynchronously queuing elements within its
-         *    memory before creating blocks.  This prevents the small block scenario, but requires
-         *    that you register callbacks to know when a block has been generated and stored
-         *    (WAL is sufficient for storage) before can checkpoint back to the source.
-        */
-        batch.foreach(record => receiver.store(record.getData().array()))
-
-        logDebug(s"Stored:  Worker $workerId stored ${batch.size} records for shardId $shardId")
+        if (batch.size() > 0) {
+          val dataIterator = batch.iterator().map { _.getData().array() }
+          val metadata = SequenceNumberRange(streamName, shardId,
+            batch.get(0).getSequenceNumber(), batch.get(batch.size() - 1).getSequenceNumber())
+          blockGenerator.addMultipleDataWithCallback(dataIterator, metadata)
+          logDebug(s"Stored: Worker $workerId stored ${batch.size} records for shardId $shardId")
+        }
 
         /*
          * Checkpoint the sequence number of the last record successfully processed/stored
@@ -115,7 +108,7 @@ private[kinesis] class KinesisRecordProcessor(
               s" ${checkpointState.checkpointClock.getTimeMillis()} for shardId $shardId")
         }
       } catch {
-        case e: Throwable => {
+        case NonFatal(e) => {
           /*
            *  If there is a failure within the batch, the batch will not be checkpointed.
            *  This will potentially cause records since the last checkpoint to be processed
@@ -130,7 +123,7 @@ private[kinesis] class KinesisRecordProcessor(
       }
     } else {
       /* RecordProcessor has been stopped. */
-      logInfo(s"Stopped:  The Spark KinesisReceiver has stopped for workerId $workerId" +
+      logInfo(s"Stopped:  KinesisReceiver has stopped for workerId $workerId" +
           s" and shardId $shardId.  No more records will be processed.")
     }
   }

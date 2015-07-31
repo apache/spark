@@ -66,8 +66,8 @@ object KinesisUtils {
     // Setting scope to override receiver stream's scope of "receiver stream"
     ssc.withNamedScope("kinesis stream") {
       ssc.receiverStream(
-        new KinesisReceiver(kinesisAppName, streamName, endpointUrl, validateRegion(regionName),
-          initialPositionInStream, checkpointInterval, storageLevel, None))
+        new KinesisReceiver(streamName, endpointUrl, validateRegion(regionName),
+          initialPositionInStream, kinesisAppName, checkpointInterval, storageLevel, None))
     }
   }
 
@@ -113,8 +113,8 @@ object KinesisUtils {
       awsSecretKey: String
     ): ReceiverInputDStream[Array[Byte]] = {
     ssc.receiverStream(
-      new KinesisReceiver(kinesisAppName, streamName, endpointUrl, validateRegion(regionName),
-        initialPositionInStream, checkpointInterval, storageLevel,
+      new KinesisReceiver(streamName, endpointUrl, validateRegion(regionName),
+        initialPositionInStream, kinesisAppName, checkpointInterval, storageLevel,
         Some(SerializableAWSCredentials(awsAccessKeyId, awsSecretKey))))
   }
 
@@ -156,8 +156,8 @@ object KinesisUtils {
       storageLevel: StorageLevel
     ): ReceiverInputDStream[Array[Byte]] = {
     ssc.receiverStream(
-      new KinesisReceiver(ssc.sc.appName, streamName, endpointUrl, getRegionByEndpoint(endpointUrl),
-        initialPositionInStream, checkpointInterval, storageLevel, None))
+      new KinesisReceiver(streamName, endpointUrl, getRegionByEndpoint(endpointUrl),
+        initialPositionInStream, ssc.sc.appName, checkpointInterval, storageLevel, None))
   }
 
   /**

@@ -18,16 +18,17 @@ package org.apache.spark.streaming.kinesis
 
 import java.util.UUID
 
+import scala.collection.mutable
 import scala.util.control.NonFatal
 
-import com.amazonaws.auth.{AWSCredentials, AWSCredentialsProvider, BasicAWSCredentials, DefaultAWSCredentialsProviderChain}
+import com.amazonaws.auth.{AWSCredentials, AWSCredentialsProvider, DefaultAWSCredentialsProviderChain}
 import com.amazonaws.services.kinesis.clientlibrary.interfaces.{IRecordProcessor, IRecordProcessorFactory}
 import com.amazonaws.services.kinesis.clientlibrary.lib.worker.{InitialPositionInStream, KinesisClientLibConfiguration, Worker}
 
-import org.apache.spark.Logging
-import org.apache.spark.storage.StorageLevel
+import org.apache.spark.{SparkEnv, Logging}
+import org.apache.spark.storage.{StorageLevel, StreamBlockId}
 import org.apache.spark.streaming.Duration
-import org.apache.spark.streaming.receiver.Receiver
+import org.apache.spark.streaming.receiver.{BlockGenerator, BlockGeneratorListener, Receiver}
 import org.apache.spark.util.Utils
 
 
@@ -42,10 +43,10 @@ case class SerializableAWSCredentials(accessKeyId: String, secretKey: String)
  * Custom AWS Kinesis-specific implementation of Spark Streaming's Receiver.
  * This implementation relies on the Kinesis Client Library (KCL) Worker as described here:
  * https://github.com/awslabs/amazon-kinesis-client
- * This is a custom receiver used with StreamingContext.receiverStream(Receiver) as described here:
- *   http://spark.apache.org/docs/latest/streaming-custom-receivers.html
- * Instances of this class will get shipped to the Spark Streaming Workers to run within a
- *   Spark Executor.
+ *
+ * The way this Receiver works is as follows:
+ * -
+ *
  *
  * @param appName  Kinesis application name. Kinesis Apps are mapped to Kinesis Streams
  *                 by the Kinesis Client Library.  If you change the App name or Stream name,
@@ -69,11 +70,11 @@ case class SerializableAWSCredentials(accessKeyId: String, secretKey: String)
  *                             the credentials
  */
 private[kinesis] class KinesisReceiver(
-    appName: String,
-    streamName: String,
+    val streamName: String,
     endpointUrl: String,
     regionName: String,
     initialPositionInStream: InitialPositionInStream,
+    checkpointAppName: String,
     checkpointInterval: Duration,
     storageLevel: StorageLevel,
     awsCredentialsOption: Option[SerializableAWSCredentials]
@@ -90,7 +91,7 @@ private[kinesis] class KinesisReceiver(
    * workerId is used by the KCL should be based on the ip address of the actual Spark Worker
    * where this code runs (not the driver's IP address.)
    */
-  private var workerId: String = null
+  @volatile private var workerId: String = null
 
   /**
    * Worker is the core client abstraction from the Kinesis Client Library (KCL).
@@ -98,22 +99,29 @@ private[kinesis] class KinesisReceiver(
    * Each shard is assigned its own IRecordProcessor and the worker run multiple such
    * processors.
    */
-  private var worker: Worker = null
+  @volatile private var worker: Worker = null
+  @volatile private var workerThread: Thread = null
 
-  /** Thread running the worker */
-  private var workerThread: Thread = null
+  /** BlockGenerator used to generates blocks out of Kinesis data */
+  @volatile private[kinesis] var blockGenerator: BlockGenerator = null
+
+  private val seqNumRangesInCurrentBlock = new mutable.ArrayBuffer[SequenceNumberRange]
+
+  private val blockIdToSeqNumRanges = new mutable.HashMap[StreamBlockId, Array[SequenceNumberRange]]
 
   /**
    * This is called when the KinesisReceiver starts and must be non-blocking.
    * The KCL creates and manages the receiving/processing thread pool through Worker.run().
    */
   override def onStart() {
+    blockGenerator =  new BlockGenerator(new GeneratedBlockHandler, streamId, SparkEnv.get.conf)
+
     workerId = Utils.localHostName() + ":" + UUID.randomUUID()
 
     // KCL config instance
     val awsCredProvider = resolveAWSCredentialsProvider()
     val kinesisClientLibConfiguration =
-      new KinesisClientLibConfiguration(appName, streamName, awsCredProvider, workerId)
+      new KinesisClientLibConfiguration(checkpointAppName, streamName, awsCredProvider, workerId)
       .withKinesisEndpoint(endpointUrl)
       .withInitialPositionInStream(initialPositionInStream)
       .withTaskBackoffTimeMillis(500)
@@ -141,6 +149,10 @@ private[kinesis] class KinesisReceiver(
         }
       }
     }
+
+    blockIdToSeqNumRanges.clear()
+    blockGenerator.start()
+
     workerThread.setName(s"Kinesis Receiver ${streamId}")
     workerThread.setDaemon(true)
     workerThread.start()
@@ -180,6 +192,84 @@ private[kinesis] class KinesisReceiver(
       case None =>
         logInfo("Using DefaultAWSCredentialsProviderChain")
         new DefaultAWSCredentialsProviderChain()
+    }
+  }
+
+  /** Remember the range of sequence numbers that was added to the currently active block */
+  private def rememberAddedRange(range: SequenceNumberRange): Unit = {
+    seqNumRangesInCurrentBlock += range
+  }
+
+  /**
+   * Finalize the ranges added to the block that was active
+   * and prepare the ranges buffer for next block.
+   */
+  private def finalizeRangesForCurrentBlock(blockId: StreamBlockId): Unit = {
+    blockIdToSeqNumRanges(blockId) = seqNumRangesInCurrentBlock.toArray
+    seqNumRangesInCurrentBlock.clear()
+    logDebug(s"Generated block $blockId has ${ blockIdToSeqNumRanges(blockId).mkString(", ")}")
+  }
+
+  private def storeBlockWithRanges(
+      blockId: StreamBlockId, arrayBuffer: mutable.ArrayBuffer[Array[Byte]]): Unit = {
+    val rangesToReport = SequenceNumberRanges(blockIdToSeqNumRanges(blockId))
+    var count = 0
+    var stored = false
+    var throwable: Throwable = null
+    while (!stored && count <= 3) {
+      try {
+        store(arrayBuffer, rangesToReport)
+        stored = true
+      } catch {
+        case NonFatal(th) =>
+          count += 1
+          throwable = th
+      }
+    }
+    blockIdToSeqNumRanges -= blockId
+    if (!stored) {
+      stop("Error while storing block into Spark", throwable)
+    }
+  }
+
+  /**
+   * Class to handle blocks generated by this receiver's block generator. Specifically, in
+   * the context of the Kinesis Receiver, this handler does the following.
+   *
+   * - When an array of records is added to the current active block in the block generator,
+   *   this handler keeps track of the corresponding sequence number range.
+   * - When the currently active block is ready to sealed (not more records), this handler
+   *   keep track of the list of ranges added into this block in another H
+   */
+  private class GeneratedBlockHandler extends BlockGeneratorListener {
+
+    /**
+     * Callback method called after a data item is added into the BlockGenerator.
+     * The data addition, block generation, and calls to onAddData and onGenerateBlock
+     * are all synchronized through the same lock.
+     */
+    def onAddData(data: Any, metadata: Any): Unit = {
+      rememberAddedRange(metadata.asInstanceOf[SequenceNumberRange])
+    }
+
+    /**
+     * Callback method called after a block has been generated.
+     * The data addition, block generation, and calls to onAddData and onGenerateBlock
+     * are all synchronized through the same lock.
+     */
+    def onGenerateBlock(blockId: StreamBlockId): Unit = {
+      finalizeRangesForCurrentBlock(blockId)
+    }
+
+    /** Callback method called when a block is ready to be pushed / stored. */
+    def onPushBlock(blockId: StreamBlockId, arrayBuffer: mutable.ArrayBuffer[_]): Unit = {
+      storeBlockWithRanges(blockId,
+        arrayBuffer.asInstanceOf[mutable.ArrayBuffer[Array[Byte]]])
+    }
+
+    /** Callback called in case of any error in internal of the BlockGenerator */
+    def onError(message: String, throwable: Throwable): Unit = {
+      reportError(message, throwable)
     }
   }
 }
