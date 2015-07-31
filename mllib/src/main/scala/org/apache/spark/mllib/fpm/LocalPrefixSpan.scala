@@ -39,18 +39,17 @@ private[fpm] object LocalPrefixSpan extends Logging with Serializable {
   def run(
       minCount: Long,
       maxPatternLength: Int,
-      prefixes: List[Int],
-      database: Iterable[List[Int]]): Iterator[(List[Int], Long)] = {
-    if (prefixes.count(_ == DELIMITER) == maxPatternLength || database.isEmpty) {
+      prefixes: List[Set[Int]],
+      database: Iterable[List[Set[Int]]]): Iterator[(List[Set[Int]], Long)] = {
+    if (prefixes.length == maxPatternLength || database.isEmpty) {
       return Iterator.empty
     }
     val frequentItemAndCounts = getFreqItemAndCounts(minCount, database)
     val filteredDatabase = database.map { suffix =>
-      insertDelimiters(
-        splitAtDelimiter(suffix).filter(item => frequentItemAndCounts.contains(item)))
+      suffix.filter(item => frequentItemAndCounts.contains(item))
     }
     frequentItemAndCounts.iterator.flatMap { case (item, count) =>
-      val newPrefixes = DELIMITER :: item ::: prefixes
+      val newPrefixes = item :: prefixes
       val newProjected = project(filteredDatabase, item)
       Iterator.single((newPrefixes, count)) ++
         run(minCount, maxPatternLength, newPrefixes, newProjected)
@@ -63,17 +62,19 @@ private[fpm] object LocalPrefixSpan extends Logging with Serializable {
    * @param sequence sequence to extract suffix from
    * @return suffix sequence
    */
-  def getSuffix(item: List[Int], sequence: List[Int]): List[Int] = {
-    val itemsetSeq = splitAtDelimiter(sequence)
-    val index = itemsetSeq.indexOf(item)
+  def getSuffix(item: Set[Int], sequence: List[Set[Int]]): List[Set[Int]] = {
+    val itemsetSeq = sequence
+    val index = itemsetSeq.indexWhere(item.subsetOf(_))
     if (index == -1) {
       List()
     } else {
-      insertDelimiters(itemsetSeq.drop(index+1))
+      itemsetSeq.drop(index+1)
     }
   }
 
-  def project(database: Iterable[List[Int]], prefix: List[Int]): Iterable[List[Int]] = {
+  def project(
+      database: Iterable[List[Set[Int]]],
+      prefix: Set[Int]): Iterable[List[Set[Int]]] = {
     database
       .map(getSuffix(prefix, _))
       .filter(_.nonEmpty)
@@ -87,11 +88,11 @@ private[fpm] object LocalPrefixSpan extends Logging with Serializable {
    */
   private def getFreqItemAndCounts(
       minCount: Long,
-      database: Iterable[List[Int]]): Map[List[Int], Long] = {
+      database: Iterable[List[Set[Int]]]): Map[Set[Int], Long] = {
     // TODO: use PrimitiveKeyOpenHashMap
-    val counts = mutable.Map[List[Int], Long]().withDefaultValue(0L)
+    val counts = mutable.Map[Set[Int], Long]().withDefaultValue(0L)
     database.foreach { sequence =>
-      splitAtDelimiter(sequence).distinct.foreach { item =>
+      sequence.flatMap(nonemptySubsets(_)).distinct.foreach { item =>
         counts(item) += 1L
       }
     }
