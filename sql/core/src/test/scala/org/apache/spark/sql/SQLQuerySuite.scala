@@ -1618,4 +1618,14 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll with SQLTestUtils {
     checkAnswer(df.select(-df("i")),
       Row(new CalendarInterval(-(12 * 3 - 3), -(7L * MICROS_PER_WEEK + 123))))
   }
+
+  test("SPARK-9511: error with table starting with number") {
+    val df = sqlContext.sparkContext.parallelize(1 to 10).map(i => (i, i.toString))
+      .toDF("num", "str")
+    df.registerTempTable("1one")
+
+    checkAnswer(sqlContext.sql("select count(num) from 1one"), Row(10))
+
+    sqlContext.dropTempTable("1one")
+  }
 }
