@@ -277,8 +277,7 @@ class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with Timeo
       logInfo("Running count = " + runningCount)
       logInfo("TestReceiver.counter = " + TestReceiver.counter.get())
       assert(
-        (TestReceiver.counter.get() == runningCount + 1) ||
-          (TestReceiver.counter.get() == runningCount + 2),
+        TestReceiver.counter.get() == runningCount + 1,
         "Received records = " + TestReceiver.counter.get() + ", " +
           "processed records = " + runningCount
       )
