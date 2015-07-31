@@ -138,9 +138,6 @@ public final class UnsafeExternalSorter {
       spillWriters.size(),
       spillWriters.size() > 1 ? " times" : " time");
 
-    // Update peak memory used before spilling each map
-    updatePeakMemoryUsed();
-
     final UnsafeSorterSpillWriter spillWriter =
       new UnsafeSorterSpillWriter(blockManager, fileBufferSizeBytes, writeMetrics,
         sorter.numRecords());
@@ -191,6 +188,7 @@ public final class UnsafeExternalSorter {
   }
 
   public long freeMemory() {
+    updatePeakMemoryUsed();
     long memoryFreed = 0;
     for (MemoryBlock block : allocatedPages) {
       memoryManager.freePage(block);

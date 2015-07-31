@@ -268,9 +268,6 @@ final class UnsafeShuffleExternalSorter {
       spills.size(),
       spills.size() > 1 ? " times" : " time");
 
-    // Update peak memory used before each spill
-    updatePeakMemoryUsed();
-
     writeSortedFile(false);
     final long sorterMemoryUsage = sorter.getMemoryUsage();
     sorter = null;
@@ -305,6 +302,7 @@ final class UnsafeShuffleExternalSorter {
   }
 
   private long freeMemory() {
+    updatePeakMemoryUsed();
     long memoryFreed = 0;
     for (MemoryBlock block : allocatedPages) {
       memoryManager.freePage(block);

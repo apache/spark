@@ -587,6 +587,11 @@ public class UnsafeShuffleWriterSuite {
       }
       newPeakMemory = writer.getPeakMemoryUsedBytes();
       assertEquals(previousPeakMemory, newPeakMemory);
+
+      // Closing the writer should not change peak memory
+      writer.closeAndWriteOutput();
+      newPeakMemory = writer.getPeakMemoryUsedBytes();
+      assertEquals(previousPeakMemory, newPeakMemory);
     } finally {
       writer.stop(false);
     }

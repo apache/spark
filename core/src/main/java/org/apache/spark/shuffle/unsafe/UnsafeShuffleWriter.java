@@ -136,10 +136,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     return sorter.maxRecordSizeBytes;
   }
 
-  /**
-   * Return the peak memory used so far, in bytes.
-   */
-  public long getPeakMemoryUsedBytes() {
+  private void updatePeakMemoryUsed() {
     // sorter can be null if this writer is closed
     if (sorter != null) {
       long mem = sorter.getPeakMemoryUsedBytes();
@@ -147,6 +144,13 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
         peakMemoryUsedBytes = mem;
       }
     }
+  }
+
+  /**
+   * Return the peak memory used so far, in bytes.
+   */
+  public long getPeakMemoryUsedBytes() {
+    updatePeakMemoryUsed();
     return peakMemoryUsedBytes;
   }
 
@@ -205,6 +209,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
 
   @VisibleForTesting
   void closeAndWriteOutput() throws IOException {
+    updatePeakMemoryUsed();
     serBuffer = null;
     serOutputStream = null;
     final SpillInfo[] spills = sorter.closeAndGetSpills();
