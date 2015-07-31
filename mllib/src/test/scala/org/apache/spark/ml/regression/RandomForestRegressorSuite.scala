@@ -75,7 +75,7 @@ class RandomForestRegressorSuite extends SparkFunSuite with MLlibTestSparkContex
   /////////////////////////////////////////////////////////////////////////////
   // Tests of feature importance
   /////////////////////////////////////////////////////////////////////////////
-  test("Regression feature imprtance with toy data") {
+  test("Regression feature importance with toy data") {
     val newRF = new RandomForestRegressor()
       .setImpurity("variance")
       .setMaxDepth(2)
@@ -86,7 +86,7 @@ class RandomForestRegressorSuite extends SparkFunSuite with MLlibTestSparkContex
 
     /* Verify results using SKLearn:
 
-       from sklearn.ensemble import RandomForestRegressor, RandomForestClassifier
+       from sklearn.ensemble import RandomForestRegressor
        X = np.array([
                [1, 0, 0, 0, 1],
                [0, 0, 0, 1, 0],
@@ -132,7 +132,6 @@ class RandomForestRegressorSuite extends SparkFunSuite with MLlibTestSparkContex
     }
     val expected = Vectors.dense(0.304583, 0.111389, 0.33, 0.119167, 0.044861)
 
-    println(newRF.fit(df).featureImportances)
     assert(result ~== expected absTol 0.02)
   }
 
