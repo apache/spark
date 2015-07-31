@@ -128,7 +128,9 @@ test_that("create DataFrame from RDD", {
   expect_equal(dtypes(df2), list(c("name", "string"), c("age", "int"), c("height", "float")))
   expect_equal(collect(where(df2, df2$name == "Bob")), c("Bob", 16, 176.5))
 
-  localDF <- data.frame(name=c("John", "Smith", "Sarah"), age=c(19, 23, 18), height=c(164.10, 181.4, 173.7))
+  localDF <- data.frame(name=c("John", "Smith", "Sarah"),
+                        age=c(19, 23, 18),
+                        height=c(164.10, 181.4, 173.7))
   df <- createDataFrame(sqlContext, localDF, schema)
   expect_is(df, "DataFrame")
   expect_equal(count(df), 3)
