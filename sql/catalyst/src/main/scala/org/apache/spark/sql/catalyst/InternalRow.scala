@@ -58,8 +58,8 @@ abstract class InternalRow extends Serializable with SpecializedGetters {
 
   override def getBinary(ordinal: Int): Array[Byte] = getAs[Array[Byte]](ordinal, BinaryType)
 
-  override def getDecimal(ordinal: Int): Decimal =
-    getAs[Decimal](ordinal, DecimalType.SYSTEM_DEFAULT)
+  override def getDecimal(ordinal: Int, precision: Int, scale: Int): Decimal =
+    getAs[Decimal](ordinal, DecimalType(precision, scale))
 
   override def getInterval(ordinal: Int): CalendarInterval =
     getAs[CalendarInterval](ordinal, CalendarIntervalType)

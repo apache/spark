@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import java.sql.{Timestamp, Date}
+import java.sql.{Date, Timestamp}
 import java.text.SimpleDateFormat
 import java.util.Calendar
 
@@ -351,6 +351,34 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       NextDay(Literal(Date.valueOf("2015-07-23")), Literal.create(null, StringType)), null)
   }
 
+  test("function to_date") {
+    checkEvaluation(
+      ToDate(Literal(Date.valueOf("2015-07-22"))),
+      DateTimeUtils.fromJavaDate(Date.valueOf("2015-07-22")))
+    checkEvaluation(ToDate(Literal.create(null, DateType)), null)
+  }
+
+  test("function trunc") {
+    def testTrunc(input: Date, fmt: String, expected: Date): Unit = {
+      checkEvaluation(TruncDate(Literal.create(input, DateType), Literal.create(fmt, StringType)),
+        expected)
+      checkEvaluation(
+        TruncDate(Literal.create(input, DateType), NonFoldableLiteral.create(fmt, StringType)),
+        expected)
+    }
+    val date = Date.valueOf("2015-07-22")
+    Seq("yyyy", "YYYY", "year", "YEAR", "yy", "YY").foreach{ fmt =>
+      testTrunc(date, fmt, Date.valueOf("2015-01-01"))
+    }
+    Seq("month", "MONTH", "mon", "MON", "mm", "MM").foreach { fmt =>
+      testTrunc(date, fmt, Date.valueOf("2015-07-01"))
+    }
+    testTrunc(date, "DD", null)
+    testTrunc(date, null, null)
+    testTrunc(null, "MON", null)
+    testTrunc(null, null, null)
+  }
+
   test("from_unixtime") {
     val sdf1 = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss")
     val fmt2 = "yyyy-MM-dd HH:mm:ss.SSS"
@@ -405,5 +433,4 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(
       UnixTimestamp(Literal("2015-07-24"), Literal("not a valid format")), null)
   }
-
 }

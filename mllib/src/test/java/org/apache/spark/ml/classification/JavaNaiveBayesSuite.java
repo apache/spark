@@ -68,7 +68,7 @@ public class JavaNaiveBayesSuite implements Serializable {
     assert(nb.getLabelCol() == "label");
     assert(nb.getFeaturesCol() == "features");
     assert(nb.getPredictionCol() == "prediction");
-    assert(nb.getLambda() == 1.0);
+    assert(nb.getSmoothing() == 1.0);
     assert(nb.getModelType() == "multinomial");
   }
 
@@ -89,7 +89,7 @@ public class JavaNaiveBayesSuite implements Serializable {
     });
 
     DataFrame dataset = jsql.createDataFrame(jrdd, schema);
-    NaiveBayes nb = new NaiveBayes().setLambda(0.5).setModelType("multinomial");
+    NaiveBayes nb = new NaiveBayes().setSmoothing(0.5).setModelType("multinomial");
     NaiveBayesModel model = nb.fit(dataset);
 
     DataFrame predictionAndLabels = model.transform(dataset).select("prediction", "label");

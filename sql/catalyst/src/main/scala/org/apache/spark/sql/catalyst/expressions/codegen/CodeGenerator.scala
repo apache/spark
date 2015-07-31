@@ -106,6 +106,7 @@ class CodeGenContext {
     val jt = javaType(dataType)
     dataType match {
       case _ if isPrimitiveType(jt) => s"$getter.get${primitiveTypeName(jt)}($ordinal)"
+      case t: DecimalType => s"$getter.getDecimal($ordinal, ${t.precision}, ${t.scale})"
       case StringType => s"$getter.getUTF8String($ordinal)"
       case BinaryType => s"$getter.getBinary($ordinal)"
       case CalendarIntervalType => s"$getter.getInterval($ordinal)"
@@ -120,10 +121,10 @@ class CodeGenContext {
    */
   def setColumn(row: String, dataType: DataType, ordinal: Int, value: String): String = {
     val jt = javaType(dataType)
-    if (isPrimitiveType(jt)) {
-      s"$row.set${primitiveTypeName(jt)}($ordinal, $value)"
-    } else {
-      s"$row.update($ordinal, $value)"
+    dataType match {
+      case _ if isPrimitiveType(jt) => s"$row.set${primitiveTypeName(jt)}($ordinal, $value)"
+      case t: DecimalType => s"$row.setDecimal($ordinal, $value, ${t.precision})"
+      case _ => s"$row.update($ordinal, $value)"
     }
   }
 
@@ -304,7 +305,7 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
       evaluator.cook(code)
     } catch {
       case e: Exception =>
-        val msg = "failed to compile:\n " + CodeFormatter.format(code)
+        val msg = s"failed to compile: $e\n" + CodeFormatter.format(code)
         logError(msg, e)
         throw new Exception(msg, e)
     }

@@ -570,7 +570,7 @@ teenagers = sqlContext.sql("SELECT name FROM people WHERE age >= 13 AND age <= 1
 # The results of SQL queries are RDDs and support all the normal RDD operations.
 teenNames = teenagers.map(lambda p: "Name: " + p.name)
 for teenName in teenNames.collect():
-  print teenName
+  print(teenName)
 {% endhighlight %}
 
 </div>
@@ -752,7 +752,7 @@ results = sqlContext.sql("SELECT name FROM people")
 # The results of SQL queries are RDDs and support all the normal RDD operations.
 names = results.map(lambda p: "Name: " + p.name)
 for name in names.collect():
-  print name
+  print(name)
 {% endhighlight %}
 
 </div>
@@ -1006,7 +1006,7 @@ parquetFile.registerTempTable("parquetFile");
 teenagers = sqlContext.sql("SELECT name FROM parquetFile WHERE age >= 13 AND age <= 19")
 teenNames = teenagers.map(lambda p: "Name: " + p.name)
 for teenName in teenNames.collect():
-  print teenName
+  print(teenName)
 {% endhighlight %}
 
 </div>

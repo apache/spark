@@ -22,6 +22,7 @@ import org.scalatest.BeforeAndAfterEach
 import org.apache.spark.sql.TestData._
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.execution.joins._
+import org.apache.spark.sql.types.BinaryType
 
 
 class JoinSuite extends QueryTest with BeforeAndAfterEach {
@@ -488,5 +489,13 @@ class JoinSuite extends QueryTest with BeforeAndAfterEach {
         Row(3, 1) ::
         Row(3, 2) :: Nil)
 
+  }
+
+  test("Join can't work on binary type") {
+    val left = Seq(1, 1, 2, 2).map(i => Tuple1(i.toString)).toDF("c").select($"c" cast BinaryType)
+    val right = Seq(1, 1, 2, 2).map(i => Tuple1(i.toString)).toDF("d").select($"d" cast BinaryType)
+    intercept[AnalysisException] {
+      left.join(right, ($"left.N" === $"right.N"), "full")
+    }
   }
 }

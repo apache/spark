@@ -242,10 +242,9 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     checkEvaluation(cast(123L, DecimalType.USER_DEFAULT), Decimal(123))
     checkEvaluation(cast(123L, DecimalType(3, 0)), Decimal(123))
-    checkEvaluation(cast(123L, DecimalType(3, 1)), Decimal(123.0))
+    checkEvaluation(cast(123L, DecimalType(3, 1)), null)
 
-    // TODO: Fix the following bug and re-enable it.
-    // checkEvaluation(cast(123L, DecimalType(2, 0)), null)
+    checkEvaluation(cast(123L, DecimalType(2, 0)), null)
   }
 
   test("cast from boolean") {
