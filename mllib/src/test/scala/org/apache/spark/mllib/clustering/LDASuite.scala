@@ -280,7 +280,8 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext {
        > -3.69051285096
      */
 
-    assert(ldaModel.logPerplexity(docs) ~== -3.690D relTol 1E-3D)
+    // Gensim's definition of perplexity is negative our (and Stanford NLP's) definition
+    assert(ldaModel.logPerplexity(docs) ~== 3.690D relTol 1E-3D)
   }
 
   test("LocalLDAModel predict") {
