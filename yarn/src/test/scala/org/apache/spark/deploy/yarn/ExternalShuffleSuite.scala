@@ -266,39 +266,14 @@ private object ExternalShuffleDriver extends Logging with Matchers {
     val status = new File(args(0))
     var result = "failure"
     try {
-      val data = sc.parallelize(1 to 4, 4).collect().toSet
+      val data = sc.parallelize(1 to 100, 10).map { x => (x % 10) -> x }.reduceByKey{ _ + _ }.
+        collect().toSet
       sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
       data should be (Set(1, 2, 3, 4))
       result = "success"
     } finally {
       sc.stop()
       Files.write(result, status, UTF_8)
-    }
-
-    // verify log urls are present
-    val listeners = sc.listenerBus.findListenersByClass[SaveExecutorInfo]
-    assert(listeners.size === 1)
-    val listener = listeners(0)
-    val executorInfos = listener.addedExecutorInfos.values
-    assert(executorInfos.nonEmpty)
-    executorInfos.foreach { info =>
-      assert(info.logUrlMap.nonEmpty)
-    }
-
-    // If we are running in yarn-cluster mode, verify that driver logs links and present and are
-    // in the expected format.
-    if (conf.get("spark.master") == "yarn-cluster") {
-      assert(listener.driverLogs.nonEmpty)
-      val driverLogs = listener.driverLogs.get
-      assert(driverLogs.size === 2)
-      assert(driverLogs.containsKey("stderr"))
-      assert(driverLogs.containsKey("stdout"))
-      val urlStr = driverLogs("stderr")
-      // Ensure that this is a valid URL, else this will throw an exception
-      new URL(urlStr)
-      val containerId = YarnSparkHadoopUtil.get.getContainerId
-      val user = Utils.getCurrentUserName()
-      assert(urlStr.endsWith(s"/node/containerlogs/$containerId/$user/stderr?start=-4096"))
     }
   }
 
