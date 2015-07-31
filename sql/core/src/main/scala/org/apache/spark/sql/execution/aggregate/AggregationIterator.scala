@@ -24,6 +24,9 @@ import org.apache.spark.sql.catalyst.expressions.aggregate._
 
 import scala.collection.mutable.ArrayBuffer
 
+/**
+ * The base class of iterators used to evaluate [[AggregateFunction2]].
+ */
 abstract class AggregationIterator(
     groupingExpressions: Seq[NamedExpression],
     nonCompleteAggregateExpressions: Seq[AggregateExpression2],
@@ -46,7 +49,7 @@ abstract class AggregationIterator(
   // An Seq of all AggregateExpressions.
   // It is important that all AggregateExpressions with the mode Partial, PartialMerge or Final
   // are at the beginning of the allAggregateExpressions.
-  private[this] val allAggregateExpressions =
+  protected val allAggregateExpressions =
     nonCompleteAggregateExpressions ++ completeAggregateExpressions
 
   require(
@@ -316,6 +319,7 @@ abstract class AggregationIterator(
 
         (currentGroupingKey: InternalRow, currentBuffer: MutableRow) => {
           resultProjection(rowToBeEvaluated(currentGroupingKey, currentBuffer))
+          // rowToBeEvaluated(currentGroupingKey, currentBuffer)
         }
 
       // Final-only, Complete-only and Final-Complete: every output row contains values representing
@@ -374,60 +378,6 @@ abstract class AggregationIterator(
     while (i < allNonAlgebraicAggregateFunctions.length) {
       allNonAlgebraicAggregateFunctions(i).initialize(buffer)
       i += 1
-    }
-  }
-
-  ///////////////////////////////////////////////////////////////////////////
-  // Mutable states for sort based aggregation.
-  ///////////////////////////////////////////////////////////////////////////
-
-  // The partition key of the current partition.
-  protected var currentGroupingKey: InternalRow = _
-
-  // The partition key of next partition.
-  protected var nextGroupingKey: InternalRow = _
-
-  // The first row of next partition.
-  protected var firstRowInNextGroup: InternalRow = _
-
-  // Indicates if we has new group of rows from the sorted input iterator
-  protected var sortedInputHasNewGroup: Boolean = false
-
-  // The sorted input iterator.
-  protected var sortBasedInputIter: Iterator[InternalRow] = inputIter
-
-  // The aggregation buffer used by the sort-based aggregation.
-  protected var sortBasedAggregationBuffer: MutableRow = newBuffer
-
-  /** Processes rows in the current group. It will stop when it find a new group. */
-  protected def processCurrentSortedGroup(): Unit = {
-    currentGroupingKey = nextGroupingKey
-    // Now, we will start to find all rows belonging to this group.
-    // We create a variable to track if we see the next group.
-    var findNextPartition = false
-    // firstRowInNextGroup is the first row of this group. We first process it.
-    processRow(sortBasedAggregationBuffer, firstRowInNextGroup)
-    // The search will stop when we see the next group or there is no
-    // input row left in the iter.
-    while (sortBasedInputIter.hasNext && !findNextPartition) {
-      val currentRow = sortBasedInputIter.next()
-      // Get the grouping key based on the grouping expressions.
-      // For the below compare method, we do not need to make a copy of groupingKey.
-      val groupingKey = groupGenerator(currentRow)
-      // Check if the current row belongs the current input row.
-      if (currentGroupingKey == groupingKey) {
-        processRow(sortBasedAggregationBuffer, currentRow)
-      } else {
-        // We find a new group.
-        findNextPartition = true
-        nextGroupingKey = groupingKey
-        firstRowInNextGroup = currentRow.copy()
-      }
-    }
-    // We have not seen a new group. It means that there is no new row in the input
-    // iter. The current group is the last group of the iter.
-    if (!findNextPartition) {
-      sortedInputHasNewGroup = false
     }
   }
 

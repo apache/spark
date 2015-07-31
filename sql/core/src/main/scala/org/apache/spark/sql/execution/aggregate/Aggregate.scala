@@ -59,8 +59,7 @@ case class Aggregate(
       StructType.fromAttributes(groupingExpressions.map(_.toAttribute))
     val schemaSupportsUnsafe: Boolean =
       UnsafeFixedWidthAggregationMap.supportsAggregationBufferSchema(aggregationBufferSchema) &&
-        UnsafeProjection.canSupport(groupKeySchema) &&
-        UnsafeProjection.canSupport(StructType.fromAttributes(child.output))
+        UnsafeProjection.canSupport(groupKeySchema)
 
     val allAlgebraicAggregates =
       allAggregateExpressions.forall(_.aggregateFunction.isInstanceOf[AlgebraicAggregate])
@@ -122,10 +121,11 @@ case class Aggregate(
           initialInputBufferOffset,
           resultExpressions,
           newMutableProjection,
-          newProjection,
+          UnsafeProjection.create,
           newOrdering,
           child.output,
-          iter)
+          iter,
+          child.outputsUnsafeRows)
       } else {
         if (!hasInput && groupingExpressions.nonEmpty) {
           // This is a grouped aggregate and the input iterator is empty,
