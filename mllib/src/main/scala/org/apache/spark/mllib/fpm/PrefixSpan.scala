@@ -17,8 +17,6 @@
 
 package org.apache.spark.mllib.fpm
 
-import scala.collection.mutable.ArrayBuffer
-
 import org.apache.spark.Logging
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.rdd.RDD
@@ -50,7 +48,7 @@ class PrefixSpan private (
    * projected database exceeds this size, another iteration of distributed PrefixSpan is run.
    */
   // TODO: make configurable with a better default value, 10000 may be too small
-  private val maxLocalProjDBSize: Long = 10000
+  private val maxLocalProjDBSize: Long = 32000000L
 
   /**
    * Constructs a default instance with default parameters
@@ -121,7 +119,7 @@ class PrefixSpan private (
         freqItems.flatMap { item =>
           val candidateSuffix = LocalPrefixSpan.getSuffix(List(item), filteredSeq)._2
           candidateSuffix match {
-            case suffix if !suffix.isEmpty => Some((List(item), suffix))
+            case suffix if suffix.nonEmpty => Some((List(item), suffix))
             case _ => None
           }
         }
@@ -198,7 +196,7 @@ class PrefixSpan private (
     // Every (prefix :+ suffix) is guaranteed to have support exceeding `minSupport`
     val prefixItemPairAndCounts = prefixSuffixPairs
       .flatMap { case (prefix, suffix) =>
-      suffix.distinct.filter(_ != -1).map(y => ((prefix, y), 1L)) }
+      suffix.distinct.filter(item => item != -1 && item != -3).map(y => ((prefix, y), 1L)) }
       .reduceByKey(_ + _)
       .filter(_._2 >= minCount)
 
