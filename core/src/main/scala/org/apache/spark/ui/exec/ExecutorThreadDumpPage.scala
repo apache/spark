@@ -71,7 +71,7 @@ private[ui] class ExecutorThreadDumpPage(parent: ExecutorsTab) extends WebUIPage
         <div class="accordion-group">
           <div class={className} onclick="$(this).next().toggleClass('hidden')">
             <a class="accordion-toggle">
-              Thread {thread.threadId}: {thread.threadName} ({thread.threadState})
+              Thread {thread.threadId}: {threadName} ({thread.threadState})
             </a>
           </div>
           <div class="accordion-body hidden">
