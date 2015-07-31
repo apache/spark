@@ -507,7 +507,6 @@ case class FromUnixTime(sec: Expression, format: Expression)
       })
     }
   }
-
 }
 
 /**
@@ -694,5 +693,92 @@ case class MonthsBetween(date1: Expression, date2: Expression)
     defineCodeGen(ctx, ev, (l, r) => {
       s"""$dtu.monthsBetween($l, $r)"""
     })
+  }
+}
+
+/**
+ * Returns the date part of a timestamp or string.
+ */
+case class ToDate(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
+
+  // Implicit casting of spark will accept string in both date and timestamp format, as
+  // well as TimestampType.
+  override def inputTypes: Seq[AbstractDataType] = Seq(DateType)
+
+  override def dataType: DataType = DateType
+
+  override def eval(input: InternalRow): Any = child.eval(input)
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    defineCodeGen(ctx, ev, d => d)
+  }
+}
+
+/*
+ * Returns date truncated to the unit specified by the format.
+ */
+case class TruncDate(date: Expression, format: Expression)
+  extends BinaryExpression with ImplicitCastInputTypes {
+  override def left: Expression = date
+  override def right: Expression = format
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(DateType, StringType)
+  override def dataType: DataType = DateType
+  override def prettyName: String = "trunc"
+
+  lazy val minItemConst = DateTimeUtils.parseTruncLevel(format.eval().asInstanceOf[UTF8String])
+
+  override def eval(input: InternalRow): Any = {
+    val minItem = if (format.foldable) {
+      minItemConst
+    } else {
+      DateTimeUtils.parseTruncLevel(format.eval().asInstanceOf[UTF8String])
+    }
+    if (minItem == -1) {
+      // unknown format
+      null
+    } else {
+      val d = date.eval(input)
+      if (d == null) {
+        null
+      } else {
+        DateTimeUtils.truncDate(d.asInstanceOf[Int], minItem)
+      }
+    }
+  }
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
+
+    if (format.foldable) {
+      if (minItemConst == -1) {
+        s"""
+          boolean ${ev.isNull} = true;
+          ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
+        """
+      } else {
+        val d = date.gen(ctx)
+        s"""
+          ${d.code}
+          boolean ${ev.isNull} = ${d.isNull};
+          ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
+          if (!${ev.isNull}) {
+            ${ev.primitive} = $dtu.truncDate(${d.primitive}, $minItemConst);
+          }
+        """
+      }
+    } else {
+      nullSafeCodeGen(ctx, ev, (dateVal, fmt) => {
+        val form = ctx.freshName("form")
+        s"""
+          int $form = $dtu.parseTruncLevel($fmt);
+          if ($form == -1) {
+            ${ev.isNull} = true;
+          } else {
+            ${ev.primitive} = $dtu.truncDate($dateVal, $form);
+          }
+        """
+      })
+    }
   }
 }
