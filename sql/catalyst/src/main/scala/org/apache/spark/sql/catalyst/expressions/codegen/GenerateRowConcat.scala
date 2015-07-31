@@ -27,6 +27,17 @@ abstract class UnsafeRowConcat {
 }
 
 
+/**
+ * A code generator for concatenating two [[UnsafeRow]]s into a single [[UnsafeRow]].
+ *
+ * The high level algorithm is:
+ *
+ * 1. Concatenate the two bitsets together into a single one, taking padding into account.
+ * 2. Move fixed-length data.
+ * 3. Move variable-length data.
+ * 4. Update the offset position (i.e. the upper 32 bits in the fixed length part) for all
+ *    variable-length data.
+ */
 object GenerateRowConcat extends CodeGenerator[(StructType, StructType), UnsafeRowConcat] {
 
   def dump(word: Long): String = {
@@ -117,42 +128,69 @@ object GenerateRowConcat extends CodeGenerator[(StructType, StructType), UnsafeR
     }
 
     // --------------------- copy fixed length portion from row 1 ----------------------- //
+    var cursor = offset + outputBitsetWords * 8
     val copyFixedLengthRow1 = s"""
-       |PlatformDependent.UNSAFE.copyMemory(
+       |// Copy fixed length data for row1
+       |PlatformDependent.copyMemory(
        |  obj1, offset1 + ${bitset1Words * 8},
-       |  buf, offset + ${outputBitsetWords * 8},
+       |  buf, $cursor,
        |  ${schema1.size * 8});
      """.stripMargin
 
     // --------------------- copy fixed length portion from row 2 ----------------------- //
+    cursor += schema1.size * 8
     val copyFixedLengthRow2 = s"""
-       |PlatformDependent.UNSAFE.copyMemory(
-       |  obj2, offset2 + ${bitset1Words * 8},
-       |  buf, offset + ${(outputBitsetWords + schema1.size) * 8},
+       |// Copy fixed length data for row2
+       |PlatformDependent.copyMemory(
+       |  obj2, offset2 + ${bitset2Words * 8},
+       |  buf, $cursor,
        |  ${schema2.size * 8});
      """.stripMargin
 
     // --------------------- copy variable length portion from row 1 ----------------------- //
+    cursor += schema2.size * 8
     val copyVariableLengthRow1 = s"""
-       |PlatformDependent.UNSAFE.copyMemory(
+       |// Copy variable length data for row1
+       |long numBytesBitsetAndFixedRow1 = ${(bitset1Words + schema1.size) * 8};
+       |long numBytesVariableRow1 = row1.getSizeInBytes() - numBytesBitsetAndFixedRow1;
+       |PlatformDependent.copyMemory(
        |  obj1, offset1 + ${(bitset1Words + schema1.size) * 8},
-       |  buf, offset + ${(outputBitsetWords + schema1.size + schema2.size) * 8},
-       |  row1.getSizeInBytes() - ${(bitset1Words + schema1.size) * 8});
+       |  buf, $cursor,
+       |  numBytesVariableRow1);
      """.stripMargin
 
     // --------------------- copy variable length portion from row 2 ----------------------- //
     val copyVariableLengthRow2 = s"""
-       |PlatformDependent.UNSAFE.copyMemory(
+       |// Copy fixed length data for row2
+       |long numBytesBitsetAndFixedRow2 = ${(bitset2Words + schema2.size) * 8};
+       |long numBytesVariableRow2 = row2.getSizeInBytes() - numBytesBitsetAndFixedRow2;
+       |PlatformDependent.copyMemory(
        |  obj2, offset2 + ${(bitset2Words + schema2.size) * 8},
-       |  buf, offset + ${(outputBitsetWords + schema1.size + schema2.size) * 8},
-       |  row2.getSizeInBytes() - ${(bitset2Words + schema2.size) * 8});
+       |  buf, $cursor + numBytesVariableRow1,
+       |  numBytesVariableRow2);
      """.stripMargin
 
-    // ------- update fixed length data for variable length data type in row 1 ------------ //
+    // ------------- update fixed length data for variable length data type  --------------- //
+    val updateOffset = (schema1 ++ schema2).zipWithIndex.map { case (field, i) =>
+      // Skip fixed length data types, and only generate code for variable length data
+      if (UnsafeRow.isFixedLength(field.dataType)) {
+        ""
+      } else {
+        val cursor = offset + outputBitsetWords * 8 + i * 8
+        val shift =
+          if (i < schema1.size) {
+            (outputBitsetWords - bitset1Words + schema2.size) * 8
+          } else {
+            (outputBitsetWords - bitset2Words + schema1.size) * 8
+          }
+        s"""
+           |PlatformDependent.UNSAFE.putLong(buf, $cursor,
+           |  PlatformDependent.UNSAFE.getLong(buf, $cursor) + (${shift}L << 32));
+         """.stripMargin
+      }
+    }.mkString
 
-
-    // ------- update fixed length data for variable length data type in row 2 ------------ //
-
+    // ------------------------ Finally, put everything together  --------------------------- //
     val code = s"""
        |public Object generate($exprType[] exprs) {
        |  return new SpecificRowConat();
@@ -172,12 +210,17 @@ object GenerateRowConcat extends CodeGenerator[(StructType, StructType), UnsafeR
        |    }
        |
        |    final Object obj1 = row1.getBaseObject();
-       |    final Object offset1 = row1.getBaseOffset();
+       |    final long offset1 = row1.getBaseOffset();
        |    final Object obj2 = row2.getBaseObject();
-       |    final Object offset2 = row2.getBaseOffset();
+       |    final long offset2 = row2.getBaseOffset();
        |
        |    $copyBitset1
        |    $copyBitset2
+       |    $copyFixedLengthRow1
+       |    $copyFixedLengthRow2
+       |    $copyVariableLengthRow1
+       |    $copyVariableLengthRow2
+       |    $updateOffset
        |
        |    out.pointTo(buf, ${schema1.size + schema2.size}, sizeInBytes - $sizeReduction);
        |
@@ -187,8 +230,6 @@ object GenerateRowConcat extends CodeGenerator[(StructType, StructType), UnsafeR
      """.stripMargin
 
     logDebug(s"code for GenerateRowConcat($schema1, $schema2):\n${CodeFormatter.format(code)}")
-
-    // println(CodeFormatter.format(code))
 
     val c = compile(code)
     c.generate(Array.empty).asInstanceOf[UnsafeRowConcat]

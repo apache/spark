@@ -20,168 +20,93 @@ package org.apache.spark.sql.catalyst.expressions.codegen
 import scala.util.Random
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{UnsafeRow, UnsafeProjection}
+import org.apache.spark.sql.RandomDataGenerator
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
+import org.apache.spark.sql.catalyst.expressions.UnsafeProjection
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.UTF8String
 
-
+/**
+ * Test suite for [[GenerateRowConcat]].
+ *
+ * There is also a separate [[GenerateRowConcatBitsetSuite]] that tests specifically concatenation
+ * for the bitset portion, since that is the hardest one to get right.
+ */
 class GenerateRowConcatSuite extends SparkFunSuite {
 
-  private def createUnsafeRow(numFields: Int): UnsafeRow = {
-    val row = new UnsafeRow
-    val sizeInBytes = numFields * 8 + ((numFields + 63) / 64) * 8
-    val buf = new Array[Byte](sizeInBytes)
-    row.pointTo(buf, numFields, sizeInBytes)
-    row
+  private val fixed = Seq(IntegerType)
+  private val variable = Seq(IntegerType, StringType)
+
+  test("simple fixed width types") {
+    testConcat(0, 0, fixed)
+    testConcat(0, 1, fixed)
+    testConcat(1, 0, fixed)
+    testConcat(64, 0, fixed)
+    testConcat(0, 64, fixed)
+    testConcat(64, 64, fixed)
   }
 
-  private def testBitsets(numFields1: Int, numFields2: Int): Unit = {
-    for (i <- 0 until 5) {
-      testBitsetsOnce(numFields1, numFields2)
+  test("randomized fix width types") {
+    for (i <- 0 until 20) {
+      testConcatOnce(Random.nextInt(100), Random.nextInt(100), fixed)
     }
   }
 
-  private def testBitsetsOnce(numFields1: Int, numFields2: Int): Unit = {
-    val schema1 = StructType(Seq.tabulate(numFields1) { i => StructField(s"a_$i", IntegerType) })
-    val schema2 = StructType(Seq.tabulate(numFields2) { i => StructField(s"b_$i", IntegerType) })
+  test("simple variable width types") {
+    testConcat(0, 0, variable)
+    testConcat(0, 1, variable)
+    testConcat(1, 0, variable)
+    testConcat(64, 0, variable)
+    testConcat(0, 64, variable)
+    testConcat(64, 64, variable)
+  }
 
-    val row1 = createUnsafeRow(numFields1)
-    val row2 = createUnsafeRow(numFields2)
-
-    if (numFields1 > 0) {
-      for (i <- 0 until Random.nextInt(numFields1)) {
-        row1.setNullAt(Random.nextInt(numFields1))
-      }
-    }
-    if (numFields2 > 0) {
-      for (i <- 0 until Random.nextInt(numFields2)) {
-        row2.setNullAt(Random.nextInt(numFields2))
-      }
-    }
-
-    val concater = GenerateRowConcat.create(schema1, schema2)
-    val output = concater.concat(row1, row2)
-
-    def dumpDebug(): String = {
-      val set1 = Seq.tabulate(numFields1) { i => if (row1.isNullAt(i)) "1" else "0" }
-      val set2 = Seq.tabulate(numFields2) { i => if (row2.isNullAt(i)) "1" else "0" }
-      val out = Seq.tabulate(numFields1 + numFields2) { i => if (output.isNullAt(i)) "1" else "0" }
-
-      s"""
-         |input1: ${set1.mkString}
-         |input2: ${set2.mkString}
-         |output: ${out.mkString}
-       """.stripMargin
-    }
-
-    for (i <- 0 until (numFields1 + numFields2)) {
-      if (i < numFields1) {
-        assert(output.isNullAt(i) === row1.isNullAt(i), dumpDebug())
-      } else {
-        assert(output.isNullAt(i) === row2.isNullAt(i - numFields1), dumpDebug())
-      }
+  test("randomized variable width types") {
+    for (i <- 0 until 10) {
+      testConcatOnce(Random.nextInt(100), Random.nextInt(100), variable)
     }
   }
 
-  test("bitset concat: boundary size 0, 0") {
-    testBitsets(0, 0)
-  }
-
-  test("bitset concat: boundary size 0, 64") {
-    testBitsets(0, 64)
-  }
-
-  test("bitset concat: boundary size 64, 0") {
-    testBitsets(64, 0)
-  }
-
-  test("bitset concat: boundary size 64, 64") {
-    testBitsets(64, 64)
-  }
-
-  test("bitset concat: boundary size 0, 128") {
-    testBitsets(0, 128)
-  }
-
-  test("bitset concat: boundary size 128, 0") {
-    testBitsets(128, 0)
-  }
-
-  test("bitset concat: boundary size 128, 128") {
-    testBitsets(128, 128)
-  }
-
-  test("bitset concat: single word bitsets") {
-    testBitsets(10, 5)
-  }
-
-  test("bitset concat: first bitset larger than a word") {
-    testBitsets(67, 5)
-  }
-
-  test("bitset concat: second bitset larger than a word") {
-    testBitsets(6, 67)
-  }
-
-  test("bitset concat: no reduction in bitset size") {
-    testBitsets(33, 34)
-  }
-
-  test("bitset concat: two words") {
-    testBitsets(120, 95)
-  }
-
-  test("bitset concat: bitset 65, 128") {
-    testBitsets(65, 128)
-  }
-
-  test("bitset concat: randomized tests") {
-    for (i <- 1 until 20) {
-      val numFields1 = Random.nextInt(1000)
-      val numFields2 = Random.nextInt(1000)
-      info(s"num fields: $numFields1 and $numFields2")
-      testBitsets(numFields1, numFields2)
+  private def testConcat(numFields1: Int, numFields2: Int, candidateTypes: Seq[DataType]): Unit = {
+    for (i <- 0 until 10) {
+      testConcatOnce(numFields1, numFields2, candidateTypes)
     }
   }
 
-  ignore("concat of two bitmaps") {
-    val schema1 = new StructType()
-      .add("a", ByteType)
-      .add("b", ShortType)
-      .add("c", IntegerType)
-      .add("d", LongType)
+  private def testConcatOnce(numFields1: Int, numFields2: Int, candidateTypes: Seq[DataType]) {
+    info(s"schema size $numFields1, $numFields2")
+    val schema1 = RandomDataGenerator.randomSchema(numFields1, candidateTypes)
+    val schema2 = RandomDataGenerator.randomSchema(numFields2, candidateTypes)
 
-    val schema2 = new StructType()
-      .add("e", FloatType)
-      .add("f", DoubleType)
-      .add("g", StringType)
-      .add("h", StringType)
-
-    val mergedSchema = StructType(schema1 ++ schema2)
-
+    // Create the converters needed to convert from external row to internal row and to UnsafeRows.
+    val internalConverter1 = CatalystTypeConverters.createToCatalystConverter(schema1)
+    val internalConverter2 = CatalystTypeConverters.createToCatalystConverter(schema2)
     val converter1 = UnsafeProjection.create(schema1)
     val converter2 = UnsafeProjection.create(schema2)
 
-    val row1 = converter1.apply(InternalRow(1.toByte, 2.toShort, 3, 4.toLong))
-    val row2 = converter2.apply(InternalRow(5.0F, 6.0D, null, UTF8String.fromString("abcd")))
+    // Create the input rows, convert them into UnsafeRows.
+    val extRow1 = RandomDataGenerator.forType(schema1, nullable = false).get.apply()
+    val extRow2 = RandomDataGenerator.forType(schema2, nullable = false).get.apply()
+    val row1 = converter1.apply(internalConverter1.apply(extRow1).asInstanceOf[InternalRow])
+    val row2 = converter2.apply(internalConverter2.apply(extRow2).asInstanceOf[InternalRow])
 
+    // Run the concater.
+    val mergedSchema = StructType(schema1 ++ schema2)
     val concater = GenerateRowConcat.create(schema1, schema2)
     val output = concater.concat(row1, row2)
 
+    // Test everything equals ...
     for (i <- mergedSchema.indices) {
       if (i < schema1.size) {
         assert(output.isNullAt(i) === row1.isNullAt(i))
-//        if (!row1.isNullAt(i)) {
-//          assert(output.get(i, schema1(i).dataType) === row1.get(i, schema1(i).dataType))
-//        }
+        if (!output.isNullAt(i)) {
+          assert(output.get(i, mergedSchema(i).dataType) === row1.get(i, mergedSchema(i).dataType))
+        }
       } else {
         assert(output.isNullAt(i) === row2.isNullAt(i - schema1.size))
-//        if (!row2.isNullAt(i)) {
-//          assert(
-//            output.get(i, schema2(i - schema1.size).dataType) ===
-//              row2.get(i, schema2(i - schema1.size).dataType))
-//        }
+        if (!output.isNullAt(i)) {
+          assert(output.get(i, mergedSchema(i).dataType) ===
+            row2.get(i - schema1.size, mergedSchema(i).dataType))
+        }
       }
     }
   }

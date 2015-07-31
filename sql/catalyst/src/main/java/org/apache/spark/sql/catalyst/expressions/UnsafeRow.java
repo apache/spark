@@ -85,6 +85,14 @@ public final class UnsafeRow extends MutableRow {
         })));
   }
 
+  public static boolean isFixedLength(DataType dt) {
+    if (dt instanceof DecimalType) {
+      return ((DecimalType) dt).precision() < Decimal.MAX_LONG_DIGITS();
+    } else {
+      return settableFieldTypes.contains(dt);
+    }
+  }
+
   //////////////////////////////////////////////////////////////////////////////
   // Private fields and methods
   //////////////////////////////////////////////////////////////////////////////

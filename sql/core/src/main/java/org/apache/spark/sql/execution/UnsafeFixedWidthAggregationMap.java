@@ -73,12 +73,7 @@ public final class UnsafeFixedWidthAggregationMap {
    */
   public static boolean supportsAggregationBufferSchema(StructType schema) {
     for (StructField field: schema.fields()) {
-      if (field.dataType() instanceof DecimalType) {
-        DecimalType dt = (DecimalType) field.dataType();
-        if (dt.precision() > Decimal.MAX_LONG_DIGITS()) {
-          return false;
-        }
-      } else if (!UnsafeRow.settableFieldTypes.contains(field.dataType())) {
+      if (!UnsafeRow.settableFieldTypes.contains(field.dataType())) {
         return false;
       }
     }
