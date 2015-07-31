@@ -108,7 +108,12 @@ class ExternalTaskSensor(BaseSensorOperator):
     """
 
     @apply_defaults
-    def __init__(self, external_dag_id, external_task_id, *args, **kwargs):
+    def __init__(
+            self,
+            external_dag_id,
+            external_task_id,
+            allowed_state=None,
+            *args, **kwargs):
         super(ExternalTaskSensor, self).__init__(*args, **kwargs)
         self.external_dag_id = external_dag_id
         self.external_task_id = external_task_id
