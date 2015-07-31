@@ -726,7 +726,8 @@ case class TruncDate(date: Expression, format: Expression)
   override def dataType: DataType = DateType
   override def prettyName: String = "trunc"
 
-  private lazy val truncLevel = DateTimeUtils.parseTruncLevel(format.eval().asInstanceOf[UTF8String])
+  private lazy val truncLevel: Int =
+    DateTimeUtils.parseTruncLevel(format.eval().asInstanceOf[UTF8String])
 
   override def eval(input: InternalRow): Any = {
     val level = if (format.foldable) {
