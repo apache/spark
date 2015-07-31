@@ -131,10 +131,7 @@
     <flume.version>1.6.0</flume.version>
     <zookeeper.version>3.4.5</zookeeper.version>
     <curator.version>2.4.0</curator.version>
-    <!--
-       <hive.group>org.spark-project.hive</hive.group>
-      -->
-    <hive.group>org.apache.hive</hive.group>
+    <hive.group>org.spark-project.hive</hive.group>
     <!-- Version used in Maven Hive dependency -->
     <hive.version>1.2.1.spark</hive.version>
     <!-- Version used for internal directory structure -->
@@ -266,6 +263,12 @@
       <snapshots>
         <enabled>false</enabled>
       </snapshots>
+    </repository>
+    <repository>
+      <id>spark-hive-staging</id>
+      <name>Staging Repo for Hive 1.2.1 (Spark Version)</name>
+      <url>https://oss.sonatype.org/content/repositories/orgspark-project-1112</url>
+      <releases>
     </repository>
     <repository>
       <id>mapr-repo</id>
