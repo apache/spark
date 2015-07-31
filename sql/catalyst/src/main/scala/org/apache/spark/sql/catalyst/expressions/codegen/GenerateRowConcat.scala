@@ -176,13 +176,16 @@ object GenerateRowConcat extends CodeGenerator[(StructType, StructType), UnsafeR
       if (UnsafeRow.isFixedLength(field.dataType)) {
         ""
       } else {
-        val cursor = offset + outputBitsetWords * 8 + i * 8
+        // Number of bytes to increase for the offset. Note that since in UnsafeRow we store the
+        // offset in the upper 32 bit of the words, we can just shift the offset to the left by
+        // 32 and increment that amount in place.
         val shift =
           if (i < schema1.size) {
             (outputBitsetWords - bitset1Words + schema2.size) * 8
           } else {
             (outputBitsetWords - bitset2Words + schema1.size) * 8
           }
+        val cursor = offset + outputBitsetWords * 8 + i * 8
         s"""
            |PlatformDependent.UNSAFE.putLong(buf, $cursor,
            |  PlatformDependent.UNSAFE.getLong(buf, $cursor) + (${shift}L << 32));
