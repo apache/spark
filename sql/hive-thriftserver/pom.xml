@@ -62,6 +62,10 @@
     </dependency>
     <dependency>
       <groupId>${hive.group}</groupId>
+      <artifactId>hive-service</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>${hive.group}</groupId>
       <artifactId>hive-beeline</artifactId>
     </dependency>
     <dependency>
