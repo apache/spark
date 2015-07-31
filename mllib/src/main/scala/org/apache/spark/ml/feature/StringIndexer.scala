@@ -194,7 +194,7 @@ class StringIndexerInverse private[ml] (
    * @group setParam
    */
   def setLabels(value: Array[String]): this.type = set(labels, value)
-  setDefault(labels -> Array[String]())
+  setDefault(labels -> Array.empty[String])
 
   /**
    * Param for array of labels.
