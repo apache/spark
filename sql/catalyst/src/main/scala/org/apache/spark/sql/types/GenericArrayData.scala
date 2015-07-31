@@ -43,7 +43,7 @@ class GenericArrayData(array: Array[Any]) extends ArrayData {
 
   override def getDouble(ordinal: Int): Double = getAs(ordinal)
 
-  override def getDecimal(ordinal: Int): Decimal = getAs(ordinal)
+  override def getDecimal(ordinal: Int, precision: Int, scale: Int): Decimal = getAs(ordinal)
 
   override def getUTF8String(ordinal: Int): UTF8String = getAs(ordinal)
 

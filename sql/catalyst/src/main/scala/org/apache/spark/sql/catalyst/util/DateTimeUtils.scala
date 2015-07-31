@@ -779,4 +779,38 @@ object DateTimeUtils {
     }
     date + (lastDayOfMonthInYear - dayInYear)
   }
+
+  private val TRUNC_TO_YEAR = 1
+  private val TRUNC_TO_MONTH = 2
+  private val TRUNC_INVALID = -1
+
+  /**
+   * Returns the trunc date from original date and trunc level.
+   * Trunc level should be generated using `parseTruncLevel()`, should only be 1 or 2.
+   */
+  def truncDate(d: Int, level: Int): Int = {
+    if (level == TRUNC_TO_YEAR) {
+      d - DateTimeUtils.getDayInYear(d) + 1
+    } else if (level == TRUNC_TO_MONTH) {
+      d - DateTimeUtils.getDayOfMonth(d) + 1
+    } else {
+      throw new Exception(s"Invalid trunc level: $level")
+    }
+  }
+
+  /**
+   * Returns the truncate level, could be TRUNC_YEAR, TRUNC_MONTH, or TRUNC_INVALID,
+   * TRUNC_INVALID means unsupported truncate level.
+   */
+  def parseTruncLevel(format: UTF8String): Int = {
+    if (format == null) {
+      TRUNC_INVALID
+    } else {
+      format.toString.toUpperCase match {
+        case "YEAR" | "YYYY" | "YY" => TRUNC_TO_YEAR
+        case "MON" | "MONTH" | "MM" => TRUNC_TO_MONTH
+        case _ => TRUNC_INVALID
+      }
+    }
+  }
 }

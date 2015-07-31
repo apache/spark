@@ -666,10 +666,12 @@ test_that("column binary mathfunctions", {
   expect_equal(collect(select(df, atan2(df$a, df$b)))[2, "ATAN2(a, b)"], atan2(2, 6))
   expect_equal(collect(select(df, atan2(df$a, df$b)))[3, "ATAN2(a, b)"], atan2(3, 7))
   expect_equal(collect(select(df, atan2(df$a, df$b)))[4, "ATAN2(a, b)"], atan2(4, 8))
+  ## nolint start
   expect_equal(collect(select(df, hypot(df$a, df$b)))[1, "HYPOT(a, b)"], sqrt(1^2 + 5^2))
   expect_equal(collect(select(df, hypot(df$a, df$b)))[2, "HYPOT(a, b)"], sqrt(2^2 + 6^2))
   expect_equal(collect(select(df, hypot(df$a, df$b)))[3, "HYPOT(a, b)"], sqrt(3^2 + 7^2))
   expect_equal(collect(select(df, hypot(df$a, df$b)))[4, "HYPOT(a, b)"], sqrt(4^2 + 8^2))
+  ## nolint end
 })
 
 test_that("string operators", {
@@ -876,7 +878,7 @@ test_that("parquetFile works with multiple input paths", {
   write.df(df, parquetPath2, "parquet", mode="overwrite")
   parquetDF <- parquetFile(sqlContext, parquetPath, parquetPath2)
   expect_is(parquetDF, "DataFrame")
-  expect_equal(count(parquetDF), count(df)*2)
+  expect_equal(count(parquetDF), count(df) * 2)
 })
 
 test_that("describe() on a DataFrame", {
@@ -1000,6 +1002,11 @@ test_that("crosstab() on a DataFrame", {
   expected <- data.frame("a_b" = c("a0", "a1", "a2"), "b0" = c(1, 0, 1), "b1" = c(1, 1, 0),
                          stringsAsFactors = FALSE, row.names = NULL)
   expect_identical(expected, ordered)
+})
+
+test_that("SQL error message is returned from JVM", {
+  retError <- tryCatch(sql(sqlContext, "select * from blah"), error = function(e) e)
+  expect_equal(grepl("Table Not Found: blah", retError), TRUE)
 })
 
 unlink(parquetPath)

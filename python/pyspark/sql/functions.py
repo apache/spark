@@ -889,6 +889,36 @@ def months_between(date1, date2):
 
 
 @since(1.5)
+def to_date(col):
+    """
+    Converts the column of StringType or TimestampType into DateType.
+
+    >>> df = sqlContext.createDataFrame([('1997-02-28 10:30:00',)], ['t'])
+    >>> df.select(to_date(df.t).alias('date')).collect()
+    [Row(date=datetime.date(1997, 2, 28))]
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.to_date(_to_java_column(col)))
+
+
+@since(1.5)
+def trunc(date, format):
+    """
+    Returns date truncated to the unit specified by the format.
+
+    :param format: 'year', 'YYYY', 'yy' or 'month', 'mon', 'mm'
+
+    >>> df = sqlContext.createDataFrame([('1997-02-28',)], ['d'])
+    >>> df.select(trunc(df.d, 'year').alias('year')).collect()
+    [Row(year=datetime.date(1997, 1, 1))]
+    >>> df.select(trunc(df.d, 'mon').alias('month')).collect()
+    [Row(month=datetime.date(1997, 2, 1))]
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.trunc(_to_java_column(date), format))
+
+
+@since(1.5)
 def size(col):
     """
     Collection function: returns the length of the array or map stored in the column.

@@ -85,7 +85,9 @@ setMethod("initialize", "PipelinedRDD", function(.Object, prev, func, jrdd_val) 
 
   isPipelinable <- function(rdd) {
     e <- rdd@env
+    # nolint start
     !(e$isCached || e$isCheckpointed)
+    # nolint end
   }
 
   if (!inherits(prev, "PipelinedRDD") || !isPipelinable(prev)) {
@@ -97,7 +99,8 @@ setMethod("initialize", "PipelinedRDD", function(.Object, prev, func, jrdd_val) 
     # prev_serializedMode is used during the delayed computation of JRDD in getJRDD
   } else {
     pipelinedFunc <- function(partIndex, part) {
-      func(partIndex, prev@func(partIndex, part))
+      f <- prev@func
+      func(partIndex, f(partIndex, part))
     }
     .Object@func <- cleanClosure(pipelinedFunc)
     .Object@prev_jrdd <- prev@prev_jrdd # maintain the pipeline
@@ -841,7 +844,7 @@ setMethod("sampleRDD",
                 if (withReplacement) {
                   count <- rpois(1, fraction)
                   if (count > 0) {
-                    res[(len + 1):(len + count)] <- rep(list(elem), count)
+                    res[ (len + 1) : (len + count) ] <- rep(list(elem), count)
                     len <- len + count
                   }
                 } else {
