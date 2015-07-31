@@ -21,16 +21,13 @@ import java.lang.Exception;
 import java.nio.ByteBuffer;
 import java.util.*;
 
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.*;
 import org.mockito.invocation.InvocationOnMock;
 import org.mockito.stubbing.Answer;
+import static org.hamcrest.Matchers.greaterThan;
 import static org.mockito.AdditionalMatchers.geq;
 import static org.mockito.Mockito.*;
 
-import org.apache.spark.SparkConf;
 import org.apache.spark.shuffle.ShuffleMemoryManager;
 import org.apache.spark.unsafe.array.ByteArrayMethods;
 import org.apache.spark.unsafe.memory.*;
@@ -50,11 +47,11 @@ public abstract class AbstractBytesToBytesMapSuite {
 
   @Before
   public void setup() {
-    shuffleMemoryManager = new ShuffleMemoryManager(new SparkConf());
+    shuffleMemoryManager = new ShuffleMemoryManager(Long.MAX_VALUE);
     taskMemoryManager = new TaskMemoryManager(new ExecutorMemoryManager(getMemoryAllocator()));
     // Mocked memory manager for tests that check the maximum array size, since actually allocating
     // such large arrays will cause us to run out of memory in our tests.
-    sizeLimitedTaskMemoryManager = spy(taskMemoryManager);
+    sizeLimitedTaskMemoryManager = mock(TaskMemoryManager.class);
     when(sizeLimitedTaskMemoryManager.allocate(geq(1L << 20))).thenAnswer(
       new Answer<MemoryBlock>() {
         @Override
@@ -62,7 +59,7 @@ public abstract class AbstractBytesToBytesMapSuite {
           if (((Long) invocation.getArguments()[0] / 8) > Integer.MAX_VALUE) {
             throw new OutOfMemoryError("Requested array size exceeds VM limit");
           }
-          return taskMemoryManager.allocate(1L << 20);
+          return new MemoryBlock(null, 0, (Long) invocation.getArguments()[0]);
         }
       }
     );
@@ -71,7 +68,10 @@ public abstract class AbstractBytesToBytesMapSuite {
   @After
   public void tearDown() {
     if (taskMemoryManager != null) {
-      taskMemoryManager.cleanUpAllAllocatedMemory();
+      long leakedShuffleMemory = shuffleMemoryManager.getMemoryConsumptionForThisTask();
+      Assert.assertEquals(0, taskMemoryManager.cleanUpAllAllocatedMemory());
+      Assert.assertEquals(0, leakedShuffleMemory);
+      shuffleMemoryManager = null;
       taskMemoryManager = null;
     }
   }
@@ -143,14 +143,14 @@ public abstract class AbstractBytesToBytesMapSuite {
       final BytesToBytesMap.Location loc =
         map.lookup(keyData, BYTE_ARRAY_OFFSET, recordLengthBytes);
       Assert.assertFalse(loc.isDefined());
-      loc.putNewKey(
+      Assert.assertTrue(loc.putNewKey(
         keyData,
         BYTE_ARRAY_OFFSET,
         recordLengthBytes,
         valueData,
         BYTE_ARRAY_OFFSET,
         recordLengthBytes
-      );
+      ));
       // After storing the key and value, the other location methods should return results that
       // reflect the result of this store without us having to call lookup() again on the same key.
       Assert.assertEquals(recordLengthBytes, loc.getKeyLength());
@@ -166,14 +166,14 @@ public abstract class AbstractBytesToBytesMapSuite {
       Assert.assertArrayEquals(valueData, getByteArray(loc.getValueAddress(), recordLengthBytes));
 
       try {
-        loc.putNewKey(
+        Assert.assertTrue(loc.putNewKey(
           keyData,
           BYTE_ARRAY_OFFSET,
           recordLengthBytes,
           valueData,
           BYTE_ARRAY_OFFSET,
           recordLengthBytes
-        );
+        ));
         Assert.fail("Should not be able to set a new value for a key");
       } catch (AssertionError e) {
         // Expected exception; do nothing.
@@ -196,23 +196,23 @@ public abstract class AbstractBytesToBytesMapSuite {
         Assert.assertFalse(loc.isDefined());
         // Ensure that we store some zero-length keys
         if (i % 5 == 0) {
-          loc.putNewKey(
+          Assert.assertTrue(loc.putNewKey(
             null,
             PlatformDependent.LONG_ARRAY_OFFSET,
             0,
             value,
             PlatformDependent.LONG_ARRAY_OFFSET,
             8
-          );
+          ));
         } else {
-          loc.putNewKey(
+          Assert.assertTrue(loc.putNewKey(
             value,
             PlatformDependent.LONG_ARRAY_OFFSET,
             8,
             value,
             PlatformDependent.LONG_ARRAY_OFFSET,
             8
-          );
+          ));
         }
       }
       final java.util.BitSet valuesSeen = new java.util.BitSet(size);
@@ -261,14 +261,14 @@ public abstract class AbstractBytesToBytesMapSuite {
           KEY_LENGTH
         );
         Assert.assertFalse(loc.isDefined());
-        loc.putNewKey(
+        Assert.assertTrue(loc.putNewKey(
           key,
           LONG_ARRAY_OFFSET,
           KEY_LENGTH,
           value,
           LONG_ARRAY_OFFSET,
           VALUE_LENGTH
-        );
+        ));
       }
       Assert.assertEquals(2, map.getNumDataPages());
 
@@ -331,14 +331,14 @@ public abstract class AbstractBytesToBytesMapSuite {
             key.length
           );
           Assert.assertFalse(loc.isDefined());
-          loc.putNewKey(
+          Assert.assertTrue(loc.putNewKey(
             key,
             BYTE_ARRAY_OFFSET,
             key.length,
             value,
             BYTE_ARRAY_OFFSET,
             value.length
-          );
+          ));
           // After calling putNewKey, the following should be true, even before calling
           // lookup():
           Assert.assertTrue(loc.isDefined());
@@ -382,14 +382,14 @@ public abstract class AbstractBytesToBytesMapSuite {
             key.length
           );
           Assert.assertFalse(loc.isDefined());
-          loc.putNewKey(
+          Assert.assertTrue(loc.putNewKey(
             key,
             BYTE_ARRAY_OFFSET,
             key.length,
             value,
             BYTE_ARRAY_OFFSET,
             value.length
-          );
+          ));
           // After calling putNewKey, the following should be true, even before calling
           // lookup():
           Assert.assertTrue(loc.isDefined());
@@ -407,6 +407,49 @@ public abstract class AbstractBytesToBytesMapSuite {
         Assert.assertTrue(arrayEquals(key, loc.getKeyAddress(), loc.getKeyLength()));
         Assert.assertTrue(arrayEquals(value, loc.getValueAddress(), loc.getValueLength()));
       }
+    } finally {
+      map.free();
+    }
+  }
+
+  @Test
+  public void failureToAllocateFirstPage() {
+    shuffleMemoryManager = new ShuffleMemoryManager(1024);
+    BytesToBytesMap map =
+      new BytesToBytesMap(taskMemoryManager, shuffleMemoryManager, 1, PAGE_SIZE_BYTES);
+    ;
+    try {
+      final long[] emptyArray = new long[0];
+      final BytesToBytesMap.Location loc =
+        map.lookup(emptyArray, PlatformDependent.LONG_ARRAY_OFFSET, 0);
+      Assert.assertFalse(loc.isDefined());
+      Assert.assertFalse(loc.putNewKey(
+        emptyArray, LONG_ARRAY_OFFSET, 0,
+        emptyArray, LONG_ARRAY_OFFSET, 0
+      ));
+    } finally {
+      map.free();
+    }
+  }
+
+
+  @Test
+  public void failureToGrow() {
+    shuffleMemoryManager = new ShuffleMemoryManager(1024 * 10);
+    BytesToBytesMap map = new BytesToBytesMap(taskMemoryManager, shuffleMemoryManager, 1, 1024);
+    try {
+      boolean success = true;
+      int i;
+      for (i = 0; i < 1024; i++) {
+        final long[] arr = new long[]{i};
+        final BytesToBytesMap.Location loc = map.lookup(arr, PlatformDependent.LONG_ARRAY_OFFSET, 8);
+        success = loc.putNewKey(arr, LONG_ARRAY_OFFSET, 8, arr, LONG_ARRAY_OFFSET, 8);
+        if (!success) {
+          break;
+        }
+      }
+      Assert.assertThat(i, greaterThan(0));
+      Assert.assertFalse(success);
     } finally {
       map.free();
     }
@@ -432,16 +475,18 @@ public abstract class AbstractBytesToBytesMapSuite {
       // expected exception
     }
 
-   // Can allocate _at_ the max capacity
-    BytesToBytesMap map = new BytesToBytesMap(
-      sizeLimitedTaskMemoryManager,
-      shuffleMemoryManager,
-      BytesToBytesMap.MAX_CAPACITY,
-      PAGE_SIZE_BYTES);
-    map.free();
+    // Ignored because this can OOM now that we allocate the long array w/o a TaskMemoryManager
+    // Can allocate _at_ the max capacity
+    //    BytesToBytesMap map = new BytesToBytesMap(
+    //      sizeLimitedTaskMemoryManager,
+    //      shuffleMemoryManager,
+    //      BytesToBytesMap.MAX_CAPACITY,
+    //      PAGE_SIZE_BYTES);
+    //    map.free();
   }
 
-  @Test
+  // Ignored because this can OOM now that we allocate the long array w/o a TaskMemoryManager
+  @Ignore
   public void resizingLargeMap() {
     // As long as a map's capacity is below the max, we should be able to resize up to the max
     BytesToBytesMap map = new BytesToBytesMap(

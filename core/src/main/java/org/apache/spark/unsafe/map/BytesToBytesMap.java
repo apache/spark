@@ -17,6 +17,7 @@
 
 package org.apache.spark.unsafe.map;
 
+import java.io.IOException;
 import java.lang.Override;
 import java.lang.UnsupportedOperationException;
 import java.util.Iterator;
@@ -24,6 +25,8 @@ import java.util.LinkedList;
 import java.util.List;
 
 import com.google.common.annotations.VisibleForTesting;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import org.apache.spark.shuffle.ShuffleMemoryManager;
 import org.apache.spark.unsafe.*;
@@ -45,6 +48,8 @@ import org.apache.spark.unsafe.memory.*;
  * This class is not thread safe.
  */
 public final class BytesToBytesMap {
+
+  private final Logger logger = LoggerFactory.getLogger(BytesToBytesMap.class);
 
   private static final Murmur3_x86_32 HASHER = new Murmur3_x86_32(0);
 
@@ -425,7 +430,8 @@ public final class BytesToBytesMap {
     /**
      * Store a new key and value. This method may only be called once for a given key; if you want
      * to update the value associated with a key, then you can directly manipulate the bytes stored
-     * at the value address.
+     * at the value address. The return value indicates whether the put succeeded or whether it
+     * failed because additional memory could not be required.
      * <p>
      * It is only valid to call this method immediately after calling `lookup()` using the same key.
      * </p>
@@ -442,14 +448,19 @@ public final class BytesToBytesMap {
      * <pre>
      *   Location loc = map.lookup(keyBaseObject, keyBaseOffset, keyLengthInBytes);
      *   if (!loc.isDefined()) {
-     *     loc.putNewKey(keyBaseObject, keyBaseOffset, keyLengthInBytes, ...)
+     *     if (!loc.putNewKey(keyBaseObject, keyBaseOffset, keyLengthInBytes, ...)) {
+     *       // handle failure to grow map (by spilling, for example)
+     *     }
      *   }
      * </pre>
      * <p>
      * Unspecified behavior if the key is not defined.
      * </p>
+     *
+     * @return true if the put() was successful and false if the put() failed because memory could
+     *         not be acquired.
      */
-    public void putNewKey(
+    public boolean putNewKey(
         Object keyBaseObject,
         long keyBaseOffset,
         int keyLengthBytes,
@@ -478,7 +489,14 @@ public final class BytesToBytesMap {
       if (useOverflowPage) {
         // The record is larger than the page size, so allocate a special overflow page just to hold
         // that record.
-        MemoryBlock overflowPage = taskMemoryManager.allocatePage(requiredSize + 8);
+        final long memoryRequested = requiredSize + 8;
+        final long memoryGranted = shuffleMemoryManager.tryToAcquire(memoryRequested);
+        if (memoryGranted != memoryRequested) {
+          shuffleMemoryManager.release(memoryGranted);
+          logger.debug("Failed to acquire {} bytes of memory", memoryRequested);
+          return false;
+        }
+        MemoryBlock overflowPage = taskMemoryManager.allocatePage(memoryRequested);
         dataPages.add(overflowPage);
         dataPage = overflowPage;
         dataPageBaseObject = overflowPage.getBaseObject();
@@ -491,6 +509,12 @@ public final class BytesToBytesMap {
           final Object pageBaseObject = currentDataPage.getBaseObject();
           final long lengthOffsetInPage = currentDataPage.getBaseOffset() + pageCursor;
           PlatformDependent.UNSAFE.putLong(pageBaseObject, lengthOffsetInPage, END_OF_PAGE_MARKER);
+        }
+        final long memoryGranted = shuffleMemoryManager.tryToAcquire(pageSizeBytes);
+        if (memoryGranted != pageSizeBytes) {
+          shuffleMemoryManager.release(memoryGranted);
+          logger.debug("Failed to acquire {} bytes of memory", pageSizeBytes);
+          return false;
         }
         MemoryBlock newPage = taskMemoryManager.allocatePage(pageSizeBytes);
         dataPages.add(newPage);
@@ -549,6 +573,7 @@ public final class BytesToBytesMap {
       if (numElements > growthThreshold && longArray.size() < MAX_CAPACITY) {
         growAndRehash();
       }
+      return true;
     }
   }
 
@@ -563,7 +588,7 @@ public final class BytesToBytesMap {
     // The capacity needs to be divisible by 64 so that our bit set can be sized properly
     capacity = Math.max((int) Math.min(MAX_CAPACITY, nextPowerOf2(capacity)), 64);
     assert (capacity <= MAX_CAPACITY);
-    longArray = new LongArray(taskMemoryManager.allocate(capacity * 8L * 2));
+    longArray = new LongArray(MemoryBlock.fromLongArray(new long[capacity * 2]));
     bitset = new BitSet(MemoryBlock.fromLongArray(new long[capacity / 64]));
 
     this.growthThreshold = (int) (capacity * loadFactor);
@@ -577,18 +602,14 @@ public final class BytesToBytesMap {
    * This method is idempotent.
    */
   public void free() {
-    if (longArray != null) {
-      taskMemoryManager.free(longArray.memoryBlock());
-      longArray = null;
-    }
-    if (bitset != null) {
-      // The bitset's heap memory isn't managed by a memory manager, so no need to free it here.
-      bitset = null;
-    }
+    longArray = null;
+    bitset = null;
     Iterator<MemoryBlock> dataPagesIterator = dataPages.iterator();
     while (dataPagesIterator.hasNext()) {
-      taskMemoryManager.freePage(dataPagesIterator.next());
+      MemoryBlock dataPage = dataPagesIterator.next();
       dataPagesIterator.remove();
+      taskMemoryManager.freePage(dataPage);
+      shuffleMemoryManager.release(dataPage.size());
     }
     assert(dataPages.isEmpty());
   }
@@ -675,8 +696,6 @@ public final class BytesToBytesMap {
       }
     }
 
-    // Deallocate the old data structures.
-    taskMemoryManager.free(oldLongArray.memoryBlock());
     if (enablePerfMetrics) {
       timeSpentResizingNs += System.nanoTime() - resizeStartTime;
     }

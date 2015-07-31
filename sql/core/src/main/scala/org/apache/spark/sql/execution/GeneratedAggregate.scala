@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution
 
+import java.io.IOException
+
 import org.apache.spark.{SparkEnv, TaskContext}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
@@ -276,6 +278,9 @@ case class GeneratedAggregate(
           val currentRow: InternalRow = iter.next()
           val groupKey: InternalRow = groupProjection(currentRow)
           val aggregationBuffer = aggregationMap.getAggregationBuffer(groupKey)
+          if (aggregationBuffer == null) {
+            throw new IOException("Could not allocate memory to grow aggregation buffer")
+          }
           updateProjection.target(aggregationBuffer)(joinedRow(aggregationBuffer, currentRow))
         }
 

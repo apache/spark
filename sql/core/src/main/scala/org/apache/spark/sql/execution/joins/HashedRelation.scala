@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.joins
 
-import java.io.{Externalizable, ObjectInput, ObjectOutput}
+import java.io.{IOException, Externalizable, ObjectInput, ObjectOutput}
 import java.nio.ByteOrder
 import java.util.{HashMap => JavaHashMap}
 
@@ -29,6 +29,7 @@ import org.apache.spark.sql.execution.SparkSqlSerializer
 import org.apache.spark.unsafe.PlatformDependent
 import org.apache.spark.unsafe.map.BytesToBytesMap
 import org.apache.spark.unsafe.memory.{ExecutorMemoryManager, MemoryAllocator, TaskMemoryManager}
+import org.apache.spark.util.Utils
 import org.apache.spark.util.collection.CompactBuffer
 
 
@@ -218,7 +219,7 @@ private[joins] final class UnsafeHashedRelation(
     }
   }
 
-  override def writeExternal(out: ObjectOutput): Unit = {
+  override def writeExternal(out: ObjectOutput): Unit = Utils.tryOrIOException {
     out.writeInt(hashTable.size())
 
     val iter = hashTable.entrySet().iterator()
@@ -257,7 +258,7 @@ private[joins] final class UnsafeHashedRelation(
     }
   }
 
-  override def readExternal(in: ObjectInput): Unit = {
+  override def readExternal(in: ObjectInput): Unit = Utils.tryOrIOException {
     val nKeys = in.readInt()
     // This is used in Broadcast, shared by multiple tasks, so we use on-heap memory
     val taskMemoryManager = new TaskMemoryManager(new ExecutorMemoryManager(MemoryAllocator.HEAP))
@@ -298,8 +299,11 @@ private[joins] final class UnsafeHashedRelation(
       // put it into binary map
       val loc = binaryMap.lookup(keyBuffer, PlatformDependent.BYTE_ARRAY_OFFSET, keySize)
       assert(!loc.isDefined, "Duplicated key found!")
-      loc.putNewKey(keyBuffer, PlatformDependent.BYTE_ARRAY_OFFSET, keySize,
+      val putSuceeded = loc.putNewKey(keyBuffer, PlatformDependent.BYTE_ARRAY_OFFSET, keySize,
         valuesBuffer, PlatformDependent.BYTE_ARRAY_OFFSET, valuesSize)
+      if (!putSuceeded) {
+        throw new IOException("Could not allocate memory to grow BytesToBytesMap")
+      }
       i += 1
     }
   }

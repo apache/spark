@@ -23,6 +23,7 @@ import scala.collection.JavaConverters._
 import scala.util.Random
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.shuffle.ShuffleMemoryManager
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.memory.{ExecutorMemoryManager, MemoryAllocator, TaskMemoryManager}
@@ -41,16 +42,20 @@ class UnsafeFixedWidthAggregationMapSuite
   private def emptyAggregationBuffer: InternalRow = InternalRow(0)
   private val PAGE_SIZE_BYTES: Long = 1L << 26; // 64 megabytes
 
-  private var memoryManager: TaskMemoryManager = null
+  private var taskMemoryManager: TaskMemoryManager = null
+  private var shuffleMemoryManager: ShuffleMemoryManager = null
 
   override def beforeEach(): Unit = {
-    memoryManager = new TaskMemoryManager(new ExecutorMemoryManager(MemoryAllocator.HEAP))
+    taskMemoryManager = new TaskMemoryManager(new ExecutorMemoryManager(MemoryAllocator.HEAP))
+    shuffleMemoryManager = new ShuffleMemoryManager(Long.MaxValue)
   }
 
   override def afterEach(): Unit = {
-    if (memoryManager != null) {
-      memoryManager.cleanUpAllAllocatedMemory()
-      memoryManager = null
+    if (taskMemoryManager != null) {
+      val leakedShuffleMemory = shuffleMemoryManager.getMemoryConsumptionForThisTask
+      assert(taskMemoryManager.cleanUpAllAllocatedMemory() === 0)
+      assert(leakedShuffleMemory === 0)
+      taskMemoryManager = null
     }
   }
 
@@ -69,7 +74,8 @@ class UnsafeFixedWidthAggregationMapSuite
       emptyAggregationBuffer,
       aggBufferSchema,
       groupKeySchema,
-      memoryManager,
+      taskMemoryManager,
+      shuffleMemoryManager,
       1024, // initial capacity,
       PAGE_SIZE_BYTES,
       false // disable perf metrics
@@ -83,7 +89,8 @@ class UnsafeFixedWidthAggregationMapSuite
       emptyAggregationBuffer,
       aggBufferSchema,
       groupKeySchema,
-      memoryManager,
+      taskMemoryManager,
+      shuffleMemoryManager,
       1024, // initial capacity
       PAGE_SIZE_BYTES,
       false // disable perf metrics
@@ -91,7 +98,7 @@ class UnsafeFixedWidthAggregationMapSuite
     val groupKey = InternalRow(UTF8String.fromString("cats"))
 
     // Looking up a key stores a zero-entry in the map (like Python Counters or DefaultDicts)
-    map.getAggregationBuffer(groupKey)
+    assert(map.getAggregationBuffer(groupKey) != null)
     val iter = map.iterator()
     val entry = iter.next()
     assert(!iter.hasNext)
@@ -110,7 +117,8 @@ class UnsafeFixedWidthAggregationMapSuite
       emptyAggregationBuffer,
       aggBufferSchema,
       groupKeySchema,
-      memoryManager,
+      taskMemoryManager,
+      shuffleMemoryManager,
       128, // initial capacity
       PAGE_SIZE_BYTES,
       false // disable perf metrics
@@ -118,7 +126,7 @@ class UnsafeFixedWidthAggregationMapSuite
     val rand = new Random(42)
     val groupKeys: Set[String] = Seq.fill(512)(rand.nextString(1024)).toSet
     groupKeys.foreach { keyString =>
-      map.getAggregationBuffer(InternalRow(UTF8String.fromString(keyString)))
+      assert(map.getAggregationBuffer(InternalRow(UTF8String.fromString(keyString))) != null)
     }
     val seenKeys: Set[String] = map.iterator().asScala.map { entry =>
       entry.key.getString(0)

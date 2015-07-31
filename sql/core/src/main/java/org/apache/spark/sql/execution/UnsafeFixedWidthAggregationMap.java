@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution;
 
+import java.io.IOException;
 import java.util.Iterator;
 
 import org.apache.spark.shuffle.ShuffleMemoryManager;
@@ -128,7 +129,8 @@ public final class UnsafeFixedWidthAggregationMap {
 
   /**
    * Return the aggregation buffer for the current group. For efficiency, all calls to this method
-   * return the same object.
+   * return the same object. If additional memory could not be allocated, then this method will
+   * signal an error by returning null.
    */
   public UnsafeRow getAggregationBuffer(InternalRow groupingKey) {
     final UnsafeRow unsafeGroupingKeyRow = this.groupingKeyProjection.apply(groupingKey);
@@ -141,7 +143,7 @@ public final class UnsafeFixedWidthAggregationMap {
     if (!loc.isDefined()) {
       // This is the first time that we've seen this grouping key, so we'll insert a copy of the
       // empty aggregation buffer into the map:
-      loc.putNewKey(
+      boolean putSucceeded = loc.putNewKey(
         unsafeGroupingKeyRow.getBaseObject(),
         unsafeGroupingKeyRow.getBaseOffset(),
         unsafeGroupingKeyRow.getSizeInBytes(),
@@ -149,6 +151,9 @@ public final class UnsafeFixedWidthAggregationMap {
         PlatformDependent.BYTE_ARRAY_OFFSET,
         emptyAggregationBuffer.length
       );
+      if (!putSucceeded) {
+        return null;
+      }
     }
 
     // Reset the pointer to point to the value that we just stored or looked up:
