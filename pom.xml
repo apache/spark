@@ -1642,6 +1642,7 @@
       <id>kinesis-asl</id>
       <modules>
         <module>extras/kinesis-asl</module>
+        <module>extras/kinesis-asl-assembly</module>
       </modules>
     </profile>
 
