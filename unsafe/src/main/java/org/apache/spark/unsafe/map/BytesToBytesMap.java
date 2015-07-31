@@ -120,7 +120,7 @@ public final class BytesToBytesMap {
   /**
    * Number of keys defined in the map.
    */
-  private int size;
+  private int numElements;
 
   /**
    * The map will be expanded once the number of keys exceeds this threshold.
@@ -192,7 +192,7 @@ public final class BytesToBytesMap {
   /**
    * Returns the number of keys defined in the map.
    */
-  public int size() { return size; }
+  public int numElements() { return numElements; }
 
   private static final class BytesToBytesMapIterator implements Iterator<Location> {
 
@@ -252,7 +252,7 @@ public final class BytesToBytesMap {
    * `lookup()`, the behavior of the returned iterator is undefined.
    */
   public Iterator<Location> iterator() {
-    return new BytesToBytesMapIterator(size, dataPages.iterator(), loc);
+    return new BytesToBytesMapIterator(numElements, dataPages.iterator(), loc);
   }
 
   /**
@@ -445,7 +445,7 @@ public final class BytesToBytesMap {
       assert (!isDefined) : "Can only set value once for a key";
       assert (keyLengthBytes % 8 == 0);
       assert (valueLengthBytes % 8 == 0);
-      if (size == MAX_CAPACITY) {
+      if (numElements == MAX_CAPACITY) {
         throw new IllegalStateException("BytesToBytesMap has reached maximum capacity");
       }
 
@@ -524,7 +524,7 @@ public final class BytesToBytesMap {
         pageCursor += requiredSize;
       }
 
-      size++;
+      numElements++;
       bitset.set(pos);
       final long storedKeyAddress = memoryManager.encodePageNumberAndOffset(
         dataPage, keySizeOffsetInPage);
@@ -532,7 +532,7 @@ public final class BytesToBytesMap {
       longArray.set(pos * 2 + 1, keyHashcode);
       updateAddressesAndSizes(storedKeyAddress);
       isDefined = true;
-      if (size > growthThreshold && longArray.size() < MAX_CAPACITY) {
+      if (numElements > growthThreshold && longArray.size() < MAX_CAPACITY) {
         growAndRehash();
       }
     }
