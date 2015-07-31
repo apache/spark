@@ -777,12 +777,12 @@ class DAGScheduler(
       stage match {
         case stage: ShuffleMapStage =>
           val allPartitions = 0 until stage.numPartitions
-          val filteredPartitions = allPartitions.filter(id => stage.outputLocs(id).isEmpty)
+          val filteredPartitions = allPartitions.filter { id => stage.outputLocs(id).isEmpty }
           (allPartitions, filteredPartitions)
         case stage: ResultStage =>
           val job = stage.resultOfJob.get
           val allPartitions = 0 until job.numPartitions
-          val filteredPartitions = allPartitions.filter(id => !job.finished(id))
+          val filteredPartitions = allPartitions.filter { id => !job.finished(id) }
           (allPartitions, filteredPartitions)
       }
     }

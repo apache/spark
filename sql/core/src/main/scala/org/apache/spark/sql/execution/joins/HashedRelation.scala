@@ -193,6 +193,7 @@ private[joins] final class UnsafeHashedRelation(
    * the executors.
    *
    * For non-broadcast joins or in local mode, return 0.
+   *
    */
   def getUnsafeSize: Long = {
     if (binaryMap != null) {

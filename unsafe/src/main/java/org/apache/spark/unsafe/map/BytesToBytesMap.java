@@ -546,7 +546,10 @@ public final class BytesToBytesMap {
     assert(dataPages.isEmpty());
   }
 
-  /** Returns the total amount of memory, in bytes, consumed by this map's managed structures. */
+  /**
+   * Returns the total amount of memory, in bytes, consumed by this map's managed structures.
+   * Note that this is also the peak memory used by this map, since the map is append-only.
+   */
   public long getTotalMemoryConsumption() {
     long totalDataPagesSize = 0L;
     for (MemoryBlock dataPage : dataPages) {

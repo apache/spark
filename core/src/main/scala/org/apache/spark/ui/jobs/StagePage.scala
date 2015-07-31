@@ -369,7 +369,6 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
               </span>
             </td> +:
             getFormattedTimeQuantiles(gettingResultTimes)
-
           val peakExecutionMemory = validTasks.map { case TaskUIData(info, _, _) =>
             info.accumulables
               .find { acc => acc.name == InternalAccumulator.PEAK_EXECUTION_MEMORY }
@@ -385,7 +384,6 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
               </span>
             </td> +: getFormattedSizeQuantiles(peakExecutionMemory)
           }
-
           // The scheduler delay includes the network delay to send the task to the worker
           // machine and to send back the result (but not the time to fetch the task result,
           // if it needed to be fetched from the block manager on the worker).
@@ -806,7 +804,7 @@ private[ui] class TaskTableRowData(
     val gcTime: Long,
     val serializationTime: Long,
     val gettingResultTime: Long,
-    val peakMemoryUsed: Long,
+    val peakExecutionMemoryUsed: Long,
     val accumulators: Option[String], // HTML
     val input: Option[TaskTableRowInputData],
     val output: Option[TaskTableRowOutputData],
@@ -862,8 +860,7 @@ private[ui] class TaskDataSource(
     val externalAccumulableReadable = taskExternalAccumulables.map { acc =>
       StringEscapeUtils.escapeHtml4(s"${acc.name}: ${acc.update.get}")
     }
-
-    val peakMemoryUsed = taskInternalAccumulables
+    val peakExecutionMemoryUsed = taskInternalAccumulables
       .find { acc => acc.name == InternalAccumulator.PEAK_EXECUTION_MEMORY }
       .map { acc => acc.value.toLong }
       .getOrElse(0L)
@@ -986,7 +983,7 @@ private[ui] class TaskDataSource(
       gcTime,
       serializationTime,
       gettingResultTime,
-      peakMemoryUsed,
+      peakExecutionMemoryUsed,
       if (hasAccumulators) Some(externalAccumulableReadable.mkString("<br/>")) else None,
       input,
       output,
@@ -1056,7 +1053,7 @@ private[ui] class TaskDataSource(
       }
       case "Peak Execution Memory" => new Ordering[TaskTableRowData] {
         override def compare(x: TaskTableRowData, y: TaskTableRowData): Int =
-          Ordering.Long.compare(x.peakMemoryUsed, y.peakMemoryUsed)
+          Ordering.Long.compare(x.peakExecutionMemoryUsed, y.peakExecutionMemoryUsed)
       }
       case "Accumulators" =>
         if (hasAccumulators) {
@@ -1198,8 +1195,8 @@ private[ui] class TaskPagedTable(
     sortColumn: String,
     desc: Boolean) extends PagedTable[TaskTableRowData] {
 
-  // We only track peak memory used for unsafe operations
-  private val displayPeakMemoryUsage =
+  // We only track peak memory used for unsafe operators
+  private val displayPeakExecutionMemory =
     conf.getOption("spark.sql.unsafe.enabled").exists(_.toBoolean)
 
   override def tableId: String = ""
@@ -1253,7 +1250,7 @@ private[ui] class TaskPagedTable(
         ("Result Serialization Time", TaskDetailsClassNames.RESULT_SERIALIZATION_TIME),
         ("Getting Result Time", TaskDetailsClassNames.GETTING_RESULT_TIME)) ++
         {
-          if (displayPeakMemoryUsage) {
+          if (displayPeakExecutionMemory) {
             Seq(("Peak Execution Memory", TaskDetailsClassNames.PEAK_EXECUTION_MEMORY))
           } else {
             Nil
@@ -1335,9 +1332,9 @@ private[ui] class TaskPagedTable(
       <td class={TaskDetailsClassNames.GETTING_RESULT_TIME}>
         {UIUtils.formatDuration(task.gettingResultTime)}
       </td>
-      {if (displayPeakMemoryUsage) {
+      {if (displayPeakExecutionMemory) {
         <td class={TaskDetailsClassNames.PEAK_EXECUTION_MEMORY}>
-          {Utils.bytesToString(task.peakMemoryUsed)}
+          {Utils.bytesToString(task.peakExecutionMemoryUsed)}
         </td>
       }}
       {if (task.accumulators.nonEmpty) {
