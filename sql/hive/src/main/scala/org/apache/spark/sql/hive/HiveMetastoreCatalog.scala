@@ -29,20 +29,19 @@ import org.apache.hadoop.hive.ql.metadata._
 import org.apache.hadoop.hive.ql.plan.TableDesc
 
 import org.apache.spark.Logging
-import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{Catalog, MultiInstanceRelation, OverrideCatalog}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
+import org.apache.spark.sql.catalyst.{InternalRow, SqlParser, TableIdentifier}
 import org.apache.spark.sql.execution.datasources
 import org.apache.spark.sql.execution.datasources.{CreateTableUsingAsSelect, LogicalRelation, Partition => ParquetPartition, PartitionSpec, ResolvedDataSource}
 import org.apache.spark.sql.hive.client._
 import org.apache.spark.sql.parquet.ParquetRelation
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.{AnalysisException, SQLContext, SaveMode}
-
 
 private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: HiveContext)
   extends Catalog with Logging {
@@ -115,7 +114,7 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
     CacheBuilder.newBuilder().maximumSize(1000).build(cacheLoader)
   }
 
-  override def refreshTable(databaseName: String, tableName: String): Unit = {
+  override def refreshTable(tableIdent: TableIdentifier): Unit = {
     // refreshTable does not eagerly reload the cache. It just invalidate the cache.
     // Next time when we use the table, it will be populated in the cache.
     // Since we also cache ParquetRelations converted from Hive Parquet tables and
@@ -124,7 +123,7 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
     // it is better at here to invalidate the cache to avoid confusing waring logs from the
     // cache loader (e.g. cannot find data source provider, which is only defined for
     // data source table.).
-    invalidateTable(databaseName, tableName)
+    invalidateTable(tableIdent.database.getOrElse(client.currentDatabase), tableIdent.table)
   }
 
   def invalidateTable(databaseName: String, tableName: String): Unit = {
@@ -144,7 +143,27 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
       provider: String,
       options: Map[String, String],
       isExternal: Boolean): Unit = {
-    val (dbName, tblName) = processDatabaseAndTableName(client.currentDatabase, tableName)
+    createDataSourceTable(
+      new SqlParser().parseTableIdentifier(tableName),
+      userSpecifiedSchema,
+      partitionColumns,
+      provider,
+      options,
+      isExternal)
+  }
+
+  private def createDataSourceTable(
+      tableIdent: TableIdentifier,
+      userSpecifiedSchema: Option[StructType],
+      partitionColumns: Array[String],
+      provider: String,
+      options: Map[String, String],
+      isExternal: Boolean): Unit = {
+    val (dbName, tblName) = {
+      val database = tableIdent.database.getOrElse(client.currentDatabase)
+      processDatabaseAndTableName(database, tableIdent.table)
+    }
+
     val tableProperties = new scala.collection.mutable.HashMap[String, String]
     tableProperties.put("spark.sql.sources.provider", provider)
 
@@ -177,7 +196,7 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
         // partitions when we load the table. However, if there are specified partition columns,
         // we simplily ignore them and provide a warning message..
         logWarning(
-          s"The schema and partitions of table $tableName will be inferred when it is loaded. " +
+          s"The schema and partitions of table $tableIdent will be inferred when it is loaded. " +
             s"Specified partition columns (${partitionColumns.mkString(",")}) will be ignored.")
       }
       Seq.empty[HiveColumn]
@@ -255,9 +274,9 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
     val metastoreSchema = StructType.fromAttributes(metastoreRelation.output)
     val mergeSchema = hive.convertMetastoreParquetWithSchemaMerging
 
-    // NOTE: Instead of passing Metastore schema directly to `ParquetRelation2`, we have to
+    // NOTE: Instead of passing Metastore schema directly to `ParquetRelation`, we have to
     // serialize the Metastore schema to JSON and pass it as a data source option because of the
-    // evil case insensitivity issue, which is reconciled within `ParquetRelation2`.
+    // evil case insensitivity issue, which is reconciled within `ParquetRelation`.
     val parquetOptions = Map(
       ParquetRelation.METASTORE_SCHEMA -> metastoreSchema.json,
       ParquetRelation.MERGE_SCHEMA -> mergeSchema.toString)
@@ -271,7 +290,7 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
         partitionSpecInMetastore: Option[PartitionSpec]): Option[LogicalRelation] = {
       cachedDataSourceTables.getIfPresent(tableIdentifier) match {
         case null => None // Cache miss
-        case logical@LogicalRelation(parquetRelation: ParquetRelation) =>
+        case logical @ LogicalRelation(parquetRelation: ParquetRelation) =>
           // If we have the same paths, same schema, and same partition spec,
           // we will use the cached Parquet Relation.
           val useCached =
@@ -659,8 +678,18 @@ private[hive] case class MetastoreRelation
     }
   )
 
+  // When metastore partition pruning is turned off, we cache the list of all partitions to
+  // mimic the behavior of Spark < 1.5
+  lazy val allPartitions = table.getAllPartitions
+
   def getHiveQlPartitions(predicates: Seq[Expression] = Nil): Seq[Partition] = {
-    table.getPartitions(predicates).map { p =>
+    val rawPartitions = if (sqlContext.conf.metastorePartitionPruning) {
+      table.getPartitions(predicates)
+    } else {
+      allPartitions
+    }
+
+    rawPartitions.map { p =>
       val tPartition = new org.apache.hadoop.hive.metastore.api.Partition
       tPartition.setDbName(databaseName)
       tPartition.setTableName(tableName)

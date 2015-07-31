@@ -45,7 +45,7 @@ case class ShuffledHashJoin(
 
   protected override def doExecute(): RDD[InternalRow] = {
     buildPlan.execute().zipPartitions(streamedPlan.execute()) { (buildIter, streamIter) =>
-      val hashed = buildHashRelation(buildIter)
+      val hashed = HashedRelation(buildIter, buildSideKeyGenerator)
       hashJoin(streamIter, hashed)
     }
   }

@@ -20,6 +20,8 @@ package org.apache.spark.sql.catalyst.expressions;
 import java.util.Iterator;
 
 import org.apache.spark.sql.catalyst.InternalRow;
+import org.apache.spark.sql.types.Decimal;
+import org.apache.spark.sql.types.DecimalType;
 import org.apache.spark.sql.types.StructField;
 import org.apache.spark.sql.types.StructType;
 import org.apache.spark.unsafe.PlatformDependent;
@@ -62,25 +64,17 @@ public final class UnsafeFixedWidthAggregationMap {
   private final boolean enablePerfMetrics;
 
   /**
-   * @return true if UnsafeFixedWidthAggregationMap supports grouping keys with the given schema,
-   *         false otherwise.
-   */
-  public static boolean supportsGroupKeySchema(StructType schema) {
-    for (StructField field: schema.fields()) {
-      if (!UnsafeRow.readableFieldTypes.contains(field.dataType())) {
-        return false;
-      }
-    }
-    return true;
-  }
-
-  /**
    * @return true if UnsafeFixedWidthAggregationMap supports aggregation buffers with the given
    *         schema, false otherwise.
    */
   public static boolean supportsAggregationBufferSchema(StructType schema) {
     for (StructField field: schema.fields()) {
-      if (!UnsafeRow.settableFieldTypes.contains(field.dataType())) {
+      if (field.dataType() instanceof DecimalType) {
+        DecimalType dt = (DecimalType) field.dataType();
+        if (dt.precision() > Decimal.MAX_LONG_DIGITS()) {
+          return false;
+        }
+      } else if (!UnsafeRow.settableFieldTypes.contains(field.dataType())) {
         return false;
       }
     }
@@ -95,6 +89,7 @@ public final class UnsafeFixedWidthAggregationMap {
    * @param groupingKeySchema the schema of the grouping key, used for row conversion.
    * @param memoryManager the memory manager used to allocate our Unsafe memory structures.
    * @param initialCapacity the initial capacity of the map (a sizing hint to avoid re-hashing).
+   * @param pageSizeBytes the data page size, in bytes; limits the maximum record size.
    * @param enablePerfMetrics if true, performance metrics will be recorded (has minor perf impact)
    */
   public UnsafeFixedWidthAggregationMap(
@@ -103,11 +98,13 @@ public final class UnsafeFixedWidthAggregationMap {
       StructType groupingKeySchema,
       TaskMemoryManager memoryManager,
       int initialCapacity,
+      long pageSizeBytes,
       boolean enablePerfMetrics) {
     this.aggregationBufferSchema = aggregationBufferSchema;
     this.groupingKeyProjection = UnsafeProjection.create(groupingKeySchema);
     this.groupingKeySchema = groupingKeySchema;
-    this.map = new BytesToBytesMap(memoryManager, initialCapacity, enablePerfMetrics);
+    this.map =
+      new BytesToBytesMap(memoryManager, initialCapacity, pageSizeBytes, enablePerfMetrics);
     this.enablePerfMetrics = enablePerfMetrics;
 
     // Initialize the buffer for aggregation value

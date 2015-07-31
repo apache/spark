@@ -277,6 +277,66 @@ class SQLContext(object):
 
         return self.createDataFrame(rdd, schema)
 
+    def _createFromRDD(self, rdd, schema, samplingRatio):
+        """
+        Create an RDD for DataFrame from an existing RDD, returns the RDD and schema.
+        """
+        if schema is None or isinstance(schema, (list, tuple)):
+            struct = self._inferSchema(rdd, samplingRatio)
+            converter = _create_converter(struct)
+            rdd = rdd.map(converter)
+            if isinstance(schema, (list, tuple)):
+                for i, name in enumerate(schema):
+                    struct.fields[i].name = name
+                    struct.names[i] = name
+            schema = struct
+
+        elif isinstance(schema, StructType):
+            # take the first few rows to verify schema
+            rows = rdd.take(10)
+            for row in rows:
+                _verify_type(row, schema)
+
+        else:
+            raise TypeError("schema should be StructType or list or None, but got: %s" % schema)
+
+        # convert python objects to sql data
+        rdd = rdd.map(schema.toInternal)
+        return rdd, schema
+
+    def _createFromLocal(self, data, schema):
+        """
+        Create an RDD for DataFrame from an list or pandas.DataFrame, returns
+        the RDD and schema.
+        """
+        if has_pandas and isinstance(data, pandas.DataFrame):
+            if schema is None:
+                schema = [str(x) for x in data.columns]
+            data = [r.tolist() for r in data.to_records(index=False)]
+
+        # make sure data could consumed multiple times
+        if not isinstance(data, list):
+            data = list(data)
+
+        if schema is None or isinstance(schema, (list, tuple)):
+            struct = self._inferSchemaFromList(data)
+            if isinstance(schema, (list, tuple)):
+                for i, name in enumerate(schema):
+                    struct.fields[i].name = name
+                    struct.names[i] = name
+            schema = struct
+
+        elif isinstance(schema, StructType):
+            for row in data:
+                _verify_type(row, schema)
+
+        else:
+            raise TypeError("schema should be StructType or list or None, but got: %s" % schema)
+
+        # convert python objects to sql data
+        data = [schema.toInternal(row) for row in data]
+        return self._sc.parallelize(data), schema
+
     @since(1.3)
     @ignore_unicode_prefix
     def createDataFrame(self, data, schema=None, samplingRatio=None):
@@ -340,49 +400,15 @@ class SQLContext(object):
         if isinstance(data, DataFrame):
             raise TypeError("data is already a DataFrame")
 
-        if has_pandas and isinstance(data, pandas.DataFrame):
-            if schema is None:
-                schema = [str(x) for x in data.columns]
-            data = [r.tolist() for r in data.to_records(index=False)]
-
-        if not isinstance(data, RDD):
-            if not isinstance(data, list):
-                data = list(data)
-            try:
-                # data could be list, tuple, generator ...
-                rdd = self._sc.parallelize(data)
-            except Exception:
-                raise TypeError("cannot create an RDD from type: %s" % type(data))
+        if isinstance(data, RDD):
+            rdd, schema = self._createFromRDD(data, schema, samplingRatio)
         else:
-            rdd = data
-
-        if schema is None or isinstance(schema, (list, tuple)):
-            if isinstance(data, RDD):
-                struct = self._inferSchema(rdd, samplingRatio)
-            else:
-                struct = self._inferSchemaFromList(data)
-            if isinstance(schema, (list, tuple)):
-                for i, name in enumerate(schema):
-                    struct.fields[i].name = name
-            schema = struct
-            converter = _create_converter(schema)
-            rdd = rdd.map(converter)
-
-        elif isinstance(schema, StructType):
-            # take the first few rows to verify schema
-            rows = rdd.take(10)
-            for row in rows:
-                _verify_type(row, schema)
-
-        else:
-            raise TypeError("schema should be StructType or list or None")
-
-        # convert python objects to sql data
-        rdd = rdd.map(schema.toInternal)
-
+            rdd, schema = self._createFromLocal(data, schema)
         jrdd = self._jvm.SerDeUtil.toJavaArray(rdd._to_java_object_rdd())
-        df = self._ssql_ctx.applySchemaToPythonRDD(jrdd.rdd(), schema.json())
-        return DataFrame(df, self)
+        jdf = self._ssql_ctx.applySchemaToPythonRDD(jrdd.rdd(), schema.json())
+        df = DataFrame(jdf, self)
+        df._schema = schema
+        return df
 
     @since(1.3)
     def registerDataFrameAsTable(self, df, tableName):

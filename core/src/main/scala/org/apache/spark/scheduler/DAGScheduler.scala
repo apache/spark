@@ -790,8 +790,28 @@ class DAGScheduler(
     // serializable. If tasks are not serializable, a SparkListenerStageCompleted event
     // will be posted, which should always come after a corresponding SparkListenerStageSubmitted
     // event.
-    stage.makeNewStageAttempt(partitionsToCompute.size)
     outputCommitCoordinator.stageStart(stage.id)
+    val taskIdToLocations = try {
+      stage match {
+        case s: ShuffleMapStage =>
+          partitionsToCompute.map { id => (id, getPreferredLocs(stage.rdd, id))}.toMap
+        case s: ResultStage =>
+          val job = s.resultOfJob.get
+          partitionsToCompute.map { id =>
+            val p = job.partitions(id)
+            (id, getPreferredLocs(stage.rdd, p))
+          }.toMap
+      }
+    } catch {
+      case NonFatal(e) =>
+        stage.makeNewStageAttempt(partitionsToCompute.size)
+        listenerBus.post(SparkListenerStageSubmitted(stage.latestInfo, properties))
+        abortStage(stage, s"Task creation failed: $e\n${e.getStackTraceString}")
+        runningStages -= stage
+        return
+    }
+
+    stage.makeNewStageAttempt(partitionsToCompute.size, taskIdToLocations.values.toSeq)
     listenerBus.post(SparkListenerStageSubmitted(stage.latestInfo, properties))
 
     // TODO: Maybe we can keep the taskBinary in Stage to avoid serializing it multiple times.
@@ -830,7 +850,7 @@ class DAGScheduler(
       stage match {
         case stage: ShuffleMapStage =>
           partitionsToCompute.map { id =>
-            val locs = getPreferredLocs(stage.rdd, id)
+            val locs = taskIdToLocations(id)
             val part = stage.rdd.partitions(id)
             new ShuffleMapTask(stage.id, stage.latestInfo.attemptId, taskBinary, part, locs)
           }
@@ -840,7 +860,7 @@ class DAGScheduler(
           partitionsToCompute.map { id =>
             val p: Int = job.partitions(id)
             val part = stage.rdd.partitions(p)
-            val locs = getPreferredLocs(stage.rdd, p)
+            val locs = taskIdToLocations(id)
             new ResultTask(stage.id, stage.latestInfo.attemptId, taskBinary, part, locs, id)
           }
       }
@@ -896,11 +916,9 @@ class DAGScheduler(
           // To avoid UI cruft, ignore cases where value wasn't updated
           if (acc.name.isDefined && partialValue != acc.zero) {
             val name = acc.name.get
-            val stringPartialValue = Accumulators.stringifyPartialValue(partialValue)
-            val stringValue = Accumulators.stringifyValue(acc.value)
-            stage.latestInfo.accumulables(id) = AccumulableInfo(id, name, stringValue)
+            stage.latestInfo.accumulables(id) = AccumulableInfo(id, name, s"${acc.value}")
             event.taskInfo.accumulables +=
-              AccumulableInfo(id, name, Some(stringPartialValue), stringValue)
+              AccumulableInfo(id, name, Some(s"$partialValue"), s"${acc.value}")
           }
         }
       } catch {
@@ -927,7 +945,7 @@ class DAGScheduler(
     // The success case is dealt with separately below, since we need to compute accumulator
     // updates before posting.
     if (event.reason != Success) {
-      val attemptId = stageIdToStage.get(task.stageId).map(_.latestInfo.attemptId).getOrElse(-1)
+      val attemptId = task.stageAttemptId
       listenerBus.post(SparkListenerTaskEnd(stageId, attemptId, taskType, event.reason,
         event.taskInfo, event.taskMetrics))
     }

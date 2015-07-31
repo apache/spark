@@ -31,7 +31,7 @@ object ColumnarTestUtils {
     row
   }
 
-  def makeRandomValue[T <: DataType, JvmType](columnType: ColumnType[T, JvmType]): JvmType = {
+  def makeRandomValue[JvmType](columnType: ColumnType[JvmType]): JvmType = {
     def randomBytes(length: Int) = {
       val bytes = new Array[Byte](length)
       Random.nextBytes(bytes)
@@ -58,15 +58,15 @@ object ColumnarTestUtils {
   }
 
   def makeRandomValues(
-      head: ColumnType[_ <: DataType, _],
-      tail: ColumnType[_ <: DataType, _]*): Seq[Any] = makeRandomValues(Seq(head) ++ tail)
+      head: ColumnType[_],
+      tail: ColumnType[_]*): Seq[Any] = makeRandomValues(Seq(head) ++ tail)
 
-  def makeRandomValues(columnTypes: Seq[ColumnType[_ <: DataType, _]]): Seq[Any] = {
+  def makeRandomValues(columnTypes: Seq[ColumnType[_]]): Seq[Any] = {
     columnTypes.map(makeRandomValue(_))
   }
 
-  def makeUniqueRandomValues[T <: DataType, JvmType](
-      columnType: ColumnType[T, JvmType],
+  def makeUniqueRandomValues[JvmType](
+      columnType: ColumnType[JvmType],
       count: Int): Seq[JvmType] = {
 
     Iterator.iterate(HashSet.empty[JvmType]) { set =>
@@ -75,10 +75,10 @@ object ColumnarTestUtils {
   }
 
   def makeRandomRow(
-      head: ColumnType[_ <: DataType, _],
-      tail: ColumnType[_ <: DataType, _]*): InternalRow = makeRandomRow(Seq(head) ++ tail)
+      head: ColumnType[_],
+      tail: ColumnType[_]*): InternalRow = makeRandomRow(Seq(head) ++ tail)
 
-  def makeRandomRow(columnTypes: Seq[ColumnType[_ <: DataType, _]]): InternalRow = {
+  def makeRandomRow(columnTypes: Seq[ColumnType[_]]): InternalRow = {
     val row = new GenericMutableRow(columnTypes.length)
     makeRandomValues(columnTypes).zipWithIndex.foreach { case (value, index) =>
       row(index) = value

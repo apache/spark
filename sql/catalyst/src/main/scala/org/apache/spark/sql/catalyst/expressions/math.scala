@@ -646,19 +646,19 @@ case class Logarithm(left: Expression, right: Expression)
 /**
  * Round the `child`'s result to `scale` decimal place when `scale` >= 0
  * or round at integral part when `scale` < 0.
- * For example, round(31.415, 2) would eval to 31.42 and round(31.415, -1) would eval to 30.
+ * For example, round(31.415, 2) = 31.42 and round(31.415, -1) = 30.
  *
- * Child of IntegralType would eval to itself when `scale` >= 0.
- * Child of FractionalType whose value is NaN or Infinite would always eval to itself.
+ * Child of IntegralType would round to itself when `scale` >= 0.
+ * Child of FractionalType whose value is NaN or Infinite would always round to itself.
  *
- * Round's dataType would always equal to `child`'s dataType except for [[DecimalType.Fixed]],
- * which leads to scale update in DecimalType's [[PrecisionInfo]]
+ * Round's dataType would always equal to `child`'s dataType except for DecimalType,
+ * which would lead scale decrease from the origin DecimalType.
  *
  * @param child expr to be round, all [[NumericType]] is allowed as Input
  * @param scale new scale to be round to, this should be a constant int at runtime
  */
 case class Round(child: Expression, scale: Expression)
-  extends BinaryExpression with ExpectsInputTypes {
+  extends BinaryExpression with ImplicitCastInputTypes {
 
   import BigDecimal.RoundingMode.HALF_UP
 
@@ -838,6 +838,4 @@ case class Round(child: Expression, scale: Expression)
       """
     }
   }
-
-  override def prettyName: String = "round"
 }

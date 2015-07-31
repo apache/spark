@@ -15,23 +15,33 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.types
+package org.apache.spark.sql.catalyst.util
 
-import org.apache.spark.annotation.DeveloperApi
+import java.util.regex.Pattern
 
+object StringUtils {
 
-/**
- * :: DeveloperApi ::
- * The data type representing time intervals.
- *
- * Please use the singleton [[DataTypes.IntervalType]].
- */
-@DeveloperApi
-class IntervalType private() extends DataType {
-
-  override def defaultSize: Int = 4096
-
-  private[spark] override def asNullable: IntervalType = this
+  // replace the _ with .{1} exactly match 1 time of any character
+  // replace the % with .*, match 0 or more times with any character
+  def escapeLikeRegex(v: String): String = {
+    if (!v.isEmpty) {
+      "(?s)" + (' ' +: v.init).zip(v).flatMap {
+        case (prev, '\\') => ""
+        case ('\\', c) =>
+          c match {
+            case '_' => "_"
+            case '%' => "%"
+            case _ => Pattern.quote("\\" + c)
+          }
+        case (prev, c) =>
+          c match {
+            case '_' => "."
+            case '%' => ".*"
+            case _ => Pattern.quote(Character.toString(c))
+          }
+      }.mkString
+    } else {
+      v
+    }
+  }
 }
-
-case object IntervalType extends IntervalType

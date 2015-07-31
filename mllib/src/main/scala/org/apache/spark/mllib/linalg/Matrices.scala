@@ -154,9 +154,9 @@ private[spark] class MatrixUDT extends UserDefinedType[Matrix] {
         row.setByte(0, 0)
         row.setInt(1, sm.numRows)
         row.setInt(2, sm.numCols)
-        row.update(3, sm.colPtrs.toSeq)
-        row.update(4, sm.rowIndices.toSeq)
-        row.update(5, sm.values.toSeq)
+        row.update(3, new GenericArrayData(sm.colPtrs.map(_.asInstanceOf[Any])))
+        row.update(4, new GenericArrayData(sm.rowIndices.map(_.asInstanceOf[Any])))
+        row.update(5, new GenericArrayData(sm.values.map(_.asInstanceOf[Any])))
         row.setBoolean(6, sm.isTransposed)
 
       case dm: DenseMatrix =>
@@ -165,7 +165,7 @@ private[spark] class MatrixUDT extends UserDefinedType[Matrix] {
         row.setInt(2, dm.numCols)
         row.setNullAt(3)
         row.setNullAt(4)
-        row.update(5, dm.values.toSeq)
+        row.update(5, new GenericArrayData(dm.values.map(_.asInstanceOf[Any])))
         row.setBoolean(6, dm.isTransposed)
     }
     row
@@ -179,14 +179,12 @@ private[spark] class MatrixUDT extends UserDefinedType[Matrix] {
         val tpe = row.getByte(0)
         val numRows = row.getInt(1)
         val numCols = row.getInt(2)
-        val values = row.getAs[Seq[Double]](5, ArrayType(DoubleType, containsNull = false)).toArray
+        val values = row.getArray(5).toArray.map(_.asInstanceOf[Double])
         val isTransposed = row.getBoolean(6)
         tpe match {
           case 0 =>
-            val colPtrs =
-              row.getAs[Seq[Int]](3, ArrayType(IntegerType, containsNull = false)).toArray
-            val rowIndices =
-              row.getAs[Seq[Int]](4, ArrayType(IntegerType, containsNull = false)).toArray
+            val colPtrs = row.getArray(3).toArray.map(_.asInstanceOf[Int])
+            val rowIndices = row.getArray(4).toArray.map(_.asInstanceOf[Int])
             new SparseMatrix(numRows, numCols, colPtrs, rowIndices, values, isTransposed)
           case 1 =>
             new DenseMatrix(numRows, numCols, values, isTransposed)

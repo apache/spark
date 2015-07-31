@@ -798,8 +798,10 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * @group ddl_ops
    * @since 1.3.0
    */
-  def table(tableName: String): DataFrame =
-    DataFrame(this, catalog.lookupRelation(Seq(tableName)))
+  def table(tableName: String): DataFrame = {
+    val tableIdent = new SqlParser().parseTableIdentifier(tableName)
+    DataFrame(this, catalog.lookupRelation(tableIdent.toSeq))
+  }
 
   /**
    * Returns a [[DataFrame]] containing names of existing tables in the current database.

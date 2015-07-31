@@ -18,8 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions.codegen
 
 /**
- * An utility class that indents a block of code based on the curly braces.
- *
+ * An utility class that indents a block of code based on the curly braces and parentheses.
  * This is used to prettify generated code when in debug mode (or exceptions).
  *
  * Written by Matei Zaharia.
@@ -35,11 +34,12 @@ private class CodeFormatter {
   private var indentString = ""
 
   private def addLine(line: String): Unit = {
-    val indentChange = line.count(_ == '{') - line.count(_ == '}')
+    val indentChange =
+      line.count(c => "({".indexOf(c) >= 0) - line.count(c => ")}".indexOf(c) >= 0)
     val newIndentLevel = math.max(0, indentLevel + indentChange)
     // Lines starting with '}' should be de-indented even if they contain '{' after;
     // in addition, lines ending with ':' are typically labels
-    val thisLineIndent = if (line.startsWith("}") || line.endsWith(":")) {
+    val thisLineIndent = if (line.startsWith("}") || line.startsWith(")") || line.endsWith(":")) {
       " " * (indentSize * (indentLevel - 1))
     } else {
       indentString

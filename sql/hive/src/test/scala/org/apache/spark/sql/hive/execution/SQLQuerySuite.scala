@@ -406,13 +406,15 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils {
         |   FROM src
         |   ORDER BY key, value""".stripMargin).collect()
 
-    checkExistence(sql("DESC EXTENDED ctas5"), true,
-      "name:key", "type:string", "name:value", "ctas5",
-      "org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat",
-      "org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat",
-      "org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe",
-      "MANAGED_TABLE"
-    )
+    withSQLConf(HiveContext.CONVERT_METASTORE_PARQUET.key -> "false") {
+      checkExistence(sql("DESC EXTENDED ctas5"), true,
+        "name:key", "type:string", "name:value", "ctas5",
+        "org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat",
+        "org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat",
+        "org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe",
+        "MANAGED_TABLE"
+      )
+    }
 
     // use the Hive SerDe for parquet tables
     withSQLConf(HiveContext.CONVERT_METASTORE_PARQUET.key -> "false") {
