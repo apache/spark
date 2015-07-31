@@ -22,10 +22,9 @@ import java.lang.reflect.{InvocationTargetException, Modifier, UndeclaredThrowab
 import java.net.URL
 import java.security.PrivilegedExceptionAction
 
-import org.apache.commons.lang3.StringUtils
-
 import scala.collection.mutable.{ArrayBuffer, HashMap, Map}
 
+import org.apache.commons.lang3.StringUtils
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.security.UserGroupInformation
 import org.apache.ivy.Ivy
@@ -39,6 +38,7 @@ import org.apache.ivy.core.settings.IvySettings
 import org.apache.ivy.plugins.matcher.GlobPatternMatcher
 import org.apache.ivy.plugins.repository.file.FileRepository
 import org.apache.ivy.plugins.resolver.{FileSystemResolver, ChainResolver, IBiblioResolver}
+
 import org.apache.spark.api.r.RUtils
 import org.apache.spark.SPARK_VERSION
 import org.apache.spark.deploy.rest._
