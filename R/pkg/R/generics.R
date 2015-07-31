@@ -669,3 +669,7 @@ setGeneric("upper", function(x) { standardGeneric("upper") })
 #' @rdname glm
 #' @export
 setGeneric("glm")
+
+#' @rdname rbind
+#' @export
+setGeneric("rbind", signature = "...")
