@@ -41,7 +41,7 @@ import org.apache.spark.util.Utils
 /**
  * Integration test for the external shuffle service with a yarn mini-cluster
  */
-class ExternalShuffleSuite extends BaseYarnClusterSuite {
+class YarnExternalShuffleSuite extends BaseYarnClusterSuite {
 
   override def yarnConfig: YarnConfiguration = {
     val yarnConfig = new YarnConfiguration()
@@ -55,7 +55,7 @@ class ExternalShuffleSuite extends BaseYarnClusterSuite {
     val result = File.createTempFile("result", null, tempDir)
     runSpark(
       false,
-      mainClassName(ExternalShuffleDriver.getClass),
+      mainClassName(YarnExternalShuffleDriver.getClass),
       appArgs = Seq(result.getAbsolutePath()),
       extraConf = Map("spark.shuffle.service.enabled" -> "true")
     )
@@ -63,7 +63,7 @@ class ExternalShuffleSuite extends BaseYarnClusterSuite {
   }
 }
 
-private object ExternalShuffleDriver extends Logging with Matchers {
+private object YarnExternalShuffleDriver extends Logging with Matchers {
 
   val WAIT_TIMEOUT_MILLIS = 10000
 
