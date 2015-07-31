@@ -72,7 +72,7 @@ private[fpm] object LocalPrefixSpan extends Logging with Serializable {
     if (index == -1) {
       List()
     } else {
-      itemsetSeq.drop(index+1)
+      itemsetSeq.drop(index + 1)
     }
   }
 
