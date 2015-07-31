@@ -184,14 +184,14 @@ private[ui] object RDDOperationGraph extends Logging {
   private def makeDotSubgraph(
     subgraph: StringBuilder,
     cluster: RDDOperationCluster,
-    indent: String): StringBuilder = {
+    indent: String): Unit = {
     subgraph.append(indent).append(s"subgraph cluster${cluster.id} {\n")
-    subgraph.append(indent).append( s"""  label="${cluster.name}";\n""")
+    subgraph.append(indent).append(s"""  label="${cluster.name}";\n""")
     cluster.childNodes.foreach { node =>
       subgraph.append(indent).append(s"  ${makeDotNode(node)};\n")
     }
     cluster.childClusters.foreach { cscope =>
-      subgraph.append(makeDotSubgraph(subgraph, cscope, indent + "  "))
+      makeDotSubgraph(subgraph, cscope, indent + "  ")
     }
     subgraph.append(indent).append("}\n")
   }
