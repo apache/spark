@@ -18,8 +18,9 @@
 package org.apache.spark.sql.catalyst.expressions;
 
 import org.apache.spark.sql.catalyst.InternalRow;
+import org.apache.spark.sql.types.ArrayData;
 import org.apache.spark.sql.types.Decimal;
-import org.apache.spark.unsafe.types.Interval;
+import org.apache.spark.unsafe.types.CalendarInterval;
 import org.apache.spark.unsafe.types.UTF8String;
 
 public interface SpecializedGetters {
@@ -40,14 +41,15 @@ public interface SpecializedGetters {
 
   double getDouble(int ordinal);
 
-  Decimal getDecimal(int ordinal);
+  Decimal getDecimal(int ordinal, int precision, int scale);
 
   UTF8String getUTF8String(int ordinal);
 
   byte[] getBinary(int ordinal);
 
-  Interval getInterval(int ordinal);
+  CalendarInterval getInterval(int ordinal);
 
   InternalRow getStruct(int ordinal, int numFields);
 
+  ArrayData getArray(int ordinal);
 }

@@ -87,6 +87,18 @@ trait CheckAnalysis {
               s"join condition '${condition.prettyString}' " +
                 s"of type ${condition.dataType.simpleString} is not a boolean.")
 
+          case j @ Join(_, _, _, Some(condition)) =>
+            def checkValidJoinConditionExprs(expr: Expression): Unit = expr match {
+              case p: Predicate =>
+                p.asInstanceOf[Expression].children.foreach(checkValidJoinConditionExprs)
+              case e if e.dataType.isInstanceOf[BinaryType] =>
+                failAnalysis(s"expression ${e.prettyString} in join condition " +
+                  s"'${condition.prettyString}' can't be binary type.")
+              case _ => // OK
+            }
+
+            checkValidJoinConditionExprs(condition)
+
           case Aggregate(groupingExprs, aggregateExprs, child) =>
             def checkValidAggregateExpression(expr: Expression): Unit = expr match {
               case _: AggregateExpression => // OK
@@ -100,7 +112,15 @@ trait CheckAnalysis {
               case e => e.children.foreach(checkValidAggregateExpression)
             }
 
+            def checkValidGroupingExprs(expr: Expression): Unit = expr.dataType match {
+              case BinaryType =>
+                failAnalysis(s"grouping expression '${expr.prettyString}' in aggregate can " +
+                  s"not be binary type.")
+              case _ => // OK
+            }
+
             aggregateExprs.foreach(checkValidAggregateExpression)
+            aggregateExprs.foreach(checkValidGroupingExprs)
 
           case Sort(orders, _, _) =>
             orders.foreach { order =>

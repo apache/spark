@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.types.{DataType, StructType, AtomicType}
+import org.apache.spark.sql.types.{Decimal, DataType, StructType, AtomicType}
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
@@ -39,6 +39,7 @@ abstract class MutableRow extends InternalRow {
   def setShort(i: Int, value: Short): Unit = { update(i, value) }
   def setByte(i: Int, value: Byte): Unit = { update(i, value) }
   def setFloat(i: Int, value: Float): Unit = { update(i, value) }
+  def setDecimal(i: Int, value: Decimal, precision: Int) { update(i, value) }
   def setString(i: Int, value: String): Unit = {
     update(i, UTF8String.fromString(value))
   }

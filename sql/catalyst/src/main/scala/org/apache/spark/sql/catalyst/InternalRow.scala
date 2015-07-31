@@ -21,7 +21,7 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.{Interval, UTF8String}
+import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 /**
  * An abstract class for row used internal in Spark SQL, which only contain the columns as
@@ -59,10 +59,11 @@ abstract class InternalRow extends Serializable with SpecializedGetters {
 
   override def getBinary(ordinal: Int): Array[Byte] = getAs[Array[Byte]](ordinal, BinaryType)
 
-  override def getDecimal(ordinal: Int): Decimal =
-    getAs[Decimal](ordinal, DecimalType.SYSTEM_DEFAULT)
+  override def getDecimal(ordinal: Int, precision: Int, scale: Int): Decimal =
+    getAs[Decimal](ordinal, DecimalType(precision, scale))
 
-  override def getInterval(ordinal: Int): Interval = getAs[Interval](ordinal, IntervalType)
+  override def getInterval(ordinal: Int): CalendarInterval =
+    getAs[CalendarInterval](ordinal, CalendarIntervalType)
 
   // This is only use for test and will throw a null pointer exception if the position is null.
   def getString(ordinal: Int): String = getUTF8String(ordinal).toString
@@ -75,6 +76,8 @@ abstract class InternalRow extends Serializable with SpecializedGetters {
    */
   override def getStruct(ordinal: Int, numFields: Int): InternalRow =
     getAs[InternalRow](ordinal, null)
+
+  override def getArray(ordinal: Int): ArrayData = getAs(ordinal, null)
 
   override def toString: String = s"[${this.mkString(",")}]"
 

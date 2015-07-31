@@ -47,4 +47,8 @@ object NonFoldableLiteral {
     val lit = Literal(value)
     NonFoldableLiteral(lit.value, lit.dataType)
   }
+  def create(value: Any, dataType: DataType): NonFoldableLiteral = {
+    val lit = Literal.create(value, dataType)
+    NonFoldableLiteral(lit.value, lit.dataType)
+  }
 }

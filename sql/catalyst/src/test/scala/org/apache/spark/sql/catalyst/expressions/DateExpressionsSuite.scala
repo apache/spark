@@ -17,13 +17,14 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import java.sql.{Timestamp, Date}
+import java.sql.{Date, Timestamp}
 import java.text.SimpleDateFormat
 import java.util.Calendar
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
-import org.apache.spark.sql.types.{StringType, TimestampType, DateType}
+import org.apache.spark.unsafe.types.CalendarInterval
+import org.apache.spark.sql.types._
 
 class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
@@ -47,56 +48,8 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("DayOfYear") {
     val sdfDay = new SimpleDateFormat("D")
-    (2002 to 2004).foreach { y =>
-      (0 to 11).foreach { m =>
-        (0 to 5).foreach { i =>
-          val c = Calendar.getInstance()
-          c.set(y, m, 28, 0, 0, 0)
-          c.add(Calendar.DATE, i)
-          checkEvaluation(DayOfYear(Literal(new Date(c.getTimeInMillis))),
-            sdfDay.format(c.getTime).toInt)
-        }
-      }
-    }
-
     (1998 to 2002).foreach { y =>
-      (0 to 11).foreach { m =>
-        (0 to 5).foreach { i =>
-          val c = Calendar.getInstance()
-          c.set(y, m, 28, 0, 0, 0)
-          c.add(Calendar.DATE, i)
-          checkEvaluation(DayOfYear(Literal(new Date(c.getTimeInMillis))),
-            sdfDay.format(c.getTime).toInt)
-        }
-      }
-    }
-
-    (1969 to 1970).foreach { y =>
-      (0 to 11).foreach { m =>
-        (0 to 5).foreach { i =>
-          val c = Calendar.getInstance()
-          c.set(y, m, 28, 0, 0, 0)
-          c.add(Calendar.DATE, i)
-          checkEvaluation(DayOfYear(Literal(new Date(c.getTimeInMillis))),
-            sdfDay.format(c.getTime).toInt)
-        }
-      }
-    }
-
-    (2402 to 2404).foreach { y =>
-      (0 to 11).foreach { m =>
-        (0 to 5).foreach { i =>
-          val c = Calendar.getInstance()
-          c.set(y, m, 28, 0, 0, 0)
-          c.add(Calendar.DATE, i)
-          checkEvaluation(DayOfYear(Literal(new Date(c.getTimeInMillis))),
-            sdfDay.format(c.getTime).toInt)
-        }
-      }
-    }
-
-    (2398 to 2402).foreach { y =>
-      (0 to 11).foreach { m =>
+      (0 to 3).foreach { m =>
         (0 to 5).foreach { i =>
           val c = Calendar.getInstance()
           c.set(y, m, 28, 0, 0, 0)
@@ -116,7 +69,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Year(Cast(Literal(ts), DateType)), 2013)
 
     val c = Calendar.getInstance()
-    (2000 to 2010).foreach { y =>
+    (2000 to 2002).foreach { y =>
       (0 to 11 by 11).foreach { m =>
         c.set(y, m, 28)
         (0 to 5 * 24).foreach { i =>
@@ -154,20 +107,8 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Month(Cast(Literal(ts), DateType)), 11)
 
     (2003 to 2004).foreach { y =>
-      (0 to 11).foreach { m =>
-        (0 to 5 * 24).foreach { i =>
-          val c = Calendar.getInstance()
-          c.set(y, m, 28, 0, 0, 0)
-          c.add(Calendar.HOUR_OF_DAY, i)
-          checkEvaluation(Month(Literal(new Date(c.getTimeInMillis))),
-            c.get(Calendar.MONTH) + 1)
-        }
-      }
-    }
-
-    (1999 to 2000).foreach { y =>
-      (0 to 11).foreach { m =>
-        (0 to 5 * 24).foreach { i =>
+      (0 to 3).foreach { m =>
+        (0 to 2 * 24).foreach { i =>
           val c = Calendar.getInstance()
           c.set(y, m, 28, 0, 0, 0)
           c.add(Calendar.HOUR_OF_DAY, i)
@@ -261,6 +202,112 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
+  test("date_add") {
+    checkEvaluation(
+      DateAdd(Literal(Date.valueOf("2016-02-28")), Literal(1)),
+      DateTimeUtils.fromJavaDate(Date.valueOf("2016-02-29")))
+    checkEvaluation(
+      DateAdd(Literal(Date.valueOf("2016-02-28")), Literal(-365)),
+      DateTimeUtils.fromJavaDate(Date.valueOf("2015-02-28")))
+    checkEvaluation(DateAdd(Literal.create(null, DateType), Literal(1)), null)
+    checkEvaluation(DateAdd(Literal(Date.valueOf("2016-02-28")), Literal.create(null, IntegerType)),
+      null)
+    checkEvaluation(DateAdd(Literal.create(null, DateType), Literal.create(null, IntegerType)),
+      null)
+  }
+
+  test("date_sub") {
+    checkEvaluation(
+      DateSub(Literal(Date.valueOf("2015-01-01")), Literal(1)),
+      DateTimeUtils.fromJavaDate(Date.valueOf("2014-12-31")))
+    checkEvaluation(
+      DateSub(Literal(Date.valueOf("2015-01-01")), Literal(-1)),
+      DateTimeUtils.fromJavaDate(Date.valueOf("2015-01-02")))
+    checkEvaluation(DateSub(Literal.create(null, DateType), Literal(1)), null)
+    checkEvaluation(DateSub(Literal(Date.valueOf("2016-02-28")), Literal.create(null, IntegerType)),
+      null)
+    checkEvaluation(DateSub(Literal.create(null, DateType), Literal.create(null, IntegerType)),
+      null)
+  }
+
+  test("time_add") {
+    checkEvaluation(
+      TimeAdd(Literal(Timestamp.valueOf("2016-01-29 10:00:00")),
+        Literal(new CalendarInterval(1, 123000L))),
+      DateTimeUtils.fromJavaTimestamp(Timestamp.valueOf("2016-02-29 10:00:00.123")))
+
+    checkEvaluation(
+      TimeAdd(Literal.create(null, TimestampType), Literal(new CalendarInterval(1, 123000L))),
+      null)
+    checkEvaluation(
+      TimeAdd(Literal(Timestamp.valueOf("2016-01-29 10:00:00")),
+        Literal.create(null, CalendarIntervalType)),
+      null)
+    checkEvaluation(
+      TimeAdd(Literal.create(null, TimestampType), Literal.create(null, CalendarIntervalType)),
+      null)
+  }
+
+  test("time_sub") {
+    checkEvaluation(
+      TimeSub(Literal(Timestamp.valueOf("2016-03-31 10:00:00")),
+        Literal(new CalendarInterval(1, 0))),
+      DateTimeUtils.fromJavaTimestamp(Timestamp.valueOf("2016-02-29 10:00:00")))
+    checkEvaluation(
+      TimeSub(
+        Literal(Timestamp.valueOf("2016-03-30 00:00:01")),
+        Literal(new CalendarInterval(1, 2000000.toLong))),
+      DateTimeUtils.fromJavaTimestamp(Timestamp.valueOf("2016-02-28 23:59:59")))
+
+    checkEvaluation(
+      TimeSub(Literal.create(null, TimestampType), Literal(new CalendarInterval(1, 123000L))),
+      null)
+    checkEvaluation(
+      TimeSub(Literal(Timestamp.valueOf("2016-01-29 10:00:00")),
+        Literal.create(null, CalendarIntervalType)),
+      null)
+    checkEvaluation(
+      TimeSub(Literal.create(null, TimestampType), Literal.create(null, CalendarIntervalType)),
+      null)
+  }
+
+  test("add_months") {
+    checkEvaluation(AddMonths(Literal(Date.valueOf("2015-01-30")), Literal(1)),
+      DateTimeUtils.fromJavaDate(Date.valueOf("2015-02-28")))
+    checkEvaluation(AddMonths(Literal(Date.valueOf("2016-03-30")), Literal(-1)),
+      DateTimeUtils.fromJavaDate(Date.valueOf("2016-02-29")))
+    checkEvaluation(
+      AddMonths(Literal(Date.valueOf("2015-01-30")), Literal.create(null, IntegerType)),
+      null)
+    checkEvaluation(AddMonths(Literal.create(null, DateType), Literal(1)), null)
+    checkEvaluation(AddMonths(Literal.create(null, DateType), Literal.create(null, IntegerType)),
+      null)
+  }
+
+  test("months_between") {
+    checkEvaluation(
+      MonthsBetween(Literal(Timestamp.valueOf("1997-02-28 10:30:00")),
+        Literal(Timestamp.valueOf("1996-10-30 00:00:00"))),
+      3.94959677)
+    checkEvaluation(
+      MonthsBetween(Literal(Timestamp.valueOf("2015-01-30 11:52:00")),
+        Literal(Timestamp.valueOf("2015-01-30 11:50:00"))),
+      0.0)
+    checkEvaluation(
+      MonthsBetween(Literal(Timestamp.valueOf("2015-01-31 00:00:00")),
+        Literal(Timestamp.valueOf("2015-03-31 22:00:00"))),
+      -2.0)
+    checkEvaluation(
+      MonthsBetween(Literal(Timestamp.valueOf("2015-03-31 22:00:00")),
+        Literal(Timestamp.valueOf("2015-02-28 00:00:00"))),
+      1.0)
+    val t = Literal(Timestamp.valueOf("2015-03-31 22:00:00"))
+    val tnull = Literal.create(null, TimestampType)
+    checkEvaluation(MonthsBetween(t, tnull), null)
+    checkEvaluation(MonthsBetween(tnull, t), null)
+    checkEvaluation(MonthsBetween(tnull, tnull), null)
+  }
+
   test("last_day") {
     checkEvaluation(LastDay(Literal(Date.valueOf("2015-02-28"))), Date.valueOf("2015-02-28"))
     checkEvaluation(LastDay(Literal(Date.valueOf("2015-03-27"))), Date.valueOf("2015-03-31"))
@@ -302,5 +349,88 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(NextDay(Literal.create(null, DateType), Literal("xx")), null)
     checkEvaluation(
       NextDay(Literal(Date.valueOf("2015-07-23")), Literal.create(null, StringType)), null)
+  }
+
+  test("function to_date") {
+    checkEvaluation(
+      ToDate(Literal(Date.valueOf("2015-07-22"))),
+      DateTimeUtils.fromJavaDate(Date.valueOf("2015-07-22")))
+    checkEvaluation(ToDate(Literal.create(null, DateType)), null)
+  }
+
+  test("function trunc") {
+    def testTrunc(input: Date, fmt: String, expected: Date): Unit = {
+      checkEvaluation(TruncDate(Literal.create(input, DateType), Literal.create(fmt, StringType)),
+        expected)
+      checkEvaluation(
+        TruncDate(Literal.create(input, DateType), NonFoldableLiteral.create(fmt, StringType)),
+        expected)
+    }
+    val date = Date.valueOf("2015-07-22")
+    Seq("yyyy", "YYYY", "year", "YEAR", "yy", "YY").foreach{ fmt =>
+      testTrunc(date, fmt, Date.valueOf("2015-01-01"))
+    }
+    Seq("month", "MONTH", "mon", "MON", "mm", "MM").foreach { fmt =>
+      testTrunc(date, fmt, Date.valueOf("2015-07-01"))
+    }
+    testTrunc(date, "DD", null)
+    testTrunc(date, null, null)
+    testTrunc(null, "MON", null)
+    testTrunc(null, null, null)
+  }
+
+  test("from_unixtime") {
+    val sdf1 = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss")
+    val fmt2 = "yyyy-MM-dd HH:mm:ss.SSS"
+    val sdf2 = new SimpleDateFormat(fmt2)
+    checkEvaluation(
+      FromUnixTime(Literal(0L), Literal("yyyy-MM-dd HH:mm:ss")), sdf1.format(new Timestamp(0)))
+    checkEvaluation(FromUnixTime(
+      Literal(1000L), Literal("yyyy-MM-dd HH:mm:ss")), sdf1.format(new Timestamp(1000000)))
+    checkEvaluation(
+      FromUnixTime(Literal(-1000L), Literal(fmt2)), sdf2.format(new Timestamp(-1000000)))
+    checkEvaluation(
+      FromUnixTime(Literal.create(null, LongType), Literal.create(null, StringType)), null)
+    checkEvaluation(
+      FromUnixTime(Literal.create(null, LongType), Literal("yyyy-MM-dd HH:mm:ss")), null)
+    checkEvaluation(FromUnixTime(Literal(1000L), Literal.create(null, StringType)), null)
+    checkEvaluation(
+      FromUnixTime(Literal(0L), Literal("not a valid format")), null)
+  }
+
+  test("unix_timestamp") {
+    val sdf1 = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss")
+    val fmt2 = "yyyy-MM-dd HH:mm:ss.SSS"
+    val sdf2 = new SimpleDateFormat(fmt2)
+    val fmt3 = "yy-MM-dd"
+    val sdf3 = new SimpleDateFormat(fmt3)
+    val date1 = Date.valueOf("2015-07-24")
+    checkEvaluation(
+      UnixTimestamp(Literal(sdf1.format(new Timestamp(0))), Literal("yyyy-MM-dd HH:mm:ss")), 0L)
+    checkEvaluation(UnixTimestamp(
+      Literal(sdf1.format(new Timestamp(1000000))), Literal("yyyy-MM-dd HH:mm:ss")), 1000L)
+    checkEvaluation(
+      UnixTimestamp(Literal(new Timestamp(1000000)), Literal("yyyy-MM-dd HH:mm:ss")), 1000L)
+    checkEvaluation(
+      UnixTimestamp(Literal(date1), Literal("yyyy-MM-dd HH:mm:ss")),
+      DateTimeUtils.daysToMillis(DateTimeUtils.fromJavaDate(date1)) / 1000L)
+    checkEvaluation(
+      UnixTimestamp(Literal(sdf2.format(new Timestamp(-1000000))), Literal(fmt2)), -1000L)
+    checkEvaluation(UnixTimestamp(
+      Literal(sdf3.format(Date.valueOf("2015-07-24"))), Literal(fmt3)),
+      DateTimeUtils.daysToMillis(DateTimeUtils.fromJavaDate(Date.valueOf("2015-07-24"))) / 1000L)
+    val t1 = UnixTimestamp(
+      CurrentTimestamp(), Literal("yyyy-MM-dd HH:mm:ss")).eval().asInstanceOf[Long]
+    val t2 = UnixTimestamp(
+      CurrentTimestamp(), Literal("yyyy-MM-dd HH:mm:ss")).eval().asInstanceOf[Long]
+    assert(t2 - t1 <= 1)
+    checkEvaluation(
+      UnixTimestamp(Literal.create(null, DateType), Literal.create(null, StringType)), null)
+    checkEvaluation(
+      UnixTimestamp(Literal.create(null, DateType), Literal("yyyy-MM-dd HH:mm:ss")), null)
+    checkEvaluation(UnixTimestamp(
+      Literal(date1), Literal.create(null, StringType)), date1.getTime / 1000L)
+    checkEvaluation(
+      UnixTimestamp(Literal("2015-07-24"), Literal("not a valid format")), null)
   }
 }
