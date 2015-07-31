@@ -110,13 +110,9 @@ class PrefixSpanSuite extends SparkFunSuite with MLlibTestSparkContext {
       "ef,ab,df,c,b",
       "e,g,af,c,b,c")
     val coder = Array('a', 'b', 'c', 'd', 'e', 'f', 'g').zip(Array(1, 2, 3, 4, 5, 6, 7)).toMap
-    val intSequences = sequences.map(_.split(",").flatMap(-1 +: _.toArray.map(coder)).drop(1))
+    val intSequences = sequences.map(_.split(",").flatMap(_.toArray.map(coder) :+ -1))
     val data = sc.parallelize(intSequences, 2).cache()
-    val prefixspan = new PrefixSpan()
-      .setMinSupport(0.5)
-      .setMaxPatternLength(5)
 
-    val results = prefixspan.run(data)
     val expectedValue4 = Array(
       "a:4",
       "b:4",
@@ -173,12 +169,16 @@ class PrefixSpanSuite extends SparkFunSuite with MLlibTestSparkContext {
       "f,c,b:2")
     val intExpectedValue = expectedValue4
       .map(_.split(":"))
-      .map { x => (x(0).split(",").flatMap(-1 +: _.toArray.sorted.map(coder)), x(1).toLong) }
-    compareResults(intExpectedValue, results.collect())
+      .map { x =>
+        (x(0).split(",").flatMap(_.toArray.sorted.map(coder) :+ -1), x(1).toLong)
+      }
 
-//    println(prefixspan.run(sc.parallelize(Seq(
-//      Array(1,2,-1,3,-1)
-//    ))).collect().toList.map(x => (x._1.mkString("").split("-1").toList, x._2)))
+    val prefixspan = new PrefixSpan()
+      .setMinSupport(0.5)
+      .setMaxPatternLength(5)
+
+    val results = prefixspan.run(data)
+    compareResults(intExpectedValue, results.collect())
   }
 
   private def compareResults(
@@ -186,8 +186,6 @@ class PrefixSpanSuite extends SparkFunSuite with MLlibTestSparkContext {
       actualValue: Array[(Array[Int], Long)]): Unit = {
     val expectedSet = expectedValue.map(x => (x._1.toSeq, x._2)).toSet
     val actualSet = actualValue.map(x => (x._1.toSeq, x._2)).toSet
-    println(s"missing expected:\n${expectedSet.diff(actualSet).map(x => (x._1.mkString("").split("-1").toList, x._2))}")
-    println(s"extra actual:\n${actualSet.diff(expectedSet).map(x => (x._1.mkString("").split("-1").toList, x._2))}")
     assert(expectedSet === actualSet)
   }
 

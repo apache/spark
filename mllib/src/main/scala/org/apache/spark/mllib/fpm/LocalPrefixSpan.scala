@@ -44,11 +44,15 @@ private[fpm] object LocalPrefixSpan extends Logging with Serializable {
     if (prefixes.length == maxPatternLength || database.isEmpty) {
       return Iterator.empty
     }
-    val frequentItemAndCounts = getFreqItemAndCounts(minCount, database)
+    val freqItemSetsAndCounts = getFreqItemAndCounts(minCount, database)
+    val freqItems = freqItemSetsAndCounts.keys.flatten.toSet
     val filteredDatabase = database.map { suffix =>
-      suffix.filter(item => frequentItemAndCounts.contains(item))
+      suffix
+        .map(item => freqItems.intersect(item))
+        .filterNot(_.isEmpty)
+
     }
-    frequentItemAndCounts.iterator.flatMap { case (item, count) =>
+    freqItemSetsAndCounts.iterator.flatMap { case (item, count) =>
       val newPrefixes = item :: prefixes
       val newProjected = project(filteredDatabase, item)
       Iterator.single((newPrefixes, count)) ++
@@ -97,7 +101,7 @@ private[fpm] object LocalPrefixSpan extends Logging with Serializable {
       }
     }
     counts
-      .filter { case (item, count) => (count >= minCount) && (item != DELIMITER) }
+      .filter { case (item, count) => count >= minCount }
       .toMap
   }
 }
