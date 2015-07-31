@@ -28,20 +28,22 @@ package org.apache.spark.streaming.scheduler.rate
  *
  * @param batchDurationMillis the batch duration, in milliseconds
  * @param proportional how much the correction should depend on the current
- *        error. This term usually provides the bulk of correction. A value too large would
- *        make the controller overshoot the setpoint, while a small value would make the
- *        controller too insensitive. The default value is -1.
+ *        error. This term usually provides the bulk of correction and should be positive or zero.
+ *        A value too large would make the controller overshoot the setpoint, while a small value
+ *        would make the controller too insensitive. The default value is 1.
  * @param integral how much the correction should depend on the accumulation
- *        of past errors. This term accelerates the movement towards the setpoint, but a large
- *        value may lead to overshooting. The default value is -0.2.
+ *        of past errors. This value should be positive or 0. This term accelerates the movement
+ *        towards the desired value, but a large value may lead to overshooting. The default value
+ *        is 0.2.
  * @param derivative how much the correction should depend on a prediction
- *        of future errors, based on current rate of change. This term is not used very often,
- *        as it impacts stability of the system. The default value is 0.
+ *        of future errors, based on current rate of change. This value should be positive or 0.
+ *        This term is not used very often, as it impacts stability of the system. The default
+ *        value is 0.
  */
 private[streaming] class PIDRateEstimator(
     batchIntervalMillis: Long,
-    proportional: Double = -1D,
-    integral: Double = -.2D,
+    proportional: Double = 1D,
+    integral: Double = .2D,
     derivative: Double = 0D)
   extends RateEstimator {
 
@@ -53,9 +55,19 @@ private[streaming] class PIDRateEstimator(
   require(
     batchIntervalMillis > 0,
     s"Specified batch interval $batchIntervalMillis in PIDRateEstimator is invalid.")
+  require(
+    proportional >= 0,
+    s"Proportional term $proportional in PIDRateEstimator should be >= 0.")
+  require(
+    integral >= 0,
+    s"Integral term $integral in PIDRateEstimator should be >= 0.")
+  require(
+    derivative >= 0,
+    s"Derivative term $derivative in PIDRateEstimator should be >= 0.")
+
 
   def compute(time: Long, // in milliseconds
-      elements: Long,
+      numElements: Long,
       processingDelay: Long, // in milliseconds
       schedulingDelay: Long // in milliseconds
     ): Option[Double] = {
@@ -67,16 +79,19 @@ private[streaming] class PIDRateEstimator(
         val delaySinceUpdate = (time - latestTime).toDouble / 1000
 
         // in elements/second
-        val processingRate = elements.toDouble / processingDelay * 1000
+        val processingRate = numElements.toDouble / processingDelay * 1000
 
+        // In our system `error` is the difference between the desired rate and the measured rate
+        // based on the latest batch information. We consider the desired rate to be latest rate,
+        // which is what this estimator calculated for the previous batch.
         // in elements/second
         val error = latestRate - processingRate
 
-        // The error integral, based on schedulingDelay as an indicator for accumulated errors
-        // a scheduling delay s corresponds to s * processingRate overflowing elements. Those
+        // The error integral, based on schedulingDelay as an indicator for accumulated errors.
+        // A scheduling delay s corresponds to s * processingRate overflowing elements. Those
         // are elements that couldn't be processed in previous batches, leading to this delay.
-        // We assume the processingRate didn't change too much.
-        // from the number of overflowing elements we can calculate the rate at which they would be
+        // In the following, we assume the processingRate didn't change too much.
+        // From the number of overflowing elements we can calculate the rate at which they would be
         // processed by dividing it by the batch interval. This rate is our "historical" error,
         // or integral part, since if we subtracted this rate from the previous "calculated rate",
         // there wouldn't have been any overflowing elements, and the scheduling delay would have
@@ -87,8 +102,8 @@ private[streaming] class PIDRateEstimator(
         // in elements/(second ^ 2)
         val dError = (error - latestError) / delaySinceUpdate
 
-        val newRate = (latestRate + proportional * error +
-                                    integral * historicalError +
+        val newRate = (latestRate - proportional * error -
+                                    integral * historicalError -
                                     derivative * dError).max(0.0)
         latestTime = time
         if (firstRun) {

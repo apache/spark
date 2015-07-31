@@ -58,9 +58,9 @@ object RateEstimator {
   def create(conf: SparkConf, batchInterval: Duration): RateEstimator =
     conf.get("spark.streaming.backpressure.rateEstimator", "pid") match {
       case "pid" =>
-        val proportional = conf.getDouble("spark.streraming.backpressure.pid.proportional", -1.0)
-        val integral = conf.getDouble("spark.streraming.backpressure.pid.integral", -0.2)
-        val derived = conf.getDouble("spark.streraming.backpressure.pid.derived", 0.0)
+        val proportional = conf.getDouble("spark.streaming.backpressure.pid.proportional", 1.0)
+        val integral = conf.getDouble("spark.streaming.backpressure.pid.integral", 0.2)
+        val derived = conf.getDouble("spark.streaming.backpressure.pid.derived", 0.0)
         new PIDRateEstimator(batchInterval.milliseconds, proportional, integral, derived)
 
       case estimator =>

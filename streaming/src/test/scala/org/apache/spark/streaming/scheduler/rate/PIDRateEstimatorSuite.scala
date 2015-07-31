@@ -19,35 +19,64 @@ package org.apache.spark.streaming.scheduler.rate
 
 import scala.util.Random
 
-import org.scalatest._
+import org.scalatest.Inspectors.forAll
 import org.scalatest.Matchers
-import org.scalatest.Inspectors._
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.streaming.Seconds
 
 class PIDRateEstimatorSuite extends SparkFunSuite with Matchers {
 
+  test("the right estimator is created") {
+    val conf = new SparkConf
+    conf.set("spark.streaming.backpressure.rateEstimator", "pid")
+    val pid = RateEstimator.create(conf, Seconds(1))
+    pid.getClass should equal(classOf[PIDRateEstimator])
+  }
+
+  test("estimator checks ranges") {
+    intercept[IllegalArgumentException] {
+      new PIDRateEstimator(0, 1, 2, 3)
+    }
+    intercept[IllegalArgumentException] {
+      new PIDRateEstimator(100, -1, 2, 3)
+    }
+    intercept[IllegalArgumentException] {
+      new PIDRateEstimator(100, 0, -1, 3)
+    }
+    intercept[IllegalArgumentException] {
+      new PIDRateEstimator(100, 0, 0, -1)
+    }
+  }
+
+  private def createDefaultEstimator: PIDRateEstimator = {
+    new PIDRateEstimator(20, 1D, 0D, 0D)
+  }
+
   test("first bound is None") {
-    val p = new PIDRateEstimator(20, -1D, 0D, 0D)
+    val p = createDefaultEstimator
     p.compute(0, 10, 10, 0) should equal(None)
   }
 
   test("second bound is rate") {
-    val p = new PIDRateEstimator(20, -1D, 0D, 0D)
+    val p = createDefaultEstimator
     p.compute(0, 10, 10, 0)
     // 1000 elements / s
     p.compute(10, 10, 10, 0) should equal(Some(1000))
   }
 
   test("works even with no time between updates") {
-    val p = new PIDRateEstimator(20, -1D, 0D, 0D)
+    val p = createDefaultEstimator
     p.compute(0, 10, 10, 0)
     p.compute(10, 10, 10, 0)
     p.compute(10, 10, 10, 0) should equal(None)
   }
 
   test("bound is never negative") {
-    val p = new PIDRateEstimator(20, -1D, -1D, 0D)
+    val p = new PIDRateEstimator(20, 1D, 1D, 0D)
+    // prepare a series of batch updates, one every 20ms, 0 processed elements, 2ms of processing
+    // this might point the estimator to try and decrease the bound, but we test it never
+    // goes below zero, which would be nonsensical.
     val times = List.tabulate(50)(x => x * 20) // every 20ms
     val elements = List.fill(50)(0) // no processing
     val proc = List.fill(50)(20) // 20ms of processing
@@ -58,7 +87,10 @@ class PIDRateEstimatorSuite extends SparkFunSuite with Matchers {
   }
 
   test("with no accumulated or positive error, |I| > 0, follow the processing speed") {
-    val p = new PIDRateEstimator(20, -1D, -1D, 0D)
+    val p = new PIDRateEstimator(20, 1D, 1D, 0D)
+    // prepare a series of batch updates, one every 20ms with an increasing number of processed
+    // elements in each batch, but constant processing time, and no accumulated error. Even though
+    // the integral part is non-zero, the estimated rate should follow only the proportional term
     val times = List.tabulate(50)(x => x * 20) // every 20ms
     val elements = List.tabulate(50)(x => x * 20) // increasing
     val proc = List.fill(50)(20) // 20ms of processing
@@ -69,7 +101,11 @@ class PIDRateEstimatorSuite extends SparkFunSuite with Matchers {
   }
 
   test("with no accumulated but some positive error, |I| > 0, follow the processing speed") {
-    val p = new PIDRateEstimator(20, -1D, -1D, 0D)
+    val p = new PIDRateEstimator(20, 1D, 1D, 0D)
+    // prepare a series of batch updates, one every 20ms with an decreasing number of processed
+    // elements in each batch, but constant processing time, and no accumulated error. Even though
+    // the integral part is non-zero, the estimated rate should follow only the proportional term,
+    // asking for less and less elements
     val times = List.tabulate(50)(x => x * 20) // every 20ms
     val elements = List.tabulate(50)(x => (50 - x) * 20) // decreasing
     val proc = List.fill(50)(20) // 20ms of processing
@@ -80,7 +116,7 @@ class PIDRateEstimatorSuite extends SparkFunSuite with Matchers {
   }
 
   test("with some accumulated and some positive error, |I| > 0, stay below the processing speed") {
-    val p = new PIDRateEstimator(20, -1D, -.01D, 0D)
+    val p = new PIDRateEstimator(20, 1D, .01D, 0D)
     val times = List.tabulate(50)(x => x * 20) // every 20ms
     val rng = new Random()
     val elements = List.tabulate(50)(x => rng.nextInt(1000))
