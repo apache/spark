@@ -347,6 +347,34 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     // scalastyle:on
   }
 
+  test("soundex unit test") {
+    checkEvaluation(SoundEx(Literal("ZIN")), "Z500")
+    checkEvaluation(SoundEx(Literal("SU")), "S000")
+    checkEvaluation(SoundEx(Literal("")), "")
+    checkEvaluation(SoundEx(Literal.create(null, StringType)), null)
+
+    // scalastyle:off
+    // non ascii characters are not allowed in the code, so we disable the scalastyle here.
+    checkEvaluation(SoundEx(Literal("测试")), "测试")
+    checkEvaluation(SoundEx(Literal("Tschüss")), "T220")
+    // scalastyle:on
+    checkEvaluation(SoundEx(Literal("zZ")), "Z000", create_row("s8"))
+    checkEvaluation(SoundEx(Literal("RAGSSEEESSSVEEWE")), "R221")
+    checkEvaluation(SoundEx(Literal("Ashcraft")), "A261")
+    checkEvaluation(SoundEx(Literal("Aswcraft")), "A261")
+    checkEvaluation(SoundEx(Literal("Tymczak")), "T522")
+    checkEvaluation(SoundEx(Literal("Pfister")), "P236")
+    checkEvaluation(SoundEx(Literal("Miller")), "M460")
+    checkEvaluation(SoundEx(Literal("Peterson")), "P362")
+    checkEvaluation(SoundEx(Literal("Peters")), "P362")
+    checkEvaluation(SoundEx(Literal("Auerbach")), "A612")
+    checkEvaluation(SoundEx(Literal("Uhrbach")), "U612")
+    checkEvaluation(SoundEx(Literal("Moskowitz")), "M232")
+    checkEvaluation(SoundEx(Literal("Moskovitz")), "M213")
+    checkEvaluation(SoundEx(Literal("relyheewsgeessg")), "R422")
+    checkEvaluation(SoundEx(Literal("!!")), "!!")
+  }
+
   test("TRIM/LTRIM/RTRIM") {
     val s = 'a.string.at(0)
     checkEvaluation(StringTrim(Literal(" aa  ")), "aa", create_row(" abdef "))

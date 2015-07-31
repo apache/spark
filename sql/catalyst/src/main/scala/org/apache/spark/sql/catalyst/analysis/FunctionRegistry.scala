@@ -194,6 +194,7 @@ object FunctionRegistry {
     expression[StringRepeat]("repeat"),
     expression[StringReverse]("reverse"),
     expression[StringTrimRight]("rtrim"),
+    expression[SoundEx]("soundex"),
     expression[StringSpace]("space"),
     expression[StringSplit]("split"),
     expression[Substring]("substr"),
