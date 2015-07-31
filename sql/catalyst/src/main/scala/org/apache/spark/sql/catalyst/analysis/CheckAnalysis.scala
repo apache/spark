@@ -94,6 +94,9 @@ trait CheckAnalysis {
               case e if e.dataType.isInstanceOf[BinaryType] =>
                 failAnalysis(s"expression ${e.prettyString} in join condition " +
                   s"'${condition.prettyString}' can't be binary type.")
+              case e if e.dataType.isInstanceOf[MapType] =>
+                failAnalysis(s"expression ${e.prettyString} in join condition " +
+                  s"'${condition.prettyString}' can't be map type.")
               case _ => // OK
             }
 
@@ -116,11 +119,14 @@ trait CheckAnalysis {
               case BinaryType =>
                 failAnalysis(s"grouping expression '${expr.prettyString}' in aggregate can " +
                   s"not be binary type.")
+              case m: MapType =>
+                failAnalysis(s"grouping expression '${expr.prettyString}' in aggregate can " +
+                  s"not be map type.")
               case _ => // OK
             }
 
             aggregateExprs.foreach(checkValidAggregateExpression)
-            aggregateExprs.foreach(checkValidGroupingExprs)
+            groupingExprs.foreach(checkValidGroupingExprs)
 
           case Sort(orders, _, _) =>
             orders.foreach { order =>
