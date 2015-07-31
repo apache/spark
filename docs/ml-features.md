@@ -217,21 +217,27 @@ for feature in result.select("result").take(3):
 
 [Tokenization](http://en.wikipedia.org/wiki/Lexical_analysis#Tokenization) is the process of taking text (such as a sentence) and breaking it into individual terms (usually words).  A simple [Tokenizer](api/scala/index.html#org.apache.spark.ml.feature.Tokenizer) class provides this functionality.  The example below shows how to split sentences into sequences of words.
 
-Note: A more advanced tokenizer is provided via [RegexTokenizer](api/scala/index.html#org.apache.spark.ml.feature.RegexTokenizer).
+[RegexTokenizer](api/scala/index.html#org.apache.spark.ml.feature.RegexTokenizer) allows more advanced tokenization based on regular expression (regex) matching. By default, the parameter pattern (regex, default: \\s+) is used as delimiters to split the input text. Alternatively, users can set parameter gaps to false indicating the regex pattern denotes "tokens" rather than splitting "gaps", and find all matching occurrences as the tokenization result.
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 {% highlight scala %}
-import org.apache.spark.ml.feature.Tokenizer
+import org.apache.spark.ml.feature.{Tokenizer, RegexTokenizer}
 
 val sentenceDataFrame = sqlContext.createDataFrame(Seq(
   (0, "Hi I heard about Spark"),
-  (0, "I wish Java could use case classes"),
-  (1, "Logistic regression models are neat")
+  (1, "I wish Java could use case classes"),
+  (2, "Logistic,regression,models,are,neat")
 )).toDF("label", "sentence")
 val tokenizer = new Tokenizer().setInputCol("sentence").setOutputCol("words")
-val wordsDataFrame = tokenizer.transform(sentenceDataFrame)
-wordsDataFrame.select("words", "label").take(3).foreach(println)
+val regexTokenizer = new RegexTokenizer().setInputCol("sentence").setOutputCol("words")
+  .setPattern("\\W")
+// alternatively .setPattern("\\w+").setGaps(false)
+
+val tokenized = tokenizer.transform(sentenceDataFrame)
+tokenized.select("words", "label").take(3).foreach(println)
+val regexTokenized = regexTokenizer.transform(sentenceDataFrame)
+regexTokenized.select("words", "label").take(3).foreach(println)
 {% endhighlight %}
 </div>
 
