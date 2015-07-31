@@ -115,13 +115,15 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext {
       assert(topicDistribution.toArray.sum ~== 1.0 absTol 1e-5)
     }
 
-    val top2TopicsPerDoc = model.topTopicsPerDocument(2).collect()
-    top2TopicsPerDoc.zip(topicDistributions).foreach {
-      case ((docId1, indices, weights), (docId2, topicDistribution)) =>
+    val top2TopicsPerDoc = model.topTopicsPerDocument(2).map(t => (t._1, (t._2, t._3)))
+    model.topicDistributions.join(top2TopicsPerDoc).collect().foreach {
+      case (docId, (topicDistribution, (indices, weights))) =>
         assert(indices.length == 2)
         assert(weights.length == 2)
-        assert(docId1 == docId2)
-        assert(argtopk(topicDistribution.toBreeze, 2).toArray === indices)
+        val bdvTopicDist = topicDistribution.toBreeze
+        val top2Indices = argtopk(bdvTopicDist, 2)
+        assert(top2Indices.toArray === indices)
+        assert(bdvTopicDist(top2Indices).toArray === weights)
     }
 
     // Check: log probabilities
