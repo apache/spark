@@ -210,14 +210,58 @@ case class IsNotNull(child: Expression) extends UnaryExpression with Predicate {
   }
 }
 
+/**
+ * A predicate that is evaluated to be true if there are at least `n` null values.
+ */
+case class AtLeastNNulls(n: Int, children: Seq[Expression]) extends Predicate {
+  override def nullable: Boolean = false
+  override def foldable: Boolean = children.forall(_.foldable)
+  override def toString: String = s"AtLeastNNulls($n, ${children.mkString(",")})"
+
+  private[this] val childrenArray = children.toArray
+
+  override def eval(input: InternalRow): Boolean = {
+    var numNulls = 0
+    var i = 0
+    while (i < childrenArray.length && numNulls < n) {
+      val evalC = childrenArray(i).eval(input)
+      if (evalC == null) {
+        numNulls += 1
+      }
+      i += 1
+    }
+    numNulls >= n
+  }
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    val numNulls = ctx.freshName("numNulls")
+    val code = children.map { e =>
+      val eval = e.gen(ctx)
+      s"""
+        if ($numNulls < $n) {
+          ${eval.code}
+          if (${eval.isNull}) {
+            $numNulls += 1;
+          }
+        }
+      """
+    }.mkString("\n")
+    s"""
+      int $numNulls = 0;
+      $code
+      boolean ${ev.isNull} = false;
+      boolean ${ev.primitive} = $numNulls >= $n;
+     """
+  }
+}
 
 /**
  * A predicate that is evaluated to be true if there are at least `n` non-null and non-NaN values.
  */
-case class AtLeastNNonNulls(n: Int, children: Seq[Expression]) extends Predicate {
+case class AtLeastNNonNullNans(n: Int, children: Seq[Expression]) extends Predicate {
   override def nullable: Boolean = false
   override def foldable: Boolean = children.forall(_.foldable)
-  override def toString: String = s"AtLeastNNulls(n, ${children.mkString(",")})"
+  override def toString: String = s"AtLeastNNonNullNans($n, ${children.mkString(",")})"
 
   private[this] val childrenArray = children.toArray
 
