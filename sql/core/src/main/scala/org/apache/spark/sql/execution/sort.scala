@@ -32,10 +32,10 @@ import org.apache.spark.util.collection.ExternalSorterNoAgg
 
 
 /**
-* Performs a sort on-heap.
-* @param global when true performs a global sort of all partitions by shuffling the data first
-*               if necessary.
-*/
+ * Performs a sort on-heap.
+ * @param global when true performs a global sort of all partitions by shuffling the data first
+ *               if necessary.
+ */
 case class Sort(
     sortOrder: Seq[SortOrder],
     global: Boolean,
