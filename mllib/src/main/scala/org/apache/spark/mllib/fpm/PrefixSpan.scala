@@ -91,15 +91,47 @@ class PrefixSpan private (
   }
 
   /**
-   * Find the complete set of sequential patterns in the input sequences.
+   * Find the complete set of sequential patterns in the input sequences of itemsets.
+   * @param data ordered sequences of itemsets.
+   * @return (sequential itemset pattern, count) tuples
+   */
+  def run[Item: ClassTag](data: RDD[Array[Array[Item]]]): RDD[(Array[Array[Item]], Long)] = {
+    val itemToInt = data.aggregate(Set[Item]())(
+      seqOp = { (uniqItems, item) => uniqItems ++ item.flatten.toSet },
+      combOp = { _ ++ _ }
+    ).zipWithIndex.toMap
+    val intToItem = Map() ++ (itemToInt.map {case (k,v) => (v,k)})
+
+    val dataInternalRepr = data.map { seq =>
+      seq.map(itemset => itemset.map(itemToInt)).reduce((a, b) => a ++ (DELIMITER +: b))
+    }
+    val results = run(dataInternalRepr)
+
+
+    def toPublicRepr(pattern: Iterable[Int]): List[Array[Item]] = {
+      pattern.span(_ != DELIMITER) match {
+        case (x, xs) if xs.size > 1 => x.map(intToItem).toArray :: toPublicRepr(xs.tail)
+        case (x, xs) => List(x.map(intToItem).toArray)
+      }
+    }
+    results.map { case (seq: Array[Int], count: Long) =>
+      (toPublicRepr(seq).toArray, count)
+    }
+  }
+
+
+
+  /**
+   * Find the complete set of sequential patterns in the input sequences. This method utilizes
+   * the internal representation of itemsets as Array[Int] where each itemset is represented by
+   * a contiguous sequence of non-negative integers and delimiters represented by [[DELIMITER]].
    * @param data ordered sequences of itemsets. Items are represented by non-negative integers.
-   *                  Each itemset has one or more items and is delimited by [[DELIMITER]].
+   *             Each itemset has one or more items and is delimited by [[DELIMITER]].
    * @return a set of sequential pattern pairs,
    *         the key of pair is pattern (a list of elements),
    *         the value of pair is the pattern's count.
    */
-  // TODO: generalize to arbitrary item-types and use mapping to Ints for internal algorithm
-  def run(data: RDD[Array[Int]]): RDD[(Array[Int], Long)] = {
+  private[fpm] def run(data: RDD[Array[Int]]): RDD[(Array[Int], Long)] = {
     val sc = data.sparkContext
 
     if (data.getStorageLevel == StorageLevel.NONE) {
