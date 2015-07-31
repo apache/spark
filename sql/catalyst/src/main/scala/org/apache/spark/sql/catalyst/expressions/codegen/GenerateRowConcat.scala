@@ -143,11 +143,15 @@ object GenerateRowConcat extends CodeGenerator[(StructType, StructType), UnsafeR
     // --------------------- copy variable length portion from row 2 ----------------------- //
     val copyVariableLengthRow2 = s"""
        |PlatformDependent.UNSAFE.copyMemory(
-       |  obj1, offset1 + ${(outputBitsetWords + schema1.size + schema2.size) * 8},
+       |  obj2, offset2 + ${(bitset2Words + schema2.size) * 8},
        |  buf, offset + ${(outputBitsetWords + schema1.size + schema2.size) * 8},
-       |  ${schema1.size * 8});
+       |  row2.getSizeInBytes() - ${(bitset2Words + schema2.size) * 8});
      """.stripMargin
 
+    // ------- update fixed length data for variable length data type in row 1 ------------ //
+
+
+    // ------- update fixed length data for variable length data type in row 2 ------------ //
 
     val code = s"""
        |public Object generate($exprType[] exprs) {
