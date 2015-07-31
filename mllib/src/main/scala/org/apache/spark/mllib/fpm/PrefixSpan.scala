@@ -89,39 +89,42 @@ class PrefixSpan private (
 
   /**
    * Find the complete set of sequential patterns in the input sequences.
-   * @param sequences ordered sequences of itemsets. Items are represented by non-negative integers.
+   * @param data ordered sequences of itemsets. Items are represented by non-negative integers.
    *                  Each itemset has one or more items and is delimited by [[DELIMITER]].
    * @return a set of sequential pattern pairs,
    *         the key of pair is pattern (a list of elements),
    *         the value of pair is the pattern's count.
    */
   // TODO: generalize to arbitrary item-types and use mapping to Ints for internal algorithm
-  def run(sequences: RDD[Array[Int]]): RDD[(Array[Int], Long)] = {
-    val sc = sequences.sparkContext
+  def run(data: RDD[Array[Int]]): RDD[(Array[Int], Long)] = {
+    val sc = data.sparkContext
 
-    if (sequences.getStorageLevel == StorageLevel.NONE) {
+    if (data.getStorageLevel == StorageLevel.NONE) {
       logWarning("Input data is not cached.")
     }
+    val sequences = data.map(_.toList)
 
     // Convert min support to a min number of transactions for this dataset
     val minCount = if (minSupport == 0) 0L else math.ceil(sequences.count() * minSupport).toLong
 
     // (Frequent items -> number of occurrences, all items here satisfy the `minSupport` threshold
     val freqItemCounts = sequences
-      .flatMap(seq => seq.distinct.map(item => (item, 1L)))
+      .flatMap(seq => splitAtDelimiter(seq).distinct.map(item => (item, 1L)))
       .reduceByKey(_ + _)
-      .filter { case (item, count) => (count >= minCount) && (item != DELIMITER) }
+      .filter { case (item, count) => (count >= minCount) }
       .collect()
+      .toList
 
     // Pairs of (length 1 prefix, suffix consisting of frequent items)
     val itemSuffixPairs = {
       val freqItems = freqItemCounts.map(_._1).toSet
       sequences.flatMap { seq =>
-        val filteredSeq = seq.filter(item => item == DELIMITER || freqItems.contains(item))
+        val filteredSeq = insertDelimiters(
+          splitAtDelimiter(seq).filter(item => freqItems.contains(item)))
         freqItems.flatMap { item =>
           val candidateSuffix = LocalPrefixSpan.getSuffix(item, filteredSeq)
           candidateSuffix match {
-            case suffix if !suffix.isEmpty => Some((List(DELIMITER, item), suffix))
+            case suffix if !suffix.isEmpty => Some((DELIMITER :: item, suffix))
             case _ => None
           }
         }
@@ -129,7 +132,7 @@ class PrefixSpan private (
     }
     // Accumulator for the computed results to be returned, initialized to the frequent items (i.e.
     // frequent length-one prefixes)
-    var resultsAccumulator = freqItemCounts.map(x => (List(DELIMITER, x._1), x._2))
+    var resultsAccumulator = freqItemCounts.map(x => (DELIMITER :: x._1, x._2))
 
     // Remaining work to be locally and distributively processed respectfully
     var (pairsForLocal, pairsForDistributed) = partitionByProjDBSize(itemSuffixPairs)
@@ -137,7 +140,7 @@ class PrefixSpan private (
     // Continue processing until no pairs for distributed processing remain (i.e. all prefixes have
     // projected database sizes <= `maxLocalProjDBSize`) or `maxPatternLength` is reached
     var patternLength = 1
-    while (pairsForDistributed.count() != 0 || patternLength < maxPatternLength) {
+    while (pairsForDistributed.count() != 0 && patternLength < maxPatternLength) {
       val (nextPatternAndCounts, nextPrefixSuffixPairs) =
         extendPrefixes(minCount, pairsForDistributed)
       pairsForDistributed.unpersist()
@@ -164,8 +167,8 @@ class PrefixSpan private (
    * @return prefix-suffix pairs partitioned by whether their projected database size is <= or
    *         greater than [[maxLocalProjDBSize]]
    */
-  private def partitionByProjDBSize(prefixSuffixPairs: RDD[(List[Int], Array[Int])])
-    : (Array[(List[Int], Array[Int])], RDD[(List[Int], Array[Int])]) = {
+  private def partitionByProjDBSize(prefixSuffixPairs: RDD[(List[Int], List[Int])])
+    : (List[(List[Int], List[Int])], RDD[(List[Int], List[Int])]) = {
     val prefixToSuffixSize = prefixSuffixPairs
       .aggregateByKey(0)(
         seqOp = { case (count, suffix) => count + suffix.length },
@@ -177,12 +180,12 @@ class PrefixSpan private (
       .toSet
     val small = prefixSuffixPairs.filter { case (prefix, _) => smallPrefixes.contains(prefix) }
     val large = prefixSuffixPairs.filter { case (prefix, _) => !smallPrefixes.contains(prefix) }
-    (small.collect(), large)
+    (small.collect().toList, large)
   }
 
   /**
-   * Extends all prefixes by one item from their suffix and computes the resulting frequent prefixes
-   * and remaining work.
+   * Extends all prefixes by one itemset from their suffix and computes the resulting frequent
+   * prefixes and remaining work.
    * @param minCount minimum count
    * @param prefixSuffixPairs prefix (length N) and suffix pairs,
    * @return (frequent length N+1 extended prefix, count) pairs and (frequent length N+1 extended
@@ -190,15 +193,17 @@ class PrefixSpan private (
    */
   private def extendPrefixes(
       minCount: Long,
-      prefixSuffixPairs: RDD[(List[Int], Array[Int])])
-    : (RDD[(List[Int], Long)], RDD[(List[Int], Array[Int])]) = {
+      prefixSuffixPairs: RDD[(List[Int], List[Int])])
+    : (RDD[(List[Int], Long)], RDD[(List[Int], List[Int])]) = {
 
-    // (length N prefix, item from suffix) pairs and their corresponding number of occurrences
+    // (length N prefix, itemset from suffix) pairs and their corresponding number of occurrences
     // Every (prefix :+ suffix) is guaranteed to have support exceeding `minSupport`
     val prefixItemPairAndCounts = prefixSuffixPairs
-      .flatMap { case (prefix, suffix) => suffix.distinct.map(y => ((prefix, y), 1L)) }
+      .flatMap { case (prefix, suffix) =>
+        splitAtDelimiter(suffix).distinct.map(y => ((prefix, y), 1L))
+      }
       .reduceByKey(_ + _)
-      .filter { case (item, count) => (count >= minCount) && (item != DELIMITER) }
+      .filter { case (item, count) => (count >= minCount) }
 
     // Map from prefix to set of possible next items from suffix
     val prefixToNextItems = prefixItemPairAndCounts
@@ -210,17 +215,18 @@ class PrefixSpan private (
 
     // Frequent patterns with length N+1 and their corresponding counts
     val extendedPrefixAndCounts = prefixItemPairAndCounts
-      .map { case ((prefix, item), count) => (DELIMITER :: item :: prefix, count) }
+      .map { case ((prefix, item), count) => (DELIMITER :: item ::: prefix, count) }
 
     // Remaining work, all prefixes will have length N+1
     val extendedPrefixAndSuffix = prefixSuffixPairs
       .filter(x => prefixToNextItems.contains(x._1))
       .flatMap { case (prefix, suffix) =>
         val frequentNextItems = prefixToNextItems(prefix)
-        val filteredSuffix = suffix.filter(frequentNextItems.contains(_))
+        val filteredSuffix = insertDelimiters(
+          splitAtDelimiter(suffix).filter(frequentNextItems.contains(_)))
         frequentNextItems.flatMap { item =>
           LocalPrefixSpan.getSuffix(item, filteredSuffix) match {
-            case suffix if !suffix.isEmpty => Some(DELIMITER :: item :: prefix, suffix)
+            case suffix if !suffix.isEmpty => Some(DELIMITER :: item ::: prefix, suffix)
             case _ => None
           }
         }
@@ -237,17 +243,33 @@ class PrefixSpan private (
    */
   private def getPatternsInLocal(
       minCount: Long,
-      data: RDD[(List[Int], Iterable[Array[Int]])]): RDD[(List[Int], Long)] = {
+      data: RDD[(List[Int], Iterable[List[Int]])]): RDD[(List[Int], Long)] = {
     data.flatMap {
       case (prefix, projDB) =>
-        LocalPrefixSpan.run(minCount, maxPatternLength, prefix.toList, projDB)
+        LocalPrefixSpan.run(minCount, maxPatternLength, prefix, projDB)
           .map { case (pattern: List[Int], count: Long) =>
           (pattern, count)
         }
     }
   }
+
 }
 
 object PrefixSpan {
-  val DELIMITER = -1
+  private[fpm] val DELIMITER = -1
+
+  private[fpm] def splitAtDelimiter(pattern: List[Int]): List[List[Int]] = {
+    pattern.span(_ != DELIMITER) match {
+      case (x, xs) if xs.length > 1 => x :: splitAtDelimiter(xs.tail)
+      case (x, xs) => List(x)
+    }
+  }
+
+  private[fpm] def insertDelimiters(sequence: List[List[Int]]): List[Int] = {
+    // TODO: avoid allocating new arrays when appending
+    sequence.zip(Seq.fill(sequence.size)(PrefixSpan.DELIMITER))
+      .flatMap { case (a: List[Int], b: Int) =>
+        a :+ b
+      }
+  }
 }
