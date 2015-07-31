@@ -200,26 +200,22 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
     if (until <= start || start >= numBytes) {
       return UTF8String.EMPTY_UTF8;
     }
-    int j = firstByteIndex(0, 0, start);
-    int i = firstByteIndex(j, start, until);
-    byte[] bytes = new byte[i - j];
-    copyMemory(base, offset + j, bytes, BYTE_ARRAY_OFFSET, i - j);
-    return fromBytes(bytes);
-  }
 
-  /**
-   * Returns a substring of this from start to end.
-   * @param start the position of first code point
-   */
-  public UTF8String substring(final int start) {
-    if (start >= numBytes) {
-      return fromBytes(new byte[0]);
+    int i = 0;
+    int c = 0;
+    while (i < numBytes && c < start) {
+      i += numBytesForFirstByte(getByte(i));
+      c += 1;
     }
 
-    int i = firstByteIndex(0, 0, start);
+    int j = i;
+    while (i < numBytes && c < until) {
+      i += numBytesForFirstByte(getByte(i));
+      c += 1;
+    }
 
-    byte[] bytes = new byte[numBytes - i];
-    copyMemory(base, offset + i, bytes, BYTE_ARRAY_OFFSET, numBytes - i);
+    byte[] bytes = new byte[i - j];
+    copyMemory(base, offset + j, bytes, BYTE_ARRAY_OFFSET, i - j);
     return fromBytes(bytes);
   }
 
@@ -388,8 +384,13 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
       return 0;
     }
 
-    int i = firstByteIndex(0, 0, start); // position in byte
-    int c = start; // position in character
+    // locate to the start position.
+    int i = 0; // position in byte
+    int c = 0; // position in character
+    while (i < numBytes && c < start) {
+      i += numBytesForFirstByte(getByte(i));
+      c += 1;
+    }
 
     do {
       if (i + v.numBytes > numBytes) {
@@ -405,174 +406,81 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
     return -1;
   }
 
-  private enum ByteType {FIRSTBYTE, MIDBYTE, SINGLEBYTECHAR};
-
-  private ByteType checkByteType(byte b) {
-    int firstTwoBits = (b >>> 6) & 0x03;
-    if (firstTwoBits == 3) {
-       return ByteType.FIRSTBYTE;
-     } else if (firstTwoBits == 2) {
-      return ByteType.MIDBYTE;
-    } else {
-      return ByteType.SINGLEBYTECHAR;
-    }
-  }
-
   /**
-   * Return the first byte position for a given byte which shared the same code point.
-   * @param bytePos any byte within the code point
-   * @return the first byte position of a given code point, throw exception if not a valid UTF8 str
+   * Find the `str` from left to right.
    */
-  private int firstOfCurrentCodePoint(int bytePos) {
-    while (bytePos >= 0) {
-      ByteType byteType = checkByteType(getByte(bytePos));
-      if (ByteType.FIRSTBYTE == byteType || ByteType.SINGLEBYTECHAR == byteType) {
-        return bytePos;
+  private int find(UTF8String str, int start) {
+    assert (str.numBytes > 0);
+    while (start <= numBytes - str.numBytes) {
+      if (ByteArrayMethods.arrayEquals(base, offset + start, str.base, str.offset, str.numBytes)) {
+        return start;
       }
-      bytePos--;
+      start += 1;
     }
-    throw new RuntimeException("Invalid UTF8 string: " + toString());
-  }
-
-  // Locate to the start position in byte for a given code point
-  private int firstByteIndex(int startByteIndex, int startPointIndex, int codePoint) {
-    int i = startByteIndex; // position in byte
-    int c = startPointIndex; // position in character
-    while (i < numBytes && c < codePoint) {
-      i += numBytesForFirstByte(getByte(i));
-      c += 1;
-    }
-    if (i > numBytes) {
-      throw new StringIndexOutOfBoundsException(codePoint);
-    }
-    return i;
-  }
-
-  // Locate to the last position in byte for a given code point
-  private int lastByteIndex(int codePoint) {
-    int i = firstByteIndex(0, 0, codePoint);
-    return i + numBytesForFirstByte(getByte(i)) - 1;
-  }
-
-  /**
-   * Returns the index within this string of the last occurrence of the
-   * specified substring, searching backward starting at the specified index.
-   * @param v the substring to search for.
-   * @param startCodePoint the index to start search from
-   * @return the index of the last occurrence of the specified substring,
-   *         searching backward from the specified index,
-   *         or {@code -1} if there is no such occurrence.
-   */
-  public int lastIndexOf(UTF8String v, int startCodePoint) {
-    // Empty string always match
-    if (v.numBytes == 0) {
-      return startCodePoint;
-    }
-    return lastIndexOfInByte(v, lastByteIndex(startCodePoint));
-  }
-
-  private int lastIndexOfInByte(UTF8String v, int fromIndexInByte) {
-    if (numBytes == 0) {
-      return -1;
-    }
-    do {
-      int startByteIndex = fromIndexInByte - v.numBytes + 1;
-      if (startByteIndex < 0 ) {
-        return -1;
-      }
-      if (ByteArrayMethods.arrayEquals(
-              base, offset + startByteIndex, v.base, v.offset, v.numBytes)) {
-        int count = 0; // count from right most to the match end in byte.
-        while (startByteIndex >= 0) {
-          count++;
-          startByteIndex = firstOfCurrentCodePoint(startByteIndex) - 1;
-        }
-        return count - 1;
-      }
-      fromIndexInByte  = firstOfCurrentCodePoint(fromIndexInByte) - 1;
-    } while (fromIndexInByte >= 0);
     return -1;
   }
 
   /**
-   * Finds the n-th last index within a String.
-   * This method uses {@link String#lastIndexOf(String)}.</p>
-   *
-   * @param searchStr  the String to find, may be null
-   * @param ordinal  the n-th last <code>searchStr</code> to find
-   * @return the n-th last index of the search String,
-   *  <code>-1</code> if no match or <code>null</code> string input
+   * Find the `str` from right to left.
    */
-  protected int lastOrdinalIndexOf(
-          UTF8String searchStr,
-          int ordinal) {
-    return doOrdinalIndexOf(searchStr, ordinal, true);
+  private int rfind(UTF8String str, int start) {
+    assert (str.numBytes > 0);
+    while (start >= 0) {
+      if (ByteArrayMethods.arrayEquals(base, offset + start, str.base, str.offset, str.numBytes)) {
+        return start;
+      }
+      start -= 1;
+    }
+    return -1;
   }
 
-  /**
-   * Finds the n-th index within a String, handling <code>null</code>.
-   * A <code>null</code> String will return <code>-1</code>
-   *
-   * @param searchStr  the String to find, may be null
-   * @param ordinal  the n-th <code>searchStr</code> to find
-   * @return the n-th index of the search String,
-   *  <code>-1</code> if no match or <code>null</code> string input
-   */
-  protected int ordinalIndexOf(
-          UTF8String searchStr,
-          int ordinal) {
-    return doOrdinalIndexOf(searchStr, ordinal, false);
-  }
-
-  private int doOrdinalIndexOf(
-          UTF8String searchStr,
-          int ordinal,
-          boolean lastIndex) {
-    if (ordinal <= 0) {
-      return -1;
-    }
-    if (searchStr.numBytes == 0) {
-      return lastIndex ? numChars() : 0;
-    }
-    int found = 0;
-    int index = lastIndex ? numBytes : -1;
-    do {
-      if (lastIndex) {
-        index = lastIndexOfInByte(searchStr, index - 1);
-      } else {
-        index = indexOf(searchStr, index + 1);
-      }
-      if (index < 0) {
-        return index;
-      }
-      found += 1;
-    } while (found < ordinal);
-    return index;
-  }
   /**
    * Returns the substring from string str before count occurrences of the delimiter delim.
    * If count is positive, everything the left of the final delimiter (counting from left) is
    * returned. If count is negative, every to the right of the final delimiter (counting from the
-   * right) is returned. substring_index performs a case-sensitive match when searching for delim.
+   * right) is returned. subStringIndex performs a case-sensitive match when searching for delim.
    */
   public UTF8String subStringIndex(UTF8String delim, int count) {
     if (delim.numBytes == 0 || count == 0) {
-      return UTF8String.EMPTY_UTF8;
+      return EMPTY_UTF8;
     }
     if (count > 0) {
-      int idx = ordinalIndexOf(delim, count);
-      if (idx != -1) {
-        return substring(0, idx);
-      } else {
-        return this;
+      int idx = -1;
+      while (count > 0) {
+        idx = find(delim, idx + 1);
+        if (idx >= 0) {
+          count --;
+        } else {
+          // can not find enough delim
+          return this;
+        }
       }
+      if (idx == 0) {
+        return EMPTY_UTF8;
+      }
+      byte[] bytes = new byte[idx];
+      copyMemory(base, offset, bytes, BYTE_ARRAY_OFFSET, idx);
+      return fromBytes(bytes);
+
     } else {
-      int idx = lastOrdinalIndexOf(delim, -count);
-      if (idx != -1) {
-        return substring(idx + delim.numChars());
-      } else {
-        return this;
+      int idx = numBytes - delim.numBytes + 1;
+      count = -count;
+      while (count > 0) {
+        idx = rfind(delim, idx - 1);
+        if (idx >= 0) {
+          count --;
+        } else {
+          // can not find enough delim
+          return this;
+        }
       }
+      if (idx + delim.numBytes == numBytes) {
+        return EMPTY_UTF8;
+      }
+      int size = numBytes - delim.numBytes - idx;
+      byte[] bytes = new byte[size];
+      copyMemory(base, offset + idx + delim.numBytes, bytes, BYTE_ARRAY_OFFSET, size);
+      return fromBytes(bytes);
     }
   }
 

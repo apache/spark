@@ -190,32 +190,32 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("string substring_index function") {
     checkEvaluation(
-      Substring_index(Literal("www.apache.org"), Literal("."), Literal(3)), "www.apache.org")
+      SubstringIndex(Literal("www.apache.org"), Literal("."), Literal(3)), "www.apache.org")
     checkEvaluation(
-      Substring_index(Literal("www.apache.org"), Literal("."), Literal(2)), "www.apache")
+      SubstringIndex(Literal("www.apache.org"), Literal("."), Literal(2)), "www.apache")
     checkEvaluation(
-      Substring_index(Literal("www.apache.org"), Literal("."), Literal(1)), "www")
+      SubstringIndex(Literal("www.apache.org"), Literal("."), Literal(1)), "www")
     checkEvaluation(
-      Substring_index(Literal("www.apache.org"), Literal("."), Literal(0)), "")
+      SubstringIndex(Literal("www.apache.org"), Literal("."), Literal(0)), "")
     checkEvaluation(
-      Substring_index(Literal("www.apache.org"), Literal("."), Literal(-3)), "www.apache.org")
+      SubstringIndex(Literal("www.apache.org"), Literal("."), Literal(-3)), "www.apache.org")
     checkEvaluation(
-      Substring_index(Literal("www.apache.org"), Literal("."), Literal(-2)), "apache.org")
+      SubstringIndex(Literal("www.apache.org"), Literal("."), Literal(-2)), "apache.org")
     checkEvaluation(
-      Substring_index(Literal("www.apache.org"), Literal("."), Literal(-1)), "org")
+      SubstringIndex(Literal("www.apache.org"), Literal("."), Literal(-1)), "org")
     checkEvaluation(
-      Substring_index(Literal(""), Literal("."), Literal(-2)), "")
+      SubstringIndex(Literal(""), Literal("."), Literal(-2)), "")
     checkEvaluation(
-      Substring_index(Literal.create(null, StringType), Literal("."), Literal(-2)), null)
-    checkEvaluation(Substring_index(
+      SubstringIndex(Literal.create(null, StringType), Literal("."), Literal(-2)), null)
+    checkEvaluation(SubstringIndex(
         Literal("www.apache.org"), Literal.create(null, StringType), Literal(-2)), null)
     // non ascii chars
     // scalastyle:off
     checkEvaluation(
-      Substring_index(Literal("大千世界大千世界"), Literal( "千"), Literal(2)), "大千世界大")
+      SubstringIndex(Literal("大千世界大千世界"), Literal( "千"), Literal(2)), "大千世界大")
     // scalastyle:on
     checkEvaluation(
-      Substring_index(Literal("www||apache||org"), Literal( "||"), Literal(2)), "www||apache")
+      SubstringIndex(Literal("www||apache||org"), Literal( "||"), Literal(2)), "www||apache")
   }
 
   test("LIKE literal Regular Expression") {

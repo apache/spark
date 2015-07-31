@@ -1796,7 +1796,7 @@ object functions {
    * @group string_funcs
    */
   def substring_index(str: Column, delim: String, count: Int): Column =
-    Substring_index(str.expr, lit(delim).expr, lit(count).expr)
+    SubstringIndex(str.expr, lit(delim).expr, lit(count).expr)
 
   /**
    * Locate the position of the first occurrence of substr.
