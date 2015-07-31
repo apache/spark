@@ -26,6 +26,7 @@
       <useTransitiveDependencies>true</useTransitiveDependencies>
       <scope>test</scope>
       <useProjectArtifact>false</useProjectArtifact>
+      <unpack>true</unpack>
       <excludes>
         <exclude>org.apache.hadoop:*:jar</exclude>
         <exclude>org.apache.spark:*:jar</exclude>
