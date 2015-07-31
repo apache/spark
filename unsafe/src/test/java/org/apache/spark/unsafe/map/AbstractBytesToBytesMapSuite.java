@@ -85,7 +85,7 @@ public abstract class AbstractBytesToBytesMapSuite {
   }
 
   private byte[] getRandomByteArray(int numWords) {
-    Assert.assertTrue(numWords > 0);
+    Assert.assertTrue(numWords >= 0);
     final int lengthInBytes = numWords * 8;
     final byte[] bytes = new byte[lengthInBytes];
     rand.nextBytes(bytes);
@@ -338,6 +338,55 @@ public abstract class AbstractBytesToBytesMapSuite {
         }
       }
 
+      for (Map.Entry<ByteBuffer, byte[]> entry : expected.entrySet()) {
+        final byte[] key = entry.getKey().array();
+        final byte[] value = entry.getValue();
+        final BytesToBytesMap.Location loc = map.lookup(key, BYTE_ARRAY_OFFSET, key.length);
+        Assert.assertTrue(loc.isDefined());
+        Assert.assertTrue(arrayEquals(key, loc.getKeyAddress(), loc.getKeyLength()));
+        Assert.assertTrue(arrayEquals(value, loc.getValueAddress(), loc.getValueLength()));
+      }
+    } finally {
+      map.free();
+    }
+  }
+
+  @Test
+  public void randomizedTestWithRecordsLargerThanPageSize() {
+    final long pageSizeBytes = 128;
+    final BytesToBytesMap map = new BytesToBytesMap(memoryManager, 64, pageSizeBytes);
+    // Java arrays' hashCodes() aren't based on the arrays' contents, so we need to wrap arrays
+    // into ByteBuffers in order to use them as keys here.
+    final Map<ByteBuffer, byte[]> expected = new HashMap<ByteBuffer, byte[]>();
+    try {
+      for (int i = 0; i < 1000; i++) {
+        final byte[] key = getRandomByteArray(rand.nextInt(128));
+        final byte[] value = getRandomByteArray(rand.nextInt(128));
+        if (!expected.containsKey(ByteBuffer.wrap(key))) {
+          expected.put(ByteBuffer.wrap(key), value);
+          final BytesToBytesMap.Location loc = map.lookup(
+            key,
+            BYTE_ARRAY_OFFSET,
+            key.length
+          );
+          Assert.assertFalse(loc.isDefined());
+          loc.putNewKey(
+            key,
+            BYTE_ARRAY_OFFSET,
+            key.length,
+            value,
+            BYTE_ARRAY_OFFSET,
+            value.length
+          );
+          // After calling putNewKey, the following should be true, even before calling
+          // lookup():
+          Assert.assertTrue(loc.isDefined());
+          Assert.assertEquals(key.length, loc.getKeyLength());
+          Assert.assertEquals(value.length, loc.getValueLength());
+          Assert.assertTrue(arrayEquals(key, loc.getKeyAddress(), key.length));
+          Assert.assertTrue(arrayEquals(value, loc.getValueAddress(), value.length));
+        }
+      }
       for (Map.Entry<ByteBuffer, byte[]> entry : expected.entrySet()) {
         final byte[] key = entry.getKey().array();
         final byte[] value = entry.getValue();
