@@ -557,10 +557,9 @@ def length(col):
 @since(1.5)
 def initcap(col):
     """Translate the first letter of each word to upper case in the sentence.
-
-    >>> sqlContext.createDataFrame([('the test',)], ['a']).select(initcap('the test')\
-    .alias('v')).collect()
-    [Row(v='The Test')]
+    
+    >>> sqlContext.createDataFrame([('a b',)], ['a']).select(initcap('a b').alias('v')).collect()
+    [Row(v='A B')]
     """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.initcap(_to_java_column(col)))
