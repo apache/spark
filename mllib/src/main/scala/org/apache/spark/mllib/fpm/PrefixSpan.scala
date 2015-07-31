@@ -48,8 +48,8 @@ class PrefixSpan private (
    * The maximum number of items allowed in a projected database before local processing. If a
    * projected database exceeds this size, another iteration of distributed PrefixSpan is run.
    */
-  // TODO: make configurable with a better default value, 10000 may be too small
-  private val maxLocalProjDBSize: Long = 10000
+  // TODO: make configurable with a better default value
+  private val maxLocalProjDBSize: Long = 32000000L
 
   /**
    * Constructs a default instance with default parameters
@@ -269,8 +269,8 @@ object PrefixSpan {
     // TODO: avoid allocating new arrays when appending
     sequence.zip(Seq.fill(sequence.size)(PrefixSpan.DELIMITER))
       .flatMap { case (a: Set[Int], b: Int) =>
-        a.toList.sorted :+ b
-      }
+        b :: a.toList.sorted
+      }.drop(1) // drop leading delimiter
   }
 
   private[fpm] def nonemptySubsets(itemSet: Set[Int]): Iterator[Set[Int]] = {
