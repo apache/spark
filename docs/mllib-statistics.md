@@ -431,9 +431,9 @@ user tests against the normal distribution (`distName="norm"`), but does not pro
 parameters, the test initializes to the standard normal distribution and logs an appropriate 
 message.
 
-There is also a 2-sample, 2-sided implementation available, which tests if the 2 samples are drawn
-from the same distribution. It is worth noting that the test assumes that all elements
-are unique, both within and across the 2 samples, and thus no ranking ties should occur. 
+There is also a 2-sample, 2-sided implementation available, which tests the null hypothesis that the
+2 samples are drawn from the same distribution. It is worth noting that the test assumes that all
+elements are unique, both within and across the 2 samples, and thus no ranking ties should occur.
 Given that the test is for continuous distributions this should not be an onerous requirement.
 
 <div class="codetabs">

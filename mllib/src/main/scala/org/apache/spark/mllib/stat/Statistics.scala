@@ -199,7 +199,7 @@ object Statistics {
 
   /**
    * Perform a two-sample, two-sided Kolmogorov-Smirnov test for probability distribution equality
-   * The null hypothesis corresponds to both samples coming from the same distribution
+   * The null hypothesis is that both samples come from the same distribution
    * @param data1 `RDD[Double]` first sample of data
    * @param data2 `RDD[Double]` second sample of data
    * @return [[org.apache.spark.mllib.stat.test.KolmogorovSmirnovTestResult]] object containing test
