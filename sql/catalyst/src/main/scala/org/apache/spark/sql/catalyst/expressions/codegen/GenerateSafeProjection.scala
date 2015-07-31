@@ -117,7 +117,7 @@ object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection]
         return new SpecificProjection(expr);
       }
 
-      class FromUnsafeProjection extends ${classOf[BaseProjection].getName} {
+      class SpecificProjection extends ${classOf[BaseProjection].getName} {
 
         private $exprType[] expressions;
         private $mutableRowType mutableRow;
