@@ -744,6 +744,15 @@ object functions {
   def sparkPartitionId(): Column = SparkPartitionID()
 
   /**
+   * The file name of the current Spark task
+   *
+   * Note that this is indeterministic becuase it depends on what is currently being read in.
+   *
+   * @group normal_funcs
+   */
+  def inputFileName(): Column = InputFileName()
+
+  /**
    * Computes the square root of the specified float value.
    *
    * @group math_funcs
@@ -1423,7 +1432,8 @@ object functions {
   def round(columnName: String): Column = round(Column(columnName), 0)
 
   /**
-   * Returns the value of `e` rounded to `scale` decimal places.
+   * Round the value of `e` to `scale` decimal places if `scale` >= 0
+   * or at integral part when `scale` < 0.
    *
    * @group math_funcs
    * @since 1.5.0
@@ -1431,7 +1441,8 @@ object functions {
   def round(e: Column, scale: Int): Column = Round(e.expr, Literal(scale))
 
   /**
-   * Returns the value of the given column rounded to `scale` decimal places.
+   * Round the value of the given column to `scale` decimal places if `scale` >= 0
+   * or at integral part when `scale` < 0.
    *
    * @group math_funcs
    * @since 1.5.0
@@ -1917,6 +1928,14 @@ object functions {
   //////////////////////////////////////////////////////////////////////////////////////////////
 
   /**
+   * Returns the date that is numMonths after startDate.
+   * @group datetime_funcs
+   * @since 1.5.0
+   */
+  def add_months(startDate: Column, numMonths: Int): Column =
+    AddMonths(startDate.expr, Literal(numMonths))
+
+  /**
    * Converts a date/timestamp/string to a value of string in the format specified by the date
    * format given by the second argument.
    *
@@ -1947,6 +1966,20 @@ object functions {
    */
   def date_format(dateColumnName: String, format: String): Column =
     date_format(Column(dateColumnName), format)
+
+  /**
+   * Returns the date that is `days` days after `start`
+   * @group datetime_funcs
+   * @since 1.5.0
+   */
+  def date_add(start: Column, days: Int): Column = DateAdd(start.expr, Literal(days))
+
+  /**
+   * Returns the date that is `days` days before `start`
+   * @group datetime_funcs
+   * @since 1.5.0
+   */
+  def date_sub(start: Column, days: Int): Column = DateSub(start.expr, Literal(days))
 
   /**
    * Extracts the year as an integer from a given date/timestamp/string.
@@ -2056,6 +2089,13 @@ object functions {
    */
   def minute(columnName: String): Column = minute(Column(columnName))
 
+  /*
+   * Returns number of months between dates `date1` and `date2`.
+   * @group datetime_funcs
+   * @since 1.5.0
+   */
+  def months_between(date1: Column, date2: Column): Column = MonthsBetween(date1.expr, date2.expr)
+
   /**
    * Given a date column, returns the first date which is later than the value of the date column
    * that is on the specified day of the week.
@@ -2098,6 +2138,48 @@ object functions {
    * @since 1.5.0
    */
   def weekofyear(columnName: String): Column = weekofyear(Column(columnName))
+
+  /**
+   * Converts the number of seconds from unix epoch (1970-01-01 00:00:00 UTC) to a string
+   * representing the timestamp of that moment in the current system time zone in the given
+   * format.
+   * @group datetime_funcs
+   * @since 1.5.0
+   */
+  def from_unixtime(ut: Column): Column = FromUnixTime(ut.expr, Literal("yyyy-MM-dd HH:mm:ss"))
+
+  /**
+   * Converts the number of seconds from unix epoch (1970-01-01 00:00:00 UTC) to a string
+   * representing the timestamp of that moment in the current system time zone in the given
+   * format.
+   * @group datetime_funcs
+   * @since 1.5.0
+   */
+  def from_unixtime(ut: Column, f: String): Column = FromUnixTime(ut.expr, Literal(f))
+
+  /**
+   * Gets current Unix timestamp in seconds.
+   * @group datetime_funcs
+   * @since 1.5.0
+   */
+  def unix_timestamp(): Column = UnixTimestamp(CurrentTimestamp(), Literal("yyyy-MM-dd HH:mm:ss"))
+
+  /**
+   * Converts time string in format yyyy-MM-dd HH:mm:ss to Unix timestamp (in seconds),
+   * using the default timezone and the default locale, return null if fail.
+   * @group datetime_funcs
+   * @since 1.5.0
+   */
+  def unix_timestamp(s: Column): Column = UnixTimestamp(s.expr, Literal("yyyy-MM-dd HH:mm:ss"))
+
+  /**
+   * Convert time string with given pattern
+   * (see [http://docs.oracle.com/javase/tutorial/i18n/format/simpleDateFormat.html])
+   * to Unix time stamp (in seconds), return null if fail.
+   * @group datetime_funcs
+   * @since 1.5.0
+   */
+  def unix_timestamp(s: Column, p: String): Column = UnixTimestamp(s.expr, Literal(p))
 
   //////////////////////////////////////////////////////////////////////////////////////////////
   // Collection functions

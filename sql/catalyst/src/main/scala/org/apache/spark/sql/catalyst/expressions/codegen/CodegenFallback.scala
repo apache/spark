@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions.codegen
 
-import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.catalyst.expressions.{Nondeterministic, Expression}
 
 /**
  * A trait that can be used to provide a fallback mode for expression code generation.
@@ -25,6 +25,11 @@ import org.apache.spark.sql.catalyst.expressions.Expression
 trait CodegenFallback extends Expression {
 
   protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    foreach {
+      case n: Nondeterministic => n.setInitialValues()
+      case _ =>
+    }
+
     ctx.references += this
     val objectTerm = ctx.freshName("obj")
     s"""

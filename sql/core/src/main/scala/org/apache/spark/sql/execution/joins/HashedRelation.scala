@@ -21,7 +21,7 @@ import java.io.{Externalizable, ObjectInput, ObjectOutput}
 import java.nio.ByteOrder
 import java.util.{HashMap => JavaHashMap}
 
-import org.apache.spark.{SparkEnv, TaskContext}
+import org.apache.spark.{SparkConf, SparkEnv, TaskContext}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.SparkSqlSerializer
@@ -229,7 +229,7 @@ private[joins] final class UnsafeHashedRelation(
       // write all the values as single byte array
       var totalSize = 0L
       var i = 0
-      while (i < values.size) {
+      while (i < values.length) {
         totalSize += values(i).getSizeInBytes + 4 + 4
         i += 1
       }
@@ -240,7 +240,7 @@ private[joins] final class UnsafeHashedRelation(
       out.writeInt(totalSize.toInt)
       out.write(key.getBytes)
       i = 0
-      while (i < values.size) {
+      while (i < values.length) {
         // [num of fields] [num of bytes] [row bytes]
         // write the integer in native order, so they can be read by UNSAFE.getInt()
         if (ByteOrder.nativeOrder() == ByteOrder.BIG_ENDIAN) {
@@ -260,7 +260,10 @@ private[joins] final class UnsafeHashedRelation(
     val nKeys = in.readInt()
     // This is used in Broadcast, shared by multiple tasks, so we use on-heap memory
     val memoryManager = new TaskMemoryManager(new ExecutorMemoryManager(MemoryAllocator.HEAP))
-    val pageSizeBytes = SparkEnv.get.conf.getSizeAsBytes("spark.buffer.pageSize", "64m")
+
+    val pageSizeBytes = Option(SparkEnv.get).map(_.conf).getOrElse(new SparkConf())
+      .getSizeAsBytes("spark.buffer.pageSize", "64m")
+
     binaryMap = new BytesToBytesMap(
       memoryManager,
       nKeys * 2, // reduce hash collision

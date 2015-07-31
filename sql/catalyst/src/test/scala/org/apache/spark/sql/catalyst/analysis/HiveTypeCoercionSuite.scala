@@ -17,12 +17,15 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import java.sql.Timestamp
+
 import org.apache.spark.sql.catalyst.plans.PlanTest
 
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.CalendarInterval
 
 class HiveTypeCoercionSuite extends PlanTest {
 
@@ -399,6 +402,33 @@ class HiveTypeCoercionSuite extends PlanTest {
       checkOutput(r6.left, Seq(expectedType))
     }
   }
+
+  test("rule for date/timestamp operations") {
+    val dateTimeOperations = HiveTypeCoercion.DateTimeOperations
+    val date = Literal(new java.sql.Date(0L))
+    val timestamp = Literal(new Timestamp(0L))
+    val interval = Literal(new CalendarInterval(0, 0))
+    val str = Literal("2015-01-01")
+
+    ruleTest(dateTimeOperations, Add(date, interval), Cast(TimeAdd(date, interval), DateType))
+    ruleTest(dateTimeOperations, Add(interval, date), Cast(TimeAdd(date, interval), DateType))
+    ruleTest(dateTimeOperations, Add(timestamp, interval),
+      Cast(TimeAdd(timestamp, interval), TimestampType))
+    ruleTest(dateTimeOperations, Add(interval, timestamp),
+      Cast(TimeAdd(timestamp, interval), TimestampType))
+    ruleTest(dateTimeOperations, Add(str, interval), Cast(TimeAdd(str, interval), StringType))
+    ruleTest(dateTimeOperations, Add(interval, str), Cast(TimeAdd(str, interval), StringType))
+
+    ruleTest(dateTimeOperations, Subtract(date, interval), Cast(TimeSub(date, interval), DateType))
+    ruleTest(dateTimeOperations, Subtract(timestamp, interval),
+      Cast(TimeSub(timestamp, interval), TimestampType))
+    ruleTest(dateTimeOperations, Subtract(str, interval), Cast(TimeSub(str, interval), StringType))
+
+    // interval operations should not be effected
+    ruleTest(dateTimeOperations, Add(interval, interval), Add(interval, interval))
+    ruleTest(dateTimeOperations, Subtract(interval, interval), Subtract(interval, interval))
+  }
+
 
   /**
    * There are rules that need to not fire before child expressions get resolved.

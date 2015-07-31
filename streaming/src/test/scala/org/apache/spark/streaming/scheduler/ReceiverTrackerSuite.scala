@@ -29,36 +29,40 @@ import org.apache.spark.storage.StorageLevel
 /** Testsuite for receiver scheduling */
 class ReceiverTrackerSuite extends TestSuiteBase {
   val sparkConf = new SparkConf().setMaster("local[8]").setAppName("test")
-  val ssc = new StreamingContext(sparkConf, Milliseconds(100))
 
-  ignore("Receiver tracker - propagates rate limit") {
-    object ReceiverStartedWaiter extends StreamingListener {
-      @volatile
-      var started = false
+  test("Receiver tracker - propagates rate limit") {
+    withStreamingContext(new StreamingContext(sparkConf, Milliseconds(100))) { ssc =>
+      object ReceiverStartedWaiter extends StreamingListener {
+        @volatile
+        var started = false
 
-      override def onReceiverStarted(receiverStarted: StreamingListenerReceiverStarted): Unit = {
-        started = true
+        override def onReceiverStarted(receiverStarted: StreamingListenerReceiverStarted): Unit = {
+          started = true
+        }
       }
-    }
 
-    ssc.addStreamingListener(ReceiverStartedWaiter)
-    ssc.scheduler.listenerBus.start(ssc.sc)
-    SingletonTestRateReceiver.reset()
+      ssc.addStreamingListener(ReceiverStartedWaiter)
+      ssc.scheduler.listenerBus.start(ssc.sc)
+      SingletonTestRateReceiver.reset()
 
-    val newRateLimit = 100L
-    val inputDStream = new RateLimitInputDStream(ssc)
-    val tracker = new ReceiverTracker(ssc)
-    tracker.start()
-
-    // we wait until the Receiver has registered with the tracker,
-    // otherwise our rate update is lost
-    eventually(timeout(5 seconds)) {
-      assert(ReceiverStartedWaiter.started)
-    }
-    tracker.sendRateUpdate(inputDStream.id, newRateLimit)
-    // this is an async message, we need to wait a bit for it to be processed
-    eventually(timeout(3 seconds)) {
-      assert(inputDStream.getCurrentRateLimit.get === newRateLimit)
+      val newRateLimit = 100L
+      val inputDStream = new RateLimitInputDStream(ssc)
+      val tracker = new ReceiverTracker(ssc)
+      tracker.start()
+      try {
+        // we wait until the Receiver has registered with the tracker,
+        // otherwise our rate update is lost
+        eventually(timeout(5 seconds)) {
+          assert(ReceiverStartedWaiter.started)
+        }
+        tracker.sendRateUpdate(inputDStream.id, newRateLimit)
+        // this is an async message, we need to wait a bit for it to be processed
+        eventually(timeout(3 seconds)) {
+          assert(inputDStream.getCurrentRateLimit.get === newRateLimit)
+        }
+      } finally {
+        tracker.stop(false)
+      }
     }
   }
 }
