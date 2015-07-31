@@ -27,7 +27,7 @@ import org.apache.spark.sql.types.DoubleType
 
 /**
  * :: Experimental ::
- * Evaluator for binary classification, which expects two input columns: score and label.
+ * Evaluator for multiclass classification, which expects two input columns: score and label.
  */
 @Experimental
 class MulticlassClassificationEvaluator (override val uid: String)
@@ -36,7 +36,8 @@ class MulticlassClassificationEvaluator (override val uid: String)
   def this() = this(Identifiable.randomUID("mcEval"))
 
   /**
-   * param for metric name in evaluation (supports `"f1"` (default))
+   * param for metric name in evaluation (supports `"f1"` (default), `"precision"`, `"recall"`,
+   * `"weightedPrecision"`, `"weightedRecall"`)
    * @group param
    */
   val metricName: Param[String] = {
