@@ -191,6 +191,15 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Literal.create(null, StringType).like("a"), null)
     checkEvaluation(Literal.create("a", StringType).like(Literal.create(null, StringType)), null)
     checkEvaluation(Literal.create(null, StringType).like(Literal.create(null, StringType)), null)
+    checkEvaluation(
+      Literal.create("a", StringType).like(NonFoldableLiteral.create("a", StringType)), true)
+    checkEvaluation(
+      Literal.create("a", StringType).like(NonFoldableLiteral.create(null, StringType)), null)
+    checkEvaluation(
+      Literal.create(null, StringType).like(NonFoldableLiteral.create("a", StringType)), null)
+    checkEvaluation(
+      Literal.create(null, StringType).like(NonFoldableLiteral.create(null, StringType)), null)
+
     checkEvaluation("abdef" like "abdef", true)
     checkEvaluation("a_%b" like "a\\__b", true)
     checkEvaluation("addb" like "a_%b", true)
@@ -232,6 +241,13 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Literal.create(null, StringType) rlike "abdef", null)
     checkEvaluation("abdef" rlike Literal.create(null, StringType), null)
     checkEvaluation(Literal.create(null, StringType) rlike Literal.create(null, StringType), null)
+    checkEvaluation("abdef" rlike NonFoldableLiteral.create("abdef", StringType), true)
+    checkEvaluation("abdef" rlike NonFoldableLiteral.create(null, StringType), null)
+    checkEvaluation(
+      Literal.create(null, StringType) rlike NonFoldableLiteral.create("abdef", StringType), null)
+    checkEvaluation(
+      Literal.create(null, StringType) rlike NonFoldableLiteral.create(null, StringType), null)
+
     checkEvaluation("abdef" rlike "abdef", true)
     checkEvaluation("abbbbc" rlike "a.*c", true)
 
