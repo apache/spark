@@ -101,14 +101,6 @@ private[spark] class ApplicationInfo(
 
   private[master] def coresLeft: Int = requestedCores - coresGranted
 
-  /**
-   * Return whether this application should launch at most one executor per worker.
-   *
-   * This is true if cores per executor is not defined, in which case the executor should
-   * grab all the available cores on the worker instead.
-   */
-  private[master] def oneExecutorPerWorker(): Boolean = desc.coresPerExecutor.isEmpty
-
   private var _retryCount = 0
 
   private[master] def retryCount = _retryCount

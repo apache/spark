@@ -572,6 +572,7 @@ private[master] class Master(
       spreadOutApps: Boolean): Array[Int] = {
     val coresPerExecutor = app.desc.coresPerExecutor
     val minCoresPerExecutor = coresPerExecutor.getOrElse(1)
+    val oneExecutorPerWorker = coresPerExecutor.isEmpty
     val memoryPerExecutor = app.desc.memoryPerExecutorMB
     val numUsable = usableWorkers.length
     val assignedCores = new Array[Int](numUsable) // Number of cores to give to each worker
@@ -580,16 +581,16 @@ private[master] class Master(
 
     /** Return whether the specified worker can launch an executor for this app. */
     def canLaunchExecutor(pos: Int): Boolean = {
-      val assignedMemory = assignedExecutors(pos) * memoryPerExecutor
+      // If we allow multiple executors per worker, then we can always launch new executors.
+      // Otherwise, we may have already started assigning cores to the executor on this worker.
+      val launchingNewExecutor = !oneExecutorPerWorker || assignedExecutors(pos) == 0
       val underLimit =
-        if (app.oneExecutorPerWorker() && assignedExecutors(pos) == 1) {
-          // We only have one executor per worker and have already started to assign cores to it,
-          // so assigning more to it does not change the number of executors we'll end up with
-          true
-        } else {
-          // Otherwise, we should launch a new executor only if we do not exceed the limit
+        if (launchingNewExecutor) {
           assignedExecutors.sum + app.executors.size < app.executorLimit
+        } else {
+          true
         }
+      val assignedMemory = assignedExecutors(pos) * memoryPerExecutor
       usableWorkers(pos).memoryFree - assignedMemory >= memoryPerExecutor &&
       usableWorkers(pos).coresFree - assignedCores(pos) >= minCoresPerExecutor &&
       coresToAssign >= minCoresPerExecutor &&
@@ -608,7 +609,7 @@ private[master] class Master(
 
           // If we are launching one executor per worker, then every iteration assigns 1 core
           // to the executor. Otherwise, every iteration assigns cores to a new executor.
-          if (app.oneExecutorPerWorker()) {
+          if (oneExecutorPerWorker) {
             assignedExecutors(pos) = 1
           } else {
             assignedExecutors(pos) += 1
@@ -851,8 +852,8 @@ private[master] class Master(
    * Handle a kill request from the given application.
    *
    * This method assumes the executor limit has already been adjusted downwards through
-   * a separate [[RequestExecutors]] message, such that we do not immediately launch new
-   * executors immediately after the old ones are removed.
+   * a separate [[RequestExecutors]] message, such that we do not launch new executors
+   * immediately after the old ones are removed.
    *
    * @return whether the application has previously registered with this Master.
    */
