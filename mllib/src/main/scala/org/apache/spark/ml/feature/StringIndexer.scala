@@ -194,7 +194,6 @@ class StringIndexerInverse private[ml] (
    * @group setParam
    */
   def setLabels(value: Array[String]): this.type = set(labels, value)
-  setDefault(labels -> Array.empty[String])
 
   /**
    * Param for array of labels.
@@ -203,6 +202,7 @@ class StringIndexerInverse private[ml] (
    * @group param
    */
   final val labels: StringArrayParam = new StringArrayParam(this, "labels", "array of labels")
+  setDefault(labels, Array.empty[String])
 
   /** @group getParam
    * Optional labels to be provided by the user, if not supplied column
