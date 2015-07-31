@@ -392,7 +392,7 @@ private[sql] case class FIXED_DECIMAL(precision: Int, scale: Int)
   }
 
   override def getField(row: InternalRow, ordinal: Int): Decimal = {
-    row.getDecimal(ordinal)
+    row.getDecimal(ordinal, precision, scale)
   }
 
   override def setField(row: MutableRow, ordinal: Int, value: Decimal): Unit = {
