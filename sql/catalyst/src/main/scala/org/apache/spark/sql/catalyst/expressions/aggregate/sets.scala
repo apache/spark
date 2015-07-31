@@ -79,7 +79,7 @@ case class ReduceSetAlgebraic(left: Expression, right: AlgebraicAggregate)
 case class ReduceSetAggregate(left: Expression, right: AggregateFunction2)
   extends BinaryExpression with CodegenFallback {
 
-  right.bufferOffset = 0
+  right.mutableBufferOffset = 0
 
   override def dataType: DataType = right.dataType
 

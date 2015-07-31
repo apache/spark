@@ -1038,7 +1038,7 @@ class Analyzer(
     }
   }
 
-  /*
+  /**
    * Check and add proper window frames for all window functions.
    */
   object ResolveWindowFrame extends Rule[LogicalPlan] {
