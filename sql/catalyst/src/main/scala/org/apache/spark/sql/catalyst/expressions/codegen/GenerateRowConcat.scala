@@ -58,7 +58,7 @@ object GenerateRowConcat extends CodeGenerator[(StructType, StructType), UnsafeR
     // The only reduction comes from merging the bitset portion of the two rows, saving 1 word.
     val sizeReduction = bitset1Words + bitset2Words - outputBitsetWords
 
-    // Copy bitset from row1: pretty straightforward
+    // --------------------- copy bitset from row 1 ----------------------- //
     val copyBitset1 = Seq.tabulate(bitset1Words) { i =>
       s"""
          |PlatformDependent.UNSAFE.putLong(buf, ${offset + i * 8},
@@ -66,6 +66,8 @@ object GenerateRowConcat extends CodeGenerator[(StructType, StructType), UnsafeR
        """.stripMargin
     }.mkString
 
+
+    // --------------------- copy bitset from row 2 ----------------------- //
     var copyBitset2 = ""
     if (bitset1Remainder == 0) {
       copyBitset2 += Seq.tabulate(bitset2Words) { i =>
@@ -75,8 +77,6 @@ object GenerateRowConcat extends CodeGenerator[(StructType, StructType), UnsafeR
          """.stripMargin
       }.mkString
     } else {
-      // Copy bitset from row2: slightly more complicated here, as we need to use the leftover
-      // space from the first bitset.
       copyBitset2 = Seq.tabulate(bitset2Words) { i =>
         s"""
            |long bs2w$i = PlatformDependent.UNSAFE.getLong(obj2, ${offset + i * 8});
@@ -105,7 +105,8 @@ object GenerateRowConcat extends CodeGenerator[(StructType, StructType), UnsafeR
         }
       }.mkString("\n")
 
-      if (bitset2Remainder > (64 - bitset1Remainder)) {
+      if (bitset2Words > 0 &&
+        (bitset2Remainder == 0 || bitset2Remainder > (64 - bitset1Remainder))) {
         val lastWord = bitset2Words - 1
         copyBitset2 +=
           s"""
@@ -114,6 +115,38 @@ object GenerateRowConcat extends CodeGenerator[(StructType, StructType), UnsafeR
           """.stripMargin
       }
     }
+
+    // --------------------- copy fixed length portion from row 1 ----------------------- //
+    val copyFixedLengthRow1 = s"""
+       |PlatformDependent.UNSAFE.copyMemory(
+       |  obj1, offset1 + ${bitset1Words * 8},
+       |  buf, offset + ${outputBitsetWords * 8},
+       |  ${schema1.size * 8});
+     """.stripMargin
+
+    // --------------------- copy fixed length portion from row 2 ----------------------- //
+    val copyFixedLengthRow2 = s"""
+       |PlatformDependent.UNSAFE.copyMemory(
+       |  obj2, offset2 + ${bitset1Words * 8},
+       |  buf, offset + ${(outputBitsetWords + schema1.size) * 8},
+       |  ${schema2.size * 8});
+     """.stripMargin
+
+    // --------------------- copy variable length portion from row 1 ----------------------- //
+    val copyVariableLengthRow1 = s"""
+       |PlatformDependent.UNSAFE.copyMemory(
+       |  obj1, offset1 + ${(bitset1Words + schema1.size) * 8},
+       |  buf, offset + ${(outputBitsetWords + schema1.size + schema2.size) * 8},
+       |  row1.getSizeInBytes() - ${(bitset1Words + schema1.size) * 8});
+     """.stripMargin
+
+    // --------------------- copy variable length portion from row 2 ----------------------- //
+    val copyVariableLengthRow2 = s"""
+       |PlatformDependent.UNSAFE.copyMemory(
+       |  obj1, offset1 + ${(outputBitsetWords + schema1.size + schema2.size) * 8},
+       |  buf, offset + ${(outputBitsetWords + schema1.size + schema2.size) * 8},
+       |  ${schema1.size * 8});
+     """.stripMargin
 
 
     val code = s"""
@@ -150,6 +183,8 @@ object GenerateRowConcat extends CodeGenerator[(StructType, StructType), UnsafeR
      """.stripMargin
 
     logDebug(s"code for GenerateRowConcat($schema1, $schema2):\n${CodeFormatter.format(code)}")
+
+    // println(CodeFormatter.format(code))
 
     val c = compile(code)
     c.generate(Array.empty).asInstanceOf[UnsafeRowConcat]

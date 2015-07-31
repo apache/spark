@@ -37,6 +37,12 @@ class GenerateRowConcatSuite extends SparkFunSuite {
   }
 
   private def testBitsets(numFields1: Int, numFields2: Int): Unit = {
+    for (i <- 0 until 5) {
+      testBitsetsOnce(numFields1, numFields2)
+    }
+  }
+
+  private def testBitsetsOnce(numFields1: Int, numFields2: Int): Unit = {
     val schema1 = StructType(Seq.tabulate(numFields1) { i => StructField(s"a_$i", IntegerType) })
     val schema2 = StructType(Seq.tabulate(numFields2) { i => StructField(s"b_$i", IntegerType) })
 
@@ -64,8 +70,8 @@ class GenerateRowConcatSuite extends SparkFunSuite {
 
       s"""
          |input1: ${set1.mkString}
-          |input2: ${set2.mkString}
-          |output: ${out.mkString}
+         |input2: ${set2.mkString}
+         |output: ${out.mkString}
        """.stripMargin
     }
 
@@ -78,62 +84,63 @@ class GenerateRowConcatSuite extends SparkFunSuite {
     }
   }
 
-  test("boundary size 0, 0") {
+  test("bitset concat: boundary size 0, 0") {
     testBitsets(0, 0)
   }
 
-  test("boundary size 0, 64") {
+  test("bitset concat: boundary size 0, 64") {
     testBitsets(0, 64)
   }
 
-  test("boundary size 64, 0") {
+  test("bitset concat: boundary size 64, 0") {
     testBitsets(64, 0)
   }
 
-  test("boundary size 64, 64") {
+  test("bitset concat: boundary size 64, 64") {
     testBitsets(64, 64)
   }
 
-  test("boundary size 0, 128") {
+  test("bitset concat: boundary size 0, 128") {
     testBitsets(0, 128)
   }
 
-  test("boundary size 128, 0") {
+  test("bitset concat: boundary size 128, 0") {
     testBitsets(128, 0)
   }
 
-  test("boundary size 128, 128") {
+  test("bitset concat: boundary size 128, 128") {
     testBitsets(128, 128)
   }
 
-  test("single word bitsets") {
+  test("bitset concat: single word bitsets") {
     testBitsets(10, 5)
   }
 
-  test("first bitset larger than a word") {
+  test("bitset concat: first bitset larger than a word") {
     testBitsets(67, 5)
   }
 
-  test("second bitset larger than a word") {
+  test("bitset concat: second bitset larger than a word") {
     testBitsets(6, 67)
   }
 
-  test("no reduction in bitset size") {
+  test("bitset concat: no reduction in bitset size") {
     testBitsets(33, 34)
   }
 
-  test("two words") {
+  test("bitset concat: two words") {
     testBitsets(120, 95)
   }
 
-  test("bitset 595, 960") {
+  test("bitset concat: bitset 65, 128") {
     testBitsets(65, 128)
   }
 
-  test("randomized tests") {
+  test("bitset concat: randomized tests") {
     for (i <- 1 until 20) {
       val numFields1 = Random.nextInt(1000)
       val numFields2 = Random.nextInt(1000)
+      info(s"num fields: $numFields1 and $numFields2")
       testBitsets(numFields1, numFields2)
     }
   }
