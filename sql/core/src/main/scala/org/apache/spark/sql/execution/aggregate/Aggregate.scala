@@ -56,10 +56,11 @@ case class Aggregate(
       StructType.fromAttributes(
         allAggregateExpressions.flatMap(_.aggregateFunction.bufferAttributes))
     val groupKeySchema: StructType =
-    StructType.fromAttributes(groupingExpressions.map(_.toAttribute))
+      StructType.fromAttributes(groupingExpressions.map(_.toAttribute))
     val schemaSupportsUnsafe: Boolean =
       UnsafeFixedWidthAggregationMap.supportsAggregationBufferSchema(aggregationBufferSchema) &&
-        UnsafeProjection.canSupport(groupKeySchema)
+        UnsafeProjection.canSupport(groupKeySchema) &&
+        UnsafeProjection.canSupport(StructType.fromAttributes(child.output))
 
     val allAlgebraicAggregates =
       allAggregateExpressions.forall(_.aggregateFunction.isInstanceOf[AlgebraicAggregate])
