@@ -235,8 +235,7 @@ private object InternalNode {
  *            [[org.apache.spark.mllib.tree.model.Node]], but this will change later.
  * @param isLeaf  Indicates whether this node will definitely be a leaf in the learned tree,
  *                so that we do not need to consider splitting it further.
- * @param stats  Old structure for storing stats about information gain, prediction, etc.
- *               This is legacy and will be modified in the future.
+ * @param stats  Impurity statistics for this node.
  */
 private[tree] class LearningNode(
     var id: Int,
