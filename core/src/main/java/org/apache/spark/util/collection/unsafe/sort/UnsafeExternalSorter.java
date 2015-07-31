@@ -134,7 +134,6 @@ public final class UnsafeExternalSorter {
   public void spill() throws IOException {
     logger.info("Thread {} spilling sort data of {} to disk ({} {} so far)",
       Thread.currentThread().getId(),
-      // We must call this here to ensure we update the peak memory usage before each spill
       Utils.bytesToString(getMemoryUsage()),
       spillWriters.size(),
       spillWriters.size() > 1 ? " times" : " time");

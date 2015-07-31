@@ -356,9 +356,6 @@ private[spark] object Accumulators extends Logging {
     }
   }
 
-  def stringifyPartialValue(partialValue: Any): String = "%s".format(partialValue)
-
-  def stringifyValue(value: Any): String = "%s".format(value)
 }
 
 private[spark] object InternalAccumulator {

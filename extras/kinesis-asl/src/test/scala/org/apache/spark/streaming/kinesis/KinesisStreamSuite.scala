@@ -88,11 +88,11 @@ class KinesisStreamSuite extends KinesisFunSuite
     try {
       kinesisTestUtils.createStream()
       ssc = new StreamingContext(sc, Seconds(1))
-      val aWSCredentials = KinesisTestUtils.getAWSCredentials()
+      val awsCredentials = KinesisTestUtils.getAWSCredentials()
       val stream = KinesisUtils.createStream(ssc, kinesisAppName, kinesisTestUtils.streamName,
         kinesisTestUtils.endpointUrl, kinesisTestUtils.regionName, InitialPositionInStream.LATEST,
         Seconds(10), StorageLevel.MEMORY_ONLY,
-        aWSCredentials.getAWSAccessKeyId, aWSCredentials.getAWSSecretKey)
+        awsCredentials.getAWSAccessKeyId, awsCredentials.getAWSSecretKey)
 
       val collected = new mutable.HashSet[Int] with mutable.SynchronizedSet[Int]
       stream.map { bytes => new String(bytes).toInt }.foreachRDD { rdd =>

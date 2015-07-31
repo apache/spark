@@ -202,7 +202,7 @@ case class GeneratedAggregate(
 
     val schemaSupportsUnsafe: Boolean = {
       UnsafeFixedWidthAggregationMap.supportsAggregationBufferSchema(aggregationBufferSchema) &&
-        UnsafeFixedWidthAggregationMap.supportsGroupKeySchema(groupKeySchema)
+        UnsafeProjection.canSupport(groupKeySchema)
     }
 
     child.execute().mapPartitions { iter =>

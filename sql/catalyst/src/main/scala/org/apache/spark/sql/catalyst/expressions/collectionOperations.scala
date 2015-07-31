@@ -27,11 +27,15 @@ case class Size(child: Expression) extends UnaryExpression with ExpectsInputType
   override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection(ArrayType, MapType))
 
   override def nullSafeEval(value: Any): Int = child.dataType match {
-    case ArrayType(_, _) => value.asInstanceOf[Seq[Any]].size
-    case MapType(_, _, _) => value.asInstanceOf[Map[Any, Any]].size
+    case _: ArrayType => value.asInstanceOf[ArrayData].numElements()
+    case _: MapType => value.asInstanceOf[Map[Any, Any]].size
   }
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    nullSafeCodeGen(ctx, ev, c => s"${ev.primitive} = ($c).size();")
+    val sizeCall = child.dataType match {
+      case _: ArrayType => "numElements()"
+      case _: MapType => "size()"
+    }
+    nullSafeCodeGen(ctx, ev, c => s"${ev.primitive} = ($c).$sizeCall;")
   }
 }

@@ -21,8 +21,11 @@ import java.text.DecimalFormat
 import java.util.Locale
 import java.util.regex.{MatchResult, Pattern}
 
+import org.apache.commons.lang3.StringEscapeUtils
+
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen._
+import org.apache.spark.sql.catalyst.util.StringUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -92,7 +95,7 @@ case class ConcatWs(children: Seq[Expression])
     val flatInputs = children.flatMap { child =>
       child.eval(input) match {
         case s: UTF8String => Iterator(s)
-        case arr: Seq[_] => arr.asInstanceOf[Seq[UTF8String]]
+        case arr: ArrayData => arr.toArray().map(_.asInstanceOf[UTF8String])
         case null => Iterator(null.asInstanceOf[UTF8String])
       }
     }
@@ -105,7 +108,7 @@ case class ConcatWs(children: Seq[Expression])
       val evals = children.map(_.gen(ctx))
 
       val inputs = evals.map { eval =>
-        s"${eval.isNull} ? (UTF8String)null : ${eval.primitive}"
+        s"${eval.isNull} ? (UTF8String) null : ${eval.primitive}"
       }.mkString(", ")
 
       evals.map(_.code).mkString("\n") + s"""
@@ -160,32 +163,51 @@ trait StringRegexExpression extends ImplicitCastInputTypes {
 case class Like(left: Expression, right: Expression)
   extends BinaryExpression with StringRegexExpression with CodegenFallback {
 
-  // replace the _ with .{1} exactly match 1 time of any character
-  // replace the % with .*, match 0 or more times with any character
-  override def escape(v: String): String =
-    if (!v.isEmpty) {
-      "(?s)" + (' ' +: v.init).zip(v).flatMap {
-        case (prev, '\\') => ""
-        case ('\\', c) =>
-          c match {
-            case '_' => "_"
-            case '%' => "%"
-            case _ => Pattern.quote("\\" + c)
-          }
-        case (prev, c) =>
-          c match {
-            case '_' => "."
-            case '%' => ".*"
-            case _ => Pattern.quote(Character.toString(c))
-          }
-      }.mkString
-    } else {
-      v
-    }
+  override def escape(v: String): String = StringUtils.escapeLikeRegex(v)
 
   override def matches(regex: Pattern, str: String): Boolean = regex.matcher(str).matches()
 
   override def toString: String = s"$left LIKE $right"
+
+  override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    val patternClass = classOf[Pattern].getName
+    val escapeFunc = StringUtils.getClass.getName.stripSuffix("$") + ".escapeLikeRegex"
+    val pattern = ctx.freshName("pattern")
+
+    if (right.foldable) {
+      val rVal = right.eval()
+      if (rVal != null) {
+        val regexStr =
+          StringEscapeUtils.escapeJava(escape(rVal.asInstanceOf[UTF8String].toString()))
+        ctx.addMutableState(patternClass, pattern,
+          s"""$pattern = ${patternClass}.compile("$regexStr");""")
+
+        // We don't use nullSafeCodeGen here because we don't want to re-evaluate right again.
+        val eval = left.gen(ctx)
+        s"""
+          ${eval.code}
+          boolean ${ev.isNull} = ${eval.isNull};
+          ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
+          if (!${ev.isNull}) {
+            ${ev.primitive} = $pattern.matcher(${eval.primitive}.toString()).matches();
+          }
+        """
+      } else {
+        s"""
+          boolean ${ev.isNull} = true;
+          ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
+        """
+      }
+    } else {
+      nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
+        s"""
+          String rightStr = ${eval2}.toString();
+          ${patternClass} $pattern = ${patternClass}.compile($escapeFunc(rightStr));
+          ${ev.primitive} = $pattern.matcher(${eval1}.toString()).matches();
+        """
+      })
+    }
+  }
 }
 
 
@@ -195,6 +217,45 @@ case class RLike(left: Expression, right: Expression)
   override def escape(v: String): String = v
   override def matches(regex: Pattern, str: String): Boolean = regex.matcher(str).find(0)
   override def toString: String = s"$left RLIKE $right"
+
+  override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    val patternClass = classOf[Pattern].getName
+    val pattern = ctx.freshName("pattern")
+
+    if (right.foldable) {
+      val rVal = right.eval()
+      if (rVal != null) {
+        val regexStr =
+          StringEscapeUtils.escapeJava(rVal.asInstanceOf[UTF8String].toString())
+        ctx.addMutableState(patternClass, pattern,
+          s"""$pattern = ${patternClass}.compile("$regexStr");""")
+
+        // We don't use nullSafeCodeGen here because we don't want to re-evaluate right again.
+        val eval = left.gen(ctx)
+        s"""
+          ${eval.code}
+          boolean ${ev.isNull} = ${eval.isNull};
+          ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
+          if (!${ev.isNull}) {
+            ${ev.primitive} = $pattern.matcher(${eval.primitive}.toString()).find(0);
+          }
+        """
+      } else {
+        s"""
+          boolean ${ev.isNull} = true;
+          ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
+        """
+      }
+    } else {
+      nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
+        s"""
+          String rightStr = ${eval2}.toString();
+          ${patternClass} $pattern = ${patternClass}.compile(rightStr);
+          ${ev.primitive} = $pattern.matcher(${eval1}.toString()).find(0);
+        """
+      })
+    }
+  }
 }
 
 
@@ -665,13 +726,15 @@ case class StringSplit(str: Expression, pattern: Expression)
   override def inputTypes: Seq[DataType] = Seq(StringType, StringType)
 
   override def nullSafeEval(string: Any, regex: Any): Any = {
-    string.asInstanceOf[UTF8String].split(regex.asInstanceOf[UTF8String], -1).toSeq
+    val strings = string.asInstanceOf[UTF8String].split(regex.asInstanceOf[UTF8String], -1)
+    new GenericArrayData(strings.asInstanceOf[Array[Any]])
   }
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    val arrayClass = classOf[GenericArrayData].getName
     nullSafeCodeGen(ctx, ev, (str, pattern) =>
-      s"""${ev.primitive} = scala.collection.JavaConversions.asScalaBuffer(
-            java.util.Arrays.asList($str.split($pattern, -1)));""")
+      // Array in java is covariant, so we don't need to cast UTF8String[] to Object[].
+      s"""${ev.primitive} = new $arrayClass($str.split($pattern, -1));""")
   }
 
   override def prettyName: String = "split"
