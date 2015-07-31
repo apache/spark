@@ -232,7 +232,7 @@ class DecisionTreeClassifierSuite extends SparkFunSuite with MLlibTestSparkConte
     compareAPIs(rdd, dt, categoricalFeatures = Map.empty[Int, Int], numClasses)
   }
 
-  test("predictRaw") {
+  test("predictRaw and predictProbability") {
     val rdd = continuousDataPointsForMulticlassRDD
     val dt = new DecisionTreeClassifier()
       .setImpurity("Gini")
@@ -245,12 +245,15 @@ class DecisionTreeClassifierSuite extends SparkFunSuite with MLlibTestSparkConte
     val newTree = dt.fit(newData)
 
     val predictions = newTree.transform(newData)
-      .select(newTree.getPredictionCol, newTree.getRawPredictionCol)
+      .select(newTree.getPredictionCol, newTree.getRawPredictionCol, newTree.getProbabilityCol)
       .collect()
 
-    predictions.foreach { case Row(pred: Double, rawPred: Vector) =>
+    predictions.foreach { case Row(pred: Double, rawPred: Vector, probPred: Vector) =>
       assert(pred === rawPred.argmax,
         s"Expected prediction $pred but calculated ${rawPred.argmax} from rawPrediction.")
+      val sum = rawPred.toArray.sum
+      assert(Vectors.dense(rawPred.toArray.map(_ / sum)) === probPred,
+        "probability prediction mismatch")
     }
   }
 

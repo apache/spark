@@ -22,7 +22,7 @@ import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.tree.{DecisionTreeModel, DecisionTreeParams, Node, TreeClassifierParams}
 import org.apache.spark.ml.tree.impl.RandomForest
 import org.apache.spark.ml.util.{Identifiable, MetadataUtils}
-import org.apache.spark.mllib.linalg.{Vector, Vectors}
+import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vector, Vectors}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo, Strategy => OldStrategy}
 import org.apache.spark.mllib.tree.model.{DecisionTreeModel => OldDecisionTreeModel}
@@ -125,12 +125,24 @@ final class DecisionTreeClassificationModel private[ml] (
   }
 
   override protected def predictRaw(features: Vector): Vector = {
-    Vectors.dense(rootNode.predictImpl(features).impurityStats.stats)
+    Vectors.dense(rootNode.predictImpl(features).impurityStats.stats.clone())
   }
 
   override protected def raw2probabilityInPlace(rawPrediction: Vector): Vector = {
-    val sum = rawPrediction.toArray.sum
-    Vectors.dense(rawPrediction.toArray.map(_ / sum))
+    rawPrediction match {
+      case dv: DenseVector =>
+        var i = 0
+        val size = dv.size
+        val sum = dv.values.sum
+        while (i < size) {
+          dv.values(i) = dv.values(i) / sum
+          i += 1
+        }
+        dv
+      case sv: SparseVector =>
+        throw new RuntimeException("Unexpected error in DecisionTreeClassificationModel:" +
+          " raw2probabilityInPlace encountered SparseVector")
+    }
   }
 
   override def copy(extra: ParamMap): DecisionTreeClassificationModel = {
