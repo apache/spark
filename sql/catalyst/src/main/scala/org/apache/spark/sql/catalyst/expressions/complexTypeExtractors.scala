@@ -57,7 +57,8 @@ object ExtractValue {
       case (ArrayType(StructType(fields), containsNull), NonNullLiteral(v, StringType)) =>
         val fieldName = v.toString
         val ordinal = findField(fields, fieldName, resolver)
-        GetArrayStructFields(child, fields(ordinal).copy(name = fieldName), ordinal, containsNull)
+        GetArrayStructFields(child, fields(ordinal).copy(name = fieldName),
+          ordinal, fields.length, containsNull)
 
       case (_: ArrayType, _) if extraction.dataType.isInstanceOf[IntegralType] =>
         GetArrayItem(child, extraction)
@@ -110,7 +111,7 @@ case class GetStructField(child: Expression, field: StructField, ordinal: Int)
   override def toString: String = s"$child.${field.name}"
 
   protected override def nullSafeEval(input: Any): Any =
-    input.asInstanceOf[InternalRow](ordinal)
+    input.asInstanceOf[InternalRow].get(ordinal, field.dataType)
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     nullSafeCodeGen(ctx, ev, eval => {
@@ -118,7 +119,7 @@ case class GetStructField(child: Expression, field: StructField, ordinal: Int)
         if ($eval.isNullAt($ordinal)) {
           ${ev.isNull} = true;
         } else {
-          ${ev.primitive} = ${ctx.getColumn(eval, dataType, ordinal)};
+          ${ev.primitive} = ${ctx.getValue(eval, dataType, ordinal.toString)};
         }
       """
     })
@@ -134,6 +135,7 @@ case class GetArrayStructFields(
     child: Expression,
     field: StructField,
     ordinal: Int,
+    numFields: Int,
     containsNull: Boolean) extends UnaryExpression {
 
   override def dataType: DataType = ArrayType(field.dataType, containsNull)
@@ -141,26 +143,45 @@ case class GetArrayStructFields(
   override def toString: String = s"$child.${field.name}"
 
   protected override def nullSafeEval(input: Any): Any = {
-    input.asInstanceOf[Seq[InternalRow]].map { row =>
-      if (row == null) null else row(ordinal)
+    val array = input.asInstanceOf[ArrayData]
+    val length = array.numElements()
+    val result = new Array[Any](length)
+    var i = 0
+    while (i < length) {
+      if (array.isNullAt(i)) {
+        result(i) = null
+      } else {
+        val row = array.getStruct(i, numFields)
+        if (row.isNullAt(ordinal)) {
+          result(i) = null
+        } else {
+          result(i) = row.get(ordinal, field.dataType)
+        }
+      }
+      i += 1
     }
+    new GenericArrayData(result)
   }
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    val arraySeqClass = "scala.collection.mutable.ArraySeq"
-    // TODO: consider using Array[_] for ArrayType child to avoid
-    // boxing of primitives
+    val arrayClass = classOf[GenericArrayData].getName
     nullSafeCodeGen(ctx, ev, eval => {
       s"""
-        final int n = $eval.size();
-        final $arraySeqClass<Object> values = new $arraySeqClass<Object>(n);
+        final int n = $eval.numElements();
+        final Object[] values = new Object[n];
         for (int j = 0; j < n; j++) {
-          InternalRow row = (InternalRow) $eval.apply(j);
-          if (row != null && !row.isNullAt($ordinal)) {
-            values.update(j, ${ctx.getColumn("row", field.dataType, ordinal)});
+          if ($eval.isNullAt(j)) {
+            values[j] = null;
+          } else {
+            final InternalRow row = $eval.getStruct(j, $numFields);
+            if (row.isNullAt($ordinal)) {
+              values[j] = null;
+            } else {
+              values[j] = ${ctx.getValue("row", field.dataType, ordinal.toString)};
+            }
           }
         }
-        ${ev.primitive} = (${ctx.javaType(dataType)}) values;
+        ${ev.primitive} = new $arrayClass(values);
       """
     })
   }
@@ -186,23 +207,23 @@ case class GetArrayItem(child: Expression, ordinal: Expression) extends BinaryEx
   protected override def nullSafeEval(value: Any, ordinal: Any): Any = {
     // TODO: consider using Array[_] for ArrayType child to avoid
     // boxing of primitives
-    val baseValue = value.asInstanceOf[Seq[_]]
+    val baseValue = value.asInstanceOf[ArrayData]
     val index = ordinal.asInstanceOf[Number].intValue()
-    if (index >= baseValue.size || index < 0) {
+    if (index >= baseValue.numElements() || index < 0) {
       null
     } else {
-      baseValue(index)
+      baseValue.get(index)
     }
   }
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
       s"""
-        final int index = (int)$eval2;
-        if (index >= $eval1.size() || index < 0) {
+        final int index = (int) $eval2;
+        if (index >= $eval1.numElements() || index < 0) {
           ${ev.isNull} = true;
         } else {
-          ${ev.primitive} = (${ctx.boxedType(dataType)})$eval1.apply(index);
+          ${ev.primitive} = ${ctx.getValue(eval1, dataType, "index")};
         }
       """
     })

@@ -113,7 +113,7 @@ private[sql] object InferSchema {
           case INT | LONG => LongType
           // Since we do not have a data type backed by BigInteger,
           // when we see a Java BigInteger, we use DecimalType.
-          case BIG_INTEGER | BIG_DECIMAL => DecimalType.Unlimited
+          case BIG_INTEGER | BIG_DECIMAL => DecimalType.SYSTEM_DEFAULT
           case FLOAT | DOUBLE => DoubleType
         }
 
@@ -125,7 +125,7 @@ private[sql] object InferSchema {
    * Convert NullType to StringType and remove StructTypes with no fields
    */
   private def canonicalizeType: DataType => Option[DataType] = {
-    case at@ArrayType(elementType, _) =>
+    case at @ ArrayType(elementType, _) =>
       for {
         canonicalType <- canonicalizeType(elementType)
       } yield {
@@ -168,8 +168,13 @@ private[sql] object InferSchema {
     HiveTypeCoercion.findTightestCommonTypeOfTwo(t1, t2).getOrElse {
       // t1 or t2 is a StructType, ArrayType, or an unexpected type.
       (t1, t2) match {
-        case (other: DataType, NullType) => other
-        case (NullType, other: DataType) => other
+        // Double support larger range than fixed decimal, DecimalType.Maximum should be enough
+        // in most case, also have better precision.
+        case (DoubleType, t: DecimalType) =>
+          if (t == DecimalType.SYSTEM_DEFAULT) t else DoubleType
+        case (t: DecimalType, DoubleType) =>
+          if (t == DecimalType.SYSTEM_DEFAULT) t else DoubleType
+
         case (StructType(fields1), StructType(fields2)) =>
           val newFields = (fields1 ++ fields2).groupBy(field => field.name).map {
             case (name, fieldTypes) =>

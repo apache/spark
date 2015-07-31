@@ -44,13 +44,6 @@ class PrefixSpanSuite extends SparkFunSuite with MLlibTestSparkContext {
 
     val rdd = sc.parallelize(sequences, 2).cache()
 
-    def compareResult(
-        expectedValue: Array[(Array[Int], Long)],
-        actualValue: Array[(Array[Int], Long)]): Boolean = {
-      expectedValue.map(x => (x._1.toSeq, x._2)).toSet ==
-        actualValue.map(x => (x._1.toSeq, x._2)).toSet
-    }
-
     val prefixspan = new PrefixSpan()
       .setMinSupport(0.33)
       .setMaxPatternLength(50)
@@ -76,7 +69,7 @@ class PrefixSpanSuite extends SparkFunSuite with MLlibTestSparkContext {
       (Array(4, 5), 2L),
       (Array(5), 3L)
     )
-    assert(compareResult(expectedValue1, result1.collect()))
+    assert(compareResults(expectedValue1, result1.collect()))
 
     prefixspan.setMinSupport(0.5).setMaxPatternLength(50)
     val result2 = prefixspan.run(rdd)
@@ -87,7 +80,7 @@ class PrefixSpanSuite extends SparkFunSuite with MLlibTestSparkContext {
       (Array(4), 4L),
       (Array(5), 3L)
     )
-    assert(compareResult(expectedValue2, result2.collect()))
+    assert(compareResults(expectedValue2, result2.collect()))
 
     prefixspan.setMinSupport(0.33).setMaxPatternLength(2)
     val result3 = prefixspan.run(rdd)
@@ -107,6 +100,14 @@ class PrefixSpanSuite extends SparkFunSuite with MLlibTestSparkContext {
       (Array(4, 5), 2L),
       (Array(5), 3L)
     )
-    assert(compareResult(expectedValue3, result3.collect()))
+    assert(compareResults(expectedValue3, result3.collect()))
   }
+
+  private def compareResults(
+    expectedValue: Array[(Array[Int], Long)],
+    actualValue: Array[(Array[Int], Long)]): Boolean = {
+    expectedValue.map(x => (x._1.toSeq, x._2)).toSet ==
+      actualValue.map(x => (x._1.toSeq, x._2)).toSet
+  }
+
 }

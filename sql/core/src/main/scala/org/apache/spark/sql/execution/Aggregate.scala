@@ -172,7 +172,7 @@ case class Aggregate(
           private[this] val resultProjection =
             new InterpretedMutableProjection(
               resultExpressions, computedSchema ++ namedGroups.map(_._2))
-          private[this] val joinedRow = new JoinedRow4
+          private[this] val joinedRow = new JoinedRow
 
           override final def hasNext: Boolean = hashTableIter.hasNext
 

@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateProjection
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
-import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
+import org.apache.spark.sql.catalyst.{InternalRow, CatalystTypeConverters}
 import org.apache.spark.sql.execution.RunnableCommand
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.StringType
@@ -174,14 +174,19 @@ private[sql] case class InsertIntoHadoopFsRelation(
       try {
         writerContainer.executorSideSetup(taskContext)
 
-        val converter: InternalRow => Row = if (needsConversion) {
-          CatalystTypeConverters.createToScalaConverter(dataSchema).asInstanceOf[InternalRow => Row]
+        if (needsConversion) {
+          val converter = CatalystTypeConverters.createToScalaConverter(dataSchema)
+            .asInstanceOf[InternalRow => Row]
+          while (iterator.hasNext) {
+            val internalRow = iterator.next()
+            writerContainer.outputWriterForRow(internalRow).write(converter(internalRow))
+          }
         } else {
-          r: InternalRow => r.asInstanceOf[Row]
-        }
-        while (iterator.hasNext) {
-          val internalRow = iterator.next()
-          writerContainer.outputWriterForRow(internalRow).write(converter(internalRow))
+          while (iterator.hasNext) {
+            val internalRow = iterator.next()
+            writerContainer.outputWriterForRow(internalRow)
+              .asInstanceOf[OutputWriterInternal].writeInternal(internalRow)
+          }
         }
 
         writerContainer.commitTask()
@@ -251,17 +256,6 @@ private[sql] case class InsertIntoHadoopFsRelation(
       try {
         writerContainer.executorSideSetup(taskContext)
 
-        // Projects all partition columns and casts them to strings to build partition directories.
-        val partitionCasts = partitionOutput.map(Cast(_, StringType))
-        val partitionProj = newProjection(codegenEnabled, partitionCasts, output)
-        val dataProj = newProjection(codegenEnabled, dataOutput, output)
-
-        val dataConverter: InternalRow => Row = if (needsConversion) {
-          CatalystTypeConverters.createToScalaConverter(dataSchema).asInstanceOf[InternalRow => Row]
-        } else {
-          r: InternalRow => r.asInstanceOf[Row]
-        }
-
         // Sort the data by partition so that it's possible to use a single outputWriter at a
         // time to process the incoming data
         def sortRows(iterator: Iterator[InternalRow]): Iterator[InternalRow] = {
@@ -274,17 +268,28 @@ private[sql] case class InsertIntoHadoopFsRelation(
         // we extract this functionality into its own function that can be called with updated
         // underlying data.
         def writeRowsSafe(iterator: Iterator[InternalRow]): Unit = {
+          var converter: Option[InternalRow => Row] = None
+          if (needsConversion) {
+            converter = Some(CatalystTypeConverters.createToScalaConverter(dataSchema)
+              .asInstanceOf[InternalRow => Row])
+          }
+
           while (iterator.hasNext) {
             val internalRow = iterator.next()
 
             // Only output rows that we haven't already output, this code can be called after a sort
             // mid-traversal.
             if (!writtenRows.contains(internalRow) &&
-                writerContainer.canGetOutputWriter(internalRow)) {
-              val partitionPart = partitionProj(internalRow)
-              val dataPart = dataConverter(dataProj(internalRow))
+              writerContainer.canGetOutputWriter(internalRow)) {
 
-              writerContainer.outputWriterForRow(partitionPart, sorted).write(dataPart)
+              converter match {
+                case Some(converter) =>
+                  writerContainer.outputWriterForRow(internalRow).write(converter(internalRow))
+                case None =>
+                  writerContainer.outputWriterForRow(internalRow)
+                    .asInstanceOf[OutputWriterInternal].writeInternal(internalRow)
+              }
+
               writtenRows += internalRow
             } else if (!writtenRows.contains(internalRow)) {
               // If there are no more available output writers, sort the data, and set the sorted
@@ -571,8 +576,12 @@ private[sql] class DynamicPartitionWriterContainer(
       while (i < partitionColumns.length) {
         val col = partitionColumns(i)
         val partitionValueString = {
-          val string = row.getString(i)
-          if (string.eq(null)) defaultPartitionName else PartitioningUtils.escapePathName(string)
+          val string = row.getUTF8String(i)
+          if (string.eq(null)) {
+            defaultPartitionName
+          } else {
+            PartitioningUtils.escapePathName(string.toString)
+          }
         }
 
         if (i > 0) {
