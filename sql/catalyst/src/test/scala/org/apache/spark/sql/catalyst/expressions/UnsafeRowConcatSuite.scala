@@ -15,11 +15,10 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
+package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{UnsafeProjection, UnsafeRow, UnsafeRowConcat}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.PlatformDependent
 import org.apache.spark.unsafe.types.UTF8String
@@ -59,7 +58,7 @@ class UnsafeRowConcatSuite extends SparkFunSuite {
     val r2 = new UnsafeRow()
 
     // join two big rows
-    val rc = new UnsafeRowConcat(schema1, schema2)
+    val rc = new InterpretedUnsafeRowConcat(schema1, schema2)
     r1.pointTo(new Array[Byte](2048), PlatformDependent.BYTE_ARRAY_OFFSET, 100, 816)
     r2.pointTo(new Array[Byte](2048), PlatformDependent.BYTE_ARRAY_OFFSET, 100, 816)
     val r1nulls = Set(0, 5, 10, 15, 20, 25, 30, 35, 40, 60, 63, 80, 99)
@@ -67,7 +66,7 @@ class UnsafeRowConcatSuite extends SparkFunSuite {
     checkResultNulls(r1, r2, r1nulls, r2nulls, rc)
 
     // both row null bit set end at word boundary
-    val rc2 = new UnsafeRowConcat(schema3, schema4)
+    val rc2 = new InterpretedUnsafeRowConcat(schema3, schema4)
     r1.pointTo(new Array[Byte](2048), PlatformDependent.BYTE_ARRAY_OFFSET, 64, 520)
     r2.pointTo(new Array[Byte](2048), PlatformDependent.BYTE_ARRAY_OFFSET, 64, 520)
     val r1nulls2 = Set(0, 5, 30, 45, 63)
@@ -75,7 +74,7 @@ class UnsafeRowConcatSuite extends SparkFunSuite {
     checkResultNulls(r1, r2, r1nulls2, r2nulls2, rc2)
 
     // left row null bit set end at word boundary
-    val rc3 = new UnsafeRowConcat(schema3, schema5)
+    val rc3 = new InterpretedUnsafeRowConcat(schema3, schema5)
     r1.pointTo(new Array[Byte](2048), PlatformDependent.BYTE_ARRAY_OFFSET, 64, 520)
     r2.pointTo(new Array[Byte](2048), PlatformDependent.BYTE_ARRAY_OFFSET, 70, 576)
     val r1nulls3 = Set(0, 5, 30, 45, 63)
@@ -83,7 +82,7 @@ class UnsafeRowConcatSuite extends SparkFunSuite {
     checkResultNulls(r1, r2, r1nulls3, r2nulls3, rc3)
 
     // right row null bit set end at word boundary
-    val rc4 = new UnsafeRowConcat(schema5, schema3)
+    val rc4 = new InterpretedUnsafeRowConcat(schema5, schema3)
     r1.pointTo(new Array[Byte](2048), PlatformDependent.BYTE_ARRAY_OFFSET, 70, 576)
     r2.pointTo(new Array[Byte](2048), PlatformDependent.BYTE_ARRAY_OFFSET, 64, 520)
     val r1nulls4 = Set(17, 32, 50, 67, 69)
@@ -91,7 +90,7 @@ class UnsafeRowConcatSuite extends SparkFunSuite {
     checkResultNulls(r1, r2, r1nulls4, r2nulls4, rc4)
 
     // right row null bit set end at word boundary
-    val rc5 = new UnsafeRowConcat(schema1, schema6)
+    val rc5 = new InterpretedUnsafeRowConcat(schema1, schema6)
     r1.pointTo(new Array[Byte](2048), PlatformDependent.BYTE_ARRAY_OFFSET, 100, 816)
     r2.pointTo(new Array[Byte](2048), PlatformDependent.BYTE_ARRAY_OFFSET, 28, 232)
     val r1nulls5 = Set(0, 5, 10, 15, 20, 25, 30, 35, 40, 60, 63, 80, 99)
@@ -117,7 +116,7 @@ class UnsafeRowConcatSuite extends SparkFunSuite {
     val unsafe1 = UnsafeProjection.create(schema1).apply(r1)
     val unsafe2 = UnsafeProjection.create(schema2).apply(r2)
 
-    val rc = new UnsafeRowConcat(schema1, schema2)
+    val rc = new InterpretedUnsafeRowConcat(schema1, schema2)
     val result = rc.concat(unsafe1, unsafe2)
     val correctUnsafe = UnsafeProjection.create(schema1.merge(schema2)).apply(correctResult)
 
