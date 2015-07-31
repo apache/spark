@@ -38,7 +38,8 @@ import java.util.BitSet;
  * This is a fork of Hive 0.13's org/apache/hadoop/hive/serde2/thrift/test/Complex.java, which
  * does not contain union fields that are not supported by Spark SQL.
  */
-@SuppressWarnings("ALL")
+
+@SuppressWarnings({"ALL", "unchecked"})
 public class Complex implements org.apache.thrift.TBase<Complex, Complex._Fields>, java.io.Serializable, Cloneable {
   private static final org.apache.thrift.protocol.TStruct STRUCT_DESC = new org.apache.thrift.protocol.TStruct("Complex");
 
