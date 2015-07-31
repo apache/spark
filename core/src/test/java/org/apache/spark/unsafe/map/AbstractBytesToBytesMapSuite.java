@@ -417,7 +417,6 @@ public abstract class AbstractBytesToBytesMapSuite {
     shuffleMemoryManager = new ShuffleMemoryManager(1024);
     BytesToBytesMap map =
       new BytesToBytesMap(taskMemoryManager, shuffleMemoryManager, 1, PAGE_SIZE_BYTES);
-    ;
     try {
       final long[] emptyArray = new long[0];
       final BytesToBytesMap.Location loc =
