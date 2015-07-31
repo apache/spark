@@ -17,6 +17,8 @@
 
 package org.apache.spark.mllib.fpm
 
+import scala.collection.mutable.ArrayBuilder
+
 import org.apache.spark.Logging
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.rdd.RDD
@@ -104,7 +106,7 @@ class PrefixSpan private (
     }
 
     // Use List[Set[Item]] for internal computation
-    val sequences = data.map { seq => splitAtDelimiter(seq.toList) }
+    val sequences = data.map { seq => splitSequence(seq.toList) }
 
     // Convert min support to a min number of transactions for this dataset
     val minCount = if (minSupport == 0) 0L else math.ceil(sequences.count() * minSupport).toLong
@@ -160,7 +162,7 @@ class PrefixSpan private (
       minCount, sc.parallelize(pairsForLocal, 1).groupByKey())
 
     (sc.parallelize(resultsAccumulator, 1) ++ remainingResults)
-      .map { case (pattern, count) => (insertDelimiters(pattern.reverse).toArray, count) }
+      .map { case (pattern, count) => (flattenSequence(pattern.reverse).toArray, count) }
   }
 
 
@@ -255,25 +257,30 @@ class PrefixSpan private (
 
 }
 
-object PrefixSpan {
+private[fpm] object PrefixSpan {
   private[fpm] val DELIMITER = -1
 
-  private[fpm] def splitAtDelimiter(pattern: List[Int]): List[Set[Int]] = {
-    pattern.span(_ != DELIMITER) match {
-      case (x, xs) if xs.length > 1 => x.toSet :: splitAtDelimiter(xs.tail)
+  /** Splits a sequence of itemsets delimited by [[DELIMITER]]. */
+  private[fpm] def splitSequence(sequence: List[Int]): List[Set[Int]] = {
+    sequence.span(_ != DELIMITER) match {
+      case (x, xs) if xs.length > 1 => x.toSet :: splitSequence(xs.tail)
       case (x, xs) => List(x.toSet)
     }
   }
 
-  private[fpm] def insertDelimiters(sequence: List[Set[Int]]): List[Int] = {
-    // TODO: avoid allocating new arrays when appending
-    sequence.zip(Seq.fill(sequence.size)(PrefixSpan.DELIMITER))
-      .flatMap { case (a: Set[Int], b: Int) =>
-        b :: a.toList.sorted
-      }.drop(1) // drop leading delimiter
+  /** Flattens a sequence of itemsets into an Array, inserting[[DELIMITER]] between itemsets. */
+  private[fpm] def flattenSequence(sequence: List[Set[Int]]): List[Int] = {
+    val builder = ArrayBuilder.make[Int]()
+    for (itemSet <- sequence) {
+      builder += DELIMITER
+      builder ++= itemSet.toSeq.sorted
+    }
+    builder.result().toList.drop(1) // drop trailing delimiter
   }
 
+  /** Returns an iterator over all non-empty subsets of `itemSet` */
   private[fpm] def nonemptySubsets(itemSet: Set[Int]): Iterator[Set[Int]] = {
+    // TODO: improve complexity by using partial prefixes, considering one item at a time
     itemSet.subsets.filter(_ != Set.empty[Int])
   }
 }
