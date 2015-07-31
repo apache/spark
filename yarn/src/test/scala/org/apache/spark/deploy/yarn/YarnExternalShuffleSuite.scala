@@ -17,26 +17,14 @@
 
 package org.apache.spark.deploy.yarn
 
-import java.io.{File, FileOutputStream, OutputStreamWriter}
-import java.net.URL
-import java.util.Properties
-import java.util.concurrent.TimeUnit
-
-import scala.collection.JavaConversions._
-import scala.collection.mutable
+import java.io.File
 
 import com.google.common.base.Charsets.UTF_8
-import com.google.common.io.ByteStreams
 import com.google.common.io.Files
 import org.apache.hadoop.yarn.conf.YarnConfiguration
-import org.apache.hadoop.yarn.server.MiniYARNCluster
-import org.scalatest.{BeforeAndAfterAll, Matchers}
+import org.scalatest.Matchers
 
 import org.apache.spark._
-import org.apache.spark.scheduler.cluster.ExecutorInfo
-import org.apache.spark.scheduler.{SparkListener, SparkListenerApplicationStart,
-  SparkListenerExecutorAdded}
-import org.apache.spark.util.Utils
 
 /**
  * Integration test for the external shuffle service with a yarn mini-cluster
