@@ -232,7 +232,7 @@ val sentenceDataFrame = sqlContext.createDataFrame(Seq(
 val tokenizer = new Tokenizer().setInputCol("sentence").setOutputCol("words")
 val regexTokenizer = new RegexTokenizer().setInputCol("sentence").setOutputCol("words")
   .setPattern("\\W")
-// alternatively .setPattern("\\w+").setGaps(false)
+  // alternatively .setPattern("\\w+").setGaps(false)
 
 val tokenized = tokenizer.transform(sentenceDataFrame)
 tokenized.select("words", "label").take(3).foreach(println)
@@ -246,6 +246,7 @@ regexTokenized.select("words", "label").take(3).foreach(println)
 import com.google.common.collect.Lists;
 
 import org.apache.spark.api.java.JavaRDD;
+import org.apache.spark.ml.feature.RegexTokenizer;
 import org.apache.spark.ml.feature.Tokenizer;
 import org.apache.spark.mllib.linalg.Vector;
 import org.apache.spark.sql.DataFrame;
@@ -258,8 +259,8 @@ import org.apache.spark.sql.types.StructType;
 
 JavaRDD<Row> jrdd = jsc.parallelize(Lists.newArrayList(
   RowFactory.create(0, "Hi I heard about Spark"),
-  RowFactory.create(0, "I wish Java could use case classes"),
-  RowFactory.create(1, "Logistic regression models are neat")
+  RowFactory.create(1, "I wish Java could use case classes"),
+  RowFactory.create(2, "Logistic regression models are neat")
 ));
 StructType schema = new StructType(new StructField[]{
   new StructField("label", DataTypes.DoubleType, false, Metadata.empty()),
@@ -273,22 +274,28 @@ for (Row r : wordsDataFrame.select("words", "label").take(3)) {
   for (String word : words) System.out.print(word + " ");
   System.out.println();
 }
+
+RegexTokenizer regexTokenizer = new RegexTokenizer().setInputCol("sentence").setOutputCol("words")
+  .setPattern("\\W");
+  // alternatively .setPattern("\\w+").setGaps(false);
 {% endhighlight %}
 </div>
 
 <div data-lang="python" markdown="1">
 {% highlight python %}
-from pyspark.ml.feature import Tokenizer
+from pyspark.ml.feature import Tokenizer, RegexTokenizer
 
 sentenceDataFrame = sqlContext.createDataFrame([
   (0, "Hi I heard about Spark"),
-  (0, "I wish Java could use case classes"),
-  (1, "Logistic regression models are neat")
+  (1, "I wish Java could use case classes"),
+  (2, "Logistic regression models are neat")
 ], ["label", "sentence"])
 tokenizer = Tokenizer(inputCol="sentence", outputCol="words")
 wordsDataFrame = tokenizer.transform(sentenceDataFrame)
 for words_label in wordsDataFrame.select("words", "label").take(3):
   print(words_label)
+regexTokenizer = RegexTokenizer(inputCol="sentence", outputCol="words", pattern="\\W")
+# alternatively, pattern="\\w+", gaps(false)
 {% endhighlight %}
 </div>
 </div>
