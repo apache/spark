@@ -20,6 +20,7 @@ package org.apache.spark.unsafe.types;
 import javax.annotation.Nonnull;
 import java.io.Serializable;
 import java.io.UnsupportedEncodingException;
+import java.nio.ByteOrder;
 import java.util.Arrays;
 
 import org.apache.spark.unsafe.PlatformDependent;
@@ -161,18 +162,25 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
     // If size is greater than 4, assume we have at least 8 bytes of data to fetch.
     // After getting the data, we use a mask to mask out data that is not part of the string.
     long p;
+    long mask = 0;
     if (numBytes >= 8) {
       p = PlatformDependent.UNSAFE.getLong(base, offset);
     } else  if (numBytes > 4) {
+      mask = (1L << (8 - numBytes) * 8) - 1;
       p = PlatformDependent.UNSAFE.getLong(base, offset);
-      p = p & ((1L << numBytes * 8) - 1);
     } else if (numBytes > 0) {
+      mask = (1L << (8 - numBytes) * 8) - 1;
       p = (long) PlatformDependent.UNSAFE.getInt(base, offset);
-      p = p & ((1L << numBytes * 8) - 1);
+      if (ByteOrder.nativeOrder() == ByteOrder.BIG_ENDIAN) {
+        p <<= 32;
+      }
     } else {
       p = 0;
     }
-    p = java.lang.Long.reverseBytes(p);
+    if (ByteOrder.nativeOrder() == ByteOrder.LITTLE_ENDIAN) {
+      p = java.lang.Long.reverseBytes(p);
+    }
+    p &= ~mask;
     return p;
   }
 
