@@ -187,21 +187,27 @@ class StringIndexerInverse private[ml] (
   /** @group setParam */
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
-  /** @group setParam
+  /**
    * Optional labels to be provided by the user, if not supplied column
-   * metadata is read for labels.
+   * metadata is read for labels. The default value is an empty array,
+   * but the empty array is ignored and column metadata used instead.
+   * @group setParam
    */
   def setLabels(value: Array[String]): this.type = set(labels, value)
+  setDefault(labels -> Array[String]())
 
   /**
    * Param for array of labels.
+   * Optional labels to be provided by the user, if not supplied column
+   * metadata is read for labels.
    * @group param
    */
   final val labels: StringArrayParam = new StringArrayParam(this, "labels", "array of labels")
 
-  setDefault(labels, null)
-
-  /** @group getParam */
+  /** @group getParam
+   * Optional labels to be provided by the user, if not supplied column
+   * metadata is read for labels.
+   */
   final def getLabels: Array[String] = $(labels)
 
   /** Transform the schema for the inverse transformation */
@@ -222,9 +228,12 @@ class StringIndexerInverse private[ml] (
 
   override def transform(dataset: DataFrame): DataFrame = {
     val inputColSchema = dataset.schema($(inputCol))
-    val values = Option($(labels)).getOrElse{
+    // If the labels array is empty use column metadata
+    val values = if ($(labels).isEmpty) {
       Attribute.fromStructField(inputColSchema)
         .asInstanceOf[NominalAttribute].values.get
+    } else {
+      $(labels)
     }
     val indexer = udf { index: Double =>
       val idx = index.toInt
