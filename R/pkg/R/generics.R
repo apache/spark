@@ -463,7 +463,7 @@ setGeneric("limit", function(x, num) {standardGeneric("limit") })
 
 #' rdname merge
 #' @export
-setGeneric("merge", function(x, y, ...) { standardGeneric("merge") })
+setGeneric("merge")
 
 #' @rdname withColumn
 #' @export
@@ -535,8 +535,8 @@ setGeneric("showDF", function(x,...) { standardGeneric("showDF") })
 #' @export
 setGeneric("summarize", function(x,...) { standardGeneric("summarize") })
 
-#' rdname summary
-#' @export
+##' rdname summary
+##' @export
 setGeneric("summary", function(x, ...) { standardGeneric("summary") })
 
 # @rdname tojson
