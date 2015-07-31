@@ -79,6 +79,17 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
   }
 
   /**
+   * Creates an UTF8String from given address (base and offset) and length.
+   */
+  public static UTF8String fromAddress(Object base, long offset, int numBytes) {
+    if (base != null) {
+      return new UTF8String(base, offset, numBytes);
+    } else {
+      return null;
+    }
+  }
+
+  /**
    * Creates an UTF8String from String.
    */
   public static UTF8String fromString(String str) {
@@ -345,7 +356,7 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
     while (i < numBytes) {
       int len = numBytesForFirstByte(getByte(i));
       copyMemory(this.base, this.offset + i, result,
-              BYTE_ARRAY_OFFSET + result.length - i - len, len);
+        BYTE_ARRAY_OFFSET + result.length - i - len, len);
 
       i += len;
     }

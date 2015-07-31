@@ -871,12 +871,12 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
   override def nullSafeEval(s: Any, p: Any, r: Any): Any = {
     if (!p.equals(lastRegex)) {
       // regex value changed
-      lastRegex = p.asInstanceOf[UTF8String]
+      lastRegex = p.asInstanceOf[UTF8String].clone()
       pattern = Pattern.compile(lastRegex.toString)
     }
     if (!r.equals(lastReplacementInUTF8)) {
       // replacement string changed
-      lastReplacementInUTF8 = r.asInstanceOf[UTF8String]
+      lastReplacementInUTF8 = r.asInstanceOf[UTF8String].clone()
       lastReplacement = lastReplacementInUTF8.toString
     }
     val m = pattern.matcher(s.toString())
@@ -922,12 +922,12 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
     s"""
       if (!$regexp.equals(${termLastRegex})) {
         // regex value changed
-        ${termLastRegex} = $regexp;
+        ${termLastRegex} = $regexp.clone();
         ${termPattern} = ${classNamePattern}.compile(${termLastRegex}.toString());
       }
       if (!$rep.equals(${termLastReplacementInUTF8})) {
         // replacement string changed
-        ${termLastReplacementInUTF8} = $rep;
+        ${termLastReplacementInUTF8} = $rep.clone();
         ${termLastReplacement} = ${termLastReplacementInUTF8}.toString();
       }
       ${termResult}.delete(0, ${termResult}.length());
@@ -961,7 +961,7 @@ case class RegExpExtract(subject: Expression, regexp: Expression, idx: Expressio
   override def nullSafeEval(s: Any, p: Any, r: Any): Any = {
     if (!p.equals(lastRegex)) {
       // regex value changed
-      lastRegex = p.asInstanceOf[UTF8String]
+      lastRegex = p.asInstanceOf[UTF8String].clone()
       pattern = Pattern.compile(lastRegex.toString)
     }
     val m = pattern.matcher(s.toString())
@@ -990,7 +990,7 @@ case class RegExpExtract(subject: Expression, regexp: Expression, idx: Expressio
       s"""
       if (!$regexp.equals(${termLastRegex})) {
         // regex value changed
-        ${termLastRegex} = $regexp;
+        ${termLastRegex} = $regexp.clone();
         ${termPattern} = ${classNamePattern}.compile(${termLastRegex}.toString());
       }
       java.util.regex.Matcher m =
