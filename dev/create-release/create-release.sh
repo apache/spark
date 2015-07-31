@@ -117,13 +117,13 @@ if [[ ! "$@" =~ --skip-publish ]]; then
   echo "Created Nexus staging repository: $staged_repo_id"
 
   build/mvn -DskipTests -Dhadoop.version=2.2.0 -Dyarn.version=2.2.0 \
-    -Pyarn -Phive -Phive-thriftserver -Phadoop-2.2 -Pspark-ganglia-lgpl -Pkinesis-asl -Prelease-profile \
+    -Pyarn -Phive -Phive-thriftserver -Phadoop-2.2 -Pspark-ganglia-lgpl -Pkinesis-asl \
     clean install
 
   ./dev/change-version-to-2.11.sh
-  
+
   build/mvn -DskipTests -Dhadoop.version=2.2.0 -Dyarn.version=2.2.0 \
-    -Dscala-2.11 -Pyarn -Phive -Phadoop-2.2 -Pspark-ganglia-lgpl -Pkinesis-asl -Prelease-profile \
+    -Dscala-2.11 -Pyarn -Phive -Phadoop-2.2 -Pspark-ganglia-lgpl -Pkinesis-asl \
     clean install
 
   ./dev/change-version-to-2.10.sh
@@ -197,7 +197,7 @@ if [[ ! "$@" =~ --skip-package ]]; then
     NAME=$1
     FLAGS=$2
     cp -r spark spark-$RELEASE_VERSION-bin-$NAME
-    
+
     cd spark-$RELEASE_VERSION-bin-$NAME
 
     # TODO There should probably be a flag to make-distribution to allow 2.11 support
