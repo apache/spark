@@ -20,6 +20,8 @@ package org.apache.spark.sql.catalyst.expressions;
 import java.util.Iterator;
 
 import org.apache.spark.sql.catalyst.InternalRow;
+import org.apache.spark.sql.types.Decimal;
+import org.apache.spark.sql.types.DecimalType;
 import org.apache.spark.sql.types.StructField;
 import org.apache.spark.sql.types.StructType;
 import org.apache.spark.unsafe.PlatformDependent;
@@ -62,25 +64,17 @@ public final class UnsafeFixedWidthAggregationMap {
   private final boolean enablePerfMetrics;
 
   /**
-   * @return true if UnsafeFixedWidthAggregationMap supports grouping keys with the given schema,
-   *         false otherwise.
-   */
-  public static boolean supportsGroupKeySchema(StructType schema) {
-    for (StructField field: schema.fields()) {
-      if (!UnsafeRow.readableFieldTypes.contains(field.dataType())) {
-        return false;
-      }
-    }
-    return true;
-  }
-
-  /**
    * @return true if UnsafeFixedWidthAggregationMap supports aggregation buffers with the given
    *         schema, false otherwise.
    */
   public static boolean supportsAggregationBufferSchema(StructType schema) {
     for (StructField field: schema.fields()) {
-      if (!UnsafeRow.settableFieldTypes.contains(field.dataType())) {
+      if (field.dataType() instanceof DecimalType) {
+        DecimalType dt = (DecimalType) field.dataType();
+        if (dt.precision() > Decimal.MAX_LONG_DIGITS()) {
+          return false;
+        }
+      } else if (!UnsafeRow.settableFieldTypes.contains(field.dataType())) {
         return false;
       }
     }

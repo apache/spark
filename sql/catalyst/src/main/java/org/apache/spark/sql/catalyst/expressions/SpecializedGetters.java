@@ -41,7 +41,7 @@ public interface SpecializedGetters {
 
   double getDouble(int ordinal);
 
-  Decimal getDecimal(int ordinal);
+  Decimal getDecimal(int ordinal, int precision, int scale);
 
   UTF8String getUTF8String(int ordinal);
 

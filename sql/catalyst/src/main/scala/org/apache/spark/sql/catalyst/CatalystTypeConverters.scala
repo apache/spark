@@ -68,7 +68,7 @@ object CatalystTypeConverters {
       case StringType => StringConverter
       case DateType => DateConverter
       case TimestampType => TimestampConverter
-      case dt: DecimalType => BigDecimalConverter
+      case dt: DecimalType => new DecimalConverter(dt)
       case BooleanType => BooleanConverter
       case ByteType => ByteConverter
       case ShortType => ShortConverter
@@ -306,7 +306,8 @@ object CatalystTypeConverters {
       DateTimeUtils.toJavaTimestamp(row.getLong(column))
   }
 
-  private object BigDecimalConverter extends CatalystTypeConverter[Any, JavaBigDecimal, Decimal] {
+  private class DecimalConverter(dataType: DecimalType)
+    extends CatalystTypeConverter[Any, JavaBigDecimal, Decimal] {
     override def toCatalystImpl(scalaValue: Any): Decimal = scalaValue match {
       case d: BigDecimal => Decimal(d)
       case d: JavaBigDecimal => Decimal(d)
@@ -314,8 +315,10 @@ object CatalystTypeConverters {
     }
     override def toScala(catalystValue: Decimal): JavaBigDecimal = catalystValue.toJavaBigDecimal
     override def toScalaImpl(row: InternalRow, column: Int): JavaBigDecimal =
-      row.getDecimal(column).toJavaBigDecimal
+      row.getDecimal(column, dataType.precision, dataType.scale).toJavaBigDecimal
   }
+
+  private object BigDecimalConverter extends DecimalConverter(DecimalType.SYSTEM_DEFAULT)
 
   private abstract class PrimitiveConverter[T] extends CatalystTypeConverter[T, Any, Any] {
     final override def toScala(catalystValue: Any): Any = catalystValue

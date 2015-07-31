@@ -19,6 +19,8 @@ package org.apache.spark.sql.catalyst.expressions;
 
 import java.io.IOException;
 import java.io.OutputStream;
+import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
@@ -65,12 +67,7 @@ public final class UnsafeRow extends MutableRow {
    */
   public static final Set<DataType> settableFieldTypes;
 
-  /**
-   * Fields types can be read(but not set (e.g. set() will throw UnsupportedOperationException).
-   */
-  public static final Set<DataType> readableFieldTypes;
-
-  // TODO: support DecimalType
+  // DecimalType(precision <= 18) is settable
   static {
     settableFieldTypes = Collections.unmodifiableSet(
       new HashSet<>(
@@ -86,16 +83,6 @@ public final class UnsafeRow extends MutableRow {
           DateType,
           TimestampType
         })));
-
-    // We support get() on a superset of the types for which we support set():
-    final Set<DataType> _readableFieldTypes = new HashSet<>(
-      Arrays.asList(new DataType[]{
-        StringType,
-        BinaryType,
-        CalendarIntervalType
-      }));
-    _readableFieldTypes.addAll(settableFieldTypes);
-    readableFieldTypes = Collections.unmodifiableSet(_readableFieldTypes);
   }
 
   //////////////////////////////////////////////////////////////////////////////
@@ -233,6 +220,21 @@ public final class UnsafeRow extends MutableRow {
   }
 
   @Override
+  public void setDecimal(int ordinal, Decimal value, int precision) {
+    assertIndexIsValid(ordinal);
+    if (value == null) {
+      setNullAt(ordinal);
+    } else {
+      if (precision <= Decimal.MAX_LONG_DIGITS()) {
+        setLong(ordinal, value.toUnscaledLong());
+      } else {
+        // TODO(davies): support update decimal (hold a bounded space even it's null)
+        throw new UnsupportedOperationException();
+      }
+    }
+  }
+
+  @Override
   public Object get(int ordinal) {
     throw new UnsupportedOperationException();
   }
@@ -256,7 +258,8 @@ public final class UnsafeRow extends MutableRow {
     } else if (dataType instanceof DoubleType) {
       return getDouble(ordinal);
     } else if (dataType instanceof DecimalType) {
-      return getDecimal(ordinal);
+      DecimalType dt = (DecimalType) dataType;
+      return getDecimal(ordinal, dt.precision(), dt.scale());
     } else if (dataType instanceof DateType) {
       return getInt(ordinal);
     } else if (dataType instanceof TimestampType) {
@@ -320,6 +323,22 @@ public final class UnsafeRow extends MutableRow {
   public double getDouble(int ordinal) {
     assertIndexIsValid(ordinal);
     return PlatformDependent.UNSAFE.getDouble(baseObject, getFieldOffset(ordinal));
+  }
+
+  @Override
+  public Decimal getDecimal(int ordinal, int precision, int scale) {
+    assertIndexIsValid(ordinal);
+    if (isNullAt(ordinal)) {
+      return null;
+    }
+    if (precision <= Decimal.MAX_LONG_DIGITS()) {
+      return Decimal.apply(getLong(ordinal), precision, scale);
+    } else {
+      byte[] bytes = getBinary(ordinal);
+      BigInteger bigInteger = new BigInteger(bytes);
+      BigDecimal javaDecimal = new BigDecimal(bigInteger, scale);
+      return Decimal.apply(new scala.math.BigDecimal(javaDecimal), precision, scale);
+    }
   }
 
   @Override
