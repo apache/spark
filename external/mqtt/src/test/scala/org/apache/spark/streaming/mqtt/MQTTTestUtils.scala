@@ -18,7 +18,6 @@
 package org.apache.spark.streaming.mqtt
 
 import java.net.{ServerSocket, URI}
-import java.util.concurrent.{CountDownLatch, TimeUnit}
 
 import scala.language.postfixOps
 
@@ -28,10 +27,6 @@ import org.apache.commons.lang3.RandomUtils
 import org.eclipse.paho.client.mqttv3._
 import org.eclipse.paho.client.mqttv3.persist.MqttDefaultFilePersistence
 
-import org.apache.spark.streaming.StreamingContext
-import org.apache.spark.streaming.api.java.JavaStreamingContext
-import org.apache.spark.streaming.scheduler.StreamingListener
-import org.apache.spark.streaming.scheduler.StreamingListenerReceiverStarted
 import org.apache.spark.util.Utils
 import org.apache.spark.{Logging, SparkConf}
 
@@ -46,8 +41,6 @@ private class MQTTTestUtils extends Logging {
 
   private var broker: BrokerService = _
   private var connector: TransportConnector = _
-
-  private var receiverStartedLatch = new CountDownLatch(1)
 
   def brokerUri: String = {
     s"$brokerHost:$brokerPort"
@@ -73,7 +66,6 @@ private class MQTTTestUtils extends Logging {
       connector = null
     }
     Utils.deleteRecursively(persistenceDir)
-    receiverStartedLatch = null
   }
 
   private def findFreePort(): Int = {
@@ -114,38 +106,4 @@ private class MQTTTestUtils extends Logging {
     }
   }
 
-  /**
-   * Call this one before starting StreamingContext so that we won't miss the
-   * StreamingListenerReceiverStarted event.
-   */
-  def registerStreamingListener(jssc: JavaStreamingContext): Unit = {
-    registerStreamingListener(jssc.ssc)
-  }
-
-  /**
-   * Call this one before starting StreamingContext so that we won't miss the
-   * StreamingListenerReceiverStarted event.
-   */
-  def registerStreamingListener(ssc: StreamingContext): Unit = {
-    ssc.addStreamingListener(new StreamingListener {
-      override def onReceiverStarted(receiverStarted: StreamingListenerReceiverStarted) {
-        receiverStartedLatch.countDown()
-      }
-    })
-  }
-
-  /**
-   * Block until at least one receiver has started or timeout occurs.
-   */
-  def waitForReceiverToStart(jssc: JavaStreamingContext): Unit = {
-    waitForReceiverToStart(jssc.ssc)
-  }
-
-  /**
-   * Block until at least one receiver has started or timeout occurs.
-   */
-  def waitForReceiverToStart(ssc: StreamingContext): Unit = {
-    assert(
-      receiverStartedLatch.await(10, TimeUnit.SECONDS), "Timeout waiting for receiver to start.")
-  }
 }
