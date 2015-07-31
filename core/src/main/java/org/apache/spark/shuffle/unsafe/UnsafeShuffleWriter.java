@@ -20,7 +20,6 @@ package org.apache.spark.shuffle.unsafe;
 import java.io.*;
 import java.nio.channels.FileChannel;
 import java.util.Iterator;
-import java.util.Map;
 import javax.annotation.Nullable;
 
 import scala.Option;
@@ -28,6 +27,7 @@ import scala.Product2;
 import scala.collection.JavaConversions;
 import scala.reflect.ClassTag;
 import scala.reflect.ClassTag$;
+import scala.collection.immutable.Map;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.io.ByteStreams;
@@ -81,6 +81,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
 
   private MapStatus mapStatus = null;
   private UnsafeShuffleExternalSorter sorter = null;
+  private long peakMemoryUsedBytes = 0;
 
   /** Subclass of ByteArrayOutputStream that exposes `buf` directly. */
   private static final class MyByteArrayOutputStream extends ByteArrayOutputStream {
@@ -139,7 +140,14 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
    * Return the peak memory used so far, in bytes.
    */
   public long getPeakMemoryUsedBytes() {
-    return sorter.getPeakMemoryUsedBytes();
+    // sorter can be null if this writer is closed
+    if (sorter != null) {
+      long mem = sorter.getPeakMemoryUsedBytes();
+      if (mem > peakMemoryUsedBytes) {
+        peakMemoryUsedBytes = mem;
+      }
+    }
+    return peakMemoryUsedBytes;
   }
 
   /**
@@ -439,10 +447,13 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
   @Override
   public Option<MapStatus> stop(boolean success) {
     try {
-      // Update internal metrics
-      TaskContext context = TaskContext.get();
-      JavaConversions.asJavaMap(context.internalMetricsToAccumulators())
-        .get(InternalAccumulator.PEAK_EXECUTION_MEMORY()).add(getPeakMemoryUsedBytes());
+      // Update task metrics from accumulators (null during some tests)
+      Map<String, Accumulator<Object>> internalAccumulators =
+        taskContext.internalMetricsToAccumulators();
+      if (internalAccumulators != null) {
+        JavaConversions.asJavaMap(internalAccumulators)
+          .get(InternalAccumulator.PEAK_EXECUTION_MEMORY()).add(getPeakMemoryUsedBytes());
+      }
 
       if (stopping) {
         return Option.apply(null);
