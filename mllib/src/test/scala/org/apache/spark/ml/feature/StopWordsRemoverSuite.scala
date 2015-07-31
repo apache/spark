@@ -21,18 +21,13 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.{DataFrame, Row}
 
-import scala.beans.BeanInfo
-
-@BeanInfo
-case class StopWordsTestData(raw: Array[String], wanted: Array[String])
-
 object StopWordsRemoverSuite extends SparkFunSuite {
   def testStopWordsRemover(t: StopWordsRemover, dataset: DataFrame): Unit = {
     t.transform(dataset)
-      .select("filtered", "wanted")
+      .select("filtered", "expected")
       .collect()
       .foreach { case Row(tokens, wantedTokens) =>
-      assert(tokens === wantedTokens)
+        assert(tokens === wantedTokens)
     }
   }
 }
@@ -44,15 +39,16 @@ class StopWordsRemoverSuite extends SparkFunSuite with MLlibTestSparkContext {
     val remover = new StopWordsRemover()
       .setInputCol("raw")
       .setOutputCol("filtered")
-    val dataset = sqlContext.createDataFrame(Seq(
-      StopWordsTestData(Array("test", "test"), Array("test", "test")),
-      StopWordsTestData(Array("a", "b", "c", "d"), Array("b", "c", "d")),
-      StopWordsTestData(Array("a", "the", "an"), Array()),
-      StopWordsTestData(Array("A", "The", "AN"), Array()),
-      StopWordsTestData(Array(null), Array(null)),
-      StopWordsTestData(Array(), Array())
-    ))
-    testStopWordsRemover(remover, dataset)
+    val dataSet = sqlContext.createDataFrame(Seq(
+      (Seq("test", "test"), Seq("test", "test")),
+      (Seq("a", "b", "c", "d"), Seq("b", "c", "d")),
+      (Seq("a", "the", "an"), Seq()),
+      (Seq("A", "The", "AN"), Seq()),
+      (Seq(null), Seq(null)),
+      (Seq(), Seq())
+    )).toDF("raw", "expected")
+
+    testStopWordsRemover(remover, dataSet)
   }
 
   test("StopWordsRemover case sensitive") {
@@ -60,25 +56,25 @@ class StopWordsRemoverSuite extends SparkFunSuite with MLlibTestSparkContext {
       .setInputCol("raw")
       .setOutputCol("filtered")
       .setCaseSensitive(true)
+    val dataSet = sqlContext.createDataFrame(Seq(
+      (Seq("A"), Seq("A")),
+      (Seq("The", "the"), Seq("The"))
+    )).toDF("raw", "expected")
 
-    val dataset = sqlContext.createDataFrame(Seq(
-      StopWordsTestData(Array("A"), Array("A")),
-      StopWordsTestData(Array("The", "the"), Array("The"))
-    ))
-    testStopWordsRemover(remover, dataset)
+    testStopWordsRemover(remover, dataSet)
   }
 
   test("StopWordsRemover with additional words") {
-    val stopWords = StopWords.EnglishSet + "python" + "scala"
+    val stopWords = StopWords.EnglishStopWords ++ Array("python", "scala")
     val remover = new StopWordsRemover()
       .setInputCol("raw")
       .setOutputCol("filtered")
       .setStopWords(stopWords)
+    val dataSet = sqlContext.createDataFrame(Seq(
+      (Seq("python", "scala", "a"), Seq()),
+      (Seq("Python", "Scala", "swift"), Seq("swift"))
+    )).toDF("raw", "expected")
 
-    val dataset = sqlContext.createDataFrame(Seq(
-      StopWordsTestData(Array("python", "scala", "a"), Array()),
-      StopWordsTestData(Array("Python", "Scala", "swift"), Array("swift"))
-    ))
-    testStopWordsRemover(remover, dataset)
+    testStopWordsRemover(remover, dataSet)
   }
 }
