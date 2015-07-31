@@ -312,6 +312,10 @@ private[spark] object AccumulatorSuite {
       testName: String)(testBody: => Unit): Unit = {
     val listener = new SaveInfoListener
     sc.addSparkListener(listener)
+    // Verify that the accumulator does not already exist
+    sc.parallelize(1 to 10).count()
+    val accums = listener.getCompletedStageInfos.flatMap(_.accumulables.values)
+    assert(!accums.exists(_.name == InternalAccumulator.PEAK_EXECUTION_MEMORY))
     testBody
     // Verify that peak execution memory is updated
     val accum = listener.getCompletedStageInfos
