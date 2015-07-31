@@ -788,7 +788,7 @@ private[execution] object AggregateProcessor {
         val ref = distinctExpressionSchemaMap(agg.children)
         evaluateExpressions += ReduceSetAlgebraic(ref, agg)
       case (agg: AlgebraicAggregate, false, _) =>
-        agg.bufferOffset = bufferSchema.size
+        agg.mutableBufferOffset = bufferSchema.size
         bufferSchema ++= agg.bufferAttributes
         initialValues ++= agg.initialValues
         updateExpressions ++= agg.updateExpressions
@@ -800,7 +800,7 @@ private[execution] object AggregateProcessor {
         val boundAgg = BindReferences.bindReference(agg, inputSchema)
         aggregates2 += boundAgg
         aggregates2OutputOffsets += i
-        agg.bufferOffset = bufferSchema.size
+        agg.mutableBufferOffset = bufferSchema.size
         bufferSchema ++= boundAgg.bufferAttributes
         val nops = Seq.fill(boundAgg.bufferAttributes.size)(NoOp)
         initialValues ++= nops
@@ -821,8 +821,12 @@ private[execution] object AggregateProcessor {
 
     // Create the projections.
     val initialProjection = newMutableProjection(initialValues, Nil)()
-    val updateProjection = newMutableProjection(updateExpressions, bufferSchema ++ inputSchema)()
     val evaluateProjection = newMutableProjection(evaluateExpressions, bufferSchema)()
+
+    // (EXPERI)-MENTAL
+    val boundUpdateExpressions = BindReferences.bindJoinReferences(
+      updateExpressions, bufferSchema, inputSchema)
+    val updateProjection = newMutableProjection(boundUpdateExpressions, Nil)()
 
     // Create the processor
     new AggregateProcessor(bufferSchema.toArray, initialProjection, updateProjection,
@@ -847,13 +851,13 @@ private[execution] final class AggregateProcessor(
     private[this] val aggregates1OutputOffsets: Array[Int]) {
 
   private[this] val join = new JoinedRow
-  private[this] val bufferSchemaSize = bufferSchema.length
+  private[this] val bufferDataTypes = bufferSchema.toSeq.map(_.dataType)
   private[this] val aggregates2Size = aggregates2.length
   private[this] val aggregates1Size = aggregates1.length
 
   // Create the initial state
   def initialize: MutableRow = {
-    val buffer = new GenericMutableRow(bufferSchemaSize)
+    val buffer = new SpecificMutableRow(bufferDataTypes)
     initialProjection.target(buffer)(EmptyRow)
     var i = 0
     while (i < aggregates2Size) {

@@ -28,13 +28,20 @@ import org.apache.spark.sql.types._
  * to be retrieved more efficiently.  However, since operations like column pruning can change
  * the layout of intermediate tuples, BindReferences should be run after all such transformations.
  */
-case class BoundReference(ordinal: Int, dataType: DataType, nullable: Boolean)
-  extends LeafExpression with NamedExpression {
+abstract class AbstractBoundReference extends LeafExpression with NamedExpression {
+  val ordinal: Int
 
-  override def toString: String = s"input[$ordinal, $dataType]"
+  protected[this] def prefix: String = ""
+
+  protected[this] def genCodeInput = "i"
+
+  protected[this] def unwrap(input: InternalRow): InternalRow = input
+
+  override def toString: String = s"${prefix}input[$ordinal, $dataType]"
 
   // Use special getter for primitive types (for UnsafeRow)
-  override def eval(input: InternalRow): Any = {
+  override def eval(i: InternalRow): Any = {
+    val input = unwrap(i)
     if (input.isNullAt(ordinal)) {
       null
     } else {
@@ -68,12 +75,33 @@ case class BoundReference(ordinal: Int, dataType: DataType, nullable: Boolean)
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     val javaType = ctx.javaType(dataType)
-    val value = ctx.getValue("i", dataType, ordinal.toString)
+    val value = ctx.getValue(genCodeInput, dataType, ordinal.toString)
     s"""
-      boolean ${ev.isNull} = i.isNullAt($ordinal);
+      boolean ${ev.isNull} = $genCodeInput.isNullAt($ordinal);
       $javaType ${ev.primitive} = ${ev.isNull} ? ${ctx.defaultValue(dataType)} : ($value);
     """
   }
+}
+
+case class BoundReference(ordinal: Int, dataType: DataType, nullable: Boolean)
+    extends AbstractBoundReference
+
+case class LeftBoundReference(ordinal: Int, dataType: DataType, nullable: Boolean)
+  extends AbstractBoundReference {
+  override protected def prefix = "left"
+  override protected def genCodeInput =
+    "((org.apache.spark.sql.catalyst.expressions.JoinedRow)i).left()"
+  override protected def unwrap(input: InternalRow): InternalRow =
+    input.asInstanceOf[JoinedRow].left
+}
+
+case class RightBoundReference(ordinal: Int, dataType: DataType, nullable: Boolean)
+  extends AbstractBoundReference {
+  override protected def prefix = "right"
+  override protected def genCodeInput =
+    "((org.apache.spark.sql.catalyst.expressions.JoinedRow)i).right()"
+  override protected def unwrap(input: InternalRow): InternalRow =
+    input.asInstanceOf[JoinedRow].right
 }
 
 object BindReferences extends Logging {
@@ -96,5 +124,31 @@ object BindReferences extends Logging {
         }
       }
     }.asInstanceOf[A] // Kind of a hack, but safe.  TODO: Tighten return type when possible.
+  }
+
+  def createJoinReferenceMap(left: Seq[Attribute], right: Seq[Attribute]):
+      Map[ExprId, AbstractBoundReference] = {
+    (left.zipWithIndex.map {
+      case (e, ordinal) =>
+        (e.exprId, LeftBoundReference(ordinal, e.dataType, e.nullable))
+    } ++ right.zipWithIndex.map {
+      case (e, ordinal) =>
+        (e.exprId, RightBoundReference(ordinal, e.dataType, e.nullable))
+    }).toMap
+  }
+
+  def bindJoinReferences(
+      expressions: Seq[Expression],
+      left: Seq[Attribute],
+      right: Seq[Attribute]): Seq[Expression] = {
+    val refMap = createJoinReferenceMap(left, right)
+    expressions.map { expression =>
+      expression.transform { case a: AttributeReference =>
+        attachTree(a, "Binding attribute") {
+          refMap.getOrElse(a.exprId, sys.error(s"Couldn't find $a in left " +
+            s"${left.mkString("[", ",", "]")} or right ${right.mkString("[", ",", "]")}"))
+        }
+      }
+    }
   }
 }
