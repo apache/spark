@@ -344,7 +344,6 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           execution.Aggregate(partial = false, group, agg, planLater(child)) :: Nil
         }
       }
-
       case logical.Window(projectList, windowExprs, partitionSpec, orderSpec, child) =>
         val convertedWindowExpressions = windowExprs.map { e =>
           val converted = e.transformDown(Utils.convertAggregateExpressions)
