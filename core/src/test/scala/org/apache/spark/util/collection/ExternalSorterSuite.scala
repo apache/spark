@@ -749,7 +749,7 @@ class ExternalSorterSuite extends SparkFunSuite with LocalSparkContext {
     val conf = createSparkConf(loadDefaults = false, kryo = false)
       .set("spark.shuffle.manager", "sort")
     sc = new SparkContext("local", "test", conf)
-    // Do not aggregate here to make sure we're not also using ExternalAppendOnlyMap
+    // Avoid aggregating here to make sure we're not also using ExternalAppendOnlyMap
     AccumulatorSuite.verifyPeakExecutionMemorySet(sc, "external sorter") {
       sc.parallelize(1 to 1000, 2).repartition(100).count()
     }

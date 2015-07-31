@@ -117,12 +117,10 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
 
       val stageData = stageDataOption.get
       val tasks = stageData.taskData.values.toSeq.sortBy(_.taskInfo.launchTime)
-
       val numCompleted = tasks.count(_.taskInfo.finished)
-      val (_, externalAccumulables) =
-        progressListener.stageIdToData((stageId, stageAttemptId))
-          .accumulables
-          .partition { case (_, acc) => acc.internal }
+
+      val allAccumulables = progressListener.stageIdToData((stageId, stageAttemptId)).accumulables
+      val externalAccumulables = allAccumulables.values.filter { acc => !acc.internal }
       val hasAccumulators = externalAccumulables.size > 0
 
       val summary =
@@ -256,7 +254,7 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
       val accumulableTable = UIUtils.listingTable(
         accumulableHeaders,
         accumulableRow,
-        externalAccumulables.values.toSeq)
+        externalAccumulables.toSeq)
 
       val currentTime = System.currentTimeMillis()
       val (taskTable, taskTableHTML) = try {
@@ -310,13 +308,11 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
         else {
           def getDistributionQuantiles(data: Seq[Double]): IndexedSeq[Double] =
             Distribution(data).get.getQuantiles()
-
           def getFormattedTimeQuantiles(times: Seq[Double]): Seq[Node] = {
             getDistributionQuantiles(times).map { millis =>
               <td>{UIUtils.formatDuration(millis.toLong)}</td>
             }
           }
-
           def getFormattedSizeQuantiles(data: Seq[Double]): Seq[Elem] = {
             getDistributionQuantiles(data).map(d => <td>{Utils.bytesToString(d.toLong)}</td>)
           }
@@ -369,6 +365,7 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
               </span>
             </td> +:
             getFormattedTimeQuantiles(gettingResultTimes)
+
           val peakExecutionMemory = validTasks.map { case TaskUIData(info, _, _) =>
             info.accumulables
               .find { acc => acc.name == InternalAccumulator.PEAK_EXECUTION_MEMORY }
@@ -384,6 +381,7 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
               </span>
             </td> +: getFormattedSizeQuantiles(peakExecutionMemory)
           }
+
           // The scheduler delay includes the network delay to send the task to the worker
           // machine and to send back the result (but not the time to fetch the task result,
           // if it needed to be fetched from the block manager on the worker).
