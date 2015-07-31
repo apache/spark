@@ -244,14 +244,10 @@ class DecisionTreeClassifierSuite extends SparkFunSuite with MLlibTestSparkConte
     val newData: DataFrame = TreeTests.setMetadata(rdd, categoricalFeatures, numClasses)
     val newTree = dt.fit(newData)
 
-//    println(newTree.toDebugString)
-//    newTree.transform(newData).select(newTree.getRawPredictionCol).show(false)
-
     val predictions = newTree.transform(newData)
       .select(newTree.getPredictionCol, newTree.getRawPredictionCol)
       .collect()
 
-//    predictions.foreach(println)
     predictions.foreach { case Row(pred: Double, rawPred: Vector) =>
       assert(pred === rawPred.argmax,
         s"Expected prediction $pred but calculated ${rawPred.argmax} from rawPrediction.")

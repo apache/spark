@@ -78,7 +78,7 @@ private[spark] object InformationGainStats {
     new Predict(0.0, 0.0), new Predict(0.0, 0.0))
 }
 
-class ImpurityStats(
+private[spark] class ImpurityStats(
     val gain: Double,
     val impurity: Double,
     val impurityCalculator: ImpurityCalculator,
@@ -93,25 +93,6 @@ class ImpurityStats(
   def leftImpurity: Double = leftImpurityCalculator.calculate()
 
   def rightImpurity: Double = rightImpurityCalculator.calculate()
-
-  override def equals(o: Any): Boolean = o match {
-    case other: ImpurityStats =>
-      gain == other.gain &&
-      impurityCalculator == other.impurityCalculator &&
-      leftImpurityCalculator == other.leftImpurityCalculator &&
-      rightImpurityCalculator == other.rightImpurityCalculator
-
-    case _ => false
-  }
-
-  override def hashCode: Int = {
-    com.google.common.base.Objects.hashCode(
-      gain: java.lang.Double,
-      impurityCalculator,
-      leftImpurityCalculator,
-      rightImpurityCalculator
-    )
-  }
 }
 
 private[spark] object ImpurityStats {
@@ -122,7 +103,6 @@ private[spark] object ImpurityStats {
   }
 
   def getEmptyImpurityStats(impurityCalculator: ImpurityCalculator): ImpurityStats = {
-    new ImpurityStats(Double.NaN, impurityCalculator.calculate(),
-      impurityCalculator, null, null)
+    new ImpurityStats(Double.NaN, impurityCalculator.calculate(), impurityCalculator, null, null)
   }
 }
