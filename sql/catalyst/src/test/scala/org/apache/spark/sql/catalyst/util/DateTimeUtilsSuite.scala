@@ -398,4 +398,16 @@ class DateTimeUtilsSuite extends SparkFunSuite {
     c2.set(1996, 2, 31, 0, 0, 0)
     assert(monthsBetween(c1.getTimeInMillis * 1000L, c2.getTimeInMillis * 1000L) === 11)
   }
+
+  test("from UTC timestamp") {
+    assert(DateTimeUtils.fromUTCTime(0, UTF8String.fromString("UTC")) == -28800000000L)
+    assert(DateTimeUtils.fromUTCTime(0, UTF8String.fromString("PST")) == 0)
+    assert(DateTimeUtils.fromUTCTime(0, UTF8String.fromString("Asia/Shanghai")) == -57600000000L)
+  }
+
+  test("to UTC timestamp") {
+    assert(DateTimeUtils.toUTCTime(0, UTF8String.fromString("UTC")) == 28800000000L)
+    assert(DateTimeUtils.toUTCTime(0, UTF8String.fromString("PST")) == 0)
+    assert(DateTimeUtils.toUTCTime(0, UTF8String.fromString("Asia/Shanghai")) == 57600000000L)
+  }
 }
