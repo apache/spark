@@ -377,6 +377,7 @@ class SparkSubmitSuite
         "--master", "local-cluster[2,1,1024]",
         "--packages", main.toString,
         "--repositories", repo,
+        "--verbose",
         "--conf", "spark.ui.enabled=false",
         rScriptDir)
       runSparkSubmit(args)

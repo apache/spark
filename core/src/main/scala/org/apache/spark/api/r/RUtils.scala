@@ -19,7 +19,7 @@ package org.apache.spark.api.r
 
 import java.io.File
 
-import scala.sys.process._
+import scala.collection.JavaConversions._
 
 import org.apache.spark.{SparkEnv, SparkException}
 
@@ -66,5 +66,8 @@ private[spark] object RUtils {
   }
 
   /** Check if R is installed before running tests that use R commands. */
-  def isRInstalled: Boolean = Seq("R", "--version").! == 0
+  def isRInstalled: Boolean = {
+    val builder = new ProcessBuilder(Seq("R", "--version"))
+    builder.start().waitFor() == 0
+  }
 }

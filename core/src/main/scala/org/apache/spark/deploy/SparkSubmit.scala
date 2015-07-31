@@ -24,6 +24,7 @@ import java.security.PrivilegedExceptionAction
 
 import scala.collection.mutable.{ArrayBuffer, HashMap, Map}
 
+import org.apache.commons.lang3.StringUtils
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.security.UserGroupInformation
 import org.apache.ivy.Ivy
@@ -81,6 +82,8 @@ object SparkSubmit {
   private val PYSPARK_SHELL = "pyspark-shell"
   private val SPARKR_SHELL = "sparkr-shell"
   private val SPARKR_PACKAGE_ARCHIVE = "sparkr.zip"
+  // contains R packages designed to run with SparkR for distribution in Yarn cluster mode
+  private val SPARKR_EXTRAS_ARCHIVE = "sparkr-extras.zip"
 
   private val CLASS_NOT_FOUND_EXIT_STATUS = 101
 
@@ -293,6 +296,12 @@ object SparkSubmit {
       }
     }
 
+    // install any R packages that may have been passed through --jars or --packages.
+    // Spark Packages may contain R source code inside the jar.
+    if (args.isR && !StringUtils.isEmpty(args.jars)) {
+      RPackageUtils.checkAndBuildRPackage(args.jars, printStream, args.verbose)
+    }
+
     // Require all python files to be local, so we can add them to the PYTHONPATH
     // In YARN cluster mode, python files are distributed as regular files, which can be non-local
     if (args.isPython && !isYarnCluster) {
@@ -367,9 +376,11 @@ object SparkSubmit {
         printErrorAndExit(s"$SPARKR_PACKAGE_ARCHIVE does not exist for R application in YARN mode.")
       }
       val localURI = Utils.resolveURI(rPackageFile.getAbsolutePath)
+      val rExtras = RPackageUtils.zipRLibraries(new File(rPackagePath.get), SPARKR_EXTRAS_ARCHIVE)
+      val extrasURI = Utils.resolveURI(rExtras.getAbsolutePath).toString + "#sparkr-extras"
 
       // Assigns a symbol link name "sparkr" to the shipped package.
-      args.archives = mergeFileLists(args.archives, localURI.toString + "#sparkr")
+      args.archives = mergeFileLists(args.archives, localURI.toString + "#sparkr", extrasURI)
     }
 
     // If we're running a R app, set the main class to our specific R runner
@@ -988,11 +999,9 @@ private[spark] object SparkSubmitUtils {
         addExclusionRules(ivySettings, ivyConfName, md)
         // add all supplied maven artifacts as dependencies
         addDependenciesToIvy(md, artifacts, ivyConfName)
-
         exclusions.foreach { e =>
           md.addExcludeRule(createExclusion(e + ":*", ivySettings, ivyConfName))
         }
-
         // resolve dependencies
         val rr: ResolveReport = ivy.resolve(md, resolveOptions)
         if (rr.hasError) {

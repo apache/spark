@@ -17,19 +17,21 @@
 
 package org.apache.spark.deploy
 
-import java.io.{FileOutputStream, PrintStream, File}
+import java.io._
+import java.net.URI
 import java.util.jar.JarFile
 import java.util.logging.Level
+import java.util.zip.{ZipEntry, ZipOutputStream}
 
-import com.google.common.io.Files
+import com.google.common.io.{ByteStreams, Files}
 
-import org.apache.spark.Logging
+import org.apache.spark.{SparkException, Logging}
 import org.apache.spark.api.r.RUtils
 import org.apache.spark.util.{RedirectThread, Utils}
 
 import scala.collection.JavaConversions._
 
-private[spark] object RPackageUtils extends Logging {
+private[deploy] object RPackageUtils extends Logging {
 
   /** The key in the MANIFEST.mf that we look for, in case a jar contains R code. */
   private final val hasRPackage = "Spark-HasRPackage"
@@ -63,6 +65,29 @@ private[spark] object RPackageUtils extends Logging {
       |...
     """.stripMargin.trim
 
+  /** Internal method for logging. We log to a printStream in tests, for debugging purposes. */
+  private def print(
+      msg: String,
+      printStream: PrintStream,
+      level: Level = Level.FINE,
+      e: Throwable = null): Unit = {
+    if (printStream != null) {
+      // scalastyle:off println
+      printStream.println(msg)
+      // scalastyle:on println
+      if (e != null) {
+        e.printStackTrace(printStream)
+      }
+    } else {
+      level match {
+        case Level.INFO => logInfo(msg)
+        case Level.WARNING => logWarning(msg)
+        case Level.SEVERE => logError(msg, e)
+        case _ => logDebug(msg)
+      }
+    }
+  }
+
   /**
    * Checks the manifest of the Jar whether there is any R source code bundled with it.
    * Exposed for testing.
@@ -78,7 +103,8 @@ private[spark] object RPackageUtils extends Logging {
    */
   private def rPackageBuilder(dir: File, printStream: PrintStream, verbose: Boolean): Boolean = {
     // this code should be always running on the driver.
-    val pathToSparkR = RUtils.sparkRPackagePath(isDriver = true)
+    val pathToSparkR = RUtils.localSparkRPackagePath.getOrElse(
+      throw new SparkException("SPARK_HOME not set. Can't locate SparkR package."))
     val pathToPkg = Seq(dir, "R", "pkg").mkString(File.separator)
     val installCmd = baseInstallCmd ++ Seq(pathToSparkR, pathToPkg)
     if (verbose) {
@@ -134,12 +160,12 @@ private[spark] object RPackageUtils extends Logging {
   /**
    * Extracts the files under /R in the jar to a temporary directory for building.
    */
-  private[spark] def checkAndBuildRPackage(
+  private[deploy] def checkAndBuildRPackage(
       jars: String,
       printStream: PrintStream = null,
       verbose: Boolean = false): Unit = {
     jars.split(",").foreach { jarPath =>
-      val file = new File(jarPath)
+      val file = new File(new URI(jarPath))
       if (file.exists()) {
         val jar = new JarFile(file)
         if (checkManifestForR(jar)) {
@@ -164,26 +190,44 @@ private[spark] object RPackageUtils extends Logging {
     }
   }
 
-  /** Internal method for logging. We log to a printStream in tests, for debugging purposes. */
-  private def print(
-      msg: String,
-      printStream: PrintStream,
-      level: Level = Level.FINE,
-      e: Throwable = null): Unit = {
-    if (printStream != null) {
-      // scalastyle:off println
-      printStream.println(msg)
-      // scalastyle:on println
-      if (e != null) {
-        e.printStackTrace(printStream)
-      }
+  private def listFilesRecursively(dir: File): Seq[File] = {
+    if (!dir.exists()) {
+      Seq.empty[File]
     } else {
-      level match {
-        case Level.INFO => logInfo(msg)
-        case Level.WARNING => logWarning(msg)
-        case Level.SEVERE => logError(msg, e)
-        case _ => logDebug(msg)
+      if (dir.isDirectory) {
+        val subDir = dir.listFiles(new FilenameFilter {
+          override def accept(dir: File, name: String): Boolean = {
+            !dir.getAbsolutePath.contains("SparkR" + File.separator)
+          }
+        })
+        subDir.flatMap(listFilesRecursively)
+      } else {
+        Seq(dir)
       }
     }
+  }
+
+  /** Zips all the libraries found with SparkR in the R/lib directory for distribution with Yarn. */
+  private[deploy] def zipRLibraries(dir: File, name: String): File = {
+    val filesToBundle = listFilesRecursively(dir)
+    // create a zip file from scratch, do not append to existing file.
+    val zipFile = new File(dir, name)
+    zipFile.delete()
+    val zipOutputStream = new ZipOutputStream(new FileOutputStream(zipFile, false))
+    try {
+      filesToBundle.foreach { file =>
+        // get the relative paths for proper naming in the zip file
+        val relPath = file.getAbsolutePath.replaceFirst(dir.getAbsolutePath, "")
+        val fis = new FileInputStream(file)
+        val zipEntry = new ZipEntry(relPath)
+        zipOutputStream.putNextEntry(zipEntry)
+        ByteStreams.copy(fis, zipOutputStream)
+        zipOutputStream.closeEntry()
+        fis.close()
+      }
+    } finally {
+      zipOutputStream.close()
+    }
+    zipFile
   }
 }

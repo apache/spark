@@ -1662,10 +1662,6 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       }
       if (key != null) {
         addedJars(key) = System.currentTimeMillis
-        // install any R packages that may have been passed through --jars or --packages.
-        // Spark Packages may contain R source code inside the jar. This method needs to be here
-        // so that the package is always installed on the driver.
-        RPackageUtils.checkAndBuildRPackage(path)
         logInfo("Added JAR " + path + " at " + key + " with timestamp " + addedJars(key))
       }
     }
