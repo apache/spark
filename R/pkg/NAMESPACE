@@ -12,7 +12,8 @@ export("print.jobj")
 
 # MLlib integration
 exportMethods("glm",
-              "predict")
+              "predict",
+              "summary")
 
 # Job group lifecycle management methods
 export("setJobGroup",
@@ -26,6 +27,7 @@ exportMethods("arrange",
               "collect",
               "columns",
               "count",
+              "crosstab",
               "describe",
               "distinct",
               "dropna",

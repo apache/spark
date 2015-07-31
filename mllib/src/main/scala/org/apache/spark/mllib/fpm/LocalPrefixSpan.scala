@@ -40,6 +40,7 @@ private[fpm] object LocalPrefixSpan extends Logging with Serializable {
       minCount: Long,
       maxPatternLength: Int,
       prefixes: List[Int],
+<<<<<<< HEAD
       database: Array[(Array[Int], Int)]): Iterator[(List[Int], Long)] = {
     if ((prefixes.nonEmpty && prefixes.filter(_ != -1).length == maxPatternLength) ||
       database.length < minCount) { return Iterator.empty }
@@ -48,6 +49,17 @@ private[fpm] object LocalPrefixSpan extends Logging with Serializable {
       val newProjected = project(database, prefix)
       Iterator.single((prefix, count)) ++
         run(minCount, maxPatternLength, prefix, newProjected)
+=======
+      database: Iterable[Array[Int]]): Iterator[(List[Int], Long)] = {
+    if (prefixes.length == maxPatternLength || database.isEmpty) return Iterator.empty
+    val frequentItemAndCounts = getFreqItemAndCounts(minCount, database)
+    val filteredDatabase = database.map(x => x.filter(frequentItemAndCounts.contains))
+    frequentItemAndCounts.iterator.flatMap { case (item, count) =>
+      val newPrefixes = item :: prefixes
+      val newProjected = project(filteredDatabase, item)
+      Iterator.single((newPrefixes, count)) ++
+        run(minCount, maxPatternLength, newPrefixes, newProjected)
+>>>>>>> 83670fc9e6fc9c7a6ae68dfdd3f9335ea72f4ab0
     }
   }
 
@@ -95,10 +107,14 @@ private[fpm] object LocalPrefixSpan extends Logging with Serializable {
     }
   }
 
+<<<<<<< HEAD
   private def project(
       database: Array[(Array[Int], Int)],
       prefix: List[Int]): Array[(Array[Int], Int)] = {
     val lastElement = prefix.toArray.drop(prefix.lastIndexOf(-1) + 1)
+=======
+  def project(database: Iterable[Array[Int]], prefix: Int): Iterable[Array[Int]] = {
+>>>>>>> 83670fc9e6fc9c7a6ae68dfdd3f9335ea72f4ab0
     database
       .map(getSuffix(lastElement, _))
       .filter(_._1.nonEmpty)
@@ -113,6 +129,7 @@ private[fpm] object LocalPrefixSpan extends Logging with Serializable {
    */
   private def getFreqPrefixAndCounts(
       minCount: Long,
+<<<<<<< HEAD
       prefix: List[Int],
       suffixes: Array[(Array[Int], Int)]): mutable.Map[List[Int], Long] = {
     val counts = mutable.Map[List[Int], Long]().withDefaultValue(0L)
@@ -137,6 +154,14 @@ private[fpm] object LocalPrefixSpan extends Logging with Serializable {
             }
           }
         }
+=======
+      database: Iterable[Array[Int]]): mutable.Map[Int, Long] = {
+    // TODO: use PrimitiveKeyOpenHashMap
+    val counts = mutable.Map[Int, Long]().withDefaultValue(0L)
+    database.foreach { sequence =>
+      sequence.distinct.foreach { item =>
+        counts(item) += 1L
+>>>>>>> 83670fc9e6fc9c7a6ae68dfdd3f9335ea72f4ab0
       }
       multiItemSet.filter(_._2 >= minCount).foreach { case (item, count) =>
         if (prefix.nonEmpty) {

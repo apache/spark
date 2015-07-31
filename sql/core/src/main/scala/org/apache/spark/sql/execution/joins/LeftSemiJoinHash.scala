@@ -43,7 +43,7 @@ case class LeftSemiJoinHash(
   protected override def doExecute(): RDD[InternalRow] = {
     right.execute().zipPartitions(left.execute()) { (buildIter, streamIter) =>
       if (condition.isEmpty) {
-        val hashSet = buildKeyHashSet(buildIter, copy = false)
+        val hashSet = buildKeyHashSet(buildIter)
         hashSemiJoin(streamIter, hashSet)
       } else {
         val hashRelation = HashedRelation(buildIter, rightKeyGenerator)
