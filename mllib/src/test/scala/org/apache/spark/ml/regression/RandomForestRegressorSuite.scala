@@ -19,13 +19,14 @@ package org.apache.spark.ml.regression
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.impl.TreeTests
+import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.{EnsembleTestHelper, RandomForest => OldRandomForest}
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
+import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.DataFrame
-
 
 /**
  * Test suite for [[RandomForestRegressor]].
@@ -69,6 +70,70 @@ class RandomForestRegressorSuite extends SparkFunSuite with MLlibTestSparkContex
     val rf = new RandomForestRegressor()
       .setCacheNodeIds(true)
     regressionTestWithContinuousFeatures(rf)
+  }
+
+  /////////////////////////////////////////////////////////////////////////////
+  // Tests of feature importance
+  /////////////////////////////////////////////////////////////////////////////
+  test("Regression feature imprtance with toy data") {
+    val newRF = new RandomForestRegressor()
+      .setImpurity("variance")
+      .setMaxDepth(2)
+      .setMaxBins(10)
+      .setNumTrees(100)
+      .setFeatureSubsetStrategy("auto")
+      .setSeed(123)
+
+    /* Verify results using SKLearn:
+
+       from sklearn.ensemble import RandomForestRegressor, RandomForestClassifier
+       X = np.array([
+               [1, 0, 0, 0, 1],
+               [0, 0, 0, 1, 0],
+               [0, 0, 1, 0, 1],
+               [1, 0, 0, 0, 0],
+               [1, 1, 1, 0, 0]
+           ])
+       y = np.array([
+               0,
+               1,
+               1,
+               0,
+               1
+           ])
+       regressor = RandomForestRegressor(random_state=0, n_estimators=100, max_depth=2).fit(X,y)
+       importances = regressor.feature_importances_
+       std = np.std([tree.feature_importances_ for tree in forest.estimators_], axis=0)
+       indices = np.argsort(importances)[::-1]
+       print("Feature importance:")
+       for f in range(5):
+       print("%d. feature %d (%f)" % (f + 1, indices[f], importances[indices[f]]))
+
+       Feature importance:
+       1. feature 2 (0.330000)
+       2. feature 0 (0.304583)
+       3. feature 3 (0.119167)
+       4. feature 1 (0.111389)
+       5. feature 4 (0.044861)
+     */
+    val data: RDD[LabeledPoint] = sc.parallelize(Seq(
+      new LabeledPoint(0, Vectors.dense(1, 0, 0, 0, 1)),
+      new LabeledPoint(1, Vectors.dense(0, 0, 0, 1, 0)),
+      new LabeledPoint(1, Vectors.dense(0, 0, 1, 0, 1)),
+      new LabeledPoint(0, Vectors.dense(1, 0, 0, 0, 0)),
+      new LabeledPoint(1, Vectors.dense(1, 1, 1, 0, 0))
+    ))
+    val categoricalFeatures = Map.empty[Int, Int]
+    val df: DataFrame = TreeTests.setMetadata(data, categoricalFeatures, numClasses = 0)
+
+    val result =  {
+      val (idx, importance) = newRF.fit(df).featureImportances.unzip
+      Vectors.sparse(5, idx.toArray, importance.toArray)
+    }
+    val expected = Vectors.dense(0.304583, 0.111389, 0.33, 0.119167, 0.044861)
+
+    println(newRF.fit(df).featureImportances)
+    assert(result ~== expected absTol 0.02)
   }
 
   /////////////////////////////////////////////////////////////////////////////
