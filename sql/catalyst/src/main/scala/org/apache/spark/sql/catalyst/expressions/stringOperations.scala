@@ -22,7 +22,6 @@ import java.util.Locale
 import java.util.regex.{MatchResult, Pattern}
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.UnresolvedException
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -784,18 +783,16 @@ case class Levenshtein(left: Expression, right: Expression) extends BinaryExpres
 /**
  * A function that return soundex code of the given string expression.
  */
-case class SoundEx(child: Expression) extends UnaryExpression with ExpectsInputTypes
-  with CodegenFallback {
+case class SoundEx(child: Expression) extends UnaryExpression with ExpectsInputTypes {
 
   override def dataType: DataType = StringType
 
   override def inputTypes: Seq[DataType] = Seq(StringType)
 
-  override def nullSafeEval(input: Any): Any = {
-    input.asInstanceOf[UTF8String].soundex()
-  }
+  override def nullSafeEval(input: Any): Any = input.asInstanceOf[UTF8String].soundex()
+
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    nullSafeCodeGen(ctx, ev, c => s"${ev.primitive} = $c.soundex();")
+    defineCodeGen(ctx, ev, c => s"$c.soundex()")
   }
 }
 

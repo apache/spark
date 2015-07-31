@@ -1888,14 +1888,6 @@ object functions {
   def soundex(e: Column): Column = SoundEx(e.expr)
 
   /**
-   * Return the soundex for the specified column.
-   *
-   * @group string_funcs
-   * @since 1.5.0
-   */
-  def soundex(columnName: String): Column = soundex(Column(columnName))
-
-  /**
    * Splits str around pattern (pattern is a regular expression).
    * NOTE: pattern is a string represent the regular expression.
    *

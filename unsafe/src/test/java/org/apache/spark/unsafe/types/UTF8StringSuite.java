@@ -322,4 +322,52 @@ public class UTF8StringSuite {
     assertEquals(fromString("   "), blankString(3));
     assertEquals(fromString(""), blankString(0));
   }
+
+  @Test
+  public void soundex() {
+    assertEquals(fromString("Robert").soundex(), fromString("R163"));
+    assertEquals(fromString("Rupert").soundex(), fromString("R163"));
+    assertEquals(fromString("Rubin").soundex(), fromString("R150"));
+    assertEquals(fromString("Ashcraft").soundex(), fromString("A261"));
+    assertEquals(fromString("Ashcroft").soundex(), fromString("A261"));
+    assertEquals(fromString("Burroughs").soundex(), fromString("B620"));
+    assertEquals(fromString("Burrows").soundex(), fromString("B620"));
+    assertEquals(fromString("Ekzampul").soundex(), fromString("E251"));
+    assertEquals(fromString("Example").soundex(), fromString("E251"));
+    assertEquals(fromString("Ellery").soundex(), fromString("E460"));
+    assertEquals(fromString("Euler").soundex(), fromString("E460"));
+    assertEquals(fromString("Ghosh").soundex(), fromString("G200"));
+    assertEquals(fromString("Gauss").soundex(), fromString("G200"));
+    assertEquals(fromString("Gutierrez").soundex(), fromString("G362"));
+    assertEquals(fromString("Heilbronn").soundex(), fromString("H416"));
+    assertEquals(fromString("Hilbert").soundex(), fromString("H416"));
+    assertEquals(fromString("Jackson").soundex(), fromString("J250"));
+    assertEquals(fromString("Kant").soundex(), fromString("K530"));
+    assertEquals(fromString("Knuth").soundex(), fromString("K530"));
+    assertEquals(fromString("Lee").soundex(), fromString("L000"));
+    assertEquals(fromString("Lukasiewicz").soundex(), fromString("L222"));
+    assertEquals(fromString("Lissajous").soundex(), fromString("L222"));
+    assertEquals(fromString("Ladd").soundex(), fromString("L300"));
+    assertEquals(fromString("Lloyd").soundex(), fromString("L300"));
+    assertEquals(fromString("Moses").soundex(), fromString("M220"));
+    assertEquals(fromString("O'Hara").soundex(), fromString("O600"));
+    assertEquals(fromString("Pfister").soundex(), fromString("P236"));
+    assertEquals(fromString("Rubin").soundex(), fromString("R150"));
+    assertEquals(fromString("Robert").soundex(), fromString("R163"));
+    assertEquals(fromString("Rupert").soundex(), fromString("R163"));
+    assertEquals(fromString("Soundex").soundex(), fromString("S532"));
+    assertEquals(fromString("Sownteks").soundex(), fromString("S532"));
+    assertEquals(fromString("Tymczak").soundex(), fromString("T522"));
+    assertEquals(fromString("VanDeusen").soundex(), fromString("V532"));
+    assertEquals(fromString("Washington").soundex(), fromString("W252"));
+    assertEquals(fromString("Wheaton").soundex(), fromString("W350"));
+
+    assertEquals(fromString("a").soundex(), fromString("A000"));
+    assertEquals(fromString("ab").soundex(), fromString("A100"));
+    assertEquals(fromString("abc").soundex(), fromString("A120"));
+    assertEquals(fromString("abcd").soundex(), fromString("A123"));
+    assertEquals(fromString("").soundex(), fromString(""));
+    assertEquals(fromString("123").soundex(), fromString("123"));
+    assertEquals(fromString("世界千世").soundex(), fromString("世界千世"));
+  }
 }
