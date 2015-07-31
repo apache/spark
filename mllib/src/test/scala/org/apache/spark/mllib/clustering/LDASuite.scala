@@ -123,7 +123,7 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext {
     val topDocsByTopicDistributions = { n: Int =>
       Range(0, k).map { topic =>
         val (doc, docWeights) = topicDistributions.sortBy(-_._2(topic)).take(n).unzip
-        (doc.map(_.toInt).toArray, docWeights.map(_(topic)).toArray)
+        (doc.toArray, docWeights.map(_(topic)).toArray)
       }.toArray
     }
 
