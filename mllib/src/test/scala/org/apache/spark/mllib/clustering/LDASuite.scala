@@ -210,16 +210,7 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext {
   }
 
   test("OnlineLDAOptimizer with toy data") {
-    def toydata: Array[(Long, Vector)] = Array(
-      Vectors.sparse(6, Array(0, 1), Array(1, 1)),
-      Vectors.sparse(6, Array(1, 2), Array(1, 1)),
-      Vectors.sparse(6, Array(0, 2), Array(1, 1)),
-      Vectors.sparse(6, Array(3, 4), Array(1, 1)),
-      Vectors.sparse(6, Array(3, 5), Array(1, 1)),
-      Vectors.sparse(6, Array(4, 5), Array(1, 1))
-    ).zipWithIndex.map { case (wordCounts, docId) => (docId.toLong, wordCounts) }
-
-    val docs = sc.parallelize(toydata)
+    val docs = sc.parallelize(toyData)
     val op = new OnlineLDAOptimizer().setMiniBatchFraction(1).setTau0(1024).setKappa(0.51)
       .setGammaShape(1e10)
     val lda = new LDA().setK(2)
@@ -242,30 +233,45 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext {
     }
   }
 
+  test("LocalLDAModel logLikelihood") {
+    val ldaModel: LocalLDAModel = toyModel
+
+    val docsSingleWord = sc.parallelize(Array(Vectors.sparse(6, Array(0), Array(1)))
+      .zipWithIndex
+      .map { case (wordCounts, docId) => (docId.toLong, wordCounts) })
+    val docsRepeatedWord = sc.parallelize(Array(Vectors.sparse(6, Array(0), Array(5)))
+      .zipWithIndex
+      .map { case (wordCounts, docId) => (docId.toLong, wordCounts) })
+
+    /* Verify results using gensim:
+       import numpy as np
+       from gensim import models
+       corpus = [
+          [(0, 1.0), (1, 1.0)],
+          [(1, 1.0), (2, 1.0)],
+          [(0, 1.0), (2, 1.0)],
+          [(3, 1.0), (4, 1.0)],
+          [(3, 1.0), (5, 1.0)],
+          [(4, 1.0), (5, 1.0)]]
+       np.random.seed(2345)
+       lda = models.ldamodel.LdaModel(
+          corpus=corpus, alpha=0.01, eta=0.01, num_topics=2, update_every=0, passes=100,
+          decay=0.51, offset=1024)
+       docsSingleWord = [[(0, 1.0)]]
+       docsRepeatedWord = [[(0, 5.0)]]
+       print(lda.bound(docsSingleWord))
+       > -25.9706969833
+       print(lda.bound(docsRepeatedWord))
+       > -31.4413908227
+     */
+
+    assert(ldaModel.logLikelihood(docsSingleWord) ~== -25.971 relTol 1E-3D)
+    assert(ldaModel.logLikelihood(docsRepeatedWord) ~== -31.441  relTol 1E-3D)
+  }
+
   test("LocalLDAModel logPerplexity") {
-    val k = 2
-    val vocabSize = 6
-    val alpha = 0.01
-    val eta = 0.01
-    val gammaShape = 100
-    // obtained from LDA model trained in gensim, see below
-    val topics = new DenseMatrix(numRows = vocabSize, numCols = k, values = Array(
-      1.86738052, 1.94056535, 1.89981687, 0.0833265, 0.07405918, 0.07940597,
-      0.15081551, 0.08637973, 0.12428538, 1.9474897, 1.94615165, 1.95204124))
-
-    def toydata: Array[(Long, Vector)] = Array(
-      Vectors.sparse(6, Array(0, 1), Array(1, 1)),
-      Vectors.sparse(6, Array(1, 2), Array(1, 1)),
-      Vectors.sparse(6, Array(0, 2), Array(1, 1)),
-      Vectors.sparse(6, Array(3, 4), Array(1, 1)),
-      Vectors.sparse(6, Array(3, 5), Array(1, 1)),
-      Vectors.sparse(6, Array(4, 5), Array(1, 1))
-    ).zipWithIndex.map { case (wordCounts, docId) => (docId.toLong, wordCounts) }
-    val docs = sc.parallelize(toydata)
-
-
-    val ldaModel: LocalLDAModel = new LocalLDAModel(
-      topics, Vectors.dense(Array.fill(k)(alpha)), eta, gammaShape)
+    val docs = sc.parallelize(toyData)
+    val ldaModel: LocalLDAModel = toyModel
 
     /* Verify results using gensim:
        import numpy as np
@@ -285,32 +291,13 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext {
        > -3.69051285096
      */
 
-    assert(ldaModel.logPerplexity(docs) ~== -3.690D relTol 1E-3D)
+    // Gensim's definition of perplexity is negative our (and Stanford NLP's) definition
+    assert(ldaModel.logPerplexity(docs) ~== 3.690D relTol 1E-3D)
   }
 
   test("LocalLDAModel predict") {
-    val k = 2
-    val vocabSize = 6
-    val alpha = 0.01
-    val eta = 0.01
-    val gammaShape = 100
-    // obtained from LDA model trained in gensim, see below
-    val topics = new DenseMatrix(numRows = vocabSize, numCols = k, values = Array(
-      1.86738052, 1.94056535, 1.89981687, 0.0833265, 0.07405918, 0.07940597,
-      0.15081551, 0.08637973, 0.12428538, 1.9474897, 1.94615165, 1.95204124))
-
-    def toydata: Array[(Long, Vector)] = Array(
-      Vectors.sparse(6, Array(0, 1), Array(1, 1)),
-      Vectors.sparse(6, Array(1, 2), Array(1, 1)),
-      Vectors.sparse(6, Array(0, 2), Array(1, 1)),
-      Vectors.sparse(6, Array(3, 4), Array(1, 1)),
-      Vectors.sparse(6, Array(3, 5), Array(1, 1)),
-      Vectors.sparse(6, Array(4, 5), Array(1, 1))
-    ).zipWithIndex.map { case (wordCounts, docId) => (docId.toLong, wordCounts) }
-    val docs = sc.parallelize(toydata)
-
-    val ldaModel: LocalLDAModel = new LocalLDAModel(
-      topics, Vectors.dense(Array.fill(k)(alpha)), eta, gammaShape)
+    val docs = sc.parallelize(toyData)
+    val ldaModel: LocalLDAModel = toyModel
 
     /* Verify results using gensim:
        import numpy as np
@@ -351,16 +338,7 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext {
   }
 
   test("OnlineLDAOptimizer with asymmetric prior") {
-    def toydata: Array[(Long, Vector)] = Array(
-      Vectors.sparse(6, Array(0, 1), Array(1, 1)),
-      Vectors.sparse(6, Array(1, 2), Array(1, 1)),
-      Vectors.sparse(6, Array(0, 2), Array(1, 1)),
-      Vectors.sparse(6, Array(3, 4), Array(1, 1)),
-      Vectors.sparse(6, Array(3, 5), Array(1, 1)),
-      Vectors.sparse(6, Array(4, 5), Array(1, 1))
-    ).zipWithIndex.map { case (wordCounts, docId) => (docId.toLong, wordCounts) }
-
-    val docs = sc.parallelize(toydata)
+    val docs = sc.parallelize(toyData)
     val op = new OnlineLDAOptimizer().setMiniBatchFraction(1).setTau0(1024).setKappa(0.51)
       .setGammaShape(1e10)
     val lda = new LDA().setK(2)
@@ -530,5 +508,28 @@ private[clustering] object LDASuite {
 
   def getNonEmptyDoc(corpus: Array[(Long, Vector)]): Array[(Long, Vector)] = corpus.filter {
     case (_, wc: Vector) => Vectors.norm(wc, p = 1.0) != 0.0
+  }
+
+  def toyData: Array[(Long, Vector)] = Array(
+    Vectors.sparse(6, Array(0, 1), Array(1, 1)),
+    Vectors.sparse(6, Array(1, 2), Array(1, 1)),
+    Vectors.sparse(6, Array(0, 2), Array(1, 1)),
+    Vectors.sparse(6, Array(3, 4), Array(1, 1)),
+    Vectors.sparse(6, Array(3, 5), Array(1, 1)),
+    Vectors.sparse(6, Array(4, 5), Array(1, 1))
+  ).zipWithIndex.map { case (wordCounts, docId) => (docId.toLong, wordCounts) }
+
+  def toyModel: LocalLDAModel = {
+    val k = 2
+    val vocabSize = 6
+    val alpha = 0.01
+    val eta = 0.01
+    val gammaShape = 100
+    val topics = new DenseMatrix(numRows = vocabSize, numCols = k, values = Array(
+      1.86738052, 1.94056535, 1.89981687, 0.0833265, 0.07405918, 0.07940597,
+      0.15081551, 0.08637973, 0.12428538, 1.9474897, 1.94615165, 1.95204124))
+    val ldaModel: LocalLDAModel = new LocalLDAModel(
+      topics, Vectors.dense(Array.fill(k)(alpha)), eta, gammaShape)
+    ldaModel
   }
 }
