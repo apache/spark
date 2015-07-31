@@ -131,28 +131,20 @@ class NaiveBayesModel private[ml] (
 
   override val numClasses: Int = pi.size
 
-  private def posteriorProbabilities(logProb: DenseVector) = {
-    val logProbArray = logProb.toArray
-    val maxLog = logProbArray.max
-    val scaledProbs = logProbArray.map(lp => math.exp(lp - maxLog))
-    val probSum = scaledProbs.sum
-    new DenseVector(scaledProbs.map(_ / probSum))
-  }
-
-  private def multinomialCalculation(testData: Vector) = {
-    val prob = theta.multiply(testData)
+  private def multinomialCalculation(features: Vector) = {
+    val prob = theta.multiply(features)
     BLAS.axpy(1.0, pi, prob)
     prob
   }
 
-  private def bernoulliCalculation(testData: Vector) = {
-    testData.foreachActive((_, value) =>
+  private def bernoulliCalculation(features: Vector) = {
+    features.foreachActive((_, value) =>
       if (value != 0.0 && value != 1.0) {
         throw new SparkException(
-          s"Bernoulli naive Bayes requires 0 or 1 feature values but found $testData.")
+          s"Bernoulli naive Bayes requires 0 or 1 feature values but found $features.")
       }
     )
-    val prob = thetaMinusNegTheta.get.multiply(testData)
+    val prob = thetaMinusNegTheta.get.multiply(features)
     BLAS.axpy(1.0, pi, prob)
     BLAS.axpy(1.0, negThetaSum.get, prob)
     prob
@@ -171,7 +163,26 @@ class NaiveBayesModel private[ml] (
   }
 
   override protected def raw2probabilityInPlace(rawPrediction: Vector): Vector = {
-    posteriorProbabilities(rawPrediction.toDense)
+    rawPrediction match {
+      case dv: DenseVector =>
+        var i = 0
+        val size = dv.size
+        val maxLog = dv.values.max
+        while (i < size) {
+          dv.values(i) = math.exp(dv.values(i) - maxLog)
+          i += 1
+        }
+        val probSum = dv.values.sum
+        i = 0
+        while (i < size) {
+          dv.values(i) = dv.values(i) / probSum
+          i += 1
+        }
+        dv
+      case sv: SparseVector =>
+        throw new RuntimeException("Unexpected error in NaiveBayesModel:" +
+          " raw2probabilityInPlace encountered SparseVector")
+    }
   }
 
   override def copy(extra: ParamMap): NaiveBayesModel = {

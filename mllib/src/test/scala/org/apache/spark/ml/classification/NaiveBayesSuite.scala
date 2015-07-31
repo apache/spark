@@ -74,8 +74,7 @@ class NaiveBayesSuite extends SparkFunSuite with MLlibTestSparkContext {
       modelType: String): Unit = {
     featureAndProbabilities.collect().foreach {
       case Row(features: Vector, probability: Vector) => {
-        val predicted = probability
-        assert(predicted.toArray.sum ~== 1.0 relTol 1.0e-10)
+        assert(probability.toArray.sum ~== 1.0 relTol 1.0e-10)
         val expected = modelType match {
           case Multinomial =>
             expectedMultinomialProbabilities(model, features)
@@ -84,7 +83,7 @@ class NaiveBayesSuite extends SparkFunSuite with MLlibTestSparkContext {
           case _ =>
             throw new UnknownError(s"Invalid modelType: $modelType.")
         }
-        assert(predicted ~== expected relTol 1.0e-10)
+        assert(probability ~== expected relTol 1.0e-10)
       }
     }
   }
