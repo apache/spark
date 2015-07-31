@@ -373,18 +373,18 @@ class DistributedLDAModel private (
    *          (indices for the documents, weights of the topic in these documents).
    *          For each topic, documents are sorted in order of decreasing topic weights.
    */
-  def topDocumentsPerTopic(maxDocumentsPerTopic: Int): Array[(Array[Int], Array[Double])] = {
+  def topDocumentsPerTopic(maxDocumentsPerTopic: Int): Array[(Array[Long], Array[Double])] = {
     val numTopics = k
-    val topicsInQueues: Array[BoundedPriorityQueue[(Double, Int)]] =
+    val topicsInQueues: Array[BoundedPriorityQueue[(Double, Long)]] =
       topicDistributions.mapPartitions { docVertices =>
         // For this partition, collect the most common docs for each topic in queues:
-        //  queues(topic) = queue of (doc weight, doc index).
+        //  queues(topic) = queue of (doc topic, doc index).
         val queues =
-          Array.fill(numTopics)(new BoundedPriorityQueue[(Double, Int)](maxDocumentsPerTopic))
-        for ((docId, docWeight) <- docVertices) {
+          Array.fill(numTopics)(new BoundedPriorityQueue[(Double, Long)](maxDocumentsPerTopic))
+        for ((docId, docTopics) <- docVertices) {
           var topic = 0
           while (topic < numTopics) {
-            queues(topic) += (docWeight(topic) -> docId.toInt)
+            queues(topic) += (docTopics(topic) -> docId)
             topic += 1
           }
         }
@@ -394,8 +394,8 @@ class DistributedLDAModel private (
         q1
       }
     topicsInQueues.map { q =>
-      val (docWeights, docs) = q.toArray.sortBy(-_._1).unzip
-      (docs.toArray, docWeights.toArray)
+      val (docTopics, docs) = q.toArray.sortBy(-_._1).unzip
+      (docs.toArray, docTopics.toArray)
     }
   }
 
