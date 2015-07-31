@@ -347,7 +347,7 @@ class Analyzer(
             val newOutput = oldVersion.generatorOutput.map(_.newInstance())
             (oldVersion, oldVersion.copy(generatorOutput = newOutput))
 
-          case oldVersion @ Window(_, windowExpressions, _, child)
+          case oldVersion @ Window(_, windowExpressions, _, _, child)
               if AttributeSet(windowExpressions.map(_.toAttribute)).intersect(conflictingAttributes)
                 .nonEmpty =>
             (oldVersion, oldVersion.copy(windowExpressions = newAliases(windowExpressions)))
@@ -825,7 +825,7 @@ class Analyzer(
         }.asInstanceOf[NamedExpression]
       }
 
-      // Second, we group extractedWindowExprBuffer based on their Window Spec.
+      // Second, we group extractedWindowExprBuffer based on their Partition and Order Specs.
       val groupedWindowExpressions = extractedWindowExprBuffer.groupBy { expr =>
         val distinctWindowSpec = expr.collect {
           case window: WindowExpression => window.windowSpec
@@ -841,7 +841,8 @@ class Analyzer(
           failAnalysis(s"$expr has multiple Window Specifications ($distinctWindowSpec)." +
             s"Please file a bug report with this error message, stack trace, and the query.")
         } else {
-          distinctWindowSpec.head
+          val spec = distinctWindowSpec.head
+          (spec.partitionSpec, spec.orderSpec)
         }
       }.toSeq
 
@@ -850,9 +851,10 @@ class Analyzer(
       var currentChild = child
       var i = 0
       while (i < groupedWindowExpressions.size) {
-        val (windowSpec, windowExpressions) = groupedWindowExpressions(i)
+        val ((partitionSpec, orderSpec), windowExpressions) = groupedWindowExpressions(i)
         // Set currentChild to the newly created Window operator.
-        currentChild = Window(currentChild.output, windowExpressions, windowSpec, currentChild)
+        currentChild = Window(currentChild.output, windowExpressions,
+          partitionSpec, orderSpec, currentChild)
 
         // Move to next Window Spec.
         i += 1

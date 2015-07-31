@@ -726,15 +726,16 @@ case class TruncDate(date: Expression, format: Expression)
   override def dataType: DataType = DateType
   override def prettyName: String = "trunc"
 
-  lazy val minItemConst = DateTimeUtils.parseTruncLevel(format.eval().asInstanceOf[UTF8String])
+  private lazy val truncLevel: Int =
+    DateTimeUtils.parseTruncLevel(format.eval().asInstanceOf[UTF8String])
 
   override def eval(input: InternalRow): Any = {
-    val minItem = if (format.foldable) {
-      minItemConst
+    val level = if (format.foldable) {
+      truncLevel
     } else {
       DateTimeUtils.parseTruncLevel(format.eval().asInstanceOf[UTF8String])
     }
-    if (minItem == -1) {
+    if (level == -1) {
       // unknown format
       null
     } else {
@@ -742,7 +743,7 @@ case class TruncDate(date: Expression, format: Expression)
       if (d == null) {
         null
       } else {
-        DateTimeUtils.truncDate(d.asInstanceOf[Int], minItem)
+        DateTimeUtils.truncDate(d.asInstanceOf[Int], level)
       }
     }
   }
@@ -751,7 +752,7 @@ case class TruncDate(date: Expression, format: Expression)
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
 
     if (format.foldable) {
-      if (minItemConst == -1) {
+      if (truncLevel == -1) {
         s"""
           boolean ${ev.isNull} = true;
           ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
@@ -763,7 +764,7 @@ case class TruncDate(date: Expression, format: Expression)
           boolean ${ev.isNull} = ${d.isNull};
           ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
           if (!${ev.isNull}) {
-            ${ev.primitive} = $dtu.truncDate(${d.primitive}, $minItemConst);
+            ${ev.primitive} = $dtu.truncDate(${d.primitive}, $truncLevel);
           }
         """
       }
