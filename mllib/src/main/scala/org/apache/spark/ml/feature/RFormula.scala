@@ -17,6 +17,7 @@
 
 package org.apache.spark.ml.feature
 
+import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.util.parsing.combinator.RegexParsers
 
@@ -91,11 +92,20 @@ class RFormula(override val uid: String) extends Estimator[RFormulaModel] with R
     // TODO(ekl) add support for feature interactions
     val encoderStages = ArrayBuffer[PipelineStage]()
     val tempColumns = ArrayBuffer[String]()
+    val takenNames = mutable.Set(dataset.columns: _*)
     val encodedTerms = resolvedFormula.terms.map { term =>
       dataset.schema(term) match {
         case column if column.dataType == StringType =>
           val indexCol = term + "_idx_" + uid
-          val encodedCol = term + "_onehot_" + uid
+          val encodedCol = {
+            var tmp = term
+            while (takenNames.contains(tmp)) {
+              tmp += "_"
+            }
+            tmp
+          }
+          takenNames.add(indexCol)
+          takenNames.add(encodedCol)
           encoderStages += new StringIndexer().setInputCol(term).setOutputCol(indexCol)
           encoderStages += new OneHotEncoder().setInputCol(indexCol).setOutputCol(encodedCol)
           tempColumns += indexCol

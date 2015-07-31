@@ -66,6 +66,19 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
   }
 
   /**
+   * Creates an UTF8String from byte array, which should be encoded in UTF-8.
+   *
+   * Note: `bytes` will be hold by returned UTF8String.
+   */
+  public static UTF8String fromBytes(byte[] bytes, int offset, int numBytes) {
+    if (bytes != null) {
+      return new UTF8String(bytes, BYTE_ARRAY_OFFSET + offset, numBytes);
+    } else {
+      return null;
+    }
+  }
+
+  /**
    * Creates an UTF8String from String.
    */
   public static UTF8String fromString(String str) {
@@ -89,10 +102,10 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
     return fromBytes(spaces);
   }
 
-  protected UTF8String(Object base, long offset, int size) {
+  protected UTF8String(Object base, long offset, int numBytes) {
     this.base = base;
     this.offset = offset;
-    this.numBytes = size;
+    this.numBytes = numBytes;
   }
 
   /**
@@ -141,7 +154,24 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
    * Returns a 64-bit integer that can be used as the prefix used in sorting.
    */
   public long getPrefix() {
-    long p = PlatformDependent.UNSAFE.getLong(base, offset);
+    // Since JVMs are either 4-byte aligned or 8-byte aligned, we check the size of the string.
+    // If size is 0, just return 0.
+    // If size is between 0 and 4 (inclusive), assume data is 4-byte aligned under the hood and
+    // use a getInt to fetch the prefix.
+    // If size is greater than 4, assume we have at least 8 bytes of data to fetch.
+    // After getting the data, we use a mask to mask out data that is not part of the string.
+    long p;
+    if (numBytes >= 8) {
+      p = PlatformDependent.UNSAFE.getLong(base, offset);
+    } else  if (numBytes > 4) {
+      p = PlatformDependent.UNSAFE.getLong(base, offset);
+      p = p & ((1L << numBytes * 8) - 1);
+    } else if (numBytes > 0) {
+      p = (long) PlatformDependent.UNSAFE.getInt(base, offset);
+      p = p & ((1L << numBytes * 8) - 1);
+    } else {
+      p = 0;
+    }
     p = java.lang.Long.reverseBytes(p);
     return p;
   }

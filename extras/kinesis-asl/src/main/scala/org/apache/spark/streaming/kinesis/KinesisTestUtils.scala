@@ -59,6 +59,8 @@ private class KinesisTestUtils(val endpointUrl: String, _regionName: String) ext
 
   @volatile
   private var streamCreated = false
+
+  @volatile
   private var _streamName: String = _
 
   private lazy val kinesisClient = {
@@ -128,21 +130,9 @@ private class KinesisTestUtils(val endpointUrl: String, _regionName: String) ext
     pushData(scala.collection.JavaConversions.asScalaBuffer(testData))
   }
 
-  def describeStream(streamNameToDescribe: String = streamName): Option[StreamDescription] = {
-    try {
-      val describeStreamRequest = new DescribeStreamRequest().withStreamName(streamNameToDescribe)
-      val desc = kinesisClient.describeStream(describeStreamRequest).getStreamDescription()
-      Some(desc)
-    } catch {
-      case rnfe: ResourceNotFoundException =>
-        None
-    }
-  }
-
   def deleteStream(): Unit = {
     try {
-      if (describeStream().nonEmpty) {
-        val deleteStreamRequest = new DeleteStreamRequest()
+      if (streamCreated) {
         kinesisClient.deleteStream(streamName)
       }
     } catch {
@@ -159,6 +149,17 @@ private class KinesisTestUtils(val endpointUrl: String, _regionName: String) ext
     } catch {
       case e: Exception =>
         logWarning(s"Could not delete DynamoDB table $tableName")
+    }
+  }
+
+  private def describeStream(streamNameToDescribe: String): Option[StreamDescription] = {
+    try {
+      val describeStreamRequest = new DescribeStreamRequest().withStreamName(streamNameToDescribe)
+      val desc = kinesisClient.describeStream(describeStreamRequest).getStreamDescription()
+      Some(desc)
+    } catch {
+      case rnfe: ResourceNotFoundException =>
+        None
     }
   }
 
