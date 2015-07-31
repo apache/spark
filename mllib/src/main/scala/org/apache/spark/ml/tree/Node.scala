@@ -126,8 +126,8 @@ final class LeafNode private[ml] (
   override private[tree] def subtreeDepth: Int = 0
 
   override private[ml] def toOld(id: Int): OldNode = {
-    new OldNode(id, new OldPredict(prediction, prob = impurityStats.prob(prediction)), impurity, isLeaf = true,
-      None, None, None, None)
+    new OldNode(id, new OldPredict(prediction, prob = impurityStats.prob(prediction)),
+      impurity, isLeaf = true, None, None, None, None)
   }
 }
 
