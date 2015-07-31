@@ -431,7 +431,7 @@ public final class BytesToBytesMap {
      * Store a new key and value. This method may only be called once for a given key; if you want
      * to update the value associated with a key, then you can directly manipulate the bytes stored
      * at the value address. The return value indicates whether the put succeeded or whether it
-     * failed because additional memory could not be required.
+     * failed because additional memory could not be acquired.
      * <p>
      * It is only valid to call this method immediately after calling `lookup()` using the same key.
      * </p>
