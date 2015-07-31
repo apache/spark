@@ -184,6 +184,7 @@ object FunctionRegistry {
     expression[Levenshtein]("levenshtein"),
     expression[RegExpExtract]("regexp_extract"),
     expression[RegExpReplace]("regexp_replace"),
+    expression[SoundEx]("soundex"),
     expression[StringInstr]("instr"),
     expression[StringLocate]("locate"),
     expression[StringLPad]("lpad"),

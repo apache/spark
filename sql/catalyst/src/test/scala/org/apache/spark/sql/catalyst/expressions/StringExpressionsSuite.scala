@@ -347,6 +347,35 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     // scalastyle:on
   }
 
+  test("soundex unit test") {
+    checkEvaluation(SoundEx(Literal("ZIN")), "Z500", create_row("s1"))
+    checkEvaluation(SoundEx(Literal("SU")), "S000", create_row("s2"))
+    checkEvaluation(SoundEx(Literal("")), "", create_row("s3"))
+    checkEvaluation(SoundEx(Literal.create(null, StringType)), null, create_row("s4"))
+
+    // scalastyle:off
+    // non ascii characters are not allowed in the code, so we disable the scalastyle here.
+    checkEvaluation(SoundEx(Literal("测试")), "测试", create_row("s5"))
+    checkEvaluation(SoundEx(Literal("z測試")), "z測試", create_row("s6"))
+    checkEvaluation(SoundEx(Literal("Tschüss")), "Tschüss", create_row("s7"))
+    // scalastyle:on
+    checkEvaluation(SoundEx(Literal("zZ")), "z000", create_row("s8"))
+    checkEvaluation(SoundEx(Literal("RAGSSEEESSSVEEWE")), "R221", create_row("s9"))
+    checkEvaluation(SoundEx(Literal("Ashcraft")), "A261", create_row("s10"))
+    checkEvaluation(SoundEx(Literal("Aswcraft")), "A261", create_row("s11"))
+    checkEvaluation(SoundEx(Literal("Tymczak")), "T522", create_row("s12"))
+    checkEvaluation(SoundEx(Literal("Pfister")), "P236", create_row("s13"))
+    checkEvaluation(SoundEx(Literal("Miller")), "M460", create_row("s14"))
+    checkEvaluation(SoundEx(Literal("Peterson")), "P362", create_row("s15"))
+    checkEvaluation(SoundEx(Literal("Peters")), "P362", create_row("s16"))
+    checkEvaluation(SoundEx(Literal("Auerbach")), "A612", create_row("s17"))
+    checkEvaluation(SoundEx(Literal("Uhrbach")), "U612", create_row("s18"))
+    checkEvaluation(SoundEx(Literal("Moskowitz")), "M232", create_row("s19"))
+    checkEvaluation(SoundEx(Literal("Moskovitz")), "M213", create_row("s20"))
+    checkEvaluation(SoundEx(Literal("relyheewsgeessg")), "r422", create_row("s21"))
+    checkEvaluation(SoundEx(Literal("!!")), "!!", create_row("s22"))
+  }
+
   test("TRIM/LTRIM/RTRIM") {
     val s = 'a.string.at(0)
     checkEvaluation(StringTrim(Literal(" aa  ")), "aa", create_row(" abdef "))
