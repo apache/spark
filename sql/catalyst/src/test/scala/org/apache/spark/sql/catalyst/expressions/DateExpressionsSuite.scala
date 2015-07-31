@@ -363,7 +363,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       checkEvaluation(TruncDate(Literal.create(input, DateType), Literal.create(fmt, StringType)),
         expected)
       checkEvaluation(
-        TruncDate(Literal.create(input, DateType), NonFoldableLiteral.create(fmt, StringType)),
+        TruncDate(Literal.create(input, DateType), NonFoldableLiteral(fmt, StringType)),
         expected)
     }
     val date = Date.valueOf("2015-07-22")
