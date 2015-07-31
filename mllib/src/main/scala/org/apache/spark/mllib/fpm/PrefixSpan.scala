@@ -122,7 +122,6 @@ class PrefixSpan private (
       val freqItemSets = freqItemCounts.keys.toSet
       val freqItems = freqItemSets.flatten
       sequences.flatMap { seq =>
-//        val filteredSeq = seq.filter(item => freqItems.contains(item))
         val filteredSeq = seq.map(item => freqItems.intersect(item)).filterNot(_.isEmpty)
         freqItemSets.flatMap { item =>
           val candidateSuffix = LocalPrefixSpan.getSuffix(item, filteredSeq)
