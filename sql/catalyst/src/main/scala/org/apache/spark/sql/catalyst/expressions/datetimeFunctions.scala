@@ -710,7 +710,7 @@ case class ToDate(child: Expression) extends UnaryExpression with ImplicitCastIn
   override def eval(input: InternalRow): Any = child.eval(input)
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    child.genCode(ctx, ev)
+    defineCodeGen(ctx, ev, d => d)
   }
 }
 
