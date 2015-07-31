@@ -301,10 +301,9 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
     int s = 0;
     int e = this.numBytes - 1;
     // skip all of the space (0x20) in the left side
-    while (s < this.numBytes && getByte(s) == 0x20) s++;
+    while (s < this.numBytes && getByte(s) <= 0x20 && getByte(s) >= 0x00) s++;
     // skip all of the space (0x20) in the right side
-    while (e >= 0 && getByte(e) == 0x20) e--;
-
+    while (e >= 0 && getByte(e) <= 0x20 && getByte(e) >= 0x00) e--;
     if (s > e) {
       // empty string
       return UTF8String.fromBytes(new byte[0]);
@@ -316,7 +315,7 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
   public UTF8String trimLeft() {
     int s = 0;
     // skip all of the space (0x20) in the left side
-    while (s < this.numBytes && getByte(s) == 0x20) s++;
+    while (s < this.numBytes && getByte(s) <= 0x20 && getByte(s) >= 0x00) s++;
     if (s == this.numBytes) {
       // empty string
       return UTF8String.fromBytes(new byte[0]);
@@ -328,7 +327,7 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
   public UTF8String trimRight() {
     int e = numBytes - 1;
     // skip all of the space (0x20) in the right side
-    while (e >= 0 && getByte(e) == 0x20) e--;
+    while (e >= 0 && getByte(e) <= 0x20 && getByte(e) >= 0x00) e--;
 
     if (e < 0) {
       // empty string
@@ -354,7 +353,7 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
   }
 
   public UTF8String repeat(int times) {
-    if (times <=0) {
+    if (times <= 0) {
       return EMPTY_UTF8;
     }
 
@@ -414,7 +413,7 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
    */
   public UTF8String rpad(int len, UTF8String pad) {
     int spaces = len - this.numChars(); // number of char need to pad
-    if (spaces <= 0) {
+    if (spaces <= 0 || pad.numChars() == 0) {
       // no padding at all, return the substring of the current string
       return substring(0, len);
     } else {
@@ -429,7 +428,7 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
       int idx = 0;
       while (idx < count) {
         copyMemory(pad.base, pad.offset, data, BYTE_ARRAY_OFFSET + offset, pad.numBytes);
-        ++idx;
+        ++ idx;
         offset += pad.numBytes;
       }
       copyMemory(remain.base, remain.offset, data, BYTE_ARRAY_OFFSET + offset, remain.numBytes);
@@ -446,7 +445,7 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
    */
   public UTF8String lpad(int len, UTF8String pad) {
     int spaces = len - this.numChars(); // number of char need to pad
-    if (spaces <= 0) {
+    if (spaces <= 0 || pad.numChars() == 0) {
       // no padding at all, return the substring of the current string
       return substring(0, len);
     } else {
@@ -461,7 +460,7 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
       int idx = 0;
       while (idx < count) {
         copyMemory(pad.base, pad.offset, data, BYTE_ARRAY_OFFSET + offset, pad.numBytes);
-        ++idx;
+        ++ idx;
         offset += pad.numBytes;
       }
       copyMemory(remain.base, remain.offset, data, BYTE_ARRAY_OFFSET + offset, remain.numBytes);

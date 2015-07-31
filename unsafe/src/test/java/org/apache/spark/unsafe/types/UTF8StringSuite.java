@@ -271,7 +271,6 @@ public class UTF8StringSuite {
     assertEquals(fromString("hello?????"), fromString("hello").rpad(10, fromString("?????")));
     assertEquals(fromString("???????"), EMPTY_UTF8.rpad(7, fromString("?????")));
 
-
     assertEquals(fromString("数据砖"), fromString("数据砖头").lpad(3, fromString("????")));
     assertEquals(fromString("?数据砖头"), fromString("数据砖头").lpad(5, fromString("????")));
     assertEquals(fromString("??数据砖头"), fromString("数据砖头").lpad(6, fromString("????")));
@@ -289,6 +288,18 @@ public class UTF8StringSuite {
     assertEquals(
       fromString("数据砖头孙行者孙行者孙行"),
       fromString("数据砖头").rpad(12, fromString("孙行者")));
+
+    assertEquals(EMPTY_UTF8, fromString("数据砖头").lpad(-10, fromString("孙行者")));
+    assertEquals(EMPTY_UTF8, fromString("数据砖头").lpad(-10, EMPTY_UTF8));
+    assertEquals(fromString("数据砖头"), fromString("数据砖头").lpad(5, EMPTY_UTF8));
+    assertEquals(fromString("数据砖"), fromString("数据砖头").lpad(3, EMPTY_UTF8));
+    assertEquals(EMPTY_UTF8, EMPTY_UTF8.lpad(3, EMPTY_UTF8));
+
+    assertEquals(EMPTY_UTF8, fromString("数据砖头").rpad(-10, fromString("孙行者")));
+    assertEquals(EMPTY_UTF8, fromString("数据砖头").rpad(-10, EMPTY_UTF8));
+    assertEquals(fromString("数据砖头"), fromString("数据砖头").rpad(5, EMPTY_UTF8));
+    assertEquals(fromString("数据砖"), fromString("数据砖头").rpad(3, EMPTY_UTF8));
+    assertEquals(EMPTY_UTF8, EMPTY_UTF8.rpad(3, EMPTY_UTF8));
   }
 
   @Test
