@@ -21,7 +21,7 @@ import org.apache.spark.mllib.util.MLlibTestSparkContext
 
 class PrefixSpanSuite extends SparkFunSuite with MLlibTestSparkContext {
 
-  test("PrefixSpan using Integer type") {
+  test("PrefixSpan using Integer type (An element contains only one item)") {
 
     /*
       library("arulesSequences")
@@ -35,12 +35,12 @@ class PrefixSpanSuite extends SparkFunSuite with MLlibTestSparkContext {
     */
 
     val sequences = Array(
-      Array(1, 3, 4, 5),
-      Array(2, 3, 1),
-      Array(2, 4, 1),
-      Array(3, 1, 3, 4, 5),
-      Array(3, 4, 4, 3),
-      Array(6, 5, 3))
+      Array(1, -1, 3, -1, 4, -1, 5),
+      Array(2, -1, 3, -1, 1),
+      Array(2, -1, 4, -1, 1),
+      Array(3, -1, 1, -1, 3, -1, 4, -1, 5),
+      Array(3, -1, 4, -1, 4, -1, 3),
+      Array(6, -1, 5, -1, 3))
 
     val rdd = sc.parallelize(sequences, 2).cache()
 
@@ -50,23 +50,23 @@ class PrefixSpanSuite extends SparkFunSuite with MLlibTestSparkContext {
     val result1 = prefixspan.run(rdd)
     val expectedValue1 = Array(
       (Array(1), 4L),
-      (Array(1, 3), 2L),
-      (Array(1, 3, 4), 2L),
-      (Array(1, 3, 4, 5), 2L),
-      (Array(1, 3, 5), 2L),
-      (Array(1, 4), 2L),
-      (Array(1, 4, 5), 2L),
-      (Array(1, 5), 2L),
+      (Array(1, -1, 3), 2L),
+      (Array(1, -1, 3, -1, 4), 2L),
+      (Array(1, -1, 3, -1, 4, -1, 5), 2L),
+      (Array(1, -1, 3, -1, 5), 2L),
+      (Array(1, -1, 4), 2L),
+      (Array(1, -1, 4, -1, 5), 2L),
+      (Array(1, -1, 5), 2L),
       (Array(2), 2L),
-      (Array(2, 1), 2L),
+      (Array(2, -1, 1), 2L),
       (Array(3), 5L),
-      (Array(3, 1), 2L),
-      (Array(3, 3), 2L),
-      (Array(3, 4), 3L),
-      (Array(3, 4, 5), 2L),
-      (Array(3, 5), 2L),
+      (Array(3, -1, 1), 2L),
+      (Array(3, -1, 3), 2L),
+      (Array(3, -1, 4), 3L),
+      (Array(3, -1, 4, -1, 5), 2L),
+      (Array(3, -1, 5), 2L),
       (Array(4), 4L),
-      (Array(4, 5), 2L),
+      (Array(4, -1, 5), 2L),
       (Array(5), 3L)
     )
     assert(compareResults(expectedValue1, result1.collect()))
@@ -76,7 +76,7 @@ class PrefixSpanSuite extends SparkFunSuite with MLlibTestSparkContext {
     val expectedValue2 = Array(
       (Array(1), 4L),
       (Array(3), 5L),
-      (Array(3, 4), 3L),
+      (Array(3, -1, 4), 3L),
       (Array(4), 4L),
       (Array(5), 3L)
     )
@@ -86,21 +86,87 @@ class PrefixSpanSuite extends SparkFunSuite with MLlibTestSparkContext {
     val result3 = prefixspan.run(rdd)
     val expectedValue3 = Array(
       (Array(1), 4L),
-      (Array(1, 3), 2L),
-      (Array(1, 4), 2L),
-      (Array(1, 5), 2L),
-      (Array(2, 1), 2L),
+      (Array(1, -1, 3), 2L),
+      (Array(1, -1, 4), 2L),
+      (Array(1, -1, 5), 2L),
+      (Array(2, -1, 1), 2L),
       (Array(2), 2L),
       (Array(3), 5L),
-      (Array(3, 1), 2L),
-      (Array(3, 3), 2L),
-      (Array(3, 4), 3L),
-      (Array(3, 5), 2L),
+      (Array(3, -1, 1), 2L),
+      (Array(3, -1, 3), 2L),
+      (Array(3, -1, 4), 3L),
+      (Array(3, -1, 5), 2L),
       (Array(4), 4L),
-      (Array(4, 5), 2L),
+      (Array(4, -1, 5), 2L),
       (Array(5), 3L)
     )
     assert(compareResults(expectedValue3, result3.collect()))
+  }
+
+  test("PrefixSpan using Integer type (An element contains multiple items)") {
+    val sequences = Array(
+      Array(1, -1, 1, 2, 3, -1, 1, 3, -1, 4, -1, 3, 6),
+      Array(1, 4, -1, 3, -1, 2, 3, -1, 1, 5),
+      Array(5, 6, -1, 1, 2, -1, 4, 6, -1, 3, -1, 2),
+      Array(5, -1, 7, -1, 1, 6, -1, 3, -1, 2, -1, 3))
+    val rdd = sc.parallelize(sequences, 2).cache()
+    val prefixspan = new PrefixSpan().setMinSupport(0.5).setMaxPatternLength(5)
+    val result = prefixspan.run(rdd)
+    val expectedValue = Array(
+      (Array(1), 4L),
+      (Array(1,-1,6), 2L),
+      (Array(1,-1,1), 2L),
+      (Array(1,-1,3), 4L),
+      (Array(1,-1,3,-1,1), 2L),
+      (Array(1,-1,3,-1,3), 3L),
+      (Array(1,-1,3,-1,2), 3L),
+      (Array(1,-1,2), 4L),
+      (Array(1,-1,2,-1,1), 2L),
+      (Array(1,-1,2,-1,3), 2L),
+      (Array(1,-1,2,3), 2L),
+      (Array(1,-1,2,3,-1,1), 2L),
+      (Array(1,2), 2L),
+      (Array(1,2,-1,6), 2L),
+      (Array(1,2,-1,3), 2L),
+      (Array(1,2,-1,4), 2L),
+      (Array(1,2,-1,4,-1,3), 2L),
+      (Array(1,-1,4), 2L),
+      (Array(1,-1,4,-1,3), 2L),
+      (Array(2), 4L),
+      (Array(2,-1,6), 2L),
+      (Array(2,-1,1), 2L),
+      (Array(2,-1,3), 3L),
+      (Array(2,3), 2L),
+      (Array(2,3,-1,1), 2L),
+      (Array(2,-1,4), 2L),
+      (Array(2,-1,4,-1,3), 2L),
+      (Array(3), 4L),
+      (Array(3,-1,1), 2L),
+      (Array(3,-1,3), 3L),
+      (Array(3,-1,2), 3L),
+      (Array(4), 3L),
+      (Array(4,-1,3), 3L),
+      (Array(4,-1,3,-1,2), 2L),
+      (Array(4,-1,2), 2L),
+      (Array(5), 3L),
+      (Array(5,-1,6), 2L),
+      (Array(5,-1,6,-1,3), 2L),
+      (Array(5,-1,6,-1,3,-1,2), 2L),
+      (Array(5,-1,6,-1,2), 2L),
+      (Array(5,-1,1), 2L),
+      (Array(5,-1,1,-1,3), 2L),
+      (Array(5,-1,1,-1,3,-1,2), 2L),
+      (Array(5,-1,1,-1,2), 2L),
+      (Array(5,-1,3), 2L),
+      (Array(5,-1,3,-1,2), 2L),
+      (Array(5,-1,2), 2L),
+      (Array(5,-1,2,-1,3), 2L),
+      (Array(6), 3L),
+      (Array(6,-1,3), 2L),
+      (Array(6,-1,3,-1,2), 2L),
+      (Array(6,-1,2), 2L),
+      (Array(6,-1,2,-1,3), 2L))
+    assert(compareResults(expectedValue, result.collect()))
   }
 
   private def compareResults(
