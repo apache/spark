@@ -36,9 +36,15 @@ import org.apache.spark.Logging
 /**
  * Shared utility methods for performing Kinesis tests that actually transfer data
  */
-private class KinesisTestUtils(
-    val endpointUrl: String = "https://kinesis.us-west-2.amazonaws.com",
-    _regionName: String = "") extends Logging {
+private class KinesisTestUtils(val endpointUrl: String, _regionName: String) extends Logging {
+
+  def this() {
+    this("https://kinesis.us-west-2.amazonaws.com", "")
+  }
+
+  def this(endpointUrl: String) {
+    this(endpointUrl, "")
+  }
 
   val regionName = if (_regionName.length == 0) {
     RegionUtils.getRegionByEndpoint(endpointUrl).getName()
@@ -115,6 +121,13 @@ private class KinesisTestUtils(
 
     logInfo(s"Pushed $testData:\n\t ${shardIdToSeqNumbers.mkString("\n\t")}")
     shardIdToSeqNumbers.toMap
+  }
+
+  /**
+   * Expose a Python friendly API.
+   */
+  def pushData(testData: java.util.List[Int]): Unit = {
+    pushData(scala.collection.JavaConversions.asScalaBuffer(testData))
   }
 
   def deleteStream(): Unit = {

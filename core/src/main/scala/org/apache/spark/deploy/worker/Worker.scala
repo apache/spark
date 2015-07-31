@@ -25,7 +25,7 @@ import java.util.concurrent._
 import java.util.concurrent.{Future => JFuture, ScheduledFuture => JScheduledFuture}
 
 import scala.collection.JavaConversions._
-import scala.collection.mutable.{HashMap, HashSet}
+import scala.collection.mutable.{HashMap, HashSet, LinkedHashMap}
 import scala.concurrent.ExecutionContext
 import scala.util.Random
 import scala.util.control.NonFatal
@@ -115,12 +115,17 @@ private[worker] class Worker(
     }
 
   var workDir: File = null
-  val finishedExecutors = new HashMap[String, ExecutorRunner]
+  val finishedExecutors = new LinkedHashMap[String, ExecutorRunner]
   val drivers = new HashMap[String, DriverRunner]
   val executors = new HashMap[String, ExecutorRunner]
-  val finishedDrivers = new HashMap[String, DriverRunner]
+  val finishedDrivers = new LinkedHashMap[String, DriverRunner]
   val appDirectories = new HashMap[String, Seq[String]]
   val finishedApps = new HashSet[String]
+
+  val retainedExecutors = conf.getInt("spark.worker.ui.retainedExecutors",
+    WorkerWebUI.DEFAULT_RETAINED_EXECUTORS)
+  val retainedDrivers = conf.getInt("spark.worker.ui.retainedDrivers",
+    WorkerWebUI.DEFAULT_RETAINED_DRIVERS)
 
   // The shuffle service is not actually started unless configured.
   private val shuffleService = new ExternalShuffleService(conf, securityMgr)
@@ -461,25 +466,7 @@ private[worker] class Worker(
       }
 
     case executorStateChanged @ ExecutorStateChanged(appId, execId, state, message, exitStatus) =>
-      sendToMaster(executorStateChanged)
-      val fullId = appId + "/" + execId
-      if (ExecutorState.isFinished(state)) {
-        executors.get(fullId) match {
-          case Some(executor) =>
-            logInfo("Executor " + fullId + " finished with state " + state +
-              message.map(" message " + _).getOrElse("") +
-              exitStatus.map(" exitStatus " + _).getOrElse(""))
-            executors -= fullId
-            finishedExecutors(fullId) = executor
-            coresUsed -= executor.cores
-            memoryUsed -= executor.memory
-          case None =>
-            logInfo("Unknown Executor " + fullId + " finished with state " + state +
-              message.map(" message " + _).getOrElse("") +
-              exitStatus.map(" exitStatus " + _).getOrElse(""))
-        }
-        maybeCleanupApplication(appId)
-      }
+      handleExecutorStateChanged(executorStateChanged)
 
     case KillExecutor(masterUrl, appId, execId) =>
       if (masterUrl != activeMasterUrl) {
@@ -523,24 +510,8 @@ private[worker] class Worker(
       }
     }
 
-    case driverStageChanged @ DriverStateChanged(driverId, state, exception) => {
-      state match {
-        case DriverState.ERROR =>
-          logWarning(s"Driver $driverId failed with unrecoverable exception: ${exception.get}")
-        case DriverState.FAILED =>
-          logWarning(s"Driver $driverId exited with failure")
-        case DriverState.FINISHED =>
-          logInfo(s"Driver $driverId exited successfully")
-        case DriverState.KILLED =>
-          logInfo(s"Driver $driverId was killed by user")
-        case _ =>
-          logDebug(s"Driver $driverId changed state to $state")
-      }
-      sendToMaster(driverStageChanged)
-      val driver = drivers.remove(driverId).get
-      finishedDrivers(driverId) = driver
-      memoryUsed -= driver.driverDesc.mem
-      coresUsed -= driver.driverDesc.cores
+    case driverStateChanged @ DriverStateChanged(driverId, state, exception) => {
+      handleDriverStateChanged(driverStateChanged)
     }
 
     case ReregisterWithMaster =>
@@ -614,6 +585,78 @@ private[worker] class Worker(
     webUi.stop()
     metricsSystem.stop()
   }
+
+  private def trimFinishedExecutorsIfNecessary(): Unit = {
+    // do not need to protect with locks since both WorkerPage and Restful server get data through
+    // thread-safe RpcEndPoint
+    if (finishedExecutors.size > retainedExecutors) {
+      finishedExecutors.take(math.max(finishedExecutors.size / 10, 1)).foreach {
+        case (executorId, _) => finishedExecutors.remove(executorId)
+      }
+    }
+  }
+
+  private def trimFinishedDriversIfNecessary(): Unit = {
+    // do not need to protect with locks since both WorkerPage and Restful server get data through
+    // thread-safe RpcEndPoint
+    if (finishedDrivers.size > retainedDrivers) {
+      finishedDrivers.take(math.max(finishedDrivers.size / 10, 1)).foreach {
+        case (driverId, _) => finishedDrivers.remove(driverId)
+      }
+    }
+  }
+
+  private[worker] def handleDriverStateChanged(driverStateChanged: DriverStateChanged): Unit = {
+    val driverId = driverStateChanged.driverId
+    val exception = driverStateChanged.exception
+    val state = driverStateChanged.state
+    state match {
+      case DriverState.ERROR =>
+        logWarning(s"Driver $driverId failed with unrecoverable exception: ${exception.get}")
+      case DriverState.FAILED =>
+        logWarning(s"Driver $driverId exited with failure")
+      case DriverState.FINISHED =>
+        logInfo(s"Driver $driverId exited successfully")
+      case DriverState.KILLED =>
+        logInfo(s"Driver $driverId was killed by user")
+      case _ =>
+        logDebug(s"Driver $driverId changed state to $state")
+    }
+    sendToMaster(driverStateChanged)
+    val driver = drivers.remove(driverId).get
+    finishedDrivers(driverId) = driver
+    trimFinishedDriversIfNecessary()
+    memoryUsed -= driver.driverDesc.mem
+    coresUsed -= driver.driverDesc.cores
+  }
+
+  private[worker] def handleExecutorStateChanged(executorStateChanged: ExecutorStateChanged):
+    Unit = {
+    sendToMaster(executorStateChanged)
+    val state = executorStateChanged.state
+    if (ExecutorState.isFinished(state)) {
+      val appId = executorStateChanged.appId
+      val fullId = appId + "/" + executorStateChanged.execId
+      val message = executorStateChanged.message
+      val exitStatus = executorStateChanged.exitStatus
+      executors.get(fullId) match {
+        case Some(executor) =>
+          logInfo("Executor " + fullId + " finished with state " + state +
+            message.map(" message " + _).getOrElse("") +
+            exitStatus.map(" exitStatus " + _).getOrElse(""))
+          executors -= fullId
+          finishedExecutors(fullId) = executor
+          trimFinishedExecutorsIfNecessary()
+          coresUsed -= executor.cores
+          memoryUsed -= executor.memory
+        case None =>
+          logInfo("Unknown Executor " + fullId + " finished with state " + state +
+            message.map(" message " + _).getOrElse("") +
+            exitStatus.map(" exitStatus " + _).getOrElse(""))
+      }
+      maybeCleanupApplication(appId)
+    }
+  }
 }
 
 private[deploy] object Worker extends Logging {
@@ -669,5 +712,4 @@ private[deploy] object Worker extends Logging {
       cmd
     }
   }
-
 }

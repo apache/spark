@@ -2192,6 +2192,9 @@ object functions {
   /**
    * Returns date truncated to the unit specified by the format.
    *
+   * @param format: 'year', 'yyyy', 'yy' for truncate by year,
+   *               or 'month', 'mon', 'mm' for truncate by month
+   *
    * @group datetime_funcs
    * @since 1.5.0
    */

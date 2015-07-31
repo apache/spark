@@ -794,7 +794,8 @@ object DateTimeUtils {
     } else if (level == TRUNC_TO_MONTH) {
       d - DateTimeUtils.getDayOfMonth(d) + 1
     } else {
-      throw new Exception(s"Invalid trunc level: $level")
+      // caller make sure that this should never be reached
+      sys.error(s"Invalid trunc level: $level")
     }
   }
 

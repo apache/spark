@@ -160,7 +160,7 @@ final class RandomForestClassificationModel private[ml] (
     // Ignore the weights since all are 1.0 for now.
     val votes = new Array[Double](numClasses)
     _trees.view.foreach { tree =>
-      val prediction = tree.rootNode.predict(features).toInt
+      val prediction = tree.rootNode.predictImpl(features).prediction.toInt
       votes(prediction) = votes(prediction) + 1.0 // 1.0 = weight
     }
     Vectors.dense(votes)
