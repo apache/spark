@@ -270,7 +270,7 @@ class AccumulatorSuite extends SparkFunSuite with Matchers with LocalSparkContex
     sc.parallelize(1 to 100, numPartitions).mapPartitionsWithIndex { case (i, iter) =>
       val taskContext = TaskContext.get()
       taskContext.internalMetricsToAccumulators(TEST_ACCUMULATOR) += 1
-      // Fail the first attempt of a subset of the tasks
+      // Fail the first attempts of a subset of the tasks
       if (failCondition(i) && taskContext.attemptNumber() == 0) {
         1 / 0
       }

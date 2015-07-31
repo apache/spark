@@ -565,29 +565,30 @@ public class UnsafeShuffleWriterSuite {
     // we allocate a new page it should increase by exactly the size of the page.
     long previousPeakMemory = writer.getPeakMemoryUsedBytes();
     long newPeakMemory;
-    for (int i = 0; i < numRecordsPerPage * 10; i++) {
-      writer.insertRecordIntoSorter(new Tuple2<Object, Object>(1, 1));
-      newPeakMemory = writer.getPeakMemoryUsedBytes();
-      if (i % numRecordsPerPage == 0) {
-        // We allocated a new page for this record, so peak memory should change
-        assertEquals(previousPeakMemory + pageSizeBytes, newPeakMemory);
-      } else {
-        assertEquals(previousPeakMemory, newPeakMemory);
+    try {
+      for (int i = 0; i < numRecordsPerPage * 10; i++) {
+        writer.insertRecordIntoSorter(new Tuple2<Object, Object>(1, 1));
+        newPeakMemory = writer.getPeakMemoryUsedBytes();
+        if (i % numRecordsPerPage == 0) {
+          // We allocated a new page for this record, so peak memory should change
+          assertEquals(previousPeakMemory + pageSizeBytes, newPeakMemory);
+        } else {
+          assertEquals(previousPeakMemory, newPeakMemory);
+        }
+        previousPeakMemory = newPeakMemory;
       }
-      previousPeakMemory = newPeakMemory;
-    }
 
-    // Spilling should not change peak memory
-    writer.forceSorterToSpill();
-    newPeakMemory = writer.getPeakMemoryUsedBytes();
-    assertEquals(previousPeakMemory, newPeakMemory);
-    for (int i = 0; i < numRecordsPerPage; i++) {
-      writer.insertRecordIntoSorter(new Tuple2<Object, Object>(1, 1));
+      // Spilling should not change peak memory
+      writer.forceSorterToSpill();
+      newPeakMemory = writer.getPeakMemoryUsedBytes();
+      assertEquals(previousPeakMemory, newPeakMemory);
+      for (int i = 0; i < numRecordsPerPage; i++) {
+        writer.insertRecordIntoSorter(new Tuple2<Object, Object>(1, 1));
+      }
+      newPeakMemory = writer.getPeakMemoryUsedBytes();
+      assertEquals(previousPeakMemory, newPeakMemory);
+    } finally {
+      writer.stop(false);
     }
-    newPeakMemory = writer.getPeakMemoryUsedBytes();
-    assertEquals(previousPeakMemory, newPeakMemory);
-
-    // Clean up
-    writer.stop(false);
   }
 }

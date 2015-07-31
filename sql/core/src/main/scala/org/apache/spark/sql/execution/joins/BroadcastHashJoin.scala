@@ -72,7 +72,6 @@ case class BroadcastHashJoin(
 
     streamedPlan.execute().mapPartitions { streamedIter =>
       val hashedRelation = broadcastRelation.value
-      // Track memory used in unsafe hashed relations
       hashedRelation match {
         case unsafe: UnsafeHashedRelation =>
           TaskContext.get().internalMetricsToAccumulators(

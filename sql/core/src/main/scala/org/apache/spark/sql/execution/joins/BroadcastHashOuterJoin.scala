@@ -74,7 +74,6 @@ case class BroadcastHashOuterJoin(
       val hashTable = broadcastRelation.value
       val keyGenerator = streamedKeyGenerator
 
-      // Track memory used in unsafe hashed relations
       hashTable match {
         case unsafe: UnsafeHashedRelation =>
           TaskContext.get().internalMetricsToAccumulators(

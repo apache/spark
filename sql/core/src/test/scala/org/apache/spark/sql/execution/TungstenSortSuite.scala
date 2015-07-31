@@ -59,17 +59,12 @@ class TungstenSortSuite extends SparkPlanTest with BeforeAndAfterAll {
 
   test("sorting updates peak execution memory") {
     val sc = TestSQLContext.sparkContext
-    sc.conf.set("spark.unsafe.exceptionOnMemoryLeak", "false")
-    try {
-      AccumulatorSuite.verifyPeakExecutionMemorySet(sc, "unsafe external sort") {
-        checkThatPlansAgree(
-          (1 to 100).map(v => Tuple1(v)).toDF("a"),
-          (child: SparkPlan) => TungstenSort('a.asc :: Nil, true, child),
-          (child: SparkPlan) => Sort('a.asc :: Nil, global = true, child),
-          sortAnswers = false)
-      }
-    } finally {
-      sc.conf.set("spark.unsafe.exceptionOnMemoryLeak", "false")
+    AccumulatorSuite.verifyPeakExecutionMemorySet(sc, "unsafe external sort") {
+      checkThatPlansAgree(
+        (1 to 100).map(v => Tuple1(v)).toDF("a"),
+        (child: SparkPlan) => TungstenSort('a.asc :: Nil, true, child),
+        (child: SparkPlan) => Sort('a.asc :: Nil, global = true, child),
+        sortAnswers = false)
     }
   }
 

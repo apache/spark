@@ -53,7 +53,6 @@ case class BroadcastLeftSemiJoinHash(
 
       left.execute().mapPartitions { streamIter =>
         val hashedRelation = broadcastedRelation.value
-        // Track memory used in unsafe hashed relations
         hashedRelation match {
           case unsafe: UnsafeHashedRelation =>
             TaskContext.get().internalMetricsToAccumulators(

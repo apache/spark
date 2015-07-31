@@ -119,7 +119,7 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
       val tasks = stageData.taskData.values.toSeq.sortBy(_.taskInfo.launchTime)
 
       val numCompleted = tasks.count(_.taskInfo.finished)
-      val (internalAccumulables, externalAccumulables) =
+      val (_, externalAccumulables) =
         progressListener.stageIdToData((stageId, stageAttemptId))
           .accumulables
           .partition { case (_, acc) => acc.internal }

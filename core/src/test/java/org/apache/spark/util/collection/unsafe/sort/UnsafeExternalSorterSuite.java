@@ -238,27 +238,31 @@ public class UnsafeExternalSorterSuite {
     // we allocate a new page it should increase by exactly the size of the page.
     long previousPeakMemory = sorter.getPeakMemoryUsedBytes();
     long newPeakMemory;
-    for (int i = 0; i < numRecordsPerPage * 10; i++) {
-      insertNumber(sorter, i);
-      newPeakMemory = sorter.getPeakMemoryUsedBytes();
-      if (i % numRecordsPerPage == 0) {
-        // We allocated a new page for this record, so peak memory should change
-        assertEquals(previousPeakMemory + pageSizeBytes, newPeakMemory);
-      } else {
-        assertEquals(previousPeakMemory, newPeakMemory);
+    try {
+      for (int i = 0; i < numRecordsPerPage * 10; i++) {
+        insertNumber(sorter, i);
+        newPeakMemory = sorter.getPeakMemoryUsedBytes();
+        if (i % numRecordsPerPage == 0) {
+          // We allocated a new page for this record, so peak memory should change
+          assertEquals(previousPeakMemory + pageSizeBytes, newPeakMemory);
+        } else {
+          assertEquals(previousPeakMemory, newPeakMemory);
+        }
+        previousPeakMemory = newPeakMemory;
       }
-      previousPeakMemory = newPeakMemory;
-    }
 
-    // Spilling should not change peak memory
-    sorter.spill();
-    newPeakMemory = sorter.getPeakMemoryUsedBytes();
-    assertEquals(previousPeakMemory, newPeakMemory);
-    for (int i = 0; i < numRecordsPerPage; i++) {
-      insertNumber(sorter, i);
+      // Spilling should not change peak memory
+      sorter.spill();
+      newPeakMemory = sorter.getPeakMemoryUsedBytes();
+      assertEquals(previousPeakMemory, newPeakMemory);
+      for (int i = 0; i < numRecordsPerPage; i++) {
+        insertNumber(sorter, i);
+      }
+      newPeakMemory = sorter.getPeakMemoryUsedBytes();
+      assertEquals(previousPeakMemory, newPeakMemory);
+    } finally {
+      sorter.freeMemory();
     }
-    newPeakMemory = sorter.getPeakMemoryUsedBytes();
-    assertEquals(previousPeakMemory, newPeakMemory);
   }
 
 }
