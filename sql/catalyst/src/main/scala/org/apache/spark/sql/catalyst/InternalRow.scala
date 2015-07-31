@@ -201,40 +201,6 @@ abstract class InternalRow extends Serializable with SpecializedGetters {
     }
     result
   }
-
-  def compare(other: InternalRow): Int = {
-    val len = Math.min(numFields, other.numFields)
-    var i = 0
-    while (i < len) {
-      val ret: Int =
-        if (isNullAt(i) && other.isNullAt(i)) {
-          0
-        } else if (isNullAt(i)) {
-          1
-        } else if (other.isNullAt(i)) {
-          -1
-        } else {
-          get(i) match {
-            case b: Boolean => b.compare(other.get(i).asInstanceOf[Boolean])
-            case b: Byte => b.compare(other.get(i).asInstanceOf[Byte])
-            case s: Short => s.compare(other.get(i).asInstanceOf[Short])
-            case n: Int => n.compare(other.get(i).asInstanceOf[Int])
-            case l: Long => l.compare(other.get(i).asInstanceOf[Long])
-            case f: Float => f.compare(other.get(i).asInstanceOf[Float])
-            case d: Double => d.compare(other.get(i).asInstanceOf[Double])
-            case a: Array[Byte] =>
-              TypeUtils.compareBinary(a, other.get(i).asInstanceOf[Array[Byte]])
-            case u: UTF8String => u.compare(other.get(i).asInstanceOf[UTF8String])
-            case d: Decimal => d.compare(other.get(i).asInstanceOf[Decimal])
-          }
-        }
-      if (ret != 0) {
-        return ret
-      }
-      i += 1
-    }
-    numFields - other.numFields
-  }
 }
 
 object InternalRow {
