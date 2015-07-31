@@ -23,8 +23,12 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.types.StructType
 
-
-
+/**
+ * An iterator used to evaluate [[AggregateFunction2]].
+ * It first tries to use in-memory hash-based aggregation. If we cannot allocate more
+ * space for the hash map, we spill the sorted map entries, free the map, and then
+ * switch to sort-based aggregation.
+ */
 class UnsafeHybridAggregationIterator(
     groupingExpressions: Seq[NamedExpression],
     nonCompleteAggregateExpressions: Seq[AggregateExpression2],
