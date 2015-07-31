@@ -197,7 +197,7 @@ class AnalysisErrorSuite extends SparkFunSuite with BeforeAndAfter {
     val error = intercept[AnalysisException] {
       caseSensitiveAnalyze(plan)
     }
-    assert(error.message.contains("grouping expression 'a' in aggregate can not be binary type"))
+    assert(error.message.contains("binary type expression a cannot be used in grouping expression"))
 
     val plan2 =
       Aggregate(
@@ -210,7 +210,7 @@ class AnalysisErrorSuite extends SparkFunSuite with BeforeAndAfter {
     val error2 = intercept[AnalysisException] {
       caseSensitiveAnalyze(plan2)
     }
-    assert(error2.message.contains("grouping expression 'a' in aggregate can not be map type"))
+    assert(error2.message.contains("map type expression a cannot be used in grouping expression"))
   }
 
   test("Join can't work on binary and map types") {
@@ -229,7 +229,7 @@ class AnalysisErrorSuite extends SparkFunSuite with BeforeAndAfter {
     val error = intercept[AnalysisException] {
       caseSensitiveAnalyze(plan)
     }
-    assert(error.message.contains("expression a in join condition '(a = c)' can't be binary type"))
+    assert(error.message.contains("binary type expression a cannot be used in join conditions"))
 
     val plan2 =
       Join(
@@ -246,6 +246,6 @@ class AnalysisErrorSuite extends SparkFunSuite with BeforeAndAfter {
     val error2 = intercept[AnalysisException] {
       caseSensitiveAnalyze(plan2)
     }
-    assert(error2.message.contains("expression a in join condition '(a = c)' can't be map type"))
+    assert(error2.message.contains("map type expression a cannot be used in join conditions"))
   }
 }
