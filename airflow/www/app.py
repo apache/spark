@@ -1889,7 +1889,7 @@ mv = PoolModelView(models.Pool, Session, name="Pools", category="Admin")
 admin.add_view(mv)
 
 
-class SlaMissModelView(wwwutils.SuperUserMixin, AirflowModelView):
+class SlaMissModelView(wwwutils.SuperUserMixin, ModelViewOnly):
     verbose_name_plural = "SLA misses"
     verbose_name = "SLA miss"
     column_list = (
