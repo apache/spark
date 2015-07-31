@@ -409,7 +409,7 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext {
       > [ 0.42582646  0.43511073]
      */
 
-    assert(ldaModel.docConcentration ~== Vectors.dense(0.42582646,  0.43511073) absTol 0.05)
+    assert(ldaModel.docConcentration ~== Vectors.dense(0.42582646, 0.43511073) absTol 0.05)
   }
 
   test("model save/load") {
