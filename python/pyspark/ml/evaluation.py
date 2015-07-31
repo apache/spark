@@ -222,14 +222,19 @@ class MulticlassClassificationEvaluator(JavaEvaluator, HasLabelCol, HasPredictio
     columns: prediction and label.
     >>> scoreAndLabels = [(0.0, 0.0), (0.0, 1.0), (0.0, 0.0),
     ...     (1.0, 0.0), (1.0, 1.0), (1.0, 1.0), (1.0, 1.0), (2.0, 2.0), (2.0, 0.0)]
-    >>> dataset = sqlContext.createDataFrame(scoreAndLabels, ["raw", "label"])
+    >>> dataset = sqlContext.createDataFrame(scoreAndLabels, ["prediction", "label"])
     ...
-    >>> evaluator = MulticlassClassificationEvaluator(predictionCol="raw")
+    >>> evaluator = MulticlassClassificationEvaluator(predictionCol="prediction")
     >>> evaluator.evaluate(dataset)
+    0.66...
+    >>> evaluator.evaluate(dataset, {evaluator.metricName: "precision"})
+    0.66...
+    >>> evaluator.evaluate(dataset, {evaluator.metricName: "recall"})
     0.66...
     """
     # a placeholder to make it appear in the generated doc
-    metricName = Param(Params._dummy(), "metricName", "metric name in evaluation (f1)")
+    metricName = Param(Params._dummy(), "metricName",
+        "metric name in evaluation (f1|precision|recall|weightedPrecision|weightedRecall)")
 
     @keyword_only
     def __init__(self, predictionCol="prediction", labelCol="label",
@@ -241,9 +246,10 @@ class MulticlassClassificationEvaluator(JavaEvaluator, HasLabelCol, HasPredictio
         super(MulticlassClassificationEvaluator, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.evaluation.MulticlassClassificationEvaluator", self.uid)
-        #: param for metric name in evaluation (f1)
+        # param for metric name in evaluation (f1|precision|recall|weightedPrecision|weightedRecall)
         self.metricName = Param(self, "metricName",
-                                "metric name in evaluation (f1)")
+                                "metric name in evaluation"
+                                " (f1|precision|recall|weightedPrecision|weightedRecall)")
         self._setDefault(predictionCol="prediction", labelCol="label",
                          metricName="f1")
         kwargs = self.__init__._input_kwargs

@@ -40,8 +40,10 @@ class MulticlassClassificationEvaluator (override val uid: String)
    * @group param
    */
   val metricName: Param[String] = {
-    val allowedParams = ParamValidators.inArray(Array("f1"))
-    new Param(this, "metricName", "metric name in evaluation (f1)", allowedParams)
+    val allowedParams = ParamValidators.inArray(Array("f1", "precision",
+      "recall", "weightedPrecision", "weightedRecall"))
+    new Param(this, "metricName", "metric name in evaluation " +
+      "(f1|precision|recall|weightedPrecision|weightedRecall)", allowedParams)
   }
 
   /** @group getParam */
@@ -70,6 +72,10 @@ class MulticlassClassificationEvaluator (override val uid: String)
     val metrics = new MulticlassMetrics(predictionAndLabels)
     val metric = $(metricName) match {
       case "f1" => metrics.weightedFMeasure
+      case "precision" => metrics.precision
+      case "recall" => metrics.recall
+      case "weightedPrecision" => metrics.weightedPrecision
+      case "weightedRecall" => metrics.weightedRecall
     }
     metric
   }
