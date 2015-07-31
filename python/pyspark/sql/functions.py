@@ -59,7 +59,7 @@ __all__ = [
 __all__ += ['lag', 'lead', 'ntile']
 
 __all__ += [
-    'date_format',
+    'date_format', 'date_add', 'date_sub', 'add_months', 'months_between',
     'year', 'quarter', 'month', 'hour', 'minute', 'second',
     'dayofmonth', 'dayofyear', 'weekofyear']
 
@@ -543,6 +543,16 @@ def sparkPartitionId():
     return Column(sc._jvm.functions.sparkPartitionId())
 
 
+def expr(str):
+    """Parses the expression string into the column that it represents
+
+    >>> df.select(expr("length(name)")).collect()
+    [Row('length(name)=5), Row('length(name)=3)]
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.expr(str))
+
+
 @ignore_unicode_prefix
 @since(1.5)
 def length(col):
@@ -708,7 +718,7 @@ def date_format(dateCol, format):
     [Row(date=u'04/08/2015')]
     """
     sc = SparkContext._active_spark_context
-    return Column(sc._jvm.functions.date_format(dateCol, format))
+    return Column(sc._jvm.functions.date_format(_to_java_column(dateCol), format))
 
 
 @since(1.5)
@@ -721,7 +731,7 @@ def year(col):
     [Row(year=2015)]
     """
     sc = SparkContext._active_spark_context
-    return Column(sc._jvm.functions.year(col))
+    return Column(sc._jvm.functions.year(_to_java_column(col)))
 
 
 @since(1.5)
@@ -734,7 +744,7 @@ def quarter(col):
     [Row(quarter=2)]
     """
     sc = SparkContext._active_spark_context
-    return Column(sc._jvm.functions.quarter(col))
+    return Column(sc._jvm.functions.quarter(_to_java_column(col)))
 
 
 @since(1.5)
@@ -747,7 +757,7 @@ def month(col):
     [Row(month=4)]
    """
     sc = SparkContext._active_spark_context
-    return Column(sc._jvm.functions.month(col))
+    return Column(sc._jvm.functions.month(_to_java_column(col)))
 
 
 @since(1.5)
@@ -760,7 +770,7 @@ def dayofmonth(col):
     [Row(day=8)]
     """
     sc = SparkContext._active_spark_context
-    return Column(sc._jvm.functions.dayofmonth(col))
+    return Column(sc._jvm.functions.dayofmonth(_to_java_column(col)))
 
 
 @since(1.5)
@@ -773,7 +783,7 @@ def dayofyear(col):
     [Row(day=98)]
     """
     sc = SparkContext._active_spark_context
-    return Column(sc._jvm.functions.dayofyear(col))
+    return Column(sc._jvm.functions.dayofyear(_to_java_column(col)))
 
 
 @since(1.5)
@@ -786,7 +796,7 @@ def hour(col):
     [Row(hour=13)]
     """
     sc = SparkContext._active_spark_context
-    return Column(sc._jvm.functions.hour(col))
+    return Column(sc._jvm.functions.hour(_to_java_column(col)))
 
 
 @since(1.5)
@@ -799,7 +809,7 @@ def minute(col):
     [Row(minute=8)]
     """
     sc = SparkContext._active_spark_context
-    return Column(sc._jvm.functions.minute(col))
+    return Column(sc._jvm.functions.minute(_to_java_column(col)))
 
 
 @since(1.5)
@@ -812,7 +822,7 @@ def second(col):
     [Row(second=15)]
     """
     sc = SparkContext._active_spark_context
-    return Column(sc._jvm.functions.second(col))
+    return Column(sc._jvm.functions.second(_to_java_column(col)))
 
 
 @since(1.5)
@@ -821,11 +831,63 @@ def weekofyear(col):
     Extract the week number of a given date as integer.
 
     >>> df = sqlContext.createDataFrame([('2015-04-08',)], ['a'])
-    >>> df.select(weekofyear('a').alias('week')).collect()
+    >>> df.select(weekofyear(df.a).alias('week')).collect()
     [Row(week=15)]
     """
     sc = SparkContext._active_spark_context
-    return Column(sc._jvm.functions.weekofyear(col))
+    return Column(sc._jvm.functions.weekofyear(_to_java_column(col)))
+
+
+@since(1.5)
+def date_add(start, days):
+    """
+    Returns the date that is `days` days after `start`
+
+    >>> df = sqlContext.createDataFrame([('2015-04-08',)], ['d'])
+    >>> df.select(date_add(df.d, 1).alias('d')).collect()
+    [Row(d=datetime.date(2015, 4, 9))]
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.date_add(_to_java_column(start), days))
+
+
+@since(1.5)
+def date_sub(start, days):
+    """
+    Returns the date that is `days` days before `start`
+
+    >>> df = sqlContext.createDataFrame([('2015-04-08',)], ['d'])
+    >>> df.select(date_sub(df.d, 1).alias('d')).collect()
+    [Row(d=datetime.date(2015, 4, 7))]
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.date_sub(_to_java_column(start), days))
+
+
+@since(1.5)
+def add_months(start, months):
+    """
+    Returns the date that is `months` months after `start`
+
+    >>> df = sqlContext.createDataFrame([('2015-04-08',)], ['d'])
+    >>> df.select(add_months(df.d, 1).alias('d')).collect()
+    [Row(d=datetime.date(2015, 5, 8))]
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.add_months(_to_java_column(start), months))
+
+
+@since(1.5)
+def months_between(date1, date2):
+    """
+    Returns the number of months between date1 and date2.
+
+    >>> df = sqlContext.createDataFrame([('1997-02-28 10:30:00', '1996-10-30')], ['t', 'd'])
+    >>> df.select(months_between(df.t, df.d).alias('months')).collect()
+    [Row(months=3.9495967...)]
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.months_between(_to_java_column(date1), _to_java_column(date2)))
 
 
 @since(1.5)

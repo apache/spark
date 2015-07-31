@@ -22,7 +22,7 @@ import java.util.Arrays
 import scala.collection.mutable.ListBuffer
 
 import breeze.linalg.{DenseMatrix => BDM, DenseVector => BDV, SparseVector => BSV, axpy => brzAxpy,
-  svd => brzSvd}
+  svd => brzSvd, MatrixSingularException, inv}
 import breeze.numerics.{sqrt => brzSqrt}
 import com.github.fommil.netlib.BLAS.{getInstance => blas}
 
@@ -495,6 +495,50 @@ class RowMatrix(
     }
 
     columnSimilaritiesDIMSUM(computeColumnSummaryStatistics().normL2.toArray, gamma)
+  }
+
+  /**
+   * Compute QR decomposition for [[RowMatrix]]. The implementation is designed to optimize the QR
+   * decomposition (factorization) for the [[RowMatrix]] of a tall and skinny shape.
+   * Reference:
+   *  Paul G. Constantine, David F. Gleich. "Tall and skinny QR factorizations in MapReduce
+   *  architectures"  ([[http://dx.doi.org/10.1145/1996092.1996103]])
+   *
+   * @param computeQ whether to computeQ
+   * @return QRDecomposition(Q, R), Q = null if computeQ = false.
+   */
+  def tallSkinnyQR(computeQ: Boolean = false): QRDecomposition[RowMatrix, Matrix] = {
+    val col = numCols().toInt
+    // split rows horizontally into smaller matrices, and compute QR for each of them
+    val blockQRs = rows.glom().map { partRows =>
+      val bdm = BDM.zeros[Double](partRows.length, col)
+      var i = 0
+      partRows.foreach { row =>
+        bdm(i, ::) := row.toBreeze.t
+        i += 1
+      }
+      breeze.linalg.qr.reduced(bdm).r
+    }
+
+    // combine the R part from previous results vertically into a tall matrix
+    val combinedR = blockQRs.treeReduce{ (r1, r2) =>
+      val stackedR = BDM.vertcat(r1, r2)
+      breeze.linalg.qr.reduced(stackedR).r
+    }
+    val finalR = Matrices.fromBreeze(combinedR.toDenseMatrix)
+    val finalQ = if (computeQ) {
+      try {
+        val invR = inv(combinedR)
+        this.multiply(Matrices.fromBreeze(invR))
+      } catch {
+        case err: MatrixSingularException =>
+          logWarning("R is not invertible and return Q as null")
+          null
+      }
+    } else {
+      null
+    }
+    QRDecomposition(finalQ, finalR)
   }
 
   /**

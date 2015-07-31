@@ -51,7 +51,7 @@ case class Concat(children: Seq[Expression]) extends Expression with ImplicitCas
   override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     val evals = children.map(_.gen(ctx))
     val inputs = evals.map { eval =>
-      s"${eval.isNull} ? (UTF8String)null : ${eval.primitive}"
+      s"${eval.isNull} ? null : ${eval.primitive}"
     }.mkString(", ")
     evals.map(_.code).mkString("\n") + s"""
       boolean ${ev.isNull} = false;
@@ -92,7 +92,7 @@ case class ConcatWs(children: Seq[Expression])
     val flatInputs = children.flatMap { child =>
       child.eval(input) match {
         case s: UTF8String => Iterator(s)
-        case arr: Seq[_] => arr.asInstanceOf[Seq[UTF8String]]
+        case arr: ArrayData => arr.toArray().map(_.asInstanceOf[UTF8String])
         case null => Iterator(null.asInstanceOf[UTF8String])
       }
     }
@@ -105,7 +105,7 @@ case class ConcatWs(children: Seq[Expression])
       val evals = children.map(_.gen(ctx))
 
       val inputs = evals.map { eval =>
-        s"${eval.isNull} ? (UTF8String)null : ${eval.primitive}"
+        s"${eval.isNull} ? (UTF8String) null : ${eval.primitive}"
       }.mkString(", ")
 
       evals.map(_.code).mkString("\n") + s"""
@@ -213,6 +213,9 @@ trait String2StringExpression extends ImplicitCastInputTypes {
 /**
  * A function that converts the characters of a string to uppercase.
  */
+@ExpressionDescription(
+  usage = "_FUNC_(str) - Returns str with all characters changed to uppercase",
+  extended = "> SELECT _FUNC_('SparkSql');\n 'SPARKSQL'")
 case class Upper(child: Expression)
   extends UnaryExpression with String2StringExpression {
 
@@ -226,6 +229,9 @@ case class Upper(child: Expression)
 /**
  * A function that converts the characters of a string to lowercase.
  */
+@ExpressionDescription(
+  usage = "_FUNC_(str) - Returns str with all characters changed to lowercase",
+  extended = "> SELECT _FUNC_('SparkSql');\n'sparksql'")
 case class Lower(child: Expression) extends UnaryExpression with String2StringExpression {
 
   override def convert(v: UTF8String): UTF8String = v.toLowerCase
@@ -659,13 +665,15 @@ case class StringSplit(str: Expression, pattern: Expression)
   override def inputTypes: Seq[DataType] = Seq(StringType, StringType)
 
   override def nullSafeEval(string: Any, regex: Any): Any = {
-    string.asInstanceOf[UTF8String].split(regex.asInstanceOf[UTF8String], -1).toSeq
+    val strings = string.asInstanceOf[UTF8String].split(regex.asInstanceOf[UTF8String], -1)
+    new GenericArrayData(strings.asInstanceOf[Array[Any]])
   }
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    val arrayClass = classOf[GenericArrayData].getName
     nullSafeCodeGen(ctx, ev, (str, pattern) =>
-      s"""${ev.primitive} = scala.collection.JavaConversions.asScalaBuffer(
-            java.util.Arrays.asList($str.split($pattern, -1)));""")
+      // Array in java is covariant, so we don't need to cast UTF8String[] to Object[].
+      s"""${ev.primitive} = new $arrayClass($str.split($pattern, -1));""")
   }
 
   override def prettyName: String = "split"
@@ -770,7 +778,6 @@ case class Levenshtein(left: Expression, right: Expression) extends BinaryExpres
   override def inputTypes: Seq[AbstractDataType] = Seq(StringType, StringType)
 
   override def dataType: DataType = IntegerType
-
   protected override def nullSafeEval(leftValue: Any, rightValue: Any): Any =
     leftValue.asInstanceOf[UTF8String].levenshteinDistance(rightValue.asInstanceOf[UTF8String])
 
@@ -1018,7 +1025,7 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
 
     s"""
       ${evalSubject.code}
-      boolean ${ev.isNull} = ${evalSubject.isNull};
+      boolean ${ev.isNull} = true;
       ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
       if (!${evalSubject.isNull}) {
         ${evalRegexp.code}
@@ -1113,9 +1120,9 @@ case class RegExpExtract(subject: Expression, regexp: Expression, idx: Expressio
     val evalIdx = idx.gen(ctx)
 
     s"""
-      ${ctx.javaType(dataType)} ${ev.primitive} = null;
-      boolean ${ev.isNull} = true;
       ${evalSubject.code}
+      ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
+      boolean ${ev.isNull} = true;
       if (!${evalSubject.isNull}) {
         ${evalRegexp.code}
         if (!${evalRegexp.isNull}) {
@@ -1127,7 +1134,7 @@ case class RegExpExtract(subject: Expression, regexp: Expression, idx: Expressio
               ${termPattern} = ${classNamePattern}.compile(${termLastRegex}.toString());
             }
             ${classOf[java.util.regex.Matcher].getCanonicalName} m =
-                                   ${termPattern}.matcher(${evalSubject.primitive}.toString());
+              ${termPattern}.matcher(${evalSubject.primitive}.toString());
             if (m.find()) {
               ${classOf[java.util.regex.MatchResult].getCanonicalName} mr = m.toMatchResult();
               ${ev.primitive} = ${classNameUTF8String}.fromString(mr.group(${evalIdx.primitive}));
@@ -1149,7 +1156,7 @@ case class RegExpExtract(subject: Expression, regexp: Expression, idx: Expressio
  * fractional part.
  */
 case class FormatNumber(x: Expression, d: Expression)
-  extends BinaryExpression with ExpectsInputTypes with CodegenFallback {
+  extends BinaryExpression with ExpectsInputTypes {
 
   override def left: Expression = x
   override def right: Expression = d

@@ -154,17 +154,19 @@ private[sql] class JSONRelation(
   }
 
   override def buildScan(): RDD[Row] = {
+    // Rely on type erasure hack to pass RDD[InternalRow] back as RDD[Row]
     JacksonParser(
       baseRDD(),
       schema,
-      sqlContext.conf.columnNameOfCorruptRecord).map(_.asInstanceOf[Row])
+      sqlContext.conf.columnNameOfCorruptRecord).asInstanceOf[RDD[Row]]
   }
 
   override def buildScan(requiredColumns: Seq[Attribute], filters: Seq[Expression]): RDD[Row] = {
+    // Rely on a type erasure hack to pass RDD[InternalRow] back as RDD[Row]
     JacksonParser(
       baseRDD(),
       StructType.fromAttributes(requiredColumns),
-      sqlContext.conf.columnNameOfCorruptRecord).map(_.asInstanceOf[Row])
+      sqlContext.conf.columnNameOfCorruptRecord).asInstanceOf[RDD[Row]]
   }
 
   override def insert(data: DataFrame, overwrite: Boolean): Unit = {

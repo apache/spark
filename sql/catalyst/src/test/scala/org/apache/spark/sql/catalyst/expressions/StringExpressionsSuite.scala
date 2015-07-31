@@ -332,32 +332,31 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("soundex unit test") {
-    checkEvaluation(SoundEx(Literal("ZIN")), "Z500", create_row("s1"))
-    checkEvaluation(SoundEx(Literal("SU")), "S000", create_row("s2"))
-    checkEvaluation(SoundEx(Literal("")), "", create_row("s3"))
-    checkEvaluation(SoundEx(Literal.create(null, StringType)), null, create_row("s4"))
+    checkEvaluation(SoundEx(Literal("ZIN")), "Z500")
+    checkEvaluation(SoundEx(Literal("SU")), "S000")
+    checkEvaluation(SoundEx(Literal("")), "")
+    checkEvaluation(SoundEx(Literal.create(null, StringType)), null)
 
     // scalastyle:off
     // non ascii characters are not allowed in the code, so we disable the scalastyle here.
-    checkEvaluation(SoundEx(Literal("测试")), "测试", create_row("s5"))
-    checkEvaluation(SoundEx(Literal("z測試")), "z測試", create_row("s6"))
-    checkEvaluation(SoundEx(Literal("Tschüss")), "Tschüss", create_row("s7"))
+    checkEvaluation(SoundEx(Literal("测试")), "测试")
+    checkEvaluation(SoundEx(Literal("Tschüss")), "T220")
     // scalastyle:on
-    checkEvaluation(SoundEx(Literal("zZ")), "z000", create_row("s8"))
-    checkEvaluation(SoundEx(Literal("RAGSSEEESSSVEEWE")), "R221", create_row("s9"))
-    checkEvaluation(SoundEx(Literal("Ashcraft")), "A261", create_row("s10"))
-    checkEvaluation(SoundEx(Literal("Aswcraft")), "A261", create_row("s11"))
-    checkEvaluation(SoundEx(Literal("Tymczak")), "T522", create_row("s12"))
-    checkEvaluation(SoundEx(Literal("Pfister")), "P236", create_row("s13"))
-    checkEvaluation(SoundEx(Literal("Miller")), "M460", create_row("s14"))
-    checkEvaluation(SoundEx(Literal("Peterson")), "P362", create_row("s15"))
-    checkEvaluation(SoundEx(Literal("Peters")), "P362", create_row("s16"))
-    checkEvaluation(SoundEx(Literal("Auerbach")), "A612", create_row("s17"))
-    checkEvaluation(SoundEx(Literal("Uhrbach")), "U612", create_row("s18"))
-    checkEvaluation(SoundEx(Literal("Moskowitz")), "M232", create_row("s19"))
-    checkEvaluation(SoundEx(Literal("Moskovitz")), "M213", create_row("s20"))
-    checkEvaluation(SoundEx(Literal("relyheewsgeessg")), "r422", create_row("s21"))
-    checkEvaluation(SoundEx(Literal("!!")), "!!", create_row("s22"))
+    checkEvaluation(SoundEx(Literal("zZ")), "Z000", create_row("s8"))
+    checkEvaluation(SoundEx(Literal("RAGSSEEESSSVEEWE")), "R221")
+    checkEvaluation(SoundEx(Literal("Ashcraft")), "A261")
+    checkEvaluation(SoundEx(Literal("Aswcraft")), "A261")
+    checkEvaluation(SoundEx(Literal("Tymczak")), "T522")
+    checkEvaluation(SoundEx(Literal("Pfister")), "P236")
+    checkEvaluation(SoundEx(Literal("Miller")), "M460")
+    checkEvaluation(SoundEx(Literal("Peterson")), "P362")
+    checkEvaluation(SoundEx(Literal("Peters")), "P362")
+    checkEvaluation(SoundEx(Literal("Auerbach")), "A612")
+    checkEvaluation(SoundEx(Literal("Uhrbach")), "U612")
+    checkEvaluation(SoundEx(Literal("Moskowitz")), "M232")
+    checkEvaluation(SoundEx(Literal("Moskovitz")), "M213")
+    checkEvaluation(SoundEx(Literal("relyheewsgeessg")), "R422")
+    checkEvaluation(SoundEx(Literal("!!")), "!!")
   }
 
   test("TRIM/LTRIM/RTRIM") {
@@ -377,6 +376,9 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(StringTrimLeft(s), "花花世界 ", create_row("  花花世界 "))
     checkEvaluation(StringTrim(s), "花花世界", create_row("  花花世界 "))
     // scalastyle:on
+    checkEvaluation(StringTrim(Literal.create(null, StringType)), null)
+    checkEvaluation(StringTrimLeft(Literal.create(null, StringType)), null)
+    checkEvaluation(StringTrimRight(Literal.create(null, StringType)), null)
   }
 
   test("FORMAT") {
@@ -420,6 +422,9 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val s3 = 'c.string.at(2)
     val s4 = 'd.int.at(3)
     val row1 = create_row("aaads", "aa", "zz", 1)
+    val row2 = create_row(null, "aa", "zz", 0)
+    val row3 = create_row("aaads", null, "zz", 0)
+    val row4 = create_row(null, null, null, 0)
 
     checkEvaluation(new StringLocate(Literal("aa"), Literal("aaads")), 1, row1)
     checkEvaluation(StringLocate(Literal("aa"), Literal("aaads"), Literal(1)), 2, row1)
@@ -431,6 +436,9 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(StringLocate(s2, s1, s4), 2, row1)
     checkEvaluation(new StringLocate(s3, s1), 0, row1)
     checkEvaluation(StringLocate(s3, s1, Literal.create(null, IntegerType)), 0, row1)
+    checkEvaluation(new StringLocate(s2, s1), null, row2)
+    checkEvaluation(new StringLocate(s2, s1), null, row3)
+    checkEvaluation(new StringLocate(s2, s1, Literal.create(null, IntegerType)), 0, row4)
   }
 
   test("LPAD/RPAD") {
@@ -477,6 +485,7 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val row1 = create_row("abccc")
     checkEvaluation(StringReverse(Literal("abccc")), "cccba", row1)
     checkEvaluation(StringReverse(s), "cccba", row1)
+    checkEvaluation(StringReverse(Literal.create(null, StringType)), null, row1)
   }
 
   test("SPACE") {
@@ -495,6 +504,9 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val row1 = create_row("100-200", "(\\d+)", "num")
     val row2 = create_row("100-200", "(\\d+)", "###")
     val row3 = create_row("100-200", "(-)", "###")
+    val row4 = create_row(null, "(\\d+)", "###")
+    val row5 = create_row("100-200", null, "###")
+    val row6 = create_row("100-200", "(-)", null)
 
     val s = 's.string.at(0)
     val p = 'p.string.at(1)
@@ -504,6 +516,9 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(expr, "num-num", row1)
     checkEvaluation(expr, "###-###", row2)
     checkEvaluation(expr, "100###200", row3)
+    checkEvaluation(expr, null, row4)
+    checkEvaluation(expr, null, row5)
+    checkEvaluation(expr, null, row6)
   }
 
   test("RegexExtract") {
@@ -511,6 +526,9 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val row2 = create_row("100-200", "(\\d+)-(\\d+)", 2)
     val row3 = create_row("100-200", "(\\d+).*", 1)
     val row4 = create_row("100-200", "([a-z])", 1)
+    val row5 = create_row(null, "([a-z])", 1)
+    val row6 = create_row("100-200", null, 1)
+    val row7 = create_row("100-200", "([a-z])", null)
 
     val s = 's.string.at(0)
     val p = 'p.string.at(1)
@@ -521,6 +539,9 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(expr, "200", row2)
     checkEvaluation(expr, "100", row3)
     checkEvaluation(expr, "", row4) // will not match anything, empty string get
+    checkEvaluation(expr, null, row5)
+    checkEvaluation(expr, null, row6)
+    checkEvaluation(expr, null, row7)
 
     val expr1 = new RegExpExtract(s, p)
     checkEvaluation(expr1, "100", row1)
@@ -530,11 +551,15 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val s1 = 'a.string.at(0)
     val s2 = 'b.string.at(1)
     val row1 = create_row("aa2bb3cc", "[1-9]+")
+    val row2 = create_row(null, "[1-9]+")
+    val row3 = create_row("aa2bb3cc", null)
 
     checkEvaluation(
       StringSplit(Literal("aa2bb3cc"), Literal("[1-9]+")), Seq("aa", "bb", "cc"), row1)
     checkEvaluation(
       StringSplit(s1, s2), Seq("aa", "bb", "cc"), row1)
+    checkEvaluation(StringSplit(s1, s2), null, row2)
+    checkEvaluation(StringSplit(s1, s2), null, row3)
   }
 
   test("length for string / binary") {

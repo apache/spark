@@ -172,7 +172,7 @@ class StatisticsSuite extends QueryTest with BeforeAndAfterAll {
         bhj = df.queryExecution.sparkPlan.collect { case j: BroadcastHashJoin => j }
         assert(bhj.isEmpty, "BroadcastHashJoin still planned even though it is switched off")
 
-        val shj = df.queryExecution.sparkPlan.collect { case j: ShuffledHashJoin => j }
+        val shj = df.queryExecution.sparkPlan.collect { case j: SortMergeJoin => j }
         assert(shj.size === 1,
           "ShuffledHashJoin should be planned when BroadcastHashJoin is turned off")
 
