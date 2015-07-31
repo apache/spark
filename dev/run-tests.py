@@ -273,7 +273,7 @@ def get_hadoop_profiles(hadoop_version):
         "hadoop2.0": ["-Phadoop-1", "-Dhadoop.version=2.0.0-mr1-cdh4.1.1"],
         "hadoop2.2": ["-Pyarn", "-Phadoop-2.2"],
         "hadoop2.3": ["-Pyarn", "-Phadoop-2.3", "-Dhadoop.version=2.3.0"],
-        "hadoop2.6": ["-Pyarn", "-Phadoop-2.6", "-Dhadoop.version=2.6.0"],
+        "hadoop2.6": ["-Pyarn", "-Phadoop-2.6"],
     }
 
     if hadoop_version in sbt_maven_hadoop_profiles:
