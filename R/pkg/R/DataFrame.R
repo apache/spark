@@ -483,6 +483,10 @@ setMethod("distinct",
             dataFrame(sdf)
           })
 
+#' @title Distinct rows in a DataFrame
+#
+#' @description Returns a new DataFrame containing distinct rows in this DataFrame
+#'
 #' @rdname unique
 #' @aliases unique
 setMethod("unique",
@@ -552,6 +556,11 @@ setMethod("count",
             callJMethod(x@sdf, "count")
           })
 
+#' @title Number of rows for a DataFrame
+#' @description Returns number of rows in a DataFrames
+#'
+#' @name nrow
+#'
 #' @rdname nrow
 #' @aliases count
 setMethod("nrow",
@@ -1296,6 +1305,10 @@ setMethod("unionAll",
             dataFrame(unioned)
           })
 
+#' @title Union two or more DataFrames
+#
+#' @description Returns a new DataFrame containing rows of all parameters.
+#
 #' @rdname rbind
 #' @aliases unionAll
   setMethod("rbind",
