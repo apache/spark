@@ -225,6 +225,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   private var _jars: Seq[String] = _
   private var _files: Seq[String] = _
   private var _shutdownHookRef: AnyRef = _
+  private var _executorBlacklistTracker: Option[ExecutorBlacklistTracker] = None
 
   /* ------------------------------------------------------------------------------------- *
    | Accessors and public fields. These provide access to the internal state of the        |
@@ -332,6 +333,9 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
 
   private[spark] def executorAllocationManager: Option[ExecutorAllocationManager] =
     _executorAllocationManager
+
+  private[spark] def executorBlacklistTracker: Option[ExecutorBlacklistTracker] =
+    _executorBlacklistTracker
 
   private[spark] def cleaner: Option[ContextCleaner] = _cleaner
 
@@ -538,6 +542,17 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
         None
       }
     _executorAllocationManager.foreach(_.start())
+
+    val executorBlacklistEnabled = _conf.getBoolean("spark.scheduler.blacklist.enabled", false)
+    _executorBlacklistTracker = if (executorBlacklistEnabled) {
+      Some(new ExecutorBlacklistTracker(_conf))
+    } else {
+      None
+    }
+    _executorBlacklistTracker.foreach { e =>
+      listenerBus.addListener(e)
+      e.start()
+    }
 
     _cleaner =
       if (_conf.getBoolean("spark.cleaner.referenceTracking", true)) {
@@ -1699,6 +1714,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     }
     _cleaner.foreach(_.stop())
     _executorAllocationManager.foreach(_.stop())
+    _executorBlacklistTracker.foreach(_.stop())
     if (_dagScheduler != null) {
       _dagScheduler.stop()
       _dagScheduler = null

@@ -277,7 +277,8 @@ private[spark] class TaskSetManager(
 
   /**
    * Is this re-execution of a failed task on an executor it already failed in before
-   * EXECUTOR_TASK_BLACKLIST_TIMEOUT has elapsed ?
+   * EXECUTOR_TASK_BLACKLIST_TIMEOUT has elapsed, or is the task which want to execute on the
+   * specific executor already blacklisted?
    */
   private def executorIsBlacklisted(execId: String, taskId: Int): Boolean = {
     if (failedExecutors.contains(taskId)) {
@@ -285,6 +286,14 @@ private[spark] class TaskSetManager(
 
       return failed.contains(execId) &&
         clock.getTimeMillis() - failed.get(execId).get < EXECUTOR_TASK_BLACKLIST_TIMEOUT
+    }
+
+    val executorBlacklistTracker = sched.sc.executorBlacklistTracker
+    if (executorBlacklistTracker.isDefined) {
+      val blacklist = executorBlacklistTracker.get.getExecutorBlacklist
+      if (blacklist.contains(execId)) {
+        return true
+      }
     }
 
     false
