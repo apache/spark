@@ -463,11 +463,11 @@ final class OnlineLDAOptimizer extends LDAOptimizer {
   }
 
   /**
-   *    Update (in place) parameters for the Dirichlet prior on the per-document
-   *    topic weights `alpha` given the last `gammat`.
-   *    Uses Newton's method,
-   *    @see Huang: Maximum Likelihood Estimation of Dirichlet Distribution Parameters
-   *         (http://www.stanford.edu/~jhuang11/research/dirichlet/dirichlet.pdf)
+   * Update alpha based on `gammat`, the inferred topic distributions for documents in the
+   * current mini-batch.
+   * Uses Newton's method,
+   * @see Huang: Maximum Likelihood Estimation of Dirichlet Distribution Parameters
+   *      (http://jonathan-huang.org/research/dirichlet/dirichlet.pdf)
    */
   private def updateAlpha(gammat: BDM[Double]): Unit = {
     val weight = rho()
