@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 /**
  * A `parquet.hadoop.api.WriteSupport` for Row objects.
@@ -95,7 +95,7 @@ private[parquet] class RowWriteSupport extends WriteSupport[InternalRow] with Lo
         case t @ StructType(_) => writeStruct(
           t,
           value.asInstanceOf[CatalystConverter.StructScalaType[_]])
-        case _ => writePrimitive(schema.asInstanceOf[AtomicType], value)
+        case _ => writePrimitive(schema, value)
       }
     }
   }
@@ -117,6 +117,8 @@ private[parquet] class RowWriteSupport extends WriteSupport[InternalRow] with Lo
           Binary.fromByteArray(value.asInstanceOf[Array[Byte]]))
         case DecimalType.Fixed(precision, _) =>
           writeDecimal(value.asInstanceOf[Decimal], precision)
+        case CalendarIntervalType =>
+          writeCalendarInterval(value.asInstanceOf[CalendarInterval])
         case _ => sys.error(s"Do not know how to writer $schema to consumer")
       }
     }
@@ -199,6 +201,16 @@ private[parquet] class RowWriteSupport extends WriteSupport[InternalRow] with Lo
 
   // Scratch array used to write decimals as fixed-length byte array
   private[this] var reusableDecimalBytes = new Array[Byte](16)
+
+  private[parquet] def writeCalendarInterval(ci: CalendarInterval): Unit = {
+    val days: Int = (ci.microseconds / CalendarInterval.MICROS_PER_DAY).toInt
+    val rest: Long = ci.microseconds % CalendarInterval.MICROS_PER_DAY
+    val milliseconds: Int = (rest / CalendarInterval.MICROS_PER_MILLI).toInt
+
+    val buffer = ByteBuffer.allocate(12).order(ByteOrder.LITTLE_ENDIAN)
+    buffer.putInt(ci.months).putInt(days).putInt(milliseconds)
+    writer.addBinary(Binary.fromByteArray(buffer.array()))
+  }
 
   private[parquet] def writeDecimal(decimal: Decimal, precision: Int): Unit = {
     val numBytes = CatalystSchemaConverter.minBytesForPrecision(precision)
@@ -295,6 +307,8 @@ private[parquet] class MutableRowWriteSupport extends RowWriteSupport {
         writer.addBinary(Binary.fromByteArray(record.getBinary(index)))
       case DecimalType.Fixed(precision, _) =>
         writeDecimal(record.getDecimal(index), precision)
+      case CalendarIntervalType =>
+        writeCalendarInterval(record.getInterval(index))
       case _ => sys.error(s"Unsupported datatype $ctype, cannot write to consumer")
     }
   }

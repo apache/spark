@@ -187,7 +187,7 @@ private[parquet] class CatalystSchemaConverter(
       case FIXED_LEN_BYTE_ARRAY =>
         originalType match {
           case DECIMAL => makeDecimalType(maxPrecisionForBytes(field.getTypeLength))
-          case INTERVAL => typeNotImplemented()
+          case INTERVAL => CalendarIntervalType
           case _ => illegalType()
         }
 
@@ -357,6 +357,9 @@ private[parquet] class CatalystSchemaConverter(
 
       case DateType =>
         Types.primitive(INT32, repetition).as(DATE).named(field.name)
+
+      case CalendarIntervalType =>
+        Types.primitive(FIXED_LEN_BYTE_ARRAY, repetition).as(INTERVAL).length(12).named(field.name)
 
       // NOTE: Spark SQL TimestampType is NOT a well defined type in Parquet format spec.
       //

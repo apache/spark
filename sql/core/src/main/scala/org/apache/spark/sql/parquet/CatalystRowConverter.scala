@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 /**
  * A [[ParentContainerUpdater]] is used by a Parquet converter to set converted values to some
@@ -140,6 +140,9 @@ private[parquet] class CatalystRowConverter(
             updater.setShort(value.asInstanceOf[ShortType#InternalType])
         }
 
+      case CalendarIntervalType =>
+        new CatalystCalendarIntervalConverter(updater)
+
       case t: DecimalType =>
         new CatalystDecimalConverter(t, updater)
 
@@ -233,6 +236,41 @@ private[parquet] class CatalystRowConverter(
 
     override def addBinary(value: Binary): Unit = {
       updater.set(UTF8String.fromBytes(value.getBytes))
+    }
+  }
+
+  /**
+   * Parquet converter for CalendarInterval.
+   */
+  private final class CatalystCalendarIntervalConverter(updater: ParentContainerUpdater)
+    extends PrimitiveConverter {
+
+    // Converts CalendarInterval stored as FIXED_LENGTH_BYTE_ARRAY
+    override def addBinary(value: Binary): Unit = {
+      updater.set(toCalendarInterval(value))
+    }
+
+    private def toCalendarInterval(value: Binary): CalendarInterval = {
+      val bytes = value.getBytes
+
+      var months: Int = 0
+      var i = 11
+      while (i >=8) {
+        months = (months << 8) | (bytes(i) & 0xff)
+        i -= 1
+      }
+      var days: Int = 0
+      while (i >= 4) {
+        days = (days << 8) | (bytes(i) & 0xff)
+        i -= 1
+      }
+      var milliseconds: Int = 0
+      while (i >= 0) {
+        milliseconds = (milliseconds << 8) | (bytes(i) & 0xff)
+        i -= 1
+      }
+      new CalendarInterval(months, days * CalendarInterval.MICROS_PER_DAY +
+        milliseconds * CalendarInterval.MICROS_PER_MILLI)
     }
   }
 

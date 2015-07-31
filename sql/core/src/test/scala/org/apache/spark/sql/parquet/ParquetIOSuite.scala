@@ -38,6 +38,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.CalendarInterval
 
 // Write support class for nested groups: ParquetWriter initializes GroupWriteSupport
 // with an empty configuration (it is after all not intended to be used in this way?)
@@ -112,6 +113,21 @@ class ParquetIOSuite extends QueryTest with ParquetTest {
         data.write.parquet(dir.getCanonicalPath)
         checkAnswer(sqlContext.read.parquet(dir.getCanonicalPath), data.collect().toSeq)
       }
+    }
+  }
+
+  test("interval") {
+    def makeIntervalRDD(interval: CalendarIntervalType): DataFrame =
+      sqlContext.sparkContext
+        .parallelize(1 to 10)
+        .map(i => Tuple1(new CalendarInterval(i, i * 1000L)))
+        .toDF()
+        .select($"_1")
+
+    withTempPath { dir =>
+      val data = makeIntervalRDD(CalendarIntervalType)
+      data.write.parquet(dir.getCanonicalPath)
+      checkAnswer(sqlContext.read.parquet(dir.getCanonicalPath), data.collect().toSeq)
     }
   }
 
