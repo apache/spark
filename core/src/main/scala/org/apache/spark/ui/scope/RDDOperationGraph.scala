@@ -20,7 +20,7 @@ package org.apache.spark.ui.scope
 import scala.collection.mutable
 import scala.collection.mutable.{StringBuilder, ListBuffer}
 
-import org.apache.spark.{SparkException, Logging}
+import org.apache.spark.Logging
 import org.apache.spark.scheduler.StageInfo
 import org.apache.spark.storage.StorageLevel
 
@@ -167,7 +167,7 @@ private[ui] object RDDOperationGraph extends Logging {
   def makeDotFile(graph: RDDOperationGraph): String = {
     val dotFile = new StringBuilder
     dotFile.append("digraph G {\n")
-    dotFile.append(makeDotSubgraph(graph.rootCluster, indent = new StringBuilder("  ")))
+    makeDotSubgraph(dotFile, graph.rootCluster, indent = "  ")
     graph.edges.foreach { edge => dotFile.append(s"""  ${edge.fromId}->${edge.toId};\n""") }
     dotFile.append("}")
     val result = dotFile.toString()
@@ -176,30 +176,23 @@ private[ui] object RDDOperationGraph extends Logging {
   }
 
   /** Return the dot representation of a node in an RDDOperationGraph. */
-  private def makeDotNode(node: RDDOperationNode): StringBuilder = {
-    new StringBuilder(s"""${node.id} [label="${node.name} [${node.id}]"]""")
+  private def makeDotNode(node: RDDOperationNode): String = {
+    s"""${node.id} [label="${node.name} [${node.id}]"]"""
   }
 
   /** Return the dot representation of a subgraph in an RDDOperationGraph. */
   private def makeDotSubgraph(
+    subgraph: StringBuilder,
     cluster: RDDOperationCluster,
-    indent: StringBuilder): StringBuilder = {
-    val subgraph = new StringBuilder
-    try {
-      subgraph.append(indent).append(s"subgraph cluster${cluster.id} {\n")
-      subgraph.append(indent).append( s"""  label="${cluster.name}";\n""")
-      cluster.childNodes.foreach { node =>
-        subgraph.append(indent).append(makeDotNode(node)).append("\n")
-      }
-      cluster.childClusters.foreach { cscope =>
-        subgraph.append(makeDotSubgraph(cscope, indent.append("  ")))
-      }
-      subgraph.append(indent).append("}\n")
-    } catch {
-      case oom: OutOfMemoryError =>
-        throw new SparkException(s"Failed to create graph for job in $cluster.id. " +
-        s"Not enough heap space.Increase thread stack size(-Xss) on your cluster.")
+    indent: String): StringBuilder = {
+    subgraph.append(indent).append(s"subgraph cluster${cluster.id} {\n")
+    subgraph.append(indent).append( s"""  label="${cluster.name}";\n""")
+    cluster.childNodes.foreach { node =>
+      subgraph.append(indent).append(s"  ${makeDotNode(node)};\n")
     }
-    subgraph
+    cluster.childClusters.foreach { cscope =>
+      subgraph.append(makeDotSubgraph(subgraph, cscope, indent + "  "))
+    }
+    subgraph.append(indent).append("}\n")
   }
 }
