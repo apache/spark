@@ -100,7 +100,7 @@ class PrefixSpan private (
       seqOp = { (uniqItems, item) => uniqItems ++ item.flatten.toSet },
       combOp = { _ ++ _ }
     ).zipWithIndex.toMap
-    val intToItem = Map() ++ (itemToInt.map {case (k,v) => (v,k)})
+    val intToItem = Map() ++ (itemToInt.map { case (k, v) => (v, k) })
 
     val dataInternalRepr = data.map { seq =>
       seq.map(itemset => itemset.map(itemToInt)).reduce((a, b) => a ++ (DELIMITER +: b))

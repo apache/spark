@@ -302,7 +302,7 @@ class PrefixSpanSuite extends SparkFunSuite with MLlibTestSparkContext {
       (Array(Array(2)), 3L),
       (Array(Array(3)), 2L),
       (Array(Array(1), Array(3)), 2L),
-      (Array(Array(1,2)), 3L)
+      (Array(Array(1, 2)), 3L)
     )
     compareResults(expected, result.collect())
   }
@@ -328,7 +328,7 @@ class PrefixSpanSuite extends SparkFunSuite with MLlibTestSparkContext {
       (Array(Array(2)), 3L),
       (Array(Array(3)), 2L),
       (Array(Array(1), Array(3)), 2L),
-      (Array(Array(1,2)), 3L)
+      (Array(Array(1, 2)), 3L)
     ).map { case (pattern, count) =>
       (pattern.map(itemSet => itemSet.map(intToString)), count)
     }
