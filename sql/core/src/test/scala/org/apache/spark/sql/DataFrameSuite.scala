@@ -492,15 +492,16 @@ class DataFrameSuite extends QueryTest with SQLTestUtils {
     val df1 = DataFrame(sqlContext, LogicalRelation(fakeRelation1))
     assert(df1.inputFiles.toSet == fakeRelation1.paths.toSet)
 
-    val fakeRelation2 = new JSONRelation("/json/path", 1, Some(testData.schema), sqlContext)
+    val fakeRelation2 = new JSONRelation(
+      None, 1, Some(testData.schema), None, None, Array("/json/path"))(sqlContext)
     val df2 = DataFrame(sqlContext, LogicalRelation(fakeRelation2))
-    assert(df2.inputFiles.toSet == fakeRelation2.path.toSet)
+    assert(df2.inputFiles.toSet == fakeRelation2.paths.toSet)
 
     val unionDF = df1.unionAll(df2)
-    assert(unionDF.inputFiles.toSet == fakeRelation1.paths.toSet ++ fakeRelation2.path)
+    assert(unionDF.inputFiles.toSet == fakeRelation1.paths.toSet ++ fakeRelation2.paths)
 
     val filtered = df1.filter("false").unionAll(df2.intersect(df2))
-    assert(filtered.inputFiles.toSet == fakeRelation1.paths.toSet ++ fakeRelation2.path)
+    assert(filtered.inputFiles.toSet == fakeRelation1.paths.toSet ++ fakeRelation2.paths)
   }
 
   ignore("show") {

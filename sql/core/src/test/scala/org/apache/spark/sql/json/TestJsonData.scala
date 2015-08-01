@@ -198,5 +198,9 @@ trait TestJsonData {
         """{"b": [{"c": {}}]}""" ::
         """]""" :: Nil)
 
+  lazy val singleRow: RDD[String] =
+    ctx.sparkContext.parallelize(
+      """{"a":123}""" :: Nil)
+
   def empty: RDD[String] = ctx.sparkContext.parallelize(Seq[String]())
 }
