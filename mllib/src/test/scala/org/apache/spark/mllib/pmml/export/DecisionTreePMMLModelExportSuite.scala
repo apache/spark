@@ -27,11 +27,14 @@ import org.scalatest.PrivateMethodTester
 
 import scala.collection.JavaConverters._
 
-class DecisionTreePMMLModelExportSuite extends SparkFunSuite with MLlibTestSparkContext with PrivateMethodTester {
+class DecisionTreePMMLModelExportSuite extends SparkFunSuite
+  with MLlibTestSparkContext
+  with PrivateMethodTester {
 
   test("PMML export should work as expected for DecisionTree model with regressor") {
 
-    // instantiate a MLLib DecisionTreeModel with Regression and with 3 nodes with continuous feature type
+    // instantiate a MLLib DecisionTreeModel with Regression and with 3 nodes with continuous
+    // feature type
     val mlLeftNode = new Node(2, new Predict(0.5, 0.5), 0.2, true, None, None, None, None)
     val mlRightNode = new Node(3, new Predict(1.0, 0.5), 0.2, true, None, None, None, None)
     val split = new Split(100, 10.00, FeatureType.Continuous, Nil)
@@ -68,7 +71,8 @@ class DecisionTreePMMLModelExportSuite extends SparkFunSuite with MLlibTestSpark
     assert(predicate.isInstanceOf[SimplePredicate])
     assert(predicate.asInstanceOf[SimplePredicate].getField.getValue === "field_100")
     assert(predicate.asInstanceOf[SimplePredicate].getValue === "10.0")
-    assert(predicate.asInstanceOf[SimplePredicate].getOperator == SimplePredicate.Operator.LESS_OR_EQUAL)
+    assert(predicate.asInstanceOf[SimplePredicate].getOperator == SimplePredicate.Operator
+    .LESS_OR_EQUAL)
 
     // validate the left node is populated as expected
     val pmmlLeftNode = pmmlRootNode.getNodes.get(0)
@@ -77,7 +81,7 @@ class DecisionTreePMMLModelExportSuite extends SparkFunSuite with MLlibTestSpark
     assert(pmmlLeftNode.getId === "2")
     assert(pmmlLeftNode.getScore == "0.5")
 
-    //validate the right node is populated as expected
+    // validate the right node is populated as expected
     val pmmlRightNode = pmmlRootNode.getNodes.get(1)
     assert(pmmlRightNode != null)
     assert(!pmmlRightNode.hasNodes)
@@ -91,7 +95,7 @@ class DecisionTreePMMLModelExportSuite extends SparkFunSuite with MLlibTestSpark
     val miningFields = miningSchema.getMiningFields
     assert(miningFields.get(0).getName.getValue === "field_100")
 
-    //validate the data dictionay is populated as expected
+    // validate the data dictionay is populated as expected
     val dataDictionary = pmmlWrapperForDT.getDataDictionary
     assert(dataDictionary != null)
     val dataFields = dataDictionary.getDataFields
@@ -139,7 +143,8 @@ class DecisionTreePMMLModelExportSuite extends SparkFunSuite with MLlibTestSpark
     assert(pmmlRootNode.getNodes != null && pmmlRootNode.getNodes.size() == 2)
     assert(pmmlRootNode.getId === "1")
 
-    // validate the pmml root node predicate is a compound predicate since the mllib split had multiple categories
+    // validate the pmml root node predicate is a compound predicate since the mllib split had
+    // multiple categories
     val predicate = pmmlRootNode.getPredicate()
     assert(predicate != null)
     assert(predicate.isInstanceOf[CompoundPredicate])
@@ -150,12 +155,14 @@ class DecisionTreePMMLModelExportSuite extends SparkFunSuite with MLlibTestSpark
     assert(predicatesList1.get(0).isInstanceOf[SimplePredicate])
     assert(predicatesList1.get(0).asInstanceOf[SimplePredicate].getField.getValue === "field_200")
     assert(predicatesList1.get(0).asInstanceOf[SimplePredicate].getValue === "10.0")
-    assert(predicatesList1.get(0).asInstanceOf[SimplePredicate].getOperator == SimplePredicate.Operator.EQUAL)
+    assert(predicatesList1.get(0).asInstanceOf[SimplePredicate].getOperator == SimplePredicate
+    .Operator.EQUAL)
 
     assert(predicatesList1.get(1).isInstanceOf[SimplePredicate])
     assert(predicatesList1.get(1).asInstanceOf[SimplePredicate].getField.getValue === "field_200")
     assert(predicatesList1.get(1).asInstanceOf[SimplePredicate].getValue === "20.0")
-    assert(predicatesList1.get(1).asInstanceOf[SimplePredicate].getOperator == SimplePredicate.Operator.EQUAL)
+    assert(predicatesList1.get(1).asInstanceOf[SimplePredicate].getOperator == SimplePredicate
+    .Operator.EQUAL)
 
     // validate level 1 left node is populated properly
     val pmmlLeftNode_L1 = pmmlRootNode.getNodes.get(0)
@@ -171,7 +178,7 @@ class DecisionTreePMMLModelExportSuite extends SparkFunSuite with MLlibTestSpark
     assert(pmmlRightNode_L1.getId === "3")
     assert(pmmlRightNode_L1.getScore == "4.0")
 
-    //validate predicate for level 2 split is populated as expected
+    // validate predicate for level 2 split is populated as expected
     val predicate2 = pmmlLeftNode_L1.getPredicate()
     assert(predicate2 != null)
     assert(predicate2.isInstanceOf[CompoundPredicate])
@@ -183,12 +190,14 @@ class DecisionTreePMMLModelExportSuite extends SparkFunSuite with MLlibTestSpark
     assert(predicatesList2.get(0).isInstanceOf[SimplePredicate])
     assert(predicatesList2.get(0).asInstanceOf[SimplePredicate].getField.getValue === "field_100")
     assert(predicatesList2.get(0).asInstanceOf[SimplePredicate].getValue === "1.0")
-    assert(predicatesList2.get(0).asInstanceOf[SimplePredicate].getOperator == SimplePredicate.Operator.EQUAL)
+    assert(predicatesList2.get(0).asInstanceOf[SimplePredicate].getOperator == SimplePredicate
+    .Operator.EQUAL)
 
     assert(predicatesList2.get(1).isInstanceOf[SimplePredicate])
     assert(predicatesList2.get(1).asInstanceOf[SimplePredicate].getField.getValue === "field_100")
     assert(predicatesList2.get(1).asInstanceOf[SimplePredicate].getValue === "4.0")
-    assert(predicatesList2.get(1).asInstanceOf[SimplePredicate].getOperator == SimplePredicate.Operator.EQUAL)
+    assert(predicatesList2.get(1).asInstanceOf[SimplePredicate].getOperator == SimplePredicate
+    .Operator.EQUAL)
 
 
     // validate level 2 left node is populated as expected
@@ -215,7 +224,7 @@ class DecisionTreePMMLModelExportSuite extends SparkFunSuite with MLlibTestSpark
     assert(miningFields.get(1).getName.getValue === "field_200")
 
 
-    //validate data dictionary is populated as expected
+    // validate data dictionary is populated as expected
     val dataDictionary = pmmlWrapperForDT.getDataDictionary
     assert(dataDictionary != null)
     val dataFields = dataDictionary.getDataFields
@@ -237,7 +246,8 @@ class DecisionTreePMMLModelExportSuite extends SparkFunSuite with MLlibTestSpark
 
   }
 
-  test("TreeModelUtils should return distinct datafields and miningfields for continuous features") {
+  test("TreeModelUtils should return distinct datafields and miningfields for continuous " +
+    "features") {
 
     // instantiate MLLIb DecisionTreeModel with Classification algo ,5 nodes, 2 levels
     val mlLeftNode_L3 = new Node(6, new Predict(1.0, 0.5), 0.2, true, None, None, None, None)
@@ -277,7 +287,7 @@ class DecisionTreePMMLModelExportSuite extends SparkFunSuite with MLlibTestSpark
     assert(miningFields.get(1).getName.getValue === "field_200")
 
 
-    //validate data dictionary is populated as expected
+    // validate data dictionary is populated as expected
     val dataDictionary = pmmlWrapperForDT.getDataDictionary
     assert(dataDictionary != null)
     val dataFields = dataDictionary.getDataFields
@@ -294,7 +304,8 @@ class DecisionTreePMMLModelExportSuite extends SparkFunSuite with MLlibTestSpark
     assert(sortedValues2(0).getValue == "10.0")
   }
 
-  test("TreeModelUtils getPredicate should return simple predicate for node with split with continuous feature type") {
+  test("TreeModelUtils getPredicate should return simple predicate for node with split with " +
+  "continuous feature type") {
     val split = new Split(100, 10.0, FeatureType.Continuous, Nil)
     val treeNode = new Node(1, new Predict(0.5, 0.5), 0.2, true, Some(split), None, None, None)
     val privateMethodProxy = PrivateMethod[Option[Predicate]]('getPredicate)
@@ -302,11 +313,13 @@ class DecisionTreePMMLModelExportSuite extends SparkFunSuite with MLlibTestSpark
     assert(predicate.isDefined)
     assert(predicate.get.isInstanceOf[SimplePredicate])
     assert(predicate.get.asInstanceOf[SimplePredicate].getField.getValue == "field_100")
-    assert(predicate.get.asInstanceOf[SimplePredicate].getOperator == SimplePredicate.Operator.LESS_OR_EQUAL)
+    assert(predicate.get.asInstanceOf[SimplePredicate].getOperator == SimplePredicate.Operator
+    .LESS_OR_EQUAL)
     assert(predicate.get.asInstanceOf[SimplePredicate].getValue == "10.0")
   }
 
-  test("TreeModelUtils getPredicate should work as expected for node with split with catogorical feature") {
+  test("TreeModelUtils getPredicate should work as expected for node with split with catogorical " +
+    "feature") {
     val split1 = new Split(100, 10.0, FeatureType.Categorical, List(1))
     val treeNode1 = new Node(1, new Predict(0.5, 0.5), 0.2, true, Some(split1), None, None, None)
     val privateMethodProxy = PrivateMethod[Option[Predicate]]('getPredicate)
@@ -314,7 +327,8 @@ class DecisionTreePMMLModelExportSuite extends SparkFunSuite with MLlibTestSpark
     assert(predicate1.isDefined)
     assert(predicate1.get.isInstanceOf[SimplePredicate])
     assert(predicate1.get.asInstanceOf[SimplePredicate].getField.getValue == "field_100")
-    assert(predicate1.get.asInstanceOf[SimplePredicate].getOperator == SimplePredicate.Operator.EQUAL)
+    assert(predicate1.get.asInstanceOf[SimplePredicate].getOperator == SimplePredicate.Operator
+    .EQUAL)
     assert(predicate1.get.asInstanceOf[SimplePredicate].getValue == "1.0")
 
     val split2 = new Split(100, 10.0, FeatureType.Categorical, List(1, 2))
@@ -329,12 +343,14 @@ class DecisionTreePMMLModelExportSuite extends SparkFunSuite with MLlibTestSpark
     assert(predicatesList2.get(0).isInstanceOf[SimplePredicate])
     assert(predicatesList2.get(0).asInstanceOf[SimplePredicate].getField.getValue === "field_100")
     assert(predicatesList2.get(0).asInstanceOf[SimplePredicate].getValue === "1.0")
-    assert(predicatesList2.get(0).asInstanceOf[SimplePredicate].getOperator == SimplePredicate.Operator.EQUAL)
+    assert(predicatesList2.get(0).asInstanceOf[SimplePredicate].getOperator == SimplePredicate
+    .Operator.EQUAL)
 
     assert(predicatesList2.get(1).isInstanceOf[SimplePredicate])
     assert(predicatesList2.get(1).asInstanceOf[SimplePredicate].getField.getValue === "field_100")
     assert(predicatesList2.get(1).asInstanceOf[SimplePredicate].getValue === "2.0")
-    assert(predicatesList2.get(1).asInstanceOf[SimplePredicate].getOperator == SimplePredicate.Operator.EQUAL)
+    assert(predicatesList2.get(1).asInstanceOf[SimplePredicate].getOperator == SimplePredicate
+    .Operator.EQUAL)
   }
 
   test("TreeModelUtils getPredicate returns None if split not defined for node") {
